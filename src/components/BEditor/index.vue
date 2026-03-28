@@ -59,19 +59,37 @@ const Code = _Code.extend({ excludes: '' });
 
 const CodeBlock = CodeBlockLowlight.extend({ addNodeView: () => VueNodeViewRenderer(_CodeBlock) }).configure({ lowlight });
 
+let headingIndex = 0;
+
 const Heading = BaseHeading.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      id: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('id'),
+        renderHTML: (attributes) => {
+          if (!attributes.id) {
+            return {};
+          }
+          return { id: attributes.id };
+        }
+      }
+    };
+  },
   parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
     const content = helpers.parseInline(token.tokens || []);
+    const id = `heading-${headingIndex++}`;
 
     if (content.length) {
-      return helpers.createNode('heading', { level: token.depth || 1 }, content);
+      return helpers.createNode('heading', { level: token.depth || 1, id }, content);
     }
 
     const text = typeof token.text === 'string' ? token.text.trim() : '';
 
-    return helpers.createNode('heading', { level: token.depth || 1 }, text ? [helpers.createTextNode(text)] : []);
+    return helpers.createNode('heading', { level: token.depth || 1, id }, text ? [helpers.createTextNode(text)] : []);
   }
-});
+}).configure({ levels: [1, 2, 3, 4, 5, 6] });
 
 const Paragraph = BaseParagraph.extend({
   parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
@@ -177,6 +195,7 @@ function setEditorContent(text: string, emitUpdate = true) {
   const instance = editorInstance.value;
   if (!instance) return;
 
+  headingIndex = 0;
   instance.commands.setContent(text, { emitUpdate, contentType: 'markdown' });
 }
 
@@ -218,7 +237,10 @@ function handleScrollbarClick(event: MouseEvent): void {
 }
 
 function handleChangeAnchor(record: { id: string; level: number; text: string }) {
-  console.log('🚀 ~ handleChangeAnchor ~ record:', record);
+  const element = document.getElementById(record.id);
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 watch(
