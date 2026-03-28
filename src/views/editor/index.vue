@@ -4,58 +4,21 @@
       <div class="header-left">
         <Toolbar :title="'文件'" :options="toolbarMenuOptions" />
       </div>
-
-      <div class="header-right">
-        <span class="file-name">{{ currentFileName }}</span>
-      </div>
     </div>
 
     <div class="editor-content">
       <BEditor v-model="sourceFile.content" v-model:title="sourceFile.name" />
     </div>
-
-    <Modal v-model:open="confirmVisible" title="确认" @ok="handleConfirmOk" @cancel="handleConfirmCancel">
-      <p>当前文档有未保存的修改，是否保存？</p>
-    </Modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { Modal } from 'ant-design-vue';
+import { ref } from 'vue';
 import Toolbar from '@/components/Toolbar.vue';
 import type { File } from '@/utils/native';
 import { useToolbar } from './hooks/useToolbar';
 
-const currentFilePath = ref<string | null>(null);
-
-const isModified = ref(false);
 const sourceFile = ref<Partial<File>>({});
-const confirmVisible = ref(false);
-const confirmCallback = ref<(() => Promise<void>) | null>(null);
-
-const currentFileName = computed(() => {
-  if (!currentFilePath.value) {
-    return isModified.value ? '未命名 *' : '未命名';
-  }
-
-  const fileName = currentFilePath.value.split(/[/\\]/).pop() || '未命名';
-  return isModified.value ? `${fileName} *` : fileName;
-});
-
-async function handleConfirmOk() {
-  if (confirmCallback.value) {
-    await confirmCallback.value();
-  }
-
-  confirmCallback.value = null;
-  confirmVisible.value = false;
-}
-
-function handleConfirmCancel() {
-  confirmCallback.value = null;
-  confirmVisible.value = false;
-}
 
 const { toolbarMenuOptions } = useToolbar(sourceFile);
 </script>
@@ -82,17 +45,6 @@ const { toolbarMenuOptions } = useToolbar(sourceFile);
 .header-left {
   display: flex;
   align-items: center;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
-.file-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #57606a;
 }
 
 .editor-content {
