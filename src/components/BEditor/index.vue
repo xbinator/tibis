@@ -52,9 +52,9 @@ const props = withDefaults(defineProps<Props>(), {
 
 const editorContent = defineModel<string>();
 
-const editorTitle = defineModel<string>('title');
-
-const { textarea } = useTextareaAutosize({ input: editorTitle.value });
+const editorTitle = defineModel<string>('title', { default: '' });
+// @ts-ignore
+const { textarea } = useTextareaAutosize({ input: editorTitle });
 
 const Code = _Code.extend({ excludes: '' });
 
