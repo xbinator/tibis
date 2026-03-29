@@ -3,7 +3,7 @@
     <BEditorSidebar
       v-if="showSidebar"
       :title="editorTitle"
-      :content="editorContent"
+      :content="bodyContentForSidebar"
       :anchor-id-prefix="editorInstanceId"
       :active-id="activeAnchorId"
       class="b-editor-sidebar"
@@ -14,6 +14,16 @@
       <div class="b-editor-container">
         <textarea ref="textarea" v-model="editorTitle" class="b-editor-title" placeholder="请输入标题"></textarea>
 
+        <FrontMatterCard
+          v-if="hasFrontMatter"
+          :data="frontMatterData"
+          @click.stop
+          @update="handleFrontMatterUpdate"
+          @update-field="handleFrontMatterFieldUpdate"
+          @remove-field="handleFrontMatterFieldRemove"
+          @add-field="handleFrontMatterFieldAdd"
+        />
+
         <EditorContent :editor="editorInstance" class="b-editor-content" />
       </div>
     </BScrollbar>
@@ -22,14 +32,16 @@
 
 <script setup lang="ts">
 import type { Editor } from '@tiptap/core';
-import { ref, toRef, watch } from 'vue';
+import { computed, ref, toRef, watch } from 'vue';
 import { useEditor, EditorContent } from '@tiptap/vue-3';
 import { useWindowSize, useTextareaAutosize } from '@vueuse/core';
+import FrontMatterCard from './components/FrontMatterCard.vue';
 import { useAnchors } from './hooks/useAnchors';
 import { useContent } from './hooks/useContent';
 import { useExtensions } from './hooks/useExtensions';
+import { useFrontMatter } from './hooks/useFrontMatter';
 
-const MIN_WIDTH_FOR_SIDEBAR = 1360; // 800 + 280 * 2
+const MIN_WIDTH_FOR_SIDEBAR = 1360;
 let editorInstanceCounter = 0;
 
 const { width } = useWindowSize();
@@ -55,16 +67,35 @@ const { textarea } = useTextareaAutosize({ input: editorTitle });
 const { activeAnchorId, handleChangeAnchor, handleEditorScroll } = useAnchors(layoutRef);
 const { editorExtensions, resetHeadingIndex, assignHeadingIds } = useExtensions(editorInstanceId);
 const editorInstanceRef = ref<Editor>();
+
+const {
+  bodyContent,
+  frontMatterData,
+  hasFrontMatter,
+  updateFrontMatter,
+  updateFrontMatterField,
+  removeFrontMatterField,
+  addFrontMatterField,
+  reconstructContent
+} = useFrontMatter(editorContent);
+
+const bodyContentForSidebar = computed(() => bodyContent.value);
+
+function syncToExternal(): void {
+  editorContent.value = reconstructContent();
+}
+
 const { setEditorContent, onPaste, onEditorUpdate } = useContent({
   assignHeadingIds,
   editable: toRef(props, 'editable'),
-  editorContent,
+  editorContent: bodyContent,
   getEditorInstance: () => editorInstanceRef.value,
-  resetHeadingIndex
+  resetHeadingIndex,
+  onContentChange: syncToExternal
 });
 
 const editorInstance = useEditor({
-  content: editorContent.value ?? '',
+  content: bodyContent.value ?? '',
   extensions: editorExtensions,
   editable: props.editable,
   editorProps: { attributes: { spellcheck: 'false' }, handlePaste: onPaste },
@@ -78,6 +109,36 @@ watch(
   },
   { immediate: true }
 );
+
+watch(bodyContent, (content) => {
+  const instance = editorInstanceRef.value;
+  if (!instance) return;
+
+  const currentContent = instance.getMarkdown();
+  if (currentContent === content) return;
+
+  setEditorContent(content ?? '', false);
+});
+
+function handleFrontMatterUpdate(data: Record<string, unknown>): void {
+  updateFrontMatter(data);
+  syncToExternal();
+}
+
+function handleFrontMatterFieldUpdate(key: string, value: unknown): void {
+  updateFrontMatterField(key, value);
+  syncToExternal();
+}
+
+function handleFrontMatterFieldRemove(key: string): void {
+  removeFrontMatterField(key);
+  syncToExternal();
+}
+
+function handleFrontMatterFieldAdd(key: string, value: unknown): void {
+  addFrontMatterField(key, value);
+  syncToExternal();
+}
 
 function handleScrollbarClick(event: MouseEvent): void {
   if ((event.target as HTMLElement).tagName === 'TEXTAREA') return;

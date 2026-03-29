@@ -36,7 +36,7 @@ export class WebNative implements Native {
     return filename;
   }
 
-  async writeFile(path: string, content: string): Promise<void> {
+  async writeFile(_path: string, _content: string): Promise<void> {
     // this.syncCurrentFile(path, content);
   }
 
