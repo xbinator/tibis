@@ -78,7 +78,7 @@ onUnmounted(() => {
   overflow: hidden;
   background: #f6f8fa;
   border: 1px solid #d0d7de;
-  border-radius: 12px;
+  border-radius: 6px;
   box-shadow: 0 1px 2px rgb(31 35 40 / 6%);
 }
 
@@ -105,7 +105,7 @@ onUnmounted(() => {
   cursor: pointer;
   background: #fff;
   border: 1px solid rgb(31 35 40 / 15%);
-  border-radius: 999px;
+  border-radius: 6px;
   transition: all 0.2s ease;
 }
 

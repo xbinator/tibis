@@ -4410,7 +4410,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vault"
+name = "Texti"
 version = "0.1.0"
 dependencies = [
  "serde",

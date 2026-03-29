@@ -123,7 +123,7 @@ NEW_COLORS = {
     "Scanner & Document Manager":  ("#1E293B","#334155","#2563EB","#F8FAFC","Document grey + scan blue"),
     # ── A. Utility / Productivity ──
     "Calendar & Scheduling App":   ("#2563EB","#3B82F6","#059669","#F8FAFC","Calendar blue + event green"),
-    "Password Manager":            ("#1E3A5F","#334155","#059669","#0F172A","Vault dark blue + secure green"),
+    "Password Manager":            ("#1E3A5F","#334155","#059669","#0F172A","Texti dark blue + secure green"),
     "Expense Splitter / Bill Split":("#059669","#10B981","#DC2626","#F8FAFC","Balance green + owe red"),
     "Voice Recorder & Memo":       ("#DC2626","#EF4444","#2563EB","#FFFFFF","Recording red + waveform blue"),
     "Bookmark & Read-Later":       ("#D97706","#F59E0B","#2563EB","#FFFBEB","Warm amber + link blue"),
