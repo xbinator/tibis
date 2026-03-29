@@ -23,6 +23,13 @@ interface UseBEditorExtensionsResult {
   resetHeadingIndex: () => void;
 }
 
+function createParagraphNode(content: JSONContent[] = []): JSONContent {
+  return {
+    type: 'paragraph',
+    content
+  };
+}
+
 function parseInlineOrText(tokens: MarkdownToken[] | undefined, text: string | undefined, helpers: MarkdownParseHelpers): JSONContent[] {
   const content = helpers.parseInline(tokens || []);
 
@@ -102,26 +109,58 @@ export function useExtensions(editorInstanceId: string): UseBEditorExtensionsRes
     parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
       const parseBlockChildren = helpers.parseBlockChildren ?? helpers.parseChildren;
       let contentNodes: JSONContent[] = [];
+      let inlineBuffer: JSONContent[] = [];
 
-      if (token.tokens && token.tokens.length > 0) {
-        const hasParagraphToken = token.tokens.some((item) => item.type === 'paragraph');
-        const firstToken = token.tokens[0];
-
-        if (hasParagraphToken) {
-          contentNodes = parseBlockChildren(token.tokens);
-        } else if (firstToken?.type === 'text' && firstToken.tokens && firstToken.tokens.length > 0) {
-          contentNodes = [{ type: 'paragraph', content: helpers.parseInline(firstToken.tokens) }];
-
-          if (token.tokens.length > 1) {
-            contentNodes.push(...parseBlockChildren(token.tokens.slice(1)));
-          }
-        } else {
-          contentNodes = parseBlockChildren(token.tokens);
+      function flushInlineBuffer(forceEmpty = false): void {
+        if (inlineBuffer.length > 0 || forceEmpty) {
+          contentNodes.push(createParagraphNode(inlineBuffer));
+          inlineBuffer = [];
         }
       }
 
+      if (token.tokens && token.tokens.length > 0) {
+        token.tokens.forEach((itemToken) => {
+          if (itemToken.type === 'space') {
+            return;
+          }
+
+          if (itemToken.type === 'text' && itemToken.tokens && itemToken.tokens.length > 0) {
+            inlineBuffer.push(...helpers.parseInline(itemToken.tokens));
+            return;
+          }
+
+          const parsedNodes = parseBlockChildren([itemToken]);
+
+          if (!parsedNodes.length) {
+            return;
+          }
+
+          const inlineNodes = parsedNodes.filter((node) => node.type === 'text');
+          if (inlineNodes.length === parsedNodes.length) {
+            inlineBuffer.push(...inlineNodes);
+            return;
+          }
+
+          if (contentNodes.length === 0) {
+            flushInlineBuffer(true);
+          } else {
+            flushInlineBuffer();
+          }
+
+          contentNodes.push(...parsedNodes);
+        });
+      }
+
+      if (inlineBuffer.length > 0) {
+        flushInlineBuffer(contentNodes.length === 0);
+      }
+
       if (contentNodes.length === 0) {
-        contentNodes = [{ type: 'paragraph', content: [] }];
+        contentNodes = [createParagraphNode()];
+      }
+
+      if (contentNodes[0]?.type !== 'paragraph') {
+        contentNodes = [createParagraphNode(), ...contentNodes];
       }
 
       return { type: 'listItem', content: contentNodes };
