@@ -8,6 +8,7 @@ interface UseBEditorContentParams {
   editorContent: Ref<string | undefined>;
   getEditorInstance: () => Editor | undefined;
   resetHeadingIndex: () => void;
+  onContentChange?: () => void;
 }
 
 interface UseBEditorContentResult {
@@ -21,7 +22,8 @@ export function useContent({
   editable,
   editorContent,
   getEditorInstance,
-  resetHeadingIndex
+  resetHeadingIndex,
+  onContentChange
 }: UseBEditorContentParams): UseBEditorContentResult {
   function setEditorContent(text: string, emitUpdate = true): void {
     const instance = getEditorInstance();
@@ -58,23 +60,8 @@ export function useContent({
   function onEditorUpdate({ editor }: { editor: Editor }): void {
     assignHeadingIds(editor);
     editorContent.value = editor.getMarkdown();
+    onContentChange?.();
   }
-
-  watch(
-    () => editorContent.value,
-    (content) => {
-      const instance = getEditorInstance();
-      if (!instance) {
-        return;
-      }
-
-      if (instance.getMarkdown() === content) {
-        return;
-      }
-
-      setEditorContent(content ?? '', false);
-    }
-  );
 
   watch(
     () => editable.value,
