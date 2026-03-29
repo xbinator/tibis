@@ -3,25 +3,28 @@
     <div>{{ title }}</div>
 
     <template #menu="{ record }">
-      <span class="toolbar-menu-item-label">{{ record.label }}</span>
-      <span v-if="record.shortcut" class="toolbar-menu-item-shortcut">{{ formatShortcut(record.shortcut) }}</span>
+      <span class="toolbar-menu-item-label">{{ (record as ToolbarOption).label }}</span>
+      <span v-if="(record as ToolbarOption).shortcut" class="toolbar-menu-item-shortcut">
+        {{ formatShortcut((record as ToolbarOption).shortcut as string) }}
+      </span>
     </template>
   </BDropdownButton>
 </template>
 
 <script setup lang="ts">
-import type { DropdownOption } from './BDropdown/type';
+import type { DropdownOptionItem, DropdownOptionDivider } from './BDropdown/type';
 import { computed, watch } from 'vue';
 import { useMagicKeys, whenever } from '@vueuse/core';
 import { isMac } from '@/utils/is';
 
-export interface ToolbarOption extends DropdownOption {
+interface ToolbarOption extends DropdownOptionItem {
   shortcut?: string;
 }
 
-interface Props {
+export interface Props {
   title?: string;
-  options?: ToolbarOption[];
+  //
+  options?: (ToolbarOption | DropdownOptionDivider)[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -48,18 +51,20 @@ function setupShortcuts() {
   const stopFns: (() => void)[] = [];
 
   props.options?.forEach((option) => {
-    if (option.shortcut && option.onClick && !option.disabled) {
-      const keyCombo = getKeyName(option.shortcut);
+    if (option.type === 'divider') return;
 
-      const stopFn = whenever(keys[keyCombo], () => option.onClick?.());
-      stopFns.push(stopFn);
+    if (!(option.shortcut && option.onClick && !option.disabled)) return;
 
-      if (isMacOS.value && option.shortcut.toLowerCase().includes('ctrl')) {
-        const macKeyCombo = getKeyName(option.shortcut.replace(/ctrl/gi, 'meta'));
+    const keyCombo = getKeyName(option.shortcut);
 
-        const stopFnMac = whenever(keys[macKeyCombo], () => option.onClick?.());
-        stopFns.push(stopFnMac);
-      }
+    const stopFn = whenever(keys[keyCombo], () => option.onClick?.());
+    stopFns.push(stopFn);
+
+    if (isMacOS.value && option.shortcut.toLowerCase().includes('ctrl')) {
+      const macKeyCombo = getKeyName(option.shortcut.replace(/ctrl/gi, 'meta'));
+
+      const stopFnMac = whenever(keys[macKeyCombo], () => option.onClick?.());
+      stopFns.push(stopFnMac);
     }
   });
 
