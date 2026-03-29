@@ -7,7 +7,7 @@
     </div>
 
     <div class="editor-content">
-      <BEditor v-model="sourceFile.content" v-model:title="sourceFile.name" />
+      <BEditor v-model="fileState.content" v-model:title="fileState.name" @title-blur="handleTitleBlur" />
     </div>
   </div>
 </template>
@@ -15,19 +15,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import Toolbar from '@/components/Toolbar.vue';
-<<<<<<< Updated upstream
-import type { File } from '@/utils/native';
-import { useToolbar } from './hooks/useToolbar';
-=======
 import { native, File } from '@/utils/native';
 import { useFileActive } from './hooks/useFileActive';
->>>>>>> Stashed changes
 
-const sourceFile = ref<Partial<File>>({});
+const fileState = ref<Partial<File>>({});
 
-<<<<<<< Updated upstream
-const { toolbarMenuOptions } = useToolbar(sourceFile);
-=======
 const { toolbarMenuOptions } = useFileActive(fileState);
 
 function handleTitleBlur(title: string): void {
@@ -36,7 +28,6 @@ function handleTitleBlur(title: string): void {
     native.setWindowTitle(ext ? `${title}.${ext}` : title);
   }
 }
->>>>>>> Stashed changes
 </script>
 
 <style scoped>

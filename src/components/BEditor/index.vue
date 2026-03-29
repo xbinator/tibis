@@ -12,7 +12,7 @@
 
     <BScrollbar class="b-editor-scrollbar" @click="handleScrollbarClick" @scroll="handleEditorScroll">
       <div class="b-editor-container">
-        <textarea ref="textarea" v-model="editorTitle" class="b-editor-title" placeholder="请输入标题"></textarea>
+        <textarea ref="textarea" v-model="editorTitle" class="b-editor-title" placeholder="请输入标题" @blur="handleTitleBlur"></textarea>
 
         <FrontMatterCard
           v-if="hasFrontMatter"
@@ -62,6 +62,14 @@ const props = withDefaults(defineProps<Props>(), {
 const editorContent = defineModel<string>();
 
 const editorTitle = defineModel<string>('title', { default: '' });
+
+const emit = defineEmits<{
+  titleBlur: [title: string];
+}>();
+
+function handleTitleBlur(): void {
+  emit('titleBlur', editorTitle.value);
+}
 // @ts-ignore
 const { textarea } = useTextareaAutosize({ input: editorTitle });
 const { activeAnchorId, handleChangeAnchor, handleEditorScroll } = useAnchors(layoutRef);
@@ -448,11 +456,11 @@ defineExpose({ setContent: (text: string) => setEditorContent(text, false) });
   table {
     width: 100%;
     margin: 0.75em 0;
-    border-collapse: separate;
+    overflow: hidden;
     border-spacing: 0;
+    border-collapse: separate;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
-    overflow: hidden;
 
     th {
       padding: 0.5em 0.75em;
@@ -461,8 +469,8 @@ defineExpose({ setContent: (text: string) => setEditorContent(text, false) });
       color: #2e2e2e;
       text-align: left;
       background-color: #f5f5f5;
-      border-bottom: 1px solid #e0e0e0;
       border-right: 1px solid #e0e0e0;
+      border-bottom: 1px solid #e0e0e0;
 
       &:last-child {
         border-right: none;
@@ -475,8 +483,8 @@ defineExpose({ setContent: (text: string) => setEditorContent(text, false) });
       color: #2e2e2e;
       text-align: left;
       background-color: #fff;
-      border-bottom: 1px solid #e0e0e0;
       border-right: 1px solid #e0e0e0;
+      border-bottom: 1px solid #e0e0e0;
 
       &:last-child {
         border-right: none;
