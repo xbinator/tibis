@@ -15,12 +15,28 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import Toolbar from '@/components/Toolbar.vue';
+<<<<<<< Updated upstream
 import type { File } from '@/utils/native';
 import { useToolbar } from './hooks/useToolbar';
+=======
+import { native, File } from '@/utils/native';
+import { useFileActive } from './hooks/useFileActive';
+>>>>>>> Stashed changes
 
 const sourceFile = ref<Partial<File>>({});
 
+<<<<<<< Updated upstream
 const { toolbarMenuOptions } = useToolbar(sourceFile);
+=======
+const { toolbarMenuOptions } = useFileActive(fileState);
+
+function handleTitleBlur(title: string): void {
+  if (title) {
+    const ext = fileState.value.ext || '';
+    native.setWindowTitle(ext ? `${title}.${ext}` : title);
+  }
+}
+>>>>>>> Stashed changes
 </script>
 
 <style scoped>

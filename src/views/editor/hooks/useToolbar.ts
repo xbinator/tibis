@@ -2,7 +2,11 @@ import { Ref } from 'vue';
 import type { ToolbarOption } from '@/components/Toolbar.vue';
 import { native, File } from '@/utils/native';
 
+<<<<<<< Updated upstream:src/views/editor/hooks/useToolbar.ts
 export function useToolbar(sourceFile: Ref<Partial<File>>) {
+=======
+export function useFileActive(fileState: Ref<Partial<File>>) {
+>>>>>>> Stashed changes:src/views/editor/hooks/useFileActive.ts
   const toolbarMenuOptions: ToolbarOption[] = [
     {
       value: 'new',
@@ -24,7 +28,7 @@ export function useToolbar(sourceFile: Ref<Partial<File>>) {
 
         native.setWindowTitle(`${file.name}.${file.ext}`);
         // 更新文件信息
-        sourceFile.value = file;
+        fileState.value = file;
       }
     },
     {
