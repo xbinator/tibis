@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts" generic="T extends DropdownOption">
-import type { DropdownOption } from './type';
+import type { DropdownOption, DropdownOptionItem } from './type';
 import { computed, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addCssUnit } from '../../utils/css';
@@ -72,15 +72,11 @@ const active = defineModel<string | number>('value', { default: '' });
 
 const width = computed(() => addCssUnit(props.contentWidth));
 
-const label = computed(() => props.options.find((el) => active.value === el.value)?.label);
+const label = computed(() => (props.options.find((el) => el.type === 'item' && active.value === el.value) as DropdownOptionItem)?.label);
 
 const visible = defineModel<boolean>('open', { default: false });
 
-function handleActiveChange(record: DropdownOption) {
-  props.menuClickHide && (visible.value = false);
-
-  record.onClick?.();
-
+function handleActiveChange(record: DropdownOptionItem) {
   emit('change', record);
 }
 
