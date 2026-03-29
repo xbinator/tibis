@@ -15,6 +15,7 @@
           <input
             v-if="editingKey === key"
             v-model="editKeyInput"
+            v-focus="{ selectAll: true }"
             class="item-key editing"
             placeholder="键名"
             @blur="handleKeyEditComplete(String(key))"
@@ -77,6 +78,7 @@ import type { FrontMatterData } from '../hooks/useFrontMatter';
 import { ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import yaml from 'js-yaml';
+import { vFocus } from '@/directives/focus';
 
 interface Props {
   data?: FrontMatterData;
@@ -278,22 +280,31 @@ function confirmComplexEditInline(): void {
 }
 
 .item-key {
+  box-sizing: border-box;
   min-width: 80px;
   max-width: 150px;
-  padding: 4px 8px;
+  height: 26px;
+  padding: 0 8px;
   font-family: 'SF Mono', Monaco, 'Courier New', monospace;
   font-size: 12px;
   font-weight: 500;
+  line-height: 26px;
   color: #7c3aed;
   cursor: pointer;
   background-color: #ede9fe;
+  border: 1px solid transparent;
   border-radius: 4px;
+  transition: border-color 0.2s;
+
+  &:hover {
+    border-color: #c4b5fd;
+  }
 
   &.editing {
     width: 120px;
     outline: none;
     background-color: #fff;
-    border: 1px solid #7c3aed;
+    border-color: #7c3aed;
   }
 }
 
@@ -303,9 +314,12 @@ function confirmComplexEditInline(): void {
 }
 
 .item-value {
+  box-sizing: border-box;
   width: 100%;
-  padding: 4px 8px;
+  height: 26px;
+  padding: 0 8px;
   font-size: 13px;
+  line-height: 24px;
   color: #374151;
   outline: none;
   background-color: #fff;
@@ -320,6 +334,7 @@ function confirmComplexEditInline(): void {
   &.complex {
     font-family: 'SF Mono', Monaco, 'Courier New', monospace;
     font-size: 12px;
+    line-height: 24px;
     color: #6b7280;
     cursor: pointer;
     background-color: #f3f4f6;
@@ -367,6 +382,7 @@ function confirmComplexEditInline(): void {
 
 .new-key {
   background-color: #fff;
+  border: 1px solid #e5e7eb;
 }
 
 .new-value {
