@@ -41,7 +41,7 @@ import { useContent } from './hooks/useContent';
 import { useExtensions } from './hooks/useExtensions';
 import { useFrontMatter } from './hooks/useFrontMatter';
 
-const MIN_WIDTH_FOR_SIDEBAR = 1360;
+const MIN_WIDTH_FOR_SIDEBAR = 1000 + 560;
 let editorInstanceCounter = 0;
 
 const { width } = useWindowSize();
@@ -173,7 +173,7 @@ defineExpose({ setContent: (text: string) => setEditorContent(text, false) });
 }
 
 .b-editor-container {
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 

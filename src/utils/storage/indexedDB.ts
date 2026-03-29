@@ -1,10 +1,6 @@
 import localforage from 'localforage';
 
-localforage.config({
-  name: 'Vault',
-  storeName: 'files',
-  description: 'Vault 笔记应用文件存储'
-});
+localforage.config({ name: 'Texti', storeName: 'files', description: 'Texti 笔记应用文件存储' });
 
 export interface StoredFile {
   path: string;

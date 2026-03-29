@@ -47,16 +47,12 @@ export class TauriNative implements Native {
       await writeTextFile(path, content);
       return { success: true, path };
     } catch (error) {
-      return {
-        success: false,
-        path,
-        error: error instanceof Error ? error.message : 'Auto save failed'
-      };
+      // Auto save failed
+      return { success: false, path, error: error instanceof Error ? error.message : 'Auto save failed' };
     }
   }
 
   async setWindowTitle(title: string) {
-    console.log('🚀 ~ TauriNative ~ setWindowTitle ~ title:', title);
     const appWindow = getCurrentWindow();
 
     await appWindow.setTitle(title);
