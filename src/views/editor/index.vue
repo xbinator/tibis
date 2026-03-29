@@ -13,20 +13,21 @@
 </template>
 
 <script setup lang="ts">
+import type { EditorFile } from './types';
 import { ref } from 'vue';
 import Toolbar from '@/components/Toolbar.vue';
-import { native, File } from '@/utils/native';
+import { native } from '@/utils/native';
 import { useFileActive } from './hooks/useFileActive';
 
-const fileState = ref<Partial<File>>({});
+const fileState = ref<Partial<EditorFile>>({});
 
 const { toolbarMenuOptions } = useFileActive(fileState);
 
 function handleTitleBlur(title: string): void {
-  if (title) {
-    const ext = fileState.value.ext || '';
-    native.setWindowTitle(ext ? `${title}.${ext}` : title);
-  }
+  if (!title) return;
+
+  const ext = fileState.value.ext || '';
+  native.setWindowTitle(ext ? `${title}.${ext}` : title);
 }
 </script>
 

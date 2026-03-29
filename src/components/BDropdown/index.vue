@@ -27,12 +27,7 @@ withDefaults(defineProps<Props>(), {
   padding: 4px;
   outline: none;
   background-color: #fff;
+  border: 1px solid #e5e6eb;
   border-radius: 8px;
-  box-shadow: 0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%), 0 9px 28px 8px rgb(0 0 0 / 5%);
-}
-
-:global(.dark) .b-dropdown-overlay {
-  background-color: #1f2937;
-  box-shadow: 0 6px 16px 0 rgb(0 0 0 / 30%), 0 3px 6px -4px rgb(0 0 0 / 40%), 0 9px 28px 8px rgb(0 0 0 / 20%);
 }
 </style>

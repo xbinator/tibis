@@ -1,23 +1,38 @@
 <template>
   <div class="b-dropdown-menu" :style="{ minWidth: typeof minWidth === 'number' ? `${minWidth}px` : minWidth }" @contextmenu.prevent>
-    <template v-for="item in options" :key="item.value">
+    <template v-for="(item, index) in options" :key="index">
+      <div v-if="item.type === 'divider'" class="b-dropdown-menu-item-divider"></div>
       <div
+        v-else
         class="b-dropdown-menu-item"
         :class="[item.class, rowClass, { disabled: item.disabled, danger: item.danger }, item.color]"
         @click="handleClickMenu(item)"
       >
-        <slot name="menu" v-bind="{ record: item }">
+        <BDropdown v-if="item.children?.length" placement="rightTop" :align="{ targetOffset: [-9, 0] }" :disabled="item.disabled">
+          <div class="b-dropdown-menu-item-content">
+            <slot name="menu" v-bind="{ record: item }">
+              <span>{{ item.label }}</span>
+            </slot>
+
+            <Icon class="b-dropdown-menu-item-arrow" icon="lucide:chevron-right" />
+          </div>
+
+          <template #overlay>
+            <Menu :options="(item.children as T[])" :row-class="rowClass" :min-width="minWidth" />
+          </template>
+        </BDropdown>
+
+        <slot v-else name="menu" v-bind="{ record: item }">
           <span>{{ item.label }}</span>
         </slot>
       </div>
-
-      <div v-if="item.divider" class="b-dropdown-menu-item-divider"></div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts" generic="T extends DropdownOption">
-import type { DropdownOption } from './type';
+import type { DropdownOption, DropdownOptionItem } from './type';
+import { Icon } from '@iconify/vue';
 
 interface Props {
   value?: string | number;
@@ -33,17 +48,19 @@ withDefaults(defineProps<Props>(), { value: '', rowClass: '', minWidth: 'auto' }
 
 const emit = defineEmits<{
   (e: 'update:value', value: string | number): void;
-  (e: 'change', value: T): void;
+  (e: 'change', value: DropdownOptionItem): void;
 }>();
 
 const active = defineModel<string | number>('value', { default: '' });
 
-function handleClickMenu(record: T) {
+function handleClickMenu(record: DropdownOptionItem) {
   if (record.disabled) return;
 
   if (record.value !== active.value) {
     active.value = record.value;
   }
+
+  record.onClick?.();
 
   emit('change', record);
 }
@@ -57,8 +74,8 @@ function handleClickMenu(record: T) {
   padding: 4px;
   line-height: 32px;
   background: #fff;
+  border: 1px solid #e5e6eb;
   border-radius: 6px;
-  box-shadow: 1px 1px 8px 0 rgb(0 0 0 / 12%);
 }
 
 .b-dropdown-menu-item {
@@ -88,6 +105,13 @@ function handleClickMenu(record: T) {
 .b-dropdown-menu-item-divider {
   height: 1px;
   margin: 3px 8px;
-  border-bottom: 1px solid #e5e6eb;
+  border-top: 1px solid #e5e6eb;
+}
+
+.b-dropdown-menu-item-content {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  width: 0;
 }
 </style>
