@@ -3,7 +3,8 @@ import localforage from 'localforage';
 localforage.config({ name: 'Texti', storeName: 'files', description: 'Texti 笔记应用文件存储' });
 
 export interface StoredFile {
-  path: string;
+  id: string;
+  path: string | null;
   content: string;
   name: string;
   ext: string;
@@ -11,15 +12,15 @@ export interface StoredFile {
 
 const RECENT_FILES_KEY = 'recent_files';
 
-const CURRENT_FILE_KEY = 'current_file';
+const CURRENT_FILE_ID_KEY = 'current_file_id';
 
 const MAX_RECENT_FILES = 100;
 
-export const indexedDBStorage = {
+export const indexedDB = {
   async addRecentFile(file: StoredFile): Promise<void> {
     const files = await this.getAllRecentFiles();
 
-    const filtered = files.filter((f) => f.path !== file.path);
+    const filtered = files.filter((f) => f.id !== file.id);
 
     filtered.unshift({ ...file });
 
@@ -31,23 +32,24 @@ export const indexedDBStorage = {
     return files || [];
   },
 
-  async getRecentFile(path: string): Promise<StoredFile | null> {
+  async getRecentFile(id: string): Promise<StoredFile | null> {
     const files = await this.getAllRecentFiles();
-    return files.find((f) => f.path === path) || null;
+    return files.find((f) => f.id === id) || null;
   },
 
-  async updateRecentFile(file: StoredFile): Promise<void> {
+  async updateRecentFile(id: string, file: StoredFile): Promise<void> {
     const files = await this.getAllRecentFiles();
-    const index = files.findIndex((f) => f.path === file.path);
+    const index = files.findIndex((f) => f.id === id);
     if (index !== -1) {
       files[index] = { ...file };
+
       await localforage.setItem(RECENT_FILES_KEY, files);
     }
   },
 
-  async removeRecentFile(path: string): Promise<void> {
+  async removeRecentFile(id: string): Promise<void> {
     const files = await this.getAllRecentFiles();
-    const filtered = files.filter((f) => f.path !== path);
+    const filtered = files.filter((f) => f.id !== id);
     await localforage.setItem(RECENT_FILES_KEY, filtered);
   },
 
@@ -55,16 +57,16 @@ export const indexedDBStorage = {
     await localforage.setItem(RECENT_FILES_KEY, []);
   },
 
-  async setCurrentFile(path: string): Promise<void> {
-    await localforage.setItem(CURRENT_FILE_KEY, path);
+  async setCurrentFile(id: string): Promise<void> {
+    await localforage.setItem(CURRENT_FILE_ID_KEY, id);
   },
 
-  async getCurrentFile(): Promise<string | null> {
-    return localforage.getItem<string>(CURRENT_FILE_KEY);
+  async getCurrentFileId(): Promise<string | null> {
+    return localforage.getItem<string>(CURRENT_FILE_ID_KEY);
   },
 
   async clearCurrentFile(): Promise<void> {
-    await localforage.removeItem(CURRENT_FILE_KEY);
+    await localforage.removeItem(CURRENT_FILE_ID_KEY);
   },
 
   async clear(): Promise<void> {

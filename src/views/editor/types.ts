@@ -1,3 +1,5 @@
 import type { File } from '@/utils/native/types';
 
-export type EditorFile = File;
+export interface EditorFile extends File {
+  id: string;
+}

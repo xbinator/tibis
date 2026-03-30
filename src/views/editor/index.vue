@@ -7,7 +7,7 @@
     </div>
 
     <div class="editor-content">
-      <BEditor v-model="fileState.content" v-model:title="fileState.name" @title-blur="handleTitleBlur" />
+      <BEditor v-model:value="fileState.content" v-model:title="fileState.name" :editor-id="fileState?.id" @title-blur="handleTitleBlur" />
     </div>
   </div>
 </template>
@@ -17,20 +17,25 @@ import type { EditorFile } from './types';
 import { ref } from 'vue';
 import Toolbar from '@/components/Toolbar.vue';
 import { native } from '@/utils/native';
+import { indexedDB } from '@/utils/storage';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useFileActive } from './hooks/useFileActive';
 
-const fileState = ref<Partial<EditorFile>>({});
+const fileState = ref<EditorFile>({ name: '', ext: 'md', content: '', id: 'new', path: '' });
 
 const { pause, resume } = useAutoSave(fileState);
 
-const { toolbarMenuOptions } = useFileActive(fileState, { pause, resume });
+const { toolbarMenuOptions, loadRecentFiles } = useFileActive(fileState, { pause, resume });
 
-function handleTitleBlur(title: string): void {
+function handleTitleBlur(title: string) {
   if (!title) return;
 
-  const ext = fileState.value.ext || '';
+  const ext = fileState.value?.ext || '';
   native.setWindowTitle(ext ? `${title}.${ext}` : title);
+
+  indexedDB.updateRecentFile(fileState.value.id, fileState.value).then(() => {
+    return loadRecentFiles();
+  });
 }
 </script>
 
