@@ -2,9 +2,10 @@ import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { computed, ref, onMounted, nextTick } from 'vue';
 import { Modal } from 'ant-design-vue';
+import { customAlphabet } from 'nanoid';
 import type { Props as ToolbarProps } from '@/components/Toolbar.vue';
 import { native } from '@/utils/native';
-import { indexedDBStorage, type StoredFile } from '@/utils/storage';
+import { indexedDB, StoredFile } from '@/utils/storage';
 
 interface UseFileActiveOptions {
   // 暂停自动保存
@@ -13,20 +14,22 @@ interface UseFileActiveOptions {
   resume: () => void;
 }
 
-export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseFileActiveOptions) {
+const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 6);
+
+export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActiveOptions) {
   const canSave = computed(() => fileState.value.path !== undefined);
-  const recentFiles = ref<StoredFile[]>([]);
+  const recentFiles = ref<EditorFile[]>([]);
 
   async function loadRecentFiles(): Promise<void> {
-    recentFiles.value = await indexedDBStorage.getAllRecentFiles();
+    recentFiles.value = await indexedDB.getAllRecentFiles();
   }
 
-  function setFileState(file: Partial<EditorFile>): void {
+  function setFileState(file: EditorFile): void {
     options.pause();
 
     fileState.value = file;
 
-    file.path && indexedDBStorage.setCurrentFile(file.path);
+    file.id && indexedDB.setCurrentFile(file.id);
 
     native.setWindowTitle(`${file.name || '未命名文件'}.${file.ext || 'md'}`);
 
@@ -34,11 +37,11 @@ export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseF
   }
 
   async function restoreCurrentFile(): Promise<void> {
-    const currentPath = await indexedDBStorage.getCurrentFile();
+    const currentId = await indexedDB.getCurrentFileId();
 
-    if (!currentPath) return;
+    if (!currentId) return;
 
-    const stored = await indexedDBStorage.getRecentFile(currentPath);
+    const stored = await indexedDB.getRecentFile(currentId);
 
     stored && setFileState(stored);
   }
@@ -54,7 +57,7 @@ export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseF
       label: '新建',
       shortcut: 'Ctrl+N',
       onClick: () => {
-        setFileState({ name: '', ext: 'md', content: '' });
+        setFileState({ name: '', ext: 'md', content: '', id: nanoid(6), path: '' });
       }
     },
     { type: 'divider' },
@@ -68,10 +71,12 @@ export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseF
 
         if (!file.path) return;
 
-        await indexedDBStorage.addRecentFile(file as StoredFile);
+        const _file = { ...file, id: nanoid(6) };
+
+        await indexedDB.addRecentFile(_file as StoredFile);
         loadRecentFiles();
 
-        setFileState(file);
+        setFileState(_file);
       }
     },
     {
@@ -80,10 +85,10 @@ export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseF
       disabled: !recentFiles.value.length,
       children: [
         ...recentFiles.value.map((file) => ({
-          value: file.path,
-          label: file.path,
+          value: file.id,
+          label: file.name,
           onClick: async () => {
-            const stored = await indexedDBStorage.getRecentFile(file.path);
+            const stored = await indexedDB.getRecentFile(file.id);
 
             if (!stored) return;
 
@@ -105,7 +110,7 @@ export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseF
               okButtonProps: { danger: true, type: 'primary' },
               autoFocusButton: null,
               onOk: async () => {
-                await indexedDBStorage.clearRecentFiles();
+                await indexedDB.clearRecentFiles();
 
                 await loadRecentFiles();
               }
@@ -119,16 +124,28 @@ export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseF
       value: 'save',
       label: '保存',
       shortcut: 'Ctrl+S',
-      disabled: !canSave.value,
       onClick: async () => {
-        const { path, content, name, ext } = fileState.value;
+        const { path, content, name, ext, id = '' } = fileState.value;
 
-        if (!path || content === undefined) return;
+        if (content === undefined) return;
 
-        const savedPath = await native.saveFile(content, path);
+        let savedPath: string | null;
+
+        if (path) {
+          savedPath = await native.saveFile(content, path);
+        } else {
+          savedPath = await native.saveFile(content, undefined, { defaultPath: name && ext ? `${name}.${ext}` : 'untitled.md' });
+        }
 
         if (savedPath) {
-          await indexedDBStorage.updateRecentFile({ path: savedPath, content, name: name ?? '', ext: ext ?? '' });
+          const fileName = savedPath.split(/[/\\]/).pop() ?? '';
+          const [, newName, newExt] = /^(.+?)(?:\.([^.]+))?$/.exec(fileName) || ['', '', ''];
+
+          const newFile = { path: savedPath, content, name: newName, ext: newExt, id };
+
+          await indexedDB.updateRecentFile(id, newFile);
+          loadRecentFiles();
+          setFileState(newFile);
         }
       }
     },
@@ -150,9 +167,9 @@ export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseF
           const fileName = savedPath.split(/[/\\]/).pop() ?? '';
           const [, newName, newExt] = /^(.+?)(?:\.([^.]+))?$/.exec(fileName) || ['', '', ''];
 
-          const newFile = { path: savedPath, content, name: newName, ext: newExt };
+          const newFile = { path: savedPath, content, name: newName, ext: newExt, id: nanoid(6) };
 
-          await indexedDBStorage.addRecentFile(newFile);
+          await indexedDB.addRecentFile(newFile);
           loadRecentFiles();
           setFileState(newFile);
         }
@@ -160,5 +177,5 @@ export function useFileActive(fileState: Ref<Partial<EditorFile>>, options: UseF
     }
   ]);
 
-  return { toolbarMenuOptions };
+  return { toolbarMenuOptions, loadRecentFiles };
 }

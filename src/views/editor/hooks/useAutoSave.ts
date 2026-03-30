@@ -1,20 +1,14 @@
+import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { watch, onUnmounted, ref } from 'vue';
 import { debounce } from 'lodash-es';
-import { indexedDBStorage } from '@/utils/storage';
+import { indexedDB } from '@/utils/storage';
 
 export interface AutoSaveOptions {
   delay?: number;
 }
 
-export interface AutoSaveFile {
-  path?: string | null;
-  content?: string;
-  name?: string;
-  ext?: string;
-}
-
-export function useAutoSave(fileState: Ref<AutoSaveFile>, options: AutoSaveOptions = {}) {
+export function useAutoSave(fileState: Ref<EditorFile>, options: AutoSaveOptions = {}) {
   const { delay = 500 } = options;
 
   const isPaused = ref(false);
@@ -22,17 +16,17 @@ export function useAutoSave(fileState: Ref<AutoSaveFile>, options: AutoSaveOptio
   async function saveToStorage() {
     if (isPaused.value) return;
 
-    const { path, content, name, ext } = fileState.value;
+    const { path, content, id } = fileState.value;
 
     if (!path || content === undefined) return;
 
-    await indexedDBStorage.updateRecentFile({ path, content, name: name ?? '', ext: ext ?? '' });
+    await indexedDB.updateRecentFile(id, fileState.value);
   }
 
   const debouncedSave = debounce(saveToStorage, delay);
 
   const stopWatch = watch(
-    () => [fileState.value.name, fileState.value.content],
+    () => fileState.value.content,
     () => {
       if (!(fileState.value.path && !isPaused.value)) return;
 

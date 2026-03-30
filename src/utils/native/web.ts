@@ -24,6 +24,7 @@ export class WebNative implements Native {
 
   async saveFile(content: string, path?: string, options?: SaveFileOptions): Promise<string | null> {
     const filename = path || options?.defaultPath || 'untitled.md';
+
     const blob = new Blob([content], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
 
