@@ -10,7 +10,7 @@
       @change="handleChangeAnchor"
     />
 
-    <BScrollbar class="b-editor-scrollbar" @click="handleScrollbarClick" @scroll="handleEditorScroll">
+    <BScrollbar class="b-editor-scrollbar" @scroll="handleEditorScroll">
       <div ref="containerRef" class="b-editor-container" @mouseleave="onContainerMouseLeave" @mousemove="onContainerMouseMove">
         <textarea ref="textarea" v-model="editorTitle" class="b-editor-title" placeholder="请输入标题" @blur="handleTitleBlur"></textarea>
 
@@ -170,15 +170,6 @@ function handleFrontMatterFieldRemove(key: string): void {
 function handleFrontMatterFieldAdd(key: string, value: unknown): void {
   addFrontMatterField(key, value);
   syncToExternal();
-}
-
-function handleScrollbarClick(event: MouseEvent): void {
-  if ((event.target as HTMLElement).tagName === 'TEXTAREA') return;
-
-  const instance = editorInstance.value;
-  if (instance) {
-    instance.commands.focus();
-  }
 }
 
 function setContent(text: string): void {

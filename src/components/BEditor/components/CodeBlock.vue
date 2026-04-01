@@ -1,10 +1,10 @@
 <template>
   <NodeViewWrapper class="b-code-block">
-    <div class="b-code-block__header" contenteditable="false">
+    <div class="b-code-block__header" contenteditable="false" @mousedown.prevent>
       <span class="b-code-block__language">{{ languageLabel }}</span>
 
-      <button type="button" class="b-code-block__copy" @mousedown.prevent.stop @click.prevent.stop="handleCopy">
-        {{ copyLabel }}
+      <button type="button" class="b-code-block__copy" :title="copyLabel" :aria-label="copyLabel" @click="handleCopy">
+        <Icon class="b-code-block__copy-icon" :icon="copyIconName" />
       </button>
     </div>
 
@@ -14,6 +14,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue';
+import { Icon } from '@iconify/vue';
 import { NodeViewContent, NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3';
 import { useClipboard } from '@vueuse/core';
 import { message } from 'ant-design-vue';
@@ -34,6 +35,12 @@ const languageLabel = computed(() => {
 const codeClassName = computed(() => {
   const language = props.node.attrs.language as string | null;
   return language ? `language-${language}` : '';
+});
+
+const copyIconName = computed(() => {
+  if (copyLabel.value === '已复制') return 'lucide:check';
+  if (copyLabel.value === '复制失败') return 'lucide:x';
+  return 'lucide:copy';
 });
 
 function scheduleResetCopyLabel(): void {
@@ -70,7 +77,7 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style lang="less" scoped>
 .b-code-block {
   margin: 0.75em 0;
   overflow: hidden;
@@ -84,7 +91,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  height: 38px;
+  padding: 0 14px;
   background: #f6f8fa;
   border-bottom: 1px solid #d8dee4;
 }
@@ -97,18 +105,24 @@ onUnmounted(() => {
 }
 
 .b-code-block__copy {
-  padding: 4px 10px;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   color: #24292f;
   cursor: pointer;
-  background: #fff;
-  border: 1px solid rgb(31 35 40 / 15%);
-  border-radius: 6px;
+  background: transparent;
+  border-radius: 2px;
   transition: all 0.2s ease;
 }
 
+.b-code-block__copy-icon {
+  font-size: 14px;
+}
+
 .b-code-block__copy:hover {
-  background: #f3f4f6;
+  background: fade(#000, 6);
 }
 
 .b-code-block__body {
