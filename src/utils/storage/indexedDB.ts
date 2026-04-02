@@ -47,9 +47,9 @@ export const indexedDB = {
     }
   },
 
-  async removeRecentFile(id: string): Promise<void> {
+  async removeRecentFile(...ids: string[]): Promise<void> {
     const files = await this.getAllRecentFiles();
-    const filtered = files.filter((f) => f.id !== id);
+    const filtered = files.filter((f) => !ids.includes(f.id));
     await localforage.setItem(RECENT_FILES_KEY, filtered);
   },
 

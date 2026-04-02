@@ -21,21 +21,19 @@ import { indexedDB } from '@/utils/storage';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useFileActive } from './hooks/useFileActive';
 
-const fileState = ref<EditorFile>({ name: '', ext: 'md', content: '', id: 'new', path: '' });
+const fileState = ref<EditorFile>({ id: '', path: '', content: '', name: '', ext: 'md' });
 
 const { pause, resume } = useAutoSave(fileState);
 
 const { toolbarMenuOptions, loadRecentFiles } = useFileActive(fileState, { pause, resume });
 
 function handleTitleBlur(title: string) {
-  if (!title) return;
+  if (!title || !fileState.value?.id) return;
 
   const ext = fileState.value?.ext || '';
   native.setWindowTitle(ext ? `${title}.${ext}` : title);
 
-  indexedDB.updateRecentFile(fileState.value.id, fileState.value).then(() => {
-    return loadRecentFiles();
-  });
+  indexedDB.updateRecentFile(fileState.value.id, fileState.value).then(loadRecentFiles);
 }
 </script>
 

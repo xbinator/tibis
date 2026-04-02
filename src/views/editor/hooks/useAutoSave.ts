@@ -16,9 +16,9 @@ export function useAutoSave(fileState: Ref<EditorFile>, options: AutoSaveOptions
   async function saveToStorage() {
     if (isPaused.value) return;
 
-    const { path, content, id } = fileState.value;
+    const { content, id } = fileState.value;
 
-    if (!path || content === undefined) return;
+    if (content === undefined) return;
 
     await indexedDB.updateRecentFile(id, fileState.value);
   }
@@ -27,11 +27,7 @@ export function useAutoSave(fileState: Ref<EditorFile>, options: AutoSaveOptions
 
   const stopWatch = watch(
     () => fileState.value.content,
-    () => {
-      if (!(fileState.value.path && !isPaused.value)) return;
-
-      debouncedSave();
-    }
+    () => !isPaused.value && debouncedSave()
   );
 
   // 暂停自动保存

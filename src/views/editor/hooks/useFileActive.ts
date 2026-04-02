@@ -18,17 +18,19 @@ const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 6);
 
 export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActiveOptions) {
   const canSave = computed(() => fileState.value.path !== undefined);
-  const recentFiles = ref<EditorFile[]>([]);
 
-  async function loadRecentFiles(): Promise<void> {
-    recentFiles.value = await indexedDB.getAllRecentFiles();
+  const recentFiles = ref<{ missing: EditorFile[]; list: EditorFile[] }>({ missing: [], list: [] });
+
+  async function loadRecentFiles() {
+    const files = await indexedDB.getAllRecentFiles();
+
+    recentFiles.value = { missing: files.filter((file) => !file.path), list: files };
   }
 
   function setFileState(file: EditorFile): void {
     options.pause();
 
     fileState.value = file;
-
     file.id && indexedDB.setCurrentFile(file.id);
 
     native.setWindowTitle(`${file.name || '未命名文件'}.${file.ext || 'md'}`);
@@ -38,17 +40,23 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
 
   async function restoreCurrentFile(): Promise<void> {
     const currentId = await indexedDB.getCurrentFileId();
+    if (currentId) {
+      const stored = await indexedDB.getRecentFile(currentId);
+      stored && setFileState(stored);
+    }
 
-    if (!currentId) return;
+    if (!fileState.value.id) {
+      const _file = { path: '', name: '', ext: 'md', content: '', id: nanoid(6) };
+      await indexedDB.addRecentFile(_file as StoredFile);
 
-    const stored = await indexedDB.getRecentFile(currentId);
+      setFileState(_file);
+    }
 
-    stored && setFileState(stored);
+    loadRecentFiles();
   }
 
-  onMounted(async () => {
-    await loadRecentFiles();
-    await restoreCurrentFile();
+  onMounted(() => {
+    restoreCurrentFile();
   });
 
   const toolbarMenuOptions = computed<ToolbarProps['options']>(() => [
@@ -56,8 +64,16 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
       value: 'new',
       label: '新建',
       shortcut: 'Ctrl+N',
-      onClick: () => {
-        setFileState({ name: '', ext: 'md', content: '', id: nanoid(6), path: '' });
+      onClick: async () => {
+        // 移除所有未保存的文件
+        const ids = recentFiles.value.list.map((file) => file.id);
+        await indexedDB.removeRecentFile(...ids);
+
+        const _file = { path: '', name: '', ext: 'md', content: '', id: nanoid(6) };
+        await indexedDB.addRecentFile(_file as StoredFile);
+
+        setFileState(_file);
+        loadRecentFiles();
       }
     },
     { type: 'divider' },
@@ -65,26 +81,23 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
       value: 'open',
       label: '打开',
       shortcut: 'Ctrl+O',
-
       onClick: async () => {
         const file = await native.openFile();
-
         if (!file.path) return;
 
         const _file = { ...file, id: nanoid(6) };
-
         await indexedDB.addRecentFile(_file as StoredFile);
-        loadRecentFiles();
 
+        loadRecentFiles();
         setFileState(_file);
       }
     },
     {
       value: 'recent',
       label: '打开最近的文件',
-      disabled: !recentFiles.value.length,
+      disabled: !recentFiles.value.missing.length,
       children: [
-        ...recentFiles.value.map((file) => ({
+        ...recentFiles.value.missing.map((file) => ({
           value: file.id,
           label: file.name,
           onClick: async () => {
@@ -125,28 +138,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
       label: '保存',
       shortcut: 'Ctrl+S',
       onClick: async () => {
-        const { path, content, name, ext, id = '' } = fileState.value;
-
-        if (content === undefined) return;
-
-        let savedPath: string | null;
-
-        if (path) {
-          savedPath = await native.saveFile(content, path);
-        } else {
-          savedPath = await native.saveFile(content, undefined, { defaultPath: name && ext ? `${name}.${ext}` : 'untitled.md' });
-        }
-
-        if (savedPath) {
-          const fileName = savedPath.split(/[/\\]/).pop() ?? '';
-          const [, newName, newExt] = /^(.+?)(?:\.([^.]+))?$/.exec(fileName) || ['', '', ''];
-
-          const newFile = { path: savedPath, content, name: newName, ext: newExt, id };
-
-          await indexedDB.updateRecentFile(id, newFile);
-          loadRecentFiles();
-          setFileState(newFile);
-        }
+        //
       }
     },
     {
@@ -155,24 +147,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
       shortcut: 'Ctrl+Shift+S',
       disabled: !canSave.value,
       onClick: async () => {
-        const { content, name, ext } = fileState.value;
-
-        if (content === undefined) return;
-
-        const savedPath = await native.saveFile(content, undefined, {
-          defaultPath: name && ext ? `${name}.${ext}` : 'untitled.md'
-        });
-
-        if (savedPath) {
-          const fileName = savedPath.split(/[/\\]/).pop() ?? '';
-          const [, newName, newExt] = /^(.+?)(?:\.([^.]+))?$/.exec(fileName) || ['', '', ''];
-
-          const newFile = { path: savedPath, content, name: newName, ext: newExt, id: nanoid(6) };
-
-          await indexedDB.addRecentFile(newFile);
-          loadRecentFiles();
-          setFileState(newFile);
-        }
+        //
       }
     }
   ]);
