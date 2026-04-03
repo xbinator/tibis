@@ -328,7 +328,7 @@ onUnmounted(() => {
   }
 }
 
-:global(.dark) .scrollbar__thumb {
+.dark .scrollbar__thumb {
   background: rgb(255 255 255 / 15%);
 
   &:hover {

@@ -6,7 +6,11 @@
 
         <Toolbar :title="'编辑'" :options="toolbarEditOptions" />
 
-        <Toolbar :title="'视图'" show-selected-check :value="[viewMode]" :options="toolbarViewOptions" />
+        <Toolbar :title="'视图'" show-selected-check :options="toolbarViewOptions" />
+      </div>
+
+      <div v-if="showFind" class="header-right">
+        <AInput v-model:value="findKeyword" v-focus placeholder="查找" @keydown.esc="closeFind" />
       </div>
     </div>
 
@@ -17,7 +21,8 @@
         v-model:value="fileState.content"
         v-model:title="fileState.name"
         :editor-id="fileState?.id"
-        :view-mode="viewMode"
+        :view-mode="viewState.mode"
+        :show-outline="viewState.showOutline"
         @title-blur="handleTitleBlur"
       />
     </div>
@@ -29,6 +34,7 @@ import type { EditorFile } from './types';
 import { ref } from 'vue';
 import BEditor from '@/components/BEditor/index.vue';
 import Toolbar from '@/components/Toolbar.vue';
+import { vFocus } from '@/directives/focus';
 import { native } from '@/utils/native';
 import { indexedDB } from '@/utils/storage';
 import { useAutoSave } from './hooks/useAutoSave';
@@ -43,9 +49,9 @@ const { pause, resume } = useAutoSave(fileState);
 
 const { toolbarFileOptions, loadRecentFiles } = useFileActive(fileState, { pause, resume });
 
-const { toolbarEditOptions } = useEditActive(fileState, editor);
+const { toolbarEditOptions, showFind, findKeyword, closeFind } = useEditActive(fileState, editor);
 
-const { viewMode, toolbarViewOptions } = useViewActive();
+const { viewState, toolbarViewOptions } = useViewActive();
 
 function handleTitleBlur(title: string): void {
   if (!title || !fileState.value?.id) return;
@@ -80,6 +86,15 @@ function handleTitleBlur(title: string): void {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.find-input {
+  width: 220px;
 }
 
 .editor-content {

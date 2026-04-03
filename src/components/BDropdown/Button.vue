@@ -127,21 +127,21 @@ watch(
   transition: transform 0.3s;
 }
 
-:global(.dark) .b-dropdown-button {
+:deep(.dark) .b-dropdown-button {
   color: rgb(255 255 255 / 65%);
 }
 
-:global(.dark) .b-dropdown-button:hover {
+:deep(.dark) .b-dropdown-button:hover {
   color: rgb(255 255 255 / 88%);
   background-color: rgb(255 255 255 / 10%);
 }
 
-:global(.dark) .b-dropdown-button.is-active {
+:deep(.dark) .b-dropdown-button.is-active {
   color: rgb(255 255 255 / 88%);
   background-color: rgb(255 255 255 / 10%);
 }
 
-:global(.dark) .b-dropdown-button.is-bordered {
+:deep(.dark) .b-dropdown-button.is-bordered {
   border-color: #4b5563;
 }
 </style>

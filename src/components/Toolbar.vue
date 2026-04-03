@@ -4,7 +4,7 @@
 
     <template #menu="{ record }">
       <span v-if="props.showSelectedCheck" class="toolbar-menu-item-check">
-        <Icon v-if="isSelected((record as ToolbarOption).value)" icon="lucide:check" />
+        <Icon v-if="(record as ToolbarOption).selected" icon="lucide:check" />
       </span>
       <span class="toolbar-menu-item-label">{{ (record as ToolbarOption).label }}</span>
       <span v-if="(record as ToolbarOption).shortcut" class="toolbar-menu-item-shortcut">
@@ -27,7 +27,9 @@ import { Icon } from '@iconify/vue';
 import { useMagicKeys, whenever, useEventListener } from '@vueuse/core';
 import { isMac } from '@/utils/is';
 
-interface ToolbarOption extends DropdownOptionItem {
+export interface ToolbarOption extends DropdownOptionItem {
+  // 是否选中当前项
+  selected?: boolean;
   shortcut?: string;
   // 是否启用快捷键
   enableShortcut?: boolean;
@@ -36,8 +38,6 @@ interface ToolbarOption extends DropdownOptionItem {
 export interface Props {
   // 工具栏标题
   title?: string;
-  // 工具栏选中值
-  value?: Array<string | number>;
   // 是否显示选中对勾
   showSelectedCheck?: boolean;
   // 工具栏选项
@@ -46,7 +46,6 @@ export interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   title: '',
-  value: () => [],
   showSelectedCheck: false,
   options: () => []
 });
@@ -79,10 +78,6 @@ function getShortcutParts(shortcut: string): string[] {
 
 function getKeyName(shortcut: string): string {
   return shortcut.replace(/\+/g, '_').replace(/\s+/g, '').toLowerCase();
-}
-
-function isSelected(value: string | number): boolean {
-  return props.value.includes(value);
 }
 
 const keys = useMagicKeys();

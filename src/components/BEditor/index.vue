@@ -33,7 +33,7 @@
 <script setup lang="ts">
 import type { FrontMatterData } from './hooks/useFrontMatter';
 import type { BEditorViewMode } from './types';
-import { computed, ref, toRef, watch } from 'vue';
+import { computed, ref, toRef } from 'vue';
 import { useTextareaAutosize, useWindowSize } from '@vueuse/core';
 import RichEditorPane from './components/RichEditorPane.vue';
 import SourceEditorPane from './components/SourceEditorPane.vue';
@@ -51,26 +51,26 @@ const { width } = useWindowSize();
 const layoutRef = ref<HTMLElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
 const titleTextareaRef = ref<HTMLTextAreaElement | null>(null);
-const showSidebar = ref(true);
-
-watch(width, (newWidth) => (showSidebar.value = newWidth >= MIN_WIDTH_FOR_SIDEBAR), { immediate: true });
 
 interface Props {
   editable?: boolean;
   // 编辑器实例ID
   editorId?: string;
   viewMode?: BEditorViewMode;
+  showOutline?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   editable: true,
   // 编辑器实例ID
   editorId: '',
-  viewMode: 'rich'
+  viewMode: 'rich',
+  showOutline: true
 });
 
 const editorInstanceId = computed(() => `${props.editorId || ''}`);
 const isRichMode = computed(() => props.viewMode === 'rich');
+const showSidebar = computed(() => isRichMode.value && props.showOutline && width.value >= MIN_WIDTH_FOR_SIDEBAR);
 
 const editorContent = defineModel<string>('value', { default: '' });
 

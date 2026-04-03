@@ -1,12 +1,43 @@
 import type { EditorFile } from '../types';
-import { computed, Ref } from 'vue';
-import { useClipboard } from '@vueuse/core';
-import { message } from 'ant-design-vue';
+import type { Ref } from 'vue';
+import { computed, ref } from 'vue';
+import { marked } from 'marked';
 import BEditor from '@/components/BEditor/index.vue';
 import type { Props as ToolbarProps } from '@/components/Toolbar.vue';
+import { useClipboard } from '@/hooks/useClipboard';
 
 export function useEditActive(fileState: Ref<EditorFile>, editorRef: Ref<InstanceType<typeof BEditor> | null>) {
-  const { copy } = useClipboard();
+  const { clipboard } = useClipboard();
+
+  const showFind = ref(false);
+  const findKeyword = ref('');
+
+  async function toHtml(markdown: string): Promise<string> {
+    const rendered = marked.parse(markdown);
+
+    if (typeof rendered === 'string') {
+      return rendered;
+    }
+
+    return rendered;
+  }
+
+  async function toPlainText(markdown: string): Promise<string> {
+    const parser = new DOMParser();
+    const html = await toHtml(markdown);
+    const documentNode = parser.parseFromString(html, 'text/html');
+
+    return documentNode.body.textContent?.trim() ?? '';
+  }
+
+  function openFind(): void {
+    showFind.value = true;
+  }
+
+  function closeFind(): void {
+    showFind.value = false;
+    findKeyword.value = '';
+  }
 
   const toolbarEditOptions = computed<ToolbarProps['options']>(() => {
     const { content } = fileState.value;
@@ -28,26 +59,41 @@ export function useEditActive(fileState: Ref<EditorFile>, editorRef: Ref<Instanc
         disabled: !editorRef.value?.canRedo(),
         onClick: () => editorRef.value?.redo()
       },
+      {
+        value: 'find',
+        label: '查找',
+        shortcut: 'Ctrl+F',
+        disabled: !canCopy,
+        onClick: openFind
+      },
       { type: 'divider' },
       {
-        value: 'copyAll',
-        label: '复制全文',
+        value: 'copyPlainText',
+        label: '复制为纯文本',
         disabled: !canCopy,
         onClick: async () => {
-          if (!canCopy) {
-            message.warning('内容为空');
-            return;
-          }
-
-          try {
-            await copy(content);
-            message.success('复制成功');
-          } catch {
-            message.error('复制失败');
-          }
+          const plainText = await toPlainText(content);
+          await clipboard(plainText, { successMessage: '已复制纯文本' });
+        }
+      },
+      {
+        value: 'copyMarkdown',
+        label: '复制为 Markdown',
+        disabled: !canCopy,
+        onClick: async () => {
+          await clipboard(content, { successMessage: '已复制 Markdown' });
+        }
+      },
+      {
+        value: 'copyHtml',
+        label: '复制为 HTML 代码',
+        disabled: !canCopy,
+        onClick: async () => {
+          const html = await toHtml(content);
+          await clipboard(html, { successMessage: '已复制 HTML 代码' });
         }
       }
     ];
   });
-  return { toolbarEditOptions };
+  return { toolbarEditOptions, showFind, findKeyword, openFind, closeFind };
 }
