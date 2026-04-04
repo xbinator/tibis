@@ -73,8 +73,6 @@ interface MenuDivider {
 
 type MenuItem = MenuAction | MenuDivider;
 
-const hiddenMenuItemValues = new Set(['insert-paragraph', 'insert-heading', 'insert-code-block']);
-
 const props = withDefaults(defineProps<Props>(), {
   editor: null
 });

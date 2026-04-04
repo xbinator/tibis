@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax */
 import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { computed, ref, onMounted, nextTick } from 'vue';
@@ -17,19 +18,27 @@ interface UseFileActiveOptions {
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 6);
 
+function getRecentFileLabel(file: Pick<EditorFile, 'name' | 'content'>): string {
+  const content = file.content.replace(/^\s*---[\s\S]*?---\s*\n?/, '');
+
+  const match = /^#{1,6}\s+(.+)/m.exec(content);
+
+  return match?.[1]?.trim() || file.name || '未命名';
+}
+
 export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActiveOptions) {
   const canSave = computed(() => fileState.value.path !== undefined);
-
-  const recentFiles = ref<{ missing: EditorFile[]; list: EditorFile[] }>({ missing: [], list: [] });
+  const recentFiles = ref<EditorFile[]>([]);
+  const savedRecentFiles = computed<EditorFile[]>(() => recentFiles.value.filter((file) => Boolean(file.path)));
 
   async function loadRecentFiles(): Promise<void> {
     const files = await indexedDB.getAllRecentFiles();
 
-    recentFiles.value = { missing: files.filter((file) => file.path), list: files };
+    recentFiles.value = files;
   }
 
   async function removeUnsavedFiles(): Promise<void> {
-    const ids = recentFiles.value.list.filter((v) => !v.path).map((v) => v.id);
+    const ids = recentFiles.value.filter((v) => !v.path).map((v) => v.id);
     if (!ids.length) return;
 
     await indexedDB.removeRecentFile(...ids);
@@ -136,11 +145,11 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
     {
       value: 'recent',
       label: '打开最近的文件',
-      disabled: !recentFiles.value.missing.length,
+      disabled: !savedRecentFiles.value.length,
       children: [
-        ...recentFiles.value.missing.map((file) => ({
+        ...savedRecentFiles.value.map((file) => ({
           value: file.id,
-          label: file.name,
+          label: getRecentFileLabel(file),
           onClick: async () => {
             const stored = await indexedDB.getRecentFile(file.id);
             if (!stored) return;
