@@ -34,6 +34,7 @@ export function useViewActive() {
     {
       value: 'source',
       label: '源代码模式',
+      shortcut: 'Ctrl+E',
       selected: viewState.value.mode === 'source',
       onClick: () => {
         viewState.value.mode = viewState.value.mode === 'source' ? 'rich' : 'source';

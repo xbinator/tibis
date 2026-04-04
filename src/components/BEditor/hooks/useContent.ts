@@ -1,6 +1,7 @@
 import type { Editor } from '@tiptap/core';
 import type { Ref } from 'vue';
 import { watch } from 'vue';
+import { normalizeEditorContent } from './emptyContent';
 
 interface UseBEditorContentParams {
   assignHeadingIds: (editor: Editor) => void;
@@ -32,7 +33,10 @@ export function useContent({
     }
 
     resetHeadingIndex();
-    instance.commands.setContent(text, { emitUpdate, contentType: 'markdown' });
+    instance.commands.setContent(normalizeEditorContent(text), {
+      emitUpdate,
+      contentType: text ? 'markdown' : undefined
+    });
   }
 
   function onPaste(_view: unknown, event: ClipboardEvent): boolean {

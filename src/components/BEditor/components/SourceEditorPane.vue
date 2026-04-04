@@ -1,6 +1,6 @@
 <template>
   <div class="source-editor-pane">
-    <textarea ref="sourceTextareaRef" v-model="editorContent" class="source-editor-textarea" spellcheck="false"></textarea>
+    <textarea ref="sourceTextareaRef" v-model="editorContent" class="source-editor-textarea" spellcheck="false" placeholder="请输入内容"></textarea>
   </div>
 </template>
 
@@ -15,7 +15,15 @@ function focusEditor(): void {
   sourceTextareaRef.value?.focus();
 }
 
-defineExpose({ focusEditor });
+function focusEditorAtStart(): void {
+  const textarea = sourceTextareaRef.value;
+  if (textarea) {
+    textarea.focus();
+    textarea.setSelectionRange(0, 0);
+  }
+}
+
+defineExpose({ focusEditor, focusEditorAtStart });
 
 // @ts-ignore
 useTextareaAutosize({ element: sourceTextareaRef, input: editorContent });
@@ -39,5 +47,9 @@ useTextareaAutosize({ element: sourceTextareaRef, input: editorContent });
   resize: none;
   outline: none;
   border: 0;
+
+  &::placeholder {
+    color: #bfbfbf;
+  }
 }
 </style>

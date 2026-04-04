@@ -86,7 +86,11 @@ function focusEditor(): void {
   props.editor?.commands.focus();
 }
 
-defineExpose({ undo, redo, canUndo, canRedo, focusEditor });
+function focusEditorAtStart(): void {
+  props.editor?.commands.focus('start');
+}
+
+defineExpose({ undo, redo, canUndo, canRedo, focusEditor, focusEditorAtStart });
 </script>
 
 <style lang="less">
@@ -112,14 +116,6 @@ defineExpose({ undo, redo, canUndo, canRedo, focusEditor });
       margin-top: 0;
     }
 
-    p.is-editor-empty:first-child::before {
-      float: left;
-      height: 0;
-      color: #bfbfbf;
-      pointer-events: none;
-      content: attr(data-placeholder);
-    }
-
     .search-match {
       background: rgb(250 204 21 / 28%);
       border-radius: 2px;
@@ -128,6 +124,16 @@ defineExpose({ undo, redo, canUndo, canRedo, focusEditor });
     .search-match-current {
       background: rgb(59 130 246 / 24%);
       box-shadow: 0 0 0 1px rgb(59 130 246 / 22%);
+    }
+
+    .is-editor-empty:first-child::before {
+      float: left;
+      height: 0;
+      font-size: 14px;
+      line-height: 1.74;
+      color: #bfbfbf;
+      pointer-events: none;
+      content: attr(data-placeholder);
     }
   }
 

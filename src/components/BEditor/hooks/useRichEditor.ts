@@ -2,6 +2,7 @@ import type { SearchScrollContext } from '../extensions/Search';
 import type { Ref } from 'vue';
 import { ref, watch } from 'vue';
 import { useEditor, type Editor } from '@tiptap/vue-3';
+import { normalizeEditorContent } from './emptyContent';
 import { useContent } from './useContent';
 import { useExtensions } from './useExtensions';
 
@@ -33,7 +34,7 @@ export function useRichEditor({ bodyContent, editable, editorInstanceId, onConte
   });
 
   const editorInstance = useEditor({
-    content: bodyContent.value ?? '',
+    content: normalizeEditorContent(bodyContent.value ?? ''),
     extensions: editorExtensions,
     editable: editable.value,
     contentType: 'markdown',

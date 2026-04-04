@@ -32,16 +32,10 @@ export function useFrontMatter(content: Ref<string | undefined>): UseFrontMatter
     const match = rawContent.match(FRONT_MATTER_REGEX);
 
     if (match) {
-      return {
-        frontMatter: match[1],
-        body: rawContent.slice(match[0].length)
-      };
+      return { frontMatter: match[1], body: rawContent.slice(match[0].length) };
     }
 
-    return {
-      frontMatter: '',
-      body: rawContent
-    };
+    return { frontMatter: '', body: rawContent };
   }
 
   function parseFrontMatter(raw: string): FrontMatterData {

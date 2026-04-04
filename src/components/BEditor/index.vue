@@ -12,7 +12,14 @@
 
     <BScrollbar ref="scrollbarRef" class="b-editor-scrollbar" @scroll="handleEditorScroll">
       <div ref="containerRef" :class="['b-editor-container']">
-        <textarea ref="titleTextareaRef" v-model="editorTitle" class="b-editor-title" placeholder="请输入标题" @blur="handleTitleBlur"></textarea>
+        <textarea
+          ref="titleTextareaRef"
+          v-model="editorTitle"
+          class="b-editor-title"
+          placeholder="请输入标题"
+          @blur="handleTitleBlur"
+          @keydown.enter="handleTitleEnter"
+        ></textarea>
 
         <RichEditorPane
           v-if="isRichMode"
@@ -192,6 +199,11 @@ function clearSearch() {
 
 function focusEditor(): void {
   editorController.value.focusEditor();
+}
+
+function handleTitleEnter(event: KeyboardEvent): void {
+  event.preventDefault();
+  editorController.value.focusEditorAtStart();
 }
 
 function getSearchState(): SearchSnapshot {
