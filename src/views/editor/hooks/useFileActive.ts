@@ -164,7 +164,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
           value: 'clear-recent',
           label: '清除最近打开记录',
           onClick: async () => {
-            const [, confirmed] = await Modal.delete('此操作将删除所有最近打开的文件记录，是否继续？');
+            const [, confirmed] = await Modal.delete('此操作将删除所有最近打开的文件记录，是否继续？', { title: '清除最近打开记录' });
             if (!confirmed) return;
 
             await indexedDB.clearRecentFiles();
@@ -237,6 +237,20 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
     },
     { type: 'divider' },
     {
+      value: 'rename',
+      label: '重命名',
+      shortcut: 'F2',
+      onClick: async () => {
+        const { id, name } = fileState.value;
+        const [, newName] = await Modal.input('重命名', { defaultValue: name, placeholder: '请输入文件名' });
+        if (!newName || newName === name) return;
+
+        await applyFileUpdate(id, { ...fileState.value, name: newName });
+        await loadRecentFiles();
+      }
+    },
+    { type: 'divider' },
+    {
       value: 'clear-content',
       label: '清空内容',
       onClick: async () => {
@@ -248,6 +262,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
         await loadRecentFiles();
       }
     },
+
     {
       value: 'remove-current',
       label: '从最近记录移除当前',

@@ -12,15 +12,6 @@
 
     <BScrollbar ref="scrollbarRef" class="b-editor-scrollbar" @scroll="handleEditorScroll">
       <div ref="containerRef" :class="['b-editor-container']">
-        <textarea
-          ref="titleTextareaRef"
-          v-model="editorTitle"
-          class="b-editor-title"
-          placeholder="请输入标题"
-          @blur="handleTitleBlur"
-          @keydown.enter="handleTitleEnter"
-        ></textarea>
-
         <RichEditorPane
           v-if="isRichMode"
           ref="richEditorPaneRef"
@@ -83,13 +74,9 @@ const editorContent = defineModel<string>('value', { default: '' });
 
 const editorTitle = defineModel<string>('title', { default: '' });
 
-const emit = defineEmits<{ titleBlur: [title: string] }>();
 const richEditorPaneRef = ref<InstanceType<typeof RichEditorPane> | null>(null);
 const sourceEditorPaneRef = ref<InstanceType<typeof SourceEditorPane> | null>(null);
 
-function handleTitleBlur(): void {
-  emit('titleBlur', editorTitle.value);
-}
 const { activeAnchorId, handleChangeAnchor, handleEditorScroll } = useAnchors(layoutRef);
 
 const { bodyContent, frontMatterData, hasFrontMatter, updateFrontMatter, reconstructContent } = useFrontMatter(editorContent);
@@ -199,11 +186,6 @@ function clearSearch() {
 
 function focusEditor(): void {
   editorController.value.focusEditor();
-}
-
-function handleTitleEnter(event: KeyboardEvent): void {
-  event.preventDefault();
-  editorController.value.focusEditorAtStart();
 }
 
 function getSearchState(): SearchSnapshot {

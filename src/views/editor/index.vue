@@ -21,7 +21,6 @@
         :editor-id="fileState?.id"
         :view-mode="viewState.mode"
         :show-outline="viewState.showOutline"
-        @title-blur="handleTitleBlur"
       />
     </div>
   </div>
@@ -32,8 +31,6 @@ import type { EditorFile } from './types';
 import { reactive, ref } from 'vue';
 import BEditor from '@/components/BEditor/index.vue';
 import Toolbar from '@/components/Toolbar.vue';
-import { native } from '@/utils/native';
-import { indexedDB } from '@/utils/storage';
 import FindBar from './components/FindBar.vue';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useEditActive } from './hooks/useEditActive';
@@ -47,20 +44,11 @@ const visible = reactive({ find: false });
 
 const { pause, resume } = useAutoSave(fileState);
 
-const { toolbarFileOptions, loadRecentFiles } = useFileActive(fileState, { pause, resume });
+const { toolbarFileOptions } = useFileActive(fileState, { pause, resume });
 
 const { toolbarEditOptions } = useEditActive(fileState, { editorInstance, visible });
 
 const { viewState, toolbarViewOptions } = useViewActive();
-
-function handleTitleBlur(title: string): void {
-  if (!title || !fileState.value?.id) return;
-
-  const ext = fileState.value?.ext || '';
-  native.setWindowTitle(ext ? `${title}.${ext}` : title);
-
-  indexedDB.updateRecentFile(fileState.value.id, fileState.value).then(loadRecentFiles);
-}
 </script>
 
 <style scoped>

@@ -67,13 +67,28 @@ function getShortcutParts(shortcut: string): string[] {
 
   if (!isMacOS.value) return parts;
 
-  return parts.map((part) => {
-    if (/^ctrl$/i.test(part)) return '⌘';
-    if (/^meta$/i.test(part)) return '⌘';
-    if (/^shift$/i.test(part)) return '⇧';
-    if (/^alt$/i.test(part)) return '⌥';
-    return formatShortcut(part);
+  const macParts: string[] = [];
+  const isFunctionKey = /^f\d+$/i.test(parts[parts.length - 1] || '');
+
+  if (isFunctionKey) {
+    macParts.push('fn');
+  }
+
+  parts.forEach((part) => {
+    if (/^ctrl$/i.test(part)) {
+      macParts.push('⌘');
+    } else if (/^meta$/i.test(part)) {
+      macParts.push('⌘');
+    } else if (/^shift$/i.test(part)) {
+      macParts.push('⇧');
+    } else if (/^alt$/i.test(part)) {
+      macParts.push('⌥');
+    } else {
+      macParts.push(formatShortcut(part));
+    }
   });
+
+  return macParts;
 }
 
 function getKeyName(shortcut: string): string {
