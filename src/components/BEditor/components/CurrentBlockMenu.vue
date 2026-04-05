@@ -4,7 +4,7 @@
       <Icon :icon="triggerIcon" />
     </button>
 
-    <div v-if="open" class="current-block-menu__panel">
+    <div v-if="open" class="current-block-menu__panel" :class="panelClass">
       <BScrollbar :max-height="320" class="current-block-menu__scrollbar" inset>
         <div class="current-block-menu__content">
           <template v-for="item in menuItems" :key="item.value">
@@ -86,6 +86,7 @@ const hoveredBlockPos = ref<number | null>(null);
 const triggerOffsetLeft = 0;
 const triggerSize = 28;
 const position = ref({ left: 8, top: 0 });
+const placement = ref<'top' | 'bottom'>('bottom');
 
 const hiddenBlockTypes = new Set(['codeBlock', 'table', 'tableRow', 'tableCell', 'tableHeader']);
 
@@ -128,8 +129,13 @@ const buttonStyle = computed(() => ({
   left: `${position.value.left}px`,
   top: `${position.value.top}px`
 }));
+const panelClass = computed(() => ({
+  'is-placement-top': placement.value === 'top',
+  'is-placement-bottom': placement.value === 'bottom'
+}));
 const triggerIcon = computed(() => {
   const block = currentBlock.value;
+  const { editor } = props;
   if (!block) {
     return 'lucide:text';
   }
@@ -142,12 +148,15 @@ const triggerIcon = computed(() => {
     return 'lucide:heading';
   }
 
-  if (block.nodeType === 'bulletList' || block.nodeType === 'listItem') return 'lucide:list';
   if (block.nodeType === 'orderedList') return 'lucide:list-ordered';
+  if (block.nodeType === 'bulletList') return 'lucide:list';
   if (block.nodeType === 'blockquote') return 'lucide:quote';
   if (block.nodeType === 'codeBlock') return 'lucide:square-code';
   if (block.nodeType === 'horizontalRule') return 'lucide:minus';
   if (block.nodeType === 'table') return 'lucide:table-properties';
+
+  if (editor?.isActive('orderedList')) return 'lucide:list-ordered';
+  if (editor?.isActive('bulletList')) return 'lucide:list';
 
   return 'lucide:text';
 });
@@ -289,6 +298,26 @@ function updatePosition(): void {
     left: triggerOffsetLeft,
     top: Math.max(0, nodeRect.top - rootRect.top + triggerTopOffset)
   };
+}
+
+function updatePlacement(): void {
+  const triggerElement = rootRef.value?.querySelector('.current-block-menu__trigger');
+  if (!triggerElement) {
+    return;
+  }
+
+  const triggerRect = triggerElement.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
+  const estimatedPanelHeight = 400;
+
+  const spaceBelow = viewportHeight - triggerRect.bottom;
+  const spaceAbove = triggerRect.top;
+
+  if (spaceBelow < estimatedPanelHeight && spaceAbove > spaceBelow) {
+    placement.value = 'top';
+  } else {
+    placement.value = 'bottom';
+  }
 }
 
 function syncCurrentBlock(): void {
@@ -519,6 +548,7 @@ function toggleMenu(): void {
   if (open.value) {
     props.editor?.commands.focus();
     syncCurrentBlock();
+    updatePlacement();
   }
 }
 
@@ -672,7 +702,6 @@ onBeforeUnmount(() => {
 
 .current-block-menu__panel {
   position: absolute;
-  top: 0;
   right: calc(100% + 8px);
   min-width: 172px;
   padding: 6px;
@@ -680,6 +709,14 @@ onBeforeUnmount(() => {
   border: 1px solid var(--dropdown-border);
   border-radius: 10px;
   box-shadow: var(--shadow-lg);
+}
+
+.current-block-menu__panel.is-placement-bottom {
+  top: 0;
+}
+
+.current-block-menu__panel.is-placement-top {
+  bottom: 0;
 }
 
 .current-block-menu__scrollbar {
