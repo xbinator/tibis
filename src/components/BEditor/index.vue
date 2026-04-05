@@ -208,17 +208,8 @@ useTextareaAutosize({ element: titleTextareaRef, input: editorTitle });
 
 <style lang="less">
 .b-editor-layout {
-  position: relative;
   display: flex;
   height: 100%;
-}
-
-.b-editor-sidebar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 10;
 }
 
 .b-editor-scrollbar {
