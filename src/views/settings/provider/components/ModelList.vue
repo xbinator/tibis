@@ -48,16 +48,10 @@
 </template>
 
 <script setup lang="ts">
+import type { Model } from '../types';
 import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { Button, Input } from 'ant-design-vue';
-
-interface Model {
-  id: string;
-  name: string;
-  tags: string[];
-  isEnabled: boolean;
-}
 
 interface Category {
   key: string;

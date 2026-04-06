@@ -2,7 +2,7 @@ import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { watch, onUnmounted, ref } from 'vue';
 import { debounce } from 'lodash-es';
-import { indexedDB } from '@/utils/storage';
+import { recentFilesStorage } from '@/utils/storage';
 
 export interface AutoSaveOptions {
   delay?: number;
@@ -20,7 +20,7 @@ export function useAutoSave(fileState: Ref<EditorFile>, options: AutoSaveOptions
 
     if (content === undefined) return;
 
-    await indexedDB.updateRecentFile(id, fileState.value);
+    await recentFilesStorage.updateRecentFile(id, fileState.value);
   }
 
   const debouncedSave = debounce(saveToStorage, delay);

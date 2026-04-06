@@ -24,6 +24,12 @@
       "csp": null
     }
   },
+  "plugins": {
+    "sql": {
+      "execute": true,
+      "select": true
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

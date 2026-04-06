@@ -1,90 +1,131 @@
-import type { Provider } from '../types';
-import { ref, computed } from 'vue';
+/**
+ * 服务商管理相关的 Hook
+ * 提供服务商的加载、更新、切换状态等功能
+ */
+import type { Provider, Model } from '../types';
+import { computed, ref } from 'vue';
+import { DEFAULT_PROVIDERS, providerStorage } from '@/utils/storage';
 
-const providers = ref<Provider[]>([
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    description: '提供 GPT 系列模型，适用于通用对话、内容生成、代码辅助与多模态能力。',
-    isEnabled: true,
-    type: 'openai',
-    readonly: true
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic',
-    description: '提供 Claude 系列模型，擅长长文本理解、分析推理和高质量写作。',
-    isEnabled: false,
-    type: 'anthropic',
-    readonly: true
-  },
-  {
-    id: 'google',
-    name: 'Google AI',
-    description: '提供 Gemini 系列模型，支持多模态处理、搜索增强与高效推理能力。',
-    type: 'google',
-    isEnabled: true,
-    readonly: true
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    description: '提供高性能推理与代码生成模型，适用于编程辅助和复杂逻辑任务。',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true
-  },
-  {
-    id: 'moonshot',
-    name: 'Moonshot',
-    description: '提供 Kimi 系列大模型，擅长长上下文处理、文档阅读和知识问答。',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true
-  },
-  {
-    id: 'zhipu',
-    name: '智谱 AI',
-    description: '提供 GLM 系列模型，支持中文场景优化、对话生成与智能问答。',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true
-  }
-]);
+/**
+ * 服务商列表的响应式数据
+ * 初始值为默认服务商列表的深拷贝
+ */
+const providers = ref<Provider[]>(
+  DEFAULT_PROVIDERS.map((provider: Provider) => ({
+    ...provider,
+    models: provider.models ? [...provider.models] : []
+  }))
+);
 
-const providerList = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google', label: 'Google AI' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'moonshot', label: 'Moonshot' },
-  { value: 'zhipu', label: '智谱 AI' }
-];
+/**
+ * 用于防止重复加载的 Promise 实例
+ */
+let loadPromise: Promise<void> | null = null;
 
+/**
+ * 从存储中加载服务商列表
+ */
+async function loadProviders(): Promise<void> {
+  providers.value = await providerStorage.listProviders();
+}
+
+/**
+ * 确保服务商列表已加载
+ * 防止重复加载，使用 Promise 缓存
+ */
+function ensureProvidersLoaded(): Promise<void> {
+  if (loadPromise) return loadPromise;
+
+  loadPromise = loadProviders().finally(() => (loadPromise = null));
+
+  return loadPromise;
+}
+
+/**
+ * 更新服务商信息
+ * @param id 服务商 ID
+ * @param patch 要更新的服务商信息
+ * @returns 更新后的服务商信息，若未找到则返回 null
+ */
+async function updateProvider(id: string, patch: Partial<Provider>): Promise<Provider | null> {
+  const nextProvider = await providerStorage.updateProvider(id, {
+    isEnabled: patch.isEnabled,
+    apiKey: patch.apiKey,
+    baseUrl: patch.baseUrl,
+    models: patch.models
+  });
+
+  await loadProviders();
+  return nextProvider;
+}
+
+/**
+ * 切换服务商的启用状态
+ * @param id 服务商 ID
+ * @param enabled 是否启用
+ * @returns 切换后的服务商信息，若未找到则返回 null
+ */
+async function toggleProvider(id: string, enabled: boolean): Promise<Provider | null> {
+  const nextProvider = await providerStorage.toggleProvider(id, enabled);
+  await loadProviders();
+  return nextProvider;
+}
+
+/**
+ * 保存服务商的配置信息
+ * @param id 服务商 ID
+ * @param config 配置信息，包含 apiKey 和 baseUrl
+ * @returns 保存后的服务商信息，若未找到则返回 null
+ */
+async function saveProviderConfig(id: string, config: Pick<Provider, 'apiKey' | 'baseUrl'>): Promise<Provider | null> {
+  const nextProvider = await providerStorage.saveProviderConfig(id, config);
+  await loadProviders();
+  return nextProvider;
+}
+
+/**
+ * 保存服务商的模型列表
+ * @param id 服务商 ID
+ * @param models 模型列表
+ * @returns 保存后的服务商信息，若未找到则返回 null
+ */
+async function saveProviderModels(id: string, models: Model[]): Promise<Provider | null> {
+  const nextProvider = await providerStorage.saveProviderModels(id, models);
+  await loadProviders();
+  return nextProvider;
+}
+
+/**
+ * 根据 ID 获取服务商信息
+ * @param id 服务商 ID
+ * @returns 服务商信息，若未找到则返回 null
+ */
+async function getProviderById(id: string): Promise<Provider | null> {
+  await ensureProvidersLoaded();
+  return providers.value.find((provider: Provider) => provider.id === id) || null;
+}
+
+/**
+ * 服务商管理的 Hook
+ * 提供服务商相关的状态和方法
+ */
 export function useProviders() {
-  const enabledCount = computed(() => providers.value.filter((p) => p.isEnabled).length);
+  ensureProvidersLoaded();
 
-  function toggleProvider(id: string, enabled: boolean): void {
-    const provider = providers.value.find((p) => p.id === id);
-    if (provider) {
-      provider.isEnabled = enabled;
-    }
-  }
-
-  function getProviderById(id: string): Provider | undefined {
-    return providers.value.find((p) => p.id === id);
-  }
-
-  function getProviderByProvider(providerName: string): Provider | undefined {
-    return providers.value.find((p) => p.id === providerName);
-  }
+  /**
+   * 用于下拉选择的服务商列表
+   * 格式为 { label: 服务商名称, value: 服务商 ID }
+   */
+  const providerList = computed(() => providers.value.map((provider: Provider) => ({ label: provider.name, value: provider.id })));
 
   return {
     providers,
     providerList,
-    enabledCount,
-    toggleProvider,
+    loadProviders,
     getProviderById,
-    getProviderByProvider
+    updateProvider,
+    toggleProvider,
+    saveProviderConfig,
+    saveProviderModels
   };
 }

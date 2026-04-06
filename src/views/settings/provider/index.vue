@@ -20,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+import type { Provider } from './types';
 import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
@@ -31,7 +32,9 @@ import { useProviders } from './hooks/useProviders';
 
 const route = useRoute();
 const searchText = ref<string>('');
-const { providers, enabledCount, toggleProvider } = useProviders();
+const { providers, toggleProvider } = useProviders();
+
+const enabledCount = computed(() => providers.value.filter((provider: Provider) => provider.isEnabled).length);
 
 const activeCategory = computed(() => {
   const category = route.query.category as string;
@@ -42,22 +45,21 @@ const filteredProviders = computed(() => {
   let result = providers.value;
 
   if (activeCategory.value === 'enabled') {
-    result = result.filter((p) => p.isEnabled);
+    result = result.filter((provider: Provider) => provider.isEnabled);
   } else if (activeCategory.value === 'disabled') {
-    result = result.filter((p) => !p.isEnabled);
+    result = result.filter((provider: Provider) => !provider.isEnabled);
   }
 
   if (searchText.value) {
-    const search = searchText.value.toLowerCase();
-
-    result = result.filter((p) => p.name.toLowerCase().includes(search) || p.description.toLowerCase().includes(search));
+    const regex = new RegExp(searchText.value, 'i');
+    result = result.filter((provider: Provider) => regex.test(provider.name) || regex.test(provider.description));
   }
 
   return result;
 });
 
-function handleToggleProvider(id: string, enabled: boolean): void {
-  toggleProvider(id, enabled);
+async function handleToggleProvider(id: string, enabled: boolean): Promise<void> {
+  await toggleProvider(id, enabled);
   message.success(enabled ? '已启用服务商' : '已禁用服务商');
 }
 </script>

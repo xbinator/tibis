@@ -1,14 +1,7 @@
+import type { StoredFile } from './types';
 import localforage from 'localforage';
 
 localforage.config({ name: 'Texti', storeName: 'files', description: 'Texti 笔记应用文件存储' });
-
-export interface StoredFile {
-  id: string;
-  path: string | null;
-  content: string;
-  name: string;
-  ext: string;
-}
 
 const RECENT_FILES_KEY = 'recent_files';
 
@@ -16,11 +9,11 @@ const CURRENT_FILE_ID_KEY = 'current_file_id';
 
 const MAX_RECENT_FILES = 100;
 
-export const indexedDB = {
+export const recentFilesStorage = {
   async addRecentFile(file: StoredFile): Promise<void> {
     const files = await this.getAllRecentFiles();
 
-    const filtered = files.filter((f) => f.id !== file.id);
+    const filtered = files.filter((item) => item.id !== file.id);
 
     filtered.unshift({ ...file });
 
@@ -34,12 +27,12 @@ export const indexedDB = {
 
   async getRecentFile(id: string): Promise<StoredFile | null> {
     const files = await this.getAllRecentFiles();
-    return files.find((f) => f.id === id) || null;
+    return files.find((file) => file.id === id) || null;
   },
 
   async updateRecentFile(id: string, file: StoredFile): Promise<void> {
     const files = await this.getAllRecentFiles();
-    const index = files.findIndex((f) => f.id === id);
+    const index = files.findIndex((item) => item.id === id);
     if (index !== -1) {
       files[index] = { ...file };
 
@@ -49,7 +42,7 @@ export const indexedDB = {
 
   async removeRecentFile(...ids: string[]): Promise<void> {
     const files = await this.getAllRecentFiles();
-    const filtered = files.filter((f) => !ids.includes(f.id));
+    const filtered = files.filter((file) => !ids.includes(file.id));
     await localforage.setItem(RECENT_FILES_KEY, filtered);
   },
 
@@ -73,3 +66,5 @@ export const indexedDB = {
     await localforage.clear();
   }
 };
+
+export type { StoredFile };

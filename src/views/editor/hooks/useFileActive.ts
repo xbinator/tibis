@@ -7,7 +7,7 @@ import type { Props as ToolbarProps } from '@/components/Toolbar.vue';
 import { isTauri, isWeb } from '@/utils/is';
 import { Modal } from '@/utils/modal';
 import { native } from '@/utils/native';
-import { indexedDB, StoredFile } from '@/utils/storage';
+import { recentFilesStorage, type StoredFile } from '@/utils/storage';
 import { EditorShortcuts } from '../constants/shortcuts';
 
 interface UseFileActiveOptions {
@@ -31,7 +31,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
   const savedRecentFiles = computed<EditorFile[]>(() => recentFiles.value.filter((file) => Boolean(file.path)));
 
   async function loadRecentFiles(): Promise<void> {
-    const files = await indexedDB.getAllRecentFiles();
+    const files = await recentFilesStorage.getAllRecentFiles();
     recentFiles.value = files;
   }
 
@@ -39,7 +39,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
     const ids = recentFiles.value.filter((file) => !file.path && !preserveIds.includes(file.id)).map((file) => file.id);
     if (!ids.length) return;
 
-    await indexedDB.removeRecentFile(...ids);
+    await recentFilesStorage.removeRecentFile(...ids);
   }
 
   async function confirmUnsavedChanges(): Promise<boolean> {
@@ -55,7 +55,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
 
     fileState.value = file;
     if (file.id) {
-      indexedDB.setCurrentFile(file.id);
+      void recentFilesStorage.setCurrentFile(file.id);
     }
 
     native.setWindowTitle(`${file.name || '未命名'}.${file.ext || 'md'}`);
@@ -63,9 +63,9 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
   }
 
   async function restoreCurrentFile(): Promise<void> {
-    const currentId = await indexedDB.getCurrentFileId();
+    const currentId = await recentFilesStorage.getCurrentFileId();
     if (currentId) {
-      const stored = await indexedDB.getRecentFile(currentId);
+      const stored = await recentFilesStorage.getRecentFile(currentId);
       if (stored) {
         setFileState(stored);
       }
@@ -73,7 +73,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
 
     if (!fileState.value.id) {
       const nextFile: EditorFile = { path: '', name: '', ext: 'md', content: '', id: nanoid(6) };
-      await indexedDB.addRecentFile(nextFile as StoredFile);
+      await recentFilesStorage.addRecentFile(nextFile as StoredFile);
       setFileState(nextFile);
     }
 
@@ -85,7 +85,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
   });
 
   async function applyFileUpdate(id: string, updated: EditorFile): Promise<void> {
-    await indexedDB.updateRecentFile(id, updated as StoredFile);
+    await recentFilesStorage.updateRecentFile(id, updated as StoredFile);
     setFileState(updated);
   }
 
@@ -101,7 +101,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
   }
 
   async function activateLatestOrNew(): Promise<void> {
-    const files = await indexedDB.getAllRecentFiles();
+    const files = await recentFilesStorage.getAllRecentFiles();
     const first = files[0];
     if (first) {
       setFileState(first);
@@ -110,13 +110,13 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
     }
 
     const nextFile: EditorFile = { path: '', name: '', ext: 'md', content: '', id: nanoid(6) };
-    await indexedDB.addRecentFile(nextFile as StoredFile);
+    await recentFilesStorage.addRecentFile(nextFile as StoredFile);
     setFileState(nextFile);
     await loadRecentFiles();
   }
 
   async function openRecentFile(id: string): Promise<void> {
-    const stored = await indexedDB.getRecentFile(id);
+    const stored = await recentFilesStorage.getRecentFile(id);
     if (!stored) return;
 
     if (!(await confirmUnsavedChanges())) return;
@@ -136,7 +136,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
         await removeUnsavedFiles();
 
         const nextFile: EditorFile = { path: '', name: '', ext: 'md', content: '', id: nanoid(6) };
-        await indexedDB.addRecentFile(nextFile as StoredFile);
+        await recentFilesStorage.addRecentFile(nextFile as StoredFile);
 
         setFileState(nextFile);
         await loadRecentFiles();
@@ -155,7 +155,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
         await removeUnsavedFiles();
 
         const nextFile: EditorFile = { ...file, id: nanoid(6) };
-        await indexedDB.addRecentFile(nextFile as StoredFile);
+        await recentFilesStorage.addRecentFile(nextFile as StoredFile);
 
         setFileState(nextFile);
         await loadRecentFiles();
@@ -192,7 +192,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
             const [, confirmed] = await Modal.delete('此操作将删除所有最近打开的文件记录，是否继续？', { title: '清除最近打开记录' });
             if (!confirmed) return;
 
-            await indexedDB.clearRecentFiles();
+            await recentFilesStorage.clearRecentFiles();
             await loadRecentFiles();
           }
         }
@@ -216,7 +216,7 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
           id: nanoid(6)
         };
 
-        await indexedDB.addRecentFile(nextFile as StoredFile);
+        await recentFilesStorage.addRecentFile(nextFile as StoredFile);
         setFileState(nextFile);
         await loadRecentFiles();
       }
@@ -293,11 +293,11 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
         if (!confirmed) return;
 
         const { id } = fileState.value;
-        await indexedDB.removeRecentFile(id);
+        await recentFilesStorage.removeRecentFile(id);
 
-        const currentId = await indexedDB.getCurrentFileId();
+        const currentId = await recentFilesStorage.getCurrentFileId();
         if (currentId === id) {
-          await indexedDB.clearCurrentFile();
+          await recentFilesStorage.clearCurrentFile();
         }
 
         await activateLatestOrNew();

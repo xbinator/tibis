@@ -19,6 +19,7 @@
     "fs:allow-read-file",
     "fs:allow-write-file",
     "sql:default",
+    "sql:allow-execute",
     "stronghold:default"
   ]
 }

@@ -25,6 +25,7 @@ export default defineConfig(async () => ({
       // 组件目录
       dirs: [
         'src/components',
+        'src/components/BSelect',
         'src/components/BButton',
         'src/components/BDropdown',
         'src/components/BEditor',

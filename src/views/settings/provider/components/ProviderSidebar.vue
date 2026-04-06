@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import type { Provider } from '../types';
 import { computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
@@ -75,8 +76,8 @@ const activeProvider = computed(() => {
 
 function getCategoryCount(category: string): number {
   if (category === 'all') return providers.value.length;
-  if (category === 'enabled') return providers.value.filter((p) => p.isEnabled).length;
-  if (category === 'disabled') return providers.value.filter((p) => !p.isEnabled).length;
+  if (category === 'enabled') return providers.value.filter((provider: Provider) => provider.isEnabled).length;
+  if (category === 'disabled') return providers.value.filter((provider: Provider) => !provider.isEnabled).length;
   return 0;
 }
 
