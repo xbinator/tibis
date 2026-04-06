@@ -29,21 +29,30 @@
         :class="{ active: activeProvider === provider.value && activeCategory === 'all' }"
         @click="handleProviderClick(provider.value)"
       >
-        <BModelIcon v-if="provider.value !== 'all'" :provider="provider.value" :size="16" />
+        <img v-if="getProviderLogo(provider.value)" class="provider-logo" :src="getProviderLogo(provider.value)" :alt="provider.label" />
+        <Icon v-else-if="isCustomProvider(provider.value)" icon="lucide:bot" width="16" height="16" />
+        <BModelIcon v-else-if="provider.value !== 'all'" :provider="provider.value" :size="16" />
         <Icon v-else icon="lucide:layout-grid" width="16" height="16" />
         <span>{{ provider.label }}</span>
+
+        <button v-if="isCustomProvider(provider.value)" type="button" class="edit-btn" title="编辑" @click.stop="handleEditProvider(provider.value)">
+          <Icon icon="lucide:pencil" width="12" height="12" />
+        </button>
       </div>
     </div>
   </div>
+
+  <CustomProviderModal v-model:open="modalVisible" :provider="editingProvider" />
 </template>
 
 <script setup lang="ts">
 import type { Provider } from '../types';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import BModelIcon from '@/components/BModelIcon/index.vue';
 import { useProviders } from '../hooks/useProviders';
+import CustomProviderModal from './CustomProviderModal.vue';
 
 interface Category {
   key: string;
@@ -60,6 +69,9 @@ const categories: Category[] = [
   { key: 'enabled', label: '已启用', icon: 'lucide:check-circle' }
 ];
 
+const modalVisible = ref<boolean>(false);
+const editingProvider = ref<Provider | null>(null);
+
 const activeCategory = computed(() => {
   const category = route.query.category as string;
   return category || 'all';
@@ -72,6 +84,13 @@ const activeProvider = computed(() => {
     return parts[parts.length - 1];
   }
   return 'all';
+});
+
+const providerMap = computed<Record<string, Provider>>(() => {
+  return providers.value.reduce<Record<string, Provider>>((acc, provider) => {
+    acc[provider.id] = provider;
+    return acc;
+  }, {});
 });
 
 function getCategoryCount(category: string): number {
@@ -97,8 +116,26 @@ function handleProviderClick(value: string): void {
   }
 }
 
+function getProviderLogo(providerId: string): string {
+  return providerMap.value[providerId]?.logo || '';
+}
+
+function isCustomProvider(providerId: string): boolean {
+  return Boolean(providerMap.value[providerId]?.isCustom);
+}
+
 function handleAddProvider(): void {
-  router.push('/settings/provider/custom');
+  editingProvider.value = null;
+  modalVisible.value = true;
+}
+
+function handleEditProvider(providerId: string): void {
+  const provider = providerMap.value[providerId];
+  if (!provider || !provider.isCustom) {
+    return;
+  }
+  editingProvider.value = provider;
+  modalVisible.value = true;
 }
 </script>
 
@@ -164,12 +201,48 @@ function handleAddProvider(): void {
   &:hover {
     color: var(--text-primary);
     background: var(--bg-hover);
+
+    .edit-btn {
+      opacity: 1;
+    }
   }
 
   &.active {
     font-weight: 500;
     color: var(--text-primary);
     background: var(--color-primary-bg);
+
+    .edit-btn {
+      opacity: 1;
+    }
+  }
+}
+
+.provider-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
   }
 }
 

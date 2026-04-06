@@ -1,0 +1,208 @@
+<template>
+  <BModal v-model:open="visible" :width="560" :title="isEditMode ? '编辑自定义服务商' : '新建自定义服务商'">
+    <AForm layout="vertical">
+      <div class="dataItem-section">
+        <div class="section-title">基本信息</div>
+        <AFormItem label="服务商 ID" required v-bind="validateInfos.id">
+          <AInput v-model:value="dataItem.id" :disabled="isEditMode" placeholder="例如: my-provider" @blur="handleProviderIdBlur" />
+        </AFormItem>
+
+        <AFormItem label="服务商名称" required v-bind="validateInfos.name">
+          <AInput v-model:value="dataItem.name" placeholder="请输入服务商名称" />
+        </AFormItem>
+
+        <AFormItem label="服务商 Logo">
+          <AInput v-model:value="dataItem.logo" placeholder="请输入 Logo 图片 URL" />
+        </AFormItem>
+      </div>
+
+      <div class="dataItem-section">
+        <div class="section-title">配置信息</div>
+        <AFormItem label="请求格式" required v-bind="validateInfos.type">
+          <BSelect v-model:value="dataItem.type" :label="selectedFormatLabel" :options="requestFormatOptions" placeholder="请选择请求格式">
+            <template #option="{ value, label }">
+              <div class="format-option">
+                <BModelIcon :provider="value" :size="12" />
+                <span>{{ label }}</span>
+              </div>
+            </template>
+          </BSelect>
+        </AFormItem>
+
+        <AFormItem label="代理地址">
+          <AInput v-model:value="dataItem.baseUrl" placeholder="例如: https://api.example.com/v1" />
+        </AFormItem>
+
+        <AFormItem label="API Key">
+          <AInputPassword v-model:value="dataItem.apiKey" placeholder="请输入 API Key" />
+        </AFormItem>
+      </div>
+    </AForm>
+
+    <template #footer>
+      <BButton type="secondary" @click="handleCancel">取消</BButton>
+      <BButton :loading="saving" @click="handleSubmit">保存</BButton>
+    </template>
+  </BModal>
+</template>
+
+<script setup lang="ts">
+import type { Provider } from '../types';
+import type { Rule } from 'ant-design-vue/es/form';
+import { computed, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { message, Form } from 'ant-design-vue';
+import BButton from '@/components/BButton/index.vue';
+import BModal from '@/components/BModal/index.vue';
+import BModelIcon from '@/components/BModelIcon/index.vue';
+import type { ProviderRequestFormat } from '@/utils/storage';
+import { useProviders } from '../hooks/useProviders';
+
+interface CustomProviderForm {
+  id: string;
+  name: string;
+  logo: string;
+  type: ProviderRequestFormat;
+  baseUrl: string;
+  apiKey: string;
+}
+
+const props = withDefaults(defineProps<{ provider?: Provider | null }>(), { provider: null });
+
+const emit = defineEmits<{ success: [provider: Provider] }>();
+
+const visible = defineModel<boolean>('open', { default: false });
+
+const router = useRouter();
+const { saveCustomProvider, providers } = useProviders();
+
+const requestFormatOptions: Array<{ label: string; value: ProviderRequestFormat }> = [
+  { label: 'OpenAI', value: 'openai' },
+  { label: 'Anthropic', value: 'anthropic' },
+  { label: 'Google', value: 'google' }
+];
+
+const saving = ref<boolean>(false);
+
+const dataItem = reactive<CustomProviderForm>({ id: '', name: '', logo: '', type: 'openai', apiKey: '', baseUrl: '' });
+
+const isEditMode = computed(() => Boolean(props.provider));
+
+const providerMap = computed<Record<string, Provider>>(() => {
+  return Object.fromEntries(providers.value.map((provider) => [provider.id, provider]));
+});
+
+const rules = reactive<Record<string, Rule[]>>({
+  id: [
+    { required: true, message: '请输入服务商 ID' },
+    {
+      pattern: /^[a-z0-9][a-z0-9-_]*$/,
+      message: '服务商 ID 仅支持小写字母、数字、中划线和下划线'
+    },
+    {
+      validator: (_rule: Rule, value: string) => {
+        if (!isEditMode.value && providerMap.value[value]) {
+          // eslint-disable-next-line prefer-promise-reject-errors
+          return Promise.reject('服务商 ID 已存在，请更换');
+        }
+        return Promise.resolve();
+      }
+    }
+  ],
+  name: [{ required: true, message: '请输入服务商名称' }],
+  type: [{ required: true, message: '请选择请求格式' }]
+});
+
+const { resetFields, validate, validateInfos } = Form.useForm(dataItem, rules);
+
+const selectedFormatLabel = computed(() => {
+  const option = requestFormatOptions.find((opt) => opt.value === dataItem.type);
+  return option?.label || '';
+});
+
+function handleProviderIdBlur(): void {
+  dataItem.id = dataItem.id.trim().toLowerCase();
+}
+
+function handleCancel(): void {
+  visible.value = false;
+}
+
+async function handleSubmit(): Promise<void> {
+  try {
+    await validate();
+  } catch {
+    return;
+  }
+
+  const id = isEditMode.value ? props.provider!.id : dataItem.id.trim().toLowerCase();
+
+  saving.value = true;
+  try {
+    const provider = await saveCustomProvider({
+      id,
+      name: dataItem.name.trim(),
+      description: '自定义服务商',
+      logo: dataItem.logo.trim(),
+      type: dataItem.type,
+      baseUrl: dataItem.baseUrl.trim(),
+      apiKey: dataItem.apiKey.trim()
+    });
+
+    if (!provider) {
+      message.error(isEditMode.value ? '编辑服务商失败' : '创建服务商失败');
+      return;
+    }
+
+    visible.value = false;
+    message.success(isEditMode.value ? '服务商已更新' : '服务商已创建');
+    emit('success', provider);
+    await router.push(`/settings/provider/${provider.id}`);
+  } finally {
+    saving.value = false;
+  }
+}
+
+watch(
+  () => visible.value,
+  (open) => {
+    if (open) {
+      if (props.provider) {
+        Object.assign(dataItem, {
+          id: props.provider.id,
+          name: props.provider.name,
+          logo: props.provider.logo || '',
+          type: props.provider.type,
+          baseUrl: props.provider.baseUrl || '',
+          apiKey: props.provider.apiKey || ''
+        });
+      } else {
+        resetFields();
+      }
+    }
+  }
+);
+</script>
+
+<style scoped lang="less">
+.dataItem-section {
+  margin-bottom: 16px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.section-title {
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.format-option {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+</style>
