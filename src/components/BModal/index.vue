@@ -121,11 +121,9 @@ function handleClosable(): void {
 }
 
 .b-modal__footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
   padding: 10px 24px 16px;
-  text-align: right;
-
-  .ant-btn + .ant-btn {
-    margin-left: 12px;
-  }
 }
 </style>
