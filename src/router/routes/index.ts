@@ -1,5 +1,5 @@
-import type { RouteRecordRaw } from 'vue-router';
 import type { AppRouteRecordRaw } from '../type';
+import type { RouteRecordRaw } from 'vue-router';
 
 type RouterRowMap = Record<string, { default: AppRouteRecordRaw[] }>;
 

@@ -8,8 +8,6 @@
       </div>
     </div>
 
-    <ModelModal v-model:open="modalVisible" :model="currentModel" @success="handleModelSuccess" />
-
     <div class="model-categories">
       <ASegmented v-model:value="activeCategory" :options="categoryOptions" class="w-full" />
     </div>
@@ -22,7 +20,7 @@
         </div>
         <div class="model-actions">
           <BButton type="text" size="small" style="margin-right: 8px" @click="handleEditModel(model)"> 编辑 </BButton>
-          <ASwitch :checked="model.isEnabled" size="small" @change="(checked) => $emit('toggle', model.id, checked as boolean)" />
+          <ASwitch :checked="model.isEnabled" size="small" @change="(checked) => handleToggleModel(model.id, checked as boolean)" />
         </div>
       </div>
     </div>
@@ -32,13 +30,17 @@
       <p>未找到模型</p>
     </div>
   </div>
+
+  <ModelModal v-model:open="modalVisible" :model="currentModel" :provider-id="providerId" :models="models" @success="handleModelSuccess" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
+import { message } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
 import type { ProviderModel } from '@/utils/storage/providers/types';
+import { useProviders } from '../hooks/useProviders';
 import ModelModal from './ModelModal.vue';
 
 interface Category {
@@ -47,6 +49,7 @@ interface Category {
 }
 
 interface Props {
+  providerId: string;
   models: ProviderModel[];
   categories?: Category[];
 }
@@ -62,7 +65,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'refresh'): void;
-  (e: 'toggle', modelId: string, enabled: boolean): void;
   (e: 'modelCreated', model: ProviderModel): void;
   (e: 'modelUpdated', model: ProviderModel): void;
 }>();
@@ -71,6 +73,7 @@ const searchText = ref('');
 const activeCategory = ref('all');
 const modalVisible = ref(false);
 const currentModel = ref<ProviderModel | null>(null);
+const { saveProviderModels } = useProviders();
 
 const categoryOptions = computed(() => {
   return props.categories.map((category) => ({
@@ -81,6 +84,10 @@ const categoryOptions = computed(() => {
 
 const filteredModels = computed(() => {
   let result = props.models;
+
+  if (activeCategory.value !== 'all') {
+    result = result.filter((model) => model.type === activeCategory.value);
+  }
 
   if (searchText.value) {
     const search = searchText.value.toLowerCase();
@@ -97,15 +104,25 @@ function handleCreateModel(): void {
 
 function handleEditModel(model: ProviderModel): void {
   currentModel.value = model;
+
   modalVisible.value = true;
 }
 
-function handleModelSuccess(model: ProviderModel): void {
-  if (currentModel.value) {
-    emit('modelUpdated', model);
-  } else {
-    emit('modelCreated', model);
+function handleModelSuccess(): void {
+  emit('refresh');
+}
+
+async function handleToggleModel(modelId: string, enabled: boolean): Promise<void> {
+  const nextModels = props.models.map((item: ProviderModel) => (item.id === modelId ? { ...item, isEnabled: enabled } : item));
+  const savedProvider = await saveProviderModels(props.providerId, nextModels);
+
+  if (!savedProvider) {
+    message.error(enabled ? '启用模型失败' : '禁用模型失败');
+
+    return;
   }
+
+  message.success(enabled ? '已启用模型' : '已禁用模型');
   emit('refresh');
 }
 </script>

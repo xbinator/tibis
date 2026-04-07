@@ -26,23 +26,32 @@
 </template>
 
 <script setup lang="ts">
+import type { ModelSubmitResult } from '../types';
 import type { Rule } from 'ant-design-vue/es/form';
 import { computed, reactive, ref, watch } from 'vue';
 import { message, Form } from 'ant-design-vue';
 import { asyncTo } from '@/utils/asyncTo';
 import type { ProviderModel } from '@/utils/storage/providers/types';
+import { useProviders } from '../hooks/useProviders';
 
 interface Props {
   model?: ProviderModel | null;
+  providerId?: string;
+  models?: ProviderModel[];
 }
 
-const props = withDefaults(defineProps<Props>(), { model: null });
+const props = withDefaults(defineProps<Props>(), {
+  model: null,
+  providerId: undefined,
+  models: () => []
+});
 
 const emit = defineEmits<{ success: [model: ProviderModel] }>();
 
 const visible = defineModel<boolean>('open', { default: false });
 
 const saving = ref<boolean>(false);
+const { saveProviderModels } = useProviders();
 
 const modelTypeOptions = [
   { label: '对话模型', value: 'chat' },
@@ -78,6 +87,42 @@ function handleCancel(): void {
   visible.value = false;
 }
 
+async function createModel(model: ProviderModel): Promise<ModelSubmitResult> {
+  if (!props.providerId) {
+    return { success: false, message: '服务商不存在' };
+  }
+
+  const exists = props.models.some((item: ProviderModel) => item.id === model.id);
+
+  if (exists) {
+    return { success: false, message: '模型 ID 已存在，请更换' };
+  }
+
+  const nextModels = [...props.models, { ...model }];
+  const savedProvider = await saveProviderModels(props.providerId, nextModels);
+
+  if (!savedProvider) {
+    return { success: false, message: '创建模型失败' };
+  }
+
+  return { success: true, message: '模型已创建' };
+}
+
+async function updateModel(model: ProviderModel): Promise<ModelSubmitResult> {
+  if (!props.providerId) {
+    return { success: false, message: '服务商不存在' };
+  }
+
+  const nextModels = props.models.map((item: ProviderModel) => (item.id === model.id ? { ...item, ...model } : item));
+  const savedProvider = await saveProviderModels(props.providerId, nextModels);
+
+  if (!savedProvider) {
+    return { success: false, message: '更新模型失败' };
+  }
+
+  return { success: true, message: '模型已更新' };
+}
+
 async function handleSubmit(): Promise<void> {
   const [valid] = await onValidate();
   if (valid) return;
@@ -86,30 +131,30 @@ async function handleSubmit(): Promise<void> {
 
   saving.value = true;
 
-  const model: ProviderModel = { id, name: dataItem.name.trim(), type: dataItem.type, isEnabled: true };
+  const model: ProviderModel = { id, name: dataItem.name.trim(), type: dataItem.type, isEnabled: props.model?.isEnabled ?? true };
+
+  const result = isEditMode.value ? await updateModel(model) : await createModel(model);
+  saving.value = false;
+
+  if (!result.success) {
+    message.error(result.message || (isEditMode.value ? '更新模型失败' : '创建模型失败'));
+    return;
+  }
 
   visible.value = false;
-
-  message.success(isEditMode.value ? '模型已更新' : '模型已创建');
-
+  message.success(result.message || (isEditMode.value ? '模型已更新' : '模型已创建'));
   emit('success', model);
-
-  saving.value = false;
 }
 
 watch(
   () => visible.value,
   (open) => {
-    if (open) {
-      if (props.model) {
-        Object.assign(dataItem, {
-          id: props.model.id,
-          name: props.model.name,
-          type: props.model.type || 'chat'
-        });
-      } else {
-        resetFields();
-      }
+    if (!open) return;
+
+    if (props.model) {
+      Object.assign(dataItem, { id: props.model.id, name: props.model.name, type: props.model.type || 'chat' });
+    } else {
+      resetFields();
     }
   }
 );

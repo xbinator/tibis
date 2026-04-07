@@ -7,6 +7,7 @@ import { Heading as BaseHeading } from '@tiptap/extension-heading';
 import { Highlight } from '@tiptap/extension-highlight';
 import { Image } from '@tiptap/extension-image';
 import { ListItem as BaseListItem } from '@tiptap/extension-list';
+import { Mathematics } from '@tiptap/extension-mathematics';
 import { Paragraph as BaseParagraph } from '@tiptap/extension-paragraph';
 import { Placeholder } from '@tiptap/extension-placeholder';
 import { Strike } from '@tiptap/extension-strike';
@@ -253,7 +254,12 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     Strike,
     TextStyle,
     Color,
-    Typography
+    Typography,
+    Mathematics.configure({
+      katexOptions: {
+        throwOnError: false
+      }
+    })
   ];
 
   function assignHeadingIds(editor: Editor): void {

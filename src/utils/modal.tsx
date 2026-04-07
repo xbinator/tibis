@@ -1,8 +1,8 @@
 import type { VNode } from 'vue';
 import { createApp, h, ref } from 'vue';
 import { Input } from 'ant-design-vue';
-import BModal from '@/components/BModal/index.vue';
 import BButton from '@/components/BButton/index.vue';
+import BModal from '@/components/BModal/index.vue';
 
 // ——— 类型 ———
 

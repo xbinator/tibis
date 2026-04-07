@@ -209,7 +209,9 @@ module.exports = {
     //
     'consistent-return': 'off',
     //
-    '@typescript-eslint/no-non-null-assertion': 'off'
+    '@typescript-eslint/no-non-null-assertion': 'off',
+    // 禁止在类方法中使用this
+    'class-methods-use-this': 'off'
   },
   overrides: [
     {

@@ -1,7 +1,7 @@
 import type { CustomProviderPayload, Provider, ProviderModel, ProviderRequestFormat, StoredProviderSettings } from './types';
 import { isTauri } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
-import { cloneDeep, omitBy, isUndefined, pick } from 'lodash-es';
+import { cloneDeep, omitBy, isUndefined, pick, isBoolean, isString } from 'lodash-es';
 import { DEFAULT_PROVIDERS } from './defaults';
 
 // ─────────────────────────────────────────────
@@ -139,23 +139,6 @@ function cloneProvider(provider: Provider): Provider {
 // 类型守卫
 // ─────────────────────────────────────────────
 
-/**
- * 判断一个未知值是否为合法的 ProviderModel
- * 用于过滤 JSON.parse 后的脏数据
- */
-function isProviderModel(value: unknown): value is ProviderModel {
-  if (!value || typeof value !== 'object') return false;
-  const c = value as Record<string, unknown>;
-
-  return (
-    typeof c.id === 'string' &&
-    typeof c.name === 'string' &&
-    typeof c.description === 'string' &&
-    typeof c.isEnabled === 'boolean' &&
-    (c.tags === undefined || (Array.isArray(c.tags) && c.tags.every((t) => typeof t === 'string')))
-  );
-}
-
 /** 判断一个值是否为合法的请求格式标识符 */
 function isProviderRequestFormat(value: unknown): value is ProviderRequestFormat {
   return typeof value === 'string' && REQUEST_FORMATS.includes(value as ProviderRequestFormat);
@@ -176,7 +159,7 @@ function parseModelsJson(json: string | null): ProviderModel[] | undefined {
     const parsed: unknown = JSON.parse(json);
     if (!Array.isArray(parsed)) return undefined;
     // 过滤掉不合法的模型条目
-    return cloneModels(parsed.filter(isProviderModel));
+    return cloneModels(parsed as ProviderModel[]);
   } catch {
     return undefined;
   }
@@ -201,12 +184,11 @@ function stringifyModels(models?: ProviderModel[]): string | null {
 function sanitizeProviderSettings(raw: Partial<StoredProviderSettings>): StoredProviderSettings {
   const result: StoredProviderSettings = {};
 
-  if (typeof raw.isEnabled === 'boolean') result.isEnabled = raw.isEnabled;
-  if (typeof raw.apiKey === 'string') result.apiKey = raw.apiKey;
-  if (typeof raw.baseUrl === 'string') result.baseUrl = raw.baseUrl;
-  if (Array.isArray(raw.models)) {
-    result.models = cloneModels(raw.models.filter(isProviderModel));
-  }
+  if (isBoolean(raw.isEnabled)) result.isEnabled = raw.isEnabled;
+
+  if (isString(raw.apiKey)) result.apiKey = raw.apiKey;
+
+  if (isString(raw.baseUrl)) result.baseUrl = raw.baseUrl;
 
   return result;
 }
@@ -471,6 +453,7 @@ export const providerStorage = {
       // 内置服务商：读取现有配置 → 合并 patch → 写回
       const current = (await loadStoredSetting(normalizedId)) ?? {};
       const next = sanitizeProviderSettings({ ...current, ...patch });
+      console.log('🚀 ~ updateProvider ~ next:', patch);
 
       await persistSettings(db, normalizedId, next);
       return mergeProvider(base, next);

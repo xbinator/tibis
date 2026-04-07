@@ -7,11 +7,14 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let salt_path = app
-                .path()
-                .app_local_data_dir()
-                .expect("could not resolve app local data path")
-                .join("salt.txt");
+            let app_data_dir = app.path().app_data_dir().expect("could not resolve app data path");
+            let app_local_data_dir = app.path().app_local_data_dir().expect("could not resolve app local data path");
+            
+            println!("App data directory: {:?}", app_data_dir);
+            println!("App local data directory: {:?}", app_local_data_dir);
+
+            let salt_path = app_local_data_dir.join("salt.txt");
+            println!("Salt file path: {:?}", salt_path);
 
             app.handle().plugin(
                 tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build()
