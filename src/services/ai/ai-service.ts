@@ -15,18 +15,15 @@ export class AIService {
     return { providerId: id, type, apiKey: apiKey ?? '', baseUrl: baseUrl ?? '' };
   }
 
-  async generateText(input: { providerId: string } & GenerateTextInput): AIServiceResult<GenerateTextResult> {
-    const [error, resolved] = await asyncTo(this.resolver.resolve(input.providerId, input.modelId));
-
+  async generateText(input: { providerId: string; ignoreEnabled?: boolean } & GenerateTextInput): Promise<AIServiceResult<GenerateTextResult>> {
+    const [error, resolved] = await asyncTo(this.resolver.resolve(input.providerId, input.modelId, { ignoreEnabled: input.ignoreEnabled }));
     if (error) return [toAIServiceError(error)];
 
     const driver = this.registry.get(resolved.provider.type);
     const providerConfig = this.buildProviderConfig(resolved.provider);
     const [generateError, result] = await asyncTo(driver.generateText(providerConfig, input));
 
-    if (generateError || !result) {
-      return [toAIServiceError(generateError)];
-    }
+    if (generateError) return [toAIServiceError(generateError)];
 
     return [undefined, result];
   }

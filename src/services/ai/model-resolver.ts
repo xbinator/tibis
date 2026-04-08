@@ -3,7 +3,7 @@ import { providerStorage } from '@/utils/storage';
 import { AI_ERROR_CODE, AIError } from './errors';
 
 export class AIModelResolver {
-  async resolve(providerId: string, modelId: string): Promise<ResolvedProviderModel> {
+  async resolve(providerId: string, modelId: string, options?: { ignoreEnabled?: boolean }): Promise<ResolvedProviderModel> {
     const providers = await providerStorage.listProviders();
     const provider = providers.find((item) => item.id === providerId);
 
@@ -11,7 +11,7 @@ export class AIModelResolver {
       throw new AIError(AI_ERROR_CODE.PROVIDER_NOT_FOUND, '服务商不存在');
     }
 
-    if (!provider.isEnabled) {
+    if (!options?.ignoreEnabled && !provider.isEnabled) {
       throw new AIError(AI_ERROR_CODE.PROVIDER_DISABLED, '服务商未启用');
     }
 
@@ -25,7 +25,7 @@ export class AIModelResolver {
       throw new AIError(AI_ERROR_CODE.MODEL_NOT_FOUND, '模型不存在');
     }
 
-    if (!model.isEnabled) {
+    if (!options?.ignoreEnabled && !model.isEnabled) {
       throw new AIError(AI_ERROR_CODE.MODEL_DISABLED, '模型未启用');
     }
 
