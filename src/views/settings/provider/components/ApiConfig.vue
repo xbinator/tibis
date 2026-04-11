@@ -15,27 +15,21 @@
       <p class="test-desc">测试 API Key 与代理地址是否正确配置</p>
       <div class="test-actions">
         <BSelect v-model:value="testModel" :options="modelOptions" placeholder="选择测试模型" class="model-select" />
-        <BButton type="primary" :loading="testing" :disabled="!testModel" @click="handleTestClick">检查</BButton>
+        <BButton type="primary" :loading="loading" :disabled="!testModel" @click="handleTestClick">检查</BButton>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { AIProvider } from 'types/ai';
+import type { AIProvider, AIProviderModel } from 'types/ai';
 import { computed, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
-import { generateElectronAIText } from '@/shared/platform/ai';
-
-interface TestModelOption {
-  id: string;
-  name: string;
-  isEnabled: boolean;
-}
+import { useAgent } from '@/hooks/useAgent';
 
 interface Props {
-  models: TestModelOption[];
+  models: AIProviderModel[];
 }
 
 const props = defineProps<Props>();
@@ -43,28 +37,25 @@ const props = defineProps<Props>();
 const dataItem = defineModel<Partial<AIProvider>>('value', { default: () => ({}) });
 
 const testModel = ref<string | undefined>(undefined);
-const testing = ref(false);
+
+const { agent } = useAgent({ providerId: () => dataItem.value.id, ignoreEnabled: true });
+
+const loading = ref(false);
 
 const modelOptions = computed(() => {
-  const _models = props.models.filter((model: TestModelOption) => model.isEnabled);
+  const _models = props.models.filter((model: AIProviderModel) => model.isEnabled);
 
-  return _models.map((model: TestModelOption) => ({ label: model.name, value: model.id }));
+  return _models.map((model: AIProviderModel) => ({ label: model.name, value: model.id }));
 });
 
 async function handleTestClick(): Promise<void> {
-  if (!testModel.value || !dataItem.value.id) return;
+  if (!testModel.value || !dataItem.value.id || loading.value) return;
 
-  testing.value = true;
+  loading.value = true;
 
-  const [error, result] = await generateElectronAIText({
-    providerId: dataItem.value.id,
-    modelId: testModel.value,
-    prompt: 'Hello',
-    ignoreEnabled: true,
-    providerOverride: dataItem.value
-  });
+  const [error, result] = await agent.invoke({ modelId: testModel.value, prompt: 'Hello' });
 
-  testing.value = false;
+  loading.value = false;
 
   if (error) {
     message.error(error.message);
@@ -75,10 +66,10 @@ async function handleTestClick(): Promise<void> {
 
 watch(
   () => props.models,
-  (nextModels: TestModelOption[]) => {
-    const enabledModel = nextModels.find((model: TestModelOption) => model.isEnabled);
+  (nextModels: AIProviderModel[]) => {
+    const enabledModel = nextModels.find((model) => model.isEnabled);
 
-    const hasSelectedModel = nextModels.some((model: TestModelOption) => model.id === testModel.value && model.isEnabled);
+    const hasSelectedModel = nextModels.some((model) => model.id === testModel.value && model.isEnabled);
 
     if (!hasSelectedModel) {
       testModel.value = enabledModel?.id;

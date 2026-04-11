@@ -14,7 +14,7 @@
     </div>
 
     <!-- 生成中：隐藏输入框，显示 loading -->
-    <div v-else-if="isLoading" class="ai-loading-row">
+    <div v-else-if="false" class="ai-loading-row">
       <Icon icon="svg-spinners:ring-resize" class="ai-loading-icon" />
       <span class="ai-loading-text">正在生成...</span>
       <span class="ai-cancel" @click="handleCancel">取消</span>
@@ -33,7 +33,7 @@ import { nextTick, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { TextSelection } from '@tiptap/pm/state';
 import { onClickOutside, useEventListener } from '@vueuse/core';
-import { useStream } from '@/hooks/useStream';
+// import { useStream } from '@/hooks/useAgent';
 import type { ServiceModelUpdatedDetail } from '@/shared/storage/service-models/events';
 import { SERVICE_MODEL_UPDATED_EVENT } from '@/shared/storage/service-models/events';
 import type { AvailableServiceModelConfig } from '@/stores/service-model';
@@ -58,7 +58,7 @@ const wrapperRef = ref<HTMLElement | null>(null);
 const wrapperStyle = ref<CSSProperties>({});
 const modelConfig = ref<AvailableServiceModelConfig | null>(null);
 const serviceModelStore = useServiceModelStore();
-const { isLoading, streamText } = useStream();
+// const { isLoading, streamText } = useStream();
 
 // ---- Model Config ----
 
@@ -143,14 +143,14 @@ async function handleSubmit(): Promise<void> {
   const selectedText = text || props.editor.state.doc.textBetween(from, to, '');
   const prompt = buildPrompt(selectedText, value);
 
-  const accumulatedText = await streamText({ providerId: config.providerId, modelId: config.modelId, prompt });
+  // const accumulatedText = await streamText({ providerId: config.providerId, modelId: config.modelId, prompt });
 
-  if (!accumulatedText) {
-    reset();
-    return;
-  }
+  // if (!accumulatedText) {
+  //   reset();
+  //   return;
+  // }
 
-  previewText.value = accumulatedText;
+  // previewText.value = accumulatedText;
 }
 
 function handleApply(): void {
@@ -173,10 +173,10 @@ function handleDiscard(): void {
 }
 
 function handleCancel(): void {
-  if (isLoading.value) return;
-  reset();
-  visible.value = false;
-  props.editor?.commands.focus();
+  // if (isLoading.value) return;
+  // reset();
+  // visible.value = false;
+  // props.editor?.commands.focus();
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -194,9 +194,9 @@ function handleKeydown(event: KeyboardEvent): void {
 // ---- Lifecycle ----
 
 onClickOutside(wrapperRef, () => {
-  if (!isLoading.value && !previewText.value) {
-    visible.value = false;
-  }
+  // if (!isLoading.value && !previewText.value) {
+  //   visible.value = false;
+  // }
 });
 
 watch(visible, (newValue) => {
