@@ -1,4 +1,4 @@
-//
+// 服务模型类型
 export type ServiceModelType = 'polish';
 
 export interface ServiceModelConfig {

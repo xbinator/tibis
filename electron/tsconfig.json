@@ -7,6 +7,8 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
     "outDir": "../dist-electron",
     "rootDir": ".",
     "types": ["node", "electron"]

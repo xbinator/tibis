@@ -127,43 +127,13 @@ const electronAPI: ElectronAPI = {
    * @param payload AI 创建参数与请求参数
    * @returns 生成的文本结果
    */
-  aiGenerate: (payload) => ipcRenderer.invoke('ai:generate', payload.createOptions, payload.request),
+  aiGenerate: (createOptions, request) => ipcRenderer.invoke('ai:generate', createOptions, request),
 
   /**
    * 流式文本生成
    * @param payload AI 创建参数与请求参数
    */
-  aiStream: (payload) => ipcRenderer.invoke('ai:stream', payload.createOptions, payload.request),
-
-  /**
-   * 监听 AI 流式数据块
-   * @param callback 数据块回调
-   */
-  onAiChunk: (callback: (chunk: string) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, chunk: string) => callback(chunk);
-    ipcRenderer.on('ai:chunk', handler);
-    return () => ipcRenderer.removeListener('ai:chunk', handler);
-  },
-
-  /**
-   * 监听 AI 流式生成完成
-   * @param callback 完成回调
-   */
-  onAiComplete: (callback: () => void) => {
-    const handler = () => callback();
-    ipcRenderer.on('ai:complete', handler);
-    return () => ipcRenderer.removeListener('ai:complete', handler);
-  },
-
-  /**
-   * 监听 AI 流式生成错误
-   * @param callback 错误回调
-   */
-  onAiError: (callback: (error: string) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, error: string) => callback(error);
-    ipcRenderer.on('ai:error', handler);
-    return () => ipcRenderer.removeListener('ai:error', handler);
-  }
+  aiStream: (createOptions, request) => ipcRenderer.invoke('ai:stream', createOptions, request)
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
