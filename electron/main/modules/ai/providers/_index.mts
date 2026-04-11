@@ -1,7 +1,6 @@
-import type { AIServiceError } from '../errors/codes.mjs';
 import type { AIProvider } from '../types.mjs';
 import type { LanguageModel } from 'ai';
-import type { AIProviderType, AICreateOptions } from 'types/ai';
+import type { AIServiceError, AIProviderType, AICreateOptions } from 'types/ai';
 import { AnthropicProvider } from './anthropic.mjs';
 import { GoogleProvider } from './google.mjs';
 import { OpenAIProvider } from './openai.mjs';
@@ -20,10 +19,10 @@ export class AIProviderRegistry {
   }
 
   // 创建语言模型
-  create(options: AICreateOptions): LanguageModel {
+  create(options: AICreateOptions, modelId: string): LanguageModel {
     const driver = this.providers.get(options.providerType);
 
-    return driver?.create(options) as LanguageModel;
+    return driver?.create(options, modelId) as LanguageModel;
   }
 
   // 统一错误处理分发
