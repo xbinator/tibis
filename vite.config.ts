@@ -18,6 +18,7 @@ export default defineConfig(async () => ({
       directoryAsNamespace: true,
       dirs: [
         'src/components',
+        'src/components/BLayout',
         'src/components/BToolbar',
         'src/components/BSelect',
         'src/components/BModal',
