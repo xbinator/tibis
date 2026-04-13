@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-Texti 是一款“本地优先”的 Markdown 桌面编辑器：渲染进程提供编辑/设置 UI（Vue3），主进程提供本地文件、SQLite、加密存储与 AI 调用等能力（Electron）。
+Tibis 是一款"本地优先"的 Markdown 桌面编辑器：渲染进程提供编辑/设置 UI（Vue3），主进程提供本地文件、SQLite、加密存储与 AI 调用等能力（Electron）。
 
 ## 代码结构（按职责）
 

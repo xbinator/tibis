@@ -2,7 +2,7 @@
 
 ## 分层与进程模型
 
-Texti 在运行时由两部分组成：
+Tibis 在运行时由两部分组成：
 
 - 渲染进程（Renderer）：Vite 打包的 Vue 应用，负责 UI 与交互逻辑
 - 主进程（Main）：Electron 主进程，负责窗口、文件系统、SQLite、加密存储、AI 调用等系统能力

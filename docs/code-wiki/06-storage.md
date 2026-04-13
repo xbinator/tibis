@@ -2,7 +2,7 @@
 
 ## 存储分层
 
-Texti 的本地数据分两类：
+Tibis 的本地数据分两类：
 
 - Electron 环境（桌面应用）：SQLite + electron-store（加密）
 - 非 Electron 环境（浏览器 fallback）：localforage / localStorage

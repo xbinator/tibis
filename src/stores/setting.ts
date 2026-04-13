@@ -44,7 +44,7 @@ function applyTheme(theme: ThemeMode): void {
 export const useSettingStore = defineStore('setting', {
   state: (): SettingState => ({
     theme: loadTheme(),
-    title: 'Texti'
+    title: 'Tibis'
   }),
 
   getters: {
@@ -114,7 +114,7 @@ export const useSettingStore = defineStore('setting', {
      * 恢复默认标题
      */
     async resetWindowTitle(): Promise<void> {
-      await this.setWindowTitle('Texti');
+      await this.setWindowTitle('Tibis');
     },
 
     // ==================== 统一初始化 ====================

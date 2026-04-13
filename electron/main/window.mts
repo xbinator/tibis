@@ -45,7 +45,7 @@ export function createWindow(): BrowserWindow {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: 'Texti',
+    title: 'Tibis',
     frame: false,
     titleBarStyle: 'hidden',
     trafficLightPosition: { x: 12, y: 10 },

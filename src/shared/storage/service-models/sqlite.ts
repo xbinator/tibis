@@ -6,9 +6,9 @@ import { getElectronAPI, hasElectronAPI } from '../../platform/electron-api';
 const LEGACY_SERVICE_MODELS_KEY = 'service_model_configs';
 
 const legacyServiceModelStorage = localforage.createInstance({
-  name: 'Texti',
+  name: 'Tibis',
   storeName: 'service_models',
-  description: 'Texti 服务模型配置存储'
+  description: 'Tibis 服务模型配置存储'
 });
 
 const SELECT_ALL_CONFIGS_SQL = 'SELECT service_type, provider_id, model_id, custom_prompt, updated_at FROM service_models';

@@ -2,7 +2,7 @@
 
 当前项目结构：
 ```
-Texti/
+Tibis/
 ├── .opencode/
 ├── md-editor/          # Tauri + Vue 3 项目
 │   ├── src/
@@ -14,7 +14,7 @@ Texti/
 
 目标结构：
 ```
-Texti/
+Tibis/
 ├── .opencode/
 ├── src/                # 从 md-editor/src 移出
 ├── src-tauri/          # 从 md-editor/src-tauri 移出

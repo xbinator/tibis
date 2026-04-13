@@ -2,7 +2,7 @@ import type { StoredFile } from './types';
 import localforage from 'localforage';
 import { getElectronAPI, hasElectronAPI } from '../../platform/electron-api';
 
-localforage.config({ name: 'Texti', storeName: 'files', description: 'Texti 笔记应用文件存储' });
+localforage.config({ name: 'Tibis', storeName: 'files', description: 'Tibis 笔记应用文件存储' });
 
 const RECENT_FILES_KEY = 'recent_files';
 
