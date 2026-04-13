@@ -27,12 +27,14 @@ class AIService {
   async generateText(createOptions: AICreateOptions, request: AIRequestOptions): Promise<[AIServiceError] | [undefined, AIInvokeResult]> {
     try {
       const model = this.createModel(createOptions, request.modelId);
-      const { prompt, system, temperature } = request;
+      const { prompt = '', system, temperature, messages } = request;
 
       log.info(`[AIService] generateText: Provider=${createOptions.providerType}, Model=${request.modelId}`);
-      log.info(`[AIService] generateText payload:`, { prompt, system, temperature });
+      log.info(`[AIService] generateText payload:`, { prompt, system, temperature, messages });
 
-      const result = await generateText({ model, prompt, system, temperature });
+      const baseOptions = { model, system, temperature };
+
+      const result = messages ? await generateText({ ...baseOptions, messages }) : await generateText({ ...baseOptions, prompt });
 
       const { inputTokens = 0, outputTokens = 0, totalTokens = 0 } = result.usage || {};
 
@@ -47,7 +49,7 @@ class AIService {
   async streamText(createOptions: AICreateOptions, request: AIRequestOptions): Promise<[AIServiceError] | [undefined, AIStreamResult]> {
     try {
       const model = this.createModel(createOptions, request.modelId);
-      const { prompt, system, temperature, requestId } = request;
+      const { prompt = '', system, temperature, requestId, messages } = request;
 
       let abortSignal: AbortSignal | undefined;
       if (requestId) {
@@ -57,11 +59,13 @@ class AIService {
       }
 
       log.info(`[AIService] streamText: Provider=${createOptions.providerType}, Model=${request.modelId}, RequestId=${requestId}`);
-      log.info(`[AIService] streamText payload:`, { prompt, system, temperature });
+      log.info(`[AIService] streamText payload:`, { prompt, system, temperature, messages });
 
-      const result = streamText({ model, prompt, system, temperature, abortSignal });
+      const baseOptions = { model, system, temperature, abortSignal };
 
-      return [undefined, { stream: result.textStream }];
+      const result = messages ? streamText({ ...baseOptions, messages }) : streamText({ ...baseOptions, prompt });
+
+      return [undefined, { stream: result.fullStream }];
     } catch (error: unknown) {
       log.error('[AIService] streamText error:', error);
 

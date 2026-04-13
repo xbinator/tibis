@@ -1,4 +1,4 @@
-import { StreamTextResult } from 'ai';
+import type { ModelMessage } from 'ai';
 
 /**
  * 提供商请求格式类型
@@ -27,11 +27,13 @@ export interface AIRequestOptions {
   // 模型 ID
   modelId: string;
   // 提示词
-  prompt: string;
+  prompt?: string;
   // 系统提示
   system?: string;
   // 温度
   temperature?: number;
+  // 对话消息列表（用于多轮对话）
+  messages?: ModelMessage[];
 }
 
 /**
