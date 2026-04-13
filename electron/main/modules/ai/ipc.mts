@@ -23,7 +23,6 @@ export function registerAIHandlers(): void {
 
     try {
       const [error, result] = await aiService.streamText(createOptions, request);
-
       if (error) {
         win.webContents.send('ai:stream:error', error);
         return;
@@ -39,6 +38,7 @@ export function registerAIHandlers(): void {
       if (isDev()) {
         process.stdout.write('\n');
       }
+
       win.webContents.send('ai:stream:complete');
     } catch (error: any) {
       if (error.name === 'AbortError') {

@@ -1,5 +1,5 @@
 <template>
-  <Drawer v-model:open="visible" placement="right" :width="480" :closable="false" :mask-closable="true" :keyboard="true">
+  <ADrawer v-model:open="visible" placement="right" :width="480" :closable="false" :mask-closable="true" :keyboard="true" :get-container="false">
     <template #title>
       <span>快捷键</span>
     </template>
@@ -23,12 +23,11 @@
         </div>
       </div>
     </BScrollbar>
-  </Drawer>
+  </ADrawer>
 </template>
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
-import { Drawer } from 'ant-design-vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { getShortcutParts } from '@/utils/shortcut';
 import { EditorShortcuts } from '../constants/shortcuts';

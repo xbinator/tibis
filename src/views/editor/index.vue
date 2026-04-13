@@ -38,15 +38,17 @@
       </div>
 
       <!-- 辅助工具侧边栏 -->
-      <!-- <AuxiliarySidebar v-show="sidebarVisible" /> -->
+      <BPanelSplitter v-show="sidebarVisible" v-model:size="sidebarWidth" position="left" :min-width="200" :max-width="500">
+        <AuxiliarySidebar />
+      </BPanelSplitter>
+
+      <ShortcutsHelp v-model:visible="visible.shortcuts" />
     </div>
 
     <!-- 查找栏 -->
     <FindBar v-model:visible="visible.find" :content="fileState.content" :editor-instance="editorInstance" />
 
     <SearchRecent v-model:visible="visible.recentSearch" :files="recentFiles" :active-id="fileState.id" @select="handleSelectRecentFile" />
-
-    <ShortcutsHelp v-model:visible="visible.shortcuts" />
   </BLayout>
 </template>
 
@@ -57,6 +59,7 @@ import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import BEditor from '@/components/BEditor/index.vue';
 import type { BEditorPublicInstance } from '@/components/BEditor/types';
+import BPanelSplitter from '@/components/BPanelSplitter/index.vue';
 import AuxiliarySidebar from './components/AuxiliarySidebar.vue';
 import FindBar from './components/FindBar.vue';
 import SearchRecent from './components/SearchRecent.vue';
@@ -73,6 +76,7 @@ const router = useRouter();
 
 const visible = reactive({ find: false, recentSearch: false, shortcuts: false });
 const sidebarVisible = ref(false);
+const sidebarWidth = ref(300);
 
 function toggleSidebar(): void {
   sidebarVisible.value = !sidebarVisible.value;
@@ -126,9 +130,11 @@ const { toolbarHelpOptions } = useHelp({
 }
 
 .editor-main-container {
+  position: relative;
   display: flex;
   flex: 1;
   height: 100%;
+  margin: 0 6px 6px;
   overflow: hidden;
 }
 
@@ -137,7 +143,7 @@ const { toolbarHelpOptions } = useHelp({
   display: flex;
   flex: 1;
   flex-direction: column;
-  margin: 0 6px 6px;
+  margin: 0 6px;
   overflow: hidden;
   border-radius: 8px;
 }

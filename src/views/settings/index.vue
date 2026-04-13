@@ -97,6 +97,7 @@ function handleBack(): void {
 
 :deep(.settings-container) {
   display: flex;
+  height: 100%;
 }
 
 .settings-content {

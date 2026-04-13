@@ -18,6 +18,9 @@ export default defineConfig(async () => ({
       directoryAsNamespace: true,
       dirs: [
         'src/components',
+        'src/components/BChat',
+        'src/components/BPanelSplitter',
+        'src/components/BPromptEditor',
         'src/components/BLayout',
         'src/components/BToolbar',
         'src/components/BSelect',

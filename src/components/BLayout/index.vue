@@ -32,8 +32,10 @@
       </template>
     </div>
 
-    <div class="b-layout__content" :class="contentClass">
-      <slot></slot>
+    <div class="b-layout__content">
+      <div :class="contentClass">
+        <slot></slot>
+      </div>
     </div>
   </div>
 </template>
