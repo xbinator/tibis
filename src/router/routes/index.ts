@@ -16,6 +16,7 @@ export const basicRoutes: RouteRecordRaw[] = [
   {
     path: '/',
     component: DEFAULT_LAYOUT_COMPONENT,
-    children: childRoutes
+    children: childRoutes,
+    redirect: '/editor'
   }
 ];

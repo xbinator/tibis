@@ -17,7 +17,6 @@ interface UseFileActiveOptions {
   pause: () => void;
   resume: () => void;
   setOriginalContent: (content: string) => void;
-  visible: { recentSearch: boolean };
 }
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 6);
@@ -324,20 +323,6 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
           active: file.id === fileState.value.id,
           onClick: () => openRecentFile(file.id)
         })),
-        ...(savedRecentFiles.value.length > 10
-          ? [
-              { type: 'divider' as const },
-              {
-                value: 'more',
-                label: '更多',
-                shortcut: EditorShortcuts.FILE_RECENT_MORE,
-                enableShortcut: false,
-                onClick: () => {
-                  options.visible.recentSearch = true;
-                }
-              }
-            ]
-          : []),
         { type: 'divider' as const },
         { value: 'clear-recent', label: '清除最近打开记录', onClick: handleClearRecent }
       ]
@@ -377,5 +362,5 @@ export function useFileActive(fileState: Ref<EditorFile>, options: UseFileActive
     }
   }
 
-  return { toolbarFileOptions, loadRecentFiles, savedRecentFiles, openRecentFile, loadFileById };
+  return { toolbarFileOptions, loadRecentFiles, openRecentFile, loadFileById };
 }

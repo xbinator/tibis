@@ -4,13 +4,13 @@
       <div class="editor-content-wrapper">
         <BEditor
           :key="fileState.id"
-          ref="editorInstance"
           v-model:value="fileState.content"
           v-model:title="fileState.name"
           :editor-id="fileState?.id"
-          :view-mode="viewState.mode"
           :show-outline="viewState.showOutline"
         />
+
+        <!-- :view-mode="viewState.mode" -->
       </div>
 
       <!-- 辅助工具侧边栏 -->
@@ -20,33 +20,40 @@
 
       <ShortcutsHelp v-model:visible="visible.shortcuts" />
     </div>
-
-    <!-- 查找栏 -->
-    <FindBar v-model:visible="visible.find" :content="fileState.content" :editor-instance="editorInstance" />
-
-    <SearchRecent v-model:visible="visible.recentSearch" :files="savedRecentFiles" :active-id="fileState.id" @select="handleSelectRecentFile" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { inject, type Ref } from 'vue';
+import type { EditorFile } from './types';
+import { computed, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import BEditor from '@/components/BEditor/index.vue';
-import type { BEditorPublicInstance } from '@/components/BEditor/types';
 import BPanelSplitter from '@/components/BPanelSplitter/index.vue';
-import type { EditorFile } from '@/layouts/default/types';
+import { recentFilesStorage } from '@/shared/storage';
 import AuxiliarySidebar from './components/AuxiliarySidebar.vue';
-import FindBar from './components/FindBar.vue';
-import SearchRecent from './components/SearchRecent.vue';
 import ShortcutsHelp from './components/ShortcutsHelp.vue';
 
-// Inject global editor state from layout
-const fileState = inject('editorFileState') as Ref<EditorFile>;
-const editorInstance = inject('editorInstance') as Ref<BEditorPublicInstance | null>;
-const visible = inject('editorVisible') as { find: boolean; recentSearch: boolean; shortcuts: boolean };
-const sidebarState = inject('editorSidebarState') as Ref<{ visible: boolean; width: number }>;
-const viewState = inject('editorViewState') as Ref<{ mode: any; showOutline: boolean }>;
-const savedRecentFiles = inject('editorSavedRecentFiles') as Ref<EditorFile[]>;
-const handleSelectRecentFile = inject('editorHandleSelectRecentFile') as (id: string) => Promise<void>;
+const route = useRoute();
+
+const fileId = computed(() => (route.params.id || '') as string);
+
+const fileState = ref<EditorFile>({ id: '', name: '', content: '', ext: '', path: null });
+
+const viewState = reactive({ mode: 'rich', showOutline: true });
+
+const sidebarState = ref({ visible: false, width: 300 });
+
+const visible = reactive({ shortcuts: false });
+
+async function loadFileState() {
+  if (!fileId.value) return;
+
+  const stored = await recentFilesStorage.getRecentFile(fileId.value);
+
+  stored && (fileState.value = stored);
+}
+
+watch(fileId, () => loadFileState(), { immediate: true });
 </script>
 
 <style lang="less" scoped>

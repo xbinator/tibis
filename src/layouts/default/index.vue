@@ -13,10 +13,10 @@
         <div class="b-layout-header__teleport">
           <div class="header-left">
             <template v-if="!isMac()">
-              <BToolbar :title="'文件'" :options="toolbarFileOptions" />
+              <!-- <BToolbar :title="'文件'" :options="toolbarFileOptions" />
               <BToolbar :title="'编辑'" :options="toolbarEditOptions" />
               <BToolbar :title="'视图'" show-selected-check :options="toolbarViewOptions" />
-              <BToolbar :title="'帮助'" :options="toolbarHelpOptions" />
+              <BToolbar :title="'帮助'" :options="toolbarHelpOptions" /> -->
             </template>
           </div>
         </div>
@@ -26,7 +26,7 @@
         <div class="b-layout-header__teleport">
           <div class="header-right">
             <!-- 辅助工具侧边栏切换按钮 -->
-            <BButton type="secondary" size="small" square @click="toggleSidebar">
+            <BButton type="secondary" size="small" square>
               <Icon icon="lucide:panel-right" width="16" height="16" />
             </BButton>
 
@@ -61,89 +61,21 @@
 </template>
 
 <script setup lang="ts">
-import type { EditorFile } from './types';
-import { computed, ref, reactive, watch, provide } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { useStorage, useEventListener } from '@vueuse/core';
+import { useEventListener } from '@vueuse/core';
 import BButton from '@/components/BButton/index.vue';
-import type { BEditorPublicInstance } from '@/components/BEditor/types';
-import BToolbar from '@/components/BToolbar/index.vue';
+// import BToolbar from '@/components/BToolbar/index.vue';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
 import HeaderTabs from './components/HeaderTabs.vue';
-import { useAutoSave } from './hooks/useAutoSave';
-import { useDirty } from './hooks/useDirty';
-import { useEditActive } from './hooks/useEditActive';
-import { useFileActive } from './hooks/useFileActive';
-import { useHelp } from './hooks/useHelp';
-import { useNativeMenu } from './hooks/useNativeMenu';
-import { useViewActive } from './hooks/useViewActive';
 
-const fileState = ref<EditorFile>({ id: '', path: '', content: '', name: '', ext: 'md' });
-const editorInstance = ref<BEditorPublicInstance | null>(null);
-const route = useRoute();
 const router = useRouter();
-
-const { setOriginalContent } = useDirty(fileState);
-
-const visible = reactive({ find: false, recentSearch: false, shortcuts: false });
-const sidebarState = useStorage('editor-sidebar-state', { visible: false, width: 300 });
-
-function toggleSidebar(): void {
-  sidebarState.value.visible = !sidebarState.value.visible;
-}
 
 function handleOpenSettings(): void {
   router.push('/settings');
 }
-
-const { pause, resume } = useAutoSave(fileState);
-
-const { toolbarFileOptions, savedRecentFiles, openRecentFile, loadFileById } = useFileActive(fileState, {
-  pause,
-  resume,
-  setOriginalContent,
-  visible
-});
-
-// 路由参数变化时加载对应文件
-watch(
-  () => route.params.id,
-  (id) => {
-    if (route.name === 'Editor' || route.path.startsWith('/editor')) {
-      loadFileById(id as string);
-    }
-  },
-  { immediate: true }
-);
-
-async function handleSelectRecentFile(id: string): Promise<void> {
-  await openRecentFile(id);
-}
-
-const { toolbarEditOptions } = useEditActive(fileState, { editorInstance, visible });
-
-const { viewState, toolbarViewOptions } = useViewActive();
-
-const { toolbarHelpOptions } = useHelp({ onShowShortcuts: () => (visible.shortcuts = true) });
-
-useNativeMenu({
-  toolbarFileOptions,
-  toolbarEditOptions,
-  toolbarViewOptions,
-  toolbarHelpOptions,
-  visible
-});
-
-// Provide the global editor state to the actual editor view and other components
-provide('editorFileState', fileState);
-provide('editorInstance', editorInstance);
-provide('editorVisible', visible);
-provide('editorSidebarState', sidebarState);
-provide('editorViewState', viewState);
-provide('editorSavedRecentFiles', savedRecentFiles);
-provide('editorHandleSelectRecentFile', handleSelectRecentFile);
 
 // --- Window Controls ---
 const api = getElectronAPI();

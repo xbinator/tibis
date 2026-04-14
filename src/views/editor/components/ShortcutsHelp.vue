@@ -29,8 +29,8 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
+import { EditorShortcuts } from '@/layouts/default/constants/shortcuts';
 import { getShortcutParts } from '@/utils/shortcut';
-import { EditorShortcuts } from '../constants/shortcuts';
 
 interface ShortcutItem {
   label: string;
@@ -51,16 +51,14 @@ const shortcutGroups: ShortcutGroup[] = [
       { label: '保存文件', shortcut: EditorShortcuts.FILE_SAVE },
       { label: '另存为', shortcut: EditorShortcuts.FILE_SAVE_AS },
       { label: '复制文件', shortcut: EditorShortcuts.FILE_DUPLICATE },
-      { label: '重命名', shortcut: EditorShortcuts.FILE_RENAME },
-      { label: '最近文件', shortcut: EditorShortcuts.FILE_RECENT_MORE }
+      { label: '重命名', shortcut: EditorShortcuts.FILE_RENAME }
     ]
   },
   {
     title: '编辑操作',
     items: [
       { label: '撤销', shortcut: EditorShortcuts.EDIT_UNDO },
-      { label: '重做', shortcut: EditorShortcuts.EDIT_REDO },
-      { label: '查找', shortcut: EditorShortcuts.EDIT_FIND }
+      { label: '重做', shortcut: EditorShortcuts.EDIT_REDO }
     ]
   },
   {

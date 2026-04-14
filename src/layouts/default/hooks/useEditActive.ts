@@ -2,21 +2,13 @@ import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { computed } from 'vue';
 import { marked } from 'marked';
-import type { BEditorPublicInstance } from '@/components/BEditor/types';
 import type { ToolbarOptions } from '@/components/BToolbar/types';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useEditorStore } from '@/stores/editor';
 import { EditorShortcuts } from '../constants/shortcuts';
 
-interface UseEditActiveOptions {
-  /** 查找栏是否可见 */
-  visible: { find: boolean };
-  /** 编辑器实例 */
-  editorInstance: Ref<BEditorPublicInstance | null>;
-}
-
-export function useEditActive(fileState: Ref<EditorFile>, options: UseEditActiveOptions) {
-  const { editorInstance, visible } = options;
-
+export function useEditActive(fileState: Ref<EditorFile>) {
+  const editorStore = useEditorStore();
   const { clipboard } = useClipboard();
 
   async function toHtml(markdown: string): Promise<string> {
@@ -40,32 +32,23 @@ export function useEditActive(fileState: Ref<EditorFile>, options: UseEditActive
   const toolbarEditOptions = computed<ToolbarOptions>(() => {
     const { content } = fileState.value;
     const canCopy = Boolean(content.trim());
+    const instance = editorStore.editorInstance;
     return [
       {
         value: 'undo',
         label: '撤销',
         shortcut: EditorShortcuts.EDIT_UNDO,
         enableShortcut: false,
-        disabled: !editorInstance.value?.canUndo(),
-        onClick: () => editorInstance.value?.undo()
+        disabled: !instance?.canUndo(),
+        onClick: () => instance?.undo()
       },
       {
         value: 'redo',
         label: '重做',
         shortcut: EditorShortcuts.EDIT_REDO,
         enableShortcut: false,
-        disabled: !editorInstance.value?.canRedo(),
-        onClick: () => editorInstance.value?.redo()
-      },
-      {
-        value: 'find',
-        label: '查找',
-        shortcut: EditorShortcuts.EDIT_FIND,
-        enableShortcut: false,
-        disabled: !canCopy,
-        onClick: () => {
-          visible.find = true;
-        }
+        disabled: !instance?.canRedo(),
+        onClick: () => instance?.redo()
       },
       { type: 'divider' },
       {

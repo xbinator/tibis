@@ -10,7 +10,6 @@ interface UseNativeMenuOptions {
   toolbarEditOptions: Ref<ToolbarOptions>;
   toolbarViewOptions: Ref<ToolbarOptions>;
   toolbarHelpOptions: Ref<ToolbarOptions>;
-  visible: { recentSearch: boolean };
 }
 
 type MenuOptionItem = ToolbarOption | DropdownOptionItem;
@@ -60,12 +59,7 @@ function buildAllHandlers(options: UseNativeMenuOptions): Record<string, ClickHa
     ...extractHandlers('edit:', options.toolbarEditOptions.value),
     ...extractHandlers('view:', options.toolbarViewOptions.value),
     ...extractHandlers('theme:', themeItem?.children),
-    ...extractHandlers('help:', options.toolbarHelpOptions.value),
-
-    // 特殊拦截事件
-    'file:recent': () => {
-      options.visible.recentSearch = true;
-    }
+    ...extractHandlers('help:', options.toolbarHelpOptions.value)
   };
 }
 

@@ -38,7 +38,6 @@ export function setupAppMenu(): void {
         { label: '新建', accelerator: 'CmdOrCtrl+Alt+N', click: () => sendAction('file:new') },
         { type: 'separator' as const },
         { label: '打开...', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendAction('file:open') },
-        { label: '打开最近的文件...', click: () => sendAction('file:recent') },
         { type: 'separator' as const },
         { label: '复制为新文件', accelerator: 'CmdOrCtrl+Alt+D', click: () => sendAction('file:duplicate') },
         { label: '保存', accelerator: 'CmdOrCtrl+S', click: () => sendAction('file:save') },
@@ -58,8 +57,6 @@ export function setupAppMenu(): void {
       submenu: [
         { role: 'undo' as const, label: '撤销', accelerator: 'CmdOrCtrl+Z' },
         { role: 'redo' as const, label: '重做', accelerator: 'CmdOrCtrl+Shift+Z' },
-        { type: 'separator' as const },
-        { label: '查找', accelerator: 'CmdOrCtrl+F', click: () => sendAction('edit:find') },
         { type: 'separator' as const },
         { role: 'cut' as const, label: '剪切', accelerator: 'CmdOrCtrl+X' },
         { role: 'copy' as const, label: '复制', accelerator: 'CmdOrCtrl+C' },

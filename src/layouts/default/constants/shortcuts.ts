@@ -5,13 +5,11 @@ export const EditorShortcuts = {
   FILE_SAVE: 'Ctrl+S',
   FILE_SAVE_AS: 'Ctrl+Shift+S',
   FILE_DUPLICATE: 'Ctrl+Alt+D',
-  FILE_RECENT_MORE: 'Ctrl+M',
   FILE_RENAME: 'F2',
 
   // 编辑操作
   EDIT_UNDO: 'Ctrl+Z',
   EDIT_REDO: 'Ctrl+Shift+Z',
-  EDIT_FIND: 'Ctrl+F',
 
   // 视图操作
   VIEW_SOURCE: 'Ctrl+E'

@@ -1,27 +1,20 @@
-import { computed, ref } from 'vue';
-import type { BEditorViewMode } from '@/components/BEditor/types';
+import { computed } from 'vue';
+import { storeToRefs } from 'pinia';
 import type { ToolbarOptions } from '@/components/BToolbar/types';
 import { local } from '@/shared/storage/base';
+import { useEditorStore } from '@/stores/editor';
 import { useSettingStore } from '@/stores/setting';
 import { EditorShortcuts } from '../constants/shortcuts';
 
 const STORAGE_KEY = 'editor_viewState';
 
-interface EditorViewState {
-  mode: BEditorViewMode;
-  showOutline: boolean;
-}
-
-function loadViewState(): EditorViewState {
-  return local.getItem<EditorViewState>(STORAGE_KEY) ?? { mode: 'rich', showOutline: true };
-}
-
-function saveViewState(state: EditorViewState): void {
+function saveViewState(state: { mode: string; showOutline: boolean }): void {
   local.setItem(STORAGE_KEY, state);
 }
 
 export function useViewActive() {
-  const viewState = ref<EditorViewState>(loadViewState());
+  const editorStore = useEditorStore();
+  const { viewState } = storeToRefs(editorStore);
   const settingStore = useSettingStore();
 
   const canShowOutline = computed<boolean>(() => viewState.value.mode === 'rich');
