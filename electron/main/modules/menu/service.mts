@@ -94,8 +94,22 @@ export function setupAppMenu(): void {
           ]
         },
         { type: 'separator' as const },
-        { role: 'reload' as const, label: '重新加载' },
-        { role: 'forceReload' as const, label: '强制重新加载' },
+        {
+          label: '重新加载',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win) win.reload();
+          }
+        },
+        {
+          label: '强制重新加载',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            if (win) win.webContents.reloadIgnoringCache();
+          }
+        },
         { role: 'toggleDevTools' as const, label: '切换开发者工具' },
         { type: 'separator' as const },
         { role: 'togglefullscreen' as const, label: '切换全屏' }
