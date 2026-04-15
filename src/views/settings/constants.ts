@@ -26,3 +26,9 @@ export const providerFormatOptions: ProviderFormatOption[] = [
 ];
 
 export const providerFormatLabels = Object.fromEntries(providerFormatOptions.map((option) => [option.value, option.label]));
+
+export const CONTAINER_WIDTH_THRESHOLD = 800;
+
+export const SIDEBAR_WIDTH_LARGE = 280;
+
+export const SIDEBAR_WIDTH_SMALL = 60;

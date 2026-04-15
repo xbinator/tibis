@@ -2,8 +2,8 @@
   <div class="settings-container">
     <div class="settings-sidebar">
       <RouterLink v-for="item in menuItems" :key="item.key" :to="item.path" class="sidebar-item" :class="{ active: isActive(item.key) }">
-        <Icon :icon="item.icon" />
-        <span>{{ item.label }}</span>
+        <Icon :icon="item.icon" class="sidebar-item__icon" />
+        <span class="sidebar-item__label">{{ item.label }}</span>
       </RouterLink>
     </div>
 
@@ -29,18 +29,24 @@ function isActive(key: SettingsMenuKey): boolean {
 
 <style scoped lang="less">
 .settings-container {
+  --sidebar-width-large: 280px;
+  --sidebar-width-small: 60px;
+  --container-width-threshold: 800px;
+
   display: flex;
   height: 100%;
+  container-type: inline-size;
 }
 
 .settings-sidebar {
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
-  width: 280px;
+  width: var(--sidebar-width-small);
   height: 100%;
-  padding: 6px 8px 8px;
+  padding: 16px 14px 12px 8px;
   overflow-y: auto;
+  transition: width 0.3s ease;
 }
 
 .settings-header-back {
@@ -61,10 +67,11 @@ function isActive(key: SettingsMenuKey): boolean {
 
 .sidebar-item {
   display: flex;
-  gap: 12px;
+  gap: 0;
   align-items: center;
+  justify-content: center;
   height: 38px;
-  padding: 0 14px;
+  padding: 0;
   margin-bottom: 8px;
   font-size: 14px;
   color: var(--text-secondary);
@@ -85,10 +92,40 @@ function isActive(key: SettingsMenuKey): boolean {
   }
 }
 
+.sidebar-item__icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar-item__label {
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease, width 0.3s ease;
+}
+
 .settings-content {
   flex: 1;
-  margin: 0 8px 8px 0;
   background: var(--bg-primary);
   border-radius: 8px;
+}
+
+@container (min-width: 800px) {
+  .settings-sidebar {
+    width: var(--sidebar-width-large);
+  }
+
+  .sidebar-item {
+    gap: 12px;
+    justify-content: flex-start;
+    padding: 0 14px;
+  }
+
+  .sidebar-item__label {
+    width: auto;
+    opacity: 1;
+  }
 }
 </style>
