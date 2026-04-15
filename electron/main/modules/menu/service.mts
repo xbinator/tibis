@@ -82,8 +82,8 @@ export function setupAppMenu(): void {
     {
       label: '视图',
       submenu: [
-        { id: 'view:source', type: 'checkbox', label: '源代码模式', accelerator: 'CmdOrCtrl+E', click: () => sendAction('view:source') },
-        { id: 'view:outline', type: 'checkbox', label: '大纲', click: () => sendAction('view:outline') },
+        { id: 'view:source', type: 'checkbox', label: '源代码模式', accelerator: 'CmdOrCtrl+E', click: () => sendAction('view:toggleSource') },
+        { id: 'view:outline', type: 'checkbox', label: '大纲', click: () => sendAction('view:toggleOutline') },
         { type: 'separator' as const },
         {
           label: '主题',
@@ -97,7 +97,6 @@ export function setupAppMenu(): void {
         { role: 'reload' as const, label: '重新加载' },
         { role: 'forceReload' as const, label: '强制重新加载' },
         { role: 'toggleDevTools' as const, label: '切换开发者工具' },
-        { type: 'separator' as const },
         { type: 'separator' as const },
         { role: 'togglefullscreen' as const, label: '切换全屏' }
       ]

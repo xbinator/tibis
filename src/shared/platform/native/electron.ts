@@ -52,4 +52,8 @@ export class ElectronNative implements Native {
   updateMenuItem(id: string, properties: { checked?: boolean }): void {
     getElectronAPI().updateMenuItem(id, properties);
   }
+
+  onMenuAction(callback: (action: string) => void): () => void {
+    return getElectronAPI().onMenuAction(callback);
+  }
 }

@@ -65,4 +65,11 @@ export class WebNative implements Native {
   async setWindowTitle(title: string): Promise<void> {
     document.title = title;
   }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onMenuAction(_callback: (action: string) => void): () => void {
+    return () => {
+      // web 端不需要清理
+    };
+  }
 }
