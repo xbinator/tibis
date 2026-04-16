@@ -21,7 +21,14 @@ export function useAutoSave(fileState: Ref<EditorFile>, options: AutoSaveOptions
 
     if (content === undefined) return;
 
-    await filesStore.updateFile(id, fileState.value);
+    const stored = await filesStore.getFileById(id);
+
+    if (stored) {
+      await filesStore.updateFile(id, fileState.value);
+      return;
+    }
+
+    await filesStore.addFile(fileState.value);
   }
 
   const debouncedSave = debounce(saveToStorage, delay);

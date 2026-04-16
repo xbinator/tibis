@@ -24,6 +24,7 @@ export function useFrontMatter(content: Ref<string | undefined>): UseFrontMatter
   const frontMatterRaw = ref<string>('');
   const frontMatterData = ref<FrontMatterData>({});
   const bodyContent = ref<string>('');
+  const hasFrontMatterParseError = ref(false);
   let isInternalUpdate = false;
 
   const hasFrontMatter = computed(() => Object.keys(frontMatterData.value).length > 0);
@@ -40,21 +41,28 @@ export function useFrontMatter(content: Ref<string | undefined>): UseFrontMatter
 
   function parseFrontMatter(raw: string): FrontMatterData {
     if (!raw.trim()) {
+      hasFrontMatterParseError.value = false;
       return {};
     }
 
     try {
       const result = yaml.load(raw);
+      hasFrontMatterParseError.value = false;
       if (result && typeof result === 'object' && !Array.isArray(result)) {
         return result as FrontMatterData;
       }
       return {};
     } catch {
+      hasFrontMatterParseError.value = true;
       return {};
     }
   }
 
   function reconstructContent(): string {
+    if (hasFrontMatterParseError.value && frontMatterRaw.value.trim()) {
+      return `---\n${frontMatterRaw.value}\n---\n${bodyContent.value}`;
+    }
+
     if (!hasFrontMatter.value) {
       return bodyContent.value;
     }
@@ -70,10 +78,12 @@ export function useFrontMatter(content: Ref<string | undefined>): UseFrontMatter
   }
 
   function updateFrontMatter(data: FrontMatterData): void {
+    hasFrontMatterParseError.value = false;
     frontMatterData.value = { ...data };
   }
 
   function updateFrontMatterField(key: string, value: unknown): void {
+    hasFrontMatterParseError.value = false;
     frontMatterData.value = {
       ...frontMatterData.value,
       [key]: value
@@ -81,6 +91,7 @@ export function useFrontMatter(content: Ref<string | undefined>): UseFrontMatter
   }
 
   function removeFrontMatterField(key: string): void {
+    hasFrontMatterParseError.value = false;
     const newData = { ...frontMatterData.value };
     delete newData[key];
     frontMatterData.value = newData;
@@ -90,6 +101,7 @@ export function useFrontMatter(content: Ref<string | undefined>): UseFrontMatter
     if (frontMatterData.value[key] !== undefined) {
       return;
     }
+    hasFrontMatterParseError.value = false;
     frontMatterData.value = {
       ...frontMatterData.value,
       [key]: value

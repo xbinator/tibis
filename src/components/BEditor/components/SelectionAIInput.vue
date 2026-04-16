@@ -36,7 +36,7 @@ import { Icon } from '@iconify/vue';
 import { TextSelection } from '@tiptap/pm/state';
 import { onClickOutside, useEventListener } from '@vueuse/core';
 import { message } from 'ant-design-vue';
-import { useAgent } from '@/hooks/useAgent';
+import { useChat } from '@/hooks/useChat';
 import { useShortcuts } from '@/hooks/useShortcuts';
 import type { ServiceModelUpdatedDetail } from '@/shared/storage/service-models/events';
 import { SERVICE_MODEL_UPDATED_EVENT } from '@/shared/storage/service-models/events';
@@ -66,7 +66,7 @@ const serviceModelStore = useServiceModelStore();
 
 const providerId = computed(() => modelConfig.value?.providerId ?? '');
 
-const { agent } = useAgent({
+const { agent } = useChat({
   providerId,
   onChunk(content) {
     previewText.value += content;
