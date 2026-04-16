@@ -10,6 +10,36 @@ const MAX_RECENT_FILES = 100;
 
 let electronLocalMigrationPromise: Promise<void> | null = null;
 
+function normalizeStoredFile(file: StoredFile): StoredFile {
+  // 已保存文件，直接返回
+  if (file.savedContent !== undefined) return { ...file };
+
+  // 未保存文件，直接返回
+  if (file.path === null) return { ...file, savedContent: file.content };
+
+  // 其他情况，直接返回
+  return { ...file };
+}
+
+function normalizeStoredFiles(files: StoredFile[]): { files: StoredFile[]; changed: boolean } {
+  let changed = false;
+
+  const normalizedFiles = files.map((file) => {
+    const normalizedFile = normalizeStoredFile(file);
+
+    if (normalizedFile.savedContent !== file.savedContent) {
+      changed = true;
+    }
+
+    return normalizedFile;
+  });
+
+  return {
+    files: normalizedFiles,
+    changed
+  };
+}
+
 async function getElectronStoreValue<T>(key: string): Promise<T | null> {
   const value = await getElectronAPI().storeGet(key);
   return (value as T | null) ?? null;
@@ -38,10 +68,11 @@ async function ensureElectronLocalMigration(): Promise<void> {
 export const recentFilesStorage = {
   async addRecentFile(file: StoredFile): Promise<void> {
     const files = await this.getAllRecentFiles();
+    const normalizedFile = normalizeStoredFile(file);
 
-    const filtered = files.filter((item) => item.id !== file.id);
+    const filtered = files.filter((item) => item.id !== normalizedFile.id);
 
-    filtered.unshift({ ...file });
+    filtered.unshift(normalizedFile);
 
     const nextFiles = filtered.slice(0, MAX_RECENT_FILES);
     if (hasElectronAPI()) {
@@ -55,11 +86,24 @@ export const recentFilesStorage = {
   async getAllRecentFiles(): Promise<StoredFile[]> {
     if (hasElectronAPI()) {
       await ensureElectronLocalMigration();
-      return (await getElectronStoreValue<StoredFile[]>(RECENT_FILES_KEY)) || [];
+      const storedFiles = (await getElectronStoreValue<StoredFile[]>(RECENT_FILES_KEY)) || [];
+      const { files, changed } = normalizeStoredFiles(storedFiles);
+
+      if (changed) {
+        await setElectronStoreValue(RECENT_FILES_KEY, files);
+      }
+
+      return files;
     }
 
-    const files = await localforage.getItem<StoredFile[]>(RECENT_FILES_KEY);
-    return files || [];
+    const storedFiles = (await localforage.getItem<StoredFile[]>(RECENT_FILES_KEY)) || [];
+    const { files, changed } = normalizeStoredFiles(storedFiles);
+
+    if (changed) {
+      await localforage.setItem(RECENT_FILES_KEY, files);
+    }
+
+    return files;
   },
 
   async getRecentFile(id: string): Promise<StoredFile | null> {
@@ -71,7 +115,7 @@ export const recentFilesStorage = {
     const files = await this.getAllRecentFiles();
     const index = files.findIndex((item) => item.id === id);
     if (index !== -1) {
-      files[index] = { ...file };
+      files[index] = normalizeStoredFile(file);
 
       if (hasElectronAPI()) {
         await setElectronStoreValue(RECENT_FILES_KEY, files);
