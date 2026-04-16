@@ -269,10 +269,22 @@ function isPointerWithinCurrentBlockInteractionZone(event: MouseEvent, editor: E
   return event.clientX >= left && event.clientX <= right && event.clientY >= top && event.clientY <= bottom;
 }
 
+function getPositionContainer(): HTMLElement | null {
+  if (rootRef.value?.offsetParent instanceof HTMLElement) {
+    return rootRef.value.offsetParent;
+  }
+
+  if (rootRef.value?.parentElement instanceof HTMLElement) {
+    return rootRef.value.parentElement;
+  }
+
+  return null;
+}
+
 function updatePosition(): void {
   const { editor } = props;
   const block = currentBlock.value;
-  const rootElement = rootRef.value?.offsetParent instanceof HTMLElement ? rootRef.value.offsetParent : rootRef.value?.parentElement;
+  const rootElement = getPositionContainer();
 
   if (!editor || !block || !rootElement) {
     return;
@@ -300,19 +312,20 @@ function updatePosition(): void {
 
 function updatePlacement(): void {
   const triggerElement = rootRef.value?.querySelector('.current-block-menu__trigger');
-  if (!triggerElement) {
+  const rootElement = getPositionContainer();
+
+  if (!(triggerElement instanceof HTMLElement) || !rootElement) {
     return;
   }
 
   const triggerRect = triggerElement.getBoundingClientRect();
-
-  const viewportHeight = window.innerHeight;
+  const containerRect = rootElement.getBoundingClientRect();
   const estimatedPanelWidth = 180;
   const estimatedPanelHeight = 400;
 
-  const spaceLeft = triggerRect.left;
-  const spaceBelow = viewportHeight - triggerRect.bottom;
-  const spaceAbove = triggerRect.top;
+  const spaceLeft = triggerRect.left - containerRect.left;
+  const spaceBelow = containerRect.bottom - triggerRect.bottom;
+  const spaceAbove = triggerRect.top - containerRect.top;
 
   if (spaceLeft < estimatedPanelWidth) {
     placement.value = 'bottom';

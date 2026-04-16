@@ -172,10 +172,12 @@ function handleClick(event: MouseEvent) {
     background-color: transparent;
 
     &:hover:not(.b-button--disabled, .b-button--loading) {
+      color: var(--text-primary);
       background-color: var(--color-primary-bg);
     }
 
     &:active:not(.b-button--disabled, .b-button--loading) {
+      color: var(--text-primary);
       background-color: var(--color-primary-bg-hover);
     }
   }
