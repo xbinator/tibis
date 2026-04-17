@@ -57,7 +57,7 @@
         <RouterView />
       </div>
 
-      <BPanelSplitter v-show="sidebarState.visible" v-model:size="sidebarState.width" position="left" :min-width="200" :max-width="500">
+      <BPanelSplitter v-show="settingStore.sidebarVisible" v-model:size="settingStore.sidebarWidth" position="left" :min-width="200" :max-width="500">
         <BChatSidebar />
       </BPanelSplitter>
     </div>
@@ -78,6 +78,7 @@ import BChatSidebar from '@/components/BChatSidebar/index.vue';
 import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
+import { useSettingStore } from '@/stores/setting';
 import HeaderTabs from './components/HeaderTabs.vue';
 import ShortcutsHelp from './components/ShortcutsHelp.vue';
 import { useEditActive } from './hooks/useEditActive';
@@ -89,8 +90,7 @@ const router = useRouter();
 
 const visible = reactive({ searchRecent: false, shortcutsHelp: false });
 
-// 侧边栏状态
-const sidebarState = ref({ visible: false, width: 300 });
+const settingStore = useSettingStore();
 
 const { toolbarFileOptions } = useFileActive(visible);
 const { toolbarEditOptions } = useEditActive();
@@ -101,9 +101,8 @@ function handleOpenSettings(): void {
   router.push('/settings');
 }
 
-// 切换侧边栏显示状态
 function handleToggleSidebar(): void {
-  sidebarState.value.visible = !sidebarState.value.visible;
+  settingStore.toggleSidebar();
 }
 
 // --- Window Controls ---

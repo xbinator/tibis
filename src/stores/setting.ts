@@ -6,34 +6,32 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 
 type ResolvedTheme = 'dark' | 'light';
 
-const THEME_STORAGE_KEY = 'app_theme';
-const OUTLINE_STORAGE_KEY = 'editor_showOutline';
-const SOURCE_MODE_STORAGE_KEY = 'editor_sourceMode';
+const SETTINGS_STORAGE_KEY = 'app_settings';
+const LEGACY_THEME_STORAGE_KEY = 'app_theme';
+const LEGACY_OUTLINE_STORAGE_KEY = 'editor_showOutline';
+const LEGACY_SOURCE_MODE_STORAGE_KEY = 'editor_sourceMode';
+const LEGACY_SIDEBAR_VISIBLE_KEY = 'sidebar_visible';
+const LEGACY_SIDEBAR_WIDTH_KEY = 'sidebar_width';
 
-interface SettingState {
+interface PersistedSettingState {
   theme: ThemeMode;
-  title: string;
   showOutline: boolean;
   sourceMode: boolean;
+  sidebarVisible: boolean;
+  sidebarWidth: number;
 }
 
-function loadTheme(): ThemeMode {
-  const saved = local.getItem<string>(THEME_STORAGE_KEY);
-  if (saved === 'dark' || saved === 'light' || saved === 'system') {
-    return saved;
-  }
-  return 'system';
+interface SettingState extends PersistedSettingState {
+  title: string;
 }
 
-function loadShowOutline(): boolean {
-  const saved = local.getItem<boolean>(OUTLINE_STORAGE_KEY);
-  return typeof saved === 'boolean' ? saved : true;
-}
-
-function loadSourceMode(): boolean {
-  const saved = local.getItem<boolean>(SOURCE_MODE_STORAGE_KEY);
-  return typeof saved === 'boolean' ? saved : false;
-}
+const DEFAULT_SETTINGS: PersistedSettingState = {
+  theme: 'system',
+  showOutline: true,
+  sourceMode: false,
+  sidebarVisible: false,
+  sidebarWidth: 300
+};
 
 function getSystemTheme(): ResolvedTheme {
   if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -51,16 +49,71 @@ function applyTheme(theme: ThemeMode): void {
   }
 }
 
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === 'dark' || value === 'light' || value === 'system';
+}
+
+function normalizeSidebarWidth(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_SETTINGS.sidebarWidth;
+}
+
+function normalizeSettings(value: unknown): PersistedSettingState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ...DEFAULT_SETTINGS };
+  }
+
+  const settings = value as Partial<PersistedSettingState>;
+
+  return {
+    theme: isThemeMode(settings.theme) ? settings.theme : DEFAULT_SETTINGS.theme,
+    showOutline: typeof settings.showOutline === 'boolean' ? settings.showOutline : DEFAULT_SETTINGS.showOutline,
+    sourceMode: typeof settings.sourceMode === 'boolean' ? settings.sourceMode : DEFAULT_SETTINGS.sourceMode,
+    sidebarVisible: typeof settings.sidebarVisible === 'boolean' ? settings.sidebarVisible : DEFAULT_SETTINGS.sidebarVisible,
+    sidebarWidth: normalizeSidebarWidth(settings.sidebarWidth)
+  };
+}
+
+function removeLegacySettings(): void {
+  local.removeItem(LEGACY_THEME_STORAGE_KEY);
+  local.removeItem(LEGACY_OUTLINE_STORAGE_KEY);
+  local.removeItem(LEGACY_SOURCE_MODE_STORAGE_KEY);
+  local.removeItem(LEGACY_SIDEBAR_VISIBLE_KEY);
+  local.removeItem(LEGACY_SIDEBAR_WIDTH_KEY);
+}
+
+function loadLegacySettings(): PersistedSettingState {
+  return normalizeSettings({
+    theme: local.getItem<ThemeMode>(LEGACY_THEME_STORAGE_KEY),
+    showOutline: local.getItem<boolean>(LEGACY_OUTLINE_STORAGE_KEY),
+    sourceMode: local.getItem<boolean>(LEGACY_SOURCE_MODE_STORAGE_KEY),
+    sidebarVisible: local.getItem<boolean>(LEGACY_SIDEBAR_VISIBLE_KEY),
+    sidebarWidth: local.getItem<number>(LEGACY_SIDEBAR_WIDTH_KEY)
+  });
+}
+
+function loadPersistedSettings(): PersistedSettingState {
+  const savedSettings = local.getItem<PersistedSettingState>(SETTINGS_STORAGE_KEY);
+
+  if (savedSettings) {
+    const normalizedSettings = normalizeSettings(savedSettings);
+    local.setItem(SETTINGS_STORAGE_KEY, normalizedSettings);
+    return normalizedSettings;
+  }
+
+  const legacySettings = loadLegacySettings();
+  local.setItem(SETTINGS_STORAGE_KEY, legacySettings);
+  removeLegacySettings();
+  return legacySettings;
+}
+
 /**
  * 应用设置 Store
  * 统一管理应用级别的设置：主题、窗口标题等
  */
 export const useSettingStore = defineStore('setting', {
   state: (): SettingState => ({
-    theme: loadTheme(),
-    title: 'Tibis',
-    showOutline: loadShowOutline(),
-    sourceMode: loadSourceMode()
+    ...loadPersistedSettings(),
+    title: 'Tibis'
   }),
 
   getters: {
@@ -76,6 +129,17 @@ export const useSettingStore = defineStore('setting', {
   },
 
   actions: {
+    persistSettings(): void {
+      const settings: PersistedSettingState = {
+        theme: this.theme,
+        showOutline: this.showOutline,
+        sourceMode: this.sourceMode,
+        sidebarVisible: this.sidebarVisible,
+        sidebarWidth: this.sidebarWidth
+      };
+
+      local.setItem(SETTINGS_STORAGE_KEY, settings);
+    },
     // ==================== 主题设置 ====================
 
     /**
@@ -84,7 +148,7 @@ export const useSettingStore = defineStore('setting', {
      */
     setTheme(newTheme: ThemeMode): void {
       this.theme = newTheme;
-      local.setItem(THEME_STORAGE_KEY, newTheme);
+      this.persistSettings();
       applyTheme(newTheme);
     },
 
@@ -106,7 +170,7 @@ export const useSettingStore = defineStore('setting', {
      */
     setShowOutline(show: boolean): void {
       this.showOutline = show;
-      local.setItem(OUTLINE_STORAGE_KEY, show);
+      this.persistSettings();
     },
 
     /**
@@ -124,7 +188,7 @@ export const useSettingStore = defineStore('setting', {
      */
     setSourceMode(enabled: boolean): void {
       this.sourceMode = enabled;
-      local.setItem(SOURCE_MODE_STORAGE_KEY, enabled);
+      this.persistSettings();
     },
 
     /**
@@ -132,6 +196,22 @@ export const useSettingStore = defineStore('setting', {
      */
     toggleSourceMode(): void {
       this.setSourceMode(!this.sourceMode);
+    },
+
+    // ==================== 侧边栏设置 ====================
+
+    setSidebarVisible(visible: boolean): void {
+      this.sidebarVisible = visible;
+      this.persistSettings();
+    },
+
+    setSidebarWidth(width: number): void {
+      this.sidebarWidth = width;
+      this.persistSettings();
+    },
+
+    toggleSidebar(): void {
+      this.setSidebarVisible(!this.sidebarVisible);
     },
 
     /**
