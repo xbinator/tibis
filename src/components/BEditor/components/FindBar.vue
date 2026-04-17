@@ -34,12 +34,10 @@ import { EditorShortcuts } from '@/constants/shortcuts';
 import { useShortcuts } from '@/hooks/useShortcuts';
 
 interface Props {
-  content: string;
   editorInstance: BEditorPublicInstance | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  content: '',
   editorInstance: null
 });
 
@@ -136,13 +134,6 @@ function handleEnter(event: KeyboardEvent): void {
 watch(keyword, (value) => {
   applySearchTerm(value);
 });
-
-watch(
-  () => props.content,
-  () => {
-    syncSearchState();
-  }
-);
 
 watch(visible, (value) => {
   if (!value) {

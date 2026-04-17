@@ -15,7 +15,7 @@
 
     <BScrollbar ref="scrollbarRef" class="b-editor-scrollbar" @scroll="handleEditorScroll">
       <div ref="containerRef" class="b-editor-container">
-        <RichEditorPane
+        <PaneRichEditor
           v-if="isRichMode"
           ref="richEditorPaneRef"
           v-model:front-matter-data="frontMatterModel"
@@ -24,8 +24,10 @@
           :should-show-front-matter-card="shouldShowFrontMatterCard"
         />
 
-        <SourceEditorPane v-else ref="sourceEditorPaneRef" v-model:value="editorContent" />
+        <PaneSourceEditor v-else ref="sourceEditorPaneRef" v-model:value="editorContent" />
       </div>
+
+      <FindBar v-model:visible="findBarVisible" :editor-instance="editorPublicInstance" />
     </BScrollbar>
   </div>
 </template>
@@ -33,12 +35,13 @@
 <script setup lang="ts">
 import type { EditorController } from './hooks/useEditorController';
 import type { FrontMatterData } from './hooks/useFrontMatter';
-import type { BEditorViewMode } from './types';
+import type { BEditorPublicInstance, BEditorViewMode } from './types';
 import { computed, ref, toRef } from 'vue';
 import { useTextareaAutosize } from '@vueuse/core';
 import BScrollbar from '@/components/BScrollbar/index.vue';
-import RichEditorPane from './components/RichEditorPane.vue';
-import SourceEditorPane from './components/SourceEditorPane.vue';
+import FindBar from './components/FindBar.vue';
+import PaneRichEditor from './components/PaneRichEditor.vue';
+import PaneSourceEditor from './components/PaneSourceEditor.vue';
 import { getSearchSnapshot, type SearchScrollContext, type SearchSnapshot } from './extensions/Search';
 import { useAnchors } from './hooks/useAnchors';
 import { useEditorController } from './hooks/useEditorController';
@@ -83,6 +86,7 @@ const editorTitle = defineModel<string>('title', { default: '' });
 
 const richEditorPaneRef = ref<EditorController | null>(null);
 const sourceEditorPaneRef = ref<Pick<EditorController, 'focusEditor' | 'focusEditorAtStart'> | null>(null);
+const findBarVisible = ref(false);
 
 const { activeAnchorId, handleChangeAnchor, handleEditorScroll } = useAnchors(layoutRef, scrollbarRef);
 
@@ -196,6 +200,19 @@ function getSearchState(): SearchSnapshot {
 
   return getSearchSnapshot(editorInstance.value);
 }
+
+const editorPublicInstance = computed<BEditorPublicInstance>(() => ({
+  undo,
+  redo,
+  canUndo,
+  canRedo,
+  focusEditor,
+  setSearchTerm,
+  findNext,
+  findPrevious,
+  clearSearch,
+  getSearchState
+}));
 
 defineExpose({ setContent, undo, redo, canUndo, canRedo, setSearchTerm, findNext, findPrevious, clearSearch, focusEditor, getSearchState });
 
