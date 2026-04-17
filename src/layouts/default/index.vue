@@ -57,7 +57,7 @@
         <RouterView />
       </div>
 
-      <BPanelSplitter v-show="settingStore.sidebarVisible" v-model:size="settingStore.sidebarWidth" position="left" :min-width="200" :max-width="500">
+      <BPanelSplitter v-show="settingStore.sidebarVisible" v-model:size="settingStore.sidebarWidth" position="left" :min-width="240" :max-width="500">
         <BChatSidebar />
       </BPanelSplitter>
     </div>
