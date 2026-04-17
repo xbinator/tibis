@@ -55,6 +55,8 @@ export const useTabsStore = defineStore('tabs', {
         _index === -1 ? this.tabs.push(_tab) : (this.tabs[_index] = _tab);
       } else if (index === -1) {
         this.tabs.push(tab);
+      } else {
+        this.tabs[index] = tab;
       }
 
       persistData(this.$state);
