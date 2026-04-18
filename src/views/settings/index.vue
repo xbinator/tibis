@@ -1,12 +1,12 @@
 <template>
-  <div class="settings-container">
+  <div ref="settingsContainerRef" class="settings-container">
     <div class="settings-sidebar" :class="{ 'settings-sidebar--collapsed': sidebarCollapsed }">
       <RouterLink v-for="item in menuItems" :key="item.key" :to="item.path" class="sidebar-item" :class="{ active: isActive(item.key) }">
         <Icon :icon="item.icon" class="sidebar-item__icon" />
         <span class="sidebar-item__label">{{ item.label }}</span>
       </RouterLink>
 
-      <button type="button" class="sidebar-collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
+      <button type="button" class="sidebar-collapse-btn" @click="toggleSidebarCollapsed">
         <Icon :icon="sidebarCollapsed ? 'lucide:panel-right-open' : 'lucide:panel-right-close'" width="14" height="14" />
       </button>
     </div>
@@ -21,10 +21,12 @@
 import { ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
+import { useAutoCollapse } from '@/hooks/useAutoCollapse';
 import { menuItems, type SettingsMenuKey } from './constants';
 
 const route = useRoute();
-const sidebarCollapsed = ref(false);
+const settingsContainerRef = ref<HTMLElement | null>(null);
+const { collapsed: sidebarCollapsed, toggleCollapsed: toggleSidebarCollapsed } = useAutoCollapse(settingsContainerRef, { threshold: 800 });
 
 function isActive(key: SettingsMenuKey): boolean {
   const prefix = `/settings/${key}`;
