@@ -7,7 +7,7 @@
       </div>
       <div class="ai-preview-hint">
         <div v-if="loading" class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-4">
             <Icon icon="svg-spinners:ring-resize" class="ai-loading-icon" />
             <span>正在编写中...</span>
           </div>

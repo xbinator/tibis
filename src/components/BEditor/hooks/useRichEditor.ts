@@ -83,6 +83,7 @@ export function useRichEditor({ bodyContent, editable, editorInstanceId, onConte
     editable: editable.value,
     contentType: 'markdown',
     editorProps: {
+      handleDrop: () => true, // 返回 true 阻止 drop
       attributes: { spellcheck: 'false' },
       handlePaste: onPaste,
       handleKeyDown: (_, event) => {
@@ -147,6 +148,13 @@ export function useRichEditor({ bodyContent, editable, editorInstanceId, onConte
           return true;
         }
         return false;
+      },
+      handleDOMEvents: {
+        dragstart: () => true, // 阻止拖拽开始
+        dragover: (_view, event) => {
+          event.preventDefault();
+          return true;
+        }
       }
     },
     onUpdate: onEditorUpdate

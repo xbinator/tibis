@@ -311,7 +311,11 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
       listItem: false,
       paragraph: false,
       strike: false,
-      underline: false
+      underline: false,
+      // 禁用拖拽光标（拖拽时的蓝色插入线）
+      dropcursor: false,
+      // 禁用间隙光标
+      gapcursor: false
     }),
     Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: '请输入内容' }),
     Markdown,
