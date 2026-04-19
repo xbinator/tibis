@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
   "main": "dist-electron/main/index.mjs",
   "scripts": {
     "dev": "vite",
@@ -11,13 +12,16 @@
     "electron:build-main": "tsc -p electron/tsconfig.json",
     "electron:watch-main": "tsc -p electron/tsconfig.json -w",
     "electron:run": "wait-on dist-electron/main/index.mjs && node --watch-path=dist-electron --watch-preserve-output ./node_modules/electron/cli.js .",
-    "electron:dev": "concurrently -k \"npm run dev\" \"npm run electron:watch-main\" \"npm run electron:run\"",
-    "electron:build": "npm run build && npm run electron:build-main && electron-builder",
-    "start:windows": "npm run electron:dev",
+    "electron:dev": "concurrently -k \"pnpm run dev\" \"pnpm run electron:watch-main\" \"pnpm run electron:run\"",
+    "electron:build": "pnpm run build && pnpm run electron:build-main && electron-builder",
+    "start:windows": "pnpm run electron:dev",
     "postinstall": "electron-rebuild",
     "test": "HOST=127.0.0.1 vitest run",
     "lint": "eslint src --ext .vue,.ts,.tsx,.js,.jsx --fix",
     "lint:style": "stylelint 'src/**/*.{vue,less,css}' --fix"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "better-sqlite3"]
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
