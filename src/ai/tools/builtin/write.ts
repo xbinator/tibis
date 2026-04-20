@@ -3,7 +3,7 @@
  * @description 内置写入工具实现
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../confirmation';
-import type { AIToolContext, AIToolExecutor } from '../types';
+import type { AIToolContext, AIToolExecutor } from 'types/ai';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../results';
 
 /**

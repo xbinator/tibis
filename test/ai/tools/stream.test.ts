@@ -1,5 +1,5 @@
+import type { AIToolContext, AIToolExecutor } from 'types/ai';
 import { describe, expect, it } from 'vitest';
-import type { AIToolContext, AIToolExecutor } from '@/ai/tools/types';
 import { createToolSuccessResult } from '@/ai/tools/results';
 import { createToolResultMessages, executeToolCall, toTransportTools } from '@/ai/tools/stream';
 

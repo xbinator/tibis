@@ -1,5 +1,5 @@
+import type { AIToolContext } from 'types/ai';
 import { describe, expect, it } from 'vitest';
-import type { AIToolContext } from '@/ai/tools/types';
 import { createEditorToolContextRegistry } from '@/ai/tools/editor-context';
 
 function createContext(id: string): AIToolContext {

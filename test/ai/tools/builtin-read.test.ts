@@ -1,5 +1,5 @@
+import type { AIToolContext } from 'types/ai';
 import { describe, expect, it } from 'vitest';
-import type { AIToolContext } from '@/ai/tools/types';
 import { createBuiltinReadTools } from '@/ai/tools/builtin/read';
 
 function createContext(content = 'alpha beta\nbeta gamma'): AIToolContext {

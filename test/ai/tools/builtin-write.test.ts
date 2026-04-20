@@ -1,9 +1,9 @@
+import type { AIToolContext } from 'types/ai';
 import { describe, expect, it, vi } from 'vitest';
-import type { AIToolContext } from '@/ai/tools/types';
 import { createBuiltinWriteTools } from '@/ai/tools/builtin/write';
 
 function createContext() {
-  let selection = { from: 2, to: 5, text: 'pha' };
+  let selection: { from: number; to: number; text: string } | null = { from: 2, to: 5, text: 'pha' };
   let documentContent = 'alpha beta';
 
   const context: AIToolContext = {
@@ -85,6 +85,7 @@ describe('built-in write tools', () => {
     expect(result.status).toBe('success');
     expect(getDocumentContent()).toBe('# rewritten');
     expect(confirm).toHaveBeenCalledTimes(1);
+    // @ts-ignore
     expect(confirm.mock.calls[0]?.[0].permission).toBe('dangerous');
   });
 });

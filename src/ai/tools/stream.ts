@@ -2,9 +2,8 @@
  * @file stream.ts
  * @description AI 工具流式执行相关函数
  */
-import type { AIToolContext, AIToolExecutionResult, AIToolExecutor } from './types';
 import type { JSONValue, ModelMessage } from 'ai';
-import type { AIStreamToolCallChunk, AITransportTool } from 'types/ai';
+import type { AIToolContext, AIToolExecutionResult, AIToolExecutor, AIStreamToolCallChunk, AITransportTool } from 'types/ai';
 import { createToolFailureResult } from './results';
 
 /**

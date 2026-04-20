@@ -3,11 +3,7 @@ import { createBuiltinTools } from '@/ai/tools/builtin';
 
 describe('createBuiltinTools', () => {
   it('returns read tools by default', () => {
-    expect(createBuiltinTools().map((tool) => tool.definition.name)).toEqual([
-      'read_current_document',
-      'get_current_selection',
-      'search_current_document'
-    ]);
+    expect(createBuiltinTools().map((tool) => tool.definition.name)).toEqual(['read_current_document', 'get_current_selection', 'search_current_document']);
   });
 
   it('only exposes low-risk write tools by default when confirmation is available', () => {

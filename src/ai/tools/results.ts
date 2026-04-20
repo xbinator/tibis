@@ -2,7 +2,7 @@
  * @file results.ts
  * @description AI 工具执行结果工厂函数
  */
-import type { AIToolExecutionError, AIToolExecutionResult } from './types';
+import type { AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 
 /**
  * 创建成功的工具执行结果

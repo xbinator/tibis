@@ -2,7 +2,7 @@
  * @file editor-context.ts
  * @description 编辑器工具上下文注册表，管理活动编辑器的上下文
  */
-import type { AIToolContext } from './types';
+import type { AIToolContext } from 'types/ai';
 
 /**
  * 编辑器工具上下文注册表接口

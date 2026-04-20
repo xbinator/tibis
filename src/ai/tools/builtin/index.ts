@@ -3,7 +3,7 @@
  * @description 内置工具工厂函数
  */
 import type { AIToolConfirmationAdapter } from '../confirmation';
-import type { AIToolExecutor } from '../types';
+import type { AIToolExecutor } from 'types/ai';
 import { createBuiltinReadTools } from './read';
 import { createBuiltinWriteTools } from './write';
 

@@ -2,7 +2,7 @@
  * @file confirmation.ts
  * @description AI 工具确认机制，用于危险操作的用户确认
  */
-import type { AIToolPermission } from './types';
+import type { AIToolPermission } from 'types/ai';
 
 /**
  * AI 工具确认请求

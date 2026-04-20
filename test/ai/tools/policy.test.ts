@@ -42,11 +42,6 @@ describe('AI tool policy', () => {
   });
 
   it('returns the default low-risk chat tool names', () => {
-    expect(getDefaultChatToolNames()).toEqual([
-      'read_current_document',
-      'get_current_selection',
-      'search_current_document',
-      'insert_at_cursor'
-    ]);
+    expect(getDefaultChatToolNames()).toEqual(['read_current_document', 'get_current_selection', 'search_current_document', 'insert_at_cursor']);
   });
 });

@@ -28,6 +28,8 @@ interface ToolProviderPolicyInput {
   isCustom?: boolean;
 }
 
+type ToolProvider = Pick<AIProvider, 'id' | 'name' | 'type' | 'isCustom'> | ToolProviderPolicyInput | null | undefined;
+
 /**
  * 已验证支持工具调用的服务商 ID 集合
  * @description 第一批只放开已经验证过原生 tool calling 行为的 provider
@@ -44,7 +46,7 @@ const DEFAULT_CHAT_TOOL_NAMES = ['read_current_document', 'get_current_selection
  * @param provider - 服务商信息
  * @returns 工具支持信息
  */
-export function getProviderToolSupport(provider: Pick<AIProvider, 'id' | 'name' | 'type' | 'isCustom'> | ToolProviderPolicyInput | null | undefined): AIToolProviderSupport {
+export function getProviderToolSupport(provider: ToolProvider): AIToolProviderSupport {
   if (!provider) {
     return { supported: false, reason: '当前服务商不存在' };
   }

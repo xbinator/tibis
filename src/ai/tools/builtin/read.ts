@@ -2,7 +2,7 @@
  * @file read.ts
  * @description 内置只读工具实现
  */
-import type { AIToolContext, AIToolExecutor, EditorSelection } from '../types';
+import type { AIToolContext, AIToolExecutor, EditorSelection } from 'types/ai';
 import { createToolFailureResult, createToolSuccessResult } from '../results';
 
 /**
