@@ -1,30 +1,35 @@
 <template>
-  <div ref="wrapperRef" class="b-prompt-variable">
-    <div
-      ref="editorRef"
-      :contenteditable="!disabled"
-      spellcheck="true"
-      aria-multiline="true"
-      :aria-disabled="disabled"
-      class="b-prompt-variable__textarea"
-      :class="`b-prompt-variable--${variant}`"
-      :style="editorStyle"
-      :data-placeholder="placeholder"
-      @paste="handlePaste"
-      @keydown="handleKeyDown"
-      @blur="handleBlur"
-      @input="handleInput"
-    ></div>
+  <div ref="wrapperRef" class="b-prompt-editor" @click="handleContainerClick">
+    <div class="b-prompt-editor__container">
+      <div v-if="!disabled" v-show="editorIsEmpty" class="b-prompt-editor__placeholder">
+        {{ placeholder }}
+      </div>
 
-    <VariableSelect
-      v-if="options.length"
-      :visible="trigger.visible.value"
-      :variables="trigger.filteredVariables.value"
-      :position="trigger.menuPosition.value"
-      :active-index="trigger.activeIndex.value"
-      @select="trigger.selectVariable"
-      @update:active-index="trigger.activeIndex.value = $event"
-    />
+      <div
+        ref="editorRef"
+        :contenteditable="!disabled"
+        spellcheck="true"
+        aria-multiline="true"
+        :aria-disabled="disabled"
+        class="b-prompt-editor__textarea"
+        :style="editorStyle"
+        data-empty="true"
+        @paste="handlePaste"
+        @keydown="handleKeyDown"
+        @blur="handleBlur"
+        @input="handleInput"
+      ></div>
+
+      <VariableSelect
+        v-if="options.length"
+        :visible="trigger.visible.value"
+        :variables="trigger.filteredVariables.value"
+        :position="trigger.menuPosition.value"
+        :active-index="trigger.activeIndex.value"
+        @select="trigger.selectVariable"
+        @update:active-index="trigger.activeIndex.value = $event"
+      />
+    </div>
   </div>
 </template>
 
@@ -40,7 +45,6 @@ const props = withDefaults(defineProps<Props>(), {
   options: () => [],
   disabled: false,
   maxHeight: undefined,
-  variant: 'outlined',
   submitOnEnter: true
 });
 
@@ -65,7 +69,7 @@ const editorStyle = computed(() => {
   return style;
 });
 
-const { selectionHook, updateModelValue, initializeEditor, cleanup } = useEditorCore(editorRef, inputValue, {
+const { selectionHook, updateModelValue, initializeEditor, cleanup, editorIsEmpty, undoHistory, redoHistory } = useEditorCore(editorRef, inputValue, {
   variables,
   emitChange: (value) => emit('change', value)
 });
@@ -85,6 +89,8 @@ const { handleKeyDown } = useEditorKeyboard({
     selectionHook.insertTextAtCursor('\n');
     updateModelValue();
   },
+  onUndo: () => undoHistory(),
+  onRedo: () => redoHistory(),
   onSubmit: () => emit('submit'),
   submitOnEnter: computed(() => props.submitOnEnter),
   onMenuKeydown: trigger.handleMenuKeydown,
@@ -106,6 +112,12 @@ function handleInput(): void {
 
 function handleBlur(): void {
   if (!props.disabled) setTimeout(trigger.hide, 200);
+}
+
+function handleContainerClick(): void {
+  if (!props.disabled && editorRef.value) {
+    editorRef.value.focus();
+  }
 }
 
 function handleSelectionChange(): void {
@@ -157,7 +169,7 @@ onUnmounted(() => {
 <style lang="less">
 @import url('@/assets/styles/scrollbar.less');
 
-.b-prompt-variable-tag {
+.b-prompt-editor-tag {
   display: inline-flex;
   gap: 4px;
   align-items: center;
@@ -171,12 +183,8 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.b-prompt-variable {
-  position: relative;
+.b-prompt-editor {
   width: 100%;
-}
-
-.b-prompt-variable__textarea {
   min-height: 80px;
   padding: 12px;
   overflow-y: auto;
@@ -201,70 +209,34 @@ onUnmounted(() => {
     box-shadow: 0 0 0 2px var(--input-focus-shadow);
   }
 
-  &:empty::before {
-    font-size: 14px;
-    color: var(--text-placeholder);
-    pointer-events: none;
-    content: attr(data-placeholder);
-  }
-
   .scrollbar-style();
 }
 
-.b-prompt-variable--outlined {
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-
-  &:hover {
-    border-color: var(--border-hover);
-  }
-
-  &:focus {
-    border-color: var(--input-focus-border);
-    box-shadow: 0 0 0 2px var(--input-focus-shadow);
-  }
+.b-prompt-editor__container {
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
-.b-prompt-variable--borderless {
+.b-prompt-editor__placeholder {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: inherit;
+  color: var(--text-placeholder);
+  pointer-events: none;
+}
+
+.b-prompt-editor__textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  outline: none;
   background: transparent;
   border: none;
-
-  &:hover,
-  &:focus {
-    border: none;
-    box-shadow: none;
-  }
-}
-
-.b-prompt-variable--filled {
-  background: var(--bg-secondary);
-  border: none;
-
-  &:hover {
-    background: var(--bg-tertiary);
-  }
-
-  &:focus {
-    background: var(--input-bg);
-    box-shadow: none;
-  }
-}
-
-.b-prompt-variable--underlined {
-  padding-right: 0;
-  padding-left: 0;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--input-border);
-  border-radius: 0;
-
-  &:hover {
-    border-bottom-color: var(--border-hover);
-  }
-
-  &:focus {
-    border-bottom-color: var(--input-focus-border);
-    box-shadow: none;
-  }
 }
 </style>

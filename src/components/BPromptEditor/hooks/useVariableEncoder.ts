@@ -1,7 +1,26 @@
 export const CARET_SPACER = '\u00A0';
+export const ZERO_WIDTH_SPACE = '\u200B';
 
 export interface VariableEncoderOptions {
   getVariableLabel: (value: string) => string | undefined;
+}
+
+/**
+ * 规范化编辑器文本，移除不会构成真实内容的占位字符。
+ * @param content - 解码后的编辑器文本
+ * @returns 仅用于空态判断的规范化文本
+ */
+export function normalizePromptEditorContent(content: string): string {
+  return content.replace(new RegExp(CARET_SPACER, 'g'), '').replace(new RegExp(ZERO_WIDTH_SPACE, 'g'), '').trim();
+}
+
+/**
+ * 判断当前编辑器内容是否应展示 placeholder。
+ * @param content - 解码后的编辑器文本
+ * @returns 是否为空内容
+ */
+export function isPromptEditorEffectivelyEmpty(content: string): boolean {
+  return normalizePromptEditorContent(content).length === 0;
 }
 
 function escapeHtml(text: string): string {
@@ -20,7 +39,7 @@ export function useVariableEncoder(options: VariableEncoderOptions) {
 
   function createVariableSpan(variableName: string): HTMLElement {
     const element = document.createElement('span');
-    element.className = 'b-prompt-variable-tag';
+    element.className = 'b-prompt-editor-tag';
     element.setAttribute('data-value', 'variable');
     element.setAttribute('data-content', variableName);
     element.setAttribute('contenteditable', 'false');

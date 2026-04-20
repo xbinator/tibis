@@ -23,8 +23,6 @@ export interface BPromptEditorProps {
   disabled?: boolean;
   // 最大高度
   maxHeight?: number | string;
-  // 形态变体
-  variant?: 'outlined' | 'borderless' | 'filled' | 'underlined';
   // 是否在按下 Enter 时提交（Shift+Enter 换行）
   submitOnEnter?: boolean;
 }

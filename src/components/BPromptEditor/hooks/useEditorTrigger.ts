@@ -143,19 +143,15 @@ export function useEditorTrigger(
     const { variableNode, spacerNode } = target;
     const parent = variableNode.parentNode;
     if (!parent) return false;
-
-    const nextNode = direction === 'before' ? spacerNode?.nextSibling || variableNode.nextSibling : null;
+    const variableIndex = Array.from(parent.childNodes).indexOf(variableNode);
+    if (variableIndex < 0) return false;
 
     spacerNode?.parentNode?.removeChild(spacerNode);
     parent.removeChild(variableNode);
 
     const newRange = document.createRange();
-    if (nextNode) {
-      newRange.setStartBefore(nextNode);
-    } else {
-      newRange.selectNodeContents(parent);
-      newRange.collapse(false);
-    }
+    const targetOffset = Math.min(variableIndex, parent.childNodes.length);
+    newRange.setStart(parent, targetOffset);
     newRange.collapse(true);
     selection.removeAllRanges();
     selection.addRange(newRange);

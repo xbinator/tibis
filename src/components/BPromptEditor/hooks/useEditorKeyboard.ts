@@ -4,6 +4,8 @@ export interface KeyboardOptions {
   disabled: Ref<boolean>;
   onDeleteVariable: (direction: 'before' | 'after') => boolean;
   onEnter: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
   onSubmit?: () => void;
   submitOnEnter: Ref<boolean>;
   onMenuKeydown: (event: KeyboardEvent) => boolean;
@@ -12,10 +14,26 @@ export interface KeyboardOptions {
 }
 
 export function useEditorKeyboard(options: KeyboardOptions) {
-  const { disabled, onDeleteVariable, onEnter, onSubmit, submitOnEnter, onMenuKeydown, isMenuVisible, hideMenu } = options;
+  const { disabled, onDeleteVariable, onEnter, onUndo, onRedo, onSubmit, submitOnEnter, onMenuKeydown, isMenuVisible, hideMenu } = options;
 
   function handleKeyDown(event: KeyboardEvent): void {
     if (disabled.value) return;
+
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) {
+        onRedo();
+      } else {
+        onUndo();
+      }
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'y') {
+      event.preventDefault();
+      onRedo();
+      return;
+    }
 
     if (event.key === 'Backspace' && onDeleteVariable('before')) {
       event.preventDefault();
