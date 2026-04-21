@@ -61,6 +61,10 @@ export class WebNative implements Native {
     throw new Error('Web platform does not support revealing files by path');
   }
 
+  async getRelativePath(filePath: string): Promise<string> {
+    return filePath;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async watchFile(_path: string): Promise<void> {
     // web 端不支持文件监听

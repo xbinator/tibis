@@ -40,6 +40,8 @@ export interface Native {
 
   showItemInFolder(path: string): Promise<void>;
 
+  getRelativePath(path: string): Promise<string>;
+
   watchFile(path: string): Promise<void>;
 
   unwatchFile(path: string): Promise<void>;

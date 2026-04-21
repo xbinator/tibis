@@ -1,11 +1,4 @@
-import type {
-  AICreateOptions,
-  AIRequestOptions,
-  AIServiceError,
-  AIInvokeResult,
-  AIStreamFinishChunk,
-  AIStreamToolCallChunk
-} from './ai';
+import type { AICreateOptions, AIRequestOptions, AIServiceError, AIInvokeResult, AIStreamFinishChunk, AIStreamToolCallChunk } from './ai';
 
 /**
  * Electron API 类型定义
@@ -63,6 +56,7 @@ export interface ElectronAPI {
   renameFile: (oldPath: string, newPath: string) => Promise<void>;
   trashFile: (filePath: string) => Promise<void>;
   showItemInFolder: (filePath: string) => Promise<void>;
+  getRelativePath: (filePath: string) => Promise<string>;
 
   watchFile: (filePath: string) => Promise<void>;
   unwatchFile: (filePath: string) => Promise<void>;

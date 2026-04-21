@@ -46,6 +46,8 @@ const electronAPI: ElectronAPI = {
 
   showItemInFolder: (filePath: string) => ipcRenderer.invoke('shell:showItemInFolder', filePath),
 
+  getRelativePath: (filePath: string) => ipcRenderer.invoke('shell:getRelativePath', filePath),
+
   watchFile: (filePath: string) => ipcRenderer.invoke('fs:watchFile', filePath),
 
   unwatchFile: (filePath: string) => ipcRenderer.invoke('fs:unwatchFile', filePath),

@@ -45,6 +45,10 @@ export class ElectronNative implements Native {
     await getElectronAPI().showItemInFolder(filePath);
   }
 
+  async getRelativePath(filePath: string): Promise<string> {
+    return getElectronAPI().getRelativePath(filePath);
+  }
+
   async watchFile(filePath: string): Promise<void> {
     await getElectronAPI().watchFile(filePath);
   }
