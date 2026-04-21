@@ -34,6 +34,8 @@ export interface TabsState {
   tabs: Tab[];
   /** 标签页未保存修改状态映射 */
   dirtyById: Record<string, boolean>;
+  /** 标签页对应文件已从磁盘丢失的状态映射 */
+  missingById: Record<string, boolean>;
   /** 当前需要保留的 KeepAlive 缓存 key 列表 */
   cachedKeys: string[];
 }
@@ -64,7 +66,7 @@ function normalizeCachedKeys(keys: string[]): string[] {
  */
 export function loadSavedData(): TabsState {
   const saved = local.getItem<TabsState>(TABS_STORAGE_KEY);
-  if (!saved || !Array.isArray(saved.tabs)) return { tabs: [], dirtyById: {}, cachedKeys: [] };
+  if (!saved || !Array.isArray(saved.tabs)) return { tabs: [], dirtyById: {}, missingById: {}, cachedKeys: [] };
 
   const tabs = saved.tabs.map(normalizeTab);
   const savedCachedKeys = Array.isArray(saved.cachedKeys) ? saved.cachedKeys : [];
@@ -72,6 +74,7 @@ export function loadSavedData(): TabsState {
   return {
     tabs,
     dirtyById: saved.dirtyById ?? {},
+    missingById: saved.missingById ?? {},
     cachedKeys: normalizeCachedKeys([...savedCachedKeys, ...tabs.map((tab) => tab.cacheKey || tab.id)])
   };
 }
@@ -181,6 +184,7 @@ export const useTabsStore = defineStore('tabs', {
         this.cachedKeys = this.cachedKeys.filter((cacheKey) => cacheKey !== removedCacheKey);
       }
       delete this.dirtyById[id];
+      delete this.missingById[id];
 
       persistData(this.$state);
     },
@@ -210,6 +214,33 @@ export const useTabsStore = defineStore('tabs', {
      */
     isDirty(id: string): boolean {
       return this.dirtyById[id] === true;
+    },
+
+    /**
+     * 标记标签页对应的磁盘文件已丢失。
+     * @param id - 标签页 ID
+     */
+    markMissing(id: string): void {
+      this.missingById[id] = true;
+      persistData(this.$state);
+    },
+
+    /**
+     * 清除标签页对应的磁盘文件丢失标记。
+     * @param id - 标签页 ID
+     */
+    clearMissing(id: string): void {
+      this.missingById[id] = false;
+      persistData(this.$state);
+    },
+
+    /**
+     * 检查标签页对应的磁盘文件是否已丢失。
+     * @param id - 标签页 ID
+     * @returns 文件是否已丢失
+     */
+    isMissing(id: string): boolean {
+      return this.missingById[id] === true;
     }
   }
 });

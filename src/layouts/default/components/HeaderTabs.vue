@@ -17,7 +17,7 @@
     >
       <div class="header-tab__title">
         <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
-        {{ tab.title }}
+        <span class="header-tab__title-text">{{ tab.title }}</span>
       </div>
 
       <button class="header-tab__close" @click.stop="handleCloseTab(tab)">
@@ -74,6 +74,7 @@ function getTabClassName(tab: Tab): Record<string, boolean> {
 
   return {
     'is-active': isActiveTab(tab),
+    'is-missing': tabsStore.isMissing(tab.id),
     'is-dragging': draggingTabId.value === tab.id,
     'is-drop-before': isDragTarget && dragInsertPosition.value === 'before',
     'is-drop-after': isDragTarget && dragInsertPosition.value === 'after'
@@ -299,6 +300,15 @@ function handleWheel(event: WheelEvent): void {
 
   &.is-drop-after::after {
     right: -2px;
+  }
+
+  &.is-missing .header-tab__title {
+    color: var(--error-color, #ff4d4f);
+  }
+
+  &.is-missing .header-tab__title-text {
+    text-decoration-line: line-through;
+    text-decoration-thickness: 1px;
   }
 }
 

@@ -96,6 +96,32 @@ describe('useTabsStore', () => {
     expect(tabsStore.tabs.map((tab) => tab.id)).toEqual(['beta']);
   });
 
+  it('tracks missing file status for existing tabs and clears it later', async () => {
+    const { useTabsStore } = await import('@/stores/tabs');
+    const tabsStore = useTabsStore();
+
+    tabsStore.addTab({ id: 'alpha', path: '/alpha', title: 'Alpha', cacheKey: 'cache:alpha' });
+
+    tabsStore.markMissing('alpha');
+
+    expect(tabsStore.isMissing('alpha')).toBe(true);
+
+    tabsStore.clearMissing('alpha');
+
+    expect(tabsStore.isMissing('alpha')).toBe(false);
+  });
+
+  it('migrates saved tabs without missing file state', async () => {
+    getItemMock.mockReturnValue({
+      tabs: [{ id: 'legacy', path: '/legacy', title: 'Legacy' }],
+      dirtyById: { legacy: true }
+    });
+
+    const { loadSavedData } = await import('@/stores/tabs');
+
+    expect(loadSavedData().missingById).toEqual({});
+  });
+
   it('migrates saved tabs without cache keys by using their ids', async () => {
     getItemMock.mockReturnValue({
       tabs: [{ id: 'legacy', path: '/legacy', title: 'Legacy' }],
@@ -107,6 +133,7 @@ describe('useTabsStore', () => {
     expect(loadSavedData()).toEqual({
       tabs: [{ id: 'legacy', path: '/legacy', title: 'Legacy', cacheKey: 'legacy' }],
       dirtyById: { legacy: true },
+      missingById: {},
       cachedKeys: ['legacy']
     });
   });
