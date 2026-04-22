@@ -56,7 +56,8 @@ const providerIcons: Record<string, string> = {
   hunyuan: 'hunyuan-color',
   longcat: 'longcat-color',
   tencentcloud: 'tencentcloud-color',
-  ollama: 'ollama'
+  ollama: 'ollama',
+  volcengine: 'volcengine-color'
 };
 
 const modelIcons: Record<string, string> = {
@@ -88,7 +89,9 @@ const iconId = computed(() => {
   }
 
   if (props.provider) {
-    return providerIcons[props.provider] || props.provider;
+    const provider = props.provider?.match(/^[a-zA-Z]+/i)?.[0]?.toLocaleLowerCase();
+
+    return provider ? providerIcons[provider] || provider : 'model';
   }
   return 'model';
 });
