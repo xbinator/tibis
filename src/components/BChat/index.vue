@@ -29,21 +29,30 @@
  * @description AI 聊天组件，负责消息渲染、流式响应和工具续轮控制。
  */
 import type { CachedModelMessagesResult } from './message';
-import type { BChatProps as Props, Message, MessageToolCall, ServiceConfig, ToolLoopGuardConfig } from './types';
+import type { BChatProps as Props, Message, ServiceConfig, ToolLoopGuardConfig } from './types';
 import type { AIServiceError, AIStreamFinishChunk, AIStreamToolCallChunk } from 'types/ai';
 import { nextTick, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { message as aMessage } from 'ant-design-vue';
 import { nanoid } from 'nanoid';
 import { getModelToolSupport } from '@/ai/tools/policy';
-import { createToolResultMessages, executeToolCall, toTransportTools, type ExecutedToolCall } from '@/ai/tools/stream';
+import { executeToolCall, toTransportTools, type ExecutedToolCall } from '@/ai/tools/stream';
 import BButton from '@/components/BButton/index.vue';
 import { useChat } from '@/hooks/useChat';
 import { useServiceModelStore } from '@/stores/service-model';
 import { Modal } from '@/utils/modal';
 import Container from './components/Container.vue';
 import MessageBubble from './components/MessageBubble.vue';
-import { createAssistantPlaceholder, createErrorMessage, isRemovableAssistantPlaceholder, toCachedModelMessages } from './message';
+import {
+  appendTextPart,
+  appendThinkingPart,
+  appendToolCallPart,
+  appendToolResultPart,
+  createAssistantPlaceholder,
+  createErrorMessage,
+  isRemovableAssistantPlaceholder,
+  toCachedModelMessages
+} from './message';
 import { createToolCallTracker, type ToolCallTracker } from './utils/tool-call-tracker';
 import { createToolLoopGuard, type ToolLoopGuard } from './utils/tool-loop-guard';
 
@@ -128,9 +137,20 @@ function appendAssistantToolCall(chunk: AIStreamToolCallChunk): void {
     return;
   }
 
-  const toolCall: MessageToolCall = { toolCallId: chunk.toolCallId, toolName: chunk.toolName, input: chunk.input };
+  appendToolCallPart(message, chunk.toolCallId, chunk.toolName, chunk.input);
+}
 
-  message.toolCalls = [...(message.toolCalls ?? []), toolCall];
+/**
+ * 在 assistant 消息上记录工具执行结果。
+ * @param result - 已执行的工具调用结果
+ */
+function appendAssistantToolResult(result: ExecutedToolCall): void {
+  const message = messages.value[messages.value.length - 1];
+  if (message?.role !== 'assistant') {
+    return;
+  }
+
+  appendToolResultPart(message, result.toolCallId, result.toolName, result.result);
 }
 
 /**
@@ -158,6 +178,7 @@ async function executeTrackedToolCall(chunk: AIStreamToolCallChunk, roundId: num
     return;
   }
 
+  appendAssistantToolResult(result);
   pendingToolResults.value.push(result);
 }
 
@@ -243,27 +264,44 @@ function findRegenerateStartIndex(targetMessage: Message): number {
 }
 
 /**
+ * 准备本轮要写入的 assistant 消息。
+ * @param reuseLastAssistant - 是否复用末尾 assistant 消息
+ * @returns 当前轮次承接输出的 assistant 消息
+ */
+function prepareAssistantMessage(reuseLastAssistant: boolean): Message {
+  const lastMessage = messages.value[messages.value.length - 1];
+  if (reuseLastAssistant && lastMessage?.role === 'assistant') {
+    lastMessage.loading = true;
+    lastMessage.finished = false;
+    lastMessage.createdAt ||= new Date().toISOString();
+    return lastMessage;
+  }
+
+  const placeholder = createAssistantPlaceholder();
+  messages.value.push(placeholder);
+  return placeholder;
+}
+
+/**
  * 发起一轮新的流式请求。
  * @param sourceMessages - 消息历史
  * @param config - 服务配置
- * @param toolResults - 上一轮工具执行结果
+ * @param reuseLastAssistant - 是否复用末尾 assistant 消息承接续轮结果
  */
-function streamMessages(sourceMessages: Message[], config: ServiceConfig, toolResults: ExecutedToolCall[] = []): void {
+function streamMessages(sourceMessages: Message[], config: ServiceConfig, reuseLastAssistant = false): void {
   loading.value = true;
   lastServiceConfig = config;
   startStreamRound();
+  prepareAssistantMessage(reuseLastAssistant);
 
   currentModelMessageCache = toCachedModelMessages(sourceMessages, currentModelMessageCache);
 
   const continuedMessages = [...currentModelMessageCache.modelMessages];
 
-  toolResults.length && continuedMessages.push(...createToolResultMessages(toolResults));
-
   const tools = config.toolSupport.supported && Boolean(props.tools?.length) ? toTransportTools(props.tools ?? []) : undefined;
 
   // eslint-disable-next-line no-use-before-define
   agent.stream({ messages: continuedMessages, modelId: config.modelId, providerId: config.providerId, tools });
-  messages.value.push(createAssistantPlaceholder());
 }
 
 /**
@@ -284,7 +322,7 @@ async function handleSubmit(): Promise<void> {
     return;
   }
 
-  const message: Message = { id: nanoid(), role: 'user', content, createdAt: new Date().toISOString() };
+  const message: Message = { id: nanoid(), role: 'user', content, parts: [{ type: 'text', text: content }], createdAt: new Date().toISOString() };
 
   await props.onBeforeSend?.(message);
 
@@ -349,7 +387,7 @@ const { agent } = useChat({
    */
   onText: async (content: string): Promise<void> => {
     const message = messages.value[messages.value.length - 1];
-    message.content = (message.content ?? '') + content;
+    appendTextPart(message, content);
     message.loading = false;
     message.createdAt ||= new Date().toISOString();
   },
@@ -359,7 +397,7 @@ const { agent } = useChat({
    */
   onThinking: async (thinking: string): Promise<void> => {
     const message = messages.value[messages.value.length - 1];
-    message.thinking = (message.thinking ?? '') + thinking;
+    appendThinkingPart(message, thinking);
     message.loading = false;
     message.createdAt ||= new Date().toISOString();
   },
@@ -418,15 +456,15 @@ const { agent } = useChat({
         return;
       }
 
-      // 取出待处理的工具结果，准备发起下一轮请求
-      const nextToolResults = [...pendingToolResults.value];
+      // 清空待处理工具结果，结构化结果已经写入当前 assistant 消息片段。
       pendingToolResults.value = [];
-      // 移除末尾可能存在的空 assistant 消息
-      removeTrailingEmptyAssistantMessage();
-
+      // 中间轮次的 assistant 消息也需要先持久化，避免工具调用和工具结果只存在于内存里。
+      if (message) {
+        emit('complete', message);
+      }
       // 在下一个 tick 中发起下一轮流式请求
       nextTick(() => {
-        streamMessages(messages.value, lastServiceConfig as ServiceConfig, nextToolResults);
+        streamMessages(messages.value, lastServiceConfig as ServiceConfig, true);
       });
       return;
     }

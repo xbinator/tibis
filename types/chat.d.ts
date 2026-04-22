@@ -2,7 +2,7 @@
  * @file chat.d.ts
  * @description 聊天会话、消息与附件类型定义
  */
-import type { AIUsage } from './ai';
+import type { AIToolExecutionResult, AIUsage } from './ai';
 
 /**
  * 聊天会话类型
@@ -46,6 +46,59 @@ export interface ChatMessageFile {
 }
 
 /**
+ * 聊天消息文本片段
+ */
+export interface ChatMessageTextPart {
+  /** 片段类型 */
+  type: 'text';
+  /** 文本内容 */
+  text: string;
+}
+
+/**
+ * 聊天消息思考片段
+ */
+export interface ChatMessageThinkingPart {
+  /** 片段类型 */
+  type: 'thinking';
+  /** 思考内容 */
+  thinking: string;
+}
+
+/**
+ * 聊天消息工具调用片段
+ */
+export interface ChatMessageToolCallPart {
+  /** 片段类型 */
+  type: 'tool-call';
+  /** 工具调用 ID */
+  toolCallId: string;
+  /** 工具名称 */
+  toolName: string;
+  /** 工具输入参数 */
+  input: unknown;
+}
+
+/**
+ * 聊天消息工具结果片段
+ */
+export interface ChatMessageToolResultPart {
+  /** 片段类型 */
+  type: 'tool-result';
+  /** 工具调用 ID */
+  toolCallId: string;
+  /** 工具名称 */
+  toolName: string;
+  /** 工具执行结果 */
+  result: AIToolExecutionResult;
+}
+
+/**
+ * 聊天消息结构化片段
+ */
+export type ChatMessagePart = ChatMessageTextPart | ChatMessageThinkingPart | ChatMessageToolCallPart | ChatMessageToolResultPart;
+
+/**
  * 聊天会话
  */
 export interface ChatSession {
@@ -77,6 +130,8 @@ export interface ChatMessageRecord {
   role: ChatMessageRole;
   /** 消息内容 */
   content: string;
+  /** 结构化消息片段 */
+  parts: ChatMessagePart[];
   /** 思考内容 */
   thinking?: string;
   /** 文件列表 */

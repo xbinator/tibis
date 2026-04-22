@@ -66,6 +66,7 @@ describe('useChatStore', () => {
       id: 'assistant-1',
       role: 'assistant',
       content: '最终答案',
+      parts: [{ type: 'text', text: '最终答案' }],
       thinking: '先分析问题',
       createdAt: '2026-04-21T00:00:00.000Z'
     };
@@ -75,6 +76,7 @@ describe('useChatStore', () => {
     const persistedRecord = addMessageMock.mock.calls[0]?.[0] as ChatMessageRecord | undefined;
 
     expect(persistedRecord?.thinking).toBe('先分析问题');
+    expect(persistedRecord?.parts).toEqual([{ type: 'text', text: '最终答案' }]);
   });
 
   it('adds assistant usage to the active session when a message completes', async () => {
@@ -84,6 +86,7 @@ describe('useChatStore', () => {
       id: 'assistant-2',
       role: 'assistant',
       content: '回答',
+      parts: [{ type: 'text', text: '回答' }],
       usage: { inputTokens: 3, outputTokens: 5, totalTokens: 8 },
       createdAt: '2026-04-21T00:00:00.000Z'
     };
@@ -101,6 +104,7 @@ describe('useChatStore', () => {
         id: 'assistant-1',
         role: 'assistant',
         content: '旧回答',
+        parts: [{ type: 'text', text: '旧回答' }],
         usage: { inputTokens: 2, outputTokens: 4, totalTokens: 6 },
         createdAt: '2026-04-21T00:00:00.000Z'
       },
@@ -108,6 +112,7 @@ describe('useChatStore', () => {
         id: 'assistant-2',
         role: 'assistant',
         content: '新回答',
+        parts: [{ type: 'text', text: '新回答' }],
         usage: { inputTokens: 3, outputTokens: 5, totalTokens: 8 },
         createdAt: '2026-04-21T00:00:01.000Z'
       }

@@ -17,9 +17,9 @@ import { chatStorage } from '@/shared/storage';
  * @returns 可写入存储层的聊天消息记录
  */
 function toRecordMessage(sessionId: string, message: PersistableMessage): ChatMessageRecord {
-  const { id, role, content, thinking, files, usage, createdAt = new Date().toISOString() } = message;
+  const { id, role, content, parts, thinking, files, usage, createdAt = new Date().toISOString() } = message;
 
-  return { sessionId, id, role, content, thinking, files, usage, createdAt };
+  return { sessionId, id, role, content, parts, thinking, files, usage, createdAt };
 }
 
 /**

@@ -3,15 +3,18 @@
  * @description BChat 消息工具行为测试
  */
 import { describe, expect, it } from 'vitest';
-import {
-  createErrorMessage,
-  isModelMessage,
-  isPersistableMessage,
-  isRemovableAssistantPlaceholder,
-  toCachedModelMessages,
-  toModelMessages
-} from '@/components/BChat/message';
+import { createErrorMessage, isModelMessage, isPersistableMessage, isRemovableAssistantPlaceholder, toCachedModelMessages, toModelMessages } from '@/components/BChat/message';
 import type { Message } from '@/components/BChat/types';
+
+/**
+ * 创建文本消息，便于测试结构化片段。
+ * @param id - 消息 ID
+ * @param role - 消息角色
+ * @param content - 消息文本内容
+ */
+function createTextMessage(id: string, role: Message['role'], content: string): Message {
+  return { id, role, content, parts: [{ type: 'text', text: content }], createdAt: '2026-04-21T00:00:00.000Z' };
+}
 
 /**
  * 创建基础消息列表，便于复用缓存相关测试。
@@ -19,8 +22,8 @@ import type { Message } from '@/components/BChat/types';
  */
 function createBaseMessages(): Message[] {
   return [
-    { id: 'user-1', role: 'user', content: '你好', createdAt: '2026-04-21T00:00:00.000Z' },
-    { id: 'assistant-1', role: 'assistant', content: '我来帮你处理。', createdAt: '2026-04-21T00:00:01.000Z' }
+    createTextMessage('user-1', 'user', '你好'),
+    { ...createTextMessage('assistant-1', 'assistant', '我来帮你处理。'), createdAt: '2026-04-21T00:00:01.000Z' }
   ];
 }
 
@@ -30,6 +33,7 @@ describe('BChat message helpers', () => {
 
     expect(message.role).toBe('error');
     expect(message.content).toBe('服务连接失败');
+    expect(message.parts).toEqual([{ type: 'text', text: '服务连接失败' }]);
     expect(message.loading).toBe(false);
     expect(message.finished).toBe(true);
     expect(message.createdAt).toEqual(expect.any(String));
@@ -37,38 +41,49 @@ describe('BChat message helpers', () => {
 
   it('excludes error messages from model history', () => {
     const messages: Message[] = [
-      { id: 'user-1', role: 'user', content: '你好', createdAt: '2026-04-21T00:00:00.000Z' },
-      { id: 'error-1', role: 'error', content: '服务连接失败', createdAt: '2026-04-21T00:00:01.000Z' },
-      { id: 'assistant-1', role: 'assistant', content: '你好，有什么可以帮你？', createdAt: '2026-04-21T00:00:02.000Z' }
+      createTextMessage('user-1', 'user', '你好'),
+      { ...createTextMessage('error-1', 'error', '服务连接失败'), createdAt: '2026-04-21T00:00:01.000Z' },
+      { ...createTextMessage('assistant-1', 'assistant', '你好，有什么可以帮你？'), createdAt: '2026-04-21T00:00:02.000Z' }
     ];
 
     expect(toModelMessages(messages)).toEqual([
       { role: 'user', content: '你好' },
-      { role: 'assistant', content: '你好，有什么可以帮你？' }
+      { role: 'assistant', content: [{ type: 'text', text: '你好，有什么可以帮你？' }] }
     ]);
   });
 
   it('marks error messages as persistable but not model messages', () => {
-    const errorMessage: Message = { id: 'error-1', role: 'error', content: '服务连接失败', createdAt: '2026-04-21T00:00:01.000Z' };
+    const errorMessage = createTextMessage('error-1', 'error', '服务连接失败');
 
     expect(isPersistableMessage(errorMessage)).toBe(true);
     expect(isModelMessage(errorMessage)).toBe(false);
-    expect(isPersistableMessage({ id: 'assistant-1', role: 'assistant', content: '好的', createdAt: '2026-04-21T00:00:02.000Z' })).toBe(true);
+    expect(isPersistableMessage(createTextMessage('assistant-1', 'assistant', '好的'))).toBe(true);
   });
 
-  it('preserves assistant tool-call metadata when converting continued tool loop history', () => {
+  it('preserves assistant tool parts when converting continued tool loop history', () => {
     const messages: Message[] = [
-      { id: 'user-1', role: 'user', content: '查看一下文档', createdAt: '2026-04-21T00:00:00.000Z' },
+      createTextMessage('user-1', 'user', '查看一下文档'),
       {
         id: 'assistant-1',
         role: 'assistant',
         content: '',
         createdAt: '2026-04-21T00:00:01.000Z',
-        toolCalls: [
+        parts: [
           {
+            type: 'tool-call',
             toolCallId: 'call_function_z4c3rw63ddmt_1',
             toolName: 'read_current_document',
             input: {}
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call_function_z4c3rw63ddmt_1',
+            toolName: 'read_current_document',
+            result: {
+              toolName: 'read_current_document',
+              status: 'success',
+              data: { content: '文档内容' }
+            }
           }
         ]
       }
@@ -86,6 +101,24 @@ describe('BChat message helpers', () => {
             input: {}
           }
         ]
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_function_z4c3rw63ddmt_1',
+            toolName: 'read_current_document',
+            output: {
+              type: 'json',
+              value: {
+                toolName: 'read_current_document',
+                status: 'success',
+                data: { content: '文档内容' }
+              }
+            }
+          }
+        ]
       }
     ]);
   });
@@ -93,17 +126,13 @@ describe('BChat message helpers', () => {
   it('reuses the cached model-message prefix when only new messages are appended', () => {
     const baseMessages = createBaseMessages();
     const baseCache = toCachedModelMessages(baseMessages);
-    const nextMessages: Message[] = [
-      ...baseMessages,
-      { id: 'error-1', role: 'error', content: '服务连接失败', createdAt: '2026-04-21T00:00:02.000Z' },
-      { id: 'user-2', role: 'user', content: '继续', createdAt: '2026-04-21T00:00:03.000Z' }
-    ];
+    const nextMessages: Message[] = [...baseMessages, createTextMessage('error-1', 'error', '服务连接失败'), createTextMessage('user-2', 'user', '继续')];
 
     const nextCache = toCachedModelMessages(nextMessages, baseCache);
 
     expect(nextCache.modelMessages).toEqual([
       { role: 'user', content: '你好' },
-      { role: 'assistant', content: '我来帮你处理。' },
+      { role: 'assistant', content: [{ type: 'text', text: '我来帮你处理。' }] },
       { role: 'user', content: '继续' }
     ]);
     expect(nextCache.entries[0]).toBe(baseCache.entries[0]);
@@ -117,8 +146,10 @@ describe('BChat message helpers', () => {
       baseMessages[0],
       {
         ...baseMessages[1],
-        toolCalls: [
+        parts: [
+          { type: 'text', text: '我来帮你处理。' },
           {
+            type: 'tool-call',
             toolCallId: 'call_function_z4c3rw63ddmt_2',
             toolName: 'read_current_document',
             input: { path: '/docs/guide.md' }
@@ -154,8 +185,9 @@ describe('BChat message helpers', () => {
       role: 'assistant',
       content: '',
       createdAt: '2026-04-21T00:00:01.000Z',
-      toolCalls: [
+      parts: [
         {
+          type: 'tool-call',
           toolCallId: 'call_function_z4c3rw63ddmt_1',
           toolName: 'read_current_document',
           input: {}

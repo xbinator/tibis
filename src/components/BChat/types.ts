@@ -3,20 +3,8 @@
  * @description BChat 组件消息、服务配置与续轮保护类型定义。
  */
 import type { AIUsage, AIToolContext, AIToolExecutor } from 'types/ai';
-import type { ChatMessageFile, ChatMessageRole } from 'types/chat';
+import type { ChatMessageFile, ChatMessagePart, ChatMessageRole } from 'types/chat';
 import type { AIToolProviderSupport } from '@/ai/tools/policy';
-
-/**
- * assistant 工具调用记录
- */
-export interface MessageToolCall {
-  /** 工具调用 ID */
-  toolCallId: string;
-  /** 工具名称 */
-  toolName: string;
-  /** 工具输入参数 */
-  input: unknown;
-}
 
 /**
  * 服务配置信息
@@ -48,14 +36,14 @@ export interface Message {
   id: string;
   /** 消息发送角色 */
   role: ChatMessageRole;
-  /** 消息内容 */
+  /** 消息内容，由文本片段聚合得到，用于复制、标题和搜索 */
   content: string;
+  /** 有序结构化消息片段，用于界面展示、模型上下文和工具链恢复 */
+  parts: ChatMessagePart[];
   /** 思考内容 */
   thinking?: string;
   /** 附件列表 */
   files?: ChatMessageFile[];
-  /** assistant 发起的工具调用记录 */
-  toolCalls?: MessageToolCall[];
   /** Token 使用统计 */
   usage?: AIUsage;
   /** 创建时间 */

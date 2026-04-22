@@ -2,9 +2,9 @@
  * @file message.ts
  * @description BChat 消息创建、转换与持久化过滤工具。
  */
-import type { Message, MessageToolCall } from './types';
-import type { ModelMessage } from 'ai';
-import type { ChatMessageRole } from 'types/chat';
+import type { Message } from './types';
+import type { JSONValue, ModelMessage } from 'ai';
+import type { ChatMessagePart, ChatMessageRole } from 'types/chat';
 import { nanoid } from 'nanoid';
 
 /**
@@ -25,13 +25,11 @@ export interface CachedModelMessageEntry {
   sourceMessage: Message;
   /** 参与模型转换的消息签名 */
   signature: string;
-  /** 转换后的模型消息；不可传给模型的消息为空 */
-  modelMessage?: ModelMessage;
+  /** 转换后的模型消息列表；不可传给模型的消息为空数组 */
+  modelMessages: ModelMessage[];
 }
 
-/**
- * 模型消息转换缓存结果
- */
+/** 模型消息转换缓存结果 */
 export interface CachedModelMessagesResult {
   /** 每条原始消息对应的缓存条目 */
   entries: CachedModelMessageEntry[];
@@ -39,15 +37,14 @@ export interface CachedModelMessagesResult {
   modelMessages: ModelMessage[];
 }
 
-/**
- * assistant 工具调用内容片段
- */
-interface AssistantToolCallPart {
-  type: 'tool-call';
-  toolCallId: string;
-  toolName: string;
-  input: unknown;
-}
+/** Assistant 模型消息内容片段 */
+export type AssistantModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }>;
+
+/** Tool 模型消息内容片段 */
+export type ToolModelMessageContent = Array<{ type: 'tool-result'; toolCallId: string; toolName: string; output: { type: 'json'; value: JSONValue } }>;
+
+/** 工具结果类型 */
+export type ToolResult = Extract<ChatMessagePart, { type: 'tool-result' }>['result'];
 
 /**
  * 判断消息是否可传给模型
@@ -74,15 +71,88 @@ export function isRemovableAssistantPlaceholder(message: Message | undefined): b
     return false;
   }
 
-  return !message.content && !message.usage && !message.toolCalls?.length;
+  return !message.content && !message.usage && !message.parts.length;
 }
 
 /**
- * 将 assistant 工具调用记录转换为 AI SDK 所需的内容片段
- * @param toolCalls - 工具调用记录
+ * 将任意值转换为 JSON 可序列化值。
+ * @param value - 待转换的值
  */
-function toAssistantToolCallParts(toolCalls: MessageToolCall[]): AssistantToolCallPart[] {
-  return toolCalls.map((item) => ({ type: 'tool-call', toolCallId: item.toolCallId, toolName: item.toolName, input: item.input }));
+function toJsonValue(value: unknown): JSONValue {
+  return JSON.parse(JSON.stringify(value)) as JSONValue;
+}
+
+/**
+ * 根据文本片段聚合纯文本内容。
+ * @param parts - 结构化消息片段
+ */
+export function getMessagePlainText(parts: ChatMessagePart[]): string {
+  return parts
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text)
+    .join('');
+}
+
+/**
+ * 将文本增量追加到消息片段。
+ * @param message - 待更新的消息
+ * @param text - 文本增量
+ */
+export function appendTextPart(message: Message, text: string): void {
+  const lastPart = message.parts[message.parts.length - 1];
+  if (lastPart?.type === 'text') {
+    lastPart.text += text;
+  } else {
+    message.parts.push({ type: 'text', text });
+  }
+
+  message.content = getMessagePlainText(message.parts);
+}
+
+/**
+ * 将思考增量追加到消息片段。
+ * @param message - 待更新的消息
+ * @param thinking - 思考增量
+ */
+export function appendThinkingPart(message: Message, thinking: string): void {
+  const lastPart = message.parts[message.parts.length - 1];
+  if (lastPart?.type === 'thinking') {
+    lastPart.thinking += thinking;
+  } else {
+    message.parts.push({ type: 'thinking', thinking });
+  }
+
+  message.thinking = (message.thinking ?? '') + thinking;
+}
+
+/**
+ * 将工具调用追加到消息片段。
+ * @param message - 待更新的消息
+ * @param toolCallId - 工具调用 ID
+ * @param toolName - 工具名称
+ * @param input - 工具输入参数
+ */
+export function appendToolCallPart(message: Message, toolCallId: string, toolName: string, input: unknown): void {
+  message.parts.push({ type: 'tool-call', toolCallId, toolName, input });
+}
+
+/**
+ * 将工具结果追加到消息片段。
+ * @param message - 待更新的消息
+ * @param toolCallId - 工具调用 ID
+ * @param toolName - 工具名称
+ * @param result - 工具执行结果
+ */
+export function appendToolResultPart(message: Message, toolCallId: string, toolName: string, result: ToolResult) {
+  const resultPart: Extract<ChatMessagePart, { type: 'tool-result' }> = { type: 'tool-result', toolCallId, toolName, result };
+  const toolCallIndex = message.parts.findIndex((part) => part.type === 'tool-call' && part.toolCallId === toolCallId);
+
+  if (toolCallIndex === -1) {
+    message.parts.push(resultPart);
+    return;
+  }
+
+  message.parts.splice(toolCallIndex + 1, 0, resultPart);
 }
 
 /**
@@ -93,30 +163,106 @@ function createModelMessageSignature(message: Message): string {
   return JSON.stringify({
     role: message.role,
     content: message.content,
-    toolCalls:
-      message.toolCalls?.map((item) => ({
-        toolCallId: item.toolCallId,
-        toolName: item.toolName,
-        input: item.input
-      })) ?? []
+    parts: message.parts
   });
 }
 
 /**
- * 将单条组件消息转换为 AI SDK 的 ModelMessage。
- * @param message - 组件内部消息
+ * 创建 assistant 模型消息。
+ * @param content - assistant 内容片段
  */
-function toModelMessage(message: Message): ModelMessage | undefined {
-  if (!isModelMessage(message)) {
+function createAssistantModelMessage(content: AssistantModelMessageContent): ModelMessage | undefined {
+  if (!content.length) {
     return undefined;
   }
 
-  if (message.role !== 'assistant' || !message.toolCalls?.length) {
-    return { role: message.role, content: message.content };
+  return { role: 'assistant', content };
+}
+
+/**
+ * 创建 tool 模型消息。
+ * @param content - 工具结果内容片段
+ */
+function createToolModelMessage(content: ToolModelMessageContent): ModelMessage | undefined {
+  if (!content.length) {
+    return undefined;
   }
 
-  const contentParts = [...(message.content ? [{ type: 'text' as const, text: message.content }] : []), ...toAssistantToolCallParts(message.toolCalls)];
-  return { role: message.role, content: contentParts };
+  return { role: 'tool', content };
+}
+
+/**
+ * 将 assistant 消息片段转换为 AI SDK 所需的多条模型消息。
+ * @param parts - assistant 结构化片段
+ */
+function toAssistantModelMessages(parts: ChatMessagePart[]): ModelMessage[] {
+  const modelMessages: ModelMessage[] = [];
+  let assistantParts: Array<{ type: 'text'; text: string } | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }> = [];
+  let toolResultParts: Array<{ type: 'tool-result'; toolCallId: string; toolName: string; output: { type: 'json'; value: JSONValue } }> = [];
+
+  const flushAssistantParts = (): void => {
+    const message = createAssistantModelMessage(assistantParts);
+    if (message) {
+      modelMessages.push(message);
+    }
+    assistantParts = [];
+  };
+
+  const flushToolResultParts = (): void => {
+    const message = createToolModelMessage(toolResultParts);
+    if (message) {
+      modelMessages.push(message);
+    }
+    toolResultParts = [];
+  };
+
+  parts.forEach((part) => {
+    if (part.type === 'text') {
+      flushToolResultParts();
+      assistantParts.push({ type: 'text', text: part.text });
+      return;
+    }
+
+    if (part.type === 'tool-call') {
+      flushToolResultParts();
+      assistantParts.push({ type: 'tool-call', toolCallId: part.toolCallId, toolName: part.toolName, input: part.input });
+      return;
+    }
+
+    if (part.type === 'tool-result') {
+      flushAssistantParts();
+      toolResultParts.push({
+        type: 'tool-result',
+        toolCallId: part.toolCallId,
+        toolName: part.toolName,
+        output: {
+          type: 'json',
+          value: toJsonValue(part.result)
+        }
+      });
+    }
+  });
+
+  flushAssistantParts();
+  flushToolResultParts();
+
+  return modelMessages;
+}
+
+/**
+ * 将单条组件消息转换为 AI SDK 的 ModelMessage 列表。
+ * @param message - 组件内部消息
+ */
+function toModelMessagesForMessage(message: Message): ModelMessage[] {
+  if (!isModelMessage(message)) {
+    return [];
+  }
+
+  if (message.role === 'user') {
+    return [{ role: 'user', content: message.content }];
+  }
+
+  return toAssistantModelMessages(message.parts);
 }
 
 /**
@@ -153,26 +299,22 @@ export function toCachedModelMessages(sourceMessages: Message[], previousCache?:
       }
 
       entries.push(previousEntry);
-      if (previousEntry.modelMessage) {
-        modelMessages.push(previousEntry.modelMessage);
-      }
+      modelMessages.push(...previousEntry.modelMessages);
       reuseCount += 1;
     }
   }
 
   for (let index = reuseCount; index < sourceMessages.length; index += 1) {
     const sourceMessage = sourceMessages[index];
-    const modelMessage = toModelMessage(sourceMessage);
+    const nextModelMessages = toModelMessagesForMessage(sourceMessage);
     const entry: CachedModelMessageEntry = {
       sourceMessage,
       signature: createModelMessageSignature(sourceMessage),
-      modelMessage
+      modelMessages: nextModelMessages
     };
 
     entries.push(entry);
-    if (modelMessage) {
-      modelMessages.push(modelMessage);
-    }
+    modelMessages.push(...nextModelMessages);
   }
 
   return { entries, modelMessages };
@@ -190,7 +332,7 @@ export function toModelMessages(sourceMessages: Message[]): ModelMessage[] {
  * 创建 assistant 占位消息
  */
 export function createAssistantPlaceholder(): Message {
-  return { id: nanoid(), role: 'assistant', content: '', thinking: '', createdAt: '', loading: true };
+  return { id: nanoid(), role: 'assistant', content: '', parts: [], thinking: '', createdAt: '', loading: true };
 }
 
 /**
@@ -198,5 +340,13 @@ export function createAssistantPlaceholder(): Message {
  * @param content - 错误说明
  */
 export function createErrorMessage(content: string): Message {
-  return { id: nanoid(), role: 'error', content, createdAt: new Date().toISOString(), loading: false, finished: true };
+  return {
+    id: nanoid(),
+    role: 'error',
+    content,
+    parts: [{ type: 'text', text: content }],
+    createdAt: new Date().toISOString(),
+    loading: false,
+    finished: true
+  };
 }

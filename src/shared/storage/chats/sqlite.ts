@@ -3,7 +3,7 @@
  * @description 聊天会话与消息的 SQLite/本地降级存储实现
  */
 import type { AIUsage } from 'types/ai';
-import type { ChatMessageFile, ChatMessageRecord, ChatMessageRole, ChatSession, ChatSessionType } from 'types/chat';
+import type { ChatMessageFile, ChatMessagePart, ChatMessageRecord, ChatMessageRole, ChatSession, ChatSessionType } from 'types/chat';
 import { local } from '@/shared/storage/base';
 import { dbSelect, dbExecute, isDatabaseAvailable, parseJson, stringifyJson } from '../utils';
 
@@ -30,15 +30,15 @@ const SELECT_SESSION_USAGE_SQL = 'SELECT usage_json FROM chat_sessions WHERE id 
 const UPDATE_SESSION_USAGE_SQL = 'UPDATE chat_sessions SET usage_json = ? WHERE id = ?';
 
 const SELECT_MESSAGES_BY_SESSION_SQL = `
-  SELECT id, session_id, role, content, thinking, files_json, usage_json, created_at
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, created_at
   FROM chat_messages
   WHERE session_id = ?
   ORDER BY created_at ASC
 `;
 const UPSERT_MESSAGE_SQL = `
   INSERT OR REPLACE INTO chat_messages
-    (id, session_id, role, content, thinking, files_json, usage_json, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 const DELETE_SESSION_SQL = 'DELETE FROM chat_sessions WHERE id = ?';
 const DELETE_MESSAGES_BY_SESSION_SQL = 'DELETE FROM chat_messages WHERE session_id = ?';
@@ -58,6 +58,7 @@ interface ChatMessageRow {
   session_id: string;
   role: string;
   content: string;
+  parts_json: string | null;
   thinking: string | null;
   files_json: string | null;
   usage_json: string | null;
@@ -105,6 +106,7 @@ function mapMessageRow(row: ChatMessageRow): ChatMessageRecord {
     sessionId: row.session_id,
     role: isChatMessageRole(row.role) ? row.role : 'user',
     content: row.content,
+    parts: parseJson<ChatMessagePart[]>(row.parts_json) ?? [],
     thinking: row.thinking ?? undefined,
     files: parseJson<ChatMessageFile[]>(row.files_json),
     usage: parseJson<AIUsage>(row.usage_json),
@@ -162,6 +164,7 @@ async function upsertSessionMessages(messages: ChatMessageRecord[]): Promise<voi
         message.sessionId,
         message.role,
         message.content,
+        stringifyJson(message.parts),
         message.thinking,
         stringifyJson(message.files),
         stringifyJson(message.usage),
@@ -270,6 +273,7 @@ export const chatStorage = {
       message.sessionId,
       message.role,
       message.content,
+      stringifyJson(message.parts),
       message.thinking,
       stringifyJson(message.files),
       stringifyJson(message.usage),

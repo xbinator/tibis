@@ -21,7 +21,9 @@
     </template>
 
     <div class="b-bubble-text__content">
-      <BMessage :content="content" :type="isMarkdown ? 'markdown' : 'text'" />
+      <slot>
+        <BMessage :content="content" :type="isMarkdown ? 'markdown' : 'text'" />
+      </slot>
     </div>
 
     <template v-if="$slots.toolbar" #toolbar>
