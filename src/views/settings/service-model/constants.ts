@@ -1,5 +1,5 @@
 export interface VariableOption {
-  value: 'SELECTED_TEXT' | 'USER_INPUT';
+  value: string;
   label: string;
 }
 
@@ -8,15 +8,13 @@ export interface ServiceConfigOption {
   options: VariableOption[];
 }
 
-export const variableOptions: VariableOption[] = [
-  { value: 'SELECTED_TEXT', label: '选中文本' },
-  { value: 'USER_INPUT', label: '用户输入' }
-];
-
 export const POLISH_SERVICE_CONFIG_OPTIONS: ServiceConfigOption[] = [
   {
     type: 'variable',
-    options: variableOptions
+    options: [
+      { value: 'SELECTED_TEXT', label: '选中文本' },
+      { value: 'USER_INPUT', label: '用户指令' }
+    ]
   }
 ];
 
@@ -38,3 +36,24 @@ export const POLISH_DEFAULT_PROMPT = `# Role
 {{USER_INPUT}} `;
 
 export const CHAT_SERVICE_CONFIG_OPTIONS: ServiceConfigOption[] = [];
+
+export const TOPIC_NAMING_SERVICE_CONFIG_OPTIONS: ServiceConfigOption[] = [
+  {
+    type: 'variable',
+    options: [{ value: 'INPUT_CONTENT', label: '输入内容' }]
+  }
+];
+
+export const TOPIC_NAMING_DEFAULT_PROMPT = `# Role
+你是一个话题命名助手。
+
+# Task
+根据提供的聊天内容，生成一个简洁、准确的话题名称。
+
+# Rules
+1. 仅输出话题名称，不要包含任何额外文字或解释
+2. 名称应简洁明了，不超过20个字符
+3. 使用中文命名，体现聊天主题
+
+# Chat Content
+{{INPUT_CONTENT}}`;
