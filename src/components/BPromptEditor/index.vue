@@ -40,6 +40,7 @@
  * @file BPromptEditor/index.vue
  * @description Prompt 输入编辑器，负责纯文本输入、变量插入与提交交互。
  */
+import type { FileReferenceChip } from './hooks/useVariableEncoder';
 import type { Variable, BPromptEditorProps as Props } from './types';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { addCssUnit } from '@/utils/css';
@@ -75,10 +76,14 @@ const editorStyle = computed(() => {
   return style;
 });
 
-const { selectionHook, updateModelValue, initializeEditor, cleanup, editorIsEmpty, undoHistory, redoHistory } = useEditorCore(editorRef, inputValue, {
-  variables,
-  emitChange: (value) => emit('change', value)
-});
+const { selectionHook, updateModelValue, normalizeInlineTokens, initializeEditor, cleanup, editorIsEmpty, undoHistory, redoHistory } = useEditorCore(
+  editorRef,
+  inputValue,
+  {
+    variables,
+    emitChange: (value) => emit('change', value)
+  }
+);
 
 const trigger = useEditorTrigger(editorRef, selectionHook, {
   variables,
@@ -113,6 +118,7 @@ const { handlePaste, handleDragOver, handleDrop } = useEditorPaste({
 function handleInput(): void {
   if (props.disabled) return;
   updateModelValue();
+  normalizeInlineTokens();
   trigger.updateVisibility();
 }
 
@@ -131,6 +137,16 @@ function handleContainerClick(): void {
  */
 function focus(): void {
   editorRef.value?.focus();
+}
+
+/**
+ * 插入文件引用 chip，供外部将文件名与行号写入 Prompt 输入框。
+ * @param reference - 文件引用数据
+ */
+function insertFileReference(reference: FileReferenceChip): void {
+  if (props.disabled) return;
+
+  trigger.insertFileReference(reference);
 }
 
 function handleSelectionChange(): void {
@@ -178,7 +194,7 @@ onUnmounted(() => {
   window.removeEventListener('scroll', handleViewportChange, true);
 });
 
-defineExpose({ focus });
+defineExpose({ focus, insertFileReference });
 </script>
 
 <style lang="less">
@@ -196,6 +212,12 @@ defineExpose({ focus });
   color: var(--color-primary, #4080ff);
   background-color: rgb(var(--color-primary-value, 64, 128, 255), 0.1);
   border-radius: 4px;
+}
+
+.b-prompt-editor-tag--file-reference {
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
 }
 
 .b-prompt-editor {

@@ -48,6 +48,43 @@ export type ToolModelMessageContent = Array<{ type: 'tool-result'; toolCallId: s
 export type ToolResult = Extract<ChatMessagePart, { type: 'tool-result' }>['result'];
 
 /**
+ * 判断未知值是否为普通对象。
+ * @param value - 待判断的值
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 将文件引用占位符展开为模型可读文本。
+ * @param content - 用户输入内容
+ */
+export function expandFileReferencesForModel(content: string): string {
+  return content.replace(/\{\{file-ref:(\{.*?\})\}\}/g, (match: string, payload: string): string => {
+    try {
+      const parsed: unknown = JSON.parse(payload);
+      if (!isRecord(parsed) || (typeof parsed.path !== 'string' && parsed.path !== null)) {
+        return match;
+      }
+
+      const line = typeof parsed.line === 'number' || typeof parsed.line === 'string' ? String(parsed.line) : '';
+      if (!line) {
+        return match;
+      }
+
+      if (parsed.path === null) {
+        const fileName = typeof parsed.name === 'string' && parsed.name ? parsed.name : '未保存文件';
+        return `引用未保存文件：${fileName}，第 ${line} 行`;
+      }
+
+      return `引用文件：${parsed.path}，第 ${line} 行`;
+    } catch {
+      return match;
+    }
+  });
+}
+
+/**
  * 判断消息是否可传给模型
  * @param message - 待判断的消息
  */

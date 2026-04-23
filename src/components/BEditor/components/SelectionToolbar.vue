@@ -9,6 +9,14 @@
         <div class="selection-toolbar__divider"></div>
       </template>
 
+      <template v-if="props.filePath || props.fileName">
+        <div class="selection-toolbar__ai-btn" @mousedown.prevent="insertSelectionReferenceToChat">
+          <Icon icon="lucide:message-square-plus" />
+          <span>插入对话</span>
+        </div>
+        <div class="selection-toolbar__divider"></div>
+      </template>
+
       <button
         v-for="btn in formatButtons"
         :key="btn.command"
@@ -29,6 +37,7 @@ import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { BubbleMenu } from '@tiptap/vue-3/menus';
 import { useEventListener } from '@vueuse/core';
+import { emitChatFileReferenceInsert, getFileNameFromPath, getLineRangeFromTextBeforeSelection } from '@/shared/chat/fileReference';
 import type { ServiceModelUpdatedDetail } from '@/shared/storage/service-models/events';
 import { SERVICE_MODEL_UPDATED_EVENT } from '@/shared/storage/service-models/events';
 import { useServiceModelStore } from '@/stores/service-model';
@@ -41,10 +50,14 @@ interface SelectionRange {
 
 interface Props {
   editor?: Editor | null;
+  filePath?: string | null;
+  fileName?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  editor: null
+  editor: null,
+  filePath: null,
+  fileName: ''
 });
 
 const emit = defineEmits<{ (e: 'ai-input-toggle', value: boolean, selectionRange?: SelectionRange): void }>();
@@ -93,6 +106,27 @@ function toggleAIInput(): void {
   const text = props.editor?.state.doc.textBetween(selection.from, selection.to, '') ?? '';
 
   emit('ai-input-toggle', true, { from: selection.from, to: selection.to, text });
+}
+
+/**
+ * 将当前选区所在文件与行号插入聊天输入框。
+ */
+function insertSelectionReferenceToChat(): void {
+  const { filePath } = props;
+  const { editor } = props;
+  const selection = editor?.state.selection;
+  if (!editor || !selection || selection.from === selection.to) {
+    return;
+  }
+
+  const textBeforeStart = editor.state.doc.textBetween(0, selection.from, '\n', '\n');
+  const textBeforeEnd = editor.state.doc.textBetween(0, selection.to, '\n', '\n');
+
+  emitChatFileReferenceInsert({
+    filePath: filePath ?? null,
+    fileName: props.fileName || getFileNameFromPath(filePath ?? '未保存文件'),
+    line: getLineRangeFromTextBeforeSelection(textBeforeStart, textBeforeEnd)
+  });
 }
 
 // ---- Format Buttons ----

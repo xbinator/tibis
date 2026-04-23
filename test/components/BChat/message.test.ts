@@ -9,6 +9,7 @@ import {
   createAssistantPlaceholder,
   createErrorMessage,
   findPendingUserChoiceQuestion,
+  expandFileReferencesForModel,
   isModelMessage,
   isPersistableMessage,
   isRemovableAssistantPlaceholder,
@@ -62,6 +63,18 @@ describe('BChat message helpers', () => {
       { role: 'user', content: '你好' },
       { role: 'assistant', content: [{ type: 'text', text: '你好，有什么可以帮你？' }] }
     ]);
+  });
+
+  it('expands file reference placeholders before sending user content to the model', () => {
+    const content = '请解释 {{file-ref:{"path":"src/foo/file.ts","name":"file.ts","line":"12-14"}}} 这里的逻辑';
+
+    expect(expandFileReferencesForModel(content)).toBe('请解释 引用文件：src/foo/file.ts，第 12-14 行 这里的逻辑');
+  });
+
+  it('expands unsaved file reference placeholders as temporary document references', () => {
+    const content = '看下 {{file-ref:{"path":null,"name":"临时笔记","line":"3"}}}';
+
+    expect(expandFileReferencesForModel(content)).toBe('看下 引用未保存文件：临时笔记，第 3 行');
   });
 
   it('marks error messages as persistable but not model messages', () => {

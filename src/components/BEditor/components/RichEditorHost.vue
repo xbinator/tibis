@@ -3,6 +3,8 @@
     v-model:front-matter-data="frontMatterModel"
     :editor="editorInstance"
     :editor-id="editorInstanceId"
+    :file-path="props.filePath"
+    :file-name="props.fileName"
     :should-show-front-matter-card="shouldShowFrontMatterCard"
   />
 </template>
@@ -20,12 +22,16 @@ import PaneRichEditor from './PaneRichEditor.vue';
 interface Props {
   editable?: boolean;
   editorId?: string;
+  filePath?: string | null;
+  fileName?: string;
   onSearchMatchElementFocus?: (targetElement: HTMLElement) => void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   editable: true,
   editorId: '',
+  filePath: null,
+  fileName: '',
   onSearchMatchElementFocus: undefined
 });
 

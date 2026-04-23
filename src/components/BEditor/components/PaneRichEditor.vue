@@ -14,7 +14,7 @@
     <!-- 当前选中块菜单 -->
     <CurrentBlockMenu :editor="props.editor" />
     <!-- 选择工具栏 -->
-    <SelectionToolbar :editor="props.editor" @ai-input-toggle="handleAIInputToggle" />
+    <SelectionToolbar :editor="props.editor" :file-path="props.filePath" :file-name="props.fileName" @ai-input-toggle="handleAIInputToggle" />
     <!-- 选择 AI 输入框 -->
     <SelectionAIInput v-model:visible="aiInputVisible" :editor="props.editor" :selection-range="selectionRange" />
     <!-- 编辑器内容 -->
@@ -40,6 +40,10 @@ interface Props {
   editor?: Editor | null;
   // Editor ID
   editorId?: string;
+  // 文件路径
+  filePath?: string | null;
+  // 文件名
+  fileName?: string;
   // 是否显示 Front Matter 卡片
   shouldShowFrontMatterCard?: boolean;
 }
@@ -47,6 +51,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   editor: null,
   editorId: '',
+  filePath: null,
+  fileName: '',
   shouldShowFrontMatterCard: false
 });
 

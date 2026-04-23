@@ -46,6 +46,7 @@
  */
 import type { CachedModelMessagesResult } from './message';
 import type { BChatProps as Props, Message, ServiceConfig, ToolLoopGuardConfig } from './types';
+import type { FileReferenceChip } from '@/components/BPromptEditor/hooks/useVariableEncoder';
 import type { AIServiceError, AIStreamFinishChunk, AIStreamToolCallChunk } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
 import { nextTick, ref, watch } from 'vue';
@@ -67,6 +68,7 @@ import {
   appendToolResultPart,
   createAssistantPlaceholder,
   createErrorMessage,
+  expandFileReferencesForModel,
   findPendingUserChoiceQuestion,
   isRemovableAssistantPlaceholder,
   submitUserChoiceAnswer,
@@ -105,6 +107,10 @@ interface PromptEditorExpose {
    * 聚焦编辑器输入区域。
    */
   focus: () => void;
+  /**
+   * 插入文件引用 chip。
+   */
+  insertFileReference: (reference: FileReferenceChip) => void;
 }
 
 /**
@@ -378,7 +384,8 @@ async function handleSubmit(): Promise<void> {
     return;
   }
 
-  const message: Message = { id: nanoid(), role: 'user', content, parts: [{ type: 'text', text: content }], createdAt: new Date().toISOString() };
+  const modelContent = expandFileReferencesForModel(content);
+  const message: Message = { id: nanoid(), role: 'user', content: modelContent, parts: [{ type: 'text', text: modelContent }], createdAt: new Date().toISOString() };
 
   await props.onBeforeSend?.(message);
 
@@ -454,6 +461,14 @@ async function handleUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promise<v
  */
 function focusInput(): void {
   promptEditorRef.value?.focus();
+}
+
+/**
+ * 向输入框插入文件引用 chip。
+ * @param reference - 文件引用数据
+ */
+function insertFileReference(reference: FileReferenceChip): void {
+  promptEditorRef.value?.insertFileReference(reference);
 }
 
 /**
@@ -607,7 +622,7 @@ const { agent } = useChat({
   }
 });
 
-defineExpose({ focusInput });
+defineExpose({ focusInput, insertFileReference });
 </script>
 
 <style lang="less">

@@ -1,4 +1,5 @@
 import type { Variable } from '../types';
+import type { FileReferenceChip } from './useVariableEncoder';
 import type { MenuPosition } from './useEditorSelection';
 import type { Ref } from 'vue';
 import { ref } from 'vue';
@@ -23,7 +24,7 @@ export function useEditorTrigger(
   const variableQuery = ref<string>('');
   const activeIndex = ref(0);
 
-  const { createVariableSpan, isVariableElement } = useVariableEncoder({
+  const { createFileReferenceSpan, createVariableSpan, isChipElement } = useVariableEncoder({
     getVariableLabel: (value: string) => variables.value.find((v) => v.value === value)?.label
   });
 
@@ -87,12 +88,12 @@ export function useEditorTrigger(
     }
   }
 
-  interface VariableTarget {
-    variableNode: HTMLElement;
+  interface ChipTarget {
+    chipNode: HTMLElement;
     spacerNode: Node | null;
   }
 
-  function findAdjacentVariableNode(range: Range, direction: 'before' | 'after'): VariableTarget | null {
+  function findAdjacentVariableNode(range: Range, direction: 'before' | 'after'): ChipTarget | null {
     const { startContainer, startOffset } = range;
     const isBefore = direction === 'before';
 
@@ -101,12 +102,12 @@ export function useEditorTrigger(
       const relevantText = isBefore ? text.slice(0, startOffset) : text.slice(startOffset);
       const sibling = isBefore ? startContainer.previousSibling : startContainer.nextSibling;
 
-      if (relevantText === CARET_SPACER && isVariableElement(sibling)) {
-        return { variableNode: sibling, spacerNode: startContainer };
+      if (relevantText === CARET_SPACER && isChipElement(sibling)) {
+        return { chipNode: sibling, spacerNode: startContainer };
       }
       const atEdge = isBefore ? startOffset === 0 : startOffset === text.length;
-      if (atEdge && isVariableElement(sibling)) {
-        return { variableNode: sibling, spacerNode: null };
+      if (atEdge && isChipElement(sibling)) {
+        return { chipNode: sibling, spacerNode: null };
       }
       return null;
     }
@@ -116,14 +117,14 @@ export function useEditorTrigger(
       const node = startContainer.childNodes[adjacentIndex];
       if (!node) return null;
 
-      if (isBefore && node.nodeType === Node.TEXT_NODE && node.textContent === CARET_SPACER && isVariableElement(node.previousSibling)) {
-        return { variableNode: node.previousSibling, spacerNode: node };
+      if (isBefore && node.nodeType === Node.TEXT_NODE && node.textContent === CARET_SPACER && isChipElement(node.previousSibling)) {
+        return { chipNode: node.previousSibling, spacerNode: node };
       }
-      if (!isBefore && node.nodeType === Node.TEXT_NODE && node.textContent === CARET_SPACER && isVariableElement(node.nextSibling)) {
-        return { variableNode: node.nextSibling, spacerNode: node };
+      if (!isBefore && node.nodeType === Node.TEXT_NODE && node.textContent === CARET_SPACER && isChipElement(node.nextSibling)) {
+        return { chipNode: node.nextSibling, spacerNode: node };
       }
-      if (isVariableElement(node)) {
-        return { variableNode: node, spacerNode: null };
+      if (isChipElement(node)) {
+        return { chipNode: node, spacerNode: null };
       }
     }
 
@@ -140,14 +141,14 @@ export function useEditorTrigger(
     const target = findAdjacentVariableNode(range, direction);
     if (!target) return false;
 
-    const { variableNode, spacerNode } = target;
-    const parent = variableNode.parentNode;
+    const { chipNode, spacerNode } = target;
+    const parent = chipNode.parentNode;
     if (!parent) return false;
-    const variableIndex = Array.from(parent.childNodes).indexOf(variableNode);
+    const variableIndex = Array.from(parent.childNodes).indexOf(chipNode);
     if (variableIndex < 0) return false;
 
     spacerNode?.parentNode?.removeChild(spacerNode);
-    parent.removeChild(variableNode);
+    parent.removeChild(chipNode);
 
     const newRange = document.createRange();
     const targetOffset = Math.min(variableIndex, parent.childNodes.length);
@@ -177,43 +178,80 @@ export function useEditorTrigger(
     range.setStart(textNode, triggerStart);
   }
 
-  function selectVariable(variable: Variable): void {
-    if (!editorRef.value) return;
+  /**
+   * 解析当前可用的插入 Range，没有有效光标时回退到编辑器末尾。
+   * @returns 可插入内容的 Range
+   */
+  function resolveInsertionRange(): Range | null {
+    if (!editorRef.value) return null;
     editorRef.value.focus();
 
-    const selection = getActiveSelection();
-    if (!selection) return;
+    const selection = window.getSelection();
+    if (!selection) return null;
 
-    let range: Range;
     if (cachedRange.value) {
-      range = cachedRange.value.cloneRange();
+      const range = cachedRange.value.cloneRange();
       selection.removeAllRanges();
       selection.addRange(range);
-    } else {
-      const current = getActiveRange();
-      if (!current) return;
-      range = current;
+      return range;
     }
 
-    deleteQueryTrigger(range);
+    const current = getActiveRange();
+    if (current && editorRef.value.contains(current.startContainer)) {
+      return current;
+    }
 
-    const variableSpan = createVariableSpan(variable.value);
+    const range = document.createRange();
+    range.selectNodeContents(editorRef.value);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return range;
+  }
+
+  /**
+   * 在当前光标位置插入不可编辑 chip，并补充光标落点。
+   * @param chip - 待插入的 chip 元素
+   * @param range - 插入位置
+   */
+  function insertChipAtRange(chip: HTMLElement, range: Range): void {
     range.deleteContents();
-    range.insertNode(variableSpan);
+    range.insertNode(chip);
 
     const caretSpacer = document.createTextNode(CARET_SPACER);
-    range.setStartAfter(variableSpan);
-    range.setEndAfter(variableSpan);
+    range.setStartAfter(chip);
+    range.setEndAfter(chip);
     range.insertNode(caretSpacer);
     range.setStartAfter(caretSpacer);
     range.setEndAfter(caretSpacer);
+
+    const selection = getActiveSelection();
+    if (!selection) return;
     selection.removeAllRanges();
     selection.addRange(range);
 
     updateModelValue();
-    hide();
+    editorRef.value?.focus();
+  }
 
-    editorRef.value.focus();
+  function selectVariable(variable: Variable): void {
+    const range = resolveInsertionRange();
+    if (!range) return;
+
+    deleteQueryTrigger(range);
+    insertChipAtRange(createVariableSpan(variable.value), range);
+    hide();
+  }
+
+  /**
+   * 在当前光标位置插入文件引用 chip。
+   * @param reference - 文件引用数据
+   */
+  function insertFileReference(reference: FileReferenceChip): void {
+    const range = resolveInsertionRange();
+    if (!range) return;
+
+    insertChipAtRange(createFileReferenceSpan(reference), range);
   }
 
   function handleMenuKeydown(event: KeyboardEvent): boolean {
@@ -258,6 +296,7 @@ export function useEditorTrigger(
     updateMenuPosition,
     updateVisibility,
     deleteAdjacentVariable,
+    insertFileReference,
     selectVariable,
     handleMenuKeydown,
     updateFilteredVariables

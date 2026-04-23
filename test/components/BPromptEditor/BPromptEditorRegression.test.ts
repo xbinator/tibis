@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * @file BPromptEditorRegression.test.ts
  * @description BPromptEditor 回归测试，覆盖空态占位与关键交互修复
@@ -5,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { isPromptEditorEffectivelyEmpty } from '@/components/BPromptEditor/hooks/useVariableEncoder';
+import { isPromptEditorEffectivelyEmpty, useVariableEncoder } from '@/components/BPromptEditor/hooks/useVariableEncoder';
 
 /**
  * 读取组件源码
@@ -46,7 +47,7 @@ describe('BPromptEditor placeholder state', () => {
     const coreSource = readSource('src/components/BPromptEditor/hooks/useEditorCore.ts');
 
     expect(indexSource).toContain(
-      'const { selectionHook, updateModelValue, initializeEditor, cleanup, editorIsEmpty, undoHistory, redoHistory } = useEditorCore'
+      'const { selectionHook, updateModelValue, normalizeInlineTokens, initializeEditor, cleanup, editorIsEmpty, undoHistory, redoHistory } = useEditorCore'
     );
     expect(indexSource).not.toContain("computed<boolean>(() => editorRef.value?.dataset.empty === 'true')");
     expect(coreSource).toContain('const editorIsEmpty = ref(true);');
@@ -93,5 +94,61 @@ describe('BPromptEditor DOM safety regressions', () => {
     expect(source).toContain('function captureSelectionSnapshot');
     expect(source).toContain('function restoreSelectionSnapshot');
     expect(source).not.toContain('const newTextNode = editorRef.value.firstChild as Text | null;');
+  });
+});
+
+describe('BPromptEditor file reference chips', () => {
+  test('serializes file reference chips back to stable model placeholders', () => {
+    const { createFileReferenceSpan, decodeVariables } = useVariableEncoder({
+      getVariableLabel: () => undefined
+    });
+    const chip = createFileReferenceSpan({
+      filePath: 'src/foo/file.ts',
+      fileName: 'file.ts',
+      line: '123-145'
+    });
+
+    expect(decodeVariables(`请看 ${chip.outerHTML}`)).toBe('请看 {{file-ref:{"path":"src/foo/file.ts","name":"file.ts","line":"123-145"}}}');
+  });
+
+  test('renders file reference placeholders as non-editable inline chips', () => {
+    const { encodeVariables } = useVariableEncoder({
+      getVariableLabel: () => undefined
+    });
+    const encoded = encodeVariables('定位 {{file-ref:{"path":"src/foo/file.ts","name":"file.ts","line":123}}}');
+    const container = document.createElement('div');
+    container.innerHTML = encoded;
+    const chip = container.querySelector('[data-value="file-reference"]');
+
+    expect(chip?.getAttribute('contenteditable')).toBe('false');
+    expect(chip?.getAttribute('data-file-path')).toBe('src/foo/file.ts');
+    expect(chip?.textContent).toBe('file.ts:123');
+  });
+
+  test('renders unsaved file reference placeholders as non-editable inline chips', () => {
+    const { encodeVariables, decodeVariables } = useVariableEncoder({
+      getVariableLabel: () => undefined
+    });
+    const encoded = encodeVariables('定位 {{file-ref:{"path":null,"name":"临时笔记","line":"3"}}}');
+    const container = document.createElement('div');
+    container.innerHTML = encoded;
+    const chip = container.querySelector('[data-value="file-reference"]');
+
+    expect(chip?.getAttribute('contenteditable')).toBe('false');
+    expect(chip?.getAttribute('data-file-path')).toBeNull();
+    expect(chip?.getAttribute('data-temporary')).toBe('true');
+    expect(chip?.textContent).toBe('临时笔记:3');
+    expect(decodeVariables(encoded)).toBe('定位 {{file-ref:{"path":null,"name":"临时笔记","line":"3"}}}');
+  });
+
+  test('keeps file reference chip support wired through the prompt editor insert API and deletion path', () => {
+    const indexSource = readSource('src/components/BPromptEditor/index.vue');
+    const triggerSource = readSource('src/components/BPromptEditor/hooks/useEditorTrigger.ts');
+
+    expect(indexSource).toContain('function insertFileReference');
+    expect(indexSource).toContain('defineExpose({ focus, insertFileReference })');
+    expect(triggerSource).toContain('createFileReferenceSpan');
+    expect(triggerSource).toContain('insertFileReference');
+    expect(triggerSource).toContain('isChipElement');
   });
 });

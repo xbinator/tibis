@@ -283,6 +283,30 @@ export function useEditorCore(editorRef: Ref<HTMLDivElement | undefined>, modelV
     }
   }
 
+  /**
+   * 将手动粘贴或输入的占位符同步回不可编辑 chip。
+   */
+  function normalizeInlineTokens(): void {
+    if (!editorRef.value) return;
+
+    const decoded = getEditorContent();
+    if (!decoded.includes('{{file-ref:')) {
+      return;
+    }
+
+    const encoded = encodeVariables(decoded);
+    if (editorRef.value.innerHTML === encoded) {
+      return;
+    }
+
+    const selectionSnapshot = captureSelectionSnapshot();
+    updateEditorContent(decoded);
+
+    nextTick(() => {
+      restoreSelectionSnapshot(selectionSnapshot);
+    });
+  }
+
   const unwatchModelValue = watch(modelValue, (newValue) => {
     if (isInternalUpdate.value) return;
 
@@ -346,6 +370,7 @@ export function useEditorCore(editorRef: Ref<HTMLDivElement | undefined>, modelV
     updateEditorContent,
     getEditorContent,
     updateModelValue,
+    normalizeInlineTokens,
     initializeEditor,
     cleanup,
     editorIsEmpty,

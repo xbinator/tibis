@@ -59,6 +59,8 @@ import { editorToolContextRegistry } from '@/ai/tools/editor-context';
 import { getDefaultChatToolNames } from '@/ai/tools/policy';
 import { findPendingUserChoiceQuestion } from '@/components/BChat/message';
 import type { Message } from '@/components/BChat/types';
+import type { FileReferenceChip } from '@/components/BPromptEditor/hooks/useVariableEncoder';
+import { onChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import { useChatStore } from '@/stores/chat';
 import { useSettingStore } from '@/stores/setting';
 import SessionHistory from './components/SessionHistory.vue';
@@ -87,11 +89,13 @@ const hasMoreHistory = ref(false);
 /** 聊天是否正在输出（流式响应中） */
 const chatBusy = ref(false);
 /** 聊天组件引用，用于调用组件方法 */
-const chatRef = ref<{ focusInput: () => void } | null>(null);
+const chatRef = ref<{ focusInput: () => void; insertFileReference: (reference: FileReferenceChip) => void } | null>(null);
 /** 确认控制器，管理工具调用的用户确认流程 */
 const confirmationController = createChatConfirmationController({
   getMessages: () => messages.value
 });
+
+let unregisterFileReferenceInsert: (() => void) | null = null;
 /**
  * 当前激活的会话对象
  * 根据设置中存储的激活会话 ID 从会话列表中查找对应会话
@@ -230,6 +234,18 @@ function handleChatBusyChange(busy: boolean): void {
 }
 
 /**
+ * 处理编辑器文件引用插入请求。
+ * @param reference - 文件引用数据
+ */
+async function handleFileReferenceInsert(reference: FileReferenceChip): Promise<void> {
+  settingStore.setSidebarVisible(true);
+
+  await nextTick();
+  chatRef.value?.insertFileReference(reference);
+  chatRef.value?.focusInput();
+}
+
+/**
  * 创建新会话
  * 1. 检查是否正在输出，是则中断
  * 2. 清理确认控制器状态
@@ -244,7 +260,6 @@ async function handleNewSession(): Promise<void> {
   messages.value = [];
   hasMoreHistory.value = false;
   historyLoading.value = false;
-  inputValue.value = '';
   // 新会话创建后自动聚焦输入框，提升用户体验
   await nextTick();
   chatRef.value?.focusInput();
@@ -365,11 +380,18 @@ async function handleConfirmationAction(confirmationId: string, action: ChatMess
   confirmationController.cancelConfirmation(confirmationId);
 }
 
-/** 组件挂载时加载会话列表 */
-onMounted(loadSessions);
+/** 组件挂载时加载会话列表并监听编辑器引用插入事件 */
+onMounted(() => {
+  loadSessions();
+  unregisterFileReferenceInsert = onChatFileReferenceInsert((reference) => {
+    handleFileReferenceInsert(reference);
+  });
+});
 
 /** 组件卸载时清理确认控制器 */
 onUnmounted(() => {
+  unregisterFileReferenceInsert?.();
+  unregisterFileReferenceInsert = null;
   confirmationController.dispose();
 });
 </script>

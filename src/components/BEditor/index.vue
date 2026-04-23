@@ -24,6 +24,8 @@
           v-model:value="editorContent"
           v-model:outline-content="outlineContent"
           :editor-id="props.editorId"
+          :file-path="props.filePath"
+          :file-name="editorTitle"
           :editable="props.editable"
           :on-search-match-element-focus="scrollSearchMatchElementIntoView"
         />
