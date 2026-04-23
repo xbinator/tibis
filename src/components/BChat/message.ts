@@ -245,11 +245,35 @@ function createToolModelMessage(content: ToolModelMessageContent): ModelMessage 
 }
 
 /**
+ * 收集当前 assistant 片段中已经完成配对的 tool-call ID。
+ * @param parts - assistant 结构化片段
+ * @returns 已完成配对的 tool-call ID 集合
+ */
+function collectCompletedToolCallIds(parts: ChatMessagePart[]): Set<string> {
+  const completedToolCallIds = new Set<string>();
+  const pendingToolCallIds = new Set<string>();
+
+  parts.forEach((part) => {
+    if (part.type === 'tool-call') {
+      pendingToolCallIds.add(part.toolCallId);
+      return;
+    }
+
+    if (part.type === 'tool-result' && pendingToolCallIds.has(part.toolCallId)) {
+      completedToolCallIds.add(part.toolCallId);
+    }
+  });
+
+  return completedToolCallIds;
+}
+
+/**
  * 将 assistant 消息片段转换为 AI SDK 所需的多条模型消息。
  * @param parts - assistant 结构化片段
  */
 function toAssistantModelMessages(parts: ChatMessagePart[]): ModelMessage[] {
   const modelMessages: ModelMessage[] = [];
+  const completedToolCallIds = collectCompletedToolCallIds(parts);
   let assistantParts: Array<{ type: 'text'; text: string } | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }> = [];
   let toolResultParts: Array<{ type: 'tool-result'; toolCallId: string; toolName: string; output: { type: 'json'; value: JSONValue } }> = [];
 
@@ -278,7 +302,9 @@ function toAssistantModelMessages(parts: ChatMessagePart[]): ModelMessage[] {
 
     if (part.type === 'tool-call') {
       flushToolResultParts();
-      assistantParts.push({ type: 'tool-call', toolCallId: part.toolCallId, toolName: part.toolName, input: part.input });
+      if (completedToolCallIds.has(part.toolCallId)) {
+        assistantParts.push({ type: 'tool-call', toolCallId: part.toolCallId, toolName: part.toolName, input: part.input });
+      }
       return;
     }
 

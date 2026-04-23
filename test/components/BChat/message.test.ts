@@ -178,16 +178,102 @@ describe('BChat message helpers', () => {
       { role: 'user', content: '你好' },
       {
         role: 'assistant',
-        content: [
-          { type: 'text', text: '我来帮你处理。' },
+        content: [{ type: 'text', text: '我来帮你处理。' }]
+      }
+    ]);
+  });
+
+  it('drops unmatched assistant tool calls from model history to avoid missing tool results', () => {
+    const messages: Message[] = [
+      createTextMessage('user-1', 'user', '查看一下文档'),
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-04-21T00:00:01.000Z',
+        parts: [
           {
             type: 'tool-call',
-            toolCallId: 'call_function_z4c3rw63ddmt_2',
+            toolCallId: 'call_function_1u1uzdwv6q8z_1',
             toolName: 'read_current_document',
-            input: { path: '/docs/guide.md' }
+            input: {}
           }
         ]
       }
+    ];
+
+    expect(toModelMessages(messages)).toEqual([{ role: 'user', content: '查看一下文档' }]);
+  });
+
+  it('keeps completed tool pairs and drops the final blocked repeated tool call', () => {
+    const messages: Message[] = [
+      createTextMessage('user-1', 'user', '切换一下主题色'),
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-04-21T00:00:01.000Z',
+        parts: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call_function_1u1uzdwv6q8z_1',
+            toolName: 'update_settings',
+            input: { key: 'theme', value: 'auto' }
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call_function_1u1uzdwv6q8z_1',
+            toolName: 'update_settings',
+            result: {
+              toolName: 'update_settings',
+              status: 'failure',
+              error: { code: 'INVALID_INPUT', message: 'theme 只能设置为 dark、light 或 system。' }
+            }
+          },
+          {
+            type: 'tool-call',
+            toolCallId: 'call_function_1u1uzdwv6q8z_2',
+            toolName: 'update_settings',
+            input: { key: 'theme', value: 'auto' }
+          }
+        ]
+      },
+      createTextMessage('error-1', 'error', '工具 `update_settings` 使用相同参数重复调用超过限制（2），已停止自动续轮。'),
+      createTextMessage('user-2', 'user', '重新设置一下')
+    ];
+
+    expect(toModelMessages(messages)).toEqual([
+      { role: 'user', content: '切换一下主题色' },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call_function_1u1uzdwv6q8z_1',
+            toolName: 'update_settings',
+            input: { key: 'theme', value: 'auto' }
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_function_1u1uzdwv6q8z_1',
+            toolName: 'update_settings',
+            output: {
+              type: 'json',
+              value: {
+                toolName: 'update_settings',
+                status: 'failure',
+                error: { code: 'INVALID_INPUT', message: 'theme 只能设置为 dark、light 或 system。' }
+              }
+            }
+          }
+        ]
+      },
+      { role: 'user', content: '重新设置一下' }
     ]);
   });
 
