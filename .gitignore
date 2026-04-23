@@ -27,3 +27,6 @@ release
 
 # Auto-generated files
 types/components.d.ts
+
+# Local git worktrees
+.worktrees/
