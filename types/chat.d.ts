@@ -20,6 +20,44 @@ export type ChatMessageRole = 'user' | 'assistant' | 'error';
 export type ChatMessageFileType = 'image' | 'document' | 'audio' | 'video' | 'binary';
 
 /**
+ * 聊天消息文件引用
+ */
+export interface ChatMessageFileReference {
+  /** 引用唯一标识 */
+  id: string;
+  /** 引用 token */
+  token: string;
+  /** 引用对应的文档 ID */
+  documentId: string;
+  /** 文件名 */
+  fileName: string;
+  /** 行范围，使用字符串保留原始输入 */
+  line: string;
+  /** 本地路径，不存在时为 null */
+  path: string | null;
+  /** 引用快照 ID */
+  snapshotId: string;
+  /** 引用摘录 */
+  excerpt?: string;
+}
+
+/**
+ * 聊天引用快照
+ */
+export interface ChatReferenceSnapshot {
+  /** 快照唯一标识 */
+  id: string;
+  /** 快照所属文档 ID */
+  documentId: string;
+  /** 快照标题 */
+  title: string;
+  /** 快照内容 */
+  content: string;
+  /** 创建时间 */
+  createdAt: string;
+}
+
+/**
  * 聊天消息附件
  */
 export interface ChatMessageFile {
@@ -203,6 +241,8 @@ export interface ChatMessageRecord {
   content: string;
   /** 结构化消息片段 */
   parts: ChatMessagePart[];
+  /** 消息保存的文件引用元数据 */
+  references?: ChatMessageFileReference[];
   /** 思考内容 */
   thinking?: string;
   /** 文件列表 */

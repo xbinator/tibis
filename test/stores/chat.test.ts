@@ -119,6 +119,85 @@ describe('useChatStore', () => {
     expect(persistedRecord?.parts).toEqual([{ type: 'text', text: '最终答案' }]);
   });
 
+  it('persists chat message references when adding a session message', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    const chatStore = useChatStore();
+    const reference = {
+      id: 'ref-1',
+      token: '{{file-ref:ref-1}}',
+      documentId: 'doc-1',
+      fileName: 'draft.md',
+      line: '12-18',
+      path: null,
+      snapshotId: 'snapshot-1',
+      excerpt: '## Heading'
+    };
+    const message: Message = {
+      id: 'message-1',
+      role: 'user',
+      content: '{{file-ref:ref-1}}',
+      parts: [{ type: 'text', text: '{{file-ref:ref-1}}' }],
+      references: [reference],
+      createdAt: '2026-04-24T00:00:00.000Z'
+    };
+
+    await chatStore.addSessionMessage('session-1', message);
+
+    const persistedRecord = addMessageMock.mock.calls[0]?.[0] as ChatMessageRecord | undefined;
+
+    expect(persistedRecord).toMatchObject({
+      sessionId: 'session-1',
+      id: 'message-1',
+      role: 'user',
+      content: '{{file-ref:ref-1}}',
+      parts: [{ type: 'text', text: '{{file-ref:ref-1}}' }],
+      createdAt: '2026-04-24T00:00:00.000Z'
+    });
+    expect(persistedRecord?.references).toEqual([reference]);
+  });
+
+  it('round-trips message references when loading session messages', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    const chatStore = useChatStore();
+    const reference = {
+      id: 'ref-1',
+      token: '{{file-ref:ref-1}}',
+      documentId: 'doc-1',
+      fileName: 'draft.md',
+      line: '12-18',
+      path: null,
+      snapshotId: 'snapshot-1',
+      excerpt: '## Heading'
+    };
+
+    getMessagesMock.mockResolvedValue([
+      {
+        id: 'message-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '{{file-ref:ref-1}}',
+        parts: [{ type: 'text', text: '{{file-ref:ref-1}}' }],
+        references: [reference],
+        createdAt: '2026-04-24T00:00:00.000Z'
+      }
+    ]);
+
+    const messages = await chatStore.getSessionMessages('session-1');
+
+    expect(messages).toEqual([
+      {
+        id: 'message-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '{{file-ref:ref-1}}',
+        parts: [{ type: 'text', text: '{{file-ref:ref-1}}' }],
+        references: [reference],
+        createdAt: '2026-04-24T00:00:00.000Z',
+        finished: true
+      }
+    ]);
+  });
+
   it('adds assistant usage to the active session when a message completes', async () => {
     const { useChatStore } = await import('@/stores/chat');
     const chatStore = useChatStore();
@@ -162,5 +241,4 @@ describe('useChatStore', () => {
 
     expect(updateSessionUsageMock).toHaveBeenCalledWith('session-1', { inputTokens: 5, outputTokens: 9, totalTokens: 14 });
   });
-
 });
