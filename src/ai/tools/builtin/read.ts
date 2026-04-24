@@ -59,6 +59,12 @@ export interface BuiltinReadTools {
   searchCurrentDocument: AIToolExecutor<SearchCurrentDocumentInput, SearchCurrentDocumentResult>;
 }
 
+/** 读取当前文档工具名称。 */
+export const READ_CURRENT_DOCUMENT_TOOL_NAME = 'read_current_document';
+
+/** 搜索当前文档工具名称。 */
+export const SEARCH_CURRENT_DOCUMENT_TOOL_NAME = 'search_current_document';
+
 /** 最大搜索匹配数量 */
 const MAX_SEARCH_MATCHES = 20;
 
@@ -106,14 +112,14 @@ export function createBuiltinReadTools(): BuiltinReadTools {
   return {
     readCurrentDocument: {
       definition: {
-        name: 'read_current_document',
+        name: READ_CURRENT_DOCUMENT_TOOL_NAME,
         description: '读取当前编辑器文档的标题、路径和 Markdown 内容。',
         source: 'builtin',
         riskLevel: 'read',
         parameters: { type: 'object', properties: {}, additionalProperties: false }
       },
       async execute(_input: Record<string, never>, context: AIToolContext) {
-        return createToolSuccessResult('read_current_document', {
+        return createToolSuccessResult(READ_CURRENT_DOCUMENT_TOOL_NAME, {
           id: context.document.id,
           title: context.document.title,
           path: context.document.path,
@@ -123,7 +129,7 @@ export function createBuiltinReadTools(): BuiltinReadTools {
     },
     searchCurrentDocument: {
       definition: {
-        name: 'search_current_document',
+        name: SEARCH_CURRENT_DOCUMENT_TOOL_NAME,
         description: '在当前文档中搜索关键词并返回匹配片段。',
         source: 'builtin',
         riskLevel: 'read',
@@ -139,12 +145,12 @@ export function createBuiltinReadTools(): BuiltinReadTools {
       async execute(input: SearchCurrentDocumentInput, context: AIToolContext) {
         const query = typeof input.query === 'string' ? input.query.trim() : '';
         if (!query) {
-          return createToolFailureResult('search_current_document', 'INVALID_INPUT', '搜索关键词不能为空');
+          return createToolFailureResult(SEARCH_CURRENT_DOCUMENT_TOOL_NAME, 'INVALID_INPUT', '搜索关键词不能为空');
         }
 
         const matches = searchContent(context.document.getContent(), query);
 
-        return createToolSuccessResult('search_current_document', {
+        return createToolSuccessResult(SEARCH_CURRENT_DOCUMENT_TOOL_NAME, {
           query: input.query,
           matchCount: matches.length,
           matches

@@ -1,5 +1,15 @@
 /* eslint-disable class-methods-use-this */
-import type { Native, OpenFileOptions, SaveFileOptions, FileChangeEvent, ReadFileResult, ReadWorkspaceFileOptions, ReadWorkspaceFileResult } from './types';
+import type {
+  Native,
+  OpenFileOptions,
+  SaveFileOptions,
+  FileChangeEvent,
+  ReadFileResult,
+  ReadWorkspaceFileOptions,
+  ReadWorkspaceFileResult,
+  ReadWorkspaceDirectoryOptions,
+  ReadWorkspaceDirectoryResult
+} from './types';
 import type { PlatformRecentFile } from 'types/electron-api';
 import { getElectronAPI } from '../electron-api';
 
@@ -11,6 +21,10 @@ export class ElectronNative implements Native {
 
   async readWorkspaceFile(options: ReadWorkspaceFileOptions): Promise<ReadWorkspaceFileResult> {
     return getElectronAPI().readWorkspaceFile(options);
+  }
+
+  async readWorkspaceDirectory(options: ReadWorkspaceDirectoryOptions): Promise<ReadWorkspaceDirectoryResult> {
+    return getElectronAPI().readWorkspaceDirectory(options);
   }
 
   async openFile(options?: OpenFileOptions) {

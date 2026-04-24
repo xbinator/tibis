@@ -51,6 +51,38 @@ export interface ReadWorkspaceFileResult {
   nextOffset: number | null;
 }
 
+/**
+ * 工作区目录读取参数。
+ */
+export interface ReadWorkspaceDirectoryOptions {
+  /** 目录路径，支持相对工作区路径或绝对路径 */
+  directoryPath: string;
+  /** 工作区根目录，缺省时仅允许读取绝对路径 */
+  workspaceRoot?: string;
+}
+
+/**
+ * 工作区目录子项。
+ */
+export interface ReadWorkspaceDirectoryEntry {
+  /** 子项名称。 */
+  name: string;
+  /** 子项绝对路径。 */
+  path: string;
+  /** 子项类型。 */
+  type: 'file' | 'directory';
+}
+
+/**
+ * 工作区目录读取结果。
+ */
+export interface ReadWorkspaceDirectoryResult {
+  /** 规范化后的真实目录路径 */
+  path: string;
+  /** 当前目录下的直接子项 */
+  entries: ReadWorkspaceDirectoryEntry[];
+}
+
 export interface FileChangeEvent {
   type: 'change' | 'unlink';
   filePath: string;
@@ -61,6 +93,8 @@ export interface Native {
   readFile(path: string): Promise<ReadFileResult>;
 
   readWorkspaceFile(options: ReadWorkspaceFileOptions): Promise<ReadWorkspaceFileResult>;
+
+  readWorkspaceDirectory(options: ReadWorkspaceDirectoryOptions): Promise<ReadWorkspaceDirectoryResult>;
 
   openFile(options?: OpenFileOptions): Promise<File>;
 

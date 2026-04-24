@@ -10,10 +10,10 @@ import { executeWithPermission } from '../permission';
 import { createToolFailureResult } from '../results';
 
 /** 设置修改工具名称。 */
-const UPDATE_SETTINGS_TOOL_NAME = 'update_settings';
+export const UPDATE_SETTINGS_TOOL_NAME = 'update_settings';
 
 /** 设置获取工具名称。 */
-const GET_SETTINGS_TOOL_NAME = 'get_settings';
+export const GET_SETTINGS_TOOL_NAME = 'get_settings';
 
 /** 支持通过 AI 修改的设置键。 */
 const SUPPORTED_SETTING_KEYS = [

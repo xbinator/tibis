@@ -65,6 +65,38 @@ export interface ElectronReadWorkspaceFileResult {
   nextOffset: number | null;
 }
 
+/**
+ * Electron 工作区目录读取参数。
+ */
+export interface ElectronReadWorkspaceDirectoryOptions {
+  /** 目录路径，支持相对工作区路径或绝对路径 */
+  directoryPath: string;
+  /** 工作区根目录，缺省时仅允许读取绝对路径 */
+  workspaceRoot?: string;
+}
+
+/**
+ * Electron 工作区目录子项。
+ */
+export interface ElectronReadWorkspaceDirectoryEntry {
+  /** 子项名称。 */
+  name: string;
+  /** 子项绝对路径。 */
+  path: string;
+  /** 子项类型。 */
+  type: 'file' | 'directory';
+}
+
+/**
+ * Electron 工作区目录读取结果。
+ */
+export interface ElectronReadWorkspaceDirectoryResult {
+  /** 规范化后的真实目录路径 */
+  path: string;
+  /** 当前目录下的直接子项 */
+  entries: ElectronReadWorkspaceDirectoryEntry[];
+}
+
 export interface DbExecuteResult {
   changes: number;
   lastInsertRowid: number;
@@ -85,6 +117,7 @@ export interface PlatformRecentFile {
 export interface ElectronAPI {
   readFile: (filePath: string) => Promise<ElectronReadFileResult>;
   readWorkspaceFile: (options: ElectronReadWorkspaceFileOptions) => Promise<ElectronReadWorkspaceFileResult>;
+  readWorkspaceDirectory: (options: ElectronReadWorkspaceDirectoryOptions) => Promise<ElectronReadWorkspaceDirectoryResult>;
 
   // 文件对话框操作
   openFile: (options?: ElectronOpenFileOptions) => Promise<ElectronFileResult>;

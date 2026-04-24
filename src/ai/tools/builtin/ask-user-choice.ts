@@ -6,7 +6,7 @@ import type { AIChoiceOption, AIAwaitingUserChoiceQuestion, AIToolExecutor } fro
 import { createAwaitingUserInputResult, createToolFailureResult } from '../results';
 
 /** Shared tool name constant. */
-const ASK_USER_CHOICE_TOOL_NAME = 'ask_user_choice';
+export const ASK_USER_CHOICE_TOOL_NAME = 'ask_user_choice';
 
 /** Maximum number of options accepted by the executor. */
 const MAX_CHOICE_OPTIONS = 10;

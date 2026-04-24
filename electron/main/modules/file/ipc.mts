@@ -2,7 +2,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ipcMain } from 'electron';
 import { fileWatchService } from './service.mjs';
-import { readWorkspaceFile, type ReadWorkspaceFileRequest } from './workspace-read.mjs';
+import {
+  readWorkspaceDirectory,
+  readWorkspaceFile,
+  type ReadWorkspaceDirectoryRequest,
+  type ReadWorkspaceFileRequest
+} from './workspace-read.mjs';
 
 export function registerFileHandlers(): void {
   ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
@@ -13,6 +18,7 @@ export function registerFileHandlers(): void {
   });
 
   ipcMain.handle('fs:readWorkspaceTextFile', async (_event, request: ReadWorkspaceFileRequest) => readWorkspaceFile(request));
+  ipcMain.handle('fs:readWorkspaceDirectory', async (_event, request: ReadWorkspaceDirectoryRequest) => readWorkspaceDirectory(request));
 
   ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string) => {
     await fs.promises.writeFile(filePath, content, 'utf-8');

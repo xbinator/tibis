@@ -5,11 +5,18 @@
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../confirmation';
 import type { AIToolExecutionError, AIToolExecutor } from 'types/ai';
 import { native } from '@/shared/platform';
-import type { ReadWorkspaceFileOptions, ReadWorkspaceFileResult } from '@/shared/platform/native/types';
+import type {
+  ReadWorkspaceDirectoryOptions,
+  ReadWorkspaceDirectoryResult,
+  ReadWorkspaceFileOptions,
+  ReadWorkspaceFileResult
+} from '@/shared/platform/native/types';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../results';
 
 /** read_file 工具名称 */
-const READ_FILE_TOOL_NAME = 'read_file';
+export const READ_FILE_TOOL_NAME = 'read_file';
+/** read_directory 工具名称 */
+export const READ_DIRECTORY_TOOL_NAME = 'read_directory';
 /** 默认起始行号 */
 const DEFAULT_OFFSET = 1;
 
@@ -56,6 +63,14 @@ export interface CreateBuiltinReadFileToolOptions {
   getWorkspaceRoot?: () => string | null;
   /** 读取本地文件，测试时可注入替身 */
   readWorkspaceFile?: (options: ReadWorkspaceFileOptions) => Promise<ReadWorkspaceFileResult>;
+  /** 读取本地目录，测试时可注入替身 */
+  readWorkspaceDirectory?: (options: ReadWorkspaceDirectoryOptions) => Promise<ReadWorkspaceDirectoryResult>;
+}
+
+/** read_directory 工具输入参数 */
+export interface ReadDirectoryInput {
+  /** 目录路径，支持相对工作区路径或绝对路径 */
+  path: string;
 }
 
 /**
@@ -220,6 +235,59 @@ export function createBuiltinReadFileTool(options: CreateBuiltinReadFileToolOpti
       } catch (error) {
         const code = mapWorkspaceErrorCode(readErrorCode(error));
         return createToolFailureResult(READ_FILE_TOOL_NAME, code, readErrorMessage(error));
+      }
+    }
+  };
+}
+
+/**
+ * 创建内置 read_directory 工具。
+ * @param options - 工具创建选项
+ * @returns read_directory 工具执行器
+ */
+export function createBuiltinReadDirectoryTool(
+  options: CreateBuiltinReadFileToolOptions = {}
+): AIToolExecutor<ReadDirectoryInput, ReadWorkspaceDirectoryResult> {
+  const readWorkspaceDirectory = options.readWorkspaceDirectory ?? native.readWorkspaceDirectory.bind(native);
+
+  return {
+    definition: {
+      name: READ_DIRECTORY_TOOL_NAME,
+      description: '读取指定目录下的直接子项列表，仅返回当前目录中的文件和子目录，不递归展开。相对路径需要工作区根目录，绝对路径需要用户确认。',
+      source: 'builtin',
+      riskLevel: 'read',
+      requiresActiveDocument: false,
+      permissionCategory: 'system',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '目录路径，支持相对工作区路径或绝对路径。' }
+        },
+        required: ['path'],
+        additionalProperties: false
+      }
+    },
+    async execute(input: ReadDirectoryInput) {
+      const directoryPath = typeof input.path === 'string' ? input.path.trim() : '';
+      if (!directoryPath) {
+        return createToolFailureResult(READ_DIRECTORY_TOOL_NAME, 'INVALID_INPUT', '目录路径不能为空');
+      }
+
+      const workspaceRoot = options.getWorkspaceRoot?.() ?? null;
+      if (!workspaceRoot) {
+        return createToolFailureResult(READ_DIRECTORY_TOOL_NAME, 'PERMISSION_DENIED', '未配置工作区根目录时只能读取绝对路径');
+      }
+
+      try {
+        const result = await readWorkspaceDirectory({
+          directoryPath,
+          workspaceRoot
+        });
+
+        return createToolSuccessResult(READ_DIRECTORY_TOOL_NAME, result);
+      } catch (error) {
+        const code = mapWorkspaceErrorCode(readErrorCode(error));
+        return createToolFailureResult(READ_DIRECTORY_TOOL_NAME, code, error instanceof Error ? error.message : '读取目录失败');
       }
     }
   };

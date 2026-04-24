@@ -261,7 +261,10 @@ describe('createAskUserChoiceTool', () => {
       {
         question: 'Choose a channel type',
         mode: 'single',
-        options: [{ label: 'Official', value: 'official' }, { label: '  ', value: 'video' }]
+        options: [
+          { label: 'Official', value: 'official' },
+          { label: '  ', value: 'video' }
+        ]
       },
       createContext()
     );

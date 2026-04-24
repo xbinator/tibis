@@ -9,7 +9,7 @@ import { createAskUserChoiceTool, type PendingQuestionSnapshot } from './ask-use
 import { isDefaultBuiltinReadonlyToolName, isDefaultBuiltinWritableToolName } from './catalog';
 import { createBuiltinEnvironmentTools } from './environment';
 import { createBuiltinReadTools } from './read';
-import { createBuiltinReadFileTool } from './read-file';
+import { createBuiltinReadDirectoryTool, createBuiltinReadFileTool } from './read-file';
 import { createBuiltinSettingsTools } from './settings';
 import { createBuiltinWriteTools } from './write';
 
@@ -53,7 +53,11 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     createBuiltinReadFileTool({
       confirm: options.confirm,
       getWorkspaceRoot: options.getWorkspaceRoot
-    })
+    }),
+    createBuiltinReadDirectoryTool({
+      getWorkspaceRoot: options.getWorkspaceRoot
+    }),
+    createBuiltinSettingsTools(options.confirm ?? { confirm: async () => false }).getSettings
   ];
   const readonlyTools = allReadonlyTools.filter((tool) => isDefaultBuiltinReadonlyToolName(tool.definition.name));
 

@@ -1,5 +1,7 @@
 import type { AIToolContext } from 'types/ai';
 import { describe, expect, it } from 'vitest';
+import { READ_DIRECTORY_TOOL_NAME } from '@/ai/tools/builtin/read-file';
+import { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from '@/ai/tools/builtin/settings';
 import { createBuiltinTools } from '@/ai/tools/builtin';
 
 /**
@@ -42,7 +44,15 @@ function getToolNames(includeWriteTools = false): string[] {
 
 describe('createBuiltinTools', () => {
   it('returns read tools by default', () => {
-    expect(getToolNames()).toEqual(['read_current_document', 'get_current_time', 'search_current_document', 'ask_user_choice', 'read_file']);
+    expect(getToolNames()).toEqual([
+      'read_current_document',
+      'get_current_time',
+      'search_current_document',
+      'ask_user_choice',
+      'read_file',
+      READ_DIRECTORY_TOOL_NAME,
+      GET_SETTINGS_TOOL_NAME
+    ]);
   });
 
   it('only exposes low-risk write tools by default when confirmation is available', () => {
@@ -52,8 +62,10 @@ describe('createBuiltinTools', () => {
       'search_current_document',
       'ask_user_choice',
       'read_file',
+      READ_DIRECTORY_TOOL_NAME,
+      GET_SETTINGS_TOOL_NAME,
       'insert_at_cursor',
-      'update_settings'
+      UPDATE_SETTINGS_TOOL_NAME
     ]);
   });
 
@@ -72,8 +84,10 @@ describe('createBuiltinTools', () => {
       'search_current_document',
       'ask_user_choice',
       'read_file',
+      READ_DIRECTORY_TOOL_NAME,
+      GET_SETTINGS_TOOL_NAME,
       'insert_at_cursor',
-      'update_settings',
+      UPDATE_SETTINGS_TOOL_NAME,
       'replace_selection',
       'replace_document'
     ]);
@@ -132,6 +146,20 @@ describe('createBuiltinTools', () => {
     const readFileTool = tools.find((tool) => tool.definition.name === 'read_file');
 
     const result = await readFileTool?.execute({ path: 'missing.ts' }, createToolContext());
+
+    expect(result).toMatchObject({
+      status: 'failure',
+      error: { code: 'UNSUPPORTED_PROVIDER' }
+    });
+  });
+
+  it('passes workspace root provider to read_directory', async () => {
+    const tools = createBuiltinTools({
+      getWorkspaceRoot: () => 'G:\\workspace'
+    });
+    const readDirectoryTool = tools.find((tool) => tool.definition.name === READ_DIRECTORY_TOOL_NAME);
+
+    const result = await readDirectoryTool?.execute({ path: 'src' }, createToolContext());
 
     expect(result).toMatchObject({
       status: 'failure',

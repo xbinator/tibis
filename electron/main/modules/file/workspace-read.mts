@@ -74,6 +74,32 @@ export interface ReadWorkspaceFileResult {
   nextOffset: number | null;
 }
 
+/** 读取工作区目录请求 */
+export interface ReadWorkspaceDirectoryRequest {
+  /** 目录路径，支持相对工作区路径或绝对路径 */
+  directoryPath: string;
+  /** 工作区根目录，缺省时仅允许读取绝对路径 */
+  workspaceRoot?: string;
+}
+
+/** 读取工作区目录子项 */
+export interface ReadWorkspaceDirectoryEntry {
+  /** 子项名称 */
+  name: string;
+  /** 子项真实绝对路径 */
+  path: string;
+  /** 子项类型 */
+  type: 'file' | 'directory';
+}
+
+/** 读取工作区目录结果 */
+export interface ReadWorkspaceDirectoryResult {
+  /** 规范化后的真实目录路径 */
+  path: string;
+  /** 当前目录下的直接子项 */
+  entries: ReadWorkspaceDirectoryEntry[];
+}
+
 /**
  * 工作区读取错误。
  * @description 通过 code 字段让渲染层可映射到工具错误码。
@@ -159,20 +185,30 @@ function normalizeLineRange(offset?: number, limit?: number): { offset: number; 
  * @returns 校验后的真实路径信息
  */
 async function resolveWorkspaceFile(request: ReadWorkspaceFileRequest): Promise<{ realPath: string; securityPath: string }> {
-  const filePath = request.filePath.trim();
-  const workspaceRoot = request.workspaceRoot?.trim() ?? '';
+  return resolveWorkspacePath(request.filePath, request.workspaceRoot);
+}
 
-  if (!filePath) {
-    throw new WorkspaceReadError('INVALID_INPUT', '文件路径不能为空');
+/**
+ * 解析并校验工作区路径。
+ * @param targetPath - 目标路径
+ * @param workspaceRootInput - 工作区根目录
+ * @returns 校验后的真实路径信息
+ */
+async function resolveWorkspacePath(targetPath: string, workspaceRootInput?: string): Promise<{ realPath: string; securityPath: string }> {
+  const normalizedPath = targetPath.trim();
+  const workspaceRoot = workspaceRootInput?.trim() ?? '';
+
+  if (!normalizedPath) {
+    throw new WorkspaceReadError('INVALID_INPUT', '路径不能为空');
   }
 
-  if (!workspaceRoot && !path.isAbsolute(filePath)) {
+  if (!workspaceRoot && !path.isAbsolute(normalizedPath)) {
     throw new WorkspaceReadError('INVALID_INPUT', '未配置工作区根目录时只能读取绝对路径');
   }
 
   try {
     const realRoot = workspaceRoot ? await fs.realpath(workspaceRoot) : null;
-    const candidatePath = realRoot && !path.isAbsolute(filePath) ? path.join(realRoot, filePath) : filePath;
+    const candidatePath = realRoot && !path.isAbsolute(normalizedPath) ? path.join(realRoot, normalizedPath) : normalizedPath;
     const realPath = await fs.realpath(candidatePath);
 
     if (realRoot && !isWithinWorkspace(realPath, realRoot)) {
@@ -226,5 +262,41 @@ export async function readWorkspaceFile(request: ReadWorkspaceFileRequest): Prom
     readLines: selectedLines.length,
     hasMore,
     nextOffset: hasMore ? nextOffset : null
+  };
+}
+
+/**
+ * 安全读取目录的直接子项。
+ * @param request - 读取请求
+ * @returns 目录读取结果
+ */
+export async function readWorkspaceDirectory(request: ReadWorkspaceDirectoryRequest): Promise<ReadWorkspaceDirectoryResult> {
+  const { realPath, securityPath } = await resolveWorkspacePath(request.directoryPath, request.workspaceRoot);
+
+  if (isBlacklistedPath(securityPath)) {
+    throw new WorkspaceReadError('PATH_BLACKLISTED', '目录路径命中安全黑名单');
+  }
+
+  const stats = await fs.stat(realPath);
+  if (!stats.isDirectory()) {
+    throw new WorkspaceReadError('INVALID_INPUT', '目标路径不是目录');
+  }
+
+  const children = await fs.readdir(realPath, { withFileTypes: true });
+  const entries = await Promise.all(
+    children
+      .filter((child) => child.isFile() || child.isDirectory())
+      .map(async (child) => ({
+        name: child.name,
+        path: await fs.realpath(path.join(realPath, child.name)),
+        type: child.isDirectory() ? ('directory' as const) : ('file' as const)
+      }))
+  );
+
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+
+  return {
+    path: realPath,
+    entries
   };
 }

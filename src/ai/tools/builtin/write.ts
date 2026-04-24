@@ -34,6 +34,15 @@ export interface BuiltinWriteTools {
   replaceDocument: AIToolExecutor<ToolContentInput, WriteToolAppliedResult>;
 }
 
+/** 在光标位置插入内容工具名称。 */
+export const INSERT_AT_CURSOR_TOOL_NAME = 'insert_at_cursor';
+
+/** 替换选区内容工具名称。 */
+export const REPLACE_SELECTION_TOOL_NAME = 'replace_selection';
+
+/** 替换整篇文档工具名称。 */
+export const REPLACE_DOCUMENT_TOOL_NAME = 'replace_document';
+
 /**
  * 验证并获取内容
  * @param toolName - 工具名称
@@ -103,7 +112,7 @@ export function createBuiltinWriteTools(adapter: AIToolConfirmationAdapter): Bui
   return {
     insertAtCursor: {
       definition: {
-        name: 'insert_at_cursor',
+        name: INSERT_AT_CURSOR_TOOL_NAME,
         description: '在当前光标位置插入内容。',
         source: 'builtin',
         riskLevel: 'write',
@@ -118,33 +127,33 @@ export function createBuiltinWriteTools(adapter: AIToolConfirmationAdapter): Bui
       },
       async execute(input: ToolContentInput, context: AIToolContext) {
         // 验证内容
-        const content = getValidatedContent('insert_at_cursor', input);
+        const content = getValidatedContent(INSERT_AT_CURSOR_TOOL_NAME, input);
         if (typeof content !== 'string') {
           return content;
         }
 
         // 请求用户确认
         const request: AIToolConfirmationRequest = {
-          toolName: 'insert_at_cursor',
+          toolName: INSERT_AT_CURSOR_TOOL_NAME,
           title: 'AI 想要插入内容',
           description: 'AI 请求在当前光标位置插入新内容。',
           riskLevel: 'write',
           afterText: content
         };
-        const cancelled = await confirmOrCancel(adapter, request, 'insert_at_cursor');
+        const cancelled = await confirmOrCancel(adapter, request, INSERT_AT_CURSOR_TOOL_NAME);
         if (cancelled) {
           return cancelled;
         }
 
         // 执行插入
-        return executeConfirmedWrite(adapter, request, 'insert_at_cursor', async () => {
+        return executeConfirmedWrite(adapter, request, INSERT_AT_CURSOR_TOOL_NAME, async () => {
           await context.editor.insertAtCursor(content);
         });
       }
     },
     replaceSelection: {
       definition: {
-        name: 'replace_selection',
+        name: REPLACE_SELECTION_TOOL_NAME,
         description: '替换当前编辑器选区内容。',
         source: 'builtin',
         riskLevel: 'write',
@@ -159,7 +168,7 @@ export function createBuiltinWriteTools(adapter: AIToolConfirmationAdapter): Bui
       },
       async execute(input: ToolContentInput, context: AIToolContext) {
         // 验证内容
-        const content = getValidatedContent('replace_selection', input);
+        const content = getValidatedContent(REPLACE_SELECTION_TOOL_NAME, input);
         if (typeof content !== 'string') {
           return content;
         }
@@ -167,19 +176,19 @@ export function createBuiltinWriteTools(adapter: AIToolConfirmationAdapter): Bui
         // 检查是否有选区
         const selection = context.editor.getSelection();
         if (!selection) {
-          return createToolFailureResult('replace_selection', 'NO_SELECTION', '当前没有选区');
+          return createToolFailureResult(REPLACE_SELECTION_TOOL_NAME, 'NO_SELECTION', '当前没有选区');
         }
 
         // 请求用户确认
         const request: AIToolConfirmationRequest = {
-          toolName: 'replace_selection',
+          toolName: REPLACE_SELECTION_TOOL_NAME,
           title: 'AI 想要替换当前选区',
           description: 'AI 请求用新内容替换当前选中的文本。',
           riskLevel: 'write',
           beforeText: selection.text,
           afterText: content
         };
-        const cancelled = await confirmOrCancel(adapter, request, 'replace_selection');
+        const cancelled = await confirmOrCancel(adapter, request, REPLACE_SELECTION_TOOL_NAME);
         if (cancelled) {
           return cancelled;
         }
@@ -187,18 +196,18 @@ export function createBuiltinWriteTools(adapter: AIToolConfirmationAdapter): Bui
         // 再次检查选区是否仍然有效
         const latestSelection = context.editor.getSelection();
         if (!latestSelection) {
-          return createToolFailureResult('replace_selection', 'STALE_CONTEXT', '当前选区已失效，请重新选择文本');
+          return createToolFailureResult(REPLACE_SELECTION_TOOL_NAME, 'STALE_CONTEXT', '当前选区已失效，请重新选择文本');
         }
 
         // 执行替换
-        return executeConfirmedWrite(adapter, request, 'replace_selection', async () => {
+        return executeConfirmedWrite(adapter, request, REPLACE_SELECTION_TOOL_NAME, async () => {
           await context.editor.replaceSelection(content);
         });
       }
     },
     replaceDocument: {
       definition: {
-        name: 'replace_document',
+        name: REPLACE_DOCUMENT_TOOL_NAME,
         description: '替换当前整个文档内容。',
         source: 'builtin',
         riskLevel: 'dangerous',
@@ -213,27 +222,27 @@ export function createBuiltinWriteTools(adapter: AIToolConfirmationAdapter): Bui
       },
       async execute(input: ToolContentInput, context: AIToolContext) {
         // 验证内容
-        const content = getValidatedContent('replace_document', input);
+        const content = getValidatedContent(REPLACE_DOCUMENT_TOOL_NAME, input);
         if (typeof content !== 'string') {
           return content;
         }
 
         // 请求用户确认（危险操作）
         const request: AIToolConfirmationRequest = {
-          toolName: 'replace_document',
+          toolName: REPLACE_DOCUMENT_TOOL_NAME,
           title: 'AI 想要替换整篇文档',
           description: 'AI 请求使用新内容覆盖当前整篇文档。',
           riskLevel: 'dangerous',
           beforeText: context.document.getContent(),
           afterText: content
         };
-        const cancelled = await confirmOrCancel(adapter, request, 'replace_document');
+        const cancelled = await confirmOrCancel(adapter, request, REPLACE_DOCUMENT_TOOL_NAME);
         if (cancelled) {
           return cancelled;
         }
 
         // 执行替换
-        return executeConfirmedWrite(adapter, request, 'replace_document', async () => {
+        return executeConfirmedWrite(adapter, request, REPLACE_DOCUMENT_TOOL_NAME, async () => {
           await context.editor.replaceDocument(content);
         });
       }

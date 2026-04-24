@@ -25,6 +25,9 @@ export interface BuiltinEnvironmentTools {
   getCurrentTime: AIToolExecutor<Record<string, never>, GetCurrentTimeResult>;
 }
 
+/** 获取当前时间工具名称。 */
+export const GET_CURRENT_TIME_TOOL_NAME = 'get_current_time';
+
 /**
  * 创建内置环境工具。
  * @returns 环境工具执行器对象
@@ -33,7 +36,7 @@ export function createBuiltinEnvironmentTools(): BuiltinEnvironmentTools {
   return {
     getCurrentTime: {
       definition: {
-        name: 'get_current_time',
+        name: GET_CURRENT_TIME_TOOL_NAME,
         description: '获取当前系统时间，返回 ISO、时间戳和本地格式化字符串。',
         source: 'builtin',
         riskLevel: 'read',
@@ -44,7 +47,7 @@ export function createBuiltinEnvironmentTools(): BuiltinEnvironmentTools {
       async execute() {
         const now = new Date();
 
-        return createToolSuccessResult('get_current_time', {
+        return createToolSuccessResult(GET_CURRENT_TIME_TOOL_NAME, {
           iso: now.toISOString(),
           timestamp: now.getTime(),
           locale: now.toLocaleString()

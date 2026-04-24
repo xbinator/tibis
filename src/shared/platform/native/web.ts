@@ -7,7 +7,9 @@ import type {
   FileChangeEvent,
   ReadFileResult,
   ReadWorkspaceFileOptions,
-  ReadWorkspaceFileResult
+  ReadWorkspaceFileResult,
+  ReadWorkspaceDirectoryOptions,
+  ReadWorkspaceDirectoryResult
 } from './types';
 import type { PlatformRecentFile } from 'types/electron-api';
 
@@ -19,6 +21,13 @@ export class WebNative implements Native {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async readWorkspaceFile(_options: ReadWorkspaceFileOptions): Promise<ReadWorkspaceFileResult> {
     const error = new Error('Web platform does not support reading files by path') as Error & { code: 'UNSUPPORTED_PROVIDER' };
+    error.code = 'UNSUPPORTED_PROVIDER';
+    throw error;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async readWorkspaceDirectory(_options: ReadWorkspaceDirectoryOptions): Promise<ReadWorkspaceDirectoryResult> {
+    const error = new Error('Web platform does not support reading directories by path') as Error & { code: 'UNSUPPORTED_PROVIDER' };
     error.code = 'UNSUPPORTED_PROVIDER';
     throw error;
   }

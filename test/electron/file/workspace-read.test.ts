@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readWorkspaceFile } from '../../../electron/main/modules/file/workspace-read.mts';
+import { readWorkspaceDirectory, readWorkspaceFile } from '../../../electron/main/modules/file/workspace-read.mts';
 
 /** 测试临时目录路径 */
 let tempRoot = '';
@@ -171,6 +171,65 @@ describe('readWorkspaceFile', () => {
           workspaceRoot
         }),
       'EXTENSION_NOT_ALLOWED'
+    );
+  });
+});
+
+describe('readWorkspaceDirectory', () => {
+  it('lists only direct children in the target directory', async () => {
+    const sourceDir = path.join(workspaceRoot, 'src');
+    const nestedDir = path.join(sourceDir, 'nested');
+    await mkdir(nestedDir, { recursive: true });
+    await writeFile(path.join(sourceDir, 'main.ts'), 'console.log("hi")', 'utf-8');
+    await writeFile(path.join(nestedDir, 'hidden.ts'), 'secret', 'utf-8');
+
+    const result = await readWorkspaceDirectory({
+      directoryPath: 'src',
+      workspaceRoot
+    });
+
+    expect(result).toEqual({
+      path: await realpath(sourceDir),
+      entries: [
+        {
+          name: 'main.ts',
+          path: await realpath(path.join(sourceDir, 'main.ts')),
+          type: 'file'
+        },
+        {
+          name: 'nested',
+          path: await realpath(nestedDir),
+          type: 'directory'
+        }
+      ]
+    });
+  });
+
+  it('rejects directory paths outside the workspace', async () => {
+    const siblingRoot = path.join(tempRoot, 'workspace-sibling');
+    const outsideDir = path.join(siblingRoot, 'secret');
+    await mkdir(outsideDir, { recursive: true });
+
+    await expectWorkspaceReadError(
+      () =>
+        readWorkspaceDirectory({
+          directoryPath: outsideDir,
+          workspaceRoot
+        }),
+      'PATH_OUTSIDE_WORKSPACE'
+    );
+  });
+
+  it('rejects blacklisted directories', async () => {
+    await mkdir(path.join(workspaceRoot, '.git'), { recursive: true });
+
+    await expectWorkspaceReadError(
+      () =>
+        readWorkspaceDirectory({
+          directoryPath: '.git',
+          workspaceRoot
+        }),
+      'PATH_BLACKLISTED'
     );
   });
 });
