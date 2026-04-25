@@ -43,7 +43,7 @@
 
 <script setup lang="ts">
 /**
- * @file ConfirmationCard.vue
+ * @file ChatConfirmationCard.vue
  * @description 聊天流中的确认卡片组件，负责展示确认状态、预览和折叠交互。
  */
 import type { ChatMessageConfirmationActionPayload, ChatMessageConfirmationPart } from 'types/chat';
@@ -51,7 +51,7 @@ import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import BButton from '@/components/BButton/index.vue';
 import { createNamespace } from '@/utils/namespace';
-import { formatConfirmationPreviewText, getConfirmationStatusText, isConfirmationCollapsed } from '../utils/confirmationCard';
+import { formatConfirmationPreviewText, getConfirmationStatusText, isConfirmationCollapsed } from '@/components/BChat/utils/confirmationCard';
 
 defineOptions({ name: 'ConfirmationCard' });
 
