@@ -6,10 +6,10 @@
         <Icon icon="lucide:message-circle-plus" width="16" height="16" />
       </BButton>
       <SessionHistory
-        :sessions="sessions"
+        ref="sessionHistoryRef"
+        v-model:current-session="currentSession"
         :active-session-id="settingStore.chatSidebarActiveSessionId"
         :disabled="chatStream.loading.value"
-        @delete-session="handleDeleteSession"
         @switch-session="handleSwitchSession"
       />
     </div>
@@ -37,6 +37,7 @@
           />
 
           <div class="chat-panel__input-buttons">
+            <!--  -->
             <BButton v-if="chatStream.loading.value" size="small" square icon="lucide:square" @click="chatStream.abort" />
             <BButton v-else size="small" square :disabled="!inputValue" icon="lucide:arrow-up" @click="handleChatSubmit" />
           </div>
@@ -48,7 +49,7 @@
 
 <script setup lang="ts">
 import type { ChatMessageConfirmationAction, ChatMessageHistoryCursor, ChatMessageFileReference, ChatReferenceSnapshot, ChatSession } from 'types/chat';
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { nanoid } from 'nanoid';
 import { createBuiltinTools } from '@/ai/tools/builtin';
@@ -68,9 +69,6 @@ import SessionHistory from './components/SessionHistory.vue';
 import { useChatStream } from './hooks/useChatStream';
 import { createChatConfirmationController } from './utils/confirmationController';
 
-/** 聊天会话类型标识 */
-const CHAT_SESSION_TYPE = 'assistant';
-
 /** 聊天数据存储 */
 const chatStore = useChatStore();
 /** 应用设置存储 */
@@ -80,8 +78,8 @@ const settingStore = useSettingStore();
 const inputValue = ref('');
 /** 当前会话的消息列表 */
 const messages = ref<Message[]>([]);
-/** 所有会话列表 */
-const sessions = ref<ChatSession[]>([]);
+/** 当前会话信息 */
+const currentSession = ref<ChatSession | undefined>(undefined);
 /** 会话加载状态 */
 const loading = ref(false);
 /** 历史消息加载状态 */
@@ -97,19 +95,10 @@ const confirmationController = createChatConfirmationController({
   getMessages: () => messages.value
 });
 
-let unregisterFileReferenceInsert: (() => void) | null = null;
-/**
- * 当前激活的会话对象
- * 根据设置中存储的激活会话 ID 从会话列表中查找对应会话
- */
-const currentSession = computed<ChatSession | undefined>(() => {
-  const activeSessionId = settingStore.chatSidebarActiveSessionId;
-  if (!activeSessionId) {
-    return undefined;
-  }
+/** SessionHistory 组件引用 */
+const sessionHistoryRef = ref<{ refreshSessions: () => Promise<void> } | null>(null);
 
-  return sessions.value.find((session) => session.id === activeSessionId);
-});
+let unregisterFileReferenceInsert: (() => void) | null = null;
 
 /**
  * 聊天工具列表
@@ -265,11 +254,11 @@ async function handleBeforeSend(message: Message): Promise<void> {
   await persistReferenceSnapshots(message);
 
   if (!settingStore.chatSidebarActiveSessionId) {
-    // 没有激活会话时创建新会话，使用消息内容作为标题。
-    const session = await chatStore.createSession(CHAT_SESSION_TYPE, { title: message.content });
+    const session = await chatStore.createSession('assistant', { title: message.content });
 
     settingStore.setChatSidebarActiveSessionId(session.id);
-    sessions.value.unshift(session);
+    currentSession.value = session;
+    await sessionHistoryRef.value?.refreshSessions();
   }
 
   await chatStore.addSessionMessage(settingStore.chatSidebarActiveSessionId, message);
@@ -414,28 +403,6 @@ async function handleNewSession(): Promise<void> {
 }
 
 /**
- * 加载所有会话列表
- * 1. 从存储获取会话列表
- * 2. 如果有激活会话 ID，验证并加载该会话的消息
- */
-async function loadSessions(): Promise<void> {
-  sessions.value = await chatStore.getSessions(CHAT_SESSION_TYPE);
-
-  if (!settingStore.chatSidebarActiveSessionId) {
-    return;
-  }
-
-  // 验证激活会话是否存在于列表中
-  const activeSession = sessions.value.find((session) => session.id === settingStore.chatSidebarActiveSessionId);
-  if (!activeSession) {
-    settingStore.setChatSidebarActiveSessionId(null);
-    return;
-  }
-
-  setLoadedMessages(await chatStore.getSessionMessages(activeSession.id));
-}
-
-/**
  * 切换会话
  * 1. 检查是否正在输出或加载中，是则中断
  * 2. 清理确认控制器状态
@@ -482,31 +449,11 @@ async function handleLoadHistory(): Promise<void> {
   }
 }
 
-/**
- * 删除会话
- * 1. 检查是否正在输出，是则中断
- * 2. 从会话列表中移除
- * 3. 如果删除的是当前激活会话，则创建新会话
- * @param sessionId - 要删除的会话 ID
- */
-async function handleDeleteSession(sessionId: string): Promise<void> {
-  if (chatStream.loading.value) return;
-
-  const index = sessions.value.findIndex((session) => session.id === sessionId);
-  if (index === -1) return;
-
-  sessions.value.splice(index, 1);
-
-  // 如果删除的是当前激活会话，清理状态并创建新会话
-  if (settingStore.chatSidebarActiveSessionId === sessionId) {
-    confirmationController.dispose();
-    await handleNewSession();
+onMounted(async () => {
+  if (settingStore.chatSidebarActiveSessionId) {
+    setLoadedMessages(await chatStore.getSessionMessages(settingStore.chatSidebarActiveSessionId));
   }
-}
 
-/** 组件挂载时加载会话列表并监听编辑器引用插入事件 */
-onMounted(() => {
-  loadSessions();
   unregisterFileReferenceInsert = onChatFileReferenceInsert((reference) => {
     handleFileReferenceInsert(reference);
   });

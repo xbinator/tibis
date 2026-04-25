@@ -38,7 +38,7 @@
 
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import dayjs from 'dayjs';
@@ -46,11 +46,10 @@ import { groupBy, map } from 'lodash-es';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import { useChatStore } from '@/stores/chat';
+import { useSettingStore } from '@/stores/setting';
 import { asyncTo } from '@/utils/asyncTo';
 
 interface Props {
-  /** 会话列表 */
-  sessions?: ChatSession[];
   /** 当前选中的会话 ID */
   activeSessionId?: string | null;
   /** 是否禁用历史会话操作 */
@@ -63,25 +62,52 @@ interface SessionGroup {
   sessions: ChatSession[];
 }
 
+const CHAT_SESSION_TYPE = 'assistant';
+
 const props = withDefaults(defineProps<Props>(), {
-  sessions: () => [],
   activeSessionId: null,
   disabled: false
 });
 
 const open = ref(false);
 const chatStore = useChatStore();
+const settingStore = useSettingStore();
+const sessions = ref<ChatSession[]>([]);
 
 const emit = defineEmits<{
   (e: 'switch-session', sessionId: string): void;
-  (e: 'delete-session', sessionId: string): void;
+  (e: 'update:currentSession', session: ChatSession | undefined): void;
 }>();
 
-const sessions = computed(() => props.sessions);
+const currentSession = computed<ChatSession | undefined>(() => {
+  if (!props.activeSessionId) return undefined;
+  return sessions.value.find((s) => s.id === props.activeSessionId);
+});
 
 const loading = ref(false);
 
 const isDisabled = computed(() => props.disabled || !sessions.value.length);
+
+watch(
+  () => props.activeSessionId,
+  () => {
+    emit('update:currentSession', currentSession.value);
+  },
+  { immediate: true }
+);
+
+onMounted(async () => {
+  sessions.value = await chatStore.getSessions(CHAT_SESSION_TYPE);
+});
+
+async function refreshSessions(): Promise<void> {
+  sessions.value = await chatStore.getSessions(CHAT_SESSION_TYPE);
+  emit('update:currentSession', currentSession.value);
+}
+
+defineExpose({
+  refreshSessions
+});
 
 function toDateKey(timestamp: string): string {
   return dayjs(timestamp).format('YYYY-MM-DD');
@@ -118,11 +144,23 @@ async function handleDeleteSession(sessionId: string) {
   if (props.disabled) return;
   if (loading.value) return;
 
+  const wasActive = sessionId === props.activeSessionId;
+
   loading.value = true;
   const [error] = await asyncTo(chatStore.deleteSession(sessionId));
   loading.value = false;
 
-  error ? message.error(error.message || '删除会话失败，请重试') : emit('delete-session', sessionId);
+  if (!error) {
+    await refreshSessions();
+
+    if (wasActive) {
+      settingStore.setChatSidebarActiveSessionId(null);
+    }
+
+    emit('delete-session', sessionId);
+  } else {
+    message.error(error.message || '删除会话失败，请重试');
+  }
 }
 </script>
 
