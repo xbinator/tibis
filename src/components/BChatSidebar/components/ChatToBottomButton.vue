@@ -8,6 +8,9 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
 
+/**
+ * 组件属性
+ */
 interface Props {
   visible: boolean;
   loading: boolean;
@@ -22,6 +25,10 @@ const emit = defineEmits<{
   (e: 'click', options: { behavior: 'smooth' | 'auto' }): void;
 }>();
 
+/**
+ * 处理按钮点击事件，触发滚动到底部。
+ * @param options - 滚动行为配置
+ */
 function handleClick() {
   emit('click', { behavior: props.loading ? 'auto' : 'smooth' });
 }
