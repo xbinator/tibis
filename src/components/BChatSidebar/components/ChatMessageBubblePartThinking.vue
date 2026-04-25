@@ -10,7 +10,7 @@
 
 <script setup lang="ts">
 /**
- * @file MessageBubblePartThinking.vue
+ * @file ChatMessageBubblePartThinking.vue
  * @description 聊天思考片段组件，负责展示和折叠思考内容。
  */
 import type { ChatMessageThinkingPart } from 'types/chat';
@@ -19,7 +19,7 @@ import { Icon } from '@iconify/vue';
 import BMessage from '@/components/BMessage/index.vue';
 import { createNamespace } from '@/utils/namespace';
 
-defineOptions({ name: 'MessageBubblePartThinking' });
+defineOptions({ name: 'ChatMessageBubblePartThinking' });
 
 defineProps<{
   /** 思考片段 */
