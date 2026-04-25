@@ -1,28 +1,30 @@
 <template>
   <BDropdown v-model:open="open">
     <BButton square size="small" type="text">
-      <BModelIcon v-if="currentProviderId" :provider="currentProviderId" :size="16" />
-      <Icon v-else icon="lucide:bot" width="16" height="16" />
+      <div class="model-button-content">
+        <BModelIcon v-if="currentProviderId" :provider="currentProviderId" :size="16" />
+        <Icon v-else icon="lucide:bot" width="16" height="16" />
+        <span v-if="currentModelName" class="model-name">{{ currentModelName }}</span>
+      </div>
     </BButton>
 
     <template #overlay>
       <div class="model-selector">
-        <BSelect
-          v-model:value="internalModel"
-          :options="modelOptions"
-          placeholder="请选择模型"
-          :show-arrow="false"
-          :style="{ width: '280px' }"
-          @change="handleModelChange"
-        >
-          <template #option="{ modelId, modelName, providerName }">
-            <div class="flex items-center gap-6">
-              <BModelIcon :model="modelId" :size="16" />
-              <div class="flex-1 w-0 truncate">{{ modelName }}</div>
-              <div class="fs-12">{{ providerName }}</div>
+        <div class="model-group">
+          <template v-for="group in groupedModels" :key="group.providerId">
+            <div class="model-group__header">{{ group.providerName }}</div>
+            <div
+              v-for="item in group.models"
+              :key="item.value"
+              class="model-selector__item"
+              :class="{ 'is-active': item.value === internalModel }"
+              @click="handleModelChange(item.value)"
+            >
+              <BModelIcon :model="item.modelId" :size="16" />
+              <span class="model-selector__name">{{ item.modelName }}</span>
             </div>
           </template>
-        </BSelect>
+        </div>
       </div>
     </template>
   </BDropdown>
@@ -35,19 +37,22 @@ import { Icon } from '@iconify/vue';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import BModelIcon from '@/components/BModelIcon/index.vue';
-import BSelect from '@/components/BSelect/index.vue';
 import { providerStorage, serviceModelsStorage } from '@/shared/storage';
 import { dispatchServiceModelUpdated } from '@/shared/storage/service-models/events';
 
-interface ModelOption {
+interface ModelItem {
   value: string;
   modelId: string;
   modelName: string;
+}
+
+interface ModelGroup {
+  providerId: string;
   providerName: string;
+  models: ModelItem[];
 }
 
 interface Props {
-  /** 当前选中的模型 (providerId:modelId) */
   model: string | undefined;
 }
 
@@ -69,21 +74,31 @@ const currentProviderId = computed<string | undefined>(() => {
   return match?.[1];
 });
 
-const modelOptions = computed<ModelOption[]>(() => {
-  return providers.value.flatMap((provider) => {
-    if (!provider.isEnabled || !provider.models?.length) {
-      return [];
-    }
+const currentModelName = computed<string>(() => {
+  if (!internalModel.value) return '';
+  const match = internalModel.value.match(/^([^:]+):(.+)$/);
+  const modelId = match?.[2];
+  const provider = providers.value.find((p) => p.id === currentProviderId.value);
+  if (!provider || !modelId) return '';
+  const model = provider.models.find((m) => m.id === modelId);
+  return model?.name || '';
+});
 
-    return provider.models
-      .filter((model) => model.isEnabled)
-      .map((model) => ({
-        value: `${provider.id}:${model.id}`,
-        modelId: model.id,
-        modelName: model.name,
-        providerName: provider.name
-      }));
-  });
+const groupedModels = computed<ModelGroup[]>(() => {
+  return providers.value
+    .filter((provider) => provider.isEnabled && provider.models?.length)
+    .map((provider) => ({
+      providerId: provider.id,
+      providerName: provider.name,
+      models: provider.models
+        .filter((model) => model.isEnabled)
+        .map((model) => ({
+          value: `${provider.id}:${model.id}`,
+          modelId: model.id,
+          modelName: model.name
+        }))
+    }))
+    .filter((group) => group.models.length > 0);
 });
 
 async function loadProviders(): Promise<void> {
@@ -92,9 +107,7 @@ async function loadProviders(): Promise<void> {
 
 async function loadSavedConfig(): Promise<void> {
   const config = await serviceModelsStorage.getConfig('chat');
-  internalModel.value = config?.providerId && config?.modelId
-    ? `${config.providerId}:${config.modelId}`
-    : undefined;
+  internalModel.value = config?.providerId && config?.modelId ? `${config.providerId}:${config.modelId}` : undefined;
 }
 
 function handleModelChange(value: string): void {
@@ -124,7 +137,70 @@ onMounted(async () => {
 
 <style scoped lang="less">
 .model-selector {
-  padding: 4px;
-  width: 280px;
+  width: 260px;
+  padding: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.model-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-group + .model-group {
+  margin-top: 4px;
+}
+
+.model-group__header {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.model-selector__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+
+  &.is-active {
+    background: var(--bg-active, var(--bg-hover));
+  }
+}
+
+.model-selector__name {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-button-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-name {
+  max-width: 80px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 </style>
