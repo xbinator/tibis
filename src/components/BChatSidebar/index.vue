@@ -525,16 +525,16 @@ onUnmounted(() => {
 
 .chat-panel__input-container {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
   align-items: flex-end;
-  padding: 12px 0 12px 12px;
+  gap: 12px;
+  padding: 12px;
   background: var(--input-bg);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
 
   :deep(.b-prompt-editor) {
-    padding: 0 12px 0 0;
+    flex: 1;
+    min-width: 0;
     background-color: transparent;
     border: none;
     border-radius: 0;
