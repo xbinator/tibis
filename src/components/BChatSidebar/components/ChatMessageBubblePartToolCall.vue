@@ -11,16 +11,16 @@
 
 <script setup lang="ts">
 /**
- * @file MessageBubblePartToolCall.vue
+ * @file ChatMessageBubblePartToolCall.vue
  * @description 聊天工具调用片段组件，负责展示工具名称和输入参数，支持折叠功能。
  */
 import type { ChatMessageToolCallPart } from 'types/chat';
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { createNamespace } from '@/utils/namespace';
-import { formatStructuredValue, hasStructuredValueContent } from '../utils/messagePart';
+import { formatStructuredValue, hasStructuredValueContent } from '@/components/BChat/utils/messagePart';
 
-defineOptions({ name: 'MessageBubblePartToolCall' });
+defineOptions({ name: 'ChatMessageBubblePartToolCall' });
 
 const props = defineProps<{
   /** 工具调用片段 */
