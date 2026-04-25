@@ -13,7 +13,7 @@
 
 <script setup lang="ts">
 /**
- * @file Container.vue
+ * @file ChatContainer.vue
  * @description 聊天消息滚动容器，负责回到底部、历史加载触发和滚动锚定。
  */
 import { nextTick, onMounted, ref } from 'vue';
@@ -42,6 +42,11 @@ const mainRef = ref<HTMLElement>();
 const scroller = ref<HTMLElement | Window>();
 const isBackBottom = ref(false);
 
+/**
+ * 判断滚动位置是否接近历史消息边界。
+ * @param target - 当前滚动容器
+ * @returns 是否需要提前触发历史加载
+ */
 function isNearHistoryEdge(target: HTMLElement | Window): boolean {
   if (!('scrollTop' in target)) {
     return false;
@@ -57,16 +62,27 @@ function isNearHistoryEdge(target: HTMLElement | Window): boolean {
   return scrollTop <= HISTORY_LOAD_THRESHOLD;
 }
 
+/**
+ * 通知宿主加载更早历史消息。
+ */
 function handleLoadHistory(): void {
   emit('load-history');
 }
 
+/**
+ * 滚动到最新消息位置。
+ * @param options - 滚动行为配置
+ */
 function scrollToBottom(options?: { behavior?: 'smooth' | 'auto' }): void {
   const behavior = options?.behavior || 'smooth';
 
   nextTick(() => scroller.value && setScrollTop(scroller.value, { top: 0, behavior }));
 }
 
+/**
+ * 在向消息列表前方插入历史消息后保持用户当前视觉位置不跳动。
+ * @param callback - 会插入历史消息的回调
+ */
 async function withScrollAnchor(callback: () => Promise<void> | void): Promise<void> {
   const target = scroller.value;
   if (!target || !('scrollTop' in target)) {
@@ -84,6 +100,9 @@ async function withScrollAnchor(callback: () => Promise<void> | void): Promise<v
   target.scrollTop = previousScrollTop < 0 ? previousScrollTop - heightDelta : previousScrollTop + heightDelta;
 }
 
+/**
+ * 处理消息区滚动，负责回到底部按钮状态和历史加载阈值判断。
+ */
 function handleScroll(): void {
   if (!scroller.value) return;
 
