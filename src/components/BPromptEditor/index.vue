@@ -6,10 +6,10 @@
       </div>
       <div ref="editorHostRef" class="b-prompt-editor__codemirror"></div>
       <VariableSelect
-        :visible="triggerVisible.value"
+        :visible="triggerVisible"
         :variables="filteredVariables"
-        :position="triggerPosition.value"
-        :active-index="triggerActiveIndex.value"
+        :position="triggerPosition"
+        :active-index="triggerActiveIndex"
         @select="handleVariableSelect"
         @update:active-index="handleActiveIndexChange"
       />
