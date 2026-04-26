@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * @file BPromptEditorRegression.test.ts
- * @description BPromptEditor 回归测试，覆盖空态占位与文件引用 chip 行为。
+ * @description BPromptEditor 回归测试，覆盖空态占位与文件引用 chip 行为 (CodeMirror 6).
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -28,11 +28,13 @@ describe('BPromptEditor placeholder state', () => {
     expect(isPromptEditorEffectivelyEmpty('{{ USER_NAME }}')).toBe(false);
   });
 
-  test('uses an explicit empty-state attribute instead of relying on :empty', () => {
+  test('uses v-show with editorIsEmpty ref for placeholder visibility', () => {
     const source = readSource('src/components/BPromptEditor/index.vue');
 
-    expect(source).toContain('data-empty="true"');
-    expect(source).not.toContain('&:empty::before');
+    // CodeMirror 6 implementation uses v-show with editorIsEmpty ref
+    expect(source).toContain('v-show="editorIsEmpty"');
+    expect(source).toContain('const editorIsEmpty = ref(true)');
+    expect(source).not.toContain('data-empty="true"');
   });
 
   test('renders placeholder as a separate overlay instead of editor pseudo content', () => {
@@ -42,58 +44,35 @@ describe('BPromptEditor placeholder state', () => {
     expect(source).not.toContain("&[data-empty='true']::before");
   });
 
-  test('drives placeholder visibility from a reactive editor empty ref', () => {
+  test('drives placeholder visibility from a reactive editor empty ref in index.vue', () => {
     const indexSource = readSource('src/components/BPromptEditor/index.vue');
-    const coreSource = readSource('src/components/BPromptEditor/hooks/useEditorCore.ts');
 
-    expect(indexSource).toContain(
-      'const { selectionHook, updateModelValue, normalizeInlineTokens, initializeEditor, cleanup, editorIsEmpty, undoHistory, redoHistory } = useEditorCore'
-    );
-    expect(indexSource).not.toContain("computed<boolean>(() => editorRef.value?.dataset.empty === 'true')");
-    expect(coreSource).toContain('const editorIsEmpty = ref(true);');
-    expect(coreSource).toContain('editorIsEmpty.value = isPromptEditorEffectivelyEmpty(resolvedContent);');
-    expect(coreSource).toContain('editorIsEmpty');
+    // editorIsEmpty is defined locally in index.vue for CodeMirror 6
+    expect(indexSource).toContain('const editorIsEmpty = ref(true)');
+    expect(indexSource).toContain('editorIsEmpty.value = newValue.trim().length === 0');
+    // useEditorCore.ts no longer exists in CodeMirror 6 migration
   });
 
-  test('wires custom undo and redo support for prompt editing', () => {
+  test('uses CodeMirror built-in undo/redo without custom history hooks', () => {
     const indexSource = readSource('src/components/BPromptEditor/index.vue');
-    const coreSource = readSource('src/components/BPromptEditor/hooks/useEditorCore.ts');
-    const keyboardSource = readSource('src/components/BPromptEditor/hooks/useEditorKeyboard.ts');
 
-    expect(indexSource).toContain('undoHistory');
-    expect(indexSource).toContain('redoHistory');
-    expect(coreSource).toContain('interface EditorHistorySnapshot');
-    expect(coreSource).toContain('function recordHistorySnapshot');
-    expect(coreSource).toContain('function undoHistory');
-    expect(coreSource).toContain('function redoHistory');
-    expect(keyboardSource).toContain('onUndo: () => void;');
-    expect(keyboardSource).toContain('onRedo: () => void;');
-    expect(keyboardSource).toContain("if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z')");
+    // CodeMirror 6 has built-in undo/redo via EditorView.undo/redo
+    // No custom undoHistory/redoHistory refs needed
+    expect(indexSource).not.toContain('undoHistory');
+    expect(indexSource).not.toContain('redoHistory');
+    // useEditorCore.ts and useEditorKeyboard.ts no longer exist
   });
 });
 
 describe('BPromptEditor DOM safety regressions', () => {
-  test('restores zero-rect probing selection from the parent container', () => {
-    const source = readSource('src/components/BPromptEditor/hooks/useEditorSelection.ts');
+  test('captures and restores selection using CodeMirror selection model', () => {
+    const indexSource = readSource('src/components/BPromptEditor/index.vue');
 
-    expect(source).toContain('restored.setStart(parentNode, restoredOffset)');
-    expect(source).not.toContain('setStartBefore(span)');
-  });
-
-  test('restores caret after variable deletion by parent offset', () => {
-    const source = readSource('src/components/BPromptEditor/hooks/useEditorTrigger.ts');
-
-    expect(source).toContain('const targetOffset = Math.min(variableIndex, parent.childNodes.length)');
-    expect(source).toContain('newRange.setStart(parent, targetOffset)');
-    expect(source).not.toContain('setStartBefore(nextNode)');
-  });
-
-  test('captures and restores focused selection snapshots across controlled updates', () => {
-    const source = readSource('src/components/BPromptEditor/hooks/useEditorCore.ts');
-
-    expect(source).toContain('function captureSelectionSnapshot');
-    expect(source).toContain('function restoreSelectionSnapshot');
-    expect(source).not.toContain('const newTextNode = editorRef.value.firstChild as Text | null;');
+    // CodeMirror 6 uses its own selection model
+    expect(indexSource).toContain('lastSelection');
+    expect(indexSource).toContain('captureCursorPosition');
+    expect(indexSource).toContain('view.value.state.selection');
+    // useEditorCore.ts and useEditorSelection.ts no longer exist in CodeMirror 6 migration
   });
 });
 
@@ -163,14 +142,17 @@ describe('BPromptEditor file reference chips', () => {
     expect(decodeVariables(encoded)).toBe('定位 {{file-ref:ref_temp}}');
   });
 
-  test('keeps file reference chip support wired through the prompt editor insert API and deletion path', () => {
+  test('keeps file reference chip support wired through the prompt editor insert API', () => {
     const indexSource = readSource('src/components/BPromptEditor/index.vue');
-    const triggerSource = readSource('src/components/BPromptEditor/hooks/useEditorTrigger.ts');
+    const encoderSource = readSource('src/components/BPromptEditor/hooks/useVariableEncoder.ts');
 
-    expect(indexSource).toContain('function insertFileReference');
-    expect(indexSource).toContain('defineExpose({ focus, insertFileReference })');
-    expect(triggerSource).toContain('createFileReferenceSpan');
-    expect(triggerSource).toContain('insertFileReference');
-    expect(triggerSource).toContain('isChipElement');
+    // insertFileReference is exposed via defineExpose in CodeMirror 6
+    expect(indexSource).toContain('insertFileReference');
+    expect(indexSource).toContain('captureCursorPosition');
+    expect(indexSource).toContain('defineExpose');
+    // createFileReferenceSpan and isChipElement are in useVariableEncoder.ts
+    expect(encoderSource).toContain('createFileReferenceSpan');
+    expect(encoderSource).toContain('isChipElement');
+    // useEditorTrigger.ts no longer exists in CodeMirror 6 migration
   });
 });
