@@ -2,7 +2,7 @@
   <div class="chat-input-toolbar">
     <ModelSelector :model="selectedModel" @update:model="handleModelChange" />
     <div class="action-buttons">
-      <BButton v-if="loading" size="small" square icon="lucide:square" @click="$emit('abort')" />
+      <BButton v-if="loading" size="small" square icon="lucide:circle-stop" @click="$emit('abort')" />
       <BButton v-else size="small" square :disabled="!inputValue" icon="lucide:arrow-up" @click="$emit('submit')" />
     </div>
   </div>
