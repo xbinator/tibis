@@ -34,11 +34,17 @@ export function createTriggerPlugin(params: TriggerPluginParams): Extension {
           return;
         }
 
-        const coords = update.view.coordsAtPos(triggerState.to);
-        params.triggerPosition.value = coords ? { top: coords.bottom, left: coords.left } : { top: 0, left: 0 };
         params.triggerVisible.value = true;
         params.triggerActiveIndex.value = triggerState.activeIndex;
         params.triggerQuery.value = triggerState.query;
+
+        // coordsAtPos reads DOM layout - not allowed during update, defer
+        requestAnimationFrame(() => {
+          const coords = update.view.coordsAtPos(triggerState.to);
+          params.triggerPosition.value = coords
+            ? { top: coords.bottom, left: coords.left }
+            : { top: 0, left: 0 };
+        });
       }
     }
   );
