@@ -18,7 +18,7 @@
 
     <BScrollbar ref="scrollbarRef" class="b-editor-scrollbar" @scroll="handleEditorScrollEvent">
       <div class="b-editor-container">
-        <RichEditorHost
+        <PaneRichEditor
           v-if="isRichMode"
           ref="richEditorPaneRef"
           v-model:value="editorContent"
@@ -57,7 +57,7 @@ import FindBar from './components/FindBar.vue';
 import { useAnchors } from './hooks/useAnchors';
 import { useEditorController } from './hooks/useEditorController';
 
-const RichEditorHost = defineAsyncComponent(() => import('./components/RichEditorHost.vue'));
+const PaneRichEditor = defineAsyncComponent(() => import('./components/PaneRichEditor.vue'));
 const PaneSourceEditor = defineAsyncComponent(() => import('./components/PaneSourceEditor.vue'));
 
 const layoutRef = ref<HTMLElement | null>(null);
