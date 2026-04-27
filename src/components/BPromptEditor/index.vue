@@ -23,21 +23,23 @@ import type { Variable, BPromptEditorProps as Props } from './types';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewline } from '@codemirror/commands';
 import { EditorState, Annotation } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, Decoration, keymap } from '@codemirror/view';
 import VariableSelect from './components/VariableSelect.vue';
 import { editableCompartment, readOnlyCompartment, themeCompartment } from './extensions/base';
 import { createPasteHandlerExtension } from './extensions/pasteHandler';
 import { createPlaceholderExtension } from './extensions/placeholder';
 import { createTriggerPlugin } from './extensions/triggerPlugin';
 import { triggerStateField, setTriggerActiveIndex, closeTrigger } from './extensions/triggerState';
-import { variableChipField, getChipAtPos } from './extensions/variableChip';
+import { variableChipField, chipResolverEffect, getChipAtPos } from './extensions/variableChip';
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '请输入内容...',
   options: () => [],
   disabled: false,
   maxHeight: undefined,
-  submitOnEnter: false
+  submitOnEnter: false,
+  chipResolver: undefined,
+  onPasteFiles: undefined
 });
 
 const emit = defineEmits<{
@@ -207,7 +209,7 @@ function createExtensions(): import('@codemirror/state').Extension[] {
     createPlaceholderExtension(props.placeholder),
 
     // Paste handler
-    createPasteHandlerExtension(),
+    createPasteHandlerExtension(props.onPasteFiles),
 
     // 失焦时隐藏变量菜单
     EditorView.domEventHandlers({
@@ -238,7 +240,10 @@ function createExtensions(): import('@codemirror/state').Extension[] {
     }),
 
     // 变量 Chip 设为原子范围（光标不可进入，删除时整词删除）
-    EditorView.atomicRanges.of((editorView) => editorView.state.field(variableChipField)),
+    EditorView.atomicRanges.of((editorView) => {
+      const chipState = editorView.state.field(variableChipField, false);
+      return chipState?.decorations ?? Decoration.none;
+    }),
 
     // Editable compartment
     editableCompartment.of(EditorView.editable.of(!props.disabled)),
@@ -385,6 +390,17 @@ watch(resolvedMaxHeight, (maxHeight) => {
   });
 });
 
+// Watch for chipResolver changes
+watch(
+  () => props.chipResolver,
+  (resolver) => {
+    if (!view.value || !resolver) return;
+    view.value.dispatch({
+      effects: chipResolverEffect.of(resolver)
+    });
+  }
+);
+
 // onMounted: create EditorView
 onMounted(() => {
   if (!editorHostRef.value) return;
@@ -416,22 +432,41 @@ defineExpose({
   focus: () => {
     view.value?.focus();
   },
-  captureCursorPosition: () => {
+  /**
+   * 保存当前光标位置（用于跨组件延迟插入场景）。
+   * 多次调用只保留最后一次。
+   */
+  saveCursorPosition: () => {
     if (view.value) {
       lastSelection.value = view.value.state.selection;
     }
   },
-  insertFileReference: (reference: { referenceId: string; documentId: string; fileName: string; line: number | string }) => {
+  /**
+   * 在保存的光标位置或当前位置插入文本。
+   * 插入后清除保存的位置，光标移到插入内容末尾。
+   */
+  insertTextAtCursor: (text: string) => {
     if (!view.value) return;
 
     const selection = lastSelection.value ?? view.value.state.selection;
     const pos = selection.main.head;
-    const fileRefText = `{{file-ref:${reference.referenceId}|${reference.fileName}|${reference.line}}} `;
+    const insertEnd = pos + text.length;
 
-    const insertEnd = pos + fileRefText.length;
-    view.value.dispatch({ changes: { from: pos, insert: fileRefText }, selection: { anchor: insertEnd } });
+    view.value.dispatch({
+      changes: { from: pos, insert: text },
+      selection: { anchor: insertEnd }
+    });
+
+    // 清除保存的位置
+    lastSelection.value = null;
 
     view.value.focus();
+  },
+  /**
+   * 获取编辑器原始内容（含 {{...}} token 的文本）。
+   */
+  getText: () => {
+    return view.value?.state.doc.toString() ?? '';
   }
 });
 </script>

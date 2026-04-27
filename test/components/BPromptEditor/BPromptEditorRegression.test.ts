@@ -6,14 +6,21 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { EditorState } from '@codemirror/state';
-import { Decoration } from '@codemirror/view';
+import { Decoration, WidgetType } from '@codemirror/view';
 import { describe, expect, test, vi } from 'vitest';
 import { editableCompartment, readOnlyCompartment, themeCompartment } from '@/components/BPromptEditor/extensions/base';
 import { createPasteHandlerExtension } from '@/components/BPromptEditor/extensions/pasteHandler';
 import { createPlaceholderExtension } from '@/components/BPromptEditor/extensions/placeholder';
 import { triggerStateField, setTriggerActiveIndex, closeTrigger } from '@/components/BPromptEditor/extensions/triggerState';
-import { variableChipField } from '@/components/BPromptEditor/extensions/variableChip';
-import { isPromptEditorEffectivelyEmpty, useVariableEncoder } from '@/components/BPromptEditor/hooks/useVariableEncoder';
+import { variableChipField, chipResolverEffect, type ChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
+
+/**
+ * 判断编辑器内容在去除占位符和零宽空格后是否为空。
+ * 原 useVariableEncoder 中的遗留工具函数。
+ */
+function isPromptEditorContentEmpty(content: string): boolean {
+  return content.replace(new RegExp('\u00A0', 'g'), '').replace(new RegExp('\u200B', 'g'), '').trim().length === 0;
+}
 
 /**
  * 读取组件源码。
@@ -26,13 +33,13 @@ function readSource(relativePath: string): string {
 
 describe('BPromptEditor placeholder state', () => {
   test('treats editor artifacts as empty content', () => {
-    expect(isPromptEditorEffectivelyEmpty('')).toBe(true);
-    expect(isPromptEditorEffectivelyEmpty('\n')).toBe(true);
-    expect(isPromptEditorEffectivelyEmpty('\u00A0')).toBe(true);
-    expect(isPromptEditorEffectivelyEmpty('\u200B')).toBe(true);
-    expect(isPromptEditorEffectivelyEmpty('\n\u00A0\u200B')).toBe(true);
-    expect(isPromptEditorEffectivelyEmpty('hello')).toBe(false);
-    expect(isPromptEditorEffectivelyEmpty('{{ USER_NAME }}')).toBe(false);
+    expect(isPromptEditorContentEmpty('')).toBe(true);
+    expect(isPromptEditorContentEmpty('\n')).toBe(true);
+    expect(isPromptEditorContentEmpty('\u00A0')).toBe(true);
+    expect(isPromptEditorContentEmpty('\u200B')).toBe(true);
+    expect(isPromptEditorContentEmpty('\n\u00A0\u200B')).toBe(true);
+    expect(isPromptEditorContentEmpty('hello')).toBe(false);
+    expect(isPromptEditorContentEmpty('{{ USER_NAME }}')).toBe(false);
   });
 
   test('uses v-show with editorIsEmpty ref for placeholder visibility', () => {
@@ -77,98 +84,45 @@ describe('BPromptEditor DOM safety regressions', () => {
 
     // CodeMirror 6 uses its own selection model
     expect(indexSource).toContain('lastSelection');
-    expect(indexSource).toContain('captureCursorPosition');
+    expect(indexSource).toContain('saveCursorPosition');
     expect(indexSource).toContain('view.value.state.selection');
     // useEditorCore.ts and useEditorSelection.ts no longer exist in CodeMirror 6 migration
   });
 });
 
-describe('BPromptEditor file reference chips', () => {
-  test('serializes file reference chips back to stable reference-id placeholders', () => {
-    const { createFileReferenceSpan, decodeVariables } = useVariableEncoder({
-      getVariableLabel: () => undefined
-    });
-    const reference = {
-      referenceId: 'ref_123',
-      documentId: 'doc_123',
-      filePath: 'src/foo/file.ts',
-      fileName: 'file.ts',
-      line: '123-145'
-    };
-    const chip = createFileReferenceSpan(reference);
-
-    expect(chip.getAttribute('data-reference-id')).toBe('ref_123');
-    expect(chip.getAttribute('data-document-id')).toBe('doc_123');
-    expect(decodeVariables(`请看 ${chip.outerHTML}`)).toBe('请看 {{file-ref:ref_123|file.ts|123-145}}');
-  });
-
-  test('renders file reference placeholders as non-editable inline chips', () => {
-    const { createFileReferenceSpan, encodeVariables } = useVariableEncoder({
-      getVariableLabel: () => undefined
-    });
-    createFileReferenceSpan({
-      referenceId: 'ref_123',
-      documentId: 'doc_123',
-      filePath: 'src/foo/file.ts',
-      fileName: 'file.ts',
-      line: '123-145'
-    });
-
-    const encoded = encodeVariables('定位 {{file-ref:ref_123}}');
-    const container = document.createElement('div');
-    container.innerHTML = encoded;
-    const chip = container.querySelector('[data-value="file-reference"]');
-
-    expect(chip?.getAttribute('contenteditable')).toBe('false');
-    expect(chip?.getAttribute('data-reference-id')).toBe('ref_123');
-    expect(chip?.getAttribute('data-document-id')).toBe('doc_123');
-    expect(chip?.textContent).toBe('file.ts:123-145');
-  });
-
-  test('renders unsaved file reference placeholders as non-editable inline chips', () => {
-    const { createFileReferenceSpan, encodeVariables, decodeVariables } = useVariableEncoder({
-      getVariableLabel: () => undefined
-    });
-    createFileReferenceSpan({
-      referenceId: 'ref_temp',
-      documentId: 'doc_temp',
-      filePath: null,
-      fileName: '临时笔记',
-      line: '3'
-    });
-
-    const encoded = encodeVariables('定位 {{file-ref:ref_temp}}');
-    const container = document.createElement('div');
-    container.innerHTML = encoded;
-    const chip = container.querySelector('[data-value="file-reference"]');
-
-    expect(chip?.getAttribute('contenteditable')).toBe('false');
-    expect(chip?.getAttribute('data-reference-id')).toBe('ref_temp');
-    expect(chip?.getAttribute('data-document-id')).toBe('doc_temp');
-    expect(chip?.textContent).toBe('临时笔记:3');
-    expect(decodeVariables(encoded)).toBe('定位 {{file-ref:ref_temp|临时笔记|3}}');
-  });
-
-  test('keeps file reference chip support wired through the prompt editor insert API', () => {
-    const indexSource = readSource('src/components/BPromptEditor/index.vue');
-    const encoderSource = readSource('src/components/BPromptEditor/hooks/useVariableEncoder.ts');
-
-    // insertFileReference is exposed via defineExpose in CodeMirror 6
-    expect(indexSource).toContain('insertFileReference');
-    expect(indexSource).toContain('captureCursorPosition');
-    expect(indexSource).toContain('defineExpose');
-    // createFileReferenceSpan and isChipElement are in useVariableEncoder.ts
-    expect(encoderSource).toContain('createFileReferenceSpan');
-    expect(encoderSource).toContain('isChipElement');
-    // useEditorTrigger.ts no longer exists in CodeMirror 6 migration
-  });
-});
-
 describe('BPromptEditor variableChip extension', () => {
-  // Use the actual variableChipField to test buildDecorations behavior
-  function getDecorations(doc: string) {
-    const state = EditorState.create({ doc, extensions: [variableChipField] });
-    return state.field(variableChipField);
+  /**
+   * 简单的测试 Widget，用于验证 widget 类型装饰。
+   */
+  class TestWidget extends WidgetType {
+    toDOM() { const span = document.createElement('span'); span.className = 'test-widget'; return span; }
+    eq() { return true; }
+    ignoreEvent() { return false; }
+  }
+
+  /**
+   * 模拟旧版行为的 resolver：
+   * - file-ref:... → widget
+   * - 其他 → b-prompt-chip mark
+   */
+  const legacyTestResolver: ChipResolver = (body) => {
+    if (body.startsWith('file-ref:')) {
+      const stripped = body.slice('file-ref:'.length);
+      if (!stripped) return null;
+      const parts = stripped.split('|');
+      if (parts[0]) return { widget: new TestWidget() };
+      return null;
+    }
+    return { className: 'b-prompt-chip' };
+  };
+
+  /**
+   * 创建编辑器状态并通过 chipResolverEffect 注入 resolver，返回装饰集。
+   */
+  function getDecorations(doc: string, resolver: ChipResolver = legacyTestResolver) {
+    let state = EditorState.create({ doc, extensions: [variableChipField] });
+    state = state.update({ effects: chipResolverEffect.of(resolver) }).state;
+    return state.field(variableChipField)!.decorations;
   }
 
   function iterDeco(deco: any): Array<{ from: number; to: number; type: 'mark' | 'widget'; markClass?: string }> {
@@ -194,7 +148,7 @@ describe('BPromptEditor variableChip extension', () => {
     expect(items[0].markClass).toBe('b-prompt-chip');
   });
 
-  test('renders {{file-ref:path|name}} as b-prompt-chip--file widget', () => {
+  test('renders {{file-ref:path|name}} as widget', () => {
     const deco = getDecorations('{{file-ref:src%2Ffoo%2Fbar.ts|bar.ts}}');
     const items = iterDeco(deco);
     expect(items).toHaveLength(1);
@@ -222,6 +176,21 @@ describe('BPromptEditor variableChip extension', () => {
     const deco = getDecorations('{{var\n}}');
     const items = iterDeco(deco);
     expect(items).toHaveLength(0);
+  });
+
+  test('skips chip when resolver returns null', () => {
+    const nullResolver: ChipResolver = () => null;
+    const deco = getDecorations('hello {{USER}} world', nullResolver);
+    const items = iterDeco(deco);
+    expect(items).toHaveLength(0);
+  });
+
+  test('renders widget when resolver returns widget', () => {
+    const widgetResolver: ChipResolver = (body) => body ? { widget: new TestWidget() } : null;
+    const deco = getDecorations('hello {{FOO}} world', widgetResolver);
+    const items = iterDeco(deco);
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe('widget');
   });
 });
 
@@ -308,12 +277,12 @@ describe('BPromptEditor index.vue integration', () => {
     expect(source).toContain("emit('submit'");
   });
 
-  test('exposes focus, captureCursorPosition, insertFileReference', () => {
+  test('exposes focus, saveCursorPosition, insertTextAtCursor', () => {
     const source = readSource('src/components/BPromptEditor/index.vue');
     expect(source).toContain('defineExpose');
     expect(source).toContain('focus');
-    expect(source).toContain('captureCursorPosition');
-    expect(source).toContain('insertFileReference');
+    expect(source).toContain('saveCursorPosition');
+    expect(source).toContain('insertTextAtCursor');
   });
 
   test('has VariableSelect integration', () => {
@@ -378,7 +347,7 @@ describe('BPromptEditor index.vue integration', () => {
     expect(source).toContain("emit('submit')");
   });
 
-  test('insertFileReference uses lastSelection or current selection', () => {
+  test('insertTextAtCursor uses lastSelection or current selection', () => {
     const source = readSource('src/components/BPromptEditor/index.vue');
     expect(source).toContain('lastSelection.value ?? view.value.state.selection');
   });

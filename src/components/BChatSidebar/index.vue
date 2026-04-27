@@ -32,6 +32,8 @@
             v-model:value="inputValue"
             placeholder="输入消息..."
             :max-height="200"
+            :chip-resolver="chipResolver"
+            :on-paste-files="onPasteFiles"
             submit-on-enter
             @submit="handleChatSubmit"
           />
@@ -53,6 +55,7 @@
 <script setup lang="ts">
 import type { ChatMessageConfirmationAction, ChatMessageHistoryCursor, ChatMessageFileReference, ChatReferenceSnapshot, ChatSession } from 'types/chat';
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { WidgetType } from '@codemirror/view';
 import { Icon } from '@iconify/vue';
 import { nanoid } from 'nanoid';
 import { createBuiltinTools } from '@/ai/tools/builtin';
@@ -61,8 +64,9 @@ import { getDefaultChatToolNames } from '@/ai/tools/policy';
 import BButton from '@/components/BButton/index.vue';
 import { create, userChoice } from '@/components/BChatSidebar/utils/messageHelper';
 import type { Message } from '@/components/BChatSidebar/utils/types';
-import type { FileReferenceChip } from '@/components/BPromptEditor/hooks/useVariableEncoder';
+import type { ChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
+import type { FileReferenceChip } from '@/components/BPromptEditor/types';
 import { onChatFileReferenceInsert, type ChatFileReferenceInsertPayload } from '@/shared/chat/fileReference';
 import { chatStorage, serviceModelsStorage } from '@/shared/storage';
 import { useChatStore } from '@/stores/chat';
@@ -72,6 +76,56 @@ import InputToolbar from './components/InputToolbar.vue';
 import SessionHistory from './components/SessionHistory.vue';
 import { useChatStream } from './hooks/useChatStream';
 import { createChatConfirmationController } from './utils/confirmationController';
+
+/**
+ * 文件引用 Chip Widget，由 chipResolver 返回。
+ * 有 line → 显示 `fileName:line`，无 line → 显示 `fileName`。
+ */
+class FileRefWidget extends WidgetType {
+  constructor(private fileName: string, private line: string) {
+    super();
+  }
+
+  eq(other: FileRefWidget): boolean {
+    return this.fileName === other.fileName && this.line === other.line;
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span');
+    span.className = 'b-prompt-chip b-prompt-chip--file';
+    span.textContent = this.line ? `${this.fileName}:${this.line}` : this.fileName;
+    return span;
+  }
+
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/**
+ * Chip 解析器，将 {{...}} 内部的 body 解析为渲染指令。
+ * file-ref:id|fileName|line → widget；其他 → null（不渲染为 chip）。
+ */
+const chipResolver: ChipResolver = (body) => {
+  if (body.startsWith('file-ref:')) {
+    const stripped = body.slice('file-ref:'.length);
+    if (!stripped) return null;
+    const parts = stripped.split('|');
+    const fileName = parts[1] || parts[0];
+    const line = parts[2] || '';
+    return { widget: new FileRefWidget(fileName, line) };
+  }
+  return null;
+};
+
+/**
+ * 文件粘贴/拖拽回调，将文件列表转换为 file-ref token。
+ */
+const onPasteFiles = (files: File[]): string => {
+  return Array.from(files)
+    .map((file) => `{{file-ref:${encodeURIComponent(file.name)}|${file.name}|}} `)
+    .join('');
+};
 
 /** 聊天数据存储 */
 const chatStore = useChatStore();
@@ -348,7 +402,7 @@ function handleFocusInput(): void {
 }
 
 function handleCaptureInputCursor(): void {
-  promptEditorRef.value?.captureCursorPosition();
+  promptEditorRef.value?.saveCursorPosition();
 }
 
 function handleChatInsertFileReference(reference: FileReferenceChip): void {
@@ -365,7 +419,7 @@ function handleChatInsertFileReference(reference: FileReferenceChip): void {
       snapshotId: ''
     }
   ];
-  promptEditorRef.value?.insertFileReference(reference);
+  promptEditorRef.value?.insertTextAtCursor(token);
 }
 
 async function handleFileReferenceInsert(reference: ChatFileReferenceInsertPayload): Promise<void> {
