@@ -13,7 +13,9 @@
       "Bash(npm install:*)",
       "Bash(git show:*)",
       "Bash(ls:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm test:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
