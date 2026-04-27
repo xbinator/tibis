@@ -54,7 +54,6 @@
 
 <script setup lang="ts">
 import type { FileReferenceChip } from './types';
-import type { AIToolContext } from 'types/ai';
 import type { ChatMessageConfirmationAction, ChatMessageHistoryCursor, ChatMessageFileReference, ChatReferenceSnapshot, ChatSession } from 'types/chat';
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
@@ -237,104 +236,116 @@ async function loadPersistedMessagesBeforeVisible(sessionId: string): Promise<Me
 }
 
 /**
+ * 限流并发执行一组异步任务。
+ * 内部使用 Promise.race 维持并发槽位，任务失败不中断其余任务。
+ * @param tasks - 任务工厂函数数组
+ * @param limit - 最大并发数
+ */
+async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<void> {
+  // 仅用于追踪任务完成状态，不消费返回值，使用 unknown 兼容任意泛型 T
+  const executing = new Set<Promise<unknown>>();
+
+  for (const task of tasks) {
+    // 任务内部自行处理错误（try/catch），此处 .catch 仅用于确保 finally 正常执行
+    const p = task()
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      .catch(() => {})
+      .finally(() => executing.delete(p));
+
+    executing.add(p);
+    // eslint-disable-next-line no-await-in-loop
+    if (executing.size >= limit) {
+      // eslint-disable-next-line no-await-in-loop
+      await Promise.race(executing);
+    }
+  }
+
+  await Promise.all(executing);
+}
+
+/**
  * 为消息中的所有引用持久化文件内容快照
  *
  * 获取策略（按优先级）：
  * 1. 编辑器已激活 → 从 editorToolContextRegistry 内存获取（零 I/O）
- * 2. 编辑器未激活 → 从磁盘读取（native.readFile）
+ * 2. 编辑器未激活 → 从磁盘读取（native.readFile，最多并发 5 个）
  * 3. 未保存文件且编辑器未激活 → 跳过
- *
- * 按 (来源 + 标识符) 分组去重，同文件多引用只生成一个快照
  *
  * @param message - 待发送的消息
  */
 async function persistReferenceSnapshots(message: Message): Promise<void> {
   if (!message.references?.length) return;
 
-  const snapshots: ChatReferenceSnapshot[] = [];
-
   // 按 (来源 + 标识符) 分组，同文件多引用只生成一个快照。
+  // 分组键格式: "editor|documentId" 或 "disk|path"。
   // 返回 null 表示该引用无法获取内容，跳过。
-  // 若来自编辑器，在分组结果中缓存 context，避免后续重复查找。
-  const buildGroupKey = (reference: ChatMessageFileReference): { key: string; context: AIToolContext | null } | null => {
-    // 优先：编辑器已打开，通过 documentId 查找内存内容
-    const context = editorToolContextRegistry.getContext(reference.documentId);
-    if (context) {
-      return { key: `editor|${reference.documentId}`, context };
+  const groupKey = (reference: ChatMessageFileReference): string | null => {
+    if (editorToolContextRegistry.getContext(reference.documentId)) {
+      return `editor|${reference.documentId}`;
     }
-    // 降级：编辑器未打开，从磁盘读取
     if (reference.path) {
-      return { key: `disk|${reference.path}`, context: null };
+      return `disk|${reference.path}`;
     }
-    // 未保存文件且编辑器未激活，无法获取内容
     return null;
   };
 
-  // key → { refs, context }，context 仅在 editor 来源时非 null
-  const groups = new Map<string, { refs: ChatMessageFileReference[]; context: AIToolContext | null }>();
+  const groups = new Map<string, ChatMessageFileReference[]>();
   for (const reference of message.references) {
-    const result = buildGroupKey(reference);
-    if (!result) continue;
-
-    if (!groups.has(result.key)) {
-      // 同一分组的首个 reference 负责初始化，后续同组 reference 仅追加引用记录。
-      // 同一 documentId 必然关联同一个 context（registry 的 key 即为 documentId），
-      // 因此后续 reference 的 context 值虽然被丢弃，但语义一致。
-      groups.set(result.key, { refs: [], context: result.context });
-    }
-    groups.get(result.key)!.refs.push(reference);
+    const key = groupKey(reference);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(reference);
   }
 
-  // 收集异步磁盘读取任务，editor 分组直接同步生成快照
-  const diskTasks: Promise<void>[] = [];
+  // 编辑器来源：同步生成快照
+  const snapshots: ChatReferenceSnapshot[] = [];
 
-  for (const [key, group] of groups) {
-    if (key.startsWith('editor|')) {
-      // 优先：从编辑器内存获取 — 零 I/O，context 已在分组阶段缓存
-      // 此处 guard 为防御性代码 + TypeScript narrowing，正常情况下不可达
-      const { context } = group;
-      if (!context) continue;
+  for (const [key, refs] of groups) {
+    if (!key.startsWith('editor|')) continue;
 
-      const snapshot: ChatReferenceSnapshot = {
-        id: nanoid(),
-        documentId: context.document.id,
-        title: context.document.title,
-        content: context.document.getContent(),
-        createdAt: new Date().toISOString()
-      };
-      group.refs.forEach((reference) => {
-        reference.snapshotId = snapshot.id;
-      });
-      snapshots.push(snapshot);
-    } else {
-      // 降级：从磁盘读取（异步收集后统一执行，避免 await-in-loop）
-      diskTasks.push(
-        (async () => {
-          // 进入 disk 分组的 reference 必然有 path（buildGroupKey 中 path 非空才返回 disk|...）
-          try {
-            const filePath = group.refs[0].path!;
-            const result = await native.readFile(filePath);
-            const snapshot: ChatReferenceSnapshot = {
-              id: nanoid(),
-              documentId: group.refs[0].documentId,
-              title: result.name,
-              content: result.content,
-              createdAt: new Date().toISOString()
-            };
-            group.refs.forEach((reference) => {
-              reference.snapshotId = snapshot.id;
-            });
-            snapshots.push(snapshot);
-          } catch (e) {
-            console.warn(`[persistReferenceSnapshots] 读取文件失败，跳过引用: ${group.refs[0].path}`, e);
-          }
-        })()
-      );
+    const context = editorToolContextRegistry.getContext(refs[0].documentId);
+    if (!context) continue;
+
+    const snapshot: ChatReferenceSnapshot = {
+      id: nanoid(),
+      documentId: context.document.id,
+      title: context.document.title,
+      content: context.document.getContent(),
+      createdAt: new Date().toISOString()
+    };
+    for (const reference of refs) {
+      reference.snapshotId = snapshot.id;
     }
+    snapshots.push(snapshot);
   }
 
-  // 等待所有磁盘读取完成
-  await Promise.all(diskTasks);
+  // 磁盘来源：限流并行读取，最多同时读 5 个文件
+  // 进入 disk 分组的 reference 必然有 path（groupKey 中 path 非空才返回 disk|...）
+  const diskEntries = Array.from(groups.entries()).filter(([key]) => key.startsWith('disk|'));
+
+  if (diskEntries.length > 0) {
+    const tasks = diskEntries.map(([, refs]) => async () => {
+      const filePath = refs[0].path!;
+      try {
+        const result = await native.readFile(filePath);
+        const snapshot: ChatReferenceSnapshot = {
+          id: nanoid(),
+          documentId: refs[0].documentId,
+          title: result.name,
+          content: result.content,
+          createdAt: new Date().toISOString()
+        };
+        for (const reference of refs) {
+          reference.snapshotId = snapshot.id;
+        }
+        snapshots.push(snapshot);
+      } catch (e) {
+        console.warn(`[persistReferenceSnapshots] 读取文件失败，跳过引用: ${filePath}`, e);
+      }
+    });
+
+    await withConcurrency(tasks, 5);
+  }
 
   if (snapshots.length > 0) {
     await chatStorage.upsertReferenceSnapshots(snapshots);
