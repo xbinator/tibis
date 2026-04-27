@@ -83,6 +83,7 @@
     "marked": "^17.0.6",
     "mermaid": "^11.14.0",
     "nanoid": "^5.1.9",
+    "p-limit": "^7.3.0",
     "pinia": "^3.0.4",
     "unocss": "^66.6.7",
     "unplugin-auto-import": "^21.0.0",

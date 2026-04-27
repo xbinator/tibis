@@ -77,45 +77,43 @@ describe('chat file reference insert wiring', () => {
     expect(sidebarSource).toContain('type ChatFileReferenceInsertPayload');
     expect(sidebarSource).toContain('referenceId: nanoid()');
     expect(sidebarSource).toContain('documentId: toolContext?.document.id || reference.filePath || reference.fileName');
-    expect(sidebarSource).toContain('async function persistReferenceSnapshots');
-    expect(sidebarSource).toContain('chatStorage.upsertReferenceSnapshots(snapshots)');
+    expect(sidebarSource).toContain("import { persistReferenceSnapshots }");
     expect(sidebarSource).toContain('getActiveDraftReferences');
     expect(sidebarSource).toContain('formatLineRange');
   });
 
   test('persistReferenceSnapshots uses bidirectional strategy with editor context and disk fallback', () => {
     const sidebarSource = readSource('src/components/BChatSidebar/index.vue');
+    const referenceSnapshotSource = readSource('src/components/BChatSidebar/utils/referenceSnapshot.ts');
     const editorContextSource = readSource('src/ai/tools/editor-context.ts');
 
     // 双向获取策略：编辑器激活 → 内存获取，未激活 → 磁盘读取
-    expect(sidebarSource).toContain('editor|');
-    expect(sidebarSource).toContain('disk|');
-    expect(sidebarSource).toContain('editorToolContextRegistry.getContext');
-    expect(sidebarSource).toContain('native.readFile');
-    expect(sidebarSource).toContain('console.warn(`[persistReferenceSnapshots]');
+    expect(referenceSnapshotSource).toContain('editor|');
+    expect(referenceSnapshotSource).toContain('disk|');
+    expect(referenceSnapshotSource).toContain('editorToolContextRegistry.getContext');
+    expect(referenceSnapshotSource).toContain('native.readFile');
+    expect(referenceSnapshotSource).toContain('console.warn(`[persistReferenceSnapshots]');
     // 磁盘读取异常容错
-    expect(sidebarSource).toContain('读取文件失败，跳过引用');
+    expect(referenceSnapshotSource).toContain('读取文件失败，尝试从 SQLite 历史快照降级');
 
     // 按来源分组的 groupKey 函数
-    expect(sidebarSource).toContain('const groupKey');
-    expect(sidebarSource).toContain(`return \`editor|`);
-    expect(sidebarSource).toContain(`return \`disk|`);
+    expect(referenceSnapshotSource).toContain('function groupKey');
+    expect(referenceSnapshotSource).toContain(`return \`editor|`);
+    expect(referenceSnapshotSource).toContain(`return \`disk|`);
 
-    // 并发限流
-    expect(sidebarSource).toContain("import { withConcurrency } from './utils/withConcurrency'");
-    // 检查使用点
-    expect(sidebarSource).toContain('withConcurrency(tasks, 5)');
+    // 并发限流使用 p-limit
+    expect(referenceSnapshotSource).toContain("import pLimit from 'p-limit'");
+    expect(referenceSnapshotSource).toContain('const limit = pLimit(5)');
 
     // editor-context 新增 getContext 方法
     expect(editorContextSource).toContain('getContext: (documentId: string) => AIToolContext | undefined');
     expect(editorContextSource).toContain('getContext(documentId: string): AIToolContext | undefined');
 
     // 导入 native 平台模块
-    expect(sidebarSource).toContain("import { native } from '@/shared/platform'");
+    expect(referenceSnapshotSource).toContain("import { native } from '@/shared/platform'");
 
-    // 未保存文件（path === null）的处理路径：
-    // getContext 命中 → 走 editor 分组，从内存获取内容
-    // getContext 未命中 + path === null → groupKey 返回 null，跳过
-    expect(sidebarSource).toContain('return null; // 未保存文件且编辑器未激活');
+    // persistReferenceSnapshots 从 index.vue 移除，移到独立模块
+    expect(sidebarSource).not.toContain('async function persistReferenceSnapshots');
+    expect(sidebarSource).toContain("import { persistReferenceSnapshots }");
   });
 });
