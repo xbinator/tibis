@@ -50,7 +50,7 @@ export function isChatFileReferenceInsertPayload(payload: unknown): payload is C
 
   const isValidFilePath = (isString(filePath) && filePath.length > 0) || isNull(filePath);
   const isValidFileName = isString(fileName) && fileName.length > 0;
-  const isValidLines = isNumber(startLine) && isNumber(endLine) && startLine >= 0 && endLine >= startLine;
+  const isValidLines = isNumber(startLine) && isNumber(endLine) && startLine >= 0 && (startLine === endLine || (startLine > 0 && endLine >= startLine));
 
   return isValidFilePath && isValidFileName && isValidLines;
 }
