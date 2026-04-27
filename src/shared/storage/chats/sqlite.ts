@@ -71,6 +71,13 @@ const SELECT_REFERENCE_SNAPSHOTS_BY_IDS_SQL_PREFIX = `
   FROM chat_reference_snapshots
   WHERE id IN
 `;
+const SELECT_LATEST_REFERENCE_SNAPSHOT_BY_DOCUMENT_ID_SQL = `
+  SELECT id, document_id, title, content, created_at
+  FROM chat_reference_snapshots
+  WHERE document_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`;
 const DELETE_SESSION_SQL = 'DELETE FROM chat_sessions WHERE id = ?';
 const DELETE_MESSAGES_BY_SESSION_SQL = 'DELETE FROM chat_messages WHERE session_id = ?';
 
@@ -414,6 +421,30 @@ export const chatStorage = {
 
     const rows = await dbSelect<ChatReferenceSnapshotRow>(`${SELECT_REFERENCE_SNAPSHOTS_BY_IDS_SQL_PREFIX} ${buildSqlPlaceholders(snapshotIds)}`, snapshotIds);
     return rows.map(mapReferenceSnapshotRow);
+  },
+
+  /**
+   * 按 documentId 查找最新的一条历史快照，用于磁盘文件读取失败时的降级兜底。
+   * @param documentId - 文档标识
+   * @returns 最新快照，不存在时返回 undefined
+   */
+  async getReferenceSnapshotByDocumentId(documentId: string): Promise<ChatReferenceSnapshot | undefined> {
+    if (!isDatabaseAvailable()) {
+      const snapshots = loadFallbackReferenceSnapshots();
+      // 遍历降级存储，找到匹配 documentId 的最新快照
+      let latest: ChatReferenceSnapshot | undefined;
+      for (const snapshot of Object.values(snapshots)) {
+        if (snapshot && snapshot.documentId === documentId) {
+          if (!latest || snapshot.createdAt > latest.createdAt) {
+            latest = snapshot;
+          }
+        }
+      }
+      return latest;
+    }
+
+    const rows = await dbSelect<ChatReferenceSnapshotRow>(SELECT_LATEST_REFERENCE_SNAPSHOT_BY_DOCUMENT_ID_SQL, [documentId]);
+    return rows.length > 0 ? mapReferenceSnapshotRow(rows[0]) : undefined;
   },
 
   /**
