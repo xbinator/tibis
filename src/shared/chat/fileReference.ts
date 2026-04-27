@@ -2,6 +2,7 @@
  * @file fileReference.ts
  * @description 聊天输入框文件引用插入事件与路径行号工具。
  */
+import { isNull, isString, isNumber, isObject, isArray } from 'lodash-es';
 import { emitter } from '@/utils/emitter';
 
 /** 聊天输入框文件引用插入事件名 */
@@ -15,8 +16,10 @@ export interface ChatFileReferenceInsertPayload {
   filePath: string | null;
   /** 展示用文件名 */
   fileName: string;
-  /** 行号或行号范围 */
-  line: number | string;
+  /** 起始行号（1-based），0 表示无行号 */
+  startLine: number;
+  /** 结束行号（1-based），等于 startLine 时表示单行，0 仅与 startLine=0 配对 */
+  endLine: number;
 }
 
 /**
@@ -28,36 +31,29 @@ export function getFileNameFromPath(filePath: string): string {
 }
 
 /**
- * 根据选区起止位置前的文本计算行号或行号范围。
+ * 根据选区起止位置前的文本计算行号，空字符串视为第 1 行开头。
  * @param textBeforeStart - 选区起点之前的文本
  * @param textBeforeEnd - 选区终点之前的文本
+ * @returns 包含 startLine 和 endLine 的对象
  */
-export function getLineRangeFromTextBeforeSelection(textBeforeStart: string, textBeforeEnd: string): string {
+export function getLineRangeFromTextBeforeSelection(textBeforeStart: string, textBeforeEnd: string): { startLine: number; endLine: number } {
   const startLine = textBeforeStart.split(/\r?\n/).length;
   const endLine = textBeforeEnd.split(/\r?\n/).length;
 
-  return startLine === endLine ? String(startLine) : `${startLine}-${endLine}`;
+  return { startLine, endLine };
 }
 
-/**
- * 判断未知值是否为文件引用插入事件负载。
- * @param payload - 待判断负载
- */
 export function isChatFileReferenceInsertPayload(payload: unknown): payload is ChatFileReferenceInsertPayload {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return false;
-  }
+  if (!isObject(payload) || isArray(payload)) return false;
 
-  const candidate = payload as Partial<ChatFileReferenceInsertPayload>;
+  const { filePath, fileName, startLine, endLine } = payload as Partial<ChatFileReferenceInsertPayload>;
 
-  return (
-    ((typeof candidate.filePath === 'string' && candidate.filePath.length > 0) || candidate.filePath === null) &&
-    typeof candidate.fileName === 'string' &&
-    candidate.fileName.length > 0 &&
-    (typeof candidate.line === 'number' || (typeof candidate.line === 'string' && candidate.line.length > 0))
-  );
+  const isValidFilePath = (isString(filePath) && filePath.length > 0) || isNull(filePath);
+  const isValidFileName = isString(fileName) && fileName.length > 0;
+  const isValidLines = isNumber(startLine) && isNumber(endLine) && startLine >= 0 && endLine >= startLine;
+
+  return isValidFilePath && isValidFileName && isValidLines;
 }
-
 /**
  * 发出聊天输入框文件引用插入事件。
  * @param payload - 文件引用数据

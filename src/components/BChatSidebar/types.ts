@@ -10,6 +10,8 @@ export interface FileReferenceChip {
   filePath: string | null;
   /** Chip 内显示的展示名称 */
   fileName: string;
-  /** 行号或行范围标签 */
-  line: number | string;
+  /** 起始行号（1-based），0 表示无行号 */
+  startLine: number;
+  /** 结束行号（1-based），等于 startLine 时表示单行 */
+  endLine: number;
 }

@@ -160,10 +160,13 @@ function insertSelectionReferenceToChat(): void {
   const textBeforeStart = editor.state.doc.textBetween(0, selectionRange.from, '\n', '\n');
   const textBeforeEnd = editor.state.doc.textBetween(0, selectionRange.to, '\n', '\n');
 
+  const range = getLineRangeFromTextBeforeSelection(textBeforeStart, textBeforeEnd);
+
   emitChatFileReferenceInsert({
     filePath: filePath ?? null,
     fileName: props.fileName || getFileNameFromPath(filePath ?? '未保存文件'),
-    line: getLineRangeFromTextBeforeSelection(textBeforeStart, textBeforeEnd)
+    startLine: range.startLine,
+    endLine: range.endLine
   });
 }
 

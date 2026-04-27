@@ -56,16 +56,15 @@
 import type { FileReferenceChip } from './types';
 import type { ChatMessageConfirmationAction, ChatMessageHistoryCursor, ChatMessageFileReference, ChatReferenceSnapshot, ChatSession } from 'types/chat';
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { WidgetType } from '@codemirror/view';
 import { Icon } from '@iconify/vue';
 import { nanoid } from 'nanoid';
 import { createBuiltinTools } from '@/ai/tools/builtin';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
 import { getDefaultChatToolNames } from '@/ai/tools/policy';
 import BButton from '@/components/BButton/index.vue';
+import { chipResolver } from '@/components/BChatSidebar/utils/chipResolver';
 import { create, userChoice } from '@/components/BChatSidebar/utils/messageHelper';
 import type { Message } from '@/components/BChatSidebar/utils/types';
-import type { ChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import { onChatFileReferenceInsert, type ChatFileReferenceInsertPayload } from '@/shared/chat/fileReference';
 import { chatStorage, serviceModelsStorage } from '@/shared/storage';
@@ -78,52 +77,11 @@ import { useChatStream } from './hooks/useChatStream';
 import { createChatConfirmationController } from './utils/confirmationController';
 
 /**
- * 文件引用 Chip Widget，由 chipResolver 返回。
- * 有 line → 显示 `fileName:line`，无 line → 显示 `fileName`。
- */
-class FileRefWidget extends WidgetType {
-  constructor(private fileName: string, private line: string) {
-    super();
-  }
-
-  eq(other: FileRefWidget): boolean {
-    return this.fileName === other.fileName && this.line === other.line;
-  }
-
-  toDOM(): HTMLElement {
-    const span = document.createElement('span');
-    span.className = 'b-prompt-chip b-prompt-chip--file';
-    span.textContent = this.line ? `${this.fileName}:${this.line}` : this.fileName;
-    return span;
-  }
-
-  ignoreEvent(): boolean {
-    return false;
-  }
-}
-
-/**
- * Chip 解析器，将 {{...}} 内部的 body 解析为渲染指令。
- * file-ref:id|fileName|line → widget；其他 → null（不渲染为 chip）。
- */
-const chipResolver: ChipResolver = (body) => {
-  if (body.startsWith('file-ref:')) {
-    const stripped = body.slice('file-ref:'.length);
-    if (!stripped) return null;
-    const parts = stripped.split('|');
-    const fileName = parts[1] || parts[0];
-    const line = parts[2] || '';
-    return { widget: new FileRefWidget(fileName, line) };
-  }
-  return null;
-};
-
-/**
- * 文件粘贴/拖拽回调，将文件列表转换为 file-ref token。
+ * 文件粘贴/拖拽回调，将文件列表转换为 file-ref token（无选区，startLine/endLine 均为 0）。
  */
 const onPasteFiles = (files: File[]): string => {
   return Array.from(files)
-    .map((file) => `{{file-ref:${encodeURIComponent(file.name)}|${file.name}|}} `)
+    .map((file) => `{{file-ref:${encodeURIComponent(file.name)}|${file.name}|0|0}} `)
     .join('');
 };
 
@@ -405,8 +363,21 @@ function handleCaptureInputCursor(): void {
   promptEditorRef.value?.saveCursorPosition();
 }
 
+/**
+ * 将 startLine/endLine 转换为 ChatMessageFileReference.line 字符串格式。
+ * @param startLine - 起始行号
+ * @param endLine - 结束行号
+ */
+function formatLineRange(startLine: number, endLine: number): string {
+  if (startLine <= 0) {
+    return '';
+  }
+
+  return startLine === endLine ? String(startLine) : `${startLine}-${endLine}`;
+}
+
 function handleChatInsertFileReference(reference: FileReferenceChip): void {
-  const token = `{{file-ref:${reference.referenceId}|${reference.fileName}|${reference.line}}}`;
+  const token = `{{file-ref:${reference.referenceId}|${reference.fileName}|${reference.startLine}|${reference.endLine}}}`;
   draftReferences.value = [
     ...draftReferences.value.filter((item) => item.id !== reference.referenceId),
     {
@@ -414,7 +385,7 @@ function handleChatInsertFileReference(reference: FileReferenceChip): void {
       token,
       documentId: reference.documentId,
       fileName: reference.fileName,
-      line: String(reference.line),
+      line: formatLineRange(reference.startLine, reference.endLine),
       path: reference.filePath,
       snapshotId: ''
     }
@@ -429,7 +400,8 @@ async function handleFileReferenceInsert(reference: ChatFileReferenceInsertPaylo
     documentId: toolContext?.document.id || reference.filePath || reference.fileName,
     filePath: reference.filePath ?? toolContext?.document.path ?? null,
     fileName: reference.fileName,
-    line: reference.line
+    startLine: reference.startLine,
+    endLine: reference.endLine
   };
 
   // 先锁定聊天输入框最近一次有效插入位置，再处理侧边栏聚焦与引用插入。

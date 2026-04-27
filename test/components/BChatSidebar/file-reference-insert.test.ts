@@ -27,15 +27,24 @@ describe('chat file reference insert event utilities', () => {
   });
 
   test('calculates single line and line range from selected text boundaries', () => {
-    expect(getLineRangeFromTextBeforeSelection('first line', 'first line')).toBe('1');
-    expect(getLineRangeFromTextBeforeSelection('first\nsecond', 'first\nsecond\nthird')).toBe('2-3');
+    expect(getLineRangeFromTextBeforeSelection('first line', 'first line')).toEqual({ startLine: 1, endLine: 1 });
+    expect(getLineRangeFromTextBeforeSelection('first\nsecond', 'first\nsecond\nthird')).toEqual({ startLine: 2, endLine: 3 });
+    // 空字符串视为第 1 行开头
+    expect(getLineRangeFromTextBeforeSelection('', '')).toEqual({ startLine: 1, endLine: 1 });
   });
 
   test('validates file reference insert payloads', () => {
     expect(CHAT_FILE_REFERENCE_INSERT_EVENT).toBe('chat:file-reference:insert');
-    expect(isChatFileReferenceInsertPayload({ filePath: 'src/foo/file.ts', fileName: 'file.ts', line: '12-14' })).toBe(true);
-    expect(isChatFileReferenceInsertPayload({ filePath: null, fileName: '临时笔记', line: '3' })).toBe(true);
-    expect(isChatFileReferenceInsertPayload({ filePath: 'src/foo/file.ts', fileName: 'file.ts', line: '' })).toBe(false);
+    // 正常范围
+    expect(isChatFileReferenceInsertPayload({ filePath: 'src/foo/file.ts', fileName: 'file.ts', startLine: 12, endLine: 14 })).toBe(true);
+    // 单行
+    expect(isChatFileReferenceInsertPayload({ filePath: null, fileName: '临时笔记', startLine: 3, endLine: 3 })).toBe(true);
+    // 无行号场景允许 startLine === endLine === 0
+    expect(isChatFileReferenceInsertPayload({ filePath: null, fileName: '临时笔记', startLine: 0, endLine: 0 })).toBe(true);
+    // startLine=0 但 endLine>0 歧义，拒绝
+    expect(isChatFileReferenceInsertPayload({ filePath: null, fileName: '临时笔记', startLine: 0, endLine: 5 })).toBe(false);
+    // startLine > endLine 非法
+    expect(isChatFileReferenceInsertPayload({ filePath: 'src/foo/file.ts', fileName: 'file.ts', startLine: 5, endLine: 2 })).toBe(false);
   });
 });
 
@@ -61,6 +70,9 @@ describe('chat file reference insert wiring', () => {
     expect(sidebarSource).toContain('handleChatInsertFileReference');
     expect(sidebarSource).toContain('handleFileReferenceInsert');
     expect(sidebarSource).toContain('insertTextAtCursor');
+    expect(sidebarSource).toContain('startLine');
+    expect(sidebarSource).toContain('endLine');
+    expect(sidebarSource).toContain('0|0');
     expect(chatSource).toContain('const activeReferences = getActiveDraftReferences(content);');
     expect(chatSource).toContain('loadReferenceSnapshotMap');
     expect(chatSource).toContain('chatStorage.getReferenceSnapshots');
