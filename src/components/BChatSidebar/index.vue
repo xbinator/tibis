@@ -76,6 +76,7 @@ import InputToolbar from './components/InputToolbar.vue';
 import SessionHistory from './components/SessionHistory.vue';
 import { useChatStream } from './hooks/useChatStream';
 import { createChatConfirmationController } from './utils/confirmationController';
+import { withConcurrency } from './utils/withConcurrency';
 
 /**
  * 文件粘贴/拖拽回调，将文件列表转换为 file-ref token（无选区，startLine/endLine 均为 0）。
@@ -233,34 +234,6 @@ async function loadPersistedMessagesBeforeVisible(sessionId: string): Promise<Me
   }
 
   return historyMessages;
-}
-
-/**
- * 限流并发执行一组异步任务。
- * 内部使用 Promise.race 维持并发槽位，任务失败不中断其余任务。
- * @param tasks - 任务工厂函数数组
- * @param limit - 最大并发数
- */
-async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<void> {
-  // 仅用于追踪任务完成状态，不消费返回值，使用 unknown 兼容任意泛型 T
-  const executing = new Set<Promise<unknown>>();
-
-  for (const task of tasks) {
-    // 任务内部自行处理错误（try/catch），此处 .catch 仅用于确保 finally 正常执行
-    const p = task()
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
-      .catch(() => {})
-      .finally(() => executing.delete(p));
-
-    executing.add(p);
-    // eslint-disable-next-line no-await-in-loop
-    if (executing.size >= limit) {
-      // eslint-disable-next-line no-await-in-loop
-      await Promise.race(executing);
-    }
-  }
-
-  await Promise.all(executing);
 }
 
 /**
