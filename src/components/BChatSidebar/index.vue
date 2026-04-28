@@ -12,6 +12,11 @@
         :disabled="chatStream.loading.value"
         @switch-session="handleSwitchSession"
       />
+
+      <div class="divider"></div>
+      <BButton square size="small" type="text" @click="settingStore.setSidebarVisible(false)">
+        <Icon icon="lucide:x" width="16" height="16" />
+      </BButton>
     </div>
     <div class="b-chat-sidebar__container">
       <ConversationView
@@ -290,7 +295,7 @@ function formatLineRange(startLine: number, endLine: number): string {
 }
 
 function handleChatInsertFileReference(reference: FileReferenceChip): void {
-  const token = `{{file-ref:${reference.referenceId}|${reference.fileName}|${reference.startLine}|${reference.endLine}}}`;
+  const token = `{{file-ref:${reference.referenceId}|${reference.fileName}|${reference.startLine}|${reference.endLine}}} `;
   draftReferences.value = [
     ...draftReferences.value.filter((item) => item.id !== reference.referenceId),
     {
@@ -442,6 +447,12 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background-color: var(--border-secondary);
 }
 
 .b-chat-sidebar__container {
