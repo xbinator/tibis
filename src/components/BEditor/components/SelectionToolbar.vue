@@ -1,5 +1,5 @@
 <template>
-  <BubbleMenu :editor="editor" :options="bubbleMenuOptions" class="bubble-menu-wrapper">
+  <BubbleMenu :editor="editor" :plugin-key="SELECTION_TOOLBAR_PLUGIN_KEY" :should-show="shouldShow" :options="bubbleMenuOptions" class="bubble-menu-wrapper">
     <div class="selection-toolbar">
       <template v-if="isModelAvailable">
         <div class="selection-toolbar__ai-btn" @mousedown.prevent="toggleAIInput">
@@ -33,8 +33,9 @@
 
 <script setup lang="ts">
 import type { Editor } from '@tiptap/vue-3';
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import { PluginKey, type EditorState } from '@tiptap/pm/state';
 import { BubbleMenu } from '@tiptap/vue-3/menus';
 import { useEventListener } from '@vueuse/core';
 import { emitChatFileReferenceInsert, getFileNameFromPath, getLineRangeFromTextBeforeSelection } from '@/shared/chat/fileReference';
@@ -95,6 +96,24 @@ useEventListener(window, SERVICE_MODEL_UPDATED_EVENT, handleServiceModelUpdated)
 
 // ---- Bubble Menu ----
 
+/**
+ * 与 BubbleMenu 共享的 PluginKey，用于 blur 恢复等 meta 控制。
+ */
+const SELECTION_TOOLBAR_PLUGIN_KEY = new PluginKey('bubbleMenu');
+
+/**
+ * 覆盖 BubbleMenu 内置显示判定：
+ * - 去掉 hasEditorFocus 检查，失焦时菜单不隐藏
+ * - 选区为空或选中区域无文本时仍隐藏
+ */
+const shouldShow = computed(() => ({ state }: { state: EditorState }): boolean => {
+  const { from, to } = state.selection;
+  if (from === to || !state.doc.textBetween(from, to, '') || !props.editor?.isEditable) {
+    return false;
+  }
+  return true;
+});
+
 const bubbleMenuOptions = computed(() => ({
   placement: 'top-start' as const,
   onShow: () => {
@@ -102,12 +121,15 @@ const bubbleMenuOptions = computed(() => ({
     emit('ai-input-toggle', false);
   },
   onHide: () => {
-    emit('ai-input-toggle', false);
-    emit('selection-reference-clear');
+    // emit('ai-input-toggle', false);
+    // emit('selection-reference-clear');
   }
 }));
 
 // ---- AI Input ----
+
+/** 当主动隐藏工具栏（如点击"AI 助手"）时设为 true，阻止 blur handler 错误恢复 */
+let suppressRestore = false;
 
 function toggleAIInput(): void {
   const selection = props.editor?.state.selection;
@@ -115,6 +137,10 @@ function toggleAIInput(): void {
     emit('ai-input-toggle', true);
     return;
   }
+
+  // 主动隐藏工具栏，为 AI 输入面板让位
+  suppressRestore = true;
+  props.editor?.view.dispatch(props.editor.state.tr.setMeta(SELECTION_TOOLBAR_PLUGIN_KEY, 'hide'));
 
   const text = props.editor?.state.doc.textBetween(selection.from, selection.to, '') ?? '';
 
@@ -175,6 +201,66 @@ const formatButtons = computed(() => [
 ]);
 
 checkModelAvailability();
+
+// ---- Blur Recovery ----
+
+/** 记录最后一次 document mousedown 目标，用于兜底 relatedTarget 为 null 的场景 */
+let lastMousedownTarget: HTMLElement | null = null;
+
+function handleDocumentMousedown(e: MouseEvent): void {
+  lastMousedownTarget = e.target as HTMLElement | null;
+}
+
+/**
+ * blur 后若选区仍存在，通过 meta 强制重显菜单。
+ * BubbleMenu 内置 blurHandler 会直接调用 hide()，不受 shouldShow 制约。
+ * 利用同步 dispatch 的时序保证无闪烁：hide()→show()→浏览器 paint。
+ *
+ * 例外：焦点/点击移入编辑器面板内的其他 UI（如 FrontMatterCard），
+ * 说明用户已转向编辑其他内容，不再恢复菜单。
+ * @param event - 编辑器 blur 事件
+ */
+function handleBlurRestore({ event }: { event: FocusEvent }): void {
+  if (suppressRestore) {
+    suppressRestore = false;
+    return;
+  }
+
+  const { state } = props.editor!;
+  const { from, to } = state.selection;
+  if (from === to) return;
+
+  // relatedTarget 在点击非可聚焦元素（如 div 容器背景）时为 null，
+  // 此时用 document mousedown 记录的点击目标兜底
+  const target = (event.relatedTarget as HTMLElement | null) ?? lastMousedownTarget;
+  lastMousedownTarget = null;
+
+  if (target) {
+    const editorDom = props.editor!.view.dom;
+    // 利用 DOM 结构关系定位编辑器面板边界，避免硬编码类名
+    const editorPane = editorDom.parentElement?.parentElement ?? null;
+    if (editorPane && editorPane.contains(target) && !editorDom.contains(target)) {
+      emit('selection-reference-clear');
+      return;
+    }
+  }
+
+  props.editor!.view.dispatch(state.tr.setMeta(SELECTION_TOOLBAR_PLUGIN_KEY, 'show'));
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', handleDocumentMousedown, true);
+  // 等 BubbleMenu 内部插件注册完毕（其 onMounted 里用了 nextTick）
+  // 再注册我们的 blur handler，确保内置 blurHandler 先于我们触发
+  nextTick(() => {
+    props.editor?.on('blur', handleBlurRestore);
+  });
+});
+
+onUnmounted(() => {
+  document.removeEventListener('mousedown', handleDocumentMousedown, true);
+  props.editor?.off('blur', handleBlurRestore);
+});
 </script>
 
 <style lang="less" scoped>
