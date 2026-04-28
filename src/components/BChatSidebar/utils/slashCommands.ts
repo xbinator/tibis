@@ -19,7 +19,7 @@ export const chatSlashCommands: SlashCommandOption[] = [
     id: 'usage',
     trigger: '/usage',
     title: 'Usage',
-    description: 'Show usage help for the chat sidebar.',
+    description: 'Show current session token usage.',
     type: 'action'
   },
   {
