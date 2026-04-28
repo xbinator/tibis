@@ -1,4 +1,22 @@
+/**
+ * @file types.ts
+ * @description BPromptEditor shared type definitions.
+ */
 import type { ChipResolver } from './extensions/variableChip';
+
+/**
+ * Slash command option metadata.
+ */
+export interface SlashCommandOption {
+  /** Slash trigger text shown to the user. */
+  trigger: string;
+  /** Human-readable label for the command. */
+  label: string;
+  /** Optional command description. */
+  description?: string;
+  /** Command kind; task 1 only uses action commands. */
+  type: 'action';
+}
 
 /**
  * 变量定义
@@ -30,6 +48,8 @@ export interface BPromptEditorProps {
   placeholder?: string;
   /** 变量选项 */
   options?: VariableOptionGroup[];
+  /** Slash command metadata exposed to the editor. */
+  slashCommands?: SlashCommandOption[];
   /** 是否禁用 */
   disabled?: boolean;
   /** 最大高度 */
