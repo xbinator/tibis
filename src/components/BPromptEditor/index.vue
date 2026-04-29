@@ -1,23 +1,24 @@
 <template>
-  <div class="b-prompt-editor" @click="handleContainerClick">
-    <div class="b-prompt-editor__container">
-      <div ref="editorHostRef" class="b-prompt-editor__codemirror"></div>
-      <SlashCommandSelect
-        :visible="slashVisible"
-        :commands="filteredSlashCommands"
-        :position="slashPosition"
-        :active-index="slashActiveIndex"
-        @select="handleSlashCommandSelect"
-        @update:active-index="handleSlashActiveIndexChange"
-      />
-      <VariableSelect
-        :visible="triggerVisible"
-        :variables="filteredVariables"
-        :position="triggerPosition"
-        :active-index="triggerActiveIndex"
-        @select="handleVariableSelect"
-        @update:active-index="handleActiveIndexChange"
-      />
+  <div ref="editorRootRef" class="b-prompt-editor-shell" @focusout="handleEditorShellFocusOut">
+    <SlashCommandSelect
+      :visible="slashVisible"
+      :commands="filteredSlashCommands"
+      :active-index="slashActiveIndex"
+      @select="handleSlashCommandSelect"
+      @update:active-index="handleSlashActiveIndexChange"
+    />
+    <div class="b-prompt-editor" @click="handleContainerClick">
+      <div class="b-prompt-editor__container">
+        <div ref="editorHostRef" class="b-prompt-editor__codemirror"></div>
+        <VariableSelect
+          :visible="triggerVisible"
+          :variables="filteredVariables"
+          :position="triggerPosition"
+          :active-index="triggerActiveIndex"
+          @select="handleVariableSelect"
+          @update:active-index="handleActiveIndexChange"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -30,19 +31,19 @@
 import type { SlashCommandOption, Variable, BPromptEditorProps as Props } from './types';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewline } from '@codemirror/commands';
-import { EditorState, Annotation } from '@codemirror/state';
-import { EditorView, Decoration, keymap } from '@codemirror/view';
+import { Annotation, EditorState } from '@codemirror/state';
+import { Decoration, EditorView, keymap } from '@codemirror/view';
 import SlashCommandSelect from './components/SlashCommandSelect.vue';
 import VariableSelect from './components/VariableSelect.vue';
 import { editableCompartment, readOnlyCompartment, themeCompartment } from './extensions/base';
 import { createPasteHandlerExtension } from './extensions/pasteHandler';
 import { createPlaceholderExtension } from './extensions/placeholder';
 import { createTriggerPlugin } from './extensions/triggerPlugin';
-import { triggerStateField, setTriggerActiveIndex, closeTrigger } from './extensions/triggerState';
-import { variableChipField, chipResolverEffect, getChipAtPos } from './extensions/variableChip';
+import { closeTrigger, setTriggerActiveIndex, triggerStateField } from './extensions/triggerState';
+import { chipResolverEffect, getChipAtPos, variableChipField } from './extensions/variableChip';
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: '请输入内容...',
+  placeholder: '璇疯緭鍏ュ唴瀹?..',
   options: () => [],
   slashCommands: () => [],
   disabled: false,
@@ -61,6 +62,7 @@ const emit = defineEmits<{
 const modelValue = defineModel<string>('value', { default: '' });
 
 // Template refs
+const editorRootRef = ref<HTMLDivElement>();
 const editorHostRef = ref<HTMLDivElement>();
 
 // Trigger refs (Vue refs, not computed)
@@ -71,7 +73,6 @@ const triggerQuery = ref('');
 
 // Slash command refs
 const slashVisible = ref(false);
-const slashPosition = ref({ top: 0, left: 0, bottom: 0 });
 const slashActiveIndex = ref(0);
 const slashQuery = ref('');
 const slashRange = ref<{ from: number; to: number } | null>(null);
@@ -113,22 +114,22 @@ const resolvedMaxHeight = computed<string | undefined>(() => {
 });
 
 /**
- * 判断编辑器内容在去除空白后是否为空。
- * @param content - 编辑器原始文本内容。
- * @returns 内容是否为空。
+ * Determine whether the editor content is empty after trimming whitespace.
+ * @param content - Raw editor content.
+ * @returns Whether the content should be treated as empty.
  */
 function isEditorContentEmpty(content: string): boolean {
   return content.trim().length === 0;
 }
 
-// 当前编辑器内容是否为空
+// Whether the editor currently contains visible content.
 const editorIsEmpty = ref<boolean>(isEditorContentEmpty(modelValue.value));
 
 /**
- * 创建编辑器主题扩展。
- * @param maxHeight - 编辑器滚动区域的最大高度。
- * @param isEmpty - 当前编辑器内容是否为空。
- * @returns CodeMirror 主题扩展。
+ * Create the CodeMirror theme extension.
+ * @param maxHeight - Maximum height for the editor scroller.
+ * @param isEmpty - Whether the editor is currently empty.
+ * @returns CodeMirror theme extension.
  */
 const createThemeExtension = (maxHeight: string | undefined, isEmpty: boolean): import('@codemirror/state').Extension => {
   return EditorView.theme({
@@ -163,7 +164,7 @@ const createThemeExtension = (maxHeight: string | undefined, isEmpty: boolean): 
       position: 'relative',
       height: '1em'
     },
-    // 修复 normalize.css 全局 div { border: none } 导致的 widgetBuffer 零宽问题
+    // Prevent normalize.css div border reset from collapsing widget buffer width.
     '.cm-widgetBuffer': {
       display: 'inline-block',
       width: isEmpty ? '1px' : '0'
@@ -172,19 +173,19 @@ const createThemeExtension = (maxHeight: string | undefined, isEmpty: boolean): 
 };
 
 /**
- * 判断斜杠命令是否匹配当前输入前缀。
- * @param command - 斜杠命令
- * @param query - 当前斜杠查询内容
- * @returns 是否匹配
+ * Determine whether a slash command matches the current query prefix.
+ * @param command - Slash command candidate.
+ * @param query - Current slash query content.
+ * @returns Whether the command matches.
  */
 function isSlashCommandMatch(command: SlashCommandOption, query: string): boolean {
   return command.trigger.toLowerCase().startsWith(`/${query.toLowerCase()}`);
 }
 
 /**
- * 获取当前光标所在的斜杠命令上下文。
- * @param state - 编辑器状态
- * @returns 斜杠上下文，不匹配时返回 null
+ * Get the current slash command context at the caret.
+ * @param state - Editor state.
+ * @returns Slash context or null when unavailable.
  */
 function getSlashCommandContext(state: EditorState): { from: number; to: number; query: string } | null {
   if (allSlashCommands.value.length === 0) {
@@ -219,7 +220,7 @@ function getSlashCommandContext(state: EditorState): { from: number; to: number;
 }
 
 /**
- * 隐藏斜杠菜单并清理活跃范围。
+ * Hide the slash command menu and clear its active range.
  */
 function closeSlashCommandMenu(): void {
   slashVisible.value = false;
@@ -228,11 +229,16 @@ function closeSlashCommandMenu(): void {
 }
 
 /**
- * 同步斜杠菜单状态。
- * @param state - 编辑器状态
- * @param editorView - 编辑器视图
+ * Sync slash command menu state from the editor content.
+ * @param state - Editor state.
+ * @param editorView - Editor view, used to ensure the editor still has focus.
  */
-function syncSlashCommandState(state: EditorState, editorView: EditorView): void {
+function syncSlashCommandState(state: EditorState, editorView: EditorView | null): void {
+  if (!editorView?.hasFocus) {
+    closeSlashCommandMenu();
+    return;
+  }
+
   const context = getSlashCommandContext(state);
   if (!context) {
     closeSlashCommandMenu();
@@ -243,26 +249,6 @@ function syncSlashCommandState(state: EditorState, editorView: EditorView): void
   slashQuery.value = context.query;
   slashRange.value = { from: context.from, to: context.to };
   slashActiveIndex.value = 0;
-
-  requestAnimationFrame(() => {
-    let coords: { top: number; left: number; bottom: number } | null = null;
-    try {
-      coords = editorView.coordsAtPos(context.to);
-    } catch {
-      coords = null;
-    }
-
-    if (!coords) {
-      slashPosition.value = { top: 0, left: 0, bottom: 0 };
-      return;
-    }
-
-    slashPosition.value = {
-      top: coords.top,
-      left: coords.left,
-      bottom: coords.bottom
-    };
-  });
 }
 
 // External update annotation for avoiding circular updates
@@ -276,7 +262,6 @@ const modelSyncExtension = EditorView.updateListener.of((update) => {
 
   syncSlashCommandState(update.state, update.view);
 
-  // Skip if this update was triggered by external value change
   if (isExternalValueChange) {
     return;
   }
@@ -287,7 +272,10 @@ const modelSyncExtension = EditorView.updateListener.of((update) => {
   }
 });
 
-// Handle variable selection
+/**
+ * Insert the selected variable into the active trigger range.
+ * @param variable - Selected variable metadata.
+ */
 function handleVariableSelect(variable: Variable): void {
   if (!view.value) return;
 
@@ -305,7 +293,10 @@ function handleVariableSelect(variable: Variable): void {
   view.value.focus();
 }
 
-// Handle active index change
+/**
+ * Update the highlighted variable index.
+ * @param index - New highlighted index.
+ */
 function handleActiveIndexChange(index: number): void {
   triggerActiveIndex.value = index;
   if (view.value) {
@@ -316,16 +307,16 @@ function handleActiveIndexChange(index: number): void {
 }
 
 /**
- * 处理斜杠命令高亮索引变化。
- * @param index - 新的斜杠命令高亮索引
+ * Update the highlighted slash command index.
+ * @param index - New highlighted index.
  */
 function handleSlashActiveIndexChange(index: number): void {
   slashActiveIndex.value = index;
 }
 
 /**
- * 应用斜杠命令并清除当前活动斜杠输入。
- * @param command - 被选择的斜杠命令
+ * Apply the selected slash command and clear the active slash text.
+ * @param command - Selected slash command metadata.
  */
 function handleSlashCommandSelect(command: SlashCommandOption): void {
   if (!view.value || !slashRange.value) return;
@@ -342,8 +333,8 @@ function handleSlashCommandSelect(command: SlashCommandOption): void {
 }
 
 /**
- * 选择当前高亮的斜杠命令。
- * @returns 是否已处理
+ * Select the currently highlighted slash command.
+ * @returns Whether the command was handled.
  */
 function handleSlashCommandEnter(): boolean {
   const command = filteredSlashCommands.value[slashActiveIndex.value];
@@ -356,8 +347,8 @@ function handleSlashCommandEnter(): boolean {
 }
 
 /**
- * 处理斜杠菜单向上移动。
- * @returns 是否已处理
+ * Move slash command highlight upward.
+ * @returns Whether the key was handled.
  */
 function handleSlashCommandArrowUp(): boolean {
   const list = filteredSlashCommands.value;
@@ -370,8 +361,8 @@ function handleSlashCommandArrowUp(): boolean {
 }
 
 /**
- * 处理斜杠菜单向下移动。
- * @returns 是否已处理
+ * Move slash command highlight downward.
+ * @returns Whether the key was handled.
  */
 function handleSlashCommandArrowDown(): boolean {
   const list = filteredSlashCommands.value;
@@ -383,32 +374,64 @@ function handleSlashCommandArrowDown(): boolean {
   return true;
 }
 
-// Handle container click
+/**
+ * Focus the editor when the shell is clicked.
+ */
 function handleContainerClick(): void {
   if (!props.disabled && view.value) {
     view.value.focus();
   }
 }
 
-// Create extensions array
+/**
+ * Handle document clicks outside the editor shell.
+ * @param event - Document mousedown event.
+ */
+function handleDocumentMouseDown(event: MouseEvent): void {
+  const root = editorRootRef.value;
+  const { target } = event;
+
+  if (!root || !(target instanceof Node) || root.contains(target)) {
+    return;
+  }
+
+  if (slashVisible.value) {
+    closeSlashCommandMenu();
+  }
+}
+
+/**
+ * Close the slash menu when focus leaves the editor shell.
+ * @param event - Shell focusout event.
+ */
+function handleEditorShellFocusOut(event: FocusEvent): void {
+  const root = editorRootRef.value;
+  const { relatedTarget } = event;
+
+  if (!root) {
+    return;
+  }
+
+  if (relatedTarget instanceof Node && root.contains(relatedTarget)) {
+    return;
+  }
+
+  if (slashVisible.value) {
+    closeSlashCommandMenu();
+  }
+}
+
+/**
+ * Build the CodeMirror extension list.
+ * @returns Editor extension array.
+ */
 function createExtensions(): import('@codemirror/state').Extension[] {
   const extensions: import('@codemirror/state').Extension[] = [
-    // Base extensions
     EditorView.lineWrapping,
-
-    // 历史记录（撤销/重做）
     history(),
-
-    // Model sync
     modelSyncExtension,
-
-    // Variable chip decorations
     variableChipField,
-
-    // Trigger state
     triggerStateField,
-
-    // Trigger plugin (view plugin)
     createTriggerPlugin({
       triggerVisible,
       triggerPosition,
@@ -416,14 +439,8 @@ function createExtensions(): import('@codemirror/state').Extension[] {
       triggerQuery,
       hasVariables
     }),
-
-    // Placeholder
     createPlaceholderExtension(props.placeholder),
-
-    // Paste handler
     createPasteHandlerExtension(props.onPasteFiles),
-
-    // 失焦时隐藏变量菜单
     EditorView.domEventHandlers({
       blur: (_event, editorView) => {
         if (slashVisible.value) {
@@ -435,8 +452,6 @@ function createExtensions(): import('@codemirror/state').Extension[] {
         return false;
       }
     }),
-
-    // 点击 Chip 内部时自动跳转到最近的边界
     EditorView.domEventHandlers({
       mousedown: (event, editorView) => {
         if (!(event instanceof MouseEvent)) return false;
@@ -453,26 +468,15 @@ function createExtensions(): import('@codemirror/state').Extension[] {
         return true;
       }
     }),
-
-    // 变量 Chip 设为原子范围（光标不可进入，删除时整词删除）
     EditorView.atomicRanges.of((editorView) => {
       const chipState = editorView.state.field(variableChipField, false);
       return chipState?.decorations ?? Decoration.none;
     }),
-
-    // Editable compartment
     editableCompartment.of(EditorView.editable.of(!props.disabled)),
-
-    // Read-only compartment
     readOnlyCompartment.of(EditorState.readOnly.of(props.disabled)),
-
-    // Theme compartment
     themeCompartment.of(createThemeExtension(resolvedMaxHeight.value, editorIsEmpty.value)),
-
-    // 变量菜单键盘导航 + Chip 删除 + Enter 提交 + Shift-Enter 换行 + Tab 缩进
     keymap.of([
       indentWithTab,
-      // 单步 Backspace 删除整词 Chip
       {
         key: 'Backspace',
         run: (editorView) => {
@@ -490,7 +494,6 @@ function createExtensions(): import('@codemirror/state').Extension[] {
           return false;
         }
       },
-      // 单步 Delete 删除整词 Chip
       {
         key: 'Delete',
         run: (editorView) => {
@@ -573,15 +576,12 @@ function createExtensions(): import('@codemirror/state').Extension[] {
         }
       }
     ]),
-
-    // 默认键映射（Ctrl+Z/Ctrl+Y/Ctrl+A 等标准快捷键）
     keymap.of([...defaultKeymap, ...historyKeymap])
   ];
 
   return extensions;
 }
 
-// Watch for external modelValue changes
 watch(
   () => modelValue.value,
   (value) => {
@@ -597,7 +597,6 @@ watch(
   }
 );
 
-// Watch for disabled changes
 watch(
   () => props.disabled,
   (disabled) => {
@@ -609,7 +608,6 @@ watch(
   }
 );
 
-// Watch for maxHeight changes
 watch(resolvedMaxHeight, (maxHeight) => {
   if (!view.value) return;
 
@@ -618,7 +616,6 @@ watch(resolvedMaxHeight, (maxHeight) => {
   });
 });
 
-// Watch for content empty state changes
 watch(editorIsEmpty, (isEmpty) => {
   if (!view.value) return;
 
@@ -627,7 +624,6 @@ watch(editorIsEmpty, (isEmpty) => {
   });
 });
 
-// Watch for chipResolver changes
 watch(
   () => props.chipResolver,
   (resolver) => {
@@ -638,7 +634,6 @@ watch(
   }
 );
 
-// onMounted: create EditorView
 onMounted(() => {
   if (!editorHostRef.value) return;
 
@@ -647,40 +642,33 @@ onMounted(() => {
     extensions: createExtensions()
   });
 
-  view.value = new EditorView({
-    state,
-    parent: editorHostRef.value
-  });
+  view.value = new EditorView({ state, parent: editorHostRef.value });
 
-  syncSlashCommandState(view.value.state, view.value);
+  syncSlashCommandState(view.value.state as EditorState, view.value as EditorView);
 
-  // 注入初始 chipResolver（watch 为 lazy 模式，首次不触发，需手动分派）
   if (props.chipResolver) {
-    view.value.dispatch({
-      effects: chipResolverEffect.of(props.chipResolver)
-    });
+    view.value.dispatch({ effects: chipResolverEffect.of(props.chipResolver) });
   }
 
-  // 首次创建后强制重新测量视口，确保空内容时光标层正确初始化
   nextTick(() => {
     view.value?.requestMeasure();
   });
+
+  document.addEventListener('mousedown', handleDocumentMouseDown);
 });
 
-// onBeforeUnmount: destroy EditorView
 onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', handleDocumentMouseDown);
   view.value?.destroy();
   view.value = null;
 });
 
-// Expose methods
 defineExpose({
   focus: () => {
     view.value?.focus();
   },
   /**
-   * 保存当前光标位置（用于跨组件延迟插入场景）。
-   * 多次调用只保留最后一次。
+   * Save the current selection for delayed external insertions.
    */
   saveCursorPosition: () => {
     if (view.value) {
@@ -688,8 +676,8 @@ defineExpose({
     }
   },
   /**
-   * 在保存的光标位置或当前位置插入文本。
-   * 插入后清除保存的位置，光标移到插入内容末尾。
+   * Insert text at the saved selection or current caret position.
+   * @param text - Text to insert.
    */
   insertTextAtCursor: (text: string) => {
     if (!view.value) return;
@@ -703,13 +691,11 @@ defineExpose({
       selection: { anchor: insertEnd }
     });
 
-    // 清除保存的位置
     lastSelection.value = null;
-
     view.value.focus();
   },
   /**
-   * 获取编辑器原始内容（含 {{...}} token 的文本）。
+   * Get the raw editor text, including {{...}} tokens.
    */
   getText: () => {
     return view.value?.state.doc.toString() ?? '';
@@ -719,6 +705,11 @@ defineExpose({
 
 <style lang="less">
 @import url('@/assets/styles/scrollbar.less');
+
+.b-prompt-editor-shell {
+  position: relative;
+  width: 100%;
+}
 
 .b-prompt-editor {
   width: 100%;
@@ -777,7 +768,6 @@ defineExpose({
   }
 }
 
-// Variable chip decorations
 .b-prompt-chip {
   display: inline-flex;
   gap: 4px;

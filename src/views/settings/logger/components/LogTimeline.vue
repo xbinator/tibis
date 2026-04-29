@@ -71,7 +71,7 @@ function formatDisplayTime(timestamp: string): string {
 
 .log-timeline__item {
   display: grid;
-  grid-template-columns: 132px 28px minmax(0, 1fr);
+  grid-template-columns: 100px 28px minmax(0, 1fr);
   column-gap: 18px;
   align-items: start;
   padding-bottom: 18px;
