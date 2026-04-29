@@ -4,15 +4,25 @@
 -->
 <template>
   <div class="log-timeline">
-    <div v-for="(entry, index) in entries" :key="`${entry.timestamp}-${entry.scope}-${index}`" class="log-timeline__item">
+    <div
+      v-for="(entry, index) in entries"
+      :key="`${entry.timestamp}-${entry.scope}-${index}`"
+      class="log-timeline__item"
+      :class="{
+        'log-timeline__item--first': index === 0,
+        'log-timeline__item--last': index === entries.length - 1,
+        'log-timeline__item--only': entries.length === 1
+      }"
+    >
       <div class="log-timeline__meta">
         <div class="log-timeline__time">{{ formatDisplayTime(entry.timestamp) }}</div>
         <div class="log-timeline__scope">{{ getLogScopeLabel(entry.scope) }}</div>
       </div>
 
       <div class="log-timeline__axis">
+        <div class="log-timeline__axis-track"></div>
+        <div class="log-timeline__axis-anchor"></div>
         <div class="log-timeline__axis-dot" :class="`log-timeline__axis-dot--${entry.level.toLowerCase()}`"></div>
-        <div v-if="index < entries.length - 1" class="log-timeline__axis-line"></div>
       </div>
 
       <div class="log-timeline__content">
@@ -56,7 +66,7 @@ function formatDisplayTime(timestamp: string): string {
 .log-timeline {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 0;
 }
 
 .log-timeline__item {
@@ -64,6 +74,27 @@ function formatDisplayTime(timestamp: string): string {
   grid-template-columns: 132px 28px minmax(0, 1fr);
   column-gap: 18px;
   align-items: start;
+  padding-bottom: 18px;
+}
+
+.log-timeline__item--first {
+  .log-timeline__axis-track {
+    top: 22px;
+  }
+}
+
+.log-timeline__item--last {
+  padding-bottom: 0;
+
+  .log-timeline__axis-track {
+    bottom: calc(100% - 22px);
+  }
+}
+
+.log-timeline__item--only {
+  .log-timeline__axis-track {
+    display: none;
+  }
 }
 
 .log-timeline__meta {
@@ -71,7 +102,7 @@ function formatDisplayTime(timestamp: string): string {
   flex-direction: column;
   gap: 6px;
   align-items: flex-end;
-  padding-top: 4px;
+  padding-top: 10px;
   text-align: right;
 }
 
@@ -95,36 +126,48 @@ function formatDisplayTime(timestamp: string): string {
   flex-direction: column;
   align-items: center;
   min-height: 100%;
-  padding-top: 6px;
+  padding-top: 12px;
+}
+
+.log-timeline__axis-track {
+  position: absolute;
+  top: 0;
+  bottom: -18px;
+  left: 50%;
+  width: 2px;
+  background: var(--border-secondary);
+  transform: translateX(-50%);
+}
+
+.log-timeline__axis-anchor {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
 }
 
 .log-timeline__axis-dot {
   z-index: 1;
   width: 16px;
   height: 16px;
-  background: #91caff;
+  background: var(--color-primary-border);
   border: 4px solid var(--bg-primary);
   border-radius: 50%;
+  transform: translateY(8px);
 }
 
 .log-timeline__axis-dot--error {
-  background: #ff4d4f;
+  background: var(--color-error);
 }
 
 .log-timeline__axis-dot--warn {
-  background: #faad14;
+  background: var(--color-warning);
 }
 
 .log-timeline__axis-dot--info {
-  background: #4096ff;
-}
-
-.log-timeline__axis-line {
-  position: absolute;
-  top: 22px;
-  bottom: -18px;
-  width: 2px;
-  background: var(--border-light);
+  background: var(--color-info);
 }
 
 .log-timeline__content {
@@ -135,16 +178,15 @@ function formatDisplayTime(timestamp: string): string {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  min-height: 72px;
   padding: 18px 20px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
 }
 
 .log-timeline__card-header {
   flex-shrink: 0;
-  padding-top: 2px;
+  padding-top: 1px;
 }
 
 .log-timeline__message {

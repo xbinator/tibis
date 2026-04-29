@@ -59,9 +59,8 @@ onMounted(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: #f6f7f9;
-  border: 1px solid var(--border-light);
-  border-radius: 20px;
+  background: var(--bg-primary);
+  border-radius: 8px;
 }
 
 .logger-view__content {

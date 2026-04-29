@@ -56,9 +56,14 @@ describe('LogTimeline layout', () => {
     ]);
 
     const firstItem = wrapper.get('.log-timeline__item');
+    const lastItem = wrapper.findAll('.log-timeline__item')[1];
 
+    expect(firstItem.classes()).toContain('log-timeline__item--first');
+    expect(lastItem.classes()).toContain('log-timeline__item--last');
     expect(firstItem.get('.log-timeline__meta').text()).toContain('14:32:11');
     expect(firstItem.get('.log-timeline__meta').text()).toContain('渲染进程');
+    expect(firstItem.find('.log-timeline__axis-track').exists()).toBe(true);
+    expect(firstItem.find('.log-timeline__axis-anchor').exists()).toBe(true);
     expect(firstItem.find('.log-timeline__axis-dot').classes()).toContain('log-timeline__axis-dot--error');
     expect(firstItem.get('.log-timeline__card').text()).toContain('错误');
     expect(firstItem.get('.log-timeline__card').text()).toContain('Failed to fetch ad list');
