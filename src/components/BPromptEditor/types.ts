@@ -1,4 +1,34 @@
+/**
+ * @file types.ts
+ * @description BPromptEditor shared type definitions.
+ */
 import type { ChipResolver } from './extensions/variableChip';
+
+/**
+ * Slash command option metadata.
+ */
+export type SlashCommandId = 'model' | 'usage' | 'new' | 'clear';
+
+/**
+ * Slash command kind.
+ */
+export type SlashCommandType = 'action' | 'prompt';
+
+/**
+ * Slash command option metadata used by the prompt editor and chat sidebar.
+ */
+export interface SlashCommandOption {
+  /** Stable command identifier. */
+  id: SlashCommandId;
+  /** Slash trigger text shown to the user. */
+  trigger: string;
+  /** Human-readable command title. */
+  title: string;
+  /** Command description shown in UI hints. */
+  description: string;
+  /** Command kind; action commands run immediately, prompt commands open prompt flows. */
+  type: SlashCommandType;
+}
 
 /**
  * 变量定义
@@ -30,6 +60,8 @@ export interface BPromptEditorProps {
   placeholder?: string;
   /** 变量选项 */
   options?: VariableOptionGroup[];
+  /** Slash command metadata exposed to the editor. */
+  slashCommands?: SlashCommandOption[];
   /** 是否禁用 */
   disabled?: boolean;
   /** 最大高度 */
