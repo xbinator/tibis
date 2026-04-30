@@ -9,12 +9,8 @@
     <div class="logger-view__content">
       <BScrollbar inset="auto" @scroll="handleScroll">
         <div v-if="store.entries.length === 0 && !store.isLoading" class="log-empty">
-          <AEmpty :image-style="{ height: '120px' }">
-            <template #description>
-              <div class="log-empty__text">暂无日志数据</div>
-              <div class="log-empty__subtext">可能没有产生日志，或者被当前的过滤条件拦截</div>
-            </template>
-          </AEmpty>
+          <div class="log-empty__text">暂无日志数据</div>
+          <div class="log-empty__subtext">可能没有产生日志，或者被当前的过滤条件拦截</div>
         </div>
 
         <div v-else class="log-timeline">
@@ -88,6 +84,7 @@ onMounted(() => {
 
 .log-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100%;

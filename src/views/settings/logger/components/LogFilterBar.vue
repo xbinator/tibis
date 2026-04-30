@@ -15,6 +15,13 @@
     </div>
 
     <div class="log-filter-bar">
+      <BSelect v-model:value="levelModel" placeholder="日志级别" default-value="" :width="140">
+        <ASelectOption value=""> 全部 </ASelectOption>
+        <ASelectOption value="ERROR"> 错误 </ASelectOption>
+        <ASelectOption value="WARN"> 警告 </ASelectOption>
+        <ASelectOption value="INFO"> 信息 </ASelectOption>
+      </BSelect>
+
       <AInput v-model:value="keywordModel" placeholder="搜索日志内容..." allow-clear class="log-filter-bar__input" />
 
       <ADatePicker v-model:value="dateModel" placeholder="选择日期" class="log-filter-bar__date" value-format="YYYY-MM-DD" />
@@ -25,10 +32,17 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { logger } from '@/shared/logger';
+import type { LogLevel } from '@/shared/logger/types';
 import { useLogViewerStore } from '../stores/logViewer';
 
 /** 日志查看器全局状态。 */
 const store = useLogViewerStore();
+
+/** 日志级别筛选的双向绑定，空值时显示全部。 */
+const levelModel = computed({
+  get: () => store.filterLevel,
+  set: (val: LogLevel | '') => store.setLevel(val)
+});
 
 /** 日期筛选的双向绑定，空值时清空筛选条件。 */
 const dateModel = computed<string | undefined>({
