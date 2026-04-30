@@ -1,5 +1,5 @@
 <template>
-  <div v-if="visible && commands.length > 0" class="slash-command-menu" :style="menuStyle" data-testid="slash-command-menu" @mousedown.prevent>
+  <div v-if="visible && commands.length" class="slash-command-menu" :style="menuStyle" data-testid="slash-command-menu" @mousedown.prevent>
     <div class="slash-command-menu__list">
       <div
         v-for="(command, index) in commands"
@@ -10,10 +10,7 @@
         @click="handleSelect(command)"
         @mouseenter="handleMouseEnter(index)"
       >
-        <div class="slash-command-menu__item-main">
-          <span class="slash-command-menu__item-trigger">{{ command.trigger }}</span>
-          <span class="slash-command-menu__item-title">{{ command.title }}</span>
-        </div>
+        <div class="slash-command-menu__item-trigger">{{ command.trigger }}</div>
         <div class="slash-command-menu__item-desc">{{ command.description }}</div>
       </div>
     </div>
@@ -91,6 +88,8 @@ function handleMouseEnter(index: number): void {
 }
 
 .slash-command-menu__item {
+  display: flex;
+  gap: 8px;
   padding: 8px 12px;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -99,13 +98,6 @@ function handleMouseEnter(index: number): void {
 .slash-command-menu__item:hover,
 .slash-command-menu__item.active {
   background: var(--bg-secondary);
-}
-
-.slash-command-menu__item-main {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .slash-command-menu__item-trigger {
