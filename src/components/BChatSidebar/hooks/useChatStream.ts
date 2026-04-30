@@ -176,16 +176,39 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   }
 
   /**
+   * 追加错误消息到消息列表
+   * 如果最后一条消息不是 user，则将错误信息追加到该消息的 parts 中
+   * 否则创建新的错误消息推入列表
+   * @param reason - 错误原因
+   * @returns 创建的错误消息
+   */
+  function mergeErrorMessage(reason: string): Message {
+    const errorMessage = create.errorMessage(reason);
+    const lastMessage = messages.value[messages.value.length - 1];
+
+    if (lastMessage?.role !== 'user') {
+      lastMessage.parts.push(...errorMessage.parts);
+      lastMessage.loading = false;
+      lastMessage.finished = true;
+    } else {
+      messages.value.push(errorMessage);
+    }
+
+    return errorMessage;
+  }
+
+  /**
    * 停止工具循环
+   * 当工具调用轮次或重复次数超过限制时触发
+   * @param reason - 停止原因
    */
   function stopToolLoop(reason: string): void {
     blockedToolLoopReason.value = reason;
     pendingToolResults.value = [];
     removeTrailingEmptyAssistantMessage();
 
-    const message = create.errorMessage(reason);
-    messages.value.push(message);
-    onComplete?.(message);
+    const errorMessage = mergeErrorMessage(reason);
+    onComplete?.(errorMessage);
   }
 
   /**
@@ -391,25 +414,16 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
   /**
    * 处理流式错误
+   * 当 AI 服务返回错误时触发，重置状态并显示错误消息
+   * @param error - AI 服务错误对象
    */
   function handleStreamError(error: AIServiceError): void {
     loading.value = false;
     resetToolLoopState();
     removeTrailingEmptyAssistantMessage();
 
-    const _message = create.errorMessage(error.message);
-
-    const lastMessage = messages.value[messages.value.length - 1];
-
-    if (lastMessage?.role !== 'user') {
-      lastMessage.parts.push(..._message.parts);
-      lastMessage.loading = false;
-      lastMessage.finished = true;
-    } else {
-      messages.value.push(_message);
-    }
-
-    onComplete?.(_message);
+    const errorMessage = mergeErrorMessage(error.message);
+    onComplete?.(errorMessage);
   }
 
   /**
