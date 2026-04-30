@@ -1,10 +1,19 @@
+/**
+ * @file useViewActive.ts
+ * @description 默认布局视图菜单 hook，负责组装视图相关菜单项与快捷键注册。
+ */
 import { computed, onUnmounted } from 'vue';
+import type { ComputedRef } from 'vue';
 import { useToolbarShortcuts } from '@/components/BToolbar/hooks/useToolbarShortcuts';
 import type { ToolbarOptions } from '@/components/BToolbar/types';
 import { useSettingStore } from '@/stores/setting';
 import { EditorShortcuts } from '../../../constants/shortcuts';
 
-export function useViewActive() {
+/**
+ * 构建默认布局的视图菜单选项。
+ * @returns 视图菜单配置
+ */
+export function useViewActive(): { toolbarViewOptions: ComputedRef<ToolbarOptions> } {
   const settingStore = useSettingStore();
   const { register: registerShortcuts } = useToolbarShortcuts();
 
@@ -26,6 +35,38 @@ export function useViewActive() {
       onClick: () => {
         settingStore.toggleOutline();
       }
+    },
+    { type: 'divider' },
+    {
+      value: 'page-width',
+      label: '页宽',
+      selected: false,
+      children: [
+        {
+          value: 'default',
+          label: '默认',
+          selected: settingStore.editorPageWidth === 'default',
+          onClick: () => {
+            settingStore.setEditorPageWidth('default');
+          }
+        },
+        {
+          value: 'wide',
+          label: '较宽',
+          selected: settingStore.editorPageWidth === 'wide',
+          onClick: () => {
+            settingStore.setEditorPageWidth('wide');
+          }
+        },
+        {
+          value: 'full',
+          label: '全宽',
+          selected: settingStore.editorPageWidth === 'full',
+          onClick: () => {
+            settingStore.setEditorPageWidth('full');
+          }
+        }
+      ]
     },
     { type: 'divider' },
     {

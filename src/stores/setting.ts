@@ -8,6 +8,7 @@ import { native } from '@/shared/platform';
 import { local } from '@/shared/storage/base';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
+export type EditorPageWidth = 'default' | 'wide' | 'full';
 export type ToolPermissionMode = 'ask' | 'readonly' | 'autoSafe';
 export type ToolPermissionGrantScope = 'session' | 'always';
 
@@ -33,6 +34,8 @@ interface PersistedSettingState {
   showOutline: boolean;
   // 源代码模式开关，开启后在消息气泡中显示源代码按钮，点击可查看消息的原始 Markdown 内容
   sourceMode: boolean;
+  // 编辑器正文页宽模式
+  editorPageWidth: EditorPageWidth;
   // 侧边栏是否可见
   sidebarVisible: boolean;
   // 侧边栏宽度，单位像素
@@ -55,6 +58,7 @@ const DEFAULT_SETTINGS: PersistedSettingState = {
   theme: 'system',
   showOutline: true,
   sourceMode: false,
+  editorPageWidth: 'default',
   sidebarVisible: false,
   sidebarWidth: 340,
   toolPermissionMode: 'ask',
@@ -85,6 +89,10 @@ function isToolPermissionMode(value: unknown): value is ToolPermissionMode {
   return value === 'ask' || value === 'readonly' || value === 'autoSafe';
 }
 
+function isEditorPageWidth(value: unknown): value is EditorPageWidth {
+  return value === 'default' || value === 'wide' || value === 'full';
+}
+
 function normalizeSidebarWidth(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_SETTINGS.sidebarWidth;
 }
@@ -105,6 +113,11 @@ function normalizeSettings(value: unknown): PersistedSettingState {
   // 确保工具权限模式有效
   if (!isToolPermissionMode(normalized.toolPermissionMode)) {
     normalized.toolPermissionMode = DEFAULT_SETTINGS.toolPermissionMode;
+  }
+
+  // 确保页宽模式有效
+  if (!isEditorPageWidth(normalized.editorPageWidth)) {
+    normalized.editorPageWidth = DEFAULT_SETTINGS.editorPageWidth;
   }
 
   // 确保持久授权记录是普通对象
@@ -185,6 +198,9 @@ export const useSettingStore = defineStore('setting', {
       native.updateMenuItem?.('theme:light', { checked: this.theme === 'light' });
       native.updateMenuItem?.('theme:dark', { checked: this.theme === 'dark' });
       native.updateMenuItem?.('theme:system', { checked: this.theme === 'system' });
+      native.updateMenuItem?.('view:pageWidth:default', { checked: this.editorPageWidth === 'default' });
+      native.updateMenuItem?.('view:pageWidth:wide', { checked: this.editorPageWidth === 'wide' });
+      native.updateMenuItem?.('view:pageWidth:full', { checked: this.editorPageWidth === 'full' });
     },
 
     persistSettings(): void {
@@ -195,6 +211,7 @@ export const useSettingStore = defineStore('setting', {
         theme: this.theme,
         showOutline: this.showOutline,
         sourceMode: this.sourceMode,
+        editorPageWidth: this.editorPageWidth,
         sidebarVisible: this.sidebarVisible,
         sidebarWidth: this.sidebarWidth,
         toolPermissionMode: this.toolPermissionMode,
@@ -262,6 +279,18 @@ export const useSettingStore = defineStore('setting', {
      */
     toggleSourceMode(): void {
       this.setSourceMode(!this.sourceMode);
+    },
+
+    // ==================== 编辑器页宽设置 ====================
+
+    /**
+     * 设置编辑器正文页宽模式。
+     * @param width - 页宽模式
+     */
+    setEditorPageWidth(width: EditorPageWidth): void {
+      this.editorPageWidth = width;
+      this.persistSettings();
+      this.syncNativeMenuState();
     },
 
     // ==================== 侧边栏设置 ====================

@@ -1,14 +1,25 @@
+/**
+ * @file useMenuAction.ts
+ * @description 注册系统菜单 action 回调，并分发到应用事件和设置 store。
+ */
 import { onMounted, onUnmounted } from 'vue';
 import { native } from '@/shared/platform';
 import { useSettingStore } from '@/stores/setting';
 import { emitter } from '@/utils/emitter';
 
-export function useMenuAction() {
+/**
+ * 注册系统菜单行为监听。
+ */
+export function useMenuAction(): void {
   const settingStore = useSettingStore();
 
   let unregisterMenuAction: (() => void) | undefined;
 
-  function handleMenuAction(action: string) {
+  /**
+   * 处理系统菜单 action。
+   * @param action - 菜单 action 标识
+   */
+  function handleMenuAction(action: string): void {
     if (action.startsWith('file:openRecent:')) {
       emitter.emit('file:openRecent', action.slice('file:openRecent:'.length));
       return;
@@ -67,6 +78,15 @@ export function useMenuAction() {
         break;
       case 'theme:system':
         settingStore.setTheme('system');
+        break;
+      case 'view:pageWidth:default':
+        settingStore.setEditorPageWidth('default');
+        break;
+      case 'view:pageWidth:wide':
+        settingStore.setEditorPageWidth('wide');
+        break;
+      case 'view:pageWidth:full':
+        settingStore.setEditorPageWidth('full');
         break;
 
       case 'help:shortcuts':

@@ -4,7 +4,7 @@
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../confirmation';
 import type { AIToolExecutor } from 'types/ai';
-import type { ThemeMode } from '@/stores/setting';
+import type { EditorPageWidth, ThemeMode } from '@/stores/setting';
 import { useSettingStore } from '@/stores/setting';
 import { executeWithPermission } from '../permission';
 import { createToolFailureResult } from '../results';
@@ -16,7 +16,7 @@ export const UPDATE_SETTINGS_TOOL_NAME = 'update_settings';
 export const GET_SETTINGS_TOOL_NAME = 'get_settings';
 
 /** 支持通过 AI 修改的设置键。 */
-const SUPPORTED_SETTING_KEYS = ['theme', 'showOutline', 'sourceMode'] as const;
+const SUPPORTED_SETTING_KEYS = ['theme', 'showOutline', 'sourceMode', 'editorPageWidth'] as const;
 
 /** 支持通过 AI 修改的设置键类型。 */
 type SupportedSettingKey = (typeof SUPPORTED_SETTING_KEYS)[number];
@@ -105,6 +105,15 @@ function isThemeMode(value: unknown): value is ThemeMode {
 }
 
 /**
+ * 判断值是否为编辑器页宽模式。
+ * @param value - 待检查值
+ * @returns 是否为编辑器页宽模式
+ */
+function isEditorPageWidth(value: unknown): value is EditorPageWidth {
+  return value === 'default' || value === 'wide' || value === 'full';
+}
+
+/**
  * 验证设置值。
  * @param input - 工具输入
  * @returns 验证后的输入或错误消息
@@ -116,6 +125,10 @@ function validateSettingsInput(input: UpdateSettingsInput): UpdateSettingsInput 
 
   if (input.key === 'theme') {
     return isThemeMode(input.value) ? input : 'theme 只能设置为 dark、light 或 system。';
+  }
+
+  if (input.key === 'editorPageWidth') {
+    return isEditorPageWidth(input.value) ? input : 'editorPageWidth 只能设置为 default、wide 或 full。';
   }
 
   if (isBooleanSettingKey(input.key)) {
@@ -155,6 +168,11 @@ function applySettingValue(input: UpdateSettingsInput): void {
 
   if (input.key === 'sourceMode' && typeof input.value === 'boolean') {
     settingStore.setSourceMode(input.value);
+    return;
+  }
+
+  if (input.key === 'editorPageWidth' && isEditorPageWidth(input.value)) {
+    settingStore.setEditorPageWidth(input.value);
   }
 }
 
@@ -168,7 +186,7 @@ export function createBuiltinSettingsTools(adapter: AIToolConfirmationAdapter): 
     updateSettings: {
       definition: {
         name: UPDATE_SETTINGS_TOOL_NAME,
-        description: '修改应用设置。可根据自然语言请求设置主题、大纲和源码模式。',
+        description: '修改应用设置。可根据自然语言请求设置主题、大纲、源码模式和编辑器页宽。',
         source: 'builtin',
         riskLevel: 'write',
         permissionCategory: 'settings',
@@ -184,7 +202,7 @@ export function createBuiltinSettingsTools(adapter: AIToolConfirmationAdapter): 
             },
             value: {
               type: ['string', 'boolean'],
-              description: '设置值：theme 使用 dark/light/system；布尔设置使用 true/false。'
+              description: '设置值：theme 使用 dark/light/system；editorPageWidth 使用 default/wide/full；布尔设置使用 true/false。'
             }
           },
           required: ['key', 'value'],
@@ -229,7 +247,7 @@ export function createBuiltinSettingsTools(adapter: AIToolConfirmationAdapter): 
     getSettings: {
       definition: {
         name: GET_SETTINGS_TOOL_NAME,
-        description: '获取应用设置。可获取主题、大纲和源码模式等设置项的当前值。支持传入单个 key、key 数组或不传（返回所有设置）。',
+        description: '获取应用设置。可获取主题、大纲、源码模式和编辑器页宽等设置项的当前值。支持传入单个 key、key 数组或不传（返回所有设置）。',
         source: 'builtin',
         riskLevel: 'read',
         permissionCategory: 'settings',

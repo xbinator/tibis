@@ -50,8 +50,11 @@ describe('useSettingStore', () => {
       theme: 'system',
       showOutline: true,
       sourceMode: false,
+      editorPageWidth: 'default',
       sidebarVisible: false,
-      sidebarWidth: 340
+      sidebarWidth: 340,
+      toolPermissionMode: 'ask',
+      alwaysToolPermissionGrants: {}
     });
 
     const { useSettingStore } = await import('@/stores/setting');
@@ -117,5 +120,61 @@ describe('useSettingStore', () => {
 
     expect(settingStore.sessionToolPermissionGrants).toEqual({});
     expect(settingStore.alwaysToolPermissionGrants.insert_at_cursor).toBe(true);
+  });
+
+  it('persists editor page width into app settings', async () => {
+    const { useSettingStore } = await import('@/stores/setting');
+    const settingStore = useSettingStore();
+
+    settingStore.setEditorPageWidth('wide');
+
+    expect(settingStore.editorPageWidth).toBe('wide');
+    expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).toContain('"editorPageWidth":"wide"');
+  });
+
+  it('restores editor page width from persisted app settings', async () => {
+    const { local } = await import('@/shared/storage/base');
+
+    local.setItem(SETTINGS_STORAGE_KEY, {
+      chatSidebarActiveSessionId: null,
+      providerSidebarCollapsed: false,
+      settingsSidebarCollapsed: false,
+      theme: 'system',
+      showOutline: true,
+      sourceMode: false,
+      editorPageWidth: 'full',
+      sidebarVisible: false,
+      sidebarWidth: 340,
+      toolPermissionMode: 'ask',
+      alwaysToolPermissionGrants: {}
+    });
+
+    const { useSettingStore } = await import('@/stores/setting');
+    const settingStore = useSettingStore();
+
+    expect(settingStore.editorPageWidth).toBe('full');
+  });
+
+  it('falls back to default editor page width when persisted value is invalid', async () => {
+    const { local } = await import('@/shared/storage/base');
+
+    local.setItem(SETTINGS_STORAGE_KEY, {
+      chatSidebarActiveSessionId: null,
+      providerSidebarCollapsed: false,
+      settingsSidebarCollapsed: false,
+      theme: 'system',
+      showOutline: true,
+      sourceMode: false,
+      editorPageWidth: 'giant',
+      sidebarVisible: false,
+      sidebarWidth: 340,
+      toolPermissionMode: 'ask',
+      alwaysToolPermissionGrants: {}
+    });
+
+    const { useSettingStore } = await import('@/stores/setting');
+    const settingStore = useSettingStore();
+
+    expect(settingStore.editorPageWidth).toBe('default');
   });
 });
