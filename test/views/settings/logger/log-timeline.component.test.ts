@@ -5,12 +5,9 @@
 /* @vitest-environment jsdom */
 
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { LogEntry } from '@/shared/logger/types';
 import LogTimeline from '@/views/settings/logger/components/LogTimeline.vue';
-
-let mockScrollHeight = 44;
-let mockClientHeight = 44;
 
 /**
  * 创建测试日志条目。
@@ -44,6 +41,11 @@ function mountTimeline(entry: LogEntry, flags: { isFirst?: boolean; isLast?: boo
         ATag: {
           props: ['color'],
           template: '<span class="tag-stub" :data-color="color"><slot /></span>'
+        },
+        BButton: {
+          props: ['type', 'size'],
+          emits: ['click'],
+          template: '<button type="button" class="button-stub" @click="$emit(\'click\')"><slot /></button>'
         }
       }
     }
@@ -51,36 +53,6 @@ function mountTimeline(entry: LogEntry, flags: { isFirst?: boolean; isLast?: boo
 }
 
 describe('LogTimeline layout', () => {
-  beforeEach(() => {
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
-      callback(0);
-      return 1;
-    });
-    vi.stubGlobal('cancelAnimationFrame', vi.fn());
-    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-      lineHeight: '22px'
-    } as CSSStyleDeclaration);
-    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-      configurable: true,
-      get(): number {
-        return mockScrollHeight;
-      }
-    });
-    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
-      configurable: true,
-      get(): number {
-        return mockClientHeight;
-      }
-    });
-  });
-
-  afterEach(() => {
-    mockScrollHeight = 44;
-    mockClientHeight = 44;
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
   it('renders time and scope in the left column and wraps level plus message inside a content card', () => {
     const wrapper = mountTimeline(createEntry(), { isFirst: true, isLast: true, isOnly: false });
 
@@ -95,52 +67,23 @@ describe('LogTimeline layout', () => {
     expect(item.find('.log-timeline__axis-dot').classes()).toContain('log-timeline__axis-dot--error');
     expect(item.get('.log-timeline__card').text()).toContain('错误');
     expect(item.get('.log-timeline__card').text()).toContain('Failed to fetch ad list');
+    expect(item.get('.button-stub').text()).toBe('展开');
   });
 
-  it('does not render the toggle action when the message does not exceed two lines', () => {
-    mockScrollHeight = 44;
-    mockClientHeight = 44;
-
-    const wrapper = mountTimeline(createEntry());
-
-    expect(wrapper.find('.log-timeline__toggle').exists()).toBe(false);
-  });
-
-  it('renders the toggle action for long messages and switches between collapsed and expanded states', async () => {
-    mockScrollHeight = 88;
-    mockClientHeight = 44;
-
+  it('switches between collapsed and expanded states when the toggle is clicked', async () => {
     const wrapper = mountTimeline(
       createEntry({
         message: 'line-1\nline-2\nline-3'
       })
     );
-    await wrapper.vm.$nextTick();
-    await wrapper.vm.$nextTick();
 
-    expect(wrapper.get('.log-timeline__message').classes()).toContain('log-timeline__message--collapsed');
-    expect(wrapper.get('.log-timeline__toggle').text()).toBe('展开');
+    expect(wrapper.get('.log-timeline__message > div').classes()).toContain('log-timeline__message--collapsed');
+    expect(wrapper.get('.button-stub').text()).toBe('展开');
 
-    await wrapper.get('.log-timeline__toggle').trigger('click');
+    await wrapper.get('.button-stub').trigger('click');
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.get('.log-timeline__message').classes()).not.toContain('log-timeline__message--collapsed');
-    expect(wrapper.get('.log-timeline__toggle').text()).toBe('收起');
-  });
-
-  it('recomputes overflow state after the window is resized', async () => {
-    mockScrollHeight = 44;
-    mockClientHeight = 44;
-
-    const wrapper = mountTimeline(createEntry());
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.find('.log-timeline__toggle').exists()).toBe(false);
-
-    mockScrollHeight = 88;
-    window.dispatchEvent(new Event('resize'));
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.find('.log-timeline__toggle').exists()).toBe(true);
+    expect(wrapper.get('.log-timeline__message > div').classes()).not.toContain('log-timeline__message--collapsed');
+    expect(wrapper.get('.button-stub').text()).toBe('收起');
   });
 });

@@ -70,6 +70,18 @@ describe('error-collector', () => {
 
       expect(result).toBe(false);
     });
+
+    it('should ignore ResizeObserver loop noise from window.onerror', async () => {
+      const { initErrorCollector } = await import('../../../src/shared/logger/error-collector');
+      initErrorCollector();
+
+      const error = new Error('ResizeObserver loop completed with undelivered notifications');
+      window.onerror?.(error.message, 'test.js', 10, 20, error);
+
+      await vi.runAllTimersAsync();
+
+      expect(loggerErrorMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('captureError', () => {
@@ -93,6 +105,16 @@ describe('error-collector', () => {
 
       expect(loggerErrorMock).toHaveBeenCalledTimes(1);
       expect(loggerErrorMock).toHaveBeenCalledWith(expect.stringContaining('String error message'));
+    });
+
+    it('should ignore ResizeObserver loop noise when captured manually', async () => {
+      const { captureError } = await import('../../../src/shared/logger/error-collector');
+
+      captureError(new Error('ResizeObserver loop limit exceeded'));
+
+      await vi.runAllTimersAsync();
+
+      expect(loggerErrorMock).not.toHaveBeenCalled();
     });
 
     it('should include context in error message', async () => {
