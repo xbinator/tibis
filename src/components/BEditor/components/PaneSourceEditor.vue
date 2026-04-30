@@ -405,7 +405,7 @@ defineExpose(controller);
 
   .cm-editor {
     min-height: 100%;
-    font: inherit;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
     color: var(--source-editor-markdown-foreground);
     background-color: transparent;
   }
@@ -416,7 +416,7 @@ defineExpose(controller);
 
   .cm-scroller {
     overflow: visible;
-    font: inherit;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
     line-height: 1.74;
     background-color: transparent;
   }
