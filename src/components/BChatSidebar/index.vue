@@ -6,14 +6,14 @@
   <div class="b-chat-sidebar">
     <div class="b-chat-sidebar__header">
       <div class="b-chat-sidebar__title truncate">{{ currentSession?.title || '新会话' }}</div>
-      <BButton square size="small" type="text" :disabled="chatStream.loading.value" @click="createNewSession">
+      <BButton square size="small" type="text" :disabled="loading" @click="createNewSession">
         <Icon icon="lucide:message-circle-plus" width="16" height="16" />
       </BButton>
       <SessionHistory
         ref="sessionHistoryRef"
         v-model:current-session="currentSession"
         :active-session-id="settingStore.chatSidebarActiveSessionId"
-        :disabled="chatStream.loading.value"
+        :disabled="loading"
         @switch-session="switchSession"
       />
 
@@ -26,7 +26,7 @@
       <ConversationView
         ref="conversationRef"
         v-model:messages="messages"
-        :loading="chatStream.loading.value"
+        :loading="loading"
         :on-load-history="handleLoadHistory"
         @edit="handleChatEdit"
         @regenerate="handleChatRegenerate"
@@ -59,11 +59,11 @@
 
           <InputToolbar
             ref="modelSelectorRef"
-            :loading="chatStream.loading.value"
+            :loading="loading"
             :input-value="draftInput.inputValue.value"
             :selected-model="selectedModel"
             @submit="handleChatSubmit"
-            @abort="chatStream.abort"
+            @abort="stream.abort"
             @model-change="handleModelChange"
           />
         </div>
@@ -222,7 +222,7 @@ async function handleBeforeSend(message: Message): Promise<void> {
 }
 
 /** 聊天流式处理 hook */
-const chatStream = useChatStream({
+const { stream, loading } = useChatStream({
   messages,
   tools,
   getToolContext: editorToolContextRegistry.getCurrentContext,
@@ -239,7 +239,7 @@ const { currentSession, createNewSession, switchSession, initializeActiveSession
   resetUsagePanel: usagePanel.reset,
   setLoadedMessages,
   focusInput,
-  isStreamLoading: () => chatStream.loading.value,
+  isStreamLoading: () => loading.value,
   disposeConfirmationController: () => confirmationController.dispose(),
   resetHistoryState: () => {
     hasMoreHistory.value = false;
@@ -286,7 +286,7 @@ async function handleComplete(message: Message): Promise<void> {
   }
   if (!snapshot) return;
 
-  scheduleAutoName(snapshot, () => chatStream.loading.value);
+  scheduleAutoName(snapshot, () => loading.value);
 }
 
 /**
@@ -304,7 +304,7 @@ async function handleChatSubmit(): Promise<void> {
   const content = draftInput.inputValue.value.trim();
   if (!content) return;
 
-  const config = await chatStream.resolveServiceConfig();
+  const config = await stream.resolveServiceConfig();
   if (!config) return;
 
   const references = draftInput.getActiveReferences(content);
@@ -316,7 +316,7 @@ async function handleChatSubmit(): Promise<void> {
   focusInput();
   draftInput.clear();
 
-  await chatStream.streamMessages(messages.value, config);
+  await stream.streamMessages(messages.value, config);
 }
 
 /**
@@ -332,7 +332,7 @@ function handleChatEdit(message: Message): void {
  * @param message - 要重新生成的消息
  */
 async function handleChatRegenerate(message: Message): Promise<void> {
-  await chatStream.regenerate(message);
+  await stream.regenerate(message);
 }
 
 /**
@@ -340,7 +340,7 @@ async function handleChatRegenerate(message: Message): Promise<void> {
  * @param answer - 用户选择的答案数据
  */
 async function handleChatUserChoiceSubmit(answer: import('types/chat').AIUserChoiceAnswerData): Promise<void> {
-  await chatStream.submitUserChoice(answer);
+  await stream.submitUserChoice(answer);
 }
 
 /**

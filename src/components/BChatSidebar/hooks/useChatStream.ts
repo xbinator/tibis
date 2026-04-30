@@ -36,24 +36,27 @@ export interface UseChatStreamOptions {
 export interface UseChatStreamReturns {
   /** 加载状态 */
   loading: Ref<boolean>;
-  /** 解析服务配置 */
-  resolveServiceConfig: () => Promise<ServiceConfig | undefined>;
-  /** 追加文本片段 */
-  appendText: (content: string) => void;
-  /** 追加思考片段 */
-  appendThinking: (thinking: string) => void;
-  /** 追加工具调用 */
-  appendToolCall: (chunk: AIStreamToolCallChunk) => void;
-  /** 准备助手消息占位符 */
-  prepareAssistantMessage: (reuseLastAssistant: boolean) => Message | undefined;
-  /** 流式传输消息 */
-  streamMessages: (sourceMessages: Message[], config: ServiceConfig, reuseLastAssistant?: boolean) => Promise<void>;
-  /** 中止流式传输 */
-  abort: () => void;
-  /** 用户选择提交 */
-  submitUserChoice: (answer: AIUserChoiceAnswerData) => Promise<boolean>;
-  /** 重新生成 */
-  regenerate: (message: Message) => Promise<boolean>;
+  // 流式处理相关函数
+  stream: {
+    /** 解析服务配置 */
+    resolveServiceConfig: () => Promise<ServiceConfig | undefined>;
+    /** 追加文本片段 */
+    appendText: (content: string) => void;
+    /** 追加思考片段 */
+    appendThinking: (thinking: string) => void;
+    /** 追加工具调用 */
+    appendToolCall: (chunk: AIStreamToolCallChunk) => void;
+    /** 准备助手消息占位符 */
+    prepareAssistantMessage: (reuseLastAssistant: boolean) => Message | undefined;
+    /** 流式传输消息 */
+    streamMessages: (sourceMessages: Message[], config: ServiceConfig, reuseLastAssistant?: boolean) => Promise<void>;
+    /** 中止流式传输 */
+    abort: () => void;
+    /** 用户选择提交 */
+    submitUserChoice: (answer: AIUserChoiceAnswerData) => Promise<boolean>;
+    /** 重新生成 */
+    regenerate: (message: Message) => Promise<boolean>;
+  };
 }
 
 const DEFAULT_TOOL_LOOP_GUARD_CONFIG: ToolLoopGuardConfig = {
@@ -68,6 +71,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   const pendingToolResults = shallowRef<ExecutedToolCall[]>([]);
   const blockedToolLoopReason = ref('');
   const awaitingUserChoice = ref(false);
+  const aborting = ref(false);
 
   const serviceModelStore = useServiceModelStore();
 
@@ -125,6 +129,26 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     if (is.removableAssistantPlaceholder(lastMessage)) {
       messages.value.pop();
     }
+  }
+
+  /**
+   * 收尾当前助手消息，供主动中止等非正常完成场景复用
+   */
+  function finalizeCurrentAssistantMessage(): Message | undefined {
+    const lastMessage = messages.value[messages.value.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') {
+      return undefined;
+    }
+
+    if (is.removableAssistantPlaceholder(lastMessage)) {
+      messages.value.pop();
+      return undefined;
+    }
+
+    lastMessage.loading = false;
+    lastMessage.finished = true;
+    lastMessage.createdAt ||= new Date().toISOString();
+    return lastMessage;
   }
 
   /**
@@ -304,6 +328,11 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
    * 处理流式完成
    */
   async function handleStreamComplete(): Promise<void> {
+    if (aborting.value) {
+      aborting.value = false;
+      return;
+    }
+
     loading.value = false;
     const roundId = currentToolRoundId;
     const tracker = currentToolCallTracker;
@@ -405,8 +434,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
    * 中止流式传输
    */
   function abort(): void {
+    aborting.value = true;
+    loading.value = false;
+    const message = finalizeCurrentAssistantMessage();
     resetToolLoopState();
     agent.abort();
+    message && onComplete?.(message);
   }
 
   /**
@@ -465,14 +498,16 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
   return {
     loading,
-    appendText,
-    appendThinking,
-    appendToolCall: handleAppendToolCall,
-    prepareAssistantMessage: handlePrepareAssistantMessage,
-    streamMessages: handleStreamMessages,
-    resolveServiceConfig,
-    abort,
-    submitUserChoice,
-    regenerate
+    stream: {
+      appendText,
+      appendThinking,
+      appendToolCall: handleAppendToolCall,
+      prepareAssistantMessage: handlePrepareAssistantMessage,
+      streamMessages: handleStreamMessages,
+      resolveServiceConfig,
+      abort,
+      submitUserChoice,
+      regenerate
+    }
   };
 }

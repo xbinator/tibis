@@ -42,11 +42,19 @@ import MessageBubble from './MessageBubble.vue';
 
 defineOptions({ name: 'ConversationView' });
 
-const props = defineProps<{
+interface Props {
+  // 对话消息列表
   messages: Message[];
+  // 是否正在加载历史记录
   loading?: boolean;
+  // 加载历史记录的回调函数
   onLoadHistory?: () => Promise<void> | void;
-}>();
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  loading: false,
+  onLoadHistory: undefined
+});
 
 defineEmits<{
   (e: 'edit', message: Message): void;
