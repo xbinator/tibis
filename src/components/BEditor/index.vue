@@ -1,3 +1,7 @@
+<!--
+  @file index.vue
+  @description Markdown 编辑器外层容器，负责统一编排正文区、大纲、查找条和富文本/源码双模式切换。
+-->
 <template>
   <div ref="layoutRef" class="b-editor-layout">
     <BEditorSidebar
@@ -17,7 +21,7 @@
     />
 
     <BScrollbar ref="scrollbarRef" class="b-editor-scrollbar" @scroll="handleEditorScrollEvent">
-      <div class="b-editor-container">
+      <div class="b-editor-container" :style="editorContainerStyle">
         <PaneRichEditor
           v-if="isRichMode"
           ref="richEditorPaneRef"
@@ -50,8 +54,10 @@
 import type { BEditorPublicInstance, EditorController, EditorSearchState } from './adapters/types';
 import type { AnchorRecord } from './hooks/useAnchors';
 import type { BEditorViewMode } from './types';
+import type { CSSProperties } from 'vue';
 import { computed, defineAsyncComponent, ref } from 'vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
+import { useSettingStore } from '@/stores/setting';
 import { handleEditorAnchorNavigation } from './adapters/editorAnchorNavigation';
 import FindBar from './components/FindBar.vue';
 import { useAnchors } from './hooks/useAnchors';
@@ -62,6 +68,7 @@ const PaneSourceEditor = defineAsyncComponent(() => import('./components/PaneSou
 
 const layoutRef = ref<HTMLElement | null>(null);
 const scrollbarRef = ref<InstanceType<typeof BScrollbar> | null>(null);
+const settingStore = useSettingStore();
 
 interface Props {
   editable?: boolean;
@@ -97,6 +104,21 @@ const richEditorPaneRef = ref<EditorController | null>(null);
 const sourceEditorPaneRef = ref<EditorController | null>(null);
 const findBarVisible = ref(false);
 
+const editorPageMaxWidth = computed<string>(() => {
+  switch (settingStore.editorPageWidth) {
+    case 'wide':
+      return '1200px';
+    case 'full':
+      return 'none';
+    default:
+      return '900px';
+  }
+});
+
+const editorContainerStyle = computed<CSSProperties>(() => ({
+  '--editor-page-max-width': editorPageMaxWidth.value
+}));
+
 const { activeAnchorId, handleChangeAnchor, handleEditorScroll, setActiveAnchorId } = useAnchors(layoutRef, scrollbarRef);
 
 function scrollSearchMatchElementIntoView(targetElement: HTMLElement): void {
@@ -117,7 +139,7 @@ function scrollSearchMatchElementIntoView(targetElement: HTMLElement): void {
 
 const editorController = useEditorController({ isRichMode, richEditorPaneRef, sourceEditorPaneRef });
 
-function scrollSourceAnchorIntoView(hostElement: HTMLElement, offsetTop: number) {
+function scrollSourceAnchorIntoView(hostElement: HTMLElement, offsetTop: number): void {
   const scrollElement = scrollbarRef.value?.getScrollElement();
   if (!scrollElement) {
     hostElement.scrollIntoView({ block: 'start' });
@@ -131,7 +153,7 @@ function scrollSourceAnchorIntoView(hostElement: HTMLElement, offsetTop: number)
   scrollbarRef.value?.scrollTo({ top: Math.max(0, nextTop), behavior: 'auto' });
 }
 
-function handleEditorAnchorChange(record: AnchorRecord) {
+function handleEditorAnchorChange(record: AnchorRecord): void {
   handleEditorAnchorNavigation({
     record,
     isRichMode: isRichMode.value,
@@ -142,7 +164,7 @@ function handleEditorAnchorChange(record: AnchorRecord) {
   });
 }
 
-function handleEditorScrollEvent() {
+function handleEditorScrollEvent(): void {
   if (isRichMode.value) {
     handleEditorScroll();
     return;
@@ -197,7 +219,7 @@ function clearSearch(): void {
   editorController.value.clearSearch();
 }
 
-function getSelection() {
+function getSelection(): ReturnType<EditorController['getSelection']> {
   return editorController.value.getSelection();
 }
 
@@ -281,7 +303,7 @@ defineExpose({
 
 .b-editor-container {
   position: relative;
-  max-width: 900px;
+  max-width: var(--editor-page-max-width);
   padding: 20px 40px 90px;
   margin: 0 auto;
   font-size: 16px;

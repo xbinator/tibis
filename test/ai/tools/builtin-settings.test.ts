@@ -152,4 +152,44 @@ describe('built-in settings tools', () => {
     expect(result.status).toBe('success');
     expect(settingStore.alwaysToolPermissionGrants.update_settings).toBe(true);
   });
+
+  it('updates editor page width after confirmation', async () => {
+    const confirm = vi.fn(async () => ({ approved: true }));
+    const tools = createBuiltinSettingsTools({ confirm });
+    const settingStore = useSettingStore();
+
+    const result = await tools.updateSettings.execute({ key: 'editorPageWidth', value: 'wide' }, createToolContext());
+
+    expect(result.status).toBe('success');
+    expect(settingStore.editorPageWidth).toBe('wide');
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        beforeText: 'editorPageWidth: default',
+        afterText: 'editorPageWidth: wide'
+      })
+    );
+  });
+
+  it('rejects invalid editor page width values before confirmation', async () => {
+    const confirm = vi.fn(async () => ({ approved: true }));
+    const tools = createBuiltinSettingsTools({ confirm });
+
+    const result = await tools.updateSettings.execute({ key: 'editorPageWidth', value: 'ultra' }, createToolContext());
+
+    expect(result.status).toBe('failure');
+    expect(result.error?.code).toBe('INVALID_INPUT');
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('returns editor page width from get_settings', async () => {
+    const tools = createBuiltinSettingsTools({ confirm: vi.fn(async () => ({ approved: true })) });
+    const settingStore = useSettingStore();
+
+    settingStore.setEditorPageWidth('full');
+
+    const result = await tools.getSettings.execute({ keys: 'editorPageWidth' }, createToolContext());
+
+    expect(result.status).toBe('success');
+    expect(result.data?.settings.editorPageWidth).toBe('full');
+  });
 });

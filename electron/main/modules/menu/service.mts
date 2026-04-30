@@ -136,6 +136,14 @@ export function setupAppMenu(): void {
           { id: 'theme:system', type: 'checkbox', label: '跟随系统', click: () => sendMenuAction('theme:system') }
         ]
       },
+      {
+        label: '页宽',
+        submenu: [
+          { id: 'view:pageWidth:default', type: 'checkbox', label: '默认', click: () => sendMenuAction('view:pageWidth:default') },
+          { id: 'view:pageWidth:wide', type: 'checkbox', label: '较宽', click: () => sendMenuAction('view:pageWidth:wide') },
+          { id: 'view:pageWidth:full', type: 'checkbox', label: '全宽', click: () => sendMenuAction('view:pageWidth:full') }
+        ]
+      },
       { type: 'separator' as const },
       {
         label: '重新加载',
