@@ -30,6 +30,8 @@ interface CreateBuiltinToolsOptions {
   createQuestionId?: () => string;
   /** 获取工作区根目录，无工作区时返回 null */
   getWorkspaceRoot?: () => string | null;
+  /** 判断文件路径是否在最近文件列表中，命中时跳过绝对路径确认 */
+  isFileInRecent?: (filePath: string) => boolean;
 }
 
 /**
@@ -55,11 +57,13 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     }),
     createBuiltinReadFileTool({
       confirm: options.confirm,
-      getWorkspaceRoot: options.getWorkspaceRoot
+      getWorkspaceRoot: options.getWorkspaceRoot,
+      isFileInRecent: options.isFileInRecent
     }),
     createBuiltinReadDirectoryTool({
       confirm: options.confirm,
-      getWorkspaceRoot: options.getWorkspaceRoot
+      getWorkspaceRoot: options.getWorkspaceRoot,
+      isFileInRecent: options.isFileInRecent
     }),
     createBuiltinSettingsTools(options.confirm ?? { confirm: async () => false }).getSettings,
     logTools.queryLogs

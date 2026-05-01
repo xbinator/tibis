@@ -61,6 +61,8 @@ export interface CreateBuiltinReadFileToolOptions {
   confirm?: AIToolConfirmationAdapter;
   /** 获取工作区根目录，无工作区时返回 null */
   getWorkspaceRoot?: () => string | null;
+  /** 判断文件路径是否在最近文件列表中，命中时跳过绝对路径确认 */
+  isFileInRecent?: (filePath: string) => boolean;
   /** 读取本地文件，测试时可注入替身 */
   readWorkspaceFile?: (options: ReadWorkspaceFileOptions) => Promise<ReadWorkspaceFileResult>;
   /** 读取本地目录，测试时可注入替身 */
@@ -196,11 +198,13 @@ async function confirmAbsoluteDirectoryRead(adapter: AIToolConfirmationAdapter, 
  */
 export function createBuiltinReadFileTool(options: CreateBuiltinReadFileToolOptions = {}): AIToolExecutor<ReadFileInput, ReadFileResult> {
   const readWorkspaceFile = options.readWorkspaceFile ?? native.readWorkspaceFile.bind(native);
+  /** 当前会话中已确认过的绝对路径，同一路径仅需确认一次 */
+  const sessionApprovedPaths = new Set<string>();
 
   return {
     definition: {
       name: READ_FILE_TOOL_NAME,
-      description: '读取指定本地文本文件内容，可通过 offset 和 limit 滚动读取。相对路径需要工作区根目录，绝对路径需要用户确认。',
+      description: '读取指定本地文本文件内容，可通过 offset 和 limit 滚动读取。相对路径需要工作区根目录，绝对路径需要用户确认（最近文件列表中的路径除外）。',
       source: 'builtin',
       riskLevel: 'read',
       requiresActiveDocument: false,
@@ -236,11 +240,13 @@ export function createBuiltinReadFileTool(options: CreateBuiltinReadFileToolOpti
 
       try {
         const range = normalizeReadRange(input);
-        if (!workspaceRoot) {
+        const needsConfirmation = !workspaceRoot && !options.isFileInRecent?.(filePath) && !sessionApprovedPaths.has(filePath);
+        if (needsConfirmation) {
           const confirmed = await confirmAbsoluteRead(confirmationAdapter!, filePath, range);
           if (!confirmed) {
             return createToolCancelledResult(READ_FILE_TOOL_NAME);
           }
+          sessionApprovedPaths.add(filePath);
         }
 
         const result = await readWorkspaceFile({
@@ -268,11 +274,14 @@ export function createBuiltinReadDirectoryTool(
   options: CreateBuiltinReadFileToolOptions = {}
 ): AIToolExecutor<ReadDirectoryInput, ReadWorkspaceDirectoryResult> {
   const readWorkspaceDirectory = options.readWorkspaceDirectory ?? native.readWorkspaceDirectory.bind(native);
+  /** 当前会话中已确认过的绝对路径，同一路径仅需确认一次 */
+  const sessionApprovedPaths = new Set<string>();
 
   return {
     definition: {
       name: READ_DIRECTORY_TOOL_NAME,
-      description: '读取指定目录下的直接子项列表，仅返回当前目录中的文件和子目录，不递归展开。相对路径需要工作区根目录，绝对路径需要用户确认。',
+      description:
+        '读取指定目录下的直接子项列表，仅返回当前目录中的文件和子目录，不递归展开。相对路径需要工作区根目录，绝对路径需要用户确认（最近文件列表中的路径除外）。',
       source: 'builtin',
       riskLevel: 'read',
       requiresActiveDocument: false,
@@ -305,11 +314,13 @@ export function createBuiltinReadDirectoryTool(
       }
 
       try {
-        if (!workspaceRoot) {
+        const needsConfirmation = !workspaceRoot && !options.isFileInRecent?.(directoryPath) && !sessionApprovedPaths.has(directoryPath);
+        if (needsConfirmation) {
           const confirmed = await confirmAbsoluteDirectoryRead(confirmationAdapter!, directoryPath);
           if (!confirmed) {
             return createToolCancelledResult(READ_DIRECTORY_TOOL_NAME);
           }
+          sessionApprovedPaths.add(directoryPath);
         }
 
         const result = await readWorkspaceDirectory({

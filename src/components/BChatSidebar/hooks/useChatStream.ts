@@ -330,6 +330,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
    * 流式传输消息
    */
   async function handleStreamMessages(sourceMessages: Message[], config: ServiceConfig, reuseLastAssistant = false): Promise<void> {
+    // 新消息提交时重置工具循环防护器，避免上一轮对话的状态泄露
+    !reuseLastAssistant && startToolLoopSession();
     loading.value = true;
     lastServiceConfig = config;
     currentToolRoundId += 1;

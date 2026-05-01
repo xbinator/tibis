@@ -120,7 +120,7 @@ export const useFilesStore = defineStore('files', {
      * @param _source - 打开来源
      * @returns 被打开的文件记录
      */
-    async openExistingFile(id: string, _source: OpenSource): Promise<StoredFile> {
+    async openExistingFile(id: string): Promise<StoredFile> {
       await this.ensureLoaded();
       await enqueueWrite(async () => {
         await recentFilesStorage.touchRecentFile(id);
@@ -141,7 +141,7 @@ export const useFilesStore = defineStore('files', {
      * @param source - 打开来源
      * @returns 被打开或创建的文件记录
      */
-    async openOrCreateByPath(path: string, source: OpenSource): Promise<StoredFile | null> {
+    async openOrCreateByPath(path: string): Promise<StoredFile | null> {
       if (inflightPaths.has(path)) return null;
 
       inflightPaths.add(path);
@@ -151,7 +151,7 @@ export const useFilesStore = defineStore('files', {
 
         const existingFile = await this.getFileByPath(path);
         if (existingFile) {
-          return this.openExistingFile(existingFile.id, source);
+          return this.openExistingFile(existingFile.id);
         }
 
         const file = await native.readFile(path);
@@ -187,7 +187,7 @@ export const useFilesStore = defineStore('files', {
      * @param _source - 打开来源
      * @returns 创建后的文件记录
      */
-    async createAndOpen(file: StoredFile, _source: OpenSource): Promise<StoredFile> {
+    async createAndOpen(file: StoredFile): Promise<StoredFile> {
       const now = Date.now();
       const createdFile: StoredFile = {
         ...file,

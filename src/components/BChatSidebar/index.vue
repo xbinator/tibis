@@ -96,6 +96,7 @@ import type { Message } from '@/components/BChatSidebar/utils/types';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { SlashCommandOption } from '@/components/BPromptEditor/types';
 import { useChatStore } from '@/stores/chat';
+import { useFilesStore } from '@/stores/files';
 import { useSettingStore } from '@/stores/setting';
 import ConversationView from './components/ConversationView.vue';
 import ImagePreview from './components/ImagePreview.vue';
@@ -173,8 +174,12 @@ const fileReference = useFileReference({
 });
 
 /** 聊天工具列表 */
+const filesStore = useFilesStore();
 const tools = createBuiltinTools({
   confirm: confirmationController.createAdapter(),
+  isFileInRecent: (filePath: string) => {
+    return Boolean(filesStore.recentFiles?.some((file) => file.path === filePath));
+  },
   getPendingQuestion: () => {
     const pendingQuestion = userChoice.findPending(messages.value);
     if (!pendingQuestion) return null;
