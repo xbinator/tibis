@@ -2,8 +2,10 @@
  * @file ipc.mts
  * @description 图片压缩 IPC handler，使用 sharp 在主进程执行图片压缩
  */
-import sharp from 'sharp';
 import { ipcMain } from 'electron';
+import sharp from 'sharp';
+import { writeLog } from '../logger/service.mjs';
+import { LogLevel } from '../logger/types.mjs';
 
 /** 压缩参数 */
 interface ImageCompressRequest {
@@ -68,14 +70,10 @@ export function registerImageHandlers(): void {
 
     const format = mimeTypeToFormat(request.mimeType);
 
+    const originalSize = inputBuffer.length;
+
     try {
-      let pipeline = sharp(inputBuffer)
-        .resize({
-          width: MAX_DIMENSION,
-          height: MAX_DIMENSION,
-          fit: 'inside',
-          withoutEnlargement: true
-        });
+      let pipeline = sharp(inputBuffer).resize({ width: MAX_DIMENSION, height: MAX_DIMENSION, fit: 'inside', withoutEnlargement: true });
 
       // 根据原始格式选择输出参数
       if (format === 'jpeg') {
@@ -94,6 +92,14 @@ export function registerImageHandlers(): void {
       // 若 sharp 无法推断则 toBuffer() 抛异常，外层 catch 降级返回 inputBuffer
 
       const outputBuffer = await pipeline.toBuffer();
+      const compressedSize = outputBuffer.length;
+      const compressionRatio = (((originalSize - compressedSize) / originalSize) * 100).toFixed(2);
+
+      writeLog({
+        level: LogLevel.INFO,
+        scope: 'main',
+        message: `图片压缩完成 - 原始大小: ${(originalSize / 1024).toFixed(2)}KB, 压缩后: ${(compressedSize / 1024).toFixed(2)}KB, 压缩率: ${compressionRatio}%`
+      });
 
       return { buffer: outputBuffer, compressed: true };
     } catch {

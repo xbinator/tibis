@@ -6,9 +6,6 @@ import type { ChatMessageFile } from 'types/chat';
 import { nanoid } from 'nanoid';
 import { logger } from '@/shared/logger';
 
-/** 图片压缩体积阈值（字节），小于此阈值的图片跳过压缩 */
-const COMPRESS_SIZE_THRESHOLD = 500 * 1024;
-
 /**
  * 将 File 对象转为 Base64 Data URL（未经压缩，保留供其他模块使用）。
  * @param file - 浏览器 File 对象
@@ -83,11 +80,16 @@ export async function createChatImageFile(file: File): Promise<ChatMessageFile> 
   let imageBuffer: ArrayBuffer = originalBuffer;
   let compressed = false;
 
-  if (originalBuffer.byteLength > COMPRESS_SIZE_THRESHOLD && window.electronAPI?.compressImage) {
+  if (window.electronAPI?.compressImage) {
     try {
       const result = await window.electronAPI.compressImage(originalBuffer, file.type);
-      imageBuffer = result.buffer;
-      compressed = result.compressed;
+      // 压缩后体积更大时回退到原始数据（sharp 重编码可能增大已高度压缩的图片）
+      if (result.compressed && result.buffer.byteLength >= originalBuffer.byteLength) {
+        imageBuffer = originalBuffer;
+      } else {
+        imageBuffer = result.buffer;
+        compressed = result.compressed;
+      }
     } catch {
       // 仅压缩失败时 fallback 到原始 buffer
       imageBuffer = originalBuffer;
@@ -101,9 +103,7 @@ export async function createChatImageFile(file: File): Promise<ChatMessageFile> 
     const compressedKB = (imageBuffer.byteLength / 1024).toFixed(0);
     const originalKB = (file.size / 1024).toFixed(0);
     const ratio = Math.max(0, (1 - imageBuffer.byteLength / file.size) * 100).toFixed(1);
-    logger.info(
-      `Image compressed: ${file.name} (${originalKB}KB → ${compressedKB}KB, -${ratio}%)`
-    );
+    logger.info(`Image compressed: ${file.name} (${originalKB}KB → ${compressedKB}KB, -${ratio}%)`);
   }
 
   return {

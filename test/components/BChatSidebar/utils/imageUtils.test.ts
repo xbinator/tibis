@@ -116,16 +116,18 @@ describe('imageUtils', () => {
       expect(result.contentHash).toBeTruthy();
     });
 
-    it('skips compression for files below threshold (500KB)', async () => {
-      installElectronAPI();
+    it('compresses even small files when electronAPI is available', async () => {
+      const mockCompress = vi.fn().mockResolvedValue({
+        buffer: new ArrayBuffer(100),
+        compressed: true
+      });
+      installElectronAPI({ compressImage: mockCompress });
       const { createChatImageFile } = await import('@/components/BChatSidebar/utils/imageUtils');
-      // 获取注入的 mock 引用
-      const api = (window as unknown as Record<string, unknown>).electronAPI as { compressImage: ReturnType<typeof vi.fn> };
 
-      const file = createTestImageFile(100); // 100KB
+      const file = createTestImageFile(10); // 10KB 小文件也压缩
       await createChatImageFile(file);
 
-      expect(api.compressImage).not.toHaveBeenCalled();
+      expect(mockCompress).toHaveBeenCalled();
     });
 
     it('skips compression when electronAPI is unavailable', async () => {
@@ -169,6 +171,23 @@ describe('imageUtils', () => {
 
       expect(result.size).toBe(file.size); // 回退到原始大小
       expect(result.url).toMatch(/^data:image\/jpeg;base64,/);
+    });
+
+    it('falls back to original buffer when compressed output is larger', async () => {
+      // 压缩后 700KB > 原始 600KB，应回退
+      const largerBuffer = new ArrayBuffer(700 * 1024);
+      const mockCompress = vi.fn().mockResolvedValue({
+        buffer: largerBuffer,
+        compressed: true
+      });
+      installElectronAPI({ compressImage: mockCompress });
+
+      const { createChatImageFile } = await import('@/components/BChatSidebar/utils/imageUtils');
+
+      const file = createTestImageFile(600);
+      const result = await createChatImageFile(file);
+
+      expect(result.size).toBe(file.size); // 回退到原始大小
     });
 
     it('uses compressed size in output when compression succeeds', async () => {
