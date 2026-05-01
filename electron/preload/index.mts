@@ -312,7 +312,34 @@ const electronAPI: ElectronAPI = {
   syncPlatformRecentFiles: (files) => ipcRenderer.invoke('platform-shortcuts:sync-recent-files', files),
 
   // WebView 操作
-  webview: webviewAPI
+  webview: webviewAPI,
+
+  // ==================== 图片压缩 ====================
+
+  /**
+   * 压缩图片，使用 sharp 在后台进行压缩。
+   * @param buffer - 原始图片二进制数据
+   * @param mimeType - 图片 MIME 类型
+   * @returns 压缩结果（压缩后 ArrayBuffer + 是否实际压缩）
+   */
+  compressImage: async (buffer, mimeType) => {
+    const result = await ipcRenderer.invoke('image:compress', { buffer, mimeType });
+    if (result.buffer instanceof ArrayBuffer) {
+      return result;
+    }
+    // 主进程返回的 Buffer 经结构化克隆后变为 Uint8Array
+    // 取其底层 .buffer 并 slice 出有效字节范围
+    if (result.buffer instanceof Uint8Array) {
+      result.buffer = result.buffer.buffer.slice(
+        result.buffer.byteOffset,
+        result.buffer.byteOffset + result.buffer.byteLength
+      );
+      return result;
+    }
+    // 兜底：无法识别的类型，回退到原始 buffer（调用方已有 fallback）
+    result.buffer = buffer;
+    return result;
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
