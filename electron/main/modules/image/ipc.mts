@@ -68,8 +68,6 @@ export function registerImageHandlers(): void {
 
     const format = mimeTypeToFormat(request.mimeType);
 
-    const originalSize = inputBuffer.length;
-
     try {
       let pipeline = sharp(inputBuffer).resize({ width: MAX_DIMENSION, height: MAX_DIMENSION, fit: 'inside', withoutEnlargement: true });
 
