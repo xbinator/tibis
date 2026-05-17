@@ -100,6 +100,30 @@ const VENDOR_CHUNK_GROUPS = [
   {
     name: 'dayjs',
     test: /node_modules\/dayjs\//
+  },
+  {
+    name: 'mermaid',
+    test: /node_modules\/mermaid\//
+  },
+  {
+    name: 'cytoscape',
+    test: /node_modules\/cytoscape\//
+  },
+  {
+    name: 'ai-sdk',
+    test: /node_modules\/(ai|@ai-sdk)\//
+  },
+  {
+    name: 'tiktoken',
+    test: /node_modules\/js-tiktoken\//
+  },
+  {
+    name: 'localforage',
+    test: /node_modules\/localforage\//
+  },
+  {
+    name: 'pragmatic-drag',
+    test: /node_modules\/@atlaskit\/pragmatic-drag-and-drop/
   }
 ];
 

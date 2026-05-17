@@ -46,7 +46,6 @@ import { Icon } from '@iconify/vue';
 import { NodeViewContent, NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3';
 import { useClipboard, useDebounceFn } from '@vueuse/core';
 import { message } from 'ant-design-vue';
-import mermaid from 'mermaid';
 import BSelect from '@/components/BSelect/index.vue';
 import { createNamespace } from '@/utils/namespace';
 
@@ -100,6 +99,7 @@ const LANGUAGE_OPTIONS = [
 
 let mermaidInitialized = false;
 let mermaidCurrentTheme = '';
+let mermaidModule: any = null;
 const themeChangeCallbacks = new Set<() => void>();
 
 /**
@@ -117,16 +117,20 @@ if (typeof window !== 'undefined') {
   });
 }
 
-async function initMermaid(): Promise<typeof mermaid> {
+async function initMermaid(): Promise<any> {
+  if (!mermaidModule) {
+    const module = await import('mermaid');
+    mermaidModule = module.default;
+  }
+
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   const theme = isDark ? 'dark' : 'default';
 
-  // 主题未变化时跳过重新初始化
   if (mermaidInitialized && mermaidCurrentTheme === theme) {
-    return mermaid;
+    return mermaidModule;
   }
 
-  mermaid.initialize({
+  mermaidModule.initialize({
     startOnLoad: false,
     theme,
     securityLevel: 'loose',
@@ -137,7 +141,7 @@ async function initMermaid(): Promise<typeof mermaid> {
   mermaidInitialized = true;
   mermaidCurrentTheme = theme;
 
-  return mermaid;
+  return mermaidModule;
 }
 
 // ─── 组件 ────────────────────────────────────────────────────────────────────
