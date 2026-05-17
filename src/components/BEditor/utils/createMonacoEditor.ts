@@ -3,7 +3,7 @@
  * @description Monaco 编辑器实例创建适配层，统一封装懒加载、worker 与资源释放责任。
  */
 
-import type * as Monaco from 'monaco-editor';
+import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.main.js';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 
@@ -59,6 +59,7 @@ interface MonacoEnvironmentHost {
 
 let cachedMonaco: typeof Monaco | null = null;
 let monacoEnvironmentReady = false;
+let jsonDefaultsReady = false;
 
 /**
  * 初始化 Monaco worker 环境。
@@ -91,8 +92,31 @@ async function loadMonaco(): Promise<typeof Monaco> {
     return cachedMonaco;
   }
 
-  cachedMonaco = await import('monaco-editor');
+  cachedMonaco = await import('monaco-editor/esm/vs/editor/editor.main.js');
   return cachedMonaco;
+}
+
+/**
+ * 初始化 JSON 语言服务默认配置，关闭 schema 相关提示与请求。
+ * @param monaco - Monaco API
+ */
+async function ensureJsonDefaults(monaco: typeof Monaco): Promise<void> {
+  if (jsonDefaultsReady) {
+    return;
+  }
+
+  monaco.json.jsonDefaults.setDiagnosticsOptions({
+    validate: true,
+    allowComments: true,
+    schemas: [],
+    enableSchemaRequest: false,
+    schemaRequest: 'ignore',
+    schemaValidation: 'ignore',
+    trailingCommas: 'error',
+    comments: 'error'
+  });
+
+  jsonDefaultsReady = true;
 }
 
 /**
@@ -105,8 +129,17 @@ function ensureThemes(monaco: typeof Monaco): void {
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': '#ffffff',
-      'editorLineNumber.foreground': '#9aa3af'
+      'editor.background': '#f8fafc',
+      'editor.foreground': '#243042',
+      'editor.lineHighlightBackground': '#eef2f7',
+      'editor.selectionBackground': '#cfe3ff',
+      'editor.inactiveSelectionBackground': '#e6edf5',
+      'editorLineNumber.foreground': '#a0aec0',
+      'editorLineNumber.activeForeground': '#334155',
+      'editorCursor.foreground': '#2563eb',
+      'editorGutter.background': '#f8fafc',
+      'editorIndentGuide.background1': '#e5e7eb',
+      'editorIndentGuide.activeBackground1': '#cbd5e1'
     }
   });
 
@@ -115,8 +148,17 @@ function ensureThemes(monaco: typeof Monaco): void {
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': '#141414',
-      'editorLineNumber.foreground': '#6b7280'
+      'editor.background': '#13151a',
+      'editor.foreground': '#dbe4f0',
+      'editor.lineHighlightBackground': '#1a1d24',
+      'editor.selectionBackground': '#3a4e69',
+      'editor.inactiveSelectionBackground': '#2a3544',
+      'editorLineNumber.foreground': '#64748b',
+      'editorLineNumber.activeForeground': '#e2e8f0',
+      'editorCursor.foreground': '#93c5fd',
+      'editorGutter.background': '#13151a',
+      'editorIndentGuide.background1': '#223045',
+      'editorIndentGuide.activeBackground1': '#475569'
     }
   });
 }
@@ -130,6 +172,9 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
   ensureMonacoEnvironment();
 
   const monaco = await loadMonaco();
+  if (options.language === 'json') {
+    await ensureJsonDefaults(monaco);
+  }
   ensureThemes(monaco);
   monaco.editor.setTheme(options.theme);
 
@@ -137,8 +182,17 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
   const editor = monaco.editor.create(options.container, {
     model,
     automaticLayout: true,
+    cursorSmoothCaretAnimation: 'on',
+    fontFamily: '"JetBrains Mono", "SFMono-Regular", "Consolas", "Liberation Mono", monospace',
+    fontLigatures: true,
+    fontSize: 15,
+    lineHeight: 24,
     minimap: { enabled: false },
     readOnly: options.readOnly,
+    padding: {
+      top: 18,
+      bottom: 18
+    },
     scrollBeyondLastLine: false,
     tabSize: 2
   });
