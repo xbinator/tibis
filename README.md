@@ -140,7 +140,7 @@ tibis/
 │   └── tsconfig.json        # Electron 独立编译配置
 ├── src/
 │   ├── components/          # 通用组件
-│   │   ├── BEditor/         # 编辑器核心组件
+│   │   ├── BMarkdown/         # 编辑器核心组件
 │   │   ├── BButton/
 │   │   ├── BModal/
 │   │   └── ...

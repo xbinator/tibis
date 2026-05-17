@@ -4,7 +4,7 @@
 
 **Goal:** 为 Tibis 新增 JSON 可视化编辑器 BJsonGraph，提供源码 + 节点图分栏视图，支持双向联动和 AI 结构化上下文。
 
-**Architecture:** 独立 BJsonGraph 组件（非 BEditor 扩展），左侧 CodeMirror 6 源码编辑器 + 右侧 Vue Flow 节点图，通过 BPanelSplitter 分栏。JSON 解析使用 json-source-map 提供偏移量映射，dagre 做 LR 自动布局。AI 上下文通过通用 StructuredDocumentContext 接口注册。
+**Architecture:** 独立 BJsonGraph 组件（非 BMarkdown 扩展），左侧 CodeMirror 6 源码编辑器 + 右侧 Vue Flow 节点图，通过 BPanelSplitter 分栏。JSON 解析使用 json-source-map 提供偏移量映射，dagre 做 LR 自动布局。AI 上下文通过通用 StructuredDocumentContext 接口注册。
 
 **Tech Stack:** Vue 3 + Composition API, Vue Flow, dagre, CodeMirror 6, json-source-map, Vitest
 
@@ -14,7 +14,7 @@
 3. AI 上下文注册由页面层统一管理，BJsonGraph 不自行 register/unregister
 4. fitView 仅在首次加载、显式定位、目标节点离屏时触发
 5. 折叠状态拆分为 `autoCollapsedPaths` / `userCollapsedPaths` / `userExpandedPaths`，自动折叠不覆盖用户操作
-6. 类型迁移范围包含 `useBindings.ts` 和 `useFileSelection.ts`，参数类型从 `BEditorPublicInstance` 提升到 `EditorController`
+6. 类型迁移范围包含 `useBindings.ts` 和 `useFileSelection.ts`，参数类型从 `BMarkdownPublicInstance` 提升到 `EditorController`
 7. 引入 `EditorDriver` 驱动注册表模式，页面层通过 `resolveEditorDriver(fileState)` 获取驱动，用动态组件渲染，避免 if/else 膨胀
 
 ---
@@ -138,7 +138,7 @@ git commit -m "chore: add vue-flow, dagre, json-source-map dependencies"
  */
 import { describe, expect, it } from 'vitest';
 import type { JsonNodeInfo, JsonGraphState } from '@/components/BJsonGraph/types';
-import type { EditorController } from '@/components/BEditor/adapters/types';
+import type { EditorController } from '@/components/BMarkdown/adapters/types';
 
 describe('BJsonGraph types', () => {
   it('JsonNodeInfo has required fields', () => {
@@ -215,8 +215,8 @@ Expected: FAIL
  * @file types.ts
  * @description BJsonGraph 组件类型定义
  */
-import type { EditorController, EditorSearchState, EMPTY_SEARCH_STATE } from '@/components/BEditor/adapters/types';
-import type { EditorState } from '@/components/BEditor/types';
+import type { EditorController, EditorSearchState, EMPTY_SEARCH_STATE } from '@/components/BMarkdown/adapters/types';
+import type { EditorState } from '@/components/BMarkdown/types';
 
 /** JSON 节点类型 */
 export type JsonNodeType = 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
@@ -688,7 +688,7 @@ Expected: FAIL
 - [ ] **Step 3: 实现 markdown.ts**
   - `id: 'markdown'`
   - `match: (file) => file.ext === 'md' || !file.ext`（默认回退）
-  - `component: BEditor`
+  - `component: BMarkdown`
   - `createToolContext`: 仅返回基础 `document` / `editor`，无 `structured`
   - `toolbar`: `showViewModeToggle: true, showOutlineToggle: true, showStructuredViewToggle: false, showSearch: true`
   - `supportsOutline: true`
@@ -723,15 +723,15 @@ git commit -m "feat(editor): add markdown and json drivers"
 - Modify: `src/views/editor/index.vue`
 - Modify: `src/views/editor/hooks/useBindings.ts`
 - Modify: `src/views/editor/hooks/useFileSelection.ts`
-- Modify: `src/components/BEditor/index.vue`（补齐 defineExpose）
+- Modify: `src/components/BMarkdown/index.vue`（补齐 defineExpose）
 
 **审查修正**:
-1. `editorRef` 类型从 `BEditorPublicInstance` 改为 `EditorController`，BJsonGraph 和 BEditor 都赋值给同一个 ref
+1. `editorRef` 类型从 `BMarkdownPublicInstance` 改为 `EditorController`，BJsonGraph 和 BMarkdown 都赋值给同一个 ref
 2. 使用 `resolveEditorDriver(fileState)` 获取当前驱动，用动态组件 `<component :is="activeDriver.component">` 渲染
 3. `registerEditorContext()` 调用 `activeDriver.createToolContext(input)` 拼装上下文，不再按扩展名 if/else
 4. 工具栏根据 `activeDriver.toolbar` 配置渲染
-5. **[类型迁移闭环]** `useBindings.ts` 和 `useFileSelection.ts` 的参数类型从 `Ref<BEditorPublicInstance | null>` 提升到 `Ref<EditorController | null>`
-6. BEditor 组件补齐 `focusEditorAtStart`、`scrollToAnchor`、`getActiveAnchorId` 三个方法的 `defineExpose`
+5. **[类型迁移闭环]** `useBindings.ts` 和 `useFileSelection.ts` 的参数类型从 `Ref<BMarkdownPublicInstance | null>` 提升到 `Ref<EditorController | null>`
+6. BMarkdown 组件补齐 `focusEditorAtStart`、`scrollToAnchor`、`getActiveAnchorId` 三个方法的 `defineExpose`
 
 - [ ] **Step 1: 修改 editor/index.vue**
   - 引入 `resolveEditorDriver`
@@ -742,30 +742,30 @@ git commit -m "feat(editor): add markdown and json drivers"
   - 保持现有 `useBindings`、`useFileSelection`、`activated/deactivated` 逻辑不变
 
 - [ ] **Step 2: 修改 useBindings.ts 参数类型**
-  - 将 `editorInstance?: Ref<BEditorPublicInstance | null>` 改为 `editorInstance?: Ref<EditorController | null>`
+  - 将 `editorInstance?: Ref<BMarkdownPublicInstance | null>` 改为 `editorInstance?: Ref<EditorController | null>`
   - 函数体仅使用 `undo()`/`redo()`，无需其他改动
 
 - [ ] **Step 3: 修改 useFileSelection.ts 参数类型**
-  - 将 `editorInstance: Ref<BEditorPublicInstance | null>` 改为 `editorInstance: Ref<EditorController | null>`
+  - 将 `editorInstance: Ref<BMarkdownPublicInstance | null>` 改为 `editorInstance: Ref<EditorController | null>`
   - 函数体仅使用 `selectLineRange()`，无需其他改动
 
-- [ ] **Step 4: 补齐 BEditor defineExpose**
-  - 在 BEditor 的 `defineExpose` 中补齐 `focusEditorAtStart`、`scrollToAnchor`、`getActiveAnchorId` 三个方法
+- [ ] **Step 4: 补齐 BMarkdown defineExpose**
+  - 在 BMarkdown 的 `defineExpose` 中补齐 `focusEditorAtStart`、`scrollToAnchor`、`getActiveAnchorId` 三个方法
   - 确保返回类型完全兼容 `EditorController`
 
 - [ ] **Step 5: 验证 Markdown 编辑器无回归**
 
-Run: `pnpm dev`，打开 .md 文件确认 BEditor 正常工作
+Run: `pnpm dev`，打开 .md 文件确认 BMarkdown 正常工作
 
 - [ ] **Step 6: 运行 TypeScript 类型检查**
 
 Run: `pnpm typecheck`
-Expected: PASS — `EditorController` ref 兼容 BEditor 和 BJsonGraph
+Expected: PASS — `EditorController` ref 兼容 BMarkdown 和 BJsonGraph
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/views/editor/ src/components/BEditor/index.vue
+git add src/views/editor/ src/components/BMarkdown/index.vue
 git commit -m "feat(editor): refactor index.vue with EditorDriver pattern and type migration"
 ```
 
@@ -829,7 +829,7 @@ git commit --allow-empty -m "feat(json-graph): integration verification complete
 - ✅ **[P2 修正]** AI 上下文注册由页面层统一管理 → Task 6 + Task 13 + Task 14
 - ✅ **[P2 修正]** fitView 触发策略优化 → Task 5 + Task 10
 - ✅ **[P2 修正]** 折叠状态拆分 autoCollapsedPaths / userCollapsedPaths / userExpandedPaths → Task 2 (types) + Task 4 (useGraphLayout)
-- ✅ **[P2 修正]** 类型迁移范围闭环（useBindings + useFileSelection + BEditor defineExpose）→ Task 14
+- ✅ **[P2 修正]** 类型迁移范围闭环（useBindings + useFileSelection + BMarkdown defineExpose）→ Task 14
 - ✅ **[新增]** EditorDriver 驱动注册表模式 → Task 12 + Task 13 + Task 14
 
 **2. Placeholder scan:** 无 TBD/TODO/未完成步骤 ✅
@@ -842,5 +842,5 @@ git commit --allow-empty -m "feat(json-graph): integration verification complete
 - P2 AI 上下文注册 → Task 6 (测试), Task 13 (jsonDriver.createToolContext), Task 14 (页面层统一注册)
 - P2 fitView 策略 → Task 5 (useSourceSync), Task 10 (JsonNodeGraph)
 - P2 折叠状态拆分 → Task 2 (JsonGraphState 类型), Task 4 (useGraphLayout 可见性判断)
-- P2 类型迁移闭环 → Task 14 (useBindings.ts + useFileSelection.ts + BEditor defineExpose)
+- P2 类型迁移闭环 → Task 14 (useBindings.ts + useFileSelection.ts + BMarkdown defineExpose)
 - 新增 EditorDriver 模式 → Task 12 (types + registry), Task 13 (markdown + json drivers), Task 14 (index.vue 重构)

@@ -13,7 +13,7 @@
 ### Task 1: 扩展 SelectionToolbarAction 类型
 
 **Files:**
-- Modify: `src/components/BEditor/adapters/selectionAssistant.ts:61`
+- Modify: `src/components/BMarkdown/adapters/selectionAssistant.ts:61`
 
 - [ ] **Step 1: 在 SelectionToolbarAction 联合类型中新增 'link'**
 
@@ -35,7 +35,7 @@ npx vue-tsc --noEmit --project tsconfig.web.json 2>&1 | head -20
 - [ ] **Step 3: 提交**
 
 ```bash
-git add src/components/BEditor/adapters/selectionAssistant.ts
+git add src/components/BMarkdown/adapters/selectionAssistant.ts
 git commit -m "feat: add link action to SelectionToolbarAction type"
 ```
 
@@ -44,7 +44,7 @@ git commit -m "feat: add link action to SelectionToolbarAction type"
 ### Task 2: PaneRichEditor 添加 link 按钮
 
 **Files:**
-- Modify: `src/components/BEditor/components/PaneRichEditor.vue:164-170`
+- Modify: `src/components/BMarkdown/components/PaneRichEditor.vue:164-170`
 
 - [ ] **Step 1: 在 formatButtons 数组中新增 link 按钮**
 
@@ -79,7 +79,7 @@ npx vue-tsc --noEmit --project tsconfig.web.json 2>&1 | head -20
 - [ ] **Step 3: 提交**
 
 ```bash
-git add src/components/BEditor/components/PaneRichEditor.vue
+git add src/components/BMarkdown/components/PaneRichEditor.vue
 git commit -m "feat: add link button to rich editor format buttons"
 ```
 
@@ -88,7 +88,7 @@ git commit -m "feat: add link button to rich editor format buttons"
 ### Task 3: 创建 LinkPopover 浮层组件
 
 **Files:**
-- Create: `src/components/BEditor/components/LinkPopover.vue`
+- Create: `src/components/BMarkdown/components/LinkPopover.vue`
 
 - [ ] **Step 1: 创建 LinkPopover.vue**
 
@@ -296,7 +296,7 @@ npx vue-tsc --noEmit --project tsconfig.web.json 2>&1 | head -20
 - [ ] **Step 3: 提交**
 
 ```bash
-git add src/components/BEditor/components/LinkPopover.vue
+git add src/components/BMarkdown/components/LinkPopover.vue
 git commit -m "feat: add LinkPopover component for URL input"
 ```
 
@@ -305,7 +305,7 @@ git commit -m "feat: add LinkPopover component for URL input"
 ### Task 4: SelectionToolbarRich 集成 LinkPopover
 
 **Files:**
-- Modify: `src/components/BEditor/components/SelectionToolbarRich.vue`
+- Modify: `src/components/BMarkdown/components/SelectionToolbarRich.vue`
 
 - [ ] **Step 1: 模板中新增 LinkPopover**
 
@@ -419,7 +419,7 @@ npx vue-tsc --noEmit --project tsconfig.web.json 2>&1 | head -20
 - [ ] **Step 6: 提交**
 
 ```bash
-git add src/components/BEditor/components/SelectionToolbarRich.vue
+git add src/components/BMarkdown/components/SelectionToolbarRich.vue
 git commit -m "feat: integrate LinkPopover into SelectionToolbarRich"
 ```
 
@@ -436,5 +436,5 @@ npx vue-tsc --noEmit --project tsconfig.web.json
 - [ ] **最终验证：lint 检查**
 
 ```bash
-npx eslint src/components/BEditor/components/LinkPopover.vue src/components/BEditor/components/SelectionToolbarRich.vue src/components/BEditor/adapters/selectionAssistant.ts src/components/BEditor/components/PaneRichEditor.vue --fix
+npx eslint src/components/BMarkdown/components/LinkPopover.vue src/components/BMarkdown/components/SelectionToolbarRich.vue src/components/BMarkdown/adapters/selectionAssistant.ts src/components/BMarkdown/components/PaneRichEditor.vue --fix
 ```

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a persisted editor page-width setting with `default` / `wide` / `full` modes, wire it into the in-app view menu, system menu, and AI settings tool, and make it affect only the BEditor content column.
+**Goal:** Add a persisted editor page-width setting with `default` / `wide` / `full` modes, wire it into the in-app view menu, system menu, and AI settings tool, and make it affect only the BMarkdown content column.
 
 **Architecture:** Keep `src/stores/setting.ts` as the single source of truth. The editor shell reads `editorPageWidth` and maps it to a component-local CSS variable, while menu actions and AI settings changes all flow through `settingStore.setEditorPageWidth()`. Tests should cover store persistence, editor rendering, menu action dispatch, and AI settings validation.
 
@@ -183,20 +183,20 @@ git commit -m "feat: add editor page width setting store"
 
 ---
 
-### Task 2: Apply page width to BEditor content column
+### Task 2: Apply page width to BMarkdown content column
 
 **Files:**
-- Modify: `<project>/src/components/BEditor/index.vue`
-- Test: `<project>/test/components/BEditor/index.page-width.test.ts`
+- Modify: `<project>/src/components/BMarkdown/index.vue`
+- Test: `<project>/test/components/BMarkdown/index.page-width.test.ts`
 
-- [ ] **Step 1: Write the failing BEditor rendering test**
+- [ ] **Step 1: Write the failing BMarkdown rendering test**
 
-Create `<project>/test/components/BEditor/index.page-width.test.ts`:
+Create `<project>/test/components/BMarkdown/index.page-width.test.ts`:
 
 ```ts
 /**
  * @file index.page-width.test.ts
- * @description 验证 BEditor 正文区页宽设置映射。
+ * @description 验证 BMarkdown 正文区页宽设置映射。
  */
 /* @vitest-environment jsdom */
 
@@ -204,7 +204,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it } from 'vitest';
-import BEditor from '@/components/BEditor/index.vue';
+import BMarkdown from '@/components/BMarkdown/index.vue';
 import { useSettingStore } from '@/stores/setting';
 
 const storage = new Map<string, string>();
@@ -230,12 +230,12 @@ const ScrollbarStub = defineComponent({
 });
 
 function mountEditor() {
-  return mount(BEditor, {
+  return mount(BMarkdown, {
     props: { value: '# Title', title: 'Doc' },
     global: {
       stubs: {
         BScrollbar: ScrollbarStub,
-        BEditorSidebar: true,
+        BMarkdownSidebar: true,
         FindBar: true,
         PaneRichEditor: true,
         PaneSourceEditor: true
@@ -244,7 +244,7 @@ function mountEditor() {
   });
 }
 
-describe('BEditor page width', () => {
+describe('BMarkdown page width', () => {
   beforeEach(() => {
     storage.clear();
     setActivePinia(createPinia());
@@ -252,7 +252,7 @@ describe('BEditor page width', () => {
 
   it('uses 900px max width in default mode', () => {
     const wrapper = mountEditor();
-    expect(wrapper.find('.b-editor-container').attributes('style')).toContain('--editor-page-max-width: 900px');
+    expect(wrapper.find('.b-markdown-container').attributes('style')).toContain('--editor-page-max-width: 900px');
   });
 
   it('uses 1200px max width in wide mode', () => {
@@ -260,7 +260,7 @@ describe('BEditor page width', () => {
     settingStore.setEditorPageWidth('wide');
 
     const wrapper = mountEditor();
-    expect(wrapper.find('.b-editor-container').attributes('style')).toContain('--editor-page-max-width: 1200px');
+    expect(wrapper.find('.b-markdown-container').attributes('style')).toContain('--editor-page-max-width: 1200px');
   });
 
   it('uses none max width in full mode', () => {
@@ -268,24 +268,24 @@ describe('BEditor page width', () => {
     settingStore.setEditorPageWidth('full');
 
     const wrapper = mountEditor();
-    expect(wrapper.find('.b-editor-container').attributes('style')).toContain('--editor-page-max-width: none');
+    expect(wrapper.find('.b-markdown-container').attributes('style')).toContain('--editor-page-max-width: none');
   });
 });
 ```
 
-- [ ] **Step 2: Run the BEditor test to confirm failure**
+- [ ] **Step 2: Run the BMarkdown test to confirm failure**
 
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/index.page-width.test.ts
+pnpm test -- test/components/BMarkdown/index.page-width.test.ts
 ```
 
 Expected: `FAIL` because the component still hardcodes `max-width: 900px`.
 
-- [ ] **Step 3: Implement the BEditor width mapping**
+- [ ] **Step 3: Implement the BMarkdown width mapping**
 
-Update `<project>/src/components/BEditor/index.vue`:
+Update `<project>/src/components/BMarkdown/index.vue`:
 
 ```ts
 import type { CSSProperties } from 'vue';
@@ -313,11 +313,11 @@ const editorContainerStyle = computed<CSSProperties>(() => ({
 Bind the style in template and update the style rule:
 
 ```vue
-<div class="b-editor-container" :style="editorContainerStyle">
+<div class="b-markdown-container" :style="editorContainerStyle">
 ```
 
 ```less
-.b-editor-container {
+.b-markdown-container {
   position: relative;
   max-width: var(--editor-page-max-width);
   padding: 20px 40px 90px;
@@ -328,12 +328,12 @@ Bind the style in template and update the style rule:
 
 Add file header and JSDoc comments where they are missing while touching the script, to match repo rules.
 
-- [ ] **Step 4: Re-run the BEditor test**
+- [ ] **Step 4: Re-run the BMarkdown test**
 
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/index.page-width.test.ts
+pnpm test -- test/components/BMarkdown/index.page-width.test.ts
 ```
 
 Expected: `PASS`.
@@ -343,7 +343,7 @@ Expected: `PASS`.
 Run:
 
 ```bash
-git add src/components/BEditor/index.vue test/components/BEditor/index.page-width.test.ts
+git add src/components/BMarkdown/index.vue test/components/BMarkdown/index.page-width.test.ts
 git commit -m "feat: add editor page width rendering"
 ```
 
@@ -638,7 +638,7 @@ git commit -m "feat: add editor page width ai setting"
 **Files:**
 - Modify: `<project>/changelog/2026-04-30.md`
 - Verify: `<project>/src/stores/setting.ts`
-- Verify: `<project>/src/components/BEditor/index.vue`
+- Verify: `<project>/src/components/BMarkdown/index.vue`
 - Verify: `<project>/src/layouts/default/hooks/useViewActive.ts`
 - Verify: `<project>/src/hooks/useMenuAction.ts`
 - Verify: `<project>/electron/main/modules/menu/service.mts`
@@ -657,7 +657,7 @@ Add this line under `## Changed` in `<project>/changelog/2026-04-30.md`:
 Run:
 
 ```bash
-pnpm test -- test/stores/setting.test.ts test/components/BEditor/index.page-width.test.ts test/hooks/useMenuAction.test.ts test/ai/tools/builtin-settings.test.ts
+pnpm test -- test/stores/setting.test.ts test/components/BMarkdown/index.page-width.test.ts test/hooks/useMenuAction.test.ts test/ai/tools/builtin-settings.test.ts
 ```
 
 Expected: all four test files `PASS`.
@@ -667,7 +667,7 @@ Expected: all four test files `PASS`.
 Run:
 
 ```bash
-pnpm exec eslint src/stores/setting.ts src/components/BEditor/index.vue src/layouts/default/hooks/useViewActive.ts src/hooks/useMenuAction.ts src/ai/tools/builtin/settings.ts --ext .ts,.vue
+pnpm exec eslint src/stores/setting.ts src/components/BMarkdown/index.vue src/layouts/default/hooks/useViewActive.ts src/hooks/useMenuAction.ts src/ai/tools/builtin/settings.ts --ext .ts,.vue
 ```
 
 Expected: `0 problems`.
@@ -677,7 +677,7 @@ Expected: `0 problems`.
 Run:
 
 ```bash
-git diff -- src/stores/setting.ts src/components/BEditor/index.vue src/layouts/default/hooks/useViewActive.ts src/hooks/useMenuAction.ts electron/main/modules/menu/service.mts src/ai/tools/builtin/settings.ts test/stores/setting.test.ts test/components/BEditor/index.page-width.test.ts test/hooks/useMenuAction.test.ts test/ai/tools/builtin-settings.test.ts changelog/2026-04-30.md
+git diff -- src/stores/setting.ts src/components/BMarkdown/index.vue src/layouts/default/hooks/useViewActive.ts src/hooks/useMenuAction.ts electron/main/modules/menu/service.mts src/ai/tools/builtin/settings.ts test/stores/setting.test.ts test/components/BMarkdown/index.page-width.test.ts test/hooks/useMenuAction.test.ts test/ai/tools/builtin-settings.test.ts changelog/2026-04-30.md
 ```
 
 Expected: only the planned page-width changes and required comment/type updates appear.
@@ -687,7 +687,7 @@ Expected: only the planned page-width changes and required comment/type updates 
 Run:
 
 ```bash
-git add src/stores/setting.ts src/components/BEditor/index.vue src/layouts/default/hooks/useViewActive.ts src/hooks/useMenuAction.ts electron/main/modules/menu/service.mts src/ai/tools/builtin/settings.ts test/stores/setting.test.ts test/components/BEditor/index.page-width.test.ts test/hooks/useMenuAction.test.ts test/ai/tools/builtin-settings.test.ts changelog/2026-04-30.md
+git add src/stores/setting.ts src/components/BMarkdown/index.vue src/layouts/default/hooks/useViewActive.ts src/hooks/useMenuAction.ts electron/main/modules/menu/service.mts src/ai/tools/builtin/settings.ts test/stores/setting.test.ts test/components/BMarkdown/index.page-width.test.ts test/hooks/useMenuAction.test.ts test/ai/tools/builtin-settings.test.ts changelog/2026-04-30.md
 git commit -m "feat: add editor page width setting"
 ```
 
@@ -697,7 +697,7 @@ git commit -m "feat: add editor page width setting"
 
 - Spec coverage check:
   - `settingStore` single source of truth: Task 1
-  - BEditor正文区宽度映射: Task 2
+  - BMarkdown正文区宽度映射: Task 2
   - 应用内视图菜单和系统菜单: Task 3
   - AI settings tool: Task 4
   - changelog and end-to-end verification: Task 5

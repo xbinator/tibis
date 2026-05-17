@@ -6,7 +6,7 @@
 import type { EditorFile } from '../types';
 import type { AIToolContext } from 'types/ai';
 import type { Component } from 'vue';
-import type { EditorController } from '@/components/BEditor/types';
+import type { EditorController } from '@/components/BMarkdown/types';
 
 /**
  * 工具栏能力配置。

@@ -1,8 +1,8 @@
-# 04-编辑器（BEditor）
+# 04-编辑器（BMarkdown）
 
 ## 模块目标
 
-`src/components/BEditor/` 是“编辑器能力”的组件化封装层，目标是把 Markdown 编辑体验收敛为一个可复用、可扩展的组件：
+`src/components/BMarkdown/` 是“编辑器能力”的组件化封装层，目标是把 Markdown 编辑体验收敛为一个可复用、可扩展的组件：
 
 - 富文本（TipTap）与源码编辑双模式
 - Markdown ↔ TipTap 文档结构映射
@@ -12,7 +12,7 @@
 
 ## 主要文件
 
-- 组件入口：`src/components/BEditor/index.vue`
+- 组件入口：`src/components/BMarkdown/index.vue`
 - 视图组件：
   - `components/RichEditorPane.vue`：TipTap 富文本容器
   - `components/SourceEditorPane.vue`：源码编辑容器
@@ -54,11 +54,11 @@
 
 外部通常只需要依赖：
 
-- `BEditor`：内容输入/展示
+- `BMarkdown`：内容输入/展示
 - `EditorController`：undo/redo、focus 等（通过 `useEditorController` 收口）
 - 搜索/目录：通过 `Search` 扩展与 `useAnchors` 对外传递事件/数据
 
 ## 常见扩展点
 
 - 增加新节点/mark：在 `useExtensions` 的 `editorExtensions` 中组合，并补充 markdown parse/render（如果需要可逆）
-- 增加编辑器 UI：在 `BEditor/components/*` 中实现，然后在 `BEditor/index.vue` 统一编排
+- 增加编辑器 UI：在 `BMarkdown/components/*` 中实现，然后在 `BMarkdown/index.vue` 统一编排

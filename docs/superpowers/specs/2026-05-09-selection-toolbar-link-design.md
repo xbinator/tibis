@@ -122,7 +122,7 @@ editor.chain().focus().unsetLink().run()
 
 | 文件 | 改动 |
 |------|------|
-| `src/components/BEditor/adapters/selectionAssistant.ts` | `SelectionToolbarAction` 新增 `'link'` |
-| `src/components/BEditor/components/PaneRichEditor.vue` | `formatButtons` 新增 link 按钮 |
-| `src/components/BEditor/components/SelectionToolbarRich.vue` | `handleFormat` 新增 link 分支 + LinkPopover 状态管理 |
-| **新建** `src/components/BEditor/components/LinkPopover.vue` | 链接 URL 输入浮层组件 |
+| `src/components/BMarkdown/adapters/selectionAssistant.ts` | `SelectionToolbarAction` 新增 `'link'` |
+| `src/components/BMarkdown/components/PaneRichEditor.vue` | `formatButtons` 新增 link 按钮 |
+| `src/components/BMarkdown/components/SelectionToolbarRich.vue` | `handleFormat` 新增 link 分支 + LinkPopover 状态管理 |
+| **新建** `src/components/BMarkdown/components/LinkPopover.vue` | 链接 URL 输入浮层组件 |

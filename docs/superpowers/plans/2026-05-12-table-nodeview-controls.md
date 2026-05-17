@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为 `BEditor` 富文本表格实现自定义 `Table NodeView`，支持分割线新增行列、整行整列删除入口，以及最外边框插入规则。
+**Goal:** 为 `BMarkdown` 富文本表格实现自定义 `Table NodeView`，支持分割线新增行列、整行整列删除入口，以及最外边框插入规则。
 
 **Architecture:** 先把表格交互拆成两层纯逻辑模块：`tableControlsGeometry.ts` 负责命中与矩形计算，`tableControlsCommands.ts` 负责将命中目标映射为 TipTap 表格命令。随后新增 `TableView.vue` 作为 `Table` 的 Vue NodeView，把 hover、scroll、overlay 和命令调用收敛到表格宿主内部，最后在 `useExtensions.ts` 注册 NodeView 并把表格样式迁移到新的类名体系。
 
@@ -14,14 +14,14 @@
 
 | File | Responsibility |
 |------|---------------|
-| `src/components/BEditor/extensions/tableControlsGeometry.ts` | 新建：表格分割线与行列区块命中、矩形归一化和按钮派生位置的纯函数 |
-| `src/components/BEditor/extensions/tableControlsCommands.ts` | 新建：根据命中目标定位代表单元格、执行 `addRowBefore/After`、`addColumnBefore/After`、`deleteRow`、`deleteColumn` |
-| `src/components/BEditor/components/TableView.vue` | 新建：`Table` NodeView 宿主，管理 `mousemove` / `mouseleave` / `scroll`、两套 overlay 与按钮点击 |
-| `src/components/BEditor/hooks/useExtensions.ts` | 修改：为 `MarkdownTable` 注册 `VueNodeViewRenderer(TableView)` |
-| `src/components/BEditor/components/PaneRichEditor.vue` | 修改：迁移旧 `.tableWrapper` 样式到 NodeView 类名，补齐按钮和高亮线样式 |
-| `test/components/BEditor/tableControlsGeometry.test.ts` | 新建：纯函数测试，覆盖分割线、外边框、交叉点优先级、滚动与区块删除命中 |
-| `test/components/BEditor/tableControlsCommands.test.ts` | 新建：命令测试，覆盖四向插入、内部单向插入、删除与 selection 落点 |
-| `test/components/BEditor/tableNodeView.test.ts` | 新建：NodeView 组件交互测试，覆盖 hover、scroll、可编辑状态与按钮显隐 |
+| `src/components/BMarkdown/extensions/tableControlsGeometry.ts` | 新建：表格分割线与行列区块命中、矩形归一化和按钮派生位置的纯函数 |
+| `src/components/BMarkdown/extensions/tableControlsCommands.ts` | 新建：根据命中目标定位代表单元格、执行 `addRowBefore/After`、`addColumnBefore/After`、`deleteRow`、`deleteColumn` |
+| `src/components/BMarkdown/components/TableView.vue` | 新建：`Table` NodeView 宿主，管理 `mousemove` / `mouseleave` / `scroll`、两套 overlay 与按钮点击 |
+| `src/components/BMarkdown/hooks/useExtensions.ts` | 修改：为 `MarkdownTable` 注册 `VueNodeViewRenderer(TableView)` |
+| `src/components/BMarkdown/components/PaneRichEditor.vue` | 修改：迁移旧 `.tableWrapper` 样式到 NodeView 类名，补齐按钮和高亮线样式 |
+| `test/components/BMarkdown/tableControlsGeometry.test.ts` | 新建：纯函数测试，覆盖分割线、外边框、交叉点优先级、滚动与区块删除命中 |
+| `test/components/BMarkdown/tableControlsCommands.test.ts` | 新建：命令测试，覆盖四向插入、内部单向插入、删除与 selection 落点 |
+| `test/components/BMarkdown/tableNodeView.test.ts` | 新建：NodeView 组件交互测试，覆盖 hover、scroll、可编辑状态与按钮显隐 |
 | `changelog/2026-05-12.md` | 修改：记录“表格 NodeView 增删控件”实现计划 |
 
 ## Scope Notes
@@ -36,11 +36,11 @@
 ### Task 1: 为表格几何命中编写失败测试
 
 **Files:**
-- Create: `test/components/BEditor/tableControlsGeometry.test.ts`
+- Create: `test/components/BMarkdown/tableControlsGeometry.test.ts`
 
 - [ ] **Step 1: 新建纯函数测试文件并写入分割线、外边框、交叉点与删除区块用例**
 
-创建 `test/components/BEditor/tableControlsGeometry.test.ts`，写入以下完整内容：
+创建 `test/components/BMarkdown/tableControlsGeometry.test.ts`，写入以下完整内容：
 
 ```typescript
 import { describe, expect, it } from 'vitest';
@@ -51,7 +51,7 @@ import {
   findHoveredSegment,
   getAddButtonPosition,
   getRemoveButtonPosition
-} from '@/components/BEditor/extensions/tableControlsGeometry';
+} from '@/components/BMarkdown/extensions/tableControlsGeometry';
 
 /**
  * 创建矩形数据。
@@ -205,15 +205,15 @@ describe('tableControlsGeometry', () => {
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/tableControlsGeometry.test.ts
+pnpm test -- test/components/BMarkdown/tableControlsGeometry.test.ts
 ```
 
-Expected: FAIL，报错应集中在 `Cannot find module '@/components/BEditor/extensions/tableControlsGeometry'` 或缺少导出符号。
+Expected: FAIL，报错应集中在 `Cannot find module '@/components/BMarkdown/extensions/tableControlsGeometry'` 或缺少导出符号。
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add test/components/BEditor/tableControlsGeometry.test.ts
+git add test/components/BMarkdown/tableControlsGeometry.test.ts
 git commit -m "test: cover table hover geometry"
 ```
 
@@ -222,12 +222,12 @@ git commit -m "test: cover table hover geometry"
 ### Task 2: 实现表格几何命中模块并让测试转绿
 
 **Files:**
-- Create: `src/components/BEditor/extensions/tableControlsGeometry.ts`
-- Modify: `test/components/BEditor/tableControlsGeometry.test.ts`
+- Create: `src/components/BMarkdown/extensions/tableControlsGeometry.ts`
+- Modify: `test/components/BMarkdown/tableControlsGeometry.test.ts`
 
 - [ ] **Step 1: 新建几何模块并实现类型、分割线命中、区块命中和按钮位置派生**
 
-创建 `src/components/BEditor/extensions/tableControlsGeometry.ts`，写入以下完整内容：
+创建 `src/components/BMarkdown/extensions/tableControlsGeometry.ts`，写入以下完整内容：
 
 ```typescript
 /**
@@ -574,7 +574,7 @@ export function getRemoveButtonPosition(hit: SegmentHit, buttonSize: number): Bu
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/tableControlsGeometry.test.ts
+pnpm test -- test/components/BMarkdown/tableControlsGeometry.test.ts
 ```
 
 Expected: PASS，8 个用例全部通过。
@@ -582,7 +582,7 @@ Expected: PASS，8 个用例全部通过。
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/components/BEditor/extensions/tableControlsGeometry.ts test/components/BEditor/tableControlsGeometry.test.ts
+git add src/components/BMarkdown/extensions/tableControlsGeometry.ts test/components/BMarkdown/tableControlsGeometry.test.ts
 git commit -m "feat: add table hover geometry helpers"
 ```
 
@@ -591,22 +591,22 @@ git commit -m "feat: add table hover geometry helpers"
 ### Task 3: 为表格命令映射编写失败测试并实现命令模块
 
 **Files:**
-- Create: `test/components/BEditor/tableControlsCommands.test.ts`
-- Create: `src/components/BEditor/extensions/tableControlsCommands.ts`
+- Create: `test/components/BMarkdown/tableControlsCommands.test.ts`
+- Create: `src/components/BMarkdown/extensions/tableControlsCommands.ts`
 
 - [ ] **Step 1: 新建命令测试文件，覆盖四向插入、内部单向插入与删除**
 
-创建 `test/components/BEditor/tableControlsCommands.test.ts`，写入以下完整内容：
+创建 `test/components/BMarkdown/tableControlsCommands.test.ts`，写入以下完整内容：
 
 ```typescript
 import { describe, expect, it, vi } from 'vitest';
 import type { Editor } from '@tiptap/core';
-import type { DividerHit, SegmentHit } from '@/components/BEditor/extensions/tableControlsGeometry';
+import type { DividerHit, SegmentHit } from '@/components/BMarkdown/extensions/tableControlsGeometry';
 import {
   applyAddAction,
   applyRemoveAction,
   type TableCommandContext
-} from '@/components/BEditor/extensions/tableControlsCommands';
+} from '@/components/BMarkdown/extensions/tableControlsCommands';
 
 interface CommandRecorder {
   focus: ReturnType<typeof vi.fn>;
@@ -770,14 +770,14 @@ describe('tableControlsCommands', () => {
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/tableControlsCommands.test.ts
+pnpm test -- test/components/BMarkdown/tableControlsCommands.test.ts
 ```
 
-Expected: FAIL，报错应集中在 `Cannot find module '@/components/BEditor/extensions/tableControlsCommands'`。
+Expected: FAIL，报错应集中在 `Cannot find module '@/components/BMarkdown/extensions/tableControlsCommands'`。
 
 - [ ] **Step 3: 新建命令模块并实现表格增删命令映射**
 
-创建 `src/components/BEditor/extensions/tableControlsCommands.ts`，写入以下完整内容：
+创建 `src/components/BMarkdown/extensions/tableControlsCommands.ts`，写入以下完整内容：
 
 ```typescript
 /**
@@ -907,7 +907,7 @@ export function applyRemoveAction(context: TableCommandContext, hit: SegmentHit)
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/tableControlsCommands.test.ts
+pnpm test -- test/components/BMarkdown/tableControlsCommands.test.ts
 ```
 
 Expected: PASS，6 个用例全部通过。
@@ -915,7 +915,7 @@ Expected: PASS，6 个用例全部通过。
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/components/BEditor/extensions/tableControlsCommands.ts test/components/BEditor/tableControlsCommands.test.ts
+git add src/components/BMarkdown/extensions/tableControlsCommands.ts test/components/BMarkdown/tableControlsCommands.test.ts
 git commit -m "feat: add table control command mapping"
 ```
 
@@ -924,18 +924,18 @@ git commit -m "feat: add table control command mapping"
 ### Task 4: 为 Table NodeView 编写失败测试
 
 **Files:**
-- Create: `test/components/BEditor/tableNodeView.test.ts`
+- Create: `test/components/BMarkdown/tableNodeView.test.ts`
 
 - [ ] **Step 1: 新建 NodeView 交互测试，覆盖 hover、scroll 与 editable 边界**
 
-创建 `test/components/BEditor/tableNodeView.test.ts`，写入以下完整内容：
+创建 `test/components/BMarkdown/tableNodeView.test.ts`，写入以下完整内容：
 
 ```typescript
 /* @vitest-environment jsdom */
 
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import TableView from '@/components/BEditor/components/TableView.vue';
+import TableView from '@/components/BMarkdown/components/TableView.vue';
 
 const chainRecorder = {
   focus: vi.fn(),
@@ -1057,15 +1057,15 @@ describe('TableView', () => {
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/tableNodeView.test.ts
+pnpm test -- test/components/BMarkdown/tableNodeView.test.ts
 ```
 
-Expected: FAIL，报错应集中在 `Cannot find module '@/components/BEditor/components/TableView.vue'`。
+Expected: FAIL，报错应集中在 `Cannot find module '@/components/BMarkdown/components/TableView.vue'`。
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add test/components/BEditor/tableNodeView.test.ts
+git add test/components/BMarkdown/tableNodeView.test.ts
 git commit -m "test: cover table node view controls"
 ```
 
@@ -1074,12 +1074,12 @@ git commit -m "test: cover table node view controls"
 ### Task 5: 实现 Table NodeView 并注册到 MarkdownTable
 
 **Files:**
-- Create: `src/components/BEditor/components/TableView.vue`
-- Modify: `src/components/BEditor/hooks/useExtensions.ts`
+- Create: `src/components/BMarkdown/components/TableView.vue`
+- Modify: `src/components/BMarkdown/hooks/useExtensions.ts`
 
 - [ ] **Step 1: 新建 TableView.vue，搭好 NodeView 宿主、overlay、事件绑定和命令桥接**
 
-创建 `src/components/BEditor/components/TableView.vue`，写入以下完整内容：
+创建 `src/components/BMarkdown/components/TableView.vue`，写入以下完整内容：
 
 ```vue
 <template>
@@ -1378,7 +1378,7 @@ void nextTick();
 
 - [ ] **Step 2: 在 `useExtensions.ts` 中为 `MarkdownTable` 注册 Vue NodeView**
 
-在 `src/components/BEditor/hooks/useExtensions.ts` 顶部新增导入：
+在 `src/components/BMarkdown/hooks/useExtensions.ts` 顶部新增导入：
 
 ```typescript
 import TableView from '../components/TableView.vue';
@@ -1422,7 +1422,7 @@ import TableView from '../components/TableView.vue';
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/tableNodeView.test.ts
+pnpm test -- test/components/BMarkdown/tableNodeView.test.ts
 ```
 
 Expected: PASS，5 个用例全部通过。
@@ -1430,7 +1430,7 @@ Expected: PASS，5 个用例全部通过。
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/components/BEditor/components/TableView.vue src/components/BEditor/hooks/useExtensions.ts test/components/BEditor/tableNodeView.test.ts
+git add src/components/BMarkdown/components/TableView.vue src/components/BMarkdown/hooks/useExtensions.ts test/components/BMarkdown/tableNodeView.test.ts
 git commit -m "feat: add table node view controls"
 ```
 
@@ -1439,7 +1439,7 @@ git commit -m "feat: add table node view controls"
 ### Task 6: 迁移表格样式并做整体验证
 
 **Files:**
-- Modify: `src/components/BEditor/components/PaneRichEditor.vue`
+- Modify: `src/components/BMarkdown/components/PaneRichEditor.vue`
 - Modify: `changelog/2026-05-12.md`
 
 - [ ] **Step 1: 在富文本样式中迁移旧 `.tableWrapper` 规则到 NodeView 类名体系**
@@ -1564,9 +1564,9 @@ git commit -m "feat: add table node view controls"
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/tableControlsGeometry.test.ts test/components/BEditor/tableControlsCommands.test.ts test/components/BEditor/tableNodeView.test.ts
+pnpm test -- test/components/BMarkdown/tableControlsGeometry.test.ts test/components/BMarkdown/tableControlsCommands.test.ts test/components/BMarkdown/tableNodeView.test.ts
 pnpm exec vue-tsc --noEmit
-pnpm exec eslint src/components/BEditor/components/TableView.vue src/components/BEditor/extensions/tableControlsGeometry.ts src/components/BEditor/extensions/tableControlsCommands.ts src/components/BEditor/hooks/useExtensions.ts src/components/BEditor/components/PaneRichEditor.vue
+pnpm exec eslint src/components/BMarkdown/components/TableView.vue src/components/BMarkdown/extensions/tableControlsGeometry.ts src/components/BMarkdown/extensions/tableControlsCommands.ts src/components/BMarkdown/hooks/useExtensions.ts src/components/BMarkdown/components/PaneRichEditor.vue
 ```
 
 Expected:
@@ -1578,10 +1578,10 @@ Expected:
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/components/BEditor/components/PaneRichEditor.vue changelog/2026-05-12.md
-git add src/components/BEditor/components/TableView.vue src/components/BEditor/extensions/tableControlsGeometry.ts src/components/BEditor/extensions/tableControlsCommands.ts
-git add src/components/BEditor/hooks/useExtensions.ts
-git add test/components/BEditor/tableControlsGeometry.test.ts test/components/BEditor/tableControlsCommands.test.ts test/components/BEditor/tableNodeView.test.ts
+git add src/components/BMarkdown/components/PaneRichEditor.vue changelog/2026-05-12.md
+git add src/components/BMarkdown/components/TableView.vue src/components/BMarkdown/extensions/tableControlsGeometry.ts src/components/BMarkdown/extensions/tableControlsCommands.ts
+git add src/components/BMarkdown/hooks/useExtensions.ts
+git add test/components/BMarkdown/tableControlsGeometry.test.ts test/components/BMarkdown/tableControlsCommands.test.ts test/components/BMarkdown/tableNodeView.test.ts
 git commit -m "feat: add table node view insert and remove controls"
 ```
 

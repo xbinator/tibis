@@ -33,8 +33,8 @@ import {
   findPreviousSourceEditorMatch,
   getSourceEditorSearchState,
   setSourceEditorSearchTerm
-} from '@/components/BEditor/adapters/sourceEditorSearch';
-import type { EditorController, EditorSearchState, EditorSelection as EditorSelectionRange } from '@/components/BEditor/adapters/types';
+} from '@/components/BMarkdown/adapters/sourceEditorSearch';
+import type { EditorController, EditorSearchState, EditorSelection as EditorSelectionRange } from '@/components/BMarkdown/adapters/types';
 
 interface Props {
   /** 是否可编辑。 */

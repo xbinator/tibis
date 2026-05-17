@@ -400,7 +400,7 @@ interface SaveToDiskResult {
 
 ### 视图偏好接入
 
-`src/views/editor/index.vue` 当前通过 `settingStore.sourceMode` 和 `settingStore.showOutline` 驱动 `BEditor`。
+`src/views/editor/index.vue` 当前通过 `settingStore.sourceMode` 和 `settingStore.showOutline` 驱动 `BMarkdown`。
 
 本次改为消费 `editorPreferences`：
 
@@ -411,7 +411,7 @@ interface SaveToDiskResult {
 
 ### 失焦事件接入
 
-为了支持 `onBlur`，需要在 `BEditor` 或其实际可编辑子组件上暴露失焦事件。
+为了支持 `onBlur`，需要在 `BMarkdown` 或其实际可编辑子组件上暴露失焦事件。
 
 建议原则：
 
@@ -419,13 +419,13 @@ interface SaveToDiskResult {
 - 富文本与源码模式都统一对外抛出 `blur` 语义
 - 页面层不依赖 DOM 细节，只消费统一事件
 
-若 `BEditor` 当前没有统一失焦事件，建议新增例如：
+若 `BMarkdown` 当前没有统一失焦事件，建议新增例如：
 
 - `@editor-blur`
 
 由内部富文本与源码编辑器分别转发。
 
-这个事件不应直接等同于原生 `blur`。建议由 `BEditor` 内部先做语义过滤：
+这个事件不应直接等同于原生 `blur`。建议由 `BMarkdown` 内部先做语义过滤：
 
 - 若 `relatedTarget` 仍位于当前编辑器根容器内，则视为“编辑器内部焦点迁移”，不向外抛出
 - 仅当焦点真正离开整个编辑器交互区域时，才向页面层发出一次 `editor-blur`
@@ -440,7 +440,7 @@ interface SaveToDiskResult {
 - 变化后先走草稿持久化
 - 再由保存策略执行层决定是否触发真实写盘
 
-这样可以避免重复在 `BEditor` 组件树中新增额外状态源。
+这样可以避免重复在 `BMarkdown` 组件树中新增额外状态源。
 
 ## 设置页设计
 
@@ -586,7 +586,7 @@ interface SaveToDiskResult {
 1. 新建 `editorPreferences` store，并完成旧字段迁移
 2. 将编辑器视图设置从 `settingStore` 切换到 `editorPreferences`
 3. 抽取 `useSession` 中的无交互写盘入口
-4. 在 `BEditor` 对外暴露统一且经过内部过滤的编辑器失焦事件
+4. 在 `BMarkdown` 对外暴露统一且经过内部过滤的编辑器失焦事件
 5. 新增保存策略执行层，并完成 `manual / onBlur / onChange`
 6. 新增 `/settings/editor` 页面并接入偏好读写
 7. 补充迁移、watcher 协调与保存策略验证

@@ -44,7 +44,7 @@ texti/
 │   │   ├── welcome/              # 欢迎页
 │   │   └── error/                # 404 页面
 │   ├── components/               # B 系列通用组件（通过 unplugin-vue-components 全局自动注册）
-│   │   ├── BEditor/              # Markdown 编辑器（双视图：富文本 TipTap + 源码 CodeMirror）
+│   │   ├── BMarkdown/              # Markdown 编辑器（双视图：富文本 TipTap + 源码 CodeMirror）
 │   │   ├── BChatSidebar/         # AI 聊天侧边栏（流式对话、工具调用、会话历史、文件引用）
 │   │   ├── BPromptEditor/        # 提示词输入框（支持变量插入、文件引用粘贴）
 │   │   ├── BPanelSplitter/       # 可拖拽面板分割器
@@ -156,7 +156,7 @@ texti/
 │                    渲染进程 (Vue 3)                          │
 │  ┌──────────┐  ┌───────────┐  ┌────────────┐              │
 │  │  Editor   │  │ BChatSidebar│  │  Settings  │              │
-│  │ (BEditor) │  │ (AI聊天)   │  │ (服务商配置)│              │
+│  │ (BMarkdown) │  │ (AI聊天)   │  │ (服务商配置)│              │
 │  └─────┬─────┘  └─────┬─────┘  └─────┬──────┘              │
 │        │              │              │                       │
 │        └──────────────┼──────────────┘                       │
@@ -333,7 +333,7 @@ Chat 输入支持插入 `{{file-ref:id|fileName|startLine|endLine}}` 格式的 t
 
 ### unplugin-vue-components 自动注册
 
-- 限定在 `src/components` 及若干子目录（`BChat/BPanelSplitter/BPromptEditor/BEditor` 等），目录作为 namespace
+- 限定在 `src/components` 及若干子目录（`BChat/BPanelSplitter/BPromptEditor/BMarkdown` 等），目录作为 namespace
 - 解析器使用 `AntDesignVueResolver({ importStyle: false })`
 - B 开头组件无需手动 import，全局可用
 
@@ -358,7 +358,7 @@ Chat 输入支持插入 `{{file-ref:id|fileName|startLine|endLine}}` 格式的 t
 
 | 组件 | 功能 |
 |------|------|
-| `BEditor` | Markdown 双视图编辑器（富文本 TipTap + 源码 CodeMirror） |
+| `BMarkdown` | Markdown 双视图编辑器（富文本 TipTap + 源码 CodeMirror） |
 | `BChatSidebar` | AI 聊天侧边栏（对话流、工具调用、文件引用） |
 | `BPromptEditor` | 提示词输入编辑器（支持变量插入、file-ref 粘贴） |
 | `BPanelSplitter` | 可拖拽面板分割器 |
@@ -400,7 +400,7 @@ Chat 输入支持插入 `{{file-ref:id|fileName|startLine|endLine}}` 格式的 t
 
 项目使用 Vitest 作为测试框架，test/ 目录包含约 115 个测试文件，覆盖以下层级：
 
-- **组件测试**：BEditor、BChatSidebar、BPromptEditor、BBubble 等 B 系列组件
+- **组件测试**：BMarkdown、BChatSidebar、BPromptEditor、BBubble 等 B 系列组件
 - **Store 测试**：Pinia 状态管理单元测试
 - **Hook 测试**：组合式函数测试
 - **Electron 测试**：主进程模块与服务测试

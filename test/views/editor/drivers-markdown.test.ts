@@ -52,7 +52,7 @@ describe('markdownDriver', () => {
       }
     });
 
-    expect(context.document.title).toBe('doc');
+    expect(context.document.title).toBe('doc.md');
     expect(context.structured).toBeUndefined();
   });
 });

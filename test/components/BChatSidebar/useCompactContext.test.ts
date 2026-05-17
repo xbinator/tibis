@@ -215,7 +215,7 @@ describe('useCompactContext', () => {
             toolName: 'read_file',
             status: 'success',
             data: {
-              path: 'src/components/BEditor/components/Toc.vue',
+              path: 'src/components/BMarkdown/components/Toc.vue',
               summary: '读取了 Toc 组件内容'
             }
           }
@@ -245,7 +245,7 @@ describe('useCompactContext', () => {
     const compressionMessage = messages.value.find((message) => message.role === 'compression');
     expect(compressionMessage?.compression?.recordText).toContain('KEY_TOOL_RESULTS');
     expect(compressionMessage?.compression?.recordText).toContain('read_file');
-    expect(compressionMessage?.compression?.recordText).toContain('src/components/BEditor/components/Toc.vue');
+    expect(compressionMessage?.compression?.recordText).toContain('src/components/BMarkdown/components/Toc.vue');
   });
 
   it('skips repeated compression when no new model messages were added after the latest boundary', async () => {

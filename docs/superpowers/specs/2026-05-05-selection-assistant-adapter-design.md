@@ -1,4 +1,4 @@
-# BEditor 选区工具栏适配器设计
+# BMarkdown 选区工具栏适配器设计
 
 ## 背景
 
@@ -19,8 +19,8 @@
 
 现在需要让这套能力同时支持：
 
-- `src/components/BEditor/components/PaneRichEditor.vue`
-- `src/components/BEditor/components/PaneSourceEditor.vue`
+- `src/components/BMarkdown/components/PaneRichEditor.vue`
+- `src/components/BMarkdown/components/PaneSourceEditor.vue`
 
 并尽量避免复制两套几乎相同但实现细节分叉的逻辑。
 
@@ -177,7 +177,7 @@
 
 ## 适配器接口
 
-建议新增 `src/components/BEditor/adapters/selectionAssistant.ts`，定义统一协议。
+建议新增 `src/components/BMarkdown/adapters/selectionAssistant.ts`，定义统一协议。
 
 ```ts
 /**
@@ -249,7 +249,7 @@ export type SelectionToolbarAction =
  * 适配器构建所需的编辑器上下文。
  */
 export interface SelectionAssistantContext {
-  /** BEditor 自定义文件上下文，类型来自 `src/components/BEditor/types.ts` */
+  /** BMarkdown 自定义文件上下文，类型来自 `src/components/BMarkdown/types.ts` */
   editorState: EditorState;
   /** 宿主注入的浮层根容器；adapter 返回的所有定位信息都必须相对该容器 */
   overlayRoot: HTMLElement;
@@ -655,7 +655,7 @@ source 模式的行号计算以完整文件内容为准，不跳过 front matter
 
 新增：
 
-- `src/components/BEditor/adapters/selectionAssistant.ts`
+- `src/components/BMarkdown/adapters/selectionAssistant.ts`
 
 定义：
 
@@ -668,7 +668,7 @@ source 模式的行号计算以完整文件内容为准，不跳过 front matter
 
 新增：
 
-- `src/components/BEditor/hooks/useSelectionAssistant.ts`
+- `src/components/BMarkdown/hooks/useSelectionAssistant.ts`
 
 把当前散落在 `RichEditorContent.vue` 中的：
 
@@ -686,8 +686,8 @@ source 模式的行号计算以完整文件内容为准，不跳过 front matter
 
 改造：
 
-- `src/components/BEditor/components/SelectionToolbar.vue`
-- `src/components/BEditor/components/SelectionAIInput.vue`
+- `src/components/BMarkdown/components/SelectionToolbar.vue`
+- `src/components/BMarkdown/components/SelectionAIInput.vue`
 
 要求它们只消费：
 
@@ -781,4 +781,4 @@ source 模式的行号计算以完整文件内容为准，不跳过 front matter
 4. rich 模式保留现有完整能力
 5. source 模式本次只开放 `AI 助手` 与 `插入对话`
 
-该方案可以在保留历史交互契约的前提下，把选区工具能力从富文本专属实现演进为 BEditor 的跨模式基础设施。
+该方案可以在保留历史交互契约的前提下，把选区工具能力从富文本专属实现演进为 BMarkdown 的跨模式基础设施。

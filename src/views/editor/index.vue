@@ -27,7 +27,7 @@
 import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
-import type { EditorController } from '@/components/BEditor/types';
+import type { EditorController } from '@/components/BMarkdown/types';
 import { useEditorPreferencesStore } from '@/stores/editorPreferences';
 import { resolveEditorDriver } from './drivers';
 import { useBindings } from './hooks/useBindings';

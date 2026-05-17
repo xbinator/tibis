@@ -83,11 +83,11 @@ Modify:
 - `electron/main/modules/ai/ipc.mts` — forward tool-call chunks to renderer.
 - `electron/preload/index.mts` — expose `onAiStreamToolCall`.
 - `src/hooks/useChat.ts` — surface tool-call callbacks and accept tools in requests.
-- `src/components/BEditor/types.ts` — extend `BEditorPublicInstance`.
-- `src/components/BEditor/hooks/useEditorController.ts` — include editor read/write commands.
-- `src/components/BEditor/components/PaneRichEditor.vue` — expose rich editor selection and edit commands.
-- `src/components/BEditor/components/PaneSourceEditor.vue` — expose source editor selection and edit commands.
-- `src/components/BEditor/index.vue` — expose the new public editor methods.
+- `src/components/BMarkdown/types.ts` — extend `BMarkdownPublicInstance`.
+- `src/components/BMarkdown/hooks/useEditorController.ts` — include editor read/write commands.
+- `src/components/BMarkdown/components/PaneRichEditor.vue` — expose rich editor selection and edit commands.
+- `src/components/BMarkdown/components/PaneSourceEditor.vue` — expose source editor selection and edit commands.
+- `src/components/BMarkdown/index.vue` — expose the new public editor methods.
 - `src/views/editor/index.vue` — register and unregister active editor tool context.
 - `src/components/BChat/types.ts` — add optional tool configuration props.
 - `src/components/BChat/index.vue` — connect stream callbacks to tool orchestration and show status.
@@ -673,18 +673,18 @@ git commit -m "feat: add built-in AI read tools"
 ## Task 4: Editor Public Read/Write Methods
 
 **Files:**
-- Modify: `src/components/BEditor/types.ts`
-- Modify: `src/components/BEditor/hooks/useEditorController.ts`
-- Modify: `src/components/BEditor/components/PaneRichEditor.vue`
-- Modify: `src/components/BEditor/components/PaneSourceEditor.vue`
-- Modify: `src/components/BEditor/index.vue`
+- Modify: `src/components/BMarkdown/types.ts`
+- Modify: `src/components/BMarkdown/hooks/useEditorController.ts`
+- Modify: `src/components/BMarkdown/components/PaneRichEditor.vue`
+- Modify: `src/components/BMarkdown/components/PaneSourceEditor.vue`
+- Modify: `src/components/BMarkdown/index.vue`
 
 - [ ] **Step 1: Extend public types**
 
-Modify `src/components/BEditor/types.ts`:
+Modify `src/components/BMarkdown/types.ts`:
 
 ```ts
-export type BEditorViewMode = 'rich' | 'source';
+export type BMarkdownViewMode = 'rich' | 'source';
 
 export interface SelectionRange {
   // 选中的文本起始位置
@@ -701,7 +701,7 @@ export interface EditorSearchState {
   term: string;
 }
 
-export interface BEditorPublicInstance {
+export interface BMarkdownPublicInstance {
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
@@ -721,7 +721,7 @@ export interface BEditorPublicInstance {
 
 - [ ] **Step 2: Extend `EditorController`**
 
-Modify `src/components/BEditor/hooks/useEditorController.ts` so `EditorController` includes:
+Modify `src/components/BMarkdown/hooks/useEditorController.ts` so `EditorController` includes:
 
 ```ts
 export interface EditorController {
@@ -769,7 +769,7 @@ sourceEditorPaneRef: Ref<Pick<EditorController, 'focusEditor' | 'focusEditorAtSt
 
 - [ ] **Step 3: Expose rich editor methods**
 
-Modify the script section of `src/components/BEditor/components/PaneRichEditor.vue` by importing `TextSelection`:
+Modify the script section of `src/components/BMarkdown/components/PaneRichEditor.vue` by importing `TextSelection`:
 
 ```ts
 import { TextSelection } from '@tiptap/pm/state';
@@ -819,7 +819,7 @@ defineExpose({ undo, redo, canUndo, canRedo, focusEditor, focusEditorAtStart, ge
 
 - [ ] **Step 4: Expose source editor methods**
 
-Modify `src/components/BEditor/components/PaneSourceEditor.vue`:
+Modify `src/components/BMarkdown/components/PaneSourceEditor.vue`:
 
 ```ts
 import type { SelectionRange } from '../types';
@@ -876,9 +876,9 @@ Update expose:
 defineExpose({ focusEditor, focusEditorAtStart, getSelection, insertAtCursor, replaceSelection, replaceDocument });
 ```
 
-- [ ] **Step 5: Expose methods from `BEditor`**
+- [ ] **Step 5: Expose methods from `BMarkdown`**
 
-Modify `src/components/BEditor/index.vue` by adding wrapper functions:
+Modify `src/components/BMarkdown/index.vue` by adding wrapper functions:
 
 ```ts
 function getSelection(): SelectionRange | null {
@@ -906,7 +906,7 @@ async function replaceDocument(content: string): Promise<void> {
 Import `SelectionRange`:
 
 ```ts
-import type { BEditorPublicInstance, BEditorViewMode, SelectionRange } from './types';
+import type { BMarkdownPublicInstance, BMarkdownViewMode, SelectionRange } from './types';
 ```
 
 Add the methods to `editorPublicInstance` and `defineExpose`.
@@ -924,7 +924,7 @@ Expected: PASS through `vue-tsc --noEmit` and Vite build.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/components/BEditor/types.ts src/components/BEditor/hooks/useEditorController.ts src/components/BEditor/components/PaneRichEditor.vue src/components/BEditor/components/PaneSourceEditor.vue src/components/BEditor/index.vue
+git add src/components/BMarkdown/types.ts src/components/BMarkdown/hooks/useEditorController.ts src/components/BMarkdown/components/PaneRichEditor.vue src/components/BMarkdown/components/PaneSourceEditor.vue src/components/BMarkdown/index.vue
 git commit -m "feat: expose editor methods for AI tools"
 ```
 

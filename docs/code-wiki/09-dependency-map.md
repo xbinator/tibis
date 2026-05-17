@@ -92,7 +92,7 @@ flowchart LR
   app --> router[src/router/index.ts]
   app --> store[src/stores/*]
 
-  uiEditor[src/views/editor/index.vue] --> beditor[src/components/BEditor/index.vue]
+  uiEditor[src/views/editor/index.vue] --> beditor[src/components/BMarkdown/index.vue]
   uiSettings[src/views/settings/*] --> providerHook[src/views/settings/provider/hooks/useProviders.ts]
   providerHook --> providerStorage[src/shared/storage/providers/sqlite.ts]
   uiSettings --> serviceModelStore[src/stores/service-model.ts]

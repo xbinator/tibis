@@ -80,12 +80,12 @@ describe('chat file reference insert event utilities', () => {
 
 describe('chat file reference insert wiring', () => {
   test('wires editor selection toolbar to chat sidebar through BChat insert API', () => {
-    const richEditorContentSource = readSource('src/components/BEditor/components/PaneRichEditor.vue');
-    const selectionToolbarSource = readSource('src/components/BEditor/components/SelectionToolbar.vue');
-    const richToolbarHostSource = readSource('src/components/BEditor/components/SelectionToolbarRich.vue');
-    const selectionAssistantSource = readSource('src/components/BEditor/hooks/useSelectionAssistant.ts');
-    const richAdapterSource = readSource('src/components/BEditor/adapters/richSelectionAssistant.ts');
-    const sourceAdapterSource = readSource('src/components/BEditor/adapters/sourceSelectionAssistant.ts');
+    const richEditorContentSource = readSource('src/components/BMarkdown/components/PaneRichEditor.vue');
+    const selectionToolbarSource = readSource('src/components/BMarkdown/components/SelectionToolbar.vue');
+    const richToolbarHostSource = readSource('src/components/BMarkdown/components/SelectionToolbarRich.vue');
+    const selectionAssistantSource = readSource('src/components/BMarkdown/hooks/useSelectionAssistant.ts');
+    const richAdapterSource = readSource('src/components/BMarkdown/adapters/richSelectionAssistant.ts');
+    const sourceAdapterSource = readSource('src/components/BMarkdown/adapters/sourceSelectionAssistant.ts');
     const sidebarSource = readSource('src/components/BChatSidebar/index.vue');
     const fileReferenceHookSource = readSource('src/components/BChatSidebar/hooks/useFileReference.ts');
 

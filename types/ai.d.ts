@@ -108,6 +108,36 @@ export interface EditorSelection {
 }
 
 /**
+ * 文档结构摘要。
+ */
+export interface DocumentStructureSummary {
+  /** 根节点类型。 */
+  rootType: string;
+  /** 最大嵌套深度。 */
+  maxDepth: number;
+  /** 总节点数。 */
+  totalNodes: number;
+  /** 顶层 key 列表。 */
+  topLevelKeys: string[];
+}
+
+/**
+ * 通用结构化文档上下文。
+ */
+export interface StructuredDocumentContext {
+  /** 文档类型。 */
+  documentType: string;
+  /** 获取当前路径。 */
+  getCurrentPath: () => string | null;
+  /** 获取当前节点类型。 */
+  getCurrentNodeType: () => string | null;
+  /** 按路径读取值。 */
+  getValueAtPath: (path: string) => unknown;
+  /** 获取结构摘要。 */
+  getStructureSummary: () => DocumentStructureSummary;
+}
+
+/**
  * AI 工具执行上下文。
  * @description 工具所需的文档和编辑器信息。
  */
@@ -138,36 +168,6 @@ export interface AIToolContext {
   };
   /** 结构化文档上下文。 */
   structured?: StructuredDocumentContext;
-}
-
-/**
- * 文档结构摘要。
- */
-export interface DocumentStructureSummary {
-  /** 根节点类型。 */
-  rootType: string;
-  /** 最大嵌套深度。 */
-  maxDepth: number;
-  /** 总节点数。 */
-  totalNodes: number;
-  /** 顶层 key 列表。 */
-  topLevelKeys: string[];
-}
-
-/**
- * 通用结构化文档上下文。
- */
-export interface StructuredDocumentContext {
-  /** 文档类型。 */
-  documentType: string;
-  /** 获取当前路径。 */
-  getCurrentPath: () => string | null;
-  /** 获取当前节点类型。 */
-  getCurrentNodeType: () => string | null;
-  /** 按路径读取值。 */
-  getValueAtPath: (path: string) => unknown;
-  /** 获取结构摘要。 */
-  getStructureSummary: () => DocumentStructureSummary;
 }
 
 /**

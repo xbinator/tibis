@@ -54,7 +54,7 @@
 
 要做的东西：
 
-- 扩展 `BEditorPublicInstance`。
+- 扩展 `BMarkdownPublicInstance`。
 - 给富文本编辑器和源码编辑器补齐统一的选区读取、插入、替换能力。
 - 在编辑器页面挂载和注销 active context。
 

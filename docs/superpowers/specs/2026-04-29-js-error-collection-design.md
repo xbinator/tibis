@@ -123,9 +123,9 @@
 ```
 [2025-04-29 10:23:45.123] [ERROR] [renderer] Error: TypeError: Cannot read properties of undefined
 Stack: TypeError: Cannot read properties of undefined (reading 'name')
-    at BEditor.vue:156:23
+    at BMarkdown.vue:156:23
     at callWithErrorHandling (runtime-core.esm-bundler.js:155:22)
-Context: {"component":"BEditor","info":"render function","url":"/editor/123"}
+Context: {"component":"BMarkdown","info":"render function","url":"/editor/123"}
 ```
 
 | 字段 | 说明 |

@@ -47,7 +47,7 @@
 
 - 页面入口：`src/views/editor/index.vue`
 - 组成：
-  - `BEditor`：编辑器核心（富文本/源码切换、目录、搜索等）
+  - `BMarkdown`：编辑器核心（富文本/源码切换、目录、搜索等）
   - 页面级 hooks：`src/views/editor/hooks/*`
     - `useAutoSave.ts`：自动保存
     - `useFileActive.ts`：文件激活/切换

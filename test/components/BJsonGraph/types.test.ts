@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { EditorController } from '@/components/BEditor/adapters/types';
+import type { EditorController } from '@/components/BMarkdown/adapters/types';
 import type { BJsonGraphPublicInstance, JsonGraphState, JsonNodeInfo } from '@/components/BJsonGraph/types';
 
 describe('BJsonGraph types', () => {

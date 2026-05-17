@@ -311,11 +311,11 @@ git commit -m "feat: add editor preferences store"
 
 **Files:**
 - Modify: `src/views/editor/index.vue`
-- Modify: `src/components/BEditor/index.vue`
+- Modify: `src/components/BMarkdown/index.vue`
 - Modify: `src/hooks/useMenuAction.ts`
 - Modify: `src/stores/setting.ts`
 - Modify: `test/hooks/useMenuAction.test.ts`
-- Modify: `test/components/BEditor/index.page-width.test.ts`
+- Modify: `test/components/BMarkdown/index.page-width.test.ts`
 - Modify: `test/stores/setting.test.ts`
 
 - [ ] **Step 1: Write the failing integration tests for the new store wiring**
@@ -339,7 +339,7 @@ it('maps source and outline menu actions to editor preferences updates', async (
 });
 ```
 
-In `test/components/BEditor/index.page-width.test.ts`, replace `useSettingStore()` with `useEditorPreferencesStore()` and add:
+In `test/components/BMarkdown/index.page-width.test.ts`, replace `useSettingStore()` with `useEditorPreferencesStore()` and add:
 
 ```ts
 it('uses source mode and outline visibility from editor preferences', async () => {
@@ -377,7 +377,7 @@ it('does not persist editor-specific fields into app settings anymore', async ()
 Run:
 
 ```bash
-pnpm test -- test/hooks/useMenuAction.test.ts test/components/BEditor/index.page-width.test.ts test/stores/setting.test.ts
+pnpm test -- test/hooks/useMenuAction.test.ts test/components/BMarkdown/index.page-width.test.ts test/stores/setting.test.ts
 ```
 
 Expected: `FAIL` because runtime code still reads from `settingStore`.
@@ -397,7 +397,7 @@ const editorPreferencesStore = useEditorPreferencesStore();
 and in the template:
 
 ```vue
-<BEditor
+<BMarkdown
   ref="editorRef"
   :key="fileState.id"
   v-model:value="fileState"
@@ -412,7 +412,7 @@ and in the template:
 />
 ```
 
-In `src/components/BEditor/index.vue`, replace page-width store consumption with:
+In `src/components/BMarkdown/index.vue`, replace page-width store consumption with:
 
 ```ts
 import { useEditorPreferencesStore } from '@/stores/editorPreferences';
@@ -484,7 +484,7 @@ Keep unrelated global settings intact.
 Run:
 
 ```bash
-pnpm test -- test/stores/editorPreferences.test.ts test/hooks/useMenuAction.test.ts test/components/BEditor/index.page-width.test.ts test/stores/setting.test.ts
+pnpm test -- test/stores/editorPreferences.test.ts test/hooks/useMenuAction.test.ts test/components/BMarkdown/index.page-width.test.ts test/stores/setting.test.ts
 ```
 
 Expected: `PASS`.
@@ -494,35 +494,35 @@ Expected: `PASS`.
 Run:
 
 ```bash
-git add src/views/editor/index.vue src/components/BEditor/index.vue src/hooks/useMenuAction.ts src/stores/setting.ts test/hooks/useMenuAction.test.ts test/components/BEditor/index.page-width.test.ts test/stores/setting.test.ts
+git add src/views/editor/index.vue src/components/BMarkdown/index.vue src/hooks/useMenuAction.ts src/stores/setting.ts test/hooks/useMenuAction.test.ts test/components/BMarkdown/index.page-width.test.ts test/stores/setting.test.ts
 git commit -m "refactor: move editor view settings into editor preferences"
 ```
 
 ---
 
-### Task 3: Add `editor-blur` event with internal focus filtering in `BEditor`
+### Task 3: Add `editor-blur` event with internal focus filtering in `BMarkdown`
 
 **Files:**
-- Modify: `src/components/BEditor/index.vue`
-- Modify: `src/components/BEditor/components/PaneRichEditor.vue`
-- Modify: `src/components/BEditor/components/PaneSourceEditor.vue`
-- Create: `test/components/BEditor/index.editor-blur.test.ts`
+- Modify: `src/components/BMarkdown/index.vue`
+- Modify: `src/components/BMarkdown/components/PaneRichEditor.vue`
+- Modify: `src/components/BMarkdown/components/PaneSourceEditor.vue`
+- Create: `test/components/BMarkdown/index.editor-blur.test.ts`
 
 - [ ] **Step 1: Write the failing blur-filter tests**
 
-Create `test/components/BEditor/index.editor-blur.test.ts`:
+Create `test/components/BMarkdown/index.editor-blur.test.ts`:
 
 ```ts
 /**
  * @file index.editor-blur.test.ts
- * @description 验证 BEditor 仅在焦点真正离开编辑器时抛出 editor-blur。
+ * @description 验证 BMarkdown 仅在焦点真正离开编辑器时抛出 editor-blur。
  */
 /* @vitest-environment jsdom */
 
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import BEditor from '@/components/BEditor/index.vue';
+import BMarkdown from '@/components/BMarkdown/index.vue';
 
 const PaneRichEditorStub = defineComponent({
   name: 'PaneRichEditor',
@@ -530,9 +530,9 @@ const PaneRichEditorStub = defineComponent({
   template: '<button class="rich-editor" @blur="$emit(\'editor-blur\', $event)">rich</button>'
 });
 
-describe('BEditor editor-blur', () => {
+describe('BMarkdown editor-blur', () => {
   it('re-emits editor-blur when focus leaves the whole editor', async () => {
-    const wrapper = mount(BEditor, {
+    const wrapper = mount(BMarkdown, {
       props: {
         value: { id: 'doc', name: 'Doc', content: 'content', ext: 'md', path: '/tmp/doc.md' },
         viewMode: 'rich',
@@ -543,7 +543,7 @@ describe('BEditor editor-blur', () => {
         stubs: {
           PaneRichEditor: PaneRichEditorStub,
           PaneSourceEditor: true,
-          BEditorSidebar: true,
+          BMarkdownSidebar: true,
           BScrollbar: { template: '<div><slot /></div>' }
         }
       }
@@ -558,7 +558,7 @@ describe('BEditor editor-blur', () => {
   });
 
   it('does not emit editor-blur when focus moves inside the editor container', async () => {
-    const wrapper = mount(BEditor, {
+    const wrapper = mount(BMarkdown, {
       props: {
         value: { id: 'doc', name: 'Doc', content: 'content', ext: 'md', path: '/tmp/doc.md' },
         viewMode: 'rich',
@@ -569,7 +569,7 @@ describe('BEditor editor-blur', () => {
         stubs: {
           PaneRichEditor: PaneRichEditorStub,
           PaneSourceEditor: true,
-          BEditorSidebar: true,
+          BMarkdownSidebar: true,
           BScrollbar: { template: '<div><slot /></div>' }
         }
       }
@@ -591,14 +591,14 @@ describe('BEditor editor-blur', () => {
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/index.editor-blur.test.ts
+pnpm test -- test/components/BMarkdown/index.editor-blur.test.ts
 ```
 
-Expected: `FAIL` because `BEditor` does not emit `editor-blur` yet.
+Expected: `FAIL` because `BMarkdown` does not emit `editor-blur` yet.
 
 - [ ] **Step 3: Implement filtered `editor-blur` forwarding**
 
-In `src/components/BEditor/components/PaneRichEditor.vue` and `src/components/BEditor/components/PaneSourceEditor.vue`, add:
+In `src/components/BMarkdown/components/PaneRichEditor.vue` and `src/components/BMarkdown/components/PaneSourceEditor.vue`, add:
 
 ```ts
 const emit = defineEmits<{
@@ -613,7 +613,7 @@ and forward the editable root blur:
 <EditorContent class="pane-rich-editor" @blur="emit('editor-blur', $event)" />
 ```
 
-In `src/components/BEditor/index.vue`, add:
+In `src/components/BMarkdown/index.vue`, add:
 
 ```ts
 const rootRef = ref<HTMLElement | null>(null);
@@ -631,7 +631,7 @@ function handleEditorBlur(event: FocusEvent): void {
 and wire it:
 
 ```vue
-<div ref="rootRef" class="b-editor">
+<div ref="rootRef" class="b-markdown">
   <PaneRichEditor
     v-if="viewMode === 'rich'"
     v-model:value="value"
@@ -646,7 +646,7 @@ and wire it:
 Run:
 
 ```bash
-pnpm test -- test/components/BEditor/index.editor-blur.test.ts
+pnpm test -- test/components/BMarkdown/index.editor-blur.test.ts
 ```
 
 Expected: `PASS`.
@@ -656,7 +656,7 @@ Expected: `PASS`.
 Run:
 
 ```bash
-git add src/components/BEditor/index.vue src/components/BEditor/components/PaneRichEditor.vue src/components/BEditor/components/PaneSourceEditor.vue test/components/BEditor/index.editor-blur.test.ts
+git add src/components/BMarkdown/index.vue src/components/BMarkdown/components/PaneRichEditor.vue src/components/BMarkdown/components/PaneSourceEditor.vue test/components/BMarkdown/index.editor-blur.test.ts
 git commit -m "feat: expose filtered editor blur event"
 ```
 
@@ -949,7 +949,7 @@ const actions = {
 Update `src/views/editor/index.vue`:
 
 ```vue
-<BEditor
+<BMarkdown
   ref="editorRef"
   :key="fileState.id"
   v-model:value="fileState"
@@ -1197,7 +1197,7 @@ Append these lines under `## Changed` in `changelog/2026-05-11.md`:
 Run:
 
 ```bash
-pnpm test -- test/stores/editorPreferences.test.ts test/stores/setting.test.ts test/hooks/useMenuAction.test.ts test/components/BEditor/index.page-width.test.ts test/components/BEditor/index.editor-blur.test.ts test/views/editor/useSavePolicy.test.ts test/views/editor/useSessionFileDeleted.test.ts test/views/editor/useFileWatcher.test.ts test/views/settings/editor/index.test.ts
+pnpm test -- test/stores/editorPreferences.test.ts test/stores/setting.test.ts test/hooks/useMenuAction.test.ts test/components/BMarkdown/index.page-width.test.ts test/components/BMarkdown/index.editor-blur.test.ts test/views/editor/useSavePolicy.test.ts test/views/editor/useSessionFileDeleted.test.ts test/views/editor/useFileWatcher.test.ts test/views/settings/editor/index.test.ts
 ```
 
 Expected: all tests `PASS`.

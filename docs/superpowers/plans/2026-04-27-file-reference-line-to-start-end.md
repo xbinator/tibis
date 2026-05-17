@@ -136,7 +136,7 @@
 
 ---
 
-### 4. `src/components/BEditor/components/SelectionToolbar.vue`（唯一调用方）
+### 4. `src/components/BMarkdown/components/SelectionToolbar.vue`（唯一调用方）
 
 `getLineRangeFromTextBeforeSelection` 返回类型改为对象后，调用处需解构传入：
 ```diff

@@ -27,7 +27,7 @@ const COMPONENT_DIRS = [
   'BModelIcon',
   'BButton',
   'BDropdown',
-  'BEditor',
+  'BMarkdown',
   'BScrollbar',
   'BSettingsSection',
   'BSettingsPage',

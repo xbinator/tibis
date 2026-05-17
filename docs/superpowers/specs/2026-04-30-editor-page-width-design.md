@@ -2,7 +2,7 @@
 
 ## 背景
 
-当前 `BEditor` 正文容器在样式中写死了 `max-width: 900px`，所有文档都使用同一阅读宽度。这对长文写作比较稳，但当用户在宽屏设备上编辑表格、代码块或多列内容时，正文区会显得偏窄。
+当前 `BMarkdown` 正文容器在样式中写死了 `max-width: 900px`，所有文档都使用同一阅读宽度。这对长文写作比较稳，但当用户在宽屏设备上编辑表格、代码块或多列内容时，正文区会显得偏窄。
 
 现在需要为编辑器新增页宽设置，支持以下三档：
 
@@ -35,7 +35,7 @@
 
 ### 方案一：全局持久化设置，统一挂到 `settingStore`
 
-为 `settingStore` 增加 `editorPageWidth` 字段，并由 `BEditor`、视图菜单、系统菜单、AI settings tool 共同消费。
+为 `settingStore` 增加 `editorPageWidth` 字段，并由 `BMarkdown`、视图菜单、系统菜单、AI settings tool 共同消费。
 
 优点：
 
@@ -47,11 +47,11 @@
 
 - 这是应用级设置，不是按文档独立记忆。
 
-### 方案二：由编辑页局部持有页宽状态，再透传给 `BEditor`
+### 方案二：由编辑页局部持有页宽状态，再透传给 `BMarkdown`
 
 优点：
 
-- 组件边界更纯，`BEditor` 只消费 prop。
+- 组件边界更纯，`BMarkdown` 只消费 prop。
 
 缺点：
 
@@ -193,12 +193,12 @@ settingStore.setEditorPageWidth(input.value)
 
 ### 影响范围
 
-这项设置只影响 `src/components/BEditor/index.vue` 中正文容器 `.b-editor-container` 的内容宽度。
+这项设置只影响 `src/components/BMarkdown/index.vue` 中正文容器 `.b-markdown-container` 的内容宽度。
 
 不影响以下区域：
 
 - `BScrollbar` 外层滚动容器
-- 左侧 `BEditorSidebar`
+- 左侧 `BMarkdownSidebar`
 - 查找条显示逻辑
 - 外层布局的 panel splitter
 
@@ -216,7 +216,7 @@ settingStore.setEditorPageWidth(input.value)
 
 理由：
 
-- 只需保留一套 `.b-editor-container` 样式结构
+- 只需保留一套 `.b-markdown-container` 样式结构
 - 逻辑层只负责输出宽度值，样式层负责消费
 - 以后若需要再补第四档宽度，改动点更少
 
@@ -226,13 +226,13 @@ settingStore.setEditorPageWidth(input.value)
 - 在正文容器上绑定组件局部的内联 `style`
 - 将样式中的固定 `max-width: 900px` 替换为 `max-width: var(--editor-page-max-width)`
 
-这里的 CSS 变量不放到 `:root` 或全局主题变量文件中，而是作为 `BEditor` 组件实例级变量，仅服务当前正文容器。这样更符合这项设置“只影响编辑正文区”的边界，也避免把编辑器局部布局参数扩散成全局样式约定。
+这里的 CSS 变量不放到 `:root` 或全局主题变量文件中，而是作为 `BMarkdown` 组件实例级变量，仅服务当前正文容器。这样更符合这项设置“只影响编辑正文区”的边界，也避免把编辑器局部布局参数扩散成全局样式约定。
 
 当模式为 `full` 时，变量值传入 CSS 关键字 `none`，浏览器会直接取消正文最大宽度限制。
 
 ### 容器适用范围确认
 
-当前 `PaneRichEditor` 与 `PaneSourceEditor` 都渲染在同一个 `.b-editor-container` 内，因此正文宽度逻辑只需在 `BEditor` 外层容器实现一次，就能同时覆盖富文本模式和源码模式，无需在两个子编辑器组件中重复处理。
+当前 `PaneRichEditor` 与 `PaneSourceEditor` 都渲染在同一个 `.b-markdown-container` 内，因此正文宽度逻辑只需在 `BMarkdown` 外层容器实现一次，就能同时覆盖富文本模式和源码模式，无需在两个子编辑器组件中重复处理。
 
 ## 数据流
 
@@ -242,7 +242,7 @@ settingStore.setEditorPageWidth(input.value)
 2. 各入口统一调用 `settingStore.setEditorPageWidth()`
 3. store 更新内存状态并持久化到本地
 4. `syncNativeMenuState()` 刷新系统菜单的 checked 状态
-5. `BEditor` 读取新的 `editorPageWidth` 并更新正文容器 `max-width`
+5. `BMarkdown` 读取新的 `editorPageWidth` 并更新正文容器 `max-width`
 6. 富文本与源码模式在同一容器内共享新宽度
 
 `syncNativeMenuState()` 当前已经承担 `sourceMode`、`showOutline` 和 `theme` 的系统菜单状态同步，因此本次只是按同样方式扩展三个新的页宽菜单项，不需要引入新的同步机制。
@@ -303,7 +303,7 @@ settingStore.setEditorPageWidth(input.value)
 
 控制方式：
 
-- 宽度只在 `BEditor` 外层容器统一生效
+- 宽度只在 `BMarkdown` 外层容器统一生效
 - 不在 `PaneRichEditor` 与 `PaneSourceEditor` 内部分别处理
 
 ### 风险四：后续补快捷键时入口分散
@@ -319,7 +319,7 @@ settingStore.setEditorPageWidth(input.value)
 
 - `src/stores/setting.ts`
 - `src/layouts/default/hooks/useViewActive.ts`
-- `src/components/BEditor/index.vue`
+- `src/components/BMarkdown/index.vue`
 - `src/hooks/useMenuAction.ts`
 - `electron/main/modules/menu/service.mts`
 - `src/ai/tools/builtin/settings.ts`

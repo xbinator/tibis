@@ -600,6 +600,6 @@ onBeforeUnmount(() => {
 | `hooks/useEditorPaste.ts` | 改用 `pasteHandler` |
 | `hooks/index.ts` | 清理 export，只保留 `useVariableEncoder` |
 
-## 与 BEditor 的关系
+## 与 BMarkdown 的关系
 
 完全独立，不共享 extension。后续如需可迁移复用，但初期按独立组件开发。

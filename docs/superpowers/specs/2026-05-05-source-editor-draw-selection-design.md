@@ -273,9 +273,9 @@ function computeSelectionDecorations(view: EditorView): DecorationSet {
 
 | 文件 | 操作 | 说明 |
 |------|------|------|
-| `src/components/BEditor/adapters/sourceEditorDrawSelection.ts` | **新增** | 自定义 selection 绘制扩展、suppression effect、theme |
-| `src/components/BEditor/adapters/sourceSelectionAssistant.ts` | **修改** | `clearNativeSelection()` 改为 suppress draw，`clearSelectionHighlight()` 在 source 模式下同时恢复普通 selection 绘制 |
-| `src/components/BEditor/components/PaneSourceEditor.vue` | **修改** | 在 `createEditorExtensions()` 中引入新扩展 |
+| `src/components/BMarkdown/adapters/sourceEditorDrawSelection.ts` | **新增** | 自定义 selection 绘制扩展、suppression effect、theme |
+| `src/components/BMarkdown/adapters/sourceSelectionAssistant.ts` | **修改** | `clearNativeSelection()` 改为 suppress draw，`clearSelectionHighlight()` 在 source 模式下同时恢复普通 selection 绘制 |
+| `src/components/BMarkdown/components/PaneSourceEditor.vue` | **修改** | 在 `createEditorExtensions()` 中引入新扩展 |
 
 ### PaneSourceEditor.vue 改动点
 

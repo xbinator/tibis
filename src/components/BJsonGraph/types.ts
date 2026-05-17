@@ -4,8 +4,8 @@
  */
 
 import type { DocumentStructureSummary } from 'types/ai';
-import type { EditorController } from '@/components/BEditor/adapters/types';
-import type { EditorState } from '@/components/BEditor/types';
+import type { EditorController } from '@/components/BMarkdown/adapters/types';
+import type { EditorState } from '@/components/BMarkdown/types';
 
 /** JSON 节点类型。 */
 export type JsonNodeType = 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';

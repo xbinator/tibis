@@ -2,7 +2,7 @@ import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { onUnmounted } from 'vue';
 import { marked } from 'marked';
-import type { EditorController } from '@/components/BEditor/types';
+import type { EditorController } from '@/components/BMarkdown/types';
 import { useClipboard } from '@/hooks/useClipboard';
 import { emitter } from '@/utils/emitter';
 

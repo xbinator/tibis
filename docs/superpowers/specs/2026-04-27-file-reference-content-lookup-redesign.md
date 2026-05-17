@@ -32,7 +32,7 @@ handleFileReferenceInsert
 
 ```
 SelectionToolbar.vue
-    └── emitChatFileReferenceInsert({ filePath: BEditor的props.filePath })
+    └── emitChatFileReferenceInsert({ filePath: BMarkdown的props.filePath })
             ↓
 handleFileReferenceInsert (index.vue:396)
     └── filePath: reference.filePath ?? toolContext?.document.path ?? null

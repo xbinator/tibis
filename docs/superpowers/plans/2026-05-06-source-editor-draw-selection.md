@@ -13,7 +13,7 @@
 ### Task 1: 新建 sourceEditorDrawSelection.ts
 
 **Files:**
-- Create: `src/components/BEditor/adapters/sourceEditorDrawSelection.ts`
+- Create: `src/components/BMarkdown/adapters/sourceEditorDrawSelection.ts`
 
 - [ ] **Step 1: 创建扩展文件，包含完整实现**
 
@@ -178,7 +178,7 @@ Expected: 无与 `sourceEditorDrawSelection.ts` 相关的错误
 ### Task 2: 修改 sourceSelectionAssistant.ts
 
 **Files:**
-- Modify: `src/components/BEditor/adapters/sourceSelectionAssistant.ts`
+- Modify: `src/components/BMarkdown/adapters/sourceSelectionAssistant.ts`
 
 - [ ] **Step 1: 添加 import 语句**
 
@@ -216,7 +216,7 @@ clearSelectionHighlight(): void {
 ### Task 3: 修改 PaneSourceEditor.vue
 
 **Files:**
-- Modify: `src/components/BEditor/components/PaneSourceEditor.vue`
+- Modify: `src/components/BMarkdown/components/PaneSourceEditor.vue`
 
 - [ ] **Step 1: 添加 import 语句**
 

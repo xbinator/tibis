@@ -4,7 +4,7 @@
 
 **Goal:** Make file reference chips in chat bubbles and the prompt editor open the target file and optionally select the referenced source line range in both source and rich editor modes.
 
-**Architecture:** Keep file-reference token parsing in a shared utility under `src/utils/fileReference`, route all file-opening through `src/hooks/useNavigate.ts`, and carry optional line-selection intent through a lightweight store consumed by a new editor-page hook. Source and rich selection behaviors stay behind the `BEditorPublicInstance.selectLineRange()` boundary so `BChatSidebar` never needs editor internals.
+**Architecture:** Keep file-reference token parsing in a shared utility under `src/utils/fileReference`, route all file-opening through `src/hooks/useNavigate.ts`, and carry optional line-selection intent through a lightweight store consumed by a new editor-page hook. Source and rich selection behaviors stay behind the `BMarkdownPublicInstance.selectLineRange()` boundary so `BChatSidebar` never needs editor internals.
 
 **Tech Stack:** Vue 3 Composition API, Pinia store conventions, Vue Router, CodeMirror 6, Tiptap/ProseMirror, Vitest
 
@@ -485,11 +485,11 @@ git commit -m "feat: make chat file references clickable"
 **Files:**
 - Create: `src/views/editor/hooks/useFileSelection.ts`
 - Modify: `src/views/editor/index.vue`
-- Modify: `src/components/BEditor/adapters/types.ts`
-- Modify: `src/components/BEditor/index.vue`
-- Modify: `src/components/BEditor/components/PaneSourceEditor.vue`
+- Modify: `src/components/BMarkdown/adapters/types.ts`
+- Modify: `src/components/BMarkdown/index.vue`
+- Modify: `src/components/BMarkdown/components/PaneSourceEditor.vue`
 - Test: `test/views/editor/useFileSelection.test.ts`
-- Test: `test/components/BEditor/paneSourceEditor.selectLineRange.test.ts`
+- Test: `test/components/BMarkdown/paneSourceEditor.selectLineRange.test.ts`
 
 - [ ] **Step 1: Add failing editor-consumption tests**
 
@@ -528,9 +528,9 @@ test('source editor selectLineRange selects full line range and scrolls into vie
 
 - [ ] **Step 2: Run the editor tests to verify they fail**
 
-Run: `pnpm vitest run test/views/editor/useFileSelection.test.ts test/components/BEditor/paneSourceEditor.selectLineRange.test.ts`
+Run: `pnpm vitest run test/views/editor/useFileSelection.test.ts test/components/BMarkdown/paneSourceEditor.selectLineRange.test.ts`
 
-Expected: FAIL with missing `useFileSelection` and missing `selectLineRange` method on `BEditorPublicInstance`.
+Expected: FAIL with missing `useFileSelection` and missing `selectLineRange` method on `BMarkdownPublicInstance`.
 
 - [ ] **Step 3: Add the editor-page hook and public API**
 
@@ -565,7 +565,7 @@ export function useFileSelection(options: UseFileSelectionOptions): void {
 ```
 
 ```ts
-// src/components/BEditor/adapters/types.ts
+// src/components/BMarkdown/adapters/types.ts
 export interface EditorController {
   // ...
   selectLineRange: (startLine: number, endLine: number) => boolean | Promise<boolean>;
@@ -607,7 +607,7 @@ useFileSelection({
 ```
 
 ```vue
-<BEditor
+<BMarkdown
   ref="editorRef"
   @ready="isEditorReady = true"
 />
@@ -615,26 +615,26 @@ useFileSelection({
 
 - [ ] **Step 6: Run the editor-selection tests**
 
-Run: `pnpm vitest run test/views/editor/useFileSelection.test.ts test/components/BEditor/paneSourceEditor.selectLineRange.test.ts`
+Run: `pnpm vitest run test/views/editor/useFileSelection.test.ts test/components/BMarkdown/paneSourceEditor.selectLineRange.test.ts`
 
 Expected: PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/views/editor/hooks/useFileSelection.ts src/views/editor/index.vue src/components/BEditor/adapters/types.ts src/components/BEditor/index.vue src/components/BEditor/components/PaneSourceEditor.vue test/views/editor/useFileSelection.test.ts test/components/BEditor/paneSourceEditor.selectLineRange.test.ts
+git add src/views/editor/hooks/useFileSelection.ts src/views/editor/index.vue src/components/BMarkdown/adapters/types.ts src/components/BMarkdown/index.vue src/components/BMarkdown/components/PaneSourceEditor.vue test/views/editor/useFileSelection.test.ts test/components/BMarkdown/paneSourceEditor.selectLineRange.test.ts
 git commit -m "feat: consume file selection intent in editor"
 ```
 
 ### Task 5: Rich-Mode Reverse Mapping and End-to-End Navigation Coverage
 
 **Files:**
-- Modify: `src/components/BEditor/adapters/sourceLineMapping.ts`
-- Modify: `src/components/BEditor/components/PaneRichEditor.vue`
-- Modify: `src/components/BEditor/index.vue`
-- Test: `test/components/BEditor/sourceLineMapping.test.ts`
-- Test: `test/components/BEditor/sourceLineMapping.integration.test.ts`
-- Test: `test/components/BEditor/paneRichEditor.selectLineRange.test.ts`
+- Modify: `src/components/BMarkdown/adapters/sourceLineMapping.ts`
+- Modify: `src/components/BMarkdown/components/PaneRichEditor.vue`
+- Modify: `src/components/BMarkdown/index.vue`
+- Test: `test/components/BMarkdown/sourceLineMapping.test.ts`
+- Test: `test/components/BMarkdown/sourceLineMapping.integration.test.ts`
+- Test: `test/components/BMarkdown/paneRichEditor.selectLineRange.test.ts`
 
 - [ ] **Step 1: Add failing reverse-mapping tests**
 
@@ -664,7 +664,7 @@ test('rich editor selectLineRange applies text selection and AI highlight', asyn
 
 - [ ] **Step 2: Run the rich-mode tests to verify they fail**
 
-Run: `pnpm vitest run test/components/BEditor/sourceLineMapping.test.ts test/components/BEditor/sourceLineMapping.integration.test.ts test/components/BEditor/paneRichEditor.selectLineRange.test.ts`
+Run: `pnpm vitest run test/components/BMarkdown/sourceLineMapping.test.ts test/components/BMarkdown/sourceLineMapping.integration.test.ts test/components/BMarkdown/paneRichEditor.selectLineRange.test.ts`
 
 Expected: FAIL with missing `mapSourceLineRangeToProseMirrorRange` and no `selectLineRange` implementation in the rich editor.
 
@@ -728,19 +728,19 @@ async function selectLineRange(startLine: number, endLine: number): Promise<bool
 
 - [ ] **Step 5: Re-run the rich-mode tests**
 
-Run: `pnpm vitest run test/components/BEditor/sourceLineMapping.test.ts test/components/BEditor/sourceLineMapping.integration.test.ts test/components/BEditor/paneRichEditor.selectLineRange.test.ts`
+Run: `pnpm vitest run test/components/BMarkdown/sourceLineMapping.test.ts test/components/BMarkdown/sourceLineMapping.integration.test.ts test/components/BMarkdown/paneRichEditor.selectLineRange.test.ts`
 
 Expected: PASS
 
 - [ ] **Step 6: Run the focused full regression suite**
 
-Run: `pnpm vitest run test/components/BChatSidebar/chipResolver.test.ts test/components/BChatSidebar/bubblePartUserInput.test.ts test/hooks/useNavigate.test.ts test/views/editor/useFileSelection.test.ts test/components/BEditor/sourceLineMapping.test.ts test/components/BEditor/sourceLineMapping.integration.test.ts test/components/BEditor/paneSourceEditor.selectLineRange.test.ts test/components/BEditor/paneRichEditor.selectLineRange.test.ts`
+Run: `pnpm vitest run test/components/BChatSidebar/chipResolver.test.ts test/components/BChatSidebar/bubblePartUserInput.test.ts test/hooks/useNavigate.test.ts test/views/editor/useFileSelection.test.ts test/components/BMarkdown/sourceLineMapping.test.ts test/components/BMarkdown/sourceLineMapping.integration.test.ts test/components/BMarkdown/paneSourceEditor.selectLineRange.test.ts test/components/BMarkdown/paneRichEditor.selectLineRange.test.ts`
 
 Expected: PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/components/BEditor/adapters/sourceLineMapping.ts src/components/BEditor/components/PaneRichEditor.vue src/components/BEditor/index.vue test/components/BEditor/sourceLineMapping.test.ts test/components/BEditor/sourceLineMapping.integration.test.ts test/components/BEditor/paneRichEditor.selectLineRange.test.ts
+git add src/components/BMarkdown/adapters/sourceLineMapping.ts src/components/BMarkdown/components/PaneRichEditor.vue src/components/BMarkdown/index.vue test/components/BMarkdown/sourceLineMapping.test.ts test/components/BMarkdown/sourceLineMapping.integration.test.ts test/components/BMarkdown/paneRichEditor.selectLineRange.test.ts
 git commit -m "feat: support rich editor file reference navigation"
 ```
