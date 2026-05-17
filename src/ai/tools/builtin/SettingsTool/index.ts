@@ -18,13 +18,13 @@ export const UPDATE_SETTINGS_TOOL_NAME = 'update_settings';
 export const GET_SETTINGS_TOOL_NAME = 'get_settings';
 
 /** 支持通过 AI 修改的设置键。 */
-const SUPPORTED_SETTING_KEYS = ['theme', 'showOutline', 'sourceMode', 'editorPageWidth'] as const;
+const SUPPORTED_SETTING_KEYS = ['theme', 'sourceMode', 'editorPageWidth'] as const;
 
 /** 支持通过 AI 修改的设置键类型。 */
 type SupportedSettingKey = (typeof SUPPORTED_SETTING_KEYS)[number];
 
 /** 布尔设置键列表。 */
-const BOOLEAN_SETTING_KEYS = ['showOutline', 'sourceMode'] as const;
+const BOOLEAN_SETTING_KEYS = ['sourceMode'] as const;
 
 /** 布尔设置键类型。 */
 type BooleanSettingKey = (typeof BOOLEAN_SETTING_KEYS)[number];
@@ -153,10 +153,6 @@ function getCurrentSettingValue(key: SupportedSettingKey): string | boolean | nu
     return settingStore.theme;
   }
 
-  if (key === 'showOutline') {
-    return editorPreferencesStore.showOutline;
-  }
-
   if (key === 'sourceMode') {
     return editorPreferencesStore.viewMode === 'source';
   }
@@ -178,11 +174,6 @@ function applySettingValue(input: UpdateSettingsInput): void {
 
   if (input.key === 'theme' && isThemeMode(input.value)) {
     settingStore.setTheme(input.value);
-    return;
-  }
-
-  if (input.key === 'showOutline' && typeof input.value === 'boolean') {
-    editorPreferencesStore.setShowOutline(input.value);
     return;
   }
 

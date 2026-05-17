@@ -33,15 +33,6 @@
           <BSelect :value="store.pageWidth" :options="pageWidthOptions" :width="280" @change="handlePageWidthChange" />
         </div>
       </div>
-
-      <div class="editor-settings__item">
-        <div class="editor-settings__meta">
-          <div class="editor-settings__label">显示大纲</div>
-        </div>
-        <div>
-          <ASwitch :checked="store.showOutline" @change="handleShowOutlineChange" />
-        </div>
-      </div>
     </BSettingsSection>
   </BSettingsPage>
 </template>
@@ -85,10 +76,6 @@ function handleViewModeChange(value: string | number) {
 
 function handlePageWidthChange(value: string | number) {
   store.setPageWidth(value as EditorPageWidth);
-}
-
-function handleShowOutlineChange(value: boolean | string | number) {
-  store.setShowOutline(value as boolean);
 }
 
 function handleSaveStrategyChange(value: string | number) {

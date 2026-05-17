@@ -14,8 +14,6 @@ import type { EditorController } from '@/components/BMarkdown/types';
 export interface EditorToolbarConfig {
   /** 是否显示视图切换。 */
   showViewModeToggle: boolean;
-  /** 是否显示大纲切换。 */
-  showOutlineToggle: boolean;
   /** 是否显示结构视图切换。 */
   showStructuredViewToggle: boolean;
   /** 是否显示查找。 */

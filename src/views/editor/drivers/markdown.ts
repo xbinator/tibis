@@ -52,7 +52,6 @@ export const markdownDriver: EditorDriver = {
   },
   toolbar: {
     showViewModeToggle: true,
-    showOutlineToggle: true,
     showStructuredViewToggle: false,
     showSearch: true
   }

@@ -79,7 +79,7 @@ describe('useMenuAction', () => {
     expect(editorPreferencesStore.pageWidth).toBe('default');
   });
 
-  it('maps source and outline menu actions to editor preferences updates', async () => {
+  it('maps source menu actions to editor preferences updates', async () => {
     const { useEditorPreferencesStore } = await import('@/stores/editorPreferences');
     mount(HookHarness);
 
@@ -87,8 +87,5 @@ describe('useMenuAction', () => {
 
     menuCallbacks[0]?.('view:toggleSource');
     expect(editorPreferencesStore.viewMode).toBe('source');
-
-    menuCallbacks[0]?.('view:toggleOutline');
-    expect(editorPreferencesStore.showOutline).toBe(false);
   });
 });

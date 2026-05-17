@@ -4,21 +4,13 @@
 -->
 <template>
   <div ref="layoutRef" class="b-markdown-layout">
-    <BMarkdownSidebar
+    <Sidebar
       v-if="showOutline"
       :title="editorState.name"
-      :file-path="editorState.path"
       :content="outlineContent"
       :anchor-id-prefix="editorState.id"
       :active-id="activeAnchorId"
       @change="handleEditorAnchorChange"
-      @rename-file="emit('rename-file')"
-      @save="emit('save')"
-      @save-as="emit('save-as')"
-      @copy-path="emit('copy-path')"
-      @copy-relative-path="emit('copy-relative-path')"
-      @show-in-folder="emit('show-in-folder')"
-      @close="emit('close-outline')"
     />
 
     <BScrollbar ref="scrollbarRef" class="b-markdown-scrollbar" @scroll="handleEditorScrollEvent">
@@ -47,6 +39,16 @@
         />
       </div>
 
+      <QuickActions
+        v-model:show-outline="showOutline"
+        :file-path="editorState.path"
+        @rename-file="emit('rename-file')"
+        @save="emit('save')"
+        @save-as="emit('save-as')"
+        @copy-path="emit('copy-path')"
+        @show-in-folder="emit('show-in-folder')"
+      />
+
       <FindBar v-model:visible="findBarVisible" :editor-instance="editorPublicInstance" />
     </BScrollbar>
   </div>
@@ -62,6 +64,8 @@ import BScrollbar from '@/components/BScrollbar/index.vue';
 import { useEditorPreferencesStore } from '@/stores/editorPreferences';
 import { handleEditorAnchorNavigation } from './adapters/editorAnchorNavigation';
 import FindBar from './components/FindBar.vue';
+import QuickActions from './components/QuickActions.vue';
+import Sidebar from './components/Sidebar.vue';
 import { useAnchors } from './hooks/useAnchors';
 import { useEditorController } from './hooks/useEditorController';
 
@@ -77,19 +81,18 @@ interface Props {
   editable?: boolean;
   // 编辑器视图模式
   viewMode?: BMarkdownViewMode;
-  // 是否显示大纲
-  showOutline?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   editable: true,
-  viewMode: 'rich',
-  showOutline: true
+  viewMode: 'rich'
 });
 
-const emit = defineEmits(['rename-file', 'save', 'save-as', 'copy-path', 'copy-relative-path', 'show-in-folder', 'editor-blur', 'close-outline']);
+const emit = defineEmits(['rename-file', 'save', 'save-as', 'copy-path', 'show-in-folder', 'editor-blur']);
 
 const isRichMode = computed<boolean>(() => props.viewMode === 'rich');
+
+const showOutline = ref(false);
 
 /**
  * 编辑器状态数据项，包含内容、文件名、路径等信息

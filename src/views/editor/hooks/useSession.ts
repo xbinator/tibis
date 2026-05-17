@@ -38,7 +38,7 @@ export function useSession(fileId: Ref<string>) {
   const sessionPath = ref(route.fullPath);
   const sessionCacheKey = ref(resolveRouteTabInfo(route).cacheKey);
   const fileState = ref<EditorFile>({ id: '', name: '', content: '', ext: 'md', path: null });
-  const viewState = reactive<{ mode: ViewMode; showOutline: boolean }>({ mode: 'rich', showOutline: true });
+  const viewState = reactive<{ mode: ViewMode }>({ mode: 'rich' });
   const isActive = ref(true);
 
   const autoSave = useAutoSave(fileState);

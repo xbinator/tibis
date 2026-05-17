@@ -223,8 +223,8 @@ registerShortcut({
 <style scoped>
 .b-markdown-findbar {
   position: absolute;
-  top: 20px;
-  right: 40px;
+  top: 14px;
+  right: 50px;
   z-index: 100;
   display: flex;
   align-items: center;

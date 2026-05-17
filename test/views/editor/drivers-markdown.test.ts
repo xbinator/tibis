@@ -28,7 +28,6 @@ describe('markdownDriver', () => {
     ).toBe(false);
     expect(markdownDriver.toolbar).toEqual({
       showViewModeToggle: true,
-      showOutlineToggle: true,
       showStructuredViewToggle: false,
       showSearch: true
     });

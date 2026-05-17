@@ -48,12 +48,10 @@ describe('useEditorPreferencesStore', () => {
     const store = useEditorPreferencesStore();
 
     store.setViewMode('source');
-    store.setShowOutline(false);
     store.setPageWidth('full');
     store.setSaveStrategy('onChange');
 
     expect(localStorage.getItem(EDITOR_PREFERENCES_STORAGE_KEY)).toContain('"viewMode":"source"');
-    expect(localStorage.getItem(EDITOR_PREFERENCES_STORAGE_KEY)).toContain('"showOutline":false');
     expect(localStorage.getItem(EDITOR_PREFERENCES_STORAGE_KEY)).toContain('"pageWidth":"full"');
     expect(localStorage.getItem(EDITOR_PREFERENCES_STORAGE_KEY)).toContain('"saveStrategy":"onChange"');
   });
@@ -66,7 +64,6 @@ describe('useEditorPreferencesStore', () => {
       providerSidebarCollapsed: false,
       settingsSidebarCollapsed: false,
       theme: 'system',
-      showOutline: false,
       sourceMode: true,
       editorPageWidth: 'wide',
       sidebarVisible: false,
@@ -79,7 +76,6 @@ describe('useEditorPreferencesStore', () => {
     const store = useEditorPreferencesStore();
 
     expect(store.viewMode).toBe('source');
-    expect(store.showOutline).toBe(false);
     expect(store.pageWidth).toBe('wide');
     expect(store.saveStrategy).toBe('off');
     expect(localStorage.getItem(EDITOR_PREFERENCES_STORAGE_KEY)).toContain('"pageWidth":"wide"');
@@ -90,7 +86,6 @@ describe('useEditorPreferencesStore', () => {
 
     local.setItem(EDITOR_PREFERENCES_STORAGE_KEY, {
       viewMode: 'preview',
-      showOutline: 'yes',
       pageWidth: 'giant',
       saveStrategy: 'always'
     });
@@ -99,7 +94,6 @@ describe('useEditorPreferencesStore', () => {
     const store = useEditorPreferencesStore();
 
     expect(store.viewMode).toBe('rich');
-    expect(store.showOutline).toBe(true);
     expect(store.pageWidth).toBe('default');
     expect(store.saveStrategy).toBe('off');
   });

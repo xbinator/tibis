@@ -30,8 +30,6 @@ const LEGACY_SETTINGS_STORAGE_KEY = 'app_settings';
 interface PersistedEditorPreferences {
   /** 默认视图模式 */
   viewMode: EditorViewMode;
-  /** 是否显示大纲 */
-  showOutline: boolean;
   /** 正文页宽模式 */
   pageWidth: EditorPageWidth;
   /** 真实磁盘保存策略 */
@@ -42,8 +40,6 @@ interface PersistedEditorPreferences {
  * 旧版全局设置中与编辑器相关的快照字段。
  */
 interface LegacySettingsSnapshot {
-  /** 旧版大纲显示开关 */
-  showOutline?: unknown;
   /** 旧版源码模式开关 */
   sourceMode?: unknown;
   /** 旧版页宽模式 */
@@ -52,7 +48,6 @@ interface LegacySettingsSnapshot {
 
 const DEFAULT_EDITOR_PREFERENCES: PersistedEditorPreferences = {
   viewMode: 'rich',
-  showOutline: true,
   pageWidth: 'default',
   saveStrategy: 'off'
 };
@@ -94,7 +89,6 @@ function normalizeEditorPreferences(value: unknown): PersistedEditorPreferences 
 
   return {
     viewMode: isEditorViewMode(source.viewMode) ? source.viewMode : DEFAULT_EDITOR_PREFERENCES.viewMode,
-    showOutline: typeof source.showOutline === 'boolean' ? source.showOutline : DEFAULT_EDITOR_PREFERENCES.showOutline,
     pageWidth: isEditorPageWidth(source.pageWidth) ? source.pageWidth : DEFAULT_EDITOR_PREFERENCES.pageWidth,
     saveStrategy: isEditorSaveStrategy(source.saveStrategy) ? source.saveStrategy : DEFAULT_EDITOR_PREFERENCES.saveStrategy
   };
@@ -117,7 +111,6 @@ function loadLegacyEditorPreferences(): PersistedEditorPreferences {
 
   return normalizeEditorPreferences({
     viewMode: legacySettings?.sourceMode === true ? 'source' : 'rich',
-    showOutline: legacySettings?.showOutline,
     pageWidth: legacySettings?.editorPageWidth,
     saveStrategy: 'off'
   });
@@ -153,7 +146,6 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
      */
     syncNativeMenuState(): void {
       native.updateMenuItem?.('view:source', { checked: this.viewMode === 'source' });
-      native.updateMenuItem?.('view:outline', { checked: this.showOutline });
       native.updateMenuItem?.('view:pageWidth:default', { checked: this.pageWidth === 'default' });
       native.updateMenuItem?.('view:pageWidth:wide', { checked: this.pageWidth === 'wide' });
       native.updateMenuItem?.('view:pageWidth:full', { checked: this.pageWidth === 'full' });
@@ -165,7 +157,6 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
     savePreferences(): void {
       persistEditorPreferences({
         viewMode: this.viewMode,
-        showOutline: this.showOutline,
         pageWidth: this.pageWidth,
         saveStrategy: this.saveStrategy
       });
@@ -181,20 +172,6 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
       this.syncNativeMenuState();
     },
 
-    /**
-     * 设置是否显示大纲。
-     * @param show - 是否显示大纲
-     */
-    setShowOutline(show: boolean): void {
-      this.showOutline = show;
-      this.savePreferences();
-      this.syncNativeMenuState();
-    },
-
-    /**
-     * 设置正文页宽模式。
-     * @param width - 目标页宽模式
-     */
     setPageWidth(width: EditorPageWidth): void {
       this.pageWidth = width;
       this.savePreferences();
