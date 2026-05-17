@@ -8,7 +8,7 @@
           :key="fileState.id"
           v-model:value="fileState"
           :view-mode="editorPreferencesStore.viewMode"
-          :show-outline="activeDriver.supportsOutline ? editorPreferencesStore.showOutline : false"
+          :show-outline="editorPreferencesStore.showOutline"
           @editor-blur="actions.onEditorBlur"
           @rename-file="actions.onRename"
           @save="actions.onSave"

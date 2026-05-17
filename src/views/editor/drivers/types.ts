@@ -48,6 +48,4 @@ export interface EditorDriver {
   createToolContext: (input: CreateToolContextInput) => AIToolContext;
   /** 工具栏能力。 */
   toolbar: EditorToolbarConfig;
-  /** 是否支持大纲。 */
-  supportsOutline: boolean;
 }

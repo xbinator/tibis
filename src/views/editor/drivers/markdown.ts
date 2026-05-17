@@ -55,6 +55,5 @@ export const markdownDriver: EditorDriver = {
     showOutlineToggle: true,
     showStructuredViewToggle: false,
     showSearch: true
-  },
-  supportsOutline: true
+  }
 };
