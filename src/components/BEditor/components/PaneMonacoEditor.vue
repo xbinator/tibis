@@ -302,7 +302,7 @@ async function insertAtCursor(content: string): Promise<void> {
   }
 
   const selection = handle.getEditor().getSelection();
-  const targetRange = selection ?? new (await import('monaco-editor')).Range(1, 1, 1, 1);
+  const targetRange = selection ?? new (await import('monaco-editor/esm/vs/editor/editor.api')).Range(1, 1, 1, 1);
   applyEdit(targetRange, content);
 }
 
@@ -459,7 +459,7 @@ watch(
 );
 
 watch(monacoTheme, async (nextTheme: MonacoThemeName): Promise<void> => {
-  const monaco = await import('monaco-editor');
+  const monaco = await import('monaco-editor/esm/vs/editor/editor.api');
   monaco.editor.setTheme(nextTheme);
 });
 

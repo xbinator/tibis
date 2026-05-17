@@ -5,7 +5,6 @@
  */
 import type { ModelMessage } from 'ai';
 import type { TiktokenEncoding } from 'js-tiktoken';
-import { getEncoding } from 'js-tiktoken';
 import { convert } from '@/components/BChatSidebar/utils/messageHelper';
 import type { Message } from '@/components/BChatSidebar/utils/types';
 
@@ -17,6 +16,14 @@ export interface TokenEstimator {
   estimate(messages: ModelMessage[]): number;
   /** 估算纯文本的 token 数 */
   estimateText(text: string): number;
+}
+
+/**
+ * 轻量 encoder 接口，避免在模块初始化阶段静态加载 js-tiktoken。
+ */
+interface TextEncoderLike {
+  /** 把文本编码为 token 序列。 */
+  encode(text: string): number[];
 }
 
 /**
@@ -36,7 +43,10 @@ const MODEL_TOKENIZER_MAP: Record<string, string> = {
 const DEFAULT_TOKENIZER = 'cl100k_base';
 
 /** encoder 缓存 */
-const encoderCache = new Map<string, { encode: (text: string) => number[] }>();
+const encoderCache = new Map<string, TextEncoderLike>();
+
+/** js-tiktoken 模块缓存 */
+let cachedTiktokenModule: typeof import('js-tiktoken') | null = null;
 
 /** 是否已发出过降级警告 */
 let fallbackWarningShown = false;
@@ -57,15 +67,29 @@ function getEncodingForModel(modelId: string): string {
 }
 
 /**
+ * 懒加载 js-tiktoken 模块。
+ * @returns js-tiktoken 模块
+ */
+async function loadTiktokenModule(): Promise<typeof import('js-tiktoken')> {
+  if (cachedTiktokenModule) {
+    return cachedTiktokenModule;
+  }
+
+  cachedTiktokenModule = await import('js-tiktoken');
+  return cachedTiktokenModule;
+}
+
+/**
  * 获取 encoder（懒加载 + 缓存）。
  * @param encodingName - encoding 名称
  * @returns encoder 对象，加载失败返回 null
  */
-async function getEncoder(encodingName: string): Promise<{ encode: (text: string) => number[] } | null> {
+async function getEncoder(encodingName: string): Promise<TextEncoderLike | null> {
   const cached = encoderCache.get(encodingName);
   if (cached) return cached;
 
   try {
+    const { getEncoding } = await loadTiktokenModule();
     const encoder = getEncoding(encodingName as TiktokenEncoding);
     encoderCache.set(encodingName, encoder);
     return encoder;
@@ -81,7 +105,7 @@ async function getEncoder(encodingName: string): Promise<{ encode: (text: string
  * @param encoder - tokenizer encoder
  * @returns token 数
  */
-function estimateMessageTokens(msg: ModelMessage, encoder: { encode: (text: string) => number[] }): number {
+function estimateMessageTokens(msg: ModelMessage, encoder: TextEncoderLike): number {
   if (typeof msg.content === 'string') {
     return encoder.encode(msg.content).length;
   }

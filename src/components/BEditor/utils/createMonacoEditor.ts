@@ -4,8 +4,6 @@
  */
 
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.main.js';
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 
 /**
  * Monaco 编辑器主题名称。
@@ -57,25 +55,60 @@ interface MonacoEnvironmentHost {
   };
 }
 
+/**
+ * Monaco worker 构造器模块。
+ */
+interface MonacoWorkerModule {
+  /** worker 默认导出构造器。 */
+  default: new () => Worker;
+}
+
 let cachedMonaco: typeof Monaco | null = null;
 let monacoEnvironmentReady = false;
 let jsonDefaultsReady = false;
+let EditorWorkerConstructor: MonacoWorkerModule['default'] | null = null;
+let JsonWorkerConstructor: MonacoWorkerModule['default'] | null = null;
+
+/**
+ * 懒加载 Monaco worker 构造器。
+ */
+async function ensureWorkerConstructors(): Promise<void> {
+  if (EditorWorkerConstructor && JsonWorkerConstructor) {
+    return;
+  }
+
+  const [editorWorkerModule, jsonWorkerModule] = await Promise.all([
+    import('monaco-editor/esm/vs/editor/editor.worker?worker') as Promise<MonacoWorkerModule>,
+    import('monaco-editor/esm/vs/language/json/json.worker?worker') as Promise<MonacoWorkerModule>
+  ]);
+
+  EditorWorkerConstructor = editorWorkerModule.default;
+  JsonWorkerConstructor = jsonWorkerModule.default;
+}
 
 /**
  * 初始化 Monaco worker 环境。
  */
-function ensureMonacoEnvironment(): void {
+async function ensureMonacoEnvironment(): Promise<void> {
   if (monacoEnvironmentReady) {
     return;
   }
 
+  await ensureWorkerConstructors();
+
   const environmentHost = globalThis as typeof globalThis & MonacoEnvironmentHost;
   environmentHost.MonacoEnvironment = {
     getWorker(_moduleId: string, label: string): Worker {
-      if (label === 'json') {
+      if (label === 'json' && JsonWorkerConstructor) {
+        const JsonWorker = JsonWorkerConstructor;
         return new JsonWorker();
       }
 
+      if (!EditorWorkerConstructor) {
+        throw new Error('Monaco editor worker is not ready');
+      }
+
+      const EditorWorker = EditorWorkerConstructor;
       return new EditorWorker();
     }
   };
@@ -169,7 +202,7 @@ function ensureThemes(monaco: typeof Monaco): void {
  * @returns 适配后的编辑器句柄
  */
 export async function createMonacoEditor(options: CreateMonacoEditorOptions): Promise<MonacoEditorHandle> {
-  ensureMonacoEnvironment();
+  await ensureMonacoEnvironment();
 
   const monaco = await loadMonaco();
   if (options.language === 'json') {
