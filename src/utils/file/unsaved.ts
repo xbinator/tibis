@@ -1,5 +1,5 @@
 /**
- * @file unsavedPath.ts
+ * @file unsaved.ts
  * @description 未保存文档虚拟路径的构建、判断与解析工具。
  */
 

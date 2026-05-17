@@ -6,7 +6,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { createFileRefChipResolver } from '@/components/BChatSidebar/utils/chipResolver';
 import type { ChipResult } from '@/components/BPromptEditor/extensions/variableChip';
-import { parseFileReferenceToken } from '@/utils/fileReference/parseToken';
+import { parseFileReferenceToken } from '@/utils/file';
 
 /**
  * 从 ChipResult 中提取 widget 对应的 DOM。

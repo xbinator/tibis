@@ -7,8 +7,7 @@ import type { EditorDriver } from './types';
 import type { AIToolContext } from 'types/ai';
 import BMarkdown from '@/components/BMarkdown/index.vue';
 import type { EditorController } from '@/components/BMarkdown/types';
-import { buildUnsavedPath } from '@/utils/fileReference/unsavedPath';
-import { resolveFileTitle } from '@/utils/fileTitle';
+import { resolveFileTitle, buildUnsavedPath } from '@/utils/file';
 
 /**
  * 创建通用文档上下文。

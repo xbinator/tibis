@@ -3,7 +3,7 @@
  * @description 内置文档只读工具实现
  */
 import type { AIToolContext, AIToolExecutor } from 'types/ai';
-import { buildUnsavedPath } from '@/utils/fileReference/unsavedPath';
+import { buildUnsavedPath } from '@/utils/file';
 import { createToolSuccessResult } from '../../results';
 
 /**

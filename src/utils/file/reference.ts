@@ -1,10 +1,53 @@
 /**
- * @file parseToken.ts
- * @description 解析聊天与输入框共用的文件引用 token。
+ * @file reference.ts
+ * @description 聊天与输入框共用的文件引用 token 解析及类型定义。
  */
 
-import type { ParsedFileReference } from './types';
-import { parseUnsavedPath } from './unsavedPath';
+import { parseUnsavedPath } from './unsaved';
+
+/**
+ * 文件引用解析结果
+ */
+export interface ParsedFileReference {
+  /** 原始路径字符串 */
+  rawPath: string;
+  /** 已保存文件的绝对路径；未保存草稿时为 null */
+  filePath: string | null;
+  /** 未保存草稿的文件 ID；已保存文件时为 null */
+  fileId: string | null;
+  /** 展示用文件名 */
+  fileName: string;
+  /** 源码起始行号（1-based） */
+  startLine: number;
+  /** 源码结束行号（1-based） */
+  endLine: number;
+  /** 渲染起始行号（1-based） */
+  renderStartLine: number;
+  /** 渲染结束行号（1-based） */
+  renderEndLine: number;
+  /** 展示用源码行号文本 */
+  lineText: string;
+  /** 是否为未保存草稿引用 */
+  isUnsaved: boolean;
+}
+
+/**
+ * 文件引用导航目标
+ */
+export interface FileReferenceNavigationTarget {
+  /** 原始路径字符串 */
+  rawPath: string;
+  /** 已保存文件的绝对路径；未保存草稿时为 null */
+  filePath: string | null;
+  /** 未保存草稿的文件 ID；已保存文件时为 null */
+  fileId: string | null;
+  /** 展示用文件名 */
+  fileName: string;
+  /** 源码起始行号（1-based） */
+  startLine: number;
+  /** 源码结束行号（1-based） */
+  endLine: number;
+}
 
 /** 文件引用 token 正则表达式。 */
 const FILE_REFERENCE_TOKEN_PATTERN = /^#(\S+)\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?$/;

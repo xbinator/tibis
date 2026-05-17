@@ -50,7 +50,7 @@ import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
 import { useFilesStore } from '@/stores/files';
 import { useTabsStore } from '@/stores/tabs';
-import { getRecentFileLabel } from '@/utils/recentFile';
+import { getRecentFileLabel } from '@/utils/file';
 
 // ---------- props / emits ----------
 

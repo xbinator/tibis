@@ -31,7 +31,7 @@ import { computed } from 'vue';
 import type { FileRefChipPresentation } from '@/components/BChatSidebar/components/FileRefChip';
 import { createFileRefChipPresentation } from '@/components/BChatSidebar/components/FileRefChip';
 import { useNavigate } from '@/hooks/useNavigate';
-import { parseFileReferenceToken } from '@/utils/fileReference/parseToken';
+import { parseFileReferenceToken } from '@/utils/file';
 import { createNamespace } from '@/utils/namespace';
 import { MESSAGE_REF_PATTERN } from '../../utils/fileReferenceContext';
 

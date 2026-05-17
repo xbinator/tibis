@@ -7,7 +7,7 @@ import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import type { StoredFile } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/files';
-import { buildUnsavedPath } from '@/utils/fileReference/unsavedPath';
+import { buildUnsavedPath } from '@/utils/file';
 
 const createFileId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 

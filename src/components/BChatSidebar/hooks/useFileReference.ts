@@ -7,7 +7,7 @@ import { nextTick, onMounted, onUnmounted } from 'vue';
 import type { ChatFileReferenceInsertPayload } from '@/shared/chat/fileReference';
 import { onChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import { useSettingStore } from '@/stores/setting';
-import { buildUnsavedPath } from '@/utils/fileReference/unsavedPath';
+import { buildUnsavedPath } from '@/utils/file';
 
 /**
  * 文件引用 Hook 的依赖项

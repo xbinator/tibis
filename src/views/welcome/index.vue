@@ -52,7 +52,7 @@ import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import type { StoredFile } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/files';
-import { getRecentFileLabel } from '@/utils/recentFile';
+import { getRecentFileLabel } from '@/utils/file';
 import DropZone from './components/DropZone.vue';
 
 const filesStore = useFilesStore();

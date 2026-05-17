@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { resolveFileTitle } from '@/utils/fileTitle';
+import { resolveFileTitle } from '@/utils/file';
 
 describe('resolveFileTitle', () => {
   it('combines file name and extension when both are present', () => {

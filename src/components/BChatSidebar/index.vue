@@ -112,7 +112,7 @@ import { useOpenDraft } from '@/hooks/useOpenDraft';
 import { useChatStore } from '@/stores/chat';
 import { useFilesStore } from '@/stores/files';
 import { useSettingStore } from '@/stores/setting';
-import type { FileReferenceNavigationTarget } from '@/utils/fileReference/types';
+import type { FileReferenceNavigationTarget } from '@/utils/file';
 import ConversationView from './components/ConversationView.vue';
 import ImagePreview from './components/ImagePreview.vue';
 import InputToolbar from './components/InputToolbar.vue';

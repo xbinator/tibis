@@ -3,7 +3,7 @@
  * @description 未保存文档虚拟路径工具测试。
  */
 import { describe, expect, it } from 'vitest';
-import { buildUnsavedPath, isUnsavedPath, parseUnsavedPath } from '@/utils/fileReference/unsavedPath';
+import { buildUnsavedPath, isUnsavedPath, parseUnsavedPath } from '@/utils/file';
 
 describe('unsavedPath utilities', () => {
   it('builds an unsaved path with the default extension', () => {
