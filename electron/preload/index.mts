@@ -426,7 +426,7 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.send('menu:update-item', id, properties);
   },
 
-  syncPlatformRecentFiles: (files) => ipcRenderer.invoke('platform-shortcuts:sync-recent-files', files),
+  syncRecentFiles: (files) => ipcRenderer.invoke('shortcuts:sync-recent-files', files),
 
   // WebView 操作
   webview: webviewAPI,

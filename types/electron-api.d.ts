@@ -162,9 +162,17 @@ export interface WebViewAPI {
   onAttachRejected: (callback: (payload: { src: string; reason: string }) => void) => () => void; // `<webview>` 附加被拒绝
 }
 
-export interface PlatformRecentFile {
+/**
+ * 最近文件的最小输入信息。
+ */
+export interface RecentFileShortcutInput {
+  /** 文件唯一标识 */
   id: string;
+  /** 文件名 */
   name: string;
+  /** 文件扩展名 */
+  ext: string;
+  /** 文件路径，未保存文件为空 */
   path: string | null;
 }
 
@@ -371,7 +379,7 @@ export interface ElectronAPI {
   // 菜单操作
   onMenuAction: (callback: (action: string) => void) => () => void;
   updateMenuItem: (id: string, properties: { checked?: boolean }) => void;
-  syncPlatformRecentFiles: (files: PlatformRecentFile[]) => Promise<void>;
+  syncRecentFiles: (files: RecentFileShortcutInput[]) => Promise<void>;
 
   // WebView 操作
   webview: WebViewAPI;

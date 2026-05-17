@@ -11,7 +11,7 @@ import type {
   ReadWorkspaceDirectoryOptions,
   ReadWorkspaceDirectoryResult
 } from './types';
-import type { PlatformRecentFile } from 'types/electron-api';
+import type { RecentFileShortcutInput } from 'types/electron-api';
 import { OPEN_FILE_FILTER, SAVE_FILE_FILTER } from '@/constants/extensions';
 import { getElectronAPI } from '../electron-api';
 
@@ -116,7 +116,7 @@ export class ElectronNative implements Native {
     return getElectronAPI().onMenuAction(callback);
   }
 
-  async syncPlatformRecentFiles(files: PlatformRecentFile[]): Promise<void> {
-    await getElectronAPI().syncPlatformRecentFiles(files);
+  async syncRecentFiles(files: RecentFileShortcutInput[]): Promise<void> {
+    await getElectronAPI().syncRecentFiles(files);
   }
 }

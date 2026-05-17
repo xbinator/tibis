@@ -1,5 +1,5 @@
 /**
- * @file platformShortcuts.test.ts
+ * @file shortcuts.test.ts
  * @description 验证系统快捷入口的最近文件摘要、命令行参数和菜单模型生成。
  */
 import { describe, expect, test } from 'vitest';
@@ -8,15 +8,15 @@ import {
   buildShortcutActions,
   parseShortcutActionArg,
   type RecentFileShortcutInput
-} from '../../electron/main/modules/platform-shortcuts/model.mjs';
+} from '../../electron/main/modules/shortcuts/model.mjs';
 
-describe('platform shortcut model', () => {
+describe('shortcuts model', () => {
   test('builds bounded recent file shortcuts without document content', () => {
     const storedFiles: Array<RecentFileShortcutInput & { content: string }> = [
-      { id: 'a', name: 'Alpha.md', path: '/tmp/alpha.md', content: 'secret' },
-      { id: 'b', name: 'Beta.md', path: null, content: 'draft' },
-      { id: 'c', name: '', path: '/tmp/gamma.md', content: 'hidden' },
-      { id: 'd', name: 'Delta.md', path: '/tmp/delta.md', content: 'hidden' }
+      { id: 'a', name: 'Alpha', ext: 'md', path: '/tmp/alpha.md', content: 'secret' },
+      { id: 'b', name: 'Beta', ext: 'md', path: null, content: 'draft' },
+      { id: 'c', name: '', ext: 'md', path: '/tmp/gamma.md', content: 'hidden' },
+      { id: 'd', name: 'Delta', ext: 'md', path: '/tmp/delta.md', content: 'hidden' }
     ];
 
     const shortcuts = buildRecentFileShortcuts(storedFiles, 2);
@@ -40,8 +40,23 @@ describe('platform shortcut model', () => {
   });
 
   test('clips long titles in the model layer', () => {
-    const [shortcut] = buildRecentFileShortcuts([{ id: 'a', name: 'abcdefghijklmnopqrstuvwxyz.md', path: '/tmp/abcdefghijklmnopqrstuvwxyz.md' }], 1);
+    const [shortcut] = buildRecentFileShortcuts([{ id: 'a', name: 'abcdefghijklmnopqrstuvwxyz', ext: 'md', path: '/tmp/abcdefghijklmnopqrstuvwxyz.md' }], 1);
 
     expect(shortcut.title).toBe('abcdefghijklmnopqrstuvwx...');
+  });
+
+  test('resolves file title with extension', () => {
+    const shortcuts = buildRecentFileShortcuts(
+      [
+        { id: 'a', name: 'Test', ext: 'md', path: '/tmp/test.md' },
+        { id: 'b', name: 'Test.md', ext: 'md', path: '/tmp/test.md' },
+        { id: 'c', name: '', ext: 'txt', path: '/tmp/untitled.txt' }
+      ],
+      3
+    );
+
+    expect(shortcuts[0].title).toBe('Test.md');
+    expect(shortcuts[1].title).toBe('Test.md');
+    expect(shortcuts[2].title).toBe('Untitled.txt');
   });
 });

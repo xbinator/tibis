@@ -63,7 +63,7 @@ export const useFilesStore = defineStore('files', {
       if (this.recentFiles !== null) return;
 
       await this.refreshRecentFiles();
-      await this.syncPlatformRecentFiles();
+      await this.syncRecentFiles();
     },
 
     /**
@@ -96,7 +96,7 @@ export const useFilesStore = defineStore('files', {
     async addFile(file: StoredFile): Promise<StoredFile> {
       await recentFilesStorage.addRecentFile(file);
       const files = await this.refreshRecentFiles();
-      await this.syncPlatformRecentFiles();
+      await this.syncRecentFiles();
 
       return files.find((item) => item.id === file.id) ?? file;
     },
@@ -110,7 +110,7 @@ export const useFilesStore = defineStore('files', {
     async updateFile(id: string, updates: Partial<StoredFile>): Promise<StoredFile> {
       const nextFile = await recentFilesStorage.updateRecentFile(id, updates);
       await this.refreshRecentFiles();
-      await this.syncPlatformRecentFiles();
+      await this.syncRecentFiles();
       return nextFile;
     },
 
@@ -127,7 +127,7 @@ export const useFilesStore = defineStore('files', {
       });
 
       const files = await this.refreshRecentFiles();
-      await this.syncPlatformRecentFiles();
+      await this.syncRecentFiles();
 
       const openedFile = files.find((file) => file.id === id);
       if (!openedFile) throw new Error('File not found');
@@ -173,7 +173,7 @@ export const useFilesStore = defineStore('files', {
         });
 
         const files = await this.refreshRecentFiles();
-        await this.syncPlatformRecentFiles();
+        await this.syncRecentFiles();
 
         return files.find((item) => item.id === createdFile.id) ?? createdFile;
       } finally {
@@ -210,7 +210,7 @@ export const useFilesStore = defineStore('files', {
           });
 
           await this.refreshRecentFiles();
-          await this.syncPlatformRecentFiles();
+          await this.syncRecentFiles();
           return refreshedFile;
         }
 
@@ -231,7 +231,7 @@ export const useFilesStore = defineStore('files', {
         });
 
         const files = await this.refreshRecentFiles();
-        await this.syncPlatformRecentFiles();
+        await this.syncRecentFiles();
 
         return files.find((item) => item.id === createdFile.id) ?? createdFile;
       } finally {
@@ -258,7 +258,7 @@ export const useFilesStore = defineStore('files', {
       });
 
       const files = await this.refreshRecentFiles();
-      await this.syncPlatformRecentFiles();
+      await this.syncRecentFiles();
 
       return files.find((item) => item.id === createdFile.id) ?? createdFile;
     },
@@ -270,7 +270,7 @@ export const useFilesStore = defineStore('files', {
     async removeFile(...ids: string[]): Promise<void> {
       await recentFilesStorage.removeRecentFile(...ids);
       await this.refreshRecentFiles();
-      await this.syncPlatformRecentFiles();
+      await this.syncRecentFiles();
     },
 
     /**
@@ -279,19 +279,20 @@ export const useFilesStore = defineStore('files', {
     async clearFiles(): Promise<void> {
       await recentFilesStorage.clearRecentFiles();
       this.recentFiles = [];
-      await this.syncPlatformRecentFiles();
+      await this.syncRecentFiles();
     },
 
     /**
      * 将最近文件摘要同步给主进程系统快捷入口，避免正文内容进入系统菜单模型。
      */
-    async syncPlatformRecentFiles(): Promise<void> {
-      if (!native.syncPlatformRecentFiles || this.recentFiles === null) return;
+    async syncRecentFiles(): Promise<void> {
+      if (!native.syncRecentFiles || this.recentFiles === null) return;
 
-      await native.syncPlatformRecentFiles(
+      await native.syncRecentFiles(
         this.recentFiles.map((file) => ({
           id: file.id,
           name: file.name,
+          ext: file.ext,
           path: file.path
         }))
       );

@@ -12,7 +12,7 @@ import type {
   ReadWorkspaceDirectoryOptions,
   ReadWorkspaceDirectoryResult
 } from './types';
-import type { PlatformRecentFile } from 'types/electron-api';
+import type { RecentFileShortcutInput } from 'types/electron-api';
 import { OPEN_FILE_FILTER } from '@/constants/extensions';
 
 export class WebNative implements Native {
@@ -138,7 +138,7 @@ export class WebNative implements Native {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async syncPlatformRecentFiles(_files: PlatformRecentFile[]): Promise<void> {
+  async syncRecentFiles(_files: RecentFileShortcutInput[]): Promise<void> {
     // Linux / Web 环境不支持系统快捷入口时安全跳过。
   }
 }

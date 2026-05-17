@@ -135,7 +135,7 @@ texti/
 │   │       ├── window/           # 窗口控制（最小化/最大化/全屏/标题）
 │   │       ├── image/            # 图片处理（压缩、格式转换）
 │   │       ├── speech/           # 语音服务（运行时安装、录音、识别）
-│   │       └── platform-shortcuts/  # 平台快捷入口（Dock/Taskbar 最近文件）
+│   │       └── shortcuts/        # 系统快捷入口（Dock/Taskbar 最近文件）
 │   └── preload/
 │       ├── index.mts             # contextBridge 安全暴露 electronAPI 到渲染进程
 │       ├── error-collector.mts   # 全局错误收集 preload
@@ -224,7 +224,7 @@ texti/
 - `ai`：AI 流式/非流式调用、流式中止
 - `logger`：日志记录与查询（控制台 + 文件）
 - `menu`：系统菜单动作派发与菜单项更新
-- `platform-shortcuts`：平台快捷入口（Dock/Taskbar 最近文件同步）
+- `shortcuts`：系统快捷入口（Dock/Taskbar 最近文件同步）
 - `webview`：内嵌 WebView 管理
 - `image`：图片压缩与格式转换
 - `speech`：语音运行时管理（安装、录音、语音识别）

@@ -10,7 +10,7 @@ import { updateShortcuts } from './service.mjs';
  * 注册系统快捷入口 IPC 处理器。
  */
 export function registerShortcutHandlers(): void {
-  ipcMain.handle('platform-shortcuts:sync-recent-files', async (_event, files: RecentFileShortcutInput[]) => {
+  ipcMain.handle('shortcuts:sync-recent-files', async (_event, files: RecentFileShortcutInput[]) => {
     updateShortcuts(files);
   });
 }

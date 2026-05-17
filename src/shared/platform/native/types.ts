@@ -1,4 +1,10 @@
-import type { ElectronDialogFilter, ElectronFilePathStatus, ElectronOpenFileOptions, ElectronSaveFileOptions, PlatformRecentFile } from 'types/electron-api';
+import type {
+  ElectronDialogFilter,
+  ElectronFilePathStatus,
+  ElectronOpenFileOptions,
+  ElectronSaveFileOptions,
+  RecentFileShortcutInput
+} from 'types/electron-api';
 
 export type FileFilter = ElectronDialogFilter;
 
@@ -130,5 +136,5 @@ export interface Native {
 
   updateMenuItem?(id: string, properties: { checked?: boolean }): void;
 
-  syncPlatformRecentFiles?(files: PlatformRecentFile[]): Promise<void>;
+  syncRecentFiles?(files: RecentFileShortcutInput[]): Promise<void>;
 }

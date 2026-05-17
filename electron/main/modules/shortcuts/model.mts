@@ -34,7 +34,7 @@ export interface RecentFileShortcut {
 /**
  * 系统快捷入口动作。
  */
-export interface PlatformShortcutAction {
+export interface ShortcutAction {
   /** 菜单展示标题 */
   title: string;
   /** 菜单辅助说明 */
@@ -119,7 +119,7 @@ export function buildRecentFileShortcuts(files: RecentFileShortcutInput[], limit
  * @param recentFiles - 最近文件快捷入口摘要
  * @returns 系统快捷入口动作列表
  */
-export function buildShortcutActions(recentFiles: RecentFileShortcut[]): PlatformShortcutAction[] {
+export function buildShortcutActions(recentFiles: RecentFileShortcut[]): ShortcutAction[] {
   return [
     { title: '新建', subtitle: '新建文档', action: 'file:new' },
     { title: '打开最近的文件', subtitle: '打开最近文件列表', action: 'file:recent' },

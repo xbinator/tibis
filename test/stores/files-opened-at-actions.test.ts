@@ -77,7 +77,7 @@ const nativeMocks = vi.hoisted(() => {
       name: path.split('/').pop()?.replace('.md', '') ?? 'unknown',
       ext: 'md'
     })),
-    syncPlatformRecentFiles: vi.fn(async () => undefined)
+    syncRecentFiles: vi.fn(async () => undefined)
   };
 });
 
@@ -120,7 +120,7 @@ describe('useFilesStore openedAt actions', () => {
 
     Object.values(storageMocks).forEach((mock) => mock.mockClear());
     nativeMocks.readFile.mockClear();
-    nativeMocks.syncPlatformRecentFiles.mockClear();
+    nativeMocks.syncRecentFiles.mockClear();
   });
 
   it('openExistingFile touches openedAt and refreshes recentFiles from storage order', async () => {
