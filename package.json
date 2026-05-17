@@ -96,6 +96,7 @@
     "lowlight": "^3.3.0",
     "marked": "^18.0.2",
     "mermaid": "^11.15.0",
+    "monaco-editor": "^0.55.1",
     "nanoid": "^5.1.11",
     "p-limit": "^7.3.0",
     "pinia": "^3.0.4",

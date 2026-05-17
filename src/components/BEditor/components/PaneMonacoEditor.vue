@@ -1,0 +1,550 @@
+<template>
+  <div class="b-editor-monaco" @focusout="handleFocusOut">
+    <div v-if="loadError" class="b-editor-monaco__fallback">
+      <div class="b-editor-monaco__error">{{ loadError }}</div>
+      <textarea class="b-editor-monaco__textarea" :value="editorContent" readonly></textarea>
+    </div>
+    <div v-else ref="hostRef" class="b-editor-monaco__host"></div>
+  </div>
+</template>
+
+<script setup lang="ts">
+/**
+ * @file PaneMonacoEditor.vue
+ * @description 基于 Monaco 的通用文本编辑器窗格，实现统一的 EditorController 协议。
+ */
+
+import type { MonacoEditorHandle, MonacoThemeName } from '../utils/createMonacoEditor';
+import type * as Monaco from 'monaco-editor';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import type { EditorController, EditorSearchState, EditorSelection } from '@/components/BMarkdown/adapters/types';
+import type { EditorState } from '@/components/BMarkdown/types';
+import { useSettingStore } from '@/stores/setting';
+import { createMonacoEditor } from '../utils/createMonacoEditor';
+
+/**
+ * 搜索匹配信息。
+ */
+interface SearchMatchState {
+  /** 当前搜索词。 */
+  term: string;
+  /** 当前命中的索引。 */
+  currentIndex: number;
+  /** 当前匹配列表。 */
+  matches: Monaco.editor.FindMatch[];
+}
+
+/**
+ * Monaco 查找高亮 class 名。
+ */
+const SEARCH_DECORATION_CLASS_NAME = 'b-editor-monaco__search-match';
+
+interface Props {
+  /** 当前文本内容。 */
+  value: string;
+  /** 是否允许编辑。 */
+  editable?: boolean;
+  /** 当前 Monaco 语言标识。 */
+  language: string;
+  /** 当前编辑文件状态。 */
+  editorState: EditorState;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  editable: true
+});
+
+const emit = defineEmits<{
+  /**
+   * 文本内容变更。
+   * @param event - 事件名
+   * @param value - 最新文本
+   */
+  (event: 'update:value', value: string): void;
+  /**
+   * 编辑器整体失焦。
+   * @param event - 失焦事件
+   */
+  (event: 'editor-blur', eventObject: FocusEvent): void;
+}>();
+
+const hostRef = ref<HTMLDivElement | null>(null);
+const editorHandle = shallowRef<MonacoEditorHandle | null>(null);
+const loadError = ref('');
+const ignoreModelChange = ref(false);
+const editorContent = ref(props.value);
+const settingStore = useSettingStore();
+const modelChangeDispose = ref<Monaco.IDisposable | null>(null);
+const searchDecorations = ref<Monaco.editor.IEditorDecorationsCollection | null>(null);
+const searchState = ref<SearchMatchState>({
+  term: '',
+  currentIndex: 0,
+  matches: []
+});
+
+/**
+ * 根据当前应用主题解析 Monaco 主题名。
+ */
+const monacoTheme = computed<MonacoThemeName>(() => (settingStore.resolvedTheme === 'dark' ? 'tibis-dark' : 'tibis-light'));
+
+/**
+ * 构造 Monaco 搜索选项。
+ * @param model - 当前文本模型
+ * @param term - 搜索词
+ * @returns 匹配结果列表
+ */
+function collectSearchMatches(model: Monaco.editor.ITextModel, term: string): Monaco.editor.FindMatch[] {
+  if (!term) {
+    return [];
+  }
+
+  return model.findMatches(term, false, false, false, null, true);
+}
+
+/**
+ * 把 Monaco range 转为统一选区结构。
+ * @param model - 当前文本模型
+ * @param range - 目标 range
+ * @returns 标准选区
+ */
+function toEditorSelection(model: Monaco.editor.ITextModel, range: Monaco.IRange): EditorSelection {
+  const from = model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn });
+  const to = model.getOffsetAt({ lineNumber: range.endLineNumber, column: range.endColumn });
+
+  return {
+    from,
+    to,
+    text: model.getValueInRange(range)
+  };
+}
+
+/**
+ * 刷新搜索高亮装饰与搜索状态。
+ * @param preserveIndex - 是否尽量保留当前索引
+ */
+function refreshSearchState(preserveIndex: boolean): void {
+  const handle = editorHandle.value;
+  if (!handle) {
+    return;
+  }
+
+  const model = handle.getModel();
+  const nextMatches = collectSearchMatches(model, searchState.value.term);
+  const nextIndex = preserveIndex && nextMatches.length > 0 ? Math.min(searchState.value.currentIndex, nextMatches.length - 1) : 0;
+
+  searchState.value = {
+    term: searchState.value.term,
+    currentIndex: nextIndex,
+    matches: nextMatches
+  };
+
+  if (!searchDecorations.value) {
+    const editor = handle.getEditor();
+    searchDecorations.value = editor.createDecorationsCollection([]);
+  }
+
+  searchDecorations.value.set(
+    nextMatches.map((match, index) => ({
+      range: match.range,
+      options: {
+        className: index === nextIndex ? `${SEARCH_DECORATION_CLASS_NAME} is-current` : SEARCH_DECORATION_CLASS_NAME
+      }
+    }))
+  );
+}
+
+/**
+ * 导航到当前命中的搜索结果。
+ */
+function revealCurrentSearchMatch(): void {
+  const handle = editorHandle.value;
+  const currentMatch = searchState.value.matches.at(searchState.value.currentIndex);
+  if (!handle || !currentMatch) {
+    return;
+  }
+
+  const editor = handle.getEditor();
+  editor.setSelection(currentMatch.range);
+  editor.revealRangeInCenter(currentMatch.range);
+}
+
+/**
+ * 把底层内容变更同步回外层 v-model。
+ */
+function bindModelChange(): void {
+  const handle = editorHandle.value;
+  if (!handle) {
+    return;
+  }
+
+  modelChangeDispose.value?.dispose();
+  modelChangeDispose.value = handle.getModel().onDidChangeContent((): void => {
+    if (ignoreModelChange.value) {
+      return;
+    }
+
+    const nextValue = handle.getValue();
+    editorContent.value = nextValue;
+    emit('update:value', nextValue);
+    refreshSearchState(true);
+  });
+}
+
+/**
+ * 创建 Monaco 编辑器实例。
+ */
+async function initializeEditor(): Promise<void> {
+  if (!hostRef.value) {
+    return;
+  }
+
+  try {
+    editorHandle.value = await createMonacoEditor({
+      container: hostRef.value,
+      value: props.value,
+      language: props.language,
+      readOnly: !props.editable,
+      theme: monacoTheme.value
+    });
+    bindModelChange();
+    refreshSearchState(false);
+  } catch (error: unknown) {
+    loadError.value = error instanceof Error ? error.message : 'Monaco 初始化失败';
+  }
+}
+
+/**
+ * 统一向外转发失焦事件，外层会进一步过滤 relatedTarget。
+ * @param event - 失焦事件
+ */
+function handleFocusOut(event: FocusEvent): void {
+  emit('editor-blur', event);
+}
+
+/**
+ * 获取当前标准搜索状态。
+ * @returns 搜索状态快照
+ */
+function getSearchState(): EditorSearchState {
+  return {
+    currentIndex: searchState.value.matches.length > 0 ? searchState.value.currentIndex + 1 : 0,
+    matchCount: searchState.value.matches.length,
+    term: searchState.value.term
+  };
+}
+
+/**
+ * 获取当前选区内容。
+ * @returns 标准选区；无选区时返回 null
+ */
+function getSelection(): EditorSelection | null {
+  const handle = editorHandle.value;
+  if (!handle) {
+    return null;
+  }
+
+  const range = handle.getEditor().getSelection();
+  if (!range || range.isEmpty()) {
+    return null;
+  }
+
+  return toEditorSelection(handle.getModel(), range);
+}
+
+/**
+ * 聚焦编辑器。
+ */
+function focusEditor(): void {
+  editorHandle.value?.focus();
+}
+
+/**
+ * 把光标移动到文档开头并聚焦。
+ */
+function focusEditorAtStart(): void {
+  const handle = editorHandle.value;
+  if (!handle) {
+    return;
+  }
+
+  const editor = handle.getEditor();
+  const position = { lineNumber: 1, column: 1 };
+  editor.setPosition(position);
+  editor.revealPositionInCenter(position);
+  editor.focus();
+}
+
+/**
+ * 执行编辑替换。
+ * @param range - 待替换范围
+ * @param content - 新文本
+ */
+function applyEdit(range: Monaco.IRange, content: string): void {
+  const handle = editorHandle.value;
+  if (!handle) {
+    return;
+  }
+
+  const editor = handle.getEditor();
+  editor.pushUndoStop();
+  editor.executeEdits('b-editor-monaco', [{ range, text: content, forceMoveMarkers: true }]);
+  editor.pushUndoStop();
+}
+
+/**
+ * 在当前光标位置插入文本。
+ * @param content - 待插入文本
+ */
+async function insertAtCursor(content: string): Promise<void> {
+  const handle = editorHandle.value;
+  if (!handle) {
+    return;
+  }
+
+  const selection = handle.getEditor().getSelection();
+  const targetRange = selection ?? new (await import('monaco-editor')).Range(1, 1, 1, 1);
+  applyEdit(targetRange, content);
+}
+
+/**
+ * 替换当前选区内容。
+ * @param content - 替换文本
+ */
+async function replaceSelection(content: string): Promise<void> {
+  const handle = editorHandle.value;
+  if (!handle) {
+    return;
+  }
+
+  const selection = handle.getEditor().getSelection();
+  if (!selection) {
+    return;
+  }
+
+  applyEdit(selection, content);
+}
+
+/**
+ * 替换整个文档内容。
+ * @param content - 完整文档文本
+ */
+async function replaceDocument(content: string): Promise<void> {
+  const handle = editorHandle.value;
+  if (!handle || handle.getValue() === content) {
+    return;
+  }
+
+  ignoreModelChange.value = true;
+  handle.setValue(content);
+  ignoreModelChange.value = false;
+  editorContent.value = content;
+  emit('update:value', content);
+  refreshSearchState(false);
+}
+
+/**
+ * 设置搜索词并重建搜索状态。
+ * @param term - 搜索词
+ */
+function setSearchTerm(term: string): void {
+  searchState.value = {
+    term,
+    currentIndex: 0,
+    matches: []
+  };
+  refreshSearchState(false);
+  revealCurrentSearchMatch();
+}
+
+/**
+ * 跳转到下一个命中项。
+ */
+function findNext(): void {
+  if (searchState.value.matches.length === 0) {
+    return;
+  }
+
+  searchState.value = {
+    ...searchState.value,
+    currentIndex: (searchState.value.currentIndex + 1) % searchState.value.matches.length
+  };
+  refreshSearchState(true);
+  revealCurrentSearchMatch();
+}
+
+/**
+ * 跳转到上一个命中项。
+ */
+function findPrevious(): void {
+  if (searchState.value.matches.length === 0) {
+    return;
+  }
+
+  const previousIndex = searchState.value.currentIndex <= 0 ? searchState.value.matches.length - 1 : searchState.value.currentIndex - 1;
+
+  searchState.value = {
+    ...searchState.value,
+    currentIndex: previousIndex
+  };
+  refreshSearchState(true);
+  revealCurrentSearchMatch();
+}
+
+/**
+ * 清空搜索状态与高亮。
+ */
+function clearSearch(): void {
+  searchState.value = {
+    term: '',
+    currentIndex: 0,
+    matches: []
+  };
+  searchDecorations.value?.clear();
+}
+
+/**
+ * 选中指定行区间。
+ * @param startLine - 起始行（1-based）
+ * @param endLine - 结束行（1-based）
+ * @returns 是否成功消费
+ */
+async function selectLineRange(startLine: number, endLine: number): Promise<boolean> {
+  const handle = editorHandle.value;
+  if (!handle) {
+    return false;
+  }
+
+  const model = handle.getModel();
+  const lineCount = model.getLineCount();
+  if (startLine < 1 || endLine < startLine || startLine > lineCount) {
+    return false;
+  }
+
+  const boundedEndLine = Math.min(endLine, lineCount);
+  const selection = {
+    startLineNumber: startLine,
+    startColumn: 1,
+    endLineNumber: boundedEndLine,
+    endColumn: model.getLineMaxColumn(boundedEndLine)
+  };
+
+  const editor = handle.getEditor();
+  editor.setSelection(selection);
+  editor.revealRangeInCenter(selection);
+  editor.focus();
+  return true;
+}
+
+watch(
+  () => props.value,
+  (nextValue: string): void => {
+    editorContent.value = nextValue;
+    const handle = editorHandle.value;
+    if (!handle || handle.getValue() === nextValue) {
+      return;
+    }
+
+    ignoreModelChange.value = true;
+    handle.setValue(nextValue);
+    ignoreModelChange.value = false;
+    refreshSearchState(true);
+  }
+);
+
+watch(
+  () => props.editable,
+  (editable: boolean): void => {
+    editorHandle.value?.updateOptions({ readOnly: !editable });
+  }
+);
+
+watch(monacoTheme, async (nextTheme: MonacoThemeName): Promise<void> => {
+  const monaco = await import('monaco-editor');
+  monaco.editor.setTheme(nextTheme);
+});
+
+onMounted(async (): Promise<void> => {
+  await initializeEditor();
+});
+
+onBeforeUnmount((): void => {
+  modelChangeDispose.value?.dispose();
+  searchDecorations.value?.clear();
+  searchDecorations.value = null;
+  editorHandle.value?.dispose();
+});
+
+defineExpose<EditorController>({
+  undo: (): void => {
+    editorHandle.value?.getEditor().trigger('keyboard', 'undo', null);
+  },
+  redo: (): void => {
+    editorHandle.value?.getEditor().trigger('keyboard', 'redo', null);
+  },
+  canUndo: (): boolean => true,
+  canRedo: (): boolean => true,
+  focusEditor,
+  focusEditorAtStart,
+  setSearchTerm,
+  findNext,
+  findPrevious,
+  clearSearch,
+  getSelection,
+  insertAtCursor,
+  replaceSelection,
+  replaceDocument,
+  selectLineRange,
+  getSearchState,
+  scrollToAnchor: (): boolean => false,
+  getActiveAnchorId: (): string => ''
+});
+</script>
+
+<style lang="less" scoped>
+.b-editor-monaco {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.b-editor-monaco__host {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.b-editor-monaco__fallback {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.b-editor-monaco__error {
+  font-size: 12px;
+  color: #d14343;
+}
+
+.b-editor-monaco__textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 220px;
+  padding: 12px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  color: #111827;
+  resize: none;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
+
+:global(.b-editor-monaco__search-match) {
+  background: rgb(250 204 21 / 26%);
+}
+
+:global(.b-editor-monaco__search-match.is-current) {
+  background: rgb(245 158 11 / 42%);
+}
+</style>

@@ -19,6 +19,7 @@ const COMPONENT_DIRS = [
   'BChat',
   'BPanelSplitter',
   'BPromptEditor',
+  'BEditor',
   'BLayout',
   'BToolbar',
   'BSelect',
@@ -80,6 +81,10 @@ const VENDOR_CHUNK_GROUPS = [
   {
     name: 'codemirror',
     test: /node_modules\/(@codemirror|@lezer)\//
+  },
+  {
+    name: 'monaco',
+    test: /node_modules\/monaco-editor\//
   },
   {
     name: 'markdown',
