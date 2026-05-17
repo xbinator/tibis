@@ -32,7 +32,7 @@ import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import BDropdownMenu from '@/components/BDropdown/Menu.vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
-import AnchorContent, { AnchorItem } from './components/AnchorContent.vue';
+import AnchorContent, { AnchorItem } from './AnchorContent.vue';
 
 interface Props {
   title?: string;
