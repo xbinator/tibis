@@ -8,26 +8,7 @@ import type { AIToolContext } from 'types/ai';
 import BMarkdown from '@/components/BMarkdown/index.vue';
 import type { EditorController } from '@/components/BMarkdown/types';
 import { buildUnsavedPath } from '@/utils/fileReference/unsavedPath';
-
-/**
- * 生成工具上下文中的文档标题，优先展示“文件名.扩展名”。
- * @param fileState - 当前文件状态
- * @returns 文档展示标题
- */
-function resolveDocumentTitle(fileState: Parameters<EditorDriver['createToolContext']>[0]['fileState']): string {
-  const normalizedName = fileState.name.trim();
-  const normalizedExt = fileState.ext.trim();
-
-  if (normalizedName && normalizedExt) {
-    return `${normalizedName}.${normalizedExt}`;
-  }
-
-  if (normalizedName) {
-    return normalizedName;
-  }
-
-  return normalizedExt ? `Untitled.${normalizedExt}` : 'Untitled';
-}
+import { resolveFileTitle } from '@/utils/fileTitle';
 
 /**
  * 创建通用文档上下文。
@@ -44,7 +25,7 @@ export function createBaseToolContext(
   return {
     document: {
       id: fileState.id,
-      title: resolveDocumentTitle(fileState),
+      title: resolveFileTitle(fileState),
       path: fileState.path,
       locator: fileState.path ?? buildUnsavedPath({ id: fileState.id, fileName: `${fileState.name}.${fileState.ext}` }),
       getContent: () => fileState.content

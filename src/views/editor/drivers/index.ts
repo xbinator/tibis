@@ -5,11 +5,10 @@
 
 import type { EditorFile } from '../types';
 import type { EditorDriver } from './types';
-import { jsonDriver } from './json';
 import { markdownDriver } from './markdown';
 
 /** 已注册驱动列表。 */
-export const editorDrivers: EditorDriver[] = [jsonDriver, markdownDriver];
+export const editorDrivers: EditorDriver[] = [markdownDriver];
 
 /**
  * 根据文件状态解析驱动。
