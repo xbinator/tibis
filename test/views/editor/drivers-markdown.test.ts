@@ -34,7 +34,7 @@ describe('markdownDriver', () => {
     });
   });
 
-  it('creates plain editor context without structured data', () => {
+  it('creates plain editor context with document and editor accessors', () => {
     const context = markdownDriver.createToolContext({
       fileState: {
         id: '1',
@@ -53,6 +53,6 @@ describe('markdownDriver', () => {
     });
 
     expect(context.document.title).toBe('doc.md');
-    expect(context.structured).toBeUndefined();
+    expect(context.editor.getSelection()).toBeNull();
   });
 });

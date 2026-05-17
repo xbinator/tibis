@@ -8,7 +8,7 @@ import { resolveEditorDriver } from '@/views/editor/drivers';
 import type { EditorDriver } from '@/views/editor/drivers/types';
 
 describe('EditorDriver registry', () => {
-  it('resolveEditorDriver returns json driver for json files', () => {
+  it('resolveEditorDriver falls back to markdown driver for json files', () => {
     expect(
       resolveEditorDriver({
         id: '1',
@@ -17,7 +17,7 @@ describe('EditorDriver registry', () => {
         content: '{}',
         path: null
       }).id
-    ).toBe('json');
+    ).toBe('markdown');
   });
 
   it('resolveEditorDriver returns markdown driver for markdown files', () => {
