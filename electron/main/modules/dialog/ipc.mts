@@ -130,7 +130,12 @@ export function registerDialogHandlers(): void {
 
       const pdfBuffer = await renderPdfBufferFromHtml(options.html);
       const { promises: fs } = await import('node:fs');
-      await fs.writeFile(result.filePath, pdfBuffer);
+
+      // 先写入临时文件再 rename 原子替换，避免直接覆写导致 macOS 上创建时间不更新
+      const tmpPath = `${result.filePath}.tibis-tmp`;
+      await fs.writeFile(tmpPath, pdfBuffer);
+      await fs.rename(tmpPath, result.filePath);
+
       return result.filePath;
     });
   });

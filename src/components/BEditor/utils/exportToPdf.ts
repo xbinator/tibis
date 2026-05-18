@@ -39,12 +39,62 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
     font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
   }
 
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+
   .b-markdown-export {
-    max-width: 860px;
-    padding: 48px 56px 64px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    margin: 0;
     font-size: 15px;
     line-height: 1.75;
+  }
+
+  .b-markdown-export .b-markdown-rich,
+  .b-markdown-export .b-markdown-rich__content,
+  .b-markdown-export .ProseMirror {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    inline-size: 100% !important;
+    min-inline-size: 0 !important;
+    max-inline-size: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    block-size: auto !important;
+    min-block-size: 0 !important;
+    max-block-size: none !important;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+
+  .b-markdown-export .b-markdown-frontmatter {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    inline-size: 100% !important;
+    min-inline-size: 0 !important;
+    max-inline-size: 100% !important;
+    margin: 0 0 24px !important;
+    break-inside: avoid;
+  }
+
+  .b-markdown-export .b-markdown-frontmatter__item,
+  .b-markdown-export .b-markdown-frontmatter__value-wrapper,
+  .b-markdown-export input,
+  .b-markdown-export textarea {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-inline-size: 0 !important;
+    max-inline-size: 100% !important;
   }
 
   .b-markdown-export h1,
@@ -101,9 +151,37 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
   }
 
   .b-markdown-export__source {
+    display: block;
     margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    background: transparent;
+    border-radius: 0;
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
   }
 `;
+
+/**
+ * 富文本导出时需要从内联样式中移除的屏幕布局属性。
+ * 这些值通常来自当前编辑器视口，带入 PDF 会导致内容固定宽度溢出或偏移。
+ */
+const RICH_EXPORT_LAYOUT_STYLE_PROPERTIES = [
+  'width',
+  'min-width',
+  'max-width',
+  'inline-size',
+  'min-inline-size',
+  'max-inline-size',
+  'height',
+  'min-height',
+  'max-height',
+  'block-size',
+  'min-block-size',
+  'max-block-size',
+  'margin',
+  'margin-left',
+  'margin-right'
+];
 
 /**
  * 对源码文本做 HTML 转义，避免源码模式导出时被解析为真实标签。
@@ -198,6 +276,18 @@ function cloneNodeWithInlineStyles(sourceNode: Node): Node {
 }
 
 /**
+ * 清理富文本导出副本中的视口布局样式，让内容交由 PDF 导出容器居中排版。
+ * @param rootElement - 已完成样式内联的富文本导出根节点
+ */
+function normalizeRichExportLayout(rootElement: HTMLElement): void {
+  [rootElement, ...Array.from(rootElement.querySelectorAll('*'))].forEach((element) => {
+    RICH_EXPORT_LAYOUT_STYLE_PROPERTIES.forEach((propertyName) => {
+      (element as HTMLElement).style.removeProperty(propertyName);
+    });
+  });
+}
+
+/**
  * 根据当前富文本渲染结果生成更接近屏幕显示效果的导出 HTML。
  * 通过克隆 DOM 并内联计算样式，减少样式源分散导致的导出偏差。
  * @param rootElement - 富文本渲染根节点
@@ -205,6 +295,7 @@ function cloneNodeWithInlineStyles(sourceNode: Node): Node {
  */
 export function buildRichPdfExportHtml(rootElement: HTMLElement): string {
   const clonedRoot = cloneNodeWithInlineStyles(rootElement) as HTMLElement;
+  normalizeRichExportLayout(clonedRoot);
 
   clonedRoot.querySelectorAll(RICH_EXPORT_IGNORED_SELECTORS).forEach((element) => {
     element.remove();
@@ -218,25 +309,11 @@ export function buildRichPdfExportHtml(rootElement: HTMLElement): string {
 }
 
 /**
- * 从 HTML 字符串中移除所有带 data-export-ignore 属性的元素。
- * 通过 DOMParser 解析，确保准确匹配成对标签和自闭合标签。
- * @param html - 原始 HTML 字符串
- * @returns 过滤后的 HTML 字符串
- */
-function stripDataExportIgnoreElements(html: string): string {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
-  doc.body.querySelectorAll('[data-export-ignore]').forEach((el) => el.remove());
-  return doc.body.innerHTML;
-}
-
-/**
  * 根据源码文本生成 PDF 导出的完整 HTML 文档。
  * @param source - 当前源码文本
  * @returns 完整 HTML 文档
  */
 export function buildSourcePdfExportHtml(source: string): string {
-  const filteredSource = stripDataExportIgnoreElements(source);
-  const sourceHtml = `<pre class="b-markdown-export__source">${escapePdfHtml(filteredSource)}</pre>`;
+  const sourceHtml = `<div class="b-markdown-export__source">${escapePdfHtml(source)}</div>`;
   return buildPdfDocumentHtml(sourceHtml);
 }
