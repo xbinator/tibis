@@ -1,33 +1,27 @@
 <template>
   <BModal v-model:open="visible" :mask-closable="true" :width="560" :main-style="{ padding: '16px' }">
-    <div class="b-search-recent">
-      <div ref="inputRef" class="b-search-recent-toolbar">
+    <div :class="bem()">
+      <div ref="inputRef" :class="bem('toolbar')">
         <AInput v-model:value="keyword" placeholder="搜索最近文件" @keydown.enter.prevent="handleEnter" @keydown.esc.prevent="handleClose" />
       </div>
 
       <BScrollbar :max-height="maxHeight" inset="auto">
         <template v-if="searchResultItems.length">
-          <div class="b-search-recent-list">
-            <button
-              v-for="item in searchResultItems"
-              :key="item.key"
-              class="b-search-recent-item"
-              :class="{ 'is-active': item.isActive }"
-              @click="item.onSelect"
-            >
-              <div class="b-search-recent-item-main">
-                <span class="b-search-recent-item-title">{{ item.title }}</span>
-                <span class="b-search-recent-item-path" :class="item.pathClass">{{ item.pathLabel }}</span>
+          <div :class="bem('list')">
+            <button v-for="item in searchResultItems" :key="item.key" :class="bem('item', { active: item.isActive })" @click="item.onSelect">
+              <div :class="bem('item-main')">
+                <span :class="bem('item-title')">{{ item.title }}</span>
+                <span :class="bem('item-path', { unsaved: item.pathClass === 'is-unsaved' })">{{ item.pathLabel }}</span>
               </div>
 
-              <div v-if="item.removable" class="b-search-recent-item-delete" @click.stop="item.onRemove">
+              <div v-if="item.removable" :class="bem('item-delete')" @click.stop="item.onRemove">
                 <Icon icon="ic:round-close" width="16" height="16" />
               </div>
             </button>
           </div>
         </template>
 
-        <div v-else class="b-search-recent-empty">没有匹配的最近文件</div>
+        <div v-else :class="bem('empty')">没有匹配的最近文件</div>
       </BScrollbar>
     </div>
   </BModal>
@@ -51,6 +45,9 @@ import type { StoredFile } from '@/shared/storage';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { resolveFileTitle } from '@/utils/file';
+import { createNamespace } from '@/utils/namespace';
+
+const [, bem] = createNamespace('search-recent');
 
 // ---------- props / emits ----------
 
@@ -220,18 +217,18 @@ watch(visible, (value) => {
   gap: 12px;
 }
 
-.b-search-recent-toolbar {
+.b-search-recent__toolbar {
   display: flex;
   align-items: center;
 }
 
-.b-search-recent-list {
+.b-search-recent__list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.b-search-recent-item {
+.b-search-recent__item {
   display: flex;
   gap: 12px;
   align-items: center;
@@ -246,15 +243,15 @@ watch(visible, (value) => {
   transition: background-color 0.15s ease;
 }
 
-.b-search-recent-item:hover {
+.b-search-recent__item:hover {
   background: var(--bg-hover);
 }
 
-.b-search-recent-item.is-active {
+.b-search-recent__item--active {
   background: var(--bg-selected);
 }
 
-.b-search-recent-item-main {
+.b-search-recent__item-main {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -262,7 +259,7 @@ watch(visible, (value) => {
   min-width: 0;
 }
 
-.b-search-recent-item-title {
+.b-search-recent__item-title {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 14px;
@@ -271,7 +268,7 @@ watch(visible, (value) => {
   white-space: nowrap;
 }
 
-.b-search-recent-item-path {
+.b-search-recent__item-path {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
@@ -279,16 +276,16 @@ watch(visible, (value) => {
   white-space: nowrap;
 }
 
-.b-search-recent-item-path.is-unsaved {
+.b-search-recent__item-path--unsaved {
   color: var(--color-orange);
 }
 
-.b-search-recent-item-meta {
+.b-search-recent__item-meta {
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.b-search-recent-item-delete {
+.b-search-recent__item-delete {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -304,16 +301,16 @@ watch(visible, (value) => {
   transition: all 0.15s ease;
 }
 
-.b-search-recent-item-delete:hover {
+.b-search-recent__item-delete:hover {
   color: var(--text-primary);
   background: var(--bg-active);
 }
 
-.b-search-recent-item:hover .b-search-recent-item-delete {
+.b-search-recent__item:hover .b-search-recent__item-delete {
   opacity: 1;
 }
 
-.b-search-recent-empty {
+.b-search-recent__empty {
   padding: 36px 0;
   font-size: 13px;
   color: var(--text-tertiary);
