@@ -506,3 +506,45 @@ defineExpose<EditorController>({
   getActiveAnchorId: (): string => ''
 });
 </script>
+
+<style lang="less">
+.b-editor-monaco {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.b-editor-monaco__host,
+.b-editor-monaco__fallback {
+  flex: 1;
+  min-height: calc(100vh - 42px);
+}
+
+.b-editor-monaco__fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 40px 90px;
+}
+
+.b-editor-monaco__error {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-danger, #dc2626);
+}
+
+.b-editor-monaco__textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  font-family: 'JetBrains Mono', SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--editor-text, #243042);
+  resize: none;
+  outline: none;
+  background: transparent;
+  border: none;
+}
+</style>
