@@ -4,7 +4,7 @@
  */
 import type { AIUsage } from 'types/ai';
 import { ref } from 'vue';
-import { useChatStore } from '@/stores/chat';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/setting';
 
 /**
@@ -12,7 +12,7 @@ import { useSettingStore } from '@/stores/setting';
  * @returns 用量面板状态和操作方法
  */
 export function useUsagePanel() {
-  const chatStore = useChatStore();
+  const chatStore = useChatSessionStore();
   const settingStore = useSettingStore();
 
   /** 用量面板是否已展开 */

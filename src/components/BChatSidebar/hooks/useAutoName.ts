@@ -5,7 +5,7 @@
 import { ref } from 'vue';
 import type { Message } from '@/components/BChatSidebar/utils/types';
 import { useChat } from '@/hooks/useChat';
-import { useChatStore } from '@/stores/chat';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useServiceModelStore } from '@/stores/serviceModel';
 import { asyncTo } from '@/utils/asyncTo';
 import { AUTONAME_DEFAULT_PROMPT } from '@/views/settings/service-model/constants';
@@ -64,7 +64,7 @@ export function useAutoName(options: AutoNameOptions): {
   /** 服务模型配置 Store。 */
   const serviceModelStore = useServiceModelStore();
   /** 聊天数据 Store。 */
-  const chatStore = useChatStore();
+  const chatStore = useChatSessionStore();
 
   /**
    * 在任何异步持久化之前冻结会话 ID 与首轮内容。

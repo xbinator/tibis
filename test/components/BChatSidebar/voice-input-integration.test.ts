@@ -241,7 +241,7 @@ vi.mock('@/components/BChatSidebar/hooks/useInteractionState', async () => {
 });
 
 vi.mock('@/stores/chat', () => ({
-  useChatStore: () => ({
+  useChatSessionStore: () => ({
     getSessionMessages: getSessionMessagesMock,
     getSessions: getSessionsMock,
     getSessionUsage: getSessionUsageMock,

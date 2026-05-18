@@ -33,7 +33,7 @@ vi.mock('@/shared/storage', () => ({
   }
 }));
 
-describe('useChatStore compression message persistence', () => {
+describe('useChatSessionStore compression message persistence', () => {
   beforeEach(() => {
     vi.resetModules();
     addMessageMock.mockReset();
@@ -43,8 +43,8 @@ describe('useChatStore compression message persistence', () => {
   });
 
   test('persists and restores compression messages with compression metadata', async () => {
-    const { useChatStore } = await import('@/stores/chat');
-    const chatStore = useChatStore();
+    const { useChatSessionStore } = await import('@/stores/chat/session');
+    const chatStore = useChatSessionStore();
     const message = createCompressionMessage({
       boundaryText: '已压缩 32 条历史消息',
       status: 'success',

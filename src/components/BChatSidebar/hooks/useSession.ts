@@ -5,7 +5,7 @@
 import type { Message } from '../utils/types';
 import type { ChatSession } from 'types/chat';
 import { nextTick, ref } from 'vue';
-import { useChatStore } from '@/stores/chat';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/setting';
 
 /** 初始化时用于兜底恢复的最近会话查询条数。 */
@@ -35,7 +35,7 @@ interface SessionOptions {
  * @returns 会话状态和操作方法
  */
 export function useSession(options: SessionOptions) {
-  const chatStore = useChatStore();
+  const chatStore = useChatSessionStore();
   const settingStore = useSettingStore();
 
   /** 当前会话信息 */

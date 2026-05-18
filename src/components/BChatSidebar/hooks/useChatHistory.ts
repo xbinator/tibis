@@ -5,14 +5,14 @@
 import type { Message } from '../utils/types';
 import type { ChatMessageHistoryCursor } from 'types/chat';
 import { ref } from 'vue';
-import { useChatStore } from '@/stores/chat';
+import { useChatSessionStore } from '@/stores/chat/session';
 
 /**
  * 聊天历史加载 hook
  * @returns 聊天历史状态和操作方法
  */
 export function useChatHistory() {
-  const chatStore = useChatStore();
+  const chatStore = useChatSessionStore();
 
   const messages = ref<Message[]>([]);
   const hasMoreHistory = ref(false);

@@ -53,7 +53,7 @@ import dayjs from 'dayjs';
 import { groupBy, map } from 'lodash-es';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
-import { useChatStore } from '@/stores/chat';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { asyncTo } from '@/utils/asyncTo';
 
 /**
@@ -90,7 +90,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const open = ref(false);
-const chatStore = useChatStore();
+const chatStore = useChatSessionStore();
 
 /** 已加载的会话列表（增量累加） */
 const displayedSessions = ref<ChatSession[]>([]);

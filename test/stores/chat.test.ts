@@ -69,7 +69,7 @@ vi.mock('@/shared/storage', () => ({
   }
 }));
 
-describe('useChatStore', () => {
+describe('useChatSessionStore', () => {
   beforeEach(() => {
     vi.resetModules();
     addMessageMock.mockReset();
@@ -84,8 +84,8 @@ describe('useChatStore', () => {
   });
 
   it('loads session messages with a timestamp cursor', async () => {
-    const { useChatStore } = await import('@/stores/chat');
-    const chatStore = useChatStore();
+    const { useChatSessionStore } = await import('@/stores/chat/session');
+    const chatStore = useChatSessionStore();
     const cursor: ChatMessageHistoryCursor = { beforeCreatedAt: '2026-04-21T00:00:02.000Z', beforeId: 'message-2' };
 
     getMessagesMock.mockResolvedValue([
@@ -116,8 +116,8 @@ describe('useChatStore', () => {
   });
 
   it('reads persisted session usage without recomputing from messages', async () => {
-    const { useChatStore } = await import('@/stores/chat');
-    const chatStore = useChatStore();
+    const { useChatSessionStore } = await import('@/stores/chat/session');
+    const chatStore = useChatSessionStore();
 
     getSessionUsageMock.mockResolvedValue({ inputTokens: 4, outputTokens: 6, totalTokens: 10 });
 
@@ -128,8 +128,8 @@ describe('useChatStore', () => {
   });
 
   it('persists assistant thinking content with chat messages', async () => {
-    const { useChatStore } = await import('@/stores/chat');
-    const chatStore = useChatStore();
+    const { useChatSessionStore } = await import('@/stores/chat/session');
+    const chatStore = useChatSessionStore();
     const message: Message = {
       id: 'assistant-1',
       role: 'assistant',
@@ -148,8 +148,8 @@ describe('useChatStore', () => {
   });
 
   it('adds assistant usage to the active session when a message completes', async () => {
-    const { useChatStore } = await import('@/stores/chat');
-    const chatStore = useChatStore();
+    const { useChatSessionStore } = await import('@/stores/chat/session');
+    const chatStore = useChatSessionStore();
     const message: Message = {
       id: 'assistant-2',
       role: 'assistant',
@@ -165,8 +165,8 @@ describe('useChatStore', () => {
   });
 
   it('recalculates session usage from retained messages when session messages are replaced', async () => {
-    const { useChatStore } = await import('@/stores/chat');
-    const chatStore = useChatStore();
+    const { useChatSessionStore } = await import('@/stores/chat/session');
+    const chatStore = useChatSessionStore();
     const messages: Message[] = [
       {
         id: 'assistant-1',
@@ -192,8 +192,8 @@ describe('useChatStore', () => {
   });
 
   it('updates a session title without rewriting the whole session', async () => {
-    const { useChatStore } = await import('@/stores/chat');
-    const chatStore = useChatStore();
+    const { useChatSessionStore } = await import('@/stores/chat/session');
+    const chatStore = useChatSessionStore();
 
     await chatStore.updateSessionTitle('session-1', '自动生成标题');
 

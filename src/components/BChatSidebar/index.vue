@@ -109,7 +109,7 @@ import BModelSelect from '@/components/BModelSelect/index.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
-import { useChatStore } from '@/stores/chat';
+import { useChatSessionStore } from '@/stores/chat/session';
 import { useFilesStore } from '@/stores/files';
 import { useSettingStore } from '@/stores/setting';
 import type { FileReferenceNavigationTarget } from '@/utils/file';
@@ -139,7 +139,7 @@ import { createChatConfirmationController } from './utils/confirmationController
 import { create, userChoice, buildMessageReferences } from './utils/messageHelper';
 
 /** 聊天数据存储 */
-const chatStore = useChatStore();
+const chatStore = useChatSessionStore();
 /** 应用设置存储 */
 const settingStore = useSettingStore();
 

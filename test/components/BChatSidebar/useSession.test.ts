@@ -29,7 +29,7 @@ const settingStoreState: { chatSidebarActiveSessionId: string | null } = {
 };
 
 vi.mock('@/stores/chat', () => ({
-  useChatStore: () => ({
+  useChatSessionStore: () => ({
     getSessions: getSessionsMock,
     getSessionMessages: getSessionMessagesMock
   })

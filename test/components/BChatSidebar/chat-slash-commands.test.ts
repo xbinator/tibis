@@ -267,7 +267,7 @@ vi.mock('@/shared/storage', () => ({
 }));
 
 vi.mock('@/stores/chat', () => ({
-  useChatStore: () => ({
+  useChatSessionStore: () => ({
     getSessionMessages: getSessionMessagesMock,
     getSessions: getSessionsMock,
     getSessionUsage: getSessionUsageMock,

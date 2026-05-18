@@ -86,10 +86,10 @@ describe('useAutoName', () => {
     updateSessionTitleMock.mockReset();
 
     const { useServiceModelStore } = await import('@/stores/serviceModel');
-    const { useChatStore } = await import('@/stores/chat');
+    const { useChatSessionStore } = await import('@/stores/chat/session');
 
     vi.spyOn(useServiceModelStore(), 'getAvailableServiceConfig').mockImplementation(getAvailableServiceConfigMock);
-    vi.spyOn(useChatStore(), 'updateSessionTitle').mockImplementation(updateSessionTitleMock);
+    vi.spyOn(useChatSessionStore(), 'updateSessionTitle').mockImplementation(updateSessionTitleMock);
   });
 
   afterEach(() => {

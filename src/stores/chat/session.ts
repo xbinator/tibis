@@ -43,7 +43,7 @@ function sumMessagesUsage(messages: PersistableMessage[]): AIUsage | undefined {
   );
 }
 
-export const useChatStore = defineStore('chat', {
+export const useChatSessionStore = defineStore('chat', {
   actions: {
     /**
      * 加载会话的聊天消息，可选择使用历史游标。
