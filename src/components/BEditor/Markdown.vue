@@ -1,0 +1,432 @@
+<!--
+  @file Markdown.vue
+  @description Markdown 编辑器完整布局组件，聚合大纲、编辑器面板、选区工具、快捷操作及搜索栏。
+-->
+<template>
+  <div ref="layoutRef" class="b-markdown-layout">
+    <Sidebar
+      v-if="showOutline"
+      :title="editorState.name"
+      :content="outlineContent"
+      :anchor-id-prefix="editorState.id"
+      :active-id="activeAnchorId"
+      @change="handleEditorAnchorChange"
+    />
+
+    <BScrollbar ref="scrollbarRef" class="b-markdown-scrollbar" @scroll="handleEditorScrollEvent">
+      <div class="b-markdown-container" :style="editorContainerStyle">
+        <PaneRichEditor
+          v-if="isRichMode"
+          ref="richEditorPaneRef"
+          v-model:value="content"
+          v-model:outline-content="outlineContent"
+          :editor-state="effectiveEditorState"
+          :editable="editable"
+          :on-search-match-element-focus="scrollSearchMatchElementIntoView"
+          :on-selection-host-change="handleRichSelectionHostChange"
+          :on-selection-overlay-change="recomputeSelectionOverlays"
+          @editor-blur="handleEditorBlur"
+        />
+
+        <PaneSourceEditor
+          v-else
+          ref="sourceEditorPaneRef"
+          v-model:value="content"
+          v-model:outline-content="outlineContent"
+          :editor-id="editorState.id"
+          :editor-state="effectiveEditorState"
+          :on-anchor-scroll="scrollSourceAnchorIntoView"
+          :editable="editable"
+          :on-selection-host-change="handleSourceSelectionHostChange"
+          :on-selection-overlay-change="recomputeSelectionOverlays"
+          @editor-blur="handleEditorBlur"
+        />
+
+        <SelectionToolbarRich
+          v-if="isRichMode && selectionToolbarKind === 'rich' && currentRichSelectionHost?.editor"
+          :editor="currentRichSelectionHost.editor"
+          :visible="selectionAssistant.toolbarVisible.value"
+          :position="selectionAssistant.toolbarPosition.value"
+          :overlay-root="currentRichSelectionHost.overlayRoot"
+          :format-buttons="formatButtons"
+          @ai="selectionAssistant.openAIInput()"
+          @reference="selectionAssistant.insertReference()"
+        />
+
+        <SelectionToolbarSource
+          v-else-if="!isRichMode && selectionToolbarKind === 'source'"
+          :visible="selectionAssistant.toolbarVisible.value"
+          :position="selectionAssistant.toolbarPosition.value"
+          :overlay-root="currentSourceSelectionHost?.overlayRoot"
+          :format-buttons="[]"
+          @ai="selectionAssistant.openAIInput()"
+          @reference="selectionAssistant.insertReference()"
+        />
+
+        <SelectionAIInput
+          :visible="selectionAssistant.aiInputVisible.value"
+          :adapter="currentSelectionAdapter"
+          :selection-range="selectionAssistant.cachedSelectionRange.value"
+          :position="selectionAssistant.panelPosition.value"
+          @update:visible="handleSelectionAIVisibleChange"
+          @apply="selectionAssistant.applyAIResult($event)"
+          @streaming-change="selectionAssistant.setStreaming($event)"
+        />
+      </div>
+
+      <QuickActions
+        v-model:show-outline="showOutline"
+        :file-path="editorState.path"
+        @rename-file="emit('rename-file')"
+        @save="emit('save')"
+        @save-as="emit('save-as')"
+        @copy-path="emit('copy-path')"
+        @show-in-folder="emit('show-in-folder')"
+      />
+
+      <FindBar v-model:visible="findBarVisible" :editor-instance="editorPublicInstance" />
+    </BScrollbar>
+  </div>
+</template>
+
+<script setup lang="ts">
+import type { SelectionAssistantAdapter, SelectionToolbarAction } from './adapters/selectionAssistant';
+import type { AnchorRecord } from './hooks/useAnchors';
+import type { EditorController, EditorPublicInstance, EditorState } from './types';
+import type { Editor as TiptapEditor } from '@tiptap/vue-3';
+import type { CSSProperties } from 'vue';
+import { computed, ref, shallowRef } from 'vue';
+import BScrollbar from '@/components/BScrollbar/index.vue';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
+import { handleEditorAnchorNavigation } from './adapters/editorAnchorNavigation';
+import Sidebar from './components/Sidebar.vue';
+import { useAnchors } from './hooks/useAnchors';
+import { useEditorController } from './hooks/useEditorController';
+import { useSelectionAssistant } from './hooks/useSelectionAssistant';
+import PaneRichEditor from './panes/PaneRichEditor.vue';
+import PaneSourceEditor from './panes/PaneSourceEditor.vue';
+import FindBar from './shared/FindBar.vue';
+import QuickActions from './shared/QuickActions.vue';
+import SelectionAIInput from './shared/SelectionAIInput.vue';
+import SelectionToolbarRich from './shared/SelectionToolbarRich.vue';
+import SelectionToolbarSource from './shared/SelectionToolbarSource.vue';
+
+const layoutRef = ref<HTMLElement | null>(null);
+const scrollbarRef = ref<InstanceType<typeof BScrollbar> | null>(null);
+const editorPreferencesStore = useEditorPreferencesStore();
+
+/**
+ * Markdown 组件入参。
+ */
+interface Props {
+  /** 编辑器状态数据项，包含内容、文件名、路径等信息。 */
+  editorState: EditorState;
+  /** 是否可编辑。 */
+  editable: boolean;
+}
+
+/**
+ * Rich 模式选区宿主状态。
+ */
+interface RichSelectionHostState {
+  /** 当前浮层根节点 */
+  overlayRoot: HTMLElement | null;
+  /** 当前选区适配器 */
+  adapter: SelectionAssistantAdapter | null;
+  /** 当前 Tiptap 编辑器实例 */
+  editor: TiptapEditor | null;
+}
+
+/**
+ * Source 模式选区宿主状态。
+ */
+interface SourceSelectionHostState {
+  /** 当前浮层根节点 */
+  overlayRoot: HTMLElement | null;
+  /** 当前选区适配器 */
+  adapter: SelectionAssistantAdapter | null;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  'update:outlineContent': [value: string];
+  'editor-blur': [event: FocusEvent];
+  'rename-file': [];
+  save: [];
+  'save-as': [];
+  'copy-path': [];
+  'show-in-folder': [];
+}>();
+
+const isRichMode = computed<boolean>(() => editorPreferencesStore.viewMode === 'rich');
+const showOutline = ref(false);
+const content = defineModel<string>('content', { default: '' });
+const outlineContent = defineModel<string>('outlineContent', { default: '' });
+const richEditorPaneRef = ref<(EditorController & { recomputeSelectionOverlays?: () => void }) | null>(null);
+const sourceEditorPaneRef = ref<EditorController | null>(null);
+const findBarVisible = ref(false);
+const currentRichSelectionHost = shallowRef<RichSelectionHostState | null>(null);
+const currentSourceSelectionHost = shallowRef<SourceSelectionHostState | null>(null);
+
+const editorPageMaxWidth = computed<string>(() => {
+  switch (editorPreferencesStore.pageWidth) {
+    case 'wide':
+      return '1200px';
+    case 'full':
+      return 'none';
+    default:
+      return '900px';
+  }
+});
+
+const editorContainerStyle = computed<CSSProperties>(() => ({
+  '--editor-page-max-width': editorPageMaxWidth.value
+}));
+
+/**
+ * 将 prop 中的只读 editorState 与本地 content 模型合并，
+ * 派生出一个完整的 EditorState 对象供子组件使用。
+ */
+const effectiveEditorState = computed<EditorState>(() => ({
+  ...props.editorState,
+  content: content.value
+}));
+
+const { activeAnchorId, handleChangeAnchor, handleEditorScroll, setActiveAnchorId } = useAnchors(layoutRef, scrollbarRef);
+const markdownEditorController = useEditorController({ isRichMode, richEditorPaneRef, sourceEditorPaneRef });
+const currentSelectionAdapter = computed<SelectionAssistantAdapter | null>(() => {
+  return isRichMode.value ? currentRichSelectionHost.value?.adapter ?? null : currentSourceSelectionHost.value?.adapter ?? null;
+});
+const selectionToolbarKind = computed<'rich' | 'source'>(() => {
+  return isRichMode.value ? 'rich' : 'source';
+});
+const selectionAssistant = useSelectionAssistant({
+  adapter: () => currentSelectionAdapter.value,
+  isEditable: () => props.editable
+});
+
+/**
+ * Rich 模式格式按钮列表。
+ */
+const formatButtons = computed(() => [
+  { command: 'bold' as SelectionToolbarAction, icon: 'lucide:bold' },
+  { command: 'italic' as SelectionToolbarAction, icon: 'lucide:italic' },
+  { command: 'underline' as SelectionToolbarAction, icon: 'lucide:underline' },
+  { command: 'strike' as SelectionToolbarAction, icon: 'lucide:strikethrough' },
+  { command: 'link' as SelectionToolbarAction, icon: 'lucide:link' },
+  { command: 'code' as SelectionToolbarAction, icon: 'lucide:code' }
+]);
+
+/**
+ * 接收 Rich pane 回传的选区宿主状态。
+ * @param payload - 当前选区宿主状态
+ */
+function handleRichSelectionHostChange(payload: RichSelectionHostState | null): void {
+  currentRichSelectionHost.value = payload;
+}
+
+/**
+ * 接收 Source pane 回传的选区宿主状态。
+ * @param payload - 当前选区宿主状态
+ */
+function handleSourceSelectionHostChange(payload: SourceSelectionHostState | null): void {
+  currentSourceSelectionHost.value = payload;
+}
+
+/**
+ * 请求重算当前选区浮层位置。
+ */
+function recomputeSelectionOverlays(): void {
+  selectionAssistant.recomputeAllPositions();
+}
+
+/**
+ * 处理 AI 输入层显隐变化。
+ * @param visible - 最新显隐状态
+ */
+function handleSelectionAIVisibleChange(visible: boolean): void {
+  if (!visible) {
+    selectionAssistant.closeAIInput();
+  }
+}
+
+/**
+ * 仅当焦点真正离开整个编辑器交互区域时，向外抛出统一的 editor-blur 事件。
+ * @param event - 编辑器内部上抛的失焦事件
+ */
+function handleEditorBlur(event: FocusEvent): void {
+  const nextTarget = event.relatedTarget;
+
+  if (nextTarget instanceof Node && layoutRef.value?.contains(nextTarget)) {
+    return;
+  }
+
+  emit('editor-blur', event);
+}
+
+/**
+ * 将富文本搜索命中滚动到可视区域中心。
+ * @param targetElement - 目标匹配元素
+ */
+function scrollSearchMatchElementIntoView(targetElement: HTMLElement): void {
+  const scrollElement = scrollbarRef.value?.getScrollElement();
+  if (!scrollElement) {
+    targetElement.scrollIntoView({ block: 'center', inline: 'nearest' });
+    return;
+  }
+
+  const scrollRect = scrollElement.getBoundingClientRect();
+  const targetRect = targetElement.getBoundingClientRect();
+  const centeredTop = scrollElement.scrollTop + (targetRect.top - scrollRect.top) - (scrollElement.clientHeight - targetRect.height) / 2;
+  const maxScrollTop = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
+  const nextTop = Math.min(Math.max(centeredTop, 0), maxScrollTop);
+
+  scrollbarRef.value?.scrollTo({ top: nextTop, behavior: 'auto' });
+}
+
+/**
+ * 将源码锚点滚动到目标位置。
+ * @param hostElement - 锚点宿主元素
+ * @param offsetTop - 顶部偏移
+ */
+function scrollSourceAnchorIntoView(hostElement: HTMLElement, offsetTop: number): void {
+  const scrollElement = scrollbarRef.value?.getScrollElement();
+  if (!scrollElement) {
+    hostElement.scrollIntoView({ block: 'start' });
+    return;
+  }
+
+  const scrollRect = scrollElement.getBoundingClientRect();
+  const hostRect = hostElement.getBoundingClientRect();
+  const nextTop = scrollElement.scrollTop + (hostRect.top - scrollRect.top) + offsetTop;
+
+  scrollbarRef.value?.scrollTo({ top: Math.max(0, nextTop), behavior: 'auto' });
+}
+
+/**
+ * 处理大纲锚点切换。
+ * @param record - 当前锚点记录
+ */
+function handleEditorAnchorChange(record: AnchorRecord): void {
+  handleEditorAnchorNavigation({
+    record,
+    isRichMode: isRichMode.value,
+    setActiveAnchorId,
+    scrollToTop: () => scrollbarRef.value?.scrollTo({ top: 0, behavior: 'auto' }),
+    scrollRichAnchor: handleChangeAnchor,
+    scrollEditorAnchor: markdownEditorController.value.scrollToAnchor
+  });
+}
+
+/**
+ * 响应 Markdown 编辑器滚动并同步活跃锚点。
+ */
+function handleEditorScrollEvent(): void {
+  if (isRichMode.value) {
+    handleEditorScroll();
+    recomputeSelectionOverlays();
+    return;
+  }
+
+  const scrollElement = scrollbarRef.value?.getScrollElement();
+  if (!scrollElement) {
+    return;
+  }
+
+  if (scrollElement.scrollTop < 50) {
+    setActiveAnchorId('');
+    recomputeSelectionOverlays();
+    return;
+  }
+
+  setActiveAnchorId(markdownEditorController.value.getActiveAnchorId(scrollElement, 100));
+  recomputeSelectionOverlays();
+}
+
+/**
+ * 对外开放的编辑器实例能力集合，供 FindBar 等子组件使用。
+ */
+const editorPublicInstance = computed<EditorPublicInstance>(() => ({
+  undo: () => markdownEditorController.value.undo?.(),
+  redo: () => markdownEditorController.value.redo?.(),
+  canUndo: () => markdownEditorController.value.canUndo?.() ?? false,
+  canRedo: () => markdownEditorController.value.canRedo?.() ?? false,
+  focusEditor: () => markdownEditorController.value.focusEditor?.(),
+  getSelection: () => markdownEditorController.value.getSelection?.() ?? null,
+  insertAtCursor: (text: string) => markdownEditorController.value.insertAtCursor?.(text),
+  replaceSelection: (text: string) => markdownEditorController.value.replaceSelection?.(text),
+  replaceDocument: (text: string) => markdownEditorController.value.replaceDocument?.(text),
+  selectLineRange: (startLine: number, endLine: number) => markdownEditorController.value.selectLineRange?.(startLine, endLine) ?? false,
+  setSearchTerm: (term: string) => markdownEditorController.value.setSearchTerm?.(term),
+  findNext: () => markdownEditorController.value.findNext?.(),
+  findPrevious: () => markdownEditorController.value.findPrevious?.(),
+  clearSearch: () => markdownEditorController.value.clearSearch?.(),
+  getSearchState: () => markdownEditorController.value.getSearchState?.() ?? { currentIndex: 0, matchCount: 0, term: '' }
+}));
+
+/**
+ * 对外暴露编辑器控制器，供父组件 BEditor 统一调度。
+ */
+defineExpose({
+  editorController: markdownEditorController,
+  scrollToAnchor(anchorId: string): boolean {
+    return markdownEditorController.value.scrollToAnchor(anchorId);
+  },
+  getActiveAnchorId(scrollContainer: HTMLElement, thresholdPx: number): string {
+    return markdownEditorController.value.getActiveAnchorId(scrollContainer, thresholdPx);
+  }
+});
+</script>
+
+<style lang="less">
+.b-markdown-layout {
+  display: flex;
+  gap: 6px;
+  height: 100%;
+
+  --selection-color: #000;
+  --selection-bg: #ffef5c;
+  --native-selection-color: var(--selection-color);
+  --native-selection-bg: var(--selection-bg);
+
+  ::selection {
+    color: var(--native-selection-color);
+    background: var(--native-selection-bg);
+  }
+}
+
+.b-markdown-scrollbar {
+  flex: 1;
+  width: 0;
+  background: var(--bg-primary);
+  border-radius: 8px;
+}
+
+.b-markdown-container {
+  position: relative;
+  max-width: var(--editor-page-max-width);
+  margin: 0 auto;
+  font-size: 16px;
+}
+
+.b-markdown-title {
+  display: block;
+  width: 100%;
+  padding: 20px 40px 0;
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--editor-text);
+  cursor: text;
+  resize: none;
+  outline: none;
+  background: transparent;
+  border: none;
+
+  &::placeholder {
+    font-weight: 600;
+    color: var(--editor-placeholder);
+  }
+}
+</style>
