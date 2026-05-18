@@ -27,12 +27,22 @@
           </div>
 
           <div :class="bem('value-wrapper')">
-            <input
+            <AInput
               v-if="isSimpleValue(value)"
-              v-model="localData[key]"
+              :value="getInputValue(String(key))"
               :class="bem('value')"
-              :placeholder="'值'"
-              @input="handleValueChange(String(key), localData[key])"
+              placeholder="值"
+              @change="(v) => handleInputChange(String(key), v.target.value)"
+            />
+            <ADatePicker
+              v-else-if="isDateValue(value)"
+              :value="getDatePickerValue(String(key))"
+              :class="bem('value')"
+              show-time
+              value-format="YYYY-MM-DD"
+              input-read-only
+              placeholder="选择日期"
+              @change="(v) => handleDateChange(String(key), v)"
             />
             <div v-else :class="[bem('value'), bem('value', 'complex')]" @click="toggleComplexEdit(String(key))">
               {{ formatComplexValue(value) }}
@@ -70,6 +80,7 @@
 import type { FrontMatterData } from '../hooks/useFrontMatter';
 import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import dayjs from 'dayjs';
 import yaml from 'js-yaml';
 import { vFocus } from '@/directives/focus';
 import { createNamespace } from '@/utils/namespace';
@@ -122,6 +133,13 @@ function isSimpleValue(value: unknown): boolean {
   return ['string', 'number', 'boolean'].includes(typeof value);
 }
 
+/**
+ * 判断值是否为 Date 类型
+ */
+function isDateValue(value: unknown): boolean {
+  return value instanceof Date;
+}
+
 function formatComplexValue(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.length} 项]`;
@@ -135,8 +153,41 @@ function formatComplexValue(value: unknown): string {
   return String(value);
 }
 
-function handleValueChange(key: string, value: unknown): void {
-  emit('updateField', key, value);
+/**
+ * 获取可用于 AInput 绑定的简单值
+ */
+function getInputValue(key: string): string | number | undefined {
+  const val = localData.value[key];
+  if (typeof val === 'string' || typeof val === 'number') return val;
+  return undefined;
+}
+
+/**
+ * 获取可用于 ADatePicker 绑定的日期字符串
+ */
+function getDatePickerValue(key: string): string | undefined {
+  const val = localData.value[key];
+  if (val instanceof Date) return val.toISOString().split('T')[0];
+  if (typeof val === 'string') return val;
+  return undefined;
+}
+
+/**
+ * 处理 AInput 值变更
+ */
+function handleInputChange(key: string, val?: string): void {
+  localData.value[key] = val;
+
+  emit('updateField', key, val);
+}
+
+/**
+ * 处理 ADatePicker 值变更
+ */
+function handleDateChange(key: string, val: dayjs.Dayjs | Date | string): void {
+  localData.value[key] = val;
+
+  emit('updateField', key, val);
 }
 
 function startKeyEdit(key: string): void {
