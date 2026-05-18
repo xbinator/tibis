@@ -162,7 +162,7 @@ function ensureThemes(monaco: typeof Monaco): void {
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': '#f8fafc',
+      'editor.background': '#faf9f6',
       'editor.foreground': '#243042',
       'editor.lineHighlightBackground': '#eef2f7',
       'editor.selectionBackground': '#cfe3ff',
@@ -170,7 +170,7 @@ function ensureThemes(monaco: typeof Monaco): void {
       'editorLineNumber.foreground': '#a0aec0',
       'editorLineNumber.activeForeground': '#334155',
       'editorCursor.foreground': '#2563eb',
-      'editorGutter.background': '#f8fafc',
+      'editorGutter.background': '#faf9f6',
       'editorIndentGuide.background1': '#e5e7eb',
       'editorIndentGuide.activeBackground1': '#cbd5e1'
     }
@@ -214,9 +214,14 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
   const model = monaco.editor.createModel(options.value, options.language);
   const editor = monaco.editor.create(options.container, {
     model,
+    // 关闭自动布局，避免内容超出容器。
     automaticLayout: true,
+    // 关闭行号。
+    lineNumbers: 'off',
+    // 开启平滑光标动画。
     cursorSmoothCaretAnimation: 'on',
     fontFamily: '"JetBrains Mono", "SFMono-Regular", "Consolas", "Liberation Mono", monospace',
+    // 开启字体连atures，显示连字。
     fontLigatures: true,
     fontSize: 15,
     lineHeight: 24,

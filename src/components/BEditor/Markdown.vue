@@ -76,6 +76,7 @@
 
       <QuickActions
         v-model:show-outline="showOutline"
+        v-model:view-mode="viewMode"
         :file-path="editorState.path"
         @rename-file="emit('rename-file')"
         @save="emit('save')"
@@ -164,7 +165,23 @@ const emit = defineEmits<{
 }>();
 
 const isRichMode = computed<boolean>(() => editorPreferencesStore.viewMode === 'rich');
-const showOutline = ref(false);
+
+/**
+ * 大纲显示状态双向绑定，同步到偏好设置 store。
+ */
+const showOutline = computed<boolean>({
+  get: () => editorPreferencesStore.showOutline,
+  set: (val: boolean) => editorPreferencesStore.setShowOutline(val)
+});
+
+/**
+ * 视图模式双向绑定，同步到偏好设置 store。
+ */
+const viewMode = computed<string>({
+  get: () => editorPreferencesStore.viewMode,
+  set: (val: string) => editorPreferencesStore.setViewMode(val as 'rich' | 'source')
+});
+
 const content = defineModel<string>('content', { default: '' });
 const outlineContent = defineModel<string>('outlineContent', { default: '' });
 const richEditorPaneRef = ref<(EditorController & { recomputeSelectionOverlays?: () => void }) | null>(null);

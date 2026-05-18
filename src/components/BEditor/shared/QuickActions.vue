@@ -30,6 +30,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const showOutline = defineModel<boolean>('show-outline', { default: false });
+const viewMode = defineModel<string>('viewMode', { default: 'rich' });
 
 const emit = defineEmits<{
   /** 重命名文件事件 */
@@ -51,6 +52,13 @@ const emit = defineEmits<{
  */
 function toggleOutline(): void {
   showOutline.value = !showOutline.value;
+}
+
+/**
+ * 切换源代码模式和预览模式
+ */
+function toggleViewMode(): void {
+  viewMode.value = viewMode.value === 'rich' ? 'source' : 'rich';
 }
 
 /**
@@ -92,6 +100,12 @@ const menuOptions = computed<DropdownOption[]>(() => [
     onClick: toggleOutline
   },
   {
+    value: 'toggle-view-mode',
+    label: viewMode.value === 'rich' ? '切换源代码模式' : '切换预览模式',
+    icon: 'lucide:file-code',
+    onClick: toggleViewMode
+  },
+  {
     type: 'divider'
   },
   {
@@ -100,9 +114,6 @@ const menuOptions = computed<DropdownOption[]>(() => [
     icon: 'lucide:copy',
     disabled: !props.filePath,
     onClick: () => emit('copy-path')
-  },
-  {
-    type: 'divider'
   },
   {
     value: 'reveal',
@@ -118,7 +129,7 @@ const menuOptions = computed<DropdownOption[]>(() => [
 .quick-actions {
   position: absolute;
   top: 16px;
-  right: 16px;
+  right: 10px;
   z-index: 10;
 }
 

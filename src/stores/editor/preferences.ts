@@ -34,6 +34,8 @@ interface PersistedEditorPreferences {
   pageWidth: EditorPageWidth;
   /** 真实磁盘保存策略 */
   saveStrategy: EditorSaveStrategy;
+  /** 是否显示大纲 */
+  showOutline: boolean;
 }
 
 /**
@@ -49,7 +51,8 @@ interface LegacySettingsSnapshot {
 const DEFAULT_EDITOR_PREFERENCES: PersistedEditorPreferences = {
   viewMode: 'rich',
   pageWidth: 'default',
-  saveStrategy: 'off'
+  saveStrategy: 'off',
+  showOutline: false
 };
 
 /**
@@ -90,7 +93,8 @@ function normalizeEditorPreferences(value: unknown): PersistedEditorPreferences 
   return {
     viewMode: isEditorViewMode(source.viewMode) ? source.viewMode : DEFAULT_EDITOR_PREFERENCES.viewMode,
     pageWidth: isEditorPageWidth(source.pageWidth) ? source.pageWidth : DEFAULT_EDITOR_PREFERENCES.pageWidth,
-    saveStrategy: isEditorSaveStrategy(source.saveStrategy) ? source.saveStrategy : DEFAULT_EDITOR_PREFERENCES.saveStrategy
+    saveStrategy: isEditorSaveStrategy(source.saveStrategy) ? source.saveStrategy : DEFAULT_EDITOR_PREFERENCES.saveStrategy,
+    showOutline: typeof source.showOutline === 'boolean' ? source.showOutline : DEFAULT_EDITOR_PREFERENCES.showOutline
   };
 }
 
@@ -158,7 +162,8 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
       persistEditorPreferences({
         viewMode: this.viewMode,
         pageWidth: this.pageWidth,
-        saveStrategy: this.saveStrategy
+        saveStrategy: this.saveStrategy,
+        showOutline: this.showOutline
       });
     },
 
@@ -184,6 +189,15 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
      */
     setSaveStrategy(strategy: EditorSaveStrategy): void {
       this.saveStrategy = strategy;
+      this.savePreferences();
+    },
+
+    /**
+     * 设置大纲显示状态。
+     * @param visible - 目标显示状态
+     */
+    setShowOutline(visible: boolean): void {
+      this.showOutline = visible;
       this.savePreferences();
     }
   }
