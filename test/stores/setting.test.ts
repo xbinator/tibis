@@ -48,78 +48,14 @@ describe('useSettingStore', () => {
       providerSidebarCollapsed: false,
       settingsSidebarCollapsed: false,
       theme: 'system',
-      showOutline: true,
-      sourceMode: false,
-      editorPageWidth: 'default',
       sidebarVisible: false,
-      sidebarWidth: 340,
-      toolPermissionMode: 'ask',
-      alwaysToolPermissionGrants: {}
+      sidebarWidth: 340
     });
 
     const { useSettingStore } = await import('@/stores/ui/setting');
     const settingStore = useSettingStore();
 
     expect(settingStore.chatSidebarActiveSessionId).toBe('session-restore');
-  });
-
-  it('stores always grants separately from session grants and clears session when always is granted', async () => {
-    const { useSettingStore } = await import('@/stores/ui/setting');
-    const settingStore = useSettingStore();
-
-    settingStore.grantToolPermission('update_settings', 'session');
-    expect(settingStore.sessionToolPermissionGrants.update_settings).toBe(true);
-
-    settingStore.grantToolPermission('update_settings', 'always');
-
-    expect(settingStore.alwaysToolPermissionGrants.update_settings).toBe(true);
-    expect(settingStore.sessionToolPermissionGrants.update_settings).toBeUndefined();
-    expect(localStorage.getItem(SETTINGS_STORAGE_KEY)).toContain('"alwaysToolPermissionGrants":{"update_settings":true}');
-  });
-
-  it('does not restore session grants from persisted app settings', async () => {
-    const { useSettingStore } = await import('@/stores/ui/setting');
-    const settingStore = useSettingStore();
-
-    settingStore.grantToolPermission('update_settings', 'session');
-    settingStore.grantToolPermission('insert_at_cursor', 'always');
-
-    vi.resetModules();
-    setActivePinia(createPinia());
-
-    const { useSettingStore: useReloadedSettingStore } = await import('@/stores/ui/setting');
-    const reloadedSettingStore = useReloadedSettingStore();
-
-    expect(reloadedSettingStore.alwaysToolPermissionGrants.insert_at_cursor).toBe(true);
-    expect(reloadedSettingStore.sessionToolPermissionGrants.update_settings).toBeUndefined();
-  });
-
-  it('revokes and clears persisted and session grants', async () => {
-    const { useSettingStore } = await import('@/stores/ui/setting');
-    const settingStore = useSettingStore();
-
-    settingStore.grantToolPermission('update_settings', 'session');
-    settingStore.grantToolPermission('insert_at_cursor', 'always');
-    settingStore.revokeToolPermission('update_settings');
-
-    expect(settingStore.sessionToolPermissionGrants.update_settings).toBeUndefined();
-
-    settingStore.clearToolPermissionGrants();
-
-    expect(settingStore.alwaysToolPermissionGrants).toEqual({});
-    expect(settingStore.sessionToolPermissionGrants).toEqual({});
-  });
-
-  it('clears only session grants when requested', async () => {
-    const { useSettingStore } = await import('@/stores/ui/setting');
-    const settingStore = useSettingStore();
-
-    settingStore.grantToolPermission('update_settings', 'session');
-    settingStore.grantToolPermission('insert_at_cursor', 'always');
-    settingStore.clearSessionToolPermissionGrants();
-
-    expect(settingStore.sessionToolPermissionGrants).toEqual({});
-    expect(settingStore.alwaysToolPermissionGrants.insert_at_cursor).toBe(true);
   });
 
   it('does not persist editor-specific fields into app settings anymore', async () => {

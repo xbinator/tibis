@@ -6,6 +6,7 @@ import type { AIToolContext } from 'types/ai';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBuiltinSettingsTools } from '@/ai/tools/builtin/SettingsTool';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { useSettingStore } from '@/stores/ui/setting';
 
 const storage = new Map<string, string>();
@@ -122,8 +123,9 @@ describe('built-in settings tools', () => {
     const confirm = vi.fn(async () => ({ approved: true }));
     const tools = createBuiltinSettingsTools({ confirm });
     const settingStore = useSettingStore();
+    const toolPermissionStore = useToolPermissionStore();
 
-    settingStore.setToolPermissionMode('readonly');
+    toolPermissionStore.setToolPermissionMode('readonly');
     const result = await tools.updateSettings.execute({ key: 'theme', value: 'dark' }, createToolContext());
 
     expect(result.status).toBe('failure');
@@ -136,8 +138,9 @@ describe('built-in settings tools', () => {
     const confirm = vi.fn(async () => ({ approved: true }));
     const tools = createBuiltinSettingsTools({ confirm });
     const settingStore = useSettingStore();
+    const toolPermissionStore = useToolPermissionStore();
 
-    settingStore.setToolPermissionMode('autoSafe');
+    toolPermissionStore.setToolPermissionMode('autoSafe');
     const result = await tools.updateSettings.execute({ key: 'theme', value: 'dark' }, createToolContext());
 
     expect(result.status).toBe('success');
@@ -149,8 +152,9 @@ describe('built-in settings tools', () => {
     const confirm = vi.fn(async () => ({ approved: true }));
     const tools = createBuiltinSettingsTools({ confirm });
     const settingStore = useSettingStore();
+    const toolPermissionStore = useToolPermissionStore();
 
-    settingStore.grantToolPermission('update_settings', 'session');
+    toolPermissionStore.grantToolPermission('update_settings', 'session');
     const result = await tools.updateSettings.execute({ key: 'theme', value: 'dark' }, createToolContext());
 
     expect(result.status).toBe('success');
@@ -161,12 +165,12 @@ describe('built-in settings tools', () => {
   it('stores a grant only after the operation succeeds', async () => {
     const confirm = vi.fn(async () => ({ approved: true, grantScope: 'always' as const }));
     const tools = createBuiltinSettingsTools({ confirm });
-    const settingStore = useSettingStore();
+    const toolPermissionStore = useToolPermissionStore();
 
     const result = await tools.updateSettings.execute({ key: 'theme', value: 'dark' }, createToolContext());
 
     expect(result.status).toBe('success');
-    expect(settingStore.alwaysToolPermissionGrants.update_settings).toBe(true);
+    expect(toolPermissionStore.alwaysToolPermissionGrants.update_settings).toBe(true);
   });
 
   it('returns current theme from get_settings', async () => {

@@ -7,8 +7,9 @@ import type { ElectronAPI } from 'types/electron-api';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBuiltinMCPSettingsTools } from '@/ai/tools/builtin/MCPSettingsTool';
-import { useSettingStore } from '@/stores/ui/setting';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
+import { useSettingStore } from '@/stores/ui/setting';
 
 const storage = new Map<string, string>();
 
@@ -227,9 +228,9 @@ describe('built-in MCP settings tools', () => {
   it('blocks MCP settings writes in readonly permission mode', async () => {
     const confirm = vi.fn(async () => ({ approved: true }));
     const tools = createBuiltinMCPSettingsTools({ confirm });
-    const settingStore = useSettingStore();
+    const toolPermissionStore = useToolPermissionStore();
 
-    settingStore.setToolPermissionMode('readonly');
+    toolPermissionStore.setToolPermissionMode('readonly');
     const result = await tools.addMcpServer.execute({ name: 'Blocked', command: 'npx' }, createToolContext());
 
     expect(result.status).toBe('failure');

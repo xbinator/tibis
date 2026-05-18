@@ -6,7 +6,7 @@ import type { AIToolDefinition } from 'types/ai';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeWithPermission } from '@/ai/tools/permission';
-import { useSettingStore } from '@/stores/ui/setting';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 
 const storage = new Map<string, string>();
 
@@ -53,9 +53,9 @@ describe('executeWithPermission', () => {
 
   it('falls back to confirmation for non-safe write tools in autoSafe mode', async () => {
     const confirm = vi.fn(async () => ({ approved: true }));
-    const settingStore = useSettingStore();
+    const toolPermissionStore = useToolPermissionStore();
 
-    settingStore.setToolPermissionMode('autoSafe');
+    toolPermissionStore.setToolPermissionMode('autoSafe');
     const result = await executeWithPermission({
       definition: createToolDefinition({ safeAutoApprove: false }),
       adapter: { confirm },
@@ -99,7 +99,7 @@ describe('executeWithPermission', () => {
 
   it('does not store a grant when the operation fails', async () => {
     const confirm = vi.fn(async () => ({ approved: true, grantScope: 'always' as const }));
-    const settingStore = useSettingStore();
+    const toolPermissionStore = useToolPermissionStore();
 
     const result = await executeWithPermission({
       definition: createToolDefinition({ safeAutoApprove: true }),
@@ -119,6 +119,6 @@ describe('executeWithPermission', () => {
 
     expect(result.status).toBe('failure');
     expect(result.error?.code).toBe('EXECUTION_FAILED');
-    expect(settingStore.alwaysToolPermissionGrants.test_tool).toBeUndefined();
+    expect(toolPermissionStore.alwaysToolPermissionGrants.test_tool).toBeUndefined();
   });
 });

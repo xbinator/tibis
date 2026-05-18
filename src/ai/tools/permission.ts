@@ -4,7 +4,7 @@
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from './confirmation';
 import type { AIToolDefinition, AIToolExecutionResult } from 'types/ai';
-import { useSettingStore } from '@/stores/ui/setting';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from './results';
 
 /**
@@ -36,9 +36,9 @@ function getExecutionErrorMessage(error: unknown): string {
  * @returns 是否已有授权
  */
 function hasToolGrant(toolName: string): boolean {
-  const settingStore = useSettingStore();
+  const toolPermissionStore = useToolPermissionStore();
 
-  return Boolean(settingStore.alwaysToolPermissionGrants[toolName] || settingStore.sessionToolPermissionGrants[toolName]);
+  return Boolean(toolPermissionStore.alwaysToolPermissionGrants[toolName] || toolPermissionStore.sessionToolPermissionGrants[toolName]);
 }
 
 /**
@@ -47,7 +47,7 @@ function hasToolGrant(toolName: string): boolean {
  * @returns 是否可以自动执行
  */
 function canAutoExecute(definition: AIToolDefinition): boolean {
-  const settingStore = useSettingStore();
+  const toolPermissionStore = useToolPermissionStore();
 
   if (definition.riskLevel === 'read') {
     return true;
@@ -57,7 +57,7 @@ function canAutoExecute(definition: AIToolDefinition): boolean {
     return true;
   }
 
-  return settingStore.toolPermissionMode === 'autoSafe' && definition.safeAutoApprove === true;
+  return toolPermissionStore.toolPermissionMode === 'autoSafe' && definition.safeAutoApprove === true;
 }
 
 /**
@@ -102,9 +102,9 @@ async function executeOperation<TResult>(options: ExecuteWithPermissionOptions<T
  * @returns 工具执行结果
  */
 export async function executeWithPermission<TResult>(options: ExecuteWithPermissionOptions<TResult>): Promise<AIToolExecutionResult<TResult>> {
-  const settingStore = useSettingStore();
+  const toolPermissionStore = useToolPermissionStore();
 
-  if (settingStore.toolPermissionMode === 'readonly' && options.definition.riskLevel !== 'read') {
+  if (toolPermissionStore.toolPermissionMode === 'readonly' && options.definition.riskLevel !== 'read') {
     return createToolFailureResult(options.definition.name, 'PERMISSION_DENIED', '当前权限模式不允许执行该工具');
   }
 
@@ -124,7 +124,7 @@ export async function executeWithPermission<TResult>(options: ExecuteWithPermiss
 
   const result = await executeOperation({ ...options, request: safeRequest });
   if (result.status === 'success' && normalizedDecision.grantScope) {
-    settingStore.grantToolPermission(options.definition.name, normalizedDecision.grantScope);
+    toolPermissionStore.grantToolPermission(options.definition.name, normalizedDecision.grantScope);
   }
 
   return result;

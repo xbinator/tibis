@@ -269,8 +269,8 @@ watch(
 
 .server-editor-modal__editor :deep(.cm-editor) {
   min-height: 320px;
-  background: var(--input-bg);
   outline: none;
+  background: var(--input-bg);
 }
 
 .server-editor-modal__editor :deep(.cm-scroller) {
