@@ -4,7 +4,7 @@
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from './confirmation';
 import type { AIToolDefinition, AIToolExecutionResult } from 'types/ai';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from './results';
 
 /**

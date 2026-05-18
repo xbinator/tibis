@@ -7,7 +7,7 @@ import type { ElectronAPI } from 'types/electron-api';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBuiltinMCPSettingsTools } from '@/ai/tools/builtin/MCPSettingsTool';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 
 const storage = new Map<string, string>();

@@ -43,8 +43,8 @@ import { Icon } from '@iconify/vue';
 import { Dropdown } from 'ant-design-vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { useClipboard } from '@/hooks/useClipboard';
-import { useTabsStore } from '@/stores/tabs';
-import type { Tab, TabCloseAction, TabClosePlan, TabMovePosition } from '@/stores/tabs';
+import { useTabsStore } from '@/stores/workspace/tabs';
+import type { Tab, TabCloseAction, TabClosePlan, TabMovePosition } from '@/stores/workspace/tabs';
 import { Modal } from '@/utils/modal';
 import { useTabDragger } from '../hooks/useTabDragger';
 

@@ -18,7 +18,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
 import { OPEN_FILE_EXTENSIONS } from '@/constants/extensions';
-import { useFilesStore } from '@/stores/files';
+import { useFilesStore } from '@/stores/workspace/files';
 
 const router = useRouter();
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);

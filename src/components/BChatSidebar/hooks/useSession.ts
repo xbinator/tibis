@@ -6,7 +6,7 @@ import type { Message } from '../utils/types';
 import type { ChatSession } from 'types/chat';
 import { nextTick, ref } from 'vue';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 
 /** 初始化时用于兜底恢复的最近会话查询条数。 */
 const INITIAL_SESSION_LOAD_LIMIT = 1;

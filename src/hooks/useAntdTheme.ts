@@ -1,7 +1,7 @@
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
 import theme from 'ant-design-vue/es/theme';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 
 const { darkAlgorithm, defaultAlgorithm } = theme;
 

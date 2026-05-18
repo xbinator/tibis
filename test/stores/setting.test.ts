@@ -31,7 +31,7 @@ describe('useSettingStore', () => {
   });
 
   it('persists the active chat sidebar session id into app settings', async () => {
-    const { useSettingStore } = await import('@/stores/setting');
+    const { useSettingStore } = await import('@/stores/ui/setting');
     const settingStore = useSettingStore();
 
     settingStore.setChatSidebarActiveSessionId('session-42');
@@ -57,14 +57,14 @@ describe('useSettingStore', () => {
       alwaysToolPermissionGrants: {}
     });
 
-    const { useSettingStore } = await import('@/stores/setting');
+    const { useSettingStore } = await import('@/stores/ui/setting');
     const settingStore = useSettingStore();
 
     expect(settingStore.chatSidebarActiveSessionId).toBe('session-restore');
   });
 
   it('stores always grants separately from session grants and clears session when always is granted', async () => {
-    const { useSettingStore } = await import('@/stores/setting');
+    const { useSettingStore } = await import('@/stores/ui/setting');
     const settingStore = useSettingStore();
 
     settingStore.grantToolPermission('update_settings', 'session');
@@ -78,7 +78,7 @@ describe('useSettingStore', () => {
   });
 
   it('does not restore session grants from persisted app settings', async () => {
-    const { useSettingStore } = await import('@/stores/setting');
+    const { useSettingStore } = await import('@/stores/ui/setting');
     const settingStore = useSettingStore();
 
     settingStore.grantToolPermission('update_settings', 'session');
@@ -87,7 +87,7 @@ describe('useSettingStore', () => {
     vi.resetModules();
     setActivePinia(createPinia());
 
-    const { useSettingStore: useReloadedSettingStore } = await import('@/stores/setting');
+    const { useSettingStore: useReloadedSettingStore } = await import('@/stores/ui/setting');
     const reloadedSettingStore = useReloadedSettingStore();
 
     expect(reloadedSettingStore.alwaysToolPermissionGrants.insert_at_cursor).toBe(true);
@@ -95,7 +95,7 @@ describe('useSettingStore', () => {
   });
 
   it('revokes and clears persisted and session grants', async () => {
-    const { useSettingStore } = await import('@/stores/setting');
+    const { useSettingStore } = await import('@/stores/ui/setting');
     const settingStore = useSettingStore();
 
     settingStore.grantToolPermission('update_settings', 'session');
@@ -111,7 +111,7 @@ describe('useSettingStore', () => {
   });
 
   it('clears only session grants when requested', async () => {
-    const { useSettingStore } = await import('@/stores/setting');
+    const { useSettingStore } = await import('@/stores/ui/setting');
     const settingStore = useSettingStore();
 
     settingStore.grantToolPermission('update_settings', 'session');
@@ -123,7 +123,7 @@ describe('useSettingStore', () => {
   });
 
   it('does not persist editor-specific fields into app settings anymore', async () => {
-    const { useSettingStore } = await import('@/stores/setting');
+    const { useSettingStore } = await import('@/stores/ui/setting');
     const settingStore = useSettingStore();
 
     settingStore.setChatSidebarActiveSessionId('session-42');

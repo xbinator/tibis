@@ -8,7 +8,7 @@ import { shallowRef, type ShallowRef } from 'vue';
 import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
 import { attachClosestEdge, extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
-import type { TabMovePosition } from '@/stores/tabs';
+import type { TabMovePosition } from '@/stores/workspace/tabs';
 
 /**
  * Pragmatic Drag and Drop hitbox 计算出的最近边缘。

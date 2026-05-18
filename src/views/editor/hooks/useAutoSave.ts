@@ -7,7 +7,7 @@ import type { EditorFile } from '../../../layouts/default/types';
 import type { Ref } from 'vue';
 import { watch, onUnmounted, ref } from 'vue';
 import { debounce } from 'lodash-es';
-import { useFilesStore } from '@/stores/files';
+import { useFilesStore } from '@/stores/workspace/files';
 
 export interface AutoSaveOptions {
   delay?: number;

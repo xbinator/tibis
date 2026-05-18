@@ -6,7 +6,7 @@
 import { defineStore } from 'pinia';
 import { native } from '@/shared/platform';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
-import { useTabsStore } from '@/stores/tabs';
+import { useTabsStore } from '@/stores/workspace/tabs';
 
 /**
  * 编辑器全局文件监听状态。

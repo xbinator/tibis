@@ -9,7 +9,7 @@ import { useToolbarShortcuts } from '@/components/BToolbar/hooks/useToolbarShort
 import type { ToolbarOptions } from '@/components/BToolbar/types';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { isElectron } from '@/shared/platform/env';
-import { useFilesStore } from '@/stores/files';
+import { useFilesStore } from '@/stores/workspace/files';
 import { emitter } from '@/utils/emitter';
 import { EditorShortcuts } from '../../../constants/shortcuts';
 

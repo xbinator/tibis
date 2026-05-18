@@ -2,8 +2,8 @@ import type { App } from 'vue';
 import type { RouteRecordRaw } from 'vue-router';
 import { createRouter, createWebHistory } from 'vue-router';
 import { resolveRouteTabInfo } from '@/router/cache';
-import { useSettingStore } from '@/stores/setting';
-import { useTabsStore } from '@/stores/tabs';
+import { useSettingStore } from '@/stores/ui/setting';
+import { useTabsStore } from '@/stores/workspace/tabs';
 import { basicRoutes } from './routes';
 
 const router = createRouter({

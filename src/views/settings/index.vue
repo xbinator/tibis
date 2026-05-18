@@ -24,7 +24,7 @@
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { Icon } from '@iconify/vue';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 import { menuGroups, type SettingsMenuKey } from './constants';
 
 const route = useRoute();

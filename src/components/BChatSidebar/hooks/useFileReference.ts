@@ -6,7 +6,7 @@ import type { FileReferenceChip } from '../types';
 import { nextTick, onMounted, onUnmounted } from 'vue';
 import type { ChatFileReferenceInsertPayload } from '@/shared/chat/fileReference';
 import { onChatFileReferenceInsert } from '@/shared/chat/fileReference';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 import { buildUnsavedPath } from '@/utils/file';
 
 /**

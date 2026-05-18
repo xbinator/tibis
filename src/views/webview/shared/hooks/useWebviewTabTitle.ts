@@ -4,7 +4,7 @@
  */
 import type { WebviewTabTitleOptions } from '../types';
 import { watch } from 'vue';
-import { useTabsStore } from '@/stores/tabs';
+import { useTabsStore } from '@/stores/workspace/tabs';
 
 /**
  * 监听 WebView 标题并更新当前标签页名称。

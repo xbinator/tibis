@@ -3,8 +3,8 @@ import type { Ref } from 'vue';
 import { ref, watch } from 'vue';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
 import type { StoredFile } from '@/shared/storage/files/types';
-import { useFilesStore } from '@/stores/files';
-import { useTabsStore } from '@/stores/tabs';
+import { useFilesStore } from '@/stores/workspace/files';
+import { useTabsStore } from '@/stores/workspace/tabs';
 import { parseFileName } from '../utils/filePath';
 import { useAutoSave } from './useAutoSave';
 

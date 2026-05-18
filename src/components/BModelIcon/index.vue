@@ -7,7 +7,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 import logger from '@/utils/logger';
 
 type IconTheme = 'light' | 'dark';

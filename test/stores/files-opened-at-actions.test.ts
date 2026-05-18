@@ -125,7 +125,7 @@ describe('useFilesStore openedAt actions', () => {
 
   it('openExistingFile touches openedAt and refreshes recentFiles from storage order', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(100);
-    const { useFilesStore } = await import('@/stores/files');
+    const { useFilesStore } = await import('@/stores/workspace/files');
     const store = useFilesStore();
 
     await store.ensureLoaded();
@@ -142,7 +142,7 @@ describe('useFilesStore openedAt actions', () => {
 
   it('openOrCreateByPath creates a missing disk file and returns the derived record', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(300);
-    const { useFilesStore } = await import('@/stores/files');
+    const { useFilesStore } = await import('@/stores/workspace/files');
     const store = useFilesStore();
 
     const opened = await store.openOrCreateByPath('/c.md');
@@ -162,7 +162,7 @@ describe('useFilesStore openedAt actions', () => {
 
   it('openOrRefreshByPathFromDisk refreshes an existing stored file from disk while preserving its id', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(350);
-    const { useFilesStore } = await import('@/stores/files');
+    const { useFilesStore } = await import('@/stores/workspace/files');
     const store = useFilesStore();
 
     await store.ensureLoaded();
@@ -188,7 +188,7 @@ describe('useFilesStore openedAt actions', () => {
 
   it('createAndOpen fills missing timestamps and refreshes recentFiles from storage', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(500);
-    const { useFilesStore } = await import('@/stores/files');
+    const { useFilesStore } = await import('@/stores/workspace/files');
     const store = useFilesStore();
 
     const created = await store.createAndOpen({

@@ -6,7 +6,7 @@ import type { AIToolContext } from 'types/ai';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBuiltinSettingsTools } from '@/ai/tools/builtin/SettingsTool';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 
 const storage = new Map<string, string>();
 

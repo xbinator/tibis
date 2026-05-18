@@ -5,7 +5,7 @@
 import type { AIUsage } from 'types/ai';
 import { ref } from 'vue';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 
 /**
  * 用量面板状态管理 hook

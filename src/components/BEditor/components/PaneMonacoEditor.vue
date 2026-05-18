@@ -19,7 +19,7 @@ import type * as Monaco from 'monaco-editor';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { EditorController, EditorSearchState, EditorSelection } from '@/components/BMarkdown/adapters/types';
 import type { EditorState } from '@/components/BMarkdown/types';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 import { createMonacoEditor } from '../utils/createMonacoEditor';
 
 /**

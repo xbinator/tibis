@@ -120,7 +120,7 @@ import BDropdown from '@/components/BDropdown/index.vue';
 import BDropdownMenu from '@/components/BDropdown/Menu.vue';
 import type { DropdownOptionItem } from '@/components/BDropdown/type';
 import { useProviderStore } from '@/stores/ai/provider';
-import { useSettingStore } from '@/stores/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 import { Modal } from '@/utils/modal';
 import ProviderModal from './components/ProviderModal.vue';
 import SidebarItem from './components/SidebarItem.vue';

@@ -33,7 +33,7 @@ describe('useTabsStore', () => {
   });
 
   it('moves the dragged tab before the target tab and persists the new order', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'alpha', path: '/alpha', title: 'Alpha' });
@@ -50,7 +50,7 @@ describe('useTabsStore', () => {
   });
 
   it('does not persist when the drag source and target are identical', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'alpha', path: '/alpha', title: 'Alpha' });
@@ -63,7 +63,7 @@ describe('useTabsStore', () => {
   });
 
   it('registers cache keys when tabs are added', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'alpha', path: '/alpha', title: 'Alpha', cacheKey: 'cache:alpha' });
@@ -75,7 +75,7 @@ describe('useTabsStore', () => {
 
   it('exposes cached component names for KeepAlive include filters', async () => {
     const { resolveRouteCacheName } = await import('@/router/cache');
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'alpha', path: '/alpha', title: 'Alpha', cacheKey: 'cache:alpha' });
@@ -84,7 +84,7 @@ describe('useTabsStore', () => {
   });
 
   it('removes the tab cache key when a tab is closed', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'alpha', path: '/alpha', title: 'Alpha', cacheKey: 'cache:alpha' });
@@ -97,7 +97,7 @@ describe('useTabsStore', () => {
   });
 
   it('tracks missing file status for existing tabs and clears it later', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'alpha', path: '/alpha', title: 'Alpha', cacheKey: 'cache:alpha' });
@@ -117,7 +117,7 @@ describe('useTabsStore', () => {
       dirtyById: { legacy: true }
     });
 
-    const { loadSavedData } = await import('@/stores/tabs');
+    const { loadSavedData } = await import('@/stores/workspace/tabs');
 
     expect(loadSavedData().missingById).toEqual({});
   });
@@ -128,7 +128,7 @@ describe('useTabsStore', () => {
       dirtyById: { legacy: true }
     });
 
-    const { loadSavedData } = await import('@/stores/tabs');
+    const { loadSavedData } = await import('@/stores/workspace/tabs');
 
     expect(loadSavedData()).toEqual({
       tabs: [{ id: 'legacy', path: '/legacy', title: 'Legacy', cacheKey: 'legacy' }],
@@ -139,7 +139,7 @@ describe('useTabsStore', () => {
   });
 
   it('builds a disabled close plan for the last tab when allowCloseLastTab is false', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'solo', path: '/solo', title: 'Solo', cacheKey: 'cache:solo' });
@@ -156,7 +156,7 @@ describe('useTabsStore', () => {
   });
 
   it('allows the close button path to close the last tab when allowCloseLastTab is true', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'solo', path: '/solo', title: 'Solo', cacheKey: 'cache:solo' });
@@ -175,7 +175,7 @@ describe('useTabsStore', () => {
   });
 
   it('marks closeOthers as requiring confirmation when another tab is dirty', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'left', path: '/left', title: 'Left', cacheKey: 'cache:left' });
@@ -196,7 +196,7 @@ describe('useTabsStore', () => {
   });
 
   it('routes to the nearest surviving tab when closeSaved removes the active saved tab', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'left', path: '/left', title: 'Left', cacheKey: 'cache:left' });
@@ -216,7 +216,7 @@ describe('useTabsStore', () => {
   });
 
   it('safely applies a stale close plan without recomputing confirmation state', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: 'alpha', path: '/alpha', title: 'Alpha', cacheKey: 'cache:alpha' });

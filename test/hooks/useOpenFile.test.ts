@@ -64,8 +64,8 @@ describe('useOpenFile', () => {
   });
 
   it('reuses an already-open tab for the same file path instead of reloading from disk', async () => {
-    const { useFilesStore } = await import('@/stores/files');
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useFilesStore } = await import('@/stores/workspace/files');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const { useOpenFile } = await import('@/hooks/useOpenFile');
 
     const filesStore = useFilesStore();
@@ -86,7 +86,7 @@ describe('useOpenFile', () => {
   });
 
   it('keeps restoring unsaved pathless drafts by id', async () => {
-    const { useFilesStore } = await import('@/stores/files');
+    const { useFilesStore } = await import('@/stores/workspace/files');
     const { useOpenFile } = await import('@/hooks/useOpenFile');
 
     const filesStore = useFilesStore();

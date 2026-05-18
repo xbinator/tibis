@@ -7,8 +7,8 @@ import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
 import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage/files/types';
-import { useFilesStore } from '@/stores/files';
-import { useTabsStore } from '@/stores/tabs';
+import { useFilesStore } from '@/stores/workspace/files';
+import { useTabsStore } from '@/stores/workspace/tabs';
 
 const createFileId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 

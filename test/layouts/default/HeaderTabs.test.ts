@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DropdownOption, DropdownOptionItem } from '@/components/BDropdown/type';
-import { useTabsStore } from '@/stores/tabs';
+import { useTabsStore } from '@/stores/workspace/tabs';
 
 const routerPushMock = vi.fn(async () => undefined);
 const confirmMock = vi.fn(async () => [false, false] as [boolean, boolean]);

@@ -75,7 +75,7 @@ describe('useEditorFileWatchStore', () => {
 
   it('marks every tab for the unlinked path as missing and ignores change events in phase one', async () => {
     const { useEditorFileWatchStore } = await import('@/stores/editor/fileWatch');
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const watchStore = useEditorFileWatchStore();
     const tabsStore = useTabsStore();
 

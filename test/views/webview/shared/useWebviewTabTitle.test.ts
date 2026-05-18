@@ -26,7 +26,7 @@ describe('useWebviewTabTitle', () => {
   });
 
   it('updates the matching tab title when title changes', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: '/webview/native?url=https%3A%2F%2Fexample.com', path: '/webview/native?url=https%3A%2F%2Fexample.com', title: 'WebView' });
@@ -44,7 +44,7 @@ describe('useWebviewTabTitle', () => {
   });
 
   it('ignores empty titles', async () => {
-    const { useTabsStore } = await import('@/stores/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
     const tabsStore = useTabsStore();
 
     tabsStore.addTab({ id: '/webview/web?url=https%3A%2F%2Fexample.com', path: '/webview/web?url=https%3A%2F%2Fexample.com', title: 'WebView' });

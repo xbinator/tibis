@@ -48,8 +48,8 @@ import BScrollbar from '@/components/BScrollbar/index.vue';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
-import { useFilesStore } from '@/stores/files';
-import { useTabsStore } from '@/stores/tabs';
+import { useFilesStore } from '@/stores/workspace/files';
+import { useTabsStore } from '@/stores/workspace/tabs';
 import { getRecentFileLabel } from '@/utils/file';
 
 // ---------- props / emits ----------
