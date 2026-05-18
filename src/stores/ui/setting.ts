@@ -5,7 +5,8 @@
 import { defineStore } from 'pinia';
 import { defaultsDeep } from 'lodash-es';
 import { native } from '@/shared/platform';
-import { local } from '@/shared/storage/base';
+import { loadPersistedState, persistState } from '@/stores/helpers/persist';
+import type { PersistConfig } from '@/stores/helpers/types';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -79,34 +80,31 @@ function normalizeSettings(value: unknown): PersistedSettingState {
   return normalized;
 }
 
-function removeLegacySettings(): void {
-  local.removeItem(LEGACY_THEME_STORAGE_KEY);
-  local.removeItem(LEGACY_SIDEBAR_VISIBLE_KEY);
-  local.removeItem(LEGACY_SIDEBAR_WIDTH_KEY);
-}
-
-function loadLegacySettings(): PersistedSettingState {
-  return normalizeSettings({
-    theme: local.getItem<ThemeMode>(LEGACY_THEME_STORAGE_KEY),
-    sidebarVisible: local.getItem<boolean>(LEGACY_SIDEBAR_VISIBLE_KEY),
-    sidebarWidth: local.getItem<number>(LEGACY_SIDEBAR_WIDTH_KEY)
-  });
-}
-
-function loadPersistedSettings(): PersistedSettingState {
-  const savedSettings = local.getItem<PersistedSettingState>(SETTINGS_STORAGE_KEY);
-
-  if (savedSettings) {
-    const normalizedSettings = normalizeSettings(savedSettings);
-    local.setItem(SETTINGS_STORAGE_KEY, normalizedSettings);
-    return normalizedSettings;
-  }
-
-  const legacySettings = loadLegacySettings();
-  local.setItem(SETTINGS_STORAGE_KEY, legacySettings);
-  removeLegacySettings();
-  return legacySettings;
-}
+const SETTINGS_CONFIG: PersistConfig<PersistedSettingState> = {
+  storageKey: SETTINGS_STORAGE_KEY,
+  defaults: DEFAULT_SETTINGS,
+  normalize: normalizeSettings,
+  migrations: [
+    {
+      legacyKey: LEGACY_THEME_STORAGE_KEY,
+      migrate: (legacyValue: unknown): Record<string, unknown> => ({
+        theme: legacyValue as ThemeMode
+      })
+    },
+    {
+      legacyKey: LEGACY_SIDEBAR_VISIBLE_KEY,
+      migrate: (legacyValue: unknown): Record<string, unknown> => ({
+        sidebarVisible: legacyValue as boolean
+      })
+    },
+    {
+      legacyKey: LEGACY_SIDEBAR_WIDTH_KEY,
+      migrate: (legacyValue: unknown): Record<string, unknown> => ({
+        sidebarWidth: legacyValue as number
+      })
+    }
+  ]
+};
 
 /**
  * 应用设置 Store
@@ -114,7 +112,7 @@ function loadPersistedSettings(): PersistedSettingState {
  */
 export const useSettingStore = defineStore('setting', {
   state: (): SettingState => ({
-    ...loadPersistedSettings(),
+    ...loadPersistedState(SETTINGS_CONFIG),
     title: 'Tibis'
   }),
 
@@ -147,7 +145,7 @@ export const useSettingStore = defineStore('setting', {
         sidebarWidth: this.sidebarWidth
       };
 
-      local.setItem(SETTINGS_STORAGE_KEY, settings);
+      persistState(SETTINGS_STORAGE_KEY, settings);
     },
     // ==================== 主题设置 ====================
 
