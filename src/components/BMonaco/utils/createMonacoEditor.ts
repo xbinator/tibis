@@ -66,14 +66,14 @@ interface MonacoWorkerModule {
 let cachedMonaco: typeof Monaco | null = null;
 let monacoEnvironmentReady = false;
 let jsonDefaultsReady = false;
-let EditorWorkerConstructor: MonacoWorkerModule['default'] | null = null;
-let JsonWorkerConstructor: MonacoWorkerModule['default'] | null = null;
+let editorWorkerConstructor: MonacoWorkerModule['default'] | null = null;
+let jsonWorkerConstructor: MonacoWorkerModule['default'] | null = null;
 
 /**
  * 懒加载 Monaco worker 构造器。
  */
 async function ensureWorkerConstructors(): Promise<void> {
-  if (EditorWorkerConstructor && JsonWorkerConstructor) {
+  if (editorWorkerConstructor && jsonWorkerConstructor) {
     return;
   }
 
@@ -82,8 +82,8 @@ async function ensureWorkerConstructors(): Promise<void> {
     import('monaco-editor/esm/vs/language/json/json.worker?worker') as Promise<MonacoWorkerModule>
   ]);
 
-  EditorWorkerConstructor = editorWorkerModule.default;
-  JsonWorkerConstructor = jsonWorkerModule.default;
+  editorWorkerConstructor = editorWorkerModule.default;
+  jsonWorkerConstructor = jsonWorkerModule.default;
 }
 
 /**
@@ -99,16 +99,16 @@ async function ensureMonacoEnvironment(): Promise<void> {
   const environmentHost = globalThis as typeof globalThis & MonacoEnvironmentHost;
   environmentHost.MonacoEnvironment = {
     getWorker(_moduleId: string, label: string): Worker {
-      if (label === 'json' && JsonWorkerConstructor) {
-        const JsonWorker = JsonWorkerConstructor;
+      if (label === 'json' && jsonWorkerConstructor) {
+        const JsonWorker = jsonWorkerConstructor;
         return new JsonWorker();
       }
 
-      if (!EditorWorkerConstructor) {
+      if (!editorWorkerConstructor) {
         throw new Error('Monaco editor worker is not ready');
       }
 
-      const EditorWorker = EditorWorkerConstructor;
+      const EditorWorker = editorWorkerConstructor;
       return new EditorWorker();
     }
   };

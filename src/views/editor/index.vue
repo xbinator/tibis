@@ -2,8 +2,7 @@
   <div class="editor-layout editor-content">
     <div class="editor-main-container">
       <div class="editor-content-wrapper">
-        <component
-          :is="activeDriver.component"
+        <BEditor
           ref="editorRef"
           :key="fileState.id"
           v-model:value="fileState"
@@ -23,8 +22,9 @@
 import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
-import type { EditorController } from '@/components/BMarkdown/types';
-import { resolveEditorDriver } from './drivers';
+import { createEditorToolContext } from '@/components/BEditor/hooks/useEditorToolContext';
+import BEditor from '@/components/BEditor/index.vue';
+import type { EditorController } from '@/components/BEditor/types';
 import { useBindings } from './hooks/useBindings';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useSession } from './hooks/useSession';
@@ -38,7 +38,6 @@ const { fileState, actions } = useSession(fileId);
 const editorRef = ref<EditorController | null>(null);
 const isActive = ref(true);
 const isEditorReady = computed<boolean>(() => editorRef.value !== null);
-const activeDriver = computed(() => resolveEditorDriver(fileState.value));
 
 useBindings(fileId, { fileState, actions, editorInstance: editorRef });
 
@@ -71,18 +70,14 @@ function registerEditorContext(): void {
 
   editorToolContextRegistry.register(
     documentId,
-    activeDriver.value.createToolContext({
+    createEditorToolContext({
       fileState: fileState.value,
-      editorInstance,
-      isActive: isActive.value
+      editorInstance
     })
   );
 }
 
-watch(
-  [editorRef, () => fileState.value.id, () => fileState.value.name, () => fileState.value.path, () => fileState.value.ext, activeDriver],
-  registerEditorContext
-);
+watch([editorRef, () => fileState.value.id, () => fileState.value.name, () => fileState.value.path, () => fileState.value.ext], registerEditorContext);
 
 onActivated(() => {
   isActive.value = true;

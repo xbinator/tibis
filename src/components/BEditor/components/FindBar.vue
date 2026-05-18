@@ -33,7 +33,7 @@
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
-import type { BMarkdownPublicInstance, EditorSearchState as SearchState } from '@/components/BMarkdown/types';
+import type { BMarkdownPublicInstance, EditorSearchState as SearchState } from '@/components/BEditor/types';
 import { EditorShortcuts } from '@/constants/shortcuts';
 import { useShortcuts } from '@/hooks/useShortcuts';
 import { createNamespace } from '@/utils/namespace';

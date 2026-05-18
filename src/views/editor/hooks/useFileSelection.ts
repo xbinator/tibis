@@ -6,7 +6,7 @@
 import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { nextTick, watch } from 'vue';
-import type { EditorController } from '@/components/BMarkdown/types';
+import type { EditorController } from '@/components/BEditor/types';
 import { useFileSelectionIntentStore } from '@/stores/editor/fileSelectionIntent';
 
 /**

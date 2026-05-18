@@ -166,24 +166,6 @@ function findClosestDivider(hits: DividerHit[], x: number, y: number): DividerHi
 // ─── 公开 API ─────────────────────────────────────────────────────────────────
 
 /**
- * 查找当前命中的分割线。
- * 多个候选时取轴向距离最近者；距离相同时列优先。
- */
-export function findHoveredDivider({ clientX: x, clientY: y, columnRects, rowRects, threshold }: HitTestInput): DividerHit | null {
-  const hover = findHoveredDividers({ clientX: x, clientY: y, columnRects, rowRects, threshold });
-  const candidates = [hover?.column, hover?.row].filter((hit): hit is DividerHit => hit !== null && hit !== undefined);
-
-  if (candidates.length === 0) return null;
-
-  return candidates.reduce((best, cur) => {
-    const diff = dividerDistance(cur, x, y) - dividerDistance(best, x, y);
-    if (diff !== 0) return diff < 0 ? cur : best;
-    // 距离相同：列优先
-    return best.type === 'column' ? best : cur;
-  });
-}
-
-/**
  * 查找当前命中的行列新增分割线集合。
  * 交叉点附近可同时返回一条行分割线和一条列分割线。
  */
@@ -205,6 +187,24 @@ export function findHoveredDividers({ clientX: x, clientY: y, columnRects, rowRe
   );
 
   return row || column ? { row, column } : null;
+}
+
+/**
+ * 查找当前命中的分割线。
+ * 多个候选时取轴向距离最近者；距离相同时列优先。
+ */
+export function findHoveredDivider({ clientX: x, clientY: y, columnRects, rowRects, threshold }: HitTestInput): DividerHit | null {
+  const hover = findHoveredDividers({ clientX: x, clientY: y, columnRects, rowRects, threshold });
+  const candidates = [hover?.column, hover?.row].filter((hit): hit is DividerHit => hit !== null && hit !== undefined);
+
+  if (candidates.length === 0) return null;
+
+  return candidates.reduce((best, cur) => {
+    const diff = dividerDistance(cur, x, y) - dividerDistance(best, x, y);
+    if (diff !== 0) return diff < 0 ? cur : best;
+    // 距离相同：列优先
+    return best.type === 'column' ? best : cur;
+  });
 }
 
 /**

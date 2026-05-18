@@ -10,17 +10,17 @@
 
 <script setup lang="ts">
 /**
- * @file PaneMonacoEditor.vue
- * @description 基于 Monaco 的通用文本编辑器窗格，实现统一的 EditorController 协议。
+ * @file index.vue
+ * @description 基于 Monaco 的低层编辑器组件，实现统一的 EditorController 协议。
  */
 
-import type { MonacoEditorHandle, MonacoThemeName } from '../utils/createMonacoEditor';
+import type { MonacoEditorHandle, MonacoThemeName } from './utils/createMonacoEditor';
 import type * as Monaco from 'monaco-editor';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import type { EditorController, EditorSearchState, EditorSelection } from '@/components/BMarkdown/adapters/types';
-import type { EditorState } from '@/components/BMarkdown/types';
+import type { EditorController, EditorSearchState, EditorSelection } from '@/components/BEditor/adapters/types';
+import type { EditorState } from '@/components/BEditor/types';
 import { useSettingStore } from '@/stores/ui/setting';
-import { createMonacoEditor } from '../utils/createMonacoEditor';
+import { createMonacoEditor } from './utils/createMonacoEditor';
 
 /**
  * 搜索匹配信息。
@@ -39,6 +39,9 @@ interface SearchMatchState {
  */
 const SEARCH_DECORATION_CLASS_NAME = 'b-editor-monaco__search-match';
 
+/**
+ * BMonaco 组件入参。
+ */
 interface Props {
   /** 当前文本内容。 */
   value: string;
@@ -259,7 +262,7 @@ function focusEditor(): void {
 }
 
 /**
- * 把光标移动到文档开头并聚焦。
+ * 聚焦文档起始位置。
  */
 function focusEditorAtStart(): void {
   const handle = editorHandle.value;
@@ -267,32 +270,62 @@ function focusEditorAtStart(): void {
     return;
   }
 
-  const editor = handle.getEditor();
-  const position = { lineNumber: 1, column: 1 };
-  editor.setPosition(position);
-  editor.revealPositionInCenter(position);
-  editor.focus();
+  handle.getEditor().setPosition({ lineNumber: 1, column: 1 });
+  handle.getEditor().revealPositionInCenter({ lineNumber: 1, column: 1 });
+  handle.focus();
 }
 
 /**
- * 执行编辑替换。
- * @param range - 待替换范围
- * @param content - 新文本
+ * 设置搜索词并刷新高亮。
+ * @param term - 搜索词
  */
-function applyEdit(range: Monaco.IRange, content: string): void {
-  const handle = editorHandle.value;
-  if (!handle) {
+function setSearchTerm(term: string): void {
+  searchState.value.term = term;
+  searchState.value.currentIndex = 0;
+  refreshSearchState(false);
+  revealCurrentSearchMatch();
+}
+
+/**
+ * 跳转到下一个搜索命中。
+ */
+function findNext(): void {
+  if (searchState.value.matches.length === 0) {
     return;
   }
 
-  const editor = handle.getEditor();
-  editor.pushUndoStop();
-  editor.executeEdits('b-editor-monaco', [{ range, text: content, forceMoveMarkers: true }]);
-  editor.pushUndoStop();
+  searchState.value.currentIndex = (searchState.value.currentIndex + 1) % searchState.value.matches.length;
+  refreshSearchState(true);
+  revealCurrentSearchMatch();
 }
 
 /**
- * 在当前光标位置插入文本。
+ * 跳转到上一个搜索命中。
+ */
+function findPrevious(): void {
+  if (searchState.value.matches.length === 0) {
+    return;
+  }
+
+  searchState.value.currentIndex = (searchState.value.currentIndex - 1 + searchState.value.matches.length) % searchState.value.matches.length;
+  refreshSearchState(true);
+  revealCurrentSearchMatch();
+}
+
+/**
+ * 清除当前搜索状态。
+ */
+function clearSearch(): void {
+  searchState.value = {
+    term: '',
+    currentIndex: 0,
+    matches: []
+  };
+  searchDecorations.value?.clear();
+}
+
+/**
+ * 在光标位置插入内容。
  * @param content - 待插入文本
  */
 async function insertAtCursor(content: string): Promise<void> {
@@ -301,9 +334,15 @@ async function insertAtCursor(content: string): Promise<void> {
     return;
   }
 
-  const selection = handle.getEditor().getSelection();
-  const targetRange = selection ?? new (await import('monaco-editor/esm/vs/editor/editor.api')).Range(1, 1, 1, 1);
-  applyEdit(targetRange, content);
+  const editor = handle.getEditor();
+  const range = editor.getSelection();
+  if (!range) {
+    return;
+  }
+
+  editor.executeEdits('insert-at-cursor', [{ range, text: content, forceMoveMarkers: true }]);
+  editor.pushUndoStop();
+  emit('update:value', handle.getValue());
 }
 
 /**
@@ -316,21 +355,24 @@ async function replaceSelection(content: string): Promise<void> {
     return;
   }
 
-  const selection = handle.getEditor().getSelection();
-  if (!selection) {
-    return;
+  const editor = handle.getEditor();
+  const range = editor.getSelection();
+  if (!range || range.isEmpty()) {
+    throw new Error('NO_SELECTION');
   }
 
-  applyEdit(selection, content);
+  editor.executeEdits('replace-selection', [{ range, text: content, forceMoveMarkers: true }]);
+  editor.pushUndoStop();
+  emit('update:value', handle.getValue());
 }
 
 /**
  * 替换整个文档内容。
- * @param content - 完整文档文本
+ * @param content - 新文档内容
  */
 async function replaceDocument(content: string): Promise<void> {
   const handle = editorHandle.value;
-  if (!handle || handle.getValue() === content) {
+  if (!handle) {
     return;
   }
 
@@ -339,106 +381,70 @@ async function replaceDocument(content: string): Promise<void> {
   ignoreModelChange.value = false;
   editorContent.value = content;
   emit('update:value', content);
-  refreshSearchState(false);
-}
-
-/**
- * 设置搜索词并重建搜索状态。
- * @param term - 搜索词
- */
-function setSearchTerm(term: string): void {
-  searchState.value = {
-    term,
-    currentIndex: 0,
-    matches: []
-  };
-  refreshSearchState(false);
-  revealCurrentSearchMatch();
-}
-
-/**
- * 跳转到下一个命中项。
- */
-function findNext(): void {
-  if (searchState.value.matches.length === 0) {
-    return;
-  }
-
-  searchState.value = {
-    ...searchState.value,
-    currentIndex: (searchState.value.currentIndex + 1) % searchState.value.matches.length
-  };
   refreshSearchState(true);
-  revealCurrentSearchMatch();
 }
 
 /**
- * 跳转到上一个命中项。
+ * 执行撤销。
  */
-function findPrevious(): void {
-  if (searchState.value.matches.length === 0) {
-    return;
-  }
-
-  const previousIndex = searchState.value.currentIndex <= 0 ? searchState.value.matches.length - 1 : searchState.value.currentIndex - 1;
-
-  searchState.value = {
-    ...searchState.value,
-    currentIndex: previousIndex
-  };
-  refreshSearchState(true);
-  revealCurrentSearchMatch();
+function undo(): void {
+  editorHandle.value?.getEditor().trigger('keyboard', 'undo', null);
 }
 
 /**
- * 清空搜索状态与高亮。
+ * 执行重做。
  */
-function clearSearch(): void {
-  searchState.value = {
-    term: '',
-    currentIndex: 0,
-    matches: []
-  };
-  searchDecorations.value?.clear();
+function redo(): void {
+  editorHandle.value?.getEditor().trigger('keyboard', 'redo', null);
 }
 
 /**
- * 选中指定行区间。
- * @param startLine - 起始行（1-based）
- * @param endLine - 结束行（1-based）
- * @returns 是否成功消费
+ * 当前是否可撤销。
+ * @returns 是否可撤销
  */
-async function selectLineRange(startLine: number, endLine: number): Promise<boolean> {
+function canUndo(): boolean {
+  return true;
+}
+
+/**
+ * 当前是否可重做。
+ * @returns 是否可重做
+ */
+function canRedo(): boolean {
+  return true;
+}
+
+/**
+ * 按行号选中范围。
+ * @param startLine - 起始行号
+ * @param endLine - 结束行号
+ * @returns 是否成功
+ */
+function selectLineRange(startLine: number, endLine: number): boolean {
   const handle = editorHandle.value;
   if (!handle) {
     return false;
   }
 
   const model = handle.getModel();
-  const lineCount = model.getLineCount();
-  if (startLine < 1 || endLine < startLine || startLine > lineCount) {
-    return false;
-  }
-
-  const boundedEndLine = Math.min(endLine, lineCount);
-  const selection = {
-    startLineNumber: startLine,
+  const safeStartLine = Math.max(1, Math.min(startLine, model.getLineCount()));
+  const safeEndLine = Math.max(safeStartLine, Math.min(endLine, model.getLineCount()));
+  const range = {
+    startLineNumber: safeStartLine,
     startColumn: 1,
-    endLineNumber: boundedEndLine,
-    endColumn: model.getLineMaxColumn(boundedEndLine)
+    endLineNumber: safeEndLine,
+    endColumn: model.getLineMaxColumn(safeEndLine)
   };
 
-  const editor = handle.getEditor();
-  editor.setSelection(selection);
-  editor.revealRangeInCenter(selection);
-  editor.focus();
+  handle.getEditor().setSelection(range);
+  handle.getEditor().revealRangeInCenter(range);
+  handle.focus();
   return true;
 }
 
 watch(
   () => props.value,
   (nextValue: string): void => {
-    editorContent.value = nextValue;
     const handle = editorHandle.value;
     if (!handle || handle.getValue() === nextValue) {
       return;
@@ -447,6 +453,7 @@ watch(
     ignoreModelChange.value = true;
     handle.setValue(nextValue);
     ignoreModelChange.value = false;
+    editorContent.value = nextValue;
     refreshSearchState(true);
   }
 );
@@ -458,31 +465,32 @@ watch(
   }
 );
 
-watch(monacoTheme, async (nextTheme: MonacoThemeName): Promise<void> => {
-  const monaco = await import('monaco-editor/esm/vs/editor/editor.api');
-  monaco.editor.setTheme(nextTheme);
+watch(monacoTheme, (theme: MonacoThemeName): void => {
+  const editor = editorHandle.value?.getEditor();
+  if (!editor) {
+    return;
+  }
+
+  editor.updateOptions({ theme });
 });
 
-onMounted(async (): Promise<void> => {
-  await initializeEditor();
+onMounted((): void => {
+  initializeEditor().catch((): void => {
+    // 错误已在 initializeEditor 内部收敛为 loadError，这里避免未处理 Promise。
+  });
 });
 
 onBeforeUnmount((): void => {
   modelChangeDispose.value?.dispose();
   searchDecorations.value?.clear();
-  searchDecorations.value = null;
   editorHandle.value?.dispose();
 });
 
 defineExpose<EditorController>({
-  undo: (): void => {
-    editorHandle.value?.getEditor().trigger('keyboard', 'undo', null);
-  },
-  redo: (): void => {
-    editorHandle.value?.getEditor().trigger('keyboard', 'redo', null);
-  },
-  canUndo: (): boolean => true,
-  canRedo: (): boolean => true,
+  undo,
+  redo,
+  canUndo,
+  canRedo,
   focusEditor,
   focusEditorAtStart,
   setSearchTerm,
@@ -499,52 +507,3 @@ defineExpose<EditorController>({
   getActiveAnchorId: (): string => ''
 });
 </script>
-
-<style lang="less" scoped>
-.b-editor-monaco {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-.b-editor-monaco__host {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-}
-
-.b-editor-monaco__fallback {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-}
-
-.b-editor-monaco__error {
-  font-size: 12px;
-  color: #d14343;
-}
-
-.b-editor-monaco__textarea {
-  flex: 1;
-  width: 100%;
-  min-height: 220px;
-  padding: 12px;
-  font-family: SFMono-Regular, Consolas, monospace;
-  color: #111827;
-  resize: none;
-  background: #f9fafb;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-}
-
-:global(.b-editor-monaco__search-match) {
-  background: rgb(250 204 21 / 26%);
-}
-
-:global(.b-editor-monaco__search-match.is-current) {
-  background: rgb(245 158 11 / 42%);
-}
-</style>

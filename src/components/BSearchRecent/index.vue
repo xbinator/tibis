@@ -50,7 +50,7 @@ import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import { getRecentFileLabel } from '@/utils/file';
+import { resolveFileTitle } from '@/utils/file';
 
 // ---------- props / emits ----------
 
@@ -88,7 +88,7 @@ const filteredFiles = computed<StoredFile[]>(() => {
   const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   return files.filter((file) => {
     // 同时保留扩展名与路径关键字，确保用户按文件名或类型都能搜到目标文件。
-    const searchable = [getRecentFileLabel(file), file.name, file.ext, file.path, file.content].filter(Boolean).join('\0');
+    const searchable = [resolveFileTitle(file), file.name, file.ext, file.path, file.content].filter(Boolean).join('\0');
     return re.test(searchable);
   });
 });
@@ -154,7 +154,7 @@ const searchResultItems = computed(() => {
     const isUnsaved = !file.path;
     items.push({
       key: file.id,
-      title: getRecentFileLabel(file),
+      title: resolveFileTitle(file),
       pathLabel: isUnsaved ? '未保存文件' : file.path!,
       pathClass: isUnsaved ? 'is-unsaved' : '',
       meta: '',

@@ -25,7 +25,7 @@
               <Icon icon="lucide:file-text" width="14" height="14" />
             </div>
             <div class="recent-file-info">
-              <div class="recent-file-name">{{ getFileLabel(file) }}</div>
+              <div class="recent-file-name">{{ resolveFileTitle(file) }}</div>
               <div class="recent-file-path">{{ file.path || '未保存文件' }}</div>
             </div>
           </div>
@@ -50,9 +50,8 @@ import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { useOpenFile } from '@/hooks/useOpenFile';
-import type { StoredFile } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/workspace/files';
-import { getRecentFileLabel } from '@/utils/file';
+import { resolveFileTitle } from '@/utils/file';
 import DropZone from './components/DropZone.vue';
 
 const filesStore = useFilesStore();
@@ -83,15 +82,6 @@ async function handleOpenFile(): Promise<void> {
  */
 async function handleOpenRecentFile(id: string): Promise<void> {
   await openFileById(id);
-}
-
-/**
- * 获取最近文件展示标签。
- * @param file - 文件记录
- * @returns 页面展示名称
- */
-function getFileLabel(file: Pick<StoredFile, 'name' | 'ext'>): string {
-  return getRecentFileLabel(file);
 }
 
 /**

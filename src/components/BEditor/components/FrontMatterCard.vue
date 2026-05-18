@@ -1,96 +1,80 @@
 <template>
   <div :class="name">
-    <div class="b-markdown-frontmatter__header">
-      <span class="b-markdown-frontmatter__title">元数据</span>
-      <div class="b-markdown-frontmatter__actions">
-        <button
-          class="b-markdown-frontmatter__action-btn b-markdown-frontmatter__toggle-btn"
-          :title="collapsed ? '展开' : '折叠'"
-          @click="collapsed = !collapsed"
-        >
+    <div :class="bem('header')">
+      <span :class="bem('title')">元数据</span>
+      <div :class="bem('actions')">
+        <button :class="[bem('action-btn'), bem('toggle-btn')]" :title="collapsed ? '展开' : '折叠'" @click="collapsed = !collapsed">
           <Icon :icon="collapsed ? 'mdi:chevron-down' : 'mdi:chevron-up'" />
         </button>
       </div>
     </div>
 
     <Transition name="b-markdown-frontmatter-collapse">
-      <div v-show="!collapsed" class="b-markdown-frontmatter__content">
-        <div v-for="(value, key) in data" :key="key" class="b-markdown-frontmatter__item">
+      <div v-show="!collapsed" :class="bem('content')">
+        <div v-for="(value, key) in data" :key="key" :class="bem('item')">
           <input
             v-if="editingKey === key"
             v-model="editKeyInput"
             v-focus="{ selectAll: true }"
-            class="b-markdown-frontmatter__key editing"
+            :class="bem('key', 'editing')"
             placeholder="键名"
             @blur="handleKeyEditComplete(String(key))"
             @keydown.enter="handleKeyEditComplete(String(key))"
             @keydown.escape="cancelKeyEdit"
           />
-          <div v-else class="b-markdown-frontmatter__key" @dblclick="startKeyEdit(String(key))">
+          <div v-else :class="bem('key')" @dblclick="startKeyEdit(String(key))">
             {{ key }}
           </div>
 
-          <div class="b-markdown-frontmatter__value-wrapper">
+          <div :class="bem('value-wrapper')">
             <input
               v-if="isSimpleValue(value)"
               v-model="localData[key]"
-              class="b-markdown-frontmatter__value"
+              :class="bem('value')"
               :placeholder="'值'"
               @input="handleValueChange(String(key), localData[key])"
             />
-            <div v-else class="b-markdown-frontmatter__value complex" @click="toggleComplexEdit(String(key))">
+            <div v-else :class="[bem('value'), bem('value', 'complex')]" @click="toggleComplexEdit(String(key))">
               {{ formatComplexValue(value) }}
             </div>
           </div>
 
-          <button class="b-markdown-frontmatter__delete" title="删除" @click="handleDeleteField(String(key))">
+          <button :class="bem('delete')" title="删除" @click="handleDeleteField(String(key))">
             <Icon icon="mdi:close" />
           </button>
-
-          <Transition name="b-markdown-frontmatter-slide">
-            <div v-if="complexEditingKey === String(key)" class="b-markdown-frontmatter__complex-editor">
-              <textarea
-                v-model="complexEditValue"
-                class="b-markdown-frontmatter__complex-textarea"
-                placeholder="输入 YAML 格式的值"
-                @keydown.enter.ctrl="confirmComplexEditInline"
-              ></textarea>
-              <div class="b-markdown-frontmatter__complex-actions">
-                <button class="b-markdown-frontmatter__complex-btn cancel" @click="cancelComplexEdit">取消</button>
-                <button class="b-markdown-frontmatter__complex-btn confirm" @click="confirmComplexEditInline">确定</button>
-              </div>
-            </div>
-          </Transition>
         </div>
 
-        <div class="b-markdown-frontmatter__add-row">
-          <input v-model="newKey" class="b-markdown-frontmatter__key b-markdown-frontmatter__new-key" placeholder="新键名" @keydown.enter="confirmAddField" />
-          <input
-            v-model="newValue"
-            class="b-markdown-frontmatter__value b-markdown-frontmatter__new-value"
-            placeholder="新值"
-            @keydown.enter="confirmAddField"
-          />
-          <button class="b-markdown-frontmatter__action-btn b-markdown-frontmatter__add-btn" title="添加" :disabled="!newKey.trim()" @click="confirmAddField">
+        <div :class="bem('add-row')">
+          <input v-model="newKey" :class="[bem('key'), bem('new-key')]" placeholder="新键名" @keydown.enter="confirmAddField" />
+          <input v-model="newValue" :class="[bem('value'), bem('new-value')]" placeholder="新值" @keydown.enter="confirmAddField" />
+          <button :class="[bem('action-btn'), bem('add-btn')]" title="添加" :disabled="!newKey.trim()" @click="confirmAddField">
             <Icon icon="mdi:check" />
           </button>
         </div>
 
-        <div v-if="Object.keys(data).length === 0 && !newKey" class="b-markdown-frontmatter__empty">暂无元数据</div>
+        <div v-if="Object.keys(data).length === 0 && !newKey" :class="bem('empty')">暂无元数据</div>
       </div>
     </Transition>
+
+    <BModal v-model:open="complexEditOpen" title="编辑元数据值" :width="520">
+      <ATextarea v-model:value="complexEditValue" :autosize="{ minRows: 16, maxRows: 20 }" placeholder="输入 YAML 格式的值" />
+      <template #footer>
+        <BButton type="secondary" @click="cancelComplexEdit">取消</BButton>
+        <BButton @click="confirmComplexEditInline">确定</BButton>
+      </template>
+    </BModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { FrontMatterData } from '../hooks/useFrontMatter';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import yaml from 'js-yaml';
 import { vFocus } from '@/directives/focus';
 import { createNamespace } from '@/utils/namespace';
 
-const [name] = createNamespace('', 'b-markdown-frontmatter');
+const [name, bem] = createNamespace('', 'b-markdown-frontmatter');
 
 interface Props {
   data?: FrontMatterData;
@@ -116,6 +100,16 @@ const newValue = ref('');
 const complexEditingKey = ref<string | null>(null);
 const complexEditValue = ref('');
 
+const complexEditOpen = computed({
+  get: () => complexEditingKey.value !== null,
+  set: (val: boolean) => {
+    if (!val) {
+      complexEditingKey.value = null;
+      complexEditValue.value = '';
+    }
+  }
+});
+
 watch(
   () => props.data,
   (newData) => {
@@ -125,12 +119,15 @@ watch(
 );
 
 function isSimpleValue(value: unknown): boolean {
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+  return ['string', 'number', 'boolean'].includes(typeof value);
 }
 
 function formatComplexValue(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.length} 项]`;
+  }
+  if (value instanceof Date) {
+    return value.toISOString().split('T')[0];
   }
   if (typeof value === 'object' && value !== null) {
     return `{${Object.keys(value).length} 个属性}`;
@@ -202,7 +199,7 @@ function confirmAddField(): void {
 
 function toggleComplexEdit(key: string): void {
   if (complexEditingKey.value === key) {
-    complexEditingKey.value = null;
+    complexEditOpen.value = false;
     return;
   }
 
@@ -212,8 +209,7 @@ function toggleComplexEdit(key: string): void {
 }
 
 function cancelComplexEdit(): void {
-  complexEditingKey.value = null;
-  complexEditValue.value = '';
+  complexEditOpen.value = false;
 }
 
 function confirmComplexEditInline(): void {
@@ -225,13 +221,13 @@ function confirmComplexEditInline(): void {
   } catch {
     emit('updateField', complexEditingKey.value, complexEditValue.value);
   }
-  complexEditingKey.value = null;
+  complexEditOpen.value = false;
 }
 </script>
 
 <style lang="less" scoped>
 .b-markdown-frontmatter {
-  margin: 16px 0;
+  margin: 16px 40px 0;
   background-color: var(--frontmatter-bg);
   border: 1px solid var(--frontmatter-border);
   border-radius: 8px;
@@ -313,7 +309,7 @@ function confirmComplexEditInline(): void {
     border-color: var(--color-purple-border);
   }
 
-  &.editing {
+  &--editing {
     width: 120px;
     outline: none;
     background-color: var(--bg-primary);
@@ -344,10 +340,10 @@ function confirmComplexEditInline(): void {
     border-color: var(--color-purple);
   }
 
-  &.complex {
+  &--complex {
     font-family: 'SF Mono', Monaco, 'Courier New', monospace;
     font-size: 12px;
-    line-height: 24px;
+    line-height: 28px;
     color: var(--tag-secondary-text);
     cursor: pointer;
     background-color: var(--tag-bg);
@@ -417,70 +413,6 @@ function confirmComplexEditInline(): void {
   }
 }
 
-.b-markdown-frontmatter__complex-editor {
-  position: absolute;
-  right: 0;
-  z-index: 10;
-  width: 320px;
-  padding: 12px;
-  margin-top: 4px;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  box-shadow: var(--shadow-md);
-}
-
-.b-markdown-frontmatter__complex-textarea {
-  width: 100%;
-  height: 120px;
-  padding: 8px;
-  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-  font-size: 12px;
-  resize: vertical;
-  outline: none;
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-
-  &:focus {
-    border-color: var(--color-purple);
-  }
-}
-
-.b-markdown-frontmatter__complex-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 8px;
-}
-
-.b-markdown-frontmatter__complex-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s;
-
-  &.cancel {
-    color: var(--tag-secondary-text);
-    background-color: var(--tag-bg);
-    border: none;
-
-    &:hover {
-      background-color: var(--tag-hover-bg);
-    }
-  }
-
-  &.confirm {
-    color: var(--bg-primary);
-    background-color: var(--color-purple);
-    border: none;
-
-    &:hover {
-      background-color: var(--color-purple-hover);
-    }
-  }
-}
-
 .b-markdown-frontmatter__empty {
   padding: 12px 0;
   font-size: 13px;
@@ -506,16 +438,5 @@ function confirmComplexEditInline(): void {
 .b-markdown-frontmatter-collapse-leave-from {
   max-height: 500px;
   opacity: 1;
-}
-
-.b-markdown-frontmatter-slide-enter-active,
-.b-markdown-frontmatter-slide-leave-active {
-  transition: all 0.2s ease;
-}
-
-.b-markdown-frontmatter-slide-enter-from,
-.b-markdown-frontmatter-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
 }
 </style>
