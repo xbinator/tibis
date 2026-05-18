@@ -73,26 +73,30 @@ describe('useEditorFileWatchStore', () => {
     unwatchAllMock.mockResolvedValue(undefined);
   });
 
-  it('marks every tab for the unlinked path as missing and ignores change events in phase one', async () => {
+  it('emits fileMissing event for every file id on unlink and ignores change events', async () => {
     const { useEditorFileWatchStore } = await import('@/stores/editor/fileWatch');
-    const { useTabsStore } = await import('@/stores/workspace/tabs');
+    const { storeEvents } = await import('@/stores/helpers/events');
     const watchStore = useEditorFileWatchStore();
-    const tabsStore = useTabsStore();
+    const missingIds: string[] = [];
+
+    const unsub = storeEvents.onFileMissing((payload: { fileId: string }) => {
+      missingIds.push(payload.fileId);
+    });
 
     await watchStore.register('alpha', '/tmp/shared.md');
     await watchStore.register('beta', '/tmp/shared.md');
 
     emitFileChanged({ type: 'change', filePath: '/tmp/shared.md', content: 'next' });
 
-    expect(tabsStore.isMissing('alpha')).toBe(false);
-    expect(tabsStore.isMissing('beta')).toBe(false);
+    expect(missingIds).toEqual([]);
 
     emitFileChanged({ type: 'unlink', filePath: '/tmp/shared.md' });
 
-    expect(tabsStore.isMissing('alpha')).toBe(true);
-    expect(tabsStore.isMissing('beta')).toBe(true);
+    expect(missingIds).toEqual(['alpha', 'beta']);
     expect(watchFileMock).toHaveBeenCalledTimes(1);
     expect(watchFileMock).toHaveBeenCalledWith('/tmp/shared.md');
+
+    unsub();
   });
 
   it('keeps watching a path until the last file id is unregistered', async () => {

@@ -6,6 +6,8 @@
 import { defineStore } from 'pinia';
 import { resolveRouteCacheName } from '@/router/cache';
 import { local } from '@/shared/storage/base';
+import { storeEvents } from '@/stores/helpers/events';
+import type { FileMissingPayload, FileRecoveredPayload } from '@/stores/helpers/events';
 
 /**
  * 拖拽排序时的插入位置。
@@ -491,6 +493,34 @@ export const useTabsStore = defineStore('tabs', {
 
       this.tabs[index] = { ...this.tabs[index], title: params.title };
       persistData(this.$state);
+    },
+
+    /** 事件取消订阅函数列表 */
+    _unsubscribers: [] as (() => void)[],
+
+    /**
+     * 订阅文件丢失/恢复事件，将事件路由到对应的 markMissing/clearMissing。
+     */
+    subscribeToFileWatchEvents(): void {
+      if (this._unsubscribers.length > 0) return;
+
+      const unsubMissing = storeEvents.onFileMissing((payload: FileMissingPayload) => {
+        this.markMissing(payload.fileId);
+      });
+
+      const unsubRecovered = storeEvents.onFileRecovered((payload: FileRecoveredPayload) => {
+        this.clearMissing(payload.fileId);
+      });
+
+      this._unsubscribers = [unsubMissing, unsubRecovered];
+    },
+
+    /**
+     * 取消订阅文件丢失/恢复事件。
+     */
+    unsubscribeFromFileWatchEvents(): void {
+      this._unsubscribers.forEach((unsub) => unsub());
+      this._unsubscribers = [];
     }
   }
 });

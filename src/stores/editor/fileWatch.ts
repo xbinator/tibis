@@ -6,7 +6,7 @@
 import { defineStore } from 'pinia';
 import { native } from '@/shared/platform';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
-import { useTabsStore } from '@/stores/workspace/tabs';
+import { storeEvents } from '@/stores/helpers/events';
 
 /**
  * 编辑器全局文件监听状态。
@@ -149,9 +149,8 @@ export const useEditorFileWatchStore = defineStore('editorFileWatch', {
       const fileIds = this.pathToFileIds.get(filePath);
       if (!fileIds) return;
 
-      const tabsStore = useTabsStore();
       fileIds.forEach((fileId: string) => {
-        tabsStore.markMissing(fileId);
+        storeEvents.emitFileMissing(fileId);
       });
     },
 
@@ -163,9 +162,8 @@ export const useEditorFileWatchStore = defineStore('editorFileWatch', {
       const fileIds = this.pathToFileIds.get(filePath);
       if (!fileIds) return;
 
-      const tabsStore = useTabsStore();
       fileIds.forEach((fileId: string) => {
-        tabsStore.clearMissing(fileId);
+        storeEvents.emitFileRecovered(fileId);
       });
     },
 

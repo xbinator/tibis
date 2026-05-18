@@ -80,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
@@ -111,6 +111,14 @@ const { toolbarFileOptions } = useFileActive(visible);
 const { toolbarEditOptions } = useEditActive();
 const { toolbarViewOptions } = useViewActive();
 const { toolbarHelpOptions } = useHelpActive(visible);
+
+onMounted(() => {
+  tabsStore.subscribeToFileWatchEvents();
+});
+
+onUnmounted(() => {
+  tabsStore.unsubscribeFromFileWatchEvents();
+});
 
 /**
  * 打开设置页。
