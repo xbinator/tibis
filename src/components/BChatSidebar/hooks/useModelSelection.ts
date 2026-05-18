@@ -4,8 +4,8 @@
  * 从 provider store 派生视觉能力，自动响应所有数据变更。
  */
 import { computed } from 'vue';
-import { useProviderStore } from '@/stores/provider';
-import { useServiceModelStore } from '@/stores/serviceModel';
+import { useProviderStore } from '@/stores/ai/provider';
+import { useServiceModelStore } from '@/stores/ai/serviceModel';
 
 /**
  * 模型选择状态管理 hook

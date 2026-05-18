@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MCPServerConfig } from '@/shared/storage/tool-settings';
-import { useToolSettingsStore } from '@/stores/toolSettings';
+import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 
 const storage = new Map<string, string>();
 

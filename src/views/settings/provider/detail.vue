@@ -25,7 +25,7 @@ import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { debounce } from 'lodash-es';
-import { useProviderStore } from '@/stores/provider';
+import { useProviderStore } from '@/stores/ai/provider';
 import { providerFormatLabels } from '../constants';
 import ApiConfig from './components/ApiConfig.vue';
 import ModelList from './components/ModelList.vue';

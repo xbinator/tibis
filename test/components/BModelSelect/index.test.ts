@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BModelSelect from '@/components/BModelSelect/index.vue';
-import type { SelectedModel } from '@/stores/serviceModel';
+import type { SelectedModel } from '@/stores/ai/serviceModel';
 
 /**
  * BModal 占位组件，渲染默认插槽内容。

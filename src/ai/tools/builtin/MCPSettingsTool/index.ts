@@ -15,7 +15,7 @@ import {
   MIN_CONNECT_TIMEOUT_MS,
   MIN_TOOL_CALL_TIMEOUT_MS
 } from '@/shared/storage/tool-settings';
-import { useToolSettingsStore } from '@/stores/toolSettings';
+import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { executeWithPermission } from '../../permission';
 import { createToolFailureResult, createToolSuccessResult } from '../../results';
 

@@ -7,7 +7,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useToolSettingsStore } from '@/stores/toolSettings';
+import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import SearchToolsSettingsView from '@/views/settings/tools/search/index.vue';
 
 const storage = new Map<string, string>();

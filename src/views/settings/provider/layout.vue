@@ -119,7 +119,7 @@ import { Icon } from '@iconify/vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import BDropdownMenu from '@/components/BDropdown/Menu.vue';
 import type { DropdownOptionItem } from '@/components/BDropdown/type';
-import { useProviderStore } from '@/stores/provider';
+import { useProviderStore } from '@/stores/ai/provider';
 import { useSettingStore } from '@/stores/setting';
 import { Modal } from '@/utils/modal';
 import ProviderModal from './components/ProviderModal.vue';

@@ -50,7 +50,7 @@ import { Icon } from '@iconify/vue';
 import BModal from '@/components/BModal/index.vue';
 import BModelIcon from '@/components/BModelIcon/index.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
-import { useProviderStore } from '@/stores/provider';
+import { useProviderStore } from '@/stores/ai/provider';
 
 // ── 常量 ────────────────────────────────────────
 

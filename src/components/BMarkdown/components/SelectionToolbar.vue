@@ -30,7 +30,7 @@
 import type { SelectionToolbarAction } from '../adapters/selectionAssistant';
 import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
-import { useServiceModelStore } from '@/stores/serviceModel';
+import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { createNamespace } from '@/utils/namespace';
 
 const [name] = createNamespace('', 'b-markdown-seltoolbar');

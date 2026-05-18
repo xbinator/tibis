@@ -58,7 +58,7 @@ import type { DropdownOption } from '@/components/BDropdown/type';
 import { getElectronAPI, hasElectronAPI } from '@/shared/platform/electron-api';
 import type { MCPServerConfig } from '@/shared/storage/tool-settings';
 import { DEFAULT_MCP_CONNECT_TIMEOUT_MS, DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS } from '@/shared/storage/tool-settings';
-import { useToolSettingsStore } from '@/stores/toolSettings';
+import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import ServerEditorModal from './components/ServerEditorModal.vue';
 
 const store = useToolSettingsStore();

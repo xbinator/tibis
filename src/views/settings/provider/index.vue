@@ -27,7 +27,7 @@ import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
-import { useProviderStore } from '@/stores/provider';
+import { useProviderStore } from '@/stores/ai/provider';
 import ProviderCard from './components/ProviderCard.vue';
 
 const route = useRoute();

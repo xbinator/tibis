@@ -45,7 +45,7 @@
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import BButton from '@/components/BButton/index.vue';
-import type { SelectedModel } from '@/stores/serviceModel';
+import type { SelectedModel } from '@/stores/ai/serviceModel';
 import ContextUsage from './InputToolbar/ContextUsage.vue';
 import ModelSelector from './InputToolbar/ModelSelector.vue';
 import VoiceInput from './InputToolbar/VoiceInput.vue';

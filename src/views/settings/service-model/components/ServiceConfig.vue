@@ -50,7 +50,7 @@ import type { VariableOptionGroup } from '@/components/BPromptEditor/types';
 import BSelect from '@/components/BSelect/index.vue';
 import { serviceModelsStorage } from '@/shared/storage';
 import { dispatchServiceModelUpdated } from '@/shared/storage/service-models/events';
-import { useProviderStore } from '@/stores/provider';
+import { useProviderStore } from '@/stores/ai/provider';
 
 interface Props {
   serviceType: ModelServiceType;

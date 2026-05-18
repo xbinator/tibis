@@ -123,7 +123,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { TavilyExtractDepth, TavilyExtractFormat, TavilySearchDepth, TavilySearchTopic, TavilyTimeRange } from '@/shared/storage/tool-settings';
-import { useToolSettingsStore } from '@/stores/toolSettings';
+import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { tavilyCountryOptions, tavilyExtractFormatOptions, tavilySearchDepthOptions, tavilyTimeRangeOptions, tavilyTopicOptions } from './constants';
 
 const store = useToolSettingsStore();

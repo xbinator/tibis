@@ -8,7 +8,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBuiltinMCPSettingsTools } from '@/ai/tools/builtin/MCPSettingsTool';
 import { useSettingStore } from '@/stores/setting';
-import { useToolSettingsStore } from '@/stores/toolSettings';
+import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 
 const storage = new Map<string, string>();
 

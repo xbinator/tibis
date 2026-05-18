@@ -85,7 +85,7 @@ describe('useAutoName', () => {
     getAvailableServiceConfigMock.mockReset();
     updateSessionTitleMock.mockReset();
 
-    const { useServiceModelStore } = await import('@/stores/serviceModel');
+    const { useServiceModelStore } = await import('@/stores/ai/serviceModel');
     const { useChatSessionStore } = await import('@/stores/chat/session');
 
     vi.spyOn(useServiceModelStore(), 'getAvailableServiceConfig').mockImplementation(getAvailableServiceConfigMock);

@@ -2,7 +2,7 @@
  * @file types.ts
  * @description BModelSelect 组件类型定义。
  */
-import type { SelectedModel } from '@/stores/serviceModel';
+import type { SelectedModel } from '@/stores/ai/serviceModel';
 
 /**
  * 渲染到对话框中的单个模型项。

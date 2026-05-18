@@ -41,6 +41,7 @@ const isEditorReady = computed<boolean>(() => editorRef.value !== null);
 const activeDriver = computed(() => resolveEditorDriver(fileState.value));
 
 useBindings(fileId, { fileState, actions, editorInstance: editorRef });
+
 useFileSelection({
   fileState,
   isEditorReady,

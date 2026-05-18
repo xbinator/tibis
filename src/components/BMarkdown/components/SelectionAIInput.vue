@@ -44,8 +44,8 @@ import { useScroller } from '@/hooks/useScroller';
 import { useShortcuts } from '@/hooks/useShortcuts';
 import type { ServiceModelUpdatedDetail } from '@/shared/storage/service-models/events';
 import { SERVICE_MODEL_UPDATED_EVENT } from '@/shared/storage/service-models/events';
-import type { AvailableServiceModelConfig } from '@/stores/serviceModel';
-import { useServiceModelStore } from '@/stores/serviceModel';
+import type { AvailableServiceModelConfig } from '@/stores/ai/serviceModel';
+import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { createNamespace } from '@/utils/namespace';
 
 const [name, bem] = createNamespace('', 'b-markdown-selai');

@@ -31,7 +31,7 @@ describe('useToolSettingsStore', () => {
   });
 
   it('loads Tavily defaults and keeps country = china', async () => {
-    const { useToolSettingsStore } = await import('@/stores/toolSettings');
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
     const store = useToolSettingsStore();
 
     expect(store.tavily.enabled).toBe(false);
@@ -56,7 +56,7 @@ describe('useToolSettingsStore', () => {
       }
     });
 
-    const { useToolSettingsStore } = await import('@/stores/toolSettings');
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
     const store = useToolSettingsStore();
 
     expect(store.tavily.enabled).toBe(false);
@@ -69,7 +69,7 @@ describe('useToolSettingsStore', () => {
   });
 
   it('marks Tavily available only when enabled and apiKey is present', async () => {
-    const { useToolSettingsStore } = await import('@/stores/toolSettings');
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
     const store = useToolSettingsStore();
 
     store.setTavilyEnabled(true);
@@ -80,7 +80,7 @@ describe('useToolSettingsStore', () => {
   });
 
   it('loads MCP defaults and derives enabled server availability', async () => {
-    const { useToolSettingsStore } = await import('@/stores/toolSettings');
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
     const store = useToolSettingsStore();
 
     expect(store.mcp.servers).toEqual([]);
@@ -88,7 +88,7 @@ describe('useToolSettingsStore', () => {
   });
 
   it('updates MCP servers through normalized persistence', async () => {
-    const { useToolSettingsStore } = await import('@/stores/toolSettings');
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
     const store = useToolSettingsStore();
 
     store.addMcpServer({
