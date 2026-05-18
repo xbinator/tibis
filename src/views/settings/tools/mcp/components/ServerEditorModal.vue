@@ -2,13 +2,18 @@
   <BModal v-model:open="modalOpen" :title="modalTitle" :width="640" @cancel="handleCancel">
     <div class="server-editor-modal">
       <div class="server-editor-modal__hint">粘贴 JSON 配置</div>
-      <div ref="editorHostRef" class="server-editor-modal__editor"></div>
-      <div v-if="parseError" class="server-editor-modal__error">{{ parseError }}</div>
+      <div class="server-editor-modal__editor">
+        <BMonaco ref="editorRef" v-model:value="jsonText" class="server-editor-modal__monaco" language="json" :editable="true" :editor-state="editorState" />
+      </div>
     </div>
 
     <template #footer>
-      <BButton type="secondary" @click="handleCancel">取消</BButton>
-      <BButton type="primary" :disabled="!parsedDraft || !!parseError" @click="handleConfirm">保存</BButton>
+      <div class="server-editor-modal__footer">
+        <div v-if="parseError" class="server-editor-modal__error">{{ parseError }}</div>
+
+        <BButton type="secondary" @click="handleCancel">取消</BButton>
+        <BButton type="primary" :disabled="!parsedDraft || !!parseError" @click="handleConfirm">保存</BButton>
+      </div>
     </template>
   </BModal>
 </template>
@@ -16,17 +21,131 @@
 <script setup lang="ts">
 /**
  * @file ServerEditorModal.vue
- * @description MCP Server 添加/编辑弹窗，内置 CodeMirror JSON 编辑器与格式校验。
+ * @description MCP Server 添加/编辑弹窗，内置 Monaco JSON 编辑器与格式校验。
  */
-import type { MCPServerEditorDraft } from './server-editor';
-import type { Extension } from '@codemirror/state';
-import type { ViewUpdate } from '@codemirror/view';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { json } from '@codemirror/lang-json';
-import { EditorState } from '@codemirror/state';
-import { EditorView, lineNumbers, placeholder } from '@codemirror/view';
+import { computed, nextTick, ref, watch } from 'vue';
+import { isArray, isObject, pick } from 'lodash-es';
+import type { EditorState } from '@/components/BEditor/types';
+import BMonaco from '@/components/BMonaco/index.vue';
 import type { MCPServerConfig } from '@/shared/storage/tool-settings';
-import { MCP_SERVER_JSON_PLACEHOLDER, parseMCPServerEditorDraft, serializeMCPServerEditorDraft } from './server-editor';
+import { DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS } from '@/shared/storage/tool-settings';
+
+/**
+ * MCP Server 编辑弹窗提交的草稿结构。
+ */
+export interface MCPServerEditorDraft {
+  /** 展示名称 */
+  name: string;
+  /** 启动命令 */
+  command: string;
+  /** 启动参数 */
+  args: string[];
+  /** 环境变量 */
+  env: Record<string, string>;
+  /** 允许暴露的工具名列表 */
+  toolAllowlist: string[];
+  /** 单次工具调用超时 */
+  toolCallTimeoutMs: number;
+}
+
+/**
+ * MCP Server JSON 编辑器的占位示例。
+ */
+const MCP_SERVER_JSON_PLACEHOLDER = `{
+  "name": "filesystem",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+  "env": {},
+  "toolAllowlist": ["read_file", "list_directory"],
+  "toolCallTimeoutMs": 30000
+}`;
+
+/**
+ * JSON 解析结果。
+ */
+interface MCPServerDraftParseResult {
+  /** 解析后的草稿 */
+  draft: MCPServerEditorDraft | null;
+  /** 解析错误信息 */
+  error: string;
+}
+
+/**
+ * 将任意对象安全转换为字符串字典。
+ * @param value - 待转换值
+ * @returns 字符串字典
+ */
+function normalizeStringRecord(value: unknown): Record<string, string> {
+  if (!isObject(value) || isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(Object.entries(value).map(([key, itemValue]) => [String(key), String(itemValue)]));
+}
+
+/**
+ * 将任意值安全转换为字符串数组。
+ * @param value - 待转换值
+ * @returns 字符串数组
+ */
+function normalizeStringArray(value: unknown): string[] {
+  return isArray(value) ? value.map((item) => String(item)) : [];
+}
+
+/**
+ * 将 MCP server 配置序列化为编辑器使用的 JSON。
+ * @param server - 当前编辑的 server，空时返回示例 JSON
+ * @returns 格式化后的 JSON 字符串
+ */
+function serializeMCPServerEditorDraft(server: MCPServerConfig | null): string {
+  if (!server) {
+    return MCP_SERVER_JSON_PLACEHOLDER;
+  }
+
+  return JSON.stringify(pick(server, ['name', 'command', 'args', 'env', 'toolAllowlist', 'toolCallTimeoutMs']), null, 2);
+}
+
+/**
+ * 将 JSON 文本解析为可提交的 MCP server 草稿。
+ * @param jsonText - 编辑器中的 JSON 文本
+ * @returns 解析结果
+ */
+function parseMCPServerEditorDraft(jsonText: string): MCPServerDraftParseResult {
+  const raw = jsonText.trim();
+  if (!raw) {
+    return {
+      draft: null,
+      error: '请输入 MCP Server JSON 配置。'
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed.command !== 'string' || !parsed.command.trim()) {
+      return {
+        draft: null,
+        error: '`command` 必须是非空字符串。'
+      };
+    }
+
+    return {
+      draft: {
+        name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : 'New MCP Server',
+        command: parsed.command.trim(),
+        args: normalizeStringArray(parsed.args),
+        env: normalizeStringRecord(parsed.env),
+        toolAllowlist: normalizeStringArray(parsed.toolAllowlist),
+        toolCallTimeoutMs: typeof parsed.toolCallTimeoutMs === 'number' ? parsed.toolCallTimeoutMs : DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS
+      },
+      error: ''
+    };
+  } catch (error) {
+    return {
+      draft: null,
+      error: error instanceof Error ? error.message : 'JSON 格式错误'
+    };
+  }
+}
 
 interface Props {
   /** 弹窗是否打开 */
@@ -77,107 +196,42 @@ const modalOpen = computed<boolean>({
 });
 
 const modalTitle = computed<string>(() => (props.server ? '编辑 MCP Server' : '添加 MCP Server'));
-const editorHostRef = ref<HTMLDivElement | null>(null);
-const editorView = shallowRef<EditorView | null>(null);
-const jsonText = ref('');
+const editorRef = ref<InstanceType<typeof BMonaco> | null>(null);
+const jsonText = ref(serializeMCPServerEditorDraft(props.server ?? null));
 
 const parseResult = computed(() => parseMCPServerEditorDraft(jsonText.value));
 const parsedDraft = computed<MCPServerEditorDraft | null>(() => parseResult.value.draft);
 const parseError = computed<string>(() => parseResult.value.error);
 
 /**
- * 创建 CodeMirror 编辑器扩展。
- * @returns 编辑器扩展列表
+ * 供 BMonaco 使用的编辑器状态。
+ * 这里仅承载 Monaco 所需的最小元信息，真实草稿仍由 jsonText 驱动。
+ * @returns 统一编辑器状态
  */
-function createEditorExtensions(): Extension[] {
-  return [
-    lineNumbers(),
-    json(),
-    EditorView.lineWrapping,
-    placeholder(MCP_SERVER_JSON_PLACEHOLDER),
-    EditorView.contentAttributes.of({ spellcheck: 'false', 'aria-label': 'MCP Server JSON Editor' }),
-    EditorView.theme({
-      '&': {
-        minHeight: '320px',
-        fontSize: '12px'
-      },
-      '.cm-scroller': {
-        minHeight: '320px',
-        overflow: 'auto',
-        fontFamily: 'var(--font-family-mono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace)',
-        lineHeight: '1.6'
-      },
-      '.cm-content': {
-        padding: '12px 0',
-        caretColor: 'var(--text-primary)'
-      },
-      '.cm-line': {
-        padding: '0'
-      },
-      '.cm-focused': {
-        outline: 'none'
-      },
-      '.cm-cursor': {
-        borderLeft: '1.2px solid var(--color-primary, #4080ff)',
-        marginLeft: '-0.6px',
-        pointerEvents: 'none',
-        position: 'relative',
-        height: '1.2em'
-      },
-      '.cm-placeholder': {
-        color: 'var(--text-placeholder)',
-        fontStyle: 'normal'
-      },
-      '.cm-gutters': {
-        borderTopLeftRadius: '8px',
-        borderBottomLeftRadius: '8px',
-        backgroundColor: 'var(--bg-secondary)',
-        borderRight: '1px solid var(--border-tertiary)'
-      }
-    }),
-    EditorView.updateListener.of((update: ViewUpdate): void => {
-      if (!update.docChanged) {
-        return;
-      }
-
-      jsonText.value = update.state.doc.toString();
-    })
-  ];
-}
-
-/**
- * 将最新文本同步到 CodeMirror 文档。
- * @param nextText - 目标 JSON 文本
- */
-function syncEditorDocument(nextText: string): void {
-  const view = editorView.value;
-  if (!view || view.state.doc.toString() === nextText) {
-    return;
-  }
-
-  view.dispatch({
-    changes: {
-      from: 0,
-      to: view.state.doc.length,
-      insert: nextText
-    }
-  });
-}
+const editorState = computed<EditorState>(() => ({
+  id: props.server?.id ?? 'mcp-server-draft',
+  name: props.server?.name ?? 'mcp-server.json',
+  path: null,
+  ext: 'json',
+  content: jsonText.value
+}));
 
 /**
  * 根据当前模式重置编辑器内容。
  */
-function resetEditorContent(): void {
-  const nextText = serializeMCPServerEditorDraft(props.server ?? null);
-  jsonText.value = nextText;
-  syncEditorDocument(nextText);
+function resetEditorContent() {
+  jsonText.value = serializeMCPServerEditorDraft(props.server ?? null);
 }
 
 /**
- * 聚焦 CodeMirror 编辑器。
+ * 聚焦 Monaco 编辑器。
  */
-function focusEditor(): void {
-  editorView.value?.focus();
+function focusEditor() {
+  if (!editorRef.value || typeof editorRef.value.focusEditor !== 'function') {
+    return;
+  }
+
+  editorRef.value.focusEditor();
 }
 
 /**
@@ -199,27 +253,6 @@ function handleConfirm(): void {
   emit('confirm', parsedDraft.value);
 }
 
-onMounted(() => {
-  if (!editorHostRef.value) {
-    return;
-  }
-
-  const initialText = serializeMCPServerEditorDraft(props.server ?? null);
-  jsonText.value = initialText;
-  editorView.value = new EditorView({
-    state: EditorState.create({
-      doc: initialText,
-      extensions: createEditorExtensions()
-    }),
-    parent: editorHostRef.value
-  });
-});
-
-onBeforeUnmount(() => {
-  editorView.value?.destroy();
-  editorView.value = null;
-});
-
 watch(
   () => [props.open, props.server] as const,
   async ([open]): Promise<void> => {
@@ -231,7 +264,8 @@ watch(
     resetEditorContent();
     await nextTick();
     focusEditor();
-  }
+  },
+  { immediate: true }
 );
 </script>
 
@@ -267,35 +301,38 @@ watch(
   box-shadow: 0 0 0 2px var(--input-focus-shadow);
 }
 
-.server-editor-modal__editor :deep(.cm-editor) {
+.server-editor-modal__monaco {
   min-height: 320px;
-  outline: none;
+}
+
+.server-editor-modal__editor :deep(.b-editor-monaco),
+.server-editor-modal__editor :deep(.b-editor-monaco__host) {
+  min-height: 320px;
+}
+
+.server-editor-modal__editor :deep(.monaco-editor),
+.server-editor-modal__editor :deep(.monaco-editor-background) {
   background: var(--input-bg);
 }
 
-.server-editor-modal__editor :deep(.cm-scroller) {
+.server-editor-modal__editor :deep(.monaco-editor .margin),
+.server-editor-modal__editor :deep(.monaco-editor .monaco-editor-background) {
+  background: var(--input-bg);
+}
+
+.server-editor-modal__editor :deep(.monaco-editor .view-lines) {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
 }
 
-.server-editor-modal__editor :deep(.cm-gutters) {
-  color: var(--text-tertiary);
-  background: transparent;
-  border-right: 1px solid var(--border-secondary);
-}
-
-.server-editor-modal__editor :deep(.cm-content) {
-  padding: 12px 0;
-}
-
-.server-editor-modal__editor :deep(.cm-line) {
-  white-space: pre-wrap;
-}
-
-.server-editor-modal__editor :deep(.cm-focused) {
-  outline: none;
+.server-editor-modal__footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
 }
 
 .server-editor-modal__error {
+  flex: 1;
   font-size: 12px;
   color: var(--color-error);
 }

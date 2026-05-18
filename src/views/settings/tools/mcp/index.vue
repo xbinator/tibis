@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import type { MCPServerEditorDraft } from './components/server-editor';
+import type { MCPServerEditorDraft } from './components/ServerEditorModal.vue';
 import type { MCPStatusResponse } from 'types/ai';
 import { computed, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
