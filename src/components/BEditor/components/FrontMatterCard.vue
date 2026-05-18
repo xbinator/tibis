@@ -2,7 +2,7 @@
   <div :class="name">
     <div :class="bem('header')">
       <span :class="bem('title')">元数据</span>
-      <div :class="bem('actions')">
+      <div data-export-ignore :class="bem('actions')">
         <button :class="[bem('action-btn'), bem('toggle-btn')]" :title="collapsed ? '展开' : '折叠'" @click="collapsed = !collapsed">
           <Icon :icon="collapsed ? 'mdi:chevron-down' : 'mdi:chevron-up'" />
         </button>
@@ -49,12 +49,12 @@
             </div>
           </div>
 
-          <button :class="bem('delete')" title="删除" @click="handleDeleteField(String(key))">
+          <button :class="bem('delete')" data-export-ignore title="删除" @click="handleDeleteField(String(key))">
             <Icon icon="mdi:close" />
           </button>
         </div>
 
-        <div :class="bem('add-row')">
+        <div data-export-ignore :class="bem('add-row')">
           <input v-model="newKey" :class="[bem('key'), bem('new-key')]" placeholder="新键名" @keydown.enter="confirmAddField" />
           <input v-model="newValue" :class="[bem('value'), bem('new-value')]" placeholder="新值" @keydown.enter="confirmAddField" />
           <button :class="[bem('action-btn'), bem('add-btn')]" title="添加" :disabled="!newKey.trim()" @click="confirmAddField">

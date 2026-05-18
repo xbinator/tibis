@@ -1,6 +1,6 @@
 <template>
   <NodeViewWrapper :class="[name, { 'is-collapsed': isCollapsed, 'is-word-wrap': isWordWrap }]">
-    <div class="b-markdown-codeblock__header" contenteditable="false">
+    <div :class="bem('header')" data-export-ignore contenteditable="false">
       <BSelect v-model:value="selectedLanguage" :width="200" :options="languageOptions" @change="handleLanguageChange" />
 
       <div class="flex-1"></div>
@@ -8,8 +8,7 @@
       <button
         v-if="isMermaidLanguage"
         type="button"
-        class="b-markdown-codeblock__control-btn"
-        :class="{ 'is-active': isMermaidPreviewVisible }"
+        :class="[bem('control-btn'), { 'is-active': isMermaidPreviewVisible }]"
         :disabled="!hasMermaidCode"
         :title="hasMermaidCode ? '预览' : '输入代码后可预览'"
         @mousedown.prevent
@@ -18,24 +17,24 @@
         <Icon :icon="showMermaidPreview ? 'lucide:eye-off' : 'lucide:eye'" />
       </button>
 
-      <button type="button" class="b-markdown-codeblock__control-btn" :class="{ 'is-active': isCollapsed }" @mousedown.prevent @click="toggleCollapse">
+      <button type="button" :class="[bem('control-btn'), { 'is-active': isCollapsed }]" @mousedown.prevent @click="toggleCollapse">
         <Icon :icon="isCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" />
       </button>
 
-      <button type="button" class="b-markdown-codeblock__copy" :title="copyLabel" :aria-label="copyLabel" @mousedown.prevent @click="handleCopy">
-        <Icon class="b-markdown-codeblock__copy-icon" :icon="copyIconName" />
+      <button type="button" :class="bem('copy')" :title="copyLabel" :aria-label="copyLabel" @mousedown.prevent @click="handleCopy">
+        <Icon :class="bem('copy-icon')" :icon="copyIconName" />
       </button>
     </div>
 
-    <div v-show="!isCollapsed" class="b-markdown-codeblock__body-wrapper">
-      <div v-show="isMermaidPreviewVisible" class="b-markdown-codeblock__mermaid-preview" contenteditable="false">
-        <div v-if="renderError" class="b-markdown-codeblock__mermaid-error">
+    <div v-show="!isCollapsed" :class="bem('body-wrapper')">
+      <div v-show="isMermaidPreviewVisible" :class="bem('mermaid-preview')" contenteditable="false">
+        <div v-if="renderError" :class="bem('mermaid-error')">
           <Icon icon="lucide:alert-circle" />
           <span>{{ renderError }}</span>
         </div>
-        <div v-else ref="mermaidPreviewRef" class="b-markdown-codeblock__mermaid-diagram"></div>
+        <div v-else ref="mermaidPreviewRef" :class="bem('mermaid-diagram')"></div>
       </div>
-      <pre v-show="!isMermaidPreviewVisible" class="b-markdown-codeblock__body"><NodeViewContent as="code" :class="codeClassName" /></pre>
+      <pre v-show="!isMermaidPreviewVisible" :class="bem('body')"><NodeViewContent as="code" :class="codeClassName" /></pre>
     </div>
   </NodeViewWrapper>
 </template>
@@ -49,7 +48,7 @@ import { message } from 'ant-design-vue';
 import BSelect from '@/components/BSelect/index.vue';
 import { createNamespace } from '@/utils/namespace';
 
-const [name] = createNamespace('', 'b-markdown-codeblock');
+const [name, bem] = createNamespace('markdown-codeblock');
 
 // ─── 类型 ────────────────────────────────────────────────────────────────────
 
@@ -417,6 +416,16 @@ onUnmounted(() => {
 
 .b-markdown-codeblock__body-wrapper {
   overflow: hidden;
+
+  &:first-child {
+    .b-markdown-codeblock__mermaid-preview {
+      border-top: none;
+    }
+
+    .b-markdown-codeblock__body {
+      border-top: none;
+    }
+  }
 }
 
 .b-markdown-codeblock__mermaid-preview {

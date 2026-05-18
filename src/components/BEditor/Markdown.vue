@@ -269,7 +269,7 @@ function recomputeSelectionOverlays(): void {
  */
 function buildCurrentPdfExportHtml(): string {
   if (isRichMode.value) {
-    const renderedContentRoot = layoutRef.value?.querySelector('.b-markdown-rich__content');
+    const renderedContentRoot = layoutRef.value?.querySelector('.b-markdown-rich');
     if (renderedContentRoot instanceof HTMLElement) {
       return buildRichPdfExportHtml(renderedContentRoot);
     }

@@ -14,7 +14,9 @@ const RICH_EXPORT_IGNORED_SELECTORS = [
   '.b-markdown-table__segment-overlay',
   '.b-markdown-table__add-button-group',
   '.b-markdown-table__segment-button-group',
-  '.b-markdown-codeblock__copy'
+  '.b-markdown-codeblock__copy',
+  '.b-markdown-blockmenu',
+  '[data-export-ignore]'
 ].join(', ');
 
 /**
@@ -216,11 +218,25 @@ export function buildRichPdfExportHtml(rootElement: HTMLElement): string {
 }
 
 /**
+ * 从 HTML 字符串中移除所有带 data-export-ignore 属性的元素。
+ * 通过 DOMParser 解析，确保准确匹配成对标签和自闭合标签。
+ * @param html - 原始 HTML 字符串
+ * @returns 过滤后的 HTML 字符串
+ */
+function stripDataExportIgnoreElements(html: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+  doc.body.querySelectorAll('[data-export-ignore]').forEach((el) => el.remove());
+  return doc.body.innerHTML;
+}
+
+/**
  * 根据源码文本生成 PDF 导出的完整 HTML 文档。
  * @param source - 当前源码文本
  * @returns 完整 HTML 文档
  */
 export function buildSourcePdfExportHtml(source: string): string {
-  const sourceHtml = `<pre class="b-markdown-export__source">${escapePdfHtml(source)}</pre>`;
+  const filteredSource = stripDataExportIgnoreElements(source);
+  const sourceHtml = `<pre class="b-markdown-export__source">${escapePdfHtml(filteredSource)}</pre>`;
   return buildPdfDocumentHtml(sourceHtml);
 }
