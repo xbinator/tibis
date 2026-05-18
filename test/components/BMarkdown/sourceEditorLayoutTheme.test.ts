@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SOURCE_EDITOR_LAYOUT_THEME } from '@/components/BMarkdown/adapters/sourceEditorLayoutTheme';
+import { SOURCE_EDITOR_LAYOUT_THEME } from '@/components/BEditor/adapters/sourceEditorLayoutTheme';
 
 describe('SOURCE_EDITOR_LAYOUT_THEME', () => {
   it('lets the outer BScrollbar own source editor scrolling', () => {

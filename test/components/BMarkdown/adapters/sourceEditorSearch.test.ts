@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSourceSearchState, findSourceSearchMatches } from '@/components/BMarkdown/adapters/sourceEditorSearch';
+import { createSourceSearchState, findSourceSearchMatches } from '@/components/BEditor/adapters/sourceEditorSearch';
 
 describe('sourceEditorSearch', () => {
   it('finds case-insensitive matches and tracks current result', () => {

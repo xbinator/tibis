@@ -1,8 +1,8 @@
 import { computed, shallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
-import type { EditorController } from '@/components/BMarkdown/adapters/types';
-import { EMPTY_SEARCH_STATE, createNoopEditorController } from '@/components/BMarkdown/adapters/types';
-import { useEditorController } from '@/components/BMarkdown/hooks/useEditorController';
+import type { EditorController } from '@/components/BEditor/adapters/types';
+import { EMPTY_SEARCH_STATE, createNoopEditorController } from '@/components/BEditor/adapters/types';
+import { useEditorController } from '@/components/BEditor/hooks/useEditorController';
 
 function createController(tag: string): EditorController {
   return {

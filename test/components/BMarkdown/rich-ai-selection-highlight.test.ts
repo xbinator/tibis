@@ -17,7 +17,7 @@ function readSource(relativePath: string): string {
 
 describe('PaneRichEditor AI selection highlight regression', () => {
   test('forces rich text tokens inside AI selection highlight to use selection foreground color', (): void => {
-    const richEditorPaneSource = readSource('src/components/BMarkdown/components/PaneRichEditor.vue');
+    const richEditorPaneSource = readSource('src/components/BEditor/components/PaneRichEditor.vue');
 
     expect(richEditorPaneSource).toContain('.ai-selection-highlight');
     expect(richEditorPaneSource).toContain('color: var(--selection-color);');

@@ -1,15 +1,15 @@
 /**
  * @file pane-monaco-editor.test.ts
- * @description PaneMonacoEditor 基础交互与协议兼容测试。
+ * @description BMonaco 基础交互与协议兼容测试。
  */
 /* @vitest-environment jsdom */
 
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import PaneMonacoEditor from '@/components/BEditor/components/PaneMonacoEditor.vue';
-import type { MonacoEditorHandle } from '@/components/BEditor/utils/createMonacoEditor';
-import type { EditorSelection } from '@/components/BMarkdown/adapters/types';
+import type { EditorSelection } from '@/components/BEditor/adapters/types';
+import BMonaco from '@/components/BMonaco/index.vue';
+import type { MonacoEditorHandle } from '@/components/BMonaco/utils/createMonacoEditor';
 
 const setThemeMock = vi.fn();
 
@@ -99,11 +99,11 @@ const editorHandleMock: MonacoEditorHandle = {
 };
 
 vi.mock('monaco-editor/esm/vs/editor/editor.api', () => mockMonacoModule);
-vi.mock('@/components/BEditor/utils/createMonacoEditor', () => ({
+vi.mock('@/components/BMonaco/utils/createMonacoEditor', () => ({
   createMonacoEditor: vi.fn(async () => editorHandleMock)
 }));
 
-describe('PaneMonacoEditor', () => {
+describe('BMonaco', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -133,7 +133,7 @@ describe('PaneMonacoEditor', () => {
   });
 
   it('exposes editor methods and initializes Monaco with the current json content', async () => {
-    const wrapper = mount(PaneMonacoEditor, {
+    const wrapper = mount(BMonaco, {
       props: {
         value: currentValue,
         language: 'json',
@@ -159,7 +159,7 @@ describe('PaneMonacoEditor', () => {
   });
 
   it('updates readOnly option when editable changes', async () => {
-    const wrapper = mount(PaneMonacoEditor, {
+    const wrapper = mount(BMonaco, {
       props: {
         value: currentValue,
         language: 'json',
@@ -184,7 +184,7 @@ describe('PaneMonacoEditor', () => {
   });
 
   it('replaces the document through the exposed controller API', async () => {
-    const wrapper = mount(PaneMonacoEditor, {
+    const wrapper = mount(BMonaco, {
       props: {
         value: currentValue,
         language: 'json',
@@ -210,7 +210,7 @@ describe('PaneMonacoEditor', () => {
   });
 
   it('disposes Monaco resources on unmount', async () => {
-    const wrapper = mount(PaneMonacoEditor, {
+    const wrapper = mount(BMonaco, {
       props: {
         value: currentValue,
         language: 'json',

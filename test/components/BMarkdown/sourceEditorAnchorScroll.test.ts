@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRenderedSourceAnchorOffsetTop } from '@/components/BMarkdown/adapters/sourceEditorAnchorScroll';
+import { getRenderedSourceAnchorOffsetTop } from '@/components/BEditor/adapters/sourceEditorAnchorScroll';
 
 describe('getRenderedSourceAnchorOffsetTop', () => {
   it('returns the rendered anchor offset relative to the source editor host', () => {

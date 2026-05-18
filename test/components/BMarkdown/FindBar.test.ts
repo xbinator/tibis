@@ -7,8 +7,8 @@
 import { nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BMarkdownPublicInstance, EditorSearchState } from '@/components/BMarkdown/adapters/types';
-import FindBar from '@/components/BMarkdown/components/FindBar.vue';
+import type { BMarkdownPublicInstance, EditorSearchState } from '@/components/BEditor/adapters/types';
+import FindBar from '@/components/BEditor/components/FindBar.vue';
 import { EditorShortcuts } from '@/constants/shortcuts';
 
 /**

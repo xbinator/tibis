@@ -10,7 +10,7 @@ import { ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import PaneRichEditor from '@/components/BMarkdown/components/PaneRichEditor.vue';
+import PaneRichEditor from '@/components/BEditor/components/PaneRichEditor.vue';
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
@@ -18,7 +18,7 @@ vi.mock('vue-router', () => ({
   })
 }));
 
-vi.mock('@/components/BMarkdown/hooks/useSelectionAssistant', () => ({
+vi.mock('@/components/BEditor/hooks/useSelectionAssistant', () => ({
   useSelectionAssistant: () => ({
     toolbarVisible: ref(false),
     toolbarPosition: ref(null),

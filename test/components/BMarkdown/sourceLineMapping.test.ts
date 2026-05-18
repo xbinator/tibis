@@ -12,7 +12,7 @@ import {
   mapSourceLineRangeToProseMirrorRange,
   getSelectionSourceLineRange,
   resetSourceLineTracker
-} from '@/components/BMarkdown/adapters/sourceLineMapping';
+} from '@/components/BEditor/adapters/sourceLineMapping';
 
 /**
  * 仅用于测试源码行号聚合逻辑的最小 ProseMirror schema。

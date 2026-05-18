@@ -4,11 +4,11 @@
  * @description useSelectionAssistant 在 source 模式下的新选区起始行为测试。
  */
 
-import type { SelectionAssistantAdapter, SelectionAssistantCapabilities, SelectionAssistantPosition, SelectionAssistantRange } from '@/components/BMarkdown/adapters/selectionAssistant';
+import type { SelectionAssistantAdapter, SelectionAssistantCapabilities, SelectionAssistantPosition, SelectionAssistantRange } from '@/components/BEditor/adapters/selectionAssistant';
 import { defineComponent, nextTick, watchEffect } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { useSelectionAssistant, type SelectionAssistantStatus } from '@/components/BMarkdown/hooks/useSelectionAssistant';
+import { useSelectionAssistant, type SelectionAssistantStatus } from '@/components/BEditor/hooks/useSelectionAssistant';
 
 /**
  * 选区事件处理器集合。

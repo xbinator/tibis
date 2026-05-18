@@ -17,9 +17,9 @@ function readSource(relativePath: string): string {
 
 describe('selection assistant adapter regression', () => {
   test('routes AI input visibility and apply actions through the orchestration layer', () => {
-    const richEditorContentSource = readSource('src/components/BMarkdown/components/PaneRichEditor.vue');
-    const sourceEditorPaneSource = readSource('src/components/BMarkdown/components/PaneSourceEditor.vue');
-    const aiInputSource = readSource('src/components/BMarkdown/components/SelectionAIInput.vue');
+    const richEditorContentSource = readSource('src/components/BEditor/components/PaneRichEditor.vue');
+    const sourceEditorPaneSource = readSource('src/components/BEditor/components/PaneSourceEditor.vue');
+    const aiInputSource = readSource('src/components/BEditor/components/SelectionAIInput.vue');
 
     expect(richEditorContentSource).toContain(':visible="assistant.aiInputVisible.value"');
     expect(richEditorContentSource).toContain('@update:visible="onAIInputVisibleChange"');
@@ -34,8 +34,8 @@ describe('selection assistant adapter regression', () => {
   });
 
   test('keeps rich toolbar visibility under assistant state control', () => {
-    const richToolbarHostSource = readSource('src/components/BMarkdown/components/SelectionToolbarRich.vue');
-    const richEditorContentSource = readSource('src/components/BMarkdown/components/PaneRichEditor.vue');
+    const richToolbarHostSource = readSource('src/components/BEditor/components/SelectionToolbarRich.vue');
+    const richEditorContentSource = readSource('src/components/BEditor/components/PaneRichEditor.vue');
 
     expect(richToolbarHostSource).toContain('visible?: boolean;');
     expect(richToolbarHostSource).toContain('!props.visible');
@@ -43,8 +43,8 @@ describe('selection assistant adapter regression', () => {
   });
 
   test('passes real file metadata into source-mode selection references', () => {
-    const editorIndexSource = readSource('src/components/BMarkdown/index.vue');
-    const sourceEditorPaneSource = readSource('src/components/BMarkdown/components/PaneSourceEditor.vue');
+    const editorIndexSource = readSource('src/components/BEditor/index.vue');
+    const sourceEditorPaneSource = readSource('src/components/BEditor/components/PaneSourceEditor.vue');
 
     expect(editorIndexSource).toContain(':editor-state="editorState"');
     expect(sourceEditorPaneSource).toContain('editorState?: BMarkdownState;');
@@ -53,7 +53,7 @@ describe('selection assistant adapter regression', () => {
   });
 
   test('converges sticky highlight after focus via the next selection sync', () => {
-    const assistantSource = readSource('src/components/BMarkdown/hooks/useSelectionAssistant.ts');
+    const assistantSource = readSource('src/components/BEditor/hooks/useSelectionAssistant.ts');
 
     expect(assistantSource).toContain('const awaitingSelectionSyncAfterFocus = ref(false);');
     expect(assistantSource).toContain('if (awaitingSelectionSyncAfterFocus.value) {');
@@ -62,8 +62,8 @@ describe('selection assistant adapter regression', () => {
   });
 
   test('unsubscribes rich editor keydown listeners without re-reading a destroyed editor view', () => {
-    const richAdapterSource = readSource('src/components/BMarkdown/adapters/richSelectionAssistant.ts');
-    const sourceEditorPaneSource = readSource('src/components/BMarkdown/components/PaneSourceEditor.vue');
+    const richAdapterSource = readSource('src/components/BEditor/adapters/richSelectionAssistant.ts');
+    const sourceEditorPaneSource = readSource('src/components/BEditor/components/PaneSourceEditor.vue');
 
     expect(richAdapterSource).toContain('const editorDom = editor.view.dom;');
     expect(richAdapterSource).toContain("editorDom.addEventListener('keydown', handleKeydown);");

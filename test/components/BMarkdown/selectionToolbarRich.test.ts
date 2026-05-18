@@ -9,8 +9,8 @@ import { defineComponent, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { SelectionAssistantPosition } from '@/components/BMarkdown/adapters/selectionAssistant';
-import SelectionToolbarRich from '@/components/BMarkdown/components/SelectionToolbarRich.vue';
+import type { SelectionAssistantPosition } from '@/components/BEditor/adapters/selectionAssistant';
+import SelectionToolbarRich from '@/components/BEditor/components/SelectionToolbarRich.vue';
 
 /**
  * 通用空操作函数。

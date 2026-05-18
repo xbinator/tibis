@@ -6,7 +6,7 @@ import type { JSONContent } from '@tiptap/core';
 import { Editor } from '@tiptap/core';
 import { ref, type Ref } from 'vue';
 import { describe, expect, it } from 'vitest';
-import { useExtensions } from '@/components/BMarkdown/hooks/useExtensions';
+import { useExtensions } from '@/components/BEditor/hooks/useExtensions';
 
 /**
  * Create a Markdown-configured editor with the current rich editor extensions.

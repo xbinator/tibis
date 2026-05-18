@@ -12,9 +12,9 @@ import { createPinia, setActivePinia } from 'pinia';
 import { Editor } from '@tiptap/core';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import PaneRichEditor from '@/components/BMarkdown/components/PaneRichEditor.vue';
-import { useExtensions } from '@/components/BMarkdown/hooks/useExtensions';
-import { getPersistedMarkdown } from '@/components/BMarkdown/utils/editorMarkdown';
+import PaneRichEditor from '@/components/BEditor/components/PaneRichEditor.vue';
+import { useExtensions } from '@/components/BEditor/hooks/useExtensions';
+import { getPersistedMarkdown } from '@/components/BEditor/utils/editorMarkdown';
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({

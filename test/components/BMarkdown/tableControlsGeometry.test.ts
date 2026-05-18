@@ -8,7 +8,7 @@ import {
   findHoveredSegments,
   getAddButtonPosition,
   getRemoveButtonPosition
-} from '@/components/BMarkdown/extensions/tableControlsGeometry';
+} from '@/components/BEditor/extensions/tableControlsGeometry';
 
 /**
  * 创建矩形数据。

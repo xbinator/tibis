@@ -4,11 +4,11 @@
  * @vitest-environment jsdom
  */
 
-import type { EditorController } from '@/components/BMarkdown/adapters/types';
+import type { EditorController } from '@/components/BEditor/adapters/types';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, test } from 'vitest';
-import PaneSourceEditor from '@/components/BMarkdown/components/PaneSourceEditor.vue';
+import PaneSourceEditor from '@/components/BEditor/components/PaneSourceEditor.vue';
 
 /**
  * 挂载 Source editor。

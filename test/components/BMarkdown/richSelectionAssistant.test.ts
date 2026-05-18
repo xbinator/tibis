@@ -6,8 +6,8 @@
 
 import type { Editor } from '@tiptap/vue-3';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { createRichSelectionAssistantAdapter } from '@/components/BMarkdown/adapters/richSelectionAssistant';
-import type { SelectionAssistantContext } from '@/components/BMarkdown/adapters/selectionAssistant';
+import { createRichSelectionAssistantAdapter } from '@/components/BEditor/adapters/richSelectionAssistant';
+import type { SelectionAssistantContext } from '@/components/BEditor/adapters/selectionAssistant';
 
 describe('richSelectionAssistant', () => {
   afterEach(() => {

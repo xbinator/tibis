@@ -9,7 +9,7 @@ import type { ComponentPublicInstance } from 'vue';
 import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, test, vi } from 'vitest';
-import CurrentBlockMenu from '@/components/BMarkdown/components/CurrentBlockMenu.vue';
+import CurrentBlockMenu from '@/components/BEditor/components/CurrentBlockMenu.vue';
 
 /**
  * CurrentBlockMenu 公开实例。

@@ -12,7 +12,7 @@ import {
   createSourceEditorDrawSelectionExtension,
   restoreSourceEditorSelectionDraw,
   suppressSourceEditorSelectionDraw
-} from '@/components/BMarkdown/adapters/sourceEditorDrawSelection';
+} from '@/components/BEditor/adapters/sourceEditorDrawSelection';
 
 /**
  * 创建带自定义 selection 绘制扩展的编辑器实例。
@@ -87,7 +87,7 @@ describe('sourceEditorDrawSelection', () => {
   });
 
   test('forces normal selection text inside custom selection decoration to use selection foreground color', (): void => {
-    const sourceEditorDrawSelectionSource = readFileSync(resolve(process.cwd(), 'src/components/BMarkdown/adapters/sourceEditorDrawSelection.ts'), 'utf-8');
+    const sourceEditorDrawSelectionSource = readFileSync(resolve(process.cwd(), 'src/components/BEditor/adapters/sourceEditorDrawSelection.ts'), 'utf-8');
 
     expect(sourceEditorDrawSelectionSource).toContain("'& .cm-custom-selection':");
     expect(sourceEditorDrawSelectionSource).toContain("color: 'var(--selection-color)'");

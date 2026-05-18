@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getSourceActiveHeadingId, getSourceHeadingLines } from '@/components/BMarkdown/adapters/sourceEditorHeadingAnchors';
+import { getSourceActiveHeadingId, getSourceHeadingLines } from '@/components/BEditor/adapters/sourceEditorHeadingAnchors';
 
 describe('getSourceHeadingLines', () => {
   it('assigns sidebar-compatible ids to markdown heading lines', () => {

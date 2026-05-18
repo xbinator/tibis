@@ -3,7 +3,7 @@ import {
   SOURCE_EDITOR_MARKDOWN_COLOR_VARS,
   SOURCE_EDITOR_MARKDOWN_THEME_COLORS,
   SOURCE_EDITOR_MARKDOWN_STYLE_SPECS
-} from '@/components/BMarkdown/adapters/sourceEditorMarkdownTheme';
+} from '@/components/BEditor/adapters/sourceEditorMarkdownTheme';
 
 describe('SOURCE_EDITOR_MARKDOWN_THEME_COLORS', () => {
   it('matches the Claude markdown token palettes', () => {

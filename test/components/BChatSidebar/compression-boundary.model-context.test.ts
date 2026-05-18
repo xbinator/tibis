@@ -91,7 +91,7 @@ describe('compression boundary model context', () => {
 
   test('recalls relevant older compression memories by file keyword before the latest boundary', () => {
     const tocMemory = createCompressionMessage({
-      boundaryText: 'COMPRESSED_CONTEXT\n文件：src/components/BMarkdown/components/Toc.vue；待处理操作：继续修复 Toc 高亮',
+      boundaryText: 'COMPRESSED_CONTEXT\n文件：src/components/BEditor/components/Toc.vue；待处理操作：继续修复 Toc 高亮',
       status: 'success',
       recordId: 'record-toc',
       coveredUntilMessageId: 'toc-old',
@@ -129,7 +129,7 @@ describe('compression boundary model context', () => {
     expect(modelMessages).toEqual([
       {
         role: 'assistant',
-        content: 'COMPRESSED_CONTEXT\n文件：src/components/BMarkdown/components/Toc.vue；待处理操作：继续修复 Toc 高亮'
+        content: 'COMPRESSED_CONTEXT\n文件：src/components/BEditor/components/Toc.vue；待处理操作：继续修复 Toc 高亮'
       },
       { role: 'assistant', content: 'COMPRESSED_CONTEXT\n话题：聊天压缩' },
       { role: 'user', content: '继续 Toc.vue 的改动' }

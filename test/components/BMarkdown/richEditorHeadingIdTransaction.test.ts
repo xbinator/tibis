@@ -6,8 +6,8 @@ import type { JSONContent } from '@tiptap/core';
 import { ref, type Ref } from 'vue';
 import { Editor } from '@tiptap/core';
 import { describe, expect, test } from 'vitest';
-import { useExtensions } from '@/components/BMarkdown/hooks/useExtensions';
-import { getPersistedMarkdown } from '@/components/BMarkdown/utils/editorMarkdown';
+import { useExtensions } from '@/components/BEditor/hooks/useExtensions';
+import { getPersistedMarkdown } from '@/components/BEditor/utils/editorMarkdown';
 
 /**
  * 创建包含标题扩展的编辑器与 ID 补齐函数。

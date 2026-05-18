@@ -5,7 +5,7 @@
 import { ref, type Ref } from 'vue';
 import { Editor } from '@tiptap/core';
 import { describe, expect, test } from 'vitest';
-import { useExtensions } from '@/components/BMarkdown/hooks/useExtensions';
+import { useExtensions } from '@/components/BEditor/hooks/useExtensions';
 
 function createMarkdownEditor(): Editor {
   const editorInstanceId: Ref<string> = ref('trailing-test');

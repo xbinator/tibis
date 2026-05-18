@@ -8,7 +8,7 @@ import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it } from 'vitest';
-import BMarkdown from '@/components/BMarkdown/index.vue';
+import BMarkdown from '@/components/BEditor/index.vue';
 
 const PaneRichEditorStub = defineComponent({
   name: 'PaneRichEditor',

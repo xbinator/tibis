@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getSourceCodeBlockHighlightRanges,
   getSourceCodeBlockLanguage
-} from '@/components/BMarkdown/adapters/sourceEditorCodeBlockHighlight';
+} from '@/components/BEditor/adapters/sourceEditorCodeBlockHighlight';
 
 describe('getSourceCodeBlockLanguage', () => {
   it('normalizes common fenced code block aliases', () => {

@@ -7,8 +7,8 @@ import { resolve } from 'node:path';
 import { ref, type Ref } from 'vue';
 import { Editor } from '@tiptap/core';
 import { describe, expect, test } from 'vitest';
-import { getSelectionSourceLineRangeFromMarkdown, mapSourceLineRangeToProseMirrorRange } from '@/components/BMarkdown/adapters/sourceLineMapping';
-import { useExtensions } from '@/components/BMarkdown/hooks/useExtensions';
+import { getSelectionSourceLineRangeFromMarkdown, mapSourceLineRangeToProseMirrorRange } from '@/components/BEditor/adapters/sourceLineMapping';
+import { useExtensions } from '@/components/BEditor/hooks/useExtensions';
 
 /**
  * 加载测试 fixture 文件

@@ -9,7 +9,7 @@ import { ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import PaneRichEditor from '@/components/BMarkdown/components/PaneRichEditor.vue';
+import PaneRichEditor from '@/components/BEditor/components/PaneRichEditor.vue';
 
 const { setAISelectionHighlightMock } = vi.hoisted(() => ({
   setAISelectionHighlightMock: vi.fn()
@@ -21,15 +21,15 @@ vi.mock('vue-router', () => ({
   })
 }));
 
-vi.mock('@/components/BMarkdown/extensions/aiRangeHighlight', async () => {
-  const actual = await vi.importActual<typeof import('@/components/BMarkdown/extensions/aiRangeHighlight')>('@/components/BMarkdown/extensions/aiRangeHighlight');
+vi.mock('@/components/BEditor/extensions/aiRangeHighlight', async () => {
+  const actual = await vi.importActual<typeof import('@/components/BEditor/extensions/aiRangeHighlight')>('@/components/BEditor/extensions/aiRangeHighlight');
   return {
     ...actual,
     setAISelectionHighlight: setAISelectionHighlightMock
   };
 });
 
-vi.mock('@/components/BMarkdown/hooks/useSelectionAssistant', () => ({
+vi.mock('@/components/BEditor/hooks/useSelectionAssistant', () => ({
   useSelectionAssistant: () => ({
     toolbarVisible: ref(false),
     toolbarPosition: ref(null),

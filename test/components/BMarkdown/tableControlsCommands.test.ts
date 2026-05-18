@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core';
 import { describe, expect, it, vi } from 'vitest';
-import { applyAddAction, applyRemoveAction, type TableCommandContext } from '@/components/BMarkdown/extensions/tableControlsCommands';
-import type { SegmentHit } from '@/components/BMarkdown/extensions/tableControlsGeometry';
+import { applyAddAction, applyRemoveAction, type TableCommandContext } from '@/components/BEditor/extensions/tableControlsCommands';
+import type { SegmentHit } from '@/components/BEditor/extensions/tableControlsGeometry';
 
 interface CommandRecorder {
   focus: ReturnType<typeof vi.fn>;

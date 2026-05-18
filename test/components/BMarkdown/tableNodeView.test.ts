@@ -4,7 +4,7 @@ import type { DecorationSource } from '@tiptap/pm/view';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import TableView from '@/components/BMarkdown/components/TableView.vue';
+import TableView from '@/components/BEditor/components/TableView.vue';
 
 const chainRecorder = {
   focus: vi.fn(),

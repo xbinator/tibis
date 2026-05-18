@@ -7,8 +7,8 @@
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import type { SelectionAssistantContext } from '@/components/BMarkdown/adapters/selectionAssistant';
-import { createSourceSelectionAssistantAdapter } from '@/components/BMarkdown/adapters/sourceSelectionAssistant';
+import type { SelectionAssistantContext } from '@/components/BEditor/adapters/selectionAssistant';
+import { createSourceSelectionAssistantAdapter } from '@/components/BEditor/adapters/sourceSelectionAssistant';
 
 /**
  * 创建测试用 Source adapter。

@@ -4,7 +4,7 @@
  * @description 验证富文本文内锚点链接的解析与标题匹配规则。
  */
 import { describe, expect, test } from 'vitest';
-import { findHeadingElementByHash } from '@/components/BMarkdown/adapters/richEditorAnchorLinks';
+import { findHeadingElementByHash } from '@/components/BEditor/adapters/richEditorAnchorLinks';
 
 /**
  * 创建带有标题节点的容器。

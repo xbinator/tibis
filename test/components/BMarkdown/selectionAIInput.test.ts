@@ -8,8 +8,8 @@ import { defineComponent, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { SelectionAssistantAdapter, SelectionAssistantPosition } from '@/components/BMarkdown/adapters/selectionAssistant';
-import SelectionAIInput from '@/components/BMarkdown/components/SelectionAIInput.vue';
+import type { SelectionAssistantAdapter, SelectionAssistantPosition } from '@/components/BEditor/adapters/selectionAssistant';
+import SelectionAIInput from '@/components/BEditor/components/SelectionAIInput.vue';
 
 /**
  * 通用空操作函数。

@@ -1,6 +1,6 @@
-import type { AnchorRecord } from '../../../src/components/BMarkdown/hooks/useAnchors';
+import type { AnchorRecord } from '../../../src/components/BEditor/hooks/useAnchors';
 import { describe, expect, it, vi } from 'vitest';
-import { handleEditorAnchorNavigation } from '../../../src/components/BMarkdown/adapters/editorAnchorNavigation';
+import { handleEditorAnchorNavigation } from '../../../src/components/BEditor/adapters/editorAnchorNavigation';
 
 function createAnchorRecord(id: string): AnchorRecord {
   return {
