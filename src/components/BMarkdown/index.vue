@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import type { BMarkdownPublicInstance, EditorController, EditorSearchState } from './adapters/types';
 import type { AnchorRecord } from './hooks/useAnchors';
-import type { BMarkdownViewMode, EditorState } from './types';
+import type { EditorState } from './types';
 import type { CSSProperties } from 'vue';
 import { computed, defineAsyncComponent, ref } from 'vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
@@ -76,21 +76,24 @@ const layoutRef = ref<HTMLElement | null>(null);
 const scrollbarRef = ref<InstanceType<typeof BScrollbar> | null>(null);
 const editorPreferencesStore = useEditorPreferencesStore();
 
+/**
+ * BMarkdown 组件入参。
+ */
 interface Props {
-  // 是否可编辑
+  /** 是否可编辑。 */
   editable?: boolean;
-  // 编辑器视图模式
-  viewMode?: BMarkdownViewMode;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  editable: true,
-  viewMode: 'rich'
+  editable: true
 });
 
 const emit = defineEmits(['rename-file', 'save', 'save-as', 'copy-path', 'show-in-folder', 'editor-blur']);
 
-const isRichMode = computed<boolean>(() => props.viewMode === 'rich');
+/**
+ * Markdown 编辑器视图模式直接跟随编辑器偏好设置。
+ */
+const isRichMode = computed<boolean>(() => editorPreferencesStore.viewMode === 'rich');
 
 const showOutline = ref(false);
 

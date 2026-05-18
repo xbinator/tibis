@@ -7,7 +7,6 @@
           ref="editorRef"
           :key="fileState.id"
           v-model:value="fileState"
-          :view-mode="editorPreferencesStore.viewMode"
           @editor-blur="actions.onEditorBlur"
           @rename-file="actions.onRename"
           @save="actions.onSave"
@@ -25,14 +24,12 @@ import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, watch } fro
 import { useRoute } from 'vue-router';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
 import type { EditorController } from '@/components/BMarkdown/types';
-import { useEditorPreferencesStore } from '@/stores/editorPreferences';
 import { resolveEditorDriver } from './drivers';
 import { useBindings } from './hooks/useBindings';
 import { useFileSelection } from './hooks/useFileSelection';
 import { useSession } from './hooks/useSession';
 
 const route = useRoute();
-const editorPreferencesStore = useEditorPreferencesStore();
 
 const fileId = ref(String(route.params.id || ''));
 

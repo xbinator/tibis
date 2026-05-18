@@ -37,6 +37,22 @@ const ScrollbarStub = defineComponent({
 });
 
 /**
+ * 富文本编辑器占位组件。
+ */
+const PaneRichEditorStub = defineComponent({
+  name: 'PaneRichEditor',
+  template: '<div class="pane-rich-editor-stub">rich</div>'
+});
+
+/**
+ * 源码编辑器占位组件。
+ */
+const PaneSourceEditorStub = defineComponent({
+  name: 'PaneSourceEditor',
+  template: '<div class="pane-source-editor-stub">source</div>'
+});
+
+/**
  * 挂载编辑器组件。
  * @returns BMarkdown 挂载结果
  */
@@ -54,10 +70,11 @@ function mountEditor(): VueWrapper {
     global: {
       stubs: {
         BScrollbar: ScrollbarStub,
-        BMarkdownSidebar: true,
+        Sidebar: true,
+        QuickActions: true,
         FindBar: true,
-        PaneRichEditor: true,
-        PaneSourceEditor: true
+        PaneRichEditor: PaneRichEditorStub,
+        PaneSourceEditor: PaneSourceEditorStub
       }
     }
   });
@@ -101,6 +118,18 @@ describe('BMarkdown page width', () => {
 
     const wrapper = await mountSettledEditor();
     expect(wrapper.find('.b-markdown-container').attributes('style')).toContain('--editor-page-max-width: none;');
+    wrapper.unmount();
+  });
+
+  it('uses source mode from editor preferences when view-mode is not passed', async () => {
+    const editorPreferencesStore = useEditorPreferencesStore();
+    editorPreferencesStore.setViewMode('source');
+
+    const wrapper = await mountSettledEditor();
+
+    expect(wrapper.find('.pane-source-editor-stub').exists()).toBe(true);
+    expect(wrapper.find('.pane-rich-editor-stub').exists()).toBe(false);
+
     wrapper.unmount();
   });
 });

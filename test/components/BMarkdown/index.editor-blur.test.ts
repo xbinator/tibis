@@ -25,7 +25,6 @@ describe('BMarkdown editor-blur', () => {
     const wrapper = mount(BMarkdown, {
       props: {
         value: { id: 'doc', name: 'Doc', content: 'content', ext: 'md', path: '/tmp/doc.md' },
-        viewMode: 'rich',
         showOutline: true
       },
       attachTo: document.body,
@@ -33,7 +32,8 @@ describe('BMarkdown editor-blur', () => {
         stubs: {
           PaneRichEditor: PaneRichEditorStub,
           PaneSourceEditor: true,
-          BMarkdownSidebar: true,
+          Sidebar: true,
+          QuickActions: true,
           BScrollbar: { template: '<div><slot /></div>' },
           FindBar: true
         }
@@ -52,7 +52,6 @@ describe('BMarkdown editor-blur', () => {
     const wrapper = mount(BMarkdown, {
       props: {
         value: { id: 'doc', name: 'Doc', content: 'content', ext: 'md', path: '/tmp/doc.md' },
-        viewMode: 'rich',
         showOutline: true
       },
       attachTo: document.body,
@@ -60,7 +59,8 @@ describe('BMarkdown editor-blur', () => {
         stubs: {
           PaneRichEditor: PaneRichEditorStub,
           PaneSourceEditor: true,
-          BMarkdownSidebar: true,
+          Sidebar: true,
+          QuickActions: true,
           BScrollbar: { template: '<div><slot /></div>' },
           FindBar: true
         }
