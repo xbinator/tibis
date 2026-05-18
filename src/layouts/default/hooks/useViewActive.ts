@@ -6,7 +6,7 @@ import { computed, onUnmounted } from 'vue';
 import type { ComputedRef } from 'vue';
 import { useToolbarShortcuts } from '@/components/BToolbar/hooks/useToolbarShortcuts';
 import type { ToolbarOptions } from '@/components/BToolbar/types';
-import { useEditorPreferencesStore } from '@/stores/editorPreferences';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { useSettingStore } from '@/stores/setting';
 import { EditorShortcuts } from '../../../constants/shortcuts';
 

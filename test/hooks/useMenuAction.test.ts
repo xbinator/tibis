@@ -64,7 +64,7 @@ describe('useMenuAction', () => {
   });
 
   it('maps page-width menu actions to setting store updates', async () => {
-    const { useEditorPreferencesStore } = await import('@/stores/editorPreferences');
+    const { useEditorPreferencesStore } = await import('@/stores/editor/preferences');
     mount(HookHarness);
 
     const editorPreferencesStore = useEditorPreferencesStore();
@@ -80,7 +80,7 @@ describe('useMenuAction', () => {
   });
 
   it('maps source menu actions to editor preferences updates', async () => {
-    const { useEditorPreferencesStore } = await import('@/stores/editorPreferences');
+    const { useEditorPreferencesStore } = await import('@/stores/editor/preferences');
     mount(HookHarness);
 
     const editorPreferencesStore = useEditorPreferencesStore();

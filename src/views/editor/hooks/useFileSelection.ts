@@ -7,7 +7,7 @@ import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { nextTick, watch } from 'vue';
 import type { EditorController } from '@/components/BMarkdown/types';
-import { useFileSelectionIntentStore } from '@/stores/fileSelectionIntent';
+import { useFileSelectionIntentStore } from '@/stores/editor/fileSelectionIntent';
 
 /**
  * 文件选区消费 hook 参数。

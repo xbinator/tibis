@@ -8,7 +8,7 @@ import { nextTick, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { BMarkdownPublicInstance } from '@/components/BMarkdown/types';
-import { useFileSelectionIntentStore } from '@/stores/fileSelectionIntent';
+import { useFileSelectionIntentStore } from '@/stores/editor/fileSelectionIntent';
 import { useFileSelection } from '@/views/editor/hooks/useFileSelection';
 import type { EditorFile } from '@/views/editor/types';
 

@@ -44,7 +44,7 @@ describe('useEditorPreferencesStore', () => {
   });
 
   it('persists editor preferences into dedicated storage', async () => {
-    const { useEditorPreferencesStore } = await import('@/stores/editorPreferences');
+    const { useEditorPreferencesStore } = await import('@/stores/editor/preferences');
     const store = useEditorPreferencesStore();
 
     store.setViewMode('source');
@@ -72,7 +72,7 @@ describe('useEditorPreferencesStore', () => {
       alwaysToolPermissionGrants: {}
     });
 
-    const { useEditorPreferencesStore } = await import('@/stores/editorPreferences');
+    const { useEditorPreferencesStore } = await import('@/stores/editor/preferences');
     const store = useEditorPreferencesStore();
 
     expect(store.viewMode).toBe('source');
@@ -90,7 +90,7 @@ describe('useEditorPreferencesStore', () => {
       saveStrategy: 'always'
     });
 
-    const { useEditorPreferencesStore } = await import('@/stores/editorPreferences');
+    const { useEditorPreferencesStore } = await import('@/stores/editor/preferences');
     const store = useEditorPreferencesStore();
 
     expect(store.viewMode).toBe('rich');

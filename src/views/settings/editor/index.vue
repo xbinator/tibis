@@ -39,8 +39,8 @@
 
 <script setup lang="ts">
 import { SelectOption } from '@/components/BSelect/types';
-import type { EditorViewMode, EditorPageWidth, EditorSaveStrategy } from '@/stores/editorPreferences';
-import { useEditorPreferencesStore } from '@/stores/editorPreferences';
+import type { EditorViewMode, EditorPageWidth, EditorSaveStrategy } from '@/stores/editor/preferences';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 
 const store = useEditorPreferencesStore();
 

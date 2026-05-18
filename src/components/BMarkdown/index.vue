@@ -61,7 +61,7 @@ import type { EditorState } from './types';
 import type { CSSProperties } from 'vue';
 import { computed, defineAsyncComponent, ref } from 'vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
-import { useEditorPreferencesStore } from '@/stores/editorPreferences';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { handleEditorAnchorNavigation } from './adapters/editorAnchorNavigation';
 import FindBar from './components/FindBar.vue';
 import QuickActions from './components/QuickActions.vue';
@@ -84,7 +84,7 @@ interface Props {
   editable?: boolean;
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   editable: true
 });
 

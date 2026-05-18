@@ -7,7 +7,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useEditorPreferencesStore } from '@/stores/editorPreferences';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import EditorSettingsView from '@/views/settings/editor/index.vue';
 
 const storage = new Map<string, string>();

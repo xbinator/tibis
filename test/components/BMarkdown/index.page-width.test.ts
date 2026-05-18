@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BMarkdown from '@/components/BMarkdown/index.vue';
-import { useEditorPreferencesStore } from '@/stores/editorPreferences';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 
 const storage = new Map<string, string>();
 

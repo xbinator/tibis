@@ -4,7 +4,7 @@
  */
 import { onMounted, onUnmounted } from 'vue';
 import { native } from '@/shared/platform';
-import { useEditorPreferencesStore } from '@/stores/editorPreferences';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { useSettingStore } from '@/stores/setting';
 import { emitter } from '@/utils/emitter';
 

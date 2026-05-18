@@ -4,8 +4,8 @@
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../../confirmation';
 import type { AIToolExecutor } from 'types/ai';
-import type { EditorPageWidth, EditorViewMode } from '@/stores/editorPreferences';
-import { useEditorPreferencesStore } from '@/stores/editorPreferences';
+import type { EditorPageWidth, EditorViewMode } from '@/stores/editor/preferences';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { ThemeMode } from '@/stores/setting';
 import { useSettingStore } from '@/stores/setting';
 import { executeWithPermission } from '../../permission';

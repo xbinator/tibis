@@ -54,7 +54,7 @@ describe('useNavigate', () => {
 
   test('openFile opens by path and records a selection intent', async () => {
     const { useNavigate } = await import('@/hooks/useNavigate');
-    const { useFileSelectionIntentStore } = await import('@/stores/fileSelectionIntent');
+    const { useFileSelectionIntentStore } = await import('@/stores/editor/fileSelectionIntent');
     const fileSelectionIntentStore = useFileSelectionIntentStore();
     const { openFile } = useNavigate();
 
@@ -85,7 +85,7 @@ describe('useNavigate', () => {
 
   test('openFile normalizes invalid line ranges before writing intent', async () => {
     const { useNavigate } = await import('@/hooks/useNavigate');
-    const { useFileSelectionIntentStore } = await import('@/stores/fileSelectionIntent');
+    const { useFileSelectionIntentStore } = await import('@/stores/editor/fileSelectionIntent');
     const fileSelectionIntentStore = useFileSelectionIntentStore();
     const { openFile } = useNavigate();
 
@@ -115,7 +115,7 @@ describe('useNavigate', () => {
 
   test('openFile does not write intent when no range is provided', async () => {
     const { useNavigate } = await import('@/hooks/useNavigate');
-    const { useFileSelectionIntentStore } = await import('@/stores/fileSelectionIntent');
+    const { useFileSelectionIntentStore } = await import('@/stores/editor/fileSelectionIntent');
     const fileSelectionIntentStore = useFileSelectionIntentStore();
     const { openFile } = useNavigate();
 

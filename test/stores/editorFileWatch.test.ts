@@ -74,7 +74,7 @@ describe('useEditorFileWatchStore', () => {
   });
 
   it('marks every tab for the unlinked path as missing and ignores change events in phase one', async () => {
-    const { useEditorFileWatchStore } = await import('@/stores/editorFileWatch');
+    const { useEditorFileWatchStore } = await import('@/stores/editor/fileWatch');
     const { useTabsStore } = await import('@/stores/tabs');
     const watchStore = useEditorFileWatchStore();
     const tabsStore = useTabsStore();
@@ -96,7 +96,7 @@ describe('useEditorFileWatchStore', () => {
   });
 
   it('keeps watching a path until the last file id is unregistered', async () => {
-    const { useEditorFileWatchStore } = await import('@/stores/editorFileWatch');
+    const { useEditorFileWatchStore } = await import('@/stores/editor/fileWatch');
     const watchStore = useEditorFileWatchStore();
 
     await watchStore.register('alpha', '/tmp/shared.md');
@@ -112,7 +112,7 @@ describe('useEditorFileWatchStore', () => {
   });
 
   it('keeps the old mapping when updating to a new path fails', async () => {
-    const { useEditorFileWatchStore } = await import('@/stores/editorFileWatch');
+    const { useEditorFileWatchStore } = await import('@/stores/editor/fileWatch');
     const watchStore = useEditorFileWatchStore();
     const error = new Error('watch failed');
 
@@ -127,7 +127,7 @@ describe('useEditorFileWatchStore', () => {
   });
 
   it('unsubscribes native events and clears native watchers on dispose', async () => {
-    const { useEditorFileWatchStore } = await import('@/stores/editorFileWatch');
+    const { useEditorFileWatchStore } = await import('@/stores/editor/fileWatch');
     const watchStore = useEditorFileWatchStore();
 
     await watchStore.register('alpha', '/tmp/a.md');

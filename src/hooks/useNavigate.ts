@@ -7,7 +7,7 @@ import { message } from 'ant-design-vue';
 import { customAlphabet } from 'nanoid';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform/native';
-import { useFileSelectionIntentStore } from '@/stores/fileSelectionIntent';
+import { useFileSelectionIntentStore } from '@/stores/editor/fileSelectionIntent';
 
 /**
  * 允许在应用内 webview 中打开的 URL 协议。

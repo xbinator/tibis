@@ -4,7 +4,7 @@
  */
 import type { Ref } from 'vue';
 import { getCurrentScope, onScopeDispose, ref } from 'vue';
-import type { EditorSaveStrategy } from '@/stores/editorPreferences';
+import type { EditorSaveStrategy } from '@/stores/editor/preferences';
 
 /**
  * 真实磁盘写盘结果。
