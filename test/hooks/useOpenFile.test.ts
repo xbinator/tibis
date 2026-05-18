@@ -39,6 +39,8 @@ const recentFilesStorageMocks = vi.hoisted(() => ({
   clearRecentFiles: vi.fn(async () => undefined)
 }));
 
+const modalAlertMock = vi.hoisted(() => vi.fn(async () => undefined));
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({
     push: routerPushMock
@@ -56,11 +58,18 @@ vi.mock('@/shared/storage', () => ({
   recentFilesStorage: recentFilesStorageMocks
 }));
 
+vi.mock('@/utils/modal', () => ({
+  Modal: {
+    alert: modalAlertMock
+  }
+}));
+
 describe('useOpenFile', () => {
   beforeEach(() => {
     vi.resetModules();
     setActivePinia(createPinia());
     routerPushMock.mockReset();
+    modalAlertMock.mockReset();
   });
 
   it('reuses an already-open tab for the same file path instead of reloading from disk', async () => {
@@ -83,6 +92,66 @@ describe('useOpenFile', () => {
 
     expect(refreshSpy).not.toHaveBeenCalled();
     expect(routerPushMock).toHaveBeenCalledWith('/editor/stored_a');
+  });
+
+  it('shows an alert and removes the record when opening a file whose on-disk path no longer exists', async () => {
+    const { useFilesStore } = await import('@/stores/workspace/files');
+    const { useOpenFile } = await import('@/hooks/useOpenFile');
+
+    const filesStore = useFilesStore();
+    const diskFile = createStoredFile({ id: 'gone_a', path: '/tmp/gone.md' });
+
+    vi.spyOn(filesStore, 'getFileById').mockResolvedValue(diskFile);
+    vi.spyOn(filesStore, 'getFileByPath').mockResolvedValue(diskFile);
+    vi.spyOn(filesStore, 'openOrRefreshByPathFromDisk').mockRejectedValue(new Error('ENOENT'));
+    const removeFileSpy = vi.spyOn(filesStore, 'removeFile').mockResolvedValue(undefined);
+
+    const { openFileById } = useOpenFile();
+    const result = await openFileById('gone_a');
+
+    expect(result).toBeNull();
+    expect(modalAlertMock).toHaveBeenCalledWith('文件不存在', '路径不存在：/tmp/gone.md');
+    expect(removeFileSpy).toHaveBeenCalledWith('gone_a');
+  });
+
+  it('openFile delegates to openFileByPath for path-based files and alerts on missing disk file', async () => {
+    const { useFilesStore } = await import('@/stores/workspace/files');
+    const { useOpenFile } = await import('@/hooks/useOpenFile');
+
+    const filesStore = useFilesStore();
+    const diskFile = createStoredFile({ id: 'direct_a', path: '/tmp/direct.md' });
+
+    vi.spyOn(filesStore, 'getFileById').mockResolvedValue(diskFile);
+    vi.spyOn(filesStore, 'getFileByPath').mockResolvedValue(diskFile);
+    vi.spyOn(filesStore, 'openOrRefreshByPathFromDisk').mockRejectedValue(new Error('ENOENT'));
+    const removeFileSpy = vi.spyOn(filesStore, 'removeFile').mockResolvedValue(undefined);
+
+    const { openFile } = useOpenFile();
+    const result = await openFile(diskFile);
+
+    expect(result).toBeNull();
+    expect(modalAlertMock).toHaveBeenCalledWith('文件不存在', expect.stringContaining('/tmp/direct.md'));
+    expect(removeFileSpy).toHaveBeenCalledWith('direct_a');
+  });
+
+  it('returns null without alert when openOrRefreshByPathFromDisk throws but no stored record matches the path', async () => {
+    const { useFilesStore } = await import('@/stores/workspace/files');
+    const { useOpenFile } = await import('@/hooks/useOpenFile');
+
+    const filesStore = useFilesStore();
+    const diskFile = createStoredFile({ id: 'no_store', path: '/tmp/no_store.md' });
+
+    vi.spyOn(filesStore, 'getFileById').mockResolvedValue(diskFile);
+    vi.spyOn(filesStore, 'getFileByPath').mockResolvedValue(undefined);
+    vi.spyOn(filesStore, 'openOrRefreshByPathFromDisk').mockRejectedValue(new Error('ENOENT'));
+    const removeFileSpy = vi.spyOn(filesStore, 'removeFile').mockResolvedValue(undefined);
+
+    const { openFileById } = useOpenFile();
+    const result = await openFileById('no_store');
+
+    expect(result).toBeNull();
+    expect(modalAlertMock).not.toHaveBeenCalled();
+    expect(removeFileSpy).not.toHaveBeenCalled();
   });
 
   it('keeps restoring unsaved pathless drafts by id', async () => {

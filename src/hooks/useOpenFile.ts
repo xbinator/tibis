@@ -9,6 +9,7 @@ import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
+import { Modal } from '@/utils/modal';
 
 const createFileId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 
@@ -20,19 +21,6 @@ export function useOpenFile() {
   const router = useRouter();
   const filesStore = useFilesStore();
   const tabsStore = useTabsStore();
-
-  /**
-   * 打开一个已存在的最近文件。
-   * @param file - 文件记录
-   * @returns 更新 openedAt 后的文件记录
-   */
-  async function openFile(file: StoredFile): Promise<StoredFile> {
-    const openedFile = await filesStore.openExistingFile(file.id);
-
-    // 无磁盘路径的未保存草稿仍然沿用最近文件缓存恢复。
-    await router.push({ name: 'editor', params: { id: openedFile.id } });
-    return openedFile;
-  }
 
   /**
    * 按磁盘路径查找当前已打开标签，命中时返回其路由路径。
@@ -63,10 +51,39 @@ export function useOpenFile() {
       return (await filesStore.getFileByPath(path)) ?? null;
     }
 
-    const openedFile = await filesStore.openOrRefreshByPathFromDisk(path);
-    if (!openedFile) return null;
+    try {
+      const openedFile = await filesStore.openOrRefreshByPathFromDisk(path);
+      if (!openedFile) return null;
 
+      await router.push({ name: 'editor', params: { id: openedFile.id } });
+      return openedFile;
+    } catch {
+      // 文件不存在则弹窗提示后从最近记录中移除。
+      const existingFile = await filesStore.getFileByPath(path);
+      if (existingFile?.path) {
+        await Modal.alert('文件不存在', `路径不存在：${existingFile.path}`);
+
+        await filesStore.removeFile(existingFile.id);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * 打开一个已存在的最近文件；有磁盘路径时先校验文件是否存在。
+   * @param file - 文件记录
+   * @returns 打开的文件记录；文件不存在时为 null
+   */
+  async function openFile(file: StoredFile): Promise<StoredFile | null> {
+    // 有磁盘路径则走路径统一入口，确保文件存在性校验。
+    if (file.path) {
+      return openFileByPath(file.path);
+    }
+
+    // 无磁盘路径的未保存草稿仍然沿用最近文件缓存恢复。
+    const openedFile = await filesStore.openExistingFile(file.id);
     await router.push({ name: 'editor', params: { id: openedFile.id } });
+
     return openedFile;
   }
 
