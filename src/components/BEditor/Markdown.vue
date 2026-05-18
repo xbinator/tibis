@@ -80,6 +80,7 @@
         @rename-file="emit('rename-file')"
         @save="emit('save')"
         @save-as="emit('save-as')"
+        @export-pdf="handleExportPdf"
         @copy-path="emit('copy-path')"
         @show-in-folder="emit('show-in-folder')"
       />
@@ -97,6 +98,8 @@ import type { Editor as TiptapEditor } from '@tiptap/vue-3';
 import type { CSSProperties } from 'vue';
 import { computed, ref, shallowRef } from 'vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
+import { PDF_FILE_FILTER } from '@/constants/extensions';
+import { native } from '@/shared/platform';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { handleEditorAnchorNavigation } from './adapters/editorAnchorNavigation';
 import Sidebar from './components/Sidebar.vue';
@@ -110,6 +113,7 @@ import QuickActions from './shared/QuickActions.vue';
 import SelectionAIInput from './shared/SelectionAIInput.vue';
 import SelectionToolbarRich from './shared/SelectionToolbarRich.vue';
 import SelectionToolbarSource from './shared/SelectionToolbarSource.vue';
+import { buildRichPdfExportHtml, buildSourcePdfExportHtml, resolvePdfDefaultPath } from './utils/exportToPdf';
 
 const layoutRef = ref<HTMLElement | null>(null);
 const scrollbarRef = ref<InstanceType<typeof BScrollbar> | null>(null);
@@ -239,6 +243,36 @@ function handleSourceSelectionHostChange(payload: SourceSelectionHostState | nul
  */
 function recomputeSelectionOverlays(): void {
   selectionAssistant.recomputeAllPositions();
+}
+
+/**
+ * 读取当前模式下应导出的完整 HTML 文档。
+ * 富文本模式导出当前渲染结果，源码模式导出转义后的源码文本。
+ * @returns 可直接交给 PDF 通道的完整 HTML 文档
+ */
+function buildCurrentPdfExportHtml(): string {
+  if (isRichMode.value) {
+    const renderedContentRoot = layoutRef.value?.querySelector('.b-markdown-rich__content');
+    if (renderedContentRoot instanceof HTMLElement) {
+      return buildRichPdfExportHtml(renderedContentRoot);
+    }
+
+    return buildSourcePdfExportHtml(content.value);
+  }
+
+  return buildSourcePdfExportHtml(content.value);
+}
+
+/**
+ * 导出当前文档为 PDF。
+ * 导出内容的语义判断全部收口在渲染层，原生层只处理保存与渲染。
+ */
+async function handleExportPdf() {
+  await native.exportPdf({
+    html: buildCurrentPdfExportHtml(),
+    filters: [PDF_FILE_FILTER],
+    defaultPath: resolvePdfDefaultPath(effectiveEditorState.value)
+  });
 }
 
 /**

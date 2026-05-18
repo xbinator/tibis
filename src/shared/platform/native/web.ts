@@ -1,6 +1,7 @@
 /* eslint-disable class-methods-use-this */
 import type {
   Native,
+  ExportPdfOptions,
   FilePathStatus,
   OpenFileOptions,
   SaveFileOptions,
@@ -75,6 +76,11 @@ export class WebNative implements Native {
 
     URL.revokeObjectURL(url);
     return filename;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async exportPdf(_options: ExportPdfOptions): Promise<string | null> {
+    throw new Error('Web platform does not support PDF export');
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

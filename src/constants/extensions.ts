@@ -14,3 +14,6 @@ export const OPEN_FILE_FILTER = { name: 'Markdown', extensions: OPEN_FILE_EXTENS
 
 /** 保存文件对话框默认过滤器 */
 export const SAVE_FILE_FILTER = { name: 'Markdown', extensions: SAVE_FILE_EXTENSIONS };
+
+/** PDF 导出对话框默认过滤器 */
+export const PDF_FILE_FILTER = { name: 'PDF', extensions: ['pdf'] };

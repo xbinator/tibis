@@ -1,6 +1,7 @@
 /* eslint-disable class-methods-use-this */
 import type {
   Native,
+  ExportPdfOptions,
   FilePathStatus,
   OpenFileOptions,
   SaveFileOptions,
@@ -62,6 +63,10 @@ export class ElectronNative implements Native {
     const defaultPath = options?.defaultPath || 'untitled.md';
 
     return getElectronAPI().saveFile(content, path, { filters, defaultPath });
+  }
+
+  async exportPdf(options: ExportPdfOptions): Promise<string | null> {
+    return getElectronAPI().exportPdf(options);
   }
 
   async writeFile(filePath: string, content: string): Promise<void> {

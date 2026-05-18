@@ -98,6 +98,13 @@ const electronAPI: ElectronAPI = {
   saveFile: (content, filePath, options) => ipcRenderer.invoke('dialog:saveFile', content, filePath, options),
 
   /**
+   * 导出 PDF。
+   * @param options - 导出选项，包含完整 HTML 文档与默认保存路径
+   * @returns 成功保存后的文件路径
+   */
+  exportPdf: (options) => ipcRenderer.invoke('dialog:exportPdf', options),
+
+  /**
    * 直接写入文件（已知路径时使用）
    * @param filePath 文件路径
    * @param content 文件内容

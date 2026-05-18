@@ -4,6 +4,7 @@ export type {
   DbExecuteResult,
   ElectronAPI,
   ElectronDialogFilter,
+  ElectronExportPdfOptions,
   ElectronFileResult,
   ElectronOpenFileOptions,
   ElectronReadWorkspaceFileOptions,

@@ -1,5 +1,6 @@
 import type {
   ElectronDialogFilter,
+  ElectronExportPdfOptions,
   ElectronFilePathStatus,
   ElectronOpenFileOptions,
   ElectronSaveFileOptions,
@@ -11,6 +12,9 @@ export type FileFilter = ElectronDialogFilter;
 export type OpenFileOptions = ElectronOpenFileOptions;
 
 export type SaveFileOptions = ElectronSaveFileOptions;
+
+/** PDF 导出参数。 */
+export type ExportPdfOptions = ElectronExportPdfOptions;
 
 export interface File {
   path: string | null;
@@ -109,6 +113,8 @@ export interface Native {
   openFile(options?: OpenFileOptions): Promise<File>;
 
   saveFile(content: string, path?: string, options?: SaveFileOptions): Promise<string | null>;
+
+  exportPdf(options: ExportPdfOptions): Promise<string | null>;
 
   writeFile(path: string, content: string): Promise<void>;
 

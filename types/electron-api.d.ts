@@ -34,6 +34,18 @@ export interface ElectronSaveFileOptions {
   defaultPath?: string;
 }
 
+/**
+ * Electron PDF 导出参数。
+ */
+export interface ElectronExportPdfOptions {
+  /** 已准备好的完整 HTML 文档 */
+  html: string;
+  /** 保存对话框过滤器 */
+  filters?: ElectronDialogFilter[];
+  /** 默认保存路径 */
+  defaultPath?: string;
+}
+
 export interface ElectronFileResult {
   canceled: boolean;
   filePath: string | null;
@@ -270,6 +282,7 @@ export interface ElectronAPI {
   openFile: (options?: ElectronOpenFileOptions) => Promise<ElectronFileResult>;
 
   saveFile: (content: string, filePath?: string, options?: ElectronSaveFileOptions) => Promise<string | null>;
+  exportPdf: (options: ElectronExportPdfOptions) => Promise<string | null>;
 
   writeFile: (filePath: string, content: string) => Promise<void>;
   renameFile: (oldPath: string, newPath: string) => Promise<void>;

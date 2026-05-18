@@ -38,6 +38,8 @@ const emit = defineEmits<{
   save: [];
   /** 另存为事件 */
   'save-as': [];
+  /** 导出 PDF 事件 */
+  'export-pdf': [];
   /** 复制路径事件 */
   'copy-path': [];
   /** 在文件夹中显示事件 */
@@ -73,6 +75,12 @@ const menuOptions = computed<DropdownOption[]>(() => [
     label: '另存为',
     icon: 'lucide:save-all',
     onClick: () => emit('save-as')
+  },
+  {
+    value: 'export-pdf',
+    label: '导出 PDF',
+    icon: 'lucide:file-output',
+    onClick: () => emit('export-pdf')
   },
   {
     type: 'divider'
