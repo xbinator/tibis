@@ -20,8 +20,8 @@ describe('Speech settings wiring', () => {
     const constantsSource = readSource('src/views/settings/constants.ts');
     const routesSource = readSource('src/router/routes/modules/settings.ts');
 
-    expect(constantsSource).toContain("export type SettingsMenuKey = 'provider' | 'service-model' | 'tools' | 'editor' | 'speech' | 'logger';");
-    expect(constantsSource).toContain("{ key: 'speech', label: '语音组件', icon: 'lucide:mic', path: '/settings/speech' }");
+    expect(constantsSource).toContain("export type SettingsMenuKey = 'provider' | 'service-model' | 'search' | 'mcp' | 'editor' | 'speech' | 'logger';");
+    expect(constantsSource).toContain("speech: { key: 'speech', label: '语音服务', icon: 'lucide:mic', path: '/settings/speech' }");
     expect(routesSource).toContain("path: 'speech'");
     expect(routesSource).toContain("name: 'speech'");
     expect(routesSource).toContain("import('@/views/settings/speech/index.vue')");

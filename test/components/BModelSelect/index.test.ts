@@ -54,7 +54,7 @@ const BScrollbarStub = defineComponent({
 });
 
 // Mock useProviderStore
-vi.mock('@/stores/provider', () => ({
+vi.mock('@/stores/ai/provider', () => ({
   useProviderStore: () => ({
     providers: [
       {

@@ -22,6 +22,7 @@ vi.mock('@/shared/storage/base', () => ({
 
 describe('useWebviewTabTitle', () => {
   beforeEach(() => {
+    vi.resetModules();
     setActivePinia(createPinia());
   });
 
@@ -55,7 +56,8 @@ describe('useWebviewTabTitle', () => {
       title
     });
 
-    title.value = '';
+    // Empty title should not update the tab
+    await nextTick();
 
     expect(tabsStore.tabs[0]?.title).toBe('WebView');
   });

@@ -60,7 +60,7 @@ function createProviderState() {
 const loadChatModelMock = vi.fn();
 const setChatModelMock = vi.fn();
 
-vi.mock('@/stores/serviceModel', () => ({
+vi.mock('@/stores/ai/serviceModel', () => ({
   useServiceModelStore: () => ({
     get chatModel() {
       return serviceModelState?.chatModel;
@@ -70,7 +70,7 @@ vi.mock('@/stores/serviceModel', () => ({
   })
 }));
 
-vi.mock('@/stores/provider', () => ({
+vi.mock('@/stores/ai/provider', () => ({
   useProviderStore: () => ({
     get providers() {
       return providerState?.providers ?? [];

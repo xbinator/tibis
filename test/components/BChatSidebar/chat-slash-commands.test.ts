@@ -5,6 +5,7 @@
  * @description BChatSidebar slash command registry and runtime /model open-path tests.
  */
 import { nextTick } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { chatSlashCommands } from '@/components/BChatSidebar/hooks/useSlashCommands';
@@ -263,6 +264,19 @@ vi.mock('@/shared/storage', () => ({
   serviceModelsStorage: {
     getConfig: getServiceModelConfigMock,
     saveConfig: vi.fn()
+  },
+  chatStorage: {
+    createSession: vi.fn(async () => undefined),
+    addMessage: vi.fn(async () => undefined),
+    updateSessionLastMessageAt: vi.fn(async () => undefined),
+    addSessionUsage: vi.fn(async () => undefined),
+    setSessionMessages: vi.fn(async () => undefined),
+    updateSessionUsage: vi.fn(async () => undefined),
+    updateSessionTitle: vi.fn(async () => undefined),
+    deleteSession: vi.fn(async () => undefined),
+    getMessages: vi.fn(async () => []),
+    getSessionsByType: vi.fn(async () => ({ items: [], hasMore: false })),
+    getSessionUsage: vi.fn(async () => undefined)
   }
 }));
 
@@ -411,6 +425,7 @@ function mountChatSidebar() {
 
 describe('chatSlashCommands', () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     insertTextAtCursorMock.mockReset();
     focusMock.mockReset();
     saveCursorPositionMock.mockReset();

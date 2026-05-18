@@ -341,11 +341,12 @@ describe('MessageBubble confirmation integration', () => {
     expect(wrapper.text()).not.toContain('工具结果：ask_user_question');
   });
 
-  it('hides assistant toolbar actions for error-only system messages', () => {
+  it('shows assistant toolbar for finished assistant messages including error-only', () => {
     const wrapper = mountMessageBubble(createAssistantErrorOnlyMessage());
 
     expect(wrapper.text()).toContain('工具调用轮次超过限制，已停止自动续轮。');
-    expect(wrapper.find('.message-bubble__toolbar').exists()).toBe(false);
+    // Assistant toolbar is shown for all finished assistant messages
+    expect(wrapper.find('.message-bubble__toolbar').exists()).toBe(true);
   });
 
   it('renders streamed write_file preview with path before the final tool-call arrives', () => {

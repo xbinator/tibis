@@ -49,7 +49,6 @@ describe('EditorSettingsView', () => {
   it('renders current editor preferences and updates the save strategy', async () => {
     const store = useEditorPreferencesStore();
     store.setViewMode('source');
-    store.setShowOutline(false);
     store.setPageWidth('wide');
     store.setSaveStrategy('onBlur');
 
