@@ -39,8 +39,10 @@ import CodeBlockView from '../components/CodeBlock.vue';
 import TableView from '../components/TableView.vue';
 import { AISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { Search, type SearchScrollContext } from '../extensions/editorSearch';
+import { registerRichCodeBlockLowlightAliases } from '../utils/richCodeBlockLowlight';
 
 const lowlight = createLowlight(common);
+registerRichCodeBlockLowlightAliases(lowlight);
 
 interface UseEditorExtensionsResult {
   assignHeadingIds: (editor: Editor) => void;
@@ -451,7 +453,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
       return helpers.createNode('codeBlock', { ...createSourceLineNodeAttrs(token), language }, text ? [helpers.createTextNode(text)] : []);
     },
     addNodeView: () => VueNodeViewRenderer(CodeBlockView as unknown as Component<NodeViewProps>)
-  }).configure({ lowlight });
+  }).configure({ lowlight, defaultLanguage: 'plaintext' });
 
   const Heading = BaseHeading.extend({
     addAttributes() {
