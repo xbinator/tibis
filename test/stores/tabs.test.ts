@@ -19,7 +19,8 @@ const setItemMock = vi.fn();
 vi.mock('@/shared/storage/base', () => ({
   local: {
     getItem: getItemMock,
-    setItem: setItemMock
+    setItem: setItemMock,
+    removeItem: vi.fn()
   }
 }));
 
@@ -117,9 +118,10 @@ describe('useTabsStore', () => {
       dirtyById: { legacy: true }
     });
 
-    const { loadSavedData } = await import('@/stores/workspace/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
+    const tabsStore = useTabsStore();
 
-    expect(loadSavedData().missingById).toEqual({});
+    expect(tabsStore.missingById).toEqual({});
   });
 
   it('migrates saved tabs without cache keys by using their ids', async () => {
@@ -128,14 +130,11 @@ describe('useTabsStore', () => {
       dirtyById: { legacy: true }
     });
 
-    const { loadSavedData } = await import('@/stores/workspace/tabs');
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
+    const tabsStore = useTabsStore();
 
-    expect(loadSavedData()).toEqual({
-      tabs: [{ id: 'legacy', path: '/legacy', title: 'Legacy', cacheKey: 'legacy' }],
-      dirtyById: { legacy: true },
-      missingById: {},
-      cachedKeys: ['legacy']
-    });
+    expect(tabsStore.tabs).toEqual([{ id: 'legacy', path: '/legacy', title: 'Legacy', cacheKey: 'legacy' }]);
+    expect(tabsStore.cachedKeys).toEqual(['legacy']);
   });
 
   it('builds a disabled close plan for the last tab when allowCloseLastTab is false', async () => {

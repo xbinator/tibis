@@ -5,9 +5,10 @@
 
 import { defineStore } from 'pinia';
 import { resolveRouteCacheName } from '@/router/cache';
-import { local } from '@/shared/storage/base';
 import { storeEvents } from '@/stores/helpers/events';
 import type { FileMissingPayload, FileRecoveredPayload } from '@/stores/helpers/events';
+import { loadPersistedState, persistState } from '@/stores/helpers/persist';
+import type { PersistConfig } from '@/stores/helpers/types';
 
 /**
  * 拖拽排序时的插入位置。
@@ -87,6 +88,13 @@ export interface TabClosePlan {
 
 const TABS_STORAGE_KEY = 'app_tabs';
 
+const DEFAULT_TABS_STATE: TabsState = {
+  tabs: [],
+  dirtyById: {},
+  missingById: {},
+  cachedKeys: []
+};
+
 /**
  * 规范化标签页数据，兼容历史缓存中缺少 cacheKey 的记录。
  * @param tab - 待规范化的标签页
@@ -106,12 +114,17 @@ function normalizeCachedKeys(keys: string[]): string[] {
 }
 
 /**
- * 读取本地持久化的标签页数据。
- * @returns 标签页状态
+ * 归一化持久化的标签页数据。
+ * @param value - 从 localStorage 读取的原始数据
+ * @returns 归一化后的标签页状态
  */
-export function loadSavedData(): TabsState {
-  const saved = local.getItem<TabsState>(TABS_STORAGE_KEY);
-  if (!saved || !Array.isArray(saved.tabs)) return { tabs: [], dirtyById: {}, missingById: {}, cachedKeys: [] };
+function normalizeTabsState(value: unknown): TabsState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { ...DEFAULT_TABS_STATE };
+  }
+
+  const saved = value as Partial<TabsState>;
+  if (!Array.isArray(saved.tabs)) return { ...DEFAULT_TABS_STATE };
 
   const tabs = saved.tabs.map(normalizeTab);
   const savedCachedKeys = Array.isArray(saved.cachedKeys) ? saved.cachedKeys : [];
@@ -120,17 +133,15 @@ export function loadSavedData(): TabsState {
     tabs,
     dirtyById: saved.dirtyById ?? {},
     missingById: saved.missingById ?? {},
-    cachedKeys: normalizeCachedKeys([...savedCachedKeys, ...tabs.map((tab) => tab.cacheKey || tab.id)])
+    cachedKeys: normalizeCachedKeys([...savedCachedKeys, ...tabs.map((tab: Tab) => tab.cacheKey || tab.id)])
   };
 }
 
-/**
- * 持久化标签页状态。
- * @param state - 当前标签页状态
- */
-export function persistData(state: TabsState): void {
-  local.setItem(TABS_STORAGE_KEY, state);
-}
+const TABS_CONFIG: PersistConfig<TabsState> = {
+  storageKey: TABS_STORAGE_KEY,
+  defaults: DEFAULT_TABS_STATE,
+  normalize: normalizeTabsState
+};
 
 /**
  * 在标签页列表中查找指定标签的索引。
@@ -247,7 +258,7 @@ function createDisabledClosePlan(action: TabCloseAction, anchorTabId: string | n
 
 // 标签页状态管理 Store
 export const useTabsStore = defineStore('tabs', {
-  state: (): TabsState => loadSavedData(),
+  state: (): TabsState => loadPersistedState(TABS_CONFIG),
 
   getters: {
     /**
@@ -292,7 +303,7 @@ export const useTabsStore = defineStore('tabs', {
         this.cachedKeys.push(cacheKey);
       }
 
-      persistData(this.$state);
+      persistState(TABS_STORAGE_KEY, this.$state);
     },
 
     /**
@@ -325,7 +336,7 @@ export const useTabsStore = defineStore('tabs', {
 
       const insertIndex = position === 'after' ? nextTargetIndex + 1 : nextTargetIndex;
       this.tabs.splice(insertIndex, 0, movedTab);
-      persistData(this.$state);
+      persistState(TABS_STORAGE_KEY, this.$state);
     },
 
     /**
@@ -418,7 +429,7 @@ export const useTabsStore = defineStore('tabs', {
         delete this.missingById[id];
       });
 
-      persistData(this.$state);
+      persistState(TABS_STORAGE_KEY, this.$state);
     },
 
     /**
@@ -435,7 +446,7 @@ export const useTabsStore = defineStore('tabs', {
      */
     setDirty(id: string): void {
       this.dirtyById[id] = true;
-      persistData(this.$state);
+      persistState(TABS_STORAGE_KEY, this.$state);
     },
 
     /**
@@ -444,7 +455,7 @@ export const useTabsStore = defineStore('tabs', {
      */
     clearDirty(id: string): void {
       this.dirtyById[id] = false;
-      persistData(this.$state);
+      persistState(TABS_STORAGE_KEY, this.$state);
     },
 
     /**
@@ -462,7 +473,7 @@ export const useTabsStore = defineStore('tabs', {
      */
     markMissing(id: string): void {
       this.missingById[id] = true;
-      persistData(this.$state);
+      persistState(TABS_STORAGE_KEY, this.$state);
     },
 
     /**
@@ -471,7 +482,7 @@ export const useTabsStore = defineStore('tabs', {
      */
     clearMissing(id: string): void {
       this.missingById[id] = false;
-      persistData(this.$state);
+      persistState(TABS_STORAGE_KEY, this.$state);
     },
 
     /**
@@ -492,7 +503,7 @@ export const useTabsStore = defineStore('tabs', {
       if (index === -1) return;
 
       this.tabs[index] = { ...this.tabs[index], title: params.title };
-      persistData(this.$state);
+      persistState(TABS_STORAGE_KEY, this.$state);
     },
 
     /** 事件取消订阅函数列表 */

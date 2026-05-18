@@ -17,19 +17,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { EditorController } from '@/components/BMarkdown/adapters/types';
-import type { BMarkdownViewMode, EditorState } from '@/components/BMarkdown/types';
+import type { EditorState } from '@/components/BMarkdown/types';
 import PaneMonacoEditor from './components/PaneMonacoEditor.vue';
 
 interface Props {
   /** 是否允许编辑。 */
   editable?: boolean;
-  /** 保持与现有编辑器容器一致的视图模式入参。 */
-  viewMode?: BMarkdownViewMode;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  editable: true,
-  viewMode: 'source'
+  editable: true
 });
 
 const emit = defineEmits<{
