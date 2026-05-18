@@ -29,6 +29,7 @@ const COMPONENT_DIRS = [
   'BButton',
   'BDropdown',
   'BMonaco',
+  'BJsonViewer',
   'BScrollbar',
   'BSettingsSection',
   'BSettingsPage',
