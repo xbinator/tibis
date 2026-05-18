@@ -1,6 +1,6 @@
 import { computed, shallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
-import type { EditorController } from '@/components/BEditor/adapters/types';
+import type { EditorController } from '@/components/BEditor/types';
 import { EMPTY_SEARCH_STATE, createNoopEditorController } from '@/components/BEditor/adapters/types';
 import { useEditorController } from '@/components/BEditor/hooks/useEditorController';
 

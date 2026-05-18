@@ -4,7 +4,7 @@ import { watch } from 'vue';
 import { normalizeEditorContent } from '../extensions/emptyContent';
 import { getPersistedMarkdown } from '../utils/editorMarkdown';
 
-interface UseBMarkdownContentParams {
+interface UseEditorContentParams {
   assignHeadingIds: (editor: Editor) => void;
   editable: Ref<boolean>;
   editorContent: Ref<string | undefined>;
@@ -14,7 +14,7 @@ interface UseBMarkdownContentParams {
   onContentChange?: () => void;
 }
 
-interface UseBMarkdownContentResult {
+interface UseEditorContentResult {
   isEquivalentToImportedContent: (externalContent: string | undefined, currentMarkdown: string) => boolean;
   rememberImportedContent: (text: string) => void;
   onEditorUpdate: ({ editor }: { editor: Editor }) => void;
@@ -30,7 +30,7 @@ export function useContent({
   resetHeadingIndex,
   resetSourceLineTracker,
   onContentChange
-}: UseBMarkdownContentParams): UseBMarkdownContentResult {
+}: UseEditorContentParams): UseEditorContentResult {
   let lastImportedRawContent = '';
   let lastImportedCanonicalContent = '';
 

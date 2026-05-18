@@ -23,6 +23,8 @@
           :editor-state="editorState"
           :editable="editable"
           :on-search-match-element-focus="scrollSearchMatchElementIntoView"
+          :on-selection-host-change="handleRichSelectionHostChange"
+          :on-selection-overlay-change="recomputeSelectionOverlays"
           @editor-blur="handleEditorBlur"
         />
 
@@ -35,7 +37,40 @@
           :editor-state="editorState"
           :on-anchor-scroll="scrollSourceAnchorIntoView"
           :editable="editable"
+          :on-selection-host-change="handleSourceSelectionHostChange"
+          :on-selection-overlay-change="recomputeSelectionOverlays"
           @editor-blur="handleEditorBlur"
+        />
+
+        <SelectionToolbarRich
+          v-if="isRichMode && selectionToolbarKind === 'rich' && currentRichSelectionHost?.editor"
+          :editor="currentRichSelectionHost.editor"
+          :visible="selectionAssistant.toolbarVisible.value"
+          :position="selectionAssistant.toolbarPosition.value"
+          :overlay-root="currentRichSelectionHost.overlayRoot"
+          :format-buttons="formatButtons"
+          @ai="selectionAssistant.openAIInput()"
+          @reference="selectionAssistant.insertReference()"
+        />
+
+        <SelectionToolbarSource
+          v-else-if="!isRichMode && selectionToolbarKind === 'source'"
+          :visible="selectionAssistant.toolbarVisible.value"
+          :position="selectionAssistant.toolbarPosition.value"
+          :overlay-root="currentSourceSelectionHost?.overlayRoot"
+          :format-buttons="[]"
+          @ai="selectionAssistant.openAIInput()"
+          @reference="selectionAssistant.insertReference()"
+        />
+
+        <SelectionAIInput
+          :visible="selectionAssistant.aiInputVisible.value"
+          :adapter="currentSelectionAdapter"
+          :selection-range="selectionAssistant.cachedSelectionRange.value"
+          :position="selectionAssistant.panelPosition.value"
+          @update:visible="handleSelectionAIVisibleChange"
+          @apply="selectionAssistant.applyAIResult($event)"
+          @streaming-change="selectionAssistant.setStreaming($event)"
         />
       </div>
 
@@ -65,23 +100,30 @@
 </template>
 
 <script setup lang="ts">
-import type { BMarkdownPublicInstance, EditorController, EditorSearchState } from './adapters/types';
+import type { SelectionAssistantAdapter, SelectionToolbarAction } from './adapters/selectionAssistant';
 import type { AnchorRecord } from './hooks/useAnchors';
-import type { EditorState } from './types';
+import type { EditorController, EditorPublicInstance, EditorSearchState, EditorState } from './types';
+import type { Editor as TiptapEditor } from '@tiptap/vue-3';
 import type { CSSProperties } from 'vue';
-import { computed, ref, toRef } from 'vue';
+import { computed, onBeforeUnmount, ref, shallowRef, toRef, watch } from 'vue';
+import { editorToolContextRegistry } from '@/ai/tools/editor-context';
 import BMonaco from '@/components/BMonaco/index.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { handleEditorAnchorNavigation } from './adapters/editorAnchorNavigation';
-import FindBar from './components/FindBar.vue';
-import PaneRichEditor from './components/PaneRichEditor.vue';
-import PaneSourceEditor from './components/PaneSourceEditor.vue';
-import QuickActions from './components/QuickActions.vue';
 import Sidebar from './components/Sidebar.vue';
 import { resolveEditorKind } from './constants/resolver';
 import { useAnchors } from './hooks/useAnchors';
 import { useEditorController } from './hooks/useEditorController';
+import { createEditorToolContext } from './hooks/useEditorToolContext';
+import { useSelectionAssistant } from './hooks/useSelectionAssistant';
+import PaneRichEditor from './panes/PaneRichEditor.vue';
+import PaneSourceEditor from './panes/PaneSourceEditor.vue';
+import FindBar from './shared/FindBar.vue';
+import QuickActions from './shared/QuickActions.vue';
+import SelectionAIInput from './shared/SelectionAIInput.vue';
+import SelectionToolbarRich from './shared/SelectionToolbarRich.vue';
+import SelectionToolbarSource from './shared/SelectionToolbarSource.vue';
 
 const layoutRef = ref<HTMLElement | null>(null);
 const scrollbarRef = ref<InstanceType<typeof BScrollbar> | null>(null);
@@ -93,10 +135,35 @@ const editorPreferencesStore = useEditorPreferencesStore();
 interface Props {
   /** 是否可编辑。 */
   editable?: boolean;
+  /** 当前编辑器是否处于活跃状态。 */
+  active?: boolean;
+}
+
+/**
+ * Rich 模式选区宿主状态。
+ */
+interface RichSelectionHostState {
+  /** 当前浮层根节点 */
+  overlayRoot: HTMLElement | null;
+  /** 当前选区适配器 */
+  adapter: SelectionAssistantAdapter | null;
+  /** 当前 Tiptap 编辑器实例 */
+  editor: TiptapEditor | null;
+}
+
+/**
+ * Source 模式选区宿主状态。
+ */
+interface SourceSelectionHostState {
+  /** 当前浮层根节点 */
+  overlayRoot: HTMLElement | null;
+  /** 当前选区适配器 */
+  adapter: SelectionAssistantAdapter | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  editable: true
+  editable: true,
+  active: true
 });
 
 const emit = defineEmits(['rename-file', 'save', 'save-as', 'copy-path', 'show-in-folder', 'editor-blur']);
@@ -115,6 +182,9 @@ const richEditorPaneRef = ref<(EditorController & { recomputeSelectionOverlays?:
 const sourceEditorPaneRef = ref<EditorController | null>(null);
 const monacoEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
 const findBarVisible = ref(false);
+const lastRegisteredDocumentId = ref('');
+const currentRichSelectionHost = shallowRef<RichSelectionHostState | null>(null);
+const currentSourceSelectionHost = shallowRef<SourceSelectionHostState | null>(null);
 
 const editorPageMaxWidth = computed<string>(() => {
   switch (editorPreferencesStore.pageWidth) {
@@ -133,6 +203,67 @@ const editorContainerStyle = computed<CSSProperties>(() => ({
 
 const { activeAnchorId, handleChangeAnchor, handleEditorScroll, setActiveAnchorId } = useAnchors(layoutRef, scrollbarRef);
 const markdownEditorController = useEditorController({ isRichMode, richEditorPaneRef, sourceEditorPaneRef });
+const currentSelectionAdapter = computed<SelectionAssistantAdapter | null>(() => {
+  if (editorKind.value !== 'markdown') {
+    return null;
+  }
+
+  return isRichMode.value ? currentRichSelectionHost.value?.adapter ?? null : currentSourceSelectionHost.value?.adapter ?? null;
+});
+const selectionToolbarKind = computed<'rich' | 'source' | null>(() => {
+  if (editorKind.value !== 'markdown') {
+    return null;
+  }
+
+  return isRichMode.value ? 'rich' : 'source';
+});
+const selectionAssistant = useSelectionAssistant({
+  adapter: () => currentSelectionAdapter.value,
+  isEditable: () => editable.value
+});
+
+/** Rich 模式格式按钮列表。 */
+const formatButtons = computed(() => [
+  { command: 'bold' as SelectionToolbarAction, icon: 'lucide:bold' },
+  { command: 'italic' as SelectionToolbarAction, icon: 'lucide:italic' },
+  { command: 'underline' as SelectionToolbarAction, icon: 'lucide:underline' },
+  { command: 'strike' as SelectionToolbarAction, icon: 'lucide:strikethrough' },
+  { command: 'link' as SelectionToolbarAction, icon: 'lucide:link' },
+  { command: 'code' as SelectionToolbarAction, icon: 'lucide:code' }
+]);
+
+/**
+ * 接收 Rich pane 回传的选区宿主状态。
+ * @param payload - 当前选区宿主状态
+ */
+function handleRichSelectionHostChange(payload: RichSelectionHostState | null): void {
+  currentRichSelectionHost.value = payload;
+}
+
+/**
+ * 接收 Source pane 回传的选区宿主状态。
+ * @param payload - 当前选区宿主状态
+ */
+function handleSourceSelectionHostChange(payload: SourceSelectionHostState | null): void {
+  currentSourceSelectionHost.value = payload;
+}
+
+/**
+ * 请求重算当前选区浮层位置。
+ */
+function recomputeSelectionOverlays(): void {
+  selectionAssistant.recomputeAllPositions();
+}
+
+/**
+ * 处理 AI 输入层显隐变化。
+ * @param visible - 最新显隐状态
+ */
+function handleSelectionAIVisibleChange(visible: boolean): void {
+  if (!visible) {
+    selectionAssistant.closeAIInput();
+  }
+}
 
 /**
  * 统一读取当前活动的编辑器控制器。
@@ -145,6 +276,64 @@ function getEditorController(): EditorController | null {
 
   return markdownEditorController.value;
 }
+
+/**
+ * 注销已注册的编辑器工具上下文。
+ */
+function unregisterEditorToolContext(): void {
+  if (!lastRegisteredDocumentId.value) {
+    return;
+  }
+
+  editorToolContextRegistry.unregister(lastRegisteredDocumentId.value);
+  lastRegisteredDocumentId.value = '';
+}
+
+/**
+ * 根据当前激活的编辑器实例注册统一工具上下文。
+ */
+function registerEditorToolContext(): void {
+  const editorInstance = getEditorController();
+  const documentId = editorState.value.id;
+
+  unregisterEditorToolContext();
+
+  if (!props.active || !editorInstance || !documentId) {
+    return;
+  }
+
+  editorToolContextRegistry.register(
+    documentId,
+    createEditorToolContext({
+      fileState: editorState.value,
+      editorInstance
+    })
+  );
+  lastRegisteredDocumentId.value = documentId;
+}
+
+watch(
+  [
+    () => props.active,
+    editorKind,
+    () => isRichMode.value,
+    () => editorState.value.id,
+    () => editorState.value.name,
+    () => editorState.value.path,
+    () => editorState.value.ext,
+    richEditorPaneRef,
+    sourceEditorPaneRef,
+    monacoEditorRef
+  ],
+  (): void => {
+    registerEditorToolContext();
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  unregisterEditorToolContext();
+});
 
 /**
  * 仅当焦点真正离开整个编辑器交互区域时，向外抛出统一的 editor-blur 事件。
@@ -220,7 +409,7 @@ function handleEditorAnchorChange(record: AnchorRecord): void {
 function handleEditorScrollEvent(): void {
   if (isRichMode.value) {
     handleEditorScroll();
-    richEditorPaneRef.value?.recomputeSelectionOverlays?.();
+    recomputeSelectionOverlays();
     return;
   }
 
@@ -231,10 +420,12 @@ function handleEditorScrollEvent(): void {
 
   if (scrollElement.scrollTop < 50) {
     setActiveAnchorId('');
+    recomputeSelectionOverlays();
     return;
   }
 
   setActiveAnchorId(markdownEditorController.value.getActiveAnchorId(scrollElement, 100));
+  recomputeSelectionOverlays();
 }
 
 function setContent(text: string): void {
@@ -311,7 +502,7 @@ async function selectLineRange(startLine: number, endLine: number): Promise<bool
   return getEditorController()?.selectLineRange(startLine, endLine) ?? false;
 }
 
-const editorPublicInstance = computed<BMarkdownPublicInstance>(() => ({
+const editorPublicInstance = computed<EditorPublicInstance>(() => ({
   undo,
   redo,
   canUndo,

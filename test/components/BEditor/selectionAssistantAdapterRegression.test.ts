@@ -17,16 +17,12 @@ function readSource(relativePath: string): string {
 
 describe('selection assistant adapter regression', () => {
   test('routes AI input visibility and apply actions through the orchestration layer', () => {
-    const richEditorContentSource = readSource('src/components/BEditor/components/PaneRichEditor.vue');
-    const sourceEditorPaneSource = readSource('src/components/BEditor/components/PaneSourceEditor.vue');
-    const aiInputSource = readSource('src/components/BEditor/components/SelectionAIInput.vue');
+    const editorIndexSource = readSource('src/components/BEditor/index.vue');
+    const aiInputSource = readSource('src/components/BEditor/shared/SelectionAIInput.vue');
 
-    expect(richEditorContentSource).toContain(':visible="assistant.aiInputVisible.value"');
-    expect(richEditorContentSource).toContain('@update:visible="onAIInputVisibleChange"');
-    expect(richEditorContentSource).toContain('@apply="assistant.applyAIResult($event)"');
-    expect(sourceEditorPaneSource).toContain(':visible="assistant.aiInputVisible.value"');
-    expect(sourceEditorPaneSource).toContain('@update:visible="onAIInputVisibleChange"');
-    expect(sourceEditorPaneSource).toContain('@apply="assistant.applyAIResult($event)"');
+    expect(editorIndexSource).toContain(':visible="selectionAssistant.aiInputVisible.value"');
+    expect(editorIndexSource).toContain('@update:visible="handleSelectionAIVisibleChange"');
+    expect(editorIndexSource).toContain('@apply="selectionAssistant.applyAIResult($event)"');
     expect(aiInputSource).toContain("(e: 'update:visible', value: boolean): void;");
     expect(aiInputSource).toContain("(e: 'apply', content: string): void;");
     expect(aiInputSource).not.toContain('props.adapter.applyGeneratedContent(props.selectionRange, previewText.value)');
@@ -34,20 +30,20 @@ describe('selection assistant adapter regression', () => {
   });
 
   test('keeps rich toolbar visibility under assistant state control', () => {
-    const richToolbarHostSource = readSource('src/components/BEditor/components/SelectionToolbarRich.vue');
-    const richEditorContentSource = readSource('src/components/BEditor/components/PaneRichEditor.vue');
+    const richToolbarHostSource = readSource('src/components/BEditor/shared/SelectionToolbarRich.vue');
+    const editorIndexSource = readSource('src/components/BEditor/index.vue');
 
     expect(richToolbarHostSource).toContain('visible?: boolean;');
     expect(richToolbarHostSource).toContain('!props.visible');
-    expect(richEditorContentSource).toContain(':visible="assistant.toolbarVisible.value"');
+    expect(editorIndexSource).toContain(':visible="selectionAssistant.toolbarVisible.value"');
   });
 
   test('passes real file metadata into source-mode selection references', () => {
     const editorIndexSource = readSource('src/components/BEditor/index.vue');
-    const sourceEditorPaneSource = readSource('src/components/BEditor/components/PaneSourceEditor.vue');
+    const sourceEditorPaneSource = readSource('src/components/BEditor/panes/PaneSourceEditor.vue');
 
     expect(editorIndexSource).toContain(':editor-state="editorState"');
-    expect(sourceEditorPaneSource).toContain('editorState?: BMarkdownState;');
+    expect(sourceEditorPaneSource).toContain('editorState?: EditorState;');
     expect(sourceEditorPaneSource).toContain("editorState: () => ({ content: '', name: '', path: null, id: '', ext: '' })");
     expect(sourceEditorPaneSource).toContain('editorState: props.editorState');
   });
@@ -63,7 +59,7 @@ describe('selection assistant adapter regression', () => {
 
   test('unsubscribes rich editor keydown listeners without re-reading a destroyed editor view', () => {
     const richAdapterSource = readSource('src/components/BEditor/adapters/richSelectionAssistant.ts');
-    const sourceEditorPaneSource = readSource('src/components/BEditor/components/PaneSourceEditor.vue');
+    const sourceEditorPaneSource = readSource('src/components/BEditor/panes/PaneSourceEditor.vue');
 
     expect(richAdapterSource).toContain('const editorDom = editor.view.dom;');
     expect(richAdapterSource).toContain("editorDom.addEventListener('keydown', handleKeydown);");

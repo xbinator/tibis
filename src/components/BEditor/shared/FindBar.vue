@@ -33,7 +33,7 @@
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
-import type { BMarkdownPublicInstance, EditorSearchState as SearchState } from '@/components/BEditor/types';
+import type { EditorPublicInstance, EditorSearchState as SearchState } from '@/components/BEditor/types';
 import { EditorShortcuts } from '@/constants/shortcuts';
 import { useShortcuts } from '@/hooks/useShortcuts';
 import { createNamespace } from '@/utils/namespace';
@@ -41,7 +41,7 @@ import { createNamespace } from '@/utils/namespace';
 const [name, bem] = createNamespace('', 'b-markdown-findbar');
 
 interface Props {
-  editorInstance: BMarkdownPublicInstance | null;
+  editorInstance: EditorPublicInstance | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {

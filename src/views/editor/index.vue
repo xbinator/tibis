@@ -6,6 +6,7 @@
           ref="editorRef"
           :key="fileState.id"
           v-model:value="fileState"
+          :active="isActive"
           @editor-blur="actions.onEditorBlur"
           @rename-file="actions.onRename"
           @save="actions.onSave"
@@ -19,10 +20,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue';
+import { computed, onActivated, onDeactivated, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { editorToolContextRegistry } from '@/ai/tools/editor-context';
-import { createEditorToolContext } from '@/components/BEditor/hooks/useEditorToolContext';
 import BEditor from '@/components/BEditor/index.vue';
 import type { EditorController } from '@/components/BEditor/types';
 import { useBindings } from './hooks/useBindings';
@@ -47,50 +46,12 @@ useFileSelection({
   editorInstance: editorRef
 });
 
-/**
- * 注销当前编辑器工具上下文。
- */
-function unregisterEditorContext(): void {
-  const documentId = fileState.value.id;
-  if (documentId) {
-    editorToolContextRegistry.unregister(documentId);
-  }
-}
-
-/**
- * 注册当前激活编辑器的工具上下文。
- */
-function registerEditorContext(): void {
-  const editorInstance = editorRef.value;
-  const documentId = fileState.value.id;
-
-  if (!isActive.value || !editorInstance || !documentId) {
-    return;
-  }
-
-  editorToolContextRegistry.register(
-    documentId,
-    createEditorToolContext({
-      fileState: fileState.value,
-      editorInstance
-    })
-  );
-}
-
-watch([editorRef, () => fileState.value.id, () => fileState.value.name, () => fileState.value.path, () => fileState.value.ext], registerEditorContext);
-
 onActivated(() => {
   isActive.value = true;
-  registerEditorContext();
 });
 
 onDeactivated(() => {
   isActive.value = false;
-  unregisterEditorContext();
-});
-
-onBeforeUnmount(() => {
-  unregisterEditorContext();
 });
 </script>
 

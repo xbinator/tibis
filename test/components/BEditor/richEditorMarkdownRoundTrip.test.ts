@@ -9,7 +9,7 @@ import { useExtensions } from '@/components/BEditor/hooks/useExtensions';
 import { getPersistedMarkdown } from '@/components/BEditor/utils/editorMarkdown';
 
 /**
- * 创建带有当前 BMarkdown 扩展集的 Markdown 编辑器。
+ * 创建带有当前 BEditor 扩展集的 Markdown 编辑器。
  * @returns 可用于导入导出 Markdown 的编辑器实例
  */
 function createMarkdownEditor(): Editor {

@@ -1,14 +1,15 @@
 /**
  * @file index.page-width.test.ts
- * @description 验证 BMarkdown 正文区页宽设置映射。
+ * @description 验证 BEditor 正文区页宽设置映射。
  */
 /* @vitest-environment jsdom */
+/* eslint-disable vue/one-component-per-file */
 
 import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import BMarkdown from '@/components/BEditor/index.vue';
+import BEditor from '@/components/BEditor/index.vue';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 
 const storage = new Map<string, string>();
@@ -54,10 +55,10 @@ const PaneSourceEditorStub = defineComponent({
 
 /**
  * 挂载编辑器组件。
- * @returns BMarkdown 挂载结果
+ * @returns BEditor 挂载结果
  */
 function mountEditor(): VueWrapper {
-  return mount(BMarkdown, {
+  return mount(BEditor, {
     props: {
       value: {
         id: 'doc-1',
@@ -73,6 +74,9 @@ function mountEditor(): VueWrapper {
         Sidebar: true,
         QuickActions: true,
         FindBar: true,
+        SelectionAIInput: true,
+        SelectionToolbarRich: true,
+        SelectionToolbarSource: true,
         PaneRichEditor: PaneRichEditorStub,
         PaneSourceEditor: PaneSourceEditorStub
       }
@@ -90,7 +94,7 @@ async function mountSettledEditor(): Promise<VueWrapper> {
   return wrapper;
 }
 
-describe('BMarkdown page width', () => {
+describe('BEditor page width', () => {
   beforeEach(() => {
     vi.resetModules();
     localStorage.clear();

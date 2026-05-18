@@ -2,23 +2,6 @@
   <div :class="name" @focusout="handleEditorFocusOut">
     <div ref="overlayRootRef" :class="bem('host')">
       <div ref="editorViewHostRef" class="b-markdown-source__codemirror"></div>
-      <SelectionToolbarSource
-        :visible="assistant.toolbarVisible.value"
-        :position="assistant.toolbarPosition.value"
-        :overlay-root="overlayRootRef"
-        :format-buttons="[]"
-        @ai="assistant.openAIInput()"
-        @reference="assistant.insertReference()"
-      />
-      <SelectionAIInput
-        :visible="assistant.aiInputVisible.value"
-        :adapter="adapter"
-        :selection-range="assistant.cachedSelectionRange.value"
-        :position="assistant.panelPosition.value"
-        @update:visible="onAIInputVisibleChange"
-        @apply="assistant.applyAIResult($event)"
-        @streaming-change="assistant.setStreaming($event)"
-      />
     </div>
   </div>
 </template>
@@ -30,7 +13,7 @@
  */
 import type { SelectionAssistantAdapter } from '../adapters/selectionAssistant';
 import type { EditorController, EditorSearchState, EditorSelection as EditorSelectionRange } from '../adapters/types';
-import type { EditorState as BMarkdownState } from '../types';
+import type { EditorState } from '../types';
 import type { Extension } from '@codemirror/state';
 import type { ViewUpdate } from '@codemirror/view';
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
@@ -45,7 +28,7 @@ import {
   undoDepth
 } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
-import { Compartment, EditorSelection, EditorState } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState as CodeMirrorEditorState } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { useEventListener } from '@vueuse/core';
 import { createNamespace } from '@/utils/namespace';
@@ -65,24 +48,44 @@ import {
 } from '../adapters/sourceEditorSearch';
 import { createSourceSelectionAssistantAdapter, createSourceSelectionHighlightExtension } from '../adapters/sourceSelectionAssistant';
 import { useFrontMatter } from '../hooks/useFrontMatter';
-import { useSelectionAssistant } from '../hooks/useSelectionAssistant';
-import SelectionAIInput from './SelectionAIInput.vue';
-import SelectionToolbarSource from './SelectionToolbarSource.vue';
 
 const [name, bem] = createNamespace('', 'b-markdown-source');
+
+/**
+ * 空函数占位，供事件解绑时复用稳定引用。
+ */
+function noop(): void {
+  // noop
+}
+
+/**
+ * Source 模式回传给宿主的选区工具状态。
+ */
+interface SourceSelectionHostPayload {
+  /** 当前浮层根节点 */
+  overlayRoot: HTMLElement | null;
+  /** 当前选区适配器 */
+  adapter: SelectionAssistantAdapter | null;
+}
 
 interface Props {
   editorId?: string;
   editable?: boolean;
-  editorState?: BMarkdownState;
+  editorState?: EditorState;
   onAnchorScroll?: (hostElement: HTMLElement, offsetTop: number) => void;
+  /** 将选区工具宿主状态回传给上层统一编排 */
+  onSelectionHostChange?: (payload: SourceSelectionHostPayload | null) => void;
+  /** 请求上层重算选区浮层位置 */
+  onSelectionOverlayChange?: () => void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   editorId: '',
   editable: true,
   editorState: () => ({ content: '', name: '', path: null, id: '', ext: '' }),
-  onAnchorScroll: undefined
+  onAnchorScroll: undefined,
+  onSelectionHostChange: undefined,
+  onSelectionOverlayChange: undefined
 });
 const emit = defineEmits<{
   /**
@@ -101,22 +104,7 @@ const headingAnchorCompartment = new Compartment();
 const { bodyContent } = useFrontMatter(editorContent);
 
 const adapter = shallowRef<SelectionAssistantAdapter | null>(null);
-
-const assistant = useSelectionAssistant({
-  adapter: () => adapter.value,
-  isEditable: () => props.editable
-});
 let cleanupSelectionOverlayPosition: (() => void) | null = null;
-
-/**
- * 同步 AI 面板显隐到统一编排层。
- * @param visible - 面板是否可见
- */
-function onAIInputVisibleChange(visible: boolean): void {
-  if (!visible) {
-    assistant.closeAIInput();
-  }
-}
 
 /**
  * 将编辑区 focusout 事件统一转发给外层容器做语义过滤。
@@ -455,18 +443,18 @@ onMounted((): void => {
 
   editorView.value = new EditorView({
     parent,
-    state: EditorState.create({
+    state: CodeMirrorEditorState.create({
       doc: editorContent.value,
       extensions: createEditorExtensions()
     })
   });
   cleanupSelectionOverlayPosition = (): void => {
-    editorView.value?.scrollDOM.removeEventListener('scroll', assistant.recomputeAllPositions);
-    window.removeEventListener('scroll', assistant.recomputeAllPositions);
+    editorView.value?.scrollDOM.removeEventListener('scroll', props.onSelectionOverlayChange ?? noop);
+    window.removeEventListener('scroll', props.onSelectionOverlayChange ?? noop);
   };
-  editorView.value.scrollDOM.addEventListener('scroll', assistant.recomputeAllPositions);
+  editorView.value.scrollDOM.addEventListener('scroll', props.onSelectionOverlayChange ?? noop);
   // 页面级滚动（CodeMirror scroller 设为 overflow:visible 时 scrollDOM 不滚动，需监听 window）
-  window.addEventListener('scroll', assistant.recomputeAllPositions);
+  window.addEventListener('scroll', props.onSelectionOverlayChange ?? noop);
 
   // 创建 source adapter，注入文件上下文与浮层根容器
   adapter.value = createSourceSelectionAssistantAdapter(
@@ -477,9 +465,14 @@ onMounted((): void => {
     },
     () => props.editable
   );
+  props.onSelectionHostChange?.({
+    overlayRoot,
+    adapter: adapter.value
+  });
 });
 
 onBeforeUnmount((): void => {
+  props.onSelectionHostChange?.(null);
   cleanupSelectionOverlayPosition?.();
   cleanupSelectionOverlayPosition = null;
   adapter.value?.dispose?.();
@@ -489,7 +482,7 @@ onBeforeUnmount((): void => {
 });
 
 useEventListener(window, 'resize', () => {
-  assistant.recomputeAllPositions();
+  props.onSelectionOverlayChange?.();
 });
 
 const controller: EditorController = {

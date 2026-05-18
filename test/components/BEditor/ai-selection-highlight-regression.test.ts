@@ -17,7 +17,7 @@ function readSource(relativePath: string): string {
 
 describe('PaneRichEditor AI selection highlight regression', () => {
   test('renders custom selection highlight while hiding native browser selection painting', () => {
-    const richEditorContentSource = readSource('src/components/BEditor/components/PaneRichEditor.vue');
+    const richEditorContentSource = readSource('src/components/BEditor/panes/PaneRichEditor.vue');
 
     expect(richEditorContentSource).toContain('.ai-selection-highlight');
     expect(richEditorContentSource).toContain('color: var(--selection-color);');
@@ -31,7 +31,7 @@ describe('PaneRichEditor AI selection highlight regression', () => {
   });
 
   test('binds editor selection lifecycle to custom highlight updates instead of relying on native selection paint', () => {
-    const richEditorContentSource = readSource('src/components/BEditor/components/PaneRichEditor.vue');
+    const richEditorContentSource = readSource('src/components/BEditor/panes/PaneRichEditor.vue');
     const richAdapterSource = readSource('src/components/BEditor/adapters/richSelectionAssistant.ts');
     const selectionAssistantSource = readSource('src/components/BEditor/hooks/useSelectionAssistant.ts');
     const selectionHighlightSource = readSource('src/components/BEditor/extensions/aiRangeHighlight.ts');

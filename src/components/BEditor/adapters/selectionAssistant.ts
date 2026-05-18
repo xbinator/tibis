@@ -71,7 +71,7 @@ export interface SelectionAssistantCapabilities {
  * 适配器构建所需的编辑器上下文。
  */
 export interface SelectionAssistantContext {
-  /** BMarkdown 自定义文件上下文 */
+  /** 编辑器文件上下文 */
   editorState: EditorState;
   /** 宿主注入的浮层根容器；adapter 返回的所有定位信息都必须相对该容器 */
   overlayRoot: HTMLElement;

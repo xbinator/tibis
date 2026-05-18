@@ -7,8 +7,8 @@
 import { nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BMarkdownPublicInstance, EditorSearchState } from '@/components/BEditor/adapters/types';
-import FindBar from '@/components/BEditor/components/FindBar.vue';
+import type { EditorPublicInstance, EditorSearchState } from '@/components/BEditor/types';
+import FindBar from '@/components/BEditor/shared/FindBar.vue';
 import { EditorShortcuts } from '@/constants/shortcuts';
 
 /**
@@ -30,7 +30,7 @@ vi.mock('@/hooks/useShortcuts', () => ({
 /**
  * 可观测的编辑器实例 mock。
  */
-interface MockEditorInstance extends BMarkdownPublicInstance {
+interface MockEditorInstance extends EditorPublicInstance {
   /** 当前搜索状态快照 */
   snapshot: EditorSearchState;
   /** 设置搜索词 spy */
@@ -124,7 +124,7 @@ function createEditorInstance(): MockEditorInstance {
  * @param editorInstance - 编辑器实例
  * @returns 组件包装器
  */
-function mountFindBar(editorInstance: BMarkdownPublicInstance): VueWrapper<InstanceType<typeof FindBar>> {
+function mountFindBar(editorInstance: EditorPublicInstance): VueWrapper<InstanceType<typeof FindBar>> {
   return mount(FindBar, {
     props: {
       visible: true,

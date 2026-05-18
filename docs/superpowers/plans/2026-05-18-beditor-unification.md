@@ -4,7 +4,7 @@
 
 **Goal:** 将 `src/views/editor/index.vue` 的编辑器入口、`src/views/editor/drivers` 的兼容判断，以及原 `src/components/BMarkdown` 的实现能力统一迁移到 `src/components/BEditor` 域内，并彻底移除 `BMarkdown` 组织语义。
 
-**Architecture:** 以 `src/components/BEditor/index.vue` 作为唯一编辑器入口，内部基于 `fileState.ext` 解析渲染 Markdown 或 Monaco pane。统一类型、控制器、公共交互层和工具上下文全部收口到 `BEditor` 域中；Markdown 和 Monaco 只保留底层实现责任。
+**Architecture:** 以 `src/components/BEditor/index.vue` 作为唯一编辑器入口，内部基于 `fileState.ext` 解析渲染 Markdown 或 `BMonaco`。统一类型、控制器、公共交互层和工具上下文全部收口到 `BEditor` 域中；Markdown 保留在 `BEditor` 域内，Monaco 则抽为独立低层组件。
 
 **Tech Stack:** Vue 3.5、TypeScript、TipTap 3、CodeMirror 6、Monaco Editor、Pinia、Vitest、ESLint
 
@@ -22,8 +22,10 @@
   - 封装组件层文件类型分流。
 - Create: `src/components/BEditor/hooks/useEditorToolContext.ts`
   - 封装统一工具上下文注册输入。
-- Create: `src/components/BEditor/panes/PaneMonaco.vue`
+- Create: `src/components/BMonaco/index.vue`
   - 承接 Monaco 低层实现。
+- Create: `src/components/BMonaco/utils/createMonacoEditor.ts`
+  - 承接 Monaco 初始化与 worker / theme 适配。
 - Create: `src/components/BEditor/panes/PaneMarkdownRich.vue`
   - 从原 `BMarkdown/components/PaneRichEditor.vue` 迁入。
 - Create: `src/components/BEditor/panes/PaneMarkdownSource.vue`
@@ -38,7 +40,7 @@
 ### Modified Files
 
 - Modify: `src/components/BEditor/index.vue`
-  - 从单一 Monaco 入口重构为统一编辑器入口。
+  - 从单一 Monaco 入口重构为统一编辑器入口，并接入 `BMonaco`。
 - Modify: `src/views/editor/index.vue`
   - 移除 `resolveEditorDriver`，固定渲染 `BEditor`。
 - Modify: `src/views/editor/hooks/useBindings.ts`
@@ -203,13 +205,14 @@ git add src/components/BEditor/types.ts src/components/BEditor/constants/resolve
 git commit -m "refactor: establish beditor unified boundaries"
 ```
 
-## Task 2: 抽离 Monaco 为 BEditor 低层 pane
+## Task 2: 抽离 Monaco 为独立 BMonaco 组件
 
 **Files:**
 - Modify: `src/components/BEditor/index.vue`
-- Create: `src/components/BEditor/panes/PaneMonaco.vue`
-- Modify: `src/components/BEditor/utils/createMonacoEditor.ts`
+- Create: `src/components/BMonaco/index.vue`
+- Create: `src/components/BMonaco/utils/createMonacoEditor.ts`
 - Test: `test/components/BEditor/index.test.ts`
+- Test: `test/components/BMonaco/index.test.ts`
 
 - [ ] **Step 1: 写失败测试，锁定 BEditor 对 json 的渲染**
 
@@ -217,7 +220,7 @@ git commit -m "refactor: establish beditor unified boundaries"
 import { mount } from '@vue/test-utils'
 import BEditor from '@/components/BEditor/index.vue'
 
-it('renders monaco pane for json files', () => {
+it('renders BMonaco for json files', () => {
   const wrapper = mount(BEditor, {
     props: {
       value: {
@@ -230,21 +233,21 @@ it('renders monaco pane for json files', () => {
     }
   })
 
-  expect(wrapper.findComponent({ name: 'PaneMonaco' }).exists()).toBe(true)
+  expect(wrapper.findComponent({ name: 'BMonaco' }).exists()).toBe(true)
 })
 ```
 
 - [ ] **Step 2: 运行测试，确认当前失败**
 
-Run: `pnpm vitest run test/components/BEditor/index.test.ts -t "renders monaco pane for json files"`
+Run: `pnpm vitest run test/components/BEditor/index.test.ts -t "renders BMonaco for json files"`
 
-Expected: FAIL，提示找不到 `PaneMonaco` 或 `BEditor` 仍是旧实现。
+Expected: FAIL，提示找不到 `BMonaco` 或 `BEditor` 仍是旧实现。
 
-- [ ] **Step 3: 抽出 `PaneMonaco.vue` 并改造 `BEditor` 入口**
+- [ ] **Step 3: 抽出 `BMonaco` 并改造 `BEditor` 入口**
 
 ```vue
 <template>
-  <PaneMonaco
+  <BMonaco
     v-if="editorKind === 'monaco'"
     ref="editorPaneRef"
     v-model:value="editorState"
@@ -257,7 +260,7 @@ Expected: FAIL，提示找不到 `PaneMonaco` 或 `BEditor` 仍是旧实现。
 import { computed, ref } from 'vue'
 import type { EditorController, EditorState } from './types'
 import { resolveEditorKind } from './constants/resolver'
-import PaneMonaco from './panes/PaneMonaco.vue'
+import BMonaco from '@/components/BMonaco/index.vue'
 
 interface Props {
   /** 是否允许编辑 */
@@ -296,15 +299,15 @@ defineExpose<EditorController>({
 
 - [ ] **Step 4: 运行测试，确认通过**
 
-Run: `pnpm vitest run test/components/BEditor/index.test.ts -t "renders monaco pane for json files"`
+Run: `pnpm vitest run test/components/BEditor/index.test.ts -t "renders BMonaco for json files"`
 
 Expected: PASS
 
 - [ ] **Step 5: 提交本任务**
 
 ```bash
-git add src/components/BEditor/index.vue src/components/BEditor/panes/PaneMonaco.vue src/components/BEditor/utils/createMonacoEditor.ts test/components/BEditor/index.test.ts
-git commit -m "refactor: extract monaco pane under beditor"
+git add src/components/BEditor/index.vue src/components/BMonaco/index.vue src/components/BMonaco/utils/createMonacoEditor.ts test/components/BEditor/index.test.ts test/components/BMonaco/index.test.ts
+git commit -m "refactor: extract bmonaco from beditor"
 ```
 
 ## Task 3: 将 Markdown pane、hooks、adapters、extensions 并入 BEditor
@@ -613,4 +616,3 @@ git commit -m "refactor: unify editor entry under beditor"
 - `pnpm vitest run test/ai/tools/editor-context.test.ts`
 - `pnpm exec tsc --noEmit`
 - `pnpm exec eslint src/components/BEditor src/views/editor --ext .ts,.vue`
-

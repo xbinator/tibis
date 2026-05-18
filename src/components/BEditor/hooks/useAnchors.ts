@@ -9,7 +9,7 @@ export interface AnchorRecord {
   text: string;
 }
 
-interface UseBMarkdownAnchorsResult {
+interface UseEditorAnchorsResult {
   activeAnchorId: Ref<string>;
   handleChangeAnchor: (record: AnchorRecord) => void;
   handleEditorScroll: () => void;
@@ -25,7 +25,7 @@ const RICH_HEADING_SELECTOR = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((tag) => 
 const SOURCE_HEADING_SELECTOR = '.b-markdown-source__codemirror .cm-line[id]';
 const HEADING_SELECTOR = `${RICH_HEADING_SELECTOR}, ${SOURCE_HEADING_SELECTOR}`;
 
-export function useAnchors(layoutRef: Ref<HTMLElement | null>, scrollbarRef: Ref<InstanceType<typeof BScrollbar> | null>): UseBMarkdownAnchorsResult {
+export function useAnchors(layoutRef: Ref<HTMLElement | null>, scrollbarRef: Ref<InstanceType<typeof BScrollbar> | null>): UseEditorAnchorsResult {
   const activeAnchorId = ref('');
 
   function getScrollbar(): BScrollbarExposed | null {

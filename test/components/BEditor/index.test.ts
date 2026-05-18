@@ -18,7 +18,7 @@ vi.mock('@/components/BMonaco/index.vue', () => ({
   }
 }));
 
-vi.mock('@/components/BEditor/components/PaneRichEditor.vue', () => ({
+vi.mock('@/components/BEditor/panes/PaneRichEditor.vue', () => ({
   default: {
     name: 'PaneRichEditor',
     props: ['value', 'outlineContent', 'editorState', 'editable', 'onSearchMatchElementFocus'],
@@ -27,7 +27,7 @@ vi.mock('@/components/BEditor/components/PaneRichEditor.vue', () => ({
   }
 }));
 
-vi.mock('@/components/BEditor/components/PaneSourceEditor.vue', () => ({
+vi.mock('@/components/BEditor/panes/PaneSourceEditor.vue', () => ({
   default: {
     name: 'PaneSourceEditor',
     props: ['value', 'outlineContent', 'editorState', 'editable', 'editorId', 'onAnchorScroll'],
@@ -85,6 +85,18 @@ describe('BEditor', () => {
           FindBar: {
             name: 'FindBar',
             template: '<div class="find-bar-stub" />'
+          },
+          SelectionToolbarRich: {
+            name: 'SelectionToolbarRich',
+            template: '<div class="selection-toolbar-rich-stub" />'
+          },
+          SelectionToolbarSource: {
+            name: 'SelectionToolbarSource',
+            template: '<div class="selection-toolbar-source-stub" />'
+          },
+          SelectionAIInput: {
+            name: 'SelectionAIInput',
+            template: '<div class="selection-ai-input-stub" />'
           }
         }
       }

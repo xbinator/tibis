@@ -39,8 +39,6 @@ export interface EditorController {
   getActiveAnchorId: (scrollContainer: HTMLElement, thresholdPx: number) => string;
 }
 
-export type BMarkdownPublicInstance = Omit<EditorController, 'focusEditorAtStart' | 'scrollToAnchor' | 'getActiveAnchorId'>;
-
 export function createNoopEditorController(): EditorController {
   return {
     undo: noop,

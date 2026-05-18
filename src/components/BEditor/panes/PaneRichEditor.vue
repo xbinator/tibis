@@ -14,41 +14,18 @@
     <!-- 当前选中块菜单 -->
     <CurrentBlockMenu :editor="editorInstance" />
 
-    <!-- Rich 模式选区工具栏宿主 -->
-    <SelectionToolbarRich
-      v-if="editorInstance && adapter"
-      ref="toolbarHostRef"
-      :editor="editorInstance"
-      :visible="assistant.toolbarVisible.value"
-      :position="assistant.toolbarPosition.value"
-      :overlay-root="overlayRootRef"
-      :format-buttons="formatButtons"
-      @ai="onToolbarAI"
-      @reference="assistant.insertReference()"
-    />
-
-    <!-- 选择 AI 输入框 -->
-    <SelectionAIInput
-      :visible="assistant.aiInputVisible.value"
-      :adapter="adapter"
-      :selection-range="assistant.cachedSelectionRange.value"
-      :position="assistant.panelPosition.value"
-      @update:visible="onAIInputVisibleChange"
-      @apply="assistant.applyAIResult($event)"
-      @streaming-change="assistant.setStreaming($event)"
-    />
-
     <!-- 编辑器内容 -->
     <EditorContent :key="editorState?.id" :editor="editorInstance ?? undefined" class="b-markdown-rich__content" />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { SelectionAssistantAdapter, SelectionToolbarAction } from '../adapters/selectionAssistant';
+import type { SelectionAssistantAdapter } from '../adapters/selectionAssistant';
 import type { EditorController, EditorSearchState, EditorSelection as EditorSelectionRange } from '../adapters/types';
 import type { SearchScrollContext } from '../extensions/editorSearch';
 import type { FrontMatterData } from '../hooks/useFrontMatter';
 import type { EditorState } from '../types';
+import type { Editor as TiptapEditor } from '@tiptap/vue-3';
 import { computed, onBeforeUnmount, ref, shallowRef, toRef, watch } from 'vue';
 import { EditorContent } from '@tiptap/vue-3';
 import { useEventListener } from '@vueuse/core';
@@ -57,18 +34,27 @@ import { createNamespace } from '@/utils/namespace';
 import { findHeadingElementByHash, scrollHeadingIntoView } from '../adapters/richEditorAnchorLinks';
 import { createRichSelectionAssistantAdapter } from '../adapters/richSelectionAssistant';
 import { mapSourceLineRangeToProseMirrorRange } from '../adapters/sourceLineMapping';
+import CurrentBlockMenu from '../components/CurrentBlockMenu.vue';
+import FrontMatterCard from '../components/FrontMatterCard.vue';
 import { setAISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { getSearchSnapshot } from '../extensions/editorSearch';
 import { useFrontMatter } from '../hooks/useFrontMatter';
 import { useRichEditor } from '../hooks/useRichEditor';
-import { useSelectionAssistant } from '../hooks/useSelectionAssistant';
 import { getPersistedMarkdown } from '../utils/editorMarkdown';
-import CurrentBlockMenu from './CurrentBlockMenu.vue';
-import FrontMatterCard from './FrontMatterCard.vue';
-import SelectionAIInput from './SelectionAIInput.vue';
-import SelectionToolbarRich from './SelectionToolbarRich.vue';
 
 const [name] = createNamespace('', 'b-markdown-rich');
+
+/**
+ * Rich 模式回传给宿主的选区工具状态。
+ */
+interface RichSelectionHostPayload {
+  /** 当前浮层根节点 */
+  overlayRoot: HTMLElement | null;
+  /** 当前选区适配器 */
+  adapter: SelectionAssistantAdapter | null;
+  /** 当前 Tiptap 编辑器实例 */
+  editor: TiptapEditor | null;
+}
 
 interface Props {
   /** 编辑器是否可编辑 */
@@ -77,12 +63,18 @@ interface Props {
   editorState?: EditorState;
   /** 搜索匹配元素聚焦回调 */
   onSearchMatchElementFocus?: (targetElement: HTMLElement) => void;
+  /** 将选区工具宿主状态回传给上层统一编排 */
+  onSelectionHostChange?: (payload: RichSelectionHostPayload | null) => void;
+  /** 请求上层重算选区浮层位置 */
+  onSelectionOverlayChange?: () => void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   editable: true,
   editorState: () => ({ content: '', name: '', path: '', id: '', ext: '' }),
-  onSearchMatchElementFocus: undefined
+  onSearchMatchElementFocus: undefined,
+  onSelectionHostChange: undefined,
+  onSelectionOverlayChange: undefined
 });
 const emit = defineEmits<{
   /**
@@ -186,13 +178,7 @@ watch(
 
 // ---- Adapter & Orchestration ----
 
-const toolbarHostRef = ref<InstanceType<typeof SelectionToolbarRich> | null>(null);
 const adapter = shallowRef<SelectionAssistantAdapter | null>(null);
-
-const assistant = useSelectionAssistant({
-  adapter: () => adapter.value,
-  isEditable: () => props.editable
-});
 
 watch(
   [editorInstance, overlayRootRef, () => props.editorState],
@@ -209,42 +195,28 @@ watch(
   { immediate: true }
 );
 
+watch(
+  [editorInstance, overlayRootRef, adapter],
+  ([editor, root, nextAdapter]) => {
+    if (editor) {
+      props.onSelectionHostChange?.({
+        overlayRoot: root,
+        adapter: nextAdapter,
+        editor
+      });
+      return;
+    }
+
+    props.onSelectionHostChange?.(null);
+  },
+  { immediate: true }
+);
+
 onBeforeUnmount(() => {
+  props.onSelectionHostChange?.(null);
   adapter.value?.dispose?.();
   adapter.value = null;
 });
-
-// ---- Format Buttons ----
-
-/** Rich 模式格式按钮列表 */
-const formatButtons = computed(() => [
-  { command: 'bold' as SelectionToolbarAction, icon: 'lucide:bold' },
-  { command: 'italic' as SelectionToolbarAction, icon: 'lucide:italic' },
-  { command: 'underline' as SelectionToolbarAction, icon: 'lucide:underline' },
-  { command: 'strike' as SelectionToolbarAction, icon: 'lucide:strikethrough' },
-  { command: 'link' as SelectionToolbarAction, icon: 'lucide:link' },
-  { command: 'code' as SelectionToolbarAction, icon: 'lucide:code' }
-]);
-
-// ---- Toolbar Actions ----
-
-/**
- * 点击"AI 助手"按钮，先通过 host 主动隐藏工具栏，再打开 AI 面板。
- */
-function onToolbarAI(): void {
-  toolbarHostRef.value?.suppress();
-  assistant.openAIInput();
-}
-
-/**
- * 同步 AI 面板显隐到统一编排层。
- * @param visible - 面板是否可见
- */
-function onAIInputVisibleChange(visible: boolean): void {
-  if (!visible) {
-    assistant.closeAIInput();
-  }
-}
 
 // ---- Front Matter ----
 
@@ -505,7 +477,7 @@ function getActiveAnchorId(): string {
  * rich 模式实际滚动发生在外层 BScrollbar 中，因此需要由宿主在容器滚动时主动触发重算。
  */
 function recomputeSelectionOverlays(): void {
-  assistant.recomputeAllPositions();
+  props.onSelectionOverlayChange?.();
 }
 
 const controller: EditorController & { setContent: (text: string) => void } = {
@@ -531,7 +503,7 @@ const controller: EditorController & { setContent: (text: string) => void } = {
 };
 
 useEventListener(window, 'resize', () => {
-  assistant.recomputeAllPositions();
+  props.onSelectionOverlayChange?.();
 });
 
 defineExpose({

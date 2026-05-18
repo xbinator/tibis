@@ -42,7 +42,7 @@ import { Search, type SearchScrollContext } from '../extensions/editorSearch';
 
 const lowlight = createLowlight(common);
 
-interface UseBMarkdownExtensionsResult {
+interface UseEditorExtensionsResult {
   assignHeadingIds: (editor: Editor) => void;
   editorExtensions: AnyExtension[];
   resetSourceLineTracker: () => void;
@@ -353,7 +353,7 @@ function renderMarkdownTableFallback(node: JSONContent, helpers: { renderChildre
   ].join('\n');
 }
 
-export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensionsOptions = {}): UseBMarkdownExtensionsResult {
+export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensionsOptions = {}): UseEditorExtensionsResult {
   let headingIndex = 0;
   const sourceLineTracker = createSourceLineTracker();
 

@@ -1,15 +1,16 @@
 /**
- * @file selectionToolbarSource.test.ts
- * @description SelectionToolbarSource 浮层边界收敛测试。
+ * @file selectionToolbarRich.test.ts
+ * @description SelectionToolbarRich 绝对定位回归测试。
  * @vitest-environment jsdom
  */
 
+import type { Editor } from '@tiptap/vue-3';
 import { defineComponent, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { SelectionAssistantPosition } from '@/components/BEditor/adapters/selectionAssistant';
-import SelectionToolbarSource from '@/components/BEditor/components/SelectionToolbarSource.vue';
+import SelectionToolbarRich from '@/components/BEditor/shared/SelectionToolbarRich.vue';
 
 /**
  * 通用空操作函数。
@@ -58,6 +59,26 @@ const SelectionToolbarStub = defineComponent({
 });
 
 /**
+ * 创建最小可用的 Tiptap 编辑器桩对象。
+ * @returns 测试用编辑器实例
+ */
+function createEditorStub(): Editor {
+  return {
+    isEditable: true,
+    isActive: vi.fn(() => false),
+    chain: vi.fn(() => ({
+      focus: () => ({
+        toggleBold: () => ({ run: vi.fn() }),
+        toggleItalic: () => ({ run: vi.fn() }),
+        toggleUnderline: () => ({ run: vi.fn() }),
+        toggleStrike: () => ({ run: vi.fn() }),
+        toggleCode: () => ({ run: vi.fn() })
+      })
+    }))
+  } as unknown as Editor;
+}
+
+/**
  * 创建定位信息。
  * @param anchorLeft - 锚点横坐标
  * @param anchorTop - 锚点纵坐标
@@ -75,7 +96,7 @@ function createPosition(anchorLeft: number, anchorTop: number, selectionHeight =
     selectionRect: {
       top: anchorTop,
       left: anchorLeft,
-      width: 0,
+      width: 80,
       height: selectionHeight
     },
     lineHeight: 20,
@@ -155,14 +176,14 @@ function readPx(element: HTMLElement, property: 'top' | 'left'): number {
  * @returns 工具栏宿主元素
  */
 function getToolbarElement(): HTMLElement {
-  const element = document.body.querySelector('.b-markdown-selsource');
+  const element = document.body.querySelector('.b-markdown-selrich');
   if (!(element instanceof HTMLElement)) {
     throw new Error('Selection toolbar element was not rendered.');
   }
   return element;
 }
 
-describe('SelectionToolbarSource', () => {
+describe('SelectionToolbarRich', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
@@ -175,11 +196,13 @@ describe('SelectionToolbarSource', () => {
     const overlayRoot = document.createElement('div');
     document.body.appendChild(overlayRoot);
 
-    mount(SelectionToolbarSource, {
+    mount(SelectionToolbarRich, {
       props: {
+        editor: createEditorStub(),
         visible: true,
         overlayRoot,
-        position: createPosition(80, 60)
+        position: createPosition(80, 60),
+        formatButtons: []
       },
       global: {
         stubs: {
@@ -195,17 +218,17 @@ describe('SelectionToolbarSource', () => {
     expect(toolbar.style.visibility).toBe('hidden');
   });
 
-  test('hides immediately on overlay pointerdown even before the visible prop changes', async () => {
+  test('renders above the selection when there is enough space', async () => {
     const overlayRoot = document.createElement('div');
-    const editorSurface = document.createElement('div');
-    overlayRoot.appendChild(editorSurface);
     document.body.appendChild(overlayRoot);
 
-    mount(SelectionToolbarSource, {
+    mount(SelectionToolbarRich, {
       props: {
+        editor: createEditorStub(),
         visible: true,
         overlayRoot,
-        position: createPosition(80, 60)
+        position: createPosition(80, 60),
+        formatButtons: []
       },
       global: {
         stubs: {
@@ -221,23 +244,52 @@ describe('SelectionToolbarSource', () => {
 
     window.dispatchEvent(new Event('resize'));
     await nextTick();
-    expect(toolbar.style.display).not.toBe('none');
 
-    editorSurface.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    await nextTick();
-
-    expect(toolbar.style.display).toBe('none');
+    expect(readPx(toolbar, 'top')).toBe(12);
+    expect(readPx(toolbar, 'left')).toBe(20);
   });
 
-  test('clamps horizontal position when the toolbar would overflow on the right', async () => {
+  test('renders below the selection when there is not enough space above', async () => {
     const overlayRoot = document.createElement('div');
     document.body.appendChild(overlayRoot);
 
-    mount(SelectionToolbarSource, {
+    mount(SelectionToolbarRich, {
       props: {
+        editor: createEditorStub(),
         visible: true,
         overlayRoot,
-        position: createPosition(190, 60)
+        position: createPosition(80, 10, 60),
+        formatButtons: []
+      },
+      global: {
+        stubs: {
+          SelectionToolbar: SelectionToolbarStub
+        }
+      }
+    });
+
+    await nextTick();
+
+    const toolbar = getToolbarElement();
+    mockToolbarSize(toolbar);
+
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+
+    expect(readPx(toolbar, 'top')).toBe(78);
+  });
+
+  test('prefers the full selection bottom when the anchor is above the visible viewport', async () => {
+    const overlayRoot = document.createElement('div');
+    document.body.appendChild(overlayRoot);
+
+    mount(SelectionToolbarRich, {
+      props: {
+        editor: createEditorStub(),
+        visible: true,
+        overlayRoot,
+        position: createPosition(190, -20, 60),
+        formatButtons: []
       },
       global: {
         stubs: {
@@ -255,7 +307,7 @@ describe('SelectionToolbarSource', () => {
     await nextTick();
 
     expect(readPx(toolbar, 'left')).toBe(72);
-    expect(toolbar.style.visibility).toBe('visible');
+    expect(readPx(toolbar, 'top')).toBe(48);
   });
 
   test('clamps horizontal position within the overlay root when the visible viewport is wider than the editor container', async () => {
@@ -263,11 +315,13 @@ describe('SelectionToolbarSource', () => {
     mockOverlaySize(overlayRoot, 160, 160);
     document.body.appendChild(overlayRoot);
 
-    mount(SelectionToolbarSource, {
+    mount(SelectionToolbarRich, {
       props: {
+        editor: createEditorStub(),
         visible: true,
         overlayRoot,
-        position: createPosition(150, 60)
+        position: createPosition(150, 60),
+        formatButtons: []
       },
       global: {
         stubs: {
@@ -288,56 +342,25 @@ describe('SelectionToolbarSource', () => {
     expect(toolbar.style.visibility).toBe('visible');
   });
 
-  test('uses bounding client rect measurements when offset size is unavailable', async () => {
+  test('keeps rendering at the selection bottom even when the below position overflows the viewport', async () => {
     const overlayRoot = document.createElement('div');
     document.body.appendChild(overlayRoot);
 
-    mount(SelectionToolbarSource, {
+    mount(SelectionToolbarRich, {
       props: {
+        editor: createEditorStub(),
         visible: true,
         overlayRoot,
-        position: createPosition(190, 60)
-      },
-      global: {
-        stubs: {
-          SelectionToolbar: SelectionToolbarStub
-        }
-      }
-    });
-
-    await nextTick();
-
-    const toolbar = getToolbarElement();
-    Object.defineProperty(toolbar, 'offsetWidth', {
-      configurable: true,
-      get(): number {
-        return 0;
-      }
-    });
-    Object.defineProperty(toolbar, 'offsetHeight', {
-      configurable: true,
-      get(): number {
-        return 0;
-      }
-    });
-    mockToolbarRect(toolbar);
-
-    window.dispatchEvent(new Event('resize'));
-    await nextTick();
-
-    expect(readPx(toolbar, 'left')).toBe(72);
-    expect(toolbar.style.visibility).toBe('visible');
-  });
-
-  test('renders below the selection when there is not enough space above', async () => {
-    const overlayRoot = document.createElement('div');
-    document.body.appendChild(overlayRoot);
-
-    mount(SelectionToolbarSource, {
-      props: {
-        visible: true,
-        overlayRoot,
-        position: createPosition(80, 10)
+        position: {
+          ...createPosition(80, -20, 180),
+          containerRect: {
+            top: 0,
+            left: 0,
+            width: 200,
+            height: 120
+          }
+        },
+        formatButtons: []
       },
       global: {
         stubs: {
@@ -354,35 +377,6 @@ describe('SelectionToolbarSource', () => {
     window.dispatchEvent(new Event('resize'));
     await nextTick();
 
-    expect(readPx(toolbar, 'top')).toBe(38);
-  });
-
-  test('prefers rendering below when the selection anchor is above the visible viewport', async () => {
-    const overlayRoot = document.createElement('div');
-    document.body.appendChild(overlayRoot);
-
-    mount(SelectionToolbarSource, {
-      props: {
-        visible: true,
-        overlayRoot,
-        position: createPosition(190, -20, 60)
-      },
-      global: {
-        stubs: {
-          SelectionToolbar: SelectionToolbarStub
-        }
-      }
-    });
-
-    await nextTick();
-
-    const toolbar = getToolbarElement();
-    mockToolbarSize(toolbar);
-
-    window.dispatchEvent(new Event('resize'));
-    await nextTick();
-
-    expect(readPx(toolbar, 'left')).toBe(72);
-    expect(readPx(toolbar, 'top')).toBe(48);
+    expect(readPx(toolbar, 'top')).toBe(168);
   });
 });

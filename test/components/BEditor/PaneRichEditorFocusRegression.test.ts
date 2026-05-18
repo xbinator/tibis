@@ -8,7 +8,7 @@ import type { ComponentPublicInstance } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import PaneRichEditor from '@/components/BEditor/components/PaneRichEditor.vue';
+import PaneRichEditor from '@/components/BEditor/panes/PaneRichEditor.vue';
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({

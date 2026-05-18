@@ -2,6 +2,8 @@ import type { ComputedRef, Ref } from 'vue';
 import { computed } from 'vue';
 import { createNoopEditorController, type EditorController } from '../adapters/types';
 
+export type { EditorController } from '../types';
+
 type SourceEditorFocusController = Pick<EditorController, 'focusEditor' | 'focusEditorAtStart'>;
 type SourceEditorPaneRef = Ref<EditorController | SourceEditorFocusController | null>;
 
@@ -82,5 +84,3 @@ export function useEditorController({ isRichMode, richEditorPaneRef, sourceEdito
     return isEditorController(sourceController) ? sourceController : sourceFallbackController;
   });
 }
-
-export type { EditorController } from '../adapters/types';

@@ -1,5 +1,5 @@
 /**
- * @file pane-monaco-editor.test.ts
+ * @file index.test.ts
  * @description BMonaco 基础交互与协议兼容测试。
  */
 /* @vitest-environment jsdom */
@@ -7,7 +7,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { EditorSelection } from '@/components/BEditor/adapters/types';
+import type { EditorSelection } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoEditorHandle } from '@/components/BMonaco/utils/createMonacoEditor';
 

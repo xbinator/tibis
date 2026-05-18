@@ -7,7 +7,7 @@
 import { nextTick, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { BMarkdownPublicInstance } from '@/components/BEditor/types';
+import type { EditorPublicInstance } from '@/components/BEditor/types';
 import { useFileSelectionIntentStore } from '@/stores/editor/fileSelectionIntent';
 import { useFileSelection } from '@/views/editor/hooks/useFileSelection';
 import type { EditorFile } from '@/views/editor/types';
@@ -37,7 +37,7 @@ describe('useFileSelection', () => {
     const selectLineRange = vi.fn(async () => true);
     const fileState = ref<EditorFile>(createEditorFile('file-1'));
     const isEditorReady = ref(true);
-    const editorInstance = ref<BMarkdownPublicInstance | null>({
+    const editorInstance = ref<EditorPublicInstance | null>({
       undo: vi.fn(),
       redo: vi.fn(),
       canUndo: vi.fn(() => false),

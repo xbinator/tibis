@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { SelectionAssistantAdapter, SelectionAssistantPosition } from '@/components/BEditor/adapters/selectionAssistant';
-import SelectionAIInput from '@/components/BEditor/components/SelectionAIInput.vue';
+import SelectionAIInput from '@/components/BEditor/shared/SelectionAIInput.vue';
 
 /**
  * 通用空操作函数。

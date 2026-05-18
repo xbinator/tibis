@@ -3,12 +3,41 @@
  * @description BEditor 统一类型出口。
  */
 
-export type { BMarkdownPublicInstance, EditorController, EditorSearchState, EditorSelection as SelectionRange } from './adapters/types';
+import type {
+  EditorController as BaseEditorController,
+  EditorSearchState as BaseEditorSearchState,
+  EditorSelection as BaseEditorSelection
+} from './adapters/types';
+
+/**
+ * 统一编辑器搜索状态。
+ */
+export type EditorSearchState = BaseEditorSearchState;
+
+/**
+ * 统一编辑器选区。
+ */
+export type EditorSelection = BaseEditorSelection;
+
+/**
+ * 统一编辑器控制器。
+ */
+export type EditorController = BaseEditorController;
+
+/**
+ * 对外公开的基础编辑器实例能力。
+ */
+export type EditorPublicInstance = Omit<EditorController, 'focusEditorAtStart' | 'scrollToAnchor' | 'getActiveAnchorId'>;
+
+/**
+ * 统一选区别名。
+ */
+export type SelectionRange = EditorSelection;
 
 /**
  * 编辑器视图模式。
  */
-export type BMarkdownViewMode = 'rich' | 'source';
+export type EditorViewMode = 'rich' | 'source';
 
 /**
  * 编辑器状态。

@@ -17,8 +17,7 @@
 import type { MonacoEditorHandle, MonacoThemeName } from './utils/createMonacoEditor';
 import type * as Monaco from 'monaco-editor';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import type { EditorController, EditorSearchState, EditorSelection } from '@/components/BEditor/adapters/types';
-import type { EditorState } from '@/components/BEditor/types';
+import type { EditorController, EditorSearchState, EditorSelection, EditorState } from '@/components/BEditor/types';
 import { useSettingStore } from '@/stores/ui/setting';
 import { createMonacoEditor } from './utils/createMonacoEditor';
 
