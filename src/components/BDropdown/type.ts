@@ -14,6 +14,8 @@ export interface DropdownOptionItem {
   class?: string;
   /** 是否禁用当前项 */
   disabled?: boolean;
+  /** 是否处于选中态（显示勾选图标） */
+  checked?: boolean;
   /** 是否使用危险态样式 */
   danger?: boolean;
   /** 选项主题色 */

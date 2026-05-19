@@ -16,6 +16,7 @@
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 
 /**
  * QuickActions 组件 Props
@@ -61,6 +62,21 @@ function toggleViewMode(): void {
   viewMode.value = viewMode.value === 'rich' ? 'source' : 'rich';
 }
 
+const editorPreferencesStore = useEditorPreferencesStore();
+
+/**
+ * 当前页宽模式，从偏好设置 store 中读取。
+ */
+const pageWidth = computed(() => editorPreferencesStore.pageWidth);
+
+/**
+ * 设置页宽模式。
+ * @param width - 目标页宽模式
+ */
+function setPageWidth(width: string): void {
+  editorPreferencesStore.setPageWidth(width as 'default' | 'wide' | 'full');
+}
+
 /**
  * 菜单选项配置
  * 根据文件路径动态计算菜单项的可用状态
@@ -104,6 +120,31 @@ const menuOptions = computed<DropdownOption[]>(() => [
     label: viewMode.value === 'rich' ? '切换源代码模式' : '切换预览模式',
     icon: 'lucide:file-code',
     onClick: toggleViewMode
+  },
+  {
+    value: 'page-width',
+    label: '视宽',
+    icon: 'lucide:maximize',
+    children: [
+      {
+        value: 'page-width-default',
+        label: '默认',
+        checked: pageWidth.value === 'default',
+        onClick: () => setPageWidth('default')
+      },
+      {
+        value: 'page-width-wide',
+        label: '较宽',
+        checked: pageWidth.value === 'wide',
+        onClick: () => setPageWidth('wide')
+      },
+      {
+        value: 'page-width-full',
+        label: '全宽',
+        checked: pageWidth.value === 'full',
+        onClick: () => setPageWidth('full')
+      }
+    ]
   },
   {
     type: 'divider'

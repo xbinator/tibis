@@ -17,6 +17,18 @@
         <Icon :icon="showMermaidPreview ? 'lucide:eye-off' : 'lucide:eye'" />
       </button>
 
+      <button
+        v-if="isJsonLanguage"
+        type="button"
+        :class="[bem('control-btn'), { 'is-active': isJsonPreviewVisible }]"
+        :disabled="!hasJsonCode"
+        :title="hasJsonCode ? '查看 JSON 图' : '输入 JSON 后可查看图'"
+        @mousedown.prevent
+        @click="toggleJsonPreview"
+      >
+        <Icon :icon="showJsonPreview ? 'lucide:eye-off' : 'lucide:eye'" />
+      </button>
+
       <button type="button" :class="[bem('control-btn'), { 'is-active': isCollapsed }]" @mousedown.prevent @click="toggleCollapse">
         <Icon :icon="isCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" />
       </button>
@@ -34,7 +46,10 @@
         </div>
         <div v-else ref="mermaidPreviewRef" :class="bem('mermaid-diagram')"></div>
       </div>
-      <pre v-show="!isMermaidPreviewVisible" :class="bem('body')"><NodeViewContent as="code" :class="codeClassName" /></pre>
+      <div v-show="isJsonPreviewVisible" :class="bem('json-preview')" contenteditable="false">
+        <BJsonViewer :content="codeContent" />
+      </div>
+      <pre v-show="!isMermaidPreviewVisible && !isJsonPreviewVisible" :class="bem('body')"><NodeViewContent as="code" :class="codeClassName" /></pre>
     </div>
   </NodeViewWrapper>
 </template>
@@ -154,6 +169,7 @@ const copyState = ref<CopyState>('复制');
 const isCollapsed = ref(false);
 const isWordWrap = ref(false);
 const showMermaidPreview = ref(true);
+const showJsonPreview = ref(false);
 const renderError = ref<string | null>(null);
 const mermaidPreviewRef = ref<HTMLElement | null>(null);
 
@@ -179,6 +195,10 @@ const codeClassName = computed(() => (selectedLanguage.value ? `language-${selec
 const isMermaidLanguage = computed(() => selectedLanguage.value === 'mermaid');
 const hasMermaidCode = computed(() => codeContent.value.trim().length > 0);
 const isMermaidPreviewVisible = computed(() => isMermaidLanguage.value && showMermaidPreview.value && hasMermaidCode.value);
+
+const isJsonLanguage = computed(() => selectedLanguage.value === 'json');
+const hasJsonCode = computed(() => codeContent.value.trim().length > 0);
+const isJsonPreviewVisible = computed(() => isJsonLanguage.value && showJsonPreview.value && hasJsonCode.value);
 
 // 复制按钮图标，通过 Map 替代多分支 if
 const copyIconName = computed(() => COPY_ICON_MAP[copyState.value]);
@@ -281,6 +301,13 @@ function toggleMermaidPreview(): void {
   showMermaidPreview.value = !showMermaidPreview.value;
 
   if (showMermaidPreview.value) renderMermaid();
+}
+
+function toggleJsonPreview(): void {
+  // 提前退出：没有代码时不允许切换
+  if (!hasJsonCode.value) return;
+
+  showJsonPreview.value = !showJsonPreview.value;
 }
 
 // ─── 侦听器 ──────────────────────────────────────────────────────────────────
@@ -445,6 +472,12 @@ onUnmounted(() => {
     max-width: 100%;
     height: auto;
   }
+}
+
+.b-markdown-codeblock__json-preview {
+  height: 460px;
+  overflow: hidden;
+  border-top: 1px solid var(--code-border);
 }
 
 .b-markdown-codeblock__mermaid-placeholder {

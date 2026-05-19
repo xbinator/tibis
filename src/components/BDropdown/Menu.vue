@@ -54,7 +54,14 @@ const Menu = defineComponent({
     const menuWidth = computed<string>(() => (typeof props.width === 'number' ? `${props.width}px` : props.width));
 
     function renderMenuContent(record: DropdownOptionItem): VNodeChild {
-      return slots.menu?.({ record }) ?? <BTruncateText text={record.label} />;
+      return (
+        slots.menu?.({ record }) ?? (
+          <div class="b-dropdown-menu-item-label">
+            <BTruncateText text={record.label} />
+            {record.checked ? <Icon class="b-dropdown-menu-item-check" icon="lucide:check" width={14} height={14} /> : null}
+          </div>
+        )
+      );
     }
 
     function handleClickMenu(record: DropdownOptionItem): void {
@@ -190,6 +197,21 @@ export default Menu;
   display: flex;
   flex: 1;
   align-items: center;
+  justify-content: space-between;
   width: 0;
+}
+
+.b-dropdown-menu-item-label {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.b-dropdown-menu-item-check {
+  flex-shrink: 0;
+  margin-left: 2px;
+  color: var(--text-primary);
 }
 </style>
