@@ -1,7 +1,5 @@
 appId: com.tibis.desktop
 productName: Tibis
-electronDownload:
-  mirror: https://npmmirror.com/mirrors/electron/
 directories:
   buildResources: build
   output: release
@@ -9,7 +7,15 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - "!node_modules/**/*"
+  - node_modules/@ai-sdk/**/*
+  - node_modules/@tavily/**/*
+  - node_modules/ai/**/*
   - node_modules/better-sqlite3/**/*
+  - node_modules/chokidar/**/*
+  - node_modules/electron-log/**/*
+  - node_modules/electron-store/**/*
+  - node_modules/lodash-es/**/*
+  - node_modules/sharp/**/*
 extraResources:
   - from: resources/icons
     to: icons
