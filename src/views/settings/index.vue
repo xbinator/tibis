@@ -3,7 +3,7 @@
     <div class="settings-sidebar" :class="{ 'settings-sidebar--collapsed': sidebarCollapsed }" draggable="false">
       <template v-for="(group, gi) in menuGroups" :key="gi">
         <div v-if="gi > 0" class="sidebar-divider"></div>
-        <RouterLink v-for="item in group.items" :key="item.key" :to="item.path" class="sidebar-item" :class="{ active: isActive(item.key) }" draggable="false">
+        <RouterLink v-for="item in group.items" :key="item.key" :to="item.path" class="sidebar-item" :class="{ active: isActive(item.path) }" draggable="false">
           <Icon :icon="item.icon" class="sidebar-item__icon" />
           <span class="sidebar-item__label">{{ item.label }}</span>
         </RouterLink>
@@ -25,7 +25,7 @@ import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { Icon } from '@iconify/vue';
 import { useSettingStore } from '@/stores/ui/setting';
-import { menuGroups, type SettingsMenuKey } from './constants';
+import { menuGroups } from './constants';
 
 const route = useRoute();
 const settingStore = useSettingStore();
@@ -35,10 +35,12 @@ function toggleSidebarCollapsed(): void {
   settingStore.setSettingsSidebarCollapsed(!sidebarCollapsed.value);
 }
 
-function isActive(key: SettingsMenuKey): boolean {
-  const prefix = `/settings/${key}`;
-
-  return route.path === prefix || route.path.startsWith(`${prefix}/`);
+/**
+ * 判断菜单项是否为当前激活状态。
+ * @param path - 菜单项对应的路由路径
+ */
+function isActive(path: string): boolean {
+  return route.path === path || route.path.startsWith(`${path}/`);
 }
 </script>
 

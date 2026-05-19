@@ -22,7 +22,7 @@ const routes: AppRouteRecordRaw[] = [
             name: 'provider-list',
             component: () => import('@/views/settings/provider/index.vue'),
             meta: {
-              title: 'AI服务商'
+              title: '模型服务'
             }
           },
           {
@@ -39,7 +39,7 @@ const routes: AppRouteRecordRaw[] = [
         path: 'service-model',
         name: 'service-model',
         component: () => import('@/views/settings/service-model/index.vue'),
-        meta: { title: '服务模型' }
+        meta: { title: '默认模型' }
       },
       {
         path: 'tools',

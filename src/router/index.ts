@@ -7,7 +7,6 @@ import type { App } from 'vue';
 import type { RouteRecordRaw } from 'vue-router';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { resolveRouteTabInfo } from '@/router/cache';
-import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { basicRoutes } from './routes';
 
@@ -24,18 +23,12 @@ const router = createRouter({
  * 根据路由元信息设置窗口标题
  */
 router.afterEach((to) => {
-  const title = to.meta?.title as string | undefined;
-  if (title) {
-    const settingStore = useSettingStore();
-    settingStore.setWindowTitle(title);
-  }
-
   // 路由拦截添加 Tab
   if (!to.meta?.hideTab) {
     const tabsStore = useTabsStore();
     const { tabId, cacheKey } = resolveRouteTabInfo(to);
 
-    tabsStore.addTab({ id: tabId, path: to.fullPath, title: title || (to.name as string) || to.path, cacheKey });
+    tabsStore.addTab({ id: tabId, path: to.fullPath, title: (to.meta?.title as string | undefined) || (to.name as string) || to.path, cacheKey });
   }
 });
 

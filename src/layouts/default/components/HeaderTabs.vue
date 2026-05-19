@@ -37,12 +37,13 @@
  * @description 渲染顶部标签栏的交互逻辑，拖拽排序委托给 useTabDragger 模块。
  */
 
-import { computed, shallowRef, onUnmounted } from 'vue';
+import { computed, shallowRef, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { Dropdown } from 'ant-design-vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import type { Tab, TabCloseAction, TabClosePlan, TabMovePosition } from '@/stores/workspace/tabs';
 import { Modal } from '@/utils/modal';
@@ -165,6 +166,22 @@ function getDropIndicatorStyle(): Record<string, string> | null {
 
 /** 当前独立插入指示线的样式。 */
 const dropIndicatorStyle = computed(() => getDropIndicatorStyle());
+
+/** 当前激活的标签页 */
+const activeTab = computed(() => tabsStore.tabs.find((tab) => tab.path === route.fullPath));
+
+/**
+ * 监听激活标签标题变化，同步更新窗口标题。
+ */
+watch(
+  () => activeTab.value?.title,
+  (title) => {
+    if (title) {
+      useSettingStore().setWindowTitle(title);
+    }
+  },
+  { immediate: true }
+);
 
 /**
  * 立即关闭当前右键菜单并清空等待状态。
