@@ -198,7 +198,7 @@ export function createBuiltinSettingsTools(adapter: AIToolConfirmationAdapter): 
     updateSettings: {
       definition: {
         name: UPDATE_SETTINGS_TOOL_NAME,
-        description: '修改应用设置。可根据自然语言请求设置主题、大纲、源码模式和编辑器页宽。',
+        description: '修改应用设置。可根据自然语言请求设置主题、源码模式和编辑器页宽。',
         source: 'builtin',
         riskLevel: 'write',
         permissionCategory: 'settings',
@@ -264,7 +264,7 @@ export function createBuiltinSettingsTools(adapter: AIToolConfirmationAdapter): 
     getSettings: {
       definition: {
         name: GET_SETTINGS_TOOL_NAME,
-        description: '获取应用设置。可获取主题、大纲、源码模式和编辑器页宽等设置项的当前值。支持传入单个 key、key 数组或不传（返回所有设置）。',
+        description: '获取应用设置。可获取主题、源码模式和编辑器页宽等设置项的当前值。支持传入单个 key、key 数组或不传（返回所有设置）。',
         source: 'builtin',
         riskLevel: 'read',
         permissionCategory: 'settings',

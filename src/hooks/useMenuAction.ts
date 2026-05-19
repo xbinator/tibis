@@ -69,6 +69,9 @@ export function useMenuAction(): void {
       case 'view:toggleSource':
         editorPreferencesStore.setViewMode(editorPreferencesStore.viewMode === 'source' ? 'rich' : 'source');
         break;
+      case 'view:toggleOutline':
+        editorPreferencesStore.setShowOutline(!editorPreferencesStore.showOutline);
+        break;
       case 'theme:light':
         settingStore.setTheme('light');
         break;

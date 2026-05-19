@@ -150,6 +150,7 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
      */
     syncNativeMenuState(): void {
       native.updateMenuItem?.('view:source', { checked: this.viewMode === 'source' });
+      native.updateMenuItem?.('view:outline', { checked: this.showOutline });
       native.updateMenuItem?.('view:pageWidth:default', { checked: this.pageWidth === 'default' });
       native.updateMenuItem?.('view:pageWidth:wide', { checked: this.pageWidth === 'wide' });
       native.updateMenuItem?.('view:pageWidth:full', { checked: this.pageWidth === 'full' });
@@ -199,6 +200,7 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
     setShowOutline(visible: boolean): void {
       this.showOutline = visible;
       this.savePreferences();
+      this.syncNativeMenuState();
     }
   }
 });
