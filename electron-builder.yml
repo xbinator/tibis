@@ -2,7 +2,6 @@ appId: com.tibis.desktop
 productName: Tibis
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
-  customDir: v${version}
 directories:
   buildResources: build
   output: release
