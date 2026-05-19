@@ -22,7 +22,7 @@
     </template>
 
     <div class="action-buttons">
-      <ContextUsage :used-tokens="usedTokens" :context-window="contextWindow" />
+      <ContextUsage v-if="selectedModel" :used-tokens="usedTokens" :context-window="contextWindow" />
 
       <VoiceInput ref="voiceInputRef" @start="emit('voice-start')" @partial-text="handleVoicePartial" @complete="handleVoiceComplete" />
 

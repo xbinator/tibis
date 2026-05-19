@@ -10,7 +10,7 @@
         <!-- 背景圆 -->
         <circle cx="18" cy="18" r="14" class="context-usage__ring-bg"></circle>
         <!-- 进度弧：stroke-dasharray 方案，从 12 点钟方向开始 -->
-        <circle cx="18" cy="18" r="14" class="context-usage__ring-arc" :stroke-dasharray="`${arcLength} ${circumference}`"></circle>
+        <circle v-if="arcLength > 0" cx="18" cy="18" r="14" class="context-usage__ring-arc" :stroke-dasharray="`${arcLength} ${circumference}`"></circle>
       </svg>
     </div>
 

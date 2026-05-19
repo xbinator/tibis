@@ -161,6 +161,7 @@ defineExpose({ scrollToBottom });
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* 使用悬浮指示器主题变量，保证亮暗主题下都有清晰层次。 */
