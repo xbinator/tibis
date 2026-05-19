@@ -135,6 +135,21 @@ const electronAPI: ElectronAPI = {
     };
   },
 
+  /**
+   * 监听通过系统"打开方式"传入的文件路径。
+   * @param callback - 文件路径回调
+   * @returns 取消监听函数
+   */
+  onOpenFile: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, filePath: string) => {
+      callback(filePath);
+    };
+    ipcRenderer.on('app:open-file', handler);
+    return () => {
+      ipcRenderer.removeListener('app:open-file', handler);
+    };
+  },
+
   // ==================== 窗口控制操作 ====================
 
   /**

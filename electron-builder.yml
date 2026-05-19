@@ -21,6 +21,27 @@ mac:
     - dmg
     - zip
   icon: resources/icons/app.icns
+  fileAssociations:
+    - ext: md
+      name: Markdown
+      description: Markdown 文档
+      role: Editor
+    - ext: markdown
+      name: Markdown
+      description: Markdown 文档
+      role: Editor
+    - ext: txt
+      name: 纯文本
+      description: 纯文本文档
+      role: Editor
+    - ext: mdx
+      name: MDX
+      description: MDX 文档
+      role: Editor
+    - ext: json
+      name: JSON
+      description: JSON 文档
+      role: Editor
 win:
   target:
     - nsis

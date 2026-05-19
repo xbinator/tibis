@@ -295,6 +295,9 @@ export interface ElectronAPI {
   unwatchAll: () => Promise<void>;
   onFileChanged: (callback: (data: FileChangeEvent) => void) => () => void;
 
+  /** 监听系统通过"打开方式"传入的文件路径 */
+  onOpenFile: (callback: (filePath: string) => void) => () => void;
+
   // 窗口控制操作
   setWindowTitle: (title: string) => Promise<void>;
   windowMinimize: () => Promise<void>;

@@ -25,6 +25,9 @@ let shouldContinueStartup = true;
 /** 日志维护定时器句柄，用于 before-quit 时清理 */
 let logMaintenanceTimer: ReturnType<typeof startLogMaintenanceTimer> | null = null;
 
+/** 通过 macOS "打开方式" 启动时暂存的文件路径，窗口创建后发送到渲染进程 */
+let pendingOpenFilePath: string | null = null;
+
 if (process.platform === 'win32') {
   const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -84,6 +87,14 @@ async function bootstrap(): Promise<void> {
 
   // 创建窗口
   createWindow();
+
+  // 处理通过 macOS "打开方式" 启动时的待处理文件
+  if (pendingOpenFilePath) {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    mainWindow?.webContents.send('app:open-file', pendingOpenFilePath);
+    pendingOpenFilePath = null;
+  }
+
   handleShortcutAction(startupShortcutAction);
 
   app.on('activate', handleActivate);
@@ -101,6 +112,22 @@ function cleanupLogMaintenance(): void {
 
 app.on('second-instance', (_event, commandLine) => {
   handleShortcutAction(getShortcutActionFromArgv(commandLine));
+});
+
+/**
+ * 处理 macOS "文件右键 → 打开方式 → Tibis" 传入的文件路径。
+ * macOS 系统在用户通过"打开方式"选择本应用或双击关联文件时触发此事件。
+ * 需要调用 event.preventDefault() 阻止默认行为。
+ */
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+
+  const windows = BrowserWindow.getAllWindows();
+  if (windows.length > 0) {
+    windows[0].webContents.send('app:open-file', filePath);
+  } else {
+    pendingOpenFilePath = filePath;
+  }
 });
 
 if (shouldContinueStartup) {
