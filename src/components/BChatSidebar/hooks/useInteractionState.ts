@@ -2,8 +2,20 @@
  * @file useInteractionState.ts
  * @description 交互容器状态管理 hook，提供 Toast 的显示逻辑
  */
-import type { ToastOptions, ToastItem, InteractionAPI } from '../components/InteractionContainer/types';
-import { ref } from 'vue';
+import type { ToastOptions, ToastItem, InteractionAPI, ToastContent } from '../components/InteractionContainer/types';
+import { isVNode, ref } from 'vue';
+
+/**
+ * 比较两个 Toast 内容是否相等
+ * @param a - 内容 A
+ * @param b - 内容 B
+ * @returns 是否相等
+ */
+function isSameContent(a: ToastContent, b: ToastContent): boolean {
+  // 如果都是 VNode，不认为是同一个（VNode 每次创建都是新对象）
+  if (isVNode(a) || isVNode(b)) return false;
+  return a === b;
+}
 
 /**
  * 交互容器状态管理
@@ -31,8 +43,8 @@ export function useInteractionState(options?: { maxToastCount?: number; defaultD
    * @param toastOptions - Toast 选项
    */
   function showToast(toastOptions: ToastOptions): void {
-    // 检查是否已存在相同 content 的 toast
-    const existingToast = toastQueue.value.find((t) => t.content === toastOptions.content);
+    // 检查是否已存在相同 content 的 toast（VNode 不参与重复检测）
+    const existingToast = toastQueue.value.find((t) => isSameContent(t.content, toastOptions.content));
     if (existingToast) {
       // 已存在，触发抖动动画
       existingToast.shake = true;

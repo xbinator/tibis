@@ -7,16 +7,23 @@
     <div :class="['toast-item__icon', `toast-item__icon--${type}`]">
       <Icon :icon="iconName" width="16" height="16" />
     </div>
-    <div class="toast-item__content">{{ content }}</div>
+    <div class="toast-item__content">
+      <component :is="contentVNode" v-if="isVNodeContent" />
+      <template v-else>{{ content }}</template>
+    </div>
     <button class="toast-item__close" @click.stop="handleClose">
       <Icon icon="lucide:x" width="14" height="14" />
     </button>
+    <!-- 倒计时进度条 -->
+    <div v-if="duration" class="toast-item__progress">
+      <div class="toast-item__progress-bar" :style="{ width: progressPercent + '%' }"></div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { ToastType } from './types';
-import { computed, onMounted, onUnmounted } from 'vue';
+import type { ToastContent, ToastType } from './types';
+import { computed, isVNode, onMounted, onUnmounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 
 /**
@@ -27,8 +34,8 @@ interface Props {
   id: string;
   /** Toast 类型 */
   type: ToastType;
-  /** Toast 内容 */
-  content: string;
+  /** Toast 内容（支持字符串或 VNode） */
+  content: ToastContent;
   /** 持续时间（毫秒） */
   duration: number;
   /** 是否需要抖动动画 */
@@ -40,12 +47,28 @@ const props = withDefaults(defineProps<Props>(), {
   shake: false
 });
 
+/**
+ * 判断内容是否为 VNode
+ */
+const isVNodeContent = computed<boolean>(() => isVNode(props.content));
+
+/**
+ * VNode 内容（如果是 VNode 则返回，否则返回 null）
+ */
+const contentVNode = computed(() => (isVNodeContent.value ? props.content : null));
+
 const emit = defineEmits<{
   (e: 'close', id: string): void;
 }>();
 
 /** 自动关闭定时器 */
 let timer: ReturnType<typeof setTimeout> | null = null;
+/** 倒计时进度百分比 */
+const progressPercent = ref(100);
+/** 动画帧 ID */
+let rafId: number | null = null;
+/** 开始时间 */
+let startTime: number | null = null;
 
 /**
  * 清除自动关闭定时器
@@ -54,6 +77,10 @@ function clearTimer(): void {
   if (timer) {
     clearTimeout(timer);
     timer = null;
+  }
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
   }
 }
 
@@ -66,10 +93,26 @@ function handleClose(): void {
 }
 
 /**
+ * 更新倒计时进度
+ */
+function updateProgress(): void {
+  if (!startTime || props.duration <= 0) return;
+  const elapsed = Date.now() - startTime;
+  const remaining = Math.max(0, props.duration - elapsed);
+  progressPercent.value = (remaining / props.duration) * 100;
+  if (remaining > 0) {
+    rafId = requestAnimationFrame(updateProgress);
+  }
+}
+
+/**
  * 启动自动关闭定时器
  */
 function startTimer(): void {
   if (props.duration > 0) {
+    startTime = Date.now();
+    progressPercent.value = 100;
+    rafId = requestAnimationFrame(updateProgress);
     timer = setTimeout(() => {
       handleClose();
     }, props.duration);
@@ -100,6 +143,7 @@ onUnmounted(() => {
 
 <style scoped lang="less">
 .toast-item {
+  position: relative;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -184,5 +228,23 @@ onUnmounted(() => {
   &:hover {
     opacity: 1;
   }
+}
+
+.toast-item__progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  overflow: hidden;
+  background: transparent;
+  border-radius: 0 0 6px 6px;
+}
+
+.toast-item__progress-bar {
+  height: 100%;
+  background: currentColor;
+  opacity: 0.3;
+  transition: none;
 }
 </style>
