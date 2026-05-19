@@ -143,6 +143,26 @@ jobs:
           echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
           echo "body=$BODY" >> "$GITHUB_OUTPUT"
 
+      - name: Rollback version bump on cancel
+        if: cancelled() && github.event_name == 'workflow_dispatch'
+        env:
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # 删除远程 tag（如果已推送）
+          if [ -n "$TAG_NAME" ] && git ls-remote --tags origin "refs/tags/$TAG_NAME" | grep -q .; then
+            echo "Deleting remote tag $TAG_NAME..."
+            git push origin ":refs/tags/$TAG_NAME"
+          fi
+
+          # 将分支强制回退到版本号提交之前
+          if [ -n "$TAG_NAME" ]; then
+            echo "Resetting branch $REF_NAME to previous commit..."
+            git push origin "HEAD~1:$REF_NAME" --force || true
+          fi
+
   build:
     name: Build ${{ matrix.name }}
     needs: prepare
