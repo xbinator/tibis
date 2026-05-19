@@ -9,7 +9,7 @@
       <div :class="bem('empty-message')">{{ parseError }}</div>
     </div>
 
-    <div v-else-if="graphNodes.length === 0" :class="bem('empty')">
+    <div v-else-if="hasInput && graphNodes.length === 0" :class="bem('empty')">
       <div :class="bem('empty-title')">暂无 JSON 数据</div>
       <div :class="bem('empty-message')">传入 JSON 字符串或对象后会在这里显示节点图</div>
     </div>
@@ -25,22 +25,28 @@
       :min-zoom="0.2"
       :max-zoom="1.8"
       :class="bem('flow')"
+      @node-click="handleNodeClick"
     >
       <template #node-json="{ data }">
         <RecordNode :data="data" />
       </template>
     </VueFlow>
+
+    <NodeDetailModal v-model:open="modalOpen" :node="selectedNode" />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { BJsonViewerProps } from './types';
+import type { BJsonViewerProps, JsonFlowNodeData } from './types';
+import type { NodeMouseEvent } from '@vue-flow/core';
+import { computed, ref } from 'vue';
 import { VueFlow } from '@vue-flow/core';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 import { createNamespace } from '@/utils/namespace';
+import NodeDetailModal from './components/NodeDetailModal.vue';
 import RecordNode from './components/RecordNode.vue';
-import { useJsonGraph } from './hooks/useJsonGraph';
+import { useGraph } from './hooks/useGraph';
 
 defineOptions({ name: 'BJsonViewer' });
 
@@ -50,7 +56,26 @@ const props = withDefaults(defineProps<BJsonViewerProps>(), {
 });
 
 const [name, bem] = createNamespace('json-viewer');
-const { parseError, graphEdges, graphNodes } = useJsonGraph(props);
+const { parseError, graphEdges, graphNodes } = useGraph(props);
+
+/** 是否有实际输入（非初始化空状态）。 */
+const hasInput = computed<boolean>(() => props.content?.trim().length > 0 || props.value !== undefined);
+
+/** 当前选中的节点数据，用于 Modal 展示。 */
+const selectedNode = ref<JsonFlowNodeData | null>(null);
+
+/** Modal 显示状态。 */
+const modalOpen = ref<boolean>(false);
+
+/**
+ * 处理节点点击事件，打开详情 Modal。
+ * @param event - Vue Flow 节点鼠标事件
+ */
+function handleNodeClick(event: NodeMouseEvent): void {
+  const nodeData = event.node.data as JsonFlowNodeData;
+  selectedNode.value = nodeData;
+  modalOpen.value = true;
+}
 </script>
 
 <style lang="less">

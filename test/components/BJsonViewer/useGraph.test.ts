@@ -1,11 +1,11 @@
 /**
- * @file useJsonGraph.test.ts
- * @description 验证 useJsonGraph 将 JSON 输入转换为 Vue Flow 图数据的正确性。
+ * @file useGraph.test.ts
+ * @description 验证 useGraph 将 JSON 输入转换为 Vue Flow 图数据的正确性。
  */
 
 import type { Node } from '@vue-flow/core';
 import { describe, expect, it } from 'vitest';
-import { useJsonGraph } from '@/components/BJsonViewer/hooks/useJsonGraph';
+import { useGraph } from '@/components/BJsonViewer/hooks/useGraph';
 import type { BJsonViewerProps, JsonFlowNodeData } from '@/components/BJsonViewer/types';
 import csJson from '../../../cs.json';
 
@@ -14,20 +14,20 @@ import csJson from '../../../cs.json';
  * @param overrides - 部分覆盖默认 props
  * @returns hook 返回值
  */
-function createHook(overrides: Partial<BJsonViewerProps> = {}): ReturnType<typeof useJsonGraph> {
+function createHook(overrides: Partial<BJsonViewerProps> = {}): ReturnType<typeof useGraph> {
   const props: Readonly<BJsonViewerProps> = { content: '', value: undefined, ...overrides };
 
-  return useJsonGraph(props);
+  return useGraph(props);
 }
 
-/** 卡片行高，与 useJsonGraph 保持一致。 */
+/** 卡片行高，与 useGraph 保持一致。 */
 const ROW_HEIGHT = 54;
 
-/** 子树之间的最小垂直间距，与 useJsonGraph 保持一致。 */
+/** 子树之间的最小垂直间距，与 useGraph 保持一致。 */
 const SIBLING_GAP = 34;
 
 /**
- * 估算节点高度，与 useJsonGraph 中 getVisualNodeHeight 逻辑一致。
+ * 估算节点高度，与 useGraph 中 getVisualNodeHeight 逻辑一致。
  * @param node - Vue Flow 节点
  * @returns 估算高度
  */
@@ -72,11 +72,7 @@ function getSubtreeBottom(
  * @param nodeMap - 节点映射
  * @returns 子树最小顶部 Y
  */
-function getSubtreeTop(
-  node: Node<JsonFlowNodeData>,
-  edges: Array<{ source: string; target: string }>,
-  nodeMap: Map<string, Node<JsonFlowNodeData>>
-): number {
+function getSubtreeTop(node: Node<JsonFlowNodeData>, edges: Array<{ source: string; target: string }>, nodeMap: Map<string, Node<JsonFlowNodeData>>): number {
   let minTop = node.position.y;
 
   edges
@@ -96,7 +92,7 @@ function getSubtreeTop(
  * @param hook - hook 返回值
  * @returns 解包后的图数据
  */
-function unwrap(hook: ReturnType<typeof useJsonGraph>) {
+function unwrap(hook: ReturnType<typeof useGraph>) {
   return {
     parseError: hook.parseError.value,
     nodes: hook.graphNodes.value,
@@ -104,7 +100,7 @@ function unwrap(hook: ReturnType<typeof useJsonGraph>) {
   };
 }
 
-describe('useJsonGraph', () => {
+describe('useGraph', () => {
   describe('JSON 解析', () => {
     it('空 content 和 undefined value 时无错误，无节点', () => {
       const { parseError, nodes, edges } = unwrap(createHook());
@@ -150,7 +146,7 @@ describe('useJsonGraph', () => {
 
   describe('cs.json 参考数据', () => {
     let nodes: Node<JsonFlowNodeData>[];
-    let edges: ReturnType<typeof useJsonGraph>['graphEdges']['value'];
+    let edges: ReturnType<typeof useGraph>['graphEdges']['value'];
 
     it('生成节点和连线', () => {
       const result = unwrap(createHook({ value: csJson }));

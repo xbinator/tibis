@@ -1,5 +1,5 @@
 /**
- * @file useJsonGraph.ts
+ * @file useGraph.ts
  * @description 将 JSON 输入转换为 BJsonViewer 使用的 Vue Flow 节点图数据。
  */
 
@@ -586,7 +586,7 @@ function buildGraph(value: JsonValue | undefined): JsonGraphResult {
  * @param props - JSON 查看器入参
  * @returns Vue Flow 图数据
  */
-export function useJsonGraph(props: Readonly<BJsonViewerProps>): UseJsonGraphReturn {
+export function useGraph(props: Readonly<BJsonViewerProps>): UseJsonGraphReturn {
   const parseResult = computed<JsonParseResult>(() => parseJsonInput(props));
   const graph = computed<JsonGraphResult>(() => buildGraph(parseResult.value.value));
 
