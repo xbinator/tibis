@@ -98,7 +98,8 @@
 <script setup lang="ts">
 import type { Message } from './utils/types';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatMessageConfirmationCustomInputPayload } from 'types/chat';
-import { computed, onMounted, onUnmounted, provide, ref } from 'vue';
+import { computed, h, onMounted, onUnmounted, provide, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { createBuiltinTools } from '@/ai/tools/builtin';
@@ -110,8 +111,8 @@ import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { useFilesStore } from '@/stores/workspace/files';
 import { useSettingStore } from '@/stores/ui/setting';
+import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file';
 import ConversationView from './components/ConversationView.vue';
 import ImagePreview from './components/ImagePreview.vue';
@@ -142,6 +143,8 @@ import { create, userChoice, buildMessageReferences } from './utils/messageHelpe
 const chatStore = useChatSessionStore();
 /** 应用设置存储 */
 const settingStore = useSettingStore();
+
+const router = useRouter();
 
 /** 交互容器状态 */
 const { api: interactionAPI, toastQueue, removeToast } = useInteractionState();
@@ -533,6 +536,27 @@ async function compactBeforeSendIfNeeded(): Promise<void> {
 }
 
 /**
+ * 显示"未找到模型配置"的 Toast 提示，引导用户去配置页。
+ */
+function showNoModelConfigToast(): void {
+  interactionAPI.showToast({
+    content: h('div', [
+      '未找到可用的模型配置，',
+      h(
+        'span',
+        {
+          class: 'text-primary underline cursor-pointer',
+          onClick: () => router.push('/settings/service-model')
+        },
+        '去配置'
+      )
+    ]),
+    type: 'error',
+    duration: 0
+  });
+}
+
+/**
  * 提交用户文本消息并启动新一轮流式对话。
  * @param content - 用户输入内容
  * @param images - 可选图片列表
@@ -552,6 +576,7 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
   try {
     const config = await stream.resolveServiceConfig();
     if (!config) {
+      showNoModelConfigToast();
       taskRuntime.finishTask('chat');
       return;
     }
