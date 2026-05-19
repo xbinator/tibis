@@ -5,13 +5,139 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump type. Use custom when version is provided.
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      version:
+        description: Custom version without the v prefix, for example 0.2.0 or 1.0.0-beta.1.
+        type: string
+        required: false
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Prepare release ref
+    runs-on: ubuntu-latest
+
+    outputs:
+      release_ref: ${{ steps.release.outputs.release_ref }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare tag
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          BUMP: ${{ inputs.bump || '' }}
+          VERSION: ${{ inputs.version || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            echo "release_ref=$REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "tag_name=$REF_NAME" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$REF_TYPE" != "branch" ]; then
+            echo "Manual releases must run from a branch, not $REF_TYPE." >&2
+            exit 1
+          fi
+
+          release_version="$(node <<'NODE'
+          const fs = require('node:fs');
+
+          const packagePath = 'package.json';
+          const manifest = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+          const bump = process.env.BUMP;
+          const requestedVersion = process.env.VERSION.replace(/^v/, '').trim();
+          const versionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+          function parseVersion(version) {
+            const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+
+            if (!match) {
+              throw new Error(`Invalid current package version: ${version}`);
+            }
+
+            return {
+              major: Number(match[1]),
+              minor: Number(match[2]),
+              patch: Number(match[3]),
+            };
+          }
+
+          function nextVersion() {
+            if (bump === 'custom') {
+              if (!versionPattern.test(requestedVersion)) {
+                throw new Error('Custom version must look like 0.2.0 or 1.0.0-beta.1.');
+              }
+
+              return requestedVersion;
+            }
+
+            const current = parseVersion(manifest.version);
+
+            if (bump === 'major') {
+              return `${current.major + 1}.0.0`;
+            }
+
+            if (bump === 'minor') {
+              return `${current.major}.${current.minor + 1}.0`;
+            }
+
+            if (bump === 'patch') {
+              return `${current.major}.${current.minor}.${current.patch + 1}`;
+            }
+
+            throw new Error(`Unsupported bump type: ${bump}`);
+          }
+
+          const version = nextVersion();
+          manifest.version = version;
+          fs.writeFileSync(packagePath, `${JSON.stringify(manifest, null, 2)}\n`);
+          process.stdout.write(version);
+          NODE
+          )"
+
+          tag_name="v$release_version"
+
+          if git rev-parse "$tag_name" >/dev/null 2>&1; then
+            echo "Tag $tag_name already exists." >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: release $tag_name"
+          git tag "$tag_name"
+          git push origin "HEAD:$REF_NAME"
+          git push origin "$tag_name"
+
+          echo "release_ref=$tag_name" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.name }}
+    needs: prepare
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -28,6 +154,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_ref }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -66,7 +194,9 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: build
+    needs:
+      - prepare
+      - build
     runs-on: ubuntu-latest
 
     steps:
@@ -79,8 +209,10 @@ jobs:
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: Tibis ${{ needs.prepare.outputs.tag_name }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.prepare.outputs.tag_name, '-') }}
           files: release-artifacts/*
           generate_release_notes: true
         env:

@@ -33,6 +33,12 @@ describe('package scripts', () => {
     expect(manifest.scripts?.test).toBe('cross-env HOST=127.0.0.1 vitest run');
   });
 
+  it('disables implicit electron-builder publishing during package builds', () => {
+    const manifest = readPackageScripts();
+
+    expect(manifest.scripts?.['electron:build']).toBe('pnpm run build && pnpm run electron:build-main && electron-builder --publish never');
+  });
+
   it('declares speech manifest helper scripts', () => {
     const manifest = readPackageScripts();
 

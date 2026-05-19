@@ -121,6 +121,25 @@ pnpm build
 pnpm electron:build
 ```
 
+## 下载发布版
+
+普通用户可以从 GitHub Releases 页面下载最新版本安装包。
+
+每个 Release 通常会包含以下平台产物：
+
+- macOS：`.dmg` 或 `.zip`
+- Windows：`.exe`
+- Linux：`.AppImage` 或 `.deb`
+
+当前项目暂未配置 macOS / Windows 代码签名。首次打开时，系统可能出现安全提示：
+
+- macOS 可能提示无法验证开发者，需要右键打开，或在系统设置中允许打开
+- Windows 可能触发 SmartScreen，需要确认继续运行
+
+请确认安装包来源为项目官方 GitHub Release 后再打开。
+
+维护者发版流程见 [docs/development/github-release.md](./docs/development/github-release.md)。
+
 ### 代码检查
 
 ```bash

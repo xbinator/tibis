@@ -23,7 +23,7 @@ mac:
     - dmg
     - zip
   icon: resources/icons/app.icns
-windows:
+win:
   target:
     - nsis
     - portable
