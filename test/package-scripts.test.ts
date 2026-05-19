@@ -8,11 +8,13 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * package.json 中的 scripts 数据结构。
+ * package.json 中与仓库校验相关的清单数据结构。
  */
 interface PackageScriptsManifest {
   /** npm scripts 映射表。 */
   scripts?: Record<string, string>;
+  /** 生产依赖映射表。 */
+  dependencies?: Record<string, string>;
 }
 
 /**
@@ -51,5 +53,19 @@ describe('package scripts', () => {
     expect(manifest.scripts?.['speech:manifest:hash']).toBe('node ./scripts/speech/manifest-tool.mjs hash');
     expect(manifest.scripts?.['speech:manifest:localize']).toBe('node ./scripts/speech/manifest-tool.mjs localize');
     expect(manifest.scripts?.['speech:manifest:validate']).toBe('node ./scripts/speech/manifest-tool.mjs validate');
+  });
+});
+
+describe('package runtime dependencies', () => {
+  it('declares AI SDK runtime transitive packages needed by electron-builder', () => {
+    const manifest = readPackageScripts();
+
+    expect(manifest.dependencies?.['@ai-sdk/provider']).toBeDefined();
+    expect(manifest.dependencies?.['@ai-sdk/provider-utils']).toBeDefined();
+    expect(manifest.dependencies?.['@ai-sdk/gateway']).toBeDefined();
+    expect(manifest.dependencies?.['@opentelemetry/api']).toBeDefined();
+    expect(manifest.dependencies?.['@standard-schema/spec']).toBeDefined();
+    expect(manifest.dependencies?.['eventsource-parser']).toBeDefined();
+    expect(manifest.dependencies?.zod).toBeDefined();
   });
 });

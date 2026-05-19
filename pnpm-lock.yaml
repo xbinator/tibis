@@ -14,12 +14,27 @@ importers:
       '@ai-sdk/deepseek':
         specifier: ^2.0.35
         version: 2.0.35(zod@3.25.76)
+      '@ai-sdk/gateway':
+        specifier: 3.0.114
+        version: 3.0.114(zod@3.25.76)
       '@ai-sdk/google':
         specifier: ^3.0.73
         version: 3.0.73(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^3.0.63
         version: 3.0.63(zod@3.25.76)
+      '@ai-sdk/provider':
+        specifier: 3.0.10
+        version: 3.0.10
+      '@ai-sdk/provider-utils':
+        specifier: 4.0.27
+        version: 4.0.27(zod@3.25.76)
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
+      '@standard-schema/spec':
+        specifier: ^1.1.0
+        version: 1.1.0
       '@tavily/ai-sdk':
         specifier: ^0.5.0
         version: 0.5.0(ai@6.0.182(zod@3.25.76))(zod@3.25.76)
@@ -38,12 +53,18 @@ importers:
       electron-store:
         specifier: ^10.1.0
         version: 10.1.0
+      eventsource-parser:
+        specifier: ^3.0.8
+        version: 3.0.8
       lodash-es:
         specifier: ^4.18.1
         version: 4.18.1
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@atlaskit/pragmatic-drag-and-drop':
         specifier: ^1.8.1
