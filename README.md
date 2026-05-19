@@ -316,6 +316,12 @@ pnpm dev
 
 MIT License
 
+## 致谢
+
+感谢以下个人和组织对项目的支持：
+
+- [FCDFW](https://github.com/FCDFW) 的大力 token 支持，为项目的 AI 模型调试与功能开发提供了重要的算力保障
+
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request。
