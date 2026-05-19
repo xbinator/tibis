@@ -89,3 +89,15 @@ git push origin v0.1.1
 4. `Publish GitHub Release` job 是否成功上传 `release-artifacts/*`
 
 如果失败发生在创建标签之后，后续重试前需要确认远端是否已经存在对应 `vX.Y.Z` 标签和 GitHub Release，避免重复发布同一个版本。
+
+### macOS dmg-builder 下载失败
+
+仓库 `.npmrc` 使用 `electron_mirror` 加速 Electron 本体下载。macOS DMG 构建还会额外下载 `electron-builder-binaries` 中的 `dmg-builder` 辅助包。
+
+如果镜像缺少对应文件，可能出现类似错误：
+
+```text
+Response code 404 (Not Found) for https://cdn.npmmirror.com/binaries/electron/dmg-builder@...
+```
+
+`Release` 工作流会在打包步骤显式设置 `ELECTRON_BUILDER_BINARIES_MIRROR`，让 `dmg-builder` 从 GitHub 官方源下载，避免被 Electron 本体镜像带到缺失的镜像地址。

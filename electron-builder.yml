@@ -33,3 +33,5 @@ linux:
     - AppImage
     - deb
   icon: resources/icons/app.png
+  category: Utility
+  maintainer: Tibis contributors <noreply@github.com>

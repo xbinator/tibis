@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Version bump type. Use custom when version is provided.
+        description: 版本升级类型。当提供自定义版本号时，请选择 custom。
         type: choice
         required: true
         default: patch
@@ -17,7 +17,7 @@ on:
           - major
           - custom
       version:
-        description: Custom version without the v prefix, for example 0.2.0 or 1.0.0-beta.1.
+        description: 自定义版本号（不带 v 前缀），例如 0.2.0 或 1.0.0-beta.1。
         type: string
         required: false
 
@@ -177,6 +177,9 @@ jobs:
 
       - name: Build release packages
         run: pnpm electron:build
+        env:
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+          npm_config_electron_builder_binaries_mirror: https://github.com/electron-userland/electron-builder-binaries/releases/download/
 
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@v4
