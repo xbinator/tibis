@@ -7,6 +7,7 @@ import type {
   BJsonViewerProps,
   JsonFlowNodeData,
   JsonGraphResult,
+  JsonNodeHandle,
   JsonNodeKind,
   JsonParseResult,
   JsonRecordRow,
@@ -30,8 +31,24 @@ interface UseJsonGraphReturn {
   graphEdges: ComputedRef<Edge[]>;
 }
 
-/** 聚合卡片宽度，与组件样式保持一致。 */
-const RECORD_NODE_WIDTH = 430;
+/**
+ * 子树布局边界。
+ */
+interface LayoutBounds {
+  /** 子树顶部 Y 坐标。 */
+  top: number;
+  /** 子树底部 Y 坐标。 */
+  bottom: number;
+}
+
+/** 等宽字体 22px 下单字符宽度估算。 */
+const CHAR_WIDTH = 13.2;
+
+/** Record 节点最小宽度。 */
+const RECORD_MIN_WIDTH = 200;
+
+/** Record 节点最大宽度。 */
+const RECORD_MAX_WIDTH = 800;
 
 /** 叶子值节点的最小宽度估算，用于布局时避让父节点。 */
 const VALUE_NODE_WIDTH = 160;
@@ -201,9 +218,44 @@ function createRecordRow(path: string, key: string, value: JsonValue, hasLink: b
     key,
     value: hasLink ? formatCollectionSummary(value) : formatPrimitiveValue(value),
     kind: getJsonNodeKind(value),
-    hasLink,
-    handleId: `row:${path || 'root'}`
+    hasLink
   };
+}
+
+/**
+ * 为节点内的每条连线分配独立 Handle，并计算纵向位置。
+ *
+ * 同一行有多条连线时（如数组字段），Handle 在行内均匀分布，
+ * 保证每条连线拥有独立的起始点。
+ *
+ * @param links - 子连线列表（sourceHandle 将被原地赋值）
+ * @param nodePath - 当前节点的 JSON Pointer 路径，用于生成唯一 ID
+ * @returns Handle 列表
+ */
+function buildHandlesForLinks(links: JsonVisualNode['links'], nodePath: string): JsonNodeHandle[] {
+  const linksPerRow = new Map<number, number>();
+
+  links.forEach((link): void => {
+    linksPerRow.set(link.sourceRowIndex, (linksPerRow.get(link.sourceRowIndex) ?? 0) + 1);
+  });
+
+  const rowSubIndex = new Map<number, number>();
+  const handles: JsonNodeHandle[] = [];
+
+  links.forEach((link, linkIndex): void => {
+    const totalInRow = linksPerRow.get(link.sourceRowIndex) ?? 1;
+    const subIndex = rowSubIndex.get(link.sourceRowIndex) ?? 0;
+
+    rowSubIndex.set(link.sourceRowIndex, subIndex + 1);
+
+    const handleId = `h:${nodePath || 'root'}:${linkIndex}`;
+    const top = link.sourceRowIndex * ROW_HEIGHT + (subIndex + 0.5) * (ROW_HEIGHT / totalInRow);
+
+    handles.push({ id: handleId, top });
+    link.sourceHandle = handleId;
+  });
+
+  return handles;
 }
 
 /**
@@ -216,15 +268,53 @@ function createRecordRow(path: string, key: string, value: JsonValue, hasLink: b
 function createVisualNode(value: JsonValue, path: string, depth: number): JsonVisualNode {
   const kind = getJsonNodeKind(value);
 
-  if (kind !== 'object') {
+  if (kind === 'array' && path === '') {
+    const links: JsonVisualNode['links'] = [];
+
+    if (isArray(value)) {
+      value.forEach((item, index): void => {
+        const itemPath = joinJsonPointer(path, String(index));
+
+        links.push({
+          sourceHandle: '',
+          sourceRowIndex: 0,
+          target: createVisualNode(item, itemPath, depth + 1),
+          label: ''
+        });
+      });
+    }
+
+    const valueText = formatCollectionSummary(value);
+    const width = Math.max(VALUE_NODE_WIDTH, valueText.length * CHAR_WIDTH + 40);
+    const handles = buildHandlesForLinks(links, path);
+
     return {
       id: path || 'root',
       path,
       kind,
       variant: 'value',
       depth,
+      width,
+      valueText,
+      rows: [],
+      handles,
+      links
+    };
+  }
+
+  if (kind !== 'object') {
+    const width = Math.max(VALUE_NODE_WIDTH, formatPrimitiveValue(value).length * CHAR_WIDTH + 40);
+
+    return {
+      id: path || 'root',
+      path,
+      kind,
+      variant: 'value',
+      depth,
+      width,
       valueText: formatPrimitiveValue(value),
       rows: [],
+      handles: [],
       links: []
     };
   }
@@ -243,7 +333,7 @@ function createVisualNode(value: JsonValue, path: string, depth: number): JsonVi
 
     if (childKind === 'object') {
       links.push({
-        sourceHandle: row.handleId,
+        sourceHandle: '',
         sourceRowIndex: rowIndex,
         target: createVisualNode(childValue, childPath, depth + 1),
         label: key
@@ -256,7 +346,7 @@ function createVisualNode(value: JsonValue, path: string, depth: number): JsonVi
         const itemPath = joinJsonPointer(childPath, String(index));
 
         links.push({
-          sourceHandle: row.handleId,
+          sourceHandle: '',
           sourceRowIndex: rowIndex,
           target: createVisualNode(item, itemPath, depth + 1),
           label: key
@@ -265,14 +355,25 @@ function createVisualNode(value: JsonValue, path: string, depth: number): JsonVi
     }
   });
 
+  const maxRowWidth = rows.reduce((max, row): number => {
+    const rowWidth = (row.key.length + 1 + row.value.length) * CHAR_WIDTH + 56;
+
+    return Math.max(max, rowWidth);
+  }, 0);
+  const width = Math.min(RECORD_MAX_WIDTH, Math.max(RECORD_MIN_WIDTH, maxRowWidth));
+
+  const handles = buildHandlesForLinks(links, path);
+
   return {
     id: path || 'root',
     path,
     kind,
     variant: 'record',
     depth,
+    width,
     valueText: '',
     rows,
+    handles,
     links
   };
 }
@@ -296,11 +397,7 @@ function getVisualNodeHeight(visualNode: JsonVisualNode): number {
  * @returns 节点宽度
  */
 function getVisualNodeWidth(visualNode: JsonVisualNode): number {
-  if (visualNode.variant === 'record') {
-    return RECORD_NODE_WIDTH;
-  }
-
-  return Math.max(VALUE_NODE_WIDTH, visualNode.valueText.length * 16 + 40);
+  return visualNode.width;
 }
 
 /**
@@ -319,45 +416,110 @@ function groupLinksBySourceRow(links: JsonVisualNode['links']): JsonVisualNode['
 }
 
 /**
- * 递归计算节点布局。
+ * 递归计算可视节点整棵子树的高度。
+ *
+ * 与之前“父节点先定、子树向下避让”的布局不同，这里先计算整棵子树的总高度，
+ * 再让父节点沿着该高度的中线放置，从而使父节点与一级子节点整体在纵向上对齐。
+ *
  * @param visualNode - 当前可视节点
- * @param positionedNodes - 布局结果收集器
- * @param x - 当前节点横向坐标
- * @param y - 当前节点纵向坐标
+ * @returns 子树高度
  */
-function layoutVisualNodeBranch(visualNode: JsonVisualNode, positionedNodes: Map<string, PositionedVisualNode>, x: number, y: number): void {
-  positionedNodes.set(visualNode.id, { visualNode, x, y });
+function getVisualNodeSubtreeHeight(visualNode: JsonVisualNode): number {
+  const nodeHeight = getVisualNodeHeight(visualNode);
 
-  const childX = x + getVisualNodeWidth(visualNode) + HORIZONTAL_GAP;
-  let nextAvailableY = 0;
+  if (visualNode.links.length === 0) {
+    return nodeHeight;
+  }
 
-  groupLinksBySourceRow(visualNode.links).forEach((group): void => {
-    const sourceRowIndex = group[0]?.sourceRowIndex ?? 0;
-    const rowCenterY = y + sourceRowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
-    const groupHeight = group.reduce<number>((height, link, index): number => {
-      const gap = index === 0 ? 0 : SIBLING_GAP;
-      return height + gap + getVisualNodeHeight(link.target);
-    }, 0);
-    let childY = Math.max(0, rowCenterY - groupHeight / 2, nextAvailableY);
+  const linksHeight = groupLinksBySourceRow(visualNode.links).reduce<number>((height, group, index): number => {
+    const gap = index === 0 ? 0 : SIBLING_GAP;
+    // eslint-disable-next-line no-use-before-define
+    return height + gap + getLinksBlockHeight(group);
+  }, 0);
 
-    group.forEach((link): void => {
-      layoutVisualNodeBranch(link.target, positionedNodes, childX, childY);
-      childY += getVisualNodeHeight(link.target) + SIBLING_GAP;
-    });
-
-    nextAvailableY = childY;
-  });
+  return Math.max(nodeHeight, linksHeight);
 }
 
 /**
- * 计算图节点布局。
+ * 计算一组兄弟子树占用的总高度。
+ *
+ * @param links - 同一父节点下的子连线列表
+ * @returns 子树总高度
+ */
+function getLinksBlockHeight(links: JsonVisualNode['links']): number {
+  return links.reduce<number>((height, link, index): number => {
+    const gap = index === 0 ? 0 : SIBLING_GAP;
+
+    return height + gap + getVisualNodeSubtreeHeight(link.target);
+  }, 0);
+}
+
+/**
+ * 递归计算节点布局。
+ *
+ * 返回当前子树的顶部和底部边界，用于父节点判断子树实际占据的纵向空间，
+ * 避免不同分组的子树在纵向方向重叠。
+ *
+ * @param visualNode - 当前可视节点
+ * @param positionedNodes - 布局结果收集器
+ * @param x - 当前节点横向坐标
+ * @param subtreeTop - 当前子树顶部 Y 坐标
+ * @returns 子树边界
+ */
+function layoutVisualNodeBranch(visualNode: JsonVisualNode, positionedNodes: Map<string, PositionedVisualNode>, x: number, subtreeTop: number): LayoutBounds {
+  const nodeHeight = getVisualNodeHeight(visualNode);
+  const subtreeHeight = getVisualNodeSubtreeHeight(visualNode);
+  const nodeY = subtreeTop + (subtreeHeight - nodeHeight) / 2;
+
+  positionedNodes.set(visualNode.id, { visualNode, x, y: nodeY });
+
+  let subtreeMinTop = nodeY;
+  let subtreeMaxBottom = nodeY + nodeHeight;
+
+  const childX = x + getVisualNodeWidth(visualNode) + HORIZONTAL_GAP;
+  const linksGroups = groupLinksBySourceRow(visualNode.links);
+  const totalLinksHeight = linksGroups.reduce<number>((height, group, index): number => {
+    const gap = index === 0 ? 0 : SIBLING_GAP;
+
+    return height + gap + getLinksBlockHeight(group);
+  }, 0);
+  let nextAvailableY = subtreeTop + (subtreeHeight - totalLinksHeight) / 2;
+
+  linksGroups.forEach((group): void => {
+    let childY = nextAvailableY;
+
+    group.forEach((link): void => {
+      const childBounds = layoutVisualNodeBranch(link.target, positionedNodes, childX, childY);
+
+      subtreeMinTop = Math.min(subtreeMinTop, childBounds.top);
+      subtreeMaxBottom = Math.max(subtreeMaxBottom, childBounds.bottom);
+      childY += getVisualNodeSubtreeHeight(link.target) + SIBLING_GAP;
+    });
+
+    nextAvailableY += getLinksBlockHeight(group) + SIBLING_GAP;
+  });
+
+  return { top: subtreeMinTop, bottom: subtreeMaxBottom };
+}
+
+/**
+ * 计算图节点布局，整体垂直居中。
+ *
+ * 先从 (0, 0) 开始递归布局，再根据实际布局边界将所有节点
+ * 统一偏移到纵向中心位置，避免因顶部不在 0 而导致视觉偏移。
+ *
  * @param visualNode - 根可视节点
  * @returns 布局后的节点 Map
  */
 function layoutVisualNodes(visualNode: JsonVisualNode): Map<string, PositionedVisualNode> {
   const positionedNodes = new Map<string, PositionedVisualNode>();
 
-  layoutVisualNodeBranch(visualNode, positionedNodes, 0, 0);
+  const bounds = layoutVisualNodeBranch(visualNode, positionedNodes, 0, 0);
+  const centerYOffset = -((bounds.top + bounds.bottom) / 2);
+
+  positionedNodes.forEach((positionedNode): void => {
+    positionedNode.y += centerYOffset;
+  });
 
   return positionedNodes;
 }
@@ -405,8 +567,10 @@ function buildGraph(value: JsonValue | undefined): JsonGraphResult {
         path: visualNode.path,
         kind: visualNode.kind,
         variant: visualNode.variant,
+        width: visualNode.width,
         valueText: visualNode.valueText,
-        rows: visualNode.rows
+        rows: visualNode.rows,
+        handles: visualNode.handles
       }
     };
   });

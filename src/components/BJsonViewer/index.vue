@@ -27,7 +27,7 @@
       :class="bem('flow')"
     >
       <template #node-json="{ data }">
-        <JsonRecordNode :data="data" />
+        <RecordNode :data="data" />
       </template>
     </VueFlow>
   </div>
@@ -39,7 +39,7 @@ import { VueFlow } from '@vue-flow/core';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 import { createNamespace } from '@/utils/namespace';
-import JsonRecordNode from './components/JsonRecordNode.vue';
+import RecordNode from './components/RecordNode.vue';
 import { useJsonGraph } from './hooks/useJsonGraph';
 
 defineOptions({ name: 'BJsonViewer' });
@@ -82,7 +82,7 @@ const { parseError, graphEdges, graphNodes } = useJsonGraph(props);
 }
 
 .b-json-viewer__node--record {
-  width: 430px;
+  min-width: 200px;
 }
 
 .b-json-viewer__node--value {

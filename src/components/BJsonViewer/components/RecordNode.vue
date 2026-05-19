@@ -3,7 +3,7 @@
   @description BJsonViewer 的 Vue Flow 自定义节点卡片。
 -->
 <template>
-  <div :class="bem('node', [data.variant, data.kind])">
+  <div :class="bem('node', [data.variant, data.kind])" :style="data.variant === 'record' ? { width: `${data.width}px` } : undefined">
     <Handle type="target" :position="Position.Left" :class="bem('handle', ['target'])" />
 
     <div v-if="data.variant === 'value'" :class="bem('value')">
@@ -14,9 +14,18 @@
       <div v-for="row in data.rows" :key="row.id" :class="bem('row')">
         <span :class="bem('key')">{{ row.key }}:</span>
         <span :class="bem('row-value', [row.kind])">{{ row.value }}</span>
-        <Handle v-if="row.hasLink" :id="row.handleId" type="source" :position="Position.Right" :class="bem('handle', ['source'])" />
       </div>
     </div>
+
+    <Handle
+      v-for="handle in data.handles"
+      :id="handle.id"
+      :key="handle.id"
+      type="source"
+      :position="Position.Right"
+      :class="bem('handle', ['source'])"
+      :style="{ top: `${handle.top}px` }"
+    />
   </div>
 </template>
 

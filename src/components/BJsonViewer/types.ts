@@ -44,8 +44,16 @@ export interface JsonRecordRow {
   kind: JsonNodeKind;
   /** 是否会连向右侧子节点。 */
   hasLink: boolean;
-  /** Vue Flow Handle ID。 */
-  handleId: string;
+}
+
+/**
+ * 节点上的连线起始点。
+ */
+export interface JsonNodeHandle {
+  /** Handle 唯一标识，与 Edge 的 sourceHandle 对应。 */
+  id: string;
+  /** Handle 在节点内的纵向偏移（px）。 */
+  top: number;
 }
 
 /**
@@ -58,10 +66,14 @@ export interface JsonFlowNodeData {
   kind: JsonNodeKind;
   /** 节点展示模式。 */
   variant: 'record' | 'value';
+  /** 节点宽度（px），用于内联样式及布局计算。 */
+  width: number;
   /** 值节点文本。 */
   valueText: string;
   /** 对象或数组卡片行。 */
   rows: JsonRecordRow[];
+  /** 连线起始点列表，每条连线对应独立 Handle。 */
+  handles: JsonNodeHandle[];
 }
 
 /**
@@ -78,10 +90,14 @@ export interface JsonVisualNode {
   variant: 'record' | 'value';
   /** 节点深度。 */
   depth: number;
+  /** 节点宽度（px），根据内容动态计算。 */
+  width: number;
   /** 值节点文本。 */
   valueText: string;
   /** 卡片行。 */
   rows: JsonRecordRow[];
+  /** 连线起始点列表，每条连线对应独立 Handle。 */
+  handles: JsonNodeHandle[];
   /** 子节点连线描述。 */
   links: Array<{
     /** 源节点行 Handle ID。 */
