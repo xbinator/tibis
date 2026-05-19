@@ -138,6 +138,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
+    // Electron 生产环境通过 file:// 加载 dist/index.html，资源路径必须保持相对路径。
+    base: './',
+
     plugins: [
       vue({
         template: {
