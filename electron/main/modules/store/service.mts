@@ -1,66 +1,47 @@
+/**
+ * @file service.mts
+ * @description 初始化并暴露主进程 Electron Store 实例。
+ */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { app, safeStorage } from 'electron';
+import { app } from 'electron';
 import ElectronStore from 'electron-store';
 
+/**
+ * 主进程持久化配置结构。
+ */
 interface StoreSchema extends Record<string, unknown> {
+  /** 工作区数据盐值。 */
   salt: string;
 }
 
+/**
+ * Electron Store 运行时实例类型。
+ */
 type StoreType = ElectronStore<StoreSchema> & {
+  /** 读取指定键的值。 */
   get: (key: string) => unknown;
+  /** 写入指定键的值。 */
   set: (key: string, value: unknown) => void;
+  /** 删除指定键的值。 */
   delete: (key: string) => void;
 };
 
 let storeInstance: StoreType | null = null;
 
-const KEY_FILE_NAME = 'tibis-key.bin';
 const STORE_NAME = 'tibis-secure-store';
 
-function getEncryptionKeyPath(): string {
-  return path.join(app.getPath('userData'), KEY_FILE_NAME);
-}
-
+/**
+ * 获取 Electron Store 数据文件路径。
+ * @returns Store JSON 文件的绝对路径。
+ */
 function getStorePath(): string {
   return path.join(app.getPath('userData'), `${STORE_NAME}.json`);
 }
 
-function loadOrCreateEncryptionKey(): string {
-  const keyPath = getEncryptionKeyPath();
-  const isDev = !app.isPackaged;
-
-  if (isDev) {
-    if (fs.existsSync(keyPath)) {
-      const keyData = fs.readFileSync(keyPath, 'utf-8');
-      if (keyData.startsWith('tibis-encryption-key-')) {
-        return keyData;
-      }
-    }
-    const newKey = `tibis-encryption-key-${Date.now().toString(36)}`;
-    fs.writeFileSync(keyPath, newKey, 'utf-8');
-    return newKey;
-  }
-
-  if (fs.existsSync(keyPath)) {
-    const keyData = fs.readFileSync(keyPath, 'utf-8');
-    if (safeStorage.isEncryptionAvailable()) {
-      try {
-        return safeStorage.decryptString(Buffer.from(keyData, 'base64'));
-      } catch {
-        fs.unlinkSync(keyPath);
-      }
-    }
-  }
-
-  const newKey = `tibis-encryption-key-${Date.now().toString(36)}`;
-  if (safeStorage.isEncryptionAvailable()) {
-    const encryptedKey = safeStorage.encryptString(newKey);
-    fs.writeFileSync(keyPath, encryptedKey.toString('base64'));
-  }
-  return newKey;
-}
-
+/**
+ * 清理无法被 Electron Store 读取的损坏数据文件。
+ */
 function clearCorruptedStore(): void {
   const storePath = getStorePath();
   if (fs.existsSync(storePath)) {
@@ -73,13 +54,13 @@ function clearCorruptedStore(): void {
   }
 }
 
+/**
+ * 初始化主进程 Store 实例。
+ */
 export async function initStore(): Promise<void> {
-  const encryptionKey = loadOrCreateEncryptionKey();
-
   try {
     storeInstance = new ElectronStore<StoreSchema>({
       name: STORE_NAME,
-      encryptionKey,
       defaults: { salt: '' }
     }) as StoreType;
   } catch (error) {
@@ -88,7 +69,6 @@ export async function initStore(): Promise<void> {
 
     storeInstance = new ElectronStore<StoreSchema>({
       name: STORE_NAME,
-      encryptionKey,
       defaults: { salt: '' }
     }) as StoreType;
 
@@ -96,6 +76,10 @@ export async function initStore(): Promise<void> {
   }
 }
 
+/**
+ * 获取已初始化的主进程 Store 实例。
+ * @returns 主进程 Store 实例。
+ */
 export function getStore(): StoreType {
   if (!storeInstance) {
     throw new Error('Store not initialized. Call initStore() first.');
