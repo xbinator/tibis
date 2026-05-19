@@ -20,6 +20,31 @@ importers:
       '@ai-sdk/openai':
         specifier: ^3.0.63
         version: 3.0.63(zod@3.25.76)
+      '@tavily/ai-sdk':
+        specifier: ^0.5.0
+        version: 0.5.0(ai@6.0.182(zod@3.25.76))(zod@3.25.76)
+      ai:
+        specifier: ^6.0.182
+        version: 6.0.182(zod@3.25.76)
+      better-sqlite3:
+        specifier: ^12.10.0
+        version: 12.10.0
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
+      electron-log:
+        specifier: ^5.4.4
+        version: 5.4.4
+      electron-store:
+        specifier: ^10.1.0
+        version: 10.1.0
+      lodash-es:
+        specifier: ^4.18.1
+        version: 4.18.1
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
+    devDependencies:
       '@atlaskit/pragmatic-drag-and-drop':
         specifier: ^1.8.1
         version: 1.8.1
@@ -47,15 +72,15 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.0
         version: 6.43.0
+      '@electron/rebuild':
+        specifier: ^4.0.4
+        version: 4.0.4
       '@iconify/vue':
         specifier: ^5.0.1
         version: 5.0.1(vue@3.5.34(typescript@5.9.3))
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
-      '@tavily/ai-sdk':
-        specifier: ^0.5.0
-        version: 0.5.0(ai@6.0.182(zod@3.25.76))(zod@3.25.76)
       '@tiptap/core':
         specifier: ^3.23.4
         version: 3.23.4(@tiptap/pm@3.23.4)
@@ -137,94 +162,6 @@ importers:
       '@tiptap/vue-3':
         specifier: ^3.23.4
         version: 3.23.4(@floating-ui/dom@1.7.6)(@tiptap/core@3.23.4(@tiptap/pm@3.23.4))(@tiptap/pm@3.23.4)(vue@3.5.34(typescript@5.9.3))
-      '@vue-flow/core':
-        specifier: ^1.48.2
-        version: 1.48.2(vue@3.5.34(typescript@5.9.3))
-      '@vueuse/core':
-        specifier: ^14.3.0
-        version: 14.3.0(vue@3.5.34(typescript@5.9.3))
-      ai:
-        specifier: ^6.0.182
-        version: 6.0.182(zod@3.25.76)
-      ant-design-vue:
-        specifier: ^4.2.6
-        version: 4.2.6(vue@3.5.34(typescript@5.9.3))
-      better-sqlite3:
-        specifier: ^12.10.0
-        version: 12.10.0
-      chokidar:
-        specifier: ^5.0.0
-        version: 5.0.0
-      dayjs:
-        specifier: ^1.11.20
-        version: 1.11.20
-      electron-log:
-        specifier: ^5.4.4
-        version: 5.4.4
-      electron-store:
-        specifier: ^10.1.0
-        version: 10.1.0
-      js-beautify:
-        specifier: ^1.15.4
-        version: 1.15.4
-      js-tiktoken:
-        specifier: ^1.0.21
-        version: 1.0.21
-      js-yaml:
-        specifier: ^4.1.1
-        version: 4.1.1
-      json-schema:
-        specifier: ^0.4.0
-        version: 0.4.0
-      katex:
-        specifier: ^0.16.46
-        version: 0.16.46
-      less:
-        specifier: ^4.6.4
-        version: 4.6.4
-      localforage:
-        specifier: ^1.10.0
-        version: 1.10.0
-      lodash-es:
-        specifier: ^4.18.1
-        version: 4.18.1
-      lowlight:
-        specifier: ^3.3.0
-        version: 3.3.0
-      marked:
-        specifier: ^18.0.2
-        version: 18.0.2
-      mermaid:
-        specifier: ^11.15.0
-        version: 11.15.0
-      monaco-editor:
-        specifier: ^0.55.1
-        version: 0.55.1
-      nanoid:
-        specifier: ^5.1.11
-        version: 5.1.11
-      p-limit:
-        specifier: ^7.3.0
-        version: 7.3.0
-      pinia:
-        specifier: ^3.0.4
-        version: 3.0.4(typescript@5.9.3)(vue@3.5.34(typescript@5.9.3))
-      sharp:
-        specifier: ^0.34.5
-        version: 0.34.5
-      unocss:
-        specifier: ^66.6.8
-        version: 66.6.8(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(vite@8.0.10(@types/node@25.8.0)(jiti@2.6.1)(less@4.6.4)(yaml@2.8.3))
-      vue:
-        specifier: ^3.5.34
-        version: 3.5.34(typescript@5.9.3)
-      vue-router:
-        specifier: ^5.0.7
-        version: 5.0.7(@vue/compiler-sfc@3.5.34)(pinia@3.0.4(typescript@5.9.3)(vue@3.5.34(typescript@5.9.3)))(vue@3.5.34(typescript@5.9.3))
-    devDependencies:
-      '@electron/rebuild':
-        specifier: ^4.0.4
-        version: 4.0.4
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -258,6 +195,9 @@ importers:
       '@vitejs/plugin-vue-jsx':
         specifier: ^5.1.5
         version: 5.1.5(vite@8.0.10(@types/node@25.8.0)(jiti@2.6.1)(less@4.6.4)(yaml@2.8.3))(vue@3.5.34(typescript@5.9.3))
+      '@vue-flow/core':
+        specifier: ^1.48.2
+        version: 1.48.2(vue@3.5.34(typescript@5.9.3))
       '@vue/eslint-config-prettier':
         specifier: ^7.1.0
         version: 7.1.0(eslint@8.57.1)(prettier@2.8.8)
@@ -267,12 +207,21 @@ importers:
       '@vue/test-utils':
         specifier: ^2.4.6
         version: 2.4.6
+      '@vueuse/core':
+        specifier: ^14.3.0
+        version: 14.3.0(vue@3.5.34(typescript@5.9.3))
+      ant-design-vue:
+        specifier: ^4.2.6
+        version: 4.2.6(vue@3.5.34(typescript@5.9.3))
       concurrently:
         specifier: ^9.1.2
         version: 9.2.1
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
+      dayjs:
+        specifier: ^1.11.20
+        version: 1.11.20
       electron:
         specifier: ^41.6.1
         version: 41.6.1
@@ -300,9 +249,51 @@ importers:
       eslint-plugin-vue:
         specifier: ^9.14.1
         version: 9.33.0(eslint@8.57.1)
+      js-beautify:
+        specifier: ^1.15.4
+        version: 1.15.4
+      js-tiktoken:
+        specifier: ^1.0.21
+        version: 1.0.21
+      js-yaml:
+        specifier: ^4.1.1
+        version: 4.1.1
       jsdom:
         specifier: ^29.0.2
         version: 29.0.2
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
+      katex:
+        specifier: ^0.16.46
+        version: 0.16.46
+      less:
+        specifier: ^4.6.4
+        version: 4.6.4
+      localforage:
+        specifier: ^1.10.0
+        version: 1.10.0
+      lowlight:
+        specifier: ^3.3.0
+        version: 3.3.0
+      marked:
+        specifier: ^18.0.2
+        version: 18.0.2
+      mermaid:
+        specifier: ^11.15.0
+        version: 11.15.0
+      monaco-editor:
+        specifier: ^0.55.1
+        version: 0.55.1
+      nanoid:
+        specifier: ^5.1.11
+        version: 5.1.11
+      p-limit:
+        specifier: ^7.3.0
+        version: 7.3.0
+      pinia:
+        specifier: ^3.0.4
+        version: 3.0.4(typescript@5.9.3)(vue@3.5.34(typescript@5.9.3))
       postcss-html:
         specifier: ^1.8.0
         version: 1.8.1
@@ -330,6 +321,9 @@ importers:
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
+      unocss:
+        specifier: ^66.6.8
+        version: 66.6.8(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(vite@8.0.10(@types/node@25.8.0)(jiti@2.6.1)(less@4.6.4)(yaml@2.8.3))
       unplugin-auto-import:
         specifier: ^21.0.0
         version: 21.0.0(@vueuse/core@14.3.0(vue@3.5.34(typescript@5.9.3)))
@@ -342,9 +336,15 @@ importers:
       vitest:
         specifier: ^4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.0)(@types/node@25.8.0)(jsdom@29.0.2)(vite@8.0.10(@types/node@25.8.0)(jiti@2.6.1)(less@4.6.4)(yaml@2.8.3))
+      vue:
+        specifier: ^3.5.34
+        version: 3.5.34(typescript@5.9.3)
       vue-eslint-parser:
         specifier: ^10.1.1
         version: 10.4.0(eslint@8.57.1)
+      vue-router:
+        specifier: ^5.0.7
+        version: 5.0.7(@vue/compiler-sfc@3.5.34)(pinia@3.0.4(typescript@5.9.3)(vue@3.5.34(typescript@5.9.3)))(vue@3.5.34(typescript@5.9.3))
       vue-tsc:
         specifier: ^3.2.7
         version: 3.2.7(typescript@5.9.3)
