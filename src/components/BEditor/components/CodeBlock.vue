@@ -5,28 +5,17 @@
 
       <div class="flex-1"></div>
 
+      <!-- 预览切换按钮：Mermaid 和 JSON 共用同一个按钮，通过 activePreview 统一控制 -->
       <button
-        v-if="isMermaidLanguage"
+        v-if="isMermaidLanguage || isJsonLanguage"
         type="button"
-        :class="[bem('control-btn'), { 'is-active': isMermaidPreviewVisible }]"
-        :disabled="!hasMermaidCode"
-        :title="hasMermaidCode ? '预览' : '输入代码后可预览'"
+        :class="[bem('control-btn'), { 'is-active': isPreviewVisible }]"
+        :disabled="!hasCode"
+        :title="hasCode ? '预览' : '输入代码后可预览'"
         @mousedown.prevent
-        @click="toggleMermaidPreview"
+        @click="togglePreview"
       >
-        <Icon :icon="showMermaidPreview ? 'lucide:eye-off' : 'lucide:eye'" />
-      </button>
-
-      <button
-        v-if="isJsonLanguage"
-        type="button"
-        :class="[bem('control-btn'), { 'is-active': isJsonPreviewVisible }]"
-        :disabled="!hasJsonCode"
-        :title="hasJsonCode ? '查看 JSON 图' : '输入 JSON 后可查看图'"
-        @mousedown.prevent
-        @click="toggleJsonPreview"
-      >
-        <Icon :icon="showJsonPreview ? 'lucide:eye-off' : 'lucide:eye'" />
+        <Icon :icon="isPreviewVisible ? 'lucide:eye-off' : 'lucide:eye'" />
       </button>
 
       <button type="button" :class="[bem('control-btn'), { 'is-active': isCollapsed }]" @mousedown.prevent @click="toggleCollapse">
@@ -39,17 +28,20 @@
     </div>
 
     <div v-show="!isCollapsed" :class="bem('body-wrapper')">
-      <div v-show="isMermaidPreviewVisible" :class="bem('mermaid-preview')" contenteditable="false">
+      <!-- Mermaid 图预览区域 -->
+      <BSuspense v-if="isMermaidLanguage" :active="activePreview === 'mermaid' && hasCode" :class="bem('mermaid-preview')" contenteditable="false">
         <div v-if="renderError" :class="bem('mermaid-error')">
           <Icon icon="lucide:alert-circle" />
           <span>{{ renderError }}</span>
         </div>
         <div v-else ref="mermaidPreviewRef" :class="bem('mermaid-diagram')"></div>
-      </div>
-      <div v-show="isJsonPreviewVisible" :class="bem('json-preview')" contenteditable="false">
+      </BSuspense>
+      <!-- JSON 图预览区域 -->
+      <BSuspense v-if="isJsonLanguage" :active="activePreview === 'json' && hasCode" :class="bem('json-preview')" contenteditable="false">
         <BJsonViewer :content="codeContent" />
-      </div>
-      <pre v-show="!isMermaidPreviewVisible && !isJsonPreviewVisible" :class="bem('body')"><NodeViewContent as="code" :class="codeClassName" /></pre>
+      </BSuspense>
+      <!-- 代码区域 -->
+      <pre v-show="!isPreviewVisible" :class="bem('body')"><NodeViewContent as="code" :class="codeClassName" /></pre>
     </div>
   </NodeViewWrapper>
 </template>
@@ -68,6 +60,7 @@ const [name, bem] = createNamespace('markdown-codeblock');
 // ─── 类型 ────────────────────────────────────────────────────────────────────
 
 type CopyState = '复制' | '已复制' | '复制失败';
+type PreviewType = 'mermaid' | 'json';
 
 // ─── 常量 ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +72,9 @@ const COPY_ICON_MAP: Record<CopyState, string> = {
 
 const COPY_RESET_DELAY = 1500;
 const MERMAID_DEBOUNCE_DELAY = 300;
+
+// 支持预览的语言，后续如需扩展只改这里
+const PREVIEWABLE_LANGUAGES = new Set<PreviewType>(['mermaid', 'json']);
 
 const LANGUAGE_OPTIONS = [
   { value: 'plaintext', label: 'Plain Text' },
@@ -168,10 +164,11 @@ const { copy } = useClipboard();
 const copyState = ref<CopyState>('复制');
 const isCollapsed = ref(false);
 const isWordWrap = ref(false);
-const showMermaidPreview = ref(true);
-const showJsonPreview = ref(false);
 const renderError = ref<string | null>(null);
 const mermaidPreviewRef = ref<HTMLElement | null>(null);
+
+// 统一预览状态：null 表示不显示预览，'mermaid' / 'json' 表示当前激活的预览类型
+const activePreview = ref<PreviewType | null>('mermaid');
 
 // 渲染竞态守卫
 let mermaidRenderIndex = 0;
@@ -193,12 +190,13 @@ const codeContent = computed(() => props.node.textContent);
 const codeClassName = computed(() => (selectedLanguage.value ? `language-${selectedLanguage.value}` : ''));
 
 const isMermaidLanguage = computed(() => selectedLanguage.value === 'mermaid');
-const hasMermaidCode = computed(() => codeContent.value.trim().length > 0);
-const isMermaidPreviewVisible = computed(() => isMermaidLanguage.value && showMermaidPreview.value && hasMermaidCode.value);
-
 const isJsonLanguage = computed(() => selectedLanguage.value === 'json');
-const hasJsonCode = computed(() => codeContent.value.trim().length > 0);
-const isJsonPreviewVisible = computed(() => isJsonLanguage.value && showJsonPreview.value && hasJsonCode.value);
+
+// 当前语言是否有内容
+const hasCode = computed(() => codeContent.value.trim().length > 0);
+
+// 预览是否可见：当前语言与激活预览类型匹配，且有内容
+const isPreviewVisible = computed(() => hasCode.value && activePreview.value === selectedLanguage.value);
 
 // 复制按钮图标，通过 Map 替代多分支 if
 const copyIconName = computed(() => COPY_ICON_MAP[copyState.value]);
@@ -209,7 +207,7 @@ const copyLabel = computed(() => copyState.value);
 
 async function renderMermaid(): Promise<void> {
   // 提前退出：预览不可见时无需渲染
-  if (!isMermaidPreviewVisible.value) return;
+  if (!isPreviewVisible.value) return;
 
   const code = codeContent.value.trim();
 
@@ -228,7 +226,7 @@ async function renderMermaid(): Promise<void> {
 
   // 提前退出：等待期间状态已变化
   if (!mermaidPreviewRef.value) return;
-  if (!isMermaidPreviewVisible.value) return;
+  if (!isPreviewVisible.value) return;
   if (renderIndex !== mermaidRenderIndex) return;
 
   try {
@@ -288,44 +286,43 @@ function handleLanguageChange(language: unknown): void {
   if (typeof language !== 'string') return;
 
   selectedLanguage.value = language; // computed setter 自动同步 node attrs
+
+  // 切换语言时：新语言支持预览则自动打开，否则收起
+  activePreview.value = PREVIEWABLE_LANGUAGES.has(language as PreviewType) ? (language as PreviewType) : null;
 }
 
 function toggleCollapse(): void {
   isCollapsed.value = !isCollapsed.value;
 }
 
-function toggleMermaidPreview(): void {
+// 合并后的预览切换：Mermaid 和 JSON 共用同一套开/关逻辑
+function togglePreview(): void {
   // 提前退出：没有代码时不允许切换
-  if (!hasMermaidCode.value) return;
+  if (!hasCode.value) return;
 
-  showMermaidPreview.value = !showMermaidPreview.value;
+  const type = selectedLanguage.value as PreviewType;
+  activePreview.value = activePreview.value === type ? null : type;
 
-  if (showMermaidPreview.value) renderMermaid();
-}
-
-function toggleJsonPreview(): void {
-  // 提前退出：没有代码时不允许切换
-  if (!hasJsonCode.value) return;
-
-  showJsonPreview.value = !showJsonPreview.value;
+  // 仅 Mermaid 需要主动触发渲染；JSON 由 BSuspense 的 :active 响应式驱动
+  if (activePreview.value === 'mermaid') renderMermaid();
 }
 
 // ─── 侦听器 ──────────────────────────────────────────────────────────────────
 
 // 代码变化时防抖渲染（避免每次击键都触发）
 watch(codeContent, () => {
-  if (isMermaidPreviewVisible.value) debouncedRenderMermaid();
+  if (isPreviewVisible.value && isMermaidLanguage.value) debouncedRenderMermaid();
 });
 
 // 预览可见性变化时立即渲染（用户主动切换，需要即时响应）
-watch(isMermaidPreviewVisible, (visible: boolean) => {
-  if (visible) renderMermaid();
+watch(isPreviewVisible, (visible: boolean) => {
+  if (visible && isMermaidLanguage.value) renderMermaid();
 });
 
 // ─── 生命周期 ────────────────────────────────────────────────────────────────
 
 onMounted(() => {
-  if (isMermaidPreviewVisible.value) renderMermaid();
+  if (isPreviewVisible.value) renderMermaid();
   themeChangeCallbacks.add(renderMermaid);
 });
 
