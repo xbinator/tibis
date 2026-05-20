@@ -132,6 +132,15 @@ export const useServiceModelStore = defineStore('serviceModel', {
     },
 
     /**
+     * 更新 chatModel 状态（仅内存更新，不持久化）。
+     * 用于外部已持久化后同步 store 状态。
+     * @param model - 选中的模型标识
+     */
+    updateChatModelState(model: SelectedModel): void {
+      this.chatModel = model;
+    },
+
+    /**
      * 获取区域是否折叠
      * @param serviceType - 服务类型
      * @param section - 区域名称

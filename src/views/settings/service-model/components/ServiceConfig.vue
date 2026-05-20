@@ -77,6 +77,10 @@ const props = withDefaults(defineProps<Props>(), {
   showPrompt: true
 });
 
+const emit = defineEmits<{
+  (e: 'change', payload: { providerId?: string; modelId?: string; customPrompt?: string }): void;
+}>();
+
 /**
  * Chip 解析器，将 {{...}} 内部的 body 解析为渲染指令。
  * options 中的变量值渲染为 chip（className），其他返回 null 作为纯文本。
@@ -167,8 +171,13 @@ function buildConfigPayload(): { providerId?: string; modelId?: string; customPr
   };
 }
 
+/**
+ * 持久化配置到存储并派发变更事件。
+ */
 async function persistConfig(): Promise<void> {
-  await serviceModelsStorage.saveConfig(props.serviceType, buildConfigPayload());
+  const payload = buildConfigPayload();
+  await serviceModelsStorage.saveConfig(props.serviceType, payload);
+  emit('change', payload);
   dispatchServiceModelUpdated(props.serviceType);
 }
 

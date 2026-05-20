@@ -1,6 +1,13 @@
 <template>
   <BSettingsPage title="默认模型">
-    <ServiceConfig service-type="chat" title="智能对话助手" description="指定用于智能对话的模型" :options="CHAT_SERVICE_CONFIG_OPTIONS" :show-prompt="false" />
+    <ServiceConfig
+      service-type="chat"
+      title="智能对话助手"
+      description="指定用于智能对话的模型"
+      :options="CHAT_SERVICE_CONFIG_OPTIONS"
+      :show-prompt="false"
+      @change="handleChatConfigChange"
+    />
 
     <ServiceConfig
       service-type="polish"
@@ -21,6 +28,7 @@
 </template>
 
 <script setup lang="ts">
+import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import ServiceConfig from './components/ServiceConfig.vue';
 import {
   AUTONAME_DEFAULT_PROMPT,
@@ -29,4 +37,16 @@ import {
   POLISH_DEFAULT_PROMPT,
   POLISH_SERVICE_CONFIG_OPTIONS
 } from './constants';
+
+const serviceModelStore = useServiceModelStore();
+
+/**
+ * 处理 chat 服务配置变更。
+ * 同步更新 serviceModelStore.chatModel 以保持 UI 响应式同步。
+ */
+function handleChatConfigChange(payload: { providerId?: string; modelId?: string; customPrompt?: string }): void {
+  if (!payload.providerId || !payload.modelId) return;
+
+  serviceModelStore.updateChatModelState({ providerId: payload.providerId, modelId: payload.modelId });
+}
 </script>

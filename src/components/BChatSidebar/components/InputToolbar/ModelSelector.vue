@@ -3,11 +3,11 @@
   @description Chat model selector dropdown with programmatic open support.
 -->
 <template>
-  <BDropdown v-model:open="open">
+  <BDropdown v-if="groupedModels.length" v-model:open="open">
     <BButton size="small" type="text">
       <div class="model-button-content">
         <span v-if="currentModelName" class="model-name">{{ currentModelName }}</span>
-        <Icon v-if="groupedModels.length" class="dropdown-icon" icon="lucide:chevron-down" :style="{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }" />
+        <Icon class="dropdown-icon" icon="lucide:chevron-down" :style="{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }" />
       </div>
     </BButton>
 
@@ -106,24 +106,46 @@ const internalModel = ref<string>();
 
 const providers = computed(() => store.providers);
 
+/**
+ * 获取当前选中模型的显示名称。
+ * 通过解析 internalModel 值，查找对应的 provider 和 model，返回模型的友好名称。
+ * 如果未选中模型或找不到对应模型，返回空字符串。
+ */
 const currentModelName = computed<string>(() => {
+  // 未选中任何模型时返回空字符串
   if (!internalModel.value) return '';
+
+  // 解析模型值，格式为 "providerId:modelId"
   const parsed = parseModelValue(internalModel.value);
   if (!parsed) return '';
+
+  // 查找对应的 provider
   const provider = providers.value.find((p) => p.id === parsed.providerId);
+
+  // 从 provider 的模型列表中查找对应的模型名称
   return provider?.models?.find((m) => m.id === parsed.modelId)?.name ?? '';
 });
 
+/**
+ * 将所有启用的模型按提供方分组，用于渲染下拉菜单。
+ * 只包含已启用的 provider 和已启用的模型。
+ * 返回按 provider 分组的模型列表，每个分组包含 provider 信息和该 provider 下可选的模型列表。
+ */
 const groupedModels = computed<ModelGroup[]>(() => {
   const result: ModelGroup[] = [];
 
+  // 遍历所有 provider
   for (const provider of providers.value) {
+    // 跳过未启用或没有模型的 provider
     if (!provider.isEnabled || !provider.models?.length) continue;
 
+    // 过滤出已启用的模型，并转换为下拉菜单所需的格式
     const models = provider.models.filter((m) => m.isEnabled).map((m) => ({ value: `${provider.id}:${m.id}`, modelId: m.id, modelName: m.name }));
 
+    // 如果该 provider 下没有启用的模型，跳过
     if (!models.length) continue;
 
+    // 将分组添加到结果列表
     result.push({ providerId: provider.id, providerName: provider.name, models });
   }
 
