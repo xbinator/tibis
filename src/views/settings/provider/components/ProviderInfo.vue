@@ -20,7 +20,6 @@
           </div>
         </div>
         <p class="provider-desc">{{ provider.description }}</p>
-        <span v-if="provider.models?.length" class="model-count">{{ provider.models?.length || 0 }} 个模型</span>
       </div>
     </div>
   </div>
