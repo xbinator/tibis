@@ -32,7 +32,7 @@
 │  build 作业（三平台并行）                                │
 │                                                         │
 │  macos-latest   →  whisper-darwin-arm64                 │
-│  macos-13       →  whisper-darwin-x64                   │
+│  macos-15-intel →  whisper-darwin-x64                   │
 │  windows-latest →  whisper-win32-x64.exe                │
 │                                                         │
 │  每个平台：checkout whisper.cpp → cmake 编译 → 计算 sha256 │
@@ -55,10 +55,10 @@
 | 平台 | Runner 标签 | 架构 | 产出文件 |
 |------|-------------|------|----------|
 | macOS arm64 | `macos-latest` | arm64 | `whisper-darwin-arm64` |
-| macOS x64 | `macos-13` | x64 | `whisper-darwin-x64` |
+| macOS x64 | `macos-15-intel` | x64 | `whisper-darwin-x64` |
 | Windows x64 | `windows-latest` | x64 | `whisper-win32-x64.exe` |
 
-> `macos-13` 是 GitHub Actions 最后一代 Intel macOS runner，`macos-latest`（14/15）为 Apple Silicon。
+> `macos-15-intel` 是当前用于 x64 Intel 架构的 GitHub Actions macOS runner，`macos-latest` 为 Apple Silicon。
 
 ## 回填 manifest
 
