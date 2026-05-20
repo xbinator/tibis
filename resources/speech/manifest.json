@@ -10,14 +10,14 @@
         {
           "name": "whisper",
           "url": "https://github.com/xbinator/tibis/releases/download/speech-runtime-2026.05.04/whisper-darwin-arm64",
-          "sha256": "REPLACE_WITH_DARWIN_ARM64_WHISPER_SHA256",
+          "sha256": "47ba9215712384a2b81dacaa06b7047bdd7f424b1eb6ad533f1450a2472c2920",
           "archiveType": "file",
           "targetRelativePath": "bin/whisper"
         },
         {
           "name": "model",
           "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
-          "sha256": "REPLACE_WITH_GGML_BASE_SHA256",
+          "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
           "archiveType": "file",
           "targetRelativePath": "models/ggml-base.bin"
         }
@@ -32,14 +32,14 @@
         {
           "name": "whisper",
           "url": "https://github.com/xbinator/tibis/releases/download/speech-runtime-2026.05.04/whisper-darwin-x64",
-          "sha256": "REPLACE_WITH_DARWIN_X64_WHISPER_SHA256",
+          "sha256": "66152f97a7c50fbcbb23c6250eab9118aeadb33749aa817e15363624b92ea996",
           "archiveType": "file",
           "targetRelativePath": "bin/whisper"
         },
         {
           "name": "model",
           "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
-          "sha256": "REPLACE_WITH_GGML_BASE_SHA256",
+          "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
           "archiveType": "file",
           "targetRelativePath": "models/ggml-base.bin"
         }
@@ -54,14 +54,14 @@
         {
           "name": "whisper",
           "url": "https://github.com/xbinator/tibis/releases/download/speech-runtime-2026.05.04/whisper-win32-x64.exe",
-          "sha256": "REPLACE_WITH_WIN32_X64_WHISPER_SHA256",
+          "sha256": "97c9ddd1814e7cfffc4208b2203ccd6fba1e4cfbeb7eca85c875938fe4becdf3",
           "archiveType": "file",
           "targetRelativePath": "bin/whisper.exe"
         },
         {
           "name": "model",
           "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
-          "sha256": "REPLACE_WITH_GGML_BASE_SHA256",
+          "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
           "archiveType": "file",
           "targetRelativePath": "models/ggml-base.bin"
         }
