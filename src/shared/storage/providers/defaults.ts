@@ -1,3 +1,7 @@
+/**
+ * @file defaults
+ * @description AI 服务商与默认模型配置
+ */
 import type { AIProvider } from 'types/ai';
 
 export const DEFAULT_PROVIDERS: AIProvider[] = [
@@ -9,7 +13,72 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'gpt-5.5',
+        name: 'GPT-5.5',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 400000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'gpt-5.4',
+        name: 'GPT-5.4',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 400000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'gpt-5.4-mini',
+        name: 'GPT-5.4 Mini',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 400000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'gpt-5.4-nano',
+        name: 'GPT-5.4 Nano',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 400000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'gpt-image-1',
+        name: 'GPT Image 1',
+        type: 'image',
+        isEnabled: false,
+        supportsTools: false,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: true,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'anthropic',
@@ -19,7 +88,47 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'anthropic',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'claude-opus-4-7',
+        name: 'Claude Opus 4.7',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 200000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'claude-sonnet-4-6',
+        name: 'Claude Sonnet 4.6',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 200000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'claude-haiku-4-5',
+        name: 'Claude Haiku 4.5',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 200000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'google',
@@ -29,7 +138,72 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'gemini-3.1-pro-preview',
+        name: 'Gemini 3.1 Pro Preview',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'gemini-3.5-flash',
+        name: 'Gemini 3.5 Flash',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'gemini-2.5-pro',
+        name: 'Gemini 2.5 Pro',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 1000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'imagen-4.0-generate-preview-06-06',
+        name: 'Imagen 4',
+        type: 'image',
+        isEnabled: false,
+        supportsTools: false,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: true,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'deepseek',
@@ -39,7 +213,34 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'deepseek',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'deepseek-v4-pro',
+        name: 'DeepSeek V4 Pro',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'moonshot',
@@ -49,7 +250,86 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'kimi-k2.6',
+        name: 'Kimi K2.6',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'kimi-k2.5',
+        name: 'Kimi K2.5',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'kimi-k2-thinking',
+        name: 'Kimi K2 Thinking',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'moonshot-v1-8k',
+        name: 'Moonshot v1 8K',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 8192,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'moonshot-v1-32k',
+        name: 'Moonshot v1 32K',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 32768,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'moonshot-v1-128k',
+        name: 'Moonshot v1 128K',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 131072,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'minimax',
@@ -59,7 +339,47 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'anthropic',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'MiniMax-M2.7',
+        name: 'MiniMax M2.7',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 200000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'MiniMax-M2.7-highspeed',
+        name: 'MiniMax M2.7 Highspeed',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 200000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'MiniMax-M2.5',
+        name: 'MiniMax M2.5',
+        type: 'code',
+        isEnabled: false,
+        contextWindow: 200000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'xiaomi',
@@ -69,7 +389,47 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'mimo-v2.5-pro',
+        name: 'MiMo V2.5 Pro',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'mimo-v2.5',
+        name: 'MiMo V2.5',
+        type: 'vision',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'mimo-v2-flash',
+        name: 'MiMo V2 Flash',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      }
+    ]
   },
   {
     id: 'xiaomi_plan',
@@ -79,7 +439,34 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'mimo-v2.5-pro',
+        name: 'MiMo V2.5 Pro',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'mimo-v2-flash',
+        name: 'MiMo V2 Flash',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      }
+    ]
   },
   {
     id: 'zhipu',
@@ -89,7 +476,72 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'glm-5.1',
+        name: 'GLM-5.1',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'glm-5',
+        name: 'GLM-5',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'glm-5-turbo',
+        name: 'GLM-5 Turbo',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'glm-4.6v',
+        name: 'GLM-4.6V',
+        type: 'vision',
+        isEnabled: false,
+        contextWindow: 64000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'cogview-4',
+        name: 'CogView 4',
+        type: 'image',
+        isEnabled: false,
+        supportsTools: false,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: true,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'zhipu_plan',
@@ -99,7 +551,34 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'glm-5.1',
+        name: 'GLM-5.1',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'glm-5-turbo',
+        name: 'GLM-5 Turbo',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'alibaba',
@@ -109,7 +588,85 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'qwen3-max',
+        name: 'Qwen3 Max',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 262144,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'qwen3.5-plus',
+        name: 'Qwen3.5 Plus',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 262144,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'qwen3.5-flash',
+        name: 'Qwen3.5 Flash',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 262144,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'qwen3-coder-plus',
+        name: 'Qwen3 Coder Plus',
+        type: 'code',
+        isEnabled: false,
+        contextWindow: 262144,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'qwen-vl-plus',
+        name: 'Qwen VL Plus',
+        type: 'vision',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'qwen-image',
+        name: 'Qwen Image',
+        type: 'image',
+        isEnabled: false,
+        supportsTools: false,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: true,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'alibaba_plan',
@@ -119,7 +676,34 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'qwen3-max',
+        name: 'Qwen3 Max',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 262144,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'qwen3-coder-plus',
+        name: 'Qwen3 Coder Plus',
+        type: 'code',
+        isEnabled: false,
+        contextWindow: 262144,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'baidu',
@@ -129,7 +713,60 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'ernie-5.0-thinking-latest',
+        name: 'ERNIE 5.0 Thinking Latest',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'ernie-5.0',
+        name: 'ERNIE 5.0',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'ernie-4.5-turbo-128k',
+        name: 'ERNIE 4.5 Turbo 128K',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'ernie-4.5-turbo-vl',
+        name: 'ERNIE 4.5 Turbo VL',
+        type: 'vision',
+        isEnabled: false,
+        contextWindow: 32000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      }
+    ]
   },
   {
     id: 'baidu_plan',
@@ -139,7 +776,34 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'ernie-5.0-thinking-latest',
+        name: 'ERNIE 5.0 Thinking Latest',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'ernie-4.5-turbo-128k',
+        name: 'ERNIE 4.5 Turbo 128K',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'volcengine',
@@ -149,7 +813,60 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'doubao-seed-1-8-251228',
+        name: 'Doubao Seed 1.8',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
+        id: 'doubao-seed-1-6-250615',
+        name: 'Doubao Seed 1.6',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'doubao-seed-1-6-flash-250828',
+        name: 'Doubao Seed 1.6 Flash',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'doubao-seed-1-6-vision-250815',
+        name: 'Doubao Seed 1.6 Vision',
+        type: 'vision',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      }
+    ]
   },
   {
     id: 'volcengine_plan',
@@ -159,7 +876,34 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'anthropic',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'doubao-seed-code-preview-251028',
+        name: 'Doubao Seed Code Preview',
+        type: 'code',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'doubao-seed-1-8-251228',
+        name: 'Doubao Seed 1.8',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      }
+    ]
   },
   {
     id: 'tencentcloud',
@@ -169,7 +913,60 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'hunyuan-turbos-latest',
+        name: 'Hunyuan TurboS Latest',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'hunyuan-t1-latest',
+        name: 'Hunyuan T1 Latest',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'hunyuan-a13b',
+        name: 'Hunyuan A13B',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'hunyuan-lite',
+        name: 'Hunyuan Lite',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'tencentcloud_plan',
@@ -179,7 +976,34 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'hunyuan-turbos-latest',
+        name: 'Hunyuan TurboS Latest',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'hunyuan-t1-latest',
+        name: 'Hunyuan T1 Latest',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   },
   {
     id: 'ollama',
@@ -189,6 +1013,98 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     type: 'openai',
     isEnabled: false,
     readonly: true,
-    models: []
+    models: [
+      {
+        id: 'llama3.3',
+        name: 'Llama 3.3',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'qwen3',
+        name: 'Qwen3',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'deepseek-r1',
+        name: 'DeepSeek R1',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: false,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'gemma3',
+        name: 'Gemma 3',
+        type: 'vision',
+        isEnabled: false,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'mistral',
+        name: 'Mistral',
+        type: 'chat',
+        isEnabled: false,
+        contextWindow: 32000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'phi4',
+        name: 'Phi-4',
+        type: 'reasoning',
+        isEnabled: false,
+        contextWindow: 16000,
+        supportsTools: true,
+        supportsVision: false,
+        supportsDeepThought: true,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      },
+      {
+        id: 'codellama',
+        name: 'Code Llama',
+        type: 'code',
+        isEnabled: false,
+        contextWindow: 16000,
+        supportsTools: false,
+        supportsVision: false,
+        supportsDeepThought: false,
+        supportsWebSearch: false,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: false
+      }
+    ]
   }
 ];
