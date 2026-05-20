@@ -42,4 +42,14 @@ describe('Container Extension', () => {
 
     editor.destroy();
   });
+
+  test('round-trip stable for comment container', () => {
+    const md = ':::comment{commentText="test" id="c1"}\ncontent\n:::';
+    const editor = createEditor();
+    editor.commands.setContent(md, { contentType: 'markdown' });
+    const exported = editor.getMarkdown();
+    // Markdown 扩展可能在末尾追加换行，语义上等价即可
+    expect(exported.trimEnd()).toBe(md);
+    editor.destroy();
+  });
 });

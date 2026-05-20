@@ -2,7 +2,7 @@
  * @file container.ts
  * @description 容器扩展，支持 :::type{attrs}...::: 语法。
  */
-import type { MarkdownLexerConfiguration, MarkdownParseHelpers, MarkdownParseResult, MarkdownToken, MarkdownTokenizer } from '@tiptap/core';
+import type { JSONContent, MarkdownLexerConfiguration, MarkdownParseHelpers, MarkdownParseResult, MarkdownRendererHelpers, MarkdownToken, MarkdownTokenizer, RenderContext } from '@tiptap/core';
 import { Node } from '@tiptap/core';
 
 /**
@@ -97,5 +97,24 @@ export const Container = Node.create({
     const content = helpers.parseChildren(token.tokens ?? []);
 
     return helpers.createNode('container', attrs, content);
+  },
+
+  renderMarkdown(node: JSONContent, helpers: MarkdownRendererHelpers, _ctx: RenderContext): string {
+    const { type, id, title, commentText, resolved } = node.attrs ?? {};
+
+    // 构建属性字符串（固定顺序，确保 round-trip 字符串级稳定）
+    const attrsArr: string[] = [];
+    if (commentText) attrsArr.push(`commentText="${commentText}"`);
+    if (id) attrsArr.push(`id="${id}"`);
+    if (title) attrsArr.push(`title="${title}"`);
+    if (resolved) attrsArr.push('resolved="true"');
+
+    const attrsStr = attrsArr.length > 0 ? `{${attrsArr.join(' ')}}` : '';
+    const openLine = `:::${type || 'comment'}${attrsStr}`;
+
+    // 渲染容器内部内容并去除末尾多余空行
+    const innerContent = helpers.renderChildren(node).replace(/\n+$/, '');
+
+    return `${openLine}\n${innerContent}\n:::`;
   }
 });
