@@ -52,4 +52,41 @@ describe('Container Extension', () => {
     expect(exported.trimEnd()).toBe(md);
     editor.destroy();
   });
+
+  test('supports nested blocks inside container', () => {
+    const md = `:::comment{commentText="test"}
+- item1
+
+\`\`\`js
+code
+\`\`\`
+:::`;
+    const editor = createEditor();
+    editor.commands.setContent(md, { contentType: 'markdown' });
+
+    const doc = editor.state.doc;
+    const container = doc.firstChild;
+    expect(container?.type.name).toBe('container');
+    expect(container?.childCount).toBeGreaterThanOrEqual(2);
+
+    const exported = editor.getMarkdown();
+    expect(exported).toContain('- item1');
+    expect(exported).toContain('```js');
+
+    editor.destroy();
+  });
+
+  test('unwrapContainer preserves content', () => {
+    const md = ':::comment{commentText="test"}\noriginal content\n:::';
+    const editor = createEditor();
+    editor.commands.setContent(md, { contentType: 'markdown' });
+
+    editor.chain().focus().unwrapContainer().run();
+
+    const exported = editor.getMarkdown().trimEnd();
+    expect(exported).toBe('original content');
+    expect(exported).not.toContain(':::comment');
+
+    editor.destroy();
+  });
 });

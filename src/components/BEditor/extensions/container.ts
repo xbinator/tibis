@@ -2,8 +2,17 @@
  * @file container.ts
  * @description 容器扩展，支持 :::type{attrs}...::: 语法。
  */
-import type { JSONContent, MarkdownLexerConfiguration, MarkdownParseHelpers, MarkdownParseResult, MarkdownRendererHelpers, MarkdownToken, MarkdownTokenizer, RenderContext } from '@tiptap/core';
+import type { CommandProps, JSONContent, MarkdownLexerConfiguration, MarkdownParseHelpers, MarkdownParseResult, MarkdownRendererHelpers, MarkdownToken, MarkdownTokenizer, RenderContext } from '@tiptap/core';
 import { Node } from '@tiptap/core';
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    container: {
+      /** 解除容器包裹，保留内部块内容。 */
+      unwrapContainer: () => ReturnType;
+    };
+  }
+}
 
 /**
  * marked 容器 tokenizer，识别 :::type{attrs}...::: 围栏代码块。
@@ -54,6 +63,36 @@ export const Container = Node.create({
       title: { default: null },
       commentText: { default: null },
       resolved: { default: false }
+    };
+  },
+
+  addCommands() {
+    return {
+      /**
+       * 解除容器包裹，保留内部块内容。
+       */
+      unwrapContainer:
+        () =>
+        ({ state, dispatch }: CommandProps) => {
+          const { $from } = state.selection;
+          const containerPos = $from.before(1);
+
+          if (containerPos == null) {
+            return false;
+          }
+
+          const containerNode = state.doc.nodeAt(containerPos);
+          if (containerNode?.type.name !== 'container') {
+            return false;
+          }
+
+          if (dispatch) {
+            const endPos = containerPos + containerNode.nodeSize;
+            dispatch(state.tr.replaceWith(containerPos, endPos, containerNode.content));
+          }
+
+          return true;
+        }
     };
   },
 
