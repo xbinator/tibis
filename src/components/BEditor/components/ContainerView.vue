@@ -3,147 +3,162 @@
   @description 容器节点渲染组件，支持批注、提示、警告等多种容器类型。
 -->
 <template>
-  <node-view-wrapper :class="containerClasses" :data-container-id="id">
-    <div v-if="type === 'comment'" class="b-container-comment-card">
-      <div class="b-container-comment-header">
-        <span class="b-container-comment-icon">&#x1F4AC;</span>
-        <span class="b-container-comment-label">批注</span>
-        <span v-if="resolved" class="b-container-resolved">已解决</span>
+  <NodeViewWrapper :class="containerClasses" :data-container-id="attrs.id">
+    <!-- 批注卡片 -->
+    <template v-if="isComment">
+      <div :class="bem('comment-header')">
+        <span :class="bem('comment-icon')">{{ config.icon }}</span>
+        <span :class="bem('comment-label')">{{ config.label }}</span>
+        <span v-if="attrs.resolved" :class="bem('resolved')">已解决</span>
       </div>
-      <div v-if="commentText" class="b-container-comment-content">{{ commentText }}</div>
+      <div v-if="attrs.commentText" :class="bem('comment-content')">
+        {{ attrs.commentText }}
+      </div>
+    </template>
+
+    <!-- 普通容器标题 -->
+    <div v-else-if="attrs.title" :class="bem('title')">
+      <span :class="bem('icon')">{{ config.icon }}</span>
+      <span :class="bem('title-text')">{{ attrs.title }}</span>
     </div>
-    <div
-      v-else-if="type !== 'comment' && title"
-      class="b-container-title"
-    >
-      <span :class="['b-container-icon', `b-container-icon-${type}`]">
-        {{ getContainerIcon(type) }}
-      </span>
-      <span class="b-container-title-text">{{ title }}</span>
+
+    <div :class="bem('body')">
+      <NodeViewContent />
     </div>
-    <div class="b-container-body">
-      <node-view-content />
-    </div>
-  </node-view-wrapper>
+  </NodeViewWrapper>
 </template>
 
 <script setup lang="ts">
 import type { NodeViewProps } from '@tiptap/vue-3';
-import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3';
 import { computed } from 'vue';
+import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3';
+import { createNamespace } from '@/utils/namespace';
 
+const [, bem] = createNamespace('', 'b-markdown-container');
+
+// ---- 节点属性类型 ----
+interface ContainerAttrs {
+  type: string;
+  id?: string;
+  title?: string;
+  commentText?: string;
+  resolved?: boolean;
+}
+
+// ---- 配置表 ----
+const CONTAINER_CONFIG: Record<string, { icon: string; label: string }> = {
+  comment: { icon: '💬', label: '批注' },
+  tip: { icon: '💡', label: '提示' },
+  warning: { icon: '⚠️', label: '警告' },
+  danger: { icon: '🔥', label: '危险' },
+  info: { icon: 'ℹ️', label: '说明' }
+};
+const DEFAULT_CONFIG = { icon: '📦', label: '' };
+
+// ---- Props ----
 const props = defineProps<NodeViewProps>();
 
-const type = computed(() => props.node.attrs.type as string);
-const id = computed(() => props.node.attrs.id as string | undefined);
-const title = computed(() => props.node.attrs.title as string | undefined);
-const commentText = computed(() => props.node.attrs.commentText as string | undefined);
-const resolved = computed(() => props.node.attrs.resolved as boolean | undefined);
+// 统一收敛类型断言，各字段 computed 只做轻量转发
+const attrs = computed(() => props.node.attrs as ContainerAttrs);
 
-const containerClasses = computed(() => [
-  'b-container',
-  `b-container-${type.value}`
-]);
+const type = computed(() => attrs.value.type);
+const isComment = computed(() => type.value === 'comment');
+const config = computed(() => CONTAINER_CONFIG[type.value] ?? DEFAULT_CONFIG);
 
-/**
- * 根据容器类型获取图标。
- * @param containerType - 容器类型
- * @returns 图标字符
- */
-function getContainerIcon(containerType: string): string {
-  const iconMap: Record<string, string> = {
-    tip: '\uD83D\uDCA1',
-    warning: '\u26A0\uFE0F',
-    danger: '\uD83D\uDD25',
-    info: '\u2139\uFE0F'
-  };
-  return iconMap[containerType] || '\uD83D\uDCE6';
-}
+const containerClasses = computed(() => [bem(), bem(type.value)]);
 </script>
 
 <style lang="less" scoped>
-.b-container {
-  padding: 12px;
+// ---- 基础变量 ----
+.b-markdown-container {
+  --container-bg: transparent;
+  --container-border: #d9d9d9;
+
+  padding: 12px 16px;
   margin: 8px 0;
+  background: var(--container-bg);
+  border-left: 3px solid var(--container-border);
   border-radius: 4px;
-  border-left: 3px solid transparent;
 }
 
-.b-container-comment {
-  border-left-color: #1890ff;
-  background: #f0f7ff;
+// ---- 类型主题（只覆盖变量）----
+.b-markdown-container--comment {
+  --container-bg: #f0f7ff;
+  --container-border: #1890ff;
 }
 
-.b-container-tip {
-  border-left-color: #52c41a;
-  background: #f6ffed;
+.b-markdown-container--tip {
+  --container-bg: #f6ffed;
+  --container-border: #52c41a;
 }
 
-.b-container-warning {
-  border-left-color: #faad14;
-  background: #fffbe6;
+.b-markdown-container--warning {
+  --container-bg: #fffbe6;
+  --container-border: #faad14;
 }
 
-.b-container-danger {
-  border-left-color: #ff4d4f;
-  background: #fff2f0;
+.b-markdown-container--danger {
+  --container-bg: #fff2f0;
+  --container-border: #ff4d4f;
 }
 
-.b-container-info {
-  border-left-color: #722ed1;
-  background: #f9f0ff;
+.b-markdown-container--info {
+  --container-bg: #f9f0ff;
+  --container-border: #722ed1;
 }
 
-.b-container-comment-card {
-  margin-bottom: 8px;
-  padding: 8px;
-  background: white;
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.b-container-comment-header {
+// ---- 批注头部 ----
+.b-markdown-container__comment-header {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
   margin-bottom: 4px;
   font-size: 14px;
   font-weight: 500;
   color: #1890ff;
 }
 
-.b-container-comment-label {
+.b-markdown-container__comment-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.b-markdown-container__comment-label {
   font-size: 14px;
 }
 
-.b-container-comment-content {
+.b-markdown-container__comment-content {
   font-size: 14px;
-  color: #595959;
   line-height: 1.6;
+  color: #595959;
 }
 
-.b-container-resolved {
-  font-size: 12px;
+.b-markdown-container__resolved {
   padding: 2px 6px;
-  background: #52c41a;
+  font-size: 12px;
   color: white;
+  background: #52c41a;
   border-radius: 2px;
 }
 
-.b-container-title {
+// ---- 普通容器标题 ----
+.b-markdown-container__title {
   display: flex;
-  align-items: center;
   gap: 8px;
+  align-items: center;
   margin-bottom: 8px;
   font-size: 14px;
   font-weight: 500;
 }
 
-.b-container-icon {
+.b-markdown-container__icon {
   font-size: 16px;
+  line-height: 1;
 }
 
-.b-container-body {
-  // TipTap NodeViewContent 自动渲染子节点
+// ---- 正文 ----
+.b-markdown-container__body {
+  font-size: 14px;
+  line-height: 1.7;
 }
 </style>
