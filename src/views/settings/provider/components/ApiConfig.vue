@@ -1,6 +1,5 @@
 <template>
   <div class="config-section">
-    <h3 class="section-title">API 配置</h3>
     <AForm layout="vertical">
       <AFormItem label="API Key">
         <AInputPassword v-model:value="dataItem.apiKey" placeholder="请输入 API Key" />
@@ -11,8 +10,10 @@
     </AForm>
 
     <div class="connection-test">
-      <h4 class="test-title">连通性检查</h4>
-      <p class="test-desc">测试 API Key 与代理地址是否正确配置</p>
+      <div class="test-info">
+        <h4 class="test-title">连通性检查</h4>
+        <p class="test-desc">测试 API Key 与代理地址是否正确配置</p>
+      </div>
       <div class="test-actions">
         <BSelect v-model:value="testModel" :options="modelOptions" placeholder="选择测试模型" class="model-select" />
         <BButton type="primary" :loading="loading" :disabled="!testModel" @click="handleTestClick">检查</BButton>
@@ -85,40 +86,54 @@ watch(
   border-radius: 10px;
 }
 
-.section-title {
-  margin: 0 0 16px;
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.connection-test {
-  padding: 16px;
+.config-section :deep(.ant-form) {
+  padding: 20px;
+  margin-bottom: 24px;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
 }
 
+.config-section :deep(.ant-form-item) {
+  margin-bottom: 20px;
+}
+
+.config-section :deep(.ant-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.connection-test {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.test-info {
+  flex: 1;
+}
+
 .test-title {
   margin: 0 0 4px;
-  font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
 }
 
 .test-desc {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
 .test-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 12px;
   align-items: center;
 }
 
 .model-select {
-  flex: 1;
+  min-width: 200px;
 }
 </style>
