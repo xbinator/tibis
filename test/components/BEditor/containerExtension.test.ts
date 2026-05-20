@@ -8,10 +8,9 @@ import { ref, type Ref } from 'vue';
 import { Editor } from '@tiptap/core';
 import { describe, expect, test } from 'vitest';
 import { useExtensions } from '@/components/BEditor/hooks/useExtensions';
-import { Container } from '@/components/BEditor/extensions/container';
 
 /**
- * 创建带有容器扩展的 Markdown 编辑器。
+ * 创建带有容器扩展的 Markdown 编辑器（Container 已内置在 useExtensions 中）。
  * @returns 编辑器实例
  */
 function createEditor(): Editor {
@@ -19,10 +18,7 @@ function createEditor(): Editor {
   const { editorExtensions } = useExtensions(editorInstanceId);
 
   return new Editor({
-    extensions: [
-      ...editorExtensions,
-      Container
-    ],
+    extensions: editorExtensions,
     content: '',
     contentType: 'markdown'
   });
@@ -86,6 +82,26 @@ code
     const exported = editor.getMarkdown().trimEnd();
     expect(exported).toBe('original content');
     expect(exported).not.toContain(':::comment');
+
+    editor.destroy();
+  });
+
+  test('container node has correct attributes and DOM presence', () => {
+    const md = ':::comment{commentText="test" id="c1"}\ncontent\n:::';
+    const editor = createEditor();
+    editor.commands.setContent(md, { contentType: 'markdown' });
+
+    const doc = editor.state.doc;
+    const container = doc.firstChild;
+    expect(container?.type.name).toBe('container');
+    expect(container?.attrs.type).toBe('comment');
+    expect(container?.attrs.id).toBe('c1');
+    expect(container?.attrs.commentText).toBe('test');
+
+    // 验证 DOM 中存在容器标记
+    const { view } = editor;
+    const containerDOM = view.dom.querySelector('[data-container]');
+    expect(containerDOM).not.toBeNull();
 
     editor.destroy();
   });

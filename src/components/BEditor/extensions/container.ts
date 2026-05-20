@@ -4,6 +4,8 @@
  */
 import type { CommandProps, JSONContent, MarkdownLexerConfiguration, MarkdownParseHelpers, MarkdownParseResult, MarkdownRendererHelpers, MarkdownToken, MarkdownTokenizer, RenderContext } from '@tiptap/core';
 import { Node } from '@tiptap/core';
+import { VueNodeViewRenderer } from '@tiptap/vue-3';
+import ContainerView from '../components/ContainerView.vue';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -102,6 +104,10 @@ export const Container = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     return ['div', { 'data-container': '', ...HTMLAttributes }, 0];
+  },
+
+  addNodeView() {
+    return VueNodeViewRenderer(ContainerView);
   },
 
   parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult {
