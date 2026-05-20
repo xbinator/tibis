@@ -1,0 +1,188 @@
+name: Build Speech Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 语音运行时版本号（如 2026.05.04），同时用作 Release tag 前缀。
+        type: string
+        required: true
+        default: '2026.05.04'
+      whisper_ref:
+        description: whisper.cpp Git 引用（分支、tag 或 commit）。
+        type: string
+        required: false
+        default: 'master'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build whisper (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: darwin-arm64
+            os: macos-latest
+            artifact: whisper-darwin-arm64
+            cmake_extra: ''
+          - name: darwin-x64
+            os: macos-13
+            artifact: whisper-darwin-x64
+            cmake_extra: ''
+          - name: win32-x64
+            os: windows-latest
+            artifact: whisper-win32-x64.exe
+            cmake_extra: ''
+
+    steps:
+      - name: Checkout whisper.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/whisper.cpp
+          ref: ${{ inputs.whisper_ref }}
+          path: whisper.cpp
+
+      - name: Build whisper-cli (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          cd whisper.cpp
+          cmake -B build ${{ matrix.cmake_extra }}
+          cmake --build build --config Release -j "$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+
+      - name: Build whisper-cli (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd whisper.cpp
+          cmake -B build -G "Visual Studio 17 2022" -A x64 ${{ matrix.cmake_extra }}
+          cmake --build build --config Release
+
+      - name: Prepare artifact (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          cp whisper.cpp/build/bin/whisper-cli "${{ matrix.artifact }}"
+          chmod +x "${{ matrix.artifact }}"
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          copy whisper.cpp\build\bin\Release\whisper-cli.exe "${{ matrix.artifact }}"
+
+      - name: Compute SHA256 (macOS/Linux)
+        if: runner.os != 'Windows'
+        id: sha_linux
+        run: |
+          SHA256=$(shasum -a 256 "${{ matrix.artifact }}" | awk '{print $1}')
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+          echo "::notice::SHA256 of ${{ matrix.artifact }}: ${SHA256}"
+
+      - name: Compute SHA256 (Windows)
+        if: runner.os == 'Windows'
+        id: sha_win
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Path "${{ matrix.artifact }}" -Algorithm SHA256).Hash.ToLower()
+          echo "sha256=$hash" >> $env:GITHUB_OUTPUT
+          Write-Host "::notice::SHA256 of ${{ matrix.artifact }}: $hash"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Download ggml-base.bin
+        run: |
+          curl -L -o ggml-base.bin "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
+
+      - name: Compute all SHA256
+        id: checksums
+        run: |
+          echo "darwin_arm64=$(shasum -a 256 artifacts/whisper-darwin-arm64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "darwin_x64=$(shasum -a 256 artifacts/whisper-darwin-x64 | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "win32_x64=$(shasum -a 256 artifacts/whisper-win32-x64.exe | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "ggml_base=$(shasum -a 256 ggml-base.bin | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: speech-runtime-${{ inputs.version }}
+          name: Speech Runtime ${{ inputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/whisper-darwin-arm64
+            artifacts/whisper-darwin-x64
+            artifacts/whisper-win32-x64.exe
+          body: |
+            ## Speech Runtime ${{ inputs.version }}
+
+            语音运行时资源包，用于 Tibis 桌面端语音输入功能。
+
+            ### 包含资源
+
+            | 文件 | 平台 | SHA256 |
+            |------|------|--------|
+            | `whisper-darwin-arm64` | macOS Apple Silicon | `${{ steps.checksums.outputs.darwin_arm64 }}` |
+            | `whisper-darwin-x64` | macOS Intel | `${{ steps.checksums.outputs.darwin_x64 }}` |
+            | `whisper-win32-x64.exe` | Windows x64 | `${{ steps.checksums.outputs.win32_x64 }}` |
+
+            ### 模型文件
+
+            | 文件 | SHA256 |
+            |------|--------|
+            | `ggml-base.bin` | `${{ steps.checksums.outputs.ggml_base }}` |
+
+            模型下载地址：https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+
+            ### manifest 回填
+
+            将以下值回填到 `resources/speech/manifest.json`：
+
+            ```json
+            {
+              "darwin-arm64": { "whisper": "${{ steps.checksums.outputs.darwin_arm64 }}" },
+              "darwin-x64":   { "whisper": "${{ steps.checksums.outputs.darwin_x64 }}" },
+              "win32-x64":    { "whisper": "${{ steps.checksums.outputs.win32_x64 }}" },
+              "model":        { "ggml-base": "${{ steps.checksums.outputs.ggml_base }}" }
+            }
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print SHA256 summary
+        run: |
+          echo "============================================"
+          echo "  SHA256 Summary — 回填 manifest 用"
+          echo "============================================"
+          echo ""
+          echo "  darwin-arm64 whisper:  ${{ steps.checksums.outputs.darwin_arm64 }}"
+          echo "  darwin-x64   whisper:  ${{ steps.checksums.outputs.darwin_x64 }}"
+          echo "  win32-x64    whisper:  ${{ steps.checksums.outputs.win32_x64 }}"
+          echo "  ggml-base.bin model:   ${{ steps.checksums.outputs.ggml_base }}"
+          echo ""
+          echo "  运行以下命令回填 manifest："
+          echo "  pnpm run speech:manifest:fill -- \\"
+          echo "    --manifest resources/speech/manifest.json \\"
+          echo "    --darwin-arm64 <file> \\"
+          echo "    --darwin-x64 <file> \\"
+          echo "    --win32-x64 <file> \\"
+          echo "    --model <file>"
+          echo "============================================"
