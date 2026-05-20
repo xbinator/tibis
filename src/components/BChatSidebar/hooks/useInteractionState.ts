@@ -10,6 +10,7 @@ import { isVNode, ref } from 'vue';
  * @param a - 内容 A
  * @param b - 内容 B
  * @returns 是否相等
+ * @description 仅在没有指定 id 时使用此函数判断重复，VNode 不参与重复检测
  */
 function isSameContent(a: ToastContent, b: ToastContent): boolean {
   // 如果都是 VNode，不认为是同一个（VNode 每次创建都是新对象）
@@ -43,8 +44,16 @@ export function useInteractionState(options?: { maxToastCount?: number; defaultD
    * @param toastOptions - Toast 选项
    */
   function showToast(toastOptions: ToastOptions): void {
-    // 检查是否已存在相同 content 的 toast（VNode 不参与重复检测）
-    const existingToast = toastQueue.value.find((t) => isSameContent(t.content, toastOptions.content));
+    let existingToast: ToastItem | undefined;
+
+    // 优先使用 id 判断重复
+    if (toastOptions.id) {
+      existingToast = toastQueue.value.find((t) => t.id === toastOptions.id);
+    } else {
+      // 没有 id 时，使用 content 判断（VNode 不参与重复检测）
+      existingToast = toastQueue.value.find((t) => isSameContent(t.content, toastOptions.content));
+    }
+
     if (existingToast) {
       // 已存在，触发抖动动画
       existingToast.shake = true;
@@ -58,7 +67,7 @@ export function useInteractionState(options?: { maxToastCount?: number; defaultD
     }
 
     const toast: ToastItem = {
-      id: `toast-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: toastOptions.id ?? `toast-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type: toastOptions.type,
       content: toastOptions.content,
       duration: toastOptions.duration ?? defaultDuration,

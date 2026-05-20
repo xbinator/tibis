@@ -11,13 +11,10 @@
       <component :is="contentVNode" v-if="isVNodeContent" />
       <template v-else>{{ content }}</template>
     </div>
+    <div v-if="duration" class="toast-item__countdown">{{ countdownText }}</div>
     <button class="toast-item__close" @click.stop="handleClose">
       <Icon icon="lucide:x" width="14" height="14" />
     </button>
-    <!-- 倒计时进度条 -->
-    <div v-if="duration" class="toast-item__progress">
-      <div class="toast-item__progress-bar" :style="{ width: progressPercent + '%' }"></div>
-    </div>
   </div>
 </template>
 
@@ -63,12 +60,20 @@ const emit = defineEmits<{
 
 /** 自动关闭定时器 */
 let timer: ReturnType<typeof setTimeout> | null = null;
-/** 倒计时进度百分比 */
-const progressPercent = ref(100);
+/** 剩余时间（毫秒） */
+const remainingTime = ref(props.duration);
 /** 动画帧 ID */
 let rafId: number | null = null;
 /** 开始时间 */
 let startTime: number | null = null;
+
+/**
+ * 倒计时文本（显示剩余秒数）
+ */
+const countdownText = computed<string>(() => {
+  const seconds = Math.ceil(remainingTime.value / 1000);
+  return `${seconds}s`;
+});
 
 /**
  * 清除自动关闭定时器
@@ -93,15 +98,14 @@ function handleClose(): void {
 }
 
 /**
- * 更新倒计时进度
+ * 更新剩余时间
  */
-function updateProgress(): void {
+function updateRemainingTime(): void {
   if (!startTime || props.duration <= 0) return;
   const elapsed = Date.now() - startTime;
-  const remaining = Math.max(0, props.duration - elapsed);
-  progressPercent.value = (remaining / props.duration) * 100;
-  if (remaining > 0) {
-    rafId = requestAnimationFrame(updateProgress);
+  remainingTime.value = Math.max(0, props.duration - elapsed);
+  if (remainingTime.value > 0) {
+    rafId = requestAnimationFrame(updateRemainingTime);
   }
 }
 
@@ -111,8 +115,8 @@ function updateProgress(): void {
 function startTimer(): void {
   if (props.duration > 0) {
     startTime = Date.now();
-    progressPercent.value = 100;
-    rafId = requestAnimationFrame(updateProgress);
+    remainingTime.value = props.duration;
+    rafId = requestAnimationFrame(updateRemainingTime);
     timer = setTimeout(() => {
       handleClose();
     }, props.duration);
@@ -230,21 +234,10 @@ onUnmounted(() => {
   }
 }
 
-.toast-item__progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  overflow: hidden;
-  background: transparent;
-  border-radius: 0 0 6px 6px;
-}
-
-.toast-item__progress-bar {
-  height: 100%;
-  background: currentColor;
-  opacity: 0.3;
-  transition: none;
+.toast-item__countdown {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
 }
 </style>

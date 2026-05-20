@@ -24,6 +24,8 @@ export interface ToastOptions {
   content: ToastContent;
   /** 持续时间（毫秒），默认 3000ms */
   duration?: number;
+  /** 唯一标识，用于判断是否重复（可选） */
+  id?: string;
 }
 
 /**

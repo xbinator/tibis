@@ -540,6 +540,7 @@ async function compactBeforeSendIfNeeded(): Promise<void> {
  */
 function showNoModelConfigToast(): void {
   interactionAPI.showToast({
+    id: 'no-model-config-toast',
     content: h('div', [
       '未找到可用的模型配置，',
       h(
@@ -552,7 +553,7 @@ function showNoModelConfigToast(): void {
       )
     ]),
     type: 'error',
-    duration: 0
+    duration: 6000
   });
 }
 
