@@ -1,0 +1,101 @@
+/**
+ * @file container.ts
+ * @description 容器扩展，支持 :::type{attrs}...::: 语法。
+ */
+import type { MarkdownLexerConfiguration, MarkdownParseHelpers, MarkdownParseResult, MarkdownToken, MarkdownTokenizer } from '@tiptap/core';
+import { Node } from '@tiptap/core';
+
+/**
+ * marked 容器 tokenizer，识别 :::type{attrs}...::: 围栏代码块。
+ */
+const containerTokenizer: MarkdownTokenizer = {
+  name: 'container',
+  level: 'block',
+  start(src: string): number {
+    const index = src.search(/^:::\w+/m);
+    return index;
+  },
+  tokenize(src: string, _tokens: MarkdownToken[], lexer: MarkdownLexerConfiguration): MarkdownToken | undefined {
+    const match = src.match(/^:::(\w+)(?:\{([^}]*)\})?\n([\s\S]*?)\n:::(?:\n|$)/);
+
+    if (!match) {
+      return undefined;
+    }
+
+    const innerMd = match[3] ?? '';
+
+    // 使用 lexer.blockTokens 解析容器内部 Markdown 内容为子 tokens
+    const childTokens = innerMd.trim() ? lexer.blockTokens(innerMd) : [];
+
+    return {
+      type: 'container',
+      raw: match[0],
+      text: `:::${match[1]}${match[2] ? `{${match[2]}}` : ''}`,
+      tokens: childTokens
+    };
+  }
+};
+
+export const Container = Node.create({
+  name: 'container',
+
+  group: 'block',
+
+  content: 'block+',
+
+  markdownTokenName: 'container',
+
+  markdownTokenizer: containerTokenizer,
+
+  addAttributes() {
+    return {
+      type: { default: 'comment' },
+      id: { default: null },
+      title: { default: null },
+      commentText: { default: null },
+      resolved: { default: false }
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'div[data-container]' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', { 'data-container': '', ...HTMLAttributes }, 0];
+  },
+
+  parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult {
+    const raw = typeof token.raw === 'string' ? token.raw : '';
+    const match = raw.match(/^:::(\w+)(?:\{([^}]*)\})?\n([\s\S]*?)\n:::\n?$/);
+
+    if (!match) {
+      return [];
+    }
+
+    const type = (match[1] ?? '') || 'comment';
+    const attrsStr = match[2] ?? '';
+
+    const attrs: Record<string, unknown> = { type };
+
+    const attrPattern = /(\w+)="([^"]*)"/g;
+    let attrMatch: RegExpExecArray | null;
+
+    while ((attrMatch = attrPattern.exec(attrsStr)) !== null) {
+      const key = (attrMatch[1] ?? '') || '';
+      const value = (attrMatch[2] ?? '') || '';
+      if (key === 'type') {
+        attrs.type = value;
+      } else if (key === 'resolved') {
+        attrs.resolved = value === 'true';
+      } else {
+        attrs[key] = value;
+      }
+    }
+
+    // 使用 helpers.parseChildren 解析子 tokens
+    const content = helpers.parseChildren(token.tokens ?? []);
+
+    return helpers.createNode('container', attrs, content);
+  }
+});
