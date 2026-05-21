@@ -279,6 +279,17 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
     },
 
     /**
+     * 应用行内批注到指定范围，为选中文本添加 inlineComment mark。
+     * @param range - 目标选区范围
+     * @param comment - 批注正文
+     */
+    applyComment(range: SelectionAssistantRange, comment: string): void {
+      const id = `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      this.restoreSelection(range);
+      editor.chain().focus().setMark('inlineComment', { comment, id }).run();
+    },
+
+    /**
      * 构造文件引用载荷，计算源码行号与渲染行号。
      * 优先使用基于 Markdown 原文的精确行号映射，回退到基于 ProseMirror node attr 的方案。
      * @param range - 当前选区范围

@@ -734,5 +734,13 @@ defineExpose(controller);
   .md-escape {
     color: var(--source-editor-markdown-escape);
   }
+
+  .md-comment-bracket {
+    color: var(--source-editor-markdown-link-bracket);
+  }
+
+  .md-comment-attr {
+    color: var(--source-editor-markdown-escape);
+  }
 }
 </style>

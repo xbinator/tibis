@@ -39,6 +39,7 @@ import CodeBlockView from '../components/CodeBlock.vue';
 import TableView from '../components/TableView.vue';
 import { AISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { Search, type SearchScrollContext } from '../extensions/editorSearch';
+import { InlineCommentMark } from '../extensions/inlineCommentMark';
 import { registerRichCodeBlockLowlightAliases } from '../utils/richCodeBlockLowlight';
 
 const lowlight = createLowlight(common);
@@ -668,6 +669,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     HtmlComment,
     LinkDefinitionAsText,
     AISelectionHighlight,
+    InlineCommentMark,
     Heading,
     Paragraph,
     Code,

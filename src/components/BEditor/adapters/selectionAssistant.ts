@@ -105,6 +105,8 @@ export interface SelectionAssistantAdapter {
    * 建议至少区分"可重试"和"不可重试"两类失败。
    */
   applyGeneratedContent(range: SelectionAssistantRange, content: string): Promise<void>;
+  /** 应用行内批注到指定范围 */
+  applyComment?(range: SelectionAssistantRange, comment: string): void;
   buildSelectionReference(range: SelectionAssistantRange): SelectionReferencePayload | null;
   bindSelectionEvents(handlers: {
     onSelectionChange: () => void;

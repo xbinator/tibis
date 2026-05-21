@@ -106,6 +106,24 @@ function syncToExternal(): void {
 }
 
 /**
+ * 处理搜索匹配焦点事件
+ * @param param0 - 搜索滚动上下文
+ */
+function handleSearchMatchFocus({ targetElement }: SearchScrollContext): void {
+  if (targetElement instanceof HTMLElement) {
+    props.onSearchMatchElementFocus?.(targetElement);
+  }
+}
+
+const { editorInstance } = useRichEditor({
+  bodyContent,
+  editable: toRef(props, 'editable'),
+  editorInstanceId,
+  onContentChange: syncToExternal,
+  onSearchMatchFocus: handleSearchMatchFocus
+});
+
+/**
  * 将编辑区 focusout 事件统一转发给外层容器做语义过滤。
  * @param event - 当前失焦事件
  */
@@ -149,24 +167,6 @@ function handleEditorClick(event: MouseEvent): void {
   event.preventDefault();
   scrollHeadingIntoView(heading);
 }
-
-/**
- * 处理搜索匹配焦点事件
- * @param param0 - 搜索滚动上下文
- */
-function handleSearchMatchFocus({ targetElement }: SearchScrollContext): void {
-  if (targetElement instanceof HTMLElement) {
-    props.onSearchMatchElementFocus?.(targetElement);
-  }
-}
-
-const { editorInstance } = useRichEditor({
-  bodyContent,
-  editable: toRef(props, 'editable'),
-  editorInstanceId,
-  onContentChange: syncToExternal,
-  onSearchMatchFocus: handleSearchMatchFocus
-});
 
 watch(
   bodyContent,

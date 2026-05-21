@@ -36,6 +36,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void;
+  (e: 'submit', content: string): void;
 }>();
 
 const inputValue = ref('');
@@ -100,10 +101,7 @@ function resolvePanelWidth(containerWidth: number): number {
  * @param wrapperWidth - 面板宽度
  * @returns 横向定位样式
  */
-function resolveHorizontalStyle(
-  containerRect: SelectionAssistantPosition['containerRect'],
-  wrapperWidth: number
-): CSSProperties {
+function resolveHorizontalStyle(containerRect: SelectionAssistantPosition['containerRect'], wrapperWidth: number): CSSProperties {
   if (!containerRect) {
     return {
       left: '50%',
@@ -184,6 +182,17 @@ function syncFloatPosition(): void {
 }
 
 /**
+ * 提交批注内容。
+ */
+function submitComment(): void {
+  const trimmed = inputValue.value.trim();
+  if (!trimmed) return;
+  emit('submit', trimmed);
+  inputValue.value = '';
+  emit('update:visible', false);
+}
+
+/**
  * 关闭评论面板。
  */
 function closePanel(): void {
@@ -199,6 +208,9 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     event.preventDefault();
     closePanel();
+  } else if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    submitComment();
   }
 }
 
@@ -246,5 +258,11 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 1000;
   max-width: calc(100% - 32px);
+
+  &__input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
 }
 </style>

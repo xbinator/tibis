@@ -361,6 +361,21 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
   }
 
   /**
+   * 提交批注内容，应用到当前缓存选区。
+   * @param comment - 批注正文
+   */
+  function applyComment(comment: string): void {
+    const range = cachedSelectionRange.value;
+    const adapter = getAdapter();
+    if (!range || !adapter || !adapter.applyComment) return;
+
+    adapter.applyComment(range, comment);
+    adapter.clearSelectionHighlight();
+    transitionTo('idle');
+    clearPositions();
+  }
+
+  /**
    * AI 流式生成完成后应用内容。
    * @param content - AI 生成的内容
    */
@@ -541,6 +556,7 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
     closeAIInput,
     openCommentInput,
     closeCommentInput,
+    applyComment,
     applyAIResult,
     cancelAIStreaming,
     setStreaming,

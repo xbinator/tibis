@@ -1,0 +1,281 @@
+<!--
+  @file CommentCard.vue
+  @description 行内批注浮层卡片，展示被批注文本、批注内容，支持编辑和删除。
+-->
+<template>
+  <div v-if="visible" ref="wrapperRef" :class="name" :style="wrapperStyle">
+    <!-- 查看模式 -->
+    <template v-if="!isEditing">
+      <div :class="bem('header')">
+        <div :class="bem('annotated')" :title="annotatedText">{{ annotatedText }}</div>
+        <BDropdown>
+          <BButton type="text" size="small" :class="bem('more-btn')">
+            <Icon icon="lucide:more-horizontal" :width="16" :height="16" />
+          </BButton>
+          <template #overlay>
+            <div ref="dropdownMenuRef">
+              <BDropdownMenu :options="menuOptions" :width="140" />
+            </div>
+          </template>
+        </BDropdown>
+      </div>
+      <div :class="bem('content')">{{ comment }}</div>
+    </template>
+
+    <!-- 编辑模式 -->
+    <template v-else>
+      <ATextarea v-model:value="editValue" v-focus :auto-size="{ minRows: 2, maxRows: 6 }" placeholder="编辑批注..." />
+      <div :class="bem('edit-actions')">
+        <BButton type="secondary" size="small" @click="cancelEditing">取消</BButton>
+        <BButton type="primary" size="small" @click="saveEditing">保存</BButton>
+      </div>
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+/**
+ * @file CommentCard.vue
+ * @description 行内批注浮层卡片，展示被批注文本、批注内容，支持编辑和删除。
+ */
+import type { CommentCardPosition } from '../hooks/useCommentActions';
+import type { CSSProperties } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { Icon } from '@iconify/vue';
+import { useEventListener, onClickOutside, useResizeObserver } from '@vueuse/core';
+import type { DropdownOption } from '@/components/BDropdown/type';
+import { vFocus } from '@/directives/focus';
+import { createNamespace } from '@/utils/namespace';
+
+const [name, bem] = createNamespace('', 'b-markdown-comment-card');
+
+interface Props {
+  /** 卡片是否可见 */
+  visible?: boolean;
+  /** 批注 ID */
+  commentId?: string;
+  /** 被批注的原文 */
+  annotatedText?: string;
+  /** 批注内容 */
+  comment?: string;
+  /** 卡片定位信息（由 useCommentActions 注入） */
+  position?: CommentCardPosition | null;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  visible: false,
+  commentId: '',
+  annotatedText: '',
+  comment: '',
+  position: null
+});
+
+const emit = defineEmits<{
+  (e: 'update:visible', value: boolean): void;
+  (e: 'edit', id: string, newComment: string): void;
+  (e: 'delete', id: string): void;
+}>();
+
+const isEditing = ref(false);
+const editValue = ref('');
+const wrapperRef = ref<HTMLElement | null>(null);
+const dropdownMenuRef = ref<HTMLElement | null>(null);
+const wrapperStyle = ref<CSSProperties>({});
+const hasMeasuredPosition = ref(false);
+
+/**
+ * 卡片与锚点之间的垂直间距。
+ */
+const CARD_GAP = 6;
+
+/**
+ * 卡片的期望宽度。
+ */
+const PREFERRED_CARD_WIDTH = 320;
+
+/**
+ * 构造隐藏态卡片样式。
+ * @param width - 卡片宽度
+ * @returns 隐藏态样式对象
+ */
+function createHiddenWrapperStyle(width: number): CSSProperties {
+  return {
+    top: '0px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    visibility: 'hidden',
+    width: `${width}px`
+  };
+}
+
+/**
+ * 根据编排层注入的 position 更新卡片定位。
+ * position 包含被批注文本相对容器的 left、top 和 height，
+ * 卡片优先显示在文本下方，空间不足时回退到上方。
+ */
+function syncFloatPosition(): void {
+  const { position } = props;
+  const wrapperElement = wrapperRef.value;
+  if (!position || !wrapperElement) return;
+
+  const { left, top, height } = position;
+  const { width: wrapperWidth, height: wrapperHeight } = wrapperElement.getBoundingClientRect();
+
+  if (wrapperWidth <= 0 || wrapperHeight <= 0) {
+    hasMeasuredPosition.value = false;
+    wrapperStyle.value = createHiddenWrapperStyle(PREFERRED_CARD_WIDTH);
+    return;
+  }
+
+  const width = Math.min(PREFERRED_CARD_WIDTH, wrapperWidth);
+  const preferredTop = top + height + CARD_GAP;
+
+  wrapperStyle.value = {
+    top: `${preferredTop}px`,
+    left: `${left}px`,
+    visibility: 'visible',
+    width: `${width}px`
+  };
+  hasMeasuredPosition.value = true;
+}
+
+/**
+ * 进入编辑模式。
+ */
+function startEditing(): void {
+  editValue.value = props.comment;
+  isEditing.value = true;
+}
+
+/**
+ * 取消编辑。
+ */
+function cancelEditing(): void {
+  isEditing.value = false;
+  editValue.value = '';
+}
+
+/**
+ * 保存编辑后的批注内容。
+ */
+function saveEditing(): void {
+  const trimmed = editValue.value.trim();
+  if (!trimmed) return;
+  emit('edit', props.commentId, trimmed);
+  isEditing.value = false;
+  editValue.value = '';
+}
+
+/**
+ * 删除批注。
+ */
+function handleDelete(): void {
+  emit('delete', props.commentId);
+}
+
+/**
+ * 下拉菜单选项。
+ */
+const menuOptions = computed<DropdownOption[]>(() => [
+  { value: 'edit', label: '编辑', icon: 'lucide:pencil', onClick: startEditing },
+  { value: 'delete', label: '删除', icon: 'lucide:trash-2', onClick: handleDelete }
+]);
+
+watch(
+  () => props.visible,
+  (isVisible) => {
+    if (isVisible) {
+      isEditing.value = false;
+      editValue.value = '';
+      hasMeasuredPosition.value = false;
+      wrapperStyle.value = createHiddenWrapperStyle(PREFERRED_CARD_WIDTH);
+      nextTick(syncFloatPosition);
+    } else {
+      hasMeasuredPosition.value = false;
+      isEditing.value = false;
+      editValue.value = '';
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.position,
+  () => {
+    if (!props.visible) return;
+    if (!hasMeasuredPosition.value) {
+      wrapperStyle.value = createHiddenWrapperStyle(PREFERRED_CARD_WIDTH);
+    }
+    nextTick(syncFloatPosition);
+  }
+);
+
+useResizeObserver(wrapperRef, () => {
+  syncFloatPosition();
+});
+
+onClickOutside(
+  wrapperRef,
+  () => {
+    if (props.visible) {
+      emit('update:visible', false);
+    }
+  },
+  { ignore: [dropdownMenuRef] }
+);
+
+useEventListener(window, 'resize', () => {
+  if (props.visible) syncFloatPosition();
+});
+
+onBeforeUnmount(() => {
+  wrapperStyle.value = {};
+});
+</script>
+
+<style lang="less" scoped>
+.b-markdown-comment-card {
+  position: absolute;
+  z-index: 1001;
+  max-width: calc(100% - 32px);
+  padding: 12px;
+  background-color: var(--bg-elevated, #fff);
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
+
+  &__header {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  &__annotated {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    color: var(--text-secondary, #999);
+    white-space: nowrap;
+  }
+
+  &__more-btn {
+    flex-shrink: 0;
+    color: var(--text-secondary, #999);
+  }
+
+  &__content {
+    font-size: 14px;
+    color: var(--text-primary, #333);
+  }
+
+  &__edit-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+}
+</style>

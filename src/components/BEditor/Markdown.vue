@@ -3,7 +3,7 @@
   @description Markdown 编辑器完整布局组件，聚合大纲、编辑器面板、选区工具、快捷操作及搜索栏。
 -->
 <template>
-  <div ref="layoutRef" class="b-markdown-layout">
+  <div ref="layoutRef" class="b-markdown-layout" @click="commentActions.handleCommentClick">
     <Sidebar
       v-if="showOutline"
       :title="editorState.name"
@@ -79,6 +79,18 @@
           :visible="selectionAssistant.commentInputVisible.value"
           :position="selectionAssistant.panelPosition.value"
           @update:visible="handleSelectionCommentVisibleChange"
+          @submit="selectionAssistant.applyComment($event)"
+        />
+
+        <CommentCard
+          :visible="!!commentActions.activeCommentCard.value"
+          :comment-id="commentActions.activeCommentCard.value?.id ?? ''"
+          :annotated-text="commentActions.activeCommentCard.value?.annotatedText ?? ''"
+          :comment="commentActions.activeCommentCard.value?.content ?? ''"
+          :position="commentActions.activeCommentCard.value?.position ?? null"
+          @update:visible="commentActions.activeCommentCard.value = $event ? commentActions.activeCommentCard.value : null"
+          @edit="commentActions.handleCommentEdit"
+          @delete="commentActions.handleCommentDelete"
         />
       </div>
 
@@ -114,10 +126,12 @@ import { handleEditorAnchorNavigation } from './adapters/editorAnchorNavigation'
 import QuickActions from './components/QuickActions.vue';
 import Sidebar from './components/Sidebar.vue';
 import { useAnchors } from './hooks/useAnchors';
+import { useCommentActions } from './hooks/useCommentActions';
 import { useEditorController } from './hooks/useEditorController';
 import { useSelectionAssistant } from './hooks/useSelectionAssistant';
 import PaneRichEditor from './panes/PaneRichEditor.vue';
 import PaneSourceEditor from './panes/PaneSourceEditor.vue';
+import CommentCard from './shared/CommentCard.vue';
 import FindBar from './shared/FindBar.vue';
 import SelectionAIInput from './shared/SelectionAIInput.vue';
 import SelectionCommentInput from './shared/SelectionCommentInput.vue';
@@ -236,6 +250,11 @@ const selectionAssistant = useSelectionAssistant({
   isEditable: () => props.editable
 });
 
+const commentActions = useCommentActions({
+  getEditor: () => currentRichSelectionHost.value?.editor ?? null,
+  getContainerRect: () => layoutRef.value?.getBoundingClientRect() ?? null
+});
+
 /**
  * Rich 模式格式按钮列表。
  */
@@ -312,12 +331,14 @@ function handleSelectionAIVisibleChange(visible: boolean): void {
 }
 
 /**
- * 处理评论输入层显隐变化。
+ * 处理评论输入面板显隐变化，打开时清除批注卡片状态以避免两者同时显示。
  * @param visible - 最新显隐状态
  */
 function handleSelectionCommentVisibleChange(visible: boolean): void {
   if (!visible) {
     selectionAssistant.closeCommentInput();
+  } else {
+    commentActions.activeCommentCard.value = null;
   }
 }
 
@@ -497,6 +518,18 @@ defineExpose({
   &::placeholder {
     font-weight: 600;
     color: var(--editor-placeholder);
+  }
+}
+
+.editor-comment-highlight {
+  cursor: pointer;
+  background-color: rgb(255 213 79 / 30%);
+  border-bottom: 2px solid rgb(255 152 0 / 60%);
+  border-radius: 2px;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: rgb(255 213 79 / 50%);
   }
 }
 </style>

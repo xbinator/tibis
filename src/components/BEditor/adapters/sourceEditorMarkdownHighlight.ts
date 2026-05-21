@@ -511,6 +511,38 @@ function getEscapeRanges(content: string, excludeRanges: CodeBlockRange[], inlin
 }
 
 /**
+ * 获取行内批注语法范围
+ * @description 匹配 [text]{comment="..."} 语法，高亮方括号和属性部分
+ * @param content - 文档内容
+ * @param excludeRanges - 需要排除的代码块范围
+ * @param inlineCodeRanges - 需要排除的行内代码范围
+ * @returns 高亮范围数组
+ */
+function getCommentRanges(content: string, excludeRanges: CodeBlockRange[], inlineCodeRanges: InlineCodeRange[]): MarkdownHighlightRange[] {
+  const ranges: MarkdownHighlightRange[] = [];
+  const commentRegex = /\[([^\]]*?)\]\{comment="([^"]*?)"(?:\s+id="([^"]*?)")?\}/g;
+  const isExcluded = createExclusionChecker(excludeRanges, inlineCodeRanges);
+
+  let match: RegExpExecArray | null;
+  while ((match = commentRegex.exec(content)) !== null) {
+    if (isExcluded(match.index)) continue;
+
+    const start = match.index;
+    // 左方括号
+    ranges.push({ className: 'md-comment-bracket', from: start, to: start + 1 });
+    // 右方括号
+    const textEnd = start + 1 + match[1].length;
+    ranges.push({ className: 'md-comment-bracket', from: textEnd, to: textEnd + 1 });
+    // 属性部分 {comment="..."}
+    const attrStart = textEnd + 1;
+    const attrEnd = start + match[0].length;
+    ranges.push({ className: 'md-comment-attr', from: attrStart, to: attrEnd });
+  }
+
+  return ranges;
+}
+
+/**
  * 获取代码围栏标记范围
  * @description 匹配代码块的围栏标记和语言标识
  * @param content - 文档内容
@@ -568,7 +600,8 @@ export function getMarkdownHighlightRanges(content: string): MarkdownHighlightRa
     getInlineCodeMarkerRanges(content, inlineCodeRanges),
     getLinkImageRanges(content, codeBlockRanges, inlineCodeRanges),
     getTableRanges(content, codeBlockRanges, inlineCodeRanges),
-    getEscapeRanges(content, codeBlockRanges, inlineCodeRanges)
+    getEscapeRanges(content, codeBlockRanges, inlineCodeRanges),
+    getCommentRanges(content, codeBlockRanges, inlineCodeRanges)
   ]);
 
   // 4. 按起始位置排序
