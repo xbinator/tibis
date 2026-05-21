@@ -118,6 +118,7 @@ async function handleRefreshModels(): Promise<void> {
   display: flex;
   flex-direction: column;
   width: 100%;
+  min-width: 400px;
   height: 100%;
   overflow: auto;
   background: var(--bg-primary);

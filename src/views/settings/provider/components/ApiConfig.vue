@@ -11,8 +11,12 @@
 
     <div class="connection-test">
       <div class="test-info">
-        <h4 class="test-title">连通性检查</h4>
-        <p class="test-desc">测试 API Key 与代理地址是否正确配置</p>
+        <div class="test-title">
+          <div>连通性检查</div>
+          <ATooltip title="测试 API Key 与代理地址是否正确配置">
+            <Icon icon="lucide:help-circle" width="14" height="14" class="title-icon" />
+          </ATooltip>
+        </div>
       </div>
       <div class="test-actions">
         <BSelect v-model:value="testModel" :options="modelOptions" placeholder="选择测试模型" class="model-select" />
@@ -25,6 +29,7 @@
 <script setup lang="ts">
 import type { AIProvider, AIProviderModel } from 'types/ai';
 import { computed, ref, watch } from 'vue';
+import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
 import { useChat } from '@/hooks/useChat';
@@ -116,8 +121,16 @@ watch(
 }
 
 .test-title {
+  display: flex;
+  gap: 4px;
+  align-items: center;
   margin: 0 0 4px;
   font-weight: 500;
+}
+
+.title-icon {
+  color: var(--text-secondary);
+  cursor: help;
 }
 
 .test-desc {

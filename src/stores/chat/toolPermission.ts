@@ -45,11 +45,7 @@ function normalizeToolPermission(value: unknown): PersistedToolPermissionState {
     normalized.toolPermissionMode = state.toolPermissionMode;
   }
 
-  if (
-    state.alwaysToolPermissionGrants &&
-    typeof state.alwaysToolPermissionGrants === 'object' &&
-    !Array.isArray(state.alwaysToolPermissionGrants)
-  ) {
+  if (state.alwaysToolPermissionGrants && typeof state.alwaysToolPermissionGrants === 'object' && !Array.isArray(state.alwaysToolPermissionGrants)) {
     normalized.alwaysToolPermissionGrants = state.alwaysToolPermissionGrants as Record<string, true>;
   }
 
