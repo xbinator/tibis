@@ -102,6 +102,7 @@ export function useCommentActions(options: UseCommentActionsOptions) {
 
   /**
    * 编辑批注内容，通过 ProseMirror 事务更新 comment mark 的 comment 属性。
+   * 遍历文档中所有具有相同 id 的 mark 节点，逐个替换为新 mark。
    * @param id - 批注 ID
    * @param newContent - 新批注内容
    */
@@ -112,21 +113,17 @@ export function useCommentActions(options: UseCommentActionsOptions) {
     const { state } = editor;
     const markType = state.schema.marks.inlineComment;
     const { tr } = state;
-    let found = false;
 
     state.doc.descendants((node, pos) => {
-      if (found) return false;
       const commentMark = node.marks.find((m) => m.type === markType && m.attrs.id === id);
       if (commentMark) {
         const newMark = markType.create({ ...commentMark.attrs, comment: newContent });
         tr.removeMark(pos, pos + node.nodeSize, commentMark);
         tr.addMark(pos, pos + node.nodeSize, newMark);
-        found = true;
-        return false;
       }
     });
 
-    if (found) {
+    if (tr.docChanged) {
       editor.view.dispatch(tr);
     }
 
@@ -135,6 +132,7 @@ export function useCommentActions(options: UseCommentActionsOptions) {
 
   /**
    * 删除批注，仅移除 comment mark，保留正文文本和其他 marks。
+   * 遍历文档中所有具有相同 id 的 mark 节点，逐个移除。
    * @param id - 批注 ID
    */
   function handleCommentDelete(id: string): void {
@@ -144,19 +142,15 @@ export function useCommentActions(options: UseCommentActionsOptions) {
     const { state } = editor;
     const markType = state.schema.marks.inlineComment;
     const { tr } = state;
-    let found = false;
 
     state.doc.descendants((node, pos) => {
-      if (found) return false;
       const commentMark = node.marks.find((m) => m.type === markType && m.attrs.id === id);
       if (commentMark) {
         tr.removeMark(pos, pos + node.nodeSize, commentMark);
-        found = true;
-        return false;
       }
     });
 
-    if (found) {
+    if (tr.docChanged) {
       editor.view.dispatch(tr);
     }
 

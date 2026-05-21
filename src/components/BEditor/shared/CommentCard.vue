@@ -13,7 +13,9 @@
             <Icon icon="lucide:more-horizontal" :width="16" :height="16" />
           </BButton>
           <template #overlay>
-            <BDropdownMenu :options="menuOptions" :width="120" />
+            <div ref="dropdownRef">
+              <BDropdownMenu :options="menuOptions" :width="120" />
+            </div>
           </template>
         </BDropdown>
       </div>
@@ -76,6 +78,7 @@ const emit = defineEmits<{
 const isEditing = ref(false);
 const editValue = ref('');
 const wrapperRef = ref<HTMLElement | null>(null);
+const dropdownRef = ref<HTMLElement | null>(null);
 const wrapperStyle = ref<CSSProperties>({});
 const hasMeasuredPosition = ref(false);
 
@@ -268,11 +271,15 @@ useResizeObserver(wrapperRef, () => {
   syncFloatPosition();
 });
 
-onClickOutside(wrapperRef, () => {
-  if (props.visible) {
-    emit('update:visible', false);
-  }
-});
+onClickOutside(
+  wrapperRef,
+  () => {
+    if (props.visible) {
+      emit('update:visible', false);
+    }
+  },
+  { ignore: [dropdownRef] }
+);
 
 useEventListener(window, 'resize', () => {
   if (props.visible) syncFloatPosition();
