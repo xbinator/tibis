@@ -301,12 +301,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-color, #e5e5e5);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
-
-  &:hover {
-    .b-markdown-comment-card__more-btn {
-      opacity: 1;
-    }
-  }
 }
 
 .b-markdown-comment-card__header {
@@ -328,7 +322,6 @@ onBeforeUnmount(() => {
 
 .b-markdown-comment-card__more-btn {
   flex-shrink: 0;
-  opacity: 0;
 }
 
 .b-markdown-comment-card__content {
