@@ -252,7 +252,11 @@ const selectionAssistant = useSelectionAssistant({
 
 const commentActions = useCommentActions({
   getEditor: () => currentRichSelectionHost.value?.editor ?? null,
-  getContainerRect: () => layoutRef.value?.getBoundingClientRect() ?? null
+  getPanelPosition: (from, to) => {
+    const adapter = currentSelectionAdapter.value;
+    if (!adapter) return null;
+    return adapter.getPanelPosition({ from, to, text: '', docVersion: undefined });
+  }
 });
 
 /**

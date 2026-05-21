@@ -3,7 +3,7 @@
   @description 行内批注浮层卡片，展示被批注文本、批注内容，支持编辑和删除。
 -->
 <template>
-  <div v-if="visible" ref="wrapperRef" :class="name" :style="wrapperStyle">
+  <div v-if="visible" ref="wrapperRef" :class="name" :style="wrapperStyle" @mousedown="onWrapperMousedown">
     <!-- 查看模式 -->
     <template v-if="!isEditing">
       <div :class="bem('header')">
@@ -13,9 +13,7 @@
             <Icon icon="lucide:more-horizontal" :width="16" :height="16" />
           </BButton>
           <template #overlay>
-            <div ref="dropdownMenuRef">
-              <BDropdownMenu :options="menuOptions" :width="140" />
-            </div>
+            <BDropdownMenu :options="menuOptions" :width="120" />
           </template>
         </BDropdown>
       </div>
@@ -24,7 +22,7 @@
 
     <!-- 编辑模式 -->
     <template v-else>
-      <ATextarea v-model:value="editValue" v-focus :auto-size="{ minRows: 2, maxRows: 6 }" placeholder="编辑批注..." />
+      <ATextarea v-model:value="editValue" :auto-size="{ minRows: 2, maxRows: 6 }" placeholder="编辑批注..." />
       <div :class="bem('edit-actions')">
         <BButton type="secondary" size="small" @click="cancelEditing">取消</BButton>
         <BButton type="primary" size="small" @click="saveEditing">保存</BButton>
@@ -38,13 +36,12 @@
  * @file CommentCard.vue
  * @description 行内批注浮层卡片，展示被批注文本、批注内容，支持编辑和删除。
  */
-import type { CommentCardPosition } from '../hooks/useCommentActions';
+import type { SelectionAssistantPosition } from '../adapters/selectionAssistant';
 import type { CSSProperties } from 'vue';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useEventListener, onClickOutside, useResizeObserver } from '@vueuse/core';
 import type { DropdownOption } from '@/components/BDropdown/type';
-import { vFocus } from '@/directives/focus';
 import { createNamespace } from '@/utils/namespace';
 
 const [name, bem] = createNamespace('', 'b-markdown-comment-card');
@@ -58,8 +55,8 @@ interface Props {
   annotatedText?: string;
   /** 批注内容 */
   comment?: string;
-  /** 卡片定位信息（由 useCommentActions 注入） */
-  position?: CommentCardPosition | null;
+  /** 卡片定位信息（由 adapter 计算为相对 overlayRoot 的坐标） */
+  position?: SelectionAssistantPosition | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -79,7 +76,6 @@ const emit = defineEmits<{
 const isEditing = ref(false);
 const editValue = ref('');
 const wrapperRef = ref<HTMLElement | null>(null);
-const dropdownMenuRef = ref<HTMLElement | null>(null);
 const wrapperStyle = ref<CSSProperties>({});
 const hasMeasuredPosition = ref(false);
 
@@ -89,12 +85,28 @@ const hasMeasuredPosition = ref(false);
 const CARD_GAP = 6;
 
 /**
+ * 卡片接近容器边缘时的内边距。
+ */
+const CARD_PADDING = 8;
+
+/**
  * 卡片的期望宽度。
  */
 const PREFERRED_CARD_WIDTH = 320;
 
 /**
- * 构造隐藏态卡片样式。
+ * 处理卡片容器的 mousedown 事件。
+ * 查看模式下阻止默认行为（防止编辑器失焦），编辑模式下允许焦点传入输入框。
+ * @param event - 鼠标按下事件
+ */
+function onWrapperMousedown(event: MouseEvent): void {
+  if (!isEditing.value) {
+    event.preventDefault();
+  }
+}
+
+/**
+ * 构造隐藏态卡片样式，用于首帧测量。
  * @param width - 卡片宽度
  * @returns 隐藏态样式对象
  */
@@ -109,32 +121,74 @@ function createHiddenWrapperStyle(width: number): CSSProperties {
 }
 
 /**
+ * 计算卡片纵向位置，优先显示在选区下方，空间不足时回退到上方。
+ * @param position - 编排层注入的锚点信息
+ * @param containerRect - 浮层容器矩形
+ * @param wrapperHeight - 卡片高度
+ * @returns 纵向像素值
+ */
+function resolveCardTop(
+  position: SelectionAssistantPosition,
+  containerRect: NonNullable<SelectionAssistantPosition['containerRect']>,
+  wrapperHeight: number
+): number {
+  const preferredTop = position.anchorRect.top + position.lineHeight + CARD_GAP;
+  const fallbackTop = position.anchorRect.top - wrapperHeight - CARD_GAP;
+  const maxTop = containerRect.top + containerRect.height - wrapperHeight - CARD_PADDING;
+  return preferredTop <= maxTop ? preferredTop : Math.max(containerRect.top + CARD_PADDING, fallbackTop);
+}
+
+/**
+ * 计算卡片横向位置，居中对齐锚点，溢出时约束到容器内。
+ * @param containerRect - 浮层容器矩形
+ * @param wrapperWidth - 卡片宽度
+ * @returns 横向样式对象
+ */
+function resolveHorizontalStyle(containerRect: NonNullable<SelectionAssistantPosition['containerRect']>, wrapperWidth: number): CSSProperties {
+  const anchorCenter = props.position?.anchorRect?.left ?? 0 + (props.position?.anchorRect.width ?? 0) / 2;
+  const left = anchorCenter - wrapperWidth / 2;
+  const minLeft = containerRect.left + CARD_PADDING;
+  const maxLeft = containerRect.left + containerRect.width - wrapperWidth - CARD_PADDING;
+
+  return {
+    left: `${Math.max(minLeft, Math.min(maxLeft, left))}px`,
+    transform: 'none'
+  };
+}
+
+/**
  * 根据编排层注入的 position 更新卡片定位。
- * position 包含被批注文本相对容器的 left、top 和 height，
- * 卡片优先显示在文本下方，空间不足时回退到上方。
+ * 坐标已由 adapter 计算为相对 overlayRoot 的值。
  */
 function syncFloatPosition(): void {
   const { position } = props;
   const wrapperElement = wrapperRef.value;
   if (!position || !wrapperElement) return;
 
-  const { left, top, height } = position;
+  const containerRect = position.containerRect ?? {
+    top: 0,
+    left: 0,
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+
+  const width = Math.min(PREFERRED_CARD_WIDTH, containerRect.width - CARD_PADDING * 2);
   const { width: wrapperWidth, height: wrapperHeight } = wrapperElement.getBoundingClientRect();
 
   if (wrapperWidth <= 0 || wrapperHeight <= 0) {
     hasMeasuredPosition.value = false;
-    wrapperStyle.value = createHiddenWrapperStyle(PREFERRED_CARD_WIDTH);
+    wrapperStyle.value = createHiddenWrapperStyle(width);
     return;
   }
 
-  const width = Math.min(PREFERRED_CARD_WIDTH, wrapperWidth);
-  const preferredTop = top + height + CARD_GAP;
+  const top = resolveCardTop(position, containerRect, wrapperHeight);
+  const horizontalStyle = resolveHorizontalStyle(containerRect, wrapperWidth);
 
   wrapperStyle.value = {
-    top: `${preferredTop}px`,
-    left: `${left}px`,
+    top: `${top}px`,
     visibility: 'visible',
-    width: `${width}px`
+    width: `${width}px`,
+    ...horizontalStyle
   };
   hasMeasuredPosition.value = true;
 }
@@ -214,15 +268,11 @@ useResizeObserver(wrapperRef, () => {
   syncFloatPosition();
 });
 
-onClickOutside(
-  wrapperRef,
-  () => {
-    if (props.visible) {
-      emit('update:visible', false);
-    }
-  },
-  { ignore: [dropdownMenuRef] }
-);
+onClickOutside(wrapperRef, () => {
+  if (props.visible) {
+    emit('update:visible', false);
+  }
+});
 
 useEventListener(window, 'resize', () => {
   if (props.visible) syncFloatPosition();
@@ -250,7 +300,6 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
-    user-select: text;
   }
 
   .b-markdown-comment-card__annotated {

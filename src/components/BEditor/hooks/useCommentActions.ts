@@ -2,20 +2,9 @@
  * @file useCommentActions.ts
  * @description 行内批注交互逻辑 composable，管理批注卡片状态与编辑/删除操作。
  */
+import type { SelectionAssistantPosition } from '../adapters/selectionAssistant';
 import type { Editor } from '@tiptap/core';
 import { ref } from 'vue';
-
-/**
- * 批注卡片定位信息。
- */
-interface CommentCardPosition {
-  /** 相对容器的水平偏移 */
-  left: number;
-  /** 相对容器的垂直偏移 */
-  top: number;
-  /** 被批注文本的高度 */
-  height: number;
-}
 
 /**
  * 当前激活的批注卡片状态。
@@ -27,8 +16,8 @@ interface ActiveCommentCard {
   content: string;
   /** 被批注的原文 */
   annotatedText: string;
-  /** 卡片相对容器的定位 */
-  position: CommentCardPosition;
+  /** 卡片定位信息（由 adapter 计算为相对 overlayRoot 的坐标） */
+  position: SelectionAssistantPosition;
 }
 
 /**
@@ -37,8 +26,8 @@ interface ActiveCommentCard {
 interface UseCommentActionsOptions {
   /** 获取当前 Rich 编辑器实例的 getter */
   getEditor: () => Editor | null;
-  /** 获取容器元素 getBoundingClientRect 的 getter */
-  getContainerRect: () => DOMRect | null;
+  /** 获取面板定位信息的函数，与 SelectionAIInput 使用相同的定位方式 */
+  getPanelPosition: (from: number, to: number) => SelectionAssistantPosition | null;
 }
 
 /**
@@ -51,13 +40,13 @@ interface UseCommentActionsOptions {
  * @returns 批注卡片状态与操作方法
  */
 export function useCommentActions(options: UseCommentActionsOptions) {
-  const { getEditor, getContainerRect } = options;
+  const { getEditor, getPanelPosition } = options;
 
   /** 当前激活的批注卡片信息 */
   const activeCommentCard = ref<ActiveCommentCard | null>(null);
 
   /**
-   * 点击批注高亮文本时，计算位置并显示批注卡片。
+   * 点击批注高亮文本时，通过 adapter 计算位置并显示批注卡片。
    * @param event - 鼠标点击事件
    */
   function handleCommentClick(event: MouseEvent): void {
@@ -70,19 +59,44 @@ export function useCommentActions(options: UseCommentActionsOptions) {
     const annotatedText = commentEl.textContent ?? '';
     if (!commentId || !commentContent) return;
 
-    const rect = commentEl.getBoundingClientRect();
-    const containerRect = getContainerRect();
-    if (!containerRect) return;
+    const editor = getEditor();
+    if (!editor) return;
+
+    let pos: number;
+    try {
+      pos = editor.view.posAtDOM(commentEl, 0);
+    } catch {
+      return;
+    }
+
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node) return;
+
+    const mark = editor.state.schema.marks.inlineComment;
+    if (!mark) return;
+
+    let from = pos;
+    for (let i = pos - 1; i >= 0; i--) {
+      const prevNode = editor.state.doc.nodeAt(i);
+      if (!prevNode || !prevNode.marks.some((m) => m.type === mark)) break;
+      from = i;
+    }
+
+    let to = pos + (node.nodeSize ?? 1);
+    for (let i = to; i < editor.state.doc.content.size; i++) {
+      const nextNode = editor.state.doc.nodeAt(i);
+      if (!nextNode || !nextNode.marks.some((m) => m.type === mark)) break;
+      to = i + (nextNode.nodeSize ?? 1);
+    }
+
+    const position = getPanelPosition(from, to);
+    if (!position) return;
 
     activeCommentCard.value = {
       id: commentId,
       content: commentContent,
       annotatedText,
-      position: {
-        left: rect.left - containerRect.left,
-        top: rect.top - containerRect.top,
-        height: rect.height
-      }
+      position
     };
   }
 
@@ -157,4 +171,4 @@ export function useCommentActions(options: UseCommentActionsOptions) {
   };
 }
 
-export type { ActiveCommentCard, CommentCardPosition };
+export type { ActiveCommentCard };
