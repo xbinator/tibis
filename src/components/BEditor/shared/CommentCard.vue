@@ -296,7 +296,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 1001;
   max-width: calc(100% - 32px);
-  padding: 12px;
+  padding: 6px 10px;
   background-color: var(--bg-elevated, #fff);
   border: 1px solid var(--border-color, #e5e5e5);
   border-radius: 8px;
@@ -325,6 +325,8 @@ onBeforeUnmount(() => {
 }
 
 .b-markdown-comment-card__content {
+  max-height: 200px;
+  overflow: auto;
   font-size: 14px;
   color: var(--text-primary);
   user-select: text;
