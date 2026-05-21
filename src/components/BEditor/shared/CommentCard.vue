@@ -244,34 +244,36 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
 
-  &__header {
+  .b-markdown-comment-card__header {
     display: flex;
     gap: 8px;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
+    user-select: text;
   }
 
-  &__annotated {
+  .b-markdown-comment-card__annotated {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 12px;
-    color: var(--text-secondary, #999);
+    color: var(--text-secondary);
     white-space: nowrap;
   }
 
-  &__more-btn {
+  .b-markdown-comment-card__more-btn {
     flex-shrink: 0;
-    color: var(--text-secondary, #999);
+    color: var(--text-secondary);
   }
 
-  &__content {
+  .b-markdown-comment-card__content {
     font-size: 14px;
-    color: var(--text-primary, #333);
+    color: var(--text-primary);
+    user-select: text;
   }
 
-  &__edit-actions {
+  .b-markdown-comment-card__edit-actions {
     display: flex;
     gap: 8px;
     justify-content: flex-end;

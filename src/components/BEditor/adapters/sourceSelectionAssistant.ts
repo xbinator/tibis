@@ -14,6 +14,7 @@ import type { Extension } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { EditorSelection, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView as EditorViewRef } from '@codemirror/view';
+import { nanoid } from 'nanoid';
 import { restoreSourceEditorSelectionDraw, suppressSourceEditorSelectionDraw } from './sourceEditorDrawSelection';
 
 /**
@@ -114,6 +115,7 @@ export function createSourceSelectionAssistantAdapter(
         actions: {
           ai: true,
           reference: true,
+          comment: true,
           bold: false,
           italic: false,
           underline: false,
@@ -277,6 +279,28 @@ export function createSourceSelectionAssistantAdapter(
           from: range.from,
           to: range.to,
           insert: content
+        },
+        selection: EditorSelection.cursor(nextPosition),
+        scrollIntoView: true
+      });
+      view.focus();
+    },
+
+    /**
+     * 应用行内批注，将选中文本包裹为 `[text]{comment="..."}` 语法。
+     * @param range - 当前选区范围
+     * @param comment - 批注正文
+     */
+    applyComment(range: SelectionAssistantRange, comment: string): void {
+      const selectedText = view.state.sliceDoc(range.from, range.to);
+      const id = nanoid();
+      const wrapped = `[${selectedText}]{comment="${comment}" id="${id}"}`;
+      const nextPosition = range.from + wrapped.length;
+      view.dispatch({
+        changes: {
+          from: range.from,
+          to: range.to,
+          insert: wrapped
         },
         selection: EditorSelection.cursor(nextPosition),
         scrollIntoView: true

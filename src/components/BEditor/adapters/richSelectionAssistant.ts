@@ -12,6 +12,7 @@ import type {
 } from './selectionAssistant';
 import type { Editor } from '@tiptap/vue-3';
 import { TextSelection } from '@tiptap/pm/state';
+import { nanoid } from 'nanoid';
 import { clearAISelectionHighlight, setAISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { getSelectionSourceLineRange, getSelectionSourceLineRangeFromMarkdown } from './sourceLineMapping';
 
@@ -179,6 +180,7 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
         actions: {
           ai: true,
           reference: true,
+          comment: true,
           bold: true,
           italic: true,
           underline: true,
@@ -284,7 +286,7 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
      * @param comment - 批注正文
      */
     applyComment(range: SelectionAssistantRange, comment: string): void {
-      const id = `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const id = nanoid();
       this.restoreSelection(range);
       editor.chain().focus().setMark('inlineComment', { comment, id }).run();
     },
