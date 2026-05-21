@@ -288,7 +288,7 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
     applyComment(range: SelectionAssistantRange, comment: string): void {
       const id = nanoid();
       this.restoreSelection(range);
-      editor.chain().focus().setMark('inlineComment', { comment, id }).run();
+      editor.chain().focus().setMark('inlineComment', { comment, id }).setTextSelection(range.to).run();
     },
 
     /**
