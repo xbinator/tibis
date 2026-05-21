@@ -1,7 +1,13 @@
 <template>
   <Teleport v-if="overlayRoot" :to="overlayRoot">
     <div v-if="visible" ref="toolbarRef" :class="name" :style="style">
-      <SelectionToolbar :format-buttons="resolvedFormatButtons" @ai="$emit('ai')" @reference="$emit('reference')" @format="handleFormat" />
+      <SelectionToolbar
+        :format-buttons="resolvedFormatButtons"
+        @ai="$emit('ai')"
+        @reference="$emit('reference')"
+        @comment="$emit('comment')"
+        @format="handleFormat"
+      />
     </div>
     <LinkPopover
       :visible="linkPopoverVisible"
@@ -64,6 +70,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'ai'): void;
   (e: 'reference'): void;
+  (e: 'comment'): void;
   (e: 'format', command: SelectionToolbarAction): void;
 }>();
 

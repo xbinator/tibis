@@ -11,6 +11,11 @@
       <Icon icon="lucide:message-square-plus" />
       <span>插入对话</span>
     </div>
+
+    <div class="b-markdown-seltoolbar__ai-btn" @mousedown.prevent="$emit('comment')">
+      <Icon icon="lucide:message-circle" />
+      <span>评论</span>
+    </div>
     <div v-if="buttons.length" class="b-markdown-seltoolbar__divider"></div>
 
     <button
@@ -59,11 +64,12 @@ const props = withDefaults(defineProps<Props>(), {
 defineEmits<{
   (e: 'ai'): void;
   (e: 'reference'): void;
+  (e: 'comment'): void;
   (e: 'format', command: SelectionToolbarAction): void;
 }>();
 
-/** 过滤掉 ai/reference 动作（这些由父级按钮单独处理） */
-const buttons = computed(() => props.formatButtons.filter((btn) => btn.command !== 'ai' && btn.command !== 'reference'));
+/** 过滤掉 ai/reference/comment 动作（这些由父级按钮单独处理） */
+const buttons = computed(() => props.formatButtons.filter((btn) => !['ai', 'reference', 'comment'].includes(btn.command)));
 
 const isModelAvailable = ref(false);
 const serviceModelStore = useServiceModelStore();

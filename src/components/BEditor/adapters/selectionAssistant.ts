@@ -58,7 +58,7 @@ export interface SelectionReferencePayload {
 /**
  * 工具栏支持的动作类型。
  */
-export type SelectionToolbarAction = 'ai' | 'reference' | 'bold' | 'italic' | 'underline' | 'strike' | 'code' | 'link';
+export type SelectionToolbarAction = 'ai' | 'reference' | 'comment' | 'bold' | 'italic' | 'underline' | 'strike' | 'code' | 'link';
 
 /**
  * 选区工具能力声明。

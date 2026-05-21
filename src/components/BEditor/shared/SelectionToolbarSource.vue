@@ -1,7 +1,13 @@
 <template>
   <Teleport v-if="overlayRoot" :to="overlayRoot">
     <div v-if="visible" ref="toolbarRef" :class="name" :style="style">
-      <SelectionToolbar :format-buttons="formatButtons" @ai="$emit('ai')" @reference="$emit('reference')" @format="$emit('format', $event)" />
+      <SelectionToolbar
+        :format-buttons="formatButtons"
+        @ai="$emit('ai')"
+        @reference="$emit('reference')"
+        @comment="$emit('comment')"
+        @format="$emit('format', $event)"
+      />
     </div>
   </Teleport>
 </template>
@@ -51,6 +57,7 @@ const props = withDefaults(defineProps<Props>(), {
 defineEmits<{
   (e: 'ai'): void;
   (e: 'reference'): void;
+  (e: 'comment'): void;
   (e: 'format', command: SelectionToolbarAction): void;
 }>();
 

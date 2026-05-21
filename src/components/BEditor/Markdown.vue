@@ -51,6 +51,7 @@
           :format-buttons="formatButtons"
           @ai="selectionAssistant.openAIInput()"
           @reference="selectionAssistant.insertReference()"
+          @comment="selectionAssistant.openCommentInput()"
         />
 
         <SelectionToolbarSource
@@ -61,6 +62,7 @@
           :format-buttons="[]"
           @ai="selectionAssistant.openAIInput()"
           @reference="selectionAssistant.insertReference()"
+          @comment="selectionAssistant.openCommentInput()"
         />
 
         <SelectionAIInput
@@ -71,6 +73,12 @@
           @update:visible="handleSelectionAIVisibleChange"
           @apply="selectionAssistant.applyAIResult($event)"
           @streaming-change="selectionAssistant.setStreaming($event)"
+        />
+
+        <SelectionCommentInput
+          :visible="selectionAssistant.commentInputVisible.value"
+          :position="selectionAssistant.panelPosition.value"
+          @update:visible="handleSelectionCommentVisibleChange"
         />
       </div>
 
@@ -112,6 +120,7 @@ import PaneRichEditor from './panes/PaneRichEditor.vue';
 import PaneSourceEditor from './panes/PaneSourceEditor.vue';
 import FindBar from './shared/FindBar.vue';
 import SelectionAIInput from './shared/SelectionAIInput.vue';
+import SelectionCommentInput from './shared/SelectionCommentInput.vue';
 import SelectionToolbarRich from './shared/SelectionToolbarRich.vue';
 import SelectionToolbarSource from './shared/SelectionToolbarSource.vue';
 import { buildRichPdfExportHtml, buildSourcePdfExportHtml, resolvePdfDefaultPath } from './utils/exportToPdf';
@@ -299,6 +308,16 @@ async function handleExportPdf() {
 function handleSelectionAIVisibleChange(visible: boolean): void {
   if (!visible) {
     selectionAssistant.closeAIInput();
+  }
+}
+
+/**
+ * 处理评论输入层显隐变化。
+ * @param visible - 最新显隐状态
+ */
+function handleSelectionCommentVisibleChange(visible: boolean): void {
+  if (!visible) {
+    selectionAssistant.closeCommentInput();
   }
 }
 

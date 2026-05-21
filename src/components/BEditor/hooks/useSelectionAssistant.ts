@@ -19,7 +19,7 @@ import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
 /**
  * 选区工具状态机状态枚举。
  */
-export type SelectionAssistantStatus = 'idle' | 'toolbar-visible' | 'ai-input-visible' | 'ai-streaming' | 'reference-highlight';
+export type SelectionAssistantStatus = 'idle' | 'toolbar-visible' | 'ai-input-visible' | 'ai-streaming' | 'comment-input-visible' | 'reference-highlight';
 
 /**
  * useSelectionAssistant 的配置选项。
@@ -53,6 +53,9 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
 
   /** AI 输入面板是否可见（含流式生成中） */
   const aiInputVisible = computed<boolean>(() => status.value === 'ai-input-visible' || status.value === 'ai-streaming');
+
+  /** 评论输入面板是否可见 */
+  const commentInputVisible = computed<boolean>(() => status.value === 'comment-input-visible');
 
   /** AI 按钮是否可用（按用户要求，仅由能力声明决定显示） */
   const isAIActionAvailable = computed(() => capabilities.value.actions?.ai === true);
@@ -215,7 +218,8 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
         break;
       case 'ai-input-visible':
       case 'ai-streaming':
-        // AI 面板打开期间，选区变化不关闭面板，但更新高亮和面板位置
+      case 'comment-input-visible':
+        // 面板打开期间，选区变化不关闭面板，但更新高亮和面板位置
         adapter.showSelectionHighlight(selection);
         recomputePanelPosition();
         break;
@@ -284,7 +288,8 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
         break;
       case 'ai-input-visible':
       case 'ai-streaming':
-        // AI 面板保持打开，但先撤掉旧高亮，等待新的 selectionChange 同步新范围。
+      case 'comment-input-visible':
+        // 面板保持打开，但先撤掉旧高亮，等待新的 selectionChange 同步新范围。
         adapter.clearSelectionHighlight();
         break;
       case 'idle':
@@ -319,6 +324,36 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
    * 关闭 AI 输入面板，回到 idle。
    */
   function closeAIInput(): void {
+    const adapter = getAdapter();
+    adapter?.clearSelectionHighlight();
+    transitionTo('idle');
+    clearPositions();
+  }
+
+  /**
+   * 点击"评论"按钮，打开评论输入面板。
+   */
+  function openCommentInput(): void {
+    const range = cachedSelectionRange.value;
+    if (!range) {
+      return;
+    }
+
+    const adapter = getAdapter();
+    if (!adapter) {
+      return;
+    }
+
+    adapter.clearNativeSelection?.();
+    adapter.showSelectionHighlight(range);
+    recomputePanelPosition();
+    transitionTo('comment-input-visible');
+  }
+
+  /**
+   * 关闭评论输入面板，回到 idle。
+   */
+  function closeCommentInput(): void {
     const adapter = getAdapter();
     adapter?.clearSelectionHighlight();
     transitionTo('idle');
@@ -495,6 +530,7 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
     status,
     toolbarVisible,
     aiInputVisible,
+    commentInputVisible,
     cachedSelectionRange,
     toolbarPosition,
     panelPosition,
@@ -503,6 +539,8 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
     // 动作
     openAIInput,
     closeAIInput,
+    openCommentInput,
+    closeCommentInput,
     applyAIResult,
     cancelAIStreaming,
     setStreaming,
