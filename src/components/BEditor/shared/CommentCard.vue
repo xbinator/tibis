@@ -9,7 +9,7 @@
       <div :class="bem('header')">
         <div :class="bem('annotated')" :title="annotatedText">{{ annotatedText }}</div>
         <BDropdown>
-          <BButton type="text" size="small" :class="bem('more-btn')">
+          <BButton type="text" square size="small" :class="bem('more-btn')">
             <Icon icon="lucide:more-horizontal" :width="16" :height="16" />
           </BButton>
           <template #overlay>
@@ -235,7 +235,8 @@ function handleDelete(): void {
  */
 const menuOptions = computed<DropdownOption[]>(() => [
   { value: 'edit', label: '编辑', icon: 'lucide:pencil', onClick: startEditing },
-  { value: 'delete', label: '删除', icon: 'lucide:trash-2', onClick: handleDelete }
+  { type: 'divider' },
+  { value: 'delete', label: '删除', icon: 'lucide:trash-2', danger: true, onClick: handleDelete }
 ]);
 
 watch(
@@ -301,39 +302,45 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
 
-  .b-markdown-comment-card__header {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
+  &:hover {
+    .b-markdown-comment-card__more-btn {
+      opacity: 1;
+    }
   }
+}
 
-  .b-markdown-comment-card__annotated {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 12px;
-    color: var(--text-secondary);
-    white-space: nowrap;
-  }
+.b-markdown-comment-card__header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
 
-  .b-markdown-comment-card__more-btn {
-    flex-shrink: 0;
-    color: var(--text-secondary);
-  }
+.b-markdown-comment-card__annotated {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 
-  .b-markdown-comment-card__content {
-    font-size: 14px;
-    color: var(--text-primary);
-    user-select: text;
-  }
+.b-markdown-comment-card__more-btn {
+  flex-shrink: 0;
+  opacity: 0;
+}
 
-  .b-markdown-comment-card__edit-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    margin-top: 8px;
-  }
+.b-markdown-comment-card__content {
+  font-size: 14px;
+  color: var(--text-primary);
+  user-select: text;
+}
+
+.b-markdown-comment-card__edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 </style>
