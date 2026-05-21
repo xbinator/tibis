@@ -38,7 +38,6 @@ import { captureSourceLineRange, createSourceLineTracker, resetSourceLineTracker
 import CodeBlockView from '../components/CodeBlock.vue';
 import TableView from '../components/TableView.vue';
 import { AISelectionHighlight } from '../extensions/aiRangeHighlight';
-import { Container } from '../extensions/container';
 import { Search, type SearchScrollContext } from '../extensions/editorSearch';
 import { registerRichCodeBlockLowlightAliases } from '../utils/richCodeBlockLowlight';
 
@@ -669,7 +668,6 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     HtmlComment,
     LinkDefinitionAsText,
     AISelectionHighlight,
-    Container,
     Heading,
     Paragraph,
     Code,

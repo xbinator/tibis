@@ -1043,8 +1043,8 @@ onBeforeUnmount(() => {
 
   &.is-cell-dragging,
   &.is-cell-dragging * {
-    user-select: none;
     -webkit-user-select: none;
+    user-select: none;
   }
 }
 

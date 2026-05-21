@@ -75,7 +75,7 @@ const TOOLBAR_GAP = 8;
 /**
  * 工具栏相对容器的最小安全边距。
  */
-const TOOLBAR_PADDING = 8;
+const TOOLBAR_PADDING = 40;
 
 /**
  * 工具栏层级。
