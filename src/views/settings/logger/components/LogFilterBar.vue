@@ -15,12 +15,8 @@
     </div>
 
     <div class="log-filter-bar">
-      <BSelect v-model:value="value.level" placeholder="日志级别" default-value="" :width="140" @change="handleLevelChange">
-        <ASelectOption value=""> 全部 </ASelectOption>
-        <ASelectOption value="ERROR"> 错误 </ASelectOption>
-        <ASelectOption value="WARN"> 警告 </ASelectOption>
-        <ASelectOption value="INFO"> 信息 </ASelectOption>
-      </BSelect>
+      <BSelect v-model:value="value.level" placeholder="日志级别" default-value="" :width="140" :options="levels" @change="handleLevelChange" />
+
       <AInput v-model:value="value.keyword" placeholder="搜索日志内容..." allow-clear class="log-filter-bar__input" @change="handleKeywordChange" />
 
       <ADatePicker
@@ -82,6 +78,13 @@ const emit = defineEmits<{
 const value = computed<LogFilterBarDataItem>(() => props.value);
 /** 可选择日期集合。 */
 const availableDateSet = computed<Set<string>>(() => new Set(props.availableDates));
+
+const levels = [
+  { value: '', label: '全部' },
+  { value: 'ERROR', label: '错误' },
+  { value: 'WARN', label: '警告' },
+  { value: 'INFO', label: '信息' }
+];
 
 /**
  * 向父组件同步筛选栏数据，并触发一次刷新通知。
