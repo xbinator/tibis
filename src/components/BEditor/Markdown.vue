@@ -88,6 +88,7 @@
           :annotated-text="commentActions.activeCommentCard.value?.annotatedText ?? ''"
           :comment="commentActions.activeCommentCard.value?.content ?? ''"
           :position="commentActions.activeCommentCard.value?.position ?? null"
+          :overlay-root="isRichMode ? currentRichSelectionHost?.overlayRoot : currentSourceSelectionHost?.overlayRoot"
           @update:visible="commentActions.activeCommentCard.value = $event ? commentActions.activeCommentCard.value : null"
           @edit="commentActions.handleCommentEdit"
           @delete="commentActions.handleCommentDelete"

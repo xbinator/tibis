@@ -45,6 +45,7 @@ import { Icon } from '@iconify/vue';
 import { useEventListener, onClickOutside, useResizeObserver } from '@vueuse/core';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { createNamespace } from '@/utils/namespace';
+import { resolveToolbarContainerRect } from '../utils/selectionToolbarPosition';
 
 const [name, bem] = createNamespace('', 'b-markdown-comment-card');
 
@@ -59,6 +60,8 @@ interface Props {
   comment?: string;
   /** 卡片定位信息（由 adapter 计算为相对 overlayRoot 的坐标） */
   position?: SelectionAssistantPosition | null;
+  /** 浮层根容器，用于计算容器矩形 fallback */
+  overlayRoot?: HTMLElement | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -66,7 +69,8 @@ const props = withDefaults(defineProps<Props>(), {
   commentId: '',
   annotatedText: '',
   comment: '',
-  position: null
+  position: null,
+  overlayRoot: null
 });
 
 const emit = defineEmits<{
@@ -93,11 +97,6 @@ const CARD_GAP = 6;
 const CARD_PADDING = 8;
 
 /**
- * 卡片的期望宽度。
- */
-const PREFERRED_CARD_WIDTH = 320;
-
-/**
  * 处理卡片容器的 mousedown 事件。
  * 查看模式下阻止默认行为（防止编辑器失焦），编辑模式下允许焦点传入输入框。
  * @param event - 鼠标按下事件
@@ -113,13 +112,12 @@ function onWrapperMousedown(event: MouseEvent): void {
  * @param width - 卡片宽度
  * @returns 隐藏态样式对象
  */
-function createHiddenWrapperStyle(width: number): CSSProperties {
+function createHiddenWrapperStyle(): CSSProperties {
   return {
     top: '0px',
     left: '50%',
     transform: 'translateX(-50%)',
-    visibility: 'hidden',
-    width: `${width}px`
+    visibility: 'hidden'
   };
 }
 
@@ -148,13 +146,22 @@ function resolveCardTop(
  * @returns 横向样式对象
  */
 function resolveHorizontalStyle(containerRect: NonNullable<SelectionAssistantPosition['containerRect']>, wrapperWidth: number): CSSProperties {
-  const anchorCenter = props.position?.anchorRect?.left ?? 0 + (props.position?.anchorRect.width ?? 0) / 2;
-  const left = anchorCenter - wrapperWidth / 2;
+  const anchorCenter = (props.position?.anchorRect?.left ?? 0) + (props.position?.anchorRect.width ?? 0) / 2;
+  let left = anchorCenter - wrapperWidth / 2;
   const minLeft = containerRect.left + CARD_PADDING;
   const maxLeft = containerRect.left + containerRect.width - wrapperWidth - CARD_PADDING;
 
+  left = Math.max(minLeft, Math.min(maxLeft, left));
+
+  // 显式检查卡片右侧是否超出容器右边界（当 maxLeft < minLeft 时 clamping 可能失效）
+  const containerRight = containerRect.left + containerRect.width;
+
+  if (left + wrapperWidth > containerRight) {
+    left = containerRight - wrapperWidth;
+  }
+
   return {
-    left: `${Math.max(minLeft, Math.min(maxLeft, left))}px`,
+    left: `${left}px`,
     transform: 'none'
   };
 }
@@ -168,19 +175,13 @@ function syncFloatPosition(): void {
   const wrapperElement = wrapperRef.value;
   if (!position || !wrapperElement) return;
 
-  const containerRect = position.containerRect ?? {
-    top: 0,
-    left: 0,
-    width: window.innerWidth,
-    height: window.innerHeight
-  };
+  const containerRect = resolveToolbarContainerRect(position, props.overlayRoot);
 
-  const width = Math.min(PREFERRED_CARD_WIDTH, containerRect.width - CARD_PADDING * 2);
   const { width: wrapperWidth, height: wrapperHeight } = wrapperElement.getBoundingClientRect();
 
   if (wrapperWidth <= 0 || wrapperHeight <= 0) {
     hasMeasuredPosition.value = false;
-    wrapperStyle.value = createHiddenWrapperStyle(width);
+    wrapperStyle.value = createHiddenWrapperStyle();
     return;
   }
 
@@ -190,7 +191,6 @@ function syncFloatPosition(): void {
   wrapperStyle.value = {
     top: `${top}px`,
     visibility: 'visible',
-    width: `${width}px`,
     ...horizontalStyle
   };
   hasMeasuredPosition.value = true;
@@ -246,7 +246,7 @@ watch(
       isEditing.value = false;
       editValue.value = '';
       hasMeasuredPosition.value = false;
-      wrapperStyle.value = createHiddenWrapperStyle(PREFERRED_CARD_WIDTH);
+      wrapperStyle.value = createHiddenWrapperStyle();
       nextTick(syncFloatPosition);
     } else {
       hasMeasuredPosition.value = false;
@@ -262,7 +262,7 @@ watch(
   () => {
     if (!props.visible) return;
     if (!hasMeasuredPosition.value) {
-      wrapperStyle.value = createHiddenWrapperStyle(PREFERRED_CARD_WIDTH);
+      wrapperStyle.value = createHiddenWrapperStyle();
     }
     nextTick(syncFloatPosition);
   }
@@ -295,10 +295,11 @@ onBeforeUnmount(() => {
 .b-markdown-comment-card {
   position: absolute;
   z-index: 1001;
+  width: 320px;
   max-width: calc(100% - 32px);
   padding: 6px 10px;
-  background-color: var(--bg-elevated, #fff);
-  border: 1px solid var(--border-color, #e5e5e5);
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
 }
