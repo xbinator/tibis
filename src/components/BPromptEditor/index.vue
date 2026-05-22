@@ -7,6 +7,13 @@
       @select="handleSlashCommandSelect"
       @update:active-index="handleSlashActiveIndexChange"
     />
+    <FileMentionSelect
+      :visible="mentionVisible"
+      :files="filteredFileMentions"
+      :active-index="mentionActiveIndex"
+      @select="handleFileMentionSelect"
+      @update:active-index="handleMentionActiveIndexChange"
+    />
     <div class="b-prompt-editor" @click="handleContainerClick">
       <div class="b-prompt-editor__container">
         <div ref="editorHostRef" class="b-prompt-editor__codemirror"></div>
@@ -28,11 +35,12 @@
  * @file BPromptEditor/index.vue
  * @description Prompt 编辑器主组件，基于 CodeMirror 6 实现
  */
-import type { SlashCommandOption, Variable, BPromptEditorProps as Props } from './types';
+import type { SlashCommandOption, Variable, FileMentionOption, BPromptEditorProps as Props } from './types';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewline } from '@codemirror/commands';
 import { Annotation, EditorState } from '@codemirror/state';
 import { Decoration, EditorView, keymap } from '@codemirror/view';
+import FileMentionSelect from './components/FileMentionSelect.vue';
 import SlashCommandSelect from './components/SlashCommandSelect.vue';
 import VariableSelect from './components/VariableSelect.vue';
 import { editableCompartment, readOnlyCompartment, themeCompartment } from './extensions/base';
@@ -46,6 +54,7 @@ const props = withDefaults(defineProps<Props>(), {
   placeholder: '请输入内容...',
   options: () => [],
   slashCommands: () => [],
+  fileMentions: () => [],
   disabled: false,
   maxHeight: undefined,
   submitOnEnter: false,
@@ -60,6 +69,7 @@ const emit = defineEmits<{
   (e: 'change', value: string): void;
   (e: 'submit'): void;
   (e: 'slash-command', command: SlashCommandOption): void;
+  (e: 'file-mention-select', file: FileMentionOption): void;
 }>();
 
 const modelValue = defineModel<string>('value', { default: '' });
@@ -81,6 +91,13 @@ const slashQuery = ref('');
 const slashRange = ref<{ from: number; to: number } | null>(null);
 const suppressSlashSync = ref(false);
 
+// 文件提及 ref
+const mentionVisible = ref(false);
+const mentionActiveIndex = ref(0);
+const mentionQuery = ref('');
+const mentionRange = ref<{ from: number; to: number } | null>(null);
+const suppressMentionSync = ref(false);
+
 // 编辑器状态
 const lastSelection = ref<{ main: { head: number } } | null>(null);
 
@@ -98,6 +115,16 @@ const filteredSlashCommands = computed<readonly SlashCommandOption[]>(() => {
   const query = slashQuery.value.toLowerCase();
   if (!query) return allSlashCommands.value;
   return allSlashCommands.value.filter((command) => command.trigger.toLowerCase().startsWith(`/${query}`));
+});
+
+// 文件提及列表
+const allFileMentions = computed<readonly FileMentionOption[]>(() => props.fileMentions ?? []);
+
+// 根据查询过滤后的文件提及
+const filteredFileMentions = computed<readonly FileMentionOption[]>(() => {
+  const query = mentionQuery.value.toLowerCase();
+  if (!query) return allFileMentions.value;
+  return allFileMentions.value.filter((file) => file.name.toLowerCase().includes(query));
 });
 
 // 根据触发查询过滤后的变量
@@ -224,6 +251,59 @@ function getSlashCommandContext(state: EditorState): { from: number; to: number;
 }
 
 /**
+ * 检查字符是否为单词字符（字母、数字、下划线）
+ * @param char - 字符
+ * @returns 是否为单词字符
+ */
+function isWordChar(char: string): boolean {
+  return /[a-zA-Z0-9_]/.test(char);
+}
+
+/**
+ * 获取光标位置处的当前文件提及上下文
+ * @param state - 编辑器状态
+ * @returns 文件提及上下文，不可用时返回 null
+ */
+function getFileMentionContext(state: EditorState): { from: number; to: number; query: string } | null {
+  if (allFileMentions.value.length === 0) {
+    return null;
+  }
+
+  const selection = state.selection.main;
+  if (!selection.empty) {
+    return null;
+  }
+
+  const pos = selection.head;
+  const line = state.doc.lineAt(pos);
+  const text = state.sliceDoc(line.from, pos);
+
+  // 找最后一个 @
+  const atIndex = text.lastIndexOf('@');
+  if (atIndex === -1) {
+    return null;
+  }
+
+  // 检查 @ 前面是否是单词字符（排除邮箱场景）
+  if (atIndex > 0 && isWordChar(text[atIndex - 1])) {
+    return null;
+  }
+
+  const query = text.slice(atIndex + 1);
+
+  // 如果 query 包含空格或换行，不触发
+  if (/\s/.test(query)) {
+    return null;
+  }
+
+  return {
+    from: line.from + atIndex,
+    to: pos,
+    query
+  };
+}
+
+/**
  * 隐藏斜杠命令菜单并清除其活动范围
  * @param suppressSync - 是否在关闭后抑制失焦引起的后续同步重开
  */
@@ -234,6 +314,19 @@ function closeSlashCommandMenu(suppressSync = false): void {
   slashVisible.value = false;
   slashQuery.value = '';
   slashRange.value = null;
+}
+
+/**
+ * 隐藏文件提及菜单并清除其活动范围
+ * @param suppressSync - 是否在关闭后抑制失焦引起的后续同步重开
+ */
+function closeMentionMenu(suppressSync = false): void {
+  if (suppressSync) {
+    suppressMentionSync.value = true;
+  }
+  mentionVisible.value = false;
+  mentionQuery.value = '';
+  mentionRange.value = null;
 }
 
 /**
@@ -264,6 +357,34 @@ function syncSlashCommandState(state: EditorState, editorView: EditorView | null
   slashActiveIndex.value = 0;
 }
 
+/**
+ * 从编辑器内容同步文件提及菜单状态
+ * @param state - 编辑器状态
+ * @param editorView - 编辑器视图，用于确保编辑器仍有焦点
+ */
+function syncMentionState(state: EditorState, editorView: EditorView | null): void {
+  if (!editorView) {
+    closeMentionMenu();
+    return;
+  }
+
+  if (suppressMentionSync.value) {
+    closeMentionMenu();
+    return;
+  }
+
+  const context = getFileMentionContext(state);
+  if (!context) {
+    closeMentionMenu();
+    return;
+  }
+
+  mentionVisible.value = true;
+  mentionQuery.value = context.query;
+  mentionRange.value = { from: context.from, to: context.to };
+  mentionActiveIndex.value = 0;
+}
+
 // 外部更新标记，用于避免循环更新
 const externalUpdate = Annotation.define<boolean>();
 
@@ -274,6 +395,7 @@ const modelSyncExtension = EditorView.updateListener.of((update) => {
   const isExternalValueChange = update.transactions.some((tr) => tr.annotation(externalUpdate));
 
   syncSlashCommandState(update.state, update.view);
+  syncMentionState(update.state, update.view);
 
   if (isExternalValueChange) {
     return;
@@ -328,6 +450,14 @@ function handleSlashActiveIndexChange(index: number): void {
 }
 
 /**
+ * 更新高亮文件提及的索引
+ * @param index - 新的高亮索引
+ */
+function handleMentionActiveIndexChange(index: number): void {
+  mentionActiveIndex.value = index;
+}
+
+/**
  * 应用选中的斜杠命令并清除活动斜杠文本
  * @param command - 选中的斜杠命令元数据
  */
@@ -342,6 +472,25 @@ function handleSlashCommandSelect(command: SlashCommandOption): void {
 
   emit('slash-command', command);
   closeSlashCommandMenu();
+  view.value.focus();
+}
+
+/**
+ * 应用选中的文件提及并清除活动提及文本
+ * @param file - 选中的文件提及元数据
+ */
+function handleFileMentionSelect(file: FileMentionOption): void {
+  if (!view.value || !mentionRange.value) return;
+
+  const { from, to } = mentionRange.value;
+  const insertText = `@${file.name} `;
+  view.value.dispatch({
+    changes: { from, to, insert: insertText },
+    selection: { anchor: from + insertText.length }
+  });
+
+  emit('file-mention-select', file);
+  closeMentionMenu();
   view.value.focus();
 }
 
@@ -388,11 +537,54 @@ function handleSlashCommandArrowDown(): boolean {
 }
 
 /**
+ * 向上移动文件提及高亮
+ * @returns 按键是否被处理
+ */
+function handleMentionArrowUp(): boolean {
+  const list = filteredFileMentions.value;
+  if (!mentionVisible.value) return false;
+  if (list.length === 0) return true;
+
+  const newIndex = (mentionActiveIndex.value - 1 + list.length) % list.length;
+  handleMentionActiveIndexChange(newIndex);
+  return true;
+}
+
+/**
+ * 向下移动文件提及高亮
+ * @returns 按键是否被处理
+ */
+function handleMentionArrowDown(): boolean {
+  const list = filteredFileMentions.value;
+  if (!mentionVisible.value) return false;
+  if (list.length === 0) return true;
+
+  const newIndex = (mentionActiveIndex.value + 1) % list.length;
+  handleMentionActiveIndexChange(newIndex);
+  return true;
+}
+
+/**
+ * 选择当前高亮的文件提及
+ * @returns 是否被处理
+ */
+function handleMentionEnter(): boolean {
+  const file = filteredFileMentions.value[mentionActiveIndex.value];
+  if (!file) {
+    return false;
+  }
+
+  handleFileMentionSelect(file);
+  return true;
+}
+
+/**
  * 点击编辑器外壳时聚焦编辑器
  */
 function handleContainerClick(): void {
   if (!props.disabled && view.value) {
     suppressSlashSync.value = false;
+    suppressMentionSync.value = false;
     view.value.focus();
   }
 }
@@ -411,6 +603,9 @@ function handleDocumentMouseDown(event: MouseEvent): void {
 
   if (slashVisible.value) {
     closeSlashCommandMenu(true);
+  }
+  if (mentionVisible.value) {
+    closeMentionMenu(true);
   }
 }
 
@@ -432,6 +627,9 @@ function handleEditorShellFocusOut(event: FocusEvent): void {
 
   if (slashVisible.value) {
     closeSlashCommandMenu(true);
+  }
+  if (mentionVisible.value) {
+    closeMentionMenu(true);
   }
 }
 
@@ -458,11 +656,15 @@ function createExtensions(): import('@codemirror/state').Extension[] {
     EditorView.domEventHandlers({
       focus: () => {
         suppressSlashSync.value = false;
+        suppressMentionSync.value = false;
         return false;
       },
       blur: (_event, editorView) => {
         if (slashVisible.value) {
           closeSlashCommandMenu(true);
+        }
+        if (mentionVisible.value) {
+          closeMentionMenu(true);
         }
         if (triggerVisible.value) {
           editorView.dispatch({ effects: closeTrigger.of() });
@@ -533,6 +735,9 @@ function createExtensions(): import('@codemirror/state').Extension[] {
           if (slashVisible.value) {
             return handleSlashCommandArrowUp();
           }
+          if (mentionVisible.value) {
+            return handleMentionArrowUp();
+          }
           if (!triggerVisible.value) return false;
           const list = filteredVariables.value;
           if (list.length === 0) return true;
@@ -547,6 +752,9 @@ function createExtensions(): import('@codemirror/state').Extension[] {
           if (slashVisible.value) {
             return handleSlashCommandArrowDown();
           }
+          if (mentionVisible.value) {
+            return handleMentionArrowDown();
+          }
           if (!triggerVisible.value) return false;
           const list = filteredVariables.value;
           if (list.length === 0) return true;
@@ -560,6 +768,10 @@ function createExtensions(): import('@codemirror/state').Extension[] {
         run: (editorView) => {
           if (slashVisible.value) {
             closeSlashCommandMenu();
+            return true;
+          }
+          if (mentionVisible.value) {
+            closeMentionMenu();
             return true;
           }
           if (triggerVisible.value) {
@@ -581,6 +793,9 @@ function createExtensions(): import('@codemirror/state').Extension[] {
         run: () => {
           if (slashVisible.value && filteredSlashCommands.value.length > 0) {
             return handleSlashCommandEnter();
+          }
+          if (mentionVisible.value && filteredFileMentions.value.length > 0) {
+            return handleMentionEnter();
           }
           if (triggerVisible.value && filteredVariables.value.length > 0) {
             const variable = filteredVariables.value[triggerActiveIndex.value];
@@ -666,6 +881,7 @@ onMounted(() => {
   view.value = new EditorView({ state, parent: editorHostRef.value });
 
   syncSlashCommandState(view.value.state as EditorState, view.value as EditorView);
+  syncMentionState(view.value.state as EditorState, view.value as EditorView);
 
   if (props.chipResolver) {
     view.value.dispatch({ effects: chipResolverEffect.of(props.chipResolver) });

@@ -1,8 +1,9 @@
-import { defineConfig, presetAttributify, presetWind3 } from 'unocss';
+import { defineConfig, presetAttributify, presetWind3, transformerCompileClass } from 'unocss';
 
 const remRE = /(-?[.\d]+)rem/g;
 
 export default defineConfig({
+  transformers: [transformerCompileClass()],
   presets: [presetWind3(), presetAttributify()],
   shortcuts: {
     'flex-center': 'flex justify-center items-center',
@@ -29,15 +30,5 @@ export default defineConfig({
       '2xl': '24px',
       '3xl': '32px'
     }
-  },
-  postprocess: (util) => {
-    util.entries.forEach((i) => {
-      const value = i[1];
-
-      if (value && typeof value === 'string' && remRE.test(value)) {
-        // eslint-disable-next-line no-param-reassign
-        i[1] = value.replace(remRE, (_, p1) => `${p1 * 4}px`);
-      }
-    });
   }
 });

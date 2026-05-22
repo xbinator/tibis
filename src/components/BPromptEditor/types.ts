@@ -67,6 +67,20 @@ export interface VariableOptionGroup {
 }
 
 /**
+ * 文件提及选项，用于 @ 文件查找功能
+ */
+export interface FileMentionOption {
+  /** 文件唯一标识 */
+  id: string;
+  /** 文件名（含扩展名） */
+  name: string;
+  /** 文件路径，未保存文件为 null */
+  path: string | null;
+  /** 文件扩展名 */
+  ext: string;
+}
+
+/**
  * BPromptEditor 组件属性
  */
 export interface BPromptEditorProps {
@@ -76,6 +90,8 @@ export interface BPromptEditorProps {
   options?: VariableOptionGroup[];
   /** 暴露给编辑器的斜杠命令元数据 */
   slashCommands?: SlashCommandOption[];
+  /** 文件提及选项列表，用于 @ 文件查找 */
+  fileMentions?: FileMentionOption[];
   /** 是否禁用 */
   disabled?: boolean;
   /** 最大高度 */

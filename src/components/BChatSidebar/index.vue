@@ -64,9 +64,11 @@
             :on-paste-images="imageUpload.onPasteImages"
             :can-accept-images="imageUpload.canAcceptImages"
             :slash-commands="chatSlashCommands"
+            :file-mentions="fileMentionOptions"
             :on-cancel="handleCancel"
             submit-on-enter
             @slash-command="handleSlashCommand"
+            @file-mention-select="handleFileMentionSelect"
             @submit="handleChatSubmit"
           />
 
@@ -108,6 +110,7 @@ import { getDefaultChatToolNames } from '@/ai/tools/policy';
 import BButton from '@/components/BButton/index.vue';
 import BModelSelect from '@/components/BModelSelect/index.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
+import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
 import { useChatSessionStore } from '@/stores/chat/session';
@@ -307,6 +310,17 @@ const fileReference = useFileReference({
 /** 聊天工具列表 */
 const filesStore = useFilesStore();
 const { openDraft } = useOpenDraft();
+
+/** 最近文件列表，用于 @ 文件提及功能（实时响应 filesStore.recentFiles） */
+const fileMentionOptions = computed<FileMentionOption[]>(() => {
+  const files = filesStore.recentFiles ?? [];
+  return files.map((file) => ({
+    id: file.id,
+    name: `${file.name}.${file.ext}`,
+    path: file.path,
+    ext: file.ext
+  }));
+});
 
 const tools = createBuiltinTools({
   confirm: confirmationController.createAdapter(),
@@ -691,10 +705,21 @@ function handleDeleteSession(sessionId: string): void {
   settingStore.setChatSidebarActiveSessionId(null);
 }
 
+/**
+ * 处理文件提及选择事件。
+ * @param file - 选中的文件
+ */
+function handleFileMentionSelect(file: FileMentionOption): void {
+  // 文件提及已经在 BPromptEditor 中插入到输入框
+  console.log('File mention selected:', file.name);
+}
+
 /** 组件挂载时初始化 */
 onMounted(async () => {
   await modelSelectionEvents.loadSelectedModel();
   initializeActiveSession();
+  // 确保 filesStore 已加载最近文件列表
+  await filesStore.ensureLoaded();
 });
 
 /** 组件卸载时清理 */
