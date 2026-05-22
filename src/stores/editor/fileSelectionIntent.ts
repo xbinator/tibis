@@ -13,9 +13,9 @@ export interface FileSelectionIntent {
   intentId: string;
   /** 目标文件 ID */
   fileId: string;
-  /** 起始行号（1-based） */
+  /** 起始行号（1-based），0 表示无行号 */
   startLine: number;
-  /** 结束行号（1-based） */
+  /** 结束行号（1-based），0 表示无行号 */
   endLine: number;
 }
 

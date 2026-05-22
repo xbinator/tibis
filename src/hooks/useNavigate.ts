@@ -28,9 +28,9 @@ const createIntentId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8
  * 文件选区范围。
  */
 export interface FileSelectionRange {
-  /** 起始行号（1-based） */
+  /** 起始行号（1-based），0 表示无行号 */
   startLine: number;
-  /** 结束行号（1-based） */
+  /** 结束行号（1-based），0 表示无行号 */
   endLine: number;
 }
 
@@ -207,7 +207,8 @@ export function useNavigate() {
         return;
       }
 
-      if (!options.range) {
+      // 无行号时（startLine === 0 && endLine === 0）不设置选区意图
+      if (!options.range || (options.range.startLine === 0 && options.range.endLine === 0)) {
         return;
       }
 

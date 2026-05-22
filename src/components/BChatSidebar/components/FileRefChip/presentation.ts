@@ -46,11 +46,14 @@ export const FILE_REF_CHIP_LINES_CLASS = 'b-file-ref-chip__lines';
 
 /**
  * 格式化展示行号文案。
- * @param startLine - 起始行号
- * @param endLine - 结束行号
- * @returns 行号展示文案
+ * @param startLine - 起始行号（0 表示无行号）
+ * @param endLine - 结束行号（0 表示无行号）
+ * @returns 行号展示文案，无行号时返回空字符串
  */
 export function formatFileRefChipLineText(startLine: number, endLine: number): string {
+  if (startLine === 0 && endLine === 0) {
+    return '';
+  }
   return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
 }
 
@@ -86,11 +89,15 @@ export function createFileRefChipElement(presentation: FileRefChipPresentation):
   fileName.className = presentation.fileNameClass;
   fileName.textContent = presentation.fileName;
 
-  const lineText = document.createElement('span');
-  lineText.className = presentation.lineTextClass;
-  lineText.textContent = presentation.lineText;
+  root.appendChild(fileName);
 
-  root.append(fileName, lineText);
+  // 无行号时不添加行号元素
+  if (presentation.lineText) {
+    const lineText = document.createElement('span');
+    lineText.className = presentation.lineTextClass;
+    lineText.textContent = presentation.lineText;
+    root.appendChild(lineText);
+  }
 
   return root;
 }

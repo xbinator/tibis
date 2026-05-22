@@ -44,6 +44,17 @@ describe('chipResolver', () => {
       const dom = resolveWidgetDom(createFileRefChipResolver(noopOpenFile)('#unsaved://draft123/draft.md 3-5|8-10'));
       expect(dom?.textContent).toBe('draft.md8-10');
     });
+
+    test('无行号引用只显示文件名', () => {
+      const dom = resolveWidgetDom(createFileRefChipResolver(noopOpenFile)('#src/demo.ts'));
+      expect(dom?.textContent).toBe('demo.ts');
+      expect(dom?.querySelector('.b-file-ref-chip__lines')).toBeNull();
+    });
+
+    test('无行号的未保存草稿引用', () => {
+      const dom = resolveWidgetDom(createFileRefChipResolver(noopOpenFile)('#unsaved://draft123/draft.md'));
+      expect(dom?.textContent).toBe('draft.md');
+    });
   });
 
   describe('非 file-ref 类型', () => {
@@ -145,6 +156,36 @@ describe('parseFileReferenceToken', () => {
       renderStartLine: 8,
       renderEndLine: 10,
       lineText: '3-5',
+      isUnsaved: true
+    });
+  });
+
+  test('parses token without line numbers (whole file reference)', () => {
+    expect(parseFileReferenceToken('#src/demo.ts')).toEqual({
+      rawPath: 'src/demo.ts',
+      filePath: 'src/demo.ts',
+      fileId: null,
+      fileName: 'demo.ts',
+      startLine: 0,
+      endLine: 0,
+      renderStartLine: 0,
+      renderEndLine: 0,
+      lineText: '',
+      isUnsaved: false
+    });
+  });
+
+  test('parses unsaved reference without line numbers', () => {
+    expect(parseFileReferenceToken('#unsaved://draft123/draft.md')).toEqual({
+      rawPath: 'unsaved://draft123/draft.md',
+      filePath: null,
+      fileId: 'draft123',
+      fileName: 'draft.md',
+      startLine: 0,
+      endLine: 0,
+      renderStartLine: 0,
+      renderEndLine: 0,
+      lineText: '',
       isUnsaved: true
     });
   });

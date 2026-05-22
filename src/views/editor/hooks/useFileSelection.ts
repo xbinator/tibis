@@ -51,6 +51,7 @@ export function useFileSelection(options: UseFileSelectionOptions): void {
       await nextTick();
 
       const consumed = await options.editorInstance.value.selectLineRange(intent.startLine, intent.endLine);
+
       if (consumed) {
         fileSelectionIntentStore.clearIntent(intent.intentId);
       }

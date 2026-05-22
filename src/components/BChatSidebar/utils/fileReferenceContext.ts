@@ -24,8 +24,8 @@ export interface MessageFileReferencesResult {
 /** 文件引用正则表达式（不含双花括号），尾部可选携带渲染行号。 */
 export const FILE_REF_PATTERN = /^#(?<filePath>\S+)\s+(?<startLine>\d+)-(?<endLine>\d+)(?:\|(?<renderStartLine>\d+)-(?<renderEndLine>\d+))?$/;
 
-/** 消息中的文件引用正则表达式（含双花括号），尾部可选携带渲染行号。 */
-export const MESSAGE_REF_PATTERN = /\{\{#(\S+)\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?\}\}/g;
+/** 消息中的文件引用正则表达式（含双花括号），行号可选，无行号时表示引用整个文件。 */
+export const MESSAGE_REF_PATTERN = /\{\{#(\S+)(?:\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?)?\}\}/g;
 
 // ─── 内部工具函数 ────────────────────────────────────────────────────────────
 
@@ -42,7 +42,7 @@ export const MESSAGE_REF_PATTERN = /\{\{#(\S+)\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?\}
 export async function extractFileReferenceLines(token: string, references: string[]): Promise<FileReference> {
   const [path, startLine, endLine, renderStartLine, renderEndLine] = references;
 
-  if (!path || !startLine || !endLine) return { token, path, startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };
+  if (!path) return { token, path: '', startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };
 
   let storedFile: Awaited<ReturnType<typeof recentFilesStorage.getRecentFile>> = null;
 
@@ -58,12 +58,14 @@ export async function extractFileReferenceLines(token: string, references: strin
 
   if (!storedFile) return { token, path, startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };
 
-  const _startLine = parseInt(startLine, 10);
-  const _endLine = parseInt(endLine, 10);
+  const _startLine = startLine ? parseInt(startLine, 10) : 0;
+  const _endLine = endLine ? parseInt(endLine, 10) : 0;
+  const hasLineNumber = _startLine > 0 && _endLine > 0;
 
   const lines = storedFile.content.split('\n');
 
-  const selectedContent = lines.slice(Math.max(0, _startLine - 1), Math.min(lines.length, _endLine)).join('\n');
+  // 无行号时提取整个文件内容
+  const selectedContent = hasLineNumber ? lines.slice(Math.max(0, _startLine - 1), Math.min(lines.length, _endLine)).join('\n') : storedFile.content;
 
   return {
     token,
@@ -78,7 +80,13 @@ export async function extractFileReferenceLines(token: string, references: strin
 }
 
 function buildReferenceBlock(ref: FileReference): string {
-  const { path, startLine, endLine, fullContent } = ref;
+  const { path, startLine, endLine, fullContent, selectedContent } = ref;
+  const hasLineNumber = startLine > 0 && endLine > 0;
+
+  // 无行号时直接返回整个文件内容
+  if (!hasLineNumber) {
+    return [`<QUOTED_FRAGMENT path="${path}">`, selectedContent, `</QUOTED_FRAGMENT>`].join('\n');
+  }
 
   const lines = fullContent.split('\n');
   const CONTEXT_LINES = 0;

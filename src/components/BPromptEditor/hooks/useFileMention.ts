@@ -84,18 +84,18 @@ export function useFileMention(
     const line = state.doc.lineAt(pos);
     const text = state.sliceDoc(line.from, pos);
 
-    // 找最后一个 @
-    const atIndex = text.lastIndexOf('@');
-    if (atIndex === -1) {
+    // 找最后一个 #
+    const hashIndex = text.lastIndexOf('#');
+    if (hashIndex === -1) {
       return null;
     }
 
-    // 检查 @ 前面是否是单词字符（排除邮箱场景）
-    if (atIndex > 0 && isWordChar(text[atIndex - 1])) {
+    // 检查 # 前面是否是单词字符（避免在代码中间触发）
+    if (hashIndex > 0 && isWordChar(text[hashIndex - 1])) {
       return null;
     }
 
-    const query = text.slice(atIndex + 1);
+    const query = text.slice(hashIndex + 1);
 
     // 如果 query 包含空格或换行，不触发
     if (/\s/.test(query)) {
@@ -103,7 +103,7 @@ export function useFileMention(
     }
 
     return {
-      from: line.from + atIndex,
+      from: line.from + hashIndex,
       to: pos,
       query
     };
@@ -161,7 +161,9 @@ export function useFileMention(
     if (!view.value || !mentionRange.value) return;
 
     const { from, to } = mentionRange.value;
-    const insertText = `@${file.name} `;
+    // 使用文件路径构建 token，无路径时使用 unsaved:// 格式
+    const path = file.path ?? `unsaved://${file.id}/${file.name}`;
+    const insertText = `{{#${path}}} `;
     view.value.dispatch({
       changes: { from, to, insert: insertText },
       selection: { anchor: from + insertText.length }

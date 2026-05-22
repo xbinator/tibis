@@ -49,8 +49,8 @@ export interface FileReferenceNavigationTarget {
   endLine: number;
 }
 
-/** 文件引用 token 正则表达式。 */
-const FILE_REFERENCE_TOKEN_PATTERN = /^#(\S+)\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?$/;
+/** 文件引用 token 正则表达式。行号为可选，无行号时表示引用整个文件。 */
+const FILE_REFERENCE_TOKEN_PATTERN = /^#(\S+)(?:\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?)?$/;
 
 /**
  * 从路径字符串中提取展示用文件名。
@@ -75,8 +75,9 @@ export function parseFileReferenceToken(tokenContent: string): ParsedFileReferen
   const [, rawPathText, startLineText, endLineText, renderStartLineText, renderEndLineText] = matched;
   const rawPath = rawPathText.trim();
   const unsavedReference = parseUnsavedPath(rawPath);
-  const startLine = Number(startLineText);
-  const endLine = Number(endLineText);
+  const hasLineNumber = startLineText !== undefined;
+  const startLine = hasLineNumber ? Number(startLineText) : 0;
+  const endLine = hasLineNumber ? Number(endLineText) : 0;
 
   return {
     rawPath,
@@ -87,7 +88,7 @@ export function parseFileReferenceToken(tokenContent: string): ParsedFileReferen
     endLine,
     renderStartLine: renderStartLineText ? Number(renderStartLineText) : startLine,
     renderEndLine: renderEndLineText ? Number(renderEndLineText) : endLine,
-    lineText: `${startLine}-${endLine}`,
+    lineText: hasLineNumber ? `${startLine}-${endLine}` : '',
     isUnsaved: Boolean(unsavedReference)
   };
 }
