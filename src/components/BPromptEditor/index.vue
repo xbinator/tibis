@@ -242,6 +242,7 @@ function createExtensions(): Extension[] {
 
     if (modelValue.value !== newValue) {
       modelValue.value = newValue;
+      emit('change', newValue);
     }
   });
 

@@ -139,7 +139,7 @@ describe('BPromptEditor DOM safety regressions', () => {
     // CodeMirror 6 uses its own selection model
     expect(indexSource).toContain('lastSelection');
     expect(indexSource).toContain('saveCursorPosition');
-    expect(indexSource).toContain('view.value.state.selection');
+    expect(indexSource).toContain('instance.value.state.selection');
     // useEditorCore.ts and useEditorSelection.ts no longer exist in CodeMirror 6 migration
   });
 });
@@ -472,7 +472,7 @@ describe('BPromptEditor index.vue integration', () => {
   test('destroys EditorView on unmount', () => {
     const source = readSource('src/components/BPromptEditor/index.vue');
     expect(source).toContain('onBeforeUnmount');
-    expect(source).toContain('view.value?.destroy()');
+    expect(source).toContain('instance.value?.destroy()');
   });
 
   test('uses Annotation.define to prevent circular updates', () => {
@@ -502,14 +502,14 @@ describe('BPromptEditor index.vue integration', () => {
   });
 
   test('keymap Enter handler emits submit when submitOnEnter is true', () => {
-    const source = readSource('src/components/BPromptEditor/index.vue');
-    expect(source).toContain('props.submitOnEnter');
-    expect(source).toContain("emit('submit')");
+    const source = readSource('src/components/BPromptEditor/hooks/useEditorKeymap.ts');
+    expect(source).toContain('submitOnEnter');
+    expect(source).toContain('onSubmit');
   });
 
   test('insertTextAtCursor uses lastSelection or current selection', () => {
     const source = readSource('src/components/BPromptEditor/index.vue');
-    expect(source).toContain('lastSelection.value ?? view.value.state.selection');
+    expect(source).toContain('lastSelection.value ?? instance.value.state.selection');
   });
 
   test('handleVariableSelect replaces from-to range with variable token', () => {
