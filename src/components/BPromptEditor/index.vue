@@ -1,18 +1,18 @@
 <template>
   <div ref="editorRootRef" class="b-prompt-editor-shell" @focusout="handleEditorShellFocusOut">
     <SlashCommandSelect
-      :visible="slashVisible"
-      :commands="filteredSlashCommands"
-      :active-index="slashActiveIndex"
-      @select="handleSlashCommandSelect"
-      @update:active-index="handleSlashActiveIndexChange"
+      :visible="slashCommand.slashVisible.value"
+      :commands="slashCommand.filteredSlashCommands.value"
+      :active-index="slashCommand.slashActiveIndex.value"
+      @select="slashCommand.handleSlashCommandSelect"
+      @update:active-index="slashCommand.handleSlashActiveIndexChange"
     />
     <FileMentionSelect
-      :visible="mentionVisible"
-      :files="filteredFileMentions"
-      :active-index="mentionActiveIndex"
-      @select="handleFileMentionSelect"
-      @update:active-index="handleMentionActiveIndexChange"
+      :visible="fileMention.mentionVisible.value"
+      :files="fileMention.filteredFileMentions.value"
+      :active-index="fileMention.mentionActiveIndex.value"
+      @select="fileMention.handleFileMentionSelect"
+      @update:active-index="fileMention.handleMentionActiveIndexChange"
     />
     <div class="b-prompt-editor" @click="handleContainerClick">
       <div class="b-prompt-editor__container">
@@ -36,10 +36,11 @@
  * @description Prompt 编辑器主组件，基于 CodeMirror 6 实现
  */
 import type { SlashCommandOption, Variable, FileMentionOption, BPromptEditorProps as Props } from './types';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewline } from '@codemirror/commands';
+import type { Extension } from '@codemirror/state';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { history } from '@codemirror/commands';
 import { Annotation, EditorState } from '@codemirror/state';
-import { Decoration, EditorView, keymap } from '@codemirror/view';
+import { Decoration, EditorView } from '@codemirror/view';
 import FileMentionSelect from './components/FileMentionSelect.vue';
 import SlashCommandSelect from './components/SlashCommandSelect.vue';
 import VariableSelect from './components/VariableSelect.vue';
@@ -48,7 +49,10 @@ import { createPasteHandlerExtension } from './extensions/pasteHandler';
 import { createPlaceholderExtension } from './extensions/placeholder';
 import { createTriggerPlugin } from './extensions/triggerPlugin';
 import { closeTrigger, setTriggerActiveIndex, triggerStateField } from './extensions/triggerState';
-import { chipResolverEffect, getChipAtPos, variableChipField } from './extensions/variableChip';
+import { variableChipField, chipResolverEffect, getChipAtPos } from './extensions/variableChip';
+import { useEditorKeymap } from './hooks/useEditorKeymap';
+import { useFileMention } from './hooks/useFileMention';
+import { useSlashCommand } from './hooks/useSlashCommand';
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '请输入内容...',
@@ -78,93 +82,17 @@ const modelValue = defineModel<string>('value', { default: '' });
 const editorRootRef = ref<HTMLDivElement>();
 const editorHostRef = ref<HTMLDivElement>();
 
-// 触发器 ref（Vue ref，非 computed）
+// 触发器状态（变量选择相关）
 const triggerVisible = ref(false);
 const triggerPosition = ref({ top: 0, left: 0, bottom: 0 });
 const triggerActiveIndex = ref(0);
 const triggerQuery = ref('');
 
-// 斜杠命令 ref
-const slashVisible = ref(false);
-const slashActiveIndex = ref(0);
-const slashQuery = ref('');
-const slashRange = ref<{ from: number; to: number } | null>(null);
-const suppressSlashSync = ref(false);
-
-// 文件提及 ref
-const mentionVisible = ref(false);
-const mentionActiveIndex = ref(0);
-const mentionQuery = ref('');
-const mentionRange = ref<{ from: number; to: number } | null>(null);
-const suppressMentionSync = ref(false);
-
 // 编辑器状态
 const lastSelection = ref<{ main: { head: number } } | null>(null);
 
-// Editor view reference
-const view = ref<EditorView | null>(null);
-
 // 从 options 计算得到的变量列表
 const allVariables = computed<Variable[]>(() => props.options.flatMap((group) => group.options));
-
-// 计算后的斜杠命令列表
-const allSlashCommands = computed<readonly SlashCommandOption[]>(() => props.slashCommands ?? []);
-
-// 根据触发前缀过滤后的斜杠命令
-const filteredSlashCommands = computed<readonly SlashCommandOption[]>(() => {
-  const query = slashQuery.value.toLowerCase();
-  if (!query) return allSlashCommands.value;
-  return allSlashCommands.value.filter((command) => command.trigger.toLowerCase().startsWith(`/${query}`));
-});
-
-// 文件提及列表
-const allFileMentions = computed<readonly FileMentionOption[]>(() => props.fileMentions ?? []);
-
-// 根据查询过滤后的文件提及
-const filteredFileMentions = computed<readonly FileMentionOption[]>(() => {
-  const rawQuery = mentionQuery.value.trim();
-  const query = rawQuery.toLowerCase();
-
-  if (!query) return allFileMentions.value;
-
-  const scoreFile = (file: FileMentionOption) => {
-    const { name } = file;
-    const path = file.path ?? '';
-
-    const nameLower = name.toLowerCase();
-    const pathLower = path.toLowerCase();
-
-    let score = 0;
-
-    // ========================
-    // 1. 名称优先（核心权重）
-    // ========================
-    if (name === rawQuery) score += 200; // 完全匹配（含大小写）
-    else if (name.startsWith(rawQuery)) score += 160; // 前缀（大小写敏感）
-    else if (nameLower === query) score += 120; // 忽略大小写完全匹配
-    else if (nameLower.startsWith(query)) score += 100; // 忽略大小写前缀
-    else if (nameLower.includes(query)) score += 70; // 包含
-
-    // ========================
-    // 2. path 次要
-    // ========================
-    if (path === rawQuery) score += 60;
-    else if (path.startsWith(rawQuery)) score += 40;
-    else if (pathLower === query) score += 30;
-    else if (pathLower.startsWith(query)) score += 20;
-    else if (pathLower.includes(query)) score += 10;
-
-    return score;
-  };
-
-  return [...allFileMentions.value]
-    .filter((file) => {
-      const name = file.name.toLowerCase();
-      const path = file.path?.toLowerCase() ?? '';
-      return name.includes(query) || path.includes(query);
-    })
-    .sort((a, b) => scoreFile(b) - scoreFile(a));
-});
 
 // 根据触发查询过滤后的变量
 const filteredVariables = computed<Variable[]>(() => {
@@ -185,8 +113,6 @@ const resolvedMaxHeight = computed<string | undefined>(() => {
 
 /**
  * 判断编辑器内容在去除空白后是否为空
- * @param content - 原始编辑器内容
- * @returns 内容是否应被视为空
  */
 function isEditorContentEmpty(content: string): boolean {
   return content.trim().length === 0;
@@ -194,17 +120,74 @@ function isEditorContentEmpty(content: string): boolean {
 
 // 编辑器当前是否包含可见内容
 const editorIsEmpty = ref<boolean>(isEditorContentEmpty(modelValue.value));
+// 斜杠命令列表
+const allSlashCommands = computed<readonly SlashCommandOption[]>(() => props.slashCommands ?? []);
+// 文件提及列表
+const allFileMentions = computed<readonly FileMentionOption[]>(() => props.fileMentions ?? []);
+// 外部更新标记
+const externalUpdate = Annotation.define<boolean>();
+// 编辑器视图引用
+const instance = shallowRef<EditorView | null>(null);
+// 使用斜杠命令 hook
+const slashCommand = useSlashCommand(instance, allSlashCommands, (event, command) => emit(event, command));
+// 使用文件提及 hook
+const fileMention = useFileMention(instance, allFileMentions, (event, file) => emit(event, file));
+
+/**
+ * 将选中的变量插入到活动触发范围
+ */
+function handleVariableSelect(variable: Variable): void {
+  if (!instance.value) return;
+
+  const { state } = instance.value;
+  const triggerState = state.field(triggerStateField, false);
+
+  if (!triggerState) return;
+
+  const variableText = `{{${variable.value}}} `;
+  instance.value.dispatch({
+    changes: { from: triggerState.from, to: triggerState.to, insert: variableText },
+    effects: closeTrigger.of()
+  });
+
+  instance.value.focus();
+}
+
+/**
+ * 更新高亮变量的索引
+ */
+function handleActiveIndexChange(index: number): void {
+  if (!instance.value) return;
+
+  triggerActiveIndex.value = index;
+  instance.value.dispatch({
+    effects: setTriggerActiveIndex.of(index)
+  });
+}
+
+// 键盘快捷键扩展
+const keymapExtension = useEditorKeymap({
+  view: instance,
+  slashCommand,
+  fileMention,
+  variableTrigger: {
+    triggerVisible,
+    triggerActiveIndex,
+    filteredVariables
+  },
+  handleVariableSelect,
+  submitOnEnter: props.submitOnEnter,
+  onSubmit: () => emit('submit'),
+  onCancel: props.onCancel
+});
 
 /**
  * 创建 CodeMirror 主题扩展
- * @param maxHeight - 编辑器滚动区域的最大高度
- * @param isEmpty - 编辑器当前是否为空
- * @returns CodeMirror 主题扩展
  */
-const createThemeExtension = (maxHeight: string | undefined, isEmpty: boolean): import('@codemirror/state').Extension => {
+function createThemeExtension(height: string | undefined, isEmpty: boolean): Extension {
   return EditorView.theme({
     '.cm-scroller': {
-      maxHeight: maxHeight ?? 'none',
+      maxHeight: height ?? 'none',
       overflow: 'auto',
       fontFamily: 'inherit',
       fontSize: '14px',
@@ -234,450 +217,35 @@ const createThemeExtension = (maxHeight: string | undefined, isEmpty: boolean): 
       position: 'relative',
       height: '1em'
     },
-    // 防止 normalize.css 的 div border 重置导致 widget buffer 宽度塌陷
     '.cm-widgetBuffer': {
       display: 'inline-block',
       width: isEmpty ? '1px' : '0'
     }
   });
-};
-
-/**
- * 判断斜杠命令是否匹配当前查询前缀
- * @param command - 斜杠命令候选
- * @param query - 当前斜杠查询内容
- * @returns 命令是否匹配
- */
-function isSlashCommandMatch(command: SlashCommandOption, query: string): boolean {
-  return command.trigger.toLowerCase().startsWith(`/${query.toLowerCase()}`);
-}
-
-/**
- * 获取光标位置处的当前斜杠命令上下文
- * @param state - 编辑器状态
- * @returns 斜杠上下文，不可用时返回 null
- */
-function getSlashCommandContext(state: EditorState): { from: number; to: number; query: string } | null {
-  if (allSlashCommands.value.length === 0) {
-    return null;
-  }
-
-  const selection = state.selection.main;
-  if (!selection.empty) {
-    return null;
-  }
-
-  const pos = selection.head;
-  const line = state.doc.lineAt(pos);
-  const text = state.sliceDoc(line.from, pos);
-
-  if (!text.startsWith('/')) {
-    return null;
-  }
-
-  const query = text.slice(1);
-  const matches = allSlashCommands.value.filter((command) => isSlashCommandMatch(command, query));
-
-  if (matches.length === 0) {
-    return null;
-  }
-
-  return {
-    from: line.from,
-    to: pos,
-    query
-  };
-}
-
-/**
- * 检查字符是否为单词字符（字母、数字、下划线）
- * @param char - 字符
- * @returns 是否为单词字符
- */
-function isWordChar(char: string): boolean {
-  return /[a-zA-Z0-9_]/.test(char);
-}
-
-/**
- * 获取光标位置处的当前文件提及上下文
- * @param state - 编辑器状态
- * @returns 文件提及上下文，不可用时返回 null
- */
-function getFileMentionContext(state: EditorState): { from: number; to: number; query: string } | null {
-  if (allFileMentions.value.length === 0) {
-    return null;
-  }
-
-  const selection = state.selection.main;
-  if (!selection.empty) {
-    return null;
-  }
-
-  const pos = selection.head;
-  const line = state.doc.lineAt(pos);
-  const text = state.sliceDoc(line.from, pos);
-
-  // 找最后一个 @
-  const atIndex = text.lastIndexOf('@');
-  if (atIndex === -1) {
-    return null;
-  }
-
-  // 检查 @ 前面是否是单词字符（排除邮箱场景）
-  if (atIndex > 0 && isWordChar(text[atIndex - 1])) {
-    return null;
-  }
-
-  const query = text.slice(atIndex + 1);
-
-  // 如果 query 包含空格或换行，不触发
-  if (/\s/.test(query)) {
-    return null;
-  }
-
-  return {
-    from: line.from + atIndex,
-    to: pos,
-    query
-  };
-}
-
-/**
- * 隐藏斜杠命令菜单并清除其活动范围
- * @param suppressSync - 是否在关闭后抑制失焦引起的后续同步重开
- */
-function closeSlashCommandMenu(suppressSync = false): void {
-  if (suppressSync) {
-    suppressSlashSync.value = true;
-  }
-  slashVisible.value = false;
-  slashQuery.value = '';
-  slashRange.value = null;
-}
-
-/**
- * 隐藏文件提及菜单并清除其活动范围
- * @param suppressSync - 是否在关闭后抑制失焦引起的后续同步重开
- */
-function closeMentionMenu(suppressSync = false): void {
-  if (suppressSync) {
-    suppressMentionSync.value = true;
-  }
-  mentionVisible.value = false;
-  mentionQuery.value = '';
-  mentionRange.value = null;
-}
-
-/**
- * 从编辑器内容同步斜杠命令菜单状态
- * @param state - 编辑器状态
- * @param editorView - 编辑器视图，用于确保编辑器仍有焦点
- */
-function syncSlashCommandState(state: EditorState, editorView: EditorView | null): void {
-  if (!editorView) {
-    closeSlashCommandMenu();
-    return;
-  }
-
-  if (suppressSlashSync.value) {
-    closeSlashCommandMenu();
-    return;
-  }
-
-  const context = getSlashCommandContext(state);
-  if (!context) {
-    closeSlashCommandMenu();
-    return;
-  }
-
-  slashVisible.value = true;
-  slashQuery.value = context.query;
-  slashRange.value = { from: context.from, to: context.to };
-  slashActiveIndex.value = 0;
-}
-
-/**
- * 从编辑器内容同步文件提及菜单状态
- * @param state - 编辑器状态
- * @param editorView - 编辑器视图，用于确保编辑器仍有焦点
- */
-function syncMentionState(state: EditorState, editorView: EditorView | null): void {
-  if (!editorView) {
-    closeMentionMenu();
-    return;
-  }
-
-  if (suppressMentionSync.value) {
-    closeMentionMenu();
-    return;
-  }
-
-  const context = getFileMentionContext(state);
-  if (!context) {
-    closeMentionMenu();
-    return;
-  }
-
-  mentionVisible.value = true;
-  mentionQuery.value = context.query;
-  mentionRange.value = { from: context.from, to: context.to };
-  mentionActiveIndex.value = 0;
-}
-
-// 外部更新标记，用于避免循环更新
-const externalUpdate = Annotation.define<boolean>();
-
-// 模型同步扩展
-const modelSyncExtension = EditorView.updateListener.of((update) => {
-  const newValue = update.state.doc.toString();
-  editorIsEmpty.value = isEditorContentEmpty(newValue);
-  const isExternalValueChange = update.transactions.some((tr) => tr.annotation(externalUpdate));
-
-  syncSlashCommandState(update.state, update.view);
-  syncMentionState(update.state, update.view);
-
-  if (isExternalValueChange) {
-    return;
-  }
-
-  if (modelValue.value !== newValue) {
-    modelValue.value = newValue;
-    emit('change', newValue);
-  }
-});
-
-/**
- * 将选中的变量插入到活动触发范围
- * @param variable - 选中的变量元数据
- */
-function handleVariableSelect(variable: Variable): void {
-  if (!view.value) return;
-
-  const { state } = view.value;
-  const triggerState = state.field(triggerStateField, false);
-
-  if (!triggerState) return;
-
-  const variableText = `{{${variable.value}}} `;
-  view.value.dispatch({
-    changes: { from: triggerState.from, to: triggerState.to, insert: variableText },
-    effects: closeTrigger.of()
-  });
-
-  view.value.focus();
-}
-
-/**
- * 更新高亮变量的索引
- * @param index - 新的高亮索引
- */
-function handleActiveIndexChange(index: number): void {
-  triggerActiveIndex.value = index;
-  if (view.value) {
-    view.value.dispatch({
-      effects: setTriggerActiveIndex.of(index)
-    });
-  }
-}
-
-/**
- * 更新高亮斜杠命令的索引
- * @param index - 新的高亮索引
- */
-function handleSlashActiveIndexChange(index: number): void {
-  slashActiveIndex.value = index;
-}
-
-/**
- * 更新高亮文件提及的索引
- * @param index - 新的高亮索引
- */
-function handleMentionActiveIndexChange(index: number): void {
-  mentionActiveIndex.value = index;
-}
-
-/**
- * 应用选中的斜杠命令并清除活动斜杠文本
- * @param command - 选中的斜杠命令元数据
- */
-function handleSlashCommandSelect(command: SlashCommandOption): void {
-  if (!view.value || !slashRange.value) return;
-
-  const { from, to } = slashRange.value;
-  view.value.dispatch({
-    changes: { from, to, insert: '' },
-    selection: { anchor: from }
-  });
-
-  emit('slash-command', command);
-  closeSlashCommandMenu();
-  view.value.focus();
-}
-
-/**
- * 应用选中的文件提及并清除活动提及文本
- * @param file - 选中的文件提及元数据
- */
-function handleFileMentionSelect(file: FileMentionOption): void {
-  if (!view.value || !mentionRange.value) return;
-
-  const { from, to } = mentionRange.value;
-  const insertText = `@${file.name} `;
-  view.value.dispatch({
-    changes: { from, to, insert: insertText },
-    selection: { anchor: from + insertText.length }
-  });
-
-  emit('file-mention-select', file);
-  closeMentionMenu();
-  view.value.focus();
-}
-
-/**
- * 选择当前高亮的斜杠命令
- * @returns 命令是否被处理
- */
-function handleSlashCommandEnter(): boolean {
-  const command = filteredSlashCommands.value[slashActiveIndex.value];
-  if (!command) {
-    return false;
-  }
-
-  handleSlashCommandSelect(command);
-  return true;
-}
-
-/**
- * 向上移动斜杠命令高亮
- * @returns 按键是否被处理
- */
-function handleSlashCommandArrowUp(): boolean {
-  const list = filteredSlashCommands.value;
-  if (!slashVisible.value) return false;
-  if (list.length === 0) return true;
-
-  const newIndex = (slashActiveIndex.value - 1 + list.length) % list.length;
-  handleSlashActiveIndexChange(newIndex);
-  return true;
-}
-
-/**
- * 向下移动斜杠命令高亮
- * @returns 按键是否被处理
- */
-function handleSlashCommandArrowDown(): boolean {
-  const list = filteredSlashCommands.value;
-  if (!slashVisible.value) return false;
-  if (list.length === 0) return true;
-
-  const newIndex = (slashActiveIndex.value + 1) % list.length;
-  handleSlashActiveIndexChange(newIndex);
-  return true;
-}
-
-/**
- * 向上移动文件提及高亮
- * @returns 按键是否被处理
- */
-function handleMentionArrowUp(): boolean {
-  const list = filteredFileMentions.value;
-  if (!mentionVisible.value) return false;
-  if (list.length === 0) return true;
-
-  const newIndex = (mentionActiveIndex.value - 1 + list.length) % list.length;
-  handleMentionActiveIndexChange(newIndex);
-  return true;
-}
-
-/**
- * 向下移动文件提及高亮
- * @returns 按键是否被处理
- */
-function handleMentionArrowDown(): boolean {
-  const list = filteredFileMentions.value;
-  if (!mentionVisible.value) return false;
-  if (list.length === 0) return true;
-
-  const newIndex = (mentionActiveIndex.value + 1) % list.length;
-  handleMentionActiveIndexChange(newIndex);
-  return true;
-}
-
-/**
- * 选择当前高亮的文件提及
- * @returns 是否被处理
- */
-function handleMentionEnter(): boolean {
-  const file = filteredFileMentions.value[mentionActiveIndex.value];
-  if (!file) {
-    return false;
-  }
-
-  handleFileMentionSelect(file);
-  return true;
-}
-
-/**
- * 点击编辑器外壳时聚焦编辑器
- */
-function handleContainerClick(): void {
-  if (!props.disabled && view.value) {
-    suppressSlashSync.value = false;
-    suppressMentionSync.value = false;
-    view.value.focus();
-  }
-}
-
-/**
- * 处理编辑器外壳外部的文档点击事件
- * @param event - 文档 mousedown 事件
- */
-function handleDocumentMouseDown(event: MouseEvent): void {
-  const root = editorRootRef.value;
-  const { target } = event;
-
-  if (!root || !(target instanceof Node) || root.contains(target)) {
-    return;
-  }
-
-  if (slashVisible.value) {
-    closeSlashCommandMenu(true);
-  }
-  if (mentionVisible.value) {
-    closeMentionMenu(true);
-  }
-}
-
-/**
- * 焦点离开编辑器外壳时关闭斜杠菜单
- * @param event - 外壳 focusout 事件
- */
-function handleEditorShellFocusOut(event: FocusEvent): void {
-  const root = editorRootRef.value;
-  const { relatedTarget } = event;
-
-  if (!root) {
-    return;
-  }
-
-  if (relatedTarget instanceof Node && root.contains(relatedTarget)) {
-    return;
-  }
-
-  if (slashVisible.value) {
-    closeSlashCommandMenu(true);
-  }
-  if (mentionVisible.value) {
-    closeMentionMenu(true);
-  }
 }
 
 /**
  * 构建 CodeMirror 扩展列表
- * @returns 编辑器扩展数组
  */
-function createExtensions(): import('@codemirror/state').Extension[] {
-  const extensions: import('@codemirror/state').Extension[] = [
+function createExtensions(): Extension[] {
+  const modelSyncExtension = EditorView.updateListener.of((update) => {
+    const newValue = update.state.doc.toString();
+    editorIsEmpty.value = isEditorContentEmpty(newValue);
+    const isExternalValueChange = update.transactions.some((tr) => tr.annotation(externalUpdate));
+
+    slashCommand.syncSlashCommandState(update.state, update.view);
+    fileMention.syncMentionState(update.state, update.view);
+
+    if (isExternalValueChange) {
+      return;
+    }
+
+    if (modelValue.value !== newValue) {
+      modelValue.value = newValue;
+    }
+  });
+
+  const extensions: Extension[] = [
     EditorView.lineWrapping,
     history(),
     modelSyncExtension,
@@ -694,16 +262,14 @@ function createExtensions(): import('@codemirror/state').Extension[] {
     createPasteHandlerExtension(props.onPasteFiles, props.onPasteImages, props.canAcceptImages),
     EditorView.domEventHandlers({
       focus: () => {
-        suppressSlashSync.value = false;
-        suppressMentionSync.value = false;
         return false;
       },
       blur: (_event, editorView) => {
-        if (slashVisible.value) {
-          closeSlashCommandMenu(true);
+        if (slashCommand.slashVisible.value) {
+          slashCommand.closeSlashCommandMenu(true);
         }
-        if (mentionVisible.value) {
-          closeMentionMenu(true);
+        if (fileMention.mentionVisible.value) {
+          fileMention.closeMentionMenu(true);
         }
         if (triggerVisible.value) {
           editorView.dispatch({ effects: closeTrigger.of() });
@@ -734,182 +300,16 @@ function createExtensions(): import('@codemirror/state').Extension[] {
     editableCompartment.of(EditorView.editable.of(!props.disabled)),
     readOnlyCompartment.of(EditorState.readOnly.of(props.disabled)),
     themeCompartment.of(createThemeExtension(resolvedMaxHeight.value, editorIsEmpty.value)),
-    keymap.of([
-      indentWithTab,
-      {
-        key: 'Backspace',
-        run: (editorView) => {
-          const sel = editorView.state.selection.main;
-          if (!sel.empty) return false;
-          if (sel.head > 0) {
-            const chip = getChipAtPos(editorView.state, sel.head - 1);
-            if (chip) {
-              editorView.dispatch({
-                changes: { from: chip.from, to: chip.to }
-              });
-              return true;
-            }
-          }
-          return false;
-        }
-      },
-      {
-        key: 'Delete',
-        run: (editorView) => {
-          const sel = editorView.state.selection.main;
-          if (!sel.empty) return false;
-          const chip = getChipAtPos(editorView.state, sel.head);
-          if (chip) {
-            editorView.dispatch({
-              changes: { from: chip.from, to: chip.to }
-            });
-            return true;
-          }
-          return false;
-        }
-      },
-      {
-        key: 'ArrowUp',
-        run: () => {
-          if (slashVisible.value) {
-            return handleSlashCommandArrowUp();
-          }
-          if (mentionVisible.value) {
-            return handleMentionArrowUp();
-          }
-          if (!triggerVisible.value) return false;
-          const list = filteredVariables.value;
-          if (list.length === 0) return true;
-          const newIdx = (triggerActiveIndex.value - 1 + list.length) % list.length;
-          handleActiveIndexChange(newIdx);
-          return true;
-        }
-      },
-      {
-        key: 'ArrowDown',
-        run: () => {
-          if (slashVisible.value) {
-            return handleSlashCommandArrowDown();
-          }
-          if (mentionVisible.value) {
-            return handleMentionArrowDown();
-          }
-          if (!triggerVisible.value) return false;
-          const list = filteredVariables.value;
-          if (list.length === 0) return true;
-          const newIdx = (triggerActiveIndex.value + 1) % list.length;
-          handleActiveIndexChange(newIdx);
-          return true;
-        }
-      },
-      {
-        key: 'Escape',
-        run: (editorView) => {
-          if (slashVisible.value) {
-            closeSlashCommandMenu();
-            return true;
-          }
-          if (mentionVisible.value) {
-            closeMentionMenu();
-            return true;
-          }
-          if (triggerVisible.value) {
-            editorView.dispatch({ effects: closeTrigger.of() });
-            return true;
-          }
-          if (props.onCancel) {
-            return props.onCancel() ?? true;
-          }
-          return false;
-        }
-      },
-      {
-        key: 'Shift-Enter',
-        run: insertNewline
-      },
-      {
-        key: 'Enter',
-        run: () => {
-          if (slashVisible.value && filteredSlashCommands.value.length > 0) {
-            return handleSlashCommandEnter();
-          }
-          if (mentionVisible.value && filteredFileMentions.value.length > 0) {
-            return handleMentionEnter();
-          }
-          if (triggerVisible.value && filteredVariables.value.length > 0) {
-            const variable = filteredVariables.value[triggerActiveIndex.value];
-            if (variable) {
-              handleVariableSelect(variable);
-              return true;
-            }
-          }
-          if (props.submitOnEnter) {
-            emit('submit');
-            return true;
-          }
-          return false;
-        }
-      }
-    ]),
-    keymap.of([...defaultKeymap, ...historyKeymap])
+    keymapExtension
   ];
 
   return extensions;
 }
 
-watch(
-  () => modelValue.value,
-  (value) => {
-    if (!view.value) return;
-
-    const currentDoc = view.value.state.doc.toString();
-    if (currentDoc === value) return;
-
-    view.value.dispatch({
-      changes: { from: 0, to: currentDoc.length, insert: value },
-      annotations: externalUpdate.of(true)
-    });
-  }
-);
-
-watch(
-  () => props.disabled,
-  (disabled) => {
-    if (!view.value) return;
-
-    view.value.dispatch({
-      effects: [editableCompartment.reconfigure(EditorView.editable.of(!disabled)), readOnlyCompartment.reconfigure(EditorState.readOnly.of(disabled))]
-    });
-  }
-);
-
-watch(resolvedMaxHeight, (maxHeight) => {
-  if (!view.value) return;
-
-  view.value.dispatch({
-    effects: themeCompartment.reconfigure(createThemeExtension(maxHeight, editorIsEmpty.value))
-  });
-});
-
-watch(editorIsEmpty, (isEmpty) => {
-  if (!view.value) return;
-
-  view.value.dispatch({
-    effects: themeCompartment.reconfigure(createThemeExtension(resolvedMaxHeight.value, isEmpty))
-  });
-});
-
-watch(
-  () => props.chipResolver,
-  (resolver) => {
-    if (!view.value || !resolver) return;
-    view.value.dispatch({
-      effects: chipResolverEffect.of(resolver)
-    });
-  }
-);
-
-onMounted(() => {
+/**
+ * 初始化编辑器
+ */
+function setupEditor(): void {
   if (!editorHostRef.value) return;
 
   const state = EditorState.create({
@@ -917,92 +317,187 @@ onMounted(() => {
     extensions: createExtensions()
   });
 
-  view.value = new EditorView({ state, parent: editorHostRef.value });
+  instance.value = new EditorView({ state, parent: editorHostRef.value });
 
-  syncSlashCommandState(view.value.state as EditorState, view.value as EditorView);
-  syncMentionState(view.value.state as EditorState, view.value as EditorView);
+  slashCommand.syncSlashCommandState(instance.value.state as EditorState, instance.value as EditorView);
+  fileMention.syncMentionState(instance.value.state as EditorState, instance.value as EditorView);
 
   if (props.chipResolver) {
-    view.value.dispatch({ effects: chipResolverEffect.of(props.chipResolver) });
+    instance.value.dispatch({ effects: chipResolverEffect.of(props.chipResolver) });
   }
 
   nextTick(() => {
-    view.value?.requestMeasure();
+    instance.value?.requestMeasure();
   });
+}
 
+/**
+ * 销毁编辑器
+ */
+function destroyEditor(): void {
+  instance.value?.destroy();
+  instance.value = null;
+}
+
+/**
+ * 点击编辑器外壳时聚焦编辑器
+ */
+function handleContainerClick(): void {
+  if (!props.disabled && instance.value) {
+    instance.value.focus();
+  }
+}
+
+/**
+ * 处理编辑器外壳外部的文档点击事件
+ */
+function handleDocumentMouseDown(event: MouseEvent): void {
+  const root = editorRootRef.value;
+  const { target } = event;
+
+  if (!root || !(target instanceof Node) || root.contains(target)) {
+    return;
+  }
+
+  if (slashCommand.slashVisible.value) {
+    slashCommand.closeSlashCommandMenu(true);
+  }
+  if (fileMention.mentionVisible.value) {
+    fileMention.closeMentionMenu(true);
+  }
+}
+
+/**
+ * 焦点离开编辑器外壳时关闭菜单
+ */
+function handleEditorShellFocusOut(event: FocusEvent): void {
+  const root = editorRootRef.value;
+  const { relatedTarget } = event;
+
+  if (!root) {
+    return;
+  }
+
+  if (relatedTarget instanceof Node && root.contains(relatedTarget)) {
+    return;
+  }
+
+  if (slashCommand.slashVisible.value) {
+    slashCommand.closeSlashCommandMenu(true);
+  }
+  if (fileMention.mentionVisible.value) {
+    fileMention.closeMentionMenu(true);
+  }
+}
+
+// 监听 modelValue 变化
+watch(modelValue, (value) => {
+  if (!instance.value) return;
+
+  const currentDoc = instance.value.state.doc.toString();
+  if (currentDoc === value) return;
+
+  instance.value.dispatch({
+    changes: { from: 0, to: currentDoc.length, insert: value },
+    annotations: externalUpdate.of(true)
+  });
+});
+
+// 监听 disabled 变化
+watch(
+  () => props.disabled,
+  (isDisabled) => {
+    if (!instance.value) return;
+
+    instance.value.dispatch({
+      effects: [editableCompartment.reconfigure(EditorView.editable.of(!isDisabled)), readOnlyCompartment.reconfigure(EditorState.readOnly.of(isDisabled))]
+    });
+  }
+);
+
+// 监听 maxHeight 变化
+watch(resolvedMaxHeight, (h) => {
+  if (!instance.value) return;
+
+  instance.value.dispatch({
+    effects: themeCompartment.reconfigure(createThemeExtension(h, editorIsEmpty.value))
+  });
+});
+
+// 监听 editorIsEmpty 变化
+watch(editorIsEmpty, (isEmpty) => {
+  if (!instance.value) return;
+
+  instance.value.dispatch({
+    effects: themeCompartment.reconfigure(createThemeExtension(resolvedMaxHeight.value, isEmpty))
+  });
+});
+
+// 监听 chipResolver 变化
+watch(
+  () => props.chipResolver,
+  (resolver) => {
+    if (!instance.value || !resolver) return;
+    instance.value.dispatch({
+      effects: chipResolverEffect.of(resolver)
+    });
+  }
+);
+
+onMounted(() => {
+  setupEditor();
   document.addEventListener('mousedown', handleDocumentMouseDown);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown);
-  view.value?.destroy();
-  view.value = null;
+  destroyEditor();
 });
 
 defineExpose({
   focus: () => {
-    view.value?.focus();
+    instance.value?.focus();
   },
-  /**
-   * 获取保存选区或当前选区的光标位置。
-   * @returns 光标位置
-   */
   getCursorPosition: (): number => {
-    if (!view.value) {
+    if (!instance.value) {
       return 0;
     }
 
-    const selection = lastSelection.value ?? view.value.state.selection;
+    const selection = lastSelection.value ?? instance.value.state.selection;
     return selection.main.head;
   },
-  /**
-   * 保存当前选区，用于延迟的外部插入操作
-   */
   saveCursorPosition: () => {
-    if (view.value) {
-      lastSelection.value = view.value.state.selection;
+    if (instance.value) {
+      lastSelection.value = instance.value.state.selection;
     }
   },
-  /**
-   * 在保存的选区或当前光标位置插入文本
-   * @param text - 要插入的文本
-   */
   insertTextAtCursor: (text: string) => {
-    if (!view.value) return;
+    if (!instance.value) return;
 
-    view.value.focus();
-    const selection = lastSelection.value ?? view.value.state.selection;
+    instance.value.focus();
+    const selection = lastSelection.value ?? instance.value.state.selection;
     const pos = selection.main.head;
     const insertEnd = pos + text.length;
 
-    view.value.dispatch({
+    instance.value.dispatch({
       changes: { from: pos, insert: text },
       selection: { anchor: insertEnd }
     });
 
     lastSelection.value = null;
   },
-  /**
-   * 替换指定范围的文本。
-   * @param from - 起始位置
-   * @param to - 结束位置
-   * @param text - 替换后的文本
-   */
   replaceTextRange: (from: number, to: number, text: string) => {
-    if (!view.value) return;
+    if (!instance.value) return;
 
-    view.value.focus();
+    instance.value.focus();
     const insertEnd = from + text.length;
-    view.value.dispatch({
+    instance.value.dispatch({
       changes: { from, to, insert: text },
       selection: { anchor: insertEnd }
     });
   },
-  /**
-   * 获取编辑器原始文本，包括 {{...}} 标记
-   */
   getText: () => {
-    return view.value?.state.doc.toString() ?? '';
+    return instance.value?.state.doc.toString() ?? '';
   }
 });
 </script>
