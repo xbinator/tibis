@@ -122,9 +122,48 @@ const allFileMentions = computed<readonly FileMentionOption[]>(() => props.fileM
 
 // 根据查询过滤后的文件提及
 const filteredFileMentions = computed<readonly FileMentionOption[]>(() => {
-  const query = mentionQuery.value.toLowerCase();
+  const rawQuery = mentionQuery.value.trim();
+  const query = rawQuery.toLowerCase();
+
   if (!query) return allFileMentions.value;
-  return allFileMentions.value.filter((file) => file.name.toLowerCase().includes(query));
+
+  const scoreFile = (file: FileMentionOption) => {
+    const { name } = file;
+    const path = file.path ?? '';
+
+    const nameLower = name.toLowerCase();
+    const pathLower = path.toLowerCase();
+
+    let score = 0;
+
+    // ========================
+    // 1. 名称优先（核心权重）
+    // ========================
+    if (name === rawQuery) score += 200; // 完全匹配（含大小写）
+    else if (name.startsWith(rawQuery)) score += 160; // 前缀（大小写敏感）
+    else if (nameLower === query) score += 120; // 忽略大小写完全匹配
+    else if (nameLower.startsWith(query)) score += 100; // 忽略大小写前缀
+    else if (nameLower.includes(query)) score += 70; // 包含
+
+    // ========================
+    // 2. path 次要
+    // ========================
+    if (path === rawQuery) score += 60;
+    else if (path.startsWith(rawQuery)) score += 40;
+    else if (pathLower === query) score += 30;
+    else if (pathLower.startsWith(query)) score += 20;
+    else if (pathLower.includes(query)) score += 10;
+
+    return score;
+  };
+
+  return [...allFileMentions.value]
+    .filter((file) => {
+      const name = file.name.toLowerCase();
+      const path = file.path?.toLowerCase() ?? '';
+      return name.includes(query) || path.includes(query);
+    })
+    .sort((a, b) => scoreFile(b) - scoreFile(a));
 });
 
 // 根据触发查询过滤后的变量
