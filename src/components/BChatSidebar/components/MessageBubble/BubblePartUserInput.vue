@@ -77,14 +77,17 @@ function parseSegments(text: string): Segment[] {
   let lastIndex = 0;
 
   for (const match of text.matchAll(pattern)) {
-    const [, filePath, startLine, endLine] = match;
     const matchStart = match.index!;
 
+    // 匹配前的纯文本
     if (matchStart > lastIndex) {
       result.push({ type: 'text', text: text.slice(lastIndex, matchStart) });
     }
 
-    const parsed = parseFileReferenceToken(`#${filePath} ${startLine}-${endLine}`);
+    // 去掉 {{ }} 后直接交给 parseFileReferenceToken 解析，避免手动拆组再拼回
+    const tokenContent = match[0].slice(2, -2);
+    const parsed = parseFileReferenceToken(tokenContent);
+
     if (parsed) {
       const presentation = createFileRefChipPresentation({
         title: parsed.filePath ?? parsed.fileName,
@@ -107,6 +110,7 @@ function parseSegments(text: string): Segment[] {
     lastIndex = matchStart + match[0].length;
   }
 
+  // 尾部剩余纯文本
   if (lastIndex < text.length) {
     result.push({ type: 'text', text: text.slice(lastIndex) });
   }
