@@ -15,8 +15,8 @@ import { useSkillStore } from '@/stores/ai/skill';
 export function useSkillInit(): void {
   const skillStore = useSkillStore();
 
-  /** skill:changed 事件取消函数 */
-  let offSkillChanged: (() => void) | null = null;
+  /** 组件卸载时需要执行的 skill 监听清理函数。 */
+  const cleanupCallbacks: Array<() => void | Promise<void>> = [];
 
   onMounted(async () => {
     try {
@@ -26,12 +26,13 @@ export function useSkillInit(): void {
         readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options)
       });
 
-      // 监听 skill 目录变化
+      // 监听统一的项目 skill 目录，事件只关注 SKILL.md。
       const skillDir = `${cwd}/.agents/skills`;
       await native.watchDirectory(skillDir, '**/SKILL.md');
+      cleanupCallbacks.push(() => native.unwatchDirectory(skillDir, '**/SKILL.md'));
 
       // 监听 skill:changed 事件，增量更新
-      offSkillChanged = native.onSkillChanged(async (data) => {
+      const removeSkillChangedListener = native.onSkillChanged(async (data) => {
         if (data.type === 'unlink') {
           if (!data.filePath.endsWith('/SKILL.md') && !data.filePath.endsWith('\\SKILL.md')) return;
           skillStore.handleSkillChange('unlink', { filePath: data.filePath } as import('@/ai/skill/types').SkillDefinition);
@@ -41,17 +42,24 @@ export function useSkillInit(): void {
         if (data.content) {
           if (!data.filePath.endsWith('/SKILL.md') && !data.filePath.endsWith('\\SKILL.md')) return;
           const { parseSkillMarkdown } = await import('@/ai/skill/parser');
-          const source = data.filePath.startsWith(`${cwd}/.agents/skills/`) ? 'project' : 'user';
-          const skill = parseSkillMarkdown(data.content, data.filePath, { source });
+          const skill = parseSkillMarkdown(data.content, data.filePath, { source: 'project' });
           skillStore.handleSkillChange(data.type as 'change' | 'add', skill);
         }
       });
+      cleanupCallbacks.push(removeSkillChangedListener);
     } catch (error: unknown) {
       console.error('Skill initialization failed:', error);
     }
   });
 
   onUnmounted(() => {
-    offSkillChanged?.();
+    for (const cleanup of cleanupCallbacks.splice(0)) {
+      const result = cleanup();
+      if (result instanceof Promise) {
+        result.catch((error: unknown) => {
+          console.error('Skill cleanup failed:', error);
+        });
+      }
+    }
   });
 }
