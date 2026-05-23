@@ -1,9 +1,9 @@
 <template>
   <div :class="bem(['part', 'confirmation', part.confirmationStatus, `permission-${part.riskLevel}`])">
     <div :class="bem('title', { clickable: true })" @click="toggleCollapse">
-      <Icon :icon="collapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" width="14" height="14" />
       <Icon :icon="part.riskLevel === 'dangerous' ? 'lucide:triangle-alert' : 'lucide:shield-check'" width="14" height="14" />
-      <span>{{ part.title }}</span>
+      <span :class="bem('title-content')">{{ part.title }}</span>
+      <Icon :icon="collapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" width="14" height="14" />
     </div>
     <div :class="bem('status')">{{ statusText }}</div>
     <template v-if="!collapsed">
@@ -193,14 +193,18 @@ function handleSubmitCustomInput(): void {
   display: flex;
   gap: 6px;
   align-items: center;
+  width: 100%;
   font-weight: 500;
   color: var(--text-primary);
+  user-select: text;
+}
+
+.confirm-card__title-content {
+  flex: 1;
 }
 
 .confirm-card__title--clickable {
-  width: fit-content;
   cursor: pointer;
-  user-select: none;
 }
 
 .confirm-card__description,

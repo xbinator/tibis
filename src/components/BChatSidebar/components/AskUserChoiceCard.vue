@@ -1,29 +1,42 @@
 <template>
   <div class="choice-card">
-    <div class="choice-card__title">{{ question.question }}</div>
+    <!-- 第一步：选择答案 -->
+    <div v-show="currentStep === 0" class="choice-card__step">
+      <div class="choice-card__title">{{ question.question }}</div>
 
-    <div class="choice-card__options">
-      <label v-for="option in question.options" :key="option.value" class="choice-card__option">
-        <div class="choice-card__option-input">
-          <input
-            :type="inputType"
-            :value="option.value"
-            :checked="selectedValues.includes(option.value)"
-            :disabled="isOptionDisabled(option.value)"
-            @change="handleOptionChange(option.value, ($event.target as HTMLInputElement).checked)"
-          />
-        </div>
-        <span class="choice-card__option-main">
-          <span>{{ option.label }}</span>
-          <small v-if="option.description">{{ option.description }}</small>
-        </span>
-      </label>
+      <div class="choice-card__options">
+        <label v-for="option in question.options" :key="option.value" class="choice-card__option">
+          <div class="choice-card__option-input">
+            <input
+              :type="inputType"
+              :value="option.value"
+              :checked="selectedValues.includes(option.value)"
+              :disabled="isOptionDisabled(option.value)"
+              @change="handleOptionChange(option.value, ($event.target as HTMLInputElement).checked)"
+            />
+          </div>
+          <span class="choice-card__option-main">
+            <span>{{ option.label }}</span>
+            <small v-if="option.description">{{ option.description }}</small>
+          </span>
+        </label>
+      </div>
+
+      <div class="choice-card__footer">
+        <BButton size="small" :disabled="!canSubmit" @click="handleNext">下一步</BButton>
+      </div>
     </div>
 
-    <input v-model="otherText" class="choice-card__other" type="text" placeholder="其他..." />
+    <!-- 第二步：补充信息 -->
+    <div v-show="currentStep === 1" class="choice-card__step">
+      <div class="choice-card__title">是否有更多的补充信息需要提供？（可选）</div>
 
-    <div class="choice-card__footer">
-      <BButton size="small" :disabled="!canSubmit" @click="handleSubmit">提交选择</BButton>
+      <input v-model="otherText" class="choice-card__other" type="text" placeholder="请输入补充信息..." />
+
+      <div class="choice-card__footer">
+        <BButton size="small" type="secondary" @click="handlePrev">上一步</BButton>
+        <BButton size="small" @click="handleSubmit">提交</BButton>
+      </div>
     </div>
   </div>
 </template>
@@ -31,7 +44,9 @@
 <script setup lang="ts">
 /**
  * @file AskUserChoiceCard.vue
- * @description 渲染 ask_user_question 等待态工具结果，并兼容历史 ask_user_choice 消息的答案提交。
+ * @description 渲染 ask_user_question 等待态工具结果，两步步骤条形式。
+ * 第一步：展示 LLM 返回的问题选项
+ * 第二步：固定问题"是否有更多的补充信息需要提供？（可选）"+ 输入框
  */
 import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type { AIUserChoiceAnswerData } from 'types/chat';
@@ -49,9 +64,10 @@ const emit = defineEmits<{
 
 const selectedValues = ref<string[]>([]);
 const otherText = ref('');
+const currentStep = ref(0);
 
 const inputType = computed(() => (props.question.mode === 'multiple' ? 'checkbox' : 'radio'));
-const canSubmit = computed(() => selectedValues.value.length > 0 || otherText.value.trim().length > 0);
+const canSubmit = computed(() => selectedValues.value.length > 0);
 
 /**
  * 根据选择模式更新选中值。
@@ -95,13 +111,26 @@ function isOptionDisabled(value: string): boolean {
 }
 
 /**
- * 提交当前用户答案。
+ * 进入下一步
  */
-function handleSubmit(): void {
+function handleNext(): void {
   if (!canSubmit.value) {
     return;
   }
+  currentStep.value = 1;
+}
 
+/**
+ * 返回上一步
+ */
+function handlePrev(): void {
+  currentStep.value = 0;
+}
+
+/**
+ * 提交当前用户答案。
+ */
+function handleSubmit(): void {
   emit('submit-choice', {
     questionId: props.question.questionId,
     toolCallId: props.question.toolCallId,
@@ -119,6 +148,10 @@ function handleSubmit(): void {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 10px;
+}
+
+.choice-card__step {
+  margin-top: 0;
 }
 
 .choice-card__title {
@@ -158,7 +191,6 @@ function handleSubmit(): void {
 .choice-card__other {
   width: 100%;
   padding: 7px 9px;
-  margin-top: 10px;
   color: var(--text-primary);
   outline: none;
   background: var(--bg-primary);
@@ -168,6 +200,7 @@ function handleSubmit(): void {
 
 .choice-card__footer {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
   margin-top: 10px;
 }
