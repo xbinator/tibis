@@ -79,7 +79,7 @@ export default defineComponent({
       const hasIcon = slots.icon || props.icon;
 
       return (
-        <button
+        <div
           class={bem([
             props.type,
             props.size,
@@ -93,7 +93,6 @@ export default defineComponent({
               danger: props.danger
             }
           ])}
-          disabled={props.disabled || props.loading}
           onClick={handleClick}
         >
           {props.loading && (
@@ -103,7 +102,7 @@ export default defineComponent({
           )}
           {props.icon && <Icon class={bem('icon')} icon={props.icon} />}
           {slots.default?.()}
-        </button>
+        </div>
       );
     }
 
