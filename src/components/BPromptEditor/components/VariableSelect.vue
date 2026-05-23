@@ -1,53 +1,45 @@
 <template>
-  <Teleport to="body">
-    <div v-if="visible && variables.length > 0" ref="dropdownRef" class="variable-menu" :style="menuStyle" @mousedown.prevent>
-      <div class="variable-menu-header">
-        <Icon icon="lucide:variable" class="header-icon" />
-        <span>选择变量</span>
+  <SelectDropdown
+    :visible="visible"
+    :items="variables"
+    :active-index="activeIndex"
+    teleport
+    :position="position"
+    :dropdown-width="300"
+    @select="handleSelect"
+    @update:active-index="handleMouseEnter"
+  >
+    <template #item="{ item }">
+      <div class="variable-item-main">
+        <span class="variable-item-label">{{ item.label }}</span>
+        <span class="variable-item-value">{{ item.value }}</span>
       </div>
-      <div class="variable-menu-list">
-        <div
-          v-for="(variable, index) in variables"
-          :key="variable.value"
-          class="variable-menu-item"
-          :class="{ active: activeIndex === index }"
-          @click="handleSelect(variable)"
-          @mouseenter="handleMouseEnter(index)"
-        >
-          <div class="variable-item-main">
-            <span class="variable-item-label">{{ variable.label }}</span>
-            <span class="variable-item-value">{{ variable.value }}</span>
-          </div>
-          <div v-if="variable.description" class="variable-item-desc">
-            {{ variable.description }}
-          </div>
-        </div>
+      <div v-if="item.description" class="variable-item-desc">
+        {{ item.description }}
       </div>
-    </div>
-    <div v-else-if="visible" ref="dropdownRef" class="variable-menu" :style="menuStyle" @mousedown.prevent>
-      <div class="variable-menu-header">
-        <Icon icon="lucide:variable" class="header-icon" />
-        <span>选择变量</span>
-      </div>
-      <div class="variable-empty-state">没有匹配的变量</div>
-    </div>
-  </Teleport>
+    </template>
+  </SelectDropdown>
 </template>
 
 <script setup lang="ts">
 import type { Variable } from '../types';
-import type { CSSProperties } from 'vue';
-import { nextTick, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
+import SelectDropdown from './_SelectDropdown.vue';
 
+/**
+ * VariableSelect 组件属性定义
+ */
 interface Props {
+  /** 是否显示菜单 */
   visible: boolean;
+  /** 可选变量列表 */
   variables: Variable[];
+  /** 锚点位置，用于 Teleport 定位计算 */
   position: { top: number; left: number; bottom: number };
+  /** 当前高亮项索引 */
   activeIndex?: number;
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   activeIndex: 0
 });
 
@@ -56,104 +48,27 @@ const emit = defineEmits<{
   (e: 'update:activeIndex', index: number): void;
 }>();
 
-const dropdownRef = ref<HTMLElement>();
-
-const menuStyle = ref<CSSProperties>({});
-
-watch(
-  [() => props.visible, () => props.position],
-  async () => {
-    if (!props.visible) return;
-
-    await nextTick();
-
-    const styles: CSSProperties = {
-      position: 'fixed',
-      maxHeight: '400px',
-      width: '300px',
-      zIndex: 9999
-    };
-
-    const { innerHeight: viewportHeight, innerWidth: viewportWidth } = window;
-    const dropdownHeight = dropdownRef.value?.clientHeight || 0;
-    const dropdownWidth = dropdownRef.value?.clientWidth || 300;
-    const gap = 8;
-
-    const { top, left, bottom } = props.position;
-
-    const expectedBottom = bottom + gap + dropdownHeight;
-    const expectedRight = left + dropdownWidth;
-
-    if (expectedBottom > viewportHeight) {
-      styles.top = `${Math.max(gap, top - dropdownHeight - gap)}px`;
-    } else {
-      styles.top = `${bottom + gap}px`;
-    }
-
-    if (expectedRight > viewportWidth) {
-      styles.left = `${Math.max(gap, viewportWidth - dropdownWidth - gap)}px`;
-    } else {
-      styles.left = `${Math.max(gap, left)}px`;
-    }
-
-    menuStyle.value = styles;
-  },
-  { immediate: true }
-);
-
+/**
+ * 处理变量选择
+ * @param variable - 被选中的变量
+ */
 function handleSelect(variable: Variable): void {
   emit('select', variable);
 }
 
+/**
+ * 处理鼠标悬停，更新高亮索引
+ * @param index - 鼠标悬停项的索引
+ */
 function handleMouseEnter(index: number): void {
   emit('update:activeIndex', index);
 }
 </script>
 
 <style scoped lang="less">
-.variable-menu {
-  position: fixed;
-  z-index: 9999;
-  min-width: 280px;
-  max-width: 400px;
-  padding: 8px 0;
-  overflow: auto;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  box-shadow: 0 6px 16px rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%), 0 9px 28px 8px rgb(0 0 0 / 5%);
-}
-
-.variable-menu-header {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-secondary);
-
-  .header-icon {
-    width: 14px;
-    height: 14px;
-  }
-}
-
-.variable-menu-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.variable-menu-item {
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-
-  &:hover,
-  &.active {
-    background: var(--bg-secondary);
-  }
+.variable-header-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .variable-item-main {
@@ -161,6 +76,7 @@ function handleMouseEnter(index: number): void {
   gap: 8px;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
 }
 
 .variable-item-label {

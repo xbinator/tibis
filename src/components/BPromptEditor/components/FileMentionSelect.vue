@@ -1,36 +1,36 @@
+/** * @file FileMentionSelect.vue * @description 文件提及选择下拉菜单，基于 SelectDropdown 实现，使用内联定位模式 */
 <template>
-  <div v-if="visible && files.length" class="file-mention-menu" :style="menuStyle" data-testid="file-mention-menu" @mousedown.prevent>
-    <div class="file-mention-menu__list">
-      <div
-        v-for="(file, index) in files"
-        :key="file.id"
-        class="file-mention-menu__item"
-        :class="{ active: activeIndex === index }"
-        data-testid="file-mention-item"
-        @click="handleSelect(file)"
-        @mouseenter="handleMouseEnter(index)"
-      >
-        <Icon :icon="getFileIcon(file.ext)" class="file-mention-item__icon" />
-        <span class="file-mention-item__name">{{ file.name }}</span>
-        <span class="file-mention-item__path"> {{ file.path }} </span>
-      </div>
-    </div>
-  </div>
+  <SelectDropdown
+    :visible="visible && files.length > 0"
+    :items="files"
+    :active-index="activeIndex"
+    data-testid="file-mention-menu"
+    @select="handleSelect"
+    @update:active-index="handleMouseEnter"
+  >
+    <template #item="{ item }">
+      <Icon :icon="getFileIcon(item.ext)" class="file-mention-item__icon" />
+      <span class="file-mention-item__name">{{ item.name }}</span>
+      <span class="file-mention-item__path">{{ item.path }}</span>
+    </template>
+  </SelectDropdown>
 </template>
 
 <script setup lang="ts">
 import type { FileMentionOption } from '../types';
-import type { CSSProperties } from 'vue';
-import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { getFileIcon } from '../utils/fileIcon';
+import SelectDropdown from './_SelectDropdown.vue';
 
+/**
+ * FileMentionSelect 组件属性定义
+ */
 interface Props {
-  // 是否可见
+  /** 是否可见 */
   visible: boolean;
-  // 文件列表
+  /** 文件列表 */
   files: readonly FileMentionOption[];
-  // 当前选中项索引
+  /** 当前选中项索引 */
   activeIndex?: number;
 }
 
@@ -43,49 +43,24 @@ const emit = defineEmits<{
   (e: 'update:activeIndex', index: number): void;
 }>();
 
-const menuStyle = computed<CSSProperties>(() => ({
-  position: 'absolute',
-  bottom: 'calc(100% + 8px)',
-  left: '0px',
-  width: '100%',
-  zIndex: 10
-}));
-
+/**
+ * 处理文件选择
+ * @param file - 被选中的文件
+ */
 function handleSelect(file: FileMentionOption): void {
   emit('select', file);
 }
 
+/**
+ * 处理鼠标悬停，更新高亮索引
+ * @param index - 鼠标悬停项的索引
+ */
 function handleMouseEnter(index: number): void {
   emit('update:activeIndex', index);
 }
 </script>
 
 <style scoped lang="less">
-.file-mention-menu {
-  min-width: 0;
-  max-height: 320px;
-  overflow: auto;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
-}
-
-.file-mention-menu__list {
-  max-height: 280px;
-  overflow-y: auto;
-}
-
-.file-mention-menu__item {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-
-  &:hover,
-  &.active {
-    background: var(--bg-secondary);
-  }
-}
-
 .file-mention-item__icon {
   flex-shrink: 0;
   width: 18px;
