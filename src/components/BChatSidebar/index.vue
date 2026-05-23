@@ -114,7 +114,6 @@ import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
-import { native } from '@/shared/platform';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/ui/setting';
@@ -139,6 +138,7 @@ import { useImageUpload } from './hooks/useImageUpload';
 import { useInteractionState } from './hooks/useInteractionState';
 import { useModelSelection } from './hooks/useModelSelection';
 import { useSession } from './hooks/useSession';
+import { useSkillInit } from './hooks/useSkillInit';
 import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
 import { useUsagePanel } from './hooks/useUsagePanel';
 import { createFileRefChipResolver } from './utils/chipResolver';
@@ -721,8 +721,8 @@ function handleFileMentionSelect(file: FileMentionOption): void {
   console.log('File mention selected:', file.name);
 }
 
-/** skill:changed 事件取消函数 */
-let offSkillChanged: (() => void) | null = null;
+/** Skill 初始化 hook */
+useSkillInit();
 
 /** 组件挂载时初始化 */
 onMounted(async () => {
@@ -730,45 +730,12 @@ onMounted(async () => {
   initializeActiveSession();
   // 确保 filesStore 已加载最近文件列表
   await filesStore.ensureLoaded();
-
-  // 初始化 skill store：扫描 skill 目录
-  try {
-    const cwd = await native.getCwd();
-    await skillStore.init(cwd, {
-      readFile: (filePath) => native.readFile(filePath).then((r) => ({ content: r.content })),
-      readWorkspaceDirectory: (options) => native.readWorkspaceDirectory(options)
-    });
-
-    // 监听 skill 目录变化
-    const skillDir = `${cwd}/.agents/skills`;
-    await native.watchDirectory(skillDir, '**/SKILL.md');
-
-    // 监听 skill:changed 事件，增量更新
-    offSkillChanged = native.onSkillChanged(async (data) => {
-      if (data.type === 'unlink') {
-        if (!data.filePath.endsWith('/SKILL.md') && !data.filePath.endsWith('\\SKILL.md')) return;
-        skillStore.handleSkillChange('unlink', { filePath: data.filePath } as import('@/ai/skill/types').SkillDefinition);
-        return;
-      }
-      // change/add：重新解析文件
-      if (data.content) {
-        if (!data.filePath.endsWith('/SKILL.md') && !data.filePath.endsWith('\\SKILL.md')) return;
-        const { parseSkillMarkdown } = await import('@/ai/skill/parser');
-        const source = data.filePath.startsWith(`${cwd}/.agents/skills/`) ? 'project' : 'user';
-        const skill = parseSkillMarkdown(data.content, data.filePath, { source });
-        skillStore.handleSkillChange(data.type as 'change' | 'add', skill);
-      }
-    });
-  } catch (error: unknown) {
-    console.error('Skill initialization failed:', error);
-  }
 });
 
 /** 组件卸载时清理 */
 onUnmounted(() => {
   taskRuntime.dispose();
   confirmationController.dispose();
-  offSkillChanged?.();
 });
 </script>
 
