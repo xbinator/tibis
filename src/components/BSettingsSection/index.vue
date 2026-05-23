@@ -1,7 +1,10 @@
 <template>
-  <section :class="bem()">
+  <section :class="name">
     <div :class="bem('title')">{{ title }}</div>
-    <slot></slot>
+
+    <div :class="[bem('content'), contentClass]">
+      <slot></slot>
+    </div>
   </section>
 </template>
 
@@ -14,11 +17,15 @@ import { createNamespace } from '@/utils/namespace';
 interface Props {
   /** 分区标题 */
   title: string;
+  // 分区内容类名
+  contentClass?: string;
 }
 
-defineProps<Props>();
+withDefaults(defineProps<Props>(), {
+  contentClass: ''
+});
 
-const [, bem] = createNamespace('settings-section');
+const [name, bem] = createNamespace('settings-section');
 </script>
 
 <style scoped lang="less">

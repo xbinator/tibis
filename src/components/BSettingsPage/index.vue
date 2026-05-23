@@ -1,7 +1,10 @@
 <template>
   <div :class="bem()">
     <div :class="bem('header')">
-      <div :class="bem('title')">{{ title }}</div>
+      <div :class="bem('title')">
+        <slot name="title">{{ title }}</slot>
+      </div>
+
       <div :class="bem('header-extra')">
         <slot name="headerExtra"></slot>
       </div>
@@ -20,10 +23,12 @@ import { createNamespace } from '@/utils/namespace';
  */
 interface Props {
   /** 页面标题 */
-  title: string;
+  title?: string;
 }
 
-defineProps<Props>();
+withDefaults(defineProps<Props>(), {
+  title: ''
+});
 
 const [, bem] = createNamespace('settings-page');
 </script>
@@ -48,6 +53,8 @@ const [, bem] = createNamespace('settings-page');
 }
 
 .b-settings-page__title {
+  display: flex;
+  align-items: center;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
