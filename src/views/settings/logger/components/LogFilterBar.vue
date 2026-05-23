@@ -1,42 +1,29 @@
 <!--
   @file LogFilterBar.vue
-  @description 日志过滤工具栏，保留日志标题、记录总数、打开目录，以及关键词与日期筛选能力。
+  @description 日志过滤工具栏，提供日志级别、关键词与日期筛选能力。
 -->
 <template>
-  <div class="log-toolbar">
-    <div class="log-header">
-      <div class="log-header-title">
-        <h3>运行日志</h3>
-        <span class="log-header-count">共 {{ count }} 条记录</span>
-      </div>
-      <div class="log-header-actions">
-        <BButton icon="lucide:folder-open" type="text" @click="handleOpenLogFolder"> 打开目录 </BButton>
-      </div>
-    </div>
+  <div class="log-filter-bar">
+    <BSelect v-model:value="value.level" placeholder="日志级别" default-value="" :width="140" :options="levels" @change="handleLevelChange" />
 
-    <div class="log-filter-bar">
-      <BSelect v-model:value="value.level" placeholder="日志级别" default-value="" :width="140" :options="levels" @change="handleLevelChange" />
+    <AInput v-model:value="value.keyword" placeholder="搜索日志内容..." allow-clear class="log-filter-bar__input" @change="handleKeywordChange" />
 
-      <AInput v-model:value="value.keyword" placeholder="搜索日志内容..." allow-clear class="log-filter-bar__input" @change="handleKeywordChange" />
-
-      <ADatePicker
-        v-model:value="value.date"
-        input-read-only
-        placeholder="选择日期"
-        class="log-filter-bar__date"
-        value-format="YYYY-MM-DD"
-        :allow-clear="false"
-        :disabled-date="disabledDate"
-        @change="handleDateChange"
-      />
-    </div>
+    <ADatePicker
+      v-model:value="value.date"
+      input-read-only
+      placeholder="选择日期"
+      class="log-filter-bar__date"
+      value-format="YYYY-MM-DD"
+      :allow-clear="false"
+      :disabled-date="disabledDate"
+      @change="handleDateChange"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import type { Dayjs } from 'dayjs';
 import { computed } from 'vue';
-import { logger } from '@/shared/logger';
 import type { LogLevel } from '@/shared/logger/types';
 
 /**
@@ -54,8 +41,6 @@ export interface LogFilterBarDataItem {
  * 组件属性定义。
  */
 interface Props {
-  /** 当前页面已加载的日志条数。 */
-  count?: number;
   /** 当前筛选栏数据对象。 */
   value: LogFilterBarDataItem;
   /** 当前存在日志数据的日期集合。 */
@@ -63,7 +48,6 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  count: 0,
   availableDates: () => []
 });
 
@@ -131,58 +115,13 @@ function handleDateChange(date: string | Dayjs | undefined): void {
 function disabledDate(current: Dayjs): boolean {
   return !availableDateSet.value.has(current.format('YYYY-MM-DD'));
 }
-
-/**
- * 打开本地日志目录。
- */
-function handleOpenLogFolder(): void {
-  logger.openLogFolder();
-}
 </script>
 
 <style scoped lang="less">
-.log-toolbar {
-  padding: 0 20px;
-}
-
-.log-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 52px;
-}
-
-.log-header-title {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-}
-
-.log-header-title h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.log-header-count {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.log-header-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
 .log-filter-bar {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding: 16px;
-  background: var(--bg-elevated);
-  border-radius: 8px;
 }
 
 .log-filter-bar__date {

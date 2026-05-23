@@ -4,32 +4,39 @@
   首次加载在 onMounted 中触发初始日志拉取。
 -->
 <template>
-  <div class="logger-view">
-    <LogFilterBar v-model:value="dataItem" :count="entries.length" :available-dates="availableDates" @change="handleFilterChange" />
-    <div class="logger-view__content">
-      <BScrollbar inset="auto" @scroll="handleScroll">
-        <div v-if="entries.length === 0 && !loading" class="log-empty">
-          <div class="log-empty__text">暂无日志数据</div>
-          <div class="log-empty__subtext">{{ emptyStateSubtext }}</div>
-        </div>
+  <BSettingsPage>
+    <template #title>
+      <div>日志</div>
+      <span class="log-count">共 {{ entries.length }} 条记录</span>
+    </template>
 
-        <div v-else class="log-timeline">
-          <LogTimeline
-            v-for="(entry, index) in entries"
-            :key="`${entry.timestamp}-${entry.scope}-${index}`"
-            :entry="entry"
-            :is-first="index === 0"
-            :is-last="index === entries.length - 1"
-            :is-only="entries.length === 1"
-          />
-        </div>
+    <template #headerExtra>
+      <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
+      <BButton icon="lucide:folder-open" type="text" size="small" @click="handleOpenLogFolder">打开目录</BButton>
+    </template>
 
-        <div v-if="loading" class="log-loading">
-          <ASpin />
-        </div>
-      </BScrollbar>
-    </div>
-  </div>
+    <BScrollbar inset="auto" @scroll="handleScroll">
+      <div v-if="entries.length === 0 && !loading" class="log-empty">
+        <div class="log-empty__text">暂无日志数据</div>
+        <div class="log-empty__subtext">{{ emptyStateSubtext }}</div>
+      </div>
+
+      <div v-else class="log-timeline">
+        <LogTimeline
+          v-for="(entry, index) in entries"
+          :key="`${entry.timestamp}-${entry.scope}-${index}`"
+          :entry="entry"
+          :is-first="index === 0"
+          :is-last="index === entries.length - 1"
+          :is-only="entries.length === 1"
+        />
+      </div>
+
+      <div v-if="loading" class="log-loading">
+        <ASpin />
+      </div>
+    </BScrollbar>
+  </BSettingsPage>
 </template>
 
 <script setup lang="ts">
@@ -163,7 +170,6 @@ function onLoadMore() {
 
 /**
  * 处理筛选条件变更并重置分页状态。
- * @param nextDataItem - 最新的筛选栏数据对象。
  */
 function handleFilterChange() {
   offset.value = 0;
@@ -185,6 +191,13 @@ function handleScroll(event: Event) {
   }
 }
 
+/**
+ * 打开本地日志目录。
+ */
+function handleOpenLogFolder(): void {
+  logger.openLogFolder();
+}
+
 onMounted(() => {
   loadAvailableDates();
   loadLogs(true);
@@ -192,18 +205,11 @@ onMounted(() => {
 </script>
 
 <style scoped lang="less">
-.logger-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-.logger-view__content {
-  flex: 1;
-  height: 0;
-  padding: 24px;
+.log-count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-tertiary);
 }
 
 .log-timeline {
