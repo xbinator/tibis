@@ -125,6 +125,7 @@ export function useSlashCommand(
     }
 
     if (suppressSlashSync.value) {
+      suppressSlashSync.value = false;
       closeSlashCommandMenu();
       return;
     }

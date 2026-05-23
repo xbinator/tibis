@@ -131,6 +131,7 @@ export function useFileMention(
     }
 
     if (suppressMentionSync.value) {
+      suppressMentionSync.value = false;
       closeMentionMenu();
       return;
     }
