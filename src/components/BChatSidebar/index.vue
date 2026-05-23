@@ -29,6 +29,7 @@
           ref="conversationRef"
           v-model:messages="messages"
           :loading="loading"
+          :disabled="!loading"
           :on-load-history="handleLoadHistory"
           @edit="handleChatEdit"
           @regenerate="handleChatRegenerate"

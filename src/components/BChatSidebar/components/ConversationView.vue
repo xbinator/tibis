@@ -7,6 +7,7 @@
           v-for="item in messages"
           :key="item.id"
           :message="item"
+          :disabled="disabled"
           @edit="$emit('edit', item)"
           @regenerate="$emit('regenerate', item)"
           @confirmation-action="(confirmationId, action) => $emit('confirmation-action', confirmationId, action)"
@@ -50,11 +51,14 @@ interface Props {
   loading?: boolean;
   // 加载历史记录的回调函数
   onLoadHistory?: () => Promise<void> | void;
+  // 会话已结束时禁用交互（如 AskUserChoiceCard）
+  disabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
-  onLoadHistory: undefined
+  onLoadHistory: undefined,
+  disabled: false
 });
 
 defineEmits<{

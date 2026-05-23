@@ -5,13 +5,13 @@
       <div class="choice-card__title">{{ question.question }}</div>
 
       <div class="choice-card__options">
-        <label v-for="option in question.options" :key="option.value" class="choice-card__option">
+        <label v-for="option in question.options" :key="option.value" class="choice-card__option" :class="{ 'choice-card__option--disabled': disabled }">
           <div class="choice-card__option-input">
             <input
               :type="inputType"
               :value="option.value"
               :checked="selectedValues.includes(option.value)"
-              :disabled="isOptionDisabled(option.value)"
+              :disabled="disabled || isOptionDisabled(option.value)"
               @change="handleOptionChange(option.value, ($event.target as HTMLInputElement).checked)"
             />
           </div>
@@ -22,7 +22,7 @@
         </label>
       </div>
 
-      <div class="choice-card__footer">
+      <div v-if="!disabled" class="choice-card__footer">
         <BButton size="small" :disabled="!canSubmit" @click="handleNext">下一步</BButton>
       </div>
     </div>
@@ -31,9 +31,9 @@
     <div v-show="currentStep === 1" class="choice-card__step">
       <div class="choice-card__title">是否有更多的补充信息需要提供？（可选）</div>
 
-      <input v-model="otherText" class="choice-card__other" type="text" placeholder="请输入补充信息..." />
+      <input v-model="otherText" class="choice-card__other" type="text" placeholder="请输入补充信息..." :disabled="disabled" />
 
-      <div class="choice-card__footer">
+      <div v-if="!disabled" class="choice-card__footer">
         <BButton size="small" type="secondary" @click="handlePrev">上一步</BButton>
         <BButton size="small" @click="handleSubmit">提交</BButton>
       </div>
@@ -52,10 +52,15 @@ import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type { AIUserChoiceAnswerData } from 'types/chat';
 import { computed, ref } from 'vue';
 
-const props = defineProps<{
-  /** 等待用户回答的问题 */
-  question: AIAwaitingUserChoiceQuestion;
-}>();
+const props = withDefaults(
+  defineProps<{
+    /** 等待用户回答的问题 */
+    question: AIAwaitingUserChoiceQuestion;
+    /** 会话已结束时禁用交互 */
+    disabled?: boolean;
+  }>(),
+  { disabled: false }
+);
 
 const emit = defineEmits<{
   /** 用户提交选择答案 */

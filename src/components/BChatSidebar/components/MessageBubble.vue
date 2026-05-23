@@ -46,6 +46,7 @@
           <AskUserChoiceCard
             v-else-if="!isCompressionMessage && isAwaitingUserChoicePart(item)"
             :question="item.result.data"
+            :disabled="disabled"
             @submit-choice="$emit('user-choice-submit', $event)"
           />
 
@@ -111,7 +112,11 @@ const { clipboard } = useClipboard();
 
 const [name, bem] = createNamespace('', 'message-bubble');
 
-const props = defineProps<{ message: Message }>();
+const props = defineProps<{
+  message: Message;
+  /** 会话已结束时禁用交互（如 AskUserChoiceCard） */
+  disabled?: boolean;
+}>();
 
 defineEmits<{
   (e: 'edit', message: Message): void;
