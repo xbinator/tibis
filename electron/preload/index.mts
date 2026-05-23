@@ -119,6 +119,10 @@ const electronAPI: ElectronAPI = {
 
   getRelativePath: (filePath: string) => ipcRenderer.invoke('shell:getRelativePath', filePath),
 
+  getCwd: () => ipcRenderer.invoke('shell:getCwd') as Promise<string>,
+
+  getHomeDir: () => ipcRenderer.invoke('shell:getHomeDir') as Promise<string>,
+
   watchFile: (filePath: string) => ipcRenderer.invoke('fs:watchFile', filePath),
 
   unwatchFile: (filePath: string) => ipcRenderer.invoke('fs:unwatchFile', filePath),
@@ -132,6 +136,20 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('file:changed', handler);
     return () => {
       ipcRenderer.removeListener('file:changed', handler);
+    };
+  },
+
+  watchDirectory: (dirPath: string, globPattern?: string) => ipcRenderer.invoke('fs:watchDirectory', dirPath, globPattern),
+
+  unwatchDirectory: (dirPath: string, globPattern?: string) => ipcRenderer.invoke('fs:unwatchDirectory', dirPath, globPattern),
+
+  onSkillChanged: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { type: string; filePath: string; content?: string }) => {
+      callback(data);
+    };
+    ipcRenderer.on('skill:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('skill:changed', handler);
     };
   },
 

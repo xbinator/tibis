@@ -79,8 +79,8 @@ export interface AIToolParameterSchema {
 export interface AIToolDefinition {
   /** 工具名称。 */
   name: string;
-  /** 工具描述。 */
-  description: string;
+  /** 工具描述，支持静态字符串或动态函数（用于 skill 工具按需生成描述）。 */
+  description: string | (() => string);
   /** 工具来源。 */
   source: AIToolSource;
   /** 风险等级。 */

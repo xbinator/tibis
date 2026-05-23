@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { SkillDefinition } from '@/ai/skill/types';
 import {
   ADD_MCP_SERVER_TOOL_NAME,
   createBuiltinTools,
@@ -8,6 +9,7 @@ import {
   READ_DIRECTORY_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
+  SKILL_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME
 } from '@/ai/tools/builtin';
@@ -69,5 +71,51 @@ describe('builtin tool exports', () => {
     expect(UPDATE_MCP_SERVER_TOOL_NAME).toBe('update_mcp_server');
     expect(REMOVE_MCP_SERVER_TOOL_NAME).toBe('remove_mcp_server');
     expect(REFRESH_MCP_DISCOVERY_TOOL_NAME).toBe('refresh_mcp_discovery');
+  });
+
+  it('exports skill tool name', () => {
+    expect(SKILL_TOOL_NAME).toBe('skill');
+  });
+});
+
+describe('createBuiltinTools with skill tool', () => {
+  /** 创建 mock skill store */
+  function createMockSkillStore(initialized: boolean, skills: SkillDefinition[] = []) {
+    return {
+      getEnabledSkills: vi.fn(() => skills),
+      getSkillByName: vi.fn((name: string) => skills.find((s) => s.name === name)),
+      initialized
+    };
+  }
+
+  it('includes skill tool when skillStore is provided and initialized', () => {
+    const mockSkillStore = createMockSkillStore(true);
+    const tools = createBuiltinTools({
+      confirm: { confirm: async () => true },
+      skillStore: mockSkillStore
+    });
+
+    const skillTool = tools.find((t) => t.definition.name === 'skill');
+    expect(skillTool).toBeDefined();
+  });
+
+  it('excludes skill tool when skillStore is not provided', () => {
+    const tools = createBuiltinTools({
+      confirm: { confirm: async () => true }
+    });
+
+    const skillTool = tools.find((t) => t.definition.name === 'skill');
+    expect(skillTool).toBeUndefined();
+  });
+
+  it('excludes skill tool when skillStore is not initialized', () => {
+    const mockSkillStore = createMockSkillStore(false);
+    const tools = createBuiltinTools({
+      confirm: { confirm: async () => true },
+      skillStore: mockSkillStore
+    });
+
+    const skillTool = tools.find((t) => t.definition.name === 'skill');
+    expect(skillTool).toBeUndefined();
   });
 });

@@ -89,6 +89,14 @@ export class ElectronNative implements Native {
     return getElectronAPI().getRelativePath(filePath);
   }
 
+  async getCwd(): Promise<string> {
+    return getElectronAPI().getCwd();
+  }
+
+  async getHomeDir(): Promise<string> {
+    return getElectronAPI().getHomeDir();
+  }
+
   async watchFile(filePath: string): Promise<void> {
     await getElectronAPI().watchFile(filePath);
   }
@@ -103,6 +111,18 @@ export class ElectronNative implements Native {
 
   onFileChanged(callback: (data: FileChangeEvent) => void): () => void {
     return getElectronAPI().onFileChanged(callback);
+  }
+
+  async watchDirectory(dirPath: string, globPattern?: string): Promise<void> {
+    await getElectronAPI().watchDirectory(dirPath, globPattern);
+  }
+
+  async unwatchDirectory(dirPath: string, globPattern?: string): Promise<void> {
+    await getElectronAPI().unwatchDirectory(dirPath, globPattern);
+  }
+
+  onSkillChanged(callback: (data: { type: string; filePath: string; content?: string }) => void): () => void {
+    return getElectronAPI().onSkillChanged(callback);
   }
 
   async setWindowTitle(title: string): Promise<void> {

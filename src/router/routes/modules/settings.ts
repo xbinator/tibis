@@ -59,6 +59,12 @@ const routes: AppRouteRecordRaw[] = [
             name: 'mcp-tools-settings',
             component: () => import('@/views/settings/tools/mcp/index.vue'),
             meta: { title: 'MCP' }
+          },
+          {
+            path: 'skill',
+            name: 'skill-tools-settings',
+            component: () => import('@/views/settings/tools/skill/index.vue'),
+            meta: { title: 'Skills' }
           }
         ]
       },

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import os from 'node:os';
 import { ipcMain, shell } from 'electron';
 
 export function registerShellHandlers(): void {
@@ -17,5 +18,13 @@ export function registerShellHandlers(): void {
   ipcMain.handle('shell:getRelativePath', async (_event, filePath: string) => {
     const relativePath = path.relative(process.cwd(), filePath);
     return relativePath || '.';
+  });
+
+  ipcMain.handle('shell:getCwd', async () => {
+    return process.cwd();
+  });
+
+  ipcMain.handle('shell:getHomeDir', async () => {
+    return os.homedir();
   });
 }

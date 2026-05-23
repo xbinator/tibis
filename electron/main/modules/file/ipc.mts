@@ -30,8 +30,7 @@ export async function getFilePathStatus(targetPath: string): Promise<FilePathSta
       isFile: stats.isFile(),
       isDirectory: stats.isDirectory()
     };
-  }
-  catch {
+  } catch {
     return {
       exists: false,
       isFile: false,
@@ -70,5 +69,13 @@ export function registerFileHandlers(): void {
 
   ipcMain.handle('fs:unwatchAll', async () => {
     await fileWatchService.unwatchAll();
+  });
+
+  ipcMain.handle('fs:watchDirectory', async (_event, dirPath: string, globPattern?: string) => {
+    await fileWatchService.watchDirectory(dirPath, globPattern);
+  });
+
+  ipcMain.handle('fs:unwatchDirectory', async (_event, dirPath: string, globPattern?: string) => {
+    await fileWatchService.unwatchDirectory(dirPath, globPattern);
   });
 }

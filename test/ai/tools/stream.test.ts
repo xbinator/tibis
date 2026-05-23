@@ -183,3 +183,45 @@ describe('AI tool stream helpers', () => {
     ]);
   });
 });
+
+describe('toTransportTools with dynamic description', () => {
+  it('resolves function description to string', () => {
+    let counter = 0;
+    const dynamicTool: AIToolExecutor = {
+      definition: {
+        name: 'dynamic',
+        description: () => `Dynamic description ${++counter}`,
+        source: 'builtin',
+        riskLevel: 'read',
+        parameters: { type: 'object', properties: {}, additionalProperties: false }
+      },
+      async execute() {
+        return createToolSuccessResult('dynamic', {});
+      }
+    };
+
+    const result = toTransportTools([dynamicTool]);
+    expect(result[0].description).toBe('Dynamic description 1');
+    // 再次调用应重新求值
+    const result2 = toTransportTools([dynamicTool]);
+    expect(result2[0].description).toBe('Dynamic description 2');
+  });
+
+  it('handles static string description unchanged', () => {
+    const staticTool: AIToolExecutor = {
+      definition: {
+        name: 'static',
+        description: 'Static description',
+        source: 'builtin',
+        riskLevel: 'read',
+        parameters: { type: 'object', properties: {}, additionalProperties: false }
+      },
+      async execute() {
+        return createToolSuccessResult('static', {});
+      }
+    };
+
+    const result = toTransportTools([staticTool]);
+    expect(result[0].description).toBe('Static description');
+  });
+});

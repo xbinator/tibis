@@ -59,7 +59,7 @@ function attachToolCallIdToAwaitingResult(result: AIToolExecutionResult, toolCal
 export function toTransportTools(tools: AIToolExecutor[]): AITransportTool[] {
   return tools.map((item) => ({
     name: item.definition.name,
-    description: item.definition.description,
+    description: typeof item.definition.description === 'function' ? item.definition.description() : item.definition.description,
     parameters: item.definition.parameters
   }));
 }

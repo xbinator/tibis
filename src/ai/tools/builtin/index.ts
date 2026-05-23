@@ -21,6 +21,7 @@ import {
   UPDATE_MCP_SERVER_TOOL_NAME
 } from './MCPSettingsTool';
 import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
+import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
 
 // 重新导出工具名称
 export { ASK_USER_QUESTION_TOOL_NAME } from './AskUserQuestionTool';
@@ -38,6 +39,7 @@ export {
   UPDATE_MCP_SERVER_TOOL_NAME
 } from './MCPSettingsTool';
 export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
+export { SKILL_TOOL_NAME } from './SkillTool';
 
 /**
  * 由主进程 AI SDK 直接执行的远端工具名称。
@@ -65,7 +67,8 @@ export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   READ_DIRECTORY_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
-  QUERY_LOGS_TOOL_NAME
+  QUERY_LOGS_TOOL_NAME,
+  SKILL_TOOL_NAME
 ] as const;
 
 /**
@@ -115,6 +118,8 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions {
   getPendingQuestion?: () => PendingQuestionSnapshot | null;
   /** 创建用户选择问题 ID */
   createQuestionId?: () => string;
+  /** Skill store 实例，提供且 initialized 时注册 skill 工具 */
+  skillStore?: SkillStoreLike;
 }
 
 /**
@@ -189,5 +194,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   ];
   const writableTools = allDefaultWritableTools.filter((tool) => isDefaultBuiltinWritableToolName(tool.definition.name));
 
-  return [...readonlyTools, ...writableTools];
+  // Skill 工具：初始化完成后注册，description 动态反映可用 skill
+  const skillTool = options.skillStore?.initialized ? createSkillTool(options.skillStore) : null;
+
+  return [...readonlyTools, ...writableTools, ...(skillTool ? [skillTool] : [])];
 }

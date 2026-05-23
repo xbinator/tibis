@@ -126,6 +126,10 @@ export interface Native {
 
   getRelativePath(path: string): Promise<string>;
 
+  getCwd(): Promise<string>;
+
+  getHomeDir(): Promise<string>;
+
   watchFile(path: string): Promise<void>;
 
   unwatchFile(path: string): Promise<void>;
@@ -133,6 +137,12 @@ export interface Native {
   unwatchAll(): Promise<void>;
 
   onFileChanged(callback: (data: FileChangeEvent) => void): () => void;
+
+  watchDirectory(dirPath: string, globPattern?: string): Promise<void>;
+
+  unwatchDirectory(dirPath: string, globPattern?: string): Promise<void>;
+
+  onSkillChanged(callback: (data: { type: string; filePath: string; content?: string }) => void): () => void;
 
   setWindowTitle(title: string): Promise<void>;
 

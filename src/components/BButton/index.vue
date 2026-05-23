@@ -79,7 +79,7 @@ export default defineComponent({
       const hasIcon = slots.icon || props.icon;
 
       return (
-        <div
+        <button
           class={bem([
             props.type,
             props.size,
@@ -102,7 +102,7 @@ export default defineComponent({
           )}
           {props.icon && <Icon class={bem('icon')} icon={props.icon} />}
           {slots.default?.()}
-        </div>
+        </button>
       );
     }
 

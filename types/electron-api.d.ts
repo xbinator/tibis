@@ -290,10 +290,18 @@ export interface ElectronAPI {
   showItemInFolder: (filePath: string) => Promise<void>;
   getRelativePath: (filePath: string) => Promise<string>;
 
+  getCwd: () => Promise<string>;
+
+  getHomeDir: () => Promise<string>;
+
   watchFile: (filePath: string) => Promise<void>;
   unwatchFile: (filePath: string) => Promise<void>;
   unwatchAll: () => Promise<void>;
   onFileChanged: (callback: (data: FileChangeEvent) => void) => () => void;
+
+  watchDirectory: (dirPath: string, globPattern?: string) => Promise<void>;
+  unwatchDirectory: (dirPath: string, globPattern?: string) => Promise<void>;
+  onSkillChanged: (callback: (data: { type: string; filePath: string; content?: string }) => void) => () => void;
 
   /** 监听系统通过"打开方式"传入的文件路径 */
   onOpenFile: (callback: (filePath: string) => void) => () => void;

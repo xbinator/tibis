@@ -1,0 +1,154 @@
+/**
+ * @file parser.ts
+ * @description SKILL.md 解析器，提取 frontmatter 元数据和 body 内容。
+ */
+import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillSource } from './types';
+
+/** 解析选项。 */
+interface ParseOptions {
+  /** skill 来源，默认 'project' */
+  source?: SkillSource;
+  /** 内容最大字符数，默认 10000 */
+  maxContentLength?: number;
+}
+
+/**
+ * 从 Markdown 文本中提取 YAML frontmatter。
+ * @param markdown - 完整 Markdown 文本
+ * @returns frontmatter 文本和 body 文本，无 frontmatter 时返回 null
+ */
+function extractFrontmatter(markdown: string): { frontmatter: string; body: string } | null {
+  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) {
+    return null;
+  }
+  return { frontmatter: match[1], body: match[2] };
+}
+
+/**
+ * 解析 YAML frontmatter 文本为键值对。
+ * 仅支持简单的 key: value 格式，不处理嵌套。
+ * @param frontmatter - frontmatter 文本
+ * @returns 键值对映射
+ */
+function parseFrontmatter(frontmatter: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const line of frontmatter.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+    const colonIndex = trimmed.indexOf(':');
+    if (colonIndex === -1) {
+      continue;
+    }
+    const key = trimmed.slice(0, colonIndex).trim();
+    const value = trimmed.slice(colonIndex + 1).trim();
+    result[key] = value;
+  }
+  return result;
+}
+
+/**
+ * 截断超长内容并附加提示。
+ * @param content - 原始内容
+ * @param maxLength - 最大字符数
+ * @param filePath - 文件路径，用于截断提示
+ * @returns 处理后的内容
+ */
+function truncateContent(content: string, maxLength: number, filePath: string): string {
+  if (content.length <= maxLength) {
+    return content;
+  }
+  const truncationNotice = `\n[Content truncated at ${maxLength} chars, full content at: ${filePath}]`;
+  return content.slice(0, maxLength - truncationNotice.length) + truncationNotice;
+}
+
+/**
+ * 获取文件所在目录，兼容 POSIX 与 Windows 路径。
+ * @param filePath - 文件路径
+ * @returns 文件所在目录
+ */
+function dirname(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const index = normalized.lastIndexOf('/');
+  if (index <= 0) {
+    return index === 0 ? '/' : '.';
+  }
+  return filePath.slice(0, index);
+}
+
+/**
+ * 解析 SKILL.md 文件内容为 SkillDefinition。
+ * @param markdown - SKILL.md 文件内容
+ * @param filePath - SKILL.md 文件绝对路径
+ * @param options - 解析选项
+ * @returns 解析结果（含错误信息时 parseError 不为空）
+ */
+export function parseSkillMarkdown(markdown: string, filePath: string, options: ParseOptions = {}): SkillDefinition {
+  const source: SkillSource = options.source ?? 'project';
+  const maxContentLength = options.maxContentLength ?? DEFAULT_SKILL_MAX_CONTENT_LENGTH;
+  const dirPath = dirname(filePath);
+  const parsedAt = Date.now();
+
+  const extracted = extractFrontmatter(markdown);
+  if (!extracted) {
+    return {
+      name: '',
+      description: '',
+      content: '',
+      filePath,
+      dirPath,
+      source,
+      enabled: true,
+      parsedAt,
+      parseError: 'Missing YAML frontmatter. SKILL.md must start with --- delimited frontmatter containing name and description.'
+    };
+  }
+
+  const fm = parseFrontmatter(extracted.frontmatter);
+  const name = fm.name?.trim();
+  const description = fm.description?.trim();
+
+  if (!name) {
+    return {
+      name: '',
+      description: description ?? '',
+      content: '',
+      filePath,
+      dirPath,
+      source,
+      enabled: true,
+      parsedAt,
+      parseError: 'Missing required frontmatter field: name'
+    };
+  }
+
+  if (!description) {
+    return {
+      name,
+      description: '',
+      content: '',
+      filePath,
+      dirPath,
+      source,
+      enabled: true,
+      parsedAt,
+      parseError: 'Missing required frontmatter field: description'
+    };
+  }
+
+  const rawContent = extracted.body.trim();
+  const content = truncateContent(rawContent, maxContentLength, filePath);
+
+  return {
+    name,
+    description,
+    content,
+    filePath,
+    dirPath,
+    source,
+    enabled: true,
+    parsedAt
+  };
+}

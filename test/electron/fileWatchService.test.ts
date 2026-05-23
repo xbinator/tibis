@@ -66,4 +66,11 @@ describe('fileWatchService', () => {
     expect(watchersByPath.get('/tmp/a.md')?.close).toHaveBeenCalledTimes(1);
     expect(watchersByPath.get('/tmp/b.md')?.close).not.toHaveBeenCalled();
   });
+
+  it('matches only SKILL.md when directory watcher uses the skill pattern', async () => {
+    const { isDirectoryWatchMatch } = await import('../../electron/main/modules/file/service.mjs');
+
+    expect(isDirectoryWatchMatch('/workspace/.agents/skills/react/SKILL.md', '**/SKILL.md')).toBe(true);
+    expect(isDirectoryWatchMatch('/workspace/.agents/skills/react/templates/example.md', '**/SKILL.md')).toBe(false);
+  });
 });

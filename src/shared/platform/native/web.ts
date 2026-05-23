@@ -107,6 +107,14 @@ export class WebNative implements Native {
     return filePath;
   }
 
+  async getCwd(): Promise<string> {
+    return '/';
+  }
+
+  async getHomeDir(): Promise<string> {
+    return '/';
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async watchFile(_path: string): Promise<void> {
     // web 端不支持文件监听
@@ -123,6 +131,23 @@ export class WebNative implements Native {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onFileChanged(_callback: (data: FileChangeEvent) => void): () => void {
+    return () => {
+      // web 端不需要清理
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async watchDirectory(_dirPath: string, _globPattern?: string): Promise<void> {
+    // web 端不支持目录监听
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async unwatchDirectory(_dirPath: string, _globPattern?: string): Promise<void> {
+    // web 端不支持目录监听
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onSkillChanged(_callback: (data: { type: string; filePath: string; content?: string }) => void): () => void {
     return () => {
       // web 端不需要清理
     };
