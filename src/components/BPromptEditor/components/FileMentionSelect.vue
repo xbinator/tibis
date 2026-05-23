@@ -10,6 +10,7 @@
         @click="handleSelect(file)"
         @mouseenter="handleMouseEnter(index)"
       >
+        <Icon :icon="getFileIcon(file.ext)" class="file-mention-item__icon" />
         <span class="file-mention-item__name">{{ file.name }}</span>
         <span class="file-mention-item__path"> {{ file.path }} </span>
       </div>
@@ -21,6 +22,8 @@
 import type { FileMentionOption } from '../types';
 import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
+import { Icon } from '@iconify/vue';
+import { getFileIcon } from '../utils/fileIcon';
 
 interface Props {
   // 是否可见
@@ -83,10 +86,11 @@ function handleMouseEnter(index: number): void {
   }
 }
 
-.file-mention-item__content {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.file-mention-item__icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
 }
 
 .file-mention-item__name {
