@@ -205,6 +205,30 @@ const copyLabel = computed(() => copyState.value);
 
 // ─── Mermaid 渲染 ────────────────────────────────────────────────────────────
 
+/**
+ * 等待 mermaidPreviewRef 挂载到 DOM。
+ * BSuspense 使用 v-if 控制预览区域的渲染，可能导致 ref 在 onMounted 时尚未就绪。
+ * 通过递归等待（nextTick + requestAnimationFrame）轮询 ref 挂载，
+ * 最多等待 MAX_WAIT_REF_ROUNDS 轮，覆盖微任务和浏览器布局两个时序。
+ * @param renderIndex - 当前渲染序号，用于竞态检测
+ * @param round - 当前轮询轮次
+ */
+async function waitForMermaidPreviewRef(renderIndex: number, round = 0): Promise<void> {
+  const MAX_WAIT_REF_ROUNDS = 10;
+
+  // ref 已就绪或已被新渲染取代，停止等待
+  if (mermaidPreviewRef.value || renderIndex !== mermaidRenderIndex || round >= MAX_WAIT_REF_ROUNDS) return;
+
+  // 先等待 Vue 响应式更新完成
+  await nextTick();
+  // 再等待浏览器布局帧，确保 v-if 触发的 DOM 挂载已完成
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+
+  await waitForMermaidPreviewRef(renderIndex, round + 1);
+}
+
 async function renderMermaid(): Promise<void> {
   // 提前退出：预览不可见时无需渲染
   if (!isPreviewVisible.value) return;
@@ -222,12 +246,13 @@ async function renderMermaid(): Promise<void> {
   const renderIndex = ++mermaidRenderIndex;
 
   renderError.value = null;
-  await nextTick();
+
+  // 等待 mermaidPreviewRef 挂载：BSuspense 的 v-if 可能导致 ref 延迟就绪
+  await waitForMermaidPreviewRef(renderIndex);
+  if (renderIndex !== mermaidRenderIndex) return;
 
   // 提前退出：等待期间状态已变化
-  if (!mermaidPreviewRef.value) return;
   if (!isPreviewVisible.value) return;
-  if (renderIndex !== mermaidRenderIndex) return;
 
   try {
     const mermaidInstance = await initMermaid();
