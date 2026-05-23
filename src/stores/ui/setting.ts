@@ -33,7 +33,7 @@ interface SettingState extends PersistedSettingState {
 const DEFAULT_SETTINGS: PersistedSettingState = {
   chatSidebarActiveSessionId: null,
   providerSidebarCollapsed: false,
-  settingsSidebarCollapsed: false,
+  settingsSidebarCollapsed: true,
   theme: 'system',
   sidebarVisible: false,
   sidebarWidth: 340
