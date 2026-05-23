@@ -80,6 +80,32 @@ describe('scanSkills', () => {
     expect(skills).toEqual([]);
   });
 
+  it('ignores non-standard skill directories because skill discovery is unified', async () => {
+    const mockAPI = createMockElectronAPI(
+      {
+        '/workspace/.agents/skills/shared/SKILL.md': '---\nname: shared\ndescription: Project skill.\n---\n\n# Project',
+        '/Users/test/skills/shared/SKILL.md': '---\nname: shared\ndescription: User skill.\n---\n\n# User'
+      },
+      {
+        '/workspace/.agents/skills': [{ name: 'shared', type: 'directory' as const }],
+        '/workspace/.agents/skills/shared': [{ name: 'SKILL.md', type: 'file' as const }],
+        '/Users/test/skills': [{ name: 'shared', type: 'directory' as const }],
+        '/Users/test/skills/shared': [{ name: 'SKILL.md', type: 'file' as const }]
+      }
+    );
+
+    const skills = await scanSkills(
+      {
+        workspaceRoot: '/workspace'
+      },
+      mockAPI
+    );
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].description).toBe('Project skill.');
+    expect(skills[0].source).toBe('project');
+  });
+
   it('skips skills with parse errors but includes them with parseError field', async () => {
     const mockAPI = createMockElectronAPI(
       {

@@ -59,7 +59,7 @@ async function scanDirectory(dirPath: string, source: SkillDefinition['source'],
 
 /**
  * 扫描所有来源的 Skill。
- * 扫描顺序：项目目录 → 用户配置路径（用户路径优先级更高，同名覆盖项目）。
+ * 扫描当前工作区统一的 Skill 目录。
  * @param config - 扫描配置
  * @param api - electronAPI 实例
  * @returns 去重后的 SkillDefinition 数组

@@ -17,8 +17,8 @@ describe('Skill types', () => {
   });
 
   it('SkillSource has expected variants', () => {
-    const sources: SkillSource[] = ['builtin', 'project', 'user'];
-    expect(sources).toHaveLength(3);
+    const sources: SkillSource[] = ['builtin', 'project'];
+    expect(sources).toHaveLength(2);
   });
 
   it('SkillDefinition has required fields', () => {
@@ -38,8 +38,7 @@ describe('Skill types', () => {
 
   it('SkillScanConfig has required fields', () => {
     const config: SkillScanConfig = {
-      workspaceRoot: '/workspace',
-      customPaths: ['~/skills']
+      workspaceRoot: '/workspace'
     };
     expect(config.maxContentLength).toBeUndefined();
   });

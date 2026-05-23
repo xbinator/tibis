@@ -292,8 +292,6 @@ export interface ElectronAPI {
 
   getCwd: () => Promise<string>;
 
-  getHomeDir: () => Promise<string>;
-
   watchFile: (filePath: string) => Promise<void>;
   unwatchFile: (filePath: string) => Promise<void>;
   unwatchAll: () => Promise<void>;

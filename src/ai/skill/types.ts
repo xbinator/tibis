@@ -4,7 +4,7 @@
  */
 
 /** Skill 来源类型。 */
-export type SkillSource = 'builtin' | 'project' | 'user';
+export type SkillSource = 'builtin' | 'project';
 
 /** Skill 目录变更事件类型。 */
 export type SkillChangeEventType = 'change' | 'add' | 'unlink';
@@ -21,7 +21,7 @@ export interface SkillDefinition {
   filePath: string;
   /** skill 目录绝对路径 */
   dirPath: string;
-  /** 来源：builtin（内置）| project（项目目录）| user（用户配置路径） */
+  /** 来源：builtin（内置）| project（项目目录） */
   source: SkillSource;
   /** 是否启用 */
   enabled: boolean;

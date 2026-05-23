@@ -1,5 +1,4 @@
 import path from 'node:path';
-import os from 'node:os';
 import { ipcMain, shell } from 'electron';
 
 export function registerShellHandlers(): void {
@@ -24,7 +23,4 @@ export function registerShellHandlers(): void {
     return process.cwd();
   });
 
-  ipcMain.handle('shell:getHomeDir', async () => {
-    return os.homedir();
-  });
 }

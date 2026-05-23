@@ -121,8 +121,6 @@ const electronAPI: ElectronAPI = {
 
   getCwd: () => ipcRenderer.invoke('shell:getCwd') as Promise<string>,
 
-  getHomeDir: () => ipcRenderer.invoke('shell:getHomeDir') as Promise<string>,
-
   watchFile: (filePath: string) => ipcRenderer.invoke('fs:watchFile', filePath),
 
   unwatchFile: (filePath: string) => ipcRenderer.invoke('fs:unwatchFile', filePath),
