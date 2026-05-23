@@ -59,8 +59,7 @@ When building React components, follow these guidelines:
 
 ### 发现来源
 
-1. **项目目录**：仅扫描当前工作区根目录下的 `.agents/skills/*/SKILL.md`
-2. **用户配置路径**：设置页中用户可配置额外 skill 目录（支持 `~/` 展开、相对/绝对路径）
+1. **统一目录**：仅扫描当前工作区根目录下的 `.agents/skills/*/SKILL.md`
 
 ### 扫描时机
 
@@ -71,15 +70,7 @@ When building React components, follow these guidelines:
 
 ### 去重与覆盖
 
-扫描顺序：**项目目录 → 用户配置路径**（用户路径后扫描，优先级更高）。同名 skill 用户配置路径覆盖项目目录，记录警告日志。
-
-### 路径规范化
-
-在 `scanner.ts` 中实现路径规范化工具函数，统一处理三种路径格式：
-
-- `~/` 展开：通过 preload API 获取 `os.homedir()` 替换；如果无法获取 homeDir，则保持原始 `~/` 路径并跳过不可读目录
-- 相对路径：基于工作区根目录解析为绝对路径
-- 绝对路径：直接使用
+统一目录下同名 skill 后发现者覆盖先发现者，记录警告日志。v1 不提供自定义搜索路径。
 
 ### 目录监听
 
@@ -202,8 +193,6 @@ interface SkillDefinition {
 interface SkillScanConfig {
   /** 项目工作区根路径 */
   workspaceRoot: string
-  /** 用户自定义 skill 目录路径列表 */
-  customPaths: string[]
   /** skill body 最大字符数，默认 10000 */
   maxContentLength?: number
 }
@@ -260,7 +249,6 @@ types/
 - skill 列表：内存缓存（启动时扫描重建）
 - 解析错误：内存缓存（启动时重建）
 - 启用/禁用状态：`localStorage`（key: `skill.disabledNames`）
-- 用户自定义路径：`localStorage`（key: `skill.customPaths`）
 
 ## UI 设计
 
@@ -273,21 +261,18 @@ types/
 │  Skills                                      │
 ├─────────────────────────────────────────────┤
 │                                              │
-│  Skill 搜索路径                              │
-│  ┌─────────────────────────────┐ [+添加路径] │
-│  │ ~/my-skills                 │  [删除]     │
-│  │ /projects/shared-skills     │  [删除]     │
-│  └─────────────────────────────┘             │
+│  Skill 统一目录                              │
+│  .agents/skills/<name>/SKILL.md              │
 │                                              │
 │  已发现的 Skills                 [刷新]       │
 │  ┌─────────────────────────────────────────┐ │
 │  │ ● react-patterns          [启用/禁用]    │ │
 │  │   Use when building React components... │ │
-│  │   来源: 项目  路径: .agents/skills/...  │ │
+│  │   路径: .agents/skills/...              │ │
 │  ├─────────────────────────────────────────┤ │
 │  │ ⚠ bad-skill               [启用/禁用]    │ │
 │  │   解析失败: frontmatter 缺少 name 字段  │ │
-│  │   来源: 用户  路径: ~/my-skills/...     │ │
+│  │   路径: .agents/skills/bad-skill/...    │ │
 │  └─────────────────────────────────────────┘ │
 │                                              │
 │  [点击展开查看 SKILL.md 正文]                 │
@@ -297,8 +282,8 @@ types/
 
 功能：
 
-- 搜索路径管理：添加/删除自定义目录
-- Skill 列表：展示名称、描述、来源、路径
+- 统一目录说明：展示 `.agents/skills/<name>/SKILL.md`
+- Skill 列表：展示名称、描述、路径
 - 解析失败标记：警告图标 + 错误信息
 - 启用/禁用开关
 - 刷新按钮（手动触发重新扫描）
@@ -329,8 +314,8 @@ types/
 
 ```
 1. 应用启动 → useSkillStore.init() 返回 Promise
-2. 读取 localStorage 获取 scanConfig（customPaths、disabledNames），通过 preload 获取 homeDir 处理 `~/`
-3. 调用 scanner.scanSkills(scanConfig) 扫描所有来源（项目目录 → 用户配置路径）
+2. 读取 localStorage 获取 disabledNames
+3. 调用 scanner.scanSkills(scanConfig) 扫描统一目录 `.agents/skills/*/SKILL.md`
 4. 解析 SKILL.md → 构建 SkillDefinition[]，解析失败记录到 parseErrors
 5. 存入 store.skills，标记 initialized = true
 6. 通过 IPC 调用 fs:watchDirectory 监听 skill 目录变化
@@ -351,13 +336,12 @@ types/
 7. LLM 按指令执行，聊天侧边栏显示 skill 标签提示
 ```
 
-### 设置变更流程
+### 刷新流程
 
 ```
-1. 用户添加/删除搜索路径 → 更新 localStorage
-2. 触发重新扫描 → 更新 store.skills
-3. 更新目录监听（取消旧监听、注册新监听）
-4. skill 工具 description 自动更新（响应式）
+1. 用户点击刷新
+2. 触发重新扫描统一目录 → 更新 store.skills
+3. skill 工具 description 自动更新（响应式）
 ```
 
 ### 目录监听增量更新流程
