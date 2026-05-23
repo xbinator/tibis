@@ -16,14 +16,16 @@ const storage = new Map<string, string>();
 const electronMocks = vi.hoisted(() => ({
   hasElectronAPI: vi.fn(() => true),
   getMcpStatus: vi.fn(),
-  refreshMcpDiscovery: vi.fn()
+  refreshMcpDiscovery: vi.fn(),
+  restartMcpServer: vi.fn()
 }));
 
 vi.mock('@/shared/platform/electron-api', () => ({
   hasElectronAPI: electronMocks.hasElectronAPI,
   getElectronAPI: () => ({
     getMcpStatus: electronMocks.getMcpStatus,
-    refreshMcpDiscovery: electronMocks.refreshMcpDiscovery
+    refreshMcpDiscovery: electronMocks.refreshMcpDiscovery,
+    restartMcpServer: electronMocks.restartMcpServer
   })
 }));
 
@@ -162,6 +164,7 @@ describe('MCPToolsSettingsView', () => {
     electronMocks.hasElectronAPI.mockReturnValue(true);
     electronMocks.getMcpStatus.mockResolvedValue([]);
     electronMocks.refreshMcpDiscovery.mockResolvedValue({ ok: true });
+    electronMocks.restartMcpServer.mockResolvedValue({ ok: true });
     localStorage.clear();
     setActivePinia(createPinia());
   });
@@ -227,5 +230,48 @@ describe('MCPToolsSettingsView', () => {
       command: 'uvx',
       args: ['mcp-server-filesystem']
     });
+  });
+
+  it('restarts a server through MCP runtime IPC from the dropdown action', async () => {
+    const { default: MCPToolsSettingsView } = await import('@/views/settings/tools/mcp/index.vue');
+    const store = useToolSettingsStore();
+    const server = createServer();
+    store.addMcpServer(server);
+
+    const wrapper = mount(MCPToolsSettingsView, {
+      global: {
+        stubs: createGlobalStubs()
+      }
+    });
+
+    const restartButton = wrapper.findAll('button').find((button) => button.text() === '重启');
+    expect(restartButton).toBeDefined();
+    await restartButton!.trigger('click');
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(electronMocks.restartMcpServer).toHaveBeenCalledWith(expect.objectContaining({ id: server.id, command: server.command }));
+    expect(electronMocks.refreshMcpDiscovery).not.toHaveBeenCalled();
+  });
+
+  it('records a failed runtime status when restart is requested without Electron API', async () => {
+    const { default: MCPToolsSettingsView } = await import('@/views/settings/tools/mcp/index.vue');
+    const store = useToolSettingsStore();
+    store.addMcpServer(createServer());
+    electronMocks.hasElectronAPI.mockReturnValue(false);
+
+    const wrapper = mount(MCPToolsSettingsView, {
+      global: {
+        stubs: createGlobalStubs()
+      }
+    });
+
+    const restartButton = wrapper.findAll('button').find((button) => button.text() === '重启');
+    expect(restartButton).toBeDefined();
+    await restartButton!.trigger('click');
+
+    expect(wrapper.text()).toContain('Runtime: failed');
+    expect(wrapper.text()).toContain('Electron API is not available');
   });
 });

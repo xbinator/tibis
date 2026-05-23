@@ -410,6 +410,11 @@ export interface MCPToolSettings {
 export type MCPSandboxStatus = 'idle' | 'starting' | 'running' | 'failed';
 
 /**
+ * MCP 本地 runtime 运行状态。
+ */
+export type MCPRuntimeStatus = 'idle' | 'connecting' | 'connected' | 'failed' | 'disabled';
+
+/**
  * MCP discovery 运行状态。
  */
 export type MCPDiscoveryStatus = 'idle' | 'refreshing' | 'ready' | 'failed';
@@ -420,6 +425,8 @@ export type MCPDiscoveryStatus = 'idle' | 'refreshing' | 'ready' | 'failed';
 export interface MCPStatusResponse {
   /** server ID。 */
   serverId: string;
+  /** runtime 状态。 */
+  runtimeStatus: MCPRuntimeStatus;
   /** sandbox 状态。 */
   sandboxStatus: MCPSandboxStatus;
   /** discovery 状态。 */

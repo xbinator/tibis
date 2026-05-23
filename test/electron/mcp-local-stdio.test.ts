@@ -139,6 +139,25 @@ describe('mcp local stdio runner', () => {
     });
   });
 
+  it('keeps a reusable stdio session open across discovery and tool calls', async () => {
+    const { createMcpStdioSession } = await import('../../electron/main/modules/mcp/local-stdio.mjs');
+    const { child, requests, killMock } = createMockProcess();
+    const spawnProcess = vi.fn(() => child);
+
+    const session = await createMcpStdioSession(createServer(), spawnProcess);
+    const tools = await session.listTools();
+    const result = await session.callTool('read_file', { path: 'README.md' });
+
+    expect(spawnProcess).toHaveBeenCalledTimes(1);
+    expect(tools).toHaveLength(1);
+    expect(result).toEqual({ content: [{ type: 'text', text: 'hello' }] });
+    expect(requests.map((request) => request.method)).toEqual(['initialize', 'notifications/initialized', 'tools/list', 'tools/call']);
+
+    session.close();
+
+    expect(killMock).toHaveBeenCalled();
+  });
+
   it('rejects disabled servers before spawning a process', async () => {
     const { discoverMcpToolsLocally } = await import('../../electron/main/modules/mcp/local-stdio.mjs');
     const spawnProcess = vi.fn();

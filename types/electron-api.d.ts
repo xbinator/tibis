@@ -335,6 +335,9 @@ export interface ElectronAPI {
   getMcpStatus: (serverIds: string[]) => Promise<MCPStatusResponse[]>;
   getMcpDiscoveryCache: (serverId?: string) => Promise<MCPServerDiscoveryCache | MCPServerDiscoveryCache[] | undefined>;
   refreshMcpDiscovery: (server: MCPServerConfig) => Promise<MCPDiscoveryRefreshResult>;
+  connectMcpServer: (server: MCPServerConfig) => Promise<MCPDiscoveryRefreshResult>;
+  disconnectMcpServer: (serverId: string) => Promise<void>;
+  restartMcpServer: (server: MCPServerConfig) => Promise<MCPDiscoveryRefreshResult>;
 
   // AI 流式事件监听
   onAiStreamText: (callback: (text: string) => void) => () => void;

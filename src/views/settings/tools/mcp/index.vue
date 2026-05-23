@@ -115,7 +115,9 @@ function getServerStatusSummary(serverId: string): string {
     return '';
   }
 
-  return `Sandbox: ${status.sandboxStatus} · Discovery: ${status.discoveryStatus}`;
+  const { runtimeStatus, sandboxStatus, discoveryStatus } = status;
+
+  return `${runtimeStatus ?? sandboxStatus} · ${discoveryStatus}`;
 }
 
 /**
@@ -221,6 +223,7 @@ async function handleRefreshDiscovery(server: MCPServerConfig): Promise<void> {
       ...statusByServerId.value,
       [server.id]: {
         serverId: server.id,
+        runtimeStatus: 'failed',
         sandboxStatus: 'failed',
         discoveryStatus: 'failed',
         message: 'Electron API is not available'
@@ -231,7 +234,7 @@ async function handleRefreshDiscovery(server: MCPServerConfig): Promise<void> {
 
   refreshingServerId.value = server.id;
   try {
-    await getElectronAPI().refreshMcpDiscovery(server);
+    await getElectronAPI().restartMcpServer(server);
     await refreshStatuses();
   } finally {
     refreshingServerId.value = null;

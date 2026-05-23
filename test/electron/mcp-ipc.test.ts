@@ -26,5 +26,8 @@ describe('registerMcpHandlers', () => {
     expect(handleMock).toHaveBeenCalledWith('tools:mcp:get-status', expect.any(Function));
     expect(handleMock).toHaveBeenCalledWith('tools:mcp:get-discovery-cache', expect.any(Function));
     expect(handleMock).toHaveBeenCalledWith('tools:mcp:refresh-discovery', expect.any(Function));
+    expect(handleMock).toHaveBeenCalledWith('tools:mcp:connect', expect.any(Function));
+    expect(handleMock).toHaveBeenCalledWith('tools:mcp:disconnect', expect.any(Function));
+    expect(handleMock).toHaveBeenCalledWith('tools:mcp:restart', expect.any(Function));
   });
 });

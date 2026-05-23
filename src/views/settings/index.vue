@@ -46,7 +46,7 @@ function isActive(path: string): boolean {
 
 <style scoped lang="less">
 .settings-container {
-  --sidebar-width-large: 280px;
+  --sidebar-width-large: 230px;
   --sidebar-width-small: 42px;
 
   display: flex;

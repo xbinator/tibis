@@ -12,6 +12,28 @@ import type { MCPDiscoveredToolSnapshot, MCPServerConfig } from 'types/ai';
 export type MCPLocalSpawn = (command: string, args: string[], options: SpawnOptionsWithoutStdio) => ChildProcessWithoutNullStreams;
 
 /**
+ * 可复用的本地 MCP stdio 会话。
+ */
+export interface MCPLocalSession {
+  /**
+   * 获取 MCP tools/list 全量结果。
+   * @returns discovery 工具快照
+   */
+  listTools(): Promise<MCPDiscoveredToolSnapshot[]>;
+  /**
+   * 调用 MCP tool。
+   * @param toolName - MCP tool 名称
+   * @param input - Tool 输入
+   * @returns MCP tool 调用结果
+   */
+  callTool(toolName: string, input: unknown): Promise<unknown>;
+  /**
+   * 关闭 MCP 子进程。
+   */
+  close(): void;
+}
+
+/**
  * 待完成 JSON-RPC 请求。
  */
 interface PendingRpcRequest {
@@ -111,7 +133,7 @@ function toToolSnapshot(serverId: string, tool: Record<string, unknown>): MCPDis
 /**
  * 本地 MCP stdio 会话。
  */
-class LocalMcpStdioSession {
+class LocalMcpStdioSession implements MCPLocalSession {
   private readonly child: ChildProcessWithoutNullStreams;
 
   private readonly pending = new Map<string | number, PendingRpcRequest>();
@@ -296,15 +318,31 @@ class LocalMcpStdioSession {
 }
 
 /**
+ * 创建并初始化可复用的本地 MCP stdio 会话。
+ * @param server - MCP server 配置
+ * @param spawnProcess - 可注入 spawn 函数
+ * @returns 已完成 initialize 的 MCP stdio 会话
+ */
+export async function createMcpStdioSession(server: MCPServerConfig, spawnProcess: MCPLocalSpawn = spawn): Promise<MCPLocalSession> {
+  const session = new LocalMcpStdioSession(server, spawnProcess);
+  try {
+    await session.initialize();
+    return session;
+  } catch (error) {
+    session.close();
+    throw error;
+  }
+}
+
+/**
  * 在本机 discovery MCP tools。
  * @param server - MCP server 配置
  * @param spawnProcess - 可注入 spawn 函数
  * @returns discovery 工具快照
  */
 export async function discoverMcpToolsLocally(server: MCPServerConfig, spawnProcess: MCPLocalSpawn = spawn): Promise<MCPDiscoveredToolSnapshot[]> {
-  const session = new LocalMcpStdioSession(server, spawnProcess);
+  const session = await createMcpStdioSession(server, spawnProcess);
   try {
-    await session.initialize();
     return await session.listTools();
   } finally {
     session.close();
@@ -320,9 +358,8 @@ export async function discoverMcpToolsLocally(server: MCPServerConfig, spawnProc
  * @returns MCP tool 调用结果
  */
 export async function executeMcpToolLocally(server: MCPServerConfig, toolName: string, input: unknown, spawnProcess: MCPLocalSpawn = spawn): Promise<unknown> {
-  const session = new LocalMcpStdioSession(server, spawnProcess);
+  const session = await createMcpStdioSession(server, spawnProcess);
   try {
-    await session.initialize();
     return await session.callTool(toolName, input);
   } finally {
     session.close();

@@ -322,6 +322,24 @@ const electronAPI: ElectronAPI = {
    */
   refreshMcpDiscovery: (server) => ipcRenderer.invoke('tools:mcp:refresh-discovery', server),
 
+  /**
+   * 连接 MCP server 并刷新 discovery
+   * @param server MCP server 配置
+   */
+  connectMcpServer: (server) => ipcRenderer.invoke('tools:mcp:connect', server),
+
+  /**
+   * 断开 MCP server
+   * @param serverId MCP server ID
+   */
+  disconnectMcpServer: (serverId) => ipcRenderer.invoke('tools:mcp:disconnect', serverId),
+
+  /**
+   * 重启 MCP server 并刷新 discovery
+   * @param server MCP server 配置
+   */
+  restartMcpServer: (server) => ipcRenderer.invoke('tools:mcp:restart', server),
+
   // ==================== AI 流式事件监听 ====================
   onAiStreamText: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, text: string) => callback(text);

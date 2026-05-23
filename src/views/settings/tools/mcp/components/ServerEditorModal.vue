@@ -9,7 +9,7 @@
 
     <template #footer>
       <div class="server-editor-modal__footer">
-        <div v-if="parseError" class="server-editor-modal__error">{{ parseError }}</div>
+        <div class="server-editor-modal__error">{{ parseError }}</div>
 
         <BButton type="secondary" @click="handleCancel">取消</BButton>
         <BButton type="primary" :disabled="!parsedDraft || !!parseError" @click="handleConfirm">保存</BButton>
