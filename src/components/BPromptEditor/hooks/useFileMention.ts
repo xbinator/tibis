@@ -84,18 +84,18 @@ export function useFileMention(
     const line = state.doc.lineAt(pos);
     const text = state.sliceDoc(line.from, pos);
 
-    // 找最后一个 #
-    const hashIndex = text.lastIndexOf('#');
-    if (hashIndex === -1) {
+    // 找最后一个 @
+    const atIndex = text.lastIndexOf('@');
+    if (atIndex === -1) {
       return null;
     }
 
-    // 检查 # 前面是否是单词字符（避免在代码中间触发）
-    if (hashIndex > 0 && isWordChar(text[hashIndex - 1])) {
+    // 检查 @ 前面是否是单词字符（避免在代码中间触发）
+    if (atIndex > 0 && isWordChar(text[atIndex - 1])) {
       return null;
     }
 
-    const query = text.slice(hashIndex + 1);
+    const query = text.slice(atIndex + 1);
 
     // 如果 query 包含空格或换行，不触发
     if (/\s/.test(query)) {
@@ -103,7 +103,7 @@ export function useFileMention(
     }
 
     return {
-      from: line.from + hashIndex,
+      from: line.from + atIndex,
       to: pos,
       query
     };

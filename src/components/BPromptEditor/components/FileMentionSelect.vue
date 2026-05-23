@@ -1,4 +1,3 @@
-/** * @file FileMentionSelect.vue * @description 文件提及选择下拉菜单，基于 SelectDropdown 实现，使用内联定位模式 */
 <template>
   <SelectDropdown
     :visible="visible && files.length > 0"

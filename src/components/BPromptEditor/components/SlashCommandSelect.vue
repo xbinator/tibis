@@ -67,7 +67,7 @@ function handleMouseEnter(index: number): void {
 }
 
 .slash-command-item-desc {
-  margin-top: 4px;
+  margin-left: 4px;
   font-size: 12px;
   color: var(--text-tertiary);
 }
