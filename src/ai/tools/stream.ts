@@ -4,6 +4,7 @@
  */
 import type { JSONValue, ModelMessage } from 'ai';
 import type { AIToolContext, AIToolExecutionResult, AIToolExecutor, AIStreamToolCallChunk, AITransportTool } from 'types/ai';
+import { isFunction } from 'lodash-es';
 import { createToolFailureResult } from './results';
 
 /**
@@ -56,12 +57,12 @@ function attachToolCallIdToAwaitingResult(result: AIToolExecutionResult, toolCal
  * @param tools - 工具执行器列表
  * @returns 传输格式的工具列表
  */
-export function toTransportTools(tools: AIToolExecutor[]): AITransportTool[] {
+export function toTransportTools(tools: AIToolExecutor[]) {
   return tools.map((item) => ({
     name: item.definition.name,
-    description: typeof item.definition.description === 'function' ? item.definition.description() : item.definition.description,
+    description: isFunction(item.definition.description) ? item.definition.description() : item.definition.description,
     parameters: item.definition.parameters
-  }));
+  })) as AITransportTool[];
 }
 
 /**
