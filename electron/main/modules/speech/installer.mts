@@ -3,12 +3,16 @@
  * @description 安装语音运行时，负责下载、解压、校验和原子替换。
  */
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { get } from 'node:http';
 import { get as getHttps } from 'node:https';
-import { join } from 'node:path';
+import { dirname, join, resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { SpeechInstallProgress, SpeechRuntimeAsset, SpeechRuntimeManifestDefinition } from './types.mjs';
 import { getSpeechRuntimeRoot } from './runtime.mjs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * ZIP 资源解压输入。
@@ -53,11 +57,39 @@ interface RemoteSpeechRuntimeIndexManifest {
 }
 
 /**
+ * Node 文件系统错误。
+ */
+interface NodeFileSystemError extends Error {
+  /** Node 错误码。 */
+  code?: string;
+}
+
+/**
  * 运行时清单解析选项。
  */
 export interface ResolveSpeechRuntimeManifestOptions {
   /** 可替换的远程下载实现。 */
   downloadUrl?: (url: string) => Promise<Buffer>;
+}
+
+/**
+ * 判断错误是否为文件不存在。
+ * @param error - 待判断错误
+ * @returns 是否为缺失文件错误
+ */
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && (error as NodeFileSystemError).code === 'ENOENT';
+}
+
+/**
+ * 获取内置语音运行时清单的候选路径。
+ * @returns 候选 manifest 路径列表
+ */
+function getBundledSpeechRuntimeManifestPaths(): string[] {
+  const sourceManifestPath = resolvePath(__dirname, '../../../../resources/speech/manifest.json');
+  const packagedManifestPath = process.resourcesPath ? join(process.resourcesPath, 'speech', 'manifest.json') : null;
+
+  return packagedManifestPath ? [packagedManifestPath, sourceManifestPath] : [sourceManifestPath];
 }
 
 /**
@@ -134,6 +166,30 @@ export async function downloadSpeechRuntimeUrl(url: string): Promise<Buffer> {
 }
 
 /**
+ * 从总清单选择当前平台的运行时清单。
+ * @param indexManifest - 总清单
+ * @param platform - 平台标识
+ * @param arch - 架构标识
+ * @returns 运行时清单
+ */
+function selectSpeechRuntimeManifestFromIndex(
+  indexManifest: RemoteSpeechRuntimeIndexManifest,
+  platform: 'darwin' | 'win32',
+  arch: 'arm64' | 'x64'
+): SpeechRuntimeManifestDefinition {
+  const platformKey = `${platform}-${arch}`;
+  const manifest = indexManifest.platforms[platformKey];
+  if (!manifest) {
+    throw new Error(`Speech runtime platform is not supported: ${platformKey}`);
+  }
+
+  return {
+    ...manifest,
+    version: manifest.version || indexManifest.currentVersion
+  };
+}
+
+/**
  * 根据 manifest URL 解析运行时清单。
  * @param manifestUrl - manifest 地址
  * @param platform - 平台标识
@@ -148,16 +204,47 @@ async function resolveSpeechRuntimeManifestFromIndex(
 ): Promise<SpeechRuntimeManifestDefinition> {
   const bytes = await downloadUrl(manifestUrl);
   const indexManifest = JSON.parse(bytes.toString('utf-8')) as RemoteSpeechRuntimeIndexManifest;
-  const platformKey = `${platform}-${arch}`;
-  const manifest = indexManifest.platforms[platformKey];
-  if (!manifest) {
-    throw new Error(`Speech runtime platform is not supported: ${platformKey}`);
+  return selectSpeechRuntimeManifestFromIndex(indexManifest, platform, arch);
+}
+
+/**
+ * 从应用内置资源读取语音运行时总清单。
+ * @returns 总清单，不存在时返回 null
+ */
+async function readBundledSpeechRuntimeIndexManifest(): Promise<RemoteSpeechRuntimeIndexManifest | null> {
+  for (const manifestPath of getBundledSpeechRuntimeManifestPaths()) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const content = await readFile(manifestPath, 'utf-8');
+      return JSON.parse(content) as RemoteSpeechRuntimeIndexManifest;
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  return {
-    ...manifest,
-    version: manifest.version || indexManifest.currentVersion
-  };
+  return null;
+}
+
+/**
+ * 从应用内置资源解析语音运行时清单。
+ * @param platform - 平台标识
+ * @param arch - 架构标识
+ * @returns 运行时清单，不存在内置清单时返回 null
+ */
+async function resolveSpeechRuntimeManifestFromBundledResource(
+  platform: 'darwin' | 'win32',
+  arch: 'arm64' | 'x64'
+): Promise<SpeechRuntimeManifestDefinition | null> {
+  const indexManifest = await readBundledSpeechRuntimeIndexManifest();
+  if (!indexManifest) {
+    return null;
+  }
+
+  return selectSpeechRuntimeManifestFromIndex(indexManifest, platform, arch);
 }
 
 /**
@@ -176,6 +263,11 @@ export async function resolveSpeechRuntimeManifest(
   const downloadUrl = options.downloadUrl ?? downloadSpeechRuntimeUrl;
   if (manifestUrl) {
     return resolveSpeechRuntimeManifestFromIndex(manifestUrl, platform, arch, downloadUrl);
+  }
+
+  const bundledManifest = await resolveSpeechRuntimeManifestFromBundledResource(platform, arch);
+  if (bundledManifest) {
+    return bundledManifest;
   }
 
   return resolveSpeechRuntimeManifestFromBaseUrl(platform, arch);

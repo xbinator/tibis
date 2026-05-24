@@ -2,7 +2,7 @@
  * @file speech-installer.test.ts
  * @description 验证语音运行时安装器会生成 current 目录和 manifest。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const chmodMock = vi.fn();
 const mkdirMock = vi.fn();
@@ -10,13 +10,18 @@ const renameMock = vi.fn();
 const rmMock = vi.fn();
 const writeFileMock = vi.fn();
 
-vi.mock('node:fs/promises', () => ({
-  chmod: chmodMock,
-  mkdir: mkdirMock,
-  rename: renameMock,
-  rm: rmMock,
-  writeFile: writeFileMock
-}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('node:fs/promises');
+
+  return {
+    ...actual,
+    chmod: chmodMock,
+    mkdir: mkdirMock,
+    rename: renameMock,
+    rm: rmMock,
+    writeFile: writeFileMock
+  };
+});
 
 describe('installSpeechRuntime', () => {
   beforeEach(() => {
@@ -26,6 +31,10 @@ describe('installSpeechRuntime', () => {
     renameMock.mockReset();
     rmMock.mockReset();
     writeFileMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('writes manifest and stages current assets after successful install', async () => {
@@ -148,6 +157,33 @@ describe('installSpeechRuntime', () => {
       ]
     });
 
-    vi.unstubAllEnvs();
+  });
+
+  it('resolves runtime manifest from bundled resources when no remote env is configured', async () => {
+    const { resolveSpeechRuntimeManifest } = await import('../../electron/main/modules/speech/installer.mjs');
+    const manifest = await resolveSpeechRuntimeManifest('darwin', 'arm64');
+
+    expect(manifest).toEqual({
+      platform: 'darwin',
+      arch: 'arm64',
+      version: '2026.05.04',
+      modelName: 'ggml-base',
+      assets: [
+        {
+          name: 'whisper',
+          url: 'https://github.com/xbinator/tibis/releases/download/speech-runtime-2026.05.04/whisper-darwin-arm64',
+          sha256: '47ba9215712384a2b81dacaa06b7047bdd7f424b1eb6ad533f1450a2472c2920',
+          archiveType: 'file',
+          targetRelativePath: 'bin/whisper'
+        },
+        {
+          name: 'model',
+          url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
+          sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
+          archiveType: 'file',
+          targetRelativePath: 'models/ggml-base.bin'
+        }
+      ]
+    });
   });
 });

@@ -12,6 +12,10 @@ extraResources:
     to: icons
     filter:
       - "**/*"
+  - from: resources/speech
+    to: speech
+    filter:
+      - "manifest.json"
 asar: true
 asarUnpack:
   - "**/*.node"
