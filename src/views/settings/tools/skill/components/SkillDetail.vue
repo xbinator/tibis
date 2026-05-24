@@ -164,6 +164,7 @@ watch(
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  user-select: text;
 }
 
 /* 覆盖 BSettingsPage body 默认样式，使内容区作为 flex 容器并禁止自身滚动 */

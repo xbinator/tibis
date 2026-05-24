@@ -2,6 +2,7 @@
  * @file parser.ts
  * @description SKILL.md 解析器，提取 frontmatter 元数据和 body 内容。
  */
+import yaml from 'js-yaml';
 import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillSource } from './types';
 
 /** 解析选项。 */
@@ -26,27 +27,22 @@ function extractFrontmatter(markdown: string): { frontmatter: string; body: stri
 }
 
 /**
- * 解析 YAML frontmatter 文本为键值对。
- * 仅支持简单的 key: value 格式，不处理嵌套。
+ * 使用 js-yaml 解析 frontmatter 文本。
  * @param frontmatter - frontmatter 文本
- * @returns 键值对映射
+ * @returns 解析结果，含可能的错误信息
  */
-function parseFrontmatter(frontmatter: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const line of frontmatter.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
+function parseFrontmatter(frontmatter: string): { data: Record<string, unknown>; error?: string } {
+  if (!frontmatter.trim()) return { data: {} };
+
+  try {
+    const result = yaml.load(frontmatter);
+    if (result && typeof result === 'object' && !Array.isArray(result)) {
+      return { data: result as Record<string, unknown> };
     }
-    const colonIndex = trimmed.indexOf(':');
-    if (colonIndex === -1) {
-      continue;
-    }
-    const key = trimmed.slice(0, colonIndex).trim();
-    const value = trimmed.slice(colonIndex + 1).trim();
-    result[key] = value;
+    return { data: {} };
+  } catch (e: unknown) {
+    return { data: {}, error: `Invalid YAML frontmatter: ${e instanceof Error ? e.message : String(e)}` };
   }
-  return result;
 }
 
 /**
@@ -65,9 +61,19 @@ function truncateContent(content: string, maxLength: number, filePath: string): 
 }
 
 /**
+ * 拼接路径片段，统一使用 / 分隔。
+ */
+export function joinPath(...segments: string[]): string {
+  return segments
+    .map((s) => s.replace(/\\/g, '/').replace(/\/+$/, ''))
+    .join('/')
+    .replace(/\/+/g, '/');
+}
+
+/**
  * 获取文件所在目录，兼容 POSIX 与 Windows 路径。
  * @param filePath - 文件路径
- * @returns 文件所在目录
+ * @returns 文件所在目录（统一使用 / 分隔）
  */
 function dirname(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/');
@@ -75,7 +81,7 @@ function dirname(filePath: string): string {
   if (index <= 0) {
     return index === 0 ? '/' : '.';
   }
-  return filePath.slice(0, index);
+  return normalized.slice(0, index);
 }
 
 /**
@@ -106,14 +112,29 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
     };
   }
 
-  const fm = parseFrontmatter(extracted.frontmatter);
-  const name = fm.name?.trim();
-  const description = fm.description?.trim();
+  const { data: fm, error: fmError } = parseFrontmatter(extracted.frontmatter);
+
+  if (fmError) {
+    return {
+      name: '',
+      description: '',
+      content: '',
+      filePath,
+      dirPath,
+      source,
+      enabled: true,
+      parsedAt,
+      parseError: fmError
+    };
+  }
+
+  const name = fm.name != null ? String(fm.name).trim() : '';
+  const description = fm.description != null ? String(fm.description).trim() : '';
 
   if (!name) {
     return {
       name: '',
-      description: description ?? '',
+      description,
       content: '',
       filePath,
       dirPath,

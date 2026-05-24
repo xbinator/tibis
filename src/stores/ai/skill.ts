@@ -103,7 +103,14 @@ export const useSkillStore = defineStore('skill', () => {
       return;
     }
 
-    // add 或 change
+    // add 或 change，解析错误的直接丢弃
+    if (updatedSkill.parseError) {
+      if (index !== -1) {
+        skills.value.splice(index, 1);
+      }
+      return;
+    }
+
     if (index !== -1) {
       skills.value[index] = updatedSkill;
     } else {

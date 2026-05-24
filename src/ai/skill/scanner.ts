@@ -3,7 +3,7 @@
  * @description Skill 目录扫描器，发现并解析 SKILL.md 文件。
  */
 import type { SkillDefinition, SkillScanConfig } from './types';
-import { parseSkillMarkdown } from './parser';
+import { parseSkillMarkdown, joinPath } from './parser';
 
 /**
  * 扫描器依赖的平台 API 接口。
@@ -38,8 +38,8 @@ async function scanDirectory(dirPath: string, source: SkillDefinition['source'],
 
     const results = await Promise.allSettled(
       dirEntries.map(async (entry) => {
-        const skillDirPath = `${dirPath}/${entry.name}`;
-        const skillFilePath = `${skillDirPath}/SKILL.md`;
+        const skillDirPath = joinPath(dirPath, entry.name);
+        const skillFilePath = joinPath(skillDirPath, 'SKILL.md');
         if (api.getPathStatus) {
           const status = await api.getPathStatus(skillFilePath);
           if (!status.exists || !status.isFile) {
@@ -74,12 +74,13 @@ export async function scanSkills(config: SkillScanConfig, api: SkillScannerAPI):
   const { maxContentLength } = config;
 
   // 扫描用户级全局 skill 目录。
-  const globalSkillsDir = `${config.homeDir}/.agents/skills`;
+  const globalSkillsDir = joinPath(config.homeDir, '.agents', 'skills');
   const globalSkills = await scanDirectory(globalSkillsDir, 'global', api, maxContentLength);
 
-  // 去重：同名 skill 后者覆盖前者
+  // 去重：同名 skill 后者覆盖前者，过滤掉解析错误的
   const skillMap = new Map<string, SkillDefinition>();
   for (const skill of globalSkills) {
+    if (skill.parseError) continue;
     const key = skill.name || skill.filePath;
     skillMap.set(key, skill);
   }

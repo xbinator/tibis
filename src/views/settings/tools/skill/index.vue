@@ -127,6 +127,7 @@ function handleCloseSkillDetail(): void {
 .skill-settings__hint {
   font-size: 12px;
   color: var(--text-secondary);
+  user-select: text;
 
   code {
     padding: 1px 4px;

@@ -103,6 +103,7 @@ function handleToggle(): void {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+  user-select: text;
 }
 
 .skill-settings__item-error-badge {
@@ -118,12 +119,14 @@ function handleToggle(): void {
   font-size: 11px;
   color: var(--text-secondary);
   white-space: nowrap;
+  user-select: text;
 }
 
 .skill-settings__item-parse-error {
   margin-top: 4px;
   font-size: 11px;
   color: var(--color-danger, #ff4d4f);
+  user-select: text;
 }
 
 .skill-settings__item-actions {

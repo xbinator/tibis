@@ -131,6 +131,6 @@ Content`;
 
     const result = parseSkillMarkdown(markdown, 'C:\\workspace\\.agents\\skills\\test-skill\\SKILL.md');
 
-    expect(result.dirPath).toBe('C:\\workspace\\.agents\\skills\\test-skill');
+    expect(result.dirPath).toBe('C:/workspace/.agents/skills/test-skill');
   });
 });

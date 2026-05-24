@@ -7,6 +7,7 @@ import { onMounted, onUnmounted } from 'vue';
 import { native } from '@/shared/platform';
 import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useSkillStore } from '@/stores/ai/skill';
+import { joinPath } from '@/ai/skill';
 
 /**
  * 初始化 Skill Store：扫描 skill 目录并监听变更。
@@ -28,7 +29,7 @@ export function useSkillInit(): void {
       });
 
       // 监听用户级全局 skill 目录，事件只关注 SKILL.md。
-      const skillDir = `${homeDir}/.agents/skills`;
+      const skillDir = joinPath(homeDir, '.agents', 'skills');
       await native.watchDirectory(skillDir, '**/SKILL.md');
       cleanupCallbacks.push(() => native.unwatchDirectory(skillDir, '**/SKILL.md'));
 
