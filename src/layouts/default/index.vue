@@ -66,7 +66,7 @@
         v-model:size="settingStore.sidebarWidth"
         position="left"
         :min-width="300"
-        :max-width="600"
+        max-width="40%"
         @close="settingStore.setSidebarVisible(false)"
       >
         <BChatSidebar />

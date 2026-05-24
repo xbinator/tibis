@@ -33,6 +33,7 @@ const [name, bem] = createNamespace('settings-section');
   max-width: 820px;
   margin: 0 auto;
   overflow: hidden;
+  user-select: text;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 14px;

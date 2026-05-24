@@ -117,7 +117,6 @@ function handleSaveStrategyChange(value: string | number) {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  user-select: none;
 }
 
 // ─── Responsive ───────────────────────────────────────────────────────────────

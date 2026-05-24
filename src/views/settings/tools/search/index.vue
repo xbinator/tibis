@@ -267,7 +267,7 @@ function handleExtractIncludeImagesChange(value: boolean | string | number): voi
 <style scoped lang="less">
 .search-tools-settings__item {
   display: flex;
-  gap: 16px;
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
   min-height: 56px;
@@ -313,7 +313,7 @@ function handleExtractIncludeImagesChange(value: boolean | string | number): voi
   color: var(--text-secondary);
 }
 
-@media (width <= 720px) {
+@media (width <= 800px) {
   .search-tools-settings__item {
     flex-direction: column;
     align-items: flex-start;
