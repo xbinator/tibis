@@ -18,7 +18,7 @@
 <script setup lang="ts">
 import type { FileMentionOption } from '../types';
 import { Icon } from '@iconify/vue';
-import { getFileIcon } from '../utils/fileIcon';
+import { getFileIcon } from '@/utils/file/icons';
 import SelectDropdown from './_SelectDropdown.vue';
 
 /**

@@ -168,7 +168,5 @@ function isActive(path: string): boolean {
 .settings-content {
   flex: 1;
   width: 0;
-  background: var(--bg-primary);
-  border-radius: 8px;
 }
 </style>

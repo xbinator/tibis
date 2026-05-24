@@ -3,7 +3,7 @@
   @description Skill 列表项行组件，展示单个 Skill 的图标、名称、描述及启用开关。
 -->
 <template>
-  <div class="skill-settings__item-row">
+  <div class="skill-settings__item-row" role="button" tabindex="0" @click="handleOpen" @keydown.enter.prevent="handleOpen" @keydown.space.prevent="handleOpen">
     <div class="skill-settings__item-icon">{{ initial }}</div>
     <div class="skill-settings__item-info">
       <div class="skill-settings__item-name">
@@ -17,7 +17,7 @@
       <div v-if="skill.parseError" class="skill-settings__item-parse-error">{{ skill.parseError }}</div>
     </div>
     <div class="skill-settings__item-actions">
-      <ASwitch :checked="skill.enabled" size="small" :disabled="!!skill.parseError" @change="() => emit('toggle', skill.name)" />
+      <ASwitch :checked="skill.enabled" size="small" :disabled="!!skill.parseError" @click.stop @change="handleToggle" />
     </div>
   </div>
 </template>
@@ -40,6 +40,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** 切换 Skill 启用状态 */
   (e: 'toggle', name: string): void;
+  /** 打开 Skill 只读详情 */
+  (e: 'open', name: string): void;
 }>();
 
 /** Skill 名称首字母大写，用于图标展示。 */
@@ -50,6 +52,20 @@ const description = computed(() => {
   const desc = props.skill.description;
   return desc.startsWith('"') ? desc.slice(1) : desc;
 });
+
+/**
+ * 打开 Skill 只读详情。
+ */
+function handleOpen(): void {
+  emit('open', props.skill.name);
+}
+
+/**
+ * 切换 Skill 启用状态。
+ */
+function handleToggle(): void {
+  emit('toggle', props.skill.name);
+}
 </script>
 
 <style scoped lang="less">
@@ -57,6 +73,13 @@ const description = computed(() => {
   display: flex;
   gap: 12px;
   align-items: center;
+  cursor: pointer;
+  outline: none;
+
+  &:focus-visible {
+    border-radius: 6px;
+    box-shadow: 0 0 0 2px var(--color-primary-bg, rgb(22 119 255 / 14%));
+  }
 }
 
 .skill-settings__item-icon {

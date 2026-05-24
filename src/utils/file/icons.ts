@@ -1,5 +1,5 @@
 /**
- * @file fileIcon.ts
+ * @file icons.ts
  * @description 文件扩展名到 Iconify 图标名的映射，用于展示带颜色的文件类型图标
  */
 
