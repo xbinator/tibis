@@ -76,6 +76,20 @@ const TOOL_ACTION_LABELS: Record<string, ToolActionLabel> = {
 /** 提问工具名称集合，兼容历史消息。 */
 const QUESTION_TOOL_NAMES = new Set(['question', 'ask_user_question', 'ask_user_choice']);
 
+/** Shell 命令工具名称。 */
+const SHELL_COMMAND_TOOL_NAME = 'run_shell_command';
+
+/** Shell 命令执行结果数据。 */
+interface ShellCommandResultData {
+  exitCode?: number | null;
+  signal?: string | null;
+  durationMs?: number;
+  timedOut?: boolean;
+  truncated?: boolean;
+  stdout?: string;
+  stderr?: string;
+}
+
 /**
  * 获取工具对应的用户可读动作。
  * @param toolName - 内部工具名称
@@ -119,6 +133,44 @@ function formatAnswers(answers: string[]): string {
  */
 function isQuestionToolName(toolName: string): boolean {
   return QUESTION_TOOL_NAMES.has(toolName);
+}
+
+/**
+ * 格式化 Shell 命令执行结果摘要。
+ * @param data - 工具结果数据
+ * @returns 摘要文本
+ */
+function formatShellResultSummary(data: unknown): string {
+  if (!isRecord(data)) {
+    return '命令已执行。';
+  }
+
+  const result = data as ShellCommandResultData;
+  const lines: string[] = [];
+
+  if (result.exitCode === 0 || result.exitCode === null) {
+    if (result.signal) {
+      lines.push(`进程被信号 ${result.signal} 终止`);
+    } else {
+      lines.push('退出码 0');
+    }
+  } else {
+    lines.push(`退出码 ${result.exitCode}`);
+    if (result.stderr) {
+      const stderrPreview = result.stderr.trimEnd().split('\n').slice(-2).join('\n').slice(0, 200);
+      lines.push(`错误: ${stderrPreview}`);
+    }
+  }
+
+  if (result.durationMs !== undefined) {
+    lines.push(`耗时 ${result.durationMs < 1000 ? `${result.durationMs}ms` : `${(result.durationMs / 1000).toFixed(1)}s`}`);
+  }
+
+  if (result.truncated) {
+    lines.push('输出已截断');
+  }
+
+  return lines.length ? lines.join(' · ') : '命令已执行。';
 }
 
 /**
@@ -220,6 +272,10 @@ const summaryText = computed(() => {
   if (result.status === 'success') {
     if (isQuestionToolName(props.part.toolName)) {
       return formatQuestionResultSummary(result.data, props.toolCallInput) ?? '问题已提交。';
+    }
+
+    if (props.part.toolName === SHELL_COMMAND_TOOL_NAME) {
+      return formatShellResultSummary(result.data);
     }
 
     return '已完成。';

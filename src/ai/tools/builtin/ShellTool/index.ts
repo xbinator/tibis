@@ -4,7 +4,7 @@
  */
 import type { AIToolConfirmationDecision, AIToolConfirmationRequest } from '../../confirmation';
 import type { ToolRequiredConfirmationOptions, ToolWorkspaceOptions } from '../../shared/types';
-import type { AIToolExecutionResult, AIToolExecutor } from 'types/ai';
+import type { AIToolExecutor } from 'types/ai';
 import type { ElectronShellCommandRunResult, ElectronShellCommandSafetyReport, ElectronShellCommandShell } from 'types/electron-api';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
@@ -74,7 +74,7 @@ function normalizeTimeoutMs(timeoutMs: unknown): number {
     throw new Error('timeoutMs 必须是整数');
   }
 
-  return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, timeoutMs));
+  return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, timeoutMs as number));
 }
 
 /**
@@ -112,31 +112,6 @@ function formatConfirmationDescription(shell: ElectronShellCommandShell, cwd: st
   const findingText = safety.findings.length ? safety.findings.map((finding) => `- [${finding.severity}] ${finding.message}`).join('\n') : '- 未发现阻断项';
 
   return [`AI 请求执行 Shell 命令。`, `Shell: ${shell}`, `CWD: ${cwd}`, `Timeout: ${timeoutMs}ms`, `安全检查:`, findingText].join('\n');
-}
-
-/**
- * 执行带确认生命周期的命令。
- * @param options - 工具创建选项
- * @param request - 确认请求
- * @param operation - 实际执行函数
- * @returns 工具执行结果
- */
-async function executeConfirmedShellCommand(
-  options: CreateBuiltinShellCommandToolOptions,
-  request: AIToolConfirmationRequest,
-  operation: () => Promise<RunShellCommandToolResult>
-): Promise<AIToolExecutionResult<RunShellCommandToolResult>> {
-  await options.confirm.onExecutionStart?.(request);
-
-  try {
-    const data = await operation();
-    await options.confirm.onExecutionComplete?.(request, { status: 'success' });
-    return createToolSuccessResult(RUN_SHELL_COMMAND_TOOL_NAME, data);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '执行 Shell 命令失败';
-    await options.confirm.onExecutionComplete?.(request, { status: 'failure', errorMessage: message });
-    return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'EXECUTION_FAILED', message);
-  }
 }
 
 /**
@@ -213,7 +188,8 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
       }
 
-      return executeConfirmedShellCommand(options, confirmationRequest, async () => {
+      await options.confirm.onExecutionStart?.(confirmationRequest);
+      try {
         const runResult = await native.runShellCommand({
           commandId: typeof input.commandId === 'string' && input.commandId.trim().length > 0 ? input.commandId.trim() : nanoid(),
           shell: input.shell as ElectronShellCommandShell,
@@ -223,11 +199,34 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
           timeoutMs
         });
 
-        return {
+        const toolResult: RunShellCommandToolResult = {
           ...runResult,
           safety
         };
-      });
+
+        if (runResult.timedOut) {
+          const partialOutput = [
+            runResult.stdout && `stdout: ${runResult.stdout.slice(0, 500)}`,
+            runResult.stderr && `stderr: ${runResult.stderr.slice(0, 500)}`,
+            runResult.truncated && '输出已截断'
+          ]
+            .filter(Boolean)
+            .join('\n');
+          await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: `命令执行超时 (${runResult.durationMs}ms)` });
+          return createToolFailureResult(
+            RUN_SHELL_COMMAND_TOOL_NAME,
+            'TOOL_TIMEOUT',
+            `命令在 ${runResult.durationMs}ms 后超时${partialOutput ? `\n${partialOutput}` : ''}`
+          );
+        }
+
+        await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'success' });
+        return createToolSuccessResult(RUN_SHELL_COMMAND_TOOL_NAME, toolResult);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '执行 Shell 命令失败';
+        await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: message });
+        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'EXECUTION_FAILED', message);
+      }
     }
   };
 }

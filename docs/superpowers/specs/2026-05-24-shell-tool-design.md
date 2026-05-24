@@ -302,36 +302,107 @@ The raw final JSON should remain hidden behind the existing tool-result presenta
 
 Add focused tests before implementation:
 
-- `test/ai/tools/builtin-shell.test.ts`
-  - rejects unsupported shell
-  - rejects empty command
-  - rejects missing workspace root
-  - rejects blocked safety reports
-  - asks for confirmation after an allowed safety report
-  - returns cancelled when confirmation is denied
-  - returns bounded stdout and stderr from a successful run
-  - treats non-zero exit as an executed result
+- `test/ai/tools/builtin-shell.test.ts` (7 tests, all passing)
+  - [x] rejects unsupported shell
+  - [x] rejects empty command (validated inline in `execute`, no standalone test)
+  - [x] rejects missing workspace root
+  - [x] rejects blocked safety reports
+  - [x] asks for confirmation after an allowed safety report
+  - [x] returns cancelled when confirmation is denied
+  - [x] returns bounded stdout and stderr from a successful run
+  - [x] treats non-zero exit as an executed result
+  - [ ] returns TOOL_TIMEOUT failure when command times out (gap #4)
 
-- `test/ai/tools/builtin-index.test.ts`
-  - exports `RUN_SHELL_COMMAND_TOOL_NAME`
-  - includes the tool only when a confirmation adapter is available
+- `test/ai/tools/builtin-index.test.ts` (2 tests, all passing)
+  - [x] exports `RUN_SHELL_COMMAND_TOOL_NAME`
+  - [x] includes the tool only when a confirmation adapter is available
 
-- `test/electron/shell-safety.test.ts`
-  - parser adapters report syntax errors
-  - policy analyzer blocks destructive commands
-  - policy analyzer allows simple project commands
-  - cwd validation stays inside workspace
+- `test/electron/shell-safety.test.ts` (6 tests, all passing)
+  - [ ] parser adapters report syntax errors (gap #1 — parser not wired)
+  - [x] policy analyzer blocks destructive commands
+  - [x] policy analyzer allows simple project commands
+  - [x] cwd validation stays inside workspace
+  - [ ] blocks permission mutation, profile mutation, command substitution, output redirection (gap #3)
 
-- `test/electron/shell-runner.test.ts`
-  - streams stdout chunks
-  - streams stderr chunks
-  - returns exit code and duration
-  - times out long-running commands
-  - kills the child process on cancellation
+- `test/electron/shell-runner.test.ts` (4 tests, all passing)
+  - [x] streams stdout chunks
+  - [x] streams stderr chunks
+  - [x] returns exit code and duration
+  - [x] times out long-running commands
+  - [x] kills the child process on cancellation
+  - [ ] verifies process-tree cleanup (gap #2)
 
-- `test/components/BChatSidebar/useChatStream.test.ts`
-  - live shell output chunks update the matching tool-call display
-  - final shell result still triggers normal tool-loop continuation
+- `test/components/BChatSidebar/useChatStream.test.ts` (2 tests, all passing)
+  - [x] live shell output chunks update the matching tool-call display
+  - [x] final shell result still triggers normal tool-loop continuation
+
+## Implementation Status (2026-05-24)
+
+The following is a gap analysis comparing the design document against the running implementation.
+
+### Already Implemented
+
+- **Tool registration** — `run_shell_command` registers as a dangerous built-in tool with confirmation requirement
+- **Input validation** — Shell type, command text, workspace root, timeout bounds checked before analysis
+- **Safety analysis (regex-based)** — Input validation + conservative regex policy matching
+- **Confirmation flow** — Danger-level confirmation card showing shell/cwd/timeout/command/findings, `allowRemember: false`
+- **Main-process execution** — `child_process.spawn` with shell-specific executable resolution, workspace cwd enforcement
+- **Real-time streaming** — IPC side channel (`shell:output`) streams stdout/stderr chunks to chat UI
+- **Chat UI integration** — `shellOutput` buffer on tool-call parts, rolling buffer capped at 80 chunks
+- **Web platform stubs** — `web.ts` throws `UNSUPPORTED_PROVIDER` for all shell execution methods
+- **Tests** — 42 tests across 7 test files covering tool, index, safety, runner, IPC, and chat stream
+
+### Gaps
+
+#### 1. Parser Layer: Tree-Sitter Not Wired
+
+**See detailed analysis in Safety Model → Remaining Gap above.** The AST-based parser is designed but not functional. Current implementation uses regex pattern matching.
+
+#### 2. Process-Tree Cleanup
+
+**See detailed analysis in Main-Process Runtime → Remaining Gap above.** `cancel()` only kills the direct child process, not descendant processes.
+
+#### 3. Policy Coverage Incomplete (4 of 9 Patterns)
+
+The current regex-based safety analyzer (`appendPolicyFindings`) blocks only 4 of the 9 policy categories listed in the Safety Model:
+
+| Policy | Status |
+|--------|--------|
+| Destructive recursive deletion | Blocked |
+| Network pipe to shell | Blocked |
+| Environment/secret dumping | Blocked |
+| Background/detached processes | Blocked |
+| Permission/ownership mutation (`chmod`, `chown`) | Not checked |
+| Shell profile mutation (`.bashrc`, `.profile`) | Not checked |
+| Command substitution hiding unsafe context | Not checked |
+| Output redirection outside workspace | Not checked |
+| `cd` outside workspace before running command | Not checked (only initial cwd validated) |
+
+These gaps will be addressed when the tree-sitter AST parser is wired, as AST walking can detect these patterns structurally rather than through fragile regexes.
+
+#### 4. Timeout Returns Success Instead of Failure
+
+**Design says:** "Timeout: failure result with `TOOL_TIMEOUT`, including partial output"
+
+**Current behavior:** The runner resolves normally with `timedOut: true` in the result. The Shell tool treats all resolved results as success via `createToolSuccessResult`. The `timedOut` flag is present in the data but the tool result status is `success`, not `failure` with code `TOOL_TIMEOUT`.
+
+This means the LLM receives a successful tool result for timed-out commands, potentially leading it to believe the command completed normally. Fix: the Shell tool's `execute` method should check `runResult.timedOut` and return `createToolFailureResult(..., 'TOOL_TIMEOUT', ...)` with partial output included.
+
+#### 5. Result Summary UI Missing Shell-Specific Details
+
+**Design says:** "The final tool result should summarize: exit code or signal, duration, timeout status, whether output was truncated"
+
+**Current behavior:** `BubblePartToolActivity.vue` returns a generic "已完成。" for all successful non-question tools. No shell-specific summary (exit code, duration, truncated flag) is rendered.
+
+Fix: In `summaryText` computed, add a shell-specific branch that formats `exitCode`, `durationMs`, `timedOut`, and `truncated` from the result data when `toolName === 'run_shell_command'`.
+
+#### 6. Electron Bridge Capability Check Missing at Registration
+
+**Design says:** "The first release should register the tool only when the Electron native bridge supports shell command execution"
+
+**Current behavior:** `createBuiltinTools` registers the shell tool whenever `options.confirm` is present. On web, the tool would still be registered and visible to the LLM, but calling it would throw `UNSUPPORTED_PROVIDER` at runtime.
+
+Fix: Add a capability check (e.g., `native.supportsShellCommand?.()`) that gates tool registration. Web platform should return `false`.
 
 ## Rollout
 

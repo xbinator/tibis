@@ -153,6 +153,9 @@ export interface Native {
 
   openExternal(url: string): Promise<void>;
 
+  /** 当前平台是否支持 Shell 命令执行。Web 平台返回 false。 */
+  supportsShellCommand(): boolean;
+
   analyzeShellCommand(request: ElectronShellCommandSafetyRequest): Promise<ElectronShellCommandSafetyReport>;
 
   runShellCommand(request: ElectronShellCommandRunRequest): Promise<ElectronShellCommandRunResult>;

@@ -213,4 +213,26 @@ describe('createBuiltinShellCommandTool', () => {
     expect(result.status === 'success' ? result.data.exitCode : null).toBe(2);
     expect(result.status === 'success' ? result.data.stderr : '').toBe('failed\n');
   });
+
+  it('returns TOOL_TIMEOUT failure when command times out', async () => {
+    const { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } = await import('@/ai/tools/builtin/ShellTool');
+    const { adapter } = createConfirmationAdapter(true);
+    const tool = createBuiltinShellCommandTool({ confirm: adapter, getWorkspaceRoot: () => '/workspace' });
+    nativeMock.analyzeShellCommand.mockResolvedValue(createAllowedReport());
+    nativeMock.runShellCommand.mockResolvedValue({
+      ...createRunResult(),
+      timedOut: true,
+      durationMs: 30001,
+      stdout: 'partial output\n',
+      stderr: '',
+      truncated: true
+    });
+
+    const result = await tool.execute({ shell: 'bash', command: 'sleep 60', timeoutMs: 1000 });
+
+    expect(result.status).toBe('failure');
+    expect(result.status === 'failure' ? result.error.code : '').toBe('TOOL_TIMEOUT');
+    expect(result.status === 'failure' ? result.error.message : '').toContain('30001ms');
+    expect(result.status === 'failure' ? result.error.message : '').toContain('partial output');
+  });
 });

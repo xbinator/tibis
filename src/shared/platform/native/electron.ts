@@ -133,6 +133,10 @@ export class ElectronNative implements Native {
     await getElectronAPI().openExternal(url);
   }
 
+  supportsShellCommand(): boolean {
+    return true;
+  }
+
   async analyzeShellCommand(request: Parameters<Native['analyzeShellCommand']>[0]): ReturnType<Native['analyzeShellCommand']> {
     return getElectronAPI().analyzeShellCommand(request);
   }

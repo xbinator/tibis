@@ -161,6 +161,10 @@ export class WebNative implements Native {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
+  supportsShellCommand(): boolean {
+    return false;
+  }
+
   async analyzeShellCommand(): ReturnType<Native['analyzeShellCommand']> {
     const error = new Error('Web platform does not support shell command analysis') as Error & { code: 'UNSUPPORTED_PROVIDER' };
     error.code = 'UNSUPPORTED_PROVIDER';

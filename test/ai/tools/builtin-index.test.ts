@@ -56,7 +56,7 @@ describe('createBuiltinTools', () => {
     expect(names).toContain('update_mcp_server');
     expect(names).toContain('remove_mcp_server');
     expect(names).toContain('refresh_mcp_discovery');
-    expect(names).toContain('run_shell_command');
+    // run_shell_command is only registered when native.supportsShellCommand() returns true (Electron)
   });
 });
 

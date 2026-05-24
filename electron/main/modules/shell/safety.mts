@@ -21,6 +21,13 @@ const ENV_DUMP_PATTERN = /(?:^|[;&|]\s*)(?:env|printenv|Get-ChildItem\s+Env:)\b/
 /** 后台或分离进程匹配。 */
 const BACKGROUND_PROCESS_PATTERN = /(?:^|[^&])&\s*$|\b(?:Start-Process)\b/i;
 
+/** 权限或所有权变更匹配，阻止递归开放权限和变更文件所有者。 */
+const PERMISSION_MUTATION_PATTERN = /\bchmod\s+(?:-[a-zA-Z]*[Rr][a-zA-Z]*\s*)?(?:777|a\+rwx|ugo\+rwx)\b|\bchown\b|\bicacls\b|\bSet-Acl\b/i;
+
+/** Shell 配置文件写入匹配，阻止覆盖或追加到 shell profile。 */
+const SHELL_PROFILE_PATTERN =
+  /[>>>]\s*(?:~\/(?:\.bashrc|\.bash_profile|\.profile|\.zshrc|\.zshenv)|\$profile\b|\$PROFILE\b|\$HOME\/\.(?:bashrc|bash_profile|profile|zshrc|zshenv))/i;
+
 /**
  * 判断未知值是否为支持的 shell。
  * @param value - 待检查值
@@ -93,6 +100,14 @@ function appendPolicyFindings(command: string, findings: ShellCommandSafetyFindi
 
   if (BACKGROUND_PROCESS_PATTERN.test(command)) {
     findings.push(createBlocker('BACKGROUND_PROCESS', '命令可能启动后台或分离进程，当前工具只支持有界前台命令。', command));
+  }
+
+  if (PERMISSION_MUTATION_PATTERN.test(command)) {
+    findings.push(createBlocker('PERMISSION_MUTATION', '命令包含权限或所有权变更操作（chmod 777 / chown / icacls / Set-Acl），需要人工审核。', command));
+  }
+
+  if (SHELL_PROFILE_PATTERN.test(command)) {
+    findings.push(createBlocker('SHELL_PROFILE_MUTATION', '命令尝试写入 Shell 配置文件，可能持久化恶意行为。', command));
   }
 }
 

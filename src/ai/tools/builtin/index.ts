@@ -5,6 +5,7 @@
 import type { BuiltinToolBaseOptions } from '../shared/types';
 import type { AIToolExecutor } from 'types/ai';
 import { nanoid } from 'nanoid';
+import { native } from '@/shared/platform';
 import { READ_CURRENT_DOCUMENT_TOOL_NAME, createBuiltinReadTools } from './DocumentTool';
 import { GET_CURRENT_TIME_TOOL_NAME, createBuiltinEnvironmentTools } from './EnvironmentTool';
 import { EDIT_FILE_TOOL_NAME, createBuiltinEditFileTool } from './FileEditTool';
@@ -185,11 +186,13 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const settingsTools = createBuiltinSettingsTools(options.confirm);
   // 创建 MCP 配置写工具
   const writableMcpSettingsTools = createBuiltinMCPSettingsTools(options.confirm);
-  // 创建危险级 Shell 命令工具，执行前始终需要用户确认。
-  const shellCommandTool = createBuiltinShellCommandTool({
-    confirm: options.confirm!,
-    getWorkspaceRoot: options.getWorkspaceRoot
-  });
+  // 创建危险级 Shell 命令工具，仅当 Electron 原生桥接支持时注册。
+  const shellCommandTool = native.supportsShellCommand()
+    ? createBuiltinShellCommandTool({
+        confirm: options.confirm!,
+        getWorkspaceRoot: options.getWorkspaceRoot
+      })
+    : null;
   // 先汇总默认文件写工具，再通过共享清单筛选默认暴露项。
   const allDefaultWritableTools: AIToolExecutor[] = [
     editFileTool,
@@ -199,7 +202,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     writableMcpSettingsTools.updateMcpServer,
     writableMcpSettingsTools.removeMcpServer,
     writableMcpSettingsTools.refreshMcpDiscovery,
-    shellCommandTool
+    ...(shellCommandTool ? [shellCommandTool] : [])
   ];
   const writableTools = allDefaultWritableTools.filter((tool) => isDefaultBuiltinWritableToolName(tool.definition.name));
 

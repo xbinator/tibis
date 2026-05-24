@@ -73,4 +73,39 @@ describe('shell command safety analyzer', () => {
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'CWD_OUTSIDE_WORKSPACE' }));
   });
+
+  it('blocks chmod 777 operations', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = analyzeShellCommandSafety(createRequest({ command: 'chmod -R 777 /var/www' }));
+
+    expect(report.status).toBe('blocked');
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'PERMISSION_MUTATION' }));
+  });
+
+  it('blocks chown operations', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = analyzeShellCommandSafety(createRequest({ command: 'sudo chown root:root /etc/config' }));
+
+    expect(report.status).toBe('blocked');
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'PERMISSION_MUTATION' }));
+  });
+
+  it('blocks shell profile mutation via redirect', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = analyzeShellCommandSafety(createRequest({ command: 'echo "alias ls=rm" >> ~/.bashrc' }));
+
+    expect(report.status).toBe('blocked');
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'SHELL_PROFILE_MUTATION' }));
+  });
+
+  it('allows safe chmod like +x for scripts', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = analyzeShellCommandSafety(createRequest({ command: 'chmod +x ./deploy.sh' }));
+
+    expect(report.status).toBe('allowed');
+  });
 });
