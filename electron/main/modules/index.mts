@@ -6,7 +6,8 @@ import { registerImageHandlers } from './image/ipc.mjs';
 import { registerLoggerHandlers, registerLogFileHandlers } from './logger/ipc.mjs';
 import { registerMcpHandlers } from './mcp/ipc.mjs';
 import { registerMenuHandlers } from './menu/ipc.mjs';
-import { registerShellHandlers } from './shell/ipc.mjs';
+import { registerSystemHandlers } from './system/ipc.mjs';
+import { registerShellCommandHandlers } from './shell-command/ipc.mjs';
 import { registerShortcutHandlers } from './shortcuts/ipc.mjs';
 import { registerSpeechHandlers } from './speech/ipc.mjs';
 import { registerStoreHandlers } from './store/ipc.mjs';
@@ -19,7 +20,8 @@ export function registerAllIpcHandlers() {
   registerWindowHandlers();
   registerDatabaseHandlers();
   registerStoreHandlers();
-  registerShellHandlers();
+  registerSystemHandlers();
+  registerShellCommandHandlers();
   registerAIHandlers();
   registerMcpHandlers();
   registerLoggerHandlers();
@@ -37,7 +39,8 @@ export {
   registerWindowHandlers,
   registerDatabaseHandlers,
   registerStoreHandlers,
-  registerShellHandlers,
+  registerSystemHandlers,
+  registerShellCommandHandlers,
   registerAIHandlers,
   registerMcpHandlers,
   registerLoggerHandlers,

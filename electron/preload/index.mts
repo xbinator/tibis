@@ -13,7 +13,7 @@ import type {
   AIStreamToolInputStartChunk,
   AIStreamToolResultChunk
 } from 'types/ai';
-import type { ElectronAPI, ElectronSpeechInstallProgress, FileChangeEvent } from 'types/electron-api';
+import type { ElectronAPI, ElectronShellCommandOutputChunk, ElectronSpeechInstallProgress, FileChangeEvent } from 'types/electron-api';
 import { contextBridge, ipcRenderer } from 'electron';
 import { formatPreloadErrorMessage, shouldIgnorePreloadError } from './error-collector.mjs';
 import webviewAPI from './webview.mjs';
@@ -113,14 +113,14 @@ const electronAPI: ElectronAPI = {
 
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('fs:renameFile', oldPath, newPath),
 
-  trashFile: (filePath: string) => ipcRenderer.invoke('shell:trashFile', filePath),
+  trashFile: (filePath: string) => ipcRenderer.invoke('system:trashFile', filePath),
 
-  showItemInFolder: (filePath: string) => ipcRenderer.invoke('shell:showItemInFolder', filePath),
+  showItemInFolder: (filePath: string) => ipcRenderer.invoke('system:showItemInFolder', filePath),
 
-  getRelativePath: (filePath: string) => ipcRenderer.invoke('shell:getRelativePath', filePath),
+  getRelativePath: (filePath: string) => ipcRenderer.invoke('system:getRelativePath', filePath),
 
-  getCwd: () => ipcRenderer.invoke('shell:getCwd') as Promise<string>,
-  getHomeDir: () => ipcRenderer.invoke('shell:getHomeDir') as Promise<string>,
+  getCwd: () => ipcRenderer.invoke('system:getCwd') as Promise<string>,
+  getHomeDir: () => ipcRenderer.invoke('system:getHomeDir') as Promise<string>,
 
   watchFile: (filePath: string) => ipcRenderer.invoke('fs:watchFile', filePath),
 
@@ -248,7 +248,42 @@ const electronAPI: ElectronAPI = {
    * 使用系统默认浏览器打开外部链接
    * @param url 要打开的 URL
    */
-  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  openExternal: (url: string) => ipcRenderer.invoke('system:openExternal', url),
+
+  /**
+   * 分析 Shell 命令安全性。
+   * @param request - 安全分析请求
+   * @returns 安全分析报告
+   */
+  analyzeShellCommand: (request) => ipcRenderer.invoke('shell-command:analyze', request),
+
+  /**
+   * 运行 Shell 命令。
+   * @param request - 命令运行请求
+   * @returns 命令执行结果
+   */
+  runShellCommand: (request) => ipcRenderer.invoke('shell-command:run', request),
+
+  /**
+   * 取消 Shell 命令。
+   * @param commandId - 命令 ID
+   * @returns 是否取消成功
+   */
+  cancelShellCommand: (commandId) => ipcRenderer.invoke('shell-command:cancel', commandId),
+
+  /**
+   * 监听 Shell 命令输出。
+   * @param callback - 输出片段回调
+   * @returns 取消监听函数
+   */
+  onShellCommandOutput: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, chunk: ElectronShellCommandOutputChunk) => callback(chunk);
+
+    ipcRenderer.on('shell-command:output', handler);
+    return () => {
+      ipcRenderer.removeListener('shell-command:output', handler);
+    };
+  },
 
   // ==================== 语音转写 ====================
 
