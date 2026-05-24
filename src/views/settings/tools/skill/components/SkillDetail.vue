@@ -23,7 +23,7 @@
     <template v-if="skill">
       <header class="skill-detail__header">
         <div class="skill-detail__meta">
-          <div class="skill-detail__desc">{{ normalizedDescription }}</div>
+          <div class="skill-detail__desc">{{ skill.description }}</div>
         </div>
       </header>
 
@@ -32,7 +32,12 @@
         <span>{{ skill.parseError }}</span>
       </div>
 
-      <div class="skill-detail__path">{{ skill.dirPath }}</div>
+      <div class="skill-detail__path">
+        <span class="skill-detail__path-text">{{ skill.dirPath }}</span>
+        <BButton type="text" square size="small" title="复制路径" @click="handleCopyPath">
+          <Icon icon="lucide:copy" :width="12" />
+        </BButton>
+      </div>
 
       <div class="skill-detail__body">
         <BPanelSplitter v-show="showFileTree" position="right" :size="220" :min-width="160" :max-width="300" :closable="false">
@@ -42,6 +47,9 @@
         <main class="skill-detail__preview">
           <div class="skill-detail__preview-header">
             <span>{{ selectedFileName }}</span>
+            <BButton v-if="fileContent" type="text" square size="small" title="复制内容" @click="handleCopyContent">
+              <Icon icon="lucide:copy" :width="12" />
+            </BButton>
           </div>
 
           <div v-if="fileLoading" class="skill-detail__preview-empty">正在读取文件…</div>
@@ -57,8 +65,11 @@
 import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import type { SkillDefinition } from '@/ai/skill/types';
+import { useClipboard } from '@/hooks/useClipboard';
 import { native } from '@/shared/platform';
 import SkillFileTree from './SkillFileTree.vue';
+
+const { clipboard } = useClipboard();
 
 interface Props {
   /** 当前查看的 Skill。 */
@@ -86,11 +97,19 @@ let fileRequestId = 0;
 /** Skill 名称首字母大写，用于图标展示。 */
 const initial = computed<string>(() => props.skill?.name.charAt(0).toUpperCase() ?? 'S');
 
-/** 展示用描述，移除开头的双引号。 */
-const normalizedDescription = computed<string>(() => {
-  const description = props.skill?.description ?? '';
-  return description.startsWith('"') ? description.slice(1) : description;
-});
+/** 复制目录路径。 */
+function handleCopyPath(): void {
+  if (props.skill?.dirPath) {
+    clipboard(props.skill.dirPath, { successMessage: '路径已复制' });
+  }
+}
+
+/** 复制文件内容。 */
+function handleCopyContent(): void {
+  if (fileContent.value) {
+    clipboard(fileContent.value, { successMessage: '内容已复制' });
+  }
+}
 
 /** 当前选中文件名称。 */
 const selectedFileName = computed<string>(() => selectedFilePath.value.split('/').at(-1) ?? '未选择文件');
@@ -251,16 +270,24 @@ watch(
 }
 
 .skill-detail__path {
-  padding: 6px 8px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 4px 4px 8px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-tertiary);
+  border-radius: 6px;
+}
+
+.skill-detail__path-text {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-tertiary);
-  border-radius: 6px;
 }
 
 .skill-detail__body {
