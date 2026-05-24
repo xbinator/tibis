@@ -113,6 +113,22 @@ export interface ChatMessageThinkingPart {
 }
 
 /**
+ * 聊天消息 Shell 命令输出片段
+ */
+export interface ChatMessageShellOutputChunk {
+  /** 命令唯一标识 */
+  commandId: string;
+  /** 输出流 */
+  stream: 'stdout' | 'stderr';
+  /** 输出文本 */
+  text: string;
+  /** 输出序号 */
+  sequence: number;
+  /** 创建时间 */
+  createdAt: string;
+}
+
+/**
  * 聊天消息工具调用片段
  */
 export interface ChatMessageToolCallPart {
@@ -124,6 +140,8 @@ export interface ChatMessageToolCallPart {
   toolName: string;
   /** 工具输入参数 */
   input: unknown;
+  /** Shell 命令实时输出缓冲，仅 run_shell_command 使用 */
+  shellOutput?: ChatMessageShellOutputChunk[];
 }
 
 /**

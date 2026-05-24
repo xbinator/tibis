@@ -18,6 +18,7 @@ import {
   READ_FILE_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
+  RUN_SHELL_COMMAND_TOOL_NAME,
   SKILL_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
@@ -50,7 +51,8 @@ describe('built-in tool catalog', () => {
       ADD_MCP_SERVER_TOOL_NAME,
       UPDATE_MCP_SERVER_TOOL_NAME,
       REMOVE_MCP_SERVER_TOOL_NAME,
-      REFRESH_MCP_DISCOVERY_TOOL_NAME
+      REFRESH_MCP_DISCOVERY_TOOL_NAME,
+      RUN_SHELL_COMMAND_TOOL_NAME
     ]);
   });
 
@@ -71,7 +73,8 @@ describe('built-in tool catalog', () => {
       ADD_MCP_SERVER_TOOL_NAME,
       UPDATE_MCP_SERVER_TOOL_NAME,
       REMOVE_MCP_SERVER_TOOL_NAME,
-      REFRESH_MCP_DISCOVERY_TOOL_NAME
+      REFRESH_MCP_DISCOVERY_TOOL_NAME,
+      RUN_SHELL_COMMAND_TOOL_NAME
     ]);
   });
 
@@ -87,6 +90,7 @@ describe('built-in tool catalog', () => {
   it('checks writable tool membership from the shared catalog', () => {
     expect(isDefaultBuiltinWritableToolName(EDIT_FILE_TOOL_NAME)).toBe(true);
     expect(isDefaultBuiltinWritableToolName(WRITE_FILE_TOOL_NAME)).toBe(true);
+    expect(isDefaultBuiltinWritableToolName(RUN_SHELL_COMMAND_TOOL_NAME)).toBe(true);
     expect(isDefaultBuiltinWritableToolName('replace_document')).toBe(false);
   });
 });

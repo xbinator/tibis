@@ -136,6 +136,117 @@ export interface ElectronReadWorkspaceDirectoryResult {
   entries: ElectronReadWorkspaceDirectoryEntry[];
 }
 
+/** Shell 命令支持的 shell 类型。 */
+export type ElectronShellCommandShell = 'bash' | 'powershell';
+
+/**
+ * Electron Shell 命令安全发现项。
+ */
+export interface ElectronShellCommandSafetyFinding {
+  /** 严重级别。 */
+  severity: 'info' | 'warning' | 'blocker';
+  /** 机器可读编码。 */
+  code: string;
+  /** 展示消息。 */
+  message: string;
+  /** 触发规则的命令片段。 */
+  nodeText?: string;
+}
+
+/**
+ * Electron Shell 命令安全报告。
+ */
+export interface ElectronShellCommandSafetyReport {
+  /** 分析状态。 */
+  status: 'allowed' | 'blocked';
+  /** Shell 类型。 */
+  shell: ElectronShellCommandShell | 'unknown';
+  /** 安全发现项。 */
+  findings: ElectronShellCommandSafetyFinding[];
+  /** 归一化命令预览。 */
+  normalizedCommandPreview: string;
+  /** 归一化执行目录。 */
+  cwd: string;
+}
+
+/**
+ * Electron Shell 命令安全分析请求。
+ */
+export interface ElectronShellCommandSafetyRequest {
+  /** Shell 类型。 */
+  shell?: unknown;
+  /** 命令文本。 */
+  command?: unknown;
+  /** 执行目录。 */
+  cwd?: unknown;
+  /** 工作区根目录。 */
+  workspaceRoot?: unknown;
+}
+
+/**
+ * Electron Shell 命令执行请求。
+ */
+export interface ElectronShellCommandRunRequest {
+  /** 命令唯一标识。 */
+  commandId: string;
+  /** Shell 类型。 */
+  shell: ElectronShellCommandShell;
+  /** 命令文本。 */
+  command: string;
+  /** 执行目录。 */
+  cwd: string;
+  /** 工作区根目录。 */
+  workspaceRoot: string;
+  /** 超时时间，单位毫秒。 */
+  timeoutMs: number;
+  /** 最终输出最大字符数。 */
+  maxOutputChars?: number;
+}
+
+/**
+ * Electron Shell 命令输出片段。
+ */
+export interface ElectronShellCommandOutputChunk {
+  /** 命令唯一标识。 */
+  commandId: string;
+  /** 输出流。 */
+  stream: 'stdout' | 'stderr';
+  /** 输出文本。 */
+  text: string;
+  /** 递增序号。 */
+  sequence: number;
+  /** 创建时间。 */
+  createdAt: string;
+}
+
+/**
+ * Electron Shell 命令执行结果。
+ */
+export interface ElectronShellCommandRunResult {
+  /** 命令唯一标识。 */
+  commandId: string;
+  /** Shell 类型。 */
+  shell: ElectronShellCommandShell;
+  /** 命令文本。 */
+  command: string;
+  /** 执行目录。 */
+  cwd: string;
+  /** 退出码。 */
+  exitCode: number | null;
+  /** 退出信号。 */
+  signal: string | null;
+  /** 执行耗时。 */
+  durationMs: number;
+  /** 是否超时。 */
+  timedOut: boolean;
+  /** 截断后的 stdout。 */
+  stdout: string;
+  /** 截断后的 stderr。 */
+  stderr: string;
+  /** 是否截断。 */
+  truncated: boolean;
+}
+
 export interface DbExecuteResult {
   changes: number;
   lastInsertRowid: number;
@@ -324,6 +435,10 @@ export interface ElectronAPI {
 
   // 系统操作
   openExternal: (url: string) => Promise<void>;
+  analyzeShellCommand: (request: ElectronShellCommandSafetyRequest) => Promise<ElectronShellCommandSafetyReport>;
+  runShellCommand: (request: ElectronShellCommandRunRequest) => Promise<ElectronShellCommandRunResult>;
+  cancelShellCommand: (commandId: string) => Promise<boolean>;
+  onShellCommandOutput: (callback: (chunk: ElectronShellCommandOutputChunk) => void) => () => void;
 
   // 语音转写
   transcribeAudio: (request: ElectronAudioTranscribeRequest) => Promise<ElectronAudioTranscribeResult>;

@@ -21,6 +21,7 @@ import {
 } from './MCPSettingsTool';
 import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } from './QuestionTool';
 import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
+import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
 
 // 重新导出工具名称
@@ -39,6 +40,7 @@ export {
 } from './MCPSettingsTool';
 export { LEGACY_ASK_USER_QUESTION_TOOL_NAME, QUESTION_TOOL_NAME } from './QuestionTool';
 export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
+export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
 
 /**
@@ -81,7 +83,8 @@ export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [
   ADD_MCP_SERVER_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
-  REFRESH_MCP_DISCOVERY_TOOL_NAME
+  REFRESH_MCP_DISCOVERY_TOOL_NAME,
+  RUN_SHELL_COMMAND_TOOL_NAME
 ] as const;
 
 /**
@@ -182,6 +185,11 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const settingsTools = createBuiltinSettingsTools(options.confirm);
   // 创建 MCP 配置写工具
   const writableMcpSettingsTools = createBuiltinMCPSettingsTools(options.confirm);
+  // 创建危险级 Shell 命令工具，执行前始终需要用户确认。
+  const shellCommandTool = createBuiltinShellCommandTool({
+    confirm: options.confirm!,
+    getWorkspaceRoot: options.getWorkspaceRoot
+  });
   // 先汇总默认文件写工具，再通过共享清单筛选默认暴露项。
   const allDefaultWritableTools: AIToolExecutor[] = [
     editFileTool,
@@ -190,7 +198,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     writableMcpSettingsTools.addMcpServer,
     writableMcpSettingsTools.updateMcpServer,
     writableMcpSettingsTools.removeMcpServer,
-    writableMcpSettingsTools.refreshMcpDiscovery
+    writableMcpSettingsTools.refreshMcpDiscovery,
+    shellCommandTool
   ];
   const writableTools = allDefaultWritableTools.filter((tool) => isDefaultBuiltinWritableToolName(tool.definition.name));
 

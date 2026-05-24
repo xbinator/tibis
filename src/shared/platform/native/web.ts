@@ -161,6 +161,28 @@ export class WebNative implements Native {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
+  async analyzeShellCommand(): ReturnType<Native['analyzeShellCommand']> {
+    const error = new Error('Web platform does not support shell command analysis') as Error & { code: 'UNSUPPORTED_PROVIDER' };
+    error.code = 'UNSUPPORTED_PROVIDER';
+    throw error;
+  }
+
+  async runShellCommand(): ReturnType<Native['runShellCommand']> {
+    const error = new Error('Web platform does not support running shell commands') as Error & { code: 'UNSUPPORTED_PROVIDER' };
+    error.code = 'UNSUPPORTED_PROVIDER';
+    throw error;
+  }
+
+  async cancelShellCommand(): Promise<boolean> {
+    return false;
+  }
+
+  onShellCommandOutput(): () => void {
+    return () => {
+      // web 端不支持 Shell 命令输出监听
+    };
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onMenuAction(_callback: (action: string) => void): () => void {
     return () => {

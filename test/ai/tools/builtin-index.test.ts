@@ -10,6 +10,7 @@ import {
   READ_DIRECTORY_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
+  RUN_SHELL_COMMAND_TOOL_NAME,
   SKILL_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME
@@ -55,6 +56,7 @@ describe('createBuiltinTools', () => {
     expect(names).toContain('update_mcp_server');
     expect(names).toContain('remove_mcp_server');
     expect(names).toContain('refresh_mcp_discovery');
+    expect(names).toContain('run_shell_command');
   });
 });
 
@@ -73,6 +75,7 @@ describe('builtin tool exports', () => {
     expect(UPDATE_MCP_SERVER_TOOL_NAME).toBe('update_mcp_server');
     expect(REMOVE_MCP_SERVER_TOOL_NAME).toBe('remove_mcp_server');
     expect(REFRESH_MCP_DISCOVERY_TOOL_NAME).toBe('refresh_mcp_discovery');
+    expect(RUN_SHELL_COMMAND_TOOL_NAME).toBe('run_shell_command');
   });
 
   it('exports skill tool name', () => {

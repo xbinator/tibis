@@ -3,6 +3,7 @@
  * @description 校验聊天流在用户主动中止时会正确收尾助手消息并触发持久化回调。
  */
 import type { AIToolExecutor } from 'types/ai';
+import type { ElectronShellCommandOutputChunk } from 'types/electron-api';
 import { nextTick, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -70,6 +71,7 @@ interface MockChatCallbacks {
  */
 let capturedCallbacks: MockChatCallbacks | null = null;
 const streamSpy = vi.fn();
+let shellOutputCallback: ((chunk: ElectronShellCommandOutputChunk) => void) | null = null;
 
 // Mutable state for mocks - use module-level mutable state
 let getAvailableServiceConfigCallCount = 0;
@@ -145,6 +147,17 @@ vi.mock('@/components/BChatSidebar/utils/compression/coordinator', () => ({
   })
 }));
 
+vi.mock('@/shared/platform', () => ({
+  native: {
+    onShellCommandOutput: vi.fn((callback: (chunk: ElectronShellCommandOutputChunk) => void) => {
+      shellOutputCallback = callback;
+      return () => {
+        shellOutputCallback = null;
+      };
+    })
+  }
+}));
+
 vi.mock('@/stores/ai/serviceModel', () => ({
   /**
    * 模拟服务模型 store，避免测试初始化时依赖真实 store。
@@ -195,6 +208,7 @@ describe('useChatStream abort', () => {
     getAvailableServiceConfigCallCount = 0;
     getAvailableServiceConfigReturnValues = [];
     mcpServers.length = 0;
+    shellOutputCallback = null;
   });
 
   it('finalizes the current assistant message and calls onComplete once when the user aborts', () => {
@@ -490,6 +504,57 @@ describe('useChatStream abort', () => {
 
     expect(messages.value).toHaveLength(2);
     expect(messages.value[1].role).toBe('assistant');
+  });
+
+  it('appends live shell output chunks to the matching tool call while execution is pending', async () => {
+    let resolveTool: ((value: Awaited<ReturnType<AIToolExecutor['execute']>>) => void) | null = null;
+    const shellTool: AIToolExecutor = {
+      definition: {
+        name: 'run_shell_command',
+        description: 'Run shell command',
+        source: 'builtin',
+        riskLevel: 'dangerous',
+        requiresActiveDocument: false,
+        parameters: { type: 'object', properties: {} }
+      },
+      execute: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveTool = resolve;
+          })
+      )
+    };
+    const messages = ref<Message[]>([create.userMessage('执行测试')]);
+    const { stream } = useChatStream({ messages, tools: [shellTool] });
+    const config: ServiceConfig = {
+      providerId: 'openai',
+      modelId: 'gpt-4o',
+      toolSupport: {
+        supported: true
+      }
+    };
+
+    await stream.streamMessages(messages.value, config);
+    const toolCallPromise = capturedCallbacks?.onToolCall?.({
+      toolCallId: 'tc-shell',
+      toolName: 'run_shell_command',
+      input: { shell: 'bash', command: 'pnpm test' }
+    });
+    await Promise.resolve();
+    shellOutputCallback?.({
+      commandId: 'tc-shell',
+      stream: 'stdout',
+      text: 'running\n',
+      sequence: 1,
+      createdAt: '2026-05-24T00:00:00.000Z'
+    });
+
+    const assistantMessage = messages.value[1];
+    const toolCallPart = assistantMessage.parts.find((part) => part.type === 'tool-call' && part.toolCallId === 'tc-shell');
+    expect(toolCallPart?.type === 'tool-call' ? toolCallPart.shellOutput?.[0]?.text : '').toBe('running\n');
+
+    resolveTool?.({ toolName: 'run_shell_command', status: 'success', data: { exitCode: 0 } });
+    await toolCallPromise;
   });
 
   it('allows submitting user choice while stream loading remains active for awaiting input', async () => {

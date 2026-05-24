@@ -7,6 +7,9 @@ import type { AIToolContext, AIToolExecutionResult, AIToolExecutor, AIStreamTool
 import { isFunction } from 'lodash-es';
 import { createToolFailureResult } from './results';
 
+/** Shell 命令工具名称。 */
+const RUN_SHELL_COMMAND_TOOL_NAME = 'run_shell_command';
+
 /**
  * 已执行的工具调用
  * @description 包含工具调用 ID、名称、输入和执行结果
@@ -49,6 +52,33 @@ function attachToolCallIdToAwaitingResult(result: AIToolExecutionResult, toolCal
       ...result.data,
       toolCallId
     }
+  };
+}
+
+/**
+ * 判断值是否为普通对象。
+ * @param value - 待判断值
+ * @returns 是否为普通对象
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 为需要 toolCallId 的本地工具补充内部执行输入。
+ * @param toolName - 工具名称
+ * @param input - 原始输入
+ * @param toolCallId - 工具调用 ID
+ * @returns 工具执行输入
+ */
+function createExecutionInput(toolName: string, input: unknown, toolCallId: string): unknown {
+  if (toolName !== RUN_SHELL_COMMAND_TOOL_NAME || !isRecord(input)) {
+    return input;
+  }
+
+  return {
+    ...input,
+    commandId: toolCallId
   };
 }
 
@@ -96,7 +126,8 @@ export async function executeToolCall(call: AIStreamToolCallChunk, tools: AITool
   }
 
   // 执行工具，等待用户输入结果仍作为普通终态 tool-result 进入消息历史。
-  const rawResult = await executor.execute(call.input, context);
+  const executionInput = createExecutionInput(call.toolName, call.input, call.toolCallId);
+  const rawResult = await executor.execute(executionInput, context);
 
   return {
     toolCallId: call.toolCallId,

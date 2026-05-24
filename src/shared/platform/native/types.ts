@@ -4,6 +4,11 @@ import type {
   ElectronFilePathStatus,
   ElectronOpenFileOptions,
   ElectronSaveFileOptions,
+  ElectronShellCommandOutputChunk,
+  ElectronShellCommandRunRequest,
+  ElectronShellCommandRunResult,
+  ElectronShellCommandSafetyReport,
+  ElectronShellCommandSafetyRequest,
   RecentFileShortcutInput
 } from 'types/electron-api';
 
@@ -147,6 +152,14 @@ export interface Native {
   setWindowTitle(title: string): Promise<void>;
 
   openExternal(url: string): Promise<void>;
+
+  analyzeShellCommand(request: ElectronShellCommandSafetyRequest): Promise<ElectronShellCommandSafetyReport>;
+
+  runShellCommand(request: ElectronShellCommandRunRequest): Promise<ElectronShellCommandRunResult>;
+
+  cancelShellCommand(commandId: string): Promise<boolean>;
+
+  onShellCommandOutput(callback: (chunk: ElectronShellCommandOutputChunk) => void): () => void;
 
   onMenuAction?(callback: (action: string) => void): () => void;
 

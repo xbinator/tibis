@@ -255,21 +255,21 @@ const electronAPI: ElectronAPI = {
    * @param request - 安全分析请求
    * @returns 安全分析报告
    */
-  analyzeShellCommand: (request) => ipcRenderer.invoke('shell-command:analyze', request),
+  analyzeShellCommand: (request) => ipcRenderer.invoke('shell:analyze', request),
 
   /**
    * 运行 Shell 命令。
    * @param request - 命令运行请求
    * @returns 命令执行结果
    */
-  runShellCommand: (request) => ipcRenderer.invoke('shell-command:run', request),
+  runShellCommand: (request) => ipcRenderer.invoke('shell:run', request),
 
   /**
    * 取消 Shell 命令。
    * @param commandId - 命令 ID
    * @returns 是否取消成功
    */
-  cancelShellCommand: (commandId) => ipcRenderer.invoke('shell-command:cancel', commandId),
+  cancelShellCommand: (commandId) => ipcRenderer.invoke('shell:cancel', commandId),
 
   /**
    * 监听 Shell 命令输出。
@@ -279,9 +279,9 @@ const electronAPI: ElectronAPI = {
   onShellCommandOutput: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, chunk: ElectronShellCommandOutputChunk) => callback(chunk);
 
-    ipcRenderer.on('shell-command:output', handler);
+    ipcRenderer.on('shell:output', handler);
     return () => {
-      ipcRenderer.removeListener('shell-command:output', handler);
+      ipcRenderer.removeListener('shell:output', handler);
     };
   },
 

@@ -133,6 +133,22 @@ export class ElectronNative implements Native {
     await getElectronAPI().openExternal(url);
   }
 
+  async analyzeShellCommand(request: Parameters<Native['analyzeShellCommand']>[0]): ReturnType<Native['analyzeShellCommand']> {
+    return getElectronAPI().analyzeShellCommand(request);
+  }
+
+  async runShellCommand(request: Parameters<Native['runShellCommand']>[0]): ReturnType<Native['runShellCommand']> {
+    return getElectronAPI().runShellCommand(request);
+  }
+
+  async cancelShellCommand(commandId: string): Promise<boolean> {
+    return getElectronAPI().cancelShellCommand(commandId);
+  }
+
+  onShellCommandOutput(callback: Parameters<Native['onShellCommandOutput']>[0]): () => void {
+    return getElectronAPI().onShellCommandOutput(callback);
+  }
+
   updateMenuItem(id: string, properties: { checked?: boolean }): void {
     getElectronAPI().updateMenuItem(id, properties);
   }

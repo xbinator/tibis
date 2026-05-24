@@ -7,6 +7,7 @@
     </template>
 
     <div :class="bem('summary')">{{ summaryText }}</div>
+    <pre v-if="shellOutputText" :class="bem('shell-output')">{{ shellOutputText }}</pre>
   </BubblePart>
 </template>
 
@@ -51,7 +52,7 @@ const TOOL_ACTION_LABELS: Record<string, ToolActionLabel> = {
   question: { alias: '提问', running: '正在准备问题', success: '' },
   ask_user_question: { alias: '提问', running: '正在准备问题', success: '' },
   ask_user_choice: { alias: '选择', running: '正在准备选项', success: '' },
-  read_current_document: { alias: '当前文档读取', running: '正在读取当前文档', success: '当前文档读取完成' },
+  read_current_document: { alias: '', running: '文档读取中', success: '文档读取完成' },
   read_file: { alias: '文件读取', running: '正在读取文件', success: '文件读取完成' },
   read_directory: { alias: '目录读取', running: '正在读取目录', success: '目录读取完成' },
   write_file: { alias: '文件写入', running: '正在写入文件', success: '文件写入完成' },
@@ -65,6 +66,7 @@ const TOOL_ACTION_LABELS: Record<string, ToolActionLabel> = {
   update_mcp_server: { alias: 'MCP 服务更新', running: '正在更新 MCP 服务', success: 'MCP 服务更新完成' },
   remove_mcp_server: { alias: 'MCP 服务移除', running: '正在移除 MCP 服务', success: 'MCP 服务移除完成' },
   refresh_mcp_discovery: { alias: 'MCP 发现刷新', running: '正在刷新 MCP 发现', success: 'MCP 发现刷新完成' },
+  run_shell_command: { alias: 'Shell 命令', running: '正在执行命令', success: '命令执行完成' },
   skill: { alias: 'Skill 加载', running: '正在加载 Skill', success: 'Skill 加载完成' },
   open_draft: { alias: '草稿打开', running: '正在打开草稿', success: '草稿已打开' },
   tavily_search: { alias: '网页搜索', running: '正在搜索网页', success: '网页搜索完成' },
@@ -163,6 +165,14 @@ const resultPart = computed<ChatMessageToolResultPart | null>(() => (props.part.
 const actionLabel = computed(() => getActionLabel(props.part.toolName));
 /** 工具是否仍在进行中。 */
 const running = computed(() => props.part.type !== 'tool-result');
+/** Shell 命令实时输出文本。 */
+const shellOutputText = computed(() => {
+  if (props.part.type !== 'tool-call' || !props.part.shellOutput?.length) {
+    return '';
+  }
+
+  return props.part.shellOutput.map((chunk) => `[${chunk.stream}] ${chunk.text}`).join('');
+});
 /** 工具是否失败或取消。 */
 const isFailure = computed(() => Boolean(resultPart.value && resultPart.value.result.status !== 'success'));
 /** 标题文案。 */
@@ -253,6 +263,21 @@ const iconName = computed(() => {
 .message-bubble-tool-activity__summary {
   line-height: 1.6;
   color: var(--text-secondary);
+}
+
+.message-bubble-tool-activity__shell-output {
+  max-height: 180px;
+  padding: 8px;
+  margin: 8px 0 0;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
 }
 
 @keyframes message-bubble-tool-activity-spin {

@@ -6,7 +6,15 @@ import type { Message } from './types';
 import type { FileReference } from '../types';
 import type { JSONValue, ModelMessage } from 'ai';
 import type { AIAwaitingUserChoiceQuestion, AIToolExecutionAwaitingUserInputResult } from 'types/ai';
-import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageRole, ChatMessageToolInputPart, ChatMessageToolResultPart } from 'types/chat';
+import type {
+  AIUserChoiceAnswerData,
+  ChatMessagePart,
+  ChatMessageRole,
+  ChatMessageShellOutputChunk,
+  ChatMessageToolCallPart,
+  ChatMessageToolInputPart,
+  ChatMessageToolResultPart
+} from 'types/chat';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { asyncTo } from '@/utils/asyncTo';
@@ -56,6 +64,8 @@ export type ToolResult = Extract<ChatMessagePart, { type: 'tool-result' }>['resu
 const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
 /** 旧压缩记忆召回的最大数量。 */
 const MAX_RECALLED_COMPRESSION_MEMORY_COUNT = 2;
+/** Shell 命令实时输出最多保留片段数量。 */
+const MAX_SHELL_OUTPUT_CHUNK_COUNT = 80;
 
 // ─── 内部工具函数 ────────────────────────────────────────────────────────────
 
@@ -152,6 +162,19 @@ export const append = {
    */
   toolCallPart(message: Message, toolCallId: string, toolName: string, input: unknown): void {
     message.parts.push({ type: 'tool-call', toolCallId, toolName, input });
+  },
+
+  /**
+   * 追加 Shell 命令实时输出片段。
+   */
+  shellOutputPart(message: Message, commandId: string, chunk: ChatMessageShellOutputChunk): void {
+    const existingPart = message.parts.find((part): part is ChatMessageToolCallPart => part.type === 'tool-call' && part.toolCallId === commandId);
+    if (!existingPart) {
+      return;
+    }
+
+    const output = [...(existingPart.shellOutput ?? []), chunk];
+    existingPart.shellOutput = output.slice(Math.max(0, output.length - MAX_SHELL_OUTPUT_CHUNK_COUNT));
   },
 
   /**

@@ -20,13 +20,14 @@ import type {
   AIStreamToolResultChunk
 } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
-import { nextTick, ref, shallowRef, type Ref } from 'vue';
+import { nextTick, onScopeDispose, ref, shallowRef, type Ref } from 'vue';
 import { parsePartialJson } from 'ai';
 import dayjs from 'dayjs';
 import { isSdkManagedToolName } from '@/ai/tools/builtin';
 import { getModelToolSupport } from '@/ai/tools/policy';
 import { executeToolCall, toTransportTools, type ExecutedToolCall } from '@/ai/tools/stream';
 import { useChat } from '@/hooks/useChat';
+import { native } from '@/shared/platform';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { buildChatMessageReferences } from '../utils/fileReferenceContext';
@@ -129,6 +130,16 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     onComplete: handleStreamComplete,
     onError: handleStreamError
   });
+
+  const disposeShellCommandOutput = native.onShellCommandOutput((chunk) => {
+    const message = messages.value[messages.value.length - 1];
+    if (message?.role !== 'assistant') {
+      return;
+    }
+
+    append.shellOutputPart(message, chunk.commandId, chunk);
+  });
+  onScopeDispose(disposeShellCommandOutput);
 
   /**
    * 重置工具循环状态
