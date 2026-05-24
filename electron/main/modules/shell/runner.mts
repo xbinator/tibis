@@ -11,6 +11,86 @@ import { Effect } from 'effect';
 /** 默认最终输出截断字符数。 */
 const DEFAULT_MAX_OUTPUT_CHARS = 20_000;
 
+/** SIGTERM 后等待进程退出的宽限期（毫秒），超时后升级为 SIGKILL。 */
+const GRACE_PERIOD_MS = 3_000;
+
+/**
+ * 允许传递给子进程的环境变量白名单键名。
+ * 仅包含 PATH、HOME 等基础变量和常见包管理器变量，
+ * 避免将 API 密钥等敏感信息泄露给 LLM 生成的命令。
+ */
+const ALLOWED_ENV_KEYS: ReadonlySet<string> = new Set([
+  // 基础路径
+  'PATH',
+  'HOME',
+  'USER',
+  'SHELL',
+  'TMPDIR',
+  'TEMP',
+  'TMP',
+  // 包管理器
+  'NPM_CONFIG_REGISTRY',
+  'YARN_REGISTRY',
+  'PNPM_HOME',
+  'CARGO_HOME',
+  'RUSTUP_HOME',
+  'GOPATH',
+  'GOPROXY',
+  // 语言运行时
+  'NODE_OPTIONS',
+  'PYTHONPATH',
+  'PYTHONIOENCODING',
+  // 区域设置
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  // 终端
+  'TERM',
+  'COLORTERM'
+]);
+
+/**
+ * 从 process.env 中提取白名单内的环境变量。
+ * @returns 最小化环境变量对象
+ */
+function buildMinimalEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of ALLOWED_ENV_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
+/**
+ * 终止进程及其所有子进程（进程树清理）。
+ * Unix: 使用负 PID 杀死进程组。
+ * Windows: 回退到仅杀死直接子进程。
+ * @param child - 子进程对象
+ * @param signal - 终止信号
+ */
+function killProcessTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals = 'SIGTERM'): void {
+  if (child.pid === undefined) {
+    child.kill(signal);
+    return;
+  }
+
+  if (process.platform === 'win32') {
+    // Windows 不支持进程组 kill，回退到直接 kill
+    child.kill(signal);
+  } else {
+    try {
+      // 负 PID 表示向整个进程组发送信号
+      process.kill(-child.pid, signal);
+    } catch {
+      // 进程组不存在时回退到直接 kill
+      child.kill(signal);
+    }
+  }
+}
+
 /** Shell 命令输出接收函数。 */
 export type ShellCommandOutputSink = (chunk: ShellCommandOutputChunk) => void;
 
@@ -52,6 +132,12 @@ interface ActiveCommand {
   child: ChildProcessWithoutNullStreams;
   /** 是否已经触发超时。 */
   timedOut: boolean;
+  /** 是否已进入终止流程，防止重复 cancel 重复安排定时器。 */
+  terminating: boolean;
+  /** SIGTERM 后的宽限期定时器。 */
+  graceTimer: ReturnType<typeof setTimeout> | null;
+  /** 强制终止回调（Promise 闭包内设置，cancel/timeout 共用）。 */
+  forceTerminate: ((reason: 'timeout' | 'cancel') => void) | null;
 }
 
 /**
@@ -132,13 +218,17 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
         spawnProcess(spawnCommand.command, spawnCommand.args, {
           cwd: request.cwd,
           shell: false,
-          env: process.env
+          env: buildMinimalEnv(),
+          detached: true
         })
       )
     );
     const activeCommand: ActiveCommand = {
       child,
-      timedOut: false
+      timedOut: false,
+      terminating: false,
+      graceTimer: null,
+      forceTerminate: null
     };
     let stdout = '';
     let stderr = '';
@@ -148,10 +238,20 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
 
     activeCommands.set(request.commandId, activeCommand);
 
-    const timeout = setTimeout(() => {
-      activeCommand.timedOut = true;
-      child.kill('SIGTERM');
-    }, request.timeoutMs);
+    /** 主超时定时器，在 cleanup 之前声明以便引用。 */
+    let timeout: ReturnType<typeof setTimeout>;
+
+    /**
+     * 清理命令：清除定时器、从活跃列表移除。
+     */
+    function cleanup(): void {
+      clearTimeout(timeout);
+      if (activeCommand.graceTimer) {
+        clearTimeout(activeCommand.graceTimer);
+        activeCommand.graceTimer = null;
+      }
+      activeCommands.delete(request.commandId);
+    }
 
     /**
      * 处理输出流片段。
@@ -178,6 +278,55 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
     }
 
     return new Promise<ShellCommandRunResult>((resolve, reject) => {
+      /**
+       * 强制结束：SIGTERM → grace period → SIGKILL → 强制 resolve。
+       * cancel 和 timeout 共用此状态机，确保 Promise 始终能 settle。
+       * @param reason - 终止原因（timeout / cancel）
+       */
+      function doForceTerminate(reason: 'timeout' | 'cancel'): void {
+        // 已进入终止流程则跳过，防止重复 cancel 重复安排定时器
+        if (activeCommand.terminating) return;
+        activeCommand.terminating = true;
+
+        // 终止流程启动后清除主超时定时器，避免重复触发
+        clearTimeout(timeout);
+
+        if (reason === 'timeout') {
+          activeCommand.timedOut = true;
+        }
+        killProcessTree(child, 'SIGTERM');
+
+        // 宽限期后升级为 SIGKILL
+        activeCommand.graceTimer = setTimeout(() => {
+          killProcessTree(child, 'SIGKILL');
+
+          // SIGKILL 后仍未退出则强制 resolve
+          activeCommand.graceTimer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve({
+              commandId: request.commandId,
+              shell: request.shell,
+              command: request.command,
+              cwd: request.cwd,
+              exitCode: null,
+              signal: 'SIGKILL',
+              durationMs: Date.now() - startedAt,
+              timedOut: activeCommand.timedOut,
+              stdout,
+              stderr,
+              truncated
+            });
+          }, GRACE_PERIOD_MS);
+        }, GRACE_PERIOD_MS);
+      }
+
+      // 将终止回调暴露给外部 cancel()，共用同一状态机
+      activeCommand.forceTerminate = doForceTerminate;
+
+      timeout = setTimeout(() => doForceTerminate('timeout'), request.timeoutMs);
+
       child.stdout.on('data', (chunk: Buffer | string) => handleOutput('stdout', chunk));
       child.stderr.on('data', (chunk: Buffer | string) => handleOutput('stderr', chunk));
       child.on('error', (error: Error) => {
@@ -185,8 +334,7 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
           return;
         }
         settled = true;
-        clearTimeout(timeout);
-        activeCommands.delete(request.commandId);
+        cleanup();
         reject(error);
       });
       child.on('exit', (exitCode: number | null, signal: NodeJS.Signals | null) => {
@@ -194,8 +342,7 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
           return;
         }
         settled = true;
-        clearTimeout(timeout);
-        activeCommands.delete(request.commandId);
+        cleanup();
         resolve({
           commandId: request.commandId,
           shell: request.shell,
@@ -215,6 +362,8 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
 
   /**
    * 取消运行中的命令。
+   * 通过 activeCommand.forceTerminate 回调与 timeout 共用同一终止状态机，
+   * 确保 Promise 始终能 settle 并 cleanup。
    * @param commandId - 命令 ID
    * @returns 是否找到并取消
    */
@@ -224,7 +373,12 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
       return false;
     }
 
-    activeCommand.child.kill('SIGTERM');
+    if (activeCommand.forceTerminate) {
+      activeCommand.forceTerminate('cancel');
+    } else {
+      // forceTerminate 尚未设置（spawn 还没完成），直接 kill
+      killProcessTree(activeCommand.child, 'SIGTERM');
+    }
     return true;
   }
 

@@ -18,7 +18,8 @@
       "Bash(npx tsc:*)",
       "Bash(pnpm test:*)",
       "Bash(npx vitest:*)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(pnpm add *)"
     ]
   }
 }

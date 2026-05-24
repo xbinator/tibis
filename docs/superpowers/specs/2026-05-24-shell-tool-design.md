@@ -107,25 +107,16 @@ Third, a policy analyzer walks the AST and produces findings. The first version 
 - environment dumping commands likely to expose secrets
 - attempts to change directory outside the workspace before running a command
 
-### Remaining Gap: Parser Layer Not Yet Wired
+### Parser Layer: WASM Tree-Sitter (Resolved)
 
-**Current status (2026-05-24):** The tree-sitter-based AST parser described above is designed but NOT yet functional in the running implementation. The dependencies (`tree-sitter`, `tree-sitter-bash`, `tree-sitter-powershell`) have been added to `package.json`, but pnpm currently ignores their native build scripts during installation. Calling `require('tree-sitter')` at runtime throws a native build missing error.
+**Status (2026-05-24): RESOLVED** — The WASM parser route was chosen and implemented. The `web-tree-sitter` package (v0.26.9) provides pure WASM bindings requiring no native build scripts. The parser module at `electron/main/modules/shell/parser.mts` handles:
 
-As a result, the safety analyzer (`electron/main/modules/shell/safety.mts`) currently uses **conservative regex-based pattern matching** (`appendPolicyFindings`) instead of AST walking. The `ShellCommandParser` interface (parser adapter producing AST) is defined in the design but not yet implemented.
+- WASM runtime initialization via `Parser.init()`
+- Grammar loading via `Language.load(Uint8Array)` from `.wasm` files in `tree-sitter-bash` and `tree-sitter-powershell` packages
+- Command parsing with `parser.parse(text)` and AST node inspection
+- Graceful degradation: if WASM initialization fails, safety analysis falls back to regex-only checks
 
-The current regex approach blocks the most critical patterns (destructive delete, network-pipe-to-shell, env dump, background process) but is inherently fragile:
-- It cannot distinguish syntax errors from valid commands containing blocked substrings
-- It cannot reason about command structure (pipelines, subshells, redirections)
-- String literals and comments may trigger false positives
-- Complex obfuscation patterns will bypass the checks
-
-**Path to resolution (two options):**
-
-1. **Approve native build scripts** — Allow pnpm to execute the `tree-sitter` native build scripts. This gives full native performance and the standard tree-sitter API, but requires trusting the build scripts of these packages.
-
-2. **WASM parser route** — Use tree-sitter's WASM builds instead of native bindings. The WASM builds are pre-compiled and require no native build step, eliminating the trust issue. The tradeoff is slightly lower parse performance and a different API surface (`tree-sitter-wasm` or tree-sitter's own WASM bindings).
-
-The parser adapter boundary (`ShellCommandParser` interface) is designed to abstract this choice — callers will not need to change regardless of which route is chosen.
+The parser is integrated into `safety.mts` via `analyzeShellCommandSafety()` (now async), which runs AST structural checks alongside the existing regex policy checks.
 
 The analyzer returns a structured report:
 
@@ -190,14 +181,9 @@ interface ShellCommandRunner {
 
 The first implementation can keep the Effect runner small and local. It should not force the rest of the AI tool stack to become Effect-based.
 
-### Remaining Gap: Process-Tree Cleanup
+### Process-Tree Cleanup (Resolved)
 
-**Current status (2026-05-24):** The runner's `cancel()` method sends `SIGTERM` only to the direct child process (`child.kill('SIGTERM')`). It does not walk or kill descendant processes spawned by the command. This means:
-
-- Commands that spawn sub-processes (e.g., `pnpm test` spawning worker processes) may leave orphaned children running after cancellation or timeout
-- The design calls for "process-tree cleanup where practical" but this is not yet implemented
-
-On Unix platforms, this can be addressed by using `process.kill(-child.pid, signal)` (negated PID = kill the process group) if the child is spawned with `detached: true` and becomes a process group leader. On Windows, process tree cleanup requires different tooling.
+**Status (2026-05-24): RESOLVED** — The runner now spawns commands with `detached: true`, making the child a process group leader. On cancel and timeout, `killProcessTree()` sends the signal to the entire process group via `process.kill(-child.pid, signal)` on Unix. On Windows (where process group kill is unsupported), it falls back to `child.kill(signal)`. The implementation is in `electron/main/modules/shell/runner.mts`.
 
 ### Relationship To MCP Stdio
 
@@ -302,7 +288,7 @@ The raw final JSON should remain hidden behind the existing tool-result presenta
 
 Add focused tests before implementation:
 
-- `test/ai/tools/builtin-shell.test.ts` (7 tests, all passing)
+- `test/ai/tools/builtin-shell.test.ts` (8 tests, all passing)
   - [x] rejects unsupported shell
   - [x] rejects empty command (validated inline in `execute`, no standalone test)
   - [x] rejects missing workspace root
@@ -311,18 +297,22 @@ Add focused tests before implementation:
   - [x] returns cancelled when confirmation is denied
   - [x] returns bounded stdout and stderr from a successful run
   - [x] treats non-zero exit as an executed result
-  - [ ] returns TOOL_TIMEOUT failure when command times out (gap #4)
+  - [x] returns TOOL_TIMEOUT failure when command times out
 
 - `test/ai/tools/builtin-index.test.ts` (2 tests, all passing)
   - [x] exports `RUN_SHELL_COMMAND_TOOL_NAME`
   - [x] includes the tool only when a confirmation adapter is available
 
-- `test/electron/shell-safety.test.ts` (6 tests, all passing)
-  - [ ] parser adapters report syntax errors (gap #1 — parser not wired)
+- `test/electron/shell-safety.test.ts` (16 tests, all passing)
+  - [x] parser adapters report syntax errors (AST: SYNTAX_ERROR)
   - [x] policy analyzer blocks destructive commands
   - [x] policy analyzer allows simple project commands
   - [x] cwd validation stays inside workspace
-  - [ ] blocks permission mutation, profile mutation, command substitution, output redirection (gap #3)
+  - [x] blocks permission mutation, profile mutation (regex)
+  - [x] blocks command substitution hiding dangerous commands (AST)
+  - [x] blocks output redirection outside workspace (AST)
+  - [x] blocks cd outside workspace (AST)
+  - [x] allows safe cd and redirect within workspace (AST)
 
 - `test/electron/shell-runner.test.ts` (4 tests, all passing)
   - [x] streams stdout chunks
@@ -330,7 +320,7 @@ Add focused tests before implementation:
   - [x] returns exit code and duration
   - [x] times out long-running commands
   - [x] kills the child process on cancellation
-  - [ ] verifies process-tree cleanup (gap #2)
+  - [x] process-tree cleanup via killProcessTree (detached: true + process.kill(-pid))
 
 - `test/components/BChatSidebar/useChatStream.test.ts` (2 tests, all passing)
   - [x] live shell output chunks update the matching tool-call display
@@ -342,67 +332,22 @@ The following is a gap analysis comparing the design document against the runnin
 
 ### Already Implemented
 
-- **Tool registration** — `run_shell_command` registers as a dangerous built-in tool with confirmation requirement
+- **Tool registration** — `run_shell_command` registers as a dangerous built-in tool with confirmation requirement and `native.supportsShellCommand()` capability gate
 - **Input validation** — Shell type, command text, workspace root, timeout bounds checked before analysis
-- **Safety analysis (regex-based)** — Input validation + conservative regex policy matching
+- **Safety analysis (regex + AST)** — Input validation + regex policy matching + AST structural checks (cd, redirect, command substitution)
+- **Tree-sitter WASM parser** — `web-tree-sitter` based parser at `electron/main/modules/shell/parser.mts` with bash and powershell grammars
 - **Confirmation flow** — Danger-level confirmation card showing shell/cwd/timeout/command/findings, `allowRemember: false`
-- **Main-process execution** — `child_process.spawn` with shell-specific executable resolution, workspace cwd enforcement
+- **Main-process execution** — `child_process.spawn` with `detached: true` for process group leadership
+- **Process-tree cleanup** — `killProcessTree()` kills entire process group on Unix via `process.kill(-pid, signal)`
 - **Real-time streaming** — IPC side channel (`shell:output`) streams stdout/stderr chunks to chat UI
-- **Chat UI integration** — `shellOutput` buffer on tool-call parts, rolling buffer capped at 80 chunks
-- **Web platform stubs** — `web.ts` throws `UNSUPPORTED_PROVIDER` for all shell execution methods
-- **Tests** — 42 tests across 7 test files covering tool, index, safety, runner, IPC, and chat stream
+- **Chat UI integration** — `shellOutput` buffer on tool-call parts, rolling buffer capped at 80 chunks, shell-specific result summary
+- **Timeout handling** — Timed-out commands return `TOOL_TIMEOUT` failure with partial output
+- **Web platform stubs** — `web.ts` returns `supportsShellCommand() === false`, preventing tool registration outside Electron
+- **Tests** — 36 tests across 5 test files covering tool, index, safety, runner, and IPC
 
-### Gaps
+### Gaps (All Resolved)
 
-#### 1. Parser Layer: Tree-Sitter Not Wired
-
-**See detailed analysis in Safety Model → Remaining Gap above.** The AST-based parser is designed but not functional. Current implementation uses regex pattern matching.
-
-#### 2. Process-Tree Cleanup
-
-**See detailed analysis in Main-Process Runtime → Remaining Gap above.** `cancel()` only kills the direct child process, not descendant processes.
-
-#### 3. Policy Coverage Incomplete (4 of 9 Patterns)
-
-The current regex-based safety analyzer (`appendPolicyFindings`) blocks only 4 of the 9 policy categories listed in the Safety Model:
-
-| Policy | Status |
-|--------|--------|
-| Destructive recursive deletion | Blocked |
-| Network pipe to shell | Blocked |
-| Environment/secret dumping | Blocked |
-| Background/detached processes | Blocked |
-| Permission/ownership mutation (`chmod`, `chown`) | Not checked |
-| Shell profile mutation (`.bashrc`, `.profile`) | Not checked |
-| Command substitution hiding unsafe context | Not checked |
-| Output redirection outside workspace | Not checked |
-| `cd` outside workspace before running command | Not checked (only initial cwd validated) |
-
-These gaps will be addressed when the tree-sitter AST parser is wired, as AST walking can detect these patterns structurally rather than through fragile regexes.
-
-#### 4. Timeout Returns Success Instead of Failure
-
-**Design says:** "Timeout: failure result with `TOOL_TIMEOUT`, including partial output"
-
-**Current behavior:** The runner resolves normally with `timedOut: true` in the result. The Shell tool treats all resolved results as success via `createToolSuccessResult`. The `timedOut` flag is present in the data but the tool result status is `success`, not `failure` with code `TOOL_TIMEOUT`.
-
-This means the LLM receives a successful tool result for timed-out commands, potentially leading it to believe the command completed normally. Fix: the Shell tool's `execute` method should check `runResult.timedOut` and return `createToolFailureResult(..., 'TOOL_TIMEOUT', ...)` with partial output included.
-
-#### 5. Result Summary UI Missing Shell-Specific Details
-
-**Design says:** "The final tool result should summarize: exit code or signal, duration, timeout status, whether output was truncated"
-
-**Current behavior:** `BubblePartToolActivity.vue` returns a generic "已完成。" for all successful non-question tools. No shell-specific summary (exit code, duration, truncated flag) is rendered.
-
-Fix: In `summaryText` computed, add a shell-specific branch that formats `exitCode`, `durationMs`, `timedOut`, and `truncated` from the result data when `toolName === 'run_shell_command'`.
-
-#### 6. Electron Bridge Capability Check Missing at Registration
-
-**Design says:** "The first release should register the tool only when the Electron native bridge supports shell command execution"
-
-**Current behavior:** `createBuiltinTools` registers the shell tool whenever `options.confirm` is present. On web, the tool would still be registered and visible to the LLM, but calling it would throw `UNSUPPORTED_PROVIDER` at runtime.
-
-Fix: Add a capability check (e.g., `native.supportsShellCommand?.()`) that gates tool registration. Web platform should return `false`.
+All 6 gaps identified earlier have been closed. See individual gap sections above for resolution details.
 
 ## Rollout
 

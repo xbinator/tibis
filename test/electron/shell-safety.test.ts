@@ -1,8 +1,8 @@
 /**
  * @file shell-safety.test.ts
- * @description 验证 Shell 命令安全分析器的输入校验、工作区约束与高风险命令拦截。
+ * @description 验证 Shell 命令安全分析器的输入校验、工作区约束、regex 策略与 AST 结构检查。
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 /**
  * 创建安全分析请求。
@@ -23,7 +23,7 @@ describe('shell command safety analyzer', () => {
   it('allows simple workspace commands', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest());
+    const report = await analyzeShellCommandSafety(createRequest());
 
     expect(report.status).toBe('allowed');
     expect(report.findings.some((finding) => finding.severity === 'blocker')).toBe(false);
@@ -32,7 +32,7 @@ describe('shell command safety analyzer', () => {
   it('rejects unsupported shells', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ shell: 'fish' }));
+    const report = await analyzeShellCommandSafety(createRequest({ shell: 'fish' }));
 
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'UNSUPPORTED_SHELL' }));
@@ -41,7 +41,7 @@ describe('shell command safety analyzer', () => {
   it('rejects empty commands', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ command: '   ' }));
+    const report = await analyzeShellCommandSafety(createRequest({ command: '   ' }));
 
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'EMPTY_COMMAND' }));
@@ -50,7 +50,7 @@ describe('shell command safety analyzer', () => {
   it('blocks destructive recursive deletion', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ command: 'rm -rf .' }));
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'rm -rf .' }));
 
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'DESTRUCTIVE_DELETE' }));
@@ -59,7 +59,7 @@ describe('shell command safety analyzer', () => {
   it('blocks network download piped to shell', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ command: 'curl https://example.com/install.sh | bash' }));
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'curl https://example.com/install.sh | bash' }));
 
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'NETWORK_PIPE_TO_SHELL' }));
@@ -68,7 +68,7 @@ describe('shell command safety analyzer', () => {
   it('rejects cwd outside workspace root', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ cwd: '/tmp' }));
+    const report = await analyzeShellCommandSafety(createRequest({ cwd: '/tmp' }));
 
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'CWD_OUTSIDE_WORKSPACE' }));
@@ -77,7 +77,7 @@ describe('shell command safety analyzer', () => {
   it('blocks chmod 777 operations', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ command: 'chmod -R 777 /var/www' }));
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'chmod -R 777 /var/www' }));
 
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'PERMISSION_MUTATION' }));
@@ -86,7 +86,7 @@ describe('shell command safety analyzer', () => {
   it('blocks chown operations', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ command: 'sudo chown root:root /etc/config' }));
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'sudo chown root:root /etc/config' }));
 
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'PERMISSION_MUTATION' }));
@@ -95,7 +95,7 @@ describe('shell command safety analyzer', () => {
   it('blocks shell profile mutation via redirect', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ command: 'echo "alias ls=rm" >> ~/.bashrc' }));
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'echo "alias ls=rm" >> ~/.bashrc' }));
 
     expect(report.status).toBe('blocked');
     expect(report.findings).toContainEqual(expect.objectContaining({ code: 'SHELL_PROFILE_MUTATION' }));
@@ -104,8 +104,80 @@ describe('shell command safety analyzer', () => {
   it('allows safe chmod like +x for scripts', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
-    const report = analyzeShellCommandSafety(createRequest({ command: 'chmod +x ./deploy.sh' }));
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'chmod +x ./deploy.sh' }));
 
     expect(report.status).toBe('allowed');
+  });
+
+  it('blocks syntax errors in commands', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'for i in; do echo $i; done' }));
+
+    expect(report.status).toBe('blocked');
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'SYNTAX_ERROR' }));
+  });
+
+  it('blocks cd outside workspace via AST check', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'cd /tmp && echo done', cwd: '/workspace', workspaceRoot: '/workspace' }));
+
+    expect(report.status).toBe('blocked');
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'CD_OUTSIDE_WORKSPACE' }));
+  });
+
+  it('allows cd within workspace via AST check', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'cd ./src && pnpm test' }));
+
+    expect(report.status).toBe('allowed');
+  });
+
+  it('blocks output redirection outside workspace via AST check', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'ls > /tmp/output.txt' }));
+
+    expect(report.status).toBe('blocked');
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'REDIRECT_OUTSIDE_WORKSPACE' }));
+  });
+
+  it('allows output redirection within workspace via AST check', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'ls > ./output.txt' }));
+
+    expect(report.status).toBe('allowed');
+  });
+
+  it('detects dangerous command inside command substitution', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'echo $(rm -rf /tmp/dangerous)' }));
+
+    expect(report.status).toBe('blocked');
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'SUBSTITUTED_DANGEROUS_COMMAND' }));
+  });
+
+  it('blocks when parser initialization fails', async () => {
+    const parserModule = await import('../../electron/main/modules/shell/parser.mjs');
+    const parseSpy = vi.spyOn(parserModule, 'parseShellCommand').mockResolvedValue({
+      ok: false,
+      shell: 'bash',
+      error: 'Tree-sitter WASM 初始化失败: native build missing'
+    });
+
+    try {
+      const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+      const report = await analyzeShellCommandSafety(createRequest({ command: 'echo hello' }));
+
+      expect(report.status).toBe('blocked');
+      expect(report.findings).toContainEqual(expect.objectContaining({ code: 'PARSER_UNAVAILABLE' }));
+    } finally {
+      parseSpy.mockRestore();
+    }
   });
 });

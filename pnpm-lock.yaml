@@ -80,6 +80,9 @@ importers:
       tree-sitter-powershell:
         specifier: ^0.26.4
         version: 0.26.4(tree-sitter@0.25.0)
+      web-tree-sitter:
+        specifier: ^0.26.9
+        version: 0.26.9
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -5693,6 +5696,9 @@ packages:
 
   warning@4.0.3:
     resolution: {integrity: sha512-rpJyN222KWIvHJ/F53XSZv0Zl/accqHR8et1kpaMTD/fLCRxtV8iX8czMzY7sVZupTI3zcUTg8eycS2kNF9l6w==}
+
+  web-tree-sitter@0.26.9:
+    resolution: {integrity: sha512-YJwSHANl6XFgeEjB8nitgj0qZYt5gkIesJ4w2srS2wcLB4GUa4xcOkM0YaMsU6WNR53YVIkDSY7Ej4pf3IXtCA==}
 
   webidl-conversions@8.0.1:
     resolution: {integrity: sha512-BMhLD/Sw+GbJC21C/UgyaZX41nPt8bUTg+jWyDeg7e7YN4xOM05YPSIXceACnXVtqyEw/LMClUQMtMZ+PGGpqQ==}
@@ -11766,6 +11772,8 @@ snapshots:
   warning@4.0.3:
     dependencies:
       loose-envify: 1.4.0
+
+  web-tree-sitter@0.26.9: {}
 
   webidl-conversions@8.0.1: {}
 
