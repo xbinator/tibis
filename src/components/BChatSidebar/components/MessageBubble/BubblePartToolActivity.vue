@@ -48,9 +48,9 @@ interface ToolActionLabel {
 
 /** 内置工具对应的用户可读动作文案。 */
 const TOOL_ACTION_LABELS: Record<string, ToolActionLabel> = {
-  question: { alias: '提问', running: '正在准备问题', success: '问题已提交' },
-  ask_user_question: { alias: '提问', running: '正在准备问题', success: '问题已提交' },
-  ask_user_choice: { alias: '选择', running: '正在准备选项', success: '选择已提交' },
+  question: { alias: '提问', running: '正在准备问题', success: '' },
+  ask_user_question: { alias: '提问', running: '正在准备问题', success: '' },
+  ask_user_choice: { alias: '选择', running: '正在准备选项', success: '' },
   read_current_document: { alias: '当前文档读取', running: '正在读取当前文档', success: '当前文档读取完成' },
   read_file: { alias: '文件读取', running: '正在读取文件', success: '文件读取完成' },
   read_directory: { alias: '目录读取', running: '正在读取目录', success: '目录读取完成' },
@@ -59,7 +59,7 @@ const TOOL_ACTION_LABELS: Record<string, ToolActionLabel> = {
   get_current_time: { alias: '时间获取', running: '正在获取时间', success: '时间获取完成' },
   query_logs: { alias: '日志查询', running: '正在查询日志', success: '日志查询完成' },
   get_settings: { alias: '设置读取', running: '正在读取设置', success: '设置读取完成' },
-  update_settings: { alias: '设置修改', running: '正在修改设置', success: '设置修改完成' },
+  update_settings: { alias: '', running: '正在修改设置', success: '设置修改完成' },
   get_mcp_settings: { alias: 'MCP 设置读取', running: '正在读取 MCP 设置', success: 'MCP 设置读取完成' },
   add_mcp_server: { alias: 'MCP 服务添加', running: '正在添加 MCP 服务', success: 'MCP 服务添加完成' },
   update_mcp_server: { alias: 'MCP 服务更新', running: '正在更新 MCP 服务', success: 'MCP 服务更新完成' },
@@ -168,19 +168,20 @@ const isFailure = computed(() => Boolean(resultPart.value && resultPart.value.re
 /** 标题文案。 */
 const title = computed(() => {
   const result = resultPart.value?.result;
+
   if (!result) {
-    return `${actionLabel.value.alias}：${actionLabel.value.running}`;
+    return [actionLabel.value.alias, actionLabel.value.running].filter(Boolean).join('：');
   }
 
   if (result.status === 'success') {
-    return `${actionLabel.value.alias}：${actionLabel.value.success}`;
+    return [actionLabel.value.alias, actionLabel.value.success].filter(Boolean).join('：');
   }
 
   if (result.status === 'cancelled') {
-    return `${actionLabel.value.alias}：操作已取消`;
+    return `${actionLabel.value.alias}操作已取消`;
   }
 
-  return `${actionLabel.value.alias}：操作未完成`;
+  return `${actionLabel.value.alias}操作未完成`;
 });
 /** 状态标签文案。 */
 const statusText = computed(() => {

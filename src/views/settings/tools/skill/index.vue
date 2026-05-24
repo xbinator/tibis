@@ -60,7 +60,7 @@ import SkillDetail from './components/SkillDetail.vue';
 import SkillItemRow from './components/SkillItemRow.vue';
 
 /** 每页显示数量。 */
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 8;
 
 const store = useSkillStore();
 const currentPage = ref(1);
@@ -151,7 +151,7 @@ function handleCloseSkillDetail(): void {
   padding: 12px 20px;
 
   &:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
   }
 
   &:not(:first-child) {
