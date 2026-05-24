@@ -54,6 +54,7 @@ import { useClipboard, useDebounceFn } from '@vueuse/core';
 import { message } from 'ant-design-vue';
 import BSelect from '@/components/BSelect/index.vue';
 import { createNamespace } from '@/utils/namespace';
+import { createMermaidRenderId } from '../utils/mermaidRenderId';
 
 const [name, bem] = createNamespace('markdown-codeblock');
 
@@ -109,7 +110,7 @@ const LANGUAGE_OPTIONS = [
 
 let mermaidInitialized = false;
 let mermaidCurrentTheme = '';
-let mermaidModule: any = null;
+let mermaidModule: typeof import('mermaid').default | null = null;
 const themeChangeCallbacks = new Set<() => void>();
 
 /**
@@ -127,7 +128,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-async function initMermaid(): Promise<any> {
+async function initMermaid(): Promise<typeof import('mermaid').default> {
   if (!mermaidModule) {
     const module = await import('mermaid');
     mermaidModule = module.default;
@@ -256,7 +257,7 @@ async function renderMermaid(): Promise<void> {
 
   try {
     const mermaidInstance = await initMermaid();
-    const mermaidId = `mermaid-${Date.now()}-${renderIndex}`;
+    const mermaidId = createMermaidRenderId();
     const { svg } = await mermaidInstance.render(mermaidId, code);
 
     // 提前退出：渲染完成后再次检查是否仍是最新请求

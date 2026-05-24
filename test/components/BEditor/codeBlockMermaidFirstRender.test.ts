@@ -8,12 +8,13 @@
  * 3. BSuspense 延迟挂载 — 模拟真实浏览器中 ref 延迟就绪的场景（核心 bug 复现）
  */
 import type { VueWrapper } from '@vue/test-utils';
-import type { ComponentPublicInstance } from 'vue';
+import type { ComponentPublicInstance, Slots } from 'vue';
 import { h, ref, watch } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import PaneRichEditor from '@/components/BEditor/panes/PaneRichEditor.vue';
+import { createMermaidRenderId } from '@/components/BEditor/utils/mermaidRenderId';
 
 // ─── Mock ────────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,7 @@ function createDelayedBSuspenseStub(mountDelayMs: number) {
   return {
     name: 'BSuspense',
     props: { active: { type: Boolean, default: false } },
-    setup(props: { active: boolean }, { slots }: { slots: Record<string, () => unknown> }) {
+    setup(props: { active: boolean }, { slots }: { slots: Slots }) {
       const hasBeenActive = ref(false);
 
       // 延迟设置 hasBeenActive，模拟真实浏览器中 DOM 延迟挂载
@@ -241,6 +242,17 @@ describe('CodeBlock Mermaid 首次渲染', () => {
     expect(renderCalls[0].code).toBe(MERMAID_CODE);
 
     wrapper.unmount();
+  });
+
+  test('同一毫秒内生成多个 Mermaid 渲染 id 时应保持唯一', () => {
+    const originalDateNow = Date.now;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => 1234567890);
+
+    const renderIds = [createMermaidRenderId(), createMermaidRenderId(), createMermaidRenderId()];
+    expect(new Set(renderIds).size).toBe(renderIds.length);
+
+    dateNowSpy.mockRestore();
+    expect(originalDateNow()).toBeGreaterThan(0);
   });
 });
 
