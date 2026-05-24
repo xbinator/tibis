@@ -29,29 +29,132 @@ type ToolActivityPart = ChatMessageToolInputPart | ChatMessageToolCallPart | Cha
 interface Props {
   /** 工具活动片段 */
   part: ToolActivityPart;
+  /** 对应工具调用的输入参数，用于兼容旧格式结果展示 */
+  toolCallInput?: unknown;
 }
 
 const props = defineProps<Props>();
 const [, bem] = createNamespace('', 'message-bubble-tool-activity');
 
+/** 工具活动用户可读标签。 */
+interface ToolActionLabel {
+  /** 展示给用户的工具别名 */
+  alias: string;
+  /** 执行中状态文案 */
+  running: string;
+  /** 成功完成状态文案 */
+  success: string;
+}
+
 /** 内置工具对应的用户可读动作文案。 */
-const TOOL_ACTION_LABELS: Record<string, { running: string; success: string }> = {
-  read_file: { running: '正在读取文件', success: '文件读取完成' },
-  write_file: { running: '正在写入文件', success: '文件写入完成' },
-  edit_file: { running: '正在修改文件', success: '文件修改完成' },
-  list_files: { running: '正在查看文件列表', success: '文件列表已获取' },
-  search_files: { running: '正在搜索文件', success: '文件搜索完成' },
-  open_draft: { running: '正在打开草稿', success: '草稿已打开' },
-  tavily_search: { running: '正在搜索网页', success: '网页搜索完成' }
+const TOOL_ACTION_LABELS: Record<string, ToolActionLabel> = {
+  question: { alias: '提问', running: '正在准备问题', success: '问题已提交' },
+  ask_user_question: { alias: '提问', running: '正在准备问题', success: '问题已提交' },
+  ask_user_choice: { alias: '选择', running: '正在准备选项', success: '选择已提交' },
+  read_current_document: { alias: '当前文档读取', running: '正在读取当前文档', success: '当前文档读取完成' },
+  read_file: { alias: '文件读取', running: '正在读取文件', success: '文件读取完成' },
+  read_directory: { alias: '目录读取', running: '正在读取目录', success: '目录读取完成' },
+  write_file: { alias: '文件写入', running: '正在写入文件', success: '文件写入完成' },
+  edit_file: { alias: '文件修改', running: '正在修改文件', success: '文件修改完成' },
+  get_current_time: { alias: '时间获取', running: '正在获取时间', success: '时间获取完成' },
+  query_logs: { alias: '日志查询', running: '正在查询日志', success: '日志查询完成' },
+  get_settings: { alias: '设置读取', running: '正在读取设置', success: '设置读取完成' },
+  update_settings: { alias: '设置修改', running: '正在修改设置', success: '设置修改完成' },
+  get_mcp_settings: { alias: 'MCP 设置读取', running: '正在读取 MCP 设置', success: 'MCP 设置读取完成' },
+  add_mcp_server: { alias: 'MCP 服务添加', running: '正在添加 MCP 服务', success: 'MCP 服务添加完成' },
+  update_mcp_server: { alias: 'MCP 服务更新', running: '正在更新 MCP 服务', success: 'MCP 服务更新完成' },
+  remove_mcp_server: { alias: 'MCP 服务移除', running: '正在移除 MCP 服务', success: 'MCP 服务移除完成' },
+  refresh_mcp_discovery: { alias: 'MCP 发现刷新', running: '正在刷新 MCP 发现', success: 'MCP 发现刷新完成' },
+  skill: { alias: 'Skill 加载', running: '正在加载 Skill', success: 'Skill 加载完成' },
+  open_draft: { alias: '草稿打开', running: '正在打开草稿', success: '草稿已打开' },
+  tavily_search: { alias: '网页搜索', running: '正在搜索网页', success: '网页搜索完成' },
+  tavily_extract: { alias: '网页提取', running: '正在提取网页内容', success: '网页内容提取完成' }
 };
+
+/** 提问工具名称集合，兼容历史消息。 */
+const QUESTION_TOOL_NAMES = new Set(['question', 'ask_user_question', 'ask_user_choice']);
 
 /**
  * 获取工具对应的用户可读动作。
  * @param toolName - 内部工具名称
  * @returns 用户可读动作文案
  */
-function getActionLabel(toolName: string): { running: string; success: string } {
-  return TOOL_ACTION_LABELS[toolName] ?? { running: '正在处理请求', success: '操作已完成' };
+function getActionLabel(toolName: string): ToolActionLabel {
+  return TOOL_ACTION_LABELS[toolName] ?? { alias: '工具能力', running: '正在处理请求', success: '操作已完成' };
+}
+
+/**
+ * 判断值是否为普通对象。
+ * @param value - 待判断值
+ * @returns 是否为普通对象
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 判断值是否为字符串数组。
+ * @param value - 待判断值
+ * @returns 是否为字符串数组
+ */
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+/**
+ * 格式化选项答案列表。
+ * @param answers - 答案值列表
+ * @returns 用户可读答案文案
+ */
+function formatAnswers(answers: string[]): string {
+  return answers.length ? answers.join('、') : '未选择';
+}
+
+/**
+ * 判断工具名是否为提问工具。
+ * @param toolName - 工具名称
+ * @returns 是否为提问工具
+ */
+function isQuestionToolName(toolName: string): boolean {
+  return QUESTION_TOOL_NAMES.has(toolName);
+}
+
+/**
+ * 从提问工具结果中提取问题与答案摘要。
+ * @param data - 工具结果数据
+ * @param toolCallInput - 对应工具调用输入
+ * @returns 摘要文本，不可解析时返回 null
+ */
+function formatQuestionResultSummary(data: unknown, toolCallInput?: unknown): string | null {
+  if (!isRecord(data)) {
+    return null;
+  }
+
+  const lines: string[] = [];
+  const { questionAnswers } = data;
+  if (Array.isArray(questionAnswers)) {
+    questionAnswers.forEach((item) => {
+      if (!isRecord(item) || typeof item.question !== 'string' || !isStringArray(item.answers)) {
+        return;
+      }
+
+      lines.push(`问题：${item.question}`);
+      lines.push(`回答：${formatAnswers(item.answers)}`);
+    });
+  }
+
+  if (!lines.length && isStringArray(data.answers)) {
+    if (isRecord(toolCallInput) && typeof toolCallInput.question === 'string') {
+      lines.push(`问题：${toolCallInput.question}`);
+    }
+    lines.push(`回答：${formatAnswers(data.answers)}`);
+  }
+
+  if (typeof data.otherText === 'string' && data.otherText.trim()) {
+    lines.push(`补充：${data.otherText.trim()}`);
+  }
+
+  return lines.length ? lines.join('\n') : null;
 }
 
 /** 当前执行结果片段。 */
@@ -66,18 +169,18 @@ const isFailure = computed(() => Boolean(resultPart.value && resultPart.value.re
 const title = computed(() => {
   const result = resultPart.value?.result;
   if (!result) {
-    return actionLabel.value.running;
+    return `${actionLabel.value.alias}：${actionLabel.value.running}`;
   }
 
   if (result.status === 'success') {
-    return actionLabel.value.success;
+    return `${actionLabel.value.alias}：${actionLabel.value.success}`;
   }
 
   if (result.status === 'cancelled') {
-    return '操作已取消';
+    return `${actionLabel.value.alias}：操作已取消`;
   }
 
-  return '操作未完成';
+  return `${actionLabel.value.alias}：操作未完成`;
 });
 /** 状态标签文案。 */
 const statusText = computed(() => {
@@ -87,7 +190,7 @@ const statusText = computed(() => {
   }
 
   if (result.status === 'success') {
-    return '已完成';
+    return '';
   }
 
   if (result.status === 'cancelled') {
@@ -104,6 +207,10 @@ const summaryText = computed(() => {
   }
 
   if (result.status === 'success') {
+    if (isQuestionToolName(props.part.toolName)) {
+      return formatQuestionResultSummary(result.data, props.toolCallInput) ?? '问题已提交。';
+    }
+
     return '已完成。';
   }
 

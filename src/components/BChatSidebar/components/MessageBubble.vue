@@ -50,7 +50,7 @@
             @submit-choice="$emit('user-choice-submit', $event)"
           />
 
-          <BubblePartToolActivity v-else-if="!isCompressionMessage && item.type === 'tool-result'" :part="item" />
+          <BubblePartToolActivity v-else-if="!isCompressionMessage && item.type === 'tool-result'" :part="item" :tool-call-input="getToolCallInput(item)" />
         </template>
       </div>
     </BBubble>
@@ -167,6 +167,15 @@ function isAwaitingUserChoicePart(part: ChatMessagePart): part is ChatMessageToo
  */
 function hasToolResult(part: ChatMessageToolCallPart): boolean {
   return props.message.parts.some((item) => item.type === 'tool-result' && item.toolCallId === part.toolCallId);
+}
+
+/**
+ * 获取工具结果对应的原始工具输入。
+ * @param part - 工具结果片段
+ * @returns 对应工具调用输入，不存在时返回 undefined
+ */
+function getToolCallInput(part: ChatMessageToolResultPart): unknown {
+  return props.message.parts.find((item) => item.type === 'tool-call' && item.toolCallId === part.toolCallId)?.input;
 }
 
 /**

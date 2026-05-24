@@ -306,6 +306,114 @@ function createMessageWithToolResult(): Message {
 }
 
 /**
+ * 创建指定工具名称的成功结果消息。
+ * @param toolName - 工具名称
+ * @returns assistant 消息
+ */
+function createMessageWithNamedToolResult(toolName: string): Message {
+  return {
+    id: `assistant-tool-result-${toolName}`,
+    role: 'assistant',
+    content: '',
+    createdAt: '2026-05-14T00:30:00.000Z',
+    loading: false,
+    finished: true,
+    parts: [
+      {
+        type: 'tool-result',
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        result: {
+          toolName,
+          status: 'success',
+          data: {}
+        }
+      }
+    ]
+  };
+}
+
+/**
+ * 创建已完成的用户提问工具消息。
+ * @returns assistant 消息
+ */
+function createMessageWithCompletedQuestionTool(): Message {
+  return {
+    id: 'assistant-question-complete-1',
+    role: 'assistant',
+    content: '',
+    createdAt: '2026-05-14T00:35:00.000Z',
+    loading: false,
+    finished: true,
+    parts: [
+      {
+        type: 'tool-result',
+        toolCallId: 'tool-call-question-1',
+        toolName: 'question',
+        result: {
+          toolName: 'question',
+          status: 'success',
+          data: {
+            questionId: 'question-1',
+            toolCallId: 'tool-call-question-1',
+            answers: ['official'],
+            questionAnswers: [
+              {
+                question: '请选择渠道',
+                answers: ['official']
+              }
+            ],
+            otherText: '优先官网'
+          }
+        }
+      }
+    ]
+  };
+}
+
+/**
+ * 创建旧格式的单题用户提问工具完成消息。
+ * @returns assistant 消息
+ */
+function createMessageWithLegacyCompletedQuestionTool(): Message {
+  return {
+    id: 'assistant-question-legacy-complete-1',
+    role: 'assistant',
+    content: '',
+    createdAt: '2026-05-14T00:40:00.000Z',
+    loading: false,
+    finished: true,
+    parts: [
+      {
+        type: 'tool-call',
+        toolCallId: 'tool-call-question-legacy-1',
+        toolName: 'ask_user_question',
+        input: {
+          question: '请选择发布渠道',
+          mode: 'single',
+          options: [{ label: '官网', value: 'official' }]
+        }
+      },
+      {
+        type: 'tool-result',
+        toolCallId: 'tool-call-question-legacy-1',
+        toolName: 'ask_user_question',
+        result: {
+          toolName: 'ask_user_question',
+          status: 'success',
+          data: {
+            questionId: 'question-legacy-1',
+            toolCallId: 'tool-call-question-legacy-1',
+            answers: ['official'],
+            otherText: ''
+          }
+        }
+      }
+    ]
+  };
+}
+
+/**
  * 挂载 MessageBubble。
  * @param message - 消息数据
  * @returns 挂载结果
@@ -392,6 +500,7 @@ describe('MessageBubble confirmation integration', () => {
   it('renders streamed tool work as a user-facing progress summary', () => {
     const wrapper = mountMessageBubble(createMessageWithToolInputPreview());
 
+    expect(wrapper.text()).toContain('文件写入：正在写入文件');
     expect(wrapper.text()).toContain('正在写入文件');
     expect(wrapper.text()).not.toContain('write_file');
     expect(wrapper.text()).not.toContain('docs/release-notes.md');
@@ -401,10 +510,43 @@ describe('MessageBubble confirmation integration', () => {
   it('renders completed tool work as a concise result without exposing tool details', () => {
     const wrapper = mountMessageBubble(createMessageWithToolResult());
 
+    expect(wrapper.text()).toContain('文件写入：文件写入完成');
     expect(wrapper.text()).toContain('文件写入完成');
-    expect(wrapper.text()).toContain('已完成');
+    expect(wrapper.text()).not.toContain('已完成已完成');
     expect(wrapper.text()).not.toContain('write_file');
     expect(wrapper.text()).not.toContain('docs/release-notes.md');
     expect(wrapper.text()).not.toContain('# Release');
+  });
+
+  it.each([
+    ['read_directory', '目录读取：目录读取完成'],
+    ['get_current_time', '时间获取：时间获取完成'],
+    ['skill', 'Skill 加载：Skill 加载完成'],
+    ['refresh_mcp_discovery', 'MCP 发现刷新：MCP 发现刷新完成'],
+    ['tavily_extract', '网页提取：网页内容提取完成']
+  ])('renders %s with a user-facing alias', (toolName: string, expectedText: string) => {
+    const wrapper = mountMessageBubble(createMessageWithNamedToolResult(toolName));
+
+    expect(wrapper.text()).toContain(expectedText);
+    expect(wrapper.text()).not.toContain(toolName);
+  });
+
+  it('renders completed question tool with question and submitted answer', () => {
+    const wrapper = mountMessageBubble(createMessageWithCompletedQuestionTool());
+
+    expect(wrapper.text()).toContain('提问：问题已提交');
+    expect(wrapper.text()).toContain('问题：请选择渠道');
+    expect(wrapper.text()).toContain('回答：official');
+    expect(wrapper.text()).toContain('补充：优先官网');
+    expect(wrapper.text()).not.toContain('tool-call-question-1');
+  });
+
+  it('renders legacy single-question result with question from the tool call input', () => {
+    const wrapper = mountMessageBubble(createMessageWithLegacyCompletedQuestionTool());
+
+    expect(wrapper.text()).toContain('提问：问题已提交');
+    expect(wrapper.text()).toContain('问题：请选择发布渠道');
+    expect(wrapper.text()).toContain('回答：official');
+    expect(wrapper.text()).not.toContain('ask_user_question');
   });
 });
