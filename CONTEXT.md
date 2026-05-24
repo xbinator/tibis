@@ -16,10 +16,11 @@ Tibis 是一款基于 Electron + Vue 3 + TypeScript 的桌面端应用，面向"
 | 源码编辑器 | CodeMirror 6 |
 | JSON/代码编辑器 | Monaco Editor 0.55 |
 | 拖拽 | @atlaskit/pragmatic-drag-and-drop |
+| 流程图 | @vue-flow/core（BJsonViewer 图形视图） |
 | UI 组件库 | Ant Design Vue 4 + B 系列自研组件 |
 | 原子化 CSS | UnoCSS（presetWind3 + presetAttributify） |
 | 样式预处理 | Less |
-| AI SDK | Vercel AI SDK v6（`ai` 包 + @ai-sdk/openai/anthropic/google/deepseek） |
+| AI SDK | Vercel AI SDK v6（`ai` 包 + @ai-sdk/openai/anthropic/google/deepseek/gateway） |
 | AI 搜索 | @tavily/ai-sdk |
 | 数据库 | better-sqlite3（主进程本地数据库） |
 | 安全存储 | electron-store（API Key 等敏感信息加密存储） |
@@ -47,25 +48,25 @@ tibis/
 │   │   │   ├── service-model/    # 服务模型配置（Chat / Edit / Summary 等能力分配）
 │   │   │   ├── editor/           # 编辑器偏好设置（视图模式/大纲/页宽/保存策略）
 │   │   │   ├── speech/           # 语音设置（运行时管理、语音识别配置）
-│   │   │   ├── tools/            # 工具设置（MCP 服务器管理 + Tavily 搜索配置）
+│   │   │   ├── tools/            # 工具设置（MCP 服务器管理 + Tavily 搜索配置 + 技能管理）
 │   │   │   └── logger/           # 运行日志查看（LogFilterBar + LogTimeline）
 │   │   ├── webview/              # 内嵌浏览器页面（双实现：native + web/DOM）
 │   │   ├── welcome/              # 欢迎页（含 DropZone 组件）
 │   │   └── error/                # 404 页面
 │   ├── components/               # B 系列通用组件（通过 unplugin-vue-components 全局自动注册）
 │   │   ├── BEditor/              # Markdown 编辑器（统一入口，双视图：富文本 TipTap + 源码 CodeMirror）
-│   │   │   ├── adapters/         # 15 个编辑器适配器（选区、导航、搜索、行映射、布局主题等）
-│   │   │   ├── components/       # 8 个 UI 组件（AnchorContent、CodeBlock、FrontMatterCard、TableView 等）
-│   │   │   ├── extensions/       # 6 个 CodeMirror/TipTap 扩展（AI 高亮、装饰、搜索等）
-│   │   │   ├── hooks/            # 9 个编辑器 hooks（useAnchors、useContent、useRichEditor 等）
+│   │   │   ├── adapters/         # 15 个编辑器适配器（选区、导航、搜索、行映射、布局主题、评论辅助等）
+│   │   │   ├── components/       # 9 个 UI 组件（AnchorContent、CodeBlock、FrontMatterCard、TableView、QuickActions、Sidebar 等）
+│   │   │   ├── extensions/       # 7 个 CodeMirror/TipTap 扩展（AI 高亮、装饰、搜索、表格控件、空内容、行内评论等）
+│   │   │   ├── hooks/            # 10 个编辑器 hooks（useAnchors、useContent、useRichEditor、useEditorController、useCommentActions、useSelectionAssistant 等）
 │   │   │   ├── panes/            # 2 个编辑器面板（PaneRichEditor、PaneSourceEditor）
-│   │   │   ├── shared/           # 6 个共享组件（FindBar、SelectionToolbar、SelectionAIInput 等）
+│   │   │   ├── shared/           # 7 个共享组件（FindBar、SelectionToolbar、SelectionAIInput、CommentCard 等）
 │   │   │   └── utils/            # 编辑器工具函数
 │   │   ├── BChatSidebar/         # AI 聊天侧边栏（流式对话、工具调用、会话历史、文件引用、语音输入、上下文压缩）
 │   │   │   ├── components/       # 10+ 子组件（Bubble、ConfirmationCard、InputToolbar、SessionHistory 等）
-│   │   │   ├── hooks/            # 18 个 hooks（useChatStream、useAutoName、useCompactContext、useVoiceRecorder 等）
-│   │   │   └── utils/            # 12 个工具模块（compression、confirmationController、toolCallTracker 等）
-│   │   ├── BPromptEditor/        # 提示词输入框（支持斜杠命令、变量插入、文件引用粘贴）
+│   │   │   ├── hooks/            # 19 个 hooks（useChatStream、useAutoName、useCompactContext、useVoiceRecorder、useSkillInit、useSlashCommands 等）
+│   │   │   └── utils/            # 12 个工具模块（compression、confirmationController、messageHelper、chipResolver、fileReferenceContext 等）
+│   │   ├── BPromptEditor/        # 提示词输入框（斜杠命令、文件引用 @mention、变量插入、6 个 ProseMirror 扩展、3 个 hooks）
 │   │   ├── BMonaco/              # Monaco Editor 封装（JSON/代码编辑，从 BEditor 提取独立）
 │   │   ├── BPanelSplitter/       # 可拖拽面板分割器（支持拖拽关闭 closeThreshold）
 │   │   ├── BSearchRecent/        # 最近文件搜索弹窗（支持绝对路径打开）
@@ -78,6 +79,8 @@ tibis/
 │   │   ├── BScrollbar/           # 自定义滚动条
 │   │   ├── BTruncateText/        # 文本截断
 │   │   ├── BImageViewer/         # 图片查看器（含 Carousel 走马灯，支持缩放/旋转/拖拽）
+│   │   ├── BJsonViewer/          # JSON 数据查看器（树形展开/折叠、搜索高亮、Vue Flow 图形视图）
+│   │   ├── BSuspense/            # 异步组件 Suspense 包装器
 │   │   ├── BUpload/              # 文件上传组件
 │   │   ├── BSettingsPage/        # 设置页布局组件
 │   │   ├── BSettingsSection/     # 设置分区组件
@@ -105,7 +108,7 @@ tibis/
 │   │   ├── scroll.ts             # 滚动工具
 │   │   └── shortcut.ts           # 快捷键格式化
 │   ├── ai/tools/                 # AI 工具系统
-│   │   ├── builtin/              # 9 个内置工具（每工具独立目录）：AskUserQuestionTool / DocumentTool / EnvironmentTool / FileEditTool / FileReadTool / FileWriteTool / LogsTool / MCPSettingsTool / SettingsTool
+│   │   ├── builtin/              # 10 个内置工具（每工具独立目录）：DocumentTool / EnvironmentTool / FileEditTool / FileReadTool / FileWriteTool / LogsTool / MCPSettingsTool / QuestionTool / SettingsTool / SkillTool
 │   │   ├── shared/               # 共享工具层（fileErrors、fileTool、pathUtils、types）
 │   │   ├── confirmation.ts       # 用户确认适配器接口
 │   │   ├── editor-context.ts     # 编辑器上下文注册表
@@ -124,6 +127,7 @@ tibis/
 │   │   ├── ai/
 │   │   │   ├── provider.ts       # AI 提供商配置
 │   │   │   ├── serviceModel.ts   # 服务模型配置（Chat/Edit 等能力绑定）
+│   │   │   ├── skill.ts          # 技能配置（斜杠命令 /skill 注册与发现）
 │   │   │   └── toolSettings.ts   # 工具设置（MCP 服务器、搜索配置）
 │   │   ├── chat/
 │   │   │   ├── session.ts        # 聊天会话管理（原 useChatStore，已重命名）
@@ -146,7 +150,7 @@ tibis/
 │   │   ├── storage/              # 本地存储适配（base / chats / files / providers / service-models / tool-settings / chat-compression-records）
 │   │   ├── chat/                 # 聊天共享工具（文件引用事件桥接）
 │   │   └── logger/               # 日志共享类型与工具
-│   ├── hooks/                    # 全局组合式函数（10 个）
+│   ├── hooks/                    # 全局组合式函数（11 个）
 │   │   ├── useAntdTheme.ts       # Ant Design 明暗主题计算
 │   │   ├── useAutoCollapse.ts    # 容器宽度不足时自动折叠（ResizeObserver）
 │   │   ├── useChat.ts            # AI 流式聊天（invoke/stream/abort，含 provider 解析）
@@ -156,7 +160,8 @@ tibis/
 │   │   ├── useOpenDraft.ts       # 草稿文件打开
 │   │   ├── useOpenFile.ts        # 统一文件打开
 │   │   ├── useScroller.ts        # DOM 元素滚动包装
-│   │   └── useShortcuts.ts       # 键盘快捷键注册（@vueuse/core useMagicKeys）
+│   │   ├── useShortcuts.ts       # 键盘快捷键注册（@vueuse/core useMagicKeys）
+│   │   └── useSystem.ts          # 系统信息查询（平台、版本等）
 │   └── assets/styles/            # 全局样式 + 主题变量（明/暗）
 │
 ├── electron/                     # Electron 主进程 + preload
@@ -298,6 +303,7 @@ tibis/
 | `/settings/speech` | 语音设置 | 管理语音运行时和识别配置 |
 | `/settings/tools/mcp` | MCP 工具设置 | MCP 服务器管理（增删改查、发现状态） |
 | `/settings/tools/search` | 搜索工具设置 | Tavily 搜索配置（启用/API Key/默认参数） |
+| `/settings/tools/skill` | 技能设置 | 技能注册管理与配置 |
 | `/settings/logger` | 运行日志 | 查看系统运行日志 |
 | `/webview/native` | 网页浏览（Native） | 内嵌浏览器（`<webview>` 标签实现） |
 | `/webview/web` | 网页浏览（DOM） | 内嵌浏览器（DOM iframe 实现） |
@@ -349,16 +355,17 @@ stores 采用 `helpers/persist.ts` 中的持久化中间件模式，提供：
 - `stream.ts` — 工具流式执行适配（toTransportTools、executeToolCall、createToolResultMessages）
 - `shared/` — 共享工具层（文件错误处理 fileErrors.ts、文件工具基类 fileTool.ts、路径工具 pathUtils.ts、类型 types.ts）
 
-**builtin 内置工具（9 个）**：
-- `AskUserQuestionTool/` — 向用户提问（多选/单选，支持自定义文本输入）
+**builtin 内置工具（10 个）**：
 - `DocumentTool/` — 读取/编辑当前编辑器文档内容
 - `EnvironmentTool/` — 环境信息查询
-- `FileReadTool/` — 读取本地文件 + 列出目录
 - `FileEditTool/` — 编辑本地文件（搜索/替换，支持未保存草稿）
+- `FileReadTool/` — 读取本地文件 + 列出目录
 - `FileWriteTool/` — 写入本地文件（支持 unsaved:// 虚拟路径）
 - `LogsTool/` — 查询应用运行日志
 - `MCPSettingsTool/` — MCP 服务器配置读写
+- `QuestionTool/` — 向用户提问（多选/单选，支持自定义文本输入，原 AskUserQuestionTool）
 - `SettingsTool/` — 应用设置读写
+- `SkillTool/` — 技能注册与调用（斜杠命令路由、参数解析、执行）
 
 ### 编辑器上下文
 
@@ -445,9 +452,9 @@ Chat 输入支持插入 `{{@fileName:startLine-endLine}}` 格式的 token：
 
 | 组件 | 功能 |
 |------|------|
-| `BEditor` | Markdown 双视图编辑器（富文本 TipTap + 源码 CodeMirror），统一入口，含 15 个适配器、9 个 hooks、6 个扩展 |
-| `BChatSidebar` | AI 聊天侧边栏（流式对话、工具调用、会话历史、文件引用、语音输入、上下文压缩），含 18 个 hooks、12 个工具模块 |
-| `BPromptEditor` | 提示词输入编辑器（斜杠命令、变量插入、file-ref 粘贴） |
+| `BEditor` | Markdown 双视图编辑器（富文本 TipTap + 源码 CodeMirror），统一入口，含 15 个适配器、10 个 hooks、7 个扩展 |
+| `BChatSidebar` | AI 聊天侧边栏（流式对话、工具调用、会话历史、文件引用、语音输入、上下文压缩、技能调用），含 19 个 hooks、12 个工具模块 |
+| `BPromptEditor` | 提示词输入编辑器（斜杠命令、@mention 文件引用、变量插入、6 个 ProseMirror 扩展） |
 | `BMonaco` | Monaco Editor 封装（JSON/代码编辑，从 BEditor 提取独立） |
 | `BPanelSplitter` | 可拖拽面板分割器（支持拖拽关闭 closeThreshold） |
 | `BSearchRecent` | 最近文件搜索弹窗（支持绝对路径打开） |
@@ -460,6 +467,8 @@ Chat 输入支持插入 `{{@fileName:startLine-endLine}}` 格式的 token：
 | `BTruncateText` | 文本截断 |
 | `BScrollbar` | 自定义滚动条 |
 | `BImageViewer` | 图片查看器（缩放/旋转/拖拽/键盘快捷键/Carousel 走马灯） |
+| `BJsonViewer` | JSON 数据查看器（树形展开/折叠、搜索高亮、复制路径、Vue Flow 图形视图） |
+| `BSuspense` | 异步组件 Suspense 包装器（Loading/Error 状态管理） |
 | `BUpload` | 文件上传组件 |
 | `BSettingsPage` | 设置页布局组件 |
 | `BSettingsSection` | 设置分区组件 |
@@ -504,14 +513,15 @@ Chat 输入支持插入 `{{@fileName:startLine-endLine}}` 格式的 token：
 | 目录 | 内容 |
 |------|------|
 | `docs/code-wiki/` | 项目代码百科（概述、架构、前端、编辑器、Electron、存储、AI、开发指南、依赖地图，9 篇） |
-| `docs/superpowers/plans/` | 技术实现计划（59 篇，按日期 `YYYY-MM-DD-<主题>.md` 组织） |
-| `docs/superpowers/specs/` | 设计规范文档（63 篇，与 plans 对称组织） |
+| `docs/superpowers/plans/` | 技术实现计划（65 篇，按日期 `YYYY-MM-DD-<主题>.md` 组织） |
+| `docs/superpowers/specs/` | 设计规范文档（70 篇，与 plans 对称组织） |
+| `docs/superpowers/reviews/` | 代码审查记录（2 篇） |
 | `docs/ai-tools/` | AI 工具系统分析与开发指南（含 tasks 任务分解） |
 | `docs/web-view/` | WebView 功能设计文档（双实现方案，3 篇） |
 | `docs/development/` | 开发问题与注意事项（如原生模块版本问题） |
 | `docs/markdown-symbol-highlight/` | Markdown 符号高亮方案 |
 | `docs/speech/` | 语音功能完整说明 |
-| `changelog/` | 变更日志（按日期 `.md` 每日记录，50 条，覆盖 2026-03-26 至今） |
+| `changelog/` | 变更日志（按日期 `.md` 每日记录，54 条，覆盖 2026-03-26 至今） |
 
 ## 全局类型与脚本
 
