@@ -75,11 +75,6 @@ function handleToggle(): void {
   align-items: center;
   cursor: pointer;
   outline: none;
-
-  &:focus-visible {
-    border-radius: 6px;
-    box-shadow: 0 0 0 2px var(--color-primary-bg, rgb(22 119 255 / 14%));
-  }
 }
 
 .skill-settings__item-icon {

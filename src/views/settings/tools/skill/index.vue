@@ -16,15 +16,7 @@
           {{ store.initialized ? '未发现任何 Skill' : '正在扫描…' }}
         </div>
 
-        <div
-          v-for="skill in pagedSkills"
-          :key="skill.filePath"
-          class="skill-settings__item"
-          :class="{
-            'skill-settings__item--error': skill.parseError,
-            'skill-settings__item--active': selectedSkill?.filePath === skill.filePath
-          }"
-        >
+        <div v-for="skill in pagedSkills" :key="skill.filePath" class="skill-settings__item">
           <SkillItemRow :skill="skill" @toggle="store.toggleSkill" @open="handleOpenSkill" />
         </div>
 
@@ -50,8 +42,8 @@
       v-if="detailVisible"
       v-model:size="detailPanelWidth"
       position="left"
-      :min-width="300"
-      :max-width="800"
+      :min-width="400"
+      max-width="70%"
       section-class="skill-settings__detail-wrapper"
       @close="handleCloseSkillDetail"
     >
@@ -157,13 +149,8 @@ function handleCloseSkillDetail(): void {
 .skill-settings__item {
   padding: 12px 20px;
 
-  &--error {
-    background: var(--color-danger-bg, #fff2f0);
-    border-radius: 6px;
-  }
-
-  &--active {
-    background: var(--bg-secondary);
+  &:hover {
+    background: var(--bg-tertiary);
   }
 
   &:not(:first-child) {

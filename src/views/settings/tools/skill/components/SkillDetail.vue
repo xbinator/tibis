@@ -35,7 +35,9 @@
       <div class="skill-detail__path">{{ skill.dirPath }}</div>
 
       <div class="skill-detail__body">
-        <SkillFileTree :root-path="skill?.dirPath ?? ''" :selected-file-path="selectedFilePath" @select-file="handleSelectFile" />
+        <BPanelSplitter v-show="showFileTree" position="right" :size="220" :min-width="160" :max-width="300" :closable="false">
+          <SkillFileTree :root-path="skill?.dirPath ?? ''" :selected-file-path="selectedFilePath" @select-file="handleSelectFile" @loaded="handleTreeLoaded" />
+        </BPanelSplitter>
 
         <main class="skill-detail__preview">
           <div class="skill-detail__preview-header">
@@ -77,6 +79,8 @@ const selectedFilePath = ref('');
 const fileContent = ref('');
 const fileLoading = ref(false);
 const fileError = ref('');
+/** 文件树中的文件数量，用于判断是否需要显示文件树。 */
+const fileCount = ref(0);
 let fileRequestId = 0;
 
 /** Skill 名称首字母大写，用于图标展示。 */
@@ -90,6 +94,17 @@ const normalizedDescription = computed<string>(() => {
 
 /** 当前选中文件名称。 */
 const selectedFileName = computed<string>(() => selectedFilePath.value.split('/').at(-1) ?? '未选择文件');
+
+/** 文件数量大于 1 时显示文件树。 */
+const showFileTree = computed<boolean>(() => fileCount.value > 1);
+
+/**
+ * 文件树加载完成回调，记录文件数量。
+ * @param count - 文件数量
+ */
+function handleTreeLoaded(count: number): void {
+  fileCount.value = count;
+}
 
 /**
  * 读取并展示指定文件内容。
@@ -248,9 +263,8 @@ watch(
 }
 
 .skill-detail__body {
-  display: grid;
+  display: flex;
   flex: 1;
-  grid-template-columns: 220px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--border-tertiary);

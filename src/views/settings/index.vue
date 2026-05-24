@@ -3,13 +3,15 @@
     <div class="settings-sidebar" :class="{ 'settings-sidebar--collapsed': sidebarCollapsed }" draggable="false">
       <template v-for="(group, gi) in menuGroups" :key="gi">
         <div v-if="gi > 0" class="sidebar-divider"></div>
-        <RouterLink v-for="item in group.items" :key="item.key" :to="item.path" class="sidebar-item" :class="{ active: isActive(item.path) }" draggable="false">
-          <Icon :icon="item.icon" class="sidebar-item__icon" />
-          <span class="sidebar-item__label">{{ item.label }}</span>
-        </RouterLink>
+        <ATooltip v-for="item in group.items" :key="item.key" :title="sidebarCollapsed ? item.label : undefined" placement="right">
+          <RouterLink :to="item.path" class="sidebar-item" :class="{ active: isActive(item.path) }" draggable="false">
+            <Icon :icon="item.icon" class="sidebar-item__icon" />
+            <span class="sidebar-item__label">{{ item.label }}</span>
+          </RouterLink>
+        </ATooltip>
       </template>
 
-      <button type="button" class="sidebar-collapse-btn" @click="toggleSidebarCollapsed">
+      <button type="button" class="sidebar-collapse-btn" :title="sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'" @click="toggleSidebarCollapsed">
         <Icon :icon="sidebarCollapsed ? 'lucide:panel-right-open' : 'lucide:panel-right-close'" width="14" height="14" />
       </button>
     </div>

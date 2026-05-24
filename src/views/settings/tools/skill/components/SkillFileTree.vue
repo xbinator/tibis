@@ -27,8 +27,8 @@
           :width="12"
           class="skill-file-tree__chevron"
         />
-        <span v-else class="skill-file-tree__chevron-placeholder"></span>
-        <Icon :icon="getNodeIcon(node)" :width="14" />
+        <span v-else-if="hasDirectories" class="skill-file-tree__chevron-placeholder"></span>
+        <Icon :icon="getNodeIcon(node)" :width="14" class="skill-file-tree__icon" />
         <span>{{ node.name }}</span>
       </button>
     </template>
@@ -77,6 +77,12 @@ const emit = defineEmits<{
    * @param filePath - 选中的文件路径
    */
   (event: 'select-file', filePath: string): void;
+  /**
+   * 文件树加载完成时触发。
+   * @param event - 事件名
+   * @param fileCount - 文件数量（不含目录）
+   */
+  (event: 'loaded', fileCount: number): void;
 }>();
 
 /** 全量扁平节点列表。 */
@@ -86,6 +92,9 @@ const error = ref('');
 /** 已折叠的目录路径集合，默认为空即全部展开。 */
 const collapsedPaths = ref<Set<string>>(new Set());
 let requestId = 0;
+
+/** 树中是否包含目录节点，用于决定是否显示对齐占位符。 */
+const hasDirectories = computed<boolean>(() => nodes.value.some((n) => n.type === 'directory'));
 
 /**
  * 根据折叠状态过滤出可见节点。
@@ -163,6 +172,7 @@ async function collectTreeNodes(directoryPath: string, depth: number): Promise<F
 async function loadTree(): Promise<void> {
   if (!props.rootPath) {
     nodes.value = [];
+    emit('loaded', 0);
     return;
   }
 
@@ -178,6 +188,7 @@ async function loadTree(): Promise<void> {
       return;
     }
     nodes.value = result;
+    emit('loaded', result.filter((n) => n.type === 'file').length);
   } catch (err: unknown) {
     if (currentRequestId !== requestId) {
       return;
@@ -234,6 +245,7 @@ watch(
 <style scoped lang="less">
 .skill-file-tree {
   min-width: 0;
+  height: 100%;
   padding: 4px 6px 6px;
   overflow: auto;
   background: var(--bg-secondary);
@@ -282,6 +294,10 @@ watch(
   & + & {
     margin-top: 2px;
   }
+}
+
+.skill-file-tree__icon {
+  flex-shrink: 0;
 }
 
 /** 折叠箭头 */
