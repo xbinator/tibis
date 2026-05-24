@@ -6,7 +6,7 @@ import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../co
 import type { AIToolContext, AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 import { recentFilesStorage } from '@/shared/storage';
 import type { StoredFile } from '@/shared/storage/files/types';
-import { isUnsavedPath as isUnsavedPathUtil } from '@/utils/file';
+import { isUnsavedPath as isUnsavedPathUtil } from '@/utils/file/unsaved';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../results';
 import { isAbsoluteFilePath, isPathInsideWorkspace, resolvePathAgainstWorkspace } from './pathUtils';
 

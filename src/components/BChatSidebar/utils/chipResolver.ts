@@ -5,7 +5,7 @@
 import { WidgetType } from '@codemirror/view';
 import { createFileRefChipElement, createFileRefChipPresentation } from '@/components/BChatSidebar/components/FileRefChip';
 import type { ChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
-import { parseFileReferenceToken, type FileReferenceNavigationTarget, type ParsedFileReference } from '@/utils/file';
+import { parseFileReferenceToken, type FileReferenceNavigationTarget, type ParsedFileReference } from '@/utils/file/reference';
 
 /**
  * 将解析结果转换为文件导航目标。

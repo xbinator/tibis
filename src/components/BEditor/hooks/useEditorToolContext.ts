@@ -5,7 +5,8 @@
 
 import type { EditorController, EditorState } from '../types';
 import type { AIToolContext } from 'types/ai';
-import { buildUnsavedPath, resolveFileTitle } from '@/utils/file';
+import { buildUnsavedPath } from '@/utils/file/unsaved';
+import { resolveFileTitle } from '@/utils/file/title';
 
 /**
  * 工具上下文输入。

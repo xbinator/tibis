@@ -51,7 +51,7 @@ import { Icon } from '@iconify/vue';
 import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { useFilesStore } from '@/stores/workspace/files';
-import { resolveFileTitle } from '@/utils/file';
+import { resolveFileTitle } from '@/utils/file/title';
 import DropZone from './components/DropZone.vue';
 
 const filesStore = useFilesStore();

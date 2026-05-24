@@ -44,7 +44,7 @@ import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import { resolveFileTitle } from '@/utils/file';
+import { resolveFileTitle } from '@/utils/file/title';
 import { createNamespace } from '@/utils/namespace';
 
 const [, bem] = createNamespace('search-recent');

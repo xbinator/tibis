@@ -119,7 +119,7 @@ import { useSkillStore } from '@/stores/ai/skill';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
-import type { FileReferenceNavigationTarget } from '@/utils/file';
+import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import ConversationView from './components/ConversationView.vue';
 import ImagePreview from './components/ImagePreview.vue';
 import InputToolbar from './components/InputToolbar.vue';

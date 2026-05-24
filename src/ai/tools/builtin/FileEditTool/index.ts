@@ -7,7 +7,7 @@ import type { AIToolConfirmationRequest } from '../../confirmation';
 import type { AIToolContext, AIToolExecutionError, AIToolExecutor } from 'types/ai';
 import { native } from '@/shared/platform';
 import type { ReadWorkspaceFileResult } from '@/shared/platform/native/types';
-import { parseUnsavedPath } from '@/utils/file';
+import { parseUnsavedPath } from '@/utils/file/unsaved';
 import { createToolFailureResult } from '../../results';
 import { toFileToolExecutionError } from '../../shared/fileErrors';
 import {

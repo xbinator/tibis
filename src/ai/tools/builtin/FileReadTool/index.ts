@@ -13,7 +13,7 @@ import type {
   ReadWorkspaceFileResult
 } from '@/shared/platform/native/types';
 import { recentFilesStorage } from '@/shared/storage';
-import { isUnsavedPath, parseUnsavedPath } from '@/utils/file';
+import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../../results';
 import { isAbsoluteFilePath } from '../../shared/pathUtils';
 

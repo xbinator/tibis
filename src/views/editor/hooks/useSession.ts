@@ -11,7 +11,7 @@ import { useEditorFileWatchStore } from '@/stores/editor/fileWatch';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import { resolveFileTitle } from '@/utils/file';
+import { resolveFileTitle } from '@/utils/file/title';
 import { Modal } from '@/utils/modal';
 import { getDefaultSavePath, getRecoveredSavePath, parseFileName, replaceFileName } from '../utils/filePath';
 import { resolveFileReconcileAction } from '../utils/reconcileFileContent';

@@ -5,7 +5,7 @@
 import type { FileReference } from '../types';
 import type { Message } from './types';
 import { recentFilesStorage } from '@/shared/storage';
-import { isUnsavedPath, parseUnsavedPath } from '@/utils/file';
+import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 
 // ─── 类型定义 ────────────────────────────────────────────────────────────────
 
