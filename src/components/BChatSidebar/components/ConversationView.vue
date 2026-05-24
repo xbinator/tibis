@@ -89,6 +89,7 @@ defineExpose({ scrollToBottom });
   height: 100%;
   padding: var(--b-chat-padding, 16px);
   overflow-y: auto;
+  overflow-anchor: none;
   scrollbar-gutter: stable;
 
   .scrollbar-style();
