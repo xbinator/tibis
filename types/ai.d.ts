@@ -39,14 +39,10 @@ export interface AIChoiceOption {
 }
 
 /**
- * AI 等待用户选择问题。
- * @description 工具暂停等待用户输入时使用的载荷。
+ * AI 等待用户选择的单个问题。
+ * @description 批量等待用户输入时使用的单题条目。
  */
-export interface AIAwaitingUserChoiceQuestion {
-  /** 生成的问题标识符。 */
-  questionId: string;
-  /** 相关的工具调用标识符。 */
-  toolCallId: string;
+export interface AIAwaitingUserChoiceItem {
   /** 选择模式。 */
   mode: 'single' | 'multiple';
   /** 提示文本。 */
@@ -55,6 +51,19 @@ export interface AIAwaitingUserChoiceQuestion {
   options: AIChoiceOption[];
   /** 多选时的最大选择数。 */
   maxSelections?: number;
+}
+
+/**
+ * AI 等待用户选择问题。
+ * @description 工具暂停等待用户输入时使用的载荷，支持单个问题与批量问题。
+ */
+export interface AIAwaitingUserChoiceQuestion extends AIAwaitingUserChoiceItem {
+  /** 生成的问题标识符。 */
+  questionId: string;
+  /** 相关的工具调用标识符。 */
+  toolCallId: string;
+  /** 同一次工具调用中等待回答的问题列表。 */
+  questions?: AIAwaitingUserChoiceItem[];
 }
 
 /**

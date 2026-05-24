@@ -5,7 +5,7 @@
 import type { Message } from '@/components/BChatSidebar/utils/types';
 
 /** 兼容历史消息与新工具实现的用户提问工具名称。 */
-const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question']);
+const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
 
 /**
  * 判断 assistant 消息是否含有未完成的工具调用（有 tool-call 但没有对应 tool-result）。

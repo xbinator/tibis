@@ -5,7 +5,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   ADD_MCP_SERVER_TOOL_NAME,
-  ASK_USER_QUESTION_TOOL_NAME,
   DEFAULT_BUILTIN_READONLY_TOOL_NAMES,
   DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES,
   EDIT_FILE_TOOL_NAME,
@@ -13,11 +12,13 @@ import {
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME,
+  QUESTION_TOOL_NAME,
   READ_CURRENT_DOCUMENT_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
   READ_FILE_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
+  SKILL_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
   WRITE_FILE_TOOL_NAME,
@@ -31,12 +32,13 @@ describe('built-in tool catalog', () => {
     expect([...DEFAULT_BUILTIN_READONLY_TOOL_NAMES]).toEqual([
       READ_CURRENT_DOCUMENT_TOOL_NAME,
       GET_CURRENT_TIME_TOOL_NAME,
-      ASK_USER_QUESTION_TOOL_NAME,
+      QUESTION_TOOL_NAME,
       READ_FILE_TOOL_NAME,
       READ_DIRECTORY_TOOL_NAME,
       GET_SETTINGS_TOOL_NAME,
       GET_MCP_SETTINGS_TOOL_NAME,
-      QUERY_LOGS_TOOL_NAME
+      QUERY_LOGS_TOOL_NAME,
+      SKILL_TOOL_NAME
     ]);
   });
 
@@ -56,12 +58,13 @@ describe('built-in tool catalog', () => {
     expect(getDefaultBuiltinChatToolNames()).toEqual([
       READ_CURRENT_DOCUMENT_TOOL_NAME,
       GET_CURRENT_TIME_TOOL_NAME,
-      ASK_USER_QUESTION_TOOL_NAME,
+      QUESTION_TOOL_NAME,
       READ_FILE_TOOL_NAME,
       READ_DIRECTORY_TOOL_NAME,
       GET_SETTINGS_TOOL_NAME,
       GET_MCP_SETTINGS_TOOL_NAME,
       QUERY_LOGS_TOOL_NAME,
+      SKILL_TOOL_NAME,
       EDIT_FILE_TOOL_NAME,
       WRITE_FILE_TOOL_NAME,
       UPDATE_SETTINGS_TOOL_NAME,
@@ -74,7 +77,7 @@ describe('built-in tool catalog', () => {
 
   it('checks readonly tool membership from the shared catalog', () => {
     expect(isDefaultBuiltinReadonlyToolName(GET_CURRENT_TIME_TOOL_NAME)).toBe(true);
-    expect(isDefaultBuiltinReadonlyToolName(ASK_USER_QUESTION_TOOL_NAME)).toBe(true);
+    expect(isDefaultBuiltinReadonlyToolName(QUESTION_TOOL_NAME)).toBe(true);
     expect(isDefaultBuiltinReadonlyToolName(READ_FILE_TOOL_NAME)).toBe(true);
     expect(isDefaultBuiltinReadonlyToolName(READ_DIRECTORY_TOOL_NAME)).toBe(true);
     expect(isDefaultBuiltinReadonlyToolName(GET_SETTINGS_TOOL_NAME)).toBe(true);

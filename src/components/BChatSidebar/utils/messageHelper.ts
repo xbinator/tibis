@@ -53,7 +53,7 @@ export type ToolModelMessageContent = Array<{
 export type ToolResult = Extract<ChatMessagePart, { type: 'tool-result' }>['result'];
 
 /** 兼容历史消息与新工具实现的用户提问工具名称。 */
-const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question']);
+const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
 /** 旧压缩记忆召回的最大数量。 */
 const MAX_RECALLED_COMPRESSION_MEMORY_COUNT = 2;
 

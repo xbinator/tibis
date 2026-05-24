@@ -51,7 +51,7 @@ interface Props {
   loading?: boolean;
   // 加载历史记录的回调函数
   onLoadHistory?: () => Promise<void> | void;
-  // 会话已结束时禁用交互（如 AskUserChoiceCard）
+  // 会话已结束时禁用交互（如 QuestionCard）
   disabled?: boolean;
 }
 

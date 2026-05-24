@@ -5,7 +5,6 @@
 import type { BuiltinToolBaseOptions } from '../shared/types';
 import type { AIToolExecutor } from 'types/ai';
 import { nanoid } from 'nanoid';
-import { ASK_USER_QUESTION_TOOL_NAME, createAskUserQuestionTool, type PendingQuestionSnapshot } from './AskUserQuestionTool';
 import { READ_CURRENT_DOCUMENT_TOOL_NAME, createBuiltinReadTools } from './DocumentTool';
 import { GET_CURRENT_TIME_TOOL_NAME, createBuiltinEnvironmentTools } from './EnvironmentTool';
 import { EDIT_FILE_TOOL_NAME, createBuiltinEditFileTool } from './FileEditTool';
@@ -20,11 +19,11 @@ import {
   REMOVE_MCP_SERVER_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME
 } from './MCPSettingsTool';
+import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } from './QuestionTool';
 import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
 
 // 重新导出工具名称
-export { ASK_USER_QUESTION_TOOL_NAME } from './AskUserQuestionTool';
 export { READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool';
 export { GET_CURRENT_TIME_TOOL_NAME } from './EnvironmentTool';
 export { EDIT_FILE_TOOL_NAME } from './FileEditTool';
@@ -38,6 +37,7 @@ export {
   REMOVE_MCP_SERVER_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME
 } from './MCPSettingsTool';
+export { LEGACY_ASK_USER_QUESTION_TOOL_NAME, QUESTION_TOOL_NAME } from './QuestionTool';
 export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
 
@@ -62,7 +62,7 @@ export function isSdkManagedToolName(toolName: string): boolean {
 export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   READ_CURRENT_DOCUMENT_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
-  ASK_USER_QUESTION_TOOL_NAME,
+  QUESTION_TOOL_NAME,
   READ_FILE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
@@ -140,7 +140,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const allReadonlyTools: AIToolExecutor[] = [
     readTools.readCurrentDocument,
     environmentTools.getCurrentTime,
-    createAskUserQuestionTool({
+    createQuestionTool({
       getPendingQuestion: options.getPendingQuestion ?? (() => null),
       createQuestionId: options.createQuestionId ?? (() => nanoid())
     }),

@@ -94,7 +94,7 @@ function mountBubble(message: Message): VueWrapper {
         BubblePartThinking: true,
         BubblePartToolCall: true,
         BubblePartToolResult: true,
-        AskUserChoiceCard: true,
+        QuestionCard: true,
         ConfirmationCard: true,
         BubblePartUserInput: true,
         BubblePartCompression: true

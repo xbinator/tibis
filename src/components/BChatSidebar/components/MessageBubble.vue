@@ -43,7 +43,7 @@
             @custom-input-submit="$emit('confirmation-custom-input', $event)"
           />
 
-          <AskUserChoiceCard
+          <QuestionCard
             v-else-if="!isCompressionMessage && isAwaitingUserChoicePart(item)"
             :question="item.result.data"
             :disabled="disabled"
@@ -96,7 +96,6 @@ import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
-import AskUserChoiceCard from './AskUserChoiceCard.vue';
 import ConfirmationCard from './ConfirmationCard.vue';
 import BubblePartCompression from './MessageBubble/BubblePartCompression.vue';
 import BubblePartText from './MessageBubble/BubblePartText.vue';
@@ -105,6 +104,7 @@ import BubblePartToolCall from './MessageBubble/BubblePartToolCall.vue';
 import BubblePartToolInput from './MessageBubble/BubblePartToolInput.vue';
 import BubblePartToolResult from './MessageBubble/BubblePartToolResult.vue';
 import BubblePartUserInput from './MessageBubble/BubblePartUserInput.vue';
+import QuestionCard from './QuestionCard.vue';
 
 defineOptions({ name: 'MessageBubble' });
 
@@ -114,7 +114,7 @@ const [name, bem] = createNamespace('', 'message-bubble');
 
 const props = defineProps<{
   message: Message;
-  /** 会话已结束时禁用交互（如 AskUserChoiceCard） */
+  /** 会话已结束时禁用交互（如 QuestionCard） */
   disabled?: boolean;
 }>();
 

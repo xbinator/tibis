@@ -5,6 +5,7 @@ import {
   createBuiltinTools,
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
+  QUESTION_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
@@ -36,7 +37,7 @@ describe('createBuiltinTools', () => {
     expect(getToolNames()).toEqual([
       'read_current_document',
       'get_current_time',
-      'ask_user_question',
+      'question',
       'read_file',
       'read_directory',
       'get_settings',
@@ -60,6 +61,7 @@ describe('createBuiltinTools', () => {
 describe('builtin tool exports', () => {
   it('exports read tool names', () => {
     expect(READ_DIRECTORY_TOOL_NAME).toBe('read_directory');
+    expect(QUESTION_TOOL_NAME).toBe('question');
     expect(QUERY_LOGS_TOOL_NAME).toBe('query_logs');
     expect(GET_SETTINGS_TOOL_NAME).toBe('get_settings');
     expect(GET_MCP_SETTINGS_TOOL_NAME).toBe('get_mcp_settings');

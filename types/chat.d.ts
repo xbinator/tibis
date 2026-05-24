@@ -157,6 +157,16 @@ export interface ChatMessageToolResultPart {
 }
 
 /**
+ * 用户选择题单题答案。
+ */
+export interface AIUserChoiceQuestionAnswer {
+  /** 问题文本 */
+  question: string;
+  /** 选中的选项值列表 */
+  answers: string[];
+}
+
+/**
  * 用户选择题答案数据
  */
 export interface AIUserChoiceAnswerData {
@@ -166,6 +176,8 @@ export interface AIUserChoiceAnswerData {
   toolCallId: string;
   /** 选中的选项值列表 */
   answers: string[];
+  /** 批量问题的逐题答案 */
+  questionAnswers?: AIUserChoiceQuestionAnswer[];
   /** 其他手动输入文本 */
   otherText?: string;
 }

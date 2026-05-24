@@ -1,13 +1,13 @@
 /**
- * @file builtin-ask-user-question.test.ts
- * @description Tests for the built-in ask_user_question tool executor.
+ * @file builtin-question.test.ts
+ * @description Tests for the built-in question tool executor.
  */
 import type { AIToolContext } from 'types/ai';
 import { describe, expect, it } from 'vitest';
-import { createAskUserQuestionTool } from '@/ai/tools/builtin/AskUserQuestionTool';
+import { createQuestionTool } from '@/ai/tools/builtin/QuestionTool';
 
 /**
- * Creates a stable tool execution context for ask_user_question tests.
+ * Creates a stable tool execution context for question tool tests.
  * @returns Tool execution context.
  */
 function createContext(): AIToolContext {
@@ -27,9 +27,9 @@ function createContext(): AIToolContext {
   };
 }
 
-describe('createAskUserQuestionTool', () => {
+describe('createQuestionTool', () => {
   it('does not require an active editor document', () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => null,
       createQuestionId: () => 'question-global'
     });
@@ -38,7 +38,7 @@ describe('createAskUserQuestionTool', () => {
   });
 
   it('returns awaiting user input for a valid single-choice question', async () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => null,
       createQuestionId: () => 'question-1'
     });
@@ -56,7 +56,7 @@ describe('createAskUserQuestionTool', () => {
     );
 
     expect(result).toEqual({
-      toolName: 'ask_user_question',
+      toolName: 'question',
       status: 'awaiting_user_input',
       data: {
         questionId: 'question-1',
@@ -66,13 +66,23 @@ describe('createAskUserQuestionTool', () => {
         options: [
           { label: 'Official', value: 'official' },
           { label: 'Video', value: 'video' }
+        ],
+        questions: [
+          {
+            question: 'Choose a channel type',
+            mode: 'single',
+            options: [
+              { label: 'Official', value: 'official' },
+              { label: 'Video', value: 'video' }
+            ]
+          }
         ]
       }
     });
   });
 
   it('keeps maxSelections for valid multiple-choice questions', async () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => null,
       createQuestionId: () => 'question-2'
     });
@@ -102,12 +112,92 @@ describe('createAskUserQuestionTool', () => {
         { label: 'Beta', value: 'beta' },
         { label: 'Nightly', value: 'nightly' }
       ],
-      maxSelections: 2
+      maxSelections: 2,
+      questions: [
+        {
+          question: 'Choose the release channels',
+          mode: 'multiple',
+          options: [
+            { label: 'Stable', value: 'stable' },
+            { label: 'Beta', value: 'beta' },
+            { label: 'Nightly', value: 'nightly' }
+          ],
+          maxSelections: 2
+        }
+      ]
+    });
+  });
+
+  it('returns awaiting user input for multiple questions in one tool call', async () => {
+    const tool = createQuestionTool({
+      getPendingQuestion: () => null,
+      createQuestionId: () => 'question-batch-1'
+    });
+
+    const result = await tool.execute(
+      {
+        questions: [
+          {
+            question: 'Choose a channel type',
+            mode: 'single',
+            options: [
+              { label: 'Official', value: 'official' },
+              { label: 'Video', value: 'video' }
+            ]
+          },
+          {
+            question: 'Choose release channels',
+            mode: 'multiple',
+            options: [
+              { label: 'Stable', value: 'stable' },
+              { label: 'Beta', value: 'beta' },
+              { label: 'Nightly', value: 'nightly' }
+            ],
+            maxSelections: 2
+          }
+        ]
+      },
+      createContext()
+    );
+
+    expect(result).toEqual({
+      toolName: 'question',
+      status: 'awaiting_user_input',
+      data: {
+        questionId: 'question-batch-1',
+        toolCallId: '',
+        question: 'Choose a channel type',
+        mode: 'single',
+        options: [
+          { label: 'Official', value: 'official' },
+          { label: 'Video', value: 'video' }
+        ],
+        questions: [
+          {
+            question: 'Choose a channel type',
+            mode: 'single',
+            options: [
+              { label: 'Official', value: 'official' },
+              { label: 'Video', value: 'video' }
+            ]
+          },
+          {
+            question: 'Choose release channels',
+            mode: 'multiple',
+            options: [
+              { label: 'Stable', value: 'stable' },
+              { label: 'Beta', value: 'beta' },
+              { label: 'Nightly', value: 'nightly' }
+            ],
+            maxSelections: 2
+          }
+        ]
+      }
     });
   });
 
   it('rejects a second pending question before creating a new one', async () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => ({
         questionId: 'pending-1',
         toolCallId: 'tool-call-1'
@@ -125,7 +215,7 @@ describe('createAskUserQuestionTool', () => {
     );
 
     expect(result).toEqual({
-      toolName: 'ask_user_question',
+      toolName: 'question',
       status: 'failure',
       error: {
         code: 'EXECUTION_FAILED',
@@ -135,7 +225,7 @@ describe('createAskUserQuestionTool', () => {
   });
 
   it('rejects maxSelections for single-choice questions', async () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => null,
       createQuestionId: () => 'question-4'
     });
@@ -154,7 +244,7 @@ describe('createAskUserQuestionTool', () => {
     );
 
     expect(result).toEqual({
-      toolName: 'ask_user_question',
+      toolName: 'question',
       status: 'failure',
       error: {
         code: 'INVALID_INPUT',
@@ -164,7 +254,7 @@ describe('createAskUserQuestionTool', () => {
   });
 
   it('rejects invalid maxSelections for multiple-choice questions', async () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => null,
       createQuestionId: () => 'question-5'
     });
@@ -183,7 +273,7 @@ describe('createAskUserQuestionTool', () => {
     );
 
     expect(result).toEqual({
-      toolName: 'ask_user_question',
+      toolName: 'question',
       status: 'failure',
       error: {
         code: 'INVALID_INPUT',
@@ -193,7 +283,7 @@ describe('createAskUserQuestionTool', () => {
   });
 
   it('rejects invalid runtime mode values', async () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => null,
       createQuestionId: () => 'question-6'
     });
@@ -211,7 +301,7 @@ describe('createAskUserQuestionTool', () => {
     );
 
     expect(result).toEqual({
-      toolName: 'ask_user_question',
+      toolName: 'question',
       status: 'failure',
       error: {
         code: 'INVALID_INPUT',
@@ -221,7 +311,7 @@ describe('createAskUserQuestionTool', () => {
   });
 
   it('rejects inputs whose options exceed the executor limit', async () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => null,
       createQuestionId: () => 'question-7'
     });
@@ -239,7 +329,7 @@ describe('createAskUserQuestionTool', () => {
     );
 
     expect(result).toEqual({
-      toolName: 'ask_user_question',
+      toolName: 'question',
       status: 'failure',
       error: {
         code: 'INVALID_INPUT',
@@ -249,7 +339,7 @@ describe('createAskUserQuestionTool', () => {
   });
 
   it('rejects invalid options before returning an awaiting result', async () => {
-    const tool = createAskUserQuestionTool({
+    const tool = createQuestionTool({
       getPendingQuestion: () => null,
       createQuestionId: () => 'question-8'
     });
@@ -267,7 +357,7 @@ describe('createAskUserQuestionTool', () => {
     );
 
     expect(result).toEqual({
-      toolName: 'ask_user_question',
+      toolName: 'question',
       status: 'failure',
       error: {
         code: 'INVALID_INPUT',
