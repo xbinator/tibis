@@ -41,24 +41,24 @@ function createMockElectronAPI(files: Record<string, string> = {}, directories: 
 }
 
 describe('scanSkills', () => {
-  it('discovers skills from project .agents/skills/ directory', async () => {
+  it('discovers skills from user .agents/skills/ directory', async () => {
     const mockAPI = createMockElectronAPI(
       {
-        '/workspace/.agents/skills/react-patterns/SKILL.md': '---\nname: react-patterns\ndescription: React patterns.\n---\n\n# React Patterns\nContent here.',
-        '/workspace/.agents/skills/api-design/SKILL.md': '---\nname: api-design\ndescription: API design.\n---\n\n# API Design\nContent here.'
+        '/Users/test/.agents/skills/react-patterns/SKILL.md': '---\nname: react-patterns\ndescription: React patterns.\n---\n\n# React Patterns\nContent here.',
+        '/Users/test/.agents/skills/api-design/SKILL.md': '---\nname: api-design\ndescription: API design.\n---\n\n# API Design\nContent here.'
       },
       {
-        '/workspace/.agents/skills': [
+        '/Users/test/.agents/skills': [
           { name: 'react-patterns', type: 'directory' as const },
           { name: 'api-design', type: 'directory' as const }
         ],
-        '/workspace/.agents/skills/react-patterns': [{ name: 'SKILL.md', type: 'file' as const }],
-        '/workspace/.agents/skills/api-design': [{ name: 'SKILL.md', type: 'file' as const }]
+        '/Users/test/.agents/skills/react-patterns': [{ name: 'SKILL.md', type: 'file' as const }],
+        '/Users/test/.agents/skills/api-design': [{ name: 'SKILL.md', type: 'file' as const }]
       }
     );
 
     const config: SkillScanConfig = {
-      workspaceRoot: '/workspace'
+      homeDir: '/Users/test'
     };
 
     const skills = await scanSkills(config, mockAPI);
@@ -72,7 +72,7 @@ describe('scanSkills', () => {
     const mockAPI = createMockElectronAPI({}, {});
 
     const config: SkillScanConfig = {
-      workspaceRoot: '/workspace'
+      homeDir: '/Users/test'
     };
 
     const skills = await scanSkills(config, mockAPI);
@@ -80,50 +80,50 @@ describe('scanSkills', () => {
     expect(skills).toEqual([]);
   });
 
-  it('ignores non-standard skill directories because skill discovery is unified', async () => {
+  it('ignores project skill directories because skill discovery is global', async () => {
     const mockAPI = createMockElectronAPI(
       {
         '/workspace/.agents/skills/shared/SKILL.md': '---\nname: shared\ndescription: Project skill.\n---\n\n# Project',
-        '/Users/test/skills/shared/SKILL.md': '---\nname: shared\ndescription: User skill.\n---\n\n# User'
+        '/Users/test/.agents/skills/shared/SKILL.md': '---\nname: shared\ndescription: User skill.\n---\n\n# User'
       },
       {
         '/workspace/.agents/skills': [{ name: 'shared', type: 'directory' as const }],
         '/workspace/.agents/skills/shared': [{ name: 'SKILL.md', type: 'file' as const }],
-        '/Users/test/skills': [{ name: 'shared', type: 'directory' as const }],
-        '/Users/test/skills/shared': [{ name: 'SKILL.md', type: 'file' as const }]
+        '/Users/test/.agents/skills': [{ name: 'shared', type: 'directory' as const }],
+        '/Users/test/.agents/skills/shared': [{ name: 'SKILL.md', type: 'file' as const }]
       }
     );
 
     const skills = await scanSkills(
       {
-        workspaceRoot: '/workspace'
+        homeDir: '/Users/test'
       },
       mockAPI
     );
 
     expect(skills).toHaveLength(1);
-    expect(skills[0].description).toBe('Project skill.');
-    expect(skills[0].source).toBe('project');
+    expect(skills[0].description).toBe('User skill.');
+    expect(skills[0].source).toBe('global');
   });
 
   it('skips skills with parse errors but includes them with parseError field', async () => {
     const mockAPI = createMockElectronAPI(
       {
-        '/workspace/.agents/skills/bad-skill/SKILL.md': '# No frontmatter',
-        '/workspace/.agents/skills/good-skill/SKILL.md': '---\nname: good-skill\ndescription: Good skill.\n---\n\n# Good'
+        '/Users/test/.agents/skills/bad-skill/SKILL.md': '# No frontmatter',
+        '/Users/test/.agents/skills/good-skill/SKILL.md': '---\nname: good-skill\ndescription: Good skill.\n---\n\n# Good'
       },
       {
-        '/workspace/.agents/skills': [
+        '/Users/test/.agents/skills': [
           { name: 'bad-skill', type: 'directory' as const },
           { name: 'good-skill', type: 'directory' as const }
         ],
-        '/workspace/.agents/skills/bad-skill': [{ name: 'SKILL.md', type: 'file' as const }],
-        '/workspace/.agents/skills/good-skill': [{ name: 'SKILL.md', type: 'file' as const }]
+        '/Users/test/.agents/skills/bad-skill': [{ name: 'SKILL.md', type: 'file' as const }],
+        '/Users/test/.agents/skills/good-skill': [{ name: 'SKILL.md', type: 'file' as const }]
       }
     );
 
     const config: SkillScanConfig = {
-      workspaceRoot: '/workspace'
+      homeDir: '/Users/test'
     };
 
     const skills = await scanSkills(config, mockAPI);
@@ -133,5 +133,27 @@ describe('scanSkills', () => {
     const goodSkill = skills.find((s: { name: string }) => s.name === 'good-skill');
     expect(badSkill?.parseError).toBeDefined();
     expect(goodSkill?.parseError).toBeUndefined();
+  });
+
+  it('skips skill directories without SKILL.md before reading file content', async () => {
+    const mockAPI = createMockElectronAPI(
+      {
+        '/Users/test/.agents/skills/good-skill/SKILL.md': '---\nname: good-skill\ndescription: Good skill.\n---\n\n# Good'
+      },
+      {
+        '/Users/test/.agents/skills': [
+          { name: 'empty-skill', type: 'directory' as const },
+          { name: 'good-skill', type: 'directory' as const }
+        ],
+        '/Users/test/.agents/skills/empty-skill': [],
+        '/Users/test/.agents/skills/good-skill': [{ name: 'SKILL.md', type: 'file' as const }]
+      }
+    );
+
+    const skills = await scanSkills({ homeDir: '/Users/test' }, mockAPI);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('good-skill');
+    expect(mockAPI.readFile).not.toHaveBeenCalledWith('/Users/test/.agents/skills/empty-skill/SKILL.md');
   });
 });

@@ -291,6 +291,7 @@ export interface ElectronAPI {
   getRelativePath: (filePath: string) => Promise<string>;
 
   getCwd: () => Promise<string>;
+  getHomeDir: () => Promise<string>;
 
   watchFile: (filePath: string) => Promise<void>;
   unwatchFile: (filePath: string) => Promise<void>;

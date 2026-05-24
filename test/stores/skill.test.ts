@@ -21,7 +21,7 @@ const sampleSkill: SkillDefinition = {
   content: '# React Patterns\n\n1. Prefer composition',
   filePath: '/workspace/.agents/skills/react-patterns/SKILL.md',
   dirPath: '/workspace/.agents/skills/react-patterns',
-  source: 'project',
+  source: 'global',
   enabled: true,
   parsedAt: Date.now()
 };
@@ -32,7 +32,7 @@ const sampleSkill2: SkillDefinition = {
   content: '# API Design\n\nREST conventions',
   filePath: '/workspace/.agents/skills/api-design/SKILL.md',
   dirPath: '/workspace/.agents/skills/api-design',
-  source: 'project',
+  source: 'global',
   enabled: true,
   parsedAt: Date.now()
 };
@@ -120,7 +120,7 @@ describe('useSkillStore', () => {
       content: '',
       filePath: '/bad/SKILL.md',
       dirPath: '/bad',
-      source: 'project',
+      source: 'global',
       enabled: true,
       parsedAt: Date.now(),
       parseError: 'Missing frontmatter'

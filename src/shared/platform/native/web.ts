@@ -111,6 +111,10 @@ export class WebNative implements Native {
     return '/';
   }
 
+  async getHomeDir(): Promise<string> {
+    return '/';
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async watchFile(_path: string): Promise<void> {
     // web 端不支持文件监听

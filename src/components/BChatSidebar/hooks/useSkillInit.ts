@@ -20,14 +20,15 @@ export function useSkillInit(): void {
 
   onMounted(async () => {
     try {
-      const cwd = await native.getCwd();
-      await skillStore.init(cwd, {
+      const homeDir = await native.getHomeDir();
+      await skillStore.init(homeDir, {
         readFile: (filePath: string) => native.readFile(filePath).then((r) => ({ content: r.content })),
-        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options)
+        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
+        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath)
       });
 
-      // 监听统一的项目 skill 目录，事件只关注 SKILL.md。
-      const skillDir = `${cwd}/.agents/skills`;
+      // 监听用户级全局 skill 目录，事件只关注 SKILL.md。
+      const skillDir = `${homeDir}/.agents/skills`;
       await native.watchDirectory(skillDir, '**/SKILL.md');
       cleanupCallbacks.push(() => native.unwatchDirectory(skillDir, '**/SKILL.md'));
 
@@ -42,7 +43,7 @@ export function useSkillInit(): void {
         if (data.content) {
           if (!data.filePath.endsWith('/SKILL.md') && !data.filePath.endsWith('\\SKILL.md')) return;
           const { parseSkillMarkdown } = await import('@/ai/skill/parser');
-          const skill = parseSkillMarkdown(data.content, data.filePath, { source: 'project' });
+          const skill = parseSkillMarkdown(data.content, data.filePath, { source: 'global' });
           skillStore.handleSkillChange(data.type as 'change' | 'add', skill);
         }
       });

@@ -39,7 +39,7 @@ export const useSkillStore = defineStore('skill', () => {
 
   /** 扫描配置。 */
   const scanConfig = ref<SkillScanConfig>({
-    workspaceRoot: ''
+    homeDir: ''
   });
 
   /** 解析失败的 skill 及错误信息。 */
@@ -113,21 +113,21 @@ export const useSkillStore = defineStore('skill', () => {
 
   /**
    * 初始化：扫描 skill 目录。
-   * @param workspaceRoot - 工作区根路径
+   * @param homeDir - 用户主目录路径
    * @param api - electronAPI 实例
    */
-  async function init(workspaceRoot: string, api: SkillScannerAPI): Promise<void> {
+  async function init(homeDir: string, api: SkillScannerAPI): Promise<void> {
     if (initPromise) {
       return initPromise;
     }
 
-    scanConfig.value.workspaceRoot = workspaceRoot;
+    scanConfig.value.homeDir = homeDir;
     cachedApi = api;
 
     initPromise = (async () => {
       try {
         const config: SkillScanConfig = {
-          workspaceRoot,
+          homeDir,
           maxContentLength: DEFAULT_SKILL_MAX_CONTENT_LENGTH
         };
 
@@ -153,16 +153,16 @@ export const useSkillStore = defineStore('skill', () => {
   }
 
   /**
-   * 重新扫描 skill 目录（使用缓存的 api 和 workspaceRoot）。
+   * 重新扫描 skill 目录（使用缓存的 api 和 homeDir）。
    */
   async function rescan(): Promise<void> {
-    if (!cachedApi || !scanConfig.value.workspaceRoot) {
+    if (!cachedApi || !scanConfig.value.homeDir) {
       console.warn('Skill rescan called before init');
       return;
     }
     initPromise = null;
     initialized.value = false;
-    await init(scanConfig.value.workspaceRoot, cachedApi);
+    await init(scanConfig.value.homeDir, cachedApi);
   }
 
   /**

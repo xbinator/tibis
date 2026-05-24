@@ -17,7 +17,7 @@ describe('Skill types', () => {
   });
 
   it('SkillSource has expected variants', () => {
-    const sources: SkillSource[] = ['builtin', 'project'];
+    const sources: SkillSource[] = ['builtin', 'global'];
     expect(sources).toHaveLength(2);
   });
 
@@ -28,7 +28,7 @@ describe('Skill types', () => {
       content: '# Test\nContent',
       filePath: '/path/to/SKILL.md',
       dirPath: '/path/to',
-      source: 'project',
+      source: 'global',
       enabled: true,
       parsedAt: Date.now()
     };
@@ -38,7 +38,7 @@ describe('Skill types', () => {
 
   it('SkillScanConfig has required fields', () => {
     const config: SkillScanConfig = {
-      workspaceRoot: '/workspace'
+      homeDir: '/Users/test'
     };
     expect(config.maxContentLength).toBeUndefined();
   });

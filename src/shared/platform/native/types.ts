@@ -128,6 +128,8 @@ export interface Native {
 
   getCwd(): Promise<string>;
 
+  getHomeDir(): Promise<string>;
+
   watchFile(path: string): Promise<void>;
 
   unwatchFile(path: string): Promise<void>;

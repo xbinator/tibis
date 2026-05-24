@@ -4,7 +4,7 @@
  */
 
 /** Skill 来源类型。 */
-export type SkillSource = 'builtin' | 'project';
+export type SkillSource = 'builtin' | 'global';
 
 /** Skill 目录变更事件类型。 */
 export type SkillChangeEventType = 'change' | 'add' | 'unlink';
@@ -21,7 +21,7 @@ export interface SkillDefinition {
   filePath: string;
   /** skill 目录绝对路径 */
   dirPath: string;
-  /** 来源：builtin（内置）| project（项目目录） */
+  /** 来源：builtin（内置）| global（用户级全局目录） */
   source: SkillSource;
   /** 是否启用 */
   enabled: boolean;
@@ -33,8 +33,8 @@ export interface SkillDefinition {
 
 /** Skill 扫描配置。 */
 export interface SkillScanConfig {
-  /** 项目工作区根路径 */
-  workspaceRoot: string;
+  /** 用户主目录路径 */
+  homeDir: string;
   /** skill body 最大字符数，默认 10000 */
   maxContentLength?: number;
 }

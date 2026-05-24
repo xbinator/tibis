@@ -93,6 +93,10 @@ export class ElectronNative implements Native {
     return getElectronAPI().getCwd();
   }
 
+  async getHomeDir(): Promise<string> {
+    return getElectronAPI().getHomeDir();
+  }
+
   async watchFile(filePath: string): Promise<void> {
     await getElectronAPI().watchFile(filePath);
   }

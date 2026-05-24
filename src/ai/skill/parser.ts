@@ -6,7 +6,7 @@ import { DEFAULT_SKILL_MAX_CONTENT_LENGTH, type SkillDefinition, type SkillSourc
 
 /** 解析选项。 */
 interface ParseOptions {
-  /** skill 来源，默认 'project' */
+  /** skill 来源，默认 'global' */
   source?: SkillSource;
   /** 内容最大字符数，默认 10000 */
   maxContentLength?: number;
@@ -86,7 +86,7 @@ function dirname(filePath: string): string {
  * @returns 解析结果（含错误信息时 parseError 不为空）
  */
 export function parseSkillMarkdown(markdown: string, filePath: string, options: ParseOptions = {}): SkillDefinition {
-  const source: SkillSource = options.source ?? 'project';
+  const source: SkillSource = options.source ?? 'global';
   const maxContentLength = options.maxContentLength ?? DEFAULT_SKILL_MAX_CONTENT_LENGTH;
   const dirPath = dirname(filePath);
   const parsedAt = Date.now();

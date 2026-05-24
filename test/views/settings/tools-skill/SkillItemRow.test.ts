@@ -20,7 +20,7 @@ function createSkill(): SkillDefinition {
     content: 'Use this skill for writing.',
     filePath: '/workspace/.agents/skills/writer/SKILL.md',
     dirPath: '/workspace/.agents/skills/writer',
-    source: 'project',
+    source: 'global',
     enabled: true,
     parsedAt: 1710000000000
   };

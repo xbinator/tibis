@@ -25,7 +25,7 @@ const sampleSkill: SkillDefinition = {
   content: '# React Patterns\n\n1. Prefer composition over inheritance',
   filePath: '/workspace/.agents/skills/react-patterns/SKILL.md',
   dirPath: '/workspace/.agents/skills/react-patterns',
-  source: 'project',
+  source: 'global',
   enabled: true,
   parsedAt: Date.now()
 };

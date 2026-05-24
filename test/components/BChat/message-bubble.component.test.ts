@@ -267,6 +267,45 @@ function createMessageWithToolInputPreview(): Message {
 }
 
 /**
+ * 创建带完整工具调用结果的助手消息。
+ * @returns assistant 消息
+ */
+function createMessageWithToolResult(): Message {
+  return {
+    id: 'assistant-tool-result-1',
+    role: 'assistant',
+    content: '',
+    createdAt: '2026-05-14T00:25:00.000Z',
+    loading: false,
+    finished: true,
+    parts: [
+      {
+        type: 'tool-call',
+        toolCallId: 'tool-call-1',
+        toolName: 'write_file',
+        input: {
+          path: 'docs/release-notes.md',
+          content: '# Release'
+        }
+      },
+      {
+        type: 'tool-result',
+        toolCallId: 'tool-call-1',
+        toolName: 'write_file',
+        result: {
+          toolName: 'write_file',
+          status: 'success',
+          data: {
+            path: 'docs/release-notes.md',
+            bytes: 9
+          }
+        }
+      }
+    ]
+  };
+}
+
+/**
  * 挂载 MessageBubble。
  * @param message - 消息数据
  * @returns 挂载结果
@@ -337,7 +376,8 @@ describe('MessageBubble confirmation integration', () => {
 
     expect(wrapper.text()).toContain('请选择渠道');
     expect(wrapper.text()).toContain('官网');
-    expect(wrapper.text()).toContain('提交选择');
+    expect(wrapper.text()).toContain('提交');
+    expect(wrapper.text()).not.toContain('调用工具：ask_user_question');
     expect(wrapper.text()).not.toContain('工具结果：ask_user_question');
   });
 
@@ -349,11 +389,22 @@ describe('MessageBubble confirmation integration', () => {
     expect(wrapper.find('.message-bubble__toolbar').exists()).toBe(true);
   });
 
-  it('renders streamed write_file preview with path before the final tool-call arrives', () => {
+  it('renders streamed tool work as a user-facing progress summary', () => {
     const wrapper = mountMessageBubble(createMessageWithToolInputPreview());
 
-    expect(wrapper.text()).toContain('准备写入文件');
-    expect(wrapper.text()).toContain('docs/release-notes.md');
-    expect(wrapper.text()).toContain('# Release');
+    expect(wrapper.text()).toContain('正在写入文件');
+    expect(wrapper.text()).not.toContain('write_file');
+    expect(wrapper.text()).not.toContain('docs/release-notes.md');
+    expect(wrapper.text()).not.toContain('# Release');
+  });
+
+  it('renders completed tool work as a concise result without exposing tool details', () => {
+    const wrapper = mountMessageBubble(createMessageWithToolResult());
+
+    expect(wrapper.text()).toContain('文件写入完成');
+    expect(wrapper.text()).toContain('已完成');
+    expect(wrapper.text()).not.toContain('write_file');
+    expect(wrapper.text()).not.toContain('docs/release-notes.md');
+    expect(wrapper.text()).not.toContain('# Release');
   });
 });

@@ -40,13 +40,19 @@ async function scanDirectory(dirPath: string, source: SkillDefinition['source'],
       dirEntries.map(async (entry) => {
         const skillDirPath = `${dirPath}/${entry.name}`;
         const skillFilePath = `${skillDirPath}/SKILL.md`;
+        if (api.getPathStatus) {
+          const status = await api.getPathStatus(skillFilePath);
+          if (!status.exists || !status.isFile) {
+            return null;
+          }
+        }
         const { content } = await api.readFile(skillFilePath);
         return parseSkillMarkdown(content, skillFilePath, { source, maxContentLength });
       })
     );
 
     for (const result of results) {
-      if (result.status === 'fulfilled') {
+      if (result.status === 'fulfilled' && result.value) {
         skills.push(result.value);
       }
     }
@@ -67,13 +73,13 @@ async function scanDirectory(dirPath: string, source: SkillDefinition['source'],
 export async function scanSkills(config: SkillScanConfig, api: SkillScannerAPI): Promise<SkillDefinition[]> {
   const { maxContentLength } = config;
 
-  // 扫描项目目录
-  const projectSkillsDir = `${config.workspaceRoot}/.agents/skills`;
-  const projectSkills = await scanDirectory(projectSkillsDir, 'project', api, maxContentLength);
+  // 扫描用户级全局 skill 目录。
+  const globalSkillsDir = `${config.homeDir}/.agents/skills`;
+  const globalSkills = await scanDirectory(globalSkillsDir, 'global', api, maxContentLength);
 
   // 去重：同名 skill 后者覆盖前者
   const skillMap = new Map<string, SkillDefinition>();
-  for (const skill of projectSkills) {
+  for (const skill of globalSkills) {
     const key = skill.name || skill.filePath;
     skillMap.set(key, skill);
   }
