@@ -1,5 +1,5 @@
 <template>
-  <div :class="name">
+  <div ref="rootRef" :class="name">
     <div :class="[bem('section'), sectionClass]" :style="sectionStyle">
       <slot></slot>
     </div>
@@ -14,6 +14,7 @@
 <script setup lang="ts">
 import type { BPanelSplitterProps as Props } from './types';
 import { computed, reactive, ref } from 'vue';
+import { useResizeObserver } from '@vueuse/core';
 import { clamp } from 'lodash-es';
 import { createNamespace } from '@/utils/namespace';
 
@@ -26,7 +27,8 @@ const props = withDefaults(defineProps<Props>(), {
   minWidth: 200,
   maxWidth: 600,
   sectionClass: '',
-  closeThreshold: 60
+  closeThreshold: 60,
+  closable: true
 });
 
 const size = defineModel<number>('size', { default: 300 });
@@ -36,6 +38,7 @@ const emit = defineEmits<{
 }>();
 
 const isDragging = ref(false);
+const rootRef = ref<HTMLElement>();
 
 const state = reactive({
   startX: 0,
@@ -43,6 +46,7 @@ const state = reactive({
 });
 
 const isLeft = computed(() => props.position === 'left');
+const containerRef = computed(() => rootRef.value?.parentElement);
 
 const sectionStyle = computed(() => ({
   width: `${size.value}px`
@@ -56,7 +60,68 @@ const splitterStyle = computed(() => {
   return { right: 0, transform: 'translateX(100%)' };
 });
 
-function getRawSize(e: MouseEvent) {
+/**
+ * 获取百分比宽度计算所需的父容器宽度。
+ * @returns 父容器宽度，无法读取时返回 0
+ */
+function getContainerWidth(): number {
+  let container = rootRef.value?.parentElement;
+
+  while (container) {
+    const { width } = container.getBoundingClientRect();
+
+    if (width > 0) {
+      return width;
+    }
+
+    container = container.parentElement;
+  }
+
+  return 0;
+}
+
+/**
+ * 将宽度约束转换为像素值。
+ * @param value - 宽度约束，数字表示 px，百分数字符串表示相对父容器宽度
+ * @returns 宽度像素值
+ */
+function resolveSizeValue(value: NonNullable<Props['minWidth']>): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  const percentage = Number.parseFloat(value);
+
+  if (!Number.isFinite(percentage)) {
+    return 0;
+  }
+
+  return (getContainerWidth() * percentage) / 100;
+}
+
+/**
+ * 将当前面板宽度同步到最新的宽度约束范围内。
+ */
+function syncSizeWithinBounds(): void {
+  if (size.value === 0) {
+    return;
+  }
+
+  const minWidth = resolveSizeValue(props.minWidth);
+  const maxWidth = resolveSizeValue(props.maxWidth);
+  const nextSize = clamp(size.value, minWidth, maxWidth);
+
+  if (nextSize !== size.value) {
+    size.value = nextSize;
+  }
+}
+
+/**
+ * 获取本次拖拽中的理论面板宽度。
+ * @param e - 鼠标移动事件
+ * @returns 理论面板宽度，单位 px
+ */
+function getRawSize(e: MouseEvent): number {
   const deltaX = e.clientX - state.startX;
 
   return state.startSize + (isLeft.value ? -deltaX : deltaX);
@@ -75,22 +140,24 @@ function getRawSize(e: MouseEvent) {
  * 只要 rawSize 再次大于 minWidth - closeThreshold，
  * 面板就会恢复到 minWidth。
  */
-function handleMouseMove(e: MouseEvent) {
+function handleMouseMove(e: MouseEvent): void {
   const rawSize = getRawSize(e);
-  const closeLine = props.minWidth - props.closeThreshold;
+  const minWidth = resolveSizeValue(props.minWidth);
+  const maxWidth = resolveSizeValue(props.maxWidth);
+  const closeLine = minWidth - props.closeThreshold;
 
-  if (rawSize <= closeLine) {
+  if (props.closable && rawSize <= closeLine) {
     size.value = 0;
     return;
   }
 
-  size.value = clamp(rawSize, props.minWidth, props.maxWidth);
+  size.value = clamp(rawSize, minWidth, maxWidth);
 }
 
 /**
  * 处理鼠标松开：清理拖拽状态。
  */
-function handleMouseUp() {
+function handleMouseUp(): void {
   isDragging.value = false;
 
   document.body.classList.remove('cursor-col-resize');
@@ -104,7 +171,11 @@ function handleMouseUp() {
   }
 }
 
-function handleMouseDown(e: MouseEvent) {
+/**
+ * 处理鼠标按下：记录起始位置并注册全局拖拽事件。
+ * @param e - 鼠标按下事件
+ */
+function handleMouseDown(e: MouseEvent): void {
   e.preventDefault();
 
   isDragging.value = true;
@@ -117,6 +188,13 @@ function handleMouseDown(e: MouseEvent) {
   window.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('mouseup', handleMouseUp);
 }
+
+/**
+ * 监听父容器尺寸变化，确保百分比约束随容器变化重新生效。
+ */
+useResizeObserver(containerRef, () => {
+  syncSizeWithinBounds();
+});
 </script>
 
 <style lang="less">
