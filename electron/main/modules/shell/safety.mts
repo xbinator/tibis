@@ -148,6 +148,35 @@ function resolveTargetPath(rawPath: string | null, cwd: string): string | null {
   return path.resolve(cwd, rawPath);
 }
 
+/**
+ * Bash 安全重定向目标白名单。
+ * /dev/null 是 Unix 空设备，丢弃输出，不构成文件写入风险。
+ */
+const BASH_SAFE_REDIRECT_TARGETS = new Set(['/dev/null']);
+
+/**
+ * PowerShell 安全重定向目标白名单。
+ * $null 和 Out-Null 是 PowerShell 丢弃输出的方式。
+ */
+const POWERSHELL_SAFE_REDIRECT_TARGETS = new Set(['$null', 'out-null']);
+
+/**
+ * 判断重定向目标是否为安全例外（如 /dev/null、$null）。
+ * @param rawPath - 原始路径字符串
+ * @param shell - Shell 类型
+ * @returns 是否为安全重定向目标
+ */
+function isSafeRedirectTarget(rawPath: string, shell: ShellCommandShell): boolean {
+  const normalized = rawPath.toLowerCase().trim();
+  if (shell === 'bash') {
+    return BASH_SAFE_REDIRECT_TARGETS.has(normalized);
+  }
+  if (shell === 'powershell') {
+    return POWERSHELL_SAFE_REDIRECT_TARGETS.has(normalized);
+  }
+  return false;
+}
+
 /** AST 结构检查的公共参数。 */
 interface StructuralCheckOptions {
   /** 命令文本 */
@@ -212,6 +241,9 @@ function appendBashStructuralFindings(options: StructuralCheckOptions): void {
     const fileNode = wordNodes[wordNodes.length - 1];
     const rawPath = extractLiteralPath(fileNode);
     if (rawPath === null) continue;
+
+    // 放行安全重定向目标（如 /dev/null）
+    if (isSafeRedirectTarget(rawPath, 'bash')) continue;
 
     const resolvedTarget = resolveTargetPath(rawPath, cwd);
     if (resolvedTarget && !isPathInsideWorkspace(resolvedTarget, workspaceRoot)) {
@@ -283,6 +315,9 @@ function appendPowerShellStructuralFindings(options: StructuralCheckOptions): vo
     for (const fileNode of fileNodes) {
       const rawPath = extractLiteralPath(fileNode);
       if (rawPath === null) continue;
+
+      // 放行安全重定向目标（如 $null）
+      if (isSafeRedirectTarget(rawPath, 'powershell')) continue;
 
       const resolvedTarget = resolveTargetPath(rawPath, cwd);
       if (resolvedTarget && !isPathInsideWorkspace(resolvedTarget, workspaceRoot)) {

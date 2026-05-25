@@ -152,6 +152,42 @@ describe('shell command safety analyzer', () => {
     expect(report.status).toBe('allowed');
   });
 
+  it('allows redirect to /dev/null in bash', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'some-command > /dev/null' }));
+
+    expect(report.status).toBe('allowed');
+    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'REDIRECT_OUTSIDE_WORKSPACE' }));
+  });
+
+  it('allows redirect stderr to /dev/null in bash', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'some-command 2>/dev/null' }));
+
+    expect(report.status).toBe('allowed');
+    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'REDIRECT_OUTSIDE_WORKSPACE' }));
+  });
+
+  it('allows combined redirect to /dev/null in bash', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'some-command >/dev/null 2>&1' }));
+
+    expect(report.status).toBe('allowed');
+    expect(report.findings).not.toContainEqual(expect.objectContaining({ code: 'REDIRECT_OUTSIDE_WORKSPACE' }));
+  });
+
+  it('still blocks other absolute path redirects outside workspace', async () => {
+    const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
+
+    const report = await analyzeShellCommandSafety(createRequest({ command: 'echo bad > ~/.zshrc' }));
+
+    expect(report.status).toBe('blocked');
+    expect(report.findings).toContainEqual(expect.objectContaining({ code: 'REDIRECT_OUTSIDE_WORKSPACE' }));
+  });
+
   it('detects dangerous command inside command substitution', async () => {
     const { analyzeShellCommandSafety } = await import('../../electron/main/modules/shell/safety.mjs');
 
