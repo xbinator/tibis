@@ -113,6 +113,8 @@ const electronAPI: ElectronAPI = {
 
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('fs:renameFile', oldPath, newPath),
 
+  ensureDir: (dirPath: string) => ipcRenderer.invoke('fs:ensureDir', dirPath),
+
   trashFile: (filePath: string) => ipcRenderer.invoke('ui:trashFile', filePath),
 
   showItemInFolder: (filePath: string) => ipcRenderer.invoke('ui:showItemInFolder', filePath),

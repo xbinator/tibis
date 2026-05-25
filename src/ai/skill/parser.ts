@@ -52,12 +52,12 @@ function parseFrontmatter(frontmatter: string): { data: Record<string, unknown>;
  * @param filePath - 文件路径，用于截断提示
  * @returns 处理后的内容
  */
-function truncateContent(content: string, maxLength: number, filePath: string): string {
+function truncateContent(content: string, maxLength: number, filePath: string): { text: string; truncated: boolean } {
   if (content.length <= maxLength) {
-    return content;
+    return { text: content, truncated: false };
   }
   const truncationNotice = `\n[Content truncated at ${maxLength} chars, full content at: ${filePath}]`;
-  return content.slice(0, maxLength - truncationNotice.length) + truncationNotice;
+  return { text: content.slice(0, maxLength - truncationNotice.length) + truncationNotice, truncated: true };
 }
 
 /**
@@ -160,7 +160,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
   }
 
   const rawContent = extracted.body.trim();
-  const content = truncateContent(rawContent, maxContentLength, filePath);
+  const { text: content, truncated } = truncateContent(rawContent, maxContentLength, filePath);
 
   return {
     name,
@@ -170,6 +170,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
     dirPath,
     source,
     enabled: true,
-    parsedAt
+    parsedAt,
+    truncated
   };
 }

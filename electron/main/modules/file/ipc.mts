@@ -58,4 +58,8 @@ export function registerFileHandlers(): void {
   ipcMain.handle('fs:renameFile', async (_event, oldPath: string, newPath: string) => {
     await fs.promises.rename(oldPath, newPath);
   });
+
+  ipcMain.handle('fs:ensureDir', async (_event, dirPath: string) => {
+    await fs.promises.mkdir(dirPath, { recursive: true });
+  });
 }

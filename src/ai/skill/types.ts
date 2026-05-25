@@ -29,6 +29,8 @@ export interface SkillDefinition {
   parsedAt: number;
   /** 解析失败时的错误信息 */
   parseError?: string;
+  /** 内容是否因超长而被截断 */
+  truncated?: boolean;
 }
 
 /** Skill 扫描配置。 */

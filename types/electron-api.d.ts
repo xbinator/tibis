@@ -407,6 +407,7 @@ export interface ElectronAPI {
 
   writeFile: (filePath: string, content: string) => Promise<void>;
   renameFile: (oldPath: string, newPath: string) => Promise<void>;
+  ensureDir: (dirPath: string) => Promise<void>;
   trashFile: (filePath: string) => Promise<void>;
   showItemInFolder: (filePath: string) => Promise<void>;
   getRelativePath: (filePath: string) => Promise<string>;

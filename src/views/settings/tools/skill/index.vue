@@ -5,6 +5,9 @@
 <template>
   <div class="skill-settings">
     <BSettingsPage class="skill-settings__page" title="技能">
+      <template #headerExtra>
+        <BButton type="primary" size="small" @click="creatorVisible = true">创建技能</BButton>
+      </template>
       <!-- 搜索路径说明 -->
       <BSettingsSection title="搜索路径" content-class="skill-settings__content">
         <div class="skill-settings__hint">Skill 文件放置在 <code>.agents/skills/&lt;name&gt;/SKILL.md</code> 目录下即可自动发现</div>
@@ -49,6 +52,9 @@
     >
       <SkillDetail :skill="selectedSkill" @close="handleCloseSkillDetail" />
     </BPanelSplitter>
+
+    <!-- 创建技能模态框 -->
+    <SkillCreator v-model:open="creatorVisible" />
   </div>
 </template>
 
@@ -56,6 +62,7 @@
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useSkillStore } from '@/stores/ai/skill';
+import SkillCreator from './components/SkillCreator.vue';
 import SkillDetail from './components/SkillDetail.vue';
 import SkillItemRow from './components/SkillItemRow.vue';
 
@@ -68,6 +75,9 @@ const selectedSkillName = ref('');
 const detailVisible = ref(false);
 /** 详情面板默认宽度。 */
 const DEFAULT_DETAIL_PANEL_WIDTH = 480;
+
+/** 创建技能模态框可见性。 */
+const creatorVisible = ref(false);
 
 const detailPanelWidth = ref(DEFAULT_DETAIL_PANEL_WIDTH);
 

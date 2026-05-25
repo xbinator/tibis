@@ -19,6 +19,8 @@ export interface SkillScannerAPI {
   }) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>;
   /** 获取路径状态 */
   getPathStatus?: (targetPath: string) => Promise<{ exists: boolean; isFile: boolean; isDirectory: boolean }>;
+  /** 移动文件/目录到系统回收站 */
+  trashFile?: (filePath: string) => Promise<void>;
 }
 
 /**
@@ -34,7 +36,8 @@ async function scanDirectory(dirPath: string, source: SkillDefinition['source'],
 
   try {
     const { entries } = await api.readWorkspaceDirectory({ directoryPath: dirPath });
-    const dirEntries = entries.filter((e) => e.type === 'directory');
+    // 排除 .tmp-*, .bak-* 等临时目录
+    const dirEntries = entries.filter((e) => e.type === 'directory').filter((e) => !e.name.startsWith('.'));
 
     const results = await Promise.allSettled(
       dirEntries.map(async (entry) => {
@@ -75,6 +78,25 @@ export async function scanSkills(config: SkillScanConfig, api: SkillScannerAPI):
 
   // 扫描用户级全局 skill 目录。
   const globalSkillsDir = joinPath(config.homeDir, '.agents', 'skills');
+
+  // 清理孤儿临时/备份目录（上次安装中断遗留）
+  if (api.trashFile) {
+    try {
+      const { entries } = await api.readWorkspaceDirectory({ directoryPath: globalSkillsDir });
+      const orphans = entries.filter((e) => e.type === 'directory' && (e.name.startsWith('.tmp-') || e.name.startsWith('.bak-')));
+      await Promise.allSettled(
+        orphans.map((entry) => {
+          const orphanPath = joinPath(globalSkillsDir, entry.name);
+          return api.trashFile!(orphanPath).catch(() => {
+            // 单个清理失败不影响其他
+          });
+        })
+      );
+    } catch {
+      // 目录不存在或不可读，跳过
+    }
+  }
+
   const globalSkills = await scanDirectory(globalSkillsDir, 'global', api, maxContentLength);
 
   // 去重：同名 skill 后者覆盖前者，过滤掉解析错误的

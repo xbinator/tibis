@@ -12,7 +12,7 @@ import type { SkillScanConfig } from '@/ai/skill/types';
  * @param directories - 目录映射（路径 → 子条目列表）
  * @returns mock electronAPI
  */
-function createMockElectronAPI(files: Record<string, string> = {}, directories: Record<string, Array<{ name: string; type: 'file' | 'directory' }>> = {}) {
+function createMockElectronAPI(files: Record<string, string> = {}, directories: Record<string, Array<{ name: string; type: 'file' | 'directory' }>> = {}, overrides?: { trashFile?: ReturnType<typeof vi.fn> }) {
   return {
     readFile: vi.fn(async (filePath: string) => {
       const content = files[filePath];
@@ -36,7 +36,8 @@ function createMockElectronAPI(files: Record<string, string> = {}, directories: 
         return { exists: true, isFile: false, isDirectory: true };
       }
       return { exists: false, isFile: false, isDirectory: false };
-    })
+    }),
+    trashFile: overrides?.trashFile ?? vi.fn(async (_filePath: string) => {})
   };
 }
 
@@ -128,11 +129,64 @@ describe('scanSkills', () => {
 
     const skills = await scanSkills(config, mockAPI);
 
-    expect(skills).toHaveLength(2);
-    const badSkill = skills.find((s: { name: string }) => s.name === '');
-    const goodSkill = skills.find((s: { name: string }) => s.name === 'good-skill');
-    expect(badSkill?.parseError).toBeDefined();
-    expect(goodSkill?.parseError).toBeUndefined();
+    // Skills with parseError are filtered out, only valid skills are returned
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('good-skill');
+    expect(skills[0].parseError).toBeUndefined();
+  });
+
+  it('skips dot-prefixed directories (.tmp-*, .bak-*)', async () => {
+    const mockAPI = createMockElectronAPI(
+      {
+        '/Users/test/.agents/skills/.tmp-abc12345/SKILL.md': '---\nname: orphan-tmp\ndescription: Orphan temp.\n---\n\n# Orphan',
+        '/Users/test/.agents/skills/.bak-def67890/SKILL.md': '---\nname: orphan-bak\ndescription: Orphan backup.\n---\n\n# Orphan',
+        '/Users/test/.agents/skills/good-skill/SKILL.md': '---\nname: good-skill\ndescription: Good skill.\n---\n\n# Good'
+      },
+      {
+        '/Users/test/.agents/skills': [
+          { name: '.tmp-abc12345', type: 'directory' as const },
+          { name: '.bak-def67890', type: 'directory' as const },
+          { name: 'good-skill', type: 'directory' as const }
+        ],
+        '/Users/test/.agents/skills/.tmp-abc12345': [{ name: 'SKILL.md', type: 'file' as const }],
+        '/Users/test/.agents/skills/.bak-def67890': [{ name: 'SKILL.md', type: 'file' as const }],
+        '/Users/test/.agents/skills/good-skill': [{ name: 'SKILL.md', type: 'file' as const }]
+      }
+    );
+
+    const skills = await scanSkills({ homeDir: '/Users/test' }, mockAPI);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('good-skill');
+    // assert dot dirs were never read
+    expect(mockAPI.readFile).not.toHaveBeenCalledWith('/Users/test/.agents/skills/.tmp-abc12345/SKILL.md');
+    expect(mockAPI.readFile).not.toHaveBeenCalledWith('/Users/test/.agents/skills/.bak-def67890/SKILL.md');
+  });
+
+  it('cleans up orphan .tmp-* and .bak-* directories before scanning', async () => {
+    const trashFile = vi.fn(async (_filePath: string) => {});
+    const mockAPI = createMockElectronAPI(
+      {
+        '/Users/test/.agents/skills/good-skill/SKILL.md': '---\nname: good-skill\ndescription: Good skill.\n---\n\n# Good'
+      },
+      {
+        '/Users/test/.agents/skills': [
+          { name: '.tmp-xyz', type: 'directory' as const },
+          { name: '.bak-old', type: 'directory' as const },
+          { name: 'good-skill', type: 'directory' as const }
+        ],
+        '/Users/test/.agents/skills/good-skill': [{ name: 'SKILL.md', type: 'file' as const }]
+      },
+      { trashFile }
+    );
+
+    const skills = await scanSkills({ homeDir: '/Users/test' }, mockAPI);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('good-skill');
+    expect(trashFile).toHaveBeenCalledTimes(2);
+    expect(trashFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.tmp-xyz');
+    expect(trashFile).toHaveBeenCalledWith('/Users/test/.agents/skills/.bak-old');
   });
 
   it('skips skill directories without SKILL.md before reading file content', async () => {

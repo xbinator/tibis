@@ -4,10 +4,10 @@
  */
 
 import { onMounted, onUnmounted } from 'vue';
+import { joinPath } from '@/ai/skill';
 import { native } from '@/shared/platform';
 import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useSkillStore } from '@/stores/ai/skill';
-import { joinPath } from '@/ai/skill';
 
 /**
  * 初始化 Skill Store：扫描 skill 目录并监听变更。
@@ -25,7 +25,8 @@ export function useSkillInit(): void {
       await skillStore.init(homeDir, {
         readFile: (filePath: string) => native.readFile(filePath).then((r) => ({ content: r.content })),
         readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
-        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath)
+        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath),
+        trashFile: (filePath: string) => native.trashFile(filePath)
       });
 
       // 监听用户级全局 skill 目录，事件只关注 SKILL.md。
