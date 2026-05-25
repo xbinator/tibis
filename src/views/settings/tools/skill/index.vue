@@ -24,10 +24,10 @@
         <div v-if="store.skills.length > PAGE_SIZE" class="skill-settings__pagination">
           <APagination v-model:current="currentPage" :total="store.skills.length" :page-size="PAGE_SIZE">
             <template #itemRender="{ type, originalElement }">
-              <BButton v-if="type === 'prev'" square>
+              <BButton v-if="type === 'prev'" square size="small" type="outline">
                 <Icon icon="lucide:chevron-left" :width="16" />
               </BButton>
-              <BButton v-else-if="type === 'next'" square>
+              <BButton v-else-if="type === 'next'" square size="small" type="outline">
                 <Icon icon="lucide:chevron-right" :width="16" />
               </BButton>
               <component :is="originalElement" v-else />
@@ -141,6 +141,14 @@ function handleCloseSkillDetail(): void {
   padding: 16px 20px;
 }
 
+:deep(.ant-pagination-item),
+:deep(.ant-pagination-next),
+:deep(.ant-pagination-prev) {
+  min-width: 28px;
+  height: 28px;
+  line-height: 28px;
+}
+
 .skill-settings__empty {
   padding: 16px;
   font-size: 12px;
@@ -164,10 +172,6 @@ function handleCloseSkillDetail(): void {
   justify-content: flex-end;
   padding: 12px 20px;
   border-top: 1px solid var(--border-tertiary);
-
-  button {
-    color: #fff;
-  }
 }
 
 @media (width <= 960px) {
