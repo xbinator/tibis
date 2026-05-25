@@ -11,7 +11,8 @@ import type {
   ReadWorkspaceFileOptions,
   ReadWorkspaceFileResult,
   ReadWorkspaceDirectoryOptions,
-  ReadWorkspaceDirectoryResult
+  ReadWorkspaceDirectoryResult,
+  TibisWorkspaceRoot
 } from './types';
 import type { RecentFileShortcutInput } from 'types/electron-api';
 import { OPEN_FILE_FILTER } from '@/constants/extensions';
@@ -163,6 +164,11 @@ export class WebNative implements Native {
 
   supportsShellCommand(): boolean {
     return false;
+  }
+
+  async getTibisWorkspaceRoot(): Promise<TibisWorkspaceRoot | null> {
+    // Web 平台不支持工作区根目录
+    return null;
   }
 
   async analyzeShellCommand(): ReturnType<Native['analyzeShellCommand']> {

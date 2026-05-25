@@ -4,21 +4,17 @@
  */
 /* @vitest-environment jsdom */
 
+import type { ElectronShellCommandRunResult, ElectronShellCommandSafetyReport } from 'types/electron-api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AIToolConfirmationAdapter } from '@/ai/tools/confirmation';
-import type {
-  ElectronShellCommandRunRequest,
-  ElectronShellCommandRunResult,
-  ElectronShellCommandSafetyReport,
-  ElectronShellCommandSafetyRequest
-} from 'types/electron-api';
 
 /** native mock。 */
 const nativeMock = vi.hoisted(() => ({
-  analyzeShellCommand: vi.fn<[ElectronShellCommandSafetyRequest], Promise<ElectronShellCommandSafetyReport>>(),
-  runShellCommand: vi.fn<[ElectronShellCommandRunRequest], Promise<ElectronShellCommandRunResult>>(),
-  cancelShellCommand: vi.fn<[string], Promise<boolean>>(),
-  onShellCommandOutput: vi.fn()
+  analyzeShellCommand: vi.fn(),
+  runShellCommand: vi.fn(),
+  cancelShellCommand: vi.fn(),
+  onShellCommandOutput: vi.fn(),
+  getTibisWorkspaceRoot: vi.fn()
 }));
 
 vi.mock('@/shared/platform', () => ({
@@ -83,6 +79,7 @@ describe('createBuiltinShellCommandTool', () => {
     nativeMock.runShellCommand.mockReset();
     nativeMock.cancelShellCommand.mockReset();
     nativeMock.onShellCommandOutput.mockReset();
+    nativeMock.getTibisWorkspaceRoot.mockReset();
   });
 
   it('rejects invalid shell input before safety analysis', async () => {
@@ -103,10 +100,11 @@ describe('createBuiltinShellCommandTool', () => {
     expect(nativeMock.analyzeShellCommand).not.toHaveBeenCalled();
   });
 
-  it('rejects execution without a workspace root', async () => {
+  it('rejects execution without a workspace root or Tibis workspace', async () => {
     const { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } = await import('@/ai/tools/builtin/ShellTool');
     const { adapter } = createConfirmationAdapter(true);
     const tool = createBuiltinShellCommandTool({ confirm: adapter, getWorkspaceRoot: () => null });
+    nativeMock.getTibisWorkspaceRoot.mockResolvedValue(null);
 
     const result = await tool.execute({ shell: 'bash', command: 'pnpm test' });
 
@@ -115,9 +113,49 @@ describe('createBuiltinShellCommandTool', () => {
       status: 'failure',
       error: {
         code: 'PERMISSION_DENIED',
-        message: '缺少工作区根目录，拒绝执行 Shell 命令'
+        message: '无法初始化 Tibis 工作区目录，拒绝执行 Shell 命令'
       }
     });
+  });
+
+  it('falls back to Tibis workspace root when no caller workspace exists', async () => {
+    const { createBuiltinShellCommandTool } = await import('@/ai/tools/builtin/ShellTool');
+    const { adapter } = createConfirmationAdapter(true);
+    const tool = createBuiltinShellCommandTool({ confirm: adapter, getWorkspaceRoot: () => null });
+    nativeMock.getTibisWorkspaceRoot.mockResolvedValue({ rootPath: '/home/user/Tibis', created: true });
+    nativeMock.analyzeShellCommand.mockResolvedValue(createAllowedReport());
+    nativeMock.runShellCommand.mockResolvedValue(createRunResult());
+
+    const result = await tool.execute({ shell: 'bash', command: 'pnpm test' });
+
+    expect(nativeMock.getTibisWorkspaceRoot).toHaveBeenCalled();
+    expect(nativeMock.runShellCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: '/home/user/Tibis',
+        workspaceRoot: '/home/user/Tibis'
+      })
+    );
+    expect(result.status).toBe('success');
+  });
+
+  it('prefers caller workspace root over Tibis workspace', async () => {
+    const { createBuiltinShellCommandTool } = await import('@/ai/tools/builtin/ShellTool');
+    const { adapter } = createConfirmationAdapter(true);
+    const tool = createBuiltinShellCommandTool({ confirm: adapter, getWorkspaceRoot: () => '/project' });
+    nativeMock.getTibisWorkspaceRoot.mockResolvedValue({ rootPath: '/home/user/Tibis', created: false });
+    nativeMock.analyzeShellCommand.mockResolvedValue(createAllowedReport());
+    nativeMock.runShellCommand.mockResolvedValue(createRunResult());
+
+    const result = await tool.execute({ shell: 'bash', command: 'pnpm test' });
+
+    // 不应调用 Tibis workspace fallback
+    expect(nativeMock.getTibisWorkspaceRoot).not.toHaveBeenCalled();
+    expect(nativeMock.runShellCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: '/project'
+      })
+    );
+    expect(result.status).toBe('success');
   });
 
   it('returns permission failure when safety analysis blocks the command', async () => {

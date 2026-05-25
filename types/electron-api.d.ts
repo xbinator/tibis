@@ -383,6 +383,16 @@ export interface ElectronSpeechInstallProgress {
   message: string;
 }
 
+/**
+ * Tibis 工作区根目录信息。
+ */
+export interface ElectronTibisWorkspaceRoot {
+  /** 绝对根目录路径，作为安全边界。 */
+  rootPath: string;
+  /** 本次请求是否创建了目录。 */
+  created: boolean;
+}
+
 export interface ElectronAPI {
   readFile: (filePath: string) => Promise<ElectronReadFileResult>;
   readWorkspaceFile: (options: ElectronReadWorkspaceFileOptions) => Promise<ElectronReadWorkspaceFileResult>;
@@ -435,6 +445,8 @@ export interface ElectronAPI {
 
   // 系统操作
   openExternal: (url: string) => Promise<void>;
+  /** 获取 Tibis 工作区根目录，不可用时返回 null。 */
+  getTibisWorkspaceRoot: () => Promise<ElectronTibisWorkspaceRoot | null>;
   analyzeShellCommand: (request: ElectronShellCommandSafetyRequest) => Promise<ElectronShellCommandSafetyReport>;
   runShellCommand: (request: ElectronShellCommandRunRequest) => Promise<ElectronShellCommandRunResult>;
   cancelShellCommand: (commandId: string) => Promise<boolean>;

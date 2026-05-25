@@ -10,7 +10,8 @@ import type {
   ReadWorkspaceFileOptions,
   ReadWorkspaceFileResult,
   ReadWorkspaceDirectoryOptions,
-  ReadWorkspaceDirectoryResult
+  ReadWorkspaceDirectoryResult,
+  TibisWorkspaceRoot
 } from './types';
 import type { RecentFileShortcutInput } from 'types/electron-api';
 import { OPEN_FILE_FILTER, SAVE_FILE_FILTER } from '@/constants/extensions';
@@ -135,6 +136,10 @@ export class ElectronNative implements Native {
 
   supportsShellCommand(): boolean {
     return true;
+  }
+
+  async getTibisWorkspaceRoot(): Promise<TibisWorkspaceRoot | null> {
+    return getElectronAPI().getTibisWorkspaceRoot();
   }
 
   async analyzeShellCommand(request: Parameters<Native['analyzeShellCommand']>[0]): ReturnType<Native['analyzeShellCommand']> {

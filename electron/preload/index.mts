@@ -251,6 +251,12 @@ const electronAPI: ElectronAPI = {
   openExternal: (url: string) => ipcRenderer.invoke('system:openExternal', url),
 
   /**
+   * 获取 Tibis 工作区根目录。
+   * @returns 工作区根目录信息，不可用时返回 null
+   */
+  getTibisWorkspaceRoot: () => ipcRenderer.invoke('workspace:get-root'),
+
+  /**
    * 分析 Shell 命令安全性。
    * @param request - 安全分析请求
    * @returns 安全分析报告

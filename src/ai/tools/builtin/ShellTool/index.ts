@@ -111,7 +111,7 @@ function formatSafetyFailureMessage(safety: ElectronShellCommandSafetyReport): s
 function formatConfirmationDescription(shell: ElectronShellCommandShell, cwd: string, timeoutMs: number, safety: ElectronShellCommandSafetyReport): string {
   const findingText = safety.findings.length ? safety.findings.map((finding) => `- [${finding.severity}] ${finding.message}`).join('\n') : '- 未发现阻断项';
 
-  return [`AI 请求执行 Shell 命令。`, `Shell: ${shell}`, `CWD: ${cwd}`, `Timeout: ${timeoutMs}ms`, `安全检查:`, findingText].join('\n');
+  return [`AI 请求在 Tibis 工作区内执行 Shell 命令。`, `Shell: ${shell}`, `执行目录: ${cwd}`, `Timeout: ${timeoutMs}ms`, `安全检查:`, findingText].join('\n');
 }
 
 /**
@@ -123,7 +123,7 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
   return {
     definition: {
       name: RUN_SHELL_COMMAND_TOOL_NAME,
-      description: '在当前工作区内执行一条 bash 或 PowerShell 命令。命令会先经过安全检查，再由用户确认后执行；适合运行测试、构建、lint 和短脚本。',
+      description: '在工作区内执行一条 bash 或 PowerShell 命令。命令会先经过安全检查，再由用户确认后执行；适合运行测试、构建、lint 和短脚本。',
       source: 'builtin',
       riskLevel: 'dangerous',
       requiresActiveDocument: false,
@@ -134,7 +134,7 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         properties: {
           shell: { type: 'string', enum: ['bash', 'powershell'], description: '命令使用的 shell。' },
           command: { type: 'string', description: '要执行的命令文本。' },
-          cwd: { type: 'string', description: '可选执行目录，必须位于当前工作区内；默认工作区根目录。' },
+          cwd: { type: 'string', description: '可选执行目录，必须位于 Tibis 工作区内；默认工作区目录。' },
           timeoutMs: { type: 'number', description: '可选超时时间，默认 30000ms，范围 1000-120000ms。' }
         },
         required: ['shell', 'command'],
@@ -152,8 +152,18 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
       }
 
       const workspaceRoot = options.getWorkspaceRoot?.() ?? null;
-      if (!workspaceRoot) {
-        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', '缺少工作区根目录，拒绝执行 Shell 命令');
+      let resolvedWorkspaceRoot = workspaceRoot;
+
+      // 调用方未提供工作区根目录时，回退到 Tibis 工作区
+      if (!resolvedWorkspaceRoot) {
+        const tibisWorkspace = await native.getTibisWorkspaceRoot();
+        if (tibisWorkspace) {
+          resolvedWorkspaceRoot = tibisWorkspace.rootPath;
+        }
+      }
+
+      if (!resolvedWorkspaceRoot) {
+        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', '无法初始化 Tibis 工作区目录，拒绝执行 Shell 命令');
       }
 
       let timeoutMs: number;
@@ -163,12 +173,12 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'INVALID_INPUT', error instanceof Error ? error.message : 'timeoutMs 参数无效');
       }
 
-      const cwd = typeof input.cwd === 'string' && input.cwd.trim().length > 0 ? input.cwd.trim() : workspaceRoot;
+      const cwd = typeof input.cwd === 'string' && input.cwd.trim().length > 0 ? input.cwd.trim() : resolvedWorkspaceRoot;
       const safety = await native.analyzeShellCommand({
         shell: input.shell,
         command,
         cwd,
-        workspaceRoot
+        workspaceRoot: resolvedWorkspaceRoot
       });
 
       if (safety.status === 'blocked') {
@@ -195,7 +205,7 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
           shell: input.shell as ElectronShellCommandShell,
           command,
           cwd,
-          workspaceRoot,
+          workspaceRoot: resolvedWorkspaceRoot,
           timeoutMs
         });
 

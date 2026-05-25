@@ -106,6 +106,16 @@ export interface FileChangeEvent {
   content?: string;
 }
 
+/**
+ * Tibis 工作区根目录信息。
+ */
+export interface TibisWorkspaceRoot {
+  /** 绝对根目录路径，作为安全边界。 */
+  rootPath: string;
+  /** 本次请求是否创建了目录。 */
+  created: boolean;
+}
+
 export interface Native {
   readFile(path: string): Promise<ReadFileResult>;
 
@@ -155,6 +165,9 @@ export interface Native {
 
   /** 当前平台是否支持 Shell 命令执行。Web 平台返回 false。 */
   supportsShellCommand(): boolean;
+
+  /** 获取 Tibis 工作区根目录，不可用时返回 null。 */
+  getTibisWorkspaceRoot(): Promise<TibisWorkspaceRoot | null>;
 
   analyzeShellCommand(request: ElectronShellCommandSafetyRequest): Promise<ElectronShellCommandSafetyReport>;
 
