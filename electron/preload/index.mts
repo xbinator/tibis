@@ -400,6 +400,42 @@ const electronAPI: ElectronAPI = {
    */
   restartMcpServer: (server) => ipcRenderer.invoke('tools:mcp:restart', server),
 
+  /**
+   * 启动 OAuth 认证流程
+   * @param server MCP server 配置
+   */
+  startMcpOAuth: (server) => ipcRenderer.invoke('tools:mcp:oauth:start', server),
+
+  /**
+   * 清除 OAuth 凭据
+   * @param serverId MCP server ID
+   */
+  clearMcpOAuth: (serverId) => ipcRenderer.invoke('tools:mcp:oauth:clear', serverId),
+
+  /**
+   * 监听 MCP 工具列表变更通知
+   * @param callback 变更回调
+   */
+  onMcpToolsChanged: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { serverId: string }) => callback(data.serverId);
+    ipcRenderer.on('tools:mcp:tools-changed', handler);
+    return () => {
+      ipcRenderer.removeListener('tools:mcp:tools-changed', handler);
+    };
+  },
+
+  /**
+   * 监听 OAuth 授权 URL 打开请求
+   * @param callback URL 回调
+   */
+  onMcpOAuthOpenUrl: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
+    ipcRenderer.on('tools:mcp:oauth:open-url', handler);
+    return () => {
+      ipcRenderer.removeListener('tools:mcp:oauth:open-url', handler);
+    };
+  },
+
   // ==================== AI 流式事件监听 ====================
   onAiStreamText: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, text: string) => callback(text);

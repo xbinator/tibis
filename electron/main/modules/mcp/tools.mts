@@ -24,13 +24,16 @@ export interface MCPToolExecuteRequest {
 export type MCPToolExecutor = (request: MCPToolExecuteRequest, options?: ToolExecutionOptions) => Promise<unknown>;
 
 /**
- * 判断 MCP server 是否可参与本次工具暴露。
+ * 判断 server 配置是否完整到可以参与工具暴露（仅检查配置完整性，不检查运行时连接状态）。
+ * 运行时连接由 executeMcpTool 内部自动处理（按需重连）。
  * @param server - MCP server 配置
  * @param request - 当前请求的 MCP 配置
  * @returns 是否可参与工具暴露
  */
 function isServerRunnableForRequest(server: MCPServerConfig, request: AIMCPRequestConfig): boolean {
-  return server.enabled && server.command.trim().length > 0 && request.enabledServerIds.includes(server.id);
+  if (!server.enabled || !request.enabledServerIds.includes(server.id)) return false;
+  if (server.transport === 'stdio') return server.command.trim().length > 0;
+  return Boolean(server.url?.trim());
 }
 
 /**

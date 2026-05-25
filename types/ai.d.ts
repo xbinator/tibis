@@ -380,6 +380,24 @@ export interface MCPDiscoveredToolSnapshot {
 }
 
 /**
+ * MCP OAuth 配置。
+ */
+export interface MCPOAuthConfig {
+  /** OAuth 客户端 ID。 */
+  clientId?: string;
+  /** OAuth 客户端密钥。 */
+  clientSecret?: string;
+  /** 访问令牌。 */
+  accessToken?: string;
+  /** 刷新令牌。 */
+  refreshToken?: string;
+  /** 令牌过期时间（Unix 时间戳，秒）。 */
+  expiresAt?: number;
+  /** 授权范围。 */
+  scope?: string;
+}
+
+/**
  * MCP server 运行配置。
  */
 export interface MCPServerConfig {
@@ -390,8 +408,10 @@ export interface MCPServerConfig {
   /** 是否启用。 */
   enabled: boolean;
   /** transport 类型。 */
-  transport: 'stdio';
-  /** 启动命令。 */
+  transport: 'stdio' | 'streamableHTTP' | 'sse';
+  /** HTTP/SSE 端点 URL（streamableHTTP / sse 必填）。 */
+  url?: string;
+  /** 启动命令（stdio 必填）。 */
   command: string;
   /** 启动参数。 */
   args: string[];
@@ -399,6 +419,10 @@ export interface MCPServerConfig {
   env: Record<string, string>;
   /** server 级工具白名单。 */
   toolAllowlist: string[];
+  /** OAuth 配置（远程服务器可选）。 */
+  oauth?: MCPOAuthConfig;
+  /** 是否监听工具变更通知。 */
+  watchToolChanges?: boolean;
   /** 连接与握手超时。 */
   connectTimeoutMs: number;
   /** 单次工具调用超时。 */
@@ -421,7 +445,7 @@ export type MCPSandboxStatus = 'idle' | 'starting' | 'running' | 'failed';
 /**
  * MCP 本地 runtime 运行状态。
  */
-export type MCPRuntimeStatus = 'idle' | 'connecting' | 'connected' | 'failed' | 'disabled';
+export type MCPRuntimeStatus = 'idle' | 'connecting' | 'connected' | 'failed' | 'disabled' | 'needs_auth' | 'needs_client_registration';
 
 /**
  * MCP discovery 运行状态。

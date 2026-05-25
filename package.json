@@ -26,7 +26,7 @@
     "speech:manifest:hash": "node ./scripts/speech/manifest-tool.mjs hash",
     "speech:manifest:localize": "node ./scripts/speech/manifest-tool.mjs localize",
     "speech:manifest:validate": "node ./scripts/speech/manifest-tool.mjs validate",
-    "lint": "eslint src --ext .vue,.ts,.tsx,.js,.jsx --fix",
+    "lint": "eslint src --ext .vue,.ts,.tsx,.js,.jsx,.mts --fix",
     "lint:style": "stylelint 'src/**/*.{vue,less,css}' --fix"
   },
   "pnpm": {
@@ -46,6 +46,7 @@
     "@ai-sdk/provider-utils": "4.0.27",
     "@effect/platform": "^0.96.1",
     "@effect/platform-node": "^0.106.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@opentelemetry/api": "^1.9.0",
     "@standard-schema/spec": "^1.1.0",
     "@tavily/ai-sdk": "^0.5.0",

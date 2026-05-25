@@ -13,7 +13,8 @@ import type {
   TavilyToolSettings,
   ToolSettingsState,
   MCPToolSettings,
-  MCPServerConfig
+  MCPServerConfig,
+  MCPOAuthConfig
 } from './types';
 import { local } from '@/shared/storage/base';
 import {
@@ -238,6 +239,22 @@ function normalizeEnv(value: unknown): Record<string, string> {
 }
 
 /**
+ * 归一化 OAuth 配置。
+ */
+function normalizeOAuthConfig(value: unknown): MCPOAuthConfig | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const source = value as Partial<MCPOAuthConfig>;
+  return {
+    clientId: typeof source.clientId === 'string' ? source.clientId : undefined,
+    clientSecret: typeof source.clientSecret === 'string' ? source.clientSecret : undefined,
+    accessToken: typeof source.accessToken === 'string' ? source.accessToken : undefined,
+    refreshToken: typeof source.refreshToken === 'string' ? source.refreshToken : undefined,
+    expiresAt: typeof source.expiresAt === 'number' ? source.expiresAt : undefined,
+    scope: typeof source.scope === 'string' ? source.scope : undefined
+  };
+}
+
+/**
  * 归一化单个 MCP server 配置。
  */
 function normalizeMCPServerConfig(value: unknown): MCPServerConfig | null {
@@ -248,19 +265,23 @@ function normalizeMCPServerConfig(value: unknown): MCPServerConfig | null {
 
   if (!source.id?.trim()) return null;
 
+  const transport = source.transport === 'streamableHTTP' || source.transport === 'sse' ? source.transport : 'stdio';
   const args = Array.isArray(source.args) ? source.args.filter((a: unknown): a is string => typeof a === 'string') : [];
 
   return {
     id: source.id.trim(),
     name: source.name?.trim() || source.command?.trim() || 'Unnamed MCP Server',
     enabled: Boolean(source.enabled),
-    transport: 'stdio',
+    transport,
+    url: transport !== 'stdio' && typeof source.url === 'string' ? source.url.trim() : undefined,
     command: typeof source.command === 'string' ? source.command.trim() : '',
     args,
     env: normalizeEnv(source.env),
     toolAllowlist: Array.isArray(source.toolAllowlist)
       ? [...new Set(source.toolAllowlist.filter((t: unknown): t is string => typeof t === 'string' && t.trim().length > 0).map((t: string) => t.trim()))]
       : [],
+    oauth: normalizeOAuthConfig(source.oauth),
+    watchToolChanges: typeof source.watchToolChanges === 'boolean' ? source.watchToolChanges : undefined,
     connectTimeoutMs: normalizeTimeoutMs(source.connectTimeoutMs, DEFAULT_MCP_CONNECT_TIMEOUT_MS, MIN_CONNECT_TIMEOUT_MS, MAX_CONNECT_TIMEOUT_MS),
     toolCallTimeoutMs: normalizeTimeoutMs(source.toolCallTimeoutMs, DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS, MIN_TOOL_CALL_TIMEOUT_MS, MAX_TOOL_CALL_TIMEOUT_MS)
   };

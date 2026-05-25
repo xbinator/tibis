@@ -19,7 +19,10 @@
           <div class="mcp-tools-settings__server-icon">{{ server.name.charAt(0).toUpperCase() }}</div>
           <div class="mcp-tools-settings__server-info">
             <div class="mcp-tools-settings__server-name">{{ server.name }}</div>
-            <div class="mcp-tools-settings__server-command">{{ server.command }} {{ server.args.join(' ') }}</div>
+            <div class="mcp-tools-settings__server-command">
+              <template v-if="server.transport === 'stdio'">{{ server.command }} {{ server.args.join(' ') }}</template>
+              <template v-else>{{ server.transport }} · {{ server.url }}</template>
+            </div>
             <div v-if="getServerStatusSummary(server.id)" class="mcp-tools-settings__server-status">
               {{ getServerStatusSummary(server.id) }}
             </div>
@@ -175,16 +178,21 @@ function handleCancelAdd(): void {
  * @param draft - 编辑弹窗返回的 server 草稿
  */
 function handleConfirmAdd(draft: MCPServerEditorDraft): void {
+  const isRemote = draft.transport === 'streamableHTTP' || draft.transport === 'sse';
+
   if (editingServerId.value) {
-    store.updateMcpServer(editingServerId.value, draft);
+    store.updateMcpServer(editingServerId.value, {
+      ...draft,
+      oauth: isRemote && draft.enableOAuth ? {} : undefined
+    });
   } else {
     const server: MCPServerConfig = {
       ...draft,
       id: nanoid(),
       enabled: false,
-      transport: 'stdio',
       connectTimeoutMs: DEFAULT_MCP_CONNECT_TIMEOUT_MS,
-      toolCallTimeoutMs: draft.toolCallTimeoutMs ?? DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS
+      toolCallTimeoutMs: draft.toolCallTimeoutMs ?? DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS,
+      oauth: isRemote && draft.enableOAuth ? {} : undefined
     };
     store.addMcpServer(server);
   }
@@ -242,12 +250,44 @@ async function handleRefreshDiscovery(server: MCPServerConfig): Promise<void> {
 }
 
 /**
+ * 启动 OAuth 认证流程。
+ * @param server - MCP server 配置
+ */
+async function handleStartOAuth(server: MCPServerConfig): Promise<void> {
+  if (!hasElectronAPI()) return;
+  try {
+    await getElectronAPI().startMcpOAuth(server);
+    await refreshStatuses();
+  } catch (error) {
+    console.error('OAuth failed:', error);
+  }
+}
+
+/**
+ * 清除 OAuth 凭据。
+ * @param serverId - MCP server ID
+ */
+async function handleClearOAuth(serverId: string): Promise<void> {
+  if (!hasElectronAPI()) return;
+  try {
+    await getElectronAPI().clearMcpOAuth(serverId);
+    await refreshStatuses();
+  } catch (error) {
+    console.error('Clear OAuth failed:', error);
+  }
+}
+
+/**
  * 生成指定 server 的下拉菜单选项。
  * @param server - MCP server 配置
  * @returns 下拉菜单选项
  */
 function getServerDropdownOptions(server: MCPServerConfig): DropdownOption[] {
-  return [
+  const isRemote = server.transport === 'streamableHTTP' || server.transport === 'sse';
+  const status = getServerStatus(server.id);
+  const needsAuth = status?.runtimeStatus === 'needs_auth';
+
+  const options: DropdownOption[] = [
     {
       type: 'item',
       value: 'edit',
@@ -262,10 +302,30 @@ function getServerDropdownOptions(server: MCPServerConfig): DropdownOption[] {
       icon: 'lucide:refresh-cw',
       disabled: refreshingServerId.value === server.id,
       onClick: () => handleRefreshDiscovery(server)
-    },
-    {
-      type: 'divider'
-    },
+    }
+  ];
+
+  if (isRemote && server.oauth) {
+    if (needsAuth) {
+      options.push({
+        type: 'item',
+        value: 'oauth',
+        label: 'OAuth 认证',
+        icon: 'lucide:log-in',
+        onClick: () => handleStartOAuth(server)
+      });
+    }
+    options.push({
+      type: 'item',
+      value: 'clear-oauth',
+      label: '清除 OAuth',
+      icon: 'lucide:log-out',
+      onClick: () => handleClearOAuth(server.id)
+    });
+  }
+
+  options.push(
+    { type: 'divider' },
     {
       type: 'item',
       value: 'delete',
@@ -274,7 +334,9 @@ function getServerDropdownOptions(server: MCPServerConfig): DropdownOption[] {
       danger: true,
       onClick: () => handleRemoveServer(server.id)
     }
-  ];
+  );
+
+  return options;
 }
 
 onMounted(refreshStatuses);
