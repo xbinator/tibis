@@ -122,7 +122,7 @@ describe('createBuiltinShellCommandTool', () => {
     const { createBuiltinShellCommandTool } = await import('@/ai/tools/builtin/ShellTool');
     const { adapter } = createConfirmationAdapter(true);
     const tool = createBuiltinShellCommandTool({ confirm: adapter, getWorkspaceRoot: () => null });
-    nativeMock.getTibisWorkspaceRoot.mockResolvedValue({ rootPath: '/home/user/Tibis', created: true });
+    nativeMock.getTibisWorkspaceRoot.mockResolvedValue({ rootPath: '/home/user/.tibis', created: true });
     nativeMock.analyzeShellCommand.mockResolvedValue(createAllowedReport());
     nativeMock.runShellCommand.mockResolvedValue(createRunResult());
 
@@ -131,8 +131,8 @@ describe('createBuiltinShellCommandTool', () => {
     expect(nativeMock.getTibisWorkspaceRoot).toHaveBeenCalled();
     expect(nativeMock.runShellCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        cwd: '/home/user/Tibis',
-        workspaceRoot: '/home/user/Tibis'
+        cwd: '/home/user/.tibis',
+        workspaceRoot: '/home/user/.tibis'
       })
     );
     expect(result.status).toBe('success');
@@ -142,7 +142,7 @@ describe('createBuiltinShellCommandTool', () => {
     const { createBuiltinShellCommandTool } = await import('@/ai/tools/builtin/ShellTool');
     const { adapter } = createConfirmationAdapter(true);
     const tool = createBuiltinShellCommandTool({ confirm: adapter, getWorkspaceRoot: () => '/project' });
-    nativeMock.getTibisWorkspaceRoot.mockResolvedValue({ rootPath: '/home/user/Tibis', created: false });
+    nativeMock.getTibisWorkspaceRoot.mockResolvedValue({ rootPath: '/home/user/.tibis', created: false });
     nativeMock.analyzeShellCommand.mockResolvedValue(createAllowedReport());
     nativeMock.runShellCommand.mockResolvedValue(createRunResult());
 

@@ -33,13 +33,13 @@ Recommended default:
 
 | Platform | Default |
 |----------|---------|
-| macOS | `~/Tibis` |
-| Linux | `~/Tibis` |
-| Windows | `%USERPROFILE%\Tibis` |
+| macOS | `~/.tibis` |
+| Linux | `~/.tibis` |
+| Windows | `%USERPROFILE%\.tibis` |
 
 Rationale:
 
-- The path is short and readable in confirmation dialogs.
+- The dot-prefix keeps the directory hidden by default, avoiding visual clutter in the home directory.
 - It is clearly owned by Tibis.
 - It avoids mixing AI-generated files directly into `Documents`.
 - It works even when the user has no active Markdown file.
@@ -130,7 +130,7 @@ Example confirmation copy:
 ```text
 AI 请求在 Tibis 工作区内执行 Shell 命令。
 Shell: bash
-执行目录: ~/Tibis
+执行目录: ~/.tibis
 ```
 
 The internal field can remain `workspaceRoot` in this phase to minimize churn. A later cleanup can rename the Shell boundary type to `executionRoot`.

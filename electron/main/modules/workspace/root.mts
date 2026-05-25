@@ -18,12 +18,12 @@ export interface TibisWorkspaceRoot {
 
 /**
  * 解析当前平台的默认工作区根目录路径。
- * macOS/Linux: ~/Tibis
- * Windows: %USERPROFILE%\Tibis
+ * macOS/Linux: ~/.tibis
+ * Windows: %USERPROFILE%\.tibis
  * @returns 默认工作区根目录的绝对路径
  */
 export function resolveDefaultWorkspaceRoot(): string {
-  return path.join(os.homedir(), 'Tibis');
+  return path.join(os.homedir(), '.tibis');
 }
 
 /**

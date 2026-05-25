@@ -48,41 +48,41 @@ describe('workspace root provider', () => {
     mockRealpath.mockReset();
   });
 
-  it('resolves default workspace root to ~/Tibis', async () => {
+  it('resolves default workspace root to ~/.tibis', async () => {
     const { resolveDefaultWorkspaceRoot } = await import('../../electron/main/modules/workspace/root.mjs');
-    expect(resolveDefaultWorkspaceRoot()).toBe('/home/testuser/Tibis');
+    expect(resolveDefaultWorkspaceRoot()).toBe('/home/testuser/.tibis');
   });
 
   it('returns existing directory without creating', async () => {
     mockAccess.mockResolvedValue(undefined);
-    mockRealpath.mockResolvedValue('/home/testuser/Tibis');
+    mockRealpath.mockResolvedValue('/home/testuser/.tibis');
 
     const { ensureTibisWorkspaceRoot } = await import('../../electron/main/modules/workspace/root.mjs');
     const result = await ensureTibisWorkspaceRoot();
 
-    expect(result).toEqual({ rootPath: '/home/testuser/Tibis', created: false });
+    expect(result).toEqual({ rootPath: '/home/testuser/.tibis', created: false });
     expect(mockMkdir).not.toHaveBeenCalled();
   });
 
   it('creates directory when it does not exist', async () => {
     mockAccess.mockRejectedValue(new Error('ENOENT'));
     mockMkdir.mockResolvedValue(undefined);
-    mockRealpath.mockResolvedValue('/home/testuser/Tibis');
+    mockRealpath.mockResolvedValue('/home/testuser/.tibis');
 
     const { ensureTibisWorkspaceRoot } = await import('../../electron/main/modules/workspace/root.mjs');
     const result = await ensureTibisWorkspaceRoot();
 
-    expect(result).toEqual({ rootPath: '/home/testuser/Tibis', created: true });
-    expect(mockMkdir).toHaveBeenCalledWith('/home/testuser/Tibis', { recursive: true });
+    expect(result).toEqual({ rootPath: '/home/testuser/.tibis', created: true });
+    expect(mockMkdir).toHaveBeenCalledWith('/home/testuser/.tibis', { recursive: true });
   });
 
   it('resolves symlinks via realpath', async () => {
     mockAccess.mockResolvedValue(undefined);
-    mockRealpath.mockResolvedValue('/real/path/Tibis');
+    mockRealpath.mockResolvedValue('/real/path/.tibis');
 
     const { ensureTibisWorkspaceRoot } = await import('../../electron/main/modules/workspace/root.mjs');
     const result = await ensureTibisWorkspaceRoot();
 
-    expect(result.rootPath).toBe('/real/path/Tibis');
+    expect(result.rootPath).toBe('/real/path/.tibis');
   });
 });
