@@ -32,9 +32,9 @@
 
           <BubblePartThinking v-else-if="!isCompressionMessage && item.type === 'thinking'" :part="item" />
 
-          <BubblePartToolActivity v-else-if="!isCompressionMessage && item.type === 'tool-input'" :part="item" />
+          <BubblePartToolInput v-else-if="!isCompressionMessage && item.type === 'tool-input'" :part="item as ChatMessageToolInputPart" />
 
-          <BubblePartToolActivity v-else-if="!isCompressionMessage && item.type === 'tool-call' && !hasToolResult(item)" :part="item" />
+          <BubblePartToolCall v-else-if="!isCompressionMessage && item.type === 'tool-call'" :part="item" />
 
           <ConfirmationCard
             v-else-if="!isCompressionMessage && item.type === 'confirmation'"
@@ -50,7 +50,7 @@
             @submit-choice="$emit('user-choice-submit', $event)"
           />
 
-          <BubblePartToolActivity v-else-if="!isCompressionMessage && item.type === 'tool-result'" :part="item" :tool-call-input="getToolCallInput(item)" />
+          <BubblePartToolResult v-else-if="!isCompressionMessage && item.type === 'tool-result'" :part="item" />
         </template>
       </div>
     </BBubble>
@@ -84,8 +84,8 @@ import type {
   ChatMessageConfirmationAction,
   ChatMessageConfirmationCustomInputPayload,
   ChatMessagePart,
-  ChatMessageToolCallPart,
   ChatMessageTextPart,
+  ChatMessageToolInputPart,
   ChatMessageToolResultPart
 } from 'types/chat';
 import { computed, ref } from 'vue';
@@ -100,7 +100,9 @@ import ConfirmationCard from './ConfirmationCard.vue';
 import BubblePartCompression from './MessageBubble/BubblePartCompression.vue';
 import BubblePartText from './MessageBubble/BubblePartText.vue';
 import BubblePartThinking from './MessageBubble/BubblePartThinking.vue';
-import BubblePartToolActivity from './MessageBubble/BubblePartToolActivity.vue';
+import BubblePartToolCall from './MessageBubble/BubblePartToolCall.vue';
+import BubblePartToolInput from './MessageBubble/BubblePartToolInput.vue';
+import BubblePartToolResult from './MessageBubble/BubblePartToolResult.vue';
 import BubblePartUserInput from './MessageBubble/BubblePartUserInput.vue';
 import QuestionCard from './QuestionCard.vue';
 
@@ -158,24 +160,6 @@ const imagePreviewList = computed(() => imageFiles.value.map((file) => file.url 
  */
 function isAwaitingUserChoicePart(part: ChatMessagePart): part is ChatMessageToolResultPart & { result: AIToolExecutionAwaitingUserInputResult } {
   return isAwaitingUserChoiceResult(part);
-}
-
-/**
- * 判断工具调用是否已有结果片段。
- * @param part - 工具调用片段
- * @returns 是否存在同 ID 的工具结果
- */
-function hasToolResult(part: ChatMessageToolCallPart): boolean {
-  return props.message.parts.some((item) => item.type === 'tool-result' && item.toolCallId === part.toolCallId);
-}
-
-/**
- * 获取工具结果对应的原始工具输入。
- * @param part - 工具结果片段
- * @returns 对应工具调用输入，不存在时返回 undefined
- */
-function getToolCallInput(part: ChatMessageToolResultPart): unknown {
-  return props.message.parts.find((item) => item.type === 'tool-call' && item.toolCallId === part.toolCallId)?.input;
 }
 
 /**

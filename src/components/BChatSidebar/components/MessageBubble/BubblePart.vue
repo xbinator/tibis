@@ -27,7 +27,7 @@ defineOptions({ name: 'BubblePart' });
 
 interface Props {
   /** 片段类型 */
-  type: 'thinking' | 'tool-input' | 'tool-call' | 'tool-result' | 'tool-activity';
+  type: 'thinking' | 'tool-input' | 'tool-call' | 'tool-result';
   /** 是否有可展示内容（无内容时不可折叠） */
   hasContent?: boolean;
   /** 默认折叠状态，默认为 true（折叠） */
@@ -53,6 +53,7 @@ function toggleCollapse(): void {
 
 <style scoped lang="less">
 .message-bubble-part {
+  padding: 10px 12px;
   font-size: 12px;
   color: var(--text-secondary);
   background: var(--bg-secondary);
@@ -66,8 +67,7 @@ function toggleCollapse(): void {
 
 .message-bubble-part--tool-input,
 .message-bubble-part--tool-call,
-.message-bubble-part--tool-result,
-.message-bubble-part--tool-activity {
+.message-bubble-part--tool-result {
   border-style: dashed;
 }
 
@@ -75,8 +75,6 @@ function toggleCollapse(): void {
   display: flex;
   gap: 6px;
   align-items: center;
-  height: 32px;
-  padding: 0 12px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -94,6 +92,6 @@ function toggleCollapse(): void {
 }
 
 .message-bubble-part__content {
-  padding: 0 12px 6px;
+  margin-top: 8px;
 }
 </style>

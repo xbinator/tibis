@@ -19,6 +19,7 @@ import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { createNamespace } from '@/utils/namespace';
 import { hasStructuredValueContent } from '../../utils/messagePart';
+import { getActionLabel } from '../../utils/toolLabels';
 import BubblePart from './BubblePart.vue';
 import BubblePartToolCode from './BubblePartToolCode.vue';
 
@@ -61,11 +62,13 @@ const contentPreview = computed(() => {
 
 /** 标题文案 */
 const title = computed(() => {
-  if (props.part.toolName === 'write_file') {
-    return pathPreview.value ? `准备写入文件：${pathPreview.value}` : '正在准备写入文件';
+  const { alias } = getActionLabel(props.part.toolName);
+
+  if ((props.part.toolName === 'write_file' || props.part.toolName === 'edit_file') && pathPreview.value) {
+    return `${alias}：${pathPreview.value}`;
   }
 
-  return `正在准备调用工具：${props.part.toolName}`;
+  return `正在准备调用工具：${alias}`;
 });
 
 /** 预览展示内容 */

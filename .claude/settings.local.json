@@ -19,7 +19,8 @@
       "Bash(pnpm test:*)",
       "Bash(npx vitest:*)",
       "Bash(npx eslint *)",
-      "Bash(pnpm add *)"
+      "Bash(pnpm add *)",
+      "Bash(git checkout *)"
     ]
   }
 }
