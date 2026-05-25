@@ -54,6 +54,7 @@ const [, bem] = createNamespace('settings-page');
 
 .b-settings-page__title {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   font-size: 16px;
   font-weight: 600;
