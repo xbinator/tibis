@@ -1,7 +1,6 @@
 <template>
   <BModal v-model:open="modalOpen" :title="modalTitle" :width="640" @cancel="handleCancel">
     <div class="server-editor-modal">
-      <div class="server-editor-modal__hint">粘贴 JSON 配置</div>
       <div class="server-editor-modal__editor">
         <BMonaco ref="editorRef" v-model:value="jsonText" class="server-editor-modal__monaco" language="json" :editable="true" :editor-state="editorState" />
       </div>
@@ -113,10 +112,7 @@ function serializeMCPServerEditorDraft(server: MCPServerConfig | null): string {
 function parseMCPServerEditorDraft(jsonText: string): MCPServerDraftParseResult {
   const raw = jsonText.trim();
   if (!raw) {
-    return {
-      draft: null,
-      error: '请输入 MCP Server JSON 配置。'
-    };
+    return { draft: null, error: '请输入 MCP Server JSON 配置。' };
   }
 
   try {
@@ -274,11 +270,6 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.server-editor-modal__hint {
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 
 .server-editor-modal__editor {

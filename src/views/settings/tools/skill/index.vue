@@ -6,7 +6,7 @@
   <div class="skill-settings">
     <BSettingsPage class="skill-settings__page" title="技能">
       <template #headerExtra>
-        <BButton type="primary" size="small" @click="creatorVisible = true">创建技能</BButton>
+        <BButton icon="lucide:plus" type="primary" size="small" @click="creatorVisible = true">创建技能</BButton>
       </template>
       <!-- 搜索路径说明 -->
       <BSettingsSection title="搜索路径" content-class="skill-settings__content">

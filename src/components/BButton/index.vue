@@ -164,6 +164,7 @@ export default defineComponent({
 
   // 尺寸
   &--small {
+    gap: 4px;
     height: 28px;
     padding: 0 12px;
     font-size: 12px;
@@ -171,7 +172,6 @@ export default defineComponent({
     .b-button__icon {
       width: 14px;
       height: 14px;
-      margin-right: 4px;
     }
   }
 

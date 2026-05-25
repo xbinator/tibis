@@ -5,7 +5,7 @@
 <template>
   <BSettingsPage title="MCP">
     <template #headerExtra>
-      <BButton type="primary" size="small" @click="handleOpenAddModal">添加</BButton>
+      <BButton icon="lucide:plus" type="primary" size="small" @click="handleOpenAddModal">添加</BButton>
     </template>
     <BSettingsSection title="MCP Servers">
       <div class="mcp-tools-settings__toolbar">
@@ -42,12 +42,12 @@
       </div>
     </BSettingsSection>
 
-    <ServerEditorModal v-model:open="addModalVisible" :server="editingServer" @cancel="handleCancelAdd" @confirm="handleConfirmAdd" />
+    <ServerEditor v-model:open="addModalVisible" :server="editingServer" @cancel="handleCancelAdd" @confirm="handleConfirmAdd" />
   </BSettingsPage>
 </template>
 
 <script setup lang="ts">
-import type { MCPServerEditorDraft } from './components/ServerEditorModal.vue';
+import type { MCPServerEditorDraft } from './components/ServerEditor.vue';
 import type { MCPStatusResponse } from 'types/ai';
 import { computed, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
@@ -59,7 +59,7 @@ import { getElectronAPI, hasElectronAPI } from '@/shared/platform/electron-api';
 import type { MCPServerConfig } from '@/shared/storage/tool-settings';
 import { DEFAULT_MCP_CONNECT_TIMEOUT_MS, DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS } from '@/shared/storage/tool-settings';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
-import ServerEditorModal from './components/ServerEditorModal.vue';
+import ServerEditor from './components/ServerEditor.vue';
 
 const store = useToolSettingsStore();
 const refreshingServerId = ref<string | null>(null);

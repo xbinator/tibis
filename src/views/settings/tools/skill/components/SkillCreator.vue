@@ -348,7 +348,6 @@ async function handleInstall(): Promise<void> {
 
     .skill-creator__dropzone-icon {
       color: var(--color-primary);
-      transform: translateY(-2px);
     }
   }
 }
