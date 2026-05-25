@@ -11,6 +11,8 @@ export interface BUploadProps {
   accept?: string;
   /** 是否支持多选 */
   multiple?: boolean;
+  /** 是否启用拖拽上传 */
+  draggable?: boolean;
 }
 
 /**

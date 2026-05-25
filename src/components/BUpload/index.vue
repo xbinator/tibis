@@ -1,6 +1,12 @@
 <template>
-  <div @click="openSelector">
-    <slot></slot>
+  <div
+    :class="bem({ draggable: draggable, dragover: draggable && isDragOver })"
+    @click="openSelector"
+    @dragover.prevent="onDragOver"
+    @dragleave.prevent="onDragLeave"
+    @drop.prevent="onDrop"
+  >
+    <slot :drag-over="isDragOver"></slot>
 
     <input ref="inputRef" type="file" :class="name" :accept="accept" :multiple="multiple" @change="handleFileChange" />
   </div>
@@ -11,15 +17,18 @@ import type { BUploadProps as Props } from './types';
 import { onUnmounted, ref, watch } from 'vue';
 import { createNamespace } from '@/utils/namespace';
 
-const [name] = createNamespace('upload');
+const [name, bem] = createNamespace('upload');
 
 const props = withDefaults(defineProps<Props>(), {
   accept: '',
-  multiple: false
+  multiple: false,
+  draggable: false
 });
 
 /** 控制文件选择器打开状态 */
 const open = defineModel<boolean>('open', { default: false });
+/** 拖拽悬停状态（双向绑定） */
+const isDragOver = defineModel<boolean>('dragOver', { default: false });
 
 const emit = defineEmits<{
   /** 文件选择成功时触发 */
@@ -52,6 +61,42 @@ function validateFileType(file: File): boolean {
     const [mimeType] = type.split('/');
     return mimeType === '*' || file.type.startsWith(mimeType) || file.type === type;
   });
+}
+
+/**
+ * 拖拽进入/悬停时设置状态
+ */
+function onDragOver(): void {
+  if (!props.draggable) return;
+  isDragOver.value = true;
+}
+
+/**
+ * 拖拽离开时重置状态
+ */
+function onDragLeave(): void {
+  if (!props.draggable) return;
+  isDragOver.value = false;
+}
+
+/**
+ * 处理拖拽放下文件
+ */
+function onDrop(e: DragEvent): void {
+  if (!props.draggable) return;
+  isDragOver.value = false;
+
+  const files = e.dataTransfer?.files;
+  if (!files || files.length === 0) return;
+
+  // 验证所有文件类型
+  for (let i = 0; i < files.length; i++) {
+    if (!validateFileType(files[i])) {
+      return;
+    }
+  }
+
+  emit('change', files);
 }
 
 /**
@@ -130,5 +175,14 @@ defineExpose({
 <style scoped lang="less">
 .b-upload {
   display: none;
+}
+
+.b-upload--draggable {
+  display: block;
+}
+
+.b-upload--dragover {
+  background: var(--bg-hover);
+  border-color: var(--color-primary);
 }
 </style>

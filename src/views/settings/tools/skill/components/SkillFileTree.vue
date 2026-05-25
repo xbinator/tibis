@@ -62,8 +62,10 @@ interface FileTreeNode {
 }
 
 interface Props {
-  /** 根目录路径，为空时不加载。 */
-  rootPath: string;
+  /** 根目录路径，为空时不加载。与 virtualPaths 互斥。 */
+  rootPath?: string;
+  /** 虚拟文件路径列表，传入时跳过文件系统扫描。与 rootPath 互斥。 */
+  virtualPaths?: string[];
   /** 当前选中文件路径。 */
   selectedFilePath: string;
 }
@@ -124,6 +126,38 @@ const visibleNodes = computed<FileTreeNode[]>(() => {
 });
 
 /**
+ * 从虚拟路径列表构建文件树节点（无文件系统依赖）。
+ * @param paths - 文件相对路径列表，如 ["SKILL.md", "scripts/helper.js"]
+ * @returns 扁平文件树节点列表
+ */
+function buildVirtualTree(paths: string[]): FileTreeNode[] {
+  const result: FileTreeNode[] = [];
+  const seenDir = new Set<string>();
+
+  for (const rawPath of paths) {
+    const segments = rawPath.split('/');
+    let currentPath = '';
+
+    for (let i = 0; i < segments.length; i++) {
+      const isLast = i === segments.length - 1;
+      currentPath = i === 0 ? segments[i] : `${currentPath}/${segments[i]}`;
+
+      if (isLast) {
+        result.push({ name: segments[i], path: currentPath, type: 'file', depth: i });
+      } else if (!seenDir.has(currentPath)) {
+        seenDir.add(currentPath);
+        result.push({ name: segments[i], path: currentPath, type: 'directory', depth: i });
+      }
+    }
+  }
+
+  return result.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
  * 按目录优先、名称升序排序。
  * @param entries - 目录项列表
  * @returns 排序后的目录项
@@ -167,15 +201,9 @@ async function collectTreeNodes(directoryPath: string, depth: number): Promise<F
 }
 
 /**
- * 加载文件树。
+ * 加载文件树。virtualPaths 或 rootPath 二选一。
  */
 async function loadTree(): Promise<void> {
-  if (!props.rootPath) {
-    nodes.value = [];
-    emit('loaded', 0);
-    return;
-  }
-
   const currentRequestId = ++requestId;
   loading.value = true;
   error.value = '';
@@ -183,16 +211,21 @@ async function loadTree(): Promise<void> {
   collapsedPaths.value = new Set();
 
   try {
-    const result = await collectTreeNodes(props.rootPath, 0);
-    if (currentRequestId !== requestId) {
-      return;
+    let result: FileTreeNode[];
+
+    if (props.virtualPaths && props.virtualPaths.length > 0) {
+      result = buildVirtualTree(props.virtualPaths);
+    } else if (props.rootPath) {
+      result = await collectTreeNodes(props.rootPath, 0);
+    } else {
+      result = [];
     }
+
+    if (currentRequestId !== requestId) return;
     nodes.value = result;
     emit('loaded', result.filter((n) => n.type === 'file').length);
   } catch (err: unknown) {
-    if (currentRequestId !== requestId) {
-      return;
-    }
+    if (currentRequestId !== requestId) return;
     error.value = err instanceof Error ? err.message : '无法加载 Skill 文件树。';
   } finally {
     if (currentRequestId === requestId) {
@@ -232,13 +265,13 @@ function handleNodeClick(node: FileTreeNode): void {
 }
 
 watch(
-  () => props.rootPath,
+  [() => props.rootPath, () => props.virtualPaths],
   () => {
     loadTree().catch((err: unknown) => {
       console.error('Skill tree load failed:', err);
     });
   },
-  { immediate: true }
+  { immediate: true, deep: true }
 );
 </script>
 
