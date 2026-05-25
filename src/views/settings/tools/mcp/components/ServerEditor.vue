@@ -57,13 +57,15 @@ export interface MCPServerEditorDraft {
  * MCP Server JSON 编辑器的占位示例。
  */
 const MCP_SERVER_JSON_PLACEHOLDER = `{
-  "name": "filesystem",
-  "transport": "stdio",
-  "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-filesystem"],
-  "env": {},
-  "toolAllowlist": ["read_file", "list_directory"],
-  "toolCallTimeoutMs": 30000
+  "mcpServers": {
+    "example-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-server-example"
+      ]
+    }
+  }
 }`;
 
 /**

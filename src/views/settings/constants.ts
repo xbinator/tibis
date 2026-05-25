@@ -19,7 +19,7 @@ const menuItemMap: Record<SettingsMenuKey, MenuItem> = {
   provider: { key: 'provider', label: '模型服务', icon: 'lucide:cloud', path: '/settings/provider' },
   'service-model': { key: 'service-model', label: '默认模型', icon: 'lucide:sparkles', path: '/settings/service-model' },
   search: { key: 'search', label: '网络搜索', icon: 'lucide:globe', path: '/settings/tools/search' },
-  mcp: { key: 'mcp', label: 'MCP', icon: 'lucide:puzzle', path: '/settings/tools/mcp' },
+  mcp: { key: 'mcp', label: 'MCP', icon: 'lucide:cable', path: '/settings/tools/mcp' },
   skill: { key: 'skill', label: '技能', icon: 'lucide:zap', path: '/settings/tools/skill' },
   editor: { key: 'editor', label: '编辑器', icon: 'lucide:square-pen', path: '/settings/editor' },
   speech: { key: 'speech', label: '语音服务', icon: 'lucide:mic', path: '/settings/speech' },
