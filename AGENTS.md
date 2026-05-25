@@ -167,14 +167,90 @@ async function syncData() {
 - ❌ 禁止注释掉的废弃代码长期存在，应直接删除
 - ❌ 禁止用注释代替清晰的命名，命名本身应具有可读性
 
-## 代码质量要求
+## 代码检查规范
 
-### ESLint 和 TypeScript
-- 所有代码必须通过 ESLint 检查
-- 所有代码必须通过 TypeScript 类型检查
-- 使用 `strict` 模式
+### ESLint 检查
+- **所有代码必须通过 ESLint 检查**，提交前执行 `pnpm lint` 修复问题
+- 配置文件：`.eslintrc.cjs`，忽略文件：`.eslintignore`
+- 检查范围：`src/` 下 `.vue`、`.ts`、`.tsx`、`.js`、`.jsx` 文件
+- 核心规则（来自已有配置）：
+  - `@typescript-eslint/no-explicit-any`：禁止使用 `any`（见[TypeScript 类型规范](#typescript-类型规范)）
+  - `import/order`：强制 import 排序（vue/vue-router/pinia 优先，`@/` 次之，按字母升序）
+  - `vue/order-in-components`：强制组件选项顺序
+  - `vue/attributes-order`：强制组件属性排序
+  - `vue/html-self-closing`：强制自闭合标签风格
+  - `vue/component-name-in-template-casing`：模板中组件名使用 PascalCase
+  - `no-console`：关闭（Electron 桌面应用允许 console）
 
-### 代码风格
+### Stylelint 检查
+- **所有样式代码必须通过 Stylelint 检查**，提交前执行 `pnpm lint:style` 修复问题
+- 配置文件：`.stylelintrc.cjs`
+- 检查范围：`src/` 下 `.vue`、`.less`、`.css` 文件
+- 核心规则（来自已有配置）：
+  - CSS 属性书写顺序遵循 `stylelint-config-recess-order`
+  - Less 文件使用 `postcss-less` 语法解析
+  - Vue 文件使用 `postcss-html` 语法解析
+  - 允许 `v-deep`、`:global`、`fade()` 等 Vue/Less 特殊语法
+  - 不限制选择器类名格式（UnoCSS 原子化类名不受约束）
+
+### TypeScript 类型检查
+- **所有代码必须通过 TypeScript 类型检查**，提交前执行 `pnpm exec tsc --noEmit`
+- 使用 `strict` 模式（`tsconfig.json` 中 `strict: true`）
+- 开启 `noUnusedLocals` 和 `noUnusedParameters`
+- 项目使用 `@typescript-eslint/*` 替代已废弃的 TSLint，**禁止引入 TSLint**
+
+### 检查命令速查
+
+| 命令 | 说明 |
+|------|------|
+| `pnpm lint` | ESLint 检查 + 自动修复 |
+| `pnpm lint:style` | Stylelint 检查 + 自动修复 |
+| `pnpm exec tsc --noEmit` | TypeScript 类型检查（无输出） |
+| `pnpm exec eslint src --ext .vue,.ts,.tsx,.js,.jsx` | ESLint 仅检查（不修复） |
+| `pnpm exec stylelint 'src/**/*.{vue,less,css}'` | Stylelint 仅检查（不修复） |
+
+## 工具库使用规范
+
+### lodash-es 优先
+- 项目已安装 `lodash-es` 和 `@types/lodash-es`，**优先使用 lodash-es 替代手写工具函数**
+- 必须使用 `lodash-es`（ES Module 版本），**禁止使用 `lodash`**（CommonJS 版本，不利于 tree-shaking）
+
+**应使用 lodash-es 的场景**：
+
+| 手写模式 | lodash-es 替代 | 说明 |
+|----------|---------------|------|
+| 手写 `debounce` / `throttle` | `import { debounce, throttle } from 'lodash-es'` | 防抖 / 节流 |
+| 手写深拷贝 `JSON.parse(JSON.stringify())` | `import { cloneDeep } from 'lodash-es'` | 深拷贝（支持循环引用、函数等） |
+| 手写分组逻辑 | `import { groupBy, keyBy } from 'lodash-es'` | 数组分组 / 键值映射 |
+| 手写去重逻辑 | `import { uniqBy, uniq } from 'lodash-es'` | 数组去重 |
+| 手写合并逻辑 | `import { merge, mergeWith } from 'lodash-es'` | 深度合并对象 |
+| 手写取值逻辑 | `import { get, pick, omit } from 'lodash-es'` | 安全取值 / 选取 / 排除属性 |
+| 手写扁平化逻辑 | `import { flatten, flattenDeep } from 'lodash-es'` | 数组扁平化 |
+| 手写条件判断 | `import { isEmpty, isNil, isPlainObject } from 'lodash-es'` | 类型判断 |
+
+**错误示例**：
+```typescript
+// ❌ 手写 debounce
+function debounce(fn: Function, delay: number) {
+  let timer: ReturnType<typeof setTimeout>
+  return (...args: unknown[]) => {
+    clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), delay)
+  }
+}
+
+// ❌ 使用 lodash（CommonJS，无法 tree-shake）
+import { debounce } from 'lodash'
+```
+
+**正确示例**：
+```typescript
+// ✅ 使用 lodash-es（ES Module，支持 tree-shake）
+import { debounce } from 'lodash-es'
+```
+
+## 代码风格
+
 - 使用一致的缩进和格式
 - 使用有意义的变量和函数命名
 - **所有函数、接口、复杂逻辑必须添加注释**，具体格式见[注释规范](#注释规范)

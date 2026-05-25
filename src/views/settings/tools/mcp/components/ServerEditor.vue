@@ -23,10 +23,10 @@
  * @description MCP Server 添加/编辑弹窗，内置 Monaco JSON 编辑器与格式校验。
  */
 import { computed, nextTick, ref, watch } from 'vue';
-import { isArray, isObject, pick } from 'lodash-es';
+import { isArray, isObject } from 'lodash-es';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
-import type { MCPServerConfig } from '@/shared/storage/tool-settings';
+import type { MCPServerConfig, MCPTransportType } from '@/shared/storage/tool-settings';
 import { DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS } from '@/shared/storage/tool-settings';
 
 /**
@@ -35,12 +35,18 @@ import { DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS } from '@/shared/storage/tool-settings
 export interface MCPServerEditorDraft {
   /** 展示名称 */
   name: string;
-  /** 启动命令 */
+  /** 传输类型 */
+  transport: MCPTransportType;
+  /** 启动命令（stdio） */
   command: string;
-  /** 启动参数 */
+  /** 启动参数（stdio） */
   args: string[];
-  /** 环境变量 */
+  /** 环境变量（stdio） */
   env: Record<string, string>;
+  /** 服务端 URL（streamableHTTP/sse） */
+  url: string;
+  /** 是否启用 OAuth */
+  enableOAuth: boolean;
   /** 允许暴露的工具名列表 */
   toolAllowlist: string[];
   /** 单次工具调用超时 */
@@ -52,6 +58,7 @@ export interface MCPServerEditorDraft {
  */
 const MCP_SERVER_JSON_PLACEHOLDER = `{
   "name": "filesystem",
+  "transport": "stdio",
   "command": "npx",
   "args": ["-y", "@modelcontextprotocol/server-filesystem"],
   "env": {},
@@ -101,7 +108,19 @@ function serializeMCPServerEditorDraft(server: MCPServerConfig | null): string {
     return MCP_SERVER_JSON_PLACEHOLDER;
   }
 
-  return JSON.stringify(pick(server, ['name', 'command', 'args', 'env', 'toolAllowlist', 'toolCallTimeoutMs']), null, 2);
+  const isRemote = server.transport === 'streamableHTTP' || server.transport === 'sse';
+  return JSON.stringify(
+    {
+      name: server.name,
+      transport: server.transport,
+      ...(isRemote ? { url: server.url } : { command: server.command, args: server.args, env: server.env }),
+      ...(isRemote && server.oauth ? { enableOAuth: true } : {}),
+      toolAllowlist: server.toolAllowlist,
+      toolCallTimeoutMs: server.toolCallTimeoutMs
+    },
+    null,
+    2
+  );
 }
 
 /**
@@ -117,19 +136,31 @@ function parseMCPServerEditorDraft(jsonText: string): MCPServerDraftParseResult 
 
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed.command !== 'string' || !parsed.command.trim()) {
+    const transport: MCPTransportType = parsed.transport === 'streamableHTTP' || parsed.transport === 'sse' ? parsed.transport : 'stdio';
+
+    if (transport === 'stdio') {
+      if (typeof parsed.command !== 'string' || !parsed.command.trim()) {
+        return {
+          draft: null,
+          error: '`command` 必须是非空字符串（stdio 模式）。'
+        };
+      }
+    } else if (typeof parsed.url !== 'string' || !parsed.url.trim()) {
       return {
         draft: null,
-        error: '`command` 必须是非空字符串。'
+        error: '`url` 必须是非空字符串（远程模式）。'
       };
     }
 
     return {
       draft: {
         name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : 'New MCP Server',
-        command: parsed.command.trim(),
+        transport,
+        command: typeof parsed.command === 'string' ? parsed.command.trim() : '',
         args: normalizeStringArray(parsed.args),
         env: normalizeStringRecord(parsed.env),
+        url: typeof parsed.url === 'string' ? parsed.url.trim() : '',
+        enableOAuth: Boolean(parsed.enableOAuth),
         toolAllowlist: normalizeStringArray(parsed.toolAllowlist),
         toolCallTimeoutMs: typeof parsed.toolCallTimeoutMs === 'number' ? parsed.toolCallTimeoutMs : DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS
       },

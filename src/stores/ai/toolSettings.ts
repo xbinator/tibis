@@ -34,11 +34,16 @@ export const useToolSettingsStore = defineStore('toolSettings', {
     isTavilyAvailable: (state): boolean => state.tavily.enabled && state.tavily.apiKey.trim().length > 0,
 
     /**
-     * 是否存在已启用且命令完整的 MCP server。
+     * 是否存在已启用且配置完整的 MCP server。
      * @param state - Store 状态
      * @returns 是否存在可运行的 MCP server 配置
      */
-    hasEnabledMcpServers: (state): boolean => state.mcp.servers.some((server) => server.enabled && server.command.trim().length > 0),
+    hasEnabledMcpServers: (state): boolean =>
+      state.mcp.servers.some((server) => {
+        if (!server.enabled) return false;
+        if (server.transport === 'stdio') return server.command.trim().length > 0;
+        return Boolean(server.url?.trim());
+      }),
 
     /**
      * 按 ID 查询 MCP server。

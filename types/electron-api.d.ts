@@ -473,6 +473,14 @@ export interface ElectronAPI {
   connectMcpServer: (server: MCPServerConfig) => Promise<MCPDiscoveryRefreshResult>;
   disconnectMcpServer: (serverId: string) => Promise<void>;
   restartMcpServer: (server: MCPServerConfig) => Promise<MCPDiscoveryRefreshResult>;
+  /** 启动 OAuth 认证流程 */
+  startMcpOAuth: (server: MCPServerConfig) => Promise<{ authorizationUrl: string }>;
+  /** 清除 OAuth 凭据 */
+  clearMcpOAuth: (serverId: string) => Promise<void>;
+  /** 监听 MCP 工具列表变更通知 */
+  onMcpToolsChanged: (callback: (serverId: string) => void) => () => void;
+  /** 监听 OAuth 授权 URL 打开请求 */
+  onMcpOAuthOpenUrl: (callback: (url: string) => void) => () => void;
 
   // AI 流式事件监听
   onAiStreamText: (callback: (text: string) => void) => () => void;

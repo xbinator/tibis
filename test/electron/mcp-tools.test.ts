@@ -2,6 +2,7 @@
  * @file mcp-tools.test.ts
  * @description 验证主进程 MCP 工具过滤边界。
  */
+import type { ToolExecutionOptions } from 'ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AIMCPRequestConfig, MCPDiscoveredToolSnapshot, MCPServerConfig, MCPToolSettings } from '@/shared/storage/tool-settings';
 
@@ -129,7 +130,7 @@ describe('resolveMcpExposedTools', () => {
     expect(filesystemToolName).not.toBe(gitToolName);
     expect(Object.keys(sdkTools)).toEqual([filesystemToolName, gitToolName]);
 
-    await sdkTools[filesystemToolName].execute?.({ path: 'README.md' }, {});
+    await sdkTools[filesystemToolName].execute?.({ path: 'README.md' }, { toolCallId: 'test-call' } as ToolExecutionOptions);
 
     expect(executeTool).toHaveBeenCalledWith(
       {
@@ -137,7 +138,7 @@ describe('resolveMcpExposedTools', () => {
         toolName: 'status',
         input: { path: 'README.md' }
       },
-      {}
+      { toolCallId: 'test-call' }
     );
   });
 });

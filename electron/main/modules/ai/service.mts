@@ -7,7 +7,7 @@ import type { AICreateOptions, AIRequestOptions, AIInvokeResult, AIStreamResult,
 import { tavilyExtract, tavilySearch } from '@tavily/ai-sdk';
 import { generateText, jsonSchema, Output, stepCountIs, streamText, tool } from 'ai';
 import { log } from '../logger/service.mjs';
-import { executeMcpTool, getMcpDiscoveryCache } from '../mcp/runtime.mjs';
+import { executeMcpTool, getMcpDiscoveryCache } from '../mcp/session.mjs';
 import { createMcpSdkTools, resolveMcpExposedTools } from '../mcp/tools.mjs';
 import { AI_ERROR_CODE } from './errors/codes.mjs';
 import { AIProviderRegistry } from './providers/_index.mjs';
@@ -106,7 +106,13 @@ function hasTavilySdkTools(tavily: AIRequestOptions['tavily']): boolean {
  * @returns 是否存在可启用的 MCP server
  */
 function hasMcpSdkTools(mcp: AIRequestOptions['mcp']): boolean {
-  return Boolean(mcp?.servers.some((server) => server.enabled && server.command.trim().length > 0 && mcp.enabledServerIds.includes(server.id)));
+  return Boolean(
+    mcp?.servers.some((server) => {
+      if (!server.enabled || !mcp.enabledServerIds.includes(server.id)) return false;
+      if (server.transport === 'stdio') return server.command.trim().length > 0;
+      return Boolean(server.url?.trim());
+    })
+  );
 }
 
 /**
