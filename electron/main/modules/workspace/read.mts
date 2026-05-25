@@ -1,5 +1,5 @@
 /**
- * @file workspace-read.mts
+ * @file read.mts
  * @description 工作区和授权绝对路径文本文件安全读取服务。
  */
 import * as fs from 'node:fs/promises';

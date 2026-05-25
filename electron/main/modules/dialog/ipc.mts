@@ -1,8 +1,10 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+/**
+ * @file ipc.mts
+ * @description 原生文件对话框 IPC handler 注册。
+ */
 import * as path from 'node:path';
-import type { ElectronExportPdfOptions, ElectronFileResult, ElectronOpenFileOptions, ElectronSaveFileOptions } from 'types/electron-api';
-import { BrowserWindow, ipcMain } from 'electron';
+import type { ElectronFileResult, ElectronOpenFileOptions, ElectronSaveFileOptions } from 'types/electron-api';
+import { ipcMain } from 'electron';
 import { showOpenDialog, showSaveDialog } from './utils.mjs';
 
 /**
@@ -41,36 +43,6 @@ class SingleRunner {
 const openLock = new SingleRunner();
 /** 保存文件对话框锁 */
 const saveLock = new SingleRunner();
-/** PDF 导出对话框锁 */
-const exportPdfLock = new SingleRunner();
-
-/**
- * 生成隐藏打印窗口，并将指定 HTML 渲染为 PDF 缓冲区。
- * Electron 主进程只负责通用的 HTML -> PDF 管道，不参与正文语义判断。
- * 这里使用临时 HTML 文件而非 data URL，避免大体积导出内容触发 URL 长度/合法性问题。
- * @param html - 已准备好的完整 HTML 文档
- * @returns PDF 二进制数据
- */
-export async function renderPdfBufferFromHtml(html: string): Promise<Buffer> {
-  const window = new BrowserWindow({
-    show: false,
-    webPreferences: {
-      sandbox: true
-    }
-  });
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'tibis-pdf-export-'));
-  const tempHtmlPath = path.join(tempDirectory, 'export.html');
-
-  try {
-    await writeFile(tempHtmlPath, html, 'utf-8');
-    await window.loadFile(tempHtmlPath);
-
-    return await window.webContents.printToPDF({ printBackground: true, preferCSSPageSize: true });
-  } finally {
-    window.destroy();
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-}
 
 export function registerDialogHandlers(): void {
   ipcMain.handle('dialog:openFile', async (_event, options?: ElectronOpenFileOptions): Promise<ElectronFileResult> => {
@@ -113,29 +85,6 @@ export function registerDialogHandlers(): void {
 
       const { promises: fs } = await import('node:fs');
       await fs.writeFile(result.filePath, content, 'utf-8');
-      return result.filePath;
-    });
-  });
-
-  ipcMain.handle('dialog:exportPdf', async (_event, options: ElectronExportPdfOptions): Promise<string | null> => {
-    return exportPdfLock.run(async () => {
-      const result = await showSaveDialog({
-        filters: options.filters,
-        defaultPath: options.defaultPath || 'untitled.pdf'
-      });
-
-      if (result.canceled || !result.filePath) {
-        return null;
-      }
-
-      const pdfBuffer = await renderPdfBufferFromHtml(options.html);
-      const { promises: fs } = await import('node:fs');
-
-      // 先写入临时文件再 rename 原子替换，避免直接覆写导致 macOS 上创建时间不更新
-      const tmpPath = `${result.filePath}.tibis-tmp`;
-      await fs.writeFile(tmpPath, pdfBuffer);
-      await fs.rename(tmpPath, result.filePath);
-
       return result.filePath;
     });
   });

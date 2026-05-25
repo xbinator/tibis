@@ -1,3 +1,7 @@
+/**
+ * @file menu.mts
+ * @description 应用系统菜单构建与菜单动作派发。
+ */
 import { app, Menu, MenuItemConstructorOptions, BrowserWindow } from 'electron';
 import { getWindow } from '../../window.mjs';
 
@@ -20,7 +24,7 @@ function ensureWindowVisible(win: BrowserWindow): void {
 function flushPendingActions(win: BrowserWindow): void {
   while (pendingActions.length > 0) {
     const action = pendingActions.shift();
-    if (action) win.webContents.send('menu:action', action);
+    if (action) win.webContents.send('ui:menuAction', action);
   }
 }
 
@@ -55,7 +59,7 @@ export function sendMenuAction(action: string): void {
   }
 
   flushPendingActions(win);
-  win.webContents.send('menu:action', action);
+  win.webContents.send('ui:menuAction', action);
 }
 
 /**

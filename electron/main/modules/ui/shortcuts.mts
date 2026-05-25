@@ -1,6 +1,6 @@
 /* eslint-disable no-use-before-define */
 /**
- * @file service.mts
+ * @file shortcuts.mts
  * @description 管理 macOS Dock 菜单和 Windows 任务栏 Jump List 快捷入口。
  */
 import { app, Menu, type JumpListCategory, type MenuItemConstructorOptions } from 'electron';

@@ -1,5 +1,5 @@
 /**
- * @file service.mts
+ * @file watch.mts
  * @description 提供主进程文件变化监听服务，支持文件级和目录级监听，并向所有窗口广播事件。
  */
 

@@ -1,8 +1,10 @@
+/**
+ * @file ipc.mts
+ * @description 文件系统基础操作 IPC handler 注册。
+ */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ipcMain } from 'electron';
-import { fileWatchService } from './service.mjs';
-import { readWorkspaceDirectory, readWorkspaceFile, type ReadWorkspaceDirectoryRequest, type ReadWorkspaceFileRequest } from './workspace-read.mjs';
 
 /**
  * 文件路径状态。
@@ -47,8 +49,6 @@ export function registerFileHandlers(): void {
     return { content, fileName, ext };
   });
 
-  ipcMain.handle('fs:readWorkspaceTextFile', async (_event, request: ReadWorkspaceFileRequest) => readWorkspaceFile(request));
-  ipcMain.handle('fs:readWorkspaceDirectory', async (_event, request: ReadWorkspaceDirectoryRequest) => readWorkspaceDirectory(request));
   ipcMain.handle('fs:getPathStatus', async (_event, targetPath: string) => getFilePathStatus(targetPath));
 
   ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string) => {
@@ -57,25 +57,5 @@ export function registerFileHandlers(): void {
 
   ipcMain.handle('fs:renameFile', async (_event, oldPath: string, newPath: string) => {
     await fs.promises.rename(oldPath, newPath);
-  });
-
-  ipcMain.handle('fs:watchFile', async (_event, filePath: string) => {
-    await fileWatchService.watch(filePath);
-  });
-
-  ipcMain.handle('fs:unwatchFile', async (_event, filePath: string) => {
-    await fileWatchService.unwatch(filePath);
-  });
-
-  ipcMain.handle('fs:unwatchAll', async () => {
-    await fileWatchService.unwatchAll();
-  });
-
-  ipcMain.handle('fs:watchDirectory', async (_event, dirPath: string, globPattern?: string) => {
-    await fileWatchService.watchDirectory(dirPath, globPattern);
-  });
-
-  ipcMain.handle('fs:unwatchDirectory', async (_event, dirPath: string, globPattern?: string) => {
-    await fileWatchService.unwatchDirectory(dirPath, globPattern);
   });
 }

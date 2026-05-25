@@ -56,7 +56,7 @@ function hasFileExtension(fileName: string): boolean {
 }
 
 /**
- * 生成系统快捷入口使用的最近文件标题，优先展示“文件名.扩展名”。
+ * 生成系统快捷入口使用的最近文件标题，优先展示"文件名.扩展名"。
  * @param file - 最近文件摘要
  * @returns 规范化后的文件标题
  */

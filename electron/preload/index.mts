@@ -102,7 +102,7 @@ const electronAPI: ElectronAPI = {
    * @param options - 导出选项，包含完整 HTML 文档与默认保存路径
    * @returns 成功保存后的文件路径
    */
-  exportPdf: (options) => ipcRenderer.invoke('dialog:exportPdf', options),
+  exportPdf: (options) => ipcRenderer.invoke('export:pdf', options),
 
   /**
    * 直接写入文件（已知路径时使用）
@@ -113,14 +113,14 @@ const electronAPI: ElectronAPI = {
 
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('fs:renameFile', oldPath, newPath),
 
-  trashFile: (filePath: string) => ipcRenderer.invoke('system:trashFile', filePath),
+  trashFile: (filePath: string) => ipcRenderer.invoke('ui:trashFile', filePath),
 
-  showItemInFolder: (filePath: string) => ipcRenderer.invoke('system:showItemInFolder', filePath),
+  showItemInFolder: (filePath: string) => ipcRenderer.invoke('ui:showItemInFolder', filePath),
 
-  getRelativePath: (filePath: string) => ipcRenderer.invoke('system:getRelativePath', filePath),
+  getRelativePath: (filePath: string) => ipcRenderer.invoke('ui:getRelativePath', filePath),
 
-  getCwd: () => ipcRenderer.invoke('system:getCwd') as Promise<string>,
-  getHomeDir: () => ipcRenderer.invoke('system:getHomeDir') as Promise<string>,
+  getCwd: () => ipcRenderer.invoke('ui:getCwd') as Promise<string>,
+  getHomeDir: () => ipcRenderer.invoke('ui:getHomeDir') as Promise<string>,
 
   watchFile: (filePath: string) => ipcRenderer.invoke('fs:watchFile', filePath),
 
@@ -173,34 +173,34 @@ const electronAPI: ElectronAPI = {
    * 设置窗口标题
    * @param title 窗口标题
    */
-  setWindowTitle: (title: string) => ipcRenderer.invoke('window:setTitle', title),
+  setWindowTitle: (title: string) => ipcRenderer.invoke('ui:setTitle', title),
 
   /**
    * 最小化窗口
    */
-  windowMinimize: () => ipcRenderer.invoke('window:minimize'),
+  windowMinimize: () => ipcRenderer.invoke('ui:minimize'),
 
   /**
    * 最大化/恢复窗口
    */
-  windowMaximize: () => ipcRenderer.invoke('window:maximize'),
+  windowMaximize: () => ipcRenderer.invoke('ui:maximize'),
 
   /**
    * 关闭窗口
    */
-  windowClose: () => ipcRenderer.invoke('window:close'),
+  windowClose: () => ipcRenderer.invoke('ui:close'),
 
   /**
    * 查询窗口是否已最大化
    * @returns 是否最大化
    */
-  windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  windowIsMaximized: () => ipcRenderer.invoke('ui:isMaximized'),
 
   /**
    * 查询窗口是否全屏
    * @returns 是否全屏
    */
-  windowIsFullScreen: () => ipcRenderer.invoke('window:isFullScreen'),
+  windowIsFullScreen: () => ipcRenderer.invoke('ui:isFullScreen'),
 
   // ==================== 数据库操作 ====================
 
@@ -248,7 +248,7 @@ const electronAPI: ElectronAPI = {
    * 使用系统默认浏览器打开外部链接
    * @param url 要打开的 URL
    */
-  openExternal: (url: string) => ipcRenderer.invoke('system:openExternal', url),
+  openExternal: (url: string) => ipcRenderer.invoke('ui:openExternal', url),
 
   /**
    * 获取 Tibis 工作区根目录。
@@ -514,17 +514,17 @@ const electronAPI: ElectronAPI = {
   // ==================== 菜单操作 ====================
   onMenuAction: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, action: string) => callback(action);
-    ipcRenderer.on('menu:action', handler);
+    ipcRenderer.on('ui:menuAction', handler);
     return () => {
-      ipcRenderer.removeListener('menu:action', handler);
+      ipcRenderer.removeListener('ui:menuAction', handler);
     };
   },
 
   updateMenuItem: (id: string, properties: { checked?: boolean }) => {
-    ipcRenderer.send('menu:update-item', id, properties);
+    ipcRenderer.send('ui:updateMenuItem', id, properties);
   },
 
-  syncRecentFiles: (files) => ipcRenderer.invoke('shortcuts:sync-recent-files', files),
+  syncRecentFiles: (files) => ipcRenderer.invoke('ui:syncRecentFiles', files),
 
   // WebView 操作
   webview: webviewAPI,
