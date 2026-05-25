@@ -88,6 +88,7 @@ import { nanoid } from 'nanoid';
 import type { SkillDefinition } from '@/ai/skill/types';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useSkillStore } from '@/stores/ai/skill';
+import { asyncTo } from '@/utils/asyncTo';
 import SkillPreview from './SkillPreview.vue';
 
 /** 资源文件（来自 Worker 解析结果）。 */
@@ -248,12 +249,9 @@ function joinPath(...parts: string[]): string {
  * 格式：<homeDir>/.agents/skills
  */
 async function getSkillDir(api: ReturnType<typeof getElectronAPI>): Promise<string | null> {
-  try {
-    const homeDir = await api!.getHomeDir();
-    return joinPath(homeDir, '.agents', 'skills');
-  } catch {
-    return null;
-  }
+  const [err, homeDir] = await asyncTo(api!.getHomeDir());
+  if (err) return null;
+  return joinPath(homeDir, '.agents', 'skills');
 }
 
 /** 确认安装：备份 → 替换 → 清理或回滚（消除 TOCTOU 竞态）。 */
@@ -303,43 +301,23 @@ async function handleInstall(): Promise<void> {
       await api.renameFile(targetDir, bakDir);
     }
 
-    // 3. 替换：临时目录 → 目标
-    try {
-      await api.renameFile(tmpDir, targetDir);
-    } catch {
-      // 替换失败 → 回滚备份
-      if (bakDir) {
-        try {
-          await api.renameFile(bakDir, targetDir);
-        } catch {
-          /* 尽力回滚 */
-        }
-      }
+    // 3. 替换：临时目录 → 目标；失败则回滚备份
+    const [renameErr] = await asyncTo(api.renameFile(tmpDir, targetDir));
+    if (renameErr) {
+      if (bakDir) await asyncTo(api.renameFile(bakDir, targetDir));
       throw new Error('无法完成安装，已回滚');
     }
 
-    // 4. 清理备份
-    if (bakDir) {
-      try {
-        await api.trashFile(bakDir);
-      } catch {
-        /* 忽略，孤儿清理会处理 */
-      }
-    }
+    // 4. 清理备份（忽略失败，孤儿清理会处理）
+    if (bakDir) await asyncTo(api.trashFile(bakDir));
 
     // 5. 重新扫描并关闭
     await store.rescan();
     message.success(`技能 "${skillName}" 安装成功`);
     handleClose();
   } catch (err: unknown) {
-    // 失败时清理临时目录
-    if (tmpDir) {
-      try {
-        await api.trashFile(tmpDir);
-      } catch {
-        /* 忽略，孤儿清理会处理 */
-      }
-    }
+    // 失败时清理临时目录（忽略失败，孤儿清理会处理）
+    if (tmpDir) await asyncTo(api.trashFile(tmpDir));
     message.error(`安装失败：${err instanceof Error ? err.message : String(err)}`);
   } finally {
     installing.value = false;
