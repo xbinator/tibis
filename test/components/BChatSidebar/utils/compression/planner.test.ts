@@ -23,14 +23,16 @@ function makeMsg(overrides: Partial<Message> & { id: string }): Message {
  * 创建带工具调用的 assistant 消息。
  */
 function makeToolCallMsg(id: string, toolCallId: string, toolName: string, hasResult = true): Message {
-  const parts: Message['parts'] = [{ type: 'tool-call', toolCallId, toolName, input: {} }];
+  const parts: Message['parts'] = [{ type: 'tool', status: hasResult ? 'done' : 'executing', toolCallId, toolName, input: {} }];
   if (hasResult) {
-    parts.push({
-      type: 'tool-result',
+    parts[0] = {
+      type: 'tool',
+      status: 'done',
       toolCallId,
       toolName,
+      input: {},
       result: { status: 'success', data: {} } as never
-    });
+    };
   }
   return makeMsg({ id, role: 'assistant', content: 'tool call', parts });
 }
@@ -45,9 +47,11 @@ function makeAwaitingUserChoiceMsg(id: string): Message {
     content: 'awaiting choice',
     parts: [
       {
-        type: 'tool-result',
+        type: 'tool',
+        status: 'done',
         toolCallId: 'tc-choice',
         toolName: 'ask_user_question',
+        input: {},
         result: { status: 'awaiting_user_input', data: { questionId: 'q1', question: 'choose' } } as never
       }
     ]
@@ -114,9 +118,11 @@ describe('planner - classifyMessages', () => {
       content: 'awaiting legacy choice',
       parts: [
         {
-          type: 'tool-result',
+          type: 'tool',
+          status: 'done',
           toolCallId: 'tc-choice-legacy',
           toolName: 'ask_user_choice',
+          input: {},
           result: { status: 'awaiting_user_input', data: { questionId: 'q-legacy', question: 'choose' } } as never
         }
       ]

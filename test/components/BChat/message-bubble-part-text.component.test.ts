@@ -92,10 +92,8 @@ function mountBubble(message: Message): VueWrapper {
         BMessage: MessageStub,
         Icon: IconStub,
         BubblePartThinking: true,
-        BubblePartToolCall: true,
-        BubblePartToolResult: true,
+        BubblePartTool: true,
         QuestionCard: true,
-        ConfirmationCard: true,
         BubblePartUserInput: true,
         BubblePartCompression: true
       }

@@ -208,9 +208,11 @@ describe('useCompactContext', () => {
       content: '',
       parts: [
         {
-          type: 'tool-result',
+          type: 'tool',
+          status: 'done',
           toolCallId: 'tool-call-1',
           toolName: 'read_file',
+          input: {},
           result: {
             toolName: 'read_file',
             status: 'success',
