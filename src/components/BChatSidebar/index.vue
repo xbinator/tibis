@@ -53,8 +53,6 @@
 
       <div class="b-chat-sidebar__input">
         <div class="b-chat-sidebar__input-container">
-          <SkillIndicator :messages="messages" />
-
           <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
 
           <BPromptEditor
@@ -125,7 +123,6 @@ import ImagePreview from './components/ImagePreview.vue';
 import InputToolbar from './components/InputToolbar.vue';
 import InteractionContainer from './components/InteractionContainer/index.vue';
 import SessionHistory from './components/SessionHistory.vue';
-import SkillIndicator from './components/SkillIndicator.vue';
 import UsagePanel from './components/UsagePanel.vue';
 import { useAutoName } from './hooks/useAutoName';
 import { useChatHistory } from './hooks/useChatHistory';

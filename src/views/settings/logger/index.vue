@@ -4,12 +4,7 @@
   首次加载在 onMounted 中触发初始日志拉取。
 -->
 <template>
-  <BSettingsPage>
-    <template #title>
-      <div>日志</div>
-      <span class="log-count">共 {{ entries.length }} 条记录</span>
-    </template>
-
+  <BSettingsPage title="日志">
     <template #headerExtra>
       <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
       <BButton icon="lucide:folder-open" type="text" size="small" @click="handleOpenLogFolder">打开目录</BButton>
@@ -205,13 +200,6 @@ onMounted(() => {
 </script>
 
 <style scoped lang="less">
-.log-count {
-  margin-left: 6px;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-tertiary);
-}
-
 .log-timeline {
   display: flex;
   flex-direction: column;
