@@ -8,41 +8,26 @@
       <BButton icon="lucide:plus" type="primary" size="small" @click="handleOpenAddModal">添加</BButton>
     </template>
     <BSettingsSection title="MCP Servers">
-      <div class="mcp-tools-settings__toolbar">
-        <div class="mcp-tools-settings__hint">配置会保存为全局设置，聊天侧只消费默认启用项。</div>
+      <div class="settings__toolbar">
+        <div class="settings__hint">配置会保存为全局设置，聊天侧只消费默认启用项。</div>
       </div>
 
-      <div v-if="store.mcp.servers.length === 0" class="mcp-tools-settings__empty">暂无 MCP server 配置。</div>
+      <div v-if="store.mcp.servers.length === 0" class="settings__empty">暂无 MCP server 配置。</div>
 
-      <div v-for="server in store.mcp.servers" :key="server.id" class="mcp-tools-settings__server">
-        <div class="mcp-tools-settings__server-row">
-          <div class="mcp-tools-settings__server-icon">{{ server.name.charAt(0).toUpperCase() }}</div>
-          <div class="mcp-tools-settings__server-info">
-            <div class="mcp-tools-settings__server-name">{{ server.name }}</div>
-            <div class="mcp-tools-settings__server-command">
-              <template v-if="server.transport === 'stdio'">{{ server.command }} {{ server.args.join(' ') }}</template>
-              <template v-else>{{ server.transport }} · {{ server.url }}</template>
-            </div>
-            <div v-if="getServerStatusSummary(server.id)" class="mcp-tools-settings__server-status">
-              {{ getServerStatusSummary(server.id) }}
-            </div>
-            <div v-if="getServerStatusMessage(server.id)" class="mcp-tools-settings__server-status-message">
-              {{ getServerStatusMessage(server.id) }}
-            </div>
-          </div>
-          <div class="mcp-tools-settings__server-actions">
-            <ASwitch :checked="server.enabled" size="small" @change="(value) => handleServerPatch(server.id, { enabled: Boolean(value) })" />
-            <BDropdown placement="bottomRight">
-              <button class="mcp-tools-settings__settings-btn">
-                <Icon icon="lucide:settings" :width="16" />
-              </button>
-              <template #overlay>
-                <BDropdownMenu :options="getServerDropdownOptions(server)" :width="120" />
-              </template>
-            </BDropdown>
-          </div>
-        </div>
-      </div>
+      <ServerCard
+        v-for="server in store.mcp.servers"
+        :key="server.id"
+        :server="server"
+        :status="getServerStatus(server.id)"
+        :discovered-tools="getDiscoveredTools(server.id)"
+        :refreshing="refreshingServerId === server.id"
+        @edit="handleEditServer"
+        @patch="handleServerPatch"
+        @remove="handleRemoveServer"
+        @restart="handleRefreshDiscovery"
+        @oauth-start="handleStartOAuth"
+        @oauth-clear="handleClearOAuth"
+      />
     </BSettingsSection>
 
     <ServerEditor v-model:open="addModalVisible" :server="editingServer" @cancel="handleCancelAdd" @confirm="handleConfirmAdd" />
@@ -50,23 +35,21 @@
 </template>
 
 <script setup lang="ts">
-import type { MCPServerEditorDraft } from './components/ServerEditor.vue';
 import type { MCPStatusResponse } from 'types/ai';
 import { computed, onMounted, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import { nanoid } from 'nanoid';
-import BDropdown from '@/components/BDropdown/index.vue';
-import BDropdownMenu from '@/components/BDropdown/Menu.vue';
-import type { DropdownOption } from '@/components/BDropdown/type';
 import { getElectronAPI, hasElectronAPI } from '@/shared/platform/electron-api';
-import type { MCPServerConfig } from '@/shared/storage/tool-settings';
+import type { MCPServerConfig, MCPDiscoveredToolSnapshot, MCPServerDiscoveryCache } from '@/shared/storage/tool-settings';
 import { DEFAULT_MCP_CONNECT_TIMEOUT_MS, DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS } from '@/shared/storage/tool-settings';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
+import ServerCard from './components/ServerCard.vue';
 import ServerEditor from './components/ServerEditor.vue';
+import { parseMCPServerEditorDraft } from './utils/parseMCPServer';
 
 const store = useToolSettingsStore();
 const refreshingServerId = ref<string | null>(null);
 const statusByServerId = ref<Record<string, MCPStatusResponse>>({});
+const discoveryByServerId = ref<Record<string, MCPServerDiscoveryCache>>({});
 const addModalVisible = ref(false);
 
 /**
@@ -108,28 +91,12 @@ function getServerStatus(serverId: string): MCPStatusResponse | null {
 }
 
 /**
- * 生成 server 状态摘要文案。
+ * 获取指定 server 已发现的工具列表。
  * @param serverId - MCP server ID
- * @returns 状态摘要
+ * @returns 工具列表
  */
-function getServerStatusSummary(serverId: string): string {
-  const status = getServerStatus(serverId);
-  if (!status) {
-    return '';
-  }
-
-  const { runtimeStatus, sandboxStatus, discoveryStatus } = status;
-
-  return `${runtimeStatus ?? sandboxStatus} · ${discoveryStatus}`;
-}
-
-/**
- * 读取 server 最新状态说明。
- * @param serverId - MCP server ID
- * @returns 状态说明
- */
-function getServerStatusMessage(serverId: string): string {
-  return getServerStatus(serverId)?.message ?? '';
+function getDiscoveredTools(serverId: string): MCPDiscoveredToolSnapshot[] {
+  return discoveryByServerId.value[serverId]?.tools ?? [];
 }
 
 /**
@@ -174,33 +141,6 @@ function handleCancelAdd(): void {
 }
 
 /**
- * 确认添加或编辑 MCP server。
- * @param draft - 编辑弹窗返回的 server 草稿
- */
-function handleConfirmAdd(draft: MCPServerEditorDraft): void {
-  const isRemote = draft.transport === 'streamableHTTP' || draft.transport === 'sse';
-
-  if (editingServerId.value) {
-    store.updateMcpServer(editingServerId.value, {
-      ...draft,
-      oauth: isRemote && draft.enableOAuth ? {} : undefined
-    });
-  } else {
-    const server: MCPServerConfig = {
-      ...draft,
-      id: nanoid(),
-      enabled: false,
-      connectTimeoutMs: DEFAULT_MCP_CONNECT_TIMEOUT_MS,
-      toolCallTimeoutMs: draft.toolCallTimeoutMs ?? DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS,
-      oauth: isRemote && draft.enableOAuth ? {} : undefined
-    };
-    store.addMcpServer(server);
-  }
-  closeEditorModal();
-  requestStatusRefresh();
-}
-
-/**
  * 更新 MCP server。
  * @param serverId - MCP server ID
  * @param patch - 更新字段
@@ -219,6 +159,41 @@ function handleRemoveServer(serverId: string): void {
   const nextStatuses = { ...statusByServerId.value };
   delete nextStatuses[serverId];
   statusByServerId.value = nextStatuses;
+  const nextDiscovery = { ...discoveryByServerId.value };
+  delete nextDiscovery[serverId];
+  discoveryByServerId.value = nextDiscovery;
+}
+
+/**
+ * 将 MCPServerConfig 浅拷贝为普通对象，用于跨 IPC 传输。
+ * Pinia store 中的 server 是 reactive proxy，无法通过 contextBridge 结构化克隆。
+ * @param server - MCP server 配置
+ * @returns 普通 JS 对象副本
+ */
+function toPlainMcpServer(server: MCPServerConfig): MCPServerConfig {
+  return {
+    ...server,
+    args: [...server.args],
+    env: { ...server.env },
+    toolAllowlist: [...server.toolAllowlist],
+    oauth: server.oauth ? { ...server.oauth } : undefined
+  };
+}
+
+/**
+ * 刷新指定 server 的 discovery cache。
+ * @param serverId - MCP server ID
+ */
+async function refreshDiscoveryCache(serverId: string): Promise<void> {
+  if (!hasElectronAPI()) return;
+
+  const cache = await getElectronAPI().getMcpDiscoveryCache(serverId);
+  if (cache && !Array.isArray(cache)) {
+    discoveryByServerId.value = {
+      ...discoveryByServerId.value,
+      [serverId]: cache
+    };
+  }
 }
 
 /**
@@ -242,11 +217,48 @@ async function handleRefreshDiscovery(server: MCPServerConfig): Promise<void> {
 
   refreshingServerId.value = server.id;
   try {
-    await getElectronAPI().restartMcpServer(server);
+    await getElectronAPI().restartMcpServer(toPlainMcpServer(server));
     await refreshStatuses();
+    await refreshDiscoveryCache(server.id);
   } finally {
     refreshingServerId.value = null;
   }
+}
+
+/**
+ * 确认添加或编辑 MCP server。
+ * 接收编辑器原始 JSON 文本，解析后保存并自动连接服务器加载工具列表。
+ * @param jsonText - 编辑器中的原始 JSON 文本
+ */
+async function handleConfirmAdd(jsonText: string): Promise<void> {
+  const result = parseMCPServerEditorDraft(jsonText);
+  if (!result.draft) {
+    return;
+  }
+  const { draft } = result;
+  const isRemote = draft.transport === 'streamableHTTP' || draft.transport === 'sse';
+
+  if (editingServerId.value) {
+    store.updateMcpServer(editingServerId.value, {
+      ...draft,
+      oauth: isRemote && draft.enableOAuth ? {} : undefined
+    });
+    closeEditorModal();
+    await handleRefreshDiscovery(store.getMcpServerById(editingServerId.value)!);
+    return;
+  }
+
+  const server: MCPServerConfig = {
+    ...draft,
+    id: nanoid(),
+    enabled: true,
+    connectTimeoutMs: DEFAULT_MCP_CONNECT_TIMEOUT_MS,
+    toolCallTimeoutMs: draft.toolCallTimeoutMs ?? DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS,
+    oauth: isRemote && draft.enableOAuth ? {} : undefined
+  };
+  store.addMcpServer(server);
+  closeEditorModal();
+  await handleRefreshDiscovery(server);
 }
 
 /**
@@ -256,7 +268,7 @@ async function handleRefreshDiscovery(server: MCPServerConfig): Promise<void> {
 async function handleStartOAuth(server: MCPServerConfig): Promise<void> {
   if (!hasElectronAPI()) return;
   try {
-    await getElectronAPI().startMcpOAuth(server);
+    await getElectronAPI().startMcpOAuth(toPlainMcpServer(server));
     await refreshStatuses();
   } catch (error) {
     console.error('OAuth failed:', error);
@@ -277,73 +289,14 @@ async function handleClearOAuth(serverId: string): Promise<void> {
   }
 }
 
-/**
- * 生成指定 server 的下拉菜单选项。
- * @param server - MCP server 配置
- * @returns 下拉菜单选项
- */
-function getServerDropdownOptions(server: MCPServerConfig): DropdownOption[] {
-  const isRemote = server.transport === 'streamableHTTP' || server.transport === 'sse';
-  const status = getServerStatus(server.id);
-  const needsAuth = status?.runtimeStatus === 'needs_auth';
-
-  const options: DropdownOption[] = [
-    {
-      type: 'item',
-      value: 'edit',
-      label: '编辑',
-      icon: 'lucide:pencil',
-      onClick: () => handleEditServer(server)
-    },
-    {
-      type: 'item',
-      value: 'restart',
-      label: refreshingServerId.value === server.id ? '重启中…' : '重启',
-      icon: 'lucide:refresh-cw',
-      disabled: refreshingServerId.value === server.id,
-      onClick: () => handleRefreshDiscovery(server)
-    }
-  ];
-
-  if (isRemote && server.oauth) {
-    if (needsAuth) {
-      options.push({
-        type: 'item',
-        value: 'oauth',
-        label: 'OAuth 认证',
-        icon: 'lucide:log-in',
-        onClick: () => handleStartOAuth(server)
-      });
-    }
-    options.push({
-      type: 'item',
-      value: 'clear-oauth',
-      label: '清除 OAuth',
-      icon: 'lucide:log-out',
-      onClick: () => handleClearOAuth(server.id)
-    });
-  }
-
-  options.push(
-    { type: 'divider' },
-    {
-      type: 'item',
-      value: 'delete',
-      label: '删除',
-      icon: 'lucide:trash-2',
-      danger: true,
-      onClick: () => handleRemoveServer(server.id)
-    }
-  );
-
-  return options;
-}
-
-onMounted(refreshStatuses);
+onMounted(async () => {
+  await refreshStatuses();
+  await Promise.all(store.mcp.servers.map((server) => refreshDiscoveryCache(server.id)));
+});
 </script>
 
 <style scoped lang="less">
-.mcp-tools-settings__toolbar {
+.settings__toolbar {
   display: flex;
   gap: 16px;
   align-items: center;
@@ -351,100 +304,13 @@ onMounted(refreshStatuses);
   padding: 12px 16px;
 }
 
-.mcp-tools-settings__hint,
-.mcp-tools-settings__empty,
-.mcp-tools-settings__description {
+.settings__hint,
+.settings__empty {
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.mcp-tools-settings__empty {
+.settings__empty {
   padding: 16px;
-}
-
-.mcp-tools-settings__server {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-tertiary);
-}
-
-.mcp-tools-settings__server-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.mcp-tools-settings__server-icon {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border-radius: 6px;
-}
-
-.mcp-tools-settings__server-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.mcp-tools-settings__server-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.mcp-tools-settings__server-command {
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.mcp-tools-settings__server-status,
-.mcp-tools-settings__server-status-message {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.mcp-tools-settings__server-status-message {
-  color: var(--text-tertiary);
-}
-
-.mcp-tools-settings__server-actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 8px;
-  align-items: center;
-}
-
-.mcp-tools-settings__settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  color: var(--text-secondary);
-  cursor: pointer;
-  background: none;
-  border: none;
-  border-radius: 4px;
-  transition: background 0.2s, color 0.2s;
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-tertiary);
-  }
 }
 </style>
