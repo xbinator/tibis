@@ -5,6 +5,7 @@ import {
   createBuiltinTools,
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
+  isSdkManagedToolName,
   QUESTION_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
@@ -80,6 +81,30 @@ describe('builtin tool exports', () => {
 
   it('exports skill tool name', () => {
     expect(SKILL_TOOL_NAME).toBe('skill');
+  });
+});
+
+describe('isSdkManagedToolName', () => {
+  it('returns true for tavily_search', () => {
+    expect(isSdkManagedToolName('tavily_search')).toBe(true);
+  });
+
+  it('returns true for tavily_extract', () => {
+    expect(isSdkManagedToolName('tavily_extract')).toBe(true);
+  });
+
+  it('returns true for MCP tool names with mcp_ prefix', () => {
+    expect(isSdkManagedToolName('mcp_6e706d_726561645f66696c65')).toBe(true);
+  });
+
+  it('returns false for builtin tool names', () => {
+    expect(isSdkManagedToolName('read_file')).toBe(false);
+    expect(isSdkManagedToolName('write_file')).toBe(false);
+    expect(isSdkManagedToolName('question')).toBe(false);
+  });
+
+  it('returns false for unknown tool names', () => {
+    expect(isSdkManagedToolName('some_random_tool')).toBe(false);
   });
 });
 
