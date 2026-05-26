@@ -1,7 +1,7 @@
 <template>
   <BubblePart type="tool-result" has-content>
     <template #title>
-      <Icon :icon="part.result.status === 'success' ? 'lucide:check-circle-2' : 'lucide:circle-alert'" width="14" height="14" />
+      <Icon :icon="part.result.status === 'success' ? 'lucide:check-circle-2' : 'lucide:circle-alert'" :class="bem('icon')" width="14" height="14" />
       <span :class="bem('name')">{{ title }}</span>
       <span v-if="part.result.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
@@ -44,6 +44,14 @@ const title = computed(() => {
 <style scoped lang="less">
 .message-bubble-tool-result__name {
   flex: 1;
+  width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-bubble-tool-result__icon {
+  flex-shrink: 0;
 }
 
 .message-bubble-tool-result__status--failure {

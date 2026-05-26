@@ -31,5 +31,5 @@ export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
  * @returns 用户可读动作文案
  */
 export function getActionLabel(toolName: string): { alias: string } {
-  return TOOL_ACTION_LABELS[toolName] ?? { alias: `正在执行：${toolName}` };
+  return TOOL_ACTION_LABELS[toolName] ?? { alias: toolName };
 }
