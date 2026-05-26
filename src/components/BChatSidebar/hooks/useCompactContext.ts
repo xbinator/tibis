@@ -5,7 +5,7 @@
 import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { CompressionRecord } from '../utils/compression/types';
 import type { Message } from '../utils/types';
-import type { ChatCompressionStatus, ChatMessageToolResultPart } from 'types/chat';
+import type { ChatCompressionStatus, ChatMessageToolPart } from 'types/chat';
 import type { CompressionRecordStatus } from 'types/compression';
 import type { Ref } from 'vue';
 import { computed, ref } from 'vue';
@@ -227,7 +227,7 @@ function summarizeToolResultData(data: unknown): string {
  * @param part - 工具结果片段
  * @returns 是否保留该工具结果摘要
  */
-function isKeyToolResult(part: ChatMessageToolResultPart): boolean {
+function isKeyToolResult(part: ChatMessageToolPart): boolean {
   const toolName = part.toolName.toLowerCase();
   return KEY_TOOL_RESULT_NAME_PATTERNS.some((pattern) => toolName.includes(pattern));
 }
@@ -242,7 +242,7 @@ function extractKeyToolResultContext(sourceMessages: Message[]): string[] {
 
   for (const sourceMessage of sourceMessages) {
     for (const part of sourceMessage.parts) {
-      if (part.type !== 'tool-result' || !isKeyToolResult(part)) {
+      if (part.type !== 'tool' || !part.result || !isKeyToolResult(part)) {
         continue;
       }
 

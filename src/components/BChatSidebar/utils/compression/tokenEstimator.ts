@@ -199,8 +199,7 @@ export function buildMessageContentHash(msg: Message): string {
   const parts = msg.parts
     .map((p) => {
       if (p.type === 'text') return p.text;
-      if (p.type === 'tool-call') return `tc:${p.toolName}`;
-      if (p.type === 'tool-result') return `tr:${p.toolName}`;
+      if (p.type === 'tool') return p.result ? `tr:${p.toolName}` : `tc:${p.toolName}`;
       return p.type;
     })
     .join('|');
