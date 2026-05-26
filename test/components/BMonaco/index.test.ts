@@ -9,7 +9,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { EditorSelection } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
-import type { MonacoEditorHandle } from '@/components/BMonaco/utils/createMonacoEditor';
+import type { MonacoEditorHandle } from '@/components/BMonaco/utils/createMonaco';
 
 const setThemeMock = vi.fn();
 

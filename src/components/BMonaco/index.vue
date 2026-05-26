@@ -14,12 +14,12 @@
  * @description 基于 Monaco 的低层编辑器组件，实现统一的 EditorController 协议。
  */
 
-import type { MonacoEditorHandle, MonacoThemeName } from './utils/createMonacoEditor';
+import type { MonacoEditorHandle, MonacoThemeName } from './utils/createMonaco';
 import type * as Monaco from 'monaco-editor';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { EditorController, EditorSearchState, EditorSelection, EditorState } from '@/components/BEditor/types';
 import { useSettingStore } from '@/stores/ui/setting';
-import { createMonacoEditor } from './utils/createMonacoEditor';
+import { createMonacoEditor } from './utils/createMonaco';
 
 /**
  * 搜索匹配信息。
@@ -39,6 +39,16 @@ interface SearchMatchState {
 const SEARCH_DECORATION_CLASS_NAME = 'b-editor-monaco__search-match';
 
 /**
+ * BMonaco 编辑器运行时选项。
+ */
+interface BMonacoOptions {
+  /** 是否自动换行 */
+  wordWrap?: boolean;
+  /** 是否启用内置搜索（Ctrl+F/Cmd+F），默认 true */
+  search?: boolean;
+}
+
+/**
  * BMonaco 组件入参。
  */
 interface Props {
@@ -50,10 +60,13 @@ interface Props {
   language: string;
   /** 当前编辑文件状态。 */
   editorState: EditorState;
+  /** 编辑器运行时选项 */
+  options?: BMonacoOptions;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  editable: true
+  editable: true,
+  options: () => ({ wordWrap: false, search: true })
 });
 
 const emit = defineEmits<{
@@ -88,6 +101,16 @@ const searchState = ref<SearchMatchState>({
  * 根据当前应用主题解析 Monaco 主题名。
  */
 const monacoTheme = computed<MonacoThemeName>(() => (settingStore.resolvedTheme === 'dark' ? 'tibis-dark' : 'tibis-light'));
+
+/**
+ * 计算生效的自动换行配置。
+ */
+const effectiveWordWrap = computed<boolean>(() => props.options?.wordWrap ?? false);
+
+/**
+ * 计算生效的搜索配置，默认开启。
+ */
+const effectiveSearch = computed<boolean>(() => props.options?.search ?? true);
 
 /**
  * 构造 Monaco 搜索选项。
@@ -206,7 +229,9 @@ async function initializeEditor(): Promise<void> {
       value: props.value,
       language: props.language,
       readOnly: !props.editable,
-      theme: monacoTheme.value
+      theme: monacoTheme.value,
+      wordWrap: effectiveWordWrap.value,
+      search: effectiveSearch.value
     });
     bindModelChange();
     refreshSearchState(false);
@@ -462,6 +487,32 @@ watch(
   (editable: boolean): void => {
     editorHandle.value?.updateOptions({ readOnly: !editable });
   }
+);
+
+/**
+ * 动态响应 options 变化，实时更新编辑器配置。
+ */
+watch(
+  () => props.options,
+  (): void => {
+    const handle = editorHandle.value;
+    if (!handle) {
+      return;
+    }
+
+    handle.updateOptions({
+      wordWrap: effectiveWordWrap.value ? 'on' : 'off',
+      find: effectiveSearch.value
+        ? {
+            addExtraSpaceOnTop: false,
+            autoFindInSelection: 'never',
+            seedSearchStringFromSelection: 'always',
+            loop: true
+          }
+        : {}
+    });
+  },
+  { deep: true }
 );
 
 watch(monacoTheme, (theme: MonacoThemeName): void => {

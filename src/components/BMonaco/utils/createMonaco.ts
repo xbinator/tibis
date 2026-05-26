@@ -4,6 +4,7 @@
  */
 
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.main.js';
+import { noop } from 'lodash-es';
 
 /**
  * Monaco 编辑器主题名称。
@@ -24,6 +25,14 @@ export interface CreateMonacoEditorOptions {
   readOnly: boolean;
   /** 当前主题名。 */
   theme: MonacoThemeName;
+  /** 是否自动换行 */
+  wordWrap?: boolean;
+  /** 是否启用内置搜索（Ctrl+F/Cmd+F），默认 true */
+  search?: boolean;
+  /** 是否启用格式校验（如 JSON 语法校验），默认 true */
+  validation?: boolean;
+  /** 是否只显示滚动条，隐藏其他装饰（glyph margin、折叠等），默认 false */
+  scrollbarOnly?: boolean;
 }
 
 /**
@@ -35,7 +44,7 @@ export interface MonacoEditorHandle {
   /** 整体替换文本。 */
   setValue: (value: string) => void;
   /** 更新编辑器配置。 */
-  updateOptions: (options: { readOnly?: boolean }) => void;
+  updateOptions: (options: { readOnly?: boolean; wordWrap?: 'on' | 'off'; find?: Monaco.editor.IEditorFindOptions }) => void;
   /** 聚焦编辑器。 */
   focus: () => void;
   /** 读取底层编辑器实例。 */
@@ -212,6 +221,9 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
   monaco.editor.setTheme(options.theme);
 
   const model = monaco.editor.createModel(options.value, options.language);
+
+  const hasSearch = options.search !== false;
+
   const editor = monaco.editor.create(options.container, {
     model,
     // 关闭自动布局，避免内容超出容器。
@@ -232,8 +244,25 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
       bottom: 18
     },
     scrollBeyondLastLine: false,
-    tabSize: 2
+    tabSize: 2,
+    wordWrap: options.wordWrap ? 'on' : 'off',
+    ...(hasSearch
+      ? {
+          find: {
+            addExtraSpaceOnTop: false,
+            autoFindInSelection: 'never',
+            seedSearchStringFromSelection: 'always',
+            loop: true
+          }
+        }
+      : {})
   });
+
+  // 禁用内置搜索快捷键
+  if (!hasSearch) {
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, noop);
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, noop);
+  }
 
   return {
     getValue: () => model.getValue(),
