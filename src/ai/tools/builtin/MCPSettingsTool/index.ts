@@ -586,7 +586,14 @@ export function createBuiltinMCPSettingsTools(adapter: AIToolConfirmationAdapter
           adapter,
           request,
           operation: async () => {
-            const result = await getElectronAPI().refreshMcpDiscovery(existingServer);
+            const plainServer: MCPServerConfig = {
+              ...existingServer,
+              args: [...existingServer.args],
+              env: { ...existingServer.env },
+              toolAllowlist: [...existingServer.toolAllowlist],
+              oauth: existingServer.oauth ? { ...existingServer.oauth } : undefined
+            };
+            const result = await getElectronAPI().refreshMcpDiscovery(plainServer);
 
             return { refreshed: true, result };
           }
