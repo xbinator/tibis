@@ -1,7 +1,13 @@
 <template>
   <NodeViewWrapper :class="[name, { 'is-collapsed': isCollapsed, 'is-word-wrap': isWordWrap }]">
     <div :class="bem('header')" data-export-ignore contenteditable="false">
-      <BSelect v-model:value="selectedLanguage" :width="200" :options="languageOptions" @change="handleLanguageChange" />
+      <BSelect
+        v-model:value="selectedLanguage"
+        :width="200"
+        :options="languageOptions"
+        :get-popup-container="(triggerNode) => triggerNode.parentNode?.parentNode as HTMLElement"
+        @change="handleLanguageChange"
+      />
 
       <div class="flex-1"></div>
 

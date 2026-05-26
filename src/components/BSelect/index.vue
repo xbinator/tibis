@@ -10,6 +10,7 @@
     :size="size"
     :style="{ width: viewWidth }"
     :class="{ 'is-fill-color': isFillColor }"
+    :get-popup-container="getPopupContainer"
     @change="handleChange"
     @dropdown-visible-change="handleDropdownVisibleChange"
   >
@@ -71,6 +72,7 @@ interface Props {
   defaultValue?: string | number;
   disabled?: boolean;
   size?: 'large' | 'middle' | 'small';
+  getPopupContainer?: (triggerNode: HTMLElement) => HTMLElement;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -85,7 +87,8 @@ const props = withDefaults(defineProps<Props>(), {
   isFillColor: undefined,
   defaultValue: undefined,
   disabled: false,
-  size: 'middle'
+  size: 'middle',
+  getPopupContainer: undefined
 });
 
 const emit = defineEmits<{
