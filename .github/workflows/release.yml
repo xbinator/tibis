@@ -274,7 +274,7 @@ jobs:
       - prepare
       - build
       - publish
-    if: ${{ always() && cancelled() && github.event_name == 'workflow_dispatch' && needs.prepare.outputs.rollback_required == 'true' }}
+    if: ${{ always() && (cancelled() || failure()) && github.event_name == 'workflow_dispatch' && needs.prepare.outputs.rollback_required == 'true' }}
     runs-on: ubuntu-latest
 
     steps:

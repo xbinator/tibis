@@ -14,7 +14,7 @@
       </BSettingsSection>
 
       <!-- Skill 列表 -->
-      <BSettingsSection title="全局">
+      <BSettingsSection title="已安装">
         <div v-if="store.skills.length === 0" class="skill-settings__empty">
           {{ store.initialized ? '未发现任何 Skill' : '正在扫描…' }}
         </div>
