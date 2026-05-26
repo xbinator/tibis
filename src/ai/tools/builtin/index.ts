@@ -56,7 +56,13 @@ export const SDK_MANAGED_TOOL_NAMES = ['tavily_search', 'tavily_extract'] as con
  * @returns 是否为 SDK 托管工具
  */
 export function isSdkManagedToolName(toolName: string): boolean {
-  return SDK_MANAGED_TOOL_NAMES.includes(toolName as (typeof SDK_MANAGED_TOOL_NAMES)[number]);
+  if (SDK_MANAGED_TOOL_NAMES.includes(toolName as (typeof SDK_MANAGED_TOOL_NAMES)[number])) {
+    return true;
+  }
+  if (toolName.startsWith('mcp_')) {
+    return true;
+  }
+  return false;
 }
 
 /**

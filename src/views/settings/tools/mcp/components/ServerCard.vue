@@ -34,9 +34,9 @@
         <Icon icon="lucide:wrench" :width="14" class="server-card__tools-icon" />
         <div class="server-card__tools-title-text">已发现的工具</div>
 
-        <Icon :icon="toolsCollapsed ? 'lucide:chevron-right' : 'lucide:chevron-down'" :width="14" class="server-card__tools-arrow" />
+        <Icon :icon="toolsCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-right'" :width="14" class="server-card__tools-arrow" />
       </div>
-      <div v-if="!toolsCollapsed" class="server-card__tools-body">
+      <div v-if="toolsCollapsed" class="server-card__tools-body">
         <div v-for="tool in discoveredTools" :key="tool.toolName" class="server-card__tool-item">
           <div class="server-card__tool-name">{{ tool.toolName }}</div>
           <div v-if="tool.description" class="server-card__tool-desc">{{ tool.description }}</div>
@@ -280,6 +280,7 @@ const dropdownOptions = computed<DropdownOption[]>(() => {
 
 .server-card__tools-title-text {
   flex: 1;
+  user-select: none;
 }
 
 .server-card__tools-arrow {
