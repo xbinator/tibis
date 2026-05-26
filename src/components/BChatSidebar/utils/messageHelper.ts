@@ -101,7 +101,7 @@ export const is = {
    * 判断消息是否可持久化。
    */
   persistableMessage(message: Message): message is PersistableMessage {
-    return message.role === 'user' || message.role === 'assistant' || message.role === 'error' || message.role === 'compression';
+    return ['user', 'assistant', 'error', 'compression', 'interrupt'].includes(message.role);
   },
 
   /**
@@ -245,6 +245,10 @@ export const create = {
     const parts: ChatMessagePart[] = content ? [{ type: 'text', text: content }] : [];
 
     return createBase({ role: 'user', content, parts, references, finished: true });
+  },
+  // 创建中断消息
+  interruptMessage(): Message {
+    return createBase({ role: 'interrupt', content: '已中断', finished: true });
   }
 } as const;
 

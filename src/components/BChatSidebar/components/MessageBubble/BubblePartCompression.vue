@@ -35,6 +35,10 @@ const props = defineProps<Props>();
  * 压缩状态文案。
  */
 const statusLabel = computed<string>(() => {
+  if (props.message.role === 'interrupt') {
+    return '已中断';
+  }
+
   if (props.message.compression?.status === 'pending') {
     return '正在压缩上下文';
   }
@@ -54,6 +58,10 @@ const statusLabel = computed<string>(() => {
  * 压缩状态样式类名。
  */
 const statusClassName = computed<string>(() => {
+  if (props.message.role === 'interrupt') {
+    return 'cancelled';
+  }
+
   return props.message.compression?.status ?? 'success';
 });
 

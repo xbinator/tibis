@@ -23,7 +23,7 @@
       </template>
 
       <div :class="bem('parts')">
-        <BubblePartCompression v-if="isCompressionMessage" :message="message" />
+        <BubblePartCompression v-if="isCompressionMessage || isInterruptMessage" :message="message" />
 
         <template v-for="(item, index) in renderableParts" :key="`${item.type}-${index}`">
           <BubblePartUserInput v-if="isUserMessage" :part="item as ChatMessageTextPart" />
@@ -114,12 +114,14 @@ const isUserMessage = computed(() => props.message.role === 'user');
 const isAssistantMessage = computed(() => props.message.role === 'assistant');
 /** 是否为压缩消息 */
 const isCompressionMessage = computed(() => props.message.role === 'compression');
+/** 是否为中断消息 */
+const isInterruptMessage = computed(() => props.message.role === 'interrupt');
 /** 气泡位置：助手和错误消息靠左，用户消息靠右 */
 const bubblePlacement = computed(() => (isUserMessage.value ? 'right' : 'left'));
 /** 是否显示头部（用户消息且有文件时显示） */
 const showHeader = computed(() => isUserMessage.value && (imageFiles.value.length || otherFiles.value.length));
 /** 是否显示气泡容器（用户消息且有文件时显示） */
-const showContainer = computed(() => isCompressionMessage.value || !!props.message.parts?.length);
+const showContainer = computed(() => isCompressionMessage.value || isInterruptMessage.value || !!props.message.parts?.length);
 /** 是否显示助手工具栏 */
 const showAssistantToolbar = computed(() => props.message.finished === true && isAssistantMessage.value);
 
