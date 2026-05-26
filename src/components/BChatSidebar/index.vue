@@ -54,6 +54,7 @@
       <div class="b-chat-sidebar__input">
         <div class="b-chat-sidebar__input-container">
           <SkillIndicator :messages="messages" />
+
           <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
 
           <BPromptEditor
@@ -105,7 +106,6 @@ import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatMessage
 import { computed, h, onMounted, onUnmounted, provide, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { message } from 'ant-design-vue';
 import { createBuiltinTools } from '@/ai/tools/builtin';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
 import { getDefaultChatToolNames } from '@/ai/tools/policy';
@@ -279,7 +279,7 @@ function handleVoiceComplete(payload: { text: string }): void {
       replaceVoiceInsertionText('');
       activeVoiceInsertionRange.value = null;
     }
-    message.error('语音转写结果为空，请重试');
+    interactionAPI.showToast({ content: '语音转写结果为空，请重试', type: 'error' });
     return;
   }
 
@@ -302,7 +302,7 @@ const { inputContent, inputImages, ...inputEvents } = useChatInput({ focusInput 
 const { selectedModel, supportsVision, contextWindow, ...modelSelectionEvents } = useModelSelection();
 
 /** 图片上传 hook */
-const imageUpload = useImageUpload({ supportsVision, inputEvents: { ...inputEvents, inputImages } });
+const imageUpload = useImageUpload({ supportsVision, inputEvents: { ...inputEvents, inputImages }, showToast: interactionAPI.showToast });
 
 /** 当前是否允许提交消息（文本非空 或 有图片） */
 const canSubmit = computed<boolean>(() => !inputEvents.isEmpty() || inputEvents.hasImages());
@@ -691,7 +691,7 @@ const { handleSlashCommand } = useSlashCommands({
   isBusy: () => loading.value,
   onBusyCommandRejected: (commandId: string) => {
     if (commandId === 'compact') {
-      message.info('当前消息仍在生成中，请先停止或等待完成');
+      interactionAPI.showToast({ content: '当前消息仍在生成中，请先停止或等待完成', type: 'info' });
     }
   }
 });
