@@ -8,14 +8,11 @@ import type { Message } from '@/components/BChatSidebar/utils/types';
 const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
 
 /**
- * 判断 assistant 消息是否含有未完成的工具调用（有 tool-call 但没有对应 tool-result）。
+ * 判断 assistant 消息是否含有未完成的工具调用（有 tool 但 status 不是 done）。
  */
 function hasUnfinishedToolCalls(message: Message): boolean {
   if (message.role !== 'assistant') return false;
-  const partTypes = message.parts.map((p) => p.type);
-  const hasToolCall = partTypes.includes('tool-call');
-  const hasToolResult = partTypes.includes('tool-result');
-  return hasToolCall && !hasToolResult;
+  return message.parts.some((p) => p.type === 'tool' && p.status !== 'done' && !p.result);
 }
 
 /**
@@ -25,7 +22,7 @@ function hasAwaitingUserChoice(message: Message): boolean {
   if (message.role !== 'assistant') return false;
   return message.parts.some(
     (part) =>
-      part.type === 'tool-result' &&
+      part.type === 'tool' &&
       ASK_USER_QUESTION_TOOL_NAMES.has(part.toolName) &&
       typeof part.result === 'object' &&
       part.result !== null &&

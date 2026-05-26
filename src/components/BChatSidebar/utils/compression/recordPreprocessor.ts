@@ -65,11 +65,11 @@ function extractTrimmedText(message: Message): string {
         // 不将 raw thinking 持久化进摘要，仅保留 provider 明确返回的 reasoningSummary（如果可用）
         return '[thinking: 已省略模型推理过程]';
       }
-      if (part.type === 'tool-call') {
+      if (part.type === 'tool' && part.status !== 'done') {
         return `[tool-call: ${part.toolName}]`;
       }
-      if (part.type === 'tool-result') {
-        const summary = safeToolResultSummary(part);
+      if (part.type === 'tool' && part.result) {
+        const summary = safeToolResultSummary({ toolName: part.toolName, result: part.result });
         return summary ? `[tool-result: ${summary.toolName}, ${summary.status}, ${summary.message}]` : `[tool-result: ${part.toolName}]`;
       }
       if (part.type === 'error') {

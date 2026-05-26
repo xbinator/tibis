@@ -6,15 +6,7 @@ import type { Message } from './types';
 import type { FileReference } from '../types';
 import type { JSONValue, ModelMessage } from 'ai';
 import type { AIAwaitingUserChoiceQuestion, AIToolExecutionAwaitingUserInputResult } from 'types/ai';
-import type {
-  AIUserChoiceAnswerData,
-  ChatMessagePart,
-  ChatMessageRole,
-  ChatMessageShellOutputChunk,
-  ChatMessageToolCallPart,
-  ChatMessageToolInputPart,
-  ChatMessageToolResultPart
-} from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageRole, ChatMessageShellOutputChunk, ChatMessageToolPart } from 'types/chat';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { asyncTo } from '@/utils/asyncTo';
@@ -58,7 +50,7 @@ export type ToolModelMessageContent = Array<{
 }>;
 
 /** 工具结果类型 */
-export type ToolResult = Extract<ChatMessagePart, { type: 'tool-result' }>['result'];
+export type ToolResult = NonNullable<ChatMessageToolPart['result']>;
 
 /** 兼容历史消息与新工具实现的用户提问工具名称。 */
 const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
@@ -159,16 +151,26 @@ export const append = {
 
   /**
    * 将工具调用追加到消息片段。
+   * 若未找到已有 tool-input 片段则新建，否则将同一 toolCallId 的片段状态从 inputting 切换为 executing。
    */
   toolCallPart(message: Message, toolCallId: string, toolName: string, input: unknown): void {
-    message.parts.push({ type: 'tool-call', toolCallId, toolName, input });
+    const existingPart = message.parts.find((part): part is ChatMessageToolPart => part.type === 'tool' && part.toolCallId === toolCallId);
+    if (existingPart) {
+      existingPart.status = 'executing';
+      existingPart.toolName = toolName;
+      existingPart.input = input;
+      delete existingPart.inputText;
+      return;
+    }
+
+    message.parts.push({ type: 'tool', toolCallId, toolName, status: 'executing', input });
   },
 
   /**
    * 追加 Shell 命令实时输出片段。
    */
   shellOutputPart(message: Message, commandId: string, chunk: ChatMessageShellOutputChunk): void {
-    const existingPart = message.parts.find((part): part is ChatMessageToolCallPart => part.type === 'tool-call' && part.toolCallId === commandId);
+    const existingPart = message.parts.find((part): part is ChatMessageToolPart => part.type === 'tool' && part.toolCallId === commandId);
     if (!existingPart) {
       return;
     }
@@ -179,60 +181,48 @@ export const append = {
 
   /**
    * 追加工具输入预览片段。
+   * 流式开始时新建 type: 'tool'，status: 'inputting' 的片段。
    */
   toolInputStartPart(message: Message, toolCallId: string, toolName: string): void {
-    const existingPart = message.parts.find((part): part is ChatMessageToolInputPart => part.type === 'tool-input' && part.toolCallId === toolCallId);
+    const existingPart = message.parts.find((part): part is ChatMessageToolPart => part.type === 'tool' && part.toolCallId === toolCallId);
     if (existingPart) {
       existingPart.toolName = toolName;
       return;
     }
 
-    message.parts.push({ type: 'tool-input', toolCallId, toolName, inputText: '' });
+    message.parts.push({ type: 'tool', toolCallId, toolName, status: 'inputting', input: null, inputText: '' });
   },
 
   /**
    * 更新工具输入预览片段。
    */
   toolInputDeltaPart(message: Message, toolCallId: string, inputTextDelta: string, input: unknown): void {
-    const existingPart = message.parts.find((part): part is ChatMessageToolInputPart => part.type === 'tool-input' && part.toolCallId === toolCallId);
+    const existingPart = message.parts.find((part): part is ChatMessageToolPart => part.type === 'tool' && part.toolCallId === toolCallId);
     if (!existingPart) {
       return;
     }
 
-    existingPart.inputText += inputTextDelta;
+    existingPart.inputText = (existingPart.inputText ?? '') + inputTextDelta;
     if (input !== undefined) {
       existingPart.input = input;
     }
   },
 
   /**
-   * 移除工具输入预览片段。
-   */
-  removeToolInputPart(message: Message, toolCallId: string): void {
-    const previewIndex = message.parts.findIndex((part) => part.type === 'tool-input' && part.toolCallId === toolCallId);
-    if (previewIndex !== -1) {
-      message.parts.splice(previewIndex, 1);
-    }
-  },
-
-  /**
-   * 将工具结果追加到消息片段。
-   * 结果会被插入到对应 tool-call 之后；若找不到则追加到末尾。
+   * 将工具结果更新到对应 tool 片段。
+   * 将同一 toolCallId 的片段状态从 executing 切换为 done，并写入执行结果。
    */
   toolResultPart(message: Message, toolCallId: string, toolName: string, result: ToolResult): void {
-    const resultPart: Extract<ChatMessagePart, { type: 'tool-result' }> = {
-      type: 'tool-result',
-      toolCallId,
-      toolName,
-      result
-    };
-    const toolCallIndex = message.parts.findIndex((part) => part.type === 'tool-call' && part.toolCallId === toolCallId);
-
-    if (toolCallIndex === -1) {
-      message.parts.push(resultPart);
-    } else {
-      message.parts.splice(toolCallIndex + 1, 0, resultPart);
+    const existingPart = message.parts.find((part): part is ChatMessageToolPart => part.type === 'tool' && part.toolCallId === toolCallId);
+    if (existingPart) {
+      existingPart.status = 'done';
+      existingPart.toolName = toolName;
+      existingPart.result = result;
+      delete existingPart.inputText;
+      return;
     }
+
+    message.parts.push({ type: 'tool', toolCallId, toolName, status: 'done', input: null, result });
   }
 } as const;
 
@@ -260,8 +250,8 @@ export const create = {
 
 // ─── find / submit —— 用户选择题流程 ─────────────────────────────────────────
 
-export function isAwaitingUserChoiceResult(part: ChatMessagePart): part is ChatMessageToolResultPart & { result: AIToolExecutionAwaitingUserInputResult } {
-  return part.type === 'tool-result' && ASK_USER_QUESTION_TOOL_NAMES.has(part.toolName) && part.result.status === 'awaiting_user_input';
+export function isAwaitingUserChoiceResult(part: ChatMessagePart): part is ChatMessageToolPart & { result: AIToolExecutionAwaitingUserInputResult } {
+  return part.type === 'tool' && ASK_USER_QUESTION_TOOL_NAMES.has(part.toolName) && part.result?.status === 'awaiting_user_input';
 }
 
 export const userChoice = {
@@ -288,9 +278,9 @@ export const userChoice = {
         (part) => isAwaitingUserChoiceResult(part) && part.toolCallId === answer.toolCallId && part.result.data.questionId === answer.questionId
       );
 
-      if (resultPart?.type !== 'tool-result') continue;
+      if (resultPart?.type !== 'tool') continue;
 
-      resultPart.result = { toolName: resultPart.toolName, status: 'success', data: answer };
+      resultPart.result = { toolName: resultPart.toolName, status: 'success', data: answer } as ChatMessageToolPart['result'];
       return true;
     }
     return false;
@@ -403,12 +393,9 @@ export function sliceMessagesFromCompressionBoundary(sourceMessages: Message[]):
 /** 收集当前 assistant 片段中已完成配对的 tool-call ID */
 function collectCompletedToolCallIds(parts: ChatMessagePart[]): Set<string> {
   const completed = new Set<string>();
-  const pending = new Set<string>();
 
   for (const part of parts) {
-    if (part.type === 'tool-call') {
-      pending.add(part.toolCallId);
-    } else if (part.type === 'tool-result' && pending.has(part.toolCallId)) {
+    if (part.type === 'tool' && part.result) {
       completed.add(part.toolCallId);
     }
   }
@@ -444,9 +431,34 @@ function toAssistantModelMessages(parts: ChatMessagePart[]): ModelMessage[] {
       continue;
     }
 
-    if (part.type === 'tool-call') {
-      flushToolResults();
+    if (part.type === 'tool') {
+      // inputting 阶段（流式输入中）暂不生成任何模型消息
+      if (part.status === 'inputting') {
+        continue;
+      }
+
+      // 已完成且有结果的 tool 片段需同时生成 tool-call 和 tool-result
+      if (part.status === 'done' && part.result && completedToolCallIds.has(part.toolCallId)) {
+        flushToolResults();
+        assistantParts.push({
+          type: 'tool-call',
+          toolCallId: part.toolCallId,
+          toolName: part.toolName,
+          input: part.input
+        });
+        flushAssistant();
+        toolResultParts.push({
+          type: 'tool-result',
+          toolCallId: part.toolCallId,
+          toolName: part.toolName,
+          output: { type: 'json', value: toJsonValue(part.result) }
+        });
+        continue;
+      }
+
+      // executing 阶段（等待结果），若有结果则生成 tool-call
       if (completedToolCallIds.has(part.toolCallId)) {
+        flushToolResults();
         assistantParts.push({
           type: 'tool-call',
           toolCallId: part.toolCallId,
@@ -454,17 +466,6 @@ function toAssistantModelMessages(parts: ChatMessagePart[]): ModelMessage[] {
           input: part.input
         });
       }
-      continue;
-    }
-
-    if (part.type === 'tool-result') {
-      flushAssistant();
-      toolResultParts.push({
-        type: 'tool-result',
-        toolCallId: part.toolCallId,
-        toolName: part.toolName,
-        output: { type: 'json', value: toJsonValue(part.result) }
-      });
     }
   }
 
