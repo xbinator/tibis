@@ -646,8 +646,15 @@ async function handleChatSubmit(): Promise<void> {
 /**
  * 处理中止流式输出。
  */
-function handleAbort(): void {
+async function handleAbort(): Promise<void> {
   taskRuntime.abortActiveTask();
+
+  const sessionId = settingStore.chatSidebarActiveSessionId;
+  if (sessionId) {
+    const interruptMessage = create.interruptMessage();
+    messages.value.push(interruptMessage);
+    await chatStore.addSessionMessage(sessionId, interruptMessage);
+  }
 }
 
 /**

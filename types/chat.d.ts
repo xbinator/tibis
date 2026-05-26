@@ -12,7 +12,7 @@ export type ChatSessionType = 'assistant';
 /**
  * 聊天消息角色
  */
-export type ChatMessageRole = 'user' | 'system' | 'assistant' | 'error' | 'compression';
+export type ChatMessageRole = 'user' | 'system' | 'assistant' | 'error' | 'compression' | 'interrupt';
 
 /**
  * 压缩消息状态
@@ -270,12 +270,7 @@ export interface ChatMessageErrorPart {
 /**
  * 聊天消息结构化片段
  */
-export type ChatMessagePart =
-  | ChatMessageTextPart
-  | ChatMessageErrorPart
-  | ChatMessageThinkingPart
-  | ChatMessageToolPart
-  | ChatMessageConfirmationPart;
+export type ChatMessagePart = ChatMessageTextPart | ChatMessageErrorPart | ChatMessageThinkingPart | ChatMessageToolPart | ChatMessageConfirmationPart;
 
 /**
  * 聊天会话
