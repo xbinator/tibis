@@ -22,6 +22,8 @@ export type AIToolConfirmationDecision =
  * @description 描述需要用户确认的操作信息
  */
 export interface AIToolConfirmationRequest {
+  /** 关联的工具调用 ID，用于在展示确认卡时抑制对应 tool-call 的展示（可选） */
+  toolCallId?: string;
   /** 工具名称 */
   toolName: string;
   /** 确认弹窗标题 */

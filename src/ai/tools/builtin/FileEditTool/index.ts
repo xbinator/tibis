@@ -144,6 +144,7 @@ async function handleUnsavedEdit(
   const nextFile = applyStringReplacement(currentContent, oldString, newString, replaceAll);
 
   const request: AIToolConfirmationRequest = {
+    toolCallId: context?.toolCallId ?? '',
     toolName: EDIT_FILE_TOOL_NAME,
     title: 'AI 想要修改未保存草稿',
     description: `AI 请求修改未保存草稿：${targetPath}\n将 ${nextFile.replacedCount} 处匹配内容替换为新文本。`,
@@ -253,6 +254,7 @@ export function createBuiltinEditFileTool(options: CreateBuiltinEditFileToolOpti
 
       const nextFile = applyStringReplacement(currentFile.content, oldString, newString, replaceAll);
       const request: AIToolConfirmationRequest = {
+        toolCallId: context?.toolCallId ?? '',
         toolName: EDIT_FILE_TOOL_NAME,
         title: 'AI 想要修改本地文件',
         description: `AI 请求修改本地文件：${currentFile.path}\n将 ${nextFile.replacedCount} 处匹配内容替换为新文本。`,
