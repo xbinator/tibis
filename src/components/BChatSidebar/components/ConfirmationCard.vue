@@ -83,7 +83,9 @@ const manuallyCollapsed = ref(false);
 const manuallyExpanded = ref(false);
 const showCustomInput = ref(false);
 const customInput = ref('');
+
 const [, bem] = createNamespace('', 'confirm-card');
+
 const emit = defineEmits<{
   (e: 'confirmation-action', payload: ChatMessageConfirmationActionPayload): void;
   (e: 'custom-input-submit', payload: ChatMessageConfirmationCustomInputPayload): void;

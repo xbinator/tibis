@@ -1,20 +1,11 @@
 /* eslint-disable no-use-before-define */
 /**
  * @file confirmationController.ts
- * @description 聊天侧边栏会话级确认控制器，负责卡片状态与 Promise 桥接。
+ * @description 聊天侧边栏会话级确认控制器，通过底部弹出卡片处理用户确认。
  */
-import type { ChatMessageConfirmationPart, ChatMessageConfirmationStatus } from 'types/chat';
+import { ref, type Ref } from 'vue';
 import { nanoid } from 'nanoid';
 import type { AIToolConfirmationAdapter, AIToolConfirmationDecision, AIToolConfirmationRequest } from '@/ai/tools/confirmation';
-import type { Message } from '@/components/BChatSidebar/utils/types';
-
-/**
- * 确认控制器依赖。
- */
-interface ChatConfirmationControllerOptions {
-  /** 读取当前会话消息列表 */
-  getMessages: () => Message[];
-}
 
 /**
  * 挂起中的确认项。
@@ -29,116 +20,31 @@ interface PendingConfirmation {
 }
 
 /**
- * 查找最后一条 assistant 消息。
- * @param messages - 当前消息列表
- * @returns assistant 消息，不存在时返回 undefined
- */
-function findLastAssistantMessage(messages: Message[]): Message | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index].role === 'assistant') {
-      return messages[index];
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * 创建确认卡片片段。
- * @param confirmationId - 确认项 ID
- * @param request - 确认请求
- * @returns 确认卡片片段
- */
-function createConfirmationPart(confirmationId: string, request: AIToolConfirmationRequest): ChatMessageConfirmationPart {
-  return {
-    type: 'confirmation',
-    confirmationId,
-    toolName: request.toolName,
-    title: request.title,
-    description: request.description,
-    riskLevel: request.riskLevel === 'dangerous' ? 'dangerous' : 'write',
-    beforeText: request.beforeText,
-    afterText: request.afterText,
-    allowRemember: request.allowRemember,
-    rememberScopes: request.rememberScopes,
-    customInput: request.customInput,
-    confirmationStatus: 'pending',
-    executionStatus: 'idle'
-  };
-}
-
-/**
  * 创建会话级确认控制器。
- * @param options - 控制器依赖
  * @returns 确认控制器
  */
-export function createChatConfirmationController(options: ChatConfirmationControllerOptions) {
+export function createChatConfirmationController() {
   let pendingConfirmation: PendingConfirmation | null = null;
-  let activeConfirmationId: string | null = null;
 
-  /**
-   * 根据确认项 ID 查找确认卡片片段。
-   * @param confirmationId - 确认项 ID
-   * @returns 对应的确认卡片片段
-   */
-  function findConfirmationPart(confirmationId: string): ChatMessageConfirmationPart | undefined {
-    const messages = options.getMessages();
+  /** 当前等待确认的请求，供 UI 消费渲染底部弹出卡片 */
+  const currentConfirmationRequest: Ref<AIToolConfirmationRequest | null> = ref(null);
 
-    for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-      const message = messages[messageIndex];
-      const part = message.parts.find((item): item is ChatMessageConfirmationPart => item.type === 'confirmation' && item.confirmationId === confirmationId);
-
-      if (part) {
-        return part;
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * 将确认项更新为指定状态。
-   * @param confirmationId - 确认项 ID
-   * @param status - 确认状态
-   */
-  function updateConfirmationStatus(confirmationId: string, status: ChatMessageConfirmationStatus): void {
-    const part = findConfirmationPart(confirmationId);
-    if (!part) {
-      return;
-    }
-
-    part.confirmationStatus = status;
-  }
-
-  /**
-   * 更新确认项执行状态。
-   * @param confirmationId - 确认项 ID
-   * @param executionStatus - 执行状态
-   * @param executionError - 执行失败说明
-   */
-  function updateExecutionStatus(confirmationId: string, executionStatus: ChatMessageConfirmationPart['executionStatus'], executionError?: string): void {
-    const part = findConfirmationPart(confirmationId);
-    if (!part) {
-      return;
-    }
-
-    part.executionStatus = executionStatus;
-    part.executionError = executionError;
-  }
+  /** 当前等待确认的确认项 ID */
+  const currentConfirmationId: Ref<string | null> = ref(null);
 
   /**
    * 结束当前挂起确认项。
-   * @param status - 最终确认状态
    * @param decision - Promise 返回值
    */
-  function settlePendingConfirmation(status: ChatMessageConfirmationStatus, decision: AIToolConfirmationDecision): void {
+  function settlePendingConfirmation(decision: AIToolConfirmationDecision): void {
     if (!pendingConfirmation) {
       return;
     }
 
     const current = pendingConfirmation;
     pendingConfirmation = null;
-    updateConfirmationStatus(current.id, status);
+    currentConfirmationRequest.value = null;
+    currentConfirmationId.value = null;
     current.resolve(decision);
   }
 
@@ -150,13 +56,9 @@ export function createChatConfirmationController(options: ChatConfirmationContro
   async function requestConfirmation(request: AIToolConfirmationRequest): Promise<AIToolConfirmationDecision> {
     expirePendingConfirmation();
 
-    const message = findLastAssistantMessage(options.getMessages());
-    if (!message) {
-      return { approved: false };
-    }
-
     const confirmationId = nanoid();
-    message.parts.push(createConfirmationPart(confirmationId, request));
+    currentConfirmationRequest.value = request;
+    currentConfirmationId.value = confirmationId;
 
     return new Promise<AIToolConfirmationDecision>((resolve) => {
       pendingConfirmation = { id: confirmationId, request, resolve };
@@ -173,8 +75,7 @@ export function createChatConfirmationController(options: ChatConfirmationContro
       return;
     }
 
-    activeConfirmationId = confirmationId;
-    settlePendingConfirmation('approved', grantScope ? { approved: true, grantScope } : { approved: true });
+    settlePendingConfirmation(grantScope ? { approved: true, grantScope } : { approved: true });
   }
 
   /**
@@ -186,7 +87,7 @@ export function createChatConfirmationController(options: ChatConfirmationContro
       return;
     }
 
-    settlePendingConfirmation('cancelled', { approved: false });
+    settlePendingConfirmation({ approved: false });
   }
 
   /**
@@ -197,31 +98,7 @@ export function createChatConfirmationController(options: ChatConfirmationContro
       return;
     }
 
-    settlePendingConfirmation('expired', { approved: false });
-  }
-
-  /**
-   * 标记已确认项开始执行。
-   */
-  function markExecutionStart(): void {
-    if (!activeConfirmationId) {
-      return;
-    }
-
-    updateExecutionStatus(activeConfirmationId, 'running');
-  }
-
-  /**
-   * 标记已确认项执行完成。
-   * @param result - 执行结果
-   */
-  function markExecutionComplete(result: { status: 'success' | 'failure'; errorMessage?: string }): void {
-    if (!activeConfirmationId) {
-      return;
-    }
-
-    updateExecutionStatus(activeConfirmationId, result.status, result.errorMessage);
-    activeConfirmationId = null;
+    settlePendingConfirmation({ approved: false });
   }
 
   /**
@@ -229,7 +106,6 @@ export function createChatConfirmationController(options: ChatConfirmationContro
    */
   function dispose(): void {
     expirePendingConfirmation();
-    activeConfirmationId = null;
   }
 
   /**
@@ -239,20 +115,22 @@ export function createChatConfirmationController(options: ChatConfirmationContro
   function createAdapter(): AIToolConfirmationAdapter {
     return {
       confirm: requestConfirmation,
-      onExecutionStart: markExecutionStart,
-      onExecutionComplete: (_request, result) => {
-        markExecutionComplete(result);
+      onExecutionStart: () => {
+        // 底部弹窗模式下无需在消息中标记执行状态
+      },
+      onExecutionComplete: () => {
+        // 底部弹窗模式下无需在消息中标记执行状态
       }
     };
   }
 
   return {
+    currentConfirmationRequest,
+    currentConfirmationId,
     requestConfirmation,
     approveConfirmation,
     cancelConfirmation,
     expirePendingConfirmation,
-    markExecutionStart,
-    markExecutionComplete,
     dispose,
     createAdapter
   };
