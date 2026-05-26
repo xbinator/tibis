@@ -202,7 +202,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       return;
     }
 
-    append.removeToolInputPart(message, chunk.toolCallId);
     append.toolCallPart(message, chunk.toolCallId, chunk.toolName, chunk.input);
   }
 
@@ -229,7 +228,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     }
 
     const previewPart = message.parts.find(
-      (part): part is Extract<Message['parts'][number], { type: 'tool-input' }> => part.type === 'tool-input' && part.toolCallId === chunk.toolCallId
+      (part): part is Extract<Message['parts'][number], { type: 'tool' }> => part.type === 'tool' && part.toolCallId === chunk.toolCallId
     );
     const nextInputText = `${previewPart?.inputText ?? ''}${chunk.inputTextDelta}`;
     const parsed = await parsePartialJson(nextInputText);
@@ -247,7 +246,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       return;
     }
 
-    const previewPart = message.parts.find((part) => part.type === 'tool-input' && part.toolCallId === chunk.toolCallId);
+    const previewPart = message.parts.find((part) => part.type === 'tool' && part.toolCallId === chunk.toolCallId);
     if (!previewPart) {
       return;
     }
@@ -305,7 +304,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
    * 判断助手消息是否只停留在 Tavily 等远端工具阶段。
    */
   function hasSdkManagedToolResult(message: Message): boolean {
-    return message.parts.some((part) => part.type === 'tool-result' && isSdkManagedToolName(part.toolName));
+    return message.parts.some((part) => part.type === 'tool' && Boolean(part.result) && isSdkManagedToolName(part.toolName));
   }
 
   /**

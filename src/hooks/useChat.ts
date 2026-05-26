@@ -11,7 +11,6 @@ import type {
   AIStreamToolResultChunk
 } from 'types/ai';
 import { computed, toValue, ref, type MaybeRefOrGetter } from 'vue';
-import { message } from 'ant-design-vue';
 import { cloneDeep } from 'lodash-es';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { providerStorage } from '@/shared/storage';
@@ -82,7 +81,6 @@ export function useChat(options: UseStreamOptions) {
   };
 
   const _onError = (error: AIServiceError) => {
-    message.error(error.message);
     options.onError?.(error);
   };
 

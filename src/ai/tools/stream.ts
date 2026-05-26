@@ -127,7 +127,8 @@ export async function executeToolCall(call: AIStreamToolCallChunk, tools: AITool
 
   // 执行工具，等待用户输入结果仍作为普通终态 tool-result 进入消息历史。
   const executionInput = createExecutionInput(call.toolName, call.input, call.toolCallId);
-  const rawResult = await executor.execute(executionInput, context);
+  const enrichedContext = context ? { ...context, toolCallId: call.toolCallId } : undefined;
+  const rawResult = await executor.execute(executionInput, enrichedContext);
 
   return {
     toolCallId: call.toolCallId,
