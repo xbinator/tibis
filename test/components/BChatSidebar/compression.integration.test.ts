@@ -48,9 +48,39 @@ vi.mock('@/shared/storage', () => ({
 // Mock electron API
 vi.mock('@/shared/platform/electron-api', () => ({
   getElectronAPI: vi.fn().mockReturnValue({
-    aiInvoke: vi.fn().mockResolvedValue([null, { text: '{}' }])
+    aiInvoke: vi.fn().mockResolvedValue([null, { text: '{}' }]),
+    chatCompressionGetLatest: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
+    chatCompressionCreate: vi.fn().mockImplementation((record: Record<string, unknown>) => Promise.resolve({
+      ok: true,
+      data: {
+        id: 'record-1',
+        sessionId: 'session-1',
+        buildMode: record.buildMode ?? 'full',
+        derivedFromRecordId: undefined,
+        coveredStartMessageId: 'm1',
+        coveredEndMessageId: 'm14',
+        coveredUntilMessageId: 'm14',
+        sourceMessageIds: [],
+        preservedMessageIds: [],
+        recordText: '压缩摘要',
+        structuredSummary: undefined,
+        triggerReason: record.triggerReason ?? 'manual',
+        messageCountSnapshot: 14,
+        charCountSnapshot: 0,
+        schemaVersion: 2,
+        status: 'valid',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    })),
+    chatCompressionUpdateStatus: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
+    chatCompressionGetAll: vi.fn().mockResolvedValue({ ok: true, data: [] })
   }),
-  hasElectronAPI: vi.fn().mockReturnValue(false)
+  hasElectronAPI: vi.fn().mockReturnValue(false),
+  unwrap: (result: { ok: true; data: unknown } | { ok: false; error: string; code: string }) => {
+    if (!result.ok) throw new Error(result.error);
+    return result.data;
+  }
 }));
 
 /**

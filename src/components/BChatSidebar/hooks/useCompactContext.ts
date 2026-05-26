@@ -6,9 +6,10 @@ import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { CompressionRecord } from '../utils/compression/types';
 import type { Message } from '../utils/types';
 import type { ChatCompressionStatus, ChatMessageToolResultPart } from 'types/chat';
+import type { CompressionRecordStatus } from 'types/compression';
 import type { Ref } from 'vue';
 import { computed, ref } from 'vue';
-import { chatCompressionRecordsStorage } from '@/shared/storage/chat-compression-records';
+import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { createCompressionCoordinator } from '../utils/compression/coordinator';
 import { CompressionCancelledError, CompressionError, getCompressionErrorMessage } from '../utils/compression/error';
 import { createBase, findLatestCompressionBoundaryIndex } from '../utils/messageHelper';
@@ -329,8 +330,28 @@ export function useCompactContext(options: UseCompactContextOptions) {
   /** 压缩错误 */
   const error = ref<string | undefined>();
 
+  /** 基于 electronAPI 的压缩记录存储 adapter */
+  const electronAPIAdapter = {
+    async getLatestValidRecord(sessionId: string): Promise<CompressionRecord | undefined> {
+      const result = await getElectronAPI().chatCompressionGetLatest(sessionId);
+      return unwrap(result);
+    },
+    async createRecord(record: Omit<CompressionRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<CompressionRecord> {
+      const result = await getElectronAPI().chatCompressionCreate(record);
+      return unwrap(result);
+    },
+    async updateRecordStatus(id: string, status: CompressionRecordStatus, invalidReason?: string): Promise<void> {
+      const result = await getElectronAPI().chatCompressionUpdateStatus(id, status, invalidReason);
+      unwrap(result);
+    },
+    async getAllRecords(sessionId: string): Promise<CompressionRecord[]> {
+      const result = await getElectronAPI().chatCompressionGetAll(sessionId);
+      return unwrap(result);
+    }
+  };
+
   /** 压缩协调器（稳定引用，避免重复创建） */
-  const coordinator = computed(() => createCompressionCoordinator(chatCompressionRecordsStorage));
+  const coordinator = computed(() => createCompressionCoordinator(electronAPIAdapter));
 
   /**
    * 统一设置错误信息

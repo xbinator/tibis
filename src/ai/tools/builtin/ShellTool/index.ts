@@ -111,7 +111,7 @@ function formatSafetyFailureMessage(safety: ElectronShellCommandSafetyReport): s
 function formatConfirmationDescription(shell: ElectronShellCommandShell, cwd: string, timeoutMs: number, safety: ElectronShellCommandSafetyReport): string {
   const findingText = safety.findings.length ? safety.findings.map((finding) => `- [${finding.severity}] ${finding.message}`).join('\n') : '- 未发现阻断项';
 
-  return [`AI 请求在 Tibis 工作区内执行 Shell 命令。`, `Shell: ${shell}`, `执行目录: ${cwd}`, `Timeout: ${timeoutMs}ms`, `安全检查:`, findingText].join('\n');
+  return [`AI 请求在工作区内执行 Shell 命令。`, `Shell: ${shell}`, `执行目录: ${cwd}`, `Timeout: ${timeoutMs}ms`, `安全检查:`, findingText].join('\n');
 }
 
 /**
@@ -134,7 +134,7 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         properties: {
           shell: { type: 'string', enum: ['bash', 'powershell'], description: '命令使用的 shell。' },
           command: { type: 'string', description: '要执行的命令文本。' },
-          cwd: { type: 'string', description: '可选执行目录，必须位于 Tibis 工作区内；默认工作区目录。' },
+          cwd: { type: 'string', description: '可选执行目录，必须位于工作区内；默认工作区目录。' },
           timeoutMs: { type: 'number', description: '可选超时时间，默认 30000ms，范围 1000-120000ms。' }
         },
         required: ['shell', 'command'],
@@ -154,7 +154,7 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
       const workspaceRoot = options.getWorkspaceRoot?.() ?? null;
       let resolvedWorkspaceRoot = workspaceRoot;
 
-      // 调用方未提供工作区根目录时，回退到 Tibis 工作区
+      // 调用方未提供工作区根目录时，回退到工作区
       if (!resolvedWorkspaceRoot) {
         const tibisWorkspace = await native.getTibisWorkspaceRoot();
         if (tibisWorkspace) {
@@ -163,7 +163,7 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
       }
 
       if (!resolvedWorkspaceRoot) {
-        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', '无法初始化 Tibis 工作区目录，拒绝执行 Shell 命令');
+        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', '无法初始化工作区目录，拒绝执行 Shell 命令');
       }
 
       let timeoutMs: number;

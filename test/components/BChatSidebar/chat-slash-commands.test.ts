@@ -69,7 +69,7 @@ const {
       sourceMessageIds: ['message-1', 'message-2']
     }
   })),
-  getSessionUsageMock: vi.fn(async () => undefined),
+  getSessionUsageMock: vi.fn<() => Promise<{ inputTokens: number; outputTokens: number; totalTokens: number } | undefined>>(async () => undefined),
   getSessionsMock: vi.fn(async () => ({ items: [] })),
   loadProvidersMock: vi.fn(async () => undefined),
   getServiceModelConfigMock: vi.fn(async () => undefined),
@@ -265,22 +265,14 @@ vi.mock('@/shared/storage', () => ({
     getConfig: getServiceModelConfigMock,
     saveConfig: vi.fn()
   },
-  chatStorage: {
-    createSession: vi.fn(async () => undefined),
-    addMessage: vi.fn(async () => undefined),
-    updateSessionLastMessageAt: vi.fn(async () => undefined),
-    addSessionUsage: vi.fn(async () => undefined),
-    setSessionMessages: vi.fn(async () => undefined),
-    updateSessionUsage: vi.fn(async () => undefined),
-    updateSessionTitle: vi.fn(async () => undefined),
-    deleteSession: vi.fn(async () => undefined),
-    getMessages: vi.fn(async () => []),
-    getSessionsByType: vi.fn(async () => ({ items: [], hasMore: false })),
-    getSessionUsage: vi.fn(async () => undefined)
+  recentFilesStorage: {
+    getAllRecentFiles: vi.fn(async () => []),
+    addRecentFile: vi.fn(),
+    removeRecentFile: vi.fn()
   }
 }));
 
-vi.mock('@/stores/chat', () => ({
+vi.mock('@/stores/chat/session', () => ({
   useChatSessionStore: () => ({
     getSessionMessages: getSessionMessagesMock,
     getSessions: getSessionsMock,
@@ -297,11 +289,45 @@ vi.mock('@/stores/files', () => ({
   })
 }));
 
-const settingStoreState = {
+const okResult = <T>(data: T) => ({ ok: true as const, data });
+vi.mock('@/shared/platform/electron-api', () => ({
+  hasElectronAPI: () => true,
+  unwrap: (result: { ok: true; data: unknown } | { ok: false; error: string; code: string }) => {
+    if (!result.ok) throw new Error(result.error);
+    return result.data;
+  },
+  getElectronAPI: () => ({
+    getHomeDir: vi.fn(async () => '/home'),
+    getCwd: vi.fn(async () => '/cwd'),
+    watchDirectory: vi.fn(async () => undefined),
+    watchFile: vi.fn(async () => undefined),
+    unwatchDirectory: vi.fn(async () => undefined),
+    unwatchFile: vi.fn(async () => undefined),
+    onFileChanged: vi.fn(() => () => undefined),
+    onSkillChanged: vi.fn(() => () => undefined),
+    readFile: vi.fn(async () => ({ content: '', fileName: '', ext: '' })),
+    getPathStatus: vi.fn(async () => ({ exists: false, isDirectory: false, isFile: false })),
+    chatSessionList: vi.fn(async () => okResult({ items: [], hasMore: false })),
+    chatSessionCreate: vi.fn(async () => okResult(undefined)),
+    chatSessionUpdateTitle: vi.fn(async () => okResult(undefined)),
+    chatSessionDelete: vi.fn(async () => okResult(undefined)),
+    chatSessionUsageGet: vi.fn(async () => okResult(undefined)),
+    chatMessageList: vi.fn(async () => okResult([])),
+    chatMessageAdd: vi.fn(async () => okResult(undefined)),
+    chatMessageSetAll: vi.fn(async () => okResult(undefined)),
+    chatCompressionGetLatest: vi.fn(async () => okResult(undefined)),
+    chatCompressionCreate: vi.fn(async () => okResult({})),
+    chatCompressionUpdateStatus: vi.fn(async () => okResult(undefined)),
+    chatCompressionGetAll: vi.fn(async () => okResult([])),
+    syncRecentFiles: vi.fn(async () => undefined)
+  })
+}));
+
+const settingStoreState: { chatSidebarActiveSessionId: string | null } = {
   chatSidebarActiveSessionId: 'session-usage'
 };
 
-vi.mock('@/stores/setting', () => ({
+vi.mock('@/stores/ui/setting', () => ({
   useSettingStore: () => ({
     chatSidebarActiveSessionId: settingStoreState.chatSidebarActiveSessionId,
     setChatSidebarActiveSessionId: (sessionId: string | null) => {
@@ -458,28 +484,28 @@ describe('chatSlashCommands', () => {
         id: 'model',
         trigger: '/model',
         title: '模型',
-        description: '切换当前使用的模型。',
+        description: '切换当前使用的模型',
         type: 'action'
       },
       {
         id: 'usage',
         trigger: '/usage',
         title: '使用情况',
-        description: '显示当前会话的 token 使用情况。',
+        description: '显示当前会话的 token 使用情况',
         type: 'action'
       },
       {
         id: 'new',
         trigger: '/new',
         title: '新建聊天',
-        description: '开始一个新的聊天会话。',
+        description: '开始一个新的聊天会话',
         type: 'action'
       },
       {
         id: 'compact',
         trigger: '/compact',
         title: '压缩上下文',
-        description: '立即执行一次手动上下文压缩。',
+        description: '立即执行一次手动上下文压缩',
         type: 'action'
       }
     ]);
@@ -534,7 +560,7 @@ describe('chatSlashCommands', () => {
     getSessionUsageMock.mockImplementation(
       async () =>
         new Promise<{ inputTokens: number; outputTokens: number; totalTokens: number } | undefined>((resolve) => {
-          resolveUsage = resolve;
+          resolveUsage = (value) => resolve(value);
         })
     );
 
@@ -623,6 +649,10 @@ describe('chatSlashCommands', () => {
     await Promise.resolve();
     await Promise.resolve();
     await nextTick();
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+    await Promise.resolve();
     await nextTick();
 
     expect(cancelConfirmationMock).toHaveBeenCalledWith('confirmation-1');

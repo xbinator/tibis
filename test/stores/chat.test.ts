@@ -7,79 +7,48 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message } from '@/components/BChatSidebar/utils/types';
 
-type AddMessageMock = (message: ChatMessageRecord) => Promise<void>;
-type GetMessagesMock = (sessionId: string, cursor?: ChatMessageHistoryCursor) => Promise<ChatMessageRecord[]>;
-type GetSessionUsageMock = (sessionId: string) => Promise<NonNullable<Message['usage']> | undefined>;
-type SetSessionMessagesMock = (sessionId: string, messages: ChatMessageRecord[]) => Promise<void>;
-type UpdateSessionLastMessageAtMock = (sessionId: string, lastMessageAt: string) => Promise<void>;
-type AddSessionUsageMock = (sessionId: string, usage: NonNullable<Message['usage']>) => Promise<void>;
-type UpdateSessionUsageMock = (sessionId: string, usage: NonNullable<Message['usage']> | undefined) => Promise<void>;
-type UpdateSessionTitleMock = (sessionId: string, title: string) => Promise<void>;
+type HandlerResult<T> = { ok: true; data: T } | { ok: false; error: string; code: string };
+const ok = <T>(data: T): HandlerResult<T> => ({ ok: true, data });
 
-/**
- * 模拟消息写入存储层的行为。
- */
-const addMessageMock = vi.fn<AddMessageMock>();
+const chatMessageListMock = vi.fn<(sessionId: string, cursor?: ChatMessageHistoryCursor) => Promise<HandlerResult<ChatMessageRecord[]>>>();
+const chatSessionUsageGetMock = vi.fn<(sessionId: string) => Promise<HandlerResult<NonNullable<Message['usage']> | undefined>>>();
+const chatMessageAddMock = vi.fn<(message: ChatMessageRecord) => Promise<HandlerResult<void>>>();
+const chatMessageSetAllMock = vi.fn<(sessionId: string, messages: ChatMessageRecord[]) => Promise<HandlerResult<void>>>();
+const chatSessionUpdateTitleMock = vi.fn<(sessionId: string, title: string) => Promise<HandlerResult<void>>>();
+const chatSessionCreateMock = vi.fn<(session: unknown) => Promise<HandlerResult<void>>>();
+const chatSessionListMock = vi.fn<() => Promise<HandlerResult<unknown>>>();
+const chatSessionDeleteMock = vi.fn<() => Promise<HandlerResult<void>>>();
 
-/**
- * 模拟按游标读取会话消息的行为。
- */
-const getMessagesMock = vi.fn<GetMessagesMock>();
+const electronAPIMock = {
+  chatMessageList: chatMessageListMock,
+  chatSessionUsageGet: chatSessionUsageGetMock,
+  chatMessageAdd: chatMessageAddMock,
+  chatMessageSetAll: chatMessageSetAllMock,
+  chatSessionUpdateTitle: chatSessionUpdateTitleMock,
+  chatSessionCreate: chatSessionCreateMock,
+  chatSessionList: chatSessionListMock,
+  chatSessionDelete: chatSessionDeleteMock
+};
 
-/**
- * 妯℃嫙浼氳瘽 usage 璇诲彇琛屼负銆?
- */
-const getSessionUsageMock = vi.fn<GetSessionUsageMock>();
-
-/**
- * 模拟会话消息整体替换行为。
- */
-const setSessionMessagesMock = vi.fn<SetSessionMessagesMock>();
-
-/**
- * 模拟会话最近消息时间更新行为。
- */
-const updateSessionLastMessageAtMock = vi.fn<UpdateSessionLastMessageAtMock>();
-
-/**
- * 模拟会话 usage 累加行为。
- */
-const addSessionUsageMock = vi.fn<AddSessionUsageMock>();
-
-/**
- * 模拟会话 usage 重算写入行为。
- */
-const updateSessionUsageMock = vi.fn<UpdateSessionUsageMock>();
-
-/**
- * 模拟会话标题更新行为。
- */
-const updateSessionTitleMock = vi.fn<UpdateSessionTitleMock>();
-
-vi.mock('@/shared/storage', () => ({
-  chatStorage: {
-    getMessages: getMessagesMock,
-    getSessionUsage: getSessionUsageMock,
-    addMessage: addMessageMock,
-    setSessionMessages: setSessionMessagesMock,
-    updateSessionLastMessageAt: updateSessionLastMessageAtMock,
-    addSessionUsage: addSessionUsageMock,
-    updateSessionUsage: updateSessionUsageMock,
-    updateSessionTitle: updateSessionTitleMock
+vi.mock('@/shared/platform/electron-api', () => ({
+  getElectronAPI: () => electronAPIMock,
+  unwrap: (result: { ok: true; data: unknown } | { ok: false; error: string; code: string }) => {
+    if (!result.ok) throw new Error(result.error);
+    return result.data;
   }
 }));
 
 describe('useChatSessionStore', () => {
   beforeEach(() => {
     vi.resetModules();
-    addMessageMock.mockReset();
-    getMessagesMock.mockReset();
-    getSessionUsageMock.mockReset();
-    setSessionMessagesMock.mockReset();
-    updateSessionLastMessageAtMock.mockReset();
-    addSessionUsageMock.mockReset();
-    updateSessionUsageMock.mockReset();
-    updateSessionTitleMock.mockReset();
+    chatMessageListMock.mockReset();
+    chatSessionUsageGetMock.mockReset();
+    chatMessageAddMock.mockReset();
+    chatMessageSetAllMock.mockReset();
+    chatSessionUpdateTitleMock.mockReset();
+    chatSessionCreateMock.mockReset();
+    chatSessionListMock.mockReset();
+    chatSessionDeleteMock.mockReset();
     setActivePinia(createPinia());
   });
 
@@ -88,20 +57,22 @@ describe('useChatSessionStore', () => {
     const chatStore = useChatSessionStore();
     const cursor: ChatMessageHistoryCursor = { beforeCreatedAt: '2026-04-21T00:00:02.000Z', beforeId: 'message-2' };
 
-    getMessagesMock.mockResolvedValue([
-      {
-        id: 'message-1',
-        sessionId: 'session-1',
-        role: 'user',
-        content: '历史消息',
-        parts: [{ type: 'text', text: '历史消息' }],
-        createdAt: '2026-04-21T00:00:01.000Z'
-      }
-    ]);
+    chatMessageListMock.mockResolvedValue(
+      ok([
+        {
+          id: 'message-1',
+          sessionId: 'session-1',
+          role: 'user',
+          content: '历史消息',
+          parts: [{ type: 'text', text: '历史消息' }],
+          createdAt: '2026-04-21T00:00:01.000Z'
+        }
+      ])
+    );
 
     const messages = await chatStore.getSessionMessages('session-1', cursor);
 
-    expect(getMessagesMock).toHaveBeenCalledWith('session-1', cursor);
+    expect(chatMessageListMock).toHaveBeenCalledWith('session-1', cursor);
     expect(messages).toEqual([
       {
         id: 'message-1',
@@ -119,11 +90,11 @@ describe('useChatSessionStore', () => {
     const { useChatSessionStore } = await import('@/stores/chat/session');
     const chatStore = useChatSessionStore();
 
-    getSessionUsageMock.mockResolvedValue({ inputTokens: 4, outputTokens: 6, totalTokens: 10 });
+    chatSessionUsageGetMock.mockResolvedValue(ok({ inputTokens: 4, outputTokens: 6, totalTokens: 10 }));
 
     const usage = await chatStore.getSessionUsage('session-1');
 
-    expect(getSessionUsageMock).toHaveBeenCalledWith('session-1');
+    expect(chatSessionUsageGetMock).toHaveBeenCalledWith('session-1');
     expect(usage).toEqual({ inputTokens: 4, outputTokens: 6, totalTokens: 10 });
   });
 
@@ -139,15 +110,17 @@ describe('useChatSessionStore', () => {
       createdAt: '2026-04-21T00:00:00.000Z'
     };
 
+    chatMessageAddMock.mockResolvedValue(ok(undefined));
+
     await chatStore.addSessionMessage('session-1', message);
 
-    const persistedRecord = addMessageMock.mock.calls[0]?.[0] as ChatMessageRecord | undefined;
+    const persistedRecord = chatMessageAddMock.mock.calls[0]?.[0] as ChatMessageRecord | undefined;
 
     expect(persistedRecord?.thinking).toBe('先分析问题');
     expect(persistedRecord?.parts).toEqual([{ type: 'text', text: '最终答案' }]);
   });
 
-  it('adds assistant usage to the active session when a message completes', async () => {
+  it('adds assistant message via single IPC call (cascade handled in main process)', async () => {
     const { useChatSessionStore } = await import('@/stores/chat/session');
     const chatStore = useChatSessionStore();
     const message: Message = {
@@ -159,12 +132,16 @@ describe('useChatSessionStore', () => {
       createdAt: '2026-04-21T00:00:00.000Z'
     };
 
+    chatMessageAddMock.mockResolvedValue(ok(undefined));
+
     await chatStore.addSessionMessage('session-1', message);
 
-    expect(addSessionUsageMock).toHaveBeenCalledWith('session-1', { inputTokens: 3, outputTokens: 5, totalTokens: 8 });
+    expect(chatMessageAddMock).toHaveBeenCalledTimes(1);
+    const persistedRecord = chatMessageAddMock.mock.calls[0]?.[0] as ChatMessageRecord | undefined;
+    expect(persistedRecord?.usage).toEqual({ inputTokens: 3, outputTokens: 5, totalTokens: 8 });
   });
 
-  it('recalculates session usage from retained messages when session messages are replaced', async () => {
+  it('replaces session messages via single IPC call (cascade handled in main process)', async () => {
     const { useChatSessionStore } = await import('@/stores/chat/session');
     const chatStore = useChatSessionStore();
     const messages: Message[] = [
@@ -186,17 +163,22 @@ describe('useChatSessionStore', () => {
       }
     ];
 
+    chatMessageSetAllMock.mockResolvedValue(ok(undefined));
+
     await chatStore.setSessionMessages('session-1', messages);
 
-    expect(updateSessionUsageMock).toHaveBeenCalledWith('session-1', { inputTokens: 5, outputTokens: 9, totalTokens: 14 });
+    expect(chatMessageSetAllMock).toHaveBeenCalledTimes(1);
+    expect(chatMessageSetAllMock).toHaveBeenCalledWith('session-1', expect.any(Array));
   });
 
   it('updates a session title without rewriting the whole session', async () => {
     const { useChatSessionStore } = await import('@/stores/chat/session');
     const chatStore = useChatSessionStore();
 
+    chatSessionUpdateTitleMock.mockResolvedValue(ok(undefined));
+
     await chatStore.updateSessionTitle('session-1', '自动生成标题');
 
-    expect(updateSessionTitleMock).toHaveBeenCalledWith('session-1', '自动生成标题');
+    expect(chatSessionUpdateTitleMock).toHaveBeenCalledWith('session-1', '自动生成标题');
   });
 });
