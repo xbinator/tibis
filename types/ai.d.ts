@@ -121,6 +121,8 @@ export interface EditorSelection {
  * @description 工具所需的文档和编辑器信息。
  */
 export interface AIToolContext {
+  /** 当前工具调用 ID，每个工具调用执行时由调用方注入 */
+  toolCallId?: string;
   /** 当前文档信息。 */
   document: {
     /** 文档标识符。 */

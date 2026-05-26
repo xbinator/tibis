@@ -129,49 +129,26 @@ export interface ChatMessageShellOutputChunk {
 }
 
 /**
- * 聊天消息工具调用片段
+ * 聊天消息统一工具片段。
+ * 合并原 tool-input / tool-call / tool-result 为同一片段，通过 status 追踪工具执行生命周期。
  */
-export interface ChatMessageToolCallPart {
+export interface ChatMessageToolPart {
   /** 片段类型 */
-  type: 'tool-call';
+  type: 'tool';
   /** 工具调用 ID */
   toolCallId: string;
   /** 工具名称 */
   toolName: string;
-  /** 工具输入参数 */
+  /** 工具执行生命周期：inputting（流式输入中）→ executing（执行中）→ done（已完成） */
+  status: 'inputting' | 'executing' | 'done';
+  /** 工具输入参数（inputting 阶段可能不完整） */
   input: unknown;
+  /** 流式输入文本片段，仅 inputting 阶段使用 */
+  inputText?: string;
+  /** 工具执行结果，仅 status === 'done' 时存在 */
+  result?: AIToolExecutionResult;
   /** Shell 命令实时输出缓冲，仅 run_shell_command 使用 */
   shellOutput?: ChatMessageShellOutputChunk[];
-}
-
-/**
- * 聊天消息工具输入预览片段。
- */
-export interface ChatMessageToolInputPart {
-  /** 片段类型 */
-  type: 'tool-input';
-  /** 工具调用 ID */
-  toolCallId: string;
-  /** 工具名称 */
-  toolName: string;
-  /** 工具输入的原始增量文本 */
-  inputText: string;
-  /** 当前已解析出的部分输入 */
-  input?: unknown;
-}
-
-/**
- * 聊天消息工具结果片段
- */
-export interface ChatMessageToolResultPart {
-  /** 片段类型 */
-  type: 'tool-result';
-  /** 工具调用 ID */
-  toolCallId: string;
-  /** 工具名称 */
-  toolName: string;
-  /** 工具执行结果 */
-  result: AIToolExecutionResult;
 }
 
 /**
@@ -253,6 +230,8 @@ export interface ChatMessageConfirmationCustomInputConfig {
 export interface ChatMessageConfirmationPart {
   /** 片段类型 */
   type: 'confirmation';
+  /** 关联的工具调用 ID，用于在展示确认卡时抑制对应 tool-call 的展示（可选） */
+  toolCallId?: string;
   /** 确认项唯一标识 */
   confirmationId: string;
   /** 工具名称 */
@@ -295,9 +274,7 @@ export type ChatMessagePart =
   | ChatMessageTextPart
   | ChatMessageErrorPart
   | ChatMessageThinkingPart
-  | ChatMessageToolInputPart
-  | ChatMessageToolCallPart
-  | ChatMessageToolResultPart
+  | ChatMessageToolPart
   | ChatMessageConfirmationPart;
 
 /**
