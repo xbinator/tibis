@@ -25,23 +25,12 @@
       <div :class="bem('parts')">
         <BubblePartCompression v-if="isCompressionMessage" :message="message" />
 
-        <template v-for="(item, index) in message.parts" :key="`${item.type}-${index}`">
+        <template v-for="(item, index) in renderableParts" :key="`${item.type}-${index}`">
           <BubblePartUserInput v-if="isUserMessage" :part="item as ChatMessageTextPart" />
 
           <BubblePartText v-else-if="!isCompressionMessage && (item.type === 'text' || item.type === 'error')" :item="item" :part="item" />
 
           <BubblePartThinking v-else-if="!isCompressionMessage && item.type === 'thinking'" :part="item" />
-
-          <BubblePartToolInput v-else-if="!isCompressionMessage && item.type === 'tool-input'" :part="item as ChatMessageToolInputPart" />
-
-          <BubblePartToolCall v-else-if="!isCompressionMessage && item.type === 'tool-call'" :part="item" />
-
-          <ConfirmationCard
-            v-else-if="!isCompressionMessage && item.type === 'confirmation'"
-            :part="item"
-            @confirmation-action="$emit('confirmation-action', $event.confirmationId, $event.action)"
-            @custom-input-submit="$emit('confirmation-custom-input', $event)"
-          />
 
           <QuestionCard
             v-else-if="!isCompressionMessage && isAwaitingUserChoicePart(item)"
@@ -50,7 +39,7 @@
             @submit-choice="$emit('user-choice-submit', $event)"
           />
 
-          <BubblePartToolResult v-else-if="!isCompressionMessage && item.type === 'tool-result'" :part="item" />
+          <BubblePartTool v-else-if="!isCompressionMessage && item.type === 'tool'" :part="item" />
         </template>
       </div>
     </BBubble>
@@ -79,15 +68,7 @@
  */
 import type { Message } from '../utils/types';
 import type { AIToolExecutionAwaitingUserInputResult } from 'types/ai';
-import type {
-  AIUserChoiceAnswerData,
-  ChatMessageConfirmationAction,
-  ChatMessageConfirmationCustomInputPayload,
-  ChatMessagePart,
-  ChatMessageTextPart,
-  ChatMessageToolInputPart,
-  ChatMessageToolResultPart
-} from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageTextPart, ChatMessageToolPart } from 'types/chat';
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import BBubble from '@/components/BBubble/index.vue';
@@ -96,13 +77,10 @@ import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
-import ConfirmationCard from './ConfirmationCard.vue';
 import BubblePartCompression from './MessageBubble/BubblePartCompression.vue';
 import BubblePartText from './MessageBubble/BubblePartText.vue';
 import BubblePartThinking from './MessageBubble/BubblePartThinking.vue';
-import BubblePartToolCall from './MessageBubble/BubblePartToolCall.vue';
-import BubblePartToolInput from './MessageBubble/BubblePartToolInput.vue';
-import BubblePartToolResult from './MessageBubble/BubblePartToolResult.vue';
+import BubblePartTool from './MessageBubble/BubblePartTool.vue';
 import BubblePartUserInput from './MessageBubble/BubblePartUserInput.vue';
 import QuestionCard from './QuestionCard.vue';
 
@@ -121,8 +99,6 @@ const props = defineProps<{
 defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
-  (e: 'confirmation-action', confirmationId: string, action: ChatMessageConfirmationAction): void;
-  (e: 'confirmation-custom-input', payload: ChatMessageConfirmationCustomInputPayload): void;
   (e: 'user-choice-submit', answer: AIUserChoiceAnswerData): void;
 }>();
 
@@ -158,9 +134,14 @@ const imagePreviewList = computed(() => imageFiles.value.map((file) => file.url 
  * 判断片段是否为等待用户选择的工具结果。
  * @param part - 消息片段
  */
-function isAwaitingUserChoicePart(part: ChatMessagePart): part is ChatMessageToolResultPart & { result: AIToolExecutionAwaitingUserInputResult } {
+function isAwaitingUserChoicePart(part: ChatMessagePart): part is ChatMessageToolPart & { result: AIToolExecutionAwaitingUserInputResult } {
   return isAwaitingUserChoiceResult(part);
 }
+
+/**
+ * 过滤后的消息片段。排除已移至底部弹窗的 confirmation 片段。
+ */
+const renderableParts = computed(() => props.message.parts.filter((p) => p.type !== 'confirmation'));
 
 /**
  * 打开图片预览

@@ -33,12 +33,12 @@
           :on-load-history="handleLoadHistory"
           @edit="handleChatEdit"
           @regenerate="handleChatRegenerate"
-          @confirmation-action="handleConfirmationAction"
-          @confirmation-custom-input="handleConfirmationCustomInput"
           @user-choice-submit="handleChatUserChoiceSubmit"
         />
 
         <div class="b-chat-sidebar__floating-container">
+          <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
+
           <UsagePanel
             v-if="usagePanel.open.value"
             :loading="usagePanel.loading.value"
@@ -100,7 +100,7 @@
 
 <script setup lang="ts">
 import type { Message } from './utils/types';
-import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatMessageConfirmationCustomInputPayload } from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
 import { computed, h, onMounted, onUnmounted, provide, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
@@ -118,6 +118,7 @@ import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
+import ConfirmationSheet from './components/ConfirmationSheet.vue';
 import ConversationView from './components/ConversationView.vue';
 import ImagePreview from './components/ImagePreview.vue';
 import InputToolbar from './components/InputToolbar.vue';
@@ -176,9 +177,7 @@ const sessionHistoryRef = ref<InstanceType<typeof SessionHistory>>();
 const { setLoadedMessages, fetchAllPriorHistory, messages, hasMoreHistory, loadHistory } = useChatHistory();
 
 /** 确认控制器，管理工具调用的用户确认流程 */
-const confirmationController = createChatConfirmationController({
-  getMessages: () => messages.value
-});
+const confirmationController = createChatConfirmationController();
 
 /** 聚焦输入框 */
 function focusInput(): void {
@@ -363,11 +362,13 @@ const tools = createBuiltinTools({
 });
 
 /**
- * 处理聊天流中的确认卡片操作。
- * @param confirmationId - 确认项 ID
+ * 处理底部确认弹窗操作。
  * @param action - 用户操作（approve/approve-session/approve-always/cancel）
  */
-async function handleConfirmationAction(confirmationId: string, action: ChatMessageConfirmationAction): Promise<void> {
+function handleConfirmationSheetAction(action: ChatMessageConfirmationAction): void {
+  const confirmationId = confirmationController.currentConfirmationId.value;
+  if (!confirmationId) return;
+
   if (action === 'approve') {
     confirmationController.approveConfirmation(confirmationId);
   } else if (action === 'approve-session') {
@@ -377,6 +378,13 @@ async function handleConfirmationAction(confirmationId: string, action: ChatMess
   } else {
     confirmationController.cancelConfirmation(confirmationId);
   }
+}
+
+/**
+ * 处理聊天流中的确认卡片操作（已废弃，由底部弹窗接管）。
+ */
+function handleConfirmationAction(_confirmationId: string, action: ChatMessageConfirmationAction): void {
+  handleConfirmationSheetAction(action);
 }
 
 /**
@@ -622,15 +630,6 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
     taskRuntime.finishTask('chat');
     throw error;
   }
-}
-
-/**
- * 处理确认卡片中的自定义输入提交。
- * @param payload - 自定义输入载荷
- */
-async function handleConfirmationCustomInput(payload: ChatMessageConfirmationCustomInputPayload): Promise<void> {
-  confirmationController.cancelConfirmation(payload.confirmationId);
-  await submitUserTextMessage(payload.text, [], false);
 }
 
 /**
