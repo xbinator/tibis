@@ -2,7 +2,7 @@
   <BubblePart type="tool-input" :has-content="hasContent" :default-collapsed="false">
     <template #title>
       <Icon icon="lucide:loader-circle" width="14" height="14" :class="bem('icon')" />
-      <span :class="bem('title')">{{ title }}</span>
+      <BTruncateText :class="bem('name')" :text="title" />
     </template>
 
     <BubblePartToolCode v-if="hasContent" :value="previewValue" />

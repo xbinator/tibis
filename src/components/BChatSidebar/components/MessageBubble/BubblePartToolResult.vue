@@ -2,7 +2,7 @@
   <BubblePart type="tool-result" has-content>
     <template #title>
       <Icon :icon="part.result.status === 'success' ? 'lucide:check-circle-2' : 'lucide:circle-alert'" :class="bem('icon')" width="14" height="14" />
-      <span :class="bem('name')">{{ title }}</span>
+      <BTruncateText :class="bem('name')" :text="title" />
       <span v-if="part.result.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
 
