@@ -1,8 +1,8 @@
 <template>
   <BubblePart type="tool-call" :has-content="hasContent">
     <template #title>
-      <Icon icon="lucide:wrench" width="14" height="14" class="bubble-part-tool-call__icon" />
-      <span>{{ title }}</span>
+      <Icon icon="lucide:wrench" :class="bem('icon')" width="14" height="14" />
+      <span :class="bem('name')">{{ title }}</span>
     </template>
     <BubblePartToolCode :value="part.input" />
   </BubblePart>
@@ -16,6 +16,7 @@
 import type { ChatMessageToolCallPart } from 'types/chat';
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
+import { createNamespace } from '@/utils/namespace';
 import { hasStructuredValueContent } from '../../utils/messagePart';
 import { getActionLabel } from '../../utils/toolLabels';
 import BubblePart from './BubblePart.vue';
@@ -30,6 +31,8 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {});
 
+const [, bem] = createNamespace('', 'bubble-part-tool-call');
+
 const hasContent = computed(() => hasStructuredValueContent(props.part.input));
 
 const title = computed(() => {
@@ -38,3 +41,17 @@ const title = computed(() => {
   return `调用工具：${alias}`;
 });
 </script>
+
+<style scoped lang="less">
+.bubble-part-tool-call__icon {
+  flex-shrink: 0;
+}
+
+.bubble-part-tool-call__name {
+  flex: 1;
+  width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

@@ -90,6 +90,7 @@ const hasContent = computed(() => hasStructuredValueContent(previewValue.value))
 
 <style scoped lang="less">
 .message-bubble-tool-input__icon {
+  flex-shrink: 0;
   animation: message-bubble-tool-input-spin 1.2s linear infinite;
 }
 
