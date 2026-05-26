@@ -6,10 +6,10 @@
   <div v-if="activeSkills.length > 0" class="skill-indicator">
     <ATooltip v-for="skill in activeSkills" :key="skill.name" placement="top">
       <template #title>{{ skill.description }}</template>
-      <span class="skill-indicator__tag" @click="handleClose(skill.name)">
+      <span class="skill-indicator__tag">
         <Icon icon="lucide:zap" :width="10" />
         {{ skill.name }}
-        <Icon icon="lucide:x" :width="10" class="skill-indicator__close" />
+        <Icon icon="lucide:x" :width="10" class="skill-indicator__close" @click="handleClose(skill.name)" />
       </span>
     </ATooltip>
   </div>
