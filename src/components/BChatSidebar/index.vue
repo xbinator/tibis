@@ -34,11 +34,11 @@
           @edit="handleChatEdit"
           @regenerate="handleChatRegenerate"
           @user-choice-submit="handleChatUserChoiceSubmit"
-        />
+        >
+          <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
+        </ConversationView>
 
         <div class="b-chat-sidebar__floating-container">
-          <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
-
           <UsagePanel
             v-if="usagePanel.open.value"
             :loading="usagePanel.loading.value"
