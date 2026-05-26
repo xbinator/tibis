@@ -108,15 +108,11 @@ describe('BChat message helpers', () => {
         createdAt: '2026-04-21T00:00:01.000Z',
         parts: [
           {
-            type: 'tool-call',
+            type: 'tool',
+            status: 'done',
             toolCallId: 'call_function_z4c3rw63ddmt_1',
             toolName: 'read_current_document',
-            input: {}
-          },
-          {
-            type: 'tool-result',
-            toolCallId: 'call_function_z4c3rw63ddmt_1',
-            toolName: 'read_current_document',
+            input: {},
             result: {
               toolName: 'read_current_document',
               status: 'success',
@@ -217,7 +213,8 @@ describe('BChat message helpers', () => {
         parts: [
           { type: 'text', text: '我来帮你处理。' },
           {
-            type: 'tool-call',
+            type: 'tool',
+            status: 'executing',
             toolCallId: 'call_function_z4c3rw63ddmt_2',
             toolName: 'read_current_document',
             input: { path: '/docs/guide.md' }
@@ -274,7 +271,8 @@ describe('BChat message helpers', () => {
         createdAt: '2026-04-21T00:00:01.000Z',
         parts: [
           {
-            type: 'tool-call',
+            type: 'tool',
+            status: 'executing',
             toolCallId: 'call_function_1u1uzdwv6q8z_1',
             toolName: 'read_current_document',
             input: {}
@@ -296,15 +294,11 @@ describe('BChat message helpers', () => {
         createdAt: '2026-04-21T00:00:01.000Z',
         parts: [
           {
-            type: 'tool-call',
+            type: 'tool',
+            status: 'done',
             toolCallId: 'call_function_1u1uzdwv6q8z_1',
             toolName: 'update_settings',
-            input: { key: 'theme', value: 'auto' }
-          },
-          {
-            type: 'tool-result',
-            toolCallId: 'call_function_1u1uzdwv6q8z_1',
-            toolName: 'update_settings',
+            input: { key: 'theme', value: 'auto' },
             result: {
               toolName: 'update_settings',
               status: 'failure',
@@ -312,7 +306,8 @@ describe('BChat message helpers', () => {
             }
           },
           {
-            type: 'tool-call',
+            type: 'tool',
+            status: 'executing',
             toolCallId: 'call_function_1u1uzdwv6q8z_2',
             toolName: 'update_settings',
             input: { key: 'theme', value: 'auto' }
@@ -366,7 +361,8 @@ describe('BChat message helpers', () => {
       createdAt: '2026-04-21T00:00:01.000Z',
       parts: [
         {
-          type: 'tool-call',
+          type: 'tool',
+          status: 'executing',
           toolCallId: 'call_function_z4c3rw63ddmt_1',
           toolName: 'read_current_document',
           input: {}

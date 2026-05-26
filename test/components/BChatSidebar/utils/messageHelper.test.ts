@@ -268,7 +268,7 @@ describe('append.toolCallPart', () => {
       createdAt: new Date().toISOString()
     };
     append.toolCallPart(message, 'tool-call-1', 'test_tool', { arg1: 'value1' });
-    expect(message.parts).toEqual([{ type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'test_tool', input: { arg1: 'value1' } }]);
+    expect(message.parts).toEqual([{ type: 'tool', status: 'executing', toolCallId: 'tool-call-1', toolName: 'test_tool', input: { arg1: 'value1' } }]);
   });
 
   it('appends multiple tool calls', () => {
@@ -298,17 +298,17 @@ describe('append.toolResultPart', () => {
     };
     append.toolResultPart(message, 'tool-call-1', 'test_tool', { status: 'success', toolName: 'test_tool', data: {} });
     expect(message.parts).toEqual([
-      { type: 'tool-result', toolCallId: 'tool-call-1', toolName: 'test_tool', result: { status: 'success', toolName: 'test_tool', data: {} } }
+      { type: 'tool', status: 'done', toolCallId: 'tool-call-1', toolName: 'test_tool', result: { status: 'success', toolName: 'test_tool', data: {} }, input: null }
     ]);
   });
 
-  it('inserts tool result after matching tool call', () => {
+  it('updates tool part in place when matching tool call exists', () => {
     const message: Message = {
       id: 'test-id',
       role: 'assistant',
       content: '',
       parts: [
-        { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'test_tool', input: {} },
+        { type: 'tool', status: 'executing', toolCallId: 'tool-call-1', toolName: 'test_tool', input: {} },
         { type: 'text', text: 'some text' }
       ],
       loading: false,
@@ -316,8 +316,7 @@ describe('append.toolResultPart', () => {
     };
     append.toolResultPart(message, 'tool-call-1', 'test_tool', { status: 'success', toolName: 'test_tool', data: {} });
     expect(message.parts).toEqual([
-      { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'test_tool', input: {} },
-      { type: 'tool-result', toolCallId: 'tool-call-1', toolName: 'test_tool', result: { status: 'success', toolName: 'test_tool', data: {} } },
+      { type: 'tool', status: 'done', toolCallId: 'tool-call-1', toolName: 'test_tool', input: {}, result: { status: 'success', toolName: 'test_tool', data: {} } },
       { type: 'text', text: 'some text' }
     ]);
   });
@@ -372,7 +371,7 @@ describe('userChoice.findPending', () => {
     expect(userChoice.findPending(messages)).toBeNull();
   });
 
-  it('finds pending ask_user_question in last message', () => {
+  it('finds pending user choice with ask_user_question toolName', () => {
     const questionData = {
       questionId: 'q1',
       toolCallId: 'tc1',
@@ -386,9 +385,11 @@ describe('userChoice.findPending', () => {
       content: '',
       parts: [
         {
-          type: 'tool-result',
+          type: 'tool',
+          status: 'done',
           toolCallId: 'tc1',
           toolName: 'ask_user_question',
+          input: {},
           result: {
             toolName: 'ask_user_question',
             status: 'awaiting_user_input',
@@ -410,9 +411,11 @@ describe('userChoice.findPending', () => {
       content: '',
       parts: [
         {
-          type: 'tool-result',
+          type: 'tool',
+          status: 'done',
           toolCallId: 'tc1',
           toolName: 'ask_user_question',
+          input: {},
           result: {
             status: 'success',
             toolName: 'ask_user_question',
@@ -446,9 +449,11 @@ describe('userChoice.submitAnswer', () => {
       content: '',
       parts: [
         {
-          type: 'tool-result',
+          type: 'tool',
+          status: 'done',
           toolCallId: 'tc1',
           toolName: 'ask_user_question',
+          input: {},
           result: {
             toolName: 'ask_user_question',
             status: 'awaiting_user_input',
@@ -469,8 +474,8 @@ describe('userChoice.submitAnswer', () => {
 
     const result = userChoice.submitAnswer(messages, answer);
     expect(result).toBe(true);
-    const toolResultPart = message.parts[0] as Extract<ChatMessagePart, { type: 'tool-result' }>;
-    expect(toolResultPart.result.status).toBe('success');
+    const toolResultPart = message.parts[0] as Extract<ChatMessagePart, { type: 'tool' }>;
+    expect(toolResultPart.result!.status).toBe('success');
   });
 
   it('returns false when no matching pending question', () => {
@@ -520,8 +525,7 @@ describe('convert.toModelMessages', () => {
       role: 'assistant',
       content: '',
       parts: [
-        { type: 'tool-call', toolCallId: 'tc1', toolName: 'test_tool', input: { arg: 'value' } },
-        { type: 'tool-result', toolCallId: 'tc1', toolName: 'test_tool', result: { status: 'success', toolName: 'test_tool', data: {} } }
+        { type: 'tool', status: 'done', toolCallId: 'tc1', toolName: 'test_tool', input: { arg: 'value' }, result: { status: 'success', toolName: 'test_tool', data: {} } }
       ],
       loading: false,
       createdAt: new Date().toISOString()

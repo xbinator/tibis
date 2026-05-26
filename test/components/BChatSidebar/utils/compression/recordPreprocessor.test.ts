@@ -90,8 +90,7 @@ describe('recordPreprocessor - ruleTrim', () => {
         role: 'assistant',
         content: 'tool result',
         parts: [
-          { type: 'tool-call' as never, toolCallId: 't1', toolName: 'read', input: { path: '/test.ts' } },
-          { type: 'tool-result' as never, toolCallId: 't1', toolName: 'read', result: { status: 'success', toolName: 'read', data: 'file content' } }
+          { type: 'tool' as never, status: 'done' as never, toolCallId: 't1', toolName: 'read', input: { path: '/test.ts' }, result: { status: 'success', toolName: 'read', data: 'file content' } }
         ]
       })
     ];

@@ -144,6 +144,7 @@ function createMessageWithConfirmation(): Message {
       },
       {
         type: 'confirmation',
+        toolCallId: 'tool-call-1',
         confirmationId: 'confirmation-1',
         toolName: 'insert_at_cursor',
         title: 'AI 想要插入内容',
@@ -190,19 +191,15 @@ function createMessageWithAwaitingUserQuestion(): Message {
     finished: true,
     parts: [
       {
-        type: 'tool-call',
+        type: 'tool',
+        status: 'done',
         toolCallId: 'tool-call-1',
         toolName: 'ask_user_question',
         input: {
           question: '请选择渠道',
           mode: 'single',
           options: [{ label: '官网', value: 'official' }]
-        }
-      },
-      {
-        type: 'tool-result',
-        toolCallId: 'tool-call-1',
-        toolName: 'ask_user_question',
+        },
         result: {
           toolName: 'ask_user_question',
           status: 'awaiting_user_input',
@@ -253,7 +250,8 @@ function createMessageWithToolInputPreview(): Message {
     finished: false,
     parts: [
       {
-        type: 'tool-input',
+        type: 'tool',
+        status: 'inputting',
         toolCallId: 'tool-call-1',
         toolName: 'write_file',
         inputText: '{"path":"docs/release-notes.md","content":"# Release"}',

@@ -20,11 +20,9 @@ describe('MessageBubble part extraction', () => {
     const source = readSource('src/components/BChatSidebar/components/MessageBubble.vue');
 
     expect(source).toContain("import BubblePartThinking from './MessageBubble/BubblePartThinking.vue';");
-    expect(source).toContain("import BubblePartToolCall from './MessageBubble/BubblePartToolCall.vue';");
-    expect(source).toContain("import BubblePartToolResult from './MessageBubble/BubblePartToolResult.vue';");
+    expect(source).toContain("import BubblePartTool from './MessageBubble/BubblePartTool.vue';");
     expect(source).toContain('<BubblePartThinking');
-    expect(source).toContain('<BubblePartToolCall');
-    expect(source).toContain('<BubblePartToolResult');
+    expect(source).toContain('<BubblePartTool');
   });
 
   test('renders text parts through a dedicated child component while keeping attachments in MessageBubble', () => {
