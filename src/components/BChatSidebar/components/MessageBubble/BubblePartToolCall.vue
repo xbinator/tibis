@@ -2,7 +2,7 @@
   <BubblePart type="tool-call" :has-content="hasContent">
     <template #title>
       <Icon icon="lucide:wrench" :class="bem('icon')" width="14" height="14" />
-      <span :class="bem('name')">{{ title }}</span>
+      <BTruncateText :class="bem('name')" :text="title" />
     </template>
     <BubblePartToolCode :value="part.input" />
   </BubblePart>
