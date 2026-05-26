@@ -27,7 +27,7 @@ import BubblePartToolCode from './BubblePartToolCode.vue';
 defineOptions({ name: 'BubblePartTool' });
 
 interface Props {
-  /** 工具片段 */
+  // 工具片段
   part: ChatMessageToolPart;
 }
 
@@ -35,13 +35,22 @@ const props = withDefaults(defineProps<Props>(), {});
 
 const [, bem] = createNamespace('', 'bubble-part-tool');
 
-/** 图标 */
-const icon = computed(() => {
-  if (props.part.status === 'inputting') return 'lucide:loader-circle';
-  if (props.part.status === 'done') {
-    return props.part.result?.status === 'success' ? 'lucide:check-circle-2' : 'lucide:circle-alert';
+// 图标映射表（提取为模块常量，避免每次渲染重建）
+const ICON_MAP = {
+  inputting: 'lucide:loader-circle',
+  executing: 'lucide:wrench',
+  done: {
+    success: 'lucide:check-circle-2',
+    failure: 'lucide:circle-alert'
   }
-  return 'lucide:wrench';
+} as const;
+
+const icon = computed(() => {
+  const { status } = props.part;
+  if (status === 'done') {
+    return ICON_MAP.done[(props.part.result?.status as keyof typeof ICON_MAP.done) ?? 'failure'];
+  }
+  return ICON_MAP[status];
 });
 
 /** 默认折叠：inputting 不折叠，其余折叠 */
@@ -49,33 +58,35 @@ const defaultCollapsed = computed(() => props.part.status !== 'inputting');
 
 /** 标题文案 */
 const title = computed(() => {
-  const { alias } = getActionLabel(props.part.toolName);
-  const statusPrefix = { inputting: '正在准备调用工具', executing: '调用工具', done: '工具结果' }[props.part.status];
+  const { part } = props;
+  const { alias } = getActionLabel(part.toolName);
 
-  if (props.part.toolName === 'write_file' || props.part.toolName === 'edit_file') {
-    const { input } = props.part;
-    if (input && typeof input === 'object' && 'path' in input && typeof input.path === 'string') {
-      return `${statusPrefix}：${input.path}`;
-    }
+  if (part.toolName === 'write_file' || part.toolName === 'edit_file') {
+    const path = (part.input as Record<string, unknown>)?.path;
+    if (typeof path === 'string') return path;
   }
 
-  return `${statusPrefix}：${alias}`;
+  return alias;
 });
+
+/** inputting 状态下的预览值 */
+function getInputtingValue(part: ChatMessageToolPart) {
+  const { content } = part.input as { content: string };
+  // 写入文件工具，预览内容为 content
+  if (part.toolName === 'write_file' && typeof content !== 'undefined') return content;
+
+  return part.input ?? part.inputText;
+}
 
 /** 预览内容 */
 const previewValue = computed(() => {
-  if (props.part.status === 'inputting') {
-    if (props.part.toolName === 'write_file' && typeof props.part.input === 'object' && props.part.input && 'content' in props.part.input) {
-      return (props.part.input as Record<string, unknown>).content;
-    }
-    return props.part.input ?? props.part.inputText;
-  }
+  const { part } = props;
 
-  if (props.part.status === 'executing') {
-    return props.part.input;
-  }
+  if (part.status === 'inputting') return getInputtingValue(part);
 
-  return props.part.result;
+  if (part.status === 'executing') return part.input;
+
+  return part.result;
 });
 
 /** 是否有可展示内容 */
@@ -88,10 +99,10 @@ const hasContent = computed(() => {
 <style scoped lang="less">
 .bubble-part-tool__icon {
   flex-shrink: 0;
-}
 
-.bubble-part-tool__icon--spin {
-  animation: bubble-part-tool-spin 1.2s linear infinite;
+  &--spin {
+    animation: bubble-part-tool-spin 1.2s linear infinite;
+  }
 }
 
 @keyframes bubble-part-tool-spin {
