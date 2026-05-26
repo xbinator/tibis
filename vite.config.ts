@@ -17,6 +17,7 @@ const COMPONENTS_ROOT = 'src/components';
 // 子组件目录列表（基于约定，自动拼接前缀）
 const COMPONENT_DIRS = [
   'BChat',
+  'BCollapseTransition',
   'BPanelSplitter',
   'BPromptEditor',
   'BEditor',
