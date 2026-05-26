@@ -65,7 +65,7 @@
         v-show="settingStore.sidebarVisible"
         v-model:size="settingStore.sidebarWidth"
         position="left"
-        :min-width="300"
+        :min-width="340"
         max-width="40%"
         @close="settingStore.setSidebarVisible(false)"
       >

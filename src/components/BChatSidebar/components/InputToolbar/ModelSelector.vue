@@ -247,6 +247,7 @@ defineExpose({
 }
 
 .model-name {
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;

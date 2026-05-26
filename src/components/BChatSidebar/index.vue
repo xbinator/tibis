@@ -479,12 +479,15 @@ async function handleComplete(nextMessage: Message): Promise<void> {
   const sessionId = settingStore.chatSidebarActiveSessionId;
   const snapshot = captureSnapshot(nextMessage, sessionId);
 
-  await chatStore.addSessionMessage(sessionId, nextMessage);
-  if (sessionId) {
-    await usagePanel.refresh(sessionId, currentSession.value?.id);
+  try {
+    await chatStore.addSessionMessage(sessionId, nextMessage);
+    if (sessionId) {
+      await usagePanel.refresh(sessionId, currentSession.value?.id);
+    }
+  } finally {
+    taskRuntime.finishTask('chat');
   }
 
-  taskRuntime.finishTask('chat');
   if (!snapshot) return;
 
   scheduleAutoName(snapshot, () => loading.value);

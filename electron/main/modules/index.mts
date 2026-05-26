@@ -3,6 +3,7 @@
  * @description 模块入口，统一注册所有 IPC handler 并导出服务实例。
  */
 import { registerAIHandlers } from './ai/ipc.mjs';
+import { registerChatHandlers } from './chat/ipc.mjs';
 import { registerDatabaseHandlers } from './database/ipc.mjs';
 import { registerDialogHandlers } from './dialog/ipc.mjs';
 import { registerExportHandlers } from './export/ipc.mjs';
@@ -23,6 +24,7 @@ export function registerAllIpcHandlers() {
   registerFileHandlers();
   registerUiHandlers();
   registerDatabaseHandlers();
+  registerChatHandlers();
   registerStoreHandlers();
   registerShellCommandHandlers();
   registerAIHandlers();
@@ -41,6 +43,7 @@ export {
   registerFileHandlers,
   registerUiHandlers,
   registerDatabaseHandlers,
+  registerChatHandlers,
   registerStoreHandlers,
   registerShellCommandHandlers,
   registerAIHandlers,
@@ -57,7 +60,7 @@ export { aiService } from './ai/service.mjs';
 
 export { initLogger, initMainErrorCollector, log, cleanOldLogs, startLogMaintenanceTimer } from './logger/service.mjs';
 
-export { initDatabase, closeDatabase, dbExecute, dbSelect, getDbPath } from './database/service.mjs';
+export { initDatabase, closeDatabase, dbExecute, dbSelect, transaction, getDbPath } from './database/service.mjs';
 
 export { initStore, getStore } from './store/service.mjs';
 

@@ -181,6 +181,11 @@ export function dbSelect<T = unknown[]>(sql: string, params?: unknown[]): T[] {
   return db.prepare(sql).all(...(params || [])) as T[];
 }
 
+export function transaction<T>(fn: () => T): T {
+  if (!db) throw new Error('Database not initialized');
+  return db.transaction(fn)();
+}
+
 export function closeDatabase(): void {
   if (db) {
     db.close();

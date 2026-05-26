@@ -7,38 +7,40 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createCompressionMessage } from '@/components/BChatSidebar/hooks/useCompactContext';
 
-type AddMessageMock = (message: ChatMessageRecord) => Promise<void>;
-type CreateSessionMock = (session: ChatSession) => Promise<void>;
-type GetMessagesMock = (sessionId: string, cursor?: ChatMessageHistoryCursor) => Promise<ChatMessageRecord[]>;
+type HandlerResult<T> = { ok: true; data: T } | { ok: false; error: string; code: string };
+const ok = <T>(data: T): HandlerResult<T> => ({ ok: true, data });
 
-const { addMessageMock, createSessionMock, getMessagesMock } = vi.hoisted(() => ({
-  addMessageMock: vi.fn<AddMessageMock>(),
-  createSessionMock: vi.fn<CreateSessionMock>(),
-  getMessagesMock: vi.fn<GetMessagesMock>()
+const { chatMessageAddMock, chatSessionCreateMock, chatMessageListMock } = vi.hoisted(() => ({
+  chatMessageAddMock: vi.fn<(message: ChatMessageRecord) => Promise<HandlerResult<void>>>(),
+  chatSessionCreateMock: vi.fn<(session: ChatSession) => Promise<HandlerResult<void>>>(),
+  chatMessageListMock: vi.fn<(sessionId: string, cursor?: ChatMessageHistoryCursor) => Promise<HandlerResult<ChatMessageRecord[]>>>()
 }));
 
-vi.mock('@/shared/storage', () => ({
-  chatStorage: {
-    createSession: createSessionMock,
-    addMessage: addMessageMock,
-    getMessages: getMessagesMock,
-    updateSessionLastMessageAt: vi.fn(async () => undefined),
-    addSessionUsage: vi.fn(async () => undefined),
-    updateSessionUsage: vi.fn(async () => undefined),
-    getSessionUsage: vi.fn(async () => undefined),
-    setSessionMessages: vi.fn(async () => undefined),
-    updateSessionTitle: vi.fn(async () => undefined),
-    getSessionsByType: vi.fn(async () => ({ items: [], hasMore: false })),
-    deleteSession: vi.fn(async () => undefined)
+const electronAPIMock = {
+  chatMessageAdd: chatMessageAddMock,
+  chatSessionCreate: chatSessionCreateMock,
+  chatMessageList: chatMessageListMock,
+  chatSessionUsageGet: vi.fn<() => Promise<HandlerResult<unknown>>>(),
+  chatMessageSetAll: vi.fn<() => Promise<HandlerResult<void>>>(),
+  chatSessionUpdateTitle: vi.fn<() => Promise<HandlerResult<void>>>(),
+  chatSessionList: vi.fn<() => Promise<HandlerResult<unknown>>>(),
+  chatSessionDelete: vi.fn<() => Promise<HandlerResult<void>>>()
+};
+
+vi.mock('@/shared/platform/electron-api', () => ({
+  getElectronAPI: () => electronAPIMock,
+  unwrap: (result: { ok: true; data: unknown } | { ok: false; error: string; code: string }) => {
+    if (!result.ok) throw new Error(result.error);
+    return result.data;
   }
 }));
 
 describe('useChatSessionStore compression message persistence', () => {
   beforeEach(() => {
     vi.resetModules();
-    addMessageMock.mockReset();
-    createSessionMock.mockReset();
-    getMessagesMock.mockReset();
+    chatMessageAddMock.mockReset();
+    chatSessionCreateMock.mockReset();
+    chatMessageListMock.mockReset();
     setActivePinia(createPinia());
   });
 
@@ -53,18 +55,22 @@ describe('useChatSessionStore compression message persistence', () => {
       sourceMessageIds: ['message-1', 'message-32']
     });
 
+    chatMessageAddMock.mockResolvedValue(ok(undefined));
+
     await chatStore.addSessionMessage('session-1', message);
 
-    const persistedRecord = addMessageMock.mock.calls[0]?.[0];
+    const persistedRecord = chatMessageAddMock.mock.calls[0]?.[0];
     expect(persistedRecord?.role).toBe('compression');
     expect(persistedRecord?.compression?.recordId).toBe('record-1');
 
-    getMessagesMock.mockResolvedValue([
-      {
-        ...persistedRecord,
-        sessionId: 'session-1'
-      } as ChatMessageRecord
-    ]);
+    chatMessageListMock.mockResolvedValue(
+      ok([
+        {
+          ...persistedRecord,
+          sessionId: 'session-1'
+        } as ChatMessageRecord
+      ])
+    );
 
     const messages = await chatStore.getSessionMessages('session-1');
     expect(messages[0].role).toBe('compression');

@@ -78,7 +78,7 @@ export function useChat(options: UseStreamOptions) {
 
     if (error) return [error];
 
-    return electronAPI.aiInvoke(provider, payload);
+    return electronAPI.aiInvoke(provider, cloneDeep(payload));
   };
 
   const _onError = (error: AIServiceError) => {

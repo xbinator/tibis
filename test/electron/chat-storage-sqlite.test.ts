@@ -1,103 +1,67 @@
 /* eslint-disable max-classes-per-file */
 /**
  * @file chat-storage-sqlite.test.ts
- * @description 验证聊天消息在真实 SQLite 链路中的迁移、写入与读取。
+ * @description 验证 ChatSessionManager 在真实 SQLite 链路中的写入与读取。
  */
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ChatMessageRecord, ChatSession } from 'types/chat';
-import type { DbExecuteResult, ElectronAPI } from 'types/electron-api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-/**
- * 测试期间使用的临时 userData 目录。
- */
 let tempUserDataDir = '';
 
 vi.mock('better-sqlite3', () => {
-  /**
-   * better-sqlite3 `prepare` 语句的最小测试替身。
-   */
   class BetterSqliteStatementMock {
-    /**
-     * 原生 SQLite 预编译语句。
-     */
     private readonly statement;
 
-    /**
-     * 初始化预编译语句。
-     * @param statement - 原生 SQLite 预编译语句。
-     */
     constructor(statement: ReturnType<DatabaseSync['prepare']>) {
       this.statement = statement;
     }
 
-    /**
-     * 执行写操作语句。
-     * @param params - SQL 参数列表。
-     * @returns 写操作结果。
-     */
     run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint } {
       return this.statement.run(...params);
     }
 
-    /**
-     * 执行读操作语句。
-     * @param params - SQL 参数列表。
-     * @returns 查询结果列表。
-     */
     all(...params: unknown[]): unknown[] {
       return this.statement.all(...params);
     }
   }
 
-  /**
-   * 基于 Node 内置 SQLite 的 better-sqlite3 兼容替身。
-   */
   class BetterSqliteDatabaseMock {
-    /**
-     * 原生 SQLite 数据库实例。
-     */
     private readonly database;
 
-    /**
-     * 初始化数据库连接。
-     * @param databasePath - 数据库文件路径。
-     */
     constructor(databasePath: string) {
       this.database = new DatabaseSync(databasePath);
     }
 
-    /**
-     * 兼容 better-sqlite3 的 pragma 调用。
-     * @param sql - pragma 语句。
-     */
     pragma(sql: string): void {
       this.database.exec(`PRAGMA ${sql}`);
     }
 
-    /**
-     * 执行原始 SQL。
-     * @param sql - SQL 语句。
-     */
     exec(sql: string): void {
       this.database.exec(sql);
     }
 
-    /**
-     * 创建预编译语句。
-     * @param sql - SQL 语句。
-     * @returns 兼容 better-sqlite3 的语句对象。
-     */
     prepare(sql: string): BetterSqliteStatementMock {
       return new BetterSqliteStatementMock(this.database.prepare(sql));
     }
 
-    /**
-     * 关闭数据库连接。
-     */
+    transaction<T>(fn: () => T): () => T {
+      return () => {
+        this.database.exec('BEGIN');
+        try {
+          const result = fn();
+          this.database.exec('COMMIT');
+          return result;
+        } catch (error) {
+          this.database.exec('ROLLBACK');
+          throw error;
+        }
+      };
+    }
+
     close(): void {
       this.database.close();
     }
@@ -114,16 +78,11 @@ vi.mock('electron', () => ({
       if (name !== 'userData') {
         throw new Error(`Unexpected app path request: ${name}`);
       }
-
       return tempUserDataDir;
     }
   }
 }));
 
-/**
- * 构造用于断言的会话记录。
- * @returns 标准化的聊天会话。
- */
 function createSession(): ChatSession {
   return {
     id: 'session-1',
@@ -135,11 +94,6 @@ function createSession(): ChatSession {
   };
 }
 
-/**
- * 构造用于断言的消息记录。
- * @param overrides - 需要覆盖的消息字段。
- * @returns 标准化的聊天消息。
- */
 function createMessage(overrides: Partial<ChatMessageRecord> = {}): ChatMessageRecord {
   return {
     id: 'message-1',
@@ -152,7 +106,7 @@ function createMessage(overrides: Partial<ChatMessageRecord> = {}): ChatMessageR
   };
 }
 
-describe('chatStorage SQLite references', () => {
+describe('ChatSessionManager SQLite integration', () => {
   beforeEach(() => {
     vi.resetModules();
     tempUserDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tibis-chat-storage-'));
@@ -160,55 +114,27 @@ describe('chatStorage SQLite references', () => {
 
   afterEach(async () => {
     const { closeDatabase } = await import('../../electron/main/modules/database/service.mts');
-
     closeDatabase();
     fs.rmSync(tempUserDataDir, { recursive: true, force: true });
   });
 
-  it('updates only the session title metadata when auto naming completes', async () => {
-    const { initDatabase, dbExecute, dbSelect } = await import('../../electron/main/modules/database/service.mts');
-
+  it('addMessage cascades lastMessageAt and usage in a single transaction', async () => {
+    const { initDatabase, dbSelect } = await import('../../electron/main/modules/database/service.mts');
     await initDatabase();
 
-    vi.doMock('@/shared/platform/electron-api', () => {
-      /**
-       * Creates the minimal Electron API backed by the real test SQLite database.
-       * @returns Electron API subset used by shared storage.
-       */
-      function createElectronApi(): ElectronAPI {
-        return {
-          dbExecute: async (sql: string, params?: unknown[]): Promise<DbExecuteResult> => {
-            const result = dbExecute(sql, params);
+    const { chatSessionManager } = await import('../../electron/main/modules/chat/service.mts');
 
-            return {
-              changes: result.changes,
-              lastInsertRowid: Number(result.lastInsertRowid)
-            };
-          },
-          dbSelect: async <T>(sql: string, params?: unknown[]): Promise<T[]> => dbSelect<T>(sql, params)
-        } as ElectronAPI;
-      }
-
-      return {
-        hasElectronAPI: (): boolean => true,
-        getElectronAPI: (): ElectronAPI => createElectronApi()
-      };
-    });
-
-    const { chatStorage } = await import('@/shared/storage/chats');
     const session = createSession();
     const message = createMessage({
       role: 'assistant',
       usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 }
     });
 
-    await chatStorage.createSession(session);
-    await chatStorage.addMessage(message);
-    await chatStorage.updateSessionLastMessageAt(session.id, message.createdAt);
-    await chatStorage.addSessionUsage(session.id, message.usage!);
-    await chatStorage.updateSessionTitle(session.id, '自动命名标题');
+    chatSessionManager.createSession(session);
+    chatSessionManager.addMessage(message);
+    chatSessionManager.updateSessionTitle(session.id, '自动命名标题');
 
-    const rows = await dbSelect<{
+    const rows = dbSelect<{
       title: string;
       updated_at: string;
       last_message_at: string;
@@ -226,9 +152,6 @@ describe('chatStorage SQLite references', () => {
     const legacyDbPath = path.join(tempUserDataDir, 'tibis.db');
     const legacyDb = new DatabaseSync(legacyDbPath);
 
-    /**
-     * 创建旧版压缩记录表结构，模拟缺失后续压缩迭代新增列的历史数据库。
-     */
     legacyDb.exec(`
       CREATE TABLE chat_session_compression_records (
         id TEXT PRIMARY KEY,
@@ -257,7 +180,7 @@ describe('chatStorage SQLite references', () => {
     const { initDatabase, dbSelect } = await import('../../electron/main/modules/database/service.mts');
     await initDatabase();
 
-    const columns = await dbSelect<{ name: string }>('PRAGMA table_info(chat_session_compression_records)');
+    const columns = dbSelect<{ name: string }>('PRAGMA table_info(chat_session_compression_records)');
     const columnNames = columns.map((column) => column.name);
 
     expect(columnNames).toContain('token_count_snapshot');
@@ -267,4 +190,41 @@ describe('chatStorage SQLite references', () => {
     expect(columnNames).toContain('segment_count');
     expect(columnNames).toContain('topic_tags_json');
   });
+
+  it('deleteSession atomically removes messages and session', async () => {
+    const { initDatabase, dbSelect } = await import('../../electron/main/modules/database/service.mts');
+    await initDatabase();
+
+    const { chatSessionManager } = await import('../../electron/main/modules/chat/service.mts');
+
+    const session = createSession();
+    chatSessionManager.createSession(session);
+    chatSessionManager.addMessage(createMessage({ id: 'msg-1' }));
+    chatSessionManager.addMessage(createMessage({ id: 'msg-2', createdAt: '2026-04-25T00:00:02.000Z' }));
+
+    chatSessionManager.deleteSession(session.id);
+
+    const sessions = dbSelect('SELECT * FROM chat_sessions WHERE id = ?', [session.id]);
+    const messages = dbSelect('SELECT * FROM chat_messages WHERE session_id = ?', [session.id]);
+
+    expect(sessions).toHaveLength(0);
+    expect(messages).toHaveLength(0);
+  }, 15000);
+
+  it('setSessionMessages atomically replaces all messages', async () => {
+    const { initDatabase, dbSelect } = await import('../../electron/main/modules/database/service.mts');
+    await initDatabase();
+
+    const { chatSessionManager } = await import('../../electron/main/modules/chat/service.mts');
+
+    const session = createSession();
+    chatSessionManager.createSession(session);
+    chatSessionManager.addMessage(createMessage({ id: 'old-msg' }));
+
+    const newMessages = [createMessage({ id: 'new-msg-1' }), createMessage({ id: 'new-msg-2', createdAt: '2026-04-25T00:00:02.000Z' })];
+    chatSessionManager.setSessionMessages(session.id, newMessages);
+
+    const messages = dbSelect<{ id: string }>('SELECT id FROM chat_messages WHERE session_id = ? ORDER BY created_at', [session.id]);
+    expect(messages.map((m) => m.id)).toEqual(['new-msg-1', 'new-msg-2']);
+  }, 15000);
 });

@@ -222,6 +222,27 @@ const electronAPI: ElectronAPI = {
    */
   dbSelect: (sql: string, params?: unknown[]) => ipcRenderer.invoke('db:select', sql, params),
 
+  // ==================== 聊天会话操作 ====================
+
+  chatSessionList: (type, pagination?) => ipcRenderer.invoke('chat:session:list', type, pagination),
+  chatSessionCreate: (session) => ipcRenderer.invoke('chat:session:create', session),
+  chatSessionUpdateTitle: (sessionId, title) => ipcRenderer.invoke('chat:session:updateTitle', sessionId, title),
+  chatSessionDelete: (sessionId) => ipcRenderer.invoke('chat:session:delete', sessionId),
+  chatSessionUsageGet: (sessionId) => ipcRenderer.invoke('chat:session:usage:get', sessionId),
+
+  // ==================== 聊天消息操作 ====================
+
+  chatMessageList: (sessionId, cursor?) => ipcRenderer.invoke('chat:message:list', sessionId, cursor),
+  chatMessageAdd: (message) => ipcRenderer.invoke('chat:message:add', message),
+  chatMessageSetAll: (sessionId, messages) => ipcRenderer.invoke('chat:message:setAll', sessionId, messages),
+
+  // ==================== 聊天压缩记录操作 ====================
+
+  chatCompressionGetLatest: (sessionId) => ipcRenderer.invoke('chat:compression:getLatest', sessionId),
+  chatCompressionCreate: (record) => ipcRenderer.invoke('chat:compression:create', record),
+  chatCompressionUpdateStatus: (id, status, invalidReason?) => ipcRenderer.invoke('chat:compression:updateStatus', id, status, invalidReason),
+  chatCompressionGetAll: (sessionId) => ipcRenderer.invoke('chat:compression:getAll', sessionId),
+
   // ==================== 安全存储操作 ====================
 
   /**

@@ -5,6 +5,7 @@
 import type { Message } from '@/components/BChatSidebar/utils/types';
 import type { ChatSession, PaginatedSessionsResult } from 'types/chat';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
 
 /**
  * 模拟按分页读取会话列表。
@@ -28,14 +29,14 @@ const settingStoreState: { chatSidebarActiveSessionId: string | null } = {
   chatSidebarActiveSessionId: null
 };
 
-vi.mock('@/stores/chat', () => ({
+vi.mock('@/stores/chat/session', () => ({
   useChatSessionStore: () => ({
     getSessions: getSessionsMock,
     getSessionMessages: getSessionMessagesMock
   })
 }));
 
-vi.mock('@/stores/setting', () => ({
+vi.mock('@/stores/ui/setting', () => ({
   useSettingStore: () => ({
     get chatSidebarActiveSessionId() {
       return settingStoreState.chatSidebarActiveSessionId;
@@ -47,6 +48,7 @@ vi.mock('@/stores/setting', () => ({
 describe('BChatSidebar useSession', () => {
   beforeEach(() => {
     vi.resetModules();
+    setActivePinia(createPinia());
     getSessionsMock.mockReset();
     getSessionMessagesMock.mockReset();
     setChatSidebarActiveSessionIdMock.mockReset();

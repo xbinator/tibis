@@ -1,6 +1,7 @@
 import type {
   AICreateOptions,
   AIRequestOptions,
+  AIUsage,
   AIServiceError,
   AIInvokeResult,
   AIStreamFinishChunk,
@@ -14,6 +15,11 @@ import type {
   MCPServerDiscoveryCache,
   MCPStatusResponse
 } from './ai';
+import type { ChatSession, ChatSessionType, ChatMessageRecord, ChatMessageHistoryCursor, PaginatedSessionsResult, SessionPaginationParams } from './chat';
+import type { CompressionRecord, CompressionRecordStatus } from './compression';
+
+/** Chat IPC handler 统一返回类型 */
+export type ChatHandlerResult<T> = { ok: true; data: T } | { ok: false; error: string; code: string };
 
 /**
  * Electron API 类型定义
@@ -438,6 +444,24 @@ export interface ElectronAPI {
   // 数据库操作
   dbExecute: (sql: string, params?: unknown[]) => Promise<DbExecuteResult>;
   dbSelect: <T = unknown>(sql: string, params?: unknown[]) => Promise<T[]>;
+
+  // 聊天会话操作
+  chatSessionList: (type: ChatSessionType, pagination?: SessionPaginationParams) => Promise<ChatHandlerResult<PaginatedSessionsResult>>;
+  chatSessionCreate: (session: ChatSession) => Promise<ChatHandlerResult<void>>;
+  chatSessionUpdateTitle: (sessionId: string, title: string) => Promise<ChatHandlerResult<void>>;
+  chatSessionDelete: (sessionId: string) => Promise<ChatHandlerResult<void>>;
+  chatSessionUsageGet: (sessionId: string) => Promise<ChatHandlerResult<AIUsage | undefined>>;
+
+  // 聊天消息操作
+  chatMessageList: (sessionId: string, cursor?: ChatMessageHistoryCursor) => Promise<ChatHandlerResult<ChatMessageRecord[]>>;
+  chatMessageAdd: (message: ChatMessageRecord) => Promise<ChatHandlerResult<void>>;
+  chatMessageSetAll: (sessionId: string, messages: ChatMessageRecord[]) => Promise<ChatHandlerResult<void>>;
+
+  // 聊天压缩记录操作
+  chatCompressionGetLatest: (sessionId: string) => Promise<ChatHandlerResult<CompressionRecord | undefined>>;
+  chatCompressionCreate: (record: Omit<CompressionRecord, 'id' | 'createdAt' | 'updatedAt'>) => Promise<ChatHandlerResult<CompressionRecord>>;
+  chatCompressionUpdateStatus: (id: string, status: CompressionRecordStatus, invalidReason?: string) => Promise<ChatHandlerResult<void>>;
+  chatCompressionGetAll: (sessionId: string) => Promise<ChatHandlerResult<CompressionRecord[]>>;
 
   // 安全存储操作
   storeGet: <T = unknown>(key: string) => Promise<T | undefined>;
