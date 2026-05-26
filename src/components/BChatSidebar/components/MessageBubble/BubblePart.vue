@@ -27,7 +27,7 @@ defineOptions({ name: 'BubblePart' });
 
 interface Props {
   /** 片段类型 */
-  type: 'thinking' | 'tool-input' | 'tool-call' | 'tool-result';
+  type: 'thinking' | 'tool-input' | 'tool-call' | 'tool-result' | 'tool';
   /** 是否有可展示内容（无内容时不可折叠） */
   hasContent?: boolean;
   /** 默认折叠状态，默认为 true（折叠） */
@@ -67,7 +67,8 @@ function toggleCollapse(): void {
 
 .message-bubble-part--tool-input,
 .message-bubble-part--tool-call,
-.message-bubble-part--tool-result {
+.message-bubble-part--tool-result,
+.message-bubble-part--tool {
   border-style: dashed;
 }
 
