@@ -521,7 +521,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     return {
       servers,
-      enabledServerIds: servers.filter((server) => server.enabled && server.command.trim().length > 0).map((server) => server.id),
+      enabledServerIds: servers
+        .filter((server) => {
+          if (!server.enabled) return false;
+          if (server.transport === 'stdio') return server.command.trim().length > 0;
+          return Boolean(server.url?.trim());
+        })
+        .map((server) => server.id),
       enabledTools: [],
       toolInstructions: ''
     };
