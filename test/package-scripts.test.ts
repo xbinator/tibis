@@ -79,8 +79,24 @@ describe('package runtime dependencies', () => {
     const manifest = readPackageScripts();
 
     expect(manifest.dependencies?.['form-data']).toBeDefined();
+    expect(manifest.dependencies?.asynckit).toBeDefined();
+    expect(manifest.dependencies?.['call-bind-apply-helpers']).toBeDefined();
+    expect(manifest.dependencies?.['combined-stream']).toBeDefined();
+    expect(manifest.dependencies?.['delayed-stream']).toBeDefined();
+    expect(manifest.dependencies?.['dunder-proto']).toBeDefined();
+    expect(manifest.dependencies?.['es-define-property']).toBeDefined();
+    expect(manifest.dependencies?.['es-errors']).toBeDefined();
     expect(manifest.dependencies?.['es-set-tostringtag']).toBeDefined();
-    expect(manifest.dependencies?.['get-intrinsic']).toBeDefined();
     expect(manifest.dependencies?.['es-object-atoms']).toBeDefined();
+    expect(manifest.dependencies?.['function-bind']).toBeDefined();
+    expect(manifest.dependencies?.['get-intrinsic']).toBeDefined();
+    expect(manifest.dependencies?.['get-proto']).toBeDefined();
+    expect(manifest.dependencies?.gopd).toBeDefined();
+    expect(manifest.dependencies?.['has-symbols']).toBeDefined();
+    expect(manifest.dependencies?.['has-tostringtag']).toBeDefined();
+    expect(manifest.dependencies?.hasown).toBeDefined();
+    expect(manifest.dependencies?.['math-intrinsics']).toBeDefined();
+    expect(manifest.dependencies?.['mime-types']).toBeDefined();
+    expect(manifest.dependencies?.['mime-db']).toBeDefined();
   });
 });
