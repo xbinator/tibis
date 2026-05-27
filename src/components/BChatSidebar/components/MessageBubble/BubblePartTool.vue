@@ -138,6 +138,7 @@ const title = computed(() => {
  * @returns 预览内容
  */
 function getInputtingValue(part: ChatMessageToolPart) {
+  if (!part.input) return part.inputText ?? '';
   const { content } = part.input as { content: string };
   if (part.toolName === 'write_file' && typeof content !== 'undefined') return content;
   return part.input ?? part.inputText;
