@@ -1,27 +1,17 @@
 /* eslint-disable class-methods-use-this */
 import type {
-  Native,
-  ExportPdfOptions,
   FilePathStatus,
   OpenFileOptions,
   SaveFileOptions,
   File,
-  FileChangeEvent,
-  ReadFileResult,
   ReadWorkspaceFileOptions,
   ReadWorkspaceFileResult,
   ReadWorkspaceDirectoryOptions,
-  ReadWorkspaceDirectoryResult,
-  TibisWorkspaceRoot
+  ReadWorkspaceDirectoryResult
 } from './types';
-import type { RecentFileShortcutInput } from 'types/electron-api';
 import { OPEN_FILE_FILTER } from '@/constants/extensions';
 
-export class WebNative implements Native {
-  async readFile(): Promise<ReadFileResult> {
-    throw new Error('Web platform does not support reading files by path');
-  }
-
+export class WebNative {
   async getPathStatus(): Promise<FilePathStatus> {
     return {
       exists: false,
@@ -77,131 +67,5 @@ export class WebNative implements Native {
 
     URL.revokeObjectURL(url);
     return filename;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async exportPdf(_options: ExportPdfOptions): Promise<string | null> {
-    throw new Error('Web platform does not support PDF export');
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async writeFile(_path: string, _content: string): Promise<void> {
-    // this.syncCurrentFile(path, content);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async renameFile(_oldPath: string, _newPath: string): Promise<void> {
-    throw new Error('Web platform does not support renaming files by path');
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async trashFile(_path: string): Promise<void> {
-    throw new Error('Web platform does not support deleting files by path');
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async showItemInFolder(_path: string): Promise<void> {
-    throw new Error('Web platform does not support revealing files by path');
-  }
-
-  async getRelativePath(filePath: string): Promise<string> {
-    return filePath;
-  }
-
-  async getCwd(): Promise<string> {
-    return '/';
-  }
-
-  async getHomeDir(): Promise<string> {
-    return '/';
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async watchFile(_path: string): Promise<void> {
-    // web 端不支持文件监听
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async unwatchFile(_path: string): Promise<void> {
-    // web 端不支持文件监听
-  }
-
-  async unwatchAll(): Promise<void> {
-    // web 端不支持文件监听
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onFileChanged(_callback: (data: FileChangeEvent) => void): () => void {
-    return () => {
-      // web 端不需要清理
-    };
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async watchDirectory(_dirPath: string, _globPattern?: string): Promise<void> {
-    // web 端不支持目录监听
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async unwatchDirectory(_dirPath: string, _globPattern?: string): Promise<void> {
-    // web 端不支持目录监听
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onSkillChanged(_callback: (data: { type: string; filePath: string; content?: string }) => void): () => void {
-    return () => {
-      // web 端不需要清理
-    };
-  }
-
-  async setWindowTitle(title: string): Promise<void> {
-    document.title = title;
-  }
-
-  async openExternal(url: string): Promise<void> {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-
-  supportsShellCommand(): boolean {
-    return false;
-  }
-
-  async getTibisWorkspaceRoot(): Promise<TibisWorkspaceRoot | null> {
-    // Web 平台不支持工作区根目录
-    return null;
-  }
-
-  async analyzeShellCommand(): ReturnType<Native['analyzeShellCommand']> {
-    const error = new Error('Web platform does not support shell command analysis') as Error & { code: 'UNSUPPORTED_PROVIDER' };
-    error.code = 'UNSUPPORTED_PROVIDER';
-    throw error;
-  }
-
-  async runShellCommand(): ReturnType<Native['runShellCommand']> {
-    const error = new Error('Web platform does not support running shell commands') as Error & { code: 'UNSUPPORTED_PROVIDER' };
-    error.code = 'UNSUPPORTED_PROVIDER';
-    throw error;
-  }
-
-  async cancelShellCommand(): Promise<boolean> {
-    return false;
-  }
-
-  onShellCommandOutput(): () => void {
-    return () => {
-      // web 端不支持 Shell 命令输出监听
-    };
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  onMenuAction(_callback: (action: string) => void): () => void {
-    return () => {
-      // web 端不需要清理
-    };
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async syncRecentFiles(_files: RecentFileShortcutInput[]): Promise<void> {
-    // Linux / Web 环境不支持系统快捷入口时安全跳过。
   }
 }
