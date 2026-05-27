@@ -6,7 +6,6 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { ShellCommandOutputChunk, ShellCommandRunRequest, ShellCommandRunResult } from './types.mjs';
 import type { ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from 'node:child_process';
-import { Effect } from 'effect';
 
 /** 默认最终输出截断字符数。 */
 const DEFAULT_MAX_OUTPUT_CHARS = 20_000;
@@ -213,16 +212,12 @@ export function createShellCommandRunner(options: CreateShellCommandRunnerOption
     const maxOutputChars = request.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
     const startedAt = Date.now();
     const spawnCommand = resolveSpawnCommand(request);
-    const child = Effect.runSync(
-      Effect.sync(() =>
-        spawnProcess(spawnCommand.command, spawnCommand.args, {
-          cwd: request.cwd,
-          shell: false,
-          env: buildMinimalEnv(),
-          detached: true
-        })
-      )
-    );
+    const child = spawnProcess(spawnCommand.command, spawnCommand.args, {
+      cwd: request.cwd,
+      shell: false,
+      env: buildMinimalEnv(),
+      detached: true
+    });
     const activeCommand: ActiveCommand = {
       child,
       timedOut: false,
