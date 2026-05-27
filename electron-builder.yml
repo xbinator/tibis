@@ -1,6 +1,6 @@
 appId: com.tibis.desktop
-productName: Tibis
-artifactName: "Tibis-${os}-${arch}.${ext}"
+productName: tibis
+artifactName: "tibis-${os}-${arch}.${ext}"
 directories:
   buildResources: build
   output: release
@@ -58,4 +58,4 @@ linux:
     - deb
   icon: resources/icons/app.png
   category: Utility
-  maintainer: Tibis contributors <noreply@github.com>
+  maintainer: tibis contributors <noreply@github.com>
