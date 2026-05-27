@@ -23,7 +23,7 @@
     ref="monacoEditorRef"
     v-model:value="editorState.content"
     :editor-state="editorState"
-    language="json"
+    :language="monacoLanguage"
     :editable="editable"
     @editor-blur="emit('editor-blur', $event)"
   />
@@ -34,7 +34,7 @@ import type { EditorController, EditorSearchState, EditorState } from './types';
 import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
 import BMonaco from '@/components/BMonaco/index.vue';
-import { resolveEditorKind } from './constants/resolver';
+import { resolveEditorKind, resolveMonacoLanguage } from './constants/resolver';
 import { createEditorToolContext } from './hooks/useEditorToolContext';
 import Markdown from './Markdown.vue';
 
@@ -65,6 +65,7 @@ const editorState = defineModel<EditorState>('value', { default: () => ({ conten
 
 const editable = toRef(props, 'editable');
 const editorKind = computed(() => resolveEditorKind(editorState.value.ext));
+const monacoLanguage = computed(() => resolveMonacoLanguage(editorState.value.ext));
 const outlineContent = defineModel<string>('outlineContent', { default: '' });
 const lastRegisteredDocumentId = ref('');
 

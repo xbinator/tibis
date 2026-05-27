@@ -246,6 +246,7 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
     scrollBeyondLastLine: false,
     tabSize: 2,
     wordWrap: options.wordWrap ? 'on' : 'off',
+    contextmenu: false,
     ...(hasSearch
       ? {
           find: {
