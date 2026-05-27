@@ -74,4 +74,13 @@ describe('package runtime dependencies', () => {
     expect(manifest.dependencies?.['eventsource-parser']).toBeDefined();
     expect(manifest.dependencies?.zod).toBeDefined();
   });
+
+  it('declares Tavily form-data dependency closure needed by packaged Electron runtime', () => {
+    const manifest = readPackageScripts();
+
+    expect(manifest.dependencies?.['form-data']).toBeDefined();
+    expect(manifest.dependencies?.['es-set-tostringtag']).toBeDefined();
+    expect(manifest.dependencies?.['get-intrinsic']).toBeDefined();
+    expect(manifest.dependencies?.['es-object-atoms']).toBeDefined();
+  });
 });
