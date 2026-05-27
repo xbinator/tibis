@@ -9,6 +9,7 @@ import type { ElectronShellCommandRunResult, ElectronShellCommandSafetyReport, E
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../../results';
+import { isPathInsideWorkspace } from '../../shared/pathUtils';
 
 /** run_shell_command 工具名称。 */
 export const RUN_SHELL_COMMAND_TOOL_NAME = 'run_shell_command';
@@ -49,7 +50,10 @@ export interface RunShellCommandToolResult extends ElectronShellCommandRunResult
 /**
  * 创建 Shell 命令工具选项。
  */
-export interface CreateBuiltinShellCommandToolOptions extends ToolRequiredConfirmationOptions, ToolWorkspaceOptions {}
+export interface CreateBuiltinShellCommandToolOptions extends ToolRequiredConfirmationOptions, ToolWorkspaceOptions {
+  /** 获取额外允许作为 Shell 安全边界的目录，如已启用 Skill 的目录。 */
+  getAdditionalShellWorkspaceRoots?: () => string[];
+}
 
 /**
  * 判断是否为支持的 shell。
@@ -115,6 +119,35 @@ function formatConfirmationDescription(shell: ElectronShellCommandShell, cwd: st
 }
 
 /**
+ * 获取非空的额外 Shell 工作区根目录。
+ * @param options - Shell 工具选项
+ * @returns 额外允许根目录列表
+ */
+function getAdditionalShellWorkspaceRoots(options: CreateBuiltinShellCommandToolOptions): string[] {
+  return (options.getAdditionalShellWorkspaceRoots?.() ?? []).map((root) => root.trim()).filter(Boolean);
+}
+
+/**
+ * 根据 cwd 选择用于安全分析和执行的工作区根目录。
+ * @param cwd - 命令执行目录
+ * @param primaryWorkspaceRoot - 当前主工作区根目录
+ * @param additionalWorkspaceRoots - 额外允许根目录
+ * @returns 匹配到的工作区根目录
+ */
+function resolveShellWorkspaceRoot(cwd: string, primaryWorkspaceRoot: string | null, additionalWorkspaceRoots: string[]): string | null {
+  if (primaryWorkspaceRoot && isPathInsideWorkspace(cwd, primaryWorkspaceRoot)) {
+    return primaryWorkspaceRoot;
+  }
+
+  const matchedAdditionalRoot = additionalWorkspaceRoots.find((root) => isPathInsideWorkspace(cwd, root));
+  if (matchedAdditionalRoot) {
+    return matchedAdditionalRoot;
+  }
+
+  return primaryWorkspaceRoot;
+}
+
+/**
  * 创建内置 Shell 命令执行工具。
  * @param options - 工具创建选项
  * @returns Shell 命令工具执行器
@@ -152,18 +185,14 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
       }
 
       const workspaceRoot = options.getWorkspaceRoot?.() ?? null;
-      let resolvedWorkspaceRoot = workspaceRoot;
+      let primaryWorkspaceRoot = workspaceRoot;
 
       // 调用方未提供工作区根目录时，回退到工作区
-      if (!resolvedWorkspaceRoot) {
+      if (!primaryWorkspaceRoot) {
         const tibisWorkspace = await native.getTibisWorkspaceRoot();
         if (tibisWorkspace) {
-          resolvedWorkspaceRoot = tibisWorkspace.rootPath;
+          primaryWorkspaceRoot = tibisWorkspace.rootPath;
         }
-      }
-
-      if (!resolvedWorkspaceRoot) {
-        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', '无法初始化工作区目录，拒绝执行 Shell 命令');
       }
 
       let timeoutMs: number;
@@ -173,7 +202,12 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'INVALID_INPUT', error instanceof Error ? error.message : 'timeoutMs 参数无效');
       }
 
-      const cwd = typeof input.cwd === 'string' && input.cwd.trim().length > 0 ? input.cwd.trim() : resolvedWorkspaceRoot;
+      const cwd = typeof input.cwd === 'string' && input.cwd.trim().length > 0 ? input.cwd.trim() : primaryWorkspaceRoot;
+      const resolvedWorkspaceRoot = cwd ? resolveShellWorkspaceRoot(cwd, primaryWorkspaceRoot, getAdditionalShellWorkspaceRoots(options)) : null;
+      if (!cwd || !resolvedWorkspaceRoot) {
+        return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', '无法初始化 Tibis 工作区目录，拒绝执行 Shell 命令');
+      }
+
       const safety = await native.analyzeShellCommand({
         shell: input.shell,
         command,

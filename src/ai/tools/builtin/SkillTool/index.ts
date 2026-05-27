@@ -68,6 +68,32 @@ function buildSkillDescription(store: SkillStoreLike): string {
 }
 
 /**
+ * 转义 XML 文本节点中的特殊字符。
+ * @param value - 原始文本
+ * @returns 转义后的文本
+ */
+function escapeXmlText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * 构建返回给模型的 skill 内容。
+ * @param skill - Skill 定义
+ * @returns 带元数据的 skill 指令文本
+ */
+function buildSkillContent(skill: SkillDefinition): string {
+  const metadata = [
+    '<skill_metadata>',
+    `<dir_path>${escapeXmlText(skill.dirPath)}</dir_path>`,
+    `<file_path>${escapeXmlText(skill.filePath)}</file_path>`,
+    '<shell_cwd_hint>When running scripts or using resources bundled with this skill, call run_shell_command with cwd set to dir_path.</shell_cwd_hint>',
+    '</skill_metadata>'
+  ].join('\n');
+
+  return `${metadata}\n<skill_content name="${escapeXmlText(skill.name)}">\n${skill.content}\n</skill_content>`;
+}
+
+/**
  * 创建 Skill 工具执行器。
  * @param store - skill store 实例
  * @returns 工具执行器
@@ -106,7 +132,7 @@ export function createSkillTool(store: SkillStoreLike): AIToolExecutor<{ name: s
         return createToolFailureResult(SKILL_TOOL_NAME, 'TOOL_NOT_FOUND', `Skill '${input.name}' not found. Available skills: ${available || 'none'}`);
       }
 
-      const content = `<skill_content name="${skill.name}">\n${skill.content}\n</skill_content>`;
+      const content = buildSkillContent(skill);
       return createToolSuccessResult(SKILL_TOOL_NAME, content);
     }
   };

@@ -89,6 +89,20 @@ describe('SkillTool', () => {
     expect(result.data).toContain('</skill_content>');
   });
 
+  it('includes skill directory guidance for bundled scripts and resources', async () => {
+    const store = createMockSkillStore([sampleSkill]);
+    const tool = createSkillTool(store);
+
+    const result = await tool.execute({ name: 'react-patterns' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') throw new Error('Expected success');
+
+    expect(result.data).toContain('<skill_metadata>');
+    expect(result.data).toContain('<dir_path>/workspace/.agents/skills/react-patterns</dir_path>');
+    expect(result.data).toContain('run_shell_command');
+  });
+
   it('returns failure when skill name not found', async () => {
     const store = createMockSkillStore([sampleSkill]);
     const tool = createSkillTool(store);
