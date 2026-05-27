@@ -187,12 +187,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS
+          - name: macOS-arm64
             os: macos-latest
+            build_args: --mac --arm64
+          - name: macOS-x64
+            os: macos-15-intel
+            build_args: --mac --x64
           - name: Windows
             os: windows-latest
+            build_args: ''
           - name: Linux
             os: ubuntu-latest
+            build_args: ''
 
     steps:
       - name: Checkout
@@ -219,7 +225,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build release packages
-        run: pnpm electron:build
+        run: pnpm electron:build -- ${{ matrix.build_args }}
         env:
           ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
           npm_config_electron_builder_binaries_mirror: https://github.com/electron-userland/electron-builder-binaries/releases/download/
