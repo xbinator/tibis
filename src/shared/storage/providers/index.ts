@@ -1,4 +1,4 @@
 export { DEFAULT_PROVIDERS } from './defaults';
-export { providerStorage } from './sqlite';
+export { providerStorage } from './json';
 
-export type { SettingsState, StoredProviderSettings } from './types';
+export type { SettingsState, StoredProviderSettings, StoredProviderEntry, SettingsFileContent } from './types';
