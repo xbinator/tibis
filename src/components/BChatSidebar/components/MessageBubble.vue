@@ -50,10 +50,11 @@
       <BButton square type="text" size="small" icon="lucide:refresh-cw" @click="$emit('regenerate', message)" />
     </div>
 
-    <!-- 用户消息底部：时间戳 + 复制按钮（hover 可见） -->
+    <!-- 用户消息底部：时间戳 + 回退按钮 + 复制按钮（hover 可见） -->
     <div v-if="isUserMessage && message.finished" :class="bem('toolbar', { right: isUserMessage })">
       <span :class="bem('time')">{{ formatMessageTime(message.createdAt) }}</span>
-      <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
+      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" tooltip="回退到此" @click="$emit('rollback', message)" />
+      <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" tooltip="复制消息" @click="handleCopy(message)" />
     </div>
 
     <!-- 图片预览器 -->
@@ -94,12 +95,15 @@ const props = defineProps<{
   message: Message;
   /** 会话已结束时禁用交互（如 QuestionCard） */
   disabled?: boolean;
+  /** 判断消息是否可回退 */
+  canRollback?: (message: Message) => boolean;
 }>();
 
 defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'user-choice-submit', answer: AIUserChoiceAnswerData): void;
+  (e: 'rollback', message: Message): void;
 }>();
 
 /** 图片文件列表（有 url 或 path 的图片类型文件） */
@@ -124,6 +128,9 @@ const showHeader = computed(() => isUserMessage.value && (imageFiles.value.lengt
 const showContainer = computed(() => isCompressionMessage.value || isInterruptMessage.value || !!props.message.parts?.length);
 /** 是否显示助手工具栏 */
 const showAssistantToolbar = computed(() => props.message.finished === true && isAssistantMessage.value);
+
+/** 是否显示回退按钮（仅在后面还有消息时显示） */
+const showRollback = computed(() => isUserMessage.value && props.message.finished === true && props.canRollback?.(props.message));
 
 /** 图片预览器显示状态 */
 const showImageViewer = ref(false);

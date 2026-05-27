@@ -31,9 +31,11 @@
           :loading="loading"
           :disabled="!loading"
           :on-load-history="handleLoadHistory"
+          :can-rollback="rollbackController.canRollback"
           @edit="handleChatEdit"
           @regenerate="handleChatRegenerate"
           @user-choice-submit="handleChatUserChoiceSubmit"
+          @rollback="handleRollback"
         >
           <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
         </ConversationView>
@@ -113,12 +115,14 @@ import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
+import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
+import { Modal } from '@/utils/modal';
 import ConfirmationSheet from './components/ConfirmationSheet.vue';
 import ConversationView from './components/ConversationView.vue';
 import ImagePreview from './components/ImagePreview.vue';
@@ -137,6 +141,7 @@ import { useFileReference } from './hooks/useFileReference';
 import { useImageUpload } from './hooks/useImageUpload';
 import { useInteractionState } from './hooks/useInteractionState';
 import { useModelSelection } from './hooks/useModelSelection';
+import { useRollback } from './hooks/useRollback';
 import { useSession } from './hooks/useSession';
 import { useSkillInit } from './hooks/useSkillInit';
 import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
@@ -563,6 +568,43 @@ const { handleAutoCompactContext, handleCompactContext } = useCompactContext({
   scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
   showToast: interactionAPI.showToast
 });
+
+/** 用户消息回退 hook。 */
+const rollbackController = useRollback({
+  messages,
+  getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined,
+  fetchAllPriorHistory,
+  persistMessages: (sessionId, nextMessages) => chatStore.setSessionMessages(sessionId, nextMessages),
+  invalidateCompressionRecords: async (recordIds) => {
+    for (const recordId of recordIds) {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await getElectronAPI().chatCompressionUpdateStatus(recordId, 'invalid', 'rollback_truncation');
+      unwrap(result);
+    }
+  },
+  restoreInput: (nextMessage) => inputEvents.restoreFromMessage(nextMessage),
+  expireConfirmation: () => confirmationController.expirePendingConfirmation(),
+  focusInput
+});
+
+/**
+ * 处理回退请求。
+ * 弹出二次确认后执行截断、恢复输入框。
+ * @param message - 目标用户消息
+ */
+async function handleRollback(message: Message): Promise<void> {
+  const index = messages.value.findIndex((m) => m.id === message.id);
+  if (index === -1) return;
+
+  const deleteCount = messages.value.length - index;
+  const [cancelled] = await Modal.confirm('确认回退', `将删除该用户消息及其后的 ${deleteCount} 条消息。此操作不可撤销，是否继续？`, {
+    confirmText: '确认回退',
+    cancelText: '取消'
+  });
+  if (cancelled) return;
+
+  await rollbackController.rollback(message);
+}
 
 /**
  * 在发送用户消息前按上下文用量自动压缩旧消息。

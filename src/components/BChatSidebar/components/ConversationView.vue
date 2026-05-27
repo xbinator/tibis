@@ -9,9 +9,11 @@
             :key="item.id"
             :message="item"
             :disabled="disabled"
+            :can-rollback="canRollback"
             @edit="$emit('edit', item)"
             @regenerate="$emit('regenerate', item)"
             @user-choice-submit="$emit('user-choice-submit', $event)"
+            @rollback="$emit('rollback', item)"
           />
         </div>
       </div>
@@ -57,12 +59,15 @@ interface Props {
   onLoadHistory?: () => Promise<void> | void;
   // 会话已结束时禁用交互（如 QuestionCard）
   disabled?: boolean;
+  /** 判断消息是否可回退 */
+  canRollback?: (message: Message) => boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
   onLoadHistory: undefined,
-  disabled: false
+  disabled: false,
+  canRollback: undefined
 });
 
 defineEmits<{
@@ -70,6 +75,7 @@ defineEmits<{
   (e: 'regenerate', message: Message): void;
   (e: 'load-history'): void;
   (e: 'user-choice-submit', answer: AIUserChoiceAnswerData): void;
+  (e: 'rollback', message: Message): void;
 }>();
 
 const { isBackBottom, scrollToBottom } = useChatScroll({ onLoadHistory: props.onLoadHistory });
