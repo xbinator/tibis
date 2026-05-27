@@ -5,7 +5,7 @@
       <span>{{ request.title }}</span>
     </div>
 
-    <div class="confirm-bottom-sheet__description">{{ request.description }}</div>
+    <div class="confirm-bottom-sheet__description" v-html="description"></div>
 
     <div v-if="request.beforeText" class="confirm-bottom-sheet__preview">
       <div class="confirm-bottom-sheet__label">原内容</div>
@@ -40,7 +40,9 @@
  * @description 底部弹出确认卡片，用于替代消息流内的 ConfirmationCard。
  */
 import type { ChatMessageConfirmationAction } from 'types/chat';
+import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
+import { escape } from 'lodash-es';
 import type { AIToolConfirmationRequest } from '@/ai/tools/confirmation';
 
 defineOptions({ name: 'ConfirmationSheet' });
@@ -50,7 +52,7 @@ interface Props {
   request: AIToolConfirmationRequest | null;
 }
 
-defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {});
 
 const emit = defineEmits<{
   (e: 'action', action: ChatMessageConfirmationAction): void;
@@ -58,6 +60,18 @@ const emit = defineEmits<{
 
 /** 预览文本截断最大长度 */
 const PREVIEW_MAX_LENGTH = 800;
+
+/**
+ * 安全的 HTML 描述内容。
+ * 使用 lodash escape 转义所有 HTML 特殊字符，防止 XSS 和 CSS 注入，
+ * 然后将换行符替换为 <br> 标签以保留换行格式。
+ */
+const description = computed(() => {
+  const raw = props.request?.description?.trim() || '';
+  if (!raw) return '';
+  const escaped = escape(raw);
+  return escaped.replace(/\n/g, '<br>');
+});
 
 /**
  * 截断预览文本。
