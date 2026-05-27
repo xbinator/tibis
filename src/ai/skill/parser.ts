@@ -94,7 +94,9 @@ function dirname(filePath: string): string {
 export function parseSkillMarkdown(markdown: string, filePath: string, options: ParseOptions = {}): SkillDefinition {
   const source: SkillSource = options.source ?? 'global';
   const maxContentLength = options.maxContentLength ?? DEFAULT_SKILL_MAX_CONTENT_LENGTH;
-  const dirPath = dirname(filePath);
+  // 统一使用 / 分隔符，避免 Windows 下 Chokidar 报告 \ 路径与 scanner 的 / 路径不一致导致去重失败
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
+  const dirPath = dirname(normalizedFilePath);
   const parsedAt = Date.now();
 
   const extracted = extractFrontmatter(markdown);
@@ -103,7 +105,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       name: '',
       description: '',
       content: '',
-      filePath,
+      filePath: normalizedFilePath,
       dirPath,
       source,
       enabled: true,
@@ -119,7 +121,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       name: '',
       description: '',
       content: '',
-      filePath,
+      filePath: normalizedFilePath,
       dirPath,
       source,
       enabled: true,
@@ -136,7 +138,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       name: '',
       description,
       content: '',
-      filePath,
+      filePath: normalizedFilePath,
       dirPath,
       source,
       enabled: true,
@@ -150,7 +152,7 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
       name,
       description: '',
       content: '',
-      filePath,
+      filePath: normalizedFilePath,
       dirPath,
       source,
       enabled: true,
@@ -160,13 +162,13 @@ export function parseSkillMarkdown(markdown: string, filePath: string, options: 
   }
 
   const rawContent = extracted.body.trim();
-  const { text: content, truncated } = truncateContent(rawContent, maxContentLength, filePath);
+  const { text: content, truncated } = truncateContent(rawContent, maxContentLength, normalizedFilePath);
 
   return {
     name,
     description,
     content,
-    filePath,
+    filePath: normalizedFilePath,
     dirPath,
     source,
     enabled: true,
