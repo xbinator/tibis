@@ -190,6 +190,37 @@ describe('createBuiltinShellCommandTool', () => {
     expect(result.status).toBe('success');
   });
 
+  it('infers an allowed skill directory from a leading cd command when cwd is omitted', async () => {
+    const { createBuiltinShellCommandTool } = await import('@/ai/tools/builtin/ShellTool');
+    const { adapter } = createConfirmationAdapter(true);
+    const tool = createBuiltinShellCommandTool({
+      confirm: adapter,
+      getWorkspaceRoot: () => '/home/user/.tibis',
+      getAdditionalShellWorkspaceRoots: () => ['/home/user/.agents/skills/fund-assistant']
+    });
+    nativeMock.analyzeShellCommand.mockResolvedValue(createAllowedReport());
+    nativeMock.runShellCommand.mockResolvedValue(createRunResult());
+
+    const result = await tool.execute({
+      shell: 'bash',
+      command: 'cd /home/user/.agents/skills/fund-assistant && python scripts/fund_api.py query 024479'
+    });
+
+    expect(nativeMock.analyzeShellCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: '/home/user/.agents/skills/fund-assistant',
+        workspaceRoot: '/home/user/.agents/skills/fund-assistant'
+      })
+    );
+    expect(nativeMock.runShellCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: '/home/user/.agents/skills/fund-assistant',
+        workspaceRoot: '/home/user/.agents/skills/fund-assistant'
+      })
+    );
+    expect(result.status).toBe('success');
+  });
+
   it('returns permission failure when safety analysis blocks the command', async () => {
     const { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } = await import('@/ai/tools/builtin/ShellTool');
     const { adapter, confirmMock } = createConfirmationAdapter(true);

@@ -1,35 +1,49 @@
 <template>
   <div v-if="request" class="confirm-bottom-sheet">
-    <div class="confirm-bottom-sheet__title">
+    <div class="confirm-bottom-sheet__title" @click="toggleCollapse">
       <Icon :icon="request.riskLevel === 'dangerous' ? 'lucide:triangle-alert' : 'lucide:shield-check'" width="14" height="14" />
       <span>{{ request.title }}</span>
+      <Icon
+        icon="lucide:chevron-up"
+        width="14"
+        height="14"
+        class="confirm-bottom-sheet__chevron"
+        :class="{ 'confirm-bottom-sheet__chevron--collapsed': isCollapsed }"
+      />
     </div>
 
-    <div class="confirm-bottom-sheet__description" v-html="description"></div>
+    <div v-show="!isCollapsed" class="confirm-bottom-sheet__body">
+      <div class="confirm-bottom-sheet__description" v-html="description"></div>
 
-    <div v-if="request.beforeText" class="confirm-bottom-sheet__preview">
-      <div class="confirm-bottom-sheet__label">原内容</div>
-      <pre class="confirm-bottom-sheet__code">{{ truncatePreview(request.beforeText) }}</pre>
-    </div>
-    <div v-if="request.afterText" class="confirm-bottom-sheet__preview">
-      <div class="confirm-bottom-sheet__label">{{ request.toolName === 'edit_file' ? '替换为' : '新内容' }}</div>
-      <pre class="confirm-bottom-sheet__code">{{ truncatePreview(request.afterText) }}</pre>
-    </div>
+      <div v-if="request.beforeText" class="confirm-bottom-sheet__preview">
+        <div class="confirm-bottom-sheet__label">原内容</div>
+        <pre class="confirm-bottom-sheet__code">{{ truncatePreview(request.beforeText) }}</pre>
+      </div>
+      <div v-if="request.afterText" class="confirm-bottom-sheet__preview">
+        <div class="confirm-bottom-sheet__label">{{ request.toolName === 'edit_file' ? '替换为' : '新内容' }}</div>
+        <pre class="confirm-bottom-sheet__code">{{ truncatePreview(request.afterText) }}</pre>
+      </div>
 
-    <div class="confirm-bottom-sheet__actions">
-      <BButton size="small" @click="handleAction('approve')">应用</BButton>
-      <BButton
-        v-if="request.allowRemember && request.rememberScopes?.includes('session')"
-        size="small"
-        type="secondary"
-        @click="handleAction('approve-session')"
-      >
-        本会话允许
-      </BButton>
-      <BButton v-if="request.allowRemember && request.rememberScopes?.includes('always')" size="small" type="secondary" @click="handleAction('approve-always')">
-        始终允许
-      </BButton>
-      <BButton size="small" type="text" @click="handleAction('cancel')">取消</BButton>
+      <div class="confirm-bottom-sheet__actions">
+        <BButton size="small" @click="handleAction('approve')">应用</BButton>
+        <BButton
+          v-if="request.allowRemember && request.rememberScopes?.includes('session')"
+          size="small"
+          type="secondary"
+          @click="handleAction('approve-session')"
+        >
+          本会话允许
+        </BButton>
+        <BButton
+          v-if="request.allowRemember && request.rememberScopes?.includes('always')"
+          size="small"
+          type="secondary"
+          @click="handleAction('approve-always')"
+        >
+          始终允许
+        </BButton>
+        <BButton size="small" type="text" @click="handleAction('cancel')">取消</BButton>
+      </div>
     </div>
   </div>
 </template>
@@ -40,7 +54,7 @@
  * @description 底部弹出确认卡片，用于替代消息流内的 ConfirmationCard。
  */
 import type { ChatMessageConfirmationAction } from 'types/chat';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { escape } from 'lodash-es';
 import type { AIToolConfirmationRequest } from '@/ai/tools/confirmation';
@@ -57,6 +71,16 @@ const props = withDefaults(defineProps<Props>(), {});
 const emit = defineEmits<{
   (e: 'action', action: ChatMessageConfirmationAction): void;
 }>();
+
+/** 内容区域是否折叠 */
+const isCollapsed = ref(false);
+
+/**
+ * 切换内容区域的折叠状态。
+ */
+function toggleCollapse(): void {
+  isCollapsed.value = !isCollapsed.value;
+}
 
 /** 预览文本截断最大长度 */
 const PREVIEW_MAX_LENGTH = 800;
@@ -96,19 +120,31 @@ function handleAction(action: ChatMessageConfirmationAction): void {
 
 <style scoped lang="less">
 .confirm-bottom-sheet {
-  padding: 14px 16px;
+  padding: 10px 12px;
   pointer-events: auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .confirm-bottom-sheet__title {
   display: flex;
   gap: 6px;
   align-items: center;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.confirm-bottom-sheet__chevron {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.confirm-bottom-sheet__chevron--collapsed {
+  transform: rotate(180deg);
 }
 
 .confirm-bottom-sheet__description {
