@@ -119,6 +119,16 @@ export const useProviderStore = defineStore('provider', {
         await this.loadProviders();
       }
       return result;
+    },
+
+    /**
+     * 重新排序服务商列表
+     * @param orderedIds 排序后的服务商 ID 数组
+     */
+    async reorderProviders(orderedIds: string[]): Promise<AIProvider[]> {
+      await providerStorage.reorderProviders(orderedIds);
+      await this.loadProviders();
+      return this.providers;
     }
   }
 });
