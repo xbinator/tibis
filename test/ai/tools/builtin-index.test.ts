@@ -43,7 +43,6 @@ describe('createBuiltinTools', () => {
       'read_file',
       'read_directory',
       'get_settings',
-      'get_mcp_settings',
       'query_logs'
     ]);
   });
@@ -53,10 +52,6 @@ describe('createBuiltinTools', () => {
     expect(names).toContain('edit_file');
     expect(names).toContain('write_file');
     expect(names).toContain('update_settings');
-    expect(names).toContain('add_mcp_server');
-    expect(names).toContain('update_mcp_server');
-    expect(names).toContain('remove_mcp_server');
-    expect(names).toContain('refresh_mcp_discovery');
     // run_shell_command is only registered when native.supportsShellCommand() returns true (Electron)
   });
 });
@@ -118,8 +113,8 @@ describe('createBuiltinTools with skill tool', () => {
     };
   }
 
-  it('includes skill tool when skillStore is provided and initialized', () => {
-    const mockSkillStore = createMockSkillStore(true);
+  it('includes skill tool when skillStore is provided, initialized and has enabled skills', () => {
+    const mockSkillStore = createMockSkillStore(true, [{ name: 'test-skill', description: 'A test skill', content: 'instructions', parseError: null }]);
     const tools = createBuiltinTools({
       confirm: { confirm: async () => true },
       skillStore: mockSkillStore
@@ -139,7 +134,18 @@ describe('createBuiltinTools with skill tool', () => {
   });
 
   it('excludes skill tool when skillStore is not initialized', () => {
-    const mockSkillStore = createMockSkillStore(false);
+    const mockSkillStore = createMockSkillStore(false, [{ name: 'test-skill', description: 'A test skill', content: 'instructions', parseError: null }]);
+    const tools = createBuiltinTools({
+      confirm: { confirm: async () => true },
+      skillStore: mockSkillStore
+    });
+
+    const skillTool = tools.find((t) => t.definition.name === 'skill');
+    expect(skillTool).toBeUndefined();
+  });
+
+  it('excludes skill tool when skillStore has no enabled skills', () => {
+    const mockSkillStore = createMockSkillStore(true, []);
     const tools = createBuiltinTools({
       confirm: { confirm: async () => true },
       skillStore: mockSkillStore

@@ -1,12 +1,12 @@
 /**
- * @file builtin-mcp-settings.test.ts
- * @description 内置 MCP 配置工具测试。
+ * @file builtin-mcp.test.ts
+ * @description 内置 MCP 工具测试。
  */
 import type { AIToolContext } from 'types/ai';
 import type { ElectronAPI } from 'types/electron-api';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBuiltinMCPSettingsTools } from '@/ai/tools/builtin/MCPSettingsTool';
+import { createBuiltinMCPTools } from '@/ai/tools/builtin/MCPTool';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { useSettingStore } from '@/stores/ui/setting';
@@ -66,7 +66,7 @@ function createToolContext(): AIToolContext {
   };
 }
 
-describe('built-in MCP settings tools', () => {
+describe('built-in MCP tools', () => {
   beforeEach(() => {
     localStorage.clear();
     electronMocks.hasElectronAPI.mockReturnValue(true);
@@ -80,7 +80,7 @@ describe('built-in MCP settings tools', () => {
   });
 
   it('returns MCP server settings without secrets redaction so the model can inspect config exactly', async () => {
-    const tools = createBuiltinMCPSettingsTools({ confirm: vi.fn(async () => ({ approved: true })) });
+    const tools = createBuiltinMCPTools({ confirm: vi.fn(async () => ({ approved: true })) });
     const toolSettingsStore = useToolSettingsStore();
 
     toolSettingsStore.addMcpServer({
@@ -108,7 +108,7 @@ describe('built-in MCP settings tools', () => {
 
   it('adds an MCP server after confirmation', async () => {
     const confirm = vi.fn(async () => ({ approved: true }));
-    const tools = createBuiltinMCPSettingsTools({ confirm });
+    const tools = createBuiltinMCPTools({ confirm });
     const toolSettingsStore = useToolSettingsStore();
 
     const result = await tools.addMcpServer.execute(
@@ -139,7 +139,7 @@ describe('built-in MCP settings tools', () => {
 
   it('updates an MCP server after confirmation', async () => {
     const confirm = vi.fn(async () => ({ approved: true }));
-    const tools = createBuiltinMCPSettingsTools({ confirm });
+    const tools = createBuiltinMCPTools({ confirm });
     const toolSettingsStore = useToolSettingsStore();
 
     toolSettingsStore.addMcpServer({
@@ -179,7 +179,7 @@ describe('built-in MCP settings tools', () => {
 
   it('removes an MCP server after confirmation', async () => {
     const confirm = vi.fn(async () => ({ approved: true }));
-    const tools = createBuiltinMCPSettingsTools({ confirm });
+    const tools = createBuiltinMCPTools({ confirm });
     const toolSettingsStore = useToolSettingsStore();
 
     toolSettingsStore.addMcpServer({
@@ -203,7 +203,7 @@ describe('built-in MCP settings tools', () => {
 
   it('refreshes MCP discovery through Electron after confirmation', async () => {
     const confirm = vi.fn(async () => ({ approved: true }));
-    const tools = createBuiltinMCPSettingsTools({ confirm });
+    const tools = createBuiltinMCPTools({ confirm });
     const toolSettingsStore = useToolSettingsStore();
 
     toolSettingsStore.addMcpServer({
@@ -227,7 +227,7 @@ describe('built-in MCP settings tools', () => {
 
   it('blocks MCP settings writes in readonly permission mode', async () => {
     const confirm = vi.fn(async () => ({ approved: true }));
-    const tools = createBuiltinMCPSettingsTools({ confirm });
+    const tools = createBuiltinMCPTools({ confirm });
     const toolPermissionStore = useToolPermissionStore();
 
     toolPermissionStore.setToolPermissionMode('readonly');
