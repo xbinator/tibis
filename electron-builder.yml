@@ -1,5 +1,5 @@
 appId: com.tibis.desktop
-productName: tibis
+productName: Tibis
 artifactName: "tibis-${os}-${arch}.${ext}"
 directories:
   buildResources: build
