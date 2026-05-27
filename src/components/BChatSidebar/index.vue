@@ -661,6 +661,7 @@ async function handleChatSubmit(): Promise<void> {
  * 处理中止流式输出。
  */
 async function handleAbort(): Promise<void> {
+  confirmationController.expirePendingConfirmation();
   taskRuntime.abortActiveTask();
 
   const sessionId = settingStore.chatSidebarActiveSessionId;
