@@ -41,6 +41,12 @@ describe('package scripts', () => {
     expect(manifest.scripts?.['electron:build']).toBe('pnpm run build && pnpm run electron:build-main && electron-builder --publish never');
   });
 
+  it('cleans stale electron main output before compiling', () => {
+    const manifest = readPackageScripts();
+
+    expect(manifest.scripts?.['electron:build-main']).toBe('node scripts/clean-dist-electron.mjs && tsc -p electron/tsconfig.json');
+  });
+
   it('declares speech manifest helper scripts', () => {
     const manifest = readPackageScripts();
 
