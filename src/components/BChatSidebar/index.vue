@@ -100,6 +100,7 @@
 
 <script setup lang="ts">
 import type { Message } from './utils/types';
+import type { AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
 import { computed, h, onMounted, onUnmounted, provide, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -326,7 +327,7 @@ const fileMentionOptions = computed<FileMentionOption[]>(() => {
   }));
 });
 
-const tools = createBuiltinTools({
+const allBuiltinTools = createBuiltinTools({
   confirm: confirmationController.createAdapter(),
   skillStore,
   mcpStore: toolSettingsStore,
@@ -358,10 +359,21 @@ const tools = createBuiltinTools({
       toolCallId: pendingQuestion.toolCallId
     };
   }
-}).filter((tool) => {
-  // 聊天侧仅开放内置工具白名单（含条件注册工具），避免暴露实验性或未正式纳入策略的工具。
-  return isBuiltinToolName(tool.definition.name);
 });
+
+/**
+ * 动态获取当前可用的工具列表。
+ * 每次调用时根据运行时状态（编辑器、MCP、Skill）过滤条件工具。
+ * @returns 当前可用工具列表
+ */
+function getActiveTools(): AIToolExecutor[] {
+  const hasActiveEditor = Boolean(editorToolContextRegistry.getCurrentContext());
+  return allBuiltinTools.filter((tool) => {
+    if (!isBuiltinToolName(tool.definition.name)) return false;
+    if (tool.definition.name === 'read_current_document' && !hasActiveEditor) return false;
+    return true;
+  });
+}
 
 /**
  * 处理底部确认弹窗操作。
@@ -420,7 +432,7 @@ async function handleBeforeSend(nextMessage: Message): Promise<void> {
 /** 聊天流式处理 hook */
 const { stream, loading: streamLoading } = useChatStream({
   messages,
-  tools,
+  tools: getActiveTools,
   getToolContext: editorToolContextRegistry.getCurrentContext,
   getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined,
   onBeforeRegenerate: handleBeforeRegenerate,

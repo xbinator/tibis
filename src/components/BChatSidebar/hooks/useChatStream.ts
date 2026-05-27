@@ -38,8 +38,8 @@ import { createToolLoopGuard, type ToolLoopGuard } from '../utils/toolLoopGuard'
 export interface UseChatStreamOptions {
   /** 消息列表（响应式引用） */
   messages: Ref<Message[]>;
-  /** 可用 AI 工具 */
-  tools?: AIToolExecutor[];
+  /** 可用 AI 工具，支持静态数组或动态获取函数 */
+  tools?: AIToolExecutor[] | (() => AIToolExecutor[]);
   /** 获取工具上下文 */
   getToolContext?: () => AIToolContext | undefined;
   /** 获取会话 ID */
@@ -79,7 +79,7 @@ export interface UseChatStreamReturns {
 }
 
 const DEFAULT_TOOL_LOOP_GUARD_CONFIG: ToolLoopGuardConfig = {
-  maxRounds: 5,
+  maxRounds: 25,
   maxRepeatedCalls: 2
 };
 
@@ -88,7 +88,16 @@ const DEFAULT_TOOL_LOOP_GUARD_CONFIG: ToolLoopGuardConfig = {
  * 这些工具会在主进程内完成调用并继续同一轮流式输出，前端不应再次尝试本地执行。
  */
 export function useChatStream(options: UseChatStreamOptions): UseChatStreamReturns {
-  const { messages, tools, getToolContext, onBeforeRegenerate, onComplete } = options;
+  const { messages, tools: toolsInput, getToolContext, onBeforeRegenerate, onComplete } = options;
+
+  /**
+   * 解析当前可用的工具列表。
+   * 支持静态数组或动态 getter 函数，每次调用时取最新值。
+   * @returns 工具执行器数组
+   */
+  function resolveTools(): AIToolExecutor[] {
+    return typeof toolsInput === 'function' ? toolsInput() : toolsInput ?? [];
+  }
 
   const loading = ref(false);
   const pendingToolResults = shallowRef<ExecutedToolCall[]>([]);
@@ -371,7 +380,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
    * 执行追踪的工具调用
    */
   async function executeTrackedToolCall(chunk: AIStreamToolCallChunk, roundId: number): Promise<void> {
-    const result = await executeToolCall(chunk, tools ?? [], getToolContext?.());
+    const result = await executeToolCall(chunk, resolveTools(), getToolContext?.());
     if (roundId !== currentToolRoundId) {
       return;
     }
@@ -399,7 +408,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     appendAssistantToolCall(chunk);
 
     // Tavily 等远端 SDK 工具由主进程直接执行，前端仅展示 tool-call，不再本地回放执行。
-    if (!tools?.some((item) => item.definition.name === chunk.toolName) && isSdkManagedToolName(chunk.toolName)) {
+    if (!resolveTools().some((item) => item.definition.name === chunk.toolName) && isSdkManagedToolName(chunk.toolName)) {
       return;
     }
 
@@ -547,7 +556,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     // 处理文件引用
     const nextMessages = buildChatMessageReferences(sourceMessages);
-    const transportTools = config.toolSupport.supported && Boolean(tools?.length) ? toTransportTools(tools ?? []) : undefined;
+    const resolvedTools = resolveTools();
+    const transportTools = config.toolSupport.supported && Boolean(resolvedTools.length) ? toTransportTools(resolvedTools) : undefined;
 
     currentModelMessageCache = convert.toCachedModelMessages(nextMessages, currentModelMessageCache);
     const continuedMessages: ModelMessage[] = [...currentModelMessageCache.modelMessages];
