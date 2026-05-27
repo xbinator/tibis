@@ -211,9 +211,10 @@ export function resolvePdfDefaultPath(editorState: EditorState): string {
 /**
  * 将正文片段包装为可直接用于 PDF 渲染的完整 HTML 文档。
  * @param body - 已准备好的正文 HTML
+ * @param extraStyles - 额外注入的样式块（如收集的页面样式表规则）
  * @returns 完整 HTML 文档
  */
-export function buildPdfDocumentHtml(body: string): string {
+export function buildPdfDocumentHtml(body: string, extraStyles = ''): string {
   return [
     '<!DOCTYPE html>',
     '<html lang="zh-CN">',
@@ -222,6 +223,7 @@ export function buildPdfDocumentHtml(body: string): string {
     '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
     '<title>Export PDF</title>',
     `<style>${PDF_EXPORT_DOCUMENT_STYLE}</style>`,
+    extraStyles ? `<style>${extraStyles}</style>` : '',
     '</head>',
     `<body><main class="b-markdown-export">${body}</main></body>`,
     '</html>'
@@ -229,50 +231,64 @@ export function buildPdfDocumentHtml(body: string): string {
 }
 
 /**
- * 将单个 DOM 元素的计算样式内联到导出副本上。
- * @param source - 原始元素
- * @param target - 克隆后的目标元素
+ * 标记为与 markdown 导出内容相关的样式表规则模式。
+ * 只收集匹配这些模式的规则，避免注入无关样式影响导出排版。
  */
-function inlineComputedStyle(source: Element, target: Element): void {
-  const computedStyle = window.getComputedStyle(source);
-  const cssText = Array.from(computedStyle)
-    .map((propertyName) => `${propertyName}: ${computedStyle.getPropertyValue(propertyName)};`)
-    .join(' ');
-
-  if (cssText) {
-    target.setAttribute('style', cssText);
-  }
-}
+const DOCUMENT_STYLE_RELEVANT_SELECTORS = [
+  '.b-markdown-rich',
+  '.ProseMirror',
+  '.hljs-',
+  '.code-highlight',
+  '.search-match',
+  '.ai-selection-highlight',
+  '.editor-comment-highlight',
+  '.b-markdown-frontmatter',
+  '.b-markdown-codeblock',
+  '.b-markdown-table',
+  '.b-markdown-anchor'
+];
 
 /**
- * 深度克隆富文本节点，并将当前计算样式写入导出副本。
- * @param sourceNode - 原始 DOM 节点
- * @returns 带内联样式的克隆节点
+ * 从当前页面收集 CSS 自定义属性与样式表规则。
+ * 将收集结果作为独立样式块注入导出 HTML，替代逐节点调用 getComputedStyle 的性能瓶颈。
+ * @returns 收集到的 CSS 文本
  */
-function cloneNodeWithInlineStyles(sourceNode: Node): Node {
-  if (!(sourceNode instanceof Element)) {
-    return sourceNode.cloneNode(true);
+function collectDocumentStyles(): string {
+  const parts: string[] = [];
+
+  // 收集 :root 中的 CSS 自定义属性（色值与间距变量），确保导出上下文中的颜色与尺寸一致
+  const computedRootStyle = getComputedStyle(document.documentElement);
+  const variables: string[] = [];
+  for (const name of Array.from(computedRootStyle)) {
+    if (name.startsWith('--')) {
+      variables.push(`  ${name}: ${computedRootStyle.getPropertyValue(name).trim()};`);
+    }
+  }
+  if (variables.length > 0) {
+    parts.push(`:root {\n${variables.join('\n')}\n}`);
   }
 
-  const clonedElement = sourceNode.cloneNode(false) as Element;
-  inlineComputedStyle(sourceNode, clonedElement);
-
-  if (sourceNode instanceof HTMLInputElement) {
-    const clonedInput = clonedElement as HTMLInputElement;
-    clonedInput.checked = sourceNode.checked;
-
-    if (sourceNode.checked) {
-      clonedInput.setAttribute('checked', '');
-    } else {
-      clonedInput.removeAttribute('checked');
+  // 收集与 markdown 渲染相关的样式表规则
+  for (const sheet of document.styleSheets) {
+    try {
+      for (const rule of sheet.cssRules) {
+        if (!(rule instanceof CSSStyleRule)) {
+          continue;
+        }
+        const { selectorText } = rule;
+        if (!DOCUMENT_STYLE_RELEVANT_SELECTORS.some((pattern) => selectorText.includes(pattern))) {
+          continue;
+        }
+        // 移除 Vue scoped 数据属性选择器，使规则在导出 DOM 中也能匹配
+        const cleaned = rule.cssText.replace(/\[data-v-[a-f0-9]+\]/gi, '');
+        parts.push(cleaned);
+      }
+    } catch {
+      // 跨域或受限的样式表无法读取，静默跳过
     }
   }
 
-  Array.from(sourceNode.childNodes).forEach((childNode) => {
-    clonedElement.appendChild(cloneNodeWithInlineStyles(childNode));
-  });
-
-  return clonedElement;
+  return parts.join('\n');
 }
 
 /**
@@ -294,7 +310,7 @@ function normalizeRichExportLayout(rootElement: HTMLElement): void {
  * @returns 完整 HTML 文档
  */
 export function buildRichPdfExportHtml(rootElement: HTMLElement): string {
-  const clonedRoot = cloneNodeWithInlineStyles(rootElement) as HTMLElement;
+  const clonedRoot = rootElement.cloneNode(true) as HTMLElement;
   normalizeRichExportLayout(clonedRoot);
 
   clonedRoot.querySelectorAll(RICH_EXPORT_IGNORED_SELECTORS).forEach((element) => {
@@ -305,7 +321,7 @@ export function buildRichPdfExportHtml(rootElement: HTMLElement): string {
     element.removeAttribute('contenteditable');
   });
 
-  return buildPdfDocumentHtml(clonedRoot.outerHTML);
+  return buildPdfDocumentHtml(clonedRoot.outerHTML, collectDocumentStyles());
 }
 
 /**

@@ -4,11 +4,11 @@
  */
 /* @vitest-environment jsdom */
 
+import type { ElectronExportPdfOptions } from 'types/electron-api';
 import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ElectronExportPdfOptions } from 'types/electron-api';
 import Markdown from '@/components/BEditor/Markdown.vue';
 import { PDF_FILE_FILTER } from '@/constants/extensions';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
@@ -150,7 +150,6 @@ describe('Markdown export pdf', () => {
     expect(exportPdfMock.mock.calls[0]?.[0].html).toContain('Rich Title');
     expect(exportPdfMock.mock.calls[0]?.[0].html).toContain('<strong');
     expect(exportPdfMock.mock.calls[0]?.[0].html).toContain('b-markdown-rich__content');
-    expect(exportPdfMock.mock.calls[0]?.[0].html).toContain('style=');
     expect(exportPdfMock.mock.calls[0]?.[0].html).toContain('font-size: 24px;');
     expect(exportPdfMock.mock.calls[0]?.[0].html).toContain('padding: 20px 40px 90px;');
   });

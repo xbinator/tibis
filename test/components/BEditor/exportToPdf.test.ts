@@ -9,7 +9,7 @@ import { buildRichPdfExportHtml, buildSourcePdfExportHtml } from '@/components/B
 
 describe('buildSourcePdfExportHtml', () => {
   it('exports raw markdown source without injecting wrapper divs or code block background', () => {
-    const source = '# Title\n\n`<webview>` and `<KeepAlive>`\n\n```typescript\nconst value = \"ok\"\n```';
+    const source = '# Title\n\n`<webview>` and `<KeepAlive>`\n\n```typescript\nconst value = "ok"\n```';
     const html = buildSourcePdfExportHtml(source);
 
     expect(html).toContain('&lt;webview&gt;');
