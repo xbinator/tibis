@@ -1,17 +1,23 @@
 <template>
   <div class="conversation-view">
-    <div ref="container" class="conversation-view__container">
-      <div class="conversation-view__placeholder"></div>
-      <div class="conversation-view__content">
-        <MessageBubble
-          v-for="item in messages"
-          :key="item.id"
-          :message="item"
-          :disabled="disabled"
-          @edit="$emit('edit', item)"
-          @regenerate="$emit('regenerate', item)"
-          @user-choice-submit="$emit('user-choice-submit', $event)"
-        />
+    <div class="conversation-view__main">
+      <div ref="container" class="conversation-view__container">
+        <div class="conversation-view__placeholder"></div>
+        <div class="conversation-view__content">
+          <MessageBubble
+            v-for="item in messages"
+            :key="item.id"
+            :message="item"
+            :disabled="disabled"
+            @edit="$emit('edit', item)"
+            @regenerate="$emit('regenerate', item)"
+            @user-choice-submit="$emit('user-choice-submit', $event)"
+          />
+        </div>
+      </div>
+
+      <div class="conversation-view__floating-container">
+        <slot></slot>
       </div>
     </div>
 
@@ -29,10 +35,6 @@
       </div>
       <div class="conversation-view__title">开始对话</div>
       <div class="conversation-view__text">输入你的问题，跟助手聊聊吧</div>
-    </div>
-
-    <div class="conversation-view__floating-container">
-      <slot></slot>
     </div>
   </div>
 </template>
@@ -83,16 +85,26 @@ defineExpose({ scrollToBottom });
   height: 100%;
 }
 
+.conversation-view__main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .conversation-view__container {
   display: flex;
   flex-direction: column-reverse;
   height: 100%;
-  padding: var(--b-chat-padding, 16px);
+  padding: 12px;
   overflow-y: auto;
-  // overflow-anchor: none;
   scrollbar-gutter: stable;
 
   .scrollbar-style();
+}
+
+.conversation-view__floating-container {
+  position: relative;
+  padding: 0 12px 12px;
 }
 
 .conversation-view__content {
@@ -167,12 +179,6 @@ defineExpose({ scrollToBottom });
   line-height: 1.6;
   color: var(--text-secondary);
   white-space: nowrap;
-}
-
-.conversation-view__floating-container {
-  position: absolute;
-  inset: auto 16px 16px;
-  z-index: 2;
 }
 
 /* 使用悬浮指示器主题变量，保证亮暗主题下都有清晰层次。 */

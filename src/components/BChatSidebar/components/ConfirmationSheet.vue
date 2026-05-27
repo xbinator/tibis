@@ -87,7 +87,6 @@ function handleAction(action: ChatMessageConfirmationAction): void {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 12px;
-  box-shadow: 0 -4px 24px rgb(0 0 0 / 12%);
 }
 
 .confirm-bottom-sheet__title {
