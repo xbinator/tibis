@@ -1,6 +1,6 @@
 /**
- * @file index.ts
- * @description 内置 MCP 配置读写工具实现。
+ * @file MCPTool/index.ts
+ * @description 内置 MCP 工具实现，管理 MCP 服务器配置与发现。
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../../confirmation';
 import type { AIToolExecutor, MCPDiscoveryRefreshResult } from 'types/ai';
@@ -157,7 +157,7 @@ export interface RefreshMcpDiscoveryResult {
 /**
  * 内置 MCP 配置工具集合。
  */
-export interface BuiltinMCPSettingsTools {
+export interface BuiltinMCPTools {
   /** 获取 MCP 设置工具。 */
   getMcpSettings: AIToolExecutor<Record<string, never>, GetMcpSettingsResult>;
   /** 新增 MCP server 工具。 */
@@ -361,11 +361,28 @@ function createMcpWriteConfirmationRequest(
 }
 
 /**
- * 创建内置 MCP 配置工具。
- * @param adapter - 确认适配器
- * @returns MCP 配置工具集合
+ * MCP 工具 store 接口，仅声明 MCPTool 条件注册所需的方法。
  */
-export function createBuiltinMCPSettingsTools(adapter: AIToolConfirmationAdapter): BuiltinMCPSettingsTools {
+export interface MCPStoreLike {
+  /** 是否存在已启用且配置完整的 MCP server */
+  hasEnabledMcpServers: boolean;
+}
+
+/**
+ * 判断是否存在已配置的 MCP server。
+ * @param store - MCP store 实例
+ * @returns 是否有可用的 MCP server 配置
+ */
+export function hasMcpServers(store: MCPStoreLike): boolean {
+  return store.hasEnabledMcpServers;
+}
+
+/**
+ * 创建内置 MCP 工具。
+ * @param adapter - 确认适配器
+ * @returns MCP 工具集合
+ */
+export function createBuiltinMCPTools(adapter: AIToolConfirmationAdapter): BuiltinMCPTools {
   return {
     getMcpSettings: {
       definition: {

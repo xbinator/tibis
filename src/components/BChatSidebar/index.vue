@@ -104,9 +104,8 @@ import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'type
 import { computed, h, onMounted, onUnmounted, provide, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { createBuiltinTools } from '@/ai/tools/builtin';
+import { createBuiltinTools, isBuiltinToolName } from '@/ai/tools/builtin';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
-import { getDefaultChatToolNames } from '@/ai/tools/policy';
 import BButton from '@/components/BButton/index.vue';
 import BModelSelect from '@/components/BModelSelect/index.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
@@ -114,6 +113,7 @@ import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
 import { useSkillStore } from '@/stores/ai/skill';
+import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
@@ -151,6 +151,7 @@ const chatStore = useChatSessionStore();
 const settingStore = useSettingStore();
 /** Skill 存储 */
 const skillStore = useSkillStore();
+const toolSettingsStore = useToolSettingsStore();
 
 const router = useRouter();
 
@@ -328,6 +329,7 @@ const fileMentionOptions = computed<FileMentionOption[]>(() => {
 const tools = createBuiltinTools({
   confirm: confirmationController.createAdapter(),
   skillStore,
+  mcpStore: toolSettingsStore,
   isFileInRecent: (filePath: string) => {
     return Boolean(filesStore.recentFiles?.some((file) => file.path === filePath));
   },
@@ -357,8 +359,8 @@ const tools = createBuiltinTools({
     };
   }
 }).filter((tool) => {
-  // 聊天侧仅开放默认工具清单，避免暴露实验性或未正式纳入策略的工具。
-  return getDefaultChatToolNames().includes(tool.definition.name);
+  // 聊天侧仅开放内置工具白名单（含条件注册工具），避免暴露实验性或未正式纳入策略的工具。
+  return isBuiltinToolName(tool.definition.name);
 });
 
 /**

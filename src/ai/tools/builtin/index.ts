@@ -14,12 +14,14 @@ import { createBuiltinWriteFileTool, WRITE_FILE_TOOL_NAME } from './FileWriteToo
 import { createBuiltinLogTools, QUERY_LOGS_TOOL_NAME } from './LogsTool';
 import {
   ADD_MCP_SERVER_TOOL_NAME,
-  createBuiltinMCPSettingsTools,
+  createBuiltinMCPTools,
   GET_MCP_SETTINGS_TOOL_NAME,
+  hasMcpServers,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
-  UPDATE_MCP_SERVER_TOOL_NAME
-} from './MCPSettingsTool';
+  UPDATE_MCP_SERVER_TOOL_NAME,
+  type MCPStoreLike
+} from './MCPTool';
 import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } from './QuestionTool';
 import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
@@ -38,7 +40,7 @@ export {
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME
-} from './MCPSettingsTool';
+} from './MCPTool';
 export { LEGACY_ASK_USER_QUESTION_TOOL_NAME, QUESTION_TOOL_NAME } from './QuestionTool';
 export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
@@ -67,6 +69,7 @@ export function isSdkManagedToolName(toolName: string): boolean {
 
 /**
  * 默认开放的只读内置工具名称列表。
+ * MCP 工具和 Skill 工具为条件注册，不在此默认列表中。
  */
 export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   READ_CURRENT_DOCUMENT_TOOL_NAME,
@@ -75,23 +78,38 @@ export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   READ_FILE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
-  GET_MCP_SETTINGS_TOOL_NAME,
-  QUERY_LOGS_TOOL_NAME,
-  SKILL_TOOL_NAME
+  QUERY_LOGS_TOOL_NAME
 ] as const;
 
 /**
  * 默认开放的内置写工具名称列表。
+ * MCP 写工具为条件注册，不在此默认列表中。
  */
-export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [
-  EDIT_FILE_TOOL_NAME,
-  WRITE_FILE_TOOL_NAME,
-  UPDATE_SETTINGS_TOOL_NAME,
+export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [EDIT_FILE_TOOL_NAME, WRITE_FILE_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME, RUN_SHELL_COMMAND_TOOL_NAME] as const;
+
+/**
+ * 条件注册的只读工具名称列表（MCP/Skill 等，有内容时才注册）。
+ */
+export const CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES = [GET_MCP_SETTINGS_TOOL_NAME, SKILL_TOOL_NAME] as const;
+
+/**
+ * 条件注册的写工具名称列表（MCP 写操作等，有内容时才注册）。
+ */
+export const CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES = [
   ADD_MCP_SERVER_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
-  REFRESH_MCP_DISCOVERY_TOOL_NAME,
-  RUN_SHELL_COMMAND_TOOL_NAME
+  REFRESH_MCP_DISCOVERY_TOOL_NAME
+] as const;
+
+/**
+ * 所有内置工具名称列表（默认 + 条件），用于聊天侧白名单过滤。
+ */
+export const ALL_BUILTIN_TOOL_NAMES = [
+  ...DEFAULT_BUILTIN_READONLY_TOOL_NAMES,
+  ...DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES,
+  ...CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES,
+  ...CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES
 ] as const;
 
 /**
@@ -99,7 +117,16 @@ export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [
  * @returns 默认聊天工具名称数组
  */
 export function getDefaultBuiltinChatToolNames(): string[] {
-  return [...DEFAULT_BUILTIN_READONLY_TOOL_NAMES, ...DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES];
+  return [...ALL_BUILTIN_TOOL_NAMES];
+}
+
+/**
+ * 判断工具名称是否属于内置工具白名单（含条件注册工具）。
+ * @param toolName - 工具名称
+ * @returns 是否为内置工具
+ */
+export function isBuiltinToolName(toolName: string): boolean {
+  return ALL_BUILTIN_TOOL_NAMES.includes(toolName as (typeof ALL_BUILTIN_TOOL_NAMES)[number]);
 }
 
 /**
@@ -128,7 +155,9 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions {
   getPendingQuestion?: () => PendingQuestionSnapshot | null;
   /** 创建用户选择问题 ID */
   createQuestionId?: () => string;
-  /** Skill store 实例，提供且 initialized 时注册 skill 工具 */
+  /** MCP store 实例，有已配置 server 时注册 MCP 工具 */
+  mcpStore?: MCPStoreLike;
+  /** Skill store 实例，有可用 skill 时注册 skill 工具 */
   skillStore?: SkillStoreLike;
 }
 
@@ -144,8 +173,6 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const environmentTools = createBuiltinEnvironmentTools();
   // 创建日志只读工具
   const logTools = createBuiltinLogTools();
-  // 创建 MCP 配置工具，读工具不需要真实确认，写工具仅在 options.confirm 存在时暴露。
-  const mcpSettingsTools = createBuiltinMCPSettingsTools(options.confirm ?? { confirm: async () => false });
   // 先汇总全部只读工具，再通过共享清单筛选默认暴露项。
   const allReadonlyTools: AIToolExecutor[] = [
     readTools.readCurrentDocument,
@@ -168,14 +195,17 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       isFileInRecent: options.isFileInRecent
     }),
     createBuiltinSettingsTools(options.confirm ?? { confirm: async () => false }).getSettings,
-    mcpSettingsTools.getMcpSettings,
     logTools.queryLogs
   ];
   const readonlyTools = allReadonlyTools.filter((tool) => isDefaultBuiltinReadonlyToolName(tool.definition.name));
 
+  // MCP 只读工具：仅当存在已配置的 MCP server 时注册
+  const mcpHasContent = options.mcpStore ? hasMcpServers(options.mcpStore) : false;
+  const mcpReadTool = mcpHasContent ? createBuiltinMCPTools(options.confirm ?? { confirm: async () => false }).getMcpSettings : null;
+
   // 没有确认适配器时只返回只读工具
   if (!options.confirm) {
-    return readonlyTools;
+    return [...readonlyTools, ...(mcpReadTool ? [mcpReadTool] : [])];
   }
 
   // 创建文件级写入工具
@@ -190,8 +220,6 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   });
   // 创建设置修改工具
   const settingsTools = createBuiltinSettingsTools(options.confirm);
-  // 创建 MCP 配置写工具
-  const writableMcpSettingsTools = createBuiltinMCPSettingsTools(options.confirm);
   // 创建危险级 Shell 命令工具，仅当 Electron 原生桥接支持时注册。
   const shellCommandTool = native.supportsShellCommand()
     ? createBuiltinShellCommandTool({
@@ -204,16 +232,22 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     editFileTool,
     writeFileTool,
     settingsTools.updateSettings,
-    writableMcpSettingsTools.addMcpServer,
-    writableMcpSettingsTools.updateMcpServer,
-    writableMcpSettingsTools.removeMcpServer,
-    writableMcpSettingsTools.refreshMcpDiscovery,
     ...(shellCommandTool ? [shellCommandTool] : [])
   ];
   const writableTools = allDefaultWritableTools.filter((tool) => isDefaultBuiltinWritableToolName(tool.definition.name));
 
-  // Skill 工具：初始化完成后注册，description 动态反映可用 skill
-  const skillTool = options.skillStore?.initialized ? createSkillTool(options.skillStore) : null;
+  // MCP 写工具：仅当存在已配置的 MCP server 时注册
+  const mcpWriteTools = mcpHasContent ? createBuiltinMCPTools(options.confirm) : null;
 
-  return [...readonlyTools, ...writableTools, ...(skillTool ? [skillTool] : [])];
+  // Skill 工具：仅当有可用 skill 时注册
+  const enabledSkills = options.skillStore?.getEnabledSkills() ?? [];
+  const skillTool = options.skillStore?.initialized && enabledSkills.length > 0 ? createSkillTool(options.skillStore) : null;
+
+  return [
+    ...readonlyTools,
+    ...(mcpReadTool ? [mcpReadTool] : []),
+    ...writableTools,
+    ...(mcpWriteTools ? [mcpWriteTools.addMcpServer, mcpWriteTools.updateMcpServer, mcpWriteTools.removeMcpServer, mcpWriteTools.refreshMcpDiscovery] : []),
+    ...(skillTool ? [skillTool] : [])
+  ];
 }
