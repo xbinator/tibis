@@ -128,6 +128,38 @@ function getAdditionalShellWorkspaceRoots(options: CreateBuiltinShellCommandTool
 }
 
 /**
+ * 去除简单引号包裹。
+ * @param value - 原始路径文本
+ * @returns 去除引号后的路径
+ */
+function stripSimpleShellQuotes(value: string): string {
+  const trimmed = value.trim();
+  if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+/**
+ * 从命令开头提取字面量 cd 目标目录。
+ * @param command - 命令文本
+ * @returns cd 目标目录，无法安全识别时返回 null
+ */
+function extractLeadingCdTarget(command: string): string | null {
+  const match = command.match(/^\s*cd\s+((?:"[^"]+"|'[^']+'|[^\s;&|]+))\s*(?:&&|;)/);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const target = stripSimpleShellQuotes(match[1]);
+  if (!target || target.includes('$') || target.includes('`')) {
+    return null;
+  }
+
+  return target;
+}
+
+/**
  * 根据 cwd 选择用于安全分析和执行的工作区根目录。
  * @param cwd - 命令执行目录
  * @param primaryWorkspaceRoot - 当前主工作区根目录
@@ -145,6 +177,22 @@ function resolveShellWorkspaceRoot(cwd: string, primaryWorkspaceRoot: string | n
   }
 
   return primaryWorkspaceRoot;
+}
+
+/**
+ * 当调用方未显式传 cwd 时，尝试从安全的命令前缀中推断 cwd。
+ * @param command - 命令文本
+ * @param additionalWorkspaceRoots - 额外允许根目录
+ * @returns 推断出的 cwd，无法推断时返回 null
+ */
+function inferCwdFromLeadingCd(command: string, additionalWorkspaceRoots: string[]): string | null {
+  const leadingCdTarget = extractLeadingCdTarget(command);
+  if (!leadingCdTarget) {
+    return null;
+  }
+
+  const matchedAdditionalRoot = additionalWorkspaceRoots.find((root) => isPathInsideWorkspace(leadingCdTarget, root));
+  return matchedAdditionalRoot ? leadingCdTarget : null;
 }
 
 /**
@@ -202,8 +250,10 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'INVALID_INPUT', error instanceof Error ? error.message : 'timeoutMs 参数无效');
       }
 
-      const cwd = typeof input.cwd === 'string' && input.cwd.trim().length > 0 ? input.cwd.trim() : primaryWorkspaceRoot;
-      const resolvedWorkspaceRoot = cwd ? resolveShellWorkspaceRoot(cwd, primaryWorkspaceRoot, getAdditionalShellWorkspaceRoots(options)) : null;
+      const additionalWorkspaceRoots = getAdditionalShellWorkspaceRoots(options);
+      const explicitCwd = typeof input.cwd === 'string' && input.cwd.trim().length > 0 ? input.cwd.trim() : null;
+      const cwd = explicitCwd ?? inferCwdFromLeadingCd(command, additionalWorkspaceRoots) ?? primaryWorkspaceRoot;
+      const resolvedWorkspaceRoot = cwd ? resolveShellWorkspaceRoot(cwd, primaryWorkspaceRoot, additionalWorkspaceRoots) : null;
       if (!cwd || !resolvedWorkspaceRoot) {
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', '无法初始化 Tibis 工作区目录，拒绝执行 Shell 命令');
       }
