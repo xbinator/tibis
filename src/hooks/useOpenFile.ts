@@ -24,19 +24,17 @@ export function useOpenFile() {
 
   /**
    * 按磁盘路径查找当前已打开标签，命中时返回其路由路径。
+   * 直接从内存缓存查找路径对应的文件 ID，再匹配标签页，避免逐个 tab 调用 getFileById。
    * @param path - 目标文件绝对路径
    * @returns 已打开标签的路由路径；未命中时返回 null
    */
   async function findOpenTabPathByFilePath(path: string): Promise<string | null> {
-    const tabEntries = await Promise.all(
-      tabsStore.tabs.map(async (tab) => ({
-        tab,
-        storedFile: await filesStore.getFileById(tab.id)
-      }))
-    );
-    const matchedEntry = tabEntries.find((entry) => entry.storedFile?.path === path);
+    await filesStore.ensureLoaded();
 
-    return matchedEntry?.tab.path ?? null;
+    const matchedFileId = filesStore.recentFiles?.find((f) => f.path === path)?.id;
+    if (!matchedFileId) return null;
+
+    return tabsStore.tabs.find((tab) => tab.id === matchedFileId)?.path ?? null;
   }
 
   /**

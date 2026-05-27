@@ -51,7 +51,7 @@ function normalizeTime(value: number | undefined): number {
 /**
  * 依据 openedAt → modifiedAt → createdAt → 原始顺序 降序排列文件。
  */
-function sortRecentFiles(files: StoredFile[]): StoredFile[] {
+export function sortRecentFiles(files: StoredFile[]): StoredFile[] {
   return [...files].sort((a, b) => {
     const diff =
       normalizeTime(b.openedAt) - normalizeTime(a.openedAt) ||

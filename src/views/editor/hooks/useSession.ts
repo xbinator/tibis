@@ -343,6 +343,12 @@ export function useSession(fileId: Ref<string>) {
   async function reconcileStoredFileWithDisk() {
     if (!fileState.value.path) return;
 
+    // 当前内容与已保存基线一致时，不存在未保存草稿，不可能产生冲突，跳过磁盘读取。
+    // 典型场景：openOrRefreshByPathFromDisk 刚从磁盘刷新过，存储中 content === savedContent。
+    if (fileStateActions.hasSavedContentBaseline.value && fileState.value.content === fileStateActions.savedContent.value) {
+      return;
+    }
+
     let diskFile: ReadFileResult;
 
     try {

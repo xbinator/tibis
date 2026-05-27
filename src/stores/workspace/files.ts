@@ -7,7 +7,7 @@ import { defineStore } from 'pinia';
 import { customAlphabet } from 'nanoid';
 import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
-import { recentFilesStorage } from '@/shared/storage';
+import { recentFilesStorage, sortRecentFiles } from '@/shared/storage';
 
 /**
  * files store 的状态定义。
@@ -57,6 +57,27 @@ export const useFilesStore = defineStore('files', {
     },
 
     /**
+     * 写入后直接更新内存缓存并重排序，避免额外 IPC 读取全量数据。
+     * @param updatedFile - 写入操作返回的最新文件记录
+     */
+    patchCache(updatedFile: StoredFile): void {
+      if (this.recentFiles === null) return;
+      const filtered = this.recentFiles.filter((f) => f.id !== updatedFile.id);
+      filtered.unshift(updatedFile);
+      this.recentFiles = sortRecentFiles(filtered);
+    },
+
+    /**
+     * 从内存缓存中移除指定 ID 的记录，避免删除后重新 IPC 读取。
+     * @param ids - 需要移除的文件 ID 列表
+     */
+    removeCacheEntries(ids: string[]): void {
+      if (this.recentFiles === null) return;
+      const idSet = new Set(ids);
+      this.recentFiles = this.recentFiles.filter((f) => !idSet.has(f.id));
+    },
+
+    /**
      * 确保 store 已经加载最近文件列表。
      */
     async ensureLoaded(): Promise<void> {
@@ -89,50 +110,42 @@ export const useFilesStore = defineStore('files', {
     },
 
     /**
-     * 添加最近文件，并从 storage 刷新派生顺序。
+     * 添加最近文件，直接更新内存缓存。
      * @param file - 需要写入的文件记录
      * @returns 写入后的文件记录
      */
     async addFile(file: StoredFile): Promise<StoredFile> {
       await recentFilesStorage.addRecentFile(file);
-      const files = await this.refreshRecentFiles();
-      await this.syncRecentFiles();
-
-      return files.find((item) => item.id === file.id) ?? file;
+      this.patchCache(file);
+      this.syncRecentFiles();
+      return file;
     },
 
     /**
-     * 更新最近文件记录，并从 storage 刷新派生顺序。
+     * 更新最近文件记录，直接更新内存缓存。
      * @param id - 文件 ID
      * @param updates - 需要更新的字段
      * @returns 更新后的文件记录
      */
     async updateFile(id: string, updates: Partial<StoredFile>): Promise<StoredFile> {
       const nextFile = await recentFilesStorage.updateRecentFile(id, updates);
-      await this.refreshRecentFiles();
-      await this.syncRecentFiles();
+      this.patchCache(nextFile);
+      this.syncRecentFiles();
       return nextFile;
     },
 
     /**
-     * 打开已存在的最近文件，并刷新 openedAt 派生顺序。
+     * 打开已存在的最近文件，直接更新内存缓存。
      * @param id - 文件 ID
      * @param _source - 打开来源
      * @returns 被打开的文件记录
      */
     async openExistingFile(id: string): Promise<StoredFile> {
       await this.ensureLoaded();
-      await enqueueWrite(async () => {
-        await recentFilesStorage.touchRecentFile(id);
-      });
-
-      const files = await this.refreshRecentFiles();
-      await this.syncRecentFiles();
-
-      const openedFile = files.find((file) => file.id === id);
-      if (!openedFile) throw new Error('File not found');
-
-      return openedFile;
+      const touchedFile = await enqueueWrite(() => recentFilesStorage.touchRecentFile(id));
+      this.patchCache(touchedFile);
+      this.syncRecentFiles();
+      return touchedFile;
     },
 
     /**
@@ -172,10 +185,9 @@ export const useFilesStore = defineStore('files', {
           await recentFilesStorage.addRecentFile(createdFile);
         });
 
-        const files = await this.refreshRecentFiles();
-        await this.syncRecentFiles();
-
-        return files.find((item) => item.id === createdFile.id) ?? createdFile;
+        this.patchCache(createdFile);
+        this.syncRecentFiles();
+        return createdFile;
       } finally {
         inflightPaths.delete(path);
       }
@@ -209,8 +221,8 @@ export const useFilesStore = defineStore('files', {
             savedAt: now
           });
 
-          await this.refreshRecentFiles();
-          await this.syncRecentFiles();
+          this.patchCache(refreshedFile);
+          this.syncRecentFiles();
           return refreshedFile;
         }
 
@@ -230,10 +242,9 @@ export const useFilesStore = defineStore('files', {
           await recentFilesStorage.addRecentFile(createdFile);
         });
 
-        const files = await this.refreshRecentFiles();
-        await this.syncRecentFiles();
-
-        return files.find((item) => item.id === createdFile.id) ?? createdFile;
+        this.patchCache(createdFile);
+        this.syncRecentFiles();
+        return createdFile;
       } finally {
         inflightPaths.delete(path);
       }
@@ -257,10 +268,9 @@ export const useFilesStore = defineStore('files', {
         await recentFilesStorage.addRecentFile(createdFile);
       });
 
-      const files = await this.refreshRecentFiles();
-      await this.syncRecentFiles();
-
-      return files.find((item) => item.id === createdFile.id) ?? createdFile;
+      this.patchCache(createdFile);
+      this.syncRecentFiles();
+      return createdFile;
     },
 
     /**
@@ -269,8 +279,8 @@ export const useFilesStore = defineStore('files', {
      */
     async removeFile(...ids: string[]): Promise<void> {
       await recentFilesStorage.removeRecentFile(...ids);
-      await this.refreshRecentFiles();
-      await this.syncRecentFiles();
+      this.removeCacheEntries(ids);
+      this.syncRecentFiles();
     },
 
     /**
@@ -279,7 +289,7 @@ export const useFilesStore = defineStore('files', {
     async clearFiles(): Promise<void> {
       await recentFilesStorage.clearRecentFiles();
       this.recentFiles = [];
-      await this.syncRecentFiles();
+      this.syncRecentFiles();
     },
 
     /**
