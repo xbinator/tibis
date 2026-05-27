@@ -77,15 +77,12 @@ importers:
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
-      tree-sitter:
-        specifier: ^0.25.0
-        version: 0.25.0
       tree-sitter-bash:
         specifier: ^0.25.1
-        version: 0.25.1(tree-sitter@0.25.0)
+        version: 0.25.1
       tree-sitter-powershell:
         specifier: ^0.26.4
-        version: 0.26.4(tree-sitter@0.25.0)
+        version: 0.26.4
       web-tree-sitter:
         specifier: ^0.26.9
         version: 0.26.9
@@ -5583,9 +5580,6 @@ packages:
     peerDependenciesMeta:
       tree-sitter:
         optional: true
-
-  tree-sitter@0.25.0:
-    resolution: {integrity: sha512-PGZZzFW63eElZJDe/b/R/LbsjDDYJa5UEjLZJB59RQsMX+fo0j54fqBPn1MGKav/QNa0JR0zBiVaikYDWCj5KQ==}
 
   truncate-utf8-bytes@1.0.2:
     resolution: {integrity: sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ==}
@@ -11915,21 +11909,12 @@ snapshots:
 
   tree-kill@1.2.2: {}
 
-  tree-sitter-bash@0.25.1(tree-sitter@0.25.0):
+  tree-sitter-bash@0.25.1:
     dependencies:
       node-addon-api: 8.8.0
       node-gyp-build: 4.8.4
-    optionalDependencies:
-      tree-sitter: 0.25.0
 
-  tree-sitter-powershell@0.26.4(tree-sitter@0.25.0):
-    dependencies:
-      node-addon-api: 8.8.0
-      node-gyp-build: 4.8.4
-    optionalDependencies:
-      tree-sitter: 0.25.0
-
-  tree-sitter@0.25.0:
+  tree-sitter-powershell@0.26.4:
     dependencies:
       node-addon-api: 8.8.0
       node-gyp-build: 4.8.4
