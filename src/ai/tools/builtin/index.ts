@@ -220,11 +220,14 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   });
   // 创建设置修改工具
   const settingsTools = createBuiltinSettingsTools(options.confirm);
+  // 已启用 Skill 的目录也可作为 Shell 执行安全边界，用于运行 Skill 自带脚本。
+  const enabledSkills = options.skillStore?.getEnabledSkills() ?? [];
   // 创建危险级 Shell 命令工具，仅当 Electron 原生桥接支持时注册。
   const shellCommandTool = native.supportsShellCommand()
     ? createBuiltinShellCommandTool({
         confirm: options.confirm!,
-        getWorkspaceRoot: options.getWorkspaceRoot
+        getWorkspaceRoot: options.getWorkspaceRoot,
+        getAdditionalShellWorkspaceRoots: () => enabledSkills.map((skill) => skill.dirPath)
       })
     : null;
   // 先汇总默认文件写工具，再通过共享清单筛选默认暴露项。
@@ -240,7 +243,6 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const mcpWriteTools = mcpHasContent ? createBuiltinMCPTools(options.confirm) : null;
 
   // Skill 工具：仅当有可用 skill 时注册
-  const enabledSkills = options.skillStore?.getEnabledSkills() ?? [];
   const skillTool = options.skillStore?.initialized && enabledSkills.length > 0 ? createSkillTool(options.skillStore) : null;
 
   return [

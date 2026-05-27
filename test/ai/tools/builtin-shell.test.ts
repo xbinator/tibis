@@ -158,6 +158,38 @@ describe('createBuiltinShellCommandTool', () => {
     expect(result.status).toBe('success');
   });
 
+  it('uses an allowed skill directory as shell workspace root when cwd points there', async () => {
+    const { createBuiltinShellCommandTool } = await import('@/ai/tools/builtin/ShellTool');
+    const { adapter } = createConfirmationAdapter(true);
+    const tool = createBuiltinShellCommandTool({
+      confirm: adapter,
+      getWorkspaceRoot: () => '/home/user/.tibis',
+      getAdditionalShellWorkspaceRoots: () => ['/home/user/.agents/skills/imagegen']
+    });
+    nativeMock.analyzeShellCommand.mockResolvedValue(createAllowedReport());
+    nativeMock.runShellCommand.mockResolvedValue(createRunResult());
+
+    const result = await tool.execute({
+      shell: 'bash',
+      command: 'node scripts/render.js',
+      cwd: '/home/user/.agents/skills/imagegen'
+    });
+
+    expect(nativeMock.analyzeShellCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: '/home/user/.agents/skills/imagegen',
+        workspaceRoot: '/home/user/.agents/skills/imagegen'
+      })
+    );
+    expect(nativeMock.runShellCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: '/home/user/.agents/skills/imagegen',
+        workspaceRoot: '/home/user/.agents/skills/imagegen'
+      })
+    );
+    expect(result.status).toBe('success');
+  });
+
   it('returns permission failure when safety analysis blocks the command', async () => {
     const { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } = await import('@/ai/tools/builtin/ShellTool');
     const { adapter, confirmMock } = createConfirmationAdapter(true);
@@ -253,7 +285,7 @@ describe('createBuiltinShellCommandTool', () => {
   });
 
   it('returns TOOL_TIMEOUT failure when command times out', async () => {
-    const { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } = await import('@/ai/tools/builtin/ShellTool');
+    const { createBuiltinShellCommandTool } = await import('@/ai/tools/builtin/ShellTool');
     const { adapter } = createConfirmationAdapter(true);
     const tool = createBuiltinShellCommandTool({ confirm: adapter, getWorkspaceRoot: () => '/workspace' });
     nativeMock.analyzeShellCommand.mockResolvedValue(createAllowedReport());

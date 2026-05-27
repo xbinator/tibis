@@ -11,7 +11,7 @@
       <!-- 执行失败状态标签 -->
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
-
+    {{ part }}
     <!-- 提问工具成功结果：以问答形式展示用户选择 -->
     <template v-if="isQuestionSuccess">
       <div :class="bem('result')">
