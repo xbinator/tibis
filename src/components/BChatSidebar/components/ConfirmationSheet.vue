@@ -1,14 +1,14 @@
 <template>
   <div v-if="request" class="confirm-bottom-sheet">
-    <div class="confirm-bottom-sheet__title" @click="toggleCollapse">
+    <div class="confirm-bottom-sheet__title">
       <Icon :icon="request.riskLevel === 'dangerous' ? 'lucide:triangle-alert' : 'lucide:shield-check'" width="14" height="14" />
       <span>{{ request.title }}</span>
       <Icon
-        icon="lucide:chevron-up"
+        :icon="isCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'"
         width="14"
         height="14"
         class="confirm-bottom-sheet__chevron"
-        :class="{ 'confirm-bottom-sheet__chevron--collapsed': isCollapsed }"
+        @click="toggleCollapse"
       />
     </div>
 
@@ -131,20 +131,13 @@ function handleAction(action: ChatMessageConfirmationAction): void {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
-  cursor: pointer;
-  user-select: none;
 }
 
 .confirm-bottom-sheet__chevron {
   margin-left: auto;
-  transition: transform 0.2s ease;
-}
-
-.confirm-bottom-sheet__chevron--collapsed {
-  transform: rotate(180deg);
+  cursor: pointer;
 }
 
 .confirm-bottom-sheet__description {
