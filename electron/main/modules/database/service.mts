@@ -76,29 +76,6 @@ export async function initDatabase(): Promise<void> {
   db.pragma('journal_mode = WAL');
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS provider_settings (
-      id          TEXT    PRIMARY KEY,
-      is_enabled  INTEGER NOT NULL,
-      api_key     TEXT,
-      base_url    TEXT,
-      models_json TEXT,
-      updated_at  INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS custom_providers (
-      id          TEXT    PRIMARY KEY,
-      name        TEXT    NOT NULL,
-      description TEXT    NOT NULL,
-      type        TEXT    NOT NULL,
-      logo        TEXT,
-      is_enabled  INTEGER NOT NULL,
-      api_key     TEXT,
-      base_url    TEXT,
-      models_json TEXT,
-      created_at  INTEGER NOT NULL,
-      updated_at  INTEGER NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS service_models (
       service_type TEXT PRIMARY KEY,
       provider_id TEXT,
