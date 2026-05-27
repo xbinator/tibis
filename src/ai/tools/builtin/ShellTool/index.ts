@@ -123,7 +123,8 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
   return {
     definition: {
       name: RUN_SHELL_COMMAND_TOOL_NAME,
-      description: '在工作区内执行一条 bash 或 PowerShell 命令。命令会先经过安全检查，再由用户确认后执行；适合运行测试、构建、lint 和短脚本。',
+      description:
+        '在 Tibis 默认工作区目录内执行一条 bash 或 PowerShell 命令。命令会先经过安全检查，再由用户确认后执行；适合运行测试、构建、lint 和短脚本。所有命令均在系统自动确定的工作区目录下执行，无需也不应指定 cwd。',
       source: 'builtin',
       riskLevel: 'dangerous',
       requiresActiveDocument: false,
@@ -134,7 +135,6 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         properties: {
           shell: { type: 'string', enum: ['bash', 'powershell'], description: '命令使用的 shell。' },
           command: { type: 'string', description: '要执行的命令文本。' },
-          cwd: { type: 'string', description: '可选执行目录，必须位于工作区内；默认工作区目录。' },
           timeoutMs: { type: 'number', description: '可选超时时间，默认 30000ms，范围 1000-120000ms。' }
         },
         required: ['shell', 'command'],
