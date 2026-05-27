@@ -36,16 +36,18 @@ export function useSkillInit(): void {
 
       // 监听 skill:changed 事件，增量更新
       const removeSkillChangedListener = native.onSkillChanged(async (data) => {
+        // 统一规范化路径分隔符，Windows 下 Chokidar 报告 \ 而 scanner 使用 /
+        const normalizedPath = data.filePath.replace(/\\/g, '/');
         if (data.type === 'unlink') {
-          if (!data.filePath.endsWith('/SKILL.md') && !data.filePath.endsWith('\\SKILL.md')) return;
-          skillStore.handleSkillChange('unlink', { filePath: data.filePath } as import('@/ai/skill/types').SkillDefinition);
+          if (!normalizedPath.endsWith('/SKILL.md')) return;
+          skillStore.handleSkillChange('unlink', { filePath: normalizedPath } as import('@/ai/skill/types').SkillDefinition);
           return;
         }
         // change/add：重新解析文件
         if (data.content) {
-          if (!data.filePath.endsWith('/SKILL.md') && !data.filePath.endsWith('\\SKILL.md')) return;
+          if (!normalizedPath.endsWith('/SKILL.md')) return;
           const { parseSkillMarkdown } = await import('@/ai/skill/parser');
-          const skill = parseSkillMarkdown(data.content, data.filePath, { source: 'global' });
+          const skill = parseSkillMarkdown(data.content, normalizedPath, { source: 'global' });
           skillStore.handleSkillChange(data.type as 'change' | 'add', skill);
         }
       });
