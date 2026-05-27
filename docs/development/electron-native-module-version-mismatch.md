@@ -114,68 +114,70 @@ node-gyp failed to rebuild 'node_modules/.pnpm/tree-sitter@0.25.0/node_modules/t
 
 因此，该问题不是普通的网络下载失败，也不是删除 lockfile 可以稳定解决的问题。根因是 Electron 41 的头文件要求与 `tree-sitter` 原生模块默认编译标准不一致。
 
-### 临时解决思路
+### 解决思路
 
-安装依赖时显式指定 C++20 编译标准，让 `electron-rebuild` 在重编译原生模块时使用 C++20。
+项目当前使用 `web-tree-sitter` 加载 WASM grammar 文件，不直接使用 native `tree-sitter` 绑定。因此解决方向是把 native `tree-sitter` 从安装和 Electron rebuild 链路中移除：
+
+相关文件：
+
+- `package.json`
+- `pnpm-lock.yaml`
+
+具体策略：
+
+1. `package.json` 不再直接依赖 `tree-sitter`。
+2. `package.json` 的 `pnpm.peerDependencyRules.ignoreMissing` 忽略 `tree-sitter-bash` 和 `tree-sitter-powershell` 的 optional peer `tree-sitter`，避免 pnpm 自动安装 native `tree-sitter`。
+3. `postinstall` 使用 `electron-rebuild --only better-sqlite3`，只重编译实际通过 native binding 运行的 Electron 模块。
+
+开发者只需要正常安装依赖：
 
 #### macOS / Linux
 
 ```bash
-CXXFLAGS=-std=c++20 pnpm i
+pnpm i
 ```
 
 如果依赖已经安装过，只需要重新编译原生模块，可以执行：
 
 ```bash
-CXXFLAGS=-std=c++20 pnpm exec electron-rebuild
-```
-
-或只重建 `tree-sitter`：
-
-```bash
-CXXFLAGS=-std=c++20 pnpm rebuild tree-sitter
+pnpm run postinstall
 ```
 
 #### Windows PowerShell
 
-Windows 需要先确认已经安装 Visual Studio Build Tools 2022，并勾选 C++ 桌面开发工具链。使用 MSVC 编译时，可以通过 `CL` 环境变量传入 C++20 参数：
+Windows 需要先确认已经安装 Visual Studio Build Tools 2022，并勾选 C++ 桌面开发工具链。
 
 ```powershell
-$env:CL="/std:c++20"
 pnpm i
 ```
 
 重新编译原生模块：
 
 ```powershell
-$env:CL="/std:c++20"
-pnpm exec electron-rebuild
+pnpm run postinstall
 ```
 
 #### Windows cmd
 
 ```bat
-set CL=/std:c++20
 pnpm i
 ```
 
 重新编译原生模块：
 
 ```bat
-set CL=/std:c++20
-pnpm exec electron-rebuild
+pnpm run postinstall
 ```
 
-如果 Windows 构建日志中仍然出现 `/std:c++17` 并覆盖了环境变量，说明依赖包的 `binding.gyp` 参数优先级更高，需要采用长期解决思路中的依赖升级、补丁或 Electron 版本调整。
+不建议只依赖 `CL=/std:c++20` 或 `CXXFLAGS=-std=c++20` 这类环境变量。Windows 的 MSVC 构建中，`tree-sitter@0.25.0` 原始 `binding.gyp` 会继续传入 `/std:c++17`，并在日志中出现 `overriding '/std:c++20' with '/std:c++17'`，最终仍然触发 Electron 41 的 C++20 头文件错误。
 
 ### 长期解决思路
 
-后续可以考虑以下方向之一，避免每个开发者手动设置环境变量：
+后续可以考虑以下方向之一，继续降低原生模块维护成本：
 
-1. 在 `postinstall` 脚本中为 `electron-rebuild` 统一注入 C++20 编译参数。
-2. 升级 `tree-sitter` 相关依赖到默认兼容 Electron 41 / C++20 的版本。
-3. 如果 Electron 版本没有必须升级到 41，可以评估回退到 V8 头文件仍兼容 C++17 的 Electron 版本。
-4. 在 CI 和本地开发文档中固定 Node.js、pnpm、Electron 与原生模块的兼容矩阵，减少环境差异。
+1. 如果后续必须使用 native `tree-sitter`，升级到默认兼容 Electron 41 / C++20 的版本。
+2. 如果 Electron 版本没有必须升级到 41，可以评估回退到 V8 头文件仍兼容 C++17 的 Electron 版本。
+3. 在 CI 和本地开发文档中固定 Node.js、pnpm、Electron 与原生模块的兼容矩阵，减少环境差异。
 
 ## pnpm store-dir 指向 hvigor 缓存的问题
 
@@ -206,10 +208,8 @@ pnpm config set store-dir ~/.pnpm-store
 然后重新安装：
 
 ```bash
-CXXFLAGS=-std=c++20 pnpm i
+pnpm i
 ```
-
-Windows 环境按上文 Windows PowerShell 或 Windows cmd 的命令设置 C++20 编译参数。
 
 ## 预防措施
 
