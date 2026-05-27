@@ -21,6 +21,14 @@ interface PackageManifest {
 }
 
 /**
+ * 读取 Shell runner 源码。
+ * @returns Shell runner 源码文本
+ */
+async function readShellRunnerSource(): Promise<string> {
+  return readFile(new URL('../electron/main/modules/shell/runner.mts', import.meta.url), 'utf8');
+}
+
+/**
  * 读取当前仓库的 package.json。
  * @returns package.json 的结构化内容
  */
@@ -51,5 +59,15 @@ describe('package dependency policy', () => {
     const manifest = await readPackageManifest();
 
     expect(manifest.scripts?.postinstall).toBe('electron-rebuild --only better-sqlite3');
+  });
+
+  it('keeps effect top-level entry out of the Electron runtime graph', async () => {
+    const manifest = await readPackageManifest();
+    const shellRunnerSource = await readShellRunnerSource();
+
+    expect(shellRunnerSource).not.toContain("from 'effect'");
+    expect(manifest.dependencies).not.toHaveProperty('effect');
+    expect(manifest.dependencies).not.toHaveProperty('@effect/platform');
+    expect(manifest.dependencies).not.toHaveProperty('@effect/platform-node');
   });
 });
