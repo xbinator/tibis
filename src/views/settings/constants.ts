@@ -42,7 +42,7 @@ export interface MenuGroup {
  */
 export const menuGroups: MenuGroup[] = [
   { label: 'AI 服务', items: ['provider', 'service-model'].map((k) => menuItemMap[k as SettingsMenuKey]) },
-  { label: '功能配置', items: ['editor', 'mcp', 'search', 'skill', 'speech'].map((k) => menuItemMap[k as SettingsMenuKey]) },
+  { label: '功能配置', items: ['editor', 'mcp', 'search', 'skill'].map((k) => menuItemMap[k as SettingsMenuKey]) },
   { label: '系统', items: ['logger'].map((k) => menuItemMap[k as SettingsMenuKey]) }
 ];
 
