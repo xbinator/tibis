@@ -6,7 +6,7 @@ import type { BuiltinToolBaseOptions } from '../shared/types';
 import type { AIToolExecutor } from 'types/ai';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
-import { READ_CURRENT_DOCUMENT_TOOL_NAME, createBuiltinReadTools } from './DocumentTool';
+import { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME, createBuiltinDocumentWriteTool, createBuiltinReadTools } from './DocumentTool';
 import { GET_CURRENT_TIME_TOOL_NAME, createBuiltinEnvironmentTools } from './EnvironmentTool';
 import { EDIT_FILE_TOOL_NAME, createBuiltinEditFileTool } from './FileEditTool';
 import { createBuiltinReadDirectoryTool, createBuiltinReadFileTool, READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool';
@@ -29,7 +29,7 @@ import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTo
 import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteTool';
 
 // 重新导出工具名称
-export { READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool';
+export { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool';
 export { GET_CURRENT_TIME_TOOL_NAME } from './EnvironmentTool';
 export { EDIT_FILE_TOOL_NAME } from './FileEditTool';
 export { READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool';
@@ -86,7 +86,13 @@ export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
  * 默认开放的内置写工具名称列表。
  * MCP 写工具为条件注册，不在此默认列表中。
  */
-export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [EDIT_FILE_TOOL_NAME, WRITE_FILE_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME, RUN_SHELL_COMMAND_TOOL_NAME] as const;
+export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [
+  CREATE_DOCUMENT_TOOL_NAME,
+  EDIT_FILE_TOOL_NAME,
+  WRITE_FILE_TOOL_NAME,
+  UPDATE_SETTINGS_TOOL_NAME,
+  RUN_SHELL_COMMAND_TOOL_NAME
+] as const;
 
 /**
  * 条件注册的只读工具名称列表（MCP/Skill 等，有内容时才注册）。
@@ -211,16 +217,21 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const mcpHasContent = options.mcpStore ? hasMcpServers(options.mcpStore) : false;
   const mcpReadTool = mcpHasContent ? createBuiltinMCPTools(options.confirm ?? { confirm: async () => false }).getMcpSettings : null;
 
-  // 没有确认适配器时只返回只读工具
+  // 创建文档写工具（创建新文档），始终注册，不依赖确认适配器
+  const documentWriteTools = createBuiltinDocumentWriteTool({
+    openDraft: options.openDraft
+  });
+
+  // 没有确认适配器时只返回只读工具 + 始终注册的写工具
   if (!options.confirm) {
     return [
       ...readonlyTools,
       ...(readDirectoryTool ? [readDirectoryTool] : []),
       ...(mcpReadTool ? [mcpReadTool] : []),
-      createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) })
+      createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) }),
+      documentWriteTools.createDocument
     ];
   }
-
   // 创建文件级写入工具
   const editFileTool = createBuiltinEditFileTool({
     confirm: options.confirm!,
@@ -245,6 +256,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     : null;
   // 先汇总默认文件写工具，再通过共享清单筛选默认暴露项。
   const allDefaultWritableTools: AIToolExecutor[] = [
+    documentWriteTools.createDocument,
     editFileTool,
     writeFileTool,
     settingsTools.updateSettings,
