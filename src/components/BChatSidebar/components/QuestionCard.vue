@@ -5,14 +5,17 @@
 -->
 <template>
   <div class="choice-card">
-    <!-- 问题步骤：每次只展示一个问题 -->
-    <div v-if="currentStep < questionItems.length" class="choice-card__step">
+    <div class="choice-card__step">
       <div class="choice-card__header">
-        <div class="choice-card__title">{{ currentItem.question }}</div>
-        <span v-if="questionItems.length > 1" class="choice-card__indicator">{{ currentStep + 1 }} / {{ questionItems.length }}</span>
+        <div class="choice-card__title">{{ isSupplementaryStep ? '是否有更多的补充信息需要提供？（可选）' : currentItem.question }}</div>
+        <span v-if="totalSteps > 1" class="choice-card__indicator">{{ currentStep + 1 }} / {{ totalSteps }}</span>
       </div>
 
-      <div class="choice-card__options">
+      <!-- 补充信息输入 -->
+      <input v-if="isSupplementaryStep" v-model="otherText" class="choice-card__other" type="text" placeholder="请输入补充信息..." :disabled="disabled" />
+
+      <!-- 问题选项 -->
+      <div v-else class="choice-card__options">
         <template v-if="currentItem.mode !== 'multiple'">
           <ARadio
             v-for="option in currentItem.options"
@@ -42,20 +45,10 @@
       </div>
 
       <div v-if="!disabled" class="choice-card__footer">
+        <BButton size="small" type="secondary" @click="handleCancel">取消</BButton>
         <BButton v-if="currentStep > 0" size="small" type="secondary" @click="handlePrev">上一步</BButton>
-        <BButton size="small" :disabled="!canSubmitCurrentQuestion" @click="handleNext">下一步</BButton>
-      </div>
-    </div>
-
-    <!-- 最后一步：补充信息 -->
-    <div v-else class="choice-card__step">
-      <div class="choice-card__title">是否有更多的补充信息需要提供？（可选）</div>
-
-      <input v-model="otherText" class="choice-card__other" type="text" placeholder="请输入补充信息..." :disabled="disabled" />
-
-      <div v-if="!disabled" class="choice-card__footer">
-        <BButton size="small" type="secondary" @click="handlePrev">上一步</BButton>
-        <BButton size="small" @click="handleSubmit">提交</BButton>
+        <BButton v-if="isSupplementaryStep" size="small" @click="handleSubmit">提交</BButton>
+        <BButton v-else size="small" :disabled="!canSubmitCurrentQuestion" @click="handleNext">下一步</BButton>
       </div>
     </div>
   </div>
@@ -95,6 +88,12 @@ const currentStep = ref(0);
 
 /** 展开后的所有问题项（兼容单问题和多问题结构） */
 const questionItems = computed<AIAwaitingUserChoiceItem[]>(() => props.question.questions ?? [props.question]);
+
+/** 总步骤数：问题步骤数 + 补充信息步骤 */
+const totalSteps = computed(() => questionItems.value.length + 1);
+
+/** 是否处于补充信息步骤 */
+const isSupplementaryStep = computed(() => currentStep.value >= questionItems.value.length);
 
 /** 当前步骤对应的问题项 */
 const currentItem = computed<AIAwaitingUserChoiceItem>(() => questionItems.value[currentStep.value]);
@@ -188,6 +187,19 @@ function handleNext(): void {
  */
 function handlePrev(): void {
   currentStep.value = Math.max(currentStep.value - 1, 0);
+}
+
+/**
+ * 取消操作：提交空答案。
+ */
+function handleCancel(): void {
+  emit('submit-choice', {
+    questionId: props.question.questionId,
+    toolCallId: props.question.toolCallId,
+    answers: [],
+    questionAnswers: [],
+    otherText: ''
+  });
 }
 
 /**
