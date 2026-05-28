@@ -38,6 +38,8 @@
           @rollback="handleRollback"
         >
           <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
+
+          <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
         </ConversationView>
 
         <div class="b-chat-sidebar__floating-container">
@@ -48,8 +50,6 @@
             :error="usagePanel.error.value"
             :on-close="usagePanel.close"
           />
-
-          <TodoPanel v-if="todoPanelVisible" v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
 
           <InteractionContainer :toast-queue="toastQueue" @remove-toast="removeToast" />
         </div>
@@ -171,11 +171,13 @@ const todoPanelVisible = ref(true);
 /** 当前会话的待办列表 */
 const currentSessionTodos = computed(() => todoStore.getTodos(settingStore.chatSidebarActiveSessionId ?? ''));
 
-/** LLM 调用 todowrite 时自动重新打开面板 */
+/** LLM 调用 todowrite 时自动打开/关闭面板 */
 watch(
   () => todoStore.getTodos(settingStore.chatSidebarActiveSessionId ?? ''),
   (newTodos) => {
-    if (newTodos.length > 0 && !todoPanelVisible.value) {
+    if (newTodos.length === 0) {
+      todoPanelVisible.value = false;
+    } else if (!todoPanelVisible.value) {
       todoPanelVisible.value = true;
     }
   },

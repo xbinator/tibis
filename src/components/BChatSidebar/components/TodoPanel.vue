@@ -3,30 +3,37 @@
   @description 聊天侧边栏的待办任务面板，显示当前会话的 LLM 任务列表。
 -->
 <template>
-  <section v-if="todos.length > 0" class="todo-panel">
-    <div class="todo-panel__header">
-      <span class="todo-panel__title">任务列表</span>
-      <span class="todo-panel__progress">{{ completedCount }}/{{ todos.length }}</span>
-      <BButton type="text" size="small" class="todo-panel__close" @click="emit('update:visible', false)"> 关闭 </BButton>
-    </div>
-
-    <div class="todo-panel__progress-bar">
-      <div class="todo-panel__progress-fill" :style="{ width: progressPercent + '%' }"></div>
-    </div>
-
-    <div class="todo-panel__body">
-      <div v-for="(todo, index) in todos" :key="index" class="todo-panel__item" :class="'todo-panel__item--' + todo.status">
-        <span class="todo-panel__status-icon">
-          <Icon v-if="todo.status === 'completed'" icon="lucide:check-circle-2" width="14" height="14" />
-          <Icon v-else-if="todo.status === 'in_progress'" icon="lucide:circle-dot" width="14" height="14" />
-          <Icon v-else-if="todo.status === 'cancelled'" icon="lucide:x-circle" width="14" height="14" />
-          <Icon v-else icon="lucide:circle" width="14" height="14" />
-        </span>
-        <span class="todo-panel__priority" :class="'todo-panel__priority--' + todo.priority"></span>
-        <span class="todo-panel__content">{{ todo.content }}</span>
+  <div class="todo-panel">
+    <section v-if="visible && todos.length" class="todo-panel__board">
+      <div class="todo-panel__header">
+        <span class="todo-panel__title">任务列表</span>
+        <span class="todo-panel__progress">{{ completedCount }}/{{ todos.length }}</span>
       </div>
+
+      <div class="todo-panel__progress-bar">
+        <div class="todo-panel__progress-fill" :style="{ width: progressPercent + '%' }"></div>
+      </div>
+
+      <div class="todo-panel__body">
+        <div v-for="(todo, index) in todos" :key="index" class="todo-panel__item" :class="'todo-panel__item--' + todo.status">
+          <span class="todo-panel__status-icon">
+            <Icon v-if="todo.status === 'completed'" icon="lucide:check-circle-2" width="14" height="14" />
+            <Icon v-else-if="todo.status === 'in_progress'" icon="lucide:circle-dot" width="14" height="14" />
+            <Icon v-else-if="todo.status === 'cancelled'" icon="lucide:x-circle" width="14" height="14" />
+            <Icon v-else icon="lucide:circle" width="14" height="14" />
+          </span>
+          <span class="todo-panel__priority" :class="'todo-panel__priority--' + todo.priority"></span>
+          <span class="todo-panel__content">{{ todo.content }}</span>
+        </div>
+      </div>
+    </section>
+
+    <div v-if="todos.length" class="todo-panel__footer">
+      <BButton type="text" size="small" class="todo-panel__toggle" @click="emit('update:visible', !visible)">
+        <span>任务列表 {{ completedCount }}/{{ todos.length }}</span>
+      </BButton>
     </div>
-  </section>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -66,15 +73,19 @@ const progressPercent = computed<number>(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="less">
 .todo-panel {
+  position: relative;
+}
+
+.todo-panel__board {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
+  margin-bottom: 8px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-secondary);
   border-radius: 6px;
-  box-shadow: var(--shadow-sm);
 }
 
 .todo-panel__header {
@@ -190,5 +201,15 @@ const progressPercent = computed<number>(() => {
 .todo-panel__content {
   font-size: 12px;
   color: var(--text-primary);
+}
+
+.todo-panel__footer {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: 4px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
 }
 </style>

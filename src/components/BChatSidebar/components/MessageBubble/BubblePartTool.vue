@@ -62,7 +62,7 @@ const [, bem] = createNamespace('', 'bubble-part-tool');
 const ICON_MAP = {
   inputting: 'lucide:loader-circle',
   executing: 'lucide:wrench',
-  done: { success: 'lucide:check-circle-2', failure: 'lucide:circle-alert' }
+  done: { success: 'lucide:check-circle-2', failure: 'lucide:circle-alert', cancelled: 'lucide:circle-x' }
 } as const;
 
 /** 提问类工具名称集合，用于判断是否展示问答结果视图 */
