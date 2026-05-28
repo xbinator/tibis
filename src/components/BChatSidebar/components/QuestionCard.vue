@@ -46,9 +46,11 @@
 
       <div v-if="!disabled" class="choice-card__footer">
         <BButton size="small" type="secondary" @click="handleCancel">取消</BButton>
-        <BButton v-if="currentStep > 0" size="small" type="secondary" @click="handlePrev">上一步</BButton>
-        <BButton v-if="isSupplementaryStep" size="small" @click="handleSubmit">提交</BButton>
-        <BButton v-else size="small" :disabled="!canSubmitCurrentQuestion" @click="handleNext">下一步</BButton>
+        <div class="choice-card__footer-right">
+          <BButton v-if="currentStep > 0" size="small" type="secondary" @click="handlePrev">上一步</BButton>
+          <BButton v-if="isSupplementaryStep" size="small" @click="handleSubmit">提交</BButton>
+          <BButton v-else size="small" :disabled="!canSubmitCurrentQuestion" @click="handleNext">下一步</BButton>
+        </div>
       </div>
     </div>
   </div>
@@ -278,7 +280,12 @@ function handleSubmit(): void {
 .choice-card__footer {
   display: flex;
   gap: 8px;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-top: 10px;
+}
+
+.choice-card__footer-right {
+  display: flex;
+  gap: 8px;
 }
 </style>
