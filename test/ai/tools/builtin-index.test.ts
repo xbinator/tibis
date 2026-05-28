@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SkillDefinition } from '@/ai/skill/types';
 import {
   ADD_MCP_SERVER_TOOL_NAME,
+  CREATE_DOCUMENT_TOOL_NAME,
   createBuiltinTools,
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
@@ -13,6 +14,7 @@ import {
   REMOVE_MCP_SERVER_TOOL_NAME,
   RUN_SHELL_COMMAND_TOOL_NAME,
   SKILL_TOOL_NAME,
+  TODO_WRITE_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME
 } from '@/ai/tools/builtin';
@@ -36,11 +38,12 @@ function getToolNames(includeWriteTools = false): string[] {
 
 describe('createBuiltinTools', () => {
   it('returns read tools by default', () => {
-    expect(getToolNames()).toEqual(['read_current_document', 'get_current_time', 'question', 'read_file', 'read_directory', 'get_settings', 'query_logs']);
+    expect(getToolNames()).toEqual(['read_current_document', 'get_current_time', 'question', 'read_file', 'get_settings', 'query_logs', 'todowrite', 'create_document']);
   });
 
   it('includes write tools when confirmation adapter is provided', () => {
     const names = getToolNames(true);
+    expect(names).toContain('create_document');
     expect(names).toContain('edit_file');
     expect(names).toContain('write_file');
     expect(names).toContain('update_settings');
@@ -58,6 +61,8 @@ describe('builtin tool exports', () => {
   });
 
   it('exports write tool names', () => {
+    expect(CREATE_DOCUMENT_TOOL_NAME).toBe('create_document');
+    expect(TODO_WRITE_TOOL_NAME).toBe('todowrite');
     expect(UPDATE_SETTINGS_TOOL_NAME).toBe('update_settings');
     expect(ADD_MCP_SERVER_TOOL_NAME).toBe('add_mcp_server');
     expect(UPDATE_MCP_SERVER_TOOL_NAME).toBe('update_mcp_server');

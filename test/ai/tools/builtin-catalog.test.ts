@@ -8,6 +8,7 @@ import {
   ALL_BUILTIN_TOOL_NAMES,
   CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES,
   CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES,
+  CREATE_DOCUMENT_TOOL_NAME,
   DEFAULT_BUILTIN_READONLY_TOOL_NAMES,
   DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES,
   EDIT_FILE_TOOL_NAME,
@@ -23,6 +24,7 @@ import {
   REMOVE_MCP_SERVER_TOOL_NAME,
   RUN_SHELL_COMMAND_TOOL_NAME,
   SKILL_TOOL_NAME,
+  TODO_WRITE_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
   WRITE_FILE_TOOL_NAME,
@@ -39,7 +41,6 @@ describe('built-in tool catalog', () => {
       GET_CURRENT_TIME_TOOL_NAME,
       QUESTION_TOOL_NAME,
       READ_FILE_TOOL_NAME,
-      READ_DIRECTORY_TOOL_NAME,
       GET_SETTINGS_TOOL_NAME,
       QUERY_LOGS_TOOL_NAME
     ]);
@@ -47,6 +48,7 @@ describe('built-in tool catalog', () => {
 
   it('exposes the default low-risk writable tool names', () => {
     expect([...DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES]).toEqual([
+      CREATE_DOCUMENT_TOOL_NAME,
       EDIT_FILE_TOOL_NAME,
       WRITE_FILE_TOOL_NAME,
       UPDATE_SETTINGS_TOOL_NAME,
@@ -55,7 +57,7 @@ describe('built-in tool catalog', () => {
   });
 
   it('exposes the conditional readonly tool names', () => {
-    expect([...CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES]).toEqual([GET_MCP_SETTINGS_TOOL_NAME, SKILL_TOOL_NAME]);
+    expect([...CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES]).toEqual([READ_DIRECTORY_TOOL_NAME, GET_MCP_SETTINGS_TOOL_NAME, SKILL_TOOL_NAME]);
   });
 
   it('exposes the conditional writable tool names', () => {
@@ -76,6 +78,8 @@ describe('built-in tool catalog', () => {
     expect(isBuiltinToolName(GET_MCP_SETTINGS_TOOL_NAME)).toBe(true);
     expect(isBuiltinToolName(SKILL_TOOL_NAME)).toBe(true);
     expect(isBuiltinToolName(ADD_MCP_SERVER_TOOL_NAME)).toBe(true);
+    expect(isBuiltinToolName(CREATE_DOCUMENT_TOOL_NAME)).toBe(true);
+    expect(isBuiltinToolName(TODO_WRITE_TOOL_NAME)).toBe(true);
     expect(isBuiltinToolName('unknown_tool')).toBe(false);
   });
 
@@ -83,8 +87,8 @@ describe('built-in tool catalog', () => {
     expect(isDefaultBuiltinReadonlyToolName(GET_CURRENT_TIME_TOOL_NAME)).toBe(true);
     expect(isDefaultBuiltinReadonlyToolName(QUESTION_TOOL_NAME)).toBe(true);
     expect(isDefaultBuiltinReadonlyToolName(READ_FILE_TOOL_NAME)).toBe(true);
-    expect(isDefaultBuiltinReadonlyToolName(READ_DIRECTORY_TOOL_NAME)).toBe(true);
     expect(isDefaultBuiltinReadonlyToolName(GET_SETTINGS_TOOL_NAME)).toBe(true);
+    expect(isDefaultBuiltinReadonlyToolName(READ_DIRECTORY_TOOL_NAME)).toBe(false);
     expect(isDefaultBuiltinReadonlyToolName(EDIT_FILE_TOOL_NAME)).toBe(false);
   });
 

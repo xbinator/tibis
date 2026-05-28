@@ -103,13 +103,19 @@ export interface CreateBuiltinDocumentWriteToolOptions {
 }
 
 /**
+ * 内置文档写工具集合。
+ */
+export interface BuiltinDocumentWriteTools {
+  /** 创建文档工具 */
+  createDocument: AIToolExecutor<CreateDocumentInput, CreateDocumentResult>;
+}
+
+/**
  * 创建内置文档写工具。
  * @param options - 工具创建选项
  * @returns 文档创建工具执行器
  */
-export function createBuiltinDocumentWriteTool(options: CreateBuiltinDocumentWriteToolOptions): {
-  createDocument: AIToolExecutor<CreateDocumentInput, CreateDocumentResult>;
-} {
+export function createBuiltinDocumentWriteTool(options: CreateBuiltinDocumentWriteToolOptions): BuiltinDocumentWriteTools {
   return {
     createDocument: {
       definition: {
