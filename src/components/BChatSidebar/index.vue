@@ -49,6 +49,8 @@
             :on-close="usagePanel.close"
           />
 
+          <TodoPanel v-if="todoPanelVisible" v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
+
           <InteractionContainer :toast-queue="toastQueue" @remove-toast="removeToast" />
         </div>
       </div>
@@ -104,7 +106,7 @@
 import type { Message } from './utils/types';
 import type { AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
-import { computed, h, onMounted, onUnmounted, provide, ref, shallowRef } from 'vue';
+import { computed, h, onMounted, onUnmounted, provide, ref, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { createBuiltinTools, isBuiltinToolName, READ_DIRECTORY_TOOL_NAME } from '@/ai/tools/builtin';
@@ -120,6 +122,7 @@ import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useChatSessionStore } from '@/stores/chat/session';
+import { useTodoStore } from '@/stores/chat/todo';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
@@ -130,6 +133,7 @@ import ImagePreview from './components/ImagePreview.vue';
 import InputToolbar from './components/InputToolbar.vue';
 import InteractionContainer from './components/InteractionContainer/index.vue';
 import SessionHistory from './components/SessionHistory.vue';
+import TodoPanel from './components/TodoPanel.vue';
 import UsagePanel from './components/UsagePanel.vue';
 import { useAutoName } from './hooks/useAutoName';
 import { useChatHistory } from './hooks/useChatHistory';
@@ -159,6 +163,24 @@ const settingStore = useSettingStore();
 /** Skill 存储 */
 const skillStore = useSkillStore();
 const toolSettingsStore = useToolSettingsStore();
+
+/** Todo 存储 */
+const todoStore = useTodoStore();
+/** Todo 面板可见性 */
+const todoPanelVisible = ref(true);
+/** 当前会话的待办列表 */
+const currentSessionTodos = computed(() => todoStore.getTodos(settingStore.chatSidebarActiveSessionId ?? ''));
+
+/** LLM 调用 todowrite 时自动重新打开面板 */
+watch(
+  () => todoStore.getTodos(settingStore.chatSidebarActiveSessionId ?? ''),
+  (newTodos) => {
+    if (newTodos.length > 0 && !todoPanelVisible.value) {
+      todoPanelVisible.value = true;
+    }
+  },
+  { deep: true }
+);
 
 const router = useRouter();
 
@@ -368,7 +390,8 @@ const allBuiltinTools = createBuiltinTools({
       questionId: pendingQuestion.questionId,
       toolCallId: pendingQuestion.toolCallId
     };
-  }
+  },
+  getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined
 });
 
 /**

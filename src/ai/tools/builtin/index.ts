@@ -26,6 +26,7 @@ import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } 
 import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
+import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteTool';
 
 // 重新导出工具名称
 export { READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool';
@@ -45,6 +46,7 @@ export { LEGACY_ASK_USER_QUESTION_TOOL_NAME, QUESTION_TOOL_NAME } from './Questi
 export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
+export { TODO_WRITE_TOOL_NAME } from './TodoWriteTool';
 
 /**
  * 由主进程 AI SDK 直接执行的远端工具名称。
@@ -108,7 +110,8 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   ...DEFAULT_BUILTIN_READONLY_TOOL_NAMES,
   ...DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES,
   ...CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES,
-  ...CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES
+  ...CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES,
+  TODO_WRITE_TOOL_NAME
 ] as const;
 
 /**
@@ -158,6 +161,8 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions {
   mcpStore?: MCPStoreLike;
   /** Skill store 实例，有可用 skill 时注册 skill 工具 */
   skillStore?: SkillStoreLike;
+  /** 获取当前活跃会话 ID，用于 todowrite 工具 */
+  getSessionId?: () => string | undefined;
 }
 
 /**
@@ -208,7 +213,12 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
 
   // 没有确认适配器时只返回只读工具
   if (!options.confirm) {
-    return [...readonlyTools, ...(readDirectoryTool ? [readDirectoryTool] : []), ...(mcpReadTool ? [mcpReadTool] : [])];
+    return [
+      ...readonlyTools,
+      ...(readDirectoryTool ? [readDirectoryTool] : []),
+      ...(mcpReadTool ? [mcpReadTool] : []),
+      createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) })
+    ];
   }
 
   // 创建文件级写入工具
@@ -248,12 +258,18 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   // Skill 工具：仅当有可用 skill 时注册
   const skillTool = options.skillStore?.initialized && enabledSkills.length > 0 ? createSkillTool(options.skillStore) : null;
 
+  // todowrite 工具：无条件注册
+  const todoWriteTool = createBuiltinTodoWriteTool({
+    getSessionId: options.getSessionId ?? (() => undefined)
+  });
+
   return [
     ...readonlyTools,
     ...(readDirectoryTool ? [readDirectoryTool] : []),
     ...(mcpReadTool ? [mcpReadTool] : []),
     ...writableTools,
     ...(mcpWriteTools ? [mcpWriteTools.addMcpServer, mcpWriteTools.updateMcpServer, mcpWriteTools.removeMcpServer, mcpWriteTools.refreshMcpDiscovery] : []),
-    ...(skillTool ? [skillTool] : [])
+    ...(skillTool ? [skillTool] : []),
+    todoWriteTool
   ];
 }

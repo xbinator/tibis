@@ -124,6 +124,14 @@ export const useChatSessionStore = defineStore('chat', {
     async deleteSession(sessionId: string): Promise<void> {
       const result = await getElectronAPI().chatSessionDelete(sessionId);
       unwrap(result);
+
+      // 级联清理该会话的 todo 数据（在 unwrap 成功后执行，try-catch 防止中断删除流程）
+      try {
+        const { useTodoStore } = await import('@/stores/chat/todo');
+        useTodoStore().clearTodos(sessionId);
+      } catch {
+        // todo 清理失败不影响会话删除结果
+      }
     }
   }
 });
