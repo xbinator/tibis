@@ -284,7 +284,14 @@ export const userChoice = {
 
       if (resultPart?.type !== 'tool') continue;
 
-      resultPart.result = { toolName: resultPart.toolName, status: 'success', data: answer } as ChatMessageToolPart['result'];
+      const isUserCancelled = answer.answers.length === 0 && answer.otherText === '' && (answer.questionAnswers ?? []).every((qa) => qa.answers.length === 0);
+
+      if (isUserCancelled) {
+        resultPart.result = { toolName: resultPart.toolName, status: 'cancelled', error: { code: 'USER_CANCELLED', message: '用户取消了选择' } };
+      } else {
+        resultPart.result = { toolName: resultPart.toolName, status: 'success', data: answer };
+      }
+
       return true;
     }
     return false;
