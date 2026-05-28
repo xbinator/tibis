@@ -10,10 +10,6 @@
         <span class="todo-panel__progress">{{ completedCount }}/{{ todos.length }}</span>
       </div>
 
-      <div class="todo-panel__progress-bar">
-        <div class="todo-panel__progress-fill" :style="{ width: progressPercent + '%' }"></div>
-      </div>
-
       <div class="todo-panel__body">
         <div v-for="(todo, index) in todos" :key="index" class="todo-panel__item" :class="'todo-panel__item--' + todo.status">
           <span class="todo-panel__status-icon">
@@ -65,12 +61,6 @@ const emit = defineEmits<{
 
 /** 已完成任务数量 */
 const completedCount = computed<number>(() => props.todos.filter((t) => t.status === 'completed').length);
-
-/** 完成进度百分比 */
-const progressPercent = computed<number>(() => {
-  if (props.todos.length === 0) return 0;
-  return (completedCount.value / props.todos.length) * 100;
-});
 </script>
 
 <style scoped lang="less">
@@ -116,17 +106,6 @@ const progressPercent = computed<number>(() => {
 
 .todo-panel__close:hover {
   color: var(--text-primary);
-}
-
-.todo-panel__progress-bar {
-  height: 2px;
-  background: var(--bg-disabled);
-}
-
-.todo-panel__progress-fill {
-  height: 100%;
-  background: var(--color-success);
-  transition: width 0.3s ease;
 }
 
 .todo-panel__body {

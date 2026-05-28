@@ -121,6 +121,7 @@ function handleAction(action: ChatMessageConfirmationAction): void {
 <style scoped lang="less">
 .confirm-bottom-sheet {
   padding: 10px 12px;
+  margin-top: -6px;
   pointer-events: auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);

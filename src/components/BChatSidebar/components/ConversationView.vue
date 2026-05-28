@@ -15,11 +15,13 @@
             @user-choice-submit="$emit('user-choice-submit', $event)"
             @rollback="$emit('rollback', item)"
           />
+
+          <slot name="footer"></slot>
         </div>
       </div>
 
-      <div class="conversation-view__floating-container">
-        <slot></slot>
+      <div class="conversation-view__toolbar">
+        <slot name="toolbar"></slot>
       </div>
     </div>
 
@@ -108,8 +110,11 @@ defineExpose({ scrollToBottom });
   .scrollbar-style();
 }
 
-.conversation-view__floating-container {
+.conversation-view__toolbar {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 0 12px 12px;
 }
 

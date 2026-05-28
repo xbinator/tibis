@@ -37,9 +37,13 @@
           @user-choice-submit="handleChatUserChoiceSubmit"
           @rollback="handleRollback"
         >
-          <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
+          <template #footer>
+            <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
+          </template>
 
-          <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
+          <template #toolbar>
+            <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
+          </template>
         </ConversationView>
 
         <div class="b-chat-sidebar__floating-container">
