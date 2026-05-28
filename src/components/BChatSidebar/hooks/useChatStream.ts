@@ -31,7 +31,7 @@ import { native } from '@/shared/platform';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { buildChatMessageReferences } from '../utils/fileReferenceContext';
-import { append, convert, create, userChoice, is } from '../utils/messageHelper';
+import { append, convert, create, userChoice, is, finalizeToolPartsAsCancelled } from '../utils/messageHelper';
 import { createToolCallTracker, type ToolCallTracker } from '../utils/toolCallTracker';
 import { createToolLoopGuard, type ToolLoopGuard } from '../utils/toolLoopGuard';
 
@@ -706,6 +706,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     loading.value = false;
     activeTaskType.value = null;
     const message = finalizeCurrentAssistantMessage();
+    if (message) {
+      finalizeToolPartsAsCancelled(message);
+    }
     resetToolLoopState();
     agent.abort();
     message && onComplete?.(message);

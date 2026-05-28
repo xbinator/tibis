@@ -5,7 +5,7 @@
 import type { Message } from './types';
 import type { FileReference } from '../types';
 import type { JSONValue, ModelMessage } from 'ai';
-import type { AIAwaitingUserChoiceQuestion, AIToolExecutionAwaitingUserInputResult } from 'types/ai';
+import type { AIAwaitingUserChoiceQuestion, AIToolExecutionAwaitingUserInputResult, AIToolExecutionCancelledResult } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageRole, ChatMessageShellOutputChunk, ChatMessageToolPart } from 'types/chat';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
@@ -85,6 +85,27 @@ export async function buildMessageReferences(content: string) {
   const [, result] = await asyncTo(Promise.all(values));
 
   return result;
+}
+
+// ─── finalize —— 消息终态处理 ──────────────────────────────────────────────
+
+/**
+ * 将消息中所有未完成的 tool part 标记为已取消。
+ * 用于中止流式传输等非正常完成场景，避免 tool part 永远停留在 inputting/executing 状态。
+ * @param message - 待处理的助手消息
+ */
+export function finalizeToolPartsAsCancelled(message: Message): void {
+  for (const part of message.parts) {
+    if (part.type === 'tool' && part.status !== 'done') {
+      part.status = 'done';
+      part.result = {
+        toolName: part.toolName,
+        status: 'cancelled',
+        error: { code: 'USER_CANCELLED', message: '用户中止了操作' }
+      } satisfies AIToolExecutionCancelledResult;
+      delete part.inputText;
+    }
+  }
 }
 
 // ─── is —— 消息类型判断 ──────────────────────────────────────────────────────
