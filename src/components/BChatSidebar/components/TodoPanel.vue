@@ -28,6 +28,10 @@
       <BButton type="text" size="small" class="todo-panel__toggle" @click="emit('update:visible', !visible)">
         <span>任务列表 {{ completedCount }}/{{ todos.length }}</span>
       </BButton>
+      <span v-if="!visible && currentTask" class="todo-panel__current-task">
+        <Icon icon="lucide:circle-dot" width="12" height="12" class="todo-panel__current-task-icon" />
+        <span class="todo-panel__current-task-text">{{ currentTask.content }}</span>
+      </span>
     </div>
   </div>
 </template>
@@ -61,6 +65,9 @@ const emit = defineEmits<{
 
 /** 已完成任务数量 */
 const completedCount = computed<number>(() => props.todos.filter((t) => t.status === 'completed').length);
+
+/** 当前正在执行的任务（取第一个 in_progress） */
+const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) => t.status === 'in_progress'));
 </script>
 
 <style scoped lang="less">
@@ -185,10 +192,33 @@ const completedCount = computed<number>(() => props.todos.filter((t) => t.status
 .todo-panel__footer {
   display: flex;
   flex: 0 0 auto;
-  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
   padding: 4px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-secondary);
   border-radius: 6px;
+}
+
+.todo-panel__current-task {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+}
+
+.todo-panel__current-task-icon {
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
+.todo-panel__current-task-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 </style>
