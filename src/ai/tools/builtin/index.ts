@@ -76,7 +76,6 @@ export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   GET_CURRENT_TIME_TOOL_NAME,
   QUESTION_TOOL_NAME,
   READ_FILE_TOOL_NAME,
-  READ_DIRECTORY_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME
 ] as const;
@@ -90,7 +89,7 @@ export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [EDIT_FILE_TOOL_NAME, WRITE_F
 /**
  * 条件注册的只读工具名称列表（MCP/Skill 等，有内容时才注册）。
  */
-export const CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES = [GET_MCP_SETTINGS_TOOL_NAME, SKILL_TOOL_NAME] as const;
+export const CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES = [READ_DIRECTORY_TOOL_NAME, GET_MCP_SETTINGS_TOOL_NAME, SKILL_TOOL_NAME] as const;
 
 /**
  * 条件注册的写工具名称列表（MCP 写操作等，有内容时才注册）。
@@ -188,16 +187,20 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       findFileByPath: options.findFileByPath,
       getEditorContext: options.getEditorContext
     }),
-
-    createBuiltinReadDirectoryTool({
-      confirm: options.confirm,
-      getWorkspaceRoot: options.getWorkspaceRoot,
-      isFileInRecent: options.isFileInRecent
-    }),
     createBuiltinSettingsTools(options.confirm ?? { confirm: async () => false }).getSettings,
     logTools.queryLogs
   ];
   const readonlyTools = allReadonlyTools.filter((tool) => isDefaultBuiltinReadonlyToolName(tool.definition.name));
+
+  // read_directory 工具：仅当存在工作区根目录时注册
+  const hasWorkspace = Boolean(options.getWorkspaceRoot?.());
+  const readDirectoryTool = hasWorkspace
+    ? createBuiltinReadDirectoryTool({
+        confirm: options.confirm,
+        getWorkspaceRoot: options.getWorkspaceRoot,
+        isFileInRecent: options.isFileInRecent
+      })
+    : null;
 
   // MCP 只读工具：仅当存在已配置的 MCP server 时注册
   const mcpHasContent = options.mcpStore ? hasMcpServers(options.mcpStore) : false;
@@ -205,7 +208,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
 
   // 没有确认适配器时只返回只读工具
   if (!options.confirm) {
-    return [...readonlyTools, ...(mcpReadTool ? [mcpReadTool] : [])];
+    return [...readonlyTools, ...(readDirectoryTool ? [readDirectoryTool] : []), ...(mcpReadTool ? [mcpReadTool] : [])];
   }
 
   // 创建文件级写入工具
@@ -247,6 +250,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
 
   return [
     ...readonlyTools,
+    ...(readDirectoryTool ? [readDirectoryTool] : []),
     ...(mcpReadTool ? [mcpReadTool] : []),
     ...writableTools,
     ...(mcpWriteTools ? [mcpWriteTools.addMcpServer, mcpWriteTools.updateMcpServer, mcpWriteTools.removeMcpServer, mcpWriteTools.refreshMcpDiscovery] : []),

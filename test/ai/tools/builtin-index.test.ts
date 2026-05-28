@@ -36,15 +36,7 @@ function getToolNames(includeWriteTools = false): string[] {
 
 describe('createBuiltinTools', () => {
   it('returns read tools by default', () => {
-    expect(getToolNames()).toEqual([
-      'read_current_document',
-      'get_current_time',
-      'question',
-      'read_file',
-      'read_directory',
-      'get_settings',
-      'query_logs'
-    ]);
+    expect(getToolNames()).toEqual(['read_current_document', 'get_current_time', 'question', 'read_file', 'read_directory', 'get_settings', 'query_logs']);
   });
 
   it('includes write tools when confirmation adapter is provided', () => {
