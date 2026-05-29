@@ -13,10 +13,10 @@
       <div class="todo-panel__body">
         <div v-for="(todo, index) in todos" :key="index" class="todo-panel__item" :class="'todo-panel__item--' + todo.status">
           <span class="todo-panel__status-icon">
-            <Icon v-if="todo.status === 'completed'" icon="lucide:check-circle-2" width="14" height="14" />
-            <Icon v-else-if="todo.status === 'in_progress'" icon="lucide:circle-dot" width="14" height="14" />
-            <Icon v-else-if="todo.status === 'cancelled'" icon="lucide:x-circle" width="14" height="14" />
-            <Icon v-else icon="lucide:circle" width="14" height="14" />
+            <BIcon v-if="todo.status === 'completed'" icon="lucide:check-circle-2" :size="14" />
+            <BIcon v-else-if="todo.status === 'in_progress'" icon="lucide:circle-dot" :size="14" />
+            <BIcon v-else-if="todo.status === 'cancelled'" icon="lucide:x-circle" :size="14" />
+            <BIcon v-else icon="lucide:circle" :size="14" />
           </span>
           <span class="todo-panel__priority" :class="'todo-panel__priority--' + todo.priority"></span>
           <span class="todo-panel__content">{{ todo.content }}</span>
@@ -26,10 +26,12 @@
 
     <div v-if="todos.length" class="todo-panel__footer">
       <BButton type="text" size="small" class="todo-panel__toggle" @click="emit('update:visible', !visible)">
+        <BIcon icon="lucide:list-checks" :size="14" class="todo-panel__toggle-icon" />
         <span>任务列表 {{ completedCount }}/{{ todos.length }}</span>
+        <BIcon icon="lucide:chevron-down" :size="12" color="var(--text-tertiary)" :rotate="visible ? 180 : 0" />
       </BButton>
       <span v-if="!visible && currentTask" class="todo-panel__current-task">
-        <Icon icon="lucide:circle-dot" width="12" height="12" class="todo-panel__current-task-icon" />
+        <BIcon icon="lucide:circle-dot" :size="12" class="todo-panel__current-task-icon" />
         <span class="todo-panel__current-task-text">{{ currentTask.content }}</span>
       </span>
     </div>
@@ -42,7 +44,6 @@
  * @description 聊天侧边栏的待办任务面板，显示当前会话的 LLM 任务列表。
  */
 import { computed } from 'vue';
-import { Icon } from '@iconify/vue';
 import type { TodoItem } from '@/stores/chat/todo';
 
 /**
@@ -212,6 +213,11 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
 .todo-panel__current-task-icon {
   flex-shrink: 0;
   color: var(--color-primary);
+}
+
+.todo-panel__toggle-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
 }
 
 .todo-panel__current-task-text {

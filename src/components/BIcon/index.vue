@@ -53,6 +53,7 @@ const wrapStyle = computed(() => {
 <style lang="less">
 .b-icon {
   display: inline-block;
+  flex-shrink: 0;
   width: 1em;
   height: 1em;
   overflow: hidden;
