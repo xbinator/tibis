@@ -141,13 +141,15 @@ async function handleUnsavedWrite(
  * @param context - 工具执行上下文
  * @param targetPath - 规范化后的目标路径
  * @param content - 写入内容
+ * @param isOutsideWorkspace - 是否在工作区外，工作区外时强调风险
  * @returns 工具执行结果
  */
 async function handleWorkspaceWrite(
   options: CreateBuiltinWriteFileToolOptions,
   context: AIToolContext | undefined,
   targetPath: string,
-  content: string
+  content: string,
+  isOutsideWorkspace = false
 ): Promise<ReturnType<typeof createToolFailureResult> | ReturnType<typeof executeConfirmedWrite<WriteFileResult>>> {
   const readWorkspaceFile = options.readWorkspaceFile ?? native.readWorkspaceFile.bind(native);
   const writeFile = options.writeFile ?? native.writeFile.bind(native);
@@ -156,11 +158,14 @@ async function handleWorkspaceWrite(
   const existingFile = await tryReadWorkspaceFile(readWorkspaceFile, targetPath, workspaceRoot);
   const fileExists = existingFile !== null;
 
+  const baseTitle = fileExists ? 'AI 想要覆盖本地文件' : 'AI 想要创建本地文件';
+  const baseDescription = fileExists ? `AI 请求覆盖本地文件：${targetPath}` : `AI 请求创建本地文件：${targetPath}`;
+
   const request: AIToolConfirmationRequest = {
     toolName: WRITE_FILE_TOOL_NAME,
-    title: fileExists ? 'AI 想要覆盖本地文件' : 'AI 想要创建本地文件',
-    description: fileExists ? `AI 请求覆盖本地文件：${targetPath}` : `AI 请求创建本地文件：${targetPath}`,
-    riskLevel: fileExists ? 'dangerous' : 'write',
+    title: isOutsideWorkspace ? `⚠️ ${baseTitle}（工作区外）` : baseTitle,
+    description: isOutsideWorkspace ? `${baseDescription}\n该文件不在当前工作区内，请确认是否允许。` : baseDescription,
+    riskLevel: isOutsideWorkspace || fileExists ? 'dangerous' : 'write',
     ...(fileExists ? { beforeText: existingFile.content, afterText: content } : { afterText: content })
   };
 
@@ -224,7 +229,8 @@ export function createBuiltinWriteFileTool(options: CreateBuiltinWriteFileToolOp
         return handleUnsavedWrite(options, context, resolvedTargetPath.path, content);
       }
 
-      return handleWorkspaceWrite(options, context, resolvedTargetPath.path, content);
+      const isOutsideWorkspace = 'outsideWorkspace' in resolvedTargetPath;
+      return handleWorkspaceWrite(options, context, resolvedTargetPath.path, content, isOutsideWorkspace);
     }
   };
 }

@@ -18,7 +18,11 @@ export { isUnsavedPathUtil as isUnsavedPath };
 /**
  * 路径解析结果联合类型。
  */
-export type ResolveResult = { path: string } | { draft: true; originalPath: string } | { error: AIToolExecutionResult<never> };
+export type ResolveResult =
+  | { path: string }
+  | { path: string; outsideWorkspace: true }
+  | { draft: true; originalPath: string }
+  | { error: AIToolExecutionResult<never> };
 
 /**
  * 未保存草稿读写能力接口，FileEditTool 和 FileWriteTool 的 options 均满足此约束。
@@ -57,11 +61,12 @@ export function mapNativeError(error: unknown): { code: AIToolExecutionError['co
 // ─── 路径解析 ─────────────────────────────────────────────────────────────────
 
 /**
- * 解析输入路径并执行工作区边界校验。
+ * 解析输入路径并判断是否在工作区内。
+ * 工作区外的路径不再直接拒绝，而是返回 outsideWorkspace 标记，由调用方决定是否弹出确认。
  * @param filePath - 用户输入路径
  * @param workspaceRoot - 工作区根目录
  * @param toolName - 工具名称，用于构造错误结果
- * @returns 规范化后的目标路径、草稿降级或失败结果
+ * @returns 规范化后的目标路径、草稿降级、工作区外标记或失败结果
  */
 export function resolveTargetPath(filePath: string, workspaceRoot: string | null, toolName: string): ResolveResult {
   if (isUnsavedPathUtil(filePath)) {
@@ -78,7 +83,7 @@ export function resolveTargetPath(filePath: string, workspaceRoot: string | null
 
   if (isAbsoluteFilePath(filePath)) {
     if (!isPathInsideWorkspace(filePath, workspaceRoot)) {
-      return { error: createToolFailureResult(toolName, 'PERMISSION_DENIED', '目标文件不在当前工作区内') };
+      return { path: filePath, outsideWorkspace: true };
     }
 
     return { path: filePath };

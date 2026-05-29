@@ -228,6 +228,8 @@ export function createBuiltinEditFileTool(options: CreateBuiltinEditFileToolOpti
         return handleUnsavedEdit(options, context, resolvedTargetPath.path, oldString, newString, replaceAll);
       }
 
+      const isOutsideWorkspace = 'outsideWorkspace' in resolvedTargetPath;
+
       let currentFile: ReadWorkspaceFileResult;
       try {
         currentFile = await readWorkspaceFile({
@@ -253,12 +255,15 @@ export function createBuiltinEditFileTool(options: CreateBuiltinEditFileToolOpti
       }
 
       const nextFile = applyStringReplacement(currentFile.content, oldString, newString, replaceAll);
+      const baseTitle = 'AI 想要修改本地文件';
+      const baseDescription = `AI 请求修改本地文件：${currentFile.path}\n将 ${nextFile.replacedCount} 处匹配内容替换为新文本。`;
+
       const request: AIToolConfirmationRequest = {
         toolCallId: context?.toolCallId ?? '',
         toolName: EDIT_FILE_TOOL_NAME,
-        title: 'AI 想要修改本地文件',
-        description: `AI 请求修改本地文件：${currentFile.path}\n将 ${nextFile.replacedCount} 处匹配内容替换为新文本。`,
-        riskLevel: 'write',
+        title: isOutsideWorkspace ? `⚠️ ${baseTitle}（工作区外）` : baseTitle,
+        description: isOutsideWorkspace ? `${baseDescription}\n该文件不在当前工作区内，请确认是否允许。` : baseDescription,
+        riskLevel: isOutsideWorkspace ? 'dangerous' : 'write',
         beforeText: oldString,
         afterText: newString
       };

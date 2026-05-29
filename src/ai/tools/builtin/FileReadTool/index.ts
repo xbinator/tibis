@@ -13,7 +13,7 @@ import type {
   ReadWorkspaceFileResult
 } from '@/shared/platform/native/types';
 import { recentFilesStorage } from '@/shared/storage';
-import { isAbsoluteFilePath } from '@/shared/workspace/pathUtils';
+import { isAbsoluteFilePath, isPathInsideWorkspace } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../../results';
 
@@ -222,6 +222,24 @@ function resolveEditorFilePath(filePath: string, workspaceRoot: string | null | 
 }
 
 /**
+ * 判断目标路径是否在工作区内。
+ * 有 workspaceRoot 时：绝对路径用 isPathInsideWorkspace 判断，相对路径默认在工作区内。
+ * 无 workspaceRoot 时：一律视为工作区外。
+ * @param filePath - 目标路径
+ * @param workspaceRoot - 工作区根目录
+ * @returns 是否在工作区内
+ */
+function isPathInside(filePath: string, workspaceRoot: string | null): boolean {
+  if (!workspaceRoot) {
+    return false;
+  }
+  if (!isAbsoluteFilePath(filePath)) {
+    return true;
+  }
+  return isPathInsideWorkspace(filePath, workspaceRoot);
+}
+
+/**
  * 请求用户确认读取本地绝对路径。
  * @param adapter - 确认适配器
  * @param filePath - 文件路径
@@ -384,30 +402,30 @@ export function createBuiltinReadFileTool(options: CreateBuiltinReadFileToolOpti
 
       const workspaceRoot = options.getWorkspaceRoot?.() ?? null;
       const confirmationAdapter = options.confirm;
-      if (!workspaceRoot) {
-        if (!isAbsoluteFilePath(filePath)) {
-          return createToolFailureResult(READ_FILE_TOOL_NAME, 'PERMISSION_DENIED', '未配置工作区根目录时只能读取绝对路径');
-        }
 
+      // 判断目标路径是否在工作区内：工作区内静默读取，工作区外需用户确认
+      const isInsideWorkspace = isPathInside(filePath, workspaceRoot);
+
+      if (!isInsideWorkspace) {
         if (!confirmationAdapter) {
-          return createToolFailureResult(READ_FILE_TOOL_NAME, 'PERMISSION_DENIED', '读取本地绝对路径需要用户确认');
+          return createToolFailureResult(READ_FILE_TOOL_NAME, 'PERMISSION_DENIED', '读取工作区外的文件需要用户确认');
         }
-      }
 
-      try {
-        const range = normalizeReadRange(input);
         const isRecentFile = options.isFileInRecent?.(filePath) === true;
         const hasApproved = sessionApprovedPaths.has(filePath);
-        const needsConfirmation = !workspaceRoot && !isRecentFile && !hasApproved;
 
-        if (needsConfirmation) {
-          const confirmed = await confirmAbsoluteRead(confirmationAdapter!, filePath, range);
+        if (!isRecentFile && !hasApproved) {
+          const range = normalizeReadRange(input);
+          const confirmed = await confirmAbsoluteRead(confirmationAdapter, filePath, range);
           if (!confirmed) {
             return createToolCancelledResult(READ_FILE_TOOL_NAME);
           }
           sessionApprovedPaths.add(filePath);
         }
+      }
 
+      try {
+        const range = normalizeReadRange(input);
         const result = await readWorkspaceFile({
           filePath,
           ...buildWorkspaceRootOptions(workspaceRoot),
@@ -465,29 +483,28 @@ export function createBuiltinReadDirectoryTool(
 
       const workspaceRoot = options.getWorkspaceRoot?.() ?? null;
       const confirmationAdapter = options.confirm;
-      if (!workspaceRoot) {
-        if (!isAbsoluteFilePath(directoryPath)) {
-          return createToolFailureResult(READ_DIRECTORY_TOOL_NAME, 'PERMISSION_DENIED', '未配置工作区根目录时只能读取绝对路径');
-        }
 
+      // 判断目标路径是否在工作区内：工作区内静默读取，工作区外需用户确认
+      const isInsideWorkspace = isPathInside(directoryPath, workspaceRoot);
+
+      if (!isInsideWorkspace) {
         if (!confirmationAdapter) {
-          return createToolFailureResult(READ_DIRECTORY_TOOL_NAME, 'PERMISSION_DENIED', '读取本地绝对路径目录需要用户确认');
+          return createToolFailureResult(READ_DIRECTORY_TOOL_NAME, 'PERMISSION_DENIED', '读取工作区外的目录需要用户确认');
         }
-      }
 
-      try {
         const isRecentFile = options.isFileInRecent?.(directoryPath) === true;
         const hasApproved = sessionApprovedPaths.has(directoryPath);
-        const needsConfirmation = !workspaceRoot && !isRecentFile && !hasApproved;
 
-        if (needsConfirmation) {
-          const confirmed = await confirmAbsoluteDirectoryRead(confirmationAdapter!, directoryPath);
+        if (!isRecentFile && !hasApproved) {
+          const confirmed = await confirmAbsoluteDirectoryRead(confirmationAdapter, directoryPath);
           if (!confirmed) {
             return createToolCancelledResult(READ_DIRECTORY_TOOL_NAME);
           }
           sessionApprovedPaths.add(directoryPath);
         }
+      }
 
+      try {
         const result = await readWorkspaceDirectory({
           directoryPath,
           ...buildWorkspaceRootOptions(workspaceRoot)
