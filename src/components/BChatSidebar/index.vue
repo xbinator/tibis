@@ -112,7 +112,8 @@ import type { AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
 import { computed, h, onMounted, onUnmounted, provide, ref, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { createBuiltinTools, isBuiltinToolName, READ_DIRECTORY_TOOL_NAME } from '@/ai/tools/builtin';
+import { createBuiltinTools, isBuiltinToolName, READ_DIRECTORY_TOOL_NAME, SKILL_TOOL_NAME } from '@/ai/tools/builtin';
+import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
 import BButton from '@/components/BButton/index.vue';
 import BModelSelect from '@/components/BModelSelect/index.vue';
@@ -407,7 +408,18 @@ const allBuiltinTools = createBuiltinTools({
 function getActiveTools(): AIToolExecutor[] {
   const hasActiveEditor = Boolean(editorToolContextRegistry.getCurrentContext());
   const hasWorkspace = Boolean(workspaceRootCache.value);
-  return allBuiltinTools.filter((tool) => {
+
+  // skillStore 在 onMounted 中异步初始化，allBuiltinTools 创建时 skillStore.initialized 为 false，
+  // 因此需要在每次获取工具时动态判断是否需要追加 Skill 工具
+  const dynamicTools: AIToolExecutor[] = [];
+  if (skillStore.initialized && skillStore.getEnabledSkills().length > 0) {
+    const hasSkillTool = allBuiltinTools.some((t) => t.definition.name === SKILL_TOOL_NAME);
+    if (!hasSkillTool) {
+      dynamicTools.push(createSkillTool(skillStore));
+    }
+  }
+
+  return [...allBuiltinTools, ...dynamicTools].filter((tool) => {
     if (!isBuiltinToolName(tool.definition.name)) return false;
     if (tool.definition.name === 'read_current_document' && !hasActiveEditor) return false;
     if (tool.definition.name === READ_DIRECTORY_TOOL_NAME && !hasWorkspace) return false;
