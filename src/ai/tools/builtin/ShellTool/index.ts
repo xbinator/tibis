@@ -110,12 +110,13 @@ function formatSafetyFailureMessage(safety: ElectronShellCommandSafetyReport): s
  * @param cwd - 执行目录
  * @param timeoutMs - 超时时间
  * @param safety - 安全分析报告
- * @returns 确认描述
+ * @param autoApproved - 是否已自动批准，仅用于执行开始/完成回调时传 null
+ * @returns 确认描述，无 finding 时返回 null 表示无需确认
  */
 function formatConfirmationDescription(shell: ElectronShellCommandShell, cwd: string, timeoutMs: number, safety: ElectronShellCommandSafetyReport): string {
-  const findingText = safety.findings.length ? safety.findings.map((finding) => `- [${finding.severity}] ${finding.message}`).join('\n') : '- 未发现阻断项';
+  const findingText = safety.findings.map((finding) => `- [${finding.severity}] ${finding.message}`).join('\n');
 
-  return [`Shell: ${shell}`, `执行目录: ${cwd}`, `Timeout: ${timeoutMs}ms`, `安全检查:`, findingText].join('\n');
+  return [`Shell: ${shell}`, `执行目录: ${cwd}`, `Timeout: ${timeoutMs}ms`, `安全风险:`, findingText].join('\n');
 }
 
 /**
@@ -269,20 +270,25 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', formatSafetyFailureMessage(safety));
       }
 
-      const confirmationRequest: AIToolConfirmationRequest = {
-        toolName: RUN_SHELL_COMMAND_TOOL_NAME,
-        title: 'AI 想要执行 Shell 命令',
-        description: formatConfirmationDescription(input.shell, cwd, timeoutMs, safety),
-        riskLevel: 'dangerous',
-        allowRemember: false,
-        beforeText: safety.normalizedCommandPreview
-      };
-      const decision = await options.confirm.confirm(confirmationRequest);
-      if (!isConfirmationApproved(decision)) {
-        return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
-      }
+      // 安全分析无 risk finding 时直接放行，有 finding 时弹窗让用户确认
+      const hasSafetyFindings = safety.findings.length > 0;
+      let confirmationRequest: AIToolConfirmationRequest | undefined;
 
-      await options.confirm.onExecutionStart?.(confirmationRequest);
+      if (hasSafetyFindings) {
+        confirmationRequest = {
+          toolName: RUN_SHELL_COMMAND_TOOL_NAME,
+          title: 'AI 想要执行 Shell 命令',
+          description: formatConfirmationDescription(input.shell, cwd, timeoutMs, safety),
+          riskLevel: 'dangerous',
+          allowRemember: false,
+          beforeText: safety.normalizedCommandPreview
+        };
+        const decision = await options.confirm.confirm(confirmationRequest);
+        if (!isConfirmationApproved(decision)) {
+          return createToolCancelledResult(RUN_SHELL_COMMAND_TOOL_NAME);
+        }
+        await options.confirm.onExecutionStart?.(confirmationRequest);
+      }
       try {
         const runResult = await native.runShellCommand({
           commandId: typeof input.commandId === 'string' && input.commandId.trim().length > 0 ? input.commandId.trim() : nanoid(),
@@ -306,7 +312,9 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
           ]
             .filter(Boolean)
             .join('\n');
-          await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: `命令执行超时 (${runResult.durationMs}ms)` });
+          if (confirmationRequest) {
+            await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: `命令执行超时 (${runResult.durationMs}ms)` });
+          }
           return createToolFailureResult(
             RUN_SHELL_COMMAND_TOOL_NAME,
             'TOOL_TIMEOUT',
@@ -314,11 +322,15 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
           );
         }
 
-        await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'success' });
+        if (confirmationRequest) {
+          await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'success' });
+        }
         return createToolSuccessResult(RUN_SHELL_COMMAND_TOOL_NAME, toolResult);
       } catch (error) {
         const message = error instanceof Error ? error.message : '执行 Shell 命令失败';
-        await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: message });
+        if (confirmationRequest) {
+          await options.confirm.onExecutionComplete?.(confirmationRequest, { status: 'failure', errorMessage: message });
+        }
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'EXECUTION_FAILED', message);
       }
     }
