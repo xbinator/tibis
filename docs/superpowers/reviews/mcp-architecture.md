@@ -232,7 +232,7 @@ flowchart TD
     N --> O
 ```
 
-**配置文件写入逻辑**（[mcp.ts](file://https://github.com/opencode-ai/opencode/packages/opencode/src/cli/cmd/mcp.ts)）：
+**配置文件写入逻辑**（`opencode/packages/opencode/src/cli/cmd/mcp.ts`）：
 
 1. **定位配置文件** — 按优先级查找 `opencode.json` / `opencode.jsonc`（项目级还检查 `.opencode/` 子目录）
 2. **使用 `jsonc-parser` 修改** — 调用 `modify(text, ["mcp", name], config)` 生成编辑操作，再 `applyEdits()` 应用，保留文件中的注释
@@ -268,7 +268,7 @@ POST /mcp
 }
 ```
 
-**请求处理流程**（[handlers/mcp.ts](file://https://github.com/opencode-ai/opencode/packages/opencode/src/server/routes/instance/httpapi/handlers/mcp.ts)）：
+**请求处理流程**（`opencode/packages/opencode/src/server/routes/instance/httpapi/handlers/mcp.ts`）：
 
 ```
 HTTP Request → AddPayload 校验 (name + ConfigMCP.Info)
@@ -311,7 +311,7 @@ HTTP Request → AddPayload 校验 (name + ConfigMCP.Info)
 
 ### 4.4 MCP Service `add()` 内部流程
 
-无论通过哪种途径添加，最终都调用 MCP Service 的 `add()` 方法（[mcp/index.ts](file://https://github.com/opencode-ai/opencode/packages/opencode/src/mcp/index.ts)）：
+无论通过哪种途径添加，最终都调用 MCP Service 的 `add()` 方法（`opencode/packages/opencode/src/mcp/index.ts`）：
 
 ```mermaid
 flowchart TD
@@ -365,7 +365,7 @@ flowchart TD
 
 ### 4.5 配置 Schema 详解
 
-MCP 配置定义在 [config/mcp.ts](file://https://github.com/opencode-ai/opencode/packages/opencode/src/config/mcp.ts)，使用 Effect Schema：
+MCP 配置定义在 `opencode/packages/opencode/src/config/mcp.ts`，使用 Effect Schema：
 
 ```
 ConfigMCP.Info = Union[Local, Remote]  (discriminator: "type")

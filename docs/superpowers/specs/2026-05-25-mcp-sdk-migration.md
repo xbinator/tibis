@@ -1462,7 +1462,7 @@ test.describe('MCP Settings Page', () => {
 
 - [MCP SDK GitHub](https://github.com/modelcontextprotocol/typescript-sdk)
 - [MCP 协议规范](https://modelcontextprotocol.io/)
-- [OpenCode MCP 实现](https://github.com/opencode-ai/opencode/docs/mcp-architecture.md)
+- [OpenCode MCP 实现](https://github.com/opencode-ai/opencode)
 - [RFC 6749 - OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc6749)
 - [RFC 7591 - OAuth 2.0 Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591)
 - [RFC 9728 - OAuth 2.0 Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728)
