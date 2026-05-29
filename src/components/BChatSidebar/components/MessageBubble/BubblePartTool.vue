@@ -12,8 +12,8 @@
       <span v-if="part.status === 'done' && part.result?.status === 'failure'" :class="bem('status', { failure: true })">失败</span>
     </template>
 
-    <!-- 提问工具成功结果：以问答形式展示用户选择 -->
-    <template v-if="isQuestionSuccess">
+    <!-- 提问工具结果：以问答形式展示用户选择 -->
+    <template v-if="isQuestionResult">
       <div :class="bem('result')">
         <div v-for="(item, index) in qaItems" :key="index" :class="bem('result-item')">
           <div :class="bem('result-label')">{{ item.question }}</div>
@@ -81,11 +81,11 @@ const [, bem] = createNamespace('', 'bubble-part-tool');
 /** 原始数据展开状态 */
 const rawExpanded = ref(false);
 
-/** 工具状态与图标的映射：inputting 旋转加载、executing 扳手、done 成功/失败 */
+/** 工具状态与图标的映射：inputting 旋转加载、executing 扳手、done 成功/失败/取消/等待用户输入 */
 const ICON_MAP = {
   inputting: 'lucide:loader-circle',
   executing: 'lucide:wrench',
-  done: { success: 'lucide:check-circle-2', failure: 'lucide:circle-alert', cancelled: 'lucide:circle-x' }
+  done: { success: 'lucide:check-circle-2', failure: 'lucide:circle-alert', cancelled: 'lucide:circle-x', awaiting_user_input: 'lucide:circle-help' }
 } as const;
 
 /** 提问类工具名称集合，用于判断是否展示问答结果视图 */
@@ -187,9 +187,12 @@ const hasContent = computed(() => {
   return hasStructuredValueContent(previewValue.value);
 });
 
-/** 判断是否为提问工具且执行成功，用于切换问答结果视图 */
-const isQuestionSuccess = computed(
-  () => props.part.status === 'done' && props.part.result?.status === 'success' && QUESTION_TOOL_NAMES.has(props.part.toolName)
+/** 判断是否为提问工具且有结果（成功/取消/等待用户输入），用于切换问答结果视图 */
+const isQuestionResult = computed(
+  () =>
+    props.part.status === 'done' &&
+    (props.part.result?.status === 'success' || props.part.result?.status === 'cancelled' || props.part.result?.status === 'awaiting_user_input') &&
+    QUESTION_TOOL_NAMES.has(props.part.toolName)
 );
 
 /** 工具执行完成时的人可读摘要，支持成功/失败/取消状态，无匹配时返回 null 降级到代码视图 */
@@ -199,14 +202,21 @@ const summary = computed(() => {
 });
 
 /**
- * 解析提问工具的问答结果，将 value 映射为可读的 label
- * 兼容多问题（questionAnswers）和单问题（answers）两种返回格式
+ * 解析提问工具的问答结果，将 value 映射为可读的 label。
+ * 兼容多问题（questionAnswers）和单问题（answers）两种返回格式。
+ * 取消/等待状态下无用户答案，从 input 中提取问题并显示"未回答"。
  */
 const qaItems = computed<QaItem[]>(() => {
-  if (!isQuestionSuccess.value) return [];
+  if (!isQuestionResult.value) return [];
   const input = props.part.input as QuestionToolInput;
-  const answer = props.part.result!.data as AIUserChoiceAnswerData;
   const questions = resolveQaQuestions(input);
+
+  // 取消或等待用户输入状态：无用户答案，展示问题列表并标记为未回答
+  if (props.part.result?.status === 'cancelled' || props.part.result?.status === 'awaiting_user_input') {
+    return questions.map((q) => ({ question: q.question, selectedLabels: ['未回答'] }));
+  }
+
+  const answer = props.part.result!.data as AIUserChoiceAnswerData;
   const answers = answer.questionAnswers ?? [];
   // 多问题模式：逐条映射 questionAnswers
   if (answers.length > 0) {
@@ -221,9 +231,9 @@ const qaItems = computed<QaItem[]>(() => {
   return [{ question: firstQuestion.question, selectedLabels: resolveQaLabels(questions, firstQuestion.question, answer.answers) }];
 });
 
-/** 提问工具中用户填写的补充信息文本 */
+/** 提问工具中用户填写的补充信息文本，取消/等待状态下不展示 */
 const questionOtherText = computed(() => {
-  if (!isQuestionSuccess.value) return undefined;
+  if (!isQuestionResult.value || props.part.result?.status === 'cancelled' || props.part.result?.status === 'awaiting_user_input') return undefined;
   return (props.part.result!.data as AIUserChoiceAnswerData).otherText;
 });
 </script>

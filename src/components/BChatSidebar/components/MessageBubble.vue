@@ -33,7 +33,7 @@
           <BubblePartThinking v-else-if="!isCompressionMessage && item.type === 'thinking'" :part="item" />
 
           <QuestionCard
-            v-else-if="!isCompressionMessage && isAwaitingUserChoicePart(item)"
+            v-else-if="!isCompressionMessage && !disabled && isAwaitingUserChoicePart(item)"
             :question="item.result.data"
             :disabled="disabled"
             @submit-choice="$emit('user-choice-submit', $event)"
