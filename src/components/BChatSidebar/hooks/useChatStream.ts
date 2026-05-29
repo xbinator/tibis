@@ -810,15 +810,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   }
 
   /**
-   * 重新生成
+   * 重新生成。
+   * 先立即更新 UI（删除旧消息、创建加载占位符），再执行异步操作，
+   * 避免用户点击后长时间无视觉反馈。
    */
   async function regenerate(message: Message): Promise<boolean> {
     if (loading.value) {
-      return false;
-    }
-
-    const config = await resolveServiceConfig();
-    if (!config) {
       return false;
     }
 
@@ -828,12 +825,31 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     }
 
     const sourceMessages = messages.value.slice(0, startIndex + 1);
+    const removedMessages = messages.value.slice(startIndex + 1);
+
+    // 立即更新 UI，让用户感知操作已响应
+    loading.value = true;
+    activeTaskType.value = 'chat';
+    messages.value.splice(0, messages.value.length, ...sourceMessages);
+    handlePrepareAssistantMessage(false);
+    startToolLoopSession();
+
+    // 异步操作：解析服务配置
+    const config = await resolveServiceConfig();
+    if (!config) {
+      // 配置解析失败，回滚 UI 状态
+      messages.value.splice(0, messages.value.length, ...sourceMessages, ...removedMessages);
+      removeTrailingEmptyAssistantMessage();
+      loading.value = false;
+      activeTaskType.value = null;
+      return false;
+    }
+
+    // 异步操作：持久化消息
     await onBeforeRegenerate?.(sourceMessages, message);
 
-    // 直接修改 messages 数组（由外部控制）
-    messages.value.splice(0, messages.value.length, ...sourceMessages);
-    startToolLoopSession();
-    nextTick(() => handleStreamMessages(sourceMessages, config));
+    // 复用已创建的占位符开始流式传输
+    nextTick(() => handleStreamMessages(sourceMessages, config, true));
     return true;
   }
 
