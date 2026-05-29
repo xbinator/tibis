@@ -7,8 +7,10 @@
   <div class="choice-card">
     <div class="choice-card__step">
       <div class="choice-card__header">
-        <div class="choice-card__title">{{ isSupplementaryStep ? '是否有更多的补充信息需要提供？（可选）' : currentItem.question }}</div>
-        <span v-if="totalSteps > 1" class="choice-card__indicator">{{ currentStep + 1 }} / {{ totalSteps }}</span>
+        <div class="choice-card__title">
+          <BIcon :icon="isSupplementaryStep ? 'lucide:message-square-plus' : 'lucide:circle-help'" :size="14" class="choice-card__title-icon" />
+          <span>{{ isSupplementaryStep ? '是否有更多的补充信息需要提供？（可选）' : currentItem.question }}</span>
+        </div>
       </div>
 
       <!-- 补充信息输入 -->
@@ -16,37 +18,25 @@
 
       <!-- 问题选项 -->
       <div v-else class="choice-card__options">
-        <template v-if="currentItem.mode !== 'multiple'">
-          <ARadio
-            v-for="option in currentItem.options"
-            :key="option.value"
-            :value="option.value"
-            :checked="currentSelectedValues.includes(option.value)"
-            :disabled="disabled || isCurrentOptionDisabled(option.value)"
-            @change="handleCurrentOptionChange(option.value, ($event.target as { checked: boolean }).checked)"
-          >
-            <div>{{ option.label }}</div>
-            <div v-if="option.description" class="choice-card__option-desc">{{ option.description }}</div>
-          </ARadio>
-        </template>
-        <template v-else>
-          <ACheckbox
-            v-for="option in currentItem.options"
-            :key="option.value"
-            :value="option.value"
-            :checked="currentSelectedValues.includes(option.value)"
-            :disabled="disabled || isCurrentOptionDisabled(option.value)"
-            @change="handleCurrentOptionChange(option.value, ($event.target as { checked: boolean }).checked)"
-          >
-            <div>{{ option.label }}</div>
-            <div v-if="option.description" class="choice-card__option-desc">{{ option.description }}</div>
-          </ACheckbox>
-        </template>
+        <button
+          v-for="option in currentItem.options"
+          :key="option.value"
+          class="choice-card__option-btn"
+          :class="{ 'choice-card__option-btn--selected': currentSelectedValues.includes(option.value) }"
+          :disabled="disabled || isCurrentOptionDisabled(option.value)"
+          type="button"
+          @click="handleButtonClick(option.value)"
+        >
+          <span class="choice-card__option-btn-label">{{ option.label }}</span>
+          <span v-if="option.description" class="choice-card__option-desc">{{ option.description }}</span>
+        </button>
       </div>
 
       <div v-if="!disabled" class="choice-card__footer">
-        <BButton size="small" type="secondary" @click="handleCancel">取消</BButton>
+        <span v-if="totalSteps > 1" class="choice-card__indicator">{{ currentStep + 1 }} / {{ totalSteps }}</span>
+
         <div class="choice-card__footer-right">
+          <BButton size="small" type="secondary" @click="handleCancel">取消</BButton>
           <BButton v-if="currentStep > 0" size="small" type="secondary" @click="handlePrev">上一步</BButton>
           <BButton v-if="isSupplementaryStep" size="small" @click="handleSubmit">提交</BButton>
           <BButton v-else size="small" :disabled="!canSubmitCurrentQuestion" @click="handleNext">下一步</BButton>
@@ -124,11 +114,10 @@ function getSelectedValues(questionIndex: number): string[] {
 }
 
 /**
- * 更新当前步骤问题的选中值。
+ * 按钮点击处理：单选模式下点击切换，多选模式下 toggle 选中/取消。
  * @param value - 选项值
- * @param checked - 是否选中
  */
-function handleCurrentOptionChange(value: string, checked: boolean): void {
+function handleButtonClick(value: string): void {
   const item = currentItem.value;
   if (!item) {
     return;
@@ -138,16 +127,17 @@ function handleCurrentOptionChange(value: string, checked: boolean): void {
   const currentValues = getSelectedValues(questionIndex);
 
   if (item.mode === 'single') {
-    selectedValuesByQuestion.value[questionIndex] = checked ? [value] : [];
+    // 单选：点击已选中的不做任何操作
+    if (currentValues.includes(value)) {
+      return;
+    }
+    selectedValuesByQuestion.value[questionIndex] = [value];
     return;
   }
 
-  if (!checked) {
-    selectedValuesByQuestion.value[questionIndex] = currentValues.filter((selectedValue) => selectedValue !== value);
-    return;
-  }
-
+  // 多选：toggle 选中/取消
   if (currentValues.includes(value)) {
+    selectedValuesByQuestion.value[questionIndex] = currentValues.filter((selectedValue) => selectedValue !== value);
     return;
   }
 
@@ -225,8 +215,8 @@ function handleSubmit(): void {
 
 <style scoped lang="less">
 .choice-card {
-  padding: 12px;
-  font-size: 13px;
+  padding: 10px 12px;
+  font-size: 12px;
   color: var(--text-primary);
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
@@ -245,7 +235,17 @@ function handleSubmit(): void {
 }
 
 .choice-card__title {
-  font-weight: 600;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  align-items: center;
+  width: 0;
+  font-weight: 500;
+}
+
+.choice-card__title-icon {
+  flex-shrink: 0;
+  color: var(--color-primary);
 }
 
 .choice-card__indicator {
@@ -258,11 +258,47 @@ function handleSubmit(): void {
 .choice-card__options {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+}
+
+.choice-card__option-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  &--selected {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary);
+  }
+}
+
+.choice-card__option-btn-label {
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .choice-card__option-desc {
   font-size: 12px;
+  line-height: 1.5;
   color: var(--text-secondary);
 }
 
@@ -287,5 +323,6 @@ function handleSubmit(): void {
 .choice-card__footer-right {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 </style>

@@ -2,7 +2,6 @@
 import type { DropdownOption, DropdownOptionItem } from './type';
 import type { PropType, VNodeChild } from 'vue';
 import { computed, defineComponent } from 'vue';
-import { Icon } from '@iconify/vue';
 import { Dropdown } from 'ant-design-vue';
 import BTruncateText from '../BTruncateText/index.vue';
 
@@ -58,7 +57,7 @@ const Menu = defineComponent({
         slots.menu?.({ record }) ?? (
           <div class="b-dropdown-menu-item-label">
             <BTruncateText text={record.label} />
-            {record.checked ? <Icon class="b-dropdown-menu-item-check" icon="lucide:check" width={14} height={14} /> : null}
+            {record.checked ? <BIcon class="b-dropdown-menu-item-check" icon="lucide:check" size={14} /> : null}
           </div>
         )
       );
@@ -120,7 +119,7 @@ const Menu = defineComponent({
         >
           <div class="b-dropdown-menu-item-content">
             {renderMenuContent(item)}
-            <Icon class="b-dropdown-menu-item-arrow" icon="lucide:chevron-right" />
+            <BIcon class="b-dropdown-menu-item-arrow" icon="lucide:chevron-right" />
           </div>
         </Dropdown>
       );

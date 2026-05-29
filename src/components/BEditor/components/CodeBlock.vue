@@ -21,15 +21,15 @@
         @mousedown.prevent
         @click="togglePreview"
       >
-        <Icon :icon="isPreviewVisible ? 'lucide:eye-off' : 'lucide:eye'" />
+        <BIcon :icon="isPreviewVisible ? 'lucide:eye-off' : 'lucide:eye'" />
       </button>
 
       <button type="button" :class="[bem('control-btn'), { 'is-active': isCollapsed }]" @mousedown.prevent @click="toggleCollapse">
-        <Icon :icon="isCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" />
+        <BIcon :icon="isCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" />
       </button>
 
       <button type="button" :class="bem('copy')" :title="copyLabel" :aria-label="copyLabel" @mousedown.prevent @click="handleCopy">
-        <Icon :class="bem('copy-icon')" :icon="copyIconName" />
+        <BIcon :class="bem('copy-icon')" :icon="copyIconName" />
       </button>
     </div>
 
@@ -37,7 +37,7 @@
       <!-- Mermaid 图预览区域 -->
       <BSuspense v-if="isMermaidLanguage" :active="activePreview === 'mermaid' && hasCode" :class="bem('mermaid-preview')" contenteditable="false">
         <div v-if="renderError" :class="bem('mermaid-error')">
-          <Icon icon="lucide:alert-circle" />
+          <BIcon icon="lucide:alert-circle" />
           <span>{{ renderError }}</span>
         </div>
         <div v-else ref="mermaidPreviewRef" :class="bem('mermaid-diagram')"></div>
@@ -54,7 +54,6 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import { NodeViewContent, NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3';
 import { useClipboard, useDebounceFn } from '@vueuse/core';
 import { message } from 'ant-design-vue';

@@ -5,7 +5,7 @@
   <BubblePart type="tool" :has-content="hasContent" :default-collapsed="defaultCollapsed">
     <template #title>
       <!-- 状态图标：inputting 旋转、executing 扳手、done 成功/失败 -->
-      <Icon :icon="icon" :class="bem('icon', { spin: part.status === 'inputting' })" width="14" height="14" />
+      <BIcon :icon="icon" :class="bem('icon', { spin: part.status === 'inputting' })" :size="14" />
       <!-- 工具名称（文件操作时显示路径，其余显示别名） -->
       <BTruncateText :class="bem('name')" :text="title" />
       <!-- 执行失败状态标签 -->
@@ -38,7 +38,6 @@
 <script setup lang="ts">
 import type { AIUserChoiceAnswerData, AIUserChoiceQuestionAnswer, ChatMessageToolPart } from 'types/chat';
 import { computed } from 'vue';
-import { Icon } from '@iconify/vue';
 import type { QuestionItemInput, QuestionToolInput } from '@/ai/tools/builtin/QuestionTool';
 import { createNamespace } from '@/utils/namespace';
 import { hasStructuredValueContent } from '../../utils/messagePart';

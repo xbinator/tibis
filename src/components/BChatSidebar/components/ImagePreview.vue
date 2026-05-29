@@ -8,7 +8,7 @@
       <div v-for="(image, index) in images" :key="image.id" class="image-preview-item">
         <img :src="image.url" :alt="image.name" class="image-preview-image" @click="handleImageClick(index)" />
         <div class="image-preview-remove" @click.stop="handleRemoveImage(image.id)">
-          <Icon icon="lucide:x" width="12" height="12" />
+          <BIcon icon="lucide:x" :size="12" />
         </div>
       </div>
     </div>
@@ -20,7 +20,6 @@
 <script setup lang="ts">
 import type { ChatMessageFile } from 'types/chat';
 import { computed, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 
 /**
  * 图片预览组件 Props

@@ -8,19 +8,19 @@
       <div v-if="show" ref="viewerRef" :class="name" @click="close">
         <div :class="bem('controls')" @click.stop>
           <div :class="bem('button')" @click="handleZoomOut">
-            <Icon icon="lucide:zoom-out" />
+            <BIcon icon="lucide:zoom-out" />
           </div>
           <div :class="bem('button')" @click="handleZoomIn">
-            <Icon icon="lucide:zoom-in" />
+            <BIcon icon="lucide:zoom-in" />
           </div>
           <div :class="bem('button')" @click="handleRotateLeft">
-            <Icon icon="lucide:rotate-ccw" />
+            <BIcon icon="lucide:rotate-ccw" />
           </div>
           <div :class="bem('button')" @click="handleRotateRight">
-            <Icon icon="lucide:rotate-cw" />
+            <BIcon icon="lucide:rotate-cw" />
           </div>
           <div :class="[bem('button'), bem('close')]" @click="close">
-            <Icon icon="lucide:x" />
+            <BIcon icon="lucide:x" />
           </div>
         </div>
 
@@ -49,7 +49,6 @@
 import type { BImageViewerProps } from './types';
 import type { CSSProperties } from 'vue';
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
 import { clamp } from 'lodash-es';
 import { createNamespace } from '@/utils/namespace';

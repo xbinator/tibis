@@ -4,12 +4,7 @@
       <slot>
         <div class="b-dropdown-button-content" :style="{ width }">{{ contentPrefix }}{{ label }}</div>
       </slot>
-      <Icon
-        v-if="showIcon && options.length"
-        class="dropdown-icon"
-        icon="lucide:chevron-down"
-        :style="{ transform: visible ? 'rotate(180deg)' : 'rotate(0deg)' }"
-      />
+      <BIcon v-if="showIcon && options.length" class="dropdown-icon" icon="lucide:chevron-down" :rotate="visible ? 180 : 0" />
     </button>
 
     <template #overlay>
@@ -25,7 +20,6 @@
 <script setup lang="ts" generic="T extends DropdownOption">
 import type { DropdownOption, DropdownOptionItem } from './type';
 import { computed, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import { addCssUnit } from '../../utils/css';
 
 interface Props {
@@ -130,6 +124,5 @@ watch(
 .dropdown-icon {
   width: 16px;
   height: 16px;
-  transition: transform 0.3s;
 }
 </style>

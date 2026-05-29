@@ -15,7 +15,7 @@
           </div>
           <div v-if="otherFiles.length" :class="bem('files')">
             <div v-for="file in otherFiles" :key="file.id" :class="bem('file')">
-              <Icon icon="lucide:file" width="14" height="14" />
+              <BIcon icon="lucide:file" :size="14" />
               <span :class="bem('file-name')">{{ file.name }}</span>
             </div>
           </div>
@@ -71,7 +71,6 @@ import type { Message } from '../utils/types';
 import type { AIToolExecutionAwaitingUserInputResult } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageTextPart, ChatMessageToolPart } from 'types/chat';
 import { computed, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import BBubble from '@/components/BBubble/index.vue';
 import BImageViewer from '@/components/BImageViewer/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';

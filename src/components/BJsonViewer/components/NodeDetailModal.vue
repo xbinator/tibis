@@ -9,7 +9,7 @@
       <div :class="bem('header')">
         <span :class="bem('title')">内容</span>
         <button :class="bem('copy')" @click="copyContent">
-          <Icon icon="lucide:copy" width="14" height="14" />
+          <BIcon icon="lucide:copy" :size="14" />
         </button>
       </div>
       <pre :class="bem('code')"><code v-html="formattedContent"></code></pre>
@@ -19,7 +19,7 @@
       <div :class="bem('header')">
         <span :class="bem('title')">路径</span>
         <button :class="bem('copy')" @click="copyPath">
-          <Icon icon="lucide:copy" width="14" height="14" />
+          <BIcon icon="lucide:copy" :size="14" />
         </button>
       </div>
       <pre :class="bem('code')">{{ node?.path || '/' }}</pre>
@@ -30,7 +30,6 @@
 <script setup lang="ts">
 import type { JsonFlowNodeData, JsonNodeKind, JsonRecordRow } from '../types';
 import { computed } from 'vue';
-import { Icon } from '@iconify/vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
 

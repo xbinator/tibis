@@ -15,7 +15,7 @@
       :disabled="true"
     />
     <BButton v-else-if="isIdle" tooltip="语言输入" data-testid="voice-start" size="small" type="text" square :disabled="disabled" @click="handleStart">
-      <Icon icon="lucide:mic" width="16" height="16" />
+      <BIcon icon="lucide:mic" :size="16" />
     </BButton>
     <BButton v-else tooltip="停止语言输入" data-testid="voice-stop" size="small" type="outline" square :disabled="disabled" @click="handleStop">
       <div class="voice-stop-icon"></div>
@@ -25,7 +25,6 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { getElectronAPI, hasElectronAPI } from '@/shared/platform/electron-api';
 import { Modal } from '@/utils/modal';

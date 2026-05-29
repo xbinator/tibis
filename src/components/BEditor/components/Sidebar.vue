@@ -3,7 +3,7 @@
     <div class="b-markdown-sidebar">
       <div v-if="title" class="sidebar__header">
         <div class="sidebar__main" @click="handleTitleClick">
-          <Icon icon="lucide:file-text" width="14" height="14" class="sidebar__file-icon" />
+          <BIcon icon="lucide:file-text" :size="14" class="sidebar__file-icon" />
           <span class="sidebar__title">{{ title }}</span>
         </div>
       </div>
@@ -16,7 +16,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import { marked, Tokens } from 'marked';
 import AnchorContent, { AnchorItem } from './AnchorContent.vue';
 

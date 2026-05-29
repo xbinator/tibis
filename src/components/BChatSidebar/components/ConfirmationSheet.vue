@@ -1,15 +1,9 @@
 <template>
   <div v-if="request" class="confirm-bottom-sheet">
     <div class="confirm-bottom-sheet__title">
-      <Icon :icon="request.riskLevel === 'dangerous' ? 'lucide:triangle-alert' : 'lucide:shield-check'" width="14" height="14" />
+      <BIcon :icon="request.riskLevel === 'dangerous' ? 'lucide:triangle-alert' : 'lucide:shield-check'" :size="14" />
       <span>{{ request.title }}</span>
-      <Icon
-        :icon="isCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'"
-        width="14"
-        height="14"
-        class="confirm-bottom-sheet__chevron"
-        @click="toggleCollapse"
-      />
+      <BIcon :icon="isCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" :size="14" class="confirm-bottom-sheet__chevron" @click="toggleCollapse" />
     </div>
 
     <div v-show="!isCollapsed" class="confirm-bottom-sheet__body">
@@ -55,7 +49,6 @@
  */
 import type { ChatMessageConfirmationAction } from 'types/chat';
 import { computed, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import { escape } from 'lodash-es';
 import type { AIToolConfirmationRequest } from '@/ai/tools/confirmation';
 

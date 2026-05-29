@@ -4,7 +4,7 @@
 
     <template #menu="{ record }">
       <span v-if="props.showSelectedCheck" class="toolbar-menu-item-check">
-        <Icon v-if="(record as ToolbarOption).selected" icon="lucide:check" />
+        <BIcon v-if="(record as ToolbarOption).selected" icon="lucide:check" />
       </span>
       <BTruncateText :text="(record as ToolbarOption).label" class="toolbar-menu-item-label" :class="{ 'is-active': (record as ToolbarOption).active }" />
       <div v-if="(record as ToolbarOption).shortcut" class="toolbar-menu-item-shortcut">
@@ -22,7 +22,6 @@
 
 <script setup lang="ts">
 import type { ToolbarOption, ToolbarOptions } from './types';
-import { Icon } from '@iconify/vue';
 import { getShortcutParts } from '@/utils/shortcut';
 
 export interface Props {

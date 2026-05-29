@@ -12,7 +12,7 @@
     <template v-else>
       <BUpload v-if="supportsVision" accept="image/*" @change="handleImageInputChange">
         <BButton size="small" type="text" square>
-          <Icon icon="lucide:image-plus" width="16" height="16" />
+          <BIcon icon="lucide:image-plus" :size="16" />
         </BButton>
       </BUpload>
 
@@ -43,7 +43,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import BButton from '@/components/BButton/index.vue';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 import ContextUsage from './InputToolbar/ContextUsage.vue';

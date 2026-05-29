@@ -15,9 +15,9 @@
     @dropdown-visible-change="handleDropdownVisibleChange"
   >
     <template #suffixIcon>
-      <Icon v-if="loading" icon="lucide:loader-2" class="is-spinning" />
-      <Icon v-else-if="showSearch" icon="lucide:search" />
-      <Icon v-else icon="lucide:chevron-down" :style="{ fontSize: `${suffixIconSize}px` }" />
+      <BIcon v-if="loading" icon="lucide:loader-2" class="is-spinning" />
+      <BIcon v-else-if="showSearch" icon="lucide:search" />
+      <BIcon v-else icon="lucide:chevron-down" :size="suffixIconSize" />
     </template>
 
     <template #option="data">
@@ -48,7 +48,6 @@
 <script lang="ts" setup>
 import type { SelectOption } from './types';
 import { computed, ref, onMounted, defineComponent, Ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import { useVModel } from '@vueuse/core';
 
 // Hoisted outside setup to avoid re-creating on every render

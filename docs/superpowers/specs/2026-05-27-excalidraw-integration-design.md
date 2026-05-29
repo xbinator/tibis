@@ -53,10 +53,10 @@ src/components/BExcalidraw/
 
 ### 模式设计
 
-BExcalidraw 支持 `mode: 'full' | 'compact'` prop：
+BExcalidraw 支持 `readonly: boolean` prop：
 
-- **full（独立页面）**：完整 Excalidraw 编辑器，所有绘图工具可用
-- **compact（编辑器内嵌）**：只读 SVG 预览，不加载编辑器运行时，右上角"打开画板"按钮跳转独立页面
+- **`readonly: false`（独立页面）**：完整 Excalidraw 编辑器，所有绘图工具可用
+- **`readonly: true`（编辑器内嵌）**：只读 SVG 预览，不加载编辑器运行时，右上角"打开画板"按钮跳转独立页面
 
 ## 数据流与存储
 

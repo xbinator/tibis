@@ -27,7 +27,7 @@
             @mouseenter="handleOverlayControlMouseEnter"
             @click="handleAdd(addHover?.column ?? null)"
           >
-            <Icon :class="bem('button-icon')" :icon="ICONS.add" />
+            <BIcon :class="bem('button-icon')" :icon="ICONS.add" />
           </button>
         </div>
         <div v-show="showAddRowButton" :class="[bem('add-button-group'), bem('add-button-group', 'row')]" :style="addRowButtonStyle">
@@ -41,7 +41,7 @@
             @mouseenter="handleOverlayControlMouseEnter"
             @click="handleAdd(addHover?.row ?? null)"
           >
-            <Icon :class="bem('button-icon')" :icon="ICONS.add" />
+            <BIcon :class="bem('button-icon')" :icon="ICONS.add" />
           </button>
         </div>
       </div>
@@ -59,7 +59,7 @@
             @mouseenter="handleOverlayControlMouseEnter"
             @click="handleRemove(segmentHover?.row ?? null)"
           >
-            <Icon :class="bem('button-icon')" :icon="ICONS.remove" />
+            <BIcon :class="bem('button-icon')" :icon="ICONS.remove" />
           </button>
         </div>
         <div v-show="showRemoveColumnButton" :class="bem('segment-button-group', 'column')" :style="removeColumnButtonStyle">
@@ -73,7 +73,7 @@
             @mouseenter="handleOverlayControlMouseEnter"
             @click="handleRemove(segmentHover?.column ?? null)"
           >
-            <Icon :class="bem('button-icon')" :icon="ICONS.remove" />
+            <BIcon :class="bem('button-icon')" :icon="ICONS.remove" />
           </button>
         </div>
       </div>
@@ -89,7 +89,6 @@
 
 import type { CSSProperties } from 'vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { NodeViewContent, NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3';
 import { createNamespace } from '@/utils/namespace';

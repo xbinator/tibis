@@ -2,7 +2,7 @@
   <div class="quick-actions">
     <BDropdown>
       <BButton square size="small" type="text" class="quick-actions__trigger" @click.stop>
-        <Icon icon="lucide:ellipsis" width="14" height="14" />
+        <BIcon icon="lucide:ellipsis" :size="14" />
       </BButton>
 
       <template #overlay>
@@ -14,7 +14,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Icon } from '@iconify/vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 

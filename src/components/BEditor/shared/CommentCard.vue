@@ -10,7 +10,7 @@
         <div :class="bem('annotated')" :title="annotatedText">{{ annotatedText }}</div>
         <BDropdown>
           <BButton type="text" square size="small" :class="bem('more-btn')">
-            <Icon icon="lucide:more-horizontal" :width="16" :height="16" />
+            <BIcon icon="lucide:more-horizontal" :size="16" />
           </BButton>
           <template #overlay>
             <div ref="dropdownRef">
@@ -41,7 +41,6 @@
 import type { SelectionAssistantPosition } from '../adapters/selectionAssistant';
 import type { CSSProperties } from 'vue';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import { useEventListener, onClickOutside, useResizeObserver } from '@vueuse/core';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { createNamespace } from '@/utils/namespace';

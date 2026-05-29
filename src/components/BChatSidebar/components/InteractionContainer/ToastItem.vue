@@ -5,7 +5,7 @@
 <template>
   <div :class="['toast-item', { 'toast-item--shake': shake }]">
     <div :class="['toast-item__icon', `toast-item__icon--${type}`]">
-      <Icon :icon="iconName" width="16" height="16" />
+      <BIcon :icon="iconName" :size="16" />
     </div>
     <div class="toast-item__content">
       <component :is="contentVNode" v-if="isVNodeContent" />
@@ -13,7 +13,7 @@
     </div>
     <div v-if="duration" class="toast-item__countdown">{{ countdownText }}</div>
     <button class="toast-item__close" @click.stop="handleClose">
-      <Icon icon="lucide:x" width="14" height="14" />
+      <BIcon icon="lucide:x" :size="14" />
     </button>
   </div>
 </template>
@@ -21,7 +21,6 @@
 <script setup lang="ts">
 import type { ToastContent, ToastType } from './types';
 import { computed, isVNode, onMounted, onUnmounted, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 
 /**
  * ToastItem 属性
