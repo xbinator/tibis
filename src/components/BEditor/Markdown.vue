@@ -11,6 +11,7 @@
       :anchor-id-prefix="editorState.id"
       :active-id="activeAnchorId"
       @change="handleEditorAnchorChange"
+      @close="showOutline = false"
     />
 
     <BScrollbar ref="scrollbarRef" class="b-markdown-scrollbar" @scroll="handleEditorScrollEvent">
