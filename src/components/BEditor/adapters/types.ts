@@ -113,6 +113,16 @@ export interface RichLoadState {
   progress: number;
   /** 失败时的错误信息，仅 failed 阶段有值 */
   errorMessage?: string;
+  /** 解析耗时（毫秒），parsing 阶段之后可用 */
+  parseDurationMs?: number;
+  /** 装载耗时（毫秒），ready 阶段可用 */
+  mountDurationMs?: number;
+  /** 总耗时（毫秒），ready 阶段可用 */
+  totalDurationMs?: number;
+  /** Markdown 字符数，ready 阶段可用 */
+  contentSize?: number;
+  /** ProseMirror 节点数，ready 阶段可用 */
+  nodeCount?: number;
 }
 
 /**
@@ -122,7 +132,9 @@ export interface RichParseResult {
   json: import('@tiptap/core').JSONContent;
   stats: {
     durationMs: number;
+    mountDurationMs: number;
     nodeCount: number;
+    headingCount: number;
   };
 }
 

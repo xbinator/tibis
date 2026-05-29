@@ -3,12 +3,15 @@
  * @description Rich 编辑器大文档异步加载状态机。
  * 管理 idle/loading/ready/failed 状态转移、取消令牌、事务 meta。
  * Markdown → JSON 解析统一走 parseMarkdownForRichLoad（MarkdownManager + schema 扩展）。
+ * JSON → ProseMirror 装载采用分帧 dispatch，每帧 12ms 时间预算，避免主线程长时间阻塞。
  */
 import type { RichLoadState, RichLoadCancelReason, RichLoadCompletePayload } from '../adapters/types';
 import type { Editor, JSONContent } from '@tiptap/core';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { ref, computed, type Ref } from 'vue';
-import { parseMarkdownForRichLoad } from './richMarkdownParser';
+import { Fragment } from '@tiptap/pm/model';
+import { parseMarkdownForRichLoad } from '../utils/richMarkdownParser';
 
 export const EMPTY_PARAGRAPH_JSON: JSONContent = {
   type: 'doc',
@@ -74,17 +77,148 @@ export function useRichEditorLoad({ getEditor, getEditorInstanceId, onLoadComple
     currentLoadToken = Symbol('rich-load-canceled');
   }
 
-  function finishLoad(_editor: Editor, _token: symbol, rawMarkdown: string, json: JSONContent, stats: { durationMs: number; nodeCount: number }): void {
+  interface FinishLoadOptions {
+    rawMarkdown: string;
+    json: JSONContent;
+    durationMs: number;
+    nodeCount: number;
+    headingCount: number;
+    mountDurationMs: number;
+  }
+
+  function finishLoad(options: FinishLoadOptions): void {
+    const { rawMarkdown, json, durationMs, nodeCount, headingCount, mountDurationMs } = options;
     internalLoadState.value = {
       phase: 'ready',
       isReload: internalLoadState.value.isReload,
-      progress: 1
+      progress: 1,
+      parseDurationMs: durationMs,
+      mountDurationMs,
+      totalDurationMs: durationMs + mountDurationMs,
+      contentSize: rawMarkdown.length,
+      nodeCount
     };
-    onLoadComplete({ rawMarkdown, json, stats });
+    onLoadComplete({
+      rawMarkdown,
+      json,
+      stats: {
+        durationMs,
+        mountDurationMs,
+        nodeCount,
+        headingCount
+      }
+    });
+  }
+
+  /**
+   * 分帧时间预算（毫秒）。
+   * 每帧在超过此预算后 yield 给浏览器，避免阻塞用户交互。
+   */
+  const FRAME_TIME_BUDGET_MS = 12;
+
+  /**
+   * 取消当前已调度的下一帧回调。
+   * 在 cancelLoad 或新 startLoad 时调用，防止旧任务继续 dispatch。
+   */
+  let scheduledFrameCancel: (() => void) | null = null;
+
+  /**
+   * 通过 requestAnimationFrame 调度回调，返回取消函数。
+   */
+  function scheduleByAnimationFrame(fn: () => void): () => void {
+    const handle = requestAnimationFrame(fn);
+    return () => cancelAnimationFrame(handle);
+  }
+
+  /**
+   * 分帧装载 JSON 顶层 block 到 ProseMirror editor。
+   * 每帧累积 block 直到超过 TIME_BUDGET，然后 dispatch 一个 transaction，
+   * 通过 requestAnimationFrame yield 给浏览器，再继续下一帧。
+   *
+   * @param editor - 当前 editor 实例
+   * @param token - 当前加载令牌
+   * @param json - 完整解析后的 Tiptap JSON
+   */
+  function mountContentInChunks(editor: Editor, token: symbol, json: JSONContent): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const blocks = json.content ?? [];
+      const totalBlocks = blocks.length;
+      let cursor = 0;
+      let isFirstChunk = true;
+
+      function scheduleNextChunk(): void {
+        if (!isCurrentToken(token)) {
+          resolve();
+          return;
+        }
+
+        scheduledFrameCancel = null;
+
+        try {
+          const frameStart = performance.now();
+          const chunkNodes: ProseMirrorNode[] = [];
+
+          while (cursor < totalBlocks) {
+            const block = blocks[cursor];
+            if (!block) {
+              cursor++;
+              continue;
+            }
+            const node = editor.schema.nodeFromJSON(block);
+            chunkNodes.push(node);
+            cursor++;
+
+            if (performance.now() - frameStart >= FRAME_TIME_BUDGET_MS) break;
+          }
+
+          if (chunkNodes.length === 0) {
+            resolve();
+            return;
+          }
+
+          let { tr } = editor.state;
+
+          if (isFirstChunk) {
+            // 首帧：替换占位段落为实际内容
+            const fragment = Fragment.from(chunkNodes);
+            tr = tr.replaceWith(0, editor.state.doc.content.size, fragment);
+            isFirstChunk = false;
+          } else {
+            // 后续帧：追加到文档末尾
+            for (const node of chunkNodes) {
+              tr = tr.insert(tr.doc.content.size, node);
+            }
+          }
+
+          tr.setMeta('preventUpdate', true).setMeta('addToHistory', false).setMeta('bEditorRichLoad', true);
+          editor.view.dispatch(tr);
+
+          // 更新进度
+          internalLoadState.value = {
+            ...internalLoadState.value,
+            progress: 0.05 + 0.9 * (cursor / totalBlocks)
+          };
+
+          if (cursor < totalBlocks) {
+            scheduledFrameCancel = scheduleByAnimationFrame(scheduleNextChunk);
+          } else {
+            resolve();
+          }
+        } catch (error) {
+          reject(error);
+        }
+      }
+
+      scheduledFrameCancel = scheduleByAnimationFrame(scheduleNextChunk);
+    });
   }
 
   async function startLoad(markdown: string, options?: { isReload?: boolean }): Promise<void> {
     invalidateCurrentTask();
+
+    // 取消旧加载可能残留的调度帧
+    scheduledFrameCancel?.();
+    scheduledFrameCancel = null;
 
     const editor = getEditor();
     if (!editor || editor.isDestroyed) return;
@@ -125,17 +259,12 @@ export function useRichEditorLoad({ getEditor, getEditorInstanceId, onLoadComple
 
       if (!isCurrentToken(token)) return;
 
-      internalLoadState.value = { ...internalLoadState.value, stage: 'mounting', progress: 0.05 };
+      internalLoadState.value = { ...internalLoadState.value, stage: 'mounting', progress: 0.05, parseDurationMs: parseResult.stats.durationMs };
 
-      // Stage 2: JSON → ProseMirror 装载
+      // Stage 2: JSON → ProseMirror 分帧装载
+      const mountStart = performance.now();
       try {
-        const nextDoc = editor.schema.nodeFromJSON(parseResult.json);
-        const tr = editor.state.tr
-          .replaceWith(0, editor.state.doc.content.size, nextDoc.content)
-          .setMeta('preventUpdate', true)
-          .setMeta('addToHistory', false)
-          .setMeta('bEditorRichLoad', true);
-        editor.view.dispatch(tr);
+        await mountContentInChunks(editor, token, parseResult.json);
       } catch {
         if (!isCurrentToken(token)) return;
         clearEditorToEmptyPlaceholder(editor);
@@ -144,9 +273,19 @@ export function useRichEditorLoad({ getEditor, getEditorInstanceId, onLoadComple
         return;
       }
 
+      const mountDurationMs = performance.now() - mountStart;
+      internalLoadState.value = { ...internalLoadState.value, mountDurationMs };
+
       if (!isCurrentToken(token)) return;
 
-      finishLoad(editor, token, markdown, parseResult.json, parseResult.stats);
+      finishLoad({
+        rawMarkdown: markdown,
+        json: parseResult.json,
+        durationMs: parseResult.stats.durationMs,
+        nodeCount: parseResult.stats.nodeCount,
+        headingCount: parseResult.stats.headingCount,
+        mountDurationMs
+      });
     } catch (_error) {
       if (!isCurrentToken(token)) return;
       clearEditorToEmptyPlaceholder(editor);
@@ -157,6 +296,10 @@ export function useRichEditorLoad({ getEditor, getEditorInstanceId, onLoadComple
 
   function cancelLoad(reason: RichLoadCancelReason): void {
     invalidateCurrentTask();
+
+    // 取消已调度的下一帧回调
+    scheduledFrameCancel?.();
+    scheduledFrameCancel = null;
 
     const editor = getEditor();
     if (editor && !editor.isDestroyed && reason !== 'retry') {

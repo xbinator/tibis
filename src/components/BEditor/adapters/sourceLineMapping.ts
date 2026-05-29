@@ -72,17 +72,45 @@ export function resetSourceLineTracker(tracker: SourceLineTracker): void {
 }
 
 /**
+ * 统计字符串中换行符的数量（\r\n 和 \n 均计为一次换行）。
+ * 使用 indexOf 替代正则，避免 4102 次 token 解析时的正则开销。
+ * @param s - 待统计的字符串
+ * @returns 换行符数量
+ */
+function countNewlines(s: string): number {
+  let count = 0;
+  let pos = s.indexOf('\n');
+  while (pos !== -1) {
+    count++;
+    pos = s.indexOf('\n', pos + 1);
+  }
+  return count;
+}
+
+/**
  * 统计 token 原始文本实际覆盖的源码行数，不包含仅用于分隔块的尾随空行。
  * @param raw - token 原始 Markdown 文本
  * @returns token 覆盖的源码行数
  */
 function getCoveredLineCount(raw: string): number {
-  const normalized = raw.replace(/\r\n/g, '\n').replace(/\n+$/g, '');
-  if (!normalized) {
+  let end = raw.length;
+  while (end > 0 && (raw[end - 1] === '\n' || raw[end - 1] === '\r')) {
+    end--;
+  }
+  if (end === 0) {
     return 1;
   }
 
-  return normalized.split('\n').length;
+  let count = 1;
+  for (let i = 0; i < end; i++) {
+    if (raw[i] === '\n') {
+      count++;
+      if (i > 0 && raw[i - 1] === '\r') {
+        count--;
+      }
+    }
+  }
+  return count;
 }
 
 /**
@@ -91,15 +119,14 @@ function getCoveredLineCount(raw: string): number {
  * @returns 下一个 block token 应从多少行后开始
  */
 function getConsumedLineCount(raw: string): number {
-  const normalized = raw.replace(/\r\n/g, '\n');
-  if (!normalized) {
+  if (!raw) {
     return 0;
   }
 
-  const newlineMatches = normalized.match(/\n/g);
-  const newlineCount = newlineMatches ? newlineMatches.length : 0;
+  const newlineCount = countNewlines(raw);
+  const endsWithNewline = raw[raw.length - 1] === '\n' || (raw[raw.length - 1] === '\r' && raw[raw.length - 2] !== '\n');
 
-  return normalized.endsWith('\n') ? Math.max(1, newlineCount) : newlineCount + 1;
+  return endsWithNewline ? Math.max(1, newlineCount) : newlineCount + 1;
 }
 
 /**

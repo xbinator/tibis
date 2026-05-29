@@ -82,7 +82,9 @@ function handleSelectAllInCodeBlock(editor: Editor, event: KeyboardEvent): boole
 }
 
 export function useRichEditor({ bodyContent, editable, editorInstanceId, onContentChange, onSearchMatchFocus }: UseRichEditorParams): UseRichEditorResult {
-  const { editorExtensions, resetHeadingIndex, resetSourceLineTracker, assignHeadingIds } = useExtensions(editorInstanceId, { onSearchMatchFocus });
+  const { editorExtensions, resetHeadingIndex, resetSourceLineTracker, assignHeadingIds, setHeadingIndex } = useExtensions(editorInstanceId, {
+    onSearchMatchFocus
+  });
   const editorInstanceRef = ref<Editor>();
 
   const isLargeDocument = computed(() => (bodyContent.value?.length ?? 0) > LARGE_DOCUMENT_THRESHOLD);
@@ -97,7 +99,8 @@ export function useRichEditor({ bodyContent, editable, editorInstanceId, onConte
     onLoadComplete: (payload: RichLoadCompletePayload) => {
       const editor = editorInstanceRef.value;
       if (!editor) return;
-      assignHeadingIds(editor, { silent: true });
+      // 解析阶段已分配正确 heading ID，直接同步运行时 headingIndex 避免全文档遍历
+      setHeadingIndex(payload.stats.headingCount);
       onLoadCompleteWrapper(payload.rawMarkdown);
       // 加载完成后 ediable 可直接恢复为 props.editable（此时 phase === 'ready'）
       editor.setEditable(editable.value);

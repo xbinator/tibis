@@ -50,6 +50,7 @@ interface UseEditorExtensionsResult {
   editorExtensions: AnyExtension[];
   resetSourceLineTracker: () => void;
   resetHeadingIndex: () => void;
+  setHeadingIndex: (count: number) => void;
 }
 
 interface UseExtensionsOptions {
@@ -743,7 +744,10 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     assignHeadingIds,
     editorExtensions,
     resetSourceLineTracker: () => resetSourceLineTracker(sourceLineTracker),
-    resetHeadingIndex
+    resetHeadingIndex,
+    setHeadingIndex: (count: number): void => {
+      headingIndex = count;
+    }
   };
 }
 
@@ -762,6 +766,8 @@ interface RichMarkdownSchemaResult {
   assignHeadingIds: (editor: Editor, headingOptions?: { silent?: boolean }) => void;
   /** 重置标题索引 */
   resetHeadingIndex: () => void;
+  /** 获取当前标题索引（即已分配的标题数量） */
+  getHeadingIndex: () => number;
 }
 
 /**
@@ -1135,7 +1141,8 @@ export function createRichMarkdownSchemaExtensions(
   return {
     extensions,
     assignHeadingIds,
-    resetHeadingIndex
+    resetHeadingIndex,
+    getHeadingIndex: () => headingIndex
   };
 }
 

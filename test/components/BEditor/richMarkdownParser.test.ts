@@ -12,7 +12,7 @@ import { ref } from 'vue';
 import { Editor } from '@tiptap/core';
 import { describe, expect, test } from 'vitest';
 import { createSourceLineTracker } from '@/components/BEditor/adapters/sourceLineMapping';
-import { parseMarkdownForRichLoad } from '@/components/BEditor/hooks/richMarkdownParser';
+import { parseMarkdownForRichLoad } from '@/components/BEditor/utils/richMarkdownParser';
 import { createRichMarkdownSchemaExtensions, createRichEditorRuntimeOnlyExtensions, useExtensions } from '@/components/BEditor/hooks/useExtensions';
 import { getPersistedMarkdown } from '@/components/BEditor/utils/editorMarkdown';
 
