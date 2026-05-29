@@ -14,7 +14,7 @@
 
 <script setup lang="ts">
 import type { BMessageProps as Props } from './types';
-import { computed } from 'vue';
+import { computed, onScopeDispose, shallowRef, watch } from 'vue';
 import { marked } from 'marked';
 import { useNavigate } from '@/hooks/useNavigate';
 import { addCssUnit } from '@/utils/css';
@@ -38,27 +38,77 @@ const rootStyle = computed(() => {
   };
 });
 
-const renderedMarkdown = computed<string>(() => {
-  if (!props.content && !props.loading) return '';
-  // 如果没有内容但正在加载，直接显示光标
-  if (!props.content && props.loading) return '<span class="b-message__cursor" aria-hidden="true"></span>';
+/** 光标占位标记，用于在流式渲染时替换为动画光标 HTML */
+const CURSOR_MARKER = '___B_MESSAGE_CURSOR_MARKER___';
 
-  // 使用一个不可能出现在正常内容中的标记符
-  const CURSOR_MARKER = '___B_MESSAGE_CURSOR_MARKER___';
+/**
+ * 将 Markdown 内容解析为 HTML。
+ * @param text - Markdown 文本
+ * @param loading - 是否处于流式加载状态（流式时追加光标）
+ * @returns 解析后的 HTML 字符串
+ */
+function parseMarkdown(text: string, loading: boolean): string {
+  if (!text && !loading) return '';
+  if (!text && loading) return '<span class="b-message__cursor" aria-hidden="true"></span>';
 
-  // 在内容末尾追加标记符，如果是流式加载状态
-  const textToParse = props.loading ? props.content + CURSOR_MARKER : props.content;
-
-  // 解析 Markdown
+  const textToParse = loading ? text + CURSOR_MARKER : text;
   let html = marked.parse(textToParse, { async: false }) as string;
 
-  // 将解析后的标记符替换为光标的 HTML 标签
-  // 这样光标就会完美跟随在最后一个渲染节点（如 p, pre, table 等）的内部末尾
-  if (props.loading) {
+  if (loading) {
     html = html.replace(CURSOR_MARKER, '<span class="b-message__cursor" aria-hidden="true"></span>');
   }
 
   return html;
+}
+
+/** 流式渲染结果，使用 shallowRef 避免深度追踪 */
+const renderedMarkdown = shallowRef<string>('');
+
+/** 当前是否正在流式传输 */
+const isStreaming = computed(() => props.loading);
+
+/** rAF 句柄，用于流式渲染的帧级合并 */
+let rafHandle: ReturnType<typeof requestAnimationFrame> | null = null;
+
+/**
+ * 调度请求渲染，确保流式时每帧最多执行一次 markdown 解析。
+ * 非流式状态直接同步渲染。
+ */
+function scheduleRender(): void {
+  if (isStreaming.value && props.content) {
+    // 流式状态下使用 rAF 合并，每帧最多渲染一次
+    if (rafHandle !== null) {
+      cancelAnimationFrame(rafHandle);
+    }
+    rafHandle = requestAnimationFrame(() => {
+      rafHandle = null;
+      renderedMarkdown.value = parseMarkdown(props.content, true);
+    });
+  } else {
+    // 非流式状态（完成/初始空内容）同步渲染
+    if (rafHandle !== null) {
+      cancelAnimationFrame(rafHandle);
+      rafHandle = null;
+    }
+    renderedMarkdown.value = parseMarkdown(props.content, isStreaming.value);
+  }
+}
+
+// 监听内容和流式状态变化，触发渲染调度
+watch(
+  () => [props.content, props.loading] as const,
+  () => {
+    scheduleRender();
+  },
+  { immediate: true }
+);
+
+// 组件卸载时清理未执行的 rAF
+onScopeDispose(() => {
+  if (rafHandle !== null) {
+    cancelAnimationFrame(rafHandle);
+    rafHandle = null;
+  }
 });
 </script>
 

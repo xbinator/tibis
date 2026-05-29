@@ -7,6 +7,7 @@
           <MessageBubble
             v-for="item in messages"
             :key="item.id"
+            v-memo="[item.id, item.finished, item.loading, item.content?.length ?? 0, item.thinking?.length ?? 0, item.parts.length]"
             :message="item"
             :disabled="disabled"
             :can-rollback="canRollback"

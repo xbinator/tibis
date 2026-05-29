@@ -120,12 +120,57 @@ export function useContextUsage(options: UseContextUsageOptions): UseContextUsag
     return activeEstimator.estimate(modelMessages);
   }
 
+  /** 节流后的 token 估算缓存，避免每条 token 都做 JSON.stringify 转换 */
+  const cachedEstimate = ref(0);
+
+  /** 上次估算时的消息数量快照 */
+  let lastEstimateMsgCount = 0;
+  /** 上次估算时末条消息的内容长度 */
+  let lastEstimateContentLen = 0;
+  /** 节流定时器 */
+  let estimateTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * 节流更新 token 估算。
+   * 流式期间每 300ms 或消息结构变化时更新一次。
+   */
+  function scheduleEstimate(): void {
+    const msgCount = messages.value.length;
+    const lastMsg = messages.value[msgCount - 1];
+    const contentLen = lastMsg?.content?.length ?? 0;
+
+    // 消息数量变化或内容增长超过 200 字符时立即更新
+    if (msgCount !== lastEstimateMsgCount || Math.abs(contentLen - lastEstimateContentLen) > 200) {
+      if (estimateTimer) {
+        clearTimeout(estimateTimer);
+        estimateTimer = null;
+      }
+      lastEstimateMsgCount = msgCount;
+      lastEstimateContentLen = contentLen;
+      cachedEstimate.value = estimateFromMessages();
+      return;
+    }
+
+    // 否则 300ms 后更新
+    if (!estimateTimer) {
+      estimateTimer = setTimeout(() => {
+        estimateTimer = null;
+        lastEstimateMsgCount = msgCount;
+        lastEstimateContentLen = contentLen;
+        cachedEstimate.value = estimateFromMessages();
+      }, 300);
+    }
+  }
+
   /** 当前上下文已使用的 Token 数 */
   const usedTokens = computed<number>(() => {
     if (!streaming.value && !isApiReportedUsageStaleAfterCompression(messages.value)) {
       return getApiReportedTokens(messages.value);
     }
-    return estimateFromMessages();
+
+    // 流式状态：触发节流估算
+    scheduleEstimate();
+    return cachedEstimate.value;
   });
 
   /** 已使用百分比 (0-100)，contextWindow 为 0 时返回 0 */

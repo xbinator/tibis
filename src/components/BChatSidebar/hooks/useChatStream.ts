@@ -20,7 +20,7 @@ import type {
   AIStreamToolResultChunk
 } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
-import { nextTick, onScopeDispose, ref, shallowRef, type Ref } from 'vue';
+import { nextTick, onScopeDispose, ref, shallowRef, watch, type Ref } from 'vue';
 import { parsePartialJson } from 'ai';
 import dayjs from 'dayjs';
 import { isSdkManagedToolName } from '@/ai/tools/builtin';
@@ -117,12 +117,67 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   let currentModelMessageCache: CachedModelMessagesResult | undefined;
   let lastFinishReason: AIStreamFinishReason | null = null;
 
+  /** 文本 token 缓冲，用于 rAF 帧级合并 */
+  let textBuffer = '';
+  /** 文本 rAF 句柄 */
+  let textFlushRaf: number | null = null;
+  /** 思考 token 缓冲，用于 rAF 帧级合并 */
+  let thinkingBuffer = '';
+  /** 思考 rAF 句柄 */
+  let thinkingFlushRaf: number | null = null;
+
+  /**
+   * 将累积的文本缓冲一次性刷新到消息。
+   */
+  function flushTextBuffer(): void {
+    textFlushRaf = null;
+    if (textBuffer) {
+      const flushed = textBuffer;
+      textBuffer = '';
+      appendText(flushed);
+    }
+  }
+
+  /**
+   * 将累积的思考缓冲一次性刷新到消息。
+   */
+  function flushThinkingBuffer(): void {
+    thinkingFlushRaf = null;
+    if (thinkingBuffer) {
+      const flushed = thinkingBuffer;
+      thinkingBuffer = '';
+      appendThinking(flushed);
+    }
+  }
+
+  /**
+   * 清空所有缓冲并取消待执行的 rAF。
+   */
+  function flushAllBuffers(): void {
+    if (textFlushRaf !== null) {
+      cancelAnimationFrame(textFlushRaf);
+      textFlushRaf = null;
+    }
+    if (thinkingFlushRaf !== null) {
+      cancelAnimationFrame(thinkingFlushRaf);
+      thinkingFlushRaf = null;
+    }
+    flushTextBuffer();
+    flushThinkingBuffer();
+  }
+
   const { agent } = useChat({
     onText: async (content: string): Promise<void> => {
-      appendText(content);
+      textBuffer += content;
+      if (textFlushRaf === null) {
+        textFlushRaf = requestAnimationFrame(flushTextBuffer);
+      }
     },
     onThinking: async (thinking: string): Promise<void> => {
-      appendThinking(thinking);
+      thinkingBuffer += thinking;
+      if (thinkingFlushRaf === null) {
+        thinkingFlushRaf = requestAnimationFrame(flushThinkingBuffer);
+      }
     },
     onFinish: async ({ usage, finishReason }: AIStreamFinishChunk): Promise<void> => {
       const message = messages.value[messages.value.length - 1];
@@ -140,6 +195,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     onError: handleStreamError
   });
 
+  // 流式完成（正常/异常/中止）时清空缓冲，确保所有内容被渲染
+  watch(loading, (val) => {
+    if (!val) {
+      flushAllBuffers();
+    }
+  });
+
   const disposeShellCommandOutput = native.onShellCommandOutput((chunk) => {
     const message = messages.value[messages.value.length - 1];
     if (message?.role !== 'assistant') {
@@ -148,7 +210,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     append.shellOutputPart(message, chunk.commandId, chunk);
   });
-  onScopeDispose(disposeShellCommandOutput);
+  onScopeDispose(() => {
+    disposeShellCommandOutput();
+    flushAllBuffers();
+  });
 
   /**
    * 重置工具循环状态
