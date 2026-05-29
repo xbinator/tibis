@@ -22,10 +22,10 @@
           </div>
         </div>
         <!-- 用户填写的补充信息 -->
-        <div v-if="questionOtherText" :class="bem('result-item')">
+        <div :class="bem('result-item')">
           <div :class="bem('result-label')">是否有更多的补充信息需要提供？（可选）</div>
           <div :class="bem('result-tags')">
-            <span :class="bem('result-tag')">{{ questionOtherText }}</span>
+            <span :class="bem('result-tag')">{{ questionOtherText || '未填写' }}</span>
           </div>
         </div>
       </div>
@@ -36,7 +36,7 @@
         <div v-if="summary.text" :class="bem('summary-text')">{{ summary.text }}</div>
         <div v-if="summary.tags?.length" :class="bem('summary-tags')">
           <div v-for="tag in summary.tags" :key="tag.label" :class="bem('summary-tag')">
-            <span :class="bem('summary-tag-label')">{{ tag.label }}：</span>
+            <span v-if="tag.label" :class="bem('summary-tag-label')">{{ tag.label }}：</span>
             <span :class="bem('summary-tag-value')">{{ tag.value }}</span>
           </div>
         </div>

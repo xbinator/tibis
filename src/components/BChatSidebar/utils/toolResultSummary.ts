@@ -257,7 +257,7 @@ function summarizeSkill(data: unknown): ToolResultSummary {
 
     if (skillName) {
       return {
-        tags: filePath ? [{ label: '路径', value: filePath }] : undefined
+        tags: filePath ? [{ label: '', value: filePath }] : undefined
       };
     }
 
