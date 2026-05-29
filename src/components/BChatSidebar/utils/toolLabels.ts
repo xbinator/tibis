@@ -17,7 +17,7 @@ export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
   remove_mcp_server: { alias: '移除 MCP 服务器' },
   refresh_mcp_discovery: { alias: '刷新 MCP 发现' },
   query_logs: { alias: '查询日志' },
-  skill: { alias: '技能' },
+  skill: { alias: '调用技能' },
   question: { alias: '提问' },
   ask_user_question: { alias: '提问' },
   todowrite: { alias: '更新任务列表' },

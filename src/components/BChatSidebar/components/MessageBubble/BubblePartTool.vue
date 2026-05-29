@@ -154,7 +154,7 @@ const title = computed(() => {
   if (part.toolName === 'skill') {
     const skillName = (part.input as Record<string, unknown>)?.name;
 
-    if (typeof skillName === 'string') return `${alias} ${skillName}`;
+    if (typeof skillName === 'string') return `${alias}：${skillName}`;
   }
 
   return alias;
