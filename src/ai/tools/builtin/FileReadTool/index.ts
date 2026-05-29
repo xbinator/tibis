@@ -13,9 +13,9 @@ import type {
   ReadWorkspaceFileResult
 } from '@/shared/platform/native/types';
 import { recentFilesStorage } from '@/shared/storage';
+import { isAbsoluteFilePath } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../../results';
-import { isAbsoluteFilePath } from '../../shared/pathUtils';
 
 /** read_file 工具名称 */
 export const READ_FILE_TOOL_NAME = 'read_file';

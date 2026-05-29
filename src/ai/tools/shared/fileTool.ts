@@ -6,9 +6,9 @@ import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../co
 import type { AIToolContext, AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 import { recentFilesStorage } from '@/shared/storage';
 import type { StoredFile } from '@/shared/storage/files/types';
+import { isAbsoluteFilePath, isPathInsideWorkspace, resolvePathAgainstWorkspace } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath as isUnsavedPathUtil } from '@/utils/file/unsaved';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../results';
-import { isAbsoluteFilePath, isPathInsideWorkspace, resolvePathAgainstWorkspace } from './pathUtils';
 
 /** 重新导出 isUnsavedPath，方便调用方统一从本模块导入。 */
 export { isUnsavedPathUtil as isUnsavedPath };

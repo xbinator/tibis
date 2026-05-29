@@ -1,6 +1,6 @@
 /**
  * @file pathUtils.ts
- * @description 文件工具共享路径解析与工作区边界校验。
+ * @description 渲染进程共享路径解析与工作区边界校验。
  */
 
 /**

@@ -8,8 +8,8 @@ import type { AIToolExecutor } from 'types/ai';
 import type { ElectronShellCommandRunResult, ElectronShellCommandSafetyReport, ElectronShellCommandShell } from 'types/electron-api';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
+import { isPathInsideWorkspace } from '@/shared/workspace/pathUtils';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../../results';
-import { isPathInsideWorkspace } from '../../shared/pathUtils';
 
 /** run_shell_command 工具名称。 */
 export const RUN_SHELL_COMMAND_TOOL_NAME = 'run_shell_command';
@@ -234,15 +234,6 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
       }
 
       const workspaceRoot = options.getWorkspaceRoot?.() ?? null;
-      let primaryWorkspaceRoot = workspaceRoot;
-
-      // 调用方未提供工作区根目录时，回退到工作区
-      if (!primaryWorkspaceRoot) {
-        const tibisWorkspace = await native.getTibisWorkspaceRoot();
-        if (tibisWorkspace) {
-          primaryWorkspaceRoot = tibisWorkspace.rootPath;
-        }
-      }
 
       let timeoutMs: number;
       try {
@@ -253,8 +244,8 @@ export function createBuiltinShellCommandTool(options: CreateBuiltinShellCommand
 
       const additionalWorkspaceRoots = getAdditionalShellWorkspaceRoots(options);
       const explicitCwd = typeof input.cwd === 'string' && input.cwd.trim().length > 0 ? input.cwd.trim() : null;
-      const cwd = explicitCwd ?? inferCwdFromLeadingCd(command, additionalWorkspaceRoots) ?? primaryWorkspaceRoot;
-      const resolvedWorkspaceRoot = cwd ? resolveShellWorkspaceRoot(cwd, primaryWorkspaceRoot, additionalWorkspaceRoots) : null;
+      const cwd = explicitCwd ?? inferCwdFromLeadingCd(command, additionalWorkspaceRoots) ?? workspaceRoot;
+      const resolvedWorkspaceRoot = cwd ? resolveShellWorkspaceRoot(cwd, workspaceRoot, additionalWorkspaceRoots) : null;
       if (!cwd || !resolvedWorkspaceRoot) {
         return createToolFailureResult(RUN_SHELL_COMMAND_TOOL_NAME, 'PERMISSION_DENIED', '无法初始化 Tibis 工作区目录，拒绝执行 Shell 命令');
       }
