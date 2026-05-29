@@ -26,6 +26,7 @@
           :on-selection-host-change="handleRichSelectionHostChange"
           :on-selection-overlay-change="recomputeSelectionOverlays"
           @editor-blur="handleEditorBlur"
+          @request-source-mode="handleSwitchToSource"
         />
 
         <PaneSourceEditor
@@ -43,7 +44,7 @@
         />
 
         <SelectionToolbarRich
-          v-if="isRichMode && selectionToolbarKind === 'rich' && currentRichSelectionHost?.editor"
+          v-if="isRichMode && selectionToolbarKind === 'rich' && currentRichSelectionHost?.editor && !isRichLoading"
           :editor="currentRichSelectionHost.editor"
           :visible="selectionAssistant.toolbarVisible.value"
           :position="selectionAssistant.toolbarPosition.value"
@@ -66,6 +67,7 @@
         />
 
         <SelectionAIInput
+          v-if="!isRichLoading"
           :visible="selectionAssistant.aiInputVisible.value"
           :adapter="currentSelectionAdapter"
           :selection-range="selectionAssistant.cachedSelectionRange.value"
@@ -76,6 +78,7 @@
         />
 
         <SelectionCommentInput
+          v-if="!isRichLoading"
           :visible="selectionAssistant.commentInputVisible.value"
           :position="selectionAssistant.panelPosition.value"
           @update:visible="handleSelectionCommentVisibleChange"
@@ -83,6 +86,7 @@
         />
 
         <CommentCard
+          v-if="!isRichLoading"
           :visible="!!commentActions.activeCommentCard.value"
           :comment-id="commentActions.activeCommentCard.value?.id ?? ''"
           :annotated-text="commentActions.activeCommentCard.value?.annotatedText ?? ''"
@@ -114,6 +118,7 @@
 
 <script setup lang="ts">
 import type { SelectionAssistantAdapter, SelectionToolbarAction } from './adapters/selectionAssistant';
+import type { RichLoadState } from './adapters/types';
 import type { AnchorRecord } from './hooks/useAnchors';
 import type { EditorController, EditorPublicInstance, EditorState } from './types';
 import type { Editor as TiptapEditor } from '@tiptap/vue-3';
@@ -208,7 +213,7 @@ const viewMode = computed<string>({
 
 const content = defineModel<string>('content', { default: '' });
 const outlineContent = defineModel<string>('outlineContent', { default: '' });
-const richEditorPaneRef = ref<(EditorController & { recomputeSelectionOverlays?: () => void }) | null>(null);
+const richEditorPaneRef = ref<(EditorController & { recomputeSelectionOverlays?: () => void; richLoadState?: RichLoadState }) | null>(null);
 const sourceEditorPaneRef = ref<EditorController | null>(null);
 const findBarVisible = ref(false);
 const currentRichSelectionHost = shallowRef<RichSelectionHostState | null>(null);
@@ -246,6 +251,14 @@ const currentSelectionAdapter = computed<SelectionAssistantAdapter | null>(() =>
 const selectionToolbarKind = computed<'rich' | 'source'>(() => {
   return isRichMode.value ? 'rich' : 'source';
 });
+
+/**
+ * Rich 编辑器是否正处于加载或失败状态，用于禁用选区工具/评论/AI 交互入口。
+ */
+const isRichLoading = computed<boolean>(() => {
+  const state = richEditorPaneRef.value?.richLoadState;
+  return state?.phase === 'loading' || state?.phase === 'failed';
+});
 const selectionAssistant = useSelectionAssistant({
   adapter: () => currentSelectionAdapter.value,
   isEditable: () => props.editable
@@ -278,6 +291,13 @@ const formatButtons = computed(() => [
  */
 function handleRichSelectionHostChange(payload: RichSelectionHostState | null): void {
   currentRichSelectionHost.value = payload;
+}
+
+/**
+ * 切换到源码模式（由 Rich pane 的 loading/failed 状态触发）。
+ */
+function handleSwitchToSource(): void {
+  editorPreferencesStore.setViewMode('source');
 }
 
 /**

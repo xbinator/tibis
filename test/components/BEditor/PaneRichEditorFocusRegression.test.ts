@@ -46,6 +46,10 @@ interface PaneRichEditorVm extends ComponentPublicInstance {
    * 让富文本编辑器获得焦点。
    */
   focusEditor: () => void;
+  /**
+   * 在光标处插入内容。
+   */
+  insertAtCursor: (content: string) => Promise<void>;
 }
 
 /**
@@ -98,6 +102,16 @@ describe('PaneRichEditor focus regression', () => {
     await flushEditorWork();
 
     expect(wrapper.emitted('update:value') ?? []).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  test('allows editing small documents without rich loading state', async () => {
+    const wrapper = mountPaneRichEditor('hello');
+
+    await flushEditorWork();
+    await expect(wrapper.vm.insertAtCursor(' world')).resolves.toBeUndefined();
+
+    expect(wrapper.emitted('update:value')?.flat().join('\n')).toContain('world');
     wrapper.unmount();
   });
 });

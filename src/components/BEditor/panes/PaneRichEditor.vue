@@ -12,10 +12,33 @@
     />
 
     <!-- 当前选中块菜单 -->
-    <CurrentBlockMenu :editor="editorInstance" />
+    <CurrentBlockMenu v-if="!isLoadingRich && !isFailedRich" :editor="editorInstance" />
+
+    <!-- Loading overlay -->
+    <div v-if="isLoadingRich" class="b-markdown-rich__loading-overlay">
+      <div class="b-markdown-rich__loading-content">
+        <div class="b-markdown-rich__loading-spinner"></div>
+      </div>
+    </div>
+
+    <!-- Failed overlay -->
+    <div v-if="isFailedRich" class="b-markdown-rich__failed-overlay">
+      <div class="b-markdown-rich__failed-content">
+        <p class="b-markdown-rich__failed-message">{{ richLoadState.errorMessage }}</p>
+        <div class="b-markdown-rich__failed-actions">
+          <BButton size="small" @click="onRetryLoad">重试</BButton>
+          <BButton size="small" @click="onSwitchToSource">切换到源码模式</BButton>
+        </div>
+      </div>
+    </div>
 
     <!-- 编辑器内容 -->
-    <EditorContent :key="editorState?.id" :editor="editorInstance ?? undefined" class="b-markdown-rich__content" />
+    <EditorContent
+      :key="editorState?.id"
+      :editor="editorInstance ?? undefined"
+      class="b-markdown-rich__content"
+      :class="{ 'b-markdown-rich__content--loading': isLoadingRich }"
+    />
   </div>
 </template>
 
@@ -81,6 +104,10 @@ const emit = defineEmits<{
    * 编辑器根区域发生失焦事件。
    */
   (e: 'editor-blur', event: FocusEvent): void;
+  /**
+   * 请求切换到源码模式。
+   */
+  (e: 'request-source-mode'): void;
 }>();
 
 const editorContent = defineModel<string>('value', { default: '' });
@@ -115,13 +142,28 @@ function handleSearchMatchFocus({ targetElement }: SearchScrollContext): void {
   }
 }
 
-const { editorInstance } = useRichEditor({
+const {
+  editorInstance,
+  loadState: richLoadState,
+  retryLoad
+} = useRichEditor({
   bodyContent,
   editable: toRef(props, 'editable'),
   editorInstanceId,
   onContentChange: syncToExternal,
   onSearchMatchFocus: handleSearchMatchFocus
 });
+
+const isLoadingRich = computed(() => richLoadState.value?.phase === 'loading');
+const isFailedRich = computed(() => richLoadState.value?.phase === 'failed');
+
+function onRetryLoad(): void {
+  retryLoad();
+}
+
+function onSwitchToSource(): void {
+  emit('request-source-mode');
+}
 
 /**
  * 将编辑区 focusout 事件统一转发给外层容器做语义过滤。
@@ -260,6 +302,19 @@ function handleFrontMatterFieldAdd(key: string, value: unknown): void {
   syncToExternal();
 }
 
+/**
+ * 统一编辑守卫
+ * @throws Error 当 editable 为 false 或加载状态非 ready
+ */
+function guardEdit(): TiptapEditor {
+  if (richLoadState.value?.phase !== 'ready' || !props.editable) {
+    throw new Error(richLoadState.value?.phase === 'failed' ? '富文本加载失败，请重试或切换回源码模式' : '富文本正在加载，请稍后或切换到源码模式');
+  }
+  const instance = editorInstance.value;
+  if (!instance) throw new Error('编辑器未初始化');
+  return instance;
+}
+
 // ---- Editor Commands ----
 
 /**
@@ -366,11 +421,7 @@ function getSelection(): EditorSelectionRange | null {
  * @param content - 要插入的 Markdown 文本
  */
 async function insertAtCursor(content: string): Promise<void> {
-  const instance = editorInstance.value;
-  if (!instance) {
-    return;
-  }
-
+  const instance = guardEdit();
   const { selection } = instance.state;
   instance.chain().focus().insertContentAt({ from: selection.from, to: selection.to }, content, { contentType: 'markdown' }).run();
 }
@@ -381,11 +432,7 @@ async function insertAtCursor(content: string): Promise<void> {
  * @throws {Error} 当没有选中内容时抛出 NO_SELECTION 错误
  */
 async function replaceSelection(content: string): Promise<void> {
-  const instance = editorInstance.value;
-  if (!instance) {
-    return;
-  }
-
+  const instance = guardEdit();
   const { selection } = instance.state;
   if (selection.from === selection.to) {
     throw new Error('NO_SELECTION');
@@ -399,11 +446,7 @@ async function replaceSelection(content: string): Promise<void> {
  * @param content - 新的 Markdown 文档内容
  */
 async function replaceDocument(content: string): Promise<void> {
-  const instance = editorInstance.value;
-  if (!instance) {
-    return;
-  }
-
+  const instance = guardEdit();
   instance.commands.setContent(content, { contentType: 'markdown' });
 }
 
@@ -422,11 +465,7 @@ function getSearchState(): EditorSearchState {
  * @returns 是否成功设置选区
  */
 async function selectLineRange(startLine: number, endLine: number): Promise<boolean> {
-  const instance = editorInstance.value;
-  if (!instance) {
-    return false;
-  }
-
+  const instance = guardEdit();
   const mappedRange = mapSourceLineRangeToProseMirrorRange(instance.state.doc, startLine, endLine, getPersistedMarkdown(instance));
   if (!mappedRange) {
     return false;
@@ -508,7 +547,8 @@ useEventListener(window, 'resize', () => {
 
 defineExpose({
   ...controller,
-  recomputeSelectionOverlays
+  recomputeSelectionOverlays,
+  richLoadState: computed(() => richLoadState.value)
 });
 </script>
 
@@ -863,5 +903,72 @@ defineExpose({
       }
     }
   }
+}
+
+.b-markdown-rich__loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+}
+
+.b-markdown-rich__loading-content {
+  text-align: center;
+
+  p {
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+}
+
+.b-markdown-rich__loading-spinner {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--editor-link);
+  border-radius: 50%;
+  animation: b-markdown-rich-spin 0.8s linear infinite;
+}
+
+@keyframes b-markdown-rich-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.b-markdown-rich__failed-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+}
+
+.b-markdown-rich__failed-content {
+  text-align: center;
+}
+
+.b-markdown-rich__failed-message {
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.b-markdown-rich__failed-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.b-markdown-rich__content--loading {
+  pointer-events: none;
+  opacity: 0.5;
 }
 </style>

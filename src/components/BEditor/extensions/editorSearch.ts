@@ -242,6 +242,11 @@ export const Search = Extension.create<SearchOptions>({
         state: {
           init: (_, state) => createSearchState(state.doc),
           apply(tr, pluginState, _oldState, newState) {
+            // 加载事务时清空搜索状态（旧 Decoration 位置已无效）
+            if (tr.getMeta('bEditorRichLoad')) {
+              return createSearchState(newState.doc);
+            }
+
             const meta = tr.getMeta(searchPluginKey) as SearchMeta | undefined;
 
             if (meta) {

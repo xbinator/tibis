@@ -81,3 +81,56 @@ export function createNoopEditorController(): EditorController {
     }
   };
 }
+
+// ============ Rich 编辑器大文档加载相关类型 ============
+
+/**
+ * Rich 编辑器加载阶段
+ */
+export type RichLoadPhase = 'idle' | 'loading' | 'ready' | 'failed';
+
+/**
+ * 分帧阶段
+ */
+export type RichLoadStage = 'parsing' | 'mounting';
+
+/**
+ * 取消原因
+ */
+export type RichLoadCancelReason = 'switch-file' | 'switch-source' | 'external-change' | 'unmount' | 'retry';
+
+/**
+ * 加载状态（暴露给 UI）
+ */
+export interface RichLoadState {
+  /** 当前阶段 */
+  phase: RichLoadPhase;
+  /** 首次加载还是重新加载 */
+  isReload: boolean;
+  /** 当前子阶段 */
+  stage?: RichLoadStage;
+  /** 分帧装载进度：parsing 阶段为 indeterminate，mounting 阶段为 0.05→1 */
+  progress: number;
+  /** 失败时的错误信息，仅 failed 阶段有值 */
+  errorMessage?: string;
+}
+
+/**
+ * 解析接口返回结果
+ */
+export interface RichParseResult {
+  json: import('@tiptap/core').JSONContent;
+  stats: {
+    durationMs: number;
+    nodeCount: number;
+  };
+}
+
+/**
+ * 加载完成 payload
+ */
+export interface RichLoadCompletePayload {
+  rawMarkdown: string;
+  json: import('@tiptap/core').JSONContent;
+  stats: RichParseResult['stats'];
+}

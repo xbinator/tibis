@@ -634,7 +634,9 @@ function bindEditor(editor: Editor | null | undefined): (() => void) | undefined
 
   const editorDom = editor.view.dom;
 
-  const update = (): void => {
+  const update = ({ transaction }: { transaction?: { getMeta: (key: string) => unknown } } = {}): void => {
+    // 加载事务期间不重算菜单，避免半成品文档参与交互
+    if (transaction?.getMeta('bEditorRichLoad')) return;
     syncCurrentBlock();
   };
   const handleFocus = (): void => {

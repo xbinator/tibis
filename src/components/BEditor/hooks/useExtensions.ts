@@ -46,7 +46,7 @@ const lowlight = createLowlight(common);
 registerRichCodeBlockLowlightAliases(lowlight);
 
 interface UseEditorExtensionsResult {
-  assignHeadingIds: (editor: Editor) => void;
+  assignHeadingIds: (editor: Editor, headingOptions?: { silent?: boolean }) => void;
   editorExtensions: AnyExtension[];
   resetSourceLineTracker: () => void;
   resetHeadingIndex: () => void;
@@ -714,7 +714,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     })
   ];
 
-  function assignHeadingIds(editor: Editor): void {
+  function assignHeadingIds(editor: Editor, headingOptions?: { silent?: boolean }): void {
     const { state, view } = editor;
     const { tr } = state;
     let index = 0;
@@ -732,6 +732,9 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     });
 
     if (needsUpdate) {
+      if (headingOptions?.silent) {
+        tr.setMeta('preventUpdate', true).setMeta('addToHistory', false);
+      }
       view.dispatch(tr);
     }
   }
@@ -742,4 +745,428 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     resetSourceLineTracker: () => resetSourceLineTracker(sourceLineTracker),
     resetHeadingIndex
   };
+}
+
+// ========================================================================
+//  Rich Load Schema Extensions (方案 B Worker 预解析用)
+//  所有 node/mark schema + Markdown parse/render，不含 Vue NodeView/DOM
+// ========================================================================
+
+/**
+ * Schema 扩展组的返回结果
+ */
+interface RichMarkdownSchemaResult {
+  /** 仅包含 schema+parse 的扩展集合 */
+  extensions: AnyExtension[];
+  /** 标题 ID 分配函数 */
+  assignHeadingIds: (editor: Editor, headingOptions?: { silent?: boolean }) => void;
+  /** 重置标题索引 */
+  resetHeadingIndex: () => void;
+}
+
+/**
+ * 创建仅包含 node/mark schema + Markdown parse/render 的扩展集合。
+ * 不含 Vue NodeView、不含 DOM/Window 引用、不含运行时 Plugin。
+ * 可在 Worker 中使用，也供主线程 editor 使用。
+ *
+ * @param editorInstanceId - 编辑器实例 ID
+ * @param sourceLineTracker - 源码行号追踪器实例
+ */
+export function createRichMarkdownSchemaExtensions(
+  editorInstanceId: string,
+  sourceLineTracker: ReturnType<typeof createSourceLineTracker>
+): RichMarkdownSchemaResult {
+  let headingIndex = 0;
+
+  function getHeadingId(index: number): string {
+    return `${editorInstanceId}-heading-${index}`;
+  }
+
+  function resetHeadingIndex(): void {
+    headingIndex = 0;
+  }
+
+  function createSourceLineAttributes(parentAttributes: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      ...parentAttributes,
+      sourceLineStart: {
+        default: null,
+        renderHTML: () => ({})
+      },
+      sourceLineEnd: {
+        default: null,
+        renderHTML: () => ({})
+      }
+    };
+  }
+
+  function createSourceLineNodeAttrs(token: MarkdownToken): { sourceLineStart: number; sourceLineEnd: number } | {} {
+    if (typeof token.raw !== 'string' || !token.raw) {
+      return {};
+    }
+
+    const range = captureSourceLineRange(sourceLineTracker, token.raw);
+
+    return {
+      sourceLineStart: range.startLine,
+      sourceLineEnd: range.endLine
+    };
+  }
+
+  const Code = _Code.extend({ excludes: '' });
+
+  const HtmlComment = Extension.create({
+    name: 'htmlComment',
+    markdownTokenName: 'html',
+    parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+      let raw = '';
+
+      if (typeof token.raw === 'string') {
+        raw = token.raw;
+      } else if (typeof token.text === 'string') {
+        raw = token.text;
+      }
+
+      const normalized = raw.replace(/\r?\n$/, '');
+
+      if (!/^<!--[\s\S]*?-->$/.test(normalized.trim())) {
+        return [];
+      }
+
+      return helpers.createNode('paragraph', createSourceLineNodeAttrs(token), [helpers.createTextNode(normalized)]);
+    }
+  });
+
+  const LinkDefinitionAsText = Extension.create({
+    name: 'linkDefinitionAsText',
+    markdownTokenName: 'def',
+    parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+      const raw = typeof token.raw === 'string' ? token.raw.trim() : '';
+
+      if (!/^\[[^\]]+\]:\s+\S+/.test(raw)) {
+        return [];
+      }
+
+      return helpers.createNode('paragraph', createSourceLineNodeAttrs(token), [helpers.createTextNode(raw)]);
+    }
+  });
+
+  // CodeBlock（仅 schema + parseMarkdown，不含 VueNodeView——运行时由 createRichEditorRuntimeOnlyExtensions 补）
+  const CodeBlock = CodeBlockLowlight.extend({
+    addAttributes() {
+      return createSourceLineAttributes(this.parent?.() ?? {});
+    },
+    parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+      const language = typeof token.lang === 'string' && token.lang ? token.lang : null;
+      const text = typeof token.text === 'string' ? token.text : '';
+
+      return helpers.createNode('codeBlock', { ...createSourceLineNodeAttrs(token), language }, text ? [helpers.createTextNode(text)] : []);
+    }
+  }).configure({ lowlight, defaultLanguage: 'plaintext' });
+
+  const Heading = BaseHeading.extend({
+    addAttributes() {
+      return createSourceLineAttributes({
+        ...(this.parent?.() ?? {}),
+        id: {
+          default: null,
+          parseHTML: (element: HTMLElement) => element.getAttribute('id'),
+          renderHTML: (attributes: Record<string, unknown>) => (attributes.id ? { id: attributes.id } : {})
+        }
+      });
+    },
+    parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+      const content = parseInlinePreservingReferenceLinks(token.tokens, helpers);
+      const id = getHeadingId(headingIndex++);
+      const sourceLineAttrs = createSourceLineNodeAttrs(token);
+
+      if (content.length) {
+        return helpers.createNode('heading', { ...sourceLineAttrs, level: token.depth || 1, id }, content);
+      }
+
+      const text = typeof token.text === 'string' ? token.text.trim() : '';
+
+      return helpers.createNode('heading', { ...sourceLineAttrs, level: token.depth || 1, id }, text ? [helpers.createTextNode(text)] : []);
+    },
+    addKeyboardShortcuts() {
+      return this.parent?.() ?? {};
+    }
+  }).configure({ levels: [1, 2, 3, 4, 5, 6] });
+
+  const Paragraph = BaseParagraph.extend({
+    addAttributes() {
+      return createSourceLineAttributes(this.parent?.() ?? {});
+    },
+    parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+      const content = parseInlinePreservingReferenceLinks(token.tokens, helpers);
+      const sourceLineAttrs = createSourceLineNodeAttrs(token);
+
+      if (content.length) {
+        return helpers.createNode('paragraph', sourceLineAttrs, content);
+      }
+
+      const text = typeof token.text === 'string' ? token.text : '';
+
+      return helpers.createNode('paragraph', sourceLineAttrs, text ? [helpers.createTextNode(text)] : []);
+    },
+    renderMarkdown: (node: JSONContent, helpers): string => {
+      const rawHtmlComment = getRawHtmlCommentFromParagraph(node);
+
+      if (rawHtmlComment) {
+        return rawHtmlComment;
+      }
+
+      const content = Array.isArray(node.content) ? node.content : [];
+
+      if (content.length === 0) {
+        return '';
+      }
+
+      return helpers.renderChildren(content);
+    }
+  });
+
+  const ListItem = BaseListItem.extend({
+    addAttributes() {
+      return createSourceLineAttributes(this.parent?.() ?? {});
+    },
+    parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+      if (token.type !== 'list_item') {
+        return [];
+      }
+
+      const parseBlockChildren = helpers.parseBlockChildren ?? helpers.parseChildren;
+      let contentNodes: JSONContent[] = [];
+
+      if (token.tokens && token.tokens.length > 0) {
+        const hasParagraphTokens = token.tokens.some((itemToken) => itemToken.type === 'paragraph');
+
+        if (hasParagraphTokens) {
+          contentNodes = parseBlockChildren(token.tokens);
+        } else {
+          const [firstToken, ...remainingTokens] = token.tokens;
+
+          if (firstToken?.type === 'text' && firstToken.tokens && firstToken.tokens.length > 0) {
+            contentNodes = [
+              helpers.createNode('paragraph', createSourceLineNodeAttrs(firstToken), parseInlinePreservingReferenceLinks(firstToken.tokens, helpers))
+            ];
+
+            if (remainingTokens.length > 0) {
+              contentNodes.push(...parseBlockChildren(remainingTokens));
+            }
+          } else {
+            contentNodes = parseBlockChildren(token.tokens);
+          }
+        }
+      }
+
+      if (contentNodes.length === 0) {
+        contentNodes = [createParagraphNode()];
+      }
+
+      return { type: 'listItem', content: contentNodes };
+    }
+  });
+
+  // MarkdownTable（仅 schema + parseMarkdown，不含 VueNodeView——运行时由 createRichEditorRuntimeOnlyExtensions 补）
+  const MarkdownTable = Table.extend({
+    addAttributes() {
+      return createSourceLineAttributes({
+        ...(this.parent?.() ?? {}),
+        markdownRaw: {
+          default: null,
+          renderHTML: () => ({})
+        },
+        markdownSignature: {
+          default: null,
+          renderHTML: () => ({})
+        }
+      });
+    },
+    parseMarkdown: (token: MarkdownTableTokenData, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+      const rows: JSONContent[] = [];
+      const alignments = Array.isArray(token.align) ? token.align : [];
+
+      if (token.header) {
+        const headerCells = token.header.map((cell, index) =>
+          helpers.createNode(
+            'tableHeader',
+            normalizeMarkdownTableAlignment(alignments[index]) ? { align: normalizeMarkdownTableAlignment(alignments[index]) } : {},
+            [helpers.createNode('paragraph', {}, parseInlineOrText(cell.tokens, cell.text, helpers))]
+          )
+        );
+
+        rows.push(helpers.createNode('tableRow', {}, headerCells));
+      }
+
+      if (token.rows) {
+        token.rows.forEach((row) => {
+          const bodyCells = row.map((cell, index) =>
+            helpers.createNode(
+              'tableCell',
+              normalizeMarkdownTableAlignment(alignments[index]) ? { align: normalizeMarkdownTableAlignment(alignments[index]) } : {},
+              [helpers.createNode('paragraph', {}, parseInlineOrText(cell.tokens, cell.text, helpers))]
+            )
+          );
+
+          rows.push(helpers.createNode('tableRow', {}, bodyCells));
+        });
+      }
+
+      return helpers.createNode(
+        'table',
+        {
+          ...createSourceLineNodeAttrs(token),
+          markdownRaw: typeof token.raw === 'string' ? token.raw.replace(/\r\n/g, '\n').replace(/\n+$/, '') : null,
+          markdownSignature: buildMarkdownTableSignatureFromToken(token, helpers)
+        },
+        rows
+      );
+    },
+    renderMarkdown: (node: JSONContent, helpers): string => {
+      const rawMarkdown = typeof node.attrs?.markdownRaw === 'string' ? node.attrs.markdownRaw : null;
+      const importedSignature = typeof node.attrs?.markdownSignature === 'string' ? node.attrs.markdownSignature : null;
+
+      if (rawMarkdown && importedSignature === buildMarkdownTableSignatureFromNode(node)) {
+        return rawMarkdown.trimEnd();
+      }
+
+      return renderMarkdownTableFallback(node, helpers);
+    }
+  });
+
+  const MarkdownLink = Link.extend({
+    parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+      const content = helpers.parseInline(token.tokens || []);
+      const href = typeof token.href === 'string' ? token.href : '';
+      const title = typeof token.title === 'string' ? token.title : undefined;
+
+      if (content.length) {
+        return { mark: 'link', content, attrs: { href, title } };
+      }
+
+      const text = typeof token.text === 'string' ? token.text : '';
+      return { mark: 'link', content: text ? [helpers.createTextNode(text)] : [], attrs: { href, title } };
+    }
+  });
+
+  const extensions = [
+    StarterKit.configure({
+      code: false,
+      codeBlock: false,
+      heading: false,
+      link: false,
+      listItem: false,
+      paragraph: false,
+      strike: false,
+      underline: false,
+      dropcursor: false,
+      gapcursor: false
+    }),
+    Markdown,
+    HtmlComment,
+    LinkDefinitionAsText,
+    Heading,
+    Paragraph,
+    Code,
+    CodeBlock,
+    ListItem,
+    MarkdownTable.configure({ resizable: false }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    Image.configure({
+      inline: false,
+      allowBase64: true,
+      HTMLAttributes: {
+        class: 'editor-image'
+      }
+    }),
+    TaskList,
+    TaskItem.configure({
+      nested: true
+    }),
+    Highlight.configure({
+      multicolor: true
+    }),
+    Strike,
+    TextStyle,
+    Color,
+    Typography,
+    Underline,
+    MarkdownLink.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: 'editor-link'
+      }
+    }),
+    Mathematics.configure({
+      katexOptions: {
+        throwOnError: false
+      }
+    })
+  ];
+
+  function assignHeadingIds(editor: Editor, headingOptions?: { silent?: boolean }): void {
+    const { state, view } = editor;
+    const { tr } = state;
+    let index = 0;
+    let needsUpdate = false;
+
+    state.doc.descendants((node, pos) => {
+      if (node.type.name === 'heading') {
+        const expectedId = getHeadingId(index);
+        if (node.attrs.id !== expectedId) {
+          needsUpdate = true;
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, id: expectedId });
+        }
+        index++;
+      }
+    });
+
+    if (needsUpdate) {
+      if (headingOptions?.silent) {
+        tr.setMeta('preventUpdate', true).setMeta('addToHistory', false);
+      }
+      view.dispatch(tr);
+    }
+  }
+
+  return {
+    extensions,
+    assignHeadingIds,
+    resetHeadingIndex
+  };
+}
+
+/**
+ * 创建运行时扩展集合（含 Vue NodeView、Plugin、Placeholder 等主线程专用扩展）。
+ * 仅主线程使用。
+ *
+ * @param editorInstanceId - 编辑器实例 ID
+ * @param options - 运行时扩展配置选项
+ */
+export function createRichEditorRuntimeOnlyExtensions(
+  _editorInstanceId: string,
+  options?: { onSearchMatchFocus?: (context: SearchScrollContext) => void }
+): AnyExtension[] {
+  const runtimeExtensions: AnyExtension[] = [];
+
+  // Placeholder
+  runtimeExtensions.push(Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: '请输入内容' }));
+
+  // AI 选区高亮
+  runtimeExtensions.push(AISelectionHighlight);
+
+  // 内联注释 Mark
+  runtimeExtensions.push(InlineCommentMark);
+
+  // 搜索
+  runtimeExtensions.push(
+    Search.configure({
+      onMatchFocus: options?.onSearchMatchFocus ?? null
+    })
+  );
+
+  return runtimeExtensions;
 }
