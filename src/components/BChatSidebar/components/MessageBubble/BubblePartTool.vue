@@ -1,5 +1,5 @@
 /** * @file BubblePartTool.vue * @description 聊天消息中工具调用部分的气泡组件，展示工具的执行状态、输入/输出内容， * 以及提问工具（ask_user_choice
-等）的问答结果 */
+等）的问答结果和简单工具的人可读摘要。 */
 <template>
   <!-- 工具气泡容器：inputting 状态默认展开，其余状态默认折叠 -->
   <BubblePart type="tool" :has-content="hasContent" :default-collapsed="defaultCollapsed">
@@ -30,18 +30,39 @@
         </div>
       </div>
     </template>
-    <!-- 非提问工具：展示代码格式的输入/输出内容 -->
+    <!-- 有摘要的工具结果：展示人可读的摘要信息 -->
+    <template v-else-if="summary">
+      <div :class="bem('summary', { [summary.variant ?? 'success']: true })">
+        <div :class="bem('summary-text')">{{ summary.text }}</div>
+        <div v-if="summary.tags?.length" :class="bem('summary-tags')">
+          <div v-for="tag in summary.tags" :key="tag.label" :class="bem('summary-tag')">
+            <span :class="bem('summary-tag-label')">{{ tag.label }}：</span>
+            <span :class="bem('summary-tag-value')">{{ tag.value }}</span>
+          </div>
+        </div>
+        <!-- 成功时折叠的原始数据 -->
+        <template v-if="summary.variant !== 'failure' && summary.variant !== 'cancelled'">
+          <div :class="bem('summary-raw-toggle')" @click="rawExpanded = !rawExpanded">
+            <BIcon :icon="rawExpanded ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="12" />
+            <span>{{ rawExpanded ? '收起原始数据' : '查看原始数据' }}</span>
+          </div>
+          <BubblePartToolCode v-if="rawExpanded" :value="previewValue" />
+        </template>
+      </div>
+    </template>
+    <!-- 无摘要的工具：展示代码格式的输入/输出内容 -->
     <BubblePartToolCode v-else-if="hasContent" :value="previewValue" />
   </BubblePart>
 </template>
 
 <script setup lang="ts">
 import type { AIUserChoiceAnswerData, AIUserChoiceQuestionAnswer, ChatMessageToolPart } from 'types/chat';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { QuestionItemInput, QuestionToolInput } from '@/ai/tools/builtin/QuestionTool';
 import { createNamespace } from '@/utils/namespace';
 import { hasStructuredValueContent } from '../../utils/messagePart';
 import { getActionLabel } from '../../utils/toolLabels';
+import { getToolResultSummary } from '../../utils/toolResultSummary';
 import BubblePart from './BubblePart.vue';
 import BubblePartToolCode from './BubblePartToolCode.vue';
 
@@ -56,6 +77,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {});
 
 const [, bem] = createNamespace('', 'bubble-part-tool');
+
+/** 原始数据展开状态 */
+const rawExpanded = ref(false);
 
 /** 工具状态与图标的映射：inputting 旋转加载、executing 扳手、done 成功/失败 */
 const ICON_MAP = {
@@ -162,6 +186,12 @@ const isQuestionSuccess = computed(
   () => props.part.status === 'done' && props.part.result?.status === 'success' && QUESTION_TOOL_NAMES.has(props.part.toolName)
 );
 
+/** 工具执行完成时的人可读摘要，支持成功/失败/取消状态，无匹配时返回 null 降级到代码视图 */
+const summary = computed(() => {
+  if (props.part.status !== 'done' || !props.part.result) return null;
+  return getToolResultSummary(props.part.toolName, props.part.result);
+});
+
 /**
  * 解析提问工具的问答结果，将 value 映射为可读的 label
  * 兼容多问题（questionAnswers）和单问题（answers）两种返回格式
@@ -252,5 +282,72 @@ const questionOtherText = computed(() => {
   color: var(--color-primary);
   background: var(--color-primary-bg, rgb(22 119 255 / 8%));
   border-radius: 4px;
+}
+
+.bubble-part-tool__summary {
+  font-size: 12px;
+  line-height: 1.6;
+
+  &--failure {
+    .bubble-part-tool__summary-text {
+      color: var(--color-error);
+    }
+
+    .bubble-part-tool__summary-tag {
+      background: var(--color-error-bg, rgb(255 0 0 / 8%));
+    }
+
+    .bubble-part-tool__summary-tag-value {
+      color: var(--color-error);
+    }
+  }
+
+  &--cancelled {
+    .bubble-part-tool__summary-text {
+      color: var(--text-tertiary);
+    }
+  }
+}
+
+.bubble-part-tool__summary-text {
+  color: var(--text-primary);
+}
+
+.bubble-part-tool__summary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.bubble-part-tool__summary-tag {
+  gap: 4px;
+  padding: 1px 6px;
+  background: var(--color-primary-bg, rgb(22 119 255 / 8%));
+  border-radius: 4px;
+}
+
+.bubble-part-tool__summary-tag-label {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.bubble-part-tool__summary-tag-value {
+  color: var(--color-primary);
+}
+
+.bubble-part-tool__summary-raw-toggle {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    color: var(--text-secondary);
+  }
 }
 </style>

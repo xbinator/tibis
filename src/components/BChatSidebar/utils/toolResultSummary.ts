@@ -1,0 +1,395 @@
+/**
+ * @file toolResultSummary.ts
+ * @description 工具执行结果摘要解析模块，将已知工具的结构化结果转换为人可读的摘要信息，
+ * 用于在气泡中展示简明内容，避免直接暴露原始 JSON。
+ */
+import type { AIToolExecutionResult } from 'types/ai';
+
+/**
+ * 从完整路径中提取文件名。
+ * @param filePath - 完整文件路径
+ * @returns 文件名部分
+ */
+function toFileName(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const segments = normalized.split('/');
+  return segments[segments.length - 1] || filePath;
+}
+
+/**
+ * 工具结果摘要标签项。
+ */
+export interface ToolSummaryTag {
+  /** 标签名称 */
+  label: string;
+  /** 标签值 */
+  value: string;
+}
+
+/**
+ * 工具结果摘要样式变体。
+ */
+export type ToolSummaryVariant = 'success' | 'failure' | 'cancelled';
+
+/**
+ * 工具结果摘要。
+ */
+export interface ToolResultSummary {
+  /** 摘要主文本 */
+  text: string;
+  /** 可选的标签列表 */
+  tags?: ToolSummaryTag[];
+  /** 摘要样式变体，默认 success */
+  variant?: ToolSummaryVariant;
+}
+
+/** 设置键的中文映射 */
+const SETTINGS_KEY_LABEL_MAP: Record<string, string> = {
+  theme: '主题',
+  sourceMode: '源码模式',
+  editorPageWidth: '页宽'
+};
+
+/** 主题值的中文映射 */
+const THEME_VALUE_MAP: Record<string, string> = {
+  dark: '深色',
+  light: '浅色',
+  system: '跟随系统'
+};
+
+/** 页宽值的中文映射 */
+const PAGE_WIDTH_MAP: Record<string, string> = {
+  default: '默认',
+  wide: '宽',
+  full: '全宽'
+};
+
+/** 任务状态的中文映射 */
+const TODO_STATUS_MAP: Record<string, string> = {
+  pending: '待办',
+  in_progress: '进行中',
+  completed: '已完成',
+  cancelled: '已取消'
+};
+
+/**
+ * 格式化 get_current_time 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 时间摘要
+ */
+function summarizeGetCurrentTime(data: Record<string, unknown>): ToolResultSummary {
+  const locale = typeof data.locale === 'string' ? data.locale : String(data.iso ?? '');
+  const iso = typeof data.iso === 'string' ? data.iso : '';
+  const timestamp = typeof data.timestamp === 'number' ? String(data.timestamp) : '';
+
+  return {
+    text: locale,
+    tags: [
+      { label: 'ISO', value: iso },
+      { label: '时间戳', value: timestamp }
+    ].filter((tag) => tag.value)
+  };
+}
+
+/**
+ * 格式化 get_settings 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 设置摘要
+ */
+function summarizeGetSettings(data: Record<string, unknown>): ToolResultSummary {
+  const settings = (data.settings ?? data) as Record<string, unknown>;
+  const tags: ToolSummaryTag[] = [];
+
+  for (const [key, rawValue] of Object.entries(settings)) {
+    const label = SETTINGS_KEY_LABEL_MAP[key] ?? key;
+    let value: string;
+
+    if (key === 'theme') {
+      value = THEME_VALUE_MAP[String(rawValue)] ?? String(rawValue);
+    } else if (key === 'editorPageWidth') {
+      value = PAGE_WIDTH_MAP[String(rawValue)] ?? String(rawValue);
+    } else if (key === 'sourceMode') {
+      value = rawValue ? '开' : '关';
+    } else {
+      value = String(rawValue);
+    }
+
+    tags.push({ label, value });
+  }
+
+  return {
+    text: tags.length > 0 ? '当前设置' : '无设置项',
+    tags
+  };
+}
+
+/**
+ * 格式化 update_settings 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 更新设置摘要
+ */
+function summarizeUpdateSettings(data: Record<string, unknown>): ToolResultSummary {
+  const key = String(data.key ?? '');
+  const label = SETTINGS_KEY_LABEL_MAP[key] ?? key;
+
+  const formatValue = (k: string, v: unknown): string => {
+    if (k === 'theme') return THEME_VALUE_MAP[String(v)] ?? String(v);
+    if (k === 'editorPageWidth') return PAGE_WIDTH_MAP[String(v)] ?? String(v);
+    if (k === 'sourceMode') return v ? '开' : '关';
+    return String(v);
+  };
+
+  const previous = formatValue(key, data.previousValue);
+  const current = formatValue(key, data.currentValue);
+
+  return {
+    text: `${label}: ${previous} → ${current}`
+  };
+}
+
+/**
+ * 格式化 todowrite 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 任务列表摘要
+ */
+function summarizeTodoWrite(data: Record<string, unknown>): ToolResultSummary {
+  const count = typeof data.count === 'number' ? data.count : 0;
+  const stats = (data.stats ?? {}) as Record<string, number>;
+  const tags: ToolSummaryTag[] = [];
+
+  for (const [status, num] of Object.entries(stats)) {
+    if (num > 0) {
+      tags.push({ label: TODO_STATUS_MAP[status] ?? status, value: String(num) });
+    }
+  }
+
+  return {
+    text: count > 0 ? `已更新 ${count} 项任务` : '已清空任务列表',
+    tags
+  };
+}
+
+/**
+ * 格式化 query_logs 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 日志查询摘要
+ */
+function summarizeQueryLogs(data: Record<string, unknown>): ToolResultSummary {
+  const returnedCount = typeof data.returnedCount === 'number' ? data.returnedCount : 0;
+  const appliedFilters = (data.appliedFilters ?? {}) as Record<string, unknown>;
+  const tags: ToolSummaryTag[] = [];
+
+  if (appliedFilters.level) {
+    tags.push({ label: '级别', value: String(appliedFilters.level) });
+  }
+  if (appliedFilters.scope) {
+    tags.push({ label: '来源', value: String(appliedFilters.scope) });
+  }
+  if (appliedFilters.keyword) {
+    tags.push({ label: '关键字', value: String(appliedFilters.keyword) });
+  }
+  if (appliedFilters.date) {
+    tags.push({ label: '日期', value: String(appliedFilters.date) });
+  }
+
+  return {
+    text: returnedCount > 0 ? `查询到 ${returnedCount} 条日志` : '未查询到日志',
+    tags
+  };
+}
+
+/**
+ * 格式化 run_shell_command 工具的结果。
+ * @param data - 工具结果数据
+ * @returns Shell 命令执行摘要
+ */
+function summarizeShellCommand(data: Record<string, unknown>): ToolResultSummary {
+  const { command: rawCommand, exitCode, durationMs: rawDurationMs, timedOut } = data;
+  const command = typeof rawCommand === 'string' ? rawCommand : '';
+  const durationMs = typeof rawDurationMs === 'number' ? rawDurationMs : 0;
+
+  const tags: ToolSummaryTag[] = [];
+
+  if (exitCode !== undefined && exitCode !== null) {
+    tags.push({ label: '退出码', value: String(exitCode) });
+  }
+  if (durationMs > 0) {
+    tags.push({ label: '耗时', value: `${durationMs}ms` });
+  }
+
+  return {
+    text: timedOut ? `命令超时: ${command}` : command,
+    tags
+  };
+}
+
+/**
+ * 格式化 skill 工具的结果。
+ * @param data - 工具结果数据（skill 内容为纯文本字符串）
+ * @returns Skill 加载摘要
+ */
+function summarizeSkill(data: unknown): ToolResultSummary {
+  if (typeof data === 'string') {
+    const firstLine = data.split('\n').find((line) => line.trim().length > 0) ?? '';
+    const preview = firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine;
+
+    return {
+      text: '已加载技能',
+      tags: [{ label: '内容预览', value: preview }]
+    };
+  }
+
+  return { text: '已加载技能' };
+}
+
+/**
+ * 格式化 create_document 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 创建文档摘要
+ */
+function summarizeCreateDocument(data: Record<string, unknown>): ToolResultSummary {
+  const title = typeof data.title === 'string' ? data.title : '未命名文档';
+  const path = typeof data.path === 'string' ? data.path : '';
+
+  return {
+    text: `已创建: ${title}`,
+    tags: path ? [{ label: '文件', value: toFileName(path) }] : undefined
+  };
+}
+
+/**
+ * 格式化 write_file 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 写入文件摘要
+ */
+function summarizeWriteFile(data: Record<string, unknown>): ToolResultSummary {
+  const { path, created } = data;
+  const filePath = typeof path === 'string' ? path : '';
+
+  return {
+    text: created ? '已创建文件' : '已写入文件',
+    tags: filePath ? [{ label: '文件', value: toFileName(filePath) }] : undefined
+  };
+}
+
+/**
+ * 格式化 read_file / read_current_document 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 读取文件摘要
+ */
+function summarizeReadFile(data: Record<string, unknown>): ToolResultSummary {
+  const { path, totalLines, readLines } = data;
+  const filePath = typeof path === 'string' ? path : '';
+  const tags: ToolSummaryTag[] = [];
+
+  if (filePath) {
+    tags.push({ label: '文件', value: toFileName(filePath) });
+  }
+  if (typeof totalLines === 'number' && typeof readLines === 'number') {
+    tags.push({ label: '行数', value: readLines === totalLines ? `${totalLines}` : `${readLines} / ${totalLines}` });
+  }
+
+  return {
+    text: '已读取文件',
+    tags
+  };
+}
+
+/**
+ * 格式化 edit_file 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 编辑文件摘要
+ */
+function summarizeEditFile(data: Record<string, unknown>): ToolResultSummary {
+  const { path, replacedCount } = data;
+  const filePath = typeof path === 'string' ? path : '';
+  const count = typeof replacedCount === 'number' ? replacedCount : 0;
+  const tags: ToolSummaryTag[] = [];
+
+  if (filePath) {
+    tags.push({ label: '文件', value: toFileName(filePath) });
+  }
+  tags.push({ label: '替换次数', value: String(count) });
+
+  return {
+    text: '已修改文件',
+    tags
+  };
+}
+
+/** 工具名称到摘要解析函数的映射 */
+const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
+  get_current_time: (data) => summarizeGetCurrentTime(data as Record<string, unknown>),
+  get_settings: (data) => summarizeGetSettings(data as Record<string, unknown>),
+  update_settings: (data) => summarizeUpdateSettings(data as Record<string, unknown>),
+  todowrite: (data) => summarizeTodoWrite(data as Record<string, unknown>),
+  query_logs: (data) => summarizeQueryLogs(data as Record<string, unknown>),
+  run_shell_command: (data) => summarizeShellCommand(data as Record<string, unknown>),
+  skill: summarizeSkill,
+  create_document: (data) => summarizeCreateDocument(data as Record<string, unknown>),
+  write_file: (data) => summarizeWriteFile(data as Record<string, unknown>),
+  read_file: (data) => summarizeReadFile(data as Record<string, unknown>),
+  read_current_document: (data) => summarizeReadFile(data as Record<string, unknown>),
+  edit_file: (data) => summarizeEditFile(data as Record<string, unknown>)
+};
+
+/** 错误码到中文的映射 */
+const ERROR_CODE_MAP: Record<string, string> = {
+  TOOL_NOT_FOUND: '工具未找到',
+  INVALID_INPUT: '输入参数无效',
+  NO_ACTIVE_DOCUMENT: '无活动文档',
+  NO_SELECTION: '无选区',
+  NO_CURSOR: '无光标',
+  PERMISSION_DENIED: '权限被拒绝',
+  USER_CANCELLED: '用户取消',
+  EDITOR_UNAVAILABLE: '编辑器不可用',
+  STALE_CONTEXT: '上下文已过期',
+  TOOL_TIMEOUT: '工具超时',
+  UNSUPPORTED_PROVIDER: '不支持的服务商',
+  CONFIRMATION_DISMISSED: '确认已关闭',
+  EXECUTION_FAILED: '执行失败'
+};
+
+/**
+ * 根据工具名称和执行结果生成人可读的摘要。
+ * 支持成功、失败、取消三种状态；未知工具在成功时返回 null 降级到代码视图，
+ * 失败/取消时仍生成错误摘要。
+ * @param toolName - 工具名称
+ * @param result - 工具执行结果
+ * @returns 摘要信息，无匹配时返回 null
+ */
+export function getToolResultSummary(toolName: string, result: AIToolExecutionResult): ToolResultSummary | null {
+  if (result.status === 'failure') {
+    const errorCode = result.error?.code ?? '';
+    const errorMessage = result.error?.message ?? '';
+    const label = ERROR_CODE_MAP[errorCode] ?? errorCode;
+
+    return {
+      text: errorMessage || '执行失败',
+      tags: errorCode ? [{ label: '错误码', value: label }] : undefined,
+      variant: 'failure'
+    };
+  }
+
+  if (result.status === 'cancelled') {
+    return {
+      text: '用户已取消',
+      variant: 'cancelled'
+    };
+  }
+
+  if (result.status !== 'success') {
+    return null;
+  }
+
+  const summarizer = TOOL_SUMMARIZERS[toolName];
+  if (!summarizer) {
+    return null;
+  }
+
+  try {
+    return summarizer(result.data);
+  } catch {
+    return null;
+  }
+}

@@ -52,7 +52,6 @@ function toggleCollapse(): void {
 
 <style scoped lang="less">
 .message-bubble-part {
-  padding: 10px 12px;
   font-size: 12px;
   color: var(--text-secondary);
   background: var(--bg-secondary);
@@ -75,6 +74,7 @@ function toggleCollapse(): void {
   display: flex;
   gap: 6px;
   align-items: center;
+  padding: 10px 12px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -92,6 +92,6 @@ function toggleCollapse(): void {
 }
 
 .message-bubble-part__content {
-  margin-top: 8px;
+  margin: 0 12px 10px;
 }
 </style>
