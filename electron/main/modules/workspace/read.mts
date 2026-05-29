@@ -1,6 +1,7 @@
 /**
  * @file read.mts
- * @description 工作区和授权绝对路径文本文件安全读取服务。
+ * @description 工作区文本文件读取服务，仅负责路径解析与文件 I/O，不做安全拦截。
+ * 安全策略（扩展名、黑名单、工作区边界）由业务方决定。
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -8,49 +9,11 @@ import * as path from 'node:path';
 /** 默认起始行号 */
 const DEFAULT_OFFSET = 1;
 
-/** 允许读取的文本文件扩展名 */
-const ALLOWED_EXTENSIONS = new Set([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.vue',
-  '.json',
-  '.md',
-  '.mdx',
-  '.css',
-  '.less',
-  '.scss',
-  '.html',
-  '.yml',
-  '.yaml',
-  '.toml',
-  '.txt',
-  '.sh',
-  '.bash'
-]);
-
-/** 禁止读取的路径模式 */
-const BLACKLIST_PATTERNS: RegExp[] = [
-  /(^|\/)\.env(?:[./]|$)/,
-  /(^|\/)\.git(?:\/|$)/,
-  /(^|\/)node_modules(?:\/|$)/,
-  /(^|\/)dist(?:\/|$)/,
-  /(^|\/)dist-electron(?:\/|$)/,
-  /\.pem$/i,
-  /\.key$/i,
-  /\.lock$/i,
-  /\.sqlite?$/i
-];
-
-/** 工作区读取错误码 */
-export type WorkspaceReadErrorCode = 'PATH_OUTSIDE_WORKSPACE' | 'PATH_BLACKLISTED' | 'EXTENSION_NOT_ALLOWED' | 'FILE_NOT_FOUND' | 'INVALID_INPUT';
-
 /** 读取工作区文件请求 */
 export interface ReadWorkspaceFileRequest {
   /** 文件路径，支持相对工作区路径或绝对路径 */
   filePath: string;
-  /** 工作区根目录，缺省时仅允许读取绝对路径 */
+  /** 工作区根目录，用作相对路径的解析基准 */
   workspaceRoot?: string;
   /** 起始行号，默认 1 */
   offset?: number;
@@ -78,7 +41,7 @@ export interface ReadWorkspaceFileResult {
 export interface ReadWorkspaceDirectoryRequest {
   /** 目录路径，支持相对工作区路径或绝对路径 */
   directoryPath: string;
-  /** 工作区根目录，缺省时仅允许读取绝对路径 */
+  /** 工作区根目录，用作相对路径的解析基准 */
   workspaceRoot?: string;
 }
 
@@ -101,65 +64,6 @@ export interface ReadWorkspaceDirectoryResult {
 }
 
 /**
- * 工作区读取错误。
- * @description 通过 code 字段让渲染层可映射到工具错误码。
- */
-export class WorkspaceReadError extends Error {
-  /** 工作区读取错误码 */
-  public readonly code: WorkspaceReadErrorCode;
-
-  /**
-   * 创建工作区读取错误。
-   * @param code - 错误码
-   * @param message - 错误消息
-   */
-  public constructor(code: WorkspaceReadErrorCode, message: string) {
-    super(message);
-    this.name = 'WorkspaceReadError';
-    this.code = code;
-  }
-}
-
-/**
- * 判断真实路径是否位于工作区内。
- * @param realPath - 文件真实路径
- * @param realRoot - 工作区真实路径
- * @returns 是否位于工作区内
- */
-export function isWithinWorkspace(realPath: string, realRoot: string): boolean {
-  const relativePath = path.relative(realRoot, realPath);
-  return !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
-}
-
-/**
- * 将路径规范化为 POSIX 风格，便于安全规则匹配。
- * @param targetPath - 待匹配路径
- * @returns POSIX 风格路径
- */
-function toSafePath(targetPath: string): string {
-  return targetPath.split(path.sep).join('/');
-}
-
-/**
- * 判断路径是否命中黑名单。
- * @param targetPath - 目标路径
- * @returns 是否命中黑名单
- */
-function isBlacklistedPath(targetPath: string): boolean {
-  const safePath = toSafePath(targetPath);
-  return BLACKLIST_PATTERNS.some((pattern) => pattern.test(safePath));
-}
-
-/**
- * 判断文件扩展名是否允许读取。
- * @param filePath - 文件路径
- * @returns 是否允许读取
- */
-function isAllowedExtension(filePath: string): boolean {
-  return ALLOWED_EXTENSIONS.has(path.extname(filePath).toLowerCase());
-}
-
-/**
  * 规范化读取行范围。
  * @param offset - 起始行号
  * @param limit - 读取行数
@@ -169,82 +73,57 @@ function normalizeLineRange(offset?: number, limit?: number): { offset: number; 
   const normalizedOffset = offset ?? DEFAULT_OFFSET;
 
   if (!Number.isInteger(normalizedOffset) || normalizedOffset < 1) {
-    throw new WorkspaceReadError('INVALID_INPUT', 'offset 必须是大于等于 1 的整数');
+    throw new Error('offset 必须是大于等于 1 的整数');
   }
 
   if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
-    throw new WorkspaceReadError('INVALID_INPUT', 'limit 必须是大于等于 1 的整数');
+    throw new Error('limit 必须是大于等于 1 的整数');
   }
 
   return limit === undefined ? { offset: normalizedOffset } : { offset: normalizedOffset, limit };
 }
 
 /**
- * 解析并校验工作区路径。
+ * 解析目标路径为真实绝对路径。
+ * 支持相对路径（基于 workspaceRoot 解析）和绝对路径。
+ * 不做任何安全拦截。
  * @param targetPath - 目标路径
- * @param workspaceRootInput - 工作区根目录
- * @returns 校验后的真实路径信息
+ * @param workspaceRoot - 工作区根目录
+ * @returns 真实绝对路径
  */
-async function resolveWorkspacePath(targetPath: string, workspaceRootInput?: string): Promise<{ realPath: string; securityPath: string }> {
+async function resolveTargetPath(targetPath: string, workspaceRoot?: string): Promise<string> {
   const normalizedPath = targetPath.trim();
-  const workspaceRoot = workspaceRootInput?.trim() ?? '';
+  const resolvedRoot = workspaceRoot?.trim() ?? '';
 
   if (!normalizedPath) {
-    throw new WorkspaceReadError('INVALID_INPUT', '路径不能为空');
+    throw new Error('路径不能为空');
   }
 
-  if (!workspaceRoot && !path.isAbsolute(normalizedPath)) {
-    throw new WorkspaceReadError('INVALID_INPUT', '未配置工作区根目录时只能读取绝对路径');
+  if (!resolvedRoot && !path.isAbsolute(normalizedPath)) {
+    throw new Error('未配置工作区根目录时只能使用绝对路径');
   }
 
   try {
-    const realRoot = workspaceRoot ? await fs.realpath(workspaceRoot) : null;
-    const candidatePath = realRoot && !path.isAbsolute(normalizedPath) ? path.join(realRoot, normalizedPath) : normalizedPath;
-    const realPath = await fs.realpath(candidatePath);
-
-    if (realRoot && !isWithinWorkspace(realPath, realRoot)) {
-      throw new WorkspaceReadError('PATH_OUTSIDE_WORKSPACE', '文件路径不在工作区内');
-    }
-
-    return { realPath, securityPath: realRoot ? path.relative(realRoot, realPath) : realPath };
-  } catch (error) {
-    if (error instanceof WorkspaceReadError) {
-      throw error;
-    }
-
-    throw new WorkspaceReadError('FILE_NOT_FOUND', '文件不存在或无法访问');
+    const candidatePath = resolvedRoot && !path.isAbsolute(normalizedPath) ? path.join(resolvedRoot, normalizedPath) : normalizedPath;
+    return await fs.realpath(candidatePath);
+  } catch {
+    throw new Error('文件或目录不存在或无法访问');
   }
 }
 
 /**
- * 解析并校验文件真实路径。
- * @param request - 读取请求
- * @returns 校验后的真实路径信息
- */
-async function resolveWorkspaceFile(request: ReadWorkspaceFileRequest): Promise<{ realPath: string; securityPath: string }> {
-  return resolveWorkspacePath(request.filePath, request.workspaceRoot);
-}
-
-/**
- * 安全读取文本文件。
+ * 读取文本文件，支持行范围截取。
+ * 不做扩展名、黑名单、工作区边界等安全拦截，由业务方决定。
  * @param request - 读取请求
  * @returns 文件读取结果
  */
 export async function readWorkspaceFile(request: ReadWorkspaceFileRequest): Promise<ReadWorkspaceFileResult> {
   const lineRange = normalizeLineRange(request.offset, request.limit);
-  const { realPath, securityPath } = await resolveWorkspaceFile(request);
-
-  if (isBlacklistedPath(securityPath)) {
-    throw new WorkspaceReadError('PATH_BLACKLISTED', '文件路径命中安全黑名单');
-  }
-
-  if (!isAllowedExtension(realPath)) {
-    throw new WorkspaceReadError('EXTENSION_NOT_ALLOWED', '不支持读取该类型文件');
-  }
+  const realPath = await resolveTargetPath(request.filePath, request.workspaceRoot);
 
   const stats = await fs.stat(realPath);
   if (!stats.isFile()) {
-    throw new WorkspaceReadError('INVALID_INPUT', '目标路径不是文件');
+    throw new Error('目标路径不是文件');
   }
 
   const content = await fs.readFile(realPath, 'utf-8');
@@ -266,20 +145,17 @@ export async function readWorkspaceFile(request: ReadWorkspaceFileRequest): Prom
 }
 
 /**
- * 安全读取目录的直接子项。
+ * 读取目录的直接子项。
+ * 不做黑名单、工作区边界等安全拦截，由业务方决定。
  * @param request - 读取请求
  * @returns 目录读取结果
  */
 export async function readWorkspaceDirectory(request: ReadWorkspaceDirectoryRequest): Promise<ReadWorkspaceDirectoryResult> {
-  const { realPath, securityPath } = await resolveWorkspacePath(request.directoryPath, request.workspaceRoot);
-
-  if (isBlacklistedPath(securityPath)) {
-    throw new WorkspaceReadError('PATH_BLACKLISTED', '目录路径命中安全黑名单');
-  }
+  const realPath = await resolveTargetPath(request.directoryPath, request.workspaceRoot);
 
   const stats = await fs.stat(realPath);
   if (!stats.isDirectory()) {
-    throw new WorkspaceReadError('INVALID_INPUT', '目标路径不是目录');
+    throw new Error('目标路径不是目录');
   }
 
   const children = await fs.readdir(realPath, { withFileTypes: true });

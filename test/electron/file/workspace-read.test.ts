@@ -1,12 +1,12 @@
 /**
  * @file workspace-read.test.ts
- * @description 工作区安全文件读取服务测试。
+ * @description 工作区文件读取服务测试（纯 I/O，不做安全拦截）。
  */
 import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readWorkspaceDirectory, readWorkspaceFile } from '../../../electron/main/modules/file/workspace-read.mts';
+import { readWorkspaceDirectory, readWorkspaceFile } from '../../../electron/main/modules/workspace/read.mjs';
 
 /** 测试临时目录路径 */
 let tempRoot = '';
@@ -26,15 +26,6 @@ async function writeWorkspaceFixture(relativePath: string, content: string): Pro
   return filePath;
 }
 
-/**
- * 断言工作区读取错误码。
- * @param action - 触发读取的函数
- * @param code - 期望错误码
- */
-async function expectWorkspaceReadError(action: () => Promise<unknown>, code: string): Promise<void> {
-  await expect(action()).rejects.toMatchObject({ code });
-}
-
 beforeEach(async () => {
   tempRoot = await mkdtemp(path.join(tmpdir(), 'tibis-workspace-read-'));
   workspaceRoot = path.join(tempRoot, 'workspace');
@@ -46,7 +37,7 @@ afterEach(async () => {
 });
 
 describe('readWorkspaceFile', () => {
-  it('reads a line slice from an allowed workspace text file', async () => {
+  it('reads a line slice from a workspace text file', async () => {
     const filePath = await writeWorkspaceFixture('src/example.ts', ['line 1', 'line 2', 'line 3', 'line 4'].join('\n'));
 
     const result = await readWorkspaceFile({
@@ -85,56 +76,20 @@ describe('readWorkspaceFile', () => {
     });
   });
 
-  it('reads text files larger than 1MB when the extension is allowed', async () => {
-    const largeContent = `${'a'.repeat(1024 * 1024 + 1)}\nend`;
-    const filePath = await writeWorkspaceFixture('large.txt', largeContent);
+  it('reads files with any extension since security is handled by the business layer', async () => {
+    const content = 'not really an image';
+    await writeWorkspaceFixture('asset.png', content);
 
     const result = await readWorkspaceFile({
-      filePath: 'large.txt',
-      workspaceRoot,
-      offset: 2
+      filePath: 'asset.png',
+      workspaceRoot
     });
 
-    expect(result).toEqual({
-      content: 'end',
-      hasMore: false,
-      nextOffset: null,
-      path: await realpath(filePath),
-      totalLines: 2,
-      readLines: 1
-    });
+    expect(result.content).toBe(content);
+    expect(result.totalLines).toBe(1);
   });
 
-  it('rejects paths outside the workspace without prefix matching bypass', async () => {
-    const siblingRoot = path.join(tempRoot, 'workspace-sibling');
-    await mkdir(siblingRoot, { recursive: true });
-    const outsideFile = path.join(siblingRoot, 'secret.ts');
-    await writeFile(outsideFile, 'secret', 'utf-8');
-
-    await expectWorkspaceReadError(
-      () =>
-        readWorkspaceFile({
-          filePath: outsideFile,
-          workspaceRoot
-        }),
-      'PATH_OUTSIDE_WORKSPACE'
-    );
-  });
-
-  it('rejects blacklisted files before reading content', async () => {
-    await writeWorkspaceFixture('.env', 'TOKEN=secret');
-
-    await expectWorkspaceReadError(
-      () =>
-        readWorkspaceFile({
-          filePath: '.env',
-          workspaceRoot
-        }),
-      'PATH_BLACKLISTED'
-    );
-  });
-
-  it('reads an allowed absolute file when no workspace root is provided', async () => {
+  it('reads an absolute file path when no workspace root is provided', async () => {
     const filePath = await writeWorkspaceFixture('README.md', '# Tibis');
 
     const result = await readWorkspaceFile({
@@ -152,26 +107,58 @@ describe('readWorkspaceFile', () => {
   });
 
   it('rejects relative paths when no workspace root is provided', async () => {
-    await expectWorkspaceReadError(
-      () =>
-        readWorkspaceFile({
-          filePath: 'README.md'
-        }),
-      'INVALID_INPUT'
-    );
+    await expect(
+      readWorkspaceFile({
+        filePath: 'README.md'
+      })
+    ).rejects.toThrow('未配置工作区根目录时只能使用绝对路径');
   });
 
-  it('rejects files with unsupported extensions', async () => {
-    await writeWorkspaceFixture('asset.png', 'not really an image');
+  it('rejects invalid offset values', async () => {
+    await writeWorkspaceFixture('test.ts', 'content');
 
-    await expectWorkspaceReadError(
-      () =>
-        readWorkspaceFile({
-          filePath: 'asset.png',
-          workspaceRoot
-        }),
-      'EXTENSION_NOT_ALLOWED'
-    );
+    await expect(
+      readWorkspaceFile({
+        filePath: 'test.ts',
+        workspaceRoot,
+        offset: -1
+      })
+    ).rejects.toThrow('offset 必须是大于等于 1 的整数');
+  });
+
+  it('rejects invalid limit values', async () => {
+    await writeWorkspaceFixture('test.ts', 'content');
+
+    await expect(
+      readWorkspaceFile({
+        filePath: 'test.ts',
+        workspaceRoot,
+        limit: 0
+      })
+    ).rejects.toThrow('limit 必须是大于等于 1 的整数');
+  });
+
+  it('rejects empty file path', async () => {
+    await expect(
+      readWorkspaceFile({
+        filePath: '',
+        workspaceRoot
+      })
+    ).rejects.toThrow('路径不能为空');
+  });
+
+  it('reads files outside the workspace since boundary check is handled by the business layer', async () => {
+    const siblingRoot = path.join(tempRoot, 'workspace-sibling');
+    await mkdir(siblingRoot, { recursive: true });
+    const outsideFile = path.join(siblingRoot, 'secret.ts');
+    await writeFile(outsideFile, 'secret', 'utf-8');
+
+    const result = await readWorkspaceFile({
+      filePath: outsideFile,
+      workspaceRoot
+    });
+
+    expect(result.content).toBe('secret');
   });
 });
 
@@ -205,31 +192,28 @@ describe('readWorkspaceDirectory', () => {
     });
   });
 
-  it('rejects directory paths outside the workspace', async () => {
+  it('reads directories outside the workspace since boundary check is handled by the business layer', async () => {
     const siblingRoot = path.join(tempRoot, 'workspace-sibling');
     const outsideDir = path.join(siblingRoot, 'secret');
     await mkdir(outsideDir, { recursive: true });
 
-    await expectWorkspaceReadError(
-      () =>
-        readWorkspaceDirectory({
-          directoryPath: outsideDir,
-          workspaceRoot
-        }),
-      'PATH_OUTSIDE_WORKSPACE'
-    );
+    const result = await readWorkspaceDirectory({
+      directoryPath: outsideDir,
+      workspaceRoot
+    });
+
+    expect(result.path).toBe(await realpath(outsideDir));
+    expect(result.entries).toEqual([]);
   });
 
-  it('rejects blacklisted directories', async () => {
+  it('reads blacklisted directories since security is handled by the business layer', async () => {
     await mkdir(path.join(workspaceRoot, '.git'), { recursive: true });
 
-    await expectWorkspaceReadError(
-      () =>
-        readWorkspaceDirectory({
-          directoryPath: '.git',
-          workspaceRoot
-        }),
-      'PATH_BLACKLISTED'
-    );
+    const result = await readWorkspaceDirectory({
+      directoryPath: '.git',
+      workspaceRoot
+    });
+
+    expect(result.path).toBe(await realpath(path.join(workspaceRoot, '.git')));
   });
 });

@@ -25,13 +25,7 @@ export const READ_DIRECTORY_TOOL_NAME = 'read_directory';
 const DEFAULT_OFFSET = 1;
 
 /** 工作区读取业务错误码 */
-type WorkspaceReadErrorCode =
-  | 'PATH_OUTSIDE_WORKSPACE'
-  | 'PATH_BLACKLISTED'
-  | 'EXTENSION_NOT_ALLOWED'
-  | 'FILE_NOT_FOUND'
-  | 'INVALID_INPUT'
-  | 'UNSUPPORTED_PROVIDER';
+type WorkspaceReadErrorCode = 'FILE_NOT_FOUND' | 'INVALID_INPUT' | 'UNSUPPORTED_PROVIDER';
 
 /** read_file 工具输入参数 */
 export interface ReadFileInput {
@@ -100,10 +94,6 @@ function mapWorkspaceErrorCode(code: WorkspaceReadErrorCode | null): AIToolExecu
   switch (code) {
     case 'INVALID_INPUT':
       return 'INVALID_INPUT';
-    case 'PATH_OUTSIDE_WORKSPACE':
-    case 'PATH_BLACKLISTED':
-    case 'EXTENSION_NOT_ALLOWED':
-      return 'PERMISSION_DENIED';
     case 'UNSUPPORTED_PROVIDER':
       return 'UNSUPPORTED_PROVIDER';
     case 'FILE_NOT_FOUND':
