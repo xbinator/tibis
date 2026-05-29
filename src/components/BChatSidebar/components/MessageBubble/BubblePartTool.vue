@@ -33,7 +33,7 @@
     <!-- 有摘要的工具结果：展示人可读的摘要信息 -->
     <template v-else-if="summary">
       <div :class="bem('summary', { [summary.variant ?? 'success']: true })">
-        <div :class="bem('summary-text')">{{ summary.text }}</div>
+        <div v-if="summary.text" :class="bem('summary-text')">{{ summary.text }}</div>
         <div v-if="summary.tags?.length" :class="bem('summary-tags')">
           <div v-for="tag in summary.tags" :key="tag.label" :class="bem('summary-tag')">
             <span :class="bem('summary-tag-label')">{{ tag.label }}：</span>
@@ -140,7 +140,7 @@ const icon = computed(() => {
 /** 非 inputting 状态默认折叠，inputting 时展开让用户看到实时输入 */
 const defaultCollapsed = computed(() => props.part.status !== 'inputting');
 
-/** 工具标题：文件操作显示文件路径，其余显示工具别名 */
+/** 工具标题：文件操作显示文件路径，skill 显示技能名称，其余显示工具别名 */
 const title = computed(() => {
   const { part } = props;
   const { alias } = getActionLabel(part.toolName);
@@ -149,6 +149,12 @@ const title = computed(() => {
     const path = (part.input as Record<string, unknown>)?.path;
 
     if (typeof path === 'string') return path;
+  }
+
+  if (part.toolName === 'skill') {
+    const skillName = (part.input as Record<string, unknown>)?.name;
+
+    if (typeof skillName === 'string') return `${alias} ${skillName}`;
   }
 
   return alias;
@@ -285,6 +291,9 @@ const questionOtherText = computed(() => {
 }
 
 .bubble-part-tool__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 12px;
   line-height: 1.6;
 
@@ -317,13 +326,15 @@ const questionOtherText = computed(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 6px;
 }
 
 .bubble-part-tool__summary-tag {
-  gap: 4px;
+  max-width: 100%;
   padding: 1px 6px;
-  background: var(--color-primary-bg, rgb(22 119 255 / 8%));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--color-primary-bg);
   border-radius: 4px;
 }
 

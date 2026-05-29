@@ -36,7 +36,7 @@ export type ToolSummaryVariant = 'success' | 'failure' | 'cancelled';
  */
 export interface ToolResultSummary {
   /** 摘要主文本 */
-  text: string;
+  text?: string;
   /** 可选的标签列表 */
   tags?: ToolSummaryTag[];
   /** 摘要样式变体，默认 success */
@@ -224,12 +224,43 @@ function summarizeShellCommand(data: Record<string, unknown>): ToolResultSummary
 }
 
 /**
+ * 从 skill 工具结果字符串中提取技能名称。
+ * 结果格式为 <skill_content name="xxx">...</skill_content>，提取 name 属性值。
+ * @param content - skill 工具返回的内容字符串
+ * @returns 技能名称，未匹配时返回 null
+ */
+function extractSkillName(content: string): string | null {
+  const match = content.match(/<skill_content\s+name="([^"]+)"/);
+  return match?.[1] ?? null;
+}
+
+/**
+ * 从 skill 工具结果字符串中提取技能文件路径。
+ * 结果格式为 <file_path>...</file_path>，提取路径值。
+ * @param content - skill 工具返回的内容字符串
+ * @returns 技能文件路径，未匹配时返回 null
+ */
+function extractSkillFilePath(content: string): string | null {
+  const match = content.match(/<file_path>([^<]+)<\/file_path>/);
+  return match?.[1]?.trim() ?? null;
+}
+
+/**
  * 格式化 skill 工具的结果。
  * @param data - 工具结果数据（skill 内容为纯文本字符串）
  * @returns Skill 加载摘要
  */
 function summarizeSkill(data: unknown): ToolResultSummary {
   if (typeof data === 'string') {
+    const skillName = extractSkillName(data);
+    const filePath = extractSkillFilePath(data);
+
+    if (skillName) {
+      return {
+        tags: filePath ? [{ label: '路径', value: filePath }] : undefined
+      };
+    }
+
     const firstLine = data.split('\n').find((line) => line.trim().length > 0) ?? '';
     const preview = firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine;
 
