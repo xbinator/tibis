@@ -26,7 +26,7 @@
     </div>
 
     <div class="to-bottom" :class="{ 'to-bottom--visible': isBackBottom }" @click="() => scrollToBottom()">
-      <Icon icon="lucide:arrow-down" />
+      <BIcon icon="lucide:arrow-down" />
       <div v-if="loading" class="to-bottom__loading"></div>
     </div>
 
@@ -34,7 +34,7 @@
       <div class="conversation-view__art" aria-hidden="true">
         <div class="conversation-view__card conversation-view__card--back"></div>
         <div class="conversation-view__card conversation-view__card--front">
-          <Icon icon="lucide:messages-square" width="26" height="26" />
+          <BIcon icon="lucide:messages-square" :size="26" />
         </div>
       </div>
       <div class="conversation-view__title">开始对话</div>
@@ -46,7 +46,6 @@
 <script setup lang="ts">
 import type { Message } from '../utils/types';
 import type { AIUserChoiceAnswerData } from 'types/chat';
-import { Icon } from '@iconify/vue';
 import { useChatScroll } from '../hooks/useChatScroll';
 import MessageBubble from './MessageBubble.vue';
 

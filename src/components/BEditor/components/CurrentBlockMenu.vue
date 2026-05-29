@@ -1,7 +1,7 @@
 <template>
   <div v-if="isVisible" ref="rootRef" :class="name" :style="buttonStyle" @mouseenter="isHoveringMenu = true" @mouseleave="handleMenuMouseLeave">
     <button ref="triggerRef" type="button" class="b-markdown-blockmenu__trigger" :class="{ 'is-open': open }" @mousedown.prevent="toggleMenu" @click.prevent>
-      <Icon :icon="triggerIcon" />
+      <BIcon :icon="triggerIcon" />
     </button>
 
     <div v-if="open" class="b-markdown-blockmenu__panel" :class="panelClass">
@@ -19,11 +19,11 @@
               @click.prevent
             >
               <span class="b-markdown-blockmenu__item-icon">
-                <Icon :icon="item.icon" />
+                <BIcon :icon="item.icon" />
               </span>
               <span class="b-markdown-blockmenu__item-label">{{ item.label }}</span>
               <span v-if="item.active" class="b-markdown-blockmenu__item-check">
-                <Icon icon="lucide:check" />
+                <BIcon icon="lucide:check" />
               </span>
             </button>
           </template>
@@ -40,7 +40,6 @@
  */
 import type { Editor } from '@tiptap/vue-3';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { onClickOutside, useEventListener } from '@vueuse/core';
 import BScrollbar from '@/components/BScrollbar/index.vue';

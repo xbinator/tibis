@@ -1,7 +1,7 @@
 <template>
   <BubblePart type="thinking" :has-content="hasContent" :default-collapsed="false">
     <template #title>
-      <Icon icon="lucide:sparkles" width="14" height="14" />
+      <BIcon icon="lucide:sparkles" :size="14" />
       深度思考
     </template>
     <BMessage :content="part.thinking" type="markdown" />
@@ -11,7 +11,6 @@
 <script setup lang="ts">
 import type { ChatMessageThinkingPart } from 'types/chat';
 import { computed } from 'vue';
-import { Icon } from '@iconify/vue';
 import BubblePart from './BubblePart.vue';
 
 defineOptions({ name: 'BubblePartThinking' });

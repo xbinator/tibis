@@ -11,7 +11,7 @@
         @click="handleClick(item)"
       >
         <div v-if="item.children.length" class="b-markdown-anchor__toggle" @click.stop="toggleCollapsed(item.id)">
-          <Icon :icon="isCollapsed(item.id) ? 'lucide:chevron-right' : 'lucide:chevron-down'" />
+          <BIcon :icon="isCollapsed(item.id) ? 'lucide:chevron-right' : 'lucide:chevron-down'" />
         </div>
 
         <span v-else class="b-markdown-anchor__toggle--empty"></span>
@@ -24,7 +24,6 @@
 
 <script setup lang="ts">
 import { computed, CSSProperties, ref, watch, nextTick } from 'vue';
-import { Icon } from '@iconify/vue';
 import { createNamespace } from '@/utils/namespace';
 import BScrollbar from '../../BScrollbar/index.vue';
 

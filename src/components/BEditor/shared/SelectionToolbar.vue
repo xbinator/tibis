@@ -2,18 +2,18 @@
   <div :class="name">
     <template v-if="isModelAvailable">
       <div class="b-markdown-seltoolbar__ai-btn" @mousedown.prevent="$emit('ai')">
-        <Icon icon="lucide:sparkles" />
+        <BIcon icon="lucide:sparkles" />
         <span>AI 助手</span>
       </div>
     </template>
 
     <div class="b-markdown-seltoolbar__ai-btn" @mousedown.prevent="$emit('reference')">
-      <Icon icon="lucide:message-square-plus" />
+      <BIcon icon="lucide:message-square-plus" />
       <span>插入对话</span>
     </div>
 
     <div class="b-markdown-seltoolbar__ai-btn" @mousedown.prevent="$emit('comment')">
-      <Icon icon="lucide:message-circle" />
+      <BIcon icon="lucide:message-circle" />
       <span>评论</span>
     </div>
     <div v-if="buttons.length" class="b-markdown-seltoolbar__divider"></div>
@@ -26,7 +26,7 @@
       :class="{ 'is-active': btn.active }"
       @mousedown.prevent="$emit('format', btn.command)"
     >
-      <Icon :icon="btn.icon" />
+      <BIcon :icon="btn.icon" />
     </button>
   </div>
 </template>
@@ -34,7 +34,6 @@
 <script setup lang="ts">
 import type { SelectionToolbarAction } from '../adapters/selectionAssistant';
 import { ref, computed } from 'vue';
-import { Icon } from '@iconify/vue';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { createNamespace } from '@/utils/namespace';
 

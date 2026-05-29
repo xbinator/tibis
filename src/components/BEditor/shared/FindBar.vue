@@ -12,14 +12,14 @@
         />
         <span :class="bem('result', { empty: isNoMatchFound })">{{ findResultText }}</span>
         <button type="button" :class="bem('btn')" :disabled="!hasMatches" @click="findPrevious">
-          <Icon icon="lucide:chevron-up" />
+          <BIcon icon="lucide:chevron-up" />
         </button>
         <button type="button" :class="bem('btn')" :disabled="!hasMatches" @click="findNext">
-          <Icon icon="lucide:chevron-down" />
+          <BIcon icon="lucide:chevron-down" />
         </button>
         <span :class="bem('divider')"></span>
         <button type="button" :class="bem('btn')" @click="closeFind">
-          <Icon icon="lucide:x" />
+          <BIcon icon="lucide:x" />
         </button>
       </div>
     </div>
@@ -32,7 +32,6 @@
  * @description 编辑器查找条组件，负责管理查找关键词、结果状态与快捷查找交互。
  */
 import { computed, nextTick, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import type { EditorPublicInstance, EditorSearchState as SearchState } from '@/components/BEditor/types';
 import { EditorShortcuts } from '@/constants/shortcuts';
 import { useShortcuts } from '@/hooks/useShortcuts';

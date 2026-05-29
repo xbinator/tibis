@@ -8,7 +8,7 @@
     <div class="choice-card__step">
       <div class="choice-card__header">
         <div class="choice-card__title">
-          <Icon :icon="isSupplementaryStep ? 'lucide:message-square-plus' : 'lucide:circle-help'" width="14" height="14" class="choice-card__title-icon" />
+          <BIcon :icon="isSupplementaryStep ? 'lucide:message-square-plus' : 'lucide:circle-help'" :size="14" class="choice-card__title-icon" />
           <span>{{ isSupplementaryStep ? '是否有更多的补充信息需要提供？（可选）' : currentItem.question }}</span>
         </div>
       </div>
@@ -55,7 +55,6 @@
 import type { AIAwaitingUserChoiceItem, AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type { AIUserChoiceAnswerData } from 'types/chat';
 import { computed, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 
 const props = withDefaults(
   defineProps<{

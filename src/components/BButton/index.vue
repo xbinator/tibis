@@ -1,7 +1,6 @@
 <script lang="tsx">
 import type { BButtonProps } from './types';
 import { defineComponent, type PropType } from 'vue';
-import { Icon } from '@iconify/vue';
 import { Tooltip } from 'ant-design-vue';
 import { createNamespace } from '@/utils/namespace';
 
@@ -100,7 +99,7 @@ export default defineComponent({
               <div class={bem('loading-spinner')}></div>
             </div>
           )}
-          {props.icon && <Icon class={bem('icon')} icon={props.icon} />}
+          {props.icon && <BIcon class={bem('icon')} icon={props.icon} />}
           {slots.default?.()}
         </button>
       );

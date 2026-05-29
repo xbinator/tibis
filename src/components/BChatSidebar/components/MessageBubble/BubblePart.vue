@@ -5,7 +5,7 @@
         <slot name="title"></slot>
       </div>
 
-      <Icon v-if="hasContent" :icon="collapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" width="14" height="14" />
+      <BIcon v-if="hasContent" :icon="collapsed ? 'lucide:chevron-down' : 'lucide:chevron-up'" :size="14" />
     </div>
 
     <div v-show="hasContent && !collapsed" :class="bem('content')">
@@ -20,7 +20,6 @@
  * @description 聊天气泡片段共享组件，处理折叠逻辑和通用结构。
  */
 import { computed, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import { createNamespace } from '@/utils/namespace';
 
 defineOptions({ name: 'BubblePart' });

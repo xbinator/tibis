@@ -7,7 +7,7 @@
     <div class="b-chat-sidebar__header">
       <div class="b-chat-sidebar__title truncate">{{ currentSession?.title || '新会话' }}</div>
       <BButton square size="small" type="text" :disabled="loading" @click="createNewSession">
-        <Icon icon="lucide:message-circle-plus" width="16" height="16" />
+        <BIcon icon="lucide:message-circle-plus" :size="16" />
       </BButton>
       <SessionHistory
         ref="sessionHistoryRef"
@@ -20,7 +20,7 @@
 
       <div class="divider"></div>
       <BButton square size="small" type="text" @click="settingStore.setSidebarVisible(false)">
-        <Icon icon="lucide:x" width="16" height="16" />
+        <BIcon icon="lucide:x" :size="16" />
       </BButton>
     </div>
     <div class="b-chat-sidebar__container">
@@ -112,7 +112,6 @@ import type { AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
 import { computed, h, onMounted, onUnmounted, provide, ref, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { Icon } from '@iconify/vue';
 import { createBuiltinTools, isBuiltinToolName, READ_DIRECTORY_TOOL_NAME } from '@/ai/tools/builtin';
 import { editorToolContextRegistry } from '@/ai/tools/editor-context';
 import BButton from '@/components/BButton/index.vue';

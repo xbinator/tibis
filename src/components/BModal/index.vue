@@ -15,7 +15,7 @@
       <slot name="title">{{ title }}</slot>
 
       <div v-if="closable" :class="bem('closable')" @click="handleClosable">
-        <Icon icon="lucide:x" />
+        <BIcon icon="lucide:x" />
       </div>
     </div>
 
@@ -32,7 +32,6 @@
 <script setup lang="ts">
 import type { BModalProps as Props } from './types';
 import { computed } from 'vue';
-import { Icon } from '@iconify/vue';
 import { Modal } from 'ant-design-vue';
 import { addCssUnit } from '@/utils/css';
 

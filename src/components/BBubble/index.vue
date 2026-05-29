@@ -24,7 +24,7 @@
 
         <div v-if="shouldShowCollapseButton" :class="bem('collapse')" @click="toggleCollapse">
           <span :class="bem('collapse-text')">{{ collapse.value ? '展开查看全部' : '收起' }}</span>
-          <Icon :icon="collapse.value ? 'lucide:chevron-down' : 'lucide:chevron-up'" :class="bem('collapse-icon')" />
+          <BIcon :icon="collapse.value ? 'lucide:chevron-down' : 'lucide:chevron-up'" :class="bem('collapse-icon')" />
         </div>
       </div>
     </div>
@@ -42,7 +42,6 @@
 <script setup lang="ts">
 import type { BBubbleProps } from './types';
 import { computed, ref } from 'vue';
-import { Icon } from '@iconify/vue';
 import { isObject } from 'lodash-es';
 import { createNamespace } from '@/utils/namespace';
 import Avatar from './components/Avatar.vue';

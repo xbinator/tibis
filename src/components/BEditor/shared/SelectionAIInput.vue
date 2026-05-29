@@ -8,7 +8,7 @@
       <div :class="bem('preview-hint')">
         <div v-if="loading" class="flex items-center justify-between">
           <div class="flex items-center gap-4">
-            <Icon icon="svg-spinners:ring-resize" :class="bem('loading-icon')" />
+            <BIcon icon="svg-spinners:ring-resize" :class="bem('loading-icon')" />
             <span>正在编写中...</span>
           </div>
           <BButton type="secondary" size="small" @click.stop="stopStreaming">停 止</BButton>
@@ -35,7 +35,6 @@
 import type { SelectionAssistantAdapter, SelectionAssistantPosition, SelectionAssistantRange } from '../adapters/selectionAssistant';
 import type { CSSProperties } from 'vue';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import { onClickOutside, useEventListener, useResizeObserver } from '@vueuse/core';
 import { message } from 'ant-design-vue';
 import { vFocus } from '@/directives/focus';

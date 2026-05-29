@@ -15,7 +15,7 @@
               </div>
 
               <div v-if="item.removable" :class="bem('item-delete')" @click.stop="item.onRemove">
-                <Icon icon="ic:round-close" width="16" height="16" />
+                <BIcon icon="ic:round-close" :size="16" />
               </div>
             </button>
           </div>
@@ -36,7 +36,6 @@
 import type { BSearchRecentProps, AbsolutePathSearchResult, NormalizedItem } from './types';
 import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { Icon } from '@iconify/vue';
 import BModal from '@/components/BModal/index.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { useOpenFile } from '@/hooks/useOpenFile';

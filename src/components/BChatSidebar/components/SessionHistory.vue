@@ -1,7 +1,7 @@
 <template>
   <BDropdown v-model:open="open" :disabled="isDisabled" :align="{ offset: [-45, 0] }">
     <BButton square size="small" type="text" :disabled="isDisabled">
-      <Icon icon="lucide:history" width="16" height="16" />
+      <BIcon icon="lucide:history" :size="16" />
     </BButton>
 
     <template #overlay>
@@ -24,14 +24,14 @@
                 </span>
                 <span class="session-history__actions">
                   <BButton type="text" square danger size="small" @click.stop="handleDeleteSession(session.id)">
-                    <Icon icon="lucide:trash-2" width="14" height="14" />
+                    <BIcon icon="lucide:trash-2" :size="14" />
                   </BButton>
                 </span>
               </div>
             </template>
 
             <div v-if="loading" class="session-history__loading">
-              <Icon icon="lucide:loader-2" width="14" height="14" class="is-spinning" />
+              <BIcon icon="lucide:loader-2" :size="14" class="is-spinning" />
               <span>加载中...</span>
             </div>
           </div>
@@ -46,7 +46,6 @@
 <script setup lang="ts">
 import type { ChatSession, SessionCursor, SessionPaginationParams } from 'types/chat';
 import { computed, onMounted, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import { useInfiniteScroll } from '@vueuse/core';
 import { message } from 'ant-design-vue';
 import dayjs from 'dayjs';

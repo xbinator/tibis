@@ -36,7 +36,7 @@
 
       <!-- 空状态 -->
       <div v-if="!filteredGroups.length" class="model-empty">
-        <Icon icon="lucide:search-x" width="28" height="28" class="model-empty__icon" />
+        <BIcon icon="lucide:search-x" :size="28" class="model-empty__icon" />
         <span>未找到匹配的模型</span>
       </div>
     </BScrollbar>
@@ -46,7 +46,6 @@
 <script setup lang="ts">
 import type { BModelSelectExpose, BModelSelectProps, ModelGroup, ModelItem, ParsedModel, SelectedModel } from './types';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import BModal from '@/components/BModal/index.vue';
 import BModelIcon from '@/components/BModelIcon/index.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';

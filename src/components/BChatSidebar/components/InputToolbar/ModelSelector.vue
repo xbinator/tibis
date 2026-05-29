@@ -7,7 +7,7 @@
     <BButton size="small" type="text">
       <div class="model-button-content">
         <span v-if="currentModelName" class="model-name">{{ currentModelName }}</span>
-        <Icon class="dropdown-icon" icon="lucide:chevron-down" :style="{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }" />
+        <BIcon class="dropdown-icon" icon="lucide:chevron-down" :rotate="open ? 180 : 0" />
       </div>
     </BButton>
 
@@ -35,7 +35,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Icon } from '@iconify/vue';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import BModelIcon from '@/components/BModelIcon/index.vue';
@@ -258,6 +257,5 @@ defineExpose({
 .dropdown-icon {
   font-size: 14px;
   color: var(--text-secondary);
-  transition: transform 0.2s ease;
 }
 </style>
