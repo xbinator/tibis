@@ -5,20 +5,16 @@
  * 产生与现有完整扩展集等价的行为。
  * 阶段一 REFACTOR：测试新拆分函数的 markdown round-trip 与当前保持一致。
  */
-import { ref } from 'vue';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Editor } from '@tiptap/core';
 import type { JSONContent } from '@tiptap/core';
+import { ref } from 'vue';
+import { Editor } from '@tiptap/core';
 import { describe, expect, test } from 'vitest';
-import {
-  createRichMarkdownSchemaExtensions,
-  createRichEditorRuntimeOnlyExtensions,
-  useExtensions,
-} from '@/components/BEditor/hooks/useExtensions';
-import { getPersistedMarkdown } from '@/components/BEditor/utils/editorMarkdown';
 import { createSourceLineTracker } from '@/components/BEditor/adapters/sourceLineMapping';
 import { parseMarkdownForRichLoad } from '@/components/BEditor/hooks/richMarkdownParser';
+import { createRichMarkdownSchemaExtensions, createRichEditorRuntimeOnlyExtensions, useExtensions } from '@/components/BEditor/hooks/useExtensions';
+import { getPersistedMarkdown } from '@/components/BEditor/utils/editorMarkdown';
 
 /**
  * 递归移除 heading 节点的 id 属性以进行结构化等价对比。
@@ -29,7 +25,8 @@ function normalizeHeadingIds(node: JSONContent): JSONContent {
   const normalized = { ...node };
 
   if (normalized.type === 'heading' && normalized.attrs) {
-    const { id: _id, ...rest } = normalized.attrs;
+    const rest = { ...normalized.attrs };
+    delete rest.id;
     normalized.attrs = rest;
   }
 
@@ -49,7 +46,7 @@ describe('createRichMarkdownSchemaExtensions', () => {
     const currentEditor = new Editor({
       extensions: currentResult.editorExtensions,
       content: markdown,
-      contentType: 'markdown',
+      contentType: 'markdown'
     });
     const currentJson = normalizeHeadingIds(currentEditor.getJSON());
     const currentMarkdown = getPersistedMarkdown(currentEditor);
@@ -62,7 +59,7 @@ describe('createRichMarkdownSchemaExtensions', () => {
     const splitEditor = new Editor({
       extensions: [...schemaResult.extensions, ...runtimeExts],
       content: markdown,
-      contentType: 'markdown',
+      contentType: 'markdown'
     });
     const splitJson = normalizeHeadingIds(splitEditor.getJSON());
     const splitMarkdown = getPersistedMarkdown(splitEditor);
@@ -80,7 +77,7 @@ describe('createRichMarkdownSchemaExtensions', () => {
     const schemaEditor = new Editor({
       extensions: schemaResult.extensions,
       content: markdown,
-      contentType: 'markdown',
+      contentType: 'markdown'
     });
 
     const exported = getPersistedMarkdown(schemaEditor);
@@ -107,6 +104,17 @@ describe('parseMarkdownForRichLoad', () => {
     expect(result.stats.nodeCount).toBeGreaterThan(0);
   });
 
+  test('reuses cached JSON when the same editor instance parses unchanged markdown', async () => {
+    const markdown = '# Cache Probe\n\nThe second rich load should avoid Markdown reparsing.';
+
+    const first = await parseMarkdownForRichLoad(markdown, 'cache-test', 'req-cache-1');
+    const second = await parseMarkdownForRichLoad(markdown, 'cache-test', 'req-cache-2');
+
+    expect(first.stats.cacheHit).toBe(false);
+    expect(second.stats.cacheHit).toBe(true);
+    expect(second.json).toEqual(first.json);
+  });
+
   test('parsed JSON can be loaded into editor and produces same markdown', async () => {
     const markdown = '# 标题\n\n段落内容\n\n- 列表项1\n- 列表项2';
     const result = await parseMarkdownForRichLoad(markdown, 'test', 'req-2');
@@ -116,7 +124,7 @@ describe('parseMarkdownForRichLoad', () => {
     const runtimeExts = createRichEditorRuntimeOnlyExtensions('test');
     const editor = new Editor({
       extensions: [...schemaExts.extensions, ...runtimeExts],
-      content: result.json,
+      content: result.json
     });
 
     const exported = getPersistedMarkdown(editor);
@@ -129,9 +137,7 @@ describe('parseMarkdownForRichLoad', () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(
-      parseMarkdownForRichLoad('# test', 'test', 'req-3', controller.signal),
-    ).rejects.toThrow('Aborted');
+    await expect(parseMarkdownForRichLoad('# test', 'test', 'req-3', controller.signal)).rejects.toThrow('Aborted');
   });
 
   test('stats nodeCount matches editor document node count', async () => {
@@ -143,11 +149,13 @@ describe('parseMarkdownForRichLoad', () => {
     const runtimeExts = createRichEditorRuntimeOnlyExtensions('test');
     const editor = new Editor({
       extensions: [...schemaExts.extensions, ...runtimeExts],
-      content: result.json,
+      content: result.json
     });
 
     let editorNodeCount = 0;
-    editor.state.doc.descendants(() => { editorNodeCount++; });
+    editor.state.doc.descendants(() => {
+      editorNodeCount++;
+    });
     editor.destroy();
 
     // parseMarkdownForRichLoad 统计包含根 doc 节点，editor.descendants 不包含

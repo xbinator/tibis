@@ -17,7 +17,67 @@ export interface RichParseResult {
   stats: {
     durationMs: number;
     nodeCount: number;
+    cacheHit: boolean;
   };
+}
+
+/**
+ * Rich 解析缓存项。
+ */
+interface RichParseCacheEntry {
+  /** 编辑器实例 ID，影响 heading id 前缀 */
+  editorInstanceId: string;
+  /** 原始 Markdown 内容 */
+  markdown: string;
+  /** 解析后的 JSON */
+  json: JSONContent;
+  /** JSON 节点总数 */
+  nodeCount: number;
+}
+
+/**
+ * Rich 解析缓存最大条目数。
+ * 仅保留最近两个文档，避免大文档 JSON 长期占用过多内存。
+ */
+const RICH_PARSE_CACHE_LIMIT = 2;
+
+const richParseCache: RichParseCacheEntry[] = [];
+
+/**
+ * 查找未变化文档的解析缓存。
+ * @param markdown - 原始 Markdown 字符串
+ * @param editorInstanceId - 编辑器实例 ID
+ * @returns 命中时返回缓存项，否则返回 null
+ */
+function findCachedParseResult(markdown: string, editorInstanceId: string): RichParseCacheEntry | null {
+  const index = richParseCache.findIndex((entry) => entry.editorInstanceId === editorInstanceId && entry.markdown === markdown);
+  if (index < 0) {
+    return null;
+  }
+
+  const [entry] = richParseCache.splice(index, 1);
+  if (!entry) {
+    return null;
+  }
+
+  richParseCache.unshift(entry);
+  return entry;
+}
+
+/**
+ * 写入解析缓存，并按 LRU 淘汰旧项。
+ * @param entry - 待缓存的解析结果
+ */
+function rememberParsedMarkdown(entry: RichParseCacheEntry): void {
+  const existingIndex = richParseCache.findIndex((item) => item.editorInstanceId === entry.editorInstanceId && item.markdown === entry.markdown);
+  if (existingIndex >= 0) {
+    richParseCache.splice(existingIndex, 1);
+  }
+
+  richParseCache.unshift(entry);
+  if (richParseCache.length > RICH_PARSE_CACHE_LIMIT) {
+    richParseCache.length = RICH_PARSE_CACHE_LIMIT;
+  }
 }
 
 /**
@@ -69,6 +129,18 @@ function parseMarkdownOnMainThread(markdown: string, editorInstanceId: string): 
 export async function parseMarkdownForRichLoad(markdown: string, editorInstanceId: string, _requestId: string, signal?: AbortSignal): Promise<RichParseResult> {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
+  const cached = findCachedParseResult(markdown, editorInstanceId);
+  if (cached) {
+    return {
+      json: cached.json,
+      stats: {
+        durationMs: 0,
+        nodeCount: cached.nodeCount,
+        cacheHit: true
+      }
+    };
+  }
+
   // YIELD：让出主线程给 UI 渲染（loading 遮罩等），然后再执行 CPU 密集解析
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
@@ -79,14 +151,23 @@ export async function parseMarkdownForRichLoad(markdown: string, editorInstanceI
 
   const startTime = performance.now();
   const json = parseMarkdownOnMainThread(markdown, editorInstanceId);
+  const nodeCount = countNodes(json);
 
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+  rememberParsedMarkdown({
+    editorInstanceId,
+    markdown,
+    json,
+    nodeCount
+  });
 
   return {
     json,
     stats: {
       durationMs: performance.now() - startTime,
-      nodeCount: countNodes(json)
+      nodeCount,
+      cacheHit: false
     }
   };
 }
