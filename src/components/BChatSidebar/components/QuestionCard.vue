@@ -8,7 +8,6 @@
     <div class="choice-card__step">
       <div class="choice-card__header">
         <div class="choice-card__title">
-          <BIcon :icon="isSupplementaryStep ? 'lucide:message-square-plus' : 'lucide:circle-help'" :size="14" class="choice-card__title-icon" />
           <span>{{ isSupplementaryStep ? '是否有更多的补充信息需要提供？（可选）' : currentItem.question }}</span>
         </div>
       </div>
@@ -32,14 +31,14 @@
         </button>
       </div>
 
-      <div v-if="!disabled" class="choice-card__footer">
+      <div class="choice-card__footer">
         <span v-if="totalSteps > 1" class="choice-card__indicator">{{ currentStep + 1 }} / {{ totalSteps }}</span>
 
         <div class="choice-card__footer-right">
-          <BButton size="small" type="secondary" @click="handleCancel">取消</BButton>
-          <BButton v-if="currentStep > 0" size="small" type="secondary" @click="handlePrev">上一步</BButton>
-          <BButton v-if="isSupplementaryStep" size="small" @click="handleSubmit">提交</BButton>
-          <BButton v-else size="small" :disabled="!canSubmitCurrentQuestion" @click="handleNext">下一步</BButton>
+          <BButton size="small" type="secondary" :disabled="disabled" @click="handleCancel">取消</BButton>
+          <BButton v-if="currentStep > 0" size="small" type="secondary" :disabled="disabled" @click="handlePrev">上一步</BButton>
+          <BButton v-if="isSupplementaryStep" size="small" :disabled="disabled" @click="handleSubmit">提交</BButton>
+          <BButton v-else size="small" :disabled="!canSubmitCurrentQuestion || disabled" @click="handleNext">下一步</BButton>
         </div>
       </div>
     </div>
@@ -235,17 +234,9 @@ function handleSubmit(): void {
 }
 
 .choice-card__title {
-  display: flex;
   flex: 1;
-  gap: 6px;
-  align-items: center;
   width: 0;
   font-weight: 500;
-}
-
-.choice-card__title-icon {
-  flex-shrink: 0;
-  color: var(--color-primary);
 }
 
 .choice-card__indicator {
@@ -316,6 +307,7 @@ function handleSubmit(): void {
 .choice-card__footer {
   display: flex;
   gap: 8px;
+  align-items: center;
   justify-content: space-between;
   margin-top: 10px;
 }
