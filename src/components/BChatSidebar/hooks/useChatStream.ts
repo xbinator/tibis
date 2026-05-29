@@ -69,8 +69,8 @@ export interface UseChatStreamReturns {
     prepareAssistantMessage: (reuseLastAssistant: boolean) => Message | undefined;
     /** 流式传输消息 */
     streamMessages: (sourceMessages: Message[], config: ServiceConfig, reuseLastAssistant?: boolean) => Promise<void>;
-    /** 中止流式传输 */
-    abort: () => void;
+    /** 中止流式传输，等待助手消息持久化完成 */
+    abort: () => Promise<void>;
     /** 用户选择提交 */
     submitUserChoice: (answer: AIUserChoiceAnswerData) => Promise<boolean>;
     /** 重新生成 */
@@ -764,9 +764,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   }
 
   /**
-   * 中止流式传输
+   * 中止流式传输，等待助手消息持久化完成后再返回。
+   * 确保 handleAbort 中的 interrupt 消息在 assistant 消息之后保存。
    */
-  function abort() {
+  async function abort() {
     aborting.value = true;
     loading.value = false;
     activeTaskType.value = null;
@@ -776,7 +777,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     }
     resetToolLoopState();
     agent.abort();
-    message && onComplete?.(message);
+    if (message && onComplete) {
+      await onComplete(message);
+    }
   }
 
   /**

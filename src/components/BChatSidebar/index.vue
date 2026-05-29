@@ -747,10 +747,11 @@ async function handleChatSubmit(): Promise<void> {
 
 /**
  * 处理中止流式输出。
+ * 等待助手消息持久化完成后再保存 interrupt 消息，确保数据库中消息顺序一致。
  */
 async function handleAbort(): Promise<void> {
   confirmationController.expirePendingConfirmation();
-  taskRuntime.abortActiveTask();
+  await taskRuntime.abortActiveTask();
 
   const sessionId = settingStore.chatSidebarActiveSessionId;
   if (sessionId) {
@@ -763,9 +764,9 @@ async function handleAbort(): Promise<void> {
 /**
  * 处理 ESC 取消操作：流式输出中则中止。
  */
-function handleCancel(): void {
+async function handleCancel(): Promise<void> {
   if (loading.value) {
-    handleAbort();
+    await handleAbort();
   }
 }
 

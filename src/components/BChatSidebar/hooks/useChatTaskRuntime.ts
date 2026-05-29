@@ -30,8 +30,8 @@ export interface ChatTaskStartResult {
  * 统一任务运行时的依赖项。
  */
 interface UseChatTaskRuntimeOptions {
-  /** 当前活跃聊天任务的中止函数 */
-  abortChatTask: () => void;
+  /** 当前活跃聊天任务的中止函数，等待助手消息持久化完成 */
+  abortChatTask: () => Promise<void>;
 }
 
 /**
@@ -118,8 +118,9 @@ export function useChatTaskRuntime(options: UseChatTaskRuntimeOptions) {
   /**
    * 中止当前活跃任务。
    * 工具循环续轮期间 activeTask 可能已提前置为 idle，仍需保证能中止底层流式传输。
+   * 等待聊天任务的助手消息持久化完成后再重置状态，确保数据一致性。
    */
-  function abortActiveTask(): void {
+  async function abortActiveTask(): Promise<void> {
     if (activeTask.value === 'compact') {
       compactAbortController.value?.abort();
       compactAbortHandler.value?.();
@@ -127,7 +128,7 @@ export function useChatTaskRuntime(options: UseChatTaskRuntimeOptions) {
       return;
     }
 
-    abortChatTask();
+    await abortChatTask();
     resetToIdle();
   }
 
