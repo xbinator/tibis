@@ -33,7 +33,7 @@ export function isDatabaseAvailable(): boolean {
  * @param error - 待判断的错误对象
  * @returns 是否为数据库未初始化错误
  */
-function isDatabaseInitializationRaceError(error: unknown): boolean {
+export function isDatabaseInitializationRaceError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('Database not initialized');
 }
 
@@ -53,7 +53,7 @@ async function waitForRetry(delayMs: number): Promise<void> {
  * @param operation - 需要执行的数据库操作
  * @returns 操作成功后的结果
  */
-async function retryDuringDatabaseInitialization<T>(operation: () => Promise<T>): Promise<T> {
+export async function retryDuringDatabaseInitialization<T>(operation: () => Promise<T>): Promise<T> {
   /**
    * 执行单次重试尝试。
    * @param attemptIndex - 当前尝试索引

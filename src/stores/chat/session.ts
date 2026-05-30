@@ -10,6 +10,7 @@ import { nanoid } from 'nanoid';
 import { is, type PersistableMessage } from '@/components/BChatSidebar/utils/messageHelper';
 import type { Message } from '@/components/BChatSidebar/utils/types';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
+import { isDatabaseInitializationRaceError, retryDuringDatabaseInitialization } from '@/shared/storage/utils/database';
 
 /**
  * 将可持久化的侧边栏消息转换为存储记录。
@@ -33,10 +34,20 @@ export const useChatSessionStore = defineStore('chat', {
      * @returns 已完成的聊天消息，可直接用于 UI 展示。
      */
     async getSessionMessages(sessionId: string, cursor?: ChatMessageHistoryCursor): Promise<Message[]> {
-      const result = await getElectronAPI().chatMessageList(sessionId, cursor);
-      const messages = unwrap(result);
+      try {
+        const messages = await retryDuringDatabaseInitialization(async () => {
+          const result = await getElectronAPI().chatMessageList(sessionId, cursor);
+          return unwrap(result);
+        });
 
-      return messages.map((message) => ({ ...message, finished: true }));
+        return messages.map((message) => ({ ...message, finished: true }));
+      } catch (error: unknown) {
+        if (isDatabaseInitializationRaceError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
     },
 
     /**
@@ -46,8 +57,18 @@ export const useChatSessionStore = defineStore('chat', {
      * @returns 分页会话结果，包含会话列表、是否有更多数据标志和下一个游标。
      */
     async getSessions(type: ChatSessionType, pagination?: SessionPaginationParams): Promise<PaginatedSessionsResult> {
-      const result = await getElectronAPI().chatSessionList(type, pagination);
-      return unwrap(result);
+      try {
+        return await retryDuringDatabaseInitialization(async () => {
+          const result = await getElectronAPI().chatSessionList(type, pagination);
+          return unwrap(result);
+        });
+      } catch (error: unknown) {
+        if (isDatabaseInitializationRaceError(error)) {
+          return { items: [], hasMore: false };
+        }
+
+        throw error;
+      }
     },
 
     /**
@@ -56,8 +77,18 @@ export const useChatSessionStore = defineStore('chat', {
      * @returns 已持久化的使用量总计，如果会话没有使用量则返回 undefined。
      */
     async getSessionUsage(sessionId: string): Promise<AIUsage | undefined> {
-      const result = await getElectronAPI().chatSessionUsageGet(sessionId);
-      return unwrap(result);
+      try {
+        return await retryDuringDatabaseInitialization(async () => {
+          const result = await getElectronAPI().chatSessionUsageGet(sessionId);
+          return unwrap(result);
+        });
+      } catch (error: unknown) {
+        if (isDatabaseInitializationRaceError(error)) {
+          return undefined;
+        }
+
+        throw error;
+      }
     },
 
     /**
@@ -70,8 +101,10 @@ export const useChatSessionStore = defineStore('chat', {
       const now = dayjs().toISOString();
       const session: ChatSession = { id: nanoid(), type, title, createdAt: now, updatedAt: now, lastMessageAt: now };
 
-      const result = await getElectronAPI().chatSessionCreate(session);
-      unwrap(result);
+      await retryDuringDatabaseInitialization(async () => {
+        const result = await getElectronAPI().chatSessionCreate(session);
+        unwrap(result);
+      });
 
       return session;
     },
@@ -87,8 +120,10 @@ export const useChatSessionStore = defineStore('chat', {
       if (!is.persistableMessage(message)) return;
 
       const record = toRecordMessage(sessionId, message);
-      const result = await getElectronAPI().chatMessageAdd(record);
-      unwrap(result);
+      await retryDuringDatabaseInitialization(async () => {
+        const result = await getElectronAPI().chatMessageAdd(record);
+        unwrap(result);
+      });
     },
 
     /**
@@ -103,8 +138,10 @@ export const useChatSessionStore = defineStore('chat', {
       const persistableMessages = messages.filter(is.persistableMessage);
       const records = persistableMessages.map((message) => toRecordMessage(sessionId, message));
 
-      const result = await getElectronAPI().chatMessageSetAll(sessionId, records);
-      unwrap(result);
+      await retryDuringDatabaseInitialization(async () => {
+        const result = await getElectronAPI().chatMessageSetAll(sessionId, records);
+        unwrap(result);
+      });
     },
 
     /**
@@ -113,8 +150,10 @@ export const useChatSessionStore = defineStore('chat', {
      * @param title - 新的会话标题。
      */
     async updateSessionTitle(sessionId: string, title: string): Promise<void> {
-      const result = await getElectronAPI().chatSessionUpdateTitle(sessionId, title);
-      unwrap(result);
+      await retryDuringDatabaseInitialization(async () => {
+        const result = await getElectronAPI().chatSessionUpdateTitle(sessionId, title);
+        unwrap(result);
+      });
     },
 
     /**
@@ -122,8 +161,10 @@ export const useChatSessionStore = defineStore('chat', {
      * @param sessionId - 要删除的会话 ID。
      */
     async deleteSession(sessionId: string): Promise<void> {
-      const result = await getElectronAPI().chatSessionDelete(sessionId);
-      unwrap(result);
+      await retryDuringDatabaseInitialization(async () => {
+        const result = await getElectronAPI().chatSessionDelete(sessionId);
+        unwrap(result);
+      });
 
       // 级联清理该会话的 todo 数据（在 unwrap 成功后执行，try-catch 防止中断删除流程）
       try {
