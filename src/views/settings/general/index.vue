@@ -1,36 +1,45 @@
 <!--
   @file index.vue
-  @description 编辑器设置页，负责管理视图偏好与真实写盘保存策略。
+  @description 通用设置页，管理配色方案、编辑器视图偏好与保存策略。
 -->
 <template>
-  <BSettingsPage title="编辑器">
-    <BSettingsSection title="常用设置">
-      <div class="editor-settings__item">
-        <div class="editor-settings__meta">
-          <div class="editor-settings__label">自动保存</div>
+  <BSettingsPage title="通用">
+    <BSettingsSection title="配色方案">
+      <div class="general-settings__item">
+        <div class="general-settings__meta">
+          <div class="general-settings__label">外观</div>
         </div>
         <div>
-          <BSelect :value="store.saveStrategy" :options="saveStrategyOptions" :width="280" @change="handleSaveStrategyChange" />
+          <BSelect :value="settingStore.theme" :options="themeOptions" :width="280" @change="handleThemeChange" />
         </div>
       </div>
     </BSettingsSection>
 
-    <BSettingsSection title="视图">
-      <div class="editor-settings__item">
-        <div class="editor-settings__meta">
-          <div class="editor-settings__label">默认视图模式</div>
+    <BSettingsSection title="编辑器">
+      <div class="general-settings__item">
+        <div class="general-settings__meta">
+          <div class="general-settings__label">自动保存</div>
         </div>
         <div>
-          <BSelect :value="store.viewMode" :options="viewModeOptions" :width="280" @change="handleViewModeChange" />
+          <BSelect :value="editorStore.saveStrategy" :options="saveStrategyOptions" :width="280" @change="handleSaveStrategyChange" />
         </div>
       </div>
 
-      <div class="editor-settings__item">
-        <div class="editor-settings__meta">
-          <div class="editor-settings__label">页面宽度</div>
+      <div class="general-settings__item">
+        <div class="general-settings__meta">
+          <div class="general-settings__label">默认视图模式</div>
         </div>
         <div>
-          <BSelect :value="store.pageWidth" :options="pageWidthOptions" :width="280" @change="handlePageWidthChange" />
+          <BSelect :value="editorStore.viewMode" :options="viewModeOptions" :width="280" @change="handleViewModeChange" />
+        </div>
+      </div>
+
+      <div class="general-settings__item">
+        <div class="general-settings__meta">
+          <div class="general-settings__label">页面宽度</div>
+        </div>
+        <div>
+          <BSelect :value="editorStore.pageWidth" :options="pageWidthOptions" :width="280" @change="handlePageWidthChange" />
         </div>
       </div>
     </BSettingsSection>
@@ -38,11 +47,23 @@
 </template>
 
 <script setup lang="ts">
-import { SelectOption } from '@/components/BSelect/types';
+import type { SelectOption } from '@/components/BSelect/types';
 import type { EditorViewMode, EditorPageWidth, EditorSaveStrategy } from '@/stores/editor/preferences';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
+import type { ThemeMode } from '@/stores/ui/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 
-const store = useEditorPreferencesStore();
+const editorStore = useEditorPreferencesStore();
+const settingStore = useSettingStore();
+
+/**
+ * 配色方案选项。
+ */
+const themeOptions: SelectOption[] = [
+  { value: 'system', label: '跟随系统' },
+  { value: 'light', label: '浅色主题' },
+  { value: 'dark', label: '深色主题' }
+];
 
 /**
  * 默认视图模式选项。
@@ -70,22 +91,30 @@ const saveStrategyOptions: SelectOption[] = [
   { value: 'onChange', label: '实时保存', tips: '内容变更时立即自动保存' }
 ];
 
-function handleViewModeChange(value: string | number) {
-  store.setViewMode(value as EditorViewMode);
+/**
+ * 处理配色方案变更。
+ * @param value - 新的主题模式
+ */
+function handleThemeChange(value: string | number): void {
+  settingStore.setTheme(value as ThemeMode);
 }
 
-function handlePageWidthChange(value: string | number) {
-  store.setPageWidth(value as EditorPageWidth);
+function handleViewModeChange(value: string | number): void {
+  editorStore.setViewMode(value as EditorViewMode);
 }
 
-function handleSaveStrategyChange(value: string | number) {
-  store.setSaveStrategy(value as EditorSaveStrategy);
+function handlePageWidthChange(value: string | number): void {
+  editorStore.setPageWidth(value as EditorPageWidth);
+}
+
+function handleSaveStrategyChange(value: string | number): void {
+  editorStore.setSaveStrategy(value as EditorSaveStrategy);
 }
 </script>
 
 <style scoped lang="less">
 // ─── Item ─────────────────────────────────────────────────────────────────────
-.editor-settings__item {
+.general-settings__item {
   display: flex;
   gap: 16px;
   align-items: center;
@@ -107,13 +136,13 @@ function handleSaveStrategyChange(value: string | number) {
   }
 }
 
-.editor-settings__meta {
+.general-settings__meta {
   flex: 1;
   min-width: 0;
   padding: 12px 0;
 }
 
-.editor-settings__label {
+.general-settings__label {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
@@ -122,7 +151,7 @@ function handleSaveStrategyChange(value: string | number) {
 // ─── Responsive ───────────────────────────────────────────────────────────────
 
 @media (width <= 720px) {
-  .editor-settings__item {
+  .general-settings__item {
     flex-direction: column;
     align-items: flex-start;
 
@@ -135,7 +164,7 @@ function handleSaveStrategyChange(value: string | number) {
 // ─── Accessibility ────────────────────────────────────────────────────────────
 
 @media (prefers-reduced-motion: reduce) {
-  .editor-settings__item {
+  .general-settings__item {
     transition: none;
   }
 }

@@ -1,6 +1,6 @@
 /**
  * @file index.test.ts
- * @description 验证编辑器设置页可读写视图与保存策略。
+ * @description 验证通用设置页可读写配色方案、视图与保存策略。
  */
 /* @vitest-environment jsdom */
 
@@ -8,7 +8,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
-import EditorSettingsView from '@/views/settings/editor/index.vue';
+import { useSettingStore } from '@/stores/ui/setting';
+import GeneralSettingsView from '@/views/settings/general/index.vue';
 
 const storage = new Map<string, string>();
 
@@ -39,20 +40,23 @@ vi.mock('@/shared/platform', () => ({
   }
 }));
 
-describe('EditorSettingsView', () => {
+describe('GeneralSettingsView', () => {
   beforeEach(() => {
     vi.resetModules();
     localStorage.clear();
     setActivePinia(createPinia());
   });
 
-  it('renders current editor preferences and updates the save strategy', async () => {
-    const store = useEditorPreferencesStore();
-    store.setViewMode('source');
-    store.setPageWidth('wide');
-    store.setSaveStrategy('onBlur');
+  it('renders current settings and updates the save strategy', async () => {
+    const editorStore = useEditorPreferencesStore();
+    editorStore.setViewMode('source');
+    editorStore.setPageWidth('wide');
+    editorStore.setSaveStrategy('onBlur');
 
-    const wrapper = mount(EditorSettingsView, {
+    const settingStore = useSettingStore();
+    settingStore.setTheme('dark');
+
+    const wrapper = mount(GeneralSettingsView, {
       global: {
         stubs: {
           BSettingsPage: {
@@ -77,8 +81,9 @@ describe('EditorSettingsView', () => {
       }
     });
 
+    expect(wrapper.text()).toContain('配色方案');
+    expect(wrapper.text()).toContain('编辑器');
     expect(wrapper.text()).toContain('默认视图模式');
     expect(wrapper.text()).toContain('自动保存');
-    expect(wrapper.text()).toContain('常用设置');
   });
 });

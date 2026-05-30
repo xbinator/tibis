@@ -133,11 +133,11 @@ export function setupAppMenu(): void {
       { id: 'view:outline', type: 'checkbox', label: '大纲', click: () => sendMenuAction('view:toggleOutline') },
       { type: 'separator' as const },
       {
-        label: '主题',
+        label: '配色方案',
         submenu: [
-          { id: 'theme:light', type: 'checkbox', label: '浅色模式', click: () => sendMenuAction('theme:light') },
-          { id: 'theme:dark', type: 'checkbox', label: '深色模式', click: () => sendMenuAction('theme:dark') },
-          { id: 'theme:system', type: 'checkbox', label: '跟随系统', click: () => sendMenuAction('theme:system') }
+          { id: 'theme:system', type: 'checkbox', label: '跟随系统', click: () => sendMenuAction('theme:system') },
+          { id: 'theme:light', type: 'checkbox', label: '浅色主题', click: () => sendMenuAction('theme:light') },
+          { id: 'theme:dark', type: 'checkbox', label: '深色主题', click: () => sendMenuAction('theme:dark') }
         ]
       },
       {

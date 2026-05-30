@@ -64,12 +64,20 @@ export function useViewActive(): { toolbarViewOptions: ComputedRef<ToolbarOption
     { type: 'divider' },
     {
       value: 'theme',
-      label: '主题',
+      label: '配色方案',
       selected: false,
       children: [
         {
+          value: 'system',
+          label: '跟随系统',
+          selected: settingStore.theme === 'system',
+          onClick: () => {
+            settingStore.setTheme('system');
+          }
+        },
+        {
           value: 'light',
-          label: '浅色模式',
+          label: '浅色主题',
           selected: settingStore.theme === 'light',
           onClick: () => {
             settingStore.setTheme('light');
@@ -77,18 +85,10 @@ export function useViewActive(): { toolbarViewOptions: ComputedRef<ToolbarOption
         },
         {
           value: 'dark',
-          label: '深色模式',
+          label: '深色主题',
           selected: settingStore.theme === 'dark',
           onClick: () => {
             settingStore.setTheme('dark');
-          }
-        },
-        {
-          value: 'system',
-          label: '跟随系统',
-          selected: settingStore.theme === 'system',
-          onClick: () => {
-            settingStore.setTheme('system');
           }
         }
       ]

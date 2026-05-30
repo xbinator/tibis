@@ -69,10 +69,10 @@ const routes: AppRouteRecordRaw[] = [
         ]
       },
       {
-        path: 'editor',
-        name: 'editor-settings',
-        component: () => import('@/views/settings/editor/index.vue'),
-        meta: { title: '编辑器' }
+        path: 'general',
+        name: 'general-settings',
+        component: () => import('@/views/settings/general/index.vue'),
+        meta: { title: '通用' }
       },
       {
         path: 'speech',
