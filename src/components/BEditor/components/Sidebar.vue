@@ -3,7 +3,6 @@
     <div class="b-markdown-sidebar">
       <div v-if="title" class="sidebar__header">
         <div class="sidebar__main" @click="handleTitleClick">
-          <BIcon icon="lucide:file-text" :size="14" class="sidebar__file-icon" />
           <span class="sidebar__title">{{ title }}</span>
         </div>
       </div>
@@ -92,9 +91,9 @@ function handleTitleClick() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 32px;
-  padding: 0 4px 0 8px;
-  margin: 16px 8px 0;
+  min-height: 28px;
+  padding: 0 8px;
+  margin: 8px 4px 0;
   color: var(--text-primary);
   border-radius: 6px;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -118,16 +117,12 @@ function handleTitleClick() {
   height: 0;
 }
 
-.sidebar__file-icon {
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-
 .sidebar__title {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 13px;
+  font-weight: 500;
   letter-spacing: 0.08em;
   white-space: nowrap;
 }

@@ -865,7 +865,6 @@ onUnmounted(() => {
   flex-shrink: 0;
   flex-direction: column;
   height: 100%;
-  margin-right: 6px;
   overflow: hidden;
   background: var(--bg-primary);
   border-radius: 8px;

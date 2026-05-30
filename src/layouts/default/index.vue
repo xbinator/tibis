@@ -186,13 +186,14 @@ useEventListener(window, 'resize', validateWindowState);
 .b-layout__content {
   display: flex;
   flex: 1;
+  gap: 6px;
   height: 0;
   padding-bottom: 6px;
+  margin: 0 6px;
 
   .b-layout__content__main {
     flex: 1;
     width: 0;
-    margin: 0 6px;
   }
 }
 
