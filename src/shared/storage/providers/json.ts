@@ -289,30 +289,27 @@ function normalizeCustomProviderPayload(payload: AICustomProvider): AICustomProv
 // ─────────────────────────────────────────────
 
 export const providerStorage = {
-  /** 列出所有服务商（内置 + 自定义，按 JSON 数组顺序） */
+  /** 列出所有服务商（内置按 DEFAULT_PROVIDERS 顺序，自定义追加到末尾） */
   async listProviders(): Promise<AIProvider[]> {
     const settings = await readSettingsFile();
     const entries = settings?.providers ?? [];
+    const entryMap = new Map(entries.map((e) => [e.id, e]));
 
     const merged: AIProvider[] = [];
     const seenIds = new Set<string>();
 
-    // 按 JSON 数组顺序输出
-    for (const entry of entries) {
-      const base = getDefaultProvider(entry.id);
-      if (base) {
-        merged.push(mergeProvider(base, entry));
-        seenIds.add(entry.id);
-      } else if (entry.isCustom) {
-        merged.push(entryToCustomProvider(entry));
-        seenIds.add(entry.id);
-      }
+    // 按 DEFAULT_PROVIDERS 顺序输出内置服务商，确保与默认配置顺序一致
+    for (const base of DEFAULT_PROVIDERS) {
+      const stored = entryMap.get(base.id);
+      merged.push(mergeProvider(base, stored));
+      seenIds.add(base.id);
     }
 
-    // 追加 JSON 中不存在的新内置服务商（代码升级新增的默认服务商）
-    for (const base of DEFAULT_PROVIDERS) {
-      if (!seenIds.has(base.id)) {
-        merged.push(cloneDeep(base));
+    // 追加自定义服务商（保持 JSON 文件中的顺序）
+    for (const entry of entries) {
+      if (entry.isCustom && !seenIds.has(entry.id)) {
+        merged.push(entryToCustomProvider(entry));
+        seenIds.add(entry.id);
       }
     }
 
