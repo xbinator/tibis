@@ -24,4 +24,6 @@ export interface BPanelSplitterProps {
   closeThreshold?: number;
   /** 是否允许拖拽关闭面板，默认 true。 */
   closable?: boolean;
+  /** 是否禁用拖拽调整宽度，禁用时隐藏拖拽条。 */
+  disabled?: boolean;
 }

@@ -1,21 +1,17 @@
 <template>
-  <div class="editor-layout editor-content">
-    <div class="editor-main-container">
-      <div class="editor-content-wrapper">
-        <BEditor
-          ref="editorRef"
-          :key="fileState.id"
-          v-model:value="fileState"
-          :active="isActive"
-          @editor-blur="actions.onEditorBlur"
-          @rename-file="actions.onRename"
-          @save="actions.onSave"
-          @save-as="actions.onSaveAs"
-          @copy-path="actions.onCopyPath"
-          @show-in-folder="actions.onShowInFolder"
-        />
-      </div>
-    </div>
+  <div class="editor-content">
+    <BEditor
+      ref="editorRef"
+      :key="fileState.id"
+      v-model:value="fileState"
+      :active="isActive"
+      @editor-blur="actions.onEditorBlur"
+      @rename-file="actions.onRename"
+      @save="actions.onSave"
+      @save-as="actions.onSaveAs"
+      @copy-path="actions.onCopyPath"
+      @show-in-folder="actions.onShowInFolder"
+    />
   </div>
 </template>
 
@@ -58,24 +54,9 @@ onDeactivated(() => {
 <style lang="less" scoped>
 .editor-content {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.editor-main-container {
-  position: relative;
-  display: flex;
-  flex: 1;
-  gap: 6px;
-  height: 100%;
-  overflow: hidden;
-}
-
-.editor-content-wrapper {
-  position: relative;
-  display: flex;
   flex: 1;
   flex-direction: column;
+  height: 100%;
   overflow: hidden;
   border-radius: 8px;
 }

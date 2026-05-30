@@ -3,107 +3,116 @@
   @description 聊天侧边栏组件，包含会话管理、消息列表、输入框和模型选择功能。
 -->
 <template>
-  <div class="b-chat-sidebar">
-    <div class="b-chat-sidebar__header">
-      <div class="b-chat-sidebar__title truncate">{{ currentSession?.title || '新会话' }}</div>
-      <BButton square size="small" type="text" :disabled="loading" @click="createNewSession">
-        <BIcon icon="lucide:message-circle-plus" :size="16" />
-      </BButton>
-      <SessionHistory
-        ref="sessionHistoryRef"
-        v-model:current-session="currentSession"
-        :active-session-id="settingStore.chatSidebarActiveSessionId"
-        :disabled="loading"
-        @switch-session="switchSession"
-        @delete-session="handleDeleteSession"
-      />
+  <BPanelSplitter
+    v-show="settingStore.sidebarVisible"
+    v-model:size="settingStore.sidebarWidth"
+    position="left"
+    :min-width="340"
+    max-width="40%"
+    @close="settingStore.setSidebarVisible(false)"
+  >
+    <div class="b-chat-sidebar">
+      <div class="b-chat-sidebar__header">
+        <div class="b-chat-sidebar__title truncate">{{ currentSession?.title || '新会话' }}</div>
+        <BButton square size="small" type="text" :disabled="loading" @click="createNewSession">
+          <BIcon icon="lucide:message-circle-plus" :size="16" />
+        </BButton>
+        <SessionHistory
+          ref="sessionHistoryRef"
+          v-model:current-session="currentSession"
+          :active-session-id="settingStore.chatSidebarActiveSessionId"
+          :disabled="loading"
+          @switch-session="switchSession"
+          @delete-session="handleDeleteSession"
+        />
 
-      <div class="divider"></div>
-      <BButton square size="small" type="text" @click="settingStore.setSidebarVisible(false)">
-        <BIcon icon="lucide:x" :size="16" />
-      </BButton>
-    </div>
-    <div class="b-chat-sidebar__container">
-      <div class="b-chat-sidebar__conversation-container">
-        <ConversationView
-          ref="conversationRef"
-          v-model:messages="messages"
-          :loading="loading"
-          :disabled="!loading"
-          :on-load-history="handleLoadHistory"
-          :can-rollback="rollbackController.canRollback"
-          @edit="handleChatEdit"
-          @regenerate="handleChatRegenerate"
-          @user-choice-submit="handleChatUserChoiceSubmit"
-          @rollback="handleRollback"
-        >
-          <template #footer>
-            <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
-          </template>
-
-          <template #toolbar>
-            <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
-          </template>
-        </ConversationView>
-
-        <div class="b-chat-sidebar__floating-container">
-          <UsagePanel
-            v-if="usagePanel.open.value"
-            :loading="usagePanel.loading.value"
-            :usage="usagePanel.usage.value"
-            :error="usagePanel.error.value"
-            :on-close="usagePanel.close"
-          />
-
-          <InteractionContainer :toast-queue="toastQueue" @remove-toast="removeToast" />
-        </div>
+        <div class="divider"></div>
+        <BButton square size="small" type="text" @click="settingStore.setSidebarVisible(false)">
+          <BIcon icon="lucide:x" :size="16" />
+        </BButton>
       </div>
-
-      <div class="b-chat-sidebar__input">
-        <div class="b-chat-sidebar__input-container">
-          <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
-
-          <BPromptEditor
-            ref="promptEditorRef"
-            v-model:value="inputContent"
-            placeholder="输入消息..."
-            :max-height="200"
-            :chip-resolver="promptChipResolver"
-            :on-paste-files="fileReference.onPasteFiles"
-            :on-paste-images="imageUpload.onPasteImages"
-            :can-accept-images="imageUpload.canAcceptImages"
-            :slash-commands="chatSlashCommands"
-            :file-mentions="fileMentionOptions"
-            :on-cancel="handleCancel"
-            submit-on-enter
-            @slash-command="handleSlashCommand"
-            @file-mention-select="handleFileMentionSelect"
-            @submit="handleChatSubmit"
-          />
-
-          <InputToolbar
+      <div class="b-chat-sidebar__container">
+        <div class="b-chat-sidebar__conversation-container">
+          <ConversationView
+            ref="conversationRef"
+            v-model:messages="messages"
             :loading="loading"
-            :input-value="inputContent"
-            :selected-model="selectedModel"
-            :supports-vision="supportsVision"
-            :can-submit="canSubmit"
-            :used-tokens="usedTokens"
-            :context-window="contextWindow"
-            @submit="handleChatSubmit"
-            @abort="handleAbort"
-            @image-select="imageUpload.appendImages"
-            @model-change="handleModelChange"
-            @voice-start="handleVoiceStart"
-            @voice-partial="handleVoicePartial"
-            @voice-complete="handleVoiceComplete"
-          />
+            :disabled="!loading"
+            :on-load-history="handleLoadHistory"
+            :can-rollback="rollbackController.canRollback"
+            @edit="handleChatEdit"
+            @regenerate="handleChatRegenerate"
+            @user-choice-submit="handleChatUserChoiceSubmit"
+            @rollback="handleRollback"
+          >
+            <template #footer>
+              <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
+            </template>
+
+            <template #toolbar>
+              <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
+            </template>
+          </ConversationView>
+
+          <div class="b-chat-sidebar__floating-container">
+            <UsagePanel
+              v-if="usagePanel.open.value"
+              :loading="usagePanel.loading.value"
+              :usage="usagePanel.usage.value"
+              :error="usagePanel.error.value"
+              :on-close="usagePanel.close"
+            />
+
+            <InteractionContainer :toast-queue="toastQueue" @remove-toast="removeToast" />
+          </div>
+        </div>
+
+        <div class="b-chat-sidebar__input">
+          <div class="b-chat-sidebar__input-container">
+            <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
+
+            <BPromptEditor
+              ref="promptEditorRef"
+              v-model:value="inputContent"
+              placeholder="输入消息..."
+              :max-height="200"
+              :chip-resolver="promptChipResolver"
+              :on-paste-files="fileReference.onPasteFiles"
+              :on-paste-images="imageUpload.onPasteImages"
+              :can-accept-images="imageUpload.canAcceptImages"
+              :slash-commands="chatSlashCommands"
+              :file-mentions="fileMentionOptions"
+              :on-cancel="handleCancel"
+              submit-on-enter
+              @slash-command="handleSlashCommand"
+              @file-mention-select="handleFileMentionSelect"
+              @submit="handleChatSubmit"
+            />
+
+            <InputToolbar
+              :loading="loading"
+              :input-value="inputContent"
+              :selected-model="selectedModel"
+              :supports-vision="supportsVision"
+              :can-submit="canSubmit"
+              :used-tokens="usedTokens"
+              :context-window="contextWindow"
+              @submit="handleChatSubmit"
+              @abort="handleAbort"
+              @image-select="imageUpload.appendImages"
+              @model-change="handleModelChange"
+              @voice-start="handleVoiceStart"
+              @voice-partial="handleVoicePartial"
+              @voice-complete="handleVoiceComplete"
+            />
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- 全局模型选择器 -->
-    <BModelSelect ref="modelSelectRef" v-model:open="modelSelectOpen" :model="selectedModel" @change="handleGlobalModelChange" />
-  </div>
+      <!-- 全局模型选择器 -->
+      <BModelSelect ref="modelSelectRef" v-model:open="modelSelectOpen" :model="selectedModel" @change="handleGlobalModelChange" />
+    </div>
+  </BPanelSplitter>
 </template>
 
 <script setup lang="ts">

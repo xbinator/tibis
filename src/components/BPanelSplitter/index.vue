@@ -4,7 +4,7 @@
       <slot></slot>
     </div>
 
-    <div :class="bem('line', { dragging: isDragging })" :style="splitterStyle" @mousedown="handleMouseDown">
+    <div v-if="!props.disabled" :class="bem('line', { dragging: isDragging })" :style="splitterStyle" @mousedown="handleMouseDown">
       <div :class="bem('resizer')"></div>
       <div :class="bem('bar')"></div>
     </div>
@@ -28,7 +28,8 @@ const props = withDefaults(defineProps<Props>(), {
   maxWidth: 600,
   sectionClass: '',
   closeThreshold: 60,
-  closable: true
+  closable: true,
+  disabled: false
 });
 
 const size = defineModel<number>('size', { default: 300 });
