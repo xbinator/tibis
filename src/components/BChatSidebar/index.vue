@@ -48,10 +48,6 @@
             <template #footer>
               <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
             </template>
-
-            <template #toolbar>
-              <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
-            </template>
           </ConversationView>
 
           <div class="b-chat-sidebar__floating-container">
@@ -65,6 +61,10 @@
 
             <InteractionContainer :toast-queue="toastQueue" @remove-toast="removeToast" />
           </div>
+        </div>
+
+        <div class="b-chat-sidebar__toolbar">
+          <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
         </div>
 
         <div class="b-chat-sidebar__input">
@@ -897,6 +897,10 @@ onUnmounted(() => {
   flex: 1;
   flex-direction: column;
   height: 0;
+}
+
+.b-chat-sidebar__toolbar {
+  padding: 0 12px 12px;
 }
 
 .b-chat-sidebar__conversation-container {

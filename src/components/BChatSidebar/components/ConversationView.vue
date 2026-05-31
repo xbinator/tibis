@@ -20,10 +20,6 @@
           <slot name="footer"></slot>
         </div>
       </div>
-
-      <div class="conversation-view__toolbar">
-        <slot name="toolbar"></slot>
-      </div>
     </div>
 
     <div class="to-bottom" :class="{ 'to-bottom--visible': isBackBottom }" @click="() => scrollToBottom()">
@@ -108,14 +104,6 @@ defineExpose({ scrollToBottom });
   scrollbar-gutter: stable;
 
   .scrollbar-style();
-}
-
-.conversation-view__toolbar {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 12px 12px;
 }
 
 .conversation-view__content {
