@@ -80,7 +80,7 @@ const nordDark: BasePalette = {
 
 registerPreset({
   id: 'nord',
-  label: 'Nord',
+  label: '冰蓝色',
   light: createThemeTokens(nordLight, 'light'),
   dark: createThemeTokens(nordDark, 'dark')
 });

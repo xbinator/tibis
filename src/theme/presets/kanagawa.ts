@@ -79,7 +79,7 @@ const kanagawaWave: BasePalette = {
 
 registerPreset({
   id: 'kanagawa',
-  label: 'Kanagawa',
+  label: '靛蓝色',
   light: createThemeTokens(kanagawaLotus, 'light'),
   dark: createThemeTokens(kanagawaWave, 'dark')
 });

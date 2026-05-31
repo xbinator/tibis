@@ -79,7 +79,7 @@ const ayuDark: BasePalette = {
 
 registerPreset({
   id: 'ayu',
-  label: 'Ayu',
+  label: '暖黄色',
   light: createThemeTokens(ayuLight, 'light'),
   dark: createThemeTokens(ayuDark, 'dark')
 });

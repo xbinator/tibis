@@ -79,7 +79,7 @@ const gruvboxDark: BasePalette = {
 
 registerPreset({
   id: 'gruvbox',
-  label: 'Gruvbox',
+  label: '棕黄色',
   light: createThemeTokens(gruvboxLight, 'light'),
   dark: createThemeTokens(gruvboxDark, 'dark')
 });

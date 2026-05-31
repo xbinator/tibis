@@ -80,7 +80,7 @@ const tokyonightStorm: BasePalette = {
 
 registerPreset({
   id: 'tokyonight',
-  label: 'Tokyonight',
+  label: '紫蓝色',
   light: createThemeTokens(tokyonightDay, 'light'),
   dark: createThemeTokens(tokyonightStorm, 'dark')
 });

@@ -80,7 +80,7 @@ const oneDark: BasePalette = {
 
 registerPreset({
   id: 'one-dark',
-  label: 'One Dark',
+  label: '深灰色',
   light: createThemeTokens(oneLight, 'light'),
   dark: createThemeTokens(oneDark, 'dark')
 });

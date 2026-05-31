@@ -292,8 +292,7 @@ async function handleDeleteSession(sessionId: string): Promise<void> {
 .session-history {
   width: 200px;
   padding: 6px;
-  background: var(--dropdown-bg, var(--bg-primary));
-  border: 1px solid var(--dropdown-border, var(--border-color));
+  background: var(--dropdown-bg);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
 }
@@ -330,7 +329,7 @@ async function handleDeleteSession(sessionId: string): Promise<void> {
 
   &:hover,
   &.is-active {
-    background: var(--bg-hover);
+    background: var(--dropdown-item-hover-bg);
   }
 }
 
