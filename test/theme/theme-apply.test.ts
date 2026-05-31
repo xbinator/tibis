@@ -3,8 +3,8 @@
  * @description 验证主题运行时注入（applyCssVars）和开发时校验（validateTokens）的正确性。
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { light } from '@/theme/tokens';
-import type { ThemeTokens } from '@/theme/tokens';
+import { light } from '@/theme';
+import type { ThemeTokens } from '@/theme';
 
 /**
  * 模拟 DOM 环境：捕获 createElement / head.appendChild / querySelector 调用。
@@ -46,7 +46,7 @@ describe('applyCssVars', () => {
     stub = createDomStub();
     vi.stubGlobal('document', stub.document);
 
-    const { applyCssVars } = await import('@/theme/apply');
+    const { applyCssVars } = await import('@/theme/core/apply');
     applyCssVars(light);
   });
 
@@ -92,7 +92,7 @@ describe('applyCssVars 二次调用', () => {
     vi.stubGlobal('document', stub.document);
 
     vi.resetModules();
-    const { applyCssVars } = await import('@/theme/apply');
+    const { applyCssVars } = await import('@/theme/core/apply');
 
     applyCssVars(light);
     expect(stub.appendedChildren.length).toBe(1);
@@ -111,7 +111,7 @@ describe('validateTokens', () => {
   it('在 DEV 环境下对合法 token 不输出警告', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => void 0);
 
-    const { validateTokens } = await import('@/theme/apply');
+    const { validateTokens } = await import('@/theme/core/apply');
     validateTokens(light, 'light');
 
     expect(warnSpy).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe('validateTokens', () => {
   it('在 DEV 环境下对非法格式 token 输出警告', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => void 0);
 
-    const { validateTokens } = await import('@/theme/apply');
+    const { validateTokens } = await import('@/theme/core/apply');
     const badTokens: ThemeTokens = {
       ...light,
       bg: { ...light.bg, primary: 'not-a-color' }

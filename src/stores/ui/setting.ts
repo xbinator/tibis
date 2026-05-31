@@ -7,7 +7,7 @@ import { defaultsDeep } from 'lodash-es';
 import { native } from '@/shared/platform';
 import { loadPersistedState, persistState } from '@/stores/helpers/persist';
 import type { PersistConfig } from '@/stores/helpers/types';
-import { light, dark, applyCssVars, validateTokens } from '@/theme';
+import { getResolvedTokens, applyCssVars, validateTokens } from '@/theme';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -23,6 +23,8 @@ interface PersistedSettingState {
   providerSidebarCollapsed: boolean;
   settingsSidebarCollapsed: boolean;
   theme: ThemeMode;
+  /** 主题预设 ID，如 'default'、'everforest' */
+  themePreset: string;
   sidebarVisible: boolean;
   sidebarWidth: number;
 }
@@ -36,6 +38,7 @@ const DEFAULT_SETTINGS: PersistedSettingState = {
   providerSidebarCollapsed: false,
   settingsSidebarCollapsed: true,
   theme: 'system',
+  themePreset: 'default',
   sidebarVisible: false,
   sidebarWidth: 340
 };
@@ -47,9 +50,10 @@ function getSystemTheme(): ResolvedTheme {
   return 'light';
 }
 
-function applyTheme(theme: ThemeMode): void {
+function applyTheme(theme: ThemeMode, presetId: string): void {
   const resolvedTheme = theme === 'system' ? getSystemTheme() : theme;
-  applyCssVars(resolvedTheme === 'dark' ? dark : light);
+  const tokens = getResolvedTokens(presetId, resolvedTheme);
+  applyCssVars(tokens);
   if (resolvedTheme === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
   } else {
@@ -143,6 +147,7 @@ export const useSettingStore = defineStore('setting', {
         providerSidebarCollapsed: this.providerSidebarCollapsed,
         settingsSidebarCollapsed: this.settingsSidebarCollapsed,
         theme: this.theme,
+        themePreset: this.themePreset,
         sidebarVisible: this.sidebarVisible,
         sidebarWidth: this.sidebarWidth
       };
@@ -158,7 +163,7 @@ export const useSettingStore = defineStore('setting', {
     setTheme(newTheme: ThemeMode): void {
       this.theme = newTheme;
       this.persistSettings();
-      applyTheme(newTheme);
+      applyTheme(newTheme, this.themePreset);
       this.syncNativeMenuState();
     },
 
@@ -170,6 +175,16 @@ export const useSettingStore = defineStore('setting', {
       const currentIndex = themes.indexOf(this.theme);
       const newTheme = themes[(currentIndex + 1) % themes.length];
       this.setTheme(newTheme);
+    },
+
+    /**
+     * 设置主题预设
+     * @param presetId - 预设 ID，如 'default'、'everforest'
+     */
+    setThemePreset(presetId: string): void {
+      this.themePreset = presetId;
+      this.persistSettings();
+      applyTheme(this.theme, presetId);
     },
 
     // ==================== 侧边栏设置 ====================
@@ -211,14 +226,16 @@ export const useSettingStore = defineStore('setting', {
      * 初始化主题并监听系统主题变化
      */
     initTheme(): void {
-      validateTokens(light, 'light');
-      validateTokens(dark, 'dark');
-      applyTheme(this.theme);
+      const tokens = getResolvedTokens(this.themePreset, 'light');
+      validateTokens(tokens, 'light');
+      const darkTokens = getResolvedTokens(this.themePreset, 'dark');
+      validateTokens(darkTokens, 'dark');
+      applyTheme(this.theme, this.themePreset);
 
       // 监听系统主题变化
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
         if (this.theme === 'system') {
-          applyTheme('system');
+          applyTheme('system', this.themePreset);
         }
       });
     },

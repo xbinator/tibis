@@ -6,7 +6,7 @@ import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
 import theme from 'ant-design-vue/es/theme';
 import { useSettingStore } from '@/stores/ui/setting';
-import { light, dark, toAntdToken } from '@/theme';
+import { getResolvedTokens, toAntdToken } from '@/theme';
 
 const { darkAlgorithm, defaultAlgorithm } = theme;
 
@@ -34,7 +34,7 @@ export function useAntdTheme(): UseAntdThemeResult {
 
   const antdTheme = computed<AntdThemeConfig>(() => {
     const isDark = settingStore.resolvedTheme === 'dark';
-    const tokens = isDark ? dark : light;
+    const tokens = getResolvedTokens(settingStore.themePreset, isDark ? 'dark' : 'light');
     return {
       algorithm: isDark ? darkAlgorithm : defaultAlgorithm,
       token: toAntdToken(tokens)

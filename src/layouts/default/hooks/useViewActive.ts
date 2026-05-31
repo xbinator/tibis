@@ -8,6 +8,7 @@ import { useToolbarShortcuts } from '@/components/BToolbar/hooks/useToolbarShort
 import type { ToolbarOptions } from '@/components/BToolbar/types';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { useSettingStore } from '@/stores/ui/setting';
+import { getPresetList } from '@/theme';
 import { EditorShortcuts } from '../../../constants/shortcuts';
 
 /**
@@ -90,6 +91,20 @@ export function useViewActive(): { toolbarViewOptions: ComputedRef<ToolbarOption
           onClick: () => {
             settingStore.setTheme('dark');
           }
+        },
+        { type: 'divider' },
+        {
+          value: 'preset',
+          label: '主题风格',
+          selected: false,
+          children: getPresetList().map((p) => ({
+            value: p.id,
+            label: p.label,
+            selected: settingStore.themePreset === p.id,
+            onClick: () => {
+              settingStore.setThemePreset(p.id);
+            }
+          }))
         }
       ]
     }

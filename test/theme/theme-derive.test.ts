@@ -3,8 +3,7 @@
  * @description 验证主题派生函数（toCssVars / toAntdToken / toMonacoColors）的正确性。
  */
 import { describe, expect, it } from 'vitest';
-import { toCssVars, toAntdToken, toMonacoColors } from '@/theme/derive';
-import { light, dark } from '@/theme/tokens';
+import { dark, light, toAntdToken, toCssVars, toMonacoColors } from '@/theme';
 
 describe('toCssVars', () => {
   it('将 light token 扁平化为 CSS 变量映射', () => {

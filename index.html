@@ -5,6 +5,37 @@
     <link rel="icon" type="image/svg+xml" href="/app.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tibis</title>
+    <script>
+      (function() {
+        var t = localStorage.getItem('app_settings');
+        var isDark = false;
+        var preset = 'default';
+        try {
+          var s = JSON.parse(t);
+          if (s.theme === 'dark') isDark = true;
+          else if (s.theme === 'system') isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (s.themePreset) preset = s.themePreset;
+        } catch(e) {}
+
+        var bg1, bg2, tx1;
+        if (preset === 'default') {
+          bg1 = isDark ? '#13151a' : '#faf9f6';
+          bg2 = isDark ? '#0d0f12' : '#f0ebe1';
+          tx1 = isDark ? '#e8ecf2' : '#1a1a1a';
+        } else {
+          bg1 = isDark ? '#1a1a1a' : '#ffffff';
+          bg2 = isDark ? '#111111' : '#f5f5f5';
+          tx1 = isDark ? '#e0e0e0' : '#1a1a1a';
+        }
+
+        var s2 = document.createElement('style');
+        s2.setAttribute('data-theme-styles', '');
+        s2.textContent = ':root{--bg-primary:' + bg1 + ';--bg-secondary:' + bg2 + ';--text-primary:' + tx1 + '}';
+        document.head.appendChild(s2);
+
+        if (isDark) document.documentElement.setAttribute('data-theme', 'dark');
+      })();
+    </script>
   </head>
 
   <body>

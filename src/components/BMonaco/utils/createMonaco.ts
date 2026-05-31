@@ -5,12 +5,12 @@
 
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.main.js';
 import { noop } from 'lodash-es';
-import { light, dark, toMonacoColors } from '@/theme';
+import { getResolvedTokens, toMonacoColors } from '@/theme';
 
 /**
  * Monaco 编辑器主题名称。
  */
-export type MonacoThemeName = 'tibis-light' | 'tibis-dark';
+export type MonacoThemeName = string;
 
 /**
  * Monaco 编辑器创建参数。
@@ -26,6 +26,10 @@ export interface CreateMonacoEditorOptions {
   readOnly: boolean;
   /** 当前主题名。 */
   theme: MonacoThemeName;
+  /** 主题预设 ID，用于动态注册 Monaco 主题 */
+  presetId?: string;
+  /** 明暗模式 */
+  mode?: 'light' | 'dark';
   /** 是否自动换行 */
   wordWrap?: boolean;
   /** 是否启用内置搜索（Ctrl+F/Cmd+F），默认 true */
@@ -168,30 +172,38 @@ async function ensureJsonDefaults(monaco: typeof Monaco): Promise<void> {
 const definedThemes = new Set<string>();
 
 /**
- * 注册 Tibis 使用的基础主题，从统一 Token 派生颜色。
- * @param monaco - Monaco API
+ * 生成 Monaco 主题名称。
+ * @param presetId - 主题预设 ID
+ * @param mode - 明暗模式
+ * @returns Monaco 主题名称，格式为 tibis-{presetId}-{mode}
  */
-function ensureThemes(monaco: typeof Monaco): void {
-  if (definedThemes.has('tibis-light')) {
-    return;
+export function getMonacoThemeName(presetId: string, mode: 'light' | 'dark'): string {
+  return `tibis-${presetId}-${mode}`;
+}
+
+/**
+ * 注册指定预设和模式的 Monaco 主题，幂等保护。
+ * @param monaco - Monaco API
+ * @param presetId - 主题预设 ID
+ * @param mode - 明暗模式
+ * @returns 注册后的主题名称
+ */
+export function ensureTheme(monaco: typeof Monaco, presetId: string, mode: 'light' | 'dark'): string {
+  const themeName = getMonacoThemeName(presetId, mode);
+  if (definedThemes.has(themeName)) {
+    return themeName;
   }
 
-  monaco.editor.defineTheme('tibis-light', {
-    base: 'vs',
+  const tokens = getResolvedTokens(presetId, mode);
+  monaco.editor.defineTheme(themeName, {
+    base: mode === 'dark' ? 'vs-dark' : 'vs',
     inherit: true,
     rules: [],
-    colors: toMonacoColors(light)
+    colors: toMonacoColors(tokens)
   });
 
-  monaco.editor.defineTheme('tibis-dark', {
-    base: 'vs-dark',
-    inherit: true,
-    rules: [],
-    colors: toMonacoColors(dark)
-  });
-
-  definedThemes.add('tibis-light');
-  definedThemes.add('tibis-dark');
+  definedThemes.add(themeName);
+  return themeName;
 }
 
 /**
@@ -206,8 +218,14 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
   if (options.language === 'json') {
     await ensureJsonDefaults(monaco);
   }
-  ensureThemes(monaco);
-  monaco.editor.setTheme(options.theme);
+
+  // 如果提供了 presetId 和 mode，使用动态主题注册
+  let themeName = options.theme;
+  if (options.presetId && options.mode) {
+    themeName = ensureTheme(monaco, options.presetId, options.mode);
+  }
+
+  monaco.editor.setTheme(themeName);
 
   const model = monaco.editor.createModel(options.value, options.language);
 

@@ -940,6 +940,11 @@ onUnmounted(() => {
   background: var(--input-bg);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
+  transition: background 0.3s ease-in-out;
+
+  &:focus-within {
+    background: var(--input-bg-hover);
+  }
 }
 
 .b-chat-sidebar__input-container .b-prompt-editor {

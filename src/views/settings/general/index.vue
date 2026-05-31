@@ -13,6 +13,14 @@
           <BSelect :value="settingStore.theme" :options="themeOptions" :width="280" @change="handleThemeChange" />
         </div>
       </div>
+      <div class="general-settings__item">
+        <div class="general-settings__meta">
+          <div class="general-settings__label">主题风格</div>
+        </div>
+        <div>
+          <BSelect :value="settingStore.themePreset" :options="presetOptions" :width="280" @change="handlePresetChange" />
+        </div>
+      </div>
     </BSettingsSection>
 
     <BSettingsSection title="编辑器">
@@ -47,11 +55,13 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { SelectOption } from '@/components/BSelect/types';
 import type { EditorViewMode, EditorPageWidth, EditorSaveStrategy } from '@/stores/editor/preferences';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { ThemeMode } from '@/stores/ui/setting';
 import { useSettingStore } from '@/stores/ui/setting';
+import { getPresetList } from '@/theme';
 
 const editorStore = useEditorPreferencesStore();
 const settingStore = useSettingStore();
@@ -64,6 +74,11 @@ const themeOptions: SelectOption[] = [
   { value: 'light', label: '浅色主题' },
   { value: 'dark', label: '深色主题' }
 ];
+
+/**
+ * 主题风格选项，从注册表动态获取。
+ */
+const presetOptions = computed<SelectOption[]>(() => getPresetList().map((p) => ({ value: p.id, label: p.label })));
 
 /**
  * 默认视图模式选项。
@@ -97,6 +112,14 @@ const saveStrategyOptions: SelectOption[] = [
  */
 function handleThemeChange(value: string | number): void {
   settingStore.setTheme(value as ThemeMode);
+}
+
+/**
+ * 处理主题风格变更。
+ * @param value - 新的预设 ID
+ */
+function handlePresetChange(value: string | number): void {
+  settingStore.setThemePreset(value as string);
 }
 
 function handleViewModeChange(value: string | number): void {

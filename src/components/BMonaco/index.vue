@@ -19,7 +19,7 @@ import type * as Monaco from 'monaco-editor';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { EditorController, EditorSearchState, EditorSelection, EditorState } from '@/components/BEditor/types';
 import { useSettingStore } from '@/stores/ui/setting';
-import { createMonacoEditor } from './utils/createMonaco';
+import { createMonacoEditor, ensureTheme, getMonacoThemeName } from './utils/createMonaco';
 
 /**
  * 搜索匹配信息。
@@ -100,7 +100,10 @@ const searchState = ref<SearchMatchState>({
 /**
  * 根据当前应用主题解析 Monaco 主题名。
  */
-const monacoTheme = computed<MonacoThemeName>(() => (settingStore.resolvedTheme === 'dark' ? 'tibis-dark' : 'tibis-light'));
+const monacoTheme = computed<MonacoThemeName>(() => {
+  const mode = settingStore.resolvedTheme === 'dark' ? 'dark' : 'light';
+  return getMonacoThemeName(settingStore.themePreset, mode);
+});
 
 /**
  * 计算生效的自动换行配置。
@@ -230,6 +233,8 @@ async function initializeEditor(): Promise<void> {
       language: props.language,
       readOnly: !props.editable,
       theme: monacoTheme.value,
+      presetId: settingStore.themePreset,
+      mode: settingStore.resolvedTheme === 'dark' ? 'dark' : 'light',
       wordWrap: effectiveWordWrap.value,
       search: effectiveSearch.value
     });
@@ -515,13 +520,17 @@ watch(
   { deep: true }
 );
 
-watch(monacoTheme, (theme: MonacoThemeName): void => {
+watch(monacoTheme, async (): Promise<void> => {
   const editor = editorHandle.value?.getEditor();
   if (!editor) {
     return;
   }
 
-  editor.updateOptions({ theme });
+  // 确保 Monaco 模块已加载，然后注册主题
+  const monaco = await import('monaco-editor/esm/vs/editor/editor.main.js');
+  const mode = settingStore.resolvedTheme === 'dark' ? 'dark' : 'light';
+  const resolvedThemeName = ensureTheme(monaco, settingStore.themePreset, mode);
+  editor.updateOptions({ theme: resolvedThemeName });
 });
 
 onMounted((): void => {

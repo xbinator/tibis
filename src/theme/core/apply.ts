@@ -1,9 +1,9 @@
 /**
- * @file apply.ts
+ * @file core/apply.ts
  * @description 运行时将主题 Token 注入为 CSS 变量（通过 <style> 标签），并提供开发时格式校验。
  */
 
-import type { ThemeTokens } from './tokens';
+import type { ThemeTokens } from '../types/tokens';
 import { toCssVars } from './derive';
 
 /**

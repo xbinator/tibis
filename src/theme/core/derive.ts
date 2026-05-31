@@ -1,9 +1,9 @@
 /**
- * @file derive.ts
+ * @file core/derive.ts
  * @description 从 ThemeTokens 派生各消费方所需格式的映射函数。
  */
 
-import type { ThemeTokens } from './tokens';
+import type { ThemeTokens } from '../types/tokens';
 
 /**
  * Ant Design 主题 Token 结构。

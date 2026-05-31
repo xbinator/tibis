@@ -1,9 +1,23 @@
 /**
  * @file index.ts
- * @description 主题模块统一导出。
+ * @description 主题模块统一导出。先导入预设文件触发 registerPreset，再导出 API。
  */
+import './presets/default';
+import './presets/everforest';
+import './presets/tokyonight';
+import './presets/ayu';
+import './presets/catppuccin';
+import './presets/gruvbox';
+import './presets/kanagawa';
+import './presets/nord';
+import './presets/matrix';
+import './presets/one-dark';
 
-export type { ThemeTokens } from './tokens';
-export { light, dark } from './tokens';
-export { toCssVars, toAntdToken, toMonacoColors } from './derive';
-export { applyCssVars, validateTokens } from './apply';
+export type { ThemeTokens } from './types/tokens';
+export { defaultLight as light, defaultDark as dark } from './presets/default';
+export { toCssVars, toAntdToken, toMonacoColors } from './core/derive';
+export { applyCssVars, validateTokens } from './core/apply';
+export { registerPreset, getPresetList, getResolvedTokens } from './core/registry';
+export { createThemeTokens } from './core/factory';
+export type { BasePalette } from './core/factory';
+export type { ThemePreset } from './core/registry';
