@@ -4,10 +4,10 @@
       <template v-for="(group, gi) in menuGroups" :key="gi">
         <div v-if="gi > 0" class="sidebar-divider"></div>
         <ATooltip v-for="item in group.items" :key="item.key" :title="sidebarCollapsed ? item.label : undefined" placement="right">
-          <RouterLink :to="item.path" class="sidebar-item" :class="{ active: isActive(item.path) }" draggable="false">
+          <div class="sidebar-item" :class="{ active: isActive(item.path) }" draggable="false" @click="navigateTo(item)">
             <Icon :icon="item.icon" class="sidebar-item__icon" />
             <span class="sidebar-item__label">{{ item.label }}</span>
-          </RouterLink>
+          </div>
         </ATooltip>
       </template>
 
@@ -23,16 +23,21 @@
 </template>
 
 <script setup lang="ts">
-import { useRoute } from 'vue-router';
+import type { MenuItem } from './constants';
+import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { Icon } from '@iconify/vue';
 import { useSettingStore } from '@/stores/ui/setting';
 import { menuGroups } from './constants';
 
 const route = useRoute();
+const router = useRouter();
 const settingStore = useSettingStore();
 const { settingsSidebarCollapsed: sidebarCollapsed } = storeToRefs(settingStore);
 
+/**
+ * 切换侧边栏折叠状态
+ */
 function toggleSidebarCollapsed(): void {
   settingStore.setSettingsSidebarCollapsed(!sidebarCollapsed.value);
 }
@@ -43,6 +48,15 @@ function toggleSidebarCollapsed(): void {
  */
 function isActive(path: string): boolean {
   return route.path === path || route.path.startsWith(`${path}/`);
+}
+
+/**
+ * 导航到指定菜单项，若当前已在目标路径则忽略。
+ * @param item - 菜单项
+ */
+function navigateTo(item: MenuItem): void {
+  if (isActive(item.path)) return;
+  router.push(item.path);
 }
 </script>
 

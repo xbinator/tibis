@@ -19,7 +19,7 @@
               :label="provider.label"
               :logo="providerLogos[provider.value]"
               :provider="provider.value"
-              @click="handleProviderClick(provider.value)"
+              @click="handleNavigate('provider', provider.value)"
             />
           </SidebarSection>
         </template>
@@ -36,7 +36,7 @@
               :icon="category.icon"
               :label="category.label"
               :title="sidebarCollapsed ? category.label : ''"
-              @click="handleCategoryClick(category.key)"
+              @click="handleNavigate('category', category.key)"
             />
           </SidebarSection>
 
@@ -62,7 +62,7 @@
               :label="provider.label"
               :logo="providerLogos[provider.value]"
               :title="sidebarCollapsed ? provider.label : ''"
-              @click="handleProviderClick(provider.value)"
+              @click="handleNavigate('provider', provider.value)"
             >
               <template #extra>
                 <BDropdown>
@@ -94,7 +94,7 @@
               :logo="providerLogos[provider.value]"
               :provider="provider.value"
               :title="sidebarCollapsed ? provider.label : ''"
-              @click="handleProviderClick(provider.value)"
+              @click="handleNavigate('provider', provider.value)"
             />
           </SidebarSection>
         </template>
@@ -200,19 +200,21 @@ const activeProvider = computed(() => {
 const providerMap = computed(() => providerComputedData.value.providerMap);
 const categoryCountMap = computed(() => providerComputedData.value.categoryCountMap);
 
-function handleCategoryClick(value: string): void {
-  if (value === 'all') {
-    router.push('/settings/provider');
-  } else {
-    router.push({ path: '/settings/provider', query: { category: value } });
-  }
-}
+/**
+ * 处理分类或供应商点击导航，若当前已在目标路由则忽略。
+ * @param type - 点击类型：'category' 或 'provider'
+ * @param value - 点击的值，'all' 时导航到列表页
+ */
+function handleNavigate(type: 'category' | 'provider', value: string): void {
+  if (type === 'category' && activeCategory.value === value && route.name === 'provider-list') return;
+  if (type === 'provider' && activeProvider.value === value && route.name === 'provider-detail') return;
 
-function handleProviderClick(value: string): void {
   if (value === 'all') {
-    router.push('/settings/provider');
+    router.push({ name: 'provider-list' });
+  } else if (type === 'category') {
+    router.push({ name: 'provider-list', query: { category: value } });
   } else {
-    router.push(`/settings/provider/${value}`);
+    router.push({ name: 'provider-detail', params: { provider: value } });
   }
 }
 

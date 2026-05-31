@@ -16,7 +16,7 @@ export interface MenuItem {
  * 按 key 索引的菜单项映射，方便按分组引用
  */
 const menuItemMap: Record<SettingsMenuKey, MenuItem> = {
-  provider: { key: 'provider', label: '模型服务', icon: 'lucide:cloud', path: '/settings/provider' },
+  provider: { key: 'provider', label: '模型', icon: 'lucide:cloud', path: '/provider' },
   'service-model': { key: 'service-model', label: '默认模型', icon: 'lucide:sparkles', path: '/settings/service-model' },
   search: { key: 'search', label: '网络搜索', icon: 'lucide:globe', path: '/settings/tools/search' },
   mcp: { key: 'mcp', label: 'MCP', icon: 'lucide:cable', path: '/settings/tools/mcp' },
@@ -42,8 +42,9 @@ export interface MenuGroup {
  * 侧边栏菜单分组
  */
 export const menuGroups: MenuGroup[] = [
+  { label: '基础', items: ['general'].map((k) => menuItemMap[k as SettingsMenuKey]) },
   { label: 'AI 服务', items: ['provider', 'service-model'].map((k) => menuItemMap[k as SettingsMenuKey]) },
-  { label: '功能配置', items: ['general', 'memory', 'mcp', 'skill', 'search'].map((k) => menuItemMap[k as SettingsMenuKey]) },
+  { label: '功能配置', items: ['memory', 'mcp', 'skill', 'search'].map((k) => menuItemMap[k as SettingsMenuKey]) },
   { label: '系统', items: ['logger'].map((k) => menuItemMap[k as SettingsMenuKey]) }
 ];
 
