@@ -23,6 +23,8 @@ const MIN_EXTRACTION_INTERVAL_MS = 5 * 60 * 1000;
 interface MemoryState {
   /** 记忆文档 */
   doc: MemoryDoc;
+  /** 记忆文件原始 Markdown 内容 */
+  rawContent: string;
   /** 是否已加载 */
   loaded: boolean;
   /** 是否正在提取 */
@@ -76,6 +78,7 @@ async function getChatModelConfig(): Promise<{ providerId: string; modelId: stri
 export const useMemoryStore = defineStore('memory', {
   state: (): MemoryState => ({
     doc: createEmptyMemoryDoc(),
+    rawContent: '',
     loaded: false,
     extracting: false,
     lastExtractionTime: 0,
@@ -104,14 +107,17 @@ export const useMemoryStore = defineStore('memory', {
         const status = await native.getPathStatus(filePath);
         if (!status.exists) {
           this.doc = createEmptyMemoryDoc();
+          this.rawContent = '';
           this.loaded = true;
           return;
         }
         const result = await native.readFile(filePath);
+        this.rawContent = result.content;
         this.doc = parseMemoryDoc(result.content);
         this.loaded = true;
       } catch {
         this.doc = createEmptyMemoryDoc();
+        this.rawContent = '';
         this.loaded = true;
       }
     },
@@ -125,6 +131,7 @@ export const useMemoryStore = defineStore('memory', {
         await getElectronAPI().ensureDir(dirPath);
         const filePath = await getMemoryFilePath();
         const content = serializeMemoryDoc(this.doc);
+        this.rawContent = content;
         await native.writeFile(filePath, content);
       } catch (error) {
         console.error('[memory] Failed to save memory file:', error);
@@ -212,6 +219,20 @@ export const useMemoryStore = defineStore('memory', {
     },
 
     /**
+     * 更新指定分区的指定条目内容
+     * @param category - 分区名称
+     * @param index - 条目索引
+     * @param content - 新内容
+     */
+    async updateItem(category: string, index: number, content: string): Promise<void> {
+      const section = this.doc.sections.find((s) => s.category === category);
+      if (!section || index < 0 || index >= section.items.length) return;
+
+      section.items[index] = { content };
+      await this.saveMemory();
+    },
+
+    /**
      * 删除指定分区的指定条目
      * @param category - 分区名称
      * @param index - 条目索引
@@ -221,6 +242,15 @@ export const useMemoryStore = defineStore('memory', {
       if (!section || index < 0 || index >= section.items.length) return;
 
       section.items.splice(index, 1);
+      await this.saveMemory();
+    },
+
+    /**
+     * 清空所有记忆
+     */
+    async clearAll(): Promise<void> {
+      this.doc = createEmptyMemoryDoc();
+      this.rawContent = '';
       await this.saveMemory();
     },
 

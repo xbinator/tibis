@@ -12,10 +12,18 @@ const OUTPUT_FORMAT = `Output ONLY valid JSON array. Each item must have:
 - "content": string (single line, no markdown formatting)
 - "reason": string (brief explanation, for debugging)
 
+Action rules:
+- "add": new information not covered by any existing memory item
+- "update": existing memory item needs correction/refinement (e.g., name changed, habit updated).
+  Use this when the new info contradicts or supersedes an existing item.
+  Mention which item you are updating in the reason.
+- "remove": existing memory item is no longer true or relevant
+
 Example:
 [
   {"action": "add", "section": "Facts", "content": "用户正在开发记忆系统功能", "reason": "对话中明确提及"},
-  {"action": "update", "section": "Preferences", "content": "偏好使用中文注释", "reason": "替代旧的英文注释偏好"}
+  {"action": "update", "section": "Facts", "content": "助手名为小宝", "reason": "更新助手名称，替代旧的"},
+  {"action": "remove", "section": "Facts", "content": "用户使用 Windows", "reason": "用户已切换到 macOS"}
 ]
 
 Do NOT wrap in markdown code blocks. Output raw JSON array only.
@@ -31,8 +39,7 @@ function formatConversation(messages: ExtractionMessage[]): string {
 }
 
 /**
- * 将现有记忆格式化为摘要（只传分区名 + 条目数 + 首条摘要）
- * 减少提取 prompt 的 token 消耗
+ * 将现有记忆格式化为完整摘要（展示所有条目，让 AI 能判断 update vs add）
  * @param doc - 当前记忆文档
  * @returns 摘要文本
  */
@@ -42,12 +49,10 @@ function formatMemorySummary(doc: MemoryDoc): string {
   return doc.sections
     .filter((section) => section.items.length > 0)
     .map((section) => {
-      const count = section.items.length;
-      const firstItem = section.items[0].content;
-      const example = firstItem.length > 30 ? `${firstItem.slice(0, 30)}...` : firstItem;
-      return `- ${section.category}: ${count} items (e.g., "${example}")`;
+      const items = section.items.map((item) => `  - ${item.content}`).join('\n');
+      return `## ${section.category}\n${items}`;
     })
-    .join('\n');
+    .join('\n\n');
 }
 
 /**

@@ -1,6 +1,6 @@
 <!--
   @file index.vue
-  @description 记忆设置页，管理记忆开关、查看记忆条目、删除/清空记忆。
+  @description 记忆设置页，管理记忆开关、查看记忆内容、清空记忆。
 -->
 <template>
   <BSettingsPage title="记忆">
@@ -16,20 +16,15 @@
       </div>
     </BSettingsSection>
 
-    <BSettingsSection title="记忆概览">
+    <BSettingsSection title="记忆内容">
       <div v-if="memoryStore.isEmpty" class="memory-settings__empty">
         <Icon :icon="'lucide:brain'" :width="32" class="memory-settings__empty-icon" />
         <p>暂无记忆条目</p>
         <p class="memory-settings__empty-hint">随着对话积累，Tibis 会自动学习你的偏好和习惯</p>
       </div>
       <template v-else>
-        <div class="memory-settings__grid">
-          <SectionCard
-            v-for="section in memoryStore.nonEmptySections"
-            :key="section.category"
-            :section="section"
-            @delete="(index: number) => handleDeleteItem(section.category, index)"
-          />
+        <div class="memory-settings__content">
+          <pre class="memory-settings__pre">{{ memoryStore.rawContent }}</pre>
         </div>
       </template>
     </BSettingsSection>
@@ -42,7 +37,6 @@
  */
 import { Icon } from '@iconify/vue';
 import { useMemoryStore } from '@/stores/ai/memory';
-import SectionCard from './components/SectionCard.vue';
 
 const memoryStore = useMemoryStore();
 
@@ -52,15 +46,6 @@ const memoryStore = useMemoryStore();
  */
 function handleToggleEnabled(value: boolean | string | number): void {
   memoryStore.setEnabled(Boolean(value));
-}
-
-/**
- * 删除指定分区的指定条目
- * @param category - 分区名称
- * @param index - 条目索引
- */
-async function handleDeleteItem(category: string, index: number): Promise<void> {
-  await memoryStore.deleteItem(category, index);
 }
 </script>
 
@@ -119,11 +104,22 @@ async function handleDeleteItem(category: string, index: number): Promise<void> 
   color: var(--text-tertiary);
 }
 
-.memory-settings__grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px 14px;
+.memory-settings__content {
+  margin: 12px 16px;
+}
+
+.memory-settings__pre {
+  padding: 12px 16px;
+  margin: 0;
+  font-family: 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  word-break: break-all;
+  white-space: pre-wrap;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
 }
 
 @media (width <= 800px) {
@@ -131,8 +127,8 @@ async function handleDeleteItem(category: string, index: number): Promise<void> 
     padding: 0 12px;
   }
 
-  .memory-settings__grid {
-    padding: 0 8px;
+  .memory-settings__content {
+    padding: 0 12px 12px;
   }
 }
 </style>

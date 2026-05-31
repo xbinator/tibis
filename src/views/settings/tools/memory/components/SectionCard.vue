@@ -1,6 +1,6 @@
 <!--
-  @file MemorySectionCard.vue
-  @description 记忆分区卡片组件，支持折叠展开和条目删除。
+  @file SectionCard.vue
+  @description 记忆分区卡片组件，支持折叠展开、条目编辑和删除。
 -->
 <template>
   <div class="memory-section-card">
@@ -11,8 +11,27 @@
     </div>
     <div v-if="expanded" class="memory-section-card__list">
       <div v-for="(item, index) in section.items" :key="index" class="memory-section-card__item">
-        <span class="memory-section-card__text">{{ item.content }} </span>
-        <BButton type="text" size="small" icon="lucide:trash-2" square @click.stop="emit('delete', index)" />
+        <!-- 编辑模式 -->
+        <div v-if="editingIndex === index" class="memory-section-card__edit">
+          <AInput
+            v-focus
+            :value="editValue"
+            size="small"
+            class="memory-section-card__input"
+            @update:value="handleEditInput"
+            @keydown.enter="handleEditConfirm(index)"
+            @keydown.escape="handleEditCancel"
+            @blur="handleEditConfirm(index)"
+          />
+        </div>
+        <!-- 展示模式 -->
+        <template v-else>
+          <span class="memory-section-card__text" @dblclick="handleStartEdit(index, item.content)">{{ item.content }}</span>
+          <div class="memory-section-card__actions">
+            <BButton type="text" size="small" icon="lucide:pencil" square @click.stop="handleStartEdit(index, item.content)" />
+            <BButton type="text" size="small" icon="lucide:trash-2" square @click.stop="emit('delete', index)" />
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -25,6 +44,7 @@
 import { ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import type { MemoryCategory, MemorySection } from '@/ai/memory/types';
+import { vFocus } from '@/directives/focus';
 
 /**
  * 组件 props
@@ -42,12 +62,20 @@ defineProps<Props>();
 interface Emits {
   /** 删除条目事件 */
   (e: 'delete', index: number): void;
+  /** 更新条目内容事件 */
+  (e: 'update', index: number, content: string): void;
 }
 
 const emit = defineEmits<Emits>();
 
 /** 展开/折叠状态，默认展开 */
 const expanded = ref(true);
+
+/** 当前正在编辑的条目索引，-1 表示不在编辑 */
+const editingIndex = ref(-1);
+
+/** 编辑中的内容值 */
+const editValue = ref('');
 
 /** 分区中文标签映射 */
 const CATEGORY_LABELS: Record<MemoryCategory, string> = {
@@ -112,6 +140,45 @@ function getCategoryIcon(category: MemoryCategory): string {
 function getCategoryDescription(category: MemoryCategory): string {
   return CATEGORY_DESCRIPTIONS[category] ?? '';
 }
+
+/**
+ * 进入编辑模式
+ * @param index - 条目索引
+ * @param content - 当前内容
+ */
+function handleStartEdit(index: number, content: string): void {
+  editingIndex.value = index;
+  editValue.value = content;
+}
+
+/**
+ * 处理编辑输入
+ * @param value - 输入值
+ */
+function handleEditInput(value: string): void {
+  editValue.value = value;
+}
+
+/**
+ * 确认编辑，保存修改
+ * @param index - 条目索引
+ */
+function handleEditConfirm(index: number): void {
+  const trimmed = editValue.value.trim();
+  if (trimmed.length > 0 && editingIndex.value !== -1) {
+    emit('update', index, trimmed);
+  }
+  editingIndex.value = -1;
+  editValue.value = '';
+}
+
+/**
+ * 取消编辑
+ */
+function handleEditCancel(): void {
+  editingIndex.value = -1;
+  editValue.value = '';
+}
 </script>
 
 <style scoped lang="less">
@@ -161,7 +228,6 @@ function getCategoryDescription(category: MemoryCategory): string {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  cursor: pointer;
   border-top: 1px solid var(--border-tertiary);
 
   &:first-child {
@@ -173,15 +239,19 @@ function getCategoryDescription(category: MemoryCategory): string {
   }
 
   &:hover {
-    button {
+    .memory-section-card__actions {
       opacity: 1;
     }
   }
+}
 
-  button {
-    opacity: 0;
-    transition: opacity 0.15s ease, transform 0.15s ease;
-  }
+.memory-section-card__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
 .memory-section-card__text {
@@ -192,5 +262,18 @@ function getCategoryDescription(category: MemoryCategory): string {
   line-height: 1.5;
   color: var(--text-primary);
   word-break: break-all;
+  cursor: text;
+}
+
+.memory-section-card__edit {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.memory-section-card__input {
+  :deep(.ant-input) {
+    font-size: 12px;
+  }
 }
 </style>

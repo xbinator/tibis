@@ -148,10 +148,10 @@ export function extractKeywords(text: string): string[] {
  * 检查两条记忆是否相似
  * @param newItem - 新记忆内容
  * @param existingItem - 已有记忆内容
- * @param threshold - 相似度阈值，默认 0.8
+ * @param threshold - 相似度阈值，默认 0.5
  * @returns 是否相似
  */
-export function isSimilar(newItem: string, existingItem: string, threshold = 0.8): boolean {
+export function isSimilar(newItem: string, existingItem: string, threshold = 0.5): boolean {
   if (newItem === existingItem) return true;
 
   if (newItem.includes(existingItem) || existingItem.includes(newItem)) return true;
@@ -165,14 +165,14 @@ export function isSimilar(newItem: string, existingItem: string, threshold = 0.8
 }
 
 /**
- * 在分区内查找与指定内容相似的条目
+ * 在分区内查找与指定内容相似的条目索引
  * @param items - 现有条目列表
  * @param content - 要匹配的内容
  * @param threshold - 相似度阈值
- * @returns 是否找到相似条目
+ * @returns 相似条目的索引，未找到返回 -1
  */
-function findSimilar(items: { content: string }[], content: string, threshold: number): boolean {
-  return items.some((item) => isSimilar(content, item.content, threshold));
+function findSimilarIndex(items: { content: string }[], content: string, threshold: number): number {
+  return items.findIndex((item) => isSimilar(content, item.content, threshold));
 }
 
 /**
@@ -181,7 +181,7 @@ function findSimilar(items: { content: string }[], content: string, threshold: n
  * @param content - 要删除的内容
  */
 function removeByMatch(section: { items: { content: string }[] }, content: string): void {
-  const index = section.items.findIndex((item) => isSimilar(content, item.content, 0.6));
+  const index = section.items.findIndex((item) => isSimilar(content, item.content, 0.5));
   if (index !== -1) {
     section.items.splice(index, 1);
   }
@@ -193,7 +193,7 @@ function removeByMatch(section: { items: { content: string }[] }, content: strin
  * @param content - 新内容
  */
 function replaceByMatch(section: { items: { content: string }[] }, content: string): void {
-  const index = section.items.findIndex((item) => isSimilar(content, item.content, 0.6));
+  const index = section.items.findIndex((item) => isSimilar(content, item.content, 0.5));
   if (index !== -1) {
     section.items[index] = { content };
   } else {
@@ -266,7 +266,7 @@ export function parseExtractionResult(raw: string): ExtractedMemory {
  *
  * 合并优先级：
  * - AI 的 remove/update → 无条件执行（AI 做了语义判断）
- * - AI 的 add → 做字符串相似度安全检查（相似度 > 0.8 才拦截）
+ * - AI 的 add → 做字符串相似度安全检查（相似度 > 0.5 则用新内容替换旧条目），不相似则追加
  *
  * @param current - 当前记忆文档
  * @param extracted - AI 提取的记忆操作列表
@@ -295,11 +295,15 @@ export function mergeMemory(current: MemoryDoc, extracted: ExtractedMemory): Mem
         replaceByMatch(section, item.content);
         break;
 
-      case 'add':
-        if (!findSimilar(section.items, item.content, 0.8)) {
+      case 'add': {
+        const similarIndex = findSimilarIndex(section.items, item.content, 0.5);
+        if (similarIndex !== -1) {
+          section.items[similarIndex] = { content: item.content };
+        } else {
           section.items.push({ content: item.content });
         }
         break;
+      }
 
       default:
         break;
