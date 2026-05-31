@@ -23,13 +23,13 @@ function extractSectionItems(text: string, category: MemoryCategory): MemoryItem
   for (const line of lines) {
     const trimmed = line.trim();
 
-    if (trimmed === `# ${category}`) {
+    if (trimmed === `## ${category}`) {
       inTargetSection = true;
       continue;
     }
 
-    // 遇到下一个一级标题，结束当前分区
-    if (trimmed.startsWith('# ') && inTargetSection) {
+    // 遇到下一个二级标题，结束当前分区
+    if (trimmed.startsWith('## ') && inTargetSection) {
       break;
     }
 
@@ -71,7 +71,7 @@ export function serializeMemoryDoc(doc: MemoryDoc): string {
 
   for (const section of doc.sections) {
     if (section.items.length === 0) continue;
-    parts.push(`# ${section.category}`);
+    parts.push(`## ${section.category}`);
     for (const item of section.items) {
       parts.push(`- ${item.content}`);
     }
