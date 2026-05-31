@@ -3,7 +3,7 @@
   @description 聊天侧边栏的待办任务面板，显示当前会话的 LLM 任务列表。
 -->
 <template>
-  <div class="todo-panel">
+  <div v-if="todos.length" class="todo-panel">
     <section v-if="visible && todos.length" class="todo-panel__board">
       <div class="todo-panel__header">
         <span class="todo-panel__title">任务列表</span>
@@ -24,7 +24,7 @@
       </div>
     </section>
 
-    <div v-if="todos.length" class="todo-panel__footer">
+    <div class="todo-panel__footer">
       <BButton type="text" size="small" class="todo-panel__toggle" @click="emit('update:visible', !visible)">
         <BIcon icon="lucide:list-checks" :size="14" class="todo-panel__toggle-icon" />
         <span>任务列表 {{ completedCount }}/{{ todos.length }}</span>

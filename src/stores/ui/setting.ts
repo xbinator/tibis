@@ -7,6 +7,7 @@ import { defaultsDeep } from 'lodash-es';
 import { native } from '@/shared/platform';
 import { loadPersistedState, persistState } from '@/stores/helpers/persist';
 import type { PersistConfig } from '@/stores/helpers/types';
+import { light, dark, applyCssVars, validateTokens } from '@/theme';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -48,6 +49,7 @@ function getSystemTheme(): ResolvedTheme {
 
 function applyTheme(theme: ThemeMode): void {
   const resolvedTheme = theme === 'system' ? getSystemTheme() : theme;
+  applyCssVars(resolvedTheme === 'dark' ? dark : light);
   if (resolvedTheme === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
   } else {
@@ -209,6 +211,8 @@ export const useSettingStore = defineStore('setting', {
      * 初始化主题并监听系统主题变化
      */
     initTheme(): void {
+      validateTokens(light, 'light');
+      validateTokens(dark, 'dark');
       applyTheme(this.theme);
 
       // 监听系统主题变化

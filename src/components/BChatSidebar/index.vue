@@ -859,7 +859,7 @@ onUnmounted(() => {
 });
 </script>
 
-<style>
+<style lang="less">
 .b-chat-sidebar {
   display: flex;
   flex-shrink: 0;
@@ -900,7 +900,11 @@ onUnmounted(() => {
 }
 
 .b-chat-sidebar__toolbar {
-  padding: 0 12px 12px;
+  padding: 8px 12px 12px;
+
+  &:empty {
+    display: none;
+  }
 }
 
 .b-chat-sidebar__conversation-container {

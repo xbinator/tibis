@@ -5,6 +5,7 @@
 
 import type * as Monaco from 'monaco-editor/esm/vs/editor/editor.main.js';
 import { noop } from 'lodash-es';
+import { light, dark, toMonacoColors } from '@/theme';
 
 /**
  * Monaco 编辑器主题名称。
@@ -162,47 +163,35 @@ async function ensureJsonDefaults(monaco: typeof Monaco): Promise<void> {
 }
 
 /**
- * 注册 Tibis 使用的基础主题。
+ * 已注册的 Monaco 主题名集合，用于幂等保护。
+ */
+const definedThemes = new Set<string>();
+
+/**
+ * 注册 Tibis 使用的基础主题，从统一 Token 派生颜色。
  * @param monaco - Monaco API
  */
 function ensureThemes(monaco: typeof Monaco): void {
+  if (definedThemes.has('tibis-light')) {
+    return;
+  }
+
   monaco.editor.defineTheme('tibis-light', {
     base: 'vs',
     inherit: true,
     rules: [],
-    colors: {
-      'editor.background': '#faf9f6',
-      'editor.foreground': '#243042',
-      'editor.lineHighlightBackground': '#eef2f7',
-      'editor.selectionBackground': '#cfe3ff',
-      'editor.inactiveSelectionBackground': '#e6edf5',
-      'editorLineNumber.foreground': '#a0aec0',
-      'editorLineNumber.activeForeground': '#334155',
-      'editorCursor.foreground': '#2563eb',
-      'editorGutter.background': '#faf9f6',
-      'editorIndentGuide.background1': '#e5e7eb',
-      'editorIndentGuide.activeBackground1': '#cbd5e1'
-    }
+    colors: toMonacoColors(light)
   });
 
   monaco.editor.defineTheme('tibis-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [],
-    colors: {
-      'editor.background': '#13151a',
-      'editor.foreground': '#dbe4f0',
-      'editor.lineHighlightBackground': '#1a1d24',
-      'editor.selectionBackground': '#3a4e69',
-      'editor.inactiveSelectionBackground': '#2a3544',
-      'editorLineNumber.foreground': '#64748b',
-      'editorLineNumber.activeForeground': '#e2e8f0',
-      'editorCursor.foreground': '#93c5fd',
-      'editorGutter.background': '#13151a',
-      'editorIndentGuide.background1': '#223045',
-      'editorIndentGuide.activeBackground1': '#475569'
-    }
+    colors: toMonacoColors(dark)
   });
+
+  definedThemes.add('tibis-light');
+  definedThemes.add('tibis-dark');
 }
 
 /**
