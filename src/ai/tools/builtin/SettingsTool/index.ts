@@ -8,6 +8,7 @@ import type { EditorPageWidth, EditorViewMode } from '@/stores/editor/preference
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { ThemeMode } from '@/stores/ui/setting';
 import { useSettingStore } from '@/stores/ui/setting';
+import { getPresetList } from '@/theme/core/registry';
 import { executeWithPermission } from '../../permission';
 import { createToolFailureResult } from '../../results';
 
@@ -18,7 +19,7 @@ export const UPDATE_SETTINGS_TOOL_NAME = 'update_settings';
 export const GET_SETTINGS_TOOL_NAME = 'get_settings';
 
 /** 支持通过 AI 修改的设置键。 */
-const SUPPORTED_SETTING_KEYS = ['theme', 'sourceMode', 'editorPageWidth'] as const;
+const SUPPORTED_SETTING_KEYS = ['theme', 'themePreset', 'sourceMode', 'editorPageWidth'] as const;
 
 /** 支持通过 AI 修改的设置键类型。 */
 type SupportedSettingKey = (typeof SUPPORTED_SETTING_KEYS)[number];
@@ -116,6 +117,16 @@ function isEditorPageWidth(value: unknown): value is EditorPageWidth {
 }
 
 /**
+ * 判断值是否为已注册的主题预设 ID。
+ * @param value - 待检查值
+ * @returns 是否为有效的主题预设 ID
+ */
+function isThemePresetId(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  return getPresetList().some((p) => p.id === value);
+}
+
+/**
  * 验证设置值。
  * @param input - 工具输入
  * @returns 验证后的输入或错误消息
@@ -127,6 +138,14 @@ function validateSettingsInput(input: UpdateSettingsInput): UpdateSettingsInput 
 
   if (input.key === 'theme') {
     return isThemeMode(input.value) ? input : 'theme 只能设置为 dark、light 或 system。';
+  }
+
+  if (input.key === 'themePreset') {
+    if (isThemePresetId(input.value)) return input;
+    const available = getPresetList()
+      .map((p) => `${p.id}（${p.label}）`)
+      .join('、');
+    return `themePreset 只能设置为已注册的预设 ID：${available}。`;
   }
 
   if (input.key === 'editorPageWidth') {
@@ -153,6 +172,10 @@ function getCurrentSettingValue(key: SupportedSettingKey): string | boolean | nu
     return settingStore.theme;
   }
 
+  if (key === 'themePreset') {
+    return settingStore.themePreset;
+  }
+
   if (key === 'sourceMode') {
     return editorPreferencesStore.viewMode === 'source';
   }
@@ -177,6 +200,11 @@ function applySettingValue(input: UpdateSettingsInput): void {
     return;
   }
 
+  if (input.key === 'themePreset' && isThemePresetId(input.value)) {
+    settingStore.setThemePreset(input.value);
+    return;
+  }
+
   if (input.key === 'sourceMode' && typeof input.value === 'boolean') {
     const viewMode: EditorViewMode = input.value ? 'source' : 'rich';
     editorPreferencesStore.setViewMode(viewMode);
@@ -198,7 +226,7 @@ export function createBuiltinSettingsTools(adapter: AIToolConfirmationAdapter): 
     updateSettings: {
       definition: {
         name: UPDATE_SETTINGS_TOOL_NAME,
-        description: '修改应用设置。可根据自然语言请求设置主题、源码模式和编辑器页宽。',
+        description: '修改应用设置。可根据自然语言请求设置主题外观、主题色、源码模式和编辑器页宽。',
         source: 'builtin',
         riskLevel: 'write',
         permissionCategory: 'settings',
@@ -214,7 +242,8 @@ export function createBuiltinSettingsTools(adapter: AIToolConfirmationAdapter): 
             },
             value: {
               type: ['string', 'boolean'],
-              description: '设置值：theme 使用 dark/light/system；editorPageWidth 使用 default/wide/full；布尔设置使用 true/false。'
+              description:
+                '设置值：theme 使用 dark/light/system；themePreset 使用预设 ID（如 default、everforest、tokyonight 等）；editorPageWidth 使用 default/wide/full；布尔设置使用 true/false。'
             }
           },
           required: ['key', 'value'],
@@ -264,7 +293,7 @@ export function createBuiltinSettingsTools(adapter: AIToolConfirmationAdapter): 
     getSettings: {
       definition: {
         name: GET_SETTINGS_TOOL_NAME,
-        description: '获取应用设置。可获取主题、源码模式和编辑器页宽等设置项的当前值。支持传入单个 key、key 数组或不传（返回所有设置）。',
+        description: '获取应用设置。可获取主题外观、主题色、源码模式和编辑器页宽等设置项的当前值。支持传入单个 key、key 数组或不传（返回所有设置）。',
         source: 'builtin',
         riskLevel: 'read',
         permissionCategory: 'settings',
