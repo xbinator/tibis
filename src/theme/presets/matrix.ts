@@ -80,7 +80,7 @@ const matrixDark: BasePalette = {
 
 registerPreset({
   id: 'matrix',
-  label: '荧光绿',
+  label: '荧光绿「Matrix」',
   light: createThemeTokens(matrixLight, 'light'),
   dark: createThemeTokens(matrixDark, 'dark')
 });

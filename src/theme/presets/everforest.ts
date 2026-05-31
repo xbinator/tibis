@@ -79,7 +79,7 @@ const everforestDark: BasePalette = {
 
 registerPreset({
   id: 'everforest',
-  label: '绿色',
+  label: '柔绿色「Everforest」',
   light: createThemeTokens(everforestLight, 'light'),
   dark: createThemeTokens(everforestDark, 'dark')
 });

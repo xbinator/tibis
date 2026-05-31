@@ -116,14 +116,14 @@ const catppuccinMacchiato: BasePalette = {
 
 registerPreset({
   id: 'catppuccin',
-  label: '奶咖色',
+  label: '奶咖色「Catppuccin」',
   light: createThemeTokens(catppuccinLatte, 'light'),
   dark: createThemeTokens(catppuccinMocha, 'dark')
 });
 
 registerPreset({
   id: 'catppuccin-macchiato',
-  label: '深咖色',
+  label: '深咖色「Catppuccin」',
   light: createThemeTokens(catppuccinLatte, 'light'),
   dark: createThemeTokens(catppuccinMacchiato, 'dark')
 });
