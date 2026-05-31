@@ -14,7 +14,7 @@ import { useSystem } from '@/hooks/useSystem';
 const { antdTheme } = useAntdTheme();
 useMenuAction();
 
-// 引导系统级事件监听（macOS "打开方式" 等）
+// 引导系统级事件监听（macOS "打开方式"、记忆加载等）
 useSystem();
 </script>
 

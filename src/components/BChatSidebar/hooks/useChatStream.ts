@@ -28,6 +28,7 @@ import { getModelToolSupport } from '@/ai/tools/policy';
 import { executeToolCall, toTransportTools, type ExecutedToolCall } from '@/ai/tools/stream';
 import { useChat } from '@/hooks/useChat';
 import { native } from '@/shared/platform';
+import { useMemoryStore } from '@/stores/ai/memory';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { buildChatMessageReferences } from '../utils/fileReferenceContext';
@@ -627,13 +628,46 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     currentModelMessageCache = convert.toCachedModelMessages(nextMessages, currentModelMessageCache);
     const continuedMessages: ModelMessage[] = [...currentModelMessageCache.modelMessages];
 
+    const memoryStore = useMemoryStore();
+    const memoryContext = memoryStore.buildSystemPromptContext();
+
     agent.stream({
       messages: continuedMessages,
       modelId: config.modelId,
       providerId: config.providerId,
+      system: memoryContext || undefined,
       tools: transportTools,
       tavily: toolSettingsStore.tavily,
       mcp: resolveMcpRequestConfig()
+    });
+  }
+
+  /**
+   * 触发记忆提取（异步，不阻塞 UI）
+   * 从当前对话消息中提取用户偏好和习惯
+   */
+  function triggerMemoryExtraction(): void {
+    const memoryStore = useMemoryStore();
+    if (!memoryStore.enabled) return;
+
+    const extractionMessages = messages.value
+      .filter((msg): msg is Message & { role: 'user' | 'assistant' } => msg.role === 'user' || msg.role === 'assistant')
+      .filter((msg) => {
+        const hasText = msg.parts.some((part) => part.type === 'text' && part.text.trim().length > 0);
+        return hasText;
+      })
+      .map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.parts
+          .filter((part) => part.type === 'text')
+          .map((part) => (part as { type: 'text'; text: string }).text)
+          .join('\n')
+      }));
+
+    if (extractionMessages.length < 2) return;
+
+    memoryStore.onTurnComplete(extractionMessages).catch((err) => {
+      console.error('[memory] Background extraction failed:', err);
     });
   }
 
@@ -727,6 +761,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     if (message) {
       appendSilentSdkCompletionHint(message);
       onComplete?.(message);
+      triggerMemoryExtraction();
     }
   }
 

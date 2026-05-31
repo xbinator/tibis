@@ -65,6 +65,12 @@ const routes: AppRouteRecordRaw[] = [
             name: 'skill-tools-settings',
             component: () => import('@/views/settings/tools/skill/index.vue'),
             meta: { title: 'Skills' }
+          },
+          {
+            path: 'memory',
+            name: 'memory-tools-settings',
+            component: () => import('@/views/settings/tools/memory/index.vue'),
+            meta: { title: '记忆' }
           }
         ]
       },

@@ -5,6 +5,7 @@
 import { onMounted, onUnmounted } from 'vue';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { useMemoryStore } from '@/stores/ai/memory';
 
 /**
  * 文件打开处理器类型。
@@ -54,6 +55,10 @@ export function useSystem(): void {
         handler(filePath);
       });
     });
+
+    // 应用启动时加载记忆缓存
+    const memoryStore = useMemoryStore();
+    memoryStore.loadMemory();
   });
 
   onUnmounted(() => {
