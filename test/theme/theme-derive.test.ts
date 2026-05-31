@@ -80,7 +80,7 @@ describe('toCssVars', () => {
 
 describe('toAntdToken', () => {
   it('从 light token 派生 Ant Design 主题配置', () => {
-    const token = toAntdToken(light);
+    const { token, components } = toAntdToken(light);
 
     expect(token.colorBgBase).toBe('#faf9f6');
     expect(token.colorBgContainer).toBe('#f0ebe1');
@@ -92,10 +92,14 @@ describe('toAntdToken', () => {
     expect(token.colorPrimaryBg).toBe('rgb(138 111 90 / 10%)');
     expect(token.colorPrimaryBorder).toBe('rgb(138 111 90 / 24%)');
     expect(token.controlOutline).toBe('rgb(138 111 90 / 20%)');
+
+    expect(components.Input.colorBgContainer).toBe('#fffdf8');
+    expect(components.Select.colorBgContainer).toBe('#fffdf8');
+    expect(components.DatePicker.colorBgContainer).toBe('#fffdf8');
   });
 
   it('从 dark token 派生 Ant Design 主题配置', () => {
-    const token = toAntdToken(dark);
+    const { token, components } = toAntdToken(dark);
 
     expect(token.colorBgBase).toBe('#13151a');
     expect(token.colorBgContainer).toBe('#0d0f12');
@@ -107,6 +111,9 @@ describe('toAntdToken', () => {
     expect(token.colorPrimaryBg).toBe('rgb(200 169 139 / 10%)');
     expect(token.colorPrimaryBorder).toBe('rgb(200 169 139 / 22%)');
     expect(token.controlOutline).toBe('rgb(200 169 139 / 15%)');
+
+    expect(components.Input.colorBgContainer).toBe('#181b21');
+    expect(components.Select.colorBgContainer).toBe('#181b21');
   });
 });
 

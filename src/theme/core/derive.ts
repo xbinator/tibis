@@ -6,7 +6,7 @@
 import type { ThemeTokens } from '../types/tokens';
 
 /**
- * Ant Design 主题 Token 结构。
+ * Ant Design 全局主题 Token 结构。
  */
 interface AntdThemeToken {
   colorBgBase: string;
@@ -20,6 +20,29 @@ interface AntdThemeToken {
   colorPrimaryBorder: string;
   controlOutline: string;
 }
+
+/**
+ * Ant Design 组件级 Token 覆盖结构。
+ * 每个键对应一个 Ant Design 组件名，值为该组件的 token 覆盖。
+ */
+interface AntdComponentTokens {
+  [component: string]: Record<string, string>;
+}
+
+/**
+ * Ant Design 完整主题配置，包含全局 token 和组件级 token。
+ */
+interface AntdThemeConfig {
+  token: AntdThemeToken;
+  components: AntdComponentTokens;
+}
+
+/**
+ * 需要使用输入容器背景色的 Ant Design 组件列表。
+ * 这些组件的 colorBgContainer 应映射到 tokens.bg.input，
+ * 而非全局的 tokens.bg.secondary，以保持输入区域与卡片容器的视觉层次。
+ */
+const INPUT_COMPONENTS = ['Input', 'InputNumber', 'Select', 'DatePicker', 'TimePicker', 'Cascader', 'TreeSelect', 'AutoComplete', 'Mentions'] as const;
 
 /**
  * camelCase 转 kebab-case。
@@ -62,21 +85,35 @@ export function toCssVars(tokens: ThemeTokens): Record<string, string> {
 
 /**
  * 从 Token 派生 Ant Design 主题配置。
+ * 全局 token 中 colorBgContainer 映射到 bg.secondary（用于 Card/Table 等容器），
+ * 输入类组件（Input/Select/DatePicker 等）单独覆盖 colorBgContainer 为 bg.input，
+ * 以保持输入区域更亮的背景与卡片容器的视觉层次。
  * @param tokens - 主题 Token 对象
- * @returns Ant Design 主题 Token
+ * @returns Ant Design 完整主题配置（全局 token + 组件级 token）
  */
-export function toAntdToken(tokens: ThemeTokens): AntdThemeToken {
+export function toAntdToken(tokens: ThemeTokens): AntdThemeConfig {
+  const inputComponentTokens: AntdComponentTokens = {};
+
+  for (const component of INPUT_COMPONENTS) {
+    inputComponentTokens[component] = {
+      colorBgContainer: tokens.bg.primary
+    };
+  }
+
   return {
-    colorBgBase: tokens.bg.primary,
-    colorBgContainer: tokens.bg.secondary,
-    colorBgElevated: tokens.bg.elevated,
-    colorText: tokens.text.primary,
-    colorTextSecondary: tokens.text.secondary,
-    colorBorder: tokens.border.primary,
-    colorPrimary: tokens.color.primary,
-    colorPrimaryBg: tokens.color.primaryBg,
-    colorPrimaryBorder: tokens.color.primaryBorder,
-    controlOutline: tokens.color.controlOutline
+    token: {
+      colorBgBase: tokens.bg.primary,
+      colorBgContainer: tokens.bg.secondary,
+      colorBgElevated: tokens.bg.elevated,
+      colorText: tokens.text.primary,
+      colorTextSecondary: tokens.text.secondary,
+      colorBorder: tokens.border.primary,
+      colorPrimary: tokens.color.primary,
+      colorPrimaryBg: tokens.color.primaryBg,
+      colorPrimaryBorder: tokens.color.primaryBorder,
+      controlOutline: tokens.color.controlOutline
+    },
+    components: inputComponentTokens
   };
 }
 

@@ -937,7 +937,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 12px;
   padding: 12px;
-  background: var(--input-bg);
+  background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
   transition: background 0.3s ease-in-out;
