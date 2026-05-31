@@ -22,6 +22,7 @@ import {
   UPDATE_MCP_SERVER_TOOL_NAME,
   type MCPStoreLike
 } from './MCPTool';
+import { EDIT_MEMORY_TOOL_NAME, createBuiltinMemoryTool } from './MemoryTool';
 import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } from './QuestionTool';
 import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
@@ -47,6 +48,7 @@ export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsToo
 export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
 export { TODO_WRITE_TOOL_NAME } from './TodoWriteTool';
+export { EDIT_MEMORY_TOOL_NAME } from './MemoryTool';
 
 /**
  * 由主进程 AI SDK 直接执行的远端工具名称。
@@ -91,7 +93,8 @@ export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [
   EDIT_FILE_TOOL_NAME,
   WRITE_FILE_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
-  RUN_SHELL_COMMAND_TOOL_NAME
+  RUN_SHELL_COMMAND_TOOL_NAME,
+  EDIT_MEMORY_TOOL_NAME
 ] as const;
 
 /**
@@ -229,7 +232,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       ...(readDirectoryTool ? [readDirectoryTool] : []),
       ...(mcpReadTool ? [mcpReadTool] : []),
       createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) }),
-      documentWriteTools.createDocument
+      documentWriteTools.createDocument,
+      createBuiltinMemoryTool()
     ];
   }
   // 创建文件级写入工具
@@ -262,7 +266,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     editFileTool,
     writeFileTool,
     settingsTools.updateSettings,
-    ...(shellCommandTool ? [shellCommandTool] : [])
+    ...(shellCommandTool ? [shellCommandTool] : []),
+    createBuiltinMemoryTool()
   ];
   const writableTools = allDefaultWritableTools.filter((tool) => isDefaultBuiltinWritableToolName(tool.definition.name));
 

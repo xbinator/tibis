@@ -18,7 +18,6 @@
 
     <BSettingsSection title="记忆内容">
       <div v-if="memoryStore.isEmpty" class="memory-settings__empty">
-        <Icon :icon="'lucide:brain'" :width="32" class="memory-settings__empty-icon" />
         <p>暂无记忆条目</p>
         <p class="memory-settings__empty-hint">随着对话积累，Tibis 会自动学习你的偏好和习惯</p>
       </div>
@@ -32,10 +31,6 @@
 </template>
 
 <script setup lang="ts">
-/**
- * 记忆设置页逻辑
- */
-import { Icon } from '@iconify/vue';
 import { useMemoryStore } from '@/stores/ai/memory';
 
 const memoryStore = useMemoryStore();

@@ -25,24 +25,5 @@ export interface MemoryDoc {
   sections: MemorySection[];
 }
 
-/** AI 提取结果中的单条操作 */
-export interface ExtractedMemoryItem {
-  action: 'add' | 'update' | 'remove';
-  section: MemoryCategory;
-  content: string;
-  reason: string;
-}
-
-/** AI 提取结果 */
-export interface ExtractedMemory {
-  items: ExtractedMemoryItem[];
-}
-
-/** 提取用消息（对话消息的精简视图，避免依赖具体聊天类型） */
-export interface ExtractionMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
 /** 记忆文件路径常量 */
 export const MEMORY_FILE_NAME = 'MEMORY.md';

@@ -643,35 +643,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   }
 
   /**
-   * 触发记忆提取（异步，不阻塞 UI）
-   * 从当前对话消息中提取用户偏好和习惯
-   */
-  function triggerMemoryExtraction(): void {
-    const memoryStore = useMemoryStore();
-    if (!memoryStore.enabled) return;
-
-    const extractionMessages = messages.value
-      .filter((msg): msg is Message & { role: 'user' | 'assistant' } => msg.role === 'user' || msg.role === 'assistant')
-      .filter((msg) => {
-        const hasText = msg.parts.some((part) => part.type === 'text' && part.text.trim().length > 0);
-        return hasText;
-      })
-      .map((msg) => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.parts
-          .filter((part) => part.type === 'text')
-          .map((part) => (part as { type: 'text'; text: string }).text)
-          .join('\n')
-      }));
-
-    if (extractionMessages.length < 2) return;
-
-    memoryStore.onTurnComplete(extractionMessages).catch((err) => {
-      console.error('[memory] Background extraction failed:', err);
-    });
-  }
-
-  /**
    * 处理流式完成
    */
   async function handleStreamComplete(): Promise<void> {
@@ -761,7 +732,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     if (message) {
       appendSilentSdkCompletionHint(message);
       onComplete?.(message);
-      triggerMemoryExtraction();
     }
   }
 
