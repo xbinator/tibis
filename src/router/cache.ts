@@ -4,6 +4,7 @@
  */
 
 import type { RouteLocationNormalizedLoaded } from 'vue-router';
+import { isString } from 'lodash-es';
 
 /**
  * KeepAlive 包装组件名称前缀。
@@ -90,6 +91,21 @@ function resolveWebviewTitle(route: RouteLocationNormalizedLoaded): string | und
 }
 
 /**
+ * 解析路由的默认标签页标题。
+ * 优先使用 meta.title，其次使用路由名称，最后使用路由路径。
+ * @param route - 当前路由
+ * @returns 标签页标题
+ */
+function resolveRouteTitle(route: RouteLocationNormalizedLoaded): string {
+  const metaTitle = route.meta?.title;
+  if (isString(metaTitle)) return metaTitle;
+  // 其次使用路由名称
+  if (route.name) return String(route.name);
+  // 最后使用路由路径
+  return route.path;
+}
+
+/**
  * 解析路由对应的标签页 ID、KeepAlive 缓存 key 以及标签页标题。
  * @param route - 当前路由
  * @returns 包含 tabId、cacheKey 和 title 的对象
@@ -109,7 +125,7 @@ export function resolveRouteTabInfo(route: RouteLocationNormalizedLoaded): { tab
     return {
       tabId: editorId || fallback,
       cacheKey: editorId ? `editor:${editorId}` : fallback,
-      title: (route.meta?.title || route.name || route.path) as string
+      title: resolveRouteTitle(route)
     };
   }
 
@@ -120,7 +136,7 @@ export function resolveRouteTabInfo(route: RouteLocationNormalizedLoaded): { tab
 
   const fallback = route.fullPath || route.path;
 
-  return { tabId: fallback, cacheKey: fallback, title: (route.meta?.title || route.name || route.path) as string };
+  return { tabId: fallback, cacheKey: fallback, title: resolveRouteTitle(route) };
 }
 
 /**
