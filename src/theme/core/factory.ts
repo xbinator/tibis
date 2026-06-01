@@ -271,10 +271,10 @@ export function createThemeTokens(palette: BasePalette, mode: 'light' | 'dark'):
       hoverBg: accentOverlay(isDark ? 0.16 : 0.1)
     },
     dropdown: {
-      bg: palette.bg3,
-      border: palette.border,
-      itemHoverBg: palette.bg2,
-      divider: palette.border
+      bg: isDark ? palette.bg3 : palette.bg0,
+      border: isDark ? palette.border : borderOverlay(isDark ? 1 : 0.8),
+      itemHoverBg: isDark ? palette.bg2 : palette.bg3,
+      divider: isDark ? palette.border : borderOverlay(0.6)
     },
     modal: {
       text: palette.fg0,
