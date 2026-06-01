@@ -14,6 +14,7 @@ const DEFAULT_STATE: WebviewPageState = {
   title: '',
   isLoading: false,
   isElementSelecting: false,
+  isTouchSimulationEnabled: false,
   canGoBack: false,
   canGoForward: false,
   loadProgress: 0

@@ -19,6 +19,15 @@
 
     <div class="action-buttons">
       <BButton
+        v-if="supportsDeviceToolbar"
+        type="text"
+        size="small"
+        square
+        :tooltip="isDeviceToolbarVisible ? '隐藏设备工具栏' : '显示设备工具栏'"
+        :icon="isDeviceToolbarVisible ? 'lucide:monitor-off' : 'lucide:monitor-smartphone'"
+        @click="emit('toggleDeviceToolbar')"
+      />
+      <BButton
         v-if="supportsElementSelection"
         type="text"
         size="small"
@@ -51,6 +60,10 @@ interface Props {
   supportsElementSelection?: boolean;
   /** 是否正在选择页面 DOM 元素 */
   isElementSelecting?: boolean;
+  /** 是否支持设备工具栏 */
+  supportsDeviceToolbar?: boolean;
+  /** 设备工具栏是否可见 */
+  isDeviceToolbarVisible?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
@@ -58,7 +71,9 @@ withDefaults(defineProps<Props>(), {
   canGoForward: false,
   isLoading: false,
   supportsElementSelection: false,
-  isElementSelecting: false
+  isElementSelecting: false,
+  supportsDeviceToolbar: false,
+  isDeviceToolbarVisible: false
 });
 
 const emit = defineEmits<{
@@ -68,6 +83,7 @@ const emit = defineEmits<{
   stop: [];
   openInBrowser: [];
   selectElement: [];
+  toggleDeviceToolbar: [];
   submitUrl: [value: string];
 }>();
 

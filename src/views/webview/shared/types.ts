@@ -16,6 +16,8 @@ export interface WebviewPageState {
   isLoading: boolean;
   /** 是否正在选择页面 DOM 元素 */
   isElementSelecting: boolean;
+  /** 是否启用 touch 事件模拟 */
+  isTouchSimulationEnabled: boolean;
   /** 是否可以后退 */
   canGoBack: boolean;
   /** 是否可以前进 */
