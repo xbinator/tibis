@@ -18,7 +18,7 @@
 
     <BSettingsSection title="记忆内容">
       <template #extra>
-        <BButton v-if="!memoryStore.isEmpty" size="small" icon="lucide:pencil" @click="startEdit">编辑</BButton>
+        <BButton size="small" icon="lucide:pencil" @click="startEdit">编辑</BButton>
       </template>
 
       <div v-if="memoryStore.isEmpty" class="memory-settings__empty">
