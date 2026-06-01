@@ -289,13 +289,10 @@ export const useTabsStore = defineStore('tabs', {
       const singletonConfig = findSingletonTabConfig(normalizedTab.path);
 
       if (singletonConfig) {
-        const _index = this.tabs.findIndex((t) => findSingletonTabConfig(t.path)?.tabId === singletonConfig.tabId);
-        const _tab: Tab = {
-          ...normalizedTab,
-          id: singletonConfig.tabId,
-          title: singletonConfig.title,
-          cacheKey: singletonConfig.cacheKey
-        };
+        const { title, cacheKey, tabId } = singletonConfig;
+        const _index = this.tabs.findIndex((t) => findSingletonTabConfig(t.path)?.tabId === tabId);
+
+        const _tab: Tab = { ...normalizedTab, id: tabId, title, cacheKey };
         _index === -1 ? this.tabs.push(_tab) : (this.tabs[_index] = _tab);
       } else {
         const index = this.tabs.findIndex((t) => t.id === normalizedTab.id);
