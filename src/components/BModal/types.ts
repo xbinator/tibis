@@ -23,4 +23,6 @@ export interface BModalProps {
   afterClose?: () => void;
   // 是否支持键盘操作（如按 ESC 关闭）
   keyboard?: boolean;
+  // 弹窗圆角，支持字符串或数字
+  borderRadius?: string | number;
 }

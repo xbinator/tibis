@@ -2,6 +2,7 @@
   <Modal
     v-model:open="visible"
     :class="name"
+    :style="modalStyle"
     :footer="null"
     :closable="false"
     :width="modalWidth"
@@ -46,7 +47,8 @@ const props = withDefaults(defineProps<Props>(), {
   centered: true,
   close: undefined,
   afterClose: undefined,
-  keyboard: true
+  keyboard: true,
+  borderRadius: undefined
 });
 
 const emit = defineEmits(['update:open', 'close']);
@@ -60,6 +62,8 @@ function bem(modifier: string): string {
 const visible = defineModel<boolean>('open');
 
 const modalWidth = computed(() => addCssUnit(props.width));
+const modalRadius = computed(() => addCssUnit(props.borderRadius));
+const modalStyle = computed(() => (props.borderRadius != null ? { borderRadius: modalRadius.value } : undefined));
 
 function handleClosable(): void {
   emit('close');
@@ -70,8 +74,11 @@ function handleClosable(): void {
 
 <style lang="less">
 .b-modal {
+  overflow: hidden;
+
   .ant-modal-content {
     padding: 0;
+    border-radius: inherit;
   }
 }
 
