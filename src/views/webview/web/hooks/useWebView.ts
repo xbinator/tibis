@@ -13,6 +13,7 @@ const DEFAULT_STATE: WebviewPageState = {
   title: '',
   isLoading: false,
   isElementSelecting: false,
+  isTouchSimulationEnabled: false,
   canGoBack: false,
   canGoForward: false,
   loadProgress: 0
@@ -153,11 +154,108 @@ function isElementSelection(value: unknown): value is WebviewElementSelection {
 }
 
 /**
+ * 构建注入到页面内的 touch 事件模拟脚本。
+ * @param enabled - 是否启用 touch 事件模拟
+ * @returns 可通过 `executeJavaScript` 执行的脚本
+ */
+function createTouchSimulationScript(enabled: boolean): string {
+  return `
+(() => {
+  const cleanupExisting = window.__tibisTouchSimulationCleanup;
+  if (typeof cleanupExisting === 'function') {
+    cleanupExisting();
+  }
+
+  if (!${enabled ? 'true' : 'false'}) {
+    return null;
+  }
+
+  let activeTarget = null;
+
+  const createTouchLike = (event) => ({
+    identifier: 1,
+    target: event.target,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    screenX: event.screenX,
+    screenY: event.screenY,
+    pageX: event.pageX,
+    pageY: event.pageY,
+    radiusX: 1,
+    radiusY: 1,
+    rotationAngle: 0,
+    force: event.buttons ? 1 : 0
+  });
+
+  const dispatchTouchEvent = (mouseEvent, eventType) => {
+    const target = activeTarget || mouseEvent.target;
+    if (!(target instanceof EventTarget)) {
+      return;
+    }
+
+    const touch = createTouchLike(mouseEvent);
+    const event = new Event(eventType, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      touches: { value: eventType === 'touchend' ? [] : [touch] },
+      targetTouches: { value: eventType === 'touchend' ? [] : [touch] },
+      changedTouches: { value: [touch] },
+      altKey: { value: mouseEvent.altKey },
+      ctrlKey: { value: mouseEvent.ctrlKey },
+      metaKey: { value: mouseEvent.metaKey },
+      shiftKey: { value: mouseEvent.shiftKey }
+    });
+    target.dispatchEvent(event);
+  };
+
+  const handleMouseDown = (event) => {
+    activeTarget = event.target;
+    dispatchTouchEvent(event, 'touchstart');
+  };
+
+  const handleMouseMove = (event) => {
+    if (!activeTarget || !event.buttons) {
+      return;
+    }
+
+    dispatchTouchEvent(event, 'touchmove');
+  };
+
+  const handleMouseUp = (event) => {
+    if (!activeTarget) {
+      return;
+    }
+
+    dispatchTouchEvent(event, 'touchend');
+    activeTarget = null;
+  };
+
+  try {
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, get: () => 1 });
+    Object.defineProperty(window, 'ontouchstart', { configurable: true, value: null });
+  } catch (error) {
+    console.warn('Tibis touch simulation environment patch failed', error);
+  }
+
+  window.addEventListener('mousedown', handleMouseDown, true);
+  window.addEventListener('mousemove', handleMouseMove, true);
+  window.addEventListener('mouseup', handleMouseUp, true);
+  window.__tibisTouchSimulationCleanup = () => {
+    window.removeEventListener('mousedown', handleMouseDown, true);
+    window.removeEventListener('mousemove', handleMouseMove, true);
+    window.removeEventListener('mouseup', handleMouseUp, true);
+    delete window.__tibisTouchSimulationCleanup;
+  };
+  return null;
+})();
+`;
+}
+
+/**
  * 创建 `<webview>` 标签控制器。
  * @param webviewRef - `<webview>` 实例引用
  * @returns `<webview>` 控制器与事件处理器
  */
-export function useTagWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
+export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   const state = ref<WebviewPageState>({ ...DEFAULT_STATE });
   let initialUrlAttached = false;
   let isDomReady = false;
@@ -246,6 +344,29 @@ export function useTagWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   }
 
   /**
+   * 应用 touch 事件模拟状态到当前页面。
+   * @param enabled - 是否启用 touch 事件模拟
+   */
+  async function applyTouchSimulation(enabled: boolean): Promise<void> {
+    const instance = webviewRef.value;
+    const executeJavaScript = instance?.executeJavaScript;
+    if (!instance || typeof executeJavaScript !== 'function') {
+      return;
+    }
+
+    await executeJavaScript.call(instance, createTouchSimulationScript(enabled));
+  }
+
+  /**
+   * 设置 touch 事件模拟状态。
+   * @param enabled - 是否启用 touch 事件模拟
+   */
+  async function setTouchSimulationEnabled(enabled: boolean): Promise<void> {
+    state.value.isTouchSimulationEnabled = enabled;
+    await applyTouchSimulation(enabled);
+  }
+
+  /**
    * 开启页面 DOM 元素选择模式，并在选择完成后输出元素信息。
    */
   async function startElementSelection(): Promise<void> {
@@ -280,6 +401,9 @@ export function useTagWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     isDomReady = true;
     state.value.loadProgress = 0.7;
     syncNavigationState();
+    applyTouchSimulation(state.value.isTouchSimulationEnabled).catch((error: unknown) => {
+      console.error('Failed to apply webview touch simulation after DOM ready:', error);
+    });
   }
 
   /**
@@ -336,6 +460,12 @@ export function useTagWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     handleTitleUpdated,
     handleDidStopLoading,
     handleAttachRejected,
-    startElementSelection
+    startElementSelection,
+    setTouchSimulationEnabled
   };
 }
+
+/**
+ * 兼容旧测试与旧调用方的 `<webview>` 控制器命名。
+ */
+export const useTagWebView = useWebView;

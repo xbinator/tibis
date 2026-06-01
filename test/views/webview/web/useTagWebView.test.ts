@@ -5,7 +5,7 @@
 
 import { ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
-import { useTagWebView } from '@/views/webview/web/hooks/useTagWebView';
+import { useTagWebView } from '@/views/webview/web/hooks/useWebView';
 
 describe('useTagWebView', () => {
   it('loads the initial url only once for the same webview instance', () => {
@@ -100,5 +100,23 @@ describe('useTagWebView', () => {
     expect(hook.state.value.isElementSelecting).toBe(false);
 
     consoleLog.mockRestore();
+  });
+
+  it('injects touch simulation when touch mode is enabled', async () => {
+    const executeJavaScript = vi.fn<(script: string) => Promise<null>>().mockResolvedValue(null);
+    const instance = {
+      executeJavaScript,
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+
+    const hook = useTagWebView(ref(instance));
+
+    await hook.setTouchSimulationEnabled(true);
+
+    expect(hook.state.value.isTouchSimulationEnabled).toBe(true);
+    expect(executeJavaScript).toHaveBeenCalledTimes(1);
+    expect(executeJavaScript.mock.calls[0]?.[0]).toContain('__tibisTouchSimulationCleanup');
+    expect(executeJavaScript.mock.calls[0]?.[0]).toContain('touchstart');
   });
 });
