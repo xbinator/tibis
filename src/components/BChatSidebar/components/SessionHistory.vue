@@ -294,7 +294,7 @@ async function handleDeleteSession(sessionId: string): Promise<void> {
   padding: 6px;
   background: var(--dropdown-bg);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  box-shadow: var(--shadow-dropdown);
 }
 
 .session-history__list {

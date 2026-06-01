@@ -161,7 +161,7 @@ function handleDropdownVisibleChange(open: boolean): void {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
-  background-color: var(--bg-elevated);
+  background-color: var(--dropdown-bg);
   border-top: 1px solid var(--border-primary);
   border-radius: 0 0 8px 8px;
 }

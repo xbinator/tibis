@@ -151,9 +151,9 @@ function formatTokens(value: number): string {
 .context-usage__panel {
   min-width: 188px;
   padding: 8px 12px;
-  background: var(--bg-secondary);
+  background: var(--dropdown-bg);
   border-radius: 6px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-dropdown);
 }
 
 .context-usage__header {

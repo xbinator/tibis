@@ -187,9 +187,9 @@ defineExpose({
   max-height: 360px;
   padding: 6px;
   overflow-y: auto;
-  background: var(--bg-secondary);
+  background: var(--dropdown-bg);
   border-radius: 8px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-dropdown);
 }
 
 .model-group {

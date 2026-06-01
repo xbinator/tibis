@@ -39,10 +39,17 @@ interface AntdThemeConfig {
 
 /**
  * 需要使用输入容器背景色的 Ant Design 组件列表。
- * 这些组件的 colorBgContainer 应映射到 tokens.bg.input，
+ * 这些组件的 colorBgContainer 应映射到 tokens.bg.primary，
  * 而非全局的 tokens.bg.secondary，以保持输入区域与卡片容器的视觉层次。
  */
 const INPUT_COMPONENTS = ['Input', 'InputNumber', 'Select', 'DatePicker', 'TimePicker', 'Cascader', 'TreeSelect', 'AutoComplete', 'Mentions'] as const;
+
+/**
+ * 带下拉弹出层的 Ant Design 组件列表。
+ * 这些组件的弹出层背景色应映射到 tokens.dropdown.bg，
+ * 以保持下拉面板与主题 dropdown 语义一致。
+ */
+const DROPDOWN_COMPONENTS = ['Select', 'Cascader', 'TreeSelect', 'AutoComplete'] as const;
 
 /**
  * camelCase 转 kebab-case。
@@ -86,8 +93,10 @@ export function toCssVars(tokens: ThemeTokens): Record<string, string> {
 /**
  * 从 Token 派生 Ant Design 主题配置。
  * 全局 token 中 colorBgContainer 映射到 bg.secondary（用于 Card/Table 等容器），
- * 输入类组件（Input/Select/DatePicker 等）单独覆盖 colorBgContainer 为 bg.input，
+ * 输入类组件（Input/Select/DatePicker 等）单独覆盖 colorBgContainer 为 bg.primary，
  * 以保持输入区域更亮的背景与卡片容器的视觉层次。
+ * 带下拉弹出层的组件额外覆盖 colorBgElevated 为 dropdown.bg，
+ * 使弹出面板背景与主题 dropdown 语义保持一致。
  * @param tokens - 主题 Token 对象
  * @returns Ant Design 完整主题配置（全局 token + 组件级 token）
  */
@@ -97,6 +106,14 @@ export function toAntdToken(tokens: ThemeTokens): AntdThemeConfig {
   for (const component of INPUT_COMPONENTS) {
     inputComponentTokens[component] = {
       colorBgContainer: tokens.bg.primary
+    };
+  }
+
+  for (const component of DROPDOWN_COMPONENTS) {
+    const existing = inputComponentTokens[component] ?? {};
+    inputComponentTokens[component] = {
+      ...existing,
+      colorBgElevated: tokens.dropdown.bg
     };
   }
 
