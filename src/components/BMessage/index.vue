@@ -19,6 +19,25 @@ import { marked } from 'marked';
 import { useNavigate } from '@/hooks/useNavigate';
 import { addCssUnit } from '@/utils/css';
 
+/**
+ * 配置 marked 仅将 ~~（双波浪号）识别为删除线，单个 ~ 不作为删除线定界符。
+ * marked 默认 GFM 模式下 ~~? 均可匹配删除线，此处覆写 tokenizer 仅保留双波浪号语义。
+ */
+marked.use({
+  tokenizer: {
+    del(src: string) {
+      const match = /^~~(?=\S)([\s\S]*?\S)~~/.exec(src);
+      if (!match) return undefined;
+      return {
+        type: 'del',
+        raw: match[0],
+        text: match[1],
+        tokens: this.lexer.inlineTokens(match[1])
+      };
+    }
+  }
+});
+
 defineOptions({ name: 'BMessage' });
 
 const navigate = useNavigate();
