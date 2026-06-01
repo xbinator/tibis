@@ -105,7 +105,7 @@ function formatTokens(value: number): string {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-secondary);
   border-radius: 6px;
   box-shadow: var(--shadow-sm);

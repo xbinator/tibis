@@ -151,8 +151,7 @@ function formatTokens(value: number): string {
 .context-usage__panel {
   min-width: 188px;
   padding: 8px 12px;
-  background: var(--dropdown-bg);
-  border: 1px solid var(--dropdown-border);
+  background: var(--bg-secondary);
   border-radius: 6px;
   box-shadow: var(--shadow-md);
 }
