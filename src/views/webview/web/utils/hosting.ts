@@ -1,5 +1,5 @@
 /**
- * @file dom-host.ts
+ * @file hosting.ts
  * @description 管理 `<webview>` 标签页宿主层与 DOM 节点。
  */
 

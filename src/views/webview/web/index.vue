@@ -29,8 +29,8 @@ import { native } from '@/shared/platform';
 import AddressBar from '@/views/webview/shared/components/AddressBar.vue';
 import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
-import { ensureHostedWebviewElement, ensureWebviewHostLayer, hideWebviewHostLayer, showWebviewHostLayer } from './dom-host';
 import { useTagWebView } from './hooks/useTagWebView';
+import { ensureHostedWebviewElement, ensureWebviewHostLayer, hideWebviewHostLayer, showWebviewHostLayer } from './utils/hosting';
 
 const route = useRoute();
 const webviewContainerRef = ref<HTMLElement | null>(null);
