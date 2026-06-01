@@ -3,6 +3,7 @@ import type {
   AIServiceError,
   AIRequestOptions,
   AICreateOptions,
+  AIInvokeResult,
   AIStreamFinishChunk,
   AIStreamToolCallChunk,
   AIStreamToolInputDeltaChunk,
@@ -72,7 +73,7 @@ export function useChat(options: UseStreamOptions) {
   const currentRequestId = ref<string | null>(null);
   const currentCleanup = ref<(() => void) | null>(null);
 
-  const onInvoke = async (payload: AIRequestOptions): AsyncResult<{ text: string }, { message: string }> => {
+  const onInvoke = async (payload: AIRequestOptions): AsyncResult<AIInvokeResult, { message: string }> => {
     const [error, provider] = await resolveProvider(payload);
 
     if (error) return [error];
