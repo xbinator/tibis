@@ -4,7 +4,7 @@
  */
 
 import { defineStore } from 'pinia';
-import { resolveRouteCacheName } from '@/router/cache';
+import { findSingletonTabConfig, resolveRouteCacheName } from '@/router/cache';
 import { storeEvents } from '@/stores/helpers/events';
 import type { FileMissingPayload, FileRecoveredPayload } from '@/stores/helpers/events';
 import { loadPersistedState, persistState } from '@/stores/helpers/persist';
@@ -286,16 +286,24 @@ export const useTabsStore = defineStore('tabs', {
      */
     addTab(tab: Tab): void {
       const normalizedTab = normalizeTab(tab);
-      const index = this.tabs.findIndex((t) => t.id === normalizedTab.id);
-      if (tab.path.startsWith('/settings')) {
-        const _index = this.tabs.findIndex((t) => t.path.includes('/settings'));
+      const singletonConfig = findSingletonTabConfig(normalizedTab.path);
 
-        const _tab = { ...normalizedTab, title: '设置' };
+      if (singletonConfig) {
+        const _index = this.tabs.findIndex((t) => findSingletonTabConfig(t.path)?.tabId === singletonConfig.tabId);
+        const _tab: Tab = {
+          ...normalizedTab,
+          id: singletonConfig.tabId,
+          title: singletonConfig.title,
+          cacheKey: singletonConfig.cacheKey
+        };
         _index === -1 ? this.tabs.push(_tab) : (this.tabs[_index] = _tab);
-      } else if (index === -1) {
-        this.tabs.push(normalizedTab);
       } else {
-        this.tabs[index] = normalizedTab;
+        const index = this.tabs.findIndex((t) => t.id === normalizedTab.id);
+        if (index === -1) {
+          this.tabs.push(normalizedTab);
+        } else {
+          this.tabs[index] = normalizedTab;
+        }
       }
 
       const cacheKey = normalizedTab.cacheKey || normalizedTab.id;

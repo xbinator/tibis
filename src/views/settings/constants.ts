@@ -16,7 +16,7 @@ export interface MenuItem {
  * 按 key 索引的菜单项映射，方便按分组引用
  */
 const menuItemMap: Record<SettingsMenuKey, MenuItem> = {
-  provider: { key: 'provider', label: '模型', icon: 'lucide:cloud', path: '/provider' },
+  provider: { key: 'provider', label: '模型', icon: 'lucide:cloud', path: '/settings/provider' },
   'service-model': { key: 'service-model', label: '默认模型', icon: 'lucide:sparkles', path: '/settings/service-model' },
   search: { key: 'search', label: '网络搜索', icon: 'lucide:globe', path: '/settings/tools/search' },
   mcp: { key: 'mcp', label: 'MCP', icon: 'lucide:cable', path: '/settings/tools/mcp' },
