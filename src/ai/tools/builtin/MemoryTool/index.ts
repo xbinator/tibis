@@ -92,7 +92,7 @@ export function createBuiltinMemoryTool(): AIToolExecutor<EditMemoryInput, EditM
       description:
         '管理用户记忆文件（~/.tibis/MEMORY.md）。当你在对话中发现用户的偏好、习惯、重要事实或当前工作上下文时，主动使用此工具保存。' +
         '用户明确要求记住某事时也使用。支持 read/add/update/remove 四种操作。' +
-        '注意：update 和 remove 需要先 read 获取条目内容或索引再操作。单分区最多 20 条。',
+        '重要：写入前必须先用 read 查看现有记忆！若新内容与已有条目属同一类信息（如名字、项目名、偏好），必须用 update 替换而非 add 追加，避免冲突。单分区最多 20 条。',
       source: 'builtin',
       riskLevel: 'write',
       safeAutoApprove: true,
@@ -103,7 +103,12 @@ export function createBuiltinMemoryTool(): AIToolExecutor<EditMemoryInput, EditM
           action: {
             type: 'string',
             enum: VALID_ACTIONS,
-            description: '操作类型：read（读取当前所有记忆）、add（新增条目）、update（更新条目）、remove（删除条目）。'
+            description:
+              '操作类型。write 前务必先 read 检查！' +
+              'read：读取所有记忆。' +
+              'add：新增条目（仅当同名条目不存在时使用；如已存在同类信息请用 update）。' +
+              'update：替换已有条目（需先 read 获取 index，或用 content 匹配旧值）。' +
+              'remove：删除条目（需先 read 确认）。'
           },
           section: {
             type: 'string',
