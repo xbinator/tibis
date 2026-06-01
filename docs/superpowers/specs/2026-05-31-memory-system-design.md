@@ -51,7 +51,7 @@
 
 # Facts
 - 项目 tibis 使用 Vue 3 + Pinia + Electron 41
-- 工作目录在 /Users/zhangbin/code/ai/tibis
+- 工作目录在 `<user_dir>/code/ai/tibis`
 - 团队有 3 个前端开发
 
 # Projects
