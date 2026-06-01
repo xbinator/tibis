@@ -1,6 +1,12 @@
 <template>
   <section :class="name">
-    <div :class="bem('title')">{{ title }}</div>
+    <div :class="bem('header')">
+      <span :class="bem('header-text')">{{ title }}</span>
+
+      <div :class="bem('header-extra')">
+        <slot name="extra"></slot>
+      </div>
+    </div>
 
     <div :class="[bem('content'), contentClass]">
       <slot></slot>
@@ -44,10 +50,11 @@ const [name, bem] = createNamespace('settings-section');
   }
 }
 
-.b-settings-section__title {
+.b-settings-section__header {
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: space-between;
   height: 44px;
   padding: 0 16px;
   font-size: 13px;
@@ -55,5 +62,17 @@ const [name, bem] = createNamespace('settings-section');
   color: var(--text-primary);
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-primary);
+}
+
+.b-settings-section__header-text {
+  flex-shrink: 0;
+}
+
+.b-settings-section__header-extra {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+  font-weight: 400;
 }
 </style>

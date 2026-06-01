@@ -4,7 +4,7 @@
 -->
 <template>
   <BSettingsPage title="MCP">
-    <template #headerExtra>
+    <template #extra>
       <BButton icon="lucide:plus" type="primary" size="small" @click="handleOpenAddModal">添加</BButton>
     </template>
     <BSettingsSection title="MCP Servers">

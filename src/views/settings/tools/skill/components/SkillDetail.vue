@@ -14,7 +14,7 @@
       </div>
     </template>
 
-    <template #headerExtra>
+    <template #extra>
       <BButton type="text" square title="关闭详情" data-test="skill-detail-close" @click="emit('close')">
         <Icon icon="lucide:x" :width="16" />
       </BButton>

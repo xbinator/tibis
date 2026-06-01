@@ -5,8 +5,8 @@
         <slot name="title">{{ title }}</slot>
       </div>
 
-      <div :class="bem('header-extra')">
-        <slot name="headerExtra"></slot>
+      <div :class="bem('extra')">
+        <slot name="extra"></slot>
       </div>
     </div>
     <div :class="bem('body')">
@@ -61,7 +61,7 @@ const [, bem] = createNamespace('settings-page');
   color: var(--text-primary);
 }
 
-.b-settings-page__header-extra {
+.b-settings-page__extra {
   display: flex;
   gap: 8px;
   align-items: center;

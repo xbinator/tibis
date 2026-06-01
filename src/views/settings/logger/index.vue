@@ -5,7 +5,7 @@
 -->
 <template>
   <BSettingsPage title="日志">
-    <template #headerExtra>
+    <template #extra>
       <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
       <BButton icon="lucide:folder-open" type="text" size="small" @click="handleOpenLogFolder">打开目录</BButton>
     </template>
