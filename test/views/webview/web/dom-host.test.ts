@@ -14,7 +14,7 @@ import {
   hideWebviewHostLayer,
   showWebviewHostLayer,
   WEBVIEW_HOST_LAYER_ID
-} from '@/views/webview/web/dom-host';
+} from '@/views/webview/web/utils/hosting';
 
 describe('webview dom host', () => {
   it('creates the host layer once and reuses it', () => {
@@ -46,20 +46,44 @@ describe('webview dom host', () => {
 
     expect(second).toBe(first);
     expect(hostLayer.childElementCount).toBe(1);
+    expect(hostLayer.style.flexDirection).toBe('column');
+    expect(hostLayer.style.alignItems).toBe('stretch');
     expect(hostLayer.style.borderRadius).toBe(`${WEBVIEW_BORDER_RADIUS_PX}px`);
+    expect(first.style.display).toBe('flex');
     expect(first.style.borderRadius).toBe(`${WEBVIEW_BORDER_RADIUS_PX}px`);
+  });
+
+  it('normalizes cached host and webview styles when reusing existing elements', () => {
+    const hostLayer = ensureWebviewHostLayer(document, '/webview/web?url=https%3A%2F%2Fold-style.com');
+    const webviewElement = ensureHostedWebviewElement(hostLayer);
+    hostLayer.style.flexDirection = '';
+    hostLayer.style.alignItems = '';
+    webviewElement.style.display = 'block';
+    webviewElement.style.flex = '';
+    webviewElement.style.minHeight = '';
+
+    const reusedHostLayer = ensureWebviewHostLayer(document, '/webview/web?url=https%3A%2F%2Fold-style.com');
+    const reusedWebviewElement = ensureHostedWebviewElement(reusedHostLayer);
+
+    expect(reusedHostLayer.style.flexDirection).toBe('column');
+    expect(reusedHostLayer.style.alignItems).toBe('stretch');
+    expect(reusedWebviewElement.style.display).toBe('flex');
+    expect(reusedWebviewElement.style.flex).toBe('1 1 auto');
+    expect(reusedWebviewElement.style.minHeight).toBe('0px');
   });
 
   it('shows and hides the host layer without removing the webview child', () => {
     const hostLayer = ensureWebviewHostLayer(document);
-    ensureHostedWebviewElement(hostLayer);
+    const webviewElement = ensureHostedWebviewElement(hostLayer);
 
     showWebviewHostLayer(hostLayer, { x: 10, y: 20, width: 300, height: 200 });
-    expect(hostLayer.style.display).toBe('block');
+    expect(hostLayer.style.display).toBe('flex');
     expect(hostLayer.style.left).toBe('10px');
     expect(hostLayer.style.top).toBe('20px');
     expect(hostLayer.style.width).toBe('300px');
     expect(hostLayer.style.height).toBe('200px');
+    expect(webviewElement.style.flex).toBe('1 1 auto');
+    expect(webviewElement.style.minHeight).toBe('0px');
 
     hideWebviewHostLayer(hostLayer);
     expect(hostLayer.style.display).toBe('none');
@@ -74,11 +98,11 @@ describe('webview dom host', () => {
     showWebviewHostLayer(taobaoLayer, { x: 0, y: 0, width: 300, height: 200 });
 
     expect(baiduLayer.style.display).toBe('none');
-    expect(taobaoLayer.style.display).toBe('block');
+    expect(taobaoLayer.style.display).toBe('flex');
 
     showWebviewHostLayer(baiduLayer, { x: 0, y: 0, width: 300, height: 200 });
 
-    expect(baiduLayer.style.display).toBe('block');
+    expect(baiduLayer.style.display).toBe('flex');
     expect(taobaoLayer.style.display).toBe('none');
   });
 });

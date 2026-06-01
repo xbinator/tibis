@@ -41,6 +41,38 @@ function resolveWebviewHostLayerId(hostKey?: string): string {
 }
 
 /**
+ * 同步宿主层基础布局样式。
+ * @param hostLayer - 标签页宿主层
+ */
+function applyWebviewHostLayerStyle(hostLayer: HTMLElement): void {
+  hostLayer.style.position = 'fixed';
+  hostLayer.style.left = '0';
+  hostLayer.style.top = '0';
+  hostLayer.style.width = hostLayer.style.width || '0';
+  hostLayer.style.height = hostLayer.style.height || '0';
+  hostLayer.style.flexDirection = 'column';
+  hostLayer.style.alignItems = 'stretch';
+  hostLayer.style.overflow = 'hidden';
+  hostLayer.style.pointerEvents = hostLayer.style.pointerEvents || 'none';
+  hostLayer.style.borderRadius = `${WEBVIEW_BORDER_RADIUS_PX}px`;
+}
+
+/**
+ * 同步真实 `<webview>` 的基础布局样式。
+ * @param webviewElement - 真实 `<webview>` 节点
+ */
+function applyHostedWebviewElementStyle(webviewElement: HTMLElement): void {
+  webviewElement.style.display = 'flex';
+  webviewElement.style.flex = '1 1 auto';
+  webviewElement.style.width = '100%';
+  webviewElement.style.height = '100%';
+  webviewElement.style.minWidth = '0';
+  webviewElement.style.minHeight = '0';
+  webviewElement.style.border = '0';
+  webviewElement.style.borderRadius = `${WEBVIEW_BORDER_RADIUS_PX}px`;
+}
+
+/**
  * 隐藏宿主层但不销毁内部 `<webview>`。
  * @param hostLayer - 标签页宿主层
  */
@@ -75,20 +107,14 @@ export function ensureWebviewHostLayer(doc: Document, hostKey?: string): HTMLDiv
   const hostLayerId = resolveWebviewHostLayerId(hostKey);
   const existing = doc.getElementById(hostLayerId);
   if (existing instanceof HTMLDivElement) {
+    applyWebviewHostLayerStyle(existing);
     return existing;
   }
 
   const hostLayer = doc.createElement('div');
   hostLayer.id = hostLayerId;
-  hostLayer.style.position = 'fixed';
-  hostLayer.style.left = '0';
-  hostLayer.style.top = '0';
-  hostLayer.style.width = '0';
-  hostLayer.style.height = '0';
   hostLayer.style.display = 'none';
-  hostLayer.style.overflow = 'hidden';
-  hostLayer.style.pointerEvents = 'none';
-  hostLayer.style.borderRadius = `${WEBVIEW_BORDER_RADIUS_PX}px`;
+  applyWebviewHostLayerStyle(hostLayer);
   doc.body.appendChild(hostLayer);
   return hostLayer;
 }
@@ -101,15 +127,13 @@ export function ensureWebviewHostLayer(doc: Document, hostKey?: string): HTMLDiv
 export function ensureHostedWebviewElement(hostLayer: HTMLElement): Electron.WebviewTag {
   const existing = hostLayer.querySelector('webview');
   if (existing instanceof HTMLElement) {
+    applyHostedWebviewElementStyle(existing);
     return existing as Electron.WebviewTag;
   }
 
   const webviewElement = document.createElement('webview') as Electron.WebviewTag;
   webviewElement.className = 'webview-content__element';
-  webviewElement.style.width = '100%';
-  webviewElement.style.height = '100%';
-  webviewElement.style.border = '0';
-  webviewElement.style.borderRadius = `${WEBVIEW_BORDER_RADIUS_PX}px`;
+  applyHostedWebviewElementStyle(webviewElement);
   hostLayer.appendChild(webviewElement);
   return webviewElement;
 }
@@ -121,7 +145,7 @@ export function ensureHostedWebviewElement(hostLayer: HTMLElement): Electron.Web
  */
 export function showWebviewHostLayer(hostLayer: HTMLElement, bounds: WebviewHostBounds): void {
   hideInactiveWebviewHostLayers(hostLayer);
-  hostLayer.style.display = 'block';
+  hostLayer.style.display = 'flex';
   hostLayer.style.pointerEvents = 'auto';
   hostLayer.style.left = `${Math.round(bounds.x)}px`;
   hostLayer.style.top = `${Math.round(bounds.y)}px`;
