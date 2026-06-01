@@ -360,15 +360,6 @@ function summarizeEditMemory(data: Record<string, unknown>): ToolResultSummary {
   return { text: summaryText };
 }
 
-/**
- * 格式化 read_memory 工具的结果。
- */
-function summarizeReadMemory(data: Record<string, unknown>): ToolResultSummary {
-  const summaryText = typeof data.summary === 'string' ? data.summary : '已读取记忆';
-
-  return { text: summaryText };
-}
-
 /** 工具名称到摘要解析函数的映射 */
 const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   get_current_time: (data) => summarizeGetCurrentTime(data as Record<string, unknown>),
@@ -383,8 +374,7 @@ const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   read_file: (data) => summarizeReadFile(data as Record<string, unknown>),
   read_current_document: (data) => summarizeReadFile(data as Record<string, unknown>),
   edit_file: (data) => summarizeEditFile(data as Record<string, unknown>),
-  edit_memory: (data) => summarizeEditMemory(data as Record<string, unknown>),
-  read_memory: (data) => summarizeReadMemory(data as Record<string, unknown>)
+  edit_memory: (data) => summarizeEditMemory(data as Record<string, unknown>)
 };
 
 /** 错误码到中文的映射 */
