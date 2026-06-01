@@ -8,6 +8,7 @@ export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
   write_file: { alias: '写入文件' },
   edit_file: { alias: '修改文件' },
   edit_memory: { alias: '管理记忆' },
+  read_memory: { alias: '读取记忆' },
   run_shell_command: { alias: '终端命令' },
   get_current_time: { alias: '获取当前时间' },
   get_settings: { alias: '获取设置' },

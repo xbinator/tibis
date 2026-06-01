@@ -6,6 +6,7 @@ import type { AIUsage } from 'types/ai';
 import type { ChatMessageHistoryCursor, ChatMessageRecord, ChatSession, ChatSessionType, PaginatedSessionsResult, SessionPaginationParams } from 'types/chat';
 import { defineStore } from 'pinia';
 import dayjs from 'dayjs';
+import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { is, type PersistableMessage } from '@/components/BChatSidebar/utils/messageHelper';
 import type { Message } from '@/components/BChatSidebar/utils/types';
@@ -36,7 +37,9 @@ export const useChatSessionStore = defineStore('chat', {
     async getSessionMessages(sessionId: string, cursor?: ChatMessageHistoryCursor): Promise<Message[]> {
       try {
         const messages = await retryDuringDatabaseInitialization(async () => {
-          const result = await getElectronAPI().chatMessageList(sessionId, cursor);
+          // 深拷贝以剥离 Vue 响应式 Proxy，否则 Electron IPC 结构化克隆会失败
+          const plainCursor = cursor ? (cloneDeep(cursor) as ChatMessageHistoryCursor) : undefined;
+          const result = await getElectronAPI().chatMessageList(sessionId, plainCursor);
           return unwrap(result);
         });
 
@@ -59,7 +62,9 @@ export const useChatSessionStore = defineStore('chat', {
     async getSessions(type: ChatSessionType, pagination?: SessionPaginationParams): Promise<PaginatedSessionsResult> {
       try {
         return await retryDuringDatabaseInitialization(async () => {
-          const result = await getElectronAPI().chatSessionList(type, pagination);
+          // 深拷贝以剥离 Vue 响应式 Proxy，否则 Electron IPC 结构化克隆会失败
+          const plainPagination = pagination ? (JSON.parse(JSON.stringify(pagination)) as SessionPaginationParams) : undefined;
+          const result = await getElectronAPI().chatSessionList(type, plainPagination);
           return unwrap(result);
         });
       } catch (error: unknown) {

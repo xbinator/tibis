@@ -22,7 +22,7 @@ import {
   UPDATE_MCP_SERVER_TOOL_NAME,
   type MCPStoreLike
 } from './MCPTool';
-import { EDIT_MEMORY_TOOL_NAME, createBuiltinMemoryTool } from './MemoryTool';
+import { EDIT_MEMORY_TOOL_NAME, READ_MEMORY_TOOL_NAME, createBuiltinEditMemoryTool, createBuiltinReadMemoryTool } from './MemoryTool';
 import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } from './QuestionTool';
 import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
@@ -48,7 +48,7 @@ export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsToo
 export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
 export { TODO_WRITE_TOOL_NAME } from './TodoWriteTool';
-export { EDIT_MEMORY_TOOL_NAME } from './MemoryTool';
+export { EDIT_MEMORY_TOOL_NAME, READ_MEMORY_TOOL_NAME } from './MemoryTool';
 
 /**
  * 由主进程 AI SDK 直接执行的远端工具名称。
@@ -81,7 +81,8 @@ export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   QUESTION_TOOL_NAME,
   READ_FILE_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
-  QUERY_LOGS_TOOL_NAME
+  QUERY_LOGS_TOOL_NAME,
+  READ_MEMORY_TOOL_NAME
 ] as const;
 
 /**
@@ -202,7 +203,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       getEditorContext: options.getEditorContext
     }),
     createBuiltinSettingsTools(options.confirm ?? { confirm: async () => false }).getSettings,
-    logTools.queryLogs
+    logTools.queryLogs,
+    createBuiltinReadMemoryTool()
   ];
   const readonlyTools = allReadonlyTools.filter((tool) => isDefaultBuiltinReadonlyToolName(tool.definition.name));
 
@@ -233,7 +235,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       ...(mcpReadTool ? [mcpReadTool] : []),
       createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) }),
       documentWriteTools.createDocument,
-      createBuiltinMemoryTool()
+      createBuiltinReadMemoryTool(),
+      createBuiltinEditMemoryTool()
     ];
   }
   // 创建文件级写入工具
@@ -267,7 +270,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     writeFileTool,
     settingsTools.updateSettings,
     ...(shellCommandTool ? [shellCommandTool] : []),
-    createBuiltinMemoryTool()
+    createBuiltinEditMemoryTool()
   ];
   const writableTools = allDefaultWritableTools.filter((tool) => isDefaultBuiltinWritableToolName(tool.definition.name));
 
