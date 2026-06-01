@@ -5,12 +5,15 @@
       :can-go-back="webview.state.value.canGoBack"
       :can-go-forward="webview.state.value.canGoForward"
       :is-loading="webview.state.value.isLoading"
+      :is-element-selecting="webview.state.value.isElementSelecting"
+      supports-element-selection
       @go-back="webview.goBack"
       @go-forward="webview.goForward"
       @reload="webview.reload"
       @stop="webview.stop"
       @submit-url="handleSubmitUrl"
       @open-in-browser="openInBrowser"
+      @select-element="webview.startElementSelection"
     />
 
     <div ref="webviewContainerRef" class="webview-content"></div>

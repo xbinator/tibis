@@ -3,7 +3,7 @@
  * @description 封装 `<webview>` 标签页面状态与导航控制。
  */
 import { ref, type Ref } from 'vue';
-import type { WebviewController, WebviewPageState } from '@/views/webview/shared/types';
+import type { WebviewController, WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
 
 /**
  * 默认 WebView 页面状态。
@@ -12,10 +12,145 @@ const DEFAULT_STATE: WebviewPageState = {
   url: '',
   title: '',
   isLoading: false,
+  isElementSelecting: false,
   canGoBack: false,
   canGoForward: false,
   loadProgress: 0
 };
+
+/**
+ * 构建注入到页面内的 DOM 元素选择脚本。
+ * @returns 可通过 `executeJavaScript` 执行的脚本
+ */
+function createElementSelectionScript(): string {
+  return `
+(() => new Promise((resolve) => {
+  const existingCleanup = window.__tibisElementPickerCleanup;
+  if (typeof existingCleanup === 'function') {
+    existingCleanup();
+  }
+
+  const style = document.createElement('style');
+  style.textContent = [
+    '.tibis-element-picker-highlight{',
+    'position:fixed;',
+    'z-index:2147483647;',
+    'pointer-events:none;',
+    'border:2px solid #2563eb;',
+    'background:rgba(37,99,235,.12);',
+    'box-sizing:border-box;',
+    'border-radius:4px;',
+    '}'
+  ].join('');
+  document.documentElement.appendChild(style);
+
+  const highlight = document.createElement('div');
+  highlight.className = 'tibis-element-picker-highlight';
+  highlight.hidden = true;
+  document.documentElement.appendChild(highlight);
+
+  const escapeCss = (value) => {
+    if (window.CSS && typeof window.CSS.escape === 'function') {
+      return window.CSS.escape(value);
+    }
+    return value.replace(/[^a-zA-Z0-9_-]/g, '\\\\$&');
+  };
+
+  const buildSelector = (element) => {
+    if (element.id) {
+      return element.tagName.toLowerCase() + '#' + escapeCss(element.id);
+    }
+
+    const classes = Array.from(element.classList).slice(0, 3).map((className) => '.' + escapeCss(className)).join('');
+    return element.tagName.toLowerCase() + classes;
+  };
+
+  const cleanup = () => {
+    document.removeEventListener('mousemove', handleMouseMove, true);
+    document.removeEventListener('click', handleClick, true);
+    document.removeEventListener('keydown', handleKeydown, true);
+    highlight.remove();
+    style.remove();
+    delete window.__tibisElementPickerCleanup;
+  };
+
+  const readElement = (element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      tagName: element.tagName,
+      id: element.id || '',
+      className: element.className || '',
+      text: (element.innerText || element.textContent || '').trim().slice(0, 200),
+      selector: buildSelector(element),
+      rect: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height
+      }
+    };
+  };
+
+  function handleMouseMove(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target === highlight) {
+      return;
+    }
+
+    const rect = target.getBoundingClientRect();
+    highlight.hidden = false;
+    highlight.style.left = rect.left + 'px';
+    highlight.style.top = rect.top + 'px';
+    highlight.style.width = rect.width + 'px';
+    highlight.style.height = rect.height + 'px';
+  }
+
+  function handleClick(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target === highlight) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    const selectedElement = readElement(target);
+    console.log('Tibis WebView selected element', selectedElement);
+    cleanup();
+    resolve(selectedElement);
+  }
+
+  function handleKeydown(event) {
+    if (event.key !== 'Escape') {
+      return;
+    }
+
+    event.preventDefault();
+    cleanup();
+    resolve(null);
+  }
+
+  window.__tibisElementPickerCleanup = cleanup;
+  document.addEventListener('mousemove', handleMouseMove, true);
+  document.addEventListener('click', handleClick, true);
+  document.addEventListener('keydown', handleKeydown, true);
+}))();
+`;
+}
+
+/**
+ * 判断执行脚本返回值是否为元素选择结果。
+ * @param value - 待判断的脚本返回值
+ * @returns 是否为元素选择结果
+ */
+function isElementSelection(value: unknown): value is WebviewElementSelection {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const selection = value as Partial<WebviewElementSelection>;
+  return typeof selection.tagName === 'string' && typeof selection.selector === 'string';
+}
 
 /**
  * 创建 `<webview>` 标签控制器。
@@ -111,6 +246,26 @@ export function useTagWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   }
 
   /**
+   * 开启页面 DOM 元素选择模式，并在选择完成后输出元素信息。
+   */
+  async function startElementSelection(): Promise<void> {
+    const instance = webviewRef.value;
+    if (!instance || state.value.isElementSelecting) {
+      return;
+    }
+
+    state.value.isElementSelecting = true;
+    try {
+      const result = await instance.executeJavaScript(createElementSelectionScript());
+      if (isElementSelection(result)) {
+        console.log('[WebView Element Picker]', result);
+      }
+    } finally {
+      state.value.isElementSelecting = false;
+    }
+  }
+
+  /**
    * 处理开始加载事件。
    */
   function handleDidStartLoading(): void {
@@ -180,6 +335,7 @@ export function useTagWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     handleDidNavigate,
     handleTitleUpdated,
     handleDidStopLoading,
-    handleAttachRejected
+    handleAttachRejected,
+    startElementSelection
   };
 }

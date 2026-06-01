@@ -67,4 +67,38 @@ describe('useTagWebView', () => {
     expect(hook.state.value.canGoBack).toBe(true);
     expect(hook.state.value.canGoForward).toBe(false);
   });
+
+  it('logs selected element details after starting element picker mode', async () => {
+    const selectedElement = {
+      tagName: 'A',
+      id: 'read-more',
+      className: 'link primary',
+      text: 'Read more',
+      selector: 'a#read-more.link.primary',
+      rect: {
+        x: 10,
+        y: 20,
+        width: 120,
+        height: 32
+      }
+    };
+    const executeJavaScript = vi.fn<(script: string) => Promise<typeof selectedElement>>().mockResolvedValue(selectedElement);
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const instance = {
+      executeJavaScript,
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+
+    const hook = useTagWebView(ref(instance));
+
+    await hook.startElementSelection();
+
+    expect(executeJavaScript).toHaveBeenCalledTimes(1);
+    expect(executeJavaScript.mock.calls[0]?.[0]).toContain('Tibis WebView selected element');
+    expect(consoleLog).toHaveBeenCalledWith('[WebView Element Picker]', selectedElement);
+    expect(hook.state.value.isElementSelecting).toBe(false);
+
+    consoleLog.mockRestore();
+  });
 });

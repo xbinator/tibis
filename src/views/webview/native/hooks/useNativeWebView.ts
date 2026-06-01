@@ -13,6 +13,7 @@ const DEFAULT_STATE: WebviewPageState = {
   url: '',
   title: '',
   isLoading: false,
+  isElementSelecting: false,
   canGoBack: false,
   canGoForward: false,
   loadProgress: 0

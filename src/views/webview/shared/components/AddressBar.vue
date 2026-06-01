@@ -18,6 +18,16 @@
     </div>
 
     <div class="action-buttons">
+      <BButton
+        v-if="supportsElementSelection"
+        type="text"
+        size="small"
+        square
+        :tooltip="isElementSelecting ? '正在选择元素' : '选择页面元素'"
+        :icon="isElementSelecting ? 'lucide:scan-line' : 'lucide:mouse-pointer-click'"
+        :disabled="isElementSelecting"
+        @click="emit('selectElement')"
+      />
       <BButton type="text" size="small" square tooltip="在浏览器打开" icon="lucide:external-link" @click="emit('openInBrowser')" />
     </div>
   </div>
@@ -37,12 +47,18 @@ interface Props {
   canGoForward?: boolean;
   /** 是否正在加载 */
   isLoading?: boolean;
+  /** 是否支持页面 DOM 元素选择 */
+  supportsElementSelection?: boolean;
+  /** 是否正在选择页面 DOM 元素 */
+  isElementSelecting?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
   canGoBack: false,
   canGoForward: false,
-  isLoading: false
+  isLoading: false,
+  supportsElementSelection: false,
+  isElementSelecting: false
 });
 
 const emit = defineEmits<{
@@ -51,6 +67,7 @@ const emit = defineEmits<{
   reload: [];
   stop: [];
   openInBrowser: [];
+  selectElement: [];
   submitUrl: [value: string];
 }>();
 
