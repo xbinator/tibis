@@ -90,6 +90,18 @@ describe('buildSystemPromptContext', () => {
     expect(result).toContain('规则一');
   });
 
+  it('continues checking lower priority sections when a higher priority section is too large', () => {
+    const doc = createEmptyMemoryDoc();
+    doc.sections.find((s) => s.category === 'Instructions')!.items.push({ content: '超长规则'.repeat(80) });
+    doc.sections.find((s) => s.category === 'Preferences')!.items.push({ content: '短偏好' });
+
+    const result = buildSystemPromptContext(doc, 180);
+
+    expect(result).not.toContain('# Instructions');
+    expect(result).toContain('# Preferences');
+    expect(result).toContain('短偏好');
+  });
+
   it('returns empty string when budget is too small for any section', () => {
     const doc = createEmptyMemoryDoc();
     doc.sections

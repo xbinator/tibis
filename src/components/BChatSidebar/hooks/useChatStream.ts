@@ -629,6 +629,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     const continuedMessages: ModelMessage[] = [...currentModelMessageCache.modelMessages];
 
     const memoryStore = useMemoryStore();
+    if (!memoryStore.loaded) await memoryStore.loadMemory();
     const memoryContext = memoryStore.buildSystemPromptContext();
 
     agent.stream({

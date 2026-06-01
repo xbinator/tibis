@@ -21,9 +21,23 @@ interface EditMemoryInput {
 }
 
 /**
- * 获取分区快照
+ * 工具返回的分区快照
  */
-function getSectionsSnapshot(store: ReturnType<typeof useMemoryStore>) {
+interface MemorySectionSnapshot {
+  /** 分区名称 */
+  category: MemoryCategory;
+  /** 分区条目文本 */
+  items: string[];
+  /** 分区条目数量 */
+  count: number;
+}
+
+/**
+ * 获取分区快照
+ * @param store - 记忆 Store
+ * @returns 当前所有分区的条目快照
+ */
+function getSectionsSnapshot(store: ReturnType<typeof useMemoryStore>): MemorySectionSnapshot[] {
   return store.doc.sections.map((s: MemorySection) => ({
     category: s.category,
     items: s.items.map((i) => i.content),
@@ -76,6 +90,13 @@ export function createBuiltinEditMemoryTool(): AIToolExecutor<EditMemoryInput> {
       if (!store.loaded) await store.loadMemory();
 
       const changes: string[] = [];
+      const previousDoc = {
+        sections: store.doc.sections.map((section: MemorySection) => ({
+          category: section.category,
+          items: section.items.map((item) => ({ content: item.content }))
+        }))
+      };
+      const previousRawContent = store.rawContent;
 
       for (const [category, items] of Object.entries(sections)) {
         // 校验分区名
@@ -88,8 +109,13 @@ export function createBuiltinEditMemoryTool(): AIToolExecutor<EditMemoryInput> {
           return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', `${category} 的值必须是数组。`);
         }
 
+        const hasInvalidItem = items.some((item: unknown) => typeof item !== 'string');
+        if (hasInvalidItem) {
+          return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', `${category} 的条目必须全部是字符串。`);
+        }
+
         // 过滤空字符串
-        const validItems = items.map((i: unknown) => String(i).trim()).filter((s: string) => s.length > 0);
+        const validItems = items.map((i: string) => i.trim()).filter((s: string) => s.length > 0);
 
         // 条数上限
         if (validItems.length > MAX_ITEMS_PER_SECTION) {
@@ -115,7 +141,13 @@ export function createBuiltinEditMemoryTool(): AIToolExecutor<EditMemoryInput> {
         }
       }
 
-      await store.saveMemory();
+      try {
+        await store.saveMemory();
+      } catch {
+        store.doc = previousDoc;
+        store.rawContent = previousRawContent;
+        return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'EXECUTION_FAILED', '记忆保存失败，请稍后重试。');
+      }
 
       return createToolSuccessResult(EDIT_MEMORY_TOOL_NAME, {
         summary: changes.join('，'),

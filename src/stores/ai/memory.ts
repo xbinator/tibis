@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia';
 import { buildSystemPromptContext } from '@/ai/memory/injector';
 import { parseMemoryDoc, serializeMemoryDoc, createEmptyMemoryDoc } from '@/ai/memory/parser';
-import type { MemoryDoc } from '@/ai/memory/types';
+import type { MemoryCategory, MemoryDoc } from '@/ai/memory/types';
 import { MEMORY_FILE_NAME } from '@/ai/memory/types';
 import { native } from '@/shared/platform';
 import { getElectronAPI } from '@/shared/platform/electron-api';
@@ -100,10 +100,11 @@ export const useMemoryStore = defineStore('memory', {
         await getElectronAPI().ensureDir(dirPath);
         const filePath = await getMemoryFilePath();
         const content = serializeMemoryDoc(this.doc);
-        this.rawContent = content;
         await native.writeFile(filePath, content);
+        this.rawContent = content;
       } catch (error) {
         console.error('[memory] Failed to save memory file:', error);
+        throw error;
       }
     },
 
@@ -122,7 +123,7 @@ export const useMemoryStore = defineStore('memory', {
      * @param index - 条目索引
      * @param content - 新内容
      */
-    async updateItem(category: string, index: number, content: string): Promise<void> {
+    async updateItem(category: MemoryCategory, index: number, content: string): Promise<void> {
       const section = this.doc.sections.find((s) => s.category === category);
       if (!section || index < 0 || index >= section.items.length) return;
 
@@ -135,7 +136,7 @@ export const useMemoryStore = defineStore('memory', {
      * @param category - 分区名称
      * @param index - 条目索引
      */
-    async deleteItem(category: string, index: number): Promise<void> {
+    async deleteItem(category: MemoryCategory, index: number): Promise<void> {
       const section = this.doc.sections.find((s) => s.category === category);
       if (!section || index < 0 || index >= section.items.length) return;
 

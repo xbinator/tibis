@@ -51,7 +51,7 @@ function pruneToBudget(sections: MemorySection[], header: string, maxChars: numb
       keptSections.push(section);
       remaining -= sectionText.length + 2;
     } else {
-      break;
+      continue;
     }
   }
 
