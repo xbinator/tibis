@@ -25,7 +25,8 @@ export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
   create_document: { alias: '创建文档' },
   tavily_search: { alias: '搜索网页' },
   tavily_extract: { alias: '提取网页内容' },
-  open_draft: { alias: '打开草稿' }
+  open_draft: { alias: '打开草稿' },
+  open_resource: { alias: '打开资源' }
 };
 
 /**

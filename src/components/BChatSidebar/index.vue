@@ -130,7 +130,9 @@ import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
+import { useOpenFile } from '@/hooks/useOpenFile';
 import { useWorkspaceRoot } from '@/hooks/useWorkspaceRoot';
+import { native } from '@/shared/platform';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
@@ -209,6 +211,8 @@ provide('interaction', interactionAPI);
 const promptEditorRef = ref<InstanceType<typeof BPromptEditor>>();
 /** 通用文件打开导航能力 */
 const { openFile } = useNavigate();
+/** 文件打开能力（供 open_resource 工具使用） */
+const { openFileByPath } = useOpenFile();
 /** 全局模型选择器引用。 */
 const modelSelectRef = ref<InstanceType<typeof BModelSelect>>();
 /** 全局模型选择器显示状态。 */
@@ -396,6 +400,25 @@ const allBuiltinTools = createBuiltinTools({
     return editorToolContextRegistry.getContext(documentId);
   },
   openDraft,
+  /**
+   * 通过文件路径打开文件标签页。
+   * 封装 useOpenFile().openFileByPath，返回 { id } 或 null。
+   */
+  openFileByPath,
+  /**
+   * 在内置 webview 中打开 URL。
+   * 通过 Vue Router 导航到 webview-web 页面。
+   */
+  openInWebview: (url: string) => {
+    router.push({ name: 'webview-web', query: { url: encodeURIComponent(url) } });
+  },
+  /**
+   * 在系统浏览器中打开 URL。
+   * 通过 Electron shell.openExternal 实现。
+   */
+  openExternal: (url: string) => {
+    native.openExternal(url);
+  },
   getPendingQuestion: () => {
     const pendingQuestion = userChoice.findPending(messages.value);
     if (!pendingQuestion) return null;

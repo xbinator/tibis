@@ -360,6 +360,39 @@ function summarizeEditMemory(data: Record<string, unknown>): ToolResultSummary {
   return { text: summaryText };
 }
 
+/**
+ * 格式化 open_resource 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 打开资源摘要
+ */
+function summarizeOpenResource(data: Record<string, unknown>): ToolResultSummary {
+  const resourceType = typeof data.resourceType === 'string' ? data.resourceType : '';
+  const path = typeof data.path === 'string' ? data.path : '';
+
+  if (resourceType === 'file') {
+    return {
+      text: '已打开文件',
+      tags: path ? [{ label: '文件', value: toFileName(path) }] : undefined
+    };
+  }
+
+  if (resourceType === 'webview') {
+    return {
+      text: '已打开网页',
+      tags: path ? [{ label: '网址', value: path }] : undefined
+    };
+  }
+
+  if (resourceType === 'external') {
+    return {
+      text: '已打开外部链接',
+      tags: path ? [{ label: '链接', value: path }] : undefined
+    };
+  }
+
+  return { text: '已打开资源' };
+}
+
 /** 工具名称到摘要解析函数的映射 */
 const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   get_current_time: (data) => summarizeGetCurrentTime(data as Record<string, unknown>),
@@ -374,7 +407,8 @@ const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   read_file: (data) => summarizeReadFile(data as Record<string, unknown>),
   read_current_document: (data) => summarizeReadFile(data as Record<string, unknown>),
   edit_file: (data) => summarizeEditFile(data as Record<string, unknown>),
-  edit_memory: (data) => summarizeEditMemory(data as Record<string, unknown>)
+  edit_memory: (data) => summarizeEditMemory(data as Record<string, unknown>),
+  open_resource: (data) => summarizeOpenResource(data as Record<string, unknown>)
 };
 
 /** 错误码到中文的映射 */

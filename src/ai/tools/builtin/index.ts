@@ -23,6 +23,7 @@ import {
   type MCPStoreLike
 } from './MCPTool';
 import { EDIT_MEMORY_TOOL_NAME, createBuiltinEditMemoryTool } from './MemoryTool';
+import { createOpenResourceTool, OPEN_RESOURCE_TOOL_NAME } from './OpenResourceTool';
 import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } from './QuestionTool';
 import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
@@ -31,6 +32,7 @@ import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteToo
 
 // 重新导出工具名称
 export { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool';
+export { OPEN_RESOURCE_TOOL_NAME } from './OpenResourceTool';
 export { GET_CURRENT_TIME_TOOL_NAME } from './EnvironmentTool';
 export { EDIT_FILE_TOOL_NAME } from './FileEditTool';
 export { READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool';
@@ -81,7 +83,8 @@ export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   QUESTION_TOOL_NAME,
   READ_FILE_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
-  QUERY_LOGS_TOOL_NAME
+  QUERY_LOGS_TOOL_NAME,
+  OPEN_RESOURCE_TOOL_NAME
 ] as const;
 
 /**
@@ -172,6 +175,12 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions {
   skillStore?: SkillStoreLike;
   /** 获取当前活跃会话 ID，用于 todowrite 工具 */
   getSessionId?: () => string | undefined;
+  /** 通过文件路径打开文件标签页，用于 open_resource 工具 */
+  openFileByPath?: (filePath: string) => Promise<{ id: string } | null>;
+  /** 在内置 webview 中打开 URL，用于 open_resource 工具 */
+  openInWebview?: (url: string) => void;
+  /** 在系统浏览器中打开 URL，用于 open_resource 工具 */
+  openExternal?: (url: string) => void;
 }
 
 /**
@@ -200,6 +209,14 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       isFileInRecent: options.isFileInRecent,
       findFileByPath: options.findFileByPath,
       getEditorContext: options.getEditorContext
+    }),
+    createOpenResourceTool({
+      confirm: options.confirm,
+      getWorkspaceRoot: options.getWorkspaceRoot,
+      isFileInRecent: options.isFileInRecent,
+      openFileByPath: options.openFileByPath,
+      openInWebview: options.openInWebview,
+      openExternal: options.openExternal
     }),
     createBuiltinSettingsTools(options.confirm ?? { confirm: async () => false }).getSettings,
     logTools.queryLogs
