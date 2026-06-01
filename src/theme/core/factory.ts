@@ -169,10 +169,10 @@ export function createThemeTokens(palette: BasePalette, mode: 'light' | 'dark'):
       lightActive: SHARED.scrollbarLightActive
     },
     shadow: {
-      sm: isDark ? '0 1px 2px rgb(0 0 0 / 40%)' : `0 1px 2px rgb(${parseHex(palette.bg0).join(' ')} / 5%)`,
-      md: isDark ? '0 4px 12px rgb(0 0 0 / 55%)' : `0 4px 12px rgb(${parseHex(palette.bg0).join(' ')} / 9%)`,
-      lg: isDark ? '0 12px 32px rgb(0 0 0 / 65%)' : `0 12px 32px rgb(${parseHex(palette.bg0).join(' ')} / 12%)`,
-      dropdown: isDark ? '0 4px 10px rgb(0 0 0 / 34%)' : `0 4px 10px rgb(${parseHex(palette.bg0).join(' ')} / 8%)`
+      sm: isDark ? '0 1px 2px rgb(0 0 0 / 40%)' : '0 1px 2px rgb(0 0 0 / 5%)',
+      md: isDark ? '0 4px 12px rgb(0 0 0 / 55%)' : '0 4px 12px rgb(0 0 0 / 9%)',
+      lg: isDark ? '0 12px 32px rgb(0 0 0 / 65%)' : '0 12px 32px rgb(0 0 0 / 12%)',
+      dropdown: isDark ? '0 4px 10px rgb(0 0 0 / 34%)' : '0 8px 24px rgb(0 0 0 / 30%)'
     },
     code: {
       bg: palette.bg1,

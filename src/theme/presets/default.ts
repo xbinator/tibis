@@ -310,7 +310,7 @@ const defaultDark: ThemeTokens = {
     sm: '0 1px 2px rgb(0 0 0 / 40%)',
     md: '0 4px 12px rgb(0 0 0 / 55%)',
     lg: '0 12px 32px rgb(0 0 0 / 65%)',
-    dropdown: '0 4px 10px rgb(0 0 0 / 34%)'
+    dropdown: '0 8px 24px rgb(0 0 0 / 30%)'
   },
   code: {
     bg: '#0c0e12',
