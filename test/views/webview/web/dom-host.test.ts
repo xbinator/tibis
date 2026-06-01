@@ -25,8 +25,21 @@ describe('webview dom host', () => {
     expect(second).toBe(first);
   });
 
-  it('reuses the same hosted webview element', () => {
-    const hostLayer = ensureWebviewHostLayer(document);
+  it('creates isolated host layers for different webview tabs', () => {
+    const baiduLayer = ensureWebviewHostLayer(document, '/webview/web?url=https%3A%2F%2Fbaidu.com');
+    const taobaoLayer = ensureWebviewHostLayer(document, '/webview/web?url=https%3A%2F%2Ftaobao.com');
+
+    const baiduWebview = ensureHostedWebviewElement(baiduLayer);
+    const taobaoWebview = ensureHostedWebviewElement(taobaoLayer);
+
+    expect(taobaoLayer).not.toBe(baiduLayer);
+    expect(taobaoWebview).not.toBe(baiduWebview);
+    expect(baiduLayer.childElementCount).toBe(1);
+    expect(taobaoLayer.childElementCount).toBe(1);
+  });
+
+  it('reuses the same hosted webview element inside one tab layer', () => {
+    const hostLayer = ensureWebviewHostLayer(document, '/webview/web?url=https%3A%2F%2Fbaidu.com');
 
     const first = ensureHostedWebviewElement(hostLayer);
     const second = ensureHostedWebviewElement(hostLayer);
@@ -51,5 +64,21 @@ describe('webview dom host', () => {
     hideWebviewHostLayer(hostLayer);
     expect(hostLayer.style.display).toBe('none');
     expect(hostLayer.childElementCount).toBe(1);
+  });
+
+  it('hides inactive webview tab layers when showing the active one', () => {
+    const baiduLayer = ensureWebviewHostLayer(document, '/webview/web?url=https%3A%2F%2Fbaidu.com');
+    const taobaoLayer = ensureWebviewHostLayer(document, '/webview/web?url=https%3A%2F%2Ftaobao.com');
+
+    showWebviewHostLayer(baiduLayer, { x: 0, y: 0, width: 300, height: 200 });
+    showWebviewHostLayer(taobaoLayer, { x: 0, y: 0, width: 300, height: 200 });
+
+    expect(baiduLayer.style.display).toBe('none');
+    expect(taobaoLayer.style.display).toBe('block');
+
+    showWebviewHostLayer(baiduLayer, { x: 0, y: 0, width: 300, height: 200 });
+
+    expect(baiduLayer.style.display).toBe('block');
+    expect(taobaoLayer.style.display).toBe('none');
   });
 });

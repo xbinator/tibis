@@ -28,7 +28,7 @@ router.afterEach((to) => {
     const tabsStore = useTabsStore();
     const { tabId, cacheKey, title } = resolveRouteTabInfo(to);
 
-    tabsStore.addTab({ id: tabId, path: to.fullPath, title, cacheKey });
+    tabsStore.addTab({ id: tabId, path: to.fullPath, title, cacheKey }, { preserveTitle: true });
   }
 });
 

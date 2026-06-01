@@ -74,6 +74,30 @@ describe('useTabsStore', () => {
     expect(tabsStore.cachedKeys).toEqual(['cache:alpha', 'cache:beta']);
   });
 
+  it('preserves an existing tab title when a route is reactivated', async () => {
+    const { useTabsStore } = await import('@/stores/workspace/tabs');
+    const tabsStore = useTabsStore();
+
+    tabsStore.addTab({
+      id: '/webview/web?url=https%3A%2F%2Fbaidu.com',
+      path: '/webview/web?url=https%3A%2F%2Fbaidu.com',
+      title: '百度一下，你就知道',
+      cacheKey: '/webview/web?url=https%3A%2F%2Fbaidu.com'
+    });
+
+    tabsStore.addTab(
+      {
+        id: '/webview/web?url=https%3A%2F%2Fbaidu.com',
+        path: '/webview/web?url=https%3A%2F%2Fbaidu.com',
+        title: 'https://baidu.com',
+        cacheKey: '/webview/web?url=https%3A%2F%2Fbaidu.com'
+      },
+      { preserveTitle: true }
+    );
+
+    expect(tabsStore.tabs[0]?.title).toBe('百度一下，你就知道');
+  });
+
   it('exposes cached component names for KeepAlive include filters', async () => {
     const { resolveRouteCacheName } = await import('@/router/cache');
     const { useTabsStore } = await import('@/stores/workspace/tabs');

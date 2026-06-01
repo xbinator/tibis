@@ -1,6 +1,6 @@
 /**
  * @file dom-host.ts
- * @description 管理 `<webview>` 宿主层与全局单例节点。
+ * @description 管理 `<webview>` 标签页宿主层与 DOM 节点。
  */
 
 /**
@@ -28,18 +28,58 @@ export interface WebviewHostBounds {
 }
 
 /**
- * 确保文档中存在 `<webview>` 全局宿主层。
+ * 解析指定标签页对应的宿主层 ID。
+ * @param hostKey - 标签页隔离 key，不传时使用默认宿主层 ID
+ * @returns 宿主层 DOM id
+ */
+function resolveWebviewHostLayerId(hostKey?: string): string {
+  if (!hostKey) {
+    return WEBVIEW_HOST_LAYER_ID;
+  }
+
+  return `${WEBVIEW_HOST_LAYER_ID}-${encodeURIComponent(hostKey)}`;
+}
+
+/**
+ * 隐藏宿主层但不销毁内部 `<webview>`。
+ * @param hostLayer - 标签页宿主层
+ */
+export function hideWebviewHostLayer(hostLayer: HTMLElement): void {
+  hostLayer.style.display = 'none';
+  hostLayer.style.pointerEvents = 'none';
+}
+
+/**
+ * 隐藏同文档下其它 WebView 宿主层，避免多个标签页内容互相遮挡。
+ * @param activeHostLayer - 当前需要显示的宿主层
+ */
+function hideInactiveWebviewHostLayers(activeHostLayer: HTMLElement): void {
+  const hostLayers = activeHostLayer.ownerDocument.querySelectorAll<HTMLElement>(`[id^="${WEBVIEW_HOST_LAYER_ID}"]`);
+
+  hostLayers.forEach((hostLayer) => {
+    if (hostLayer === activeHostLayer) {
+      return;
+    }
+
+    hideWebviewHostLayer(hostLayer);
+  });
+}
+
+/**
+ * 确保文档中存在指定标签页的 `<webview>` 宿主层。
  * @param doc - 目标文档对象
+ * @param hostKey - 标签页隔离 key
  * @returns 宿主层元素
  */
-export function ensureWebviewHostLayer(doc: Document): HTMLDivElement {
-  const existing = doc.getElementById(WEBVIEW_HOST_LAYER_ID);
+export function ensureWebviewHostLayer(doc: Document, hostKey?: string): HTMLDivElement {
+  const hostLayerId = resolveWebviewHostLayerId(hostKey);
+  const existing = doc.getElementById(hostLayerId);
   if (existing instanceof HTMLDivElement) {
     return existing;
   }
 
   const hostLayer = doc.createElement('div');
-  hostLayer.id = WEBVIEW_HOST_LAYER_ID;
+  hostLayer.id = hostLayerId;
   hostLayer.style.position = 'fixed';
   hostLayer.style.left = '0';
   hostLayer.style.top = '0';
@@ -54,8 +94,8 @@ export function ensureWebviewHostLayer(doc: Document): HTMLDivElement {
 }
 
 /**
- * 确保宿主层里存在全局单例 `<webview>` 节点。
- * @param hostLayer - 全局宿主层
+ * 确保宿主层里存在当前标签页专属的 `<webview>` 节点。
+ * @param hostLayer - 标签页宿主层
  * @returns `<webview>` 元素
  */
 export function ensureHostedWebviewElement(hostLayer: HTMLElement): Electron.WebviewTag {
@@ -76,23 +116,15 @@ export function ensureHostedWebviewElement(hostLayer: HTMLElement): Electron.Web
 
 /**
  * 显示宿主层并同步位置尺寸。
- * @param hostLayer - 全局宿主层
+ * @param hostLayer - 标签页宿主层
  * @param bounds - 目标位置和尺寸
  */
 export function showWebviewHostLayer(hostLayer: HTMLElement, bounds: WebviewHostBounds): void {
+  hideInactiveWebviewHostLayers(hostLayer);
   hostLayer.style.display = 'block';
   hostLayer.style.pointerEvents = 'auto';
   hostLayer.style.left = `${Math.round(bounds.x)}px`;
   hostLayer.style.top = `${Math.round(bounds.y)}px`;
   hostLayer.style.width = `${Math.round(bounds.width)}px`;
   hostLayer.style.height = `${Math.round(bounds.height)}px`;
-}
-
-/**
- * 隐藏宿主层但不销毁内部 `<webview>`。
- * @param hostLayer - 全局宿主层
- */
-export function hideWebviewHostLayer(hostLayer: HTMLElement): void {
-  hostLayer.style.display = 'none';
-  hostLayer.style.pointerEvents = 'none';
 }

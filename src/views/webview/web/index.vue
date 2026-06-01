@@ -35,7 +35,8 @@ import { useTagWebView } from './hooks/useTagWebView';
 const route = useRoute();
 const webviewContainerRef = ref<HTMLElement | null>(null);
 const webviewElementRef = ref<Electron.WebviewTag | null>(null);
-const initialUrl = computed(() => normalizeWebviewUrl(decodeURIComponent((route.query.url as string) || '')));
+const routeFullPath = route.fullPath;
+const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as string) || ''));
 const webview = useTagWebView(webviewElementRef);
 
 const offAttachRejected = window.electronAPI?.webview.onAttachRejected((payload) => {
@@ -93,7 +94,7 @@ function unbindWebviewEvents(element: Electron.WebviewTag): void {
 
 /**
  * 创建并缓存 `<webview>` 元素，只创建一次。
- * `<webview>` 与宿主层始终挂在 `document.body` 下，不跟随页面 DOM 重挂载。
+ * `<webview>` 与当前标签页宿主层始终挂在 `document.body` 下，不跟随页面 DOM 重挂载。
  * @returns `<webview>` 元素
  */
 function ensureWebviewElement(): Electron.WebviewTag {
@@ -102,12 +103,12 @@ function ensureWebviewElement(): Electron.WebviewTag {
     return existing;
   }
 
-  const hostLayer = ensureWebviewHostLayer(document);
+  const hostLayer = ensureWebviewHostLayer(document, routeFullPath);
   const element = ensureHostedWebviewElement(hostLayer);
   bindWebviewEvents(element);
   webviewElementRef.value = element;
-  webview.create(initialUrl.value);
-  webview.attachInitialUrl(initialUrl.value);
+  webview.create(initialUrl);
+  webview.attachInitialUrl(initialUrl);
   return element;
 }
 
@@ -125,7 +126,7 @@ function syncHostLayerBounds(): void {
     return;
   }
 
-  showWebviewHostLayer(ensureWebviewHostLayer(document), {
+  showWebviewHostLayer(ensureWebviewHostLayer(document, routeFullPath), {
     x: rect.left,
     y: rect.top,
     width: rect.width,
@@ -134,7 +135,7 @@ function syncHostLayerBounds(): void {
 }
 
 useWebviewTabTitle({
-  routeFullPath: route.fullPath,
+  routeFullPath,
   title: computed(() => webview.state.value.title)
 });
 
@@ -148,7 +149,7 @@ onActivated(() => {
 });
 
 onDeactivated(() => {
-  hideWebviewHostLayer(ensureWebviewHostLayer(document));
+  hideWebviewHostLayer(ensureWebviewHostLayer(document, routeFullPath));
 });
 
 useResizeObserver(webviewContainerRef, syncHostLayerBounds);

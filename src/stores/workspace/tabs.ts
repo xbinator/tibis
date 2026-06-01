@@ -47,6 +47,14 @@ export interface Tab {
 }
 
 /**
+ * 添加标签页时的行为选项。
+ */
+export interface AddTabOptions {
+  /** 已存在相同标签时是否保留当前标题 */
+  preserveTitle?: boolean;
+}
+
+/**
  * 标签页状态结构。
  */
 export interface TabsState {
@@ -284,7 +292,7 @@ export const useTabsStore = defineStore('tabs', {
      * 添加或更新标签页。
      * @param tab - 需要加入状态的标签页
      */
-    addTab(tab: Tab): void {
+    addTab(tab: Tab, options: AddTabOptions = {}): void {
       const normalizedTab = normalizeTab(tab);
       const singletonConfig = findSingletonTabConfig(normalizedTab.path);
 
@@ -299,7 +307,12 @@ export const useTabsStore = defineStore('tabs', {
         if (index === -1) {
           this.tabs.push(normalizedTab);
         } else {
-          this.tabs[index] = normalizedTab;
+          const existingTab = this.tabs[index];
+
+          this.tabs[index] = {
+            ...normalizedTab,
+            title: options.preserveTitle && existingTab ? existingTab.title : normalizedTab.title
+          };
         }
       }
 
