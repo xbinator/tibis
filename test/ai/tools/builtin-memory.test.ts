@@ -1,6 +1,6 @@
 /**
  * @file builtin-memory.test.ts
- * @description edit_memory 工具测试
+ * @description edit_memory 工具测试（分区级覆盖模式）
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,12 +27,11 @@ vi.mock('@/shared/platform/electron-api', () => ({
   getElectronAPI: vi.fn(() => ({ ensureDir: vi.fn(async () => undefined) }))
 }));
 
-const storage = new Map<string, string>();
 vi.stubGlobal('localStorage', {
-  getItem: (key: string) => storage.get(key) ?? null,
-  setItem: (key: string, value: string) => { storage.set(key, value); },
-  removeItem: (key: string) => { storage.delete(key); },
-  clear: () => { storage.clear(); }
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+  clear: () => {}
 });
 
 const edit = () => createBuiltinEditMemoryTool();
@@ -40,62 +39,91 @@ const edit = () => createBuiltinEditMemoryTool();
 describe('edit_memory', () => {
   beforeEach(() => {
     inMemoryFs.clear();
-    storage.clear();
     setActivePinia(createPinia());
   });
 
-  // ── add ──
-  it('adds item', async () => {
-    const r = await edit().execute({ action: 'add', section: 'Facts', content: '项目用 Vue 3' });
+  it('sets items in a single section', async () => {
+    const r = await edit().execute({
+      sections: { Facts: ['项目用 Vue 3', '团队有 3 人'] }
+    });
     expect(r.status).toBe('success');
+    if (r.status === 'success') {
+      expect(r.data.summary).toContain('Facts');
+      const facts = r.data.sections.find((s) => s.category === 'Facts');
+      expect(facts?.items).toEqual(['项目用 Vue 3', '团队有 3 人']);
+    }
   });
 
-  it('rejects duplicate', async () => {
-    await edit().execute({ action: 'add', section: 'Facts', content: 'x' });
-    const r = await edit().execute({ action: 'add', section: 'Facts', content: 'x' });
-    expect((r as { status: 'success'; data: { summary: string } }).data.summary).toContain('未重复添加');
+  it('overwrites existing section content', async () => {
+    await edit().execute({ sections: { Facts: ['旧事实 A', '旧事实 B'] } });
+    const r = await edit().execute({ sections: { Facts: ['新事实'] } });
+
+    if (r.status === 'success') {
+      const facts = r.data.sections.find((s) => s.category === 'Facts');
+      expect(facts?.items).toEqual(['新事实']);
+    }
   });
 
-  it('rejects when full', async () => {
-    for (let i = 0; i < 20; i++) await edit().execute({ action: 'add', section: 'Facts', content: `条目${i}` });
-    expect((await edit().execute({ action: 'add', section: 'Facts', content: '超限' })).status).toBe('failure');
+  it('clears section when given empty array', async () => {
+    await edit().execute({ sections: { Facts: ['旧事实'] } });
+    const r = await edit().execute({ sections: { Facts: [] } });
+
+    if (r.status === 'success') {
+      const facts = r.data.sections.find((s) => s.category === 'Facts');
+      expect(facts?.items).toEqual([]);
+    }
   });
 
-  it('requires content for add', async () => {
-    expect((await edit().execute({ action: 'add', section: 'Facts', content: '' })).status).toBe('failure');
-  });
+  it('does not affect unmentioned sections', async () => {
+    await edit().execute({ sections: { Facts: ['事实'] } });
+    await edit().execute({ sections: { Preferences: ['偏好'] } });
 
-  // ── update ──
-  it('updates by index', async () => {
-    await edit().execute({ action: 'add', section: 'Facts', content: '旧' });
-    const r = await edit().execute({ action: 'update', section: 'Facts', index: 0, content: '新' });
-    expect(r.status).toBe('success');
-  });
-
-  it('update fails when no match', async () => {
-    expect((await edit().execute({ action: 'update', section: 'Facts', content: '不存在' })).status).toBe('failure');
-  });
-
-  // ── remove ──
-  it('removes by index', async () => {
-    await edit().execute({ action: 'add', section: 'Facts', content: '删' });
-    const r = await edit().execute({ action: 'remove', section: 'Facts', index: 0 });
-    expect(r.status).toBe('success');
-  });
-
-  it('removes by content', async () => {
-    await edit().execute({ action: 'add', section: 'Facts', content: '删' });
-    expect((await edit().execute({ action: 'remove', section: 'Facts', content: '删' })).status).toBe('success');
-  });
-
-  it('remove fails when no match', async () => {
-    expect((await edit().execute({ action: 'remove', section: 'Facts', content: '不存在' })).status).toBe('failure');
-  });
-
-  // ── store consistency ──
-  it('writes persist in store', async () => {
-    await edit().execute({ action: 'add', section: 'Facts', content: '新事实' });
+    // Facts should still be there
     const store = useMemoryStore();
-    expect(store.doc.sections.find((s) => s.category === 'Facts')!.items.some((i) => i.content === '新事实')).toBe(true);
+    const facts = store.doc.sections.find((s) => s.category === 'Facts')!;
+    expect(facts.items[0].content).toBe('事实');
+
+    const prefs = store.doc.sections.find((s) => s.category === 'Preferences')!;
+    expect(prefs.items[0].content).toBe('偏好');
+  });
+
+  it('updates multiple sections at once', async () => {
+    const r = await edit().execute({
+      sections: {
+        Facts: ['事实 1'],
+        Preferences: ['偏好 1'],
+        Habits: ['习惯 1']
+      }
+    });
+    expect(r.status).toBe('success');
+    if (r.status === 'success') {
+      expect(r.data.summary).toContain('Facts');
+      expect(r.data.summary).toContain('Preferences');
+      expect(r.data.summary).toContain('Habits');
+    }
+  });
+
+  it('rejects invalid section name', async () => {
+    const r = await edit().execute({ sections: { InvalidSection: ['x'] } });
+    expect(r.status).toBe('failure');
+  });
+
+  it('rejects when exceeding max items', async () => {
+    const items = Array.from({ length: 21 }, (_, i) => `条目 ${i}`);
+    const r = await edit().execute({ sections: { Facts: items } });
+    expect(r.status).toBe('failure');
+  });
+
+  it('filters empty strings', async () => {
+    const r = await edit().execute({ sections: { Facts: ['', '   ', '有效条目'] } });
+    if (r.status === 'success') {
+      const facts = r.data.sections.find((s) => s.category === 'Facts');
+      expect(facts?.items).toEqual(['有效条目']);
+    }
+  });
+
+  it('requires at least one section', async () => {
+    const r = await edit().execute({ sections: {} });
+    expect(r.status).toBe('failure');
   });
 });

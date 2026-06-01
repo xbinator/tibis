@@ -1,6 +1,6 @@
 /**
  * @file MemoryTool/index.ts
- * @description 记忆编辑工具（只写），AI 通过 system prompt 已持有记忆内容，直接 edit 即可。
+ * @description 记忆编辑工具——AI 声明分区内容的最终形态，工具负责完整替换
  */
 import type { AIToolExecutor } from 'types/ai';
 import type { MemoryCategory, MemorySection } from '@/ai/memory/types';
@@ -10,10 +10,19 @@ import { createToolFailureResult, createToolSuccessResult } from '../../results'
 
 export const EDIT_MEMORY_TOOL_NAME = 'edit_memory';
 
+/** 单分区最大条目数 */
 const MAX_ITEMS_PER_SECTION = 20;
 
-type EditMemoryAction = 'add' | 'update' | 'remove';
+/**
+ * edit_memory 输入：一个或多个分区 → 该分区应当包含的完整条目列表
+ */
+interface EditMemoryInput {
+  sections: Partial<Record<MemoryCategory, string[]>>;
+}
 
+/**
+ * 获取分区快照
+ */
 function getSectionsSnapshot(store: ReturnType<typeof useMemoryStore>) {
   return store.doc.sections.map((s: MemorySection) => ({
     category: s.category,
@@ -22,24 +31,14 @@ function getSectionsSnapshot(store: ReturnType<typeof useMemoryStore>) {
   }));
 }
 
-function resolveTargetIndex(section: MemorySection, index: number | undefined, content: string): number {
-  if (index !== undefined && index >= 0 && index < section.items.length) return index;
-  if (content?.trim()) return section.items.findIndex((i) => i.content === content.trim());
-  return -1;
-}
-
-export function createBuiltinEditMemoryTool(): AIToolExecutor<{
-  action: EditMemoryAction;
-  section: MemoryCategory;
-  content?: string;
-  index?: number;
-}> {
+export function createBuiltinEditMemoryTool(): AIToolExecutor<EditMemoryInput> {
   return {
     definition: {
       name: EDIT_MEMORY_TOOL_NAME,
       description:
-        '修改用户记忆文件（~/.tibis/MEMORY.md）。你已经通过 system prompt 持有当前记忆内容，直接决定 add/update/remove。' +
-        '若新内容与已有条目属同类信息（如名字），必须 update 而非 add。单分区最多 20 条。',
+        '修改用户记忆。你已在 system prompt 中持有当前完整记忆内容。' +
+        '决定某个分区应该包含哪些条目，提供完整列表即可，工具会直接覆盖该分区。' +
+        '未提及的分区不受影响。单分区最多 20 条，每条一行文本。',
       source: 'builtin',
       riskLevel: 'write',
       safeAutoApprove: true,
@@ -47,91 +46,81 @@ export function createBuiltinEditMemoryTool(): AIToolExecutor<{
       parameters: {
         type: 'object',
         properties: {
-          action: {
-            type: 'string',
-            enum: ['add', 'update', 'remove'],
-            description: 'add=新增, update=替换已有条目, remove=删除'
-          },
-          section: {
-            type: 'string',
-            enum: MEMORY_CATEGORIES,
-            description: '目标分区'
-          },
-          content: {
-            type: 'string',
-            description: '记忆内容。add/update 必填，remove 按此精确匹配'
-          },
-          index: {
-            type: 'number',
-            description: '条目索引（0 开始）。update/remove 优先使用此项'
+          sections: {
+            type: 'object',
+            description: '要更新的分区及其完整条目列表。key 为分区名，value 为该分区应含的全部条目（字符串数组）。空数组=清空。',
+            properties: {
+              Instructions: { type: 'array', items: { type: 'string' }, description: '规则约束' },
+              Preferences: { type: 'array', items: { type: 'string' }, description: '输出偏好' },
+              Habits: { type: 'array', items: { type: 'string' }, description: '工作习惯' },
+              Facts: { type: 'array', items: { type: 'string' }, description: '事实信息' },
+              Projects: { type: 'array', items: { type: 'string' }, description: '项目描述' },
+              'Current Context': { type: 'array', items: { type: 'string' }, description: '当前事项' }
+            },
+            additionalProperties: false
           }
         },
-        required: ['action', 'section'],
+        required: ['sections'],
         additionalProperties: false
       }
     },
 
-    async execute(input) {
-      const { action, section, content, index } = input;
+    async execute(input: EditMemoryInput) {
+      const { sections } = input;
+
+      if (!sections || typeof sections !== 'object' || Object.keys(sections).length === 0) {
+        return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', '需要提供至少一个分区。');
+      }
+
       const store = useMemoryStore();
       if (!store.loaded) await store.loadMemory();
 
-      const target = store.doc.sections.find((s) => s.category === section);
-      if (!target) {
-        return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', `无效分区：${section}`);
-      }
+      const changes: string[] = [];
 
-      if (action === 'add') {
-        const text = content?.trim();
-        if (!text) return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', 'add 需要 content');
-        if (target.items.some((i) => i.content === text)) {
-          return createToolSuccessResult(EDIT_MEMORY_TOOL_NAME, {
-            action: 'add',
-            summary: `「${text}」已存在，未重复添加。`,
-            sections: getSectionsSnapshot(store)
-          });
+      for (const [category, items] of Object.entries(sections)) {
+        // 校验分区名
+        if (!MEMORY_CATEGORIES.includes(category as MemoryCategory)) {
+          return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', `无效分区：${category}。`);
         }
-        if (target.items.length >= MAX_ITEMS_PER_SECTION) {
-          return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'EXECUTION_FAILED', `${section} 已满 ${MAX_ITEMS_PER_SECTION} 条`);
+
+        // 校验条目格式
+        if (!Array.isArray(items)) {
+          return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', `${category} 的值必须是数组。`);
         }
-        target.items.push({ content: text });
-        await store.saveMemory();
-        return createToolSuccessResult(EDIT_MEMORY_TOOL_NAME, {
-          action: 'add',
-          summary: `已添加「${text}」到 ${section}（${target.items.length}/${MAX_ITEMS_PER_SECTION}）`,
-          sections: getSectionsSnapshot(store)
-        });
+
+        // 过滤空字符串
+        const validItems = items.map((i: unknown) => String(i).trim()).filter((s: string) => s.length > 0);
+
+        // 条数上限
+        if (validItems.length > MAX_ITEMS_PER_SECTION) {
+          return createToolFailureResult(
+            EDIT_MEMORY_TOOL_NAME,
+            'EXECUTION_FAILED',
+            `${category} 最多 ${MAX_ITEMS_PER_SECTION} 条，你提供了 ${validItems.length} 条。`
+          );
+        }
+
+        const target = store.doc.sections.find((s) => s.category === category)!;
+        const oldCount = target.items.length;
+        target.items = validItems.map((content: string) => ({ content }));
+
+        if (oldCount === 0 && validItems.length === 0) {
+          changes.push(`${category}: 仍为空`);
+        } else if (oldCount === 0) {
+          changes.push(`${category}: +${validItems.length} 条`);
+        } else if (validItems.length === 0) {
+          changes.push(`${category}: 已清空`);
+        } else {
+          changes.push(`${category}: ${oldCount} → ${validItems.length} 条`);
+        }
       }
 
-      if (action === 'update') {
-        const text = content?.trim();
-        if (!text) return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', 'update 需要 content');
-        const i = resolveTargetIndex(target, index, content!);
-        if (i === -1) return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', `在 ${section} 中未找到匹配条目`);
-        const old = target.items[i].content;
-        target.items[i] = { content: text };
-        await store.saveMemory();
-        return createToolSuccessResult(EDIT_MEMORY_TOOL_NAME, {
-          action: 'update',
-          summary: `${section}: 「${old}」→「${text}」`,
-          sections: getSectionsSnapshot(store)
-        });
-      }
+      await store.saveMemory();
 
-      if (action === 'remove') {
-        const i = resolveTargetIndex(target, index, content || '');
-        if (i === -1) return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', `在 ${section} 中未找到匹配条目`);
-        const removed = target.items[i].content;
-        target.items.splice(i, 1);
-        await store.saveMemory();
-        return createToolSuccessResult(EDIT_MEMORY_TOOL_NAME, {
-          action: 'remove',
-          summary: `已从 ${section} 删除「${removed}」`,
-          sections: getSectionsSnapshot(store)
-        });
-      }
-
-      return createToolFailureResult(EDIT_MEMORY_TOOL_NAME, 'INVALID_INPUT', `不支持的操作：${action}`);
+      return createToolSuccessResult(EDIT_MEMORY_TOOL_NAME, {
+        summary: changes.join('，'),
+        sections: getSectionsSnapshot(store)
+      });
     }
   };
 }
