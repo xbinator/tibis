@@ -1,5 +1,5 @@
 <template>
-  <BSettingsPage title="默认模型">
+  <BSettingsPage :title="MENU_ITEMS['service-model'].label">
     <ServiceConfig
       service-type="chat"
       title="智能对话助手"
@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
+import { MENU_ITEMS } from '@/views/settings/constants';
 import ServiceConfig from './components/ServiceConfig.vue';
 import {
   AUTONAME_DEFAULT_PROMPT,

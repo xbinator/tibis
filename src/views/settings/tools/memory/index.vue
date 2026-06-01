@@ -3,7 +3,7 @@
   @description 记忆设置页，管理记忆开关、查看记忆内容、编辑记忆。
 -->
 <template>
-  <BSettingsPage title="记忆">
+  <BSettingsPage :title="MENU_ITEMS.memory.label">
     <BSettingsSection title="功能开关">
       <div class="memory-settings__item">
         <div class="memory-settings__meta">
@@ -40,6 +40,7 @@
  */
 import { ref } from 'vue';
 import { useMemoryStore } from '@/stores/ai/memory';
+import { MENU_ITEMS } from '@/views/settings/constants';
 import MemoryContent from './components/MemoryContent.vue';
 import MemoryInput from './components/MemoryInput.vue';
 import { useMemory } from './hooks/useMemory';

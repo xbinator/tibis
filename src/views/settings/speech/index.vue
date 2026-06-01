@@ -3,7 +3,7 @@
   @description 语音组件设置页，负责展示当前运行时状态并提供安装、重装和删除入口。
 -->
 <template>
-  <BSettingsPage title="语音服务">
+  <BSettingsPage :title="MENU_ITEMS.speech.label">
     <div class="speech-settings__overview">
       <div class="speech-settings__overview-icon">
         <Icon icon="lucide:mic-2" />
@@ -60,6 +60,7 @@ import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { getElectronAPI, hasElectronAPI } from '@/shared/platform/electron-api';
 import { Modal } from '@/utils/modal';
+import { MENU_ITEMS } from '@/views/settings/constants';
 import SpeechActionMenu from './components/SpeechActionMenu.vue';
 import SpeechSettingsItem from './components/SpeechSettingsItem.vue';
 

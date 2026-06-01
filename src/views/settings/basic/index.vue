@@ -1,21 +1,21 @@
 <!--
   @file index.vue
-  @description 通用设置页，管理配色方案、编辑器视图偏好与保存策略。
+  @description 基础设置页，管理配色方案、编辑器视图偏好与保存策略。
 -->
 <template>
-  <BSettingsPage title="通用">
+  <BSettingsPage :title="MENU_ITEMS.basic.label">
     <BSettingsSection title="配色方案">
-      <div class="general-settings__item">
-        <div class="general-settings__meta">
-          <div class="general-settings__label">外观</div>
+      <div class="basic-settings__item">
+        <div class="basic-settings__meta">
+          <div class="basic-settings__label">外观</div>
         </div>
         <div>
           <BSelect :value="settingStore.theme" :options="themeOptions" :width="280" @change="handleThemeChange" />
         </div>
       </div>
-      <div class="general-settings__item">
-        <div class="general-settings__meta">
-          <div class="general-settings__label">主题风格</div>
+      <div class="basic-settings__item">
+        <div class="basic-settings__meta">
+          <div class="basic-settings__label">主题风格</div>
         </div>
         <div>
           <BSelect :value="settingStore.themePreset" :options="presetOptions" :width="280" @change="handlePresetChange" />
@@ -24,27 +24,27 @@
     </BSettingsSection>
 
     <BSettingsSection title="编辑器">
-      <div class="general-settings__item">
-        <div class="general-settings__meta">
-          <div class="general-settings__label">自动保存</div>
+      <div class="basic-settings__item">
+        <div class="basic-settings__meta">
+          <div class="basic-settings__label">自动保存</div>
         </div>
         <div>
           <BSelect :value="editorStore.saveStrategy" :options="saveStrategyOptions" :width="280" @change="handleSaveStrategyChange" />
         </div>
       </div>
 
-      <div class="general-settings__item">
-        <div class="general-settings__meta">
-          <div class="general-settings__label">默认视图模式</div>
+      <div class="basic-settings__item">
+        <div class="basic-settings__meta">
+          <div class="basic-settings__label">默认视图模式</div>
         </div>
         <div>
           <BSelect :value="editorStore.viewMode" :options="viewModeOptions" :width="280" @change="handleViewModeChange" />
         </div>
       </div>
 
-      <div class="general-settings__item">
-        <div class="general-settings__meta">
-          <div class="general-settings__label">页面宽度</div>
+      <div class="basic-settings__item">
+        <div class="basic-settings__meta">
+          <div class="basic-settings__label">页面宽度</div>
         </div>
         <div>
           <BSelect :value="editorStore.pageWidth" :options="pageWidthOptions" :width="280" @change="handlePageWidthChange" />
@@ -62,6 +62,7 @@ import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { ThemeMode } from '@/stores/ui/setting';
 import { useSettingStore } from '@/stores/ui/setting';
 import { getPresetList } from '@/theme';
+import { MENU_ITEMS } from '@/views/settings/constants';
 
 const editorStore = useEditorPreferencesStore();
 const settingStore = useSettingStore();
@@ -137,7 +138,7 @@ function handleSaveStrategyChange(value: string | number): void {
 
 <style scoped lang="less">
 // ─── Item ─────────────────────────────────────────────────────────────────────
-.general-settings__item {
+.basic-settings__item {
   display: flex;
   gap: 16px;
   align-items: center;
@@ -159,13 +160,13 @@ function handleSaveStrategyChange(value: string | number): void {
   }
 }
 
-.general-settings__meta {
+.basic-settings__meta {
   flex: 1;
   min-width: 0;
   padding: 12px 0;
 }
 
-.general-settings__label {
+.basic-settings__label {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
@@ -174,7 +175,7 @@ function handleSaveStrategyChange(value: string | number): void {
 // ─── Responsive ───────────────────────────────────────────────────────────────
 
 @media (width <= 720px) {
-  .general-settings__item {
+  .basic-settings__item {
     flex-direction: column;
     align-items: flex-start;
 
@@ -187,7 +188,7 @@ function handleSaveStrategyChange(value: string | number): void {
 // ─── Accessibility ────────────────────────────────────────────────────────────
 
 @media (prefers-reduced-motion: reduce) {
-  .general-settings__item {
+  .basic-settings__item {
     transition: none;
   }
 }

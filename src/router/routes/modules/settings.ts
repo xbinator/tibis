@@ -75,10 +75,10 @@ const routes: AppRouteRecordRaw[] = [
         ]
       },
       {
-        path: 'general',
-        name: 'general-settings',
-        component: () => import('@/views/settings/general/index.vue'),
-        meta: { title: '通用' }
+        path: 'basic',
+        name: 'basic-settings',
+        component: () => import('@/views/settings/basic/index.vue'),
+        meta: { title: '基础设置' }
       },
       {
         path: 'speech',

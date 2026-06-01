@@ -4,7 +4,7 @@
   首次加载在 onMounted 中触发初始日志拉取。
 -->
 <template>
-  <BSettingsPage title="日志">
+  <BSettingsPage :title="MENU_ITEMS.logger.label">
     <template #extra>
       <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
       <BButton icon="lucide:folder-open" type="text" size="small" @click="handleOpenLogFolder">打开目录</BButton>
@@ -40,6 +40,7 @@ import dayjs from 'dayjs';
 import { pickBy } from 'lodash-es';
 import { logger } from '@/shared/logger';
 import type { LogEntry, LogFileInfo, LogQueryOptions } from '@/shared/logger/types';
+import { MENU_ITEMS } from '@/views/settings/constants';
 import LogFilterBar, { type LogFilterBarDataItem } from './components/LogFilterBar.vue';
 import LogTimeline from './components/LogTimeline.vue';
 

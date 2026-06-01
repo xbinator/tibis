@@ -3,7 +3,7 @@
   @description 搜索工具设置页，负责管理 Tavily 的启用状态与默认参数。
 -->
 <template>
-  <BSettingsPage title="网络搜索">
+  <BSettingsPage :title="MENU_ITEMS.search.label">
     <BSettingsSection title="基础配置">
       <div class="search-tools-settings__item">
         <div class="search-tools-settings__meta">
@@ -124,6 +124,7 @@
 import { computed } from 'vue';
 import type { TavilyExtractDepth, TavilyExtractFormat, TavilySearchDepth, TavilySearchTopic, TavilyTimeRange } from '@/shared/storage/tool-settings';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
+import { MENU_ITEMS } from '@/views/settings/constants';
 import { tavilyCountryOptions, tavilyExtractFormatOptions, tavilySearchDepthOptions, tavilyTimeRangeOptions, tavilyTopicOptions } from './constants';
 
 const store = useToolSettingsStore();

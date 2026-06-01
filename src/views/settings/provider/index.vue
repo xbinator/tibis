@@ -3,7 +3,7 @@
     <div class="provider-header">
       <!--  -->
       <div class="header-left">
-        <h2 class="content-title">模型服务</h2>
+        <h2 class="content-title">{{ MENU_ITEMS.provider.label }}</h2>
       </div>
     </div>
 
@@ -28,6 +28,7 @@ import { useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { useProviderStore } from '@/stores/ai/provider';
+import { MENU_ITEMS } from '@/views/settings/constants';
 import ProviderCard from './components/ProviderCard.vue';
 
 const route = useRoute();

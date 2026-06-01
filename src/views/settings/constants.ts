@@ -1,6 +1,6 @@
 import type { AIProviderType } from 'types/ai';
 
-export type SettingsMenuKey = 'provider' | 'service-model' | 'search' | 'mcp' | 'skill' | 'memory' | 'general' | 'speech' | 'logger';
+export type SettingsMenuKey = 'provider' | 'service-model' | 'search' | 'mcp' | 'skill' | 'memory' | 'basic' | 'speech' | 'logger';
 
 /**
  * 侧边栏菜单项定义
@@ -15,20 +15,20 @@ export interface MenuItem {
 /**
  * 按 key 索引的菜单项映射，方便按分组引用
  */
-const menuItemMap: Record<SettingsMenuKey, MenuItem> = {
-  provider: { key: 'provider', label: '模型', icon: 'lucide:cloud', path: '/settings/provider' },
+export const MENU_ITEMS: Record<SettingsMenuKey, MenuItem> = {
+  provider: { key: 'provider', label: '模型服务', icon: 'lucide:cloud', path: '/settings/provider' },
   'service-model': { key: 'service-model', label: '默认模型', icon: 'lucide:sparkles', path: '/settings/service-model' },
   search: { key: 'search', label: '网络搜索', icon: 'lucide:globe', path: '/settings/tools/search' },
-  mcp: { key: 'mcp', label: 'MCP', icon: 'lucide:cable', path: '/settings/tools/mcp' },
+  mcp: { key: 'mcp', label: 'MCP 服务器', icon: 'lucide:cable', path: '/settings/tools/mcp' },
   skill: { key: 'skill', label: '技能', icon: 'lucide:wrench', path: '/settings/tools/skill' },
-  memory: { key: 'memory', label: '记忆', icon: 'lucide:brain', path: '/settings/tools/memory' },
-  general: { key: 'general', label: '通用', icon: 'lucide:settings-2', path: '/settings/general' },
+  memory: { key: 'memory', label: '全局记忆', icon: 'lucide:brain', path: '/settings/tools/memory' },
+  basic: { key: 'basic', label: '基础设置', icon: 'lucide:settings-2', path: '/settings/basic' },
   speech: { key: 'speech', label: '语音服务', icon: 'lucide:mic', path: '/settings/speech' },
   logger: { key: 'logger', label: '运行日志', icon: 'lucide:file-text', path: '/settings/logger' }
 };
 
 /** 平铺列表（兼容旧引用） */
-export const menuItems: MenuItem[] = Object.values(menuItemMap);
+export const menuItems: MenuItem[] = Object.values(MENU_ITEMS);
 
 /**
  * 菜单分组定义
@@ -42,10 +42,10 @@ export interface MenuGroup {
  * 侧边栏菜单分组
  */
 export const menuGroups: MenuGroup[] = [
-  { label: '基础', items: ['general'].map((k) => menuItemMap[k as SettingsMenuKey]) },
-  { label: 'AI 服务', items: ['provider', 'service-model'].map((k) => menuItemMap[k as SettingsMenuKey]) },
-  { label: '功能配置', items: ['memory', 'mcp', 'skill', 'search'].map((k) => menuItemMap[k as SettingsMenuKey]) },
-  { label: '系统', items: ['logger'].map((k) => menuItemMap[k as SettingsMenuKey]) }
+  { label: '基础', items: ['basic'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) },
+  { label: 'AI 服务', items: ['provider', 'service-model'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) },
+  { label: '功能配置', items: ['memory', 'mcp', 'skill', 'search'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) },
+  { label: '系统', items: ['logger'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) }
 ];
 
 export interface ProviderFormatOption {

@@ -3,7 +3,7 @@
   @description MCP 工具设置页，负责管理 MCP server 配置。
 -->
 <template>
-  <BSettingsPage title="MCP">
+  <BSettingsPage :title="MENU_ITEMS.mcp.label">
     <template #extra>
       <BButton icon="lucide:plus" type="primary" size="small" @click="handleOpenAddModal">添加</BButton>
     </template>
@@ -42,6 +42,7 @@ import { getElectronAPI, hasElectronAPI } from '@/shared/platform/electron-api';
 import type { MCPServerConfig, MCPDiscoveredToolSnapshot, MCPServerDiscoveryCache } from '@/shared/storage/tool-settings';
 import { DEFAULT_MCP_CONNECT_TIMEOUT_MS, DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS } from '@/shared/storage/tool-settings';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
+import { MENU_ITEMS } from '@/views/settings/constants';
 import ServerCard from './components/ServerCard.vue';
 import ServerEditor from './components/ServerEditor.vue';
 import { parseMCPServerEditorDraft } from './utils/parseMCPServer';

@@ -4,7 +4,7 @@
 -->
 <template>
   <div class="skill-settings">
-    <BSettingsPage class="skill-settings__page" title="技能">
+    <BSettingsPage class="skill-settings__page" :title="MENU_ITEMS.skill.label">
       <template #extra>
         <BButton icon="lucide:plus" type="primary" size="small" @click="creatorVisible = true">创建技能</BButton>
       </template>
@@ -62,6 +62,7 @@
 import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useSkillStore } from '@/stores/ai/skill';
+import { MENU_ITEMS } from '@/views/settings/constants';
 import SkillCreator from './components/SkillCreator.vue';
 import SkillDetail from './components/SkillDetail.vue';
 import SkillItemRow from './components/SkillItemRow.vue';
