@@ -26,9 +26,9 @@ router.afterEach((to) => {
   // 路由拦截添加 Tab
   if (!to.meta?.hideTab) {
     const tabsStore = useTabsStore();
-    const { tabId, cacheKey } = resolveRouteTabInfo(to);
+    const { tabId, cacheKey, title } = resolveRouteTabInfo(to);
 
-    tabsStore.addTab({ id: tabId, path: to.fullPath, title: (to.meta?.title as string | undefined) || (to.name as string) || to.path, cacheKey });
+    tabsStore.addTab({ id: tabId, path: to.fullPath, title, cacheKey });
   }
 });
 

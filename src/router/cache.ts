@@ -67,29 +67,60 @@ function isEditorRoute(route: RouteLocationNormalizedLoaded): boolean {
 }
 
 /**
- * 解析路由对应的标签页 ID 和 KeepAlive 缓存 key。
+ * 解析 webview 路由的标签页标题。
+ * 优先使用 query.url 解码后的目标 URL，解码失败或不存在时返回 undefined。
  * @param route - 当前路由
- * @returns 包含 tabId 和 cacheKey 的对象
+ * @returns 标签页标题，非 webview 路由返回 undefined
  */
-export function resolveRouteTabInfo(route: RouteLocationNormalizedLoaded): { tabId: string; cacheKey: string } {
+function resolveWebviewTitle(route: RouteLocationNormalizedLoaded): string | undefined {
+  if (route.name !== 'webview-web' && route.name !== 'webview-native') {
+    return undefined;
+  }
+
+  const urlParam = route.query.url as string | undefined;
+  if (!urlParam) {
+    return undefined;
+  }
+
+  try {
+    return decodeURIComponent(urlParam);
+  } catch {
+    return urlParam;
+  }
+}
+
+/**
+ * 解析路由对应的标签页 ID、KeepAlive 缓存 key 以及标签页标题。
+ * @param route - 当前路由
+ * @returns 包含 tabId、cacheKey 和 title 的对象
+ */
+export function resolveRouteTabInfo(route: RouteLocationNormalizedLoaded): { tabId: string; cacheKey: string; title: string } {
+  const webviewTitle = resolveWebviewTitle(route);
+  if (webviewTitle) {
+    const fallback = route.fullPath || route.path;
+
+    return { tabId: fallback, cacheKey: fallback, title: webviewTitle };
+  }
+
   if (isEditorRoute(route)) {
     const editorId = normalizeRouteParam(route.params.id);
     const fallback = route.fullPath || route.path;
 
     return {
       tabId: editorId || fallback,
-      cacheKey: editorId ? `editor:${editorId}` : fallback
+      cacheKey: editorId ? `editor:${editorId}` : fallback,
+      title: (route.meta?.title || route.name || route.path) as string
     };
   }
 
   const singletonConfig = findSingletonTabConfig(route.path);
   if (singletonConfig) {
-    return { tabId: singletonConfig.tabId, cacheKey: singletonConfig.cacheKey };
+    return { tabId: singletonConfig.tabId, cacheKey: singletonConfig.cacheKey, title: singletonConfig.title };
   }
 
   const fallback = route.fullPath || route.path;
 
-  return { tabId: fallback, cacheKey: fallback };
+  return { tabId: fallback, cacheKey: fallback, title: (route.meta?.title || route.name || route.path) as string };
 }
 
 /**
