@@ -337,6 +337,7 @@ async function handleInstall(): Promise<void> {
   min-height: 160px;
   color: var(--text-secondary);
   cursor: pointer;
+  background: var(--bg-secondary);
   border: 1.5px dashed var(--border-secondary);
   border-radius: 12px;
   transition: border-color 0.2s, background 0.2s;

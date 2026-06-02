@@ -1,23 +1,24 @@
 <!--
-  @file SkillDetail.vue
-  @description Skill 只读详情面板，展示 Skill 元信息、目录文件树与文件内容预览
+  @file detail.vue
+  @description Skill 详情独立页面，从路由参数获取 skill 名称并展示详情。
 -->
 <template>
   <BSettingsPage title="Skill 详情" class="skill-detail">
     <template #title>
-      <div v-if="skill" class="skill-detail__title">
-        <div class="skill-detail__icon">{{ initial }}</div>
-        <div class="skill-detail__name">
-          <div class="skill-detail__name-text">{{ skill.name }}</div>
-          <span class="skill-detail__tag">{{ skill.enabled ? '已启用' : '已禁用' }}</span>
+      <div class="skill-detail__title-row">
+        <BButton type="text" square size="small" title="返回列表" @click="handleGoBack">
+          <Icon icon="lucide:arrow-left" :width="16" />
+        </BButton>
+        <div v-if="skill" class="skill-detail__title">
+          <div class="skill-detail__name">
+            <div class="skill-detail__name-text">{{ skill.name }}</div>
+          </div>
         </div>
       </div>
     </template>
 
     <template #extra>
-      <BButton type="text" square title="关闭详情" data-test="skill-detail-close" @click="emit('close')">
-        <Icon icon="lucide:x" :width="16" />
-      </BButton>
+      <ASwitch v-if="skill" :checked="skill.enabled" :disabled="!!skill.parseError" @change="handleToggle" />
     </template>
 
     <template v-if="skill">
@@ -39,43 +40,52 @@
         </BButton>
       </div>
 
-      <SkillPreview :root-path="skill?.dirPath" :initial-file-path="skill?.filePath" />
+      <SkillPreview :root-path="skill.dirPath" :initial-file-path="skill.filePath" />
     </template>
+
+    <div v-else class="skill-detail__empty">
+      <Icon icon="lucide:search-x" :width="24" />
+      <span>未找到该技能</span>
+    </div>
   </BSettingsPage>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import type { SkillDefinition } from '@/ai/skill/types';
 import { useClipboard } from '@/hooks/useClipboard';
-import SkillPreview from './SkillPreview.vue';
+import { useSkillStore } from '@/stores/ai/skill';
+import SkillPreview from './components/SkillPreview.vue';
 
+const route = useRoute();
+const router = useRouter();
+const store = useSkillStore();
 const { clipboard } = useClipboard();
 
-interface Props {
-  /** 当前查看的 Skill */
-  skill: SkillDefinition | null;
+/** 从路由参数获取 skill 名称。 */
+const skillName = computed(() => decodeURIComponent(route.params.name as string));
+
+/** 当前查看的 Skill 对象。 */
+const skill = computed(() => store.getSkillByName(skillName.value) ?? null);
+
+/** 切换 Skill 启用状态。 */
+function handleToggle(): void {
+  if (skill.value) {
+    store.toggleSkill(skill.value.name);
+  }
 }
 
-const props = defineProps<Props>();
-
-const emit = defineEmits<{
-  /**
-   * 请求关闭详情面板
-   * @param event - 事件名
-   */
-  (event: 'close'): void;
-}>();
-
-/** Skill 名称首字母大写，用于图标展示 */
-const initial = computed<string>(() => props.skill?.name.charAt(0).toUpperCase() ?? 'S');
-
-/** 复制目录路径 */
+/** 复制目录路径。 */
 function handleCopyPath(): void {
-  if (props.skill?.dirPath) {
-    clipboard(props.skill.dirPath, { successMessage: '路径已复制' });
+  if (skill.value?.dirPath) {
+    clipboard(skill.value.dirPath, { successMessage: '路径已复制' });
   }
+}
+
+/** 返回技能列表页。 */
+function handleGoBack(): void {
+  router.push({ name: 'skill-list' });
 }
 </script>
 
@@ -88,7 +98,6 @@ function handleCopyPath(): void {
   user-select: text;
 }
 
-/* 覆盖 BSettingsPage body 默认样式，使内容区作为 flex 容器并禁止自身滚动 */
 .skill-detail :deep(.b-settings-page__body) {
   display: flex;
   flex-direction: column;
@@ -96,6 +105,12 @@ function handleCopyPath(): void {
   min-height: 0;
   padding: 20px;
   overflow: hidden;
+}
+
+.skill-detail__title-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .skill-detail__title {
@@ -107,20 +122,6 @@ function handleCopyPath(): void {
 .skill-detail__header {
   display: flex;
   align-items: flex-start;
-}
-
-.skill-detail__icon {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border-radius: 6px;
 }
 
 .skill-detail__meta {
@@ -148,16 +149,6 @@ function handleCopyPath(): void {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
-}
-
-.skill-detail__tag {
-  flex-shrink: 0;
-  padding: 2px 6px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-tertiary);
-  border-radius: 4px;
 }
 
 .skill-detail__parse-error {
@@ -190,5 +181,16 @@ function handleCopyPath(): void {
   font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
+}
+
+.skill-detail__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
 }
 </style>

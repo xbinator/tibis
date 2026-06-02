@@ -63,8 +63,22 @@ const routes: AppRouteRecordRaw[] = [
           {
             path: 'skill',
             name: 'skill-tools-settings',
-            component: () => import('@/views/settings/tools/skill/index.vue'),
-            meta: { title: 'Skills' }
+            component: RouterView,
+            meta: { title: 'Skills' },
+            children: [
+              {
+                path: '',
+                name: 'skill-list',
+                component: () => import('@/views/settings/tools/skill/index.vue'),
+                meta: { title: '技能' }
+              },
+              {
+                path: ':name',
+                name: 'skill-detail',
+                component: () => import('@/views/settings/tools/skill/detail.vue'),
+                meta: { title: '技能详情' }
+              }
+            ]
           },
           {
             path: 'memory',

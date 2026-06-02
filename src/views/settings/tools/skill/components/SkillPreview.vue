@@ -15,7 +15,7 @@
         />
       </BPanelSplitter>
 
-      <main class="skill-preview__preview">
+      <div class="skill-preview__preview">
         <div class="skill-preview__preview-header">
           <span>{{ selectedFileName }}</span>
           <BButton v-if="fileState.status === 'success'" type="text" square size="small" title="复制内容" @click="copyContent">
@@ -23,13 +23,14 @@
           </BButton>
         </div>
 
-        <div v-if="fileState.status === 'loading'" class="skill-preview__preview-empty">正在读取文件…</div>
-        <div v-else-if="fileState.status === 'error'" class="skill-preview__preview-error">
-          {{ fileState.message }}
-        </div>
-        <pre v-else-if="fileState.status === 'success'" class="skill-preview__preview-content"><code>{{ fileState.content }}</code>
-        </pre>
-      </main>
+        <BScrollbar class="skill-preview__preview-body">
+          <div v-if="fileState.status === 'loading'" class="skill-preview__preview-empty">正在读取文件…</div>
+          <div v-else-if="fileState.status === 'error'" class="skill-preview__preview-error">
+            {{ fileState.message }}
+          </div>
+          <pre v-else-if="fileState.status === 'success'" class="skill-preview__preview-content"><code>{{ fileState.content }}</code></pre>
+        </BScrollbar>
+      </div>
     </div>
   </div>
 </template>
@@ -173,8 +174,12 @@ watch([() => props.rootPath, () => props.virtualFiles], () => {
   flex: 1;
   flex-direction: column;
   width: 0;
-  overflow: auto;
   background: var(--bg-primary);
+}
+
+.skill-preview__preview-body {
+  flex: 1;
+  min-height: 0;
 }
 
 .skill-preview__preview-header {
@@ -194,7 +199,6 @@ watch([() => props.rootPath, () => props.virtualFiles], () => {
   min-height: 0;
   padding: 12px;
   margin: 0;
-  overflow: auto;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: 12px;
   line-height: 1.6;

@@ -48,7 +48,7 @@ const props = withDefaults(defineProps<Props>(), {
   close: undefined,
   afterClose: undefined,
   keyboard: true,
-  borderRadius: undefined
+  borderRadius: 8
 });
 
 const emit = defineEmits(['update:open', 'close']);
