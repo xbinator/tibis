@@ -52,10 +52,12 @@ function isActive(path: string): boolean {
 
 /**
  * 导航到指定菜单项，若当前已在目标路径则忽略。
+ * 注意：使用精确匹配而非 isActive，因为 isActive 包含 startsWith 逻辑用于高亮，
+ * 但导航时需要允许从子路由（如 /settings/provider/openai）跳回父路由（如 /settings/provider）。
  * @param item - 菜单项
  */
 function navigateTo(item: MenuItem): void {
-  if (isActive(item.path)) return;
+  if (route.path === item.path) return;
   router.push(item.path);
 }
 </script>
