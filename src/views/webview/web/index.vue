@@ -7,8 +7,10 @@
       :is-loading="webview.state.value.isLoading"
       :is-element-selecting="webview.state.value.isElementSelecting"
       :is-device-toolbar-visible="deviceMode.isToolbarVisible.value"
+      :is-inspector-open="isInspectorOpen"
       supports-element-selection
       supports-device-toolbar
+      supports-inspector
       @go-back="webview.goBack"
       @go-forward="webview.goForward"
       @reload="webview.reload"
@@ -17,6 +19,7 @@
       @open-in-browser="openInBrowser"
       @select-element="handleStartElementSelection"
       @toggle-device-toolbar="deviceMode.toggleToolbarVisible"
+      @toggle-inspector="toggleInspector"
     />
 
     <DeviceToolbar v-if="deviceMode.isToolbarVisible.value" :active-preset="deviceMode.activePreset.value" @select-preset="handleSelectDevicePreset" />
@@ -26,7 +29,7 @@
         <div ref="webviewContainerRef" class="webview-viewport" :style="viewportStyle"></div>
       </div>
 
-      <BPanelSplitter v-if="webview.selectedElement" v-model:size="domPanelWidth" :min-width="280" :max-width="480" @close="handleCloseDomInspector">
+      <BPanelSplitter v-if="isInspectorOpen" v-model:size="domPanelWidth" :min-width="280" :max-width="480" @close="handleCloseDomInspector">
         <InspectorPanel :selection="webview.selectedElement" @close="handleCloseDomInspector" />
       </BPanelSplitter>
     </div>
@@ -64,6 +67,9 @@ const deviceMode = useDeviceMode();
 
 /** DOM 检查看板宽度 */
 const domPanelWidth = ref(360);
+
+/** CSS 查看器是否打开 */
+const isInspectorOpen = ref(false);
 
 const isDeviceFramed = computed(() => deviceMode.isToolbarVisible.value);
 
@@ -198,10 +204,18 @@ function handleStartElementSelection(): void {
  * 关闭 DOM 检查看板并停止元素选择模式。
  */
 function handleCloseDomInspector(): void {
+  isInspectorOpen.value = false;
   webview.clearSelectedElement();
   if (webview.state.value.isElementSelecting) {
     webview.stopElementSelection().catch((err: unknown) => console.error('Failed to stop element selection:', err));
   }
+}
+
+/**
+ * 切换 CSS 查看器面板。
+ */
+function toggleInspector(): void {
+  isInspectorOpen.value = !isInspectorOpen.value;
 }
 
 /**

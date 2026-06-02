@@ -10,7 +10,7 @@
       <RenderSectionBlock title="元素">
         <RenderSectionItem label="选择器">
           <code :class="$style.infoValueItem">{{ selection.selector }}</code>
-          <BButton type="text" size="small" square icon="lucide:copy" tooltip="复制 selector" @click="copyText(selection.selector)" />
+          <BButton type="text" size="small" square icon="lucide:copy" @click="copyText(selection.selector)" />
         </RenderSectionItem>
         <RenderSectionItem label="位置" :values="[roundedRect.x, roundedRect.y]" />
         <RenderSectionItem label="大小" :values="[roundedRect.width, roundedRect.height]" />
@@ -20,7 +20,8 @@
       <RenderSectionBlock title="层级">
         <ol :class="$style.tree">
           <li v-for="item in hierarchyItems" :key="item.selector" :class="[$style.treeItem, { [$style.treeItemActive]: item.isActive }]">
-            <code>{{ item.selector }}</code>
+            <span :class="$style.treeItemTag">{{ item.tagName }}</span>
+            <code :class="$style.treeItemSelector">{{ item.displaySelector }}</code>
           </li>
         </ol>
       </RenderSectionBlock>
@@ -30,7 +31,12 @@
       </RenderSectionBlock>
 
       <RenderSectionBlock v-if="styleEntries.length" title="CSS 样式">
-        <RenderSectionItem v-for="styleEntry in styleEntries" :key="styleEntry.name" :label="styleEntry.name" :values="[styleEntry.value]" />
+        <div :class="$style.styleEntries">
+          <div v-for="styleEntry in styleEntries" :key="styleEntry.name" :class="$style.styleEntry">
+            <span :class="$style.styleEntryName">{{ styleEntry.name }}:</span>
+            <span :class="$style.styleEntryValue">{{ styleEntry.value }};</span>
+          </div>
+        </div>
       </RenderSectionBlock>
     </div>
 
@@ -49,6 +55,8 @@
 import { computed, useCssModule } from 'vue';
 import type { SetupContext, VNode } from 'vue';
 import type { WebviewElementSelection } from '@/views/webview/shared/types';
+import { filterStyleEntries } from '@/views/webview/web/utils/styles';
+import type { StyleEntry } from '@/views/webview/web/utils/styles';
 
 const $style = useCssModule();
 
@@ -109,21 +117,18 @@ const props = withDefaults(defineProps<Props>(), { selection: null });
  * DOM 层级展示项。
  */
 interface HierarchyItem {
-  /** 层级选择器 */
+  /** 完整 CSS 选择器 */
   selector: string;
+  /** 元素标签名 */
+  tagName: string;
+  /** 去除前导标签名后的显示用选择器 */
+  displaySelector: string;
   /** 是否为当前选中元素 */
   isActive: boolean;
 }
 
-/**
- * CSS 样式展示项。
- */
-interface StyleEntry {
-  /** 样式属性名 */
-  name: string;
-  /** 样式属性值 */
-  value: string;
-}
+/** 有值的属性列表（过滤掉空值） */
+const attributes = computed(() => props.selection?.attributes.filter((a) => a.value) ?? []);
 
 /** 元素矩形框的四舍五入坐标 */
 const roundedRect = computed(() => {
@@ -138,87 +143,24 @@ const roundedRect = computed(() => {
 
 /** 祖先层级 + 当前元素 */
 const hierarchyItems = computed<HierarchyItem[]>(() => {
-  if (!props.selection) {
-    return [];
-  }
+  if (!props.selection) return [];
 
-  const ancestorItems = props.selection.ancestors.map((ancestor) => ({
-    selector: ancestor.selector,
-    isActive: false
-  }));
+  const buildItem = (selector: string, tagName: string, isActive: boolean): HierarchyItem => {
+    const lowerTag = tagName.toLowerCase();
+    /** selector 去除前导 tagName，若去完后为空则保留原值 */
+    const displaySelector = selector.slice(lowerTag.length) || selector;
+    return { selector, tagName: lowerTag, displaySelector, isActive };
+  };
 
-  return [
-    ...ancestorItems,
-    {
-      selector: props.selection.selector,
-      isActive: true
-    }
-  ];
+  const ancestorItems = props.selection.ancestors
+    .filter((ancestor) => !['html', 'body'].includes(ancestor.tagName.toLowerCase()))
+    .map((ancestor) => buildItem(ancestor.selector, ancestor.tagName, false));
+
+  return [...ancestorItems, buildItem(props.selection.selector, props.selection.tagName, true)];
 });
 
-/** 有值的属性列表（过滤掉空值） */
-const attributes = computed(() => props.selection?.attributes.filter((a) => a.value) ?? []);
-
-/** CSS 默认值，不展示 */
-const CSS_DEFAULT_VALUES = new Set(['normal', 'none', 'auto', 'initial', 'inherit', 'unset', '']);
-
-function collapseBoxStyles(styles: Record<string, string>) {
-  const result = { ...styles };
-
-  for (const prefix of ['margin', 'padding'] as const) {
-    const values = [styles[`${prefix}-top`], styles[`${prefix}-right`], styles[`${prefix}-bottom`], styles[`${prefix}-left`]];
-
-    if (values.some((value) => !value)) {
-      continue;
-    }
-
-    const [top, right, bottom, left] = values;
-
-    let shorthand: string;
-
-    if (top === right && top === bottom && top === left) {
-      shorthand = top;
-    } else if (top === bottom && right === left) {
-      shorthand = `${top} ${right}`;
-    } else if (right === left) {
-      shorthand = `${top} ${right} ${bottom}`;
-    } else {
-      shorthand = `${top} ${right} ${bottom} ${left}`;
-    }
-
-    result[prefix] = shorthand;
-
-    delete result[`${prefix}-top`];
-    delete result[`${prefix}-right`];
-    delete result[`${prefix}-bottom`];
-    delete result[`${prefix}-left`];
-  }
-
-  return result;
-}
-
-const isVisibleStyleValue = (value: unknown): boolean => {
-  const normalized = String(value).trim().toLowerCase();
-
-  if (CSS_DEFAULT_VALUES.has(normalized)) {
-    return false;
-  }
-
-  return !/^0(?:px|rem|em|%|vh|vw)?$/.test(normalized);
-};
-
-/** 计算样式键值对（过滤空值和默认值） */
-const styleEntries = computed<StyleEntry[]>(() => {
-  const styles = props.selection?.computedStyles;
-
-  if (!styles) {
-    return [];
-  }
-
-  return Object.entries(collapseBoxStyles(styles))
-    .filter(([, value]) => isVisibleStyleValue(value))
-    .map(([name, value]) => ({ name, value }));
-});
+/** 计算样式键值对（过滤空值、默认值、以及标签默认 display） */
+const styleEntries = computed<StyleEntry[]>(() => filterStyleEntries(props.selection?.computedStyles, props.selection?.tagName));
 
 /**
  * 复制看板中的文本内容。
@@ -310,6 +252,7 @@ async function copyText(value: string): Promise<void> {
   align-items: flex-start;
   min-width: 0;
   font-size: 12px;
+  user-select: text;
 }
 
 .infoValueGroup {
@@ -321,13 +264,46 @@ async function copyText(value: string): Promise<void> {
 .infoValueItem {
   display: flex;
   flex: 1;
+  gap: 6px;
+  align-items: center;
   min-width: 0;
   min-height: 28px;
   padding: 4px 6px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: 12px;
   overflow-wrap: anywhere;
+  user-select: text;
   background: var(--bg-tertiary);
   border-radius: 6px;
+}
+
+.styleEntries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  user-select: text;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.styleEntry {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.styleEntryName {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.styleEntryValue {
+  flex: 1;
+  min-width: 0;
 }
 
 .tree {
@@ -336,10 +312,14 @@ async function copyText(value: string): Promise<void> {
   gap: 4px;
   padding: 0;
   margin: 0;
+  user-select: text;
   list-style: none;
 }
 
 .tree-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
   padding: 4px 6px;
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -352,9 +332,29 @@ async function copyText(value: string): Promise<void> {
   background: var(--color-primary-bg);
 }
 
-.empty,
-.empty-state {
+.treeItemTag {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  margin-right: 4px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 10px;
+  line-height: 16px;
   color: var(--text-secondary);
+  text-transform: lowercase;
+  background: var(--bg-hover);
+  border-radius: 4px;
+}
+
+.tree-item--active .treeItemTag {
+  color: var(--color-primary);
+  background: var(--color-primary-bg);
+}
+
+.treeItemSelector {
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .empty-state {
@@ -366,6 +366,7 @@ async function copyText(value: string): Promise<void> {
   justify-content: center;
   padding: 24px;
   font-size: 13px;
+  color: var(--text-secondary);
   text-align: center;
 }
 </style>
