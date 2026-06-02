@@ -367,6 +367,23 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   }
 
   /**
+   * 设置当前 `<webview>` 的 User-Agent，空字符串表示恢复默认 UA。
+   * @param userAgent - 目标 User-Agent
+   */
+  function setUserAgent(userAgent: string): void {
+    const instance = webviewRef.value;
+    if (!instance) {
+      return;
+    }
+
+    if (!userAgent) {
+      instance.removeAttribute('useragent');
+    }
+
+    instance.setUserAgent(userAgent);
+  }
+
+  /**
    * 开启页面 DOM 元素选择模式，并在选择完成后输出元素信息。
    */
   async function startElementSelection(): Promise<void> {
@@ -461,7 +478,8 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     handleDidStopLoading,
     handleAttachRejected,
     startElementSelection,
-    setTouchSimulationEnabled
+    setTouchSimulationEnabled,
+    setUserAgent
   };
 }
 

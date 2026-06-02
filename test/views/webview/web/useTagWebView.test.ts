@@ -119,4 +119,24 @@ describe('useTagWebView', () => {
     expect(executeJavaScript.mock.calls[0]?.[0]).toContain('__tibisTouchSimulationCleanup');
     expect(executeJavaScript.mock.calls[0]?.[0]).toContain('touchstart');
   });
+
+  it('sets and clears the hosted webview user agent', () => {
+    const setUserAgent = vi.fn();
+    const removeAttribute = vi.fn();
+    const instance = {
+      setUserAgent,
+      removeAttribute,
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+
+    const hook = useTagWebView(ref(instance));
+
+    hook.setUserAgent('Mozilla/5.0 iPhone');
+    hook.setUserAgent('');
+
+    expect(setUserAgent).toHaveBeenCalledWith('Mozilla/5.0 iPhone');
+    expect(setUserAgent).toHaveBeenCalledWith('');
+    expect(removeAttribute).toHaveBeenCalledWith('useragent');
+  });
 });

@@ -22,6 +22,7 @@ describe('useWebviewDeviceMode', () => {
 
     expect(deviceMode.isToolbarVisible.value).toBe(true);
     expect(deviceMode.activePreset.value.key).toBe('iphone-se');
+    expect(deviceMode.activePreset.value.userAgent).toContain('iPhone');
     expect(deviceMode.touchSimulationEnabled.value).toBe(true);
 
     deviceMode.toggleToolbarVisible();

@@ -55,6 +55,7 @@ const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
 let syncHostLayerFrame: number | null = null;
 const isDeviceFramed = computed(() => deviceMode.isToolbarVisible.value);
+const activeUserAgent = computed(() => (deviceMode.isToolbarVisible.value ? deviceMode.activePreset.value.userAgent : ''));
 const viewportStyle = computed<CSSProperties>(() => {
   if (!isDeviceFramed.value) {
     return {};
@@ -241,6 +242,7 @@ function ensureWebviewElement(): Electron.WebviewTag {
   bindWebviewEvents(element);
   webviewElementRef.value = element;
   webview.create(initialUrl);
+  webview.setUserAgent(activeUserAgent.value);
   webview.attachInitialUrl(initialUrl);
   return element;
 }
@@ -277,6 +279,10 @@ watch(deviceMode.touchSimulationEnabled, (enabled) => {
   webview.setTouchSimulationEnabled(enabled).catch((error: unknown) => {
     console.error('Failed to update webview touch simulation:', error);
   });
+});
+
+watch(activeUserAgent, (userAgent) => {
+  webview.setUserAgent(userAgent);
 });
 
 onBeforeUnmount(() => {
