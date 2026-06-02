@@ -309,6 +309,5 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   max-width: 100%;
   height: auto;
-  box-shadow: 0 0 0 1px var(--border-primary);
 }
 </style>
