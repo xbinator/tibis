@@ -4,7 +4,7 @@
  */
 import { defineStore } from 'pinia';
 import { toolSettingsStorage } from '@/shared/storage';
-import type { MCPServerConfig, MCPToolSettings, TavilyExtractDefaults, TavilySearchDefaults, TavilyToolSettings } from '@/shared/storage/tool-settings';
+import type { MCPServerConfig, MCPToolSettings, TavilyToolSettings } from '@/shared/storage/tool-settings';
 
 /**
  * 工具设置 Store 状态。
@@ -80,30 +80,6 @@ export const useToolSettingsStore = defineStore('toolSettings', {
      */
     setTavilyApiKey(apiKey: string): void {
       this.tavily.apiKey = apiKey;
-      this.saveSettings();
-    },
-
-    /**
-     * 更新 Search 默认参数。
-     * @param patch - 需要合并的 Search 默认参数
-     */
-    updateTavilySearchDefaults(patch: Partial<TavilySearchDefaults>): void {
-      this.tavily.searchDefaults = {
-        ...this.tavily.searchDefaults,
-        ...patch
-      };
-      this.saveSettings();
-    },
-
-    /**
-     * 更新 Extract 默认参数。
-     * @param patch - 需要合并的 Extract 默认参数
-     */
-    updateTavilyExtractDefaults(patch: Partial<TavilyExtractDefaults>): void {
-      this.tavily.extractDefaults = {
-        ...this.tavily.extractDefaults,
-        ...patch
-      };
       this.saveSettings();
     },
 

@@ -93,23 +93,7 @@ const mcpServers: Array<{
 const toolSettingsStoreState = {
   tavily: {
     enabled: false,
-    apiKey: '',
-    searchDefaults: {
-      searchDepth: 'basic' as const,
-      topic: 'general',
-      timeRange: null as null | string,
-      country: 'china',
-      maxResults: 5,
-      includeAnswer: true,
-      includeImages: false,
-      includeDomains: [] as string[],
-      excludeDomains: [] as string[]
-    },
-    extractDefaults: {
-      extractDepth: 'basic' as const,
-      format: 'markdown',
-      includeImages: false
-    }
+    apiKey: ''
   },
   mcp: {
     get servers() {

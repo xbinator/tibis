@@ -5,13 +5,6 @@
 export { toolSettingsStorage, normalizeToolSettings } from './sqlite';
 
 export type {
-  TavilyExtractDefaults,
-  TavilyExtractDepth,
-  TavilyExtractFormat,
-  TavilySearchDefaults,
-  TavilySearchDepth,
-  TavilySearchTopic,
-  TavilyTimeRange,
   TavilyToolSettings,
   ToolSettingsState,
   MCPTransportType,

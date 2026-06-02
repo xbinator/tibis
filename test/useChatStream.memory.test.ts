@@ -83,23 +83,7 @@ vi.mock('@/stores/ai/toolSettings', () => ({
   useToolSettingsStore: () => ({
     tavily: {
       enabled: false,
-      apiKey: '',
-      searchDefaults: {
-        searchDepth: 'basic',
-        topic: 'general',
-        timeRange: null,
-        country: 'china',
-        maxResults: 5,
-        includeAnswer: true,
-        includeImages: false,
-        includeDomains: [],
-        excludeDomains: []
-      },
-      extractDefaults: {
-        extractDepth: 'basic',
-        format: 'markdown',
-        includeImages: false
-      }
+      apiKey: ''
     },
     mcp: {
       servers: []

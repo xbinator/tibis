@@ -308,42 +308,6 @@ export interface AIOutputOptions {
 }
 
 /**
- * Tavily Search 默认配置。
- */
-export interface AITavilySearchDefaults {
-  /** 搜索深度。 */
-  searchDepth: 'basic' | 'advanced';
-  /** 搜索主题。 */
-  topic: 'general' | 'news' | 'finance';
-  /** 时间范围。 */
-  timeRange: 'day' | 'week' | 'month' | 'year' | null;
-  /** 国家。 */
-  country: string | null;
-  /** 最大结果数。 */
-  maxResults: number;
-  /** 是否包含 AI 摘要。 */
-  includeAnswer: boolean;
-  /** 是否包含图片。 */
-  includeImages: boolean;
-  /** 限定域名。 */
-  includeDomains: string[];
-  /** 排除域名。 */
-  excludeDomains: string[];
-}
-
-/**
- * Tavily Extract 默认配置。
- */
-export interface AITavilyExtractDefaults {
-  /** 提取深度。 */
-  extractDepth: 'basic' | 'advanced';
-  /** 输出格式。 */
-  format: 'markdown' | 'text';
-  /** 是否包含图片。 */
-  includeImages: boolean;
-}
-
-/**
  * Tavily 运行时配置。
  */
 export interface AITavilyRuntimeConfig {
@@ -351,10 +315,6 @@ export interface AITavilyRuntimeConfig {
   enabled: boolean;
   /** Tavily API Key。 */
   apiKey: string;
-  /** Search 默认配置。 */
-  searchDefaults: AITavilySearchDefaults;
-  /** Extract 默认配置。 */
-  extractDefaults: AITavilyExtractDefaults;
 }
 
 /**

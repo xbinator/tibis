@@ -15,6 +15,30 @@ import { AIProviderRegistry } from './providers/_index.mjs';
 // ─── 纯工具函数 ──────────────────────────────────────────────────────────────
 
 /**
+ * Tavily Search 硬编码默认参数。
+ */
+const TAVILY_SEARCH_DEFAULTS = {
+  searchDepth: 'basic' as const,
+  topic: 'general' as const,
+  timeRange: undefined as 'day' | 'month' | 'year' | 'd' | 'y' | 'm' | 'week' | 'w' | undefined,
+  country: 'china' as string | undefined,
+  maxResults: 5,
+  includeAnswer: true,
+  includeImages: false,
+  includeDomains: [] as string[],
+  excludeDomains: [] as string[]
+};
+
+/**
+ * Tavily Extract 硬编码默认参数。
+ */
+const TAVILY_EXTRACT_DEFAULTS = {
+  extractDepth: 'basic' as const,
+  format: 'markdown' as const,
+  includeImages: false
+};
+
+/**
  * Tavily Extract 单 URL 输入。
  */
 interface TavilyExtractSingleUrlInput {
@@ -30,12 +54,12 @@ interface TavilyExtractSingleUrlInput {
  * 对外暴露单 URL 版本的 Tavily Extract 工具。
  * @description SDK 原生工具要求 `urls: string[]`，这里收敛成第一版产品约定的单 `url` 输入。
  */
-function createTavilyExtractTool(tavily: NonNullable<AIRequestOptions['tavily']>) {
+function createTavilyExtractTool(apiKey: string) {
   const sdkTool = tavilyExtract({
-    apiKey: tavily.apiKey,
-    includeImages: tavily.extractDefaults.includeImages,
-    extractDepth: tavily.extractDefaults.extractDepth,
-    format: tavily.extractDefaults.format
+    apiKey,
+    includeImages: TAVILY_EXTRACT_DEFAULTS.includeImages,
+    extractDepth: TAVILY_EXTRACT_DEFAULTS.extractDepth,
+    format: TAVILY_EXTRACT_DEFAULTS.format
   });
   const inputSchema = jsonSchema({
     type: 'object',
@@ -77,17 +101,17 @@ function createTavilySdkTools(tavily: AIRequestOptions['tavily']): ToolSet {
   return {
     tavily_search: tavilySearch({
       apiKey: tavily.apiKey,
-      topic: tavily.searchDefaults.topic,
-      country: tavily.searchDefaults.country ?? undefined,
-      maxResults: tavily.searchDefaults.maxResults,
-      includeAnswer: tavily.searchDefaults.includeAnswer,
-      includeImages: tavily.searchDefaults.includeImages,
-      includeDomains: tavily.searchDefaults.includeDomains,
-      excludeDomains: tavily.searchDefaults.excludeDomains,
-      searchDepth: tavily.searchDefaults.searchDepth,
-      timeRange: tavily.searchDefaults.timeRange ?? undefined
+      topic: TAVILY_SEARCH_DEFAULTS.topic,
+      country: TAVILY_SEARCH_DEFAULTS.country,
+      maxResults: TAVILY_SEARCH_DEFAULTS.maxResults,
+      includeAnswer: TAVILY_SEARCH_DEFAULTS.includeAnswer,
+      includeImages: TAVILY_SEARCH_DEFAULTS.includeImages,
+      includeDomains: TAVILY_SEARCH_DEFAULTS.includeDomains,
+      excludeDomains: TAVILY_SEARCH_DEFAULTS.excludeDomains,
+      searchDepth: TAVILY_SEARCH_DEFAULTS.searchDepth,
+      timeRange: TAVILY_SEARCH_DEFAULTS.timeRange
     }),
-    tavily_extract: createTavilyExtractTool(tavily)
+    tavily_extract: createTavilyExtractTool(tavily.apiKey)
   };
 }
 

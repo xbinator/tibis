@@ -154,23 +154,7 @@ describe('aiService', () => {
       prompt: '搜索一下今天的 AI 新闻',
       tavily: {
         enabled: true,
-        apiKey: 'tvly-dev-key',
-        searchDefaults: {
-          searchDepth: 'basic',
-          topic: 'general',
-          timeRange: null,
-          country: 'china',
-          maxResults: 5,
-          includeAnswer: true,
-          includeImages: false,
-          includeDomains: ['example.com'],
-          excludeDomains: []
-        },
-        extractDefaults: {
-          extractDepth: 'basic',
-          format: 'markdown',
-          includeImages: false
-        }
+        apiKey: 'tvly-dev-key'
       }
     };
 
@@ -192,7 +176,7 @@ describe('aiService', () => {
       maxResults: 5,
       includeAnswer: true,
       includeImages: false,
-      includeDomains: ['example.com'],
+      includeDomains: [],
       excludeDomains: [],
       searchDepth: 'basic',
       timeRange: undefined
@@ -225,23 +209,7 @@ describe('aiService', () => {
       prompt: '搜索一下今天的 AI 新闻',
       tavily: {
         enabled: true,
-        apiKey: 'tvly-dev-key',
-        searchDefaults: {
-          searchDepth: 'basic',
-          topic: 'general',
-          timeRange: null,
-          country: 'china',
-          maxResults: 5,
-          includeAnswer: true,
-          includeImages: false,
-          includeDomains: ['example.com'],
-          excludeDomains: []
-        },
-        extractDefaults: {
-          extractDepth: 'basic',
-          format: 'markdown',
-          includeImages: false
-        }
+        apiKey: 'tvly-dev-key'
       }
     };
 
@@ -276,23 +244,7 @@ describe('aiService', () => {
       prompt: '提取这个页面',
       tavily: {
         enabled: true,
-        apiKey: 'tvly-dev-key',
-        searchDefaults: {
-          searchDepth: 'basic',
-          topic: 'general',
-          timeRange: null,
-          country: 'china',
-          maxResults: 5,
-          includeAnswer: true,
-          includeImages: false,
-          includeDomains: [],
-          excludeDomains: []
-        },
-        extractDefaults: {
-          extractDepth: 'basic',
-          format: 'markdown',
-          includeImages: false
-        }
+        apiKey: 'tvly-dev-key'
       }
     };
 
@@ -335,23 +287,7 @@ describe('aiService', () => {
       prompt: 'hello',
       tavily: {
         enabled: false,
-        apiKey: 'tvly-dev-key',
-        searchDefaults: {
-          searchDepth: 'basic',
-          topic: 'general',
-          timeRange: null,
-          country: 'china',
-          maxResults: 5,
-          includeAnswer: true,
-          includeImages: false,
-          includeDomains: [],
-          excludeDomains: []
-        },
-        extractDefaults: {
-          extractDepth: 'basic',
-          format: 'markdown',
-          includeImages: false
-        }
+        apiKey: 'tvly-dev-key'
       }
     };
 

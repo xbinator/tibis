@@ -30,12 +30,12 @@ describe('useToolSettingsStore', () => {
     setActivePinia(createPinia());
   });
 
-  it('loads Tavily defaults and keeps country = china', async () => {
+  it('loads Tavily defaults', async () => {
     const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
     const store = useToolSettingsStore();
 
     expect(store.tavily.enabled).toBe(false);
-    expect(store.tavily.searchDefaults.country).toBe('china');
+    expect(store.tavily.apiKey).toBe('');
     expect(store.isTavilyAvailable).toBe(false);
   });
 
@@ -45,14 +45,7 @@ describe('useToolSettingsStore', () => {
     local.setItem(TOOL_SETTINGS_STORAGE_KEY, {
       tavily: {
         enabled: 'yes',
-        apiKey: 123,
-        searchDefaults: {
-          topic: 'sports',
-          timeRange: 'forever',
-          country: 'CN',
-          maxResults: 99,
-          includeDomains: [' example.com ', '', 'https://bad.example.com']
-        }
+        apiKey: 123
       }
     });
 
@@ -61,11 +54,6 @@ describe('useToolSettingsStore', () => {
 
     expect(store.tavily.enabled).toBe(false);
     expect(store.tavily.apiKey).toBe('');
-    expect(store.tavily.searchDefaults.topic).toBe('general');
-    expect(store.tavily.searchDefaults.timeRange).toBeNull();
-    expect(store.tavily.searchDefaults.country).toBe('china');
-    expect(store.tavily.searchDefaults.maxResults).toBe(20);
-    expect(store.tavily.searchDefaults.includeDomains).toEqual(['example.com']);
   });
 
   it('marks Tavily available only when enabled and apiKey is present', async () => {
