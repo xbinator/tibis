@@ -68,13 +68,22 @@ describe('useTagWebView', () => {
     expect(hook.state.value.canGoForward).toBe(false);
   });
 
-  it('logs selected element details after starting element picker mode', async () => {
+  it('keeps element picker mode active and stores selected element details from console messages', async () => {
     const selectedElement = {
       tagName: 'A',
       id: 'read-more',
       className: 'link primary',
       text: 'Read more',
       selector: 'a#read-more.link.primary',
+      attributes: [
+        { name: 'id', value: 'read-more' },
+        { name: 'class', value: 'link primary' }
+      ],
+      ancestors: [{ tagName: 'BODY', selector: 'body' }],
+      computedStyles: {
+        display: 'inline',
+        color: 'rgb(0, 0, 0)'
+      },
       rect: {
         x: 10,
         y: 20,
@@ -82,8 +91,7 @@ describe('useTagWebView', () => {
         height: 32
       }
     };
-    const executeJavaScript = vi.fn<(script: string) => Promise<typeof selectedElement>>().mockResolvedValue(selectedElement);
-    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const executeJavaScript = vi.fn<(script: string) => Promise<null>>().mockResolvedValue(null);
     const instance = {
       executeJavaScript,
       canGoBack: () => false,
@@ -99,12 +107,49 @@ describe('useTagWebView', () => {
 
     expect(executeJavaScript).toHaveBeenCalledTimes(1);
     expect(executeJavaScript.mock.calls[0]?.[0]).toContain('Tibis WebView selected element');
+    expect(executeJavaScript.mock.calls[0]?.[0]).toContain('__TIBIS_ELEMENT_PICKER_SELECTION__');
+    expect(executeJavaScript.mock.calls[0]?.[0]).toContain('getComputedStyle');
     expect(executeJavaScript.mock.calls[0]?.[0]).toContain('border:2px solid #ff3366;');
     expect(executeJavaScript.mock.calls[0]?.[0]).toContain('background:rgba(255,51,102,.12);');
-    expect(consoleLog).toHaveBeenCalledWith('[WebView Element Picker]', selectedElement);
     expect(hook.state.value.isElementSelecting).toBe(false);
 
-    consoleLog.mockRestore();
+    hook.handleConsoleMessage({
+      message: `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify(selectedElement)}`
+    });
+
+    expect(hook.selectedElement.value).toEqual(selectedElement);
+  });
+
+  it('hides the element picker highlight when the pointer leaves the page container', async () => {
+    const executeJavaScript = vi.fn<(script: string) => Promise<null>>().mockResolvedValue(null);
+    const instance = {
+      executeJavaScript,
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+
+    const hook = useTagWebView(ref(instance));
+
+    await hook.startElementSelection();
+
+    const script = executeJavaScript.mock.calls[0]?.[0] ?? '';
+
+    expect(script).toContain('function handleMouseOut(event)');
+    expect(script).toContain('highlight.hidden = true;');
+    expect(script).toContain("document.addEventListener('mouseout', handleMouseOut, true);");
+    expect(script).toContain("document.removeEventListener('mouseout', handleMouseOut, true);");
+  });
+
+  it('ignores plain browser events when parsing element picker messages', () => {
+    const instance = {
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+    const hook = useTagWebView(ref(instance));
+
+    hook.handleConsoleMessage(new Event('console-message'));
+
+    expect(hook.selectedElement.value).toBeNull();
   });
 
   it('injects touch simulation when touch mode is enabled', async () => {
@@ -128,9 +173,11 @@ describe('useTagWebView', () => {
   it('sets and clears the hosted webview user agent', () => {
     const setUserAgent = vi.fn();
     const removeAttribute = vi.fn();
+    const setAttribute = vi.fn();
     const instance = {
       setUserAgent,
       removeAttribute,
+      setAttribute,
       canGoBack: () => false,
       canGoForward: () => false
     } as unknown as Electron.WebviewTag;
@@ -139,9 +186,11 @@ describe('useTagWebView', () => {
 
     hook.setUserAgent('Mozilla/5.0 iPhone');
     hook.setUserAgent('');
+    hook.handleDomReady();
+    hook.setUserAgent('Mozilla/5.0 Desktop');
 
-    expect(setUserAgent).toHaveBeenCalledWith('Mozilla/5.0 iPhone');
-    expect(setUserAgent).toHaveBeenCalledWith('');
+    expect(setAttribute).toHaveBeenCalledWith('useragent', 'Mozilla/5.0 iPhone');
     expect(removeAttribute).toHaveBeenCalledWith('useragent');
+    expect(setUserAgent).toHaveBeenCalledWith('Mozilla/5.0 Desktop');
   });
 });
