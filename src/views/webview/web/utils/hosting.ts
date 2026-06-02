@@ -168,7 +168,12 @@ export function showWebviewHostLayer(hostLayer: HTMLElement, bounds: WebviewHost
   hostLayer.style.top = `${Math.round(bounds.y)}px`;
   hostLayer.style.width = `${Math.round(bounds.width)}px`;
   hostLayer.style.height = `${Math.round(bounds.height)}px`;
-  hostLayer.style.clipPath = bounds.clip
-    ? `inset(${Math.round(bounds.clip.top)}px ${Math.round(bounds.clip.right)}px ${Math.round(bounds.clip.bottom)}px ${Math.round(bounds.clip.left)}px)`
-    : '';
+  hostLayer.style.background = 'var(--bg-secondary)';
+
+  const { clip } = bounds;
+  if (clip && (clip.top || clip.right || clip.bottom || clip.left)) {
+    hostLayer.style.clipPath = `inset(${Math.round(clip.top)}px ${Math.round(clip.right)}px ${Math.round(clip.bottom)}px ${Math.round(clip.left)}px)`;
+  } else {
+    hostLayer.style.clipPath = 'none';
+  }
 }

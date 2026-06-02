@@ -349,7 +349,6 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: center;
   padding: 16px;
-  background: var(--bg-secondary);
 }
 
 .webview-viewport {

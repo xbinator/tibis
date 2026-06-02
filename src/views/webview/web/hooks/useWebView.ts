@@ -281,6 +281,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   const state = ref<WebviewPageState>({ ...DEFAULT_STATE });
   let initialUrlAttached = false;
   let isDomReady = false;
+  let pendingUserAgent = '';
 
   /**
    * 首次把初始 URL 附着到 `<webview>` 实例。
@@ -390,6 +391,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
 
   /**
    * 设置当前 `<webview>` 的 User-Agent，空字符串表示恢复默认 UA。
+   * `dom-ready` 前通过 `setAttribute` 设置 HTML 属性，`dom-ready` 后通过 API 动态设置。
    * @param userAgent - 目标 User-Agent
    */
   function setUserAgent(userAgent: string): void {
@@ -400,6 +402,13 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
 
     if (!userAgent) {
       instance.removeAttribute('useragent');
+    }
+
+    pendingUserAgent = userAgent;
+
+    if (!isDomReady) {
+      instance.setAttribute('useragent', userAgent);
+      return;
     }
 
     instance.setUserAgent(userAgent);
@@ -443,6 +452,9 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     applyTouchSimulation(state.value.isTouchSimulationEnabled).catch((error: unknown) => {
       console.error('Failed to apply webview touch simulation after DOM ready:', error);
     });
+    if (pendingUserAgent) {
+      webviewRef.value?.setUserAgent(pendingUserAgent);
+    }
   }
 
   /**
