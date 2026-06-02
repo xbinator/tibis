@@ -27,6 +27,26 @@ export interface WebviewPageState {
 }
 
 /**
+ * WebView 元素属性。
+ */
+export interface WebviewElementAttribute {
+  /** 属性名 */
+  name: string;
+  /** 属性值 */
+  value: string;
+}
+
+/**
+ * WebView 元素层级节点。
+ */
+export interface WebviewElementAncestor {
+  /** 元素标签名 */
+  tagName: string;
+  /** 层级节点选择器 */
+  selector: string;
+}
+
+/**
  * WebView 元素选择结果。
  */
 export interface WebviewElementSelection {
@@ -40,6 +60,12 @@ export interface WebviewElementSelection {
   text: string;
   /** 可复用的 CSS 选择器 */
   selector: string;
+  /** 元素属性列表 */
+  attributes: WebviewElementAttribute[];
+  /** 当前元素的祖先层级 */
+  ancestors: WebviewElementAncestor[];
+  /** 精选计算样式 */
+  computedStyles: Record<string, string>;
   /** 元素视口矩形 */
   rect: {
     /** 横向位置 */

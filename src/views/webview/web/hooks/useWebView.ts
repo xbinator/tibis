@@ -38,6 +38,62 @@ const DEFAULT_ELEMENT_PICKER_THEME: WebviewElementPickerTheme = {
 };
 
 /**
+ * 页面脚本上报元素选择结果的 console 消息前缀。
+ */
+const ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX = '__TIBIS_ELEMENT_PICKER_SELECTION__';
+
+/**
+ * 页面元素选择脚本需要读取的精选计算样式。
+ */
+const ELEMENT_PICKER_STYLE_PROPERTIES = [
+  'display',
+  'position',
+  'box-sizing',
+  'width',
+  'height',
+  'margin-top',
+  'margin-right',
+  'margin-bottom',
+  'margin-left',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'line-height',
+  'color',
+  'background-color',
+  'border-top-width',
+  'border-right-width',
+  'border-bottom-width',
+  'border-left-width',
+  'border-color',
+  'border-radius',
+  'z-index',
+  'overflow',
+  'transform'
+];
+
+/**
+ * WebView console-message 事件的最小消息结构。
+ */
+export interface WebviewConsoleMessageEvent {
+  /** WebView 页面输出的 console message */
+  message: string;
+}
+
+/**
+ * 判断事件是否包含 WebView console message。
+ * @param event - 待判断的事件对象
+ * @returns 是否包含可解析的 message
+ */
+function isWebviewConsoleMessageEvent(event: Event | WebviewConsoleMessageEvent): event is WebviewConsoleMessageEvent {
+  return 'message' in event && typeof event.message === 'string';
+}
+
+/**
  * 构建注入到页面内的 DOM 元素选择脚本。
  * @param theme - 元素选择器主题
  * @returns 可通过 `executeJavaScript` 执行的脚本
@@ -45,6 +101,8 @@ const DEFAULT_ELEMENT_PICKER_THEME: WebviewElementPickerTheme = {
 function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT_ELEMENT_PICKER_THEME): string {
   const borderStyle = JSON.stringify(`border:2px solid ${theme.color || DEFAULT_ELEMENT_PICKER_THEME.color};`);
   const backgroundStyle = JSON.stringify(`background:${theme.background || DEFAULT_ELEMENT_PICKER_THEME.background};`);
+  const messagePrefix = JSON.stringify(ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX);
+  const styleProperties = JSON.stringify(ELEMENT_PICKER_STYLE_PROPERTIES);
 
   return `
 (() => new Promise((resolve) => {
@@ -97,6 +155,32 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     delete window.__tibisElementPickerCleanup;
   };
 
+  const readAttributes = (element) => Array.from(element.attributes).map((attribute) => ({
+    name: attribute.name,
+    value: attribute.value
+  }));
+
+  const readAncestors = (element) => {
+    const ancestors = [];
+    let current = element.parentElement;
+    while (current) {
+      ancestors.unshift({
+        tagName: current.tagName,
+        selector: buildSelector(current)
+      });
+      current = current.parentElement;
+    }
+    return ancestors;
+  };
+
+  const readComputedStyles = (element) => {
+    const styles = window.getComputedStyle(element);
+    return ${styleProperties}.reduce((result, propertyName) => {
+      result[propertyName] = styles.getPropertyValue(propertyName);
+      return result;
+    }, {});
+  };
+
   const readElement = (element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -105,6 +189,9 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
       className: element.className || '',
       text: (element.innerText || element.textContent || '').trim().slice(0, 200),
       selector: buildSelector(element),
+      attributes: readAttributes(element),
+      ancestors: readAncestors(element),
+      computedStyles: readComputedStyles(element),
       rect: {
         x: rect.x,
         y: rect.y,
@@ -139,8 +226,7 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     event.stopImmediatePropagation();
     const selectedElement = readElement(target);
     console.log('Tibis WebView selected element', selectedElement);
-    cleanup();
-    resolve(selectedElement);
+    console.log(${messagePrefix} + JSON.stringify(selectedElement));
   }
 
   function handleKeydown(event) {
@@ -153,11 +239,30 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     resolve(null);
   }
 
-  window.__tibisElementPickerCleanup = cleanup;
+  window.__tibisElementPickerCleanup = () => {
+    cleanup();
+    resolve(null);
+  };
   document.addEventListener('mousemove', handleMouseMove, true);
   document.addEventListener('click', handleClick, true);
   document.addEventListener('keydown', handleKeydown, true);
 }))();
+`;
+}
+
+/**
+ * 构建停止 DOM 元素选择模式的页面脚本。
+ * @returns 可通过 `executeJavaScript` 执行的脚本
+ */
+function createStopElementSelectionScript(): string {
+  return `
+(() => {
+  const cleanup = window.__tibisElementPickerCleanup;
+  if (typeof cleanup === 'function') {
+    cleanup();
+  }
+  return null;
+})();
 `;
 }
 
@@ -172,7 +277,14 @@ function isElementSelection(value: unknown): value is WebviewElementSelection {
   }
 
   const selection = value as Partial<WebviewElementSelection>;
-  return typeof selection.tagName === 'string' && typeof selection.selector === 'string';
+  return (
+    typeof selection.tagName === 'string' &&
+    typeof selection.selector === 'string' &&
+    Array.isArray(selection.attributes) &&
+    Array.isArray(selection.ancestors) &&
+    Boolean(selection.computedStyles) &&
+    typeof selection.computedStyles === 'object'
+  );
 }
 
 /**
@@ -279,6 +391,7 @@ function createTouchSimulationScript(enabled: boolean): string {
  */
 export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   const state = ref<WebviewPageState>({ ...DEFAULT_STATE });
+  const selectedElement = ref<WebviewElementSelection | null>(null);
   let initialUrlAttached = false;
   let isDomReady = false;
   let pendingUserAgent = '';
@@ -415,7 +528,8 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   }
 
   /**
-   * 开启页面 DOM 元素选择模式，并在选择完成后输出元素信息。
+   * 开启页面 DOM 元素持续选择模式。
+   * @param theme - 元素选择器主题
    */
   async function startElementSelection(theme: WebviewElementPickerTheme = DEFAULT_ELEMENT_PICKER_THEME): Promise<void> {
     const instance = webviewRef.value;
@@ -427,10 +541,55 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     try {
       const result = await instance.executeJavaScript(createElementSelectionScript(theme));
       if (isElementSelection(result)) {
-        console.log('[WebView Element Picker]', result);
+        selectedElement.value = result;
       }
     } finally {
       state.value.isElementSelecting = false;
+    }
+  }
+
+  /**
+   * 停止页面 DOM 元素持续选择模式。
+   */
+  async function stopElementSelection(): Promise<void> {
+    const instance = webviewRef.value;
+    const executeJavaScript = instance?.executeJavaScript;
+    state.value.isElementSelecting = false;
+    if (!instance || typeof executeJavaScript !== 'function') {
+      return;
+    }
+
+    await executeJavaScript.call(instance, createStopElementSelectionScript());
+  }
+
+  /**
+   * 清空当前 DOM 检查结果。
+   */
+  function clearSelectedElement(): void {
+    selectedElement.value = null;
+  }
+
+  /**
+   * 处理页面 console 消息中的 DOM 元素选择结果。
+   * @param event - WebView console-message 事件
+   */
+  function handleConsoleMessage(event: Event | WebviewConsoleMessageEvent): void {
+    if (!isWebviewConsoleMessageEvent(event)) {
+      return;
+    }
+
+    const { message } = event;
+    if (!message.startsWith(ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX)) {
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(message.slice(ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX.length)) as unknown;
+      if (isElementSelection(payload)) {
+        selectedElement.value = payload;
+      }
+    } catch (error) {
+      console.error('Failed to parse webview element selection message:', error);
     }
   }
 
@@ -504,6 +663,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
 
   return {
     ...controller,
+    selectedElement,
     attachInitialUrl,
     handleDidStartLoading,
     handleDomReady,
@@ -511,7 +671,10 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     handleTitleUpdated,
     handleDidStopLoading,
     handleAttachRejected,
+    handleConsoleMessage,
     startElementSelection,
+    stopElementSelection,
+    clearSelectedElement,
     setTouchSimulationEnabled,
     setUserAgent
   };

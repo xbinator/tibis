@@ -21,8 +21,12 @@
 
     <DeviceToolbar v-if="deviceMode.isToolbarVisible.value" :active-preset="deviceMode.activePreset.value" @select-preset="handleSelectDevicePreset" />
 
-    <div ref="webviewContentRef" class="webview-content" :class="{ 'webview-content--framed': isDeviceFramed }" @scroll="syncHostLayerBounds">
-      <div ref="webviewContainerRef" class="webview-viewport" :style="viewportStyle"></div>
+    <div class="webview-main">
+      <div ref="webviewContentRef" class="webview-content" :class="{ 'webview-content--framed': isDeviceFramed }" @scroll="requestSyncHostLayerBounds">
+        <div ref="webviewContainerRef" class="webview-viewport" :style="viewportStyle"></div>
+      </div>
+
+      <DomInspectorPanel v-if="webview.selectedElement.value" :selection="webview.selectedElement.value" @close="handleCloseDomInspector" />
     </div>
   </div>
 </template>
@@ -32,60 +36,121 @@
  * @file index.vue
  * @description `<webview>` 标签页面入口。
  */
-import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type CSSProperties } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue';
 import { useRoute } from 'vue-router';
-import { useEventListener, useResizeObserver } from '@vueuse/core';
 import { native } from '@/shared/platform';
 import AddressBar from '@/views/webview/shared/components/AddressBar.vue';
 import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 import DeviceToolbar from './components/DeviceToolbar.vue';
+import DomInspectorPanel from './components/DomInspectorPanel.vue';
 import { useDeviceMode, type WebviewDevicePresetKey } from './hooks/useDeviceMode.ts';
+import { useHostLayer } from './hooks/useHostLayer.ts';
 import { useWebView } from './hooks/useWebView.ts';
-import { ensureHostedWebviewElement, ensureWebviewHostLayer, hideWebviewHostLayer, showWebviewHostLayer } from './utils/hosting';
-import { resolveVisibleWebviewBounds } from './utils/viewportBounds';
+import { ensureHostedWebviewElement, ensureWebviewHostLayer } from './utils/hosting';
 
 const route = useRoute();
 const webviewContentRef = ref<HTMLElement | null>(null);
 const webviewContainerRef = ref<HTMLElement | null>(null);
 const webviewElementRef = ref<Electron.WebviewTag | null>(null);
+
 const routeFullPath = route.fullPath;
 const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as string) || ''));
+
 const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
-let syncHostLayerFrame: number | null = null;
+
 const isDeviceFramed = computed(() => deviceMode.isToolbarVisible.value);
+
 const activeUserAgent = computed(() => (deviceMode.isToolbarVisible.value ? deviceMode.activePreset.value.userAgent : ''));
+
 const viewportStyle = computed<CSSProperties>(() => {
   if (!isDeviceFramed.value) {
     return {};
   }
 
-  const preset = deviceMode.activePreset.value;
-
-  return {
-    width: `${preset.width}px`,
-    height: `${preset.height}px`
-  };
+  const { width, height } = deviceMode.activePreset.value;
+  return { width: `${width}px`, height: `${height}px` };
 });
 
-const offAttachRejected = window.electronAPI?.webview.onAttachRejected((payload) => {
-  if (payload.src !== webview.state.value.url) {
+// ---- 宿主层同步（RAF + resize + scroll 统一管理）----
+const { requestSyncHostLayerBounds } = useHostLayer(routeFullPath, webviewContainerRef, webviewContentRef, webviewElementRef);
+
+// ---- Wheel 转发（早返回简化）----
+
+/**
+ * 在设备视口被宿主层覆盖时转发滚轮到外层滚动容器。
+ * @param event - 滚轮事件
+ */
+function handleHostedWheel(event: WheelEvent): void {
+  const scroller = webviewContentRef.value;
+  if (!isDeviceFramed.value || !scroller) {
     return;
   }
 
-  webview.handleAttachRejected(payload);
-});
+  const { scrollLeft, scrollTop } = scroller;
+  scroller.scrollBy({ left: event.deltaX, top: event.deltaY, behavior: 'auto' });
+
+  if (scroller.scrollLeft !== scrollLeft || scroller.scrollTop !== scrollTop) {
+    event.preventDefault();
+    requestSyncHostLayerBounds();
+  }
+}
+
+/**
+ * 接收通用 DOM 事件并转发有效滚轮事件。
+ * @param event - DOM 事件
+ */
+function handleHostedWheelEvent(event: Event): void {
+  if (!(event instanceof WheelEvent) || !isDeviceFramed.value) {
+    return;
+  }
+
+  handleHostedWheel(event);
+}
+
+/**
+ * `<webview>` 事件绑定映射表，用于统一绑定与解绑。
+ */
+const webviewEventMap: Array<{ name: string; handler: EventListener | ((event: Event) => void); useCapture?: boolean }> = [
+  { name: 'did-start-loading', handler: webview.handleDidStartLoading as EventListener },
+  { name: 'dom-ready', handler: webview.handleDomReady as EventListener },
+  { name: 'did-navigate', handler: webview.handleDidNavigate as EventListener },
+  { name: 'did-navigate-in-page', handler: webview.handleDidNavigate as EventListener },
+  { name: 'page-title-updated', handler: webview.handleTitleUpdated as EventListener },
+  { name: 'did-stop-loading', handler: webview.handleDidStopLoading as EventListener },
+  { name: 'console-message', handler: webview.handleConsoleMessage },
+  { name: 'wheel', handler: handleHostedWheelEvent }
+];
+
+/**
+ * 绑定 `<webview>` 事件。
+ * @param element - `<webview>` 元素
+ */
+function bindWebviewEvents(element: Electron.WebviewTag): void {
+  webviewEventMap.forEach(({ name, handler, useCapture }) => {
+    element.addEventListener(name, handler, useCapture);
+  });
+}
+
+/**
+ * 解绑 `<webview>` 事件。
+ * @param element - `<webview>` 元素
+ */
+function unbindWebviewEvents(element: Electron.WebviewTag): void {
+  webviewEventMap.forEach(({ name, handler, useCapture }) => {
+    element.removeEventListener(name, handler, useCapture);
+  });
+}
 
 /**
  * 在系统浏览器中打开当前 URL。
  */
 async function openInBrowser(): Promise<void> {
-  if (!webview.state.value.url) {
-    return;
+  const { url } = webview.state.value;
+  if (url) {
+    await native.openExternal(url);
   }
-
-  await native.openExternal(webview.state.value.url);
 }
 
 /**
@@ -116,135 +181,32 @@ function resolveElementPickerTheme(): { color: string; background: string } {
 }
 
 /**
- * 开启页面 DOM 元素选择模式。
+ * 切换页面 DOM 元素持续选择模式。
  */
 function handleStartElementSelection(): void {
-  webview.startElementSelection(resolveElementPickerTheme()).catch((error: unknown) => {
-    console.error('Failed to start webview element selection:', error);
-  });
+  const action = webview.state.value.isElementSelecting ? webview.stopElementSelection() : webview.startElementSelection(resolveElementPickerTheme());
+
+  action.catch((err: unknown) => console.error('Element selection error:', err));
 }
 
 /**
- * 根据占位容器同步宿主层位置和尺寸。
+ * 关闭 DOM 检查看板并停止元素选择模式。
  */
-function syncHostLayerBounds(): void {
-  syncHostLayerFrame = null;
-  const container = webviewContainerRef.value;
-  const scrollFrame = webviewContentRef.value;
-  const hostLayer = ensureWebviewHostLayer(document, routeFullPath);
-  if (!container || !scrollFrame) {
-    hideWebviewHostLayer(hostLayer);
-    return;
-  }
-
-  const visibleBounds = resolveVisibleWebviewBounds(container.getBoundingClientRect(), scrollFrame.getBoundingClientRect());
-  if (!visibleBounds) {
-    hideWebviewHostLayer(hostLayer);
-    return;
-  }
-
-  const hostLayerX = visibleBounds.x - visibleBounds.offsetX;
-  const hostLayerY = visibleBounds.y - visibleBounds.offsetY;
-  const clipRight = visibleBounds.contentWidth - visibleBounds.offsetX - visibleBounds.width;
-  const clipBottom = visibleBounds.contentHeight - visibleBounds.offsetY - visibleBounds.height;
-
-  showWebviewHostLayer(hostLayer, {
-    x: hostLayerX,
-    y: hostLayerY,
-    width: visibleBounds.contentWidth,
-    height: visibleBounds.contentHeight,
-    clip: {
-      top: visibleBounds.offsetY,
-      right: clipRight,
-      bottom: clipBottom,
-      left: visibleBounds.offsetX
-    }
-  });
-
-  const element = webviewElementRef.value;
-  if (!element) {
-    return;
-  }
-
-  element.style.width = `${Math.round(visibleBounds.contentWidth)}px`;
-  element.style.height = `${Math.round(visibleBounds.contentHeight)}px`;
-  element.style.transform = 'translate(0px, 0px)';
-}
-
-/**
- * 请求在下一帧同步宿主层范围，合并连续 resize 与滚动触发。
- */
-function requestSyncHostLayerBounds(): void {
-  if (syncHostLayerFrame !== null) {
-    cancelAnimationFrame(syncHostLayerFrame);
-  }
-
-  syncHostLayerFrame = requestAnimationFrame(syncHostLayerBounds);
-}
-
-/**
- * 在设备视口被宿主层覆盖时转发滚轮到外层滚动容器。
- * @param event - 滚轮事件
- */
-function handleHostedWheel(event: WheelEvent): void {
-  const scroller = webviewContentRef.value;
-  if (!isDeviceFramed.value || !scroller) {
-    return;
-  }
-
-  const previousLeft = scroller.scrollLeft;
-  const previousTop = scroller.scrollTop;
-  scroller.scrollBy({
-    left: event.deltaX,
-    top: event.deltaY,
-    behavior: 'auto'
-  });
-
-  if (scroller.scrollLeft !== previousLeft || scroller.scrollTop !== previousTop) {
-    event.preventDefault();
-    syncHostLayerBounds();
+function handleCloseDomInspector(): void {
+  webview.clearSelectedElement();
+  if (webview.state.value.isElementSelecting) {
+    webview.stopElementSelection().catch((err: unknown) => console.error('Failed to stop element selection:', err));
   }
 }
 
 /**
- * 接收通用 DOM 事件并转发有效滚轮事件。
- * @param event - DOM 事件
+ * 监听宿主拒绝附加 `<webview>` 的事件。
  */
-function handleHostedWheelEvent(event: Event): void {
-  if (!(event instanceof WheelEvent)) {
-    return;
+const offAttachRejected = window.electronAPI?.webview.onAttachRejected((payload) => {
+  if (payload.src === webview.state.value.url) {
+    webview.handleAttachRejected(payload);
   }
-
-  handleHostedWheel(event);
-}
-
-/**
- * 绑定 `<webview>` 事件。
- * @param element - `<webview>` 元素
- */
-function bindWebviewEvents(element: Electron.WebviewTag): void {
-  element.addEventListener('did-start-loading', webview.handleDidStartLoading as EventListener);
-  element.addEventListener('dom-ready', webview.handleDomReady as EventListener);
-  element.addEventListener('did-navigate', webview.handleDidNavigate as EventListener);
-  element.addEventListener('did-navigate-in-page', webview.handleDidNavigate as EventListener);
-  element.addEventListener('page-title-updated', webview.handleTitleUpdated as EventListener);
-  element.addEventListener('did-stop-loading', webview.handleDidStopLoading as EventListener);
-  element.addEventListener('wheel', handleHostedWheelEvent, false);
-}
-
-/**
- * 解绑 `<webview>` 事件。
- * @param element - `<webview>` 元素
- */
-function unbindWebviewEvents(element: Electron.WebviewTag): void {
-  element.removeEventListener('did-start-loading', webview.handleDidStartLoading as EventListener);
-  element.removeEventListener('dom-ready', webview.handleDomReady as EventListener);
-  element.removeEventListener('did-navigate', webview.handleDidNavigate as EventListener);
-  element.removeEventListener('did-navigate-in-page', webview.handleDidNavigate as EventListener);
-  element.removeEventListener('page-title-updated', webview.handleTitleUpdated as EventListener);
-  element.removeEventListener('did-stop-loading', webview.handleDidStopLoading as EventListener);
-  element.removeEventListener('wheel', handleHostedWheelEvent);
-}
+});
 
 /**
  * 创建并缓存 `<webview>` 元素，只创建一次。
@@ -252,9 +214,8 @@ function unbindWebviewEvents(element: Electron.WebviewTag): void {
  * @returns `<webview>` 元素
  */
 function ensureWebviewElement(): Electron.WebviewTag {
-  const existing = webviewElementRef.value;
-  if (existing) {
-    return existing;
+  if (webviewElementRef.value) {
+    return webviewElementRef.value;
   }
 
   const hostLayer = ensureWebviewHostLayer(document, routeFullPath);
@@ -267,38 +228,18 @@ function ensureWebviewElement(): Electron.WebviewTag {
   return element;
 }
 
+ensureWebviewElement();
+
 useWebviewTabTitle({
   routeFullPath,
   title: computed(() => webview.state.value.title)
 });
 
-onMounted(() => {
-  ensureWebviewElement();
-  requestSyncHostLayerBounds();
-});
-
-onActivated(() => {
-  requestSyncHostLayerBounds();
-});
-
-onDeactivated(() => {
-  hideWebviewHostLayer(ensureWebviewHostLayer(document, routeFullPath));
-});
-
-useResizeObserver(webviewContainerRef, requestSyncHostLayerBounds);
-useResizeObserver(webviewContentRef, requestSyncHostLayerBounds);
-useEventListener(window, 'resize', requestSyncHostLayerBounds);
-
-watch([deviceMode.isToolbarVisible, deviceMode.activePreset], () => {
-  nextTick(requestSyncHostLayerBounds).catch((error: unknown) => {
-    console.error('Failed to sync webview device viewport bounds:', error);
-  });
-});
+// ---- Watches（合并 toolbar + preset 变化触发视口同步）----
+watch([deviceMode.isToolbarVisible, deviceMode.activePreset], () => nextTick(requestSyncHostLayerBounds).catch(console.error));
 
 watch(deviceMode.touchSimulationEnabled, (enabled) => {
-  webview.setTouchSimulationEnabled(enabled).catch((error: unknown) => {
-    console.error('Failed to update webview touch simulation:', error);
-  });
+  webview.setTouchSimulationEnabled(enabled).catch(console.error);
 });
 
 watch(activeUserAgent, (userAgent) => {
@@ -306,11 +247,6 @@ watch(activeUserAgent, (userAgent) => {
 });
 
 onBeforeUnmount(() => {
-  if (syncHostLayerFrame !== null) {
-    cancelAnimationFrame(syncHostLayerFrame);
-    syncHostLayerFrame = null;
-  }
-
   const element = webviewElementRef.value;
   if (element) {
     unbindWebviewEvents(element);
@@ -329,6 +265,13 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: var(--bg-primary);
   border-radius: 8px;
+}
+
+.webview-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .webview-content {
@@ -366,6 +309,6 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   max-width: 100%;
   height: auto;
-  box-shadow: 0 0 0 1px var(--border-color);
+  box-shadow: 0 0 0 1px var(--border-primary);
 }
 </style>

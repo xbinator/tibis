@@ -32,9 +32,8 @@
         type="text"
         size="small"
         square
-        :tooltip="isElementSelecting ? '正在选择元素' : '选择页面元素'"
+        :tooltip="isElementSelecting ? '停止选择元素' : '选择页面元素'"
         :icon="isElementSelecting ? 'lucide:scan-line' : 'lucide:mouse-pointer-click'"
-        :disabled="isElementSelecting"
         @click="emit('selectElement')"
       />
       <BButton type="text" size="small" square tooltip="在浏览器打开" icon="lucide:external-link" @click="emit('openInBrowser')" />
@@ -108,7 +107,7 @@ function handleEnter(event: KeyboardEvent): void {
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .nav-buttons,
@@ -130,7 +129,7 @@ function handleEnter(event: KeyboardEvent): void {
   color: var(--text-primary);
   outline: none;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
 }
 
