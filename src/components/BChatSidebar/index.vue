@@ -903,7 +903,7 @@ onUnmounted(() => {
   gap: 8px;
   align-items: center;
   padding: 8px 8px 8px 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .b-chat-sidebar__title {

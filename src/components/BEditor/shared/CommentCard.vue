@@ -298,7 +298,7 @@ onBeforeUnmount(() => {
   max-width: calc(100% - 32px);
   padding: 6px 10px;
   background-color: var(--bg-elevated);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
 }

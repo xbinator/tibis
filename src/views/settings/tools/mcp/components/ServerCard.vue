@@ -255,7 +255,7 @@ const dropdownOptions = computed<DropdownOption[]>(() => {
   padding: 12px;
   margin-top: 12px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
 }
 

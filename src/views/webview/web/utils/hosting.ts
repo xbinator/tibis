@@ -168,7 +168,7 @@ export function showWebviewHostLayer(hostLayer: HTMLElement, bounds: WebviewHost
   hostLayer.style.top = `${Math.round(bounds.y)}px`;
   hostLayer.style.width = `${Math.round(bounds.width)}px`;
   hostLayer.style.height = `${Math.round(bounds.height)}px`;
-  hostLayer.style.background = 'var(--bg-secondary)';
+  hostLayer.style.background = 'var(--bg-tertiary)';
 
   const { clip } = bounds;
   if (clip && (clip.top || clip.right || clip.bottom || clip.left)) {

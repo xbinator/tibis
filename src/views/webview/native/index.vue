@@ -141,7 +141,7 @@ onBeforeUnmount(async () => {
 
 .loading-bar {
   height: 2px;
-  background: var(--border-color, #e0e0e0);
+  background: var(--border-primary, #e0e0e0);
 }
 
 .loading-progress {
