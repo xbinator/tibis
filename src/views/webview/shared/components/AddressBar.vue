@@ -15,6 +15,8 @@
 
     <div class="address-input">
       <input :value="url" class="address-input__control" type="text" spellcheck="false" @keydown.enter="handleEnter" />
+
+      <BIcon icon="lucide:copy" class="address-input__icon" @click="handleCopy" />
     </div>
 
     <div class="action-buttons">
@@ -46,6 +48,9 @@
  * @file AddressBar.vue
  * @description WebView 共享地址栏组件。
  */
+import { useClipboard } from '@/hooks/useClipboard';
+
+const { clipboard } = useClipboard();
 interface Props {
   /** 当前地址 */
   url: string;
@@ -65,7 +70,7 @@ interface Props {
   isDeviceToolbarVisible?: boolean;
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   canGoBack: false,
   canGoForward: false,
   isLoading: false,
@@ -98,9 +103,16 @@ function handleEnter(event: KeyboardEvent): void {
 
   emit('submitUrl', target.value);
 }
+
+/**
+ * 复制当前 URL 到剪贴板。
+ */
+function handleCopy(): void {
+  clipboard(props.url, { successMessage: '已复制地址' });
+}
 </script>
 
-<style scoped>
+<style scoped lang="less">
 .address-bar {
   display: flex;
   gap: 8px;
@@ -117,23 +129,39 @@ function handleEnter(event: KeyboardEvent): void {
 }
 
 .address-input {
+  display: flex;
   flex: 1;
+  align-items: center;
   min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+
+  &:focus-within {
+    border-color: var(--color-primary);
+  }
 }
 
 .address-input__control {
   width: 100%;
   min-width: 0;
-  height: 28px;
-  padding: 0 10px;
-  color: var(--text-primary);
   outline: none;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
+  background: transparent;
+  border: none;
 }
 
-.address-input__control:focus {
-  border-color: var(--color-primary);
+.address-input__icon {
+  flex-shrink: 0;
+  margin-left: 6px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--text-secondary);
+  }
 }
 </style>
