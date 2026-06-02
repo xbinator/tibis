@@ -27,7 +27,7 @@
       </div>
 
       <BPanelSplitter v-if="webview.selectedElement" v-model:size="domPanelWidth" :min-width="280" :max-width="480" @close="handleCloseDomInspector">
-        <DomInspectorPanel :selection="webview.selectedElement" @close="handleCloseDomInspector" />
+        <InspectorPanel :selection="webview.selectedElement" @close="handleCloseDomInspector" />
       </BPanelSplitter>
     </div>
   </div>
@@ -45,7 +45,7 @@ import AddressBar from '@/views/webview/shared/components/AddressBar.vue';
 import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 import DeviceToolbar from './components/DeviceToolbar.vue';
-import DomInspectorPanel from './components/DomInspectorPanel.vue';
+import InspectorPanel from './components/InspectorPanel.vue';
 import { useDeviceMode, type WebviewDevicePresetKey } from './hooks/useDeviceMode.ts';
 import { useHostLayer } from './hooks/useHostLayer.ts';
 import { useWebView } from './hooks/useWebView.ts';
