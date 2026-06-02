@@ -10,6 +10,9 @@
         {{ record.label }}
       </template>
     </BDropdownButton>
+
+    <!-- 设备尺寸信息 -->
+    <span class="device-size-info">{{ activePreset.width }} x {{ activePreset.height }}</span>
   </div>
 </template>
 
@@ -35,13 +38,13 @@ const emit = defineEmits<{
 
 const activeDeviceLabel = computed(() => {
   const preset = props.activePreset;
-  return `${preset.label} ${preset.width}x${preset.height}`;
+  return preset.label;
 });
 
 const devicePresetOptions = computed<DropdownOptionItem[]>(() =>
   WEBVIEW_DEVICE_PRESETS.map((preset) => ({
     value: preset.key,
-    label: `${preset.label} ${preset.width}x${preset.height}`,
+    label: preset.label,
     checked: preset.key === props.activePreset.key
   }))
 );
@@ -58,9 +61,15 @@ function handleDevicePresetChange(record: DropdownOptionItem): void {
 <style scoped>
 .webview-device-toolbar {
   display: flex;
+  gap: 8px;
   align-items: center;
   justify-content: flex-start;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border-primary);
+}
+
+.device-size-info {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 </style>
