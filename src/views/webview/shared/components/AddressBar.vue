@@ -31,7 +31,7 @@
       />
       <BButton
         v-if="supportsElementSelection"
-        type="text"
+        :type="isElementSelecting ? 'secondary' : 'text'"
         size="small"
         square
         :tooltip="isElementSelecting ? '停止选择元素' : '选择页面元素'"
@@ -80,7 +80,7 @@ interface Props {
   /** 是否支持 CSS 查看器 */
   supportsInspector?: boolean;
   /** CSS 查看器是否打开 */
-  isInspectorOpen?: boolean;
+  isInspectorOpen?: boolean | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {

@@ -29,7 +29,7 @@
         <div ref="webviewContainerRef" class="webview-viewport" :style="viewportStyle"></div>
       </div>
 
-      <BPanelSplitter v-if="isInspectorOpen" v-model:size="domPanelWidth" :min-width="280" :max-width="480" @close="handleCloseDomInspector">
+      <BPanelSplitter v-if="isInspectorOpen" v-model:size="domPanelWidth" :min-width="280" :max-width="480" :closable="false">
         <InspectorPanel :selection="webview.selectedElement" @close="handleCloseDomInspector" />
       </BPanelSplitter>
     </div>
@@ -68,8 +68,8 @@ const deviceMode = useDeviceMode();
 /** DOM 检查看板宽度 */
 const domPanelWidth = ref(360);
 
-/** CSS 查看器是否打开 */
-const isInspectorOpen = ref(false);
+/** CSS 查看器是否打开，null 表示用户尚未决定（首次选中元素时自动打开） */
+const isInspectorOpen = ref<boolean | null>(null);
 
 const isDeviceFramed = computed(() => deviceMode.isToolbarVisible.value);
 
@@ -213,9 +213,10 @@ function handleCloseDomInspector(): void {
 
 /**
  * 切换 CSS 查看器面板。
+ * null 视为关闭状态，切换后打开；非 null 取反。
  */
 function toggleInspector(): void {
-  isInspectorOpen.value = !isInspectorOpen.value;
+  isInspectorOpen.value = isInspectorOpen.value === null ? true : !isInspectorOpen.value;
 }
 
 /**
@@ -256,6 +257,16 @@ useWebviewTabTitle({
 
 // ---- Watches（合并 toolbar + preset 变化触发视口同步）----
 watch([deviceMode.isToolbarVisible, deviceMode.activePreset], () => nextTick(requestSyncHostLayerBounds).catch(console.error));
+
+/**
+ * 监听选中元素变化，首次选中时自动打开 DOM 检查看板。
+ * 用户手动关闭后 isInspectorOpen 为 false，不再自动打开。
+ */
+watch(webview.selectedElementRef, (value) => {
+  if (value && isInspectorOpen.value === null) {
+    isInspectorOpen.value = true;
+  }
+});
 
 watch(deviceMode.touchSimulationEnabled, (enabled) => {
   webview.setTouchSimulationEnabled(enabled).catch(console.error);

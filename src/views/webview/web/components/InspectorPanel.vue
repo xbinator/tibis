@@ -6,7 +6,7 @@
       </div>
     </header>
 
-    <div v-if="selection" :class="$style.body">
+    <BScrollbar v-if="selection" :class="$style.body">
       <RenderSectionBlock title="元素">
         <RenderSectionItem label="选择器">
           <code :class="$style.infoValueItem">{{ selection.selector }}</code>
@@ -38,11 +38,16 @@
           </div>
         </div>
       </RenderSectionBlock>
-    </div>
+    </BScrollbar>
 
     <div v-else :class="$style.emptyState">
-      <BIcon icon="lucide:mouse-pointer-click" :size="22" />
-      <span>点击页面元素后显示层级、属性和样式</span>
+      <div :class="$style.emptyStateIcon">
+        <BIcon icon="lucide:mouse-pointer-click" :size="20" />
+      </div>
+      <div :class="$style.emptyStateText">
+        <span :class="$style.emptyStateTitle">选择页面元素</span>
+        <span :class="$style.emptyStateDesc">点击页面中的元素，查看其层级结构、属性和样式信息</span>
+      </div>
     </div>
   </div>
 </template>
@@ -54,11 +59,13 @@
  */
 import { computed, useCssModule } from 'vue';
 import type { SetupContext, VNode } from 'vue';
+import { useClipboard } from '@/hooks/useClipboard';
 import type { WebviewElementSelection } from '@/views/webview/shared/types';
 import { filterStyleEntries } from '@/views/webview/web/utils/styles';
 import type { StyleEntry } from '@/views/webview/web/utils/styles';
 
 const $style = useCssModule();
+const { clipboard } = useClipboard();
 
 /**
  * 面板分区块组件，封装统一的 section 标题 + 内容插槽结构。
@@ -166,12 +173,8 @@ const styleEntries = computed<StyleEntry[]>(() => filterStyleEntries(props.selec
  * 复制看板中的文本内容。
  * @param value - 需要复制的文本
  */
-async function copyText(value: string): Promise<void> {
-  if (!value || !navigator.clipboard) {
-    return;
-  }
-
-  await navigator.clipboard.writeText(value);
+function copyText(value: string): void {
+  clipboard(value, { successMessage: '已复制选择器' });
 }
 </script>
 
@@ -224,7 +227,6 @@ async function copyText(value: string): Promise<void> {
 .body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
 }
 
 .infoRow {
@@ -357,16 +359,45 @@ async function copyText(value: string): Promise<void> {
   overflow-wrap: anywhere;
 }
 
-.empty-state {
+.emptyState {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  font-size: 13px;
-  color: var(--text-secondary);
+  padding: 32px 24px;
+}
+
+.emptyStateIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+}
+
+.emptyStateText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  max-width: 200px;
   text-align: center;
+}
+
+.emptyStateTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.emptyStateDesc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
 }
 </style>

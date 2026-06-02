@@ -239,8 +239,6 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     const selectedElement = readElement(target);
     console.log('Tibis WebView selected element', selectedElement);
     console.log(${messagePrefix} + JSON.stringify(selectedElement));
-    cleanup();
-    resolve(selectedElement);
   }
 
   function handleKeydown(event) {
@@ -681,6 +679,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     get selectedElement() {
       return selectedElement.value;
     },
+    selectedElementRef: selectedElement,
 
     attachInitialUrl,
     handleDidStartLoading,
