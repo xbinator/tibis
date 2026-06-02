@@ -92,10 +92,15 @@ describe('useTagWebView', () => {
 
     const hook = useTagWebView(ref(instance));
 
-    await hook.startElementSelection();
+    await hook.startElementSelection({
+      color: '#ff3366',
+      background: 'rgba(255,51,102,.12)'
+    });
 
     expect(executeJavaScript).toHaveBeenCalledTimes(1);
     expect(executeJavaScript.mock.calls[0]?.[0]).toContain('Tibis WebView selected element');
+    expect(executeJavaScript.mock.calls[0]?.[0]).toContain('border:2px solid #ff3366;');
+    expect(executeJavaScript.mock.calls[0]?.[0]).toContain('background:rgba(255,51,102,.12);');
     expect(consoleLog).toHaveBeenCalledWith('[WebView Element Picker]', selectedElement);
     expect(hook.state.value.isElementSelecting).toBe(false);
 

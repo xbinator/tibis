@@ -15,7 +15,7 @@
       @stop="webview.stop"
       @submit-url="handleSubmitUrl"
       @open-in-browser="openInBrowser"
-      @select-element="webview.startElementSelection"
+      @select-element="handleStartElementSelection"
       @toggle-device-toolbar="deviceMode.toggleToolbarVisible"
     />
 
@@ -102,6 +102,26 @@ function handleSubmitUrl(value: string): void {
  */
 function handleSelectDevicePreset(presetKey: WebviewDevicePresetKey): void {
   deviceMode.selectPreset(presetKey);
+}
+
+/**
+ * 读取当前应用主题中的元素选择器高亮色。
+ * @returns 页面元素选择器主题
+ */
+function resolveElementPickerTheme(): { color: string; background: string } {
+  const rootStyle = getComputedStyle(document.documentElement);
+  const color = rootStyle.getPropertyValue('--color-primary').trim() || '#2563eb';
+  const background = rootStyle.getPropertyValue('--color-primary-bg').trim() || 'rgba(37,99,235,.12)';
+  return { color, background };
+}
+
+/**
+ * 开启页面 DOM 元素选择模式。
+ */
+function handleStartElementSelection(): void {
+  webview.startElementSelection(resolveElementPickerTheme()).catch((error: unknown) => {
+    console.error('Failed to start webview element selection:', error);
+  });
 }
 
 /**

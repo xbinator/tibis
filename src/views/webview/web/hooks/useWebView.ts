@@ -20,10 +20,32 @@ const DEFAULT_STATE: WebviewPageState = {
 };
 
 /**
+ * WebView 页面元素选择器主题。
+ */
+export interface WebviewElementPickerTheme {
+  /** 高亮边框色 */
+  color: string;
+  /** 高亮背景色 */
+  background: string;
+}
+
+/**
+ * 默认 WebView 页面元素选择器主题。
+ */
+const DEFAULT_ELEMENT_PICKER_THEME: WebviewElementPickerTheme = {
+  color: '#2563eb',
+  background: 'rgba(37,99,235,.12)'
+};
+
+/**
  * 构建注入到页面内的 DOM 元素选择脚本。
+ * @param theme - 元素选择器主题
  * @returns 可通过 `executeJavaScript` 执行的脚本
  */
-function createElementSelectionScript(): string {
+function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT_ELEMENT_PICKER_THEME): string {
+  const borderStyle = JSON.stringify(`border:2px solid ${theme.color || DEFAULT_ELEMENT_PICKER_THEME.color};`);
+  const backgroundStyle = JSON.stringify(`background:${theme.background || DEFAULT_ELEMENT_PICKER_THEME.background};`);
+
   return `
 (() => new Promise((resolve) => {
   const existingCleanup = window.__tibisElementPickerCleanup;
@@ -37,8 +59,8 @@ function createElementSelectionScript(): string {
     'position:fixed;',
     'z-index:2147483647;',
     'pointer-events:none;',
-    'border:2px solid #2563eb;',
-    'background:rgba(37,99,235,.12);',
+    ${borderStyle},
+    ${backgroundStyle},
     'box-sizing:border-box;',
     'border-radius:4px;',
     '}'
@@ -386,7 +408,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   /**
    * 开启页面 DOM 元素选择模式，并在选择完成后输出元素信息。
    */
-  async function startElementSelection(): Promise<void> {
+  async function startElementSelection(theme: WebviewElementPickerTheme = DEFAULT_ELEMENT_PICKER_THEME): Promise<void> {
     const instance = webviewRef.value;
     if (!instance || state.value.isElementSelecting) {
       return;
@@ -394,7 +416,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
 
     state.value.isElementSelecting = true;
     try {
-      const result = await instance.executeJavaScript(createElementSelectionScript());
+      const result = await instance.executeJavaScript(createElementSelectionScript(theme));
       if (isElementSelection(result)) {
         console.log('[WebView Element Picker]', result);
       }
