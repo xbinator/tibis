@@ -1,82 +1,99 @@
 <template>
-  <div class="dom-inspector-panel">
-    <header class="dom-inspector-panel__header">
-      <div class="dom-inspector-panel__title">
+  <div :class="$style.panel">
+    <header :class="$style.header">
+      <div :class="$style.title">
         <span>组件</span>
       </div>
-      <BButton type="text" size="small" square icon="lucide:x" tooltip="关闭" @click="emit('close')" />
     </header>
 
-    <div v-if="selection" class="dom-inspector-panel__body">
-      <section class="dom-inspector-panel__section">
-        <div class="dom-inspector-panel__section-title">元素</div>
-        <div class="dom-inspector-panel__selector-row">
-          <code class="dom-inspector-panel__selector">{{ selection.selector }}</code>
+    <div v-if="selection" :class="$style.body">
+      <RenderSectionBlock title="元素">
+        <RenderSectionItem label="选择器">
+          <code :class="$style.infoValueItem">{{ selection.selector }}</code>
           <BButton type="text" size="small" square icon="lucide:copy" tooltip="复制 selector" @click="copyText(selection.selector)" />
-        </div>
-        <div class="dom-inspector-panel__meta">
-          <span>{{ normalizedTagName }}</span>
-          <span>{{ roundedRect.width }} x {{ roundedRect.height }}</span>
-          <span>x {{ roundedRect.x }} / y {{ roundedRect.y }}</span>
-        </div>
-        <p v-if="selection.text" class="dom-inspector-panel__text">
-          {{ selection.text }}
-        </p>
-      </section>
+        </RenderSectionItem>
+        <RenderSectionItem label="位置" :values="[roundedRect.x, roundedRect.y]" />
+        <RenderSectionItem label="大小" :values="[roundedRect.width, roundedRect.height]" />
+        <RenderSectionItem v-if="selection.text" label="文本" :values="[selection.text]" />
+      </RenderSectionBlock>
 
-      <section class="dom-inspector-panel__section">
-        <div class="dom-inspector-panel__section-title">层级</div>
-        <ol class="dom-inspector-panel__tree">
-          <li
-            v-for="item in hierarchyItems"
-            :key="item.selector"
-            :class="{ 'dom-inspector-panel__tree-item--active': item.isActive }"
-            class="dom-inspector-panel__tree-item"
-          >
+      <RenderSectionBlock title="层级">
+        <ol :class="$style.tree">
+          <li v-for="item in hierarchyItems" :key="item.selector" :class="[$style.treeItem, { [$style.treeItemActive]: item.isActive }]">
             <code>{{ item.selector }}</code>
           </li>
         </ol>
-      </section>
+      </RenderSectionBlock>
 
-      <section class="dom-inspector-panel__section">
-        <div class="dom-inspector-panel__section-title">属性</div>
-        <dl v-if="selection.attributes.length" class="dom-inspector-panel__pairs">
-          <div v-for="attribute in selection.attributes" :key="attribute.name" class="dom-inspector-panel__pair">
-            <dt>{{ attribute.name }}</dt>
-            <dd>
-              <span>{{ attribute.value }}</span>
-              <BButton type="text" size="small" square icon="lucide:copy" tooltip="复制属性值" @click="copyText(attribute.value)" />
-            </dd>
-          </div>
-        </dl>
-        <div v-else class="dom-inspector-panel__empty">没有属性</div>
-      </section>
+      <RenderSectionBlock v-if="attributes.length" title="属性">
+        <RenderSectionItem v-for="attribute in attributes" :key="attribute.name" :label="attribute.name" :values="[attribute.value]" />
+      </RenderSectionBlock>
 
-      <section class="dom-inspector-panel__section">
-        <div class="dom-inspector-panel__section-title">CSS 样式</div>
-        <dl class="dom-inspector-panel__pairs">
-          <div v-for="styleEntry in styleEntries" :key="styleEntry.name" class="dom-inspector-panel__pair">
-            <dt>{{ styleEntry.name }}</dt>
-            <dd>{{ styleEntry.value || '-' }}</dd>
-          </div>
-        </dl>
-      </section>
+      <RenderSectionBlock v-if="styleEntries.length" title="CSS 样式">
+        <RenderSectionItem v-for="styleEntry in styleEntries" :key="styleEntry.name" :label="styleEntry.name" :values="[styleEntry.value]" />
+      </RenderSectionBlock>
     </div>
 
-    <div v-else class="dom-inspector-panel__empty-state">
+    <div v-else :class="$style.emptyState">
       <BIcon icon="lucide:mouse-pointer-click" :size="22" />
       <span>点击页面元素后显示层级、属性和样式</span>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup lang="tsx">
 /**
- * @file DomInspectorPanel.vue
+ * @file InspectorPanel.vue
  * @description 展示 WebView 页面 DOM 元素层级、属性与计算样式。
  */
-import { computed } from 'vue';
+import { computed, useCssModule } from 'vue';
+import type { SetupContext, VNode } from 'vue';
 import type { WebviewElementSelection } from '@/views/webview/shared/types';
+
+const $style = useCssModule();
+
+/**
+ * 面板分区块组件，封装统一的 section 标题 + 内容插槽结构。
+ */
+function RenderSectionBlock({ title }: { title: string }, { slots }: SetupContext) {
+  return (
+    <div class={$style.section}>
+      <div class={$style.sectionTitle}>{title}</div>
+      {slots.default?.()}
+    </div>
+  );
+}
+
+/**
+ * 信息行组件，封装标签 + 值的布局。
+ * 支持传入数组，让多个值平分剩余空间。
+ */
+function RenderSectionItem({ label, values }: { label: string; values?: (string | number)[] }, { slots }: SetupContext) {
+  let contentNode: VNode | undefined;
+
+  if (slots.default) {
+    contentNode = <div class={$style.infoValue}>{slots.default()}</div>;
+  } else if (values && values.length > 0) {
+    contentNode = (
+      <div class={$style.infoValueGroup}>
+        {values.map((value, index) => (
+          <span key={index} class={$style.infoValueItem}>
+            {value}
+          </span>
+        ))}
+      </div>
+    );
+  } else {
+    contentNode = <span class={$style.infoValue}>-</span>;
+  }
+
+  return (
+    <div class={$style.infoRow}>
+      <span class={$style.infoLabel}>{label}</span>
+      {contentNode}
+    </div>
+  );
+}
 
 /**
  * DOM 看板组件属性。
@@ -86,13 +103,7 @@ interface Props {
   selection?: WebviewElementSelection | null;
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  selection: null
-});
-
-const emit = defineEmits<{
-  close: [];
-}>();
+const props = withDefaults(defineProps<Props>(), { selection: null });
 
 /**
  * DOM 层级展示项。
@@ -114,8 +125,7 @@ interface StyleEntry {
   value: string;
 }
 
-const normalizedTagName = computed(() => props.selection?.tagName.toLowerCase() ?? '');
-// 计算元素矩形框的四舍五入坐标
+/** 元素矩形框的四舍五入坐标 */
 const roundedRect = computed(() => {
   const rect = props.selection?.rect;
   return {
@@ -126,6 +136,7 @@ const roundedRect = computed(() => {
   };
 });
 
+/** 祖先层级 + 当前元素 */
 const hierarchyItems = computed<HierarchyItem[]>(() => {
   if (!props.selection) {
     return [];
@@ -145,15 +156,68 @@ const hierarchyItems = computed<HierarchyItem[]>(() => {
   ];
 });
 
+/** 有值的属性列表（过滤掉空值） */
+const attributes = computed(() => props.selection?.attributes.filter((a) => a.value) ?? []);
+
+/** CSS 默认值，不展示 */
+const CSS_DEFAULT_VALUES = new Set(['normal', 'none', 'auto', 'initial', 'inherit', 'unset', '']);
+
+function collapseBoxStyles(styles: Record<string, string>) {
+  const result = { ...styles };
+
+  for (const prefix of ['margin', 'padding'] as const) {
+    const values = [styles[`${prefix}-top`], styles[`${prefix}-right`], styles[`${prefix}-bottom`], styles[`${prefix}-left`]];
+
+    if (values.some((value) => !value)) {
+      continue;
+    }
+
+    const [top, right, bottom, left] = values;
+
+    let shorthand: string;
+
+    if (top === right && top === bottom && top === left) {
+      shorthand = top;
+    } else if (top === bottom && right === left) {
+      shorthand = `${top} ${right}`;
+    } else if (right === left) {
+      shorthand = `${top} ${right} ${bottom}`;
+    } else {
+      shorthand = `${top} ${right} ${bottom} ${left}`;
+    }
+
+    result[prefix] = shorthand;
+
+    delete result[`${prefix}-top`];
+    delete result[`${prefix}-right`];
+    delete result[`${prefix}-bottom`];
+    delete result[`${prefix}-left`];
+  }
+
+  return result;
+}
+
+const isVisibleStyleValue = (value: unknown): boolean => {
+  const normalized = String(value).trim().toLowerCase();
+
+  if (CSS_DEFAULT_VALUES.has(normalized)) {
+    return false;
+  }
+
+  return !/^0(?:px|rem|em|%|vh|vw)?$/.test(normalized);
+};
+
+/** 计算样式键值对（过滤空值和默认值） */
 const styleEntries = computed<StyleEntry[]>(() => {
-  if (!props.selection) {
+  const styles = props.selection?.computedStyles;
+
+  if (!styles) {
     return [];
   }
 
-  return Object.entries(props.selection.computedStyles).map(([name, value]) => ({
-    name,
-    value
-  }));
+  return Object.entries(collapseBoxStyles(styles))
+    .filter(([, value]) => isVisibleStyleValue(value))
+    .map(([name, value]) => ({ name, value }));
 });
 
 /**
@@ -169,8 +233,24 @@ async function copyText(value: string): Promise<void> {
 }
 </script>
 
-<style scoped lang="less">
-.dom-inspector-panel {
+<style module lang="less">
+.section {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-primary);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.sectionTitle {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.panel {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -180,7 +260,7 @@ async function copyText(value: string): Promise<void> {
   border-left: 1px solid var(--border-primary);
 }
 
-.dom-inspector-panel__header {
+.header {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -190,7 +270,7 @@ async function copyText(value: string): Promise<void> {
   border-bottom: 1px solid var(--border-primary);
 }
 
-.dom-inspector-panel__title {
+.title {
   display: inline-flex;
   gap: 8px;
   align-items: center;
@@ -199,69 +279,58 @@ async function copyText(value: string): Promise<void> {
   font-weight: 600;
 }
 
-.dom-inspector-panel__body {
+.body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
 }
 
-.dom-inspector-panel__section {
-  padding: 12px;
-  border-bottom: 1px solid var(--border-primary);
+.infoRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 8px;
 
   &:last-child {
-    border-bottom: none;
+    margin-bottom: 0;
   }
 }
 
-.dom-inspector-panel__section-title {
-  margin-bottom: 8px;
+.infoLabel {
+  flex-shrink: 0;
+  width: 72px;
   font-size: 12px;
-  font-weight: 600;
   color: var(--text-secondary);
 }
 
-.dom-inspector-panel__selector-row {
+.infoValue {
   display: flex;
+  flex: 1 1 auto;
   gap: 6px;
   align-items: flex-start;
   min-width: 0;
+  font-size: 12px;
 }
 
-.dom-inspector-panel__selector {
-  flex: 1 1 auto;
+.infoValueGroup {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+}
+
+.infoValueItem {
+  display: flex;
+  flex: 1;
   min-width: 0;
+  min-height: 28px;
   padding: 4px 6px;
   font-size: 12px;
-  color: var(--color-primary);
   overflow-wrap: anywhere;
   background: var(--bg-tertiary);
   border-radius: 6px;
 }
 
-.dom-inspector-panel__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.dom-inspector-panel__meta span {
-  padding: 2px 6px;
-  background: var(--bg-tertiary);
-  border-radius: 4px;
-}
-
-.dom-inspector-panel__text {
-  margin: 8px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
-.dom-inspector-panel__tree {
+.tree {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -270,7 +339,7 @@ async function copyText(value: string): Promise<void> {
   list-style: none;
 }
 
-.dom-inspector-panel__tree-item {
+.tree-item {
   padding: 4px 6px;
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -278,51 +347,17 @@ async function copyText(value: string): Promise<void> {
   border-radius: 6px;
 }
 
-.dom-inspector-panel__tree-item--active {
+.tree-item--active {
   color: var(--color-primary);
   background: var(--color-primary-bg);
 }
 
-.dom-inspector-panel__pairs {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-}
-
-.dom-inspector-panel__pair {
-  display: grid;
-  grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-  font-size: 12px;
-}
-
-.dom-inspector-panel__pair dt {
-  min-width: 0;
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-}
-
-.dom-inspector-panel__pair dd {
-  display: flex;
-  gap: 4px;
-  align-items: flex-start;
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.dom-inspector-panel__pair dd span {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.dom-inspector-panel__empty,
-.dom-inspector-panel__empty-state {
+.empty,
+.empty-state {
   color: var(--text-secondary);
 }
 
-.dom-inspector-panel__empty-state {
+.empty-state {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
