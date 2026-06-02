@@ -21,4 +21,20 @@ export interface BButtonProps {
   danger?: boolean;
   // 提示信息
   tooltip?: string;
+  // 是否显示箭头
+  arrow?: boolean;
+  // 提示位置
+  placement?:
+    | 'top'
+    | 'bottom'
+    | 'left'
+    | 'right'
+    | 'topLeft'
+    | 'topRight'
+    | 'bottomLeft'
+    | 'bottomRight'
+    | 'leftTop'
+    | 'leftBottom'
+    | 'rightTop'
+    | 'rightBottom';
 }

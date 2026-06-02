@@ -38,7 +38,16 @@
         :icon="isElementSelecting ? 'lucide:scan-line' : 'lucide:mouse-pointer-click'"
         @click="emit('selectElement')"
       />
-      <BButton type="text" size="small" square tooltip="在浏览器打开" icon="lucide:external-link" @click="emit('openInBrowser')" />
+      <BButton
+        v-if="supportsInspector"
+        :type="isInspectorOpen ? 'secondary' : 'text'"
+        size="small"
+        square
+        :tooltip="isInspectorOpen ? '关闭 CSS 查看器' : '打开 CSS 查看器'"
+        :icon="'lucide:hash'"
+        @click="emit('toggleInspector')"
+      />
+      <BButton type="text" size="small" square tooltip="在浏览器打开" placement="bottomRight" icon="lucide:external-link" @click="emit('openInBrowser')" />
     </div>
   </div>
 </template>
@@ -68,6 +77,10 @@ interface Props {
   supportsDeviceToolbar?: boolean;
   /** 设备工具栏是否可见 */
   isDeviceToolbarVisible?: boolean;
+  /** 是否支持 CSS 查看器 */
+  supportsInspector?: boolean;
+  /** CSS 查看器是否打开 */
+  isInspectorOpen?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -77,7 +90,9 @@ const props = withDefaults(defineProps<Props>(), {
   supportsElementSelection: false,
   isElementSelecting: false,
   supportsDeviceToolbar: false,
-  isDeviceToolbarVisible: false
+  isDeviceToolbarVisible: false,
+  supportsInspector: false,
+  isInspectorOpen: false
 });
 
 const emit = defineEmits<{
@@ -88,6 +103,7 @@ const emit = defineEmits<{
   openInBrowser: [];
   selectElement: [];
   toggleDeviceToolbar: [];
+  toggleInspector: [];
   submitUrl: [value: string];
 }>();
 
@@ -158,10 +174,15 @@ function handleCopy(): void {
   margin-left: 6px;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: color 0.2s;
+  opacity: 0;
+  transition: color 0.2s, opacity 0.2s;
 
   &:hover {
     color: var(--text-secondary);
   }
+}
+
+.address-input:hover .address-input__icon {
+  opacity: 1;
 }
 </style>

@@ -56,6 +56,14 @@ export default defineComponent({
     tooltip: {
       type: String,
       default: ''
+    },
+    arrow: {
+      type: Boolean,
+      default: true
+    },
+    placement: {
+      type: String,
+      default: 'top'
     }
   },
   emits: ['click'],
@@ -107,7 +115,11 @@ export default defineComponent({
 
     return () => {
       if (props.tooltip) {
-        return <Tooltip title={props.tooltip}>{renderButton()}</Tooltip>;
+        return (
+          <Tooltip title={props.tooltip} arrow={props.arrow} placement={props.placement}>
+            {renderButton()}
+          </Tooltip>
+        );
       }
       return renderButton();
     };
