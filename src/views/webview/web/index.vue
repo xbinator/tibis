@@ -26,7 +26,9 @@
         <div ref="webviewContainerRef" class="webview-viewport" :style="viewportStyle"></div>
       </div>
 
-      <DomInspectorPanel v-if="webview.selectedElement.value" :selection="webview.selectedElement.value" @close="handleCloseDomInspector" />
+      <BPanelSplitter v-if="webview.selectedElement" v-model:size="domPanelWidth" :min-width="280" :max-width="480" @close="handleCloseDomInspector">
+        <DomInspectorPanel :selection="webview.selectedElement" @close="handleCloseDomInspector" />
+      </BPanelSplitter>
     </div>
   </div>
 </template>
@@ -59,6 +61,9 @@ const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as st
 
 const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
+
+/** DOM 检查看板宽度 */
+const domPanelWidth = ref(360);
 
 const isDeviceFramed = computed(() => deviceMode.isToolbarVisible.value);
 

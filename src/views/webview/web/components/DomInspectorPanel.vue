@@ -1,9 +1,8 @@
 <template>
-  <aside class="dom-inspector-panel">
+  <div class="dom-inspector-panel">
     <header class="dom-inspector-panel__header">
       <div class="dom-inspector-panel__title">
-        <BIcon icon="lucide:panel-right" :size="16" />
-        <span>DOM 看板</span>
+        <span>组件</span>
       </div>
       <BButton type="text" size="small" square icon="lucide:x" tooltip="关闭" @click="emit('close')" />
     </header>
@@ -68,7 +67,7 @@
       <BIcon icon="lucide:mouse-pointer-click" :size="22" />
       <span>点击页面元素后显示层级、属性和样式</span>
     </div>
-  </aside>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -84,10 +83,12 @@ import type { WebviewElementSelection } from '@/views/webview/shared/types';
  */
 interface Props {
   /** 当前选中的 DOM 元素信息 */
-  selection: WebviewElementSelection | null;
+  selection?: WebviewElementSelection | null;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  selection: null
+});
 
 const emit = defineEmits<{
   close: [];
@@ -114,6 +115,7 @@ interface StyleEntry {
 }
 
 const normalizedTagName = computed(() => props.selection?.tagName.toLowerCase() ?? '');
+// 计算元素矩形框的四舍五入坐标
 const roundedRect = computed(() => {
   const rect = props.selection?.rect;
   return {
@@ -167,14 +169,10 @@ async function copyText(value: string): Promise<void> {
 }
 </script>
 
-<style scoped>
+<style scoped lang="less">
 .dom-inspector-panel {
   display: flex;
-  flex: 0 0 360px;
   flex-direction: column;
-  width: 360px;
-  min-width: 320px;
-  max-width: 420px;
   height: 100%;
   overflow: hidden;
   color: var(--text-primary);
@@ -210,6 +208,10 @@ async function copyText(value: string): Promise<void> {
 .dom-inspector-panel__section {
   padding: 12px;
   border-bottom: 1px solid var(--border-primary);
+
+  &:last-child {
+    border-bottom: none;
+  }
 }
 
 .dom-inspector-panel__section-title {

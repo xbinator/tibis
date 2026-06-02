@@ -148,6 +148,7 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
 
   const cleanup = () => {
     document.removeEventListener('mousemove', handleMouseMove, true);
+    document.removeEventListener('mouseout', handleMouseOut, true);
     document.removeEventListener('click', handleClick, true);
     document.removeEventListener('keydown', handleKeydown, true);
     highlight.remove();
@@ -215,6 +216,14 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     highlight.style.height = rect.height + 'px';
   }
 
+  function handleMouseOut(event) {
+    if (event.relatedTarget) {
+      return;
+    }
+
+    highlight.hidden = true;
+  }
+
   function handleClick(event) {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target === highlight) {
@@ -227,6 +236,8 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     const selectedElement = readElement(target);
     console.log('Tibis WebView selected element', selectedElement);
     console.log(${messagePrefix} + JSON.stringify(selectedElement));
+    cleanup();
+    resolve(selectedElement);
   }
 
   function handleKeydown(event) {
@@ -244,6 +255,7 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     resolve(null);
   };
   document.addEventListener('mousemove', handleMouseMove, true);
+  document.addEventListener('mouseout', handleMouseOut, true);
   document.addEventListener('click', handleClick, true);
   document.addEventListener('keydown', handleKeydown, true);
 }))();
@@ -663,7 +675,10 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
 
   return {
     ...controller,
-    selectedElement,
+    get selectedElement() {
+      return selectedElement.value;
+    },
+
     attachInitialUrl,
     handleDidStartLoading,
     handleDomReady,

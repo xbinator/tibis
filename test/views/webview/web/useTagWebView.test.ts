@@ -68,7 +68,7 @@ describe('useTagWebView', () => {
     expect(hook.state.value.canGoForward).toBe(false);
   });
 
-  it('keeps element picker mode active and stores selected element details from console messages', async () => {
+  it('stores selected element details from console messages', async () => {
     const selectedElement = {
       tagName: 'A',
       id: 'read-more',
@@ -118,6 +118,23 @@ describe('useTagWebView', () => {
     });
 
     expect(hook.selectedElement.value).toEqual(selectedElement);
+  });
+
+  it('stops element picker mode after selecting one element', async () => {
+    const executeJavaScript = vi.fn<(script: string) => Promise<null>>().mockResolvedValue(null);
+    const instance = {
+      executeJavaScript,
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+
+    const hook = useTagWebView(ref(instance));
+
+    await hook.startElementSelection();
+
+    const script = executeJavaScript.mock.calls[0]?.[0] ?? '';
+
+    expect(script).toContain('cleanup();\n    resolve(selectedElement);');
   });
 
   it('hides the element picker highlight when the pointer leaves the page container', async () => {
