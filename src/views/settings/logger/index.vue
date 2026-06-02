@@ -7,7 +7,6 @@
   <BSettingsPage :title="MENU_ITEMS.logger.label">
     <template #extra>
       <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
-      <BButton icon="lucide:folder-open" type="text" size="small" @click="handleOpenLogFolder">打开目录</BButton>
     </template>
 
     <BScrollbar inset="auto" @scroll="handleScroll">
@@ -185,13 +184,6 @@ function handleScroll(event: Event) {
   if (scrollHeight - scrollTop - clientHeight < 50) {
     onLoadMore();
   }
-}
-
-/**
- * 打开本地日志目录。
- */
-function handleOpenLogFolder(): void {
-  logger.openLogFolder();
 }
 
 onMounted(() => {
