@@ -666,25 +666,6 @@ const rollbackController = useRollback({
 });
 
 /**
- * 处理回退请求。
- * 弹出二次确认后执行截断、恢复输入框。
- * @param message - 目标用户消息
- */
-async function handleRollback(message: Message): Promise<void> {
-  const index = messages.value.findIndex((m) => m.id === message.id);
-  if (index === -1) return;
-
-  const deleteCount = messages.value.length - index;
-  const [cancelled] = await Modal.confirm('确认回退', `将删除该用户消息及其后的 ${deleteCount} 条消息。此操作不可撤销，是否继续？`, {
-    confirmText: '确认回退',
-    cancelText: '取消'
-  });
-  if (cancelled) return;
-
-  await rollbackController.rollback(message);
-}
-
-/**
  * 在发送用户消息前按上下文用量自动压缩旧消息。
  */
 async function compactBeforeSendIfNeeded(): Promise<void> {
@@ -800,6 +781,30 @@ async function handleCancel(): Promise<void> {
   if (loading.value) {
     await handleAbort();
   }
+}
+
+/**
+ * 处理回退请求。
+ * 弹出二次确认后执行截断、恢复输入框。
+ * @param message - 目标用户消息
+ */
+async function handleRollback(message: Message): Promise<void> {
+  const index = messages.value.findIndex((m) => m.id === message.id);
+  if (index === -1) return;
+
+  // 流式输出期间先中止，避免截断与流式追加产生竞态
+  if (loading.value) {
+    await handleAbort();
+  }
+
+  const afterCount = messages.value.length - index - 1;
+  const [cancelled] = await Modal.confirm('确认回退', `将删除该用户消息及其后的 ${afterCount} 条消息。此操作不可撤销，是否继续？`, {
+    confirmText: '确认回退',
+    cancelText: '取消'
+  });
+  if (cancelled) return;
+
+  await rollbackController.rollback(message);
 }
 
 /**
