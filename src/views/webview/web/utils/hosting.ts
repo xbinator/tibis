@@ -14,6 +14,20 @@ export const WEBVIEW_HOST_LAYER_ID = 'tibis-webview-host-layer';
 export const WEBVIEW_BORDER_RADIUS_PX = 8;
 
 /**
+ * WebView 宿主层裁剪边距。
+ */
+export interface WebviewHostClipInsets {
+  /** 顶部裁剪 */
+  top: number;
+  /** 右侧裁剪 */
+  right: number;
+  /** 底部裁剪 */
+  bottom: number;
+  /** 左侧裁剪 */
+  left: number;
+}
+
+/**
  * WebView 宿主层显示范围。
  */
 export interface WebviewHostBounds {
@@ -25,6 +39,8 @@ export interface WebviewHostBounds {
   width: number;
   /** 高度 */
   height: number;
+  /** 可选裁剪范围 */
+  clip?: WebviewHostClipInsets;
 }
 
 /**
@@ -54,6 +70,7 @@ function applyWebviewHostLayerStyle(hostLayer: HTMLElement): void {
   hostLayer.style.alignItems = 'stretch';
   hostLayer.style.overflow = 'hidden';
   hostLayer.style.pointerEvents = hostLayer.style.pointerEvents || 'none';
+  hostLayer.style.clipPath = hostLayer.style.clipPath || '';
   hostLayer.style.borderRadius = `${WEBVIEW_BORDER_RADIUS_PX}px`;
 }
 
@@ -151,4 +168,7 @@ export function showWebviewHostLayer(hostLayer: HTMLElement, bounds: WebviewHost
   hostLayer.style.top = `${Math.round(bounds.y)}px`;
   hostLayer.style.width = `${Math.round(bounds.width)}px`;
   hostLayer.style.height = `${Math.round(bounds.height)}px`;
+  hostLayer.style.clipPath = bounds.clip
+    ? `inset(${Math.round(bounds.clip.top)}px ${Math.round(bounds.clip.right)}px ${Math.round(bounds.clip.bottom)}px ${Math.round(bounds.clip.left)}px)`
+    : '';
 }

@@ -122,11 +122,22 @@ function syncHostLayerBounds(): void {
     return;
   }
 
+  const hostLayerX = visibleBounds.x - visibleBounds.offsetX;
+  const hostLayerY = visibleBounds.y - visibleBounds.offsetY;
+  const clipRight = visibleBounds.contentWidth - visibleBounds.offsetX - visibleBounds.width;
+  const clipBottom = visibleBounds.contentHeight - visibleBounds.offsetY - visibleBounds.height;
+
   showWebviewHostLayer(hostLayer, {
-    x: visibleBounds.x,
-    y: visibleBounds.y,
-    width: visibleBounds.width,
-    height: visibleBounds.height
+    x: hostLayerX,
+    y: hostLayerY,
+    width: visibleBounds.contentWidth,
+    height: visibleBounds.contentHeight,
+    clip: {
+      top: visibleBounds.offsetY,
+      right: clipRight,
+      bottom: clipBottom,
+      left: visibleBounds.offsetX
+    }
   });
 
   const element = webviewElementRef.value;
@@ -136,7 +147,7 @@ function syncHostLayerBounds(): void {
 
   element.style.width = `${Math.round(visibleBounds.contentWidth)}px`;
   element.style.height = `${Math.round(visibleBounds.contentHeight)}px`;
-  element.style.transform = `translate(${-Math.round(visibleBounds.offsetX)}px, ${-Math.round(visibleBounds.offsetY)}px)`;
+  element.style.transform = 'translate(0px, 0px)';
 }
 
 /**
@@ -175,6 +186,18 @@ function handleHostedWheel(event: WheelEvent): void {
 }
 
 /**
+ * 接收通用 DOM 事件并转发有效滚轮事件。
+ * @param event - DOM 事件
+ */
+function handleHostedWheelEvent(event: Event): void {
+  if (!(event instanceof WheelEvent)) {
+    return;
+  }
+
+  handleHostedWheel(event);
+}
+
+/**
  * 绑定 `<webview>` 事件。
  * @param element - `<webview>` 元素
  */
@@ -185,7 +208,7 @@ function bindWebviewEvents(element: Electron.WebviewTag): void {
   element.addEventListener('did-navigate-in-page', webview.handleDidNavigate as EventListener);
   element.addEventListener('page-title-updated', webview.handleTitleUpdated as EventListener);
   element.addEventListener('did-stop-loading', webview.handleDidStopLoading as EventListener);
-  element.addEventListener('wheel', handleHostedWheel, { passive: false });
+  element.addEventListener('wheel', handleHostedWheelEvent, false);
 }
 
 /**
@@ -199,7 +222,7 @@ function unbindWebviewEvents(element: Electron.WebviewTag): void {
   element.removeEventListener('did-navigate-in-page', webview.handleDidNavigate as EventListener);
   element.removeEventListener('page-title-updated', webview.handleTitleUpdated as EventListener);
   element.removeEventListener('did-stop-loading', webview.handleDidStopLoading as EventListener);
-  element.removeEventListener('wheel', handleHostedWheel);
+  element.removeEventListener('wheel', handleHostedWheelEvent);
 }
 
 /**

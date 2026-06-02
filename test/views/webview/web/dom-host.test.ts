@@ -82,12 +82,35 @@ describe('webview dom host', () => {
     expect(hostLayer.style.top).toBe('20px');
     expect(hostLayer.style.width).toBe('300px');
     expect(hostLayer.style.height).toBe('200px');
+    expect(hostLayer.style.clipPath).toBe('');
     expect(webviewElement.style.flex).toBe('1 1 auto');
     expect(webviewElement.style.minHeight).toBe('0px');
 
     hideWebviewHostLayer(hostLayer);
     expect(hostLayer.style.display).toBe('none');
     expect(hostLayer.childElementCount).toBe(1);
+  });
+
+  it('clips the host layer without resizing the hosted webview viewport', () => {
+    const hostLayer = ensureWebviewHostLayer(document, '/webview/web?url=https%3A%2F%2Fclipped.com');
+
+    showWebviewHostLayer(hostLayer, {
+      x: 100,
+      y: 80,
+      width: 375,
+      height: 667,
+      clip: {
+        top: 0,
+        right: 0,
+        bottom: 5,
+        left: 0
+      }
+    });
+
+    expect(hostLayer.style.display).toBe('flex');
+    expect(hostLayer.style.width).toBe('375px');
+    expect(hostLayer.style.height).toBe('667px');
+    expect(hostLayer.style.clipPath).toBe('inset(0px 0px 5px 0px)');
   });
 
   it('hides inactive webview tab layers when showing the active one', () => {
