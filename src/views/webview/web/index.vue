@@ -70,15 +70,10 @@ const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as st
 
 const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
-const screenshot = useScreenshot({
-  webviewElementRef,
-  webviewState: webview.state
-});
+const screenshot = useScreenshot({ webviewElementRef, webviewState: webview.state });
 const cacheControl = useCacheControl();
 
-webviewToolContextRegistry.register(routeFullPath, {
-  readPageSnapshot: webview.readPageSnapshot
-});
+webviewToolContextRegistry.register(routeFullPath, { readPageSnapshot: webview.readPageSnapshot });
 
 /** DOM 检查看板宽度 */
 const domPanelWidth = ref(360);
