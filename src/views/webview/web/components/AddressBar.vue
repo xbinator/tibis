@@ -21,7 +21,6 @@
 
     <div class="action-buttons">
       <BButton
-        v-if="supportsDeviceToolbar"
         type="text"
         size="small"
         square
@@ -30,7 +29,6 @@
         @click="emit('toggleDeviceToolbar')"
       />
       <BButton
-        v-if="supportsElementSelection"
         :type="isElementSelecting ? 'secondary' : 'text'"
         size="small"
         square
@@ -39,7 +37,6 @@
         @click="emit('selectElement')"
       />
       <BButton
-        v-if="supportsInspector"
         :type="isInspectorOpen ? 'secondary' : 'text'"
         size="small"
         square
@@ -55,11 +52,12 @@
 <script setup lang="ts">
 /**
  * @file AddressBar.vue
- * @description WebView 共享地址栏组件。
+ * @description Web WebView 地址栏组件（支持设备工具栏、元素选择、CSS 查看器）。
  */
 import { useClipboard } from '@/hooks/useClipboard';
 
 const { clipboard } = useClipboard();
+
 interface Props {
   /** 当前地址 */
   url: string;
@@ -69,16 +67,10 @@ interface Props {
   canGoForward?: boolean;
   /** 是否正在加载 */
   isLoading?: boolean;
-  /** 是否支持页面 DOM 元素选择 */
-  supportsElementSelection?: boolean;
   /** 是否正在选择页面 DOM 元素 */
   isElementSelecting?: boolean;
-  /** 是否支持设备工具栏 */
-  supportsDeviceToolbar?: boolean;
   /** 设备工具栏是否可见 */
   isDeviceToolbarVisible?: boolean;
-  /** 是否支持 CSS 查看器 */
-  supportsInspector?: boolean;
   /** CSS 查看器是否打开 */
   isInspectorOpen?: boolean | null;
 }
@@ -87,11 +79,8 @@ const props = withDefaults(defineProps<Props>(), {
   canGoBack: false,
   canGoForward: false,
   isLoading: false,
-  supportsElementSelection: false,
   isElementSelecting: false,
-  supportsDeviceToolbar: false,
   isDeviceToolbarVisible: false,
-  supportsInspector: false,
   isInspectorOpen: false
 });
 

@@ -45,9 +45,9 @@ import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMoun
 import { useRoute } from 'vue-router';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { native } from '@/shared/platform';
-import AddressBar from '@/views/webview/shared/components/AddressBar.vue';
 import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
+import AddressBar from './components/AddressBar.vue';
 import DeviceToolbar from './components/DeviceToolbar.vue';
 import InspectorPanel from './components/InspectorPanel.vue';
 import { useDeviceMode, type WebviewDevicePresetKey } from './hooks/useDeviceMode.ts';

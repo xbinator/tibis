@@ -38,9 +38,9 @@ import { useRoute } from 'vue-router';
 import { useResizeObserver } from '@vueuse/core';
 import { native } from '@/shared/platform';
 import { hashString } from '@/shared/utils/hash';
-import AddressBar from '@/views/webview/shared/components/AddressBar.vue';
 import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
+import AddressBar from './components/AddressBar.vue';
 import { useNativeWebView } from './hooks/useNativeWebView';
 
 const route = useRoute();
