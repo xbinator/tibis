@@ -272,7 +272,7 @@ async function handleConfirmAdd(jsonText: string): Promise<void> {
 
   if (editingServerId.value) {
     const serverId = editingServerId.value;
-    store.updateMcpServer(editingServerId.value, {
+    await store.updateMcpServer(editingServerId.value, {
       ...draft,
       oauth: isRemote && draft.enableOAuth ? {} : undefined
     });
@@ -292,7 +292,7 @@ async function handleConfirmAdd(jsonText: string): Promise<void> {
     toolCallTimeoutMs: draft.toolCallTimeoutMs ?? DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS,
     oauth: isRemote && draft.enableOAuth ? {} : undefined
   };
-  store.addMcpServer(server);
+  await store.addMcpServer(server);
   closeEditorModal();
   await handleRefreshDiscovery(server);
 }
@@ -326,6 +326,7 @@ async function handleClearOAuth(serverId: string): Promise<void> {
 }
 
 onMounted(async () => {
+  await store.loadSettings();
   await refreshStatuses();
   await Promise.all(store.mcp.servers.map((server) => refreshDiscoveryCache(server)));
 });

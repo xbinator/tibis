@@ -446,9 +446,9 @@ export function createBuiltinMCPTools(adapter: AIToolConfirmationAdapter): Built
           definition: this.definition,
           adapter,
           request,
-          operation: () => {
+          operation: async () => {
             const toolSettingsStore = useToolSettingsStore();
-            toolSettingsStore.addMcpServer(server);
+            await toolSettingsStore.addMcpServer(server);
             const savedServer = toolSettingsStore.getMcpServerById(server.id) ?? server;
 
             return { applied: true, server: savedServer };
@@ -508,9 +508,9 @@ export function createBuiltinMCPTools(adapter: AIToolConfirmationAdapter): Built
           definition: this.definition,
           adapter,
           request,
-          operation: () => {
+          operation: async () => {
             const toolSettingsStore = useToolSettingsStore();
-            toolSettingsStore.updateMcpServer(existingServer.id, patch);
+            await toolSettingsStore.updateMcpServer(existingServer.id, patch);
             const currentServer = toolSettingsStore.getMcpServerById(existingServer.id) ?? nextServer;
 
             return { applied: true, previousServer: existingServer, currentServer };
@@ -554,9 +554,9 @@ export function createBuiltinMCPTools(adapter: AIToolConfirmationAdapter): Built
           definition: this.definition,
           adapter,
           request,
-          operation: () => {
+          operation: async () => {
             const toolSettingsStore = useToolSettingsStore();
-            toolSettingsStore.removeMcpServer(existingServer.id);
+            await toolSettingsStore.removeMcpServer(existingServer.id);
 
             return { applied: true, removedServer: existingServer };
           }

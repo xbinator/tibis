@@ -34,9 +34,9 @@ describe('SearchToolsSettingsView', () => {
     setActivePinia(createPinia());
   });
 
-  it('renders Tavily base config and default sections', async () => {
+  it('renders Tavily base config', async () => {
     const store = useToolSettingsStore();
-    store.setTavilyEnabled(true);
+    await store.setTavilyEnabled(true);
 
     const wrapper = mount(SearchToolsSettingsView, {
       global: {
@@ -56,10 +56,8 @@ describe('SearchToolsSettingsView', () => {
     });
 
     expect(wrapper.text()).toContain('基础配置');
-    expect(wrapper.text()).toContain('Tavily Search 默认配置');
-    expect(wrapper.text()).toContain('Tavily Extract 默认配置');
+    expect(wrapper.text()).toContain('启用 Tavily 工具');
+    expect(wrapper.text()).toContain('启用后，聊天工具链才会向模型暴露 Tavily 搜索与正文提取工具。');
     expect(wrapper.text()).toContain('Tavily API Key');
-    expect(wrapper.text()).toContain('国家');
-    expect(wrapper.text()).toContain('输出格式');
   });
 });

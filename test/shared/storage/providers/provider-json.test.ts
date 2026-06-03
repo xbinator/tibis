@@ -3,7 +3,7 @@
  * @file provider-json.test.ts
  * @description provider JSON 存储层单元测试，覆盖数据校验、合并逻辑、数组操作、文件读写等核心功能。
  */
-import type { AIProvider, AIProviderModel, AICustomProvider } from 'types/ai';
+import type { AIProvider, AIProviderModel, AICustomProvider, AIProviderType } from 'types/ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PROVIDERS } from '@/shared/storage/providers/defaults';
 import type { StoredProviderEntry, SettingsFileContent } from '@/shared/storage/providers/types';
@@ -48,11 +48,14 @@ beforeEach(() => {
   });
 
   // 挂载到 window
-  (window as Window & { electronAPI?: unknown }).electronAPI = mockElectronAPI;
+  Object.defineProperty(window, 'electronAPI', {
+    configurable: true,
+    value: mockElectronAPI
+  });
 });
 
 afterEach(() => {
-  delete (window as Window & { electronAPI?: unknown }).electronAPI;
+  Reflect.deleteProperty(window, 'electronAPI');
 });
 
 /** 动态导入 providerStorage（每次重新加载以重置模块状态） */
@@ -79,22 +82,24 @@ function getSettingsFile(): SettingsFileContent | null {
 
 describe('provider JSON storage', () => {
   describe('数据校验 - normalizeSettingsFile', () => {
+    const defaultSettings = { version: 1, providers: [], mcp: { servers: [] } };
+
     it('空输入返回默认结构', async () => {
       const { normalizeSettingsFile } = await import('@/shared/storage/providers/json');
       const result = normalizeSettingsFile(null);
-      expect(result).toEqual({ version: 1, providers: [] });
+      expect(result).toEqual(defaultSettings);
     });
 
     it('非对象输入返回默认结构', async () => {
       const { normalizeSettingsFile } = await import('@/shared/storage/providers/json');
-      expect(normalizeSettingsFile('string')).toEqual({ version: 1, providers: [] });
-      expect(normalizeSettingsFile(123)).toEqual({ version: 1, providers: [] });
-      expect(normalizeSettingsFile(true)).toEqual({ version: 1, providers: [] });
+      expect(normalizeSettingsFile('string')).toEqual(defaultSettings);
+      expect(normalizeSettingsFile(123)).toEqual(defaultSettings);
+      expect(normalizeSettingsFile(true)).toEqual(defaultSettings);
     });
 
     it('数组输入返回默认结构', async () => {
       const { normalizeSettingsFile } = await import('@/shared/storage/providers/json');
-      expect(normalizeSettingsFile([])).toEqual({ version: 1, providers: [] });
+      expect(normalizeSettingsFile([])).toEqual(defaultSettings);
     });
 
     it('providers 数组中缺少 id 的条目被过滤', async () => {

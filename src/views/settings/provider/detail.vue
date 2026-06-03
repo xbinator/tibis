@@ -26,6 +26,7 @@ import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { debounce } from 'lodash-es';
 import { useProviderStore } from '@/stores/ai/provider';
+import { asyncTo } from '@/utils/asyncTo';
 import { providerFormatLabels } from '../constants';
 import ApiConfig from './components/ApiConfig.vue';
 import ModelList from './components/ModelList.vue';
@@ -53,17 +54,19 @@ const providerTypeLabel: ComputedRef<string> = computed((): string => {
 async function loadProvider(): Promise<void> {
   isLoadingProvider.value = true;
 
-  await providerStore.loadProviders();
+  try {
+    await providerStore.loadProviders();
 
-  provider.value = await providerStore.getProviderById(providerId.value);
+    provider.value = await providerStore.getProviderById(providerId.value);
 
-  models.value = provider.value?.models ? provider.value.models.map((model) => ({ ...model })) : [];
-
-  isLoadingProvider.value = false;
+    models.value = provider.value?.models ? provider.value.models.map((model) => ({ ...model })) : [];
+  } finally {
+    isLoadingProvider.value = false;
+  }
 }
 
-function syncProviderState(): void {
-  loadProvider().catch(() => undefined);
+async function syncProviderState(): Promise<void> {
+  await asyncTo(loadProvider());
 }
 
 const persistProviderConfig = debounce(async () => {

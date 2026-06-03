@@ -175,10 +175,19 @@ describe('MCPToolsSettingsView', () => {
     setActivePinia(createPinia());
   });
 
+  /**
+   * 等待 Vue 事件中的异步保存流程完成。
+   */
+  async function flushAsyncWork(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  }
+
   it('renders MCP runtime status and latest message', async () => {
     const { default: MCPToolsSettingsView } = await import('@/views/settings/tools/mcp/index.vue');
     const store = useToolSettingsStore();
-    store.addMcpServer(createServer());
+    await store.addMcpServer(createServer());
     electronMocks.getMcpStatus.mockResolvedValue([
       {
         serverId: 'server-1',
@@ -194,9 +203,7 @@ describe('MCPToolsSettingsView', () => {
       }
     });
 
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
+    await flushAsyncWork();
     expect(wrapper.text()).toContain('Sandbox: running');
     expect(wrapper.text()).toContain('Discovery: ready');
     expect(wrapper.text()).toContain('3 tools discovered');
@@ -205,7 +212,7 @@ describe('MCPToolsSettingsView', () => {
   it('preserves server-level fields when saving an edited server', async () => {
     const { default: MCPToolsSettingsView } = await import('@/views/settings/tools/mcp/index.vue');
     const store = useToolSettingsStore();
-    store.addMcpServer(createServer());
+    await store.addMcpServer(createServer());
 
     const wrapper = mount(MCPToolsSettingsView, {
       global: {
@@ -229,6 +236,7 @@ describe('MCPToolsSettingsView', () => {
         toolCallTimeoutMs: 15000
       })
     );
+    await flushAsyncWork();
 
     expect(store.getMcpServerById('server-1')).toMatchObject({
       id: 'server-1',
@@ -245,16 +253,14 @@ describe('MCPToolsSettingsView', () => {
     const { default: MCPToolsSettingsView } = await import('@/views/settings/tools/mcp/index.vue');
     const store = useToolSettingsStore();
     const server = createServer();
-    store.addMcpServer(server);
+    await store.addMcpServer(server);
 
     const wrapper = mount(MCPToolsSettingsView, {
       global: {
         stubs: createGlobalStubs()
       }
     });
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
+    await flushAsyncWork();
     electronMocks.refreshMcpDiscovery.mockClear();
     electronMocks.restartMcpServer.mockResolvedValue({
       ok: true,
@@ -269,9 +275,7 @@ describe('MCPToolsSettingsView', () => {
     const restartButton = wrapper.findAll('button').find((button) => button.text() === '重启');
     expect(restartButton).toBeDefined();
     await restartButton!.trigger('click');
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
+    await flushAsyncWork();
 
     expect(electronMocks.restartMcpServer).toHaveBeenCalledWith(expect.objectContaining({ id: server.id, command: server.command }));
     expect(electronMocks.refreshMcpDiscovery).not.toHaveBeenCalled();
@@ -281,7 +285,7 @@ describe('MCPToolsSettingsView', () => {
     const { default: MCPToolsSettingsView } = await import('@/views/settings/tools/mcp/index.vue');
     const store = useToolSettingsStore();
     const server = createServer();
-    store.addMcpServer(server);
+    await store.addMcpServer(server);
     electronMocks.refreshMcpDiscovery.mockResolvedValue({
       ok: true,
       serverId: server.id,
@@ -298,9 +302,7 @@ describe('MCPToolsSettingsView', () => {
       }
     });
 
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
+    await flushAsyncWork();
 
     expect(electronMocks.refreshMcpDiscovery).toHaveBeenCalledWith(expect.objectContaining({ id: server.id, command: server.command }));
     expect(wrapper.text()).toContain('已发现的工具');
@@ -309,7 +311,7 @@ describe('MCPToolsSettingsView', () => {
   it('records a failed runtime status when restart is requested without Electron API', async () => {
     const { default: MCPToolsSettingsView } = await import('@/views/settings/tools/mcp/index.vue');
     const store = useToolSettingsStore();
-    store.addMcpServer(createServer());
+    await store.addMcpServer(createServer());
     electronMocks.hasElectronAPI.mockReturnValue(false);
 
     const wrapper = mount(MCPToolsSettingsView, {

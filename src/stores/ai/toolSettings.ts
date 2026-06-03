@@ -57,10 +57,19 @@ export const useToolSettingsStore = defineStore('toolSettings', {
 
   actions: {
     /**
+     * 从持久化层加载完整工具设置。
+     */
+    async loadSettings(): Promise<void> {
+      const normalized = await toolSettingsStorage.loadSettings();
+      this.tavily = normalized.tavily;
+      this.mcp = normalized.mcp;
+    },
+
+    /**
      * 持久化当前 Tavily 状态。
      */
-    saveSettings(): void {
-      const normalized = toolSettingsStorage.saveSettings({ tavily: this.tavily, mcp: this.mcp });
+    async saveSettings(): Promise<void> {
+      const normalized = await toolSettingsStorage.saveSettings({ tavily: this.tavily, mcp: this.mcp });
       this.tavily = normalized.tavily;
       this.mcp = normalized.mcp;
     },
@@ -69,27 +78,27 @@ export const useToolSettingsStore = defineStore('toolSettings', {
      * 设置 Tavily 启用状态。
      * @param enabled - 是否启用
      */
-    setTavilyEnabled(enabled: boolean): void {
+    async setTavilyEnabled(enabled: boolean): Promise<void> {
       this.tavily.enabled = enabled;
-      this.saveSettings();
+      await this.saveSettings();
     },
 
     /**
      * 设置 Tavily API Key。
      * @param apiKey - API Key
      */
-    setTavilyApiKey(apiKey: string): void {
+    async setTavilyApiKey(apiKey: string): Promise<void> {
       this.tavily.apiKey = apiKey;
-      this.saveSettings();
+      await this.saveSettings();
     },
 
     /**
      * 新增 MCP server 配置。
      * @param server - 待新增的 MCP server
      */
-    addMcpServer(server: MCPServerConfig): void {
+    async addMcpServer(server: MCPServerConfig): Promise<void> {
       this.mcp.servers = [...this.mcp.servers, server];
-      this.saveSettings();
+      await this.saveSettings();
     },
 
     /**
@@ -97,18 +106,18 @@ export const useToolSettingsStore = defineStore('toolSettings', {
      * @param serverId - MCP server ID
      * @param patch - 需要合并的 server 配置
      */
-    updateMcpServer(serverId: string, patch: Partial<MCPServerConfig>): void {
+    async updateMcpServer(serverId: string, patch: Partial<MCPServerConfig>): Promise<void> {
       this.mcp.servers = this.mcp.servers.map((server) => (server.id === serverId ? { ...server, ...patch, id: server.id } : server));
-      this.saveSettings();
+      await this.saveSettings();
     },
 
     /**
      * 删除 MCP server。
      * @param serverId - MCP server ID
      */
-    removeMcpServer(serverId: string): void {
+    async removeMcpServer(serverId: string): Promise<void> {
       this.mcp.servers = this.mcp.servers.filter((server) => server.id !== serverId);
-      this.saveSettings();
+      await this.saveSettings();
     }
   }
 });

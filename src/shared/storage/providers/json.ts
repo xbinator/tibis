@@ -5,14 +5,14 @@
 import type { StoredProviderSettings, StoredProviderEntry, SettingsFileContent } from './types';
 import type { AIProviderType, AIProviderModel, AIProvider, AICustomProvider } from 'types/ai';
 import { cloneDeep, omitBy, isUndefined, pick, isBoolean, isString, isArray } from 'lodash-es';
-import { native } from '@/shared/platform/native';
+import { settingsFileStorage } from '@/shared/storage/settings';
+import { DEFAULT_MCP_TOOL_SETTINGS, normalizeMCPSettings } from '@/shared/storage/tool-settings';
 import { DEFAULT_PROVIDERS } from './defaults';
 
 // ─────────────────────────────────────────────
 // 常量
 // ─────────────────────────────────────────────
 
-const SETTINGS_FILE = 'settings.json';
 const REQUEST_FORMATS: AIProviderType[] = ['openai', 'anthropic', 'google', 'deepseek'];
 
 // ─────────────────────────────────────────────
@@ -64,7 +64,7 @@ function sanitizeProviderEntry(raw: Partial<StoredProviderEntry>): StoredProvide
 /** 归一化整个 settings.json 文件内容 */
 function normalizeSettingsFile(raw: unknown): SettingsFileContent {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { version: 1, providers: [] };
+    return { version: 1, providers: [], mcp: DEFAULT_MCP_TOOL_SETTINGS };
   }
   const source = raw as Partial<SettingsFileContent>;
   const providers = source.providers?.map((e: unknown) => sanitizeProviderEntry(e as Partial<StoredProviderEntry>)).filter((e) => e.id) || [];
@@ -77,7 +77,7 @@ function normalizeSettingsFile(raw: unknown): SettingsFileContent {
     return true;
   });
 
-  return { version: 1, providers: unique };
+  return { version: 1, providers: unique, mcp: normalizeMCPSettings(source.mcp) };
 }
 
 /** 校验 StoredProviderSettings patch */
@@ -92,95 +92,10 @@ function sanitizeProviderSettings(raw: Partial<StoredProviderSettings>): StoredP
   return result;
 }
 
-// ─────────────────────────────────────────────
-// 文件路径
-// ─────────────────────────────────────────────
-
-/** 获取 settings.json 的完整路径 */
-async function getSettingsPath(): Promise<string | null> {
-  const root = await native.getTibisWorkspaceRoot();
-  if (!root) return null;
-  return `${root.rootPath}/${SETTINGS_FILE}`;
-}
-
-// ─────────────────────────────────────────────
-// 文件读写
-// ─────────────────────────────────────────────
-
-/** 从备份文件恢复 */
-async function recoverFromBackup(filePath: string): Promise<SettingsFileContent | null> {
-  const bakPath = `${filePath}.bak`;
-  const bakStatus = await native.getPathStatus(bakPath);
-  if (!bakStatus.exists) return null;
-
-  try {
-    const { content } = await native.readFile(bakPath);
-    const parsed = JSON.parse(content);
-    const normalized = normalizeSettingsFile(parsed);
-    await native.writeFile(filePath, JSON.stringify(normalized, null, 2));
-    return normalized;
-  } catch {
-    return null;
-  }
-}
-
-/** 读取 settings.json，文件损坏时自动从 .bak 恢复 */
-async function readSettingsFile(): Promise<SettingsFileContent | null> {
-  const filePath = await getSettingsPath();
-  if (!filePath) return null;
-
-  const status = await native.getPathStatus(filePath);
-  if (!status.exists) {
-    return recoverFromBackup(filePath);
-  }
-
-  const { content } = await native.readFile(filePath);
-  try {
-    return normalizeSettingsFile(JSON.parse(content));
-  } catch {
-    return recoverFromBackup(filePath);
-  }
-}
-
-/** 写入 settings.json（带备份），写入失败抛异常 */
-async function writeSettingsFile(data: SettingsFileContent): Promise<void> {
-  const filePath = await getSettingsPath();
-  if (!filePath) return;
-
-  const content = JSON.stringify(data, null, 2);
-
-  // 备份当前文件
-  const status = await native.getPathStatus(filePath);
-  if (status.exists) {
-    const { content: currentContent } = await native.readFile(filePath);
-    await native.writeFile(`${filePath}.bak`, currentContent);
-  }
-
-  await native.writeFile(filePath, content);
-}
-
-// ─────────────────────────────────────────────
-// 并发写入保护
-// ─────────────────────────────────────────────
-
-/** 写操作串行化队列 */
-let writeQueue: Promise<void> = Promise.resolve();
-
 /** 将写操作加入串行化队列：读取最新 → 应用修改 → 写入 */
 async function enqueueWrite(transformer: (current: SettingsFileContent) => SettingsFileContent): Promise<SettingsFileContent> {
-  const result = await new Promise<SettingsFileContent>((resolve, reject) => {
-    writeQueue = writeQueue.then(async () => {
-      try {
-        const current = (await readSettingsFile()) ?? { version: 1, providers: [] };
-        const next = transformer(current);
-        await writeSettingsFile(next);
-        resolve(next);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
-  return result;
+  const result = await settingsFileStorage.update((current) => transformer(normalizeSettingsFile(current)));
+  return normalizeSettingsFile(result);
 }
 
 // ─────────────────────────────────────────────
@@ -291,25 +206,33 @@ function normalizeCustomProviderPayload(payload: AICustomProvider): AICustomProv
 export const providerStorage = {
   /** 列出所有服务商（内置按 DEFAULT_PROVIDERS 顺序，自定义追加到末尾） */
   async listProviders(): Promise<AIProvider[]> {
-    const settings = await readSettingsFile();
-    const entries = settings?.providers ?? [];
+    const settings = normalizeSettingsFile(await settingsFileStorage.read());
+    const entries = settings.providers;
     const entryMap = new Map(entries.map((e) => [e.id, e]));
 
     const merged: AIProvider[] = [];
     const seenIds = new Set<string>();
 
-    // 按 DEFAULT_PROVIDERS 顺序输出内置服务商，确保与默认配置顺序一致
-    for (const base of DEFAULT_PROVIDERS) {
-      const stored = entryMap.get(base.id);
-      merged.push(mergeProvider(base, stored));
-      seenIds.add(base.id);
-    }
-
-    // 追加自定义服务商（保持 JSON 文件中的顺序）
+    // 先按 settings.json 中记录的顺序输出，支持用户自定义排序。
     for (const entry of entries) {
-      if (entry.isCustom && !seenIds.has(entry.id)) {
+      const base = getDefaultProvider(entry.id);
+      if (base) {
+        merged.push(mergeProvider(base, entry));
+        seenIds.add(entry.id);
+        continue;
+      }
+
+      if (entry.isCustom) {
         merged.push(entryToCustomProvider(entry));
         seenIds.add(entry.id);
+      }
+    }
+
+    // settings.json 未记录的内置服务商按默认顺序追加，保证新内置服务商可见。
+    for (const base of DEFAULT_PROVIDERS) {
+      if (!seenIds.has(base.id)) {
+        merged.push(mergeProvider(base, entryMap.get(base.id)));
+        seenIds.add(base.id);
       }
     }
 
@@ -322,14 +245,14 @@ export const providerStorage = {
     const base = getDefaultProvider(normalizedId);
 
     if (base) {
-      const settings = await readSettingsFile();
-      const entry = settings?.providers.find((e) => e.id === normalizedId);
+      const settings = normalizeSettingsFile(await settingsFileStorage.read());
+      const entry = settings.providers.find((e) => e.id === normalizedId);
       return mergeProvider(base, entry);
     }
 
     // 自定义服务商
-    const settings = await readSettingsFile();
-    const entry = settings?.providers.find((e) => e.id === normalizedId && e.isCustom);
+    const settings = normalizeSettingsFile(await settingsFileStorage.read());
+    const entry = settings.providers.find((e) => e.id === normalizedId && e.isCustom);
     return entry ? entryToCustomProvider(entry) : null;
   },
 
@@ -425,7 +348,7 @@ export const providerStorage = {
   async deleteCustomProvider(id: string): Promise<boolean> {
     const normalizedId = sanitizeProviderId(id);
 
-    const existedBefore = (await readSettingsFile())?.providers.some((e) => e.id === normalizedId && e.isCustom) ?? false;
+    const existedBefore = normalizeSettingsFile(await settingsFileStorage.read()).providers.some((e) => e.id === normalizedId && e.isCustom);
     if (!existedBefore) return false;
 
     const result = await enqueueWrite((current) => {

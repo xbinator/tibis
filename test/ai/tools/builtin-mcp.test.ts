@@ -9,7 +9,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBuiltinMCPTools } from '@/ai/tools/builtin/MCPTool';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
-import { useSettingStore } from '@/stores/ui/setting';
 
 const storage = new Map<string, string>();
 
@@ -77,13 +76,15 @@ describe('built-in MCP tools', () => {
       discoveredAt: 1
     });
     setActivePinia(createPinia());
+    useToolSettingsStore().mcp.servers = [];
+    useToolPermissionStore().clearToolPermissionGrants();
   });
 
   it('returns MCP server settings without secrets redaction so the model can inspect config exactly', async () => {
     const tools = createBuiltinMCPTools({ confirm: vi.fn(async () => ({ approved: true })) });
     const toolSettingsStore = useToolSettingsStore();
 
-    toolSettingsStore.addMcpServer({
+    await toolSettingsStore.addMcpServer({
       id: 'server-1',
       name: 'Filesystem',
       enabled: true,
@@ -99,6 +100,9 @@ describe('built-in MCP tools', () => {
     const result = await tools.getMcpSettings.execute({}, createToolContext());
 
     expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      throw new Error('Expected get MCP settings to succeed');
+    }
     expect(result.data?.settings.servers[0]).toMatchObject({
       id: 'server-1',
       command: 'npx',
@@ -126,6 +130,9 @@ describe('built-in MCP tools', () => {
     );
 
     expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      throw new Error('Expected add MCP server to succeed');
+    }
     expect(result.data?.server.id).toBe('generated-server-id');
     expect(toolSettingsStore.mcp.servers).toHaveLength(1);
     expect(confirm).toHaveBeenCalledWith(
@@ -142,7 +149,7 @@ describe('built-in MCP tools', () => {
     const tools = createBuiltinMCPTools({ confirm });
     const toolSettingsStore = useToolSettingsStore();
 
-    toolSettingsStore.addMcpServer({
+    await toolSettingsStore.addMcpServer({
       id: 'server-1',
       name: 'Filesystem',
       enabled: true,
@@ -182,7 +189,7 @@ describe('built-in MCP tools', () => {
     const tools = createBuiltinMCPTools({ confirm });
     const toolSettingsStore = useToolSettingsStore();
 
-    toolSettingsStore.addMcpServer({
+    await toolSettingsStore.addMcpServer({
       id: 'server-1',
       name: 'Filesystem',
       enabled: true,
@@ -206,7 +213,7 @@ describe('built-in MCP tools', () => {
     const tools = createBuiltinMCPTools({ confirm });
     const toolSettingsStore = useToolSettingsStore();
 
-    toolSettingsStore.addMcpServer({
+    await toolSettingsStore.addMcpServer({
       id: 'server-1',
       name: 'Filesystem',
       enabled: true,

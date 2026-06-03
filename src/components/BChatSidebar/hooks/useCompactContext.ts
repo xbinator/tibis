@@ -10,6 +10,7 @@ import type { CompressionRecordStatus } from 'types/compression';
 import type { Ref } from 'vue';
 import { computed, ref } from 'vue';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
+import { asyncTo } from '@/utils/asyncTo';
 import { createCompressionCoordinator } from '../utils/compression/coordinator';
 import { CompressionCancelledError, CompressionError, getCompressionErrorMessage } from '../utils/compression/error';
 import { createBase, findLatestCompressionBoundaryIndex } from '../utils/messageHelper';
@@ -480,7 +481,7 @@ export function useCompactContext(options: UseCompactContextOptions) {
     const compressionSourceMessages = createManualCompressionSourceMessages(messages.value);
     const pendingMessage = createPendingCompressionMessage(triggerSource);
     const task = beginCompactTask(() => {
-      updateCompressionMessage(pendingMessage.id, createCancelledCompressionMessage()).catch(() => undefined);
+      asyncTo(updateCompressionMessage(pendingMessage.id, createCancelledCompressionMessage()));
     });
     if (!task.ok) {
       if (triggerSource === 'manual') {

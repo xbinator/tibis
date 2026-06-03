@@ -1,12 +1,22 @@
+/* @vitest-environment jsdom */
 /**
  * @file toolSettings.test.ts
  * @description 验证 Tavily 工具设置 store 的默认值、归一化与可用性派生状态。
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SettingsFileContent } from '@/shared/storage/providers/types';
 
 const TOOL_SETTINGS_STORAGE_KEY = 'tool_settings';
 const storage = new Map<string, string>();
+let fileStore: Record<string, string> = {};
+
+const mockElectronAPI = {
+  getTibisWorkspaceRoot: vi.fn(),
+  getPathStatus: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn()
+};
 
 vi.stubGlobal('localStorage', {
   getItem(key: string): string | null {
@@ -26,9 +36,37 @@ vi.stubGlobal('localStorage', {
 describe('useToolSettingsStore', () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.clearAllMocks();
+    fileStore = {};
     localStorage.clear();
+    mockElectronAPI.getTibisWorkspaceRoot.mockResolvedValue({ rootPath: '/home/user/.tibis', created: false });
+    mockElectronAPI.getPathStatus.mockImplementation(async (path: string) => ({
+      exists: path in fileStore,
+      isFile: path in fileStore,
+      isDirectory: false
+    }));
+    mockElectronAPI.readFile.mockImplementation(async (path: string) => ({
+      content: fileStore[path] ?? '',
+      name: path.split('/').pop() ?? '',
+      ext: 'json'
+    }));
+    mockElectronAPI.writeFile.mockImplementation(async (path: string, content: string) => {
+      fileStore[path] = content;
+    });
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: mockElectronAPI
+    });
     setActivePinia(createPinia());
   });
+
+  /**
+   * 写入 settings.json 到模拟文件系统。
+   * @param data - 设置文件内容
+   */
+  function setSettingsFile(data: SettingsFileContent): void {
+    fileStore['/home/user/.tibis/settings.json'] = JSON.stringify(data, null, 2);
+  }
 
   it('loads Tavily defaults', async () => {
     const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
@@ -75,11 +113,88 @@ describe('useToolSettingsStore', () => {
     expect(store.hasEnabledMcpServers).toBe(false);
   });
 
+  it('ignores legacy MCP servers from localStorage', async () => {
+    const { local } = await import('@/shared/storage/base');
+
+    local.setItem(TOOL_SETTINGS_STORAGE_KEY, {
+      tavily: {
+        enabled: false,
+        apiKey: ''
+      },
+      mcp: {
+        servers: [
+          {
+            id: 'legacy-server',
+            name: 'Legacy',
+            enabled: true,
+            transport: 'stdio',
+            command: 'npx',
+            args: [],
+            env: {},
+            toolAllowlist: [],
+            connectTimeoutMs: 20000,
+            toolCallTimeoutMs: 30000
+          }
+        ]
+      }
+    });
+
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
+    const store = useToolSettingsStore();
+    expect(store.mcp.servers).toEqual([]);
+
+    await store.loadSettings();
+
+    expect(store.mcp.servers).toEqual([]);
+    expect(store.hasEnabledMcpServers).toBe(false);
+  });
+
+  it('loads MCP servers from settings.json into store state', async () => {
+    setSettingsFile({
+      version: 1,
+      providers: [],
+      mcp: {
+        servers: [
+          {
+            id: 'server-1',
+            name: 'Filesystem',
+            enabled: true,
+            transport: 'stdio',
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-filesystem'],
+            env: {},
+            toolAllowlist: ['read_file'],
+            connectTimeoutMs: 20000,
+            toolCallTimeoutMs: 30000
+          }
+        ]
+      }
+    });
+
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
+    const store = useToolSettingsStore();
+    await store.loadSettings();
+
+    expect(store.mcp.servers).toHaveLength(1);
+    expect(store.hasEnabledMcpServers).toBe(true);
+  });
+
+  it('keeps current state when persisted tool settings fail to load', async () => {
+    mockElectronAPI.getPathStatus.mockRejectedValue(new Error('settings unavailable'));
+
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
+    const store = useToolSettingsStore();
+
+    await expect(store.loadSettings()).resolves.toBeUndefined();
+    expect(store.tavily.enabled).toBe(false);
+    expect(store.mcp.servers).toEqual([]);
+  });
+
   it('updates MCP servers through normalized persistence', async () => {
     const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
     const store = useToolSettingsStore();
 
-    store.addMcpServer({
+    await store.addMcpServer({
       id: 'server-1',
       name: 'Filesystem',
       enabled: true,
@@ -95,11 +210,36 @@ describe('useToolSettingsStore', () => {
     expect(store.hasEnabledMcpServers).toBe(true);
     expect(store.getMcpServerById('server-1')?.toolAllowlist).toEqual(['read_file', 'write_file']);
 
-    store.updateMcpServer('server-1', { enabled: false, toolAllowlist: ['list_directory'] });
+    await store.updateMcpServer('server-1', { enabled: false, toolAllowlist: ['list_directory'] });
     expect(store.hasEnabledMcpServers).toBe(false);
     expect(store.getMcpServerById('server-1')?.toolAllowlist).toEqual(['list_directory']);
 
-    store.removeMcpServer('server-1');
+    await store.removeMcpServer('server-1');
     expect(store.mcp.servers).toEqual([]);
+  });
+
+  it('updates store state when settings.json fails to save', async () => {
+    mockElectronAPI.writeFile.mockRejectedValue(new Error('disk full'));
+
+    const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
+    const store = useToolSettingsStore();
+
+    await expect(
+      store.addMcpServer({
+        id: 'server-1',
+        name: 'Filesystem',
+        enabled: true,
+        transport: 'stdio',
+        command: 'npx',
+        args: [],
+        env: {},
+        toolAllowlist: [],
+        connectTimeoutMs: 20000,
+        toolCallTimeoutMs: 30000
+      })
+    ).resolves.toBeUndefined();
+
+    expect(store.mcp.servers).toHaveLength(1);
+    expect(store.hasEnabledMcpServers).toBe(true);
   });
 });

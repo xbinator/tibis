@@ -1,9 +1,11 @@
 /**
  * @file sqlite.ts
- * @description Tavily 工具设置的本地持久化与归一化实现。
+ * @description 工具设置的本地持久化与归一化实现，MCP 配置写入 ~/.tibis/settings.json。
  */
 import type { TavilyToolSettings, ToolSettingsState, MCPToolSettings, MCPServerConfig, MCPOAuthConfig } from './types';
 import { local } from '@/shared/storage/base';
+import { settingsFileStorage } from '@/shared/storage/settings';
+import { asyncTo } from '@/utils/asyncTo';
 import {
   DEFAULT_TOOL_SETTINGS,
   DEFAULT_MCP_TOOL_SETTINGS,
@@ -110,7 +112,7 @@ function normalizeMCPServerConfig(value: unknown): MCPServerConfig | null {
 /**
  * 归一化 MCP 工具设置。
  */
-function normalizeMCPSettings(value: unknown): MCPToolSettings {
+export function normalizeMCPSettings(value: unknown): MCPToolSettings {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return DEFAULT_MCP_TOOL_SETTINGS;
   }
@@ -145,8 +147,23 @@ export const toolSettingsStorage = {
    */
   getSettings(): ToolSettingsState {
     const saved = local.getItem<ToolSettingsState>(TOOL_SETTINGS_STORAGE_KEY);
-    const normalized = normalizeToolSettings(saved);
-    local.setItem(TOOL_SETTINGS_STORAGE_KEY, normalized);
+    const normalized = normalizeToolSettings({ tavily: saved?.tavily });
+    local.setItem(TOOL_SETTINGS_STORAGE_KEY, { tavily: normalized.tavily });
+    return normalized;
+  },
+
+  /**
+   * 异步读取完整工具设置。
+   * @returns 归一化后的工具设置
+   */
+  async loadSettings(): Promise<ToolSettingsState> {
+    const saved = local.getItem<ToolSettingsState>(TOOL_SETTINGS_STORAGE_KEY);
+    const [error, settingsFile] = await asyncTo(settingsFileStorage.read());
+    const normalized = normalizeToolSettings({
+      tavily: saved?.tavily,
+      mcp: error ? undefined : settingsFile.mcp
+    });
+    local.setItem(TOOL_SETTINGS_STORAGE_KEY, { tavily: normalized.tavily });
     return normalized;
   },
 
@@ -155,9 +172,10 @@ export const toolSettingsStorage = {
    * @param settings - 待保存设置
    * @returns 归一化后的工具设置
    */
-  saveSettings(settings: Partial<ToolSettingsState>): ToolSettingsState {
+  async saveSettings(settings: Partial<ToolSettingsState>): Promise<ToolSettingsState> {
     const normalized = normalizeToolSettings(settings);
-    local.setItem(TOOL_SETTINGS_STORAGE_KEY, normalized);
+    local.setItem(TOOL_SETTINGS_STORAGE_KEY, { tavily: normalized.tavily });
+    await asyncTo(settingsFileStorage.update((current) => ({ ...current, mcp: normalized.mcp })));
     return normalized;
   }
 };

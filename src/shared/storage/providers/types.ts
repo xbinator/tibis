@@ -1,3 +1,4 @@
+import type { MCPToolSettings } from '../tool-settings/types';
 import type { AIProviderModel, AIProviderType } from 'types/ai';
 
 /**
@@ -75,4 +76,6 @@ export interface SettingsFileContent {
   version: number;
   /** 服务商配置列表（数组顺序即展示顺序） */
   providers: StoredProviderEntry[];
+  /** MCP 工具配置，旧 settings.json 可能缺省 */
+  mcp?: MCPToolSettings;
 }
