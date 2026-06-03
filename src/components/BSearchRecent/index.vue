@@ -2,7 +2,7 @@
   <BModal v-model:open="visible" :mask-closable="true" :width="560" :main-style="{ padding: '16px' }">
     <div :class="bem()">
       <div ref="inputRef" :class="bem('toolbar')">
-        <AInput v-model:value="keyword" placeholder="搜索最近文件" @keydown.enter.prevent="handleEnter" @keydown.esc.prevent="handleClose" />
+        <AInput v-model:value="keyword" placeholder="搜索最近记录" @keydown.enter.prevent="handleEnter" @keydown.esc.prevent="handleClose" />
       </div>
 
       <BScrollbar :max-height="maxHeight" inset="auto">
@@ -21,7 +21,7 @@
           </div>
         </template>
 
-        <div v-else :class="bem('empty')">没有匹配的最近文件</div>
+        <div v-else :class="bem('empty')">没有匹配的最近记录</div>
       </BScrollbar>
     </div>
   </BModal>
@@ -35,13 +35,14 @@
 
 import type { BSearchRecentProps, AbsolutePathSearchResult, NormalizedItem, UrlSearchResult } from './types';
 import { computed, nextTick, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import BModal from '@/components/BModal/index.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
+import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
-import type { StoredFile } from '@/shared/storage';
-import { useFilesStore } from '@/stores/workspace/files';
+import type { StoredFile, RecentRecord } from '@/shared/storage';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { resolveFileTitle } from '@/utils/file/title';
 import { createNamespace } from '@/utils/namespace';
@@ -62,8 +63,8 @@ const emit = defineEmits<{
 // ---------- state ----------
 
 const route = useRoute();
-const router = useRouter();
-const filesStore = useFilesStore();
+const { openWebview } = useNavigate();
+const recentStore = useRecentStore();
 const tabsStore = useTabsStore();
 const { openFile, openFileByPath } = useOpenFile();
 
@@ -78,15 +79,20 @@ let pathSearchToken = 0;
 
 const activeId = computed<string>(() => (route.name === 'editor' ? (route.params.id as string) || '' : ''));
 
-const filteredFiles = computed<StoredFile[]>(() => {
-  const files = filesStore.recentFiles ?? [];
+const filteredRecords = computed<RecentRecord[]>(() => {
+  const records = recentStore.recentRecords ?? [];
   const term = keyword.value.trim();
-  if (!term) return files;
+  if (!term) return records;
 
   const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-  return files.filter((file) => {
-    // 同时保留扩展名与路径关键字，确保用户按文件名或类型都能搜到目标文件。
-    const searchable = [resolveFileTitle(file), file.name, file.ext, file.path, file.content].filter(Boolean).join('\0');
+  return records.filter((record) => {
+    if (record.type === 'file') {
+      // 同时保留扩展名与路径关键字，确保用户按文件名或类型都能搜到目标文件。
+      const searchable = [resolveFileTitle(record), record.name, record.ext, record.path, record.content].filter(Boolean).join('\0');
+      return re.test(searchable);
+    }
+    // webview 记录按 url + title 搜索
+    const searchable = [record.url, record.title].filter(Boolean).join('\0');
     return re.test(searchable);
   });
 });
@@ -113,7 +119,7 @@ async function handleOpenPath(path: string): Promise<void> {
 
 async function handleOpenUrl(url: string): Promise<void> {
   handleClose();
-  router.push({ name: 'webview-web', query: { url: encodeURIComponent(url) } });
+  openWebview(new URL(url));
 }
 
 async function handleEnter(): Promise<void> {
@@ -126,13 +132,31 @@ async function handleEnter(): Promise<void> {
     await handleOpenPath(absolutePathCandidate.value.path);
     return;
   }
-  const first = filteredFiles.value[0];
-  if (first) await handleSelect(first);
+  const first = filteredRecords.value[0];
+  if (!first) return;
+  if (first.type === 'webview') {
+    await handleOpenUrl(first.url);
+  } else {
+    await handleSelect(first);
+  }
 }
 
-async function handleRemove(id: string): Promise<void> {
-  await filesStore.removeFile(id);
+/**
+ * 删除文件记录并清理关联的 tab。
+ * @param id - 文件记录 ID
+ */
+async function handleRemoveFile(id: string): Promise<void> {
+  await recentStore.removeFile(id);
   tabsStore.removeTab(id);
+  emit('remove', id);
+}
+
+/**
+ * 删除 webview 记录（webview id 与 tab id 体系不同，不调 tabsStore.removeTab）。
+ * @param id - webview 记录 ID
+ */
+async function handleRemoveWebview(id: string): Promise<void> {
+  await recentStore.removeFile(id);
   emit('remove', id);
 }
 
@@ -172,22 +196,36 @@ const searchResultItems = computed(() => {
     });
   }
 
-  for (const file of filteredFiles.value) {
-    // 若绝对路径候选与某条最近文件路径重合，则跳过该条（避免重复）
-    if (candidate && file.path === candidate.path) continue;
+  for (const record of filteredRecords.value) {
+    // 若绝对路径候选与某条文件记录路径重合，则跳过该条（避免重复）
+    if (candidate && record.type === 'file' && record.path === candidate.path) continue;
 
-    const isUnsaved = !file.path;
-    items.push({
-      key: file.id,
-      title: resolveFileTitle(file),
-      pathLabel: isUnsaved ? '未保存文件' : file.path!,
-      pathClass: isUnsaved ? 'is-unsaved' : '',
-      meta: '',
-      isActive: file.id === activeId.value,
-      removable: true,
-      onSelect: () => handleSelect(file),
-      onRemove: () => handleRemove(file.id)
-    });
+    if (record.type === 'webview') {
+      items.push({
+        key: record.id,
+        title: record.title,
+        pathLabel: record.url,
+        pathClass: '',
+        meta: '',
+        isActive: false,
+        removable: true,
+        onSelect: () => handleOpenUrl(record.url),
+        onRemove: () => handleRemoveWebview(record.id)
+      });
+    } else {
+      const isUnsaved = !record.path;
+      items.push({
+        key: record.id,
+        title: resolveFileTitle(record),
+        pathLabel: isUnsaved ? '未保存文件' : record.path!,
+        pathClass: isUnsaved ? 'is-unsaved' : '',
+        meta: '',
+        isActive: record.id === activeId.value,
+        removable: true,
+        onSelect: () => handleSelect(record),
+        onRemove: () => handleRemoveFile(record.id)
+      });
+    }
   }
 
   return items;
@@ -260,7 +298,7 @@ watch(visible, (value) => {
     return;
   }
   focusInput();
-  filesStore.ensureLoaded();
+  recentStore.ensureLoaded();
 });
 </script>
 

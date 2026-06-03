@@ -17,16 +17,21 @@
         </div>
       </div>
 
-      <div v-if="topRecentFiles.length" class="recent-files-section">
-        <div class="recent-files-title">最近文件</div>
+      <div v-if="topRecentRecords.length" class="recent-files-section">
+        <div class="recent-files-title">最近记录</div>
         <div class="recent-files-list">
-          <div v-for="file in topRecentFiles" :key="file.id" class="recent-file-item" @click="handleOpenRecentFile(file.id)">
+          <div
+            v-for="record in topRecentRecords"
+            :key="record.id"
+            class="recent-file-item"
+            @click="record.type === 'file' ? handleOpenRecentFile(record.id) : handleOpenWebview(record.url)"
+          >
             <div class="recent-file-icon">
-              <Icon icon="lucide:file-text" width="14" height="14" />
+              <Icon :icon="record.type === 'file' ? 'lucide:file-text' : 'lucide:globe'" width="14" height="14" />
             </div>
             <div class="recent-file-info">
-              <div class="recent-file-name">{{ resolveFileTitle(file) }}</div>
-              <div class="recent-file-path">{{ file.path || '未保存文件' }}</div>
+              <div class="recent-file-name">{{ record.type === 'file' ? resolveFileTitle(record) : record.title }}</div>
+              <div class="recent-file-path">{{ record.type === 'file' ? record.path || '未保存文件' : record.url }}</div>
             </div>
           </div>
         </div>
@@ -49,18 +54,20 @@
 import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import BSearchRecent from '@/components/BSearchRecent/index.vue';
+import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
-import { useFilesStore } from '@/stores/workspace/files';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { resolveFileTitle } from '@/utils/file/title';
 import DropZone from './components/DropZone.vue';
 
-const filesStore = useFilesStore();
+const { openWebview } = useNavigate();
+const recentStore = useRecentStore();
 const { createNewFile, openFileById, openNativeFile } = useOpenFile();
 const visibleSearchRecent = ref(false);
 
-const topRecentFiles = computed(() => filesStore.recentFiles?.slice(0, 3) ?? []);
+const topRecentRecords = computed(() => recentStore.topRecentRecords);
 
-onMounted(() => filesStore.ensureLoaded());
+onMounted(() => recentStore.ensureLoaded());
 
 /**
  * 创建新的未保存文件。
@@ -82,6 +89,14 @@ async function handleOpenFile(): Promise<void> {
  */
 async function handleOpenRecentFile(id: string): Promise<void> {
   await openFileById(id);
+}
+
+/**
+ * 在 webview 中打开 URL。
+ * @param url - 目标 URL
+ */
+function handleOpenWebview(url: string): void {
+  openWebview(new URL(url));
 }
 
 /**

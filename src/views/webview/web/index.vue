@@ -46,8 +46,10 @@
  */
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type CSSProperties } from 'vue';
 import { useRoute } from 'vue-router';
+import { debounce } from 'lodash-es';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { native } from '@/shared/platform';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 import AddressBar from './components/AddressBar.vue';
@@ -141,7 +143,9 @@ const webviewEventMap: Array<{ name: string; handler: EventListener | ((event: E
   { name: 'page-title-updated', handler: webview.handleTitleUpdated as EventListener },
   { name: 'did-stop-loading', handler: webview.handleDidStopLoading as EventListener },
   { name: 'console-message', handler: webview.handleConsoleMessage },
-  { name: 'wheel', handler: handleHostedWheelEvent }
+  { name: 'wheel', handler: handleHostedWheelEvent },
+  { name: 'did-navigate', handler: handleDidNavigateRecord },
+  { name: 'did-navigate-in-page', handler: handleDidNavigateRecord }
 ];
 
 /**
@@ -261,6 +265,27 @@ useWebviewTabTitle({
   routeFullPath,
   title: computed(() => webview.state.value.title)
 });
+
+const recentStore = useRecentStore();
+
+/**
+ * 将当前 webview 页面写入最近记录。
+ * 当 isLoading 从 true 变为 false 且 url 不为空时触发，debounce 300ms 防抖。
+ */
+const writeRecentWebviewRecord = debounce(() => {
+  const { url, title } = webview.state.value;
+  if (!url) return;
+  recentStore.addWebviewRecord(url, title || url);
+}, 300);
+
+watch(
+  () => webview.state.value.isLoading,
+  (newVal, oldVal) => {
+    if (oldVal === true && newVal === false) {
+      writeRecentWebviewRecord();
+    }
+  }
+);
 
 // ---- Watches（合并 toolbar + preset 变化触发视口同步）----
 watch([deviceMode.isToolbarVisible, deviceMode.activePreset], () => nextTick(requestSyncHostLayerBounds).catch(console.error));
