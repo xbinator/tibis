@@ -16,6 +16,18 @@ export interface AbsolutePathSearchResult {
   fileName: string;
 }
 
+/**
+ * URL 搜索结果（http/https）。
+ */
+export interface UrlSearchResult {
+  /** 结果项类型。 */
+  type: 'url';
+  /** 完整 URL。 */
+  url: string;
+  /** 展示用的主机名。 */
+  host: string;
+}
+
 export interface NormalizedItem {
   key: string;
   title: string;

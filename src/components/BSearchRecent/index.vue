@@ -33,9 +33,9 @@
  * @description 渲染最近文件搜索弹窗，并支持按路径直接打开文件。
  */
 
-import type { BSearchRecentProps, AbsolutePathSearchResult, NormalizedItem } from './types';
+import type { BSearchRecentProps, AbsolutePathSearchResult, NormalizedItem, UrlSearchResult } from './types';
 import { computed, nextTick, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import BModal from '@/components/BModal/index.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { useOpenFile } from '@/hooks/useOpenFile';
@@ -62,6 +62,7 @@ const emit = defineEmits<{
 // ---------- state ----------
 
 const route = useRoute();
+const router = useRouter();
 const filesStore = useFilesStore();
 const tabsStore = useTabsStore();
 const { openFile, openFileByPath } = useOpenFile();
@@ -70,6 +71,7 @@ const visible = defineModel<boolean>('visible', { default: false });
 const keyword = ref('');
 const inputRef = ref<HTMLElement | null>(null);
 const absolutePathCandidate = ref<AbsolutePathSearchResult | null>(null);
+const urlCandidate = ref<UrlSearchResult | null>(null);
 let pathSearchToken = 0;
 
 // ---------- computed ----------
@@ -95,6 +97,7 @@ function handleClose(): void {
   visible.value = false;
   keyword.value = '';
   absolutePathCandidate.value = null;
+  urlCandidate.value = null;
 }
 
 async function handleSelect(file: StoredFile): Promise<void> {
@@ -108,7 +111,17 @@ async function handleOpenPath(path: string): Promise<void> {
   await openFileByPath(path);
 }
 
+async function handleOpenUrl(url: string): Promise<void> {
+  handleClose();
+  router.push({ name: 'webview-web', query: { url: encodeURIComponent(url) } });
+}
+
 async function handleEnter(): Promise<void> {
+  // 优先处理 URL 候选项
+  if (urlCandidate.value) {
+    await handleOpenUrl(urlCandidate.value.url);
+    return;
+  }
   if (absolutePathCandidate.value) {
     await handleOpenPath(absolutePathCandidate.value.path);
     return;
@@ -126,9 +139,25 @@ async function handleRemove(id: string): Promise<void> {
 /** 归一化后的展示列表，模板只关心渲染，不再做类型判断 */
 const searchResultItems = computed(() => {
   const candidate = absolutePathCandidate.value;
+  const url = urlCandidate.value;
   const items: NormalizedItem[] = [];
 
-  // 绝对路径候选项排在最前
+  // URL 候选项排在最前
+  if (url) {
+    items.push({
+      key: url.url,
+      title: url.host,
+      pathLabel: url.url,
+      pathClass: '',
+      meta: '在 Webview 中打开',
+      isActive: false,
+      removable: false,
+      onSelect: () => handleOpenUrl(url.url),
+      onRemove: undefined
+    });
+  }
+
+  // 绝对路径候选项次之
   if (candidate) {
     items.push({
       key: candidate.path,
@@ -170,6 +199,13 @@ function isAbsolutePathInput(value: string): boolean {
   return value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value);
 }
 
+/**
+ * 判断输入是否为 http/https URL。
+ */
+function isHttpUrlInput(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
 function focusInput(): void {
   nextTick(() => {
     const input = inputRef.value?.querySelector('input');
@@ -185,6 +221,21 @@ watch(keyword, async (value) => {
   const normalized = value.trim();
   const token = ++pathSearchToken;
 
+  // 检测 http/https URL 输入
+  if (isHttpUrlInput(normalized)) {
+    try {
+      const parsed = new URL(normalized);
+
+      urlCandidate.value = { type: 'url', url: parsed.href, host: parsed.host };
+    } catch {
+      urlCandidate.value = null;
+    }
+    absolutePathCandidate.value = null;
+    return;
+  }
+
+  urlCandidate.value = null;
+
   if (!normalized || !isAbsolutePathInput(normalized)) {
     absolutePathCandidate.value = null;
     return;
@@ -193,14 +244,18 @@ watch(keyword, async (value) => {
   const status = await native.getPathStatus(normalized);
   if (token !== pathSearchToken) return; // 过期请求丢弃
 
-  absolutePathCandidate.value =
-    status.exists && status.isFile ? { type: 'absolute-path', path: normalized, fileName: normalized.split(/[\\/]/).at(-1) || normalized } : null;
+  if (status.exists && status.isFile) {
+    absolutePathCandidate.value = { type: 'absolute-path', path: normalized, fileName: normalized.split(/[\\/]/).at(-1) || normalized };
+  } else {
+    absolutePathCandidate.value = null;
+  }
 });
 
 watch(visible, (value) => {
   if (!value) {
     keyword.value = '';
     absolutePathCandidate.value = null;
+    urlCandidate.value = null;
     pathSearchToken += 1;
     return;
   }
