@@ -168,10 +168,7 @@ function unbindWebviewEvents(element: Electron.WebviewTag): void {
  * 在系统浏览器中打开当前 URL。
  */
 async function openInBrowser(): Promise<void> {
-  const { url } = webview.state.value;
-  if (url) {
-    await native.openExternal(url);
-  }
+  await native.openExternal(webview.state.value.url);
 }
 
 /**

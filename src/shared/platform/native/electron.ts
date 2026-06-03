@@ -138,6 +138,8 @@ export class ElectronNative implements Native {
   }
 
   async openExternal(url: string): Promise<void> {
+    if (!url) return;
+
     await getElectronAPI().openExternal(url);
   }
 
