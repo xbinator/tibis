@@ -154,7 +154,7 @@ export const append = {
     } else {
       message.parts.push({ type: 'text', text });
     }
-    message.content = message.content ?? text;
+    message.content = `${message.content ?? ''}${text}`;
   },
 
   /**

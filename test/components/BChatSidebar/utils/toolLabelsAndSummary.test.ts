@@ -19,6 +19,15 @@ describe('BChatSidebar tool labels and summaries', () => {
   });
 
   /**
+   * 验证 MCP SDK 工具名会展示为可读的原始 tool 名称。
+   */
+  it('labels MCP SDK tool names with decoded original tool name', () => {
+    expect(getActionLabel('mcp_4147526665562d5455586f30384151564165717539_6d6170735f77656174686572')).toEqual({
+      alias: 'MCP: maps_weather'
+    });
+  });
+
+  /**
    * 验证当前网页读取结果会被压缩为简明摘要。
    */
   it('summarizes read_current_webpage result', () => {

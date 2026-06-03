@@ -174,7 +174,7 @@ describe('append.textPart', () => {
     };
     append.textPart(message, 'hello');
     expect(message.parts).toEqual([{ type: 'text', text: 'hello' }]);
-    expect(message.content).toBe('');
+    expect(message.content).toBe('hello');
   });
 
   it('appends text to existing text part', () => {
@@ -188,7 +188,7 @@ describe('append.textPart', () => {
     };
     append.textPart(message, ' world');
     expect(message.parts).toEqual([{ type: 'text', text: 'hello world' }]);
-    expect(message.content).toBe('hello');
+    expect(message.content).toBe('hello world');
   });
 
   it('creates new text part when last part is not text', () => {
@@ -205,7 +205,7 @@ describe('append.textPart', () => {
       { type: 'thinking', thinking: 'thinking...' },
       { type: 'text', text: 'hello' }
     ]);
-    expect(message.content).toBe('');
+    expect(message.content).toBe('hello');
   });
 });
 
@@ -298,7 +298,14 @@ describe('append.toolResultPart', () => {
     };
     append.toolResultPart(message, 'tool-call-1', 'test_tool', { status: 'success', toolName: 'test_tool', data: {} });
     expect(message.parts).toEqual([
-      { type: 'tool', status: 'done', toolCallId: 'tool-call-1', toolName: 'test_tool', result: { status: 'success', toolName: 'test_tool', data: {} }, input: null }
+      {
+        type: 'tool',
+        status: 'done',
+        toolCallId: 'tool-call-1',
+        toolName: 'test_tool',
+        result: { status: 'success', toolName: 'test_tool', data: {} },
+        input: null
+      }
     ]);
   });
 
@@ -316,7 +323,14 @@ describe('append.toolResultPart', () => {
     };
     append.toolResultPart(message, 'tool-call-1', 'test_tool', { status: 'success', toolName: 'test_tool', data: {} });
     expect(message.parts).toEqual([
-      { type: 'tool', status: 'done', toolCallId: 'tool-call-1', toolName: 'test_tool', input: {}, result: { status: 'success', toolName: 'test_tool', data: {} } },
+      {
+        type: 'tool',
+        status: 'done',
+        toolCallId: 'tool-call-1',
+        toolName: 'test_tool',
+        input: {},
+        result: { status: 'success', toolName: 'test_tool', data: {} }
+      },
       { type: 'text', text: 'some text' }
     ]);
   });
@@ -377,7 +391,7 @@ describe('userChoice.findPending', () => {
       toolCallId: 'tc1',
       mode: 'single' as const,
       question: 'Choose an option',
-      options: [{ id: 'opt1', label: 'Option 1', value: 'opt1' }],
+      options: [{ id: 'opt1', label: 'Option 1', value: 'opt1' }]
     };
     const message: Message = {
       id: 'test-id',
@@ -441,7 +455,7 @@ describe('userChoice.submitAnswer', () => {
       toolCallId: 'tc1',
       mode: 'single' as const,
       question: 'Choose an option',
-      options: [{ id: 'opt1', label: 'Option 1', value: 'opt1' }],
+      options: [{ id: 'opt1', label: 'Option 1', value: 'opt1' }]
     };
     const message: Message = {
       id: 'test-id',
@@ -525,7 +539,14 @@ describe('convert.toModelMessages', () => {
       role: 'assistant',
       content: '',
       parts: [
-        { type: 'tool', status: 'done', toolCallId: 'tc1', toolName: 'test_tool', input: { arg: 'value' }, result: { status: 'success', toolName: 'test_tool', data: {} } }
+        {
+          type: 'tool',
+          status: 'done',
+          toolCallId: 'tc1',
+          toolName: 'test_tool',
+          input: { arg: 'value' },
+          result: { status: 'success', toolName: 'test_tool', data: {} }
+        }
       ],
       loading: false,
       createdAt: new Date().toISOString()

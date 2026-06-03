@@ -1,3 +1,8 @@
+/**
+ * @file toolLabels.ts
+ * @description 聊天工具调用的用户可读展示文案。
+ */
+
 /** 内置工具对应的用户可读动作文案。 */
 export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
   read_file: { alias: '读取文件' },
@@ -31,10 +36,48 @@ export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
 };
 
 /**
+ * 将十六进制编码的字符串还原为 UTF-8 文本。
+ * @param value - 十六进制字符串
+ * @returns 解码后的文本，失败时返回空字符串
+ */
+function decodeHexText(value: string): string {
+  if (!/^(?:[0-9a-f]{2})+$/i.test(value)) {
+    return '';
+  }
+
+  const bytes = value.match(/[0-9a-f]{2}/gi)?.map((item) => Number.parseInt(item, 16)) ?? [];
+  try {
+    return new TextDecoder().decode(new Uint8Array(bytes));
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 将 MCP SDK 工具名转换为用户可读展示名。
+ * @param toolName - 内部 MCP SDK 工具名
+ * @returns 用户可读展示名，非 MCP 工具或解析失败时返回空字符串
+ */
+function getMcpActionAlias(toolName: string): string {
+  const match = /^mcp_[0-9a-f]+_([0-9a-f]+)$/i.exec(toolName);
+  if (!match) {
+    return '';
+  }
+
+  const decodedToolName = decodeHexText(match[1]);
+  return decodedToolName ? `MCP: ${decodedToolName}` : '';
+}
+
+/**
  * 获取工具对应的用户可读动作。
  * @param toolName - 内部工具名称
  * @returns 用户可读动作文案
  */
 export function getActionLabel(toolName: string): { alias: string } {
+  const mcpAlias = getMcpActionAlias(toolName);
+  if (mcpAlias) {
+    return { alias: mcpAlias };
+  }
+
   return TOOL_ACTION_LABELS[toolName] ?? { alias: toolName };
 }

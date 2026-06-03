@@ -4,7 +4,7 @@
  */
 import type { AIToolExecutor } from 'types/ai';
 import type { ElectronShellCommandOutputChunk } from 'types/electron-api';
-import { nextTick, ref } from 'vue';
+import { ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAwaitingUserInputResult } from '@/ai/tools/results';
@@ -50,6 +50,10 @@ vi.mock('localforage', () => {
  * 被测 hook 传给底层流式 Hook 的回调集合。
  */
 interface MockChatCallbacks {
+  /** 文本流式回调 */
+  onText?: (content: string) => void | Promise<void>;
+  /** 思考流式回调 */
+  onThinking?: (thinking: string) => void | Promise<void>;
   /** 流式完成回调 */
   onComplete?: () => void | Promise<void>;
   /** 流式结束回调 */
@@ -64,6 +68,8 @@ interface MockChatCallbacks {
   onToolCall?: (chunk: import('types/ai').AIStreamToolCallChunk) => void | Promise<void>;
   /** 工具结果回调 */
   onToolResult?: (chunk: import('types/ai').AIStreamToolResultChunk) => void | Promise<void>;
+  /** 流式错误回调 */
+  onError?: (error: import('types/ai').AIServiceError) => void | Promise<void>;
 }
 
 /**
@@ -76,6 +82,7 @@ let shellOutputCallback: ((chunk: ElectronShellCommandOutputChunk) => void) | nu
 // Mutable state for mocks - use module-level mutable state
 let getAvailableServiceConfigCallCount = 0;
 let getAvailableServiceConfigReturnValues: Array<ServiceConfig | null> = [];
+let pendingAnimationFrameCallback: FrameRequestCallback | null = null;
 
 const mcpServers: Array<{
   id: string;
@@ -147,7 +154,7 @@ vi.mock('@/stores/ai/serviceModel', () => ({
    * 模拟服务模型 store，避免测试初始化时依赖真实 store。
    */
   useServiceModelStore: () => ({
-    getAvailableServiceConfig: async (type: string) => {
+    getAvailableServiceConfig: async () => {
       const index = getAvailableServiceConfigCallCount++;
       const value = getAvailableServiceConfigReturnValues[index];
       return value !== undefined
@@ -193,6 +200,20 @@ describe('useChatStream abort', () => {
     getAvailableServiceConfigReturnValues = [];
     mcpServers.length = 0;
     shellOutputCallback = null;
+    pendingAnimationFrameCallback = null;
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        pendingAnimationFrameCallback = callback;
+        return 1;
+      })
+    );
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn(() => {
+        pendingAnimationFrameCallback = null;
+      })
+    );
   });
 
   it('finalizes the current assistant message and calls onComplete once when the user aborts', () => {
@@ -617,5 +638,32 @@ describe('useChatStream abort', () => {
     // Tool input is stored as 'tool-input' part type
     const inputPart = assistantMsg.parts.find((p) => p.type === 'tool-input');
     expect(inputPart).toBeTruthy();
+  });
+
+  it('flushes buffered final text before persisting the completed assistant message', async () => {
+    const messages = ref<Message[]>([create.userMessage('查询天气')]);
+    const onComplete = vi.fn<(message: Message) => void>();
+    const { stream } = useChatStream({
+      messages,
+      onComplete
+    });
+    const config: ServiceConfig = {
+      providerId: 'openai',
+      modelId: 'gpt-4o',
+      toolSupport: {
+        supported: true
+      }
+    };
+
+    await stream.streamMessages(messages.value, config);
+    await capturedCallbacks?.onText?.('天气晴朗');
+    expect(pendingAnimationFrameCallback).not.toBeNull();
+
+    await capturedCallbacks?.onComplete?.();
+    await Promise.resolve();
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete.mock.calls[0][0].parts).toContainEqual({ type: 'text', text: '天气晴朗' });
+    expect(onComplete.mock.calls[0][0].content).toBe('天气晴朗');
   });
 });
