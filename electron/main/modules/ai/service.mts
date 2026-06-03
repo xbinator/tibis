@@ -7,7 +7,7 @@ import type { AICreateOptions, AIRequestOptions, AIInvokeResult, AIStreamResult,
 import { tavilyExtract, tavilySearch } from '@tavily/ai-sdk';
 import { generateText, jsonSchema, Output, stepCountIs, streamText, tool } from 'ai';
 import { log } from '../logger/service.mjs';
-import { executeMcpTool, getMcpDiscoveryCache } from '../mcp/session.mjs';
+import { connectMcpServer, executeMcpTool, getMcpDiscoveryCache } from '../mcp/session.mjs';
 import { createMcpSdkTools, resolveMcpExposedTools } from '../mcp/tools.mjs';
 import { AI_ERROR_CODE } from './errors/codes.mjs';
 import { AIProviderRegistry } from './providers/_index.mjs';
@@ -140,13 +140,45 @@ function hasMcpSdkTools(mcp: AIRequestOptions['mcp']): boolean {
 }
 
 /**
- * 读取单个 server 的 MCP discovery 工具，避开全部 cache 返回值的数组分支。
- * @param serverId - MCP server ID
- * @returns discovery 工具列表
+ * 判断单个 MCP server 是否可在当前请求中运行。
+ * @param server - MCP server 配置
+ * @param mcp - 当前请求的 MCP 配置
+ * @returns 是否可运行
  */
-function getMcpDiscoveredToolsForServer(serverId: string): MCPDiscoveredToolSnapshot[] {
-  const cache = getMcpDiscoveryCache(serverId);
-  return cache && !Array.isArray(cache) ? cache.tools : [];
+function isMcpServerRunnableForRequest(server: NonNullable<AIRequestOptions['mcp']>['servers'][number], mcp: NonNullable<AIRequestOptions['mcp']>): boolean {
+  if (!server.enabled || !mcp.enabledServerIds.includes(server.id)) return false;
+  if (server.transport === 'stdio') return server.command.trim().length > 0;
+  return Boolean(server.url?.trim());
+}
+
+/**
+ * 准备当前请求需要暴露的 MCP discovery 工具。
+ * @param mcp - 当前请求的 MCP 配置
+ * @returns 可用于注册 AI SDK 工具的 discovery 工具列表
+ */
+async function prepareMcpDiscoveredTools(mcp: AIRequestOptions['mcp']): Promise<MCPDiscoveredToolSnapshot[]> {
+  if (!mcp) return [];
+
+  const runnableServers = mcp.servers.filter((server) => isMcpServerRunnableForRequest(server, mcp));
+  const toolGroups = await Promise.all(
+    runnableServers.map(async (server): Promise<MCPDiscoveredToolSnapshot[]> => {
+      // 优先复用设置页或上一轮聊天已经写入的 discovery cache，避免重复启动 server。
+      const cache = getMcpDiscoveryCache(server.id);
+      if (cache && !Array.isArray(cache)) {
+        return cache.tools;
+      }
+
+      const result = await connectMcpServer(server);
+      if (result.ok && result.cache) {
+        return result.cache.tools;
+      }
+
+      log.warn(`[AIService] MCP discovery unavailable for ${server.id}:`, result.message ?? result.errorCode ?? 'unknown error');
+      return [];
+    })
+  );
+
+  return toolGroups.flat();
 }
 
 /**
@@ -167,16 +199,13 @@ function appendMcpToolInstructions(system: string | undefined, mcp: AIRequestOpt
  * 将前端工具定义与 Tavily 工具合并为 AI SDK 兼容的工具集。
  * 合并结果为空时返回 undefined，避免向 SDK 传入空对象。
  */
-function toSdkTools(tools: AIRequestOptions['tools'], tavily: AIRequestOptions['tavily'], mcp: AIRequestOptions['mcp']): ToolSet | undefined {
+async function toSdkTools(tools: AIRequestOptions['tools'], tavily: AIRequestOptions['tavily'], mcp: AIRequestOptions['mcp']): Promise<ToolSet | undefined> {
   let rendererTools: ToolSet = {};
   if (tools?.length) {
     rendererTools = Object.fromEntries(tools.map((item) => [item.name, tool({ description: item.description, inputSchema: jsonSchema(item.parameters) })]));
   }
 
-  let mcpDiscoveredTools: MCPDiscoveredToolSnapshot[] = [];
-  if (mcp) {
-    mcpDiscoveredTools = mcp.enabledServerIds.flatMap((serverId) => getMcpDiscoveredToolsForServer(serverId));
-  }
+  const mcpDiscoveredTools = await prepareMcpDiscoveredTools(mcp);
 
   let mcpTools: ToolSet = {};
   if (mcp && mcpDiscoveredTools.length > 0) {
@@ -268,13 +297,13 @@ class AIService {
   /**
    * 构建 generateText / streamText 共用的基础选项。
    */
-  private buildBaseOptions(createOptions: AICreateOptions, request: AIRequestOptions) {
+  private async buildBaseOptions(createOptions: AICreateOptions, request: AIRequestOptions) {
     return {
       model: this.createModel(createOptions, request.modelId),
       system: appendMcpToolInstructions(request.system, request.mcp),
       temperature: request.temperature,
       maxOutputTokens: request.maxOutputTokens,
-      tools: toSdkTools(request.tools, request.tavily, request.mcp),
+      tools: await toSdkTools(request.tools, request.tavily, request.mcp),
       ...(hasTavilySdkTools(request.tavily) || hasMcpSdkTools(request.mcp) ? { stopWhen: stepCountIs(5) } : {})
     };
   }
@@ -304,7 +333,7 @@ class AIService {
       log.info(`[AIService] generateText request:`, request);
 
       const baseOptions = {
-        ...this.buildBaseOptions(createOptions, request),
+        ...(await this.buildBaseOptions(createOptions, request)),
         output: toOutput(request.output)
       };
 
@@ -329,7 +358,7 @@ class AIService {
       log.info(`[AIService] streamText request:`, request);
 
       const baseOptions = {
-        ...this.buildBaseOptions(createOptions, request),
+        ...(await this.buildBaseOptions(createOptions, request)),
         abortSignal: this.registerAbortSignal(request.requestId)
       };
 

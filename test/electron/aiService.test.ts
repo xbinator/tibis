@@ -18,6 +18,7 @@ const tavilyExtractMock = vi.fn();
 const tavilyExtractExecuteMock = vi.fn();
 const getMcpDiscoveryCacheMock = vi.fn();
 const executeMcpToolMock = vi.fn();
+const connectMcpServerMock = vi.fn();
 
 vi.mock('ai', () => ({
   Output: {
@@ -63,9 +64,10 @@ vi.mock('../../electron/main/modules/ai/providers/_index.mjs', () => ({
   }
 }));
 
-vi.mock('../../electron/main/modules/mcp/runtime.mjs', () => ({
+vi.mock('../../electron/main/modules/mcp/session.mjs', () => ({
   getMcpDiscoveryCache: getMcpDiscoveryCacheMock,
-  executeMcpTool: executeMcpToolMock
+  executeMcpTool: executeMcpToolMock,
+  connectMcpServer: connectMcpServerMock
 }));
 
 describe('aiService', () => {
@@ -84,6 +86,7 @@ describe('aiService', () => {
     tavilyExtractExecuteMock.mockReset();
     getMcpDiscoveryCacheMock.mockReset();
     executeMcpToolMock.mockReset();
+    connectMcpServerMock.mockReset();
     toolMock.mockImplementation((definition) => definition);
   });
 
@@ -384,5 +387,60 @@ describe('aiService', () => {
       })
     );
     expect(executeMcpToolMock).toHaveBeenCalledWith(server, 'list_directory', { path: '.' });
+  });
+
+  it('connects enabled MCP servers before registering tools when discovery cache is empty', async () => {
+    const { aiService } = await import('../../electron/main/modules/ai/service.mjs');
+    const createOptions: AICreateOptions = { providerType: 'openai', providerId: 'provider-1', providerName: 'OpenAI' };
+    const server = {
+      id: 'filesystem',
+      name: 'Filesystem',
+      enabled: true,
+      transport: 'stdio' as const,
+      command: 'node',
+      args: ['server.mjs'],
+      env: {},
+      toolAllowlist: ['list_directory'],
+      connectTimeoutMs: 20000,
+      toolCallTimeoutMs: 30000
+    };
+    const request: AIRequestOptions = {
+      modelId: 'model-1',
+      prompt: '列出文件',
+      mcp: {
+        servers: [server],
+        enabledServerIds: ['filesystem'],
+        enabledTools: [],
+        toolInstructions: ''
+      }
+    };
+
+    jsonSchemaMock.mockImplementation((schema) => schema);
+    getMcpDiscoveryCacheMock.mockReturnValue(undefined);
+    connectMcpServerMock.mockResolvedValue({
+      ok: true,
+      serverId: 'filesystem',
+      cache: {
+        serverId: 'filesystem',
+        discoveredAt: 1710000000000,
+        tools: [{ serverId: 'filesystem', toolName: 'list_directory', description: 'List files', inputSchema: { type: 'object' } }]
+      }
+    });
+    generateTextMock.mockResolvedValue({
+      text: 'ok',
+      output: undefined,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+    });
+
+    await aiService.generateText(createOptions, request);
+
+    expect(connectMcpServerMock).toHaveBeenCalledWith(server);
+    expect(generateTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: expect.objectContaining({
+          mcp_66696c6573797374656d_6c6973745f6469726563746f7279: expect.any(Object)
+        })
+      })
+    );
   });
 });
