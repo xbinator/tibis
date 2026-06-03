@@ -132,6 +132,25 @@ function handleHostedWheelEvent(event: Event): void {
   handleHostedWheel(event);
 }
 
+const recentStore = useRecentStore();
+
+/**
+ * 导航事件回调，将当前 webview 页面写入最近记录。
+ * debounce 300ms 避免重定向链产生多条记录。
+ */
+const writeRecentWebviewRecord = debounce(() => {
+  const { url, title } = webview.state.value;
+  if (!url) return;
+  recentStore.addWebviewRecord(url, title || url).catch(console.error);
+}, 300);
+
+/**
+ * 导航完成事件处理，触发记录写入。
+ */
+function handleDidNavigateRecord(): void {
+  writeRecentWebviewRecord();
+}
+
 /**
  * `<webview>` 事件绑定映射表，用于统一绑定与解绑。
  */
@@ -265,27 +284,6 @@ useWebviewTabTitle({
   routeFullPath,
   title: computed(() => webview.state.value.title)
 });
-
-const recentStore = useRecentStore();
-
-/**
- * 将当前 webview 页面写入最近记录。
- * 当 isLoading 从 true 变为 false 且 url 不为空时触发，debounce 300ms 防抖。
- */
-const writeRecentWebviewRecord = debounce(() => {
-  const { url, title } = webview.state.value;
-  if (!url) return;
-  recentStore.addWebviewRecord(url, title || url);
-}, 300);
-
-watch(
-  () => webview.state.value.isLoading,
-  (newVal, oldVal) => {
-    if (oldVal === true && newVal === false) {
-      writeRecentWebviewRecord();
-    }
-  }
-);
 
 // ---- Watches（合并 toolbar + preset 变化触发视口同步）----
 watch([deviceMode.isToolbarVisible, deviceMode.activePreset], () => nextTick(requestSyncHostLayerBounds).catch(console.error));
