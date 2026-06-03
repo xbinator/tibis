@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia';
 import { defaultsDeep } from 'lodash-es';
 import { native } from '@/shared/platform';
+import type { TavilyToolSettings } from '@/shared/storage/tool-settings';
 import { loadPersistedState, persistState } from '@/stores/helpers/persist';
 import type { PersistConfig } from '@/stores/helpers/types';
 import { getResolvedTokens, applyCssVars, validateTokens } from '@/theme';
@@ -24,6 +25,8 @@ interface PersistedSettingState {
   memoryEnabled: boolean;
   providerSidebarCollapsed: boolean;
   settingsSidebarCollapsed: boolean;
+  /** Tavily 搜索工具设置 */
+  tavily: TavilyToolSettings;
   theme: ThemeMode;
   /** 主题预设 ID，如 'default'、'everforest' */
   themePreset: string;
@@ -40,6 +43,10 @@ const DEFAULT_SETTINGS: PersistedSettingState = {
   memoryEnabled: true,
   providerSidebarCollapsed: false,
   settingsSidebarCollapsed: true,
+  tavily: {
+    enabled: false,
+    apiKey: ''
+  },
   theme: 'system',
   themePreset: 'default',
   sidebarVisible: false,
@@ -72,6 +79,20 @@ function normalizeSidebarWidth(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_SETTINGS.sidebarWidth;
 }
 
+/**
+ * 归一化 Tavily 设置。
+ * @param value - 原始值
+ * @returns 合法 Tavily 设置
+ */
+function normalizeTavily(value: unknown): TavilyToolSettings {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<TavilyToolSettings>) : {};
+
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_SETTINGS.tavily.enabled,
+    apiKey: typeof source.apiKey === 'string' ? source.apiKey : DEFAULT_SETTINGS.tavily.apiKey
+  };
+}
+
 function normalizeSettings(value: unknown): PersistedSettingState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { ...DEFAULT_SETTINGS };
@@ -85,6 +106,7 @@ function normalizeSettings(value: unknown): PersistedSettingState {
   }
 
   normalized.sidebarWidth = normalizeSidebarWidth(normalized.sidebarWidth);
+  normalized.tavily = normalizeTavily(normalized.tavily);
 
   return normalized;
 }
@@ -150,6 +172,7 @@ export const useSettingStore = defineStore('setting', {
         memoryEnabled: this.memoryEnabled,
         providerSidebarCollapsed: this.providerSidebarCollapsed,
         settingsSidebarCollapsed: this.settingsSidebarCollapsed,
+        tavily: this.tavily,
         theme: this.theme,
         themePreset: this.themePreset,
         sidebarVisible: this.sidebarVisible,
@@ -179,6 +202,26 @@ export const useSettingStore = defineStore('setting', {
       const currentIndex = themes.indexOf(this.theme);
       const newTheme = themes[(currentIndex + 1) % themes.length];
       this.setTheme(newTheme);
+    },
+
+    // ==================== Tavily 工具设置 ====================
+
+    /**
+     * 设置 Tavily 启用状态。
+     * @param enabled - 是否启用
+     */
+    setTavilyEnabled(enabled: boolean): void {
+      this.tavily.enabled = enabled;
+      this.persistSettings();
+    },
+
+    /**
+     * 设置 Tavily API Key。
+     * @param apiKey - API Key
+     */
+    setTavilyApiKey(apiKey: string): void {
+      this.tavily.apiKey = apiKey;
+      this.persistSettings();
     },
 
     /**

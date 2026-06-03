@@ -159,11 +159,6 @@ export interface ToolSettingsState {
 }
 
 /**
- * 工具设置持久化键。
- */
-export const TOOL_SETTINGS_STORAGE_KEY = 'tool_settings';
-
-/**
  * 默认配置。
  */
 export const DEFAULT_TOOL_SETTINGS: ToolSettingsState = {

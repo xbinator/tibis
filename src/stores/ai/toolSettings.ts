@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia';
 import { toolSettingsStorage } from '@/shared/storage';
 import type { MCPServerConfig, MCPToolSettings, TavilyToolSettings } from '@/shared/storage/tool-settings';
+import { useSettingStore } from '@/stores/ui/setting';
 
 /**
  * 工具设置 Store 状态。
@@ -20,10 +21,14 @@ interface ToolSettingsStoreState {
  * Tavily 工具设置 Store。
  */
 export const useToolSettingsStore = defineStore('toolSettings', {
-  state: (): ToolSettingsStoreState => ({
-    tavily: toolSettingsStorage.getSettings().tavily,
-    mcp: toolSettingsStorage.getSettings().mcp
-  }),
+  state: (): ToolSettingsStoreState => {
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+    const settingStore = useSettingStore();
+    return {
+      tavily: settingStore.tavily,
+      mcp: toolSettingsStorage.getSettings().mcp
+    };
+  },
 
   getters: {
     /**
@@ -61,16 +66,16 @@ export const useToolSettingsStore = defineStore('toolSettings', {
      */
     async loadSettings(): Promise<void> {
       const normalized = await toolSettingsStorage.loadSettings();
-      this.tavily = normalized.tavily;
+      const settingStore = useSettingStore();
+      this.tavily = settingStore.tavily;
       this.mcp = normalized.mcp;
     },
 
     /**
-     * 持久化当前 Tavily 状态。
+     * 持久化当前 MCP 状态（Tavily 由 settingStore 统一管理）。
      */
     async saveSettings(): Promise<void> {
-      const normalized = await toolSettingsStorage.saveSettings({ tavily: this.tavily, mcp: this.mcp });
-      this.tavily = normalized.tavily;
+      const normalized = await toolSettingsStorage.saveSettings({ mcp: this.mcp });
       this.mcp = normalized.mcp;
     },
 
@@ -78,18 +83,20 @@ export const useToolSettingsStore = defineStore('toolSettings', {
      * 设置 Tavily 启用状态。
      * @param enabled - 是否启用
      */
-    async setTavilyEnabled(enabled: boolean): Promise<void> {
+    setTavilyEnabled(enabled: boolean): void {
+      const settingStore = useSettingStore();
+      settingStore.setTavilyEnabled(enabled);
       this.tavily.enabled = enabled;
-      await this.saveSettings();
     },
 
     /**
      * 设置 Tavily API Key。
      * @param apiKey - API Key
      */
-    async setTavilyApiKey(apiKey: string): Promise<void> {
+    setTavilyApiKey(apiKey: string): void {
+      const settingStore = useSettingStore();
+      settingStore.setTavilyApiKey(apiKey);
       this.tavily.apiKey = apiKey;
-      await this.saveSettings();
     },
 
     /**

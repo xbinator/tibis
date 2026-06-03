@@ -7,7 +7,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SettingsFileContent } from '@/shared/storage/providers/types';
 
-const TOOL_SETTINGS_STORAGE_KEY = 'tool_settings';
+const SETTINGS_STORAGE_KEY = 'app_settings';
 const storage = new Map<string, string>();
 let fileStore: Record<string, string> = {};
 
@@ -37,6 +37,12 @@ describe('useToolSettingsStore', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.doMock('@/shared/platform', () => ({
+      native: {
+        updateMenuItem: vi.fn(),
+        setWindowTitle: vi.fn()
+      }
+    }));
     fileStore = {};
     localStorage.clear();
     mockElectronAPI.getTibisWorkspaceRoot.mockResolvedValue({ rootPath: '/home/user/.tibis', created: false });
@@ -56,6 +62,11 @@ describe('useToolSettingsStore', () => {
     Object.defineProperty(window, 'electronAPI', {
       configurable: true,
       value: mockElectronAPI
+    });
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })
     });
     setActivePinia(createPinia());
   });
@@ -80,12 +91,15 @@ describe('useToolSettingsStore', () => {
   it('normalizes invalid persisted values back to defaults', async () => {
     const { local } = await import('@/shared/storage/base');
 
-    local.setItem(TOOL_SETTINGS_STORAGE_KEY, {
+    local.setItem(SETTINGS_STORAGE_KEY, {
       tavily: {
         enabled: 'yes',
         apiKey: 123
       }
     });
+
+    const { useSettingStore } = await import('@/stores/ui/setting');
+    await useSettingStore().init();
 
     const { useToolSettingsStore } = await import('@/stores/ai/toolSettings');
     const store = useToolSettingsStore();
@@ -116,7 +130,7 @@ describe('useToolSettingsStore', () => {
   it('ignores legacy MCP servers from localStorage', async () => {
     const { local } = await import('@/shared/storage/base');
 
-    local.setItem(TOOL_SETTINGS_STORAGE_KEY, {
+    local.setItem(SETTINGS_STORAGE_KEY, {
       tavily: {
         enabled: false,
         apiKey: ''
