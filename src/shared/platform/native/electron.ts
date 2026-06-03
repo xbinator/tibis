@@ -66,6 +66,13 @@ export class ElectronNative implements Native {
     return getElectronAPI().saveFile(content, path, { filters, defaultPath });
   }
 
+  async saveBinaryFile(content: ArrayBuffer, path?: string, options?: SaveFileOptions): Promise<string | null> {
+    const filters = options?.filters || [SAVE_FILE_FILTER];
+    const defaultPath = options?.defaultPath || 'untitled.bin';
+
+    return getElectronAPI().saveBinaryFile(content, path, { filters, defaultPath });
+  }
+
   async exportPdf(options: ExportPdfOptions): Promise<string | null> {
     return getElectronAPI().exportPdf(options);
   }

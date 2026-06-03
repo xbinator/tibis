@@ -12,6 +12,7 @@ const webview: WebViewAPI = {
   setBounds: (tabId, bounds) => ipcRenderer.invoke('webview:set-bounds', tabId, bounds),
   show: (tabId) => ipcRenderer.invoke('webview:show', tabId),
   hide: (tabId) => ipcRenderer.invoke('webview:hide', tabId),
+  clearCache: () => ipcRenderer.invoke('webview:clear-cache'),
 
   onStateChanged: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, tabId: string, state: WebViewState) => {

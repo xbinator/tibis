@@ -45,6 +45,14 @@
         @click="emit('toggleInspector')"
       />
       <BButton type="text" size="small" square tooltip="在浏览器打开" placement="bottomRight" icon="lucide:external-link" @click="emit('openInBrowser')" />
+
+      <BDropdown placement="bottomRight">
+        <BButton type="text" size="small" square icon="lucide:more-vertical" />
+
+        <template #overlay>
+          <BDropdownMenu :options="moreActionOptions" :width="180" />
+        </template>
+      </BDropdown>
     </div>
   </div>
 </template>
@@ -54,6 +62,8 @@
  * @file AddressBar.vue
  * @description Web WebView 地址栏组件（支持设备工具栏、元素选择、CSS 查看器）。
  */
+import { computed } from 'vue';
+import type { DropdownOption } from '@/components/BDropdown/type';
 import { useClipboard } from '@/hooks/useClipboard';
 
 const { clipboard } = useClipboard();
@@ -93,8 +103,41 @@ const emit = defineEmits<{
   selectElement: [];
   toggleDeviceToolbar: [];
   toggleInspector: [];
+  captureViewportScreenshot: [];
+  captureFullPageScreenshot: [];
+  clearCache: [];
   submitUrl: [value: string];
 }>();
+
+/**
+ * 更多操作菜单项。
+ */
+const moreActionOptions = computed<DropdownOption[]>(() => [
+  {
+    type: 'item',
+    value: 'capture-viewport',
+    label: '截取当前视图',
+    icon: 'lucide:camera',
+    onClick: () => emit('captureViewportScreenshot')
+  },
+  {
+    type: 'item',
+    value: 'capture-full-page',
+    label: '截取完整页面',
+    icon: 'lucide:scroll-text',
+    onClick: () => emit('captureFullPageScreenshot')
+  },
+  {
+    type: 'divider'
+  },
+  {
+    type: 'item',
+    value: 'clear-cache',
+    label: '清除缓存',
+    icon: 'lucide:eraser',
+    onClick: () => emit('clearCache')
+  }
+]);
 
 /**
  * 提交地址栏中的 URL。

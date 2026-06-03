@@ -129,6 +129,8 @@ export interface Native {
 
   saveFile(content: string, path?: string, options?: SaveFileOptions): Promise<string | null>;
 
+  saveBinaryFile(content: ArrayBuffer, path?: string, options?: SaveFileOptions): Promise<string | null>;
+
   exportPdf(options: ExportPdfOptions): Promise<string | null>;
 
   writeFile(path: string, content: string): Promise<void>;

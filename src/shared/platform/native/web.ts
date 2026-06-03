@@ -68,4 +68,18 @@ export class WebNative {
     URL.revokeObjectURL(url);
     return filename;
   }
+
+  async saveBinaryFile(content: ArrayBuffer, path?: string, options?: SaveFileOptions): Promise<string | null> {
+    const filename = path || options?.defaultPath || 'untitled.bin';
+    const blob = new Blob([content], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+
+    URL.revokeObjectURL(url);
+    return filename;
+  }
 }

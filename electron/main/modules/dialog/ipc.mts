@@ -44,6 +44,19 @@ const openLock = new SingleRunner();
 /** 保存文件对话框锁 */
 const saveLock = new SingleRunner();
 
+/**
+ * 归一化 IPC 传入的二进制内容，兼容 ArrayBuffer 与 Uint8Array。
+ * @param content - 原始二进制内容
+ * @returns 可直接写入文件系统的 Buffer
+ */
+function normalizeBinaryContent(content: ArrayBuffer | Uint8Array): Buffer {
+  if (content instanceof Uint8Array) {
+    return Buffer.from(content.buffer, content.byteOffset, content.byteLength);
+  }
+
+  return Buffer.from(content);
+}
+
 export function registerDialogHandlers(): void {
   ipcMain.handle('dialog:openFile', async (_event, options?: ElectronOpenFileOptions): Promise<ElectronFileResult> => {
     return openLock.run(async () => {
@@ -88,4 +101,32 @@ export function registerDialogHandlers(): void {
       return result.filePath;
     });
   });
+
+  ipcMain.handle(
+    'dialog:saveBinaryFile',
+    async (_event, content: ArrayBuffer | Uint8Array, filePath?: string, options?: ElectronSaveFileOptions): Promise<string | null> => {
+      const normalizedContent = normalizeBinaryContent(content);
+
+      if (filePath) {
+        const { promises: fs } = await import('node:fs');
+        await fs.writeFile(filePath, normalizedContent);
+        return filePath;
+      }
+
+      return saveLock.run(async () => {
+        const result = await showSaveDialog({
+          filters: options?.filters,
+          defaultPath: options?.defaultPath || 'untitled.bin'
+        });
+
+        if (result.canceled || !result.filePath) {
+          return null;
+        }
+
+        const { promises: fs } = await import('node:fs');
+        await fs.writeFile(result.filePath, normalizedContent);
+        return result.filePath;
+      });
+    }
+  );
 }

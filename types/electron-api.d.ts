@@ -284,6 +284,7 @@ export interface WebViewAPI {
   setBounds: (tabId: string, bounds: { x: number; y: number; width: number; height: number }) => Promise<void>; // 设置边界
   show: (tabId: string) => Promise<void>; // 显示
   hide: (tabId: string) => Promise<void>; // 隐藏
+  clearCache: () => Promise<void>; // 清理 WebView 持久化分区缓存
   onStateChanged: (callback: (tabId: string, state: WebViewState) => void) => () => void; // 加载状态变化
   onTitleUpdated: (callback: (tabId: string, title: string) => void) => () => void; // 标题更新
   onNavigationStateChanged: (callback: (tabId: string, canGoBack: boolean, canGoForward: boolean) => void) => () => void; // 导航状态变化
@@ -409,6 +410,7 @@ export interface ElectronAPI {
   openFile: (options?: ElectronOpenFileOptions) => Promise<ElectronFileResult>;
 
   saveFile: (content: string, filePath?: string, options?: ElectronSaveFileOptions) => Promise<string | null>;
+  saveBinaryFile: (content: ArrayBuffer, filePath?: string, options?: ElectronSaveFileOptions) => Promise<string | null>;
   exportPdf: (options: ElectronExportPdfOptions) => Promise<string | null>;
 
   writeFile: (filePath: string, content: string) => Promise<void>;

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { WebViewState } from 'types/webview';
-import { ipcMain, WebContentsView, BrowserWindow, shell } from 'electron';
+import { ipcMain, WebContentsView, BrowserWindow, session, shell } from 'electron';
 
 // 获取当前文件的目录路径
 const __filename = fileURLToPath(import.meta.url);
@@ -244,5 +244,9 @@ export function registerWebviewHandlers(): void {
 
   ipcMain.handle('webview:hide', (_event, tabId: string) => {
     manager.hide(tabId);
+  });
+
+  ipcMain.handle('webview:clear-cache', async () => {
+    await session.fromPartition(WEBVIEW_TAG_PARTITION).clearCache();
   });
 }

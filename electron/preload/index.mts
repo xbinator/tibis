@@ -98,6 +98,15 @@ const electronAPI: ElectronAPI = {
   saveFile: (content, filePath, options) => ipcRenderer.invoke('dialog:saveFile', content, filePath, options),
 
   /**
+   * 保存二进制文件对话框或直接保存到指定路径。
+   * @param content - 文件二进制内容
+   * @param filePath - 指定保存路径
+   * @param options - 保存选项
+   * @returns 保存后的文件路径
+   */
+  saveBinaryFile: (content, filePath, options) => ipcRenderer.invoke('dialog:saveBinaryFile', content, filePath, options),
+
+  /**
    * 导出 PDF。
    * @param options - 导出选项，包含完整 HTML 文档与默认保存路径
    * @returns 成功保存后的文件路径

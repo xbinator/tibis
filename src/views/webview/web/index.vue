@@ -20,6 +20,9 @@
       @select-element="handleStartElementSelection"
       @toggle-device-toolbar="deviceMode.toggleToolbarVisible"
       @toggle-inspector="toggleInspector"
+      @capture-viewport-screenshot="screenshot.captureViewportScreenshot"
+      @capture-full-page-screenshot="screenshot.captureFullPageScreenshot"
+      @clear-cache="cacheControl.clearCache"
     />
 
     <DeviceToolbar v-if="deviceMode.isToolbarVisible.value" :active-preset="deviceMode.activePreset.value" @select-preset="handleSelectDevicePreset" />
@@ -50,8 +53,10 @@ import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 import AddressBar from './components/AddressBar.vue';
 import DeviceToolbar from './components/DeviceToolbar.vue';
 import InspectorPanel from './components/InspectorPanel.vue';
+import { useCacheControl } from './hooks/useCacheControl.ts';
 import { useDeviceMode, type WebviewDevicePresetKey } from './hooks/useDeviceMode.ts';
 import { useHostLayer } from './hooks/useHostLayer.ts';
+import { useScreenshot } from './hooks/useScreenshot.ts';
 import { useWebView } from './hooks/useWebView.ts';
 import { ensureHostedWebviewElement, ensureWebviewHostLayer } from './utils/hosting';
 
@@ -65,6 +70,11 @@ const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as st
 
 const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
+const screenshot = useScreenshot({
+  webviewElementRef,
+  webviewState: webview.state
+});
+const cacheControl = useCacheControl();
 
 webviewToolContextRegistry.register(routeFullPath, {
   readPageSnapshot: webview.readPageSnapshot
