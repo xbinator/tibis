@@ -11,7 +11,7 @@
           <div class="memory-settings__description">允许从对话中提取并记住相关上下文，以便在未来对话中提供更连贯、个性化的回应</div>
         </div>
         <div>
-          <ASwitch :checked="memoryStore.enabled" @change="handleToggleEnabled" />
+          <ASwitch :checked="settingStore.memoryEnabled" @change="handleToggleEnabled" />
         </div>
       </div>
     </BSettingsSection>
@@ -40,12 +40,14 @@
  */
 import { ref } from 'vue';
 import { useMemoryStore } from '@/stores/ai/memory';
+import { useSettingStore } from '@/stores/ui/setting';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import MemoryContent from './components/MemoryContent.vue';
 import MemoryInput from './components/MemoryInput.vue';
 import { useMemory } from './hooks/useMemory';
 
 const memoryStore = useMemoryStore();
+const settingStore = useSettingStore();
 const { organizing, organize } = useMemory();
 
 /** 是否处于编辑模式 */
@@ -58,7 +60,8 @@ const memoryInputRef = ref<InstanceType<typeof MemoryInput>>();
  * @param value - 开关状态
  */
 function handleToggleEnabled(value: boolean | string | number): void {
-  memoryStore.setEnabled(Boolean(value));
+  settingStore.memoryEnabled = Boolean(value);
+  settingStore.persistSettings();
 }
 
 /**

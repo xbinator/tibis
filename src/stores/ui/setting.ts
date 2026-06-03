@@ -20,6 +20,8 @@ const LEGACY_SIDEBAR_WIDTH_KEY = 'sidebar_width';
 
 interface PersistedSettingState {
   chatSidebarActiveSessionId: string | null;
+  /** 记忆功能是否启用 */
+  memoryEnabled: boolean;
   providerSidebarCollapsed: boolean;
   settingsSidebarCollapsed: boolean;
   theme: ThemeMode;
@@ -35,6 +37,7 @@ interface SettingState extends PersistedSettingState {
 
 const DEFAULT_SETTINGS: PersistedSettingState = {
   chatSidebarActiveSessionId: null,
+  memoryEnabled: true,
   providerSidebarCollapsed: false,
   settingsSidebarCollapsed: true,
   theme: 'system',
@@ -144,6 +147,7 @@ export const useSettingStore = defineStore('setting', {
     persistSettings(): void {
       const settings: PersistedSettingState = {
         chatSidebarActiveSessionId: this.chatSidebarActiveSessionId,
+        memoryEnabled: this.memoryEnabled,
         providerSidebarCollapsed: this.providerSidebarCollapsed,
         settingsSidebarCollapsed: this.settingsSidebarCollapsed,
         theme: this.theme,

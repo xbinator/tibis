@@ -9,6 +9,7 @@ import type { MemoryCategory, MemoryDoc } from '@/ai/memory/types';
 import { MEMORY_FILE_NAME } from '@/ai/memory/types';
 import { native } from '@/shared/platform';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { useSettingStore } from '@/stores/ui/setting';
 
 /** 记忆文件目录 */
 const MEMORY_DIR = '.tibis';
@@ -21,8 +22,6 @@ interface MemoryState {
   rawContent: string;
   /** 是否已加载 */
   loaded: boolean;
-  /** 记忆功能是否启用 */
-  enabled: boolean;
 }
 
 /**
@@ -50,8 +49,7 @@ export const useMemoryStore = defineStore('memory', {
   state: (): MemoryState => ({
     doc: createEmptyMemoryDoc(),
     rawContent: '',
-    loaded: false,
-    enabled: localStorage.getItem('memory_enabled') !== 'false'
+    loaded: false
   }),
 
   getters: {
@@ -113,7 +111,7 @@ export const useMemoryStore = defineStore('memory', {
      * @returns 注入字符串，无记忆或未启用时返回空字符串
      */
     buildSystemPromptContext(): string {
-      if (!this.enabled) return '';
+      if (!useSettingStore().memoryEnabled) return '';
       return buildSystemPromptContext(this.doc);
     },
 
@@ -151,15 +149,6 @@ export const useMemoryStore = defineStore('memory', {
       this.doc = createEmptyMemoryDoc();
       this.rawContent = '';
       await this.saveMemory();
-    },
-
-    /**
-     * 设置记忆功能启用状态
-     * @param enabled - 是否启用
-     */
-    setEnabled(enabled: boolean): void {
-      this.enabled = enabled;
-      localStorage.setItem('memory_enabled', String(enabled));
     }
   }
 });
