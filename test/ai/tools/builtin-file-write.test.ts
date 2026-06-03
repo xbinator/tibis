@@ -39,6 +39,7 @@ function createToolContext(path: string | null, locator?: string): AIToolContext
  */
 function createUnsavedDraft(overrides: Partial<StoredFile> = {}): StoredFile {
   return {
+    type: 'file' as const,
     id: 'ytjdxrm4',
     path: null,
     content: '# Draft\n',

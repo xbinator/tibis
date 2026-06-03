@@ -24,6 +24,7 @@ const openFileByPathMock = vi.hoisted(() => vi.fn());
  * 最近文件 store mock。
  */
 const filesStoreMock = vi.hoisted(() => ({
+  recentRecords: [] as StoredFile[],
   recentFiles: [] as StoredFile[],
   ensureLoaded: vi.fn(async () => undefined),
   removeFile: vi.fn(async () => undefined)
@@ -42,6 +43,9 @@ vi.mock('vue-router', () => ({
     params: {
       id: 'file_a'
     }
+  }),
+  useRouter: () => ({
+    push: vi.fn()
   })
 }));
 
@@ -58,11 +62,19 @@ vi.mock('@/hooks/useOpenFile', () => ({
   })
 }));
 
-vi.mock('@/stores/files', () => ({
-  useFilesStore: () => filesStoreMock
+vi.mock('@/hooks/useNavigate', () => ({
+  useNavigate: () => ({
+    openWebview: vi.fn(),
+    openFile: vi.fn(),
+    onLink: vi.fn()
+  })
 }));
 
-vi.mock('@/stores/tabs', () => ({
+vi.mock('@/stores/workspace/recent', () => ({
+  useRecentStore: () => filesStoreMock
+}));
+
+vi.mock('@/stores/workspace/tabs', () => ({
   useTabsStore: () => tabsStoreMock
 }));
 
@@ -142,6 +154,7 @@ function mountSearchRecent() {
  */
 function createStoredFile(overrides: Partial<StoredFile> = {}): StoredFile {
   return {
+    type: 'file',
     id: overrides.id ?? 'file_a',
     path: overrides.path === undefined ? '/workspace/demo.md' : overrides.path,
     name: overrides.name ?? 'demo',
@@ -156,6 +169,7 @@ function createStoredFile(overrides: Partial<StoredFile> = {}): StoredFile {
 
 describe('BSearchRecent absolute path search', () => {
   beforeEach(() => {
+    filesStoreMock.recentRecords = [createStoredFile()];
     filesStoreMock.recentFiles = [createStoredFile()];
     filesStoreMock.ensureLoaded.mockClear();
     filesStoreMock.removeFile.mockClear();

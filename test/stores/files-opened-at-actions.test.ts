@@ -11,6 +11,7 @@ const storageState = vi.hoisted(() => {
   return {
     files: [
       {
+        type: 'file' as const,
         id: 'a',
         path: '/a.md',
         name: 'a',
@@ -19,6 +20,7 @@ const storageState = vi.hoisted(() => {
         openedAt: 1
       },
       {
+        type: 'file' as const,
         id: 'b',
         path: '/b.md',
         name: 'b',
@@ -38,7 +40,7 @@ function getSortedFiles(): StoredFile[] {
   return storageState.files
     .slice()
     .sort((left, right) => (right.openedAt ?? 0) - (left.openedAt ?? 0))
-    .map((file) => ({ ...file }));
+    .map((file) => ({ ...file, type: 'file' as const }));
 }
 
 const storageMocks = vi.hoisted(() => {
@@ -47,19 +49,19 @@ const storageMocks = vi.hoisted(() => {
     getRecentFile: vi.fn(async (id: string) => storageState.files.find((file) => file.id === id) ?? null),
     addRecentFile: vi.fn(async (file: StoredFile) => {
       storageState.files = storageState.files.filter((item) => item.id !== file.id);
-      storageState.files.push({ ...file });
+      storageState.files.push({ ...file, type: 'file' as const });
     }),
     updateRecentFile: vi.fn(async (id: string, updates: Partial<StoredFile>) => {
       const index = storageState.files.findIndex((file) => file.id === id);
       if (index === -1) throw new Error('File not found');
-      storageState.files[index] = { ...storageState.files[index], ...updates };
-      return { ...storageState.files[index] };
+      storageState.files[index] = { ...storageState.files[index], ...updates, type: 'file' as const } as StoredFile;
+      return { ...storageState.files[index], type: 'file' as const } as StoredFile;
     }),
     touchRecentFile: vi.fn(async (id: string) => {
       const index = storageState.files.findIndex((file) => file.id === id);
       if (index === -1) throw new Error('File not found');
-      storageState.files[index] = { ...storageState.files[index], openedAt: Date.now() };
-      return { ...storageState.files[index] };
+      storageState.files[index] = { ...storageState.files[index], openedAt: Date.now(), type: 'file' as const } as StoredFile;
+      return { ...storageState.files[index], type: 'file' as const } as StoredFile;
     }),
     removeRecentFile: vi.fn(async (...ids: string[]) => {
       storageState.files = storageState.files.filter((file) => !ids.includes(file.id));
@@ -82,7 +84,8 @@ const nativeMocks = vi.hoisted(() => {
 });
 
 vi.mock('@/shared/storage', () => ({
-  recentFilesStorage: storageMocks
+  recentFilesStorage: storageMocks,
+  sortRecentFiles: vi.fn((files: StoredFile[]) => [...files].sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0)))
 }));
 
 vi.mock('@/shared/platform', () => ({
@@ -101,6 +104,7 @@ describe('useFilesStore openedAt actions', () => {
 
     storageState.files = [
       {
+        type: 'file' as const,
         id: 'a',
         path: '/a.md',
         name: 'a',
@@ -109,6 +113,7 @@ describe('useFilesStore openedAt actions', () => {
         openedAt: 1
       },
       {
+        type: 'file' as const,
         id: 'b',
         path: '/b.md',
         name: 'b',
@@ -191,7 +196,10 @@ describe('useFilesStore openedAt actions', () => {
     const { useFilesStore } = await import('@/stores/workspace/files');
     const store = useFilesStore();
 
+    await store.ensureLoaded();
+
     const created = await store.createAndOpen({
+      type: 'file' as const,
       id: 'draft',
       path: null,
       name: 'draft',
