@@ -7,6 +7,8 @@
  * 文件主记录。
  */
 export interface StoredFile {
+  /** 记录类型 */
+  type: 'file';
   /** 文件唯一标识。 */
   id: string;
   /** 文件唯一路径，未保存文件为 null。 */
@@ -32,3 +34,28 @@ export interface StoredFile {
   /** 文件所属工作区 ID（预留字段）。 */
   workspaceId?: string | null;
 }
+
+/**
+ * WebView 网页记录。
+ */
+export interface WebviewRecord {
+  /** 记录类型 */
+  type: 'webview';
+  /** 记录唯一标识（URL 的 hash 值，用于去重） */
+  id: string;
+  /** 打开的 URL */
+  url: string;
+  /** 页面标题 */
+  title: string;
+  /** 首次打开该 URL 的时间戳（记录首次进入列表的时刻） */
+  createdAt: number;
+  /** 最近一次打开/跳转到该 URL 的时间戳 */
+  openedAt: number;
+  /** 网站 favicon URL，预留字段，当前版本不写入 */
+  favicon?: string;
+}
+
+/**
+ * 最近记录联合类型（文件 + WebView 网页）。
+ */
+export type RecentRecord = StoredFile | WebviewRecord;
