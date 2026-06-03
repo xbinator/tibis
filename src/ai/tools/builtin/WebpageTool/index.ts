@@ -34,6 +34,7 @@ export function createBuiltinWebpageTool(options: CreateBuiltinWebpageToolOption
       description: '读取当前激活 WebView 网页的 URL、标题、可见文本、标题结构、链接列表和页面选中文本。',
       source: 'builtin',
       riskLevel: 'read',
+      requiresActiveDocument: false,
       parameters: { type: 'object', properties: {}, additionalProperties: false }
     },
     async execute() {

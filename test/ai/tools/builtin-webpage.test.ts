@@ -27,6 +27,12 @@ function createContext(): WebviewToolContext {
 }
 
 describe('read_current_webpage tool', () => {
+  it('does not require an active editor document', () => {
+    const tool = createBuiltinWebpageTool({ getWebviewContext: () => undefined });
+
+    expect(tool.definition.requiresActiveDocument).toBe(false);
+  });
+
   it('returns failure when no WebView context exists', async () => {
     const tool = createBuiltinWebpageTool({ getWebviewContext: () => undefined });
     const result = await tool.execute({});

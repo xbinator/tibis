@@ -2,6 +2,7 @@
 export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
   read_file: { alias: '读取文件' },
   read_current_document: { alias: '读取当前文档' },
+  read_current_webpage: { alias: '读取当前网页' },
   read_directory: { alias: '读取目录' },
   list_files: { alias: '查看文件列表' },
   search_files: { alias: '搜索文件' },

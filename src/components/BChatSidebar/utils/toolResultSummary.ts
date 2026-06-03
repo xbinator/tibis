@@ -327,6 +327,53 @@ function summarizeReadFile(data: Record<string, unknown>): ToolResultSummary {
 }
 
 /**
+ * 判断网页快照中是否存在截断字段。
+ * @param value - 网页快照截断信息
+ * @returns 任一字段被截断时返回 true
+ */
+function hasTruncatedWebpageField(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  return Object.values(value as Record<string, unknown>).some((item) => item === true);
+}
+
+/**
+ * 格式化 read_current_webpage 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 当前网页摘要
+ */
+function summarizeReadCurrentWebpage(data: Record<string, unknown>): ToolResultSummary {
+  const url = typeof data.url === 'string' ? data.url : '';
+  const title = typeof data.title === 'string' ? data.title : '';
+  const selectedText = typeof data.selectedText === 'string' ? data.selectedText : '';
+  const headings = Array.isArray(data.headings) ? data.headings : [];
+  const links = Array.isArray(data.links) ? data.links : [];
+  const tags: ToolSummaryTag[] = [];
+
+  if (url) {
+    tags.push({ label: '网址', value: url });
+  }
+
+  tags.push({ label: '页面标题数', value: String(headings.length) });
+  tags.push({ label: '页面链接数', value: String(links.length) });
+
+  if (selectedText.trim()) {
+    tags.push({ label: '选中文本', value: '有' });
+  }
+
+  if (hasTruncatedWebpageField(data.truncated)) {
+    tags.push({ label: '内容已截断', value: '是' });
+  }
+
+  return {
+    text: `已读取网页: ${title || url || '未命名网页'}`,
+    tags
+  };
+}
+
+/**
  * 格式化 edit_file 工具的结果。
  * @param data - 工具结果数据
  * @returns 编辑文件摘要
@@ -406,6 +453,7 @@ const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   write_file: (data) => summarizeWriteFile(data as Record<string, unknown>),
   read_file: (data) => summarizeReadFile(data as Record<string, unknown>),
   read_current_document: (data) => summarizeReadFile(data as Record<string, unknown>),
+  read_current_webpage: (data) => summarizeReadCurrentWebpage(data as Record<string, unknown>),
   edit_file: (data) => summarizeEditFile(data as Record<string, unknown>),
   edit_memory: (data) => summarizeEditMemory(data as Record<string, unknown>),
   open_resource: (data) => summarizeOpenResource(data as Record<string, unknown>)
