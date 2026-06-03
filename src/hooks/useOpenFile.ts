@@ -118,6 +118,7 @@ export function useOpenFile() {
    */
   async function createNewFile(): Promise<StoredFile> {
     const createdFile = await filesStore.createAndOpen({
+      type: 'file',
       id: createFileId(),
       path: null,
       name: 'Untitled',

@@ -269,7 +269,7 @@ export function useSession(fileId: Ref<string>) {
     const nextId = nanoid();
     const nextName = fileState.value.name ? `${fileState.value.name}-副本` : '';
 
-    await filesStore.addFile({ ...fileState.value, id: nextId, name: nextName, path: null, savedContent: fileState.value.content });
+    await filesStore.addFile({ ...fileState.value, type: 'file' as const, id: nextId, name: nextName, path: null, savedContent: fileState.value.content });
 
     await router.push({ name: 'editor', params: { id: nextId } });
   }

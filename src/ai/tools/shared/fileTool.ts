@@ -119,7 +119,12 @@ export function isActiveDocumentTarget(context: AIToolContext | undefined, targe
  */
 export async function readUnsavedDraft(options: UnsavedDraftOptions, fileId: string): Promise<StoredFile | null> {
   if (!fileId.trim()) return null;
-  const getter = options.getUnsavedDraft ?? ((id: string) => recentFilesStorage.getRecentFile(id));
+  const getter =
+    options.getUnsavedDraft ??
+    (async (id: string) => {
+      const record = await recentFilesStorage.getRecentFile(id);
+      return record?.type === 'file' ? record : null;
+    });
   return getter(fileId);
 }
 

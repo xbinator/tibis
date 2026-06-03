@@ -43,7 +43,7 @@ export function useAutoSave(fileState: Ref<EditorFile>, options: AutoSaveOptions
       return;
     }
 
-    await filesStore.addFile({ ...fileState.value, createdAt: modifiedAt, modifiedAt });
+    await filesStore.addFile({ ...fileState.value, type: 'file' as const, createdAt: modifiedAt, modifiedAt });
   }
 
   const debouncedSave = debounce(saveToStorage, delay);

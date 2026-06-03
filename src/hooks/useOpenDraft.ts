@@ -67,6 +67,7 @@ export function useOpenDraft() {
     const now = Date.now();
 
     const storedFile: StoredFile = {
+      type: 'file',
       id: fileId,
       path: null,
       content: input.content,

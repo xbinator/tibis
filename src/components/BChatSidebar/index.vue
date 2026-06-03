@@ -211,7 +211,7 @@ provide('interaction', interactionAPI);
 /** 输入框编辑器引用 */
 const promptEditorRef = ref<InstanceType<typeof BPromptEditor>>();
 /** 通用文件打开导航能力 */
-const { openFile } = useNavigate();
+const { openFile, openWebview } = useNavigate();
 /** 文件打开能力（供 open_resource 工具使用） */
 const { openFileByPath } = useOpenFile();
 /** 全局模型选择器引用。 */
@@ -412,7 +412,7 @@ const allBuiltinTools = createBuiltinTools({
    * 通过 Vue Router 导航到 webview-web 页面。
    */
   openInWebview: (url: string) => {
-    router.push({ name: 'webview-web', query: { url: encodeURIComponent(url) } });
+    openWebview(new URL(url));
   },
   /**
    * 在系统浏览器中打开 URL。

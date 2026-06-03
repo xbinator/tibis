@@ -51,6 +51,7 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
   function toStoredFile(): StoredFile {
     return {
       ...fileState.value,
+      type: 'file' as const,
       savedContent: savedContent.value
     };
   }
@@ -180,7 +181,7 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
     } else {
       // 先把新文件写入最近文件存储，避免首轮自动保存更新不到记录。
       fileState.value = { id: currentFileId, name: 'Untitled', content: '', ext: 'md', path: null };
-      await filesStore.addFile({ ...fileState.value, savedContent: fileState.value.content });
+      await filesStore.addFile({ ...fileState.value, type: 'file' as const, savedContent: fileState.value.content });
     }
 
     hasSavedContentBaseline.value = stored?.savedContent !== undefined || !fileState.value.path;

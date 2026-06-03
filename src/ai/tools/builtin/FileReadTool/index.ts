@@ -363,12 +363,14 @@ export function createBuiltinReadFileTool(options: CreateBuiltinReadFileToolOpti
           storedFile = await recentFilesStorage.getRecentFile(unsavedReference.fileId);
         }
 
-        if (!storedFile || storedFile.content === undefined) {
+        // 窄化类型：仅 file 类型记录有 content
+        const fileRecord = storedFile?.type === 'file' ? storedFile : null;
+        if (!fileRecord || fileRecord.content === undefined) {
           return createToolFailureResult(READ_FILE_TOOL_NAME, 'EXECUTION_FAILED', `未找到未保存文件：${filePath}`);
         }
 
         const range = normalizeReadRange(input);
-        const result = buildReadFileResult(filePath, storedFile.content, range.offset, range.limit);
+        const result = buildReadFileResult(filePath, fileRecord.content, range.offset, range.limit);
         return createToolSuccessResult<ReadFileResult>(READ_FILE_TOOL_NAME, result);
       }
 

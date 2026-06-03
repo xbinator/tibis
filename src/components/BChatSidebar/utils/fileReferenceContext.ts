@@ -5,6 +5,7 @@
 import type { FileReference } from '../types';
 import type { Message } from './types';
 import { recentFilesStorage } from '@/shared/storage';
+import type { StoredFile } from '@/shared/storage/files/types';
 import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 
 // ─── 类型定义 ────────────────────────────────────────────────────────────────
@@ -44,16 +45,17 @@ export async function extractFileReferenceLines(token: string, references: strin
 
   if (!path) return { token, path: '', startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };
 
-  let storedFile: Awaited<ReturnType<typeof recentFilesStorage.getRecentFile>> = null;
+  let storedFile: StoredFile | null = null;
 
   // 检查是否为未保存文档虚拟路径。
   if (isUnsavedPath(path)) {
     const unsavedReference = parseUnsavedPath(path);
-    storedFile = unsavedReference ? await recentFilesStorage.getRecentFile(unsavedReference.fileId) : null;
+    const record = unsavedReference ? await recentFilesStorage.getRecentFile(unsavedReference.fileId) : null;
+    storedFile = record?.type === 'file' ? record : null;
   } else {
-    // 通过文件路径查找
+    // 通过文件路径查找（仅 file 类型记录有 path 字段）
     const files = await recentFilesStorage.getAllRecentFiles();
-    storedFile = files.find((file) => file.path === path) || null;
+    storedFile = (files.find((item) => item.type === 'file' && item.path === path) as StoredFile | undefined) || null;
   }
 
   if (!storedFile) return { token, path, startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };

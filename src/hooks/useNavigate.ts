@@ -87,7 +87,7 @@ export function useNavigate() {
   /**
    * 使用应用内 webview 打开 URL。
    */
-  function openInWebview(url: URL): void {
+  function openWebview(url: URL): void {
     router.push({ name: 'webview-web', query: { url: encodeURIComponent(url.href) } });
   }
 
@@ -133,7 +133,7 @@ export function useNavigate() {
 
     if (isWebviewScheme(url.protocol)) {
       event.preventDefault();
-      openInWebview(url);
+      openWebview(url);
       return;
     }
 
@@ -220,6 +220,7 @@ export function useNavigate() {
 
   return {
     onLink,
-    openFile
+    openFile,
+    openWebview
   };
 }
