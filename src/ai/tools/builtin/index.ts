@@ -29,6 +29,7 @@ import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOO
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
 import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteTool';
+import { createBuiltinWebpageTool, READ_CURRENT_WEBPAGE_TOOL_NAME, type CreateBuiltinWebpageToolOptions } from './WebpageTool';
 
 // 重新导出工具名称
 export { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool';
@@ -51,6 +52,7 @@ export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
 export { TODO_WRITE_TOOL_NAME } from './TodoWriteTool';
 export { EDIT_MEMORY_TOOL_NAME } from './MemoryTool';
+export { READ_CURRENT_WEBPAGE_TOOL_NAME } from './WebpageTool';
 
 /**
  * 由主进程 AI SDK 直接执行的远端工具名称。
@@ -79,6 +81,7 @@ export function isSdkManagedToolName(toolName: string): boolean {
  */
 export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   READ_CURRENT_DOCUMENT_TOOL_NAME,
+  READ_CURRENT_WEBPAGE_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
   QUESTION_TOOL_NAME,
   READ_FILE_TOOL_NAME,
@@ -164,7 +167,7 @@ export function isDefaultBuiltinWritableToolName(toolName: string): boolean {
 /**
  * 创建内置工具的选项
  */
-interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions {
+interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions, CreateBuiltinWebpageToolOptions {
   /** 获取当前待回答问题，用于避免重复发起用户选择 */
   getPendingQuestion?: () => PendingQuestionSnapshot | null;
   /** 创建用户选择问题 ID */
@@ -202,6 +205,9 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     createQuestionTool({
       getPendingQuestion: options.getPendingQuestion ?? (() => null),
       createQuestionId: options.createQuestionId ?? (() => nanoid())
+    }),
+    createBuiltinWebpageTool({
+      getWebviewContext: options.getWebviewContext
     }),
     createBuiltinReadFileTool({
       confirm: options.confirm,

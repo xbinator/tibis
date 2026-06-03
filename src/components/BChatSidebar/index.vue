@@ -121,9 +121,10 @@ import type { AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
 import { computed, h, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { createBuiltinTools, isBuiltinToolName, READ_DIRECTORY_TOOL_NAME, SKILL_TOOL_NAME } from '@/ai/tools/builtin';
+import { createBuiltinTools, isBuiltinToolName, READ_CURRENT_WEBPAGE_TOOL_NAME, READ_DIRECTORY_TOOL_NAME, SKILL_TOOL_NAME } from '@/ai/tools/builtin';
 import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
-import { editorToolContextRegistry } from '@/ai/tools/editor-context';
+import { editorToolContextRegistry } from '@/ai/tools/context/editor';
+import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import BButton from '@/components/BButton/index.vue';
 import BModelSelect from '@/components/BModelSelect/index.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
@@ -399,6 +400,7 @@ const allBuiltinTools = createBuiltinTools({
   getEditorContext: (documentId: string) => {
     return editorToolContextRegistry.getContext(documentId);
   },
+  getWebviewContext: () => webviewToolContextRegistry.getCurrentContext(),
   openDraft,
   /**
    * 通过文件路径打开文件标签页。
@@ -438,6 +440,7 @@ const allBuiltinTools = createBuiltinTools({
  */
 function getActiveTools(): AIToolExecutor[] {
   const hasActiveEditor = Boolean(editorToolContextRegistry.getCurrentContext());
+  const hasActiveWebview = Boolean(webviewToolContextRegistry.getCurrentContext());
   const hasWorkspace = Boolean(workspaceRoot.value);
 
   // skillStore 在 onMounted 中异步初始化，allBuiltinTools 创建时 skillStore.initialized 为 false，
@@ -453,6 +456,7 @@ function getActiveTools(): AIToolExecutor[] {
   return [...allBuiltinTools, ...dynamicTools].filter((tool) => {
     if (!isBuiltinToolName(tool.definition.name)) return false;
     if (tool.definition.name === 'read_current_document' && !hasActiveEditor) return false;
+    if (tool.definition.name === READ_CURRENT_WEBPAGE_TOOL_NAME && !hasActiveWebview) return false;
     if (tool.definition.name === READ_DIRECTORY_TOOL_NAME && !hasWorkspace) return false;
     return true;
   });

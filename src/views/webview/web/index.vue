@@ -41,8 +41,9 @@
  * @file index.vue
  * @description `<webview>` 标签页面入口。
  */
-import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type CSSProperties } from 'vue';
 import { useRoute } from 'vue-router';
+import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { native } from '@/shared/platform';
 import AddressBar from '@/views/webview/shared/components/AddressBar.vue';
 import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
@@ -64,6 +65,10 @@ const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as st
 
 const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
+
+webviewToolContextRegistry.register(routeFullPath, {
+  readPageSnapshot: webview.readPageSnapshot
+});
 
 /** DOM 检查看板宽度 */
 const domPanelWidth = ref(360);
@@ -276,7 +281,20 @@ watch(activeUserAgent, (userAgent) => {
   webview.setUserAgent(userAgent);
 });
 
+onMounted(() => {
+  webviewToolContextRegistry.setCurrent(routeFullPath);
+});
+
+onActivated(() => {
+  webviewToolContextRegistry.setCurrent(routeFullPath);
+});
+
+onDeactivated(() => {
+  webviewToolContextRegistry.clearCurrent(routeFullPath);
+});
+
 onBeforeUnmount(() => {
+  webviewToolContextRegistry.unregister(routeFullPath);
   const element = webviewElementRef.value;
   if (element) {
     unbindWebviewEvents(element);

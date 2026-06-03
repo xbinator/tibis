@@ -3,6 +3,7 @@
  * @description 封装 `<webview>` 标签页面状态与导航控制。
  */
 import { ref, type Ref } from 'vue';
+import type { WebviewPageHeading, WebviewPageLink, WebviewPageSnapshot, WebviewPageTruncation } from '@/ai/tools/context/webview';
 import type { WebviewController, WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
 
 /**
@@ -94,6 +95,189 @@ export interface WebviewConsoleMessageEvent {
  */
 function isWebviewConsoleMessageEvent(event: Event | WebviewConsoleMessageEvent): event is WebviewConsoleMessageEvent {
   return 'message' in event && typeof event.message === 'string';
+}
+
+/** 页面正文最大字符数。 */
+export const WEBVIEW_PAGE_TEXT_LIMIT = 20000;
+/** 页面标题最大数量。 */
+export const WEBVIEW_PAGE_HEADING_LIMIT = 120;
+/** 页面链接最大数量。 */
+export const WEBVIEW_PAGE_LINK_LIMIT = 100;
+/** 页面选中文本最大字符数。 */
+export const WEBVIEW_PAGE_SELECTED_TEXT_LIMIT = 4000;
+/** 页面读取超时时间。 */
+export const WEBVIEW_PAGE_SNAPSHOT_TIMEOUT_MS = 10000;
+
+/**
+ * 判断值是否为页面标题数组。
+ * @param value - 待判断的值
+ * @returns 是否为页面标题数组
+ */
+function isHeadingArray(value: unknown): value is WebviewPageHeading[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => {
+      if (!item || typeof item !== 'object') {
+        return false;
+      }
+
+      const heading = item as Partial<WebviewPageHeading>;
+      return typeof heading.level === 'number' && typeof heading.text === 'string';
+    })
+  );
+}
+
+/**
+ * 判断值是否为页面链接数组。
+ * @param value - 待判断的值
+ * @returns 是否为页面链接数组
+ */
+function isLinkArray(value: unknown): value is WebviewPageLink[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => {
+      if (!item || typeof item !== 'object') {
+        return false;
+      }
+
+      const link = item as Partial<WebviewPageLink>;
+      return typeof link.text === 'string' && typeof link.href === 'string';
+    })
+  );
+}
+
+/**
+ * 判断值是否为未裁剪的页面快照。
+ * @param value - 待判断的值
+ * @returns 是否为页面快照
+ */
+export function isWebviewPageSnapshot(value: unknown): value is Omit<WebviewPageSnapshot, 'capturedAt' | 'truncated'> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const snapshot = value as Partial<WebviewPageSnapshot>;
+  return (
+    typeof snapshot.url === 'string' &&
+    typeof snapshot.title === 'string' &&
+    typeof snapshot.text === 'string' &&
+    typeof snapshot.selectedText === 'string' &&
+    isHeadingArray(snapshot.headings) &&
+    isLinkArray(snapshot.links)
+  );
+}
+
+/**
+ * 裁剪字符串并返回截断标记。
+ * @param value - 原始字符串
+ * @param limit - 最大长度
+ * @returns 裁剪结果
+ */
+function truncateText(value: string, limit: number): { value: string; truncated: boolean } {
+  if (value.length <= limit) {
+    return { value, truncated: false };
+  }
+
+  return { value: value.slice(0, limit), truncated: true };
+}
+
+/**
+ * 规范化 WebView 页面快照。
+ * @param value - 页面脚本返回值
+ * @returns 带截断标记的页面快照
+ */
+export function normalizeWebviewPageSnapshot(value: Omit<WebviewPageSnapshot, 'capturedAt' | 'truncated'>): WebviewPageSnapshot {
+  const text = truncateText(value.text, WEBVIEW_PAGE_TEXT_LIMIT);
+  const selectedText = truncateText(value.selectedText, WEBVIEW_PAGE_SELECTED_TEXT_LIMIT);
+  const headings = value.headings.slice(0, WEBVIEW_PAGE_HEADING_LIMIT).map((heading) => ({
+    level: heading.level,
+    text: truncateText(heading.text, 300).value
+  }));
+  const links = value.links.slice(0, WEBVIEW_PAGE_LINK_LIMIT).map((link) => ({
+    text: truncateText(link.text, 300).value,
+    href: link.href
+  }));
+  const truncated: WebviewPageTruncation = {
+    text: text.truncated,
+    headings: value.headings.length > WEBVIEW_PAGE_HEADING_LIMIT,
+    links: value.links.length > WEBVIEW_PAGE_LINK_LIMIT,
+    selectedText: selectedText.truncated
+  };
+
+  return {
+    url: value.url,
+    title: value.title,
+    text: text.value,
+    selectedText: selectedText.value,
+    headings,
+    links,
+    capturedAt: Date.now(),
+    truncated
+  };
+}
+
+/**
+ * 为页面读取 Promise 添加超时保护。
+ * @param promise - 页面读取 Promise
+ * @returns 带超时保护的 Promise
+ */
+export function withWebviewPageReadTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer: ReturnType<typeof globalThis.setTimeout> = globalThis.setTimeout(() => reject(new Error('页面读取超时')), WEBVIEW_PAGE_SNAPSHOT_TIMEOUT_MS);
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => globalThis.clearTimeout(timer));
+  });
+}
+
+/**
+ * 归一化页面读取错误，避免把底层安全策略错误直接暴露给模型。
+ * @param error - 原始错误
+ * @returns 归一化后的错误
+ */
+export function normalizeWebviewPageReadError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error || '读取当前网页失败');
+  const lowerMessage = message.toLowerCase();
+  if (
+    lowerMessage.includes('content security policy') ||
+    lowerMessage.includes('script-src') ||
+    lowerMessage.includes('refused to execute') ||
+    lowerMessage.includes('csp')
+  ) {
+    return new Error('页面安全策略阻止读取当前网页内容');
+  }
+
+  return error instanceof Error ? error : new Error(message);
+}
+
+/**
+ * 构建页面快照读取脚本。
+ * @returns 可通过 `executeJavaScript` 执行的脚本
+ */
+function createPageSnapshotScript(): string {
+  return `
+(() => {
+  const readText = (value) => String(value || '').trim();
+  const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6')).map((element) => ({
+    level: Number(element.tagName.slice(1)),
+    text: readText(element.innerText || element.textContent)
+  })).filter((item) => item.text);
+  const links = Array.from(document.querySelectorAll('a[href]')).map((element) => ({
+    text: readText(element.innerText || element.textContent || element.getAttribute('aria-label')),
+    href: element.href
+  })).filter((item) => item.href);
+
+  return {
+    url: location.href,
+    title: document.title || '',
+    text: readText(document.body ? document.body.innerText : ''),
+    selectedText: readText(window.getSelection ? window.getSelection().toString() : ''),
+    headings,
+    links
+  };
+})();
+`;
 }
 
 /**
@@ -464,6 +648,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
   let initialUrlAttached = false;
   let isDomReady = false;
   let pendingUserAgent = '';
+  let pendingPageSnapshotRead: Promise<WebviewPageSnapshot> | null = null;
 
   /**
    * 首次把初始 URL 附着到 `<webview>` 实例。
@@ -546,6 +731,45 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
    */
   function stop(): void {
     webviewRef.value?.stop();
+  }
+
+  /**
+   * 读取当前网页快照。
+   * @returns 当前网页快照
+   */
+  async function readPageSnapshot(): Promise<WebviewPageSnapshot> {
+    if (state.value.isLoading) {
+      throw new Error('当前页面正在导航，请稍后重试');
+    }
+
+    if (pendingPageSnapshotRead) {
+      return pendingPageSnapshotRead;
+    }
+
+    const instance = webviewRef.value;
+    const executeJavaScript = instance?.executeJavaScript;
+    if (!instance || typeof executeJavaScript !== 'function') {
+      throw new Error('当前页面尚未准备好读取，请稍后重试');
+    }
+
+    const rawRead = executeJavaScript.call(instance, createPageSnapshotScript()) as Promise<unknown>;
+    pendingPageSnapshotRead = withWebviewPageReadTimeout(
+      rawRead.then((value: unknown) => {
+        if (!isWebviewPageSnapshot(value)) {
+          throw new Error('页面快照格式无效');
+        }
+
+        return normalizeWebviewPageSnapshot(value);
+      })
+    )
+      .catch((error: unknown) => {
+        throw normalizeWebviewPageReadError(error);
+      })
+      .finally(() => {
+        pendingPageSnapshotRead = null;
+      });
+
+    return pendingPageSnapshotRead;
   }
 
   /**
@@ -750,6 +974,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     startElementSelection,
     stopElementSelection,
     clearSelectedElement,
+    readPageSnapshot,
     setTouchSimulationEnabled,
     setUserAgent
   };

@@ -344,7 +344,7 @@ vi.mock('@/ai/tools/builtin', () => ({
   createBuiltinTools: () => []
 }));
 
-vi.mock('@/ai/tools/editor-context', () => ({
+vi.mock('@/ai/tools/context/editor', () => ({
   editorToolContextRegistry: {
     getCurrentContext: vi.fn(() => undefined)
   }

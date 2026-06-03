@@ -1,5 +1,5 @@
 /**
- * @file editor-context.ts
+ * @file editor.ts
  * @description 编辑器工具上下文注册表，管理活动编辑器的上下文
  */
 import type { AIToolContext } from 'types/ai';

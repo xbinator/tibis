@@ -1,6 +1,6 @@
 import type { AIToolContext } from 'types/ai';
 import { describe, expect, it } from 'vitest';
-import { createEditorToolContextRegistry } from '@/ai/tools/editor-context';
+import { createEditorToolContextRegistry } from '@/ai/tools/context/editor';
 
 function createContext(id: string): AIToolContext {
   return {

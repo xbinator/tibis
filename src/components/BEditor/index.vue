@@ -32,7 +32,7 @@
 <script setup lang="ts">
 import type { EditorController, EditorSearchState, EditorState } from './types';
 import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue';
-import { editorToolContextRegistry } from '@/ai/tools/editor-context';
+import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import BMonaco from '@/components/BMonaco/index.vue';
 import { resolveEditorKind, resolveMonacoLanguage } from './constants/resolver';
 import { createEditorToolContext } from './hooks/useEditorToolContext';

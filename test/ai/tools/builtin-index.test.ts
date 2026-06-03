@@ -9,6 +9,7 @@ import {
   isSdkManagedToolName,
   QUESTION_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME,
+  READ_CURRENT_WEBPAGE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
@@ -38,7 +39,19 @@ function getToolNames(includeWriteTools = false): string[] {
 
 describe('createBuiltinTools', () => {
   it('returns read tools by default', () => {
-    expect(getToolNames()).toEqual(['read_current_document', 'get_current_time', 'question', 'read_file', 'get_settings', 'query_logs', 'todowrite', 'create_document']);
+    expect(getToolNames()).toEqual([
+      'read_current_document',
+      'get_current_time',
+      'question',
+      'read_current_webpage',
+      'read_file',
+      'open_resource',
+      'get_settings',
+      'query_logs',
+      'todowrite',
+      'create_document',
+      'edit_memory'
+    ]);
   });
 
   it('includes write tools when confirmation adapter is provided', () => {
@@ -53,6 +66,7 @@ describe('createBuiltinTools', () => {
 
 describe('builtin tool exports', () => {
   it('exports read tool names', () => {
+    expect(READ_CURRENT_WEBPAGE_TOOL_NAME).toBe('read_current_webpage');
     expect(READ_DIRECTORY_TOOL_NAME).toBe('read_directory');
     expect(QUESTION_TOOL_NAME).toBe('question');
     expect(QUERY_LOGS_TOOL_NAME).toBe('query_logs');
