@@ -15,6 +15,12 @@
         <div v-if="status?.runtimeStatus === 'failed' && status?.message" class="server-card__error">
           {{ status.message }}
         </div>
+        <div v-if="status" class="server-card__status">
+          <span>Runtime: {{ status.runtimeStatus }}</span>
+          <span>Sandbox: {{ status.sandboxStatus }}</span>
+          <span>Discovery: {{ status.discoveryStatus }}</span>
+          <span v-if="status.message">{{ status.message }}</span>
+        </div>
       </div>
       <div class="server-card__actions">
         <ASwitch :checked="server.enabled" size="small" @change="(value) => handlePatch({ enabled: Boolean(value) })" />
@@ -36,12 +42,14 @@
 
         <Icon :icon="toolsCollapsed ? 'lucide:chevron-down' : 'lucide:chevron-right'" :width="14" class="server-card__tools-arrow" />
       </div>
-      <div v-if="toolsCollapsed" class="server-card__tools-body">
-        <div v-for="tool in discoveredTools" :key="tool.toolName" class="server-card__tool-item">
-          <div class="server-card__tool-name">{{ tool.toolName }}</div>
-          <div v-if="tool.description" class="server-card__tool-desc">{{ tool.description }}</div>
+      <BCollapseTransition>
+        <div v-if="toolsCollapsed" class="server-card__tools-body">
+          <div v-for="tool in discoveredTools" :key="tool.toolName" class="server-card__tool-item">
+            <div class="server-card__tool-name">{{ tool.toolName }}</div>
+            <div v-if="tool.description" class="server-card__tool-desc">{{ tool.description }}</div>
+          </div>
         </div>
-      </div>
+      </BCollapseTransition>
     </div>
   </div>
 </template>
@@ -222,6 +230,15 @@ const dropdownOptions = computed<DropdownOption[]>(() => {
   margin-top: 4px;
   font-size: 11px;
   color: var(--color-error);
+}
+
+.server-card__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .server-card__actions {

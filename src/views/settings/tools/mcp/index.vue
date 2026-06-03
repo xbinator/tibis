@@ -182,18 +182,47 @@ function toPlainMcpServer(server: MCPServerConfig): MCPServerConfig {
 }
 
 /**
- * 刷新指定 server 的 discovery cache。
- * @param serverId - MCP server ID
+ * 判断 MCP server 配置是否足够用于 discovery 刷新。
+ * @param server - MCP server 配置
+ * @returns 是否可刷新 discovery
  */
-async function refreshDiscoveryCache(serverId: string): Promise<void> {
+function isServerRunnable(server: MCPServerConfig): boolean {
+  if (!server.enabled) return false;
+  if (server.transport === 'stdio') return server.command.trim().length > 0;
+  return Boolean(server.url?.trim());
+}
+
+/**
+ * 写入单个 server 的 discovery cache 到页面状态。
+ * @param cache - discovery cache
+ */
+function setDiscoveryCache(cache: MCPServerDiscoveryCache): void {
+  discoveryByServerId.value = {
+    ...discoveryByServerId.value,
+    [cache.serverId]: cache
+  };
+}
+
+/**
+ * 刷新指定 server 的 discovery cache。
+ * @param server - MCP server 配置
+ */
+async function refreshDiscoveryCache(server: MCPServerConfig): Promise<void> {
   if (!hasElectronAPI()) return;
 
-  const cache = await getElectronAPI().getMcpDiscoveryCache(serverId);
+  const cache = await getElectronAPI().getMcpDiscoveryCache(server.id);
   if (cache && !Array.isArray(cache)) {
-    discoveryByServerId.value = {
-      ...discoveryByServerId.value,
-      [serverId]: cache
-    };
+    setDiscoveryCache(cache);
+    return;
+  }
+
+  if (!isServerRunnable(server)) {
+    return;
+  }
+
+  const result = await getElectronAPI().refreshMcpDiscovery(toPlainMcpServer(server));
+  if (result.ok && result.cache) {
+    setDiscoveryCache(result.cache);
   }
 }
 
@@ -218,9 +247,11 @@ async function handleRefreshDiscovery(server: MCPServerConfig): Promise<void> {
 
   refreshingServerId.value = server.id;
   try {
-    await getElectronAPI().restartMcpServer(toPlainMcpServer(server));
+    const result = await getElectronAPI().restartMcpServer(toPlainMcpServer(server));
+    if (result.ok && result.cache) {
+      setDiscoveryCache(result.cache);
+    }
     await refreshStatuses();
-    await refreshDiscoveryCache(server.id);
   } finally {
     refreshingServerId.value = null;
   }
@@ -240,12 +271,16 @@ async function handleConfirmAdd(jsonText: string): Promise<void> {
   const isRemote = draft.transport === 'streamableHTTP' || draft.transport === 'sse';
 
   if (editingServerId.value) {
+    const serverId = editingServerId.value;
     store.updateMcpServer(editingServerId.value, {
       ...draft,
       oauth: isRemote && draft.enableOAuth ? {} : undefined
     });
+    const updatedServer = store.getMcpServerById(serverId);
     closeEditorModal();
-    await handleRefreshDiscovery(store.getMcpServerById(editingServerId.value)!);
+    if (updatedServer) {
+      await handleRefreshDiscovery(updatedServer);
+    }
     return;
   }
 
@@ -292,7 +327,7 @@ async function handleClearOAuth(serverId: string): Promise<void> {
 
 onMounted(async () => {
   await refreshStatuses();
-  await Promise.all(store.mcp.servers.map((server) => refreshDiscoveryCache(server.id)));
+  await Promise.all(store.mcp.servers.map((server) => refreshDiscoveryCache(server)));
 });
 </script>
 

@@ -16,6 +16,7 @@ const storage = new Map<string, string>();
 const electronMocks = vi.hoisted(() => ({
   hasElectronAPI: vi.fn(() => true),
   getMcpStatus: vi.fn(),
+  getMcpDiscoveryCache: vi.fn(),
   refreshMcpDiscovery: vi.fn(),
   restartMcpServer: vi.fn()
 }));
@@ -24,8 +25,30 @@ vi.mock('@/shared/platform/electron-api', () => ({
   hasElectronAPI: electronMocks.hasElectronAPI,
   getElectronAPI: () => ({
     getMcpStatus: electronMocks.getMcpStatus,
+    getMcpDiscoveryCache: electronMocks.getMcpDiscoveryCache,
     refreshMcpDiscovery: electronMocks.refreshMcpDiscovery,
     restartMcpServer: electronMocks.restartMcpServer
+  })
+}));
+
+vi.mock('@/views/settings/tools/mcp/components/ServerEditor.vue', () => ({
+  default: defineComponent({
+    /**
+     * MCP Server 编辑弹窗测试桩。
+     */
+    name: 'ServerEditorStub',
+    props: {
+      open: {
+        type: Boolean,
+        default: false
+      },
+      server: {
+        type: Object,
+        default: null
+      }
+    },
+    emits: ['update:open', 'confirm', 'cancel'],
+    template: '<div class="server-editor-stub"></div>'
   })
 }));
 
@@ -135,25 +158,7 @@ function createGlobalStubs() {
         </div>
       `
     }),
-    Icon: { template: '<i />', props: ['icon', 'width'] },
-    ServerEditorModal: defineComponent({
-      /**
-       * MCP Server 编辑弹窗测试桩。
-       */
-      name: 'ServerEditorModalStub',
-      props: {
-        open: {
-          type: Boolean,
-          default: false
-        },
-        server: {
-          type: Object,
-          default: null
-        }
-      },
-      emits: ['update:open', 'confirm', 'cancel'],
-      template: '<div class="server-editor-modal-stub"></div>'
-    })
+    Icon: { template: '<i />', props: ['icon', 'width'] }
   };
 }
 
@@ -163,6 +168,7 @@ describe('MCPToolsSettingsView', () => {
     vi.clearAllMocks();
     electronMocks.hasElectronAPI.mockReturnValue(true);
     electronMocks.getMcpStatus.mockResolvedValue([]);
+    electronMocks.getMcpDiscoveryCache.mockResolvedValue(undefined);
     electronMocks.refreshMcpDiscovery.mockResolvedValue({ ok: true });
     electronMocks.restartMcpServer.mockResolvedValue({ ok: true });
     localStorage.clear();
@@ -211,15 +217,18 @@ describe('MCPToolsSettingsView', () => {
     expect(editButton).toBeDefined();
     await editButton!.trigger('click');
 
-    const modal = wrapper.getComponent({ name: 'ServerEditorModalStub' });
-    await modal.vm.$emit('confirm', {
-      name: 'Filesystem Updated',
-      command: 'uvx',
-      args: ['mcp-server-filesystem'],
-      env: { ROOT: '/tmp' },
-      toolAllowlist: ['list_directory'],
-      toolCallTimeoutMs: 15000
-    });
+    const modal = wrapper.getComponent({ name: 'ServerEditorStub' });
+    await modal.vm.$emit(
+      'confirm',
+      JSON.stringify({
+        name: 'Filesystem Updated',
+        command: 'uvx',
+        args: ['mcp-server-filesystem'],
+        env: { ROOT: '/tmp' },
+        toolAllowlist: ['list_directory'],
+        toolCallTimeoutMs: 15000
+      })
+    );
 
     expect(store.getMcpServerById('server-1')).toMatchObject({
       id: 'server-1',
@@ -243,6 +252,19 @@ describe('MCPToolsSettingsView', () => {
         stubs: createGlobalStubs()
       }
     });
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    electronMocks.refreshMcpDiscovery.mockClear();
+    electronMocks.restartMcpServer.mockResolvedValue({
+      ok: true,
+      serverId: server.id,
+      cache: {
+        serverId: server.id,
+        discoveredAt: 1710000000000,
+        tools: []
+      }
+    });
 
     const restartButton = wrapper.findAll('button').find((button) => button.text() === '重启');
     expect(restartButton).toBeDefined();
@@ -253,6 +275,35 @@ describe('MCPToolsSettingsView', () => {
 
     expect(electronMocks.restartMcpServer).toHaveBeenCalledWith(expect.objectContaining({ id: server.id, command: server.command }));
     expect(electronMocks.refreshMcpDiscovery).not.toHaveBeenCalled();
+  });
+
+  it('auto-discovers tools on mount when discovery cache is empty', async () => {
+    const { default: MCPToolsSettingsView } = await import('@/views/settings/tools/mcp/index.vue');
+    const store = useToolSettingsStore();
+    const server = createServer();
+    store.addMcpServer(server);
+    electronMocks.refreshMcpDiscovery.mockResolvedValue({
+      ok: true,
+      serverId: server.id,
+      cache: {
+        serverId: server.id,
+        discoveredAt: 1710000000000,
+        tools: [{ serverId: server.id, toolName: 'maps_weather', description: 'Query weather' }]
+      }
+    });
+
+    const wrapper = mount(MCPToolsSettingsView, {
+      global: {
+        stubs: createGlobalStubs()
+      }
+    });
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(electronMocks.refreshMcpDiscovery).toHaveBeenCalledWith(expect.objectContaining({ id: server.id, command: server.command }));
+    expect(wrapper.text()).toContain('已发现的工具');
   });
 
   it('records a failed runtime status when restart is requested without Electron API', async () => {
