@@ -1,5 +1,5 @@
 /**
- * @file useTagWebView.ts
+ * @file useWebView.ts
  * @description 封装 `<webview>` 标签页面状态与导航控制。
  */
 import { ref, type Ref } from 'vue';
@@ -124,6 +124,15 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     ${backgroundStyle},
     'box-sizing:border-box;',
     'border-radius:4px;',
+    '}',
+    '.tibis-element-picker-selected{',
+    'position:fixed;',
+    'z-index:2147483646;',
+    'pointer-events:none;',
+    ${borderStyle},
+    'background:transparent;',
+    'box-sizing:border-box;',
+    'border-radius:4px;',
     '}'
   ].join('');
   document.documentElement.appendChild(style);
@@ -132,6 +141,14 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
   highlight.className = 'tibis-element-picker-highlight';
   highlight.hidden = true;
   document.documentElement.appendChild(highlight);
+
+  const selectedHighlight = document.createElement('div');
+  selectedHighlight.className = 'tibis-element-picker-selected';
+  selectedHighlight.hidden = true;
+  document.documentElement.appendChild(selectedHighlight);
+
+  let activeHoverElement = null;
+  let activeSelectedElement = null;
 
   const escapeCss = (value) => {
     if (window.CSS && typeof window.CSS.escape === 'function') {
@@ -154,7 +171,10 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     document.removeEventListener('mouseout', handleMouseOut, true);
     document.removeEventListener('click', handleClick, true);
     document.removeEventListener('keydown', handleKeydown, true);
+    window.removeEventListener('scroll', handleScrollOrResize, true);
+    window.removeEventListener('resize', handleScrollOrResize, true);
     highlight.remove();
+    selectedHighlight.remove();
     style.remove();
     delete window.__tibisElementPickerCleanup;
   };
@@ -205,18 +225,40 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     };
   };
 
-  function handleMouseMove(event) {
-    const target = event.target;
-    if (!(target instanceof HTMLElement) || target === highlight) {
+  const syncLayerPosition = (layer, element) => {
+    if (!element.isConnected) {
+      layer.hidden = true;
       return;
     }
 
-    const rect = target.getBoundingClientRect();
-    highlight.hidden = false;
-    highlight.style.left = rect.left + 'px';
-    highlight.style.top = rect.top + 'px';
-    highlight.style.width = rect.width + 'px';
-    highlight.style.height = rect.height + 'px';
+    const rect = element.getBoundingClientRect();
+    layer.hidden = false;
+    layer.style.left = rect.left + 'px';
+    layer.style.top = rect.top + 'px';
+    layer.style.width = rect.width + 'px';
+    layer.style.height = rect.height + 'px';
+  };
+
+  function syncHighlight(element) {
+    syncLayerPosition(highlight, element);
+  }
+
+  function syncSelectedHighlight(element) {
+    syncLayerPosition(selectedHighlight, element);
+  }
+
+  function isPickerLayer(target) {
+    return target === highlight || target === selectedHighlight;
+  }
+
+  function handleMouseMove(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || isPickerLayer(target)) {
+      return;
+    }
+
+    activeHoverElement = target;
+    syncHighlight(target);
   }
 
   function handleMouseOut(event) {
@@ -225,20 +267,32 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     }
 
     highlight.hidden = true;
+    activeHoverElement = null;
   }
 
   function handleClick(event) {
     const target = event.target;
-    if (!(target instanceof HTMLElement) || target === highlight) {
+    if (!(target instanceof HTMLElement) || isPickerLayer(target)) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
+    activeSelectedElement = target;
+    syncSelectedHighlight(target);
     const selectedElement = readElement(target);
     console.log('Tibis WebView selected element', selectedElement);
     console.log(${messagePrefix} + JSON.stringify(selectedElement));
+  }
+
+  function handleScrollOrResize() {
+    if (activeHoverElement) {
+      syncHighlight(activeHoverElement);
+    }
+    if (activeSelectedElement) {
+      syncSelectedHighlight(activeSelectedElement);
+    }
   }
 
   function handleKeydown(event) {
@@ -259,6 +313,8 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
   document.addEventListener('mouseout', handleMouseOut, true);
   document.addEventListener('click', handleClick, true);
   document.addEventListener('keydown', handleKeydown, true);
+  window.addEventListener('scroll', handleScrollOrResize, true);
+  window.addEventListener('resize', handleScrollOrResize, true);
 }))();
 `;
 }
@@ -611,7 +667,9 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
    */
   function handleDidStartLoading(): void {
     state.value.isLoading = true;
+    state.value.isElementSelecting = false;
     state.value.loadProgress = 0.1;
+    selectedElement.value = null;
   }
 
   /**

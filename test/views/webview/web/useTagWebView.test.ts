@@ -117,10 +117,10 @@ describe('useTagWebView', () => {
       message: `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify(selectedElement)}`
     });
 
-    expect(hook.selectedElement.value).toEqual(selectedElement);
+    expect(hook.selectedElementRef.value).toEqual(selectedElement);
   });
 
-  it('stops element picker mode after selecting one element', async () => {
+  it('keeps element picker mode active after selecting one element', async () => {
     const executeJavaScript = vi.fn<(script: string) => Promise<null>>().mockResolvedValue(null);
     const instance = {
       executeJavaScript,
@@ -134,7 +134,56 @@ describe('useTagWebView', () => {
 
     const script = executeJavaScript.mock.calls[0]?.[0] ?? '';
 
-    expect(script).toContain('cleanup();\n    resolve(selectedElement);');
+    expect(script).toContain('selectedHighlight');
+    expect(script).toContain('syncSelectedHighlight(target);');
+    expect(script).not.toContain('resolve(selectedElement);');
+    expect(script).not.toContain('box-shadow');
+  });
+
+  it('keeps picker highlight aligned when the selected page scrolls', async () => {
+    const executeJavaScript = vi.fn<(script: string) => Promise<null>>().mockResolvedValue(null);
+    const instance = {
+      executeJavaScript,
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+
+    const hook = useTagWebView(ref(instance));
+
+    await hook.startElementSelection();
+
+    const script = executeJavaScript.mock.calls[0]?.[0] ?? '';
+
+    expect(script).toContain('let activeHoverElement = null;');
+    expect(script).toContain('function syncHighlight(element)');
+    expect(script).toContain('function handleScrollOrResize()');
+    expect(script).toContain("window.addEventListener('scroll', handleScrollOrResize, true);");
+    expect(script).toContain("window.removeEventListener('scroll', handleScrollOrResize, true);");
+    expect(script).toContain("window.addEventListener('resize', handleScrollOrResize, true);");
+    expect(script).toContain("window.removeEventListener('resize', handleScrollOrResize, true);");
+  });
+
+  it('resets stale element picker state when the page starts loading again', async () => {
+    const executeJavaScript = vi.fn<(script: string) => Promise<null>>().mockReturnValue(
+      new Promise<null>(() => {
+        // 保持 executeJavaScript 挂起，用于模拟页面选择器脚本在页面内持续运行。
+      })
+    );
+    const instance = {
+      executeJavaScript,
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+
+    const hook = useTagWebView(ref(instance));
+
+    const selectionPromise = hook.startElementSelection();
+    expect(hook.state.value.isElementSelecting).toBe(true);
+    expect(selectionPromise).toBeInstanceOf(Promise);
+
+    hook.handleDidStartLoading();
+
+    expect(hook.state.value.isElementSelecting).toBe(false);
   });
 
   it('hides the element picker highlight when the pointer leaves the page container', async () => {
@@ -166,7 +215,7 @@ describe('useTagWebView', () => {
 
     hook.handleConsoleMessage(new Event('console-message'));
 
-    expect(hook.selectedElement.value).toBeNull();
+    expect(hook.selectedElementRef.value).toBeNull();
   });
 
   it('injects touch simulation when touch mode is enabled', async () => {
