@@ -171,6 +171,7 @@ function handleCopy(): void {
 <style scoped lang="less">
 .address-bar {
   display: flex;
+  flex-shrink: 0;
   gap: 8px;
   align-items: center;
   justify-content: space-between;
