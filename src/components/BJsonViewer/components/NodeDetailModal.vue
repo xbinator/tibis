@@ -12,7 +12,9 @@
           <BIcon icon="lucide:copy" :size="14" />
         </button>
       </div>
-      <pre :class="bem('code')"><code v-html="formattedContent"></code></pre>
+      <BScrollbar max-height="60vh" :class="bem('content')">
+        <pre :class="bem('code')"><code v-html="formattedContent"></code></pre>
+      </BScrollbar>
     </div>
 
     <div :class="bem('section')">
@@ -22,7 +24,9 @@
           <BIcon icon="lucide:copy" :size="14" />
         </button>
       </div>
-      <pre :class="bem('code')">{{ node?.path || '/' }}</pre>
+      <div :class="bem('content')">
+        <pre :class="bem('code')">{{ node?.path || '/' }}</pre>
+      </div>
     </div>
   </BModal>
 </template>
@@ -185,17 +189,20 @@ function copyPath(): void {
   }
 }
 
+.b-json-viewer-node-detail__content {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
 .b-json-viewer-node-detail__code {
   padding: 16px;
   margin: 0;
   overflow-x: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.6;
   overflow-wrap: break-word;
   white-space: pre-wrap;
   user-select: text;
-  background: var(--bg-secondary);
-  border-radius: 8px;
 }
 </style>
