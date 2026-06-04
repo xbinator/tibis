@@ -91,7 +91,7 @@ function handleTitleClick() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
+  height: 38px;
   padding: 0 12px;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-primary);

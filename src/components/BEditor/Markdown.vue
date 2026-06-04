@@ -533,7 +533,7 @@ defineExpose({
   flex-shrink: 0;
   align-items: center;
   justify-content: flex-end;
-  height: 40px;
+  height: 38px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border-primary);
 }
