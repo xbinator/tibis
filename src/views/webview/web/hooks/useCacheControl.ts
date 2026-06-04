@@ -13,6 +13,8 @@ export function useCacheControl(): { clearCache: () => Promise<void> } {
    * 清理当前 WebView 持久化分区缓存。
    */
   async function clearCache(): Promise<void> {
+    const key = 'clear-cache';
+    message.loading({ content: '正在清除缓存…', key, duration: 0 });
     try {
       const webviewApi = window.electronAPI?.webview;
       if (!webviewApi) {
@@ -20,9 +22,9 @@ export function useCacheControl(): { clearCache: () => Promise<void> } {
       }
 
       await webviewApi.clearCache();
-      message.success('WebView 缓存已清除');
+      message.success({ content: 'WebView 缓存已清除', key });
     } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : '清除缓存失败');
+      message.error({ content: error instanceof Error ? error.message : '清除缓存失败', key });
     }
   }
 
