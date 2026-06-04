@@ -9,6 +9,9 @@
       <div v-if="items.length" class="sidebar__content">
         <AnchorContent :items="items" :active-id="activeId" @click="handleAnchorClick" />
       </div>
+      <div v-else class="sidebar__empty">
+        <span class="sidebar__empty-text">暂无标题大纲</span>
+      </div>
     </div>
   </BPanelSplitter>
 </template>
@@ -109,6 +112,20 @@ function handleTitleClick() {
 .sidebar__content {
   flex: 1;
   height: 0;
+}
+
+.sidebar__empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar__empty-text {
+  font-size: 13px;
+  color: var(--text-tertiary);
 }
 
 .sidebar__title {
