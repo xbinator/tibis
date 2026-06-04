@@ -16,7 +16,7 @@
 
     <div class="b-markdown-main">
       <!-- 编辑器工具栏，类似地址栏风格 -->
-      <div class="b-markdown-toolbar">
+      <div class="b-markdown-toolbar" data-export-ignore>
         <QuickActions
           v-model:show-outline="showOutline"
           v-model:view-mode="viewMode"
@@ -62,6 +62,7 @@
 
           <SelectionToolbarRich
             v-if="isRichMode && selectionToolbarKind === 'rich' && currentRichSelectionHost?.editor && !isRichLoading"
+            data-export-ignore
             :editor="currentRichSelectionHost.editor"
             :visible="selectionAssistant.toolbarVisible.value"
             :position="selectionAssistant.toolbarPosition.value"
@@ -74,6 +75,7 @@
 
           <SelectionToolbarSource
             v-else-if="!isRichMode && selectionToolbarKind === 'source'"
+            data-export-ignore
             :visible="selectionAssistant.toolbarVisible.value"
             :position="selectionAssistant.toolbarPosition.value"
             :overlay-root="currentSourceSelectionHost?.overlayRoot"
@@ -85,6 +87,7 @@
 
           <SelectionAIInput
             v-if="!isRichLoading"
+            data-export-ignore
             :visible="selectionAssistant.aiInputVisible.value"
             :adapter="currentSelectionAdapter"
             :selection-range="selectionAssistant.cachedSelectionRange.value"
@@ -96,6 +99,7 @@
 
           <SelectionCommentInput
             v-if="!isRichLoading"
+            data-export-ignore
             :visible="selectionAssistant.commentInputVisible.value"
             :position="selectionAssistant.panelPosition.value"
             @update:visible="handleSelectionCommentVisibleChange"
@@ -104,6 +108,7 @@
 
           <CommentCard
             v-if="!isRichLoading"
+            data-export-ignore
             :visible="!!commentActions.activeCommentCard.value"
             :comment-id="commentActions.activeCommentCard.value?.id ?? ''"
             :annotated-text="commentActions.activeCommentCard.value?.annotatedText ?? ''"
@@ -116,7 +121,7 @@
           />
         </div>
 
-        <FindBar v-model:visible="findBarVisible" :editor-instance="editorPublicInstance" />
+        <FindBar v-model:visible="findBarVisible" data-export-ignore :editor-instance="editorPublicInstance" />
       </BScrollbar>
     </div>
   </div>
