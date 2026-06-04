@@ -1,3 +1,8 @@
+/**
+ * @file settings.ts
+ * @description 定义设置页及其子页面路由。
+ */
+
 import type { AppRouteRecordRaw } from '../../type';
 import { RouterView } from 'vue-router';
 
@@ -8,7 +13,12 @@ const routes: AppRouteRecordRaw[] = [
     component: () => import('@/views/settings/index.vue'),
     redirect: '/settings/provider',
     meta: {
-      title: '设置'
+      title: '设置',
+      tab: {
+        id: 'settings',
+        cacheKey: 'settings',
+        title: '设置'
+      }
     },
     children: [
       {

@@ -4,7 +4,7 @@
  */
 
 import { defineStore } from 'pinia';
-import { findSingletonTabConfig, resolveRouteCacheName } from '@/router/cache';
+import { resolveRouteCacheName } from '@/router/cache';
 import { storeEvents } from '@/stores/helpers/events';
 import type { FileMissingPayload, FileRecoveredPayload } from '@/stores/helpers/events';
 import { loadPersistedState, persistState } from '@/stores/helpers/persist';
@@ -294,26 +294,16 @@ export const useTabsStore = defineStore('tabs', {
      */
     addTab(tab: Tab, options: AddTabOptions = {}): void {
       const normalizedTab = normalizeTab(tab);
-      const singletonConfig = findSingletonTabConfig(normalizedTab.path);
-
-      if (singletonConfig) {
-        const { title, cacheKey, tabId } = singletonConfig;
-        const _index = this.tabs.findIndex((t) => findSingletonTabConfig(t.path)?.tabId === tabId);
-
-        const _tab: Tab = { ...normalizedTab, id: tabId, title, cacheKey };
-        _index === -1 ? this.tabs.push(_tab) : (this.tabs[_index] = _tab);
+      const index = this.tabs.findIndex((t) => t.id === normalizedTab.id);
+      if (index === -1) {
+        this.tabs.push(normalizedTab);
       } else {
-        const index = this.tabs.findIndex((t) => t.id === normalizedTab.id);
-        if (index === -1) {
-          this.tabs.push(normalizedTab);
-        } else {
-          const existingTab = this.tabs[index];
+        const existingTab = this.tabs[index];
 
-          this.tabs[index] = {
-            ...normalizedTab,
-            title: options.preserveTitle && existingTab ? existingTab.title : normalizedTab.title
-          };
-        }
+        this.tabs[index] = {
+          ...normalizedTab,
+          title: options.preserveTitle && existingTab ? existingTab.title : normalizedTab.title
+        };
       }
 
       const cacheKey = normalizedTab.cacheKey || normalizedTab.id;

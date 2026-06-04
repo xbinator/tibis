@@ -13,6 +13,11 @@ describe('settings tools routes', () => {
     const mcpRoute = toolsRoute?.children?.find((route) => route.path === 'mcp');
 
     expect(toolsRoute?.meta?.title).toBe('工具');
+    expect(settingsRoute?.meta?.tab).toEqual({
+      id: 'settings',
+      cacheKey: 'settings',
+      title: '设置'
+    });
     expect(searchRoute?.meta?.title).toBe('搜索');
     expect(mcpRoute?.meta?.title).toBe('MCP');
   });
