@@ -115,17 +115,25 @@ const emit = defineEmits<{
 const moreActionOptions = computed<DropdownOption[]>(() => [
   {
     type: 'item',
-    value: 'capture-viewport',
-    label: '截取当前视图',
+    value: 'screenshot',
+    label: '截屏',
     icon: 'lucide:camera',
-    onClick: () => emit('captureViewportScreenshot')
-  },
-  {
-    type: 'item',
-    value: 'capture-full-page',
-    label: '截取完整页面',
-    icon: 'lucide:scroll-text',
-    onClick: () => emit('captureFullPageScreenshot')
+    children: [
+      {
+        type: 'item',
+        value: 'capture-viewport',
+        label: '当前视图',
+        icon: 'lucide:image',
+        onClick: () => emit('captureViewportScreenshot')
+      },
+      {
+        type: 'item',
+        value: 'capture-full-page',
+        label: '完整页面',
+        icon: 'lucide:scroll-text',
+        onClick: () => emit('captureFullPageScreenshot')
+      }
+    ]
   },
   {
     type: 'divider'
@@ -166,7 +174,8 @@ function handleCopy(): void {
   gap: 8px;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
+  height: 40px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border-primary);
 }
 
