@@ -21,6 +21,11 @@ export type EditorPageWidth = 'default' | 'wide' | 'full';
  */
 export type EditorSaveStrategy = 'off' | 'onBlur' | 'onChange';
 
+/**
+ * Monaco 编辑器自动换行模式。
+ */
+export type MonacoWordWrap = 'on' | 'off';
+
 const EDITOR_PREFERENCES_STORAGE_KEY = 'editor_preferences';
 const LEGACY_SETTINGS_STORAGE_KEY = 'app_settings';
 
@@ -36,6 +41,8 @@ interface PersistedEditorPreferences {
   saveStrategy: EditorSaveStrategy;
   /** 是否显示大纲 */
   showOutline: boolean;
+  /** Monaco 自动换行模式 */
+  monacoWordWrap: MonacoWordWrap;
 }
 
 /**
@@ -52,7 +59,8 @@ const DEFAULT_EDITOR_PREFERENCES: PersistedEditorPreferences = {
   viewMode: 'rich',
   pageWidth: 'default',
   saveStrategy: 'off',
-  showOutline: false
+  showOutline: false,
+  monacoWordWrap: 'off'
 };
 
 /**
@@ -83,6 +91,15 @@ function isEditorSaveStrategy(value: unknown): value is EditorSaveStrategy {
 }
 
 /**
+ * 判断给定值是否为合法的 Monaco 自动换行模式。
+ * @param value - 待判断的值
+ * @returns 是否为合法自动换行模式
+ */
+function isMonacoWordWrap(value: unknown): value is MonacoWordWrap {
+  return value === 'on' || value === 'off';
+}
+
+/**
  * 将未知输入归一化为合法的编辑器偏好对象。
  * @param value - 读取到的原始持久化值
  * @returns 归一化后的编辑器偏好
@@ -94,7 +111,8 @@ function normalizeEditorPreferences(value: unknown): PersistedEditorPreferences 
     viewMode: isEditorViewMode(source.viewMode) ? source.viewMode : DEFAULT_EDITOR_PREFERENCES.viewMode,
     pageWidth: isEditorPageWidth(source.pageWidth) ? source.pageWidth : DEFAULT_EDITOR_PREFERENCES.pageWidth,
     saveStrategy: isEditorSaveStrategy(source.saveStrategy) ? source.saveStrategy : DEFAULT_EDITOR_PREFERENCES.saveStrategy,
-    showOutline: typeof source.showOutline === 'boolean' ? source.showOutline : DEFAULT_EDITOR_PREFERENCES.showOutline
+    showOutline: typeof source.showOutline === 'boolean' ? source.showOutline : DEFAULT_EDITOR_PREFERENCES.showOutline,
+    monacoWordWrap: isMonacoWordWrap(source.monacoWordWrap) ? source.monacoWordWrap : DEFAULT_EDITOR_PREFERENCES.monacoWordWrap
   };
 }
 
@@ -164,7 +182,8 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
         viewMode: this.viewMode,
         pageWidth: this.pageWidth,
         saveStrategy: this.saveStrategy,
-        showOutline: this.showOutline
+        showOutline: this.showOutline,
+        monacoWordWrap: this.monacoWordWrap
       });
     },
 
@@ -201,6 +220,15 @@ export const useEditorPreferencesStore = defineStore('editorPreferences', {
       this.showOutline = visible;
       this.savePreferences();
       this.syncNativeMenuState();
+    },
+
+    /**
+     * 设置 Monaco 自动换行模式。
+     * @param mode - 目标自动换行模式
+     */
+    setMonacoWordWrap(mode: MonacoWordWrap): void {
+      this.monacoWordWrap = mode;
+      this.savePreferences();
     }
   }
 });
