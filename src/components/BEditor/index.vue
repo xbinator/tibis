@@ -18,10 +18,10 @@
     @show-in-folder="emit('show-in-folder')"
   />
 
-  <BMonaco
+  <Monaco
     v-else
-    ref="monacoEditorRef"
-    v-model:value="editorState.content"
+    ref="monacoRef"
+    v-model:content="editorState.content"
     :editor-state="editorState"
     :language="monacoLanguage"
     :editable="editable"
@@ -33,12 +33,12 @@
 import type { EditorController, EditorSearchState, EditorState } from './types';
 import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
-import BMonaco from '@/components/BMonaco/index.vue';
 import { resolveEditorKind, resolveMonacoLanguage } from './constants/resolver';
 import { createEditorToolContext } from './hooks/useEditorToolContext';
 import Markdown from './Markdown.vue';
+import Monaco from './Monaco.vue';
 
-const monacoEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
+const monacoRef = ref<InstanceType<typeof Monaco> | null>(null);
 const markdownRef = ref<InstanceType<typeof Markdown> | null>(null);
 
 /**
@@ -75,7 +75,7 @@ const lastRegisteredDocumentId = ref('');
  */
 function getEditorController(): EditorController | null {
   if (editorKind.value === 'monaco') {
-    return monacoEditorRef.value;
+    return monacoRef.value?.editorController ?? null;
   }
 
   return markdownRef.value?.editorController ?? null;
@@ -125,7 +125,7 @@ watch(
     () => editorState.value.name,
     () => editorState.value.path,
     () => editorState.value.ext,
-    monacoEditorRef
+    monacoRef
   ],
   (): void => {
     registerEditorToolContext();
