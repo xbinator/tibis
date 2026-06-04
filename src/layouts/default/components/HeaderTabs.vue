@@ -42,7 +42,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { Dropdown } from 'ant-design-vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
-import { useClipboard } from '@/hooks/useClipboard';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import type { Tab, TabCloseAction, TabClosePlan, TabMovePosition } from '@/stores/workspace/tabs';
@@ -52,7 +51,6 @@ import { useTabDragger } from '../hooks/useTabDragger';
 const tabsStore = useTabsStore();
 const route = useRoute();
 const router = useRouter();
-const { clipboard } = useClipboard();
 const CONTEXT_MENU_CLOSE_DELAY_MS = 200;
 
 /** 横向滚动容器 ref，供拖拽模块初始化 auto-scroll */
@@ -301,15 +299,6 @@ async function executeClosePlan(plan: TabClosePlan): Promise<void> {
 }
 
 /**
- * 复制标签页路径到剪贴板。
- * @param tab - 当前标签页
- */
-async function handleCopyPath(tab: Tab): Promise<void> {
-  resetContextMenuState();
-  await clipboard(tab.path, { successMessage: '路径已复制' });
-}
-
-/**
  * 构建某个标签的右键菜单项。
  * @param tab - 当前标签页
  * @returns 下拉菜单选项
@@ -322,9 +311,7 @@ function getContextMenuOptions(tab: Tab): DropdownOption[] {
     { value: 'closeOthers', label: '关闭其他', disabled: plans.closeOthers.disabled, onClick: () => executeClosePlan(plans.closeOthers) },
     { value: 'closeRight', label: '关闭右侧', disabled: plans.closeRight.disabled, onClick: () => executeClosePlan(plans.closeRight) },
     { value: 'closeSaved', label: '关闭已保存', disabled: plans.closeSaved.disabled, onClick: () => executeClosePlan(plans.closeSaved) },
-    { value: 'closeAll', label: '全部关闭', disabled: plans.closeAll.disabled, onClick: () => executeClosePlan(plans.closeAll) },
-    { type: 'divider' },
-    { value: 'copyPath', label: '复制路径', onClick: () => handleCopyPath(tab) }
+    { value: 'closeAll', label: '全部关闭', disabled: plans.closeAll.disabled, onClick: () => executeClosePlan(plans.closeAll) }
   ];
 }
 
