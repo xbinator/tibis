@@ -249,6 +249,66 @@ import { debounce } from 'lodash'
 import { debounce } from 'lodash-es'
 ```
 
+## 样式规范
+
+### 禁止使用 `&` 嵌套省略类名
+- ❌ **禁止**: 在 Less/SCSS 中使用 `&` 省略父选择器生成 BEM 子类名
+- ✅ **推荐**: 写出完整的类名选择器，便于全局搜索定位
+
+**原因**: 使用 `&__xxx` 嵌套后，搜索 `excalidraw-page__toolbar` 无法直接命中样式定义，降低代码可搜索性。
+
+**错误示例**:
+```less
+.excalidraw-page {
+  display: flex;
+
+  &__toolbar {
+    display: flex;
+  }
+
+  &__title {
+    font-size: 14px;
+  }
+}
+```
+
+**正确示例**:
+```less
+.excalidraw-page {
+  display: flex;
+}
+
+.excalidraw-page__toolbar {
+  display: flex;
+}
+
+.excalidraw-page__title {
+  font-size: 14px;
+}
+```
+
+### `&` 允许使用的场景
+以下场景中 `&` 的使用是允许的，因为不涉及类名省略，不影响搜索：
+- 伪类：`&:hover`、`&:focus`、`&:active`
+- 伪元素：`&::before`、`&::after`
+- 修饰符：`&.is-active`、`&.is-disabled`
+- 媒体查询嵌套：`@media` 内部的 `&`
+
+```less
+// ✅ 允许 - 伪类 / 伪元素 / 修饰符
+.excalidraw-page__toolbar {
+  background: #fff;
+
+  &:hover {
+    background: #f5f5f5;
+  }
+
+  &.is-active {
+    border-color: #1890ff;
+  }
+}
+```
+
 ## 代码风格
 
 - 使用一致的缩进和格式
