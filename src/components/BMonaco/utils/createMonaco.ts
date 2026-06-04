@@ -252,6 +252,8 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
     fontSize: 15,
     lineHeight: 24,
     minimap: { enabled: false },
+    // 关闭滚动时顶部的阴影。
+    scrollbar: { useShadows: false },
     readOnly: options.readOnly,
     padding: {
       top: 18,
