@@ -46,6 +46,8 @@ interface BMonacoOptions {
   wordWrap?: boolean;
   /** 是否启用内置搜索（Ctrl+F/Cmd+F），默认 true */
   search?: boolean;
+  /** 是否启用粘性标题（函数名、类名固定在顶部），默认 false */
+  stickyScroll?: boolean;
 }
 
 /**
@@ -114,6 +116,11 @@ const effectiveWordWrap = computed<boolean>(() => props.options?.wordWrap ?? fal
  * 计算生效的搜索配置，默认开启。
  */
 const effectiveSearch = computed<boolean>(() => props.options?.search ?? true);
+
+/**
+ * 计算生效的粘性标题配置，默认关闭。
+ */
+const effectiveStickyScroll = computed<boolean>(() => props.options?.stickyScroll ?? false);
 
 /**
  * 构造 Monaco 搜索选项。
@@ -236,7 +243,8 @@ async function initializeEditor(): Promise<void> {
       presetId: settingStore.themePreset,
       mode: settingStore.resolvedTheme === 'dark' ? 'dark' : 'light',
       wordWrap: effectiveWordWrap.value,
-      search: effectiveSearch.value
+      search: effectiveSearch.value,
+      stickyScroll: effectiveStickyScroll.value
     });
     bindModelChange();
     refreshSearchState(false);
@@ -507,6 +515,7 @@ watch(
 
     handle.updateOptions({
       wordWrap: effectiveWordWrap.value ? 'on' : 'off',
+      stickyScroll: { enabled: effectiveStickyScroll.value },
       find: effectiveSearch.value
         ? {
             addExtraSpaceOnTop: false,

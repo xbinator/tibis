@@ -38,6 +38,8 @@ export interface CreateMonacoEditorOptions {
   validation?: boolean;
   /** 是否只显示滚动条，隐藏其他装饰（glyph margin、折叠等），默认 false */
   scrollbarOnly?: boolean;
+  /** 是否启用粘性标题（函数名、类名固定在顶部），默认 false */
+  stickyScroll?: boolean;
 }
 
 /**
@@ -49,7 +51,12 @@ export interface MonacoEditorHandle {
   /** 整体替换文本。 */
   setValue: (value: string) => void;
   /** 更新编辑器配置。 */
-  updateOptions: (options: { readOnly?: boolean; wordWrap?: 'on' | 'off'; find?: Monaco.editor.IEditorFindOptions }) => void;
+  updateOptions: (options: {
+    readOnly?: boolean;
+    wordWrap?: 'on' | 'off';
+    find?: Monaco.editor.IEditorFindOptions;
+    stickyScroll?: { enabled: boolean };
+  }) => void;
   /** 聚焦编辑器。 */
   focus: () => void;
   /** 读取底层编辑器实例。 */
@@ -253,6 +260,9 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
     scrollBeyondLastLine: false,
     tabSize: 2,
     wordWrap: options.wordWrap ? 'on' : 'off',
+    stickyScroll: {
+      enabled: options.stickyScroll === true
+    },
     contextmenu: false,
     ...(hasSearch
       ? {
