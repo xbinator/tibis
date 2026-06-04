@@ -14,7 +14,7 @@ export default defineComponent({
   name: 'BButton',
   props: {
     type: {
-      type: String as PropType<'primary' | 'secondary' | 'outline' | 'text'>,
+      type: String as PropType<'primary' | 'secondary' | 'outline' | 'text' | 'ghost'>,
       default: 'primary'
     },
     size: {
@@ -260,6 +260,21 @@ export default defineComponent({
     }
   }
 
+  &--ghost {
+    color: var(--text-secondary);
+    background-color: transparent;
+
+    &:hover:not(.b-button--disabled, .b-button--loading) {
+      color: var(--text-primary);
+      background-color: var(--color-primary-bg);
+    }
+
+    &:active:not(.b-button--disabled, .b-button--loading) {
+      color: var(--text-primary);
+      background-color: var(--color-primary-bg-hover);
+    }
+  }
+
   // danger 修饰符
   &--danger {
     &.b-button--primary {
@@ -317,6 +332,22 @@ export default defineComponent({
       }
     }
 
+    &.b-button--ghost {
+      color: var(--color-danger);
+      background-color: transparent;
+      transition: color 0.15s ease;
+
+      &:hover:not(.b-button--disabled, .b-button--loading) {
+        color: var(--color-danger-hover);
+        background-color: transparent;
+      }
+
+      &:active:not(.b-button--disabled, .b-button--loading) {
+        color: var(--color-danger-active);
+        background-color: transparent;
+      }
+    }
+
     .b-button__loading-spinner {
       border-color: rgb(255 255 255 / 30%);
       border-top-color: #fff;
@@ -324,7 +355,8 @@ export default defineComponent({
 
     &.b-button--outline .b-button__loading-spinner,
     &.b-button--text .b-button__loading-spinner,
-    &.b-button--secondary .b-button__loading-spinner {
+    &.b-button--secondary .b-button__loading-spinner,
+    &.b-button--ghost .b-button__loading-spinner {
       border-color: rgb(0 0 0 / 10%);
       border-top-color: var(--color-danger);
     }

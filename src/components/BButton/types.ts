@@ -1,6 +1,6 @@
 export interface BButtonProps {
   // 按钮类型
-  type?: 'primary' | 'secondary' | 'outline' | 'text';
+  type?: 'primary' | 'secondary' | 'outline' | 'text' | 'ghost';
   // 按钮大小
   size?: 'small' | 'middle' | 'large';
   // 是否禁用
