@@ -218,6 +218,31 @@ describe('useTagWebView', () => {
     expect(hook.selectedElementRef.value).toBeNull();
   });
 
+  it('keeps private-use icon glyphs separately from selected element text', () => {
+    const instance = {
+      canGoBack: () => false,
+      canGoForward: () => false
+    } as unknown as Electron.WebviewTag;
+    const hook = useTagWebView(ref(instance));
+
+    hook.handleConsoleMessage({
+      message: `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify({
+        tagName: 'I',
+        id: '',
+        className: 'iconfont',
+        text: '',
+        selector: 'i.iconfont',
+        attributes: [{ name: 'class', value: 'iconfont' }],
+        ancestors: [{ tagName: 'BUTTON', selector: 'button.search' }],
+        computedStyles: { display: 'inline-block' },
+        rect: { x: 0, y: 0, width: 16, height: 16 }
+      })}`
+    });
+
+    expect(hook.selectedElementRef.value?.text).toBe('');
+    expect(hook.selectedElementRef.value?.glyph).toBe('');
+  });
+
   it('injects touch simulation when touch mode is enabled', async () => {
     const executeJavaScript = vi.fn<(script: string) => Promise<null>>().mockResolvedValue(null);
     const instance = {

@@ -58,6 +58,8 @@ export interface WebviewElementSelection {
   className: string;
   /** 元素可读文本 */
   text: string;
+  /** 元素中的图标字体私有字区字符 */
+  glyph?: string;
   /** 可复用的 CSS 选择器 */
   selector: string;
   /** 元素属性列表 */

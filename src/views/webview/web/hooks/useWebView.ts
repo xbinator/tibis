@@ -81,6 +81,11 @@ const ELEMENT_PICKER_STYLE_PROPERTIES = [
 ];
 
 /**
+ * 私有字区通常被 iconfont 用作图标编码，不应作为可读文本展示。
+ */
+const PRIVATE_USE_ICON_GLYPH_PATTERN = /[\uE000-\uF8FF]/g;
+
+/**
  * WebView console-message 事件的最小消息结构。
  */
 export interface WebviewConsoleMessageEvent {
@@ -389,13 +394,56 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     }, {});
   };
 
+  const readRawText = (element) => String(element.innerText || element.textContent || '');
+
+  const normalizeReadableText = (value) => String(value || '').replace(/[\\uE000-\\uF8FF]/g, '').replace(/\\s+/g, ' ').trim();
+
+  const readElementGlyph = (element) => {
+    const glyphs = readRawText(element).match(/[\\uE000-\\uF8FF]/g);
+    return glyphs ? glyphs.join('') : '';
+  };
+
+  const readElementLabel = (element) => {
+    const directLabel = normalizeReadableText(
+      element.getAttribute('aria-label') ||
+      element.getAttribute('title') ||
+      element.getAttribute('alt') ||
+      element.getAttribute('value')
+    );
+    if (directLabel) {
+      return directLabel;
+    }
+
+    const labeledAncestor = element.closest('[aria-label],[title],button,a,[role="button"],[role="link"]');
+    if (labeledAncestor && labeledAncestor !== element) {
+      return normalizeReadableText(
+        labeledAncestor.getAttribute('aria-label') ||
+        labeledAncestor.getAttribute('title') ||
+        labeledAncestor.innerText ||
+        labeledAncestor.textContent
+      );
+    }
+
+    return '';
+  };
+
+  const readElementText = (element) => {
+    const label = readElementLabel(element);
+    if (label) {
+      return label.slice(0, 200);
+    }
+
+    return normalizeReadableText(element.innerText || element.textContent).slice(0, 200);
+  };
+
   const readElement = (element) => {
     const rect = element.getBoundingClientRect();
     return {
       tagName: element.tagName,
       id: element.id || '',
       className: element.className || '',
-      text: (element.innerText || element.textContent || '').trim().slice(0, 200),
+      text: readElementText(element),
+      glyph: readElementGlyph(element),
       selector: buildSelector(element),
       attributes: readAttributes(element),
       ancestors: readAncestors(element),
@@ -538,6 +586,40 @@ function isElementSelection(value: unknown): value is WebviewElementSelection {
     Boolean(selection.computedStyles) &&
     typeof selection.computedStyles === 'object'
   );
+}
+
+/**
+ * 清理元素可读文本，避免 iconfont 私有字区字符污染 DOM 检查结果。
+ * @param value - 页面脚本读取到的原始文本
+ * @returns 去除图标字形后的可读文本
+ */
+function sanitizeElementReadableText(value: string): string {
+  return value.replace(PRIVATE_USE_ICON_GLYPH_PATTERN, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * 提取元素中的 iconfont 私有字区字符。
+ * @param value - 页面脚本读取到的原始文本
+ * @returns 私有字区字符拼接结果
+ */
+function extractElementGlyph(value: string): string {
+  return Array.from(value.matchAll(PRIVATE_USE_ICON_GLYPH_PATTERN))
+    .map((match) => match[0])
+    .join('');
+}
+
+/**
+ * 规范化元素选择结果。
+ * @param selection - 页面脚本或 console 消息回传的元素选择结果
+ * @returns 规范化后的元素选择结果
+ */
+function normalizeElementSelection(selection: WebviewElementSelection): WebviewElementSelection {
+  const glyph = selection.glyph || extractElementGlyph(selection.text);
+  return {
+    ...selection,
+    glyph: glyph || undefined,
+    text: sanitizeElementReadableText(selection.text)
+  };
 }
 
 /**
@@ -834,7 +916,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     try {
       const result = await instance.executeJavaScript(createElementSelectionScript(theme));
       if (isElementSelection(result)) {
-        selectedElement.value = result;
+        selectedElement.value = normalizeElementSelection(result);
       }
     } finally {
       state.value.isElementSelecting = false;
@@ -879,7 +961,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
     try {
       const payload = JSON.parse(message.slice(ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX.length)) as unknown;
       if (isElementSelection(payload)) {
-        selectedElement.value = payload;
+        selectedElement.value = normalizeElementSelection(payload);
       }
     } catch (error) {
       console.error('Failed to parse webview element selection message:', error);
