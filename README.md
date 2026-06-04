@@ -1,316 +1,133 @@
 # Tibis
 
-Tibis 是一款面向本地写作与 AI 工作流的 Markdown 桌面编辑器，基于 Electron + Vue 3 + TypeScript 构建。
+Tibis 是一款**本地优先的 Markdown 桌面编辑器**，将 AI 对话与文档编辑深度集成。
 
-它把文档编辑、本地文件管理和多模型配置放在同一个桌面应用里，适合用于写作、知识整理、技术文档草稿和 AI 辅助内容生产。
+适合写作、知识整理、技术文档草稿和 AI 辅助内容生产。
 
-## 项目目标
+![Tibis 界面截图](https://github.com/user-attachments/assets/dad8c18f-5974-474c-938a-606cd74586d2)
 
-Tibis 的目标不是单纯做一个 Markdown 输入框，而是提供一套完整的桌面端写作体验：
+## 核心亮点
 
-- 用富文本与源码双视图编辑 Markdown 内容
-- 通过本地文件能力管理文档、最近文件和自动保存
-- 在设置中统一接入和管理多个 AI 服务商与模型
-- 为后续 AI 辅助写作、生成、理解和模型能力扩展提供基础设施
+- **双视图编辑器** — 富文本（TipTap）与源码（CodeMirror）无缝切换，所见即所得 + 精确控制
+- **AI 聊天侧边栏** — 流式对话、工具调用、上下文压缩，模型随时辅助写作
+- **多 AI 服务商支持** — OpenAI / Anthropic / Google / DeepSeek，可自由切换和配置
+- **MCP 工具集成** — 支持 Model Context Protocol，AI 可操作文件、执行命令、读写编辑器内容
+- **技能系统** — 可注册自定义技能，扩展 AI 的写作和编辑能力
+- **提示词编辑器** — 斜杠命令 `/`、文件引用 `@`，快速构建复杂提示词
+- **语音输入** — 本地 whisper.cpp 语音转文字，无需联网
+- **本地优先** — SQLite 持久化 + 加密存储，数据归你所有
 
-如果用一句话概括，它更像是一个“支持多模型配置的本地优先 Markdown 写作工作台”。
+## 界面预览
 
-## 特性
+应用围绕三个核心界面展开：
 
-### Markdown 编辑
-
-- 双视图编辑：富文本编辑 + 源码编辑无缝切换
-- 丰富格式支持：标题、列表、表格、代码块、任务列表等
-- 代码高亮：支持多种编程语言的语法高亮
-- 公式支持：支持 LaTeX 数学公式渲染
-- 编辑器能力：查找、最近文件、快捷键、自动保存
-
-### AI 集成
-
-- 多提供商支持：OpenAI、Anthropic、Google 等主流 AI 服务
-- 灵活模型配置：统一管理 Provider、模型、可用性和自定义配置
-- 本地持久化：服务商与服务模型配置可保存在本地数据库中
-
-### 桌面能力
-
-- 基于 Electron 的桌面壳
-- 通过 preload 暴露文件、窗口、数据库、store 等原生能力
-- 支持本地 SQLite 与 Electron store
-
-### 界面体验
-
-- 明暗主题切换
-- 基于 Ant Design Vue 的桌面 UI
-- 适配编辑器与设置中心两类主要工作流
-
-## 当前核心模块
-
-- 编辑器：文档标题、正文、查找、视图切换、最近文件、快捷键
-- 设置中心：AI 服务商开关、API 配置、模型管理
-- 本地存储：最近文件、本地配置、SQLite 持久化
-- AI 服务层：多 Provider 抽象、模型解析、流式文本生成
-- 桌面桥接：Electron preload、窗口能力、数据库 IPC、store IPC
+| 界面 | 说明 |
+|------|------|
+| 编辑器页面 | Markdown 双视图编辑 + AI 侧边栏 + 文件标签页 |
+| 设置中心 | 服务商配置、模型分配、MCP 管理、技能注册、语音设置 |
+| 欢迎页 | 拖拽打开文件、最近文件列表 |
 
 ## 技术栈
 
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Vue | 3.5.x | 前端框架 |
-| TypeScript | 6.0.x | 类型安全 |
-| Electron | 34.x | 桌面应用框架 |
-| Ant Design Vue | 4.2.x | UI 组件库 |
-| TipTap | 3.21.x | 富文本编辑器 |
-| Pinia | 3.0.x | 状态管理 |
-| Vue Router | 4.6.x | 路由管理 |
-| UnoCSS | 66.6.x | 原子化 CSS |
-| SQLite | - | 本地数据库 |
-
-## 运行形态
-
-- 前端使用 Vue 3 构建交互界面
-- 桌面端使用 Electron 提供原生壳、本地文件能力和预加载桥接
-- 数据层同时支持浏览器侧存储与 Electron 侧 SQLite / store
-
-这意味着 Tibis 更偏“本地优先的桌面应用”，而不是纯在线编辑器。
+| 技术 | 说明 |
+|------|------|
+| 桌面框架 | Electron 41 |
+| 前端框架 | Vue 3.5 + Composition API |
+| 构建工具 | Vite 8（Rolldown） |
+| 语言 | TypeScript 5.9（strict） |
+| 状态管理 | Pinia 3 |
+| 路由 | Vue Router 5（Hash + KeepAlive） |
+| 富文本编辑器 | TipTap 3（ProseMirror） |
+| 源码编辑器 | CodeMirror 6 |
+| UI 组件库 | Ant Design Vue 4 + UnoCSS |
+| AI SDK | Vercel AI SDK v6 |
+| MCP 协议 | @modelcontextprotocol/sdk |
+| 数据库 | better-sqlite3 |
+| 安全存储 | electron-store（API Key 加密） |
+| 语音转写 | whisper.cpp |
+| 图片处理 | sharp |
+| Markdown 渲染 | marked + KaTeX + Mermaid |
 
 ## 快速开始
 
 ### 前置要求
 
 - Node.js >= 18
-- pnpm（推荐）或 npm / yarn
+- pnpm（推荐）
 
-### 安装依赖
+### 安装与运行
 
 ```bash
+# 安装依赖
 pnpm install
-```
 
-如果本地 Electron 二进制缺失，可以补执行：
+# 启动开发模式（前端 + Electron 桌面应用）
+pnpm dev
 
-```bash
-node node_modules/.pnpm/electron@34.5.8/node_modules/electron/install.js
-```
-
-### 开发模式
-
-#### 前端开发
-
-```bash
+# 仅启动前端开发服务（浏览器预览）
 pnpm serve
 ```
 
-默认启动在 [http://localhost:1420/](http://localhost:1420/)。
+`pnpm dev` 会并行启动 Vite 前端服务、Electron 主进程编译和桌面窗口。
 
-#### Electron 桌面开发
-
-```bash
-pnpm dev
-```
-
-这个命令会并行启动：
-
-- Vite 前端开发服务
-- Electron 主进程 / preload TypeScript watch 编译
-- Electron 桌面应用
-
-### 构建生产版本
+### 构建
 
 ```bash
 pnpm build
 pnpm electron:build
 ```
 
-## 下载发布版
-
-普通用户可以从 GitHub Releases 页面下载最新版本安装包。
-
-每个 Release 通常会包含以下平台产物：
-
-- macOS：`.dmg` 或 `.zip`
-- Windows：`.exe`
-- Linux：`.AppImage` 或 `.deb`
-
-当前项目暂未配置 macOS / Windows 代码签名。首次打开时，系统可能出现安全提示：
-
-- macOS 可能提示无法验证开发者，需要右键打开，或在系统设置中允许打开
-- Windows 可能触发 SmartScreen，需要确认继续运行
-
-请确认安装包来源为项目官方 GitHub Release 后再打开。
-
-维护者发版流程见 [docs/development/github-release.md](./docs/development/github-release.md)。
+产物会生成在 `dist-electron/` 目录下。
 
 ### 代码检查
 
 ```bash
-pnpm exec tsc --noEmit
-pnpm exec eslint src --ext .vue,.ts,.tsx,.js,.jsx
-pnpm lint:style
+pnpm lint          # ESLint 检查 + 自动修复
+pnpm lint:style    # Stylelint 检查 + 自动修复
+pnpm exec tsc --noEmit  # TypeScript 类型检查
 ```
+
+## 下载
+
+从 [GitHub Releases](https://github.com/FCDFW/tibis/releases) 下载最新版本：
+
+- macOS：`.dmg`
+- Windows：`.exe`
+- Linux：`.AppImage` / `.deb`
+
+> macOS 首次打开可能提示无法验证开发者，请在系统设置中允许打开。Windows 可能触发 SmartScreen，确认来源后继续运行即可。
 
 ## 项目结构
 
 ```text
 tibis/
-├── electron/                # Electron 主进程与 preload 源码
-│   ├── main/
-│   ├── preload/
-│   ├── package.json         # dist-electron 的 CommonJS 边界
-│   └── tsconfig.json        # Electron 独立编译配置
-├── src/
-│   ├── components/          # 通用组件
-│   │   ├── BMarkdown/         # 编辑器核心组件
-│   │   ├── BButton/
-│   │   ├── BModal/
-│   │   └── ...
-│   ├── views/               # 页面视图与页面级逻辑
-│   │   ├── editor/
-│   │   └── settings/
-│   ├── shared/              # 跨页面共享能力
-│   │   ├── platform/        # Electron / Web 平台能力封装
-│   │   └── storage/         # localforage / SQLite / store
-│   ├── services/            # 业务服务层
-│   │   └── ai/              # AI provider 抽象与调用入口
-│   ├── router/              # 路由配置
-│   ├── stores/              # Pinia 状态管理
-│   ├── hooks/               # 组合式函数
-│   ├── utils/               # 通用工具
-│   └── assets/              # 静态资源
-├── dist-electron/           # Electron 编译产物（生成目录）
-├── changelog/               # 变更日志
-└── ...
+├── src/                    # 渲染进程（Vue 前端）
+│   ├── views/              # 页面视图（editor / settings / welcome / webview）
+│   ├── components/         # 通用组件（BEditor / BChatSidebar / BPromptEditor 等）
+│   ├── stores/             # Pinia 状态管理
+│   ├── ai/                 # AI 子系统（工具 / 记忆 / 技能）
+│   ├── hooks/              # 组合式函数
+│   ├── shared/             # 平台抽象 / 存储 / 日志
+│   └── utils/              # 工具函数
+├── electron/               # 主进程 + preload
+│   ├── main/modules/       # IPC 模块（15 个）
+│   └── preload/            # contextBridge 安全桥接
+├── types/                  # 全局类型声明
+├── test/                   # 测试套件（100+ 测试文件）
+├── docs/                   # 项目文档
+├── changelog/              # 变更日志
+└── scripts/                # 构建与工具脚本
 ```
 
-## 开发说明
-
-### Electron 桥接
-
-项目通过 `types/electron-api.d.ts` 维护 Electron 桥接类型，并通过 `src/shared/platform/electron-api.ts` 统一暴露运行时访问 helper：
-
-- `ElectronAPI`
-- `getElectronAPI()`
-- `hasElectronAPI()`
-
-所有原生桥接调用都应该通过这个 helper 收口，不建议直接在业务代码里访问裸 `window.electronAPI`。
-
-### 目录约定
-
-- `src/views` 放页面和页面级逻辑
-- `src/components` 放通用组件
-- `src/shared/platform` 放平台能力封装
-- `src/shared/storage` 放本地存储与数据库访问
-- `src/services/ai` 放 AI 服务抽象
-
-### 代码规范
+## 代码规范
 
 项目遵循严格的代码规范，详见 [AGENTS.md](./AGENTS.md)：
 
-- 禁止使用 `any`
-- 所有代码必须通过 ESLint 和 TypeScript 检查
-- 使用 `strict` 模式
-- 每次改动需要补充 changelog
-
-### 语音自动安装本地联调
-
-如果你要在本地开发环境联调“语音组件自动下载与安装”链路，推荐只记一个固定目录和两条命令。
-
-但在此之前，你需要先从 `whisper.cpp` 拿到两个文件：
-
-- 当前机器可执行的 `whisper` 二进制
-- `ggml-base.bin`
-
-最常见做法是先去 `whisper.cpp` 仓库执行：
-
-```bash
-git clone https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp
-cmake -B build
-cmake --build build -j --config Release
-sh ./models/download-ggml-model.sh base
-```
-
-执行完成后，通常可以拿到：
-
-- `build/bin/whisper-cli`
-- `models/ggml-base.bin`
-
-回到当前项目后，把这两个文件放到固定位置：
-
-- `.dev-resources/speech/source/whisper-cli`
-- `.dev-resources/speech/source/ggml-base.bin`
-
-这里统一的是本地开发源文件名。
-
-- 本地静态资源目录里统一使用 `whisper-cli`
-- 实际安装到应用运行时目录后，仍会按平台落成 `bin/whisper` 或 `bin/whisper.exe`
-
-注意：
-
-- 请直接复制到 `.dev-resources/speech/source/whisper-cli`
-- 也就是说，项目里的固定开发文件名与 `whisper.cpp` 默认产物保持一致，统一使用 `whisper-cli`
-
-例如：
-
-```bash
-mkdir -p .dev-resources/speech/source
-cp /path/to/whisper.cpp/build/bin/whisper-cli .dev-resources/speech/source/whisper-cli
-cp /path/to/whisper.cpp/models/ggml-base.bin .dev-resources/speech/source/ggml-base.bin
-```
-
-然后再执行下面两条命令。
-
-然后执行准备命令：
-
-```bash
-pnpm run speech:dev:prepare
-```
-
-这个命令会自动完成：
-
-- 复制 `resources/speech/manifest.json`
-- 自动判断当前机器平台
-- 只保留当前平台需要的 manifest 项
-- 把资源地址改成 `http://127.0.0.1:8787/...`
-- 计算当前 `whisper` 和 `ggml-base.bin` 的 `sha256`
-- 生成最终可用的 `.dev-resources/speech/manifest.json`
-
-接着直接启动联调环境：
-
-```bash
-pnpm run speech:dev:start
-```
-
-这个命令会自动：
-
-- 启动 `.dev-resources/speech/` 的本地静态服务
-- 设置 `TIBIS_SPEECH_RUNTIME_MANIFEST_URL=http://127.0.0.1:8787/manifest.json`
-- 启动 Electron 开发环境
-
-这样你就不需要手动传参数、手动改 manifest，或者再单独起 Python 服务了。
-
-如果你只是想快速调通转写逻辑，而不关心自动安装链路，也可以直接使用主进程兜底环境变量：
-
-```bash
-TIBIS_WHISPER_CPP_PATH=/path/to/whisper.cpp/build/bin/whisper-cli \
-TIBIS_WHISPER_MODEL_PATH=/path/to/whisper.cpp/models/ggml-base.bin \
-pnpm dev
-```
-
-更完整的语音模块说明可参考：
-
-- `docs/speech/README.md`
-
-## 当前状态
-
-当前项目已经具备以下基础能力：
-
-- Markdown 编辑器主界面
-- 设置页与 AI 服务商配置页
-- 多服务商和模型的基础抽象层
-- Electron 桌面端集成与本地数据存储
-- preload 桥接、SQLite、本地 store 三类原生能力打通
-
-如果后续继续演进，README 中描述的 AI 工作流能力可以在现有架构上继续扩展。
+- 禁止使用 `any` 类型
+- 所有代码必须通过 ESLint、Stylelint、TypeScript 类型检查
+- 优先使用 `lodash-es` 替代手写工具函数
+- 函数和接口必须添加 JSDoc 注释
+- 每次改动需补充 changelog
 
 ## 许可证
 
@@ -318,9 +135,7 @@ MIT License
 
 ## 致谢
 
-感谢以下个人和组织对项目的支持：
-
-- [FCDFW](https://github.com/FCDFW) 的大力 token 支持，为项目的 AI 模型调试与功能开发提供了重要的算力保障
+感谢 [FCDFW](https://github.com/FCDFW) 的大力 token 支持，为项目的 AI 模型调试与功能开发提供了重要的算力保障。
 
 ## 贡献
 

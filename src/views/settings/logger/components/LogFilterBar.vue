@@ -22,8 +22,8 @@
 </template>
 
 <script setup lang="ts">
-import type { Dayjs } from 'dayjs';
 import { computed } from 'vue';
+import dayjs, { type Dayjs } from 'dayjs';
 import type { LogLevel } from '@/shared/logger/types';
 
 /**
@@ -108,12 +108,14 @@ function handleDateChange(date: string | Dayjs | undefined): void {
 }
 
 /**
- * 禁用没有日志数据的日期。
+ * 禁用没有日志数据的日期，但当天始终可选。
  * @param current - 当前渲染的日期对象。
  * @returns `true` 表示禁用。
  */
 function disabledDate(current: Dayjs): boolean {
-  return !availableDateSet.value.has(current.format('YYYY-MM-DD'));
+  const dateStr = current.format('YYYY-MM-DD');
+  if (dateStr === dayjs().format('YYYY-MM-DD')) return false;
+  return !availableDateSet.value.has(dateStr);
 }
 </script>
 
