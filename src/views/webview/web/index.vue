@@ -352,8 +352,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: stretch;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -362,8 +362,6 @@ onBeforeUnmount(() => {
 
 .webview-content--framed {
   flex-direction: row;
-  align-items: flex-start;
-  justify-content: center;
   padding: 16px;
 }
 
