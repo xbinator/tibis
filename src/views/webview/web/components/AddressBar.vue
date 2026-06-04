@@ -174,7 +174,7 @@ function handleCopy(): void {
   gap: 8px;
   align-items: center;
   justify-content: space-between;
-  height: 38px;
+  height: 40px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border-primary);
 }
