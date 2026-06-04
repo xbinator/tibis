@@ -91,16 +91,10 @@ function handleTitleClick() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 28px;
-  padding: 0 8px;
-  margin: 8px 4px 0;
+  height: 40px;
+  padding: 0 12px;
   color: var(--text-primary);
-  border-radius: 6px;
-  transition: background-color 0.15s ease, color 0.15s ease;
-
-  &:hover {
-    background: var(--bg-hover);
-  }
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .sidebar__main {

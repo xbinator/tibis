@@ -14,106 +14,111 @@
       @close="showOutline = false"
     />
 
-    <BScrollbar ref="scrollbarRef" class="b-markdown-scrollbar" @scroll="handleEditorScrollEvent">
-      <div class="b-markdown-container" :style="editorContainerStyle">
-        <PaneRichEditor
-          v-if="isRichMode"
-          ref="richEditorPaneRef"
-          v-model:value="content"
-          v-model:outline-content="outlineContent"
-          :editor-state="effectiveEditorState"
-          :editable="editable"
-          :on-search-match-element-focus="scrollSearchMatchElementIntoView"
-          :on-selection-host-change="handleRichSelectionHostChange"
-          :on-selection-overlay-change="recomputeSelectionOverlays"
-          @editor-blur="handleEditorBlur"
-          @request-source-mode="handleSwitchToSource"
-        />
-
-        <PaneSourceEditor
-          v-else
-          ref="sourceEditorPaneRef"
-          v-model:value="content"
-          v-model:outline-content="outlineContent"
-          :editor-id="editorState.id"
-          :editor-state="effectiveEditorState"
-          :on-anchor-scroll="scrollSourceAnchorIntoView"
-          :editable="editable"
-          :on-selection-host-change="handleSourceSelectionHostChange"
-          :on-selection-overlay-change="recomputeSelectionOverlays"
-          @editor-blur="handleEditorBlur"
-        />
-
-        <SelectionToolbarRich
-          v-if="isRichMode && selectionToolbarKind === 'rich' && currentRichSelectionHost?.editor && !isRichLoading"
-          :editor="currentRichSelectionHost.editor"
-          :visible="selectionAssistant.toolbarVisible.value"
-          :position="selectionAssistant.toolbarPosition.value"
-          :overlay-root="currentRichSelectionHost.overlayRoot"
-          :format-buttons="formatButtons"
-          @ai="selectionAssistant.openAIInput()"
-          @reference="selectionAssistant.insertReference()"
-          @comment="selectionAssistant.openCommentInput()"
-        />
-
-        <SelectionToolbarSource
-          v-else-if="!isRichMode && selectionToolbarKind === 'source'"
-          :visible="selectionAssistant.toolbarVisible.value"
-          :position="selectionAssistant.toolbarPosition.value"
-          :overlay-root="currentSourceSelectionHost?.overlayRoot"
-          :format-buttons="[]"
-          @ai="selectionAssistant.openAIInput()"
-          @reference="selectionAssistant.insertReference()"
-          @comment="selectionAssistant.openCommentInput()"
-        />
-
-        <SelectionAIInput
-          v-if="!isRichLoading"
-          :visible="selectionAssistant.aiInputVisible.value"
-          :adapter="currentSelectionAdapter"
-          :selection-range="selectionAssistant.cachedSelectionRange.value"
-          :position="selectionAssistant.panelPosition.value"
-          @update:visible="handleSelectionAIVisibleChange"
-          @apply="selectionAssistant.applyAIResult($event)"
-          @streaming-change="selectionAssistant.setStreaming($event)"
-        />
-
-        <SelectionCommentInput
-          v-if="!isRichLoading"
-          :visible="selectionAssistant.commentInputVisible.value"
-          :position="selectionAssistant.panelPosition.value"
-          @update:visible="handleSelectionCommentVisibleChange"
-          @submit="selectionAssistant.applyComment($event)"
-        />
-
-        <CommentCard
-          v-if="!isRichLoading"
-          :visible="!!commentActions.activeCommentCard.value"
-          :comment-id="commentActions.activeCommentCard.value?.id ?? ''"
-          :annotated-text="commentActions.activeCommentCard.value?.annotatedText ?? ''"
-          :comment="commentActions.activeCommentCard.value?.content ?? ''"
-          :position="commentActions.activeCommentCard.value?.position ?? null"
-          :overlay-root="isRichMode ? currentRichSelectionHost?.overlayRoot : currentSourceSelectionHost?.overlayRoot"
-          @update:visible="commentActions.activeCommentCard.value = $event ? commentActions.activeCommentCard.value : null"
-          @edit="commentActions.handleCommentEdit"
-          @delete="commentActions.handleCommentDelete"
+    <div class="b-markdown-main">
+      <!-- 编辑器工具栏，类似地址栏风格 -->
+      <div class="b-markdown-toolbar">
+        <QuickActions
+          v-model:show-outline="showOutline"
+          v-model:view-mode="viewMode"
+          :file-path="editorState.path"
+          @rename-file="emit('rename-file')"
+          @save="emit('save')"
+          @save-as="emit('save-as')"
+          @export-pdf="handleExportPdf"
+          @copy-path="emit('copy-path')"
+          @show-in-folder="emit('show-in-folder')"
         />
       </div>
 
-      <QuickActions
-        v-model:show-outline="showOutline"
-        v-model:view-mode="viewMode"
-        :file-path="editorState.path"
-        @rename-file="emit('rename-file')"
-        @save="emit('save')"
-        @save-as="emit('save-as')"
-        @export-pdf="handleExportPdf"
-        @copy-path="emit('copy-path')"
-        @show-in-folder="emit('show-in-folder')"
-      />
+      <BScrollbar ref="scrollbarRef" class="b-markdown-scrollbar" @scroll="handleEditorScrollEvent">
+        <div class="b-markdown-container" :style="editorContainerStyle">
+          <PaneRichEditor
+            v-if="isRichMode"
+            ref="richEditorPaneRef"
+            v-model:value="content"
+            v-model:outline-content="outlineContent"
+            :editor-state="effectiveEditorState"
+            :editable="editable"
+            :on-search-match-element-focus="scrollSearchMatchElementIntoView"
+            :on-selection-host-change="handleRichSelectionHostChange"
+            :on-selection-overlay-change="recomputeSelectionOverlays"
+            @editor-blur="handleEditorBlur"
+            @request-source-mode="handleSwitchToSource"
+          />
 
-      <FindBar v-model:visible="findBarVisible" :editor-instance="editorPublicInstance" />
-    </BScrollbar>
+          <PaneSourceEditor
+            v-else
+            ref="sourceEditorPaneRef"
+            v-model:value="content"
+            v-model:outline-content="outlineContent"
+            :editor-id="editorState.id"
+            :editor-state="effectiveEditorState"
+            :on-anchor-scroll="scrollSourceAnchorIntoView"
+            :editable="editable"
+            :on-selection-host-change="handleSourceSelectionHostChange"
+            :on-selection-overlay-change="recomputeSelectionOverlays"
+            @editor-blur="handleEditorBlur"
+          />
+
+          <SelectionToolbarRich
+            v-if="isRichMode && selectionToolbarKind === 'rich' && currentRichSelectionHost?.editor && !isRichLoading"
+            :editor="currentRichSelectionHost.editor"
+            :visible="selectionAssistant.toolbarVisible.value"
+            :position="selectionAssistant.toolbarPosition.value"
+            :overlay-root="currentRichSelectionHost.overlayRoot"
+            :format-buttons="formatButtons"
+            @ai="selectionAssistant.openAIInput()"
+            @reference="selectionAssistant.insertReference()"
+            @comment="selectionAssistant.openCommentInput()"
+          />
+
+          <SelectionToolbarSource
+            v-else-if="!isRichMode && selectionToolbarKind === 'source'"
+            :visible="selectionAssistant.toolbarVisible.value"
+            :position="selectionAssistant.toolbarPosition.value"
+            :overlay-root="currentSourceSelectionHost?.overlayRoot"
+            :format-buttons="[]"
+            @ai="selectionAssistant.openAIInput()"
+            @reference="selectionAssistant.insertReference()"
+            @comment="selectionAssistant.openCommentInput()"
+          />
+
+          <SelectionAIInput
+            v-if="!isRichLoading"
+            :visible="selectionAssistant.aiInputVisible.value"
+            :adapter="currentSelectionAdapter"
+            :selection-range="selectionAssistant.cachedSelectionRange.value"
+            :position="selectionAssistant.panelPosition.value"
+            @update:visible="handleSelectionAIVisibleChange"
+            @apply="selectionAssistant.applyAIResult($event)"
+            @streaming-change="selectionAssistant.setStreaming($event)"
+          />
+
+          <SelectionCommentInput
+            v-if="!isRichLoading"
+            :visible="selectionAssistant.commentInputVisible.value"
+            :position="selectionAssistant.panelPosition.value"
+            @update:visible="handleSelectionCommentVisibleChange"
+            @submit="selectionAssistant.applyComment($event)"
+          />
+
+          <CommentCard
+            v-if="!isRichLoading"
+            :visible="!!commentActions.activeCommentCard.value"
+            :comment-id="commentActions.activeCommentCard.value?.id ?? ''"
+            :annotated-text="commentActions.activeCommentCard.value?.annotatedText ?? ''"
+            :comment="commentActions.activeCommentCard.value?.content ?? ''"
+            :position="commentActions.activeCommentCard.value?.position ?? null"
+            :overlay-root="isRichMode ? currentRichSelectionHost?.overlayRoot : currentSourceSelectionHost?.overlayRoot"
+            @update:visible="commentActions.activeCommentCard.value = $event ? commentActions.activeCommentCard.value : null"
+            @edit="commentActions.handleCommentEdit"
+            @delete="commentActions.handleCommentDelete"
+          />
+        </div>
+
+        <FindBar v-model:visible="findBarVisible" :editor-instance="editorPublicInstance" />
+      </BScrollbar>
+    </div>
   </div>
 </template>
 
@@ -513,11 +518,29 @@ defineExpose({
   }
 }
 
-.b-markdown-scrollbar {
+.b-markdown-main {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   width: 0;
+  min-width: 0;
   background: var(--bg-primary);
   border-radius: 8px;
+}
+
+.b-markdown-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  height: 40px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.b-markdown-scrollbar {
+  flex: 1;
+  height: 0;
 }
 
 .b-markdown-container {

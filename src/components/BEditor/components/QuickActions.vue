@@ -1,7 +1,24 @@
 <template>
   <div class="quick-actions">
+    <BButton
+      square
+      size="small"
+      type="ghost"
+      :tooltip="showOutline ? '隐藏大纲' : '显示大纲'"
+      :icon="showOutline ? 'lucide:list-tree' : 'lucide:list'"
+      @click="toggleOutline"
+    />
+    <BButton
+      square
+      size="small"
+      type="ghost"
+      :tooltip="viewMode === 'rich' ? '切换源代码模式' : '切换预览模式'"
+      :icon="viewMode === 'rich' ? 'lucide:file-text' : 'lucide:file-code-2'"
+      @click="toggleViewMode"
+    />
+
     <BDropdown>
-      <BButton square size="small" type="text" class="quick-actions__trigger" @click.stop>
+      <BButton square size="small" type="ghost" @click.stop>
         <BIcon icon="lucide:ellipsis" :size="14" />
       </BButton>
 
@@ -106,21 +123,6 @@ const menuOptions = computed<DropdownOption[]>(() => [
     onClick: () => emit('export-pdf')
   },
   {
-    type: 'divider'
-  },
-  {
-    value: 'toggle-outline',
-    label: showOutline.value ? '隐藏大纲' : '显示大纲',
-    icon: showOutline.value ? 'lucide:eye-off' : 'lucide:eye',
-    onClick: toggleOutline
-  },
-  {
-    value: 'toggle-view-mode',
-    label: viewMode.value === 'rich' ? '切换源代码模式' : '切换预览模式',
-    icon: 'lucide:file-code',
-    onClick: toggleViewMode
-  },
-  {
     value: 'page-width',
     label: '视宽',
     icon: 'lucide:maximize',
@@ -167,18 +169,7 @@ const menuOptions = computed<DropdownOption[]>(() => [
 
 <style scoped>
 .quick-actions {
-  position: absolute;
-  top: 16px;
-  right: 10px;
-  z-index: 10;
-}
-
-.quick-actions__trigger {
-  color: var(--text-secondary);
-  transition: color 0.15s ease;
-}
-
-.quick-actions__trigger:hover {
-  color: var(--text-primary);
+  display: flex;
+  gap: 4px;
 }
 </style>
