@@ -8,9 +8,31 @@ import { useChat } from '@/hooks/useChat';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { asyncTo } from '@/utils/asyncTo';
-import { AUTONAME_DEFAULT_PROMPT } from '@/views/settings/service-model/constants';
 
 const DEBOUNCE_MS = 300;
+
+/**
+ * 自动命名的默认 Prompt 模板。
+ */
+const AUTONAME_DEFAULT_PROMPT = `# Role
+你是一个会话标题生成器。
+
+# Task
+根据用户与 AI 的对话内容，生成一个简洁准确的会话标题。
+
+# Rules
+1. 标题长度不超过 20 个汉字
+2. 标题应概括对话的核心主题，而非描述对话格式
+3. 只输出标题文本，不要包含引号、标点或任何额外说明
+4. 使用用户使用的语言（中文对话输出中文标题，英文对话输出英文标题）
+
+# Conversation
+用户: {{USER_MESSAGE}}
+
+AI: {{AI_RESPONSE}}
+
+# Title
+`;
 
 /**
  * 自动命名快照。
@@ -94,13 +116,13 @@ export function useAutoName(options: AutoNameOptions): {
       return;
     }
 
-    const serviceConfig = await serviceModelStore.getAvailableServiceConfig('autoname');
+    const serviceConfig = await serviceModelStore.getAvailableServiceConfig('chat');
     if (!serviceConfig?.providerId || !serviceConfig?.modelId) {
       namedSessionIds.value.add(snapshot.sessionId);
       return;
     }
 
-    const promptTemplate = serviceConfig.customPrompt || AUTONAME_DEFAULT_PROMPT;
+    const promptTemplate = AUTONAME_DEFAULT_PROMPT;
     const prompt = promptTemplate.replace(/\{\{USER_MESSAGE\}\}/g, snapshot.userMessage).replace(/\{\{AI_RESPONSE\}\}/g, snapshot.aiResponse);
 
     const [invokeError, result] = await agent.invoke({

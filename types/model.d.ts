@@ -6,7 +6,7 @@
 /**
  * 服务模型类型
  */
-export type ModelServiceType = 'polish' | 'chat' | 'autoname';
+export type ModelServiceType = 'polish' | 'chat';
 
 /**
  * 服务模型配置

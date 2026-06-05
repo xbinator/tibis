@@ -16,14 +16,6 @@
       :options="POLISH_SERVICE_CONFIG_OPTIONS"
       :default-prompt="POLISH_DEFAULT_PROMPT"
     />
-
-    <ServiceConfig
-      service-type="autoname"
-      title="话题自动命名助理"
-      description="指定用于自动生成会话标题的模型"
-      :options="AUTONAME_SERVICE_CONFIG_OPTIONS"
-      :default-prompt="AUTONAME_DEFAULT_PROMPT"
-    />
   </BSettingsPage>
 </template>
 
@@ -31,13 +23,7 @@
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import ServiceConfig from './components/ServiceConfig.vue';
-import {
-  AUTONAME_DEFAULT_PROMPT,
-  AUTONAME_SERVICE_CONFIG_OPTIONS,
-  CHAT_SERVICE_CONFIG_OPTIONS,
-  POLISH_DEFAULT_PROMPT,
-  POLISH_SERVICE_CONFIG_OPTIONS
-} from './constants';
+import { CHAT_SERVICE_CONFIG_OPTIONS, POLISH_DEFAULT_PROMPT, POLISH_SERVICE_CONFIG_OPTIONS } from './constants';
 
 const serviceModelStore = useServiceModelStore();
 
