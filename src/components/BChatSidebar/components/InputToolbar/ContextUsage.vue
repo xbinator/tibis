@@ -25,7 +25,7 @@
           <div class="context-usage__summary">
             <div class="context-usage__total">
               <div class="context-usage__total-value">{{ formatTokens(usedTokens) }}</div>
-              <div class="context-usage__total-label">已使用</div>
+              <div class="context-usage__total-label">估算已用</div>
             </div>
 
             <div class="context-usage__stats">

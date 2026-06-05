@@ -24,7 +24,7 @@
         <div class="usage-panel__summary">
           <div class="usage-panel__total">
             <div class="usage-panel__total-value">{{ formatTokens(usage.totalTokens) }}</div>
-            <div class="usage-panel__total-label">本次会话合计</div>
+            <div class="usage-panel__total-label">会话累计</div>
           </div>
 
           <div class="usage-panel__stats">
