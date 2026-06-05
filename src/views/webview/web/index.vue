@@ -134,14 +134,18 @@ function handleHostedWheelEvent(event: Event): void {
 }
 
 const recentStore = useRecentStore();
+let hasWrittenRecentWebviewRecord = false;
 
 /**
  * 导航事件回调，将当前 webview 页面写入最近记录。
  * debounce 300ms 避免重定向链产生多条记录。
  */
 const writeRecentWebviewRecord = debounce(() => {
+  if (hasWrittenRecentWebviewRecord) return;
+
   const { url, title } = webview.state.value;
   if (!url) return;
+  hasWrittenRecentWebviewRecord = true;
   recentStore.addWebviewRecord(url, title || url).catch(console.error);
 }, 300);
 
@@ -149,6 +153,8 @@ const writeRecentWebviewRecord = debounce(() => {
  * 导航完成事件处理，触发记录写入。
  */
 function handleDidNavigateRecord(): void {
+  if (hasWrittenRecentWebviewRecord) return;
+
   writeRecentWebviewRecord();
 }
 
