@@ -213,26 +213,17 @@ export const providerStorage = {
     const merged: AIProvider[] = [];
     const seenIds = new Set<string>();
 
-    // 先按 settings.json 中记录的顺序输出，支持用户自定义排序。
-    for (const entry of entries) {
-      const base = getDefaultProvider(entry.id);
-      if (base) {
-        merged.push(mergeProvider(base, entry));
-        seenIds.add(entry.id);
-        continue;
-      }
-
-      if (entry.isCustom) {
-        merged.push(entryToCustomProvider(entry));
-        seenIds.add(entry.id);
-      }
+    // 先按内置默认顺序输出，避免本地配置写入顺序影响服务商展示顺序。
+    for (const base of DEFAULT_PROVIDERS) {
+      merged.push(mergeProvider(base, entryMap.get(base.id)));
+      seenIds.add(base.id);
     }
 
-    // settings.json 未记录的内置服务商按默认顺序追加，保证新内置服务商可见。
-    for (const base of DEFAULT_PROVIDERS) {
-      if (!seenIds.has(base.id)) {
-        merged.push(mergeProvider(base, entryMap.get(base.id)));
-        seenIds.add(base.id);
+    // 自定义服务商继续按 settings.json 中的顺序追加。
+    for (const entry of entries) {
+      if (entry.isCustom && !seenIds.has(entry.id)) {
+        merged.push(entryToCustomProvider(entry));
+        seenIds.add(entry.id);
       }
     }
 
