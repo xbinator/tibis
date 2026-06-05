@@ -1,6 +1,6 @@
 <template>
   <div :class="name">
-    <BBubble :show-container="showContainer" :placement="bubblePlacement" :loading="message.loading" :size="message.role === 'user' ? 'auto' : 'fill'">
+    <BBubble :show-container="showContainer" :placement="bubblePlacement" :loading="bubbleLoading" :size="message.role === 'user' ? 'auto' : 'fill'">
       <template v-if="showHeader" #header>
         <div :class="bem('header')">
           <div v-if="imageFiles.length" :class="bem('images')">
@@ -33,7 +33,7 @@
           <BubblePartThinking v-else-if="!isCompressionMessage && item.type === 'thinking'" :part="item" />
 
           <QuestionCard
-            v-else-if="!isCompressionMessage && !disabled && isAwaitingUserChoicePart(item)"
+            v-else-if="!isCompressionMessage && !disabled && isAwaitingUserChoiceResult(item)"
             :question="item.result.data"
             :disabled="disabled"
             @submit-choice="$emit('user-choice-submit', $event)"
@@ -68,8 +68,7 @@
  * @description 聊天气泡组件，按结构化消息片段渲染文本、思考、工具调用和工具结果。
  */
 import type { Message } from '../utils/types';
-import type { AIToolExecutionAwaitingUserInputResult } from 'types/ai';
-import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageTextPart, ChatMessageToolPart } from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessageTextPart } from 'types/chat';
 import { computed, ref } from 'vue';
 import BBubble from '@/components/BBubble/index.vue';
 import BImageViewer from '@/components/BImageViewer/index.vue';
@@ -138,13 +137,10 @@ const currentImageIndex = ref(0);
 /** 图片预览列表（提取 url 或 path） */
 const imagePreviewList = computed(() => imageFiles.value.map((file) => file.url || file.path || ''));
 
-/**
- * 判断片段是否为等待用户选择的工具结果。
- * @param part - 消息片段
- */
-function isAwaitingUserChoicePart(part: ChatMessagePart): part is ChatMessageToolPart & { result: AIToolExecutionAwaitingUserInputResult } {
-  return isAwaitingUserChoiceResult(part);
-}
+/** 是否处于等待用户回答问题的状态 */
+const isAwaitingQuestionMessage = computed(() => props.message.parts.some(isAwaitingUserChoiceResult));
+/** 气泡加载态。等待用户回答时不传递 loading，避免遮挡问题卡片的静态等待态。 */
+const bubbleLoading = computed(() => (isAwaitingQuestionMessage.value ? undefined : props.message.loading));
 
 /**
  * 过滤后的消息片段。排除已移至底部弹窗的 confirmation 片段。
