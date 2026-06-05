@@ -34,7 +34,7 @@ const editorRef = ref<EditorController | null>(null);
 const isActive = ref(true);
 const isEditorReady = computed<boolean>(() => editorRef.value !== null);
 
-useBindings(fileId, { fileState, actions, editorInstance: editorRef });
+useBindings(fileId, { fileState, isActive, actions, editorInstance: editorRef });
 
 useFileSelection({
   fileState,
