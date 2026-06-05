@@ -1,21 +1,35 @@
+<!--
+  @file index.vue
+  @description 消息内容渲染组件，支持 Markdown、纯文本、流式光标与 Markdown 图片预览。
+-->
 <template>
   <div ref="rootRef" class="b-message" :class="`b-message--${loading ? 'streaming' : 'done'}`" :style="rootStyle">
     <div class="b-message__placeholder" aria-hidden="true"></div>
 
     <div class="b-message__container">
       <!-- Markdown 渲染 -->
-      <div v-if="type === 'markdown'" class="b-message__markdown" @click="navigate.onLink" v-html="renderedMarkdown"></div>
+      <div
+        v-if="type === 'markdown'"
+        ref="markdownRef"
+        class="b-message__markdown"
+        @click="handleMarkdownClick"
+        @mousedown="handleMarkdownMouseDown"
+        v-html="renderedMarkdown"
+      ></div>
 
       <!-- 纯文本渲染 -->
       <div v-else class="b-message__text">{{ content }}<span v-if="loading" class="b-message__cursor" aria-hidden="true"></span></div>
     </div>
+
+    <BImageViewer v-model:show="showImageViewer" :images="imagePreviewList" :start-position="currentImageIndex" :show-carousel="imagePreviewList.length > 1" />
   </div>
 </template>
 
 <script setup lang="ts">
 import type { BMessageProps as Props } from './types';
-import { computed, onScopeDispose, shallowRef, watch } from 'vue';
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import { marked } from 'marked';
+import BImageViewer from '@/components/BImageViewer/index.vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { addCssUnit } from '@/utils/css';
 
@@ -41,6 +55,18 @@ marked.use({
 defineOptions({ name: 'BMessage' });
 
 const navigate = useNavigate();
+
+/** Markdown 渲染容器，用于收集 v-html 输出的图片节点 */
+const markdownRef = ref<HTMLElement | null>(null);
+
+/** 图片查看器显示状态 */
+const showImageViewer = ref(false);
+
+/** 当前预览图片索引 */
+const currentImageIndex = ref(0);
+
+/** 当前消息内可预览的图片列表 */
+const imagePreviewList = ref<string[]>([]);
 
 const props = withDefaults(defineProps<Props>(), {
   type: 'markdown',
@@ -78,6 +104,80 @@ function parseMarkdown(text: string, loading: boolean): string {
   }
 
   return html;
+}
+
+/**
+ * 从事件目标向上查找 Markdown 图片节点。
+ * @param target - 原始事件目标
+ * @returns 命中的图片元素，未命中时返回 null
+ */
+function findMarkdownImageElement(target: EventTarget | null): HTMLImageElement | null {
+  if (!(target instanceof Element)) return null;
+
+  const imageElement = target.closest('img[src]');
+  return imageElement instanceof HTMLImageElement ? imageElement : null;
+}
+
+/**
+ * 获取图片展示地址，优先使用浏览器实际加载地址。
+ * @param imageElement - 图片元素
+ * @returns 图片 URL
+ */
+function getImageSource(imageElement: HTMLImageElement): string {
+  return imageElement.currentSrc || imageElement.getAttribute('src') || imageElement.src;
+}
+
+/**
+ * 收集当前 Markdown 内容中的全部图片元素。
+ * @returns 图片元素列表
+ */
+function collectMarkdownImageElements(): HTMLImageElement[] {
+  return Array.from(markdownRef.value?.querySelectorAll<HTMLImageElement>('img[src]') ?? []);
+}
+
+/**
+ * 打开 Markdown 图片预览器。
+ * @param imageElement - 被点击的图片元素
+ */
+function openImageViewer(imageElement: HTMLImageElement): void {
+  const imageElements = collectMarkdownImageElements();
+  const imageSources = imageElements.map(getImageSource).filter((source) => Boolean(source));
+  const currentIndex = imageElements.findIndex((item) => item === imageElement);
+
+  if (!imageSources.length) return;
+
+  imagePreviewList.value = imageSources;
+  currentImageIndex.value = Math.max(0, currentIndex);
+  showImageViewer.value = true;
+}
+
+/**
+ * 处理 Markdown 内容点击：图片打开预览，其余链接交给统一导航逻辑。
+ * @param event - 鼠标点击事件
+ */
+function handleMarkdownClick(event: MouseEvent): void {
+  const imageElement = findMarkdownImageElement(event.target);
+
+  if (imageElement) {
+    event.preventDefault();
+    event.stopPropagation();
+    openImageViewer(imageElement);
+    return;
+  }
+
+  navigate.onLink(event);
+}
+
+/**
+ * 图片按下时阻止浏览器拖拽/选区，避免与父级 user-select: text 冲突。
+ * @param event - 鼠标按下事件
+ */
+function handleMarkdownMouseDown(event: MouseEvent): void {
+  const imageElement = findMarkdownImageElement(event.target);
+
+  if (!imageElement) return;
+
+  event.preventDefault();
 }
 
 /** 流式渲染结果，使用 shallowRef 避免深度追踪 */
@@ -159,6 +259,12 @@ onScopeDispose(() => {
 
 .b-message__markdown {
   .markdown-base();
+
+  img {
+    cursor: zoom-in;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
 }
 
 .b-message__cursor {
