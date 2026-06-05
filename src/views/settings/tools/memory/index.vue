@@ -28,7 +28,7 @@
 
       <MemoryContent v-if="!memoryStore.isEmpty" :content="memoryStore.rawContent" />
 
-      <MemoryInput ref="memoryInputRef" v-model:open="editing" :loading="organizing" @submit="handleSend" @cancel="cancelEdit" />
+      <MemoryInput v-model:open="editing" />
     </BSettingsSection>
   </BSettingsPage>
 </template>
@@ -44,16 +44,12 @@ import { useSettingStore } from '@/stores/ui/setting';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import MemoryContent from './components/MemoryContent.vue';
 import MemoryInput from './components/MemoryInput.vue';
-import { useMemory } from './hooks/useMemory';
 
 const memoryStore = useMemoryStore();
 const settingStore = useSettingStore();
-const { organizing, organize } = useMemory();
 
 /** 是否处于编辑模式 */
 const editing = ref(false);
-/** 输入组件引用 */
-const memoryInputRef = ref<InstanceType<typeof MemoryInput>>();
 
 /**
  * 切换记忆功能开关
@@ -69,26 +65,6 @@ function handleToggleEnabled(value: boolean | string | number): void {
  */
 function startEdit(): void {
   editing.value = true;
-}
-
-/**
- * 取消编辑模式
- */
-function cancelEdit(): void {
-  editing.value = false;
-  memoryInputRef.value?.clear();
-}
-
-/**
- * 发送编辑内容，调用 AI 整理
- * @param content - 用户输入的增量内容
- */
-async function handleSend(content: string): Promise<void> {
-  const success = await organize(content);
-  if (success) {
-    editing.value = false;
-    memoryInputRef.value?.clear();
-  }
 }
 </script>
 

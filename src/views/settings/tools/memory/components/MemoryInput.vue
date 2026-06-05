@@ -10,7 +10,7 @@
         v-model="content"
         class="memory-input__field"
         placeholder="告诉我要记住或忘记什么..."
-        :disabled="loading"
+        :disabled="organizing"
         @keydown.enter="handleSubmit"
         @keydown.escape="handleCancel"
       />
@@ -18,13 +18,13 @@
       <div
         class="memory-input__send"
         :class="{
-          disabled: !hasContent || loading,
-          active: hasContent && !loading,
-          loading
+          disabled: !hasContent || organizing,
+          active: hasContent && !organizing,
+          loading: organizing
         }"
         @click="handleSubmit"
       >
-        <BIcon v-if="loading" icon="lucide:loader-2" class="memory-input__send-spin" />
+        <BIcon v-if="organizing" icon="lucide:loader-2" class="memory-input__send-spin" />
         <BIcon v-else icon="lucide:send" />
       </div>
     </div>
@@ -37,23 +37,9 @@
  * @description 记忆输入弹窗组件，以 Modal 形式提供输入框和发送按钮，支持 ESC 退出编辑。
  */
 import { computed, nextTick, ref, watch } from 'vue';
+import { useMemory } from '../hooks/useMemory';
 
-/**
- * 组件 props
- */
-interface Props {
-  /** 发送按钮加载状态 */
-  loading?: boolean;
-}
-
-const props = defineProps<Props>();
-
-const emit = defineEmits<{
-  /** 提交内容 */
-  (e: 'submit', content: string): void;
-  /** 取消编辑（ESC） */
-  (e: 'cancel'): void;
-}>();
+const { organizing, organize } = useMemory();
 
 /** 弹窗是否打开 */
 const visible = defineModel<boolean>('open', { default: false });
@@ -69,12 +55,16 @@ const hasContent = computed(() => content.value.trim().length > 0);
 watch(visible, (val) => val && nextTick(() => inputRef.value?.focus()));
 
 /**
- * 提交输入内容
+ * 提交输入内容，调用 AI 整理记忆
  */
-function handleSubmit(): void {
-  if (!hasContent.value || props.loading) return;
+async function handleSubmit(): Promise<void> {
+  if (!hasContent.value || organizing.value) return;
   const value = content.value.trim();
-  emit('submit', value);
+  const success = await organize(value);
+  if (success) {
+    content.value = '';
+    visible.value = false;
+  }
 }
 
 /**
@@ -83,7 +73,6 @@ function handleSubmit(): void {
 function handleCancel(): void {
   content.value = '';
   visible.value = false;
-  emit('cancel');
 }
 
 /**
