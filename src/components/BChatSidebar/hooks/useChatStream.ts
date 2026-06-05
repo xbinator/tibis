@@ -48,7 +48,7 @@ export interface UseChatStreamOptions {
   /** 重新生成前回调 */
   onBeforeRegenerate?: (messages: Message[], triggerMessage: Message) => Promise<void> | void;
   /** 消息完成回调 */
-  onComplete?: (message: Message) => void;
+  onComplete?: (message: Message) => Promise<void> | void;
   /** 确认卡片操作回调 */
   onConfirmationAction?: (confirmationId: string, action: ChatMessageConfirmationAction) => void | Promise<void>;
 }
@@ -433,13 +433,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
    * 当工具调用轮次或重复次数超过限制时触发
    * @param reason - 停止原因
    */
-  function stopToolLoop(reason: string) {
+  async function stopToolLoop(reason: string): Promise<void> {
     blockedToolLoopReason.value = reason;
     pendingToolResults.value = [];
     removeTrailingEmptyAssistantMessage();
 
     const errorMessage = mergeErrorMessage(reason);
-    onComplete?.(errorMessage);
+    await onComplete?.(errorMessage);
   }
 
   /**
@@ -480,7 +480,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     const guardResult = currentToolLoopGuard.recordToolCall(chunk.toolName, chunk.input);
     if (!guardResult.allowed) {
-      stopToolLoop(guardResult.reason ?? '工具调用重复次数超过限制，已停止自动续轮。');
+      await stopToolLoop(guardResult.reason ?? '工具调用重复次数超过限制，已停止自动续轮。');
       return;
     }
 
@@ -647,6 +647,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
    * 处理流式完成
    */
   async function handleStreamComplete(): Promise<void> {
+    flushAllBuffers();
+
     if (aborting.value) {
       aborting.value = false;
       activeTaskType.value = null;
@@ -682,7 +684,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       loading.value = true;
       activeTaskType.value = null;
       if (message) {
-        onComplete?.(message);
+        await onComplete?.(message);
       }
       return;
     }
@@ -699,13 +701,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       const roundGuardResult = currentToolLoopGuard.advanceRound();
       if (!roundGuardResult.allowed) {
         executedToolCallIds = new Set();
-        stopToolLoop(roundGuardResult.reason ?? '工具调用轮次超过限制，已停止自动续轮。');
+        await stopToolLoop(roundGuardResult.reason ?? '工具调用轮次超过限制，已停止自动续轮。');
         return;
       }
 
       pendingToolResults.value = [];
       if (message) {
-        onComplete?.(message);
+        await onComplete?.(message);
       }
       nextTick(() => {
         handleStreamMessages(messages.value, lastServiceConfig as ServiceConfig, true);
@@ -718,7 +720,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       if (!roundGuardResult.allowed) {
         executedToolCallIds = new Set();
         appendSilentSdkCompletionHint(message);
-        onComplete?.(message);
+        await onComplete?.(message);
         return;
       }
 
@@ -732,7 +734,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     if (message) {
       appendSilentSdkCompletionHint(message);
-      onComplete?.(message);
+      await onComplete?.(message);
     }
   }
 
@@ -741,14 +743,15 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
    * 当 AI 服务返回错误时触发，重置状态并显示错误消息
    * @param error - AI 服务错误对象
    */
-  function handleStreamError(error: AIServiceError) {
+  async function handleStreamError(error: AIServiceError): Promise<void> {
+    flushAllBuffers();
     loading.value = false;
     activeTaskType.value = null;
     resetToolLoopState();
     removeTrailingEmptyAssistantMessage();
 
     const errorMessage = mergeErrorMessage(error.message);
-    onComplete?.(errorMessage);
+    await onComplete?.(errorMessage);
   }
 
   /**
