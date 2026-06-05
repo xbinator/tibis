@@ -2,6 +2,7 @@
  * @file useWebView.ts
  * @description 封装 `<webview>` 标签页面状态与导航控制。
  */
+import type { DidNavigateEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { ref, type Ref } from 'vue';
 import type { WebviewPageHeading, WebviewPageLink, WebviewPageSnapshot, WebviewPageTruncation } from '@/ai/tools/context/webview';
 import type { WebviewController, WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
@@ -724,7 +725,7 @@ function createTouchSimulationScript(enabled: boolean): string {
  * @param webviewRef - `<webview>` 实例引用
  * @returns `<webview>` 控制器与事件处理器
  */
-export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
+export function useWebView(webviewRef: Ref<WebviewTag | null>) {
   const state = ref<WebviewPageState>({ ...DEFAULT_STATE });
   const selectedElement = ref<WebviewElementSelection | null>(null);
   let initialUrlAttached = false;
@@ -997,7 +998,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
    * 处理导航事件。
    * @param event - 导航事件
    */
-  function handleDidNavigate(event: Electron.DidNavigateEvent): void {
+  function handleDidNavigate(event: DidNavigateEvent): void {
     state.value.url = event.url;
     syncNavigationState();
   }
@@ -1006,7 +1007,7 @@ export function useWebView(webviewRef: Ref<Electron.WebviewTag | null>) {
    * 处理标题更新事件。
    * @param event - 标题事件
    */
-  function handleTitleUpdated(event: Electron.PageTitleUpdatedEvent): void {
+  function handleTitleUpdated(event: PageTitleUpdatedEvent): void {
     state.value.title = event.title;
   }
 

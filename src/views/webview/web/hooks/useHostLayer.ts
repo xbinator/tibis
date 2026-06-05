@@ -2,6 +2,7 @@
  * @file useHostLayer.ts
  * @description 管理 `<webview>` 宿主层与占位容器的位置/尺寸同步，封装 RAF 调度与生命周期绑定。
  */
+import type { WebviewTag } from 'electron';
 import { onActivated, onDeactivated, onMounted, type Ref } from 'vue';
 import { useEventListener, useResizeObserver } from '@vueuse/core';
 import { ensureWebviewHostLayer, hideWebviewHostLayer, showWebviewHostLayer } from '../utils/hosting';
@@ -19,7 +20,7 @@ export function useHostLayer(
   routeFullPath: string,
   webviewContainerRef: Ref<HTMLElement | null>,
   webviewContentRef: Ref<HTMLElement | null>,
-  webviewElementRef: Ref<Electron.WebviewTag | null>
+  webviewElementRef: Ref<WebviewTag | null>
 ) {
   let frame: number | null = null;
 

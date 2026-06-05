@@ -2,6 +2,7 @@
  * @file useScreenshot.ts
  * @description 封装 WebView 视图截图与完整页面长截屏能力。
  */
+import type { WebviewTag } from 'electron';
 import type { Ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { native } from '@/shared/platform';
@@ -35,7 +36,7 @@ type ScreenshotState = Pick<WebviewPageState, 'title' | 'url'>;
  */
 export interface UseScreenshotOptions {
   /** 当前 `<webview>` 元素引用 */
-  webviewElementRef: Ref<Electron.WebviewTag | null>;
+  webviewElementRef: Ref<WebviewTag | null>;
   /** 当前页面标题与地址 */
   webviewState: Ref<ScreenshotState>;
 }
@@ -55,7 +56,7 @@ interface RenderedCaptureSlice {
  * @param webviewElementRef - `<webview>` 元素引用
  * @returns 已就绪的 `<webview>` 实例
  */
-function getReadyWebviewElement(webviewElementRef: Ref<Electron.WebviewTag | null>): Electron.WebviewTag {
+function getReadyWebviewElement(webviewElementRef: Ref<WebviewTag | null>): WebviewTag {
   const instance = webviewElementRef.value;
   if (!instance) {
     throw new Error('当前页面尚未准备好，请稍后重试');
@@ -73,7 +74,7 @@ function getReadyWebviewElement(webviewElementRef: Ref<Electron.WebviewTag | nul
  * @param element - `<webview>` 实例
  * @returns 页面截屏尺寸信息
  */
-async function readPageCaptureMetrics(element: Electron.WebviewTag): Promise<WebviewPageCaptureMetrics> {
+async function readPageCaptureMetrics(element: WebviewTag): Promise<WebviewPageCaptureMetrics> {
   const metrics = (await element.executeJavaScript(createPageCaptureMetricsScript())) as unknown;
 
   if (!isWebviewPageCaptureMetrics(metrics)) {
@@ -188,7 +189,7 @@ async function saveScreenshot(webviewState: Ref<ScreenshotState>, buffer: ArrayB
  * @param element - `<webview>` 实例
  * @returns 拼接后的 PNG 二进制
  */
-async function captureFullPagePng(element: Electron.WebviewTag): Promise<ArrayBuffer> {
+async function captureFullPagePng(element: WebviewTag): Promise<ArrayBuffer> {
   const metrics = await readPageCaptureMetrics(element);
   const slices = buildPageCaptureSlices(metrics);
   const renderedSlices: RenderedCaptureSlice[] = [];

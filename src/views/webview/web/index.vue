@@ -44,6 +44,7 @@
  * @file index.vue
  * @description `<webview>` 标签页面入口。
  */
+import type { WebviewTag } from 'electron';
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type CSSProperties } from 'vue';
 import { useRoute } from 'vue-router';
 import { debounce } from 'lodash-es';
@@ -65,7 +66,7 @@ import { ensureHostedWebviewElement, ensureWebviewHostLayer } from './utils/host
 const route = useRoute();
 const webviewContentRef = ref<HTMLElement | null>(null);
 const webviewContainerRef = ref<HTMLElement | null>(null);
-const webviewElementRef = ref<Electron.WebviewTag | null>(null);
+const webviewElementRef = ref<WebviewTag | null>(null);
 
 const routeFullPath = route.fullPath;
 const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as string) || ''));
@@ -171,7 +172,7 @@ const webviewEventMap: Array<{ name: string; handler: EventListener | ((event: E
  * 绑定 `<webview>` 事件。
  * @param element - `<webview>` 元素
  */
-function bindWebviewEvents(element: Electron.WebviewTag): void {
+function bindWebviewEvents(element: WebviewTag): void {
   webviewEventMap.forEach(({ name, handler, useCapture }) => {
     element.addEventListener(name, handler, useCapture);
   });
@@ -181,7 +182,7 @@ function bindWebviewEvents(element: Electron.WebviewTag): void {
  * 解绑 `<webview>` 事件。
  * @param element - `<webview>` 元素
  */
-function unbindWebviewEvents(element: Electron.WebviewTag): void {
+function unbindWebviewEvents(element: WebviewTag): void {
   webviewEventMap.forEach(({ name, handler, useCapture }) => {
     element.removeEventListener(name, handler, useCapture);
   });
@@ -263,7 +264,7 @@ const offAttachRejected = window.electronAPI?.webview.onAttachRejected((payload)
  * `<webview>` 与当前标签页宿主层始终挂在 `document.body` 下，不跟随页面 DOM 重挂载。
  * @returns `<webview>` 元素
  */
-function ensureWebviewElement(): Electron.WebviewTag {
+function ensureWebviewElement(): WebviewTag {
   if (webviewElementRef.value) {
     return webviewElementRef.value;
   }

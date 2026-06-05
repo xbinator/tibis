@@ -11,6 +11,7 @@ export type {
   CompressionRecordStatus,
   TriggerReason,
   FileContextSummary,
+  GeneralConversationSummary,
   StructuredConversationSummary,
   CompressionRecord,
   CompressionRecordStorage
@@ -103,7 +104,7 @@ export interface GenerateStructuredSummaryInput {
   /** 规则裁剪后的消息项列表 */
   items: TrimmedMessageItem[];
   /** 上一条压缩记录（增量模式下传入） */
-  previousRecord?: Pick<CompressionRecord, 'recordText' | 'structuredSummary'>;
+  previousRecord?: Pick<CompressionRecord, 'recordText' | 'structuredSummary' | 'generalSummary'>;
 }
 
 /**

@@ -643,6 +643,7 @@ async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promi
 const { handleAutoCompactContext, handleCompactContext } = useCompactContext({
   messages,
   getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined,
+  getContextWindow: () => contextWindow.value,
   beginCompactTask: (onAbort?: () => void) => taskRuntime.beginTask('compact', onAbort),
   finishCompactTask: () => taskRuntime.finishTask('compact'),
   persistMessage: (sessionId, nextMessage) => chatStore.addSessionMessage(sessionId, nextMessage),

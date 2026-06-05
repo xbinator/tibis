@@ -19,6 +19,7 @@ import { CompressionCancelledError, CompressionError } from './error';
 import { planCompression } from './planner';
 import { ruleTrim, truncateSummaryText } from './recordPreprocessor';
 import { generateStructuredSummary, generateSummaryText } from './structuredSummaryGenerator';
+import { fromStructuredConversationSummary } from './summaryAdapter';
 import { detectTopicBoundaries, segmentMessages } from './topicSegmenter';
 
 /**
@@ -35,10 +36,14 @@ const sessionLocks = new Map<string, Promise<void>>();
  * @param currentRecord - 当前有效压缩记录（用于继承上下文）
  * @returns 前置上下文记录，优先使用上一段记录，否则使用当前记录
  */
-function getPreviousRecordForSegment(currentIndex: number, records: CompressionRecord[], currentRecord?: CompressionRecord) {
+function getPreviousRecordForSegment(
+  currentIndex: number,
+  records: CompressionRecord[],
+  currentRecord?: CompressionRecord
+): Pick<CompressionRecord, 'recordText' | 'structuredSummary' | 'generalSummary'> | undefined {
   if (currentIndex > 0 && records.length > 0) {
     const lastRecord = records[records.length - 1];
-    return { recordText: lastRecord.recordText, structuredSummary: lastRecord.structuredSummary };
+    return { recordText: lastRecord.recordText, structuredSummary: lastRecord.structuredSummary, generalSummary: lastRecord.generalSummary };
   }
   return currentRecord;
 }
@@ -189,6 +194,7 @@ async function buildMultiSegmentSummary(params: BuildMultiSegmentSummaryParams):
         throw new CompressionError('AI 摘要生成失败', 'ai_summary', error);
       }
 
+      const generalSummary = fromStructuredConversationSummary(structuredSummary);
       const recordText = truncateSummaryText(generateSummaryText(structuredSummary));
 
       try {
@@ -205,6 +211,7 @@ async function buildMultiSegmentSummary(params: BuildMultiSegmentSummaryParams):
           preservedMessageIds: classification.preservedMessageIds,
           recordText,
           structuredSummary,
+          generalSummary,
           triggerReason,
           messageCountSnapshot: Math.ceil(messages.filter((m) => m.role === 'user' || m.role === 'assistant').length / 2),
           charCountSnapshot: trimmed.charCount,
@@ -338,6 +345,7 @@ async function buildSummaryRecord(options: BuildSummaryRecordOptions): Promise<B
   });
   throwIfCompressionCancelled(signal);
 
+  const generalSummary = fromStructuredConversationSummary(structuredSummary);
   const recordText = truncateSummaryText(generateSummaryText(structuredSummary));
   const allSummarizedIds = orderedSummarizedMessages.map((m) => m.id);
 
@@ -364,6 +372,7 @@ async function buildSummaryRecord(options: BuildSummaryRecordOptions): Promise<B
       preservedMessageIds: classification.preservedMessageIds,
       recordText,
       structuredSummary,
+      generalSummary,
       triggerReason,
       messageCountSnapshot: Math.ceil(messages.filter((m) => m.role === 'user' || m.role === 'assistant').length / 2),
       charCountSnapshot: trimmed.charCount,

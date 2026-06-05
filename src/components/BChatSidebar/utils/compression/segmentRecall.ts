@@ -5,6 +5,7 @@
 
 import type { CompressionRecord } from './types';
 import type { Message } from '@/components/BChatSidebar/utils/types';
+import { renderCompressionHandoff } from './summaryRenderer';
 
 /**
  * 段相关性得分。
@@ -134,12 +135,12 @@ function scoreSegment(record: CompressionRecord, keywords: string[], filePaths: 
 
 /**
  * 粗略估算摘要段 token 体积。
- * 召回阶段只用于预算控制，因此采用字符级近似即可。
+ * 召回阶段实际注入 Markdown 交接稿，因此用渲染后的文本做字符级近似。
  * @param record - 压缩记录
  * @returns 估算 token 数
  */
 function estimateSummaryTokens(record: CompressionRecord): number {
-  return Math.ceil(record.recordText.length / 2);
+  return Math.ceil(renderCompressionHandoff({ record }).length / 2);
 }
 
 /**
@@ -224,7 +225,7 @@ export function buildMultiSegmentSummarySystemMessage(segments: CompressionRecor
     .map((s) => {
       const index = s.segmentIndex ?? 0;
       return `<conversation_summary segment="${index}">
-${s.recordText}
+${renderCompressionHandoff({ record: s })}
 </conversation_summary>`;
     })
     .join('\n');

@@ -19,4 +19,4 @@ export const COMPRESSION_INPUT_CHAR_LIMIT = 32_000;
 export const COMPRESSION_SUMMARY_TEXT_MAX = 4_000;
 
 /** 当前支持的摘要 schema 版本 */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;

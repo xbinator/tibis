@@ -2,6 +2,7 @@
  * @file hosting.ts
  * @description 管理 `<webview>` 标签页宿主层与 DOM 节点。
  */
+import type { WebviewTag } from 'electron';
 
 /**
  * 宿主层节点 ID。
@@ -141,14 +142,14 @@ export function ensureWebviewHostLayer(doc: Document, hostKey?: string): HTMLDiv
  * @param hostLayer - 标签页宿主层
  * @returns `<webview>` 元素
  */
-export function ensureHostedWebviewElement(hostLayer: HTMLElement): Electron.WebviewTag {
+export function ensureHostedWebviewElement(hostLayer: HTMLElement): WebviewTag {
   const existing = hostLayer.querySelector('webview');
   if (existing instanceof HTMLElement) {
     applyHostedWebviewElementStyle(existing);
-    return existing as Electron.WebviewTag;
+    return existing as WebviewTag;
   }
 
-  const webviewElement = document.createElement('webview') as Electron.WebviewTag;
+  const webviewElement = document.createElement('webview') as WebviewTag;
   webviewElement.className = 'webview-content__element';
   applyHostedWebviewElementStyle(webviewElement);
   hostLayer.appendChild(webviewElement);

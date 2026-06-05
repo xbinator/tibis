@@ -36,6 +36,32 @@ export interface StructuredConversationSummary {
   pendingActions: string[];
 }
 
+/** 通用长聊天压缩摘要 */
+export interface GeneralConversationSummary {
+  /** 对话连续性：关系、语气、长期主线和用户期待的互动方式 */
+  conversationContinuity: string[];
+  /** 用户正在长期或当前尝试达成的目标 */
+  goal: string;
+  /** 最近讨论主线，偏自然语言，不替代事实字段 */
+  recentTopic: string;
+  /** 用户长期偏好、称呼、语气、边界和互动方式 */
+  userPreferences: string[];
+  /** 明确限制、必须遵守的条件和用户要求 */
+  constraints: string[];
+  /** 已达成的共识、判断或选择 */
+  decisions: string[];
+  /** 不可丢的事实、数字、名单、代码、路径、URL、时间点 */
+  criticalFacts: string[];
+  /** 从用户原文中确定性摘录出的需求和清单 */
+  rawUserRequirements: string[];
+  /** 当前未完成事项、等待回答的问题、下一步方向 */
+  openLoops: string[];
+  /** 最近 3 轮左右的对话转折 */
+  recentDirection: string[];
+  /** 文件上下文 */
+  fileContext: FileContextSummary[];
+}
+
 /** 会话压缩记录持久化对象 */
 export interface CompressionRecord {
   id: string;
@@ -49,6 +75,8 @@ export interface CompressionRecord {
   preservedMessageIds: string[];
   recordText: string;
   structuredSummary: StructuredConversationSummary;
+  /** v3 通用长聊天摘要视图 */
+  generalSummary?: GeneralConversationSummary;
   triggerReason: TriggerReason;
   messageCountSnapshot: number;
   charCountSnapshot: number;

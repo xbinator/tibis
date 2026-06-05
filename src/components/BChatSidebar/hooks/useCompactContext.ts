@@ -5,22 +5,19 @@
 import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { CompressionRecord } from '../utils/compression/types';
 import type { Message } from '../utils/types';
-import type { ChatCompressionStatus, ChatMessageToolPart } from 'types/chat';
+import type { ChatCompressionStatus } from 'types/chat';
 import type { CompressionRecordStatus } from 'types/compression';
 import type { Ref } from 'vue';
 import { computed, ref } from 'vue';
+import { logger } from '@/shared/logger';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { asyncTo } from '@/utils/asyncTo';
+import { createCompressionMetrics, formatCompressionMetricsLog } from '../utils/compression/compressionMetrics';
 import { createCompressionCoordinator } from '../utils/compression/coordinator';
 import { CompressionCancelledError, CompressionError, getCompressionErrorMessage } from '../utils/compression/error';
+import { renderCompressionHandoff } from '../utils/compression/summaryRenderer';
+import { selectTailPreservedMessageIds } from '../utils/compression/tailPolicy';
 import { createBase, findLatestCompressionBoundaryIndex } from '../utils/messageHelper';
-
-/** 手动压缩后保留的最近原文轮数，用于支持“继续”等依赖尾部上下文的指令。 */
-const MANUAL_COMPRESSION_PRESERVED_ROUNDS = 2;
-/** 压缩上下文内保留的关键工具结果最大数量。 */
-const MAX_KEY_TOOL_RESULT_CONTEXT_COUNT = 5;
-/** 对继续任务有高价值的工具结果名称片段。 */
-const KEY_TOOL_RESULT_NAME_PATTERNS = ['read', 'write', 'edit', 'file', 'reference', 'ask_user', 'choice', 'settings'];
 
 /** 压缩触发来源。 */
 type CompactTriggerSource = 'manual' | 'auto';
@@ -79,6 +76,8 @@ interface UseCompactContextOptions {
   messages: Ref<Message[]>;
   /** 获取活跃会话 ID */
   getSessionId: () => string | undefined;
+  /** 获取当前模型上下文窗口，用于 tail 预算 */
+  getContextWindow?: () => number | undefined;
   /** 启动压缩任务 */
   beginCompactTask: (onAbort?: () => void) => { ok: boolean; signal?: AbortSignal; reason?: 'busy' };
   /** 结束压缩任务 */
@@ -167,140 +166,28 @@ function createCancelledCompressionMessage(): Message {
 }
 
 /**
- * 将字符串数组格式化为摘要字段。
- * @param label - 字段标签
- * @param values - 字段值列表
- * @returns 可注入模型上下文的字段文本
- */
-function formatSummaryList(label: string, values: string[]): string | undefined {
-  if (!values.length) {
-    return undefined;
-  }
-
-  return `${label}：${values.join('；')}`;
-}
-
-/**
- * 格式化文件上下文，保留文件路径与用户意图，便于后续按需重读文件。
- * @param fileContext - 结构化摘要中的文件上下文
- * @returns 文件上下文字段列表
- */
-function formatFileContext(fileContext: CompressionRecord['structuredSummary']['fileContext']): string[] {
-  return fileContext.map((item) => {
-    const lineRange = item.startLine ? `:${item.startLine}-${item.endLine ?? item.startLine}` : '';
-    const reloadHint = item.shouldReloadOnDemand ? '是' : '否';
-    return `文件：${item.filePath}${lineRange}；意图：${item.userIntent}；摘要：${item.keySnippetSummary}；需要时重读：${reloadHint}`;
-  });
-}
-
-/**
- * 将工具结果数据压缩为短文本，避免完整工具载荷撑大上下文。
- * @param data - 工具结果数据
- * @returns 可写入压缩上下文的工具结果摘要
- */
-function summarizeToolResultData(data: unknown): string {
-  if (typeof data === 'string') {
-    return data.slice(0, 400);
-  }
-
-  if (!data || typeof data !== 'object') {
-    return String(data ?? '');
-  }
-
-  const source = data as Record<string, unknown>;
-  const preferred = [source.path, source.filePath, source.summary, source.message, source.error, source.status].filter((item): item is string => {
-    return typeof item === 'string' && item.trim().length > 0;
-  });
-
-  if (preferred.length) {
-    return preferred.join('；').slice(0, 400);
-  }
-
-  try {
-    return JSON.stringify(data).slice(0, 400);
-  } catch {
-    return '[无法序列化的工具结果]';
-  }
-}
-
-/**
- * 判断工具结果是否值得作为压缩上下文中的关键事实保留。
- * @param part - 工具结果片段
- * @returns 是否保留该工具结果摘要
- */
-function isKeyToolResult(part: ChatMessageToolPart): boolean {
-  const toolName = part.toolName.toLowerCase();
-  return KEY_TOOL_RESULT_NAME_PATTERNS.some((pattern) => toolName.includes(pattern));
-}
-
-/**
- * 从被压缩消息中提取关键工具结果摘要。
- * @param sourceMessages - 进入压缩的源消息
- * @returns 工具结果摘要列表
- */
-function extractKeyToolResultContext(sourceMessages: Message[]): string[] {
-  const results: string[] = [];
-
-  for (const sourceMessage of sourceMessages) {
-    for (const part of sourceMessage.parts) {
-      if (part.type !== 'tool' || !part.result || !isKeyToolResult(part)) {
-        continue;
-      }
-
-      results.push(`工具：${part.toolName}；状态：${part.result.status}；结果：${summarizeToolResultData(part.result.data)}`);
-      if (results.length >= MAX_KEY_TOOL_RESULT_CONTEXT_COUNT) {
-        return results;
-      }
-    }
-  }
-
-  return results;
-}
-
-/**
- * 构建注入模型的结构化压缩上下文。
+ * 构建注入模型的压缩上下文交接稿。
  * @param record - 压缩记录
  * @param sourceMessages - 进入压缩的源消息
  * @returns 更适合后续继续对话的上下文文本
  */
 function buildStructuredCompressionContext(record: CompressionRecord, sourceMessages: Message[] = []): string {
-  const summary = record.structuredSummary;
-  const keyToolResults = extractKeyToolResultContext(sourceMessages);
-  const lines = [
-    'COMPRESSED_CONTEXT',
-    '以下是较早对话的压缩上下文。请把它当作历史事实和任务状态，不要向用户复述这段说明。',
-    record.recordText,
-    formatSummaryList('目标', [summary.goal].filter(Boolean)),
-    formatSummaryList('最近话题', [summary.recentTopic].filter(Boolean)),
-    formatSummaryList('用户偏好', summary.userPreferences),
-    formatSummaryList('约束', summary.constraints),
-    formatSummaryList('已做决策', summary.decisions),
-    formatSummaryList('重要事实', summary.importantFacts),
-    ...formatFileContext(summary.fileContext),
-    keyToolResults.length ? 'KEY_TOOL_RESULTS' : undefined,
-    ...keyToolResults,
-    formatSummaryList('待解决问题', summary.openQuestions),
-    formatSummaryList('待处理操作', summary.pendingActions)
-  ].filter((line): line is string => Boolean(line));
-
-  return lines.join('\n');
+  return renderCompressionHandoff({ record, sourceMessages });
 }
 
 /**
  * 创建手动压缩使用的消息快照。
- * 最近两轮 user/assistant 消息保留为原文，不进入摘要，避免后续“继续”丢失具体上下文。
+ * 按 tail 预算保留最近原文，不进入摘要，避免后续“继续”丢失具体上下文。
  * @param sourceMessages - 当前完整消息列表
+ * @param contextWindow - 当前模型上下文窗口
  * @returns 本次实际进入压缩协调器的消息列表
  */
-function createManualCompressionSourceMessages(sourceMessages: Message[]): Message[] {
-  const preserveCount = MANUAL_COMPRESSION_PRESERVED_ROUNDS * 2;
-  const modelMessages = sourceMessages.filter((item) => item.role === 'user' || item.role === 'assistant');
-
-  if (modelMessages.length <= preserveCount) {
+function createManualCompressionSourceMessages(sourceMessages: Message[], contextWindow?: number): Message[] {
+  const preservedIds = selectTailPreservedMessageIds(sourceMessages, { contextWindow });
+  if (!preservedIds.size) {
     return [...sourceMessages];
   }
 
-  const preservedIds = new Set(modelMessages.slice(-preserveCount).map((item) => item.id));
   return sourceMessages.filter((item) => !preservedIds.has(item.id));
 }
 
@@ -324,7 +211,7 @@ function isAlreadyCompactWithoutNewModelMessages(sourceMessages: Message[]): boo
  * @returns 手动压缩命令处理函数
  */
 export function useCompactContext(options: UseCompactContextOptions) {
-  const { messages, getSessionId, beginCompactTask, finishCompactTask, persistMessage, persistMessages, scrollToBottom, showToast } = options;
+  const { messages, getSessionId, getContextWindow, beginCompactTask, finishCompactTask, persistMessage, persistMessages, scrollToBottom, showToast } = options;
 
   /** 压缩状态 */
   const compressing = ref(false);
@@ -439,8 +326,11 @@ export function useCompactContext(options: UseCompactContextOptions) {
    */
   function buildCompressionBoundaryMessage(result: CompressionExecutionResult, sourceMessages: Message[] = []): Message {
     if (result.success && result.record) {
+      const boundaryText = buildStructuredCompressionContext(result.record, sourceMessages);
+      logger.info(formatCompressionMetricsLog(createCompressionMetrics({ record: result.record, boundaryText, sourceMessages })));
+
       return createSuccessfulCompressionMessage({
-        boundaryText: buildStructuredCompressionContext(result.record, sourceMessages),
+        boundaryText,
         recordId: result.record.id,
         coveredUntilMessageId: result.record.coveredUntilMessageId,
         sourceMessageIds: result.record.sourceMessageIds
@@ -478,7 +368,7 @@ export function useCompactContext(options: UseCompactContextOptions) {
       return false;
     }
 
-    const compressionSourceMessages = createManualCompressionSourceMessages(messages.value);
+    const compressionSourceMessages = createManualCompressionSourceMessages(messages.value, getContextWindow?.());
     const pendingMessage = createPendingCompressionMessage(triggerSource);
     const task = beginCompactTask(() => {
       asyncTo(updateCompressionMessage(pendingMessage.id, createCancelledCompressionMessage()));
