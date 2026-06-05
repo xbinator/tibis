@@ -15,21 +15,6 @@
     />
 
     <div class="b-markdown-main">
-      <!-- 编辑器工具栏，类似地址栏风格 -->
-      <div class="b-markdown-toolbar" data-export-ignore>
-        <QuickActions
-          v-model:show-outline="showOutline"
-          v-model:view-mode="viewMode"
-          :file-path="editorState.path"
-          @rename-file="emit('rename-file')"
-          @save="emit('save')"
-          @save-as="emit('save-as')"
-          @export-pdf="handleExportPdf"
-          @copy-path="emit('copy-path')"
-          @show-in-folder="emit('show-in-folder')"
-        />
-      </div>
-
       <BScrollbar ref="scrollbarRef" class="b-markdown-scrollbar" @scroll="handleEditorScrollEvent">
         <div class="b-markdown-container" :style="editorContainerStyle">
           <PaneRichEditor
@@ -134,13 +119,15 @@ import type { AnchorRecord } from './hooks/useAnchors';
 import type { EditorController, EditorPublicInstance, EditorState } from './types';
 import type { Editor as TiptapEditor } from '@tiptap/vue-3';
 import type { CSSProperties } from 'vue';
-import { computed, ref, shallowRef } from 'vue';
+import { computed, ref, shallowRef, watchEffect } from 'vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { PDF_FILE_FILTER } from '@/constants/extensions';
 import { native } from '@/shared/platform';
+import type { EditorPageWidth, EditorViewMode } from '@/stores/editor/preferences';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
+import type { HeaderToolbarItem } from '@/stores/ui/headerToolbar';
+import { useHeaderToolbarStore } from '@/stores/ui/headerToolbar';
 import { handleEditorAnchorNavigation } from './adapters/editorAnchorNavigation';
-import QuickActions from './components/QuickActions.vue';
 import Sidebar from './components/Sidebar.vue';
 import { useAnchors } from './hooks/useAnchors';
 import { useCommentActions } from './hooks/useCommentActions';
@@ -168,6 +155,8 @@ interface Props {
   editorState: EditorState;
   /** 是否可编辑。 */
   editable: boolean;
+  /** 当前编辑器是否处于激活标签页。 */
+  active?: boolean;
 }
 
 /**
@@ -192,7 +181,9 @@ interface SourceSelectionHostState {
   adapter: SelectionAssistantAdapter | null;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  active: true
+});
 
 const emit = defineEmits<{
   'update:outlineContent': [value: string];
@@ -205,6 +196,8 @@ const emit = defineEmits<{
 }>();
 
 const isRichMode = computed<boolean>(() => editorPreferencesStore.viewMode === 'rich');
+const headerToolbarStore = useHeaderToolbarStore();
+const headerToolbarOwnerId = computed<string>(() => `markdown:${props.editorState.id}`);
 
 /**
  * 大纲显示状态双向绑定，同步到偏好设置 store。
@@ -217,9 +210,9 @@ const showOutline = computed<boolean>({
 /**
  * 视图模式双向绑定，同步到偏好设置 store。
  */
-const viewMode = computed<string>({
+const viewMode = computed<EditorViewMode>({
   get: () => editorPreferencesStore.viewMode,
-  set: (val: string) => editorPreferencesStore.setViewMode(val as 'rich' | 'source')
+  set: (val: EditorViewMode) => editorPreferencesStore.setViewMode(val)
 });
 
 const content = defineModel<string>('content', { default: '' });
@@ -297,6 +290,188 @@ const formatButtons = computed(() => [
 ]);
 
 /**
+ * 读取当前模式下应导出的完整 HTML 文档。
+ * 富文本模式导出当前渲染结果，源码模式导出转义后的源码文本。
+ * @returns 可直接交给 PDF 通道的完整 HTML 文档
+ */
+function buildCurrentPdfExportHtml(): string {
+  if (isRichMode.value) {
+    const renderedContentRoot = layoutRef.value?.querySelector('.b-markdown-rich');
+    if (renderedContentRoot instanceof HTMLElement) {
+      return buildRichPdfExportHtml(renderedContentRoot);
+    }
+
+    return buildSourcePdfExportHtml(content.value);
+  }
+
+  return buildSourcePdfExportHtml(content.value);
+}
+
+/**
+ * 导出当前文档为 PDF。
+ * 导出内容的语义判断全部收口在渲染层，原生层只处理保存与渲染。
+ */
+async function handleExportPdf(): Promise<void> {
+  await native.exportPdf({
+    html: buildCurrentPdfExportHtml(),
+    filters: [PDF_FILE_FILTER],
+    defaultPath: resolvePdfDefaultPath(effectiveEditorState.value)
+  });
+}
+
+/**
+ * 判断给定值是否为 Markdown 视图模式。
+ * @param value - 待判断的值
+ * @returns 是否为合法视图模式
+ */
+function isEditorViewModeValue(value: string): value is EditorViewMode {
+  return value === 'rich' || value === 'source';
+}
+
+/**
+ * 判断给定值是否为编辑器页宽模式。
+ * @param value - 待判断的值
+ * @returns 是否为合法页宽模式
+ */
+function isEditorPageWidthValue(value: string): value is EditorPageWidth {
+  return value === 'default' || value === 'wide' || value === 'full';
+}
+
+/**
+ * 设置 Markdown 视图模式。
+ * @param value - 目标视图模式
+ */
+function setMarkdownViewMode(value: string): void {
+  if (isEditorViewModeValue(value)) {
+    viewMode.value = value;
+  }
+}
+
+/**
+ * 设置 Markdown 正文页宽。
+ * @param value - 目标页宽模式
+ */
+function setMarkdownPageWidth(value: string): void {
+  if (isEditorPageWidthValue(value)) {
+    editorPreferencesStore.setPageWidth(value);
+  }
+}
+
+/**
+ * 构建 Markdown 编辑器 Header 工具栏条目。
+ * @returns Header 工具栏条目列表
+ */
+function buildMarkdownHeaderToolbarItems(): HeaderToolbarItem[] {
+  return [
+    {
+      type: 'action',
+      key: 'markdown-outline',
+      icon: showOutline.value ? 'lucide:list-tree' : 'lucide:list',
+      tooltip: showOutline.value ? '隐藏大纲' : '显示大纲',
+      active: showOutline.value,
+      onClick: (): void => {
+        showOutline.value = !showOutline.value;
+      }
+    },
+    {
+      type: 'select',
+      key: 'markdown-view-mode',
+      value: viewMode.value,
+      width: 132,
+      options: [
+        { value: 'rich', label: '预览模式', icon: 'lucide:file-text' },
+        { value: 'source', label: '源码模式', icon: 'lucide:file-code-2' }
+      ],
+      onChange: setMarkdownViewMode
+    },
+    {
+      type: 'menu',
+      key: 'markdown-file-actions',
+      icon: 'lucide:ellipsis',
+      width: 180,
+      options: [
+        {
+          value: 'rename',
+          label: '重命名',
+          icon: 'lucide:pencil',
+          onClick: (): void => emit('rename-file')
+        },
+        {
+          value: 'save',
+          label: '保存',
+          icon: 'lucide:save',
+          onClick: (): void => emit('save')
+        },
+        {
+          value: 'save-as',
+          label: '另存为',
+          icon: 'lucide:save-all',
+          onClick: (): void => emit('save-as')
+        },
+        {
+          value: 'export-pdf',
+          label: '导出 PDF',
+          icon: 'lucide:file-output',
+          onClick: handleExportPdf
+        },
+        {
+          value: 'page-width',
+          label: '视宽',
+          icon: 'lucide:maximize',
+          children: [
+            {
+              value: 'page-width-default',
+              label: '默认',
+              checked: editorPreferencesStore.pageWidth === 'default',
+              onClick: (): void => setMarkdownPageWidth('default')
+            },
+            {
+              value: 'page-width-wide',
+              label: '较宽',
+              checked: editorPreferencesStore.pageWidth === 'wide',
+              onClick: (): void => setMarkdownPageWidth('wide')
+            },
+            {
+              value: 'page-width-full',
+              label: '全宽',
+              checked: editorPreferencesStore.pageWidth === 'full',
+              onClick: (): void => setMarkdownPageWidth('full')
+            }
+          ]
+        },
+        { type: 'divider' },
+        {
+          value: 'copy-path',
+          label: '复制路径',
+          icon: 'lucide:copy',
+          disabled: !props.editorState.path,
+          onClick: (): void => emit('copy-path')
+        },
+        {
+          value: 'reveal',
+          label: '打开所在位置',
+          icon: 'lucide:folder-open',
+          disabled: !props.editorState.path,
+          onClick: (): void => emit('show-in-folder')
+        }
+      ]
+    }
+  ];
+}
+
+watchEffect((onCleanup): void => {
+  const ownerId = headerToolbarOwnerId.value;
+
+  if (!props.active) {
+    headerToolbarStore.unregister(ownerId);
+    return;
+  }
+
+  headerToolbarStore.register(ownerId, buildMarkdownHeaderToolbarItems());
+  onCleanup((): void => headerToolbarStore.unregister(ownerId));
+});
+
+/**
  * 接收 Rich pane 回传的选区宿主状态。
  * @param payload - 当前选区宿主状态
  */
@@ -324,36 +499,6 @@ function handleSourceSelectionHostChange(payload: SourceSelectionHostState | nul
  */
 function recomputeSelectionOverlays(): void {
   selectionAssistant.recomputeAllPositions();
-}
-
-/**
- * 读取当前模式下应导出的完整 HTML 文档。
- * 富文本模式导出当前渲染结果，源码模式导出转义后的源码文本。
- * @returns 可直接交给 PDF 通道的完整 HTML 文档
- */
-function buildCurrentPdfExportHtml(): string {
-  if (isRichMode.value) {
-    const renderedContentRoot = layoutRef.value?.querySelector('.b-markdown-rich');
-    if (renderedContentRoot instanceof HTMLElement) {
-      return buildRichPdfExportHtml(renderedContentRoot);
-    }
-
-    return buildSourcePdfExportHtml(content.value);
-  }
-
-  return buildSourcePdfExportHtml(content.value);
-}
-
-/**
- * 导出当前文档为 PDF。
- * 导出内容的语义判断全部收口在渲染层，原生层只处理保存与渲染。
- */
-async function handleExportPdf() {
-  await native.exportPdf({
-    html: buildCurrentPdfExportHtml(),
-    filters: [PDF_FILE_FILTER],
-    defaultPath: resolvePdfDefaultPath(effectiveEditorState.value)
-  });
 }
 
 /**
@@ -531,16 +676,6 @@ defineExpose({
   min-width: 0;
   background: var(--bg-primary);
   border-radius: 8px;
-}
-
-.b-markdown-toolbar {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: flex-end;
-  height: 40px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border-primary);
 }
 
 .b-markdown-scrollbar {

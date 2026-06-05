@@ -24,6 +24,7 @@
           <HeaderTabs />
         </div>
         <div class="b-layout-header__right">
+          <HeaderEditorActions />
           <!-- 辅助工具侧边栏切换按钮 -->
           <BButton type="secondary" size="small" square @click="handleToggleSidebar">
             <Icon :icon="settingStore.sidebarVisible ? 'tabler:layout-sidebar-right-filled' : 'tabler:layout-sidebar-right'" width="16" height="16" />
@@ -82,6 +83,7 @@ import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
+import HeaderEditorActions from './components/HeaderEditorActions.vue';
 import HeaderTabs from './components/HeaderTabs.vue';
 import ShortcutsHelp from './components/ShortcutsHelp.vue';
 import { useEditActive } from './hooks/useEditActive';

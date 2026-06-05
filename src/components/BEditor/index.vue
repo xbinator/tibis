@@ -10,6 +10,7 @@
     v-model:outline-content="outlineContent"
     :editor-state="editorState"
     :editable="editable"
+    :active="active"
     @editor-blur="emit('editor-blur', $event)"
     @rename-file="emit('rename-file')"
     @save="emit('save')"
@@ -25,6 +26,7 @@
     :editor-state="editorState"
     :language="monacoLanguage"
     :editable="editable"
+    :active="active"
     @editor-blur="emit('editor-blur', $event)"
   />
 </template>

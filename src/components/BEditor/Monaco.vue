@@ -4,30 +4,6 @@
 -->
 <template>
   <div class="b-monaco-layout">
-    <!-- 编辑器工具栏 -->
-    <div class="b-monaco-toolbar">
-      <!-- JSON 图形化查看切换按钮 -->
-      <BButton
-        v-if="isJsonViewable"
-        square
-        size="small"
-        type="ghost"
-        :tooltip="jsonViewerVisible ? '返回编辑器' : '图形化查看 JSON'"
-        :icon="jsonViewerVisible ? 'lucide:code-2' : 'lucide:git-fork'"
-        placement="bottomRight"
-        @click="toggleJsonViewer"
-      />
-      <BButton
-        square
-        size="small"
-        type="ghost"
-        :tooltip="wordWrap ? '关闭自动换行' : '开启自动换行'"
-        :icon="wordWrap ? 'lucide:wrap-text' : 'lucide:text'"
-        placement="bottomRight"
-        @click="toggleWordWrap"
-      />
-    </div>
-
     <!-- JSON 图形化查看视图 -->
     <BJsonViewer v-if="jsonViewerVisible" :content="content" />
 
@@ -52,10 +28,12 @@
  */
 
 import type { EditorController, EditorState } from './types';
-import { computed, ref } from 'vue';
+import { computed, ref, watchEffect } from 'vue';
 import BJsonViewer from '@/components/BJsonViewer/index.vue';
 import BMonaco from '@/components/BMonaco/index.vue';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
+import type { HeaderToolbarItem } from '@/stores/ui/headerToolbar';
+import { useHeaderToolbarStore } from '@/stores/ui/headerToolbar';
 
 /**
  * Monaco 组件入参。
@@ -67,16 +45,22 @@ interface Props {
   editable: boolean;
   /** 当前 Monaco 语言标识。 */
   language: string;
+  /** 当前编辑器是否处于激活标签页。 */
+  active?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  active: true
+});
 
 const emit = defineEmits<{
   'editor-blur': [event: FocusEvent];
 }>();
 
 const editorPreferencesStore = useEditorPreferencesStore();
+const headerToolbarStore = useHeaderToolbarStore();
 const monacoRef = ref<InstanceType<typeof BMonaco> | null>(null);
+const headerToolbarOwnerId = computed<string>(() => `monaco:${props.editorState.id}`);
 
 const content = defineModel<string>('content', { default: '' });
 
@@ -120,6 +104,44 @@ function toggleJsonViewer(): void {
 }
 
 /**
+ * 构建 Monaco 编辑器 Header 工具栏条目。
+ * @returns Header 工具栏条目列表
+ */
+function buildMonacoHeaderToolbarItems(): HeaderToolbarItem[] {
+  return [
+    {
+      type: 'action',
+      key: 'monaco-json-viewer',
+      icon: jsonViewerVisible.value ? 'lucide:code-2' : 'lucide:git-fork',
+      tooltip: jsonViewerVisible.value ? '返回编辑器' : '图形化查看 JSON',
+      active: jsonViewerVisible.value,
+      visible: isJsonViewable.value,
+      onClick: toggleJsonViewer
+    },
+    {
+      type: 'action',
+      key: 'monaco-word-wrap',
+      icon: wordWrap.value ? 'lucide:wrap-text' : 'lucide:text',
+      tooltip: wordWrap.value ? '关闭自动换行' : '开启自动换行',
+      active: wordWrap.value,
+      onClick: toggleWordWrap
+    }
+  ];
+}
+
+watchEffect((onCleanup): void => {
+  const ownerId = headerToolbarOwnerId.value;
+
+  if (!props.active) {
+    headerToolbarStore.unregister(ownerId);
+    return;
+  }
+
+  headerToolbarStore.register(ownerId, buildMonacoHeaderToolbarItems());
+  onCleanup((): void => headerToolbarStore.unregister(ownerId));
+});
+
+/**
  * 将 BMonaco 实例作为统一 EditorController 暴露给父组件。
  */
 const editorController = computed<EditorController>(() => monacoRef.value as unknown as EditorController);
@@ -135,16 +157,5 @@ defineExpose({
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
-}
-
-.b-monaco-toolbar {
-  display: flex;
-  flex-shrink: 0;
-  gap: 4px;
-  align-items: center;
-  justify-content: flex-end;
-  height: 40px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border-primary);
 }
 </style>
