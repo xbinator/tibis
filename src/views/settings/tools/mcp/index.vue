@@ -45,6 +45,7 @@ import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import ServerCard from './components/ServerCard.vue';
 import ServerEditor from './components/ServerEditor.vue';
+import { startMcpOAuthFlow } from './utils/oauth';
 import { parseMCPServerEditorDraft } from './utils/parseMCPServer';
 
 const store = useToolSettingsStore();
@@ -304,7 +305,7 @@ async function handleConfirmAdd(jsonText: string): Promise<void> {
 async function handleStartOAuth(server: MCPServerConfig): Promise<void> {
   if (!hasElectronAPI()) return;
   try {
-    await getElectronAPI().startMcpOAuth(toPlainMcpServer(server));
+    await startMcpOAuthFlow(getElectronAPI(), toPlainMcpServer(server));
     await refreshStatuses();
   } catch (error) {
     console.error('OAuth failed:', error);
