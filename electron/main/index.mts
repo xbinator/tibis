@@ -1,4 +1,11 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import {
+  createPendingOpenFileQueue,
+  resolveOpenFilePathsFromArgv,
+  shouldCloseDatabaseOnWindowAllClosed,
+  shouldDeferShortcutActionUntilBootstrapReady,
+  shouldQuitOnWindowAllClosed
+} from './lifecycle.mjs';
 import {
   registerAllIpcHandlers,
   initDatabase,
@@ -20,13 +27,18 @@ import { createWindow } from './window.mjs';
 app.setName('Tibis');
 
 const startupShortcutAction = getShortcutActionFromArgv(process.argv);
+const startupOpenFilePaths = resolveOpenFilePathsFromArgv(process.argv);
 let shouldContinueStartup = true;
 
 /** 日志维护定时器句柄，用于 before-quit 时清理 */
 let logMaintenanceTimer: ReturnType<typeof startLogMaintenanceTimer> | null = null;
 
-/** 通过 macOS "打开方式" 启动时暂存的文件路径，窗口创建后发送到渲染进程 */
-let pendingOpenFilePath: string | null = null;
+/** 通过系统“打开方式”或命令行传入、等待渲染进程消费的文件路径。 */
+const pendingOpenFileQueue = createPendingOpenFileQueue();
+/** 主进程是否已完成资源初始化、IPC 注册和首个窗口创建 */
+let bootstrapReady = false;
+/** bootstrap 完成前收到的系统快捷入口动作队列 */
+const pendingShortcutActions: string[] = [];
 
 if (process.platform === 'win32') {
   const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -44,11 +56,50 @@ if (process.platform === 'win32') {
 function handleShortcutAction(action: string | null): void {
   if (!action) return;
 
+  if (shouldDeferShortcutActionUntilBootstrapReady(bootstrapReady)) {
+    pendingShortcutActions.push(action);
+    return;
+  }
+
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 
   sendMenuAction(action);
+}
+
+/**
+ * 派发 bootstrap 完成前积压的系统快捷入口动作。
+ */
+function flushPendingShortcutActions(): void {
+  while (pendingShortcutActions.length > 0) {
+    handleShortcutAction(pendingShortcutActions.shift() ?? null);
+  }
+}
+
+/**
+ * 通知当前窗口有待打开文件可消费。
+ */
+function notifyOpenFilesAvailable(): void {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    win.webContents.send('app:open-file');
+  });
+}
+
+/**
+ * 处理系统传入的待打开文件路径。
+ * @param filePath - 系统传入的文件路径
+ */
+function handleSystemOpenFilePath(filePath: string): void {
+  pendingOpenFileQueue.enqueue(filePath);
+
+  if (!bootstrapReady) return;
+
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+
+  notifyOpenFilesAvailable();
 }
 
 function handleActivate(): void {
@@ -58,8 +109,10 @@ function handleActivate(): void {
 }
 
 function handleWindowAllClosed(): void {
-  closeDatabase();
-  if (process.platform !== 'darwin') {
+  if (shouldCloseDatabaseOnWindowAllClosed(process.platform)) {
+    closeDatabase();
+  }
+  if (shouldQuitOnWindowAllClosed(process.platform)) {
     app.quit();
   }
 }
@@ -80,22 +133,23 @@ async function bootstrap(): Promise<void> {
   // 初始化数据库
   await initDatabase();
   registerAllIpcHandlers();
+  ipcMain.handle('app:consume-open-files', () => pendingOpenFileQueue.consume());
 
   // 设置系统菜单
   setupAppMenu();
   refreshShortcuts();
 
+  startupOpenFilePaths.forEach((filePath) => pendingOpenFileQueue.enqueue(filePath));
+
   // 创建窗口
   createWindow();
-
-  // 处理通过 macOS "打开方式" 启动时的待处理文件
-  if (pendingOpenFilePath) {
-    const mainWindow = BrowserWindow.getAllWindows()[0];
-    mainWindow?.webContents.send('app:open-file', pendingOpenFilePath);
-    pendingOpenFilePath = null;
-  }
+  bootstrapReady = true;
 
   handleShortcutAction(startupShortcutAction);
+  flushPendingShortcutActions();
+  if (pendingOpenFileQueue.hasPending()) {
+    notifyOpenFilesAvailable();
+  }
 
   app.on('activate', handleActivate);
 }
@@ -110,8 +164,17 @@ function cleanupLogMaintenance(): void {
   }
 }
 
+/**
+ * 应用真正退出前释放主进程持有的资源。
+ */
+function handleBeforeQuit(): void {
+  cleanupLogMaintenance();
+  closeDatabase();
+}
+
 app.on('second-instance', (_event, commandLine) => {
   handleShortcutAction(getShortcutActionFromArgv(commandLine));
+  resolveOpenFilePathsFromArgv(commandLine).forEach(handleSystemOpenFilePath);
 });
 
 /**
@@ -121,17 +184,11 @@ app.on('second-instance', (_event, commandLine) => {
  */
 app.on('open-file', (event, filePath) => {
   event.preventDefault();
-
-  const windows = BrowserWindow.getAllWindows();
-  if (windows.length > 0) {
-    windows[0].webContents.send('app:open-file', filePath);
-  } else {
-    pendingOpenFilePath = filePath;
-  }
+  handleSystemOpenFilePath(filePath);
 });
 
 if (shouldContinueStartup) {
   app.whenReady().then(bootstrap);
   app.on('window-all-closed', handleWindowAllClosed);
-  app.on('before-quit', cleanupLogMaintenance);
+  app.on('before-quit', handleBeforeQuit);
 }

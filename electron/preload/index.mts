@@ -169,10 +169,21 @@ const electronAPI: ElectronAPI = {
    * @returns 取消监听函数
    */
   onOpenFile: (callback) => {
-    const handler = (_event: Electron.IpcRendererEvent, filePath: string) => {
-      callback(filePath);
+    /**
+     * 拉取主进程缓存的待打开文件路径并逐个回调给渲染进程。
+     */
+    const consumePendingOpenFiles = async (): Promise<void> => {
+      const filePaths = (await ipcRenderer.invoke('app:consume-open-files')) as unknown;
+      if (!Array.isArray(filePaths)) return;
+
+      filePaths.filter((filePath): filePath is string => typeof filePath === 'string' && filePath.length > 0).forEach(callback);
+    };
+
+    const handler = () => {
+      void consumePendingOpenFiles();
     };
     ipcRenderer.on('app:open-file', handler);
+    void consumePendingOpenFiles();
     return () => {
       ipcRenderer.removeListener('app:open-file', handler);
     };
