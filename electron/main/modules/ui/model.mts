@@ -47,6 +47,24 @@ const SUPPORTED_ACTION_PATTERN = /^file:(new|recent|openRecent:[A-Za-z0-9_-]+)$/
 const MAX_TITLE_LENGTH = 27;
 
 /**
+ * 将 IPC 边界传入的文本字段归一化为可安全 trim 的字符串。
+ * @param value - 原始字段值
+ * @returns 去除首尾空白后的字符串，非字符串返回空串
+ */
+function normalizeShortcutText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * 将 IPC 边界传入的路径字段归一化为可展示路径。
+ * @param value - 原始路径字段值
+ * @returns 可展示路径，缺失或非字符串时返回 null
+ */
+function normalizeShortcutPath(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
  * 判断文件名是否已经携带扩展名。
  * @param fileName - 待判断的文件名
  * @returns 是否已包含扩展名
@@ -61,9 +79,11 @@ function hasFileExtension(fileName: string): boolean {
  * @returns 规范化后的文件标题
  */
 function resolveRecentFileTitle(file: RecentFileShortcutInput): string {
-  const normalizedName = file.name.trim();
-  const normalizedExt = file.ext.trim();
-  const fallbackTitle = file.path ? file.path.split(/[\\/]/).pop() || file.id : file.id;
+  const normalizedName = normalizeShortcutText(file.name);
+  const normalizedExt = normalizeShortcutText(file.ext);
+  const normalizedPath = normalizeShortcutPath(file.path);
+  const normalizedId = normalizeShortcutText(file.id);
+  const fallbackTitle = normalizedPath ? normalizedPath.split(/[\\/]/).pop() || normalizedId : normalizedId;
 
   if (normalizedName && hasFileExtension(normalizedName)) {
     return normalizedName;
@@ -103,13 +123,15 @@ function clipTitle(title: string): string {
  */
 export function buildRecentFileShortcuts(files: RecentFileShortcutInput[], limit: number): RecentFileShortcut[] {
   return files.slice(0, limit).map((file) => {
+    const id = normalizeShortcutText(file.id);
     const title = clipTitle(resolveRecentFileTitle(file));
+    const subtitle = normalizeShortcutPath(file.path) ?? '未保存文件';
 
     return {
-      id: file.id,
+      id,
       title,
-      subtitle: file.path ?? '未保存文件',
-      action: `file:openRecent:${file.id}`
+      subtitle,
+      action: `file:openRecent:${id}`
     };
   });
 }
