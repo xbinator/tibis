@@ -4,6 +4,7 @@
  */
 import type { Message } from '../utils/types';
 import type { Ref } from 'vue';
+import { nextTick } from 'vue';
 
 /**
  * useRollback hook 依赖项
@@ -24,7 +25,7 @@ export interface UseRollbackOptions {
   /** 使确认控制器过期 */
   expireConfirmation: () => void;
   /** 聚焦输入框 */
-  focusInput: () => void;
+  focusInput: (options?: { moveToEnd?: boolean }) => void;
 }
 
 /**
@@ -106,8 +107,9 @@ export function useRollback(options: UseRollbackOptions): UseRollbackReturns {
     // 6. 恢复输入框内容
     restoreInput(message);
 
-    // 7. 聚焦输入框
-    focusInput();
+    // 7. 等待编辑器内容更新后，聚焦输入框并将光标移到末尾
+    await nextTick();
+    focusInput({ moveToEnd: true });
   }
 
   return { rollback, canRollback };

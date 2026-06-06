@@ -230,8 +230,8 @@ const { setLoadedMessages, fetchAllPriorHistory, messages, hasMoreHistory, loadH
 const confirmationController = createChatConfirmationController();
 
 /** 聚焦输入框 */
-function focusInput(): void {
-  promptEditorRef.value?.focus();
+function focusInput(options?: { moveToEnd?: boolean }): void {
+  promptEditorRef.value?.focus(options);
 }
 
 /**

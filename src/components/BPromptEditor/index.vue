@@ -456,8 +456,13 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-  focus: () => {
-    instance.value?.focus();
+  focus: (options?: { moveToEnd?: boolean }) => {
+    if (!instance.value) return;
+    instance.value.focus();
+    if (options?.moveToEnd) {
+      const end = instance.value.state.doc.length;
+      instance.value.dispatch({ selection: { anchor: end } });
+    }
   },
   getCursorPosition: (): number => {
     if (!instance.value) {

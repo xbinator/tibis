@@ -55,6 +55,8 @@ export function useChatInput(options: ChatInputOptions) {
    * @param message - 要编辑的消息
    */
   function restoreFromMessage(message: Message): void {
+    // 输入框已有内容时不覆盖，避免丢失用户正在编辑的草稿
+    if (inputContent.value.trim()) return;
     inputContent.value = message.content;
     inputImages.value = [...(message.files?.filter((file) => file.type === 'image') ?? [])];
   }
