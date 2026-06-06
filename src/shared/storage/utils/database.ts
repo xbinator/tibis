@@ -19,6 +19,7 @@ interface DatabaseExecuteResult {
  * 使用逐步拉长的等待，兼顾启动恢复速度和避免过久阻塞。
  */
 const DATABASE_RETRY_DELAYS_MS: number[] = [10, 20, 40, 80, 120];
+const DATABASE_NOT_INITIALIZED_MESSAGE = 'Database not initialized';
 
 /**
  * 检查当前运行环境是否具备 Electron 数据库能力。
@@ -34,7 +35,20 @@ export function isDatabaseAvailable(): boolean {
  * @returns 是否为数据库未初始化错误
  */
 export function isDatabaseInitializationRaceError(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('Database not initialized');
+  if (typeof error === 'string') {
+    return error.includes(DATABASE_NOT_INITIALIZED_MESSAGE);
+  }
+
+  if (error instanceof Error) {
+    return error.message.includes(DATABASE_NOT_INITIALIZED_MESSAGE);
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const { message } = error as { message?: unknown };
+    return typeof message === 'string' && message.includes(DATABASE_NOT_INITIALIZED_MESSAGE);
+  }
+
+  return false;
 }
 
 /**

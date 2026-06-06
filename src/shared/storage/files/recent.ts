@@ -14,15 +14,71 @@ const MAX_RECENT_FILES = 100;
 let writeQueue: Promise<void> = Promise.resolve();
 
 /**
+ * 将历史记录中的文本字段归一化为字符串。
+ * @param value - 原始字段值
+ * @returns 字符串字段，缺失或非字符串时返回空串
+ */
+function normalizeTextField(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * 将历史记录中的路径字段归一化为文件路径或 null。
+ * @param value - 原始路径字段值
+ * @returns 文件路径；缺失、空串或非字符串时返回 null
+ */
+function normalizePathField(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * 将历史记录中的正文内容归一化为字符串，并保留原始空白。
+ * @param value - 原始正文内容
+ * @returns 正文内容，缺失或非字符串时返回空串
+ */
+function normalizeContentField(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/**
+ * 从文件路径中推导文件名和扩展名。
+ * @param filePath - 文件路径
+ * @returns 文件名主体和扩展名
+ */
+function deriveFileTitleParts(filePath: string | null): { name: string; ext: string } {
+  if (!filePath) return { name: '', ext: '' };
+
+  const fileName = filePath.split(/[\\/]/).pop() ?? '';
+  const matched = /^(.+?)(?:\.([^.]+))?$/.exec(fileName);
+
+  return {
+    name: matched?.[1] ?? fileName,
+    ext: matched?.[2] ?? ''
+  };
+}
+
+/**
  * 将单个文件记录归一化到当前存储模型。
  * 对于未保存的内存文件（path === null），将当前内容作为 savedContent 基线，
  * 防止首次入库后丢失 baseline。
  */
 function normalizeStoredFile(file: StoredFile): StoredFile {
-  if (file.savedContent === undefined && file.path === null) {
-    return { ...file, savedContent: file.content };
+  const rawFile = file as unknown as Record<string, unknown>;
+  const normalizedPath = normalizePathField(rawFile.path);
+  const derivedTitleParts = deriveFileTitleParts(normalizedPath);
+  const normalizedFile: StoredFile = {
+    ...file,
+    type: 'file',
+    path: normalizedPath,
+    content: normalizeContentField(rawFile.content),
+    name: normalizeTextField(rawFile.name) || derivedTitleParts.name,
+    ext: normalizeTextField(rawFile.ext).replace(/^\.+/, '') || derivedTitleParts.ext
+  };
+
+  if (normalizedFile.savedContent === undefined && normalizedFile.path === null) {
+    return { ...normalizedFile, savedContent: normalizedFile.content };
   }
-  return file;
+  return normalizedFile;
 }
 
 /**
@@ -32,8 +88,10 @@ function normalizeStoredFiles(files: RecentRecord[]): { files: RecentRecord[]; c
   let changed = false;
 
   const normalizedFiles = files.map((file) => {
-    if (file.type === 'file') {
-      const normalized = normalizeStoredFile(file as StoredFile);
+    const rawRecord = file as unknown as Record<string, unknown>;
+
+    if (rawRecord.type !== 'webview') {
+      const normalized = normalizeStoredFile({ ...rawRecord, type: 'file' } as StoredFile);
       if (!changed && !isEqual(normalized, file)) {
         changed = true;
       }
@@ -95,18 +153,10 @@ async function readRecentFiles(): Promise<RecentRecord[]> {
   const stored = (await getElectronStoreValue<(StoredFile | WebviewRecord)[]>(RECENT_FILES_KEY)) ?? [];
   const { files, changed: normalized } = normalizeStoredFiles(stored);
 
-  // 迁移：旧记录补 type: 'file'
-  let migrated = false;
-  const patchedFiles = files.map((record) => {
-    if (record.type) return record;
-    migrated = true;
-    return { ...(record as Record<string, unknown>), type: 'file' as const } as StoredFile;
-  });
-
-  if (normalized || migrated) {
-    await setElectronStoreValue(RECENT_FILES_KEY, patchedFiles);
+  if (normalized) {
+    await setElectronStoreValue(RECENT_FILES_KEY, files);
   }
-  return patchedFiles;
+  return files;
 }
 
 /**
