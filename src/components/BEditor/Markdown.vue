@@ -364,27 +364,6 @@ function setMarkdownPageWidth(value: string): void {
 function buildMarkdownHeaderToolbarItems(): HeaderToolbarItem[] {
   return [
     {
-      type: 'action',
-      key: 'markdown-outline',
-      icon: showOutline.value ? 'lucide:list-tree' : 'lucide:list',
-      tooltip: showOutline.value ? '隐藏大纲' : '显示大纲',
-      active: showOutline.value,
-      onClick: (): void => {
-        showOutline.value = !showOutline.value;
-      }
-    },
-    {
-      type: 'select',
-      key: 'markdown-view-mode',
-      value: viewMode.value,
-      width: 132,
-      options: [
-        { value: 'rich', label: '预览模式', icon: 'lucide:file-text' },
-        { value: 'source', label: '源码模式', icon: 'lucide:file-code-2' }
-      ],
-      onChange: setMarkdownViewMode
-    },
-    {
       type: 'menu',
       key: 'markdown-file-actions',
       icon: 'lucide:ellipsis',
