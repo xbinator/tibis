@@ -7,21 +7,21 @@
     <Transition :name="bem('fade-scale') as string">
       <div v-if="show" ref="viewerRef" :class="name" @click="close">
         <div :class="bem('controls')" @click.stop>
-          <div :class="bem('button')" @click="handleZoomOut">
+          <button :class="bem('button')" @click="handleZoomOut">
             <BIcon icon="lucide:zoom-out" />
-          </div>
-          <div :class="bem('button')" @click="handleZoomIn">
+          </button>
+          <button :class="bem('button')" @click="handleZoomIn">
             <BIcon icon="lucide:zoom-in" />
-          </div>
-          <div :class="bem('button')" @click="handleRotateLeft">
+          </button>
+          <button :class="bem('button')" @click="handleRotateLeft">
             <BIcon icon="lucide:rotate-ccw" />
-          </div>
-          <div :class="bem('button')" @click="handleRotateRight">
+          </button>
+          <button :class="bem('button')" @click="handleRotateRight">
             <BIcon icon="lucide:rotate-cw" />
-          </div>
-          <div :class="[bem('button'), bem('close')]" @click="close">
+          </button>
+          <button :class="[bem('button'), bem('close')]" @click="close">
             <BIcon icon="lucide:x" />
-          </div>
+          </button>
         </div>
 
         <div ref="canvasRef" :class="bem('canvas')">
