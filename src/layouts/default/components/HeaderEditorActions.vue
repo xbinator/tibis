@@ -16,7 +16,6 @@
           <span class="header-editor-actions__select-content">
             <BIcon v-if="resolveSelectOption(item)?.icon" :icon="resolveSelectOption(item)?.icon ?? ''" :size="14" />
             <span class="header-editor-actions__select-label">{{ resolveSelectOption(item)?.label ?? item.value }}</span>
-            <BIcon icon="lucide:chevron-down" size="14" class="ml-4" />
           </span>
         </BButton>
 
