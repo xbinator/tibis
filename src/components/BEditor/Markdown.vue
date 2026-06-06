@@ -711,6 +711,7 @@ defineExpose({
 }
 
 .editor-comment-highlight {
+  padding: 0.25em 0;
   cursor: pointer;
   background-color: rgb(255 213 79 / 30%);
   border-bottom: 2px solid rgb(255 152 0 / 60%);
