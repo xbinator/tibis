@@ -97,6 +97,7 @@
               :can-submit="canSubmit"
               :used-tokens="usedTokens"
               :context-window="contextWindow"
+              :context-usage="contextUsageSnapshot"
               @submit="handleChatSubmit"
               @abort="handleAbort"
               @image-select="imageUpload.appendImages"
@@ -539,7 +540,7 @@ const taskRuntime = useChatTaskRuntime({
 const loading = computed<boolean>(() => taskRuntime.loading.value || streamLoading.value);
 
 /** 上下文窗口用量 hook（混合策略：空闲态用 API 上报值，流式中用估算器） */
-const { usedTokens } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });
+const { usedTokens, snapshot: contextUsageSnapshot } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });
 
 /** 会话 hook */
 const { currentSession, createNewSession, switchSession, initializeActiveSession } = useSession({

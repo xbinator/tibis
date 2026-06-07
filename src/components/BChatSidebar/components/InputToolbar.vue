@@ -22,7 +22,7 @@
     </template>
 
     <div class="action-buttons">
-      <ContextUsage v-if="selectedModel" :used-tokens="usedTokens" :context-window="contextWindow" />
+      <ContextUsage v-if="selectedModel" :usage="contextUsage" :used-tokens="usedTokens" :context-window="contextWindow" />
 
       <VoiceInput v-if="false" ref="voiceInputRef" @start="emit('voice-start')" @partial-text="handleVoicePartial" @complete="handleVoiceComplete" />
 
@@ -44,6 +44,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import BButton from '@/components/BButton/index.vue';
+import type { ContextUsageBudgetSnapshot } from '@/components/BChatSidebar/utils/contextUsageBudget';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 import ContextUsage from './InputToolbar/ContextUsage.vue';
 import ModelSelector from './InputToolbar/ModelSelector.vue';
@@ -68,6 +69,8 @@ interface Props {
   usedTokens: number;
   /** 模型最大上下文窗口 Token 数。 */
   contextWindow: number;
+  /** 当前上下文可用输入预算快照。 */
+  contextUsage?: ContextUsageBudgetSnapshot;
 }
 
 withDefaults(defineProps<Props>(), {
@@ -75,7 +78,8 @@ withDefaults(defineProps<Props>(), {
   supportsVision: false,
   canSubmit: false,
   usedTokens: 0,
-  contextWindow: 200000
+  contextWindow: 200000,
+  contextUsage: undefined
 });
 
 const emit = defineEmits<{

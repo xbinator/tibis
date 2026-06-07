@@ -6,32 +6,23 @@ import type { CompressionPolicyResult, ContextBudgetSnapshot, TriggerReason } fr
 import type { ModelMessage } from 'ai';
 import { sumBy } from 'lodash-es';
 import type { Message } from '@/components/BChatSidebar/utils/types';
+import { computeUsableInputTokens } from '../contextUsageBudget';
 import { COMPRESSION_CHAR_THRESHOLD, COMPRESSION_ROUND_THRESHOLD } from './constant';
 
 /** 自动压缩触发——上下文体积阈值（token 数），优先按模型上下文窗口动态计算 */
 export const COMPRESSION_TOKEN_THRESHOLD = 8_000;
 
 /**
- * 按模型上下文窗口动态计算压缩阈值。
- * 对小窗口模型使用比例化保留，避免固定阈值超过窗口本身。
+ * 按模型可用输入预算动态计算压缩阈值。
  * @param contextWindow - 模型上下文窗口大小
- * @param reservedOutputTokens - 预留输出 token 数
  * @returns 用于触发压缩的 token 阈值
  */
-export function computeCompressionTokenThreshold(contextWindow: number, reservedOutputTokens = 4_096): number {
+export function computeCompressionTokenThreshold(contextWindow: number): number {
   if (contextWindow <= 0) {
     return COMPRESSION_TOKEN_THRESHOLD;
   }
 
-  const safetyMargin = Math.min(1_024, Math.floor(contextWindow * 0.15));
-  const effectiveReservedOutput = Math.min(reservedOutputTokens, Math.floor(contextWindow * 0.5));
-  const availableBudget = contextWindow - effectiveReservedOutput - safetyMargin;
-
-  if (availableBudget <= 0) {
-    return Math.max(1, Math.floor(contextWindow * 0.5));
-  }
-
-  return Math.max(1, Math.min(Math.floor(contextWindow * 0.65), availableBudget));
+  return Math.max(1, Math.floor(computeUsableInputTokens(contextWindow) * 0.65));
 }
 
 /**

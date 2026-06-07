@@ -63,6 +63,9 @@ describe('useContextUsage', () => {
     });
 
     expect(usage.usedTokens.value).toBe(42);
-    expect(usage.remainingTokens.value).toBe(199_958);
+    expect(usage.snapshot.value.reservedOutputTokens).toBe(4_096);
+    expect(usage.snapshot.value.safetyMarginTokens).toBe(1_024);
+    expect(usage.snapshot.value.usableInputTokens).toBe(194_880);
+    expect(usage.remainingTokens.value).toBe(194_838);
   });
 });

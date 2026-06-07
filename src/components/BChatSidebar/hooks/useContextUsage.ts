@@ -4,10 +4,12 @@
  * 始终基于当前将发送给模型的消息切片估算，避免把历史 API usage 当作当前窗口用量。
  */
 import type { TokenEstimator } from '../utils/compression/tokenEstimator';
+import type { ContextUsageBudgetSnapshot } from '../utils/contextUsageBudget';
 import type { Message } from '../utils/types';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
 import { createCharLevelEstimator, createTokenEstimator } from '../utils/compression/tokenEstimator';
+import { createContextUsageBudgetSnapshot } from '../utils/contextUsageBudget';
 import { convert } from '../utils/messageHelper';
 
 /**
@@ -30,6 +32,8 @@ interface UseContextUsageOptions {
 interface UseContextUsageReturn {
   /** 当前上下文已使用的 Token 数 */
   usedTokens: ComputedRef<number>;
+  /** 当前上下文可用输入预算快照 */
+  snapshot: ComputedRef<ContextUsageBudgetSnapshot>;
   /** 已使用百分比 (0-100) */
   usagePercent: ComputedRef<number>;
   /** 剩余可用 Token 数 */
@@ -205,22 +209,18 @@ export function useContextUsage(options: UseContextUsageOptions): UseContextUsag
     return cachedEstimate.value;
   });
 
-  /** 已使用百分比 (0-100)，contextWindow 为 0 时返回 0 */
-  const usagePercent = computed<number>(() => {
-    const window = contextWindow.value;
-    if (window <= 0) return 0;
-    return Math.min(100, (usedTokens.value / window) * 100);
-  });
+  /** 当前上下文可用输入预算快照 */
+  const snapshot = computed<ContextUsageBudgetSnapshot>(() => createContextUsageBudgetSnapshot(usedTokens.value, contextWindow.value));
 
-  /** 剩余可用 Token 数，不会小于 0 */
-  const remainingTokens = computed<number>(() => {
-    const window = contextWindow.value;
-    if (window <= 0) return 0;
-    return Math.max(0, window - usedTokens.value);
-  });
+  /** 已使用百分比 (0-100)，按可用输入预算计算 */
+  const usagePercent = computed<number>(() => snapshot.value.usagePercent);
+
+  /** 剩余可用输入 Token 数，不会小于 0 */
+  const remainingTokens = computed<number>(() => snapshot.value.remainingInputTokens);
 
   return {
     usedTokens,
+    snapshot,
     usagePercent,
     remainingTokens
   };
