@@ -313,7 +313,7 @@ export function createThemeTokens(palette: BasePalette, mode: 'light' | 'dark'):
     jsonViewer: {
       nodeBg: palette.bg3,
       nodeBorder: borderOverlay(0.7),
-      rowDivider: borderOverlay(0.5),
+      rowDivider: fgOverlay(isDark ? 0.15 : 0.2),
       key: palette.blue,
       value: palette.fg0,
       number: palette.yellow,
