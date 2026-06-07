@@ -261,8 +261,8 @@ export function createBuiltinEditFileTool(options: CreateBuiltinEditFileToolOpti
       const request: AIToolConfirmationRequest = {
         toolCallId: context?.toolCallId ?? '',
         toolName: EDIT_FILE_TOOL_NAME,
-        title: isOutsideWorkspace ? `⚠️ ${baseTitle}（工作区外）` : baseTitle,
-        description: isOutsideWorkspace ? `${baseDescription}\n该文件不在当前工作区内，请确认是否允许。` : baseDescription,
+        title: baseTitle,
+        description: baseDescription,
         riskLevel: isOutsideWorkspace ? 'dangerous' : 'write',
         beforeText: oldString,
         afterText: newString
