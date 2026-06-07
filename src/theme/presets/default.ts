@@ -253,7 +253,7 @@ const defaultDark: ThemeTokens = {
     active: 'rgb(148 163 184 / 10%)',
     selected: 'rgb(120 120 200 / 18%)',
     input: '#181b21',
-    disabled: '#141720'
+    disabled: '#1e2230'
   },
   text: {
     primary: '#e8ecf2',

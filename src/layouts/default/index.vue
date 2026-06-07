@@ -25,6 +25,10 @@
         </div>
         <div class="b-layout-header__right">
           <HeaderEditorActions />
+          <!-- 搜索按钮 -->
+          <BButton type="secondary" size="small" square @click="visible.searchRecent = true">
+            <Icon icon="tabler:search" width="16" height="16" />
+          </BButton>
           <!-- 辅助工具侧边栏切换按钮 -->
           <BButton type="secondary" size="small" square @click="handleToggleSidebar">
             <Icon :icon="settingStore.sidebarVisible ? 'tabler:layout-sidebar-right-filled' : 'tabler:layout-sidebar-right'" width="16" height="16" />

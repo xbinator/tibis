@@ -123,7 +123,7 @@ import { computed, ref, shallowRef, watchEffect } from 'vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { PDF_FILE_FILTER } from '@/constants/extensions';
 import { native } from '@/shared/platform';
-import type { EditorPageWidth, EditorViewMode } from '@/stores/editor/preferences';
+import type { EditorPageWidth } from '@/stores/editor/preferences';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { HeaderToolbarItem } from '@/stores/ui/headerToolbar';
 import { useHeaderToolbarStore } from '@/stores/ui/headerToolbar';
@@ -205,14 +205,6 @@ const headerToolbarOwnerId = computed<string>(() => `markdown:${props.editorStat
 const showOutline = computed<boolean>({
   get: () => editorPreferencesStore.showOutline,
   set: (val: boolean) => editorPreferencesStore.setShowOutline(val)
-});
-
-/**
- * 视图模式双向绑定，同步到偏好设置 store。
- */
-const viewMode = computed<EditorViewMode>({
-  get: () => editorPreferencesStore.viewMode,
-  set: (val: EditorViewMode) => editorPreferencesStore.setViewMode(val)
 });
 
 const content = defineModel<string>('content', { default: '' });
@@ -320,31 +312,12 @@ async function handleExportPdf(): Promise<void> {
 }
 
 /**
- * 判断给定值是否为 Markdown 视图模式。
- * @param value - 待判断的值
- * @returns 是否为合法视图模式
- */
-function isEditorViewModeValue(value: string): value is EditorViewMode {
-  return value === 'rich' || value === 'source';
-}
-
-/**
  * 判断给定值是否为编辑器页宽模式。
  * @param value - 待判断的值
  * @returns 是否为合法页宽模式
  */
 function isEditorPageWidthValue(value: string): value is EditorPageWidth {
   return value === 'default' || value === 'wide' || value === 'full';
-}
-
-/**
- * 设置 Markdown 视图模式。
- * @param value - 目标视图模式
- */
-function setMarkdownViewMode(value: string): void {
-  if (isEditorViewModeValue(value)) {
-    viewMode.value = value;
-  }
 }
 
 /**
