@@ -944,22 +944,26 @@ onUnmounted(() => {
 
 .b-chat-sidebar__conversation-container {
   position: relative;
+  display: flex;
   flex: 1;
+  flex-direction: column;
   height: 0;
 }
 
 .b-chat-sidebar__floating-container {
-  position: absolute;
-  inset: auto 12px 16px;
-  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 0 12px 16px;
   pointer-events: none;
-}
 
-.b-chat-sidebar__floating-container > * {
-  pointer-events: auto;
+  &:empty {
+    display: none;
+  }
+
+  & > * {
+    pointer-events: auto;
+  }
 }
 
 .b-chat-sidebar__input {

@@ -3,8 +3,8 @@
  * @description BChatSidebar 输入栏上下文预算指示器渲染测试。
  * @vitest-environment jsdom
  */
-import { mount } from '@vue/test-utils';
 import { defineComponent } from 'vue';
+import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import ContextUsage from '@/components/BChatSidebar/components/InputToolbar/ContextUsage.vue';
 import { createContextUsageBudgetSnapshot } from '@/components/BChatSidebar/utils/contextUsageBudget';
@@ -30,8 +30,8 @@ describe('ContextUsage', () => {
       }
     });
 
-    expect(wrapper.text()).toContain('输入预算');
-    expect(wrapper.text()).toContain('估算已用');
+    expect(wrapper.text()).toContain('当前上下文估算');
+    expect(wrapper.text()).toContain('当前输入估算');
     expect(wrapper.text()).toContain('可用输入预算');
     expect(wrapper.text()).toContain('输出预留');
     expect(wrapper.text()).toContain('剩余输入');

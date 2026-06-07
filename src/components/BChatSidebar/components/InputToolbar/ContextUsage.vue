@@ -24,7 +24,7 @@
     <template #overlay>
       <div class="context-usage__panel">
         <div class="context-usage__header">
-          <span class="context-usage__title">输入预算</span>
+          <span class="context-usage__title">当前上下文估算</span>
           <span class="context-usage__percent">{{ currentUsage.usagePercent }}%</span>
         </div>
 
@@ -32,7 +32,7 @@
           <div class="context-usage__summary">
             <div class="context-usage__total">
               <div class="context-usage__total-value">{{ formatTokens(currentUsage.usedTokens) }}</div>
-              <div class="context-usage__total-label">估算已用</div>
+              <div class="context-usage__total-label">当前输入估算</div>
             </div>
 
             <div class="context-usage__stats">

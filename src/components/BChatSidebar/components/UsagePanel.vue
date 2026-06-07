@@ -5,7 +5,7 @@
 <template>
   <section class="usage-panel">
     <div class="usage-panel__header">
-      <span class="usage-panel__title">TOKEN 用量</span>
+      <span class="usage-panel__title">会话累计 Token</span>
       <BButton type="text" size="small" class="usage-panel__close" @click="onClose"> 关闭 </BButton>
     </div>
 
@@ -24,7 +24,7 @@
         <div class="usage-panel__summary">
           <div class="usage-panel__total">
             <div class="usage-panel__total-value">{{ formatTokens(usage.totalTokens) }}</div>
-            <div class="usage-panel__total-label">会话累计</div>
+            <div class="usage-panel__total-label">累计总量</div>
           </div>
 
           <div class="usage-panel__stats">
