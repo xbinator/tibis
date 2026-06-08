@@ -89,6 +89,7 @@ onMounted(() => {
 
 <style lang="less">
 .header-update-notice {
+  position: relative;
   display: flex;
   align-items: center;
   height: 22px;
@@ -141,21 +142,25 @@ onMounted(() => {
 }
 
 .header-update-notice__close {
-  width: 0;
-  overflow: hidden;
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 14px;
+  height: 14px;
   color: var(--text-tertiary);
   pointer-events: none;
+  background: var(--bg-primary);
   border-radius: 999px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 16%);
   opacity: 0;
-  transform: translateX(-3px);
-  transition: width 0.16s ease, color 0.16s ease, opacity 0.16s ease, transform 0.16s ease, background-color 0.16s ease;
+  transform: scale(0.82) translate(2px, -2px);
+  transition: color 0.16s ease, opacity 0.16s ease, transform 0.16s ease, background-color 0.16s ease;
 }
 
 .header-update-notice:hover .header-update-notice__close {
-  width: 22px;
   pointer-events: auto;
   opacity: 1;
-  transform: translateX(-2px);
+  transform: scale(1) translate(0, 0);
 }
 
 .header-update-notice__close:hover {
