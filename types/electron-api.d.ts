@@ -400,6 +400,40 @@ export interface ElectronTibisWorkspaceRoot {
   created: boolean;
 }
 
+/**
+ * 发现新版本时的更新检查结果。
+ */
+export interface ElectronUpdateAvailableResult {
+  /** 是否存在可用更新。 */
+  available: true;
+  /** 当前应用版本。 */
+  currentVersion: string;
+  /** GitHub Release 最新版本。 */
+  latestVersion: string;
+  /** Release 展示名。 */
+  releaseName?: string;
+  /** Release 网页地址，用于引导下载。 */
+  releaseUrl: string;
+  /** Release 发布时间。 */
+  publishedAt?: string;
+}
+
+/**
+ * 未发现更新或检查失败时的更新检查结果。
+ */
+export interface ElectronUpdateUnavailableResult {
+  /** 是否存在可用更新。 */
+  available: false;
+  /** 当前应用版本。 */
+  currentVersion: string;
+  /** GitHub Release 最新版本，检查失败时为空。 */
+  latestVersion?: string;
+  /** 检查失败时的错误消息。 */
+  errorMessage?: string;
+}
+
+export type ElectronUpdateCheckResult = ElectronUpdateAvailableResult | ElectronUpdateUnavailableResult;
+
 export interface ElectronAPI {
   readFile: (filePath: string) => Promise<ElectronReadFileResult>;
   /** 获取拖拽文件对应的本地磁盘路径。 */
@@ -474,6 +508,8 @@ export interface ElectronAPI {
 
   // 系统操作
   openExternal: (url: string) => Promise<void>;
+  /** 检查 GitHub Release 是否有新版本。 */
+  checkForUpdate: () => Promise<ElectronUpdateCheckResult>;
   /** 获取 Tibis 工作区根目录，不可用时返回 null。 */
   getTibisWorkspaceRoot: () => Promise<ElectronTibisWorkspaceRoot | null>;
   analyzeShellCommand: (request: ElectronShellCommandSafetyRequest) => Promise<ElectronShellCommandSafetyReport>;

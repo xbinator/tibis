@@ -302,6 +302,12 @@ const electronAPI: ElectronAPI = {
   openExternal: (url: string) => ipcRenderer.invoke('ui:openExternal', url),
 
   /**
+   * 检查 GitHub Release 是否有新版本。
+   * @returns 更新检查结果
+   */
+  checkForUpdate: () => ipcRenderer.invoke('updater:checkForUpdate'),
+
+  /**
    * 获取 Tibis 工作区根目录。
    * @returns 工作区根目录信息，不可用时返回 null
    */

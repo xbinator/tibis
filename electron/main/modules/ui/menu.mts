@@ -63,27 +63,28 @@ export function sendMenuAction(action: string): void {
 }
 
 /**
- * 设置应用系统菜单。
+ * 构建应用系统菜单模板。
+ * @param isMac - 是否为 macOS 平台
+ * @param appName - 应用名称
+ * @returns Electron 菜单模板
  */
-export function setupAppMenu(): void {
-  const isMac = process.platform === 'darwin';
-
+export function buildAppMenuTemplate(isMac: boolean, appName: string): MenuItemConstructorOptions[] {
   const template: MenuItemConstructorOptions[] = [];
 
   // macOS 特有的应用菜单
   if (isMac) {
     template.push({
-      label: app.name,
+      label: appName,
       submenu: [
-        { role: 'about' as const, label: `关于 ${app.name}` },
+        { role: 'about' as const, label: `关于 ${appName}` },
         { type: 'separator' as const },
         { role: 'services' as const, label: '服务' },
         { type: 'separator' as const },
-        { role: 'hide' as const, label: `隐藏 ${app.name}` },
+        { role: 'hide' as const, label: `隐藏 ${appName}` },
         { role: 'hideOthers' as const, label: '隐藏其他' },
         { role: 'unhide' as const, label: '全部显示' },
         { type: 'separator' as const },
-        { role: 'quit' as const, label: `退出 ${app.name}` }
+        { role: 'quit' as const, label: `退出 ${appName}` }
       ]
     });
   }
@@ -174,11 +175,23 @@ export function setupAppMenu(): void {
   template.push({
     label: '帮助',
     submenu: [
+      { label: '检查更新', click: () => sendMenuAction('help:checkUpdate') },
+      { type: 'separator' as const },
       { label: '快捷键', accelerator: 'CmdOrCtrl+/', click: () => sendMenuAction('help:shortcuts') },
       { type: 'separator' as const },
       { role: 'toggleDevTools' as const, label: '切换开发者工具' }
     ]
   });
+
+  return template;
+}
+
+/**
+ * 设置应用系统菜单。
+ */
+export function setupAppMenu(): void {
+  const isMac = process.platform === 'darwin';
+  const template = buildAppMenuTemplate(isMac, app.name);
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);

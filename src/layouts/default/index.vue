@@ -24,6 +24,7 @@
           <HeaderTabs />
         </div>
         <div class="b-layout-header__right">
+          <HeaderUpdateNotice />
           <HeaderEditorActions />
           <!-- 搜索按钮 -->
           <BButton type="secondary" size="small" square @click="visible.searchRecent = true">
@@ -89,6 +90,7 @@ import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import HeaderEditorActions from './components/HeaderEditorActions.vue';
 import HeaderTabs from './components/HeaderTabs.vue';
+import HeaderUpdateNotice from './components/HeaderUpdateNotice.vue';
 import ShortcutsHelp from './components/ShortcutsHelp.vue';
 import { useEditActive } from './hooks/useEditActive';
 import { useFileActive } from './hooks/useFileActive';

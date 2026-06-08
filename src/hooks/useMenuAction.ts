@@ -94,6 +94,9 @@ export function useMenuAction(): void {
       case 'help:shortcuts':
         emitter.emit('help:shortcuts');
         break;
+      case 'help:checkUpdate':
+        emitter.emit('help:checkUpdate');
+        break;
 
       default:
         break;

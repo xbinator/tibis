@@ -15,6 +15,7 @@ import { registerShellCommandHandlers } from './shell/ipc.mjs';
 import { registerSpeechHandlers } from './speech/ipc.mjs';
 import { registerStoreHandlers } from './store/ipc.mjs';
 import { registerUiHandlers } from './ui/ipc.mjs';
+import { registerUpdaterHandlers } from './updater/ipc.mjs';
 import { registerWebviewHandlers } from './webview/ipc.mjs';
 import { registerWorkspaceHandlers } from './workspace/ipc.mjs';
 
@@ -35,6 +36,7 @@ export function registerAllIpcHandlers() {
   registerImageHandlers();
   registerSpeechHandlers();
   registerWorkspaceHandlers();
+  registerUpdaterHandlers();
 }
 
 export {
@@ -53,7 +55,8 @@ export {
   registerLogFileHandlers,
   registerImageHandlers,
   registerSpeechHandlers,
-  registerWorkspaceHandlers
+  registerWorkspaceHandlers,
+  registerUpdaterHandlers
 };
 
 export { aiService } from './ai/service.mjs';

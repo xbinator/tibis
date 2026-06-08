@@ -10,7 +10,8 @@ export type {
   ElectronOpenFileOptions,
   ElectronReadWorkspaceFileOptions,
   ElectronReadWorkspaceFileResult,
-  ElectronSaveFileOptions
+  ElectronSaveFileOptions,
+  ElectronUpdateCheckResult
 } from 'types/electron-api';
 
 function readElectronAPI(): ElectronAPI | undefined {
