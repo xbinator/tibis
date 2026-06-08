@@ -3,7 +3,7 @@
   @description 上下文用量指示器，以环形图展示当前可用输入预算 Token 使用比例，鼠标悬停显示详情。
 -->
 <template>
-  <BDropdown v-model:open="open" placement="topLeft">
+  <BDropdown v-model:open="open" placement="topLeft" :align="{ offset: [-36, -5] }">
     <div class="context-usage__trigger">
       <!-- 放大 viewBox 至 36×36（3倍），渲染更清晰，显示时缩放到 12×12 -->
       <svg

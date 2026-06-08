@@ -370,12 +370,7 @@ const { workspaceRoot, getWorkspaceRoot } = useWorkspaceRoot();
 /** 最近文件列表，用于 @ 文件提及功能（实时响应 filesStore.recentFiles） */
 const fileMentionOptions = computed<FileMentionOption[]>(() => {
   const files = filesStore.recentFiles ?? [];
-  return files.map((file) => ({
-    id: file.id,
-    name: `${file.name}.${file.ext}`,
-    path: file.path,
-    ext: file.ext
-  }));
+  return files.map((file) => ({ id: file.id, name: file.name, path: file.path, ext: file.ext }));
 });
 
 const allBuiltinTools = createBuiltinTools({
