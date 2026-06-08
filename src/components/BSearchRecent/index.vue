@@ -2,7 +2,7 @@
   <BModal v-model:open="visible" :mask-closable="true" :width="560" :main-style="{ padding: '16px' }">
     <div :class="bem()">
       <div ref="inputRef" :class="bem('toolbar')">
-        <AInput v-model:value="keyword" placeholder="搜索最近记录" @keydown.enter.prevent="handleEnter" @keydown.esc.prevent="handleClose" />
+        <AInput v-model:value="keyword" placeholder="搜索最近记录" @keydown="handleKeydown" />
       </div>
 
       <BScrollbar :max-height="maxHeight" inset="auto">
@@ -138,6 +138,21 @@ async function handleEnter(): Promise<void> {
     await handleOpenUrl(first.url);
   } else {
     await handleSelect(first);
+  }
+}
+
+/**
+ * 统一处理输入框键盘事件：Enter 触发选择，Esc 关闭弹窗。
+ * @param event - 键盘事件
+ */
+function handleKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    handleEnter();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    handleClose();
   }
 }
 

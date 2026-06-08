@@ -51,7 +51,8 @@ const shortcutGroups: ShortcutGroup[] = [
       { label: '保存文件', shortcut: EditorShortcuts.FILE_SAVE },
       { label: '另存为', shortcut: EditorShortcuts.FILE_SAVE_AS },
       { label: '复制文件', shortcut: EditorShortcuts.FILE_DUPLICATE },
-      { label: '重命名', shortcut: EditorShortcuts.FILE_RENAME }
+      { label: '重命名', shortcut: EditorShortcuts.FILE_RENAME },
+      { label: '打开最近文件', shortcut: EditorShortcuts.FILE_RECENT }
     ]
   },
   {
