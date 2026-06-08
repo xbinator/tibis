@@ -1,8 +1,8 @@
 /**
  * @file sqlite.ts
- * @description MCP 工具设置的归一化与 ~/.tibis/settings.json 持久化（Tavily 已迁至 useSettingStore）。
+ * @description Tavily 与 MCP 工具设置的归一化与 ~/.tibis/settings.json 持久化。
  */
-import type { ToolSettingsState, MCPToolSettings, MCPServerConfig, MCPOAuthConfig } from './types';
+import type { ToolSettingsState, MCPToolSettings, MCPServerConfig, MCPOAuthConfig, TavilyToolSettings } from './types';
 import { isBoolean, isFinite, isPlainObject, isString, pickBy, uniq } from 'lodash-es';
 import { settingsFileStorage } from '@/shared/storage/settings';
 import { asyncTo } from '@/utils/asyncTo';
@@ -18,6 +18,20 @@ import {
 } from './types';
 
 // ─── MCP Normalization Helpers ─────────────────────────────────────────────────
+
+/**
+ * 归一化 Tavily 工具设置。
+ * @param value - 原始 Tavily 设置
+ * @returns 合法 Tavily 设置
+ */
+export function normalizeTavilySettings(value: unknown): TavilyToolSettings {
+  const source = isPlainObject(value) ? (value as Partial<TavilyToolSettings>) : {};
+
+  return {
+    enabled: isBoolean(source.enabled) ? source.enabled : DEFAULT_TOOL_SETTINGS.tavily.enabled,
+    apiKey: isString(source.apiKey) ? source.apiKey : DEFAULT_TOOL_SETTINGS.tavily.apiKey
+  };
+}
 
 /**
  * 归一化 timeout 值到合理范围。
@@ -103,7 +117,7 @@ export function normalizeMCPSettings(value: unknown): MCPToolSettings {
 }
 
 /**
- * 归一化全部工具设置（Tavily 只返回默认值，由 useSettingStore 管理）。
+ * 归一化全部工具设置。
  * @param value - 原始持久化值
  * @returns 合法工具设置
  */
@@ -111,13 +125,13 @@ export function normalizeToolSettings(value: unknown): ToolSettingsState {
   const source = isPlainObject(value) ? (value as Partial<ToolSettingsState>) : {};
 
   return {
-    tavily: DEFAULT_TOOL_SETTINGS.tavily,
+    tavily: normalizeTavilySettings(source.tavily),
     mcp: normalizeMCPSettings(source.mcp)
   };
 }
 
 /**
- * 工具设置存储（仅管理 MCP，Tavily 已迁至 useSettingStore）。
+ * 工具设置存储。
  */
 export const toolSettingsStorage = {
   /**
@@ -125,8 +139,7 @@ export const toolSettingsStorage = {
    * @returns 归一化后的工具设置
    */
   getSettings(): ToolSettingsState {
-    const normalized = normalizeToolSettings({});
-    return normalized;
+    return normalizeToolSettings({});
   },
 
   /**
@@ -135,7 +148,7 @@ export const toolSettingsStorage = {
    */
   async loadSettings(): Promise<ToolSettingsState> {
     const [error, settingsFile] = await asyncTo(settingsFileStorage.read());
-    const normalized = normalizeToolSettings({ mcp: error ? undefined : settingsFile.mcp });
+    const normalized = normalizeToolSettings(error ? {} : { tavily: settingsFile.tavily, mcp: settingsFile.mcp });
     return normalized;
   },
 
@@ -146,7 +159,7 @@ export const toolSettingsStorage = {
    */
   async saveSettings(settings: Partial<ToolSettingsState>): Promise<ToolSettingsState> {
     const normalized = normalizeToolSettings(settings);
-    await asyncTo(settingsFileStorage.update((current) => ({ ...current, mcp: normalized.mcp })));
+    await asyncTo(settingsFileStorage.update((current) => ({ ...current, tavily: normalized.tavily, mcp: normalized.mcp })));
     return normalized;
   }
 };

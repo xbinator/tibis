@@ -2,7 +2,7 @@
  * @file index.ts
  * @description 导出工具设置存储模块。
  */
-export { toolSettingsStorage, normalizeToolSettings, normalizeMCPSettings } from './sqlite';
+export { toolSettingsStorage, normalizeToolSettings, normalizeMCPSettings, normalizeTavilySettings } from './sqlite';
 
 export type {
   TavilyToolSettings,

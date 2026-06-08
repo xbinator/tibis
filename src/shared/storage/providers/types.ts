@@ -1,4 +1,4 @@
-import type { MCPToolSettings } from '../tool-settings/types';
+import type { MCPToolSettings, TavilyToolSettings } from '../tool-settings/types';
 import type { AIProviderModel, AIProviderType } from 'types/ai';
 
 /**
@@ -78,4 +78,6 @@ export interface SettingsFileContent {
   providers: StoredProviderEntry[];
   /** MCP 工具配置，旧 settings.json 可能缺省 */
   mcp?: MCPToolSettings;
+  /** Tavily 工具配置，旧 settings.json 可能缺省 */
+  tavily?: TavilyToolSettings;
 }

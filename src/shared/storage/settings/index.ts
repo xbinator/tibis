@@ -4,7 +4,7 @@
  */
 import { native } from '@/shared/platform/native';
 import type { SettingsFileContent, StoredProviderEntry } from '@/shared/storage/providers/types';
-import { DEFAULT_MCP_TOOL_SETTINGS } from '@/shared/storage/tool-settings/types';
+import { DEFAULT_MCP_TOOL_SETTINGS, DEFAULT_TOOL_SETTINGS } from '@/shared/storage/tool-settings/types';
 import { asyncTo } from '@/utils/asyncTo';
 
 const SETTINGS_FILE = 'settings.json';
@@ -14,7 +14,7 @@ const SETTINGS_FILE = 'settings.json';
  * @returns 默认设置文件结构
  */
 function createDefaultSettingsFile(): SettingsFileContent {
-  return { version: 1, providers: [], mcp: DEFAULT_MCP_TOOL_SETTINGS };
+  return { version: 1, providers: [], mcp: DEFAULT_MCP_TOOL_SETTINGS, tavily: DEFAULT_TOOL_SETTINGS.tavily };
 }
 
 /**
@@ -29,7 +29,8 @@ function normalizeSettingsFile(value: unknown): SettingsFileContent {
   return {
     version: 1,
     providers: Array.isArray(source.providers) ? (source.providers as StoredProviderEntry[]) : [],
-    mcp: source.mcp ?? DEFAULT_MCP_TOOL_SETTINGS
+    mcp: source.mcp ?? DEFAULT_MCP_TOOL_SETTINGS,
+    tavily: source.tavily ?? DEFAULT_TOOL_SETTINGS.tavily
   };
 }
 

@@ -35,16 +35,16 @@ const store = useToolSettingsStore();
  * 处理 Tavily 启用状态更新。
  * @param value - 开关值
  */
-function handleEnabledChange(value: boolean | string | number): void {
-  store.setTavilyEnabled(Boolean(value));
+async function handleEnabledChange(value: boolean | string | number): Promise<void> {
+  await store.setTavilyEnabled(Boolean(value));
 }
 
 /**
  * 处理 API Key 更新。
  * @param value - 新 API Key
  */
-function handleApiKeyChange(value: string): void {
-  store.setTavilyApiKey(value);
+async function handleApiKeyChange(value: string): Promise<void> {
+  await store.setTavilyApiKey(value);
 }
 </script>
 

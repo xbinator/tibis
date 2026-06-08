@@ -6,7 +6,7 @@ import type { StoredProviderSettings, StoredProviderEntry, SettingsFileContent }
 import type { AIProviderType, AIProviderModel, AIProvider, AICustomProvider } from 'types/ai';
 import { cloneDeep, omitBy, isUndefined, pick, isBoolean, isString, isArray } from 'lodash-es';
 import { settingsFileStorage } from '@/shared/storage/settings';
-import { DEFAULT_MCP_TOOL_SETTINGS, normalizeMCPSettings } from '@/shared/storage/tool-settings';
+import { DEFAULT_MCP_TOOL_SETTINGS, DEFAULT_TOOL_SETTINGS, normalizeMCPSettings, normalizeTavilySettings } from '@/shared/storage/tool-settings';
 import { DEFAULT_PROVIDERS } from './defaults';
 
 // ─────────────────────────────────────────────
@@ -64,7 +64,7 @@ function sanitizeProviderEntry(raw: Partial<StoredProviderEntry>): StoredProvide
 /** 归一化整个 settings.json 文件内容 */
 function normalizeSettingsFile(raw: unknown): SettingsFileContent {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { version: 1, providers: [], mcp: DEFAULT_MCP_TOOL_SETTINGS };
+    return { version: 1, providers: [], mcp: DEFAULT_MCP_TOOL_SETTINGS, tavily: DEFAULT_TOOL_SETTINGS.tavily };
   }
   const source = raw as Partial<SettingsFileContent>;
   const providers = source.providers?.map((e: unknown) => sanitizeProviderEntry(e as Partial<StoredProviderEntry>)).filter((e) => e.id) || [];
@@ -77,7 +77,7 @@ function normalizeSettingsFile(raw: unknown): SettingsFileContent {
     return true;
   });
 
-  return { version: 1, providers: unique, mcp: normalizeMCPSettings(source.mcp) };
+  return { version: 1, providers: unique, mcp: normalizeMCPSettings(source.mcp), tavily: normalizeTavilySettings(source.tavily) };
 }
 
 /** 校验 StoredProviderSettings patch */
