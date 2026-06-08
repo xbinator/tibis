@@ -116,6 +116,7 @@ function handleAction(action: ChatMessageConfirmationAction): void {
   padding: 10px 12px;
   margin-top: -6px;
   pointer-events: auto;
+  user-select: text;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;

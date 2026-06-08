@@ -163,7 +163,7 @@ async function handleWorkspaceWrite(
 
   const request: AIToolConfirmationRequest = {
     toolName: WRITE_FILE_TOOL_NAME,
-    title: isOutsideWorkspace ? `⚠️ ${baseTitle}（工作区外）` : baseTitle,
+    title: baseTitle,
     description: isOutsideWorkspace ? `${baseDescription}\n该文件不在当前工作区内，请确认是否允许。` : baseDescription,
     riskLevel: isOutsideWorkspace || fileExists ? 'dangerous' : 'write',
     ...(fileExists ? { beforeText: existingFile.content, afterText: content } : { afterText: content })
