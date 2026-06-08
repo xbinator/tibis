@@ -17,6 +17,11 @@ function toFileName(filePath: string): string {
 }
 
 /**
+ * 工具结果摘要标签动作。
+ */
+export type ToolSummaryTagAction = 'openFile';
+
+/**
  * 工具结果摘要标签项。
  */
 export interface ToolSummaryTag {
@@ -24,6 +29,24 @@ export interface ToolSummaryTag {
   label: string;
   /** 标签值 */
   value: string;
+  /** 标签触发的 UI 动作 */
+  action?: ToolSummaryTagAction;
+  /** 动作关联的文件路径 */
+  path?: string;
+}
+
+/**
+ * 创建可打开文件的摘要标签。
+ * @param filePath - 文件完整路径
+ * @returns 可打开文件标签
+ */
+function createOpenFileTag(filePath: string): ToolSummaryTag {
+  return {
+    label: '文件',
+    value: toFileName(filePath),
+    action: 'openFile',
+    path: filePath
+  };
 }
 
 /**
@@ -299,7 +322,7 @@ function summarizeWriteFile(data: Record<string, unknown>): ToolResultSummary {
 
   return {
     text: created ? '已创建文件' : '已写入文件',
-    tags: filePath ? [{ label: '文件', value: toFileName(filePath) }] : undefined
+    tags: filePath ? [createOpenFileTag(filePath)] : undefined
   };
 }
 
@@ -385,7 +408,7 @@ function summarizeEditFile(data: Record<string, unknown>): ToolResultSummary {
   const tags: ToolSummaryTag[] = [];
 
   if (filePath) {
-    tags.push({ label: '文件', value: toFileName(filePath) });
+    tags.push(createOpenFileTag(filePath));
   }
   tags.push({ label: '替换次数', value: String(count) });
 
@@ -419,7 +442,7 @@ function summarizeOpenResource(data: Record<string, unknown>): ToolResultSummary
   if (resourceType === 'file') {
     return {
       text: '已打开文件',
-      tags: path ? [{ label: '文件', value: toFileName(path) }] : undefined
+      tags: path ? [createOpenFileTag(path)] : undefined
     };
   }
 

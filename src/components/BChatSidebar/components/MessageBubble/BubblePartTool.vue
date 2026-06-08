@@ -35,10 +35,16 @@
       <div :class="bem('summary', { [summary.variant ?? 'success']: true })">
         <div v-if="summary.text" :class="bem('summary-text')">{{ summary.text }}</div>
         <div v-if="summary.tags?.length" :class="bem('summary-tags')">
-          <div v-for="tag in summary.tags" :key="tag.label" :class="bem('summary-tag')">
-            <span v-if="tag.label" :class="bem('summary-tag-label')">{{ tag.label }}：</span>
-            <span :class="bem('summary-tag-value')">{{ tag.value }}</span>
-          </div>
+          <template v-for="tag in summary.tags" :key="`${tag.label}-${tag.value}`">
+            <div v-if="isOpenFileTag(tag)" :class="bem('summary-tag', { clickable: true })" :title="tag.path" @click="handleOpenFileTag(tag)">
+              <span v-if="tag.label" :class="bem('summary-tag-label')">{{ tag.label }}：</span>
+              <span :class="bem('summary-tag-value')">{{ tag.value }}</span>
+            </div>
+            <div v-else :class="bem('summary-tag')">
+              <span v-if="tag.label" :class="bem('summary-tag-label')">{{ tag.label }}：</span>
+              <span :class="bem('summary-tag-value')">{{ tag.value }}</span>
+            </div>
+          </template>
         </div>
         <!-- 成功时折叠的原始数据 -->
         <template v-if="summary.variant !== 'failure' && summary.variant !== 'cancelled'">
@@ -56,9 +62,11 @@
 </template>
 
 <script setup lang="ts">
+import type { ToolSummaryTag } from '../../utils/toolResultSummary';
 import type { AIUserChoiceAnswerData, AIUserChoiceQuestionAnswer, ChatMessageToolPart } from 'types/chat';
 import { computed, ref } from 'vue';
 import type { QuestionItemInput, QuestionToolInput } from '@/ai/tools/builtin/QuestionTool';
+import { useNavigate } from '@/hooks/useNavigate';
 import { createNamespace } from '@/utils/namespace';
 import { hasStructuredValueContent } from '../../utils/messagePart';
 import { getActionLabel } from '../../utils/toolLabels';
@@ -77,6 +85,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {});
 
 const [, bem] = createNamespace('', 'bubble-part-tool');
+
+/** 文件导航能力 */
+const { openFile } = useNavigate();
 
 /** 原始数据展开状态 */
 const rawExpanded = ref(false);
@@ -124,6 +135,25 @@ function resolveQaLabels(questions: QuestionItemInput[], questionText: string, v
   const matched = questions.find((q) => q.question === questionText);
   if (!matched?.options?.length) return values;
   return values.map((v) => matched.options.find((o) => o.value === v)?.label ?? v);
+}
+
+/**
+ * 判断摘要标签是否可打开文件。
+ * @param tag - 摘要标签
+ * @returns 标签可打开文件时返回 true
+ */
+function isOpenFileTag(tag: ToolSummaryTag): boolean {
+  return tag.action === 'openFile' && typeof tag.path === 'string' && tag.path.length > 0;
+}
+
+/**
+ * 打开摘要标签关联的文件。
+ * @param tag - 摘要标签
+ */
+async function handleOpenFileTag(tag: ToolSummaryTag): Promise<void> {
+  if (!isOpenFileTag(tag)) return;
+
+  await openFile({ filePath: tag.path });
 }
 
 // ─── 组件逻辑 ────────────────────────────────────────────────────────
@@ -343,9 +373,26 @@ const questionOtherText = computed(() => {
   padding: 1px 6px;
   overflow: hidden;
   text-overflow: ellipsis;
+  font: inherit;
+  text-align: left;
   white-space: nowrap;
   background: var(--color-primary-bg);
+  border: 0;
   border-radius: 4px;
+}
+
+.bubble-part-tool__summary-tag--clickable {
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--color-primary-bg-hover, rgb(22 119 255 / 14%));
+  }
+
+  &:focus-visible {
+    outline: 1px solid var(--color-primary);
+    outline-offset: 1px;
+  }
 }
 
 .bubble-part-tool__summary-tag-label {
