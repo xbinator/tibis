@@ -12,6 +12,14 @@ import type {
 import { OPEN_FILE_FILTER } from '@/constants/extensions';
 
 export class WebNative {
+  /**
+   * Web 平台无法读取浏览器 File 对象的本地磁盘路径。
+   * @returns 固定返回 null
+   */
+  getPathForFile(): string | null {
+    return null;
+  }
+
   async getPathStatus(): Promise<FilePathStatus> {
     return {
       exists: false,

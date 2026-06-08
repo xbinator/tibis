@@ -119,6 +119,9 @@ export interface TibisWorkspaceRoot {
 export interface Native {
   readFile(path: string): Promise<ReadFileResult>;
 
+  /** 获取拖拽文件对应的本地磁盘路径，Web 平台不可用时返回 null。 */
+  getPathForFile(file: globalThis.File): string | null;
+
   getPathStatus(path: string): Promise<FilePathStatus>;
 
   readWorkspaceFile(options: ReadWorkspaceFileOptions): Promise<ReadWorkspaceFileResult>;

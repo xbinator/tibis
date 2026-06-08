@@ -14,7 +14,7 @@ import type {
   AIStreamToolResultChunk
 } from 'types/ai';
 import type { ElectronAPI, ElectronShellCommandOutputChunk, ElectronSpeechInstallProgress, FileChangeEvent } from 'types/electron-api';
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { formatPreloadErrorMessage, shouldIgnorePreloadError } from './error-collector.mjs';
 import webviewAPI from './webview.mjs';
 
@@ -75,6 +75,7 @@ initPreloadErrorCollector();
  */
 const electronAPI: ElectronAPI = {
   readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   readWorkspaceFile: (options) => ipcRenderer.invoke('fs:readWorkspaceTextFile', options),
   readWorkspaceDirectory: (options) => ipcRenderer.invoke('fs:readWorkspaceDirectory', options),
   getPathStatus: (targetPath: string) => ipcRenderer.invoke('fs:getPathStatus', targetPath),
@@ -179,11 +180,18 @@ const electronAPI: ElectronAPI = {
       filePaths.filter((filePath): filePath is string => typeof filePath === 'string' && filePath.length > 0).forEach(callback);
     };
 
+    /**
+     * 安全消费待打开文件，避免异步失败冒泡到 preload 全局。
+     */
+    const consumePendingOpenFilesSafely = (): void => {
+      consumePendingOpenFiles().catch(() => undefined);
+    };
+
     const handler = () => {
-      void consumePendingOpenFiles();
+      consumePendingOpenFilesSafely();
     };
     ipcRenderer.on('app:open-file', handler);
-    void consumePendingOpenFiles();
+    consumePendingOpenFilesSafely();
     return () => {
       ipcRenderer.removeListener('app:open-file', handler);
     };

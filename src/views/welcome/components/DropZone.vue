@@ -14,15 +14,31 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * @file DropZone.vue
+ * @description 为欢迎页提供拖拽文件打开能力。
+ */
+
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
 import { OPEN_FILE_EXTENSIONS } from '@/constants/extensions';
+import { useOpenFile } from '@/hooks/useOpenFile';
+import { native } from '@/shared/platform';
 import { useFilesStore } from '@/stores/workspace/files';
+
+/**
+ * 旧版 Electron 在 File 对象上暴露的路径字段。
+ */
+interface DraggedFileWithPath {
+  /** 本地磁盘路径。 */
+  path?: string;
+}
 
 const router = useRouter();
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 const filesStore = useFilesStore();
+const { openFileByPath } = useOpenFile();
 
 const isDragging = ref(false);
 let dragCounter = 0;
@@ -53,6 +69,40 @@ function handleDragLeave(): void {
 }
 
 /**
+ * 从拖拽文件中解析本地磁盘路径。
+ * @param file - 拖拽得到的浏览器 File 对象
+ * @returns 本地磁盘路径；无法获取时返回 null
+ */
+function resolveDroppedFilePath(file: File): string | null {
+  const legacyPath = (file as unknown as DraggedFileWithPath).path;
+  if (legacyPath) return legacyPath;
+
+  return native.getPathForFile(file);
+}
+
+/**
+ * 将无磁盘路径的拖拽文件保存为未保存草稿。
+ * @param file - 拖拽得到的浏览器 File 对象
+ * @param ext - 文件扩展名
+ * @returns 创建后的文件 ID
+ */
+async function createDroppedDraft(file: File, ext: string): Promise<string> {
+  const content = await file.text();
+  const name = file.name.split('.').slice(0, -1).join('.') || file.name;
+  const createdFile = await filesStore.createAndOpen({
+    type: 'file',
+    id: nanoid(),
+    path: null,
+    name,
+    ext,
+    content,
+    savedContent: content
+  });
+
+  return createdFile.id;
+}
+
+/**
  * 处理拖拽打开文件。
  * @param e - 拖拽事件
  */
@@ -70,24 +120,14 @@ async function handleDrop(e: DragEvent): Promise<void> {
     return;
   }
 
-  const filePath = (file as unknown as { path?: string }).path;
-
   try {
-    let openedId = '';
-
-    if (filePath) {
-      const openedFile = await filesStore.openOrCreateByPath(filePath);
-      if (!openedFile) return;
-
-      openedId = openedFile.id;
-    } else {
-      const content = await file.text();
-      const name = file.name.split('.').slice(0, -1).join('.') || file.name;
-      const createdFile = await filesStore.createAndOpen({ id: nanoid(), path: null, name, ext, content, savedContent: content });
-
-      openedId = createdFile.id;
+    const droppedFilePath = resolveDroppedFilePath(file);
+    if (droppedFilePath) {
+      await openFileByPath(droppedFilePath);
+      return;
     }
 
+    const openedId = await createDroppedDraft(file, ext);
     await router.push({ name: 'editor', params: { id: openedId } });
   } catch (error) {
     console.error('Failed to drop file:', error);

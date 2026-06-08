@@ -402,6 +402,8 @@ export interface ElectronTibisWorkspaceRoot {
 
 export interface ElectronAPI {
   readFile: (filePath: string) => Promise<ElectronReadFileResult>;
+  /** 获取拖拽文件对应的本地磁盘路径。 */
+  getPathForFile: (file: globalThis.File) => string;
   readWorkspaceFile: (options: ElectronReadWorkspaceFileOptions) => Promise<ElectronReadWorkspaceFileResult>;
   readWorkspaceDirectory: (options: ElectronReadWorkspaceDirectoryOptions) => Promise<ElectronReadWorkspaceDirectoryResult>;
   getPathStatus?: (targetPath: string) => Promise<ElectronFilePathStatus>;

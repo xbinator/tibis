@@ -23,6 +23,15 @@ export class ElectronNative implements Native {
     return { content: result.content, name: result.fileName, ext: result.ext };
   }
 
+  /**
+   * 通过 Electron webUtils 获取拖拽文件的本地磁盘路径。
+   * @param file - 拖拽得到的浏览器 File 对象
+   * @returns 本地磁盘路径；无法获取时返回 null
+   */
+  getPathForFile(file: globalThis.File): string | null {
+    return getElectronAPI().getPathForFile(file) || null;
+  }
+
   async getPathStatus(filePath: string): Promise<FilePathStatus> {
     const { getPathStatus } = getElectronAPI();
 
