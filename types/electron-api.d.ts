@@ -327,6 +327,28 @@ export interface ElectronImageCompressResult {
 }
 
 /**
+ * Electron 图片预览请求参数。
+ */
+export interface ElectronImagePreviewRequest {
+  /** 图片地址、本地路径或 data URL */
+  src: string;
+  /** 展示文件名 */
+  name?: string;
+  /** 图片 MIME 类型 */
+  mimeType?: string;
+}
+
+/**
+ * Electron 图片预览结果。
+ */
+export interface ElectronImagePreviewResult {
+  /** 是否已由 Electron 侧完成预览打开 */
+  opened: boolean;
+  /** 实际使用的预览模式 */
+  mode: 'native' | 'window' | 'unsupported';
+}
+
+/**
  * 语音转写请求参数。
  */
 export interface ElectronAudioTranscribeRequest {
@@ -508,6 +530,8 @@ export interface ElectronAPI {
 
   // 系统操作
   openExternal: (url: string) => Promise<void>;
+  /** 按平台打开图片预览。 */
+  previewImage: (request: ElectronImagePreviewRequest) => Promise<ElectronImagePreviewResult>;
   /** 检查 GitHub Release 是否有新版本。 */
   checkForUpdate: () => Promise<ElectronUpdateCheckResult>;
   /** 获取 Tibis 工作区根目录，不可用时返回 null。 */

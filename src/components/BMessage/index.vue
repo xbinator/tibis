@@ -20,8 +20,6 @@
       <!-- 纯文本渲染 -->
       <div v-else class="b-message__text">{{ content }}<span v-if="loading" class="b-message__cursor" aria-hidden="true"></span></div>
     </div>
-
-    <BImageViewer v-model:show="showImageViewer" :images="imagePreviewList" :start-position="currentImageIndex" :show-carousel="imagePreviewList.length > 1" />
   </div>
 </template>
 
@@ -29,7 +27,8 @@
 import type { BMessageProps as Props } from './types';
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import { marked } from 'marked';
-import BImageViewer from '@/components/BImageViewer/index.vue';
+import type { ImagePreviewItem } from '@/hooks/useImagePreview';
+import { useImagePreview } from '@/hooks/useImagePreview';
 import { useNavigate } from '@/hooks/useNavigate';
 import { addCssUnit } from '@/utils/css';
 
@@ -55,18 +54,10 @@ marked.use({
 defineOptions({ name: 'BMessage' });
 
 const navigate = useNavigate();
+const { previewImage } = useImagePreview();
 
 /** Markdown 渲染容器，用于收集 v-html 输出的图片节点 */
 const markdownRef = ref<HTMLElement | null>(null);
-
-/** 图片查看器显示状态 */
-const showImageViewer = ref(false);
-
-/** 当前预览图片索引 */
-const currentImageIndex = ref(0);
-
-/** 当前消息内可预览的图片列表 */
-const imagePreviewList = ref<string[]>([]);
 
 const props = withDefaults(defineProps<Props>(), {
   type: 'markdown',
@@ -139,29 +130,31 @@ function collectMarkdownImageElements(): HTMLImageElement[] {
  * 打开 Markdown 图片预览器。
  * @param imageElement - 被点击的图片元素
  */
-function openImageViewer(imageElement: HTMLImageElement): void {
+async function openImageViewer(imageElement: HTMLImageElement): Promise<void> {
   const imageElements = collectMarkdownImageElements();
-  const imageSources = imageElements.map(getImageSource).filter((source) => Boolean(source));
+  const imageItems = imageElements.map<ImagePreviewItem>((item) => ({ src: getImageSource(item) })).filter((item) => Boolean(item.src));
   const currentIndex = imageElements.findIndex((item) => item === imageElement);
 
-  if (!imageSources.length) return;
+  if (!imageItems.length) return;
 
-  imagePreviewList.value = imageSources;
-  currentImageIndex.value = Math.max(0, currentIndex);
-  showImageViewer.value = true;
+  await previewImage({
+    images: imageItems,
+    startPosition: currentIndex,
+    showCarousel: imageItems.length > 1
+  });
 }
 
 /**
  * 处理 Markdown 内容点击：图片打开预览，其余链接交给统一导航逻辑。
  * @param event - 鼠标点击事件
  */
-function handleMarkdownClick(event: MouseEvent): void {
+async function handleMarkdownClick(event: MouseEvent): Promise<void> {
   const imageElement = findMarkdownImageElement(event.target);
 
   if (imageElement) {
     event.preventDefault();
     event.stopPropagation();
-    openImageViewer(imageElement);
+    await openImageViewer(imageElement);
     return;
   }
 

@@ -56,9 +56,6 @@
       <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" tooltip="回退到此" @click="$emit('rollback', message)" />
       <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" tooltip="复制消息" @click="handleCopy(message)" />
     </div>
-
-    <!-- 图片预览器 -->
-    <BImageViewer v-model:show="showImageViewer" :images="imagePreviewList" :start-position="currentImageIndex" />
   </div>
 </template>
 
@@ -69,10 +66,11 @@
  */
 import type { Message } from '../utils/types';
 import type { AIUserChoiceAnswerData, ChatMessageTextPart } from 'types/chat';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import BBubble from '@/components/BBubble/index.vue';
-import BImageViewer from '@/components/BImageViewer/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';
+import type { ImagePreviewItem } from '@/hooks/useImagePreview';
+import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
@@ -86,6 +84,7 @@ import QuestionCard from './QuestionCard.vue';
 defineOptions({ name: 'MessageBubble' });
 
 const { clipboard } = useClipboard();
+const { previewImage } = useImagePreview();
 
 const [name, bem] = createNamespace('', 'message-bubble');
 
@@ -130,12 +129,14 @@ const showAssistantToolbar = computed(() => props.message.finished === true && i
 /** 是否显示回退按钮（仅在后面还有消息时显示） */
 const showRollback = computed(() => isUserMessage.value && props.message.finished === true && props.canRollback?.(props.message));
 
-/** 图片预览器显示状态 */
-const showImageViewer = ref(false);
-/** 当前预览的图片索引 */
-const currentImageIndex = ref(0);
-/** 图片预览列表（提取 url 或 path） */
-const imagePreviewList = computed(() => imageFiles.value.map((file) => file.url || file.path || ''));
+/** 图片预览条目列表 */
+const imagePreviewItems = computed<ImagePreviewItem[]>(() =>
+  imageFiles.value.map((file) => ({
+    src: file.url || file.path || '',
+    name: file.name,
+    mimeType: file.mimeType
+  }))
+);
 
 /**
  * 过滤后的消息片段。排除已移至底部弹窗的 confirmation 片段。
@@ -143,12 +144,14 @@ const imagePreviewList = computed(() => imageFiles.value.map((file) => file.url 
 const renderableParts = computed(() => props.message.parts.filter((p) => p.type !== 'confirmation'));
 
 /**
- * 打开图片预览
+ * 打开图片预览。
  * @param index - 图片索引
  */
-function handleImageClick(index: number): void {
-  currentImageIndex.value = index;
-  showImageViewer.value = true;
+async function handleImageClick(index: number): Promise<void> {
+  await previewImage({
+    images: imagePreviewItems.value,
+    startPosition: index
+  });
 }
 
 /**

@@ -302,6 +302,13 @@ const electronAPI: ElectronAPI = {
   openExternal: (url: string) => ipcRenderer.invoke('ui:openExternal', url),
 
   /**
+   * 按平台打开图片预览。
+   * @param request - 图片预览请求
+   * @returns 图片预览结果
+   */
+  previewImage: (request) => ipcRenderer.invoke('ui:previewImage', request),
+
+  /**
    * 检查 GitHub Release 是否有新版本。
    * @returns 更新检查结果
    */

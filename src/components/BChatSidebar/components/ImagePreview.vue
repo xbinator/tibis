@@ -12,14 +12,14 @@
         </div>
       </div>
     </div>
-
-    <BImageViewer v-model:show="viewerVisible" :images="imageUrls" :start-position="currentIndex" :show-carousel="images.length > 1" />
   </div>
 </template>
 
 <script setup lang="ts">
 import type { ChatMessageFile } from 'types/chat';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
+import type { ImagePreviewItem } from '@/hooks/useImagePreview';
+import { useImagePreview } from '@/hooks/useImagePreview';
 
 /**
  * 图片预览组件 Props
@@ -34,22 +34,25 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const { previewImage } = useImagePreview();
 
-/** 图片查看器是否可见 */
-const viewerVisible = ref(false);
-/** 当前预览的图片索引 */
-const currentIndex = ref(0);
-
-/** 图片 URL 列表 */
-const imageUrls = computed<string[]>(() => props.images.map((image) => image.url).filter((url): url is string => Boolean(url)));
+/** 图片预览条目列表 */
+const imagePreviewItems = computed<ImagePreviewItem[]>(() =>
+  props.images
+    .filter((image) => Boolean(image.url))
+    .map((image) => ({
+      src: image.url || '',
+      name: image.name,
+      mimeType: image.mimeType
+    }))
+);
 
 /**
- * 处理图片点击事件，打开图片查看器
+ * 处理图片点击事件，打开图片查看器。
  * @param index - 图片索引
  */
-function handleImageClick(index: number): void {
-  currentIndex.value = index;
-  viewerVisible.value = true;
+async function handleImageClick(index: number): Promise<void> {
+  await previewImage({ images: imagePreviewItems.value, startPosition: index, showCarousel: props.images.length > 1 });
 }
 
 /**

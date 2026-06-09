@@ -3,10 +3,12 @@
  * @description BMessage Markdown 图片查看器交互测试。
  * @vitest-environment jsdom
  */
+import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import BMessage from '@/components/BMessage/index.vue';
+
+const previewImageMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
@@ -14,50 +16,18 @@ vi.mock('@/hooks/useNavigate', () => ({
   })
 }));
 
-/**
- * 创建图片查看器测试桩，用于读取 BMessage 传入的预览参数。
- * @returns Vue 测试组件
- */
-function createImageViewerStub(): ReturnType<typeof defineComponent> {
-  return defineComponent({
-    name: 'BImageViewer',
-    props: {
-      images: {
-        type: Array,
-        default: () => []
-      },
-      show: {
-        type: Boolean,
-        default: false
-      },
-      startPosition: {
-        type: Number,
-        default: 0
-      }
-    },
-    setup(props) {
-      return () =>
-        h('output', {
-          class: 'image-viewer-stub',
-          'data-show': String(props.show),
-          'data-images': JSON.stringify(props.images),
-          'data-start-position': String(props.startPosition)
-        });
-    }
-  });
-}
+vi.mock('@/hooks/useImagePreview', () => ({
+  useImagePreview: () => ({
+    previewImage: previewImageMock
+  })
+}));
 
 describe('BMessage image viewer', () => {
-  it('opens BImageViewer at clicked markdown image without selecting text', async (): Promise<void> => {
+  it('opens markdown images through previewImage without selecting text', async (): Promise<void> => {
     const wrapper = mount(BMessage, {
       props: {
         type: 'markdown',
         content: '![first](https://example.com/first.png)\n\n![second](https://example.com/second.png)'
-      },
-      global: {
-        stubs: {
-          BImageViewer: createImageViewerStub()
-        }
       }
     });
 
@@ -75,12 +45,13 @@ describe('BMessage image viewer', () => {
 
     await nextTick();
 
-    const viewer = wrapper.find('.image-viewer-stub');
     expect(mouseDownPreventDefaultSpy).toHaveBeenCalledOnce();
     expect(preventDefaultSpy).toHaveBeenCalledOnce();
     expect(stopPropagationSpy).toHaveBeenCalledOnce();
-    expect(viewer.attributes('data-show')).toBe('true');
-    expect(viewer.attributes('data-start-position')).toBe('1');
-    expect(JSON.parse(viewer.attributes('data-images') ?? '[]')).toEqual(['https://example.com/first.png', 'https://example.com/second.png']);
+    expect(previewImageMock).toHaveBeenCalledWith({
+      images: [{ src: 'https://example.com/first.png' }, { src: 'https://example.com/second.png' }],
+      startPosition: 1,
+      showCarousel: true
+    });
   });
 });

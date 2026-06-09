@@ -5,8 +5,10 @@
 import os from 'node:os';
 import path from 'node:path';
 import type { RecentFileShortcutInput } from './model.mjs';
+import type { ElectronImagePreviewRequest, ElectronImagePreviewResult } from 'types/electron-api';
 import { ipcMain, Menu, shell } from 'electron';
 import { getFocusedWindow } from '../../window.mjs';
+import { getImagePreviewService } from './image-preview.mjs';
 import { updateShortcuts } from './shortcuts.mjs';
 
 /**
@@ -16,6 +18,10 @@ export function registerUiHandlers(): void {
   // 系统操作
   ipcMain.handle('ui:openExternal', async (_event, url: string) => {
     await shell.openExternal(url);
+  });
+
+  ipcMain.handle('ui:previewImage', async (_event, request: ElectronImagePreviewRequest): Promise<ElectronImagePreviewResult> => {
+    return getImagePreviewService().previewImage(request);
   });
 
   ipcMain.handle('ui:trashFile', async (_event, filePath: string) => {
