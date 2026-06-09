@@ -1,64 +1,54 @@
 <!--
   @file DrawingToolbar.vue
-  @description BDrawing 顶部工具栏。
+  @description BDrawing 画布悬浮工具栏，内部定位分组。
 -->
 <template>
   <div class="b-drawing-toolbar">
-    <button
-      class="b-drawing-toolbar__button"
-      :class="{ 'is-active': activeTool === 'select' }"
-      type="button"
-      data-testid="drawing-select-tool"
-      aria-label="选择工具"
-      @click="emit('set-tool', 'select')"
-    >
-      <BIcon icon="lucide:mouse-pointer-2" size="16" />
-    </button>
-    <button
-      class="b-drawing-toolbar__button"
-      :class="{ 'is-active': activeTool === 'hand' }"
-      type="button"
-      data-testid="drawing-hand-tool"
-      aria-label="拖动画布"
-      @click="emit('set-tool', 'hand')"
-    >
-      <BIcon icon="lucide:hand" size="16" />
-    </button>
-    <span class="b-drawing-toolbar__divider"></span>
-    <button
-      class="b-drawing-toolbar__button b-drawing-toolbar__button--primary"
-      :class="{ 'is-active': activeTool === 'process' }"
-      type="button"
-      data-testid="drawing-add-process"
-      aria-label="新增流程节点"
-      @click="emit('set-tool', 'process')"
-    >
-      <BIcon icon="lucide:square-plus" size="16" />
-    </button>
-    <span class="b-drawing-toolbar__divider"></span>
-    <button class="b-drawing-toolbar__button" type="button" aria-label="撤销" @click="emit('undo')">
-      <BIcon icon="lucide:undo-2" size="16" />
-    </button>
-    <button class="b-drawing-toolbar__button" type="button" aria-label="重做" @click="emit('redo')">
-      <BIcon icon="lucide:redo-2" size="16" />
-    </button>
-    <button class="b-drawing-toolbar__button" type="button" data-testid="drawing-delete" aria-label="删除选中元素" @click="emit('delete')">
-      <BIcon icon="lucide:trash-2" size="16" />
-    </button>
-    <span class="b-drawing-toolbar__divider"></span>
-    <button class="b-drawing-toolbar__button" type="button" aria-label="缩小" @click="emit('zoom-out')">
-      <BIcon icon="lucide:zoom-out" size="16" />
-    </button>
-    <span class="b-drawing-toolbar__zoom" data-testid="drawing-zoom-value">{{ zoomPercent }}</span>
-    <button class="b-drawing-toolbar__button" type="button" data-testid="drawing-zoom-in" aria-label="放大" @click="emit('zoom-in')">
-      <BIcon icon="lucide:zoom-in" size="16" />
-    </button>
+    <!-- 顶部水平居中：工具选择 -->
+    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--top">
+      <BButton type="text" square size="small" tooltip="选择工具" :class="{ 'is-active': activeTool === 'select' }" @click="emit('set-tool', 'select')">
+        <BIcon icon="lucide:mouse-pointer-2" :size="16" />
+      </BButton>
+      <BButton type="text" square size="small" tooltip="拖动画布" :class="{ 'is-active': activeTool === 'hand' }" @click="emit('set-tool', 'hand')">
+        <BIcon icon="lucide:hand" :size="16" />
+      </BButton>
+      <span class="b-drawing-toolbar__divider"></span>
+      <BButton type="text" square size="small" tooltip="新增流程节点" :class="{ 'is-active': activeTool === 'process' }" @click="emit('set-tool', 'process')">
+        <BIcon icon="lucide:square-plus" :size="16" />
+      </BButton>
+      <span class="b-drawing-toolbar__divider"></span>
+      <BButton type="text" square size="small" tooltip="删除选中元素" @click="emit('delete')">
+        <BIcon icon="lucide:trash-2" :size="16" />
+      </BButton>
+    </div>
+
+    <!-- 左下角：历史记录 -->
+    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left">
+      <BButton type="text" square size="small" tooltip="撤销" @click="emit('undo')">
+        <BIcon icon="lucide:undo-2" :size="16" />
+      </BButton>
+      <BButton type="text" square size="small" tooltip="重做" @click="emit('redo')">
+        <BIcon icon="lucide:redo-2" :size="16" />
+      </BButton>
+    </div>
+
+    <!-- 左下角：缩放控制 -->
+    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left-zoom">
+      <BButton type="text" square size="small" tooltip="缩小" @click="emit('zoom-out')">
+        <BIcon icon="lucide:minus" :size="16" />
+      </BButton>
+      <span class="b-drawing-toolbar__zoom" data-testid="drawing-zoom-value">{{ zoomPercent }}</span>
+      <BButton type="text" square size="small" tooltip="放大" @click="emit('zoom-in')">
+        <BIcon icon="lucide:plus" :size="16" />
+      </BButton>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { DrawingToolMode } from '../types';
 import { computed } from 'vue';
+import BButton from '@/components/BButton/index.vue';
 import BIcon from '@/components/BIcon/index.vue';
 
 /**
@@ -92,52 +82,51 @@ const zoomPercent = computed<string>(() => `${Math.round(props.zoom * 100)}%`);
 
 <style lang="less" scoped>
 .b-drawing-toolbar {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/** 各分组统一样式 + 允许点击 */
+.b-drawing-toolbar__group {
+  position: absolute;
   display: flex;
   gap: 2px;
   align-items: center;
   padding: 4px;
-  background: var(--bg-primary);
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
 }
 
-.b-drawing-toolbar__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  outline: none;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+/** 顶部水平居中 */
+.b-drawing-toolbar__group--top {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.b-drawing-toolbar__button:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
+/** 左下角 - 历史记录 */
+.b-drawing-toolbar__group--bottom-left {
+  bottom: 12px;
+  left: 12px;
 }
 
-.b-drawing-toolbar__button.is-active {
+/** 左下角 - 缩放控制，位于历史记录右侧 */
+.b-drawing-toolbar__group--bottom-left-zoom {
+  bottom: 12px;
+  left: 90px;
+  gap: 4px;
+}
+
+/** 高亮当前激活的工具 */
+.b-drawing-toolbar :deep(.is-active) {
   color: var(--color-primary);
   background: var(--color-primary-bg);
-}
-
-.b-drawing-toolbar__button:focus-visible {
-  box-shadow: 0 0 0 2px var(--color-control-outline);
-}
-
-.b-drawing-toolbar__button--primary {
-  color: var(--color-primary);
-}
-
-.b-drawing-toolbar__button--primary:hover {
-  color: var(--color-primary-hover);
-  background: var(--color-primary-bg-hover);
 }
 
 .b-drawing-toolbar__divider {
@@ -150,7 +139,6 @@ const zoomPercent = computed<string>(() => `${Math.round(props.zoom * 100)}%`);
 .b-drawing-toolbar__zoom {
   min-width: 42px;
   font-size: 12px;
-  font-weight: 700;
   color: var(--text-tertiary);
   text-align: center;
   user-select: none;

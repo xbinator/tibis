@@ -4,18 +4,17 @@
 -->
 <template>
   <section class="b-drawing" tabindex="0" @keydown="handleKeydown">
-    <header class="b-drawing__header">
-      <DrawingToolbar
-        :zoom="board.state.value.viewport.zoom"
-        :active-tool="activeTool"
-        @set-tool="setActiveTool"
-        @undo="board.undo"
-        @redo="board.redo"
-        @delete="interaction.deleteSelection"
-        @zoom-in="viewport.zoomIn"
-        @zoom-out="viewport.zoomOut"
-      />
-    </header>
+    <DrawingToolbar
+      :zoom="board.state.value.viewport.zoom"
+      :active-tool="activeTool"
+      class="b-drawing__toolbar"
+      @set-tool="setActiveTool"
+      @undo="board.undo"
+      @redo="board.redo"
+      @delete="interaction.deleteSelection"
+      @zoom-in="viewport.zoomIn"
+      @zoom-out="viewport.zoomOut"
+    />
     <DrawingCanvas
       :nodes="board.state.value.nodes"
       :edges="board.state.value.edges"
@@ -113,6 +112,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 <style lang="less" scoped>
 .b-drawing {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -124,14 +124,11 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: 8px;
 }
 
-.b-drawing__header {
-  display: flex;
-  flex-shrink: 0;
-  gap: 12px;
-  align-items: center;
-  min-height: 48px;
-  padding: 8px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-primary);
+/** 悬浮工具栏铺满画布，内部自行分组定位 */
+.b-drawing__toolbar {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
 }
 </style>

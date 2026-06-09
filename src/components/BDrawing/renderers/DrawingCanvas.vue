@@ -10,13 +10,10 @@
           <path class="b-drawing-canvas__arrow-head" d="M0,0 L0,6 L9,3 z"></path>
         </marker>
       </defs>
-      <g class="b-drawing-canvas__grid">
-        <path :d="gridPath"></path>
-      </g>
+
       <DrawingEdgeRenderer v-for="edge in edges" :key="edge.id" :edge="edge" :nodes="nodes" />
       <DrawingNodeRenderer v-for="node in nodes" :key="node.id" :node="node" :selected="selection.includes(node.id)" @select="emit('select', $event)" />
     </svg>
-    <div v-if="!nodes.length" class="b-drawing-canvas__empty">开始画图</div>
   </div>
 </template>
 
@@ -56,19 +53,6 @@ const viewBox = computed<string>(() => {
 
   return `${props.viewport.center.x - width / 2} ${props.viewport.center.y - height / 2} ${width} ${height}`;
 });
-
-const gridPath = computed<string>(() => {
-  const lines: string[] = [];
-  for (let x = -2000; x <= 2000; x += 40) {
-    lines.push(`M ${x} -2000 L ${x} 2000`);
-  }
-  for (let y = -2000; y <= 2000; y += 40) {
-    lines.push(`M -2000 ${y} L 2000 ${y}`);
-  }
-
-  return lines.join(' ');
-});
-
 /**
  * 获取当前 SVG 视口尺寸。
  * @returns SVG 视口尺寸
@@ -135,12 +119,6 @@ function handlePointerDown(event: PointerEvent): void {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.b-drawing-canvas__grid {
-  fill: none;
-  stroke: var(--border-tertiary);
-  stroke-width: 1;
 }
 
 .b-drawing-canvas__arrow-head {
