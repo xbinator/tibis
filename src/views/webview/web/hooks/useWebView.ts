@@ -817,6 +817,25 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
   }
 
   /**
+   * 打开当前 `<webview>` 页面开发者工具。
+   */
+  function openDevTools(): void {
+    const instance = webviewRef.value;
+    const open = instance?.openDevTools;
+    if (!instance || typeof open !== 'function') {
+      return;
+    }
+
+    const isOpened = instance.isDevToolsOpened;
+    const close = instance.closeDevTools;
+    if (typeof isOpened === 'function' && isOpened.call(instance) && typeof close === 'function') {
+      close.call(instance);
+    }
+
+    open.call(instance);
+  }
+
+  /**
    * 读取当前网页快照。
    * @returns 当前网页快照
    */
@@ -1036,7 +1055,8 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     goBack,
     goForward,
     reload,
-    stop
+    stop,
+    openDevTools
   };
 
   return {

@@ -45,6 +45,7 @@
         @click="emit('toggleInspector')"
       />
       <BButton type="ghost" size="small" square tooltip="在浏览器打开" placement="bottomRight" icon="lucide:external-link" @click="emit('openInBrowser')" />
+      <BButton type="ghost" size="small" square tooltip="打开开发者工具" icon="lucide:bug" @click="emit('openDevTools')" />
 
       <BDropdown placement="bottomRight">
         <BButton type="ghost" size="small" square icon="lucide:more-vertical" />
@@ -100,6 +101,7 @@ const emit = defineEmits<{
   reload: [];
   stop: [];
   openInBrowser: [];
+  openDevTools: [];
   selectElement: [];
   toggleDeviceToolbar: [];
   toggleInspector: [];

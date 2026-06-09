@@ -99,6 +99,8 @@ export interface WebviewController {
   reload(): Promise<void> | void;
   /** 停止加载 */
   stop(): Promise<void> | void;
+  /** 打开当前页面开发者工具 */
+  openDevTools?(): Promise<void> | void;
 }
 
 /**

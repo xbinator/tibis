@@ -17,6 +17,7 @@
       @stop="webview.stop"
       @submit-url="handleSubmitUrl"
       @open-in-browser="openInBrowser"
+      @open-dev-tools="webview.openDevTools"
       @select-element="handleStartElementSelection"
       @toggle-device-toolbar="deviceMode.toggleToolbarVisible"
       @toggle-inspector="toggleInspector"
