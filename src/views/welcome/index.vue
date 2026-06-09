@@ -15,6 +15,13 @@
           </div>
           <span class="action-label">打开文件</span>
         </div>
+
+        <div class="action-card" data-testid="welcome-open-drawing" @click="handleOpenDrawing">
+          <div class="action-icon">
+            <Icon icon="lucide:pen-line" width="16" height="16" />
+          </div>
+          <span class="action-label">画图</span>
+        </div>
       </div>
 
       <div v-if="topRecentRecords.length" class="recent-files-section">
@@ -52,6 +59,7 @@
  */
 
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { useNavigate } from '@/hooks/useNavigate';
@@ -61,6 +69,7 @@ import { resolveFileTitle } from '@/utils/file/title';
 import DropZone from './components/DropZone.vue';
 
 const { openWebview } = useNavigate();
+const router = useRouter();
 const recentStore = useRecentStore();
 const { createNewFile, openFileById, openNativeFile } = useOpenFile();
 const visibleSearchRecent = ref(false);
@@ -81,6 +90,13 @@ function handleNewFile(): void {
  */
 async function handleOpenFile(): Promise<void> {
   await openNativeFile();
+}
+
+/**
+ * 打开独立画图页面。
+ */
+async function handleOpenDrawing(): Promise<void> {
+  await router.push({ name: 'drawing' });
 }
 
 /**

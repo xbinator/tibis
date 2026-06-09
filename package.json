@@ -101,6 +101,7 @@
     "@electron/rebuild": "^4.0.4",
     "@iconify/vue": "^5.0.1",
     "@lezer/highlight": "^1.2.3",
+    "@plait/core": "^0.93.2",
     "@tiptap/core": "^3.23.4",
     "@tiptap/extension-bubble-menu": "^3.23.4",
     "@tiptap/extension-code": "^3.23.4",
