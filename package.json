@@ -82,12 +82,9 @@
     "math-intrinsics": "^1.1.0",
     "mime-db": "1.52.0",
     "mime-types": "^2.1.35",
-    "moveable": "^0.53.0",
-    "selecto": "^1.26.3",
     "sharp": "^0.34.5",
     "tree-sitter-bash": "^0.25.1",
     "tree-sitter-powershell": "^0.26.4",
-    "vue3-moveable": "^0.28.0",
     "web-tree-sitter": "^0.26.9",
     "zod": "^3.25.76"
   },
@@ -171,11 +168,13 @@
     "marked": "^18.0.2",
     "mermaid": "^11.15.0",
     "monaco-editor": "^0.55.1",
+    "moveable": "^0.53.0",
     "nanoid": "^5.1.11",
     "p-limit": "^7.3.0",
     "pinia": "^3.0.4",
     "postcss-html": "^1.8.0",
     "prettier": "^2.8.8",
+    "selecto": "^1.26.3",
     "stylelint": "^16.4.0",
     "stylelint-config-html": "^1.1.0",
     "stylelint-config-recess-order": "^6.0.0",
@@ -192,6 +191,8 @@
     "vue-eslint-parser": "^10.1.1",
     "vue-router": "^5.0.7",
     "vue-tsc": "^3.2.7",
+    "vue3-infinite-viewer": "^0.17.1",
+    "vue3-moveable": "^0.28.0",
     "wait-on": "^8.0.3"
   }
 }

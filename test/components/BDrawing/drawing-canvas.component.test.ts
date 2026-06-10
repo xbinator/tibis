@@ -15,6 +15,9 @@ const selectoMockState = vi.hoisted(() => ({
     destroy: ReturnType<typeof vi.fn>;
   }>
 }));
+const moveableMockState = vi.hoisted(() => ({
+  updateRect: vi.fn()
+}));
 
 /**
  * Selecto 拖拽条件回调。
@@ -43,6 +46,51 @@ vi.mock('@/components/BIcon/index.vue', () => ({
   }
 }));
 
+vi.mock('vue3-infinite-viewer', () => ({
+  VueInfiniteViewer: {
+    name: 'VueInfiniteViewer',
+    props: {
+      displayHorizontalScroll: {
+        type: Boolean,
+        default: false
+      },
+      displayVerticalScroll: {
+        type: Boolean,
+        default: false
+      },
+      useMouseDrag: {
+        type: Boolean,
+        default: false
+      },
+      useWheelPinch: {
+        type: Boolean,
+        default: false
+      },
+      useWheelScroll: {
+        type: Boolean,
+        default: false
+      },
+      zoom: {
+        type: Number,
+        default: 1
+      }
+    },
+    emits: ['scroll'],
+    template: `
+      <div
+        class="vue-infinite-viewer-mock"
+        data-testid="vue-infinite-viewer-mock"
+        :data-use-mouse-drag="String(useMouseDrag)"
+        :data-use-wheel-pinch="String(useWheelPinch)"
+        :data-use-wheel-scroll="String(useWheelScroll)"
+        :data-zoom="String(zoom)"
+      >
+        <slot />
+      </div>
+    `
+  }
+}));
+
 vi.mock('vue3-moveable/dist/moveable.js', () => ({
   default: {
     name: 'VueMoveable',
@@ -54,6 +102,10 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
       rotatable: {
         type: Boolean,
         default: false
+      },
+      zoom: {
+        type: Number,
+        default: 1
       },
       resizable: {
         type: Boolean,
@@ -77,10 +129,19 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
       }
     },
     emits: ['drag', 'drag-end', 'drag-group', 'drag-group-end', 'resize', 'resize-end', 'resize-group', 'resize-group-end', 'rotate-end'],
+    methods: {
+      /**
+       * 模拟 Moveable 重新计算控制框。
+       */
+      updateRect(): void {
+        moveableMockState.updateRect();
+      }
+    },
     template: `
       <div
         v-if="target.length"
         data-testid="drawing-moveable-mock"
+        :data-zoom="String(zoom)"
         :data-resizable="String(resizable)"
         :data-snappable="String(snappable)"
         :data-guideline-count="String(elementGuidelines.length)"
@@ -173,6 +234,22 @@ async function dispatchPointerEvent(target: Element | Window, type: string, poin
 }
 
 /**
+ * 派发滚轮事件。
+ * @param target - 目标元素
+ * @param options - 滚轮事件参数
+ */
+async function dispatchWheelEvent(target: Element, options: WheelEventInit): Promise<void> {
+  target.dispatchEvent(
+    new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      ...options
+    })
+  );
+  await nextTick();
+}
+
+/**
  * 设置画布测试尺寸。
  * @param element - 画布元素
  * @param size - 画布尺寸
@@ -190,6 +267,15 @@ function setCanvasRect(element: Element, size: { width: number; height: number }
       y: 0,
       toJSON: (): Record<string, number> => ({})
     } as DOMRect);
+}
+
+/**
+ * 解析 SVG viewBox 数值。
+ * @param value - viewBox 属性值
+ * @returns viewBox 数字列表
+ */
+function parseViewBox(value: string | undefined): number[] {
+  return (value ?? '').split(' ').map((item) => Number(item));
 }
 
 /**
@@ -213,6 +299,7 @@ async function emitSelectoEnd(targets: Element[], shiftKey = false): Promise<voi
  */
 function resetMockState(): void {
   selectoMockState.instances.length = 0;
+  moveableMockState.updateRect.mockClear();
 }
 
 describe('BDrawing', (): void => {
@@ -224,6 +311,8 @@ describe('BDrawing', (): void => {
     const wrapper = mount(BDrawing);
 
     expect(wrapper.find('.b-drawing').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="drawing-infinite-viewer"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="vue-infinite-viewer-mock"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="drawing-canvas"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('开始画图');
     expect(wrapper.find('[data-testid="drawing-add-process"]').exists()).toBe(false);
@@ -271,6 +360,27 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
   });
 
+  it('disables history toolbar actions when undo or redo is unavailable', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const undoButton = wrapper.find('button[aria-label="撤销"]');
+    const redoButton = wrapper.find('button[aria-label="重做"]');
+
+    expect(undoButton.attributes('disabled')).toBeDefined();
+    expect(redoButton.attributes('disabled')).toBeDefined();
+
+    await wrapper.trigger('keydown', { key: 'p' });
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    expect(wrapper.find('button[aria-label="撤销"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('button[aria-label="重做"]').attributes('disabled')).toBeDefined();
+
+    await wrapper.find('button[aria-label="撤销"]').trigger('click');
+
+    expect(wrapper.find('button[aria-label="撤销"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('button[aria-label="重做"]').attributes('disabled')).toBeUndefined();
+  });
+
   it('selects a node and deletes it with the keyboard shortcut', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -312,6 +422,85 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-zoom-in"]').trigger('click');
 
     expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('110%');
+  });
+
+  it('zooms the drawing viewport with modified wheel events', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await dispatchWheelEvent(canvas.element, { ctrlKey: true, deltaY: -100 });
+
+    expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('110%');
+
+    await dispatchWheelEvent(canvas.element, { metaKey: true, deltaY: 100 });
+
+    expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('100%');
+  });
+
+  it('keeps the wheel pointer anchored while zooming the viewport', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 1200, height: 720 });
+    await dispatchWheelEvent(canvas.element, { clientX: 900, clientY: 540, ctrlKey: true, deltaY: -100 });
+
+    const [minX, minY, width, height] = parseViewBox(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox'));
+
+    expect(width).toBeCloseTo(1200 / 1.1, 5);
+    expect(height).toBeCloseTo(720 / 1.1, 5);
+    expect(minX + width * 0.75).toBeCloseTo(300, 5);
+    expect(minY + height * 0.75).toBeCloseTo(180, 5);
+  });
+
+  it('pans the infinite canvas with the hand tool without moving element geometry', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await canvas.trigger('pointerdown');
+    await canvas.trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-hand-tool"]').trigger('click');
+    setCanvasRect(canvas.element, { width: 1200, height: 720 });
+
+    const initialTransform = wrapper.find('[data-testid="drawing-node"]').attributes('transform');
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 600, clientY: 360 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 720, clientY: 420 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 720, clientY: 420 });
+
+    const [minX, minY] = parseViewBox(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox'));
+
+    expect(minX).toBeCloseTo(-720, 5);
+    expect(minY).toBeCloseTo(-420, 5);
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe(initialTransform);
+  });
+
+  it('keeps select-mode empty drags from panning the infinite canvas', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 1200, height: 720 });
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 600, clientY: 360 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 720, clientY: 420 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 720, clientY: 420 });
+
+    const [minX, minY] = parseViewBox(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox'));
+
+    expect(minX).toBeCloseTo(-600, 5);
+    expect(minY).toBeCloseTo(-360, 5);
+  });
+
+  it('pans the infinite canvas with ordinary wheel events without changing zoom', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 1200, height: 720 });
+    await dispatchWheelEvent(canvas.element, { deltaX: 120, deltaY: 60 });
+
+    const [minX, minY] = parseViewBox(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox'));
+
+    expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('100%');
+    expect(minX).toBeCloseTo(-480, 5);
+    expect(minY).toBeCloseTo(-300, 5);
   });
 
   it('creates a rectangle with default size from the rect tool click', async (): Promise<void> => {
@@ -471,6 +660,35 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
 
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
+  });
+
+  it('syncs Moveable visual zoom with the drawing viewport zoom', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await canvas.trigger('pointerdown');
+    await canvas.trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await dispatchWheelEvent(canvas.element, { clientX: 600, clientY: 360, ctrlKey: true, deltaY: -100 });
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-zoom')).toBe('1.1');
+  });
+
+  it('updates Moveable target rect after viewport zoom changes selected node layout', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await canvas.trigger('pointerdown');
+    await canvas.trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    moveableMockState.updateRect.mockClear();
+    await dispatchWheelEvent(canvas.element, { clientX: 600, clientY: 360, ctrlKey: true, deltaY: -100 });
+    await nextTick();
+    await nextTick();
+
+    expect(moveableMockState.updateRect).toHaveBeenCalled();
   });
 
   it('disables Moveable snapping for multi selection', async (): Promise<void> => {
@@ -685,6 +903,21 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('240');
     expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('height')).toBe('120');
     expect(wrapper.find('[data-testid="moveable-rotate-end"]').exists()).toBe(false);
+  });
+
+  it('keeps Moveable resize dimensions in board units after viewport zoom', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await canvas.trigger('pointerdown');
+    await canvas.trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await dispatchWheelEvent(canvas.element, { clientX: 600, clientY: 360, ctrlKey: true, deltaY: -100 });
+    await wrapper.find('[data-testid="moveable-resize-end"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('240');
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('height')).toBe('120');
   });
 
   it('previews Moveable resize before the resize end event commits state', async (): Promise<void> => {

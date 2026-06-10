@@ -7,6 +7,8 @@
     <DrawingToolbar
       :zoom="board.state.value.viewport.zoom"
       :active-tool="activeTool"
+      :can-undo="canUndo"
+      :can-redo="canRedo"
       class="b-drawing__toolbar"
       @set-tool="setActiveTool"
       @undo="board.undo"
@@ -14,18 +16,21 @@
       @zoom-in="viewport.zoomIn"
       @zoom-out="viewport.zoomOut"
     />
-    <DrawingCanvas
-      :elements="board.state.value.elements"
-      :edges="board.state.value.edges"
-      :selection="board.state.value.selection"
-      :viewport="board.state.value.viewport"
-      :active-tool="activeTool"
-      :draft="board.state.value.draft"
-      @select="handleElementSelect"
-      @canvas-pointerdown="handleCanvasPointerdown"
-      @canvas-pointermove="handleCanvasPointermove"
-      @canvas-pointerup="handleCanvasPointerup"
-    />
+    <DrawingInfiniteViewport>
+      <DrawingCanvas
+        :elements="board.state.value.elements"
+        :edges="board.state.value.edges"
+        :selection="board.state.value.selection"
+        :viewport="board.state.value.viewport"
+        :active-tool="activeTool"
+        :draft="board.state.value.draft"
+        @select="handleElementSelect"
+        @canvas-pointerdown="handleCanvasPointerdown"
+        @canvas-pointermove="handleCanvasPointermove"
+        @canvas-pointerup="handleCanvasPointerup"
+        @canvas-wheel="handleCanvasWheel"
+      />
+    </DrawingInfiniteViewport>
     <DrawingMoveableLayer
       :enabled="activeTool === 'select' && !hideMoveableDuringDirectDrag"
       :root="rootRef"
@@ -40,8 +45,9 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingPoint, DrawingShapeElement, DrawingShapeType, DrawingToolMode } from './types';
-import { onBeforeUnmount, ref } from 'vue';
+import type { DrawingPoint, DrawingShapeElement, DrawingShapeType, DrawingSize, DrawingToolMode } from './types';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import DrawingInfiniteViewport from './components/DrawingInfiniteViewport.vue';
 import DrawingMoveableLayer from './components/DrawingMoveableLayer.vue';
 import DrawingSelectoLayer from './components/DrawingSelectoLayer.vue';
 import DrawingToolbar from './components/DrawingToolbar.vue';
@@ -55,6 +61,10 @@ const viewport = useDrawingViewport(board);
 const interaction = useDrawingInteraction(board);
 const activeTool = ref<DrawingToolMode>('select');
 const rootRef = ref<HTMLElement | null>(null);
+/** 当前历史栈是否允许撤销。 */
+const canUndo = computed<boolean>(() => board.state.value.history.past.length > 0);
+/** 当前历史栈是否允许重做。 */
+const canRedo = computed<boolean>(() => board.state.value.history.future.length > 0);
 /** 未选中节点直接拖拽期间临时隐藏 Moveable 图层，避免旧选框跟随显示。 */
 const hideMoveableDuringDirectDrag = ref<boolean>(false);
 const DEFAULT_VIEWBOX_WIDTH = 1200;
@@ -86,20 +96,34 @@ interface DirectElementDragSession {
   abortController: AbortController;
 }
 
-let directDragSession: DirectElementDragSession | null = null;
+/**
+ * 手型工具平移会话。
+ */
+interface HandPanSession {
+  /** 起始浏览器坐标 */
+  startClient: DrawingPoint;
+  /** 起始视口中心 */
+  startCenter: DrawingPoint;
+  /** 起始缩放比例 */
+  startZoom: number;
+  /** 起始画布渲染尺寸 */
+  canvasSize: DrawingSize;
+  /** 拖拽监听取消器 */
+  abortController: AbortController;
+}
 
 /**
- * 设置当前画板工具。
- * @param tool - 目标工具
+ * 浏览器坐标在画布中的投影信息。
  */
-function setActiveTool(tool: DrawingToolMode): void {
-  board.clearDraft();
-  activeTool.value = tool;
-
-  if (tool !== 'select') {
-    board.setSelection([]);
-  }
+interface CanvasPointProjection {
+  /** 投影后的画板坐标 */
+  boardPoint: DrawingPoint;
+  /** 坐标在画布渲染区域中的比例 */
+  viewportRatio: DrawingPoint;
 }
+
+let directDragSession: DirectElementDragSession | null = null;
+let handPanSession: HandPanSession | null = null;
 
 /**
  * 获取当前工具对应的创建形状。
@@ -147,11 +171,28 @@ function getCanvasElement(): HTMLElement | null {
 }
 
 /**
- * 将浏览器指针位置转换为画板坐标。
- * @param event - 指针事件
- * @returns 画板坐标，无法读取画布尺寸时返回 null
+ * 读取画布渲染尺寸。
+ * @returns 画布渲染尺寸，无法读取时返回 null
  */
-function getBoardPointFromPointer(event: PointerEvent): DrawingPoint | null {
+function getCanvasSize(): DrawingSize | null {
+  const rect = getCanvasElement()?.getBoundingClientRect();
+  if (!rect?.width || !rect.height) {
+    return null;
+  }
+
+  return {
+    width: rect.width,
+    height: rect.height
+  };
+}
+
+/**
+ * 将浏览器坐标投影到画板坐标系。
+ * @param clientX - 浏览器横坐标
+ * @param clientY - 浏览器纵坐标
+ * @returns 画布投影信息，无法读取画布尺寸时返回 null
+ */
+function getCanvasPointProjection(clientX: number, clientY: number): CanvasPointProjection | null {
   const rect = getCanvasElement()?.getBoundingClientRect();
   if (!rect?.width || !rect.height) {
     return null;
@@ -160,13 +201,28 @@ function getBoardPointFromPointer(event: PointerEvent): DrawingPoint | null {
   const currentViewport = board.state.value.viewport;
   const viewBoxWidth = DEFAULT_VIEWBOX_WIDTH / currentViewport.zoom;
   const viewBoxHeight = DEFAULT_VIEWBOX_HEIGHT / currentViewport.zoom;
-  const xRatio = (event.clientX - rect.left) / rect.width;
-  const yRatio = (event.clientY - rect.top) / rect.height;
+  const xRatio = (clientX - rect.left) / rect.width;
+  const yRatio = (clientY - rect.top) / rect.height;
 
   return {
-    x: currentViewport.center.x - viewBoxWidth / 2 + xRatio * viewBoxWidth,
-    y: currentViewport.center.y - viewBoxHeight / 2 + yRatio * viewBoxHeight
+    boardPoint: {
+      x: currentViewport.center.x - viewBoxWidth / 2 + xRatio * viewBoxWidth,
+      y: currentViewport.center.y - viewBoxHeight / 2 + yRatio * viewBoxHeight
+    },
+    viewportRatio: {
+      x: xRatio,
+      y: yRatio
+    }
   };
+}
+
+/**
+ * 将浏览器指针位置转换为画板坐标。
+ * @param event - 指针事件
+ * @returns 画板坐标，无法读取画布尺寸时返回 null
+ */
+function getBoardPointFromPointer(event: PointerEvent): DrawingPoint | null {
+  return getCanvasPointProjection(event.clientX, event.clientY)?.boardPoint ?? null;
 }
 
 /**
@@ -211,6 +267,83 @@ function cancelDirectDrag(): void {
   directDragSession?.abortController.abort();
   directDragSession = null;
   hideMoveableDuringDirectDrag.value = false;
+}
+
+/**
+ * 取消手型工具平移。
+ */
+function cancelHandPan(): void {
+  handPanSession?.abortController.abort();
+  handPanSession = null;
+}
+
+/**
+ * 设置当前画板工具。
+ * @param tool - 目标工具
+ */
+function setActiveTool(tool: DrawingToolMode): void {
+  board.clearDraft();
+  cancelHandPan();
+  activeTool.value = tool;
+
+  if (tool !== 'select') {
+    board.setSelection([]);
+  }
+}
+
+/**
+ * 处理手型工具平移移动。
+ * @param event - 指针事件
+ */
+function handleHandPanMove(event: PointerEvent): void {
+  if (!handPanSession) {
+    return;
+  }
+
+  const viewBoxWidth = DEFAULT_VIEWBOX_WIDTH / handPanSession.startZoom;
+  const viewBoxHeight = DEFAULT_VIEWBOX_HEIGHT / handPanSession.startZoom;
+  const deltaX = ((event.clientX - handPanSession.startClient.x) * viewBoxWidth) / handPanSession.canvasSize.width;
+  const deltaY = ((event.clientY - handPanSession.startClient.y) * viewBoxHeight) / handPanSession.canvasSize.height;
+
+  viewport.setCenter({
+    x: handPanSession.startCenter.x - deltaX,
+    y: handPanSession.startCenter.y - deltaY
+  });
+}
+
+/**
+ * 结束手型工具平移。
+ */
+function handleHandPanEnd(): void {
+  cancelHandPan();
+}
+
+/**
+ * 开始手型工具平移。
+ * @param event - 指针事件
+ */
+function startHandPan(event: PointerEvent): void {
+  const canvasSize = getCanvasSize();
+  if (!canvasSize) {
+    return;
+  }
+
+  const abortController = new AbortController();
+  cancelHandPan();
+  handPanSession = {
+    startClient: {
+      x: event.clientX,
+      y: event.clientY
+    },
+    startCenter: { ...board.state.value.viewport.center },
+    startZoom: board.state.value.viewport.zoom,
+    canvasSize,
+    abortController
+  };
+
+  window.addEventListener('pointermove', handleHandPanMove, { signal: abortController.signal });
+  window.addEventListener('pointerup', handleHandPanEnd, { signal: abortController.signal });
+  window.addEventListener('pointercancel', handleHandPanEnd, { signal: abortController.signal });
 }
 
 /**
@@ -338,7 +471,12 @@ function handleElementSelect(id: string, event: PointerEvent): void {
  * 处理画布空白区域按下。
  * @param point - 画板坐标
  */
-function handleCanvasPointerdown(point: DrawingPoint): void {
+function handleCanvasPointerdown(point: DrawingPoint, event: PointerEvent): void {
+  if (activeTool.value === 'hand') {
+    startHandPan(event);
+    return;
+  }
+
   const shape = getActiveCreateShape();
   if (shape) {
     board.startCreateShapeDraft(shape, point);
@@ -368,6 +506,51 @@ function handleCanvasPointerup(point: DrawingPoint): void {
   board.updateDraftPoint(point);
   board.commitCreateShapeDraft();
   setActiveTool('select');
+}
+
+/**
+ * 处理画布滚轮缩放。
+ * @param event - 滚轮事件
+ */
+function handleCanvasWheel(event: WheelEvent): void {
+  if (!event.ctrlKey && !event.metaKey) {
+    if (event.deltaX === 0 && event.deltaY === 0) {
+      return;
+    }
+
+    const canvasSize = getCanvasSize();
+    if (!canvasSize) {
+      return;
+    }
+
+    event.preventDefault();
+    viewport.panByClientDelta({ x: event.deltaX, y: event.deltaY }, canvasSize);
+    return;
+  }
+
+  if (event.deltaY === 0) {
+    return;
+  }
+
+  const projection = getCanvasPointProjection(event.clientX, event.clientY);
+
+  event.preventDefault();
+  if (event.deltaY < 0) {
+    if (projection) {
+      viewport.zoomInAt(projection);
+      return;
+    }
+
+    viewport.zoomIn();
+    return;
+  }
+
+  if (projection) {
+    viewport.zoomOutAt(projection);
+    return;
+  }
+
+  viewport.zoomOut();
 }
 
 /**
@@ -448,6 +631,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 onBeforeUnmount((): void => {
+  cancelHandPan();
   cancelDirectDrag();
 });
 </script>

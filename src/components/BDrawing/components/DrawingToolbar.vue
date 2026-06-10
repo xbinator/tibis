@@ -88,10 +88,10 @@
 
     <!-- 左下角：历史记录 -->
     <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left">
-      <BButton type="text" square size="small" tooltip="撤销" aria-label="撤销" @click="emit('undo')">
+      <BButton type="text" square size="small" tooltip="撤销" aria-label="撤销" :disabled="!canUndo" @click="emit('undo')">
         <BIcon icon="lucide:undo-2" :size="16" />
       </BButton>
-      <BButton type="text" square size="small" tooltip="重做" aria-label="重做" @click="emit('redo')">
+      <BButton type="text" square size="small" tooltip="重做" aria-label="重做" :disabled="!canRedo" @click="emit('redo')">
         <BIcon icon="lucide:redo-2" :size="16" />
       </BButton>
     </div>
@@ -123,6 +123,10 @@ interface Props {
   zoom: number;
   /** 当前工具模式 */
   activeTool: DrawingToolMode;
+  /** 是否允许撤销 */
+  canUndo: boolean;
+  /** 是否允许重做 */
+  canRedo: boolean;
 }
 
 const props = defineProps<Props>();

@@ -10,6 +10,7 @@
     @pointerdown="handlePointerDown"
     @pointermove="handlePointerMove"
     @pointerup="handlePointerUp"
+    @wheel="handleWheel"
   >
     <svg class="b-drawing-canvas__svg" :viewBox="viewBox">
       <defs>
@@ -72,11 +73,13 @@ const emit = defineEmits<{
   /** 选择元素 */
   select: [id: string, event: PointerEvent];
   /** 画布按下 */
-  'canvas-pointerdown': [point: DrawingPoint];
+  'canvas-pointerdown': [point: DrawingPoint, event: PointerEvent];
   /** 画布指针移动 */
-  'canvas-pointermove': [point: DrawingPoint];
+  'canvas-pointermove': [point: DrawingPoint, event: PointerEvent];
   /** 画布指针抬起 */
-  'canvas-pointerup': [point: DrawingPoint];
+  'canvas-pointerup': [point: DrawingPoint, event: PointerEvent];
+  /** 画布滚轮 */
+  'canvas-wheel': [event: WheelEvent];
 }>();
 
 const viewBox = computed<string>(() => {
@@ -142,7 +145,7 @@ function handlePointerDown(event: PointerEvent): void {
     target.setPointerCapture(event.pointerId);
   }
 
-  emit('canvas-pointerdown', getBoardPoint(event));
+  emit('canvas-pointerdown', getBoardPoint(event), event);
 }
 
 /**
@@ -150,7 +153,7 @@ function handlePointerDown(event: PointerEvent): void {
  * @param event - 指针事件
  */
 function handlePointerMove(event: PointerEvent): void {
-  emit('canvas-pointermove', getBoardPoint(event));
+  emit('canvas-pointermove', getBoardPoint(event), event);
 }
 
 /**
@@ -163,7 +166,15 @@ function handlePointerUp(event: PointerEvent): void {
     target.releasePointerCapture(event.pointerId);
   }
 
-  emit('canvas-pointerup', getBoardPoint(event));
+  emit('canvas-pointerup', getBoardPoint(event), event);
+}
+
+/**
+ * 转发画布滚轮事件。
+ * @param event - 滚轮事件
+ */
+function handleWheel(event: WheelEvent): void {
+  emit('canvas-wheel', event);
 }
 </script>
 

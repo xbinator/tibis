@@ -128,12 +128,6 @@ importers:
       mime-types:
         specifier: ^2.1.35
         version: 2.1.35
-      moveable:
-        specifier: ^0.53.0
-        version: 0.53.0
-      selecto:
-        specifier: ^1.26.3
-        version: 1.26.3
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -143,9 +137,6 @@ importers:
       tree-sitter-powershell:
         specifier: ^0.26.4
         version: 0.26.4
-      vue3-moveable:
-        specifier: ^0.28.0
-        version: 0.28.0
       web-tree-sitter:
         specifier: ^0.26.9
         version: 0.26.9
@@ -390,6 +381,9 @@ importers:
       monaco-editor:
         specifier: ^0.55.1
         version: 0.55.1
+      moveable:
+        specifier: ^0.53.0
+        version: 0.53.0
       nanoid:
         specifier: ^5.1.11
         version: 5.1.11
@@ -405,6 +399,9 @@ importers:
       prettier:
         specifier: ^2.8.8
         version: 2.8.8
+      selecto:
+        specifier: ^1.26.3
+        version: 1.26.3
       stylelint:
         specifier: ^16.4.0
         version: 16.26.1(typescript@5.9.3)
@@ -453,6 +450,12 @@ importers:
       vue-tsc:
         specifier: ^3.2.7
         version: 3.2.7(typescript@5.9.3)
+      vue3-infinite-viewer:
+        specifier: ^0.17.1
+        version: 0.17.1
+      vue3-moveable:
+        specifier: ^0.28.0
+        version: 0.28.0
       wait-on:
         specifier: ^8.0.3
         version: 8.0.5
@@ -3777,6 +3780,9 @@ packages:
     resolution: {integrity: sha512-JmXMZ6wuvDmLiHEml9ykzqO6lwFbof0GG4IkcGaENdCRDDmMVnny7s5HsIgHCbaq0w2MyPhDqkhTUgS2LU2PHA==}
     engines: {node: '>=0.8.19'}
 
+  infinite-viewer@0.29.1:
+    resolution: {integrity: sha512-/ZWsJxgB5Atg/M3rb2HlYY33XrRkOcRIRlRTZoCWsORO/xvFSprm7gq2gB8DZvkjlkRnIOeR9TjZSLn8LFK19w==}
+
   inflight@1.0.6:
     resolution: {integrity: sha512-k92I/b08q4wvFscXCLvqfsHCrjrF7yiXsQuIVvVE7N82W3+aqpzuUdBbfhWcy/FZR3/4IgflMgKLOsvPDrGCJA==}
     deprecated: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
@@ -5824,6 +5830,9 @@ packages:
     engines: {node: '>=10.15.0'}
     peerDependencies:
       vue: ^3.0.0
+
+  vue3-infinite-viewer@0.17.1:
+    resolution: {integrity: sha512-KghbYFXpZhrRT0aia12Xvl93TRrrQ2Fa/R1f4HkUm/MbgkXl6r45RT70HnRRC8R3pOD7oz99dwHjY8P5/SFJDA==}
 
   vue3-moveable@0.28.0:
     resolution: {integrity: sha512-vplQO0XkxVEtXMDh2/lZE+c5kMycGXAfYFMvbwFKi8UVYzVk8MTgVHr4fxO9Z+4i4Rb+U/IEIgkhHRMAbx8FJg==}
@@ -9885,6 +9894,15 @@ snapshots:
 
   imurmurhash@0.1.4: {}
 
+  infinite-viewer@0.29.1:
+    dependencies:
+      '@daybrush/utils': 1.13.0
+      '@egjs/agent': 2.4.4
+      '@scena/event-emitter': 1.0.5
+      css-styled: 1.0.8
+      framework-utils: 1.1.0
+      gesto: 1.19.4
+
   inflight@1.0.6:
     dependencies:
       once: 1.4.0
@@ -12100,6 +12118,10 @@ snapshots:
     dependencies:
       is-plain-object: 3.0.1
       vue: 3.5.34(typescript@5.9.3)
+
+  vue3-infinite-viewer@0.17.1:
+    dependencies:
+      infinite-viewer: 0.29.1
 
   vue3-moveable@0.28.0:
     dependencies:

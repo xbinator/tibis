@@ -2,22 +2,79 @@
  * @file useDrawingViewport.ts
  * @description BDrawing 视口缩放和平移状态管理。
  */
+import type { DrawingPoint, DrawingSize } from '../types';
 import type { UseDrawingBoardReturn } from './useDrawingBoard';
 
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 2;
 const ZOOM_STEP = 0.1;
+const DEFAULT_VIEWBOX_WIDTH = 1200;
+const DEFAULT_VIEWBOX_HEIGHT = 720;
+
+/**
+ * 缩放锚点信息。
+ */
+export interface DrawingZoomAnchor {
+  /** 鼠标当前指向的画板坐标 */
+  boardPoint: DrawingPoint;
+  /** 鼠标在画布渲染区域中的比例坐标 */
+  viewportRatio: DrawingPoint;
+}
 
 /**
  * BDrawing 视口 hook 返回值。
  */
 export interface UseDrawingViewportReturn {
+  /** 设置视口中心 */
+  setCenter: (center: DrawingPoint) => void;
+  /** 按浏览器像素位移平移视口 */
+  panByClientDelta: (delta: DrawingPoint, viewportSize: DrawingSize) => void;
   /** 放大 */
   zoomIn: () => void;
   /** 缩小 */
   zoomOut: () => void;
+  /** 围绕指定锚点放大 */
+  zoomInAt: (anchor: DrawingZoomAnchor) => void;
+  /** 围绕指定锚点缩小 */
+  zoomOutAt: (anchor: DrawingZoomAnchor) => void;
   /** 重置缩放 */
   resetZoom: () => void;
+}
+
+/**
+ * 限制缩放比例范围。
+ * @param nextZoom - 待设置缩放比例
+ * @returns 归一化后的缩放比例
+ */
+function clampZoom(nextZoom: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(nextZoom.toFixed(2))));
+}
+
+/**
+ * 根据缩放比例计算 viewBox 尺寸。
+ * @param zoom - 缩放比例
+ * @returns viewBox 尺寸
+ */
+function getViewBoxSize(zoom: number): DrawingSize {
+  return {
+    width: DEFAULT_VIEWBOX_WIDTH / zoom,
+    height: DEFAULT_VIEWBOX_HEIGHT / zoom
+  };
+}
+
+/**
+ * 根据锚点计算缩放后的视口中心。
+ * @param anchor - 缩放锚点
+ * @param zoom - 目标缩放比例
+ * @returns 新视口中心
+ */
+function getAnchoredCenter(anchor: DrawingZoomAnchor, zoom: number): DrawingPoint {
+  const viewBoxSize = getViewBoxSize(zoom);
+
+  return {
+    x: anchor.boardPoint.x + viewBoxSize.width / 2 - anchor.viewportRatio.x * viewBoxSize.width,
+    y: anchor.boardPoint.y + viewBoxSize.height / 2 - anchor.viewportRatio.y * viewBoxSize.height
+  };
 }
 
 /**
@@ -29,20 +86,62 @@ export function useDrawingViewport(board: UseDrawingBoardReturn): UseDrawingView
   /**
    * 设置缩放比例。
    * @param nextZoom - 新缩放比例
+   * @param anchor - 可选缩放锚点
    */
-  function setZoom(nextZoom: number): void {
+  function setZoom(nextZoom: number, anchor?: DrawingZoomAnchor): void {
+    const currentViewport = board.state.value.viewport;
+    const zoom = clampZoom(nextZoom);
+
     board.state.value = {
       ...board.state.value,
       viewport: {
-        ...board.state.value.viewport,
-        zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(nextZoom.toFixed(2))))
+        ...currentViewport,
+        center: anchor && zoom !== currentViewport.zoom ? getAnchoredCenter(anchor, zoom) : currentViewport.center,
+        zoom
       }
     };
   }
 
+  /**
+   * 设置视口中心点。
+   * @param center - 新视口中心点
+   */
+  function setCenter(center: DrawingPoint): void {
+    board.state.value = {
+      ...board.state.value,
+      viewport: {
+        ...board.state.value.viewport,
+        center
+      }
+    };
+  }
+
+  /**
+   * 按浏览器像素位移平移视口。
+   * @param delta - 浏览器像素位移
+   * @param viewportSize - 画布渲染尺寸
+   */
+  function panByClientDelta(delta: DrawingPoint, viewportSize: DrawingSize): void {
+    if (!viewportSize.width || !viewportSize.height) {
+      return;
+    }
+
+    const currentViewport = board.state.value.viewport;
+    const viewBoxSize = getViewBoxSize(currentViewport.zoom);
+
+    setCenter({
+      x: currentViewport.center.x + (delta.x * viewBoxSize.width) / viewportSize.width,
+      y: currentViewport.center.y + (delta.y * viewBoxSize.height) / viewportSize.height
+    });
+  }
+
   return {
+    setCenter,
+    panByClientDelta,
     zoomIn: (): void => setZoom(board.state.value.viewport.zoom + ZOOM_STEP),
     zoomOut: (): void => setZoom(board.state.value.viewport.zoom - ZOOM_STEP),
+    zoomInAt: (anchor: DrawingZoomAnchor): void => setZoom(board.state.value.viewport.zoom + ZOOM_STEP, anchor),
+    zoomOutAt: (anchor: DrawingZoomAnchor): void => setZoom(board.state.value.viewport.zoom - ZOOM_STEP, anchor),
     resetZoom: (): void => setZoom(1)
   };
 }

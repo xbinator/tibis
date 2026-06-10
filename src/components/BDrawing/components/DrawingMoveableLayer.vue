@@ -5,6 +5,7 @@
 <template>
   <div v-if="enabled && targets.length" class="b-drawing-moveable-layer">
     <VueMoveable
+      ref="moveableRef"
       :target="targets"
       :draggable="true"
       :resizable="true"
@@ -16,6 +17,7 @@
       :snap-directions="snapDirections"
       :element-snap-directions="snapDirections"
       :element-guidelines="guidelineTargets"
+      :zoom="viewport.zoom"
       :origin="false"
       :throttle-drag="0"
       :throttle-resize="0"
@@ -117,6 +119,7 @@ const emit = defineEmits<{
 }>();
 
 const targets = ref<Element[]>([]);
+const moveableRef = ref<InstanceType<typeof VueMoveable> | null>(null);
 /** 单选拖拽时用于元素间吸附的其它画板节点。 */
 const guidelineTargets = ref<Element[]>([]);
 const singleTarget = computed<boolean>(() => targets.value.length === 1);
@@ -158,11 +161,11 @@ function getTargetById(id: string): Element | null {
 }
 
 /**
- * DOM 尺寸或位移转换为世界坐标值。
+ * DOM 位移转换为世界坐标值。
  * @param value - DOM 坐标值
  * @returns 世界坐标值
  */
-function domValueToWorld(value: number): number {
+function domDeltaToWorld(value: number): number {
   return value / props.viewport.zoom;
 }
 
@@ -174,8 +177,8 @@ function domValueToWorld(value: number): number {
  * @returns SVG transform
  */
 function createPreviewTransform(element: DrawingElement, translate: [number, number], size: DrawingSize = element.size): string {
-  const x = element.position.x + domValueToWorld(translate[0]);
-  const y = element.position.y + domValueToWorld(translate[1]);
+  const x = element.position.x + domDeltaToWorld(translate[0]);
+  const y = element.position.y + domDeltaToWorld(translate[1]);
   const rotateCenterX = size.width / 2;
   const rotateCenterY = size.height / 2;
 
@@ -258,8 +261,8 @@ function createMoveChange(event: MoveableDragEndEvent): DrawingGeometryChange | 
   return {
     id,
     position: {
-      x: element.position.x + domValueToWorld(translate[0]),
-      y: element.position.y + domValueToWorld(translate[1])
+      x: element.position.x + domDeltaToWorld(translate[0]),
+      y: element.position.y + domDeltaToWorld(translate[1])
     }
   };
 }
@@ -280,12 +283,12 @@ function createResizeChange(event: MoveableResizeEndEvent): DrawingGeometryChang
   return {
     id,
     position: {
-      x: element.position.x + domValueToWorld(translate[0]),
-      y: element.position.y + domValueToWorld(translate[1])
+      x: element.position.x + domDeltaToWorld(translate[0]),
+      y: element.position.y + domDeltaToWorld(translate[1])
     },
     size: {
-      width: domValueToWorld(event.width),
-      height: domValueToWorld(event.height)
+      width: event.width,
+      height: event.height
     }
   };
 }
@@ -312,6 +315,8 @@ async function syncTargets(): Promise<void> {
           .map((element) => getTargetById(element.id))
           .filter((target): target is Element => target !== null)
       : [];
+  await nextTick();
+  moveableRef.value?.updateRect();
 }
 
 /**
@@ -341,8 +346,8 @@ function handleResize(event: MoveableResizeEvent): void {
 
   const translate = event.drag?.beforeTranslate ?? [0, 0];
   const size = {
-    width: domValueToWorld(event.width),
-    height: domValueToWorld(event.height)
+    width: event.width,
+    height: event.height
   };
 
   event.target.setAttribute('transform', createPreviewTransform(element, translate, size));
@@ -425,7 +430,7 @@ onMounted(() => {
 });
 
 watch(
-  () => [props.root, props.selection, props.elements, props.enabled],
+  () => [props.root, props.selection, props.elements, props.enabled, props.viewport.center.x, props.viewport.center.y, props.viewport.zoom],
   () => {
     syncTargets().catch((error: unknown): void => {
       console.warn('BDrawing Moveable target sync failed', error);
