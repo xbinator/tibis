@@ -3,31 +3,33 @@
   @description 渲染应用顶部标签栏，并处理切换、关闭、横向滚动与拖拽排序交互。
 -->
 <template>
-  <div ref="scrollContainer" class="header-tabs" @wheel.prevent="handleWheel">
+  <div ref="scrollContainer" class="header-tabs" @wheel="handleWheel">
     <div v-if="dropIndicatorStyle" class="header-tabs__drop-indicator" :style="dropIndicatorStyle"></div>
-    <Dropdown
-      v-for="tab in tabsStore.tabs"
-      :key="tab.id"
-      :open="openContextTabId === tab.id"
-      :trigger="['contextmenu']"
-      placement="bottomLeft"
-      @open-change="handleContextMenuOpenChange(tab.id, $event)"
-    >
-      <div :ref="setTabRef(tab.id)" :data-tab-id="tab.id" class="header-tab" :class="getTabClassName(tab)" @click="handleClickTab(tab.path)">
-        <div class="header-tab__title">
-          <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
-          <span class="header-tab__title-text">{{ tab.title }}</span>
+    <div class="header-tabs__track">
+      <Dropdown
+        v-for="tab in tabsStore.tabs"
+        :key="tab.id"
+        :open="openContextTabId === tab.id"
+        :trigger="['contextmenu']"
+        placement="bottomLeft"
+        @open-change="handleContextMenuOpenChange(tab.id, $event)"
+      >
+        <div :ref="setTabRef(tab.id)" :data-tab-id="tab.id" class="header-tab" :class="getTabClassName(tab)" @click="handleClickTab(tab.path)">
+          <div class="header-tab__title">
+            <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
+            <span class="header-tab__title-text">{{ tab.title }}</span>
+          </div>
+
+          <button class="header-tab__close" @click.stop="handleCloseButton(tab)">
+            <Icon icon="ic:round-close" width="12" height="12" />
+          </button>
         </div>
 
-        <button class="header-tab__close" @click.stop="handleCloseButton(tab)">
-          <Icon icon="ic:round-close" width="12" height="12" />
-        </button>
-      </div>
-
-      <template #overlay>
-        <BDropdownMenu :value="''" :width="200" :options="getContextMenuOptions(tab)" row-class="header-tab__menu-item" />
-      </template>
-    </Dropdown>
+        <template #overlay>
+          <BDropdownMenu :value="''" :width="200" :options="getContextMenuOptions(tab)" row-class="header-tab__menu-item" />
+        </template>
+      </Dropdown>
+    </div>
   </div>
 </template>
 
@@ -42,6 +44,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { Dropdown } from 'ant-design-vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
+import { getHeaderTabsWheelScrollDelta } from '@/layouts/default/utils/headerTabsScroll';
+import { isMac } from '@/shared/platform/env';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import type { Tab, TabCloseAction, TabClosePlan, TabMovePosition } from '@/stores/workspace/tabs';
@@ -345,7 +349,7 @@ async function handleCloseButton(tab: Tab): Promise<void> {
 }
 
 /**
- * 将纵向滚轮滚动映射为横向标签栏滚动。
+ * 将滚轮输入映射为标签栏横向滚动。
  * @param event - 鼠标滚轮事件
  */
 function handleWheel(event: WheelEvent): void {
@@ -353,7 +357,19 @@ function handleWheel(event: WheelEvent): void {
     return;
   }
 
-  scrollContainer.value.scrollLeft += event.deltaY !== 0 ? event.deltaY : event.deltaX;
+  const scrollDelta = getHeaderTabsWheelScrollDelta({
+    deltaX: event.deltaX,
+    deltaY: event.deltaY,
+    deltaMode: event.deltaMode,
+    isMacPlatform: isMac()
+  });
+
+  if (scrollDelta === null) {
+    return;
+  }
+
+  event.preventDefault();
+  scrollContainer.value.scrollLeft += scrollDelta;
 }
 </script>
 
@@ -378,6 +394,15 @@ function handleWheel(event: WheelEvent): void {
 
   /* Make the empty space draggable */
   -webkit-app-region: drag;
+}
+
+.header-tabs__track {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: max-content;
+  height: 100%;
+  -webkit-app-region: no-drag;
 }
 
 .header-tabs__drop-indicator {
