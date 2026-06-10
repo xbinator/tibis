@@ -28,6 +28,7 @@
 <script setup lang="ts">
 import type { DrawingInteractionDraft, DrawingPoint, DrawingSize } from '../types';
 import { computed } from 'vue';
+import { createDrawingDiamondPoints, isDrawingDiamondShape } from '../utils/drawingGeometry';
 
 /**
  * 创建预览组件入参。
@@ -55,17 +56,8 @@ const geometry = computed<{ position: DrawingPoint; size: DrawingSize }>(() => {
   };
 });
 
-const isDiamondShape = computed<boolean>(() => props.draft.shape === 'diamond' || props.draft.shape === 'decision');
-const diamondPoints = computed<string>(() => {
-  const halfWidth = geometry.value.size.width / 2;
-  const halfHeight = geometry.value.size.height / 2;
-  const left = geometry.value.position.x;
-  const top = geometry.value.position.y;
-  const right = left + geometry.value.size.width;
-  const bottom = top + geometry.value.size.height;
-
-  return `${left + halfWidth},${top} ${right},${top + halfHeight} ${left + halfWidth},${bottom} ${left},${top + halfHeight}`;
-});
+const isDiamondShape = computed<boolean>(() => isDrawingDiamondShape(props.draft.shape));
+const diamondPoints = computed<string>(() => createDrawingDiamondPoints(geometry.value.size, geometry.value.position));
 </script>
 
 <style lang="less" scoped>

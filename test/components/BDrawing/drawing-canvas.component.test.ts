@@ -18,11 +18,45 @@ const selectoMockState = vi.hoisted(() => ({
 const moveableMockState = vi.hoisted(() => ({
   updateRect: vi.fn()
 }));
+const resizeObserverMockState = vi.hoisted(() => ({
+  callbacks: [] as ResizeObserverCallback[],
+  targets: [] as Element[]
+}));
 
 /**
  * Selecto 拖拽条件回调。
  */
 type SelectoDragCondition = (event: { inputEvent?: { target?: EventTarget | null } }) => boolean;
+
+/**
+ * 创建 ResizeObserver 测试替身构造器。
+ * @returns ResizeObserver 构造器替身
+ */
+function createResizeObserverMock(): typeof ResizeObserver {
+  function MockResizeObserver(callback: ResizeObserverCallback): ResizeObserver {
+    resizeObserverMockState.callbacks.push(callback);
+
+    return {
+      observe: (target: Element): void => {
+        resizeObserverMockState.targets.push(target);
+      },
+      unobserve: (target: Element): void => {
+        const index = resizeObserverMockState.targets.indexOf(target);
+        if (index >= 0) {
+          resizeObserverMockState.targets.splice(index, 1);
+        }
+      },
+      disconnect: (): void => {
+        const index = resizeObserverMockState.callbacks.indexOf(callback);
+        if (index >= 0) {
+          resizeObserverMockState.callbacks.splice(index, 1);
+        }
+      }
+    };
+  }
+
+  return MockResizeObserver as unknown as typeof ResizeObserver;
+}
 
 vi.mock('@/components/BButton/index.vue', () => ({
   default: {
@@ -255,7 +289,7 @@ async function dispatchWheelEvent(target: Element, options: WheelEventInit): Pro
  * @param size - 画布尺寸
  */
 function setCanvasRect(element: Element, size: { width: number; height: number }): void {
-  element.getBoundingClientRect = (): DOMRect =>
+  const getRect = (): DOMRect =>
     ({
       bottom: size.height,
       height: size.height,
@@ -267,6 +301,12 @@ function setCanvasRect(element: Element, size: { width: number; height: number }
       y: 0,
       toJSON: (): Record<string, number> => ({})
     } as DOMRect);
+
+  element.getBoundingClientRect = getRect;
+  const root = element.closest('.b-drawing');
+  if (root) {
+    root.getBoundingClientRect = getRect;
+  }
 }
 
 /**
@@ -295,11 +335,49 @@ async function emitSelectoEnd(targets: Element[], shiftKey = false): Promise<voi
 }
 
 /**
+ * 触发 ResizeObserver mock 回调。
+ */
+async function emitCanvasResize(): Promise<void> {
+  const entries = resizeObserverMockState.targets.map(
+    (target): ResizeObserverEntry =>
+      ({
+        target,
+        contentRect: target.getBoundingClientRect()
+      } as ResizeObserverEntry)
+  );
+
+  for (const callback of resizeObserverMockState.callbacks) {
+    callback(entries, {} as ResizeObserver);
+  }
+  await nextTick();
+}
+
+/**
+ * 等待画布首屏尺寸稳定检查完成。
+ */
+async function flushViewportReadyCheck(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame((): void => {
+      resolve();
+    });
+  });
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame((): void => {
+      resolve();
+    });
+  });
+  await nextTick();
+}
+
+/**
  * 重置第三方 mock 状态。
  */
 function resetMockState(): void {
   selectoMockState.instances.length = 0;
+  resizeObserverMockState.callbacks.length = 0;
+  resizeObserverMockState.targets.length = 0;
   moveableMockState.updateRect.mockClear();
+  vi.stubGlobal('ResizeObserver', createResizeObserverMock());
 }
 
 describe('BDrawing', (): void => {
@@ -317,6 +395,31 @@ describe('BDrawing', (): void => {
     expect(wrapper.text()).not.toContain('开始画图');
     expect(wrapper.find('[data-testid="drawing-add-process"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="drawing-delete"]').exists()).toBe(false);
+  });
+
+  it('keeps SVG hidden until the initial rendered canvas size stabilizes', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await nextTick();
+
+    expect(wrapper.find('.b-drawing-canvas__svg').classes()).toContain('is-measuring');
+
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+
+    expect(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox')).toBe('-400 -300 800 600');
+    expect(wrapper.find('.b-drawing-canvas__svg').classes()).toContain('is-measuring');
+
+    setCanvasRect(canvas.element, { width: 1000, height: 500 });
+    await emitCanvasResize();
+
+    expect(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox')).toBe('-500 -250 1000 500');
+    expect(wrapper.find('.b-drawing-canvas__svg').classes()).toContain('is-measuring');
+
+    await flushViewportReadyCheck();
+
+    expect(wrapper.find('.b-drawing-canvas__svg').classes()).not.toContain('is-measuring');
   });
 
   it('selects the process tool and places a node on canvas click', async (): Promise<void> => {
@@ -691,6 +794,24 @@ describe('BDrawing', (): void => {
     expect(moveableMockState.updateRect).toHaveBeenCalled();
   });
 
+  it('updates Moveable target rect after the drawing viewport size changes', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await canvas.trigger('pointerdown');
+    await canvas.trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await nextTick();
+    moveableMockState.updateRect.mockClear();
+
+    setCanvasRect(canvas.element, { width: 1000, height: 500 });
+    await emitCanvasResize();
+    await nextTick();
+
+    expect(moveableMockState.updateRect).toHaveBeenCalled();
+  });
+
   it('disables Moveable snapping for multi selection', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -888,7 +1009,7 @@ describe('BDrawing', (): void => {
     await dispatchPointerEvent(wrapper.find('[data-testid="drawing-node"]').element, 'pointerdown', { clientX: 100, clientY: 100 });
     await dispatchPointerEvent(window, 'pointermove', { clientX: 160, clientY: 130 });
 
-    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(30, 24)');
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-30, -6)');
   });
 
   it('commits Moveable resize end events without exposing rotate controls', async (): Promise<void> => {

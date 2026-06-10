@@ -22,6 +22,8 @@
         :edges="board.state.value.edges"
         :selection="board.state.value.selection"
         :viewport="board.state.value.viewport"
+        :viewport-size="viewportSize"
+        :viewport-ready="isViewportReady"
         :active-tool="activeTool"
         :draft="board.state.value.draft"
         @select="handleElementSelect"
@@ -37,6 +39,7 @@
       :elements="board.state.value.elements"
       :selection="board.state.value.selection"
       :viewport="board.state.value.viewport"
+      :viewport-size="viewportSize"
       @move="board.moveElements"
       @resize="board.resizeElements"
     />
@@ -46,7 +49,9 @@
 
 <script setup lang="ts">
 import type { DrawingPoint, DrawingShapeElement, DrawingShapeType, DrawingSize, DrawingToolMode } from './types';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import type { DrawingCanvasPointProjection } from './utils/drawingGeometry';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useResizeObserver } from '@vueuse/core';
 import DrawingInfiniteViewport from './components/DrawingInfiniteViewport.vue';
 import DrawingMoveableLayer from './components/DrawingMoveableLayer.vue';
 import DrawingSelectoLayer from './components/DrawingSelectoLayer.vue';
@@ -55,20 +60,30 @@ import { useDrawingBoard } from './hooks/useDrawingBoard';
 import { useDrawingInteraction } from './hooks/useDrawingInteraction';
 import { useDrawingViewport } from './hooks/useDrawingViewport';
 import DrawingCanvas from './renderers/DrawingCanvas.vue';
+import {
+  clientDeltaToDrawingDelta,
+  createDrawingElementTransform,
+  findDrawingShapeElement,
+  projectClientPointToDrawingBoard,
+  queryDrawingElementTarget
+} from './utils/drawingGeometry';
 
 const board = useDrawingBoard();
 const viewport = useDrawingViewport(board);
 const interaction = useDrawingInteraction(board);
 const activeTool = ref<DrawingToolMode>('select');
 const rootRef = ref<HTMLElement | null>(null);
+/** 当前画布视口实际渲染尺寸。 */
+const viewportSize = ref<DrawingSize>({ width: 0, height: 0 });
+/** 画布首轮尺寸稳定后再显示 SVG，避免初始布局抖动产生黑框。 */
+const isViewportReady = ref<boolean>(false);
+let viewportReadyFrame: ReturnType<typeof requestAnimationFrame> | null = null;
 /** 当前历史栈是否允许撤销。 */
 const canUndo = computed<boolean>(() => board.state.value.history.past.length > 0);
 /** 当前历史栈是否允许重做。 */
 const canRedo = computed<boolean>(() => board.state.value.history.future.length > 0);
 /** 未选中节点直接拖拽期间临时隐藏 Moveable 图层，避免旧选框跟随显示。 */
 const hideMoveableDuringDirectDrag = ref<boolean>(false);
-const DEFAULT_VIEWBOX_WIDTH = 1200;
-const DEFAULT_VIEWBOX_HEIGHT = 720;
 
 /**
  * 直接拖拽节点会话。
@@ -85,7 +100,7 @@ interface DirectElementDragSession {
   /** 最后一次预览位置 */
   currentPosition: DrawingPoint;
   /** 元素尺寸 */
-  size: DrawingShapeElement['size'];
+  size: DrawingSize;
   /** 起始旋转角度 */
   rotation: number;
   /** 是否已经产生位移 */
@@ -112,70 +127,34 @@ interface HandPanSession {
   abortController: AbortController;
 }
 
-/**
- * 浏览器坐标在画布中的投影信息。
- */
-interface CanvasPointProjection {
-  /** 投影后的画板坐标 */
-  boardPoint: DrawingPoint;
-  /** 坐标在画布渲染区域中的比例 */
-  viewportRatio: DrawingPoint;
-}
-
 let directDragSession: DirectElementDragSession | null = null;
 let handPanSession: HandPanSession | null = null;
 
+/** 可创建形状的工具列表 */
+const SHAPE_TOOLS: readonly DrawingShapeType[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
+
 /**
- * 获取当前工具对应的创建形状。
- * @returns 可创建形状，不是形状工具时返回 null
+ * 从 ResizeObserver 条目读取画布尺寸。
+ * @param entry - ResizeObserver 条目
+ * @returns 画布尺寸，无法读取时返回 null
  */
-function getActiveCreateShape(): DrawingShapeType | null {
-  if (
-    activeTool.value === 'process' ||
-    activeTool.value === 'rect' ||
-    activeTool.value === 'ellipse' ||
-    activeTool.value === 'diamond' ||
-    activeTool.value === 'text'
-  ) {
-    return activeTool.value;
+function readResizeEntrySize(entry: ResizeObserverEntry): DrawingSize | null {
+  const boxSize = Array.isArray(entry.contentBoxSize) ? entry.contentBoxSize[0] : entry.contentBoxSize;
+  const width = boxSize?.inlineSize ?? entry.contentRect.width;
+  const height = boxSize?.blockSize ?? entry.contentRect.height;
+  if (!width || !height) {
+    return null;
   }
 
-  return null;
+  return { width, height };
 }
 
 /**
- * 通过元素 ID 读取形状元素。
- * @param id - 元素 ID
- * @returns 形状元素
+ * 从 DOM 读取根视口尺寸。
+ * @returns 画布尺寸，无法读取时返回 null
  */
-function getShapeElementById(id: string): DrawingShapeElement | null {
-  const element = board.state.value.elements.find((item) => item.id === id);
-  return element?.kind === 'shape' ? element : null;
-}
-
-/**
- * 通过元素 ID 读取 SVG DOM 节点。
- * @param id - 元素 ID
- * @returns SVG DOM 节点
- */
-function getElementTargetById(id: string): Element | null {
-  return rootRef.value?.querySelector(`[data-drawing-element-id="${id}"]`) ?? null;
-}
-
-/**
- * 读取画布 DOM 元素。
- * @returns 画布 DOM 元素
- */
-function getCanvasElement(): HTMLElement | null {
-  return rootRef.value?.querySelector<HTMLElement>('.b-drawing-canvas') ?? null;
-}
-
-/**
- * 读取画布渲染尺寸。
- * @returns 画布渲染尺寸，无法读取时返回 null
- */
-function getCanvasSize(): DrawingSize | null {
-  const rect = getCanvasElement()?.getBoundingClientRect();
+function readRootViewportSize(): DrawingSize | null {
+  const rect = rootRef.value?.getBoundingClientRect();
   if (!rect?.width || !rect.height) {
     return null;
   }
@@ -187,33 +166,102 @@ function getCanvasSize(): DrawingSize | null {
 }
 
 /**
+ * 取消待执行的首屏稳定性检查。
+ */
+function cancelViewportReadyCheck(): void {
+  if (viewportReadyFrame === null) {
+    return;
+  }
+
+  cancelAnimationFrame(viewportReadyFrame);
+  viewportReadyFrame = null;
+}
+
+/**
+ * 等待根视口尺寸跨帧稳定后再显示 SVG。
+ */
+function scheduleViewportReadyCheck(): void {
+  if (isViewportReady.value) {
+    return;
+  }
+
+  cancelViewportReadyCheck();
+  viewportReadyFrame = requestAnimationFrame((): void => {
+    viewportReadyFrame = requestAnimationFrame((): void => {
+      viewportReadyFrame = null;
+      isViewportReady.value = true;
+    });
+  });
+}
+
+/**
+ * 同步根视口尺寸。
+ * @param size - 画布尺寸
+ */
+function setViewportSize(size: DrawingSize): void {
+  viewportSize.value = size;
+  scheduleViewportReadyCheck();
+}
+
+/**
+ * 从根 DOM 同步视口尺寸。
+ */
+function syncViewportSizeFromRoot(): void {
+  const size = readRootViewportSize();
+  if (!size) {
+    return;
+  }
+
+  setViewportSize(size);
+}
+
+/**
+ * 获取当前工具对应的创建形状。
+ * @returns 可创建形状，不是形状工具时返回 null
+ */
+function getActiveCreateShape(): DrawingShapeType | null {
+  return SHAPE_TOOLS.includes(activeTool.value as DrawingShapeType) ? (activeTool.value as DrawingShapeType) : null;
+}
+
+/**
+ * 通过元素 ID 读取形状元素。
+ * @param id - 元素 ID
+ * @returns 形状元素
+ */
+function getShapeElementById(id: string): DrawingShapeElement | null {
+  return findDrawingShapeElement(board.state.value.elements, id);
+}
+
+/**
+ * 通过元素 ID 读取 SVG DOM 节点。
+ * @param id - 元素 ID
+ * @returns SVG DOM 节点
+ */
+function getElementTargetById(id: string): Element | null {
+  return queryDrawingElementTarget(rootRef.value, id);
+}
+
+/**
+ * 读取画布渲染尺寸。
+ * @returns 画布渲染尺寸，无法读取时返回 null
+ */
+function getCanvasSize(): DrawingSize | null {
+  return viewportSize.value.width && viewportSize.value.height ? { ...viewportSize.value } : readRootViewportSize();
+}
+
+/**
  * 将浏览器坐标投影到画板坐标系。
  * @param clientX - 浏览器横坐标
  * @param clientY - 浏览器纵坐标
  * @returns 画布投影信息，无法读取画布尺寸时返回 null
  */
-function getCanvasPointProjection(clientX: number, clientY: number): CanvasPointProjection | null {
-  const rect = getCanvasElement()?.getBoundingClientRect();
-  if (!rect?.width || !rect.height) {
+function getCanvasPointProjection(clientX: number, clientY: number): DrawingCanvasPointProjection | null {
+  const rect = rootRef.value?.getBoundingClientRect();
+  if (!rect) {
     return null;
   }
 
-  const currentViewport = board.state.value.viewport;
-  const viewBoxWidth = DEFAULT_VIEWBOX_WIDTH / currentViewport.zoom;
-  const viewBoxHeight = DEFAULT_VIEWBOX_HEIGHT / currentViewport.zoom;
-  const xRatio = (clientX - rect.left) / rect.width;
-  const yRatio = (clientY - rect.top) / rect.height;
-
-  return {
-    boardPoint: {
-      x: currentViewport.center.x - viewBoxWidth / 2 + xRatio * viewBoxWidth,
-      y: currentViewport.center.y - viewBoxHeight / 2 + yRatio * viewBoxHeight
-    },
-    viewportRatio: {
-      x: xRatio,
-      y: yRatio
-    }
-  };
+  return projectClientPointToDrawingBoard({ x: clientX, y: clientY }, rect, board.state.value.viewport);
 }
 
 /**
@@ -232,11 +280,7 @@ function getBoardPointFromPointer(event: PointerEvent): DrawingPoint | null {
  * @returns SVG transform
  */
 function createDirectDragTransform(position: DrawingPoint, session: DirectElementDragSession): string {
-  if (!session.rotation) {
-    return `translate(${position.x}, ${position.y})`;
-  }
-
-  return `translate(${position.x}, ${position.y}) rotate(${session.rotation}, ${session.size.width / 2}, ${session.size.height / 2})`;
+  return createDrawingElementTransform(position, session.size, session.rotation);
 }
 
 /**
@@ -300,14 +344,21 @@ function handleHandPanMove(event: PointerEvent): void {
     return;
   }
 
-  const viewBoxWidth = DEFAULT_VIEWBOX_WIDTH / handPanSession.startZoom;
-  const viewBoxHeight = DEFAULT_VIEWBOX_HEIGHT / handPanSession.startZoom;
-  const deltaX = ((event.clientX - handPanSession.startClient.x) * viewBoxWidth) / handPanSession.canvasSize.width;
-  const deltaY = ((event.clientY - handPanSession.startClient.y) * viewBoxHeight) / handPanSession.canvasSize.height;
+  const delta = clientDeltaToDrawingDelta(
+    {
+      x: event.clientX - handPanSession.startClient.x,
+      y: event.clientY - handPanSession.startClient.y
+    },
+    handPanSession.canvasSize,
+    handPanSession.startZoom
+  );
+  if (!delta) {
+    return;
+  }
 
   viewport.setCenter({
-    x: handPanSession.startCenter.x - deltaX,
-    y: handPanSession.startCenter.y - deltaY
+    x: handPanSession.startCenter.x - delta.x,
+    y: handPanSession.startCenter.y - delta.y
   });
 }
 
@@ -631,8 +682,22 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 onBeforeUnmount((): void => {
+  cancelViewportReadyCheck();
   cancelHandPan();
   cancelDirectDrag();
+});
+
+onMounted((): void => {
+  syncViewportSizeFromRoot();
+});
+
+useResizeObserver(rootRef, (entries: ResizeObserverEntry[]): void => {
+  const size = entries[0] ? readResizeEntrySize(entries[0]) : null;
+  if (!size) {
+    return;
+  }
+
+  setViewportSize(size);
 });
 </script>
 
@@ -646,7 +711,6 @@ onBeforeUnmount((): void => {
   overflow: hidden;
   outline: none;
   background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
   border-radius: 8px;
 }
 

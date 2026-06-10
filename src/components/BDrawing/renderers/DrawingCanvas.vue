@@ -12,7 +12,7 @@
     @pointerup="handlePointerUp"
     @wheel="handleWheel"
   >
-    <svg class="b-drawing-canvas__svg" :viewBox="viewBox">
+    <svg class="b-drawing-canvas__svg" :class="{ 'is-measuring': !viewportReady }" :viewBox="viewBox">
       <defs>
         <marker id="b-drawing-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
           <path class="b-drawing-canvas__arrow-head" d="M0,0 L0,6 L9,3 z"></path>
@@ -41,10 +41,12 @@ import type {
   DrawingInteractionDraft,
   DrawingPoint,
   DrawingShapeElement,
+  DrawingSize,
   DrawingToolMode,
   DrawingViewport
 } from '../types';
 import { computed } from 'vue';
+import { createDrawingViewBox, isDrawingConnectorElement, isDrawingShapeElement, projectClientPointToDrawingBoard } from '../utils/drawingGeometry';
 import DrawingConnectorRenderer from './DrawingConnector.vue';
 import DrawingCreatePreview from './DrawingCreatePreview.vue';
 import DrawingEdgeRenderer from './DrawingEdge.vue';
@@ -62,6 +64,10 @@ interface Props {
   selection: string[];
   /** 视口 */
   viewport: DrawingViewport;
+  /** 视口渲染尺寸 */
+  viewportSize: DrawingSize;
+  /** 视口尺寸是否已经完成首次稳定 */
+  viewportReady: boolean;
   /** 当前工具模式 */
   activeTool: DrawingToolMode;
   /** 当前交互草稿 */
@@ -82,17 +88,10 @@ const emit = defineEmits<{
   'canvas-wheel': [event: WheelEvent];
 }>();
 
-const viewBox = computed<string>(() => {
-  const width = 1200 / props.viewport.zoom;
-  const height = 720 / props.viewport.zoom;
+const viewBox = computed<string>(() => createDrawingViewBox(props.viewport, props.viewportSize));
 
-  return `${props.viewport.center.x - width / 2} ${props.viewport.center.y - height / 2} ${width} ${height}`;
-});
-
-const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter((element): element is DrawingShapeElement => element.kind === 'shape'));
-const connectorElements = computed<DrawingConnectorElement[]>(() =>
-  props.elements.filter((element): element is DrawingConnectorElement => element.kind === 'connector')
-);
+const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter(isDrawingShapeElement));
+const connectorElements = computed<DrawingConnectorElement[]>(() => props.elements.filter(isDrawingConnectorElement));
 
 /**
  * 转发元素按下选择事件。
@@ -101,17 +100,6 @@ const connectorElements = computed<DrawingConnectorElement[]>(() =>
  */
 function handleElementSelect(id: string, event: PointerEvent): void {
   emit('select', id, event);
-}
-
-/**
- * 获取当前 SVG 视口尺寸。
- * @returns SVG 视口尺寸
- */
-function getViewBoxSize(): { width: number; height: number } {
-  return {
-    width: 1200 / props.viewport.zoom,
-    height: 720 / props.viewport.zoom
-  };
 }
 
 /**
@@ -125,14 +113,9 @@ function getBoardPoint(event: PointerEvent): DrawingPoint {
     return { ...props.viewport.center };
   }
 
-  const viewBoxSize = getViewBoxSize();
-  const xRatio = (event.clientX - rect.left) / rect.width;
-  const yRatio = (event.clientY - rect.top) / rect.height;
+  const projection = projectClientPointToDrawingBoard({ x: event.clientX, y: event.clientY }, rect, props.viewport);
 
-  return {
-    x: props.viewport.center.x - viewBoxSize.width / 2 + xRatio * viewBoxSize.width,
-    y: props.viewport.center.y - viewBoxSize.height / 2 + yRatio * viewBoxSize.height
-  };
+  return projection?.boardPoint ?? { ...props.viewport.center };
 }
 
 /**
@@ -210,6 +193,10 @@ function handleWheel(event: WheelEvent): void {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.b-drawing-canvas__svg.is-measuring {
+  opacity: 0;
 }
 
 .b-drawing-canvas__arrow-head {

@@ -10,8 +10,9 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingConnectorElement, DrawingElement, DrawingPoint, DrawingShapeElement } from '../types';
+import type { DrawingConnectorElement, DrawingElement, DrawingPoint } from '../types';
 import { computed } from 'vue';
+import { createDrawingLinePath, findDrawingShapeElement, getDrawingElementCenter, getDrawingLineLabelPosition } from '../utils/drawingGeometry';
 
 /**
  * 连接线组件入参。
@@ -26,29 +27,14 @@ interface Props {
 const props = defineProps<Props>();
 
 /**
- * 判断元素是否为形状元素。
- * @param element - 画板元素
- * @returns 是否为形状元素
- */
-function isShapeElement(element: DrawingElement): element is DrawingShapeElement {
-  return element.kind === 'shape';
-}
-
-/**
  * 读取形状中心点。
  * @param elementId - 元素 ID
  * @returns 中心点，找不到时返回 null
  */
 function getElementCenter(elementId: string): DrawingPoint | null {
-  const element = props.elements.find((item) => item.id === elementId);
-  if (!element || !isShapeElement(element)) {
-    return null;
-  }
+  const element = findDrawingShapeElement(props.elements, elementId);
 
-  return {
-    x: element.position.x + element.size.width / 2,
-    y: element.position.y + element.size.height / 2
-  };
+  return element ? getDrawingElementCenter(element) : null;
 }
 
 const source = computed<DrawingPoint | null>(() => getElementCenter(props.connector.source.elementId));
@@ -58,17 +44,14 @@ const pathData = computed<string>(() => {
     return '';
   }
 
-  return `M ${source.value.x} ${source.value.y} L ${target.value.x} ${target.value.y}`;
+  return createDrawingLinePath(source.value, target.value);
 });
 const labelPosition = computed<DrawingPoint>(() => {
   if (!source.value || !target.value) {
     return { x: 0, y: 0 };
   }
 
-  return {
-    x: (source.value.x + target.value.x) / 2,
-    y: (source.value.y + target.value.y) / 2 - 8
-  };
+  return getDrawingLineLabelPosition(source.value, target.value);
 });
 </script>
 

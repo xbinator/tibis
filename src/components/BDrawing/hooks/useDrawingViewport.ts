@@ -4,12 +4,11 @@
  */
 import type { DrawingPoint, DrawingSize } from '../types';
 import type { UseDrawingBoardReturn } from './useDrawingBoard';
+import { clientDeltaToDrawingDelta, getDrawingResponsiveViewBoxSize } from '../utils/drawingGeometry';
 
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 2;
 const ZOOM_STEP = 0.1;
-const DEFAULT_VIEWBOX_WIDTH = 1200;
-const DEFAULT_VIEWBOX_HEIGHT = 720;
 
 /**
  * 缩放锚点信息。
@@ -19,6 +18,8 @@ export interface DrawingZoomAnchor {
   boardPoint: DrawingPoint;
   /** 鼠标在画布渲染区域中的比例坐标 */
   viewportRatio: DrawingPoint;
+  /** 鼠标所在画布的渲染尺寸 */
+  viewportSize: DrawingSize;
 }
 
 /**
@@ -51,25 +52,13 @@ function clampZoom(nextZoom: number): number {
 }
 
 /**
- * 根据缩放比例计算 viewBox 尺寸。
- * @param zoom - 缩放比例
- * @returns viewBox 尺寸
- */
-function getViewBoxSize(zoom: number): DrawingSize {
-  return {
-    width: DEFAULT_VIEWBOX_WIDTH / zoom,
-    height: DEFAULT_VIEWBOX_HEIGHT / zoom
-  };
-}
-
-/**
  * 根据锚点计算缩放后的视口中心。
  * @param anchor - 缩放锚点
  * @param zoom - 目标缩放比例
  * @returns 新视口中心
  */
 function getAnchoredCenter(anchor: DrawingZoomAnchor, zoom: number): DrawingPoint {
-  const viewBoxSize = getViewBoxSize(zoom);
+  const viewBoxSize = getDrawingResponsiveViewBoxSize(zoom, anchor.viewportSize);
 
   return {
     x: anchor.boardPoint.x + viewBoxSize.width / 2 - anchor.viewportRatio.x * viewBoxSize.width,
@@ -122,16 +111,15 @@ export function useDrawingViewport(board: UseDrawingBoardReturn): UseDrawingView
    * @param viewportSize - 画布渲染尺寸
    */
   function panByClientDelta(delta: DrawingPoint, viewportSize: DrawingSize): void {
-    if (!viewportSize.width || !viewportSize.height) {
+    const currentViewport = board.state.value.viewport;
+    const boardDelta = clientDeltaToDrawingDelta(delta, viewportSize, currentViewport.zoom);
+    if (!boardDelta) {
       return;
     }
 
-    const currentViewport = board.state.value.viewport;
-    const viewBoxSize = getViewBoxSize(currentViewport.zoom);
-
     setCenter({
-      x: currentViewport.center.x + (delta.x * viewBoxSize.width) / viewportSize.width,
-      y: currentViewport.center.y + (delta.y * viewBoxSize.height) / viewportSize.height
+      x: currentViewport.center.x + boardDelta.x,
+      y: currentViewport.center.y + boardDelta.y
     });
   }
 

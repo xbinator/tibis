@@ -12,6 +12,14 @@ export const DRAWING_DEFAULT_NODE_SIZE = {
 } as const;
 
 /**
+ * SVG 画布默认 viewBox 基准尺寸。
+ */
+export const DRAWING_VIEWBOX_SIZE = {
+  width: 1200,
+  height: 720
+} as const;
+
+/**
  * 拖拽创建形状时触发自定义尺寸的最小边长。
  */
 export const DRAWING_MIN_CREATE_SIZE = 8;

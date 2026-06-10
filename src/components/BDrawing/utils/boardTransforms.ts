@@ -9,7 +9,6 @@ import type {
   DrawingBoardSnapshot,
   DrawingBoardState,
   DrawingConnectorElement,
-  DrawingElement,
   DrawingGeometryChange,
   DrawingPoint,
   DrawingSize,
@@ -25,6 +24,7 @@ import {
   DRAWING_NODE_TYPE_TEXT,
   DRAWING_SHAPE_TYPE_TEXT
 } from '../constants/defaults';
+import { isDrawingConnectorElement, isDrawingShapeElement } from './drawingGeometry';
 
 /**
  * 创建默认视口。
@@ -196,24 +196,6 @@ function applyGeometryChanges(
 }
 
 /**
- * 判断元素是否为形状。
- * @param element - 画板元素
- * @returns 是否为形状元素
- */
-function isShapeElement(element: DrawingElement): element is DrawingShapeElement {
-  return element.kind === 'shape';
-}
-
-/**
- * 判断元素是否为连接线。
- * @param element - 画板元素
- * @returns 是否为连接线元素
- */
-function isConnectorElement(element: DrawingElement): element is DrawingConnectorElement {
-  return element.kind === 'connector';
-}
-
-/**
  * 创建初始画板状态。
  * @param snapshot - 初始快照
  * @returns 画板状态
@@ -313,10 +295,10 @@ export function addDrawingConnector(state: DrawingBoardState, options: DrawingAd
 
   const source = state.elements.find((element) => element.id === options.sourceId);
   const target = state.elements.find((element) => element.id === options.targetId);
-  if (!source || !isShapeElement(source)) {
+  if (!source || !isDrawingShapeElement(source)) {
     return withError(state, new Error(`找不到连接起点: ${options.sourceId}`));
   }
-  if (!target || !isShapeElement(target)) {
+  if (!target || !isDrawingShapeElement(target)) {
     return withError(state, new Error(`找不到连接目标: ${options.targetId}`));
   }
   if (source.id === target.id) {
@@ -422,7 +404,7 @@ export function moveDrawingElements(state: DrawingBoardState, changes: DrawingGe
  */
 export function moveDrawingNode(state: DrawingBoardState, nodeId: string, delta: DrawingPoint): DrawingBoardState {
   const node = state.elements.find((item) => item.id === nodeId);
-  if (!node || !isShapeElement(node)) {
+  if (!node || !isDrawingShapeElement(node)) {
     return withError(state, new Error(`找不到节点: ${nodeId}`));
   }
 
@@ -488,12 +470,12 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
   }
 
   const selected = new Set(state.selection);
-  const selectedShapeIds = new Set(state.elements.filter((element) => selected.has(element.id) && isShapeElement(element)).map((element) => element.id));
+  const selectedShapeIds = new Set(state.elements.filter((element) => selected.has(element.id) && isDrawingShapeElement(element)).map((element) => element.id));
   const nextElements = state.elements.filter((element) => {
     if (selected.has(element.id)) {
       return false;
     }
-    if (isConnectorElement(element)) {
+    if (isDrawingConnectorElement(element)) {
       return !selectedShapeIds.has(element.source.elementId) && !selectedShapeIds.has(element.target.elementId);
     }
 
@@ -519,7 +501,7 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
 export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, text: string): DrawingBoardState {
   const nextElements = cloneDeep(state.elements);
   const node = nextElements.find((item) => item.id === nodeId);
-  if (!node || !isShapeElement(node)) {
+  if (!node || !isDrawingShapeElement(node)) {
     return withError(state, new Error(`找不到节点: ${nodeId}`));
   }
 

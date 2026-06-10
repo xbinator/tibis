@@ -12,6 +12,7 @@
 <script setup lang="ts">
 import type { DrawingEdge, DrawingElement, DrawingPoint } from '../types';
 import { computed } from 'vue';
+import { createDrawingLinePath, findDrawingElementCenter, getDrawingLineLabelPosition } from '../utils/drawingGeometry';
 
 /**
  * 连线组件入参。
@@ -31,24 +32,13 @@ const props = defineProps<Props>();
  * @returns 中心点
  */
 function getNodeCenter(nodeId: string): DrawingPoint {
-  const node = props.elements.find((item) => item.id === nodeId);
-  if (!node) {
-    return { x: 0, y: 0 };
-  }
-
-  return {
-    x: node.position.x + node.size.width / 2,
-    y: node.position.y + node.size.height / 2
-  };
+  return findDrawingElementCenter(props.elements, nodeId) ?? { x: 0, y: 0 };
 }
 
 const source = computed<DrawingPoint>(() => getNodeCenter(props.edge.sourceId));
 const target = computed<DrawingPoint>(() => getNodeCenter(props.edge.targetId));
-const pathData = computed<string>(() => `M ${source.value.x} ${source.value.y} L ${target.value.x} ${target.value.y}`);
-const labelPosition = computed<DrawingPoint>(() => ({
-  x: (source.value.x + target.value.x) / 2,
-  y: (source.value.y + target.value.y) / 2 - 8
-}));
+const pathData = computed<string>(() => createDrawingLinePath(source.value, target.value));
+const labelPosition = computed<DrawingPoint>(() => getDrawingLineLabelPosition(source.value, target.value));
 </script>
 
 <style lang="less" scoped>

@@ -38,6 +38,13 @@ import type { DrawingElement, DrawingGeometryChange, DrawingSize, DrawingViewpor
 import type { SnapDirections } from 'moveable';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import VueMoveable from 'vue3-moveable/dist/moveable.js';
+import {
+  createDrawingDiamondPoints,
+  createDrawingElementTransform,
+  getDrawingElementId,
+  isDrawingDiamondShape,
+  queryDrawingElementTarget
+} from '../utils/drawingGeometry';
 
 /**
  * Moveable 结束事件中的 DOM target。
@@ -106,6 +113,8 @@ interface Props {
   selection: string[];
   /** 当前视口 */
   viewport: DrawingViewport;
+  /** 当前视口渲染尺寸 */
+  viewportSize: DrawingSize;
   /** 是否启用控制器 */
   enabled: boolean;
 }
@@ -139,7 +148,7 @@ const snapDirections: SnapDirections = {
  * @returns 元素 ID
  */
 function getTargetId(target?: Element): string | null {
-  return target?.getAttribute('data-drawing-element-id') ?? null;
+  return getDrawingElementId(target);
 }
 
 /**
@@ -157,7 +166,7 @@ function getElementById(id: string): DrawingElement | undefined {
  * @returns DOM target
  */
 function getTargetById(id: string): Element | null {
-  return props.root?.querySelector(`[data-drawing-element-id="${id}"]`) ?? null;
+  return queryDrawingElementTarget(props.root, id);
 }
 
 /**
@@ -177,28 +186,14 @@ function domDeltaToWorld(value: number): number {
  * @returns SVG transform
  */
 function createPreviewTransform(element: DrawingElement, translate: [number, number], size: DrawingSize = element.size): string {
-  const x = element.position.x + domDeltaToWorld(translate[0]);
-  const y = element.position.y + domDeltaToWorld(translate[1]);
-  const rotateCenterX = size.width / 2;
-  const rotateCenterY = size.height / 2;
-
-  if (!element.rotation) {
-    return `translate(${x}, ${y})`;
-  }
-
-  return `translate(${x}, ${y}) rotate(${element.rotation}, ${rotateCenterX}, ${rotateCenterY})`;
-}
-
-/**
- * 生成菱形点位。
- * @param size - 元素尺寸
- * @returns SVG polygon points
- */
-function createDiamondPoints(size: DrawingSize): string {
-  const halfWidth = size.width / 2;
-  const halfHeight = size.height / 2;
-
-  return `${halfWidth},0 ${size.width},${halfHeight} ${halfWidth},${size.height} 0,${halfHeight}`;
+  return createDrawingElementTransform(
+    {
+      x: element.position.x + domDeltaToWorld(translate[0]),
+      y: element.position.y + domDeltaToWorld(translate[1])
+    },
+    size,
+    element.rotation
+  );
 }
 
 /**
@@ -221,8 +216,8 @@ function updateShapePreviewSize(target: Element, element: DrawingElement, size: 
     return;
   }
 
-  if (element.kind === 'shape' && (element.shape === 'diamond' || element.shape === 'decision')) {
-    shape.setAttribute('points', createDiamondPoints(size));
+  if (element.kind === 'shape' && isDrawingDiamondShape(element.shape)) {
+    shape.setAttribute('points', createDrawingDiamondPoints(size));
     return;
   }
 
@@ -430,7 +425,17 @@ onMounted(() => {
 });
 
 watch(
-  () => [props.root, props.selection, props.elements, props.enabled, props.viewport.center.x, props.viewport.center.y, props.viewport.zoom],
+  () => [
+    props.root,
+    props.selection,
+    props.elements,
+    props.enabled,
+    props.viewport.center.x,
+    props.viewport.center.y,
+    props.viewport.zoom,
+    props.viewportSize.width,
+    props.viewportSize.height
+  ],
   () => {
     syncTargets().catch((error: unknown): void => {
       console.warn('BDrawing Moveable target sync failed', error);

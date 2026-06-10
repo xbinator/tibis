@@ -37,6 +37,7 @@
 <script setup lang="ts">
 import type { DrawingShapeElement } from '../types';
 import { computed } from 'vue';
+import { createDrawingDiamondPoints, createDrawingElementTransform, isDrawingDiamondShape } from '../utils/drawingGeometry';
 
 /**
  * 节点组件入参。
@@ -57,23 +58,9 @@ const emit = defineEmits<{
   select: [id: string, event: PointerEvent];
 }>();
 
-const isDiamondShape = computed<boolean>(() => props.node.shape === 'decision' || props.node.shape === 'diamond');
-const nodeTransform = computed<string>(() => {
-  const rotateCenterX = props.node.size.width / 2;
-  const rotateCenterY = props.node.size.height / 2;
-
-  if (!props.node.rotation) {
-    return `translate(${props.node.position.x}, ${props.node.position.y})`;
-  }
-
-  return `translate(${props.node.position.x}, ${props.node.position.y}) rotate(${props.node.rotation}, ${rotateCenterX}, ${rotateCenterY})`;
-});
-const diamondPoints = computed<string>(() => {
-  const halfWidth = props.node.size.width / 2;
-  const halfHeight = props.node.size.height / 2;
-
-  return `${halfWidth},0 ${props.node.size.width},${halfHeight} ${halfWidth},${props.node.size.height} 0,${halfHeight}`;
-});
+const isDiamondShape = computed<boolean>(() => isDrawingDiamondShape(props.node.shape));
+const nodeTransform = computed<string>(() => createDrawingElementTransform(props.node.position, props.node.size, props.node.rotation));
+const diamondPoints = computed<string>(() => createDrawingDiamondPoints(props.node.size));
 </script>
 
 <style lang="less" scoped>

@@ -10,6 +10,7 @@
 import type { DrawingToolMode } from '../types';
 import { onBeforeUnmount, onMounted, watch } from 'vue';
 import Selecto from 'selecto';
+import { getDrawingElementId } from '../utils/drawingGeometry';
 
 /**
  * Selecto 框选结束事件。
@@ -68,7 +69,7 @@ const SELECTO_BLOCKED_DRAG_SELECTOR = [
  * @returns 元素 ID
  */
 function getTargetId(target: HTMLElement | SVGElement): string | null {
-  return target.getAttribute('data-drawing-element-id');
+  return getDrawingElementId(target);
 }
 
 /**
