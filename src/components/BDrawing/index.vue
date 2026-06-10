@@ -7,6 +7,9 @@
     <DrawingToolbar
       :zoom="board.state.value.viewport.zoom"
       :active-tool="activeTool"
+      :elements="board.state.value.elements"
+      :viewport="board.state.value.viewport"
+      :viewport-size="viewportSize"
       :can-undo="canUndo"
       :can-redo="canRedo"
       class="b-drawing__toolbar"
@@ -16,6 +19,7 @@
       @zoom-in="viewport.zoomIn"
       @zoom-out="viewport.zoomOut"
       @reset-zoom="viewport.resetZoom"
+      @set-center="viewport.setCenter"
     />
     <DrawingInfiniteViewport>
       <DrawingCanvas
@@ -45,12 +49,6 @@
       @resize="board.resizeElements"
     />
     <DrawingSelectoLayer :root="rootRef" :active-tool="activeTool" :selection="board.state.value.selection" @set-selection="board.setSelection" />
-    <DrawingMinimap
-      :elements="board.state.value.elements"
-      :viewport="board.state.value.viewport"
-      :viewport-size="viewportSize"
-      @set-center="viewport.setCenter"
-    />
   </section>
 </template>
 
@@ -60,7 +58,6 @@ import type { DrawingCanvasPointProjection } from './utils/drawingGeometry';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import DrawingInfiniteViewport from './components/DrawingInfiniteViewport.vue';
-import DrawingMinimap from './components/DrawingMinimap.vue';
 import DrawingMoveableLayer from './components/DrawingMoveableLayer.vue';
 import DrawingSelectoLayer from './components/DrawingSelectoLayer.vue';
 import DrawingToolbar from './components/DrawingToolbar.vue';

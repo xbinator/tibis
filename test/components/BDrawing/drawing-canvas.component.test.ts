@@ -112,6 +112,18 @@ function findDrawingToolbarZoomValue(wrapper: VueWrapper): DOMWrapper<Element> {
 }
 
 /**
+ * 按顺序重复触发元素事件。
+ * @param wrapper - 目标元素包装器
+ * @param times - 触发次数
+ */
+async function triggerClickRepeatedly(wrapper: DOMWrapper<Element>, times: number): Promise<void> {
+  await Array.from({ length: times }).reduce<Promise<void>>(async (previousTask: Promise<void>): Promise<void> => {
+    await previousTask;
+    await wrapper.trigger('click');
+  }, Promise.resolve());
+}
+
+/**
  * 创建 ResizeObserver 测试替身构造器。
  * @returns ResizeObserver 构造器替身
  */
@@ -160,6 +172,29 @@ vi.mock('@/components/BIcon/index.vue', () => ({
   default: {
     name: 'BIcon',
     template: '<span></span>'
+  }
+}));
+
+vi.mock('@/components/BDropdown/index.vue', () => ({
+  default: {
+    name: 'BDropdown',
+    props: {
+      open: {
+        type: Boolean,
+        default: false
+      }
+    },
+    emits: ['update:open'],
+    template: `
+      <div class="b-dropdown-stub">
+        <div class="b-dropdown-stub__trigger" @click="$emit('update:open', !open)">
+          <slot />
+        </div>
+        <div v-if="open" class="b-dropdown-stub__overlay">
+          <slot name="overlay" />
+        </div>
+      </div>
+    `
   }
 }));
 
@@ -629,18 +664,14 @@ describe('BDrawing', (): void => {
     expect(zoomInButton.attributes('disabled')).toBeUndefined();
     expect(zoomOutButton.attributes('disabled')).toBeUndefined();
 
-    for (let index = 0; index < 10; index += 1) {
-      await zoomInButton.trigger('click');
-    }
+    await triggerClickRepeatedly(zoomInButton, 10);
 
     expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('200%');
     expect(zoomInButton.attributes('disabled')).toBeDefined();
 
     await findDrawingToolbarZoomValue(wrapper).trigger('click');
 
-    for (let index = 0; index < 6; index += 1) {
-      await zoomOutButton.trigger('click');
-    }
+    await triggerClickRepeatedly(zoomOutButton, 6);
 
     expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('40%');
     expect(zoomOutButton.attributes('disabled')).toBeDefined();
@@ -649,9 +680,10 @@ describe('BDrawing', (): void => {
   it('toggles the minimap from the lower-left toolbar area', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
+    expect(wrapper.find('.b-drawing-toolbar__minimap').exists()).toBe(true);
     expect(wrapper.find('.b-drawing-minimap__panel').exists()).toBe(false);
 
-    await wrapper.find('.b-drawing-minimap__toggle').trigger('click');
+    await wrapper.find('.b-drawing-toolbar__minimap').trigger('click');
 
     expect(wrapper.find('.b-drawing-minimap__panel').exists()).toBe(true);
   });
@@ -662,7 +694,7 @@ describe('BDrawing', (): void => {
     await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('.b-drawing-minimap__toggle').trigger('click');
+    await wrapper.find('.b-drawing-toolbar__minimap').trigger('click');
 
     expect(wrapper.find('.b-drawing-minimap__shape').exists()).toBe(true);
     expect(wrapper.find('.b-drawing-minimap__viewport').exists()).toBe(true);
@@ -671,7 +703,7 @@ describe('BDrawing', (): void => {
   it('recenters the drawing viewport when clicking the minimap', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('.b-drawing-minimap__toggle').trigger('click');
+    await wrapper.find('.b-drawing-toolbar__minimap').trigger('click');
 
     const minimap = wrapper.find('.b-drawing-minimap__svg');
     minimap.element.getBoundingClientRect = (): DOMRect =>

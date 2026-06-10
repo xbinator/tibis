@@ -52,15 +52,27 @@
         <BIcon icon="lucide:plus" :size="16" />
       </BButton>
     </div>
+
+    <!-- 左下角：小地图 -->
+    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left-minimap">
+      <DrawingMinimap :elements="elements" :viewport="viewport" :viewport-size="viewportSize" @set-center="emit('set-center', $event)">
+        <template #default="{ open }">
+          <BButton type="text" square size="small" class="b-drawing-toolbar__minimap" :class="{ 'is-active': open }" aria-label="小地图">
+            <BIcon icon="lucide:map" :size="16" />
+          </BButton>
+        </template>
+      </DrawingMinimap>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { DrawingToolMode } from '../types';
+import type { DrawingElement, DrawingPoint, DrawingSize, DrawingToolMode, DrawingViewport } from '../types';
 import { computed } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import BIcon from '@/components/BIcon/index.vue';
 import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM } from '../constants/defaults';
+import DrawingMinimap from './DrawingMinimap.vue';
 
 /**
  * 工具栏入参。
@@ -70,6 +82,12 @@ interface Props {
   zoom: number;
   /** 当前工具模式 */
   activeTool: DrawingToolMode;
+  /** 画板元素列表 */
+  elements: DrawingElement[];
+  /** 当前视口 */
+  viewport: DrawingViewport;
+  /** 当前视口渲染尺寸 */
+  viewportSize: DrawingSize;
   /** 是否允许撤销 */
   canUndo: boolean;
   /** 是否允许重做 */
@@ -90,6 +108,8 @@ const emit = defineEmits<{
   'zoom-out': [];
   /** 重置缩放 */
   'reset-zoom': [];
+  /** 设置视口中心 */
+  'set-center': [center: DrawingPoint];
 }>();
 
 const zoomPercent = computed<string>(() => `${Math.round(props.zoom * 100)}%`);
@@ -142,10 +162,20 @@ const canZoomIn = computed<boolean>(() => props.zoom < DRAWING_MAX_ZOOM);
   gap: 4px;
 }
 
+/** 左下角 - 小地图，位于缩放控制右侧 */
+.b-drawing-toolbar__group--bottom-left-minimap {
+  bottom: 12px;
+  left: 216px;
+}
+
 /** 高亮当前激活的工具 */
 .b-drawing-toolbar :deep(.is-active) {
   color: var(--color-primary);
   background: var(--color-primary-bg);
+}
+
+.b-drawing-toolbar__minimap {
+  color: var(--text-secondary);
 }
 
 .b-drawing-toolbar__divider {

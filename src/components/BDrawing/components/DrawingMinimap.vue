@@ -3,55 +3,63 @@
   @description BDrawing 轻量小地图组件，支持展开预览和点击定位视口中心。
 -->
 <template>
-  <div class="b-drawing-minimap">
-    <button class="b-drawing-minimap__toggle" type="button" aria-label="小地图" :aria-pressed="String(open)" @click="toggleOpen">
-      <BIcon icon="lucide:map" :size="16" />
-    </button>
-    <div v-if="open" class="b-drawing-minimap__panel">
-      <svg class="b-drawing-minimap__svg" :viewBox="viewBox" @pointerdown="handlePointerdown">
-        <line
-          v-for="connector in connectorLines"
-          :key="connector.id"
-          class="b-drawing-minimap__connector"
-          :x1="connector.source.x"
-          :y1="connector.source.y"
-          :x2="connector.target.x"
-          :y2="connector.target.y"
-        ></line>
-        <template v-for="element in shapeElements" :key="element.id">
-          <polygon
-            v-if="isDrawingDiamondShape(element.shape)"
-            class="b-drawing-minimap__shape"
-            :points="createDrawingDiamondPoints(element.size, element.position)"
-          ></polygon>
-          <ellipse
-            v-else-if="element.shape === 'ellipse'"
-            class="b-drawing-minimap__shape"
-            :cx="element.position.x + element.size.width / 2"
-            :cy="element.position.y + element.size.height / 2"
-            :rx="element.size.width / 2"
-            :ry="element.size.height / 2"
-          ></ellipse>
+  <BDropdown v-model:open="open" :trigger="['click']" placement="topLeft" :align="dropdownAlign">
+    <slot :open="open"></slot>
+
+    <template #overlay>
+      <div class="b-drawing-minimap__panel">
+        <svg class="b-drawing-minimap__svg" :viewBox="viewBox" @pointerdown="handlePointerdown">
+          <line
+            v-for="connector in connectorLines"
+            :key="connector.id"
+            class="b-drawing-minimap__connector"
+            :x1="connector.source.x"
+            :y1="connector.source.y"
+            :x2="connector.target.x"
+            :y2="connector.target.y"
+          ></line>
+          <template v-for="element in shapeElements" :key="element.id">
+            <polygon
+              v-if="isDrawingDiamondShape(element.shape)"
+              class="b-drawing-minimap__shape"
+              :points="createDrawingDiamondPoints(element.size, element.position)"
+            ></polygon>
+            <ellipse
+              v-else-if="element.shape === 'ellipse'"
+              class="b-drawing-minimap__shape"
+              :cx="element.position.x + element.size.width / 2"
+              :cy="element.position.y + element.size.height / 2"
+              :rx="element.size.width / 2"
+              :ry="element.size.height / 2"
+            ></ellipse>
+            <rect
+              v-else
+              class="b-drawing-minimap__shape"
+              :x="element.position.x"
+              :y="element.position.y"
+              :width="element.size.width"
+              :height="element.size.height"
+              :rx="element.shape === 'text' ? 0 : 10"
+            ></rect>
+          </template>
           <rect
-            v-else
-            class="b-drawing-minimap__shape"
-            :x="element.position.x"
-            :y="element.position.y"
-            :width="element.size.width"
-            :height="element.size.height"
-            :rx="element.shape === 'text' ? 0 : 10"
+            class="b-drawing-minimap__viewport"
+            :x="viewportFrame.x"
+            :y="viewportFrame.y"
+            :width="viewportFrame.width"
+            :height="viewportFrame.height"
           ></rect>
-        </template>
-        <rect class="b-drawing-minimap__viewport" :x="viewportFrame.x" :y="viewportFrame.y" :width="viewportFrame.width" :height="viewportFrame.height"></rect>
-      </svg>
-    </div>
-  </div>
+        </svg>
+      </div>
+    </template>
+  </BDropdown>
 </template>
 
 <script setup lang="ts">
 import type { DrawingConnectorElement, DrawingElement, DrawingPoint, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
+import type { VNodeChild } from 'vue';
 import { computed, ref } from 'vue';
-import BIcon from '@/components/BIcon/index.vue';
+import BDropdown from '@/components/BDropdown/index.vue';
 import {
   createDrawingDiamondPoints,
   findDrawingShapeElement,
@@ -64,6 +72,11 @@ import {
 
 const MINIMAP_EMPTY_SIZE = 320;
 const MINIMAP_VIEWBOX_PADDING = 80;
+
+/** 小地图弹框相对触发按钮的偏移。 */
+const dropdownAlign = {
+  offset: [0, -8] as [number, number]
+};
 
 /**
  * 小地图边界。
@@ -106,6 +119,14 @@ interface DrawingMinimapConnectorLine {
 }
 
 /**
+ * 小地图触发器插槽参数。
+ */
+interface DrawingMinimapTriggerSlotProps {
+  /** 当前弹框是否展开 */
+  open: boolean;
+}
+
+/**
  * 小地图组件入参。
  */
 interface Props {
@@ -118,6 +139,10 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+defineSlots<{
+  /** 渲染小地图触发器。 */
+  default(props: DrawingMinimapTriggerSlotProps): VNodeChild;
+}>();
 const emit = defineEmits<{
   /** 设置视口中心 */
   'set-center': [center: DrawingPoint];
@@ -204,13 +229,6 @@ const connectorLines = computed<DrawingMinimapConnectorLine[]>(() =>
 );
 
 /**
- * 切换小地图展开状态。
- */
-function toggleOpen(): void {
-  open.value = !open.value;
-}
-
-/**
  * 根据小地图点击位置设置视口中心。
  * @param event - 指针事件
  */
@@ -231,41 +249,6 @@ function handlePointerdown(event: PointerEvent): void {
 </script>
 
 <style lang="less" scoped>
-.b-drawing-minimap {
-  position: absolute;
-  bottom: 12px;
-  left: 206px;
-  z-index: 12;
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-  pointer-events: auto;
-}
-
-.b-drawing-minimap__toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  box-shadow: var(--shadow-md);
-  backdrop-filter: blur(12px);
-
-  &:hover,
-  &:focus-visible,
-  &[aria-pressed='true'] {
-    color: var(--color-primary);
-    outline: none;
-    background: var(--color-primary-bg);
-    border-color: var(--color-primary);
-  }
-}
-
 .b-drawing-minimap__panel {
   width: 320px;
   height: 188px;
