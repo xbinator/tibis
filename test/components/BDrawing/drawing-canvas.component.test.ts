@@ -646,6 +646,53 @@ describe('BDrawing', (): void => {
     expect(zoomOutButton.attributes('disabled')).toBeDefined();
   });
 
+  it('toggles the minimap from the lower-left toolbar area', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    expect(wrapper.find('.b-drawing-minimap__panel').exists()).toBe(false);
+
+    await wrapper.find('.b-drawing-minimap__toggle').trigger('click');
+
+    expect(wrapper.find('.b-drawing-minimap__panel').exists()).toBe(true);
+  });
+
+  it('renders drawing elements and the viewport frame in the minimap', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('.b-drawing-minimap__toggle').trigger('click');
+
+    expect(wrapper.find('.b-drawing-minimap__shape').exists()).toBe(true);
+    expect(wrapper.find('.b-drawing-minimap__viewport').exists()).toBe(true);
+  });
+
+  it('recenters the drawing viewport when clicking the minimap', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('.b-drawing-minimap__toggle').trigger('click');
+
+    const minimap = wrapper.find('.b-drawing-minimap__svg');
+    minimap.element.getBoundingClientRect = (): DOMRect =>
+      ({
+        bottom: 120,
+        height: 120,
+        left: 0,
+        right: 168,
+        top: 0,
+        width: 168,
+        x: 0,
+        y: 0,
+        toJSON: (): Record<string, number> => ({})
+      } as DOMRect);
+    const initialViewBox = wrapper.find('.b-drawing-canvas__svg').attributes('viewBox');
+
+    await dispatchPointerEvent(minimap.element, 'pointerdown', { clientX: 168, clientY: 120 });
+
+    expect(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox')).not.toBe(initialViewBox);
+  });
+
   it('zooms the drawing viewport with modified wheel events', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
