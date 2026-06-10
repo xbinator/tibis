@@ -1,6 +1,6 @@
 <!--
   @file DrawingMinimap.vue
-  @description BDrawing 轻量小地图组件，支持展开预览和点击定位视口中心。
+  @description BDrawing 轻量小地图组件，支持展开预览、点击定位视口中心和拖拽视口矩形移动位置。
 -->
 <template>
   <BDropdown v-model:open="open" :trigger="['click']" placement="topLeft" :align="dropdownAlign">
@@ -8,7 +8,7 @@
 
     <template #overlay>
       <div class="b-drawing-minimap__panel">
-        <svg class="b-drawing-minimap__svg" :viewBox="viewBox" @pointerdown="handlePointerdown">
+        <svg class="b-drawing-minimap__svg" :viewBox="viewBox" @pointerdown="handlePointerdown" @wheel.prevent="handleWheel">
           <line
             v-for="connector in connectorLines"
             :key="connector.id"
@@ -44,10 +44,12 @@
           </template>
           <rect
             class="b-drawing-minimap__viewport"
+            :class="{ 'is-dragging': isDragging }"
             :x="viewportFrame.x"
             :y="viewportFrame.y"
             :width="viewportFrame.width"
             :height="viewportFrame.height"
+            @pointerdown.stop="handleViewportDragStart"
           ></rect>
         </svg>
       </div>
@@ -59,7 +61,10 @@
 import type { DrawingConnectorElement, DrawingElement, DrawingPoint, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
 import type { VNodeChild } from 'vue';
 import { computed, ref } from 'vue';
+import { useEventListener } from '@vueuse/core';
+import { throttle } from 'lodash-es';
 import BDropdown from '@/components/BDropdown/index.vue';
+import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/defaults';
 import {
   createDrawingDiamondPoints,
   findDrawingShapeElement,
@@ -146,6 +151,8 @@ defineSlots<{
 const emit = defineEmits<{
   /** 设置视口中心 */
   'set-center': [center: DrawingPoint];
+  /** 设置缩放比例 */
+  'set-zoom': [zoom: number];
 }>();
 
 /** 小地图是否展开。 */
@@ -228,6 +235,90 @@ const connectorLines = computed<DrawingMinimapConnectorLine[]>(() =>
   })
 );
 
+/** 视口矩形是否正在拖拽。 */
+const isDragging = ref<boolean>(false);
+
+/** 拖拽起始时鼠标在 SVG 坐标系中的位置。 */
+const dragStartSvgPoint = ref<DrawingPoint>({ x: 0, y: 0 });
+
+/** 拖拽起始时的视口中心。 */
+const dragStartCenter = ref<DrawingPoint>({ x: 0, y: 0 });
+
+/**
+ * 将客户端坐标转换为 SVG 坐标系中的坐标。
+ * @param clientX - 客户端横坐标
+ * @param clientY - 客户端纵坐标
+ * @returns SVG 坐标系中的坐标
+ */
+function clientToSvgPoint(clientX: number, clientY: number): DrawingPoint {
+  const svgEl = document.querySelector('.b-drawing-minimap__svg') as SVGSVGElement | null;
+  if (!svgEl) {
+    return { x: 0, y: 0 };
+  }
+
+  const rect = svgEl.getBoundingClientRect();
+  const width = bounds.value.maxX - bounds.value.minX;
+  const height = bounds.value.maxY - bounds.value.minY;
+
+  return {
+    x: bounds.value.minX + ((clientX - rect.left) / rect.width) * width,
+    y: bounds.value.minY + ((clientY - rect.top) / rect.height) * height
+  };
+}
+
+/**
+ * 开始拖拽视口矩形。
+ * @param event - 指针事件
+ */
+function handleViewportDragStart(event: PointerEvent): void {
+  event.preventDefault();
+  isDragging.value = true;
+  dragStartSvgPoint.value = clientToSvgPoint(event.clientX, event.clientY);
+  dragStartCenter.value = { ...props.viewport.center };
+}
+
+/**
+ * 拖拽移动视口矩形。
+ * @param event - 指针事件
+ */
+function handleViewportDragMove(event: PointerEvent): void {
+  if (!isDragging.value) {
+    return;
+  }
+
+  const currentSvgPoint = clientToSvgPoint(event.clientX, event.clientY);
+  const dx = currentSvgPoint.x - dragStartSvgPoint.value.x;
+  const dy = currentSvgPoint.y - dragStartSvgPoint.value.y;
+
+  emit('set-center', {
+    x: dragStartCenter.value.x + dx,
+    y: dragStartCenter.value.y + dy
+  });
+}
+
+/** 结束拖拽视口矩形。 */
+function handleViewportDragEnd(): void {
+  isDragging.value = false;
+}
+
+/**
+ * 滚轮缩放视口。
+ * @param event - 滚轮事件
+ */
+function handleWheel(event: WheelEvent): void {
+  const direction = event.deltaY < 0 ? 1 : -1;
+  const newZoom = Math.round((props.viewport.zoom + direction * DRAWING_ZOOM_STEP) * 10) / 10;
+
+  if (newZoom < DRAWING_MIN_ZOOM || newZoom > DRAWING_MAX_ZOOM) {
+    return;
+  }
+
+  emit('set-zoom', newZoom);
+}
+
+useEventListener(window, 'pointermove', throttle(handleViewportDragMove, 16));
+useEventListener(window, 'pointerup', handleViewportDragEnd);
+
 /**
  * 根据小地图点击位置设置视口中心。
  * @param event - 指针事件
@@ -278,12 +369,17 @@ function handlePointerdown(event: PointerEvent): void {
 }
 
 .b-drawing-minimap__viewport {
+  cursor: grab;
   fill: transparent;
-  rx: 24px;
-  ry: 24px;
   stroke: var(--color-primary);
   stroke-width: 2;
   stroke-linejoin: round;
+  rx: 24px;
+  ry: 24px;
   vector-effect: non-scaling-stroke;
+
+  &.is-dragging {
+    cursor: grabbing;
+  }
 }
 </style>

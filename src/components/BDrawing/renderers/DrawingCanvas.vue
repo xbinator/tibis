@@ -5,7 +5,7 @@
 <template>
   <div
     class="b-drawing-canvas"
-    :class="`is-tool-${activeTool}`"
+    :class="[`is-tool-${activeTool}`, { 'is-panning': isPanning }]"
     data-testid="drawing-canvas"
     @pointerdown="handlePointerDown"
     @pointermove="handlePointerMove"
@@ -22,7 +22,7 @@
       <DrawingEdgeRenderer v-for="edge in edges" :key="edge.id" :edge="edge" :elements="elements" />
       <DrawingConnectorRenderer v-for="connector in connectorElements" :key="connector.id" :connector="connector" :elements="elements" />
       <DrawingNodeRenderer
-        v-for="element in shapeElements"
+        v-for="element in sortedShapeElements"
         :key="element.id"
         :node="element"
         :selected="selection.includes(element.id)"
@@ -72,6 +72,10 @@ interface Props {
   activeTool: DrawingToolMode;
   /** 当前交互草稿 */
   draft?: DrawingInteractionDraft;
+  /** 是否正在平移（手型工具拖拽中） */
+  isPanning?: boolean;
+  /** 正在拖拽的元素 ID，该元素渲染到最上层 */
+  draggingId?: string;
 }
 
 const props = defineProps<Props>();
@@ -92,6 +96,26 @@ const viewBox = computed<string>(() => createDrawingViewBox(props.viewport, prop
 
 const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter(isDrawingShapeElement));
 const connectorElements = computed<DrawingConnectorElement[]>(() => props.elements.filter(isDrawingConnectorElement));
+
+/** 将拖拽中的节点排到末尾，使其渲染在最上层。 */
+const sortedShapeElements = computed<DrawingShapeElement[]>(() => {
+  if (!props.draggingId) {
+    return shapeElements.value;
+  }
+
+  const normal: DrawingShapeElement[] = [];
+  const dragging: DrawingShapeElement[] = [];
+
+  for (const element of shapeElements.value) {
+    if (element.id === props.draggingId) {
+      dragging.push(element);
+    } else {
+      normal.push(element);
+    }
+  }
+
+  return [...normal, ...dragging];
+});
 
 /**
  * 转发元素按下选择事件。
@@ -176,6 +200,14 @@ function handleWheel(event: WheelEvent): void {
 
 .b-drawing-canvas.is-tool-hand {
   cursor: grab;
+}
+
+.b-drawing-canvas.is-tool-hand.is-panning {
+  cursor: grabbing;
+}
+
+.b-drawing-canvas.is-tool-hand .b-drawing-element {
+  pointer-events: none;
 }
 
 .b-drawing-canvas.is-tool-process {

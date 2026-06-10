@@ -30,7 +30,7 @@
       </BButton>
     </div>
 
-    <!-- 左下角：历史记录 -->
+    <!-- 左下角：历史记录 / 缩放控制 / 小地图 -->
     <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left">
       <BButton type="text" square size="small" aria-label="撤销" :disabled="!canUndo" @click="emit('undo')">
         <BIcon icon="lucide:undo-2" :size="16" />
@@ -38,10 +38,7 @@
       <BButton type="text" square size="small" aria-label="重做" :disabled="!canRedo" @click="emit('redo')">
         <BIcon icon="lucide:redo-2" :size="16" />
       </BButton>
-    </div>
-
-    <!-- 左下角：缩放控制 -->
-    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left-zoom">
+      <span class="b-drawing-toolbar__divider"></span>
       <BButton type="text" square size="small" :disabled="!canZoomOut" @click="emit('zoom-out')">
         <BIcon icon="lucide:minus" :size="16" />
       </BButton>
@@ -51,11 +48,14 @@
       <BButton type="text" square size="small" :disabled="!canZoomIn" @click="emit('zoom-in')">
         <BIcon icon="lucide:plus" :size="16" />
       </BButton>
-    </div>
-
-    <!-- 左下角：小地图 -->
-    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left-minimap">
-      <DrawingMinimap :elements="elements" :viewport="viewport" :viewport-size="viewportSize" @set-center="emit('set-center', $event)">
+      <span class="b-drawing-toolbar__divider"></span>
+      <DrawingMinimap
+        :elements="elements"
+        :viewport="viewport"
+        :viewport-size="viewportSize"
+        @set-center="emit('set-center', $event)"
+        @set-zoom="emit('set-zoom', $event)"
+      >
         <template #default="{ open }">
           <BButton type="text" square size="small" class="b-drawing-toolbar__minimap" :class="{ 'is-active': open }" aria-label="小地图">
             <BIcon icon="lucide:map" :size="16" />
@@ -110,6 +110,8 @@ const emit = defineEmits<{
   'reset-zoom': [];
   /** 设置视口中心 */
   'set-center': [center: DrawingPoint];
+  /** 设置缩放比例 */
+  'set-zoom': [zoom: number];
 }>();
 
 const zoomPercent = computed<string>(() => `${Math.round(props.zoom * 100)}%`);
@@ -149,23 +151,11 @@ const canZoomIn = computed<boolean>(() => props.zoom < DRAWING_MAX_ZOOM);
   transform: translateX(-50%);
 }
 
-/** 左下角 - 历史记录 */
+/** 左下角 - 历史记录 / 缩放控制 / 小地图 */
 .b-drawing-toolbar__group--bottom-left {
   bottom: 12px;
   left: 12px;
-}
-
-/** 左下角 - 缩放控制，位于历史记录右侧 */
-.b-drawing-toolbar__group--bottom-left-zoom {
-  bottom: 12px;
-  left: 90px;
   gap: 4px;
-}
-
-/** 左下角 - 小地图，位于缩放控制右侧 */
-.b-drawing-toolbar__group--bottom-left-minimap {
-  bottom: 12px;
-  left: 216px;
 }
 
 /** 高亮当前激活的工具 */

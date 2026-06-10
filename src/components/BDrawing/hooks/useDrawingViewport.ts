@@ -37,6 +37,8 @@ export interface UseDrawingViewportReturn {
   zoomOutAt: (anchor: DrawingZoomAnchor) => void;
   /** 重置缩放 */
   resetZoom: () => void;
+  /** 设置缩放比例 */
+  setZoom: (zoom: number) => void;
 }
 
 /**
@@ -127,6 +129,7 @@ export function useDrawingViewport(board: UseDrawingBoardReturn): UseDrawingView
     zoomOut: (): void => setZoom(board.state.value.viewport.zoom - DRAWING_ZOOM_STEP),
     zoomInAt: (anchor: DrawingZoomAnchor): void => setZoom(board.state.value.viewport.zoom + DRAWING_ZOOM_STEP, anchor),
     zoomOutAt: (anchor: DrawingZoomAnchor): void => setZoom(board.state.value.viewport.zoom - DRAWING_ZOOM_STEP, anchor),
-    resetZoom: (): void => setZoom(1)
+    resetZoom: (): void => setZoom(1),
+    setZoom
   };
 }
