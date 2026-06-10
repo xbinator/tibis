@@ -4,7 +4,7 @@
  */
 
 import { onMounted, onUnmounted } from 'vue';
-import { joinPath } from '@/ai/skill';
+import { joinPath, parseSkillMarkdown } from '@/ai/skill';
 import { native } from '@/shared/platform';
 import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useSkillStore } from '@/stores/ai/skill';
@@ -46,7 +46,6 @@ export function useSkillInit(): void {
         // change/add：重新解析文件
         if (data.content) {
           if (!normalizedPath.endsWith('/SKILL.md')) return;
-          const { parseSkillMarkdown } = await import('@/ai/skill/parser');
           const skill = parseSkillMarkdown(data.content, normalizedPath, { source: 'global' });
           skillStore.handleSkillChange(data.type as 'change' | 'add', skill);
         }

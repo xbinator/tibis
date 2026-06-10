@@ -12,6 +12,7 @@ import { is, type PersistableMessage } from '@/components/BChatSidebar/utils/mes
 import type { Message } from '@/components/BChatSidebar/utils/types';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { isDatabaseInitializationRaceError, retryDuringDatabaseInitialization } from '@/shared/storage/utils/database';
+import { useTodoStore } from './todo';
 
 /**
  * 将可持久化的侧边栏消息转换为存储记录。
@@ -173,7 +174,6 @@ export const useChatSessionStore = defineStore('chat', {
 
       // 级联清理该会话的 todo 数据（在 unwrap 成功后执行，try-catch 防止中断删除流程）
       try {
-        const { useTodoStore } = await import('@/stores/chat/todo');
         useTodoStore().clearTodos(sessionId);
       } catch {
         // todo 清理失败不影响会话删除结果
