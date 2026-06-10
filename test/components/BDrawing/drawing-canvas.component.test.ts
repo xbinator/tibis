@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import { nextTick } from 'vue';
-import { mount } from '@vue/test-utils';
+import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
 
@@ -27,6 +27,89 @@ const resizeObserverMockState = vi.hoisted(() => ({
  * Selecto 拖拽条件回调。
  */
 type SelectoDragCondition = (event: { inputEvent?: { target?: EventTarget | null } }) => boolean;
+
+/**
+ * 工具栏工具按钮类型。
+ */
+type DrawingToolbarTool = 'select' | 'hand' | 'rect' | 'ellipse' | 'diamond' | 'text' | 'connector';
+
+/**
+ * 工具栏历史按钮类型。
+ */
+type DrawingToolbarHistoryAction = 'undo' | 'redo';
+
+/**
+ * 工具栏缩放按钮类型。
+ */
+type DrawingToolbarZoomAction = 'out' | 'in';
+
+/**
+ * 工具栏工具按钮在顶部按钮组中的位置。
+ */
+const DRAWING_TOOLBAR_TOOL_BUTTON_INDEX: Record<DrawingToolbarTool, number> = {
+  connector: 6,
+  diamond: 4,
+  ellipse: 3,
+  hand: 1,
+  rect: 2,
+  select: 0,
+  text: 5
+};
+
+/**
+ * 工具栏历史按钮在历史按钮组中的位置。
+ */
+const DRAWING_TOOLBAR_HISTORY_BUTTON_INDEX: Record<DrawingToolbarHistoryAction, number> = {
+  redo: 1,
+  undo: 0
+};
+
+/**
+ * 工具栏缩放按钮在缩放按钮组中的位置。
+ */
+const DRAWING_TOOLBAR_ZOOM_BUTTON_INDEX: Record<DrawingToolbarZoomAction, number> = {
+  in: 2,
+  out: 0
+};
+
+/**
+ * 查找绘图工具栏中的工具按钮。
+ * @param wrapper - BDrawing 测试包装器
+ * @param tool - 工具类型
+ * @returns 工具按钮包装器
+ */
+function findDrawingToolbarToolButton(wrapper: VueWrapper, tool: DrawingToolbarTool): DOMWrapper<Element> {
+  return wrapper.findAll('.b-drawing-toolbar__group--top button')[DRAWING_TOOLBAR_TOOL_BUTTON_INDEX[tool]];
+}
+
+/**
+ * 查找绘图工具栏中的历史按钮。
+ * @param wrapper - BDrawing 测试包装器
+ * @param action - 历史动作
+ * @returns 历史按钮包装器
+ */
+function findDrawingToolbarHistoryButton(wrapper: VueWrapper, action: DrawingToolbarHistoryAction): DOMWrapper<Element> {
+  return wrapper.findAll('.b-drawing-toolbar__group--bottom-left button')[DRAWING_TOOLBAR_HISTORY_BUTTON_INDEX[action]];
+}
+
+/**
+ * 查找绘图工具栏中的缩放按钮。
+ * @param wrapper - BDrawing 测试包装器
+ * @param action - 缩放动作
+ * @returns 缩放按钮包装器
+ */
+function findDrawingToolbarZoomButton(wrapper: VueWrapper, action: DrawingToolbarZoomAction): DOMWrapper<Element> {
+  return wrapper.findAll('.b-drawing-toolbar__group--bottom-left-zoom button')[DRAWING_TOOLBAR_ZOOM_BUTTON_INDEX[action]];
+}
+
+/**
+ * 查找绘图工具栏中的缩放百分比按钮。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 缩放百分比按钮包装器
+ */
+function findDrawingToolbarZoomValue(wrapper: VueWrapper): DOMWrapper<Element> {
+  return wrapper.find('.b-drawing-toolbar__zoom');
+}
 
 /**
  * 创建 ResizeObserver 测试替身构造器。
@@ -443,7 +526,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
-    expect(wrapper.find('[data-testid="drawing-select-tool"]').classes()).toContain('is-active');
+    expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
     expect(wrapper.findAll('[data-testid="drawing-edge"]')).toHaveLength(0);
   });
@@ -454,19 +537,19 @@ describe('BDrawing', (): void => {
     await wrapper.trigger('keydown', { key: 'p' });
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('button[aria-label="撤销"]').trigger('click');
+    await findDrawingToolbarHistoryButton(wrapper, 'undo').trigger('click');
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
 
-    await wrapper.find('button[aria-label="重做"]').trigger('click');
+    await findDrawingToolbarHistoryButton(wrapper, 'redo').trigger('click');
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
   });
 
   it('disables history toolbar actions when undo or redo is unavailable', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
-    const undoButton = wrapper.find('button[aria-label="撤销"]');
-    const redoButton = wrapper.find('button[aria-label="重做"]');
+    const undoButton = findDrawingToolbarHistoryButton(wrapper, 'undo');
+    const redoButton = findDrawingToolbarHistoryButton(wrapper, 'redo');
 
     expect(undoButton.attributes('disabled')).toBeDefined();
     expect(redoButton.attributes('disabled')).toBeDefined();
@@ -475,13 +558,13 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
-    expect(wrapper.find('button[aria-label="撤销"]').attributes('disabled')).toBeUndefined();
-    expect(wrapper.find('button[aria-label="重做"]').attributes('disabled')).toBeDefined();
+    expect(findDrawingToolbarHistoryButton(wrapper, 'undo').attributes('disabled')).toBeUndefined();
+    expect(findDrawingToolbarHistoryButton(wrapper, 'redo').attributes('disabled')).toBeDefined();
 
-    await wrapper.find('button[aria-label="撤销"]').trigger('click');
+    await findDrawingToolbarHistoryButton(wrapper, 'undo').trigger('click');
 
-    expect(wrapper.find('button[aria-label="撤销"]').attributes('disabled')).toBeDefined();
-    expect(wrapper.find('button[aria-label="重做"]').attributes('disabled')).toBeUndefined();
+    expect(findDrawingToolbarHistoryButton(wrapper, 'undo').attributes('disabled')).toBeDefined();
+    expect(findDrawingToolbarHistoryButton(wrapper, 'redo').attributes('disabled')).toBeUndefined();
   });
 
   it('selects a node and deletes it with the keyboard shortcut', async (): Promise<void> => {
@@ -509,7 +592,7 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
 
     await wrapper.trigger('keydown', { key: 'Escape' });
-    expect(wrapper.find('[data-testid="drawing-select-tool"]').classes()).toContain('is-active');
+    expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
 
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
     await wrapper.trigger('keydown', { key: 'Delete' });
@@ -521,10 +604,46 @@ describe('BDrawing', (): void => {
   it('updates zoom through toolbar buttons', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('100%');
-    await wrapper.find('[data-testid="drawing-zoom-in"]').trigger('click');
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('100%');
+    await findDrawingToolbarZoomButton(wrapper, 'in').trigger('click');
 
-    expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('110%');
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('110%');
+  });
+
+  it('resets zoom to 100% when clicking the toolbar zoom value', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarZoomButton(wrapper, 'in').trigger('click');
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('110%');
+
+    await findDrawingToolbarZoomValue(wrapper).trigger('click');
+
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('100%');
+  });
+
+  it('disables toolbar zoom buttons at viewport zoom limits', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const zoomInButton = findDrawingToolbarZoomButton(wrapper, 'in');
+    const zoomOutButton = findDrawingToolbarZoomButton(wrapper, 'out');
+
+    expect(zoomInButton.attributes('disabled')).toBeUndefined();
+    expect(zoomOutButton.attributes('disabled')).toBeUndefined();
+
+    for (let index = 0; index < 10; index += 1) {
+      await zoomInButton.trigger('click');
+    }
+
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('200%');
+    expect(zoomInButton.attributes('disabled')).toBeDefined();
+
+    await findDrawingToolbarZoomValue(wrapper).trigger('click');
+
+    for (let index = 0; index < 6; index += 1) {
+      await zoomOutButton.trigger('click');
+    }
+
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('40%');
+    expect(zoomOutButton.attributes('disabled')).toBeDefined();
   });
 
   it('zooms the drawing viewport with modified wheel events', async (): Promise<void> => {
@@ -533,11 +652,11 @@ describe('BDrawing', (): void => {
 
     await dispatchWheelEvent(canvas.element, { ctrlKey: true, deltaY: -100 });
 
-    expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('110%');
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('110%');
 
     await dispatchWheelEvent(canvas.element, { metaKey: true, deltaY: 100 });
 
-    expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('100%');
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('100%');
   });
 
   it('keeps the wheel pointer anchored while zooming the viewport', async (): Promise<void> => {
@@ -559,10 +678,10 @@ describe('BDrawing', (): void => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await canvas.trigger('pointerdown');
     await canvas.trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-hand-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'hand').trigger('click');
     setCanvasRect(canvas.element, { width: 1200, height: 720 });
 
     const initialTransform = wrapper.find('[data-testid="drawing-node"]').attributes('transform');
@@ -601,7 +720,7 @@ describe('BDrawing', (): void => {
 
     const [minX, minY] = parseViewBox(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox'));
 
-    expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('100%');
+    expect(findDrawingToolbarZoomValue(wrapper).text()).toBe('100%');
     expect(minX).toBeCloseTo(-480, 5);
     expect(minY).toBeCloseTo(-300, 5);
   });
@@ -609,27 +728,27 @@ describe('BDrawing', (): void => {
   it('creates a rectangle with default size from the rect tool click', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
     const node = wrapper.find('[data-testid="drawing-node"]');
     expect(node.attributes('data-drawing-shape')).toBe('rect');
     expect(node.text()).toContain('矩形');
-    expect(wrapper.find('[data-testid="drawing-select-tool"]').classes()).toContain('is-active');
+    expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
   });
 
   it('does not leave Moveable controls visible while a creation tool is active', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
 
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
 
-    await wrapper.find('[data-testid="drawing-add-ellipse"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'ellipse').trigger('click');
 
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(false);
   });
@@ -640,12 +759,12 @@ describe('BDrawing', (): void => {
 
     const initialSelecto = selectoMockState.instances.at(-1);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
 
     expect(initialSelecto?.destroy).toHaveBeenCalledTimes(1);
     expect(selectoMockState.instances).toHaveLength(1);
 
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
 
     expect(selectoMockState.instances).toHaveLength(2);
   });
@@ -664,7 +783,7 @@ describe('BDrawing', (): void => {
   it('does not start Selecto from selected drawing nodes', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -697,13 +816,13 @@ describe('BDrawing', (): void => {
     const rect = wrapper.find('[data-testid="drawing-shape-rect"]');
     expect(rect.attributes('width')).toBe('200');
     expect(rect.attributes('height')).toBe('80');
-    expect(wrapper.find('[data-testid="drawing-select-tool"]').classes()).toContain('is-active');
+    expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
   });
 
   it('shows a preview while dragging a shape', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointermove');
 
@@ -730,7 +849,7 @@ describe('BDrawing', (): void => {
         toJSON: (): Record<string, number> => ({})
       } as DOMRect);
 
-    await wrapper.find('[data-testid="drawing-add-ellipse"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'ellipse').trigger('click');
     await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
     await dispatchPointerEvent(canvas.element, 'pointermove', { clientX: 260, clientY: 220 });
     await dispatchPointerEvent(canvas.element, 'pointerup', { clientX: 260, clientY: 220 });
@@ -749,7 +868,7 @@ describe('BDrawing', (): void => {
 
     await wrapper.trigger('keydown', { key: 'd' });
 
-    expect(wrapper.find('[data-testid="drawing-add-diamond"]').classes()).toContain('is-active');
+    expect(findDrawingToolbarToolButton(wrapper, 'diamond').classes()).toContain('is-active');
 
     wrapper.unmount();
   });
@@ -757,7 +876,7 @@ describe('BDrawing', (): void => {
   it('shows Moveable controls for the selected element', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -769,7 +888,7 @@ describe('BDrawing', (): void => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await canvas.trigger('pointerdown');
     await canvas.trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -782,7 +901,7 @@ describe('BDrawing', (): void => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await canvas.trigger('pointerdown');
     await canvas.trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -798,7 +917,7 @@ describe('BDrawing', (): void => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await canvas.trigger('pointerdown');
     await canvas.trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -815,13 +934,13 @@ describe('BDrawing', (): void => {
   it('disables Moveable snapping for multi selection', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     await emitSelectoEnd([nodes[0].element, nodes[1].element]);
@@ -833,13 +952,13 @@ describe('BDrawing', (): void => {
   it('keeps Moveable resize enabled for multi selection', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     await emitSelectoEnd([nodes[0].element, nodes[1].element]);
@@ -851,13 +970,13 @@ describe('BDrawing', (): void => {
   it('commits Moveable group drag end for multi selection', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     const initialTransforms = nodes.map((node) => node.attributes('transform'));
@@ -874,13 +993,13 @@ describe('BDrawing', (): void => {
   it('commits Moveable group resize end for multi selection', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     await emitSelectoEnd([nodes[0].element, nodes[1].element]);
@@ -894,10 +1013,10 @@ describe('BDrawing', (): void => {
   it('provides other nodes as Moveable element snap guidelines for single selection', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
@@ -918,7 +1037,7 @@ describe('BDrawing', (): void => {
   it('commits Moveable drag end as one undoable geometry update', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -926,7 +1045,7 @@ describe('BDrawing', (): void => {
 
     expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-50, -16)');
 
-    await wrapper.find('button[aria-label="撤销"]').trigger('click');
+    await findDrawingToolbarHistoryButton(wrapper, 'undo').trigger('click');
 
     expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-90, -36)');
   });
@@ -934,7 +1053,7 @@ describe('BDrawing', (): void => {
   it('previews Moveable drag before the drag end event commits state', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -946,10 +1065,10 @@ describe('BDrawing', (): void => {
   it('drags an unselected node and shows Moveable after pointerup', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
@@ -972,7 +1091,7 @@ describe('BDrawing', (): void => {
   it('stops direct node dragging after pointerup', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
@@ -987,7 +1106,7 @@ describe('BDrawing', (): void => {
   it('commits direct node drag at the last preview position instead of the pointerup position', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
@@ -1001,7 +1120,7 @@ describe('BDrawing', (): void => {
   it('maps direct node dragging through the rendered canvas scale', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
@@ -1015,7 +1134,7 @@ describe('BDrawing', (): void => {
   it('commits Moveable resize end events without exposing rotate controls', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -1030,7 +1149,7 @@ describe('BDrawing', (): void => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await canvas.trigger('pointerdown');
     await canvas.trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -1044,7 +1163,7 @@ describe('BDrawing', (): void => {
   it('previews Moveable resize before the resize end event commits state', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await nextTick();
@@ -1058,13 +1177,13 @@ describe('BDrawing', (): void => {
   it('replaces the selection from a Selecto selectEnd event', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     await emitSelectoEnd([nodes[0].element]);
@@ -1076,13 +1195,13 @@ describe('BDrawing', (): void => {
   it('appends to the current selection when Selecto ends with Shift pressed', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     await emitSelectoEnd([nodes[0].element]);
@@ -1095,12 +1214,12 @@ describe('BDrawing', (): void => {
   it('keeps selection changes out of the undo stack', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
     await emitSelectoEnd([wrapper.find('[data-testid="drawing-node"]').element]);
-    await wrapper.find('button[aria-label="撤销"]').trigger('click');
+    await findDrawingToolbarHistoryButton(wrapper, 'undo').trigger('click');
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
   });
@@ -1108,13 +1227,13 @@ describe('BDrawing', (): void => {
   it('creates a connector by clicking two shapes with the connector tool', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-connector-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     await nodes[0].trigger('pointerdown');
@@ -1126,20 +1245,20 @@ describe('BDrawing', (): void => {
   it('updates connector path when a connected shape moves', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-connector-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     await nodes[0].trigger('pointerdown');
     await nodes[1].trigger('pointerdown');
 
     const initialPath = wrapper.find('[data-testid="drawing-connector-path"]').attributes('d');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
     await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
     await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
     await nextTick();
@@ -1151,18 +1270,18 @@ describe('BDrawing', (): void => {
   it('removes attached connectors when deleting a connected shape', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await wrapper.find('[data-testid="drawing-connector-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
     await nodes[0].trigger('pointerdown');
     await nodes[1].trigger('pointerdown');
-    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
     await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
     await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
     await wrapper.trigger('keydown', { key: 'Delete' });

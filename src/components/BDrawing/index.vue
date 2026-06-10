@@ -15,6 +15,7 @@
       @redo="board.redo"
       @zoom-in="viewport.zoomIn"
       @zoom-out="viewport.zoomOut"
+      @reset-zoom="viewport.resetZoom"
     />
     <DrawingInfiniteViewport>
       <DrawingCanvas

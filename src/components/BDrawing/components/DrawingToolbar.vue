@@ -6,103 +6,49 @@
   <div class="b-drawing-toolbar">
     <!-- 顶部水平居中：工具选择 -->
     <div class="b-drawing-toolbar__group b-drawing-toolbar__group--top">
-      <BButton
-        data-testid="drawing-select-tool"
-        type="text"
-        square
-        size="small"
-        tooltip="选择工具"
-        :class="{ 'is-active': activeTool === 'select' }"
-        @click="emit('set-tool', 'select')"
-      >
+      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'select' }" @click="emit('set-tool', 'select')">
         <BIcon icon="lucide:mouse-pointer-2" :size="16" />
       </BButton>
-      <BButton
-        data-testid="drawing-hand-tool"
-        type="text"
-        square
-        size="small"
-        tooltip="拖动画布"
-        :class="{ 'is-active': activeTool === 'hand' }"
-        @click="emit('set-tool', 'hand')"
-      >
+      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'hand' }" @click="emit('set-tool', 'hand')">
         <BIcon icon="lucide:hand" :size="16" />
       </BButton>
       <span class="b-drawing-toolbar__divider"></span>
-      <BButton
-        data-testid="drawing-add-rect"
-        type="text"
-        square
-        size="small"
-        tooltip="矩形"
-        :class="{ 'is-active': activeTool === 'rect' }"
-        @click="emit('set-tool', 'rect')"
-      >
+      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'rect' }" @click="emit('set-tool', 'rect')">
         <BIcon icon="lucide:square" :size="16" />
       </BButton>
-      <BButton
-        data-testid="drawing-add-ellipse"
-        type="text"
-        square
-        size="small"
-        tooltip="椭圆"
-        :class="{ 'is-active': activeTool === 'ellipse' }"
-        @click="emit('set-tool', 'ellipse')"
-      >
+      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'ellipse' }" @click="emit('set-tool', 'ellipse')">
         <BIcon icon="lucide:circle" :size="16" />
       </BButton>
-      <BButton
-        data-testid="drawing-add-diamond"
-        type="text"
-        square
-        size="small"
-        tooltip="菱形"
-        :class="{ 'is-active': activeTool === 'diamond' }"
-        @click="emit('set-tool', 'diamond')"
-      >
+      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'diamond' }" @click="emit('set-tool', 'diamond')">
         <BIcon icon="lucide:diamond" :size="16" />
       </BButton>
-      <BButton
-        data-testid="drawing-add-text"
-        type="text"
-        square
-        size="small"
-        tooltip="文本"
-        :class="{ 'is-active': activeTool === 'text' }"
-        @click="emit('set-tool', 'text')"
-      >
+      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'text' }" @click="emit('set-tool', 'text')">
         <BIcon icon="lucide:type" :size="16" />
       </BButton>
-      <BButton
-        data-testid="drawing-connector-tool"
-        type="text"
-        square
-        size="small"
-        tooltip="连接线"
-        :class="{ 'is-active': activeTool === 'connector' }"
-        @click="emit('set-tool', 'connector')"
-      >
+      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'connector' }" @click="emit('set-tool', 'connector')">
         <BIcon icon="lucide:arrow-right" :size="16" />
       </BButton>
     </div>
 
     <!-- 左下角：历史记录 -->
     <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left">
-      <BButton type="text" square size="small" tooltip="撤销" aria-label="撤销" :disabled="!canUndo" @click="emit('undo')">
+      <BButton type="text" square size="small" aria-label="撤销" :disabled="!canUndo" @click="emit('undo')">
         <BIcon icon="lucide:undo-2" :size="16" />
       </BButton>
-      <BButton type="text" square size="small" tooltip="重做" aria-label="重做" :disabled="!canRedo" @click="emit('redo')">
+      <BButton type="text" square size="small" aria-label="重做" :disabled="!canRedo" @click="emit('redo')">
         <BIcon icon="lucide:redo-2" :size="16" />
       </BButton>
     </div>
 
     <!-- 左下角：缩放控制 -->
     <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left-zoom">
-      <BButton data-testid="drawing-zoom-out" type="text" square size="small" tooltip="缩小" @click="emit('zoom-out')">
+      <BButton type="text" square size="small" :disabled="!canZoomOut" @click="emit('zoom-out')">
         <BIcon icon="lucide:minus" :size="16" />
       </BButton>
-      <span class="b-drawing-toolbar__zoom" data-testid="drawing-zoom-value">{{ zoomPercent }}</span>
-      <BButton data-testid="drawing-zoom-in" type="text" square size="small" tooltip="放大" @click="emit('zoom-in')">
+      <button class="b-drawing-toolbar__zoom" type="button" @click="emit('reset-zoom')">
+        {{ zoomPercent }}
+      </button>
+      <BButton type="text" square size="small" :disabled="!canZoomIn" @click="emit('zoom-in')">
         <BIcon icon="lucide:plus" :size="16" />
       </BButton>
     </div>
@@ -114,6 +60,7 @@ import type { DrawingToolMode } from '../types';
 import { computed } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import BIcon from '@/components/BIcon/index.vue';
+import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM } from '../constants/defaults';
 
 /**
  * 工具栏入参。
@@ -141,9 +88,15 @@ const emit = defineEmits<{
   'zoom-in': [];
   /** 缩小 */
   'zoom-out': [];
+  /** 重置缩放 */
+  'reset-zoom': [];
 }>();
 
 const zoomPercent = computed<string>(() => `${Math.round(props.zoom * 100)}%`);
+/** 当前缩放是否仍允许继续缩小。 */
+const canZoomOut = computed<boolean>(() => props.zoom > DRAWING_MIN_ZOOM);
+/** 当前缩放是否仍允许继续放大。 */
+const canZoomIn = computed<boolean>(() => props.zoom < DRAWING_MAX_ZOOM);
 </script>
 
 <style lang="less" scoped>
@@ -204,9 +157,22 @@ const zoomPercent = computed<string>(() => `${Math.round(props.zoom * 100)}%`);
 
 .b-drawing-toolbar__zoom {
   min-width: 42px;
+  height: 28px;
+  padding: 0 4px;
   font-size: 12px;
   color: var(--text-tertiary);
   text-align: center;
+  cursor: pointer;
   user-select: none;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--text-primary);
+    outline: none;
+    background: var(--bg-tertiary);
+  }
 }
 </style>

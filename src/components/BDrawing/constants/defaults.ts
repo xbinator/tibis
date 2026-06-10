@@ -33,6 +33,21 @@ export const DRAWING_MIN_ELEMENT_SIZE = {
 } as const;
 
 /**
+ * 画布最小缩放比例。
+ */
+export const DRAWING_MIN_ZOOM = 0.4;
+
+/**
+ * 画布最大缩放比例。
+ */
+export const DRAWING_MAX_ZOOM = 2;
+
+/**
+ * 工具栏和滚轮单次缩放步长。
+ */
+export const DRAWING_ZOOM_STEP = 0.1;
+
+/**
  * 支持的节点类型。
  */
 export const DRAWING_NODE_TYPES = ['process', 'decision', 'actor', 'service', 'database', 'text'] as const;

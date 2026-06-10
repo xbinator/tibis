@@ -4,11 +4,8 @@
  */
 import type { DrawingPoint, DrawingSize } from '../types';
 import type { UseDrawingBoardReturn } from './useDrawingBoard';
+import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/defaults';
 import { clientDeltaToDrawingDelta, getDrawingResponsiveViewBoxSize } from '../utils/drawingGeometry';
-
-const MIN_ZOOM = 0.4;
-const MAX_ZOOM = 2;
-const ZOOM_STEP = 0.1;
 
 /**
  * 缩放锚点信息。
@@ -48,7 +45,7 @@ export interface UseDrawingViewportReturn {
  * @returns 归一化后的缩放比例
  */
 function clampZoom(nextZoom: number): number {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(nextZoom.toFixed(2))));
+  return Math.min(DRAWING_MAX_ZOOM, Math.max(DRAWING_MIN_ZOOM, Number(nextZoom.toFixed(2))));
 }
 
 /**
@@ -126,10 +123,10 @@ export function useDrawingViewport(board: UseDrawingBoardReturn): UseDrawingView
   return {
     setCenter,
     panByClientDelta,
-    zoomIn: (): void => setZoom(board.state.value.viewport.zoom + ZOOM_STEP),
-    zoomOut: (): void => setZoom(board.state.value.viewport.zoom - ZOOM_STEP),
-    zoomInAt: (anchor: DrawingZoomAnchor): void => setZoom(board.state.value.viewport.zoom + ZOOM_STEP, anchor),
-    zoomOutAt: (anchor: DrawingZoomAnchor): void => setZoom(board.state.value.viewport.zoom - ZOOM_STEP, anchor),
+    zoomIn: (): void => setZoom(board.state.value.viewport.zoom + DRAWING_ZOOM_STEP),
+    zoomOut: (): void => setZoom(board.state.value.viewport.zoom - DRAWING_ZOOM_STEP),
+    zoomInAt: (anchor: DrawingZoomAnchor): void => setZoom(board.state.value.viewport.zoom + DRAWING_ZOOM_STEP, anchor),
+    zoomOutAt: (anchor: DrawingZoomAnchor): void => setZoom(board.state.value.viewport.zoom - DRAWING_ZOOM_STEP, anchor),
     resetZoom: (): void => setZoom(1)
   };
 }
