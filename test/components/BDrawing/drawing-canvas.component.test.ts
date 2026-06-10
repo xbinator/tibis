@@ -16,6 +16,11 @@ const selectoMockState = vi.hoisted(() => ({
   }>
 }));
 
+/**
+ * Selecto 拖拽条件回调。
+ */
+type SelectoDragCondition = (event: { inputEvent?: { target?: EventTarget | null } }) => boolean;
+
 vi.mock('@/components/BButton/index.vue', () => ({
   default: {
     name: 'BButton',
@@ -50,6 +55,10 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         type: Boolean,
         default: false
       },
+      resizable: {
+        type: Boolean,
+        default: false
+      },
       snappable: {
         type: Boolean,
         default: false
@@ -67,11 +76,12 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         default: true
       }
     },
-    emits: ['drag', 'drag-end', 'resize', 'resize-end', 'rotate-end'],
+    emits: ['drag', 'drag-end', 'drag-group', 'drag-group-end', 'resize', 'resize-end', 'resize-group', 'resize-group-end', 'rotate-end'],
     template: `
       <div
         v-if="target.length"
         data-testid="drawing-moveable-mock"
+        :data-resizable="String(resizable)"
         :data-snappable="String(snappable)"
         :data-guideline-count="String(elementGuidelines.length)"
         :data-snap-directions="String(snapDirections)"
@@ -90,12 +100,28 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
           @click="$emit('drag-end', { target: target[0], lastEvent: { translate: [40, 20] } })"
         ></button>
         <button
+          data-testid="moveable-drag-group"
+          @click="$emit('drag-group', { events: target.map((item) => ({ target: item, translate: [40, 20] })) })"
+        ></button>
+        <button
+          data-testid="moveable-drag-group-end"
+          @click="$emit('drag-group-end', { events: target.map((item) => ({ target: item, lastEvent: { translate: [40, 20] } })) })"
+        ></button>
+        <button
           data-testid="moveable-resize-end"
           @click="$emit('resize-end', { target: target[0], width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })"
         ></button>
         <button
           data-testid="moveable-resize"
           @click="$emit('resize', { target: target[0], width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })"
+        ></button>
+        <button
+          data-testid="moveable-resize-group"
+          @click="$emit('resize-group', { events: target.map((item) => ({ target: item, width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })) })"
+        ></button>
+        <button
+          data-testid="moveable-resize-group-end"
+          @click="$emit('resize-group-end', { events: target.map((item) => ({ target: item, width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })) })"
         ></button>
         <button v-if="rotatable" data-testid="moveable-rotate-end" @click="$emit('rotate-end', { target: target[0], beforeRotate: -30 })"></button>
       </div>
@@ -332,6 +358,29 @@ describe('BDrawing', (): void => {
     expect(selectoMockState.instances).toHaveLength(2);
   });
 
+  it('does not start Selecto from Moveable controls', async (): Promise<void> => {
+    mount(BDrawing);
+    await nextTick();
+
+    const control = document.createElement('button');
+    control.className = 'moveable-control';
+    const condition = selectoMockState.instances.at(-1)?.options.dragCondition as SelectoDragCondition;
+
+    expect(condition({ inputEvent: { target: control } })).toBe(false);
+  });
+
+  it('does not start Selecto from selected drawing nodes', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    const condition = selectoMockState.instances.at(-1)?.options.dragCondition as SelectoDragCondition;
+    expect(condition({ inputEvent: { target: wrapper.find('[data-testid="drawing-node"]').element } })).toBe(false);
+  });
+
   it('creates a custom sized process node by dragging on the canvas', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
@@ -440,6 +489,67 @@ describe('BDrawing', (): void => {
     await nextTick();
 
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-snappable')).toBe('false');
+  });
+
+  it('keeps Moveable resize enabled for multi selection', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await emitSelectoEnd([nodes[0].element, nodes[1].element]);
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-resizable')).toBe('true');
+  });
+
+  it('commits Moveable group drag end for multi selection', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    const initialTransforms = nodes.map((node) => node.attributes('transform'));
+    await emitSelectoEnd([nodes[0].element, nodes[1].element]);
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-drag-group-end"]').trigger('click');
+
+    const movedNodes = wrapper.findAll('[data-testid="drawing-node"]');
+    expect(movedNodes.map((node) => node.attributes('transform'))).not.toEqual(initialTransforms);
+    expect(movedNodes[0].attributes('transform')).toBe('translate(-50, -16)');
+    expect(movedNodes[1].attributes('transform')).toBe('translate(-50, -16)');
+  });
+
+  it('commits Moveable group resize end for multi selection', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await emitSelectoEnd([nodes[0].element, nodes[1].element]);
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-resize-group-end"]').trigger('click');
+
+    expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('width'))).toEqual(['240', '240']);
+    expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('height'))).toEqual(['120', '120']);
   });
 
   it('provides other nodes as Moveable element snap guidelines for single selection', async (): Promise<void> => {

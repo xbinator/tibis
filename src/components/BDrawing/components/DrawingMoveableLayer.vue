@@ -3,28 +3,32 @@
   @description BDrawing Moveable 控制器适配层。
 -->
 <template>
-  <VueMoveable
-    v-if="enabled && targets.length"
-    class="b-drawing-moveable-layer"
-    :target="targets"
-    :draggable="true"
-    :resizable="singleTarget"
-    :snappable="singleTarget"
-    :snap-center="true"
-    :snap-gap="true"
-    :snap-threshold="5"
-    :snap-render-threshold="5"
-    :snap-directions="snapDirections"
-    :element-snap-directions="snapDirections"
-    :element-guidelines="guidelineTargets"
-    :origin="false"
-    :throttle-drag="0"
-    :throttle-resize="0"
-    @drag="handleDrag"
-    @drag-end="handleDragEnd"
-    @resize="handleResize"
-    @resize-end="handleResizeEnd"
-  />
+  <div v-if="enabled && targets.length" class="b-drawing-moveable-layer">
+    <VueMoveable
+      :target="targets"
+      :draggable="true"
+      :resizable="true"
+      :snappable="singleTarget"
+      :snap-center="true"
+      :snap-gap="true"
+      :snap-threshold="5"
+      :snap-render-threshold="5"
+      :snap-directions="snapDirections"
+      :element-snap-directions="snapDirections"
+      :element-guidelines="guidelineTargets"
+      :origin="false"
+      :throttle-drag="0"
+      :throttle-resize="0"
+      @drag="handleDrag"
+      @drag-end="handleDragEnd"
+      @drag-group="handleDragGroup"
+      @drag-group-end="handleDragGroupEnd"
+      @resize="handleResize"
+      @resize-end="handleResizeEnd"
+      @resize-group="handleResizeGroup"
+      @resize-group-end="handleResizeGroupEnd"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -79,6 +83,14 @@ interface MoveableResizeEndEvent extends MoveableTargetEvent {
  * Moveable 缩放过程事件。
  */
 type MoveableResizeEvent = MoveableResizeEndEvent;
+
+/**
+ * Moveable 多目标事件。
+ */
+interface MoveableGroupEvent<TEvent extends MoveableTargetEvent> {
+  /** 每个子目标对应的 Moveable 事件 */
+  events?: TEvent[];
+}
 
 /**
  * Moveable 图层入参。
@@ -231,6 +243,54 @@ function updateTextPreviewPosition(target: Element, size: DrawingSize): void {
 }
 
 /**
+ * 从拖拽结束事件创建几何移动变更。
+ * @param event - Moveable 拖拽结束事件
+ * @returns 几何变更，事件不完整时返回 null
+ */
+function createMoveChange(event: MoveableDragEndEvent): DrawingGeometryChange | null {
+  const id = getTargetId(event.target);
+  const element = id ? getElementById(id) : undefined;
+  const translate = event.lastEvent?.translate;
+  if (!id || !element || !translate) {
+    return null;
+  }
+
+  return {
+    id,
+    position: {
+      x: element.position.x + domValueToWorld(translate[0]),
+      y: element.position.y + domValueToWorld(translate[1])
+    }
+  };
+}
+
+/**
+ * 从缩放结束事件创建几何尺寸变更。
+ * @param event - Moveable 缩放结束事件
+ * @returns 几何变更，事件不完整时返回 null
+ */
+function createResizeChange(event: MoveableResizeEndEvent): DrawingGeometryChange | null {
+  const id = getTargetId(event.target);
+  const element = id ? getElementById(id) : undefined;
+  if (!id || !element || event.width === undefined || event.height === undefined) {
+    return null;
+  }
+
+  const translate = event.drag?.beforeTranslate ?? [0, 0];
+  return {
+    id,
+    position: {
+      x: element.position.x + domValueToWorld(translate[0]),
+      y: element.position.y + domValueToWorld(translate[1])
+    },
+    size: {
+      width: domValueToWorld(event.width),
+      height: domValueToWorld(event.height)
+    }
+  };
+}
+
+/**
  * 读取选区对应 DOM target。
  */
 async function syncTargets(): Promise<void> {
@@ -295,22 +355,33 @@ function handleResize(event: MoveableResizeEvent): void {
  * @param event - Moveable 拖拽结束事件
  */
 function handleDragEnd(event: MoveableDragEndEvent): void {
-  const id = getTargetId(event.target);
-  const element = id ? getElementById(id) : undefined;
-  const translate = event.lastEvent?.translate;
-  if (!id || !element || !translate) {
+  const change = createMoveChange(event);
+  if (!change) {
     return;
   }
 
-  emit('move', [
-    {
-      id,
-      position: {
-        x: element.position.x + domValueToWorld(translate[0]),
-        y: element.position.y + domValueToWorld(translate[1])
-      }
-    }
-  ]);
+  emit('move', [change]);
+}
+
+/**
+ * 处理 Moveable 多目标拖动过程。
+ * @param event - Moveable 多目标拖动过程事件
+ */
+function handleDragGroup(event: MoveableGroupEvent<MoveableDragEvent>): void {
+  event.events?.forEach(handleDrag);
+}
+
+/**
+ * 处理 Moveable 多目标拖拽结束。
+ * @param event - Moveable 多目标拖拽结束事件
+ */
+function handleDragGroupEnd(event: MoveableGroupEvent<MoveableDragEndEvent>): void {
+  const changes = event.events?.map(createMoveChange).filter((change): change is DrawingGeometryChange => change !== null) ?? [];
+  if (!changes.length) {
+    return;
+  }
+
+  emit('move', changes);
 }
 
 /**
@@ -318,26 +389,33 @@ function handleDragEnd(event: MoveableDragEndEvent): void {
  * @param event - Moveable 缩放结束事件
  */
 function handleResizeEnd(event: MoveableResizeEndEvent): void {
-  const id = getTargetId(event.target);
-  const element = id ? getElementById(id) : undefined;
-  if (!id || !element || event.width === undefined || event.height === undefined) {
+  const change = createResizeChange(event);
+  if (!change) {
     return;
   }
 
-  const translate = event.drag?.beforeTranslate ?? [0, 0];
-  emit('resize', [
-    {
-      id,
-      position: {
-        x: element.position.x + domValueToWorld(translate[0]),
-        y: element.position.y + domValueToWorld(translate[1])
-      },
-      size: {
-        width: domValueToWorld(event.width),
-        height: domValueToWorld(event.height)
-      }
-    }
-  ]);
+  emit('resize', [change]);
+}
+
+/**
+ * 处理 Moveable 多目标缩放过程。
+ * @param event - Moveable 多目标缩放过程事件
+ */
+function handleResizeGroup(event: MoveableGroupEvent<MoveableResizeEvent>): void {
+  event.events?.forEach(handleResize);
+}
+
+/**
+ * 处理 Moveable 多目标缩放结束。
+ * @param event - Moveable 多目标缩放结束事件
+ */
+function handleResizeGroupEnd(event: MoveableGroupEvent<MoveableResizeEndEvent>): void {
+  const changes = event.events?.map(createResizeChange).filter((change): change is DrawingGeometryChange => change !== null) ?? [];
+  if (!changes.length) {
+    return;
+  }
+
+  emit('resize', changes);
 }
 
 onMounted(() => {
@@ -358,11 +436,66 @@ watch(
 </script>
 
 <style lang="less" scoped>
-.b-drawing-moveable-layer :global(.moveable-guideline-group .moveable-size-value),
-.b-drawing-moveable-layer :global(.guideline-group .size-value) {
-  min-width: max-content;
-  line-height: 1;
-  text-align: center;
-  white-space: nowrap;
+.b-drawing-moveable-layer {
+  --moveable-control-padding: 12;
+
+  :deep(.moveable-control) {
+    width: 12px !important;
+    height: 12px !important;
+    margin-top: -6px !important;
+    margin-left: -6px !important;
+    background: var(--color-primary) !important;
+    border: 2px solid var(--bg-primary) !important;
+    box-shadow: 0 0 0 3px var(--color-primary-bg), 0 4px 10px var(--color-control-outline) !important;
+  }
+
+  :deep(.moveable-control:hover) {
+    background: var(--color-primary-hover) !important;
+    border-color: var(--bg-primary) !important;
+    box-shadow: 0 0 0 4px var(--color-primary-bg-hover), 0 6px 14px var(--color-control-outline) !important;
+  }
+
+  :deep(.moveable-line) {
+    background: var(--color-primary) !important;
+    box-shadow: 0 0 0 1px var(--color-primary-bg);
+  }
+
+  :deep(.moveable-line.moveable-dashed) {
+    box-shadow: none;
+  }
+
+  :deep(.moveable-line.moveable-horizontal.moveable-dashed) {
+    border-top-color: var(--color-primary);
+  }
+
+  :deep(.moveable-line.moveable-vertical.moveable-dashed) {
+    border-left-color: var(--color-primary);
+  }
+
+  :deep(.moveable-guideline) {
+    background: var(--color-primary-hover);
+    box-shadow: 0 0 0 1px var(--color-primary-bg);
+  }
+
+  :deep(.moveable-guideline-group .moveable-size-value),
+  :deep(.guideline-group .size-value) {
+    min-width: max-content;
+    padding: 3px 6px;
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1;
+    color: var(--color-primary);
+    text-align: center;
+    white-space: nowrap;
+    background: var(--bg-primary);
+    border: 1px solid var(--color-primary-border);
+    border-radius: 999px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  :deep(.moveable-size-value.moveable-gap),
+  :deep(.size-value.gap) {
+    color: var(--color-primary);
+  }
 }
 </style>

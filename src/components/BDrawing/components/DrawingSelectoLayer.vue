@@ -25,6 +25,14 @@ interface SelectoEndEvent {
 }
 
 /**
+ * Selecto 拖拽起始事件。
+ */
+interface SelectoDragStartEvent {
+  /** 原始输入事件 */
+  inputEvent?: Event;
+}
+
+/**
  * Selecto 图层入参。
  */
 interface Props {
@@ -43,6 +51,16 @@ const emit = defineEmits<{
 }>();
 
 let selecto: Selecto | null = null;
+/** Selecto 不应该从这些交互目标启动，避免抢占 Moveable 拖拽和缩放。 */
+const SELECTO_BLOCKED_DRAG_SELECTOR = [
+  '.b-drawing-moveable-layer',
+  '.moveable-control',
+  '.moveable-line',
+  '.moveable-area',
+  '.moveable-control-box',
+  '.moveable-direction',
+  '.b-drawing-element.is-selected'
+].join(', ');
 
 /**
  * 读取 DOM 目标的画板元素 ID。
@@ -61,6 +79,20 @@ function getTargetId(target: HTMLElement | SVGElement): string | null {
  */
 function mergeSelection(current: string[], incoming: string[]): string[] {
   return [...new Set([...current, ...incoming])];
+}
+
+/**
+ * 判断 Selecto 是否应该从当前输入目标启动框选。
+ * @param event - Selecto 拖拽起始事件
+ * @returns 是否允许启动框选
+ */
+function shouldStartSelectoDrag(event: SelectoDragStartEvent): boolean {
+  const target = event.inputEvent?.target;
+  if (!(target instanceof Element)) {
+    return true;
+  }
+
+  return target.closest(SELECTO_BLOCKED_DRAG_SELECTOR) === null;
 }
 
 /**
@@ -85,12 +117,14 @@ function createSelecto(): void {
   }
 
   selecto = new Selecto({
+    className: 'b-drawing-selecto-selection',
     container: props.root,
     dragContainer: props.root,
     selectableTargets: ['.b-drawing-element'],
     hitRate: 0,
     selectFromInside: false,
-    preventDragFromInside: true
+    preventDragFromInside: true,
+    dragCondition: shouldStartSelectoDrag
   });
   selecto.on('selectEnd', (event: SelectoEndEvent): void => handleSelectEnd(event));
 }
@@ -119,3 +153,11 @@ watch(
   }
 );
 </script>
+
+<style lang="less" scoped>
+:global(.b-drawing-selecto-selection.selecto-selection) {
+  background: color-mix(in srgb, var(--color-primary-bg) 72%, transparent);
+  border: 1px solid var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary-bg);
+}
+</style>
