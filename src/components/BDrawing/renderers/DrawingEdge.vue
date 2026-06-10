@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingEdge, DrawingNode, DrawingPoint } from '../types';
+import type { DrawingEdge, DrawingElement, DrawingPoint } from '../types';
 import { computed } from 'vue';
 
 /**
@@ -19,8 +19,8 @@ import { computed } from 'vue';
 interface Props {
   /** 连线 */
   edge: DrawingEdge;
-  /** 节点列表 */
-  nodes: DrawingNode[];
+  /** 元素列表 */
+  elements: DrawingElement[];
 }
 
 const props = defineProps<Props>();
@@ -31,7 +31,7 @@ const props = defineProps<Props>();
  * @returns 中心点
  */
 function getNodeCenter(nodeId: string): DrawingPoint {
-  const node = props.nodes.find((item) => item.id === nodeId);
+  const node = props.elements.find((item) => item.id === nodeId);
   if (!node) {
     return { x: 0, y: 0 };
   }

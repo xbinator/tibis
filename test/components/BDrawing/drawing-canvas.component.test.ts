@@ -3,45 +3,239 @@
  * @description 验证 BDrawing SVG 画布和基础工具栏交互。
  * @vitest-environment jsdom
  */
+import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
 
+const selectoMockState = vi.hoisted(() => ({
+  instances: [] as Array<{
+    handlers: Record<string, (event: unknown) => void>;
+    options: Record<string, unknown>;
+    destroy: ReturnType<typeof vi.fn>;
+  }>
+}));
+
+vi.mock('@/components/BButton/index.vue', () => ({
+  default: {
+    name: 'BButton',
+    inheritAttrs: false,
+    props: {
+      tooltip: {
+        type: String,
+        default: ''
+      }
+    },
+    emits: ['click'],
+    template: '<button v-bind="$attrs" :aria-label="$attrs[\'aria-label\'] || tooltip" @click="$emit(\'click\')"><slot /></button>'
+  }
+}));
+
+vi.mock('@/components/BIcon/index.vue', () => ({
+  default: {
+    name: 'BIcon',
+    template: '<span></span>'
+  }
+}));
+
+vi.mock('vue3-moveable/dist/moveable.js', () => ({
+  default: {
+    name: 'VueMoveable',
+    props: {
+      target: {
+        type: Array,
+        default: (): Element[] => []
+      },
+      rotatable: {
+        type: Boolean,
+        default: false
+      },
+      snappable: {
+        type: Boolean,
+        default: false
+      },
+      elementGuidelines: {
+        type: Array,
+        default: (): Element[] => []
+      },
+      snapDirections: {
+        type: [Boolean, Object],
+        default: true
+      },
+      elementSnapDirections: {
+        type: [Boolean, Object],
+        default: true
+      }
+    },
+    emits: ['drag', 'drag-end', 'resize', 'resize-end', 'rotate-end'],
+    template: `
+      <div
+        v-if="target.length"
+        data-testid="drawing-moveable-mock"
+        :data-snappable="String(snappable)"
+        :data-guideline-count="String(elementGuidelines.length)"
+        :data-snap-directions="String(snapDirections)"
+        :data-element-snap-directions="String(elementSnapDirections)"
+        :data-snap-center="String(snapDirections.center)"
+        :data-snap-middle="String(snapDirections.middle)"
+        :data-element-snap-center="String(elementSnapDirections.center)"
+        :data-element-snap-middle="String(elementSnapDirections.middle)"
+      >
+        <button
+          data-testid="moveable-drag"
+          @click="$emit('drag', { target: target[0], translate: [40, 20] })"
+        ></button>
+        <button
+          data-testid="moveable-drag-end"
+          @click="$emit('drag-end', { target: target[0], lastEvent: { translate: [40, 20] } })"
+        ></button>
+        <button
+          data-testid="moveable-resize-end"
+          @click="$emit('resize-end', { target: target[0], width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })"
+        ></button>
+        <button
+          data-testid="moveable-resize"
+          @click="$emit('resize', { target: target[0], width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })"
+        ></button>
+        <button v-if="rotatable" data-testid="moveable-rotate-end" @click="$emit('rotate-end', { target: target[0], beforeRotate: -30 })"></button>
+      </div>
+    `
+  }
+}));
+
+vi.mock('selecto', () => ({
+  default: class MockSelecto {
+    public handlers: Record<string, (event: unknown) => void> = {};
+
+    public destroy = vi.fn();
+
+    public options: Record<string, unknown>;
+
+    public constructor(options: Record<string, unknown>) {
+      this.options = options;
+      selectoMockState.instances.push(this);
+    }
+
+    /**
+     * 注册 Selecto 事件。
+     * @param name - 事件名
+     * @param handler - 事件处理器
+     * @returns 当前实例
+     */
+    public on(name: string, handler: (event: unknown) => void): this {
+      this.handlers[name] = handler;
+      return this;
+    }
+  }
+}));
+
+/**
+ * 派发带浏览器坐标的指针事件。
+ * @param target - 目标对象
+ * @param type - 事件类型
+ * @param point - 浏览器坐标
+ */
+async function dispatchPointerEvent(target: Element | Window, type: string, point: { clientX: number; clientY: number }): Promise<void> {
+  target.dispatchEvent(
+    new MouseEvent(type, {
+      bubbles: true,
+      clientX: point.clientX,
+      clientY: point.clientY
+    })
+  );
+  await nextTick();
+}
+
+/**
+ * 设置画布测试尺寸。
+ * @param element - 画布元素
+ * @param size - 画布尺寸
+ */
+function setCanvasRect(element: Element, size: { width: number; height: number }): void {
+  element.getBoundingClientRect = (): DOMRect =>
+    ({
+      bottom: size.height,
+      height: size.height,
+      left: 0,
+      right: size.width,
+      top: 0,
+      width: size.width,
+      x: 0,
+      y: 0,
+      toJSON: (): Record<string, number> => ({})
+    } as DOMRect);
+}
+
+/**
+ * 触发最近一个 Selecto mock 实例的 selectEnd 事件。
+ * @param targets - 选中的 DOM 目标
+ * @param shiftKey - 是否追加选择
+ */
+async function emitSelectoEnd(targets: Element[], shiftKey = false): Promise<void> {
+  const instance = selectoMockState.instances.at(-1);
+  instance?.handlers.selectEnd?.({
+    selected: targets,
+    inputEvent: {
+      shiftKey
+    }
+  });
+  await nextTick();
+}
+
+/**
+ * 重置第三方 mock 状态。
+ */
+function resetMockState(): void {
+  selectoMockState.instances.length = 0;
+}
+
 describe('BDrawing', (): void => {
+  beforeEach((): void => {
+    resetMockState();
+  });
+
   it('renders an empty drawing workbench', (): void => {
     const wrapper = mount(BDrawing);
 
     expect(wrapper.find('.b-drawing').exists()).toBe(true);
     expect(wrapper.find('[data-testid="drawing-canvas"]').exists()).toBe(true);
-    expect(wrapper.text()).toContain('开始画图');
+    expect(wrapper.text()).not.toContain('开始画图');
+    expect(wrapper.find('[data-testid="drawing-add-process"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="drawing-delete"]').exists()).toBe(false);
   });
 
   it('selects the process tool and places a node on canvas click', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-process"]').trigger('click');
+    await wrapper.trigger('keydown', { key: 'p' });
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('data-drawing-element-id')).toBe('drawing-node-1');
     expect(wrapper.text()).toContain('流程节点');
   });
 
-  it('keeps the process tool active for repeated canvas placement', async (): Promise<void> => {
+  it('returns to the select tool after creating one process node', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-process"]').trigger('click');
+    await wrapper.trigger('keydown', { key: 'p' });
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
-    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(2);
+    expect(wrapper.find('[data-testid="drawing-select-tool"]').classes()).toContain('is-active');
+    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
     expect(wrapper.findAll('[data-testid="drawing-edge"]')).toHaveLength(0);
   });
 
   it('undoes and redoes manual node creation', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-process"]').trigger('click');
+    await wrapper.trigger('keydown', { key: 'p' });
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('button[aria-label="撤销"]').trigger('click');
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
@@ -51,13 +245,14 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
   });
 
-  it('selects a node and deletes it with the toolbar', async (): Promise<void> => {
+  it('selects a node and deletes it with the keyboard shortcut', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.find('[data-testid="drawing-add-process"]').trigger('click');
+    await wrapper.trigger('keydown', { key: 'p' });
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
-    await wrapper.find('[data-testid="drawing-delete"]').trigger('click');
+    await wrapper.trigger('keydown', { key: 'Delete' });
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
   });
@@ -68,9 +263,10 @@ describe('BDrawing', (): void => {
     });
 
     await wrapper.trigger('keydown', { key: 'p' });
-    expect(wrapper.find('[data-testid="drawing-add-process"]').classes()).toContain('is-active');
+    expect(wrapper.find('[data-testid="drawing-canvas"]').classes()).toContain('is-tool-process');
 
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
 
     await wrapper.trigger('keydown', { key: 'Escape' });
@@ -90,5 +286,423 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-zoom-in"]').trigger('click');
 
     expect(wrapper.find('[data-testid="drawing-zoom-value"]').text()).toBe('110%');
+  });
+
+  it('creates a rectangle with default size from the rect tool click', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    const node = wrapper.find('[data-testid="drawing-node"]');
+    expect(node.attributes('data-drawing-shape')).toBe('rect');
+    expect(node.text()).toContain('矩形');
+    expect(wrapper.find('[data-testid="drawing-select-tool"]').classes()).toContain('is-active');
+  });
+
+  it('does not leave Moveable controls visible while a creation tool is active', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="drawing-add-ellipse"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(false);
+  });
+
+  it('disables Selecto while a creation tool is active', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    await nextTick();
+
+    const initialSelecto = selectoMockState.instances.at(-1);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+
+    expect(initialSelecto?.destroy).toHaveBeenCalledTimes(1);
+    expect(selectoMockState.instances).toHaveLength(1);
+
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+
+    expect(selectoMockState.instances).toHaveLength(2);
+  });
+
+  it('creates a custom sized process node by dragging on the canvas', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+    canvas.element.getBoundingClientRect = (): DOMRect =>
+      ({
+        bottom: 720,
+        height: 720,
+        left: 0,
+        right: 1200,
+        top: 0,
+        width: 1200,
+        x: 0,
+        y: 0,
+        toJSON: (): Record<string, number> => ({})
+      } as DOMRect);
+
+    await wrapper.trigger('keydown', { key: 'p' });
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(canvas.element, 'pointermove', { clientX: 300, clientY: 180 });
+    await dispatchPointerEvent(canvas.element, 'pointerup', { clientX: 300, clientY: 180 });
+
+    const rect = wrapper.find('[data-testid="drawing-shape-rect"]');
+    expect(rect.attributes('width')).toBe('200');
+    expect(rect.attributes('height')).toBe('80');
+    expect(wrapper.find('[data-testid="drawing-select-tool"]').classes()).toContain('is-active');
+  });
+
+  it('shows a preview while dragging a shape', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointermove');
+
+    expect(wrapper.find('[data-testid="drawing-create-preview"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    expect(wrapper.find('[data-testid="drawing-create-preview"]').exists()).toBe(false);
+  });
+
+  it('creates a custom sized ellipse by dragging on the canvas', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+    canvas.element.getBoundingClientRect = (): DOMRect =>
+      ({
+        bottom: 720,
+        height: 720,
+        left: 0,
+        right: 1200,
+        top: 0,
+        width: 1200,
+        x: 0,
+        y: 0,
+        toJSON: (): Record<string, number> => ({})
+      } as DOMRect);
+
+    await wrapper.find('[data-testid="drawing-add-ellipse"]').trigger('click');
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(canvas.element, 'pointermove', { clientX: 260, clientY: 220 });
+    await dispatchPointerEvent(canvas.element, 'pointerup', { clientX: 260, clientY: 220 });
+
+    const node = wrapper.find('[data-testid="drawing-node"]');
+    const ellipse = wrapper.find('[data-testid="drawing-shape-ellipse"]');
+    expect(node.attributes('data-drawing-shape')).toBe('ellipse');
+    expect(ellipse.attributes('rx')).toBe('80');
+    expect(ellipse.attributes('ry')).toBe('60');
+  });
+
+  it('switches to the diamond tool with the D shortcut', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body
+    });
+
+    await wrapper.trigger('keydown', { key: 'd' });
+
+    expect(wrapper.find('[data-testid="drawing-add-diamond"]').classes()).toContain('is-active');
+
+    wrapper.unmount();
+  });
+
+  it('shows Moveable controls for the selected element', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
+  });
+
+  it('disables Moveable snapping for multi selection', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await emitSelectoEnd([nodes[0].element, nodes[1].element]);
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-snappable')).toBe('false');
+  });
+
+  it('provides other nodes as Moveable element snap guidelines for single selection', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+
+    const moveable = wrapper.find('[data-testid="drawing-moveable-mock"]');
+    expect(moveable.attributes('data-snappable')).toBe('true');
+    expect(moveable.attributes('data-guideline-count')).toBe('1');
+    expect(moveable.attributes('data-snap-center')).toBe('true');
+    expect(moveable.attributes('data-snap-middle')).toBe('true');
+    expect(moveable.attributes('data-element-snap-center')).toBe('true');
+    expect(moveable.attributes('data-element-snap-middle')).toBe('true');
+  });
+
+  it('commits Moveable drag end as one undoable geometry update', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="moveable-drag-end"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-50, -16)');
+
+    await wrapper.find('button[aria-label="撤销"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-90, -36)');
+  });
+
+  it('previews Moveable drag before the drag end event commits state', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="moveable-drag"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-50, -16)');
+  });
+
+  it('drags an unselected node and shows Moveable after pointerup', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(false);
+
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')[0].classes()).not.toContain('is-selected');
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="drawing-node"]')[0].attributes('transform')).toBe('translate(-50, -16)');
+
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
+    await nextTick();
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')[0].classes()).toContain('is-selected');
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
+  });
+
+  it('stops direct node dragging after pointerup', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await dispatchPointerEvent(wrapper.find('[data-testid="drawing-node"]').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 180 });
+
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-50, -16)');
+  });
+
+  it('commits direct node drag at the last preview position instead of the pointerup position', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await dispatchPointerEvent(wrapper.find('[data-testid="drawing-node"]').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 220, clientY: 180 });
+
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-50, -16)');
+  });
+
+  it('maps direct node dragging through the rendered canvas scale', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    setCanvasRect(wrapper.find('[data-testid="drawing-canvas"]').element, { width: 600, height: 360 });
+    await dispatchPointerEvent(wrapper.find('[data-testid="drawing-node"]').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 160, clientY: 130 });
+
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(30, 24)');
+  });
+
+  it('commits Moveable resize end events without exposing rotate controls', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="moveable-resize-end"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('240');
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('height')).toBe('120');
+    expect(wrapper.find('[data-testid="moveable-rotate-end"]').exists()).toBe(false);
+  });
+
+  it('previews Moveable resize before the resize end event commits state', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-resize"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-60, 14)');
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('240');
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('height')).toBe('120');
+  });
+
+  it('replaces the selection from a Selecto selectEnd event', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await emitSelectoEnd([nodes[0].element]);
+
+    expect(nodes[0].classes()).toContain('is-selected');
+    expect(nodes[1].classes()).not.toContain('is-selected');
+  });
+
+  it('appends to the current selection when Selecto ends with Shift pressed', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await emitSelectoEnd([nodes[0].element]);
+    await emitSelectoEnd([nodes[1].element], true);
+
+    expect(nodes[0].classes()).toContain('is-selected');
+    expect(nodes[1].classes()).toContain('is-selected');
+  });
+
+  it('keeps selection changes out of the undo stack', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await emitSelectoEnd([wrapper.find('[data-testid="drawing-node"]').element]);
+    await wrapper.find('button[aria-label="撤销"]').trigger('click');
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
+  });
+
+  it('creates a connector by clicking two shapes with the connector tool', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-connector-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await nodes[0].trigger('pointerdown');
+    await nodes[1].trigger('pointerdown');
+
+    expect(wrapper.findAll('[data-testid="drawing-connector"]')).toHaveLength(1);
+  });
+
+  it('updates connector path when a connected shape moves', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-connector-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await nodes[0].trigger('pointerdown');
+    await nodes[1].trigger('pointerdown');
+
+    const initialPath = wrapper.find('[data-testid="drawing-connector-path"]').attributes('d');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-drag-end"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="drawing-connector-path"]').attributes('d')).not.toBe(initialPath);
+  });
+
+  it('removes attached connectors when deleting a connected shape', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-add-rect"]').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-connector-tool"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await nodes[0].trigger('pointerdown');
+    await nodes[1].trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-select-tool"]').trigger('click');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await wrapper.trigger('keydown', { key: 'Delete' });
+
+    expect(wrapper.findAll('[data-testid="drawing-connector"]')).toHaveLength(0);
   });
 });

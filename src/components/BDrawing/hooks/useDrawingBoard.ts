@@ -2,15 +2,20 @@
  * @file useDrawingBoard.ts
  * @description BDrawing 画板状态与命令封装。
  */
-import type { DrawingBoardSnapshot, DrawingBoardState, DrawingNodeType, DrawingPoint } from '../types';
+import type { DrawingBoardSnapshot, DrawingBoardState, DrawingGeometryChange, DrawingNodeType, DrawingPoint, DrawingShapeType } from '../types';
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 import {
+  addDrawingConnector,
   addDrawingNode,
+  addDrawingShape,
   createDrawingBoardState,
   deleteDrawingSelection,
+  moveDrawingElements,
   moveDrawingNode,
   redoDrawingBoard,
+  resizeDrawingElements,
+  rotateDrawingElements,
   undoDrawingBoard,
   updateDrawingNodeText
 } from '../utils/boardTransforms';
@@ -23,12 +28,30 @@ export interface UseDrawingBoardReturn {
   state: Ref<DrawingBoardState>;
   /** 新增节点 */
   addNode: (type: DrawingNodeType, position?: DrawingPoint) => void;
+  /** 开始创建形状草稿 */
+  startCreateShapeDraft: (shape: DrawingShapeType, start: DrawingPoint) => void;
+  /** 更新当前草稿坐标 */
+  updateDraftPoint: (point: DrawingPoint) => void;
+  /** 提交创建形状草稿 */
+  commitCreateShapeDraft: () => void;
+  /** 开始创建连接线草稿 */
+  startCreateConnectorDraft: (sourceId: string) => void;
+  /** 提交创建连接线草稿 */
+  commitCreateConnectorDraft: (targetId: string) => void;
+  /** 清空交互草稿 */
+  clearDraft: () => void;
   /** 撤销 */
   undo: () => void;
   /** 重做 */
   redo: () => void;
   /** 移动节点 */
   moveNode: (nodeId: string, delta: DrawingPoint) => void;
+  /** 移动元素 */
+  moveElements: (changes: DrawingGeometryChange[]) => void;
+  /** 缩放元素 */
+  resizeElements: (changes: DrawingGeometryChange[]) => void;
+  /** 旋转元素 */
+  rotateElements: (changes: DrawingGeometryChange[]) => void;
   /** 删除选区 */
   deleteSelection: () => void;
   /** 更新节点文本 */
@@ -44,7 +67,9 @@ export interface UseDrawingBoardReturn {
  */
 export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDrawingBoardReturn {
   const state = ref<DrawingBoardState>(createDrawingBoardState(snapshot));
-  let nodeIndex = state.value.nodes.length;
+  let nodeIndex = state.value.elements.length;
+  let shapeIndex = state.value.elements.length;
+  let connectorIndex = state.value.elements.length;
 
   /**
    * 更新画板状态。
@@ -69,9 +94,97 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
         })
       );
     },
+    startCreateShapeDraft: (shape: DrawingShapeType, start: DrawingPoint): void => {
+      state.value = {
+        ...state.value,
+        draft: {
+          kind: 'creating-shape',
+          shape,
+          start,
+          current: start
+        },
+        selection: []
+      };
+    },
+    updateDraftPoint: (point: DrawingPoint): void => {
+      if (state.value.draft?.kind !== 'creating-shape') {
+        return;
+      }
+
+      state.value = {
+        ...state.value,
+        draft: {
+          ...state.value.draft,
+          current: point
+        }
+      };
+    },
+    commitCreateShapeDraft: (): void => {
+      const { draft } = state.value;
+      if (draft?.kind !== 'creating-shape') {
+        return;
+      }
+
+      const isProcessShape = draft.shape === 'process';
+      const shapeId = isProcessShape ? `drawing-node-${++nodeIndex}` : `drawing-shape-${++shapeIndex}`;
+
+      setState(
+        addDrawingShape(
+          {
+            ...state.value,
+            draft: undefined
+          },
+          {
+            id: shapeId,
+            shape: draft.shape,
+            start: draft.start,
+            end: draft.current
+          }
+        )
+      );
+    },
+    startCreateConnectorDraft: (sourceId: string): void => {
+      state.value = {
+        ...state.value,
+        draft: {
+          kind: 'creating-connector',
+          sourceId
+        },
+        selection: []
+      };
+    },
+    commitCreateConnectorDraft: (targetId: string): void => {
+      if (state.value.draft?.kind !== 'creating-connector') {
+        return;
+      }
+
+      connectorIndex += 1;
+      setState(
+        addDrawingConnector(
+          {
+            ...state.value,
+            draft: undefined
+          },
+          {
+            id: `drawing-connector-${connectorIndex}`,
+            sourceId: state.value.draft.sourceId,
+            targetId
+          }
+        )
+      );
+    },
+    clearDraft: (): void => {
+      state.value = {
+        ...state.value,
+        draft: undefined
+      };
+    },
     undo: (): void => setState(undoDrawingBoard(state.value)),
     redo: (): void => setState(redoDrawingBoard(state.value)),
     moveNode: (nodeId: string, delta: DrawingPoint): void => setState(moveDrawingNode(state.value, nodeId, delta)),
+    moveElements: (changes: DrawingGeometryChange[]): void => setState(moveDrawingElements(state.value, changes)),
+    resizeElements: (changes: DrawingGeometryChange[]): void => setState(resizeDrawingElements(state.value, changes)),
+    rotateElements: (changes: DrawingGeometryChange[]): void => setState(rotateDrawingElements(state.value, changes)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
     updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),
     setSelection: (selection: string[]): void => {

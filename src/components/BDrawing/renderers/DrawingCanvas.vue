@@ -3,7 +3,14 @@
   @description BDrawing SVG 画布组件。
 -->
 <template>
-  <div class="b-drawing-canvas" :class="`is-tool-${activeTool}`" data-testid="drawing-canvas" @pointerdown="handlePointerDown">
+  <div
+    class="b-drawing-canvas"
+    :class="`is-tool-${activeTool}`"
+    data-testid="drawing-canvas"
+    @pointerdown="handlePointerDown"
+    @pointermove="handlePointerMove"
+    @pointerup="handlePointerUp"
+  >
     <svg class="b-drawing-canvas__svg" :viewBox="viewBox">
       <defs>
         <marker id="b-drawing-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
@@ -11,15 +18,34 @@
         </marker>
       </defs>
 
-      <DrawingEdgeRenderer v-for="edge in edges" :key="edge.id" :edge="edge" :nodes="nodes" />
-      <DrawingNodeRenderer v-for="node in nodes" :key="node.id" :node="node" :selected="selection.includes(node.id)" @select="emit('select', $event)" />
+      <DrawingEdgeRenderer v-for="edge in edges" :key="edge.id" :edge="edge" :elements="elements" />
+      <DrawingConnectorRenderer v-for="connector in connectorElements" :key="connector.id" :connector="connector" :elements="elements" />
+      <DrawingNodeRenderer
+        v-for="element in shapeElements"
+        :key="element.id"
+        :node="element"
+        :selected="selection.includes(element.id)"
+        @select="handleElementSelect"
+      />
+      <DrawingCreatePreview v-if="draft?.kind === 'creating-shape'" :draft="draft" />
     </svg>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { DrawingEdge, DrawingNode, DrawingPoint, DrawingToolMode, DrawingViewport } from '../types';
+import type {
+  DrawingConnectorElement,
+  DrawingEdge,
+  DrawingElement,
+  DrawingInteractionDraft,
+  DrawingPoint,
+  DrawingShapeElement,
+  DrawingToolMode,
+  DrawingViewport
+} from '../types';
 import { computed } from 'vue';
+import DrawingConnectorRenderer from './DrawingConnector.vue';
+import DrawingCreatePreview from './DrawingCreatePreview.vue';
 import DrawingEdgeRenderer from './DrawingEdge.vue';
 import DrawingNodeRenderer from './DrawingNode.vue';
 
@@ -27,8 +53,8 @@ import DrawingNodeRenderer from './DrawingNode.vue';
  * 画布组件入参。
  */
 interface Props {
-  /** 节点列表 */
-  nodes: DrawingNode[];
+  /** 元素列表 */
+  elements: DrawingElement[];
   /** 连线列表 */
   edges: DrawingEdge[];
   /** 选区 */
@@ -37,14 +63,20 @@ interface Props {
   viewport: DrawingViewport;
   /** 当前工具模式 */
   activeTool: DrawingToolMode;
+  /** 当前交互草稿 */
+  draft?: DrawingInteractionDraft;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
   /** 选择元素 */
-  select: [id: string];
+  select: [id: string, event: PointerEvent];
   /** 画布按下 */
   'canvas-pointerdown': [point: DrawingPoint];
+  /** 画布指针移动 */
+  'canvas-pointermove': [point: DrawingPoint];
+  /** 画布指针抬起 */
+  'canvas-pointerup': [point: DrawingPoint];
 }>();
 
 const viewBox = computed<string>(() => {
@@ -53,6 +85,21 @@ const viewBox = computed<string>(() => {
 
   return `${props.viewport.center.x - width / 2} ${props.viewport.center.y - height / 2} ${width} ${height}`;
 });
+
+const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter((element): element is DrawingShapeElement => element.kind === 'shape'));
+const connectorElements = computed<DrawingConnectorElement[]>(() =>
+  props.elements.filter((element): element is DrawingConnectorElement => element.kind === 'connector')
+);
+
+/**
+ * 转发元素按下选择事件。
+ * @param id - 元素 ID
+ * @param event - 指针事件
+ */
+function handleElementSelect(id: string, event: PointerEvent): void {
+  emit('select', id, event);
+}
+
 /**
  * 获取当前 SVG 视口尺寸。
  * @returns SVG 视口尺寸
@@ -90,7 +137,33 @@ function getBoardPoint(event: PointerEvent): DrawingPoint {
  * @param event - 指针事件
  */
 function handlePointerDown(event: PointerEvent): void {
+  const target = event.currentTarget as HTMLElement;
+  if (typeof target.setPointerCapture === 'function') {
+    target.setPointerCapture(event.pointerId);
+  }
+
   emit('canvas-pointerdown', getBoardPoint(event));
+}
+
+/**
+ * 处理画布空白区域移动。
+ * @param event - 指针事件
+ */
+function handlePointerMove(event: PointerEvent): void {
+  emit('canvas-pointermove', getBoardPoint(event));
+}
+
+/**
+ * 处理画布空白区域抬起。
+ * @param event - 指针事件
+ */
+function handlePointerUp(event: PointerEvent): void {
+  const target = event.currentTarget as HTMLElement;
+  if (typeof target.releasePointerCapture === 'function') {
+    target.releasePointerCapture(event.pointerId);
+  }
+
+  emit('canvas-pointerup', getBoardPoint(event));
 }
 </script>
 
@@ -115,6 +188,13 @@ function handlePointerDown(event: PointerEvent): void {
   cursor: crosshair;
 }
 
+.b-drawing-canvas.is-tool-rect,
+.b-drawing-canvas.is-tool-ellipse,
+.b-drawing-canvas.is-tool-diamond,
+.b-drawing-canvas.is-tool-text {
+  cursor: crosshair;
+}
+
 .b-drawing-canvas__svg {
   display: block;
   width: 100%;
@@ -123,21 +203,5 @@ function handlePointerDown(event: PointerEvent): void {
 
 .b-drawing-canvas__arrow-head {
   fill: var(--text-tertiary);
-}
-
-.b-drawing-canvas__empty {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  pointer-events: none;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  box-shadow: var(--shadow-sm);
-  transform: translate(-50%, -50%);
 }
 </style>

@@ -6,39 +6,103 @@
   <div class="b-drawing-toolbar">
     <!-- 顶部水平居中：工具选择 -->
     <div class="b-drawing-toolbar__group b-drawing-toolbar__group--top">
-      <BButton type="text" square size="small" tooltip="选择工具" :class="{ 'is-active': activeTool === 'select' }" @click="emit('set-tool', 'select')">
+      <BButton
+        data-testid="drawing-select-tool"
+        type="text"
+        square
+        size="small"
+        tooltip="选择工具"
+        :class="{ 'is-active': activeTool === 'select' }"
+        @click="emit('set-tool', 'select')"
+      >
         <BIcon icon="lucide:mouse-pointer-2" :size="16" />
       </BButton>
-      <BButton type="text" square size="small" tooltip="拖动画布" :class="{ 'is-active': activeTool === 'hand' }" @click="emit('set-tool', 'hand')">
+      <BButton
+        data-testid="drawing-hand-tool"
+        type="text"
+        square
+        size="small"
+        tooltip="拖动画布"
+        :class="{ 'is-active': activeTool === 'hand' }"
+        @click="emit('set-tool', 'hand')"
+      >
         <BIcon icon="lucide:hand" :size="16" />
       </BButton>
       <span class="b-drawing-toolbar__divider"></span>
-      <BButton type="text" square size="small" tooltip="新增流程节点" :class="{ 'is-active': activeTool === 'process' }" @click="emit('set-tool', 'process')">
-        <BIcon icon="lucide:square-plus" :size="16" />
+      <BButton
+        data-testid="drawing-add-rect"
+        type="text"
+        square
+        size="small"
+        tooltip="矩形"
+        :class="{ 'is-active': activeTool === 'rect' }"
+        @click="emit('set-tool', 'rect')"
+      >
+        <BIcon icon="lucide:square" :size="16" />
       </BButton>
-      <span class="b-drawing-toolbar__divider"></span>
-      <BButton type="text" square size="small" tooltip="删除选中元素" @click="emit('delete')">
-        <BIcon icon="lucide:trash-2" :size="16" />
+      <BButton
+        data-testid="drawing-add-ellipse"
+        type="text"
+        square
+        size="small"
+        tooltip="椭圆"
+        :class="{ 'is-active': activeTool === 'ellipse' }"
+        @click="emit('set-tool', 'ellipse')"
+      >
+        <BIcon icon="lucide:circle" :size="16" />
+      </BButton>
+      <BButton
+        data-testid="drawing-add-diamond"
+        type="text"
+        square
+        size="small"
+        tooltip="菱形"
+        :class="{ 'is-active': activeTool === 'diamond' }"
+        @click="emit('set-tool', 'diamond')"
+      >
+        <BIcon icon="lucide:diamond" :size="16" />
+      </BButton>
+      <BButton
+        data-testid="drawing-add-text"
+        type="text"
+        square
+        size="small"
+        tooltip="文本"
+        :class="{ 'is-active': activeTool === 'text' }"
+        @click="emit('set-tool', 'text')"
+      >
+        <BIcon icon="lucide:type" :size="16" />
+      </BButton>
+      <BButton
+        data-testid="drawing-connector-tool"
+        type="text"
+        square
+        size="small"
+        tooltip="连接线"
+        :class="{ 'is-active': activeTool === 'connector' }"
+        @click="emit('set-tool', 'connector')"
+      >
+        <BIcon icon="lucide:arrow-right" :size="16" />
       </BButton>
     </div>
 
     <!-- 左下角：历史记录 -->
     <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left">
-      <BButton type="text" square size="small" tooltip="撤销" @click="emit('undo')">
+      <BButton type="text" square size="small" tooltip="撤销" aria-label="撤销" @click="emit('undo')">
         <BIcon icon="lucide:undo-2" :size="16" />
       </BButton>
-      <BButton type="text" square size="small" tooltip="重做" @click="emit('redo')">
+      <BButton type="text" square size="small" tooltip="重做" aria-label="重做" @click="emit('redo')">
         <BIcon icon="lucide:redo-2" :size="16" />
       </BButton>
     </div>
 
     <!-- 左下角：缩放控制 -->
     <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left-zoom">
-      <BButton type="text" square size="small" tooltip="缩小" @click="emit('zoom-out')">
+      <BButton data-testid="drawing-zoom-out" type="text" square size="small" tooltip="缩小" @click="emit('zoom-out')">
         <BIcon icon="lucide:minus" :size="16" />
       </BButton>
       <span class="b-drawing-toolbar__zoom" data-testid="drawing-zoom-value">{{ zoomPercent }}</span>
-      <BButton type="text" square size="small" tooltip="放大" @click="emit('zoom-in')">
+      <BButton data-testid="drawing-zoom-in" type="text" square size="small" tooltip="放大" @click="emit('zoom-in')">
         <BIcon icon="lucide:plus" :size="16" />
       </BButton>
     </div>
@@ -69,8 +133,6 @@ const emit = defineEmits<{
   undo: [];
   /** 重做 */
   redo: [];
-  /** 删除 */
-  delete: [];
   /** 放大 */
   'zoom-in': [];
   /** 缩小 */

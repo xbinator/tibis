@@ -12,6 +12,19 @@ export const DRAWING_DEFAULT_NODE_SIZE = {
 } as const;
 
 /**
+ * 拖拽创建形状时触发自定义尺寸的最小边长。
+ */
+export const DRAWING_MIN_CREATE_SIZE = 8;
+
+/**
+ * Moveable 调整元素尺寸时允许的最小尺寸。
+ */
+export const DRAWING_MIN_ELEMENT_SIZE = {
+  width: 16,
+  height: 16
+} as const;
+
+/**
  * 支持的节点类型。
  */
 export const DRAWING_NODE_TYPES = ['process', 'decision', 'actor', 'service', 'database', 'text'] as const;
@@ -32,3 +45,14 @@ export const DRAWING_NODE_TYPE_TEXT: Record<(typeof DRAWING_NODE_TYPES)[number],
   service: '服务',
   text: '文本'
 };
+
+/**
+ * 自由形状默认文案。
+ */
+export const DRAWING_SHAPE_TYPE_TEXT = {
+  diamond: '菱形',
+  ellipse: '椭圆',
+  process: '流程节点',
+  rect: '矩形',
+  text: '文本'
+} as const;

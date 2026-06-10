@@ -1,12 +1,30 @@
 /**
  * @file boardTransforms.ts
- * @description BDrawing 画板状态变换、历史记录与 Plait Core 适配边界。
+ * @description BDrawing 画板状态变换、历史记录与元素数据模型。
  */
-import type { DrawingAddNodeOptions, DrawingBoardSnapshot, DrawingBoardState, DrawingEdge, DrawingNode, DrawingPoint, DrawingViewport } from '../types';
-import type { PlaitElement } from '@plait/core';
-import { createBoard } from '@plait/core';
+import type {
+  DrawingAddConnectorOptions,
+  DrawingAddNodeOptions,
+  DrawingAddShapeOptions,
+  DrawingBoardSnapshot,
+  DrawingBoardState,
+  DrawingConnectorElement,
+  DrawingElement,
+  DrawingGeometryChange,
+  DrawingPoint,
+  DrawingSize,
+  DrawingShapeElement,
+  DrawingShapeType,
+  DrawingViewport
+} from '../types';
 import { cloneDeep } from 'lodash-es';
-import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_NODE_TYPE_TEXT } from '../constants/defaults';
+import {
+  DRAWING_DEFAULT_NODE_SIZE,
+  DRAWING_MIN_CREATE_SIZE,
+  DRAWING_MIN_ELEMENT_SIZE,
+  DRAWING_NODE_TYPE_TEXT,
+  DRAWING_SHAPE_TYPE_TEXT
+} from '../constants/defaults';
 
 /**
  * 创建默认视口。
@@ -26,7 +44,7 @@ function createDefaultViewport(): DrawingViewport {
  */
 function createSnapshot(state: DrawingBoardSnapshot): DrawingBoardSnapshot {
   return {
-    nodes: cloneDeep(state.nodes),
+    elements: cloneDeep(state.elements),
     edges: cloneDeep(state.edges),
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
@@ -34,51 +52,79 @@ function createSnapshot(state: DrawingBoardSnapshot): DrawingBoardSnapshot {
 }
 
 /**
- * 将 BDrawing 节点转换为 Plait Core element。
- * @param node - BDrawing 节点
- * @returns Plait element
+ * 将旧节点类型转换为自由形状类型。
+ * @param type - 旧节点类型
+ * @returns 形状类型
  */
-function nodeToPlaitElement(node: DrawingNode): PlaitElement {
-  return {
-    id: node.id,
-    type: node.type,
-    points: [
-      [node.position.x, node.position.y],
-      [node.position.x + node.size.width, node.position.y + node.size.height]
-    ],
-    text: node.text,
-    description: node.description,
-    metadata: node.metadata
-  };
+function nodeTypeToShape(type: DrawingAddNodeOptions['type']): DrawingShapeType {
+  return type === 'decision' ? 'diamond' : type;
 }
 
 /**
- * 将 BDrawing 连线转换为 Plait Core element。
- * @param edge - BDrawing 连线
- * @returns Plait element
+ * 获取形状默认文案。
+ * @param shape - 形状类型
+ * @returns 默认文案
  */
-function edgeToPlaitElement(edge: DrawingEdge): PlaitElement {
-  return {
-    id: edge.id,
-    type: edge.type,
-    sourceId: edge.sourceId,
-    targetId: edge.targetId,
-    label: edge.label,
-    metadata: edge.metadata
-  };
+function getShapeDefaultText(shape: DrawingShapeType): string {
+  if (shape in DRAWING_SHAPE_TYPE_TEXT) {
+    return DRAWING_SHAPE_TYPE_TEXT[shape as keyof typeof DRAWING_SHAPE_TYPE_TEXT];
+  }
+
+  return DRAWING_NODE_TYPE_TEXT[shape as keyof typeof DRAWING_NODE_TYPE_TEXT];
 }
 
 /**
- * 创建 Plait Core board 并返回其 children 快照。
- * 这是第一版 Vue 渲染层与 Plait Core 的适配边界，后续 transform 会在这里收敛。
- * @param nodes - BDrawing 节点
- * @param edges - BDrawing 连线
- * @returns Plait element 列表
+ * 归一化几何数值，减少 DOM 坐标换算带来的浮点噪声。
+ * @param value - 原始数值
+ * @returns 归一化数值
  */
-function createPlaitChildrenSnapshot(nodes: DrawingNode[], edges: DrawingEdge[]): PlaitElement[] {
-  const board = createBoard([...nodes.map(nodeToPlaitElement), ...edges.map(edgeToPlaitElement)], { readonly: false });
+function normalizeGeometryValue(value: number): number {
+  return Number(value.toFixed(2));
+}
 
-  return board.children;
+/**
+ * 归一化旋转角度到 0 到 360 度之间。
+ * @param rotation - 原始角度
+ * @returns 归一化后的角度
+ */
+function normalizeRotation(rotation: number): number {
+  return normalizeGeometryValue(((rotation % 360) + 360) % 360);
+}
+
+/**
+ * 根据拖拽起止点计算形状几何。
+ * @param start - 拖拽起点
+ * @param end - 拖拽终点
+ * @returns 归一化后的元素位置和尺寸
+ */
+function createShapeGeometry(start: DrawingPoint, end: DrawingPoint): { position: DrawingPoint; size: DrawingSize } {
+  const width = normalizeGeometryValue(Math.abs(end.x - start.x));
+  const height = normalizeGeometryValue(Math.abs(end.y - start.y));
+  const center = {
+    x: (start.x + end.x) / 2,
+    y: (start.y + end.y) / 2
+  };
+
+  if (width < DRAWING_MIN_CREATE_SIZE || height < DRAWING_MIN_CREATE_SIZE) {
+    return {
+      position: {
+        x: normalizeGeometryValue(center.x - DRAWING_DEFAULT_NODE_SIZE.width / 2),
+        y: normalizeGeometryValue(center.y - DRAWING_DEFAULT_NODE_SIZE.height / 2)
+      },
+      size: DRAWING_DEFAULT_NODE_SIZE
+    };
+  }
+
+  return {
+    position: {
+      x: normalizeGeometryValue(Math.min(start.x, end.x)),
+      y: normalizeGeometryValue(Math.min(start.y, end.y))
+    },
+    size: {
+      width,
+      height
+    }
+  };
 }
 
 /**
@@ -88,8 +134,6 @@ function createPlaitChildrenSnapshot(nodes: DrawingNode[], edges: DrawingEdge[])
  * @returns 新状态
  */
 function withHistory(previous: DrawingBoardState, next: DrawingBoardSnapshot): DrawingBoardState {
-  createPlaitChildrenSnapshot(next.nodes, next.edges);
-
   return {
     ...next,
     history: {
@@ -118,25 +162,108 @@ function withError(state: DrawingBoardState, error: Error): DrawingBoardState {
 }
 
 /**
+ * 查找并应用元素几何变更。
+ * @param state - 当前画板状态
+ * @param changes - 几何变更列表
+ * @param applyChange - 单个元素应用逻辑
+ * @returns 新画板状态
+ */
+function applyGeometryChanges(
+  state: DrawingBoardState,
+  changes: DrawingGeometryChange[],
+  applyChange: (element: DrawingShapeElement, change: DrawingGeometryChange) => void
+): DrawingBoardState {
+  const nextElements = cloneDeep(state.elements);
+
+  for (const change of changes) {
+    const element = nextElements.find((item) => item.id === change.id);
+    if (!element) {
+      return withError(state, new Error(`找不到元素: ${change.id}`));
+    }
+    if (element.kind !== 'shape') {
+      return withError(state, new Error(`元素不支持几何变换: ${change.id}`));
+    }
+
+    applyChange(element, change);
+  }
+
+  return withHistory(state, {
+    elements: nextElements,
+    edges: cloneDeep(state.edges),
+    selection: [...state.selection],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 判断元素是否为形状。
+ * @param element - 画板元素
+ * @returns 是否为形状元素
+ */
+function isShapeElement(element: DrawingElement): element is DrawingShapeElement {
+  return element.kind === 'shape';
+}
+
+/**
+ * 判断元素是否为连接线。
+ * @param element - 画板元素
+ * @returns 是否为连接线元素
+ */
+function isConnectorElement(element: DrawingElement): element is DrawingConnectorElement {
+  return element.kind === 'connector';
+}
+
+/**
  * 创建初始画板状态。
  * @param snapshot - 初始快照
  * @returns 画板状态
  */
 export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>): DrawingBoardState {
-  const state = {
-    nodes: cloneDeep(snapshot?.nodes ?? []),
+  return {
+    elements: cloneDeep(snapshot?.elements ?? []),
     edges: cloneDeep(snapshot?.edges ?? []),
     selection: [...(snapshot?.selection ?? [])],
     viewport: cloneDeep(snapshot?.viewport ?? createDefaultViewport()),
+    draft: cloneDeep(snapshot?.draft),
     history: {
       past: [],
       future: []
     }
   };
+}
 
-  createPlaitChildrenSnapshot(state.nodes, state.edges);
+/**
+ * 新增一个自由形状元素。
+ * @param state - 当前画板状态
+ * @param options - 新形状参数
+ * @returns 新画板状态
+ */
+export function addDrawingShape(state: DrawingBoardState, options: DrawingAddShapeOptions): DrawingBoardState {
+  if (state.elements.some((element) => element.id === options.id)) {
+    return withError(state, new Error(`元素已存在: ${options.id}`));
+  }
 
-  return state;
+  const geometry = createShapeGeometry(options.start, options.end);
+  const element: DrawingShapeElement = {
+    id: options.id,
+    kind: 'shape',
+    shape: options.shape,
+    text: options.text ?? getShapeDefaultText(options.shape),
+    position: cloneDeep(geometry.position),
+    size: cloneDeep(geometry.size),
+    rotation: 0,
+    metadata: {
+      source: 'user',
+      createdAt: options.createdAt ?? Date.now()
+    }
+  };
+
+  return withHistory(state, {
+    elements: [...cloneDeep(state.elements), element],
+    edges: cloneDeep(state.edges),
+    selection: [element.id],
+    viewport: cloneDeep(state.viewport)
+  });
 }
 
 /**
@@ -146,17 +273,19 @@ export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>
  * @returns 新画板状态
  */
 export function addDrawingNode(state: DrawingBoardState, options: DrawingAddNodeOptions): DrawingBoardState {
-  if (state.nodes.some((node) => node.id === options.id)) {
+  if (state.elements.some((element) => element.id === options.id)) {
     return withError(state, new Error(`节点已存在: ${options.id}`));
   }
 
-  const node: DrawingNode = {
+  const node: DrawingShapeElement = {
     id: options.id,
-    type: options.type,
+    kind: 'shape',
+    shape: nodeTypeToShape(options.type),
     text: options.text ?? DRAWING_NODE_TYPE_TEXT[options.type],
     description: options.description,
     position: cloneDeep(options.position ?? state.viewport.center),
     size: cloneDeep(options.size ?? DRAWING_DEFAULT_NODE_SIZE),
+    rotation: 0,
     metadata: {
       source: 'user',
       createdAt: options.createdAt ?? Date.now()
@@ -164,9 +293,61 @@ export function addDrawingNode(state: DrawingBoardState, options: DrawingAddNode
   };
 
   return withHistory(state, {
-    nodes: [...cloneDeep(state.nodes), node],
+    elements: [...cloneDeep(state.elements), node],
     edges: cloneDeep(state.edges),
     selection: [node.id],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 新增一个连接线元素。
+ * @param state - 当前画板状态
+ * @param options - 新连接线参数
+ * @returns 新画板状态
+ */
+export function addDrawingConnector(state: DrawingBoardState, options: DrawingAddConnectorOptions): DrawingBoardState {
+  if (state.elements.some((element) => element.id === options.id)) {
+    return withError(state, new Error(`元素已存在: ${options.id}`));
+  }
+
+  const source = state.elements.find((element) => element.id === options.sourceId);
+  const target = state.elements.find((element) => element.id === options.targetId);
+  if (!source || !isShapeElement(source)) {
+    return withError(state, new Error(`找不到连接起点: ${options.sourceId}`));
+  }
+  if (!target || !isShapeElement(target)) {
+    return withError(state, new Error(`找不到连接目标: ${options.targetId}`));
+  }
+  if (source.id === target.id) {
+    return withError(state, new Error('连接线起点和终点不能相同'));
+  }
+
+  const connector: DrawingConnectorElement = {
+    id: options.id,
+    kind: 'connector',
+    source: {
+      elementId: options.sourceId,
+      anchor: 'center'
+    },
+    target: {
+      elementId: options.targetId,
+      anchor: 'center'
+    },
+    label: options.label,
+    position: { x: 0, y: 0 },
+    size: { width: 0, height: 0 },
+    rotation: 0,
+    metadata: {
+      source: 'user',
+      createdAt: options.createdAt ?? Date.now()
+    }
+  };
+
+  return withHistory(state, {
+    elements: [...cloneDeep(state.elements), connector],
+    edges: cloneDeep(state.edges),
+    selection: [connector.id],
     viewport: cloneDeep(state.viewport)
   });
 }
@@ -214,6 +395,25 @@ export function redoDrawingBoard(state: DrawingBoardState): DrawingBoardState {
 }
 
 /**
+ * 移动画板元素。
+ * @param state - 当前画板状态
+ * @param changes - 位置变更
+ * @returns 新画板状态
+ */
+export function moveDrawingElements(state: DrawingBoardState, changes: DrawingGeometryChange[]): DrawingBoardState {
+  return applyGeometryChanges(state, changes, (element: DrawingShapeElement, change: DrawingGeometryChange): void => {
+    if (!change.position) {
+      return;
+    }
+
+    element.position = {
+      x: normalizeGeometryValue(change.position.x),
+      y: normalizeGeometryValue(change.position.y)
+    };
+  });
+}
+
+/**
  * 移动画板节点。
  * @param state - 当前画板状态
  * @param nodeId - 节点 ID
@@ -221,22 +421,59 @@ export function redoDrawingBoard(state: DrawingBoardState): DrawingBoardState {
  * @returns 新画板状态
  */
 export function moveDrawingNode(state: DrawingBoardState, nodeId: string, delta: DrawingPoint): DrawingBoardState {
-  const nextNodes = cloneDeep(state.nodes);
-  const node = nextNodes.find((item) => item.id === nodeId);
-  if (!node) {
+  const node = state.elements.find((item) => item.id === nodeId);
+  if (!node || !isShapeElement(node)) {
     return withError(state, new Error(`找不到节点: ${nodeId}`));
   }
 
-  node.position = {
-    x: node.position.x + delta.x,
-    y: node.position.y + delta.y
-  };
+  return moveDrawingElements(state, [
+    {
+      id: nodeId,
+      position: {
+        x: node.position.x + delta.x,
+        y: node.position.y + delta.y
+      }
+    }
+  ]);
+}
 
-  return withHistory(state, {
-    nodes: nextNodes,
-    edges: cloneDeep(state.edges),
-    selection: [...state.selection],
-    viewport: cloneDeep(state.viewport)
+/**
+ * 缩放画板元素。
+ * @param state - 当前画板状态
+ * @param changes - 尺寸变更
+ * @returns 新画板状态
+ */
+export function resizeDrawingElements(state: DrawingBoardState, changes: DrawingGeometryChange[]): DrawingBoardState {
+  return applyGeometryChanges(state, changes, (element: DrawingShapeElement, change: DrawingGeometryChange): void => {
+    if (change.position) {
+      element.position = {
+        x: normalizeGeometryValue(change.position.x),
+        y: normalizeGeometryValue(change.position.y)
+      };
+    }
+
+    if (change.size) {
+      element.size = {
+        width: Math.max(DRAWING_MIN_ELEMENT_SIZE.width, normalizeGeometryValue(change.size.width)),
+        height: Math.max(DRAWING_MIN_ELEMENT_SIZE.height, normalizeGeometryValue(change.size.height))
+      };
+    }
+  });
+}
+
+/**
+ * 旋转画板元素。
+ * @param state - 当前画板状态
+ * @param changes - 旋转变更
+ * @returns 新画板状态
+ */
+export function rotateDrawingElements(state: DrawingBoardState, changes: DrawingGeometryChange[]): DrawingBoardState {
+  return applyGeometryChanges(state, changes, (element: DrawingShapeElement, change: DrawingGeometryChange): void => {
+    if (change.rotation === undefined) {
+      return;
+    }
+
+    element.rotation = normalizeRotation(change.rotation);
   });
 }
 
@@ -251,11 +488,21 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
   }
 
   const selected = new Set(state.selection);
-  const nextNodes = state.nodes.filter((node) => !selected.has(node.id));
+  const selectedShapeIds = new Set(state.elements.filter((element) => selected.has(element.id) && isShapeElement(element)).map((element) => element.id));
+  const nextElements = state.elements.filter((element) => {
+    if (selected.has(element.id)) {
+      return false;
+    }
+    if (isConnectorElement(element)) {
+      return !selectedShapeIds.has(element.source.elementId) && !selectedShapeIds.has(element.target.elementId);
+    }
+
+    return true;
+  });
   const nextEdges = state.edges.filter((edge) => !selected.has(edge.id) && !selected.has(edge.sourceId) && !selected.has(edge.targetId));
 
   return withHistory(state, {
-    nodes: nextNodes,
+    elements: nextElements,
     edges: nextEdges,
     selection: [],
     viewport: cloneDeep(state.viewport)
@@ -270,16 +517,16 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
  * @returns 新画板状态
  */
 export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, text: string): DrawingBoardState {
-  const nextNodes = cloneDeep(state.nodes);
-  const node = nextNodes.find((item) => item.id === nodeId);
-  if (!node) {
+  const nextElements = cloneDeep(state.elements);
+  const node = nextElements.find((item) => item.id === nodeId);
+  if (!node || !isShapeElement(node)) {
     return withError(state, new Error(`找不到节点: ${nodeId}`));
   }
 
   node.text = text;
 
   return withHistory(state, {
-    nodes: nextNodes,
+    elements: nextElements,
     edges: cloneDeep(state.edges),
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)

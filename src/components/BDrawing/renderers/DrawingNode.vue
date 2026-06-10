@@ -4,20 +4,38 @@
 -->
 <template>
   <g
-    class="b-drawing-node"
+    class="b-drawing-node b-drawing-element"
     :class="{ 'is-selected': selected }"
     data-testid="drawing-node"
-    :transform="`translate(${node.position.x}, ${node.position.y})`"
-    @pointerdown.stop="emit('select', node.id)"
+    :data-drawing-element-id="node.id"
+    :data-drawing-shape="node.shape"
+    :transform="nodeTransform"
+    @pointerdown.stop="emit('select', node.id, $event)"
   >
-    <polygon v-if="node.type === 'decision'" class="b-drawing-node__shape" :points="diamondPoints" />
-    <rect v-else class="b-drawing-node__shape" :width="node.size.width" :height="node.size.height" :rx="node.type === 'text' ? 0 : 10" />
+    <polygon v-if="isDiamondShape" class="b-drawing-node__shape" data-testid="drawing-shape-diamond" :points="diamondPoints" />
+    <ellipse
+      v-else-if="node.shape === 'ellipse'"
+      class="b-drawing-node__shape"
+      data-testid="drawing-shape-ellipse"
+      :cx="node.size.width / 2"
+      :cy="node.size.height / 2"
+      :rx="node.size.width / 2"
+      :ry="node.size.height / 2"
+    />
+    <rect
+      v-else
+      class="b-drawing-node__shape"
+      data-testid="drawing-shape-rect"
+      :width="node.size.width"
+      :height="node.size.height"
+      :rx="node.shape === 'text' ? 0 : 10"
+    />
     <text class="b-drawing-node__text" :x="node.size.width / 2" :y="node.size.height / 2">{{ node.text }}</text>
   </g>
 </template>
 
 <script setup lang="ts">
-import type { DrawingNode } from '../types';
+import type { DrawingShapeElement } from '../types';
 import { computed } from 'vue';
 
 /**
@@ -25,7 +43,7 @@ import { computed } from 'vue';
  */
 interface Props {
   /** 节点 */
-  node: DrawingNode;
+  node: DrawingShapeElement;
   /** 是否选中 */
   selected?: boolean;
 }
@@ -36,9 +54,20 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   /** 选择节点 */
-  select: [id: string];
+  select: [id: string, event: PointerEvent];
 }>();
 
+const isDiamondShape = computed<boolean>(() => props.node.shape === 'decision' || props.node.shape === 'diamond');
+const nodeTransform = computed<string>(() => {
+  const rotateCenterX = props.node.size.width / 2;
+  const rotateCenterY = props.node.size.height / 2;
+
+  if (!props.node.rotation) {
+    return `translate(${props.node.position.x}, ${props.node.position.y})`;
+  }
+
+  return `translate(${props.node.position.x}, ${props.node.position.y}) rotate(${props.node.rotation}, ${rotateCenterX}, ${rotateCenterY})`;
+});
 const diamondPoints = computed<string>(() => {
   const halfWidth = props.node.size.width / 2;
   const halfHeight = props.node.size.height / 2;
