@@ -31,11 +31,16 @@ import { computed } from 'vue';
 import { createDrawingDiamondPoints, isDrawingDiamondShape } from '../utils/drawingGeometry';
 
 /**
+ * 创建形状草稿。
+ */
+type DrawingCreateShapeDraft = Extract<DrawingInteractionDraft, { kind: 'creating-shape' }>;
+
+/**
  * 创建预览组件入参。
  */
 interface Props {
   /** 当前创建草稿 */
-  draft: DrawingInteractionDraft;
+  draft: DrawingCreateShapeDraft;
 }
 
 const props = defineProps<Props>();

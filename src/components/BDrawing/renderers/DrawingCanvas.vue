@@ -28,7 +28,7 @@
         :selected="selection.includes(element.id)"
         @select="handleElementSelect"
       />
-      <DrawingCreatePreview v-if="draft?.kind === 'creating-shape'" :draft="draft" />
+      <DrawingCreatePreview v-if="shapeDraft" :draft="shapeDraft" />
     </svg>
   </div>
 </template>
@@ -51,6 +51,11 @@ import DrawingConnectorRenderer from './DrawingConnector.vue';
 import DrawingCreatePreview from './DrawingCreatePreview.vue';
 import DrawingEdgeRenderer from './DrawingEdge.vue';
 import DrawingNodeRenderer from './DrawingNode.vue';
+
+/**
+ * 创建形状草稿。
+ */
+type DrawingCreateShapeDraft = Extract<DrawingInteractionDraft, { kind: 'creating-shape' }>;
 
 /**
  * 画布组件入参。
@@ -96,6 +101,8 @@ const viewBox = computed<string>(() => createDrawingViewBox(props.viewport, prop
 
 const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter(isDrawingShapeElement));
 const connectorElements = computed<DrawingConnectorElement[]>(() => props.elements.filter(isDrawingConnectorElement));
+/** 当前创建形状草稿，供预览组件使用。 */
+const shapeDraft = computed<DrawingCreateShapeDraft | undefined>(() => (props.draft?.kind === 'creating-shape' ? props.draft : undefined));
 
 /** 将拖拽中的节点排到末尾，使其渲染在最上层。 */
 const sortedShapeElements = computed<DrawingShapeElement[]>(() => {
