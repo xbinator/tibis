@@ -4,9 +4,11 @@
  * @vitest-environment jsdom
  */
 import { nextTick } from 'vue';
-import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
+import { config, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
+import DrawingEdgeRenderer from '@/components/BDrawing/renderers/DrawingEdge.vue';
+import type { DrawingEdge, DrawingElement } from '@/components/BDrawing/types';
 
 const selectoMockState = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -306,6 +308,7 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         :data-element-snap-center="String(elementSnapDirections.center)"
         :data-element-snap-middle="String(elementSnapDirections.middle)"
       >
+        <span v-if="$attrs.control">{{ $attrs.control }}</span>
         <button
           data-testid="moveable-drag"
           @click="$emit('drag', { target: target[0], translate: [40, 20] })"
@@ -337,6 +340,17 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         <button
           data-testid="moveable-resize-group-end"
           @click="$emit('resize-group-end', { events: target.map((item) => ({ target: item, width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })) })"
+        ></button>
+        <button
+          data-testid="moveable-zoomed-resize-group-end"
+          @click="$emit('resize-group-end', {
+            events: target.map((item) => ({
+              target: item,
+              width: 264,
+              height: 132,
+              drag: { beforeTranslate: [33, 55] }
+            }))
+          })"
         ></button>
         <button
           data-testid="moveable-real-resize-group-end"
@@ -378,6 +392,25 @@ vi.mock('selecto', () => ({
     }
   }
 }));
+
+config.global.components = {
+  BButton: {
+    name: 'BButton',
+    inheritAttrs: false,
+    props: {
+      tooltip: {
+        type: String,
+        default: ''
+      }
+    },
+    emits: ['click'],
+    template: '<button v-bind="$attrs" :aria-label="$attrs[\'aria-label\'] || tooltip" @click="$emit(\'click\')"><slot /></button>'
+  },
+  BIcon: {
+    name: 'BIcon',
+    template: '<span></span>'
+  }
+};
 
 /**
  * 派发带浏览器坐标的指针事件。
@@ -974,6 +1007,18 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
   });
 
+  it('does not render a numeric control placeholder when Moveable control count is zero', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').text()).not.toContain('0');
+  });
+
   it('syncs Moveable visual zoom with the drawing viewport zoom', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
@@ -1095,6 +1140,28 @@ describe('BDrawing', (): void => {
     await emitSelectoEnd([nodes[0].element, nodes[1].element]);
     await nextTick();
     await wrapper.find('[data-testid="moveable-resize-group-end"]').trigger('click');
+
+    expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('width'))).toEqual(['240', '240']);
+    expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('height'))).toEqual(['120', '120']);
+  });
+
+  it('keeps Moveable group resize dimensions in board units after viewport zoom', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await canvas.trigger('pointerdown');
+    await canvas.trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await canvas.trigger('pointerdown');
+    await canvas.trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
+    await dispatchWheelEvent(canvas.element, { clientX: 600, clientY: 360, ctrlKey: true, deltaY: -100 });
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await emitSelectoEnd([nodes[0].element, nodes[1].element]);
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-zoomed-resize-group-end"]').trigger('click');
 
     expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('width'))).toEqual(['240', '240']);
     expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('height'))).toEqual(['120', '120']);
@@ -1399,5 +1466,29 @@ describe('BDrawing', (): void => {
     await wrapper.trigger('keydown', { key: 'Delete' });
 
     expect(wrapper.findAll('[data-testid="drawing-connector"]')).toHaveLength(0);
+  });
+});
+
+describe('DrawingEdgeRenderer', (): void => {
+  it('hides the edge DOM when either endpoint is missing', (): void => {
+    const edge: DrawingEdge = {
+      id: 'edge-1',
+      type: 'arrow',
+      sourceId: 'missing-source',
+      targetId: 'missing-target',
+      metadata: {
+        source: 'user',
+        createdAt: 1
+      }
+    };
+    const elements: DrawingElement[] = [];
+    const wrapper = mount(DrawingEdgeRenderer, {
+      props: {
+        edge,
+        elements
+      }
+    });
+
+    expect(wrapper.find('[data-testid="drawing-edge"]').exists()).toBe(false);
   });
 });

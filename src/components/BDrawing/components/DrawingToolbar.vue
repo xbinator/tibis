@@ -69,8 +69,6 @@
 <script setup lang="ts">
 import type { DrawingElement, DrawingPoint, DrawingSize, DrawingToolMode, DrawingViewport } from '../types';
 import { computed } from 'vue';
-import BButton from '@/components/BButton/index.vue';
-import BIcon from '@/components/BIcon/index.vue';
 import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM } from '../constants/defaults';
 import DrawingMinimap from './DrawingMinimap.vue';
 
