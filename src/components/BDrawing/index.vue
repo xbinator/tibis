@@ -516,6 +516,11 @@ function handleElementSelect(id: string, event: PointerEvent): void {
     return;
   }
 
+  /* 形状创建工具（rect/ellipse/diamond/text/process）激活时，禁止选中已有节点，让点击穿透到画布创建形状 */
+  if (getActiveCreateShape()) {
+    return;
+  }
+
   if (activeTool.value !== 'connector') {
     if (board.state.value.selection.includes(id)) {
       return;

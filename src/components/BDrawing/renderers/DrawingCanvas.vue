@@ -228,6 +228,15 @@ function handleWheel(event: WheelEvent): void {
   cursor: crosshair;
 }
 
+/* 形状创建工具激活时，禁止已有节点拦截指针事件，让点击穿透到画布以创建新形状 */
+.b-drawing-canvas.is-tool-rect .b-drawing-element,
+.b-drawing-canvas.is-tool-ellipse .b-drawing-element,
+.b-drawing-canvas.is-tool-diamond .b-drawing-element,
+.b-drawing-canvas.is-tool-text .b-drawing-element,
+.b-drawing-canvas.is-tool-process .b-drawing-element {
+  pointer-events: none;
+}
+
 .b-drawing-canvas__svg {
   display: block;
   width: 100%;
