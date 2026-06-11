@@ -65,14 +65,6 @@ const DRAWING_TOOLBAR_HISTORY_BUTTON_INDEX: Record<DrawingToolbarHistoryAction, 
 };
 
 /**
- * 工具栏缩放按钮在缩放按钮组中的位置。
- */
-const DRAWING_TOOLBAR_ZOOM_BUTTON_INDEX: Record<DrawingToolbarZoomAction, number> = {
-  in: 2,
-  out: 0
-};
-
-/**
  * 查找绘图工具栏中的工具按钮。
  * @param wrapper - BDrawing 测试包装器
  * @param tool - 工具类型
@@ -99,7 +91,7 @@ function findDrawingToolbarHistoryButton(wrapper: VueWrapper, action: DrawingToo
  * @returns 缩放按钮包装器
  */
 function findDrawingToolbarZoomButton(wrapper: VueWrapper, action: DrawingToolbarZoomAction): DOMWrapper<Element> {
-  return wrapper.findAll('.b-drawing-toolbar__group--bottom-left-zoom button')[DRAWING_TOOLBAR_ZOOM_BUTTON_INDEX[action]];
+  return wrapper.find(`[aria-label="${action === 'in' ? '放大' : '缩小'}"]`);
 }
 
 /**
@@ -109,6 +101,16 @@ function findDrawingToolbarZoomButton(wrapper: VueWrapper, action: DrawingToolba
  */
 function findDrawingToolbarZoomValue(wrapper: VueWrapper): DOMWrapper<Element> {
   return wrapper.find('.b-drawing-toolbar__zoom');
+}
+
+/**
+ * 通过元素 ID 查找绘图节点。
+ * @param wrapper - BDrawing 测试包装器
+ * @param id - 元素 ID
+ * @returns 节点包装器
+ */
+function findDrawingNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
+  return wrapper.find(`[data-drawing-element-id="${id}"]`);
 }
 
 /**
@@ -335,6 +337,15 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         <button
           data-testid="moveable-resize-group-end"
           @click="$emit('resize-group-end', { events: target.map((item) => ({ target: item, width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })) })"
+        ></button>
+        <button
+          data-testid="moveable-real-resize-group-end"
+          @click="$emit('resize-group-end', {
+            events: target.map((item) => ({
+              target: item,
+              lastEvent: { width: 240, height: 120, drag: { beforeTranslate: [30, 50] } }
+            }))
+          })"
         ></button>
         <button v-if="rotatable" data-testid="moveable-rotate-end" @click="$emit('rotate-end', { target: target[0], beforeRotate: -30 })"></button>
       </div>
@@ -1089,6 +1100,27 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('height'))).toEqual(['120', '120']);
   });
 
+  it('keeps resized multi selection dimensions after the next group drag', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await emitSelectoEnd([nodes[0].element, nodes[1].element]);
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-real-resize-group-end"]').trigger('click');
+    await wrapper.find('[data-testid="moveable-drag-group-end"]').trigger('click');
+
+    expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('width'))).toEqual(['240', '240']);
+    expect(wrapper.findAll('[data-testid="drawing-shape-rect"]').map((shape) => shape.attributes('height'))).toEqual(['120', '120']);
+  });
+
   it('provides other nodes as Moveable element snap guidelines for single selection', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -1150,20 +1182,21 @@ describe('BDrawing', (): void => {
     await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    const nodeId = wrapper.findAll('[data-testid="drawing-node"]')[0].attributes('data-drawing-element-id') ?? '';
+    await dispatchPointerEvent(findDrawingNodeById(wrapper, nodeId).element, 'pointerdown', { clientX: 100, clientY: 100 });
 
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(false);
 
     await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
 
-    expect(wrapper.findAll('[data-testid="drawing-node"]')[0].classes()).not.toContain('is-selected');
+    expect(findDrawingNodeById(wrapper, nodeId).classes()).not.toContain('is-selected');
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(false);
-    expect(wrapper.findAll('[data-testid="drawing-node"]')[0].attributes('transform')).toBe('translate(-50, -16)');
+    expect(findDrawingNodeById(wrapper, nodeId).attributes('transform')).toBe('translate(-50, -16)');
 
     await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
     await nextTick();
 
-    expect(wrapper.findAll('[data-testid="drawing-node"]')[0].classes()).toContain('is-selected');
+    expect(findDrawingNodeById(wrapper, nodeId).classes()).toContain('is-selected');
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
   });
 

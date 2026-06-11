@@ -74,6 +74,21 @@ interface MoveableDragEvent extends MoveableTargetEvent {
 }
 
 /**
+ * Moveable 缩放尺寸数据。
+ */
+interface MoveableResizePayload {
+  /** DOM 宽度 */
+  width?: number;
+  /** DOM 高度 */
+  height?: number;
+  /** 缩放期间的拖动补偿 */
+  drag?: {
+    /** DOM 坐标平移量 */
+    beforeTranslate?: [number, number];
+  };
+}
+
+/**
  * Moveable 缩放结束事件。
  */
 interface MoveableResizeEndEvent extends MoveableTargetEvent {
@@ -86,6 +101,8 @@ interface MoveableResizeEndEvent extends MoveableTargetEvent {
     /** DOM 坐标平移量 */
     beforeTranslate?: [number, number];
   };
+  /** Moveable resizeEnd 携带的最后一帧缩放数据 */
+  lastEvent?: MoveableResizePayload;
 }
 
 /**
@@ -127,8 +144,16 @@ const emit = defineEmits<{
   resize: [changes: DrawingGeometryChange[]];
 }>();
 
+/**
+ * Moveable 组件公开实例。
+ */
+interface MoveableInstance {
+  /** 重新计算控制框位置 */
+  updateRect: () => void;
+}
+
 const targets = ref<Element[]>([]);
-const moveableRef = ref<InstanceType<typeof VueMoveable> | null>(null);
+const moveableRef = ref<MoveableInstance | null>(null);
 /** 单选拖拽时用于元素间吸附的其它画板节点。 */
 const guidelineTargets = ref<Element[]>([]);
 const singleTarget = computed<boolean>(() => targets.value.length === 1);
@@ -263,6 +288,15 @@ function createMoveChange(event: MoveableDragEndEvent): DrawingGeometryChange | 
 }
 
 /**
+ * 读取 Moveable 缩放事件中的最后有效尺寸。
+ * @param event - Moveable 缩放或缩放结束事件
+ * @returns 缩放尺寸数据
+ */
+function getResizePayload(event: MoveableResizeEndEvent): MoveableResizePayload {
+  return event.lastEvent ?? event;
+}
+
+/**
  * 从缩放结束事件创建几何尺寸变更。
  * @param event - Moveable 缩放结束事件
  * @returns 几何变更，事件不完整时返回 null
@@ -270,11 +304,12 @@ function createMoveChange(event: MoveableDragEndEvent): DrawingGeometryChange | 
 function createResizeChange(event: MoveableResizeEndEvent): DrawingGeometryChange | null {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
-  if (!id || !element || event.width === undefined || event.height === undefined) {
+  const payload = getResizePayload(event);
+  if (!id || !element || payload.width === undefined || payload.height === undefined) {
     return null;
   }
 
-  const translate = event.drag?.beforeTranslate ?? [0, 0];
+  const translate = payload.drag?.beforeTranslate ?? [0, 0];
   return {
     id,
     position: {
@@ -282,8 +317,8 @@ function createResizeChange(event: MoveableResizeEndEvent): DrawingGeometryChang
       y: element.position.y + domDeltaToWorld(translate[1])
     },
     size: {
-      width: event.width,
-      height: event.height
+      width: payload.width,
+      height: payload.height
     }
   };
 }

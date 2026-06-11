@@ -39,13 +39,13 @@
         <BIcon icon="lucide:redo-2" :size="16" />
       </BButton>
       <span class="b-drawing-toolbar__divider"></span>
-      <BButton type="text" square size="small" :disabled="!canZoomOut" @click="emit('zoom-out')">
+      <BButton type="text" square size="small" aria-label="缩小" :disabled="!canZoomOut" @click="emit('zoom-out')">
         <BIcon icon="lucide:minus" :size="16" />
       </BButton>
       <button class="b-drawing-toolbar__zoom" type="button" @click="emit('reset-zoom')">
         {{ zoomPercent }}
       </button>
-      <BButton type="text" square size="small" :disabled="!canZoomIn" @click="emit('zoom-in')">
+      <BButton type="text" square size="small" aria-label="放大" :disabled="!canZoomIn" @click="emit('zoom-in')">
         <BIcon icon="lucide:plus" :size="16" />
       </BButton>
       <span class="b-drawing-toolbar__divider"></span>
