@@ -3,7 +3,7 @@
   @description BDrawing Moveable 控制器适配层。
 -->
 <template>
-  <div v-if="enabled && targets.length" class="b-drawing-moveable-layer">
+  <div v-if="shouldShowMoveableLayer" class="b-drawing-moveable-layer">
     <VueMoveable
       ref="moveableRef"
       :target="targets"
@@ -157,6 +157,8 @@ const moveableRef = ref<MoveableInstance | null>(null);
 /** 单选拖拽时用于元素间吸附的其它画板节点。 */
 const guidelineTargets = ref<Element[]>([]);
 const singleTarget = computed<boolean>(() => targets.value.length === 1);
+/** 是否展示 Moveable 控制层。 */
+const shouldShowMoveableLayer = computed<boolean>(() => props.enabled && targets.value.length > 0);
 /** Moveable 元素吸附方向，显式包含中心线和中线。 */
 const snapDirections: SnapDirections = {
   bottom: true,
@@ -219,6 +221,18 @@ function createPreviewTransform(element: DrawingElement, translate: [number, num
     size,
     element.rotation
   );
+}
+
+/**
+ * 将 Moveable 多选缩放尺寸转换为画板坐标尺寸。
+ * @param size - Moveable 事件中的尺寸
+ * @returns 画板坐标尺寸
+ */
+function groupResizeSizeToWorld(size: DrawingSize): DrawingSize {
+  return {
+    width: domDeltaToWorld(size.width),
+    height: domDeltaToWorld(size.height)
+  };
 }
 
 /**
@@ -299,9 +313,10 @@ function getResizePayload(event: MoveableResizeEndEvent): MoveableResizePayload 
 /**
  * 从缩放结束事件创建几何尺寸变更。
  * @param event - Moveable 缩放结束事件
+ * @param shouldConvertGroupSize - 是否将多选缩放尺寸从 DOM 坐标转换为画板坐标
  * @returns 几何变更，事件不完整时返回 null
  */
-function createResizeChange(event: MoveableResizeEndEvent): DrawingGeometryChange | null {
+function createResizeChange(event: MoveableResizeEndEvent, shouldConvertGroupSize = false): DrawingGeometryChange | null {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
   const payload = getResizePayload(event);
@@ -310,16 +325,16 @@ function createResizeChange(event: MoveableResizeEndEvent): DrawingGeometryChang
   }
 
   const translate = payload.drag?.beforeTranslate ?? [0, 0];
+  const size = shouldConvertGroupSize
+    ? groupResizeSizeToWorld({ width: payload.width, height: payload.height })
+    : { width: payload.width, height: payload.height };
   return {
     id,
     position: {
       x: element.position.x + domDeltaToWorld(translate[0]),
       y: element.position.y + domDeltaToWorld(translate[1])
     },
-    size: {
-      width: payload.width,
-      height: payload.height
-    }
+    size
   };
 }
 
@@ -366,8 +381,9 @@ function handleDrag(event: MoveableDragEvent): void {
 /**
  * 处理 Moveable 缩放过程。
  * @param event - Moveable 缩放过程事件
+ * @param shouldConvertGroupSize - 是否将多选缩放尺寸从 DOM 坐标转换为画板坐标
  */
-function handleResize(event: MoveableResizeEvent): void {
+function handleResize(event: MoveableResizeEvent, shouldConvertGroupSize = false): void {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
   if (!event.target || !element || event.width === undefined || event.height === undefined) {
@@ -375,10 +391,7 @@ function handleResize(event: MoveableResizeEvent): void {
   }
 
   const translate = event.drag?.beforeTranslate ?? [0, 0];
-  const size = {
-    width: event.width,
-    height: event.height
-  };
+  const size = shouldConvertGroupSize ? groupResizeSizeToWorld({ width: event.width, height: event.height }) : { width: event.width, height: event.height };
 
   event.target.setAttribute('transform', createPreviewTransform(element, translate, size));
   updateShapePreviewSize(event.target, element, size);
@@ -437,7 +450,7 @@ function handleResizeEnd(event: MoveableResizeEndEvent): void {
  * @param event - Moveable 多目标缩放过程事件
  */
 function handleResizeGroup(event: MoveableGroupEvent<MoveableResizeEvent>): void {
-  event.events?.forEach(handleResize);
+  event.events?.forEach((resizeEvent: MoveableResizeEvent): void => handleResize(resizeEvent, true));
 }
 
 /**
@@ -445,7 +458,10 @@ function handleResizeGroup(event: MoveableGroupEvent<MoveableResizeEvent>): void
  * @param event - Moveable 多目标缩放结束事件
  */
 function handleResizeGroupEnd(event: MoveableGroupEvent<MoveableResizeEndEvent>): void {
-  const changes = event.events?.map(createResizeChange).filter((change): change is DrawingGeometryChange => change !== null) ?? [];
+  const changes =
+    event.events
+      ?.map((resizeEvent: MoveableResizeEndEvent): DrawingGeometryChange | null => createResizeChange(resizeEvent, true))
+      .filter((change): change is DrawingGeometryChange => change !== null) ?? [];
   if (!changes.length) {
     return;
   }
@@ -541,6 +557,11 @@ watch(
   :deep(.moveable-size-value.moveable-gap),
   :deep(.size-value.gap) {
     color: var(--color-primary);
+  }
+
+  :deep(.moveable-size-value:empty),
+  :deep(.size-value:empty) {
+    display: none !important;
   }
 }
 </style>
