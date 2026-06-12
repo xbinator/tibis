@@ -13,6 +13,7 @@ import type {
   DrawingViewport
 } from '../types';
 import { DRAWING_VIEWBOX_SIZE } from '../constants/defaults';
+import { measureDrawingTextElementSize } from './drawingTextMetrics';
 
 /**
  * 画布元素 ID 的 DOM 属性名。
@@ -233,6 +234,28 @@ export function findDrawingShapeElement(elements: DrawingElement[], id: string):
 }
 
 /**
+ * 读取形状渲染时使用的有效尺寸。
+ * @param element - 形状元素
+ * @returns 渲染尺寸
+ */
+export function getDrawingShapeRenderSize(element: DrawingShapeElement): DrawingSize {
+  if (element.shape === 'text') {
+    return measureDrawingTextElementSize(element.text, element.style);
+  }
+
+  return element.size;
+}
+
+/**
+ * 读取画板元素渲染时使用的有效尺寸。
+ * @param element - 画板元素
+ * @returns 渲染尺寸
+ */
+export function getDrawingElementRenderSize(element: DrawingElement): DrawingSize {
+  return isDrawingShapeElement(element) ? getDrawingShapeRenderSize(element) : element.size;
+}
+
+/**
  * 应用连接线路径计算时的临时几何覆盖。
  * @param element - 原始形状元素
  * @param overrides - 临时几何覆盖列表
@@ -257,9 +280,11 @@ function applyConnectorPathElementOverride(element: DrawingShapeElement, overrid
  * @returns 中心点
  */
 export function getDrawingElementCenter(element: DrawingElement): DrawingPoint {
+  const size = getDrawingElementRenderSize(element);
+
   return {
-    x: element.position.x + element.size.width / 2,
-    y: element.position.y + element.size.height / 2
+    x: element.position.x + size.width / 2,
+    y: element.position.y + size.height / 2
   };
 }
 
@@ -271,15 +296,16 @@ export function getDrawingElementCenter(element: DrawingElement): DrawingPoint {
  */
 export function getDrawingConnectorAnchorPoint(element: DrawingShapeElement, anchor: DrawingConnectorAnchor): DrawingPoint {
   const center = getDrawingElementCenter(element);
+  const size = getDrawingShapeRenderSize(element);
 
   if (anchor === 'top') {
     return { x: center.x, y: element.position.y };
   }
   if (anchor === 'right') {
-    return { x: element.position.x + element.size.width, y: center.y };
+    return { x: element.position.x + size.width, y: center.y };
   }
   if (anchor === 'bottom') {
-    return { x: center.x, y: element.position.y + element.size.height };
+    return { x: center.x, y: element.position.y + size.height };
   }
   if (anchor === 'left') {
     return { x: element.position.x, y: center.y };

@@ -13,23 +13,23 @@
             <polygon
               v-if="isDrawingDiamondShape(element.shape)"
               class="b-drawing-minimap__shape"
-              :points="createDrawingDiamondPoints(element.size, element.position)"
+              :points="createDrawingDiamondPoints(getDrawingShapeRenderSize(element), element.position)"
             ></polygon>
             <ellipse
               v-else-if="element.shape === 'ellipse'"
               class="b-drawing-minimap__shape"
-              :cx="element.position.x + element.size.width / 2"
-              :cy="element.position.y + element.size.height / 2"
-              :rx="element.size.width / 2"
-              :ry="element.size.height / 2"
+              :cx="element.position.x + getDrawingShapeRenderSize(element).width / 2"
+              :cy="element.position.y + getDrawingShapeRenderSize(element).height / 2"
+              :rx="getDrawingShapeRenderSize(element).width / 2"
+              :ry="getDrawingShapeRenderSize(element).height / 2"
             ></ellipse>
             <rect
               v-else
               class="b-drawing-minimap__shape"
               :x="element.position.x"
               :y="element.position.y"
-              :width="element.size.width"
-              :height="element.size.height"
+              :width="getDrawingShapeRenderSize(element).width"
+              :height="getDrawingShapeRenderSize(element).height"
               :rx="element.shape === 'process' ? 10 : undefined"
             ></rect>
           </template>
@@ -56,7 +56,13 @@ import { useEventListener } from '@vueuse/core';
 import { throttle } from 'lodash-es';
 import BDropdown from '@/components/BDropdown/index.vue';
 import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/defaults';
-import { createDrawingDiamondPoints, getDrawingResponsiveViewBoxSize, isDrawingDiamondShape, isDrawingShapeElement } from '../utils/drawingGeometry';
+import {
+  createDrawingDiamondPoints,
+  getDrawingResponsiveViewBoxSize,
+  getDrawingShapeRenderSize,
+  isDrawingDiamondShape,
+  isDrawingShapeElement
+} from '../utils/drawingGeometry';
 
 const MINIMAP_EMPTY_SIZE = 320;
 const MINIMAP_VIEWBOX_PADDING = 80;
@@ -137,12 +143,16 @@ const open = ref<boolean>(false);
  */
 function createMinimapBounds(elements: DrawingShapeElement[], viewport: DrawingMinimapRect): DrawingMinimapBounds {
   const baseBounds = elements.reduce<DrawingMinimapBounds>(
-    (nextBounds: DrawingMinimapBounds, element: DrawingShapeElement): DrawingMinimapBounds => ({
-      minX: Math.min(nextBounds.minX, element.position.x),
-      minY: Math.min(nextBounds.minY, element.position.y),
-      maxX: Math.max(nextBounds.maxX, element.position.x + element.size.width),
-      maxY: Math.max(nextBounds.maxY, element.position.y + element.size.height)
-    }),
+    (nextBounds: DrawingMinimapBounds, element: DrawingShapeElement): DrawingMinimapBounds => {
+      const size = getDrawingShapeRenderSize(element);
+
+      return {
+        minX: Math.min(nextBounds.minX, element.position.x),
+        minY: Math.min(nextBounds.minY, element.position.y),
+        maxX: Math.max(nextBounds.maxX, element.position.x + size.width),
+        maxY: Math.max(nextBounds.maxY, element.position.y + size.height)
+      };
+    },
     {
       minX: viewport.x,
       minY: viewport.y,

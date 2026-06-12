@@ -45,6 +45,7 @@ import {
   createDrawingConnectorPath,
   createDrawingDiamondPoints,
   createDrawingElementTransform,
+  getDrawingElementRenderSize,
   getDrawingElementId,
   isDrawingConnectorElement,
   isDrawingDiamondShape,
@@ -244,13 +245,22 @@ function domDeltaToWorld(value: number): number {
 }
 
 /**
+ * 读取元素预览尺寸。
+ * @param element - 画板元素
+ * @returns 预览尺寸
+ */
+function getElementPreviewSize(element: DrawingElement): DrawingSize {
+  return getDrawingElementRenderSize(element);
+}
+
+/**
  * 创建 SVG 元素 transform 字符串。
  * @param element - 画板元素
  * @param translate - DOM 坐标平移量
  * @param size - 预览尺寸
  * @returns SVG transform
  */
-function createPreviewTransform(element: DrawingElement, translate: [number, number], size: DrawingSize = element.size): string {
+function createPreviewTransform(element: DrawingElement, translate: [number, number], size: DrawingSize = getElementPreviewSize(element)): string {
   return createDrawingElementTransform(
     {
       x: element.position.x + domDeltaToWorld(translate[0]),
