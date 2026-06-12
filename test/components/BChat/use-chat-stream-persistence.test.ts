@@ -96,11 +96,17 @@ async function flushToolExecution(): Promise<void> {
  * @param onComplete - 完成回调。
  * @param tools - 可选工具列表。
  */
-async function startChatStream(messages: Ref<Message[]>, onComplete?: (message: Message) => Promise<void> | void, tools: AIToolExecutor[] = []): Promise<void> {
+async function startChatStream(
+  messages: Ref<Message[]>,
+  onComplete: ((message: Message) => Promise<void> | void) | undefined,
+  tools: AIToolExecutor[],
+  onAssistantDraftChange?: (message: Message) => Promise<void> | void
+): Promise<void> {
   const chatStream = useChatStream({
     messages,
     tools,
-    onComplete
+    onComplete,
+    onAssistantDraftChange
   });
 
   await chatStream.stream.streamMessages(messages.value, {
@@ -170,9 +176,13 @@ describe('useChatStream persistence snapshot', () => {
   it('flushes buffered text before notifying completion so persisted assistant messages keep the final answer', async (): Promise<void> => {
     const messages = ref<Message[]>([createUserMessage()]);
     const completedMessages: Message[] = [];
-    await startChatStream(messages, (message: Message): void => {
-      completedMessages.push({ ...message, parts: [...message.parts] });
-    });
+    await startChatStream(
+      messages,
+      (message: Message): void => {
+        completedMessages.push({ ...message, parts: [...message.parts] });
+      },
+      []
+    );
 
     await mockUseChatState.options?.onText?.('最终回答');
     await mockUseChatState.options?.onComplete?.();
@@ -215,5 +225,28 @@ describe('useChatStream persistence snapshot', () => {
     await nextTick();
 
     expect(mockUseChatState.stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('notifies assistant draft creation and text updates before final completion', async (): Promise<void> => {
+    const messages = ref<Message[]>([createUserMessage()]);
+    const draftSnapshots: Message[] = [];
+
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback): number => {
+        callback(0);
+        return 1;
+      })
+    );
+
+    await startChatStream(messages, undefined, [], (message: Message): void => {
+      draftSnapshots.push({ ...message, parts: [...message.parts] });
+    });
+
+    await mockUseChatState.options?.onText?.('半截回答');
+
+    expect(draftSnapshots).toHaveLength(2);
+    expect(draftSnapshots[0]).toMatchObject({ role: 'assistant', content: '', loading: true, finished: false });
+    expect(draftSnapshots[1]).toMatchObject({ role: 'assistant', content: '半截回答', loading: false, finished: false });
   });
 });
