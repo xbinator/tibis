@@ -4,29 +4,46 @@
 -->
 <template>
   <g class="b-drawing-create-preview" data-testid="drawing-create-preview">
-    <polygon v-if="isDiamondShape" class="b-drawing-create-preview__shape" :points="diamondPoints" />
+    <polygon
+      v-if="isDiamondShape"
+      class="b-drawing-create-preview__shape"
+      :fill="draftStyle?.fill"
+      :points="diamondPoints"
+      :stroke="draftStyle?.stroke"
+      :stroke-width="draftStyle?.strokeWidth"
+      :style="shapeStyle"
+    />
     <ellipse
       v-else-if="draft.shape === 'ellipse'"
       class="b-drawing-create-preview__shape"
       :cx="geometry.position.x + geometry.size.width / 2"
       :cy="geometry.position.y + geometry.size.height / 2"
+      :fill="draftStyle?.fill"
       :rx="geometry.size.width / 2"
       :ry="geometry.size.height / 2"
+      :stroke="draftStyle?.stroke"
+      :stroke-width="draftStyle?.strokeWidth"
+      :style="shapeStyle"
     />
     <rect
       v-else
       class="b-drawing-create-preview__shape"
+      :fill="draftStyle?.fill"
       :x="geometry.position.x"
       :y="geometry.position.y"
       :width="geometry.size.width"
       :height="geometry.size.height"
-      :rx="draft.shape === 'text' ? 0 : 10"
+      :rx="draft.shape === 'process' ? 10 : undefined"
+      :stroke="draftStyle?.stroke"
+      :stroke-width="draftStyle?.strokeWidth"
+      :style="shapeStyle"
     />
   </g>
 </template>
 
 <script setup lang="ts">
-import type { DrawingInteractionDraft, DrawingPoint, DrawingSize } from '../types';
+import type { DrawingElementStyle, DrawingInteractionDraft, DrawingPoint, DrawingSize } from '../types';
+import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { createDrawingDiamondPoints, isDrawingDiamondShape } from '../utils/drawingGeometry';
 
@@ -41,6 +58,8 @@ type DrawingCreateShapeDraft = Extract<DrawingInteractionDraft, { kind: 'creatin
 interface Props {
   /** 当前创建草稿 */
   draft: DrawingCreateShapeDraft;
+  /** 创建草稿样式 */
+  draftStyle?: DrawingElementStyle;
 }
 
 const props = defineProps<Props>();
@@ -63,6 +82,11 @@ const geometry = computed<{ position: DrawingPoint; size: DrawingSize }>(() => {
 
 const isDiamondShape = computed<boolean>(() => isDrawingDiamondShape(props.draft.shape));
 const diamondPoints = computed<string>(() => createDrawingDiamondPoints(geometry.value.size, geometry.value.position));
+const shapeStyle = computed<CSSProperties>(() => ({
+  fill: props.draftStyle?.fill,
+  stroke: props.draftStyle?.stroke,
+  strokeWidth: props.draftStyle?.strokeWidth === undefined ? undefined : String(props.draftStyle.strokeWidth)
+}));
 </script>
 
 <style lang="less" scoped>

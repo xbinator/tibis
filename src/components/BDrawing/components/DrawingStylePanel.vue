@@ -3,15 +3,15 @@
   @description BDrawing 左侧节点样式配置面板。
 -->
 <template>
-  <aside v-if="element" class="b-drawing-style-panel" data-testid="drawing-style-panel" @pointerdown.stop>
+  <aside v-if="element || draftStyle" class="b-drawing-style-panel" data-testid="drawing-style-panel" @pointerdown.stop>
     <section class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">描边</span>
-      <BColorPicker :value="strokeValue" format="hex" input-test-id="drawing-style-stroke-input" @change="handleColorClick('stroke', $event)" />
+      <BColorPicker :value="strokeValue" format="hex" placement="rightTop" @change="handleColorClick('stroke', $event)" />
     </section>
 
     <section class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">背景</span>
-      <BColorPicker :value="fillValue" format="hex" input-test-id="drawing-style-fill-input" @change="handleColorClick('fill', $event)" />
+      <BColorPicker :value="fillValue" format="hex" placement="rightTop" @change="handleColorClick('fill', $event)" />
     </section>
 
     <section class="b-drawing-style-panel__section">
@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingElementStyleChange, DrawingShapeElement } from '../types';
+import type { DrawingElementStyle, DrawingElementStyleChange, DrawingShapeElement } from '../types';
 import { computed } from 'vue';
 import BColorPicker from '@/components/BColorPicker/index.vue';
 
@@ -59,6 +59,8 @@ interface StrokeWidthOption {
 interface Props {
   /** 当前可编辑的形状元素 */
   element: DrawingShapeElement | null;
+  /** 创建工具激活时待应用到下一个元素的样式 */
+  draftStyle?: DrawingElementStyle | null;
 }
 
 const props = defineProps<Props>();
@@ -80,9 +82,9 @@ const STROKE_WIDTH_OPTIONS: readonly StrokeWidthOption[] = [
   { id: 'bold', label: '粗描边', value: 5, previewHeight: 4 }
 ];
 
-const fillValue = computed<string>(() => props.element?.style?.fill ?? DEFAULT_FILL);
-const strokeValue = computed<string>(() => props.element?.style?.stroke ?? DEFAULT_STROKE);
-const strokeWidthValue = computed<number>(() => props.element?.style?.strokeWidth ?? DEFAULT_STROKE_WIDTH);
+const fillValue = computed<string>(() => (props.element ? props.element.style?.fill : props.draftStyle?.fill) ?? DEFAULT_FILL);
+const strokeValue = computed<string>(() => (props.element ? props.element.style?.stroke : props.draftStyle?.stroke) ?? DEFAULT_STROKE);
+const strokeWidthValue = computed<number>(() => (props.element ? props.element.style?.strokeWidth : props.draftStyle?.strokeWidth) ?? DEFAULT_STROKE_WIDTH);
 const strokeWidthOptions = computed<readonly StrokeWidthOption[]>(() => STROKE_WIDTH_OPTIONS);
 
 /**
@@ -116,7 +118,7 @@ function handleStrokeWidthClick(value: number): void {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: 220px;
+  width: fit-content;
   padding: 12px;
   pointer-events: auto;
   background: var(--bg-primary);
@@ -124,6 +126,11 @@ function handleStrokeWidthClick(value: number): void {
   border-radius: 8px;
   box-shadow: 0 12px 28px rgb(0 0 0 / 10%);
   backdrop-filter: blur(12px);
+}
+
+.b-drawing-style-panel :deep(.b-color-picker__trigger),
+.b-drawing-style-panel :deep(.b-color-picker__presets) {
+  width: max-content;
 }
 
 .b-drawing-style-panel__section {

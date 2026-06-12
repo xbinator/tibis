@@ -21,14 +21,23 @@
 
       <DrawingEdgeRenderer v-for="edge in edges" :key="edge.id" :edge="edge" :elements="elements" />
       <DrawingConnectorRenderer v-for="connector in connectorElements" :key="connector.id" :connector="connector" :elements="elements" />
+      <path
+        v-if="connectorPreviewPath"
+        class="b-drawing-canvas__connector-preview"
+        data-testid="drawing-connector-preview"
+        :d="connectorPreviewPath"
+        marker-end="url(#b-drawing-arrow)"
+      ></path>
       <DrawingNodeRenderer
         v-for="element in shapeElements"
         :key="element.id"
         :node="element"
         :selected="selection.includes(element.id)"
+        :show-connector-anchors="activeTool === 'connector'"
         @select="handleElementSelect"
+        @release="handleElementRelease"
       />
-      <DrawingCreatePreview v-if="shapeDraft" :draft="shapeDraft" />
+      <DrawingCreatePreview v-if="shapeDraft" :draft="shapeDraft" :draft-style="draftStyle" />
     </svg>
   </div>
 </template>
@@ -38,6 +47,7 @@ import type {
   DrawingConnectorElement,
   DrawingEdge,
   DrawingElement,
+  DrawingElementStyle,
   DrawingInteractionDraft,
   DrawingPoint,
   DrawingShapeElement,
@@ -46,7 +56,15 @@ import type {
   DrawingViewport
 } from '../types';
 import { computed } from 'vue';
-import { createDrawingViewBox, isDrawingConnectorElement, isDrawingShapeElement, projectClientPointToDrawingBoard } from '../utils/drawingGeometry';
+import {
+  createDrawingLinePath,
+  createDrawingViewBox,
+  findDrawingShapeElement,
+  getDrawingConnectorAnchorPoint,
+  isDrawingConnectorElement,
+  isDrawingShapeElement,
+  projectClientPointToDrawingBoard
+} from '../utils/drawingGeometry';
 import DrawingConnectorRenderer from './DrawingConnector.vue';
 import DrawingCreatePreview from './DrawingCreatePreview.vue';
 import DrawingEdgeRenderer from './DrawingEdge.vue';
@@ -56,6 +74,10 @@ import DrawingNodeRenderer from './DrawingNode.vue';
  * 创建形状草稿。
  */
 type DrawingCreateShapeDraft = Extract<DrawingInteractionDraft, { kind: 'creating-shape' }>;
+/**
+ * 创建连接线草稿。
+ */
+type DrawingCreateConnectorDraft = Extract<DrawingInteractionDraft, { kind: 'creating-connector' }>;
 
 /**
  * 画布组件入参。
@@ -77,6 +99,8 @@ interface Props {
   activeTool: DrawingToolMode;
   /** 当前交互草稿 */
   draft?: DrawingInteractionDraft;
+  /** 创建草稿预览样式 */
+  draftStyle?: DrawingElementStyle;
   /** 是否正在平移（手型工具拖拽中） */
   isPanning?: boolean;
 }
@@ -85,6 +109,8 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   /** 选择元素 */
   select: [id: string, event: PointerEvent];
+  /** 在元素上释放指针 */
+  'element-pointerup': [id: string, event: PointerEvent];
   /** 画布按下 */
   'canvas-pointerdown': [point: DrawingPoint, event: PointerEvent];
   /** 画布指针移动 */
@@ -101,6 +127,20 @@ const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filte
 const connectorElements = computed<DrawingConnectorElement[]>(() => props.elements.filter(isDrawingConnectorElement));
 /** 当前创建形状草稿，供预览组件使用。 */
 const shapeDraft = computed<DrawingCreateShapeDraft | undefined>(() => (props.draft?.kind === 'creating-shape' ? props.draft : undefined));
+/** 当前创建连接线草稿，供预览路径使用。 */
+const connectorDraft = computed<DrawingCreateConnectorDraft | undefined>(() => (props.draft?.kind === 'creating-connector' ? props.draft : undefined));
+const connectorPreviewPath = computed<string>(() => {
+  if (!connectorDraft.value) {
+    return '';
+  }
+
+  const source = findDrawingShapeElement(props.elements, connectorDraft.value.source.elementId);
+  if (!source) {
+    return '';
+  }
+
+  return createDrawingLinePath(getDrawingConnectorAnchorPoint(source, connectorDraft.value.source.anchor), connectorDraft.value.current);
+});
 
 /**
  * 转发元素按下选择事件。
@@ -109,6 +149,15 @@ const shapeDraft = computed<DrawingCreateShapeDraft | undefined>(() => (props.dr
  */
 function handleElementSelect(id: string, event: PointerEvent): void {
   emit('select', id, event);
+}
+
+/**
+ * 转发元素释放事件。
+ * @param id - 元素 ID
+ * @param event - 指针事件
+ */
+function handleElementRelease(id: string, event: PointerEvent): void {
+  emit('element-pointerup', id, event);
 }
 
 /**
@@ -219,6 +268,14 @@ function handleWheel(event: WheelEvent): void {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.b-drawing-canvas__connector-preview {
+  pointer-events: none;
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
 }
 
 .b-drawing-canvas__svg.is-measuring {

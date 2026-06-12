@@ -17,6 +17,7 @@
       :snap-directions="snapDirections"
       :element-snap-directions="snapDirections"
       :element-guidelines="guidelineTargets"
+      :padding="MOVEABLE_SELECTION_PADDING"
       :zoom="viewport.zoom"
       :origin="false"
       :throttle-drag="0"
@@ -159,6 +160,13 @@ const guidelineTargets = ref<Element[]>([]);
 const singleTarget = computed<boolean>(() => targets.value.length === 1);
 /** 是否展示 Moveable 控制层。 */
 const shouldShowMoveableLayer = computed<boolean>(() => props.enabled && targets.value.length > 0);
+/** Moveable 控制框与节点边界之间的视觉留白。 */
+const MOVEABLE_SELECTION_PADDING = {
+  bottom: 8,
+  left: 8,
+  right: 8,
+  top: 8
+};
 /** Moveable 元素吸附方向，显式包含中心线和中线。 */
 const snapDirections: SnapDirections = {
   bottom: true,
@@ -501,13 +509,13 @@ watch(
   --moveable-control-padding: 12;
 
   :deep(.moveable-control) {
-    width: 12px !important;
-    height: 12px !important;
-    margin-top: -6px !important;
-    margin-left: -6px !important;
-    background: var(--color-primary) !important;
-    border: 2px solid var(--bg-primary) !important;
-    box-shadow: 0 0 0 3px var(--color-primary-bg), 0 4px 10px var(--color-control-outline) !important;
+    width: 8px !important;
+    height: 8px !important;
+    margin-top: -4px !important;
+    margin-left: -4px !important;
+    background: #fff !important;
+    border: 1px solid var(--color-primary) !important;
+    border-radius: 2px !important;
   }
 
   :deep(.moveable-control:hover) {

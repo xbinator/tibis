@@ -22,7 +22,7 @@
       @set-center="viewport.setCenter"
       @set-zoom="viewport.setZoom"
     />
-    <DrawingStylePanel :element="selectedShapeElement" @change="handleSelectedStyleChange" />
+    <DrawingStylePanel :element="selectedShapeElement" :draft-style="activeCreateShape ? creationStyle : null" @change="handleSelectedStyleChange" />
     <DrawingInfiniteViewport>
       <DrawingCanvas
         :elements="board.state.value.elements"
@@ -33,8 +33,10 @@
         :viewport-ready="isViewportReady"
         :active-tool="activeTool"
         :draft="board.state.value.draft"
+        :draft-style="creationStyle"
         :is-panning="isPanning"
         @select="handleElementSelect"
+        @element-pointerup="handleElementPointerup"
         @canvas-pointerdown="handleCanvasPointerdown"
         @canvas-pointermove="handleCanvasPointermove"
         @canvas-pointerup="handleCanvasPointerup"
@@ -56,7 +58,17 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingElementStyleChange, DrawingPoint, DrawingShapeElement, DrawingShapeType, DrawingSize, DrawingToolMode } from './types';
+import type {
+  DrawingConnectorAnchor,
+  DrawingConnectorEndpoint,
+  DrawingElementStyle,
+  DrawingElementStyleChange,
+  DrawingPoint,
+  DrawingShapeElement,
+  DrawingShapeType,
+  DrawingSize,
+  DrawingToolMode
+} from './types';
 import type { DrawingCanvasPointProjection } from './utils/drawingGeometry';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
@@ -73,6 +85,8 @@ import {
   clientDeltaToDrawingDelta,
   createDrawingElementTransform,
   findDrawingShapeElement,
+  getDrawingConnectorAnchorPoint,
+  getDrawingElementId,
   projectClientPointToDrawingBoard,
   queryDrawingElementTarget
 } from './utils/drawingGeometry';
@@ -81,6 +95,8 @@ const board = useDrawingBoard();
 const viewport = useDrawingViewport(board);
 const interaction = useDrawingInteraction(board);
 const activeTool = ref<DrawingToolMode>('select');
+/** 创建工具激活时应用到下一个形状的样式。 */
+const creationStyle = ref<DrawingElementStyle>({});
 const rootRef = ref<HTMLElement | null>(null);
 /** 当前画布视口实际渲染尺寸。 */
 const viewportSize = ref<DrawingSize>({ width: 0, height: 0 });
@@ -144,8 +160,19 @@ interface HandPanSession {
   abortController: AbortController;
 }
 
+/**
+ * 连接线拖拽会话。
+ */
+interface ConnectorDragSession {
+  /** 起点 */
+  source: DrawingConnectorEndpoint;
+  /** 拖拽监听取消器 */
+  abortController: AbortController;
+}
+
 let directDragSession: DirectElementDragSession | null = null;
 let handPanSession: HandPanSession | null = null;
+let connectorDragSession: ConnectorDragSession | null = null;
 
 /** 手型工具是否正在平移中。 */
 const isPanning = ref<boolean>(false);
@@ -243,6 +270,9 @@ function getActiveCreateShape(): DrawingShapeType | null {
   return SHAPE_TOOLS.includes(activeTool.value as DrawingShapeType) ? (activeTool.value as DrawingShapeType) : null;
 }
 
+/** 当前激活的创建形状。 */
+const activeCreateShape = computed<DrawingShapeType | null>(() => getActiveCreateShape());
+
 /**
  * 通过元素 ID 读取形状元素。
  * @param id - 元素 ID
@@ -294,6 +324,65 @@ function getBoardPointFromPointer(event: PointerEvent): DrawingPoint | null {
 }
 
 /**
+ * 从事件目标读取画板元素 ID。
+ * @param target - 事件目标
+ * @returns 元素 ID
+ */
+function getElementIdFromEventTarget(target: EventTarget | null): string | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const elementTarget = target.closest('.b-drawing-element');
+
+  return getDrawingElementId(elementTarget);
+}
+
+/**
+ * 根据指针位置推断最近的连接锚点。
+ * @param element - 形状元素
+ * @param point - 画板坐标
+ * @returns 连接锚点
+ */
+function getConnectorAnchorFromPoint(element: DrawingShapeElement, point: DrawingPoint): Exclude<DrawingConnectorAnchor, 'center'> {
+  const center = getDrawingConnectorAnchorPoint(element, 'center');
+  const normalizedX = (point.x - center.x) / Math.max(element.size.width, 1);
+  const normalizedY = (point.y - center.y) / Math.max(element.size.height, 1);
+
+  if (Math.abs(normalizedX) > Math.abs(normalizedY)) {
+    return normalizedX >= 0 ? 'right' : 'left';
+  }
+
+  return normalizedY >= 0 ? 'bottom' : 'top';
+}
+
+/**
+ * 根据指针事件读取连接端点。
+ * @param id - 元素 ID
+ * @param event - 指针事件
+ * @returns 连接端点
+ */
+function getConnectorEndpointFromPointer(id: string, event: PointerEvent): DrawingConnectorEndpoint | null {
+  const element = getShapeElementById(id);
+  if (!element) {
+    return null;
+  }
+
+  const point = getBoardPointFromPointer(event);
+  if (!point) {
+    return {
+      elementId: id,
+      anchor: 'center'
+    };
+  }
+
+  return {
+    elementId: id,
+    anchor: getConnectorAnchorFromPoint(element, point)
+  };
+}
+
+/**
  * 创建 SVG 节点 transform 字符串。
  * @param position - 元素位置
  * @param session - 拖拽会话
@@ -334,6 +423,15 @@ function cancelDirectDrag(): void {
 }
 
 /**
+ * 取消连接线拖拽。
+ */
+function cancelConnectorDrag(): void {
+  connectorDragSession?.abortController.abort();
+  connectorDragSession = null;
+  board.clearDraft();
+}
+
+/**
  * 取消手型工具平移。 */
 function cancelHandPan(): void {
   handPanSession?.abortController.abort();
@@ -348,6 +446,7 @@ function cancelHandPan(): void {
 function setActiveTool(tool: DrawingToolMode): void {
   board.clearDraft();
   cancelHandPan();
+  cancelConnectorDrag();
   activeTool.value = tool;
 
   if (tool !== 'select') {
@@ -360,11 +459,19 @@ function setActiveTool(tool: DrawingToolMode): void {
  * @param style - 样式变更
  */
 function handleSelectedStyleChange(style: DrawingElementStyleChange): void {
-  if (!selectedShapeElement.value) {
+  if (selectedShapeElement.value) {
+    board.updateElementStyle(selectedShapeElement.value.id, style);
     return;
   }
 
-  board.updateElementStyle(selectedShapeElement.value.id, style);
+  if (!activeCreateShape.value) {
+    return;
+  }
+
+  creationStyle.value = {
+    ...creationStyle.value,
+    ...style
+  };
 }
 
 /**
@@ -522,6 +629,114 @@ function startDirectDrag(id: string, event: PointerEvent, selectOnEnd: boolean):
 }
 
 /**
+ * 处理连接线拖拽移动。
+ * @param event - 指针事件
+ */
+function handleConnectorDragMove(event: PointerEvent): void {
+  if (!connectorDragSession) {
+    return;
+  }
+
+  const point = getBoardPointFromPointer(event);
+  if (!point) {
+    return;
+  }
+
+  board.updateConnectorDraftPoint(point);
+}
+
+/**
+ * 完成连接线拖拽。
+ * @param target - 目标端点
+ */
+function finishConnectorDrag(target: DrawingConnectorEndpoint | null): void {
+  if (!connectorDragSession) {
+    return;
+  }
+
+  connectorDragSession.abortController.abort();
+  connectorDragSession = null;
+
+  if (!target) {
+    board.clearDraft();
+    return;
+  }
+
+  board.commitCreateConnectorDraft(target);
+  setActiveTool('select');
+}
+
+/**
+ * 处理连接线拖拽结束。
+ * @param event - 指针事件
+ */
+function handleConnectorDragEnd(event: PointerEvent): void {
+  if (!connectorDragSession) {
+    return;
+  }
+
+  const { source } = connectorDragSession;
+  const targetId = getElementIdFromEventTarget(event.target);
+  const target = targetId && targetId !== source.elementId ? getConnectorEndpointFromPointer(targetId, event) : null;
+
+  finishConnectorDrag(target);
+}
+
+/**
+ * 处理连接线拖拽取消。
+ */
+function handleConnectorDragCancel(): void {
+  cancelConnectorDrag();
+}
+
+/**
+ * 开始拖拽创建连接线。
+ * @param id - 起点元素 ID
+ * @param event - 指针事件
+ */
+function startConnectorDrag(id: string, event: PointerEvent): void {
+  const source = getConnectorEndpointFromPointer(id, event);
+  if (!source) {
+    return;
+  }
+
+  const sourceElement = getShapeElementById(source.elementId);
+  if (!sourceElement) {
+    return;
+  }
+
+  const abortController = new AbortController();
+  cancelConnectorDrag();
+  connectorDragSession = {
+    source,
+    abortController
+  };
+  board.startCreateConnectorDraft(source, getDrawingConnectorAnchorPoint(sourceElement, source.anchor));
+
+  window.addEventListener('pointermove', handleConnectorDragMove, { signal: abortController.signal });
+  window.addEventListener('pointerup', handleConnectorDragEnd, { signal: abortController.signal });
+  window.addEventListener('pointercancel', handleConnectorDragCancel, { signal: abortController.signal });
+}
+
+/**
+ * 处理元素上释放指针。
+ * @param id - 元素 ID
+ * @param event - 指针事件
+ */
+function handleElementPointerup(id: string, event: PointerEvent): void {
+  if (activeTool.value !== 'connector') {
+    handleDirectDragEnd();
+    return;
+  }
+
+  if (!connectorDragSession || connectorDragSession.source.elementId === id) {
+    return;
+  }
+
+  finishConnectorDrag(getConnectorEndpointFromPointer(id, event));
+}
+
+/**
  * 处理元素点击。
  * @param id - 元素 ID
  * @param event - 指针事件
@@ -546,18 +761,7 @@ function handleElementSelect(id: string, event: PointerEvent): void {
     return;
   }
 
-  if (board.state.value.draft?.kind === 'creating-connector') {
-    if (board.state.value.draft.sourceId === id) {
-      board.clearDraft();
-      return;
-    }
-
-    board.commitCreateConnectorDraft(id);
-    setActiveTool('select');
-    return;
-  }
-
-  board.startCreateConnectorDraft(id);
+  startConnectorDrag(id, event);
 }
 
 /**
@@ -597,7 +801,7 @@ function handleCanvasPointerup(point: DrawingPoint): void {
   }
 
   board.updateDraftPoint(point);
-  board.commitCreateShapeDraft();
+  board.commitCreateShapeDraft(creationStyle.value);
   setActiveTool('select');
 }
 
@@ -647,86 +851,47 @@ function handleCanvasWheel(event: WheelEvent): void {
 }
 
 /**
- * 处理 Drawnix 风格基础快捷键。
+ * 判断键盘事件是否来自可编辑输入区域。
+ * @param event - 键盘事件
+ * @returns 是否来自输入区域
+ */
+function isKeyboardEventFromEditableTarget(event: KeyboardEvent): boolean {
+  const { target } = event;
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.closest('[contenteditable="true"]') !== null
+  );
+}
+
+/**
+ * 处理画板删除快捷键。
  * @param event - 键盘事件
  */
 function handleKeydown(event: KeyboardEvent): void {
   const key = event.key.toLowerCase();
-
-  if ((event.metaKey || event.ctrlKey) && key === 'z') {
-    event.preventDefault();
-    if (event.shiftKey) {
-      board.redo();
-      return;
-    }
-    board.undo();
+  if (key !== 'delete' && key !== 'backspace') {
     return;
   }
 
-  if ((event.metaKey || event.ctrlKey) && key === 'y') {
-    event.preventDefault();
-    board.redo();
+  if (isKeyboardEventFromEditableTarget(event)) {
     return;
   }
 
-  if (key === 'escape' || key === 'v') {
-    event.preventDefault();
-    setActiveTool('select');
-    return;
-  }
-
-  if (key === 'h') {
-    event.preventDefault();
-    setActiveTool('hand');
-    return;
-  }
-
-  if (key === 'p') {
-    event.preventDefault();
-    setActiveTool('process');
-    return;
-  }
-
-  if (key === 'r') {
-    event.preventDefault();
-    setActiveTool('rect');
-    return;
-  }
-
-  if (key === 'o') {
-    event.preventDefault();
-    setActiveTool('ellipse');
-    return;
-  }
-
-  if (key === 'd') {
-    event.preventDefault();
-    setActiveTool('diamond');
-    return;
-  }
-
-  if (key === 't') {
-    event.preventDefault();
-    setActiveTool('text');
-    return;
-  }
-
-  if (key === 'c') {
-    event.preventDefault();
-    setActiveTool('connector');
-    return;
-  }
-
-  if (key === 'delete' || key === 'backspace') {
-    event.preventDefault();
-    interaction.deleteSelection();
-  }
+  event.preventDefault();
+  interaction.deleteSelection();
 }
 
 onBeforeUnmount((): void => {
   cancelViewportReadyCheck();
   cancelHandPan();
   cancelDirectDrag();
+  cancelConnectorDrag();
 });
 
 onMounted((): void => {

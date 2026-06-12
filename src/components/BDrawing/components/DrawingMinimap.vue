@@ -39,7 +39,7 @@
               :y="element.position.y"
               :width="element.size.width"
               :height="element.size.height"
-              :rx="element.shape === 'text' ? 0 : 10"
+              :rx="element.shape === 'process' ? 10 : undefined"
             ></rect>
           </template>
           <rect
