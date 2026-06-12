@@ -8,7 +8,9 @@ import { config, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
 import DrawingEdgeRenderer from '@/components/BDrawing/renderers/DrawingEdge.vue';
-import type { DrawingEdge, DrawingElement } from '@/components/BDrawing/types';
+import DrawingNodeRenderer from '@/components/BDrawing/renderers/DrawingNode.vue';
+import type { DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import { measureDrawingTextElementSize } from '@/components/BDrawing/utils/boardTransforms';
 
 const selectoMockState = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -122,8 +124,8 @@ function findDrawingNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Elemen
  * @param wrapper - BDrawing 测试包装器
  * @returns 文本编辑器包装器
  */
-function findDrawingTextEditor(wrapper: VueWrapper): DOMWrapper<HTMLElement> {
-  return wrapper.find<HTMLElement>('[data-testid="drawing-text-editor"]');
+function findDrawingTextEditor(wrapper: VueWrapper): DOMWrapper<HTMLTextAreaElement> {
+  return wrapper.find<HTMLTextAreaElement>('[data-testid="drawing-text-editor"]');
 }
 
 /**
@@ -131,8 +133,9 @@ function findDrawingTextEditor(wrapper: VueWrapper): DOMWrapper<HTMLElement> {
  * @param editor - 文本编辑器包装器
  * @param value - 文本内容
  */
-async function setDrawingTextEditorValue(editor: DOMWrapper<HTMLElement>, value: string): Promise<void> {
-  editor.element.textContent = value;
+async function setDrawingTextEditorValue(editor: DOMWrapper<HTMLTextAreaElement>, value: string): Promise<void> {
+  editor.element.value = value;
+  editor.element.setSelectionRange(value.length, value.length);
   await editor.trigger('input');
   await nextTick();
 }
@@ -142,8 +145,8 @@ async function setDrawingTextEditorValue(editor: DOMWrapper<HTMLElement>, value:
  * @param editor - 文本编辑器包装器
  * @returns 文本内容
  */
-function readDrawingTextEditorValue(editor: DOMWrapper<HTMLElement>): string {
-  return editor.element.textContent ?? '';
+function readDrawingTextEditorValue(editor: DOMWrapper<HTMLTextAreaElement>): string {
+  return editor.element.value;
 }
 
 /**
@@ -156,22 +159,13 @@ function readInlinePixelValue(value: string): number {
 }
 
 /**
- * 向文本编辑器派发纯文本粘贴事件。
+ * 向文本编辑器模拟粘贴纯文本。
  * @param editor - 文本编辑器包装器
  * @param text - 粘贴文本
  */
-async function dispatchDrawingTextEditorPaste(editor: DOMWrapper<HTMLElement>, text: string): Promise<void> {
-  const event = new Event('paste', {
-    bubbles: true,
-    cancelable: true
-  }) as ClipboardEvent;
-  Object.defineProperty(event, 'clipboardData', {
-    value: {
-      getData: (format: string): string => (format === 'text/plain' ? text : '')
-    }
-  });
-
-  editor.element.dispatchEvent(event);
+async function pasteDrawingTextEditorPlainText(editor: DOMWrapper<HTMLTextAreaElement>, text: string): Promise<void> {
+  editor.element.value = `${editor.element.value}${text}`;
+  await editor.trigger('input');
   await nextTick();
 }
 
@@ -813,7 +807,7 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-node"]').text()).not.toContain('矩形');
   });
 
-  it('creates text from the text tool input after pressing Enter', async (): Promise<void> => {
+  it('creates text from the text tool input after blur', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
     await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
@@ -822,10 +816,8 @@ describe('BDrawing', (): void => {
 
     const editor = findDrawingTextEditor(wrapper);
     expect(editor.exists()).toBe(true);
-    expect(editor.element.tagName).toBe('DIV');
-    expect(editor.attributes('contenteditable')).toBe('true');
-    expect(editor.attributes('role')).toBe('textbox');
-    expect(editor.attributes('aria-multiline')).toBe('true');
+    expect(editor.element.tagName).toBe('TEXTAREA');
+    expect(editor.attributes('wrap')).toBe('off');
     expect(editor.element.style.position).toBe('fixed');
     expect(editor.element.style.whiteSpace).toBe('pre');
     expect(editor.element.style.background).toBe('transparent');
@@ -833,7 +825,7 @@ describe('BDrawing', (): void => {
     expect(editor.element.style.boxShadow).toBe('none');
 
     await setDrawingTextEditorValue(editor, '需求说明');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     expect(wrapper.find('[data-testid="drawing-text-editor"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-text');
@@ -843,7 +835,37 @@ describe('BDrawing', (): void => {
     expect(Number(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('width'))).toBeLessThan(180);
   });
 
-  it('pastes plain text into the contenteditable text editor', async (): Promise<void> => {
+  it('renders text node bounds from content size instead of stale node size', (): void => {
+    const textNode: DrawingShapeElement = {
+      id: 'text-1',
+      kind: 'shape',
+      metadata: { createdAt: 1, source: 'user' },
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      shape: 'text',
+      size: { height: 120, width: 260 },
+      style: {
+        fill: 'transparent',
+        fontSize: 13,
+        fontWeight: 650,
+        stroke: 'transparent',
+        textAlign: 'center'
+      },
+      text: 'Hi'
+    };
+    const expectedSize = measureDrawingTextElementSize(textNode.text, textNode.style);
+    const wrapper = mount(DrawingNodeRenderer, {
+      props: {
+        node: textNode
+      }
+    });
+    const shape = wrapper.find('[data-testid="drawing-shape-rect"]');
+
+    expect(Number(shape.attributes('width'))).toBe(expectedSize.width);
+    expect(Number(shape.attributes('height'))).toBe(expectedSize.height);
+  });
+
+  it('inserts a newline instead of saving when pressing Enter in the text editor', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
     await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
@@ -851,8 +873,28 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     const editor = findDrawingTextEditor(wrapper);
 
-    await dispatchDrawingTextEditorPaste(editor, '粘贴\n文本');
+    await setDrawingTextEditorValue(editor, '第一行');
     await editor.trigger('keydown', { key: 'Enter' });
+
+    expect(findDrawingTextEditor(wrapper).exists()).toBe(true);
+    expect(readDrawingTextEditorValue(editor)).toBe('第一行\n');
+
+    await setDrawingTextEditorValue(editor, `${readDrawingTextEditorValue(editor)}第二行`);
+    await editor.trigger('blur');
+
+    expect(wrapper.findAll('.b-drawing-node__text-line')).toHaveLength(2);
+  });
+
+  it('pastes plain text into the textarea text editor', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    const editor = findDrawingTextEditor(wrapper);
+
+    await pasteDrawingTextEditorPlainText(editor, '粘贴\n文本');
+    await editor.trigger('blur');
 
     expect(wrapper.find('[data-testid="drawing-node"]').text()).toContain('粘贴');
     expect(wrapper.findAll('.b-drawing-node__text-line')).toHaveLength(2);
@@ -882,7 +924,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     let editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '标题');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
     await findDrawingStylePanel(wrapper).find('[aria-label="左对齐"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="大字号"]').trigger('click');
 
@@ -892,7 +934,7 @@ describe('BDrawing', (): void => {
     expect(editor.element.style.fontSize).toBe('18px');
     expect(editor.element.style.fontWeight).toBe('650');
     expect(editor.element.style.lineHeight).toBe('24.3px');
-    expect(editor.element.style.padding).toBe('8px 10px');
+    expect(editor.element.style.padding).toBe('4px 6px');
     expect(editor.element.style.textAlign).toBe('left');
   });
 
@@ -951,7 +993,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     let editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '旧标题');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     await wrapper.find('[data-testid="drawing-node"]').trigger('dblclick');
     editor = findDrawingTextEditor(wrapper);
@@ -959,7 +1001,7 @@ describe('BDrawing', (): void => {
     expect(readDrawingTextEditorValue(editor)).toBe('旧标题');
 
     await setDrawingTextEditorValue(editor, '新标题');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     expect(wrapper.find('[data-testid="drawing-node"]').text()).toContain('新标题');
   });
@@ -972,7 +1014,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     let editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '旧标题');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     expect(wrapper.find('.b-drawing-node__text').exists()).toBe(true);
 
@@ -992,12 +1034,12 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     let editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '旧标题');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     await wrapper.find('[data-testid="drawing-node"]').trigger('dblclick');
     editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     expect(wrapper.find('[data-testid="drawing-node"]').exists()).toBe(false);
   });
@@ -1021,7 +1063,7 @@ describe('BDrawing', (): void => {
     const editor = findDrawingTextEditor(wrapper);
     expect(editor.exists()).toBe(true);
     await setDrawingTextEditorValue(editor, '覆盖标注');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(2);
     expect(wrapper.findAll('[data-testid="drawing-node"]')[1].text()).toContain('覆盖标注');
@@ -1036,7 +1078,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     let editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '旧标题');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
     await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
 
     const node = wrapper.find('[data-testid="drawing-node"]');
@@ -1060,7 +1102,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     const editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '标题');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
     await nextTick();
 
     const shape = wrapper.find('[data-testid="drawing-shape-rect"]');
@@ -1083,7 +1125,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     const editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '第一行\n\n第三行');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     const lines = wrapper.findAll('.b-drawing-node__text-line');
     expect(lines).toHaveLength(3);
@@ -1100,7 +1142,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     const editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '标题');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     await findDrawingColorSection(wrapper, 'text').find('[data-testid="color-picker-preset-#ef4444"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="左对齐"]').trigger('click');
@@ -1112,7 +1154,7 @@ describe('BDrawing', (): void => {
     expect((text.element as SVGTextElement).style.fontSize).toBe('18px');
   });
 
-  it('renders text lines from the same top padding used by the editor', async (): Promise<void> => {
+  it('centers rendered text lines within the measured text bounds', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
     await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
@@ -1120,12 +1162,17 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     const editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '第一行\n第二行');
-    await editor.trigger('keydown', { key: 'Enter' });
+    await editor.trigger('blur');
 
     const text = wrapper.find('.b-drawing-node__text');
     const lines = wrapper.findAll('.b-drawing-node__text-line');
+    const shapeHeight = Number(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('height'));
+    const lineHeight = Number(lines[1].attributes('dy'));
+    const expectedFirstLineY = shapeHeight / 2 - lineHeight / 2;
 
-    expect(text.attributes('y')).toBe('8');
+    expect(text.attributes('dominant-baseline')).toBe('central');
+    expect(text.attributes('alignment-baseline')).toBe('central');
+    expect(Number(text.attributes('y'))).toBeCloseTo(expectedFirstLineY);
     expect(lines[0].attributes('dy')).toBe('0');
     expect(lines[1].attributes('dy')).toBe('17.55');
   });

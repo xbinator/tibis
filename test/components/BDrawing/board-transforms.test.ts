@@ -22,6 +22,7 @@ import {
   updateDrawingElementStyle,
   updateDrawingNodeText
 } from '@/components/BDrawing/utils/boardTransforms';
+import { getDrawingConnectorAnchorPoint } from '@/components/BDrawing/utils/drawingGeometry';
 
 /**
  * 创建测试形状元素。
@@ -232,6 +233,29 @@ describe('boardTransforms', (): void => {
 
     const updated = updateDrawingNodeText(added, 'text-1', '更长的文本内容');
     expect(expectShapeElement(updated.elements[0]).size.width).toBeGreaterThan(textElement.size.width);
+  });
+
+  it('uses measured text size for text connector anchors even when node size is stale', (): void => {
+    const textElement: DrawingShapeElement = {
+      id: 'text-1',
+      kind: 'shape',
+      metadata: { createdAt: 1, source: 'user' },
+      position: { x: 40, y: 50 },
+      rotation: 0,
+      shape: 'text',
+      size: { height: 120, width: 260 },
+      style: {
+        fontSize: 13,
+        fontWeight: 650,
+        textAlign: 'center'
+      },
+      text: 'Hi'
+    };
+    const measuredSize = measureDrawingTextElementSize(textElement.text, textElement.style);
+    const anchor = getDrawingConnectorAnchorPoint(textElement, 'right');
+
+    expect(anchor.x).toBe(textElement.position.x + measuredSize.width);
+    expect(anchor.y).toBe(textElement.position.y + measuredSize.height / 2);
   });
 
   it('moves multiple elements as one history entry', (): void => {
