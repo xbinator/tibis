@@ -51,6 +51,8 @@ function migrateDatabase(): void {
   ensureColumn('chat_messages', 'thinking', 'thinking TEXT');
   ensureColumn('chat_messages', 'parts_json', 'parts_json TEXT');
   ensureColumn('chat_messages', 'compression_json', 'compression_json TEXT');
+  ensureColumn('chat_messages', 'loading', 'loading INTEGER');
+  ensureColumn('chat_messages', 'finished', 'finished INTEGER');
   ensureColumn('chat_session_compression_records', 'token_count_snapshot', 'token_count_snapshot INTEGER');
   ensureColumn('chat_session_compression_records', 'degrade_reason', 'degrade_reason TEXT');
   ensureColumn('chat_session_compression_records', 'record_set_id', 'record_set_id TEXT');
@@ -104,7 +106,9 @@ export async function initDatabase(): Promise<void> {
       files_json TEXT,
       usage_json TEXT,
       compression_json TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      loading INTEGER,
+      finished INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS chat_session_compression_records (

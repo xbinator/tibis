@@ -68,6 +68,12 @@ export function registerChatHandlers(): void {
     })
   );
   ipcMain.handle(
+    'chat:message:update',
+    wrapHandler((_event, message) => {
+      chatSessionManager.updateMessage(message as ChatMessageRecord);
+    })
+  );
+  ipcMain.handle(
     'chat:message:setAll',
     wrapHandler((_event, sessionId, messages) => {
       chatSessionManager.setSessionMessages(sessionId as string, messages as ChatMessageRecord[]);

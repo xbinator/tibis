@@ -63,14 +63,14 @@ const UPDATE_SESSION_USAGE_SQL = 'UPDATE chat_sessions SET usage_json = ? WHERE 
 // ==================== SQL — 消息 (5 条) ====================
 
 const SELECT_MESSAGES_BY_SESSION_SQL = `
-  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished
   FROM chat_messages
   WHERE session_id = ?
   ORDER BY created_at DESC, id DESC
   LIMIT ?
 `;
 const SELECT_MESSAGES_BEFORE_CURSOR_SQL = `
-  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished
   FROM chat_messages
   WHERE session_id = ?
     AND (created_at < ? OR (created_at = ? AND id < ?))
@@ -79,8 +79,8 @@ const SELECT_MESSAGES_BEFORE_CURSOR_SQL = `
 `;
 const UPSERT_MESSAGE_SQL = `
   INSERT OR REPLACE INTO chat_messages
-    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 const DELETE_SESSION_SQL = 'DELETE FROM chat_sessions WHERE id = ?';
 const DELETE_MESSAGES_BY_SESSION_SQL = 'DELETE FROM chat_messages WHERE session_id = ?';
@@ -141,6 +141,8 @@ interface ChatMessageRow {
   usage_json: string | null;
   compression_json: string | null;
   created_at: string;
+  loading: number | null;
+  finished: number | null;
 }
 
 interface ChatSessionUsageRow {
@@ -196,7 +198,7 @@ function isChatSessionType(value: string): value is ChatSessionType {
 }
 
 function isChatMessageRole(value: string): value is ChatMessageRole {
-  return value === 'user' || value === 'system' || value === 'assistant' || value === 'error' || value === 'compression';
+  return value === 'user' || value === 'system' || value === 'assistant' || value === 'error' || value === 'compression' || value === 'interrupt';
 }
 
 function addUsage(currentUsage: AIUsage | undefined, nextUsage: AIUsage): AIUsage {
@@ -238,8 +240,42 @@ function mapMessageRow(row: ChatMessageRow): ChatMessageRecord {
     files: parseJson<ChatMessageFile[]>(row.files_json),
     usage: parseJson<AIUsage>(row.usage_json),
     compression: parseJson<ChatCompressionMeta>(row.compression_json),
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    loading: row.loading === null ? undefined : row.loading === 1,
+    finished: row.finished === null ? undefined : row.finished === 1
   };
+}
+
+/**
+ * 将布尔值转换为 SQLite 布尔整型。
+ * @param value - 可选布尔值。
+ * @returns SQLite 可存储值。
+ */
+function toSqlBoolean(value: boolean | undefined): number | null {
+  if (value === undefined) return null;
+  return value ? 1 : 0;
+}
+
+/**
+ * 构建消息 upsert SQL 参数。
+ * @param message - 要写入的聊天消息。
+ * @returns SQL 参数列表。
+ */
+function buildMessageUpsertParams(message: ChatMessageRecord): unknown[] {
+  return [
+    message.id,
+    message.sessionId,
+    message.role,
+    message.content,
+    stringifyJson(message.parts),
+    message.thinking ?? null,
+    stringifyJson(message.files),
+    stringifyJson(message.usage),
+    stringifyJson(message.compression),
+    message.createdAt,
+    toSqlBoolean(message.loading),
+    toSqlBoolean(message.finished)
+  ];
 }
 
 function buildPaginatedResult(items: ChatSession[], limit: number): PaginatedSessionsResult {
@@ -372,18 +408,7 @@ class ChatSessionManager {
 
   addMessage(message: ChatMessageRecord): void {
     transaction(() => {
-      dbExecute(UPSERT_MESSAGE_SQL, [
-        message.id,
-        message.sessionId,
-        message.role,
-        message.content,
-        stringifyJson(message.parts),
-        message.thinking ?? null,
-        stringifyJson(message.files),
-        stringifyJson(message.usage),
-        stringifyJson(message.compression),
-        message.createdAt
-      ]);
+      dbExecute(UPSERT_MESSAGE_SQL, buildMessageUpsertParams(message));
       dbExecute(UPDATE_SESSION_LAST_MESSAGE_AT_SQL, [message.createdAt, message.sessionId]);
       if (message.usage) {
         const rows = dbSelect<ChatSessionUsageRow>(SELECT_SESSION_USAGE_SQL, [message.sessionId]);
@@ -393,22 +418,23 @@ class ChatSessionManager {
     });
   }
 
+  /**
+   * 更新或创建单条消息，不更新会话用量汇总。
+   * 用于流式 assistant 草稿和硬中断恢复回写。
+   * @param message - 要更新的聊天消息。
+   */
+  updateMessage(message: ChatMessageRecord): void {
+    transaction(() => {
+      dbExecute(UPSERT_MESSAGE_SQL, buildMessageUpsertParams(message));
+      dbExecute(UPDATE_SESSION_LAST_MESSAGE_AT_SQL, [message.createdAt, message.sessionId]);
+    });
+  }
+
   setSessionMessages(sessionId: string, messages: ChatMessageRecord[]): void {
     transaction(() => {
       dbExecute(DELETE_MESSAGES_BY_SESSION_SQL, [sessionId]);
       for (const msg of messages) {
-        dbExecute(UPSERT_MESSAGE_SQL, [
-          msg.id,
-          msg.sessionId,
-          msg.role,
-          msg.content,
-          stringifyJson(msg.parts),
-          msg.thinking ?? null,
-          stringifyJson(msg.files),
-          stringifyJson(msg.usage),
-          stringifyJson(msg.compression),
-          msg.createdAt
-        ]);
+        dbExecute(UPSERT_MESSAGE_SQL, buildMessageUpsertParams(msg));
       }
       if (messages.length > 0) {
         dbExecute(UPDATE_SESSION_LAST_MESSAGE_AT_SQL, [messages[messages.length - 1].createdAt, sessionId]);

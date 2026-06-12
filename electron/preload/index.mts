@@ -268,6 +268,7 @@ const electronAPI: ElectronAPI = {
 
   chatMessageList: (sessionId, cursor?) => ipcRenderer.invoke('chat:message:list', sessionId, cursor),
   chatMessageAdd: (message) => ipcRenderer.invoke('chat:message:add', message),
+  chatMessageUpdate: (message) => ipcRenderer.invoke('chat:message:update', message),
   chatMessageSetAll: (sessionId, messages) => ipcRenderer.invoke('chat:message:setAll', sessionId, messages),
 
   // ==================== 聊天压缩记录操作 ====================

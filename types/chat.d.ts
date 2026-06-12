@@ -316,6 +316,10 @@ export interface ChatMessageRecord {
   compression?: ChatCompressionMeta;
   /** 创建时间 */
   createdAt: string;
+  /** 是否处于加载中，用于恢复硬中断前的 assistant 草稿 */
+  loading?: boolean;
+  /** 是否已完成，用于区分流式草稿与终态消息 */
+  finished?: boolean;
 }
 
 /**
