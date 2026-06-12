@@ -5,7 +5,9 @@
 import type {
   DrawingBoardSnapshot,
   DrawingBoardState,
+  DrawingConnectorDraftOptions,
   DrawingConnectorEndpoint,
+  DrawingConnectorOptionsChange,
   DrawingElementStyle,
   DrawingElementStyleChange,
   DrawingGeometryChange,
@@ -27,6 +29,7 @@ import {
   resizeDrawingElements,
   rotateDrawingElements,
   undoDrawingBoard,
+  updateDrawingConnectorOptions,
   updateDrawingElementStyle,
   updateDrawingNodeText
 } from '../utils/boardTransforms';
@@ -50,7 +53,7 @@ export interface UseDrawingBoardReturn {
   /** 更新当前连接线草稿坐标 */
   updateConnectorDraftPoint: (point: DrawingPoint) => void;
   /** 提交创建连接线草稿 */
-  commitCreateConnectorDraft: (target: DrawingConnectorEndpoint) => void;
+  commitCreateConnectorDraft: (target: DrawingConnectorEndpoint, options?: DrawingConnectorDraftOptions) => void;
   /** 清空交互草稿 */
   clearDraft: () => void;
   /** 撤销 */
@@ -67,6 +70,8 @@ export interface UseDrawingBoardReturn {
   rotateElements: (changes: DrawingGeometryChange[]) => void;
   /** 更新元素样式 */
   updateElementStyle: (elementId: string, style: DrawingElementStyleChange) => void;
+  /** 更新连接线配置 */
+  updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange) => void;
   /** 删除选区 */
   deleteSelection: () => void;
   /** 更新节点文本 */
@@ -183,7 +188,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
         }
       };
     },
-    commitCreateConnectorDraft: (target: DrawingConnectorEndpoint): void => {
+    commitCreateConnectorDraft: (target: DrawingConnectorEndpoint, options?: DrawingConnectorDraftOptions): void => {
       if (state.value.draft?.kind !== 'creating-connector') {
         return;
       }
@@ -200,7 +205,11 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
             sourceId: state.value.draft.source.elementId,
             sourceAnchor: state.value.draft.source.anchor,
             targetId: target.elementId,
-            targetAnchor: target.anchor
+            targetAnchor: target.anchor,
+            style: options?.style,
+            markerStart: options?.markerStart,
+            markerEnd: options?.markerEnd,
+            curve: options?.curve
           }
         )
       );
@@ -218,6 +227,8 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     resizeElements: (changes: DrawingGeometryChange[]): void => setState(resizeDrawingElements(state.value, changes)),
     rotateElements: (changes: DrawingGeometryChange[]): void => setState(rotateDrawingElements(state.value, changes)),
     updateElementStyle: (elementId: string, style: DrawingElementStyleChange): void => setState(updateDrawingElementStyle(state.value, elementId, style)),
+    updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange): void =>
+      setState(updateDrawingConnectorOptions(state.value, connectorId, options)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
     updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),
     setSelection: (selection: string[]): void => {

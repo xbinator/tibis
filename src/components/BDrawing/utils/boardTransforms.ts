@@ -9,6 +9,7 @@ import type {
   DrawingBoardSnapshot,
   DrawingBoardState,
   DrawingConnectorElement,
+  DrawingConnectorOptionsChange,
   DrawingElementStyleChange,
   DrawingGeometryChange,
   DrawingPoint,
@@ -318,6 +319,10 @@ export function addDrawingConnector(state: DrawingBoardState, options: DrawingAd
       elementId: options.targetId,
       anchor: options.targetAnchor ?? 'center'
     },
+    style: cloneDeep(options.style),
+    markerStart: options.markerStart,
+    markerEnd: options.markerEnd,
+    curve: options.curve,
     label: options.label,
     position: { x: 0, y: 0 },
     size: { width: 0, height: 0 },
@@ -471,7 +476,7 @@ export function rotateDrawingElements(state: DrawingBoardState, changes: Drawing
 export function updateDrawingElementStyle(state: DrawingBoardState, elementId: string, style: DrawingElementStyleChange): DrawingBoardState {
   const nextElements = cloneDeep(state.elements);
   const element = nextElements.find((item) => item.id === elementId);
-  if (!element || !isDrawingShapeElement(element)) {
+  if (!element || (!isDrawingShapeElement(element) && !isDrawingConnectorElement(element))) {
     return withError(state, new Error(`找不到元素: ${elementId}`));
   }
 
@@ -479,6 +484,32 @@ export function updateDrawingElementStyle(state: DrawingBoardState, elementId: s
     ...element.style,
     ...style
   };
+
+  return withHistory(state, {
+    elements: nextElements,
+    edges: cloneDeep(state.edges),
+    selection: [...state.selection],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 更新连接线配置。
+ * @param state - 当前画板状态
+ * @param connectorId - 连接线 ID
+ * @param options - 连接线配置变更
+ * @returns 新画板状态
+ */
+export function updateDrawingConnectorOptions(state: DrawingBoardState, connectorId: string, options: DrawingConnectorOptionsChange): DrawingBoardState {
+  const nextElements = cloneDeep(state.elements);
+  const connector = nextElements.find((item) => item.id === connectorId);
+  if (!connector || !isDrawingConnectorElement(connector)) {
+    return withError(state, new Error(`找不到连接线: ${connectorId}`));
+  }
+
+  connector.markerStart = options.markerStart ?? connector.markerStart;
+  connector.markerEnd = options.markerEnd ?? connector.markerEnd;
+  connector.curve = options.curve ?? connector.curve;
 
   return withHistory(state, {
     elements: nextElements,
