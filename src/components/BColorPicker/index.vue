@@ -371,15 +371,16 @@ watch(
 .b-color-picker__color-block {
   width: 14px;
   height: 14px;
-  outline: 1px solid var(--border-color-a);
+  outline: 1px solid var(--border-primary, #d9d9d9);
   border-radius: 3px;
 }
 
 .b-color-picker__panel {
   padding: 10px;
-  background-color: var(--color-bg-5);
+  background-color: var(--dropdown-bg);
+  border: 1px solid var(--border-primary);
   border-radius: 4px;
-  box-shadow: var(--shadow-special-a);
+  box-shadow: var(--shadow-md);
 }
 
 .b-color-picker__main {
