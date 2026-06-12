@@ -253,6 +253,7 @@ function snapshotMcpSettings(): MCPToolSettings {
       ...server,
       args: [...server.args],
       env: { ...server.env },
+      headers: { ...server.headers },
       toolAllowlist: [...server.toolAllowlist]
     }))
   };
@@ -277,6 +278,7 @@ function createServerFromInput(input: AddMcpServerInput): MCPServerConfig | stri
     command,
     args: normalizeStringArray(input.args),
     env: normalizeEnv(input.env),
+    headers: {},
     toolAllowlist: normalizeStringArray(input.toolAllowlist),
     connectTimeoutMs: normalizeTimeout(input.connectTimeoutMs, DEFAULT_MCP_CONNECT_TIMEOUT_MS, MIN_CONNECT_TIMEOUT_MS, MAX_CONNECT_TIMEOUT_MS),
     toolCallTimeoutMs: normalizeTimeout(input.toolCallTimeoutMs, DEFAULT_MCP_TOOL_CALL_TIMEOUT_MS, MIN_TOOL_CALL_TIMEOUT_MS, MAX_TOOL_CALL_TIMEOUT_MS)
@@ -607,6 +609,7 @@ export function createBuiltinMCPTools(adapter: AIToolConfirmationAdapter): Built
               ...existingServer,
               args: [...existingServer.args],
               env: { ...existingServer.env },
+              headers: { ...existingServer.headers },
               toolAllowlist: [...existingServer.toolAllowlist],
               oauth: existingServer.oauth ? { ...existingServer.oauth } : undefined
             };

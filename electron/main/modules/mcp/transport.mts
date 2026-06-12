@@ -48,6 +48,7 @@ export function createTransport(server: MCPServerConfig, options?: TransportOpti
       return new StreamableHTTPClientTransport(new URL(server.url), {
         authProvider: options?.authProvider,
         requestInit: {
+          headers: server.headers,
           signal: AbortSignal.timeout(options?.timeout ?? server.connectTimeoutMs)
         }
       });

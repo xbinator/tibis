@@ -379,6 +379,8 @@ export interface MCPServerConfig {
   args: string[];
   /** 环境变量。 */
   env: Record<string, string>;
+  /** 远程 MCP 请求头。 */
+  headers: Record<string, string>;
   /** server 级工具白名单。 */
   toolAllowlist: string[];
   /** OAuth 配置（远程服务器可选）。 */

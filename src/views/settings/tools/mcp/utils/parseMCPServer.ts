@@ -21,6 +21,8 @@ export interface MCPServerEditorDraft {
   args: string[];
   /** 环境变量（stdio） */
   env: Record<string, string>;
+  /** 远程 MCP 请求头 */
+  headers: Record<string, string>;
   /** 服务端 URL（streamableHTTP/sse） */
   url: string;
   /** 是否启用 OAuth */
@@ -64,6 +66,30 @@ function normalizeStringArray(value: unknown): string[] {
 }
 
 /**
+ * 归一化 MCP transport 字段。
+ * 兼容第三方配置常见的 type 字段和不同大小写写法。
+ * @param value - 原始 transport/type 值
+ * @returns MCP transport 类型，无法识别时返回 null
+ */
+function normalizeTransportType(value: unknown): MCPTransportType | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'streamablehttp' || normalized === 'streamable-http') {
+    return 'streamableHTTP';
+  }
+  if (normalized === 'sse') {
+    return 'sse';
+  }
+  if (normalized === 'stdio') {
+    return 'stdio';
+  }
+  return null;
+}
+
+/**
  * 将 JSON 文本解析为可提交的 MCP server 草稿。
  * 支持两种格式：
  * 1. 扁平格式：{ "name": "...", "transport": "...", ... }
@@ -99,13 +125,9 @@ export function parseMCPServerEditorDraft(jsonText: string): MCPServerDraftParse
     effectiveParsed = firstValue as Record<string, unknown>;
   }
 
-  // 自动推断传输类型：显式指定 > 有 url 则为 streamableHTTP > 默认 stdio
-  let transport: MCPTransportType = 'stdio';
-  if (effectiveParsed.transport === 'streamableHTTP' || effectiveParsed.transport === 'sse') {
-    transport = effectiveParsed.transport;
-  } else if (typeof effectiveParsed.url === 'string' && effectiveParsed.url.trim()) {
-    transport = 'streamableHTTP';
-  }
+  // 自动推断传输类型：显式 transport/type > 有 url 则为 streamableHTTP > 默认 stdio
+  const explicitTransport = normalizeTransportType(effectiveParsed.transport) ?? normalizeTransportType(effectiveParsed.type);
+  const transport: MCPTransportType = explicitTransport ?? (typeof effectiveParsed.url === 'string' && effectiveParsed.url.trim() ? 'streamableHTTP' : 'stdio');
 
   // 名称优先级：显式 name 字段 > mcpServers 包裹键名 > 默认值
   const explicitName = typeof effectiveParsed.name === 'string' && effectiveParsed.name.trim() ? effectiveParsed.name.trim() : '';
@@ -118,6 +140,7 @@ export function parseMCPServerEditorDraft(jsonText: string): MCPServerDraftParse
       command: typeof effectiveParsed.command === 'string' ? effectiveParsed.command.trim() : '',
       args: normalizeStringArray(effectiveParsed.args),
       env: normalizeStringRecord(effectiveParsed.env),
+      headers: normalizeStringRecord(effectiveParsed.headers),
       url: typeof effectiveParsed.url === 'string' ? effectiveParsed.url.trim() : '',
       enableOAuth: Boolean(effectiveParsed.enableOAuth),
       toolAllowlist: normalizeStringArray(effectiveParsed.toolAllowlist),

@@ -590,6 +590,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       ...server,
       args: [...server.args],
       env: { ...server.env },
+      headers: { ...server.headers },
       toolAllowlist: [...server.toolAllowlist]
     }));
 

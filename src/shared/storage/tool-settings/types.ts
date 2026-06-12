@@ -58,6 +58,8 @@ export interface MCPServerConfig {
   args: string[];
   /** 环境变量 */
   env: Record<string, string>;
+  /** 远程 MCP 请求头 */
+  headers: Record<string, string>;
   /** 默认允许暴露的 tool 名称 */
   toolAllowlist: string[];
   /** OAuth 配置（远程服务器可选） */

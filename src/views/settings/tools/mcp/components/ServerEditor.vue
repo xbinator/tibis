@@ -88,7 +88,7 @@ function serializeMCPServerEditorDraft(server: MCPServerConfig | null): string {
     {
       name: server.name,
       transport: server.transport,
-      ...(isRemote ? { url: server.url } : { command: server.command, args: server.args, env: server.env }),
+      ...(isRemote ? { url: server.url, headers: server.headers } : { command: server.command, args: server.args, env: server.env }),
       ...(isRemote && server.oauth ? { enableOAuth: true } : {}),
       toolAllowlist: server.toolAllowlist,
       toolCallTimeoutMs: server.toolCallTimeoutMs

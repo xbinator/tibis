@@ -92,6 +92,7 @@ function normalizeMCPServerConfig(value: unknown): MCPServerConfig | null {
     command: isString(source.command) ? source.command.trim() : '',
     args,
     env: normalizeEnv(source.env),
+    headers: normalizeEnv(source.headers),
     toolAllowlist: Array.isArray(source.toolAllowlist)
       ? uniq(source.toolAllowlist.filter((t: unknown): t is string => isString(t) && t.trim().length > 0).map((t: string) => t.trim()))
       : [],

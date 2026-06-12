@@ -20,6 +20,7 @@ function createMcpServer(): MCPServerConfig {
     command: '',
     args: [],
     env: {},
+    headers: {},
     toolAllowlist: [],
     connectTimeoutMs: 10_000,
     toolCallTimeoutMs: 60_000,

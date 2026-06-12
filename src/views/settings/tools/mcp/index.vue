@@ -177,6 +177,7 @@ function toPlainMcpServer(server: MCPServerConfig): MCPServerConfig {
     ...server,
     args: [...server.args],
     env: { ...server.env },
+    headers: { ...server.headers },
     toolAllowlist: [...server.toolAllowlist],
     oauth: server.oauth ? { ...server.oauth } : undefined
   };
