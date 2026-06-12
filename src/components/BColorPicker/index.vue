@@ -4,23 +4,7 @@
 -->
 <template>
   <BDropdown v-model:open="visible" :disabled="readonly">
-    <slot>
-      <div class="b-color-picker__trigger" :class="{ 'is-readonly': readonly }">
-        <AInput
-          v-model:value="inputColor"
-          class="b-color-picker__input"
-          :readonly="readonly"
-          :bordered="bordered"
-          :allow-clear="allowClear"
-          :placeholder="placeholder"
-          @blur="handleInputBlur"
-        >
-          <template #suffix>
-            <div class="b-color-picker__color-block" :style="{ background: currentColor }"></div>
-          </template>
-        </AInput>
-      </div>
-    </slot>
+    <slot> </slot>
 
     <template #overlay>
       <div class="b-color-picker__panel">
@@ -347,16 +331,6 @@ function updatePositionFromColor(): void {
   hsva.v = v;
   hsva.a = a;
   syncIndicatorPositions();
-}
-
-/**
- * 输入框失焦处理，解析输入值
- */
-function handleInputBlur(): void {
-  const color = tinycolor(inputColor.value);
-  updateColor(color.isValid() ? color.toHex8() : props.defaultValue);
-  updateInnerColor();
-  updatePositionFromColor();
 }
 
 /** 弹出层打开时同步位置 */
