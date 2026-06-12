@@ -788,6 +788,28 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
   });
 
+  it('selects every drawing element when the select all shortcut is pressed on the drawing board', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    const nodesBeforeSelectAll = wrapper.findAll('[data-testid="drawing-node"]');
+    expect(nodesBeforeSelectAll).toHaveLength(2);
+    expect(nodesBeforeSelectAll[0].classes()).not.toContain('is-selected');
+    expect(nodesBeforeSelectAll[1].classes()).toContain('is-selected');
+
+    await wrapper.trigger('keydown', { key: 'a', metaKey: true });
+
+    const nodesAfterSelectAll = wrapper.findAll('[data-testid="drawing-node"]');
+    expect(nodesAfterSelectAll[0].classes()).toContain('is-selected');
+    expect(nodesAfterSelectAll[1].classes()).toContain('is-selected');
+  });
+
   it('ignores drawing keyboard shortcuts', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       attachTo: document.body

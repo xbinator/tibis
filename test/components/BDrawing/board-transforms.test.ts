@@ -3,7 +3,7 @@
  * @description 验证 BDrawing 手动画板 element transform 与历史记录。
  */
 import { describe, expect, it } from 'vitest';
-import type { DrawingConnectorElement, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import type { DrawingBoardState, DrawingConnectorElement, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import {
   addDrawingConnector,
   addDrawingNode,
@@ -13,6 +13,7 @@ import {
   moveDrawingElements,
   moveDrawingNode,
   redoDrawingBoard,
+  reorderDrawingElement,
   resizeDrawingElements,
   rotateDrawingElements,
   undoDrawingBoard,
@@ -335,5 +336,87 @@ describe('boardTransforms', (): void => {
 
     expect(deleted.elements.map((element) => element.id)).toEqual(['node-2']);
     expect(restored.elements.map((element) => element.id)).toEqual(['node-1', 'node-2', 'connector-1']);
+  });
+
+  describe('reorderDrawingElement', (): void => {
+    /** 创建包含 3 个元素的初始状态：node-1(底) → node-2(中) → node-3(顶) */
+    function createThreeElementState(): DrawingBoardState {
+      return createDrawingBoardState({
+        elements: [createShapeElement('node-1'), createShapeElement('node-2'), createShapeElement('node-3')]
+      });
+    }
+
+    it('brings an element to front (bringToFront)', (): void => {
+      const state = createThreeElementState();
+      const reordered = reorderDrawingElement(state, 'node-1', 'bringToFront');
+
+      // node-1 从索引 0 移到末尾
+      expect(reordered.elements.map((element) => element.id)).toEqual(['node-2', 'node-3', 'node-1']);
+      expect(reordered.history.past).toHaveLength(1);
+    });
+
+    it('brings an element forward by one layer (bringForward)', (): void => {
+      const state = createThreeElementState();
+      const reordered = reorderDrawingElement(state, 'node-1', 'bringForward');
+
+      // node-1 从索引 0 上移到索引 1
+      expect(reordered.elements.map((element) => element.id)).toEqual(['node-2', 'node-1', 'node-3']);
+      expect(reordered.history.past).toHaveLength(1);
+    });
+
+    it('sends an element backward by one layer (sendBackward)', (): void => {
+      const state = createThreeElementState();
+      const reordered = reorderDrawingElement(state, 'node-3', 'sendBackward');
+
+      // node-3 从索引 2 下移到索引 1
+      expect(reordered.elements.map((element) => element.id)).toEqual(['node-1', 'node-3', 'node-2']);
+      expect(reordered.history.past).toHaveLength(1);
+    });
+
+    it('sends an element to back (sendToBack)', (): void => {
+      const state = createThreeElementState();
+      const reordered = reorderDrawingElement(state, 'node-3', 'sendToBack');
+
+      // node-3 从索引 2 移到开头
+      expect(reordered.elements.map((element) => element.id)).toEqual(['node-3', 'node-1', 'node-2']);
+      expect(reordered.history.past).toHaveLength(1);
+    });
+
+    it('does not change order when bringing the top element forward', (): void => {
+      const state = createThreeElementState();
+      const reordered = reorderDrawingElement(state, 'node-3', 'bringForward');
+
+      // node-3 已在最顶层，上移无效
+      expect(reordered.elements.map((element) => element.id)).toEqual(['node-1', 'node-2', 'node-3']);
+      expect(reordered.history.past).toHaveLength(1);
+    });
+
+    it('does not change order when sending the bottom element backward', (): void => {
+      const state = createThreeElementState();
+      const reordered = reorderDrawingElement(state, 'node-1', 'sendBackward');
+
+      // node-1 已在最底层，下移无效
+      expect(reordered.elements.map((element) => element.id)).toEqual(['node-1', 'node-2', 'node-3']);
+      expect(reordered.history.past).toHaveLength(1);
+    });
+
+    it('keeps board unchanged when reordering a missing element', (): void => {
+      const state = createThreeElementState();
+      const reordered = reorderDrawingElement(state, 'missing-node', 'bringToFront');
+
+      expect(reordered.elements.map((element) => element.id)).toEqual(['node-1', 'node-2', 'node-3']);
+      expect(reordered.lastError?.message).toContain('找不到元素');
+      expect(reordered.history.past).toHaveLength(0);
+    });
+
+    it('supports undo and redo after reordering', (): void => {
+      const state = createThreeElementState();
+      const reordered = reorderDrawingElement(state, 'node-1', 'bringToFront');
+      const undone = undoDrawingBoard(reordered);
+      const redone = redoDrawingBoard(undone);
+
+      expect(undone.elements.map((element) => element.id)).toEqual(['node-1', 'node-2', 'node-3']);
+      expect(redone.elements.map((element) => element.id)).toEqual(['node-2', 'node-3', 'node-1']);
+    });
   });
 });
