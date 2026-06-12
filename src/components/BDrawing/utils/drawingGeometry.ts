@@ -46,6 +46,37 @@ export interface DrawingCanvasPointProjection {
 }
 
 /**
+ * 连接线路径计算时临时覆盖的形状几何。
+ */
+export interface DrawingConnectorPathElementOverride {
+  /** 元素 ID */
+  id: string;
+  /** 预览位置 */
+  position?: DrawingPoint;
+  /** 预览尺寸 */
+  size?: DrawingSize;
+}
+
+/**
+ * 连接线端点标记位置。
+ */
+export type DrawingConnectorMarkerPlacement = 'start' | 'end';
+
+/**
+ * 连接线解析后的端点和控制点。
+ */
+interface DrawingConnectorRoute {
+  /** 起点 */
+  source: DrawingPoint;
+  /** 终点 */
+  target: DrawingPoint;
+  /** 起点控制点 */
+  sourceControl?: DrawingPoint;
+  /** 终点控制点 */
+  targetControl?: DrawingPoint;
+}
+
+/**
  * 判断元素是否为形状。
  * @param element - 画板元素
  * @returns 是否为形状元素
@@ -202,6 +233,25 @@ export function findDrawingShapeElement(elements: DrawingElement[], id: string):
 }
 
 /**
+ * 应用连接线路径计算时的临时几何覆盖。
+ * @param element - 原始形状元素
+ * @param overrides - 临时几何覆盖列表
+ * @returns 应用覆盖后的形状元素
+ */
+function applyConnectorPathElementOverride(element: DrawingShapeElement, overrides: DrawingConnectorPathElementOverride[]): DrawingShapeElement {
+  const override = overrides.find((item: DrawingConnectorPathElementOverride): boolean => item.id === element.id);
+  if (!override) {
+    return element;
+  }
+
+  return {
+    ...element,
+    position: override.position ?? element.position,
+    size: override.size ?? element.size
+  };
+}
+
+/**
  * 读取元素中心点。
  * @param element - 画板元素
  * @returns 中心点
@@ -258,6 +308,225 @@ export function findDrawingElementCenter(elements: DrawingElement[], id: string)
  */
 export function createDrawingLinePath(source: DrawingPoint, target: DrawingPoint): string {
   return `M ${source.x} ${source.y} L ${target.x} ${target.y}`;
+}
+
+/**
+ * 创建点位差向量。
+ * @param from - 起点
+ * @param to - 终点
+ * @returns 差向量
+ */
+function createDrawingVector(from: DrawingPoint, to: DrawingPoint): DrawingPoint {
+  return {
+    x: to.x - from.x,
+    y: to.y - from.y
+  };
+}
+
+/**
+ * 归一化方向向量。
+ * @param vector - 原始方向向量
+ * @returns 单位方向向量
+ */
+function normalizeDrawingVector(vector: DrawingPoint): DrawingPoint {
+  const length = Math.hypot(vector.x, vector.y);
+  if (!length) {
+    return { x: 1, y: 0 };
+  }
+
+  return {
+    x: vector.x / length,
+    y: vector.y / length
+  };
+}
+
+/**
+ * 读取连接锚点对应的切线方向。
+ * @param anchor - 连接线锚点
+ * @returns 单位方向向量
+ */
+function getConnectorAnchorDirection(anchor: DrawingConnectorAnchor): DrawingPoint {
+  if (anchor === 'top') {
+    return { x: 0, y: -1 };
+  }
+  if (anchor === 'right') {
+    return { x: 1, y: 0 };
+  }
+  if (anchor === 'bottom') {
+    return { x: 0, y: 1 };
+  }
+  if (anchor === 'left') {
+    return { x: -1, y: 0 };
+  }
+
+  return { x: 1, y: 0 };
+}
+
+/**
+ * 创建三次贝塞尔路线控制点。
+ * @param source - 起点
+ * @param target - 终点
+ * @param sourceAnchor - 起点锚点
+ * @param targetAnchor - 终点锚点
+ * @returns 连接线解析路线
+ */
+function createDrawingBezierRoute(
+  source: DrawingPoint,
+  target: DrawingPoint,
+  sourceAnchor: DrawingConnectorAnchor,
+  targetAnchor: DrawingConnectorAnchor
+): DrawingConnectorRoute {
+  const distance = Math.hypot(target.x - source.x, target.y - source.y);
+  const handleLength = Math.max(48, distance * 0.35);
+  const sourceDirection = getConnectorAnchorDirection(sourceAnchor);
+  const targetDirection = getConnectorAnchorDirection(targetAnchor);
+  const sourceControl = {
+    x: source.x + sourceDirection.x * handleLength,
+    y: source.y + sourceDirection.y * handleLength
+  };
+  const targetControl = {
+    x: target.x + targetDirection.x * handleLength,
+    y: target.y + targetDirection.y * handleLength
+  };
+
+  return {
+    source,
+    target,
+    sourceControl,
+    targetControl
+  };
+}
+
+/**
+ * 创建三次贝塞尔 SVG 路径。
+ * @param source - 起点
+ * @param target - 终点
+ * @param sourceAnchor - 起点锚点
+ * @param targetAnchor - 终点锚点
+ * @returns SVG path d 属性值
+ */
+export function createDrawingBezierPath(
+  source: DrawingPoint,
+  target: DrawingPoint,
+  sourceAnchor: DrawingConnectorAnchor,
+  targetAnchor: DrawingConnectorAnchor
+): string {
+  const route = createDrawingBezierRoute(source, target, sourceAnchor, targetAnchor);
+
+  return `M ${route.source.x} ${route.source.y} C ${route.sourceControl?.x ?? route.source.x} ${route.sourceControl?.y ?? route.source.y}, ${
+    route.targetControl?.x ?? route.target.x
+  } ${route.targetControl?.y ?? route.target.y}, ${route.target.x} ${route.target.y}`;
+}
+
+/**
+ * 解析连接线端点和控制点。
+ * @param elements - 画板元素列表
+ * @param connector - 连接线元素
+ * @param overrides - 预览中的形状几何覆盖
+ * @returns 连接线路线，端点缺失时返回 null
+ */
+function resolveDrawingConnectorRoute(
+  elements: DrawingElement[],
+  connector: DrawingConnectorElement,
+  overrides: DrawingConnectorPathElementOverride[] = []
+): DrawingConnectorRoute | null {
+  const sourceElement = findDrawingShapeElement(elements, connector.source.elementId);
+  const targetElement = findDrawingShapeElement(elements, connector.target.elementId);
+  if (!sourceElement || !targetElement) {
+    return null;
+  }
+
+  const source = applyConnectorPathElementOverride(sourceElement, overrides);
+  const target = applyConnectorPathElementOverride(targetElement, overrides);
+  const sourcePoint = getDrawingConnectorAnchorPoint(source, connector.source.anchor);
+  const targetPoint = getDrawingConnectorAnchorPoint(target, connector.target.anchor);
+
+  if (connector.curve === 'bezier') {
+    return createDrawingBezierRoute(sourcePoint, targetPoint, connector.source.anchor, connector.target.anchor);
+  }
+
+  return {
+    source: sourcePoint,
+    target: targetPoint
+  };
+}
+
+/**
+ * 创建连接线元素路径。
+ * @param elements - 画板元素列表
+ * @param connector - 连接线元素
+ * @param overrides - 预览中的形状几何覆盖
+ * @returns SVG path d 属性值，端点缺失时返回空字符串
+ */
+export function createDrawingConnectorPath(
+  elements: DrawingElement[],
+  connector: DrawingConnectorElement,
+  overrides: DrawingConnectorPathElementOverride[] = []
+): string {
+  const route = resolveDrawingConnectorRoute(elements, connector, overrides);
+  if (!route) {
+    return '';
+  }
+
+  if (connector.curve === 'bezier') {
+    return `M ${route.source.x} ${route.source.y} C ${route.sourceControl?.x ?? route.source.x} ${route.sourceControl?.y ?? route.source.y}, ${
+      route.targetControl?.x ?? route.target.x
+    } ${route.targetControl?.y ?? route.target.y}, ${route.target.x} ${route.target.y}`;
+  }
+
+  return createDrawingLinePath(route.source, route.target);
+}
+
+/**
+ * 创建独立渲染的连接线箭头路径。
+ * @param elements - 画板元素列表
+ * @param connector - 连接线元素
+ * @param placement - 标记位置
+ * @param overrides - 预览中的形状几何覆盖
+ * @returns SVG path d 属性值，不显示标记时返回空字符串
+ */
+export function createDrawingConnectorMarkerPath(
+  elements: DrawingElement[],
+  connector: DrawingConnectorElement,
+  placement: DrawingConnectorMarkerPlacement,
+  overrides: DrawingConnectorPathElementOverride[] = []
+): string {
+  const route = resolveDrawingConnectorRoute(elements, connector, overrides);
+  if (!route) {
+    return '';
+  }
+
+  const markerType = placement === 'start' ? connector.markerStart ?? 'none' : connector.markerEnd ?? 'arrow';
+  if (markerType !== 'arrow') {
+    return '';
+  }
+
+  const tip = placement === 'start' ? route.source : route.target;
+  const tangent =
+    placement === 'start'
+      ? createDrawingVector(route.sourceControl ?? route.target, route.source)
+      : createDrawingVector(route.targetControl ?? route.source, route.target);
+  const direction = normalizeDrawingVector(tangent);
+  const length = 12;
+  const halfWidth = 4.5;
+  const baseCenter = {
+    x: tip.x - direction.x * length,
+    y: tip.y - direction.y * length
+  };
+  const perpendicular = {
+    x: -direction.y,
+    y: direction.x
+  };
+  const left = {
+    x: baseCenter.x + perpendicular.x * halfWidth,
+    y: baseCenter.y + perpendicular.y * halfWidth
+  };
+  const right = {
+    x: baseCenter.x - perpendicular.x * halfWidth,
+    y: baseCenter.y - perpendicular.y * halfWidth
+  };
+
+  return `M ${tip.x} ${tip.y} L ${left.x} ${left.y} L ${right.x} ${right.y} Z`;
 }
 
 /**
