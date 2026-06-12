@@ -76,8 +76,6 @@ const diamondPoints = computed<string>(() => createDrawingDiamondPoints(props.no
 }
 
 .b-drawing-node.is-selected .b-drawing-node__shape {
-  filter: drop-shadow(0 8px 16px var(--color-control-outline));
-  fill: var(--color-primary-bg);
   stroke: var(--color-primary);
 }
 

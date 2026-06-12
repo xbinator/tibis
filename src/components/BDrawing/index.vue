@@ -33,7 +33,6 @@
         :active-tool="activeTool"
         :draft="board.state.value.draft"
         :is-panning="isPanning"
-        :dragging-id="draggingId"
         @select="handleElementSelect"
         @canvas-pointerdown="handleCanvasPointerdown"
         @canvas-pointermove="handleCanvasPointermove"
@@ -137,9 +136,6 @@ interface HandPanSession {
 
 let directDragSession: DirectElementDragSession | null = null;
 let handPanSession: HandPanSession | null = null;
-
-/** 正在拖拽的元素 ID，用于将该节点渲染到最上层。 */
-const draggingId = ref<string | undefined>(undefined);
 
 /** 手型工具是否正在平移中。 */
 const isPanning = ref<boolean>(false);
@@ -324,13 +320,11 @@ function getDirectDragPosition(event: PointerEvent, session: DirectElementDragSe
 function cancelDirectDrag(): void {
   directDragSession?.abortController.abort();
   directDragSession = null;
-  draggingId.value = undefined;
   hideMoveableDuringDirectDrag.value = false;
 }
 
 /**
- * 取消手型工具平移。
- */
+ * 取消手型工具平移。 */
 function cancelHandPan(): void {
   handPanSession?.abortController.abort();
   handPanSession = null;
@@ -483,7 +477,6 @@ function startDirectDrag(id: string, event: PointerEvent, selectOnEnd: boolean):
 
   const abortController = new AbortController();
   cancelDirectDrag();
-  draggingId.value = id;
   hideMoveableDuringDirectDrag.value = selectOnEnd;
   directDragSession = {
     id,
