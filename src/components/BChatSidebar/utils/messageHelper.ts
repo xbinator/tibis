@@ -255,7 +255,7 @@ export function createBase(overrides: Partial<Message>): Message {
 export const create = {
   // 创建 assistant 消息占位符
   assistantPlaceholder(): Message {
-    return createBase({ role: 'assistant', content: '', thinking: '', createdAt: '', loading: true });
+    return createBase({ role: 'assistant', content: '', thinking: '', createdAt: '', loading: true, finished: false });
   },
   // 创建错误消息
   errorMessage(content: string): Message {

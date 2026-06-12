@@ -8,6 +8,7 @@ import { defineStore } from 'pinia';
 import dayjs from 'dayjs';
 import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
+import { recoverInterruptedAssistantDrafts } from '@/components/BChatSidebar/utils/interruptedDraftRecovery';
 import { is, type PersistableMessage } from '@/components/BChatSidebar/utils/messageHelper';
 import type { Message } from '@/components/BChatSidebar/utils/types';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
@@ -21,10 +22,24 @@ import { useTodoStore } from './todo';
  * @returns 可存储的聊天消息记录。
  */
 function toRecordMessage(sessionId: string, message: PersistableMessage): ChatMessageRecord {
-  const { id, role, content, parts, thinking, files, usage, compression, createdAt = dayjs().toISOString() } = message;
+  const { id, role, content, parts, thinking, files, usage, compression, createdAt = dayjs().toISOString(), loading, finished } = message;
 
   // Deep-clone to strip Vue reactive Proxy objects before passing through Electron IPC.
-  return JSON.parse(JSON.stringify({ sessionId, id, role, content, parts, thinking, files, usage, compression, createdAt }));
+  return cloneDeep({ sessionId, id, role, content, parts, thinking, files, usage, compression, createdAt, loading, finished });
+}
+
+/**
+ * 将持久化记录恢复为侧边栏消息。
+ * 旧记录没有 finished/loading 字段时按已完成历史消息处理。
+ * @param record - 持久化聊天消息记录。
+ * @returns 侧边栏消息。
+ */
+function fromRecordMessage(record: ChatMessageRecord): Message {
+  return {
+    ...record,
+    loading: record.loading ?? false,
+    finished: record.finished ?? true
+  };
 }
 
 export const useChatSessionStore = defineStore('chat', {
@@ -44,7 +59,14 @@ export const useChatSessionStore = defineStore('chat', {
           return unwrap(result);
         });
 
-        return messages.map((message) => ({ ...message, finished: true }));
+        const loadedMessages = messages.map(fromRecordMessage);
+        const recoveryResult = recoverInterruptedAssistantDrafts(loadedMessages);
+
+        if (recoveryResult.recovered) {
+          await Promise.all(recoveryResult.recoveredMessages.map((message) => this.updateSessionMessage(sessionId, message)));
+        }
+
+        return recoveryResult.messages;
       } catch (error: unknown) {
         if (isDatabaseInitializationRaceError(error)) {
           return [];
@@ -128,6 +150,23 @@ export const useChatSessionStore = defineStore('chat', {
       const record = toRecordMessage(sessionId, message);
       await retryDuringDatabaseInitialization(async () => {
         const result = await getElectronAPI().chatMessageAdd(record);
+        unwrap(result);
+      });
+    },
+
+    /**
+     * 更新或创建单条消息，不累计会话用量。
+     * 用于流式 assistant 草稿持久化和硬中断恢复回写。
+     * @param sessionId - 要更新的会话 ID。
+     * @param message - 要更新的消息。
+     */
+    async updateSessionMessage(sessionId: string | null | undefined, message: Message): Promise<void> {
+      if (!sessionId) return;
+      if (!is.persistableMessage(message)) return;
+
+      const record = toRecordMessage(sessionId, message);
+      await retryDuringDatabaseInitialization(async () => {
+        const result = await getElectronAPI().chatMessageUpdate(record);
         unwrap(result);
       });
     },

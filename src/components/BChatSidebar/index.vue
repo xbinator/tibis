@@ -122,6 +122,7 @@ import type { AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
 import { computed, h, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { throttle } from 'lodash-es';
 import { createBuiltinTools, isBuiltinToolName, READ_CURRENT_WEBPAGE_TOOL_NAME, READ_DIRECTORY_TOOL_NAME, SKILL_TOOL_NAME } from '@/ai/tools/builtin';
 import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
@@ -172,6 +173,9 @@ import { createFileRefChipResolver } from './utils/chipResolver';
 import { shouldAutoCompactByContextUsage } from './utils/compression/policy';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { create, userChoice, buildMessageReferences } from './utils/messageHelper';
+
+/** assistant 草稿节流持久化间隔。 */
+const ASSISTANT_DRAFT_PERSIST_INTERVAL_MS = 500;
 
 /** 聊天数据存储 */
 const chatStore = useChatSessionStore();
@@ -512,6 +516,57 @@ async function handleBeforeSend(nextMessage: Message): Promise<void> {
   await chatStore.addSessionMessage(settingStore.chatSidebarActiveSessionId, nextMessage);
 }
 
+/**
+ * 判断消息是否为刚创建的空 assistant 草稿。
+ * 空草稿需要立即持久化，确保硬中断时至少能恢复本轮生成状态。
+ * @param message - 待检查消息
+ * @returns 是否为空 assistant 草稿
+ */
+function isEmptyAssistantDraft(message: Message): boolean {
+  return message.role === 'assistant' && message.loading === true && message.finished === false && !message.content && message.parts.length === 0;
+}
+
+/**
+ * 将当前 assistant 草稿单条更新到数据库。
+ * @param message - 当前 assistant 草稿消息
+ */
+async function persistAssistantDraft(message: Message): Promise<void> {
+  const sessionId = settingStore.chatSidebarActiveSessionId;
+  if (!sessionId) return;
+
+  await chatStore.updateSessionMessage(sessionId, message);
+}
+
+/** 节流后的 assistant 草稿持久化，避免 token 高频输出时频繁写库。 */
+const persistAssistantDraftThrottled = throttle(
+  (message: Message): void => {
+    Promise.resolve(persistAssistantDraft(message)).catch(() => undefined);
+  },
+  ASSISTANT_DRAFT_PERSIST_INTERVAL_MS,
+  { leading: false, trailing: true }
+);
+
+/**
+ * 处理 assistant 草稿变化。
+ * @param message - 当前 assistant 草稿消息
+ */
+function handleAssistantDraftChange(message: Message): void {
+  if (isEmptyAssistantDraft(message)) {
+    Promise.resolve(persistAssistantDraft(message)).catch(() => undefined);
+    return;
+  }
+
+  persistAssistantDraftThrottled(message);
+}
+
+/**
+ * 取消待执行的草稿持久化。
+ * 最终消息落库会写入同一条记录，避免旧的 trailing 写入覆盖终态。
+ */
+function cancelAssistantDraftPersistence(): void {
+  persistAssistantDraftThrottled.cancel();
+}
+
 /** 聊天流式处理 hook */
 const { stream, loading: streamLoading } = useChatStream({
   messages,
@@ -520,9 +575,11 @@ const { stream, loading: streamLoading } = useChatStream({
   getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined,
   onBeforeRegenerate: handleBeforeRegenerate,
   onComplete: async (nextMessage: Message) => {
+    cancelAssistantDraftPersistence();
     // eslint-disable-next-line no-use-before-define
     await handleComplete(nextMessage);
   },
+  onAssistantDraftChange: handleAssistantDraftChange,
   onConfirmationAction: handleConfirmationAction
 });
 
@@ -883,6 +940,7 @@ onMounted(async () => {
 
 /** 组件卸载时清理 */
 onUnmounted(() => {
+  cancelAssistantDraftPersistence();
   taskRuntime.dispose();
   confirmationController.dispose();
 });

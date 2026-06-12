@@ -49,6 +49,8 @@ export interface UseChatStreamOptions {
   onBeforeRegenerate?: (messages: Message[], triggerMessage: Message) => Promise<void> | void;
   /** 消息完成回调 */
   onComplete?: (message: Message) => Promise<void> | void;
+  /** assistant 草稿变更回调，用于流式过程中做可恢复持久化 */
+  onAssistantDraftChange?: (message: Message) => Promise<void> | void;
   /** 确认卡片操作回调 */
   onConfirmationAction?: (confirmationId: string, action: ChatMessageConfirmationAction) => void | Promise<void>;
 }
@@ -89,7 +91,7 @@ const DEFAULT_TOOL_LOOP_GUARD_CONFIG: ToolLoopGuardConfig = {
  * 这些工具会在主进程内完成调用并继续同一轮流式输出，前端不应再次尝试本地执行。
  */
 export function useChatStream(options: UseChatStreamOptions): UseChatStreamReturns {
-  const { messages, tools: toolsInput, getToolContext, onBeforeRegenerate, onComplete } = options;
+  const { messages, tools: toolsInput, getToolContext, onBeforeRegenerate, onComplete, onAssistantDraftChange } = options;
 
   /**
    * 解析当前可用的工具列表。
@@ -249,6 +251,19 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   }
 
   /**
+   * 安全通知外层当前 assistant 草稿发生变化。
+   * 草稿持久化失败不应中断正在进行的流式响应。
+   * @param message - 当前 assistant 草稿消息
+   */
+  function notifyAssistantDraftChange(message: Message): void {
+    if (message.role !== 'assistant' || message.finished === true) {
+      return;
+    }
+
+    Promise.resolve(onAssistantDraftChange?.(message)).catch(() => undefined);
+  }
+
+  /**
    * 收尾当前助手消息，供主动中止等非正常完成场景复用
    */
   function finalizeCurrentAssistantMessage(): Message | undefined {
@@ -278,6 +293,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     }
 
     append.toolCallPart(message, chunk.toolCallId, chunk.toolName, chunk.input);
+    notifyAssistantDraftChange(message);
   }
 
   /**
@@ -291,6 +307,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     append.toolInputStartPart(message, chunk.toolCallId, chunk.toolName);
     message.createdAt ||= dayjs().toISOString();
+    notifyAssistantDraftChange(message);
   }
 
   /**
@@ -310,6 +327,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     append.toolInputDeltaPart(message, chunk.toolCallId, chunk.inputTextDelta, parsed.value);
     message.createdAt ||= dayjs().toISOString();
+    notifyAssistantDraftChange(message);
   }
 
   /**
@@ -327,6 +345,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     }
 
     message.createdAt ||= dayjs().toISOString();
+    notifyAssistantDraftChange(message);
   }
 
   /**
@@ -339,6 +358,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     }
 
     append.toolResultPart(message, result.toolCallId, result.toolName, result.result);
+    notifyAssistantDraftChange(message);
   }
 
   /**
@@ -351,6 +371,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     }
 
     append.toolResultPart(message, chunk.toolCallId, chunk.toolName, chunk.result);
+    notifyAssistantDraftChange(message);
   }
 
   /**
@@ -513,7 +534,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     append.textPart(message, content);
     message.loading = false;
+    message.finished = false;
     message.createdAt ||= dayjs().toISOString();
+    notifyAssistantDraftChange(message);
   }
 
   /**
@@ -525,7 +548,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     append.thinkingPart(message, thinking);
     message.loading = false;
+    message.finished = false;
     message.createdAt ||= dayjs().toISOString();
+    notifyAssistantDraftChange(message);
   }
 
   /**
@@ -573,11 +598,14 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       lastMessage.loading = true;
       lastMessage.finished = false;
       lastMessage.createdAt ||= dayjs().toISOString();
+      notifyAssistantDraftChange(lastMessage);
       return lastMessage;
     }
 
     const placeholder = create.assistantPlaceholder();
+    placeholder.createdAt ||= dayjs().toISOString();
     messages.value.push(placeholder);
+    notifyAssistantDraftChange(placeholder);
     return placeholder;
   }
 
