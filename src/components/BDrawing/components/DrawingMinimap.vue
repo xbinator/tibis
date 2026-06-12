@@ -9,15 +9,6 @@
     <template #overlay>
       <div class="b-drawing-minimap__panel">
         <svg class="b-drawing-minimap__svg" :viewBox="viewBox" @pointerdown="handlePointerdown" @wheel.prevent="handleWheel">
-          <line
-            v-for="connector in connectorLines"
-            :key="connector.id"
-            class="b-drawing-minimap__connector"
-            :x1="connector.source.x"
-            :y1="connector.source.y"
-            :x2="connector.target.x"
-            :y2="connector.target.y"
-          ></line>
           <template v-for="element in shapeElements" :key="element.id">
             <polygon
               v-if="isDrawingDiamondShape(element.shape)"
@@ -58,22 +49,14 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingConnectorElement, DrawingElement, DrawingPoint, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
+import type { DrawingElement, DrawingPoint, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
 import type { VNodeChild } from 'vue';
 import { computed, ref } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { throttle } from 'lodash-es';
 import BDropdown from '@/components/BDropdown/index.vue';
 import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/defaults';
-import {
-  createDrawingDiamondPoints,
-  findDrawingShapeElement,
-  getDrawingElementCenter,
-  getDrawingResponsiveViewBoxSize,
-  isDrawingConnectorElement,
-  isDrawingDiamondShape,
-  isDrawingShapeElement
-} from '../utils/drawingGeometry';
+import { createDrawingDiamondPoints, getDrawingResponsiveViewBoxSize, isDrawingDiamondShape, isDrawingShapeElement } from '../utils/drawingGeometry';
 
 const MINIMAP_EMPTY_SIZE = 320;
 const MINIMAP_VIEWBOX_PADDING = 80;
@@ -109,18 +92,6 @@ interface DrawingMinimapRect {
   width: number;
   /** 高度 */
   height: number;
-}
-
-/**
- * 小地图连接线。
- */
-interface DrawingMinimapConnectorLine {
-  /** 连接线 ID */
-  id: string;
-  /** 起点 */
-  source: DrawingPoint;
-  /** 终点 */
-  target: DrawingPoint;
 }
 
 /**
@@ -196,7 +167,6 @@ function createMinimapBounds(elements: DrawingShapeElement[], viewport: DrawingM
 }
 
 const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter(isDrawingShapeElement));
-const connectorElements = computed<DrawingConnectorElement[]>(() => props.elements.filter(isDrawingConnectorElement));
 
 const viewportFrame = computed<DrawingMinimapRect>(() => {
   const size = getDrawingResponsiveViewBoxSize(props.viewport.zoom, props.viewportSize);
@@ -217,25 +187,6 @@ const viewBox = computed<string>(() => {
   return `${bounds.value.minX} ${bounds.value.minY} ${width} ${height}`;
 });
 
-const connectorLines = computed<DrawingMinimapConnectorLine[]>(() =>
-  connectorElements.value.flatMap((connector: DrawingConnectorElement): DrawingMinimapConnectorLine[] => {
-    const source = findDrawingShapeElement(props.elements, connector.source.elementId);
-    const target = findDrawingShapeElement(props.elements, connector.target.elementId);
-    if (!source || !target) {
-      return [];
-    }
-
-    return [
-      {
-        id: connector.id,
-        source: getDrawingElementCenter(source),
-        target: getDrawingElementCenter(target)
-      }
-    ];
-  })
-);
-
-/** 视口矩形是否正在拖拽。 */
 const isDragging = ref<boolean>(false);
 
 /** 拖拽起始时鼠标在 SVG 坐标系中的位置。 */
@@ -354,13 +305,6 @@ function handlePointerdown(event: PointerEvent): void {
   height: 100%;
   cursor: crosshair;
   background: transparent;
-}
-
-.b-drawing-minimap__connector {
-  stroke: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  stroke-width: 10;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
 }
 
 .b-drawing-minimap__shape {
