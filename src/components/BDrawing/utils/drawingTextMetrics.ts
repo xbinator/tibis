@@ -9,9 +9,9 @@ export const DRAWING_TEXT_DEFAULT_FONT_SIZE = 13;
 /** 文本元素默认字重。 */
 export const DRAWING_TEXT_DEFAULT_FONT_WEIGHT = 650;
 /** 文本元素水平内边距。 */
-export const DRAWING_TEXT_HORIZONTAL_PADDING = 20;
+export const DRAWING_TEXT_HORIZONTAL_PADDING = 12;
 /** 文本元素垂直内边距。 */
-export const DRAWING_TEXT_VERTICAL_PADDING = 16;
+export const DRAWING_TEXT_VERTICAL_PADDING = 8;
 /** 文本元素窄拉丁字符宽度估算比例。 */
 const DRAWING_TEXT_NARROW_CHARACTER_WIDTH_RATIO = 0.34;
 /** 文本元素普通拉丁字符宽度估算比例。 */
