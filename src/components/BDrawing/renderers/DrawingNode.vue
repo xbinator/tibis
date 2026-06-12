@@ -56,11 +56,11 @@
         v-for="anchor in connectorAnchors"
         :key="anchor.id"
         class="b-drawing-node__anchor"
-        data-testid="drawing-connector-anchor"
+        :class="{ 'is-active': isConnectorAnchorActive(anchor.id) }"
         :data-drawing-anchor="anchor.id"
         :cx="anchor.x"
         :cy="anchor.y"
-        r="4"
+        :r="isConnectorAnchorActive(anchor.id) ? 6 : 4"
       />
     </g>
   </g>
@@ -80,11 +80,14 @@ interface Props {
   node: DrawingShapeElement;
   /** 是否选中 */
   selected?: boolean;
+  /** 当前激活的连接锚点 */
+  activeConnectorAnchor?: DrawingConnectorAnchor | null;
   /** 是否显示连接锚点 */
   showConnectorAnchors?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  activeConnectorAnchor: null,
   selected: false,
   showConnectorAnchors: false
 });
@@ -113,6 +116,15 @@ const connectorAnchors = computed<Array<{ id: Exclude<DrawingConnectorAnchor, 'c
   { id: 'bottom', x: props.node.size.width / 2, y: props.node.size.height },
   { id: 'left', x: 0, y: props.node.size.height / 2 }
 ]);
+
+/**
+ * 判断连接锚点是否处于当前激活状态。
+ * @param anchor - 锚点 ID
+ * @returns 是否激活
+ */
+function isConnectorAnchorActive(anchor: Exclude<DrawingConnectorAnchor, 'center'>): boolean {
+  return props.activeConnectorAnchor === anchor || props.activeConnectorAnchor === 'center';
+}
 </script>
 
 <style lang="less" scoped>
@@ -145,5 +157,13 @@ const connectorAnchors = computed<Array<{ id: Exclude<DrawingConnectorAnchor, 'c
   fill: var(--bg-primary);
   stroke: var(--color-primary);
   stroke-width: 2;
+  transition: fill 0.15s ease, r 0.15s ease, stroke-width 0.15s ease;
+}
+
+.b-drawing-node__anchor.is-active {
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--color-primary) 45%, transparent));
+  fill: var(--color-primary);
+  stroke: var(--bg-primary);
+  stroke-width: 2.5;
 }
 </style>

@@ -20,22 +20,54 @@
       </defs>
 
       <DrawingEdgeRenderer v-for="edge in edges" :key="edge.id" :edge="edge" :elements="elements" />
-      <DrawingConnectorRenderer v-for="connector in connectorElements" :key="connector.id" :connector="connector" :elements="elements" />
-      <path
-        v-if="connectorPreviewPath"
-        class="b-drawing-canvas__connector-preview"
-        data-testid="drawing-connector-preview"
-        :d="connectorPreviewPath"
-        marker-end="url(#b-drawing-arrow)"
-      ></path>
+      <DrawingConnectorRenderer
+        v-for="connector in connectorElements"
+        :key="`connector-hit-${connector.id}`"
+        :connector="connector"
+        :elements="elements"
+        :selected="selection.includes(connector.id)"
+        :show-line="false"
+        :show-markers="false"
+        :show-selected-endpoints="false"
+        @select="handleElementSelect"
+      />
       <DrawingNodeRenderer
         v-for="element in shapeElements"
         :key="element.id"
         :node="element"
+        :active-connector-anchor="connectorHoverEndpoint?.elementId === element.id ? connectorHoverEndpoint.anchor : null"
         :selected="selection.includes(element.id)"
         :show-connector-anchors="activeTool === 'connector'"
         @select="handleElementSelect"
         @release="handleElementRelease"
+      />
+      <path
+        v-if="connectorPreviewPath"
+        class="b-drawing-canvas__connector-preview"
+        :d="connectorPreviewPath"
+        :marker-end="connectorPreviewMarkerEnd"
+        :stroke="connectorPreviewStroke"
+        :stroke-width="connectorPreviewStrokeWidth"
+      ></path>
+      <DrawingConnectorRenderer
+        v-for="connector in connectorElements"
+        :key="connector.id"
+        :connector="connector"
+        :elements="elements"
+        :show-hit="false"
+        :show-line="true"
+        :show-selected-endpoints="false"
+        @select="handleElementSelect"
+      />
+      <DrawingConnectorRenderer
+        v-for="connector in selectedConnectorElements"
+        :key="`selected-endpoints-${connector.id}`"
+        :connector="connector"
+        :elements="elements"
+        :selected="true"
+        :show-hit="false"
+        :show-line="false"
+        :show-markers="false"
       />
       <DrawingCreatePreview v-if="shapeDraft" :draft="shapeDraft" :draft-style="draftStyle" />
     </svg>
@@ -45,6 +77,8 @@
 <script setup lang="ts">
 import type {
   DrawingConnectorElement,
+  DrawingConnectorDraftOptions,
+  DrawingConnectorEndpoint,
   DrawingEdge,
   DrawingElement,
   DrawingElementStyle,
@@ -101,6 +135,10 @@ interface Props {
   draft?: DrawingInteractionDraft;
   /** 创建草稿预览样式 */
   draftStyle?: DrawingElementStyle;
+  /** 创建连接线草稿配置 */
+  draftConnector?: DrawingConnectorDraftOptions;
+  /** 创建连接线时 hover 的目标端点 */
+  connectorHoverEndpoint?: DrawingConnectorEndpoint | null;
   /** 是否正在平移（手型工具拖拽中） */
   isPanning?: boolean;
 }
@@ -125,10 +163,20 @@ const viewBox = computed<string>(() => createDrawingViewBox(props.viewport, prop
 
 const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter(isDrawingShapeElement));
 const connectorElements = computed<DrawingConnectorElement[]>(() => props.elements.filter(isDrawingConnectorElement));
+/** 当前选中的连接线元素，用于在节点上方渲染端点高亮。 */
+const selectedConnectorElements = computed<DrawingConnectorElement[]>(() =>
+  connectorElements.value.filter((connector: DrawingConnectorElement): boolean => props.selection.includes(connector.id))
+);
 /** 当前创建形状草稿，供预览组件使用。 */
 const shapeDraft = computed<DrawingCreateShapeDraft | undefined>(() => (props.draft?.kind === 'creating-shape' ? props.draft : undefined));
 /** 当前创建连接线草稿，供预览路径使用。 */
 const connectorDraft = computed<DrawingCreateConnectorDraft | undefined>(() => (props.draft?.kind === 'creating-connector' ? props.draft : undefined));
+/** 创建连接线预览描边色。 */
+const connectorPreviewStroke = computed<string>(() => props.draftConnector?.style?.stroke ?? '#64748b');
+/** 创建连接线预览描边宽度。 */
+const connectorPreviewStrokeWidth = computed<number>(() => props.draftConnector?.style?.strokeWidth ?? 2);
+/** 创建连接线预览终点标记。 */
+const connectorPreviewMarkerEnd = computed<string | undefined>(() => (props.draftConnector?.markerEnd === 'none' ? undefined : 'url(#b-drawing-arrow)'));
 const connectorPreviewPath = computed<string>(() => {
   if (!connectorDraft.value) {
     return '';
