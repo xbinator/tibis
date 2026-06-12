@@ -1,5 +1,11 @@
 <template>
-  <ADropdown overlay-class-name="b-dropdown-overlay" :get-popup-container="getPopupContainer" :disabled="disabled" :placement="placement" :align="align">
+  <ADropdown
+    overlay-class-name="b-dropdown-overlay"
+    :get-popup-container="getPopupContainer"
+    :disabled="disabled"
+    :placement="placement as 'topLeft'"
+    :align="align"
+  >
     <slot></slot>
 
     <template #overlay>
@@ -11,16 +17,9 @@
 </template>
 
 <script lang="ts" setup>
-import { DropdownProps } from 'ant-design-vue';
+import type { BDropdownProps } from './type';
 
-interface Props {
-  disabled?: boolean;
-  placement?: DropdownProps['placement'];
-  align?: DropdownProps['align'];
-  getPopupContainer?: DropdownProps['getPopupContainer'];
-}
-
-withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<BDropdownProps>(), {
   disabled: false,
   placement: 'bottomLeft',
   align: undefined,

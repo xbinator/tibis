@@ -1,4 +1,20 @@
 /* eslint-disable no-use-before-define */
+import type { DropdownProps } from 'ant-design-vue';
+
+/**
+ * BDropdown 组件 Props 类型定义
+ */
+export interface BDropdownProps {
+  /** 是否禁用 */
+  disabled?: boolean;
+  /** 弹出位置 */
+  placement?: 'bottomLeft' | 'bottomRight' | 'topLeft' | 'topRight' | 'rightTop';
+  /** 对齐方式 */
+  align?: DropdownProps['align'];
+  /** 弹出容器 */
+  getPopupContainer?: DropdownProps['getPopupContainer'];
+}
+
 export interface DropdownOptionItem {
   /** 选项类型 */
   type?: 'item';
