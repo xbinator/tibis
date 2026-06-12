@@ -3,11 +3,44 @@
   @description BColorPicker 颜色选择器组件，支持 SV 面板、色相条、透明度条拖拽选择。
 -->
 <template>
-  <BDropdown v-model:open="visible" :disabled="readonly" :get-popup-container="(triggerNode) => triggerNode">
+  <BDropdown v-model:open="visible" :disabled="readonly" :get-popup-container="(triggerNode) => triggerNode" :placement="placement">
     <slot>
       <div class="b-color-picker__trigger" :class="{ 'is-readonly': readonly }">
+        <div class="b-color-picker__presets" role="group" aria-label="快捷颜色">
+          <button
+            v-for="presetColor in presetColorOptions"
+            :key="presetColor"
+            class="b-color-picker__preset-button"
+            :class="{ 'is-active': isPresetActive(presetColor), 'is-transparent': isTransparentColor(presetColor) }"
+            :aria-label="`选择颜色 ${presetColor}`"
+            :data-testid="`color-picker-preset-${presetColor}`"
+            :disabled="readonly"
+            type="button"
+            @click.stop="handlePresetClick(presetColor)"
+          >
+            <span class="b-color-picker__preset-swatch" :style="{ backgroundColor: presetColor }"></span>
+          </button>
+
+          <span class="b-color-picker__custom-divider" data-testid="color-picker-custom-divider"></span>
+
+          <button
+            class="b-color-picker__custom-trigger"
+            :class="{ 'is-transparent': isTransparentColor(currentColor) }"
+            aria-label="自定义颜色"
+            data-testid="color-picker-custom-trigger"
+            :disabled="readonly"
+            type="button"
+          >
+            <span class="b-color-picker__custom-swatch" :style="{ backgroundColor: currentColor }"></span>
+          </button>
+        </div>
+      </div>
+    </slot>
+
+    <template #overlay>
+      <div class="b-color-picker__panel is-compact">
         <AInput
-          v-model:value="inputColor"
+          :value="inputColor"
           class="b-color-picker__input"
           :data-testid="inputTestId"
           :readonly="readonly"
@@ -15,16 +48,13 @@
           :allow-clear="allowClear"
           :placeholder="placeholder"
           @blur="handleInputBlur"
+          @update:value="handleInputUpdate"
         >
           <template #suffix>
             <div class="b-color-picker__color-block" :style="{ background: currentColor }"></div>
           </template>
         </AInput>
-      </div>
-    </slot>
 
-    <template #overlay>
-      <div class="b-color-picker__panel">
         <!-- SV 面板 + 色相条 -->
         <div class="b-color-picker__main">
           <!-- 饱和度/明度面板 -->
@@ -87,9 +117,11 @@ const emit = defineEmits<{
 }>();
 
 /** SV 面板尺寸常量 */
-const SV_PANEL_SIZE = { width: 280, height: 180 } as const;
+const SV_PANEL_SIZE = { width: 220, height: 140 } as const;
 /** 滑块指示点尺寸 */
 const THUMB_SIZE = { width: 4, height: 4 } as const;
+/** 默认快捷预设颜色。 */
+const DEFAULT_PRESET_COLORS = ['#111827', '#64748b', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6'] as const;
 
 /** 弹出层可见状态 */
 const visible = ref<boolean>(false);
@@ -122,6 +154,8 @@ let dragging: 'sv' | 'hue' | 'alpha' | null = null;
 
 /** SV 面板背景色（纯色相） */
 const bgColor = computed<string>(() => `hsl(${hsva.h}, 100%, 50%)`);
+/** 快捷预设颜色。 */
+const presetColorOptions = computed<readonly string[]>(() => (props.presetColors?.length ? props.presetColors : DEFAULT_PRESET_COLORS));
 
 /**
  * 根据输出格式格式化颜色值
@@ -156,6 +190,24 @@ function updateColor(color: { h: number; s: number; v: number; a: number } | str
   const formattedColor = formatColor(currentColor.value);
   emit('update:value', formattedColor);
   emit('change', formattedColor);
+}
+
+/**
+ * 判断预设色是否为当前颜色。
+ * @param color - 预设颜色
+ * @returns 当前颜色是否匹配预设色
+ */
+function isPresetActive(color: string): boolean {
+  return formatColor(color).toLowerCase() === inputColor.value.toLowerCase();
+}
+
+/**
+ * 判断颜色是否为透明色。
+ * @param color - 颜色值
+ * @returns 是否为透明色
+ */
+function isTransparentColor(color: string): boolean {
+  return tinycolor(color).getAlpha() === 0;
 }
 
 /**
@@ -355,6 +407,34 @@ function updatePositionFromColor(): void {
 }
 
 /**
+ * 处理快捷预设色选择。
+ * @param color - 预设颜色
+ */
+function handlePresetClick(color: string): void {
+  if (props.readonly) return;
+
+  updateColor(color);
+  updateInnerColor();
+  updatePositionFromColor();
+  visible.value = false;
+}
+
+/**
+ * 输入框输入时同步有效颜色，避免外部在失焦前读取到旧值。
+ * @param value - 输入框当前值
+ */
+function handleInputUpdate(value: string): void {
+  inputColor.value = value;
+
+  if (!tinycolor(value).isValid()) {
+    return;
+  }
+
+  updateColor(value);
+  updatePositionFromColor();
+}
+
+/**
  * 输入框失焦处理，解析输入值
  */
 function handleInputBlur(): void {
@@ -394,9 +474,66 @@ watch(
   }
 }
 
+.b-color-picker__presets {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.b-color-picker__preset-button,
+.b-color-picker__custom-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  cursor: pointer;
+  background: var(--bg-tertiary);
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.b-color-picker__preset-button:hover,
+.b-color-picker__custom-trigger:hover,
+.b-color-picker__preset-button.is-active {
+  border-color: color-mix(in srgb, var(--color-primary) 38%, transparent);
+}
+
+.b-color-picker__preset-button:disabled,
+.b-color-picker__custom-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.b-color-picker__preset-swatch,
+.b-color-picker__custom-swatch {
+  width: 14px;
+  height: 14px;
+  outline: 1px solid color-mix(in srgb, var(--border-primary) 90%, transparent);
+  border-radius: 3px;
+}
+
+.b-color-picker__preset-button.is-transparent .b-color-picker__preset-swatch,
+.b-color-picker__custom-trigger.is-transparent .b-color-picker__custom-swatch {
+  background-color: transparent;
+  background-image: linear-gradient(45deg, #d1d5db 25%, transparent 25%), linear-gradient(-45deg, #d1d5db 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d1d5db 75%), linear-gradient(-45deg, transparent 75%, #d1d5db 75%);
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+  background-size: 10px 10px;
+}
+
+.b-color-picker__custom-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-primary);
+}
+
 .b-color-picker__input {
   width: 100%;
   height: 28px;
+  margin-bottom: 10px;
   font-size: 12px;
 
   &.ant-input-affix-wrapper {
@@ -428,14 +565,14 @@ watch(
 
 .b-color-picker__main {
   display: flex;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
 .b-color-picker__sv-panel {
   position: relative;
-  width: 280px;
-  height: 180px;
-  margin-right: 10px;
+  width: 220px;
+  height: 140px;
   touch-action: none;
   cursor: crosshair;
   user-select: none;
@@ -468,7 +605,7 @@ watch(
 .b-color-picker__hue-bar {
   position: relative;
   width: 12px;
-  height: 180px;
+  height: 140px;
   touch-action: none;
   cursor: pointer;
   user-select: none;
@@ -488,7 +625,7 @@ watch(
 
 .b-color-picker__alpha-bar {
   position: relative;
-  width: 280px;
+  width: 220px;
   height: 12px;
   touch-action: none;
   cursor: pointer;

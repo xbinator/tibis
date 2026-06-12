@@ -2,6 +2,7 @@
  * @file types.ts
  * @description BColorPicker 组件类型定义。
  */
+import type { BDropdownProps } from '@/components/BDropdown/type';
 
 /** 颜色输出格式 */
 export type ColorFormat = 'rgb' | 'hex';
@@ -24,4 +25,8 @@ export interface BColorPickerProps {
   readonly?: boolean;
   /** 输入框测试 ID */
   inputTestId?: string;
+  /** 快捷预设颜色列表 */
+  presetColors?: readonly string[];
+  /** 下拉菜单位置 */
+  placement?: BDropdownProps['placement'];
 }
