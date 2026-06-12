@@ -5,6 +5,8 @@
 import type {
   DrawingBoardSnapshot,
   DrawingBoardState,
+  DrawingConnectorEndpoint,
+  DrawingElementStyle,
   DrawingElementStyleChange,
   DrawingGeometryChange,
   DrawingNodeType,
@@ -42,11 +44,13 @@ export interface UseDrawingBoardReturn {
   /** 更新当前草稿坐标 */
   updateDraftPoint: (point: DrawingPoint) => void;
   /** 提交创建形状草稿 */
-  commitCreateShapeDraft: () => void;
+  commitCreateShapeDraft: (style?: DrawingElementStyle) => void;
   /** 开始创建连接线草稿 */
-  startCreateConnectorDraft: (sourceId: string) => void;
+  startCreateConnectorDraft: (source: DrawingConnectorEndpoint, current: DrawingPoint) => void;
+  /** 更新当前连接线草稿坐标 */
+  updateConnectorDraftPoint: (point: DrawingPoint) => void;
   /** 提交创建连接线草稿 */
-  commitCreateConnectorDraft: (targetId: string) => void;
+  commitCreateConnectorDraft: (target: DrawingConnectorEndpoint) => void;
   /** 清空交互草稿 */
   clearDraft: () => void;
   /** 撤销 */
@@ -130,7 +134,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
         }
       };
     },
-    commitCreateShapeDraft: (): void => {
+    commitCreateShapeDraft: (style?: DrawingElementStyle): void => {
       const { draft } = state.value;
       if (draft?.kind !== 'creating-shape') {
         return;
@@ -149,22 +153,37 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
             id: shapeId,
             shape: draft.shape,
             start: draft.start,
-            end: draft.current
+            end: draft.current,
+            style
           }
         )
       );
     },
-    startCreateConnectorDraft: (sourceId: string): void => {
+    startCreateConnectorDraft: (source: DrawingConnectorEndpoint, current: DrawingPoint): void => {
       state.value = {
         ...state.value,
         draft: {
           kind: 'creating-connector',
-          sourceId
+          source,
+          current
         },
         selection: []
       };
     },
-    commitCreateConnectorDraft: (targetId: string): void => {
+    updateConnectorDraftPoint: (point: DrawingPoint): void => {
+      if (state.value.draft?.kind !== 'creating-connector') {
+        return;
+      }
+
+      state.value = {
+        ...state.value,
+        draft: {
+          ...state.value.draft,
+          current: point
+        }
+      };
+    },
+    commitCreateConnectorDraft: (target: DrawingConnectorEndpoint): void => {
       if (state.value.draft?.kind !== 'creating-connector') {
         return;
       }
@@ -178,8 +197,10 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
           },
           {
             id: `drawing-connector-${connectorIndex}`,
-            sourceId: state.value.draft.sourceId,
-            targetId
+            sourceId: state.value.draft.source.elementId,
+            sourceAnchor: state.value.draft.source.anchor,
+            targetId: target.elementId,
+            targetAnchor: target.anchor
           }
         )
       );

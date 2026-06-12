@@ -73,7 +73,7 @@ const DRAWING_TOOLBAR_HISTORY_BUTTON_INDEX: Record<DrawingToolbarHistoryAction, 
  * @returns 工具按钮包装器
  */
 function findDrawingToolbarToolButton(wrapper: VueWrapper, tool: DrawingToolbarTool): DOMWrapper<Element> {
-  return wrapper.findAll('.b-drawing-toolbar__group--top button')[DRAWING_TOOLBAR_TOOL_BUTTON_INDEX[tool]];
+  return wrapper.findAll('.b-drawing-toolbar__group--top > button')[DRAWING_TOOLBAR_TOOL_BUTTON_INDEX[tool]];
 }
 
 /**
@@ -83,7 +83,7 @@ function findDrawingToolbarToolButton(wrapper: VueWrapper, tool: DrawingToolbarT
  * @returns 历史按钮包装器
  */
 function findDrawingToolbarHistoryButton(wrapper: VueWrapper, action: DrawingToolbarHistoryAction): DOMWrapper<Element> {
-  return wrapper.findAll('.b-drawing-toolbar__group--bottom-left button')[DRAWING_TOOLBAR_HISTORY_BUTTON_INDEX[action]];
+  return wrapper.findAll('.b-drawing-toolbar__group--bottom-left > button')[DRAWING_TOOLBAR_HISTORY_BUTTON_INDEX[action]];
 }
 
 /**
@@ -140,6 +140,48 @@ function findDrawingFillInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement>
  */
 function findDrawingStrokeInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement> {
   return wrapper.find<HTMLInputElement>('[data-testid="drawing-style-stroke-input"]');
+}
+
+/**
+ * 样式面板颜色配置类型。
+ */
+type DrawingStyleColorTarget = 'stroke' | 'fill';
+
+/**
+ * 样式面板颜色配置在面板中的顺序。
+ */
+const DRAWING_STYLE_COLOR_TARGET_INDEX: Record<DrawingStyleColorTarget, number> = {
+  fill: 1,
+  stroke: 0
+};
+
+/**
+ * 查找样式面板中的自定义颜色按钮。
+ * @param wrapper - BDrawing 测试包装器
+ * @param target - 颜色配置类型
+ * @returns 自定义颜色按钮包装器
+ */
+function findDrawingColorCustomTrigger(wrapper: VueWrapper, target: DrawingStyleColorTarget): DOMWrapper<Element> {
+  return findDrawingStylePanel(wrapper).findAll('[data-testid="color-picker-custom-trigger"]')[DRAWING_STYLE_COLOR_TARGET_INDEX[target]];
+}
+
+/**
+ * 打开样式面板中的颜色输入框。
+ * @param wrapper - BDrawing 测试包装器
+ * @param target - 颜色配置类型
+ * @returns 颜色输入框包装器
+ */
+async function openDrawingColorInput(wrapper: VueWrapper, target: DrawingStyleColorTarget): Promise<DOMWrapper<HTMLInputElement>> {
+  const findInput = target === 'fill' ? findDrawingFillInput : findDrawingStrokeInput;
+  const currentInput = findInput(wrapper);
+
+  if (currentInput.exists()) {
+    return currentInput;
+  }
+
+  await findDrawingColorCustomTrigger(wrapper, target).trigger('click');
+  await nextTick();
+  return findInput(wrapper);
 }
 
 /**
@@ -309,6 +351,10 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
       elementSnapDirections: {
         type: [Boolean, Object],
         default: true
+      },
+      padding: {
+        type: Object,
+        default: (): Record<string, number> => ({})
       }
     },
     emits: ['drag', 'drag-end', 'drag-group', 'drag-group-end', 'resize', 'resize-end', 'resize-group', 'resize-group-end', 'rotate-end'],
@@ -334,6 +380,7 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         :data-snap-middle="String(snapDirections.middle)"
         :data-element-snap-center="String(elementSnapDirections.center)"
         :data-element-snap-middle="String(elementSnapDirections.middle)"
+        :data-padding="JSON.stringify(padding)"
       >
         <span v-if="$attrs.control">{{ $attrs.control }}</span>
         <button
@@ -612,22 +659,22 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('.b-drawing-canvas__svg').classes()).not.toContain('is-measuring');
   });
 
-  it('selects the process tool and places a node on canvas click', async (): Promise<void> => {
+  it('selects the rectangle tool and places a node on canvas click', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.trigger('keydown', { key: 'p' });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
-    expect(wrapper.find('[data-testid="drawing-node"]').attributes('data-drawing-element-id')).toBe('drawing-node-1');
-    expect(wrapper.text()).toContain('流程节点');
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('data-drawing-element-id')).toBe('drawing-shape-1');
+    expect(wrapper.text()).toContain('矩形');
   });
 
-  it('returns to the select tool after creating one process node', async (): Promise<void> => {
+  it('returns to the select tool after creating one rectangle node', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.trigger('keydown', { key: 'p' });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
@@ -641,7 +688,7 @@ describe('BDrawing', (): void => {
   it('undoes and redoes manual node creation', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.trigger('keydown', { key: 'p' });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await findDrawingToolbarHistoryButton(wrapper, 'undo').trigger('click');
@@ -661,7 +708,7 @@ describe('BDrawing', (): void => {
     expect(undoButton.attributes('disabled')).toBeDefined();
     expect(redoButton.attributes('disabled')).toBeDefined();
 
-    await wrapper.trigger('keydown', { key: 'p' });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
@@ -674,10 +721,10 @@ describe('BDrawing', (): void => {
     expect(findDrawingToolbarHistoryButton(wrapper, 'redo').attributes('disabled')).toBeUndefined();
   });
 
-  it('selects a node and deletes it with the keyboard shortcut', async (): Promise<void> => {
+  it('deletes selected nodes when Delete is pressed on the drawing board', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
-    await wrapper.trigger('keydown', { key: 'p' });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
@@ -686,24 +733,19 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
   });
 
-  it('switches tools with Drawnix-style keyboard shortcuts', async (): Promise<void> => {
+  it('ignores drawing keyboard shortcuts', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       attachTo: document.body
     });
 
     await wrapper.trigger('keydown', { key: 'p' });
-    expect(wrapper.find('[data-testid="drawing-canvas"]').classes()).toContain('is-tool-process');
-
-    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
-    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
-    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
-
-    await wrapper.trigger('keydown', { key: 'Escape' });
     expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
 
-    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
-    await wrapper.trigger('keydown', { key: 'Delete' });
-    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
+    await wrapper.trigger('keydown', { key: 'd' });
+    expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
+
+    await wrapper.trigger('keydown', { key: 'h' });
+    expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
 
     wrapper.unmount();
   });
@@ -952,10 +994,10 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
 
     const condition = selectoMockState.instances.at(-1)?.options.dragCondition as SelectoDragCondition;
-    expect(condition({ inputEvent: { target: findDrawingFillInput(wrapper).element } })).toBe(false);
+    expect(condition({ inputEvent: { target: findDrawingStylePanel(wrapper).element } })).toBe(false);
   });
 
-  it('creates a custom sized process node by dragging on the canvas', async (): Promise<void> => {
+  it('creates a custom sized rectangle node by dragging on the canvas', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
     canvas.element.getBoundingClientRect = (): DOMRect =>
@@ -971,7 +1013,7 @@ describe('BDrawing', (): void => {
         toJSON: (): Record<string, number> => ({})
       } as DOMRect);
 
-    await wrapper.trigger('keydown', { key: 'p' });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
     await dispatchPointerEvent(canvas.element, 'pointermove', { clientX: 300, clientY: 180 });
     await dispatchPointerEvent(canvas.element, 'pointerup', { clientX: 300, clientY: 180 });
@@ -994,6 +1036,16 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
 
     expect(wrapper.find('[data-testid="drawing-create-preview"]').exists()).toBe(false);
+  });
+
+  it('renders rectangle creation preview without rounded corners', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointermove');
+
+    expect(wrapper.find('[data-testid="drawing-create-preview"] rect').attributes('rx')).toBeUndefined();
   });
 
   it('creates a custom sized ellipse by dragging on the canvas', async (): Promise<void> => {
@@ -1024,14 +1076,14 @@ describe('BDrawing', (): void => {
     expect(ellipse.attributes('ry')).toBe('60');
   });
 
-  it('switches to the diamond tool with the D shortcut', async (): Promise<void> => {
+  it('keeps the current tool when pressing D', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       attachTo: document.body
     });
 
     await wrapper.trigger('keydown', { key: 'd' });
 
-    expect(findDrawingToolbarToolButton(wrapper, 'diamond').classes()).toContain('is-active');
+    expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
 
     wrapper.unmount();
   });
@@ -1057,6 +1109,41 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('rx')).toBeUndefined();
   });
 
+  it('shows the left style panel while a creation tool is active', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+
+    expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
+    expect(findDrawingColorCustomTrigger(wrapper, 'fill').exists()).toBe(true);
+  });
+
+  it('applies creation style panel changes to the next created shape', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    const fillInput = await openDrawingColorInput(wrapper, 'fill');
+    await fillInput.setValue('#f08c00');
+    await fillInput.trigger('blur');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('fill')).toBe('#f08c00');
+    expect((wrapper.find('[data-testid="drawing-shape-rect"]').element as SVGRectElement).style.fill).toBe('rgb(240, 140, 0)');
+  });
+
+  it('applies typed creation color before the color input loses focus', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    const fillInput = await openDrawingColorInput(wrapper, 'fill');
+    await fillInput.setValue('#f08c00');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('fill')).toBe('#f08c00');
+  });
+
   it('shows the left style panel for a selected node and updates fill color', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -1070,10 +1157,11 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('.b-drawing-style-panel__range').exists()).toBe(false);
     expect(wrapper.find('[data-testid="drawing-style-fill-picker"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="drawing-style-fill-orange"]').exists()).toBe(false);
-    expect(findDrawingFillInput(wrapper).exists()).toBe(true);
+    expect(findDrawingColorCustomTrigger(wrapper, 'fill').exists()).toBe(true);
 
-    await findDrawingFillInput(wrapper).setValue('#f08c00');
-    await findDrawingFillInput(wrapper).trigger('blur');
+    const fillInput = await openDrawingColorInput(wrapper, 'fill');
+    await fillInput.setValue('#f08c00');
+    await fillInput.trigger('blur');
 
     expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('fill')).toBe('#f08c00');
     expect((wrapper.find('[data-testid="drawing-shape-rect"]').element as SVGRectElement).style.fill).toBe('rgb(240, 140, 0)');
@@ -1087,8 +1175,9 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
 
-    await findDrawingStrokeInput(wrapper).setValue('#f08c00');
-    await findDrawingStrokeInput(wrapper).trigger('blur');
+    const strokeInput = await openDrawingColorInput(wrapper, 'stroke');
+    await strokeInput.setValue('#f08c00');
+    await strokeInput.trigger('blur');
 
     expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-selected');
     expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('stroke')).toBe('#f08c00');
@@ -1103,8 +1192,10 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
 
-    expect(findDrawingStrokeInput(wrapper).element.value).toBe('#64748b');
-    expect(findDrawingFillInput(wrapper).element.value).toBe('#00000000');
+    const strokeInput = await openDrawingColorInput(wrapper, 'stroke');
+    const fillInput = await openDrawingColorInput(wrapper, 'fill');
+    expect(strokeInput.element.value).toBe('#64748b');
+    expect(fillInput.element.value).toBe('#00000000');
   });
 
   it('keeps the selected node active when interacting with the style panel', async (): Promise<void> => {
@@ -1117,8 +1208,40 @@ describe('BDrawing', (): void => {
 
     expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-selected');
 
-    await findDrawingFillInput(wrapper).trigger('pointerdown');
+    await findDrawingColorCustomTrigger(wrapper, 'fill').trigger('pointerdown');
 
+    expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-selected');
+    expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
+  });
+
+  it('keeps the selected node active when copying text from the style panel input', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    const fillInput = await openDrawingColorInput(wrapper, 'fill');
+    await fillInput.trigger('keydown', { key: 'c', metaKey: true });
+
+    expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-selected');
+    expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
+    expect(findDrawingToolbarToolButton(wrapper, 'select').classes()).toContain('is-active');
+  });
+
+  it('keeps the selected node active when Delete is pressed inside the style panel input', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    const fillInput = await openDrawingColorInput(wrapper, 'fill');
+    await fillInput.trigger('keydown', { key: 'Delete' });
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
     expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-selected');
     expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
   });
@@ -1146,6 +1269,25 @@ describe('BDrawing', (): void => {
     await dispatchWheelEvent(canvas.element, { clientX: 600, clientY: 360, ctrlKey: true, deltaY: -100 });
 
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-zoom')).toBe('1.1');
+  });
+
+  it('keeps the Moveable selection box padded around the selected node', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-padding')).toBe(
+      JSON.stringify({
+        bottom: 8,
+        left: 8,
+        right: 8,
+        top: 8
+      })
+    );
   });
 
   it('updates Moveable target rect after viewport zoom changes selected node layout', async (): Promise<void> => {
@@ -1398,6 +1540,22 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-50, -16)');
   });
 
+  it('stops direct node dragging when pointerup happens on the node', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await dispatchPointerEvent(wrapper.find('[data-testid="drawing-node"]').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(wrapper.find('[data-testid="drawing-node"]').element, 'pointerup', { clientX: 100, clientY: 100 });
+    const transformAfterPointerup = wrapper.find('[data-testid="drawing-node"]').attributes('transform');
+
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 180 });
+
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe(transformAfterPointerup);
+  });
+
   it('commits direct node drag at the last preview position instead of the pointerup position', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -1519,7 +1677,7 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
   });
 
-  it('creates a connector by clicking two shapes with the connector tool', async (): Promise<void> => {
+  it('shows a connector preview while dragging from one shape to another', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
     await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
@@ -1531,9 +1689,41 @@ describe('BDrawing', (): void => {
     await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
-    await nodes[0].trigger('pointerdown');
-    await nodes[1].trigger('pointerdown');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
 
+    expect(wrapper.find('[data-testid="drawing-connector-preview"]').exists()).toBe(true);
+    expect(wrapper.findAll('[data-testid="drawing-connector"]')).toHaveLength(0);
+  });
+
+  it('shows four connector anchors on each shape while the connector tool is active', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    expect(wrapper.findAll('[data-testid="drawing-connector-anchor"]')).toHaveLength(4);
+  });
+
+  it('creates a connector by dragging from one shape to another with the connector tool', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+
+    expect(wrapper.find('[data-testid="drawing-connector-preview"]').exists()).toBe(false);
     expect(wrapper.findAll('[data-testid="drawing-connector"]')).toHaveLength(1);
   });
 
@@ -1549,8 +1739,9 @@ describe('BDrawing', (): void => {
     await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
-    await nodes[0].trigger('pointerdown');
-    await nodes[1].trigger('pointerdown');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[1].element, 'pointerup', { clientX: 220, clientY: 160 });
 
     const initialPath = wrapper.find('[data-testid="drawing-connector-path"]').attributes('d');
     await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
@@ -1574,10 +1765,11 @@ describe('BDrawing', (): void => {
     await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
 
     const nodes = wrapper.findAll('[data-testid="drawing-node"]');
-    await nodes[0].trigger('pointerdown');
-    await nodes[1].trigger('pointerdown');
-    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
     await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
+    await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
     await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
     await wrapper.trigger('keydown', { key: 'Delete' });
 

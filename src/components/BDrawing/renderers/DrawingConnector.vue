@@ -10,9 +10,9 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingConnectorElement, DrawingElement, DrawingPoint } from '../types';
+import type { DrawingConnectorAnchor, DrawingConnectorElement, DrawingElement, DrawingPoint } from '../types';
 import { computed } from 'vue';
-import { createDrawingLinePath, findDrawingShapeElement, getDrawingElementCenter, getDrawingLineLabelPosition } from '../utils/drawingGeometry';
+import { createDrawingLinePath, findDrawingShapeElement, getDrawingConnectorAnchorPoint, getDrawingLineLabelPosition } from '../utils/drawingGeometry';
 
 /**
  * 连接线组件入参。
@@ -27,18 +27,19 @@ interface Props {
 const props = defineProps<Props>();
 
 /**
- * 读取形状中心点。
+ * 读取形状锚点。
  * @param elementId - 元素 ID
- * @returns 中心点，找不到时返回 null
+ * @param anchor - 锚点
+ * @returns 锚点坐标，找不到时返回 null
  */
-function getElementCenter(elementId: string): DrawingPoint | null {
+function getElementAnchorPoint(elementId: string, anchor: DrawingConnectorAnchor): DrawingPoint | null {
   const element = findDrawingShapeElement(props.elements, elementId);
 
-  return element ? getDrawingElementCenter(element) : null;
+  return element ? getDrawingConnectorAnchorPoint(element, anchor) : null;
 }
 
-const source = computed<DrawingPoint | null>(() => getElementCenter(props.connector.source.elementId));
-const target = computed<DrawingPoint | null>(() => getElementCenter(props.connector.target.elementId));
+const source = computed<DrawingPoint | null>(() => getElementAnchorPoint(props.connector.source.elementId, props.connector.source.anchor));
+const target = computed<DrawingPoint | null>(() => getElementAnchorPoint(props.connector.target.elementId, props.connector.target.anchor));
 const pathData = computed<string>(() => {
   if (!source.value || !target.value) {
     return '';

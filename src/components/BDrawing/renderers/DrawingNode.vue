@@ -12,6 +12,7 @@
     :opacity="node.style?.opacity"
     :transform="nodeTransform"
     @pointerdown.stop="emit('select', node.id, $event)"
+    @pointerup="emit('release', node.id, $event)"
   >
     <polygon
       v-if="isDiamondShape"
@@ -50,11 +51,23 @@
     <text class="b-drawing-node__text" :fill="node.style?.color" :style="textStyle" :x="node.size.width / 2" :y="node.size.height / 2">
       {{ node.text }}
     </text>
+    <g v-if="showConnectorAnchors" class="b-drawing-node__anchors">
+      <circle
+        v-for="anchor in connectorAnchors"
+        :key="anchor.id"
+        class="b-drawing-node__anchor"
+        data-testid="drawing-connector-anchor"
+        :data-drawing-anchor="anchor.id"
+        :cx="anchor.x"
+        :cy="anchor.y"
+        r="4"
+      />
+    </g>
   </g>
 </template>
 
 <script setup lang="ts">
-import type { DrawingShapeElement } from '../types';
+import type { DrawingConnectorAnchor, DrawingShapeElement } from '../types';
 import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { createDrawingDiamondPoints, createDrawingElementTransform, isDrawingDiamondShape } from '../utils/drawingGeometry';
@@ -67,15 +80,20 @@ interface Props {
   node: DrawingShapeElement;
   /** 是否选中 */
   selected?: boolean;
+  /** 是否显示连接锚点 */
+  showConnectorAnchors?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  selected: false
+  selected: false,
+  showConnectorAnchors: false
 });
 
 const emit = defineEmits<{
   /** 选择节点 */
   select: [id: string, event: PointerEvent];
+  /** 在节点上释放指针 */
+  release: [id: string, event: PointerEvent];
 }>();
 
 const isDiamondShape = computed<boolean>(() => isDrawingDiamondShape(props.node.shape));
@@ -89,6 +107,12 @@ const shapeStyle = computed<CSSProperties>(() => ({
 const textStyle = computed<CSSProperties>(() => ({
   fill: props.node.style?.color
 }));
+const connectorAnchors = computed<Array<{ id: Exclude<DrawingConnectorAnchor, 'center'>; x: number; y: number }>>(() => [
+  { id: 'top', x: props.node.size.width / 2, y: 0 },
+  { id: 'right', x: props.node.size.width, y: props.node.size.height / 2 },
+  { id: 'bottom', x: props.node.size.width / 2, y: props.node.size.height },
+  { id: 'left', x: 0, y: props.node.size.height / 2 }
+]);
 </script>
 
 <style lang="less" scoped>
@@ -114,5 +138,12 @@ const textStyle = computed<CSSProperties>(() => ({
   pointer-events: none;
   text-anchor: middle;
   fill: var(--text-primary);
+}
+
+.b-drawing-node__anchor {
+  pointer-events: none;
+  fill: var(--bg-primary);
+  stroke: var(--color-primary);
+  stroke-width: 2;
 }
 </style>

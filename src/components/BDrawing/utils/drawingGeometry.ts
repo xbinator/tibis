@@ -2,7 +2,16 @@
  * @file drawingGeometry.ts
  * @description BDrawing 画布坐标、SVG 几何和 DOM 查询工具。
  */
-import type { DrawingConnectorElement, DrawingElement, DrawingPoint, DrawingShapeElement, DrawingShapeType, DrawingSize, DrawingViewport } from '../types';
+import type {
+  DrawingConnectorAnchor,
+  DrawingConnectorElement,
+  DrawingElement,
+  DrawingPoint,
+  DrawingShapeElement,
+  DrawingShapeType,
+  DrawingSize,
+  DrawingViewport
+} from '../types';
 import { DRAWING_VIEWBOX_SIZE } from '../constants/defaults';
 
 /**
@@ -202,6 +211,31 @@ export function getDrawingElementCenter(element: DrawingElement): DrawingPoint {
     x: element.position.x + element.size.width / 2,
     y: element.position.y + element.size.height / 2
   };
+}
+
+/**
+ * 读取形状元素指定锚点的画板坐标。
+ * @param element - 形状元素
+ * @param anchor - 锚点
+ * @returns 锚点坐标
+ */
+export function getDrawingConnectorAnchorPoint(element: DrawingShapeElement, anchor: DrawingConnectorAnchor): DrawingPoint {
+  const center = getDrawingElementCenter(element);
+
+  if (anchor === 'top') {
+    return { x: center.x, y: element.position.y };
+  }
+  if (anchor === 'right') {
+    return { x: element.position.x + element.size.width, y: center.y };
+  }
+  if (anchor === 'bottom') {
+    return { x: center.x, y: element.position.y + element.size.height };
+  }
+  if (anchor === 'left') {
+    return { x: element.position.x, y: center.y };
+  }
+
+  return center;
 }
 
 /**

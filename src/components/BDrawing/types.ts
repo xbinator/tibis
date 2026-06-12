@@ -116,7 +116,7 @@ export interface DrawingShapeElement extends DrawingElementBase {
 /**
  * 连接线锚点类型。
  */
-export type DrawingConnectorAnchor = 'center';
+export type DrawingConnectorAnchor = 'top' | 'right' | 'bottom' | 'left' | 'center';
 
 /**
  * 连接线端点。
@@ -204,6 +204,8 @@ export interface DrawingAddShapeOptions {
   end: DrawingPoint;
   /** 节点文本 */
   text?: string;
+  /** 元素初始样式 */
+  style?: DrawingElementStyle;
   /** 创建时间戳 */
   createdAt?: number;
 }
@@ -216,8 +218,12 @@ export interface DrawingAddConnectorOptions {
   id: string;
   /** 起点元素 ID */
   sourceId: string;
+  /** 起点锚点 */
+  sourceAnchor?: DrawingConnectorAnchor;
   /** 终点元素 ID */
   targetId: string;
+  /** 终点锚点 */
+  targetAnchor?: DrawingConnectorAnchor;
   /** 连线标签 */
   label?: string;
   /** 创建时间戳 */
@@ -255,8 +261,10 @@ export type DrawingInteractionDraft =
   | {
       /** 草稿类型 */
       kind: 'creating-connector';
-      /** 起点元素 ID */
-      sourceId: string;
+      /** 起点 */
+      source: DrawingConnectorEndpoint;
+      /** 当前指针点 */
+      current: DrawingPoint;
     };
 
 /**

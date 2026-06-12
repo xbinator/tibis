@@ -235,6 +235,7 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
     position: cloneDeep(geometry.position),
     size: cloneDeep(geometry.size),
     rotation: 0,
+    style: cloneDeep(options.style),
     metadata: {
       source: 'user',
       createdAt: options.createdAt ?? Date.now()
@@ -311,11 +312,11 @@ export function addDrawingConnector(state: DrawingBoardState, options: DrawingAd
     kind: 'connector',
     source: {
       elementId: options.sourceId,
-      anchor: 'center'
+      anchor: options.sourceAnchor ?? 'center'
     },
     target: {
       elementId: options.targetId,
-      anchor: 'center'
+      anchor: options.targetAnchor ?? 'center'
     },
     label: options.label,
     position: { x: 0, y: 0 },
