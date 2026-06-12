@@ -1,7 +1,7 @@
 /**
  * @file types.ts
  * @description BColorPicker 组件类型定义。
-*/
+ */
 
 /** 颜色输出格式 */
 export type ColorFormat = 'rgb' | 'hex';
