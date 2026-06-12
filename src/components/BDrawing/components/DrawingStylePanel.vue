@@ -4,6 +4,53 @@
 -->
 <template>
   <aside v-if="element || connector || draftStyle || draftConnector" class="b-drawing-style-panel" @pointerdown.stop>
+    <!-- 层级控制区域 -->
+    <section v-if="showLayerControls" class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">层级</span>
+      <div class="b-drawing-style-panel__segments">
+        <button
+          class="b-drawing-style-panel__segment-button"
+          :disabled="!canBringToFront"
+          aria-label="置顶"
+          type="button"
+          title="置顶"
+          @click="handleLayerClick('bringToFront')"
+        >
+          <BIcon icon="lucide:arrow-up-to-line" :size="15" />
+        </button>
+        <button
+          class="b-drawing-style-panel__segment-button"
+          :disabled="!canBringForward"
+          aria-label="上移一层"
+          type="button"
+          title="上移一层"
+          @click="handleLayerClick('bringForward')"
+        >
+          <BIcon icon="lucide:arrow-up" :size="15" />
+        </button>
+        <button
+          class="b-drawing-style-panel__segment-button"
+          :disabled="!canSendBackward"
+          aria-label="下移一层"
+          type="button"
+          title="下移一层"
+          @click="handleLayerClick('sendBackward')"
+        >
+          <BIcon icon="lucide:arrow-down" :size="15" />
+        </button>
+        <button
+          class="b-drawing-style-panel__segment-button"
+          :disabled="!canSendToBack"
+          aria-label="置底"
+          type="button"
+          title="置底"
+          @click="handleLayerClick('sendToBack')"
+        >
+          <BIcon icon="lucide:arrow-down-to-line" :size="15" />
+        </button>
+      </div>
+    </section>
+
     <section class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">描边</span>
       <BColorPicker :value="strokeValue" format="hex" placement="rightTop" :align="{ offset: [20, 0] }" @change="handleColorClick('stroke', $event)" />
@@ -99,6 +146,11 @@ import { computed } from 'vue';
 import BColorPicker from '@/components/BColorPicker/index.vue';
 
 /**
+ * 层级操作类型。
+ */
+type DrawingLayerAction = 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack';
+
+/**
  * 描边宽度选项。
  */
 interface StrokeWidthOption {
@@ -136,14 +188,26 @@ interface Props {
   draftStyle?: DrawingElementStyle | null;
   /** 创建连接线时待应用到下一条连接线的配置 */
   draftConnector?: DrawingConnectorDraftOptions | null;
+  /** 选中元素在元素列表中的索引 */
+  elementIndex?: number;
+  /** 元素总数 */
+  elementCount?: number;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  connector: null,
+  draftStyle: null,
+  draftConnector: null,
+  elementIndex: -1,
+  elementCount: 0
+});
 const emit = defineEmits<{
   /** 更新元素样式 */
   change: [style: DrawingElementStyleChange];
   /** 更新连接线配置 */
   'connector-change': [options: DrawingConnectorOptionsChange];
+  /** 层级变更 */
+  'layer-change': [action: DrawingLayerAction];
 }>();
 
 /** 默认填充色。 */
@@ -168,6 +232,21 @@ const CURVE_OPTIONS: readonly ConnectorSegmentOption<DrawingConnectorCurveType>[
   { value: 'straight', label: '直线', icon: 'lucide:minus' },
   { value: 'bezier', label: '贝塞尔曲线', icon: 'lucide:spline' }
 ];
+
+/** 是否显示层级控件（选中元素时显示）。 */
+const showLayerControls = computed<boolean>(() => Boolean(props.element || props.connector));
+
+/** 是否可置顶（不在最顶层）。 */
+const canBringToFront = computed<boolean>(() => props.elementIndex >= 0 && props.elementIndex < props.elementCount - 1);
+
+/** 是否可上移一层。 */
+const canBringForward = computed<boolean>(() => props.elementIndex >= 0 && props.elementIndex < props.elementCount - 1);
+
+/** 是否可下移一层。 */
+const canSendBackward = computed<boolean>(() => props.elementIndex > 0);
+
+/** 是否可置底（不在最底层）。 */
+const canSendToBack = computed<boolean>(() => props.elementIndex > 0);
 
 const fillValue = computed<string>(() => (props.element ? props.element.style?.fill : props.draftStyle?.fill) ?? DEFAULT_FILL);
 const strokeValue = computed<string>(() => {
@@ -198,6 +277,14 @@ const showConnectorControls = computed<boolean>(() => Boolean(props.connector ||
 const markerStartValue = computed<DrawingConnectorMarkerType>(() => props.connector?.markerStart ?? props.draftConnector?.markerStart ?? 'none');
 const markerEndValue = computed<DrawingConnectorMarkerType>(() => props.connector?.markerEnd ?? props.draftConnector?.markerEnd ?? 'arrow');
 const curveValue = computed<DrawingConnectorCurveType>(() => props.connector?.curve ?? props.draftConnector?.curve ?? 'straight');
+
+/**
+ * 处理层级按钮点击。
+ * @param action - 层级操作类型
+ */
+function handleLayerClick(action: DrawingLayerAction): void {
+  emit('layer-change', action);
+}
 
 /**
  * 处理颜色按钮点击。
@@ -316,7 +403,12 @@ function getMarkerIconRotate(key: 'markerStart' | 'markerEnd', value: DrawingCon
 }
 
 .b-drawing-style-panel__segment-button {
-  width: 32px;
+  width: 28px;
+}
+
+.b-drawing-style-panel__segment-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .b-drawing-style-panel__stroke-button.is-active,

@@ -27,8 +27,11 @@
       :connector="selectedConnectorElement"
       :draft-style="activeCreateShape ? creationStyle : null"
       :draft-connector="activeTool === 'connector' ? connectorCreationOptions : null"
+      :element-index="selectedElementIndex"
+      :element-count="board.state.value.elements.length"
       @change="handleSelectedStyleChange"
       @connector-change="handleSelectedConnectorOptionsChange"
+      @layer-change="handleLayerChange"
     />
     <DrawingInfiniteViewport>
       <DrawingCanvas
@@ -76,6 +79,7 @@ import type {
   DrawingElement,
   DrawingElementStyle,
   DrawingElementStyleChange,
+  DrawingLayerAction,
   DrawingPoint,
   DrawingShapeElement,
   DrawingShapeType,
@@ -144,6 +148,15 @@ const selectedConnectorElement = computed<DrawingConnectorElement | null>(() => 
   const element = board.state.value.elements.find((item: DrawingElement): boolean => item.id === board.state.value.selection[0]);
 
   return element && isDrawingConnectorElement(element) ? element : null;
+});
+
+/** 当前选中元素在元素列表中的索引，供层级控制按钮判断是否可操作。 */
+const selectedElementIndex = computed<number>(() => {
+  if (board.state.value.selection.length !== 1) {
+    return -1;
+  }
+
+  return board.state.value.elements.findIndex((item: DrawingElement): boolean => item.id === board.state.value.selection[0]);
 });
 
 /**
@@ -626,6 +639,18 @@ function handleSelectedConnectorOptionsChange(options: DrawingConnectorOptionsCh
 }
 
 /**
+ * 处理层级变更。
+ * @param action - 层级操作类型
+ */
+function handleLayerChange(action: DrawingLayerAction): void {
+  if (board.state.value.selection.length !== 1) {
+    return;
+  }
+
+  board.reorderElement(board.state.value.selection[0], action);
+}
+
+/**
  * 处理手型工具平移移动。
  * @param event - 指针事件
  */
@@ -1037,16 +1062,31 @@ function isKeyboardEventFromEditableTarget(event: KeyboardEvent): boolean {
 }
 
 /**
- * 处理画板删除快捷键。
+ * 判断键盘事件是否为画板全选快捷键。
+ * @param event - 键盘事件
+ * @returns 是否为全选快捷键
+ */
+function isSelectAllShortcut(event: KeyboardEvent): boolean {
+  return event.key.toLowerCase() === 'a' && (event.metaKey || event.ctrlKey) && !event.altKey;
+}
+
+/**
+ * 处理画板键盘快捷键。
  * @param event - 键盘事件
  */
 function handleKeydown(event: KeyboardEvent): void {
   const key = event.key.toLowerCase();
-  if (key !== 'delete' && key !== 'backspace') {
+  if (isKeyboardEventFromEditableTarget(event)) {
     return;
   }
 
-  if (isKeyboardEventFromEditableTarget(event)) {
+  if (isSelectAllShortcut(event)) {
+    event.preventDefault();
+    board.setSelection(board.state.value.elements.map((element: DrawingElement): string => element.id));
+    return;
+  }
+
+  if (key !== 'delete' && key !== 'backspace') {
     return;
   }
 
