@@ -12,6 +12,8 @@ import type {
   DrawingConnectorOptionsChange,
   DrawingElementStyleChange,
   DrawingGeometryChange,
+  DrawingLayerAction,
+  DrawingNodeChange,
   DrawingPoint,
   DrawingSize,
   DrawingShapeElement,
@@ -566,6 +568,90 @@ export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, 
   }
 
   node.text = text;
+
+  return withHistory(state, {
+    elements: nextElements,
+    edges: cloneDeep(state.edges),
+    selection: [...state.selection],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 更新节点属性（文本、描述等）。
+ * @param state - 当前画板状态
+ * @param nodeId - 节点 ID
+ * @param change - 节点属性变更
+ * @returns 新画板状态
+ */
+export function updateDrawingNodeProperties(state: DrawingBoardState, nodeId: string, change: DrawingNodeChange): DrawingBoardState {
+  const nextElements = cloneDeep(state.elements);
+  const node = nextElements.find((item) => item.id === nodeId);
+  if (!node || !isDrawingShapeElement(node)) {
+    return withError(state, new Error(`找不到节点: ${nodeId}`));
+  }
+
+  if (change.text !== undefined) {
+    node.text = change.text;
+  }
+  if (change.description !== undefined) {
+    node.description = change.description;
+  }
+
+  return withHistory(state, {
+    elements: nextElements,
+    edges: cloneDeep(state.edges),
+    selection: [...state.selection],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 调整元素层级顺序。
+ * 元素数组中索引越大，渲染层级越高（显示在上层）。
+ * @param state - 当前画板状态
+ * @param elementId - 目标元素 ID
+ * @param action - 层级操作类型
+ * @returns 新画板状态
+ */
+export function reorderDrawingElement(state: DrawingBoardState, elementId: string, action: DrawingLayerAction): DrawingBoardState {
+  const nextElements = cloneDeep(state.elements);
+  const index = nextElements.findIndex((item) => item.id === elementId);
+  if (index === -1) {
+    return withError(state, new Error(`找不到元素: ${elementId}`));
+  }
+
+  const [element] = nextElements.splice(index, 1);
+
+  switch (action) {
+    case 'bringToFront': {
+      // 移到数组末尾（最顶层）
+      nextElements.push(element);
+      break;
+    }
+    case 'bringForward': {
+      // 上移一层（索引 +1）
+      const targetIndex = Math.min(index + 1, nextElements.length);
+      nextElements.splice(targetIndex, 0, element);
+      break;
+    }
+    case 'sendBackward': {
+      // 下移一层（索引 -1）
+      const targetIndex = Math.max(index - 1, 0);
+      nextElements.splice(targetIndex, 0, element);
+      break;
+    }
+    case 'sendToBack': {
+      // 移到数组开头（最底层）
+      nextElements.unshift(element);
+      break;
+    }
+    default: {
+      // 未知操作，放回原位
+      nextElements.splice(index, 0, element);
+      break;
+    }
+  }
 
   return withHistory(state, {
     elements: nextElements,

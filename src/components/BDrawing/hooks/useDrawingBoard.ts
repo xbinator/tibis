@@ -11,6 +11,8 @@ import type {
   DrawingElementStyle,
   DrawingElementStyleChange,
   DrawingGeometryChange,
+  DrawingLayerAction,
+  DrawingNodeChange,
   DrawingNodeType,
   DrawingPoint,
   DrawingShapeType
@@ -26,11 +28,13 @@ import {
   moveDrawingElements,
   moveDrawingNode,
   redoDrawingBoard,
+  reorderDrawingElement,
   resizeDrawingElements,
   rotateDrawingElements,
   undoDrawingBoard,
   updateDrawingConnectorOptions,
   updateDrawingElementStyle,
+  updateDrawingNodeProperties,
   updateDrawingNodeText
 } from '../utils/boardTransforms';
 
@@ -76,6 +80,10 @@ export interface UseDrawingBoardReturn {
   deleteSelection: () => void;
   /** 更新节点文本 */
   updateNodeText: (nodeId: string, text: string) => void;
+  /** 更新节点属性（文本、描述等） */
+  updateNodeProperties: (nodeId: string, change: DrawingNodeChange) => void;
+  /** 调整元素层级 */
+  reorderElement: (elementId: string, action: DrawingLayerAction) => void;
   /** 设置选区 */
   setSelection: (selection: string[]) => void;
 }
@@ -231,6 +239,8 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
       setState(updateDrawingConnectorOptions(state.value, connectorId, options)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
     updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),
+    updateNodeProperties: (nodeId: string, change: DrawingNodeChange): void => setState(updateDrawingNodeProperties(state.value, nodeId, change)),
+    reorderElement: (elementId: string, action: DrawingLayerAction): void => setState(reorderDrawingElement(state.value, elementId, action)),
     setSelection: (selection: string[]): void => {
       state.value = { ...state.value, selection };
     }

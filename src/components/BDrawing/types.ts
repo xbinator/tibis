@@ -80,6 +80,21 @@ export interface DrawingElementStyle {
 export type DrawingElementStyleChange = Partial<DrawingElementStyle>;
 
 /**
+ * 节点属性变更。
+ */
+export interface DrawingNodeChange {
+  /** 节点主文本 */
+  text?: string;
+  /** 节点说明 */
+  description?: string;
+}
+
+/**
+ * 元素层级操作类型。
+ */
+export type DrawingLayerAction = 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack';
+
+/**
  * 画板元素基础字段。
  */
 export interface DrawingElementBase {
