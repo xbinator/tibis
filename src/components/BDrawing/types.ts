@@ -119,6 +119,16 @@ export interface DrawingShapeElement extends DrawingElementBase {
 export type DrawingConnectorAnchor = 'top' | 'right' | 'bottom' | 'left' | 'center';
 
 /**
+ * 连接线端点标记类型。
+ */
+export type DrawingConnectorMarkerType = 'none' | 'arrow';
+
+/**
+ * 连接线路径类型。
+ */
+export type DrawingConnectorCurveType = 'straight' | 'bezier';
+
+/**
  * 连接线端点。
  */
 export interface DrawingConnectorEndpoint {
@@ -138,8 +148,34 @@ export interface DrawingConnectorElement extends DrawingElementBase {
   source: DrawingConnectorEndpoint;
   /** 终点 */
   target: DrawingConnectorEndpoint;
+  /** 起点标记 */
+  markerStart?: DrawingConnectorMarkerType;
+  /** 终点标记 */
+  markerEnd?: DrawingConnectorMarkerType;
+  /** 路径类型 */
+  curve?: DrawingConnectorCurveType;
   /** 连线标签 */
   label?: string;
+}
+
+/**
+ * 连接线配置变更。
+ */
+export interface DrawingConnectorOptionsChange {
+  /** 起点标记 */
+  markerStart?: DrawingConnectorMarkerType;
+  /** 终点标记 */
+  markerEnd?: DrawingConnectorMarkerType;
+  /** 路径类型 */
+  curve?: DrawingConnectorCurveType;
+}
+
+/**
+ * 创建连接线时的草稿配置。
+ */
+export interface DrawingConnectorDraftOptions extends DrawingConnectorOptionsChange {
+  /** 连接线初始样式 */
+  style?: DrawingElementStyle;
 }
 
 /**
@@ -224,6 +260,14 @@ export interface DrawingAddConnectorOptions {
   targetId: string;
   /** 终点锚点 */
   targetAnchor?: DrawingConnectorAnchor;
+  /** 元素初始样式 */
+  style?: DrawingElementStyle;
+  /** 起点标记 */
+  markerStart?: DrawingConnectorMarkerType;
+  /** 终点标记 */
+  markerEnd?: DrawingConnectorMarkerType;
+  /** 路径类型 */
+  curve?: DrawingConnectorCurveType;
   /** 连线标签 */
   label?: string;
   /** 创建时间戳 */
