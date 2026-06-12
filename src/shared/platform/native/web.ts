@@ -90,4 +90,13 @@ export class WebNative {
     URL.revokeObjectURL(url);
     return filename;
   }
+
+  async copyImageToClipboard(content: ArrayBuffer): Promise<void> {
+    if (typeof ClipboardItem === 'undefined' || typeof navigator.clipboard?.write !== 'function') {
+      throw new Error('当前环境暂不支持复制图片到剪贴板');
+    }
+
+    const blob = new Blob([content], { type: 'image/png' });
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  }
 }

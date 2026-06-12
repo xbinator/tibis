@@ -82,6 +82,10 @@ export class ElectronNative implements Native {
     return getElectronAPI().saveBinaryFile(content, path, { filters, defaultPath });
   }
 
+  async copyImageToClipboard(content: ArrayBuffer): Promise<void> {
+    await getElectronAPI().copyImageToClipboard(content);
+  }
+
   async exportPdf(options: ExportPdfOptions): Promise<string | null> {
     return getElectronAPI().exportPdf(options);
   }

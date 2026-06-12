@@ -10,7 +10,6 @@ import type { WebviewPageState } from '@/views/webview/shared/types';
 import {
   buildFixedElementOverlayCaptures,
   buildPageCaptureSlices,
-  buildScreenshotDefaultPath,
   createFixedElementCaptureCleanupScript,
   createFixedElementCaptureSetupScript,
   createFixedElementVisibilityScript,
@@ -162,29 +161,6 @@ async function exportCanvasAsPng(canvas: HTMLCanvasElement): Promise<ArrayBuffer
 }
 
 /**
- * 读取用于截图文件名的页面标题。
- * @param webviewState - 当前页面标题与地址
- * @returns 页面标题或地址
- */
-function getScreenshotTitle(webviewState: Ref<ScreenshotState>): string {
-  return webviewState.value.title || webviewState.value.url || 'webview';
-}
-
-/**
- * 保存 PNG 文件到用户选择的位置。
- * @param webviewState - 当前页面标题与地址
- * @param buffer - PNG 二进制内容
- * @param mode - 截图模式
- * @returns 最终保存路径
- */
-async function saveScreenshot(webviewState: Ref<ScreenshotState>, buffer: ArrayBuffer, mode: 'viewport' | 'full-page'): Promise<string | null> {
-  return native.saveBinaryFile(buffer, undefined, {
-    filters: [{ name: 'PNG Image', extensions: ['png'] }],
-    defaultPath: buildScreenshotDefaultPath(getScreenshotTitle(webviewState), mode)
-  });
-}
-
-/**
  * 采样并拼接完整页面长截屏。
  * @param element - `<webview>` 实例
  * @returns 拼接后的 PNG 二进制
@@ -293,34 +269,30 @@ export function useScreenshot(options: UseScreenshotOptions): {
   captureFullPageScreenshot: () => Promise<void>;
 } {
   /**
-   * 截取当前视图并保存为 PNG。
+   * 截取当前视图并复制为剪贴板 PNG。
    */
   async function captureViewportScreenshot(): Promise<void> {
     try {
       const element = getReadyWebviewElement(options.webviewElementRef);
       const image = await element.capturePage();
-      const savedPath = await saveScreenshot(options.webviewState, toArrayBuffer(image.toPNG()), 'viewport');
+      await native.copyImageToClipboard(toArrayBuffer(image.toPNG()));
 
-      if (savedPath) {
-        message.success('当前视图截图已保存');
-      }
+      message.success('截图已保存到剪贴板');
     } catch (error: unknown) {
       message.error(error instanceof Error ? error.message : '截取当前视图失败');
     }
   }
 
   /**
-   * 截取完整页面长图并保存为 PNG。
+   * 截取完整页面长图并复制为剪贴板 PNG。
    */
   async function captureFullPageScreenshot(): Promise<void> {
     try {
       const element = getReadyWebviewElement(options.webviewElementRef);
       const pngBuffer = await captureFullPagePng(element);
-      const savedPath = await saveScreenshot(options.webviewState, pngBuffer, 'full-page');
+      await native.copyImageToClipboard(pngBuffer);
 
-      if (savedPath) {
-        message.success('完整页面截图已保存');
-      }
+      message.success('截图已保存到剪贴板');
     } catch (error: unknown) {
       message.error(error instanceof Error ? error.message : '截取完整页面失败');
     }

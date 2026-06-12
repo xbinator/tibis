@@ -469,6 +469,8 @@ export interface ElectronAPI {
 
   saveFile: (content: string, filePath?: string, options?: ElectronSaveFileOptions) => Promise<string | null>;
   saveBinaryFile: (content: ArrayBuffer, filePath?: string, options?: ElectronSaveFileOptions) => Promise<string | null>;
+  /** 将 PNG 图片二进制内容写入系统剪贴板。 */
+  copyImageToClipboard: (content: ArrayBuffer) => Promise<void>;
   exportPdf: (options: ElectronExportPdfOptions) => Promise<string | null>;
 
   writeFile: (filePath: string, content: string) => Promise<void>;

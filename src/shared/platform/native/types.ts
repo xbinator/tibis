@@ -134,6 +134,9 @@ export interface Native {
 
   saveBinaryFile(content: ArrayBuffer, path?: string, options?: SaveFileOptions): Promise<string | null>;
 
+  /** 将 PNG 图片二进制内容复制到系统剪贴板。 */
+  copyImageToClipboard(content: ArrayBuffer): Promise<void>;
+
   exportPdf(options: ExportPdfOptions): Promise<string | null>;
 
   writeFile(path: string, content: string): Promise<void>;

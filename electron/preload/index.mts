@@ -108,6 +108,12 @@ const electronAPI: ElectronAPI = {
   saveBinaryFile: (content, filePath, options) => ipcRenderer.invoke('dialog:saveBinaryFile', content, filePath, options),
 
   /**
+   * 将 PNG 图片写入系统剪贴板。
+   * @param content - PNG 图片二进制内容
+   */
+  copyImageToClipboard: (content) => ipcRenderer.invoke('image:copyToClipboard', content),
+
+  /**
    * 导出 PDF。
    * @param options - 导出选项，包含完整 HTML 文档与默认保存路径
    * @returns 成功保存后的文件路径

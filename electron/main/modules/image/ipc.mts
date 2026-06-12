@@ -2,7 +2,7 @@
  * @file ipc.mts
  * @description 图片压缩 IPC handler，使用 sharp 在主进程执行图片压缩
  */
-import { ipcMain } from 'electron';
+import { clipboard, ipcMain, nativeImage } from 'electron';
 import sharp from 'sharp';
 
 /** 压缩参数 */
@@ -33,6 +33,19 @@ const WEBP_QUALITY = 80;
 const SKIP_FORMATS = new Set(['image/gif', 'image/heic', 'image/heif']);
 
 /**
+ * 归一化 IPC 传入的图片二进制内容。
+ * @param content - 原始图片二进制内容
+ * @returns 可交给 Electron nativeImage 读取的 Buffer
+ */
+function normalizeImageContent(content: ArrayBuffer | Uint8Array): Buffer {
+  if (content instanceof Uint8Array) {
+    return Buffer.from(content.buffer, content.byteOffset, content.byteLength);
+  }
+
+  return Buffer.from(content);
+}
+
+/**
  * 解析 MIME 类型到 sharp 输出格式。
  * @param mimeType - 图片 MIME 类型
  * @returns sharp 输出格式 key，若格式不支持压缩则返回 undefined
@@ -51,6 +64,16 @@ function mimeTypeToFormat(mimeType: string): keyof sharp.FormatEnum | undefined 
  * 注册图片压缩相关的 IPC handlers。
  */
 export function registerImageHandlers(): void {
+  ipcMain.handle('image:copyToClipboard', async (_event, content: ArrayBuffer | Uint8Array): Promise<void> => {
+    const image = nativeImage.createFromBuffer(normalizeImageContent(content));
+
+    if (image.isEmpty()) {
+      throw new Error('图片内容无效，无法复制到剪贴板');
+    }
+
+    clipboard.writeImage(image);
+  });
+
   ipcMain.handle('image:compress', async (_event, request: ImageCompressRequest): Promise<ImageCompressResult> => {
     // 动图、HEIC 等不支持的格式直接跳过压缩
     if (SKIP_FORMATS.has(request.mimeType)) {

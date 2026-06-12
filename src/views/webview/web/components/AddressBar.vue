@@ -118,7 +118,7 @@ const moreActionOptions = computed<DropdownOption[]>(() => [
   {
     type: 'item',
     value: 'screenshot',
-    label: '截屏',
+    label: '截图',
     icon: 'lucide:camera',
     children: [
       {
@@ -131,7 +131,7 @@ const moreActionOptions = computed<DropdownOption[]>(() => [
       {
         type: 'item',
         value: 'capture-full-page',
-        label: '完整页面',
+        label: '完整视图尺寸',
         icon: 'lucide:scroll-text',
         onClick: () => emit('captureFullPageScreenshot')
       }
