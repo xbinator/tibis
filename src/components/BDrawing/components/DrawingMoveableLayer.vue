@@ -8,7 +8,7 @@
       ref="moveableRef"
       :target="targets"
       :draggable="true"
-      :resizable="true"
+      :resizable="canResizeSelection"
       :snappable="singleTarget"
       :snap-center="true"
       :snap-gap="true"
@@ -201,6 +201,22 @@ function getElementById(id: string): DrawingElement | undefined {
 }
 
 /**
+ * 判断元素是否为文本节点。
+ * @param element - 画板元素
+ * @returns 是否为文本节点
+ */
+function isDrawingTextElement(element: DrawingElement): boolean {
+  return isDrawingShapeElement(element) && element.shape === 'text';
+}
+
+/** 当前选中的画板元素。 */
+const selectedElements = computed<DrawingElement[]>(() =>
+  props.selection.map(getElementById).filter((element: DrawingElement | undefined): element is DrawingElement => element !== undefined)
+);
+/** 当前选区是否允许通过 Moveable 修改尺寸。 */
+const canResizeSelection = computed<boolean>(() => selectedElements.value.every((element: DrawingElement): boolean => !isDrawingTextElement(element)));
+
+/**
  * 通过元素 ID 读取 DOM target。
  * @param id - 元素 ID
  * @returns DOM target
@@ -373,7 +389,7 @@ function createResizeChange(event: MoveableResizeEndEvent, shouldConvertGroupSiz
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
   const payload = getResizePayload(event);
-  if (!id || !element || payload.width === undefined || payload.height === undefined) {
+  if (!id || !element || isDrawingTextElement(element) || payload.width === undefined || payload.height === undefined) {
     return null;
   }
 
@@ -453,7 +469,7 @@ function handleDrag(event: MoveableDragEvent): void {
 function handleResize(event: MoveableResizeEvent, shouldConvertGroupSize = false): void {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
-  if (!event.target || !id || !element || event.width === undefined || event.height === undefined) {
+  if (!event.target || !id || !element || isDrawingTextElement(element) || event.width === undefined || event.height === undefined) {
     return;
   }
 

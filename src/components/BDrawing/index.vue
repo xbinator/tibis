@@ -38,6 +38,7 @@
         :elements="board.state.value.elements"
         :edges="board.state.value.edges"
         :selection="board.state.value.selection"
+        :editing-element-id="textEditingSession?.id ?? null"
         :viewport="board.state.value.viewport"
         :viewport-size="viewportSize"
         :viewport-ready="isViewportReady"
@@ -47,6 +48,7 @@
         :draft-connector="connectorCreationOptions"
         :connector-hover-endpoint="connectorHoverEndpoint"
         :is-panning="isPanning"
+        @edit="handleElementEdit"
         @select="handleElementSelect"
         @element-pointerup="handleElementPointerup"
         @canvas-pointerdown="handleCanvasPointerdown"
@@ -55,19 +57,24 @@
         @canvas-wheel="handleCanvasWheel"
       />
     </DrawingInfiniteViewport>
-    <textarea
+    <div
       v-if="textEditingSession"
       ref="textEditorRef"
-      v-model="textEditorValue"
       class="b-drawing__text-editor"
+      contenteditable="true"
       data-testid="drawing-text-editor"
+      role="textbox"
+      aria-multiline="true"
+      spellcheck="false"
       :style="textEditorStyle"
       @blur="commitTextEditor"
+      @input="handleTextEditorInput"
       @keydown.stop="handleTextEditorKeydown"
+      @paste.prevent="handleTextEditorPaste"
       @pointerdown.stop
-    ></textarea>
+    ></div>
     <DrawingMoveableLayer
-      :enabled="activeTool === 'select' && !hideMoveableDuringDirectDrag"
+      :enabled="activeTool === 'select' && !hideMoveableDuringDirectDrag && !textEditingSession"
       :root="rootRef"
       :elements="board.state.value.elements"
       :selection="board.state.value.selection"
@@ -110,6 +117,14 @@ import { useDrawingBoard } from './hooks/useDrawingBoard';
 import { useDrawingInteraction } from './hooks/useDrawingInteraction';
 import { useDrawingViewport } from './hooks/useDrawingViewport';
 import DrawingCanvas from './renderers/DrawingCanvas.vue';
+import {
+  DRAWING_TEXT_DEFAULT_FONT_SIZE,
+  DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
+  DRAWING_TEXT_HORIZONTAL_PADDING,
+  DRAWING_TEXT_LINE_HEIGHT_RATIO,
+  DRAWING_TEXT_VERTICAL_PADDING,
+  measureDrawingTextElementSize
+} from './utils/boardTransforms';
 import {
   createDrawingConnectorPath,
   clientDeltaToDrawingDelta,
@@ -224,6 +239,20 @@ interface ConnectorDragSession {
 }
 
 /**
+ * 文本工具点击已有元素创建文本的延迟会话。
+ */
+interface PendingTextElementCreateSession {
+  /** 点击起点 */
+  start: DrawingPoint;
+  /** 当前指针位置 */
+  current: DrawingPoint;
+  /** 拖拽监听取消器 */
+  abortController: AbortController;
+  /** 等待双击判定的定时器 */
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/**
  * 文本节点编辑会话。
  */
 interface TextEditingSession {
@@ -238,6 +267,7 @@ interface TextEditingSession {
 let directDragSession: DirectElementDragSession | null = null;
 let handPanSession: HandPanSession | null = null;
 let connectorDragSession: ConnectorDragSession | null = null;
+let pendingTextElementCreateSession: PendingTextElementCreateSession | null = null;
 
 /** 手型工具是否正在平移中。 */
 const isPanning = ref<boolean>(false);
@@ -247,11 +277,17 @@ const connectorHoverEndpoint = ref<DrawingConnectorEndpoint | null>(null);
 const textEditingSession = ref<TextEditingSession | null>(null);
 /** 文本编辑输入值。 */
 const textEditorValue = ref<string>('');
-/** 文本编辑框 DOM。 */
-const textEditorRef = ref<HTMLTextAreaElement | null>(null);
+/** 文本编辑器 DOM。 */
+const textEditorRef = ref<HTMLElement | null>(null);
 
 /** 可创建形状的工具列表 */
 const SHAPE_TOOLS: readonly DrawingShapeType[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
+/** 文本工具点击创建的最大拖动距离。 */
+const TEXT_CREATE_CLICK_TOLERANCE = 4;
+/** 文本工具点击已有元素后等待双击优先的延迟。 */
+const TEXT_ELEMENT_CLICK_CREATE_DELAY = 220;
+/** 文本编辑器与可视区边缘的最小间距。 */
+const TEXT_EDITOR_VIEWPORT_MARGIN = 24;
 
 /** 文本编辑框定位样式。 */
 const textEditorStyle = computed<CSSProperties>(() => {
@@ -262,14 +298,29 @@ const textEditorStyle = computed<CSSProperties>(() => {
   }
 
   const { center, zoom } = board.state.value.viewport;
-  const left = viewportSize.value.width / 2 + (element.position.x - center.x) * zoom;
-  const top = viewportSize.value.height / 2 + (element.position.y - center.y) * zoom;
+  const fontSize = element.style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
+  const fontWeight = element.style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT;
+  const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
+  const size = measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
+  const rootRect = rootRef.value?.getBoundingClientRect();
+  const left = (rootRect?.left ?? 0) + viewportSize.value.width / 2 + (element.position.x - center.x) * zoom;
+  const top = (rootRect?.top ?? 0) + viewportSize.value.height / 2 + (element.position.y - center.y) * zoom;
 
   return {
-    height: `${element.size.height * zoom}px`,
+    background: 'transparent',
+    border: 'none',
+    boxShadow: 'none',
+    fontSize: `${fontSize * zoom}px`,
+    fontWeight: String(fontWeight),
+    height: `${size.height * zoom}px`,
     left: `${left}px`,
+    lineHeight: `${lineHeight * zoom}px`,
+    padding: `${(DRAWING_TEXT_VERTICAL_PADDING / 2) * zoom}px ${(DRAWING_TEXT_HORIZONTAL_PADDING / 2) * zoom}px`,
+    position: 'fixed',
+    textAlign: element.style?.textAlign ?? 'center',
     top: `${top}px`,
-    width: `${element.size.width * zoom}px`
+    whiteSpace: 'pre',
+    width: `${size.width * zoom}px`
   };
 });
 
@@ -701,6 +752,102 @@ function handleLayerChange(action: DrawingLayerAction): void {
 }
 
 /**
+ * 结束当前文本编辑会话。
+ */
+function clearTextEditing(): void {
+  textEditingSession.value = null;
+  textEditorValue.value = '';
+}
+
+/**
+ * 同步文本编辑器 DOM 内容。
+ */
+function syncTextEditorContent(): void {
+  const editor = textEditorRef.value;
+  if (!editor || editor.textContent === textEditorValue.value) {
+    return;
+  }
+
+  editor.textContent = textEditorValue.value;
+}
+
+/**
+ * 选中文本编辑器内的全部内容。
+ */
+function selectTextEditorContent(): void {
+  const editor = textEditorRef.value;
+  const selection = window.getSelection();
+  if (!editor || !selection) {
+    return;
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+/**
+ * 确保文本编辑器保持在画板可视区域内。
+ */
+function keepTextEditorInViewport(): void {
+  const session = textEditingSession.value;
+  const element = session ? findDrawingShapeElement(board.state.value.elements, session.id) : null;
+  const rootRect = rootRef.value?.getBoundingClientRect();
+  if (!element || !rootRect?.width || !rootRect.height) {
+    return;
+  }
+
+  const { center, zoom } = board.state.value.viewport;
+  const size = measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
+  const editorLeft = rootRect.left + rootRect.width / 2 + (element.position.x - center.x) * zoom;
+  const editorTop = rootRect.top + rootRect.height / 2 + (element.position.y - center.y) * zoom;
+  const editorRight = editorLeft + size.width * zoom;
+  const editorBottom = editorTop + size.height * zoom;
+  const minLeft = rootRect.left + TEXT_EDITOR_VIEWPORT_MARGIN;
+  const maxRight = rootRect.right - TEXT_EDITOR_VIEWPORT_MARGIN;
+  const minTop = rootRect.top + TEXT_EDITOR_VIEWPORT_MARGIN;
+  const maxBottom = rootRect.bottom - TEXT_EDITOR_VIEWPORT_MARGIN;
+  let nextCenterX = center.x;
+  let nextCenterY = center.y;
+
+  if (editorLeft < minLeft) {
+    nextCenterX += (editorLeft - minLeft) / zoom;
+  }
+  if (editorRight > maxRight) {
+    nextCenterX += (editorRight - maxRight) / zoom;
+  }
+  if (editorTop < minTop) {
+    nextCenterY += (editorTop - minTop) / zoom;
+  }
+  if (editorBottom > maxBottom) {
+    nextCenterY += (editorBottom - maxBottom) / zoom;
+  }
+
+  if (nextCenterX === center.x && nextCenterY === center.y) {
+    return;
+  }
+
+  viewport.setCenter({
+    x: Number(nextCenterX.toFixed(2)),
+    y: Number(nextCenterY.toFixed(2))
+  });
+}
+
+/**
+ * 在下一轮 DOM 更新后修正文本编辑器可见区域。
+ */
+function scheduleTextEditorViewportKeepAlive(): void {
+  nextTick()
+    .then((): void => {
+      keepTextEditorInViewport();
+    })
+    .catch((error: unknown): void => {
+      console.warn('BDrawing text editor viewport sync failed', error);
+    });
+}
+
+/**
  * 开始编辑文本节点。
  * @param element - 文本元素
  * @param isNew - 是否为刚创建的元素
@@ -713,16 +860,56 @@ async function startTextEditing(element: DrawingShapeElement, isNew: boolean): P
   };
   textEditorValue.value = element.text;
   await nextTick();
+  syncTextEditorContent();
   textEditorRef.value?.focus();
-  textEditorRef.value?.select();
+  selectTextEditorContent();
+  scheduleTextEditorViewportKeepAlive();
 }
 
 /**
- * 结束当前文本编辑会话。
+ * 将光标移动到文本编辑器末尾。
+ * @param editor - 文本编辑器 DOM
  */
-function clearTextEditing(): void {
-  textEditingSession.value = null;
-  textEditorValue.value = '';
+function moveTextEditorCaretToEnd(editor: HTMLElement): void {
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+/**
+ * 在当前编辑光标处插入纯文本。
+ * @param text - 要插入的文本
+ */
+function insertTextEditorPlainText(text: string): void {
+  const editor = textEditorRef.value;
+  if (!editor) {
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.anchorNode || !editor.contains(selection.anchorNode)) {
+    editor.textContent = `${editor.textContent ?? ''}${text}`;
+    moveTextEditorCaretToEnd(editor);
+    textEditorValue.value = editor.textContent ?? '';
+    scheduleTextEditorViewportKeepAlive();
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  range.insertNode(document.createTextNode(text));
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  textEditorValue.value = editor.textContent ?? '';
+  scheduleTextEditorViewportKeepAlive();
 }
 
 /**
@@ -737,10 +924,8 @@ function commitTextEditor(): void {
   const nextText = textEditorValue.value;
   clearTextEditing();
   if (!nextText.trim()) {
-    if (session.isNew) {
-      board.setSelection([session.id]);
-      interaction.deleteSelection();
-    }
+    board.setSelection([session.id]);
+    interaction.deleteSelection();
     return;
   }
 
@@ -766,6 +951,20 @@ function cancelTextEditor(): void {
 }
 
 /**
+ * 处理文本编辑器输入。
+ * @param event - 输入事件
+ */
+function handleTextEditorInput(event: Event): void {
+  const target = event.currentTarget;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  textEditorValue.value = target.textContent ?? '';
+  scheduleTextEditorViewportKeepAlive();
+}
+
+/**
  * 处理文本编辑框快捷键。
  * @param event - 键盘事件
  */
@@ -776,12 +975,132 @@ function handleTextEditorKeydown(event: KeyboardEvent): void {
     return;
   }
 
-  if (event.key !== 'Enter' || event.shiftKey) {
+  if (event.key === 'Enter' && event.shiftKey) {
+    event.preventDefault();
+    insertTextEditorPlainText('\n');
+    return;
+  }
+
+  if (event.key !== 'Enter') {
     return;
   }
 
   event.preventDefault();
   commitTextEditor();
+}
+
+/**
+ * 处理文本编辑器粘贴，仅保留纯文本内容。
+ * @param event - 粘贴事件
+ */
+function handleTextEditorPaste(event: ClipboardEvent): void {
+  insertTextEditorPlainText(event.clipboardData?.getData('text/plain') ?? '');
+}
+
+/**
+ * 判断文本创建手势是否为点击。
+ * @param start - 创建起点
+ * @param end - 创建终点
+ * @returns 是否为点击创建
+ */
+function isTextCreateClick(start: DrawingPoint, end: DrawingPoint): boolean {
+  return Math.hypot(end.x - start.x, end.y - start.y) <= TEXT_CREATE_CLICK_TOLERANCE;
+}
+
+/**
+ * 在指定画板坐标创建文本并进入编辑。
+ * @param point - 文本创建位置
+ */
+async function createTextElementAtPoint(point: DrawingPoint): Promise<void> {
+  board.startCreateShapeDraft('text', point);
+  board.updateDraftPoint(point);
+  board.commitCreateShapeDraft(creationStyle.value);
+  const createdElement = findDrawingShapeElement(board.state.value.elements, board.state.value.selection[0]);
+  setActiveTool('select');
+  if (createdElement) {
+    await startTextEditing(createdElement, true);
+  }
+}
+
+/**
+ * 取消点击已有元素创建文本的待执行动作。
+ */
+function cancelPendingTextElementCreate(): void {
+  if (!pendingTextElementCreateSession) {
+    return;
+  }
+
+  pendingTextElementCreateSession.abortController.abort();
+  if (pendingTextElementCreateSession.timer !== null) {
+    clearTimeout(pendingTextElementCreateSession.timer);
+  }
+  pendingTextElementCreateSession = null;
+}
+
+/**
+ * 更新点击已有元素创建文本时的指针位置。
+ * @param event - 指针事件
+ */
+function handlePendingTextElementCreateMove(event: PointerEvent): void {
+  if (!pendingTextElementCreateSession) {
+    return;
+  }
+
+  const point = getBoardPointFromPointer(event);
+  if (point) {
+    pendingTextElementCreateSession.current = point;
+  }
+}
+
+/**
+ * 结束点击已有元素创建文本的手势，并等待双击判定。
+ * @param event - 指针事件
+ */
+function finishPendingTextElementCreate(event: PointerEvent): void {
+  const session = pendingTextElementCreateSession;
+  if (!session) {
+    return;
+  }
+
+  const point = getBoardPointFromPointer(event) ?? session.current;
+  session.current = point;
+  session.abortController.abort();
+  if (!isTextCreateClick(session.start, point)) {
+    cancelPendingTextElementCreate();
+    return;
+  }
+
+  session.timer = setTimeout((): void => {
+    const createPoint = session.current;
+    pendingTextElementCreateSession = null;
+    createTextElementAtPoint(createPoint).catch((error: unknown): void => {
+      console.warn('BDrawing text element create failed', error);
+    });
+  }, TEXT_ELEMENT_CLICK_CREATE_DELAY);
+}
+
+/**
+ * 从已有元素上启动文本创建点击手势。
+ * @param event - 指针事件
+ */
+function startPendingTextElementCreate(event: PointerEvent): void {
+  const point = getBoardPointFromPointer(event);
+  if (!point) {
+    return;
+  }
+
+  cancelPendingTextElementCreate();
+  const abortController = new AbortController();
+  pendingTextElementCreateSession = {
+    start: point,
+    current: point,
+    abortController,
+    timer: null
+  };
+
+  window.addEventListener('pointermove', handlePendingTextElementCreateMove, { signal: abortController.signal });
+  window.addEventListener('pointerup', finishPendingTextElementCreate, { signal: abortController.signal });
+  window.addEventListener('pointercancel', cancelPendingTextElementCreate, { signal: abortController.signal });
 }
 
 /**
@@ -1044,6 +1363,11 @@ function startConnectorDrag(id: string, event: PointerEvent): void {
  * @param event - 指针事件
  */
 function handleElementPointerup(id: string, event: PointerEvent): void {
+  if (activeTool.value === 'text') {
+    finishPendingTextElementCreate(event);
+    return;
+  }
+
   if (activeTool.value !== 'connector') {
     handleDirectDragEnd();
     return;
@@ -1063,6 +1387,11 @@ function handleElementPointerup(id: string, event: PointerEvent): void {
  */
 function handleElementSelect(id: string, event: PointerEvent): void {
   if (activeTool.value === 'hand') {
+    return;
+  }
+
+  if (activeTool.value === 'text') {
+    startPendingTextElementCreate(event);
     return;
   }
 
@@ -1088,6 +1417,23 @@ function handleElementSelect(id: string, event: PointerEvent): void {
   }
 
   startConnectorDrag(id, event);
+}
+
+/**
+ * 处理元素编辑。
+ * @param id - 元素 ID
+ */
+async function handleElementEdit(id: string): Promise<void> {
+  cancelPendingTextElementCreate();
+  const element = getElementById(id);
+  if (!element || isDrawingConnectorElement(element) || element.shape !== 'text') {
+    return;
+  }
+
+  cancelDirectDrag();
+  board.setSelection([id]);
+  setActiveTool('select');
+  await startTextEditing(element, false);
 }
 
 /**
@@ -1124,6 +1470,11 @@ function handleCanvasPointermove(point: DrawingPoint): void {
 async function handleCanvasPointerup(point: DrawingPoint): Promise<void> {
   const { draft } = board.state.value;
   if (draft?.kind !== 'creating-shape') {
+    return;
+  }
+
+  if (draft.shape === 'text' && !isTextCreateClick(draft.start, point)) {
+    board.clearDraft();
     return;
   }
 
@@ -1238,6 +1589,7 @@ onBeforeUnmount((): void => {
   cancelHandPan();
   cancelDirectDrag();
   cancelConnectorDrag();
+  cancelPendingTextElementCreate();
 });
 
 onMounted((): void => {
@@ -1276,25 +1628,22 @@ useResizeObserver(rootRef, (entries: ResizeObserverEntry[]): void => {
 }
 
 .b-drawing__text-editor {
-  position: absolute;
+  position: fixed;
   z-index: 20;
   box-sizing: border-box;
-  padding: 8px 10px;
   overflow: hidden;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
   font-weight: 650;
   line-height: 1.35;
   color: var(--text-primary);
   text-align: center;
+  white-space: pre;
   resize: none;
-  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
-  border: 1px solid var(--color-primary);
-  border-radius: 6px;
   outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
-}
-
-.b-drawing__text-editor:focus {
-  border-color: var(--color-primary);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
 }
 </style>

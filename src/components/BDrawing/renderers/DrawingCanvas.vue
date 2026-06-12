@@ -6,6 +6,7 @@
   <div
     class="b-drawing-canvas"
     :class="[`is-tool-${activeTool}`, { 'is-panning': isPanning }]"
+    :style="canvasStyle"
     data-testid="drawing-canvas"
     @pointerdown="handlePointerDown"
     @pointermove="handlePointerMove"
@@ -36,8 +37,10 @@
         :key="element.id"
         :node="element"
         :active-connector-anchor="connectorHoverEndpoint?.elementId === element.id ? connectorHoverEndpoint.anchor : null"
+        :editing="editingElementId === element.id"
         :selected="selection.includes(element.id)"
         :show-connector-anchors="activeTool === 'connector'"
+        @edit="handleElementEdit"
         @select="handleElementSelect"
         @release="handleElementRelease"
       />
@@ -89,6 +92,7 @@ import type {
   DrawingToolMode,
   DrawingViewport
 } from '../types';
+import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import {
   createDrawingLinePath,
@@ -123,6 +127,8 @@ interface Props {
   edges: DrawingEdge[];
   /** 选区 */
   selection: string[];
+  /** 正在编辑的元素 ID */
+  editingElementId?: string | null;
   /** 视口 */
   viewport: DrawingViewport;
   /** 视口渲染尺寸 */
@@ -145,6 +151,8 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
+  /** 编辑元素 */
+  edit: [id: string, event: MouseEvent];
   /** 选择元素 */
   select: [id: string, event: PointerEvent];
   /** 在元素上释放指针 */
@@ -160,6 +168,10 @@ const emit = defineEmits<{
 }>();
 
 const viewBox = computed<string>(() => createDrawingViewBox(props.viewport, props.viewportSize));
+/** 画布根节点内联样式。 */
+const canvasStyle = computed<CSSProperties>(() => ({
+  cursor: props.activeTool === 'text' ? 'text' : undefined
+}));
 
 const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter(isDrawingShapeElement));
 const connectorElements = computed<DrawingConnectorElement[]>(() => props.elements.filter(isDrawingConnectorElement));
@@ -189,6 +201,15 @@ const connectorPreviewPath = computed<string>(() => {
 
   return createDrawingLinePath(getDrawingConnectorAnchorPoint(source, connectorDraft.value.source.anchor), connectorDraft.value.current);
 });
+
+/**
+ * 转发元素编辑事件。
+ * @param id - 元素 ID
+ * @param event - 鼠标事件
+ */
+function handleElementEdit(id: string, event: MouseEvent): void {
+  emit('edit', id, event);
+}
 
 /**
  * 转发元素按下选择事件。
@@ -298,16 +319,18 @@ function handleWheel(event: WheelEvent): void {
 
 .b-drawing-canvas.is-tool-rect,
 .b-drawing-canvas.is-tool-ellipse,
-.b-drawing-canvas.is-tool-diamond,
-.b-drawing-canvas.is-tool-text {
+.b-drawing-canvas.is-tool-diamond {
   cursor: crosshair;
+}
+
+.b-drawing-canvas.is-tool-text {
+  cursor: text;
 }
 
 /* 形状创建工具激活时，禁止已有节点拦截指针事件，让点击穿透到画布以创建新形状 */
 .b-drawing-canvas.is-tool-rect .b-drawing-element,
 .b-drawing-canvas.is-tool-ellipse .b-drawing-element,
 .b-drawing-canvas.is-tool-diamond .b-drawing-element,
-.b-drawing-canvas.is-tool-text .b-drawing-element,
 .b-drawing-canvas.is-tool-process .b-drawing-element {
   pointer-events: none;
 }
