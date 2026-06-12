@@ -55,6 +55,17 @@
         @canvas-wheel="handleCanvasWheel"
       />
     </DrawingInfiniteViewport>
+    <textarea
+      v-if="textEditingSession"
+      ref="textEditorRef"
+      v-model="textEditorValue"
+      class="b-drawing__text-editor"
+      data-testid="drawing-text-editor"
+      :style="textEditorStyle"
+      @blur="commitTextEditor"
+      @keydown.stop="handleTextEditorKeydown"
+      @pointerdown.stop
+    ></textarea>
     <DrawingMoveableLayer
       :enabled="activeTool === 'select' && !hideMoveableDuringDirectDrag"
       :root="rootRef"
@@ -87,7 +98,8 @@ import type {
   DrawingToolMode
 } from './types';
 import type { DrawingCanvasPointProjection, DrawingConnectorPathElementOverride } from './utils/drawingGeometry';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import type { CSSProperties } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import DrawingInfiniteViewport from './components/DrawingInfiniteViewport.vue';
 import DrawingMoveableLayer from './components/DrawingMoveableLayer.vue';
@@ -211,6 +223,18 @@ interface ConnectorDragSession {
   abortController: AbortController;
 }
 
+/**
+ * 文本节点编辑会话。
+ */
+interface TextEditingSession {
+  /** 正在编辑的元素 ID */
+  id: string;
+  /** 进入编辑前的原始文本 */
+  originalText: string;
+  /** 是否为刚创建的文本节点 */
+  isNew: boolean;
+}
+
 let directDragSession: DirectElementDragSession | null = null;
 let handPanSession: HandPanSession | null = null;
 let connectorDragSession: ConnectorDragSession | null = null;
@@ -219,9 +243,35 @@ let connectorDragSession: ConnectorDragSession | null = null;
 const isPanning = ref<boolean>(false);
 /** 创建连接线时当前 hover 的目标端点。 */
 const connectorHoverEndpoint = ref<DrawingConnectorEndpoint | null>(null);
+/** 当前文本编辑会话。 */
+const textEditingSession = ref<TextEditingSession | null>(null);
+/** 文本编辑输入值。 */
+const textEditorValue = ref<string>('');
+/** 文本编辑框 DOM。 */
+const textEditorRef = ref<HTMLTextAreaElement | null>(null);
 
 /** 可创建形状的工具列表 */
 const SHAPE_TOOLS: readonly DrawingShapeType[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
+
+/** 文本编辑框定位样式。 */
+const textEditorStyle = computed<CSSProperties>(() => {
+  const session = textEditingSession.value;
+  const element = session ? findDrawingShapeElement(board.state.value.elements, session.id) : null;
+  if (!element) {
+    return {};
+  }
+
+  const { center, zoom } = board.state.value.viewport;
+  const left = viewportSize.value.width / 2 + (element.position.x - center.x) * zoom;
+  const top = viewportSize.value.height / 2 + (element.position.y - center.y) * zoom;
+
+  return {
+    height: `${element.size.height * zoom}px`,
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${element.size.width * zoom}px`
+  };
+});
 
 /**
  * 从 ResizeObserver 条目读取画布尺寸。
@@ -651,6 +701,90 @@ function handleLayerChange(action: DrawingLayerAction): void {
 }
 
 /**
+ * 开始编辑文本节点。
+ * @param element - 文本元素
+ * @param isNew - 是否为刚创建的元素
+ */
+async function startTextEditing(element: DrawingShapeElement, isNew: boolean): Promise<void> {
+  textEditingSession.value = {
+    id: element.id,
+    originalText: element.text,
+    isNew
+  };
+  textEditorValue.value = element.text;
+  await nextTick();
+  textEditorRef.value?.focus();
+  textEditorRef.value?.select();
+}
+
+/**
+ * 结束当前文本编辑会话。
+ */
+function clearTextEditing(): void {
+  textEditingSession.value = null;
+  textEditorValue.value = '';
+}
+
+/**
+ * 提交文本编辑内容。
+ */
+function commitTextEditor(): void {
+  const session = textEditingSession.value;
+  if (!session) {
+    return;
+  }
+
+  const nextText = textEditorValue.value;
+  clearTextEditing();
+  if (!nextText.trim()) {
+    if (session.isNew) {
+      board.setSelection([session.id]);
+      interaction.deleteSelection();
+    }
+    return;
+  }
+
+  if (nextText !== session.originalText) {
+    board.updateNodeText(session.id, nextText);
+  }
+}
+
+/**
+ * 取消文本编辑。
+ */
+function cancelTextEditor(): void {
+  const session = textEditingSession.value;
+  if (!session) {
+    return;
+  }
+
+  clearTextEditing();
+  if (session.isNew) {
+    board.setSelection([session.id]);
+    interaction.deleteSelection();
+  }
+}
+
+/**
+ * 处理文本编辑框快捷键。
+ * @param event - 键盘事件
+ */
+function handleTextEditorKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    cancelTextEditor();
+    return;
+  }
+
+  if (event.key !== 'Enter' || event.shiftKey) {
+    return;
+  }
+
+  event.preventDefault();
+  commitTextEditor();
+}
+
+/**
  * 处理手型工具平移移动。
  * @param event - 指针事件
  */
@@ -987,14 +1121,19 @@ function handleCanvasPointermove(point: DrawingPoint): void {
  * 处理画布空白区域抬起。
  * @param point - 画板坐标
  */
-function handleCanvasPointerup(point: DrawingPoint): void {
-  if (board.state.value.draft?.kind !== 'creating-shape') {
+async function handleCanvasPointerup(point: DrawingPoint): Promise<void> {
+  const { draft } = board.state.value;
+  if (draft?.kind !== 'creating-shape') {
     return;
   }
 
   board.updateDraftPoint(point);
   board.commitCreateShapeDraft(creationStyle.value);
+  const createdElement = findDrawingShapeElement(board.state.value.elements, board.state.value.selection[0]);
   setActiveTool('select');
+  if (draft.shape === 'text' && createdElement) {
+    await startTextEditing(createdElement, true);
+  }
 }
 
 /**
@@ -1134,5 +1273,28 @@ useResizeObserver(rootRef, (entries: ResizeObserverEntry[]): void => {
   inset: 0;
   z-index: 10;
   pointer-events: none;
+}
+
+.b-drawing__text-editor {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text-primary);
+  text-align: center;
+  resize: none;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  border: 1px solid var(--color-primary);
+  border-radius: 6px;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.b-drawing__text-editor:focus {
+  border-color: var(--color-primary);
 }
 </style>

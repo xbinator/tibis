@@ -49,7 +49,9 @@
       :style="shapeStyle"
     />
     <text class="b-drawing-node__text" :fill="node.style?.color" :style="textStyle" :x="node.size.width / 2" :y="node.size.height / 2">
-      {{ node.text }}
+      <tspan v-for="(line, index) in textLines" :key="`${index}-${line}`" :dy="index === 0 ? textFirstLineDy : TEXT_LINE_HEIGHT" :x="node.size.width / 2">
+        {{ line }}
+      </tspan>
     </text>
     <g v-if="showConnectorAnchors" class="b-drawing-node__anchors">
       <circle
@@ -99,6 +101,9 @@ const emit = defineEmits<{
   release: [id: string, event: PointerEvent];
 }>();
 
+/** SVG 文本行高。 */
+const TEXT_LINE_HEIGHT = 16;
+
 const isDiamondShape = computed<boolean>(() => isDrawingDiamondShape(props.node.shape));
 const nodeTransform = computed<string>(() => createDrawingElementTransform(props.node.position, props.node.size, props.node.rotation));
 const diamondPoints = computed<string>(() => createDrawingDiamondPoints(props.node.size));
@@ -110,6 +115,10 @@ const shapeStyle = computed<CSSProperties>(() => ({
 const textStyle = computed<CSSProperties>(() => ({
   fill: props.node.style?.color
 }));
+/** 节点文本按换行拆分后的渲染行。 */
+const textLines = computed<string[]>(() => props.node.text.split('\n'));
+/** 多行文本首行偏移，用于让整组文本垂直居中。 */
+const textFirstLineDy = computed<number>(() => -((textLines.value.length - 1) * TEXT_LINE_HEIGHT) / 2);
 const connectorAnchors = computed<Array<{ id: Exclude<DrawingConnectorAnchor, 'center'>; x: number; y: number }>>(() => [
   { id: 'top', x: props.node.size.width / 2, y: 0 },
   { id: 'right', x: props.node.size.width, y: props.node.size.height / 2 },
