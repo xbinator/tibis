@@ -36,14 +36,19 @@
 
 <script setup lang="ts">
 import type { DrawingElement, DrawingGeometryChange, DrawingSize, DrawingViewport } from '../types';
+import type { DrawingConnectorPathElementOverride } from '../utils/drawingGeometry';
 import type { SnapDirections } from 'moveable';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import VueMoveable from 'vue3-moveable/dist/moveable.js';
 import {
+  createDrawingConnectorMarkerPath,
+  createDrawingConnectorPath,
   createDrawingDiamondPoints,
   createDrawingElementTransform,
   getDrawingElementId,
+  isDrawingConnectorElement,
   isDrawingDiamondShape,
+  isDrawingShapeElement,
   queryDrawingElementTarget
 } from '../utils/drawingGeometry';
 
@@ -205,6 +210,15 @@ function getTargetById(id: string): Element | null {
 }
 
 /**
+ * 通过元素 ID 读取全部 DOM target。
+ * @param id - 元素 ID
+ * @returns DOM target 列表
+ */
+function getTargetsById(id: string): Element[] {
+  return Array.from(props.root?.querySelectorAll(`[data-drawing-element-id="${id}"]`) ?? []);
+}
+
+/**
  * DOM 位移转换为世界坐标值。
  * @param value - DOM 坐标值
  * @returns 世界坐标值
@@ -288,6 +302,37 @@ function updateTextPreviewPosition(target: Element, size: DrawingSize): void {
 }
 
 /**
+ * 更新关联连接线的预览路径。
+ * @param overrides - 预览几何覆盖
+ */
+function updateConnectedConnectorPreviews(overrides: DrawingConnectorPathElementOverride[]): void {
+  const overrideIds = new Set<string>(overrides.map((override: DrawingConnectorPathElementOverride): string => override.id));
+  const connectors = props.elements.filter(
+    (element: DrawingElement): boolean =>
+      isDrawingConnectorElement(element) && (overrideIds.has(element.source.elementId) || overrideIds.has(element.target.elementId))
+  );
+
+  for (const connector of connectors) {
+    if (!isDrawingConnectorElement(connector)) {
+      continue;
+    }
+
+    const pathData = createDrawingConnectorPath(props.elements, connector, overrides);
+    const markerStartPath = createDrawingConnectorMarkerPath(props.elements, connector, 'start', overrides);
+    const markerEndPath = createDrawingConnectorMarkerPath(props.elements, connector, 'end', overrides);
+    const connectorTargets = getTargetsById(connector.id);
+    connectorTargets.forEach((target: Element): void => {
+      const paths = target.querySelectorAll('.b-drawing-connector__line, .b-drawing-connector__hit');
+      paths.forEach((path: Element): void => {
+        path.setAttribute('d', pathData);
+      });
+      target.querySelector('.b-drawing-connector__marker-arrow--start')?.setAttribute('d', markerStartPath);
+      target.querySelector('.b-drawing-connector__marker-arrow--end')?.setAttribute('d', markerEndPath);
+    });
+  }
+}
+
+/**
  * 从拖拽结束事件创建几何移动变更。
  * @param event - Moveable 拖拽结束事件
  * @returns 几何变更，事件不完整时返回 null
@@ -357,14 +402,18 @@ async function syncTargets(): Promise<void> {
     return;
   }
 
-  const selectedTargets = props.selection.map(getTargetById).filter((target): target is Element => target !== null);
+  const shapeIds = new Set<string>(props.elements.filter(isDrawingShapeElement).map((element) => element.id));
+  const selectedTargets = props.selection
+    .filter((id: string): boolean => shapeIds.has(id))
+    .map(getTargetById)
+    .filter((target): target is Element => target !== null);
   const selectedIds = new Set<string>(props.selection);
 
   targets.value = selectedTargets;
   guidelineTargets.value =
     selectedTargets.length === 1
       ? props.elements
-          .filter((element) => !selectedIds.has(element.id))
+          .filter((element) => isDrawingShapeElement(element) && !selectedIds.has(element.id))
           .map((element) => getTargetById(element.id))
           .filter((target): target is Element => target !== null)
       : [];
@@ -379,11 +428,21 @@ async function syncTargets(): Promise<void> {
 function handleDrag(event: MoveableDragEvent): void {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
-  if (!event.target || !element || !event.translate) {
+  if (!event.target || !id || !element || !event.translate) {
     return;
   }
 
+  const position = {
+    x: element.position.x + domDeltaToWorld(event.translate[0]),
+    y: element.position.y + domDeltaToWorld(event.translate[1])
+  };
   event.target.setAttribute('transform', createPreviewTransform(element, event.translate));
+  updateConnectedConnectorPreviews([
+    {
+      id,
+      position
+    }
+  ]);
 }
 
 /**
@@ -394,7 +453,7 @@ function handleDrag(event: MoveableDragEvent): void {
 function handleResize(event: MoveableResizeEvent, shouldConvertGroupSize = false): void {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
-  if (!event.target || !element || event.width === undefined || event.height === undefined) {
+  if (!event.target || !id || !element || event.width === undefined || event.height === undefined) {
     return;
   }
 
@@ -404,6 +463,16 @@ function handleResize(event: MoveableResizeEvent, shouldConvertGroupSize = false
   event.target.setAttribute('transform', createPreviewTransform(element, translate, size));
   updateShapePreviewSize(event.target, element, size);
   updateTextPreviewPosition(event.target, size);
+  updateConnectedConnectorPreviews([
+    {
+      id,
+      position: {
+        x: element.position.x + domDeltaToWorld(translate[0]),
+        y: element.position.y + domDeltaToWorld(translate[1])
+      },
+      size
+    }
+  ]);
 }
 
 /**

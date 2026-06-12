@@ -22,7 +22,14 @@
       @set-center="viewport.setCenter"
       @set-zoom="viewport.setZoom"
     />
-    <DrawingStylePanel :element="selectedShapeElement" :draft-style="activeCreateShape ? creationStyle : null" @change="handleSelectedStyleChange" />
+    <DrawingStylePanel
+      :element="selectedShapeElement"
+      :connector="selectedConnectorElement"
+      :draft-style="activeCreateShape ? creationStyle : null"
+      :draft-connector="activeTool === 'connector' ? connectorCreationOptions : null"
+      @change="handleSelectedStyleChange"
+      @connector-change="handleSelectedConnectorOptionsChange"
+    />
     <DrawingInfiniteViewport>
       <DrawingCanvas
         :elements="board.state.value.elements"
@@ -34,6 +41,8 @@
         :active-tool="activeTool"
         :draft="board.state.value.draft"
         :draft-style="creationStyle"
+        :draft-connector="connectorCreationOptions"
+        :connector-hover-endpoint="connectorHoverEndpoint"
         :is-panning="isPanning"
         @select="handleElementSelect"
         @element-pointerup="handleElementPointerup"
@@ -60,7 +69,11 @@
 <script setup lang="ts">
 import type {
   DrawingConnectorAnchor,
+  DrawingConnectorDraftOptions,
   DrawingConnectorEndpoint,
+  DrawingConnectorElement,
+  DrawingConnectorOptionsChange,
+  DrawingElement,
   DrawingElementStyle,
   DrawingElementStyleChange,
   DrawingPoint,
@@ -69,7 +82,7 @@ import type {
   DrawingSize,
   DrawingToolMode
 } from './types';
-import type { DrawingCanvasPointProjection } from './utils/drawingGeometry';
+import type { DrawingCanvasPointProjection, DrawingConnectorPathElementOverride } from './utils/drawingGeometry';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import DrawingInfiniteViewport from './components/DrawingInfiniteViewport.vue';
@@ -82,11 +95,14 @@ import { useDrawingInteraction } from './hooks/useDrawingInteraction';
 import { useDrawingViewport } from './hooks/useDrawingViewport';
 import DrawingCanvas from './renderers/DrawingCanvas.vue';
 import {
+  createDrawingConnectorPath,
   clientDeltaToDrawingDelta,
   createDrawingElementTransform,
+  createDrawingConnectorMarkerPath,
   findDrawingShapeElement,
   getDrawingConnectorAnchorPoint,
   getDrawingElementId,
+  isDrawingConnectorElement,
   projectClientPointToDrawingBoard,
   queryDrawingElementTarget
 } from './utils/drawingGeometry';
@@ -97,6 +113,8 @@ const interaction = useDrawingInteraction(board);
 const activeTool = ref<DrawingToolMode>('select');
 /** 创建工具激活时应用到下一个形状的样式。 */
 const creationStyle = ref<DrawingElementStyle>({});
+/** 连线工具激活时应用到下一条连接线的配置。 */
+const connectorCreationOptions = ref<DrawingConnectorDraftOptions>({});
 const rootRef = ref<HTMLElement | null>(null);
 /** 当前画布视口实际渲染尺寸。 */
 const viewportSize = ref<DrawingSize>({ width: 0, height: 0 });
@@ -116,6 +134,16 @@ const selectedShapeElement = computed<DrawingShapeElement | null>(() => {
   }
 
   return findDrawingShapeElement(board.state.value.elements, board.state.value.selection[0]) ?? null;
+});
+/** 当前单选的连接线元素，供左侧样式面板编辑。 */
+const selectedConnectorElement = computed<DrawingConnectorElement | null>(() => {
+  if (board.state.value.selection.length !== 1) {
+    return null;
+  }
+
+  const element = board.state.value.elements.find((item: DrawingElement): boolean => item.id === board.state.value.selection[0]);
+
+  return element && isDrawingConnectorElement(element) ? element : null;
 });
 
 /**
@@ -176,6 +204,8 @@ let connectorDragSession: ConnectorDragSession | null = null;
 
 /** 手型工具是否正在平移中。 */
 const isPanning = ref<boolean>(false);
+/** 创建连接线时当前 hover 的目标端点。 */
+const connectorHoverEndpoint = ref<DrawingConnectorEndpoint | null>(null);
 
 /** 可创建形状的工具列表 */
 const SHAPE_TOOLS: readonly DrawingShapeType[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
@@ -283,12 +313,30 @@ function getShapeElementById(id: string): DrawingShapeElement | null {
 }
 
 /**
+ * 通过元素 ID 读取画板元素。
+ * @param id - 元素 ID
+ * @returns 画板元素
+ */
+function getElementById(id: string): DrawingElement | null {
+  return board.state.value.elements.find((element: DrawingElement): boolean => element.id === id) ?? null;
+}
+
+/**
  * 通过元素 ID 读取 SVG DOM 节点。
  * @param id - 元素 ID
  * @returns SVG DOM 节点
  */
 function getElementTargetById(id: string): Element | null {
   return queryDrawingElementTarget(rootRef.value, id);
+}
+
+/**
+ * 通过元素 ID 读取全部 SVG DOM 节点。
+ * @param id - 元素 ID
+ * @returns SVG DOM 节点列表
+ */
+function getElementTargetsById(id: string): Element[] {
+  return Array.from(rootRef.value?.querySelectorAll(`[data-drawing-element-id="${id}"]`) ?? []);
 }
 
 /**
@@ -336,6 +384,42 @@ function getElementIdFromEventTarget(target: EventTarget | null): string | null 
   const elementTarget = target.closest('.b-drawing-element');
 
   return getDrawingElementId(elementTarget);
+}
+
+/**
+ * 从浏览器坐标命中读取画板元素 ID。
+ * @param clientX - 浏览器横坐标
+ * @param clientY - 浏览器纵坐标
+ * @returns 元素 ID
+ */
+function getElementIdFromClientPoint(clientX: number, clientY: number): string | null {
+  if (typeof document.elementFromPoint !== 'function') {
+    return null;
+  }
+
+  const elementTarget = document.elementFromPoint(clientX, clientY);
+
+  return getElementIdFromEventTarget(elementTarget);
+}
+
+/**
+ * 从连接线释放事件读取目标元素 ID。
+ * @param event - 指针事件
+ * @param sourceId - 起点元素 ID
+ * @returns 目标元素 ID
+ */
+function getConnectorTargetIdFromPointer(event: PointerEvent, sourceId: string): string | null {
+  const eventTargetId = getElementIdFromEventTarget(event.target);
+  if (eventTargetId && eventTargetId !== sourceId) {
+    return eventTargetId;
+  }
+
+  const pointTargetId = getElementIdFromClientPoint(event.clientX, event.clientY);
+  if (pointTargetId && pointTargetId !== sourceId) {
+    return pointTargetId;
+  }
+
+  return null;
 }
 
 /**
@@ -393,6 +477,37 @@ function createDirectDragTransform(position: DrawingPoint, session: DirectElemen
 }
 
 /**
+ * 更新关联连接线的拖拽预览路径。
+ * @param elementId - 正在预览变更的元素 ID
+ * @param overrides - 预览几何覆盖
+ */
+function updateConnectedConnectorPreviews(elementId: string, overrides: DrawingConnectorPathElementOverride[]): void {
+  const connectors = board.state.value.elements.filter(
+    (element: DrawingElement): boolean =>
+      isDrawingConnectorElement(element) && (element.source.elementId === elementId || element.target.elementId === elementId)
+  );
+
+  for (const connector of connectors) {
+    if (!isDrawingConnectorElement(connector)) {
+      continue;
+    }
+
+    const pathData = createDrawingConnectorPath(board.state.value.elements, connector, overrides);
+    const markerStartPath = createDrawingConnectorMarkerPath(board.state.value.elements, connector, 'start', overrides);
+    const markerEndPath = createDrawingConnectorMarkerPath(board.state.value.elements, connector, 'end', overrides);
+    const targets = getElementTargetsById(connector.id);
+    targets.forEach((target: Element): void => {
+      const paths = target.querySelectorAll('.b-drawing-connector__line, .b-drawing-connector__hit');
+      paths.forEach((path: Element): void => {
+        path.setAttribute('d', pathData);
+      });
+      target.querySelector('.b-drawing-connector__marker-arrow--start')?.setAttribute('d', markerStartPath);
+      target.querySelector('.b-drawing-connector__marker-arrow--end')?.setAttribute('d', markerEndPath);
+    });
+  }
+}
+
+/**
  * 根据浏览器坐标计算直接拖拽位置。
  * @param event - 指针事件
  * @param session - 拖拽会话
@@ -428,6 +543,7 @@ function cancelDirectDrag(): void {
 function cancelConnectorDrag(): void {
   connectorDragSession?.abortController.abort();
   connectorDragSession = null;
+  connectorHoverEndpoint.value = null;
   board.clearDraft();
 }
 
@@ -464,13 +580,48 @@ function handleSelectedStyleChange(style: DrawingElementStyleChange): void {
     return;
   }
 
+  if (selectedConnectorElement.value) {
+    board.updateElementStyle(selectedConnectorElement.value.id, style);
+    return;
+  }
+
   if (!activeCreateShape.value) {
+    if (activeTool.value === 'connector') {
+      connectorCreationOptions.value = {
+        ...connectorCreationOptions.value,
+        style: {
+          ...connectorCreationOptions.value.style,
+          ...style
+        }
+      };
+    }
+
     return;
   }
 
   creationStyle.value = {
     ...creationStyle.value,
     ...style
+  };
+}
+
+/**
+ * 更新当前选中连接线配置。
+ * @param options - 连接线配置变更
+ */
+function handleSelectedConnectorOptionsChange(options: DrawingConnectorOptionsChange): void {
+  if (selectedConnectorElement.value) {
+    board.updateConnectorOptions(selectedConnectorElement.value.id, options);
+    return;
+  }
+
+  if (activeTool.value !== 'connector') {
+    return;
+  }
+
+  connectorCreationOptions.value = {
+    ...connectorCreationOptions.value,
+    ...options
   };
 }
 
@@ -549,6 +700,12 @@ function handleDirectDragMove(event: PointerEvent): void {
   const position = getDirectDragPosition(event, directDragSession);
   const target = getElementTargetById(directDragSession.id);
   target?.setAttribute('transform', createDirectDragTransform(position, directDragSession));
+  updateConnectedConnectorPreviews(directDragSession.id, [
+    {
+      id: directDragSession.id,
+      position
+    }
+  ]);
   directDragSession.currentPosition = position;
   directDragSession.moved = true;
 }
@@ -637,6 +794,9 @@ function handleConnectorDragMove(event: PointerEvent): void {
     return;
   }
 
+  const targetId = getConnectorTargetIdFromPointer(event, connectorDragSession.source.elementId);
+  connectorHoverEndpoint.value = targetId ? getConnectorEndpointFromPointer(targetId, event) : null;
+
   const point = getBoardPointFromPointer(event);
   if (!point) {
     return;
@@ -656,13 +816,14 @@ function finishConnectorDrag(target: DrawingConnectorEndpoint | null): void {
 
   connectorDragSession.abortController.abort();
   connectorDragSession = null;
+  connectorHoverEndpoint.value = null;
 
   if (!target) {
     board.clearDraft();
     return;
   }
 
-  board.commitCreateConnectorDraft(target);
+  board.commitCreateConnectorDraft(target, connectorCreationOptions.value);
   setActiveTool('select');
 }
 
@@ -676,8 +837,8 @@ function handleConnectorDragEnd(event: PointerEvent): void {
   }
 
   const { source } = connectorDragSession;
-  const targetId = getElementIdFromEventTarget(event.target);
-  const target = targetId && targetId !== source.elementId ? getConnectorEndpointFromPointer(targetId, event) : null;
+  const targetId = getConnectorTargetIdFromPointer(event, source.elementId);
+  const target = targetId ? getConnectorEndpointFromPointer(targetId, event) : null;
 
   finishConnectorDrag(target);
 }
@@ -753,6 +914,12 @@ function handleElementSelect(id: string, event: PointerEvent): void {
 
   if (activeTool.value !== 'connector') {
     if (board.state.value.selection.includes(id)) {
+      return;
+    }
+
+    const element = getElementById(id);
+    if (element && isDrawingConnectorElement(element)) {
+      board.setSelection([id]);
       return;
     }
 
