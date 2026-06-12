@@ -3,7 +3,7 @@
  * @description 验证 BDrawing 手动画板 element transform 与历史记录。
  */
 import { describe, expect, it } from 'vitest';
-import type { DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import type { DrawingConnectorElement, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import {
   addDrawingConnector,
   addDrawingNode,
@@ -16,6 +16,7 @@ import {
   resizeDrawingElements,
   rotateDrawingElements,
   undoDrawingBoard,
+  updateDrawingConnectorOptions,
   updateDrawingElementStyle,
   updateDrawingNodeText
 } from '@/components/BDrawing/utils/boardTransforms';
@@ -60,6 +61,16 @@ function createEdge(): DrawingEdge {
 function expectShapeElement(element: DrawingElement | undefined): DrawingShapeElement {
   expect(element?.kind).toBe('shape');
   return element as DrawingShapeElement;
+}
+
+/**
+ * 断言元素为连接线元素。
+ * @param element - 待检查元素
+ * @returns 连接线元素
+ */
+function expectConnectorElement(element: DrawingElement | undefined): DrawingConnectorElement {
+  expect(element?.kind).toBe('connector');
+  return element as DrawingConnectorElement;
 }
 
 describe('boardTransforms', (): void => {
@@ -245,6 +256,10 @@ describe('boardTransforms', (): void => {
       id: 'connector-1',
       sourceId: 'node-1',
       targetId: 'node-2',
+      style: { stroke: '#ef4444', strokeWidth: 3 },
+      curve: 'bezier',
+      markerEnd: 'none',
+      markerStart: 'arrow',
       createdAt: 30
     });
 
@@ -252,10 +267,39 @@ describe('boardTransforms', (): void => {
       id: 'connector-1',
       kind: 'connector',
       source: { elementId: 'node-1', anchor: 'center' },
-      target: { elementId: 'node-2', anchor: 'center' }
+      target: { elementId: 'node-2', anchor: 'center' },
+      style: { stroke: '#ef4444', strokeWidth: 3 },
+      curve: 'bezier',
+      markerEnd: 'none',
+      markerStart: 'arrow'
     });
     expect(connected.selection).toEqual(['connector-1']);
     expect(connected.history.past).toHaveLength(1);
+  });
+
+  it('updates connector options as one undoable history entry', (): void => {
+    const connected = addDrawingConnector(
+      createDrawingBoardState({
+        elements: [createShapeElement('node-1'), createShapeElement('node-2')]
+      }),
+      {
+        id: 'connector-1',
+        sourceId: 'node-1',
+        targetId: 'node-2'
+      }
+    );
+    const updated = updateDrawingConnectorOptions(connected, 'connector-1', {
+      curve: 'bezier',
+      markerEnd: 'none',
+      markerStart: 'arrow'
+    });
+
+    expect(expectConnectorElement(updated.elements[2])).toMatchObject({
+      curve: 'bezier',
+      markerEnd: 'none',
+      markerStart: 'arrow'
+    });
+    expect(updated.history.past).toHaveLength(2);
   });
 
   it('keeps the board unchanged when connector endpoints are missing', (): void => {

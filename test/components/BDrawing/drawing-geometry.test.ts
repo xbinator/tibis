@@ -4,8 +4,10 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it } from 'vitest';
-import type { DrawingElement, DrawingShapeElement, DrawingViewport } from '@/components/BDrawing/types';
+import type { DrawingConnectorElement, DrawingElement, DrawingShapeElement, DrawingViewport } from '@/components/BDrawing/types';
 import {
+  createDrawingConnectorMarkerPath,
+  createDrawingConnectorPath,
   createDrawingDiamondPoints,
   createDrawingElementTransform,
   createDrawingLinePath,
@@ -94,6 +96,47 @@ describe('drawingGeometry', (): void => {
 
     expect(createDrawingLinePath(source, target)).toBe('M 10 20 L 30 60');
     expect(getDrawingLineLabelPosition(source, target)).toEqual({ x: 20, y: 32 });
+  });
+
+  it('creates bezier connector paths when connector curve is bezier', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      curve: 'bezier',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 260, y: 120 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toContain(' C ');
+  });
+
+  it('points bezier end markers toward the target anchor', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      curve: 'bezier',
+      markerEnd: 'arrow',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 260, y: 120 };
+
+    expect(createDrawingConnectorMarkerPath([source, target, connector], connector, 'end')).toContain('L 248');
   });
 
   it('finds element IDs, DOM targets and element centers', (): void => {

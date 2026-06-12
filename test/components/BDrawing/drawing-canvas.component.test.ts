@@ -116,30 +116,48 @@ function findDrawingNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Elemen
 }
 
 /**
- * 查找绘图样式面板。
+ * 查找连接线创建预览路径。
  * @param wrapper - BDrawing 测试包装器
- * @returns 样式面板包装器
+ * @returns 连接线预览路径包装器
  */
-function findDrawingStylePanel(wrapper: VueWrapper): DOMWrapper<Element> {
-  return wrapper.find('[data-testid="drawing-style-panel"]');
+function findDrawingConnectorPreview(wrapper: VueWrapper): DOMWrapper<Element> {
+  return wrapper.find('.b-drawing-canvas__connector-preview');
 }
 
 /**
- * 查找绘图样式面板中的背景色输入。
+ * 查找已渲染连接线主体。
  * @param wrapper - BDrawing 测试包装器
- * @returns 背景色输入包装器
+ * @returns 连接线主体包装器
  */
-function findDrawingFillInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement> {
-  return wrapper.find<HTMLInputElement>('[data-testid="drawing-style-fill-input"]');
+function findDrawingConnectorPath(wrapper: VueWrapper): DOMWrapper<Element> {
+  return wrapper.find('.b-drawing-connector__line');
 }
 
 /**
- * 查找绘图样式面板中的描边色输入。
+ * 查找所有已渲染连接线主体。
  * @param wrapper - BDrawing 测试包装器
- * @returns 描边色输入包装器
+ * @returns 连接线主体包装器列表
  */
-function findDrawingStrokeInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement> {
-  return wrapper.find<HTMLInputElement>('[data-testid="drawing-style-stroke-input"]');
+function findDrawingConnectorPaths(wrapper: VueWrapper): DOMWrapper<Element>[] {
+  return wrapper.findAll('.b-drawing-connector__line');
+}
+
+/**
+ * 查找连接线终点箭头路径。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 终点箭头路径包装器
+ */
+function findDrawingConnectorEndMarker(wrapper: VueWrapper): DOMWrapper<Element> {
+  return wrapper.find('.b-drawing-connector__marker-arrow--end');
+}
+
+/**
+ * 查找连接线选中端点。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 连接线端点包装器列表
+ */
+function findDrawingConnectorEndpoints(wrapper: VueWrapper): DOMWrapper<Element>[] {
+  return wrapper.findAll('.b-drawing-connector__endpoint');
 }
 
 /**
@@ -156,13 +174,50 @@ const DRAWING_STYLE_COLOR_TARGET_INDEX: Record<DrawingStyleColorTarget, number> 
 };
 
 /**
+ * 查找绘图样式面板。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 样式面板包装器
+ */
+function findDrawingStylePanel(wrapper: VueWrapper): DOMWrapper<Element> {
+  return wrapper.find('.b-drawing-style-panel');
+}
+
+/**
+ * 查找绘图样式面板中的颜色配置区块。
+ * @param wrapper - BDrawing 测试包装器
+ * @param target - 颜色配置类型
+ * @returns 颜色配置区块包装器
+ */
+function findDrawingColorSection(wrapper: VueWrapper, target: DrawingStyleColorTarget): DOMWrapper<Element> {
+  return findDrawingStylePanel(wrapper).findAll('.b-drawing-style-panel__section')[DRAWING_STYLE_COLOR_TARGET_INDEX[target]];
+}
+
+/**
+ * 查找绘图样式面板中的背景色输入。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 背景色输入包装器
+ */
+function findDrawingFillInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement> {
+  return findDrawingColorSection(wrapper, 'fill').find<HTMLInputElement>('.b-color-picker__input input, input.b-color-picker__input');
+}
+
+/**
+ * 查找绘图样式面板中的描边色输入。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 描边色输入包装器
+ */
+function findDrawingStrokeInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement> {
+  return findDrawingColorSection(wrapper, 'stroke').find<HTMLInputElement>('.b-color-picker__input input, input.b-color-picker__input');
+}
+
+/**
  * 查找样式面板中的自定义颜色按钮。
  * @param wrapper - BDrawing 测试包装器
  * @param target - 颜色配置类型
  * @returns 自定义颜色按钮包装器
  */
 function findDrawingColorCustomTrigger(wrapper: VueWrapper, target: DrawingStyleColorTarget): DOMWrapper<Element> {
-  return findDrawingStylePanel(wrapper).findAll('[data-testid="color-picker-custom-trigger"]')[DRAWING_STYLE_COLOR_TARGET_INDEX[target]];
+  return findDrawingColorSection(wrapper, target).find('.b-color-picker__custom-trigger');
 }
 
 /**
@@ -1692,8 +1747,10 @@ describe('BDrawing', (): void => {
     await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
     await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
 
-    expect(wrapper.find('[data-testid="drawing-connector-preview"]').exists()).toBe(true);
-    expect(wrapper.findAll('[data-testid="drawing-connector"]')).toHaveLength(0);
+    const preview = findDrawingConnectorPreview(wrapper);
+    expect(preview.exists()).toBe(true);
+    expect(nodes[0].element.compareDocumentPosition(preview.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(findDrawingConnectorPaths(wrapper)).toHaveLength(0);
   });
 
   it('shows four connector anchors on each shape while the connector tool is active', async (): Promise<void> => {
@@ -1704,7 +1761,34 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
     await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
 
-    expect(wrapper.findAll('[data-testid="drawing-connector-anchor"]')).toHaveLength(4);
+    expect(wrapper.findAll('.b-drawing-node__anchor')).toHaveLength(4);
+  });
+
+  it('applies connector tool draft style to the next connector', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
+    await findDrawingStylePanel(wrapper).find('[aria-label="选择颜色 #ef4444"]').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="贝塞尔曲线"]').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+
+    const connectorPath = findDrawingConnectorPath(wrapper);
+    expect(connectorPath.attributes('stroke')).toBe('#ef4444');
+    expect(connectorPath.attributes('d')).toContain(' C ');
+    expect(findDrawingConnectorEndMarker(wrapper).exists()).toBe(false);
   });
 
   it('creates a connector by dragging from one shape to another with the connector tool', async (): Promise<void> => {
@@ -1723,8 +1807,39 @@ describe('BDrawing', (): void => {
     await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
     await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[1].element, 'pointerup', { clientX: 220, clientY: 160 });
 
-    expect(wrapper.find('[data-testid="drawing-connector-preview"]').exists()).toBe(false);
-    expect(wrapper.findAll('[data-testid="drawing-connector"]')).toHaveLength(1);
+    expect(findDrawingConnectorPreview(wrapper).exists()).toBe(false);
+    expect(findDrawingConnectorPaths(wrapper)).toHaveLength(1);
+    expect(nodes[0].element.compareDocumentPosition(findDrawingConnectorPath(wrapper).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('creates a connector when drag end target is resolved from pointer coordinates', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    const originalElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn((): Element => nodes[1].element)
+    });
+
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 220, clientY: 160 });
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: originalElementFromPoint
+    });
+
+    expect(findDrawingConnectorPreview(wrapper).exists()).toBe(false);
+    expect(findDrawingConnectorPaths(wrapper)).toHaveLength(1);
   });
 
   it('updates connector path when a connected shape moves', async (): Promise<void> => {
@@ -1743,14 +1858,203 @@ describe('BDrawing', (): void => {
     await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
     await dispatchPointerEvent(wrapper.findAll('[data-testid="drawing-node"]')[1].element, 'pointerup', { clientX: 220, clientY: 160 });
 
-    const initialPath = wrapper.find('[data-testid="drawing-connector-path"]').attributes('d');
+    const initialPath = findDrawingConnectorPath(wrapper).attributes('d');
     await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
     await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
     await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
     await nextTick();
     await wrapper.find('[data-testid="moveable-drag-end"]').trigger('click');
 
-    expect(wrapper.find('[data-testid="drawing-connector-path"]').attributes('d')).not.toBe(initialPath);
+    expect(findDrawingConnectorPath(wrapper).attributes('d')).not.toBe(initialPath);
+  });
+
+  it('updates connector path while previewing a connected shape drag', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+
+    const initialPath = findDrawingConnectorPath(wrapper).attributes('d');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-drag"]').trigger('click');
+
+    expect(findDrawingConnectorPath(wrapper).attributes('d')).not.toBe(initialPath);
+  });
+
+  it('updates connector marker while previewing a connected shape drag', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+
+    const initialMarkerPath = findDrawingConnectorEndMarker(wrapper).attributes('d');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-drag"]').trigger('click');
+
+    expect(findDrawingConnectorEndMarker(wrapper).attributes('d')).not.toBe(initialMarkerPath);
+  });
+
+  it('highlights connector target node while creating a connector', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    const originalElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn((): Element => nodes[1].element)
+    });
+
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+
+    expect(nodes[1].classes()).not.toContain('is-connector-active');
+    expect(nodes[1].find('[data-drawing-anchor="center"]').exists()).toBe(false);
+    const activeAnchor = nodes[1].find('.b-drawing-node__anchor.is-active');
+    expect(activeAnchor.exists()).toBe(true);
+    expect(activeAnchor.attributes('r')).toBe('6');
+
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: originalElementFromPoint
+    });
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')[1].find('.b-drawing-node__anchor.is-active').exists()).toBe(false);
+  });
+
+  it('selects and deletes a connector from the canvas', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+
+    expect(findDrawingConnectorEndpoints(wrapper)).toHaveLength(0);
+
+    await findDrawingConnectorPath(wrapper).trigger('pointerdown');
+
+    const endpoints = findDrawingConnectorEndpoints(wrapper);
+    expect(endpoints).toHaveLength(2);
+    expect(nodes[0].element.compareDocumentPosition(endpoints[0].element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await wrapper.trigger('keydown', { key: 'Delete' });
+
+    expect(findDrawingConnectorPaths(wrapper)).toHaveLength(0);
+  });
+
+  it('updates selected connector color, marker and curve from the style panel', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+    await findDrawingConnectorPath(wrapper).trigger('pointerdown');
+
+    await findDrawingStylePanel(wrapper).find('[data-testid="color-picker-preset-#ef4444"]').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="贝塞尔曲线"]').trigger('click');
+
+    const connectorPath = findDrawingConnectorPath(wrapper);
+    expect(connectorPath.attributes('stroke')).toBe('#ef4444');
+    expect(findDrawingConnectorEndMarker(wrapper).exists()).toBe(false);
+    expect(connectorPath.attributes('d')).toContain(' C ');
+  });
+
+  it('renders connector style controls as icon-only buttons', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+    await findDrawingConnectorPath(wrapper).trigger('pointerdown');
+
+    expect(findDrawingStylePanel(wrapper).find('[aria-label="直线"]').text()).toBe('');
+    expect(findDrawingStylePanel(wrapper).find('[aria-label="贝塞尔曲线"]').text()).toBe('');
+    expect(findDrawingStylePanel(wrapper).find('[aria-label="起点无箭头"]').text()).toBe('');
+    expect(findDrawingStylePanel(wrapper).find('[aria-label="终点箭头"]').text()).toBe('');
+  });
+
+  it('keeps the bezier connector end marker above the target node', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+    await findDrawingConnectorPath(wrapper).trigger('pointerdown');
+    await findDrawingStylePanel(wrapper).find('[aria-label="贝塞尔曲线"]').trigger('click');
+
+    const endMarker = findDrawingConnectorEndMarker(wrapper);
+    expect(endMarker.exists()).toBe(true);
+    expect(nodes[1].element.compareDocumentPosition(endMarker.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('removes attached connectors when deleting a connected shape', async (): Promise<void> => {
@@ -1773,7 +2077,7 @@ describe('BDrawing', (): void => {
     await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
     await wrapper.trigger('keydown', { key: 'Delete' });
 
-    expect(wrapper.findAll('[data-testid="drawing-connector"]')).toHaveLength(0);
+    expect(findDrawingConnectorPaths(wrapper)).toHaveLength(0);
   });
 });
 
