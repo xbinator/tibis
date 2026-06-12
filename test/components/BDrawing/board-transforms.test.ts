@@ -10,6 +10,7 @@ import {
   addDrawingShape,
   createDrawingBoardState,
   deleteDrawingSelection,
+  measureDrawingTextElementSize,
   moveDrawingElements,
   moveDrawingNode,
   redoDrawingBoard,
@@ -75,6 +76,13 @@ function expectConnectorElement(element: DrawingElement | undefined): DrawingCon
 }
 
 describe('boardTransforms', (): void => {
+  it('measures CJK text wider than narrow latin text with the same character count', (): void => {
+    const cjkSize = measureDrawingTextElementSize('标题标题', { fontSize: 20 });
+    const latinSize = measureDrawingTextElementSize('iiii', { fontSize: 20 });
+
+    expect(cjkSize.width).toBeGreaterThan(latinSize.width);
+  });
+
   it('adds a manual node as one undoable history entry', (): void => {
     const initial = createDrawingBoardState();
     const added = addDrawingNode(initial, {
@@ -201,8 +209,29 @@ describe('boardTransforms', (): void => {
 
     expect(added.elements[0]?.position).toEqual({ x: 111.5, y: 146 });
     expect(added.elements[0]?.size).toEqual({ width: 180, height: 72 });
-    expect(expectShapeElement(added.elements[0]).text).toBe('椭圆');
+    expect(expectShapeElement(added.elements[0]).text).toBe('');
     expect(added.history.past).toHaveLength(1);
+  });
+
+  it('sizes text shapes from their text content instead of the default node size', (): void => {
+    const initial = createDrawingBoardState();
+    const added = addDrawingShape(initial, {
+      id: 'text-1',
+      shape: 'text',
+      start: { x: 200, y: 180 },
+      end: { x: 200, y: 180 },
+      text: 'Hi',
+      createdAt: 20
+    });
+
+    const textElement = expectShapeElement(added.elements[0]);
+    expect(textElement.position).toEqual({ x: 200, y: 180 });
+    expect(textElement.size.width).toBeLessThan(180);
+    expect(textElement.size.height).toBeLessThan(72);
+    expect(textElement.style?.fill).toBe('transparent');
+
+    const updated = updateDrawingNodeText(added, 'text-1', '更长的文本内容');
+    expect(expectShapeElement(updated.elements[0]).size.width).toBeGreaterThan(textElement.size.width);
   });
 
   it('moves multiple elements as one history entry', (): void => {
