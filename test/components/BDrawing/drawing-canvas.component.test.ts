@@ -166,11 +166,11 @@ function findDrawingConnectorEndpoints(wrapper: VueWrapper): DOMWrapper<Element>
 type DrawingStyleColorTarget = 'stroke' | 'fill';
 
 /**
- * 样式面板颜色配置在面板中的顺序。
+ * 样式面板颜色配置对应标签文本。
  */
-const DRAWING_STYLE_COLOR_TARGET_INDEX: Record<DrawingStyleColorTarget, number> = {
-  fill: 1,
-  stroke: 0
+const DRAWING_STYLE_COLOR_TARGET_LABEL: Record<DrawingStyleColorTarget, string> = {
+  fill: '背景',
+  stroke: '描边'
 };
 
 /**
@@ -189,7 +189,13 @@ function findDrawingStylePanel(wrapper: VueWrapper): DOMWrapper<Element> {
  * @returns 颜色配置区块包装器
  */
 function findDrawingColorSection(wrapper: VueWrapper, target: DrawingStyleColorTarget): DOMWrapper<Element> {
-  return findDrawingStylePanel(wrapper).findAll('.b-drawing-style-panel__section')[DRAWING_STYLE_COLOR_TARGET_INDEX[target]];
+  const sections = findDrawingStylePanel(wrapper).findAll('.b-drawing-style-panel__section');
+  const label = DRAWING_STYLE_COLOR_TARGET_LABEL[target];
+
+  return sections.find((section: DOMWrapper<Element>): boolean => {
+    const labelEl = section.find('.b-drawing-style-panel__label');
+    return labelEl.exists() && labelEl.text() === label;
+  })!;
 }
 
 /**
@@ -724,6 +730,23 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
     expect(wrapper.find('[data-testid="drawing-node"]').attributes('data-drawing-element-id')).toBe('drawing-shape-1');
     expect(wrapper.text()).toContain('矩形');
+  });
+
+  it('creates text from the text tool input after pressing Enter', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    const editor = wrapper.find<HTMLTextAreaElement>('[data-testid="drawing-text-editor"]');
+    expect(editor.exists()).toBe(true);
+
+    await editor.setValue('需求说明');
+    await editor.trigger('keydown', { key: 'Enter' });
+
+    expect(wrapper.find('[data-testid="drawing-text-editor"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="drawing-node"]').text()).toContain('需求说明');
   });
 
   it('returns to the select tool after creating one rectangle node', async (): Promise<void> => {
