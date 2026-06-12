@@ -125,12 +125,21 @@ function findDrawingStylePanel(wrapper: VueWrapper): DOMWrapper<Element> {
 }
 
 /**
- * 查找绘图样式面板中的填充色输入。
+ * 查找绘图样式面板中的背景色输入。
  * @param wrapper - BDrawing 测试包装器
- * @returns 填充色输入包装器
+ * @returns 背景色输入包装器
  */
 function findDrawingFillInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement> {
-  return wrapper.find<HTMLInputElement>('[data-testid="drawing-style-fill"]');
+  return wrapper.find<HTMLInputElement>('[data-testid="drawing-style-fill-input"]');
+}
+
+/**
+ * 查找绘图样式面板中的描边色输入。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 描边色输入包装器
+ */
+function findDrawingStrokeInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement> {
+  return wrapper.find<HTMLInputElement>('[data-testid="drawing-style-stroke-input"]');
 }
 
 /**
@@ -572,6 +581,7 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-infinite-viewer"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="vue-infinite-viewer-mock"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="drawing-canvas"]').exists()).toBe(true);
+    expect(findDrawingStylePanel(wrapper).exists()).toBe(false);
     expect(wrapper.text()).not.toContain('开始画图');
     expect(wrapper.find('[data-testid="drawing-add-process"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="drawing-delete"]').exists()).toBe(false);
@@ -933,6 +943,18 @@ describe('BDrawing', (): void => {
     expect(condition({ inputEvent: { target: wrapper.find('[data-testid="drawing-node"]').element } })).toBe(false);
   });
 
+  it('does not start Selecto from the node style panel', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    const condition = selectoMockState.instances.at(-1)?.options.dragCondition as SelectoDragCondition;
+    expect(condition({ inputEvent: { target: findDrawingFillInput(wrapper).element } })).toBe(false);
+  });
+
   it('creates a custom sized process node by dragging on the canvas', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
@@ -1025,6 +1047,16 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
   });
 
+  it('renders rectangle nodes without rounded corners', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('rx')).toBeUndefined();
+  });
+
   it('shows the left style panel for a selected node and updates fill color', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -1034,10 +1066,61 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
 
     expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
+    expect(findDrawingStylePanel(wrapper).text()).not.toContain('透明度');
+    expect(wrapper.find('.b-drawing-style-panel__range').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="drawing-style-fill-picker"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="drawing-style-fill-orange"]').exists()).toBe(false);
+    expect(findDrawingFillInput(wrapper).exists()).toBe(true);
 
-    await findDrawingFillInput(wrapper).setValue('#f97316');
+    await findDrawingFillInput(wrapper).setValue('#f08c00');
+    await findDrawingFillInput(wrapper).trigger('blur');
 
-    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('fill')).toBe('#f97316');
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('fill')).toBe('#f08c00');
+    expect((wrapper.find('[data-testid="drawing-shape-rect"]').element as SVGRectElement).style.fill).toBe('rgb(240, 140, 0)');
+  });
+
+  it('keeps selected node stroke color visible after changing the hex input', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    await findDrawingStrokeInput(wrapper).setValue('#f08c00');
+    await findDrawingStrokeInput(wrapper).trigger('blur');
+
+    expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-selected');
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('stroke')).toBe('#f08c00');
+    expect((wrapper.find('[data-testid="drawing-shape-rect"]').element as SVGRectElement).style.stroke).toBe('rgb(240, 140, 0)');
+  });
+
+  it('shows selected node colors as hex inputs', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    expect(findDrawingStrokeInput(wrapper).element.value).toBe('#64748b');
+    expect(findDrawingFillInput(wrapper).element.value).toBe('#00000000');
+  });
+
+  it('keeps the selected node active when interacting with the style panel', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-selected');
+
+    await findDrawingFillInput(wrapper).trigger('pointerdown');
+
+    expect(wrapper.find('[data-testid="drawing-node"]').classes()).toContain('is-selected');
+    expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
   });
 
   it('does not render a numeric control placeholder when Moveable control count is zero', async (): Promise<void> => {

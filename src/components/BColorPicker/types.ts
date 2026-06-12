@@ -22,4 +22,6 @@ export interface BColorPickerProps {
   bordered?: boolean;
   /** 是否只读 */
   readonly?: boolean;
+  /** 输入框测试 ID */
+  inputTestId?: string;
 }

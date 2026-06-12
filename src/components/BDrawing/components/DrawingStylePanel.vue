@@ -3,67 +3,55 @@
   @description BDrawing 左侧节点样式配置面板。
 -->
 <template>
-  <aside class="b-drawing-style-panel" data-testid="drawing-style-panel">
-    <template v-if="element">
-      <div class="b-drawing-style-panel__header">
-        <span class="b-drawing-style-panel__title">样式</span>
-        <span class="b-drawing-style-panel__meta">{{ element.shape }}</span>
+  <aside v-if="element" class="b-drawing-style-panel" data-testid="drawing-style-panel" @pointerdown.stop>
+    <section class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">描边</span>
+      <BColorPicker :value="strokeValue" format="hex" input-test-id="drawing-style-stroke-input" @change="handleColorClick('stroke', $event)" />
+    </section>
+
+    <section class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">背景</span>
+      <BColorPicker :value="fillValue" format="hex" input-test-id="drawing-style-fill-input" @change="handleColorClick('fill', $event)" />
+    </section>
+
+    <section class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">描边宽度</span>
+      <div class="b-drawing-style-panel__stroke-widths">
+        <button
+          v-for="option in strokeWidthOptions"
+          :key="option.id"
+          class="b-drawing-style-panel__stroke-button"
+          :class="{ 'is-active': strokeWidthValue === option.value }"
+          :aria-label="option.label"
+          :data-testid="`drawing-style-stroke-width-${option.id}`"
+          type="button"
+          @click="handleStrokeWidthClick(option.value)"
+        >
+          <span class="b-drawing-style-panel__stroke-line" :style="{ height: `${option.previewHeight}px` }"></span>
+        </button>
       </div>
-
-      <label class="b-drawing-style-panel__field">
-        <span class="b-drawing-style-panel__label">填充</span>
-        <input
-          class="b-drawing-style-panel__color"
-          data-testid="drawing-style-fill"
-          type="color"
-          :value="fillValue"
-          @input="handleColorInput('fill', $event)"
-        />
-      </label>
-
-      <label class="b-drawing-style-panel__field">
-        <span class="b-drawing-style-panel__label">边框</span>
-        <input class="b-drawing-style-panel__color" type="color" :value="strokeValue" @input="handleColorInput('stroke', $event)" />
-      </label>
-
-      <label class="b-drawing-style-panel__field">
-        <span class="b-drawing-style-panel__label">文字</span>
-        <input class="b-drawing-style-panel__color" type="color" :value="textValue" @input="handleColorInput('color', $event)" />
-      </label>
-
-      <label class="b-drawing-style-panel__field">
-        <span class="b-drawing-style-panel__label">线宽</span>
-        <input
-          class="b-drawing-style-panel__number"
-          min="0"
-          max="12"
-          step="1"
-          type="number"
-          :value="strokeWidthValue"
-          @input="handleNumberInput('strokeWidth', $event)"
-        />
-      </label>
-
-      <label class="b-drawing-style-panel__field b-drawing-style-panel__field--stacked">
-        <span class="b-drawing-style-panel__label">透明度 {{ opacityPercent }}</span>
-        <input
-          class="b-drawing-style-panel__range"
-          min="0.1"
-          max="1"
-          step="0.05"
-          type="range"
-          :value="opacityValue"
-          @input="handleNumberInput('opacity', $event)"
-        />
-      </label>
-    </template>
-    <div v-else class="b-drawing-style-panel__empty">未选中节点</div>
+    </section>
   </aside>
 </template>
 
 <script setup lang="ts">
 import type { DrawingElementStyleChange, DrawingShapeElement } from '../types';
 import { computed } from 'vue';
+import BColorPicker from '@/components/BColorPicker/index.vue';
+
+/**
+ * 描边宽度选项。
+ */
+interface StrokeWidthOption {
+  /** 宽度 ID */
+  id: string;
+  /** 宽度名称 */
+  label: string;
+  /** 实际描边宽度 */
+  value: number;
+  /** 预览线条高度 */
+  previewHeight: number;
+}
 
 /**
  * 样式面板入参。
@@ -80,51 +68,41 @@ const emit = defineEmits<{
 }>();
 
 /** 默认填充色。 */
-const DEFAULT_FILL = '#ffffff';
+const DEFAULT_FILL = 'transparent';
 /** 默认边框色。 */
 const DEFAULT_STROKE = '#64748b';
-/** 默认文字色。 */
-const DEFAULT_TEXT = '#111827';
 /** 默认边框宽度。 */
 const DEFAULT_STROKE_WIDTH = 1.5;
-/** 默认透明度。 */
-const DEFAULT_OPACITY = 1;
+/** 描边宽度选项。 */
+const STROKE_WIDTH_OPTIONS: readonly StrokeWidthOption[] = [
+  { id: 'thin', label: '细描边', value: 1.5, previewHeight: 1 },
+  { id: 'medium', label: '中描边', value: 3, previewHeight: 2 },
+  { id: 'bold', label: '粗描边', value: 5, previewHeight: 4 }
+];
 
 const fillValue = computed<string>(() => props.element?.style?.fill ?? DEFAULT_FILL);
 const strokeValue = computed<string>(() => props.element?.style?.stroke ?? DEFAULT_STROKE);
-const textValue = computed<string>(() => props.element?.style?.color ?? DEFAULT_TEXT);
 const strokeWidthValue = computed<number>(() => props.element?.style?.strokeWidth ?? DEFAULT_STROKE_WIDTH);
-const opacityValue = computed<number>(() => props.element?.style?.opacity ?? DEFAULT_OPACITY);
-const opacityPercent = computed<string>(() => `${Math.round(opacityValue.value * 100)}%`);
+const strokeWidthOptions = computed<readonly StrokeWidthOption[]>(() => STROKE_WIDTH_OPTIONS);
 
 /**
- * 从输入事件读取输入框元素。
- * @param event - 输入事件
- * @returns 输入框元素
- */
-function getInputElement(event: Event): HTMLInputElement {
-  return event.target as HTMLInputElement;
-}
-
-/**
- * 处理颜色输入变更。
+ * 处理颜色按钮点击。
  * @param key - 样式字段
- * @param event - 输入事件
+ * @param value - 颜色值
  */
-function handleColorInput(key: 'fill' | 'stroke' | 'color', event: Event): void {
+function handleColorClick(key: 'fill' | 'stroke', value: string): void {
   emit('change', {
-    [key]: getInputElement(event).value
+    [key]: value
   });
 }
 
 /**
- * 处理数字输入变更。
- * @param key - 样式字段
- * @param event - 输入事件
+ * 处理描边宽度按钮点击。
+ * @param value - 描边宽度
  */
-function handleNumberInput(key: 'strokeWidth' | 'opacity', event: Event): void {
+function handleStrokeWidthClick(value: number): void {
   emit('change', {
-    [key]: Number(getInputElement(event).value)
+    strokeWidth: value
   });
 }
 </script>
@@ -132,84 +110,63 @@ function handleNumberInput(key: 'strokeWidth' | 'opacity', event: Event): void {
 <style lang="less" scoped>
 .b-drawing-style-panel {
   position: absolute;
-  top: 76px;
+  top: 64px;
   left: 12px;
-  z-index: 9;
+  z-index: 10000;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 188px;
+  gap: 12px;
+  width: 220px;
   padding: 12px;
   pointer-events: auto;
-  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
-  border: 1px solid var(--border-primary);
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 82%, transparent);
   border-radius: 8px;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 10%);
   backdrop-filter: blur(12px);
 }
 
-.b-drawing-style-panel__header {
+.b-drawing-style-panel__section {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.b-drawing-style-panel__title {
-  font-size: 13px;
-  font-weight: 650;
-  color: var(--text-primary);
-}
-
-.b-drawing-style-panel__meta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.b-drawing-style-panel__field {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.b-drawing-style-panel__field--stacked {
   flex-direction: column;
-  gap: 6px;
-  align-items: stretch;
+  gap: 8px;
 }
 
 .b-drawing-style-panel__label {
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 
-.b-drawing-style-panel__color {
+.b-drawing-style-panel__stroke-widths {
+  display: flex;
+  gap: 7px;
+}
+
+.b-drawing-style-panel__stroke-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
-  height: 24px;
-  padding: 0;
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-}
-
-.b-drawing-style-panel__number {
-  width: 64px;
   height: 28px;
-  padding: 0 6px;
-  font-size: 12px;
-  color: var(--text-primary);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  padding: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  background: color-mix(in srgb, var(--bg-tertiary) 90%, transparent);
+  border: 1px solid transparent;
+  border-radius: 6px;
 }
 
-.b-drawing-style-panel__range {
-  width: 100%;
+.b-drawing-style-panel__stroke-button.is-active {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--bg-tertiary));
+  border-color: color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
-.b-drawing-style-panel__empty {
-  font-size: 12px;
-  color: var(--text-tertiary);
+.b-drawing-style-panel__stroke-line {
+  display: block;
+  width: 18px;
+  background: currentColor;
+  border-radius: 999px;
 }
 </style>

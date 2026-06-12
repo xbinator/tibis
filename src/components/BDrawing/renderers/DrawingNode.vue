@@ -21,6 +21,7 @@
       :points="diamondPoints"
       :stroke="node.style?.stroke"
       :stroke-width="node.style?.strokeWidth"
+      :style="shapeStyle"
     />
     <ellipse
       v-else-if="node.shape === 'ellipse'"
@@ -33,6 +34,7 @@
       :ry="node.size.height / 2"
       :stroke="node.style?.stroke"
       :stroke-width="node.style?.strokeWidth"
+      :style="shapeStyle"
     />
     <rect
       v-else
@@ -41,16 +43,19 @@
       :fill="node.style?.fill"
       :width="node.size.width"
       :height="node.size.height"
-      :rx="node.shape === 'text' ? 0 : 10"
       :stroke="node.style?.stroke"
       :stroke-width="node.style?.strokeWidth"
+      :style="shapeStyle"
     />
-    <text class="b-drawing-node__text" :fill="node.style?.color" :x="node.size.width / 2" :y="node.size.height / 2">{{ node.text }}</text>
+    <text class="b-drawing-node__text" :fill="node.style?.color" :style="textStyle" :x="node.size.width / 2" :y="node.size.height / 2">
+      {{ node.text }}
+    </text>
   </g>
 </template>
 
 <script setup lang="ts">
 import type { DrawingShapeElement } from '../types';
+import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { createDrawingDiamondPoints, createDrawingElementTransform, isDrawingDiamondShape } from '../utils/drawingGeometry';
 
@@ -76,6 +81,14 @@ const emit = defineEmits<{
 const isDiamondShape = computed<boolean>(() => isDrawingDiamondShape(props.node.shape));
 const nodeTransform = computed<string>(() => createDrawingElementTransform(props.node.position, props.node.size, props.node.rotation));
 const diamondPoints = computed<string>(() => createDrawingDiamondPoints(props.node.size));
+const shapeStyle = computed<CSSProperties>(() => ({
+  fill: props.node.style?.fill,
+  stroke: props.node.style?.stroke,
+  strokeWidth: props.node.style?.strokeWidth === undefined ? undefined : String(props.node.style.strokeWidth)
+}));
+const textStyle = computed<CSSProperties>(() => ({
+  fill: props.node.style?.color
+}));
 </script>
 
 <style lang="less" scoped>

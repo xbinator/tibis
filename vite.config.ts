@@ -39,7 +39,8 @@ const COMPONENT_DIRS = [
   'BTruncateText',
   'BImageViewer',
   'BUpload',
-  'BDrawing'
+  'BDrawing',
+  'BColorPicker'
 ];
 
 /**

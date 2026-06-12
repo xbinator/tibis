@@ -3,8 +3,25 @@
   @description BColorPicker 颜色选择器组件，支持 SV 面板、色相条、透明度条拖拽选择。
 -->
 <template>
-  <BDropdown v-model:open="visible" :disabled="readonly">
-    <slot> </slot>
+  <BDropdown v-model:open="visible" :disabled="readonly" :get-popup-container="(triggerNode) => triggerNode">
+    <slot>
+      <div class="b-color-picker__trigger" :class="{ 'is-readonly': readonly }">
+        <AInput
+          v-model:value="inputColor"
+          class="b-color-picker__input"
+          :data-testid="inputTestId"
+          :readonly="readonly"
+          :bordered="bordered"
+          :allow-clear="allowClear"
+          :placeholder="placeholder"
+          @blur="handleInputBlur"
+        >
+          <template #suffix>
+            <div class="b-color-picker__color-block" :style="{ background: currentColor }"></div>
+          </template>
+        </AInput>
+      </div>
+    </slot>
 
     <template #overlay>
       <div class="b-color-picker__panel">
@@ -44,8 +61,10 @@ import type { BColorPickerProps } from './types';
 import type { CSSProperties } from 'vue';
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { usePointer } from '@vueuse/core';
+import { Input as AInput } from 'ant-design-vue';
 import { clamp } from 'lodash-es';
 import tinycolor from 'tinycolor2';
+import BDropdown from '@/components/BDropdown/index.vue';
 
 defineOptions({ name: 'BColorPicker' });
 
@@ -56,7 +75,8 @@ const props = withDefaults(defineProps<BColorPickerProps>(), {
   defaultValue: '',
   allowClear: false,
   placeholder: '请输入',
-  readonly: false
+  readonly: false,
+  inputTestId: undefined
 });
 
 const emit = defineEmits<{
@@ -133,8 +153,9 @@ function updateInnerColor(): void {
  */
 function updateColor(color: { h: number; s: number; v: number; a: number } | string): void {
   currentColor.value = color ? tinycolor(color).toRgbString() : '';
-  emit('update:value', formatColor(currentColor.value));
-  emit('change', currentColor.value);
+  const formattedColor = formatColor(currentColor.value);
+  emit('update:value', formattedColor);
+  emit('change', formattedColor);
 }
 
 /**
@@ -333,6 +354,16 @@ function updatePositionFromColor(): void {
   syncIndicatorPositions();
 }
 
+/**
+ * 输入框失焦处理，解析输入值
+ */
+function handleInputBlur(): void {
+  const color = tinycolor(inputColor.value);
+  updateColor(color.isValid() ? color.toHex8() : props.defaultValue);
+  updateInnerColor();
+  updatePositionFromColor();
+}
+
 /** 弹出层打开时同步位置 */
 watch(
   () => visible.value,
@@ -355,7 +386,8 @@ watch(
 
 <style lang="less">
 .b-color-picker__trigger {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
 
   &.is-readonly {
     pointer-events: none;
@@ -363,8 +395,19 @@ watch(
 }
 
 .b-color-picker__input {
+  width: 100%;
+  height: 28px;
+  font-size: 12px;
+
+  &.ant-input-affix-wrapper {
+    padding-top: 0;
+    padding-bottom: 0;
+    border-radius: 6px;
+  }
+
   .ant-input {
-    border-radius: 0;
+    height: 26px;
+    font-size: 12px;
   }
 }
 

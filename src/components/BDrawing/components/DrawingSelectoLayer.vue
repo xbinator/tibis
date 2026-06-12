@@ -60,7 +60,8 @@ const SELECTO_BLOCKED_DRAG_SELECTOR = [
   '.moveable-area',
   '.moveable-control-box',
   '.moveable-direction',
-  '.b-drawing-element.is-selected'
+  '.b-drawing-element.is-selected',
+  '.b-drawing-style-panel'
 ].join(', ');
 
 /**

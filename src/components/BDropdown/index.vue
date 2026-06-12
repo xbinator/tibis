@@ -1,5 +1,5 @@
 <template>
-  <ADropdown overlay-class-name="b-dropdown-overlay" :disabled="disabled" :placement="placement" :align="align">
+  <ADropdown overlay-class-name="b-dropdown-overlay" :get-popup-container="getPopupContainer" :disabled="disabled" :placement="placement" :align="align">
     <slot></slot>
 
     <template #overlay>
@@ -17,12 +17,14 @@ interface Props {
   disabled?: boolean;
   placement?: DropdownProps['placement'];
   align?: DropdownProps['align'];
+  getPopupContainer?: DropdownProps['getPopupContainer'];
 }
 
 withDefaults(defineProps<Props>(), {
   disabled: false,
   placement: 'bottomLeft',
-  align: undefined
+  align: undefined,
+  getPopupContainer: undefined
 });
 </script>
 
