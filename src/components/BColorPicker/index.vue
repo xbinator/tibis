@@ -3,7 +3,7 @@
   @description BColorPicker 颜色选择器组件，支持 SV 面板、色相条、透明度条拖拽选择。
 -->
 <template>
-  <BDropdown v-model:open="visible" :disabled="readonly" :get-popup-container="(triggerNode) => triggerNode" :placement="placement">
+  <BDropdown v-model:open="visible" :disabled="readonly" :get-popup-container="(triggerNode) => triggerNode" :placement="placement" :align="align">
     <slot>
       <div class="b-color-picker__trigger" :class="{ 'is-readonly': readonly }">
         <div class="b-color-picker__presets" role="group" aria-label="快捷颜色">
@@ -39,22 +39,6 @@
 
     <template #overlay>
       <div class="b-color-picker__panel is-compact">
-        <AInput
-          :value="inputColor"
-          class="b-color-picker__input"
-          :data-testid="inputTestId"
-          :readonly="readonly"
-          :bordered="bordered"
-          :allow-clear="allowClear"
-          :placeholder="placeholder"
-          @blur="handleInputBlur"
-          @update:value="handleInputUpdate"
-        >
-          <template #suffix>
-            <div class="b-color-picker__color-block" :style="{ background: currentColor }"></div>
-          </template>
-        </AInput>
-
         <!-- SV 面板 + 色相条 -->
         <div class="b-color-picker__main">
           <!-- 饱和度/明度面板 -->
@@ -76,6 +60,22 @@
         <div ref="alphaBarRef" class="b-color-picker__alpha-bar" @pointerdown="onAlphaBarDown">
           <div class="b-color-picker__alpha-thumb" :style="alphaThumbStyle"></div>
         </div>
+
+        <AInput
+          :value="inputColor"
+          class="b-color-picker__input"
+          :data-testid="inputTestId"
+          :readonly="readonly"
+          :bordered="bordered"
+          :allow-clear="allowClear"
+          :placeholder="placeholder"
+          @blur="handleInputBlur"
+          @update:value="handleInputUpdate"
+        >
+          <template #suffix>
+            <div class="b-color-picker__color-block" :style="{ background: currentColor }"></div>
+          </template>
+        </AInput>
       </div>
     </template>
   </BDropdown>
@@ -533,7 +533,7 @@ watch(
 .b-color-picker__input {
   width: 100%;
   height: 28px;
-  margin-bottom: 10px;
+  margin-top: 10px;
   font-size: 12px;
 
   &.ant-input-affix-wrapper {

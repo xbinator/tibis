@@ -29,4 +29,6 @@ export interface BColorPickerProps {
   presetColors?: readonly string[];
   /** 下拉菜单位置 */
   placement?: BDropdownProps['placement'];
+  /** 对齐方式 */
+  align?: BDropdownProps['align'];
 }
