@@ -29,11 +29,11 @@
       v-else-if="node.shape === 'ellipse'"
       class="b-drawing-node__shape"
       data-testid="drawing-shape-ellipse"
-      :cx="node.size.width / 2"
-      :cy="node.size.height / 2"
+      :cx="renderSize.width / 2"
+      :cy="renderSize.height / 2"
       :fill="node.style?.fill"
-      :rx="node.size.width / 2"
-      :ry="node.size.height / 2"
+      :rx="renderSize.width / 2"
+      :ry="renderSize.height / 2"
       :stroke="node.style?.stroke"
       :stroke-width="node.style?.strokeWidth"
       :style="shapeStyle"
@@ -43,13 +43,23 @@
       class="b-drawing-node__shape"
       data-testid="drawing-shape-rect"
       :fill="shapeFill"
-      :width="node.size.width"
-      :height="node.size.height"
+      :width="renderSize.width"
+      :height="renderSize.height"
       :stroke="shapeStroke"
       :stroke-width="shapeStrokeWidth"
       :style="shapeStyle"
     />
-    <text v-if="!editing" class="b-drawing-node__text" :fill="textFill" :style="textStyle" :text-anchor="textAnchor" :x="textX" :y="textY">
+    <text
+      v-if="!editing"
+      alignment-baseline="central"
+      class="b-drawing-node__text"
+      dominant-baseline="central"
+      :fill="textFill"
+      :style="textStyle"
+      :text-anchor="textAnchor"
+      :x="textX"
+      :y="textY"
+    >
       <tspan
         v-for="(line, index) in textLineItems"
         :key="`${index}-${line.text}`"
@@ -77,17 +87,16 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingConnectorAnchor, DrawingShapeElement } from '../types';
+import type { DrawingConnectorAnchor, DrawingShapeElement, DrawingSize } from '../types';
 import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import {
   DRAWING_TEXT_DEFAULT_FONT_SIZE,
   DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
   DRAWING_TEXT_HORIZONTAL_PADDING,
-  DRAWING_TEXT_LINE_HEIGHT_RATIO,
-  DRAWING_TEXT_VERTICAL_PADDING
+  DRAWING_TEXT_LINE_HEIGHT_RATIO
 } from '../utils/boardTransforms';
-import { createDrawingDiamondPoints, createDrawingElementTransform, isDrawingDiamondShape } from '../utils/drawingGeometry';
+import { createDrawingDiamondPoints, createDrawingElementTransform, getDrawingShapeRenderSize, isDrawingDiamondShape } from '../utils/drawingGeometry';
 
 /**
  * 节点组件入参。
@@ -124,8 +133,10 @@ const emit = defineEmits<{
 const isDiamondShape = computed<boolean>(() => isDrawingDiamondShape(props.node.shape));
 /** 是否为文本元素。 */
 const isTextShape = computed<boolean>(() => props.node.shape === 'text');
-const nodeTransform = computed<string>(() => createDrawingElementTransform(props.node.position, props.node.size, props.node.rotation));
-const diamondPoints = computed<string>(() => createDrawingDiamondPoints(props.node.size));
+/** 节点渲染尺寸，文本节点始终按内容重新测量。 */
+const renderSize = computed<DrawingSize>(() => getDrawingShapeRenderSize(props.node));
+const nodeTransform = computed<string>(() => createDrawingElementTransform(props.node.position, renderSize.value, props.node.rotation));
+const diamondPoints = computed<string>(() => createDrawingDiamondPoints(renderSize.value));
 const shapeFill = computed<string | undefined>(() => (isTextShape.value ? props.node.style?.fill ?? 'transparent' : props.node.style?.fill));
 const shapeStroke = computed<string | undefined>(() => (isTextShape.value ? props.node.style?.stroke ?? 'transparent' : props.node.style?.stroke));
 const shapeStrokeWidth = computed<number | undefined>(() => (isTextShape.value ? props.node.style?.strokeWidth ?? 0 : props.node.style?.strokeWidth));
@@ -166,18 +177,18 @@ const textX = computed<number>(() => {
     return DRAWING_TEXT_HORIZONTAL_PADDING / 2;
   }
   if (props.node.style?.textAlign === 'right') {
-    return props.node.size.width - DRAWING_TEXT_HORIZONTAL_PADDING / 2;
+    return renderSize.value.width - DRAWING_TEXT_HORIZONTAL_PADDING / 2;
   }
 
-  return props.node.size.width / 2;
+  return renderSize.value.width / 2;
 });
-/** 文本纵向位置，与编辑器 padding top 对齐。 */
-const textY = computed<number>(() => DRAWING_TEXT_VERTICAL_PADDING / 2);
+/** 文本纵向位置，按整块文本在节点外框内垂直居中。 */
+const textY = computed<number>(() => renderSize.value.height / 2 - ((textLineItems.value.length - 1) * textLineHeight.value) / 2);
 const connectorAnchors = computed<Array<{ id: Exclude<DrawingConnectorAnchor, 'center'>; x: number; y: number }>>(() => [
-  { id: 'top', x: props.node.size.width / 2, y: 0 },
-  { id: 'right', x: props.node.size.width, y: props.node.size.height / 2 },
-  { id: 'bottom', x: props.node.size.width / 2, y: props.node.size.height },
-  { id: 'left', x: 0, y: props.node.size.height / 2 }
+  { id: 'top', x: renderSize.value.width / 2, y: 0 },
+  { id: 'right', x: renderSize.value.width, y: renderSize.value.height / 2 },
+  { id: 'bottom', x: renderSize.value.width / 2, y: renderSize.value.height },
+  { id: 'left', x: 0, y: renderSize.value.height / 2 }
 ]);
 
 /**
@@ -214,7 +225,6 @@ function isConnectorAnchorActive(anchor: Exclude<DrawingConnectorAnchor, 'center
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
   font-weight: 650;
-  dominant-baseline: text-before-edge;
   pointer-events: none;
   text-anchor: middle;
   fill: var(--text-primary);
