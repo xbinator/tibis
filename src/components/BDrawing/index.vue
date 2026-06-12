@@ -57,22 +57,20 @@
         @canvas-wheel="handleCanvasWheel"
       />
     </DrawingInfiniteViewport>
-    <div
+    <textarea
       v-if="textEditingSession"
       ref="textEditorRef"
+      v-model="textEditorValue"
       class="b-drawing__text-editor"
-      contenteditable="true"
       data-testid="drawing-text-editor"
-      role="textbox"
-      aria-multiline="true"
       spellcheck="false"
+      wrap="off"
       :style="textEditorStyle"
       @blur="commitTextEditor"
       @input="handleTextEditorInput"
       @keydown.stop="handleTextEditorKeydown"
-      @paste.prevent="handleTextEditorPaste"
       @pointerdown.stop
-    ></div>
+    ></textarea>
     <DrawingMoveableLayer
       :enabled="activeTool === 'select' && !hideMoveableDuringDirectDrag && !textEditingSession"
       :root="rootRef"
@@ -132,6 +130,7 @@ import {
   createDrawingConnectorMarkerPath,
   findDrawingShapeElement,
   getDrawingConnectorAnchorPoint,
+  getDrawingShapeRenderSize,
   getDrawingElementId,
   isDrawingConnectorElement,
   projectClientPointToDrawingBoard,
@@ -278,7 +277,7 @@ const textEditingSession = ref<TextEditingSession | null>(null);
 /** 文本编辑输入值。 */
 const textEditorValue = ref<string>('');
 /** 文本编辑器 DOM。 */
-const textEditorRef = ref<HTMLElement | null>(null);
+const textEditorRef = ref<HTMLTextAreaElement | null>(null);
 
 /** 可创建形状的工具列表 */
 const SHAPE_TOOLS: readonly DrawingShapeType[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
@@ -544,8 +543,9 @@ function getConnectorTargetIdFromPointer(event: PointerEvent, sourceId: string):
  */
 function getConnectorAnchorFromPoint(element: DrawingShapeElement, point: DrawingPoint): Exclude<DrawingConnectorAnchor, 'center'> {
   const center = getDrawingConnectorAnchorPoint(element, 'center');
-  const normalizedX = (point.x - center.x) / Math.max(element.size.width, 1);
-  const normalizedY = (point.y - center.y) / Math.max(element.size.height, 1);
+  const size = getDrawingShapeRenderSize(element);
+  const normalizedX = (point.x - center.x) / Math.max(size.width, 1);
+  const normalizedY = (point.y - center.y) / Math.max(size.height, 1);
 
   if (Math.abs(normalizedX) > Math.abs(normalizedY)) {
     return normalizedX >= 0 ? 'right' : 'left';
@@ -764,11 +764,11 @@ function clearTextEditing(): void {
  */
 function syncTextEditorContent(): void {
   const editor = textEditorRef.value;
-  if (!editor || editor.textContent === textEditorValue.value) {
+  if (!editor || editor.value === textEditorValue.value) {
     return;
   }
 
-  editor.textContent = textEditorValue.value;
+  editor.value = textEditorValue.value;
 }
 
 /**
@@ -776,15 +776,11 @@ function syncTextEditorContent(): void {
  */
 function selectTextEditorContent(): void {
   const editor = textEditorRef.value;
-  const selection = window.getSelection();
-  if (!editor || !selection) {
+  if (!editor) {
     return;
   }
 
-  const range = document.createRange();
-  range.selectNodeContents(editor);
-  selection.removeAllRanges();
-  selection.addRange(range);
+  editor.select();
 }
 
 /**
@@ -867,23 +863,6 @@ async function startTextEditing(element: DrawingShapeElement, isNew: boolean): P
 }
 
 /**
- * 将光标移动到文本编辑器末尾。
- * @param editor - 文本编辑器 DOM
- */
-function moveTextEditorCaretToEnd(editor: HTMLElement): void {
-  const selection = window.getSelection();
-  if (!selection) {
-    return;
-  }
-
-  const range = document.createRange();
-  range.selectNodeContents(editor);
-  range.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
-/**
  * 在当前编辑光标处插入纯文本。
  * @param text - 要插入的文本
  */
@@ -893,22 +872,12 @@ function insertTextEditorPlainText(text: string): void {
     return;
   }
 
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || !selection.anchorNode || !editor.contains(selection.anchorNode)) {
-    editor.textContent = `${editor.textContent ?? ''}${text}`;
-    moveTextEditorCaretToEnd(editor);
-    textEditorValue.value = editor.textContent ?? '';
-    scheduleTextEditorViewportKeepAlive();
-    return;
-  }
-
-  const range = selection.getRangeAt(0);
-  range.deleteContents();
-  range.insertNode(document.createTextNode(text));
-  range.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(range);
-  textEditorValue.value = editor.textContent ?? '';
+  const { selectionStart, selectionEnd } = editor;
+  const nextValue = `${editor.value.slice(0, selectionStart)}${text}${editor.value.slice(selectionEnd)}`;
+  const nextCaret = selectionStart + text.length;
+  editor.value = nextValue;
+  editor.setSelectionRange(nextCaret, nextCaret);
+  textEditorValue.value = nextValue;
   scheduleTextEditorViewportKeepAlive();
 }
 
@@ -956,11 +925,11 @@ function cancelTextEditor(): void {
  */
 function handleTextEditorInput(event: Event): void {
   const target = event.currentTarget;
-  if (!(target instanceof HTMLElement)) {
+  if (!(target instanceof HTMLTextAreaElement)) {
     return;
   }
 
-  textEditorValue.value = target.textContent ?? '';
+  textEditorValue.value = target.value;
   scheduleTextEditorViewportKeepAlive();
 }
 
@@ -975,26 +944,12 @@ function handleTextEditorKeydown(event: KeyboardEvent): void {
     return;
   }
 
-  if (event.key === 'Enter' && event.shiftKey) {
-    event.preventDefault();
-    insertTextEditorPlainText('\n');
-    return;
-  }
-
   if (event.key !== 'Enter') {
     return;
   }
 
   event.preventDefault();
-  commitTextEditor();
-}
-
-/**
- * 处理文本编辑器粘贴，仅保留纯文本内容。
- * @param event - 粘贴事件
- */
-function handleTextEditorPaste(event: ClipboardEvent): void {
-  insertTextEditorPlainText(event.clipboardData?.getData('text/plain') ?? '');
+  insertTextEditorPlainText('\n');
 }
 
 /**
