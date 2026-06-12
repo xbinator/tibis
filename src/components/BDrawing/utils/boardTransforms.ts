@@ -9,6 +9,7 @@ import type {
   DrawingBoardSnapshot,
   DrawingBoardState,
   DrawingConnectorElement,
+  DrawingElementStyleChange,
   DrawingGeometryChange,
   DrawingPoint,
   DrawingSize,
@@ -456,6 +457,33 @@ export function rotateDrawingElements(state: DrawingBoardState, changes: Drawing
     }
 
     element.rotation = normalizeRotation(change.rotation);
+  });
+}
+
+/**
+ * 更新画板元素样式。
+ * @param state - 当前画板状态
+ * @param elementId - 元素 ID
+ * @param style - 样式变更
+ * @returns 新画板状态
+ */
+export function updateDrawingElementStyle(state: DrawingBoardState, elementId: string, style: DrawingElementStyleChange): DrawingBoardState {
+  const nextElements = cloneDeep(state.elements);
+  const element = nextElements.find((item) => item.id === elementId);
+  if (!element || !isDrawingShapeElement(element)) {
+    return withError(state, new Error(`找不到元素: ${elementId}`));
+  }
+
+  element.style = {
+    ...element.style,
+    ...style
+  };
+
+  return withHistory(state, {
+    elements: nextElements,
+    edges: cloneDeep(state.edges),
+    selection: [...state.selection],
+    viewport: cloneDeep(state.viewport)
   });
 }
 

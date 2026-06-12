@@ -22,6 +22,7 @@
       @set-center="viewport.setCenter"
       @set-zoom="viewport.setZoom"
     />
+    <DrawingStylePanel :element="selectedShapeElement" @change="handleSelectedStyleChange" />
     <DrawingInfiniteViewport>
       <DrawingCanvas
         :elements="board.state.value.elements"
@@ -55,13 +56,14 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingPoint, DrawingShapeElement, DrawingShapeType, DrawingSize, DrawingToolMode } from './types';
+import type { DrawingElementStyleChange, DrawingPoint, DrawingShapeElement, DrawingShapeType, DrawingSize, DrawingToolMode } from './types';
 import type { DrawingCanvasPointProjection } from './utils/drawingGeometry';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import DrawingInfiniteViewport from './components/DrawingInfiniteViewport.vue';
 import DrawingMoveableLayer from './components/DrawingMoveableLayer.vue';
 import DrawingSelectoLayer from './components/DrawingSelectoLayer.vue';
+import DrawingStylePanel from './components/DrawingStylePanel.vue';
 import DrawingToolbar from './components/DrawingToolbar.vue';
 import { useDrawingBoard } from './hooks/useDrawingBoard';
 import { useDrawingInteraction } from './hooks/useDrawingInteraction';
@@ -91,6 +93,14 @@ const canUndo = computed<boolean>(() => board.state.value.history.past.length > 
 const canRedo = computed<boolean>(() => board.state.value.history.future.length > 0);
 /** 未选中节点直接拖拽期间临时隐藏 Moveable 图层，避免旧选框跟随显示。 */
 const hideMoveableDuringDirectDrag = ref<boolean>(false);
+/** 当前单选的形状元素，供左侧样式面板编辑。 */
+const selectedShapeElement = computed<DrawingShapeElement | null>(() => {
+  if (board.state.value.selection.length !== 1) {
+    return null;
+  }
+
+  return findDrawingShapeElement(board.state.value.elements, board.state.value.selection[0]) ?? null;
+});
 
 /**
  * 直接拖拽节点会话。
@@ -343,6 +353,18 @@ function setActiveTool(tool: DrawingToolMode): void {
   if (tool !== 'select') {
     board.setSelection([]);
   }
+}
+
+/**
+ * 更新当前选中节点样式。
+ * @param style - 样式变更
+ */
+function handleSelectedStyleChange(style: DrawingElementStyleChange): void {
+  if (!selectedShapeElement.value) {
+    return;
+  }
+
+  board.updateElementStyle(selectedShapeElement.value.id, style);
 }
 
 /**

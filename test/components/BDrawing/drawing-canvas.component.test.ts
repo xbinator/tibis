@@ -116,6 +116,24 @@ function findDrawingNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Elemen
 }
 
 /**
+ * 查找绘图样式面板。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 样式面板包装器
+ */
+function findDrawingStylePanel(wrapper: VueWrapper): DOMWrapper<Element> {
+  return wrapper.find('[data-testid="drawing-style-panel"]');
+}
+
+/**
+ * 查找绘图样式面板中的填充色输入。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 填充色输入包装器
+ */
+function findDrawingFillInput(wrapper: VueWrapper): DOMWrapper<HTMLInputElement> {
+  return wrapper.find<HTMLInputElement>('[data-testid="drawing-style-fill"]');
+}
+
+/**
  * 按顺序重复触发元素事件。
  * @param wrapper - 目标元素包装器
  * @param times - 触发次数
@@ -1005,6 +1023,21 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
 
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(true);
+  });
+
+  it('shows the left style panel for a selected node and updates fill color', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+
+    expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
+
+    await findDrawingFillInput(wrapper).setValue('#f97316');
+
+    expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('fill')).toBe('#f97316');
   });
 
   it('does not render a numeric control placeholder when Moveable control count is zero', async (): Promise<void> => {

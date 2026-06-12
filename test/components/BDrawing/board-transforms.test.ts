@@ -16,6 +16,7 @@ import {
   resizeDrawingElements,
   rotateDrawingElements,
   undoDrawingBoard,
+  updateDrawingElementStyle,
   updateDrawingNodeText
 } from '@/components/BDrawing/utils/boardTransforms';
 
@@ -127,6 +128,31 @@ describe('boardTransforms', (): void => {
 
     expect(expectShapeElement(updated.elements[0]).text).toBe('用户手动修改');
     expect(updated.history.past).toHaveLength(1);
+  });
+
+  it('updates element style as one undoable history entry', (): void => {
+    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
+    const updated = updateDrawingElementStyle(initial, 'node-1', {
+      fill: '#f97316',
+      strokeWidth: 3
+    });
+
+    expect(expectShapeElement(updated.elements[0]).style).toEqual({
+      fill: '#f97316',
+      strokeWidth: 3
+    });
+    expect(updated.history.past).toHaveLength(1);
+  });
+
+  it('keeps board unchanged when updating style for an unknown element', (): void => {
+    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
+    const updated = updateDrawingElementStyle(initial, 'missing-node', {
+      fill: '#f97316'
+    });
+
+    expect(updated.elements).toEqual(initial.elements);
+    expect(updated.lastError?.message).toContain('找不到元素');
+    expect(updated.history.past).toHaveLength(0);
   });
 
   it('adds a custom sized shape from any drag direction', (): void => {

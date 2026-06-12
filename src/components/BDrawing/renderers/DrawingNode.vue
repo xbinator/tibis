@@ -9,28 +9,43 @@
     data-testid="drawing-node"
     :data-drawing-element-id="node.id"
     :data-drawing-shape="node.shape"
+    :opacity="node.style?.opacity"
     :transform="nodeTransform"
     @pointerdown.stop="emit('select', node.id, $event)"
   >
-    <polygon v-if="isDiamondShape" class="b-drawing-node__shape" data-testid="drawing-shape-diamond" :points="diamondPoints" />
+    <polygon
+      v-if="isDiamondShape"
+      class="b-drawing-node__shape"
+      data-testid="drawing-shape-diamond"
+      :fill="node.style?.fill"
+      :points="diamondPoints"
+      :stroke="node.style?.stroke"
+      :stroke-width="node.style?.strokeWidth"
+    />
     <ellipse
       v-else-if="node.shape === 'ellipse'"
       class="b-drawing-node__shape"
       data-testid="drawing-shape-ellipse"
       :cx="node.size.width / 2"
       :cy="node.size.height / 2"
+      :fill="node.style?.fill"
       :rx="node.size.width / 2"
       :ry="node.size.height / 2"
+      :stroke="node.style?.stroke"
+      :stroke-width="node.style?.strokeWidth"
     />
     <rect
       v-else
       class="b-drawing-node__shape"
       data-testid="drawing-shape-rect"
+      :fill="node.style?.fill"
       :width="node.size.width"
       :height="node.size.height"
       :rx="node.shape === 'text' ? 0 : 10"
+      :stroke="node.style?.stroke"
+      :stroke-width="node.style?.strokeWidth"
     />
-    <text class="b-drawing-node__text" :x="node.size.width / 2" :y="node.size.height / 2">{{ node.text }}</text>
+    <text class="b-drawing-node__text" :fill="node.style?.color" :x="node.size.width / 2" :y="node.size.height / 2">{{ node.text }}</text>
   </g>
 </template>
 

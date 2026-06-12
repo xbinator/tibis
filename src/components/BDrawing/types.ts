@@ -75,6 +75,11 @@ export interface DrawingElementStyle {
 }
 
 /**
+ * 画板元素样式变更。
+ */
+export type DrawingElementStyleChange = Partial<DrawingElementStyle>;
+
+/**
  * 画板元素基础字段。
  */
 export interface DrawingElementBase {

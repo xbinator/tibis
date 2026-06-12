@@ -2,7 +2,15 @@
  * @file useDrawingBoard.ts
  * @description BDrawing 画板状态与命令封装。
  */
-import type { DrawingBoardSnapshot, DrawingBoardState, DrawingGeometryChange, DrawingNodeType, DrawingPoint, DrawingShapeType } from '../types';
+import type {
+  DrawingBoardSnapshot,
+  DrawingBoardState,
+  DrawingElementStyleChange,
+  DrawingGeometryChange,
+  DrawingNodeType,
+  DrawingPoint,
+  DrawingShapeType
+} from '../types';
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 import {
@@ -17,6 +25,7 @@ import {
   resizeDrawingElements,
   rotateDrawingElements,
   undoDrawingBoard,
+  updateDrawingElementStyle,
   updateDrawingNodeText
 } from '../utils/boardTransforms';
 
@@ -52,6 +61,8 @@ export interface UseDrawingBoardReturn {
   resizeElements: (changes: DrawingGeometryChange[]) => void;
   /** 旋转元素 */
   rotateElements: (changes: DrawingGeometryChange[]) => void;
+  /** 更新元素样式 */
+  updateElementStyle: (elementId: string, style: DrawingElementStyleChange) => void;
   /** 删除选区 */
   deleteSelection: () => void;
   /** 更新节点文本 */
@@ -185,6 +196,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     moveElements: (changes: DrawingGeometryChange[]): void => setState(moveDrawingElements(state.value, changes)),
     resizeElements: (changes: DrawingGeometryChange[]): void => setState(resizeDrawingElements(state.value, changes)),
     rotateElements: (changes: DrawingGeometryChange[]): void => setState(rotateDrawingElements(state.value, changes)),
+    updateElementStyle: (elementId: string, style: DrawingElementStyleChange): void => setState(updateDrawingElementStyle(state.value, elementId, style)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
     updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),
     setSelection: (selection: string[]): void => {
