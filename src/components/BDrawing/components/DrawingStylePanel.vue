@@ -51,7 +51,7 @@
       </div>
     </section>
 
-    <section class="b-drawing-style-panel__section">
+    <section v-if="showStrokeControls" class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">描边</span>
       <BColorPicker :value="strokeValue" format="hex" placement="rightTop" :align="{ offset: [20, 0] }" @change="handleColorClick('stroke', $event)" />
     </section>
@@ -61,7 +61,46 @@
       <BColorPicker :value="fillValue" format="hex" placement="rightTop" :align="{ offset: [20, 0] }" @change="handleColorClick('fill', $event)" />
     </section>
 
-    <section class="b-drawing-style-panel__section">
+    <section v-if="showTextControls" class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">文字</span>
+      <BColorPicker :value="textColorValue" format="hex" placement="rightTop" :align="{ offset: [20, 0] }" @change="handleColorClick('color', $event)" />
+    </section>
+
+    <section v-if="showTextControls" class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">字号</span>
+      <div class="b-drawing-style-panel__segments">
+        <button
+          v-for="option in fontSizeOptions"
+          :key="option.value"
+          class="b-drawing-style-panel__segment-button b-drawing-style-panel__segment-button--text"
+          :class="{ 'is-active': fontSizeValue === option.value }"
+          :aria-label="option.label"
+          type="button"
+          @click="handleFontSizeClick(option.value)"
+        >
+          {{ option.preview }}
+        </button>
+      </div>
+    </section>
+
+    <section v-if="showTextControls" class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">对齐</span>
+      <div class="b-drawing-style-panel__segments">
+        <button
+          v-for="option in textAlignOptions"
+          :key="option.value"
+          class="b-drawing-style-panel__segment-button"
+          :class="{ 'is-active': textAlignValue === option.value }"
+          :aria-label="option.label"
+          type="button"
+          @click="handleTextAlignClick(option.value)"
+        >
+          <BIcon :icon="option.icon" :size="15" />
+        </button>
+      </div>
+    </section>
+
+    <section v-if="showStrokeControls" class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">描边宽度</span>
       <div class="b-drawing-style-panel__stroke-widths">
         <button
@@ -140,7 +179,8 @@ import type {
   DrawingConnectorOptionsChange,
   DrawingElementStyle,
   DrawingElementStyleChange,
-  DrawingShapeElement
+  DrawingShapeElement,
+  DrawingTextAlign
 } from '../types';
 import { computed } from 'vue';
 import BColorPicker from '@/components/BColorPicker/index.vue';
@@ -174,6 +214,18 @@ interface ConnectorSegmentOption<TValue extends string> {
   label: string;
   /** 图标名称 */
   icon: string;
+}
+
+/**
+ * 字号选项。
+ */
+interface FontSizeOption {
+  /** 字号值 */
+  value: number;
+  /** 访问性标签 */
+  label: string;
+  /** 预览文字 */
+  preview: string;
 }
 
 /**
@@ -232,6 +284,18 @@ const CURVE_OPTIONS: readonly ConnectorSegmentOption<DrawingConnectorCurveType>[
   { value: 'straight', label: '直线', icon: 'lucide:minus' },
   { value: 'bezier', label: '贝塞尔曲线', icon: 'lucide:spline' }
 ];
+/** 文本字号选项。 */
+const FONT_SIZE_OPTIONS: readonly FontSizeOption[] = [
+  { value: 12, label: '小字号', preview: '小' },
+  { value: 14, label: '中字号', preview: '中' },
+  { value: 18, label: '大字号', preview: '大' }
+];
+/** 文本对齐选项。 */
+const TEXT_ALIGN_OPTIONS: readonly ConnectorSegmentOption<DrawingTextAlign>[] = [
+  { value: 'left', label: '左对齐', icon: 'lucide:align-left' },
+  { value: 'center', label: '居中对齐', icon: 'lucide:align-center' },
+  { value: 'right', label: '右对齐', icon: 'lucide:align-right' }
+];
 
 /** 是否显示层级控件（选中元素时显示）。 */
 const showLayerControls = computed<boolean>(() => Boolean(props.element || props.connector));
@@ -247,6 +311,8 @@ const canSendBackward = computed<boolean>(() => props.elementIndex > 0);
 
 /** 是否可置底（不在最底层）。 */
 const canSendToBack = computed<boolean>(() => props.elementIndex > 0);
+/** 当前是否编辑文本元素。 */
+const isTextElement = computed<boolean>(() => props.element?.shape === 'text');
 
 const fillValue = computed<string>(() => (props.element ? props.element.style?.fill : props.draftStyle?.fill) ?? DEFAULT_FILL);
 const strokeValue = computed<string>(() => {
@@ -272,7 +338,14 @@ const strokeWidthValue = computed<number>(() => {
 const strokeWidthOptions = computed<readonly StrokeWidthOption[]>(() => STROKE_WIDTH_OPTIONS);
 const markerOptions = computed<readonly ConnectorSegmentOption<DrawingConnectorMarkerType>[]>(() => MARKER_OPTIONS);
 const curveOptions = computed<readonly ConnectorSegmentOption<DrawingConnectorCurveType>[]>(() => CURVE_OPTIONS);
+const fontSizeOptions = computed<readonly FontSizeOption[]>(() => FONT_SIZE_OPTIONS);
+const textAlignOptions = computed<readonly ConnectorSegmentOption<DrawingTextAlign>[]>(() => TEXT_ALIGN_OPTIONS);
 const showFillControls = computed<boolean>(() => Boolean(props.element || props.draftStyle));
+const showStrokeControls = computed<boolean>(() => !isTextElement.value);
+const showTextControls = computed<boolean>(() => isTextElement.value);
+const textColorValue = computed<string>(() => props.element?.style?.color ?? '#0f172a');
+const fontSizeValue = computed<number>(() => props.element?.style?.fontSize ?? 13);
+const textAlignValue = computed<DrawingTextAlign>(() => props.element?.style?.textAlign ?? 'center');
 const showConnectorControls = computed<boolean>(() => Boolean(props.connector || props.draftConnector));
 const markerStartValue = computed<DrawingConnectorMarkerType>(() => props.connector?.markerStart ?? props.draftConnector?.markerStart ?? 'none');
 const markerEndValue = computed<DrawingConnectorMarkerType>(() => props.connector?.markerEnd ?? props.draftConnector?.markerEnd ?? 'arrow');
@@ -291,7 +364,7 @@ function handleLayerClick(action: DrawingLayerAction): void {
  * @param key - 样式字段
  * @param value - 颜色值
  */
-function handleColorClick(key: 'fill' | 'stroke', value: string): void {
+function handleColorClick(key: 'fill' | 'stroke' | 'color', value: string): void {
   emit('change', {
     [key]: value
   });
@@ -304,6 +377,26 @@ function handleColorClick(key: 'fill' | 'stroke', value: string): void {
 function handleStrokeWidthClick(value: number): void {
   emit('change', {
     strokeWidth: value
+  });
+}
+
+/**
+ * 处理文字字号点击。
+ * @param value - 字号
+ */
+function handleFontSizeClick(value: number): void {
+  emit('change', {
+    fontSize: value
+  });
+}
+
+/**
+ * 处理文本对齐点击。
+ * @param value - 对齐方式
+ */
+function handleTextAlignClick(value: DrawingTextAlign): void {
+  emit('change', {
+    textAlign: value
   });
 }
 
