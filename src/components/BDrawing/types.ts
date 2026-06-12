@@ -59,6 +59,11 @@ export interface DrawingElementMetadata {
 }
 
 /**
+ * 文本对齐方式。
+ */
+export type DrawingTextAlign = 'left' | 'center' | 'right';
+
+/**
  * 画板元素样式。
  */
 export interface DrawingElementStyle {
@@ -70,6 +75,12 @@ export interface DrawingElementStyle {
   strokeWidth?: number;
   /** 文字颜色 */
   color?: string;
+  /** 文字字号 */
+  fontSize?: number;
+  /** 文字字重 */
+  fontWeight?: number;
+  /** 文字对齐方式 */
+  textAlign?: DrawingTextAlign;
   /** 透明度 */
   opacity?: number;
 }
