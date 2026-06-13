@@ -6,17 +6,16 @@
   <BPanelSplitter
     v-show="settingStore.sidebarVisible"
     v-model:size="settingStore.sidebarWidth"
-    :class="{ 'b-chat-sidebar-splitter--expanded': isSidebarExpanded }"
-    :section-class="isSidebarExpanded ? 'b-chat-sidebar-splitter__section--expanded' : ''"
+    :class="bem({ expanded: isSidebarExpanded })"
     :disabled="isSidebarExpanded"
     position="left"
     :min-width="340"
     max-width="40%"
     @close="settingStore.setSidebarVisible(false)"
   >
-    <div class="b-chat-sidebar">
-      <div class="b-chat-sidebar__header">
-        <div class="b-chat-sidebar__title truncate">{{ currentSession?.title || '新会话' }}</div>
+    <div :class="bem('content')">
+      <div :class="bem('header')">
+        <div :class="[bem('title'), 'truncate']">{{ currentSession?.title || '新会话' }}</div>
         <BButton square size="small" type="text" :disabled="loading" @click="createNewSession">
           <BIcon icon="lucide:message-circle-plus" :size="16" />
         </BButton>
@@ -29,17 +28,7 @@
           @switch-session="switchSession"
           @delete-session="handleDeleteSession"
         />
-        <BButton
-          square
-          size="small"
-          type="text"
-          class="b-chat-sidebar__expand-button"
-          :class="{ 'is-active': isSidebarExpanded }"
-          :aria-pressed="String(isSidebarExpanded)"
-          :tooltip="isSidebarExpanded ? '退出放大' : '放大侧边栏'"
-          data-testid="chat-sidebar-expand-button"
-          @click="toggleSidebarExpanded"
-        >
+        <BButton square size="small" :type="isSidebarExpanded ? 'secondary' : 'text'" data-testid="chat-sidebar-expand-button" @click="toggleSidebarExpanded">
           <BIcon icon="lucide:maximize" :size="16" />
         </BButton>
 
@@ -48,8 +37,8 @@
           <BIcon icon="lucide:x" :size="16" />
         </BButton>
       </div>
-      <div class="b-chat-sidebar__container">
-        <div class="b-chat-sidebar__conversation-container">
+      <div :class="bem('container')">
+        <div :class="bem('conversation-container')">
           <ConversationView
             ref="conversationRef"
             v-model:messages="messages"
@@ -67,7 +56,7 @@
             </template>
           </ConversationView>
 
-          <div class="b-chat-sidebar__floating-container">
+          <div :class="bem('floating-container')">
             <UsagePanel
               v-if="usagePanel.open.value"
               :loading="usagePanel.loading.value"
@@ -80,12 +69,12 @@
           </div>
         </div>
 
-        <div class="b-chat-sidebar__toolbar">
+        <div :class="bem('toolbar')">
           <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
         </div>
 
-        <div class="b-chat-sidebar__input">
-          <div class="b-chat-sidebar__input-container">
+        <div :class="bem('input')">
+          <div :class="bem('input-container')">
             <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
 
             <BPromptEditor
@@ -162,6 +151,7 @@ import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { Modal } from '@/utils/modal';
+import { createNamespace } from '@/utils/namespace';
 import ConfirmationSheet from './components/ConfirmationSheet.vue';
 import ConversationView from './components/ConversationView.vue';
 import ImagePreview from './components/ImagePreview.vue';
@@ -190,6 +180,8 @@ import { createFileRefChipResolver } from './utils/chipResolver';
 import { shouldAutoCompactByContextUsage } from './utils/compression/policy';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { create, userChoice, buildMessageReferences } from './utils/messageHelper';
+
+const [, bem] = createNamespace('chat-sidebar');
 
 /** assistant 草稿节流持久化间隔。 */
 const ASSISTANT_DRAFT_PERSIST_INTERVAL_MS = 500;
@@ -984,7 +976,18 @@ onUnmounted(() => {
 </script>
 
 <style lang="less">
-.b-chat-sidebar {
+.b-chat-sidebar--expanded {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+
+  .b-panel-splitter__section {
+    width: 100% !important;
+  }
+}
+
+.b-chat-sidebar__content {
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
@@ -992,18 +995,6 @@ onUnmounted(() => {
   overflow: hidden;
   background: var(--bg-primary);
   border-radius: 8px;
-}
-
-.b-panel-splitter.b-chat-sidebar-splitter--expanded {
-  position: absolute;
-  inset: 0;
-  z-index: 10020;
-  width: 100%;
-  height: 100%;
-}
-
-.b-panel-splitter__section.b-chat-sidebar-splitter__section--expanded {
-  width: 100% !important;
 }
 
 .b-chat-sidebar__header {
@@ -1021,11 +1012,6 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.b-chat-sidebar__expand-button.is-active {
-  color: var(--text-primary);
-  background-color: var(--color-primary-bg-hover);
 }
 
 .divider {
