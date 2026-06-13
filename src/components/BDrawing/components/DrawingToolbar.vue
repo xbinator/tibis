@@ -26,7 +26,7 @@
         <BIcon icon="lucide:type" :size="16" />
       </BButton>
       <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'connector' }" @click="emit('set-tool', 'connector')">
-        <BIcon icon="lucide:arrow-right" :size="16" />
+        <BIcon icon="lucide:waypoints" :size="16" />
       </BButton>
     </div>
 
