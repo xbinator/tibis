@@ -3,13 +3,13 @@
  * @description 验证 BDrawing SVG 画布和基础工具栏交互。
  * @vitest-environment jsdom
  */
-import { nextTick } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import { config, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
 import DrawingEdgeRenderer from '@/components/BDrawing/renderers/DrawingEdge.vue';
 import DrawingNodeRenderer from '@/components/BDrawing/renderers/DrawingNode.vue';
-import type { DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import { measureDrawingTextElementSize } from '@/components/BDrawing/utils/boardTransforms';
 
 const selectoMockState = vi.hoisted(() => ({
@@ -28,6 +28,35 @@ const resizeObserverMockState = vi.hoisted(() => ({
 }));
 /** 文本工具单击已有元素后等待双击判定的测试延迟。 */
 const TEXT_ELEMENT_CLICK_CREATE_DELAY_MS = 260;
+
+/**
+ * 创建测试用画板数据。
+ * @returns 测试画板数据
+ */
+function createDrawingDataFixture(): DrawingData {
+  return {
+    elements: [
+      {
+        id: 'external-node-1',
+        kind: 'shape',
+        shape: 'rect',
+        text: '外部节点',
+        position: { x: 24, y: 36 },
+        size: { width: 180, height: 72 },
+        rotation: 0,
+        metadata: {
+          source: 'user',
+          createdAt: 1
+        }
+      }
+    ],
+    edges: [],
+    viewport: {
+      center: { x: 10, y: 20 },
+      zoom: 1
+    }
+  };
+}
 
 /**
  * Selecto 拖拽条件回调。
@@ -690,6 +719,35 @@ function setCanvasRect(element: Element, size: { width: number; height: number }
 }
 
 /**
+ * 设置画布测试尺寸读取器。
+ * @param element - 画布元素
+ * @param readSize - 动态读取尺寸
+ */
+function setDynamicCanvasRect(element: Element, readSize: () => { width: number; height: number }): void {
+  const getRect = (): DOMRect => {
+    const size = readSize();
+
+    return {
+      bottom: size.height,
+      height: size.height,
+      left: 0,
+      right: size.width,
+      top: 0,
+      width: size.width,
+      x: 0,
+      y: 0,
+      toJSON: (): Record<string, number> => ({})
+    } as DOMRect;
+  };
+
+  element.getBoundingClientRect = getRect;
+  const root = element.closest('.b-drawing');
+  if (root) {
+    root.getBoundingClientRect = getRect;
+  }
+}
+
+/**
  * 解析 SVG viewBox 数值。
  * @param value - viewBox 属性值
  * @returns viewBox 数字列表
@@ -774,12 +832,51 @@ describe('BDrawing', (): void => {
 
     expect(wrapper.find('.b-drawing').exists()).toBe(true);
     expect(wrapper.find('[data-testid="drawing-infinite-viewer"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="vue-infinite-viewer-mock"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="vue-infinite-viewer-mock"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="drawing-canvas"]').exists()).toBe(true);
     expect(findDrawingStylePanel(wrapper).exists()).toBe(false);
     expect(wrapper.text()).not.toContain('开始画图');
     expect(wrapper.find('[data-testid="drawing-add-process"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="drawing-delete"]').exists()).toBe(false);
+  });
+
+  it('renders initial drawing data from v-model', (): void => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+
+    expect(wrapper.find('[data-drawing-element-id="external-node-1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="drawing-node"]').text()).toContain('外部节点');
+    expect(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox')).toBe('-590 -340 1200 720');
+  });
+
+  it('emits drawing data updates without internal interaction state', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: {
+          elements: [],
+          edges: [],
+          viewport: {
+            center: { x: 0, y: 0 },
+            zoom: 1
+          }
+        }
+      }
+    });
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+
+    const emitted = wrapper.emitted('update:modelValue') as Array<[DrawingData]> | undefined;
+    const latestData = emitted?.at(-1)?.[0];
+
+    expect(latestData?.elements).toHaveLength(1);
+    expect(latestData?.edges).toEqual([]);
+    expect(latestData?.viewport).toEqual({ center: { x: 0, y: 0 }, zoom: 1 });
+    expect(Object.keys(latestData ?? {}).sort()).toEqual(['edges', 'elements', 'viewport']);
   });
 
   it('keeps SVG hidden until the initial rendered canvas size stabilizes', async (): Promise<void> => {
@@ -805,6 +902,44 @@ describe('BDrawing', (): void => {
     await flushViewportReadyCheck();
 
     expect(wrapper.find('.b-drawing-canvas__svg').classes()).not.toContain('is-measuring');
+  });
+
+  it('resyncs the rendered viewport size after KeepAlive activation', async (): Promise<void> => {
+    const visible = ref<boolean>(true);
+    const drawingData = ref<DrawingData>(createDrawingDataFixture());
+    let canvasSize = { width: 1000, height: 500 };
+    let layoutSettledAfterActivation = true;
+    const Host = defineComponent({
+      components: { BDrawing },
+      /**
+       * 暴露 KeepAlive 测试状态。
+       * @returns 测试状态
+       */
+      setup(): { drawingData: typeof drawingData; visible: typeof visible } {
+        return { drawingData, visible };
+      },
+      template: '<KeepAlive><BDrawing v-if="visible" v-model="drawingData" /></KeepAlive>'
+    });
+    const wrapper = mount(Host);
+
+    await nextTick();
+    setDynamicCanvasRect(wrapper.find('[data-testid="drawing-canvas"]').element, (): { width: number; height: number } =>
+      layoutSettledAfterActivation ? canvasSize : { width: 1000, height: 500 }
+    );
+    await emitCanvasResize();
+
+    expect(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox')).toBe('-490 -230 1000 500');
+
+    visible.value = false;
+    await nextTick();
+    canvasSize = { width: 800, height: 400 };
+    layoutSettledAfterActivation = false;
+    visible.value = true;
+    await nextTick();
+    layoutSettledAfterActivation = true;
+    await flushViewportReadyCheck();
+
+    expect(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox')).toBe('-390 -180 800 400');
   });
 
   it('selects the rectangle tool and places a node on canvas click', async (): Promise<void> => {

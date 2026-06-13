@@ -92,6 +92,7 @@ import type {
   DrawingConnectorEndpoint,
   DrawingConnectorElement,
   DrawingConnectorOptionsChange,
+  DrawingData,
   DrawingElement,
   DrawingElementStyle,
   DrawingElementStyleChange,
@@ -104,8 +105,9 @@ import type {
 } from './types';
 import type { DrawingCanvasPointProjection, DrawingConnectorPathElementOverride } from './utils/drawingGeometry';
 import type { CSSProperties } from 'vue';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
+import { isEqual } from 'lodash-es';
 import DrawingInfiniteViewport from './components/DrawingInfiniteViewport.vue';
 import DrawingMoveableLayer from './components/DrawingMoveableLayer.vue';
 import DrawingSelectoLayer from './components/DrawingSelectoLayer.vue';
@@ -121,6 +123,7 @@ import {
   DRAWING_TEXT_HORIZONTAL_PADDING,
   DRAWING_TEXT_LINE_HEIGHT_RATIO,
   DRAWING_TEXT_VERTICAL_PADDING,
+  createDrawingDataSnapshot,
   measureDrawingTextElementSize
 } from './utils/boardTransforms';
 import {
@@ -137,10 +140,25 @@ import {
   queryDrawingElementTarget
 } from './utils/drawingGeometry';
 
-const board = useDrawingBoard();
+/**
+ * 画图组件入参。
+ */
+interface Props {
+  /** 外部双向绑定的轻量画板数据 */
+  modelValue?: DrawingData;
+}
+
+const props = defineProps<Props>();
+const emit = defineEmits<{
+  /** 更新外部双向绑定画板数据 */
+  'update:modelValue': [value: DrawingData];
+}>();
+
+const board = useDrawingBoard(props.modelValue);
 const viewport = useDrawingViewport(board);
 const interaction = useDrawingInteraction(board);
 const activeTool = ref<DrawingToolMode>('select');
+let syncingModelValueToBoard = false;
 /** 创建工具激活时应用到下一个形状的样式。 */
 const creationStyle = ref<DrawingElementStyle>({});
 /** 连线工具激活时应用到下一条连接线的配置。 */
@@ -151,6 +169,7 @@ const viewportSize = ref<DrawingSize>({ width: 0, height: 0 });
 /** 画布首轮尺寸稳定后再显示 SVG，避免初始布局抖动产生黑框。 */
 const isViewportReady = ref<boolean>(false);
 let viewportReadyFrame: ReturnType<typeof requestAnimationFrame> | null = null;
+let viewportSizeSyncFrame: ReturnType<typeof requestAnimationFrame> | null = null;
 /** 当前历史栈是否允许撤销。 */
 const canUndo = computed<boolean>(() => board.state.value.history.past.length > 0);
 /** 当前历史栈是否允许重做。 */
@@ -184,6 +203,48 @@ const selectedElementIndex = computed<number>(() => {
 
   return board.state.value.elements.findIndex((item: DrawingElement): boolean => item.id === board.state.value.selection[0]);
 });
+
+/**
+ * 判断外部画板数据与内部状态是否一致。
+ * @param modelValue - 外部画板数据
+ * @returns 是否一致
+ */
+function isModelValueEqualToBoard(modelValue: DrawingData): boolean {
+  return isEqual(createDrawingDataSnapshot(modelValue), createDrawingDataSnapshot(board.state.value));
+}
+
+watch(
+  () => props.modelValue,
+  (modelValue: DrawingData | undefined): void => {
+    if (!modelValue || isModelValueEqualToBoard(modelValue)) {
+      return;
+    }
+
+    syncingModelValueToBoard = true;
+    board.reset(modelValue);
+    nextTick()
+      .then((): void => {
+        syncingModelValueToBoard = false;
+      })
+      .catch((error: unknown): void => {
+        syncingModelValueToBoard = false;
+        console.warn('BDrawing model sync failed', error);
+      });
+  },
+  { deep: true }
+);
+
+watch(
+  () => [board.state.value.elements, board.state.value.edges, board.state.value.viewport],
+  (): void => {
+    if (props.modelValue === undefined || syncingModelValueToBoard) {
+      return;
+    }
+
+    emit('update:modelValue', createDrawingDataSnapshot(board.state.value));
+  },
+  { deep: true }
+);
 
 /**
  * 直接拖拽节点会话。
@@ -368,6 +429,18 @@ function cancelViewportReadyCheck(): void {
 }
 
 /**
+ * 取消待执行的视口尺寸同步。
+ */
+function cancelViewportSizeSync(): void {
+  if (viewportSizeSyncFrame === null) {
+    return;
+  }
+
+  cancelAnimationFrame(viewportSizeSyncFrame);
+  viewportSizeSyncFrame = null;
+}
+
+/**
  * 等待根视口尺寸跨帧稳定后再显示 SVG。
  */
 function scheduleViewportReadyCheck(): void {
@@ -403,6 +476,24 @@ function syncViewportSizeFromRoot(): void {
   }
 
   setViewportSize(size);
+}
+
+/**
+ * 在 KeepAlive 激活后的下一帧同步根视口尺寸。
+ */
+function scheduleViewportSizeSyncFromRoot(): void {
+  cancelViewportSizeSync();
+  isViewportReady.value = false;
+  nextTick()
+    .then((): void => {
+      viewportSizeSyncFrame = requestAnimationFrame((): void => {
+        viewportSizeSyncFrame = null;
+        syncViewportSizeFromRoot();
+      });
+    })
+    .catch((error: unknown): void => {
+      console.warn('BDrawing viewport size sync failed', error);
+    });
 }
 
 /**
@@ -1540,6 +1631,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 onBeforeUnmount((): void => {
+  cancelViewportSizeSync();
   cancelViewportReadyCheck();
   cancelHandPan();
   cancelDirectDrag();
@@ -1549,6 +1641,10 @@ onBeforeUnmount((): void => {
 
 onMounted((): void => {
   syncViewportSizeFromRoot();
+});
+
+onActivated((): void => {
+  scheduleViewportSizeSyncFromRoot();
 });
 
 useResizeObserver(rootRef, (entries: ResizeObserverEntry[]): void => {

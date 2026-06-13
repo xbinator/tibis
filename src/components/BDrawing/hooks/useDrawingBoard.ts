@@ -86,6 +86,8 @@ export interface UseDrawingBoardReturn {
   reorderElement: (elementId: string, action: DrawingLayerAction) => void;
   /** 设置选区 */
   setSelection: (selection: string[]) => void;
+  /** 重置画板状态 */
+  reset: (snapshot?: Partial<DrawingBoardSnapshot>) => void;
 }
 
 /**
@@ -98,6 +100,16 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
   let nodeIndex = state.value.elements.length;
   let shapeIndex = state.value.elements.length;
   let connectorIndex = state.value.elements.length;
+
+  /**
+   * 按当前元素数量同步自动生成 ID 的起始序号。
+   */
+  function syncElementIndexes(): void {
+    const elementCount = state.value.elements.length;
+    nodeIndex = elementCount;
+    shapeIndex = elementCount;
+    connectorIndex = elementCount;
+  }
 
   /**
    * 更新画板状态。
@@ -243,6 +255,10 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     reorderElement: (elementId: string, action: DrawingLayerAction): void => setState(reorderDrawingElement(state.value, elementId, action)),
     setSelection: (selection: string[]): void => {
       state.value = { ...state.value, selection };
+    },
+    reset: (nextSnapshot?: Partial<DrawingBoardSnapshot>): void => {
+      setState(createDrawingBoardState(nextSnapshot));
+      syncElementIndexes();
     }
   };
 }

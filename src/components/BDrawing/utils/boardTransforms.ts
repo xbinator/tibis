@@ -10,6 +10,7 @@ import type {
   DrawingBoardState,
   DrawingConnectorElement,
   DrawingConnectorOptionsChange,
+  DrawingData,
   DrawingElementStyle,
   DrawingElementStyleChange,
   DrawingGeometryChange,
@@ -258,6 +259,19 @@ export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>
       past: [],
       future: []
     }
+  };
+}
+
+/**
+ * 创建供外部双向绑定和持久化使用的轻量画板数据。
+ * @param snapshot - 画板快照或状态
+ * @returns 画板绑定数据
+ */
+export function createDrawingDataSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'edges' | 'viewport'>): DrawingData {
+  return {
+    elements: cloneDeep(snapshot.elements),
+    edges: cloneDeep(snapshot.edges),
+    viewport: cloneDeep(snapshot.viewport)
   };
 }
 

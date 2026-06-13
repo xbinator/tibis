@@ -348,6 +348,18 @@ export interface DrawingViewport {
 }
 
 /**
+ * 画板外部双向绑定数据。
+ */
+export interface DrawingData {
+  /** 元素数据 */
+  elements: DrawingElement[];
+  /** 旧连线兼容数据 */
+  edges: DrawingEdge[];
+  /** 视口数据 */
+  viewport: DrawingViewport;
+}
+
+/**
  * 画板历史快照。
  */
 export interface DrawingBoardSnapshot {
