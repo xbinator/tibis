@@ -5,14 +5,7 @@
 <template>
   <div ref="scrollContainer" class="header-tabs" @wheel="handleWheel">
     <div v-if="dropIndicatorStyle" class="header-tabs__drop-indicator" :style="dropIndicatorStyle"></div>
-    <div v-if="settingStore.chatSidebarExpanded" class="header-tabs__track header-tabs__track--chat">
-      <div class="header-tab header-tab--chat is-active" aria-current="page">
-        <div class="header-tab__title">
-          <span class="header-tab__title-text">聊天</span>
-        </div>
-      </div>
-    </div>
-    <div v-else class="header-tabs__track">
+    <div v-if="!settingStore.chatSidebarExpanded" class="header-tabs__track">
       <Dropdown
         v-for="tab in tabsStore.tabs"
         :key="tab.id"
@@ -425,10 +418,6 @@ function handleWheel(event: WheelEvent): void {
   -webkit-app-region: no-drag;
 }
 
-.header-tabs__track--chat {
-  pointer-events: none;
-}
-
 .header-tabs__drop-indicator {
   position: absolute;
   top: 4px;
@@ -477,11 +466,6 @@ function handleWheel(event: WheelEvent): void {
     text-decoration-line: line-through;
     text-decoration-thickness: 1px;
   }
-}
-
-.header-tab--chat {
-  padding: 0 10px;
-  cursor: default;
 }
 
 .header-tab__title {

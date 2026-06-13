@@ -1082,7 +1082,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-width: var(--b-chat-max-width, 800px);
   padding: 12px;
+  margin: 0 auto;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
