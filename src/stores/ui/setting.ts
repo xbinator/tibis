@@ -32,6 +32,8 @@ interface PersistedSettingState {
 }
 
 interface SettingState extends PersistedSettingState {
+  /** 聊天侧边栏是否处于放大覆盖状态（仅运行时状态，不持久化） */
+  chatSidebarExpanded: boolean;
   title: string;
 }
 
@@ -132,6 +134,7 @@ const SETTINGS_CONFIG: PersistConfig<PersistedSettingState> = {
 export const useSettingStore = defineStore('setting', {
   state: (): SettingState => ({
     ...loadPersistedState(SETTINGS_CONFIG),
+    chatSidebarExpanded: false,
     title: 'Tibis'
   }),
 
@@ -215,6 +218,21 @@ export const useSettingStore = defineStore('setting', {
 
     toggleSidebar(): void {
       this.setSidebarVisible(!this.sidebarVisible);
+    },
+
+    /**
+     * 设置聊天侧边栏放大覆盖状态。
+     * @param expanded - 是否放大覆盖主内容视图
+     */
+    setChatSidebarExpanded(expanded: boolean): void {
+      this.chatSidebarExpanded = expanded;
+    },
+
+    /**
+     * 切换聊天侧边栏放大覆盖状态。
+     */
+    toggleChatSidebarExpanded(): void {
+      this.setChatSidebarExpanded(!this.chatSidebarExpanded);
     },
 
     setSettingsSidebarCollapsed(collapsed: boolean): void {

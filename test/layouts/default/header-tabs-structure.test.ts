@@ -15,4 +15,20 @@ describe('HeaderTabs drag region structure', (): void => {
     expect(headerTabsSource).toContain('.header-tabs__track {\n');
     expect(headerTabsSource).toContain('-webkit-app-region: no-drag;');
   });
+
+  it('replaces real tabs with a chat tab while the chat sidebar is expanded', (): void => {
+    expect(headerTabsSource).toContain('v-if="settingStore.chatSidebarExpanded"');
+    expect(headerTabsSource).toContain('header-tab--chat');
+    expect(headerTabsSource).toContain('聊天');
+    expect(headerTabsSource).toContain('v-else class="header-tabs__track"');
+  });
+
+  it('keeps the chat tab horizontally symmetrical', (): void => {
+    expect(headerTabsSource).toContain('.header-tab--chat {\n  padding: 0 10px;');
+  });
+
+  it('closes the expanded chat sidebar when the active route changes', (): void => {
+    expect(headerTabsSource).toContain('() => route.fullPath');
+    expect(headerTabsSource).toContain('settingStore.setChatSidebarExpanded(false)');
+  });
 });

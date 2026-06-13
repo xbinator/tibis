@@ -192,6 +192,7 @@ useEventListener(window, 'resize', validateWindowState);
 }
 
 .b-layout__content {
+  position: relative;
   display: flex;
   flex: 1;
   gap: 6px;

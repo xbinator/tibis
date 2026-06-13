@@ -6,6 +6,9 @@
   <BPanelSplitter
     v-show="settingStore.sidebarVisible"
     v-model:size="settingStore.sidebarWidth"
+    :class="{ 'b-chat-sidebar-splitter--expanded': isSidebarExpanded }"
+    :section-class="isSidebarExpanded ? 'b-chat-sidebar-splitter__section--expanded' : ''"
+    :disabled="isSidebarExpanded"
     position="left"
     :min-width="340"
     max-width="40%"
@@ -17,6 +20,7 @@
         <BButton square size="small" type="text" :disabled="loading" @click="createNewSession">
           <BIcon icon="lucide:message-circle-plus" :size="16" />
         </BButton>
+
         <SessionHistory
           ref="sessionHistoryRef"
           v-model:current-session="currentSession"
@@ -25,6 +29,19 @@
           @switch-session="switchSession"
           @delete-session="handleDeleteSession"
         />
+        <BButton
+          square
+          size="small"
+          type="text"
+          class="b-chat-sidebar__expand-button"
+          :class="{ 'is-active': isSidebarExpanded }"
+          :aria-pressed="String(isSidebarExpanded)"
+          :tooltip="isSidebarExpanded ? '退出放大' : '放大侧边栏'"
+          data-testid="chat-sidebar-expand-button"
+          @click="toggleSidebarExpanded"
+        >
+          <BIcon icon="lucide:maximize" :size="16" />
+        </BButton>
 
         <div class="divider"></div>
         <BButton square size="small" type="text" @click="settingStore.setSidebarVisible(false)">
@@ -191,6 +208,25 @@ const todoStore = useTodoStore();
 const todoPanelVisible = ref(true);
 /** 当前会话的待办列表 */
 const currentSessionTodos = computed(() => todoStore.getTodos(settingStore.chatSidebarActiveSessionId ?? ''));
+/** 聊天侧边栏是否放大覆盖主内容区域 */
+const isSidebarExpanded = computed<boolean>(() => settingStore.chatSidebarExpanded);
+
+/**
+ * 切换聊天侧边栏放大状态。
+ */
+function toggleSidebarExpanded(): void {
+  settingStore.toggleChatSidebarExpanded();
+}
+
+/** 侧边栏被隐藏时同步退出放大态，避免再次打开直接覆盖主视图 */
+watch(
+  () => settingStore.sidebarVisible,
+  (visible) => {
+    if (!visible) {
+      settingStore.setChatSidebarExpanded(false);
+    }
+  }
+);
 
 /** LLM 调用 todowrite 时自动打开/关闭面板 */
 watch(
@@ -940,6 +976,7 @@ onMounted(async () => {
 
 /** 组件卸载时清理 */
 onUnmounted(() => {
+  settingStore.setChatSidebarExpanded(false);
   cancelAssistantDraftPersistence();
   taskRuntime.dispose();
   confirmationController.dispose();
@@ -957,6 +994,18 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
+.b-panel-splitter.b-chat-sidebar-splitter--expanded {
+  position: absolute;
+  inset: 0;
+  z-index: 10020;
+  width: 100%;
+  height: 100%;
+}
+
+.b-panel-splitter__section.b-chat-sidebar-splitter__section--expanded {
+  width: 100% !important;
+}
+
 .b-chat-sidebar__header {
   display: flex;
   gap: 8px;
@@ -972,6 +1021,11 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.b-chat-sidebar__expand-button.is-active {
+  color: var(--text-primary);
+  background-color: var(--color-primary-bg-hover);
 }
 
 .divider {
