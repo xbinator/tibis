@@ -979,6 +979,7 @@ onUnmounted(() => {
 .b-chat-sidebar--expanded {
   position: absolute;
   inset: 0;
+  z-index: 2;
   width: 100%;
   height: 100%;
 

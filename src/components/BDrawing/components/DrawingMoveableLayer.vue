@@ -664,6 +664,10 @@ watch(
     border-radius: 2px !important;
   }
 
+  :deep(.moveable-control-box) {
+    z-index: 1;
+  }
+
   :deep(.moveable-control:hover) {
     background: var(--color-primary-hover) !important;
     border-color: var(--bg-primary) !important;
