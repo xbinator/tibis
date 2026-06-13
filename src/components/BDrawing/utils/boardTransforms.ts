@@ -4,7 +4,6 @@
  */
 import type {
   DrawingAddConnectorOptions,
-  DrawingAddNodeOptions,
   DrawingAddShapeOptions,
   DrawingBoardSnapshot,
   DrawingBoardState,
@@ -15,7 +14,6 @@ import type {
   DrawingElementStyleChange,
   DrawingGeometryChange,
   DrawingLayerAction,
-  DrawingNodeChange,
   DrawingPoint,
   DrawingSize,
   DrawingShapeElement,
@@ -23,7 +21,7 @@ import type {
   DrawingViewport
 } from '../types';
 import { cloneDeep } from 'lodash-es';
-import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE, DRAWING_NODE_TYPE_TEXT } from '../constants/defaults';
+import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_DEFAULT_TEXT, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/defaults';
 import { isDrawingConnectorElement, isDrawingShapeElement } from './drawingGeometry';
 import { DRAWING_TEXT_DEFAULT_FONT_SIZE, DRAWING_TEXT_DEFAULT_FONT_WEIGHT, measureDrawingTextElementSize } from './drawingTextMetrics';
 
@@ -62,15 +60,6 @@ function createSnapshot(state: DrawingBoardSnapshot): DrawingBoardSnapshot {
 }
 
 /**
- * 将旧节点类型转换为自由形状类型。
- * @param type - 旧节点类型
- * @returns 形状类型
- */
-function nodeTypeToShape(type: DrawingAddNodeOptions['type']): DrawingShapeType {
-  return type === 'decision' ? 'diamond' : type;
-}
-
-/**
  * 归一化几何数值，减少 DOM 坐标换算带来的浮点噪声。
  * @param value - 原始数值
  * @returns 归一化数值
@@ -86,7 +75,7 @@ function normalizeGeometryValue(value: number): number {
  */
 function getShapeDefaultText(shape: DrawingShapeType): string {
   if (shape === 'text') {
-    return DRAWING_NODE_TYPE_TEXT.text;
+    return DRAWING_DEFAULT_TEXT;
   }
 
   return '';
@@ -128,15 +117,6 @@ function createShapeInitialStyle(shape: DrawingShapeType, style?: DrawingElement
     textAlign: 'center',
     ...cloneDeep(style)
   };
-}
-
-/**
- * 归一化旋转角度到 0 到 360 度之间。
- * @param rotation - 原始角度
- * @returns 归一化后的角度
- */
-function normalizeRotation(rotation: number): number {
-  return normalizeGeometryValue(((rotation % 360) + 360) % 360);
 }
 
 /**
@@ -313,40 +293,6 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
 }
 
 /**
- * 新增一个手动画板节点。
- * @param state - 当前画板状态
- * @param options - 新节点参数
- * @returns 新画板状态
- */
-export function addDrawingNode(state: DrawingBoardState, options: DrawingAddNodeOptions): DrawingBoardState {
-  if (state.elements.some((element) => element.id === options.id)) {
-    return withError(state, new Error(`节点已存在: ${options.id}`));
-  }
-
-  const node: DrawingShapeElement = {
-    id: options.id,
-    kind: 'shape',
-    shape: nodeTypeToShape(options.type),
-    text: options.text ?? DRAWING_NODE_TYPE_TEXT[options.type],
-    description: options.description,
-    position: cloneDeep(options.position ?? state.viewport.center),
-    size: cloneDeep(options.size ?? DRAWING_DEFAULT_NODE_SIZE),
-    rotation: 0,
-    metadata: {
-      source: 'user',
-      createdAt: options.createdAt ?? Date.now()
-    }
-  };
-
-  return withHistory(state, {
-    elements: [...cloneDeep(state.elements), node],
-    edges: cloneDeep(state.edges),
-    selection: [node.id],
-    viewport: cloneDeep(state.viewport)
-  });
-}
-
-/**
  * 新增一个连接线元素。
  * @param state - 当前画板状态
  * @param options - 新连接线参数
@@ -464,30 +410,6 @@ export function moveDrawingElements(state: DrawingBoardState, changes: DrawingGe
 }
 
 /**
- * 移动画板节点。
- * @param state - 当前画板状态
- * @param nodeId - 节点 ID
- * @param delta - 移动增量
- * @returns 新画板状态
- */
-export function moveDrawingNode(state: DrawingBoardState, nodeId: string, delta: DrawingPoint): DrawingBoardState {
-  const node = state.elements.find((item) => item.id === nodeId);
-  if (!node || !isDrawingShapeElement(node)) {
-    return withError(state, new Error(`找不到节点: ${nodeId}`));
-  }
-
-  return moveDrawingElements(state, [
-    {
-      id: nodeId,
-      position: {
-        x: node.position.x + delta.x,
-        y: node.position.y + delta.y
-      }
-    }
-  ]);
-}
-
-/**
  * 缩放画板元素。
  * @param state - 当前画板状态
  * @param changes - 尺寸变更
@@ -508,22 +430,6 @@ export function resizeDrawingElements(state: DrawingBoardState, changes: Drawing
         height: Math.max(DRAWING_MIN_ELEMENT_SIZE.height, normalizeGeometryValue(change.size.height))
       };
     }
-  });
-}
-
-/**
- * 旋转画板元素。
- * @param state - 当前画板状态
- * @param changes - 旋转变更
- * @returns 新画板状态
- */
-export function rotateDrawingElements(state: DrawingBoardState, changes: DrawingGeometryChange[]): DrawingBoardState {
-  return applyGeometryChanges(state, changes, (element: DrawingShapeElement, change: DrawingGeometryChange): void => {
-    if (change.rotation === undefined) {
-      return;
-    }
-
-    element.rotation = normalizeRotation(change.rotation);
   });
 }
 
@@ -632,38 +538,6 @@ export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, 
   node.text = text;
   if (node.shape === 'text') {
     node.size = measureDrawingTextElementSize(text, node.style);
-  }
-
-  return withHistory(state, {
-    elements: nextElements,
-    edges: cloneDeep(state.edges),
-    selection: [...state.selection],
-    viewport: cloneDeep(state.viewport)
-  });
-}
-
-/**
- * 更新节点属性（文本、描述等）。
- * @param state - 当前画板状态
- * @param nodeId - 节点 ID
- * @param change - 节点属性变更
- * @returns 新画板状态
- */
-export function updateDrawingNodeProperties(state: DrawingBoardState, nodeId: string, change: DrawingNodeChange): DrawingBoardState {
-  const nextElements = cloneDeep(state.elements);
-  const node = nextElements.find((item) => item.id === nodeId);
-  if (!node || !isDrawingShapeElement(node)) {
-    return withError(state, new Error(`找不到节点: ${nodeId}`));
-  }
-
-  if (change.text !== undefined) {
-    node.text = change.text;
-  }
-  if (change.description !== undefined) {
-    node.description = change.description;
-  }
-  if (node.shape === 'text' && change.text !== undefined) {
-    node.size = measureDrawingTextElementSize(node.text, node.style);
   }
 
   return withHistory(state, {

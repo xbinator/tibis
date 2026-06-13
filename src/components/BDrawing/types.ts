@@ -21,7 +21,7 @@ export type DrawingToolMode = 'select' | 'hand' | 'process' | 'rect' | 'ellipse'
 /**
  * 画板元素类别。
  */
-export type DrawingElementKind = 'shape' | 'text' | 'connector' | 'mindmap-node';
+export type DrawingElementKind = 'shape' | 'connector';
 
 /**
  * 画板形状类型。
@@ -89,16 +89,6 @@ export interface DrawingElementStyle {
  * 画板元素样式变更。
  */
 export type DrawingElementStyleChange = Partial<DrawingElementStyle>;
-
-/**
- * 节点属性变更。
- */
-export interface DrawingNodeChange {
-  /** 节点主文本 */
-  text?: string;
-  /** 节点说明 */
-  description?: string;
-}
 
 /**
  * 元素层级操作类型。
@@ -210,11 +200,6 @@ export interface DrawingConnectorDraftOptions extends DrawingConnectorOptionsCha
 export type DrawingElement = DrawingShapeElement | DrawingConnectorElement;
 
 /**
- * 兼容旧节点 API 的形状元素别名。
- */
-export type DrawingNode = DrawingShapeElement;
-
-/**
  * 画板连线。
  */
 export interface DrawingEdge {
@@ -230,26 +215,6 @@ export interface DrawingEdge {
   label?: string;
   /** 元信息 */
   metadata: DrawingElementMetadata;
-}
-
-/**
- * 新增节点参数。
- */
-export interface DrawingAddNodeOptions {
-  /** 节点 ID */
-  id: string;
-  /** 节点类型 */
-  type: DrawingNodeType;
-  /** 节点文本 */
-  text?: string;
-  /** 节点说明 */
-  description?: string;
-  /** 节点位置 */
-  position?: DrawingPoint;
-  /** 节点尺寸 */
-  size?: DrawingSize;
-  /** 创建时间戳 */
-  createdAt?: number;
 }
 
 /**
@@ -310,8 +275,6 @@ export interface DrawingGeometryChange {
   position?: DrawingPoint;
   /** 新尺寸 */
   size?: DrawingSize;
-  /** 新旋转角度 */
-  rotation?: number;
 }
 
 /**

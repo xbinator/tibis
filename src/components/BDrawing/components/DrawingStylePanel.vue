@@ -441,7 +441,6 @@ function getMarkerIconRotate(key: 'markerStart' | 'markerEnd', value: DrawingCon
   position: absolute;
   top: 64px;
   left: 12px;
-  z-index: 10000;
   display: flex;
   flex-direction: column;
   gap: 12px;

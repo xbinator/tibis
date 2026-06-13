@@ -6,17 +6,14 @@ import { describe, expect, it } from 'vitest';
 import type { DrawingBoardState, DrawingConnectorElement, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import {
   addDrawingConnector,
-  addDrawingNode,
   addDrawingShape,
   createDrawingBoardState,
   deleteDrawingSelection,
   measureDrawingTextElementSize,
   moveDrawingElements,
-  moveDrawingNode,
   redoDrawingBoard,
   reorderDrawingElement,
   resizeDrawingElements,
-  rotateDrawingElements,
   undoDrawingBoard,
   updateDrawingConnectorOptions,
   updateDrawingElementStyle,
@@ -84,35 +81,13 @@ describe('boardTransforms', (): void => {
     expect(cjkSize.width).toBeGreaterThan(latinSize.width);
   });
 
-  it('adds a manual node as one undoable history entry', (): void => {
-    const initial = createDrawingBoardState();
-    const added = addDrawingNode(initial, {
-      id: 'node-1',
-      type: 'process',
-      position: { x: 40, y: 60 },
-      createdAt: 10
+  it('supports undo and redo after adding a shape', (): void => {
+    const added = addDrawingShape(createDrawingBoardState(), {
+      id: 'shape-1',
+      shape: 'rect',
+      start: { x: 40, y: 60 },
+      end: { x: 160, y: 120 }
     });
-
-    expect(added.elements).toHaveLength(1);
-    expect(added.elements[0]?.kind).toBe('shape');
-    expect(added.elements[0]?.rotation).toBe(0);
-    expect(expectShapeElement(added.elements[0]).text).toBe('流程节点');
-    expect(added.elements[0]?.metadata.source).toBe('user');
-    expect(added.selection).toEqual(['node-1']);
-    expect(added.history.past).toHaveLength(1);
-  });
-
-  it('keeps the board unchanged when adding a duplicate node id', (): void => {
-    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
-    const result = addDrawingNode(initial, { id: 'node-1', type: 'process' });
-
-    expect(result.elements).toEqual(initial.elements);
-    expect(result.lastError?.message).toContain('节点已存在');
-    expect(result.history.past).toHaveLength(0);
-  });
-
-  it('supports undo and redo after a manual add', (): void => {
-    const added = addDrawingNode(createDrawingBoardState(), { id: 'node-1', type: 'process' });
     const undone = undoDrawingBoard(added);
     const redone = redoDrawingBoard(undone);
 
@@ -120,14 +95,6 @@ describe('boardTransforms', (): void => {
     expect(undone.history.future).toHaveLength(1);
     expect(redone.elements).toHaveLength(1);
     expect(redone.history.future).toHaveLength(0);
-  });
-
-  it('moves a node and records the movement in history', (): void => {
-    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
-    const moved = moveDrawingNode(initial, 'node-1', { x: 12, y: -8 });
-
-    expect(moved.elements[0]?.position).toEqual({ x: 112, y: 112 });
-    expect(moved.history.past).toHaveLength(1);
   });
 
   it('deletes selected nodes and connected edges', (): void => {
@@ -287,19 +254,6 @@ describe('boardTransforms', (): void => {
     expect(resized.elements[0]?.position).toEqual({ x: 80, y: 90 });
     expect(resized.elements[0]?.size).toEqual({ width: 16, height: 16 });
     expect(resized.history.past).toHaveLength(1);
-  });
-
-  it('rotates an element and normalizes the angle', (): void => {
-    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
-    const rotated = rotateDrawingElements(initial, [
-      {
-        id: 'node-1',
-        rotation: -45
-      }
-    ]);
-
-    expect(rotated.elements[0]?.rotation).toBe(315);
-    expect(rotated.history.past).toHaveLength(1);
   });
 
   it('adds a connector element between two shapes', (): void => {

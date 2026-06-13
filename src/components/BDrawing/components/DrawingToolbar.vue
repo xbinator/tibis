@@ -123,7 +123,7 @@ const canZoomIn = computed<boolean>(() => props.zoom < DRAWING_MAX_ZOOM);
 .b-drawing-toolbar {
   position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: 1;
   pointer-events: none;
 }
 

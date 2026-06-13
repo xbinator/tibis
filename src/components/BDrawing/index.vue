@@ -12,7 +12,6 @@
       :viewport-size="viewportSize"
       :can-undo="canUndo"
       :can-redo="canRedo"
-      class="b-drawing__toolbar"
       @set-tool="setActiveTool"
       @undo="board.undo"
       @redo="board.redo"
@@ -1668,14 +1667,6 @@ useResizeObserver(rootRef, (entries: ResizeObserverEntry[]): void => {
   outline: none;
   background: var(--bg-primary);
   border-radius: 8px;
-}
-
-/** 悬浮工具栏铺满画布，内部自行分组定位 */
-.b-drawing__toolbar {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  pointer-events: none;
 }
 
 .b-drawing__text-editor {

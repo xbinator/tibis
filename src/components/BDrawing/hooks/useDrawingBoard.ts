@@ -12,8 +12,6 @@ import type {
   DrawingElementStyleChange,
   DrawingGeometryChange,
   DrawingLayerAction,
-  DrawingNodeChange,
-  DrawingNodeType,
   DrawingPoint,
   DrawingShapeType
 } from '../types';
@@ -21,20 +19,16 @@ import { ref } from 'vue';
 import type { Ref } from 'vue';
 import {
   addDrawingConnector,
-  addDrawingNode,
   addDrawingShape,
   createDrawingBoardState,
   deleteDrawingSelection,
   moveDrawingElements,
-  moveDrawingNode,
   redoDrawingBoard,
   reorderDrawingElement,
   resizeDrawingElements,
-  rotateDrawingElements,
   undoDrawingBoard,
   updateDrawingConnectorOptions,
   updateDrawingElementStyle,
-  updateDrawingNodeProperties,
   updateDrawingNodeText
 } from '../utils/boardTransforms';
 
@@ -44,8 +38,6 @@ import {
 export interface UseDrawingBoardReturn {
   /** 响应式画板状态 */
   state: Ref<DrawingBoardState>;
-  /** 新增节点 */
-  addNode: (type: DrawingNodeType, position?: DrawingPoint) => void;
   /** 开始创建形状草稿 */
   startCreateShapeDraft: (shape: DrawingShapeType, start: DrawingPoint) => void;
   /** 更新当前草稿坐标 */
@@ -64,14 +56,10 @@ export interface UseDrawingBoardReturn {
   undo: () => void;
   /** 重做 */
   redo: () => void;
-  /** 移动节点 */
-  moveNode: (nodeId: string, delta: DrawingPoint) => void;
   /** 移动元素 */
   moveElements: (changes: DrawingGeometryChange[]) => void;
   /** 缩放元素 */
   resizeElements: (changes: DrawingGeometryChange[]) => void;
-  /** 旋转元素 */
-  rotateElements: (changes: DrawingGeometryChange[]) => void;
   /** 更新元素样式 */
   updateElementStyle: (elementId: string, style: DrawingElementStyleChange) => void;
   /** 更新连接线配置 */
@@ -80,8 +68,6 @@ export interface UseDrawingBoardReturn {
   deleteSelection: () => void;
   /** 更新节点文本 */
   updateNodeText: (nodeId: string, text: string) => void;
-  /** 更新节点属性（文本、描述等） */
-  updateNodeProperties: (nodeId: string, change: DrawingNodeChange) => void;
   /** 调整元素层级 */
   reorderElement: (elementId: string, action: DrawingLayerAction) => void;
   /** 设置选区 */
@@ -121,19 +107,6 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
 
   return {
     state,
-    addNode: (type: DrawingNodeType, position?: DrawingPoint): void => {
-      nodeIndex += 1;
-      setState(
-        addDrawingNode(state.value, {
-          id: `drawing-node-${nodeIndex}`,
-          type,
-          position: position ?? {
-            x: state.value.viewport.center.x - 90 + nodeIndex * 24,
-            y: state.value.viewport.center.y - 36 + nodeIndex * 18
-          }
-        })
-      );
-    },
     startCreateShapeDraft: (shape: DrawingShapeType, start: DrawingPoint): void => {
       state.value = {
         ...state.value,
@@ -242,16 +215,13 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     },
     undo: (): void => setState(undoDrawingBoard(state.value)),
     redo: (): void => setState(redoDrawingBoard(state.value)),
-    moveNode: (nodeId: string, delta: DrawingPoint): void => setState(moveDrawingNode(state.value, nodeId, delta)),
     moveElements: (changes: DrawingGeometryChange[]): void => setState(moveDrawingElements(state.value, changes)),
     resizeElements: (changes: DrawingGeometryChange[]): void => setState(resizeDrawingElements(state.value, changes)),
-    rotateElements: (changes: DrawingGeometryChange[]): void => setState(rotateDrawingElements(state.value, changes)),
     updateElementStyle: (elementId: string, style: DrawingElementStyleChange): void => setState(updateDrawingElementStyle(state.value, elementId, style)),
     updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange): void =>
       setState(updateDrawingConnectorOptions(state.value, connectorId, options)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
     updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),
-    updateNodeProperties: (nodeId: string, change: DrawingNodeChange): void => setState(updateDrawingNodeProperties(state.value, nodeId, change)),
     reorderElement: (elementId: string, action: DrawingLayerAction): void => setState(reorderDrawingElement(state.value, elementId, action)),
     setSelection: (selection: string[]): void => {
       state.value = { ...state.value, selection };
