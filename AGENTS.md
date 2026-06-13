@@ -1,5 +1,7 @@
 # 项目代码规范
 
+> 项目完整上下文（技术栈、目录结构、架构、数据流等）见 [CONTEXT.md](CONTEXT.md)
+
 ## TypeScript 类型规范
 
 ### 禁止使用 `any` 类型
