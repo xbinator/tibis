@@ -78,6 +78,16 @@ interface DrawingConnectorRoute {
 }
 
 /**
+ * 连接线端点坐标。
+ */
+export interface DrawingConnectorEndpointPoints {
+  /** 起点坐标 */
+  source: DrawingPoint;
+  /** 终点坐标 */
+  target: DrawingPoint;
+}
+
+/**
  * 判断元素是否为形状。
  * @param element - 画板元素
  * @returns 是否为形状元素
@@ -474,6 +484,29 @@ function resolveDrawingConnectorRoute(
   return {
     source: sourcePoint,
     target: targetPoint
+  };
+}
+
+/**
+ * 解析连接线端点坐标。
+ * @param elements - 画板元素列表
+ * @param connector - 连接线元素
+ * @param overrides - 预览中的形状几何覆盖
+ * @returns 连接线端点坐标，端点缺失时返回 null
+ */
+export function resolveDrawingConnectorEndpointPoints(
+  elements: DrawingElement[],
+  connector: DrawingConnectorElement,
+  overrides: DrawingConnectorPathElementOverride[] = []
+): DrawingConnectorEndpointPoints | null {
+  const route = resolveDrawingConnectorRoute(elements, connector, overrides);
+  if (!route) {
+    return null;
+  }
+
+  return {
+    source: route.source,
+    target: route.target
   };
 }
 

@@ -215,6 +215,18 @@ function findDrawingConnectorEndpoints(wrapper: VueWrapper): DOMWrapper<Element>
 }
 
 /**
+ * 读取连接线端点圆心坐标。
+ * @param endpoint - 连接线端点包装器
+ * @returns 端点圆心坐标
+ */
+function readDrawingConnectorEndpointPosition(endpoint: DOMWrapper<Element>): { cx: number; cy: number } {
+  return {
+    cx: Number(endpoint.attributes('cx')),
+    cy: Number(endpoint.attributes('cy'))
+  };
+}
+
+/**
  * 样式面板颜色配置类型。
  */
 type DrawingStyleColorTarget = 'stroke' | 'fill' | 'text';
@@ -2389,6 +2401,38 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="moveable-drag"]').trigger('click');
 
     expect(findDrawingConnectorEndMarker(wrapper).attributes('d')).not.toBe(initialMarkerPath);
+  });
+
+  it('updates selected connector endpoints while previewing a Selecto multi-node drag', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+    await findDrawingToolbarToolButton(wrapper, 'select').trigger('click');
+
+    const connectorTarget = wrapper.find('.b-drawing-connector.b-drawing-element');
+    await emitSelectoEnd([nodes[0].element, nodes[1].element, connectorTarget.element]);
+    await nextTick();
+
+    const initialEndpoints = findDrawingConnectorEndpoints(wrapper).map(readDrawingConnectorEndpointPosition);
+    await wrapper.find('[data-testid="moveable-drag-group"]').trigger('click');
+
+    expect(findDrawingConnectorEndpoints(wrapper).map(readDrawingConnectorEndpointPosition)).toEqual(
+      initialEndpoints.map((endpoint: { cx: number; cy: number }): { cx: number; cy: number } => ({
+        cx: endpoint.cx + 40,
+        cy: endpoint.cy + 20
+      }))
+    );
   });
 
   it('highlights connector target node while creating a connector', async (): Promise<void> => {

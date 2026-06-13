@@ -50,7 +50,8 @@ import {
   isDrawingConnectorElement,
   isDrawingDiamondShape,
   isDrawingShapeElement,
-  queryDrawingElementTarget
+  queryDrawingElementTarget,
+  resolveDrawingConnectorEndpointPoints
 } from '../utils/drawingGeometry';
 
 /**
@@ -346,6 +347,7 @@ function updateConnectedConnectorPreviews(overrides: DrawingConnectorPathElement
     const pathData = createDrawingConnectorPath(props.elements, connector, overrides);
     const markerStartPath = createDrawingConnectorMarkerPath(props.elements, connector, 'start', overrides);
     const markerEndPath = createDrawingConnectorMarkerPath(props.elements, connector, 'end', overrides);
+    const endpointPoints = resolveDrawingConnectorEndpointPoints(props.elements, connector, overrides);
     const connectorTargets = getTargetsById(connector.id);
     connectorTargets.forEach((target: Element): void => {
       const paths = target.querySelectorAll('.b-drawing-connector__line, .b-drawing-connector__hit');
@@ -354,6 +356,14 @@ function updateConnectedConnectorPreviews(overrides: DrawingConnectorPathElement
       });
       target.querySelector('.b-drawing-connector__marker-arrow--start')?.setAttribute('d', markerStartPath);
       target.querySelector('.b-drawing-connector__marker-arrow--end')?.setAttribute('d', markerEndPath);
+
+      const endpoints = target.querySelectorAll('.b-drawing-connector__endpoint');
+      if (endpointPoints && endpoints.length >= 2) {
+        endpoints[0].setAttribute('cx', String(endpointPoints.source.x));
+        endpoints[0].setAttribute('cy', String(endpointPoints.source.y));
+        endpoints[1].setAttribute('cx', String(endpointPoints.target.x));
+        endpoints[1].setAttribute('cy', String(endpointPoints.target.y));
+      }
     });
   }
 }
@@ -418,6 +428,61 @@ function createResizeChange(event: MoveableResizeEndEvent, shouldConvertGroupSiz
 }
 
 /**
+ * 预览 Moveable 拖动并返回连接线重算所需的几何覆盖。
+ * @param event - Moveable 拖动过程事件
+ * @returns 预览几何覆盖，事件不完整时返回 null
+ */
+function previewDragEvent(event: MoveableDragEvent): DrawingConnectorPathElementOverride | null {
+  const id = getTargetId(event.target);
+  const element = id ? getElementById(id) : undefined;
+  if (!event.target || !id || !element || !event.translate) {
+    return null;
+  }
+
+  const position = {
+    x: element.position.x + domDeltaToWorld(event.translate[0]),
+    y: element.position.y + domDeltaToWorld(event.translate[1])
+  };
+  event.target.setAttribute('transform', createPreviewTransform(element, event.translate));
+
+  return {
+    id,
+    position
+  };
+}
+
+/**
+ * 预览 Moveable 缩放并返回连接线重算所需的几何覆盖。
+ * @param event - Moveable 缩放过程事件
+ * @param shouldConvertGroupSize - 是否将多选缩放尺寸从 DOM 坐标转换为画板坐标
+ * @returns 预览几何覆盖，事件不完整时返回 null
+ */
+function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize = false): DrawingConnectorPathElementOverride | null {
+  const id = getTargetId(event.target);
+  const element = id ? getElementById(id) : undefined;
+  if (!event.target || !id || !element || isDrawingTextElement(element) || event.width === undefined || event.height === undefined) {
+    return null;
+  }
+
+  const translate = event.drag?.beforeTranslate ?? [0, 0];
+  const size = shouldConvertGroupSize ? groupResizeSizeToWorld({ width: event.width, height: event.height }) : { width: event.width, height: event.height };
+  const position = {
+    x: element.position.x + domDeltaToWorld(translate[0]),
+    y: element.position.y + domDeltaToWorld(translate[1])
+  };
+
+  event.target.setAttribute('transform', createPreviewTransform(element, translate, size));
+  updateShapePreviewSize(event.target, element, size);
+  updateTextPreviewPosition(event.target, size);
+
+  return {
+    id,
+    position,
+    size
+  };
+}
+
+/**
  * 读取选区对应 DOM target。
  */
 async function syncTargets(): Promise<void> {
@@ -452,23 +517,12 @@ async function syncTargets(): Promise<void> {
  * @param event - Moveable 拖动过程事件
  */
 function handleDrag(event: MoveableDragEvent): void {
-  const id = getTargetId(event.target);
-  const element = id ? getElementById(id) : undefined;
-  if (!event.target || !id || !element || !event.translate) {
+  const override = previewDragEvent(event);
+  if (!override) {
     return;
   }
 
-  const position = {
-    x: element.position.x + domDeltaToWorld(event.translate[0]),
-    y: element.position.y + domDeltaToWorld(event.translate[1])
-  };
-  event.target.setAttribute('transform', createPreviewTransform(element, event.translate));
-  updateConnectedConnectorPreviews([
-    {
-      id,
-      position
-    }
-  ]);
+  updateConnectedConnectorPreviews([override]);
 }
 
 /**
@@ -477,28 +531,12 @@ function handleDrag(event: MoveableDragEvent): void {
  * @param shouldConvertGroupSize - 是否将多选缩放尺寸从 DOM 坐标转换为画板坐标
  */
 function handleResize(event: MoveableResizeEvent, shouldConvertGroupSize = false): void {
-  const id = getTargetId(event.target);
-  const element = id ? getElementById(id) : undefined;
-  if (!event.target || !id || !element || isDrawingTextElement(element) || event.width === undefined || event.height === undefined) {
+  const override = previewResizeEvent(event, shouldConvertGroupSize);
+  if (!override) {
     return;
   }
 
-  const translate = event.drag?.beforeTranslate ?? [0, 0];
-  const size = shouldConvertGroupSize ? groupResizeSizeToWorld({ width: event.width, height: event.height }) : { width: event.width, height: event.height };
-
-  event.target.setAttribute('transform', createPreviewTransform(element, translate, size));
-  updateShapePreviewSize(event.target, element, size);
-  updateTextPreviewPosition(event.target, size);
-  updateConnectedConnectorPreviews([
-    {
-      id,
-      position: {
-        x: element.position.x + domDeltaToWorld(translate[0]),
-        y: element.position.y + domDeltaToWorld(translate[1])
-      },
-      size
-    }
-  ]);
+  updateConnectedConnectorPreviews([override]);
 }
 
 /**
@@ -519,7 +557,12 @@ function handleDragEnd(event: MoveableDragEndEvent): void {
  * @param event - Moveable 多目标拖动过程事件
  */
 function handleDragGroup(event: MoveableGroupEvent<MoveableDragEvent>): void {
-  event.events?.forEach(handleDrag);
+  const overrides = event.events?.map(previewDragEvent).filter((override): override is DrawingConnectorPathElementOverride => override !== null) ?? [];
+  if (!overrides.length) {
+    return;
+  }
+
+  updateConnectedConnectorPreviews(overrides);
 }
 
 /**
@@ -553,7 +596,15 @@ function handleResizeEnd(event: MoveableResizeEndEvent): void {
  * @param event - Moveable 多目标缩放过程事件
  */
 function handleResizeGroup(event: MoveableGroupEvent<MoveableResizeEvent>): void {
-  event.events?.forEach((resizeEvent: MoveableResizeEvent): void => handleResize(resizeEvent, true));
+  const overrides =
+    event.events
+      ?.map((resizeEvent: MoveableResizeEvent): DrawingConnectorPathElementOverride | null => previewResizeEvent(resizeEvent, true))
+      .filter((override): override is DrawingConnectorPathElementOverride => override !== null) ?? [];
+  if (!overrides.length) {
+    return;
+  }
+
+  updateConnectedConnectorPreviews(overrides);
 }
 
 /**
