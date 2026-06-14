@@ -53,17 +53,17 @@
 
     <section v-if="showStrokeControls" class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">描边</span>
-      <BColorPicker :value="strokeValue" format="hex" placement="rightTop" :align="{ offset: [20, 0] }" @change="handleColorClick('stroke', $event)" />
+      <ColorPalette :value="strokeValue" format="hex" @change="handleColorClick('stroke', $event)" />
     </section>
 
     <section v-if="showFillControls" class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">背景</span>
-      <BColorPicker :value="fillValue" format="hex" placement="rightTop" :align="{ offset: [20, 0] }" @change="handleColorClick('fill', $event)" />
+      <ColorPalette :value="fillValue" format="hex" @change="handleColorClick('fill', $event)" />
     </section>
 
     <section v-if="showTextControls" class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">文字</span>
-      <BColorPicker :value="textColorValue" format="hex" placement="rightTop" :align="{ offset: [20, 0] }" @change="handleColorClick('color', $event)" />
+      <ColorPalette :value="textColorValue" format="hex" @change="handleColorClick('color', $event)" />
     </section>
 
     <section v-if="showTextControls" class="b-drawing-style-panel__section">
@@ -183,7 +183,7 @@ import type {
   DrawingTextAlign
 } from '../types';
 import { computed } from 'vue';
-import BColorPicker from '@/components/BColorPicker/index.vue';
+import ColorPalette from './ColorPalette.vue';
 
 /**
  * 层级操作类型。
@@ -455,8 +455,7 @@ function getMarkerIconRotate(key: 'markerStart' | 'markerEnd', value: DrawingCon
   backdrop-filter: blur(12px);
 }
 
-.b-drawing-style-panel :deep(.b-color-picker__trigger),
-.b-drawing-style-panel :deep(.b-color-picker__presets) {
+.b-drawing-style-panel :deep(.color-palette) {
   width: max-content;
 }
 

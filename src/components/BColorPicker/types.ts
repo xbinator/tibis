@@ -25,8 +25,6 @@ export interface BColorPickerProps {
   readonly?: boolean;
   /** 输入框测试 ID */
   inputTestId?: string;
-  /** 快捷预设颜色列表 */
-  presetColors?: readonly string[];
   /** 下拉菜单位置 */
   placement?: BDropdownProps['placement'];
   /** 对齐方式 */
