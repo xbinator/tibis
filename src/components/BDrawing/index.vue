@@ -156,7 +156,6 @@ const { rootRef, viewportSize, isViewportReady } = useViewportSize();
 const {
   textEditingSession,
   textEditorValue,
-  textEditorRef,
   textEditorStyle,
   startTextEditing,
   startConnectorLabelEditing,
