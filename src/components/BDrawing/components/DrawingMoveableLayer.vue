@@ -168,7 +168,7 @@ const singleTarget = computed<boolean>(() => targets.value.length === 1);
 /** 是否展示 Moveable 控制层。 */
 const shouldShowMoveableLayer = computed<boolean>(() => props.enabled && targets.value.length > 0);
 /** Moveable 控制框与节点边界之间的视觉留白。 */
-const MOVEABLE_SELECTION_PADDING = { bottom: 4, left: 4, right: 4, top: 4 };
+const MOVEABLE_SELECTION_PADDING = { bottom: 0, left: 0, right: 0, top: 0 };
 /** Moveable 元素吸附方向，显式包含中心线和中线。 */
 const snapDirections: SnapDirections = {
   bottom: true,
