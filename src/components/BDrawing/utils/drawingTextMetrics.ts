@@ -15,6 +15,16 @@ import {
   DRAWING_TEXT_VERTICAL_PADDING
 } from '../constants/text';
 
+/**
+ * 渲染文本行。
+ */
+export interface DrawingTextLineItem {
+  /** 渲染文本 */
+  text: string;
+  /** 是否为空行 */
+  empty: boolean;
+}
+
 export {
   DRAWING_TEXT_DEFAULT_FONT_SIZE,
   DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
@@ -126,6 +136,63 @@ function measureDrawingTextLineWidth(line: string, fontSize: number, fontWeight:
 }
 
 /**
+ * 读取文本行渲染宽度。
+ * @param line - 文本行
+ * @param fontSize - 字号
+ * @param fontWeight - 字重
+ * @returns 文本行宽度
+ */
+function getDrawingTextLineWidth(line: string, fontSize: number, fontWeight: number): number {
+  return measureDrawingTextLineWidth(line, fontSize, fontWeight) ?? estimateDrawingTextLineWidth(line, fontSize);
+}
+
+/**
+ * 创建不自动换行的文本行。
+ * @param text - 文本内容
+ * @returns 文本行
+ */
+export function createDrawingTextLineItems(text: string): DrawingTextLineItem[] {
+  return text.split('\n').map((line: string): DrawingTextLineItem => ({ empty: !line, text: line || '\u00a0' }));
+}
+
+/**
+ * 按最大宽度拆分文本行。
+ * @param text - 文本内容
+ * @param maxWidth - 文本容器宽度
+ * @param style - 文本样式
+ * @returns 拆分后的文本行
+ */
+export function wrapDrawingTextLineItems(text: string, maxWidth: number, style?: DrawingElementStyle): DrawingTextLineItem[] {
+  const fontSize = style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
+  const fontWeight = style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT;
+  const maxContentWidth = Math.max(1, maxWidth - DRAWING_TEXT_HORIZONTAL_PADDING);
+
+  return text.split('\n').flatMap((paragraph: string): DrawingTextLineItem[] => {
+    if (!paragraph) {
+      return [{ empty: true, text: '\u00a0' }];
+    }
+
+    const lines: DrawingTextLineItem[] = [];
+    let currentLine = '';
+
+    for (const character of Array.from(paragraph)) {
+      const nextLine = `${currentLine}${character}`;
+      if (currentLine && getDrawingTextLineWidth(nextLine, fontSize, fontWeight) > maxContentWidth) {
+        lines.push({ empty: false, text: currentLine });
+        currentLine = character;
+        continue;
+      }
+
+      currentLine = nextLine;
+    }
+
+    lines.push({ empty: false, text: currentLine });
+
+    return lines;
+  });
+}
+
+/**
  * 按文本内容估算文本元素尺寸。
  * @param text - 文本内容
  * @param style - 文本样式
@@ -136,10 +203,7 @@ export function measureDrawingTextElementSize(text: string, style?: DrawingEleme
   const fontWeight = style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT;
   const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
   const lines = text.split('\n');
-  const maxLineWidth = Math.max(
-    1,
-    ...lines.map((line: string): number => measureDrawingTextLineWidth(line, fontSize, fontWeight) ?? estimateDrawingTextLineWidth(line, fontSize))
-  );
+  const maxLineWidth = Math.max(1, ...lines.map((line: string): number => getDrawingTextLineWidth(line, fontSize, fontWeight)));
 
   return {
     width: normalizeTextMetricValue(maxLineWidth + DRAWING_TEXT_HORIZONTAL_PADDING),

@@ -16,6 +16,7 @@ import {
   resizeDrawingElements,
   undoDrawingBoard,
   updateDrawingConnectorOptions,
+  updateDrawingConnectorLabel,
   updateDrawingElementStyle,
   updateDrawingNodeText
 } from '@/components/BDrawing/utils/boardTransforms';
@@ -307,6 +308,23 @@ describe('boardTransforms', (): void => {
       markerEnd: 'none',
       markerStart: 'arrow'
     });
+    expect(updated.history.past).toHaveLength(2);
+  });
+
+  it('updates connector label as one undoable history entry', (): void => {
+    const connected = addDrawingConnector(
+      createDrawingBoardState({
+        elements: [createShapeElement('node-1'), createShapeElement('node-2')]
+      }),
+      {
+        id: 'connector-1',
+        sourceId: 'node-1',
+        targetId: 'node-2'
+      }
+    );
+    const updated = updateDrawingConnectorLabel(connected, 'connector-1', '通过');
+
+    expect(expectConnectorElement(updated.elements[2]).label).toBe('通过');
     expect(updated.history.past).toHaveLength(2);
   });
 

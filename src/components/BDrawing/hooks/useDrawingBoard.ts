@@ -27,6 +27,7 @@ import {
   reorderDrawingElement,
   resizeDrawingElements,
   undoDrawingBoard,
+  updateDrawingConnectorLabel,
   updateDrawingConnectorOptions,
   updateDrawingElementStyle,
   updateDrawingNodeText
@@ -64,6 +65,8 @@ export interface UseDrawingBoardReturn {
   updateElementStyle: (elementId: string, style: DrawingElementStyleChange) => void;
   /** 更新连接线配置 */
   updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange) => void;
+  /** 更新连接线标签 */
+  updateConnectorLabel: (connectorId: string, label: string) => void;
   /** 删除选区 */
   deleteSelection: () => void;
   /** 更新节点文本 */
@@ -220,6 +223,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     updateElementStyle: (elementId: string, style: DrawingElementStyleChange): void => setState(updateDrawingElementStyle(state.value, elementId, style)),
     updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange): void =>
       setState(updateDrawingConnectorOptions(state.value, connectorId, options)),
+    updateConnectorLabel: (connectorId: string, label: string): void => setState(updateDrawingConnectorLabel(state.value, connectorId, label)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
     updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),
     reorderElement: (elementId: string, action: DrawingLayerAction): void => setState(reorderDrawingElement(state.value, elementId, action)),

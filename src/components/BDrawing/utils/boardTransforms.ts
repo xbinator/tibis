@@ -29,6 +29,9 @@ import { measureDrawingTextElementSize } from './drawingTextMetrics';
 export {
   DRAWING_TEXT_DEFAULT_FONT_SIZE,
   DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
+  DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE,
+  DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT,
+  DRAWING_CONNECTOR_LABEL_EDITOR_MIN_WIDTH,
   DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN,
   DRAWING_TEXT_HORIZONTAL_PADDING,
   DRAWING_TEXT_LINE_HEIGHT_RATIO,
@@ -483,6 +486,30 @@ export function updateDrawingConnectorOptions(state: DrawingBoardState, connecto
   connector.markerStart = options.markerStart ?? connector.markerStart;
   connector.markerEnd = options.markerEnd ?? connector.markerEnd;
   connector.curve = options.curve ?? connector.curve;
+
+  return withHistory(state, {
+    elements: nextElements,
+    edges: cloneDeep(state.edges),
+    selection: [...state.selection],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 更新连接线标签。
+ * @param state - 当前画板状态
+ * @param connectorId - 连接线 ID
+ * @param label - 新标签文本
+ * @returns 新画板状态
+ */
+export function updateDrawingConnectorLabel(state: DrawingBoardState, connectorId: string, label: string): DrawingBoardState {
+  const nextElements = cloneDeep(state.elements);
+  const connector = nextElements.find((item) => item.id === connectorId);
+  if (!connector || !isDrawingConnectorElement(connector)) {
+    return withError(state, new Error(`找不到连接线: ${connectorId}`));
+  }
+
+  connector.label = label.trim() ? label : undefined;
 
   return withHistory(state, {
     elements: nextElements,

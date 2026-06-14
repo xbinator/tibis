@@ -64,6 +64,11 @@ export interface DrawingElementMetadata {
 export type DrawingTextAlign = 'left' | 'center' | 'right';
 
 /**
+ * 文本垂直对齐方式。
+ */
+export type DrawingTextVerticalAlign = 'top' | 'middle' | 'bottom';
+
+/**
  * 画板元素样式。
  */
 export interface DrawingElementStyle {
@@ -81,6 +86,8 @@ export interface DrawingElementStyle {
   fontWeight?: number;
   /** 文字对齐方式 */
   textAlign?: DrawingTextAlign;
+  /** 文字垂直对齐方式 */
+  textVerticalAlign?: DrawingTextVerticalAlign;
   /** 透明度 */
   opacity?: number;
 }

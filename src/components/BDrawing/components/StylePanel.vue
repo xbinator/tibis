@@ -4,53 +4,6 @@
 -->
 <template>
   <aside v-if="element || connector || draftStyle || draftConnector" class="b-drawing-style-panel" @pointerdown.stop>
-    <!-- 层级控制区域 -->
-    <section v-if="showLayerControls" class="b-drawing-style-panel__section">
-      <span class="b-drawing-style-panel__label">层级</span>
-      <div class="b-drawing-style-panel__segments">
-        <button
-          class="b-drawing-style-panel__segment-button"
-          :disabled="!canBringToFront"
-          aria-label="置顶"
-          type="button"
-          title="置顶"
-          @click="handleLayerClick('bringToFront')"
-        >
-          <BIcon icon="lucide:arrow-up-to-line" :size="15" />
-        </button>
-        <button
-          class="b-drawing-style-panel__segment-button"
-          :disabled="!canBringForward"
-          aria-label="上移一层"
-          type="button"
-          title="上移一层"
-          @click="handleLayerClick('bringForward')"
-        >
-          <BIcon icon="lucide:arrow-up" :size="15" />
-        </button>
-        <button
-          class="b-drawing-style-panel__segment-button"
-          :disabled="!canSendBackward"
-          aria-label="下移一层"
-          type="button"
-          title="下移一层"
-          @click="handleLayerClick('sendBackward')"
-        >
-          <BIcon icon="lucide:arrow-down" :size="15" />
-        </button>
-        <button
-          class="b-drawing-style-panel__segment-button"
-          :disabled="!canSendToBack"
-          aria-label="置底"
-          type="button"
-          title="置底"
-          @click="handleLayerClick('sendToBack')"
-        >
-          <BIcon icon="lucide:arrow-down-to-line" :size="15" />
-        </button>
-      </div>
-    </section>
-
     <section v-if="showStrokeControls" class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">描边</span>
       <ColorPalette :value="strokeValue" format="hex" @change="handleColorClick('stroke', $event)" />
@@ -94,6 +47,23 @@
           :aria-label="option.label"
           type="button"
           @click="handleTextAlignClick(option.value)"
+        >
+          <BIcon :icon="option.icon" :size="15" />
+        </button>
+      </div>
+    </section>
+
+    <section v-if="showTextControls" class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">垂直</span>
+      <div class="b-drawing-style-panel__segments">
+        <button
+          v-for="option in textVerticalAlignOptions"
+          :key="option.value"
+          class="b-drawing-style-panel__segment-button"
+          :class="{ 'is-active': textVerticalAlignValue === option.value }"
+          :aria-label="option.label"
+          type="button"
+          @click="handleTextVerticalAlignClick(option.value)"
         >
           <BIcon :icon="option.icon" :size="15" />
         </button>
@@ -167,6 +137,53 @@
         </button>
       </div>
     </section>
+
+    <!-- 层级控制区域 -->
+    <section v-if="showLayerControls" class="b-drawing-style-panel__section">
+      <span class="b-drawing-style-panel__label">层级</span>
+      <div class="b-drawing-style-panel__segments">
+        <button
+          class="b-drawing-style-panel__segment-button"
+          :disabled="!canBringToFront"
+          aria-label="置顶"
+          type="button"
+          title="置顶"
+          @click="handleLayerClick('bringToFront')"
+        >
+          <BIcon icon="lucide:arrow-up-to-line" :size="15" />
+        </button>
+        <button
+          class="b-drawing-style-panel__segment-button"
+          :disabled="!canBringForward"
+          aria-label="上移一层"
+          type="button"
+          title="上移一层"
+          @click="handleLayerClick('bringForward')"
+        >
+          <BIcon icon="lucide:arrow-up" :size="15" />
+        </button>
+        <button
+          class="b-drawing-style-panel__segment-button"
+          :disabled="!canSendBackward"
+          aria-label="下移一层"
+          type="button"
+          title="下移一层"
+          @click="handleLayerClick('sendBackward')"
+        >
+          <BIcon icon="lucide:arrow-down" :size="15" />
+        </button>
+        <button
+          class="b-drawing-style-panel__segment-button"
+          :disabled="!canSendToBack"
+          aria-label="置底"
+          type="button"
+          title="置底"
+          @click="handleLayerClick('sendToBack')"
+        >
+          <BIcon icon="lucide:arrow-down-to-line" :size="15" />
+        </button>
+      </div>
+    </section>
   </aside>
 </template>
 
@@ -181,7 +198,8 @@ import type {
   DrawingElementStyle,
   DrawingElementStyleChange,
   DrawingShapeElement,
-  DrawingTextAlign
+  DrawingTextAlign,
+  DrawingTextVerticalAlign
 } from '../types';
 import { computed } from 'vue';
 import {
@@ -193,7 +211,8 @@ import {
   DRAWING_FONT_SIZE_OPTIONS,
   DRAWING_MARKER_OPTIONS,
   DRAWING_STROKE_WIDTH_OPTIONS,
-  DRAWING_TEXT_ALIGN_OPTIONS
+  DRAWING_TEXT_ALIGN_OPTIONS,
+  DRAWING_TEXT_VERTICAL_ALIGN_OPTIONS
 } from '../constants/style';
 import ColorPalette from './ColorPalette.vue';
 
@@ -279,12 +298,14 @@ const markerOptions = computed<readonly DrawingSegmentOption<DrawingConnectorMar
 const curveOptions = computed<readonly DrawingSegmentOption<DrawingConnectorCurveType>[]>(() => DRAWING_CURVE_OPTIONS);
 const fontSizeOptions = computed<readonly DrawingFontSizeOption[]>(() => DRAWING_FONT_SIZE_OPTIONS);
 const textAlignOptions = computed<readonly DrawingSegmentOption<DrawingTextAlign>[]>(() => DRAWING_TEXT_ALIGN_OPTIONS);
+const textVerticalAlignOptions = computed<readonly DrawingSegmentOption<DrawingTextVerticalAlign>[]>(() => DRAWING_TEXT_VERTICAL_ALIGN_OPTIONS);
 const showFillControls = computed<boolean>(() => Boolean(props.element || props.draftStyle));
 const showStrokeControls = computed<boolean>(() => !isTextElement.value);
-const showTextControls = computed<boolean>(() => isTextElement.value);
+const showTextControls = computed<boolean>(() => Boolean(props.element));
 const textColorValue = computed<string>(() => props.element?.style?.color ?? DRAWING_DEFAULT_TEXT_COLOR);
 const fontSizeValue = computed<number>(() => props.element?.style?.fontSize ?? 13);
 const textAlignValue = computed<DrawingTextAlign>(() => props.element?.style?.textAlign ?? 'center');
+const textVerticalAlignValue = computed<DrawingTextVerticalAlign>(() => props.element?.style?.textVerticalAlign ?? 'middle');
 const showConnectorControls = computed<boolean>(() => Boolean(props.connector || props.draftConnector));
 const markerStartValue = computed<DrawingConnectorMarkerType>(() => props.connector?.markerStart ?? props.draftConnector?.markerStart ?? 'none');
 const markerEndValue = computed<DrawingConnectorMarkerType>(() => props.connector?.markerEnd ?? props.draftConnector?.markerEnd ?? 'arrow');
@@ -336,6 +357,16 @@ function handleFontSizeClick(value: number): void {
 function handleTextAlignClick(value: DrawingTextAlign): void {
   emit('change', {
     textAlign: value
+  });
+}
+
+/**
+ * 处理文本垂直对齐点击。
+ * @param value - 垂直对齐方式
+ */
+function handleTextVerticalAlignClick(value: DrawingTextVerticalAlign): void {
+  emit('change', {
+    textVerticalAlign: value
   });
 }
 

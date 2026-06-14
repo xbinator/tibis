@@ -27,9 +27,11 @@
         :connector="connector"
         :elements="elements"
         :selected="selection.includes(connector.id)"
+        :editing="editingElementId === connector.id"
         :show-line="false"
         :show-markers="false"
         :show-selected-endpoints="false"
+        @edit="handleElementEdit"
         @select="handleElementSelect"
       />
       <DrawingNodeRenderer
@@ -57,9 +59,11 @@
         :key="connector.id"
         :connector="connector"
         :elements="elements"
+        :editing="editingElementId === connector.id"
         :show-hit="false"
         :show-line="true"
         :show-selected-endpoints="false"
+        @edit="handleElementEdit"
         @select="handleElementSelect"
       />
       <DrawingConnectorRenderer

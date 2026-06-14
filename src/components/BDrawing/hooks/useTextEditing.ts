@@ -2,13 +2,16 @@
  * @file useTextEditing.ts
  * @description BDrawing 文本节点编辑状态与 textarea 交互。
  */
-import type { DrawingSize, DrawingShapeElement } from '../types';
+import type { DrawingConnectorElement, DrawingElement, DrawingPoint, DrawingShapeElement, DrawingSize } from '../types';
 import type { UseDrawingBoardReturn } from './useDrawingBoard';
 import type { UseDrawingInteractionReturn } from './useDrawingInteraction';
 import type { UseDrawingViewportReturn } from './useDrawingViewport';
 import { computed, nextTick, ref } from 'vue';
 import type { CSSProperties, Ref } from 'vue';
 import {
+  DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE,
+  DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT,
+  DRAWING_CONNECTOR_LABEL_EDITOR_MIN_WIDTH,
   DRAWING_TEXT_DEFAULT_FONT_SIZE,
   DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
   DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN,
@@ -17,7 +20,19 @@ import {
   DRAWING_TEXT_VERTICAL_PADDING,
   measureDrawingTextElementSize
 } from '../utils/boardTransforms';
-import { findDrawingShapeElement } from '../utils/drawingGeometry';
+import {
+  findDrawingShapeElement,
+  getDrawingConnectorAnchorPoint,
+  getDrawingLineLabelPosition,
+  getDrawingShapeRenderSize,
+  isDrawingConnectorElement
+} from '../utils/drawingGeometry';
+import { wrapDrawingTextLineItems } from '../utils/drawingTextMetrics';
+
+/**
+ * 文本编辑目标类型。
+ */
+type TextEditingTargetKind = 'shape' | 'connector';
 
 /**
  * 文本节点编辑会话。
@@ -25,6 +40,8 @@ import { findDrawingShapeElement } from '../utils/drawingGeometry';
 export interface TextEditingSession {
   /** 正在编辑的元素 ID */
   id: string;
+  /** 正在编辑的目标类型 */
+  kind: TextEditingTargetKind;
   /** 进入编辑前的原始文本 */
   originalText: string;
   /** 是否为刚创建的文本节点 */
@@ -61,6 +78,8 @@ export interface UseTextEditingReturn {
   textEditorStyle: Ref<CSSProperties>;
   /** 开始编辑文本节点 */
   startTextEditing: (element: DrawingShapeElement, isNew: boolean) => Promise<void>;
+  /** 开始编辑连接线标签 */
+  startConnectorLabelEditing: (element: DrawingConnectorElement) => Promise<void>;
   /** 提交文本编辑内容 */
   commitTextEditor: () => void;
   /** 取消文本编辑 */
@@ -81,22 +100,75 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
   const textEditorValue = ref<string>('');
   const textEditorRef = ref<HTMLTextAreaElement | null>(null);
 
-  /** 文本编辑框定位样式。 */
-  const textEditorStyle = computed<CSSProperties>(() => {
-    const session = textEditingSession.value;
-    const element = session ? findDrawingShapeElement(options.board.state.value.elements, session.id) : null;
-    if (!element) {
-      return {};
+  /**
+   * 读取当前编辑的连接线元素。
+   * @param id - 连接线 ID
+   * @returns 连接线元素
+   */
+  function findConnectorElement(id: string): DrawingConnectorElement | null {
+    const element = options.board.state.value.elements.find((item: DrawingElement): boolean => item.id === id);
+
+    return element && isDrawingConnectorElement(element) ? element : null;
+  }
+
+  /**
+   * 将画板坐标转换为浏览器固定定位坐标。
+   * @param point - 画板坐标
+   * @returns 浏览器坐标
+   */
+  function projectBoardPointToClient(point: DrawingPoint): DrawingPoint {
+    const { center, zoom } = options.board.state.value.viewport;
+    const rootRect = options.rootRef.value?.getBoundingClientRect();
+
+    return {
+      x: (rootRect?.left ?? 0) + options.viewportSize.value.width / 2 + (point.x - center.x) * zoom,
+      y: (rootRect?.top ?? 0) + options.viewportSize.value.height / 2 + (point.y - center.y) * zoom
+    };
+  }
+
+  /**
+   * 读取普通形状文本编辑框在形状内的顶部偏移。
+   * @param element - 形状元素
+   * @param shapeHeight - 形状高度
+   * @param editorHeight - 编辑框高度
+   * @returns 顶部偏移
+   */
+  function getShapeTextEditorTopOffset(element: DrawingShapeElement, shapeHeight: number, editorHeight: number): number {
+    if (element.shape === 'text') {
+      return 0;
+    }
+    if (element.style?.textVerticalAlign === 'top') {
+      return 0;
+    }
+    if (element.style?.textVerticalAlign === 'bottom') {
+      return Math.max(0, shapeHeight - editorHeight);
     }
 
-    const { center, zoom } = options.board.state.value.viewport;
+    return Math.max(0, (shapeHeight - editorHeight) / 2);
+  }
+
+  /**
+   * 创建形状文本编辑框样式。
+   * @param element - 形状元素
+   * @returns 编辑框样式
+   */
+  function createShapeTextEditorStyle(element: DrawingShapeElement): CSSProperties {
+    const { zoom } = options.board.state.value.viewport;
+    const isStandaloneText = element.shape === 'text';
     const fontSize = element.style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
     const fontWeight = element.style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT;
     const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
-    const size = measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
-    const rootRect = options.rootRef.value?.getBoundingClientRect();
-    const left = (rootRect?.left ?? 0) + options.viewportSize.value.width / 2 + (element.position.x - center.x) * zoom;
-    const top = (rootRect?.top ?? 0) + options.viewportSize.value.height / 2 + (element.position.y - center.y) * zoom;
+    const renderSize = isStandaloneText
+      ? measureDrawingTextElementSize(textEditorValue.value || element.text, element.style)
+      : getDrawingShapeRenderSize(element);
+    const editorHeight = isStandaloneText
+      ? renderSize.height
+      : wrapDrawingTextLineItems(textEditorValue.value || element.text, renderSize.width, element.style).length * lineHeight + DRAWING_TEXT_VERTICAL_PADDING;
+    const editorTopOffset = getShapeTextEditorTopOffset(element, renderSize.height, editorHeight);
+    const position = projectBoardPointToClient({
+      x: element.position.x,
+      y: element.position.y + editorTopOffset
+    });
 
     return {
       background: 'transparent',
@@ -104,16 +176,93 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
       boxShadow: 'none',
       fontSize: `${fontSize * zoom}px`,
       fontWeight: String(fontWeight),
-      height: `${size.height * zoom}px`,
-      left: `${left}px`,
+      height: `${editorHeight * zoom}px`,
+      left: `${position.x}px`,
       lineHeight: `${lineHeight * zoom}px`,
+      overflowWrap: isStandaloneText ? undefined : 'anywhere',
       padding: `${DRAWING_TEXT_VERTICAL_PADDING * zoom}px ${DRAWING_TEXT_HORIZONTAL_PADDING * zoom}px`,
       position: 'fixed',
       textAlign: element.style?.textAlign ?? 'center',
-      top: `${top}px`,
-      whiteSpace: 'pre',
-      width: `${size.width * zoom}px`
+      top: `${position.y}px`,
+      whiteSpace: isStandaloneText ? 'pre' : 'pre-wrap',
+      wordBreak: isStandaloneText ? undefined : 'break-word',
+      width: `${renderSize.width * zoom}px`
     };
+  }
+
+  /**
+   * 读取连接线标签中心点。
+   * @param connector - 连接线元素
+   * @returns 标签中心点
+   */
+  function getConnectorLabelCenter(connector: DrawingConnectorElement): DrawingPoint | null {
+    const source = findDrawingShapeElement(options.board.state.value.elements, connector.source.elementId);
+    const target = findDrawingShapeElement(options.board.state.value.elements, connector.target.elementId);
+    if (!source || !target) {
+      return null;
+    }
+
+    return getDrawingLineLabelPosition(
+      getDrawingConnectorAnchorPoint(source, connector.source.anchor),
+      getDrawingConnectorAnchorPoint(target, connector.target.anchor)
+    );
+  }
+
+  /**
+   * 创建连线标签编辑框样式。
+   * @param connector - 连接线元素
+   * @returns 编辑框样式
+   */
+  function createConnectorLabelEditorStyle(connector: DrawingConnectorElement): CSSProperties {
+    const { zoom } = options.board.state.value.viewport;
+    const fontSize = connector.style?.fontSize ?? DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE;
+    const fontWeight = connector.style?.fontWeight ?? DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT;
+    const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
+    const size = measureDrawingTextElementSize(textEditorValue.value || connector.label || '', {
+      fontSize,
+      fontWeight
+    });
+    const width = Math.max(size.width, DRAWING_CONNECTOR_LABEL_EDITOR_MIN_WIDTH);
+    const center = getConnectorLabelCenter(connector) ?? { x: 0, y: 0 };
+    const position = projectBoardPointToClient({
+      x: center.x - width / 2,
+      y: center.y - size.height / 2
+    });
+
+    return {
+      background: 'var(--bg-primary)',
+      border: '1px solid var(--color-primary)',
+      boxShadow: '0 4px 12px rgba(15, 23, 42, 0.12)',
+      fontSize: `${fontSize * zoom}px`,
+      fontWeight: String(fontWeight),
+      height: `${size.height * zoom}px`,
+      left: `${position.x}px`,
+      lineHeight: `${lineHeight * zoom}px`,
+      padding: `${DRAWING_TEXT_VERTICAL_PADDING * zoom}px ${DRAWING_TEXT_HORIZONTAL_PADDING * zoom}px`,
+      position: 'fixed',
+      textAlign: 'center',
+      top: `${position.y}px`,
+      whiteSpace: 'pre',
+      width: `${width * zoom}px`
+    };
+  }
+
+  /** 文本编辑框定位样式。 */
+  const textEditorStyle = computed<CSSProperties>(() => {
+    const session = textEditingSession.value;
+    if (!session) {
+      return {};
+    }
+
+    if (session.kind === 'connector') {
+      const connector = findConnectorElement(session.id);
+
+      return connector ? createConnectorLabelEditorStyle(connector) : {};
+    }
+
+    const element = findDrawingShapeElement(options.board.state.value.elements, session.id);
+
+    return element ? createShapeTextEditorStyle(element) : {};
   });
 
   /**
@@ -153,18 +302,23 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
    */
   function keepTextEditorInViewport(): void {
     const session = textEditingSession.value;
-    const element = session ? findDrawingShapeElement(options.board.state.value.elements, session.id) : null;
     const rootRect = options.rootRef.value?.getBoundingClientRect();
-    if (!element || !rootRect?.width || !rootRect.height) {
+    if (!session || !rootRect?.width || !rootRect.height) {
       return;
     }
 
     const { center, zoom } = options.board.state.value.viewport;
-    const size = measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
-    const editorLeft = rootRect.left + rootRect.width / 2 + (element.position.x - center.x) * zoom;
-    const editorTop = rootRect.top + rootRect.height / 2 + (element.position.y - center.y) * zoom;
-    const editorRight = editorLeft + size.width * zoom;
-    const editorBottom = editorTop + size.height * zoom;
+    const style = textEditorStyle.value;
+    const editorLeft = Number(String(style.left ?? '0').replace('px', ''));
+    const editorTop = Number(String(style.top ?? '0').replace('px', ''));
+    const editorWidth = Number(String(style.width ?? '0').replace('px', ''));
+    const editorHeight = Number(String(style.height ?? '0').replace('px', ''));
+    if (!editorWidth || !editorHeight) {
+      return;
+    }
+
+    const editorRight = editorLeft + editorWidth;
+    const editorBottom = editorTop + editorHeight;
     const minLeft = rootRect.left + DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN;
     const maxRight = rootRect.right - DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN;
     const minTop = rootRect.top + DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN;
@@ -216,10 +370,30 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
   async function startTextEditing(element: DrawingShapeElement, isNew: boolean): Promise<void> {
     textEditingSession.value = {
       id: element.id,
+      kind: 'shape',
       originalText: element.text,
       isNew
     };
     textEditorValue.value = element.text;
+    await nextTick();
+    syncTextEditorContent();
+    textEditorRef.value?.focus();
+    selectTextEditorContent();
+    scheduleTextEditorViewportKeepAlive();
+  }
+
+  /**
+   * 开始编辑连接线标签。
+   * @param element - 连接线元素
+   */
+  async function startConnectorLabelEditing(element: DrawingConnectorElement): Promise<void> {
+    textEditingSession.value = {
+      id: element.id,
+      kind: 'connector',
+      originalText: element.label ?? '',
+      isNew: false
+    };
+    textEditorValue.value = element.label ?? '';
     await nextTick();
     syncTextEditorContent();
     textEditorRef.value?.focus();
@@ -257,9 +431,24 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
 
     const nextText = textEditorValue.value;
     clearTextEditing();
+    if (session.kind === 'connector') {
+      if (nextText !== session.originalText) {
+        options.board.updateConnectorLabel(session.id, nextText);
+      }
+      return;
+    }
+
+    const element = findDrawingShapeElement(options.board.state.value.elements, session.id);
     if (!nextText.trim()) {
-      options.board.setSelection([session.id]);
-      options.interaction.deleteSelection();
+      if (element?.shape === 'text') {
+        options.board.setSelection([session.id]);
+        options.interaction.deleteSelection();
+        return;
+      }
+
+      if (nextText !== session.originalText) {
+        options.board.updateNodeText(session.id, nextText);
+      }
       return;
     }
 
@@ -278,7 +467,7 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
     }
 
     clearTextEditing();
-    if (session.isNew) {
+    if (session.kind === 'shape' && session.isNew) {
       options.board.setSelection([session.id]);
       options.interaction.deleteSelection();
     }
@@ -323,6 +512,7 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
     textEditorRef,
     textEditorStyle,
     startTextEditing,
+    startConnectorLabelEditing,
     commitTextEditor,
     cancelTextEditor,
     handleTextEditorInput,

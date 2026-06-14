@@ -63,7 +63,6 @@
       class="b-drawing__text-editor"
       data-testid="drawing-text-editor"
       spellcheck="false"
-      wrap="off"
       :style="textEditorStyle"
       @blur="commitTextEditor"
       @input="handleTextEditorInput"
@@ -160,6 +159,7 @@ const {
   textEditorRef,
   textEditorStyle,
   startTextEditing,
+  startConnectorLabelEditing,
   commitTextEditor,
   handleTextEditorInput,
   handleTextEditorKeydown
@@ -1074,13 +1074,18 @@ function handleElementSelect(id: string, event: PointerEvent): void {
 async function handleElementEdit(id: string): Promise<void> {
   cancelPendingTextElementCreate();
   const element = getElementById(id);
-  if (!element || isDrawingConnectorElement(element) || element.shape !== 'text') {
+  if (!element) {
     return;
   }
 
   cancelDirectDrag();
   board.setSelection([id]);
   setActiveTool('select');
+  if (isDrawingConnectorElement(element)) {
+    await startConnectorLabelEditing(element);
+    return;
+  }
+
   await startTextEditing(element, false);
 }
 

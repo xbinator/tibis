@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
 import DrawingEdgeRenderer from '@/components/BDrawing/renderers/DrawingEdge.vue';
 import DrawingNodeRenderer from '@/components/BDrawing/renderers/DrawingNode.vue';
-import type { DrawingData, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import type { DrawingConnectorElement, DrawingData, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import { measureDrawingTextElementSize } from '@/components/BDrawing/utils/boardTransforms';
 
 const selectoMockState = vi.hoisted(() => ({
@@ -53,6 +53,68 @@ function createDrawingDataFixture(): DrawingData {
     edges: [],
     viewport: {
       center: { x: 10, y: 20 },
+      zoom: 1
+    }
+  };
+}
+
+/**
+ * 创建支持连接线标签编辑的测试画板数据。
+ * @returns 包含两个节点和一条连接线的画板数据
+ */
+function createConnectorLabelDrawingDataFixture(): DrawingData {
+  const source: DrawingShapeElement = {
+    id: 'node-1',
+    kind: 'shape',
+    shape: 'rect',
+    text: '开始',
+    position: { x: 20, y: 30 },
+    size: { width: 180, height: 72 },
+    rotation: 0,
+    metadata: {
+      source: 'user',
+      createdAt: 1
+    }
+  };
+  const target: DrawingShapeElement = {
+    id: 'node-2',
+    kind: 'shape',
+    shape: 'rect',
+    text: '结束',
+    position: { x: 260, y: 30 },
+    size: { width: 180, height: 72 },
+    rotation: 0,
+    metadata: {
+      source: 'user',
+      createdAt: 2
+    }
+  };
+  const connector: DrawingConnectorElement = {
+    id: 'connector-1',
+    kind: 'connector',
+    source: {
+      elementId: source.id,
+      anchor: 'center'
+    },
+    target: {
+      elementId: target.id,
+      anchor: 'center'
+    },
+    label: '',
+    position: { x: 0, y: 0 },
+    size: { width: 0, height: 0 },
+    rotation: 0,
+    metadata: {
+      source: 'user',
+      createdAt: 3
+    }
+  };
+
+  return {
+    elements: [source, target, connector],
+    edges: [],
+    viewport: {
+      center: { x: 0, y: 0 },
       zoom: 1
     }
   };
@@ -276,6 +338,17 @@ const DRAWING_STYLE_COLOR_TARGET_LABEL: Record<DrawingStyleColorTarget, string> 
  */
 function findDrawingStylePanel(wrapper: VueWrapper): DOMWrapper<Element> {
   return wrapper.find('.b-drawing-style-panel');
+}
+
+/**
+ * 读取样式面板区块标题。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 区块标题列表
+ */
+function readDrawingStylePanelSectionLabels(wrapper: VueWrapper): string[] {
+  return findDrawingStylePanel(wrapper)
+    .findAll('.b-drawing-style-panel__label')
+    .map((label: DOMWrapper<Element>): string => label.text());
 }
 
 /**
@@ -964,7 +1037,7 @@ describe('BDrawing', (): void => {
     const editor = findDrawingTextEditor(wrapper);
     expect(editor.exists()).toBe(true);
     expect(editor.element.tagName).toBe('TEXTAREA');
-    expect(editor.attributes('wrap')).toBe('off');
+    expect(editor.attributes('wrap')).toBeUndefined();
     expect(editor.element.style.position).toBe('fixed');
     expect(editor.element.style.whiteSpace).toBe('pre');
     expect(editor.element.style.background).toBe('transparent');
@@ -1153,6 +1226,70 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-node"]').text()).toContain('新标题');
   });
 
+  it('opens the text editor when double clicking a regular shape', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+
+    await findDrawingNodeById(wrapper, 'external-node-1').trigger('dblclick');
+    const editor = findDrawingTextEditor(wrapper);
+    expect(editor.exists()).toBe(true);
+    expect(readDrawingTextEditorValue(editor)).toBe('外部节点');
+
+    await setDrawingTextEditorValue(editor, '流程说明');
+    await editor.trigger('blur');
+
+    expect(findDrawingNodeById(wrapper, 'external-node-1').text()).toContain('流程说明');
+  });
+
+  it('wraps regular shape text within the shape width while editing commits long text', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+
+    await findDrawingNodeById(wrapper, 'external-node-1').trigger('dblclick');
+    const editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '这是一个会超过普通形状宽度并自动换行的说明文本');
+    await editor.trigger('blur');
+
+    expect(findDrawingNodeById(wrapper, 'external-node-1').findAll('.b-drawing-node__text-line').length).toBeGreaterThan(1);
+  });
+
+  it('keeps standalone text elements unconstrained by the shape width', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    const editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '这是一个独立文本元素不应该被形状宽度自动换行的长标题');
+    await editor.trigger('blur');
+
+    expect(wrapper.findAll('.b-drawing-node__text-line')).toHaveLength(1);
+  });
+
+  it('opens the text editor when double clicking a connector and commits its label', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createConnectorLabelDrawingDataFixture()
+      }
+    });
+
+    await wrapper.find('.b-drawing-connector.b-drawing-element').trigger('dblclick');
+    const editor = findDrawingTextEditor(wrapper);
+    expect(editor.exists()).toBe(true);
+    expect(readDrawingTextEditorValue(editor)).toBe('');
+
+    await setDrawingTextEditorValue(editor, '通过');
+    await editor.trigger('blur');
+
+    expect(wrapper.find('.b-drawing-connector__label').text()).toBe('通过');
+  });
+
   it('hides the rendered text and Moveable controls while editing a text node', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -1299,6 +1436,60 @@ describe('BDrawing', (): void => {
     expect(text.attributes('fill')).toBe('#ef4444');
     expect(text.attributes('text-anchor')).toBe('start');
     expect((text.element as SVGTextElement).style.fontSize).toBe('18px');
+  });
+
+  it('updates regular shape text horizontal and vertical alignment from the style panel', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+
+    await findDrawingNodeById(wrapper, 'external-node-1').trigger('dblclick');
+    const editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '第一行\n第二行');
+    await editor.trigger('blur');
+
+    await findDrawingStylePanel(wrapper).find('[aria-label="左对齐"]').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="底部对齐"]').trigger('click');
+
+    const text = findDrawingNodeById(wrapper, 'external-node-1').find('.b-drawing-node__text');
+    expect(text.attributes('text-anchor')).toBe('start');
+    expect(Number(text.attributes('y'))).toBeGreaterThan(40);
+  });
+
+  it('aligns the regular shape text editor with the rendered vertical text position', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+
+    await findDrawingNodeById(wrapper, 'external-node-1').trigger('dblclick');
+    let editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '第一行\n第二行');
+    await editor.trigger('blur');
+    await findDrawingStylePanel(wrapper).find('[aria-label="底部对齐"]').trigger('click');
+
+    await findDrawingNodeById(wrapper, 'external-node-1').trigger('dblclick');
+    editor = findDrawingTextEditor(wrapper);
+
+    expect(readInlinePixelValue(editor.element.style.top)).toBeGreaterThan(40);
+  });
+
+  it('places layer controls at the bottom of the style panel', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+
+    await findDrawingNodeById(wrapper, 'external-node-1').trigger('pointerdown');
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+
+    const labels = readDrawingStylePanelSectionLabels(wrapper);
+    expect(labels.at(-1)).toBe('层级');
   });
 
   it('centers rendered text lines within the measured text bounds', async (): Promise<void> => {

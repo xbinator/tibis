@@ -39,6 +39,21 @@ export const DRAWING_TEXT_LINE_HEIGHT_RATIO = 1.35;
 export const DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN = 24;
 
 /**
+ * 连线标签默认字号。
+ */
+export const DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE = 12;
+
+/**
+ * 连线标签默认字重。
+ */
+export const DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT = 600;
+
+/**
+ * 空连线标签进入编辑时的最小宽度。
+ */
+export const DRAWING_CONNECTOR_LABEL_EDITOR_MIN_WIDTH = 64;
+
+/**
  * 窄拉丁字符宽度估算比例。
  */
 export const DRAWING_TEXT_NARROW_CHARACTER_WIDTH_RATIO = 0.34;

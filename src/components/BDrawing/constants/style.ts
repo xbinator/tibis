@@ -2,7 +2,7 @@
  * @file style.ts
  * @description BDrawing 样式面板、颜色和连接线选项常量。
  */
-import type { DrawingConnectorCurveType, DrawingConnectorMarkerType, DrawingTextAlign } from '../types';
+import type { DrawingConnectorCurveType, DrawingConnectorMarkerType, DrawingTextAlign, DrawingTextVerticalAlign } from '../types';
 
 /**
  * 描边宽度选项。
@@ -120,4 +120,13 @@ export const DRAWING_TEXT_ALIGN_OPTIONS: readonly DrawingSegmentOption<DrawingTe
   { value: 'left', label: '左对齐', icon: 'lucide:align-left' },
   { value: 'center', label: '居中对齐', icon: 'lucide:align-center' },
   { value: 'right', label: '右对齐', icon: 'lucide:align-right' }
+];
+
+/**
+ * 文本垂直对齐选项。
+ */
+export const DRAWING_TEXT_VERTICAL_ALIGN_OPTIONS: readonly DrawingSegmentOption<DrawingTextVerticalAlign>[] = [
+  { value: 'top', label: '顶部对齐', icon: 'lucide:align-vertical-justify-start' },
+  { value: 'middle', label: '垂直居中', icon: 'lucide:align-vertical-justify-center' },
+  { value: 'bottom', label: '底部对齐', icon: 'lucide:align-vertical-justify-end' }
 ];

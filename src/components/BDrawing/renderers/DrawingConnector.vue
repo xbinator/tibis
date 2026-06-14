@@ -8,6 +8,7 @@
     class="b-drawing-connector"
     :class="{ 'b-drawing-element': showHit || showLine, 'is-selected': selected }"
     :data-drawing-element-id="connector.id"
+    @dblclick.stop="emit('edit', connector.id, $event)"
     @pointerdown.stop="handlePointerdown"
   >
     <path v-if="showHit" class="b-drawing-connector__hit" :d="pathData" />
@@ -20,13 +21,17 @@
       <circle class="b-drawing-connector__endpoint" :cx="endpointPositions.source.x" :cy="endpointPositions.source.y" r="4.5" />
       <circle class="b-drawing-connector__endpoint" :cx="endpointPositions.target.x" :cy="endpointPositions.target.y" r="4.5" />
     </g>
-    <text v-if="showLine && connector.label" class="b-drawing-connector__label" :x="labelPosition.x" :y="labelPosition.y">{{ connector.label }}</text>
+    <text v-if="showLine && connector.label && !editing" class="b-drawing-connector__label" :style="labelStyle" :x="labelPosition.x" :y="labelPosition.y">
+      {{ connector.label }}
+    </text>
   </g>
 </template>
 
 <script setup lang="ts">
 import type { DrawingConnectorAnchor, DrawingConnectorElement, DrawingElement, DrawingPoint } from '../types';
+import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
+import { DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE, DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT } from '../constants/text';
 import {
   createDrawingConnectorMarkerPath,
   createDrawingConnectorPath,
@@ -53,6 +58,8 @@ interface Props {
   showMarkers?: boolean;
   /** 是否渲染选中端点 */
   showSelectedEndpoints?: boolean;
+  /** 是否处于标签编辑态 */
+  editing?: boolean;
 }
 
 /**
@@ -66,6 +73,7 @@ interface ConnectorEndpointPositions {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  editing: false,
   selected: false,
   showHit: true,
   showLine: true,
@@ -73,6 +81,8 @@ const props = withDefaults(defineProps<Props>(), {
   showSelectedEndpoints: true
 });
 const emit = defineEmits<{
+  /** 编辑连接线 */
+  edit: [id: string, event: MouseEvent];
   /** 选择连接线 */
   select: [id: string, event: PointerEvent];
 }>();
@@ -121,6 +131,11 @@ const labelPosition = computed<DrawingPoint>(() => {
 
   return getDrawingLineLabelPosition(source.value, target.value);
 });
+/** 连线标签样式。 */
+const labelStyle = computed<CSSProperties>(() => ({
+  fontSize: `${props.connector.style?.fontSize ?? DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE}px`,
+  fontWeight: String(props.connector.style?.fontWeight ?? DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT)
+}));
 
 /**
  * 处理连接线指针按下。

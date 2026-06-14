@@ -94,9 +94,11 @@ import {
   DRAWING_TEXT_DEFAULT_FONT_SIZE,
   DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
   DRAWING_TEXT_HORIZONTAL_PADDING,
-  DRAWING_TEXT_LINE_HEIGHT_RATIO
+  DRAWING_TEXT_LINE_HEIGHT_RATIO,
+  DRAWING_TEXT_VERTICAL_PADDING
 } from '../utils/boardTransforms';
 import { createDrawingDiamondPoints, createDrawingElementTransform, getDrawingShapeRenderSize, isDrawingDiamondShape } from '../utils/drawingGeometry';
+import { createDrawingTextLineItems, wrapDrawingTextLineItems } from '../utils/drawingTextMetrics';
 
 /**
  * 节点组件入参。
@@ -158,7 +160,7 @@ const textStyle = computed<CSSProperties>(() => ({
 }));
 /** 节点文本按换行拆分后的渲染行，空行使用占位保证 SVG 行距稳定。 */
 const textLineItems = computed<Array<{ text: string; empty: boolean }>>(() =>
-  props.node.text.split('\n').map((line: string): { text: string; empty: boolean } => ({ empty: !line, text: line || '\u00a0' }))
+  isTextShape.value ? createDrawingTextLineItems(props.node.text) : wrapDrawingTextLineItems(props.node.text, renderSize.value.width, props.node.style)
 );
 /** 文本锚点。 */
 const textAnchor = computed<'start' | 'middle' | 'end'>(() => {
@@ -182,8 +184,21 @@ const textX = computed<number>(() => {
 
   return renderSize.value.width / 2;
 });
-/** 文本纵向位置，按整块文本在节点外框内垂直居中。 */
-const textY = computed<number>(() => renderSize.value.height / 2 - ((textLineItems.value.length - 1) * textLineHeight.value) / 2);
+/** 文本块高度。 */
+const textBlockHeight = computed<number>(() => Math.max(1, textLineItems.value.length) * textLineHeight.value);
+/** 文本纵向位置，按配置在节点外框内垂直对齐。 */
+const textY = computed<number>(() => {
+  const verticalPadding = DRAWING_TEXT_VERTICAL_PADDING / 2;
+  const firstLineOffset = textLineHeight.value / 2;
+  if (props.node.style?.textVerticalAlign === 'top') {
+    return verticalPadding + firstLineOffset;
+  }
+  if (props.node.style?.textVerticalAlign === 'bottom') {
+    return renderSize.value.height - verticalPadding - textBlockHeight.value + firstLineOffset;
+  }
+
+  return renderSize.value.height / 2 - ((textLineItems.value.length - 1) * textLineHeight.value) / 2;
+});
 const connectorAnchors = computed<Array<{ id: Exclude<DrawingConnectorAnchor, 'center'>; x: number; y: number }>>(() => [
   { id: 'top', x: renderSize.value.width / 2, y: 0 },
   { id: 'right', x: renderSize.value.width, y: renderSize.value.height / 2 },
