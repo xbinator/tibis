@@ -12,13 +12,9 @@ import type {
   DrawingSize,
   DrawingViewport
 } from '../types';
-import { DRAWING_VIEWBOX_SIZE } from '../constants/defaults';
+import { DRAWING_ELEMENT_ID_ATTRIBUTE } from '../constants/dom';
+import { DRAWING_VIEWBOX_SIZE } from '../constants/viewport';
 import { measureDrawingTextElementSize } from './drawingTextMetrics';
-
-/**
- * 画布元素 ID 的 DOM 属性名。
- */
-export const DRAWING_ELEMENT_ID_ATTRIBUTE = 'data-drawing-element-id';
 
 /**
  * 浏览器矩形信息。

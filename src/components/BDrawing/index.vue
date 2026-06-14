@@ -4,7 +4,7 @@
 -->
 <template>
   <section ref="rootRef" class="b-drawing" tabindex="0" @keydown="handleKeydown">
-    <DrawingToolbar
+    <Toolbar
       :zoom="board.state.value.viewport.zoom"
       :active-tool="activeTool"
       :elements="board.state.value.elements"
@@ -21,7 +21,7 @@
       @set-center="viewport.setCenter"
       @set-zoom="viewport.setZoom"
     />
-    <DrawingStylePanel
+    <StylePanel
       :element="selectedShapeElement"
       :connector="selectedConnectorElement"
       :draft-style="activeCreateShape ? creationStyle : null"
@@ -32,7 +32,7 @@
       @connector-change="handleSelectedConnectorOptionsChange"
       @layer-change="handleLayerChange"
     />
-    <DrawingInfiniteViewport>
+    <InfiniteViewport>
       <DrawingCanvas
         :elements="board.state.value.elements"
         :edges="board.state.value.edges"
@@ -55,7 +55,7 @@
         @canvas-pointerup="handleCanvasPointerup"
         @canvas-wheel="handleCanvasWheel"
       />
-    </DrawingInfiniteViewport>
+    </InfiniteViewport>
     <textarea
       v-if="textEditingSession"
       ref="textEditorRef"
@@ -70,7 +70,7 @@
       @keydown.stop="handleTextEditorKeydown"
       @pointerdown.stop
     ></textarea>
-    <DrawingMoveableLayer
+    <MoveableLayer
       :enabled="activeTool === 'select' && !hideMoveableDuringDirectDrag && !textEditingSession"
       :root="rootRef"
       :elements="board.state.value.elements"
@@ -80,7 +80,7 @@
       @move="board.moveElements"
       @resize="board.resizeElements"
     />
-    <DrawingSelectoLayer :root="rootRef" :active-tool="activeTool" :selection="board.state.value.selection" @set-selection="board.setSelection" />
+    <SelectoLayer :root="rootRef" :active-tool="activeTool" :selection="board.state.value.selection" @set-selection="board.setSelection" />
   </section>
 </template>
 
@@ -103,28 +103,20 @@ import type {
   DrawingToolMode
 } from './types';
 import type { DrawingCanvasPointProjection, DrawingConnectorPathElementOverride } from './utils/drawingGeometry';
-import type { CSSProperties } from 'vue';
-import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useResizeObserver } from '@vueuse/core';
-import { isEqual } from 'lodash-es';
-import DrawingInfiniteViewport from './components/DrawingInfiniteViewport.vue';
-import DrawingMoveableLayer from './components/DrawingMoveableLayer.vue';
-import DrawingSelectoLayer from './components/DrawingSelectoLayer.vue';
-import DrawingStylePanel from './components/DrawingStylePanel.vue';
-import DrawingToolbar from './components/DrawingToolbar.vue';
+import { computed, onBeforeUnmount, ref, toRef } from 'vue';
+import InfiniteViewport from './components/InfiniteViewport.vue';
+import MoveableLayer from './components/MoveableLayer.vue';
+import SelectoLayer from './components/SelectoLayer.vue';
+import StylePanel from './components/StylePanel.vue';
+import Toolbar from './components/Toolbar.vue';
+import { DRAWING_SHAPE_TOOLS, DRAWING_TEXT_CREATE_CLICK_TOLERANCE, DRAWING_TEXT_ELEMENT_CLICK_CREATE_DELAY } from './constants/interaction';
 import { useDrawingBoard } from './hooks/useDrawingBoard';
 import { useDrawingInteraction } from './hooks/useDrawingInteraction';
 import { useDrawingViewport } from './hooks/useDrawingViewport';
+import { useModelSync } from './hooks/useModelSync';
+import { useTextEditing } from './hooks/useTextEditing';
+import { useViewportSize } from './hooks/useViewportSize';
 import DrawingCanvas from './renderers/DrawingCanvas.vue';
-import {
-  DRAWING_TEXT_DEFAULT_FONT_SIZE,
-  DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
-  DRAWING_TEXT_HORIZONTAL_PADDING,
-  DRAWING_TEXT_LINE_HEIGHT_RATIO,
-  DRAWING_TEXT_VERTICAL_PADDING,
-  createDrawingDataSnapshot,
-  measureDrawingTextElementSize
-} from './utils/boardTransforms';
 import {
   createDrawingConnectorPath,
   clientDeltaToDrawingDelta,
@@ -157,18 +149,34 @@ const board = useDrawingBoard(props.modelValue);
 const viewport = useDrawingViewport(board);
 const interaction = useDrawingInteraction(board);
 const activeTool = ref<DrawingToolMode>('select');
-let syncingModelValueToBoard = false;
 /** 创建工具激活时应用到下一个形状的样式。 */
 const creationStyle = ref<DrawingElementStyle>({});
 /** 连线工具激活时应用到下一条连接线的配置。 */
 const connectorCreationOptions = ref<DrawingConnectorDraftOptions>({});
-const rootRef = ref<HTMLElement | null>(null);
-/** 当前画布视口实际渲染尺寸。 */
-const viewportSize = ref<DrawingSize>({ width: 0, height: 0 });
-/** 画布首轮尺寸稳定后再显示 SVG，避免初始布局抖动产生黑框。 */
-const isViewportReady = ref<boolean>(false);
-let viewportReadyFrame: ReturnType<typeof requestAnimationFrame> | null = null;
-let viewportSizeSyncFrame: ReturnType<typeof requestAnimationFrame> | null = null;
+const { rootRef, viewportSize, isViewportReady } = useViewportSize();
+const {
+  textEditingSession,
+  textEditorValue,
+  textEditorRef,
+  textEditorStyle,
+  startTextEditing,
+  commitTextEditor,
+  handleTextEditorInput,
+  handleTextEditorKeydown
+} = useTextEditing({
+  board,
+  interaction,
+  rootRef,
+  viewport,
+  viewportSize
+});
+useModelSync({
+  board,
+  emitUpdate: (value: DrawingData): void => {
+    emit('update:modelValue', value);
+  },
+  modelValue: toRef(props, 'modelValue')
+});
 /** 当前历史栈是否允许撤销。 */
 const canUndo = computed<boolean>(() => board.state.value.history.past.length > 0);
 /** 当前历史栈是否允许重做。 */
@@ -202,48 +210,6 @@ const selectedElementIndex = computed<number>(() => {
 
   return board.state.value.elements.findIndex((item: DrawingElement): boolean => item.id === board.state.value.selection[0]);
 });
-
-/**
- * 判断外部画板数据与内部状态是否一致。
- * @param modelValue - 外部画板数据
- * @returns 是否一致
- */
-function isModelValueEqualToBoard(modelValue: DrawingData): boolean {
-  return isEqual(createDrawingDataSnapshot(modelValue), createDrawingDataSnapshot(board.state.value));
-}
-
-watch(
-  () => props.modelValue,
-  (modelValue: DrawingData | undefined): void => {
-    if (!modelValue || isModelValueEqualToBoard(modelValue)) {
-      return;
-    }
-
-    syncingModelValueToBoard = true;
-    board.reset(modelValue);
-    nextTick()
-      .then((): void => {
-        syncingModelValueToBoard = false;
-      })
-      .catch((error: unknown): void => {
-        syncingModelValueToBoard = false;
-        console.warn('BDrawing model sync failed', error);
-      });
-  },
-  { deep: true }
-);
-
-watch(
-  () => [board.state.value.elements, board.state.value.edges, board.state.value.viewport],
-  (): void => {
-    if (props.modelValue === undefined || syncingModelValueToBoard) {
-      return;
-    }
-
-    emit('update:modelValue', createDrawingDataSnapshot(board.state.value));
-  },
-  { deep: true }
-);
 
 /**
  * 直接拖拽节点会话。
@@ -311,18 +277,6 @@ interface PendingTextElementCreateSession {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-/**
- * 文本节点编辑会话。
- */
-interface TextEditingSession {
-  /** 正在编辑的元素 ID */
-  id: string;
-  /** 进入编辑前的原始文本 */
-  originalText: string;
-  /** 是否为刚创建的文本节点 */
-  isNew: boolean;
-}
-
 let directDragSession: DirectElementDragSession | null = null;
 let handPanSession: HandPanSession | null = null;
 let connectorDragSession: ConnectorDragSession | null = null;
@@ -332,175 +286,13 @@ let pendingTextElementCreateSession: PendingTextElementCreateSession | null = nu
 const isPanning = ref<boolean>(false);
 /** 创建连接线时当前 hover 的目标端点。 */
 const connectorHoverEndpoint = ref<DrawingConnectorEndpoint | null>(null);
-/** 当前文本编辑会话。 */
-const textEditingSession = ref<TextEditingSession | null>(null);
-/** 文本编辑输入值。 */
-const textEditorValue = ref<string>('');
-/** 文本编辑器 DOM。 */
-const textEditorRef = ref<HTMLTextAreaElement | null>(null);
-
-/** 可创建形状的工具列表 */
-const SHAPE_TOOLS: readonly DrawingShapeType[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
-/** 文本工具点击创建的最大拖动距离。 */
-const TEXT_CREATE_CLICK_TOLERANCE = 4;
-/** 文本工具点击已有元素后等待双击优先的延迟。 */
-const TEXT_ELEMENT_CLICK_CREATE_DELAY = 220;
-/** 文本编辑器与可视区边缘的最小间距。 */
-const TEXT_EDITOR_VIEWPORT_MARGIN = 24;
-
-/** 文本编辑框定位样式。 */
-const textEditorStyle = computed<CSSProperties>(() => {
-  const session = textEditingSession.value;
-  const element = session ? findDrawingShapeElement(board.state.value.elements, session.id) : null;
-  if (!element) {
-    return {};
-  }
-
-  const { center, zoom } = board.state.value.viewport;
-  const fontSize = element.style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
-  const fontWeight = element.style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT;
-  const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
-  const size = measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
-  const rootRect = rootRef.value?.getBoundingClientRect();
-  const left = (rootRect?.left ?? 0) + viewportSize.value.width / 2 + (element.position.x - center.x) * zoom;
-  const top = (rootRect?.top ?? 0) + viewportSize.value.height / 2 + (element.position.y - center.y) * zoom;
-
-  return {
-    background: 'transparent',
-    border: 'none',
-    boxShadow: 'none',
-    fontSize: `${fontSize * zoom}px`,
-    fontWeight: String(fontWeight),
-    height: `${size.height * zoom}px`,
-    left: `${left}px`,
-    lineHeight: `${lineHeight * zoom}px`,
-    padding: `${(DRAWING_TEXT_VERTICAL_PADDING / 2) * zoom}px ${(DRAWING_TEXT_HORIZONTAL_PADDING / 2) * zoom}px`,
-    position: 'fixed',
-    textAlign: element.style?.textAlign ?? 'center',
-    top: `${top}px`,
-    whiteSpace: 'pre',
-    width: `${size.width * zoom}px`
-  };
-});
-
-/**
- * 从 ResizeObserver 条目读取画布尺寸。
- * @param entry - ResizeObserver 条目
- * @returns 画布尺寸，无法读取时返回 null
- */
-function readResizeEntrySize(entry: ResizeObserverEntry): DrawingSize | null {
-  const boxSize = Array.isArray(entry.contentBoxSize) ? entry.contentBoxSize[0] : entry.contentBoxSize;
-  const width = boxSize?.inlineSize ?? entry.contentRect.width;
-  const height = boxSize?.blockSize ?? entry.contentRect.height;
-  if (!width || !height) {
-    return null;
-  }
-
-  return { width, height };
-}
-
-/**
- * 从 DOM 读取根视口尺寸。
- * @returns 画布尺寸，无法读取时返回 null
- */
-function readRootViewportSize(): DrawingSize | null {
-  const rect = rootRef.value?.getBoundingClientRect();
-  if (!rect?.width || !rect.height) {
-    return null;
-  }
-
-  return {
-    width: rect.width,
-    height: rect.height
-  };
-}
-
-/**
- * 取消待执行的首屏稳定性检查。
- */
-function cancelViewportReadyCheck(): void {
-  if (viewportReadyFrame === null) {
-    return;
-  }
-
-  cancelAnimationFrame(viewportReadyFrame);
-  viewportReadyFrame = null;
-}
-
-/**
- * 取消待执行的视口尺寸同步。
- */
-function cancelViewportSizeSync(): void {
-  if (viewportSizeSyncFrame === null) {
-    return;
-  }
-
-  cancelAnimationFrame(viewportSizeSyncFrame);
-  viewportSizeSyncFrame = null;
-}
-
-/**
- * 等待根视口尺寸跨帧稳定后再显示 SVG。
- */
-function scheduleViewportReadyCheck(): void {
-  if (isViewportReady.value) {
-    return;
-  }
-
-  cancelViewportReadyCheck();
-  viewportReadyFrame = requestAnimationFrame((): void => {
-    viewportReadyFrame = requestAnimationFrame((): void => {
-      viewportReadyFrame = null;
-      isViewportReady.value = true;
-    });
-  });
-}
-
-/**
- * 同步根视口尺寸。
- * @param size - 画布尺寸
- */
-function setViewportSize(size: DrawingSize): void {
-  viewportSize.value = size;
-  scheduleViewportReadyCheck();
-}
-
-/**
- * 从根 DOM 同步视口尺寸。
- */
-function syncViewportSizeFromRoot(): void {
-  const size = readRootViewportSize();
-  if (!size) {
-    return;
-  }
-
-  setViewportSize(size);
-}
-
-/**
- * 在 KeepAlive 激活后的下一帧同步根视口尺寸。
- */
-function scheduleViewportSizeSyncFromRoot(): void {
-  cancelViewportSizeSync();
-  isViewportReady.value = false;
-  nextTick()
-    .then((): void => {
-      viewportSizeSyncFrame = requestAnimationFrame((): void => {
-        viewportSizeSyncFrame = null;
-        syncViewportSizeFromRoot();
-      });
-    })
-    .catch((error: unknown): void => {
-      console.warn('BDrawing viewport size sync failed', error);
-    });
-}
 
 /**
  * 获取当前工具对应的创建形状。
  * @returns 可创建形状，不是形状工具时返回 null
  */
 function getActiveCreateShape(): DrawingShapeType | null {
-  return SHAPE_TOOLS.includes(activeTool.value as DrawingShapeType) ? (activeTool.value as DrawingShapeType) : null;
+  return DRAWING_SHAPE_TOOLS.includes(activeTool.value as DrawingShapeType) ? (activeTool.value as DrawingShapeType) : null;
 }
 
 /** 当前激活的创建形状。 */
@@ -547,7 +339,19 @@ function getElementTargetsById(id: string): Element[] {
  * @returns 画布渲染尺寸，无法读取时返回 null
  */
 function getCanvasSize(): DrawingSize | null {
-  return viewportSize.value.width && viewportSize.value.height ? { ...viewportSize.value } : readRootViewportSize();
+  if (viewportSize.value.width && viewportSize.value.height) {
+    return { ...viewportSize.value };
+  }
+
+  const rect = rootRef.value?.getBoundingClientRect();
+  if (!rect?.width || !rect.height) {
+    return null;
+  }
+
+  return {
+    width: rect.width,
+    height: rect.height
+  };
 }
 
 /**
@@ -842,214 +646,13 @@ function handleLayerChange(action: DrawingLayerAction): void {
 }
 
 /**
- * 结束当前文本编辑会话。
- */
-function clearTextEditing(): void {
-  textEditingSession.value = null;
-  textEditorValue.value = '';
-}
-
-/**
- * 同步文本编辑器 DOM 内容。
- */
-function syncTextEditorContent(): void {
-  const editor = textEditorRef.value;
-  if (!editor || editor.value === textEditorValue.value) {
-    return;
-  }
-
-  editor.value = textEditorValue.value;
-}
-
-/**
- * 选中文本编辑器内的全部内容。
- */
-function selectTextEditorContent(): void {
-  const editor = textEditorRef.value;
-  if (!editor) {
-    return;
-  }
-
-  editor.select();
-}
-
-/**
- * 确保文本编辑器保持在画板可视区域内。
- */
-function keepTextEditorInViewport(): void {
-  const session = textEditingSession.value;
-  const element = session ? findDrawingShapeElement(board.state.value.elements, session.id) : null;
-  const rootRect = rootRef.value?.getBoundingClientRect();
-  if (!element || !rootRect?.width || !rootRect.height) {
-    return;
-  }
-
-  const { center, zoom } = board.state.value.viewport;
-  const size = measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
-  const editorLeft = rootRect.left + rootRect.width / 2 + (element.position.x - center.x) * zoom;
-  const editorTop = rootRect.top + rootRect.height / 2 + (element.position.y - center.y) * zoom;
-  const editorRight = editorLeft + size.width * zoom;
-  const editorBottom = editorTop + size.height * zoom;
-  const minLeft = rootRect.left + TEXT_EDITOR_VIEWPORT_MARGIN;
-  const maxRight = rootRect.right - TEXT_EDITOR_VIEWPORT_MARGIN;
-  const minTop = rootRect.top + TEXT_EDITOR_VIEWPORT_MARGIN;
-  const maxBottom = rootRect.bottom - TEXT_EDITOR_VIEWPORT_MARGIN;
-  let nextCenterX = center.x;
-  let nextCenterY = center.y;
-
-  if (editorLeft < minLeft) {
-    nextCenterX += (editorLeft - minLeft) / zoom;
-  }
-  if (editorRight > maxRight) {
-    nextCenterX += (editorRight - maxRight) / zoom;
-  }
-  if (editorTop < minTop) {
-    nextCenterY += (editorTop - minTop) / zoom;
-  }
-  if (editorBottom > maxBottom) {
-    nextCenterY += (editorBottom - maxBottom) / zoom;
-  }
-
-  if (nextCenterX === center.x && nextCenterY === center.y) {
-    return;
-  }
-
-  viewport.setCenter({
-    x: Number(nextCenterX.toFixed(2)),
-    y: Number(nextCenterY.toFixed(2))
-  });
-}
-
-/**
- * 在下一轮 DOM 更新后修正文本编辑器可见区域。
- */
-function scheduleTextEditorViewportKeepAlive(): void {
-  nextTick()
-    .then((): void => {
-      keepTextEditorInViewport();
-    })
-    .catch((error: unknown): void => {
-      console.warn('BDrawing text editor viewport sync failed', error);
-    });
-}
-
-/**
- * 开始编辑文本节点。
- * @param element - 文本元素
- * @param isNew - 是否为刚创建的元素
- */
-async function startTextEditing(element: DrawingShapeElement, isNew: boolean): Promise<void> {
-  textEditingSession.value = {
-    id: element.id,
-    originalText: element.text,
-    isNew
-  };
-  textEditorValue.value = element.text;
-  await nextTick();
-  syncTextEditorContent();
-  textEditorRef.value?.focus();
-  selectTextEditorContent();
-  scheduleTextEditorViewportKeepAlive();
-}
-
-/**
- * 在当前编辑光标处插入纯文本。
- * @param text - 要插入的文本
- */
-function insertTextEditorPlainText(text: string): void {
-  const editor = textEditorRef.value;
-  if (!editor) {
-    return;
-  }
-
-  const { selectionStart, selectionEnd } = editor;
-  const nextValue = `${editor.value.slice(0, selectionStart)}${text}${editor.value.slice(selectionEnd)}`;
-  const nextCaret = selectionStart + text.length;
-  editor.value = nextValue;
-  editor.setSelectionRange(nextCaret, nextCaret);
-  textEditorValue.value = nextValue;
-  scheduleTextEditorViewportKeepAlive();
-}
-
-/**
- * 提交文本编辑内容。
- */
-function commitTextEditor(): void {
-  const session = textEditingSession.value;
-  if (!session) {
-    return;
-  }
-
-  const nextText = textEditorValue.value;
-  clearTextEditing();
-  if (!nextText.trim()) {
-    board.setSelection([session.id]);
-    interaction.deleteSelection();
-    return;
-  }
-
-  if (nextText !== session.originalText) {
-    board.updateNodeText(session.id, nextText);
-  }
-}
-
-/**
- * 取消文本编辑。
- */
-function cancelTextEditor(): void {
-  const session = textEditingSession.value;
-  if (!session) {
-    return;
-  }
-
-  clearTextEditing();
-  if (session.isNew) {
-    board.setSelection([session.id]);
-    interaction.deleteSelection();
-  }
-}
-
-/**
- * 处理文本编辑器输入。
- * @param event - 输入事件
- */
-function handleTextEditorInput(event: Event): void {
-  const target = event.currentTarget;
-  if (!(target instanceof HTMLTextAreaElement)) {
-    return;
-  }
-
-  textEditorValue.value = target.value;
-  scheduleTextEditorViewportKeepAlive();
-}
-
-/**
- * 处理文本编辑框快捷键。
- * @param event - 键盘事件
- */
-function handleTextEditorKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    cancelTextEditor();
-    return;
-  }
-
-  if (event.key !== 'Enter') {
-    return;
-  }
-
-  event.preventDefault();
-  insertTextEditorPlainText('\n');
-}
-
-/**
  * 判断文本创建手势是否为点击。
  * @param start - 创建起点
  * @param end - 创建终点
  * @returns 是否为点击创建
  */
 function isTextCreateClick(start: DrawingPoint, end: DrawingPoint): boolean {
-  return Math.hypot(end.x - start.x, end.y - start.y) <= TEXT_CREATE_CLICK_TOLERANCE;
+  return Math.hypot(end.x - start.x, end.y - start.y) <= DRAWING_TEXT_CREATE_CLICK_TOLERANCE;
 }
 
 /**
@@ -1121,7 +724,7 @@ function finishPendingTextElementCreate(event: PointerEvent): void {
     createTextElementAtPoint(createPoint).catch((error: unknown): void => {
       console.warn('BDrawing text element create failed', error);
     });
-  }, TEXT_ELEMENT_CLICK_CREATE_DELAY);
+  }, DRAWING_TEXT_ELEMENT_CLICK_CREATE_DELAY);
 }
 
 /**
@@ -1630,29 +1233,10 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 onBeforeUnmount((): void => {
-  cancelViewportSizeSync();
-  cancelViewportReadyCheck();
   cancelHandPan();
   cancelDirectDrag();
   cancelConnectorDrag();
   cancelPendingTextElementCreate();
-});
-
-onMounted((): void => {
-  syncViewportSizeFromRoot();
-});
-
-onActivated((): void => {
-  scheduleViewportSizeSyncFromRoot();
-});
-
-useResizeObserver(rootRef, (entries: ResizeObserverEntry[]): void => {
-  const size = entries[0] ? readResizeEntrySize(entries[0]) : null;
-  if (!size) {
-    return;
-  }
-
-  setViewportSize(size);
 });
 </script>
 

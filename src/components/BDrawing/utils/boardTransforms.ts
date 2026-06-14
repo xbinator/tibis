@@ -21,18 +21,21 @@ import type {
   DrawingViewport
 } from '../types';
 import { cloneDeep } from 'lodash-es';
-import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_DEFAULT_TEXT, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/defaults';
+import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/board';
+import { DRAWING_DEFAULT_TEXT, DRAWING_TEXT_DEFAULT_FONT_SIZE, DRAWING_TEXT_DEFAULT_FONT_WEIGHT } from '../constants/text';
 import { isDrawingConnectorElement, isDrawingShapeElement } from './drawingGeometry';
-import { DRAWING_TEXT_DEFAULT_FONT_SIZE, DRAWING_TEXT_DEFAULT_FONT_WEIGHT, measureDrawingTextElementSize } from './drawingTextMetrics';
+import { measureDrawingTextElementSize } from './drawingTextMetrics';
 
 export {
   DRAWING_TEXT_DEFAULT_FONT_SIZE,
   DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
+  DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN,
   DRAWING_TEXT_HORIZONTAL_PADDING,
   DRAWING_TEXT_LINE_HEIGHT_RATIO,
-  DRAWING_TEXT_VERTICAL_PADDING,
-  measureDrawingTextElementSize
-} from './drawingTextMetrics';
+  DRAWING_TEXT_VERTICAL_PADDING
+} from '../constants/text';
+
+export { measureDrawingTextElementSize } from './drawingTextMetrics';
 
 /**
  * 创建默认视口。

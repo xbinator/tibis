@@ -1,5 +1,5 @@
 <!--
-  @file DrawingToolbar.vue
+  @file Toolbar.vue
   @description BDrawing 画布悬浮工具栏，内部定位分组。
 -->
 <template>
@@ -49,7 +49,7 @@
         <BIcon icon="lucide:plus" :size="16" />
       </BButton>
       <span class="b-drawing-toolbar__divider"></span>
-      <DrawingMinimap
+      <Minimap
         :elements="elements"
         :viewport="viewport"
         :viewport-size="viewportSize"
@@ -61,7 +61,7 @@
             <BIcon icon="lucide:map" :size="16" />
           </BButton>
         </template>
-      </DrawingMinimap>
+      </Minimap>
     </div>
   </div>
 </template>
@@ -69,8 +69,8 @@
 <script setup lang="ts">
 import type { DrawingElement, DrawingPoint, DrawingSize, DrawingToolMode, DrawingViewport } from '../types';
 import { computed } from 'vue';
-import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM } from '../constants/defaults';
-import DrawingMinimap from './DrawingMinimap.vue';
+import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM } from '../constants/viewport';
+import Minimap from './Minimap.vue';
 
 /**
  * 工具栏入参。

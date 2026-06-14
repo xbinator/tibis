@@ -1,0 +1,331 @@
+/**
+ * @file useTextEditing.ts
+ * @description BDrawing 文本节点编辑状态与 textarea 交互。
+ */
+import type { DrawingSize, DrawingShapeElement } from '../types';
+import type { UseDrawingBoardReturn } from './useDrawingBoard';
+import type { UseDrawingInteractionReturn } from './useDrawingInteraction';
+import type { UseDrawingViewportReturn } from './useDrawingViewport';
+import { computed, nextTick, ref } from 'vue';
+import type { CSSProperties, Ref } from 'vue';
+import {
+  DRAWING_TEXT_DEFAULT_FONT_SIZE,
+  DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
+  DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN,
+  DRAWING_TEXT_HORIZONTAL_PADDING,
+  DRAWING_TEXT_LINE_HEIGHT_RATIO,
+  DRAWING_TEXT_VERTICAL_PADDING,
+  measureDrawingTextElementSize
+} from '../utils/boardTransforms';
+import { findDrawingShapeElement } from '../utils/drawingGeometry';
+
+/**
+ * 文本节点编辑会话。
+ */
+export interface TextEditingSession {
+  /** 正在编辑的元素 ID */
+  id: string;
+  /** 进入编辑前的原始文本 */
+  originalText: string;
+  /** 是否为刚创建的文本节点 */
+  isNew: boolean;
+}
+
+/**
+ * 文本编辑 hook 入参。
+ */
+export interface UseTextEditingOptions {
+  /** 画板状态与命令 */
+  board: UseDrawingBoardReturn;
+  /** 视口命令 */
+  viewport: UseDrawingViewportReturn;
+  /** 选择和删除交互 */
+  interaction: UseDrawingInteractionReturn;
+  /** 画板根节点 */
+  rootRef: Ref<HTMLElement | null>;
+  /** 当前画布视口实际渲染尺寸 */
+  viewportSize: Ref<DrawingSize>;
+}
+
+/**
+ * 文本编辑 hook 返回值。
+ */
+export interface UseTextEditingReturn {
+  /** 当前文本编辑会话 */
+  textEditingSession: Ref<TextEditingSession | null>;
+  /** 文本编辑输入值 */
+  textEditorValue: Ref<string>;
+  /** 文本编辑器 DOM */
+  textEditorRef: Ref<HTMLTextAreaElement | null>;
+  /** 文本编辑框定位样式 */
+  textEditorStyle: Ref<CSSProperties>;
+  /** 开始编辑文本节点 */
+  startTextEditing: (element: DrawingShapeElement, isNew: boolean) => Promise<void>;
+  /** 提交文本编辑内容 */
+  commitTextEditor: () => void;
+  /** 取消文本编辑 */
+  cancelTextEditor: () => void;
+  /** 处理文本编辑器输入 */
+  handleTextEditorInput: (event: Event) => void;
+  /** 处理文本编辑框快捷键 */
+  handleTextEditorKeydown: (event: KeyboardEvent) => void;
+}
+
+/**
+ * 创建文本编辑 hook。
+ * @param options - 文本编辑配置
+ * @returns 文本编辑状态和事件处理器
+ */
+export function useTextEditing(options: UseTextEditingOptions): UseTextEditingReturn {
+  const textEditingSession = ref<TextEditingSession | null>(null);
+  const textEditorValue = ref<string>('');
+  const textEditorRef = ref<HTMLTextAreaElement | null>(null);
+
+  /** 文本编辑框定位样式。 */
+  const textEditorStyle = computed<CSSProperties>(() => {
+    const session = textEditingSession.value;
+    const element = session ? findDrawingShapeElement(options.board.state.value.elements, session.id) : null;
+    if (!element) {
+      return {};
+    }
+
+    const { center, zoom } = options.board.state.value.viewport;
+    const fontSize = element.style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
+    const fontWeight = element.style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT;
+    const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
+    const size = measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
+    const rootRect = options.rootRef.value?.getBoundingClientRect();
+    const left = (rootRect?.left ?? 0) + options.viewportSize.value.width / 2 + (element.position.x - center.x) * zoom;
+    const top = (rootRect?.top ?? 0) + options.viewportSize.value.height / 2 + (element.position.y - center.y) * zoom;
+
+    return {
+      background: 'transparent',
+      border: 'none',
+      boxShadow: 'none',
+      fontSize: `${fontSize * zoom}px`,
+      fontWeight: String(fontWeight),
+      height: `${size.height * zoom}px`,
+      left: `${left}px`,
+      lineHeight: `${lineHeight * zoom}px`,
+      padding: `${DRAWING_TEXT_VERTICAL_PADDING * zoom}px ${DRAWING_TEXT_HORIZONTAL_PADDING * zoom}px`,
+      position: 'fixed',
+      textAlign: element.style?.textAlign ?? 'center',
+      top: `${top}px`,
+      whiteSpace: 'pre',
+      width: `${size.width * zoom}px`
+    };
+  });
+
+  /**
+   * 结束当前文本编辑会话。
+   */
+  function clearTextEditing(): void {
+    textEditingSession.value = null;
+    textEditorValue.value = '';
+  }
+
+  /**
+   * 同步文本编辑器 DOM 内容。
+   */
+  function syncTextEditorContent(): void {
+    const editor = textEditorRef.value;
+    if (!editor || editor.value === textEditorValue.value) {
+      return;
+    }
+
+    editor.value = textEditorValue.value;
+  }
+
+  /**
+   * 选中文本编辑器内的全部内容。
+   */
+  function selectTextEditorContent(): void {
+    const editor = textEditorRef.value;
+    if (!editor) {
+      return;
+    }
+
+    editor.select();
+  }
+
+  /**
+   * 确保文本编辑器保持在画板可视区域内。
+   */
+  function keepTextEditorInViewport(): void {
+    const session = textEditingSession.value;
+    const element = session ? findDrawingShapeElement(options.board.state.value.elements, session.id) : null;
+    const rootRect = options.rootRef.value?.getBoundingClientRect();
+    if (!element || !rootRect?.width || !rootRect.height) {
+      return;
+    }
+
+    const { center, zoom } = options.board.state.value.viewport;
+    const size = measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
+    const editorLeft = rootRect.left + rootRect.width / 2 + (element.position.x - center.x) * zoom;
+    const editorTop = rootRect.top + rootRect.height / 2 + (element.position.y - center.y) * zoom;
+    const editorRight = editorLeft + size.width * zoom;
+    const editorBottom = editorTop + size.height * zoom;
+    const minLeft = rootRect.left + DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN;
+    const maxRight = rootRect.right - DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN;
+    const minTop = rootRect.top + DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN;
+    const maxBottom = rootRect.bottom - DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN;
+    let nextCenterX = center.x;
+    let nextCenterY = center.y;
+
+    if (editorLeft < minLeft) {
+      nextCenterX += (editorLeft - minLeft) / zoom;
+    }
+    if (editorRight > maxRight) {
+      nextCenterX += (editorRight - maxRight) / zoom;
+    }
+    if (editorTop < minTop) {
+      nextCenterY += (editorTop - minTop) / zoom;
+    }
+    if (editorBottom > maxBottom) {
+      nextCenterY += (editorBottom - maxBottom) / zoom;
+    }
+
+    if (nextCenterX === center.x && nextCenterY === center.y) {
+      return;
+    }
+
+    options.viewport.setCenter({
+      x: Number(nextCenterX.toFixed(2)),
+      y: Number(nextCenterY.toFixed(2))
+    });
+  }
+
+  /**
+   * 在下一轮 DOM 更新后修正文本编辑器可见区域。
+   */
+  function scheduleTextEditorViewportKeepAlive(): void {
+    nextTick()
+      .then((): void => {
+        keepTextEditorInViewport();
+      })
+      .catch((error: unknown): void => {
+        console.warn('BDrawing text editor viewport sync failed', error);
+      });
+  }
+
+  /**
+   * 开始编辑文本节点。
+   * @param element - 文本元素
+   * @param isNew - 是否为刚创建的元素
+   */
+  async function startTextEditing(element: DrawingShapeElement, isNew: boolean): Promise<void> {
+    textEditingSession.value = {
+      id: element.id,
+      originalText: element.text,
+      isNew
+    };
+    textEditorValue.value = element.text;
+    await nextTick();
+    syncTextEditorContent();
+    textEditorRef.value?.focus();
+    selectTextEditorContent();
+    scheduleTextEditorViewportKeepAlive();
+  }
+
+  /**
+   * 在当前编辑光标处插入纯文本。
+   * @param text - 要插入的文本
+   */
+  function insertTextEditorPlainText(text: string): void {
+    const editor = textEditorRef.value;
+    if (!editor) {
+      return;
+    }
+
+    const { selectionStart, selectionEnd } = editor;
+    const nextValue = `${editor.value.slice(0, selectionStart)}${text}${editor.value.slice(selectionEnd)}`;
+    const nextCaret = selectionStart + text.length;
+    editor.value = nextValue;
+    editor.setSelectionRange(nextCaret, nextCaret);
+    textEditorValue.value = nextValue;
+    scheduleTextEditorViewportKeepAlive();
+  }
+
+  /**
+   * 提交文本编辑内容。
+   */
+  function commitTextEditor(): void {
+    const session = textEditingSession.value;
+    if (!session) {
+      return;
+    }
+
+    const nextText = textEditorValue.value;
+    clearTextEditing();
+    if (!nextText.trim()) {
+      options.board.setSelection([session.id]);
+      options.interaction.deleteSelection();
+      return;
+    }
+
+    if (nextText !== session.originalText) {
+      options.board.updateNodeText(session.id, nextText);
+    }
+  }
+
+  /**
+   * 取消文本编辑。
+   */
+  function cancelTextEditor(): void {
+    const session = textEditingSession.value;
+    if (!session) {
+      return;
+    }
+
+    clearTextEditing();
+    if (session.isNew) {
+      options.board.setSelection([session.id]);
+      options.interaction.deleteSelection();
+    }
+  }
+
+  /**
+   * 处理文本编辑器输入。
+   * @param event - 输入事件
+   */
+  function handleTextEditorInput(event: Event): void {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    textEditorValue.value = target.value;
+    scheduleTextEditorViewportKeepAlive();
+  }
+
+  /**
+   * 处理文本编辑框快捷键。
+   * @param event - 键盘事件
+   */
+  function handleTextEditorKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelTextEditor();
+      return;
+    }
+
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    insertTextEditorPlainText('\n');
+  }
+
+  return {
+    textEditingSession,
+    textEditorValue,
+    textEditorRef,
+    textEditorStyle,
+    startTextEditing,
+    commitTextEditor,
+    cancelTextEditor,
+    handleTextEditorInput,
+    handleTextEditorKeydown
+  };
+}

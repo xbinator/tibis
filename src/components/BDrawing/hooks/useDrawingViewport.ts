@@ -4,7 +4,7 @@
  */
 import type { DrawingPoint, DrawingSize } from '../types';
 import type { UseDrawingBoardReturn } from './useDrawingBoard';
-import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/defaults';
+import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/viewport';
 import { clientDeltaToDrawingDelta, getDrawingResponsiveViewBoxSize } from '../utils/drawingGeometry';
 
 /**

@@ -1,5 +1,5 @@
 <!--
-  @file DrawingMoveableLayer.vue
+  @file MoveableLayer.vue
   @description BDrawing Moveable 控制器适配层。
 -->
 <template>
@@ -12,16 +12,16 @@
       :snappable="singleTarget"
       :snap-center="true"
       :snap-gap="true"
-      :snap-threshold="5"
-      :snap-render-threshold="5"
-      :snap-directions="snapDirections"
-      :element-snap-directions="snapDirections"
+      :snap-threshold="DRAWING_MOVEABLE_SNAP_THRESHOLD"
+      :snap-render-threshold="DRAWING_MOVEABLE_SNAP_THRESHOLD"
+      :snap-directions="DRAWING_MOVEABLE_SNAP_DIRECTIONS"
+      :element-snap-directions="DRAWING_MOVEABLE_SNAP_DIRECTIONS"
       :element-guidelines="guidelineTargets"
-      :padding="MOVEABLE_SELECTION_PADDING"
+      :padding="DRAWING_MOVEABLE_SELECTION_PADDING"
       :zoom="viewport.zoom"
       :origin="false"
-      :throttle-drag="0"
-      :throttle-resize="0"
+      :throttle-drag="DRAWING_MOVEABLE_THROTTLE"
+      :throttle-resize="DRAWING_MOVEABLE_THROTTLE"
       @drag="handleDrag"
       @drag-end="handleDragEnd"
       @drag-group="handleDragGroup"
@@ -37,9 +37,14 @@
 <script setup lang="ts">
 import type { DrawingElement, DrawingGeometryChange, DrawingSize, DrawingViewport } from '../types';
 import type { DrawingConnectorPathElementOverride } from '../utils/drawingGeometry';
-import type { SnapDirections } from 'moveable';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import VueMoveable from 'vue3-moveable/dist/moveable.js';
+import {
+  DRAWING_MOVEABLE_SELECTION_PADDING,
+  DRAWING_MOVEABLE_SNAP_DIRECTIONS,
+  DRAWING_MOVEABLE_SNAP_THRESHOLD,
+  DRAWING_MOVEABLE_THROTTLE
+} from '../constants/interaction';
 import {
   createDrawingConnectorMarkerPath,
   createDrawingConnectorPath,
@@ -167,18 +172,6 @@ const guidelineTargets = ref<Element[]>([]);
 const singleTarget = computed<boolean>(() => targets.value.length === 1);
 /** 是否展示 Moveable 控制层。 */
 const shouldShowMoveableLayer = computed<boolean>(() => props.enabled && targets.value.length > 0);
-/** Moveable 控制框与节点边界之间的视觉留白。 */
-const MOVEABLE_SELECTION_PADDING = { bottom: 0, left: 0, right: 0, top: 0 };
-/** Moveable 元素吸附方向，显式包含中心线和中线。 */
-const snapDirections: SnapDirections = {
-  bottom: true,
-  center: true,
-  left: true,
-  middle: true,
-  right: true,
-  top: true
-};
-
 /**
  * 通过 DOM target 读取元素 ID。
  * @param target - Moveable 操作目标

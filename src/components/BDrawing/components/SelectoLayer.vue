@@ -1,5 +1,5 @@
 <!--
-  @file DrawingSelectoLayer.vue
+  @file SelectoLayer.vue
   @description BDrawing Selecto 框选适配层。
 -->
 <template>
@@ -10,6 +10,7 @@
 import type { DrawingToolMode } from '../types';
 import { onBeforeUnmount, onMounted, watch } from 'vue';
 import Selecto from 'selecto';
+import { DRAWING_SELECTO_BLOCKED_DRAG_SELECTOR } from '../constants/interaction';
 import { getDrawingElementId } from '../utils/drawingGeometry';
 
 /**
@@ -52,17 +53,6 @@ const emit = defineEmits<{
 }>();
 
 let selecto: Selecto | null = null;
-/** Selecto 不应该从这些交互目标启动，避免抢占 Moveable 拖拽和缩放。 */
-const SELECTO_BLOCKED_DRAG_SELECTOR = [
-  '.b-drawing-moveable-layer',
-  '.moveable-control',
-  '.moveable-line',
-  '.moveable-area',
-  '.moveable-control-box',
-  '.moveable-direction',
-  '.b-drawing-element.is-selected',
-  '.b-drawing-style-panel'
-].join(', ');
 
 /**
  * 读取 DOM 目标的画板元素 ID。
@@ -94,7 +84,7 @@ function shouldStartSelectoDrag(event: SelectoDragStartEvent): boolean {
     return true;
   }
 
-  return target.closest(SELECTO_BLOCKED_DRAG_SELECTOR) === null;
+  return target.closest(DRAWING_SELECTO_BLOCKED_DRAG_SELECTOR) === null;
 }
 
 /**

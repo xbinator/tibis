@@ -3,25 +3,25 @@
  * @description BDrawing 文本元素尺寸测量工具。
  */
 import type { DrawingElementStyle, DrawingSize } from '../types';
+import {
+  DRAWING_TEXT_DEFAULT_FONT_SIZE,
+  DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
+  DRAWING_TEXT_FULL_WIDTH_CHARACTER_WIDTH_RATIO,
+  DRAWING_TEXT_HORIZONTAL_PADDING,
+  DRAWING_TEXT_LATIN_CHARACTER_WIDTH_RATIO,
+  DRAWING_TEXT_LINE_HEIGHT_RATIO,
+  DRAWING_TEXT_NARROW_CHARACTER_WIDTH_RATIO,
+  DRAWING_TEXT_SPACE_CHARACTER_WIDTH_RATIO,
+  DRAWING_TEXT_VERTICAL_PADDING
+} from '../constants/text';
 
-/** 文本元素默认字号。 */
-export const DRAWING_TEXT_DEFAULT_FONT_SIZE = 13;
-/** 文本元素默认字重。 */
-export const DRAWING_TEXT_DEFAULT_FONT_WEIGHT = 650;
-/** 文本元素水平内边距。 */
-export const DRAWING_TEXT_HORIZONTAL_PADDING = 6;
-/** 文本元素垂直内边距。 */
-export const DRAWING_TEXT_VERTICAL_PADDING = 4;
-/** 文本元素窄拉丁字符宽度估算比例。 */
-const DRAWING_TEXT_NARROW_CHARACTER_WIDTH_RATIO = 0.34;
-/** 文本元素普通拉丁字符宽度估算比例。 */
-const DRAWING_TEXT_LATIN_CHARACTER_WIDTH_RATIO = 0.56;
-/** 文本元素空白字符宽度估算比例。 */
-const DRAWING_TEXT_SPACE_CHARACTER_WIDTH_RATIO = 0.32;
-/** 文本元素全宽字符宽度估算比例。 */
-const DRAWING_TEXT_FULL_WIDTH_CHARACTER_WIDTH_RATIO = 1;
-/** 文本元素行高比例。 */
-export const DRAWING_TEXT_LINE_HEIGHT_RATIO = 1.35;
+export {
+  DRAWING_TEXT_DEFAULT_FONT_SIZE,
+  DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
+  DRAWING_TEXT_HORIZONTAL_PADDING,
+  DRAWING_TEXT_LINE_HEIGHT_RATIO,
+  DRAWING_TEXT_VERTICAL_PADDING
+} from '../constants/text';
 /** 文本测量画布缓存。 */
 let drawingTextMeasureCanvas: HTMLCanvasElement | null = null;
 

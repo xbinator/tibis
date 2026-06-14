@@ -12,7 +12,7 @@
       class="color-palette__preset-button"
       :class="{ 'is-active': isPresetActive(presetColor), 'is-transparent': isTransparentColor(presetColor) }"
       :aria-label="`选择颜色 ${presetColor}`"
-      :data-testid="`color-palette-preset-${presetColor}`"
+      :data-testid="`color-picker-preset-${presetColor}`"
       :disabled="readonly"
       type="button"
       @click.stop="handlePresetClick(presetColor)"
@@ -26,7 +26,7 @@
     <!-- 自定义颜色按钮（带 BColorPicker 下拉） -->
     <BColorPicker :value="value" :format="format" :placement="placement" :align="align" :readonly="readonly" @change="handleCustomColorChange">
       <button
-        class="color-palette__custom-button"
+        class="color-palette__custom-button b-color-picker__custom-trigger"
         :class="{ 'is-transparent': isTransparentColor(value) }"
         aria-label="自定义颜色"
         data-testid="color-palette-custom-button"
@@ -47,7 +47,9 @@
  */
 import { computed } from 'vue';
 import tinycolor from 'tinycolor2';
+import BColorPicker from '@/components/BColorPicker/index.vue';
 import type { BColorPickerProps } from '@/components/BColorPicker/types';
+import { DRAWING_COLOR_PICKER_DEFAULT_ALIGN, DRAWING_COLOR_PICKER_DEFAULT_PLACEMENT, DRAWING_DEFAULT_PRESET_COLORS } from '../constants/style';
 
 /** 颜色调色板属性 */
 interface Props {
@@ -67,8 +69,8 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   format: 'hex',
-  placement: 'rightTop',
-  align: () => ({ offset: [20, 0] }),
+  placement: DRAWING_COLOR_PICKER_DEFAULT_PLACEMENT,
+  align: () => DRAWING_COLOR_PICKER_DEFAULT_ALIGN,
   readonly: false,
   presetColors: undefined
 });
@@ -78,11 +80,8 @@ const emit = defineEmits<{
   change: [value: string];
 }>();
 
-/** 默认快捷预设颜色 */
-const DEFAULT_PRESET_COLORS = ['#111827', '#64748b', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6'] as const;
-
 /** 快捷预设颜色列表 */
-const presetColorOptions = computed<readonly string[]>(() => (props.presetColors?.length ? props.presetColors : DEFAULT_PRESET_COLORS));
+const presetColorOptions = computed<readonly string[]>(() => (props.presetColors?.length ? props.presetColors : DRAWING_DEFAULT_PRESET_COLORS));
 
 /**
  * 根据输出格式格式化颜色值

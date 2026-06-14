@@ -1,5 +1,5 @@
 <!--
-  @file DrawingInfiniteViewport.vue
+  @file InfiniteViewport.vue
   @description BDrawing 无限画布视口适配层。
 -->
 <template>

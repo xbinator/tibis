@@ -1,5 +1,5 @@
 <!--
-  @file DrawingStylePanel.vue
+  @file StylePanel.vue
   @description BDrawing 左侧节点样式配置面板。
 -->
 <template>
@@ -171,6 +171,7 @@
 </template>
 
 <script setup lang="ts">
+import type { DrawingFontSizeOption, DrawingSegmentOption, DrawingStrokeWidthOption } from '../constants/style';
 import type {
   DrawingConnectorCurveType,
   DrawingConnectorDraftOptions,
@@ -183,50 +184,23 @@ import type {
   DrawingTextAlign
 } from '../types';
 import { computed } from 'vue';
+import {
+  DRAWING_CURVE_OPTIONS,
+  DRAWING_DEFAULT_FILL,
+  DRAWING_DEFAULT_STROKE,
+  DRAWING_DEFAULT_STROKE_WIDTH,
+  DRAWING_DEFAULT_TEXT_COLOR,
+  DRAWING_FONT_SIZE_OPTIONS,
+  DRAWING_MARKER_OPTIONS,
+  DRAWING_STROKE_WIDTH_OPTIONS,
+  DRAWING_TEXT_ALIGN_OPTIONS
+} from '../constants/style';
 import ColorPalette from './ColorPalette.vue';
 
 /**
  * 层级操作类型。
  */
 type DrawingLayerAction = 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack';
-
-/**
- * 描边宽度选项。
- */
-interface StrokeWidthOption {
-  /** 宽度 ID */
-  id: string;
-  /** 宽度名称 */
-  label: string;
-  /** 实际描边宽度 */
-  value: number;
-  /** 预览线条高度 */
-  previewHeight: number;
-}
-
-/**
- * 连接线分段按钮选项。
- */
-interface ConnectorSegmentOption<TValue extends string> {
-  /** 选项值 */
-  value: TValue;
-  /** 访问性标签 */
-  label: string;
-  /** 图标名称 */
-  icon: string;
-}
-
-/**
- * 字号选项。
- */
-interface FontSizeOption {
-  /** 字号值 */
-  value: number;
-  /** 访问性标签 */
-  label: string;
-  /** 预览文字 */
-  preview: string;
-}
 
 /**
  * 样式面板入参。
@@ -262,41 +236,6 @@ const emit = defineEmits<{
   'layer-change': [action: DrawingLayerAction];
 }>();
 
-/** 默认填充色。 */
-const DEFAULT_FILL = 'transparent';
-/** 默认边框色。 */
-const DEFAULT_STROKE = '#64748b';
-/** 默认边框宽度。 */
-const DEFAULT_STROKE_WIDTH = 1.5;
-/** 描边宽度选项。 */
-const STROKE_WIDTH_OPTIONS: readonly StrokeWidthOption[] = [
-  { id: 'thin', label: '细描边', value: 1.5, previewHeight: 1 },
-  { id: 'medium', label: '中描边', value: 3, previewHeight: 2 },
-  { id: 'bold', label: '粗描边', value: 5, previewHeight: 4 }
-];
-/** 连接线端点标记选项。 */
-const MARKER_OPTIONS: readonly ConnectorSegmentOption<DrawingConnectorMarkerType>[] = [
-  { value: 'none', label: '无箭头', icon: 'lucide:minus' },
-  { value: 'arrow', label: '箭头', icon: 'lucide:arrow-right' }
-];
-/** 连接线路径选项。 */
-const CURVE_OPTIONS: readonly ConnectorSegmentOption<DrawingConnectorCurveType>[] = [
-  { value: 'straight', label: '直线', icon: 'lucide:minus' },
-  { value: 'bezier', label: '贝塞尔曲线', icon: 'lucide:spline' }
-];
-/** 文本字号选项。 */
-const FONT_SIZE_OPTIONS: readonly FontSizeOption[] = [
-  { value: 12, label: '小字号', preview: '小' },
-  { value: 14, label: '中字号', preview: '中' },
-  { value: 18, label: '大字号', preview: '大' }
-];
-/** 文本对齐选项。 */
-const TEXT_ALIGN_OPTIONS: readonly ConnectorSegmentOption<DrawingTextAlign>[] = [
-  { value: 'left', label: '左对齐', icon: 'lucide:align-left' },
-  { value: 'center', label: '居中对齐', icon: 'lucide:align-center' },
-  { value: 'right', label: '右对齐', icon: 'lucide:align-right' }
-];
-
 /** 是否显示层级控件（选中元素时显示）。 */
 const showLayerControls = computed<boolean>(() => Boolean(props.element || props.connector));
 
@@ -314,36 +253,36 @@ const canSendToBack = computed<boolean>(() => props.elementIndex > 0);
 /** 当前是否编辑文本元素。 */
 const isTextElement = computed<boolean>(() => props.element?.shape === 'text');
 
-const fillValue = computed<string>(() => (props.element ? props.element.style?.fill : props.draftStyle?.fill) ?? DEFAULT_FILL);
+const fillValue = computed<string>(() => (props.element ? props.element.style?.fill : props.draftStyle?.fill) ?? DRAWING_DEFAULT_FILL);
 const strokeValue = computed<string>(() => {
   if (props.connector) {
-    return props.connector.style?.stroke ?? DEFAULT_STROKE;
+    return props.connector.style?.stroke ?? DRAWING_DEFAULT_STROKE;
   }
   if (props.draftConnector) {
-    return props.draftConnector.style?.stroke ?? DEFAULT_STROKE;
+    return props.draftConnector.style?.stroke ?? DRAWING_DEFAULT_STROKE;
   }
 
-  return (props.element ? props.element.style?.stroke : props.draftStyle?.stroke) ?? DEFAULT_STROKE;
+  return (props.element ? props.element.style?.stroke : props.draftStyle?.stroke) ?? DRAWING_DEFAULT_STROKE;
 });
 const strokeWidthValue = computed<number>(() => {
   if (props.connector) {
-    return props.connector.style?.strokeWidth ?? DEFAULT_STROKE_WIDTH;
+    return props.connector.style?.strokeWidth ?? DRAWING_DEFAULT_STROKE_WIDTH;
   }
   if (props.draftConnector) {
-    return props.draftConnector.style?.strokeWidth ?? DEFAULT_STROKE_WIDTH;
+    return props.draftConnector.style?.strokeWidth ?? DRAWING_DEFAULT_STROKE_WIDTH;
   }
 
-  return (props.element ? props.element.style?.strokeWidth : props.draftStyle?.strokeWidth) ?? DEFAULT_STROKE_WIDTH;
+  return (props.element ? props.element.style?.strokeWidth : props.draftStyle?.strokeWidth) ?? DRAWING_DEFAULT_STROKE_WIDTH;
 });
-const strokeWidthOptions = computed<readonly StrokeWidthOption[]>(() => STROKE_WIDTH_OPTIONS);
-const markerOptions = computed<readonly ConnectorSegmentOption<DrawingConnectorMarkerType>[]>(() => MARKER_OPTIONS);
-const curveOptions = computed<readonly ConnectorSegmentOption<DrawingConnectorCurveType>[]>(() => CURVE_OPTIONS);
-const fontSizeOptions = computed<readonly FontSizeOption[]>(() => FONT_SIZE_OPTIONS);
-const textAlignOptions = computed<readonly ConnectorSegmentOption<DrawingTextAlign>[]>(() => TEXT_ALIGN_OPTIONS);
+const strokeWidthOptions = computed<readonly DrawingStrokeWidthOption[]>(() => DRAWING_STROKE_WIDTH_OPTIONS);
+const markerOptions = computed<readonly DrawingSegmentOption<DrawingConnectorMarkerType>[]>(() => DRAWING_MARKER_OPTIONS);
+const curveOptions = computed<readonly DrawingSegmentOption<DrawingConnectorCurveType>[]>(() => DRAWING_CURVE_OPTIONS);
+const fontSizeOptions = computed<readonly DrawingFontSizeOption[]>(() => DRAWING_FONT_SIZE_OPTIONS);
+const textAlignOptions = computed<readonly DrawingSegmentOption<DrawingTextAlign>[]>(() => DRAWING_TEXT_ALIGN_OPTIONS);
 const showFillControls = computed<boolean>(() => Boolean(props.element || props.draftStyle));
 const showStrokeControls = computed<boolean>(() => !isTextElement.value);
 const showTextControls = computed<boolean>(() => isTextElement.value);
-const textColorValue = computed<string>(() => props.element?.style?.color ?? '#0f172a');
+const textColorValue = computed<string>(() => props.element?.style?.color ?? DRAWING_DEFAULT_TEXT_COLOR);
 const fontSizeValue = computed<number>(() => props.element?.style?.fontSize ?? 13);
 const textAlignValue = computed<DrawingTextAlign>(() => props.element?.style?.textAlign ?? 'center');
 const showConnectorControls = computed<boolean>(() => Boolean(props.connector || props.draftConnector));

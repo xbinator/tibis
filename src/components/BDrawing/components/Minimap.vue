@@ -1,9 +1,9 @@
 <!--
-  @file DrawingMinimap.vue
+  @file Minimap.vue
   @description BDrawing 轻量小地图组件，支持展开预览、点击定位视口中心和拖拽视口矩形移动位置。
 -->
 <template>
-  <BDropdown v-model:open="open" :trigger="['click']" placement="topLeft" :align="dropdownAlign">
+  <BDropdown v-model:open="open" :trigger="['click']" placement="topLeft" :align="DRAWING_MINIMAP_DROPDOWN_ALIGN">
     <slot :open="open"></slot>
 
     <template #overlay>
@@ -55,7 +55,8 @@ import { computed, ref } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { throttle } from 'lodash-es';
 import BDropdown from '@/components/BDropdown/index.vue';
-import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/defaults';
+import { DRAWING_MINIMAP_DROPDOWN_ALIGN, DRAWING_MINIMAP_EMPTY_SIZE, DRAWING_MINIMAP_VIEWBOX_PADDING } from '../constants/minimap';
+import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/viewport';
 import {
   createDrawingDiamondPoints,
   getDrawingResponsiveViewBoxSize,
@@ -64,18 +65,10 @@ import {
   isDrawingShapeElement
 } from '../utils/drawingGeometry';
 
-const MINIMAP_EMPTY_SIZE = 320;
-const MINIMAP_VIEWBOX_PADDING = 80;
-
-/** 小地图弹框相对触发按钮的偏移。 */
-const dropdownAlign = {
-  offset: [0, -8] as [number, number]
-};
-
 /**
  * 小地图边界。
  */
-interface DrawingMinimapBounds {
+interface MinimapBounds {
   /** 左侧坐标 */
   minX: number;
   /** 顶部坐标 */
@@ -89,7 +82,7 @@ interface DrawingMinimapBounds {
 /**
  * 小地图视口矩形。
  */
-interface DrawingMinimapRect {
+interface MinimapRect {
   /** 左上角横坐标 */
   x: number;
   /** 左上角纵坐标 */
@@ -103,7 +96,7 @@ interface DrawingMinimapRect {
 /**
  * 小地图触发器插槽参数。
  */
-interface DrawingMinimapTriggerSlotProps {
+interface MinimapTriggerSlotProps {
   /** 当前弹框是否展开 */
   open: boolean;
 }
@@ -123,7 +116,7 @@ interface Props {
 const props = defineProps<Props>();
 defineSlots<{
   /** 渲染小地图触发器。 */
-  default(props: DrawingMinimapTriggerSlotProps): VNodeChild;
+  default(props: MinimapTriggerSlotProps): VNodeChild;
 }>();
 const emit = defineEmits<{
   /** 设置视口中心 */
@@ -141,9 +134,9 @@ const open = ref<boolean>(false);
  * @param viewport - 当前视口矩形
  * @returns 小地图覆盖范围
  */
-function createMinimapBounds(elements: DrawingShapeElement[], viewport: DrawingMinimapRect): DrawingMinimapBounds {
-  const baseBounds = elements.reduce<DrawingMinimapBounds>(
-    (nextBounds: DrawingMinimapBounds, element: DrawingShapeElement): DrawingMinimapBounds => {
+function createMinimapBounds(elements: DrawingShapeElement[], viewport: MinimapRect): MinimapBounds {
+  const baseBounds = elements.reduce<MinimapBounds>(
+    (nextBounds: MinimapBounds, element: DrawingShapeElement): MinimapBounds => {
       const size = getDrawingShapeRenderSize(element);
 
       return {
@@ -161,24 +154,24 @@ function createMinimapBounds(elements: DrawingShapeElement[], viewport: DrawingM
     }
   );
 
-  const width = Math.max(baseBounds.maxX - baseBounds.minX, MINIMAP_EMPTY_SIZE);
-  const height = Math.max(baseBounds.maxY - baseBounds.minY, MINIMAP_EMPTY_SIZE);
+  const width = Math.max(baseBounds.maxX - baseBounds.minX, DRAWING_MINIMAP_EMPTY_SIZE);
+  const height = Math.max(baseBounds.maxY - baseBounds.minY, DRAWING_MINIMAP_EMPTY_SIZE);
   const center = {
     x: (baseBounds.minX + baseBounds.maxX) / 2,
     y: (baseBounds.minY + baseBounds.maxY) / 2
   };
 
   return {
-    minX: center.x - width / 2 - MINIMAP_VIEWBOX_PADDING,
-    minY: center.y - height / 2 - MINIMAP_VIEWBOX_PADDING,
-    maxX: center.x + width / 2 + MINIMAP_VIEWBOX_PADDING,
-    maxY: center.y + height / 2 + MINIMAP_VIEWBOX_PADDING
+    minX: center.x - width / 2 - DRAWING_MINIMAP_VIEWBOX_PADDING,
+    minY: center.y - height / 2 - DRAWING_MINIMAP_VIEWBOX_PADDING,
+    maxX: center.x + width / 2 + DRAWING_MINIMAP_VIEWBOX_PADDING,
+    maxY: center.y + height / 2 + DRAWING_MINIMAP_VIEWBOX_PADDING
   };
 }
 
 const shapeElements = computed<DrawingShapeElement[]>(() => props.elements.filter(isDrawingShapeElement));
 
-const viewportFrame = computed<DrawingMinimapRect>(() => {
+const viewportFrame = computed<MinimapRect>(() => {
   const size = getDrawingResponsiveViewBoxSize(props.viewport.zoom, props.viewportSize);
 
   return {
@@ -189,7 +182,7 @@ const viewportFrame = computed<DrawingMinimapRect>(() => {
   };
 });
 
-const bounds = computed<DrawingMinimapBounds>(() => createMinimapBounds(shapeElements.value, viewportFrame.value));
+const bounds = computed<MinimapBounds>(() => createMinimapBounds(shapeElements.value, viewportFrame.value));
 const viewBox = computed<string>(() => {
   const width = bounds.value.maxX - bounds.value.minX;
   const height = bounds.value.maxY - bounds.value.minY;
