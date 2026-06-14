@@ -56,19 +56,15 @@
         @canvas-wheel="handleCanvasWheel"
       />
     </InfiniteViewport>
-    <textarea
+    <TextEditorOverlay
       v-if="textEditingSession"
-      ref="textEditorRef"
       v-model="textEditorValue"
-      class="b-drawing__text-editor"
-      data-testid="drawing-text-editor"
-      spellcheck="false"
       :style="textEditorStyle"
-      @blur="commitTextEditor"
+      @commit="commitTextEditor"
       @input="handleTextEditorInput"
-      @keydown.stop="handleTextEditorKeydown"
-      @pointerdown.stop
-    ></textarea>
+      @editor-keydown="handleTextEditorKeydown"
+      @ready="setTextEditorRef"
+    />
     <MoveableLayer
       :enabled="activeTool === 'select' && !hideMoveableDuringDirectDrag && !textEditingSession"
       :root="rootRef"
@@ -107,6 +103,7 @@ import InfiniteViewport from './components/InfiniteViewport.vue';
 import MoveableLayer from './components/MoveableLayer.vue';
 import SelectoLayer from './components/SelectoLayer.vue';
 import StylePanel from './components/StylePanel.vue';
+import TextEditorOverlay from './components/TextEditorOverlay.vue';
 import Toolbar from './components/Toolbar.vue';
 import { DRAWING_SHAPE_TOOLS, DRAWING_TEXT_CREATE_CLICK_TOLERANCE, DRAWING_TEXT_ELEMENT_CLICK_CREATE_DELAY } from './constants/interaction';
 import { useDrawingBoard } from './hooks/useDrawingBoard';
@@ -157,6 +154,7 @@ const {
   textEditingSession,
   textEditorValue,
   textEditorStyle,
+  setTextEditorRef,
   startTextEditing,
   startConnectorLabelEditing,
   commitTextEditor,
@@ -1255,25 +1253,5 @@ onBeforeUnmount((): void => {
   outline: none;
   background: var(--bg-primary);
   border-radius: 8px;
-}
-
-.b-drawing__text-editor {
-  position: fixed;
-  z-index: 20;
-  box-sizing: border-box;
-  overflow: hidden;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.35;
-  color: var(--text-primary);
-  text-align: center;
-  white-space: pre;
-  resize: none;
-  outline: none;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  box-shadow: none;
 }
 </style>

@@ -76,6 +76,8 @@ export interface UseTextEditingReturn {
   textEditorRef: Ref<HTMLTextAreaElement | null>;
   /** 文本编辑框定位样式 */
   textEditorStyle: Ref<CSSProperties>;
+  /** 设置文本编辑器 DOM */
+  setTextEditorRef: (editor: HTMLTextAreaElement | null) => void;
   /** 开始编辑文本节点 */
   startTextEditing: (element: DrawingShapeElement, isNew: boolean) => Promise<void>;
   /** 开始编辑连接线标签 */
@@ -283,6 +285,15 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
     }
 
     editor.value = textEditorValue.value;
+  }
+
+  /**
+   * 设置文本编辑器 DOM。
+   * @param editor - 文本编辑器 DOM
+   */
+  function setTextEditorRef(editor: HTMLTextAreaElement | null): void {
+    textEditorRef.value = editor;
+    syncTextEditorContent();
   }
 
   /**
@@ -511,6 +522,7 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
     textEditorValue,
     textEditorRef,
     textEditorStyle,
+    setTextEditorRef,
     startTextEditing,
     startConnectorLabelEditing,
     commitTextEditor,

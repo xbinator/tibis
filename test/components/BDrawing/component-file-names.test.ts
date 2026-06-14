@@ -2,7 +2,7 @@
  * @file component-file-names.test.ts
  * @description 验证 BDrawing components 目录下的组件文件命名约束。
  */
-import { readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -19,5 +19,14 @@ describe('BDrawing component file names', (): void => {
     const drawingPrefixedFiles = readComponentFileNames().filter((fileName: string): boolean => fileName.startsWith('Drawing'));
 
     expect(drawingPrefixedFiles).toEqual([]);
+  });
+
+  it('keeps the text editor overlay in a dedicated local component', (): void => {
+    const componentPath = resolve(__dirname, '../../../src/components/BDrawing/components/TextEditorOverlay.vue');
+    const indexContent = readFileSync(resolve(__dirname, '../../../src/components/BDrawing/index.vue'), 'utf-8');
+
+    expect(existsSync(componentPath)).toBe(true);
+    expect(indexContent).toContain('TextEditorOverlay');
+    expect(indexContent).not.toContain('<textarea');
   });
 });
