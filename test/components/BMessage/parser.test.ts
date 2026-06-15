@@ -1,0 +1,138 @@
+/**
+ * @file parser.test.ts
+ * @description BMessage 节点解析器测试。
+ */
+import { marked } from 'marked';
+import { describe, expect, it } from 'vitest';
+import { parseMessageNodes } from '@/components/BMessage/parser';
+import type { BlockNode, InlineNode } from '@/components/BMessage/types';
+
+/**
+ * 断言节点类型并返回窄化后的节点。
+ * @param node - 待检查节点
+ * @param type - 期望节点类型
+ * @returns 窄化后的节点
+ */
+function expectBlockNode<T extends BlockNode['type']>(node: BlockNode | undefined, type: T): Extract<BlockNode, { type: T }> {
+  expect(node?.type).toBe(type);
+  return node as Extract<BlockNode, { type: T }>;
+}
+
+/**
+ * 断言行内节点类型并返回窄化后的节点。
+ * @param node - 待检查节点
+ * @param type - 期望节点类型
+ * @returns 窄化后的节点
+ */
+function expectInlineNode<T extends InlineNode['type']>(node: InlineNode | undefined, type: T): Extract<InlineNode, { type: T }> {
+  expect(node?.type).toBe(type);
+  return node as Extract<InlineNode, { type: T }>;
+}
+
+describe('parseMessageNodes', () => {
+  it('converts markdown blocks and nested inline formatting into owned nodes', (): void => {
+    const result = parseMessageNodes({
+      content: '# Title\n\nHello **bold _em_** and ~~gone~~ with `code`.',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const heading = expectBlockNode(result.blocks[0], 'heading');
+    const paragraph = expectBlockNode(result.blocks[1], 'paragraph');
+    const strong = expectInlineNode(paragraph.children[1], 'strong');
+    const em = expectInlineNode(strong.children[1], 'em');
+    const del = expectInlineNode(paragraph.children[3], 'del');
+    const code = expectInlineNode(paragraph.children[5], 'code');
+
+    expect(heading.depth).toBe(1);
+    expect(heading.children).toMatchObject([{ type: 'text', text: 'Title' }]);
+    expect(strong.children[0]).toMatchObject({ type: 'text', text: 'bold ' });
+    expect(em.children).toMatchObject([{ type: 'text', text: 'em' }]);
+    expect(del.children).toMatchObject([{ type: 'text', text: 'gone' }]);
+    expect(code.text).toBe('code');
+  });
+
+  it('textifies raw html instead of emitting html nodes', (): void => {
+    const result = parseMessageNodes({
+      content: '<script>alert(1)</script>\n\n<div>safe text</div>',
+      mode: 'markdown',
+      loading: false
+    });
+
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks.every((node) => node.type === 'paragraph')).toBe(true);
+    expect(result.blocks[0]).toMatchObject({
+      type: 'paragraph',
+      children: [{ type: 'text', text: '<script>alert(1)</script>' }]
+    });
+    expect(result.blocks[1]).toMatchObject({
+      type: 'paragraph',
+      children: [{ type: 'text', text: '<div>safe text</div>' }]
+    });
+  });
+
+  it('collects image preview items and assigns image indexes', (): void => {
+    const result = parseMessageNodes({
+      content: '![first](https://example.com/first.png "First") and ![second](https://example.com/second.png)',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+    const firstImage = expectInlineNode(paragraph.children[0], 'image');
+    const secondImage = expectInlineNode(paragraph.children[2], 'image');
+
+    expect(firstImage.imageIndex).toBe(0);
+    expect(secondImage.imageIndex).toBe(1);
+    expect(result.images).toEqual([
+      { src: 'https://example.com/first.png', name: 'first' },
+      { src: 'https://example.com/second.png', name: 'second' }
+    ]);
+  });
+
+  it('preserves plain text mode without markdown interpretation', (): void => {
+    const result = parseMessageNodes({
+      content: '**not bold**\n  indented',
+      mode: 'text',
+      loading: true
+    });
+
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+    const text = expectInlineNode(paragraph.children[0], 'text');
+    const cursor = expectInlineNode(paragraph.children[1], 'cursor');
+
+    expect(text.text).toBe('**not bold**\n  indented');
+    expect(cursor).toMatchObject({ type: 'cursor' });
+  });
+
+  it('keeps the streaming tail id stable while promoting completed ids after loading', (): void => {
+    const streaming = parseMessageNodes({
+      content: 'Done paragraph.\n\nGrowing tail',
+      mode: 'markdown',
+      loading: true
+    });
+    const completed = parseMessageNodes({
+      content: 'Done paragraph.\n\nGrowing tail',
+      mode: 'markdown',
+      loading: false
+    });
+
+    expect(streaming.blocks[0]?.id).toMatch(/^block-0-/);
+    expect(streaming.blocks[1]?.id).toBe('block-tail-1');
+    expect(completed.blocks[1]?.id).toMatch(/^block-1-/);
+    expect(completed.blocks[1]?.id).not.toBe(streaming.blocks[1]?.id);
+  });
+
+  it('uses a local deletion tokenizer without changing the package-level marked singleton', (): void => {
+    const result = parseMessageNodes({
+      content: 'Keep ~single~ but delete ~~double~~.',
+      mode: 'markdown',
+      loading: false
+    });
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+
+    expect(paragraph.children.some((node) => node.type === 'del')).toBe(true);
+    expect(paragraph.children).toContainEqual({ type: 'text', text: 'Keep ~single~ but delete ' });
+    expect(marked.parse('Keep ~single~.', { async: false })).toContain('<del>single</del>');
+  });
+});

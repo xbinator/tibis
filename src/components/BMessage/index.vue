@@ -1,63 +1,31 @@
 <!--
   @file index.vue
-  @description 消息内容渲染组件，支持 Markdown、纯文本、流式光标与 Markdown 图片预览。
+  @description 消息内容节点渲染组件，支持 Markdown、纯文本、流式光标与 Markdown 图片预览。
 -->
 <template>
-  <div ref="rootRef" class="b-message" :class="`b-message--${loading ? 'streaming' : 'done'}`" :style="rootStyle">
+  <div class="b-message" :class="`b-message--${props.loading ? 'streaming' : 'done'}`" :style="rootStyle">
     <div class="b-message__placeholder" aria-hidden="true"></div>
 
-    <div class="b-message__container">
-      <!-- Markdown 渲染 -->
-      <div
-        v-if="type === 'markdown'"
-        ref="markdownRef"
-        class="b-message__markdown"
-        @click="handleMarkdownClick"
-        @mousedown="handleMarkdownMouseDown"
-        v-html="renderedMarkdown"
-      ></div>
-
-      <!-- 纯文本渲染 -->
-      <div v-else class="b-message__text">{{ content }}<span v-if="loading" class="b-message__cursor" aria-hidden="true"></span></div>
+    <div class="b-message__container" :class="props.type === 'text' ? 'b-message__text' : 'b-message__markdown'">
+      <BlockNode v-for="node in parsedResult.blocks" :key="node.id" :node="node" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { BMessageProps as Props } from './types';
-import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
-import { marked } from 'marked';
-import type { ImagePreviewItem } from '@/hooks/useImagePreview';
+import type { BMessageProps as Props, MessageNodeRenderContext, ParseMessageNodesResult } from './types';
+import { computed, onScopeDispose, provide, shallowRef, watch } from 'vue';
 import { useImagePreview } from '@/hooks/useImagePreview';
 import { useNavigate } from '@/hooks/useNavigate';
 import { addCssUnit } from '@/utils/css';
-
-/**
- * 配置 marked 仅将 ~~（双波浪号）识别为删除线，单个 ~ 不作为删除线定界符。
- * marked 默认 GFM 模式下 ~~? 均可匹配删除线，此处覆写 tokenizer 仅保留双波浪号语义。
- */
-marked.use({
-  tokenizer: {
-    del(src: string) {
-      const match = /^~~(?=\S)([\s\S]*?\S)~~/.exec(src);
-      if (!match) return undefined;
-      return {
-        type: 'del',
-        raw: match[0],
-        text: match[1],
-        tokens: this.lexer.inlineTokens(match[1])
-      };
-    }
-  }
-});
+import BlockNode from './components/BlockNode.vue';
+import { parseMessageNodes } from './parser';
+import { MESSAGE_NODE_RENDER_CONTEXT_KEY } from './types';
 
 defineOptions({ name: 'BMessage' });
 
 const navigate = useNavigate();
 const { previewImage } = useImagePreview();
-
-/** Markdown 渲染容器，用于收集 v-html 输出的图片节点 */
-const markdownRef = ref<HTMLElement | null>(null);
 
 const props = withDefaults(defineProps<Props>(), {
   type: 'markdown',
@@ -74,148 +42,84 @@ const rootStyle = computed(() => {
   };
 });
 
-/** 光标占位标记，用于在流式渲染时替换为动画光标 HTML */
-const CURSOR_MARKER = '___B_MESSAGE_CURSOR_MARKER___';
-
-/**
- * 将 Markdown 内容解析为 HTML。
- * @param text - Markdown 文本
- * @param loading - 是否处于流式加载状态（流式时追加光标）
- * @returns 解析后的 HTML 字符串
- */
-function parseMarkdown(text: string, loading: boolean): string {
-  if (!text && !loading) return '';
-  if (!text && loading) return '<span class="b-message__cursor" aria-hidden="true"></span>';
-
-  const textToParse = loading ? text + CURSOR_MARKER : text;
-  let html = marked.parse(textToParse, { async: false }) as string;
-
-  if (loading) {
-    html = html.replace(CURSOR_MARKER, '<span class="b-message__cursor" aria-hidden="true"></span>');
-  }
-
-  return html;
-}
-
-/**
- * 从事件目标向上查找 Markdown 图片节点。
- * @param target - 原始事件目标
- * @returns 命中的图片元素，未命中时返回 null
- */
-function findMarkdownImageElement(target: EventTarget | null): HTMLImageElement | null {
-  if (!(target instanceof Element)) return null;
-
-  const imageElement = target.closest('img[src]');
-  return imageElement instanceof HTMLImageElement ? imageElement : null;
-}
-
-/**
- * 获取图片展示地址，优先使用浏览器实际加载地址。
- * @param imageElement - 图片元素
- * @returns 图片 URL
- */
-function getImageSource(imageElement: HTMLImageElement): string {
-  return imageElement.currentSrc || imageElement.getAttribute('src') || imageElement.src;
-}
-
-/**
- * 收集当前 Markdown 内容中的全部图片元素。
- * @returns 图片元素列表
- */
-function collectMarkdownImageElements(): HTMLImageElement[] {
-  return Array.from(markdownRef.value?.querySelectorAll<HTMLImageElement>('img[src]') ?? []);
-}
-
-/**
- * 打开 Markdown 图片预览器。
- * @param imageElement - 被点击的图片元素
- */
-async function openImageViewer(imageElement: HTMLImageElement): Promise<void> {
-  const imageElements = collectMarkdownImageElements();
-  const imageItems = imageElements.map<ImagePreviewItem>((item) => ({ src: getImageSource(item) })).filter((item) => Boolean(item.src));
-  const currentIndex = imageElements.findIndex((item) => item === imageElement);
-
-  if (!imageItems.length) return;
-
-  await previewImage({
-    images: imageItems,
-    startPosition: currentIndex,
-    showCarousel: imageItems.length > 1
-  });
-}
-
-/**
- * 处理 Markdown 内容点击：图片打开预览，其余链接交给统一导航逻辑。
- * @param event - 鼠标点击事件
- */
-async function handleMarkdownClick(event: MouseEvent): Promise<void> {
-  const imageElement = findMarkdownImageElement(event.target);
-
-  if (imageElement) {
-    event.preventDefault();
-    event.stopPropagation();
-    await openImageViewer(imageElement);
-    return;
-  }
-
-  navigate.onLink(event);
-}
-
-/**
- * 图片按下时阻止浏览器拖拽/选区，避免与父级 user-select: text 冲突。
- * @param event - 鼠标按下事件
- */
-function handleMarkdownMouseDown(event: MouseEvent): void {
-  const imageElement = findMarkdownImageElement(event.target);
-
-  if (!imageElement) return;
-
-  event.preventDefault();
-}
-
-/** 流式渲染结果，使用 shallowRef 避免深度追踪 */
-const renderedMarkdown = shallowRef<string>('');
-
-/** 当前是否正在流式传输 */
-const isStreaming = computed(() => props.loading);
+/** 节点解析结果，使用 shallowRef 避免深度追踪整棵消息树 */
+const parsedResult = shallowRef<ParseMessageNodesResult>({
+  blocks: [],
+  images: []
+});
 
 /** rAF 句柄，用于流式渲染的帧级合并 */
 let rafHandle: ReturnType<typeof requestAnimationFrame> | null = null;
 
 /**
- * 调度请求渲染，确保流式时每帧最多执行一次 markdown 解析。
- * 非流式状态直接同步渲染。
+ * 解析当前消息内容。
  */
-function scheduleRender(): void {
-  if (isStreaming.value && props.content) {
-    // 流式状态下使用 rAF 合并，每帧最多渲染一次
-    if (rafHandle !== null) {
-      cancelAnimationFrame(rafHandle);
-    }
-    rafHandle = requestAnimationFrame(() => {
-      rafHandle = null;
-      renderedMarkdown.value = parseMarkdown(props.content, true);
-    });
-  } else {
-    // 非流式状态（完成/初始空内容）同步渲染
-    if (rafHandle !== null) {
-      cancelAnimationFrame(rafHandle);
-      rafHandle = null;
-    }
-    renderedMarkdown.value = parseMarkdown(props.content, isStreaming.value);
-  }
+function parseCurrentMessage(): void {
+  parsedResult.value = parseMessageNodes({
+    content: props.content,
+    mode: props.type,
+    loading: props.loading
+  });
 }
 
-// 监听内容和流式状态变化，触发渲染调度
+/**
+ * 调度请求渲染，确保流式时每帧最多执行一次解析。
+ */
+function scheduleRender(): void {
+  if (props.loading) {
+    if (rafHandle !== null) {
+      cancelAnimationFrame(rafHandle);
+    }
+
+    rafHandle = requestAnimationFrame(() => {
+      rafHandle = null;
+      parseCurrentMessage();
+    });
+    return;
+  }
+
+  if (rafHandle !== null) {
+    cancelAnimationFrame(rafHandle);
+    rafHandle = null;
+  }
+
+  parseCurrentMessage();
+}
+
+/**
+ * 打开指定索引的图片预览。
+ * @param index - 图片索引
+ */
+async function previewImageAt(index: number): Promise<void> {
+  const { images } = parsedResult.value;
+
+  if (!images.length) return;
+
+  await previewImage({
+    images,
+    startPosition: index,
+    showCarousel: images.length > 1
+  });
+}
+
+const renderContext: MessageNodeRenderContext = {
+  get images() {
+    return parsedResult.value.images;
+  },
+  previewImageAt,
+  navigateLink: navigate.onLink
+};
+
+provide(MESSAGE_NODE_RENDER_CONTEXT_KEY, renderContext);
+
 watch(
-  () => [props.content, props.loading] as const,
+  () => [props.content, props.loading, props.type] as const,
   () => {
     scheduleRender();
   },
   { immediate: true }
 );
 
-// 组件卸载时清理未执行的 rAF
 onScopeDispose(() => {
   if (rafHandle !== null) {
     cancelAnimationFrame(rafHandle);
@@ -269,6 +173,14 @@ onScopeDispose(() => {
   background: var(--color-primary);
   border-radius: 1px;
   animation: b-stream-cursor-blink 0.8s steps(1) infinite;
+}
+
+.b-message__component-placeholder {
+  padding: 8px 10px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
 }
 
 @keyframes b-stream-cursor-blink {

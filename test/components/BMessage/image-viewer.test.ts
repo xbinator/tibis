@@ -49,9 +49,33 @@ describe('BMessage image viewer', () => {
     expect(preventDefaultSpy).toHaveBeenCalledOnce();
     expect(stopPropagationSpy).toHaveBeenCalledOnce();
     expect(previewImageMock).toHaveBeenCalledWith({
-      images: [{ src: 'https://example.com/first.png' }, { src: 'https://example.com/second.png' }],
+      images: [
+        { src: 'https://example.com/first.png', name: 'first' },
+        { src: 'https://example.com/second.png', name: 'second' }
+      ],
       startPosition: 1,
       showCarousel: true
+    });
+  });
+
+  it('resolves relative markdown image sources before opening preview', async (): Promise<void> => {
+    previewImageMock.mockClear();
+
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '![relative](assets/relative.png)'
+      }
+    });
+
+    await nextTick();
+
+    await wrapper.find('.b-message__markdown img').trigger('click');
+
+    expect(previewImageMock).toHaveBeenCalledWith({
+      images: [{ src: new URL('assets/relative.png', document.baseURI).href, name: 'relative' }],
+      startPosition: 0,
+      showCarousel: false
     });
   });
 });
