@@ -65,7 +65,7 @@ export const DRAWING_DEFAULT_STROKE_WIDTH = 1.5;
 /**
  * 默认快捷预设颜色。
  */
-export const DRAWING_DEFAULT_PRESET_COLORS = ['#111827', '#64748b', '#ef4444', '#f59e0b', '#22c55e', '#3b82f6'] as const;
+export const DRAWING_DEFAULT_PRESET_COLORS = ['#1e293b', '#dc2626', '#f97316', '#16a34a', '#2563eb'] as const;
 
 /**
  * 颜色选择器默认弹层位置。
