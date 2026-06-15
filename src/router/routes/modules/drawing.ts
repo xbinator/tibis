@@ -11,11 +11,11 @@ const routes: AppRouteRecordRaw[] = [
     name: 'drawing',
     component: () => import('@/views/drawing/index.vue'),
     meta: {
-      title: '画图',
+      title: '画图 (Beta)',
       tab: {
         id: 'drawing',
         cacheKey: 'drawing',
-        title: '画图'
+        title: '画图 (Beta)'
       }
     }
   }

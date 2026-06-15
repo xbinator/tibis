@@ -20,7 +20,7 @@
           <div class="action-icon">
             <Icon icon="lucide:pen-line" width="16" height="16" />
           </div>
-          <span class="action-label">画图</span>
+          <span class="action-label">画图 <span class="beta-tag">Beta</span></span>
         </div>
       </div>
 
@@ -177,8 +177,22 @@ function handleShowShortcuts(): void {
   }
 
   .action-label {
+    display: flex;
     flex: 1;
+    align-items: center;
+    justify-content: space-between;
     font-weight: 500;
+
+    .beta-tag {
+      padding: 0 4px;
+      margin-left: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 16px;
+      color: #f59e0b;
+      background: rgb(245 158 11 / 10%);
+      border-radius: 3px;
+    }
   }
 }
 
