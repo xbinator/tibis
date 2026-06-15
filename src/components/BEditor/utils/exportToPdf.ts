@@ -45,6 +45,90 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
   }
 
   .b-markdown-export {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #f1f5f9;
+    --bg-hover: #eef2f7;
+    --bg-disabled: #f6f8fa;
+    --text-primary: #1f2329;
+    --text-secondary: #57606a;
+    --text-tertiary: #6e7781;
+    --text-quaternary: #8c959f;
+    --text-disabled: #a6b0ba;
+    --border-primary: #d0d7de;
+    --border-secondary: #d8dee4;
+    --border-tertiary: #eaeef2;
+    --color-primary: #0969da;
+    --color-primary-bg: #ddf4ff;
+    --color-primary-bg-hover: #b6e3ff;
+    --color-primary-border: #54aeff;
+    --color-success: #1a7f37;
+    --color-success-bg: #dafbe1;
+    --color-warning: #9a6700;
+    --color-warning-bg: #fff8c5;
+    --color-error: #cf222e;
+    --color-error-bg: #ffebe9;
+    --color-info: #0969da;
+    --color-purple: #8250df;
+    --color-purple-bg: #fbefff;
+    --color-purple-border: #d8b9ff;
+    --selection-color: #ffffff;
+    --selection-bg: #0969da;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    --editor-text: #1f2329;
+    --editor-placeholder: #8c959f;
+    --editor-caret: #1f2329;
+    --editor-blockquote-text: #57606a;
+    --editor-blockquote-bg: #f6f8fa;
+    --editor-blockquote-border: #d0d7de;
+    --editor-link: #0969da;
+    --editor-hr: #d8dee4;
+    --editor-table-header-bg: #f6f8fa;
+    --editor-table-border: #d0d7de;
+    --editor-table-even-bg: #fbfbfc;
+    --editor-search-highlight: transparent;
+    --editor-search-active: transparent;
+    --editor-search-active-border: none;
+    --code-bg: #f6f8fa;
+    --code-border: #d0d7de;
+    --code-header-bg: #eef2f7;
+    --code-line-bg: #ffffff;
+    --code-line-hover-bg: #eef2f7;
+    --code-line-number: #6e7781;
+    --code-text: #24292f;
+    --code-keyword: #cf222e;
+    --code-string: #0a3069;
+    --code-comment: #6e7781;
+    --code-function: #8250df;
+    --code-number: #0550ae;
+    --code-operator: #cf222e;
+    --code-punctuation: #24292f;
+    --code-property: #953800;
+    --code-tag: #116329;
+    --code-attr-name: #953800;
+    --code-attr-value: #0a3069;
+    --code-builtin: #0550ae;
+    --code-boolean: #0550ae;
+    --code-class: #953800;
+    --code-constant: #0550ae;
+    --code-deleted: #82071e;
+    --code-inserted: #116329;
+    --code-regex: #116329;
+    --code-symbol: #0550ae;
+    --code-variable: #953800;
+    --tag-bg: #f6f8fa;
+    --tag-hover-bg: #eef2f7;
+    --tag-text: #1f2329;
+    --tag-secondary-text: #57606a;
+    --tag-placeholder: #8c959f;
+    --frontmatter-bg: #f8fafc;
+    --frontmatter-border: #d0d7de;
+    --frontmatter-divider: #d8dee4;
+    --frontmatter-key-text: #8250df;
+    --frontmatter-value-text: #1f2329;
+
     width: 100%;
     max-width: none;
     padding: 0;
@@ -76,6 +160,11 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
     transform: none !important;
   }
 
+  .b-markdown-export .b-markdown-rich__content .ProseMirror {
+    color: var(--editor-text);
+    caret-color: transparent;
+  }
+
   .b-markdown-export .b-markdown-frontmatter {
     width: 100% !important;
     min-width: 0 !important;
@@ -84,7 +173,34 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
     min-inline-size: 0 !important;
     max-inline-size: 100% !important;
     margin: 0 0 24px !important;
+    background-color: var(--frontmatter-bg);
+    border: 1px solid var(--frontmatter-border);
     break-inside: avoid;
+  }
+
+  .b-markdown-export .b-markdown-frontmatter__header,
+  .b-markdown-export .b-markdown-frontmatter__content,
+  .b-markdown-export .b-markdown-frontmatter__item {
+    background: transparent;
+  }
+
+  .b-markdown-export .b-markdown-frontmatter__title,
+  .b-markdown-export .b-markdown-frontmatter__key {
+    color: var(--frontmatter-key-text);
+  }
+
+  .b-markdown-export .b-markdown-frontmatter__value,
+  .b-markdown-export .b-markdown-frontmatter__new-value {
+    color: var(--frontmatter-value-text);
+    background-color: var(--bg-primary);
+    border-color: var(--border-primary);
+  }
+
+  .b-markdown-export .b-markdown-frontmatter__action-btn,
+  .b-markdown-export .b-markdown-frontmatter__delete,
+  .b-markdown-export .b-markdown-frontmatter__add-row,
+  .b-markdown-export .b-markdown-frontmatter__add-btn {
+    display: none !important;
   }
 
   .b-markdown-export .b-markdown-frontmatter__item,
@@ -104,6 +220,7 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
   .b-markdown-export h5,
   .b-markdown-export h6 {
     margin: 1.5em 0 0.65em;
+    color: var(--editor-text);
     line-height: 1.35;
   }
 
@@ -118,23 +235,48 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
 
   .b-markdown-export img {
     max-width: 100%;
+    box-shadow: none !important;
   }
 
   .b-markdown-export table {
-    width: 100%;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
     border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .b-markdown-export .b-markdown-table,
+  .b-markdown-export .b-markdown-table__viewport,
+  .b-markdown-export .b-markdown-table__scroller,
+  .b-markdown-export .b-markdown-table__table {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: visible !important;
   }
 
   .b-markdown-export th,
   .b-markdown-export td {
+    min-width: 0 !important;
+    max-width: none !important;
     padding: 8px 12px;
-    border: 1px solid #d0d7de;
+    color: var(--editor-text);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--editor-table-border);
+  }
+
+  .b-markdown-export th {
+    background-color: var(--editor-table-header-bg);
   }
 
   .b-markdown-export blockquote {
     padding-left: 16px;
-    color: #57606a;
-    border-left: 4px solid #d0d7de;
+    color: var(--editor-blockquote-text);
+    background-color: var(--editor-blockquote-bg);
+    border-left: 4px solid var(--editor-blockquote-border);
   }
 
   .b-markdown-export code,
@@ -142,12 +284,106 @@ const PDF_EXPORT_DOCUMENT_STYLE = `
     font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
   }
 
+  .b-markdown-export :not(pre) > code {
+    color: var(--color-error);
+    background: var(--bg-disabled);
+  }
+
   .b-markdown-export pre {
     padding: 16px;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
-    background: #f6f8fa;
+    color: var(--code-text);
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
     border-radius: 8px;
+  }
+
+  .b-markdown-export a {
+    color: var(--editor-link);
+  }
+
+  .b-markdown-export .b-markdown-codeblock {
+    overflow: hidden;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 8px;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .b-markdown-export .b-markdown-codeblock__header {
+    color: var(--code-line-number);
+    background: var(--code-header-bg);
+  }
+
+  .b-markdown-export .b-markdown-codeblock__control-btn,
+  .b-markdown-export .b-markdown-codeblock__copy {
+    display: none !important;
+  }
+
+  .b-markdown-export .b-markdown-codeblock__body,
+  .b-markdown-export .b-markdown-codeblock__body code {
+    color: var(--code-text);
+    background: var(--code-bg);
+  }
+
+  .b-markdown-export .hljs-keyword {
+    color: var(--code-keyword);
+  }
+
+  .b-markdown-export .hljs-string {
+    color: var(--code-string);
+  }
+
+  .b-markdown-export .hljs-number {
+    color: var(--code-number);
+  }
+
+  .b-markdown-export .hljs-comment {
+    color: var(--code-comment);
+  }
+
+  .b-markdown-export .hljs-function,
+  .b-markdown-export .hljs-title {
+    color: var(--code-function);
+  }
+
+  .b-markdown-export .hljs-params {
+    color: var(--code-text);
+  }
+
+  .b-markdown-export .hljs-variable,
+  .b-markdown-export .hljs-property {
+    color: var(--code-variable);
+  }
+
+  .b-markdown-export .hljs-operator {
+    color: var(--code-operator);
+  }
+
+  .b-markdown-export .hljs-tag {
+    color: var(--code-tag);
+  }
+
+  .b-markdown-export .hljs-attr {
+    color: var(--code-attr-name);
+  }
+
+  .b-markdown-export .hljs-value {
+    color: var(--code-attr-value);
+  }
+
+  .b-markdown-export .hljs-built_in {
+    color: var(--code-builtin);
+  }
+
+  .b-markdown-export .hljs-class {
+    color: var(--code-class);
+  }
+
+  .b-markdown-export .hljs-constant {
+    color: var(--code-constant);
   }
 
   .b-markdown-export__source {
@@ -250,23 +486,11 @@ const DOCUMENT_STYLE_RELEVANT_SELECTORS = [
 
 /**
  * 从当前页面收集 CSS 自定义属性与样式表规则。
- * 将收集结果作为独立样式块注入导出 HTML，替代逐节点调用 getComputedStyle 的性能瓶颈。
+ * 只收集 Markdown 内容相关规则；颜色变量由 PDF 专用打印主题提供，避免当前应用主题污染导出结果。
  * @returns 收集到的 CSS 文本
  */
 function collectDocumentStyles(): string {
   const parts: string[] = [];
-
-  // 收集 :root 中的 CSS 自定义属性（色值与间距变量），确保导出上下文中的颜色与尺寸一致
-  const computedRootStyle = getComputedStyle(document.documentElement);
-  const variables: string[] = [];
-  for (const name of Array.from(computedRootStyle)) {
-    if (name.startsWith('--')) {
-      variables.push(`  ${name}: ${computedRootStyle.getPropertyValue(name).trim()};`);
-    }
-  }
-  if (variables.length > 0) {
-    parts.push(`:root {\n${variables.join('\n')}\n}`);
-  }
 
   // 收集与 markdown 渲染相关的样式表规则
   for (const sheet of document.styleSheets) {
