@@ -1,10 +1,10 @@
 /**
  * @file compression-summary.test.ts
- * @description BChatSidebar 上下文压缩摘要保真度测试。
+ * @description BChat 上下文压缩摘要保真度测试。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateStructuredSummary, generateSummaryText } from '@/components/BChatSidebar/utils/compression/structuredSummaryGenerator';
-import type { TrimmedMessageItem } from '@/components/BChatSidebar/utils/compression/types';
+import { generateStructuredSummary, generateSummaryText } from '@/components/BChat/utils/compression/structuredSummaryGenerator';
+import type { TrimmedMessageItem } from '@/components/BChat/utils/compression/types';
 
 /** AI 调用返回值类型。 */
 type MockAIInvokeResult = Promise<[unknown, { output?: unknown; text: string }]>;

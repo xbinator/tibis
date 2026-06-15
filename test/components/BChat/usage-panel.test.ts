@@ -1,12 +1,12 @@
 /**
  * @file usage-panel.test.ts
- * @description BChatSidebar 会话累计 Token 用量面板渲染测试。
+ * @description BChat 会话累计 Token 用量面板渲染测试。
  * @vitest-environment jsdom
  */
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import UsagePanel from '@/components/BChatSidebar/components/UsagePanel.vue';
+import UsagePanel from '@/components/BChat/components/UsagePanel.vue';
 
 /** BButton 测试替身。 */
 const BButtonStub = defineComponent({

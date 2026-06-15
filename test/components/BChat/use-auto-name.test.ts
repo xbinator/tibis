@@ -3,7 +3,7 @@
  * @description useAutoName Hook 单元测试，覆盖快照采集、防抖调度、chat 模型复用与标题持久化。
  */
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { useAutoName } from '@/components/BChatSidebar/hooks/useAutoName';
+import { useAutoName } from '@/components/BChat/hooks/useAutoName';
 
 /** mock agent.invoke */
 const mockInvoke = vi.hoisted(() => vi.fn());

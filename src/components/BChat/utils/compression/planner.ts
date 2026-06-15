@@ -2,7 +2,7 @@
  * @file planner.ts
  * @description 消息保留规则切分：根据保留规则将消息分为保留原文、文件语义和可摘要三类。
  */
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 
 /** 兼容历史消息与新工具实现的用户提问工具名称。 */
 const ASK_USER_QUESTION_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);

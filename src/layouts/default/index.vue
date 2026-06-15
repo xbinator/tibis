@@ -67,7 +67,7 @@
         </RouterView>
       </div>
 
-      <BChatSidebar />
+      <BChat />
     </div>
 
     <BSearchRecent v-model:visible="visible.searchRecent" />
@@ -82,7 +82,7 @@ import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
 import BButton from '@/components/BButton/index.vue';
-import BChatSidebar from '@/components/BChatSidebar/index.vue';
+import BChat from '@/components/BChat/index.vue';
 import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';

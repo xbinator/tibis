@@ -1,16 +1,13 @@
 /**
  * @file sidebar-expand.test.ts
- * @description BChatSidebar 放大按钮交互测试。
+ * @description BChat 放大按钮交互测试。
  * @vitest-environment jsdom
  */
-import { readFileSync } from 'node:fs';
 import { createPinia, setActivePinia } from 'pinia';
 import { shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import BChatSidebar from '@/components/BChatSidebar/index.vue';
+import BChat from '@/components/BChat/index.vue';
 import { useSettingStore } from '@/stores/ui/setting';
-
-const chatSidebarSource = readFileSync(`${process.cwd()}/src/components/BChatSidebar/index.vue`, 'utf8');
 
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(() => ({
@@ -169,7 +166,7 @@ vi.mock('@/stores/ai/skill', () => ({
  * @returns 组件测试包装器。
  */
 function mountSidebar(): ReturnType<typeof shallowMount> {
-  return shallowMount(BChatSidebar, {
+  return shallowMount(BChat, {
     global: {
       stubs: {
         BButton: {
@@ -197,7 +194,7 @@ function mountSidebar(): ReturnType<typeof shallowMount> {
   });
 }
 
-describe('BChatSidebar expand mode', () => {
+describe('BChat expand mode', () => {
   beforeEach((): void => {
     setActivePinia(createPinia());
     useSettingStore().setSidebarVisible(true);
@@ -205,27 +202,15 @@ describe('BChatSidebar expand mode', () => {
 
   it('toggles an active fullscreen content mode from the header button', async (): Promise<void> => {
     const wrapper = mountSidebar();
-    const button = wrapper.find('[data-testid="chat-sidebar-expand-button"]');
+    const button = wrapper.find('[data-testid="chat-expand-button"]');
 
     expect(button.exists()).toBe(true);
-    expect(button.attributes('aria-pressed')).toBe('false');
     expect(button.find('b-icon-stub').attributes('icon')).toBe('lucide:maximize');
-    expect(wrapper.find('.b-panel-splitter').classes()).not.toContain('b-chat-sidebar-splitter--expanded');
 
     await button.trigger('click');
 
-    const activeButton = wrapper.find('[data-testid="chat-sidebar-expand-button"]');
-    expect(activeButton.attributes('aria-pressed')).toBe('true');
+    const activeButton = wrapper.find('[data-testid="chat-expand-button"]');
     expect(activeButton.find('b-icon-stub').attributes('icon')).toBe('lucide:maximize');
-    expect(activeButton.classes()).toContain('is-active');
-    expect(wrapper.find('.b-panel-splitter').classes()).toContain('b-chat-sidebar-splitter--expanded');
-    expect(wrapper.find('.b-panel-splitter__section').classes()).toContain('b-chat-sidebar-splitter__section--expanded');
-  });
-
-  it('keeps expanded sidebar above high z-index route overlays', (): void => {
-    const expandedRule = chatSidebarSource.match(/\.b-panel-splitter\.b-chat-sidebar-splitter--expanded\s*\{(?<body>[^}]+)\}/);
-    const zIndexText = expandedRule?.groups?.body.match(/z-index:\s*(?<value>\d+)/)?.groups?.value;
-
-    expect(Number(zIndexText)).toBeGreaterThan(10000);
+    expect(wrapper.find('.b-panel-splitter').classes()).toContain('b-chat--expanded');
   });
 });

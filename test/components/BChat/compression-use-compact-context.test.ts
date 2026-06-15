@@ -1,12 +1,12 @@
 /**
  * @file compression-use-compact-context.test.ts
- * @description BChatSidebar 手动压缩 hook 与压缩可观察性集成测试。
+ * @description BChat 手动压缩 hook 与压缩可观察性集成测试。
  */
 import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useCompactContext } from '@/components/BChatSidebar/hooks/useCompactContext';
-import type { CompressionRecord } from '@/components/BChatSidebar/utils/compression/types';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { useCompactContext } from '@/components/BChat/hooks/useCompactContext';
+import type { CompressionRecord } from '@/components/BChat/utils/compression/types';
+import type { Message } from '@/components/BChat/utils/types';
 
 /** 压缩协调器测试替身。 */
 const mockCompressSessionManually = vi.hoisted(() =>
@@ -18,7 +18,7 @@ const mockLogger = vi.hoisted(() => ({
   info: vi.fn<(message: string) => Promise<void>>()
 }));
 
-vi.mock('@/components/BChatSidebar/utils/compression/coordinator', () => ({
+vi.mock('@/components/BChat/utils/compression/coordinator', () => ({
   createCompressionCoordinator: vi.fn(() => ({
     compressSessionManually: mockCompressSessionManually
   }))

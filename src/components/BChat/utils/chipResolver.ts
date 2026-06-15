@@ -3,7 +3,7 @@
  * @description 聊天输入框 Chip 解析器，将 file-ref token 解析为渲染 Widget。
  */
 import { WidgetType } from '@codemirror/view';
-import { createFileRefChipElement, createFileRefChipPresentation } from '@/components/BChatSidebar/components/FileRefChip';
+import { createFileRefChipElement, createFileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
 import type { ChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
 import { parseFileReferenceToken, type FileReferenceNavigationTarget, type ParsedFileReference } from '@/utils/file/reference';
 

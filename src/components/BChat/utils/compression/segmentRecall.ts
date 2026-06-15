@@ -4,7 +4,7 @@
  */
 
 import type { CompressionRecord } from './types';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 import { renderCompressionHandoff } from './summaryRenderer';
 
 /**

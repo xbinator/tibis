@@ -1,17 +1,17 @@
 /**
  * @file context-usage.test.ts
- * @description BChatSidebar 上下文窗口用量计算测试。
+ * @description BChat 上下文窗口用量计算测试。
  */
 import type { ModelMessage } from 'ai';
 import { computed, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useContextUsage } from '@/components/BChatSidebar/hooks/useContextUsage';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { useContextUsage } from '@/components/BChat/hooks/useContextUsage';
+import type { Message } from '@/components/BChat/utils/types';
 
 /** token 估算器测试替身。 */
 const mockEstimate = vi.hoisted(() => vi.fn<(messages: ModelMessage[]) => number>());
 
-vi.mock('@/components/BChatSidebar/utils/compression/tokenEstimator', () => ({
+vi.mock('@/components/BChat/utils/compression/tokenEstimator', () => ({
   createTokenEstimator: vi.fn(async () => ({
     estimate: mockEstimate,
     estimateText: vi.fn<(text: string) => number>((text) => text.length)

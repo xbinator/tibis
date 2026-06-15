@@ -2,7 +2,7 @@
  * @file tailPolicy.ts
  * @description 压缩 tail 原文保留策略，按上下文窗口预算选择最近消息。
  */
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 
 /** tail 预算占模型上下文窗口比例。 */
 const TAIL_CONTEXT_WINDOW_RATIO = 0.25;

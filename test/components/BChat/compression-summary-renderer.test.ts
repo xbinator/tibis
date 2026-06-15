@@ -1,10 +1,10 @@
 /**
  * @file compression-summary-renderer.test.ts
- * @description BChatSidebar 压缩摘要 Markdown 交接稿渲染测试。
+ * @description BChat 压缩摘要 Markdown 交接稿渲染测试。
  */
 import { describe, expect, it } from 'vitest';
-import { renderCompressionHandoff } from '@/components/BChatSidebar/utils/compression/summaryRenderer';
-import type { CompressionRecord } from '@/components/BChatSidebar/utils/compression/types';
+import { renderCompressionHandoff } from '@/components/BChat/utils/compression/summaryRenderer';
+import type { CompressionRecord } from '@/components/BChat/utils/compression/types';
 
 /**
  * 创建压缩记录测试数据。

@@ -1,6 +1,6 @@
 /**
  * @file message.ts
- * @description BChatSidebar 消息创建、转换与持久化过滤工具。
+ * @description BChat 消息创建、转换与持久化过滤工具。
  */
 import type { Message } from './types';
 import type { FileReference } from '../types';

@@ -4,7 +4,7 @@
  */
 import type { AIToolExecutionResult } from 'types/ai';
 import { describe, expect, it } from 'vitest';
-import { getToolResultSummary } from '@/components/BChatSidebar/utils/toolResultSummary';
+import { getToolResultSummary } from '@/components/BChat/utils/toolResultSummary';
 
 /**
  * 创建成功工具结果。

@@ -28,8 +28,8 @@
  */
 import type { ChatMessageTextPart } from 'types/chat';
 import { computed } from 'vue';
-import type { FileRefChipPresentation } from '@/components/BChatSidebar/components/FileRefChip';
-import { createFileRefChipPresentation } from '@/components/BChatSidebar/components/FileRefChip';
+import type { FileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
+import { createFileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
 import { useNavigate } from '@/hooks/useNavigate';
 import { parseFileReferenceToken } from '@/utils/file/reference';
 import { createNamespace } from '@/utils/namespace';

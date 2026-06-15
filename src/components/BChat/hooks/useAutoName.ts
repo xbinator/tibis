@@ -3,7 +3,7 @@
  * @description 负责首轮会话的自动命名快照冻结、延迟调度与标题持久化
  */
 import { ref } from 'vue';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 import { useChat } from '@/hooks/useChat';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { useChatSessionStore } from '@/stores/chat/session';

@@ -1,10 +1,10 @@
 /**
  * @file compression-tail-policy.test.ts
- * @description BChatSidebar 压缩 tail 预算策略测试。
+ * @description BChat 压缩 tail 预算策略测试。
  */
 import { describe, expect, it } from 'vitest';
-import { computeTailTokenBudget, selectTailPreservedMessageIds } from '@/components/BChatSidebar/utils/compression/tailPolicy';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { computeTailTokenBudget, selectTailPreservedMessageIds } from '@/components/BChat/utils/compression/tailPolicy';
+import type { Message } from '@/components/BChat/utils/types';
 
 /**
  * 创建 user/assistant 测试消息。

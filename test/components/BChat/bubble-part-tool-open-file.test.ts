@@ -7,7 +7,7 @@ import type { VueWrapper } from '@vue/test-utils';
 import type { ChatMessageToolPart } from 'types/chat';
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import BubblePartTool from '@/components/BChatSidebar/components/MessageBubble/BubblePartTool.vue';
+import BubblePartTool from '@/components/BChat/components/MessageBubble/BubblePartTool.vue';
 
 const openFileMock = vi.hoisted(() => vi.fn<(_options: { filePath?: string | null }) => Promise<void>>().mockResolvedValue(undefined));
 
@@ -66,7 +66,7 @@ describe('BubblePartTool open file summary tag', (): void => {
   it('opens the file when the write_file summary file tag is clicked', async (): Promise<void> => {
     const wrapper = mountTool(createToolPart('write_file', { path: '/workspace/docs/report.md', content: '# Report', created: true }));
 
-    await wrapper.find('button.bubble-part-tool__summary-tag--clickable').trigger('click');
+    await wrapper.find('.bubble-part-tool__summary-tag--clickable').trigger('click');
 
     expect(openFileMock).toHaveBeenCalledWith({ filePath: '/workspace/docs/report.md' });
     wrapper.unmount();

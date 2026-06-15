@@ -28,7 +28,7 @@
           @switch-session="switchSession"
           @delete-session="handleDeleteSession"
         />
-        <BButton square size="small" :type="isSidebarExpanded ? 'secondary' : 'text'" data-testid="chat-sidebar-expand-button" @click="toggleSidebarExpanded">
+        <BButton square size="small" :type="isSidebarExpanded ? 'secondary' : 'text'" data-testid="chat-expand-button" @click="toggleSidebarExpanded">
           <BIcon icon="lucide:maximize" :size="16" />
         </BButton>
 
@@ -181,7 +181,7 @@ import { shouldAutoCompactByContextUsage } from './utils/compression/policy';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { create, userChoice, buildMessageReferences } from './utils/messageHelper';
 
-const [, bem] = createNamespace('chat-sidebar');
+const [, bem] = createNamespace('chat');
 
 /** assistant 草稿节流持久化间隔。 */
 const ASSISTANT_DRAFT_PERSIST_INTERVAL_MS = 500;
@@ -976,7 +976,7 @@ onUnmounted(() => {
 </script>
 
 <style lang="less">
-.b-chat-sidebar--expanded {
+.b-chat--expanded {
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -988,7 +988,7 @@ onUnmounted(() => {
   }
 }
 
-.b-chat-sidebar__content {
+.b-chat__content {
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
@@ -998,7 +998,7 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
-.b-chat-sidebar__header {
+.b-chat__header {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -1007,7 +1007,7 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--border-primary);
 }
 
-.b-chat-sidebar__title {
+.b-chat__title {
   flex: 1;
   width: 0;
   font-size: 12px;
@@ -1021,14 +1021,14 @@ onUnmounted(() => {
   background-color: var(--border-secondary);
 }
 
-.b-chat-sidebar__container {
+.b-chat__container {
   display: flex;
   flex: 1;
   flex-direction: column;
   height: 0;
 }
 
-.b-chat-sidebar__toolbar {
+.b-chat__toolbar {
   padding: 8px 12px 12px;
 
   &:empty {
@@ -1036,7 +1036,7 @@ onUnmounted(() => {
   }
 }
 
-.b-chat-sidebar__conversation-container {
+.b-chat__conversation-container {
   position: relative;
   display: flex;
   flex: 1;
@@ -1044,7 +1044,7 @@ onUnmounted(() => {
   height: 0;
 }
 
-.b-chat-sidebar__floating-container {
+.b-chat__floating-container {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1060,12 +1060,12 @@ onUnmounted(() => {
   }
 }
 
-.b-chat-sidebar__input {
+.b-chat__input {
   padding: 12px;
   border-top: 1px solid var(--border-primary);
 }
 
-.b-chat-sidebar__input-container {
+.b-chat__input-container {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1078,7 +1078,7 @@ onUnmounted(() => {
   transition: background 0.3s ease-in-out;
 }
 
-.b-chat-sidebar__input-container .b-prompt-editor {
+.b-chat__input-container .b-prompt-editor {
   flex: 1;
   min-width: 0;
   padding: 0;
@@ -1087,7 +1087,7 @@ onUnmounted(() => {
   border-radius: 0;
 }
 
-.b-chat-sidebar__input-container .b-prompt-editor:focus-within {
+.b-chat__input-container .b-prompt-editor:focus-within {
   box-shadow: none;
 }
 </style>

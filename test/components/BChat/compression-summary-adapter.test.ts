@@ -1,10 +1,10 @@
 /**
  * @file compression-summary-adapter.test.ts
- * @description BChatSidebar 压缩摘要 v2/v3 兼容视图测试。
+ * @description BChat 压缩摘要 v2/v3 兼容视图测试。
  */
 import { describe, expect, it } from 'vitest';
-import { fromStructuredConversationSummary, toGeneralConversationSummary } from '@/components/BChatSidebar/utils/compression/summaryAdapter';
-import type { CompressionRecord, GeneralConversationSummary, StructuredConversationSummary } from '@/components/BChatSidebar/utils/compression/types';
+import { fromStructuredConversationSummary, toGeneralConversationSummary } from '@/components/BChat/utils/compression/summaryAdapter';
+import type { CompressionRecord, GeneralConversationSummary, StructuredConversationSummary } from '@/components/BChat/utils/compression/types';
 
 /**
  * 创建 v2 摘要测试数据。

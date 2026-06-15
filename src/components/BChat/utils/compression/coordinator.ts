@@ -12,7 +12,7 @@ import type {
   TriggerReason
 } from './types';
 import { findLast } from 'lodash-es';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 import { asyncTo } from '@/utils/asyncTo';
 import { CURRENT_SCHEMA_VERSION, RECENT_ROUND_PRESERVE } from './constant';
 import { CompressionCancelledError, CompressionError } from './error';

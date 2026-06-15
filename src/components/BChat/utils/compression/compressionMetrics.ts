@@ -3,7 +3,7 @@
  * @description 聊天压缩质量指标计算与日志格式化。
  */
 import type { CompressionRecord } from './types';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 import { toGeneralConversationSummary } from './summaryAdapter';
 
 /**

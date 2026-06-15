@@ -1,12 +1,12 @@
 /**
  * @file use-chat-stream-persistence.test.ts
- * @description BChatSidebar 流式完成前的消息落库快照测试。
+ * @description BChat 流式完成前的消息落库快照测试。
  */
 import type { AIToolExecutor } from 'types/ai';
 import { nextTick, ref, type Ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useChatStream } from '@/components/BChatSidebar/hooks/useChatStream';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { useChatStream } from '@/components/BChat/hooks/useChatStream';
+import type { Message } from '@/components/BChat/utils/types';
 import type { UseStreamOptions } from '@/hooks/useChat';
 
 /** 捕获 useChat 注册的流式回调，供测试直接驱动。 */

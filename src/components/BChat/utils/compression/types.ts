@@ -3,7 +3,7 @@
  * @description 上下文压缩模块类型定义，包含压缩记录结构、策略结果与存储接口。
  */
 import type { CompressionRecord, TriggerReason } from 'types/compression';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 
 // 核心类型从共享类型目录 re-export
 export type {

@@ -1,13 +1,13 @@
 /**
  * @file context-usage-indicator.test.ts
- * @description BChatSidebar 输入栏上下文预算指示器渲染测试。
+ * @description BChat 输入栏上下文预算指示器渲染测试。
  * @vitest-environment jsdom
  */
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import ContextUsage from '@/components/BChatSidebar/components/InputToolbar/ContextUsage.vue';
-import { createContextUsageBudgetSnapshot } from '@/components/BChatSidebar/utils/contextUsageBudget';
+import ContextUsage from '@/components/BChat/components/InputToolbar/ContextUsage.vue';
+import { createContextUsageBudgetSnapshot } from '@/components/BChat/utils/contextUsageBudget';
 
 /** BDropdown 测试替身，直接渲染默认插槽和 overlay 插槽。 */
 const BDropdownStub = defineComponent({

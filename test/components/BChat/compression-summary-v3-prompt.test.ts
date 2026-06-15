@@ -1,10 +1,10 @@
 /**
  * @file compression-summary-v3-prompt.test.ts
- * @description BChatSidebar v3 摘要提示词与 fallback 保真测试。
+ * @description BChat v3 摘要提示词与 fallback 保真测试。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateStructuredSummary } from '@/components/BChatSidebar/utils/compression/structuredSummaryGenerator';
-import type { StructuredConversationSummary, TrimmedMessageItem } from '@/components/BChatSidebar/utils/compression/types';
+import { generateStructuredSummary } from '@/components/BChat/utils/compression/structuredSummaryGenerator';
+import type { StructuredConversationSummary, TrimmedMessageItem } from '@/components/BChat/utils/compression/types';
 
 /** AI 调用参数测试视图。 */
 interface MockAIInvokeOptions {

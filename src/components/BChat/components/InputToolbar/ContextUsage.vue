@@ -66,8 +66,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { ContextUsageBudgetSnapshot } from '@/components/BChatSidebar/utils/contextUsageBudget';
-import { createContextUsageBudgetSnapshot } from '@/components/BChatSidebar/utils/contextUsageBudget';
+import type { ContextUsageBudgetSnapshot } from '@/components/BChat/utils/contextUsageBudget';
+import { createContextUsageBudgetSnapshot } from '@/components/BChat/utils/contextUsageBudget';
 
 /**
  * 上下文用量指示器属性。

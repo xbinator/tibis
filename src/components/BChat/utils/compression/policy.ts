@@ -5,7 +5,7 @@
 import type { CompressionPolicyResult, ContextBudgetSnapshot, TriggerReason } from './types';
 import type { ModelMessage } from 'ai';
 import { sumBy } from 'lodash-es';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 import { computeUsableInputTokens } from '../contextUsageBudget';
 import { COMPRESSION_CHAR_THRESHOLD, COMPRESSION_ROUND_THRESHOLD } from './constant';
 

@@ -1,10 +1,10 @@
 /**
  * @file interrupted-draft-recovery.test.ts
- * @description BChatSidebar 硬中断 assistant 草稿恢复测试。
+ * @description BChat 硬中断 assistant 草稿恢复测试。
  */
 import { describe, expect, it } from 'vitest';
-import { recoverInterruptedAssistantDrafts, HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChatSidebar/utils/interruptedDraftRecovery';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { recoverInterruptedAssistantDrafts, HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChat/utils/interruptedDraftRecovery';
+import type { Message } from '@/components/BChat/utils/types';
 
 /**
  * 创建一条未完成的助手草稿消息。

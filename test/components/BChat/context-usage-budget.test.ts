@@ -1,6 +1,6 @@
 /**
  * @file context-usage-budget.test.ts
- * @description BChatSidebar 上下文可用输入预算计算测试。
+ * @description BChat 上下文可用输入预算计算测试。
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -8,7 +8,7 @@ import {
   computeSafetyMarginTokens,
   computeUsableInputTokens,
   createContextUsageBudgetSnapshot
-} from '@/components/BChatSidebar/utils/contextUsageBudget';
+} from '@/components/BChat/utils/contextUsageBudget';
 
 describe('contextUsageBudget', () => {
   it('computes usable input budget after output reservation and safety margin', (): void => {

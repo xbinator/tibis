@@ -1,11 +1,11 @@
 /**
  * @file compression-metrics.test.ts
- * @description BChatSidebar 压缩质量指标测试。
+ * @description BChat 压缩质量指标测试。
  */
 import { describe, expect, it } from 'vitest';
-import { createCompressionMetrics, formatCompressionMetricsLog } from '@/components/BChatSidebar/utils/compression/compressionMetrics';
-import type { CompressionRecord } from '@/components/BChatSidebar/utils/compression/types';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { createCompressionMetrics, formatCompressionMetricsLog } from '@/components/BChat/utils/compression/compressionMetrics';
+import type { CompressionRecord } from '@/components/BChat/utils/compression/types';
+import type { Message } from '@/components/BChat/utils/types';
 
 /**
  * 创建消息测试数据。

@@ -1,11 +1,11 @@
 /**
  * @file compression-coordinator-v3.test.ts
- * @description BChatSidebar 压缩协调器 v3 记录写入测试。
+ * @description BChat 压缩协调器 v3 记录写入测试。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createCompressionCoordinator } from '@/components/BChatSidebar/utils/compression/coordinator';
-import type { CompressionRecord, CompressionRecordStorage, StructuredConversationSummary } from '@/components/BChatSidebar/utils/compression/types';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { createCompressionCoordinator } from '@/components/BChat/utils/compression/coordinator';
+import type { CompressionRecord, CompressionRecordStorage, StructuredConversationSummary } from '@/components/BChat/utils/compression/types';
+import type { Message } from '@/components/BChat/utils/types';
 
 /** 摘要生成器测试替身。 */
 const mockSummaryGenerator = vi.hoisted(() => ({
@@ -13,7 +13,7 @@ const mockSummaryGenerator = vi.hoisted(() => ({
   generateSummaryText: vi.fn<(summary: StructuredConversationSummary) => string>()
 }));
 
-vi.mock('@/components/BChatSidebar/utils/compression/structuredSummaryGenerator', () => ({
+vi.mock('@/components/BChat/utils/compression/structuredSummaryGenerator', () => ({
   generateStructuredSummary: mockSummaryGenerator.generateStructuredSummary,
   generateSummaryText: mockSummaryGenerator.generateSummaryText
 }));

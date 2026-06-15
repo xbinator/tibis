@@ -510,7 +510,7 @@ defineExpose({
 
 <style lang="less">
 @import url('@/assets/styles/scrollbar.less');
-@import url('@/components/BChatSidebar/components/FileRefChip/index.less');
+@import url('@/components/BChat/components/FileRefChip/index.less');
 
 .b-prompt-editor-shell {
   position: relative;

@@ -4,7 +4,7 @@
  */
 
 import dayjs from 'dayjs';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 
 /**
  * 话题边界信息。

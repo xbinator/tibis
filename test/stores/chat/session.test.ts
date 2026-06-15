@@ -5,7 +5,7 @@
 import type { ChatMessageRecord } from 'types/chat';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChatSidebar/utils/interruptedDraftRecovery';
+import { HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChat/utils/interruptedDraftRecovery';
 import { useChatSessionStore } from '@/stores/chat/session';
 
 const mockElectronAPI = vi.hoisted(() => ({

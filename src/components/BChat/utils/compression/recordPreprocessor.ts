@@ -4,7 +4,7 @@
  */
 import type { RuleTrimResult, TrimmedMessageItem } from './types';
 import { compact, sumBy } from 'lodash-es';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import type { Message } from '@/components/BChat/utils/types';
 import { COMPRESSION_INPUT_CHAR_LIMIT, COMPRESSION_SUMMARY_TEXT_MAX } from './constant';
 
 /**

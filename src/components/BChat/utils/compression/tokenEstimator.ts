@@ -5,8 +5,8 @@
  */
 import type { ModelMessage } from 'ai';
 import type { TiktokenEncoding } from 'js-tiktoken';
-import { convert } from '@/components/BChatSidebar/utils/messageHelper';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { convert } from '@/components/BChat/utils/messageHelper';
+import type { Message } from '@/components/BChat/utils/types';
 
 /**
  * token 估算器接口。

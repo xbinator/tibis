@@ -1,11 +1,11 @@
 /**
  * @file compression-segment-recall.test.ts
- * @description BChatSidebar 多段摘要召回渲染测试。
+ * @description BChat 多段摘要召回渲染测试。
  */
 import { describe, expect, it } from 'vitest';
-import { buildMultiSegmentSummarySystemMessage, selectRelevantSegments } from '@/components/BChatSidebar/utils/compression/segmentRecall';
-import type { CompressionRecord } from '@/components/BChatSidebar/utils/compression/types';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { buildMultiSegmentSummarySystemMessage, selectRelevantSegments } from '@/components/BChat/utils/compression/segmentRecall';
+import type { CompressionRecord } from '@/components/BChat/utils/compression/types';
+import type { Message } from '@/components/BChat/utils/types';
 
 /**
  * 创建多段压缩记录。

@@ -44,7 +44,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import BButton from '@/components/BButton/index.vue';
-import type { ContextUsageBudgetSnapshot } from '@/components/BChatSidebar/utils/contextUsageBudget';
+import type { ContextUsageBudgetSnapshot } from '@/components/BChat/utils/contextUsageBudget';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 import ContextUsage from './InputToolbar/ContextUsage.vue';
 import ModelSelector from './InputToolbar/ModelSelector.vue';

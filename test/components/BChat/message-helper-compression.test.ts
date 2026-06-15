@@ -1,10 +1,10 @@
 /**
  * @file message-helper-compression.test.ts
- * @description BChatSidebar 压缩边界后的模型上下文组装测试。
+ * @description BChat 压缩边界后的模型上下文组装测试。
  */
 import { describe, expect, it } from 'vitest';
-import { convert, sliceMessagesFromCompressionBoundary } from '@/components/BChatSidebar/utils/messageHelper';
-import type { Message } from '@/components/BChatSidebar/utils/types';
+import { convert, sliceMessagesFromCompressionBoundary } from '@/components/BChat/utils/messageHelper';
+import type { Message } from '@/components/BChat/utils/types';
 
 /**
  * 创建 user/assistant 测试消息。
