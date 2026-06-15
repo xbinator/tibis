@@ -150,6 +150,15 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
   }
 
   /**
+   * 创建与 SVG 文本测量一致的编辑器内边距。
+   * @param zoom - 画布缩放比例
+   * @returns textarea padding 样式值
+   */
+  function createTextEditorPadding(zoom: number): string {
+    return `${(DRAWING_TEXT_VERTICAL_PADDING * zoom) / 2}px ${(DRAWING_TEXT_HORIZONTAL_PADDING * zoom) / 2}px`;
+  }
+
+  /**
    * 创建形状文本编辑框样式。
    * @param element - 形状元素
    * @returns 编辑框样式
@@ -182,7 +191,7 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
       left: `${position.x}px`,
       lineHeight: `${lineHeight * zoom}px`,
       overflowWrap: isStandaloneText ? undefined : 'anywhere',
-      padding: `${DRAWING_TEXT_VERTICAL_PADDING * zoom}px ${DRAWING_TEXT_HORIZONTAL_PADDING * zoom}px`,
+      padding: createTextEditorPadding(zoom),
       position: 'fixed',
       textAlign: element.style?.textAlign ?? 'center',
       top: `${position.y}px`,
@@ -240,7 +249,7 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
       height: `${size.height * zoom}px`,
       left: `${position.x}px`,
       lineHeight: `${lineHeight * zoom}px`,
-      padding: `${DRAWING_TEXT_VERTICAL_PADDING * zoom}px ${DRAWING_TEXT_HORIZONTAL_PADDING * zoom}px`,
+      padding: createTextEditorPadding(zoom),
       position: 'fixed',
       textAlign: 'center',
       top: `${position.y}px`,

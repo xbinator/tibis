@@ -1153,7 +1153,7 @@ describe('BDrawing', (): void => {
     expect(editor.element.style.fontSize).toBe('18px');
     expect(editor.element.style.fontWeight).toBe('650');
     expect(editor.element.style.lineHeight).toBe('24.3px');
-    expect(editor.element.style.padding).toBe('4px 6px');
+    expect(editor.element.style.padding).toBe('2px 3px');
     expect(editor.element.style.textAlign).toBe('center');
   });
 

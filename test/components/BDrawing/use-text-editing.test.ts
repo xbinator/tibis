@@ -5,11 +5,11 @@
  */
 import { effectScope, nextTick, ref } from 'vue';
 import { describe, expect, it } from 'vitest';
-import type { DrawingShapeElement, DrawingSize } from '@/components/BDrawing/types';
 import { useDrawingBoard } from '@/components/BDrawing/hooks/useDrawingBoard';
 import { useDrawingInteraction } from '@/components/BDrawing/hooks/useDrawingInteraction';
 import { useDrawingViewport } from '@/components/BDrawing/hooks/useDrawingViewport';
 import { useTextEditing } from '@/components/BDrawing/hooks/useTextEditing';
+import type { DrawingShapeElement, DrawingSize } from '@/components/BDrawing/types';
 
 /**
  * 创建测试文本元素。
