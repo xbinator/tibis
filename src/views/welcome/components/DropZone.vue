@@ -20,11 +20,11 @@
  */
 
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
 import { OPEN_FILE_EXTENSIONS } from '@/constants/extensions';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { native } from '@/shared/platform';
+import type { StoredFile } from '@/shared/storage';
 import { useFilesStore } from '@/stores/workspace/files';
 
 /**
@@ -35,10 +35,9 @@ interface DraggedFileWithPath {
   path?: string;
 }
 
-const router = useRouter();
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 const filesStore = useFilesStore();
-const { openFileByPath } = useOpenFile();
+const { openFile, openFileByPath } = useOpenFile();
 
 const isDragging = ref(false);
 let dragCounter = 0;
@@ -84,12 +83,13 @@ function resolveDroppedFilePath(file: File): string | null {
  * 将无磁盘路径的拖拽文件保存为未保存草稿。
  * @param file - 拖拽得到的浏览器 File 对象
  * @param ext - 文件扩展名
- * @returns 创建后的文件 ID
+ * @returns 创建后的最近文件记录
  */
-async function createDroppedDraft(file: File, ext: string): Promise<string> {
+async function createDroppedDraft(file: File, ext: string): Promise<StoredFile> {
   const content = await file.text();
   const name = file.name.split('.').slice(0, -1).join('.') || file.name;
-  const createdFile = await filesStore.createAndOpen({
+
+  return filesStore.createAndOpen({
     type: 'file',
     id: nanoid(),
     path: null,
@@ -98,8 +98,6 @@ async function createDroppedDraft(file: File, ext: string): Promise<string> {
     content,
     savedContent: content
   });
-
-  return createdFile.id;
 }
 
 /**
@@ -127,8 +125,8 @@ async function handleDrop(e: DragEvent): Promise<void> {
       return;
     }
 
-    const openedId = await createDroppedDraft(file, ext);
-    await router.push({ name: 'editor', params: { id: openedId } });
+    const createdFile = await createDroppedDraft(file, ext);
+    await openFile(createdFile);
   } catch (error) {
     console.error('Failed to drop file:', error);
   }

@@ -20,7 +20,7 @@
           <div class="action-icon">
             <Icon icon="lucide:pen-line" width="16" height="16" />
           </div>
-          <span class="action-label">画图 <span class="beta-tag">Beta</span></span>
+          <span class="action-label">画图</span>
         </div>
       </div>
 
@@ -34,7 +34,7 @@
             @click="record.type === 'file' ? handleOpenRecentFile(record.id) : handleOpenWebview(record.url)"
           >
             <div class="recent-file-icon">
-              <Icon :icon="record.type === 'file' ? 'lucide:file-text' : 'lucide:globe'" width="14" height="14" />
+              <Icon :icon="getRecentRecordIcon(record)" width="14" height="14" />
             </div>
             <div class="recent-file-info">
               <div class="recent-file-name">{{ record.type === 'file' ? resolveFileTitle(record) : record.title }}</div>
@@ -59,19 +59,18 @@
  */
 
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
+import type { RecentRecord } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { resolveFileTitle } from '@/utils/file/title';
 import DropZone from './components/DropZone.vue';
 
 const { openWebview } = useNavigate();
-const router = useRouter();
 const recentStore = useRecentStore();
-const { createNewFile, openFileById, openNativeFile } = useOpenFile();
+const { createNewFile, createNewDrawingFile, openFileById, openNativeFile } = useOpenFile();
 const visibleSearchRecent = ref(false);
 
 const topRecentRecords = computed(() => recentStore.topRecentRecords);
@@ -93,10 +92,10 @@ async function handleOpenFile(): Promise<void> {
 }
 
 /**
- * 打开独立画图页面。
+ * 创建并打开画图文件。
  */
 async function handleOpenDrawing(): Promise<void> {
-  await router.push({ name: 'drawing' });
+  await createNewDrawingFile();
 }
 
 /**
@@ -120,6 +119,19 @@ function handleOpenWebview(url: string): void {
  */
 function handleShowShortcuts(): void {
   visibleSearchRecent.value = true;
+}
+
+/**
+ * 读取最近记录图标。
+ * @param record - 最近记录
+ * @returns 图标名称
+ */
+function getRecentRecordIcon(record: RecentRecord): string {
+  if (record.type === 'webview') {
+    return 'lucide:globe';
+  }
+
+  return record.ext === 'tibis' ? 'lucide:pen-line' : 'lucide:file-text';
 }
 </script>
 
@@ -182,17 +194,6 @@ function handleShowShortcuts(): void {
     align-items: center;
     justify-content: space-between;
     font-weight: 500;
-
-    .beta-tag {
-      padding: 0 4px;
-      margin-left: 4px;
-      font-size: 10px;
-      font-weight: 600;
-      line-height: 16px;
-      color: #f59e0b;
-      background: rgb(245 158 11 / 10%);
-      border-radius: 3px;
-    }
   }
 }
 
