@@ -77,7 +77,13 @@ let pathSearchToken = 0;
 
 // ---------- computed ----------
 
-const activeId = computed<string>(() => (route.name === 'editor' ? (route.params.id as string) || '' : ''));
+const activeId = computed<string>(() => {
+  if (route.name !== 'editor' && route.name !== 'drawing') {
+    return '';
+  }
+
+  return (route.params.id as string) || '';
+});
 
 const filteredRecords = computed<RecentRecord[]>(() => {
   const records = recentStore.recentRecords ?? [];

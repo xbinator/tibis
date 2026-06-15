@@ -5,19 +5,82 @@
 
 import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
+import type { DrawingData } from '@/components/BDrawing/types';
 import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { Modal } from '@/utils/modal';
+import { createTibisDocumentContent, resolveTibisDocumentRoute } from './useFileSession';
 
 const createFileId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
+
+/**
+ * 文件打开目标路由。
+ */
+interface FileRouteLocation {
+  /** 目标路由名称 */
+  name: string;
+  /** 路由参数 */
+  params: {
+    /** 文件 ID */
+    id: string;
+  };
+}
+
+/**
+ * 统一文件打开与新建行为。
+ */
+interface OpenFileActions {
+  /** 打开最近文件记录 */
+  openFile: (file: StoredFile) => Promise<StoredFile | null>;
+  /** 通过文件 ID 打开最近文件 */
+  openFileById: (id: string) => Promise<StoredFile | null>;
+  /** 通过磁盘路径打开文件 */
+  openFileByPath: (path: string) => Promise<StoredFile | null>;
+  /** 通过原生文件选择器打开文件 */
+  openNativeFile: () => Promise<StoredFile | null>;
+  /** 创建新的 Markdown 文件 */
+  createNewFile: () => Promise<StoredFile>;
+  /** 创建新的 Tibis 画图文件 */
+  createNewDrawingFile: () => Promise<StoredFile>;
+}
+
+/**
+ * 创建空画图数据。
+ * @returns 空画图数据
+ */
+function createEmptyDrawingData(): DrawingData {
+  return {
+    elements: [],
+    edges: [],
+    viewport: {
+      center: { x: 0, y: 0 },
+      zoom: 1
+    }
+  };
+}
+
+/**
+ * 根据文件内容解析目标路由。
+ * @param file - 最近文件记录
+ * @returns 路由位置
+ */
+function resolveFileRoute(file: StoredFile): FileRouteLocation {
+  if (file.ext !== 'tibis') {
+    return { name: 'editor', params: { id: file.id } };
+  }
+
+  const route = resolveTibisDocumentRoute(file.content);
+
+  return { name: route.routeName, params: { id: file.id } };
+}
 
 /**
  * 提供统一的文件打开与新建行为。
  * @returns 文件打开相关操作
  */
-export function useOpenFile() {
+export function useOpenFile(): OpenFileActions {
   const router = useRouter();
   const filesStore = useFilesStore();
   const tabsStore = useTabsStore();
@@ -53,7 +116,7 @@ export function useOpenFile() {
       const openedFile = await filesStore.openOrRefreshByPathFromDisk(path);
       if (!openedFile) return null;
 
-      await router.push({ name: 'editor', params: { id: openedFile.id } });
+      await router.push(resolveFileRoute(openedFile));
       return openedFile;
     } catch {
       // 文件不存在则弹窗提示后从最近记录中移除。
@@ -80,7 +143,7 @@ export function useOpenFile() {
 
     // 无磁盘路径的未保存草稿仍然沿用最近文件缓存恢复。
     const openedFile = await filesStore.openExistingFile(file.id);
-    await router.push({ name: 'editor', params: { id: openedFile.id } });
+    await router.push(resolveFileRoute(openedFile));
 
     return openedFile;
   }
@@ -131,5 +194,30 @@ export function useOpenFile() {
     return createdFile;
   }
 
-  return { openFile, openFileById, openFileByPath, openNativeFile, createNewFile };
+  /**
+   * 创建一个新的未保存画图文件并打开。
+   * @returns 创建后的文件记录
+   */
+  async function createNewDrawingFile(): Promise<StoredFile> {
+    const drawingData = createEmptyDrawingData();
+    const content = createTibisDocumentContent({
+      type: 'drawing',
+      version: 1,
+      data: drawingData
+    });
+    const createdFile = await filesStore.createAndOpen({
+      type: 'file',
+      id: createFileId(),
+      path: null,
+      name: 'Untitled',
+      ext: 'tibis',
+      content,
+      savedContent: content
+    });
+
+    await router.push(resolveFileRoute(createdFile));
+    return createdFile;
+  }
+
+  return { openFile, openFileById, openFileByPath, openNativeFile, createNewFile, createNewDrawingFile };
 }

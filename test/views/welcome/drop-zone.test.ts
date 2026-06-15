@@ -20,6 +20,7 @@ interface TestFileList {
 }
 
 const openFileByPathMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<unknown>>().mockResolvedValue({ id: 'opened-file' }));
+const openFileMock = vi.hoisted(() => vi.fn<(_file: unknown) => Promise<unknown>>().mockResolvedValue({ id: 'opened-file' }));
 const getPathForFileMock = vi.hoisted(() => vi.fn<(_file: File) => string | null>().mockReturnValue('/tmp/dropped.md'));
 const routerPushMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise<void>>().mockResolvedValue(undefined));
 const createAndOpenMock = vi.hoisted(() => vi.fn());
@@ -32,6 +33,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/hooks/useOpenFile', () => ({
   useOpenFile: () => ({
+    openFile: openFileMock,
     openFileByPath: openFileByPathMock
   })
 }));
@@ -78,9 +80,20 @@ function createDropEvent(file: File): Event {
   return event;
 }
 
+/**
+ * 等待异步拖拽处理完成。
+ * @returns Promise
+ */
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
 describe('DropZone', () => {
   beforeEach((): void => {
     openFileByPathMock.mockClear();
+    openFileMock.mockClear();
     getPathForFileMock.mockClear();
     routerPushMock.mockClear();
     createAndOpenMock.mockClear();
@@ -98,5 +111,31 @@ describe('DropZone', () => {
 
     expect(getPathForFileMock).toHaveBeenCalledTimes(1);
     expect(openFileByPathMock).toHaveBeenCalledWith('/tmp/dropped.md');
+  });
+
+  it('creates and opens a dropped tibis draft when no native path is available', async (): Promise<void> => {
+    getPathForFileMock.mockReturnValue(null);
+    createAndOpenMock.mockResolvedValue({
+      type: 'file',
+      id: 'draft-1',
+      path: null,
+      name: 'board',
+      ext: 'tibis',
+      content: '{"type":"drawing","version":1}',
+      savedContent: '{"type":"drawing","version":1}'
+    });
+
+    const wrapper = shallowMount(DropZone, {
+      slots: {
+        default: '<div>content</div>'
+      }
+    });
+
+    await wrapper.element.dispatchEvent(createDropEvent(new File(['{"type":"drawing","version":1}'], 'board.tibis', { type: 'application/json' })));
+    await flushPromises();
+
+    expect(createAndOpenMock).toHaveBeenCalledWith(expect.objectContaining({ ext: 'tibis', name: 'board' }));
+    expect(openFileMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'draft-1', ext: 'tibis' }));
+    expect(routerPushMock).not.toHaveBeenCalled();
   });
 });

@@ -4,6 +4,7 @@ import { computed, nextTick, onActivated, onDeactivated, onUnmounted, reactive, 
 import { useRoute, useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
 import { useClipboard } from '@/hooks/useClipboard';
+import { useFileAutoSave } from '@/hooks/useFileAutoSave';
 import { resolveRouteTabInfo } from '@/router/cache';
 import { native } from '@/shared/platform';
 import type { ReadFileResult } from '@/shared/platform/native/types';
@@ -15,7 +16,6 @@ import { resolveFileTitle } from '@/utils/file/title';
 import { Modal } from '@/utils/modal';
 import { getDefaultSavePath, getRecoveredSavePath, parseFileName, replaceFileName } from '../utils/filePath';
 import { resolveFileReconcileAction } from '../utils/reconcileFileContent';
-import { useAutoSave } from './useAutoSave';
 import { useFileState } from './useFileState';
 import { useFileWatcher } from './useFileWatcher';
 import { type SaveToDiskResult, useSavePolicy } from './useSavePolicy';
@@ -41,7 +41,7 @@ export function useSession(fileId: Ref<string>) {
   const viewState = reactive<{ mode: ViewMode }>({ mode: 'rich' });
   const isActive = ref(true);
 
-  const autoSave = useAutoSave(fileState);
+  const autoSave = useFileAutoSave(fileState);
 
   const currentTitle = computed(() => resolveFileTitle(fileState.value));
   // 文件状态相关的存储同步、保存收尾和外部文件回填都收口到这里，useSession 只做流程编排。

@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WelcomePage from '@/views/welcome/index.vue';
 
 const routerPushMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise<void>>().mockResolvedValue(undefined));
+const createNewDrawingFileMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'drawing-1' }));
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
@@ -24,6 +25,7 @@ vi.mock('@/hooks/useNavigate', () => ({
 vi.mock('@/hooks/useOpenFile', () => ({
   useOpenFile: () => ({
     createNewFile: vi.fn(),
+    createNewDrawingFile: createNewDrawingFileMock,
     openFileById: vi.fn(),
     openNativeFile: vi.fn()
   })
@@ -39,9 +41,10 @@ vi.mock('@/stores/workspace/recent', () => ({
 describe('WelcomePage', (): void => {
   beforeEach((): void => {
     routerPushMock.mockClear();
+    createNewDrawingFileMock.mockClear();
   });
 
-  it('opens the independent drawing route from the quick action entry', async (): Promise<void> => {
+  it('creates a drawing file from the quick action entry', async (): Promise<void> => {
     const wrapper = shallowMount(WelcomePage, {
       global: {
         stubs: {
@@ -56,6 +59,7 @@ describe('WelcomePage', (): void => {
 
     await wrapper.find('[data-testid="welcome-open-drawing"]').trigger('click');
 
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'drawing' });
+    expect(createNewDrawingFileMock).toHaveBeenCalledTimes(1);
+    expect(routerPushMock).not.toHaveBeenCalledWith({ name: 'drawing' });
   });
 });
