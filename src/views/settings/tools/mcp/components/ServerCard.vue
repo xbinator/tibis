@@ -16,9 +16,9 @@
           {{ status.message }}
         </div>
         <div v-if="status" class="server-card__status">
-          <span>Runtime: {{ status.runtimeStatus }}</span>
-          <span>Sandbox: {{ status.sandboxStatus }}</span>
-          <span>Discovery: {{ status.discoveryStatus }}</span>
+          <span>运行时: {{ statusLabel(status.runtimeStatus, 'runtime') }}</span>
+          <span>沙箱: {{ statusLabel(status.sandboxStatus, 'sandbox') }}</span>
+          <span>扫描: {{ statusLabel(status.discoveryStatus, 'discovery') }}</span>
           <span v-if="status.message">{{ status.message }}</span>
         </div>
       </div>
@@ -119,6 +119,55 @@ const isRemote = computed<boolean>(() => props.server.transport === 'streamableH
  * 是否需要 OAuth 认证。
  */
 const needsAuth = computed<boolean>(() => props.status?.runtimeStatus === 'needs_auth');
+
+/**
+ * 运行时状态中文映射。
+ */
+const runtimeStatusMap: Record<string, string> = {
+  idle: '空闲',
+  connecting: '连接中',
+  connected: '已连接',
+  failed: '失败',
+  disabled: '已禁用',
+  needs_auth: '需要认证',
+  needs_client_registration: '需要客户端注册'
+};
+
+/**
+ * 沙箱状态中文映射。
+ */
+const sandboxStatusMap: Record<string, string> = {
+  idle: '空闲',
+  starting: '启动中',
+  running: '运行中',
+  failed: '失败'
+};
+
+/**
+ * 工具发现状态中文映射。
+ */
+const discoveryStatusMap: Record<string, string> = {
+  idle: '空闲',
+  refreshing: '刷新中',
+  ready: '已完成',
+  failed: '失败'
+};
+
+/**
+ * 将状态值翻译为中文。
+ * @param status - 原始状态值
+ * @param type - 状态类型
+ * @returns 中文状态名称
+ */
+function statusLabel(status: string, type: 'runtime' | 'sandbox' | 'discovery'): string {
+  if (type === 'runtime') {
+    return runtimeStatusMap[status] || status;
+  }
+  if (type === 'sandbox') {
+    return sandboxStatusMap[status] || status;
+  }
+  return discoveryStatusMap[status] || status;
+}
 
 /**
  * 下拉菜单选项。
