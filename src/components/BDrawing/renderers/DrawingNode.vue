@@ -232,7 +232,7 @@ function isConnectorAnchorActive(anchor: Exclude<DrawingConnectorAnchor, 'center
 }
 
 .b-drawing-node__shape {
-  fill: var(--bg-elevated);
+  fill: transparent;
   stroke: var(--border-hover);
   stroke-width: 1.5;
   transition: fill 0.15s ease, stroke 0.15s ease, filter 0.15s ease;
