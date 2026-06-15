@@ -4,8 +4,8 @@
  * @vitest-environment jsdom
  */
 import type { ChatSession, PaginatedSessionsResult } from 'types/chat';
-import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent, h, nextTick } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ChatSider from '@/layouts/default/components/ChatSider.vue';
@@ -34,7 +34,7 @@ vi.mock('@/components/BChat/index.vue', () => ({
   default: {
     name: 'BChat',
     props: ['sessionId'],
-    emits: ['session-created', 'loading-change'],
+    emits: ['session-created', 'draft-session-created', 'loading-change'],
     template: '<div data-testid="b-chat" :data-session-id="sessionId || \'\'"></div>'
   }
 }));
@@ -182,6 +182,22 @@ describe('ChatSider', (): void => {
     expect(settingStore.chatSidebarActiveSessionId).toBe('session-created');
     expect(wrapper.text()).toContain('首条消息');
     expect(sessionHistoryRefreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears active session when BChat requests a new draft session', async (): Promise<void> => {
+    const latestSession = createSession('session-old', '旧会话');
+    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    const settingStore = useSettingStore();
+    settingStore.setSidebarVisible(true);
+    const wrapper = mountChatSider();
+    await flushPromises();
+    await nextTick();
+
+    wrapper.findComponent({ name: 'BChat' }).vm.$emit('draft-session-created');
+    await nextTick();
+
+    expect(settingStore.chatSidebarActiveSessionId).toBeNull();
+    expect(wrapper.text()).toContain('新会话');
   });
 
   it('disables session controls while chat is loading', async (): Promise<void> => {

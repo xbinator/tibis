@@ -149,6 +149,7 @@ const props = withDefaults(defineProps<BChatProps>(), {
 
 const emit = defineEmits<{
   (e: 'session-created', session: ChatSession): void;
+  (e: 'draft-session-created'): void;
   (e: 'loading-change', loading: boolean): void;
 }>();
 
@@ -650,6 +651,7 @@ async function createDraftSession(): Promise<void> {
   if (loading.value) return;
 
   await resetDraftSessionState();
+  emit('draft-session-created');
 }
 
 /** 自动命名 Hook。 */

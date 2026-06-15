@@ -41,6 +41,7 @@
       <BChat
         v-if="initialized"
         :session-id="settingStore.chatSidebarActiveSessionId"
+        @draft-session-created="handleCreateDraftSession"
         @session-created="handleSessionCreated"
         @loading-change="handleChatLoadingChange"
       />
