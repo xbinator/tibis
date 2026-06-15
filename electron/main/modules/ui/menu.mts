@@ -175,9 +175,8 @@ export function buildAppMenuTemplate(isMac: boolean, appName: string): MenuItemC
   template.push({
     label: '帮助',
     submenu: [
-      { label: '检查更新', click: () => sendMenuAction('help:checkUpdate') },
-      { type: 'separator' as const },
       { label: '快捷键', accelerator: 'CmdOrCtrl+/', click: () => sendMenuAction('help:shortcuts') },
+      { label: '检查更新', click: () => sendMenuAction('help:checkUpdate') },
       { type: 'separator' as const },
       { role: 'toggleDevTools' as const, label: '切换开发者工具' }
     ]
