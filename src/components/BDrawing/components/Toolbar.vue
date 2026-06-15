@@ -130,6 +130,7 @@ const canZoomIn = computed<boolean>(() => props.zoom < DRAWING_MAX_ZOOM);
 /** 各分组统一样式 + 允许点击 */
 .b-drawing-toolbar__group {
   position: absolute;
+  z-index: 2;
   display: flex;
   gap: 2px;
   align-items: center;

@@ -4,23 +4,6 @@
 -->
 <template>
   <section ref="rootRef" class="b-drawing" tabindex="0" @keydown="handleKeydown">
-    <Toolbar
-      :zoom="board.state.value.viewport.zoom"
-      :active-tool="activeTool"
-      :elements="board.state.value.elements"
-      :viewport="board.state.value.viewport"
-      :viewport-size="viewportSize"
-      :can-undo="canUndo"
-      :can-redo="canRedo"
-      @set-tool="setActiveTool"
-      @undo="board.undo"
-      @redo="board.redo"
-      @zoom-in="viewport.zoomIn"
-      @zoom-out="viewport.zoomOut"
-      @reset-zoom="viewport.resetZoom"
-      @set-center="viewport.setCenter"
-      @set-zoom="viewport.setZoom"
-    />
     <StylePanel
       :element="selectedShapeElement"
       :connector="selectedConnectorElement"
@@ -76,6 +59,23 @@
       @resize="board.resizeElements"
     />
     <SelectoLayer :root="rootRef" :active-tool="activeTool" :selection="board.state.value.selection" @set-selection="board.setSelection" />
+    <Toolbar
+      :zoom="board.state.value.viewport.zoom"
+      :active-tool="activeTool"
+      :elements="board.state.value.elements"
+      :viewport="board.state.value.viewport"
+      :viewport-size="viewportSize"
+      :can-undo="canUndo"
+      :can-redo="canRedo"
+      @set-tool="setActiveTool"
+      @undo="board.undo"
+      @redo="board.redo"
+      @zoom-in="viewport.zoomIn"
+      @zoom-out="viewport.zoomOut"
+      @reset-zoom="viewport.resetZoom"
+      @set-center="viewport.setCenter"
+      @set-zoom="viewport.setZoom"
+    />
   </section>
 </template>
 
