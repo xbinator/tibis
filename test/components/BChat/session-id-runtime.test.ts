@@ -31,6 +31,14 @@ const streamMock = vi.hoisted(() => ({
 
 const streamLoading = vi.hoisted(() => ({ value: false }));
 
+const autoNameMockState = vi.hoisted(() => ({
+  options: undefined as
+    | {
+        onTitlePersisted?: (sessionId: string, title: string) => Promise<void> | void;
+      }
+    | undefined
+}));
+
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(() => ({
     push: vi.fn()
@@ -167,6 +175,17 @@ vi.mock('@/components/BChat/hooks/useChatStream', () => ({
     stream: streamMock,
     loading: streamLoading
   }))
+}));
+
+vi.mock('@/components/BChat/hooks/useAutoName', () => ({
+  useAutoName: vi.fn((options: { onTitlePersisted?: (sessionId: string, title: string) => Promise<void> | void }) => {
+    autoNameMockState.options = options;
+
+    return {
+      captureSnapshot: vi.fn(() => null),
+      scheduleAutoName: vi.fn()
+    };
+  })
 }));
 
 vi.mock('@/utils/modal', () => ({
@@ -315,6 +334,7 @@ describe('BChat sessionId runtime', (): void => {
     streamMock.regenerate.mockReset();
     streamMock.submitUserChoice.mockReset();
     streamMock.abort.mockReset();
+    autoNameMockState.options = undefined;
     chatStoreMock.getSessionMessages.mockResolvedValue([]);
     chatStoreMock.getSessions.mockResolvedValue({ items: [], hasMore: false });
     chatStoreMock.addSessionMessage.mockResolvedValue();
@@ -375,5 +395,15 @@ describe('BChat sessionId runtime', (): void => {
     await flushPromises();
 
     expect(chatStoreMock.getSessionMessages).not.toHaveBeenCalled();
+  });
+
+  it('emits session title persisted after auto name callback runs', async (): Promise<void> => {
+    const wrapper = mountBChat('session-1');
+    await flushPromises();
+
+    await autoNameMockState.options?.onTitlePersisted?.('session-1', '生成标题');
+    await flushPromises();
+
+    expect(wrapper.emitted('session-title-persisted')?.[0]).toEqual(['session-1', '生成标题']);
   });
 });

@@ -34,7 +34,7 @@ vi.mock('@/components/BChat/index.vue', () => ({
   default: {
     name: 'BChat',
     props: ['sessionId'],
-    emits: ['session-created', 'draft-session-created', 'loading-change'],
+    emits: ['session-created', 'session-title-persisted', 'draft-session-created', 'loading-change'],
     template: '<div data-testid="b-chat" :data-session-id="sessionId || \'\'"></div>'
   }
 }));
@@ -181,6 +181,23 @@ describe('ChatSider', (): void => {
 
     expect(settingStore.chatSidebarActiveSessionId).toBe('session-created');
     expect(wrapper.text()).toContain('首条消息');
+    expect(sessionHistoryRefreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates current title and refreshes history after BChat persists generated title', async (): Promise<void> => {
+    const latestSession = createSession('session-latest', '首条消息');
+    chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
+    const settingStore = useSettingStore();
+    settingStore.setSidebarVisible(true);
+    const wrapper = mountChatSider();
+    await flushPromises();
+    await nextTick();
+
+    wrapper.findComponent({ name: 'BChat' }).vm.$emit('session-title-persisted', 'session-latest', '生成标题');
+    await flushPromises();
+    await nextTick();
+
+    expect(wrapper.text()).toContain('生成标题');
     expect(sessionHistoryRefreshMock).toHaveBeenCalledTimes(1);
   });
 

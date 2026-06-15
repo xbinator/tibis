@@ -43,6 +43,7 @@
         :session-id="settingStore.chatSidebarActiveSessionId"
         @draft-session-created="handleCreateDraftSession"
         @session-created="handleSessionCreated"
+        @session-title-persisted="handleSessionTitlePersisted"
         @loading-change="handleChatLoadingChange"
       />
     </div>
@@ -125,6 +126,19 @@ async function handleSwitchSession(sessionId: string): Promise<void> {
 async function handleSessionCreated(session: ChatSession): Promise<void> {
   settingStore.setChatSidebarActiveSessionId(session.id);
   setCurrentSession(session);
+  await sessionHistoryRef.value?.refreshSessions();
+}
+
+/**
+ * 同步 BChat 自动命名后持久化的会话标题。
+ * @param sessionId - 已更新标题的会话 ID
+ * @param title - 自动生成后的会话标题
+ */
+async function handleSessionTitlePersisted(sessionId: string, title: string): Promise<void> {
+  if (currentSession.value?.id === sessionId) {
+    setCurrentSession({ ...currentSession.value, title });
+  }
+
   await sessionHistoryRef.value?.refreshSessions();
 }
 

@@ -3,7 +3,6 @@
     <div class="b-markdown-sidebar">
       <div v-if="title" class="sidebar__header">
         <div class="sidebar__main" @click="handleTitleClick">
-          <BIcon icon="lucide:bookmark" />
           <span class="sidebar__title">{{ title }}</span>
         </div>
       </div>

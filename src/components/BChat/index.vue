@@ -149,6 +149,7 @@ const props = withDefaults(defineProps<BChatProps>(), {
 
 const emit = defineEmits<{
   (e: 'session-created', session: ChatSession): void;
+  (e: 'session-title-persisted', sessionId: string, title: string): void;
   (e: 'draft-session-created'): void;
   (e: 'loading-change', loading: boolean): void;
 }>();
@@ -673,7 +674,9 @@ const { captureSnapshot, scheduleAutoName } = useAutoName({
       aiResponse: nextMessage.content
     };
   },
-  onTitlePersisted: undefined
+  onTitlePersisted: (sessionId, title) => {
+    emit('session-title-persisted', sessionId, title);
+  }
 });
 
 /**
