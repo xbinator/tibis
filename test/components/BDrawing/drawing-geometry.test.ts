@@ -139,6 +139,27 @@ describe('drawingGeometry', (): void => {
     expect(createDrawingConnectorMarkerPath([source, target, connector], connector, 'end')).toContain('L 248');
   });
 
+  it('trims connector line endpoints under arrow markers', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      markerEnd: 'arrow',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 260, y: 60 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 248 100');
+    expect(createDrawingConnectorMarkerPath([source, target, connector], connector, 'end')).toContain('M 260 100');
+  });
+
   it('finds element IDs, DOM targets and element centers', (): void => {
     const root = document.createElement('div');
     const target = document.createElement('div');

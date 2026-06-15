@@ -83,6 +83,25 @@ export interface DrawingConnectorEndpointPoints {
   target: DrawingPoint;
 }
 
+/** 连接线箭头长度。 */
+const DRAWING_CONNECTOR_ARROW_LENGTH = 12;
+/** 连接线箭头半宽。 */
+const DRAWING_CONNECTOR_ARROW_HALF_WIDTH = 4.5;
+
+/**
+ * 连接线箭头几何。
+ */
+interface DrawingConnectorMarkerGeometry {
+  /** 箭头尖端 */
+  tip: DrawingPoint;
+  /** 箭头底边中心 */
+  baseCenter: DrawingPoint;
+  /** 箭头底边左点 */
+  left: DrawingPoint;
+  /** 箭头底边右点 */
+  right: DrawingPoint;
+}
+
 /**
  * 判断元素是否为形状。
  * @param element - 画板元素
@@ -373,6 +392,65 @@ function normalizeDrawingVector(vector: DrawingPoint): DrawingPoint {
 }
 
 /**
+ * 读取连接线箭头类型。
+ * @param connector - 连接线元素
+ * @param placement - 标记位置
+ * @returns 箭头类型
+ */
+function getDrawingConnectorMarkerType(connector: DrawingConnectorElement, placement: DrawingConnectorMarkerPlacement): string {
+  return placement === 'start' ? connector.markerStart ?? 'none' : connector.markerEnd ?? 'arrow';
+}
+
+/**
+ * 读取连接线箭头切线方向。
+ * @param route - 连接线路线
+ * @param placement - 标记位置
+ * @returns 箭头方向
+ */
+function getDrawingConnectorMarkerDirection(route: DrawingConnectorRoute, placement: DrawingConnectorMarkerPlacement): DrawingPoint {
+  const tangent =
+    placement === 'start'
+      ? createDrawingVector(route.sourceControl ?? route.target, route.source)
+      : createDrawingVector(route.targetControl ?? route.source, route.target);
+
+  return normalizeDrawingVector(tangent);
+}
+
+/**
+ * 创建连接线箭头几何。
+ * @param route - 连接线路线
+ * @param placement - 标记位置
+ * @returns 箭头几何
+ */
+function createDrawingConnectorMarkerGeometry(route: DrawingConnectorRoute, placement: DrawingConnectorMarkerPlacement): DrawingConnectorMarkerGeometry {
+  const tip = placement === 'start' ? route.source : route.target;
+  const direction = getDrawingConnectorMarkerDirection(route, placement);
+  const baseCenter = {
+    x: tip.x - direction.x * DRAWING_CONNECTOR_ARROW_LENGTH,
+    y: tip.y - direction.y * DRAWING_CONNECTOR_ARROW_LENGTH
+  };
+  const perpendicular = {
+    x: -direction.y,
+    y: direction.x
+  };
+  const left = {
+    x: baseCenter.x + perpendicular.x * DRAWING_CONNECTOR_ARROW_HALF_WIDTH,
+    y: baseCenter.y + perpendicular.y * DRAWING_CONNECTOR_ARROW_HALF_WIDTH
+  };
+  const right = {
+    x: baseCenter.x - perpendicular.x * DRAWING_CONNECTOR_ARROW_HALF_WIDTH,
+    y: baseCenter.y - perpendicular.y * DRAWING_CONNECTOR_ARROW_HALF_WIDTH
+  };
+
+  return {
+    tip,
+    baseCenter,
+    left,
+    right
+  };
+}
+
+/**
  * 读取连接锚点对应的切线方向。
  * @param anchor - 连接线锚点
  * @returns 单位方向向量
@@ -484,6 +562,23 @@ function resolveDrawingConnectorRoute(
 }
 
 /**
+ * 根据箭头占位裁剪连接线本体端点。
+ * @param route - 原始连接线路线
+ * @param connector - 连接线元素
+ * @returns 裁剪后的连接线路线
+ */
+function trimDrawingConnectorRouteForMarkers(route: DrawingConnectorRoute, connector: DrawingConnectorElement): DrawingConnectorRoute {
+  const source = getDrawingConnectorMarkerType(connector, 'start') === 'arrow' ? createDrawingConnectorMarkerGeometry(route, 'start').baseCenter : route.source;
+  const target = getDrawingConnectorMarkerType(connector, 'end') === 'arrow' ? createDrawingConnectorMarkerGeometry(route, 'end').baseCenter : route.target;
+
+  return {
+    ...route,
+    source,
+    target
+  };
+}
+
+/**
  * 解析连接线端点坐标。
  * @param elements - 画板元素列表
  * @param connector - 连接线元素
@@ -518,11 +613,12 @@ export function createDrawingConnectorPath(
   connector: DrawingConnectorElement,
   overrides: DrawingConnectorPathElementOverride[] = []
 ): string {
-  const route = resolveDrawingConnectorRoute(elements, connector, overrides);
-  if (!route) {
+  const resolvedRoute = resolveDrawingConnectorRoute(elements, connector, overrides);
+  if (!resolvedRoute) {
     return '';
   }
 
+  const route = trimDrawingConnectorRouteForMarkers(resolvedRoute, connector);
   if (connector.curve === 'bezier') {
     return `M ${route.source.x} ${route.source.y} C ${route.sourceControl?.x ?? route.source.x} ${route.sourceControl?.y ?? route.source.y}, ${
       route.targetControl?.x ?? route.target.x
@@ -556,32 +652,9 @@ export function createDrawingConnectorMarkerPath(
     return '';
   }
 
-  const tip = placement === 'start' ? route.source : route.target;
-  const tangent =
-    placement === 'start'
-      ? createDrawingVector(route.sourceControl ?? route.target, route.source)
-      : createDrawingVector(route.targetControl ?? route.source, route.target);
-  const direction = normalizeDrawingVector(tangent);
-  const length = 12;
-  const halfWidth = 4.5;
-  const baseCenter = {
-    x: tip.x - direction.x * length,
-    y: tip.y - direction.y * length
-  };
-  const perpendicular = {
-    x: -direction.y,
-    y: direction.x
-  };
-  const left = {
-    x: baseCenter.x + perpendicular.x * halfWidth,
-    y: baseCenter.y + perpendicular.y * halfWidth
-  };
-  const right = {
-    x: baseCenter.x - perpendicular.x * halfWidth,
-    y: baseCenter.y - perpendicular.y * halfWidth
-  };
+  const marker = createDrawingConnectorMarkerGeometry(route, placement);
 
-  return `M ${tip.x} ${tip.y} L ${left.x} ${left.y} L ${right.x} ${right.y} Z`;
+  return `M ${marker.tip.x} ${marker.tip.y} L ${marker.left.x} ${marker.left.y} L ${marker.right.x} ${marker.right.y} Z`;
 }
 
 /**
