@@ -25,6 +25,16 @@ export type EditorSelection = BaseEditorSelection;
 export type EditorController = BaseEditorController;
 
 /**
+ * 编辑器滚动位置控制器。
+ */
+export interface EditorScrollController {
+  /** 缓存当前滚动位置 */
+  rememberScrollPosition: () => void;
+  /** 恢复最近一次缓存的滚动位置 */
+  restoreScrollPosition: () => Promise<void> | void;
+}
+
+/**
  * 对外公开的基础编辑器实例能力。
  */
 export type EditorPublicInstance = Omit<EditorController, 'focusEditorAtStart' | 'scrollToAnchor' | 'getActiveAnchorId'>;

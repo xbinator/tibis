@@ -119,7 +119,7 @@ import type { AnchorRecord } from './hooks/useAnchors';
 import type { EditorController, EditorPublicInstance, EditorState } from './types';
 import type { Editor as TiptapEditor } from '@tiptap/vue-3';
 import type { CSSProperties } from 'vue';
-import { computed, ref, shallowRef, watchEffect } from 'vue';
+import { computed, nextTick, onActivated, onDeactivated, ref, shallowRef, watchEffect } from 'vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { PDF_FILE_FILTER } from '@/constants/extensions';
 import { native } from '@/shared/platform';
@@ -215,6 +215,18 @@ const findBarVisible = ref(false);
 const currentRichSelectionHost = shallowRef<RichSelectionHostState | null>(null);
 const currentSourceSelectionHost = shallowRef<SourceSelectionHostState | null>(null);
 
+/**
+ * 编辑器滚动位置快照。
+ */
+interface EditorScrollSnapshot {
+  /** 垂直滚动位置 */
+  top: number;
+  /** 水平滚动位置 */
+  left: number;
+}
+
+const cachedScrollSnapshot = ref<EditorScrollSnapshot>({ top: 0, left: 0 });
+
 const editorPageMaxWidth = computed<string>(() => {
   switch (editorPreferencesStore.pageWidth) {
     case 'wide':
@@ -239,7 +251,6 @@ const effectiveEditorState = computed<EditorState>(() => ({
   content: content.value
 }));
 
-const { activeAnchorId, handleChangeAnchor, handleEditorScroll, setActiveAnchorId } = useAnchors(layoutRef, scrollbarRef);
 const markdownEditorController = useEditorController({ isRichMode, richEditorPaneRef, sourceEditorPaneRef });
 const currentSelectionAdapter = computed<SelectionAssistantAdapter | null>(() => {
   return isRichMode.value ? currentRichSelectionHost.value?.adapter ?? null : currentSourceSelectionHost.value?.adapter ?? null;
@@ -490,6 +501,45 @@ function handleEditorBlur(event: FocusEvent): void {
 }
 
 /**
+ * 缓存当前滚动位置，供 KeepAlive 标签页恢复。
+ */
+function rememberScrollbarPosition(): void {
+  const scrollElement = scrollbarRef.value?.getScrollElement();
+  if (!scrollElement || !scrollElement.isConnected) {
+    return;
+  }
+
+  cachedScrollSnapshot.value = {
+    top: scrollElement.scrollTop,
+    left: scrollElement.scrollLeft
+  };
+}
+
+/**
+ * 通过统一入口滚动 Markdown 容器并同步滚动快照。
+ * @param options - 滚动参数
+ */
+function scrollMarkdownTo(options: ScrollToOptions): void {
+  const scrollElement = scrollbarRef.value?.getScrollElement();
+  if (!scrollElement || !scrollElement.isConnected) {
+    return;
+  }
+
+  const nextTop = typeof options.top === 'number' ? options.top : scrollElement.scrollTop;
+  const nextLeft = typeof options.left === 'number' ? options.left : scrollElement.scrollLeft;
+
+  scrollbarRef.value?.scrollTo(options);
+  cachedScrollSnapshot.value = {
+    top: nextTop,
+    left: nextLeft
+  };
+}
+
+const { activeAnchorId, handleChangeAnchor, handleEditorScroll, setActiveAnchorId } = useAnchors(layoutRef, scrollbarRef, {
+  onScrollTo: scrollMarkdownTo
+});
+
+/**
  * 将富文本搜索命中滚动到可视区域中心。
  * @param targetElement - 目标匹配元素
  */
@@ -506,7 +556,7 @@ function scrollSearchMatchElementIntoView(targetElement: HTMLElement): void {
   const maxScrollTop = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
   const nextTop = Math.min(Math.max(centeredTop, 0), maxScrollTop);
 
-  scrollbarRef.value?.scrollTo({ top: nextTop, behavior: 'auto' });
+  scrollMarkdownTo({ top: nextTop, behavior: 'auto' });
 }
 
 /**
@@ -525,7 +575,21 @@ function scrollSourceAnchorIntoView(hostElement: HTMLElement, offsetTop: number)
   const hostRect = hostElement.getBoundingClientRect();
   const nextTop = scrollElement.scrollTop + (hostRect.top - scrollRect.top) + offsetTop;
 
-  scrollbarRef.value?.scrollTo({ top: Math.max(0, nextTop), behavior: 'auto' });
+  scrollMarkdownTo({ top: Math.max(0, nextTop), behavior: 'auto' });
+}
+
+/**
+ * 恢复当前 KeepAlive 标签页上次停留的滚动位置。
+ */
+async function restoreScrollbarPosition(): Promise<void> {
+  await nextTick();
+
+  scrollMarkdownTo({
+    top: cachedScrollSnapshot.value.top,
+    left: cachedScrollSnapshot.value.left,
+    behavior: 'auto'
+  });
+  recomputeSelectionOverlays();
 }
 
 /**
@@ -537,7 +601,7 @@ function handleEditorAnchorChange(record: AnchorRecord): void {
     record,
     isRichMode: isRichMode.value,
     setActiveAnchorId,
-    scrollToTop: () => scrollbarRef.value?.scrollTo({ top: 0, behavior: 'auto' }),
+    scrollToTop: () => scrollMarkdownTo({ top: 0, behavior: 'auto' }),
     scrollRichAnchor: handleChangeAnchor,
     scrollEditorAnchor: markdownEditorController.value.scrollToAnchor
   });
@@ -547,6 +611,8 @@ function handleEditorAnchorChange(record: AnchorRecord): void {
  * 响应 Markdown 编辑器滚动并同步活跃锚点。
  */
 function handleEditorScrollEvent(): void {
+  rememberScrollbarPosition();
+
   if (isRichMode.value) {
     handleEditorScroll();
     recomputeSelectionOverlays();
@@ -567,6 +633,14 @@ function handleEditorScrollEvent(): void {
   setActiveAnchorId(markdownEditorController.value.getActiveAnchorId(scrollElement, 100));
   recomputeSelectionOverlays();
 }
+
+onActivated((): void => {
+  restoreScrollbarPosition();
+});
+
+onDeactivated((): void => {
+  rememberScrollbarPosition();
+});
 
 /**
  * 对外开放的编辑器实例能力集合，供 FindBar 等子组件使用。
@@ -594,6 +668,8 @@ const editorPublicInstance = computed<EditorPublicInstance>(() => ({
  */
 defineExpose({
   editorController: markdownEditorController,
+  rememberScrollPosition: rememberScrollbarPosition,
+  restoreScrollPosition: restoreScrollbarPosition,
   scrollToAnchor(anchorId: string): boolean {
     return markdownEditorController.value.scrollToAnchor(anchorId);
   },

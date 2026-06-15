@@ -191,6 +191,30 @@ async function replaceDocument(content: string): Promise<void> {
   await getEditorController()?.replaceDocument(content);
 }
 
+/**
+ * 保存当前编辑器滚动位置。
+ */
+function rememberScrollPosition(): void {
+  if (editorKind.value === 'monaco') {
+    monacoRef.value?.rememberScrollPosition();
+    return;
+  }
+
+  markdownRef.value?.rememberScrollPosition();
+}
+
+/**
+ * 恢复当前编辑器滚动位置。
+ */
+async function restoreScrollPosition(): Promise<void> {
+  if (editorKind.value === 'monaco') {
+    await monacoRef.value?.restoreScrollPosition();
+    return;
+  }
+
+  await markdownRef.value?.restoreScrollPosition();
+}
+
 function focusEditor(): void {
   getEditorController()?.focusEditor();
 }
@@ -229,6 +253,8 @@ defineExpose({
   insertAtCursor,
   replaceSelection,
   replaceDocument,
+  rememberScrollPosition,
+  restoreScrollPosition,
   selectLineRange,
   getSearchState,
   scrollToAnchor(anchorId: string): boolean {

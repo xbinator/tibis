@@ -17,7 +17,7 @@
 import type { MonacoEditorHandle, MonacoThemeName } from './utils/createMonaco';
 import type * as Monaco from 'monaco-editor';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import type { EditorController, EditorSearchState, EditorSelection, EditorState } from '@/components/BEditor/types';
+import type { EditorController, EditorScrollController, EditorSearchState, EditorSelection, EditorState } from '@/components/BEditor/types';
 import { useSettingStore } from '@/stores/ui/setting';
 import { createMonacoEditor, ensureTheme, getMonacoThemeName } from './utils/createMonaco';
 
@@ -92,12 +92,25 @@ const ignoreModelChange = ref(false);
 const editorContent = ref(props.value);
 const settingStore = useSettingStore();
 const modelChangeDispose = ref<Monaco.IDisposable | null>(null);
+const scrollChangeDispose = ref<Monaco.IDisposable | null>(null);
 const searchDecorations = ref<Monaco.editor.IEditorDecorationsCollection | null>(null);
 const searchState = ref<SearchMatchState>({
   term: '',
   currentIndex: 0,
   matches: []
 });
+
+/**
+ * Monaco 滚动位置快照。
+ */
+interface MonacoScrollSnapshot {
+  /** 垂直滚动位置 */
+  top: number;
+  /** 水平滚动位置 */
+  left: number;
+}
+
+const cachedScrollSnapshot = ref<MonacoScrollSnapshot>({ top: 0, left: 0 });
 
 /**
  * 根据当前应用主题解析 Monaco 主题名。
@@ -226,6 +239,51 @@ function bindModelChange(): void {
 }
 
 /**
+ * 保存 Monaco 当前滚动位置。
+ */
+function rememberScrollPosition(): void {
+  const editor = editorHandle.value?.getEditor();
+  if (!editor) {
+    return;
+  }
+
+  cachedScrollSnapshot.value = {
+    top: editor.getScrollTop(),
+    left: editor.getScrollLeft()
+  };
+}
+
+/**
+ * 恢复 Monaco 最近一次滚动位置。
+ */
+function restoreScrollPosition(): void {
+  const editor = editorHandle.value?.getEditor();
+  if (!editor) {
+    return;
+  }
+
+  editor.setScrollPosition({
+    scrollTop: cachedScrollSnapshot.value.top,
+    scrollLeft: cachedScrollSnapshot.value.left
+  });
+}
+
+/**
+ * 监听 Monaco 滚动变化并维护快照。
+ */
+function bindScrollChange(): void {
+  const editor = editorHandle.value?.getEditor();
+  if (!editor) {
+    return;
+  }
+
+  scrollChangeDispose.value?.dispose();
+  scrollChangeDispose.value = editor.onDidScrollChange((): void => {
+    rememberScrollPosition();
+  });
+}
+
+/**
  * 创建 Monaco 编辑器实例。
  */
 async function initializeEditor(): Promise<void> {
@@ -247,6 +305,7 @@ async function initializeEditor(): Promise<void> {
       stickyScroll: effectiveStickyScroll.value
     });
     bindModelChange();
+    bindScrollChange();
     refreshSearchState(false);
   } catch (error: unknown) {
     loadError.value = error instanceof Error ? error.message : 'Monaco 初始化失败';
@@ -550,11 +609,12 @@ onMounted((): void => {
 
 onBeforeUnmount((): void => {
   modelChangeDispose.value?.dispose();
+  scrollChangeDispose.value?.dispose();
   searchDecorations.value?.clear();
   editorHandle.value?.dispose();
 });
 
-defineExpose<EditorController>({
+defineExpose<EditorController & EditorScrollController>({
   undo,
   redo,
   canUndo,
@@ -571,6 +631,8 @@ defineExpose<EditorController>({
   replaceDocument,
   selectLineRange,
   getSearchState,
+  rememberScrollPosition,
+  restoreScrollPosition,
   scrollToAnchor: (): boolean => false,
   getActiveAnchorId: (): string => ''
 });

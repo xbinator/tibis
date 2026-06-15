@@ -104,6 +104,20 @@ function toggleJsonViewer(): void {
 }
 
 /**
+ * 保存 Monaco 编辑器当前滚动位置。
+ */
+function rememberScrollPosition(): void {
+  monacoRef.value?.rememberScrollPosition();
+}
+
+/**
+ * 恢复 Monaco 编辑器最近一次滚动位置。
+ */
+async function restoreScrollPosition(): Promise<void> {
+  monacoRef.value?.restoreScrollPosition();
+}
+
+/**
  * 构建 Monaco 编辑器 Header 工具栏条目。
  * @returns Header 工具栏条目列表
  */
@@ -147,7 +161,9 @@ watchEffect((onCleanup): void => {
 const editorController = computed<EditorController>(() => monacoRef.value as unknown as EditorController);
 
 defineExpose({
-  editorController
+  editorController,
+  rememberScrollPosition,
+  restoreScrollPosition
 });
 </script>
 
