@@ -24,10 +24,10 @@ export const DRAWING_TEXT_ELEMENT_CLICK_CREATE_DELAY = 220;
  * Moveable 控制框与节点边界之间的视觉留白。
  */
 export const DRAWING_MOVEABLE_SELECTION_PADDING = {
-  bottom: 8,
-  left: 8,
-  right: 8,
-  top: 8
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: 0
 } as const;
 
 /**

@@ -1145,7 +1145,6 @@ describe('BDrawing', (): void => {
     let editor = findDrawingTextEditor(wrapper);
     await setDrawingTextEditorValue(editor, '标题');
     await editor.trigger('blur');
-    await findDrawingStylePanel(wrapper).find('[aria-label="左对齐"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="大字号"]').trigger('click');
 
     await wrapper.find('[data-testid="drawing-node"]').trigger('dblclick');
@@ -1155,7 +1154,7 @@ describe('BDrawing', (): void => {
     expect(editor.element.style.fontWeight).toBe('650');
     expect(editor.element.style.lineHeight).toBe('24.3px');
     expect(editor.element.style.padding).toBe('4px 6px');
-    expect(editor.element.style.textAlign).toBe('left');
+    expect(editor.element.style.textAlign).toBe('center');
   });
 
   it('uses the text cursor while the text tool is active', async (): Promise<void> => {
@@ -1418,7 +1417,7 @@ describe('BDrawing', (): void => {
     expect(lines[2].text()).toBe('第三行');
   });
 
-  it('updates text color alignment and font size from the style panel', async (): Promise<void> => {
+  it('updates standalone text color and font size from the style panel', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
     await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
@@ -1429,13 +1428,27 @@ describe('BDrawing', (): void => {
     await editor.trigger('blur');
 
     await findDrawingColorSection(wrapper, 'text').find('[data-testid="color-picker-preset-#ef4444"]').trigger('click');
-    await findDrawingStylePanel(wrapper).find('[aria-label="左对齐"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="大字号"]').trigger('click');
 
     const text = wrapper.find('.b-drawing-node__text');
     expect(text.attributes('fill')).toBe('#ef4444');
-    expect(text.attributes('text-anchor')).toBe('start');
     expect((text.element as SVGTextElement).style.fontSize).toBe('18px');
+  });
+
+  it('hides alignment controls for standalone text elements', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    const editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '标题');
+    await editor.trigger('blur');
+
+    const stylePanel = findDrawingStylePanel(wrapper);
+
+    expect(stylePanel.find('[aria-label="左对齐"]').exists()).toBe(false);
+    expect(stylePanel.find('[aria-label="底部对齐"]').exists()).toBe(false);
   });
 
   it('updates regular shape text horizontal and vertical alignment from the style panel', async (): Promise<void> => {
@@ -1456,6 +1469,24 @@ describe('BDrawing', (): void => {
     const text = findDrawingNodeById(wrapper, 'external-node-1').find('.b-drawing-node__text');
     expect(text.attributes('text-anchor')).toBe('start');
     expect(Number(text.attributes('y'))).toBeGreaterThan(40);
+  });
+
+  it('applies regular shape text anchor through inline style when left aligned', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+
+    await findDrawingNodeById(wrapper, 'external-node-1').trigger('dblclick');
+    const editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '什么');
+    await editor.trigger('blur');
+    await findDrawingStylePanel(wrapper).find('[aria-label="左对齐"]').trigger('click');
+
+    const text = findDrawingNodeById(wrapper, 'external-node-1').find<SVGTextElement>('.b-drawing-node__text');
+
+    expect(text.element.style.getPropertyValue('text-anchor')).toBe('start');
   });
 
   it('aligns the regular shape text editor with the rendered vertical text position', async (): Promise<void> => {
@@ -2137,7 +2168,7 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-zoom')).toBe('1.1');
   });
 
-  it('keeps the Moveable selection box padded around the selected node', async (): Promise<void> => {
+  it('keeps the Moveable selection box tight around the selected node', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
     await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
@@ -2148,10 +2179,10 @@ describe('BDrawing', (): void => {
 
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-padding')).toBe(
       JSON.stringify({
-        bottom: 8,
-        left: 8,
-        right: 8,
-        top: 8
+        bottom: 0,
+        left: 0,
+        right: 0,
+        top: 0
       })
     );
   });

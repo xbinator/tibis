@@ -36,7 +36,7 @@
       </div>
     </section>
 
-    <section v-if="showTextControls" class="b-drawing-style-panel__section">
+    <section v-if="showShapeTextAlignmentControls" class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">对齐</span>
       <div class="b-drawing-style-panel__segments">
         <button
@@ -53,7 +53,7 @@
       </div>
     </section>
 
-    <section v-if="showTextControls" class="b-drawing-style-panel__section">
+    <section v-if="showShapeTextAlignmentControls" class="b-drawing-style-panel__section">
       <span class="b-drawing-style-panel__label">垂直</span>
       <div class="b-drawing-style-panel__segments">
         <button
@@ -302,6 +302,8 @@ const textVerticalAlignOptions = computed<readonly DrawingSegmentOption<DrawingT
 const showFillControls = computed<boolean>(() => Boolean(props.element || props.draftStyle));
 const showStrokeControls = computed<boolean>(() => !isTextElement.value);
 const showTextControls = computed<boolean>(() => Boolean(props.element));
+/** 是否显示普通形状内文本的对齐控件。 */
+const showShapeTextAlignmentControls = computed<boolean>(() => Boolean(props.element && !isTextElement.value));
 const textColorValue = computed<string>(() => props.element?.style?.color ?? DRAWING_DEFAULT_TEXT_COLOR);
 const fontSizeValue = computed<number>(() => props.element?.style?.fontSize ?? 13);
 const textAlignValue = computed<DrawingTextAlign>(() => props.element?.style?.textAlign ?? 'center');

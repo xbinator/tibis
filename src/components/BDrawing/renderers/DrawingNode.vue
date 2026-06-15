@@ -153,11 +153,6 @@ const textFontSize = computed<number>(() => props.node.style?.fontSize ?? DRAWIN
 const textLineHeight = computed<number>(() => textFontSize.value * DRAWING_TEXT_LINE_HEIGHT_RATIO);
 /** 文本颜色。 */
 const textFill = computed<string | undefined>(() => props.node.style?.color);
-const textStyle = computed<CSSProperties>(() => ({
-  fill: props.node.style?.color,
-  fontSize: `${textFontSize.value}px`,
-  fontWeight: String(props.node.style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT)
-}));
 /** 节点文本按换行拆分后的渲染行，空行使用占位保证 SVG 行距稳定。 */
 const textLineItems = computed<Array<{ text: string; empty: boolean }>>(() =>
   isTextShape.value ? createDrawingTextLineItems(props.node.text) : wrapDrawingTextLineItems(props.node.text, renderSize.value.width, props.node.style)
@@ -173,6 +168,12 @@ const textAnchor = computed<'start' | 'middle' | 'end'>(() => {
 
   return 'middle';
 });
+const textStyle = computed<CSSProperties>(() => ({
+  fill: props.node.style?.color,
+  fontSize: `${textFontSize.value}px`,
+  fontWeight: String(props.node.style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT),
+  textAnchor: textAnchor.value
+}));
 /** 文本横向位置。 */
 const textX = computed<number>(() => {
   if (props.node.style?.textAlign === 'left') {
