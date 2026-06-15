@@ -1,6 +1,6 @@
 # Tibis
 
-Tibis 是一款**本地优先的 Markdown 桌面编辑器**，将 AI 对话与文档编辑深度集成。
+Tibis 是一款**Markdown 桌面编辑器**，数据保存在你的电脑上，并将 AI 对话与文档编辑深度集成。
 
 适合写作、知识整理、技术文档草稿和 AI 辅助内容生产。
 
@@ -89,7 +89,7 @@ pnpm exec tsc --noEmit  # TypeScript 类型检查
 
 ## 下载
 
-从 [GitHub Releases](https://github.com/FCDFW/tibis/releases) 下载最新版本：
+从 [GitHub Releases](https://github.com/xbinator/tibis/releases) 下载最新版本：
 
 - macOS：`.dmg`
 - Windows：`.exe`
@@ -118,16 +118,6 @@ tibis/
 ├── changelog/              # 变更日志
 └── scripts/                # 构建与工具脚本
 ```
-
-## 代码规范
-
-项目遵循严格的代码规范，详见 [AGENTS.md](./AGENTS.md)：
-
-- 禁止使用 `any` 类型
-- 所有代码必须通过 ESLint、Stylelint、TypeScript 类型检查
-- 优先使用 `lodash-es` 替代手写工具函数
-- 函数和接口必须添加 JSDoc 注释
-- 每次改动需补充 changelog
 
 ## 许可证
 
