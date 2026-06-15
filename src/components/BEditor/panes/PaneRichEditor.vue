@@ -788,11 +788,11 @@ defineExpose({
   a {
     font-weight: 500;
     color: var(--editor-link);
-    text-decoration: none;
+    text-decoration: underline;
     cursor: pointer;
 
     &:hover {
-      text-decoration: underline;
+      opacity: 0.7;
     }
   }
 
