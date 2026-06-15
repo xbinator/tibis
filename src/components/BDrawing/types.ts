@@ -56,6 +56,8 @@ export interface DrawingElementMetadata {
   source: 'user';
   /** 创建时间戳 */
   createdAt: number;
+  /** 用户手动设置的基础尺寸，文本自动撑高时用于恢复高度 */
+  manualSize?: DrawingSize;
 }
 
 /**

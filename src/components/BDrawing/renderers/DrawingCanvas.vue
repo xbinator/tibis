@@ -40,6 +40,8 @@
         :node="element"
         :active-connector-anchor="connectorHoverEndpoint?.elementId === element.id ? connectorHoverEndpoint.anchor : null"
         :editing="editingElementId === element.id"
+        :preview-position="getElementPreviewPosition(element.id)"
+        :preview-size="getElementPreviewSize(element.id)"
         :selected="selection.includes(element.id)"
         :show-connector-anchors="activeTool === 'connector'"
         @edit="handleElementEdit"
@@ -89,6 +91,7 @@ import type {
   DrawingEdge,
   DrawingElement,
   DrawingElementStyle,
+  DrawingGeometryChange,
   DrawingInteractionDraft,
   DrawingPoint,
   DrawingShapeElement,
@@ -133,6 +136,10 @@ interface Props {
   selection: string[];
   /** 正在编辑的元素 ID */
   editingElementId?: string | null;
+  /** 正在编辑的形状预览尺寸 */
+  editingPreviewSize?: DrawingSize | null;
+  /** Moveable 操作中的预览几何 */
+  geometryPreviewChanges?: DrawingGeometryChange[];
   /** 视口 */
   viewport: DrawingViewport;
   /** 视口渲染尺寸 */
@@ -172,6 +179,10 @@ const emit = defineEmits<{
 }>();
 
 const viewBox = computed<string>(() => createDrawingViewBox(props.viewport, props.viewportSize));
+/** Moveable 几何预览索引。 */
+const geometryPreviewById = computed<Map<string, DrawingGeometryChange>>(
+  () => new Map((props.geometryPreviewChanges ?? []).map((change: DrawingGeometryChange): [string, DrawingGeometryChange] => [change.id, change]))
+);
 /** 画布根节点内联样式。 */
 const canvasStyle = computed<CSSProperties>(() => ({
   cursor: props.activeTool === 'text' ? 'text' : undefined
@@ -205,6 +216,29 @@ const connectorPreviewPath = computed<string>(() => {
 
   return createDrawingLinePath(getDrawingConnectorAnchorPoint(source, connectorDraft.value.source.anchor), connectorDraft.value.current);
 });
+
+/**
+ * 读取元素预览位置。
+ * @param id - 元素 ID
+ * @returns 预览位置
+ */
+function getElementPreviewPosition(id: string): DrawingPoint | null {
+  return geometryPreviewById.value.get(id)?.position ?? null;
+}
+
+/**
+ * 读取元素预览尺寸。
+ * @param id - 元素 ID
+ * @returns 预览尺寸
+ */
+function getElementPreviewSize(id: string): DrawingSize | null {
+  const geometryPreviewSize = geometryPreviewById.value.get(id)?.size;
+  if (geometryPreviewSize) {
+    return geometryPreviewSize;
+  }
+
+  return props.editingElementId === id ? props.editingPreviewSize ?? null : null;
+}
 
 /**
  * 转发元素编辑事件。

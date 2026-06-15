@@ -21,6 +21,8 @@
         :edges="board.state.value.edges"
         :selection="board.state.value.selection"
         :editing-element-id="textEditingSession?.id ?? null"
+        :editing-preview-size="textEditingPreviewSize"
+        :geometry-preview-changes="moveablePreviewChanges"
         :viewport="board.state.value.viewport"
         :viewport-size="viewportSize"
         :viewport-ready="isViewportReady"
@@ -56,7 +58,9 @@
       :viewport="board.state.value.viewport"
       :viewport-size="viewportSize"
       @move="board.moveElements"
-      @resize="board.resizeElements"
+      @preview-end="handleMoveablePreviewEnd"
+      @resize="handleMoveableResize"
+      @resize-preview="handleMoveableResizePreview"
     />
     <SelectoLayer :root="rootRef" :active-tool="activeTool" :selection="board.state.value.selection" @set-selection="board.setSelection" />
     <Toolbar
@@ -90,6 +94,7 @@ import type {
   DrawingElement,
   DrawingElementStyle,
   DrawingElementStyleChange,
+  DrawingGeometryChange,
   DrawingLayerAction,
   DrawingPoint,
   DrawingShapeElement,
@@ -153,6 +158,7 @@ const { rootRef, viewportSize, isViewportReady } = useViewportSize();
 const {
   textEditingSession,
   textEditorValue,
+  textEditingPreviewSize,
   textEditorStyle,
   setTextEditorRef,
   startTextEditing,
@@ -180,6 +186,8 @@ const canUndo = computed<boolean>(() => board.state.value.history.past.length > 
 const canRedo = computed<boolean>(() => board.state.value.history.future.length > 0);
 /** 未选中节点直接拖拽期间临时隐藏 Moveable 图层，避免旧选框跟随显示。 */
 const hideMoveableDuringDirectDrag = ref<boolean>(false);
+/** Moveable 拖拽缩放过程中的临时几何预览。 */
+const moveablePreviewChanges = ref<DrawingGeometryChange[]>([]);
 /** 当前单选的形状元素，供左侧样式面板编辑。 */
 const selectedShapeElement = computed<DrawingShapeElement | null>(() => {
   if (board.state.value.selection.length !== 1) {
@@ -294,6 +302,30 @@ function getActiveCreateShape(): DrawingShapeType | null {
 
 /** 当前激活的创建形状。 */
 const activeCreateShape = computed<DrawingShapeType | null>(() => getActiveCreateShape());
+
+/**
+ * 处理 Moveable 缩放预览。
+ * @param changes - 预览几何变更
+ */
+function handleMoveableResizePreview(changes: DrawingGeometryChange[]): void {
+  moveablePreviewChanges.value = changes;
+}
+
+/**
+ * 清理 Moveable 临时预览。
+ */
+function handleMoveablePreviewEnd(): void {
+  moveablePreviewChanges.value = [];
+}
+
+/**
+ * 提交 Moveable 缩放并清理预览。
+ * @param changes - 几何变更
+ */
+function handleMoveableResize(changes: DrawingGeometryChange[]): void {
+  board.resizeElements(changes);
+  handleMoveablePreviewEnd();
+}
 
 /**
  * 通过元素 ID 读取形状元素。

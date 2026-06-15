@@ -24,7 +24,7 @@ import { cloneDeep } from 'lodash-es';
 import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/board';
 import { DRAWING_DEFAULT_TEXT, DRAWING_TEXT_DEFAULT_FONT_SIZE, DRAWING_TEXT_DEFAULT_FONT_WEIGHT } from '../constants/text';
 import { isDrawingConnectorElement, isDrawingShapeElement } from './drawingGeometry';
-import { measureDrawingTextElementSize } from './drawingTextMetrics';
+import { createDrawingTextFitSize, measureDrawingTextElementSize } from './drawingTextMetrics';
 
 export {
   DRAWING_TEXT_DEFAULT_FONT_SIZE,
@@ -123,6 +123,62 @@ function createShapeInitialStyle(shape: DrawingShapeType, style?: DrawingElement
     textAlign: 'center',
     ...cloneDeep(style)
   };
+}
+
+/**
+ * 读取普通形状的手动基础尺寸。
+ * @param element - 形状元素
+ * @returns 手动基础尺寸
+ */
+function getRegularShapeManualSize(element: DrawingShapeElement): DrawingSize {
+  return cloneDeep(element.metadata.manualSize ?? element.size);
+}
+
+/**
+ * 记录普通形状的手动基础尺寸。
+ * @param element - 待更新的形状元素
+ * @param manualSize - 手动基础尺寸
+ */
+function setRegularShapeManualSize(element: DrawingShapeElement, manualSize: DrawingSize): void {
+  element.metadata = {
+    ...element.metadata,
+    manualSize: cloneDeep(manualSize)
+  };
+}
+
+/**
+ * 根据 resize 输入推断新的手动基础尺寸。
+ * @param element - 待更新的形状元素
+ * @param size - resize 输入尺寸
+ * @returns 新的手动基础尺寸
+ */
+function createManualResizeSize(element: DrawingShapeElement, size: DrawingSize): DrawingSize {
+  const nextSize = {
+    width: Math.max(DRAWING_MIN_ELEMENT_SIZE.width, normalizeGeometryValue(size.width)),
+    height: Math.max(DRAWING_MIN_ELEMENT_SIZE.height, normalizeGeometryValue(size.height))
+  };
+  const currentManualSize = getRegularShapeManualSize(element);
+  const isHeightChangedByUser = nextSize.height !== normalizeGeometryValue(element.size.height);
+
+  return {
+    width: nextSize.width,
+    height: isHeightChangedByUser ? nextSize.height : currentManualSize.height
+  };
+}
+
+/**
+ * 确保普通形状尺寸能容纳换行后的文本内容。
+ * @param element - 待更新的形状元素
+ */
+function fitRegularShapeSizeToText(element: DrawingShapeElement): void {
+  if (element.shape === 'text' || !element.text) {
+    return;
+  }
+
+  const manualSize = getRegularShapeManualSize(element);
+  setRegularShapeManualSize(element, manualSize);
+
+  element.size = createDrawingTextFitSize(element.text, manualSize, element.style);
 }
 
 /**
@@ -431,10 +487,10 @@ export function resizeDrawingElements(state: DrawingBoardState, changes: Drawing
     }
 
     if (change.size) {
-      element.size = {
-        width: Math.max(DRAWING_MIN_ELEMENT_SIZE.width, normalizeGeometryValue(change.size.width)),
-        height: Math.max(DRAWING_MIN_ELEMENT_SIZE.height, normalizeGeometryValue(change.size.height))
-      };
+      const manualSize = createManualResizeSize(element, change.size);
+      setRegularShapeManualSize(element, manualSize);
+      element.size = manualSize;
+      fitRegularShapeSizeToText(element);
     }
   });
 }
@@ -459,6 +515,8 @@ export function updateDrawingElementStyle(state: DrawingBoardState, elementId: s
   };
   if (isDrawingShapeElement(element) && element.shape === 'text') {
     element.size = measureDrawingTextElementSize(element.text, element.style);
+  } else if (isDrawingShapeElement(element)) {
+    fitRegularShapeSizeToText(element);
   }
 
   return withHistory(state, {
@@ -568,6 +626,8 @@ export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, 
   node.text = text;
   if (node.shape === 'text') {
     node.size = measureDrawingTextElementSize(text, node.style);
+  } else {
+    fitRegularShapeSizeToText(node);
   }
 
   return withHistory(state, {

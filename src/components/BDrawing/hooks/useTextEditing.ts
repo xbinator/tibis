@@ -72,6 +72,8 @@ export interface UseTextEditingReturn {
   textEditingSession: Ref<TextEditingSession | null>;
   /** 文本编辑输入值 */
   textEditorValue: Ref<string>;
+  /** 当前编辑中的形状预览尺寸 */
+  textEditingPreviewSize: Ref<DrawingSize | null>;
   /** 文本编辑器 DOM */
   textEditorRef: Ref<HTMLTextAreaElement | null>;
   /** 文本编辑框定位样式 */
@@ -156,6 +158,28 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
    */
   function createTextEditorPadding(zoom: number): string {
     return `${(DRAWING_TEXT_VERTICAL_PADDING * zoom) / 2}px ${(DRAWING_TEXT_HORIZONTAL_PADDING * zoom) / 2}px`;
+  }
+
+  /**
+   * 计算编辑中的形状预览尺寸。
+   * @param element - 正在编辑的形状元素
+   * @returns 预览尺寸
+   */
+  function createShapeTextEditingPreviewSize(element: DrawingShapeElement): DrawingSize {
+    if (element.shape === 'text') {
+      return measureDrawingTextElementSize(textEditorValue.value || element.text, element.style);
+    }
+
+    const fontSize = element.style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
+    const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
+    const text = textEditorValue.value || element.text;
+    const lineCount = wrapDrawingTextLineItems(text, element.size.width, element.style).length;
+    const requiredHeight = lineCount * lineHeight + DRAWING_TEXT_VERTICAL_PADDING;
+
+    return {
+      width: element.size.width,
+      height: Math.max(element.size.height, Number(requiredHeight.toFixed(2)))
+    };
   }
 
   /**
@@ -274,6 +298,18 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
     const element = findDrawingShapeElement(options.board.state.value.elements, session.id);
 
     return element ? createShapeTextEditorStyle(element) : {};
+  });
+
+  /** 当前编辑中的形状预览尺寸。 */
+  const textEditingPreviewSize = computed<DrawingSize | null>(() => {
+    const session = textEditingSession.value;
+    if (!session || session.kind !== 'shape') {
+      return null;
+    }
+
+    const element = findDrawingShapeElement(options.board.state.value.elements, session.id);
+
+    return element ? createShapeTextEditingPreviewSize(element) : null;
   });
 
   /**
@@ -529,6 +565,7 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
   return {
     textEditingSession,
     textEditorValue,
+    textEditingPreviewSize,
     textEditorRef,
     textEditorStyle,
     setTextEditorRef,

@@ -210,3 +210,32 @@ export function measureDrawingTextElementSize(text: string, style?: DrawingEleme
     height: normalizeTextMetricValue(Math.max(1, lines.length) * lineHeight + DRAWING_TEXT_VERTICAL_PADDING)
   };
 }
+
+/**
+ * 按容器宽度估算普通形状中换行文本需要的高度。
+ * @param text - 文本内容
+ * @param width - 文本容器宽度
+ * @param style - 文本样式
+ * @returns 换行文本所需高度
+ */
+export function measureWrappedDrawingTextHeight(text: string, width: number, style?: DrawingElementStyle): number {
+  const fontSize = style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
+  const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
+  const lineCount = wrapDrawingTextLineItems(text, width, style).length;
+
+  return normalizeTextMetricValue(Math.max(1, lineCount) * lineHeight + DRAWING_TEXT_VERTICAL_PADDING);
+}
+
+/**
+ * 根据文本换行高度修正普通形状尺寸。
+ * @param text - 文本内容
+ * @param size - 用户手动设置的基础尺寸
+ * @param style - 文本样式
+ * @returns 至少能容纳文本的形状尺寸
+ */
+export function createDrawingTextFitSize(text: string, size: DrawingSize, style?: DrawingElementStyle): DrawingSize {
+  return {
+    width: size.width,
+    height: Math.max(size.height, measureWrappedDrawingTextHeight(text, size.width, style))
+  };
+}

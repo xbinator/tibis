@@ -49,28 +49,29 @@
       :stroke-width="shapeStrokeWidth"
       :style="shapeStyle"
     />
-    <text
-      v-if="!editing"
-      alignment-baseline="central"
-      class="b-drawing-node__text"
-      dominant-baseline="central"
-      :fill="textFill"
-      :style="textStyle"
-      :text-anchor="textAnchor"
-      :x="textX"
-      :y="textY"
-    >
-      <tspan
-        v-for="(line, index) in textLineItems"
-        :key="`${index}-${line.text}`"
-        class="b-drawing-node__text-line"
-        :data-drawing-empty-line="line.empty ? 'true' : undefined"
-        :dy="index === 0 ? 0 : textLineHeight"
+    <svg v-if="!editing" class="b-drawing-node__text-viewport" :width="renderSize.width" :height="renderSize.height" overflow="hidden">
+      <text
+        alignment-baseline="central"
+        class="b-drawing-node__text"
+        dominant-baseline="central"
+        :fill="textFill"
+        :style="textStyle"
+        :text-anchor="textAnchor"
         :x="textX"
+        :y="textY"
       >
-        {{ line.text }}
-      </tspan>
-    </text>
+        <tspan
+          v-for="(line, index) in textLineItems"
+          :key="`${index}-${line.text}`"
+          class="b-drawing-node__text-line"
+          :data-drawing-empty-line="line.empty ? 'true' : undefined"
+          :dy="index === 0 ? 0 : textLineHeight"
+          :x="textX"
+        >
+          {{ line.text }}
+        </tspan>
+      </text>
+    </svg>
     <g v-if="showConnectorAnchors" class="b-drawing-node__anchors">
       <circle
         v-for="anchor in connectorAnchors"
@@ -87,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingConnectorAnchor, DrawingShapeElement, DrawingSize } from '../types';
+import type { DrawingConnectorAnchor, DrawingPoint, DrawingShapeElement, DrawingSize } from '../types';
 import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import {
@@ -106,6 +107,10 @@ import { createDrawingTextLineItems, wrapDrawingTextLineItems } from '../utils/d
 interface Props {
   /** 节点 */
   node: DrawingShapeElement;
+  /** 预览位置 */
+  previewPosition?: DrawingPoint | null;
+  /** 编辑态预览尺寸 */
+  previewSize?: DrawingSize | null;
   /** 是否选中 */
   selected?: boolean;
   /** 是否处于文本编辑态 */
@@ -119,6 +124,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   activeConnectorAnchor: null,
   editing: false,
+  previewPosition: null,
+  previewSize: null,
   selected: false,
   showConnectorAnchors: false
 });
@@ -136,8 +143,10 @@ const isDiamondShape = computed<boolean>(() => isDrawingDiamondShape(props.node.
 /** 是否为文本元素。 */
 const isTextShape = computed<boolean>(() => props.node.shape === 'text');
 /** 节点渲染尺寸，文本节点始终按内容重新测量。 */
-const renderSize = computed<DrawingSize>(() => getDrawingShapeRenderSize(props.node));
-const nodeTransform = computed<string>(() => createDrawingElementTransform(props.node.position, renderSize.value, props.node.rotation));
+const renderSize = computed<DrawingSize>(() => props.previewSize ?? getDrawingShapeRenderSize(props.node));
+/** 节点渲染位置，Moveable 预览时优先使用临时位置。 */
+const renderPosition = computed<DrawingPoint>(() => props.previewPosition ?? props.node.position);
+const nodeTransform = computed<string>(() => createDrawingElementTransform(renderPosition.value, renderSize.value, props.node.rotation));
 const diamondPoints = computed<string>(() => createDrawingDiamondPoints(renderSize.value));
 const shapeFill = computed<string | undefined>(() => (isTextShape.value ? props.node.style?.fill ?? 'transparent' : props.node.style?.fill));
 const shapeStroke = computed<string | undefined>(() => (isTextShape.value ? props.node.style?.stroke ?? 'transparent' : props.node.style?.stroke));
@@ -240,10 +249,15 @@ function isConnectorAnchorActive(anchor: Exclude<DrawingConnectorAnchor, 'center
 .b-drawing-node__text {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 400;
   pointer-events: none;
   text-anchor: middle;
   fill: var(--text-primary);
+}
+
+.b-drawing-node__text-viewport {
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .b-drawing-node__anchor {
