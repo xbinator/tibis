@@ -119,6 +119,21 @@ describe('boardTransforms', (): void => {
     expect(updated.history.past).toHaveLength(1);
   });
 
+  it('grows regular shape height when committed text needs more wrapped lines', (): void => {
+    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
+    const original = expectShapeElement(initial.elements[0]);
+    const updated = updateDrawingNodeText(
+      initial,
+      'node-1',
+      '这是一段会在普通形状中自动换行并需要更多高度展示的长文本内容，用来验证矩形等节点会随着文本内容增高'
+    );
+    const updatedShape = expectShapeElement(updated.elements[0]);
+
+    expect(updatedShape.size.width).toBe(original.size.width);
+    expect(updatedShape.size.height).toBeGreaterThan(original.size.height);
+    expect(updated.history.past).toHaveLength(1);
+  });
+
   it('updates element style as one undoable history entry', (): void => {
     const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
     const updated = updateDrawingElementStyle(initial, 'node-1', {
@@ -243,7 +258,14 @@ describe('boardTransforms', (): void => {
   });
 
   it('resizes an element with the minimum size clamp', (): void => {
-    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
+    const initial = createDrawingBoardState({
+      elements: [
+        {
+          ...createShapeElement('node-1'),
+          text: ''
+        }
+      ]
+    });
     const resized = resizeDrawingElements(initial, [
       {
         id: 'node-1',
@@ -255,6 +277,56 @@ describe('boardTransforms', (): void => {
     expect(resized.elements[0]?.position).toEqual({ x: 80, y: 90 });
     expect(resized.elements[0]?.size).toEqual({ width: 16, height: 16 });
     expect(resized.history.past).toHaveLength(1);
+  });
+
+  it('keeps manual width changes and grows height when resizing a text-bearing shape narrower', (): void => {
+    const initial = createDrawingBoardState({
+      elements: [
+        {
+          ...createShapeElement('node-1'),
+          text: '这是一段已经存在于节点内部的长文本，拖拽修改宽度后需要重新计算换行高度'
+        }
+      ]
+    });
+    const resized = resizeDrawingElements(initial, [
+      {
+        id: 'node-1',
+        size: { width: 80, height: 72 }
+      }
+    ]);
+    const resizedShape = expectShapeElement(resized.elements[0]);
+
+    expect(resizedShape.size.width).toBe(80);
+    expect(resizedShape.size.height).toBeGreaterThan(72);
+  });
+
+  it('restores auto-grown text height when resizing a text-bearing shape wider', (): void => {
+    const initial = createDrawingBoardState({
+      elements: [
+        {
+          ...createShapeElement('node-1'),
+          text: '这是一段已经存在于节点内部的长文本，拖拽修改宽度后需要重新计算换行高度'
+        }
+      ]
+    });
+    const narrowed = resizeDrawingElements(initial, [
+      {
+        id: 'node-1',
+        size: { width: 80, height: 72 }
+      }
+    ]);
+    const narrowedShape = expectShapeElement(narrowed.elements[0]);
+    const widened = resizeDrawingElements(narrowed, [
+      {
+        id: 'node-1',
+        size: { width: 260, height: narrowedShape.size.height }
+      }
+    ]);
+    const widenedShape = expectShapeElement(widened.elements[0]);
+
+    expect(widenedShape.size.width).toBe(260);
+    expect(widenedShape.size.height).toBeLessThan(narrowedShape.size.height);
+    expect(widenedShape.size.height).toBe(72);
   });
 
   it('adds a connector element between two shapes', (): void => {

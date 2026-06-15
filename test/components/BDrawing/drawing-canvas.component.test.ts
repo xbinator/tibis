@@ -654,6 +654,23 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
           @click="$emit('resize', { target: target[0], width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })"
         ></button>
         <button
+          data-testid="moveable-resize-narrow-text"
+          @click="$emit('resize', { target: target[0], width: 80, height: 72, drag: { beforeTranslate: [0, 0] } })"
+        ></button>
+        <button
+          data-testid="moveable-resize-wide-text"
+          @click="$emit('resize', { target: target[0], width: 260, height: 72, drag: { beforeTranslate: [0, 0] } })"
+        ></button>
+        <button
+          data-testid="moveable-resize-wide-from-grown-text"
+          @click="$emit('resize', {
+            target: target[0],
+            width: 260,
+            height: Number(target[0]?.querySelector('.b-drawing-node__shape')?.getAttribute('height') ?? 72),
+            drag: { beforeTranslate: [0, 0] }
+          })"
+        ></button>
+        <button
           data-testid="moveable-resize-group"
           @click="$emit('resize-group', { events: target.map((item) => ({ target: item, width: 240, height: 120, drag: { beforeTranslate: [30, 50] } })) })"
         ></button>
@@ -1085,6 +1102,29 @@ describe('BDrawing', (): void => {
     expect(Number(shape.attributes('height'))).toBe(expectedSize.height);
   });
 
+  it('clips node text to the rendered node bounds', (): void => {
+    const node: DrawingShapeElement = {
+      id: 'node-1',
+      kind: 'shape',
+      metadata: { createdAt: 1, source: 'user' },
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      shape: 'rect',
+      size: { height: 72, width: 120 },
+      text: '这是一段比节点宽度更长的文字内容'
+    };
+    const wrapper = mount(DrawingNodeRenderer, {
+      props: {
+        node
+      }
+    });
+    const viewport = wrapper.find('.b-drawing-node__text-viewport');
+
+    expect(viewport.attributes('width')).toBe('120');
+    expect(viewport.attributes('height')).toBe('72');
+    expect(viewport.attributes('overflow')).toBe('hidden');
+  });
+
   it('inserts a newline instead of saving when pressing Enter in the text editor', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -1151,7 +1191,7 @@ describe('BDrawing', (): void => {
     editor = findDrawingTextEditor(wrapper);
 
     expect(editor.element.style.fontSize).toBe('18px');
-    expect(editor.element.style.fontWeight).toBe('650');
+    expect(editor.element.style.fontWeight).toBe('400');
     expect(editor.element.style.lineHeight).toBe('24.3px');
     expect(editor.element.style.padding).toBe('2px 3px');
     expect(editor.element.style.textAlign).toBe('center');
@@ -1249,13 +1289,38 @@ describe('BDrawing', (): void => {
         modelValue: createDrawingDataFixture()
       }
     });
+    const initialHeight = Number(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('height'));
 
     await findDrawingNodeById(wrapper, 'external-node-1').trigger('dblclick');
     const editor = findDrawingTextEditor(wrapper);
-    await setDrawingTextEditorValue(editor, '这是一个会超过普通形状宽度并自动换行的说明文本');
+    await setDrawingTextEditorValue(
+      editor,
+      '这是一个会超过普通形状宽度并自动换行的说明文本，用来验证矩形节点在内容明显变多时会跟随文本高度自动增高，避免文字溢出到节点外面'
+    );
     await editor.trigger('blur');
 
     expect(findDrawingNodeById(wrapper, 'external-node-1').findAll('.b-drawing-node__text-line').length).toBeGreaterThan(1);
+    expect(Number(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('height'))).toBeGreaterThan(
+      initialHeight
+    );
+  });
+
+  it('previews regular shape height growth while editing long text', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+    const initialHeight = Number(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('height'));
+
+    await findDrawingNodeById(wrapper, 'external-node-1').trigger('dblclick');
+    const editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '这是一段正在编辑中的长文本，用来验证还没有提交时矩形节点也会跟随文本高度即时增高，避免编辑态先溢出再提交后修正');
+
+    expect(findDrawingTextEditor(wrapper).exists()).toBe(true);
+    expect(Number(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('height'))).toBeGreaterThan(
+      initialHeight
+    );
   });
 
   it('keeps standalone text elements unconstrained by the shape width', async (): Promise<void> => {
@@ -2495,6 +2560,23 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="moveable-rotate-end"]').exists()).toBe(false);
   });
 
+  it('keeps Moveable resize enabled for regular shapes that contain text', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createDrawingDataFixture()
+      }
+    });
+
+    await dispatchPointerEvent(findDrawingNodeById(wrapper, 'external-node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-resizable')).toBe('true');
+
+    await wrapper.find('[data-testid="moveable-resize-end"]').trigger('click');
+
+    expect(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('240');
+  });
+
   it('keeps Moveable resize dimensions in board units after viewport zoom', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
@@ -2522,6 +2604,128 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(-60, 14)');
     expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('240');
     expect(wrapper.find('[data-testid="drawing-shape-rect"]').attributes('height')).toBe('120');
+  });
+
+  it('previews Moveable text fit height while resizing a text-bearing shape', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: {
+          elements: [
+            {
+              id: 'external-node-1',
+              kind: 'shape',
+              shape: 'rect',
+              text: '这是一段已经存在于节点内部的长文本，拖拽修改宽度后需要重新计算换行高度',
+              position: { x: 24, y: 36 },
+              size: { width: 180, height: 72 },
+              rotation: 0,
+              metadata: {
+                source: 'user',
+                createdAt: 1
+              }
+            }
+          ],
+          edges: [],
+          viewport: {
+            center: { x: 0, y: 0 },
+            zoom: 1
+          }
+        }
+      }
+    });
+
+    await dispatchPointerEvent(findDrawingNodeById(wrapper, 'external-node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-resize-narrow-text"]').trigger('click');
+    const narrowHeight = Number(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('height'));
+
+    expect(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('80');
+    expect(narrowHeight).toBeGreaterThan(72);
+
+    await wrapper.find('[data-testid="moveable-resize-wide-text"]').trigger('click');
+
+    expect(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('260');
+    expect(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('height')).toBe('72');
+  });
+
+  it('restores Moveable preview height from the resize gesture base size when widening again', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: {
+          elements: [
+            {
+              id: 'external-node-1',
+              kind: 'shape',
+              shape: 'rect',
+              text: '这是一段已经存在于节点内部的长文本，拖拽修改宽度后需要重新计算换行高度',
+              position: { x: 24, y: 36 },
+              size: { width: 180, height: 72 },
+              rotation: 0,
+              metadata: {
+                source: 'user',
+                createdAt: 1
+              }
+            }
+          ],
+          edges: [],
+          viewport: {
+            center: { x: 0, y: 0 },
+            zoom: 1
+          }
+        }
+      }
+    });
+
+    await dispatchPointerEvent(findDrawingNodeById(wrapper, 'external-node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-resize-narrow-text"]').trigger('click');
+    const grownHeight = Number(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('height'));
+
+    expect(grownHeight).toBeGreaterThan(72);
+
+    await wrapper.find('[data-testid="moveable-resize-wide-from-grown-text"]').trigger('click');
+
+    expect(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('260');
+    expect(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('height')).toBe('72');
+  });
+
+  it('commits Moveable resize after previewing wrapped node text', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: {
+          elements: [
+            {
+              id: 'external-node-1',
+              kind: 'shape',
+              shape: 'rect',
+              text: '这是一段已经存在于节点内部的长文本，拖拽修改宽度后需要重新计算换行高度',
+              position: { x: 24, y: 36 },
+              size: { width: 180, height: 72 },
+              rotation: 0,
+              metadata: {
+                source: 'user',
+                createdAt: 1
+              }
+            }
+          ],
+          edges: [],
+          viewport: {
+            center: { x: 0, y: 0 },
+            zoom: 1
+          }
+        }
+      }
+    });
+
+    await dispatchPointerEvent(findDrawingNodeById(wrapper, 'external-node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await nextTick();
+    await wrapper.find('[data-testid="moveable-resize-narrow-text"]').trigger('click');
+    await wrapper.find('[data-testid="moveable-resize-end"]').trigger('click');
+
+    expect(findDrawingNodeById(wrapper, 'external-node-1').find('[data-testid="drawing-shape-rect"]').attributes('width')).toBe('240');
   });
 
   it('replaces the selection from a Selecto selectEnd event', async (): Promise<void> => {
