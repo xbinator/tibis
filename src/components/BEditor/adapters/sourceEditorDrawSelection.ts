@@ -116,9 +116,9 @@ const customSelectionTheme = EditorView.theme({
   },
   // 自定义 selection decoration 样式，与 AI 高亮保持一致的 box-shadow 方案
   '& .cm-custom-selection': {
-    color: 'var(--selection-color)',
-    background: 'var(--selection-bg)',
-    boxShadow: '0 0.2em 0 0 var(--selection-bg), 0 -0.2em 0 0 var(--selection-bg)',
+    // color: 'var(--selection-color)',
+    // background: 'var(--selection-bg)',
+    // boxShadow: '0 0.2em 0 0 var(--selection-bg), 0 -0.2em 0 0 var(--selection-bg)',
     WebkitBoxDecorationBreak: 'clone',
     boxDecorationBreak: 'clone'
   },

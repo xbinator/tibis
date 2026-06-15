@@ -574,17 +574,17 @@ defineExpose({
     caret-color: var(--editor-caret);
     outline: none;
 
-    &::selection {
-      color: var(--native-selection-color) !important;
-      background: var(--native-selection-bg) !important;
-      -webkit-text-fill-color: var(--native-selection-color) !important;
-    }
+    // &::selection {
+    //   color: var(--native-selection-color) !important;
+    //   background: var(--native-selection-bg) !important;
+    //   -webkit-text-fill-color: var(--native-selection-color) !important;
+    // }
 
-    *::selection {
-      color: var(--native-selection-color) !important;
-      background: var(--native-selection-bg) !important;
-      -webkit-text-fill-color: var(--native-selection-color) !important;
-    }
+    // *::selection {
+    //   color: var(--native-selection-color) !important;
+    //   background: var(--native-selection-bg) !important;
+    //   -webkit-text-fill-color: var(--native-selection-color) !important;
+    // }
 
     > *:first-child {
       margin-top: 0;

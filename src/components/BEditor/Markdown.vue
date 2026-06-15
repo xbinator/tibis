@@ -685,14 +685,15 @@ defineExpose({
   gap: 6px;
   height: 100%;
 
-  --selection-color: #000;
-  --selection-bg: #ffef5c;
+  // --selection-color: var(--color-primary);
+  --selection-bg: var(--color-primary-bg);
   --native-selection-color: var(--selection-color);
   --native-selection-bg: var(--selection-bg);
 
   ::selection {
-    color: var(--native-selection-color);
-    background: var(--native-selection-bg);
+    // color: var(--native-selection-color);
+    // background: var(--native-selection-bg);
+    background: transparent;
   }
 }
 
