@@ -16,7 +16,7 @@ export const DRAWING_TEXT_DEFAULT_FONT_SIZE = 13;
 /**
  * 文本元素默认字重。
  */
-export const DRAWING_TEXT_DEFAULT_FONT_WEIGHT = 650;
+export const DRAWING_TEXT_DEFAULT_FONT_WEIGHT = 400;
 
 /**
  * 文本元素横向内边距。
@@ -46,7 +46,7 @@ export const DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE = 12;
 /**
  * 连线标签默认字重。
  */
-export const DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT = 600;
+export const DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT = 400;
 
 /**
  * 空连线标签进入编辑时的最小宽度。

@@ -62,7 +62,7 @@ const labelPosition = computed<DrawingPoint>(() => {
 
 .b-drawing-edge__label {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   text-anchor: middle;
   fill: var(--text-secondary);
   stroke: var(--bg-primary);

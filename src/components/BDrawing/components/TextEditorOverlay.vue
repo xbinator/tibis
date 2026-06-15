@@ -78,7 +78,7 @@ onBeforeUnmount((): void => {
   overflow: hidden;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 400;
   line-height: 1.35;
   color: var(--text-primary);
   text-align: center;
