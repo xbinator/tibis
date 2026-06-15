@@ -33,7 +33,7 @@
     <!-- 有摘要的工具结果：展示人可读的摘要信息 -->
     <template v-else-if="summary">
       <div :class="bem('summary', { [summary.variant ?? 'success']: true })">
-        <div v-if="summary.text" :class="bem('summary-text')">{{ summary.text }}</div>
+        <div v-if="summary.text" :class="bem('summary-text', { shell: isShellCommand })">{{ summary.text }}</div>
         <div v-if="summary.tags?.length" :class="bem('summary-tags')">
           <template v-for="tag in summary.tags" :key="`${tag.label}-${tag.value}`">
             <div v-if="isOpenFileTag(tag)" :class="bem('summary-tag', { clickable: true })" :title="tag.path" @click="handleOpenFileTag(tag)">
@@ -231,6 +231,9 @@ const summary = computed(() => {
   return getToolResultSummary(props.part.toolName, props.part.result);
 });
 
+/** 是否为终端命令执行，用于特殊样式（等宽字体 + 背景色） */
+const isShellCommand = computed(() => props.part.toolName === 'run_shell_command');
+
 /**
  * 解析提问工具的问答结果，将 value 映射为可读的 label。
  * 兼容多问题（questionAnswers）和单问题（answers）两种返回格式。
@@ -360,6 +363,14 @@ const questionOtherText = computed(() => {
 
 .bubble-part-tool__summary-text {
   color: var(--text-primary);
+
+  &--shell {
+    padding: 4px 8px;
+    font-family: Monaco, 'SF Mono', Consolas, monospace;
+    font-size: 11px;
+    background: var(--color-fill-tertiary, rgb(0 0 0 / 6%));
+    border-radius: 4px;
+  }
 }
 
 .bubble-part-tool__summary-tags {
