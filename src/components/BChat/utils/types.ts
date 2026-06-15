@@ -3,8 +3,8 @@
  * @description BChat 组件消息、服务配置与续轮保护类型定义。
  */
 import type { FileReference } from '../types';
-import type { AIUsage, AIToolContext, AIToolExecutor } from 'types/ai';
-import type { ChatCompressionMeta, ChatMessageConfirmationAction, ChatMessageFile, ChatMessagePart, ChatMessageRole } from 'types/chat';
+import type { AIUsage } from 'types/ai';
+import type { ChatCompressionMeta, ChatMessageFile, ChatMessagePart, ChatMessageRole } from 'types/chat';
 import type { AIToolProviderSupport } from '@/ai/tools/policy';
 
 /**
@@ -71,20 +71,6 @@ export interface Message {
  * BChat 组件属性
  */
 export interface BChatProps {
-  /** 输入框占位文本 */
-  placeholder?: string;
-  /** 消息列表 */
-  messages?: Message[];
-  /** 发送前回调 */
-  onBeforeSend?: (message: Message) => Message | Promise<Message | void> | void;
-  /** 重新生成前回调 */
-  onBeforeRegenerate?: (messages: Message[], triggerMessage: Message) => Promise<void> | void;
-  /** 加载更早历史消息回调 */
-  onLoadHistory?: () => Promise<void> | void;
-  /** 可用 AI 工具 */
-  tools?: AIToolExecutor[];
-  /** 获取工具上下文 */
-  getToolContext?: () => AIToolContext | undefined;
-  /** 确认卡片操作回调 */
-  onConfirmationAction?: (confirmationId: string, action: ChatMessageConfirmationAction) => void | Promise<void>;
+  /** 当前聊天会话 ID，空值表示新会话草稿态 */
+  sessionId?: string | null;
 }

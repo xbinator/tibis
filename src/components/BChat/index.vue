@@ -3,137 +3,100 @@
   @description 聊天侧边栏组件，包含会话管理、消息列表、输入框和模型选择功能。
 -->
 <template>
-  <BPanelSplitter
-    v-show="settingStore.sidebarVisible"
-    v-model:size="settingStore.sidebarWidth"
-    :class="bem({ expanded: isSidebarExpanded })"
-    :disabled="isSidebarExpanded"
-    position="left"
-    :min-width="340"
-    max-width="40%"
-    @close="settingStore.setSidebarVisible(false)"
-  >
-    <div :class="bem('content')">
-      <div :class="bem('header')">
-        <div :class="[bem('title'), 'truncate']">{{ currentSession?.title || '新会话' }}</div>
-        <BButton square size="small" type="text" :disabled="loading" @click="createNewSession">
-          <BIcon icon="lucide:message-circle-plus" :size="16" />
-        </BButton>
+  <div :class="bem('container')">
+    <div :class="bem('conversation-container')">
+      <ConversationView
+        ref="conversationRef"
+        v-model:messages="messages"
+        :loading="loading"
+        :disabled="!loading"
+        :on-load-history="handleLoadHistory"
+        :can-rollback="rollbackController.canRollback"
+        @edit="handleChatEdit"
+        @regenerate="handleChatRegenerate"
+        @user-choice-submit="handleChatUserChoiceSubmit"
+        @rollback="handleRollback"
+      >
+        <template #footer>
+          <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
+        </template>
+      </ConversationView>
 
-        <SessionHistory
-          ref="sessionHistoryRef"
-          v-model:current-session="currentSession"
-          :active-session-id="settingStore.chatSidebarActiveSessionId"
-          :disabled="loading"
-          @switch-session="switchSession"
-          @delete-session="handleDeleteSession"
+      <div :class="bem('floating-container')">
+        <UsagePanel
+          v-if="usagePanel.open.value"
+          :loading="usagePanel.loading.value"
+          :usage="usagePanel.usage.value"
+          :error="usagePanel.error.value"
+          :on-close="usagePanel.close"
         />
-        <BButton square size="small" :type="isSidebarExpanded ? 'secondary' : 'text'" data-testid="chat-expand-button" @click="toggleSidebarExpanded">
-          <BIcon icon="lucide:maximize" :size="16" />
-        </BButton>
 
-        <div class="divider"></div>
-        <BButton square size="small" type="text" @click="settingStore.setSidebarVisible(false)">
-          <BIcon icon="lucide:x" :size="16" />
-        </BButton>
+        <InteractionContainer :toast-queue="toastQueue" @remove-toast="removeToast" />
       </div>
-      <div :class="bem('container')">
-        <div :class="bem('conversation-container')">
-          <ConversationView
-            ref="conversationRef"
-            v-model:messages="messages"
-            :loading="loading"
-            :disabled="!loading"
-            :on-load-history="handleLoadHistory"
-            :can-rollback="rollbackController.canRollback"
-            @edit="handleChatEdit"
-            @regenerate="handleChatRegenerate"
-            @user-choice-submit="handleChatUserChoiceSubmit"
-            @rollback="handleRollback"
-          >
-            <template #footer>
-              <ConfirmationSheet :request="confirmationController.currentConfirmationRequest.value" @action="handleConfirmationSheetAction" />
-            </template>
-          </ConversationView>
-
-          <div :class="bem('floating-container')">
-            <UsagePanel
-              v-if="usagePanel.open.value"
-              :loading="usagePanel.loading.value"
-              :usage="usagePanel.usage.value"
-              :error="usagePanel.error.value"
-              :on-close="usagePanel.close"
-            />
-
-            <InteractionContainer :toast-queue="toastQueue" @remove-toast="removeToast" />
-          </div>
-        </div>
-
-        <div :class="bem('toolbar')">
-          <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
-        </div>
-
-        <div :class="bem('input')">
-          <div :class="bem('input-container')">
-            <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
-
-            <BPromptEditor
-              ref="promptEditorRef"
-              v-model:value="inputContent"
-              placeholder="输入消息..."
-              :max-height="200"
-              :chip-resolver="promptChipResolver"
-              :on-paste-files="fileReference.onPasteFiles"
-              :on-paste-images="imageUpload.onPasteImages"
-              :can-accept-images="imageUpload.canAcceptImages"
-              :slash-commands="chatSlashCommands"
-              :file-mentions="fileMentionOptions"
-              :on-cancel="handleCancel"
-              submit-on-enter
-              @slash-command="handleSlashCommand"
-              @file-mention-select="handleFileMentionSelect"
-              @submit="handleChatSubmit"
-            />
-
-            <InputToolbar
-              :loading="loading"
-              :input-value="inputContent"
-              :selected-model="selectedModel"
-              :supports-vision="supportsVision"
-              :can-submit="canSubmit"
-              :used-tokens="usedTokens"
-              :context-window="contextWindow"
-              :context-usage="contextUsageSnapshot"
-              @submit="handleChatSubmit"
-              @abort="handleAbort"
-              @image-select="imageUpload.appendImages"
-              @model-change="handleModelChange"
-              @voice-start="handleVoiceStart"
-              @voice-partial="handleVoicePartial"
-              @voice-complete="handleVoiceComplete"
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- 全局模型选择器 -->
-      <BModelSelect ref="modelSelectRef" v-model:open="modelSelectOpen" :model="selectedModel" @change="handleGlobalModelChange" />
     </div>
-  </BPanelSplitter>
+
+    <div :class="bem('toolbar')">
+      <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
+    </div>
+
+    <div :class="bem('input')">
+      <div :class="bem('input-container')">
+        <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
+
+        <BPromptEditor
+          ref="promptEditorRef"
+          v-model:value="inputContent"
+          placeholder="输入消息..."
+          :max-height="200"
+          :chip-resolver="promptChipResolver"
+          :on-paste-files="fileReference.onPasteFiles"
+          :on-paste-images="imageUpload.onPasteImages"
+          :can-accept-images="imageUpload.canAcceptImages"
+          :slash-commands="chatSlashCommands"
+          :file-mentions="fileMentionOptions"
+          :on-cancel="handleCancel"
+          submit-on-enter
+          @slash-command="handleSlashCommand"
+          @file-mention-select="handleFileMentionSelect"
+          @submit="handleChatSubmit"
+        />
+
+        <InputToolbar
+          :loading="loading"
+          :input-value="inputContent"
+          :selected-model="selectedModel"
+          :supports-vision="supportsVision"
+          :can-submit="canSubmit"
+          :used-tokens="usedTokens"
+          :context-window="contextWindow"
+          :context-usage="contextUsageSnapshot"
+          @submit="handleChatSubmit"
+          @abort="handleAbort"
+          @image-select="imageUpload.appendImages"
+          @model-change="handleModelChange"
+          @voice-start="handleVoiceStart"
+          @voice-partial="handleVoicePartial"
+          @voice-complete="handleVoiceComplete"
+        />
+      </div>
+    </div>
+  </div>
+
+  <!-- 全局模型选择器 -->
+  <BModelSelect ref="modelSelectRef" v-model:open="modelSelectOpen" :model="selectedModel" @change="handleGlobalModelChange" />
 </template>
 
 <script setup lang="ts">
-import type { Message } from './utils/types';
+import type { BChatProps, Message } from './utils/types';
 import type { AIToolExecutor } from 'types/ai';
-import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction } from 'types/chat';
-import { computed, h, onMounted, onUnmounted, provide, ref, watch } from 'vue';
+import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession } from 'types/chat';
+import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { throttle } from 'lodash-es';
 import { createBuiltinTools, isBuiltinToolName, READ_CURRENT_WEBPAGE_TOOL_NAME, READ_DIRECTORY_TOOL_NAME, SKILL_TOOL_NAME } from '@/ai/tools/builtin';
 import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
-import BButton from '@/components/BButton/index.vue';
 import BModelSelect from '@/components/BModelSelect/index.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
@@ -147,7 +110,6 @@ import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useTodoStore } from '@/stores/chat/todo';
-import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { Modal } from '@/utils/modal';
@@ -157,7 +119,6 @@ import ConversationView from './components/ConversationView.vue';
 import ImagePreview from './components/ImagePreview.vue';
 import InputToolbar from './components/InputToolbar.vue';
 import InteractionContainer from './components/InteractionContainer/index.vue';
-import SessionHistory from './components/SessionHistory.vue';
 import TodoPanel from './components/TodoPanel.vue';
 import UsagePanel from './components/UsagePanel.vue';
 import { useAutoName } from './hooks/useAutoName';
@@ -172,7 +133,6 @@ import { useImageUpload } from './hooks/useImageUpload';
 import { useInteractionState } from './hooks/useInteractionState';
 import { useModelSelection } from './hooks/useModelSelection';
 import { useRollback } from './hooks/useRollback';
-import { useSession } from './hooks/useSession';
 import { useSkillInit } from './hooks/useSkillInit';
 import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
 import { useUsagePanel } from './hooks/useUsagePanel';
@@ -183,13 +143,20 @@ import { create, userChoice, buildMessageReferences } from './utils/messageHelpe
 
 const [, bem] = createNamespace('chat');
 
+const props = withDefaults(defineProps<BChatProps>(), {
+  sessionId: null
+});
+
+const emit = defineEmits<{
+  (e: 'session-created', session: ChatSession): void;
+  (e: 'loading-change', loading: boolean): void;
+}>();
+
 /** assistant 草稿节流持久化间隔。 */
 const ASSISTANT_DRAFT_PERSIST_INTERVAL_MS = 500;
 
 /** 聊天数据存储 */
 const chatStore = useChatSessionStore();
-/** 应用设置存储 */
-const settingStore = useSettingStore();
 /** Skill 存储 */
 const skillStore = useSkillStore();
 const toolSettingsStore = useToolSettingsStore();
@@ -198,31 +165,18 @@ const toolSettingsStore = useToolSettingsStore();
 const todoStore = useTodoStore();
 /** Todo 面板可见性 */
 const todoPanelVisible = ref(true);
+/** BChat 内部为新会话草稿创建出的会话 ID。 */
+const createdSessionId = ref<string | null>(null);
+/** 自动命名时需要的当前会话镜像。 */
+const currentSessionForAutoName = ref<{ id: string; title: string } | undefined>(undefined);
+/** 当前聊天运行时使用的有效会话 ID。 */
+const activeSessionId = computed<string | null>(() => props.sessionId ?? createdSessionId.value);
 /** 当前会话的待办列表 */
-const currentSessionTodos = computed(() => todoStore.getTodos(settingStore.chatSidebarActiveSessionId ?? ''));
-/** 聊天侧边栏是否放大覆盖主内容区域 */
-const isSidebarExpanded = computed<boolean>(() => settingStore.chatSidebarExpanded);
-
-/**
- * 切换聊天侧边栏放大状态。
- */
-function toggleSidebarExpanded(): void {
-  settingStore.toggleChatSidebarExpanded();
-}
-
-/** 侧边栏被隐藏时同步退出放大态，避免再次打开直接覆盖主视图 */
-watch(
-  () => settingStore.sidebarVisible,
-  (visible) => {
-    if (!visible) {
-      settingStore.setChatSidebarExpanded(false);
-    }
-  }
-);
+const currentSessionTodos = computed(() => todoStore.getTodos(activeSessionId.value ?? ''));
 
 /** LLM 调用 todowrite 时自动打开/关闭面板 */
 watch(
-  () => todoStore.getTodos(settingStore.chatSidebarActiveSessionId ?? ''),
+  () => todoStore.getTodos(activeSessionId.value ?? ''),
   (newTodos) => {
     if (newTodos.length === 0) {
       todoPanelVisible.value = false;
@@ -253,8 +207,6 @@ const modelSelectRef = ref<InstanceType<typeof BModelSelect>>();
 const modelSelectOpen = ref(false);
 /** 对话视图引用 */
 const conversationRef = ref<InstanceType<typeof ConversationView>>();
-/** 会话历史组件引用 */
-const sessionHistoryRef = ref<InstanceType<typeof SessionHistory>>();
 
 /** 聊天历史加载状态和方法 */
 const { setLoadedMessages, fetchAllPriorHistory, messages, hasMoreHistory, loadHistory } = useChatHistory();
@@ -264,7 +216,7 @@ const confirmationController = createChatConfirmationController();
 
 /** 聚焦输入框 */
 function focusInput(options?: { moveToEnd?: boolean }): void {
-  promptEditorRef.value?.focus(options);
+  promptEditorRef.value?.focus?.(options);
 }
 
 /**
@@ -458,7 +410,7 @@ const allBuiltinTools = createBuiltinTools({
       toolCallId: pendingQuestion.toolCallId
     };
   },
-  getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined
+  getSessionId: () => activeSessionId.value ?? undefined
 });
 
 /**
@@ -522,7 +474,7 @@ function handleConfirmationAction(_confirmationId: string, action: ChatMessageCo
  */
 async function handleBeforeRegenerate(nextMessages: Message[]): Promise<void> {
   confirmationController.expirePendingConfirmation();
-  const sessionId = settingStore.chatSidebarActiveSessionId;
+  const sessionId = activeSessionId.value;
   if (!sessionId) return;
 
   const historyMessages = await fetchAllPriorHistory(sessionId);
@@ -530,18 +482,34 @@ async function handleBeforeRegenerate(nextMessages: Message[]): Promise<void> {
 }
 
 /**
- * 消息发送前的处理函数。
- * @param nextMessage - 待发送的消息
+ * 确保当前发送动作有可持久化的会话。
+ * @param title - 新会话标题
+ * @returns 有效会话 ID
  */
-async function handleBeforeSend(nextMessage: Message): Promise<void> {
-  confirmationController.expirePendingConfirmation();
-
-  if (!settingStore.chatSidebarActiveSessionId) {
-    const session = await chatStore.createSession('assistant', { title: nextMessage.content });
-    settingStore.setChatSidebarActiveSessionId(session.id);
+async function ensureActiveSession(title: string): Promise<string> {
+  if (activeSessionId.value) {
+    return activeSessionId.value;
   }
 
-  await chatStore.addSessionMessage(settingStore.chatSidebarActiveSessionId, nextMessage);
+  const session = await chatStore.createSession('assistant', { title });
+  createdSessionId.value = session.id;
+  currentSessionForAutoName.value = session;
+  emit('session-created', session);
+  return session.id;
+}
+
+/**
+ * 消息发送前的处理函数。
+ * @param nextMessage - 待发送的消息
+ * @returns 当前有效会话 ID
+ */
+async function handleBeforeSend(nextMessage: Message): Promise<string> {
+  confirmationController.expirePendingConfirmation();
+
+  const sessionId = await ensureActiveSession(nextMessage.content);
+
+  await chatStore.addSessionMessage(sessionId, nextMessage);
+  return sessionId;
 }
 
 /**
@@ -559,7 +527,7 @@ function isEmptyAssistantDraft(message: Message): boolean {
  * @param message - 当前 assistant 草稿消息
  */
 async function persistAssistantDraft(message: Message): Promise<void> {
-  const sessionId = settingStore.chatSidebarActiveSessionId;
+  const sessionId = activeSessionId.value;
   if (!sessionId) return;
 
   await chatStore.updateSessionMessage(sessionId, message);
@@ -600,7 +568,7 @@ const { stream, loading: streamLoading } = useChatStream({
   messages,
   tools: getActiveTools,
   getToolContext: editorToolContextRegistry.getCurrentContext,
-  getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined,
+  getSessionId: () => activeSessionId.value ?? undefined,
   onBeforeRegenerate: handleBeforeRegenerate,
   onComplete: async (nextMessage: Message) => {
     cancelAssistantDraftPersistence();
@@ -622,21 +590,71 @@ const loading = computed<boolean>(() => taskRuntime.loading.value || streamLoadi
 /** 上下文窗口用量 hook（混合策略：空闲态用 API 上报值，流式中用估算器） */
 const { usedTokens, snapshot: contextUsageSnapshot } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });
 
-/** 会话 hook */
-const { currentSession, createNewSession, switchSession, initializeActiveSession } = useSession({
-  resetUsagePanel: usagePanel.reset,
-  setLoadedMessages,
-  focusInput,
-  isStreamLoading: () => loading.value,
-  disposeConfirmationController: () => confirmationController.dispose(),
-  resetHistoryState: () => {
-    hasMoreHistory.value = false;
-  }
-});
+watch(
+  loading,
+  (value) => {
+    emit('loading-change', value);
+  },
+  { immediate: true }
+);
+
+/**
+ * 重置新会话草稿态。
+ */
+async function resetDraftSessionState(): Promise<void> {
+  confirmationController.dispose();
+  createdSessionId.value = null;
+  currentSessionForAutoName.value = undefined;
+  usagePanel.reset();
+  setLoadedMessages([]);
+  hasMoreHistory.value = false;
+  await nextTick();
+  focusInput();
+}
+
+/**
+ * 加载指定会话消息。
+ * @param sessionId - 会话 ID
+ */
+async function loadSessionMessages(sessionId: string): Promise<void> {
+  confirmationController.dispose();
+  usagePanel.reset();
+  hasMoreHistory.value = false;
+  setLoadedMessages(await chatStore.getSessionMessages(sessionId));
+}
+
+watch(
+  () => props.sessionId,
+  async (nextSessionId) => {
+    if (nextSessionId && nextSessionId === createdSessionId.value) {
+      createdSessionId.value = null;
+      return;
+    }
+
+    if (!nextSessionId) {
+      await resetDraftSessionState();
+      return;
+    }
+
+    createdSessionId.value = null;
+    currentSessionForAutoName.value = undefined;
+    await loadSessionMessages(nextSessionId);
+  },
+  { immediate: true }
+);
+
+/**
+ * 进入新会话草稿态。
+ */
+async function createDraftSession(): Promise<void> {
+  if (loading.value) return;
+
+  await resetDraftSessionState();
+}
 
 /** 自动命名 Hook。 */
 const { captureSnapshot, scheduleAutoName } = useAutoName({
-  getCurrentSession: () => currentSession.value,
+  getCurrentSession: () => currentSessionForAutoName.value,
   getFirstRoundContent: (nextMessage) => {
     // 首轮如果仍在等待用户补充输入，则不应提前触发自动命名
     if (userChoice.findPending(messages.value)) {
@@ -653,9 +671,7 @@ const { captureSnapshot, scheduleAutoName } = useAutoName({
       aiResponse: nextMessage.content
     };
   },
-  onTitlePersisted: async () => {
-    await sessionHistoryRef.value?.refreshSessions();
-  }
+  onTitlePersisted: undefined
 });
 
 /**
@@ -663,13 +679,13 @@ const { captureSnapshot, scheduleAutoName } = useAutoName({
  * @param nextMessage - 完成的消息
  */
 async function handleComplete(nextMessage: Message): Promise<void> {
-  const sessionId = settingStore.chatSidebarActiveSessionId;
+  const sessionId = activeSessionId.value;
   const snapshot = captureSnapshot(nextMessage, sessionId);
 
   try {
     await chatStore.addSessionMessage(sessionId, nextMessage);
     if (sessionId) {
-      await usagePanel.refresh(sessionId, currentSession.value?.id);
+      await usagePanel.refresh(sessionId, currentSessionForAutoName.value?.id ?? sessionId);
     }
   } finally {
     taskRuntime.finishTask('chat');
@@ -723,7 +739,7 @@ async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promi
 /** 手动上下文压缩命令 hook。 */
 const { handleAutoCompactContext, handleCompactContext } = useCompactContext({
   messages,
-  getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined,
+  getSessionId: () => activeSessionId.value ?? undefined,
   getContextWindow: () => contextWindow.value,
   beginCompactTask: (onAbort?: () => void) => taskRuntime.beginTask('compact', onAbort),
   finishCompactTask: () => taskRuntime.finishTask('compact'),
@@ -736,7 +752,7 @@ const { handleAutoCompactContext, handleCompactContext } = useCompactContext({
 /** 用户消息回退 hook。 */
 const rollbackController = useRollback({
   messages,
-  getSessionId: () => settingStore.chatSidebarActiveSessionId ?? undefined,
+  getSessionId: () => activeSessionId.value ?? undefined,
   fetchAllPriorHistory,
   persistMessages: (sessionId, nextMessages) => chatStore.setSessionMessages(sessionId, nextMessages),
   invalidateCompressionRecords: async (recordIds) => {
@@ -852,7 +868,7 @@ async function handleAbort(): Promise<void> {
   confirmationController.expirePendingConfirmation();
   await taskRuntime.abortActiveTask();
 
-  const sessionId = settingStore.chatSidebarActiveSessionId;
+  const sessionId = activeSessionId.value;
   if (sessionId) {
     const interruptMessage = create.interruptMessage();
     messages.value.push(interruptMessage);
@@ -914,8 +930,8 @@ function handleGlobalModelChange(model: { providerId: string; modelId: string })
 /** 斜杠命令处理 hook */
 const { handleSlashCommand } = useSlashCommands({
   openModelSelector: () => modelSelectRef.value?.open(),
-  openUsagePanel: () => usagePanel.openPanel(currentSession.value?.id),
-  createNewSession,
+  openUsagePanel: () => usagePanel.openPanel(activeSessionId.value ?? undefined),
+  createNewSession: createDraftSession,
   clearInput: () => inputEvents.clear(),
   compactContext: handleCompactContext,
   isBusy: () => loading.value,
@@ -928,22 +944,10 @@ const { handleSlashCommand } = useSlashCommands({
 
 /** 加载历史消息 */
 async function handleLoadHistory(): Promise<void> {
-  const sessionId = settingStore.chatSidebarActiveSessionId;
+  const sessionId = activeSessionId.value;
   if (!sessionId) return;
 
   await loadHistory(sessionId);
-}
-
-/**
- * 处理会话删除事件：当删除的会话为当前活跃会话时，清除消息列表与会话选中状态。
- * @param sessionId - 被删除的会话 ID
- */
-function handleDeleteSession(sessionId: string): void {
-  if (settingStore.chatSidebarActiveSessionId !== sessionId) return;
-
-  setLoadedMessages([]);
-  hasMoreHistory.value = false;
-  settingStore.setChatSidebarActiveSessionId(null);
 }
 
 /**
@@ -961,14 +965,12 @@ useSkillInit();
 /** 组件挂载时初始化 */
 onMounted(async () => {
   await modelSelectionEvents.loadSelectedModel();
-  initializeActiveSession();
   // 确保 filesStore 已加载最近文件列表
   await filesStore.ensureLoaded();
 });
 
 /** 组件卸载时清理 */
 onUnmounted(() => {
-  settingStore.setChatSidebarExpanded(false);
   cancelAssistantDraftPersistence();
   taskRuntime.dispose();
   confirmationController.dispose();
@@ -976,51 +978,6 @@ onUnmounted(() => {
 </script>
 
 <style lang="less">
-.b-chat--expanded {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-
-  .b-panel-splitter__section {
-    width: 100% !important;
-  }
-}
-
-.b-chat__content {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  background: var(--bg-primary);
-  border-radius: 8px;
-}
-
-.b-chat__header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  height: 40px;
-  padding: 0 8px 0 12px;
-  border-bottom: 1px solid var(--border-primary);
-}
-
-.b-chat__title {
-  flex: 1;
-  width: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.divider {
-  width: 1px;
-  height: 16px;
-  background-color: var(--border-secondary);
-}
-
 .b-chat__container {
   display: flex;
   flex: 1;
