@@ -1492,11 +1492,11 @@ describe('BDrawing', (): void => {
     await setDrawingTextEditorValue(editor, '标题');
     await editor.trigger('blur');
 
-    await findDrawingColorSection(wrapper, 'text').find('[data-testid="color-picker-preset-#ef4444"]').trigger('click');
+    await findDrawingColorSection(wrapper, 'text').find('[data-testid="color-picker-preset-#dc2626"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="大字号"]').trigger('click');
 
     const text = wrapper.find('.b-drawing-node__text');
-    expect(text.attributes('fill')).toBe('#ef4444');
+    expect(text.attributes('fill')).toBe('#dc2626');
     expect((text.element as SVGTextElement).style.fontSize).toBe('18px');
   });
 
@@ -2822,7 +2822,7 @@ describe('BDrawing', (): void => {
     await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
 
     expect(findDrawingStylePanel(wrapper).exists()).toBe(true);
-    await findDrawingStylePanel(wrapper).find('[aria-label="选择颜色 #ef4444"]').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="选择颜色 #dc2626"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="贝塞尔曲线"]').trigger('click');
 
@@ -2832,7 +2832,7 @@ describe('BDrawing', (): void => {
     await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
 
     const connectorPath = findDrawingConnectorPath(wrapper);
-    expect(connectorPath.attributes('stroke')).toBe('#ef4444');
+    expect(connectorPath.attributes('stroke')).toBe('#dc2626');
     expect(connectorPath.attributes('d')).toContain(' C ');
     expect(findDrawingConnectorEndMarker(wrapper).exists()).toBe(false);
   });
@@ -3079,12 +3079,12 @@ describe('BDrawing', (): void => {
     await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
     await findDrawingConnectorPath(wrapper).trigger('pointerdown');
 
-    await findDrawingStylePanel(wrapper).find('[data-testid="color-picker-preset-#ef4444"]').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[data-testid="color-picker-preset-#dc2626"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
     await findDrawingStylePanel(wrapper).find('[aria-label="贝塞尔曲线"]').trigger('click');
 
     const connectorPath = findDrawingConnectorPath(wrapper);
-    expect(connectorPath.attributes('stroke')).toBe('#ef4444');
+    expect(connectorPath.attributes('stroke')).toBe('#dc2626');
     expect(findDrawingConnectorEndMarker(wrapper).exists()).toBe(false);
     expect(connectorPath.attributes('d')).toContain(' C ');
   });

@@ -12,7 +12,7 @@ describe('drawing route', (): void => {
     expect(drawingRoute).toBeTruthy();
     expect(drawingRoute?.path).toBe('drawing');
     expect(drawingRoute?.name).toBe('drawing');
-    expect(drawingRoute?.meta?.title).toBe('画图');
+    expect(drawingRoute?.meta?.title).toBe('画图 (Beta)');
     expect(drawingRoute?.meta?.tab?.id).toBe('drawing');
   });
 });
