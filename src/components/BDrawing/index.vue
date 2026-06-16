@@ -103,7 +103,7 @@ import type {
   DrawingToolMode
 } from './types';
 import type { DrawingCanvasPointProjection, DrawingConnectorPathElementOverride } from './utils/drawingGeometry';
-import { computed, onBeforeUnmount, ref, toRef } from 'vue';
+import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue';
 import { useShortcuts } from '@/hooks/useShortcuts';
 import InfiniteViewport from './components/InfiniteViewport.vue';
 import MoveableLayer from './components/MoveableLayer.vue';
@@ -124,6 +124,7 @@ import {
   clientDeltaToDrawingDelta,
   createDrawingElementTransform,
   createDrawingConnectorMarkerPath,
+  createDrawingViewportForElements,
   findDrawingShapeElement,
   getDrawingConnectorAnchorPoint,
   getDrawingShapeRenderSize,
@@ -186,6 +187,8 @@ const { registerShortcuts } = useShortcuts();
 const canUndo = computed<boolean>(() => board.state.value.history.past.length > 0);
 /** 当前历史栈是否允许重做。 */
 const canRedo = computed<boolean>(() => board.state.value.history.future.length > 0);
+/** 是否已执行初始内容视口适配。 */
+const initialContentViewportFitted = ref<boolean>(false);
 /** 未选中节点直接拖拽期间临时隐藏 Moveable 图层，避免旧选框跟随显示。 */
 const hideMoveableDuringDirectDrag = ref<boolean>(false);
 /** Moveable 拖拽缩放过程中的临时几何预览。 */
@@ -208,6 +211,32 @@ const selectedConnectorElement = computed<DrawingConnectorElement | null>(() => 
 
   return element && isDrawingConnectorElement(element) ? element : null;
 });
+
+/**
+ * 首次打开已有内容时自动适配视口。
+ */
+function fitInitialContentViewport(): void {
+  if (initialContentViewportFitted.value || !isViewportReady.value || board.state.value.elements.length === 0) {
+    return;
+  }
+
+  const nextViewport = createDrawingViewportForElements(board.state.value.elements, viewportSize.value);
+  if (!nextViewport) {
+    return;
+  }
+
+  initialContentViewportFitted.value = true;
+  viewport.setCenter(nextViewport.center);
+  viewport.setZoom(nextViewport.zoom);
+}
+
+watch(
+  [isViewportReady, () => viewportSize.value.width, () => viewportSize.value.height, () => board.state.value.elements.length],
+  (): void => {
+    fitInitialContentViewport();
+  },
+  { immediate: true }
+);
 
 /** 当前选中元素在元素列表中的索引，供层级控制按钮判断是否可操作。 */
 const selectedElementIndex = computed<number>(() => {

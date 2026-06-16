@@ -2,7 +2,7 @@
  * @file useModelSync.ts
  * @description BDrawing 外部 v-model 与内部画板状态同步。
  */
-import type { DrawingData } from '../types';
+import type { DrawingBoardSnapshot, DrawingData } from '../types';
 import type { UseDrawingBoardReturn } from './useDrawingBoard';
 import { nextTick, watch } from 'vue';
 import type { Ref } from 'vue';
@@ -22,13 +22,38 @@ export interface UseModelSyncOptions {
 }
 
 /**
- * 判断外部画板数据与内部状态是否一致。
+ * 创建用于判断内容是否变化的画板快照。
+ * @param snapshot - 画板快照或绑定数据
+ * @returns 内容快照
+ */
+function createDrawingContentSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'edges'>): Pick<DrawingData, 'elements' | 'edges'> {
+  return {
+    elements: snapshot.elements,
+    edges: snapshot.edges
+  };
+}
+
+/**
+ * 判断外部画板内容与内部状态是否一致。
  * @param modelValue - 外部画板数据
  * @param board - 内部画板状态与命令
  * @returns 是否一致
  */
-function isModelValueEqualToBoard(modelValue: DrawingData, board: UseDrawingBoardReturn): boolean {
-  return isEqual(createDrawingDataSnapshot(modelValue), createDrawingDataSnapshot(board.state.value));
+function isModelContentEqualToBoard(modelValue: DrawingData, board: UseDrawingBoardReturn): boolean {
+  return isEqual(createDrawingContentSnapshot(modelValue), createDrawingContentSnapshot(board.state.value));
+}
+
+/**
+ * 创建对外同步的画板数据，保留外部已有视口快照。
+ * @param board - 内部画板状态与命令
+ * @param modelValue - 外部画板数据
+ * @returns 对外同步数据
+ */
+function createModelUpdateSnapshot(board: UseDrawingBoardReturn, modelValue: DrawingData): DrawingData {
+  return {
+    ...createDrawingDataSnapshot(board.state.value),
+    viewport: modelValue.viewport
+  };
 }
 
 /**
@@ -41,7 +66,7 @@ export function useModelSync(options: UseModelSyncOptions): void {
   watch(
     () => options.modelValue.value,
     (modelValue: DrawingData | undefined): void => {
-      if (!modelValue || isModelValueEqualToBoard(modelValue, options.board)) {
+      if (!modelValue || isModelContentEqualToBoard(modelValue, options.board)) {
         return;
       }
 
@@ -60,13 +85,17 @@ export function useModelSync(options: UseModelSyncOptions): void {
   );
 
   watch(
-    () => [options.board.state.value.elements, options.board.state.value.edges, options.board.state.value.viewport],
+    () => [options.board.state.value.elements, options.board.state.value.edges],
     (): void => {
       if (options.modelValue.value === undefined || syncingModelValueToBoard) {
         return;
       }
 
-      options.emitUpdate(createDrawingDataSnapshot(options.board.state.value));
+      if (isModelContentEqualToBoard(options.modelValue.value, options.board)) {
+        return;
+      }
+
+      options.emitUpdate(createModelUpdateSnapshot(options.board, options.modelValue.value));
     },
     { deep: true }
   );

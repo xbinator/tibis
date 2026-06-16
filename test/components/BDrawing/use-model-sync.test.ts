@@ -4,9 +4,9 @@
  */
 import { effectScope, nextTick, ref } from 'vue';
 import { describe, expect, it } from 'vitest';
-import type { DrawingData, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import { useDrawingBoard } from '@/components/BDrawing/hooks/useDrawingBoard';
 import { useModelSync } from '@/components/BDrawing/hooks/useModelSync';
+import type { DrawingData, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 
 /**
  * 创建测试形状元素。
@@ -81,6 +81,70 @@ describe('useModelSync', (): void => {
     expect(emitted).toHaveLength(1);
     expect(emitted[0]?.elements).toHaveLength(2);
     expect(hasInternalStateFields(emitted[0] as DrawingData)).toBe(false);
+  });
+
+  it('does not emit model updates when only the viewport changes', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<DrawingData | undefined>(createDrawingData('node-1'));
+    const emitted: DrawingData[] = [];
+
+    scope.run((): void => {
+      const board = useDrawingBoard(modelValue.value);
+      useModelSync({
+        board,
+        emitUpdate: (value: DrawingData): void => {
+          emitted.push(value);
+        },
+        modelValue
+      });
+
+      board.state.value = {
+        ...board.state.value,
+        viewport: {
+          center: { x: 300, y: 240 },
+          zoom: 0.8
+        }
+      };
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(emitted).toEqual([]);
+  });
+
+  it('preserves the external viewport snapshot when emitting content changes', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<DrawingData | undefined>(createDrawingData('node-1'));
+    const emitted: DrawingData[] = [];
+
+    scope.run((): void => {
+      const board = useDrawingBoard(modelValue.value);
+      useModelSync({
+        board,
+        emitUpdate: (value: DrawingData): void => {
+          emitted.push(value);
+        },
+        modelValue
+      });
+
+      board.state.value = {
+        ...board.state.value,
+        viewport: {
+          center: { x: 300, y: 240 },
+          zoom: 0.8
+        }
+      };
+      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
+      board.updateDraftPoint({ x: 140, y: 90 });
+      board.commitCreateShapeDraft();
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]?.viewport).toEqual({ center: { x: 10, y: 20 }, zoom: 1 });
   });
 
   it('resets board from external model without echoing the same update', async (): Promise<void> => {

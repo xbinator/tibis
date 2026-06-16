@@ -13,7 +13,7 @@ import type {
   DrawingViewport
 } from '../types';
 import { DRAWING_ELEMENT_ID_ATTRIBUTE } from '../constants/dom';
-import { DRAWING_VIEWBOX_SIZE } from '../constants/viewport';
+import { DRAWING_MIN_ZOOM, DRAWING_VIEWBOX_SIZE } from '../constants/viewport';
 import { measureDrawingTextElementSize } from './drawingTextMetrics';
 
 /**
@@ -81,6 +81,20 @@ export interface DrawingConnectorEndpointPoints {
   source: DrawingPoint;
   /** 终点坐标 */
   target: DrawingPoint;
+}
+
+/**
+ * 画板内容边界。
+ */
+interface DrawingContentBounds {
+  /** 左侧边界 */
+  minX: number;
+  /** 顶部边界 */
+  minY: number;
+  /** 右侧边界 */
+  maxX: number;
+  /** 底部边界 */
+  maxY: number;
 }
 
 /** 连接线箭头长度。 */
@@ -155,6 +169,60 @@ export function getDrawingResponsiveViewBoxSize(zoom: number, viewportSize: Draw
   return {
     width: viewportSize.width / zoom,
     height: viewportSize.height / zoom
+  };
+}
+
+/**
+ * 根据元素列表计算内容边界。
+ * @param elements - 画板元素列表
+ * @returns 内容边界，无可见元素时返回 null
+ */
+function getDrawingContentBounds(elements: DrawingElement[]): DrawingContentBounds | null {
+  const visibleElements = elements.filter((element: DrawingElement): boolean => element.size.width > 0 && element.size.height > 0);
+  if (!visibleElements.length) {
+    return null;
+  }
+
+  return visibleElements.reduce<DrawingContentBounds>(
+    (bounds: DrawingContentBounds, element: DrawingElement): DrawingContentBounds => ({
+      minX: Math.min(bounds.minX, element.position.x),
+      minY: Math.min(bounds.minY, element.position.y),
+      maxX: Math.max(bounds.maxX, element.position.x + element.size.width),
+      maxY: Math.max(bounds.maxY, element.position.y + element.size.height)
+    }),
+    {
+      minX: visibleElements[0].position.x,
+      minY: visibleElements[0].position.y,
+      maxX: visibleElements[0].position.x + visibleElements[0].size.width,
+      maxY: visibleElements[0].position.y + visibleElements[0].size.height
+    }
+  );
+}
+
+/**
+ * 创建能够完整展示现有内容的视口。
+ * @param elements - 画板元素列表
+ * @param viewportSize - 画布渲染尺寸
+ * @param padding - 内容周围留白
+ * @returns 适配内容的视口，无内容时返回 null
+ */
+export function createDrawingViewportForElements(elements: DrawingElement[], viewportSize: DrawingSize, padding = 80): DrawingViewport | null {
+  const bounds = getDrawingContentBounds(elements);
+  if (!bounds) {
+    return null;
+  }
+
+  const size = viewportSize.width && viewportSize.height ? viewportSize : DRAWING_VIEWBOX_SIZE;
+  const contentWidth = bounds.maxX - bounds.minX + padding * 2;
+  const contentHeight = bounds.maxY - bounds.minY + padding * 2;
+  const fitZoom = Math.min(1, size.width / contentWidth, size.height / contentHeight);
+
+  return {
+    center: {
+      x: Number(((bounds.minX + bounds.maxX) / 2).toFixed(2)),
+      y: Number(((bounds.minY + bounds.maxY) / 2).toFixed(2))
+    },
+    zoom: Number(Math.max(DRAWING_MIN_ZOOM, fitZoom).toFixed(2))
   };
 }
 

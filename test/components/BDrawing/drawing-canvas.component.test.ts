@@ -121,6 +121,35 @@ function createConnectorLabelDrawingDataFixture(): DrawingData {
 }
 
 /**
+ * 创建远离原点的测试画板数据。
+ * @returns 远处节点画板数据
+ */
+function createFarDrawingDataFixture(): DrawingData {
+  return {
+    elements: [
+      {
+        id: 'far-node-1',
+        kind: 'shape',
+        shape: 'rect',
+        text: '远处节点',
+        position: { x: 2000, y: 1200 },
+        size: { width: 200, height: 100 },
+        rotation: 0,
+        metadata: {
+          source: 'user',
+          createdAt: 1
+        }
+      }
+    ],
+    edges: [],
+    viewport: {
+      center: { x: 0, y: 0 },
+      zoom: 1
+    }
+  };
+}
+
+/**
  * Selecto 拖拽条件回调。
  */
 type SelectoDragCondition = (event: { inputEvent?: { target?: EventTarget | null } }) => boolean;
@@ -847,6 +876,26 @@ function parseViewBox(value: string | undefined): number[] {
 }
 
 /**
+ * 判断 viewBox 是否完整包含指定矩形。
+ * @param viewBox - SVG viewBox 数值
+ * @param rect - 待检查矩形
+ * @returns 是否完整包含
+ */
+function doesViewBoxContainRect(
+  viewBox: number[],
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+): boolean {
+  const [minX, minY, width, height] = viewBox;
+
+  return minX <= rect.x && minY <= rect.y && minX + width >= rect.x + rect.width && minY + height >= rect.y + rect.height;
+}
+
+/**
  * 触发最近一个 Selecto mock 实例的 selectEnd 事件。
  * @param targets - 选中的 DOM 目标
  * @param shiftKey - 是否追加选择
@@ -940,6 +989,25 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-drawing-element-id="external-node-1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="drawing-node"]').text()).toContain('外部节点');
     expect(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox')).toBe('-590 -340 1200 720');
+  });
+
+  it('fits existing drawing content into the first visible viewport', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createFarDrawingDataFixture()
+      }
+    });
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await nextTick();
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await nextTick();
+
+    const viewBox = parseViewBox(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox'));
+
+    expect(doesViewBoxContainRect(viewBox, { x: 2000, y: 1200, width: 200, height: 100 })).toBe(true);
   });
 
   it('emits drawing data updates without internal interaction state', async (): Promise<void> => {
