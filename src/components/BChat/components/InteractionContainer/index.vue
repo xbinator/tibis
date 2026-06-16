@@ -3,7 +3,7 @@
   @description 交互容器主组件，管理 Toast 的显示
 -->
 <template>
-  <template v-if="toastQueue.length">
+  <div v-if="toastQueue.length" class="interaction-container">
     <ToastItem
       v-for="toast in toastQueue"
       :id="toast.id"
@@ -14,7 +14,7 @@
       :shake="toast.shake"
       @close="removeToast"
     />
-  </template>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -44,4 +44,9 @@ function removeToast(id: string): void {
 }
 </script>
 
-<style scoped lang="less"></style>
+<style scoped lang="less">
+.interaction-container {
+  max-width: var(--b-chat-max-width, 800px);
+  margin: 0 auto;
+}
+</style>

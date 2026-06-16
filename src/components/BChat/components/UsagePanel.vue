@@ -105,6 +105,8 @@ function formatTokens(value: number): string {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
+  max-width: var(--b-chat-max-width, 800px);
+  margin: 0 auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-secondary);
   border-radius: 6px;

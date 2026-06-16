@@ -74,6 +74,8 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
 <style scoped lang="less">
 .todo-panel {
   position: relative;
+  max-width: var(--b-chat-max-width, 800px);
+  margin: 0 auto;
 }
 
 .todo-panel__board {
