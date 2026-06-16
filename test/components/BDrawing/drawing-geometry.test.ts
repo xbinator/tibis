@@ -14,6 +14,7 @@ import {
   createDrawingViewBox,
   findDrawingElementCenter,
   findDrawingShapeElement,
+  getDrawingConnectorLabelPosition,
   getDrawingElementId,
   getDrawingLineLabelPosition,
   isDrawingDiamondShape,
@@ -158,6 +159,72 @@ describe('drawingGeometry', (): void => {
 
     expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 248 100');
     expect(createDrawingConnectorMarkerPath([source, target, connector], connector, 'end')).toContain('M 260 100');
+  });
+
+  it('routes default connectors as orthogonal elbow paths between offset anchors', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      markerEnd: 'arrow',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 320, y: 180 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 240 100 L 240 220 L 308 220');
+    expect(createDrawingConnectorMarkerPath([source, target, connector], connector, 'end')).toContain('M 320 220');
+  });
+
+  it('places default connector labels on the middle segment of an orthogonal route', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      markerEnd: 'arrow',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 320, y: 180 };
+
+    expect(getDrawingConnectorLabelPosition([source, target, connector], connector)).toEqual({ x: 240, y: 152 });
+  });
+
+  it('routes default connectors around blocking shapes', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const blocker: DrawingShapeElement = {
+      ...createShapeElement('blocker'),
+      position: { x: 250, y: 120 },
+      size: { width: 120, height: 100 }
+    };
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      markerEnd: 'arrow',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 420, y: 180 };
+
+    expect(createDrawingConnectorPath([source, target, blocker, connector], connector)).toBe('M 160 100 L 184 100 L 184 72 L 396 72 L 396 220 L 408 220');
   });
 
   it('finds element IDs, DOM targets and element centers', (): void => {

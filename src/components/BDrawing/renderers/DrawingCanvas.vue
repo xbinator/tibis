@@ -20,7 +20,6 @@
         </marker>
       </defs>
 
-      <DrawingEdgeRenderer v-for="edge in edges" :key="edge.id" :edge="edge" :elements="elements" />
       <DrawingConnectorRenderer
         v-for="connector in connectorElements"
         :key="`connector-hit-${connector.id}`"
@@ -88,7 +87,6 @@ import type {
   DrawingConnectorElement,
   DrawingConnectorDraftOptions,
   DrawingConnectorEndpoint,
-  DrawingEdge,
   DrawingElement,
   DrawingElementStyle,
   DrawingGeometryChange,
@@ -112,7 +110,6 @@ import {
 } from '../utils/drawingGeometry';
 import DrawingConnectorRenderer from './DrawingConnector.vue';
 import DrawingCreatePreview from './DrawingCreatePreview.vue';
-import DrawingEdgeRenderer from './DrawingEdge.vue';
 import DrawingNodeRenderer from './DrawingNode.vue';
 
 /**
@@ -130,8 +127,6 @@ type DrawingCreateConnectorDraft = Extract<DrawingInteractionDraft, { kind: 'cre
 interface Props {
   /** 元素列表 */
   elements: DrawingElement[];
-  /** 连线列表 */
-  edges: DrawingEdge[];
   /** 选区 */
   selection: string[];
   /** 正在编辑的元素 ID */

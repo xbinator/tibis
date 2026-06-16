@@ -70,4 +70,27 @@ describe('toolResultSummary open file metadata', (): void => {
       ]
     });
   });
+
+  it('summarizes create_drawing as a created drawing draft', (): void => {
+    const summary = getToolResultSummary(
+      'create_drawing',
+      successResult('create_drawing', {
+        title: '流程图',
+        path: 'unsaved://draft-1/flow.tibis',
+        data: {
+          elements: [{ id: 'node-1' }],
+          edges: [],
+          viewport: { center: { x: 0, y: 0 }, zoom: 1 }
+        }
+      })
+    );
+
+    expect(summary).toEqual({
+      text: '已创建画板: 流程图',
+      tags: [
+        { label: '元素', value: '1' },
+        { label: '文件', value: 'flow.tibis' }
+      ]
+    });
+  });
 });

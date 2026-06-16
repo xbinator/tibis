@@ -59,7 +59,7 @@ function createDefaultViewport(): DrawingViewport {
 function createSnapshot(state: DrawingBoardSnapshot): DrawingBoardSnapshot {
   return {
     elements: cloneDeep(state.elements),
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   };
@@ -279,7 +279,7 @@ function applyGeometryChanges(
 
   return withHistory(state, {
     elements: nextElements,
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
@@ -293,7 +293,7 @@ function applyGeometryChanges(
 export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>): DrawingBoardState {
   return {
     elements: cloneDeep(snapshot?.elements ?? []),
-    edges: cloneDeep(snapshot?.edges ?? []),
+    edges: [],
     selection: [...(snapshot?.selection ?? [])],
     viewport: cloneDeep(snapshot?.viewport ?? createDefaultViewport()),
     draft: cloneDeep(snapshot?.draft),
@@ -312,7 +312,7 @@ export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>
 export function createDrawingDataSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'edges' | 'viewport'>): DrawingData {
   return {
     elements: cloneDeep(snapshot.elements),
-    edges: cloneDeep(snapshot.edges),
+    edges: [],
     viewport: cloneDeep(snapshot.viewport)
   };
 }
@@ -348,7 +348,7 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
 
   return withHistory(state, {
     elements: [...cloneDeep(state.elements), element],
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [element.id],
     viewport: cloneDeep(state.viewport)
   });
@@ -404,7 +404,7 @@ export function addDrawingConnector(state: DrawingBoardState, options: DrawingAd
 
   return withHistory(state, {
     elements: [...cloneDeep(state.elements), connector],
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [connector.id],
     viewport: cloneDeep(state.viewport)
   });
@@ -521,7 +521,7 @@ export function updateDrawingElementStyle(state: DrawingBoardState, elementId: s
 
   return withHistory(state, {
     elements: nextElements,
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
@@ -547,7 +547,7 @@ export function updateDrawingConnectorOptions(state: DrawingBoardState, connecto
 
   return withHistory(state, {
     elements: nextElements,
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
@@ -571,7 +571,7 @@ export function updateDrawingConnectorLabel(state: DrawingBoardState, connectorI
 
   return withHistory(state, {
     elements: nextElements,
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
@@ -599,11 +599,9 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
 
     return true;
   });
-  const nextEdges = state.edges.filter((edge) => !selected.has(edge.id) && !selected.has(edge.sourceId) && !selected.has(edge.targetId));
-
   return withHistory(state, {
     elements: nextElements,
-    edges: nextEdges,
+    edges: [],
     selection: [],
     viewport: cloneDeep(state.viewport)
   });
@@ -632,7 +630,7 @@ export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, 
 
   return withHistory(state, {
     elements: nextElements,
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
@@ -687,7 +685,7 @@ export function reorderDrawingElement(state: DrawingBoardState, elementId: strin
 
   return withHistory(state, {
     elements: nextElements,
-    edges: cloneDeep(state.edges),
+    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });

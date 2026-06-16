@@ -67,6 +67,8 @@ interface DrawingConnectorRoute {
   source: DrawingPoint;
   /** 终点 */
   target: DrawingPoint;
+  /** 折线路径点 */
+  points?: DrawingPoint[];
   /** 起点控制点 */
   sourceControl?: DrawingPoint;
   /** 终点控制点 */
@@ -101,6 +103,8 @@ interface DrawingContentBounds {
 const DRAWING_CONNECTOR_ARROW_LENGTH = 12;
 /** 连接线箭头半宽。 */
 const DRAWING_CONNECTOR_ARROW_HALF_WIDTH = 4.5;
+/** 连接线绕开节点时的安全间距。 */
+const DRAWING_CONNECTOR_ROUTE_MARGIN = 24;
 
 /**
  * 连接线箭头几何。
@@ -476,6 +480,14 @@ function getDrawingConnectorMarkerType(connector: DrawingConnectorElement, place
  * @returns 箭头方向
  */
 function getDrawingConnectorMarkerDirection(route: DrawingConnectorRoute, placement: DrawingConnectorMarkerPlacement): DrawingPoint {
+  if (route.points && route.points.length >= 2) {
+    const { points } = route;
+    const tangent =
+      placement === 'start' ? createDrawingVector(points[1], points[0]) : createDrawingVector(points[points.length - 2], points[points.length - 1]);
+
+    return normalizeDrawingVector(tangent);
+  }
+
   const tangent =
     placement === 'start'
       ? createDrawingVector(route.sourceControl ?? route.target, route.source)
@@ -538,6 +550,275 @@ function getConnectorAnchorDirection(anchor: DrawingConnectorAnchor): DrawingPoi
   }
 
   return { x: 1, y: 0 };
+}
+
+/**
+ * 判断方向是否为水平。
+ * @param direction - 单位方向
+ * @returns 是否为水平
+ */
+function isHorizontalConnectorDirection(direction: DrawingPoint): boolean {
+  return Math.abs(direction.x) >= Math.abs(direction.y);
+}
+
+/**
+ * 移除折线路径中的连续重复点。
+ * @param points - 原始折线路径点
+ * @returns 清理后的折线路径点
+ */
+function compactDrawingConnectorRoutePoints(points: DrawingPoint[]): DrawingPoint[] {
+  return points.filter((point: DrawingPoint, index: number): boolean => {
+    if (index === 0) {
+      return true;
+    }
+
+    const previous = points[index - 1];
+
+    return previous.x !== point.x || previous.y !== point.y;
+  });
+}
+
+/**
+ * 创建连接线折线路线对象。
+ * @param source - 起点
+ * @param target - 终点
+ * @param points - 折线路径点
+ * @returns 连接线解析路线
+ */
+function createDrawingPolylineRoute(source: DrawingPoint, target: DrawingPoint, points: DrawingPoint[]): DrawingConnectorRoute {
+  return {
+    source,
+    target,
+    points: compactDrawingConnectorRoutePoints(points)
+  };
+}
+
+/**
+ * 读取形状避让边界。
+ * @param element - 形状元素
+ * @returns 膨胀后的避让边界
+ */
+function getDrawingConnectorObstacleBounds(element: DrawingShapeElement): DrawingContentBounds {
+  const size = getDrawingShapeRenderSize(element);
+
+  return {
+    minX: element.position.x - DRAWING_CONNECTOR_ROUTE_MARGIN,
+    minY: element.position.y - DRAWING_CONNECTOR_ROUTE_MARGIN,
+    maxX: element.position.x + size.width + DRAWING_CONNECTOR_ROUTE_MARGIN,
+    maxY: element.position.y + size.height + DRAWING_CONNECTOR_ROUTE_MARGIN
+  };
+}
+
+/**
+ * 收集连接线需要避让的形状边界。
+ * @param elements - 画板元素列表
+ * @param sourceId - 起点元素 ID
+ * @param targetId - 终点元素 ID
+ * @param overrides - 预览中的形状几何覆盖
+ * @returns 避让边界列表
+ */
+function getDrawingConnectorObstacles(
+  elements: DrawingElement[],
+  sourceId: string,
+  targetId: string,
+  overrides: DrawingConnectorPathElementOverride[]
+): DrawingContentBounds[] {
+  return elements
+    .filter((element: DrawingElement): element is DrawingShapeElement => isDrawingShapeElement(element) && element.id !== sourceId && element.id !== targetId)
+    .map((element: DrawingShapeElement): DrawingShapeElement => applyConnectorPathElementOverride(element, overrides))
+    .map(getDrawingConnectorObstacleBounds);
+}
+
+/**
+ * 判断数值区间是否相交。
+ * @param start - 第一个区间起点
+ * @param end - 第一个区间终点
+ * @param min - 第二个区间起点
+ * @param max - 第二个区间终点
+ * @returns 是否相交
+ */
+function doesDrawingRangeOverlap(start: number, end: number, min: number, max: number): boolean {
+  return Math.max(Math.min(start, end), min) <= Math.min(Math.max(start, end), max);
+}
+
+/**
+ * 判断折线段是否穿过避让边界。
+ * @param start - 线段起点
+ * @param end - 线段终点
+ * @param bounds - 避让边界
+ * @returns 是否穿过边界
+ */
+function doesDrawingRouteSegmentIntersectBounds(start: DrawingPoint, end: DrawingPoint, bounds: DrawingContentBounds): boolean {
+  if (start.x === end.x) {
+    return start.x >= bounds.minX && start.x <= bounds.maxX && doesDrawingRangeOverlap(start.y, end.y, bounds.minY, bounds.maxY);
+  }
+
+  if (start.y === end.y) {
+    return start.y >= bounds.minY && start.y <= bounds.maxY && doesDrawingRangeOverlap(start.x, end.x, bounds.minX, bounds.maxX);
+  }
+
+  return doesDrawingRangeOverlap(start.x, end.x, bounds.minX, bounds.maxX) && doesDrawingRangeOverlap(start.y, end.y, bounds.minY, bounds.maxY);
+}
+
+/**
+ * 判断折线路径是否穿过任意避让边界。
+ * @param points - 折线路径点
+ * @param obstacles - 避让边界列表
+ * @returns 是否穿过避让边界
+ */
+function doesDrawingRouteIntersectObstacles(points: DrawingPoint[], obstacles: DrawingContentBounds[]): boolean {
+  return obstacles.some((bounds: DrawingContentBounds): boolean =>
+    points.slice(1).some((point: DrawingPoint, index: number): boolean => doesDrawingRouteSegmentIntersectBounds(points[index], point, bounds))
+  );
+}
+
+/**
+ * 计算折线路径长度。
+ * @param points - 折线路径点
+ * @returns 路径长度
+ */
+function getDrawingPolylineLength(points: DrawingPoint[]): number {
+  return points.slice(1).reduce((total: number, point: DrawingPoint, index: number): number => {
+    const previous = points[index];
+
+    return total + Math.hypot(point.x - previous.x, point.y - previous.y);
+  }, 0);
+}
+
+/**
+ * 从候选路径中选择最短的不碰撞路径。
+ * @param fallback - 原始路径
+ * @param candidates - 候选路径
+ * @param obstacles - 避让边界列表
+ * @returns 最终路径
+ */
+function selectDrawingConnectorRoutePoints(fallback: DrawingPoint[], candidates: DrawingPoint[][], obstacles: DrawingContentBounds[]): DrawingPoint[] {
+  const clearCandidates = candidates.filter((points: DrawingPoint[]): boolean => !doesDrawingRouteIntersectObstacles(points, obstacles));
+  if (!clearCandidates.length) {
+    return fallback;
+  }
+
+  return clearCandidates.reduce((shortest: DrawingPoint[], points: DrawingPoint[]): DrawingPoint[] =>
+    getDrawingPolylineLength(points) < getDrawingPolylineLength(shortest) ? points : shortest
+  );
+}
+
+/**
+ * 创建水平锚点之间的避让候选路径。
+ * @param source - 起点
+ * @param target - 终点
+ * @param sourceDirection - 起点方向
+ * @param targetDirection - 终点方向
+ * @param obstacles - 避让边界列表
+ * @returns 候选路径列表
+ */
+function createHorizontalConnectorAvoidanceCandidates(
+  source: DrawingPoint,
+  target: DrawingPoint,
+  sourceDirection: DrawingPoint,
+  targetDirection: DrawingPoint,
+  obstacles: DrawingContentBounds[]
+): DrawingPoint[][] {
+  const sourceOut = {
+    x: source.x + sourceDirection.x * DRAWING_CONNECTOR_ROUTE_MARGIN,
+    y: source.y
+  };
+  const targetOut = {
+    x: target.x + targetDirection.x * DRAWING_CONNECTOR_ROUTE_MARGIN,
+    y: target.y
+  };
+  const topY = Math.min(source.y, target.y, ...obstacles.map((bounds: DrawingContentBounds): number => bounds.minY)) - DRAWING_CONNECTOR_ROUTE_MARGIN;
+  const bottomY = Math.max(source.y, target.y, ...obstacles.map((bounds: DrawingContentBounds): number => bounds.maxY)) + DRAWING_CONNECTOR_ROUTE_MARGIN;
+
+  return [
+    [source, sourceOut, { x: sourceOut.x, y: topY }, { x: targetOut.x, y: topY }, targetOut, target],
+    [source, sourceOut, { x: sourceOut.x, y: bottomY }, { x: targetOut.x, y: bottomY }, targetOut, target]
+  ];
+}
+
+/**
+ * 创建垂直锚点之间的避让候选路径。
+ * @param source - 起点
+ * @param target - 终点
+ * @param sourceDirection - 起点方向
+ * @param targetDirection - 终点方向
+ * @param obstacles - 避让边界列表
+ * @returns 候选路径列表
+ */
+function createVerticalConnectorAvoidanceCandidates(
+  source: DrawingPoint,
+  target: DrawingPoint,
+  sourceDirection: DrawingPoint,
+  targetDirection: DrawingPoint,
+  obstacles: DrawingContentBounds[]
+): DrawingPoint[][] {
+  const sourceOut = {
+    x: source.x,
+    y: source.y + sourceDirection.y * DRAWING_CONNECTOR_ROUTE_MARGIN
+  };
+  const targetOut = {
+    x: target.x,
+    y: target.y + targetDirection.y * DRAWING_CONNECTOR_ROUTE_MARGIN
+  };
+  const leftX = Math.min(source.x, target.x, ...obstacles.map((bounds: DrawingContentBounds): number => bounds.minX)) - DRAWING_CONNECTOR_ROUTE_MARGIN;
+  const rightX = Math.max(source.x, target.x, ...obstacles.map((bounds: DrawingContentBounds): number => bounds.maxX)) + DRAWING_CONNECTOR_ROUTE_MARGIN;
+
+  return [
+    [source, sourceOut, { x: leftX, y: sourceOut.y }, { x: leftX, y: targetOut.y }, targetOut, target],
+    [source, sourceOut, { x: rightX, y: sourceOut.y }, { x: rightX, y: targetOut.y }, targetOut, target]
+  ];
+}
+
+/**
+ * 创建正交折线路线。
+ * @param source - 起点
+ * @param target - 终点
+ * @param sourceAnchor - 起点锚点
+ * @param targetAnchor - 终点锚点
+ * @param obstacles - 避让边界列表
+ * @returns 连接线解析路线
+ */
+function createDrawingOrthogonalRoute(
+  source: DrawingPoint,
+  target: DrawingPoint,
+  sourceAnchor: DrawingConnectorAnchor,
+  targetAnchor: DrawingConnectorAnchor,
+  obstacles: DrawingContentBounds[] = []
+): DrawingConnectorRoute {
+  if (source.x === target.x || source.y === target.y) {
+    return createDrawingPolylineRoute(source, target, [source, target]);
+  }
+
+  const sourceDirection = getConnectorAnchorDirection(sourceAnchor);
+  const targetDirection = getConnectorAnchorDirection(targetAnchor);
+  const sourceIsHorizontal = isHorizontalConnectorDirection(sourceDirection);
+  const targetIsHorizontal = isHorizontalConnectorDirection(targetDirection);
+  let points: DrawingPoint[];
+
+  if (sourceIsHorizontal && targetIsHorizontal) {
+    const middleX = (source.x + target.x) / 2;
+    points = [source, { x: middleX, y: source.y }, { x: middleX, y: target.y }, target];
+  } else if (!sourceIsHorizontal && !targetIsHorizontal) {
+    const middleY = (source.y + target.y) / 2;
+    points = [source, { x: source.x, y: middleY }, { x: target.x, y: middleY }, target];
+  } else if (sourceIsHorizontal) {
+    points = [source, { x: target.x, y: source.y }, target];
+  } else {
+    points = [source, { x: source.x, y: target.y }, target];
+  }
+
+  if (obstacles.length && doesDrawingRouteIntersectObstacles(points, obstacles)) {
+    let candidates: DrawingPoint[][] = [];
+    if (sourceIsHorizontal && targetIsHorizontal) {
+      candidates = createHorizontalConnectorAvoidanceCandidates(source, target, sourceDirection, targetDirection, obstacles);
+    } else if (!sourceIsHorizontal && !targetIsHorizontal) {
+      candidates = createVerticalConnectorAvoidanceCandidates(source, target, sourceDirection, targetDirection, obstacles);
+    }
+
+    points = selectDrawingConnectorRoutePoints(points, candidates, obstacles);
+  }
+
+  return createDrawingPolylineRoute(source, target, points);
 }
 
 /**
@@ -623,10 +904,13 @@ function resolveDrawingConnectorRoute(
     return createDrawingBezierRoute(sourcePoint, targetPoint, connector.source.anchor, connector.target.anchor);
   }
 
-  return {
-    source: sourcePoint,
-    target: targetPoint
-  };
+  return createDrawingOrthogonalRoute(
+    sourcePoint,
+    targetPoint,
+    connector.source.anchor,
+    connector.target.anchor,
+    getDrawingConnectorObstacles(elements, connector.source.elementId, connector.target.elementId, overrides)
+  );
 }
 
 /**
@@ -638,11 +922,13 @@ function resolveDrawingConnectorRoute(
 function trimDrawingConnectorRouteForMarkers(route: DrawingConnectorRoute, connector: DrawingConnectorElement): DrawingConnectorRoute {
   const source = getDrawingConnectorMarkerType(connector, 'start') === 'arrow' ? createDrawingConnectorMarkerGeometry(route, 'start').baseCenter : route.source;
   const target = getDrawingConnectorMarkerType(connector, 'end') === 'arrow' ? createDrawingConnectorMarkerGeometry(route, 'end').baseCenter : route.target;
+  const points = route.points ? [source, ...route.points.slice(1, -1), target] : undefined;
 
   return {
     ...route,
     source,
-    target
+    target,
+    points
   };
 }
 
@@ -693,7 +979,69 @@ export function createDrawingConnectorPath(
     } ${route.targetControl?.y ?? route.target.y}, ${route.target.x} ${route.target.y}`;
   }
 
-  return createDrawingLinePath(route.source, route.target);
+  const points = route.points ?? [route.source, route.target];
+
+  return points.map((point: DrawingPoint, index: number): string => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+}
+
+/**
+ * 读取折线路径指定长度处的点。
+ * @param points - 折线路径点
+ * @param distance - 从起点开始的长度
+ * @returns 指定长度处的点
+ */
+function getDrawingPolylinePointAtLength(points: DrawingPoint[], distance: number): DrawingPoint {
+  let remaining = distance;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const segmentLength = Math.hypot(current.x - previous.x, current.y - previous.y);
+    if (remaining <= segmentLength) {
+      const ratio = segmentLength ? remaining / segmentLength : 0;
+
+      return {
+        x: previous.x + (current.x - previous.x) * ratio,
+        y: previous.y + (current.y - previous.y) * ratio
+      };
+    }
+
+    remaining -= segmentLength;
+  }
+
+  return points.at(-1) ?? { x: 0, y: 0 };
+}
+
+/**
+ * 计算连接线标签位置。
+ * @param elements - 画板元素列表
+ * @param connector - 连接线元素
+ * @param overrides - 预览中的形状几何覆盖
+ * @returns 标签中心点
+ */
+export function getDrawingConnectorLabelPosition(
+  elements: DrawingElement[],
+  connector: DrawingConnectorElement,
+  overrides: DrawingConnectorPathElementOverride[] = []
+): DrawingPoint {
+  const route = resolveDrawingConnectorRoute(elements, connector, overrides);
+  if (!route) {
+    return { x: 0, y: 0 };
+  }
+
+  if (connector.curve === 'bezier' || !route.points) {
+    return {
+      x: (route.source.x + route.target.x) / 2,
+      y: (route.source.y + route.target.y) / 2 - 8
+    };
+  }
+
+  const middle = getDrawingPolylinePointAtLength(route.points, getDrawingPolylineLength(route.points) / 2);
+
+  return {
+    x: middle.x,
+    y: middle.y - 8
+  };
 }
 
 /**

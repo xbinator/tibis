@@ -37,7 +37,7 @@ import {
   createDrawingConnectorPath,
   findDrawingShapeElement,
   getDrawingConnectorAnchorPoint,
-  getDrawingLineLabelPosition
+  getDrawingConnectorLabelPosition
 } from '../utils/drawingGeometry';
 
 /**
@@ -125,11 +125,7 @@ const shouldRender = computed<boolean>(
       (props.showMarkers && (Boolean(markerStartPath.value) || Boolean(markerEndPath.value))))
 );
 const labelPosition = computed<DrawingPoint>(() => {
-  if (!source.value || !target.value) {
-    return { x: 0, y: 0 };
-  }
-
-  return getDrawingLineLabelPosition(source.value, target.value);
+  return getDrawingConnectorLabelPosition(props.elements, props.connector);
 });
 /** 连线标签样式。 */
 const labelStyle = computed<CSSProperties>(() => ({

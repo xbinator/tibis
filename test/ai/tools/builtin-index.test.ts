@@ -3,14 +3,21 @@
  * @description 验证内置工具工厂的默认工具暴露。
  */
 import { describe, expect, it } from 'vitest';
-import { APPLY_DRAWING_OPERATIONS_TOOL_NAME, createBuiltinTools, READ_CURRENT_DRAWING_TOOL_NAME, UPDATE_CURRENT_DRAWING_TOOL_NAME } from '@/ai/tools/builtin';
+import {
+  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
+  CREATE_DRAWING_TOOL_NAME,
+  createBuiltinTools,
+  READ_CURRENT_DRAWING_TOOL_NAME,
+  UPDATE_CURRENT_DRAWING_TOOL_NAME
+} from '@/ai/tools/builtin';
 
 describe('builtin tools index', (): void => {
-  it('includes Drawing read and write tools in the builtin tool factory', (): void => {
+  it('exposes the Drawing operation tool but not the full replacement tool by default', (): void => {
     const toolNames = createBuiltinTools().map((tool) => tool.definition.name);
 
     expect(toolNames).toContain(READ_CURRENT_DRAWING_TOOL_NAME);
-    expect(toolNames).toContain(UPDATE_CURRENT_DRAWING_TOOL_NAME);
+    expect(toolNames).toContain(CREATE_DRAWING_TOOL_NAME);
     expect(toolNames).toContain(APPLY_DRAWING_OPERATIONS_TOOL_NAME);
+    expect(toolNames).not.toContain(UPDATE_CURRENT_DRAWING_TOOL_NAME);
   });
 });

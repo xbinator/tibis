@@ -5,12 +5,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   APPLY_DRAWING_OPERATIONS_TOOL_NAME,
+  CREATE_DRAWING_TOOL_NAME,
   READ_CURRENT_DRAWING_TOOL_NAME,
   UPDATE_CURRENT_DRAWING_TOOL_NAME,
   createBuiltinDrawingTools
 } from '@/ai/tools/builtin/DrawingTool';
 import type { DrawingToolContext } from '@/ai/tools/context/drawing';
-import type { DrawingConnectorElement, DrawingData, DrawingEdge, DrawingShapeElement } from '@/components/BDrawing/types';
+import type { OpenDraftResult } from '@/ai/tools/shared/types';
+import type { DrawingConnectorElement, DrawingData, DrawingShapeElement } from '@/components/BDrawing/types';
 
 /**
  * 创建测试形状元素。
@@ -70,7 +72,7 @@ function createConnectorElement(id: string, sourceId: string, targetId: string):
  * @param targetId - 终点元素 ID
  * @returns 测试兼容连线数据
  */
-function createEdge(id: string, sourceId: string, targetId: string): DrawingEdge {
+function createLegacyEdge(id: string, sourceId: string, targetId: string): DrawingData['edges'][number] {
   return {
     id,
     type: 'arrow',
@@ -96,6 +98,20 @@ function createDrawingData(id: string): DrawingData {
       center: { x: 0, y: 0 },
       zoom: 1
     }
+  };
+}
+
+/**
+ * 解析测试用 .tibis 画图内容。
+ * @param content - .tibis 文件内容
+ * @returns 画图数据
+ */
+function parseDrawingContent(content: string): DrawingData {
+  const parsed = JSON.parse(content) as { elements: DrawingData['elements']; edges: DrawingData['edges']; viewport: DrawingData['viewport'] };
+  return {
+    elements: parsed.elements,
+    edges: parsed.edges,
+    viewport: parsed.viewport
   };
 }
 
@@ -147,6 +163,89 @@ describe('DrawingTool', (): void => {
       path: null,
       data: nextData
     });
+  });
+
+  it('exposes strict schemas for each drawing operation so models can call the tool', (): void => {
+    const tools = createBuiltinDrawingTools({ getDrawingContext: () => undefined });
+    const operationsSchema = tools.applyDrawingOperations.definition.parameters.properties.operations as {
+      type?: string;
+      items?: {
+        oneOf?: Array<{
+          properties?: Record<string, unknown>;
+          required?: string[];
+        }>;
+      };
+    };
+
+    expect(operationsSchema.type).toBe('array');
+    expect(operationsSchema.items?.oneOf).toHaveLength(5);
+    expect(operationsSchema.items?.oneOf?.map((schema) => schema.required)).toEqual([
+      ['type', 'shape', 'position'],
+      ['type', 'id', 'text'],
+      ['type', 'id', 'position'],
+      ['type', 'sourceId', 'targetId'],
+      ['type', 'id']
+    ]);
+  });
+
+  it('creates a drawing draft with initial operations when no drawing is open', async (): Promise<void> => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-16T08:00:00.000Z'));
+    const openDraft = vi.fn<(input: { originalPath: string; content: string }) => Promise<OpenDraftResult>>().mockImplementation(async (input) => ({
+      file: {
+        type: 'file',
+        id: 'draft-1',
+        path: null,
+        name: '流程图',
+        ext: 'tibis',
+        content: input.content,
+        savedContent: ''
+      },
+      unsavedPath: 'unsaved://draft-1/%E6%B5%81%E7%A8%8B%E5%9B%BE.tibis'
+    }));
+    const tools = createBuiltinDrawingTools({
+      getDrawingContext: () => undefined,
+      openDraft
+    });
+
+    const result = await tools.createDrawing.execute({
+      title: '流程图',
+      operations: [
+        {
+          type: 'add_shape',
+          shape: 'rect',
+          text: '开始',
+          position: { x: 20, y: 30 }
+        }
+      ]
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.toolName).toBe(CREATE_DRAWING_TOOL_NAME);
+    expect(openDraft).toHaveBeenCalledWith({
+      originalPath: '流程图.tibis',
+      content: expect.stringContaining('"type": "drawing"')
+    });
+    const draftContent = openDraft.mock.calls[0]?.[0].content ?? '';
+    expect(parseDrawingContent(draftContent)).toMatchObject({
+      elements: [
+        {
+          id: 'drawing-ai-shape-1',
+          kind: 'shape',
+          text: '开始',
+          position: { x: 20, y: 30 }
+        }
+      ],
+      edges: [],
+      viewport: { center: { x: 0, y: 0 }, zoom: 1 }
+    });
+    expect(result.data).toMatchObject({
+      id: 'draft-1',
+      title: '流程图',
+      path: 'unsaved://draft-1/%E6%B5%81%E7%A8%8B%E5%9B%BE.tibis',
+      data: parseDrawingContent(draftContent)
+    });
+    vi.useRealTimers();
   });
 
   it('applies drawing operations and preserves the current viewport', async (): Promise<void> => {
@@ -221,15 +320,7 @@ describe('DrawingTool', (): void => {
           label: '下一步'
         }
       ],
-      edges: [
-        {
-          id: 'drawing-ai-connector-1',
-          type: 'arrow',
-          sourceId: 'node-1',
-          targetId: 'drawing-ai-shape-1',
-          label: '下一步'
-        }
-      ]
+      edges: []
     });
     expect(result.data).toMatchObject({
       appliedOperations: 4,
@@ -238,10 +329,60 @@ describe('DrawingTool', (): void => {
     vi.useRealTimers();
   });
 
+  it('infers connector anchors and avoids creating legacy edges for AI connectors', async (): Promise<void> => {
+    const initialData: DrawingData = {
+      elements: [
+        createShapeElement('node-1'),
+        {
+          ...createShapeElement('node-2'),
+          position: { x: 320, y: 30 }
+        }
+      ],
+      edges: [],
+      viewport: {
+        center: { x: 0, y: 0 },
+        zoom: 1
+      }
+    };
+    const replaceData = vi.fn<(data: DrawingData) => Promise<DrawingData>>().mockImplementation(async (data: DrawingData): Promise<DrawingData> => data);
+    const context: DrawingToolContext = {
+      id: 'drawing-1',
+      title: '流程图.tibis',
+      path: null,
+      getData: () => initialData,
+      replaceData
+    };
+    const tools = createBuiltinDrawingTools({ getDrawingContext: () => context });
+
+    const result = await tools.applyDrawingOperations.execute({
+      operations: [
+        {
+          type: 'add_connector',
+          sourceId: 'node-1',
+          targetId: 'node-2'
+        }
+      ]
+    });
+
+    expect(result.status).toBe('success');
+    const nextData = replaceData.mock.calls[0]?.[0];
+    expect(nextData?.edges).toEqual([]);
+    expect(nextData?.elements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'drawing-ai-connector-1',
+          kind: 'connector',
+          source: { elementId: 'node-1', anchor: 'right' },
+          target: { elementId: 'node-2', anchor: 'left' }
+        })
+      ])
+    );
+  });
+
   it('removes connectors that reference a deleted shape', async (): Promise<void> => {
     const initialData = createDrawingData('node-1');
     initialData.elements.push(createShapeElement('node-2'), createConnectorElement('edge-1', 'node-1', 'node-2'));
-    initialData.edges.push(createEdge('edge-1', 'node-1', 'node-2'));
+    initialData.edges.push(createLegacyEdge('edge-1', 'node-1', 'node-2'));
     const replaceData = vi.fn<(data: DrawingData) => Promise<DrawingData>>().mockImplementation(async (data: DrawingData): Promise<DrawingData> => data);
     const context: DrawingToolContext = {
       id: 'drawing-1',

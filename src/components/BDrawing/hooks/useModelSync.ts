@@ -2,7 +2,7 @@
  * @file useModelSync.ts
  * @description BDrawing 外部 v-model 与内部画板状态同步。
  */
-import type { DrawingBoardSnapshot, DrawingData } from '../types';
+import type { DrawingBoardSnapshot, DrawingData, DrawingElement } from '../types';
 import type { UseDrawingBoardReturn } from './useDrawingBoard';
 import { nextTick, watch } from 'vue';
 import type { Ref } from 'vue';
@@ -26,10 +26,9 @@ export interface UseModelSyncOptions {
  * @param snapshot - 画板快照或绑定数据
  * @returns 内容快照
  */
-function createDrawingContentSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'edges'>): Pick<DrawingData, 'elements' | 'edges'> {
+function createDrawingContentSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements'>): { elements: DrawingElement[] } {
   return {
-    elements: snapshot.elements,
-    edges: snapshot.edges
+    elements: snapshot.elements
   };
 }
 
@@ -85,7 +84,7 @@ export function useModelSync(options: UseModelSyncOptions): void {
   );
 
   watch(
-    () => [options.board.state.value.elements, options.board.state.value.edges],
+    () => options.board.state.value.elements,
     (): void => {
       if (options.modelValue.value === undefined || syncingModelValueToBoard) {
         return;

@@ -3,13 +3,13 @@
  * @description 内置 Drawing 工具实现（读取 + 更新当前画板）。
  */
 import type { DrawingToolContext } from '../../context/drawing';
+import type { OpenDraftInput, OpenDraftResult } from '../../shared/types';
 import type { AIToolExecutor } from 'types/ai';
 import { cloneDeep } from 'lodash-es';
 import type {
   DrawingConnectorAnchor,
   DrawingConnectorElement,
   DrawingData,
-  DrawingEdge,
   DrawingElement,
   DrawingElementStyle,
   DrawingPoint,
@@ -19,6 +19,8 @@ import type {
 } from '@/components/BDrawing/types';
 import { createToolFailureResult, createToolSuccessResult } from '../../results';
 
+/** 创建画板草稿工具名称。 */
+export const CREATE_DRAWING_TOOL_NAME = 'create_drawing';
 /** 读取当前画板工具名称。 */
 export const READ_CURRENT_DRAWING_TOOL_NAME = 'read_current_drawing';
 /** 更新当前画板工具名称。 */
@@ -34,6 +36,135 @@ const AI_CONNECTOR_ID_PREFIX = 'drawing-ai-connector';
 const SUPPORTED_DRAWING_SHAPES: readonly DrawingShapeType[] = ['process', 'decision', 'actor', 'service', 'database', 'text', 'rect', 'ellipse', 'diamond'];
 /** AI 支持使用的连接线锚点。 */
 const SUPPORTED_CONNECTOR_ANCHORS: readonly DrawingConnectorAnchor[] = ['top', 'right', 'bottom', 'left', 'center'];
+
+/**
+ * 内部 JSON Schema 对象类型。
+ */
+type DrawingToolJsonSchema = Record<string, unknown>;
+
+/** 画板坐标点参数 Schema。 */
+const DRAWING_POINT_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'object',
+  properties: {
+    x: { type: 'number' },
+    y: { type: 'number' }
+  },
+  required: ['x', 'y'],
+  additionalProperties: false
+};
+
+/** 画板尺寸参数 Schema。 */
+const DRAWING_SIZE_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'object',
+  properties: {
+    width: { type: 'number', minimum: 0 },
+    height: { type: 'number', minimum: 0 }
+  },
+  required: ['width', 'height'],
+  additionalProperties: false
+};
+
+/** 画板样式参数 Schema。 */
+const DRAWING_STYLE_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'object',
+  properties: {
+    fill: { type: 'string' },
+    stroke: { type: 'string' },
+    strokeWidth: { type: 'number' },
+    color: { type: 'string' },
+    fontSize: { type: 'number' },
+    fontWeight: { type: 'number' },
+    textAlign: { type: 'string', enum: ['left', 'center', 'right'] },
+    textVerticalAlign: { type: 'string', enum: ['top', 'middle', 'bottom'] },
+    opacity: { type: 'number' }
+  },
+  additionalProperties: false
+};
+
+/** 新增形状操作参数 Schema。 */
+const ADD_SHAPE_OPERATION_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['add_shape'] },
+    id: { type: 'string' },
+    shape: { type: 'string', enum: SUPPORTED_DRAWING_SHAPES },
+    text: { type: 'string' },
+    position: DRAWING_POINT_PARAMETER_SCHEMA,
+    size: DRAWING_SIZE_PARAMETER_SCHEMA,
+    style: DRAWING_STYLE_PARAMETER_SCHEMA
+  },
+  required: ['type', 'shape', 'position'],
+  additionalProperties: false
+};
+
+/** 更新形状文本操作参数 Schema。 */
+const UPDATE_SHAPE_TEXT_OPERATION_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['update_shape_text'] },
+    id: { type: 'string' },
+    text: { type: 'string' }
+  },
+  required: ['type', 'id', 'text'],
+  additionalProperties: false
+};
+
+/** 移动形状操作参数 Schema。 */
+const MOVE_SHAPE_OPERATION_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['move_shape'] },
+    id: { type: 'string' },
+    position: DRAWING_POINT_PARAMETER_SCHEMA
+  },
+  required: ['type', 'id', 'position'],
+  additionalProperties: false
+};
+
+/** 新增连接线操作参数 Schema。 */
+const ADD_CONNECTOR_OPERATION_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['add_connector'] },
+    id: { type: 'string' },
+    sourceId: { type: 'string' },
+    targetId: { type: 'string' },
+    sourceAnchor: { type: 'string', enum: SUPPORTED_CONNECTOR_ANCHORS },
+    targetAnchor: { type: 'string', enum: SUPPORTED_CONNECTOR_ANCHORS },
+    label: { type: 'string' },
+    style: DRAWING_STYLE_PARAMETER_SCHEMA
+  },
+  required: ['type', 'sourceId', 'targetId'],
+  additionalProperties: false
+};
+
+/** 删除元素操作参数 Schema。 */
+const DELETE_ELEMENT_OPERATION_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['delete_element'] },
+    id: { type: 'string' }
+  },
+  required: ['type', 'id'],
+  additionalProperties: false
+};
+
+/** 批量画板操作参数 Schema。 */
+const DRAWING_OPERATIONS_PARAMETER_SCHEMA: DrawingToolJsonSchema = {
+  type: 'array',
+  description:
+    '按顺序执行的操作列表。支持 add_shape、update_shape_text、move_shape、add_connector、delete_element。' +
+    'add_shape 可传 shape/text/position/size/style；add_connector 可传 sourceId/targetId/sourceAnchor/targetAnchor/label/style。',
+  items: {
+    oneOf: [
+      ADD_SHAPE_OPERATION_PARAMETER_SCHEMA,
+      UPDATE_SHAPE_TEXT_OPERATION_PARAMETER_SCHEMA,
+      MOVE_SHAPE_OPERATION_PARAMETER_SCHEMA,
+      ADD_CONNECTOR_OPERATION_PARAMETER_SCHEMA,
+      DELETE_ELEMENT_OPERATION_PARAMETER_SCHEMA
+    ]
+  }
+};
 
 /**
  * 读取当前画板结果。
@@ -144,6 +275,16 @@ export type DrawingOperation =
   | DeleteDrawingElementOperation;
 
 /**
+ * 创建画板草稿输入。
+ */
+export interface CreateDrawingInput {
+  /** 画板标题/文件名主体 */
+  title: string;
+  /** 创建草稿时同步应用的初始画板操作 */
+  operations?: DrawingOperation[];
+}
+
+/**
  * 操作当前画板输入。
  */
 export interface ApplyDrawingOperationsInput {
@@ -155,6 +296,11 @@ export interface ApplyDrawingOperationsInput {
  * 更新当前画板结果。
  */
 export type UpdateCurrentDrawingResult = ReadCurrentDrawingResult;
+
+/**
+ * 创建画板草稿结果。
+ */
+export type CreateDrawingResult = ReadCurrentDrawingResult;
 
 /**
  * 操作当前画板结果。
@@ -180,12 +326,16 @@ type DrawingOperationsApplyResult = { ok: true; data: DrawingData; appliedOperat
 export interface CreateBuiltinDrawingToolsOptions {
   /** 获取当前活动 Drawing 上下文 */
   getDrawingContext?: () => DrawingToolContext | undefined;
+  /** 创建并打开未保存草稿 */
+  openDraft?: (input: OpenDraftInput) => Promise<OpenDraftResult>;
 }
 
 /**
  * 内置 Drawing 工具集合。
  */
 export interface BuiltinDrawingTools {
+  /** 创建画板草稿工具 */
+  createDrawing: AIToolExecutor<CreateDrawingInput, CreateDrawingResult>;
   /** 读取当前画板工具 */
   readCurrentDrawing: AIToolExecutor<Record<string, never>, ReadCurrentDrawingResult>;
   /** 更新当前画板工具 */
@@ -276,6 +426,48 @@ function isDrawingData(value: unknown): value is DrawingData {
 }
 
 /**
+ * 创建空画板数据。
+ * @returns 空画板数据
+ */
+function createEmptyDrawingData(): DrawingData {
+  return {
+    elements: [],
+    edges: [],
+    viewport: {
+      center: { x: 0, y: 0 },
+      zoom: 1
+    }
+  };
+}
+
+/**
+ * 创建 .tibis 画板草稿内容。
+ * @param data - 画板数据
+ * @returns .tibis JSON 内容
+ */
+function createDrawingDraftContent(data: DrawingData): string {
+  return JSON.stringify(
+    {
+      type: 'drawing',
+      version: 1,
+      ...data
+    },
+    null,
+    2
+  );
+}
+
+/**
+ * 规范化画板标题。
+ * @param value - 原始标题
+ * @returns 可用标题
+ */
+function normalizeDrawingTitle(value: unknown): string {
+  const title = typeof value === 'string' ? value.trim() : '';
+  return title || 'Untitled';
+}
+
+/**
  * 判断元素是否为形状元素。
  * @param element - 画板元素
  * @returns 是否为形状元素
@@ -309,12 +501,27 @@ function createDrawingResult(context: DrawingToolContext, data: DrawingData): Re
 }
 
 /**
+ * 创建画板草稿工具结果。
+ * @param draft - 草稿创建结果
+ * @param data - 画板数据
+ * @returns 工具结果载荷
+ */
+function createDrawingDraftResult(draft: OpenDraftResult, data: DrawingData): CreateDrawingResult {
+  return {
+    id: draft.file.id,
+    title: draft.file.name,
+    path: draft.unsavedPath,
+    data: cloneDeep(data)
+  };
+}
+
+/**
  * 收集当前画板已占用的元素和连线 ID。
  * @param data - 当前画板数据
  * @returns 已占用 ID 集合
  */
 function createUsedDrawingIds(data: DrawingData): Set<string> {
-  return new Set([...data.elements.map((element) => element.id), ...data.edges.map((edge) => edge.id)]);
+  return new Set(data.elements.map((element) => element.id));
 }
 
 /**
@@ -368,6 +575,74 @@ function findDrawingShape(data: DrawingData, id: string): DrawingShapeElement | 
 }
 
 /**
+ * 读取形状中心点。
+ * @param shape - 形状元素
+ * @returns 形状中心点
+ */
+function getShapeCenter(shape: DrawingShapeElement): DrawingPoint {
+  return {
+    x: shape.position.x + shape.size.width / 2,
+    y: shape.position.y + shape.size.height / 2
+  };
+}
+
+/**
+ * 推断左右排列时的连接锚点。
+ * @param sourceCenter - 起点中心
+ * @param targetCenter - 终点中心
+ * @returns 起终点锚点
+ */
+function inferHorizontalConnectorAnchors(
+  sourceCenter: DrawingPoint,
+  targetCenter: DrawingPoint
+): { sourceAnchor: DrawingConnectorAnchor; targetAnchor: DrawingConnectorAnchor } {
+  if (targetCenter.x >= sourceCenter.x) {
+    return { sourceAnchor: 'right', targetAnchor: 'left' };
+  }
+
+  return { sourceAnchor: 'left', targetAnchor: 'right' };
+}
+
+/**
+ * 推断上下排列时的连接锚点。
+ * @param sourceCenter - 起点中心
+ * @param targetCenter - 终点中心
+ * @returns 起终点锚点
+ */
+function inferVerticalConnectorAnchors(
+  sourceCenter: DrawingPoint,
+  targetCenter: DrawingPoint
+): { sourceAnchor: DrawingConnectorAnchor; targetAnchor: DrawingConnectorAnchor } {
+  if (targetCenter.y >= sourceCenter.y) {
+    return { sourceAnchor: 'bottom', targetAnchor: 'top' };
+  }
+
+  return { sourceAnchor: 'top', targetAnchor: 'bottom' };
+}
+
+/**
+ * 根据节点相对位置推断缺省连接锚点。
+ * @param sourceShape - 起点形状
+ * @param targetShape - 终点形状
+ * @returns 起终点锚点
+ */
+function inferConnectorAnchors(
+  sourceShape: DrawingShapeElement,
+  targetShape: DrawingShapeElement
+): { sourceAnchor: DrawingConnectorAnchor; targetAnchor: DrawingConnectorAnchor } {
+  const sourceCenter = getShapeCenter(sourceShape);
+  const targetCenter = getShapeCenter(targetShape);
+  const dx = Math.abs(targetCenter.x - sourceCenter.x);
+  const dy = Math.abs(targetCenter.y - sourceCenter.y);
+
+  if (dx >= dy) {
+    return inferHorizontalConnectorAnchors(sourceCenter, targetCenter);
+  }
+
+  return inferVerticalConnectorAnchors(sourceCenter, targetCenter);
+}
+
+/**
  * 创建形状元素。
  * @param operation - 新增形状操作
  * @param id - 已解析的元素 ID
@@ -394,19 +669,24 @@ function createShapeElementFromOperation(operation: AddDrawingShapeOperation, id
  * 创建连接线元素。
  * @param operation - 新增连接线操作
  * @param id - 已解析的连接线 ID
+ * @param anchors - 推断后的连接锚点
  * @returns 连接线元素
  */
-function createConnectorElementFromOperation(operation: AddDrawingConnectorOperation, id: string): DrawingConnectorElement {
+function createConnectorElementFromOperation(
+  operation: AddDrawingConnectorOperation,
+  id: string,
+  anchors: { sourceAnchor: DrawingConnectorAnchor; targetAnchor: DrawingConnectorAnchor }
+): DrawingConnectorElement {
   return {
     id,
     kind: 'connector',
     source: {
       elementId: operation.sourceId,
-      anchor: operation.sourceAnchor ?? 'center'
+      anchor: operation.sourceAnchor ?? anchors.sourceAnchor
     },
     target: {
       elementId: operation.targetId,
-      anchor: operation.targetAnchor ?? 'center'
+      anchor: operation.targetAnchor ?? anchors.targetAnchor
     },
     markerEnd: 'arrow',
     label: operation.label,
@@ -414,26 +694,6 @@ function createConnectorElementFromOperation(operation: AddDrawingConnectorOpera
     position: { x: 0, y: 0 },
     size: { width: 0, height: 0 },
     rotation: 0,
-    metadata: {
-      source: 'user',
-      createdAt: Date.now()
-    }
-  };
-}
-
-/**
- * 创建兼容连线数据。
- * @param operation - 新增连接线操作
- * @param id - 已解析的连接线 ID
- * @returns 兼容连线数据
- */
-function createEdgeFromConnectorOperation(operation: AddDrawingConnectorOperation, id: string): DrawingEdge {
-  return {
-    id,
-    type: 'arrow',
-    sourceId: operation.sourceId,
-    targetId: operation.targetId,
-    label: operation.label,
     metadata: {
       source: 'user',
       createdAt: Date.now()
@@ -579,10 +839,12 @@ function applyMoveShapeOperation(data: DrawingData, operation: MoveDrawingShapeO
  * @returns 应用结果
  */
 function applyAddConnectorOperation(data: DrawingData, operation: AddDrawingConnectorOperation, usedIds: Set<string>): DrawingOperationApplyResult {
-  if (!findDrawingShape(data, operation.sourceId)) {
+  const sourceShape = findDrawingShape(data, operation.sourceId);
+  const targetShape = findDrawingShape(data, operation.targetId);
+  if (!sourceShape) {
     return { ok: false, message: `找不到连接起点: ${operation.sourceId}` };
   }
-  if (!findDrawingShape(data, operation.targetId)) {
+  if (!targetShape) {
     return { ok: false, message: `找不到连接目标: ${operation.targetId}` };
   }
   if (operation.sourceId === operation.targetId) {
@@ -594,8 +856,7 @@ function applyAddConnectorOperation(data: DrawingData, operation: AddDrawingConn
     return resolvedId;
   }
 
-  data.elements.push(createConnectorElementFromOperation(operation, resolvedId.id));
-  data.edges.push(createEdgeFromConnectorOperation(operation, resolvedId.id));
+  data.elements.push(createConnectorElementFromOperation(operation, resolvedId.id, inferConnectorAnchors(sourceShape, targetShape)));
   return { ok: true };
 }
 
@@ -621,7 +882,7 @@ function applyDeleteElementOperation(data: DrawingData, operation: DeleteDrawing
     }
     return true;
   });
-  data.edges = data.edges.filter((edge) => edge.id !== operation.id && !deletedShapeIds.has(edge.sourceId) && !deletedShapeIds.has(edge.targetId));
+  data.edges = [];
   return { ok: true };
 }
 
@@ -657,6 +918,7 @@ function applyDrawingOperation(data: DrawingData, operation: DrawingOperation, u
  */
 function applyDrawingOperationsToData(data: DrawingData, operations: unknown[]): DrawingOperationsApplyResult {
   const nextData = cloneDeep(data);
+  nextData.edges = [];
   const usedIds = createUsedDrawingIds(nextData);
 
   for (const rawOperation of operations) {
@@ -700,6 +962,51 @@ function getActiveDrawingContext(options: CreateBuiltinDrawingToolsOptions, tool
  */
 export function createBuiltinDrawingTools(options: CreateBuiltinDrawingToolsOptions): BuiltinDrawingTools {
   return {
+    createDrawing: {
+      definition: {
+        name: CREATE_DRAWING_TOOL_NAME,
+        description:
+          '创建新的 BDrawing 画板草稿并打开。可传入初始 operations，一次性创建并绘制初始节点、连线或布局；适合用户要求新建流程图、结构图、思维草图时使用。',
+        source: 'builtin',
+        riskLevel: 'write',
+        requiresActiveDocument: false,
+        permissionCategory: 'document',
+        safeAutoApprove: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: '画板标题/文件名主体，如 "产品流程图"。' },
+            operations: {
+              ...DRAWING_OPERATIONS_PARAMETER_SCHEMA,
+              description: '创建草稿后立即应用的初始画板操作列表。省略时创建空画板。'
+            }
+          },
+          required: ['title'],
+          additionalProperties: false
+        }
+      },
+      async execute(input: CreateDrawingInput) {
+        const title = normalizeDrawingTitle(input.title);
+        const operations = Array.isArray(input.operations) ? input.operations : [];
+
+        if (!options.openDraft) {
+          return createToolFailureResult(CREATE_DRAWING_TOOL_NAME, 'EXECUTION_FAILED', '当前环境不支持创建画板草稿');
+        }
+
+        const applied = applyDrawingOperationsToData(createEmptyDrawingData(), operations);
+        if (!applied.ok) {
+          return createToolFailureResult(CREATE_DRAWING_TOOL_NAME, 'INVALID_INPUT', applied.message);
+        }
+
+        const content = createDrawingDraftContent(applied.data);
+        const draft = await options.openDraft({
+          originalPath: `${title}.tibis`,
+          content
+        });
+
+        return createToolSuccessResult(CREATE_DRAWING_TOOL_NAME, createDrawingDraftResult(draft, applied.data));
+      }
+    },
     readCurrentDrawing: {
       definition: {
         name: READ_CURRENT_DRAWING_TOOL_NAME,
@@ -765,13 +1072,7 @@ export function createBuiltinDrawingTools(options: CreateBuiltinDrawingToolsOpti
           type: 'object',
           properties: {
             operations: {
-              type: 'array',
-              description:
-                '按顺序执行的操作列表。支持 add_shape、update_shape_text、move_shape、add_connector、delete_element。' +
-                'add_shape 可传 shape/text/position/size/style；add_connector 可传 sourceId/targetId/sourceAnchor/targetAnchor/label/style。',
-              items: {
-                type: 'object'
-              }
+              ...DRAWING_OPERATIONS_PARAMETER_SCHEMA
             }
           },
           required: ['operations'],

@@ -354,10 +354,12 @@ function summarizeReadFile(data: Record<string, unknown>): ToolResultSummary {
  * @param data - 工具结果数据
  * @returns Drawing 工具摘要
  */
-function summarizeDrawing(data: Record<string, unknown>): ToolResultSummary {
+function summarizeDrawing(data: Record<string, unknown>, mode: 'create' | 'process' = 'process'): ToolResultSummary {
   const drawingData = data.data;
   const elements = typeof drawingData === 'object' && drawingData !== null && 'elements' in drawingData ? drawingData.elements : null;
   const appliedOperations = typeof data.appliedOperations === 'number' ? data.appliedOperations : null;
+  const title = typeof data.title === 'string' ? data.title : '';
+  const path = typeof data.path === 'string' ? data.path : '';
   const tags: ToolSummaryTag[] = [];
 
   if (Array.isArray(elements)) {
@@ -366,9 +368,19 @@ function summarizeDrawing(data: Record<string, unknown>): ToolResultSummary {
   if (appliedOperations !== null) {
     tags.push({ label: '操作', value: `${appliedOperations}` });
   }
+  if (path && title) {
+    tags.push({ label: '文件', value: toFileName(path) });
+  }
+
+  let text = '已处理画板';
+  if (mode === 'create' && title) {
+    text = `已创建画板: ${title}`;
+  } else if (appliedOperations !== null) {
+    text = '已操作画板';
+  }
 
   return {
-    text: appliedOperations !== null ? '已操作画板' : '已处理画板',
+    text,
     tags
   };
 }
@@ -500,6 +512,7 @@ const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   write_file: (data) => summarizeWriteFile(data as Record<string, unknown>),
   read_file: (data) => summarizeReadFile(data as Record<string, unknown>),
   read_current_document: (data) => summarizeReadFile(data as Record<string, unknown>),
+  create_drawing: (data) => summarizeDrawing(data as Record<string, unknown>, 'create'),
   read_current_drawing: (data) => summarizeDrawing(data as Record<string, unknown>),
   apply_drawing_operations: (data) => summarizeDrawing(data as Record<string, unknown>),
   update_current_drawing: (data) => summarizeDrawing(data as Record<string, unknown>),

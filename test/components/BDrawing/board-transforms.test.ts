@@ -3,7 +3,7 @@
  * @description 验证 BDrawing 手动画板 element transform 与历史记录。
  */
 import { describe, expect, it } from 'vitest';
-import type { DrawingBoardState, DrawingConnectorElement, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import type { DrawingBoardState, DrawingConnectorElement, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import {
   addDrawingConnector,
   addDrawingShape,
@@ -36,20 +36,6 @@ function createShapeElement(id: string): DrawingShapeElement {
     position: { x: 100, y: 120 },
     size: { width: 180, height: 72 },
     rotation: 0,
-    metadata: { source: 'user', createdAt: 1 }
-  };
-}
-
-/**
- * 创建测试连线。
- * @returns 测试连线
- */
-function createEdge(): DrawingEdge {
-  return {
-    id: 'edge-1',
-    type: 'arrow',
-    sourceId: 'node-1',
-    targetId: 'node-2',
     metadata: { source: 'user', createdAt: 1 }
   };
 }
@@ -98,17 +84,22 @@ describe('boardTransforms', (): void => {
     expect(redone.history.future).toHaveLength(0);
   });
 
-  it('deletes selected nodes and connected edges', (): void => {
+  it('drops legacy edge snapshots when creating board state', (): void => {
     const initial = createDrawingBoardState({
       elements: [createShapeElement('node-1'), createShapeElement('node-2')],
-      edges: [createEdge()],
+      edges: [
+        {
+          id: 'edge-1',
+          type: 'arrow',
+          sourceId: 'node-1',
+          targetId: 'node-2',
+          metadata: { source: 'user', createdAt: 1 }
+        }
+      ],
       selection: ['node-1']
     });
-    const deleted = deleteDrawingSelection(initial);
 
-    expect(deleted.elements.map((element) => element.id)).toEqual(['node-2']);
-    expect(deleted.edges).toHaveLength(0);
-    expect(deleted.selection).toEqual([]);
+    expect(initial.edges).toEqual([]);
   });
 
   it('updates node text through a manual board command', (): void => {

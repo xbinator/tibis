@@ -7,9 +7,8 @@ import { defineComponent, nextTick, ref } from 'vue';
 import { config, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
-import DrawingEdgeRenderer from '@/components/BDrawing/renderers/DrawingEdge.vue';
 import DrawingNodeRenderer from '@/components/BDrawing/renderers/DrawingNode.vue';
-import type { DrawingConnectorElement, DrawingData, DrawingEdge, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import type { DrawingConnectorElement, DrawingData, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import { measureDrawingTextElementSize } from '@/components/BDrawing/utils/boardTransforms';
 
 const selectoMockState = vi.hoisted(() => ({
@@ -118,6 +117,37 @@ function createConnectorLabelDrawingDataFixture(): DrawingData {
       zoom: 1
     }
   };
+}
+
+/**
+ * 创建旧版 edge 连线数据。
+ * @param id - edge ID
+ * @param sourceId - 起点节点 ID
+ * @param targetId - 终点节点 ID
+ * @returns 旧版 edge 数据
+ */
+function createLegacyEdge(id: string, sourceId: string, targetId: string): DrawingData['edges'][number] {
+  return {
+    id,
+    type: 'arrow',
+    sourceId,
+    targetId,
+    metadata: {
+      source: 'user',
+      createdAt: 1
+    }
+  };
+}
+
+/**
+ * 创建仅包含旧版 edge 连线的测试画板数据。
+ * @returns 含旧版 edge 连线的画板数据
+ */
+function createLegacyEdgeDrawingDataFixture(): DrawingData {
+  const data = createConnectorLabelDrawingDataFixture();
+  data.elements = data.elements.filter((element: DrawingElement): boolean => element.kind !== 'connector');
+  data.edges = [createLegacyEdge('edge-1', 'node-1', 'node-2')];
+  return data;
 }
 
 /**
@@ -2984,6 +3014,17 @@ describe('BDrawing', (): void => {
     expect(nodes[0].element.compareDocumentPosition(findDrawingConnectorPath(wrapper).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('does not render legacy edges from model data', (): void => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        modelValue: createLegacyEdgeDrawingDataFixture()
+      }
+    });
+
+    expect(wrapper.findAll('[data-testid="drawing-edge"]')).toHaveLength(0);
+    expect(findDrawingConnectorPaths(wrapper)).toHaveLength(0);
+  });
+
   it('creates a connector when drag end target is resolved from pointer coordinates', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
 
@@ -3290,29 +3331,5 @@ describe('BDrawing', (): void => {
     expect(findDrawingConnectorPaths(wrapper)).toHaveLength(0);
 
     wrapper.unmount();
-  });
-});
-
-describe('DrawingEdgeRenderer', (): void => {
-  it('hides the edge DOM when either endpoint is missing', (): void => {
-    const edge: DrawingEdge = {
-      id: 'edge-1',
-      type: 'arrow',
-      sourceId: 'missing-source',
-      targetId: 'missing-target',
-      metadata: {
-        source: 'user',
-        createdAt: 1
-      }
-    };
-    const elements: DrawingElement[] = [];
-    const wrapper = mount(DrawingEdgeRenderer, {
-      props: {
-        edge,
-        elements
-      }
-    });
-
-    expect(wrapper.find('[data-testid="drawing-edge"]').exists()).toBe(false);
   });
 });

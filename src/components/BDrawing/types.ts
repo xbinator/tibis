@@ -9,11 +9,6 @@
 export type DrawingNodeType = 'process' | 'decision' | 'actor' | 'service' | 'database' | 'text';
 
 /**
- * 画板支持的连线类型。
- */
-export type DrawingEdgeType = 'arrow';
-
-/**
  * 画板工具模式。
  */
 export type DrawingToolMode = 'select' | 'hand' | 'process' | 'rect' | 'ellipse' | 'diamond' | 'text' | 'connector';
@@ -209,24 +204,6 @@ export interface DrawingConnectorDraftOptions extends DrawingConnectorOptionsCha
 export type DrawingElement = DrawingShapeElement | DrawingConnectorElement;
 
 /**
- * 画板连线。
- */
-export interface DrawingEdge {
-  /** 真实连线 ID */
-  id: string;
-  /** 连线类型 */
-  type: DrawingEdgeType;
-  /** 起点节点 ID */
-  sourceId: string;
-  /** 终点节点 ID */
-  targetId: string;
-  /** 连线标签 */
-  label?: string;
-  /** 元信息 */
-  metadata: DrawingElementMetadata;
-}
-
-/**
  * 新增形状参数。
  */
 export interface DrawingAddShapeOptions {
@@ -325,8 +302,8 @@ export interface DrawingViewport {
 export interface DrawingData {
   /** 元素数据 */
   elements: DrawingElement[];
-  /** 旧连线兼容数据 */
-  edges: DrawingEdge[];
+  /** 旧版 edge 输入占位，内部会归一化为空数组 */
+  edges: unknown[];
   /** 视口数据 */
   viewport: DrawingViewport;
 }
@@ -337,8 +314,8 @@ export interface DrawingData {
 export interface DrawingBoardSnapshot {
   /** 元素快照 */
   elements: DrawingElement[];
-  /** 连线快照 */
-  edges: DrawingEdge[];
+  /** 旧版 edge 输入占位，内部会归一化为空数组 */
+  edges: unknown[];
   /** 选区快照 */
   selection: string[];
   /** 视口快照 */

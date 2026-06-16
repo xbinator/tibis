@@ -18,7 +18,6 @@
     <InfiniteViewport>
       <DrawingCanvas
         :elements="board.state.value.elements"
-        :edges="board.state.value.edges"
         :selection="board.state.value.selection"
         :editing-element-id="textEditingSession?.id ?? null"
         :editing-preview-size="textEditingPreviewSize"
