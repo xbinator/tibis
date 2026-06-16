@@ -37,7 +37,7 @@
 <script setup lang="ts">
 import type { DrawingElement, DrawingGeometryChange, DrawingSize, DrawingViewport } from '../types';
 import type { DrawingConnectorPathElementOverride } from '../utils/drawingGeometry';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import VueMoveable from 'vue3-moveable/dist/moveable.js';
 import {
   DRAWING_MOVEABLE_SELECTION_PADDING,
@@ -174,6 +174,7 @@ interface MoveableInstance {
 
 const targets = ref<Element[]>([]);
 const moveableRef = ref<MoveableInstance | null>(null);
+let moveableRectRefreshFrame: ReturnType<typeof requestAnimationFrame> | null = null;
 /** 本轮 Moveable 缩放手势的基础尺寸，用于区分手动高度和文本自动撑高高度。 */
 const resizeGestureBaseSizes = new Map<string, DrawingSize>();
 /** 单选拖拽时用于元素间吸附的其它画板节点。 */
@@ -231,6 +232,43 @@ function getTargetById(id: string): Element | null {
  */
 function getTargetsById(id: string): Element[] {
   return Array.from(props.root?.querySelectorAll(`[data-drawing-element-id="${id}"]`) ?? []);
+}
+
+/**
+ * 立即刷新 Moveable 控制框位置。
+ */
+function refreshMoveableRect(): void {
+  if (!props.enabled || !targets.value.length) {
+    return;
+  }
+
+  moveableRef.value?.updateRect();
+}
+
+/**
+ * 取消已排队的 Moveable 控制框刷新。
+ */
+function cancelMoveableRectRefresh(): void {
+  if (moveableRectRefreshFrame === null) {
+    return;
+  }
+
+  cancelAnimationFrame(moveableRectRefreshFrame);
+  moveableRectRefreshFrame = null;
+}
+
+/**
+ * 将 Moveable 控制框刷新排到下一帧，等待 SVG viewBox 完成布局。
+ */
+function scheduleMoveableRectRefresh(): void {
+  if (!props.enabled || !targets.value.length || moveableRectRefreshFrame !== null) {
+    return;
+  }
+
+  moveableRectRefreshFrame = requestAnimationFrame((): void => {
+    moveableRectRefreshFrame = null;
+    refreshMoveableRect();
+  });
 }
 
 /**
@@ -574,7 +612,7 @@ async function syncTargets(): Promise<void> {
           .filter((target): target is Element => target !== null)
       : [];
   await nextTick();
-  moveableRef.value?.updateRect();
+  refreshMoveableRect();
 }
 
 /**
@@ -704,24 +742,26 @@ onMounted(() => {
   });
 });
 
+onBeforeUnmount(() => {
+  cancelMoveableRectRefresh();
+});
+
 watch(
-  () => [
-    props.root,
-    props.selection,
-    props.elements,
-    props.enabled,
-    props.viewport.center.x,
-    props.viewport.center.y,
-    props.viewport.zoom,
-    props.viewportSize.width,
-    props.viewportSize.height
-  ],
+  () => [props.root, props.selection, props.elements, props.enabled],
   () => {
     syncTargets().catch((error: unknown): void => {
       console.warn('BDrawing Moveable target sync failed', error);
     });
   },
   { deep: true }
+);
+
+watch(
+  () => [props.viewport.center.x, props.viewport.center.y, props.viewport.zoom, props.viewportSize.width, props.viewportSize.height],
+  () => {
+    scheduleMoveableRectRefresh();
+  },
+  { flush: 'post' }
 );
 </script>
 

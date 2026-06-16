@@ -182,6 +182,96 @@ describe('drawingGeometry', (): void => {
     expect(createDrawingConnectorMarkerPath([source, target, connector], connector, 'end')).toContain('M 320 220');
   });
 
+  it('separates parallel connectors between the same anchors', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connectorA: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+    const connectorB: DrawingConnectorElement = {
+      ...connectorA,
+      id: 'connector-2'
+    };
+    const connectorC: DrawingConnectorElement = {
+      ...connectorA,
+      id: 'connector-3'
+    };
+
+    target.position = { x: 320, y: 180 };
+
+    expect(createDrawingConnectorPath([source, target, connectorA, connectorB, connectorC], connectorA)).toBe('M 160 100 L 240 100 L 240 220 L 320 220');
+    expect(createDrawingConnectorPath([source, target, connectorA, connectorB, connectorC], connectorB)).toBe('M 160 100 L 258 100 L 258 220 L 320 220');
+    expect(createDrawingConnectorPath([source, target, connectorA, connectorB, connectorC], connectorC)).toBe('M 160 100 L 222 100 L 222 220 L 320 220');
+  });
+
+  it('snaps nearly aligned vertical connectors into a single straight segment', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'bottom' },
+      target: { elementId: target.id, anchor: 'top' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 48, y: 220 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 100 140 L 108 220');
+  });
+
+  it('keeps an elbow when vertical connector endpoints are outside the smaller snap range', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'bottom' },
+      target: { elementId: target.id, anchor: 'top' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 54, y: 220 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 100 140 L 100 180 L 114 180 L 114 220');
+  });
+
+  it('snaps nearly aligned horizontal connectors into a single straight segment', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 220, y: 68 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 220 108');
+  });
+
   it('places default connector labels on the middle segment of an orthogonal route', (): void => {
     const source = createShapeElement('source');
     const target = createShapeElement('target');

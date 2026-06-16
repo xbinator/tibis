@@ -105,6 +105,10 @@ const DRAWING_CONNECTOR_ARROW_LENGTH = 12;
 const DRAWING_CONNECTOR_ARROW_HALF_WIDTH = 4.5;
 /** 连接线绕开节点时的安全间距。 */
 const DRAWING_CONNECTOR_ROUTE_MARGIN = 24;
+/** 连接线近似同轴时吸附成单段直线的阈值。 */
+const DRAWING_CONNECTOR_STRAIGHT_SNAP_DISTANCE = 8;
+/** 多条平行连接线之间的错开间距。 */
+const DRAWING_CONNECTOR_PARALLEL_OFFSET_STEP = 18;
 
 /**
  * 连接线箭头几何。
@@ -770,11 +774,116 @@ function createVerticalConnectorAvoidanceCandidates(
 }
 
 /**
+ * 判断两条连接线是否使用相同端点和锚点。
+ * @param connector - 当前连接线
+ * @param candidate - 候选连接线
+ * @returns 是否属于同一组平行连接线
+ */
+function isSameConnectorEndpointGroup(connector: DrawingConnectorElement, candidate: DrawingConnectorElement): boolean {
+  return (
+    connector.curve !== 'bezier' &&
+    candidate.curve !== 'bezier' &&
+    connector.source.elementId === candidate.source.elementId &&
+    connector.source.anchor === candidate.source.anchor &&
+    connector.target.elementId === candidate.target.elementId &&
+    connector.target.anchor === candidate.target.anchor
+  );
+}
+
+/**
+ * 根据平行连接线序号计算错开距离。
+ * @param index - 当前连接线在同组中的序号
+ * @returns 错开距离
+ */
+function getParallelConnectorOffsetByIndex(index: number): number {
+  if (index <= 0) {
+    return 0;
+  }
+
+  const magnitude = Math.ceil(index / 2) * DRAWING_CONNECTOR_PARALLEL_OFFSET_STEP;
+  return index % 2 === 1 ? magnitude : -magnitude;
+}
+
+/**
+ * 读取当前连接线在同端点同锚点连接线中的错开距离。
+ * @param elements - 画板元素列表
+ * @param connector - 当前连接线
+ * @returns 错开距离
+ */
+function getParallelConnectorOffset(elements: DrawingElement[], connector: DrawingConnectorElement): number {
+  const group = elements.filter(
+    (element: DrawingElement): element is DrawingConnectorElement => isDrawingConnectorElement(element) && isSameConnectorEndpointGroup(connector, element)
+  );
+  if (group.length <= 1) {
+    return 0;
+  }
+
+  const index = group.findIndex((element: DrawingConnectorElement): boolean => element.id === connector.id);
+
+  return getParallelConnectorOffsetByIndex(index);
+}
+
+/**
+ * 判断连接方向是否相对。
+ * @param sourceDirection - 起点方向
+ * @param targetDirection - 终点方向
+ * @returns 是否为相对方向
+ */
+function areOppositeConnectorDirections(sourceDirection: DrawingPoint, targetDirection: DrawingPoint): boolean {
+  return sourceDirection.x + targetDirection.x === 0 && sourceDirection.y + targetDirection.y === 0;
+}
+
+/**
+ * 创建近似同轴时的单段吸附路径。
+ * @param source - 起点
+ * @param target - 终点
+ * @param sourceDirection - 起点方向
+ * @param targetDirection - 终点方向
+ * @param sourceIsHorizontal - 起点方向是否水平
+ * @param targetIsHorizontal - 终点方向是否水平
+ * @param obstacles - 避让边界列表
+ * @returns 可用的单段路径，不满足条件时返回 null
+ */
+function createStraightSnapRoutePoints(
+  source: DrawingPoint,
+  target: DrawingPoint,
+  sourceDirection: DrawingPoint,
+  targetDirection: DrawingPoint,
+  sourceIsHorizontal: boolean,
+  targetIsHorizontal: boolean,
+  obstacles: DrawingContentBounds[]
+): DrawingPoint[] | null {
+  const points = [source, target];
+  if (doesDrawingRouteIntersectObstacles(points, obstacles)) {
+    return null;
+  }
+
+  if (source.x === target.x || source.y === target.y) {
+    return points;
+  }
+
+  if (!areOppositeConnectorDirections(sourceDirection, targetDirection)) {
+    return null;
+  }
+
+  if (!sourceIsHorizontal && !targetIsHorizontal && Math.abs(source.x - target.x) <= DRAWING_CONNECTOR_STRAIGHT_SNAP_DISTANCE) {
+    return points;
+  }
+
+  if (sourceIsHorizontal && targetIsHorizontal && Math.abs(source.y - target.y) <= DRAWING_CONNECTOR_STRAIGHT_SNAP_DISTANCE) {
+    return points;
+  }
+
+  return null;
+}
+
+/**
  * 创建正交折线路线。
  * @param source - 起点
  * @param target - 终点
  * @param sourceAnchor - 起点锚点
  * @param targetAnchor - 终点锚点
+ * @param parallelOffset - 多条平行连接线的错开距离
  * @param obstacles - 避让边界列表
  * @returns 连接线解析路线
  */
@@ -783,6 +892,7 @@ function createDrawingOrthogonalRoute(
   target: DrawingPoint,
   sourceAnchor: DrawingConnectorAnchor,
   targetAnchor: DrawingConnectorAnchor,
+  parallelOffset = 0,
   obstacles: DrawingContentBounds[] = []
 ): DrawingConnectorRoute {
   if (source.x === target.x || source.y === target.y) {
@@ -793,14 +903,19 @@ function createDrawingOrthogonalRoute(
   const targetDirection = getConnectorAnchorDirection(targetAnchor);
   const sourceIsHorizontal = isHorizontalConnectorDirection(sourceDirection);
   const targetIsHorizontal = isHorizontalConnectorDirection(targetDirection);
+  const straightSnapPoints = createStraightSnapRoutePoints(source, target, sourceDirection, targetDirection, sourceIsHorizontal, targetIsHorizontal, obstacles);
+  if (straightSnapPoints) {
+    return createDrawingPolylineRoute(source, target, straightSnapPoints);
+  }
+
   let points: DrawingPoint[];
 
   if (sourceIsHorizontal && targetIsHorizontal) {
     const middleX = (source.x + target.x) / 2;
-    points = [source, { x: middleX, y: source.y }, { x: middleX, y: target.y }, target];
+    points = [source, { x: middleX + parallelOffset, y: source.y }, { x: middleX + parallelOffset, y: target.y }, target];
   } else if (!sourceIsHorizontal && !targetIsHorizontal) {
     const middleY = (source.y + target.y) / 2;
-    points = [source, { x: source.x, y: middleY }, { x: target.x, y: middleY }, target];
+    points = [source, { x: source.x, y: middleY + parallelOffset }, { x: target.x, y: middleY + parallelOffset }, target];
   } else if (sourceIsHorizontal) {
     points = [source, { x: target.x, y: source.y }, target];
   } else {
@@ -909,6 +1024,7 @@ function resolveDrawingConnectorRoute(
     targetPoint,
     connector.source.anchor,
     connector.target.anchor,
+    getParallelConnectorOffset(elements, connector),
     getDrawingConnectorObstacles(elements, connector.source.elementId, connector.target.elementId, overrides)
   );
 }

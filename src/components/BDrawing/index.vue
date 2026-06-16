@@ -61,7 +61,14 @@
       @resize="handleMoveableResize"
       @resize-preview="handleMoveableResizePreview"
     />
-    <SelectoLayer :root="rootRef" :active-tool="activeTool" :selection="board.state.value.selection" @set-selection="board.setSelection" />
+    <SelectoLayer
+      :root="rootRef"
+      :active-tool="activeTool"
+      :selection="board.state.value.selection"
+      :viewport="board.state.value.viewport"
+      :viewport-size="viewportSize"
+      @set-selection="board.setSelection"
+    />
     <Toolbar
       :zoom="board.state.value.viewport.zoom"
       :active-tool="activeTool"

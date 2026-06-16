@@ -15,7 +15,9 @@ const selectoMockState = vi.hoisted(() => ({
   instances: [] as Array<{
     handlers: Record<string, (event: unknown) => void>;
     options: Record<string, unknown>;
+    checkScroll: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
+    findSelectableTargets: ReturnType<typeof vi.fn>;
   }>
 }));
 const moveableMockState = vi.hoisted(() => ({
@@ -767,7 +769,11 @@ vi.mock('selecto', () => ({
   default: class MockSelecto {
     public handlers: Record<string, (event: unknown) => void> = {};
 
+    public checkScroll = vi.fn();
+
     public destroy = vi.fn();
+
+    public findSelectableTargets = vi.fn();
 
     public options: Record<string, unknown>;
 
@@ -968,6 +974,18 @@ async function flushViewportReadyCheck(): Promise<void> {
       resolve();
     });
   });
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame((): void => {
+      resolve();
+    });
+  });
+  await nextTick();
+}
+
+/**
+ * 等待下一帧动画回调。
+ */
+async function flushNextAnimationFrame(): Promise<void> {
   await new Promise<void>((resolve) => {
     requestAnimationFrame((): void => {
       resolve();
@@ -2007,6 +2025,33 @@ describe('BDrawing', (): void => {
     expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe(initialTransform);
   });
 
+  it('refreshes selection overlays on the next frame after viewport panning', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await canvas.trigger('pointerdown');
+    await canvas.trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    setCanvasRect(canvas.element, { width: 1200, height: 720 });
+    moveableMockState.updateRect.mockClear();
+    selectoMockState.instances.at(-1)?.checkScroll.mockClear();
+    selectoMockState.instances.at(-1)?.findSelectableTargets.mockClear();
+
+    await dispatchWheelEvent(canvas.element, { deltaX: 120, deltaY: 60 });
+    await nextTick();
+
+    expect(moveableMockState.updateRect).not.toHaveBeenCalled();
+    expect(selectoMockState.instances.at(-1)?.findSelectableTargets).not.toHaveBeenCalled();
+    expect(selectoMockState.instances.at(-1)?.checkScroll).not.toHaveBeenCalled();
+
+    await flushNextAnimationFrame();
+
+    expect(moveableMockState.updateRect).toHaveBeenCalled();
+    expect(selectoMockState.instances.at(-1)?.findSelectableTargets).toHaveBeenCalled();
+    expect(selectoMockState.instances.at(-1)?.checkScroll).toHaveBeenCalled();
+  });
+
   it('keeps select-mode empty drags from panning the infinite canvas', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
@@ -2418,8 +2463,7 @@ describe('BDrawing', (): void => {
     await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
     moveableMockState.updateRect.mockClear();
     await dispatchWheelEvent(canvas.element, { clientX: 600, clientY: 360, ctrlKey: true, deltaY: -100 });
-    await nextTick();
-    await nextTick();
+    await flushNextAnimationFrame();
 
     expect(moveableMockState.updateRect).toHaveBeenCalled();
   });
@@ -2437,7 +2481,7 @@ describe('BDrawing', (): void => {
 
     setCanvasRect(canvas.element, { width: 1000, height: 500 });
     await emitCanvasResize();
-    await nextTick();
+    await flushNextAnimationFrame();
 
     expect(moveableMockState.updateRect).toHaveBeenCalled();
   });
