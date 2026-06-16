@@ -97,7 +97,6 @@ function handleTitleClick() {
   height: 40px;
   padding: 0 12px;
   color: var(--text-primary);
-  border-bottom: 1px solid var(--border-primary);
 }
 
 .sidebar__main {
