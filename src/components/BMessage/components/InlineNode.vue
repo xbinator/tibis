@@ -23,25 +23,35 @@
     <InlineNode v-for="(child, index) in node.children" :key="index" :node="child" />
   </a>
 
-  <span v-else-if="node.type === 'image'" class="b-message__image-wrap">
-    <img :src="node.src" :alt="node.alt" :title="node.title || undefined" @click="handleImageClick" @mousedown="handleImageMouseDown" />
-    <button type="button" class="b-message__image-copy" title="复制图片" aria-label="复制图片" @click="handleImageCopyClick" @mousedown.stop.prevent>
+  <span v-else-if="node.type === 'image'" :class="bem('image')">
+    <img
+      :src="node.src"
+      :alt="node.alt"
+      :title="node.title || undefined"
+      :class="bem('image__img')"
+      @click="handleImageClick"
+      @mousedown="handleImageMouseDown"
+    />
+    <button type="button" :class="bem('image-copy')" title="复制图片" aria-label="复制图片" @click="handleImageCopyClick" @mousedown.stop.prevent>
       <BIcon icon="lucide:copy" :size="14" />
     </button>
   </span>
 
   <br v-else-if="node.type === 'break'" />
 
-  <span v-else-if="node.type === 'cursor'" class="b-message__cursor" aria-hidden="true"></span>
+  <span v-else-if="node.type === 'cursor'" :class="bem('cursor')" aria-hidden="true"></span>
 </template>
 
 <script setup lang="ts">
 import type { InlineNode } from '../types';
 import { inject } from 'vue';
 import { useClipboard } from '@/hooks/useClipboard';
+import { createNamespace } from '@/utils/namespace';
 import { MESSAGE_NODE_RENDER_CONTEXT_KEY } from '../types';
 
 defineOptions({ name: 'InlineNode' });
+
+const [, bem] = createNamespace('message');
 
 interface Props {
   /** 待渲染的行内节点 */
@@ -99,46 +109,46 @@ function handleLinkClick(event: MouseEvent): void {
 </script>
 
 <style scoped lang="less">
-.b-message__image-wrap {
+.b-message__image {
   position: relative;
   display: inline-block;
   max-width: 100%;
   line-height: 0;
   vertical-align: top;
-}
 
-.b-message__image-wrap > img {
-  display: block;
-  max-width: 100%;
-}
+  .b-message__image__img {
+    display: block;
+    max-width: 100%;
+  }
 
-.b-message__image-copy {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  color: var(--text-secondary);
-  cursor: pointer;
-  background: var(--bg-primary);
-  border-radius: 6px;
-  opacity: 0;
-  transition: opacity 0.16s ease, color 0.16s ease, background-color 0.16s ease;
-}
+  .b-message__image-copy {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    color: var(--text-secondary);
+    cursor: pointer;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    opacity: 0;
+    transition: opacity 0.16s ease, color 0.16s ease, background-color 0.16s ease;
 
-.b-message__image-copy:hover,
-.b-message__image-copy:focus-visible {
-  color: var(--color-primary);
-  background: var(--bg-secondary);
-  border-color: var(--border-primary);
-}
+    &:hover,
+    &:focus-visible {
+      color: var(--color-primary);
+      background: var(--bg-secondary);
+      border-color: var(--border-primary);
+    }
+  }
 
-.b-message__image-wrap:hover .b-message__image-copy,
-.b-message__image-wrap:focus-within .b-message__image-copy {
-  opacity: 1;
+  &:hover .b-message__image-copy,
+  &:focus-within .b-message__image-copy {
+    opacity: 1;
+  }
 }
 </style>

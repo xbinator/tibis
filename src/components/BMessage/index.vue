@@ -3,10 +3,10 @@
   @description 消息内容节点渲染组件，支持 Markdown、纯文本、流式光标与 Markdown 图片预览。
 -->
 <template>
-  <div class="b-message" :class="`b-message--${props.loading ? 'streaming' : 'done'}`" :style="rootStyle">
-    <div class="b-message__placeholder" aria-hidden="true"></div>
+  <div :class="bem({ streaming: props.loading, done: !props.loading })" :style="rootStyle">
+    <div :class="bem('placeholder')" aria-hidden="true"></div>
 
-    <div class="b-message__container" :class="props.type === 'text' ? 'b-message__text' : 'b-message__markdown'">
+    <div :class="[bem('container'), props.type === 'text' ? bem('text') : bem('markdown')]">
       <BlockNode v-for="node in parsedResult.blocks" :key="node.id" :node="node" />
     </div>
   </div>
@@ -18,11 +18,14 @@ import { computed, onScopeDispose, provide, shallowRef, watch } from 'vue';
 import { useImagePreview } from '@/hooks/useImagePreview';
 import { useNavigate } from '@/hooks/useNavigate';
 import { addCssUnit } from '@/utils/css';
+import { createNamespace } from '@/utils/namespace';
 import BlockNode from './components/BlockNode.vue';
 import { parseMessageNodes } from './parser';
 import { MESSAGE_NODE_RENDER_CONTEXT_KEY } from './types';
 
 defineOptions({ name: 'BMessage' });
+
+const [, bem] = createNamespace('message');
 
 const navigate = useNavigate();
 const { previewImage } = useImagePreview();
