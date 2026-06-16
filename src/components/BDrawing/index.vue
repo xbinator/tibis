@@ -3,7 +3,7 @@
   @description 独立画图工具组件。
 -->
 <template>
-  <section ref="rootRef" class="b-drawing" tabindex="0" @keydown="handleKeydown">
+  <section ref="rootRef" class="b-drawing" tabindex="0">
     <StylePanel
       :element="selectedShapeElement"
       :connector="selectedConnectorElement"
@@ -104,6 +104,7 @@ import type {
 } from './types';
 import type { DrawingCanvasPointProjection, DrawingConnectorPathElementOverride } from './utils/drawingGeometry';
 import { computed, onBeforeUnmount, ref, toRef } from 'vue';
+import { useShortcuts } from '@/hooks/useShortcuts';
 import InfiniteViewport from './components/InfiniteViewport.vue';
 import MoveableLayer from './components/MoveableLayer.vue';
 import SelectoLayer from './components/SelectoLayer.vue';
@@ -180,6 +181,7 @@ useModelSync({
   },
   modelValue: toRef(props, 'modelValue')
 });
+const { registerShortcuts } = useShortcuts();
 /** 当前历史栈是否允许撤销。 */
 const canUndo = computed<boolean>(() => board.state.value.history.past.length > 0);
 /** 当前历史栈是否允许重做。 */
@@ -1234,39 +1236,66 @@ function isKeyboardEventFromEditableTarget(event: KeyboardEvent): boolean {
 }
 
 /**
- * 判断键盘事件是否为画板全选快捷键。
+ * 判断画板局部快捷键是否可响应当前键盘事件。
  * @param event - 键盘事件
- * @returns 是否为全选快捷键
+ * @returns 是否允许响应画板快捷键
  */
-function isSelectAllShortcut(event: KeyboardEvent): boolean {
-  return event.key.toLowerCase() === 'a' && (event.metaKey || event.ctrlKey) && !event.altKey;
+function canHandleDrawingShortcut(event: KeyboardEvent): boolean {
+  const { target } = event;
+
+  return target instanceof Element && rootRef.value?.contains(target) === true && !isKeyboardEventFromEditableTarget(event);
 }
 
 /**
- * 处理画板键盘快捷键。
- * @param event - 键盘事件
+ * 选中画板中的全部元素。
  */
-function handleKeydown(event: KeyboardEvent): void {
-  const key = event.key.toLowerCase();
-  if (isKeyboardEventFromEditableTarget(event)) {
-    return;
-  }
-
-  if (isSelectAllShortcut(event)) {
-    event.preventDefault();
-    board.setSelection(board.state.value.elements.map((element: DrawingElement): string => element.id));
-    return;
-  }
-
-  if (key !== 'delete' && key !== 'backspace') {
-    return;
-  }
-
-  event.preventDefault();
-  interaction.deleteSelection();
+function selectAllDrawingElements(): void {
+  board.setSelection(board.state.value.elements.map((element: DrawingElement): string => element.id));
 }
 
+/**
+ * 注册画板键盘快捷键。
+ * @returns 取消快捷键注册的函数
+ */
+function registerDrawingKeyboardShortcuts(): () => void {
+  return registerShortcuts([
+    {
+      key: 'Ctrl+Z',
+      handler: board.undo,
+      guard: canHandleDrawingShortcut
+    },
+    {
+      key: 'Ctrl+Shift+Z',
+      handler: board.redo,
+      guard: canHandleDrawingShortcut
+    },
+    {
+      key: 'Ctrl+Y',
+      handler: board.redo,
+      guard: canHandleDrawingShortcut
+    },
+    {
+      key: 'Ctrl+A',
+      handler: selectAllDrawingElements,
+      guard: canHandleDrawingShortcut
+    },
+    {
+      key: 'Delete',
+      handler: interaction.deleteSelection,
+      guard: canHandleDrawingShortcut
+    },
+    {
+      key: 'Backspace',
+      handler: interaction.deleteSelection,
+      guard: canHandleDrawingShortcut
+    }
+  ]);
+}
+
+const unregisterDrawingKeyboardShortcuts = registerDrawingKeyboardShortcuts();
+
 onBeforeUnmount((): void => {
+  unregisterDrawingKeyboardShortcuts();
   cancelHandPan();
   cancelDirectDrag();
   cancelConnectorDrag();

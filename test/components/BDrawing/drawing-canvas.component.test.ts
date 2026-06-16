@@ -1640,6 +1640,56 @@ describe('BDrawing', (): void => {
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
   });
 
+  it('undoes and redoes manual node creation with history shortcuts', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body
+    });
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.trigger('keydown', { key: 'z', ctrlKey: true, metaKey: true });
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
+
+    await wrapper.trigger('keydown', { key: 'z', ctrlKey: true, metaKey: true, shiftKey: true });
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
+
+    wrapper.unmount();
+  });
+
+  it('redoes manual node creation with the Ctrl+Y history shortcut', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body
+    });
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.trigger('keydown', { key: 'z', ctrlKey: true, metaKey: true });
+    await wrapper.trigger('keydown', { key: 'y', ctrlKey: true, metaKey: true });
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
+
+    wrapper.unmount();
+  });
+
+  it('ignores history shortcuts from outside the drawing board', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body
+    });
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, metaKey: true, bubbles: true }));
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
+
+    wrapper.unmount();
+  });
+
   it('disables history toolbar actions when undo or redo is unavailable', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const undoButton = findDrawingToolbarHistoryButton(wrapper, 'undo');
@@ -1662,7 +1712,9 @@ describe('BDrawing', (): void => {
   });
 
   it('deletes selected nodes when Delete is pressed on the drawing board', async (): Promise<void> => {
-    const wrapper = mount(BDrawing);
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body
+    });
 
     await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
@@ -1671,10 +1723,14 @@ describe('BDrawing', (): void => {
     await wrapper.trigger('keydown', { key: 'Delete' });
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
+
+    wrapper.unmount();
   });
 
   it('selects every drawing element when the select all shortcut is pressed on the drawing board', async (): Promise<void> => {
-    const wrapper = mount(BDrawing);
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body
+    });
 
     await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
@@ -1688,11 +1744,13 @@ describe('BDrawing', (): void => {
     expect(nodesBeforeSelectAll[0].classes()).not.toContain('is-selected');
     expect(nodesBeforeSelectAll[1].classes()).toContain('is-selected');
 
-    await wrapper.trigger('keydown', { key: 'a', metaKey: true });
+    await wrapper.trigger('keydown', { key: 'a', ctrlKey: true, metaKey: true });
 
     const nodesAfterSelectAll = wrapper.findAll('[data-testid="drawing-node"]');
     expect(nodesAfterSelectAll[0].classes()).toContain('is-selected');
     expect(nodesAfterSelectAll[1].classes()).toContain('is-selected');
+
+    wrapper.unmount();
   });
 
   it('ignores drawing keyboard shortcuts', async (): Promise<void> => {
@@ -3033,7 +3091,9 @@ describe('BDrawing', (): void => {
   });
 
   it('selects and deletes a connector from the canvas', async (): Promise<void> => {
-    const wrapper = mount(BDrawing);
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body
+    });
 
     await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
@@ -3060,6 +3120,8 @@ describe('BDrawing', (): void => {
     await wrapper.trigger('keydown', { key: 'Delete' });
 
     expect(findDrawingConnectorPaths(wrapper)).toHaveLength(0);
+
+    wrapper.unmount();
   });
 
   it('updates selected connector color, marker and curve from the style panel', async (): Promise<void> => {
@@ -3136,7 +3198,9 @@ describe('BDrawing', (): void => {
   });
 
   it('removes attached connectors when deleting a connected shape', async (): Promise<void> => {
-    const wrapper = mount(BDrawing);
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body
+    });
 
     await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
     await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
@@ -3156,6 +3220,8 @@ describe('BDrawing', (): void => {
     await wrapper.trigger('keydown', { key: 'Delete' });
 
     expect(findDrawingConnectorPaths(wrapper)).toHaveLength(0);
+
+    wrapper.unmount();
   });
 });
 
