@@ -35,11 +35,7 @@
         <span class="todo-panel__current-task-text">{{ currentTask.content }}</span>
       </span>
       <span v-else-if="!visible && isFinished" class="todo-panel__finished-summary">
-        <BIcon icon="lucide:check-circle-2" :size="12" class="todo-panel__finished-summary-icon" />
-        <span class="todo-panel__finished-summary-text">已完成</span>
-        <BButton type="text" size="small" class="todo-panel__close-completed" aria-label="关闭已完成任务列表" @click="handleCloseCompletedTodos">
-          <BIcon icon="lucide:x" :size="12" />
-        </BButton>
+        <span class="todo-panel__finished-countdown">{{ finishedDismissRemaining }}秒后关闭</span>
       </span>
     </div>
   </div>
@@ -50,15 +46,17 @@
  * @file TodoPanel.vue
  * @description 聊天侧边栏的待办任务面板，显示当前会话的 LLM 任务列表。
  */
-import { computed } from 'vue';
-import { useTodoStore } from '@/stores/chat/todo';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import type { TodoItem } from '@/stores/chat/todo';
+
+/** 完成态折叠摘要自动隐藏等待秒数。 */
+const FINISHED_DISMISS_DELAY_SECONDS = 3;
 
 /**
  * TodoPanel 属性
  */
 interface TodoPanelProps {
-  /** 当前会话 ID，用于关闭已完成任务列表 */
+  /** 当前会话 ID，保留给父级按会话控制面板状态 */
   sessionId: string | null;
   /** 当前会话的任务列表 */
   todos: TodoItem[];
@@ -72,10 +70,14 @@ const props = defineProps<TodoPanelProps>();
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void;
+  (e: 'dismiss'): void;
 }>();
 
-/** Todo 存储 */
-const todoStore = useTodoStore();
+/** 完成态折叠摘要剩余自动隐藏秒数。 */
+const finishedDismissRemaining = ref<number>(FINISHED_DISMISS_DELAY_SECONDS);
+
+/** 完成态自动隐藏计时器。 */
+let finishedDismissTimer: ReturnType<typeof setInterval> | null = null;
 
 /** 已完成任务数量 */
 const completedCount = computed<number>(() => props.todos.filter((t) => t.status === 'completed').length);
@@ -87,15 +89,51 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
 const isFinished = computed<boolean>(() => props.todos.length > 0 && props.todos.every((t) => t.status === 'completed' || t.status === 'cancelled'));
 
 /**
- * 关闭已完成任务列表。
+ * 停止完成态自动隐藏倒计时。
  */
-function handleCloseCompletedTodos(): void {
-  if (!props.sessionId || !isFinished.value) {
-    return;
+function stopFinishedDismissCountdown(): void {
+  if (finishedDismissTimer) {
+    clearInterval(finishedDismissTimer);
+    finishedDismissTimer = null;
   }
-
-  todoStore.clearTodos(props.sessionId);
 }
+
+/**
+ * 启动完成态自动隐藏倒计时。
+ */
+function startFinishedDismissCountdown(): void {
+  stopFinishedDismissCountdown();
+  finishedDismissRemaining.value = FINISHED_DISMISS_DELAY_SECONDS;
+
+  finishedDismissTimer = setInterval((): void => {
+    if (finishedDismissRemaining.value <= 1) {
+      stopFinishedDismissCountdown();
+      if (isFinished.value && !props.visible) {
+        emit('dismiss');
+      }
+      return;
+    }
+
+    finishedDismissRemaining.value -= 1;
+  }, 1000);
+}
+
+watch(
+  [() => props.visible, isFinished],
+  ([visible, finished]): void => {
+    if (!visible && finished) {
+      startFinishedDismissCountdown();
+      return;
+    }
+
+    stopFinishedDismissCountdown();
+  },
+  { immediate: true }
+);
+
+onUnmounted((): void => {
+  stopFinishedDismissCountdown();
+});
 </script>
 
 <style scoped lang="less">
@@ -244,11 +282,6 @@ function handleCloseCompletedTodos(): void {
   color: var(--color-primary);
 }
 
-.todo-panel__finished-summary-icon {
-  flex-shrink: 0;
-  color: var(--color-success);
-}
-
 .todo-panel__toggle-icon {
   flex-shrink: 0;
   color: var(--text-secondary);
@@ -262,19 +295,9 @@ function handleCloseCompletedTodos(): void {
   white-space: nowrap;
 }
 
-.todo-panel__finished-summary-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.todo-panel__close-completed {
+.todo-panel__finished-countdown {
   flex-shrink: 0;
+  font-size: 11px;
   color: var(--text-tertiary);
-}
-
-.todo-panel__close-completed:hover {
-  color: var(--text-primary);
 }
 </style>

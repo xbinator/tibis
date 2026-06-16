@@ -444,4 +444,17 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(wrapper.findComponent({ name: 'TodoPanel' }).props('sessionId')).toBe('session-finished');
   });
+
+  it('hides finished todo panel after countdown dismiss without clearing todos', async (): Promise<void> => {
+    todoStoreMock.todosBySession.set('session-finished', [{ content: '完成任务', status: 'completed', priority: 'medium' }]);
+    const wrapper = mountBChat('session-finished');
+    await flushPromises();
+
+    wrapper.findComponent({ name: 'TodoPanel' }).vm.$emit('dismiss');
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'TodoPanel' }).exists()).toBe(false);
+    expect(todoStoreMock.clearTodos).not.toHaveBeenCalled();
+    expect(todoStoreMock.todosBySession.get('session-finished')).toEqual([{ content: '完成任务', status: 'completed', priority: 'medium' }]);
+  });
 });

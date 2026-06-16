@@ -36,7 +36,13 @@
     </div>
 
     <div :class="bem('toolbar')">
-      <TodoPanel v-model:visible="todoPanelVisible" :session-id="activeSessionId" :todos="currentSessionTodos" />
+      <TodoPanel
+        v-if="!todoPanelDismissed"
+        v-model:visible="todoPanelVisible"
+        :session-id="activeSessionId"
+        :todos="currentSessionTodos"
+        @dismiss="handleTodoPanelDismiss"
+      />
     </div>
 
     <div :class="bem('input')">
@@ -178,6 +184,8 @@ const toolSettingsStore = useToolSettingsStore();
 const todoStore = useTodoStore();
 /** Todo 面板可见性 */
 const todoPanelVisible = ref(true);
+/** Todo 面板是否已在完成态倒计时后隐藏 */
+const todoPanelDismissed = ref(false);
 /** BChat 内部为新会话草稿创建出的会话 ID。 */
 const createdSessionId = ref<string | null>(null);
 /** 自动命名时需要的当前会话镜像。 */
@@ -196,16 +204,28 @@ function areTodosFinished(todos: TodoItem[]): boolean {
   return todos.length > 0 && todos.every((todo) => todo.status === 'completed' || todo.status === 'cancelled');
 }
 
+/**
+ * 处理完成态任务面板自动隐藏。
+ */
+function handleTodoPanelDismiss(): void {
+  todoPanelDismissed.value = true;
+}
+
 /** LLM 调用 todowrite 时自动打开/关闭面板 */
 watch(
   () => todoStore.getTodos(activeSessionId.value ?? ''),
   (newTodos) => {
     if (newTodos.length === 0) {
       todoPanelVisible.value = false;
+      todoPanelDismissed.value = false;
     } else if (areTodosFinished(newTodos)) {
       todoPanelVisible.value = false;
+      todoPanelDismissed.value = false;
     } else if (!todoPanelVisible.value) {
       todoPanelVisible.value = true;
+      todoPanelDismissed.value = false;
+    } else {
+      todoPanelDismissed.value = false;
     }
   },
   { deep: true }

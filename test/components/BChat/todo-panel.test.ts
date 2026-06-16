@@ -5,7 +5,7 @@
  */
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TodoPanel from '@/components/BChat/components/TodoPanel.vue';
 import type { TodoItem } from '@/stores/chat/todo';
 
@@ -61,10 +61,15 @@ function mountTodoPanel(todos: TodoItem[], visible: boolean, sessionId: string |
 
 describe('TodoPanel', (): void => {
   beforeEach((): void => {
+    vi.useFakeTimers();
     todoStoreMock.clearTodos.mockReset();
   });
 
-  it('keeps task list title and shows finished summary when folded', (): void => {
+  afterEach((): void => {
+    vi.useRealTimers();
+  });
+
+  it('keeps task list title and only shows finished countdown when folded', (): void => {
     const wrapper = mountTodoPanel(
       [
         { content: '完成 A', status: 'completed', priority: 'high' },
@@ -74,29 +79,41 @@ describe('TodoPanel', (): void => {
     );
 
     expect(wrapper.text()).toContain('任务列表 1/2');
-    expect(wrapper.text()).toContain('已完成');
-    expect(wrapper.find('.todo-panel__close-completed').exists()).toBe(true);
+    expect(wrapper.find('.todo-panel__finished-summary-icon').exists()).toBe(false);
+    expect(wrapper.find('.todo-panel__finished-summary-text').exists()).toBe(false);
+    expect(wrapper.text()).toContain('3秒后关闭');
+    expect(wrapper.find('.todo-panel__close-completed').exists()).toBe(false);
   });
 
-  it('clears current session todos when close button is clicked in finished summary', async (): Promise<void> => {
+  it('requests panel dismissal after folded finished countdown ends', async (): Promise<void> => {
     const wrapper = mountTodoPanel([{ content: '完成 A', status: 'completed', priority: 'high' }], false);
 
-    await wrapper.find('.todo-panel__close-completed').trigger('click');
+    await vi.advanceTimersByTimeAsync(3000);
 
-    expect(todoStoreMock.clearTodos).toHaveBeenCalledWith('session-1');
-  });
-
-  it('does not clear todos when session id is missing', async (): Promise<void> => {
-    const wrapper = mountTodoPanel([{ content: '完成 A', status: 'completed', priority: 'high' }], false, null);
-
-    await wrapper.find('.todo-panel__close-completed').trigger('click');
-
+    expect(wrapper.emitted('dismiss')).toEqual([[]]);
     expect(todoStoreMock.clearTodos).not.toHaveBeenCalled();
   });
 
-  it('does not show close button in expanded finished panel header', (): void => {
+  it('cancels finished countdown while the user opens the board', async (): Promise<void> => {
+    const wrapper = mountTodoPanel([{ content: '完成 A', status: 'completed', priority: 'high' }], false);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await wrapper.setProps({ visible: true });
+    await vi.advanceTimersByTimeAsync(4000);
+
+    expect(wrapper.emitted('dismiss')).toBeUndefined();
+  });
+
+  it('restarts finished countdown when the user folds the finished board', async (): Promise<void> => {
     const wrapper = mountTodoPanel([{ content: '完成 A', status: 'completed', priority: 'high' }], true);
 
-    expect(wrapper.find('.todo-panel__close').exists()).toBe(false);
+    await wrapper.setProps({ visible: false });
+    expect(wrapper.text()).toContain('3秒后关闭');
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(wrapper.text()).toContain('2秒后关闭');
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(wrapper.emitted('dismiss')).toEqual([[]]);
   });
 });
