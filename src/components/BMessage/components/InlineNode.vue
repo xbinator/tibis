@@ -43,8 +43,17 @@
       :class="bem('image__img')"
       @click="handleImageClick"
       @mousedown="handleImageMouseDown"
+      @error="handleImageError"
     />
-    <button type="button" :class="bem('image-copy')" title="复制图片" aria-label="复制图片" @click="handleImageCopyClick" @mousedown.stop.prevent>
+    <button
+      v-if="!imageLoadError"
+      type="button"
+      :class="bem('image-copy')"
+      title="复制图片"
+      aria-label="复制图片"
+      @click="handleImageCopyClick"
+      @mousedown.stop.prevent
+    >
       <BIcon icon="lucide:copy" :size="14" />
     </button>
   </span>
@@ -60,7 +69,7 @@
 
 <script setup lang="ts">
 import type { InlineNode } from '../types';
-import { inject } from 'vue';
+import { inject, ref, watch } from 'vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
 import { MESSAGE_NODE_RENDER_CONTEXT_KEY } from '../types';
@@ -79,12 +88,31 @@ const props = defineProps<Props>();
 const renderContext = inject(MESSAGE_NODE_RENDER_CONTEXT_KEY, null);
 const { copyImageFromUrl } = useClipboard();
 
+/** 图片是否加载失败 */
+const imageLoadError = ref(false);
+
+/** 图片 src 变化时重置错误状态 */
+watch(
+  () => (props.node.type === 'image' ? props.node.src : null),
+  () => {
+    imageLoadError.value = false;
+  }
+);
+
 /**
- * 处理图片点击。
+ * 图片加载失败时标记错误状态，禁用预览与复制。
+ */
+function handleImageError(): void {
+  imageLoadError.value = true;
+}
+
+/**
+ * 处理图片点击，加载失败时不触发预览。
  * @param event - 鼠标点击事件
  */
 async function handleImageClick(event: MouseEvent): Promise<void> {
   if (props.node.type !== 'image') return;
+  if (imageLoadError.value) return;
 
   event.preventDefault();
   event.stopPropagation();
