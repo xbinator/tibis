@@ -36,13 +36,7 @@
     </div>
 
     <div :class="bem('toolbar')">
-      <TodoPanel
-        v-if="!todoPanelDismissed"
-        v-model:visible="todoPanelVisible"
-        :session-id="activeSessionId"
-        :todos="currentSessionTodos"
-        @dismiss="handleTodoPanelDismiss"
-      />
+      <TodoPanel v-if="currentSessionTodos.length > 0 && !todoPanelDismissed" v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
     </div>
 
     <div :class="bem('input')">
@@ -184,7 +178,7 @@ const toolSettingsStore = useToolSettingsStore();
 const todoStore = useTodoStore();
 /** Todo 面板可见性 */
 const todoPanelVisible = ref(true);
-/** Todo 面板是否已在完成态倒计时后隐藏 */
+/** Todo 面板是否已因当前任务全部结束而隐藏 */
 const todoPanelDismissed = ref(false);
 /** BChat 内部为新会话草稿创建出的会话 ID。 */
 const createdSessionId = ref<string | null>(null);
@@ -205,22 +199,26 @@ function areTodosFinished(todos: TodoItem[]): boolean {
 }
 
 /**
- * 处理完成态任务面板自动隐藏。
+ * 清理已结束任务并隐藏任务面板。
+ * @param sessionId - 当前会话 ID
  */
-function handleTodoPanelDismiss(): void {
+function clearFinishedTodos(sessionId: string): void {
+  todoStore.clearTodos(sessionId);
+  todoPanelVisible.value = false;
   todoPanelDismissed.value = true;
 }
 
 /** LLM 调用 todowrite 时自动打开/关闭面板 */
 watch(
-  () => todoStore.getTodos(activeSessionId.value ?? ''),
-  (newTodos) => {
+  () => [activeSessionId.value, todoStore.getTodos(activeSessionId.value ?? '')] as const,
+  ([sessionId, newTodos]) => {
     if (newTodos.length === 0) {
       todoPanelVisible.value = false;
       todoPanelDismissed.value = false;
     } else if (areTodosFinished(newTodos)) {
-      todoPanelVisible.value = false;
-      todoPanelDismissed.value = false;
+      if (sessionId) {
+        clearFinishedTodos(sessionId);
+      }
     } else if (!todoPanelVisible.value) {
       todoPanelVisible.value = true;
       todoPanelDismissed.value = false;
@@ -228,7 +226,7 @@ watch(
       todoPanelDismissed.value = false;
     }
   },
-  { deep: true }
+  { deep: true, immediate: true }
 );
 
 const router = useRouter();

@@ -50,7 +50,9 @@ const todoStoreMock = vi.hoisted(
 
     return {
       todosBySession,
-      clearTodos: vi.fn<(sessionId: string) => void>(),
+      clearTodos: vi.fn<(sessionId: string) => void>((sessionId: string): void => {
+        todosBySession.delete(sessionId);
+      }),
       getTodos: vi.fn<(sessionId: string) => TodoItem[]>((sessionId: string) => todosBySession.get(sessionId) ?? [])
     };
   }
@@ -425,7 +427,7 @@ describe('BChat sessionId runtime', (): void => {
     expect(wrapper.emitted('session-title-persisted')?.[0]).toEqual(['session-1', '生成标题']);
   });
 
-  it('folds todo panel when all todos are finished after session change', async (): Promise<void> => {
+  it('clears finished todos immediately after session change', async (): Promise<void> => {
     todoStoreMock.todosBySession.set('session-active', [{ content: '执行任务', status: 'in_progress', priority: 'high' }]);
     todoStoreMock.todosBySession.set('session-finished', [{ content: '完成任务', status: 'completed', priority: 'medium' }]);
     const wrapper = mountBChat('session-active');
@@ -434,27 +436,25 @@ describe('BChat sessionId runtime', (): void => {
     await wrapper.setProps({ sessionId: 'session-finished' });
     await flushPromises();
 
-    expect(wrapper.findComponent({ name: 'TodoPanel' }).props('visible')).toBe(false);
-  });
-
-  it('passes active session id to todo panel for local close handling', async (): Promise<void> => {
-    todoStoreMock.todosBySession.set('session-finished', [{ content: '完成任务', status: 'completed', priority: 'medium' }]);
-    const wrapper = mountBChat('session-finished');
-    await flushPromises();
-
-    expect(wrapper.findComponent({ name: 'TodoPanel' }).props('sessionId')).toBe('session-finished');
-  });
-
-  it('hides finished todo panel after countdown dismiss without clearing todos', async (): Promise<void> => {
-    todoStoreMock.todosBySession.set('session-finished', [{ content: '完成任务', status: 'completed', priority: 'medium' }]);
-    const wrapper = mountBChat('session-finished');
-    await flushPromises();
-
-    wrapper.findComponent({ name: 'TodoPanel' }).vm.$emit('dismiss');
-    await flushPromises();
-
+    expect(todoStoreMock.clearTodos).toHaveBeenCalledWith('session-finished');
     expect(wrapper.findComponent({ name: 'TodoPanel' }).exists()).toBe(false);
+  });
+
+  it('keeps active todo panel visible for unfinished todos', async (): Promise<void> => {
+    todoStoreMock.todosBySession.set('session-active', [{ content: '执行任务', status: 'in_progress', priority: 'high' }]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'TodoPanel' }).props('visible')).toBe(true);
     expect(todoStoreMock.clearTodos).not.toHaveBeenCalled();
-    expect(todoStoreMock.todosBySession.get('session-finished')).toEqual([{ content: '完成任务', status: 'completed', priority: 'medium' }]);
+  });
+
+  it('clears finished todos on mount so refresh does not restore the panel', async (): Promise<void> => {
+    todoStoreMock.todosBySession.set('session-finished', [{ content: '完成任务', status: 'completed', priority: 'medium' }]);
+    const wrapper = mountBChat('session-finished');
+    await flushPromises();
+
+    expect(todoStoreMock.clearTodos).toHaveBeenCalledWith('session-finished');
+    expect(wrapper.findComponent({ name: 'TodoPanel' }).exists()).toBe(false);
   });
 });
