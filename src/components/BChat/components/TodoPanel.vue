@@ -34,6 +34,13 @@
         <BIcon icon="lucide:circle-dot" :size="12" class="todo-panel__current-task-icon" />
         <span class="todo-panel__current-task-text">{{ currentTask.content }}</span>
       </span>
+      <span v-else-if="!visible && isFinished" class="todo-panel__finished-summary">
+        <BIcon icon="lucide:check-circle-2" :size="12" class="todo-panel__finished-summary-icon" />
+        <span class="todo-panel__finished-summary-text">已完成</span>
+        <BButton type="text" size="small" class="todo-panel__close-completed" aria-label="关闭已完成任务列表" @click="handleCloseCompletedTodos">
+          <BIcon icon="lucide:x" :size="12" />
+        </BButton>
+      </span>
     </div>
   </div>
 </template>
@@ -44,12 +51,15 @@
  * @description 聊天侧边栏的待办任务面板，显示当前会话的 LLM 任务列表。
  */
 import { computed } from 'vue';
+import { useTodoStore } from '@/stores/chat/todo';
 import type { TodoItem } from '@/stores/chat/todo';
 
 /**
  * TodoPanel 属性
  */
 interface TodoPanelProps {
+  /** 当前会话 ID，用于关闭已完成任务列表 */
+  sessionId: string | null;
   /** 当前会话的任务列表 */
   todos: TodoItem[];
   /** 面板可见性，支持 v-model:visible */
@@ -64,11 +74,28 @@ const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void;
 }>();
 
+/** Todo 存储 */
+const todoStore = useTodoStore();
+
 /** 已完成任务数量 */
 const completedCount = computed<number>(() => props.todos.filter((t) => t.status === 'completed').length);
 
 /** 当前正在执行的任务（取第一个 in_progress） */
 const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) => t.status === 'in_progress'));
+
+/** 是否所有任务均已结束 */
+const isFinished = computed<boolean>(() => props.todos.length > 0 && props.todos.every((t) => t.status === 'completed' || t.status === 'cancelled'));
+
+/**
+ * 关闭已完成任务列表。
+ */
+function handleCloseCompletedTodos(): void {
+  if (!props.sessionId || !isFinished.value) {
+    return;
+  }
+
+  todoStore.clearTodos(props.sessionId);
+}
 </script>
 
 <style scoped lang="less">
@@ -107,15 +134,6 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
   margin-left: auto;
   font-size: 11px;
   color: var(--text-tertiary);
-}
-
-.todo-panel__close {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.todo-panel__close:hover {
-  color: var(--text-primary);
 }
 
 .todo-panel__body {
@@ -212,9 +230,23 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
   overflow: hidden;
 }
 
+.todo-panel__finished-summary {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
 .todo-panel__current-task-icon {
   flex-shrink: 0;
   color: var(--color-primary);
+}
+
+.todo-panel__finished-summary-icon {
+  flex-shrink: 0;
+  color: var(--color-success);
 }
 
 .todo-panel__toggle-icon {
@@ -228,5 +260,21 @@ const currentTask = computed<TodoItem | undefined>(() => props.todos.find((t) =>
   font-size: 11px;
   color: var(--text-secondary);
   white-space: nowrap;
+}
+
+.todo-panel__finished-summary-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.todo-panel__close-completed {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.todo-panel__close-completed:hover {
+  color: var(--text-primary);
 }
 </style>

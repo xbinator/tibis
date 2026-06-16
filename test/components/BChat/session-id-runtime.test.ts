@@ -4,12 +4,13 @@
  * @vitest-environment jsdom
  */
 import type { ChatSession } from 'types/chat';
-import type { Message, ServiceConfig } from '@/components/BChat/utils/types';
-import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent, h } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BChat from '@/components/BChat/index.vue';
+import type { Message, ServiceConfig } from '@/components/BChat/utils/types';
+import type { TodoItem } from '@/stores/chat/todo';
 import { useSettingStore } from '@/stores/ui/setting';
 
 const chatStoreMock = vi.hoisted(() => ({
@@ -38,6 +39,22 @@ const autoNameMockState = vi.hoisted(() => ({
       }
     | undefined
 }));
+
+const todoStoreMock = vi.hoisted(
+  (): {
+    todosBySession: Map<string, TodoItem[]>;
+    clearTodos: ReturnType<typeof vi.fn<(sessionId: string) => void>>;
+    getTodos: ReturnType<typeof vi.fn<(sessionId: string) => TodoItem[]>>;
+  } => {
+    const todosBySession = new Map<string, TodoItem[]>();
+
+    return {
+      todosBySession,
+      clearTodos: vi.fn<(sessionId: string) => void>(),
+      getTodos: vi.fn<(sessionId: string) => TodoItem[]>((sessionId: string) => todosBySession.get(sessionId) ?? [])
+    };
+  }
+);
 
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(() => ({
@@ -127,9 +144,7 @@ vi.mock('@/stores/chat/session', () => ({
 }));
 
 vi.mock('@/stores/chat/todo', () => ({
-  useTodoStore: vi.fn(() => ({
-    getTodos: vi.fn(() => [])
-  }))
+  useTodoStore: vi.fn(() => todoStoreMock)
 }));
 
 vi.mock('@/stores/ai/serviceModel', () => ({
@@ -334,6 +349,9 @@ describe('BChat sessionId runtime', (): void => {
     streamMock.regenerate.mockReset();
     streamMock.submitUserChoice.mockReset();
     streamMock.abort.mockReset();
+    todoStoreMock.todosBySession.clear();
+    todoStoreMock.clearTodos.mockReset();
+    todoStoreMock.getTodos.mockClear();
     autoNameMockState.options = undefined;
     chatStoreMock.getSessionMessages.mockResolvedValue([]);
     chatStoreMock.getSessions.mockResolvedValue({ items: [], hasMore: false });
@@ -405,5 +423,25 @@ describe('BChat sessionId runtime', (): void => {
     await flushPromises();
 
     expect(wrapper.emitted('session-title-persisted')?.[0]).toEqual(['session-1', '生成标题']);
+  });
+
+  it('folds todo panel when all todos are finished after session change', async (): Promise<void> => {
+    todoStoreMock.todosBySession.set('session-active', [{ content: '执行任务', status: 'in_progress', priority: 'high' }]);
+    todoStoreMock.todosBySession.set('session-finished', [{ content: '完成任务', status: 'completed', priority: 'medium' }]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    await wrapper.setProps({ sessionId: 'session-finished' });
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'TodoPanel' }).props('visible')).toBe(false);
+  });
+
+  it('passes active session id to todo panel for local close handling', async (): Promise<void> => {
+    todoStoreMock.todosBySession.set('session-finished', [{ content: '完成任务', status: 'completed', priority: 'medium' }]);
+    const wrapper = mountBChat('session-finished');
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'TodoPanel' }).props('sessionId')).toBe('session-finished');
   });
 });

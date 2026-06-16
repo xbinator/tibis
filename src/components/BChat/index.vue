@@ -36,7 +36,7 @@
     </div>
 
     <div :class="bem('toolbar')">
-      <TodoPanel v-model:visible="todoPanelVisible" :todos="currentSessionTodos" />
+      <TodoPanel v-model:visible="todoPanelVisible" :session-id="activeSessionId" :todos="currentSessionTodos" />
     </div>
 
     <div :class="bem('input')">
@@ -110,6 +110,7 @@ import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useTodoStore } from '@/stores/chat/todo';
+import type { TodoItem } from '@/stores/chat/todo';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { Modal } from '@/utils/modal';
@@ -176,11 +177,22 @@ const activeSessionId = computed<string | null>(() => props.sessionId ?? created
 /** 当前会话的待办列表 */
 const currentSessionTodos = computed(() => todoStore.getTodos(activeSessionId.value ?? ''));
 
+/**
+ * 判断任务列表是否已经全部结束。
+ * @param todos - 当前会话的任务列表
+ * @returns 所有任务均完成或取消时返回 true
+ */
+function areTodosFinished(todos: TodoItem[]): boolean {
+  return todos.length > 0 && todos.every((todo) => todo.status === 'completed' || todo.status === 'cancelled');
+}
+
 /** LLM 调用 todowrite 时自动打开/关闭面板 */
 watch(
   () => todoStore.getTodos(activeSessionId.value ?? ''),
   (newTodos) => {
     if (newTodos.length === 0) {
+      todoPanelVisible.value = false;
+    } else if (areTodosFinished(newTodos)) {
       todoPanelVisible.value = false;
     } else if (!todoPanelVisible.value) {
       todoPanelVisible.value = true;
