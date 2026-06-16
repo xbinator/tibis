@@ -52,6 +52,95 @@ describe('parseMessageNodes', () => {
     expect(code.text).toBe('code');
   });
 
+  it('converts extended inline markdown into semantic nodes', (): void => {
+    const result = parseMessageNodes({
+      content: 'Use ==highlight==, X^2^ and H~2~O.',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+
+    expect(paragraph.children).toMatchObject([
+      { type: 'text', text: 'Use ' },
+      { type: 'mark', children: [{ type: 'text', text: 'highlight' }] },
+      { type: 'text', text: ', X' },
+      { type: 'sup', children: [{ type: 'text', text: '2' }] },
+      { type: 'text', text: ' and H' },
+      { type: 'sub', children: [{ type: 'text', text: '2' }] },
+      { type: 'text', text: 'O.' }
+    ]);
+  });
+
+  it('preserves inline formatting inside tight list item text blocks', (): void => {
+    const result = parseMessageNodes({
+      content: '- **粗体**\n- *斜体*\n- ~~删除线~~\n- ==高亮==\n- `行内代码`\n- X^2^ and H~2~O',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const list = expectBlockNode(result.blocks[0], 'list');
+    const firstItemParagraph = expectBlockNode(list.items[0]?.children[0], 'paragraph');
+    const secondItemParagraph = expectBlockNode(list.items[1]?.children[0], 'paragraph');
+    const thirdItemParagraph = expectBlockNode(list.items[2]?.children[0], 'paragraph');
+    const fourthItemParagraph = expectBlockNode(list.items[3]?.children[0], 'paragraph');
+    const fifthItemParagraph = expectBlockNode(list.items[4]?.children[0], 'paragraph');
+    const sixthItemParagraph = expectBlockNode(list.items[5]?.children[0], 'paragraph');
+
+    expect(firstItemParagraph.children[0]).toMatchObject({ type: 'strong' });
+    expect(secondItemParagraph.children[0]).toMatchObject({ type: 'em' });
+    expect(thirdItemParagraph.children[0]).toMatchObject({ type: 'del' });
+    expect(fourthItemParagraph.children[0]).toMatchObject({ type: 'mark' });
+    expect(fifthItemParagraph.children[0]).toMatchObject({ type: 'code', text: '行内代码' });
+    expect(sixthItemParagraph.children).toMatchObject([
+      { type: 'text', text: 'X' },
+      { type: 'sup' },
+      { type: 'text', text: ' and H' },
+      { type: 'sub' },
+      { type: 'text', text: 'O' }
+    ]);
+  });
+
+  it('omits raw task checkbox tokens from task list item content', (): void => {
+    const result = parseMessageNodes({
+      content: '- [x] 已完成任务\n- [ ] 未完成任务',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const list = expectBlockNode(result.blocks[0], 'list');
+    const firstItemParagraph = expectBlockNode(list.items[0]?.children[0], 'paragraph');
+    const secondItemParagraph = expectBlockNode(list.items[1]?.children[0], 'paragraph');
+
+    expect(list.items[0]?.task).toBe(true);
+    expect(list.items[0]?.checked).toBe(true);
+    expect(list.items[1]?.task).toBe(true);
+    expect(list.items[1]?.checked).toBe(false);
+    expect(firstItemParagraph.children).toMatchObject([{ type: 'text', text: '已完成任务' }]);
+    expect(secondItemParagraph.children).toMatchObject([{ type: 'text', text: '未完成任务' }]);
+  });
+
+  it('converts safe inline html tags without allowing unsafe html injection', (): void => {
+    const result = parseMessageNodes({
+      content: '<u>under</u> <mark>marked</mark> <kbd>Ctrl</kbd> <abbr title="HyperText Markup Language">HTML</abbr> <script>alert(1)</script>',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+
+    expect(paragraph.children).toMatchObject([
+      { type: 'htmlInline', tag: 'u', children: [{ type: 'text', text: 'under' }] },
+      { type: 'text', text: ' ' },
+      { type: 'htmlInline', tag: 'mark', children: [{ type: 'text', text: 'marked' }] },
+      { type: 'text', text: ' ' },
+      { type: 'htmlInline', tag: 'kbd', children: [{ type: 'text', text: 'Ctrl' }] },
+      { type: 'text', text: ' ' },
+      { type: 'htmlInline', tag: 'abbr', title: 'HyperText Markup Language', children: [{ type: 'text', text: 'HTML' }] },
+      { type: 'text', text: ' <script>alert(1)</script>' }
+    ]);
+  });
+
   it('textifies raw html instead of emitting html nodes', (): void => {
     const result = parseMessageNodes({
       content: '<script>alert(1)</script>\n\n<div>safe text</div>',
@@ -123,7 +212,7 @@ describe('parseMessageNodes', () => {
     expect(completed.blocks[1]?.id).not.toBe(streaming.blocks[1]?.id);
   });
 
-  it('uses a local deletion tokenizer without changing the package-level marked singleton', (): void => {
+  it('uses local inline extensions without changing the package-level marked singleton', (): void => {
     const result = parseMessageNodes({
       content: 'Keep ~single~ but delete ~~double~~.',
       mode: 'markdown',
@@ -132,7 +221,7 @@ describe('parseMessageNodes', () => {
     const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
 
     expect(paragraph.children.some((node) => node.type === 'del')).toBe(true);
-    expect(paragraph.children).toContainEqual({ type: 'text', text: 'Keep ~single~ but delete ' });
+    expect(paragraph.children.some((node) => node.type === 'sub')).toBe(true);
     expect(marked.parse('Keep ~single~.', { async: false })).toContain('<del>single</del>');
   });
 });

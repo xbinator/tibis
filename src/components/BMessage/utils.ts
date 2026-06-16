@@ -32,7 +32,16 @@ function collectInlineImageNodes(nodes: InlineNode[], images: ImageInlineNode[])
       return;
     }
 
-    if (node.type === 'strong' || node.type === 'em' || node.type === 'del' || node.type === 'link') {
+    if (
+      node.type === 'strong' ||
+      node.type === 'em' ||
+      node.type === 'del' ||
+      node.type === 'mark' ||
+      node.type === 'sup' ||
+      node.type === 'sub' ||
+      node.type === 'link' ||
+      node.type === 'htmlInline'
+    ) {
       collectInlineImageNodes(node.children, images);
     }
   });

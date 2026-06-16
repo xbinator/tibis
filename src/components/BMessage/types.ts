@@ -218,6 +218,36 @@ export interface DelInlineNode {
 }
 
 /**
+ * 高亮行内节点。
+ */
+export interface MarkInlineNode {
+  /** 节点类型 */
+  type: 'mark';
+  /** 子节点 */
+  children: InlineNode[];
+}
+
+/**
+ * 上标行内节点。
+ */
+export interface SupInlineNode {
+  /** 节点类型 */
+  type: 'sup';
+  /** 子节点 */
+  children: InlineNode[];
+}
+
+/**
+ * 下标行内节点。
+ */
+export interface SubInlineNode {
+  /** 节点类型 */
+  type: 'sub';
+  /** 子节点 */
+  children: InlineNode[];
+}
+
+/**
  * 行内代码节点。
  */
 export interface CodeInlineNode {
@@ -274,6 +304,25 @@ export interface CursorInlineNode {
 }
 
 /**
+ * 安全 HTML 行内标签名。
+ */
+export type SafeHtmlInlineTag = 'abbr' | 'kbd' | 'mark' | 'small' | 'sub' | 'sup' | 'u';
+
+/**
+ * 安全 HTML 行内节点。
+ */
+export interface HtmlInlineNode {
+  /** 节点类型 */
+  type: 'htmlInline';
+  /** 白名单内的 HTML 标签名 */
+  tag: SafeHtmlInlineTag;
+  /** 安全标题属性，主要用于 abbr */
+  title?: string;
+  /** 子节点 */
+  children: InlineNode[];
+}
+
+/**
  * 行内消息节点。
  */
 export type InlineNode =
@@ -281,10 +330,14 @@ export type InlineNode =
   | StrongInlineNode
   | EmInlineNode
   | DelInlineNode
+  | MarkInlineNode
+  | SupInlineNode
+  | SubInlineNode
   | CodeInlineNode
   | LinkInlineNode
   | ImageInlineNode
   | BreakInlineNode
+  | HtmlInlineNode
   | CursorInlineNode;
 
 /**

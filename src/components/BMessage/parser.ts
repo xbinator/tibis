@@ -3,8 +3,17 @@
  * @description 将 BMessage 内容解析为 BlockNode / InlineNode 消息节点。
  */
 /* eslint-disable no-use-before-define -- parser 使用递归下降转换，函数之间存在自然递归。 */
-import type { BlockNode, HeadingBlockNode, InlineNode, ListItemNode, ParseMessageNodesOptions, ParseMessageNodesResult, TableCellNode } from './types';
-import type { Token, Tokens } from 'marked';
+import type {
+  BlockNode,
+  HeadingBlockNode,
+  InlineNode,
+  ListItemNode,
+  ParseMessageNodesOptions,
+  ParseMessageNodesResult,
+  SafeHtmlInlineTag,
+  TableCellNode
+} from './types';
+import type { Token, TokenizerExtension, Tokens } from 'marked';
 import { unescape } from 'lodash-es';
 import { Marked } from 'marked';
 import { assignImageIndexes, stableHash } from './utils';
@@ -15,7 +24,72 @@ import { assignImageIndexes, stableHash } from './utils';
 const messageMarked = new Marked();
 let entityDecoderElement: HTMLTextAreaElement | null = null;
 
+/**
+ * BMessage 支持的扩展行内 Markdown token 类型。
+ */
+type ExtendedInlineTokenType = 'mark' | 'sub' | 'sup';
+
+/**
+ * BMessage 扩展行内 Markdown token。
+ */
+interface ExtendedInlineToken extends Tokens.Generic {
+  /** 节点类型 */
+  type: ExtendedInlineTokenType;
+  /** 原始文本 */
+  raw: string;
+  /** 去掉定界符后的文本 */
+  text: string;
+  /** 子 token */
+  tokens: Token[];
+}
+
+/**
+ * 安全 HTML 标签解析结果。
+ */
+interface ParsedSafeHtmlInlineTag {
+  /** 标签状态 */
+  kind: 'open' | 'close' | 'selfClosing';
+  /** 标签名 */
+  tag: SafeHtmlInlineTag | 'br';
+  /** 安全标题属性 */
+  title?: string;
+}
+
+/**
+ * 创建行内 Markdown 扩展 tokenizer。
+ * @param name - token 名称
+ * @param pattern - 匹配源码的正则
+ * @param startMarker - 起始标记
+ * @returns Marked tokenizer 扩展
+ */
+function createInlineMarkdownExtension(name: ExtendedInlineTokenType, pattern: RegExp, startMarker: string): TokenizerExtension {
+  return {
+    name,
+    level: 'inline',
+    start(src: string): number | void {
+      const index = src.indexOf(startMarker);
+      return index >= 0 ? index : undefined;
+    },
+    tokenizer(src: string): ExtendedInlineToken | undefined {
+      const match = pattern.exec(src);
+      if (!match) return undefined;
+
+      return {
+        type: name,
+        raw: match[0],
+        text: match[1],
+        tokens: this.lexer.inlineTokens(match[1])
+      };
+    }
+  };
+}
+
 messageMarked.use({
+  extensions: [
+    createInlineMarkdownExtension('mark', /^==(?=\S)([\s\S]*?\S)==(?!=)/, '=='),
+    createInlineMarkdownExtension('sup', /^\^(?!\^)(?=\S)([\s\S]*?\S)\^(?!\^)/, '^'),
+    createInlineMarkdownExtension('sub', /^~(?!~)(?=\S)([\s\S]*?\S)~(?!~)/, '~')
+  ],
   tokenizer: {
     /**
      * 仅将双波浪号识别为删除线，单波浪号保持普通文本。
@@ -92,6 +166,57 @@ function decodeMarkdownText(text: string): string {
 }
 
 /**
+ * 从 HTML 标签源码中读取安全 title 属性。
+ * @param raw - HTML 标签源码
+ * @returns 解码后的 title 属性
+ */
+function extractSafeTitleAttribute(raw: string): string | undefined {
+  const match = /\stitle\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(raw);
+  const title = match?.[1] ?? match?.[2] ?? match?.[3];
+  return title ? decodeMarkdownText(title) : undefined;
+}
+
+/**
+ * 判断标签名是否为安全行内 HTML 标签。
+ * @param tag - 标签名
+ * @returns 是否可渲染为行内 HTML 节点
+ */
+function isSafeHtmlInlineTag(tag: string): tag is SafeHtmlInlineTag {
+  return ['abbr', 'kbd', 'mark', 'small', 'sub', 'sup', 'u'].includes(tag);
+}
+
+/**
+ * 解析白名单内的安全行内 HTML 标签。
+ * @param raw - HTML 标签源码
+ * @returns 标签信息，无法安全解析时返回 null
+ */
+function parseSafeHtmlInlineTag(raw: string): ParsedSafeHtmlInlineTag | null {
+  const trimmedRaw = raw.trim();
+  const closeMatch = /^<\/([a-z][\w-]*)\s*>$/i.exec(trimmedRaw);
+
+  if (closeMatch) {
+    const tag = closeMatch[1].toLowerCase();
+    return isSafeHtmlInlineTag(tag) ? { kind: 'close', tag } : null;
+  }
+
+  if (/^<br\s*\/?>$/i.test(trimmedRaw)) {
+    return { kind: 'selfClosing', tag: 'br' };
+  }
+
+  const openMatch = /^<([a-z][\w-]*)(?:\s+[^>]*)?>$/i.exec(trimmedRaw);
+  if (!openMatch || /\/>$/.test(trimmedRaw)) return null;
+
+  const tag = openMatch[1].toLowerCase();
+  if (!isSafeHtmlInlineTag(tag)) return null;
+
+  return {
+    kind: 'open',
+    tag,
+    title: tag === 'abbr' ? extractSafeTitleAttribute(raw) : undefined
+  };
+}
+
+/**
  * 按浏览器基准地址规范化图片地址，保留无法解析的原值。
  * @param src - Markdown 图片地址
  * @returns 规范化后的图片地址
@@ -132,6 +257,28 @@ function textToInlineNodes(text: string, decodeEntities = false): InlineNode[] {
 }
 
 /**
+ * 合并相邻文本节点，避免 HTML 标签降级为文本时产生碎片。
+ * @param nodes - 行内节点列表
+ * @returns 合并后的行内节点列表
+ */
+function mergeAdjacentTextNodes(nodes: InlineNode[]): InlineNode[] {
+  const mergedNodes: InlineNode[] = [];
+
+  nodes.forEach((node) => {
+    const previousNode = mergedNodes[mergedNodes.length - 1];
+
+    if (previousNode?.type === 'text' && node.type === 'text') {
+      previousNode.text += node.text;
+      return;
+    }
+
+    mergedNodes.push(node);
+  });
+
+  return mergedNodes;
+}
+
+/**
  * 将 Marked 行内 token 转为项目行内节点。
  * @param token - Marked token
  * @param path - 节点路径
@@ -161,6 +308,21 @@ function tokenToInlineNodes(token: Token, path: number[]): InlineNode[] {
     case 'del': {
       const delToken = token as Tokens.Del;
       return [{ type: 'del', children: tokensToInlineNodes(delToken.tokens, path) }];
+    }
+
+    case 'mark': {
+      const markToken = token as ExtendedInlineToken;
+      return [{ type: 'mark', children: tokensToInlineNodes(markToken.tokens, path) }];
+    }
+
+    case 'sup': {
+      const supToken = token as ExtendedInlineToken;
+      return [{ type: 'sup', children: tokensToInlineNodes(supToken.tokens, path) }];
+    }
+
+    case 'sub': {
+      const subToken = token as ExtendedInlineToken;
+      return [{ type: 'sub', children: tokensToInlineNodes(subToken.tokens, path) }];
     }
 
     case 'codespan': {
@@ -196,6 +358,10 @@ function tokenToInlineNodes(token: Token, path: number[]): InlineNode[] {
       return [{ type: 'break' }];
     }
 
+    case 'checkbox': {
+      return [];
+    }
+
     case 'html': {
       return textToInlineNodes(getTokenRaw(token), true);
     }
@@ -215,7 +381,41 @@ function tokenToInlineNodes(token: Token, path: number[]): InlineNode[] {
 function tokensToInlineNodes(tokens: Token[] | undefined, path: number[]): InlineNode[] {
   if (!tokens?.length) return [];
 
-  return tokens.flatMap((token, index) => tokenToInlineNodes(token, [...path, index]));
+  const nodes: InlineNode[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const safeTag = token.type === 'html' ? parseSafeHtmlInlineTag(getTokenRaw(token)) : null;
+
+    if (safeTag?.kind === 'selfClosing' && safeTag.tag === 'br') {
+      nodes.push({ type: 'break' });
+      continue;
+    }
+
+    if (safeTag?.kind === 'open' && safeTag.tag !== 'br') {
+      const closeIndex = tokens.findIndex((candidateToken, candidateIndex) => {
+        if (candidateIndex <= index || candidateToken.type !== 'html') return false;
+
+        const candidateTag = parseSafeHtmlInlineTag(getTokenRaw(candidateToken));
+        return candidateTag?.kind === 'close' && candidateTag.tag === safeTag.tag;
+      });
+
+      if (closeIndex > index) {
+        nodes.push({
+          type: 'htmlInline',
+          tag: safeTag.tag,
+          title: safeTag.title,
+          children: tokensToInlineNodes(tokens.slice(index + 1, closeIndex), [...path, index])
+        });
+        index = closeIndex;
+        continue;
+      }
+    }
+
+    nodes.push(...tokenToInlineNodes(token, [...path, index]));
+  }
+
+  return mergeAdjacentTextNodes(nodes);
 }
 
 /**
@@ -263,6 +463,7 @@ function tokenToBlockNodes(token: Token, path: number[], tailIndex: number): Blo
 
   switch (token.type) {
     case 'space':
+    case 'checkbox':
     case 'def': {
       return [];
     }
@@ -293,12 +494,13 @@ function tokenToBlockNodes(token: Token, path: number[], tailIndex: number): Blo
     }
 
     case 'text': {
+      const textToken = token as Tokens.Text;
       return [
         {
           type: 'paragraph',
           id,
           raw,
-          children: textToInlineNodes((token as Tokens.Text).text, true)
+          children: textToken.tokens?.length ? tokensToInlineNodes(textToken.tokens, path) : textToInlineNodes(textToken.text, true)
         }
       ];
     }

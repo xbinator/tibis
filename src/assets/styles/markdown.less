@@ -56,12 +56,70 @@
     margin: 0.4em 0;
   }
 
+  ul > li {
+    list-style: disc;
+  }
+
+  ol > li {
+    list-style: decimal;
+  }
+
+  ul ul > li {
+    list-style: circle;
+  }
+
+  ul ul ul > li {
+    list-style: square;
+  }
+
+  ol ol > li {
+    list-style: lower-alpha;
+  }
+
+  ol ol ol > li {
+    list-style: lower-roman;
+  }
+
   li {
     margin: 0.2em 0;
+
+    &::marker {
+      color: var(--text-tertiary);
+    }
 
     > p {
       margin: 0.2em 0;
     }
+  }
+
+  li:has(> input[type='checkbox']) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 0.45em;
+    align-items: start;
+    list-style: none;
+  }
+
+  li > input[type='checkbox'] {
+    width: 1em;
+    height: 1em;
+    margin: 0.32em 0 0;
+    accent-color: var(--color-primary);
+  }
+
+  li:has(> input[type='checkbox']) > p {
+    grid-column: 2;
+    margin: 0;
+  }
+
+  li:has(> input[type='checkbox']) > ul,
+  li:has(> input[type='checkbox']) > ol {
+    grid-column: 2;
+  }
+
+  li > ul,
+  li > ol {
+    margin: 0.2em 0;
   }
 
   blockquote {
@@ -94,6 +152,32 @@
       background: transparent;
       border-radius: 0;
     }
+  }
+
+  mark {
+    padding: 0.05em 0.2em;
+    color: inherit;
+    background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+    border-radius: 3px;
+  }
+
+  kbd {
+    display: inline-block;
+    padding: 0 0.35em;
+    font-family: 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    vertical-align: 0.05em;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+  }
+
+  abbr[title] {
+    text-decoration: underline dotted;
+    cursor: help;
   }
 
   a {

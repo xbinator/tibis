@@ -17,6 +17,18 @@
     <InlineNode v-for="(child, index) in node.children" :key="index" :node="child" />
   </del>
 
+  <mark v-else-if="node.type === 'mark'">
+    <InlineNode v-for="(child, index) in node.children" :key="index" :node="child" />
+  </mark>
+
+  <sup v-else-if="node.type === 'sup'">
+    <InlineNode v-for="(child, index) in node.children" :key="index" :node="child" />
+  </sup>
+
+  <sub v-else-if="node.type === 'sub'">
+    <InlineNode v-for="(child, index) in node.children" :key="index" :node="child" />
+  </sub>
+
   <code v-else-if="node.type === 'code'">{{ node.text }}</code>
 
   <a v-else-if="node.type === 'link'" :href="node.href" :title="node.title || undefined" @click="handleLinkClick">
@@ -38,6 +50,10 @@
   </span>
 
   <br v-else-if="node.type === 'break'" />
+
+  <component :is="node.tag" v-else-if="node.type === 'htmlInline'" :title="node.title">
+    <InlineNode v-for="(child, index) in node.children" :key="index" :node="child" />
+  </component>
 
   <span v-else-if="node.type === 'cursor'" :class="bem('cursor')" aria-hidden="true"></span>
 </template>
