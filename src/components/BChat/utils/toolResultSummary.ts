@@ -350,6 +350,30 @@ function summarizeReadFile(data: Record<string, unknown>): ToolResultSummary {
 }
 
 /**
+ * 格式化 Drawing 工具结果。
+ * @param data - 工具结果数据
+ * @returns Drawing 工具摘要
+ */
+function summarizeDrawing(data: Record<string, unknown>): ToolResultSummary {
+  const drawingData = data.data;
+  const elements = typeof drawingData === 'object' && drawingData !== null && 'elements' in drawingData ? drawingData.elements : null;
+  const appliedOperations = typeof data.appliedOperations === 'number' ? data.appliedOperations : null;
+  const tags: ToolSummaryTag[] = [];
+
+  if (Array.isArray(elements)) {
+    tags.push({ label: '元素', value: `${elements.length}` });
+  }
+  if (appliedOperations !== null) {
+    tags.push({ label: '操作', value: `${appliedOperations}` });
+  }
+
+  return {
+    text: appliedOperations !== null ? '已操作画板' : '已处理画板',
+    tags
+  };
+}
+
+/**
  * 判断网页快照中是否存在截断字段。
  * @param value - 网页快照截断信息
  * @returns 任一字段被截断时返回 true
@@ -476,6 +500,9 @@ const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   write_file: (data) => summarizeWriteFile(data as Record<string, unknown>),
   read_file: (data) => summarizeReadFile(data as Record<string, unknown>),
   read_current_document: (data) => summarizeReadFile(data as Record<string, unknown>),
+  read_current_drawing: (data) => summarizeDrawing(data as Record<string, unknown>),
+  apply_drawing_operations: (data) => summarizeDrawing(data as Record<string, unknown>),
+  update_current_drawing: (data) => summarizeDrawing(data as Record<string, unknown>),
   read_current_webpage: (data) => summarizeReadCurrentWebpage(data as Record<string, unknown>),
   edit_file: (data) => summarizeEditFile(data as Record<string, unknown>),
   edit_memory: (data) => summarizeEditMemory(data as Record<string, unknown>),

@@ -93,8 +93,18 @@ import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { throttle } from 'lodash-es';
-import { createBuiltinTools, isBuiltinToolName, READ_CURRENT_WEBPAGE_TOOL_NAME, READ_DIRECTORY_TOOL_NAME, SKILL_TOOL_NAME } from '@/ai/tools/builtin';
+import {
+  createBuiltinTools,
+  isBuiltinToolName,
+  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
+  READ_CURRENT_DRAWING_TOOL_NAME,
+  READ_CURRENT_WEBPAGE_TOOL_NAME,
+  READ_DIRECTORY_TOOL_NAME,
+  SKILL_TOOL_NAME,
+  UPDATE_CURRENT_DRAWING_TOOL_NAME
+} from '@/ai/tools/builtin';
 import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
+import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import BModelSelect from '@/components/BModelSelect/index.vue';
@@ -394,6 +404,7 @@ const allBuiltinTools = createBuiltinTools({
   getEditorContext: (documentId: string) => {
     return editorToolContextRegistry.getContext(documentId);
   },
+  getDrawingContext: () => drawingToolContextRegistry.getCurrentContext(),
   getWebviewContext: () => webviewToolContextRegistry.getCurrentContext(),
   openDraft,
   /**
@@ -434,6 +445,7 @@ const allBuiltinTools = createBuiltinTools({
  */
 function getActiveTools(): AIToolExecutor[] {
   const hasActiveEditor = Boolean(editorToolContextRegistry.getCurrentContext());
+  const hasActiveDrawing = Boolean(drawingToolContextRegistry.getCurrentContext());
   const hasActiveWebview = Boolean(webviewToolContextRegistry.getCurrentContext());
   const hasWorkspace = Boolean(workspaceRoot.value);
 
@@ -450,6 +462,9 @@ function getActiveTools(): AIToolExecutor[] {
   return [...allBuiltinTools, ...dynamicTools].filter((tool) => {
     if (!isBuiltinToolName(tool.definition.name)) return false;
     if (tool.definition.name === 'read_current_document' && !hasActiveEditor) return false;
+    if (tool.definition.name === APPLY_DRAWING_OPERATIONS_TOOL_NAME && !hasActiveDrawing) return false;
+    if (tool.definition.name === READ_CURRENT_DRAWING_TOOL_NAME && !hasActiveDrawing) return false;
+    if (tool.definition.name === UPDATE_CURRENT_DRAWING_TOOL_NAME && !hasActiveDrawing) return false;
     if (tool.definition.name === READ_CURRENT_WEBPAGE_TOOL_NAME && !hasActiveWebview) return false;
     if (tool.definition.name === READ_DIRECTORY_TOOL_NAME && !hasWorkspace) return false;
     return true;

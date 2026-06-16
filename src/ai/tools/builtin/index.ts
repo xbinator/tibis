@@ -7,6 +7,7 @@ import type { AIToolExecutor } from 'types/ai';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
 import { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME, createBuiltinDocumentWriteTool, createBuiltinReadTools } from './DocumentTool';
+import { APPLY_DRAWING_OPERATIONS_TOOL_NAME, READ_CURRENT_DRAWING_TOOL_NAME, UPDATE_CURRENT_DRAWING_TOOL_NAME, createBuiltinDrawingTools } from './DrawingTool';
 import { GET_CURRENT_TIME_TOOL_NAME, createBuiltinEnvironmentTools } from './EnvironmentTool';
 import { EDIT_FILE_TOOL_NAME, createBuiltinEditFileTool } from './FileEditTool';
 import { createBuiltinReadDirectoryTool, createBuiltinReadFileTool, READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool';
@@ -33,6 +34,7 @@ import { createBuiltinWebpageTool, READ_CURRENT_WEBPAGE_TOOL_NAME, type CreateBu
 
 // 重新导出工具名称
 export { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool';
+export { APPLY_DRAWING_OPERATIONS_TOOL_NAME, READ_CURRENT_DRAWING_TOOL_NAME, UPDATE_CURRENT_DRAWING_TOOL_NAME } from './DrawingTool';
 export { OPEN_RESOURCE_TOOL_NAME } from './OpenResourceTool';
 export { GET_CURRENT_TIME_TOOL_NAME } from './EnvironmentTool';
 export { EDIT_FILE_TOOL_NAME } from './FileEditTool';
@@ -81,6 +83,7 @@ export function isSdkManagedToolName(toolName: string): boolean {
  */
 export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
   READ_CURRENT_DOCUMENT_TOOL_NAME,
+  READ_CURRENT_DRAWING_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
   QUESTION_TOOL_NAME,
@@ -96,6 +99,8 @@ export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
  */
 export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [
   CREATE_DOCUMENT_TOOL_NAME,
+  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
+  UPDATE_CURRENT_DRAWING_TOOL_NAME,
   EDIT_FILE_TOOL_NAME,
   WRITE_FILE_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
@@ -184,6 +189,8 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions, CreateBuilti
   openInWebview?: (url: string) => void;
   /** 在系统浏览器中打开 URL，用于 open_resource 工具 */
   openExternal?: (url: string) => void;
+  /** 获取当前活动 Drawing 上下文 */
+  getDrawingContext?: Parameters<typeof createBuiltinDrawingTools>[0]['getDrawingContext'];
 }
 
 /**
@@ -198,9 +205,14 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const environmentTools = createBuiltinEnvironmentTools();
   // 创建日志只读工具
   const logTools = createBuiltinLogTools();
+  // 创建 Drawing 工具
+  const drawingTools = createBuiltinDrawingTools({
+    getDrawingContext: options.getDrawingContext
+  });
   // 先汇总全部只读工具，再通过共享清单筛选默认暴露项。
   const allReadonlyTools: AIToolExecutor[] = [
     readTools.readCurrentDocument,
+    drawingTools.readCurrentDrawing,
     environmentTools.getCurrentTime,
     createQuestionTool({
       getPendingQuestion: options.getPendingQuestion ?? (() => null),
@@ -256,6 +268,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       ...(mcpReadTool ? [mcpReadTool] : []),
       createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) }),
       documentWriteTools.createDocument,
+      drawingTools.applyDrawingOperations,
+      drawingTools.updateCurrentDrawing,
       createBuiltinEditMemoryTool()
     ];
   }
@@ -286,6 +300,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   // 先汇总默认文件写工具，再通过共享清单筛选默认暴露项。
   const allDefaultWritableTools: AIToolExecutor[] = [
     documentWriteTools.createDocument,
+    drawingTools.applyDrawingOperations,
+    drawingTools.updateCurrentDrawing,
     editFileTool,
     writeFileTool,
     settingsTools.updateSettings,
