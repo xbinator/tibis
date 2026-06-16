@@ -2,7 +2,8 @@
  * @file useChatScroll.ts
  * @description 聊天面板滚动状态和历史加载 hook，基于 useScroller 提供反向滚动容器的业务逻辑
  */
-import { nextTick, ref, watch, useTemplateRef } from 'vue';
+import type { Ref } from 'vue';
+import { nextTick, onUnmounted, ref, watch, useTemplateRef } from 'vue';
 import { useScroller } from '@/hooks/useScroller';
 import { scroll } from '@/utils/scroll';
 
@@ -11,16 +12,62 @@ export interface UseChatScrollOptions {
   historyLoadThreshold?: number;
   /** 回到底部按钮可见阈值 */
   backBottomHeight?: number;
+  /** 回到底部按钮停止滚动后隐藏延迟 */
+  backBottomIdleHideDelay?: number;
   /** 加载历史回调 */
   onLoadHistory?: () => Promise<void> | void;
 }
 
-export function useChatScroll(scrollOptions: UseChatScrollOptions) {
+/**
+ * 聊天滚动状态返回值
+ */
+interface UseChatScrollReturn {
+  /** 回到底部按钮是否显示 */
+  isBackBottom: Ref<boolean>;
+  /** 滚动到底部 */
+  scrollToBottom: (options?: { behavior?: 'smooth' | 'auto' }) => void;
+  /** 带滚动锚点执行内容更新 */
+  withScrollAnchor: (callback: () => Promise<void> | void) => Promise<void>;
+}
+
+/**
+ * 创建聊天滚动状态。
+ * @param scrollOptions - 滚动配置
+ * @returns 聊天滚动状态与操作方法
+ */
+export function useChatScroll(scrollOptions: UseChatScrollOptions): UseChatScrollReturn {
   const containerRef = useTemplateRef<HTMLElement>('container');
-  const { historyLoadThreshold = 160, backBottomHeight = 300, onLoadHistory } = scrollOptions;
+  const { historyLoadThreshold = 160, backBottomHeight = 300, backBottomIdleHideDelay = 1200, onLoadHistory } = scrollOptions;
 
   const scroller = useScroller(containerRef);
   const isBackBottom = ref(false);
+  let backBottomHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * 清理回到底部按钮隐藏定时器。
+   */
+  function clearBackBottomHideTimer(): void {
+    if (backBottomHideTimer) {
+      clearTimeout(backBottomHideTimer);
+      backBottomHideTimer = null;
+    }
+  }
+
+  /**
+   * 重置回到底部按钮停止滚动后的隐藏定时器。
+   */
+  function resetBackBottomHideTimer(): void {
+    clearBackBottomHideTimer();
+
+    if (backBottomIdleHideDelay <= 0) {
+      return;
+    }
+
+    backBottomHideTimer = setTimeout(() => {
+      isBackBottom.value = false;
+      backBottomHideTimer = null;
+    }, backBottomIdleHideDelay);
+  }
 
   /**
    * 检查是否接近历史边缘
@@ -45,7 +92,13 @@ export function useChatScroll(scrollOptions: UseChatScrollOptions) {
     () => scroller.scrollTop,
     (currentTop) => {
       // 回到底部按钮可见性
-      isBackBottom.value = Math.abs(currentTop) > backBottomHeight;
+      if (Math.abs(currentTop) > backBottomHeight) {
+        isBackBottom.value = true;
+        resetBackBottomHideTimer();
+      } else {
+        isBackBottom.value = false;
+        clearBackBottomHideTimer();
+      }
 
       // 历史加载检测
       if (isNearHistoryEdge()) {
@@ -53,6 +106,10 @@ export function useChatScroll(scrollOptions: UseChatScrollOptions) {
       }
     }
   );
+
+  onUnmounted(() => {
+    clearBackBottomHideTimer();
+  });
 
   /**
    * 滚动到底部
