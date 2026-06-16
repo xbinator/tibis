@@ -4,11 +4,18 @@
  * @vitest-environment jsdom
  */
 import { nextTick } from 'vue';
-import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BMessage from '@/components/BMessage/index.vue';
 
 const previewImageMock = vi.hoisted(() => vi.fn());
+const nativeMocks = vi.hoisted(() => ({
+  copyImageToClipboard: vi.fn()
+}));
+const messageMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn()
+}));
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
@@ -22,7 +29,23 @@ vi.mock('@/hooks/useImagePreview', () => ({
   })
 }));
 
+vi.mock('@/shared/platform/native', () => ({
+  native: nativeMocks
+}));
+
+vi.mock('ant-design-vue', () => ({
+  message: messageMocks
+}));
+
 describe('BMessage image viewer', () => {
+  beforeEach((): void => {
+    previewImageMock.mockClear();
+    nativeMocks.copyImageToClipboard.mockReset();
+    messageMocks.success.mockClear();
+    messageMocks.error.mockClear();
+    vi.unstubAllGlobals();
+  });
+
   it('opens markdown images through previewImage without selecting text', async (): Promise<void> => {
     const wrapper = mount(BMessage, {
       props: {
@@ -77,5 +100,67 @@ describe('BMessage image viewer', () => {
       startPosition: 0,
       showCarousel: false
     });
+  });
+
+  it('copies markdown image binary to clipboard without opening preview', async (): Promise<void> => {
+    const imageBuffer = new ArrayBuffer(4);
+    const fetchResponse = {
+      ok: true,
+      arrayBuffer: async (): Promise<ArrayBuffer> => imageBuffer
+    } as unknown as Response;
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(fetchResponse);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '![first](https://example.com/first.png)'
+      }
+    });
+
+    await nextTick();
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    const preventDefaultSpy = vi.spyOn(clickEvent, 'preventDefault');
+    const stopPropagationSpy = vi.spyOn(clickEvent, 'stopPropagation');
+    wrapper.find('button[aria-label="复制图片"]').element.dispatchEvent(clickEvent);
+
+    await flushPromises();
+
+    expect(preventDefaultSpy).toHaveBeenCalledOnce();
+    expect(stopPropagationSpy).toHaveBeenCalledOnce();
+    expect(previewImageMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/first.png');
+    expect(nativeMocks.copyImageToClipboard).toHaveBeenCalledWith(imageBuffer);
+    expect(messageMocks.success).toHaveBeenCalledWith('图片已复制');
+  });
+
+  it('shows an error when copying markdown image binary fails', async (): Promise<void> => {
+    const copyError = new Error('系统剪贴板不可用');
+    const fetchResponse = {
+      ok: true,
+      arrayBuffer: async (): Promise<ArrayBuffer> => new ArrayBuffer(4)
+    } as unknown as Response;
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(fetchResponse);
+
+    vi.stubGlobal('fetch', fetchMock);
+    nativeMocks.copyImageToClipboard.mockRejectedValue(copyError);
+
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '![first](https://example.com/first.png)'
+      }
+    });
+
+    await nextTick();
+
+    await wrapper.find('button[aria-label="复制图片"]').trigger('click');
+    await flushPromises();
+
+    expect(previewImageMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/first.png');
+    expect(messageMocks.error).toHaveBeenCalledWith('系统剪贴板不可用');
   });
 });
