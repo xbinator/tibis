@@ -87,6 +87,8 @@ watch(
 <style scoped lang="less">
 .config-section {
   padding: 20px;
+  container-name: api-config;
+  container-type: inline-size;
   background: var(--bg-secondary);
   border-radius: 10px;
 }
@@ -148,5 +150,27 @@ watch(
 
 .model-select {
   min-width: 200px;
+}
+
+@container api-config (max-width: 520px) {
+  .connection-test {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .test-info {
+    flex: none;
+  }
+
+  .test-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .model-select {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
 </style>
