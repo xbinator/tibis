@@ -87,6 +87,41 @@ describe('parseMessageNodes', () => {
     expect(blockMath.text).toBe('a^2+b^2=c^2');
   });
 
+  it('marks fenced code blocks as incomplete until their closing fence arrives', (): void => {
+    const streaming = parseMessageNodes({
+      content: '```mermaid\ngraph TD\n  A --> B',
+      mode: 'markdown',
+      loading: true
+    });
+    const completed = parseMessageNodes({
+      content: '```mermaid\ngraph TD\n  A --> B\n```',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const streamingCode = expectBlockNode(streaming.blocks[0], 'code');
+    const completedCode = expectBlockNode(completed.blocks[0], 'code');
+
+    expect(streamingCode.complete).toBe(false);
+    expect(completedCode.complete).toBe(true);
+  });
+
+  it('keeps incomplete math delimiters as text while streaming', (): void => {
+    const result = parseMessageNodes({
+      content: 'Inline $E=mc^2 and block:\n\n$$\na^2+b^2=c^2',
+      mode: 'markdown',
+      loading: true
+    });
+
+    const firstParagraph = expectBlockNode(result.blocks[0], 'paragraph');
+    const secondParagraph = expectBlockNode(result.blocks[1], 'paragraph');
+
+    expect(firstParagraph.children.some((node) => node.type === 'math')).toBe(false);
+    expect(secondParagraph.children.some((node) => node.type === 'math')).toBe(false);
+    expect(firstParagraph.children).toMatchObject([{ type: 'text', text: 'Inline $E=mc^2 and block:' }]);
+    expect(secondParagraph.children[0]).toMatchObject({ type: 'text', text: '$$\na^2+b^2=c^2' });
+  });
+
   it('preserves inline formatting inside tight list item text blocks', (): void => {
     const result = parseMessageNodes({
       content: '- **粗体**\n- *斜体*\n- ~~删除线~~\n- ==高亮==\n- `行内代码`\n- X^2^ and H~2~O',

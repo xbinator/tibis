@@ -109,6 +109,8 @@ export interface CodeBlockNode extends MessageNodeBase {
   lang?: string;
   /** 代码内容 */
   text: string;
+  /** 围栏代码块是否已闭合，非围栏代码块视为已完成 */
+  complete: boolean;
 }
 
 /**

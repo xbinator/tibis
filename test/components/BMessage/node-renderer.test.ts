@@ -8,6 +8,11 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import BMessage from '@/components/BMessage/index.vue';
 
+/**
+ * BMessage 组件公开属性类型。
+ */
+type BMessagePublicProps = InstanceType<typeof BMessage>['$props'];
+
 const navigateLinkMock = vi.hoisted(() =>
   vi.fn((event: MouseEvent) => {
     event.preventDefault();
@@ -283,6 +288,54 @@ describe('BMessage node renderer', () => {
       successMessage: '代码已复制',
       trim: false
     });
+  });
+
+  it('renders streaming mermaid source as code until the closing fence arrives', async (): Promise<void> => {
+    mermaidMock.render.mockClear();
+    mermaidMock.render.mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' });
+
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        loading: true,
+        content: '```mermaid\ngraph TD\n  A --> B'
+      }
+    });
+
+    await waitAnimationFrame();
+    await flushPromises();
+
+    expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(false);
+    expect(wrapper.find('.b-message__code-block code').text()).toContain('graph TD');
+    expect(mermaidMock.render).not.toHaveBeenCalled();
+
+    await wrapper.setProps({
+      loading: false,
+      content: '```mermaid\ngraph TD\n  A --> B\n```'
+    } as Partial<BMessagePublicProps>);
+    await nextTick();
+    await flushPromises();
+
+    expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^b-message-mermaid-/), 'graph TD\n  A --> B');
+  });
+
+  it('renders incomplete math delimiters as text instead of KaTeX while streaming', async (): Promise<void> => {
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        loading: true,
+        content: 'Inline $E=mc^2 and block:\n\n$$\na^2+b^2=c^2'
+      }
+    });
+
+    await waitAnimationFrame();
+
+    expect(wrapper.find('.b-message__math-inline .katex').exists()).toBe(false);
+    expect(wrapper.find('.b-message__math-block .katex-display').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Inline $E=mc^2 and block:');
+    expect(wrapper.text()).toContain('$$\na^2+b^2=c^2');
   });
 
   it('keeps inline code without a copy control', async (): Promise<void> => {

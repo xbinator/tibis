@@ -173,7 +173,7 @@ const highlightLanguage = computed(() => {
 const codeClassName = computed(() => (rawLanguage.value ? `language-${rawLanguage.value}` : undefined));
 const isMermaidLanguage = computed(() => rawLanguage.value === 'mermaid');
 const hasCode = computed(() => props.node.text.trim().length > 0);
-const isMermaidPreviewVisible = computed(() => isMermaidLanguage.value && hasCode.value);
+const isMermaidPreviewVisible = computed(() => isMermaidLanguage.value && hasCode.value && props.node.complete);
 const highlightedNodes = computed<CodeHighlightRenderNode[]>(() => {
   if (!highlightLanguage.value) {
     return textToHighlightNodes(props.node.text);

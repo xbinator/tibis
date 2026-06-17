@@ -56,6 +56,18 @@ interface ExtendedMathBlockToken extends Tokens.Generic {
 }
 
 /**
+ * BMessage 未闭合数学公式源码 token。
+ */
+interface PendingMathToken extends Tokens.Generic {
+  /** 节点类型 */
+  type: 'pendingMath' | 'pendingMathBlock';
+  /** 原始文本 */
+  raw: string;
+  /** 公式源码 */
+  text: string;
+}
+
+/**
  * 安全 HTML 标签解析结果。
  */
 interface ParsedSafeHtmlInlineTag {
@@ -123,6 +135,33 @@ function createInlineMathExtension(): TokenizerExtension {
 }
 
 /**
+ * 创建未闭合行内数学公式 tokenizer，流式过程中保留源码文本。
+ * @returns Marked tokenizer 扩展
+ */
+function createPendingInlineMathExtension(): TokenizerExtension {
+  return {
+    name: 'pendingMath',
+    level: 'inline',
+    start(src: string): number | void {
+      const index = src.indexOf('$');
+      return index >= 0 ? index : undefined;
+    },
+    tokenizer(src: string): PendingMathToken | undefined {
+      if (/^\$(?!\$|\s)([\s\S]*?\S)\$(?!\$)/.test(src)) return undefined;
+
+      const match = /^\$(?!\$|\s)[\s\S]*$/.exec(src);
+      if (!match) return undefined;
+
+      return {
+        type: 'pendingMath',
+        raw: match[0],
+        text: match[0]
+      };
+    }
+  };
+}
+
+/**
  * 创建块级数学公式 tokenizer。
  * @returns Marked tokenizer 扩展
  */
@@ -147,10 +186,39 @@ function createBlockMathExtension(): TokenizerExtension {
   };
 }
 
+/**
+ * 创建未闭合块级数学公式 tokenizer，避免流式源码被行内 Markdown 改写。
+ * @returns Marked tokenizer 扩展
+ */
+function createPendingBlockMathExtension(): TokenizerExtension {
+  return {
+    name: 'pendingMathBlock',
+    level: 'block',
+    start(src: string): number | void {
+      const index = src.indexOf('$$');
+      return index >= 0 ? index : undefined;
+    },
+    tokenizer(src: string): PendingMathToken | undefined {
+      if (/^\$\$[ \t]*\n?([\s\S]+?)\n?\$\$(?:\n+|$)/.test(src)) return undefined;
+
+      const match = /^\$\$[ \t]*\n?[\s\S]*$/.exec(src);
+      if (!match) return undefined;
+
+      return {
+        type: 'pendingMathBlock',
+        raw: match[0],
+        text: match[0].trimEnd()
+      };
+    }
+  };
+}
+
 messageMarked.use({
   extensions: [
     createBlockMathExtension(),
+    createPendingBlockMathExtension(),
     createInlineMathExtension(),
+    createPendingInlineMathExtension(),
     createInlineMarkdownExtension('mark', /^==(?=\S)([\s\S]*?\S)==(?!=)/, '=='),
     createInlineMarkdownExtension('sup', /^\^(?!\^)(?=\S)([\s\S]*?\S)\^(?!\^)/, '^'),
     createInlineMarkdownExtension('sub', /^~(?!~)(?=\S)([\s\S]*?\S)~(?!~)/, '~')
@@ -213,6 +281,22 @@ function getTokenRaw(token: Token): string {
 function getTokenText(token: Token): string {
   if ('text' in token && typeof token.text === 'string') return token.text;
   return getTokenRaw(token);
+}
+
+/**
+ * 判断 Marked 代码 token 对应的围栏是否已经闭合。
+ * @param raw - 代码 token 原始源码
+ * @returns 围栏已闭合或不是围栏代码块时返回 true
+ */
+function isCodeFenceComplete(raw: string): boolean {
+  const openingMatch = /^ {0,3}(`{3,}|~{3,})[^\n]*(?:\n|$)/.exec(raw);
+  if (!openingMatch) return true;
+
+  const openingFence = openingMatch[1];
+  const fenceChar = openingFence[0];
+  const closingFencePattern = new RegExp(`^ {0,3}${fenceChar}{${openingFence.length},}[ \\t]*$`, 'm');
+
+  return closingFencePattern.test(raw.slice(openingMatch[0].length));
 }
 
 /**
@@ -396,6 +480,10 @@ function tokenToInlineNodes(token: Token, path: number[]): InlineNode[] {
 
     case 'math': {
       return [{ type: 'math', text: (token as ExtendedInlineToken).text }];
+    }
+
+    case 'pendingMath': {
+      return textToInlineNodes((token as PendingMathToken).text, true);
     }
 
     case 'link': {
@@ -619,7 +707,8 @@ function tokenToBlockNodes(token: Token, path: number[], tailIndex: number): Blo
           id,
           raw,
           lang: codeToken.lang,
-          text: codeToken.text
+          text: codeToken.text,
+          complete: isCodeFenceComplete(raw)
         }
       ];
     }
@@ -632,6 +721,18 @@ function tokenToBlockNodes(token: Token, path: number[], tailIndex: number): Blo
           id,
           raw,
           text: mathToken.text
+        }
+      ];
+    }
+
+    case 'pendingMathBlock': {
+      const pendingMathToken = token as PendingMathToken;
+      return [
+        {
+          type: 'paragraph',
+          id,
+          raw,
+          children: textToInlineNodes(pendingMathToken.text, true)
         }
       ];
     }
