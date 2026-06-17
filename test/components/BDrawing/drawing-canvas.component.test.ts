@@ -3133,6 +3133,9 @@ describe('BDrawing', (): void => {
     const endpoints = findDrawingConnectorEndpoints(wrapper);
     await dispatchPointerEvent(endpoints[1].element, 'pointerdown', { clientX: 300, clientY: 200 });
     await dispatchPointerEvent(window, 'pointermove', { clientX: 360, clientY: 260 });
+
+    expect(findDrawingConnectorPath(wrapper).attributes('d')).toBe('M -300 -200 L -40 -40');
+
     await dispatchPointerEvent(window, 'pointerup', { clientX: 360, clientY: 260 });
 
     expect(findDrawingConnectorPath(wrapper).attributes('d')).toBe('M -300 -200 L -40 -40');

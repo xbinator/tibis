@@ -142,7 +142,8 @@ import {
   isDrawingConnectorElementEndpoint,
   isDrawingConnectorElement,
   projectClientPointToDrawingBoard,
-  queryDrawingElementTarget
+  queryDrawingElementTarget,
+  resolveDrawingConnectorEndpointPoints
 } from './utils/drawingGeometry';
 
 /**
@@ -573,6 +574,35 @@ function createDirectDragTransform(position: DrawingPoint, session: DirectElemen
 }
 
 /**
+ * 将连接线几何同步到 SVG DOM。
+ * @param connector - 待同步连接线
+ * @param overrides - 预览几何覆盖
+ */
+function syncConnectorPreviewDom(connector: DrawingConnectorElement, overrides: DrawingConnectorPathElementOverride[] = []): void {
+  const pathData = createDrawingConnectorPath(board.state.value.elements, connector, overrides);
+  const markerStartPath = createDrawingConnectorMarkerPath(board.state.value.elements, connector, 'start', overrides);
+  const markerEndPath = createDrawingConnectorMarkerPath(board.state.value.elements, connector, 'end', overrides);
+  const endpointPoints = resolveDrawingConnectorEndpointPoints(board.state.value.elements, connector, overrides);
+  const targets = getElementTargetsById(connector.id);
+  targets.forEach((target: Element): void => {
+    const paths = target.querySelectorAll('.b-drawing-connector__line, .b-drawing-connector__hit');
+    paths.forEach((path: Element): void => {
+      path.setAttribute('d', pathData);
+    });
+    target.querySelector('.b-drawing-connector__marker-arrow--start')?.setAttribute('d', markerStartPath);
+    target.querySelector('.b-drawing-connector__marker-arrow--end')?.setAttribute('d', markerEndPath);
+
+    const endpoints = target.querySelectorAll('.b-drawing-connector__endpoint');
+    if (endpointPoints && endpoints.length >= 2) {
+      endpoints[0].setAttribute('cx', String(endpointPoints.source.x));
+      endpoints[0].setAttribute('cy', String(endpointPoints.source.y));
+      endpoints[1].setAttribute('cx', String(endpointPoints.target.x));
+      endpoints[1].setAttribute('cy', String(endpointPoints.target.y));
+    }
+  });
+}
+
+/**
  * 更新关联连接线的拖拽预览路径。
  * @param elementId - 正在预览变更的元素 ID
  * @param overrides - 预览几何覆盖
@@ -589,18 +619,7 @@ function updateConnectedConnectorPreviews(elementId: string, overrides: DrawingC
       continue;
     }
 
-    const pathData = createDrawingConnectorPath(board.state.value.elements, connector, overrides);
-    const markerStartPath = createDrawingConnectorMarkerPath(board.state.value.elements, connector, 'start', overrides);
-    const markerEndPath = createDrawingConnectorMarkerPath(board.state.value.elements, connector, 'end', overrides);
-    const targets = getElementTargetsById(connector.id);
-    targets.forEach((target: Element): void => {
-      const paths = target.querySelectorAll('.b-drawing-connector__line, .b-drawing-connector__hit');
-      paths.forEach((path: Element): void => {
-        path.setAttribute('d', pathData);
-      });
-      target.querySelector('.b-drawing-connector__marker-arrow--start')?.setAttribute('d', markerStartPath);
-      target.querySelector('.b-drawing-connector__marker-arrow--end')?.setAttribute('d', markerEndPath);
-    });
+    syncConnectorPreviewDom(connector, overrides);
   }
 }
 
@@ -1111,6 +1130,47 @@ function handleConnectorEndpointDragEnd(event: PointerEvent): void {
 }
 
 /**
+ * 创建端点拖拽预览连接线。
+ * @param session - 端点拖拽会话
+ * @param endpoint - 预览端点
+ * @returns 预览连接线
+ */
+function createConnectorEndpointPreview(session: ConnectorEndpointDragSession, endpoint: DrawingConnectorEndpoint): DrawingConnectorElement | null {
+  const element = getElementById(session.connectorId);
+  if (!element || !isDrawingConnectorElement(element)) {
+    return null;
+  }
+
+  return {
+    ...element,
+    source: session.placement === 'source' ? endpoint : element.source,
+    target: session.placement === 'target' ? endpoint : element.target
+  };
+}
+
+/**
+ * 处理连接线端点拖拽移动。
+ * @param event - 指针事件
+ */
+function handleConnectorEndpointDragMove(event: PointerEvent): void {
+  if (!connectorEndpointDragSession) {
+    return;
+  }
+
+  const endpoint = createConnectorEndpointFromPointer(event);
+  if (!endpoint) {
+    return;
+  }
+
+  const connector = createConnectorEndpointPreview(connectorEndpointDragSession, endpoint);
+  if (!connector) {
+    return;
+  }
+
+  syncConnectorPreviewDom(connector);
+}
+
+/**
  * 开始拖拽连接线端点。
  * @param id - 连接线 ID
  * @param placement - 端点位置
@@ -1127,6 +1187,7 @@ function handleConnectorEndpointPointerdown(id: string, placement: DrawingConnec
     abortController
   };
 
+  window.addEventListener('pointermove', handleConnectorEndpointDragMove, { signal: abortController.signal });
   window.addEventListener('pointerup', handleConnectorEndpointDragEnd, { signal: abortController.signal });
   window.addEventListener('pointercancel', cancelConnectorEndpointDrag, { signal: abortController.signal });
 }
