@@ -55,9 +55,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { NodeViewContent, NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3';
-import { useClipboard, useDebounceFn } from '@vueuse/core';
+import { useDebounceFn } from '@vueuse/core';
 import { message } from 'ant-design-vue';
 import BSelect from '@/components/BSelect/index.vue';
+import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
 import { createMermaidRenderId } from '../utils/mermaidRenderId';
 
@@ -164,7 +165,7 @@ async function initMermaid(): Promise<typeof import('mermaid').default> {
 
 const props = defineProps(nodeViewProps);
 
-const { copy } = useClipboard();
+const { clipboard, copyImage } = useClipboard();
 
 // UI 状态
 const copyState = ref<CopyState>('复制');
@@ -283,6 +284,20 @@ const debouncedRenderMermaid = useDebounceFn(renderMermaid, MERMAID_DEBOUNCE_DEL
 
 // ─── 复制 ────────────────────────────────────────────────────────────────────
 
+/**
+ * 获取当前 Mermaid 预览 SVG 元素。
+ * @returns Mermaid 预览 SVG 元素
+ */
+function getMermaidPreviewSvg(): SVGSVGElement {
+  const svgElement = mermaidPreviewRef.value?.querySelector<SVGSVGElement>('svg');
+
+  if (!svgElement) {
+    throw new Error('暂无可复制的预览图');
+  }
+
+  return svgElement;
+}
+
 function scheduleResetCopyState(): void {
   if (resetTimer !== null) window.clearTimeout(resetTimer);
 
@@ -298,10 +313,32 @@ async function handleCopy(): Promise<void> {
   // 提前退出：无内容不处理
   if (!text) return;
 
+  if (isPreviewVisible.value && isMermaidLanguage.value) {
+    try {
+      const copied = await copyImage(getMermaidPreviewSvg(), {
+        successMessage: '复制成功',
+        errorMessage: '复制图片失败'
+      });
+
+      copyState.value = copied ? '已复制' : '复制失败';
+    } catch (error: unknown) {
+      copyState.value = '复制失败';
+      message.error(error instanceof Error ? error.message : '复制图片失败');
+    } finally {
+      scheduleResetCopyState();
+    }
+
+    return;
+  }
+
   try {
-    await copy(text);
-    copyState.value = '已复制';
-    message.success('复制成功');
+    const copied = await clipboard(text, {
+      successMessage: '复制成功',
+      trim: false
+    });
+
+    copyState.value = copied ? '已复制' : '复制失败';
+    if (!copied) message.error('复制失败');
   } catch {
     copyState.value = '复制失败';
     message.error('复制失败');

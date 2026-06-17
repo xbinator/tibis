@@ -6,6 +6,7 @@ import { useClipboard as _useClipboard } from '@vueuse/core';
 import { message } from 'ant-design-vue';
 import { native } from '@/shared/platform/native';
 import { asyncTo } from '@/utils/asyncTo';
+import { downloadImageArrayBuffer, svgElementToPngArrayBuffer } from '@/utils/image';
 
 /**
  * 复制反馈配置。
@@ -28,15 +29,18 @@ interface CopyTextOptions {
 }
 
 /**
+ * 图片复制来源。
+ */
+type CopyImageSource = ArrayBuffer | string | SVGSVGElement;
+
+/**
  * 剪贴板操作集合。
  */
 interface ClipboardActions {
   /** 复制文本到系统剪贴板 */
   clipboard: (content: string, options?: CopyTextOptions) => Promise<boolean>;
-  /** 复制图片二进制到系统剪贴板 */
-  copyImage: (content: ArrayBuffer, options?: CopyFeedbackOptions) => Promise<boolean>;
-  /** 下载图片并复制图片本体到系统剪贴板 */
-  copyImageFromUrl: (src: string, options?: CopyFeedbackOptions) => Promise<boolean>;
+  /** 复制图片来源到系统剪贴板 */
+  copyImage: (source: CopyImageSource, options?: CopyFeedbackOptions) => Promise<boolean>;
 }
 
 /**
@@ -83,7 +87,7 @@ export function useClipboard(): ClipboardActions {
    * @param options - 复制反馈配置
    * @returns 是否复制成功
    */
-  async function copyImage(content: ArrayBuffer, options: CopyFeedbackOptions = {}): Promise<boolean> {
+  async function copyImageContent(content: ArrayBuffer, options: CopyFeedbackOptions = {}): Promise<boolean> {
     const { successMessage = '复制成功', errorMessage = '复制失败' } = options;
     const [error] = await asyncTo(native.copyImageToClipboard(content));
 
@@ -97,27 +101,42 @@ export function useClipboard(): ClipboardActions {
   }
 
   /**
-   * 下载图片并复制图片本体到系统剪贴板。
-   * @param src - 图片地址
+   * 将图片来源转换为二进制。
+   * @param source - 图片复制来源
+   * @param options - 复制反馈配置
+   * @returns 图片二进制结果
+   */
+  async function resolveImageSource(source: CopyImageSource, options: CopyFeedbackOptions = {}): Promise<[Error] | [undefined, ArrayBuffer]> {
+    const { errorMessage = '复制图片失败' } = options;
+
+    if (source instanceof ArrayBuffer) {
+      return [undefined, source];
+    }
+
+    if (typeof source === 'string') {
+      return downloadImageArrayBuffer(source, errorMessage);
+    }
+
+    return svgElementToPngArrayBuffer(source);
+  }
+
+  /**
+   * 复制图片来源到系统剪贴板。
+   * @param source - 图片复制来源
    * @param options - 复制反馈配置
    * @returns 是否复制成功
    */
-  async function copyImageFromUrl(src: string, options: CopyFeedbackOptions = {}): Promise<boolean> {
+  async function copyImage(source: CopyImageSource, options: CopyFeedbackOptions = {}): Promise<boolean> {
     const { errorMessage = '复制图片失败' } = options;
+    const [error, content] = await resolveImageSource(source, options);
 
-    try {
-      const response = await fetch(src);
-
-      if (!response.ok) {
-        throw new Error(errorMessage);
-      }
-
-      return await copyImage(await response.arrayBuffer(), options);
-    } catch (error: unknown) {
+    if (error) {
       message.error(resolveErrorMessage(error, errorMessage));
       return false;
     }
+
+    return copyImageContent(content, options);
   }
 
-  return { clipboard, copyImage, copyImageFromUrl };
+  return { clipboard, copyImage };
 }

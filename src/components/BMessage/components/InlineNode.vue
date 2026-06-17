@@ -89,7 +89,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const renderContext = inject(MESSAGE_NODE_RENDER_CONTEXT_KEY, null);
-const { copyImageFromUrl } = useClipboard();
+const { copyImage } = useClipboard();
 
 /** 图片是否加载失败 */
 const imageLoadError = ref(false);
@@ -132,7 +132,7 @@ async function handleImageCopyClick(event: MouseEvent): Promise<void> {
 
   if (props.node.type !== 'image') return;
 
-  await copyImageFromUrl(props.node.src, {
+  await copyImage(props.node.src, {
     successMessage: '图片已复制',
     errorMessage: '复制图片失败'
   });
