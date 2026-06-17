@@ -37,12 +37,12 @@
         v-for="element in shapeElements"
         :key="element.id"
         :node="element"
-        :active-connector-anchor="connectorHoverEndpoint?.elementId === element.id ? connectorHoverEndpoint.anchor : null"
+        :active-connector-anchor="getActiveConnectorAnchor(element.id)"
         :editing="editingElementId === element.id"
         :preview-position="getElementPreviewPosition(element.id)"
         :preview-size="getElementPreviewSize(element.id)"
         :selected="selection.includes(element.id)"
-        :show-connector-anchors="activeTool === 'connector'"
+        :show-connector-anchors="activeTool === 'connector' || isConnectorEndpointDragging || getActiveConnectorAnchor(element.id) !== null"
         @edit="handleElementEdit"
         @select="handleElementSelect"
         @release="handleElementRelease"
@@ -76,6 +76,7 @@
         :show-hit="false"
         :show-line="false"
         :show-markers="false"
+        :hidden-selected-endpoint-placement="getHiddenSelectedEndpointPlacement(connector.id)"
         @endpoint-pointerdown="handleConnectorEndpointPointerdown"
       />
       <DrawingCreatePreview v-if="shapeDraft" :draft="shapeDraft" :draft-style="draftStyle" />
@@ -85,6 +86,7 @@
 
 <script setup lang="ts">
 import type {
+  DrawingConnectorAnchor,
   DrawingConnectorElement,
   DrawingConnectorDraftOptions,
   DrawingConnectorEndpoint,
@@ -125,6 +127,16 @@ type DrawingCreateShapeDraft = Extract<DrawingInteractionDraft, { kind: 'creatin
 type DrawingCreateConnectorDraft = Extract<DrawingInteractionDraft, { kind: 'creating-connector' }>;
 
 /**
+ * 正在拖拽的连接线端点。
+ */
+interface DraggingConnectorEndpoint {
+  /** 连接线 ID */
+  connectorId: string;
+  /** 端点位置 */
+  placement: DrawingConnectorEndpointPlacement;
+}
+
+/**
  * 画布组件入参。
  */
 interface Props {
@@ -154,6 +166,10 @@ interface Props {
   draftConnector?: DrawingConnectorDraftOptions;
   /** 创建连接线时 hover 的目标端点 */
   connectorHoverEndpoint?: DrawingConnectorEndpoint | null;
+  /** 正在拖拽的连接线端点 */
+  draggingConnectorEndpoint?: DraggingConnectorEndpoint | null;
+  /** 是否正在拖拽已选连接线端点 */
+  isConnectorEndpointDragging?: boolean;
   /** 是否正在平移（手型工具拖拽中） */
   isPanning?: boolean;
 }
@@ -198,6 +214,29 @@ const selectedConnectorElements = computed<DrawingConnectorElement[]>(() =>
 const shapeDraft = computed<DrawingCreateShapeDraft | undefined>(() => (props.draft?.kind === 'creating-shape' ? props.draft : undefined));
 /** 当前创建连接线草稿，供预览路径使用。 */
 const connectorDraft = computed<DrawingCreateConnectorDraft | undefined>(() => (props.draft?.kind === 'creating-connector' ? props.draft : undefined));
+
+/**
+ * 读取指定连接线需要隐藏的选中端点。
+ * @param connectorId - 连接线 ID
+ * @returns 需要隐藏的端点位置
+ */
+function getHiddenSelectedEndpointPlacement(connectorId: string): DrawingConnectorEndpointPlacement | null {
+  return props.draggingConnectorEndpoint?.connectorId === connectorId ? props.draggingConnectorEndpoint.placement : null;
+}
+
+/**
+ * 读取节点当前激活的连接锚点。
+ * @param elementId - 节点 ID
+ * @returns 激活的连接锚点
+ */
+function getActiveConnectorAnchor(elementId: string): DrawingConnectorAnchor | null {
+  const endpoint = props.connectorHoverEndpoint;
+  if (!endpoint || !isDrawingConnectorElementEndpoint(endpoint) || endpoint.elementId !== elementId) {
+    return null;
+  }
+
+  return endpoint.anchor;
+}
 
 /**
  * 读取连接线草稿起点坐标。

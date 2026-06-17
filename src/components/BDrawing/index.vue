@@ -30,6 +30,8 @@
         :draft-style="creationStyle"
         :draft-connector="connectorCreationOptions"
         :connector-hover-endpoint="connectorHoverEndpoint"
+        :dragging-connector-endpoint="draggingConnectorEndpoint"
+        :is-connector-endpoint-dragging="isConnectorEndpointDragging"
         :is-panning="isPanning"
         @edit="handleElementEdit"
         @select="handleElementSelect"
@@ -328,6 +330,16 @@ interface ConnectorEndpointDragSession {
 }
 
 /**
+ * 当前正在拖拽的连接线端点标识。
+ */
+interface DraggingConnectorEndpoint {
+  /** 连接线 ID */
+  connectorId: string;
+  /** 端点位置 */
+  placement: DrawingConnectorEndpointPlacement;
+}
+
+/**
  * 文本工具点击已有元素创建文本的延迟会话。
  */
 interface PendingTextElementCreateSession {
@@ -351,6 +363,10 @@ let pendingTextElementCreateSession: PendingTextElementCreateSession | null = nu
 const isPanning = ref<boolean>(false);
 /** 创建连接线时当前 hover 的目标端点。 */
 const connectorHoverEndpoint = ref<DrawingConnectorEndpoint | null>(null);
+/** 当前正在拖拽的连接线端点，用于隐藏旧端点圆圈。 */
+const draggingConnectorEndpoint = ref<DraggingConnectorEndpoint | null>(null);
+/** 是否正在拖拽已选连接线端点。 */
+const isConnectorEndpointDragging = ref<boolean>(false);
 
 /**
  * 获取当前工具对应的创建形状。
@@ -483,19 +499,27 @@ function getElementIdFromEventTarget(target: EventTarget | null): string | null 
 }
 
 /**
- * 从浏览器坐标命中读取画板元素 ID。
+ * 从浏览器坐标命中读取形状元素 ID。
  * @param clientX - 浏览器横坐标
  * @param clientY - 浏览器纵坐标
- * @returns 元素 ID
+ * @returns 形状元素 ID
  */
-function getElementIdFromClientPoint(clientX: number, clientY: number): string | null {
+function getShapeElementIdFromClientPoint(clientX: number, clientY: number): string | null {
+  const pointTargets = typeof document.elementsFromPoint === 'function' ? document.elementsFromPoint(clientX, clientY) : [];
+  for (const pointTarget of pointTargets) {
+    const pointTargetId = getElementIdFromEventTarget(pointTarget);
+    if (pointTargetId && getShapeElementById(pointTargetId)) {
+      return pointTargetId;
+    }
+  }
+
   if (typeof document.elementFromPoint !== 'function') {
     return null;
   }
 
-  const elementTarget = document.elementFromPoint(clientX, clientY);
+  const elementTargetId = getElementIdFromEventTarget(document.elementFromPoint(clientX, clientY));
 
-  return getElementIdFromEventTarget(elementTarget);
+  return elementTargetId && getShapeElementById(elementTargetId) ? elementTargetId : null;
 }
 
 /**
@@ -506,12 +530,12 @@ function getElementIdFromClientPoint(clientX: number, clientY: number): string |
  */
 function getConnectorTargetIdFromPointer(event: PointerEvent, sourceId: string | null): string | null {
   const eventTargetId = getElementIdFromEventTarget(event.target);
-  if (eventTargetId && eventTargetId !== sourceId) {
+  if (eventTargetId && eventTargetId !== sourceId && getShapeElementById(eventTargetId)) {
     return eventTargetId;
   }
 
-  const pointTargetId = getElementIdFromClientPoint(event.clientX, event.clientY);
-  if (pointTargetId && pointTargetId !== sourceId) {
+  const pointTargetId = getShapeElementIdFromClientPoint(event.clientX, event.clientY);
+  if (pointTargetId && pointTargetId !== sourceId && getShapeElementById(pointTargetId)) {
     return pointTargetId;
   }
 
@@ -669,6 +693,9 @@ function cancelConnectorDrag(): void {
 function cancelConnectorEndpointDrag(): void {
   connectorEndpointDragSession?.abortController.abort();
   connectorEndpointDragSession = null;
+  connectorHoverEndpoint.value = null;
+  draggingConnectorEndpoint.value = null;
+  isConnectorEndpointDragging.value = false;
 }
 
 /**
@@ -1097,17 +1124,37 @@ function handleConnectorDragEnd(event: PointerEvent): void {
 /**
  * 根据指针位置创建连接线端点。
  * @param event - 指针事件
+ * @param blockedElementId - 需要排除的另一端形状 ID
  * @returns 连接线端点
  */
-function createConnectorEndpointFromPointer(event: PointerEvent): DrawingConnectorEndpoint | null {
-  const targetId = getConnectorTargetIdFromPointer(event, null);
+function createConnectorEndpointFromPointer(event: PointerEvent, blockedElementId: string | null = null): DrawingConnectorEndpoint | null {
+  const targetId = getConnectorTargetIdFromPointer(event, blockedElementId);
   if (targetId) {
-    return getConnectorEndpointFromPointer(targetId, event);
+    const endpoint = getConnectorEndpointFromPointer(targetId, event);
+    if (endpoint) {
+      return endpoint;
+    }
   }
 
   const point = getBoardPointFromPointer(event);
 
   return point ? { point } : null;
+}
+
+/**
+ * 读取端点拖动时需要排除的另一端节点。
+ * @param session - 端点拖拽会话
+ * @returns 另一端节点 ID，另一端为自由点或连接线不存在时返回 null
+ */
+function getConnectorEndpointDragBlockedElementId(session: ConnectorEndpointDragSession): string | null {
+  const element = getElementById(session.connectorId);
+  if (!element || !isDrawingConnectorElement(element)) {
+    return null;
+  }
+
+  const oppositeEndpoint = session.placement === 'source' ? element.target : element.source;
+
+  return getDrawingConnectorEndpointElementId(oppositeEndpoint);
 }
 
 /**
@@ -1120,7 +1167,8 @@ function handleConnectorEndpointDragEnd(event: PointerEvent): void {
   }
 
   const session = connectorEndpointDragSession;
-  const endpoint = createConnectorEndpointFromPointer(event);
+  const blockedElementId = getConnectorEndpointDragBlockedElementId(session);
+  const endpoint = createConnectorEndpointFromPointer(event, blockedElementId);
   cancelConnectorEndpointDrag();
   if (!endpoint) {
     return;
@@ -1157,7 +1205,9 @@ function handleConnectorEndpointDragMove(event: PointerEvent): void {
     return;
   }
 
-  const endpoint = createConnectorEndpointFromPointer(event);
+  const blockedElementId = getConnectorEndpointDragBlockedElementId(connectorEndpointDragSession);
+  const endpoint = createConnectorEndpointFromPointer(event, blockedElementId);
+  connectorHoverEndpoint.value = endpoint && isDrawingConnectorElementEndpoint(endpoint) ? endpoint : null;
   if (!endpoint) {
     return;
   }
@@ -1181,6 +1231,11 @@ function handleConnectorEndpointPointerdown(id: string, placement: DrawingConnec
   cancelConnectorDrag();
   cancelDirectDrag();
   board.setSelection([id]);
+  draggingConnectorEndpoint.value = {
+    connectorId: id,
+    placement
+  };
+  isConnectorEndpointDragging.value = true;
   connectorEndpointDragSession = {
     connectorId: id,
     placement,

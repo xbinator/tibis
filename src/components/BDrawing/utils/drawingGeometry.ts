@@ -654,6 +654,26 @@ function getDrawingConnectorObstacles(
 }
 
 /**
+ * 收集连接线端点节点的轨道边界。
+ * @param elements - 画板元素列表
+ * @param connector - 连接线元素
+ * @param overrides - 预览中的形状几何覆盖
+ * @returns 端点节点边界列表
+ */
+function getDrawingConnectorEndpointTrackBounds(
+  elements: DrawingElement[],
+  connector: DrawingConnectorElement,
+  overrides: DrawingConnectorPathElementOverride[]
+): DrawingContentBounds[] {
+  return [connector.source, connector.target]
+    .filter(isDrawingConnectorElementEndpoint)
+    .map((endpoint: DrawingConnectorElementEndpoint): DrawingShapeElement | null => findDrawingShapeElement(elements, endpoint.elementId) ?? null)
+    .filter((element: DrawingShapeElement | null): element is DrawingShapeElement => element !== null)
+    .map((element: DrawingShapeElement): DrawingShapeElement => applyConnectorPathElementOverride(element, overrides))
+    .map(getDrawingConnectorObstacleBounds);
+}
+
+/**
  * 判断数值区间是否相交。
  * @param start - 第一个区间起点
  * @param end - 第一个区间终点
@@ -733,7 +753,7 @@ function selectDrawingConnectorRoutePoints(fallback: DrawingPoint[], candidates:
  * @param target - 终点
  * @param sourceDirection - 起点方向
  * @param targetDirection - 终点方向
- * @param obstacles - 避让边界列表
+ * @param trackBounds - 轨道边界列表
  * @returns 候选路径列表
  */
 function createHorizontalConnectorAvoidanceCandidates(
@@ -741,7 +761,7 @@ function createHorizontalConnectorAvoidanceCandidates(
   target: DrawingPoint,
   sourceDirection: DrawingPoint,
   targetDirection: DrawingPoint,
-  obstacles: DrawingContentBounds[]
+  trackBounds: DrawingContentBounds[]
 ): DrawingPoint[][] {
   const sourceOut = {
     x: source.x + sourceDirection.x * DRAWING_CONNECTOR_ROUTE_MARGIN,
@@ -751,13 +771,23 @@ function createHorizontalConnectorAvoidanceCandidates(
     x: target.x + targetDirection.x * DRAWING_CONNECTOR_ROUTE_MARGIN,
     y: target.y
   };
-  const topY = Math.min(source.y, target.y, ...obstacles.map((bounds: DrawingContentBounds): number => bounds.minY)) - DRAWING_CONNECTOR_ROUTE_MARGIN;
-  const bottomY = Math.max(source.y, target.y, ...obstacles.map((bounds: DrawingContentBounds): number => bounds.maxY)) + DRAWING_CONNECTOR_ROUTE_MARGIN;
+  const topY = Math.min(source.y, target.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minY)) - DRAWING_CONNECTOR_ROUTE_MARGIN;
+  const bottomY = Math.max(source.y, target.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxY)) + DRAWING_CONNECTOR_ROUTE_MARGIN;
+  let sameSideX: number | null = null;
+  if (sourceDirection.x === targetDirection.x && sourceDirection.x > 0) {
+    sameSideX = Math.max(sourceOut.x, targetOut.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxX));
+  } else if (sourceDirection.x === targetDirection.x) {
+    sameSideX = Math.min(sourceOut.x, targetOut.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minX));
+  }
+  const sameSideCandidate: DrawingPoint[] | null =
+    sameSideX === null ? null : [source, sourceOut, { x: sameSideX, y: source.y }, { x: sameSideX, y: target.y }, targetOut, target];
 
-  return [
+  const candidates = [
     [source, sourceOut, { x: sourceOut.x, y: topY }, { x: targetOut.x, y: topY }, targetOut, target],
     [source, sourceOut, { x: sourceOut.x, y: bottomY }, { x: targetOut.x, y: bottomY }, targetOut, target]
   ];
+
+  return sameSideCandidate ? [sameSideCandidate, ...candidates] : candidates;
 }
 
 /**
@@ -766,7 +796,7 @@ function createHorizontalConnectorAvoidanceCandidates(
  * @param target - 终点
  * @param sourceDirection - 起点方向
  * @param targetDirection - 终点方向
- * @param obstacles - 避让边界列表
+ * @param trackBounds - 轨道边界列表
  * @returns 候选路径列表
  */
 function createVerticalConnectorAvoidanceCandidates(
@@ -774,7 +804,7 @@ function createVerticalConnectorAvoidanceCandidates(
   target: DrawingPoint,
   sourceDirection: DrawingPoint,
   targetDirection: DrawingPoint,
-  obstacles: DrawingContentBounds[]
+  trackBounds: DrawingContentBounds[]
 ): DrawingPoint[][] {
   const sourceOut = {
     x: source.x,
@@ -784,13 +814,60 @@ function createVerticalConnectorAvoidanceCandidates(
     x: target.x,
     y: target.y + targetDirection.y * DRAWING_CONNECTOR_ROUTE_MARGIN
   };
-  const leftX = Math.min(source.x, target.x, ...obstacles.map((bounds: DrawingContentBounds): number => bounds.minX)) - DRAWING_CONNECTOR_ROUTE_MARGIN;
-  const rightX = Math.max(source.x, target.x, ...obstacles.map((bounds: DrawingContentBounds): number => bounds.maxX)) + DRAWING_CONNECTOR_ROUTE_MARGIN;
+  const leftX = Math.min(source.x, target.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minX)) - DRAWING_CONNECTOR_ROUTE_MARGIN;
+  const rightX = Math.max(source.x, target.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxX)) + DRAWING_CONNECTOR_ROUTE_MARGIN;
+  let sameSideY: number | null = null;
+  if (sourceDirection.y === targetDirection.y && sourceDirection.y > 0) {
+    sameSideY = Math.max(sourceOut.y, targetOut.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxY));
+  } else if (sourceDirection.y === targetDirection.y) {
+    sameSideY = Math.min(sourceOut.y, targetOut.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minY));
+  }
+  const sameSideCandidate: DrawingPoint[] | null =
+    sameSideY === null ? null : [source, sourceOut, { x: source.x, y: sameSideY }, { x: target.x, y: sameSideY }, targetOut, target];
 
-  return [
+  const candidates = [
     [source, sourceOut, { x: leftX, y: sourceOut.y }, { x: leftX, y: targetOut.y }, targetOut, target],
     [source, sourceOut, { x: rightX, y: sourceOut.y }, { x: rightX, y: targetOut.y }, targetOut, target]
   ];
+
+  return sameSideCandidate ? [sameSideCandidate, ...candidates] : candidates;
+}
+
+/**
+ * 创建水平锚点与垂直锚点之间的避让候选路径。
+ * @param source - 起点
+ * @param target - 终点
+ * @param sourceDirection - 起点方向
+ * @param targetDirection - 终点方向
+ * @param sourceIsHorizontal - 起点方向是否水平
+ * @returns 候选路径列表
+ */
+function createMixedConnectorAvoidanceCandidates(
+  source: DrawingPoint,
+  target: DrawingPoint,
+  sourceDirection: DrawingPoint,
+  targetDirection: DrawingPoint,
+  sourceIsHorizontal: boolean
+): DrawingPoint[][] {
+  const sourceOut = {
+    x: source.x + sourceDirection.x * DRAWING_CONNECTOR_ROUTE_MARGIN,
+    y: source.y + sourceDirection.y * DRAWING_CONNECTOR_ROUTE_MARGIN
+  };
+  const targetOut = {
+    x: target.x + targetDirection.x * DRAWING_CONNECTOR_ROUTE_MARGIN,
+    y: target.y + targetDirection.y * DRAWING_CONNECTOR_ROUTE_MARGIN
+  };
+  const elbow = sourceIsHorizontal
+    ? {
+        x: sourceOut.x,
+        y: targetOut.y
+      }
+    : {
+        x: targetOut.x,
+        y: sourceOut.y
+      };
+
+  return [[source, sourceOut, elbow, targetOut, target]];
 }
 
 /**
@@ -895,6 +972,48 @@ function areOppositeConnectorDirections(sourceDirection: DrawingPoint, targetDir
 }
 
 /**
+ * 判断线段是否沿锚点外侧方向离开端点。
+ * @param start - 端点坐标
+ * @param next - 下一折点
+ * @param direction - 锚点外侧方向
+ * @returns 是否沿外侧方向离开
+ */
+function isConnectorRouteLeavingEndpointOutward(start: DrawingPoint, next: DrawingPoint, direction: DrawingPoint): boolean {
+  return (next.x - start.x) * direction.x + (next.y - start.y) * direction.y > 0;
+}
+
+/**
+ * 判断线段是否从锚点外侧方向进入端点。
+ * @param previous - 上一折点
+ * @param target - 端点坐标
+ * @param direction - 锚点外侧方向
+ * @returns 是否从外侧进入
+ */
+function isConnectorRouteEnteringEndpointOutward(previous: DrawingPoint, target: DrawingPoint, direction: DrawingPoint): boolean {
+  return (previous.x - target.x) * direction.x + (previous.y - target.y) * direction.y > 0;
+}
+
+/**
+ * 判断折线路线是否会反向穿入自身端点节点。
+ * @param points - 折线路径点
+ * @param sourceDirection - 起点外侧方向
+ * @param targetDirection - 终点外侧方向
+ * @returns 是否穿入自身端点节点
+ */
+function doesConnectorRouteEnterOwnEndpoint(points: DrawingPoint[], sourceDirection: DrawingPoint, targetDirection: DrawingPoint): boolean {
+  if (points.length < 2) {
+    return false;
+  }
+
+  const source = points[0];
+  const target = points[points.length - 1];
+  const next = points[1];
+  const previous = points[points.length - 2];
+
+  return !isConnectorRouteLeavingEndpointOutward(source, next, sourceDirection) || !isConnectorRouteEnteringEndpointOutward(previous, target, targetDirection);
+}
+
+/**
  * 创建近似同轴时的单段吸附路径。
  * @param source - 起点
  * @param target - 终点
@@ -915,6 +1034,10 @@ function createStraightSnapRoutePoints(
   obstacles: DrawingContentBounds[]
 ): DrawingPoint[] | null {
   const points = [source, target];
+  if (doesConnectorRouteEnterOwnEndpoint(points, sourceDirection, targetDirection)) {
+    return null;
+  }
+
   if (doesDrawingRouteIntersectObstacles(points, obstacles)) {
     return null;
   }
@@ -946,6 +1069,7 @@ function createStraightSnapRoutePoints(
  * @param targetAnchor - 终点锚点
  * @param parallelOffset - 多条平行连接线的错开距离
  * @param obstacles - 避让边界列表
+ * @param trackBounds - 计算绕线路径外侧轨道时使用的边界列表
  * @returns 连接线解析路线
  */
 function createDrawingOrthogonalRoute(
@@ -954,12 +1078,9 @@ function createDrawingOrthogonalRoute(
   sourceAnchor: DrawingConnectorAnchor,
   targetAnchor: DrawingConnectorAnchor,
   parallelOffset = 0,
-  obstacles: DrawingContentBounds[] = []
+  obstacles: DrawingContentBounds[] = [],
+  trackBounds: DrawingContentBounds[] = obstacles
 ): DrawingConnectorRoute {
-  if (source.x === target.x || source.y === target.y) {
-    return createDrawingPolylineRoute(source, target, [source, target]);
-  }
-
   const sourceDirection = getConnectorAnchorDirection(sourceAnchor);
   const targetDirection = getConnectorAnchorDirection(targetAnchor);
   const sourceIsHorizontal = isHorizontalConnectorDirection(sourceDirection);
@@ -983,12 +1104,16 @@ function createDrawingOrthogonalRoute(
     points = [source, { x: source.x, y: target.y }, target];
   }
 
-  if (obstacles.length && doesDrawingRouteIntersectObstacles(points, obstacles)) {
+  const routeEntersOwnEndpoint = doesConnectorRouteEnterOwnEndpoint(points, sourceDirection, targetDirection);
+  if (routeEntersOwnEndpoint || (obstacles.length && doesDrawingRouteIntersectObstacles(points, obstacles))) {
+    const avoidanceTrackBounds = routeEntersOwnEndpoint ? trackBounds : obstacles;
     let candidates: DrawingPoint[][] = [];
     if (sourceIsHorizontal && targetIsHorizontal) {
-      candidates = createHorizontalConnectorAvoidanceCandidates(source, target, sourceDirection, targetDirection, obstacles);
+      candidates = createHorizontalConnectorAvoidanceCandidates(source, target, sourceDirection, targetDirection, avoidanceTrackBounds);
     } else if (!sourceIsHorizontal && !targetIsHorizontal) {
-      candidates = createVerticalConnectorAvoidanceCandidates(source, target, sourceDirection, targetDirection, obstacles);
+      candidates = createVerticalConnectorAvoidanceCandidates(source, target, sourceDirection, targetDirection, avoidanceTrackBounds);
+    } else {
+      candidates = createMixedConnectorAvoidanceCandidates(source, target, sourceDirection, targetDirection, sourceIsHorizontal);
     }
 
     points = selectDrawingConnectorRoutePoints(points, candidates, obstacles);
@@ -1083,18 +1208,22 @@ function resolveDrawingConnectorRoute(
     return createDrawingPolylineRoute(sourcePoint, targetPoint, [sourcePoint, targetPoint]);
   }
 
+  const obstacles = getDrawingConnectorObstacles(
+    elements,
+    getDrawingConnectorEndpointElementId(connector.source) ?? '',
+    getDrawingConnectorEndpointElementId(connector.target) ?? '',
+    overrides
+  );
+  const trackBounds = [...obstacles, ...getDrawingConnectorEndpointTrackBounds(elements, connector, overrides)];
+
   return createDrawingOrthogonalRoute(
     sourcePoint,
     targetPoint,
     sourceAnchor,
     targetAnchor,
     getParallelConnectorOffset(elements, connector),
-    getDrawingConnectorObstacles(
-      elements,
-      getDrawingConnectorEndpointElementId(connector.source) ?? '',
-      getDrawingConnectorEndpointElementId(connector.target) ?? '',
-      overrides
-    )
+    obstacles,
+    trackBounds
   );
 }
 

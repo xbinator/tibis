@@ -3141,6 +3141,218 @@ describe('BDrawing', (): void => {
     expect(findDrawingConnectorPath(wrapper).attributes('d')).toBe('M -300 -200 L -40 -40');
   });
 
+  it('highlights a node target while dragging a selected connector endpoint', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 300, clientY: 200 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 300, clientY: 200 });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 500, clientY: 300 });
+    await dispatchPointerEvent(canvas.element, 'pointerup', { clientX: 500, clientY: 300 });
+    await findDrawingConnectorPath(wrapper).trigger('pointerdown');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    const endpoints = findDrawingConnectorEndpoints(wrapper);
+    const originalElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn((): Element => nodes[0].element)
+    });
+
+    try {
+      await dispatchPointerEvent(endpoints[1].element, 'pointerdown', { clientX: 300, clientY: 200 });
+      await dispatchPointerEvent(window, 'pointermove', { clientX: 500, clientY: 300 });
+
+      expect(nodes[0].find('.b-drawing-node__anchor.is-active').exists()).toBe(true);
+    } finally {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint
+      });
+    }
+  });
+
+  it('shows every node connector anchor while dragging a selected connector endpoint', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
+
+    const endpoints = findDrawingConnectorEndpoints(wrapper);
+    await dispatchPointerEvent(endpoints[1].element, 'pointerdown', { clientX: 220, clientY: 160 });
+
+    expect(wrapper.findAll('.b-drawing-node__anchor')).toHaveLength(8);
+  });
+
+  it('hides the original endpoint handle while dragging a selected connector endpoint', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 300, clientY: 200 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 300, clientY: 200 });
+
+    const endpoints = findDrawingConnectorEndpoints(wrapper);
+    /** 读取端点位置标记。 */
+    const readEndpointPlacement = (endpoint: DOMWrapper<Element>): string | undefined => endpoint.attributes('data-drawing-connector-endpoint');
+    expect(endpoints.map(readEndpointPlacement)).toEqual(['source', 'target']);
+
+    await dispatchPointerEvent(endpoints[1].element, 'pointerdown', { clientX: 300, clientY: 200 });
+
+    expect(findDrawingConnectorEndpoints(wrapper).map(readEndpointPlacement)).toEqual(['source']);
+  });
+
+  it('attaches a selected connector endpoint to the node under the release point', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body,
+      props: {
+        modelValue: {
+          elements: [],
+          edges: [],
+          viewport: {
+            center: { x: 0, y: 0 },
+            zoom: 1
+          }
+        }
+      }
+    });
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 300, clientY: 200 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 300, clientY: 200 });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 500, clientY: 300 });
+    await dispatchPointerEvent(canvas.element, 'pointerup', { clientX: 500, clientY: 300 });
+    await findDrawingConnectorPath(wrapper).trigger('pointerdown');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    const endpoints = findDrawingConnectorEndpoints(wrapper);
+    const nodeId = nodes[0].attributes('data-drawing-element-id');
+    const originalElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn((): Element => nodes[0].element)
+    });
+
+    try {
+      await dispatchPointerEvent(endpoints[1].element, 'pointerdown', { clientX: 300, clientY: 200 });
+      await dispatchPointerEvent(window, 'pointermove', { clientX: 500, clientY: 300 });
+      await dispatchPointerEvent(window, 'pointerup', { clientX: 500, clientY: 300 });
+    } finally {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint
+      });
+    }
+
+    const emitted = wrapper.emitted('update:modelValue') as Array<[DrawingData]> | undefined;
+    const latestData = emitted?.at(-1)?.[0];
+    const connector = latestData?.elements.find((element: DrawingElement): element is DrawingConnectorElement => element.kind === 'connector');
+
+    expect(connector?.target).toMatchObject({ elementId: nodeId });
+
+    wrapper.unmount();
+  });
+
+  it('attaches a selected connector endpoint when the endpoint handle overlays the node', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      attachTo: document.body,
+      props: {
+        modelValue: {
+          elements: [],
+          edges: [],
+          viewport: {
+            center: { x: 0, y: 0 },
+            zoom: 1
+          }
+        }
+      }
+    });
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 300, clientY: 200 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 300, clientY: 200 });
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 500, clientY: 300 });
+    await dispatchPointerEvent(canvas.element, 'pointerup', { clientX: 500, clientY: 300 });
+    await findDrawingConnectorPath(wrapper).trigger('pointerdown');
+
+    const nodes = wrapper.findAll('[data-testid="drawing-node"]');
+    const endpoints = findDrawingConnectorEndpoints(wrapper);
+    const nodeId = nodes[0].attributes('data-drawing-element-id');
+    const originalElementFromPoint = document.elementFromPoint;
+    const originalElementsFromPoint = document.elementsFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn((): Element => endpoints[1].element)
+    });
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn((): Element[] => [endpoints[1].element, nodes[0].element])
+    });
+
+    try {
+      await dispatchPointerEvent(endpoints[1].element, 'pointerdown', { clientX: 300, clientY: 200 });
+      await dispatchPointerEvent(window, 'pointermove', { clientX: 500, clientY: 300 });
+      await dispatchPointerEvent(window, 'pointerup', { clientX: 500, clientY: 300 });
+    } finally {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint
+      });
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint
+      });
+    }
+
+    const emitted = wrapper.emitted('update:modelValue') as Array<[DrawingData]> | undefined;
+    const latestData = emitted?.at(-1)?.[0];
+    const connector = latestData?.elements.find((element: DrawingElement): element is DrawingConnectorElement => element.kind === 'connector');
+
+    expect(connector?.target).toMatchObject({ elementId: nodeId });
+
+    wrapper.unmount();
+  });
+
   it('does not render legacy edges from model data', (): void => {
     const wrapper = mount(BDrawing, {
       props: {
@@ -3250,8 +3462,8 @@ describe('BDrawing', (): void => {
     await dispatchPointerEvent(nodes[1].element, 'pointerup', { clientX: 220, clientY: 160 });
 
     const initialMarkerPath = findDrawingConnectorEndMarker(wrapper).attributes('d');
-    await dispatchPointerEvent(nodes[0].element, 'pointerdown', { clientX: 100, clientY: 100 });
-    await dispatchPointerEvent(window, 'pointerup', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(nodes[1].element, 'pointerdown', { clientX: 220, clientY: 160 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 220, clientY: 160 });
     await nextTick();
     await wrapper.find('[data-testid="moveable-drag"]').trigger('click');
 

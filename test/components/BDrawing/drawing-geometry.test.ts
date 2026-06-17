@@ -4,7 +4,14 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it } from 'vitest';
-import type { DrawingConnectorElement, DrawingElement, DrawingShapeElement, DrawingViewport } from '@/components/BDrawing/types';
+import type {
+  DrawingConnectorAnchor,
+  DrawingConnectorElement,
+  DrawingElement,
+  DrawingPoint,
+  DrawingShapeElement,
+  DrawingViewport
+} from '@/components/BDrawing/types';
 import {
   createDrawingConnectorMarkerPath,
   createDrawingConnectorPath,
@@ -23,6 +30,11 @@ import {
 } from '@/components/BDrawing/utils/drawingGeometry';
 
 /**
+ * 有明确外侧方向的连接线边缘锚点。
+ */
+type DrawingConnectorEdgeAnchor = Exclude<DrawingConnectorAnchor, 'center'>;
+
+/**
  * 创建测试形状元素。
  * @param id - 元素 ID
  * @returns 测试形状元素
@@ -38,6 +50,112 @@ function createShapeElement(id: string): DrawingShapeElement {
     rotation: 0,
     metadata: { source: 'user', createdAt: 1 }
   };
+}
+
+/**
+ * 从 SVG 折线路径中解析路径点。
+ * @param path - SVG path 字符串
+ * @returns 路径点列表
+ */
+function parseConnectorPathPoints(path: string): DrawingPoint[] {
+  return [...path.matchAll(/[ML] (-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g)].map(
+    (match: RegExpMatchArray): DrawingPoint => ({
+      x: Number(match[1]),
+      y: Number(match[2])
+    })
+  );
+}
+
+/**
+ * 读取锚点朝向。
+ * @param anchor - 连接线锚点
+ * @returns 锚点外侧方向
+ */
+function getTestAnchorDirection(anchor: DrawingConnectorEdgeAnchor): DrawingPoint {
+  const directions: Record<DrawingConnectorEdgeAnchor, DrawingPoint> = {
+    top: { x: 0, y: -1 },
+    right: { x: 1, y: 0 },
+    bottom: { x: 0, y: 1 },
+    left: { x: -1, y: 0 }
+  };
+
+  return directions[anchor];
+}
+
+/**
+ * 判断首段是否从起点锚点外侧离开。
+ * @param points - 路径点
+ * @param anchor - 起点锚点
+ * @returns 是否从外侧离开
+ */
+function doesRouteLeaveSourceOutward(points: DrawingPoint[], anchor: DrawingConnectorEdgeAnchor): boolean {
+  const direction = getTestAnchorDirection(anchor);
+  const source = points[0];
+  const next = points[1];
+
+  return (next.x - source.x) * direction.x + (next.y - source.y) * direction.y > 0;
+}
+
+/**
+ * 判断末段是否从终点锚点外侧进入。
+ * @param points - 路径点
+ * @param anchor - 终点锚点
+ * @returns 是否从外侧进入
+ */
+function doesRouteEnterTargetOutward(points: DrawingPoint[], anchor: DrawingConnectorEdgeAnchor): boolean {
+  const direction = getTestAnchorDirection(anchor);
+  const target = points[points.length - 1];
+  const previous = points[points.length - 2];
+
+  return (previous.x - target.x) * direction.x + (previous.y - target.y) * direction.y > 0;
+}
+
+/**
+ * 判断开区间数值范围是否相交。
+ * @param start - 第一个区间起点
+ * @param end - 第一个区间终点
+ * @param min - 第二个区间起点
+ * @param max - 第二个区间终点
+ * @returns 是否存在内部相交
+ */
+function doesStrictRangeOverlap(start: number, end: number, min: number, max: number): boolean {
+  return Math.max(Math.min(start, end), min) < Math.min(Math.max(start, end), max);
+}
+
+/**
+ * 判断路径线段是否穿过形状内部。
+ * @param start - 线段起点
+ * @param end - 线段终点
+ * @param element - 形状元素
+ * @returns 是否穿过形状内部
+ */
+function doesSegmentCrossShapeInterior(start: DrawingPoint, end: DrawingPoint, element: DrawingShapeElement): boolean {
+  const bounds = {
+    minX: element.position.x,
+    minY: element.position.y,
+    maxX: element.position.x + element.size.width,
+    maxY: element.position.y + element.size.height
+  };
+
+  if (start.x === end.x) {
+    return start.x > bounds.minX && start.x < bounds.maxX && doesStrictRangeOverlap(start.y, end.y, bounds.minY, bounds.maxY);
+  }
+
+  if (start.y === end.y) {
+    return start.y > bounds.minY && start.y < bounds.maxY && doesStrictRangeOverlap(start.x, end.x, bounds.minX, bounds.maxX);
+  }
+
+  return doesStrictRangeOverlap(start.x, end.x, bounds.minX, bounds.maxX) && doesStrictRangeOverlap(start.y, end.y, bounds.minY, bounds.maxY);
+}
+
+/**
+ * 判断折线路径是否穿过形状内部。
+ * @param points - 路径点
+ * @param element - 形状元素
+ * @returns 是否穿过形状内部
+ */
+function doesRouteCrossShapeInterior(points: DrawingPoint[], element: DrawingShapeElement): boolean {
+  return points.slice(1).some((point: DrawingPoint, index: number): boolean => doesSegmentCrossShapeInterior(points[index], point, element));
 }
 
 describe('drawingGeometry', (): void => {
@@ -180,6 +298,167 @@ describe('drawingGeometry', (): void => {
 
     expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 240 100 L 240 220 L 308 220');
     expect(createDrawingConnectorMarkerPath([source, target, connector], connector, 'end')).toContain('M 320 220');
+  });
+
+  it('routes default connectors around their own endpoint nodes when anchors face away', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: -80, y: -60 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 184 100 L 184 -108 L -104 -108 L -104 -20 L -80 -20');
+  });
+
+  it('routes aligned default connectors around their own endpoint nodes when anchors face away', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'left' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: -80, y: 60 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 184 100 L 184 12 L -104 12 L -104 100 L -80 100');
+  });
+
+  it('routes same-side horizontal anchors through the shared outside lane', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'right' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: -80, y: -60 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 184 100 L 184 -20 L 64 -20 L 40 -20');
+  });
+
+  it('routes same-side vertical anchors through the shared outside lane', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'bottom' },
+      target: { elementId: target.id, anchor: 'bottom' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: -80, y: -140 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 100 140 L 100 164 L -20 164 L -20 -36 L -20 -60');
+  });
+
+  it('routes mixed horizontal and vertical anchors outside their own endpoint nodes', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'right' },
+      target: { elementId: target.id, anchor: 'bottom' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: -80, y: -140 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 160 100 L 184 100 L 184 -36 L -20 -36 L -20 -60');
+  });
+
+  it('routes mixed vertical and horizontal anchors outside their own endpoint nodes', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'bottom' },
+      target: { elementId: target.id, anchor: 'right' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: -80, y: -140 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 100 140 L 100 164 L 64 164 L 64 -100 L 40 -100');
+  });
+
+  it('keeps every anchor combination outside source and target node interiors', (): void => {
+    const anchors: DrawingConnectorEdgeAnchor[] = ['top', 'right', 'bottom', 'left'];
+    const targetPositions: DrawingPoint[] = [
+      { x: -120, y: -140 },
+      { x: 260, y: -140 },
+      { x: 260, y: 220 },
+      { x: -120, y: 220 }
+    ];
+
+    targetPositions.forEach((targetPosition: DrawingPoint): void => {
+      anchors.forEach((sourceAnchor: DrawingConnectorEdgeAnchor): void => {
+        anchors.forEach((targetAnchor: DrawingConnectorEdgeAnchor): void => {
+          const source = createShapeElement('source');
+          const target = createShapeElement('target');
+          const connector: DrawingConnectorElement = {
+            id: `connector-${sourceAnchor}-${targetAnchor}`,
+            kind: 'connector',
+            source: { elementId: source.id, anchor: sourceAnchor },
+            target: { elementId: target.id, anchor: targetAnchor },
+            markerEnd: 'none',
+            position: { x: 0, y: 0 },
+            size: { width: 0, height: 0 },
+            rotation: 0,
+            metadata: { source: 'user', createdAt: 1 }
+          };
+
+          target.position = targetPosition;
+
+          const points = parseConnectorPathPoints(createDrawingConnectorPath([source, target, connector], connector));
+          const caseName = `${sourceAnchor}->${targetAnchor} target(${targetPosition.x},${targetPosition.y})`;
+
+          expect(points.length, caseName).toBeGreaterThanOrEqual(2);
+          expect(doesRouteLeaveSourceOutward(points, sourceAnchor), caseName).toBe(true);
+          expect(doesRouteEnterTargetOutward(points, targetAnchor), caseName).toBe(true);
+          expect(doesRouteCrossShapeInterior(points, source), caseName).toBe(false);
+          expect(doesRouteCrossShapeInterior(points, target), caseName).toBe(false);
+        });
+      });
+    });
   });
 
   it('separates parallel connectors between the same anchors', (): void => {

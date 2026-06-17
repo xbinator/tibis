@@ -19,6 +19,7 @@
     </g>
     <g v-if="endpointPositions" class="b-drawing-connector__endpoints">
       <circle
+        v-if="hiddenSelectedEndpointPlacement !== 'source'"
         class="b-drawing-connector__endpoint"
         :cx="endpointPositions.source.x"
         :cy="endpointPositions.source.y"
@@ -27,6 +28,7 @@
         @pointerdown.stop="handleEndpointPointerdown('source', $event)"
       />
       <circle
+        v-if="hiddenSelectedEndpointPlacement !== 'target'"
         class="b-drawing-connector__endpoint"
         :cx="endpointPositions.target.x"
         :cy="endpointPositions.target.y"
@@ -71,6 +73,8 @@ interface Props {
   showMarkers?: boolean;
   /** 是否渲染选中端点 */
   showSelectedEndpoints?: boolean;
+  /** 选中态下需要隐藏的端点 */
+  hiddenSelectedEndpointPlacement?: DrawingConnectorEndpointPlacement | null;
   /** 是否处于标签编辑态 */
   editing?: boolean;
 }
@@ -87,6 +91,7 @@ interface ConnectorEndpointPositions {
 
 const props = withDefaults(defineProps<Props>(), {
   editing: false,
+  hiddenSelectedEndpointPlacement: null,
   selected: false,
   showHit: true,
   showLine: true,
