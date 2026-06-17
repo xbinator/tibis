@@ -22,7 +22,13 @@
       </div>
     </div>
 
-    <div class="to-bottom" :class="{ 'to-bottom--visible': isBackBottom }" @click="() => scrollToBottom()">
+    <div
+      class="to-bottom"
+      :class="{ 'to-bottom--visible': isBackBottom }"
+      @click="() => scrollToBottom()"
+      @mouseenter="pauseBackBottomHideTimer"
+      @mouseleave="resumeBackBottomHideTimer"
+    >
       <BIcon icon="lucide:arrow-down" />
       <div v-if="loading" class="to-bottom__loading"></div>
     </div>
@@ -76,7 +82,7 @@ defineEmits<{
   (e: 'rollback', message: Message): void;
 }>();
 
-const { isBackBottom, scrollToBottom } = useChatScroll({ onLoadHistory: props.onLoadHistory });
+const { isBackBottom, scrollToBottom, pauseBackBottomHideTimer, resumeBackBottomHideTimer } = useChatScroll({ onLoadHistory: props.onLoadHistory });
 
 defineExpose({ scrollToBottom });
 </script>

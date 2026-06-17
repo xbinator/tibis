@@ -14,6 +14,10 @@ import { useChatScroll } from '@/components/BChat/hooks/useChatScroll';
 interface ChatScrollHostVm {
   /** 回到底部按钮是否显示 */
   isBackBottom: boolean;
+  /** 暂停回到底部按钮自动隐藏 */
+  pauseBackBottomHideTimer: () => void;
+  /** 恢复回到底部按钮自动隐藏 */
+  resumeBackBottomHideTimer: () => void;
 }
 
 /**
@@ -30,7 +34,9 @@ function createChatScrollHost(): ReturnType<typeof defineComponent> {
       });
 
       return {
-        isBackBottom: scrollState.isBackBottom
+        isBackBottom: scrollState.isBackBottom,
+        pauseBackBottomHideTimer: scrollState.pauseBackBottomHideTimer,
+        resumeBackBottomHideTimer: scrollState.resumeBackBottomHideTimer
       };
     },
     template: '<div ref="container" style="height: 400px; overflow-y: auto;"><div style="height: 1200px;"></div></div>'
@@ -96,6 +102,32 @@ describe('useChatScroll', (): void => {
     await nextTick();
     await vi.advanceTimersByTimeAsync(199);
 
+    expect(vm.isBackBottom).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(vm.isBackBottom).toBe(false);
+  });
+
+  it('pauses idle hide timer while hovering and restarts the delay after leaving', async (): Promise<void> => {
+    vi.useFakeTimers();
+    const wrapper = mount(createChatScrollHost());
+    const vm = wrapper.vm as unknown as ChatScrollHostVm;
+    await nextTick();
+    const container = wrapper.element;
+    mockScrollMetrics(container);
+
+    container.scrollTop = 420;
+    container.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    await vi.advanceTimersByTimeAsync(150);
+
+    vm.pauseBackBottomHideTimer();
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(vm.isBackBottom).toBe(true);
+
+    vm.resumeBackBottomHideTimer();
+    await vi.advanceTimersByTimeAsync(199);
     expect(vm.isBackBottom).toBe(true);
 
     await vi.advanceTimersByTimeAsync(1);

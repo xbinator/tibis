@@ -26,6 +26,10 @@ interface UseChatScrollReturn {
   isBackBottom: Ref<boolean>;
   /** 滚动到底部 */
   scrollToBottom: (options?: { behavior?: 'smooth' | 'auto' }) => void;
+  /** 暂停回到底部按钮自动隐藏 */
+  pauseBackBottomHideTimer: () => void;
+  /** 恢复回到底部按钮自动隐藏 */
+  resumeBackBottomHideTimer: () => void;
   /** 带滚动锚点执行内容更新 */
   withScrollAnchor: (callback: () => Promise<void> | void) => Promise<void>;
 }
@@ -67,6 +71,22 @@ export function useChatScroll(scrollOptions: UseChatScrollOptions): UseChatScrol
       isBackBottom.value = false;
       backBottomHideTimer = null;
     }, backBottomIdleHideDelay);
+  }
+
+  /**
+   * 暂停回到底部按钮自动隐藏。
+   */
+  function pauseBackBottomHideTimer(): void {
+    clearBackBottomHideTimer();
+  }
+
+  /**
+   * 恢复回到底部按钮自动隐藏。
+   */
+  function resumeBackBottomHideTimer(): void {
+    if (isBackBottom.value) {
+      resetBackBottomHideTimer();
+    }
   }
 
   /**
@@ -151,6 +171,8 @@ export function useChatScroll(scrollOptions: UseChatScrollOptions): UseChatScrol
   return {
     isBackBottom,
     scrollToBottom,
+    pauseBackBottomHideTimer,
+    resumeBackBottomHideTimer,
     withScrollAnchor
   };
 }
