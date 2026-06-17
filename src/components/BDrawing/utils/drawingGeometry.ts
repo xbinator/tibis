@@ -821,7 +821,7 @@ function createHorizontalConnectorAvoidanceCandidates(
       doesConnectorRailCrossForeignTrackBounds(targetRailStart, targetOut, target, trackBounds);
 
     sameSideCandidate = shouldUseSideLane
-      ? [source, sourceOut, { x: sourceOut.x, y: sideY }, { x: sameSideX, y: sideY }, { x: sameSideX, y: target.y }, targetOut, target]
+      ? [source, sourceOut, { x: sourceOut.x, y: sideY }, { x: targetOut.x, y: sideY }, targetOut, target]
       : [source, sourceOut, sourceRailEnd, targetRailStart, targetOut, target];
   }
 
@@ -878,7 +878,7 @@ function createVerticalConnectorAvoidanceCandidates(
       doesConnectorRailCrossForeignTrackBounds(targetRailStart, targetOut, target, trackBounds);
 
     sameSideCandidate = shouldUseSideLane
-      ? [source, sourceOut, { x: sideX, y: sourceOut.y }, { x: sideX, y: sameSideY }, { x: target.x, y: sameSideY }, targetOut, target]
+      ? [source, sourceOut, { x: sideX, y: sourceOut.y }, { x: sideX, y: targetOut.y }, targetOut, target]
       : [source, sourceOut, sourceRailEnd, targetRailStart, targetOut, target];
   }
 
