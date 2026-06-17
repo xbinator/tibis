@@ -42,6 +42,22 @@ export interface DetachedIndicatorPlacement {
 }
 
 /**
+ * 拖拽指引条位置解析参数。
+ */
+export interface ResolveDragIndicatorPlacementParams {
+  /** 指针在滚动内容坐标系中的横向位置 */
+  pointerX: number;
+  /** 当前可见标签的几何信息 */
+  tabs: HeaderTabRect[];
+  /** 被拖拽标签 ID */
+  sourceTabId: string;
+  /** 当前拖拽库命中的目标标签 ID，可能因 sticky target 保留旧值 */
+  targetTabId: string | null;
+  /** 当前目标标签由 hitbox 推导出的最近边 */
+  targetEdge: ClosestEdge | null;
+}
+
+/**
  * 将 Pragmatic hitbox 的 ClosestEdge 枚举映射为标签排序插入位置。
  * @param edge - 命中区域判定的最近边，null 时默认视为 'after'
  * @returns 排序插入位置
@@ -97,6 +113,35 @@ export function getDetachedIndicatorPlacement(params: {
   }
 
   return null;
+}
+
+/**
+ * 解析当前拖拽指引条位置，首尾边界以鼠标位置优先于 sticky target。
+ * @param params - 指针、标签几何信息与拖拽库命中状态
+ * @returns 当前应显示的指引条位置，无有效位置时返回 null
+ */
+export function resolveDragIndicatorPlacement(params: ResolveDragIndicatorPlacementParams): DetachedIndicatorPlacement | null {
+  const { pointerX, tabs, sourceTabId, targetTabId, targetEdge } = params;
+  const detachedPlacement = getDetachedIndicatorPlacement({ pointerX, tabs });
+  if (detachedPlacement) {
+    return detachedPlacement;
+  }
+
+  if (!targetTabId || targetTabId === sourceTabId) {
+    return null;
+  }
+
+  const targetTab = tabs.find((tab) => tab.id === targetTabId);
+  if (!targetTab) {
+    return null;
+  }
+
+  const position = closestEdgeToMovePosition(targetEdge);
+  return {
+    tabId: targetTabId,
+    position,
+    offset: getDropIndicatorOffset(targetTab, position)
+  };
 }
 
 /**
@@ -188,23 +233,6 @@ export function useTabDragger(
   }
 
   /**
-   * 根据目标标签与插入位置同步当前指示线状态。
-   * @param tabId - 目标标签 ID
-   * @param position - 插入位置
-   */
-  function applyIndicatorPlacement(tabId: string, position: TabMovePosition): void {
-    const tabRect = getRegisteredTabRects().find((tab) => tab.id === tabId);
-    if (!tabRect) {
-      resetIndicatorState();
-      return;
-    }
-
-    dropTargetTabId.value = tabId;
-    dragInsertPosition.value = position;
-    dropIndicatorOffset.value = getDropIndicatorOffset(tabRect, position);
-  }
-
-  /**
    * 将视口坐标中的指针位置转换为滚动内容坐标。
    * @param clientX - 指针在视口中的横向位置
    * @returns 指针在滚动内容中的横向偏移，无容器时返回 null
@@ -219,27 +247,47 @@ export function useTabDragger(
   }
 
   /**
-   * 当指针离开具体标签时，尝试按首尾边界回退为可见的插入指示线。
-   * @param clientX - 指针在视口中的横向位置
-   * @returns 是否成功生成回退指示线
+   * 根据解析结果同步当前指示线状态。
+   * @param placement - 已解析的指示线位置
    */
-  function applyDetachedIndicatorPlacement(clientX: number): boolean {
-    const pointerX = getPointerContentX(clientX);
+  function applyResolvedIndicatorPlacement(placement: DetachedIndicatorPlacement): void {
+    dropTargetTabId.value = placement.tabId;
+    dragInsertPosition.value = placement.position;
+    dropIndicatorOffset.value = placement.offset;
+  }
+
+  /**
+   * 根据指针位置与当前 drop target 解析并应用指示线。
+   * @param params - 视口指针位置、源标签和当前目标标签信息
+   * @returns 是否成功生成指示线
+   */
+  function applyIndicatorFromDragState(params: {
+    /** 指针在视口中的横向位置 */
+    clientX: number;
+    /** 被拖拽标签 ID */
+    sourceTabId: string;
+    /** 当前拖拽库命中的目标标签 ID */
+    targetTabId: string | null;
+    /** 当前目标标签由 hitbox 推导出的最近边 */
+    targetEdge: ClosestEdge | null;
+  }): boolean {
+    const pointerX = getPointerContentX(params.clientX);
     if (pointerX === null) {
       return false;
     }
 
-    const placement = getDetachedIndicatorPlacement({
+    const placement = resolveDragIndicatorPlacement({
       pointerX,
-      tabs: getRegisteredTabRects()
+      tabs: getRegisteredTabRects(),
+      sourceTabId: params.sourceTabId,
+      targetTabId: params.targetTabId,
+      targetEdge: params.targetEdge
     });
     if (!placement) {
       return false;
     }
 
-    dropTargetTabId.value = placement.tabId;
-    dragInsertPosition.value = placement.position;
-    dropIndicatorOffset.value = placement.offset;
+    applyResolvedIndicatorPlacement(placement);
     return true;
   }
 
@@ -333,44 +381,33 @@ export function useTabDragger(
     },
     onDrag({ location, source }) {
       const target = location.current.dropTargets[0];
-      if (!target) {
-        if (!applyDetachedIndicatorPlacement(location.current.input.clientX)) {
-          resetIndicatorState();
-        }
-        return;
-      }
+      const targetTabId = target ? (target.data.tabId as string) : null;
+      const targetEdge = target ? extractClosestEdge(target.data) : null;
 
-      const targetTabId = target.data.tabId as string;
-      if (targetTabId === source.data.tabId) {
-        if (!applyDetachedIndicatorPlacement(location.current.input.clientX)) {
-          resetIndicatorState();
-        }
-        return;
+      if (
+        !applyIndicatorFromDragState({
+          clientX: location.current.input.clientX,
+          sourceTabId: source.data.tabId as string,
+          targetTabId,
+          targetEdge
+        })
+      ) {
+        resetIndicatorState();
       }
-
-      // 从目标元素的 userData 中提取最近边
-      const edge = extractClosestEdge(target.data);
-      applyIndicatorPlacement(targetTabId, closestEdgeToMovePosition(edge));
     },
     onDrop({ source, location }) {
       const target = location.current.dropTargets[0];
       const fromId = source.data.tabId as string;
-      let toId: string | null = null;
-      let position: TabMovePosition | null = null;
-
-      if (target && target.data.tabId !== fromId) {
-        toId = target.data.tabId as string;
-        position = closestEdgeToMovePosition(extractClosestEdge(target.data));
-      } else {
-        const placement = applyDetachedIndicatorPlacement(location.current.input.clientX)
-          ? {
-              tabId: dropTargetTabId.value,
-              position: dragInsertPosition.value
-            }
-          : null;
-        toId = placement?.tabId ?? null;
-        position = placement?.position ?? null;
-      }
+      const targetTabId = target ? (target.data.tabId as string) : null;
+      const targetEdge = target ? extractClosestEdge(target.data) : null;
+      const hasPlacement = applyIndicatorFromDragState({
+        clientX: location.current.input.clientX,
+        sourceTabId: fromId,
+        targetTabId,
+        targetEdge
+      });
+      const toId = hasPlacement ? dropTargetTabId.value : null;
+      const position = hasPlacement ? dragInsertPosition.value : null;
 
       if (!toId || !position || fromId === toId) {
         resetDragState();
