@@ -222,7 +222,12 @@ const selectedConnectorElement = computed<DrawingConnectorElement | null>(() => 
  * 首次打开已有内容时自动适配视口。
  */
 function fitInitialContentViewport(): void {
-  if (initialContentViewportFitted.value || !isViewportReady.value || board.state.value.elements.length === 0) {
+  if (initialContentViewportFitted.value || !isViewportReady.value) {
+    return;
+  }
+
+  initialContentViewportFitted.value = true;
+  if (board.state.value.elements.length === 0) {
     return;
   }
 
@@ -231,7 +236,6 @@ function fitInitialContentViewport(): void {
     return;
   }
 
-  initialContentViewportFitted.value = true;
   viewport.setCenter(nextViewport.center);
   viewport.setZoom(nextViewport.zoom);
 }

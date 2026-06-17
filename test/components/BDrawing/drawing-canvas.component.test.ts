@@ -1058,6 +1058,27 @@ describe('BDrawing', (): void => {
     expect(doesViewBoxContainRect(viewBox, { x: 2000, y: 1200, width: 200, height: 100 })).toBe(true);
   });
 
+  it('does not refit the viewport when the first user-created node is added', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    await nextTick();
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await nextTick();
+
+    const initialViewBox = wrapper.find('.b-drawing-canvas__svg').attributes('viewBox');
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 760, clientY: 560 });
+    await dispatchPointerEvent(canvas.element, 'pointerup', { clientX: 760, clientY: 560 });
+    await nextTick();
+
+    expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(1);
+    expect(wrapper.find('.b-drawing-canvas__svg').attributes('viewBox')).toBe(initialViewBox);
+  });
+
   it('emits drawing data updates without internal interaction state', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
