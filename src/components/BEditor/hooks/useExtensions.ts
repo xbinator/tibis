@@ -2,6 +2,7 @@ import type { NodeViewProps } from '@tiptap/vue-3';
 import type { Component, Ref } from 'vue';
 import {
   Extension,
+  Mark,
   type AnyExtension,
   type JSONContent,
   type MarkdownParseHelpers,
@@ -96,11 +97,194 @@ interface MarkdownTableSignatureCell {
   text: string;
 }
 
+/**
+ * Markdown 行内 HTML 标签解析结果。
+ */
+interface ParsedInlineHtmlTag {
+  /** 标签类型 */
+  kind: 'open' | 'close' | 'selfClosing';
+  /** 标准化后的标签名 */
+  tag: string;
+  /** 原始属性字符串 */
+  attributes: string;
+}
+
+/**
+ * 用于给 Markdown 行内内容补充的 Tiptap mark。
+ */
+interface InlineMarkdownMark {
+  /** mark 类型 */
+  type: string;
+  /** mark 属性 */
+  attrs?: Record<string, string | null>;
+}
+
+/**
+ * htmlInline mark 支持的属性。
+ */
+interface HtmlInlineMarkAttributes {
+  /** 需要渲染的安全行内标签 */
+  tag?: string | null;
+  /** abbr 标签的 title 属性 */
+  title?: string | null;
+}
+
+const INLINE_HTML_MARK_TAGS = new Set(['abbr', 'kbd', 'small', 'sub', 'sup']);
+const INLINE_HTML_SUPPORTED_TAGS = new Set(['abbr', 'br', 'kbd', 'mark', 'small', 'sub', 'sup', 'u']);
+
+/**
+ * 生成普通段落节点。
+ * @param content - 段落行内内容
+ * @returns Tiptap JSON 段落节点
+ */
 function createParagraphNode(content: JSONContent[] = []): JSONContent {
   return {
     type: 'paragraph',
     content
   };
+}
+
+/**
+ * 转义 Markdown 导出时的 HTML 属性值。
+ * @param value - 原始属性值
+ * @returns 可安全写入双引号属性的文本
+ */
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/**
+ * 提取行内 HTML 标签属性。
+ * @param attributes - 原始属性文本
+ * @param name - 属性名
+ * @returns 命中时返回属性值，否则返回 null
+ */
+function getInlineHtmlAttribute(attributes: string, name: string): string | null {
+  const pattern = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`, 'i');
+  const match = pattern.exec(attributes);
+
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+/**
+ * 解析 marked 产生的行内 HTML token。
+ * @param token - 当前 Markdown token
+ * @returns 支持的 HTML 标签描述，非标签或不支持时返回 null
+ */
+function parseInlineHtmlToken(token: MarkdownToken): ParsedInlineHtmlTag | null {
+  if (token.type !== 'html') {
+    return null;
+  }
+
+  let raw = '';
+  if (typeof token.raw === 'string') {
+    raw = token.raw;
+  } else if (typeof token.text === 'string') {
+    raw = token.text;
+  }
+  const match = /^<\s*(\/)?\s*([a-zA-Z][\w-]*)([^>]*)>$/.exec(raw.trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const tag = match[2]?.toLowerCase() ?? '';
+  if (!INLINE_HTML_SUPPORTED_TAGS.has(tag)) {
+    return null;
+  }
+
+  const attributes = match[3] ?? '';
+  const isClosing = Boolean(match[1]);
+  const isSelfClosing = /\/\s*$/.test(attributes) || tag === 'br';
+
+  if (isClosing) {
+    return { kind: 'close', tag, attributes };
+  }
+
+  return { kind: isSelfClosing ? 'selfClosing' : 'open', tag, attributes };
+}
+
+/**
+ * 将行内 HTML 标签映射为 Tiptap mark。
+ * @param tag - HTML 标签名
+ * @param attributes - 原始属性文本
+ * @returns 可应用到文本节点的 mark，无法映射时返回 null
+ */
+function createInlineHtmlMark(tag: string, attributes: string): InlineMarkdownMark | null {
+  if (tag === 'u') {
+    return { type: 'underline' };
+  }
+
+  if (tag === 'mark') {
+    return { type: 'highlight' };
+  }
+
+  if (!INLINE_HTML_MARK_TAGS.has(tag)) {
+    return null;
+  }
+
+  const title = tag === 'abbr' ? getInlineHtmlAttribute(attributes, 'title') : null;
+  return title ? { type: 'htmlInline', attrs: { tag, title } } : { type: 'htmlInline', attrs: { tag } };
+}
+
+/**
+ * 给 JSONContent 文本子树追加 mark。
+ * @param content - 原始行内 JSON 节点
+ * @param marks - 需要追加的 mark 列表
+ * @returns 带有附加 mark 的新节点列表
+ */
+function applyInlineMarkdownMarks(content: JSONContent[], marks: InlineMarkdownMark[]): JSONContent[] {
+  if (marks.length === 0) {
+    return content;
+  }
+
+  return content.map((node) => {
+    if (node.type === 'text') {
+      return {
+        ...node,
+        marks: [...(Array.isArray(node.marks) ? node.marks : []), ...marks]
+      };
+    }
+
+    if (Array.isArray(node.content)) {
+      return {
+        ...node,
+        content: applyInlineMarkdownMarks(node.content, marks)
+      };
+    }
+
+    return node;
+  });
+}
+
+/**
+ * 查找行内 HTML 开始标签的匹配结束标签。
+ * @param tokens - 当前行内 token 列表
+ * @param startIndex - 开始标签下标
+ * @param tag - 标签名
+ * @returns 匹配结束标签下标，不存在时返回 -1
+ */
+function findInlineHtmlClosingIndex(tokens: MarkdownToken[], startIndex: number, tag: string): number {
+  let depth = 0;
+
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const htmlTag = parseInlineHtmlToken(tokens[index] as MarkdownToken);
+    if (!htmlTag || htmlTag.tag !== tag || htmlTag.kind === 'selfClosing') {
+      continue;
+    }
+
+    if (htmlTag.kind === 'open') {
+      depth += 1;
+      continue;
+    }
+
+    depth -= 1;
+    if (depth === 0) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function getReferenceStyleLinkRaw(token: MarkdownToken): string | null {
@@ -112,20 +296,92 @@ function getReferenceStyleLinkRaw(token: MarkdownToken): string | null {
   return /^\[[^\]]+\]\[[^\]]+\]$/.test(raw) ? raw : null;
 }
 
+/**
+ * 解析行内 token，并保留安全 HTML 标签的富文本语义。
+ * @param tokens - marked 行内 token 列表
+ * @param helpers - Tiptap Markdown 解析辅助函数
+ * @param activeMarks - 外层 HTML 标签累积的 mark
+ * @returns Tiptap JSON 行内节点列表
+ */
+function parseInlineTokensWithHtmlMarks(tokens: MarkdownToken[], helpers: MarkdownParseHelpers, activeMarks: InlineMarkdownMark[] = []): JSONContent[] {
+  const content: JSONContent[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index] as MarkdownToken;
+    const htmlTag = parseInlineHtmlToken(token);
+
+    if (htmlTag?.kind === 'selfClosing' && htmlTag.tag === 'br') {
+      content.push(helpers.createNode('hardBreak'));
+      continue;
+    }
+
+    if (htmlTag?.kind === 'open') {
+      const closingIndex = findInlineHtmlClosingIndex(tokens, index, htmlTag.tag);
+      const mark = createInlineHtmlMark(htmlTag.tag, htmlTag.attributes);
+
+      if (closingIndex > index && mark) {
+        content.push(...parseInlineTokensWithHtmlMarks(tokens.slice(index + 1, closingIndex), helpers, [...activeMarks, mark]));
+        index = closingIndex;
+        continue;
+      }
+    }
+
+    const raw = getReferenceStyleLinkRaw(token);
+    const parsed = raw ? [helpers.createTextNode(raw)] : helpers.parseInline([token]);
+    content.push(...applyInlineMarkdownMarks(parsed, activeMarks));
+  }
+
+  return content;
+}
+
+const HtmlInline = Mark.create({
+  name: 'htmlInline',
+  addAttributes() {
+    return {
+      tag: {
+        default: 'span',
+        renderHTML: () => ({})
+      },
+      title: {
+        default: null,
+        renderHTML: (attributes: HtmlInlineMarkAttributes): Record<string, string> => {
+          const tag = typeof attributes.tag === 'string' ? attributes.tag : '';
+          const title = typeof attributes.title === 'string' ? attributes.title : '';
+          return tag === 'abbr' && title ? { title } : {};
+        }
+      }
+    };
+  },
+  parseHTML() {
+    return Array.from(INLINE_HTML_MARK_TAGS).map((tag) => ({
+      tag,
+      getAttrs: (element: HTMLElement): HtmlInlineMarkAttributes => ({
+        tag,
+        title: tag === 'abbr' ? element.getAttribute('title') : null
+      })
+    }));
+  },
+  renderHTML({ mark, HTMLAttributes }) {
+    const attrs = mark.attrs as HtmlInlineMarkAttributes;
+    const tag = typeof attrs.tag === 'string' && INLINE_HTML_MARK_TAGS.has(attrs.tag) ? attrs.tag : 'span';
+
+    return [tag, HTMLAttributes, 0];
+  },
+  renderMarkdown(node: JSONContent, helpers): string {
+    const attrs = node.attrs as HtmlInlineMarkAttributes | undefined;
+    const tag = typeof attrs?.tag === 'string' && INLINE_HTML_MARK_TAGS.has(attrs.tag) ? attrs.tag : 'span';
+    const title = tag === 'abbr' && typeof attrs?.title === 'string' && attrs.title ? ` title="${escapeHtmlAttribute(attrs.title)}"` : '';
+
+    return `<${tag}${title}>${helpers.renderChildren(node)}</${tag}>`;
+  }
+});
+
 function parseInlinePreservingReferenceLinks(tokens: MarkdownToken[] | undefined, helpers: MarkdownParseHelpers): JSONContent[] {
   if (!tokens?.length) {
     return [];
   }
 
-  return tokens.flatMap((token) => {
-    const raw = getReferenceStyleLinkRaw(token);
-
-    if (raw) {
-      return [helpers.createTextNode(raw)];
-    }
-
-    return helpers.parseInline([token]);
-  });
+  return parseInlineTokensWithHtmlMarks(tokens, helpers);
 }
 
 function parseInlineOrText(tokens: MarkdownToken[] | undefined, text: string | undefined, helpers: MarkdownParseHelpers): JSONContent[] {
@@ -700,6 +956,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     Strike,
     TextStyle,
     Color,
+    HtmlInline,
     Typography,
     Underline,
     MarkdownLink.configure({
@@ -1098,6 +1355,7 @@ export function createRichMarkdownSchemaExtensions(
     Strike,
     TextStyle,
     Color,
+    HtmlInline,
     Typography,
     Underline,
     MarkdownLink.configure({
