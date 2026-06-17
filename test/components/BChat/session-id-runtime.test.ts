@@ -32,6 +32,15 @@ const streamMock = vi.hoisted(() => ({
 
 const streamLoading = vi.hoisted(() => ({ value: false }));
 
+const streamOptionsMockState = vi.hoisted(() => ({
+  options: undefined as
+    | {
+        onComplete?: (message: Message) => Promise<void> | void;
+        onAssistantDraftChange?: (message: Message) => Promise<void> | void;
+      }
+    | undefined
+}));
+
 const autoNameMockState = vi.hoisted(() => ({
   options: undefined as
     | {
@@ -188,10 +197,16 @@ vi.mock('@/stores/ai/skill', () => ({
 }));
 
 vi.mock('@/components/BChat/hooks/useChatStream', () => ({
-  useChatStream: vi.fn(() => ({
-    stream: streamMock,
-    loading: streamLoading
-  }))
+  useChatStream: vi.fn(
+    (options: { onComplete?: (message: Message) => Promise<void> | void; onAssistantDraftChange?: (message: Message) => Promise<void> | void }) => {
+      streamOptionsMockState.options = options;
+
+      return {
+        stream: streamMock,
+        loading: streamLoading
+      };
+    }
+  )
 }));
 
 vi.mock('@/components/BChat/hooks/useAutoName', () => ({
@@ -305,6 +320,37 @@ function createMessage(id: string, content: string): Message {
 }
 
 /**
+ * 创建测试用助手消息。
+ * @param overrides - 需要覆盖的消息字段。
+ * @returns 测试助手消息。
+ */
+function createAssistantMessage(overrides: Partial<Message> = {}): Message {
+  return {
+    id: 'assistant-1',
+    role: 'assistant',
+    content: 'assistant content',
+    parts: [{ type: 'text', text: 'assistant content' }],
+    createdAt: '2026-06-15T00:00:01.000Z',
+    loading: false,
+    finished: true,
+    ...overrides
+  };
+}
+
+/**
+ * 创建可手动完成的 Promise。
+ * @returns Promise 与完成函数。
+ */
+function createDeferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolvePromise: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+
+  return { promise, resolve: resolvePromise };
+}
+
+/**
  * 挂载 BChat。
  * @param sessionId - 当前会话 ID
  * @returns 组件包装器
@@ -351,6 +397,7 @@ describe('BChat sessionId runtime', (): void => {
     streamMock.regenerate.mockReset();
     streamMock.submitUserChoice.mockReset();
     streamMock.abort.mockReset();
+    streamOptionsMockState.options = undefined;
     todoStoreMock.todosBySession.clear();
     todoStoreMock.clearTodos.mockReset();
     todoStoreMock.getTodos.mockClear();
@@ -456,5 +503,37 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(todoStoreMock.clearTodos).toHaveBeenCalledWith('session-finished');
     expect(wrapper.findComponent({ name: 'TodoPanel' }).exists()).toBe(false);
+  });
+
+  it('waits for pending assistant draft persistence before writing the final assistant message', async (): Promise<void> => {
+    const draftPersist = createDeferred();
+    chatStoreMock.updateSessionMessage.mockReturnValueOnce(draftPersist.promise);
+    mountBChat('session-active');
+    await flushPromises();
+
+    const draftMessage = createAssistantMessage({
+      content: '',
+      parts: [],
+      loading: true,
+      finished: false
+    });
+    await streamOptionsMockState.options?.onAssistantDraftChange?.(draftMessage);
+
+    const finalMessage = createAssistantMessage({
+      content: 'final answer',
+      parts: [{ type: 'text', text: 'final answer' }],
+      loading: false,
+      finished: true
+    });
+    const completeTask = Promise.resolve(streamOptionsMockState.options?.onComplete?.(finalMessage));
+    await flushPromises();
+
+    expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-active', expect.objectContaining({ id: finalMessage.id }));
+
+    draftPersist.resolve();
+    await completeTask;
+    await flushPromises();
+
+    expect(chatStoreMock.addSessionMessage).toHaveBeenCalledWith('session-active', expect.objectContaining({ id: finalMessage.id, finished: true }));
   });
 });

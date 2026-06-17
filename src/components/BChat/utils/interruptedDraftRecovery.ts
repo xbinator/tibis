@@ -22,12 +22,21 @@ export interface InterruptedDraftRecoveryResult {
 }
 
 /**
+ * 判断消息是否正在等待用户输入。
+ * @param message - 待检查消息。
+ * @returns 是否为等待用户选择的暂停态消息。
+ */
+function isAwaitingUserChoiceMessage(message: Message): boolean {
+  return message.parts.some((part) => part.type === 'tool' && part.result?.status === 'awaiting_user_input');
+}
+
+/**
  * 判断消息是否为上次硬中断遗留的 assistant 草稿。
  * @param message - 待检查消息。
  * @returns 是否需要恢复。
  */
 function isInterruptedAssistantDraft(message: Message): boolean {
-  return message.role === 'assistant' && (message.loading === true || message.finished === false);
+  return message.role === 'assistant' && !isAwaitingUserChoiceMessage(message) && (message.loading === true || message.finished === false);
 }
 
 /**

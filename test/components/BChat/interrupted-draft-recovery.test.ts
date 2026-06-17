@@ -25,6 +25,41 @@ function createInterruptedAssistantDraft(): Message {
   };
 }
 
+/**
+ * 创建一条等待用户选择的助手消息。
+ * @returns 等待用户选择的助手消息。
+ */
+function createAwaitingUserChoiceAssistantMessage(): Message {
+  return {
+    id: 'assistant-awaiting-choice-1',
+    role: 'assistant',
+    content: '',
+    parts: [
+      {
+        type: 'tool',
+        toolCallId: 'question-tool-1',
+        toolName: 'ask_user_question',
+        status: 'done',
+        input: { question: '继续吗？' },
+        result: {
+          toolName: 'ask_user_question',
+          status: 'awaiting_user_input',
+          data: {
+            questionId: 'question-1',
+            toolCallId: 'question-tool-1',
+            mode: 'single',
+            question: '继续吗？',
+            options: [{ label: '继续', value: 'continue' }]
+          }
+        }
+      }
+    ],
+    createdAt: '2026-06-13T00:00:00.000Z',
+    loading: false,
+    finished: false
+  };
+}
+
 describe('interrupted assistant draft recovery', () => {
   it('finalizes unfinished assistant drafts and marks running tools as cancelled', (): void => {
     const sourceMessages = [createInterruptedAssistantDraft()];
@@ -46,5 +81,13 @@ describe('interrupted assistant draft recovery', () => {
         error: { code: 'USER_CANCELLED' }
       }
     });
+  });
+
+  it('keeps assistant messages that are waiting for user choice', (): void => {
+    const awaitingMessage = createAwaitingUserChoiceAssistantMessage();
+    const result = recoverInterruptedAssistantDrafts([awaitingMessage]);
+
+    expect(result.recovered).toBe(false);
+    expect(result.messages[0]).toEqual(awaitingMessage);
   });
 });

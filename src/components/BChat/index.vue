@@ -580,10 +580,29 @@ async function persistAssistantDraft(message: Message): Promise<void> {
   await chatStore.updateSessionMessage(sessionId, message);
 }
 
+/** 当前仍在执行的 assistant 草稿持久化任务。 */
+let pendingAssistantDraftPersistence: Promise<void> = Promise.resolve();
+
+/**
+ * 串行执行 assistant 草稿持久化，避免旧草稿写入晚于最终消息落库。
+ * @param message - 当前 assistant 草稿消息
+ */
+function queueAssistantDraftPersistence(message: Message): void {
+  const persistenceTask = pendingAssistantDraftPersistence.catch(() => undefined).then(() => persistAssistantDraft(message));
+  pendingAssistantDraftPersistence = persistenceTask.catch(() => undefined);
+}
+
+/**
+ * 等待已启动的 assistant 草稿持久化完成。
+ */
+async function waitForAssistantDraftPersistence(): Promise<void> {
+  await pendingAssistantDraftPersistence;
+}
+
 /** 节流后的 assistant 草稿持久化，避免 token 高频输出时频繁写库。 */
 const persistAssistantDraftThrottled = throttle(
   (message: Message): void => {
-    Promise.resolve(persistAssistantDraft(message)).catch(() => undefined);
+    queueAssistantDraftPersistence(message);
   },
   ASSISTANT_DRAFT_PERSIST_INTERVAL_MS,
   { leading: false, trailing: true }
@@ -595,7 +614,7 @@ const persistAssistantDraftThrottled = throttle(
  */
 function handleAssistantDraftChange(message: Message): void {
   if (isEmptyAssistantDraft(message)) {
-    Promise.resolve(persistAssistantDraft(message)).catch(() => undefined);
+    queueAssistantDraftPersistence(message);
     return;
   }
 
@@ -619,6 +638,7 @@ const { stream, loading: streamLoading } = useChatStream({
   onBeforeRegenerate: handleBeforeRegenerate,
   onComplete: async (nextMessage: Message) => {
     cancelAssistantDraftPersistence();
+    await waitForAssistantDraftPersistence();
     // eslint-disable-next-line no-use-before-define
     await handleComplete(nextMessage);
   },
