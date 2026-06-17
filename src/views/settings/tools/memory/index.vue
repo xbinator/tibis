@@ -23,7 +23,7 @@
 
       <div v-if="memoryStore.isEmpty" class="memory-settings__empty">
         <p>暂无记忆条目</p>
-        <p class="memory-settings__empty-hint">随着对话积累，自动学习你的偏好和习惯</p>
+        <p class="memory-settings__empty-hint">可点击右上角「编辑」手动添加，或在对话中使用「请记住」「记住这个」自动记录</p>
       </div>
 
       <MemoryContent v-if="!memoryStore.isEmpty" :content="memoryStore.rawContent" />
