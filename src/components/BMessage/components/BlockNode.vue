@@ -22,7 +22,7 @@
     <BlockNode v-for="child in node.children" :key="child.id" :node="child" />
   </blockquote>
 
-  <pre v-else-if="node.type === 'code'"><code :class="node.lang ? `language-${node.lang}` : undefined">{{ node.text }}</code></pre>
+  <CodeBlockNode v-else-if="node.type === 'code'" :node="node" />
 
   <table v-else-if="node.type === 'table'">
     <thead>
@@ -53,6 +53,7 @@
 <script setup lang="ts">
 import type { BlockNode } from '../types';
 import { computed } from 'vue';
+import CodeBlockNode from './CodeBlockNode.vue';
 import InlineNode from './InlineNode.vue';
 
 defineOptions({ name: 'BlockNode' });

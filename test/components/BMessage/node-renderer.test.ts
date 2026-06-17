@@ -14,6 +14,7 @@ const navigateLinkMock = vi.hoisted(() =>
   })
 );
 const previewImageMock = vi.hoisted(() => vi.fn());
+const clipboardMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
@@ -24,6 +25,12 @@ vi.mock('@/hooks/useNavigate', () => ({
 vi.mock('@/hooks/useImagePreview', () => ({
   useImagePreview: () => ({
     previewImage: previewImageMock
+  })
+}));
+
+vi.mock('@/hooks/useClipboard', () => ({
+  useClipboard: () => ({
+    clipboard: clipboardMock
   })
 }));
 
@@ -177,6 +184,71 @@ describe('BMessage node renderer', () => {
 
     expect(wrapper.text()).toContain('Fish & chips <ok> & more');
     expect(wrapper.text()).not.toContain('&amp;');
+  });
+
+  it('renders fenced code blocks with syntax highlight classes', async (): Promise<void> => {
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '```ts\nconst answer: number = 42\n```'
+      }
+    });
+
+    await nextTick();
+
+    expect(wrapper.find('.b-message__code-block').exists()).toBe(true);
+    expect(wrapper.find('.b-message__code-language').text()).toBe('Ts');
+    expect(wrapper.find('.hljs-keyword').exists()).toBe(true);
+    expect(wrapper.find('code').text()).toContain('const answer');
+    expect(wrapper.find('.b-message__code-content').element.textContent).toBe('const answer: number = 42');
+  });
+
+  it('falls back to plain text for unknown code block languages', async (): Promise<void> => {
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '```madeup\nplain text\n```'
+      }
+    });
+
+    await nextTick();
+
+    expect(wrapper.find('.b-message__code-language').text()).toBe('Madeup');
+    expect(wrapper.find('.hljs-keyword').exists()).toBe(false);
+    expect(wrapper.find('code').text()).toBe('plain text');
+  });
+
+  it('copies fenced code block text without rendered labels', async (): Promise<void> => {
+    clipboardMock.mockResolvedValue(true);
+
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '```js\nconsole.log("copy me")\n```'
+      }
+    });
+
+    await nextTick();
+    await wrapper.find('button[aria-label="复制代码"]').trigger('click');
+
+    expect(clipboardMock).toHaveBeenCalledWith('console.log("copy me")', {
+      successMessage: '代码已复制',
+      trim: false
+    });
+  });
+
+  it('keeps inline code without a copy control', async (): Promise<void> => {
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: 'Inline `const value = 1` only.'
+      }
+    });
+
+    await nextTick();
+
+    expect(wrapper.find('p code').text()).toBe('const value = 1');
+    expect(wrapper.find('button[aria-label="复制代码"]').exists()).toBe(false);
   });
 
   it('preserves plain text whitespace through the node path', async (): Promise<void> => {
