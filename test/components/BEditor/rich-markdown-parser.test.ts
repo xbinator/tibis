@@ -41,6 +41,28 @@ function findTextNode(node: JSONContent, text: string): JSONContent | null {
 }
 
 /**
+ * 查找指定类型的第一个 JSON 节点。
+ * @param node - 当前 JSON 节点
+ * @param type - 节点类型
+ * @returns 命中时返回节点，否则返回 null
+ */
+function findNodeByType(node: JSONContent, type: string): JSONContent | null {
+  if (node.type === type) {
+    return node;
+  }
+
+  const children = Array.isArray(node.content) ? node.content : [];
+  for (const child of children) {
+    const found = findNodeByType(child, type);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+/**
  * 判断文本节点是否带有指定 mark。
  * @param node - 文本节点
  * @param markType - mark 类型
@@ -94,5 +116,12 @@ describe('BEditor rich Markdown parser', (): void => {
     expect(getMark(findTextNode(json, '2'), 'htmlInline')?.attrs).toEqual({ tag: 'sub' });
     expect(getMark(findTextNode(json, '上标'), 'htmlInline')?.attrs).toEqual({ tag: 'sup' });
     expect(JSON.stringify(json)).toContain('"type":"hardBreak"');
+  });
+
+  it('keeps block math as a semantic node when loading Markdown', async (): Promise<void> => {
+    const { json } = await parseMarkdownForRichLoad('$$\na^2+b^2=c^2\n$$', 'math-node-test', '1');
+    const blockMath = findNodeByType(json, 'blockMath');
+
+    expect(blockMath?.attrs).toEqual({ latex: 'a^2+b^2=c^2' });
   });
 });

@@ -18,7 +18,7 @@ import { Highlight } from '@tiptap/extension-highlight';
 import { Image } from '@tiptap/extension-image';
 import { Link } from '@tiptap/extension-link';
 import { ListItem as BaseListItem } from '@tiptap/extension-list';
-import { Mathematics } from '@tiptap/extension-mathematics';
+import { BlockMath, InlineMath, Mathematics } from '@tiptap/extension-mathematics';
 import { Paragraph as BaseParagraph } from '@tiptap/extension-paragraph';
 import { Placeholder } from '@tiptap/extension-placeholder';
 import { Strike } from '@tiptap/extension-strike';
@@ -37,6 +37,7 @@ import { VueNodeViewRenderer } from '@tiptap/vue-3';
 import { common, createLowlight } from 'lowlight';
 import { captureSourceLineRange, createSourceLineTracker, resetSourceLineTracker } from '../adapters/sourceLineMapping';
 import CodeBlockView from '../components/CodeBlock.vue';
+import MathBlockView from '../components/MathBlock.vue';
 import TableView from '../components/TableView.vue';
 import { AISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { Search, type SearchScrollContext } from '../extensions/editorSearch';
@@ -664,6 +665,10 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
 
   const Code = _Code.extend({ excludes: '' });
 
+  const RuntimeBlockMath = BlockMath.extend({
+    addNodeView: () => VueNodeViewRenderer(MathBlockView as unknown as Component<NodeViewProps>)
+  });
+
   const HtmlComment = Extension.create({
     name: 'htmlComment',
     markdownTokenName: 'html',
@@ -965,7 +970,12 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
         class: 'editor-link'
       }
     }),
-    Mathematics.configure({
+    RuntimeBlockMath.configure({
+      katexOptions: {
+        throwOnError: false
+      }
+    }),
+    InlineMath.configure({
       katexOptions: {
         throwOnError: false
       }
