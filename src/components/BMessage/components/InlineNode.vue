@@ -31,6 +31,8 @@
 
   <code v-else-if="node.type === 'code'">{{ node.text }}</code>
 
+  <MathNode v-else-if="node.type === 'math'" :text="node.text" />
+
   <a v-else-if="node.type === 'link'" :href="node.href" :title="node.title || undefined" @click="handleLinkClick">
     <InlineNode v-for="(child, index) in node.children" :key="index" :node="child" />
   </a>
@@ -73,6 +75,7 @@ import { inject, ref, watch } from 'vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
 import { MESSAGE_NODE_RENDER_CONTEXT_KEY } from '../types';
+import MathNode from './MathNode.vue';
 
 defineOptions({ name: 'InlineNode' });
 

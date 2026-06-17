@@ -27,7 +27,7 @@ let entityDecoderElement: HTMLTextAreaElement | null = null;
 /**
  * BMessage 支持的扩展行内 Markdown token 类型。
  */
-type ExtendedInlineTokenType = 'mark' | 'sub' | 'sup';
+type ExtendedInlineTokenType = 'mark' | 'math' | 'sub' | 'sup';
 
 /**
  * BMessage 扩展行内 Markdown token。
@@ -41,6 +41,18 @@ interface ExtendedInlineToken extends Tokens.Generic {
   text: string;
   /** 子 token */
   tokens: Token[];
+}
+
+/**
+ * BMessage 扩展块级数学公式 token。
+ */
+interface ExtendedMathBlockToken extends Tokens.Generic {
+  /** 节点类型 */
+  type: 'mathBlock';
+  /** 原始文本 */
+  raw: string;
+  /** 公式内容 */
+  text: string;
 }
 
 /**
@@ -84,8 +96,61 @@ function createInlineMarkdownExtension(name: ExtendedInlineTokenType, pattern: R
   };
 }
 
+/**
+ * 创建行内数学公式 tokenizer。
+ * @returns Marked tokenizer 扩展
+ */
+function createInlineMathExtension(): TokenizerExtension {
+  return {
+    name: 'math',
+    level: 'inline',
+    start(src: string): number | void {
+      const index = src.indexOf('$');
+      return index >= 0 ? index : undefined;
+    },
+    tokenizer(src: string): ExtendedInlineToken | undefined {
+      const match = /^\$(?!\$|\s)([\s\S]*?\S)\$(?!\$)/.exec(src);
+      if (!match) return undefined;
+
+      return {
+        type: 'math',
+        raw: match[0],
+        text: match[1],
+        tokens: []
+      };
+    }
+  };
+}
+
+/**
+ * 创建块级数学公式 tokenizer。
+ * @returns Marked tokenizer 扩展
+ */
+function createBlockMathExtension(): TokenizerExtension {
+  return {
+    name: 'mathBlock',
+    level: 'block',
+    start(src: string): number | void {
+      const index = src.indexOf('$$');
+      return index >= 0 ? index : undefined;
+    },
+    tokenizer(src: string): ExtendedMathBlockToken | undefined {
+      const match = /^\$\$[ \t]*\n?([\s\S]+?)\n?\$\$(?:\n+|$)/.exec(src);
+      if (!match) return undefined;
+
+      return {
+        type: 'mathBlock',
+        raw: match[0],
+        text: match[1].trim()
+      };
+    }
+  };
+}
+
 messageMarked.use({
   extensions: [
+    createBlockMathExtension(),
+    createInlineMathExtension(),
     createInlineMarkdownExtension('mark', /^==(?=\S)([\s\S]*?\S)==(?!=)/, '=='),
     createInlineMarkdownExtension('sup', /^\^(?!\^)(?=\S)([\s\S]*?\S)\^(?!\^)/, '^'),
     createInlineMarkdownExtension('sub', /^~(?!~)(?=\S)([\s\S]*?\S)~(?!~)/, '~')
@@ -329,6 +394,10 @@ function tokenToInlineNodes(token: Token, path: number[]): InlineNode[] {
       return [{ type: 'code', text: (token as Tokens.Codespan).text }];
     }
 
+    case 'math': {
+      return [{ type: 'math', text: (token as ExtendedInlineToken).text }];
+    }
+
     case 'link': {
       const linkToken = token as Tokens.Link;
       return [
@@ -551,6 +620,18 @@ function tokenToBlockNodes(token: Token, path: number[], tailIndex: number): Blo
           raw,
           lang: codeToken.lang,
           text: codeToken.text
+        }
+      ];
+    }
+
+    case 'mathBlock': {
+      const mathToken = token as ExtendedMathBlockToken;
+      return [
+        {
+          type: 'math',
+          id,
+          raw,
+          text: mathToken.text
         }
       ];
     }

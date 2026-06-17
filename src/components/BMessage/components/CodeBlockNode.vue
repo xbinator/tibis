@@ -10,7 +10,14 @@
         <BIcon icon="lucide:copy" :size="14" />
       </button>
     </div>
-    <pre :class="bem('code-pre')"><code :class="[bem('code-content'), codeClassName]"><CodeHighlightNode
+    <div v-if="isMermaidPreviewVisible" :class="bem('mermaid-preview')">
+      <div v-if="mermaidError" :class="bem('mermaid-error')">
+        <BIcon icon="lucide:alert-circle" />
+        <span>{{ mermaidError }}</span>
+      </div>
+      <div v-else ref="mermaidPreviewRef" :class="bem('mermaid-diagram')"></div>
+    </div>
+    <pre v-else :class="bem('code-pre')"><code :class="[bem('code-content'), codeClassName]"><CodeHighlightNode
       v-for="(child, index) in highlightedNodes"
       :key="index"
       :node="child"
@@ -22,15 +29,19 @@
 /* eslint-disable no-use-before-define -- 代码高亮节点是递归结构，类型与组件渲染存在自然递归。 */
 import type { CodeBlockNode as MessageCodeBlockNode } from '../types';
 import type { PropType, VNodeChild } from 'vue';
-import { computed, defineComponent, h } from 'vue';
+import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { common, createLowlight } from 'lowlight';
 import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
+import { createMessageMermaidRenderId } from '../utils';
 
 defineOptions({ name: 'CodeBlockNode' });
 
 const [, bem] = createNamespace('message');
 const lowlight = createLowlight(common);
+let mermaidInitialized = false;
+let mermaidCurrentTheme = '';
+let mermaidModule: typeof import('mermaid').default | null = null;
 
 /**
  * Lowlight 文本节点。
@@ -99,6 +110,9 @@ interface Props {
 
 const props = defineProps<Props>();
 const { clipboard } = useClipboard();
+const mermaidPreviewRef = ref<HTMLElement | null>(null);
+const mermaidError = ref<string | null>(null);
+let mermaidRenderIndex = 0;
 
 /**
  * Markdown 代码围栏语言别名。
@@ -157,6 +171,9 @@ const highlightLanguage = computed(() => {
   return language && lowlight.registered(language) ? language : '';
 });
 const codeClassName = computed(() => (rawLanguage.value ? `language-${rawLanguage.value}` : undefined));
+const isMermaidLanguage = computed(() => rawLanguage.value === 'mermaid');
+const hasCode = computed(() => props.node.text.trim().length > 0);
+const isMermaidPreviewVisible = computed(() => isMermaidLanguage.value && hasCode.value);
 const highlightedNodes = computed<CodeHighlightRenderNode[]>(() => {
   if (!highlightLanguage.value) {
     return textToHighlightNodes(props.node.text);
@@ -169,6 +186,69 @@ const highlightedNodes = computed<CodeHighlightRenderNode[]>(() => {
     return textToHighlightNodes(props.node.text);
   }
 });
+
+/**
+ * 初始化 Mermaid 渲染实例。
+ * @returns Mermaid 默认导出实例
+ */
+async function initMermaid(): Promise<typeof import('mermaid').default> {
+  if (!mermaidModule) {
+    const module = await import('mermaid');
+    mermaidModule = module.default;
+  }
+
+  const isDark = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark';
+  const theme = isDark ? 'dark' : 'default';
+
+  if (mermaidInitialized && mermaidCurrentTheme === theme) {
+    return mermaidModule;
+  }
+
+  mermaidModule.initialize({
+    startOnLoad: false,
+    theme,
+    securityLevel: 'loose',
+    fontFamily: 'inherit',
+    suppressErrorRendering: true
+  });
+
+  mermaidInitialized = true;
+  mermaidCurrentTheme = theme;
+
+  return mermaidModule;
+}
+
+/**
+ * 渲染 Mermaid 图表。
+ */
+async function renderMermaid(): Promise<void> {
+  if (!isMermaidPreviewVisible.value) return;
+
+  const renderIndex = ++mermaidRenderIndex;
+  const code = props.node.text.trim();
+
+  mermaidError.value = null;
+  await nextTick();
+
+  if (!mermaidPreviewRef.value || renderIndex !== mermaidRenderIndex || !isMermaidPreviewVisible.value) return;
+
+  try {
+    const mermaid = await initMermaid();
+    const { svg } = await mermaid.render(createMessageMermaidRenderId(), code);
+
+    if (!mermaidPreviewRef.value || renderIndex !== mermaidRenderIndex) return;
+
+    mermaidPreviewRef.value.innerHTML = svg;
+  } catch (error: unknown) {
+    if (renderIndex !== mermaidRenderIndex) return;
+
+    mermaidError.value = error instanceof Error ? error.message : '渲染失败';
+
+    if (mermaidPreviewRef.value) {
+      mermaidPreviewRef.value.innerHTML = '';
+    }
+  }
+}
 
 /**
  * 将纯文本转为代码高亮文本节点。
@@ -234,6 +314,21 @@ async function handleCopyClick(): Promise<void> {
     trim: false
   });
 }
+
+watch(
+  () => [isMermaidPreviewVisible.value, props.node.text] as const,
+  () => {
+    renderMermaid();
+  }
+);
+
+onMounted(() => {
+  renderMermaid();
+});
+
+onUnmounted(() => {
+  mermaidRenderIndex += 1;
+});
 </script>
 
 <style scoped lang="less">
@@ -304,5 +399,35 @@ async function handleCopyClick(): Promise<void> {
   background: transparent;
   border-radius: 0;
   .code-highlight();
+}
+
+.b-message__mermaid-preview {
+  padding: 20px;
+  overflow: auto;
+  background: var(--bg-primary);
+}
+
+.b-message__mermaid-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+}
+
+.b-message__mermaid-diagram :deep(svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.b-message__mermaid-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  font-size: 14px;
+  color: var(--color-error);
+  text-align: center;
 }
 </style>

@@ -5,6 +5,18 @@
 import type { BlockNode, ImageInlineNode, InlineNode } from './types';
 import type { ImagePreviewItem } from '@/hooks/useImagePreview';
 
+let mermaidRenderIdCounter = 0;
+
+/**
+ * 生成 Mermaid render() 需要的唯一 id。
+ * @returns 当前页面生命周期内唯一的 Mermaid 渲染 id
+ */
+export function createMessageMermaidRenderId(): string {
+  mermaidRenderIdCounter = (mermaidRenderIdCounter + 1) % Number.MAX_SAFE_INTEGER;
+
+  return `b-message-mermaid-${Date.now()}-${mermaidRenderIdCounter}`;
+}
+
 /**
  * 生成稳定短哈希，用于节点 key。
  * @param value - 待哈希文本

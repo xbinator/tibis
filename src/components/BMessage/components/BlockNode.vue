@@ -24,6 +24,8 @@
 
   <CodeBlockNode v-else-if="node.type === 'code'" :node="node" />
 
+  <MathBlockNode v-else-if="node.type === 'math'" :text="node.text" />
+
   <table v-else-if="node.type === 'table'">
     <thead>
       <tr>
@@ -55,6 +57,7 @@ import type { BlockNode } from '../types';
 import { computed } from 'vue';
 import CodeBlockNode from './CodeBlockNode.vue';
 import InlineNode from './InlineNode.vue';
+import MathBlockNode from './MathBlockNode.vue';
 
 defineOptions({ name: 'BlockNode' });
 

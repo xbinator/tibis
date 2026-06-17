@@ -112,6 +112,16 @@ export interface CodeBlockNode extends MessageNodeBase {
 }
 
 /**
+ * 数学公式块节点。
+ */
+export interface MathBlockNode extends MessageNodeBase {
+  /** 节点类型 */
+  type: 'math';
+  /** 公式内容 */
+  text: string;
+}
+
+/**
  * 表格单元格节点。
  */
 export interface TableCellNode {
@@ -172,6 +182,7 @@ export type BlockNode =
   | ListBlockNode
   | BlockquoteBlockNode
   | CodeBlockNode
+  | MathBlockNode
   | TableBlockNode
   | HrBlockNode
   | ComponentBlockNode
@@ -258,6 +269,16 @@ export interface CodeInlineNode {
 }
 
 /**
+ * 行内数学公式节点。
+ */
+export interface MathInlineNode {
+  /** 节点类型 */
+  type: 'math';
+  /** 公式内容 */
+  text: string;
+}
+
+/**
  * 链接行内节点。
  */
 export interface LinkInlineNode {
@@ -334,6 +355,7 @@ export type InlineNode =
   | SupInlineNode
   | SubInlineNode
   | CodeInlineNode
+  | MathInlineNode
   | LinkInlineNode
   | ImageInlineNode
   | BreakInlineNode

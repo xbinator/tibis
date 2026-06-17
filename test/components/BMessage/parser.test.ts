@@ -72,6 +72,21 @@ describe('parseMessageNodes', () => {
     ]);
   });
 
+  it('converts inline and block math into semantic nodes', (): void => {
+    const result = parseMessageNodes({
+      content: 'Inline $E=mc^2$ math.\n\n$$\na^2+b^2=c^2\n$$',
+      mode: 'markdown',
+      loading: false
+    });
+
+    const paragraph = expectBlockNode(result.blocks[0], 'paragraph');
+    const inlineMath = expectInlineNode(paragraph.children[1], 'math');
+    const blockMath = expectBlockNode(result.blocks[1], 'math');
+
+    expect(inlineMath.text).toBe('E=mc^2');
+    expect(blockMath.text).toBe('a^2+b^2=c^2');
+  });
+
   it('preserves inline formatting inside tight list item text blocks', (): void => {
     const result = parseMessageNodes({
       content: '- **粗体**\n- *斜体*\n- ~~删除线~~\n- ==高亮==\n- `行内代码`\n- X^2^ and H~2~O',

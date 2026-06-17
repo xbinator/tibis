@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import { nextTick } from 'vue';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import BMessage from '@/components/BMessage/index.vue';
 
@@ -15,6 +15,10 @@ const navigateLinkMock = vi.hoisted(() =>
 );
 const previewImageMock = vi.hoisted(() => vi.fn());
 const clipboardMock = vi.hoisted(() => vi.fn());
+const mermaidMock = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  render: vi.fn().mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' })
+}));
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
@@ -32,6 +36,10 @@ vi.mock('@/hooks/useClipboard', () => ({
   useClipboard: () => ({
     clipboard: clipboardMock
   })
+}));
+
+vi.mock('mermaid', () => ({
+  default: mermaidMock
 }));
 
 /**
@@ -218,6 +226,20 @@ describe('BMessage node renderer', () => {
     expect(wrapper.find('code').text()).toBe('plain text');
   });
 
+  it('renders inline and block math with KaTeX', async (): Promise<void> => {
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: 'Inline $E=mc^2$ math.\n\n$$\na^2+b^2=c^2\n$$'
+      }
+    });
+
+    await nextTick();
+
+    expect(wrapper.find('.b-message__math-inline .katex').exists()).toBe(true);
+    expect(wrapper.find('.b-message__math-block .katex-display').exists()).toBe(true);
+  });
+
   it('copies fenced code block text without rendered labels', async (): Promise<void> => {
     clipboardMock.mockResolvedValue(true);
 
@@ -232,6 +254,32 @@ describe('BMessage node renderer', () => {
     await wrapper.find('button[aria-label="复制代码"]').trigger('click');
 
     expect(clipboardMock).toHaveBeenCalledWith('console.log("copy me")', {
+      successMessage: '代码已复制',
+      trim: false
+    });
+  });
+
+  it('renders mermaid fenced code blocks as diagrams while keeping source copy', async (): Promise<void> => {
+    clipboardMock.mockResolvedValue(true);
+    mermaidMock.render.mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' });
+
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '```mermaid\ngraph TD\n  A --> B\n```'
+      }
+    });
+
+    await nextTick();
+    await flushPromises();
+
+    expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^b-message-mermaid-/), 'graph TD\n  A --> B');
+
+    await wrapper.find('button[aria-label="复制代码"]').trigger('click');
+
+    expect(clipboardMock).toHaveBeenCalledWith('graph TD\n  A --> B', {
       successMessage: '代码已复制',
       trim: false
     });
