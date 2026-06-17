@@ -31,6 +31,11 @@ export const DRAWING_MOVEABLE_SELECTION_PADDING = {
 } as const;
 
 /**
+ * Moveable 缩放控制点方向，仅保留四个角以避免边中点误触。
+ */
+export const DRAWING_MOVEABLE_RENDER_DIRECTIONS: readonly string[] = ['nw', 'ne', 'sw', 'se'];
+
+/**
  * Moveable 元素吸附方向，显式包含中心线和中线。
  */
 export const DRAWING_MOVEABLE_SNAP_DIRECTIONS: SnapDirections = {

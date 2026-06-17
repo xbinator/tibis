@@ -18,6 +18,7 @@
       :element-snap-directions="DRAWING_MOVEABLE_SNAP_DIRECTIONS"
       :element-guidelines="guidelineTargets"
       :padding="DRAWING_MOVEABLE_SELECTION_PADDING"
+      :render-directions="DRAWING_MOVEABLE_RENDER_DIRECTIONS"
       :zoom="viewport.zoom"
       :origin="false"
       :throttle-drag="DRAWING_MOVEABLE_THROTTLE"
@@ -40,6 +41,7 @@ import type { DrawingConnectorPathElementOverride } from '../utils/drawingGeomet
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import VueMoveable from 'vue3-moveable/dist/moveable.js';
 import {
+  DRAWING_MOVEABLE_RENDER_DIRECTIONS,
   DRAWING_MOVEABLE_SELECTION_PADDING,
   DRAWING_MOVEABLE_SNAP_DIRECTIONS,
   DRAWING_MOVEABLE_SNAP_THRESHOLD,

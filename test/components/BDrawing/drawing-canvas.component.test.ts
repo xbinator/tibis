@@ -662,6 +662,10 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
       padding: {
         type: Object,
         default: (): Record<string, number> => ({})
+      },
+      renderDirections: {
+        type: Array,
+        default: (): string[] => []
       }
     },
     emits: ['drag', 'drag-end', 'drag-group', 'drag-group-end', 'resize', 'resize-end', 'resize-group', 'resize-group-end', 'rotate-end'],
@@ -688,6 +692,7 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         :data-element-snap-center="String(elementSnapDirections.center)"
         :data-element-snap-middle="String(elementSnapDirections.middle)"
         :data-padding="JSON.stringify(padding)"
+        :data-render-directions="JSON.stringify(renderDirections)"
       >
         <span v-if="$attrs.control">{{ $attrs.control }}</span>
         <button
@@ -1509,6 +1514,29 @@ describe('BDrawing', (): void => {
     expect(editor.exists()).toBe(true);
     expect(wrapper.find('.b-drawing-node__text').exists()).toBe(false);
     expect(wrapper.find('[data-testid="drawing-moveable-mock"]').exists()).toBe(false);
+  });
+
+  it('commits text editing and drags the node when dragging starts during editing', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'text').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    let editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '旧标题');
+    await editor.trigger('blur');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('dblclick');
+    editor = findDrawingTextEditor(wrapper);
+    await setDrawingTextEditorValue(editor, '拖拽标题');
+
+    await dispatchPointerEvent(wrapper.find('[data-testid="drawing-node"]').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
+    await nextTick();
+
+    expect(findDrawingTextEditor(wrapper).exists()).toBe(false);
+    expect(wrapper.find('[data-testid="drawing-node"]').text()).toContain('拖拽标题');
+    expect(wrapper.find('[data-testid="drawing-node"]').attributes('transform')).toBe('translate(40, 20)');
   });
 
   it('deletes an existing text node when committing empty text', async (): Promise<void> => {
@@ -2489,6 +2517,18 @@ describe('BDrawing', (): void => {
         top: 0
       })
     );
+  });
+
+  it('only renders corner resize handles for selected nodes', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+
+    await findDrawingToolbarToolButton(wrapper, 'rect').trigger('click');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerdown');
+    await wrapper.find('[data-testid="drawing-canvas"]').trigger('pointerup');
+    await wrapper.find('[data-testid="drawing-node"]').trigger('pointerdown');
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="drawing-moveable-mock"]').attributes('data-render-directions')).toBe(JSON.stringify(['nw', 'ne', 'sw', 'se']));
   });
 
   it('updates Moveable target rect after viewport zoom changes selected node layout', async (): Promise<void> => {

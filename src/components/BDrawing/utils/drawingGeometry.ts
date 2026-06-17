@@ -705,6 +705,35 @@ function doesDrawingRouteSegmentIntersectBounds(start: DrawingPoint, end: Drawin
 }
 
 /**
+ * 判断点是否在边界内。
+ * @param point - 待判断坐标
+ * @param bounds - 边界
+ * @returns 是否位于边界内
+ */
+function isDrawingPointInsideBounds(point: DrawingPoint, bounds: DrawingContentBounds): boolean {
+  return point.x >= bounds.minX && point.x <= bounds.maxX && point.y >= bounds.minY && point.y <= bounds.maxY;
+}
+
+/**
+ * 判断从端点引出的轨道是否穿过其他端点或障碍边界。
+ * @param start - 轨道起点
+ * @param end - 轨道终点
+ * @param endpoint - 当前轨道所属端点
+ * @param trackBounds - 轨道边界列表
+ * @returns 是否穿过非自身边界
+ */
+function doesConnectorRailCrossForeignTrackBounds(
+  start: DrawingPoint,
+  end: DrawingPoint,
+  endpoint: DrawingPoint,
+  trackBounds: DrawingContentBounds[]
+): boolean {
+  return trackBounds.some(
+    (bounds: DrawingContentBounds): boolean => !isDrawingPointInsideBounds(endpoint, bounds) && doesDrawingRouteSegmentIntersectBounds(start, end, bounds)
+  );
+}
+
+/**
  * 判断折线路径是否穿过任意避让边界。
  * @param points - 折线路径点
  * @param obstacles - 避让边界列表
@@ -773,14 +802,28 @@ function createHorizontalConnectorAvoidanceCandidates(
   };
   const topY = Math.min(source.y, target.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minY)) - DRAWING_CONNECTOR_ROUTE_MARGIN;
   const bottomY = Math.max(source.y, target.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxY)) + DRAWING_CONNECTOR_ROUTE_MARGIN;
+  const sharedTopY = Math.min(source.y, target.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minY));
+  const sharedBottomY = Math.max(source.y, target.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxY));
   let sameSideX: number | null = null;
   if (sourceDirection.x === targetDirection.x && sourceDirection.x > 0) {
     sameSideX = Math.max(sourceOut.x, targetOut.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxX));
   } else if (sourceDirection.x === targetDirection.x) {
     sameSideX = Math.min(sourceOut.x, targetOut.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minX));
   }
-  const sameSideCandidate: DrawingPoint[] | null =
-    sameSideX === null ? null : [source, sourceOut, { x: sameSideX, y: source.y }, { x: sameSideX, y: target.y }, targetOut, target];
+  let sameSideCandidate: DrawingPoint[] | null = null;
+  if (sameSideX !== null) {
+    const sourceRailEnd = { x: sameSideX, y: source.y };
+    const targetRailStart = { x: sameSideX, y: target.y };
+    const averageY = (source.y + target.y) / 2;
+    const sideY = averageY - sharedTopY <= sharedBottomY - averageY ? sharedTopY : sharedBottomY;
+    const shouldUseSideLane =
+      doesConnectorRailCrossForeignTrackBounds(sourceOut, sourceRailEnd, source, trackBounds) ||
+      doesConnectorRailCrossForeignTrackBounds(targetRailStart, targetOut, target, trackBounds);
+
+    sameSideCandidate = shouldUseSideLane
+      ? [source, sourceOut, { x: sourceOut.x, y: sideY }, { x: sameSideX, y: sideY }, { x: sameSideX, y: target.y }, targetOut, target]
+      : [source, sourceOut, sourceRailEnd, targetRailStart, targetOut, target];
+  }
 
   const candidates = [
     [source, sourceOut, { x: sourceOut.x, y: topY }, { x: targetOut.x, y: topY }, targetOut, target],
@@ -816,14 +859,28 @@ function createVerticalConnectorAvoidanceCandidates(
   };
   const leftX = Math.min(source.x, target.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minX)) - DRAWING_CONNECTOR_ROUTE_MARGIN;
   const rightX = Math.max(source.x, target.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxX)) + DRAWING_CONNECTOR_ROUTE_MARGIN;
+  const sharedLeftX = Math.min(source.x, target.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minX));
+  const sharedRightX = Math.max(source.x, target.x, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxX));
   let sameSideY: number | null = null;
   if (sourceDirection.y === targetDirection.y && sourceDirection.y > 0) {
     sameSideY = Math.max(sourceOut.y, targetOut.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.maxY));
   } else if (sourceDirection.y === targetDirection.y) {
     sameSideY = Math.min(sourceOut.y, targetOut.y, ...trackBounds.map((bounds: DrawingContentBounds): number => bounds.minY));
   }
-  const sameSideCandidate: DrawingPoint[] | null =
-    sameSideY === null ? null : [source, sourceOut, { x: source.x, y: sameSideY }, { x: target.x, y: sameSideY }, targetOut, target];
+  let sameSideCandidate: DrawingPoint[] | null = null;
+  if (sameSideY !== null) {
+    const sourceRailEnd = { x: source.x, y: sameSideY };
+    const targetRailStart = { x: target.x, y: sameSideY };
+    const averageX = (source.x + target.x) / 2;
+    const sideX = averageX - sharedLeftX <= sharedRightX - averageX ? sharedLeftX : sharedRightX;
+    const shouldUseSideLane =
+      doesConnectorRailCrossForeignTrackBounds(sourceOut, sourceRailEnd, source, trackBounds) ||
+      doesConnectorRailCrossForeignTrackBounds(targetRailStart, targetOut, target, trackBounds);
+
+    sameSideCandidate = shouldUseSideLane
+      ? [source, sourceOut, { x: sideX, y: sourceOut.y }, { x: sideX, y: sameSideY }, { x: target.x, y: sameSideY }, targetOut, target]
+      : [source, sourceOut, sourceRailEnd, targetRailStart, targetOut, target];
+  }
 
   const candidates = [
     [source, sourceOut, { x: leftX, y: sourceOut.y }, { x: leftX, y: targetOut.y }, targetOut, target],

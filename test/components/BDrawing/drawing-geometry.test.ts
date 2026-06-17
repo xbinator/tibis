@@ -380,6 +380,26 @@ describe('drawingGeometry', (): void => {
     expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 100 140 L 100 164 L -20 164 L -20 -36 L -20 -60');
   });
 
+  it('routes same-side vertical anchors around a target that overlaps the source rail', (): void => {
+    const source = createShapeElement('source');
+    const target = createShapeElement('target');
+    const connector: DrawingConnectorElement = {
+      id: 'connector-1',
+      kind: 'connector',
+      source: { elementId: source.id, anchor: 'top' },
+      target: { elementId: target.id, anchor: 'top' },
+      markerEnd: 'none',
+      position: { x: 0, y: 0 },
+      size: { width: 0, height: 0 },
+      rotation: 0,
+      metadata: { source: 'user', createdAt: 1 }
+    };
+
+    target.position = { x: 40, y: -140 };
+
+    expect(createDrawingConnectorPath([source, target, connector], connector)).toBe('M 100 60 L 100 36 L 16 36 L 16 -164 L 100 -164 L 100 -140');
+  });
+
   it('routes mixed horizontal and vertical anchors outside their own endpoint nodes', (): void => {
     const source = createShapeElement('source');
     const target = createShapeElement('target');

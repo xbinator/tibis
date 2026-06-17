@@ -1333,6 +1333,11 @@ function handleElementPointerup(id: string, event: PointerEvent): void {
  * @param event - 指针事件
  */
 function handleElementSelect(id: string, event: PointerEvent): void {
+  const shouldStartDragAfterEditing = textEditingSession.value !== null;
+  if (shouldStartDragAfterEditing) {
+    commitTextEditor();
+  }
+
   if (activeTool.value === 'hand') {
     return;
   }
@@ -1348,7 +1353,7 @@ function handleElementSelect(id: string, event: PointerEvent): void {
   }
 
   if (activeTool.value !== 'connector') {
-    if (board.state.value.selection.includes(id)) {
+    if (board.state.value.selection.includes(id) && !shouldStartDragAfterEditing) {
       return;
     }
 
