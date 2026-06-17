@@ -38,6 +38,7 @@
         @canvas-pointermove="handleCanvasPointermove"
         @canvas-pointerup="handleCanvasPointerup"
         @canvas-wheel="handleCanvasWheel"
+        @connector-endpoint-pointerdown="handleConnectorEndpointPointerdown"
       />
     </InfiniteViewport>
     <TextEditorOverlay
@@ -93,7 +94,9 @@
 import type {
   DrawingConnectorAnchor,
   DrawingConnectorDraftOptions,
+  DrawingConnectorElementEndpoint,
   DrawingConnectorEndpoint,
+  DrawingConnectorEndpointPlacement,
   DrawingConnectorElement,
   DrawingConnectorOptionsChange,
   DrawingData,
@@ -133,8 +136,10 @@ import {
   createDrawingViewportForElements,
   findDrawingShapeElement,
   getDrawingConnectorAnchorPoint,
+  getDrawingConnectorEndpointElementId,
   getDrawingShapeRenderSize,
   getDrawingElementId,
+  isDrawingConnectorElementEndpoint,
   isDrawingConnectorElement,
   projectClientPointToDrawingBoard,
   queryDrawingElementTarget
@@ -310,6 +315,18 @@ interface ConnectorDragSession {
 }
 
 /**
+ * 连接线端点拖拽会话。
+ */
+interface ConnectorEndpointDragSession {
+  /** 连接线 ID */
+  connectorId: string;
+  /** 端点位置 */
+  placement: DrawingConnectorEndpointPlacement;
+  /** 拖拽监听取消器 */
+  abortController: AbortController;
+}
+
+/**
  * 文本工具点击已有元素创建文本的延迟会话。
  */
 interface PendingTextElementCreateSession {
@@ -326,6 +343,7 @@ interface PendingTextElementCreateSession {
 let directDragSession: DirectElementDragSession | null = null;
 let handPanSession: HandPanSession | null = null;
 let connectorDragSession: ConnectorDragSession | null = null;
+let connectorEndpointDragSession: ConnectorEndpointDragSession | null = null;
 let pendingTextElementCreateSession: PendingTextElementCreateSession | null = null;
 
 /** 手型工具是否正在平移中。 */
@@ -482,10 +500,10 @@ function getElementIdFromClientPoint(clientX: number, clientY: number): string |
 /**
  * 从连接线释放事件读取目标元素 ID。
  * @param event - 指针事件
- * @param sourceId - 起点元素 ID
+ * @param sourceId - 起点元素 ID，点位端点传 null
  * @returns 目标元素 ID
  */
-function getConnectorTargetIdFromPointer(event: PointerEvent, sourceId: string): string | null {
+function getConnectorTargetIdFromPointer(event: PointerEvent, sourceId: string | null): string | null {
   const eventTargetId = getElementIdFromEventTarget(event.target);
   if (eventTargetId && eventTargetId !== sourceId) {
     return eventTargetId;
@@ -524,7 +542,7 @@ function getConnectorAnchorFromPoint(element: DrawingShapeElement, point: Drawin
  * @param event - 指针事件
  * @returns 连接端点
  */
-function getConnectorEndpointFromPointer(id: string, event: PointerEvent): DrawingConnectorEndpoint | null {
+function getConnectorEndpointFromPointer(id: string, event: PointerEvent): DrawingConnectorElementEndpoint | null {
   const element = getShapeElementById(id);
   if (!element) {
     return null;
@@ -562,7 +580,8 @@ function createDirectDragTransform(position: DrawingPoint, session: DirectElemen
 function updateConnectedConnectorPreviews(elementId: string, overrides: DrawingConnectorPathElementOverride[]): void {
   const connectors = board.state.value.elements.filter(
     (element: DrawingElement): boolean =>
-      isDrawingConnectorElement(element) && (element.source.elementId === elementId || element.target.elementId === elementId)
+      isDrawingConnectorElement(element) &&
+      (getDrawingConnectorEndpointElementId(element.source) === elementId || getDrawingConnectorEndpointElementId(element.target) === elementId)
   );
 
   for (const connector of connectors) {
@@ -626,6 +645,14 @@ function cancelConnectorDrag(): void {
 }
 
 /**
+ * 取消连接线端点拖拽。
+ */
+function cancelConnectorEndpointDrag(): void {
+  connectorEndpointDragSession?.abortController.abort();
+  connectorEndpointDragSession = null;
+}
+
+/**
  * 取消手型工具平移。 */
 function cancelHandPan(): void {
   handPanSession?.abortController.abort();
@@ -641,6 +668,7 @@ function setActiveTool(tool: DrawingToolMode): void {
   board.clearDraft();
   cancelHandPan();
   cancelConnectorDrag();
+  cancelConnectorEndpointDrag();
   activeTool.value = tool;
 
   if (tool !== 'select') {
@@ -990,7 +1018,8 @@ function handleConnectorDragMove(event: PointerEvent): void {
     return;
   }
 
-  const targetId = getConnectorTargetIdFromPointer(event, connectorDragSession.source.elementId);
+  const sourceId = getDrawingConnectorEndpointElementId(connectorDragSession.source);
+  const targetId = getConnectorTargetIdFromPointer(event, sourceId);
   connectorHoverEndpoint.value = targetId ? getConnectorEndpointFromPointer(targetId, event) : null;
 
   const point = getBoardPointFromPointer(event);
@@ -1033,10 +1062,73 @@ function handleConnectorDragEnd(event: PointerEvent): void {
   }
 
   const { source } = connectorDragSession;
-  const targetId = getConnectorTargetIdFromPointer(event, source.elementId);
-  const target = targetId ? getConnectorEndpointFromPointer(targetId, event) : null;
+  const sourceId = getDrawingConnectorEndpointElementId(source);
+  const targetId = getConnectorTargetIdFromPointer(event, sourceId);
+  const targetPoint = getBoardPointFromPointer(event);
+  let target: DrawingConnectorEndpoint | null = null;
+  if (targetId) {
+    target = getConnectorEndpointFromPointer(targetId, event);
+  } else if (targetPoint) {
+    target = { point: targetPoint };
+  }
 
   finishConnectorDrag(target);
+}
+
+/**
+ * 根据指针位置创建连接线端点。
+ * @param event - 指针事件
+ * @returns 连接线端点
+ */
+function createConnectorEndpointFromPointer(event: PointerEvent): DrawingConnectorEndpoint | null {
+  const targetId = getConnectorTargetIdFromPointer(event, null);
+  if (targetId) {
+    return getConnectorEndpointFromPointer(targetId, event);
+  }
+
+  const point = getBoardPointFromPointer(event);
+
+  return point ? { point } : null;
+}
+
+/**
+ * 处理连接线端点拖拽结束。
+ * @param event - 指针事件
+ */
+function handleConnectorEndpointDragEnd(event: PointerEvent): void {
+  if (!connectorEndpointDragSession) {
+    return;
+  }
+
+  const session = connectorEndpointDragSession;
+  const endpoint = createConnectorEndpointFromPointer(event);
+  cancelConnectorEndpointDrag();
+  if (!endpoint) {
+    return;
+  }
+
+  board.updateConnectorEndpoint(session.connectorId, session.placement, endpoint);
+}
+
+/**
+ * 开始拖拽连接线端点。
+ * @param id - 连接线 ID
+ * @param placement - 端点位置
+ */
+function handleConnectorEndpointPointerdown(id: string, placement: DrawingConnectorEndpointPlacement): void {
+  const abortController = new AbortController();
+  cancelConnectorEndpointDrag();
+  cancelConnectorDrag();
+  cancelDirectDrag();
+  board.setSelection([id]);
+  connectorEndpointDragSession = {
+    connectorId: id,
+    placement,
+    abortController
+  };
+
+  window.addEventListener('pointerup', handleConnectorEndpointDragEnd, { signal: abortController.signal });
+  window.addEventListener('pointercancel', cancelConnectorEndpointDrag, { signal: abortController.signal });
 }
 
 /**
@@ -1076,6 +1168,27 @@ function startConnectorDrag(id: string, event: PointerEvent): void {
 }
 
 /**
+ * 开始从空白画布拖拽创建自由连接线。
+ * @param point - 起点画布坐标
+ */
+function startFreeConnectorDrag(point: DrawingPoint): void {
+  const source: DrawingConnectorEndpoint = {
+    point
+  };
+  const abortController = new AbortController();
+  cancelConnectorDrag();
+  connectorDragSession = {
+    source,
+    abortController
+  };
+  board.startCreateConnectorDraft(source, point);
+
+  window.addEventListener('pointermove', handleConnectorDragMove, { signal: abortController.signal });
+  window.addEventListener('pointerup', handleConnectorDragEnd, { signal: abortController.signal });
+  window.addEventListener('pointercancel', handleConnectorDragCancel, { signal: abortController.signal });
+}
+
+/**
  * 处理元素上释放指针。
  * @param id - 元素 ID
  * @param event - 指针事件
@@ -1091,7 +1204,7 @@ function handleElementPointerup(id: string, event: PointerEvent): void {
     return;
   }
 
-  if (!connectorDragSession || connectorDragSession.source.elementId === id) {
+  if (!connectorDragSession || (isDrawingConnectorElementEndpoint(connectorDragSession.source) && connectorDragSession.source.elementId === id)) {
     return;
   }
 
@@ -1166,6 +1279,11 @@ async function handleElementEdit(id: string): Promise<void> {
 function handleCanvasPointerdown(point: DrawingPoint, event: PointerEvent): void {
   if (activeTool.value === 'hand') {
     startHandPan(event);
+    return;
+  }
+
+  if (activeTool.value === 'connector') {
+    startFreeConnectorDrag(point);
     return;
   }
 
@@ -1338,6 +1456,7 @@ onBeforeUnmount((): void => {
   cancelHandPan();
   cancelDirectDrag();
   cancelConnectorDrag();
+  cancelConnectorEndpointDrag();
   cancelPendingTextElementCreate();
 });
 </script>

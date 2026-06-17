@@ -76,6 +76,7 @@
         :show-hit="false"
         :show-line="false"
         :show-markers="false"
+        @endpoint-pointerdown="handleConnectorEndpointPointerdown"
       />
       <DrawingCreatePreview v-if="shapeDraft" :draft="shapeDraft" :draft-style="draftStyle" />
     </svg>
@@ -87,6 +88,7 @@ import type {
   DrawingConnectorElement,
   DrawingConnectorDraftOptions,
   DrawingConnectorEndpoint,
+  DrawingConnectorEndpointPlacement,
   DrawingElement,
   DrawingElementStyle,
   DrawingGeometryChange,
@@ -104,6 +106,7 @@ import {
   createDrawingViewBox,
   findDrawingShapeElement,
   getDrawingConnectorAnchorPoint,
+  isDrawingConnectorElementEndpoint,
   isDrawingConnectorElement,
   isDrawingShapeElement,
   projectClientPointToDrawingBoard
@@ -171,6 +174,8 @@ const emit = defineEmits<{
   'canvas-pointerup': [point: DrawingPoint, event: PointerEvent];
   /** 画布滚轮 */
   'canvas-wheel': [event: WheelEvent];
+  /** 连接线端点按下 */
+  'connector-endpoint-pointerdown': [id: string, placement: DrawingConnectorEndpointPlacement, event: PointerEvent];
 }>();
 
 const viewBox = computed<string>(() => createDrawingViewBox(props.viewport, props.viewportSize));
@@ -193,6 +198,22 @@ const selectedConnectorElements = computed<DrawingConnectorElement[]>(() =>
 const shapeDraft = computed<DrawingCreateShapeDraft | undefined>(() => (props.draft?.kind === 'creating-shape' ? props.draft : undefined));
 /** 当前创建连接线草稿，供预览路径使用。 */
 const connectorDraft = computed<DrawingCreateConnectorDraft | undefined>(() => (props.draft?.kind === 'creating-connector' ? props.draft : undefined));
+
+/**
+ * 读取连接线草稿起点坐标。
+ * @param draft - 连接线草稿
+ * @returns 起点坐标
+ */
+function createConnectorDraftSourcePoint(draft: DrawingCreateConnectorDraft): DrawingPoint | null {
+  if (!isDrawingConnectorElementEndpoint(draft.source)) {
+    return { ...draft.source.point };
+  }
+
+  const source = findDrawingShapeElement(props.elements, draft.source.elementId);
+
+  return source ? getDrawingConnectorAnchorPoint(source, draft.source.anchor) : null;
+}
+
 /** 创建连接线预览描边色。 */
 const connectorPreviewStroke = computed<string>(() => props.draftConnector?.style?.stroke ?? '#64748b');
 /** 创建连接线预览描边宽度。 */
@@ -204,12 +225,12 @@ const connectorPreviewPath = computed<string>(() => {
     return '';
   }
 
-  const source = findDrawingShapeElement(props.elements, connectorDraft.value.source.elementId);
-  if (!source) {
+  const sourcePoint = createConnectorDraftSourcePoint(connectorDraft.value);
+  if (!sourcePoint) {
     return '';
   }
 
-  return createDrawingLinePath(getDrawingConnectorAnchorPoint(source, connectorDraft.value.source.anchor), connectorDraft.value.current);
+  return createDrawingLinePath(sourcePoint, connectorDraft.value.current);
 });
 
 /**
@@ -260,6 +281,16 @@ function handleElementSelect(id: string, event: PointerEvent): void {
  */
 function handleElementRelease(id: string, event: PointerEvent): void {
   emit('element-pointerup', id, event);
+}
+
+/**
+ * 转发连接线端点按下事件。
+ * @param id - 连接线 ID
+ * @param placement - 端点位置
+ * @param event - 指针事件
+ */
+function handleConnectorEndpointPointerdown(id: string, placement: DrawingConnectorEndpointPlacement, event: PointerEvent): void {
+  emit('connector-endpoint-pointerdown', id, placement, event);
 }
 
 /**

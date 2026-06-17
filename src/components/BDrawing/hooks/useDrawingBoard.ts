@@ -7,6 +7,7 @@ import type {
   DrawingBoardState,
   DrawingConnectorDraftOptions,
   DrawingConnectorEndpoint,
+  DrawingConnectorEndpointPlacement,
   DrawingConnectorOptionsChange,
   DrawingElementStyle,
   DrawingElementStyleChange,
@@ -27,6 +28,7 @@ import {
   reorderDrawingElement,
   resizeDrawingElements,
   undoDrawingBoard,
+  updateDrawingConnectorEndpoint,
   updateDrawingConnectorLabel,
   updateDrawingConnectorOptions,
   updateDrawingElementStyle,
@@ -65,6 +67,8 @@ export interface UseDrawingBoardReturn {
   updateElementStyle: (elementId: string, style: DrawingElementStyleChange) => void;
   /** 更新连接线配置 */
   updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange) => void;
+  /** 更新连接线端点 */
+  updateConnectorEndpoint: (connectorId: string, placement: DrawingConnectorEndpointPlacement, endpoint: DrawingConnectorEndpoint) => void;
   /** 更新连接线标签 */
   updateConnectorLabel: (connectorId: string, label: string) => void;
   /** 删除选区 */
@@ -198,10 +202,8 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
           },
           {
             id: `drawing-connector-${connectorIndex}`,
-            sourceId: state.value.draft.source.elementId,
-            sourceAnchor: state.value.draft.source.anchor,
-            targetId: target.elementId,
-            targetAnchor: target.anchor,
+            source: state.value.draft.source,
+            target,
             style: options?.style,
             markerStart: options?.markerStart,
             markerEnd: options?.markerEnd,
@@ -223,6 +225,8 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     updateElementStyle: (elementId: string, style: DrawingElementStyleChange): void => setState(updateDrawingElementStyle(state.value, elementId, style)),
     updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange): void =>
       setState(updateDrawingConnectorOptions(state.value, connectorId, options)),
+    updateConnectorEndpoint: (connectorId: string, placement: DrawingConnectorEndpointPlacement, endpoint: DrawingConnectorEndpoint): void =>
+      setState(updateDrawingConnectorEndpoint(state.value, connectorId, placement, endpoint)),
     updateConnectorLabel: (connectorId: string, label: string): void => setState(updateDrawingConnectorLabel(state.value, connectorId, label)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
     updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),

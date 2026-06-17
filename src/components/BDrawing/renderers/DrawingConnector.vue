@@ -18,8 +18,22 @@
       <path v-if="markerEndPath" class="b-drawing-connector__marker-arrow b-drawing-connector__marker-arrow--end" :d="markerEndPath" :fill="lineStroke" />
     </g>
     <g v-if="endpointPositions" class="b-drawing-connector__endpoints">
-      <circle class="b-drawing-connector__endpoint" :cx="endpointPositions.source.x" :cy="endpointPositions.source.y" r="4.5" />
-      <circle class="b-drawing-connector__endpoint" :cx="endpointPositions.target.x" :cy="endpointPositions.target.y" r="4.5" />
+      <circle
+        class="b-drawing-connector__endpoint"
+        :cx="endpointPositions.source.x"
+        :cy="endpointPositions.source.y"
+        data-drawing-connector-endpoint="source"
+        r="4.5"
+        @pointerdown.stop="handleEndpointPointerdown('source', $event)"
+      />
+      <circle
+        class="b-drawing-connector__endpoint"
+        :cx="endpointPositions.target.x"
+        :cy="endpointPositions.target.y"
+        data-drawing-connector-endpoint="target"
+        r="4.5"
+        @pointerdown.stop="handleEndpointPointerdown('target', $event)"
+      />
     </g>
     <text v-if="showLine && connector.label && !editing" class="b-drawing-connector__label" :style="labelStyle" :x="labelPosition.x" :y="labelPosition.y">
       {{ connector.label }}
@@ -28,16 +42,15 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingConnectorAnchor, DrawingConnectorElement, DrawingElement, DrawingPoint } from '../types';
+import type { DrawingConnectorEndpointPlacement, DrawingConnectorElement, DrawingElement, DrawingPoint } from '../types';
 import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE, DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT } from '../constants/text';
 import {
   createDrawingConnectorMarkerPath,
   createDrawingConnectorPath,
-  findDrawingShapeElement,
-  getDrawingConnectorAnchorPoint,
-  getDrawingConnectorLabelPosition
+  getDrawingConnectorLabelPosition,
+  resolveDrawingConnectorEndpointPoints
 } from '../utils/drawingGeometry';
 
 /**
@@ -85,36 +98,21 @@ const emit = defineEmits<{
   edit: [id: string, event: MouseEvent];
   /** 选择连接线 */
   select: [id: string, event: PointerEvent];
+  /** 开始拖拽连接线端点 */
+  'endpoint-pointerdown': [id: string, placement: DrawingConnectorEndpointPlacement, event: PointerEvent];
 }>();
 
-/**
- * 读取形状锚点。
- * @param elementId - 元素 ID
- * @param anchor - 锚点
- * @returns 锚点坐标，找不到时返回 null
- */
-function getElementAnchorPoint(elementId: string, anchor: DrawingConnectorAnchor): DrawingPoint | null {
-  const element = findDrawingShapeElement(props.elements, elementId);
-
-  return element ? getDrawingConnectorAnchorPoint(element, anchor) : null;
-}
-
-const source = computed<DrawingPoint | null>(() => getElementAnchorPoint(props.connector.source.elementId, props.connector.source.anchor));
-const target = computed<DrawingPoint | null>(() => getElementAnchorPoint(props.connector.target.elementId, props.connector.target.anchor));
 const pathData = computed<string>(() => createDrawingConnectorPath(props.elements, props.connector));
 const lineStroke = computed<string>(() => props.connector.style?.stroke ?? '#64748b');
 const lineStrokeWidth = computed<number>(() => props.connector.style?.strokeWidth ?? 2);
 const markerStartPath = computed<string>(() => createDrawingConnectorMarkerPath(props.elements, props.connector, 'start'));
 const markerEndPath = computed<string>(() => createDrawingConnectorMarkerPath(props.elements, props.connector, 'end'));
 const endpointPositions = computed<ConnectorEndpointPositions | null>(() => {
-  if (!props.selected || !props.showSelectedEndpoints || !source.value || !target.value) {
+  if (!props.selected || !props.showSelectedEndpoints) {
     return null;
   }
 
-  return {
-    source: source.value,
-    target: target.value
-  };
+  return resolveDrawingConnectorEndpointPoints(props.elements, props.connector);
 });
 const shouldRender = computed<boolean>(
   () =>
@@ -143,6 +141,15 @@ function handlePointerdown(event: PointerEvent): void {
   }
 
   emit('select', props.connector.id, event);
+}
+
+/**
+ * 处理连接线端点按下。
+ * @param placement - 端点位置
+ * @param event - 指针事件
+ */
+function handleEndpointPointerdown(placement: DrawingConnectorEndpointPlacement, event: PointerEvent): void {
+  emit('endpoint-pointerdown', props.connector.id, placement, event);
 }
 </script>
 
@@ -174,11 +181,9 @@ function handlePointerdown(event: PointerEvent): void {
   transition: fill 0.15s ease;
 }
 
-.b-drawing-connector__endpoints {
-  pointer-events: none;
-}
-
 .b-drawing-connector__endpoint {
+  pointer-events: auto;
+  cursor: move;
   fill: var(--bg-primary);
   stroke: var(--color-primary);
   stroke-width: 2;

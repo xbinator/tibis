@@ -20,13 +20,7 @@ import {
   DRAWING_TEXT_VERTICAL_PADDING,
   measureDrawingTextElementSize
 } from '../utils/boardTransforms';
-import {
-  findDrawingShapeElement,
-  getDrawingConnectorAnchorPoint,
-  getDrawingLineLabelPosition,
-  getDrawingShapeRenderSize,
-  isDrawingConnectorElement
-} from '../utils/drawingGeometry';
+import { findDrawingShapeElement, getDrawingConnectorLabelPosition, getDrawingShapeRenderSize, isDrawingConnectorElement } from '../utils/drawingGeometry';
 import { wrapDrawingTextLineItems } from '../utils/drawingTextMetrics';
 
 /**
@@ -231,16 +225,7 @@ export function useTextEditing(options: UseTextEditingOptions): UseTextEditingRe
    * @returns 标签中心点
    */
   function getConnectorLabelCenter(connector: DrawingConnectorElement): DrawingPoint | null {
-    const source = findDrawingShapeElement(options.board.state.value.elements, connector.source.elementId);
-    const target = findDrawingShapeElement(options.board.state.value.elements, connector.target.elementId);
-    if (!source || !target) {
-      return null;
-    }
-
-    return getDrawingLineLabelPosition(
-      getDrawingConnectorAnchorPoint(source, connector.source.anchor),
-      getDrawingConnectorAnchorPoint(target, connector.target.anchor)
-    );
+    return getDrawingConnectorLabelPosition(options.board.state.value.elements, connector);
   }
 
   /**

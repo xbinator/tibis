@@ -50,6 +50,7 @@ import {
   createDrawingConnectorPath,
   createDrawingDiamondPoints,
   createDrawingElementTransform,
+  getDrawingConnectorEndpointElementId,
   getDrawingElementRenderSize,
   getDrawingElementId,
   isDrawingConnectorElement,
@@ -437,7 +438,9 @@ function updateConnectedConnectorPreviews(overrides: DrawingConnectorPathElement
   const overrideIds = new Set<string>(overrides.map((override: DrawingConnectorPathElementOverride): string => override.id));
   const connectors = props.elements.filter(
     (element: DrawingElement): boolean =>
-      isDrawingConnectorElement(element) && (overrideIds.has(element.source.elementId) || overrideIds.has(element.target.elementId))
+      isDrawingConnectorElement(element) &&
+      (overrideIds.has(getDrawingConnectorEndpointElementId(element.source) ?? '') ||
+        overrideIds.has(getDrawingConnectorEndpointElementId(element.target) ?? ''))
   );
 
   for (const connector of connectors) {

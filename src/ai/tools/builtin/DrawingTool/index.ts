@@ -8,6 +8,7 @@ import type { AIToolExecutor } from 'types/ai';
 import { cloneDeep } from 'lodash-es';
 import type {
   DrawingConnectorAnchor,
+  DrawingConnectorEndpoint,
   DrawingConnectorElement,
   DrawingData,
   DrawingElement,
@@ -486,6 +487,15 @@ function isDrawingConnectorElement(element: DrawingElement): element is DrawingC
 }
 
 /**
+ * 读取连接线端点绑定的元素 ID。
+ * @param endpoint - 连接线端点
+ * @returns 元素 ID，点位端点返回 null
+ */
+function getConnectorEndpointElementId(endpoint: DrawingConnectorEndpoint): string | null {
+  return 'elementId' in endpoint ? endpoint.elementId : null;
+}
+
+/**
  * 创建 Drawing 工具结果。
  * @param context - Drawing 工具上下文
  * @param data - 画图数据
@@ -878,7 +888,10 @@ function applyDeleteElementOperation(data: DrawingData, operation: DeleteDrawing
       return false;
     }
     if (isDrawingConnectorElement(element)) {
-      return !deletedShapeIds.has(element.source.elementId) && !deletedShapeIds.has(element.target.elementId);
+      const sourceId = getConnectorEndpointElementId(element.source);
+      const targetId = getConnectorEndpointElementId(element.target);
+
+      return !deletedShapeIds.has(sourceId ?? '') && !deletedShapeIds.has(targetId ?? '');
     }
     return true;
   });

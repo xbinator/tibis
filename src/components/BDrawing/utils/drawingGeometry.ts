@@ -4,9 +4,11 @@
  */
 import type {
   DrawingConnectorAnchor,
+  DrawingConnectorElementEndpoint,
   DrawingConnectorElement,
   DrawingElement,
   DrawingPoint,
+  DrawingConnectorEndpoint,
   DrawingShapeElement,
   DrawingShapeType,
   DrawingSize,
@@ -140,6 +142,24 @@ export function isDrawingShapeElement(element: DrawingElement): element is Drawi
  */
 export function isDrawingConnectorElement(element: DrawingElement): element is DrawingConnectorElement {
   return element.kind === 'connector';
+}
+
+/**
+ * 判断连接线端点是否绑定到画板元素。
+ * @param endpoint - 连接线端点
+ * @returns 是否为元素锚点端点
+ */
+export function isDrawingConnectorElementEndpoint(endpoint: DrawingConnectorEndpoint): endpoint is DrawingConnectorElementEndpoint {
+  return 'elementId' in endpoint;
+}
+
+/**
+ * 读取连接线端点绑定的元素 ID。
+ * @param endpoint - 连接线端点
+ * @returns 元素 ID，点位端点返回 null
+ */
+export function getDrawingConnectorEndpointElementId(endpoint: DrawingConnectorEndpoint): string | null {
+  return isDrawingConnectorElementEndpoint(endpoint) ? endpoint.elementId : null;
 }
 
 /**
@@ -780,6 +800,13 @@ function createVerticalConnectorAvoidanceCandidates(
  * @returns 是否属于同一组平行连接线
  */
 function isSameConnectorEndpointGroup(connector: DrawingConnectorElement, candidate: DrawingConnectorElement): boolean {
+  if (!isDrawingConnectorElementEndpoint(connector.source) || !isDrawingConnectorElementEndpoint(connector.target)) {
+    return false;
+  }
+  if (!isDrawingConnectorElementEndpoint(candidate.source) || !isDrawingConnectorElementEndpoint(candidate.target)) {
+    return false;
+  }
+
   return (
     connector.curve !== 'bezier' &&
     candidate.curve !== 'bezier' &&
@@ -788,6 +815,40 @@ function isSameConnectorEndpointGroup(connector: DrawingConnectorElement, candid
     connector.target.elementId === candidate.target.elementId &&
     connector.target.anchor === candidate.target.anchor
   );
+}
+
+/**
+ * 解析连接线端点坐标。
+ * @param elements - 画板元素列表
+ * @param endpoint - 连接线端点
+ * @param overrides - 预览中的形状几何覆盖
+ * @returns 端点坐标，绑定元素缺失时返回 null
+ */
+function resolveDrawingConnectorEndpointPoint(
+  elements: DrawingElement[],
+  endpoint: DrawingConnectorEndpoint,
+  overrides: DrawingConnectorPathElementOverride[]
+): DrawingPoint | null {
+  if (!isDrawingConnectorElementEndpoint(endpoint)) {
+    return { ...endpoint.point };
+  }
+
+  const element = findDrawingShapeElement(elements, endpoint.elementId);
+  if (!element) {
+    return null;
+  }
+
+  return getDrawingConnectorAnchorPoint(applyConnectorPathElementOverride(element, overrides), endpoint.anchor);
+}
+
+/**
+ * 读取连接线端点出线方向。
+ * @param endpoint - 连接线端点
+ * @param fallback - 点位端点的默认方向
+ * @returns 端点方向
+ */
+function getDrawingConnectorEndpointDirection(endpoint: DrawingConnectorEndpoint, fallback: DrawingConnectorAnchor): DrawingConnectorAnchor {
+  return isDrawingConnectorElementEndpoint(endpoint) ? endpoint.anchor : fallback;
 }
 
 /**
@@ -1004,28 +1065,36 @@ function resolveDrawingConnectorRoute(
   connector: DrawingConnectorElement,
   overrides: DrawingConnectorPathElementOverride[] = []
 ): DrawingConnectorRoute | null {
-  const sourceElement = findDrawingShapeElement(elements, connector.source.elementId);
-  const targetElement = findDrawingShapeElement(elements, connector.target.elementId);
-  if (!sourceElement || !targetElement) {
+  const sourcePoint = resolveDrawingConnectorEndpointPoint(elements, connector.source, overrides);
+  const targetPoint = resolveDrawingConnectorEndpointPoint(elements, connector.target, overrides);
+  if (!sourcePoint || !targetPoint) {
     return null;
   }
 
-  const source = applyConnectorPathElementOverride(sourceElement, overrides);
-  const target = applyConnectorPathElementOverride(targetElement, overrides);
-  const sourcePoint = getDrawingConnectorAnchorPoint(source, connector.source.anchor);
-  const targetPoint = getDrawingConnectorAnchorPoint(target, connector.target.anchor);
+  const hasPointEndpoint = !isDrawingConnectorElementEndpoint(connector.source) || !isDrawingConnectorElementEndpoint(connector.target);
+  const sourceAnchor = getDrawingConnectorEndpointDirection(connector.source, 'right');
+  const targetAnchor = getDrawingConnectorEndpointDirection(connector.target, 'left');
 
   if (connector.curve === 'bezier') {
-    return createDrawingBezierRoute(sourcePoint, targetPoint, connector.source.anchor, connector.target.anchor);
+    return createDrawingBezierRoute(sourcePoint, targetPoint, sourceAnchor, targetAnchor);
+  }
+
+  if (hasPointEndpoint) {
+    return createDrawingPolylineRoute(sourcePoint, targetPoint, [sourcePoint, targetPoint]);
   }
 
   return createDrawingOrthogonalRoute(
     sourcePoint,
     targetPoint,
-    connector.source.anchor,
-    connector.target.anchor,
+    sourceAnchor,
+    targetAnchor,
     getParallelConnectorOffset(elements, connector),
-    getDrawingConnectorObstacles(elements, connector.source.elementId, connector.target.elementId, overrides)
+    getDrawingConnectorObstacles(
+      elements,
+      getDrawingConnectorEndpointElementId(connector.source) ?? '',
+      getDrawingConnectorEndpointElementId(connector.target) ?? '',
+      overrides
+    )
   );
 }
 

@@ -149,14 +149,32 @@ export type DrawingConnectorMarkerType = 'none' | 'arrow';
 export type DrawingConnectorCurveType = 'straight' | 'bezier';
 
 /**
- * 连接线端点。
+ * 连接线元素锚点端点。
  */
-export interface DrawingConnectorEndpoint {
+export interface DrawingConnectorElementEndpoint {
   /** 端点元素 ID */
   elementId: string;
   /** 端点锚点 */
   anchor: DrawingConnectorAnchor;
 }
+
+/**
+ * 连接线画布点位端点。
+ */
+export interface DrawingConnectorPointEndpoint {
+  /** 端点画布坐标 */
+  point: DrawingPoint;
+}
+
+/**
+ * 连接线端点。
+ */
+export type DrawingConnectorEndpoint = DrawingConnectorElementEndpoint | DrawingConnectorPointEndpoint;
+
+/**
+ * 连接线端点位置。
+ */
+export type DrawingConnectorEndpointPlacement = 'source' | 'target';
 
 /**
  * 连接线元素。
@@ -229,12 +247,16 @@ export interface DrawingAddShapeOptions {
 export interface DrawingAddConnectorOptions {
   /** 连接线 ID */
   id: string;
+  /** 起点端点 */
+  source?: DrawingConnectorEndpoint;
   /** 起点元素 ID */
-  sourceId: string;
+  sourceId?: string;
   /** 起点锚点 */
   sourceAnchor?: DrawingConnectorAnchor;
+  /** 终点端点 */
+  target?: DrawingConnectorEndpoint;
   /** 终点元素 ID */
-  targetId: string;
+  targetId?: string;
   /** 终点锚点 */
   targetAnchor?: DrawingConnectorAnchor;
   /** 元素初始样式 */

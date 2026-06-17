@@ -62,6 +62,8 @@ export const DRAWING_SELECTO_BLOCKED_DRAG_SELECTOR = [
   '.moveable-area',
   '.moveable-control-box',
   '.moveable-direction',
+  '.b-drawing-connector__endpoint',
+  '.b-drawing-connector__endpoints',
   '.b-drawing-element.is-selected',
   '.b-drawing-style-panel'
 ].join(', ');

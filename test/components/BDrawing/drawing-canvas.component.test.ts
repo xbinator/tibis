@@ -2181,6 +2181,23 @@ describe('BDrawing', (): void => {
     expect(condition({ inputEvent: { target: findDrawingStylePanel(wrapper).element } })).toBe(false);
   });
 
+  it('does not start Selecto from selected connector endpoints', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 300, clientY: 200 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 300, clientY: 200 });
+
+    const condition = selectoMockState.instances.at(-1)?.options.dragCondition as SelectoDragCondition;
+    expect(condition({ inputEvent: { target: findDrawingConnectorEndpoints(wrapper)[1].element } })).toBe(false);
+  });
+
   it('creates a custom sized rectangle node by dragging on the canvas', async (): Promise<void> => {
     const wrapper = mount(BDrawing);
     const canvas = wrapper.find('[data-testid="drawing-canvas"]');
@@ -3077,6 +3094,48 @@ describe('BDrawing', (): void => {
     expect(findDrawingConnectorPreview(wrapper).exists()).toBe(false);
     expect(findDrawingConnectorPaths(wrapper)).toHaveLength(1);
     expect(nodes[0].element.compareDocumentPosition(findDrawingConnectorPath(wrapper).element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('creates a free connector by dragging on blank canvas with the connector tool', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 300, clientY: 200 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 300, clientY: 200 });
+
+    const connectorPath = findDrawingConnectorPath(wrapper);
+    expect(findDrawingConnectorPreview(wrapper).exists()).toBe(false);
+    expect(findDrawingConnectorPaths(wrapper)).toHaveLength(1);
+    expect(connectorPath.attributes('d')).toBe('M -300 -200 L -100 -100');
+  });
+
+  it('updates a free connector endpoint by dragging the selected endpoint handle', async (): Promise<void> => {
+    const wrapper = mount(BDrawing);
+    const canvas = wrapper.find('[data-testid="drawing-canvas"]');
+
+    setCanvasRect(canvas.element, { width: 800, height: 600 });
+    await emitCanvasResize();
+    await flushViewportReadyCheck();
+    await findDrawingToolbarToolButton(wrapper, 'connector').trigger('click');
+    await findDrawingStylePanel(wrapper).find('[aria-label="终点无箭头"]').trigger('click');
+
+    await dispatchPointerEvent(canvas.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 300, clientY: 200 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 300, clientY: 200 });
+
+    const endpoints = findDrawingConnectorEndpoints(wrapper);
+    await dispatchPointerEvent(endpoints[1].element, 'pointerdown', { clientX: 300, clientY: 200 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 360, clientY: 260 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 360, clientY: 260 });
+
+    expect(findDrawingConnectorPath(wrapper).attributes('d')).toBe('M -300 -200 L -40 -40');
   });
 
   it('does not render legacy edges from model data', (): void => {

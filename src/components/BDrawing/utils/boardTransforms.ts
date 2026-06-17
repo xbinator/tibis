@@ -7,6 +7,9 @@ import type {
   DrawingAddShapeOptions,
   DrawingBoardSnapshot,
   DrawingBoardState,
+  DrawingConnectorAnchor,
+  DrawingConnectorEndpoint,
+  DrawingConnectorEndpointPlacement,
   DrawingConnectorElement,
   DrawingConnectorOptionsChange,
   DrawingData,
@@ -23,7 +26,7 @@ import type {
 import { cloneDeep } from 'lodash-es';
 import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/board';
 import { DRAWING_DEFAULT_TEXT, DRAWING_TEXT_DEFAULT_FONT_SIZE, DRAWING_TEXT_DEFAULT_FONT_WEIGHT } from '../constants/text';
-import { isDrawingConnectorElement, isDrawingShapeElement } from './drawingGeometry';
+import { getDrawingConnectorEndpointElementId, isDrawingConnectorElement, isDrawingConnectorElementEndpoint, isDrawingShapeElement } from './drawingGeometry';
 import { createDrawingTextFitSize, measureDrawingTextElementSize } from './drawingTextMetrics';
 
 export {
@@ -286,6 +289,85 @@ function applyGeometryChanges(
 }
 
 /**
+ * 从兼容参数创建连接线端点。
+ * @param endpoint - 显式端点
+ * @param elementId - 兼容旧参数的元素 ID
+ * @param anchor - 兼容旧参数的锚点
+ * @returns 连接线端点
+ */
+function createConnectorEndpoint(
+  endpoint: DrawingConnectorEndpoint | undefined,
+  elementId: string | undefined,
+  anchor?: DrawingConnectorAnchor
+): DrawingConnectorEndpoint | null {
+  if (endpoint) {
+    return cloneDeep(endpoint);
+  }
+  if (!elementId) {
+    return null;
+  }
+
+  return {
+    elementId,
+    anchor: anchor ?? 'center'
+  };
+}
+
+/**
+ * 验证连接线元素端点是否指向存在的形状。
+ * @param state - 当前画板状态
+ * @param endpoint - 待验证端点
+ * @param message - 错误信息
+ * @returns 错误对象，验证通过时返回 null
+ */
+function validateConnectorElementEndpoint(state: DrawingBoardState, endpoint: DrawingConnectorEndpoint, message: string): Error | null {
+  if (!isDrawingConnectorElementEndpoint(endpoint)) {
+    return null;
+  }
+
+  const element = state.elements.find((item) => item.id === endpoint.elementId);
+
+  return element && isDrawingShapeElement(element) ? null : new Error(message);
+}
+
+/**
+ * 判断端点是否引用指定形状。
+ * @param endpoint - 连接线端点
+ * @param shapeIds - 形状 ID 集合
+ * @returns 是否引用指定形状
+ */
+function doesConnectorEndpointReferenceShape(endpoint: DrawingConnectorEndpoint, shapeIds: Set<string>): boolean {
+  const elementId = getDrawingConnectorEndpointElementId(endpoint);
+
+  return elementId ? shapeIds.has(elementId) : false;
+}
+
+/**
+ * 验证连接线两个端点组合是否合法。
+ * @param state - 当前画板状态
+ * @param source - 起点
+ * @param target - 终点
+ * @returns 错误对象，验证通过时返回 null
+ */
+function validateConnectorEndpoints(state: DrawingBoardState, source: DrawingConnectorEndpoint, target: DrawingConnectorEndpoint): Error | null {
+  const sourceError = validateConnectorElementEndpoint(state, source, `找不到连接起点: ${getDrawingConnectorEndpointElementId(source) ?? ''}`);
+  if (sourceError) {
+    return sourceError;
+  }
+
+  const targetError = validateConnectorElementEndpoint(state, target, `找不到连接目标: ${getDrawingConnectorEndpointElementId(target) ?? ''}`);
+  if (targetError) {
+    return targetError;
+  }
+
+  if (isDrawingConnectorElementEndpoint(source) && isDrawingConnectorElementEndpoint(target) && source.elementId === target.elementId) {
+    return new Error('连接线起点和终点不能相同');
+  }
+
+  return null;
+}
+
+/**
  * 创建初始画板状态。
  * @param snapshot - 初始快照
  * @returns 画板状态
@@ -365,29 +447,25 @@ export function addDrawingConnector(state: DrawingBoardState, options: DrawingAd
     return withError(state, new Error(`元素已存在: ${options.id}`));
   }
 
-  const source = state.elements.find((element) => element.id === options.sourceId);
-  const target = state.elements.find((element) => element.id === options.targetId);
-  if (!source || !isDrawingShapeElement(source)) {
-    return withError(state, new Error(`找不到连接起点: ${options.sourceId}`));
+  const source = createConnectorEndpoint(options.source, options.sourceId, options.sourceAnchor);
+  const target = createConnectorEndpoint(options.target, options.targetId, options.targetAnchor);
+  if (!source) {
+    return withError(state, new Error('缺少连接起点'));
   }
-  if (!target || !isDrawingShapeElement(target)) {
-    return withError(state, new Error(`找不到连接目标: ${options.targetId}`));
+  if (!target) {
+    return withError(state, new Error('缺少连接目标'));
   }
-  if (source.id === target.id) {
-    return withError(state, new Error('连接线起点和终点不能相同'));
+
+  const endpointError = validateConnectorEndpoints(state, source, target);
+  if (endpointError) {
+    return withError(state, endpointError);
   }
 
   const connector: DrawingConnectorElement = {
     id: options.id,
     kind: 'connector',
-    source: {
-      elementId: options.sourceId,
-      anchor: options.sourceAnchor ?? 'center'
-    },
-    target: {
-      elementId: options.targetId,
-      anchor: options.targetAnchor ?? 'center'
-    },
+    source,
+    target,
     style: cloneDeep(options.style),
     markerStart: options.markerStart,
     markerEnd: options.markerEnd,
@@ -406,6 +484,44 @@ export function addDrawingConnector(state: DrawingBoardState, options: DrawingAd
     elements: [...cloneDeep(state.elements), connector],
     edges: [],
     selection: [connector.id],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 更新连接线端点。
+ * @param state - 当前画板状态
+ * @param connectorId - 连接线 ID
+ * @param placement - 端点位置
+ * @param endpoint - 新端点
+ * @returns 新画板状态
+ */
+export function updateDrawingConnectorEndpoint(
+  state: DrawingBoardState,
+  connectorId: string,
+  placement: DrawingConnectorEndpointPlacement,
+  endpoint: DrawingConnectorEndpoint
+): DrawingBoardState {
+  const nextElements = cloneDeep(state.elements);
+  const connector = nextElements.find((item) => item.id === connectorId);
+  if (!connector || !isDrawingConnectorElement(connector)) {
+    return withError(state, new Error(`找不到连接线: ${connectorId}`));
+  }
+
+  const nextSource = placement === 'source' ? cloneDeep(endpoint) : connector.source;
+  const nextTarget = placement === 'target' ? cloneDeep(endpoint) : connector.target;
+  const endpointError = validateConnectorEndpoints(state, nextSource, nextTarget);
+  if (endpointError) {
+    return withError(state, endpointError);
+  }
+
+  connector.source = nextSource;
+  connector.target = nextTarget;
+
+  return withHistory(state, {
+    elements: nextElements,
+    edges: [],
+    selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
 }
@@ -594,7 +710,7 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
       return false;
     }
     if (isDrawingConnectorElement(element)) {
-      return !selectedShapeIds.has(element.source.elementId) && !selectedShapeIds.has(element.target.elementId);
+      return !doesConnectorEndpointReferenceShape(element.source, selectedShapeIds) && !doesConnectorEndpointReferenceShape(element.target, selectedShapeIds);
     }
 
     return true;
