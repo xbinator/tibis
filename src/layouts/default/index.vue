@@ -70,9 +70,9 @@
       <ChatSider v-if="settingStore.sidebarVisible" />
     </div>
 
-    <BSearchRecent v-model:visible="visible.searchRecent" />
+    <BSearchRecent v-if="visible.searchRecent" v-model:visible="visible.searchRecent" />
 
-    <ShortcutsHelp v-model:visible="visible.shortcutsHelp" />
+    <ShortcutsHelp v-if="visible.shortcutsHelp" v-model:visible="visible.shortcutsHelp" />
   </div>
 </template>
 
@@ -82,7 +82,6 @@ import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
 import BButton from '@/components/BButton/index.vue';
-import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
 import { useSettingStore } from '@/stores/ui/setting';
@@ -90,7 +89,6 @@ import { useTabsStore } from '@/stores/workspace/tabs';
 import HeaderEditorActions from './components/HeaderEditorActions.vue';
 import HeaderTabs from './components/HeaderTabs.vue';
 import HeaderUpdateNotice from './components/HeaderUpdateNotice.vue';
-import ShortcutsHelp from './components/ShortcutsHelp.vue';
 import { useEditActive } from './hooks/useEditActive';
 import { useFileActive } from './hooks/useFileActive';
 import { useHelpActive } from './hooks/useHelpActive';
@@ -107,6 +105,10 @@ const { getRouteCacheKey, getRouteCacheComponent } = useKeepAlive();
 
 /** 聊天侧栏体量较大，首屏隐藏时延迟加载以减少首次白屏等待。 */
 const ChatSider = defineAsyncComponent(() => import('./components/ChatSider.vue'));
+/** 最近记录搜索弹窗仅在打开时加载，避免首屏提前解析搜索组件依赖。 */
+const BSearchRecent = defineAsyncComponent(() => import('@/components/BSearchRecent/index.vue'));
+/** 快捷键帮助抽屉仅在打开时加载，减少默认布局首屏组件体积。 */
+const ShortcutsHelp = defineAsyncComponent(() => import('./components/ShortcutsHelp.vue'));
 
 const { toolbarFileOptions } = useFileActive(visible);
 const { toolbarEditOptions } = useEditActive();

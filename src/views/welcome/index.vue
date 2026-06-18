@@ -47,7 +47,7 @@
         </div>
       </div>
 
-      <BSearchRecent v-model:visible="visibleSearchRecent" />
+      <BSearchRecent v-if="visibleSearchRecent" v-model:visible="visibleSearchRecent" />
     </div>
   </DropZone>
 </template>
@@ -58,9 +58,8 @@
  * @description 渲染欢迎页快捷入口与最近文件列表，并支持拖拽打开文件。
  */
 
-import { ref, computed, onMounted } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
-import BSearchRecent from '@/components/BSearchRecent/index.vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import type { RecentRecord } from '@/shared/storage';
@@ -72,6 +71,9 @@ const { openWebview } = useNavigate();
 const recentStore = useRecentStore();
 const { createNewFile, createNewDrawingFile, openFileById, openNativeFile } = useOpenFile();
 const visibleSearchRecent = ref(false);
+
+/** 最近记录搜索弹窗仅在用户点击“更多”后加载，降低欢迎页首屏成本。 */
+const BSearchRecent = defineAsyncComponent(() => import('@/components/BSearchRecent/index.vue'));
 
 const topRecentRecords = computed(() => recentStore.topRecentRecords);
 

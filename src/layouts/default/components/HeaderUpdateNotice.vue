@@ -20,14 +20,18 @@
  * @description 标题栏更新提示组件，负责检查更新、打开 Release 页面与永久关闭提示。
  */
 import type { ElectronUpdateAvailableResult } from 'types/electron-api';
-import { onMounted, shallowRef } from 'vue';
+import { onBeforeUnmount, onMounted, shallowRef } from 'vue';
 import { Icon } from '@iconify/vue';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 
 const DISMISS_STORAGE_KEY = 'tibis:update-notice-dismissed';
+/** 延迟检查更新，避免应用启动首屏阶段抢占 IPC 与网络资源。 */
+const UPDATE_CHECK_STARTUP_DELAY_MS = 2500;
 
 /** 当前可展示的更新信息。 */
 const updateInfo = shallowRef<ElectronUpdateAvailableResult | null>(null);
+/** 延迟检查更新的定时器 ID。 */
+let updateCheckTimer: number | null = null;
 
 /**
  * 判断用户是否已永久关闭更新提示。
@@ -83,7 +87,17 @@ function handleDismiss(): void {
 }
 
 onMounted(() => {
-  checkUpdateNotice();
+  updateCheckTimer = window.setTimeout(() => {
+    updateCheckTimer = null;
+    Promise.resolve(checkUpdateNotice()).catch(() => undefined);
+  }, UPDATE_CHECK_STARTUP_DELAY_MS);
+});
+
+onBeforeUnmount(() => {
+  if (updateCheckTimer) {
+    window.clearTimeout(updateCheckTimer);
+    updateCheckTimer = null;
+  }
 });
 </script>
 

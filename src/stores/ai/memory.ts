@@ -13,6 +13,8 @@ import { useSettingStore } from '@/stores/ui/setting';
 
 /** 记忆文件目录 */
 const MEMORY_DIR = '.tibis';
+/** 当前进行中的记忆加载任务，用于合并并发加载请求。 */
+let memoryLoadPromise: Promise<void> | null = null;
 
 /** 记忆 Store 状态 */
 interface MemoryState {
@@ -69,23 +71,37 @@ export const useMemoryStore = defineStore('memory', {
      * 文件不存在时创建空文档，不触发主进程 ENOENT 错误
      */
     async loadMemory(): Promise<void> {
-      try {
-        const filePath = await getMemoryFilePath();
-        const status = await native.getPathStatus(filePath);
-        if (!status.exists) {
+      if (this.loaded) return;
+      if (memoryLoadPromise) {
+        await memoryLoadPromise;
+        return;
+      }
+
+      memoryLoadPromise = (async (): Promise<void> => {
+        try {
+          const filePath = await getMemoryFilePath();
+          const status = await native.getPathStatus(filePath);
+          if (!status.exists) {
+            this.doc = createEmptyMemoryDoc();
+            this.rawContent = '';
+            this.loaded = true;
+            return;
+          }
+          const result = await native.readFile(filePath);
+          this.rawContent = result.content;
+          this.doc = parseMemoryDoc(result.content);
+          this.loaded = true;
+        } catch {
           this.doc = createEmptyMemoryDoc();
           this.rawContent = '';
           this.loaded = true;
-          return;
         }
-        const result = await native.readFile(filePath);
-        this.rawContent = result.content;
-        this.doc = parseMemoryDoc(result.content);
-        this.loaded = true;
-      } catch {
-        this.doc = createEmptyMemoryDoc();
-        this.rawContent = '';
-        this.loaded = true;
+      })();
+
+      try {
+        await memoryLoadPromise;
+      } finally {
+        memoryLoadPromise = null;
       }
     },
 
