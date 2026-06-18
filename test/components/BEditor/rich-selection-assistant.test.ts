@@ -1,13 +1,33 @@
 /**
  * @file rich-selection-assistant.test.ts
  * @description BEditor Rich 模式选区工具适配器回归测试。
+ * @vitest-environment jsdom
  */
 import type { Node as PMNode } from '@tiptap/pm/model';
+import type { Editor as TiptapEditor } from '@tiptap/vue-3';
 import { Schema } from '@tiptap/pm/model';
 import { AllSelection, EditorState, NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { CellSelection, tableNodes } from '@tiptap/pm/tables';
-import { describe, expect, it } from 'vitest';
-import { getRichSelectionCapabilities, resolveRichSelectionRange } from '@/components/BEditor/adapters/richSelectionAssistant';
+import { describe, expect, it, vi, type Mock } from 'vitest';
+import {
+  createRichSelectionAssistantAdapter,
+  getRichSelectionCapabilities,
+  resolveRichSelectionRange
+} from '@/components/BEditor/adapters/richSelectionAssistant';
+import type { SelectionAssistantRange } from '@/components/BEditor/adapters/selectionAssistant';
+import type { EditorState as BEditorState } from '@/components/BEditor/types';
+
+/**
+ * TipTap 链式命令的最小测试替身。
+ */
+interface RichEditorChainStub {
+  /** 聚焦编辑器并继续链式调用。 */
+  focus: Mock<() => RichEditorChainStub>;
+  /** 在指定范围插入内容并继续链式调用。 */
+  insertContentAt: Mock<(range: { from: number; to: number }, content: string, options?: { contentType?: string }) => RichEditorChainStub>;
+  /** 执行链式命令。 */
+  run: Mock<() => boolean>;
+}
 
 /**
  * 创建包含两个段落的 ProseMirror 测试文档。
@@ -58,6 +78,45 @@ function createTableDoc(): PMNode {
   const table = schema.nodes.table.create(null, [firstRow, secondRow]);
 
   return schema.node('doc', null, [table]);
+}
+
+/**
+ * 构造 Rich 选区适配器测试上下文。
+ * @returns TipTap 命令替身与 Rich 选区适配器。
+ */
+function createAdapterHarness(): {
+  chain: RichEditorChainStub;
+  adapter: ReturnType<typeof createRichSelectionAssistantAdapter>;
+} {
+  const chain: RichEditorChainStub = {
+    focus: vi.fn<() => RichEditorChainStub>(),
+    insertContentAt: vi.fn<(range: { from: number; to: number }, content: string, options?: { contentType?: string }) => RichEditorChainStub>(),
+    run: vi.fn<() => boolean>()
+  };
+
+  chain.focus.mockReturnValue(chain);
+  chain.insertContentAt.mockReturnValue(chain);
+  chain.run.mockReturnValue(true);
+
+  const editor = {
+    chain: vi.fn<() => RichEditorChainStub>().mockReturnValue(chain)
+  } as unknown as TiptapEditor;
+
+  const editorState: BEditorState = {
+    content: 'old',
+    name: 'note.md',
+    path: '/tmp/note.md',
+    id: 'rich-selection-test',
+    ext: 'md'
+  };
+  const adapter = createRichSelectionAssistantAdapter(editor, {
+    editorState,
+    overlayRoot: document.createElement('div')
+  });
+
+  adapter.restoreSelection = vi.fn<(range: SelectionAssistantRange) => void>();
+
+  return { chain, adapter };
 }
 
 describe('resolveRichSelectionRange', (): void => {
@@ -142,5 +201,21 @@ describe('getRichSelectionCapabilities', (): void => {
     expect(capabilities.actions.strike).toBe(false);
     expect(capabilities.actions.code).toBe(false);
     expect(capabilities.actions.link).toBe(false);
+  });
+});
+
+describe('createRichSelectionAssistantAdapter', (): void => {
+  it('applies AI generated content as Markdown in rich mode', async (): Promise<void> => {
+    const { adapter, chain } = createAdapterHarness();
+    const range: SelectionAssistantRange = {
+      from: 1,
+      to: 4,
+      text: 'old',
+      docVersion: 5
+    };
+
+    await adapter.applyGeneratedContent(range, '### Title\n\n**bold**');
+
+    expect(chain.insertContentAt).toHaveBeenCalledWith({ from: 1, to: 4 }, '### Title\n\n**bold**', { contentType: 'markdown' });
   });
 });

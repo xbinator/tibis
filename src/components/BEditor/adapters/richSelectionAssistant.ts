@@ -347,7 +347,7 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
      */
     async applyGeneratedContent(range: SelectionAssistantRange, content: string): Promise<void> {
       this.restoreSelection(range);
-      editor.chain().focus().insertContentAt({ from: range.from, to: range.to }, content).run();
+      editor.chain().focus().insertContentAt({ from: range.from, to: range.to }, content, { contentType: 'markdown' }).run();
     },
 
     /**
