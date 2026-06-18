@@ -8,7 +8,7 @@
   >
     <slot :drag-over="isDragOver"></slot>
 
-    <input ref="inputRef" type="file" :class="name" :accept="accept" :multiple="multiple" @change="handleFileChange" />
+    <input ref="inputRef" type="file" :class="bem('input')" :accept="accept" :multiple="multiple" @change="handleFileChange" />
   </div>
 </template>
 
@@ -17,7 +17,7 @@ import type { BUploadProps as Props } from './types';
 import { onUnmounted, ref, watch } from 'vue';
 import { createNamespace } from '@/utils/namespace';
 
-const [name, bem] = createNamespace('upload');
+const [, bem] = createNamespace('upload');
 
 const props = withDefaults(defineProps<Props>(), {
   accept: '',
@@ -173,7 +173,7 @@ defineExpose({
 </script>
 
 <style scoped lang="less">
-.b-upload {
+.b-upload__input {
   display: none;
 }
 
