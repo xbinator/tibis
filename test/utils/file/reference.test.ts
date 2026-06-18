@@ -1,0 +1,31 @@
+/**
+ * @file reference.test.ts
+ * @description 文件引用 token 解析测试。
+ */
+import { describe, expect, it } from 'vitest';
+import { MESSAGE_REF_PATTERN } from '@/components/BChat/utils/fileReferenceContext';
+import { parseFileReferenceToken } from '@/utils/file/reference';
+
+describe('parseFileReferenceToken', (): void => {
+  it('parses encoded bracket file paths with spaces', (): void => {
+    const parsed = parseFileReferenceToken('#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)');
+
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        rawPath: '/workspace/My Notes/note.md',
+        filePath: '/workspace/My Notes/note.md',
+        fileName: 'note.md',
+        startLine: 0,
+        endLine: 0
+      })
+    );
+  });
+
+  it('matches encoded bracket file references in message text', (): void => {
+    const content = '引用 {{#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)}} 继续';
+    const matches = [...content.matchAll(MESSAGE_REF_PATTERN)];
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.[1]).toBe('[](%2Fworkspace%2FMy%20Notes%2Fnote.md)');
+  });
+});

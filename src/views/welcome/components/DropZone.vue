@@ -1,11 +1,5 @@
 <template>
-  <div
-    class="drop-zone"
-    @dragenter.prevent="handleDragEnter"
-    @dragover.prevent="handleDragOver"
-    @drop.prevent="handleDrop"
-    @dragleave.prevent="handleDragLeave"
-  >
+  <div ref="dropZoneRef" class="drop-zone">
     <div v-if="isDragging" class="drag-overlay">
       <div class="drag-overlay-content"></div>
     </div>
@@ -22,62 +16,15 @@
 import { ref } from 'vue';
 import { customAlphabet } from 'nanoid';
 import { OPEN_FILE_EXTENSIONS } from '@/constants/extensions';
+import { useFileDrop, resolveDroppedFilePath } from '@/hooks/useFileDrop';
 import { useOpenFile } from '@/hooks/useOpenFile';
-import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage';
 import { useFilesStore } from '@/stores/workspace/files';
-
-/**
- * 旧版 Electron 在 File 对象上暴露的路径字段。
- */
-interface DraggedFileWithPath {
-  /** 本地磁盘路径。 */
-  path?: string;
-}
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 const filesStore = useFilesStore();
 const { openFile, openFileByPath } = useOpenFile();
-
-const isDragging = ref(false);
-let dragCounter = 0;
-
-/**
- * 处理拖拽进入。
- */
-function handleDragEnter(): void {
-  dragCounter++;
-  isDragging.value = true;
-}
-
-/**
- * 处理拖拽悬停。
- */
-function handleDragOver(): void {
-  isDragging.value = true;
-}
-
-/**
- * 处理拖拽离开。
- */
-function handleDragLeave(): void {
-  dragCounter = Math.max(0, dragCounter - 1);
-  if (dragCounter === 0) {
-    isDragging.value = false;
-  }
-}
-
-/**
- * 从拖拽文件中解析本地磁盘路径。
- * @param file - 拖拽得到的浏览器 File 对象
- * @returns 本地磁盘路径；无法获取时返回 null
- */
-function resolveDroppedFilePath(file: File): string | null {
-  const legacyPath = (file as unknown as DraggedFileWithPath).path;
-  if (legacyPath) return legacyPath;
-
-  return native.getPathForFile(file);
-}
+const dropZoneRef = ref<HTMLElement>();
 
 /**
  * 将无磁盘路径的拖拽文件保存为未保存草稿。
@@ -104,14 +51,9 @@ async function createDroppedDraft(file: File, ext: string): Promise<StoredFile> 
  * 处理拖拽打开文件。
  * @param e - 拖拽事件
  */
-async function handleDrop(e: DragEvent): Promise<void> {
-  dragCounter = 0;
-  isDragging.value = false;
-
-  const files = e.dataTransfer?.files;
-  if (!files || files.length === 0) return;
-
+async function handleDropFiles(files: File[]): Promise<void> {
   const file = files[0];
+  if (!file) return;
 
   const ext = file.name.split('.').pop()?.toLowerCase();
   if (!ext || !OPEN_FILE_EXTENSIONS.includes(ext)) {
@@ -131,6 +73,12 @@ async function handleDrop(e: DragEvent): Promise<void> {
     console.error('Failed to drop file:', error);
   }
 }
+
+/** 通用文件拖拽 hook */
+const { isDragging } = useFileDrop({
+  targetRef: dropZoneRef,
+  onDropFiles: handleDropFiles
+});
 </script>
 
 <style lang="less" scoped>

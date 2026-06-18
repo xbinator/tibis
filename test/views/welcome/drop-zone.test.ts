@@ -73,7 +73,8 @@ function createDropEvent(file: File): Event {
 
   Object.defineProperty(event, 'dataTransfer', {
     value: {
-      files: createFileList(file)
+      files: createFileList(file),
+      types: ['Files']
     }
   });
 

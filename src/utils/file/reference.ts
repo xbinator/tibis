@@ -51,6 +51,34 @@ export interface FileReferenceNavigationTarget {
 
 /** 文件引用 token 正则表达式。行号为可选，无行号时表示引用整个文件。 */
 const FILE_REFERENCE_TOKEN_PATTERN = /^#(\S+)(?:\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?)?$/;
+/** 编码路径 token 片段，形如 [](%2Fworkspace%2Fnote.md)。 */
+const ENCODED_PATH_TOKEN_PATTERN = /^\[\]\((.*)\)$/;
+
+/**
+ * 将文件路径编码为可安全放入 file-ref token 的路径片段。
+ * @param rawPath - 原始文件路径或文件名
+ * @returns 编码后的路径片段
+ */
+export function encodeFileReferencePath(rawPath: string): string {
+  return `[](${encodeURIComponent(rawPath)})`;
+}
+
+/**
+ * 解码 file-ref token 中的路径片段。
+ * @param rawPath - token 内路径片段
+ * @returns 解码后的原始路径
+ */
+export function decodeFileReferencePath(rawPath: string): string {
+  const matched = rawPath.match(ENCODED_PATH_TOKEN_PATTERN);
+  if (!matched) return rawPath;
+
+  const [, encodedPath] = matched;
+  try {
+    return decodeURIComponent(encodedPath);
+  } catch {
+    return encodedPath;
+  }
+}
 
 /**
  * 从路径字符串中提取展示用文件名。
@@ -73,7 +101,7 @@ export function parseFileReferenceToken(tokenContent: string): ParsedFileReferen
   }
 
   const [, rawPathText, startLineText, endLineText, renderStartLineText, renderEndLineText] = matched;
-  const rawPath = rawPathText.trim();
+  const rawPath = decodeFileReferencePath(rawPathText.trim());
   const unsavedReference = parseUnsavedPath(rawPath);
   const hasLineNumber = startLineText !== undefined;
   const startLine = hasLineNumber ? Number(startLineText) : 0;

@@ -32,6 +32,15 @@ const streamMock = vi.hoisted(() => ({
 
 const streamLoading = vi.hoisted(() => ({ value: false }));
 
+const promptEditorMockState = vi.hoisted(() => ({
+  focus: vi.fn(),
+  saveCursorPosition: vi.fn(),
+  insertTextAtCursor: vi.fn<(text: string) => void>(),
+  getCursorPosition: vi.fn<() => number>(() => 0),
+  replaceTextRange: vi.fn()
+}));
+const getPathForFileMock = vi.hoisted(() => vi.fn<(_file: File) => string | null>().mockReturnValue('/workspace/My Notes/note.md'));
+
 const streamOptionsMockState = vi.hoisted(() => ({
   options: undefined as
     | {
@@ -105,7 +114,8 @@ vi.mock('@/shared/platform', () => ({
     trashFile: vi.fn(),
     watchDirectory: vi.fn(),
     unwatchDirectory: vi.fn(),
-    onSkillChanged: vi.fn(() => vi.fn())
+    onSkillChanged: vi.fn(() => vi.fn()),
+    getPathForFile: getPathForFileMock
   }
 }));
 
@@ -237,11 +247,11 @@ const BPromptEditorStub = defineComponent({
   emits: ['update:value', 'submit', 'slash-command', 'file-mention-select'],
   setup(_props, { expose }) {
     expose({
-      focus: vi.fn(),
-      saveCursorPosition: vi.fn(),
-      insertTextAtCursor: vi.fn(),
-      getCursorPosition: vi.fn(() => 0),
-      replaceTextRange: vi.fn()
+      focus: promptEditorMockState.focus,
+      saveCursorPosition: promptEditorMockState.saveCursorPosition,
+      insertTextAtCursor: promptEditorMockState.insertTextAtCursor,
+      getCursorPosition: promptEditorMockState.getCursorPosition,
+      replaceTextRange: promptEditorMockState.replaceTextRange
     });
 
     return () => h('div', { 'data-testid': 'prompt-editor' });
@@ -351,6 +361,24 @@ function createDeferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 /**
+ * 创建带文件拖拽数据的 DOM 事件。
+ * @param type - 事件类型
+ * @param files - 拖拽文件列表
+ * @returns 拖拽事件
+ */
+function createFileDragEvent(type: 'dragenter' | 'dragover' | 'dragleave' | 'drop', files: File[]): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      files,
+      types: ['Files'],
+      dropEffect: 'none'
+    }
+  });
+  return event;
+}
+
+/**
  * 挂载 BChat。
  * @param sessionId - 当前会话 ID
  * @returns 组件包装器
@@ -398,6 +426,14 @@ describe('BChat sessionId runtime', (): void => {
     streamMock.submitUserChoice.mockReset();
     streamMock.abort.mockReset();
     streamOptionsMockState.options = undefined;
+    promptEditorMockState.focus.mockReset();
+    promptEditorMockState.saveCursorPosition.mockReset();
+    promptEditorMockState.insertTextAtCursor.mockReset();
+    promptEditorMockState.getCursorPosition.mockReset();
+    promptEditorMockState.getCursorPosition.mockReturnValue(0);
+    promptEditorMockState.replaceTextRange.mockReset();
+    getPathForFileMock.mockReset();
+    getPathForFileMock.mockReturnValue('/workspace/My Notes/note.md');
     todoStoreMock.todosBySession.clear();
     todoStoreMock.clearTodos.mockReset();
     todoStoreMock.getTodos.mockClear();
@@ -535,5 +571,89 @@ describe('BChat sessionId runtime', (): void => {
     await flushPromises();
 
     expect(chatStoreMock.addSessionMessage).toHaveBeenCalledWith('session-active', expect.objectContaining({ id: finalMessage.id, finished: true }));
+  });
+
+  it('highlights the input container while dragging files over it', async (): Promise<void> => {
+    const wrapper = mountBChat(null);
+    await flushPromises();
+    const inputContainer = wrapper.find('.b-chat__input-container');
+
+    await inputContainer.element.dispatchEvent(createFileDragEvent('dragenter', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await wrapper.vm.$nextTick();
+
+    expect(inputContainer.classes()).toContain('b-chat__input-container--dragover');
+
+    await inputContainer.element.dispatchEvent(createFileDragEvent('dragleave', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await wrapper.vm.$nextTick();
+
+    expect(inputContainer.classes()).not.toContain('b-chat__input-container--dragover');
+  });
+
+  it('inserts file reference tokens when non-image files are dropped on the input container', async (): Promise<void> => {
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    await wrapper
+      .find('.b-chat__input-container')
+      .element.dispatchEvent(createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await flushPromises();
+
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)}}');
+  });
+
+  it('adds image files when images are dropped on the input container', async (): Promise<void> => {
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    await wrapper
+      .find('.b-chat__input-container')
+      .element.dispatchEvent(createFileDragEvent('drop', [new File(['image'], 'photo.png', { type: 'image/png' })]));
+    await flushPromises();
+
+    expect(promptEditorMockState.insertTextAtCursor).not.toHaveBeenCalled();
+  });
+
+  it('processes mixed dropped files with image upload and file reference insertion', async (): Promise<void> => {
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    await wrapper
+      .find('.b-chat__input-container')
+      .element.dispatchEvent(
+        createFileDragEvent('drop', [new File(['image'], 'photo.png', { type: 'image/png' }), new File(['hello'], 'note.md', { type: 'text/markdown' })])
+      );
+    await flushPromises();
+
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)}}');
+  });
+
+  it('falls back to filename token when dropped file path cannot be resolved', async (): Promise<void> => {
+    getPathForFileMock.mockReturnValue(null);
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    await wrapper
+      .find('.b-chat__input-container')
+      .element.dispatchEvent(createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await flushPromises();
+
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{#[](note.md)}}');
+  });
+
+  it('clears input drag state without duplicate processing when an inner editor already handled the drop', async (): Promise<void> => {
+    const wrapper = mountBChat(null);
+    await flushPromises();
+    const inputContainer = wrapper.find('.b-chat__input-container');
+
+    await inputContainer.element.dispatchEvent(createFileDragEvent('dragenter', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await wrapper.vm.$nextTick();
+
+    const dropEvent = createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]);
+    dropEvent.preventDefault();
+    await inputContainer.element.dispatchEvent(dropEvent);
+    await flushPromises();
+
+    expect(inputContainer.classes()).not.toContain('b-chat__input-container--dragover');
+    expect(promptEditorMockState.insertTextAtCursor).not.toHaveBeenCalled();
   });
 });
