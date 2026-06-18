@@ -119,17 +119,21 @@ export function useChatTaskRuntime(options: UseChatTaskRuntimeOptions) {
    * 中止当前活跃任务。
    * 工具循环续轮期间 activeTask 可能已提前置为 idle，仍需保证能中止底层流式传输。
    * 等待聊天任务的助手消息持久化完成后再重置状态，确保数据一致性。
+   * @returns 被中止前的任务类型，用于外层区分不同任务的取消展示。
    */
-  async function abortActiveTask(): Promise<void> {
-    if (activeTask.value === 'compact') {
+  async function abortActiveTask(): Promise<ChatTaskState> {
+    const abortedTask = activeTask.value;
+
+    if (abortedTask === 'compact') {
       compactAbortController.value?.abort();
       compactAbortHandler.value?.();
       resetToIdle();
-      return;
+      return abortedTask;
     }
 
     await abortChatTask();
     resetToIdle();
+    return abortedTask;
   }
 
   /**

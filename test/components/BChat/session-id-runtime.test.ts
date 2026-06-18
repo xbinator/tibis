@@ -9,6 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BChat from '@/components/BChat/index.vue';
+import { CompressionCancelledError } from '@/components/BChat/utils/compression/error';
 import type { Message, ServiceConfig } from '@/components/BChat/utils/types';
 import type { TodoItem } from '@/stores/chat/todo';
 import { useSettingStore } from '@/stores/ui/setting';
@@ -31,6 +32,7 @@ const streamMock = vi.hoisted(() => ({
 }));
 
 const streamLoading = vi.hoisted(() => ({ value: false }));
+const mockCompressSessionManually = vi.hoisted(() => vi.fn<(input: { sessionId: string; messages: Message[]; signal?: AbortSignal }) => Promise<undefined>>());
 
 const promptEditorMockState = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -230,6 +232,12 @@ vi.mock('@/components/BChat/hooks/useAutoName', () => ({
   })
 }));
 
+vi.mock('@/components/BChat/utils/compression/coordinator', () => ({
+  createCompressionCoordinator: vi.fn(() => ({
+    compressSessionManually: mockCompressSessionManually
+  }))
+}));
+
 vi.mock('@/utils/modal', () => ({
   Modal: {
     confirm: vi.fn()
@@ -425,6 +433,7 @@ describe('BChat sessionId runtime', (): void => {
     streamMock.regenerate.mockReset();
     streamMock.submitUserChoice.mockReset();
     streamMock.abort.mockReset();
+    mockCompressSessionManually.mockReset();
     streamOptionsMockState.options = undefined;
     promptEditorMockState.focus.mockReset();
     promptEditorMockState.saveCursorPosition.mockReset();
@@ -571,6 +580,46 @@ describe('BChat sessionId runtime', (): void => {
     await flushPromises();
 
     expect(chatStoreMock.addSessionMessage).toHaveBeenCalledWith('session-active', expect.objectContaining({ id: finalMessage.id, finished: true }));
+  });
+
+  it('does not append an interrupt message when cancelling an active compression task', async (): Promise<void> => {
+    chatStoreMock.getSessionMessages.mockResolvedValue([
+      createMessage('message-1', '第一轮上下文'),
+      createMessage('message-2', '第二轮上下文'),
+      createMessage('message-3', '第三轮上下文'),
+      createMessage('message-4', '第四轮上下文'),
+      createMessage('message-5', '第五轮上下文'),
+      createMessage('message-6', '第六轮上下文')
+    ]);
+    mockCompressSessionManually.mockImplementation(
+      ({ signal }): Promise<undefined> =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new CompressionCancelledError()), { once: true });
+          if (signal?.aborted) {
+            reject(new CompressionCancelledError());
+          }
+        })
+    );
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(BPromptEditorStub).vm.$emit('slash-command', {
+      id: 'compact',
+      trigger: '/compact',
+      title: '压缩上下文',
+      description: '立即执行一次手动上下文压缩',
+      type: 'action'
+    });
+    await flushPromises();
+
+    wrapper.findComponent(InputToolbarStub).vm.$emit('abort');
+    await flushPromises();
+
+    expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-active', expect.objectContaining({ role: 'interrupt' }));
+    expect(chatStoreMock.setSessionMessages).toHaveBeenCalledWith(
+      'session-active',
+      expect.arrayContaining([expect.objectContaining({ role: 'compression', compression: expect.objectContaining({ status: 'cancelled' }) })])
+    );
   });
 
   it('highlights the input container while dragging files over it', async (): Promise<void> => {

@@ -979,7 +979,11 @@ async function handleChatSubmit(): Promise<void> {
  */
 async function handleAbort(): Promise<void> {
   confirmationController.expirePendingConfirmation();
-  await taskRuntime.abortActiveTask();
+  const abortedTask = await taskRuntime.abortActiveTask();
+
+  if (abortedTask === 'compact') {
+    return;
+  }
 
   const sessionId = activeSessionId.value;
   if (sessionId) {
