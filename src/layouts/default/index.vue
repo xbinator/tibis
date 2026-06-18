@@ -67,7 +67,7 @@
         </RouterView>
       </div>
 
-      <ChatSider />
+      <ChatSider v-if="settingStore.sidebarVisible" />
     </div>
 
     <BSearchRecent v-model:visible="visible.searchRecent" />
@@ -77,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
@@ -87,7 +87,6 @@ import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import ChatSider from './components/ChatSider.vue';
 import HeaderEditorActions from './components/HeaderEditorActions.vue';
 import HeaderTabs from './components/HeaderTabs.vue';
 import HeaderUpdateNotice from './components/HeaderUpdateNotice.vue';
@@ -105,6 +104,9 @@ const visible = reactive({ searchRecent: false, shortcutsHelp: false });
 const settingStore = useSettingStore();
 const tabsStore = useTabsStore();
 const { getRouteCacheKey, getRouteCacheComponent } = useKeepAlive();
+
+/** 聊天侧栏体量较大，首屏隐藏时延迟加载以减少首次白屏等待。 */
+const ChatSider = defineAsyncComponent(() => import('./components/ChatSider.vue'));
 
 const { toolbarFileOptions } = useFileActive(visible);
 const { toolbarEditOptions } = useEditActive();
@@ -143,26 +145,36 @@ const platform = computed(() => (isMac() ? 'mac' : 'win'));
 const isMaximized = ref(false);
 const isFullScreen = ref(false);
 
-// 验证窗口状态
-function validateWindowState() {
-  // 最大化窗口
+/**
+ * 同步窗口最大化和全屏状态。
+ */
+function validateWindowState(): void {
+  // 读取最大化状态用于切换窗口按钮图标。
   api?.windowIsMaximized?.().then((value) => (isMaximized.value = value));
-  // 全屏窗口
+  // 读取全屏状态用于 macOS 标题栏占位。
   api?.windowIsFullScreen?.().then((value) => (isFullScreen.value = value));
 }
 
-// 最小化窗口
-function handleMinimize() {
+/**
+ * 最小化当前窗口。
+ */
+function handleMinimize(): void {
   api?.windowMinimize();
 }
-// 最大化窗口
-function handleMaximize() {
+
+/**
+ * 切换当前窗口最大化状态。
+ */
+function handleMaximize(): void {
   api?.windowMaximize();
 
   validateWindowState();
 }
-// 关闭窗口
-function handleClose() {
+
+/**
+ * 关闭当前窗口。
+ */
+function handleClose(): void {
   api?.windowClose();
 }
 
