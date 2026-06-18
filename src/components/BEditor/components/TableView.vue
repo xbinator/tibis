@@ -1055,10 +1055,35 @@ onBeforeUnmount(() => {
 .b-markdown-table__table {
   width: 100%;
   margin: 0;
+  table-layout: fixed;
   border-spacing: 0;
   border-collapse: separate;
   border: 1px solid var(--editor-table-border);
   border-radius: 8px;
+}
+
+.b-markdown-table__table colgroup,
+.b-markdown-table__table col {
+  width: auto !important;
+}
+
+.b-markdown-table__table [data-node-view-content-vue] {
+  display: contents;
+}
+
+.b-markdown-table__table tbody,
+.b-markdown-table__table thead {
+  width: 100%;
+}
+
+.b-markdown-table__table tr {
+  width: 100%;
+}
+
+.b-markdown-table__table th,
+.b-markdown-table__table td {
+  width: auto;
+  min-width: 0;
 }
 
 .b-markdown-table__line-overlay,
