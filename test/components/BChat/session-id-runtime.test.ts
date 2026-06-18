@@ -523,12 +523,12 @@ describe('BChat sessionId runtime', (): void => {
     expect(wrapper.findComponent({ name: 'TodoPanel' }).exists()).toBe(false);
   });
 
-  it('keeps active todo panel visible for unfinished todos', async (): Promise<void> => {
+  it('keeps active todo panel collapsed by default for unfinished todos', async (): Promise<void> => {
     todoStoreMock.todosBySession.set('session-active', [{ content: '执行任务', status: 'in_progress', priority: 'high' }]);
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    expect(wrapper.findComponent({ name: 'TodoPanel' }).props('visible')).toBe(true);
+    expect(wrapper.findComponent({ name: 'TodoPanel' }).props('visible')).toBe(false);
     expect(todoStoreMock.clearTodos).not.toHaveBeenCalled();
   });
 

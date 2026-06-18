@@ -178,7 +178,7 @@ const toolSettingsStore = useToolSettingsStore();
 /** Todo 存储 */
 const todoStore = useTodoStore();
 /** Todo 面板可见性 */
-const todoPanelVisible = ref(true);
+const todoPanelVisible = ref(false);
 /** Todo 面板是否已因当前任务全部结束而隐藏 */
 const todoPanelDismissed = ref(false);
 /** BChat 内部为新会话草稿创建出的会话 ID。 */
@@ -209,10 +209,20 @@ function clearFinishedTodos(sessionId: string): void {
   todoPanelDismissed.value = true;
 }
 
+/**
+ * 判断待办面板是否应由当前待办更新自动展开。
+ * @param sessionId - 当前会话 ID
+ * @param previousSessionId - 上一次监听到的会话 ID
+ * @returns 同一会话的后续待办更新可自动展开时返回 true
+ */
+function shouldAutoShowTodoPanel(sessionId: string | null, previousSessionId: string | null | undefined): boolean {
+  return previousSessionId !== undefined && sessionId === previousSessionId && !todoPanelVisible.value;
+}
+
 /** LLM 调用 todowrite 时自动打开/关闭面板 */
 watch(
   () => [activeSessionId.value, todoStore.getTodos(activeSessionId.value ?? '')] as const,
-  ([sessionId, newTodos]) => {
+  ([sessionId, newTodos], previousValue) => {
     if (newTodos.length === 0) {
       todoPanelVisible.value = false;
       todoPanelDismissed.value = false;
@@ -220,7 +230,7 @@ watch(
       if (sessionId) {
         clearFinishedTodos(sessionId);
       }
-    } else if (!todoPanelVisible.value) {
+    } else if (shouldAutoShowTodoPanel(sessionId, previousValue?.[0])) {
       todoPanelVisible.value = true;
       todoPanelDismissed.value = false;
     } else {
