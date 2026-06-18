@@ -107,6 +107,24 @@ describe('BEditor rich Markdown parser', (): void => {
     expect(hasMark(findTextNode(json, '已删除'), 'strike')).toBe(true);
   });
 
+  it('keeps technical prose plain when no explicit Markdown syntax is used', async (): Promise<void> => {
+    const markdown = [
+      '仓库 b2cmall_qr、b2c_public_components，字段 <refId>，地址 https://example.com/a_b。',
+      '显式链接：[文档](https://example.com/doc)。'
+    ].join('\n');
+
+    const { json } = await parseMarkdownForRichLoad(markdown, 'technical-prose-test', '1');
+    const textContent = getTextContent(json);
+
+    expect(textContent).toContain('b2cmall_qr');
+    expect(textContent).toContain('b2c_public_components');
+    expect(textContent).toContain('<refId>');
+    expect(textContent).toContain('https://example.com/a_b');
+    expect(countMarks(json, 'italic')).toBe(0);
+    expect(countMarks(json, 'link')).toBe(1);
+    expect(hasMark(findTextNode(json, '文档'), 'link')).toBe(true);
+  });
+
   it('keeps content carried by raw HTML tags when loading Markdown', async (): Promise<void> => {
     const markdown = [
       '这是 <u>下划线</u>、<mark>标记</mark>、<kbd>Ctrl</kbd>、<abbr title="HyperText Markup Language">HTML</abbr>、<small>小字</small>、H<sub>2</sub>O 和 x<sup>上标</sup>。',
