@@ -565,6 +565,8 @@ defineExpose({
   .ProseMirror {
     --native-selection-color: var(--selection-color);
     --native-selection-bg: var(--selection-bg);
+    --editor-table-selection-header-bg: color-mix(in srgb, var(--color-primary-bg-hover) 88%, var(--editor-table-header-bg));
+    --editor-table-selection-cell-bg: color-mix(in srgb, var(--color-primary-bg-hover) 74%, var(--bg-primary));
 
     min-height: calc(100vh - 42px);
     padding: 20px 40px 90px;
@@ -613,6 +615,26 @@ defineExpose({
       & * {
         color: var(--selection-color) !important;
       }
+    }
+
+    .b-markdown-table.ai-selection-highlight {
+      background: transparent;
+      border-radius: 8px;
+      box-shadow: none;
+    }
+
+    .b-markdown-table.ai-selection-highlight,
+    .b-markdown-table.ai-selection-highlight * {
+      color: var(--editor-text) !important;
+      -webkit-text-fill-color: var(--editor-text) !important;
+    }
+
+    .b-markdown-table.ai-selection-highlight th {
+      background-color: var(--editor-table-selection-header-bg);
+    }
+
+    .b-markdown-table.ai-selection-highlight td {
+      background-color: var(--editor-table-selection-cell-bg);
     }
 
     .is-editor-empty:first-child::before {
@@ -816,7 +838,7 @@ defineExpose({
 
     &.selectedCell {
       color: var(--editor-text);
-      background-color: color-mix(in srgb, var(--editor-link) 12%, var(--editor-table-header-bg));
+      background-color: var(--editor-table-selection-header-bg);
       -webkit-text-fill-color: var(--editor-text);
     }
   }
@@ -833,7 +855,7 @@ defineExpose({
 
     &.selectedCell {
       color: var(--editor-text);
-      background-color: color-mix(in srgb, var(--editor-link) 12%, var(--bg-primary));
+      background-color: var(--editor-table-selection-cell-bg);
       -webkit-text-fill-color: var(--editor-text);
     }
 

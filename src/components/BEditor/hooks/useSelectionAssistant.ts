@@ -95,6 +95,15 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
     return adapter.isRangeStillValid(range);
   }
 
+  /**
+   * 根据当前选区同步工具栏能力。
+   * @param adapter - 当前选区适配器
+   * @param range - 当前选区范围；为空时恢复适配器默认能力
+   */
+  function syncCapabilities(adapter: SelectionAssistantAdapter, range?: SelectionAssistantRange | null): void {
+    capabilities.value = adapter.getCapabilities(range);
+  }
+
   // ---- 事件绑定 ----
   let cleanupAdapterEvents: (() => void) | undefined;
 
@@ -108,7 +117,7 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
       return;
     }
 
-    capabilities.value = adapter.getCapabilities();
+    syncCapabilities(adapter);
 
     cleanupAdapterEvents = adapter.bindSelectionEvents({
       onSelectionChange() {
@@ -167,6 +176,8 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
 
     // 无有效选区 → 按当前状态决定下一步
     if (!selection) {
+      syncCapabilities(adapter);
+
       if (awaitingSelectionSyncAfterFocus.value) {
         awaitingSelectionSyncAfterFocus.value = false;
         clearStickyHighlight();
@@ -185,6 +196,7 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
 
     // 更新缓存
     cachedSelectionRange.value = { ...selection };
+    syncCapabilities(adapter, selection);
 
     if (pointerSelectionActive.value) {
       adapter.showSelectionHighlight(selection);
@@ -549,6 +561,7 @@ export function useSelectionAssistant(options: UseSelectionAssistantOptions) {
     cachedSelectionRange,
     toolbarPosition,
     panelPosition,
+    capabilities,
     isAIActionAvailable,
     isReferenceActionAvailable,
     // 动作

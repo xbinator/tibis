@@ -283,14 +283,31 @@ const commentActions = useCommentActions({
 /**
  * Rich 模式格式按钮列表。
  */
-const formatButtons = computed(() => [
+interface MarkdownFormatButton {
+  /** 按钮对应的选区动作 */
+  command: SelectionToolbarAction;
+  /** Iconify 图标名称 */
+  icon: string;
+}
+
+/**
+ * Rich 模式完整格式按钮候选列表。
+ */
+const richFormatButtonCandidates: readonly MarkdownFormatButton[] = [
   { command: 'bold' as SelectionToolbarAction, icon: 'lucide:bold' },
   { command: 'italic' as SelectionToolbarAction, icon: 'lucide:italic' },
   { command: 'underline' as SelectionToolbarAction, icon: 'lucide:underline' },
   { command: 'strike' as SelectionToolbarAction, icon: 'lucide:strikethrough' },
   { command: 'link' as SelectionToolbarAction, icon: 'lucide:link' },
   { command: 'code' as SelectionToolbarAction, icon: 'lucide:code' }
-]);
+];
+
+/**
+ * Rich 模式当前选区可显示的格式按钮列表。
+ */
+const formatButtons = computed<MarkdownFormatButton[]>(() =>
+  richFormatButtonCandidates.filter((button) => selectionAssistant.capabilities.value.actions[button.command] === true)
+);
 
 /**
  * 读取当前模式下应导出的完整 HTML 文档。

@@ -1,11 +1,13 @@
+import type { DecorationRange } from './editorDecorations';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { DecorationSet } from '@tiptap/pm/view';
-import { createSingleDecorationSet, type DecorationRange } from './editorDecorations';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-type AISelectionRange = DecorationRange;
+interface AISelectionRange extends DecorationRange {
+  highlightKind?: 'inline' | 'node';
+}
 
 interface AISelectionHighlightState {
   decorations: DecorationSet;
@@ -18,9 +20,92 @@ interface AISelectionHighlightMeta {
 
 const aiSelectionHighlightPluginKey = new PluginKey<AISelectionHighlightState>('b-markdown-ai-selection-highlight');
 
+/**
+ * 当前节点是否为 Rich 表格节点。
+ * @param node - ProseMirror 节点
+ * @returns 节点是否为 table
+ */
+function isTableNode(node: PMNode): boolean {
+  return node.type.name === 'table';
+}
+
+/**
+ * 创建普通 inline 范围内需要同步高亮的表格容器装饰。
+ * @param doc - 当前 ProseMirror 文档
+ * @param range - 当前高亮范围
+ * @returns table node decorations
+ */
+function createTableContainerDecorations(doc: PMNode, range: AISelectionRange): Decoration[] {
+  const decorations: Decoration[] = [];
+
+  doc.nodesBetween(range.from, range.to, (node, pos) => {
+    if (!isTableNode(node)) {
+      return true;
+    }
+
+    const tableTo = pos + node.nodeSize;
+    if (pos >= range.from && tableTo <= range.to) {
+      decorations.push(Decoration.node(pos, tableTo, { class: 'ai-selection-highlight' }));
+    }
+
+    return false;
+  });
+
+  return decorations;
+}
+
+/**
+ * 创建普通 inline 文本高亮，并跳过已经用 node decoration 高亮的表格容器。
+ * @param range - 当前高亮范围
+ * @param tableDecorations - 已创建的表格容器装饰
+ * @returns inline decorations
+ */
+function createInlineDecorationsOutsideTables(range: AISelectionRange, tableDecorations: Decoration[]): Decoration[] {
+  const decorations: Decoration[] = [];
+  let cursor = range.from;
+
+  tableDecorations
+    .map((decoration) => ({ from: decoration.from, to: decoration.to }))
+    .sort((left, right) => left.from - right.from)
+    .forEach((tableRange) => {
+      if (cursor < tableRange.from) {
+        decorations.push(Decoration.inline(cursor, tableRange.from, { class: 'ai-selection-highlight' }));
+      }
+      cursor = Math.max(cursor, tableRange.to);
+    });
+
+  if (cursor < range.to) {
+    decorations.push(Decoration.inline(cursor, range.to, { class: 'ai-selection-highlight' }));
+  }
+
+  return decorations;
+}
+
+/**
+ * 创建 AI 选区高亮装饰。
+ * 普通文本使用 inline decoration，table 容器选区使用 node decoration。
+ * @param doc - 当前 ProseMirror 文档
+ * @param range - 高亮范围
+ * @returns ProseMirror decoration set
+ */
+export function createAISelectionDecorationSet(doc: PMNode, range: AISelectionRange | null): DecorationSet {
+  if (!range || range.from === range.to) {
+    return DecorationSet.create(doc, []);
+  }
+
+  if (range.highlightKind === 'node') {
+    return DecorationSet.create(doc, [Decoration.node(range.from, range.to, { class: 'ai-selection-highlight' })]);
+  }
+
+  const tableDecorations = createTableContainerDecorations(doc, range);
+  const inlineDecorations = createInlineDecorationsOutsideTables(range, tableDecorations);
+
+  return DecorationSet.create(doc, [...inlineDecorations, ...tableDecorations]);
+}
+
 function createHighlightState(doc: PMNode, range: AISelectionRange | null = null): AISelectionHighlightState {
   return {
-    decorations: createSingleDecorationSet(doc, range, 'ai-selection-highlight'),
+    decorations: createAISelectionDecorationSet(doc, range),
     range
   };
 }
@@ -40,7 +125,7 @@ function isSameRange(left: AISelectionRange | null, right: AISelectionRange | nu
     return false;
   }
 
-  return left.from === right.from && left.to === right.to;
+  return left.from === right.from && left.to === right.to && (left.highlightKind ?? 'inline') === (right.highlightKind ?? 'inline');
 }
 
 export function setAISelectionHighlight(editor: Editor | null | undefined, range: AISelectionRange): void {
@@ -81,7 +166,7 @@ export const AISelectionHighlight = Extension.create({
               const mappedFrom = tr.mapping.map(pluginState.range.from);
               const mappedTo = tr.mapping.map(pluginState.range.to);
 
-              return createHighlightState(newState.doc, { from: mappedFrom, to: mappedTo });
+              return createHighlightState(newState.doc, { ...pluginState.range, from: mappedFrom, to: mappedTo });
             }
 
             return pluginState;

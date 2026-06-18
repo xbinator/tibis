@@ -8,13 +8,22 @@ import type {
   SelectionAssistantContext,
   SelectionAssistantPosition,
   SelectionAssistantRange,
+  SelectionToolbarAction,
   SelectionReferencePayload
 } from './selectionAssistant';
+import type { Node as PMNode } from '@tiptap/pm/model';
+import type { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/vue-3';
-import { TextSelection } from '@tiptap/pm/state';
+import { AllSelection, NodeSelection, TextSelection } from '@tiptap/pm/state';
+import { CellSelection, findTable, TableMap } from '@tiptap/pm/tables';
 import { nanoid } from 'nanoid';
 import { clearAISelectionHighlight, setAISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { getSelectionSourceLineRange, getSelectionSourceLineRangeFromMarkdown } from './sourceLineMapping';
+
+/**
+ * Rich 模式内由 Tiptap mark 命令承载的文字格式动作。
+ */
+const RICH_TEXT_FORMAT_ACTIONS: readonly SelectionToolbarAction[] = ['bold', 'italic', 'underline', 'strike', 'code', 'link'];
 
 /**
  * 判断字符是否为行尾换行符。
@@ -32,6 +41,85 @@ function isLineBreakChar(char: string): boolean {
  */
 function isVisibleDomRect(rect: DOMRect): boolean {
   return rect.width > 0 && rect.height > 0;
+}
+
+/**
+ * 判断表格单元格选区是否覆盖了整张表。
+ * @param selection - 当前 CellSelection
+ * @param table - 当前选区所在表格
+ * @returns 是否选中了整张表
+ */
+function isWholeTableCellSelection(selection: CellSelection, table: NonNullable<ReturnType<typeof findTable>>): boolean {
+  const tableMap = TableMap.get(table.node);
+  const rect = tableMap.rectBetween(selection.$anchorCell.pos - table.start, selection.$headCell.pos - table.start);
+
+  return rect.left === 0 && rect.top === 0 && rect.right === tableMap.width && rect.bottom === tableMap.height;
+}
+
+/**
+ * 将 ProseMirror 选区转换为 Rich 选区工具可消费的范围。
+ * Ctrl+A 会产生 AllSelection，需要保留为完整文档范围以触发 AI 高亮。
+ * @param selection - ProseMirror 当前选区
+ * @param doc - ProseMirror 当前文档
+ * @returns Rich 选区范围；非文本类选区返回 null
+ */
+export function resolveRichSelectionRange(selection: Selection, doc: PMNode): SelectionAssistantRange | null {
+  if (selection.empty) {
+    return null;
+  }
+
+  if (selection instanceof CellSelection) {
+    const table = findTable(selection.$anchorCell);
+    if (!table) {
+      return null;
+    }
+
+    if (!isWholeTableCellSelection(selection, table)) {
+      return null;
+    }
+
+    const from = table.pos;
+    const to = table.pos + table.node.nodeSize;
+    return {
+      from,
+      to,
+      text: doc.textBetween(from, to, ''),
+      docVersion: doc.nodeSize,
+      highlightKind: 'node'
+    };
+  }
+
+  if (!(selection instanceof TextSelection) && !(selection instanceof AllSelection)) {
+    return null;
+  }
+
+  return {
+    from: selection.from,
+    to: selection.to,
+    text: doc.textBetween(selection.from, selection.to, ''),
+    docVersion: doc.nodeSize
+  };
+}
+
+/**
+ * 获取 Rich 模式当前选区可用的工具能力。
+ * 表格容器等 node 级选区不适合执行文字 mark 命令，因此只保留 AI/引用/评论动作。
+ * @param range - 当前选区范围；为空时返回默认文字选区能力
+ * @returns Rich 选区工具能力声明
+ */
+export function getRichSelectionCapabilities(range?: SelectionAssistantRange | null): SelectionAssistantCapabilities {
+  const canApplyTextFormat = range?.highlightKind !== 'node';
+  const actions: SelectionAssistantCapabilities['actions'] = {
+    ai: true,
+    reference: true,
+    comment: true
+  };
+
+  RICH_TEXT_FORMAT_ACTIONS.forEach((action) => {
+    actions[action] = canApplyTextFormat;
+  });
+
+  return { actions };
 }
 
 /**
@@ -175,19 +263,8 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
   }
 
   return {
-    getCapabilities(): SelectionAssistantCapabilities {
-      return {
-        actions: {
-          ai: true,
-          reference: true,
-          comment: true,
-          bold: true,
-          italic: true,
-          underline: true,
-          strike: true,
-          code: true
-        }
-      };
+    getCapabilities(range?: SelectionAssistantRange | null): SelectionAssistantCapabilities {
+      return getRichSelectionCapabilities(range);
     },
 
     isEditable(): boolean {
@@ -196,23 +273,16 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
 
     getSelection(): SelectionAssistantRange | null {
       const { selection } = editor.state;
-      if (selection.empty) return null;
-
-      // 仅对文本选区显示格式工具栏，过滤表格单元格选区与节点选区
-      if (!(selection instanceof TextSelection)) {
-        return null;
-      }
-
-      return {
-        from: selection.from,
-        to: selection.to,
-        text: editor.state.doc.textBetween(selection.from, selection.to, ''),
-        docVersion: editor.state.doc.nodeSize
-      };
+      return resolveRichSelectionRange(selection, editor.state.doc);
     },
 
     restoreSelection(range: SelectionAssistantRange): void {
       const { state, view } = editor;
+      if (range.highlightKind === 'node') {
+        view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, range.from)));
+        return;
+      }
+
       view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, range.from, range.to)));
     },
 
@@ -262,7 +332,7 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
     },
 
     showSelectionHighlight(range: SelectionAssistantRange): void {
-      setAISelectionHighlight(editor, { from: range.from, to: range.to });
+      setAISelectionHighlight(editor, { from: range.from, to: range.to, highlightKind: range.highlightKind });
     },
 
     clearSelectionHighlight(): void {

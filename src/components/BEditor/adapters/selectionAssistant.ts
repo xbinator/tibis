@@ -11,6 +11,8 @@ export interface SelectionAssistantRange {
   from: number;
   to: number;
   text: string;
+  /** 高亮绘制方式；table 等容器选区使用 node，其余默认 inline */
+  highlightKind?: 'inline' | 'node';
   /** 选区快照生成时的文档版本，用于校验范围是否仍然可信 */
   docVersion?: number;
   /** 可选的快照标识，用于跨阶段追踪同一轮 AI / 引用流程 */
@@ -82,7 +84,7 @@ export interface SelectionAssistantContext {
  */
 export interface SelectionAssistantAdapter {
   dispose?(): void;
-  getCapabilities(): SelectionAssistantCapabilities;
+  getCapabilities(range?: SelectionAssistantRange | null): SelectionAssistantCapabilities;
   isEditable(): boolean;
   getSelection(): SelectionAssistantRange | null;
   /** 在 AI 内容应用前恢复缓存选区，不等同于任意时刻覆写当前选区 */
