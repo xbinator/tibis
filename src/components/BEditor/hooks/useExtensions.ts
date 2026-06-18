@@ -335,6 +335,27 @@ function parseInlineTokensWithHtmlMarks(tokens: MarkdownToken[], helpers: Markdo
   return content;
 }
 
+const MarkdownStrike = Strike.extend({
+  parseMarkdown: (token: MarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult => {
+    const raw = typeof token.raw === 'string' ? token.raw : '';
+    if (!raw.startsWith('~~')) {
+      return helpers.createTextNode(raw);
+    }
+
+    return helpers.applyMark('strike', helpers.parseInline(token.tokens || []));
+  }
+}) as unknown as AnyExtension;
+
+/**
+ * 将 Tiptap 扩展集合统一适配为当前入口使用的 AnyExtension[]。
+ * pnpm 下不同 Tiptap 子包可能解析到不同 patch 版本，扩展运行时协议一致但类型私有字段不完全兼容。
+ * @param extensions - Tiptap 扩展集合
+ * @returns 当前模块统一使用的扩展集合类型
+ */
+function toAnyExtensions(extensions: readonly unknown[]): AnyExtension[] {
+  return extensions as AnyExtension[];
+}
+
 const HtmlInline = Mark.create({
   name: 'htmlInline',
   addAttributes() {
@@ -911,7 +932,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     }
   });
 
-  const editorExtensions = [
+  const editorExtensions = toAnyExtensions([
     StarterKit.configure({
       code: false,
       codeBlock: false,
@@ -958,7 +979,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     Highlight.configure({
       multicolor: true
     }),
-    Strike,
+    MarkdownStrike,
     TextStyle,
     Color,
     HtmlInline,
@@ -980,7 +1001,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
         throwOnError: false
       }
     })
-  ];
+  ]);
 
   function assignHeadingIds(editor: Editor, headingOptions?: { silent?: boolean }): void {
     const { state, view } = editor;
@@ -1323,7 +1344,7 @@ export function createRichMarkdownSchemaExtensions(
     }
   });
 
-  const extensions = [
+  const extensions = toAnyExtensions([
     StarterKit.configure({
       code: false,
       codeBlock: false,
@@ -1362,7 +1383,7 @@ export function createRichMarkdownSchemaExtensions(
     Highlight.configure({
       multicolor: true
     }),
-    Strike,
+    MarkdownStrike,
     TextStyle,
     Color,
     HtmlInline,
@@ -1379,7 +1400,7 @@ export function createRichMarkdownSchemaExtensions(
         throwOnError: false
       }
     })
-  ];
+  ]);
 
   function assignHeadingIds(editor: Editor, headingOptions?: { silent?: boolean }): void {
     const { state, view } = editor;
@@ -1425,23 +1446,12 @@ export function createRichEditorRuntimeOnlyExtensions(
   _editorInstanceId: string,
   options?: { onSearchMatchFocus?: (context: SearchScrollContext) => void }
 ): AnyExtension[] {
-  const runtimeExtensions: AnyExtension[] = [];
-
-  // Placeholder
-  runtimeExtensions.push(Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: '请输入内容' }));
-
-  // AI 选区高亮
-  runtimeExtensions.push(AISelectionHighlight);
-
-  // 内联注释 Mark
-  runtimeExtensions.push(InlineCommentMark);
-
-  // 搜索
-  runtimeExtensions.push(
+  return toAnyExtensions([
+    Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: '请输入内容' }),
+    AISelectionHighlight,
+    InlineCommentMark,
     Search.configure({
       onMatchFocus: options?.onSearchMatchFocus ?? null
     })
-  );
-
-  return runtimeExtensions;
+  ]);
 }

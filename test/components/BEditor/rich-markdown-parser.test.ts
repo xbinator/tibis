@@ -82,7 +82,31 @@ function getMark(node: JSONContent | null, markType: string): { type: string; at
   return node?.marks?.find((mark) => mark.type === markType) ?? null;
 }
 
+/**
+ * 统计 JSONContent 树中指定 mark 的出现次数。
+ * @param node - 当前 JSON 节点
+ * @param markType - mark 类型
+ * @returns 当前节点及子节点中的 mark 数量
+ */
+function countMarks(node: JSONContent, markType: string): number {
+  const currentCount = node.marks?.filter((mark) => mark.type === markType).length ?? 0;
+  const childCount = Array.isArray(node.content)
+    ? node.content.reduce((total: number, child: JSONContent): number => total + countMarks(child, markType), 0)
+    : 0;
+
+  return currentCount + childCount;
+}
+
 describe('BEditor rich Markdown parser', (): void => {
+  it('does not create strikethrough marks for ATDD single-tilde ranges', async (): Promise<void> => {
+    const markdown = ['REQ-5/6/7→ATDD-1~3、REQ-8/9/10→ATDD-4~6、REQ-12~16→ATDD-8~11。', '', '显式删除线仍应生效：~~已删除~~。'].join('\n');
+
+    const { json } = await parseMarkdownForRichLoad(markdown, 'atdd-table-test', '1');
+
+    expect(countMarks(json, 'strike')).toBe(1);
+    expect(hasMark(findTextNode(json, '已删除'), 'strike')).toBe(true);
+  });
+
   it('keeps content carried by raw HTML tags when loading Markdown', async (): Promise<void> => {
     const markdown = [
       '这是 <u>下划线</u>、<mark>标记</mark>、<kbd>Ctrl</kbd>、<abbr title="HyperText Markup Language">HTML</abbr>、<small>小字</small>、H<sub>2</sub>O 和 x<sup>上标</sup>。',
