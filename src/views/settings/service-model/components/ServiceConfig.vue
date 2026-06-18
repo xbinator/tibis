@@ -151,24 +151,27 @@ async function loadSavedConfig(): Promise<void> {
   const config = await serviceModelsStorage.getConfig(props.serviceType);
 
   selectedModel.value = config?.providerId && config?.modelId ? `${config.providerId}:${config.modelId}` : undefined;
-  customPrompt.value = config?.customPrompt ?? props.defaultPrompt ?? '';
+  customPrompt.value = props.showPrompt ? config?.customPrompt ?? props.defaultPrompt ?? '' : '';
   draftPrompt.value = customPrompt.value;
 }
 
 function buildConfigPayload(): { providerId?: string; modelId?: string; customPrompt?: string } {
-  if (!selectedModel.value) {
-    return {
-      customPrompt: customPrompt.value?.trim() || undefined
-    };
+  const payload: { providerId?: string; modelId?: string; customPrompt?: string } = {};
+
+  if (selectedModel.value) {
+    const [, providerId, modelId] = selectedModel.value.match(/^([^:]+):(.+)$/) ?? [];
+    payload.providerId = providerId || undefined;
+    payload.modelId = modelId || undefined;
   }
 
-  const [, providerId, modelId] = selectedModel.value.match(/^([^:]+):(.+)$/) ?? [];
+  if (props.showPrompt) {
+    const trimmedPrompt = customPrompt.value?.trim();
+    if (trimmedPrompt) {
+      payload.customPrompt = trimmedPrompt;
+    }
+  }
 
-  return {
-    providerId: providerId || undefined,
-    modelId: modelId || undefined,
-    customPrompt: customPrompt.value?.trim() || undefined
-  };
+  return payload;
 }
 
 /**
