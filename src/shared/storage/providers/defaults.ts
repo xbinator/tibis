@@ -19,7 +19,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         name: 'Claude Opus 4.8',
         type: 'reasoning',
         isEnabled: true,
-        contextWindow: 200000,
+        contextWindow: 1000000,
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: true,
@@ -32,7 +32,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         name: 'Claude Sonnet 4.6',
         type: 'reasoning',
         isEnabled: true,
-        contextWindow: 200000,
+        contextWindow: 1000000,
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: true,
@@ -45,7 +45,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         name: 'Claude Haiku 4.5',
         type: 'chat',
         isEnabled: true,
-        contextWindow: 200000,
+        contextWindow: 1000000,
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: false,
@@ -71,7 +71,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
-        supportsVision: false,
+        supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: false,
         supportsImageGeneration: false,
@@ -84,7 +84,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         isEnabled: true,
         contextWindow: 1000000,
         supportsTools: true,
-        supportsVision: false,
+        supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: false,
         supportsImageGeneration: false,
@@ -102,47 +102,21 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     readonly: true,
     models: [
       {
+        id: 'gemini-3.5-pro',
+        name: 'Gemini 3.5 Pro',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 2000000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
         id: 'gemini-3.5-flash',
         name: 'Gemini 3.5 Flash',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'gemini-3.1-pro-preview',
-        name: 'Gemini 3.1 Pro Preview',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'gemini-2.5-pro',
-        name: 'Gemini 2.5 Pro',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'gemini-2.5-flash',
-        name: 'Gemini 2.5 Flash',
         type: 'chat',
         isEnabled: true,
         contextWindow: 1000000,
@@ -185,35 +159,9 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: true,
-        supportsWebSearch: false,
+        supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: true
-      },
-      {
-        id: 'MiniMax-M2.7',
-        name: 'MiniMax M2.7',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 200000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'MiniMax-M2.7-highspeed',
-        name: 'MiniMax M2.7 Highspeed',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 200000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
       }
     ]
   },
@@ -236,32 +184,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'kimi-k2.5',
-        name: 'Kimi K2.5',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 256000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'kimi-k2-thinking',
-        name: 'Kimi K2 Thinking',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 256000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: false,
         supportsImageGeneration: false,
         supportsVideoRecognition: false
       }
@@ -287,6 +209,19 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     readonly: true,
     models: [
       {
+        id: 'gpt-5.5-pro',
+        name: 'GPT-5.5 Pro',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 400000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
+      {
         id: 'gpt-5.5',
         name: 'GPT-5.5',
         type: 'reasoning',
@@ -311,32 +246,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: true
-      },
-      {
-        id: 'gpt-5.4-mini',
-        name: 'GPT-5.4 Mini',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 400000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'gpt-5.4-nano',
-        name: 'GPT-5.4 Nano',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 400000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: false,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
       },
       {
         id: 'gpt-image-1',
@@ -366,7 +275,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         name: 'Qwen3.7 Max',
         type: 'reasoning',
         isEnabled: true,
-        contextWindow: 262144,
+        contextWindow: 1000000,
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: true,
@@ -375,54 +284,15 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsVideoRecognition: true
       },
       {
-        id: 'qwen3.6-plus',
-        name: 'Qwen3.6 Plus',
+        id: 'qwen3.7-plus',
+        name: 'Qwen3.7 Plus',
         type: 'chat',
         isEnabled: true,
-        contextWindow: 262144,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'qwen3.6-flash',
-        name: 'Qwen3.6 Flash',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 262144,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'qwen3-coder-plus',
-        name: 'Qwen3 Coder Plus',
-        type: 'code',
-        isEnabled: true,
-        contextWindow: 262144,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'qwen-vl-plus',
-        name: 'Qwen VL Plus',
-        type: 'vision',
-        isEnabled: true,
-        contextWindow: 128000,
+        contextWindow: 1000000,
         supportsTools: true,
         supportsVision: true,
-        supportsDeepThought: false,
-        supportsWebSearch: false,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: true
       },
@@ -454,26 +324,13 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         name: 'Qwen3.7 Max',
         type: 'reasoning',
         isEnabled: true,
-        contextWindow: 262144,
+        contextWindow: 1000000,
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: true
-      },
-      {
-        id: 'qwen3-coder-plus',
-        name: 'Qwen3 Coder Plus',
-        type: 'code',
-        isEnabled: true,
-        contextWindow: 262144,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
       }
     ]
   },
@@ -495,45 +352,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'ernie-5.0',
-        name: 'ERNIE 5.0',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: false,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'ernie-4.5-turbo-128k',
-        name: 'ERNIE 4.5 Turbo 128K',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: false,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'ernie-4.5-turbo-vl',
-        name: 'ERNIE 4.5 Turbo VL',
-        type: 'vision',
-        isEnabled: true,
-        contextWindow: 32000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: false,
         supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: true
@@ -561,19 +379,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: true
-      },
-      {
-        id: 'ernie-4.5-turbo-128k',
-        name: 'ERNIE 4.5 Turbo 128K',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: false,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
       }
     ]
   },
@@ -608,19 +413,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsTools: true,
         supportsVision: true,
         supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'doubao-seed-1.6-flash',
-        name: 'Doubao Seed 1.6 Flash',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 256000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: false,
         supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: false
@@ -680,37 +472,11 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
-        supportsVision: false,
+        supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'hunyuan-turbos-latest',
-        name: 'Hunyuan TurboS Latest',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: false,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'hunyuan-a13b',
-        name: 'Hunyuan A13B',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 224000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
+        supportsVideoRecognition: true
       }
     ]
   },
@@ -730,24 +496,11 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         isEnabled: true,
         contextWindow: 256000,
         supportsTools: true,
-        supportsVision: false,
+        supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'hunyuan-turbos-latest',
-        name: 'Hunyuan TurboS Latest',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: false,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
+        supportsVideoRecognition: true
       }
     ]
   },
@@ -770,32 +523,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'mimo-v2.5',
-        name: 'MiMo V2.5',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      },
-      {
-        id: 'mimo-v2-flash',
-        name: 'MiMo V2 Flash',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: false,
-        supportsWebSearch: false,
         supportsImageGeneration: false,
         supportsVideoRecognition: true
       }
@@ -822,19 +549,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsWebSearch: true,
         supportsImageGeneration: false,
         supportsVideoRecognition: true
-      },
-      {
-        id: 'mimo-v2-flash',
-        name: 'MiMo V2 Flash',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: false,
-        supportsWebSearch: false,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
       }
     ]
   },
@@ -848,30 +562,17 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     readonly: true,
     models: [
       {
-        id: 'glm-5.1',
-        name: 'GLM-5.1',
+        id: 'glm-5.2',
+        name: 'GLM-5.2',
         type: 'reasoning',
         isEnabled: true,
-        contextWindow: 200000,
+        contextWindow: 1000000,
         supportsTools: true,
-        supportsVision: false,
+        supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'glm-5-turbo',
-        name: 'GLM-5 Turbo',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 200000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
+        supportsVideoRecognition: true
       },
       {
         id: 'glm-4.6v',
@@ -910,30 +611,17 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     readonly: true,
     models: [
       {
-        id: 'glm-5.1',
-        name: 'GLM-5.1',
+        id: 'glm-5.2',
+        name: 'GLM-5.2',
         type: 'reasoning',
         isEnabled: true,
-        contextWindow: 200000,
+        contextWindow: 1000000,
         supportsTools: true,
-        supportsVision: false,
+        supportsVision: true,
         supportsDeepThought: true,
         supportsWebSearch: true,
         supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'glm-5-turbo',
-        name: 'GLM-5 Turbo',
-        type: 'chat',
-        isEnabled: true,
-        contextWindow: 200000,
-        supportsTools: true,
-        supportsVision: false,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
+        supportsVideoRecognition: true
       }
     ]
   }
