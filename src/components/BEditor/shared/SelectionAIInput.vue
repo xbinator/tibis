@@ -46,6 +46,7 @@ import { SERVICE_MODEL_UPDATED_EVENT } from '@/shared/storage/service-models/eve
 import type { AvailableServiceModelConfig } from '@/stores/ai/serviceModel';
 import { useServiceModelStore } from '@/stores/ai/serviceModel';
 import { createNamespace } from '@/utils/namespace';
+import { buildSelectionAIPrompt } from '../utils/selectionAIPrompt';
 
 const [name, bem] = createNamespace('', 'b-markdown-selai');
 
@@ -100,12 +101,6 @@ const PANEL_PADDING = 16;
  * AI 面板的期望宽度。
  */
 const PREFERRED_PANEL_WIDTH = 500;
-
-/**
- * 用于替换提示词模板占位符的正则，模块级复用避免重复编译。
- */
-const RE_SELECTED_TEXT = /\{\{SELECTED_TEXT\}\}/g;
-const RE_USER_INPUT = /\{\{USER_INPUT\}\}/g;
 
 const { agent } = useChat({
   providerId,
@@ -392,11 +387,6 @@ useEventListener(window, 'resize', (): void => {
 
 // ---- AI ----
 
-function buildAIPrompt(selectedText: string, userInput: string): string {
-  const template = modelConfig.value?.customPrompt ?? '';
-  return template.replace(RE_SELECTED_TEXT, selectedText).replace(RE_USER_INPUT, userInput);
-}
-
 async function sendInstruction(): Promise<void> {
   const value = inputValue.value.trim();
   const range = props.selectionRange;
@@ -409,7 +399,7 @@ async function sendInstruction(): Promise<void> {
     return;
   }
 
-  const prompt = buildAIPrompt(range.text, value);
+  const prompt = buildSelectionAIPrompt(range.text, value);
   loading.value = true;
   emit('streaming-change', true);
   agent.stream({ modelId: config.modelId, prompt });
