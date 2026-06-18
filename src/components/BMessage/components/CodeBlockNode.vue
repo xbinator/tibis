@@ -337,7 +337,7 @@ onUnmounted(() => {
 .b-message__code-block {
   margin: 0.6em 0;
   overflow: hidden;
-  background: var(--code-bg);
+  background: var(--bg-primary);
   border: 1px solid var(--border-secondary);
   border-radius: 6px;
 }
