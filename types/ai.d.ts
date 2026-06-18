@@ -568,6 +568,8 @@ export interface AIProviderModel {
   type: string;
   /** 此模型是否启用。 */
   isEnabled: boolean;
+  /** 此模型是否已被用户删除。 */
+  isDelete?: boolean;
   /** 上下文窗口大小。 */
   contextWindow?: number;
   /** 是否支持工具使用。 */

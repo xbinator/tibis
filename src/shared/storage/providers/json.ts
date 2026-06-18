@@ -109,22 +109,61 @@ function getDefaultProvider(id: string): AIProvider | undefined {
   return DEFAULT_PROVIDERS_MAP.get(id);
 }
 
-/** 合并内置服务商的默认配置与用户覆盖设置，models 增量合并 */
+/** 判断模型是否为用户删除标记 */
+function isDeletedModel(model: AIProviderModel): boolean {
+  return model.isDelete === true;
+}
+
+/** 克隆模型并清理删除标记，用于恢复已删除模型 */
+function restoreModel(model: AIProviderModel): AIProviderModel {
+  const nextModel = cloneDeep(model);
+  delete nextModel.isDelete;
+  return nextModel;
+}
+
+/** 克隆模型并标记为已删除，用于阻止内置默认模型刷新时被补回 */
+function markModelDeleted(model: AIProviderModel): AIProviderModel {
+  return { ...cloneDeep(model), isDelete: true };
+}
+
+/**
+ * 生成内置服务商需要持久化的模型列表。
+ * @param base 内置服务商默认配置
+ * @param existing 已保存的服务商覆盖配置
+ * @param models 本次保存的可见模型列表
+ * @returns 包含删除标记的持久化模型列表
+ */
+function buildStoredModels(base: AIProvider, existing: StoredProviderEntry | undefined, models: AIProviderModel[]): AIProviderModel[] {
+  const savedModelIds = new Set(models.map((model) => model.id));
+  const defaultModelIds = new Set((base.models ?? []).map((model) => model.id));
+  const activeModels = models.map((model) => restoreModel(model));
+  const deletedDefaultModels = (base.models ?? []).filter((model) => !savedModelIds.has(model.id)).map((model) => markModelDeleted(model));
+  const preservedDeletedModels = (existing?.models ?? []).filter(
+    (model) => isDeletedModel(model) && !savedModelIds.has(model.id) && !defaultModelIds.has(model.id)
+  );
+
+  return [...activeModels, ...deletedDefaultModels, ...cloneDeep(preservedDeletedModels)];
+}
+
+/** 合并内置服务商的默认配置与用户覆盖设置，models 增量合并并隐藏用户删除过的模型 */
 function mergeProvider(base: AIProvider, stored?: StoredProviderEntry): AIProvider {
   const overrides = stored ? sanitizeProviderEntry(stored) : null;
 
   let mergedModels: AIProviderModel[];
-  if (overrides?.models && overrides.models.length > 0) {
+  if (overrides?.models) {
     const overrideModelIds = new Set(overrides.models.map((m) => m.id));
+    const visibleOverrideModels = overrides.models.filter((model) => !isDeletedModel(model));
     const newBaseModels = (base.models ?? []).filter((m) => !overrideModelIds.has(m.id));
-    mergedModels = [...overrides.models, ...newBaseModels];
+    mergedModels = [...cloneDeep(visibleOverrideModels), ...cloneDeep(newBaseModels)];
   } else {
     mergedModels = cloneDeep(base.models ?? []);
   }
 
+  const providerOverrides = overrides ? omitBy(overrides, isUndefined) : {};
+
   return {
     ...cloneDeep(base),
-    ...(overrides ? omitBy(overrides, isUndefined) : {}),
+    ...providerOverrides,
     models: mergedModels
   };
 }
@@ -139,7 +178,7 @@ function entryToCustomProvider(entry: StoredProviderEntry): AIProvider {
     logo: entry.logo ?? '',
     baseUrl: entry.baseUrl ?? '',
     apiKey: entry.apiKey ?? '',
-    models: entry.models ?? [],
+    models: (entry.models ?? []).filter((model) => !isDeletedModel(model)),
     isEnabled: entry.isEnabled ?? false,
     readonly: false,
     isCustom: true
@@ -292,6 +331,9 @@ export const providerStorage = {
           id: normalizedId,
           ...sanitized
         };
+        if (sanitized.models) {
+          entry.models = buildStoredModels(base, existing, sanitized.models);
+        }
         return { ...current, providers: upsertEntry(current.providers, entry) };
       });
 
@@ -372,6 +414,8 @@ export {
   sanitizeProviderSettings,
   sanitizeModel,
   mergeProvider,
+  isDeletedModel,
+  buildStoredModels,
   entryToCustomProvider,
   upsertEntry,
   reorderEntries,
