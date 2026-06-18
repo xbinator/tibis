@@ -46,6 +46,7 @@ function removeToast(id: string): void {
 
 <style scoped lang="less">
 .interaction-container {
+  width: 100%;
   max-width: var(--b-chat-max-width, 800px);
   margin: 0 auto;
 }
