@@ -12,8 +12,16 @@ const RATE_LIMIT_STATUS_CODES = [429, 529];
 /** 频率限制相关的错误类型 */
 const RATE_LIMIT_ERROR_TYPES = ['rate_limit_error', 'overloaded_error'];
 
-/** 频率限制相关的关键词 */
-const RATE_LIMIT_KEYWORDS = ['rate limit', 'too many requests', 'quota', 'resource exhausted'];
+/** 频率限制与额度耗尽相关的关键词 */
+const RATE_LIMIT_KEYWORDS = [
+  'rate limit',
+  'too many requests',
+  'quota',
+  'resource exhausted',
+  'insufficient balance',
+  'insufficient credit',
+  'balance not enough'
+];
 
 /** 服务不可用相关的 HTTP 状态码 */
 const SERVICE_UNAVAILABLE_STATUS_CODES = [500, 502, 503, 504];

@@ -5,31 +5,13 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { useAutoName } from '@/components/BChat/hooks/useAutoName';
 
-/** mock agent.invoke */
-const mockInvoke = vi.hoisted(() => vi.fn());
+/** mock ChatRuntime 自动命名命令。 */
+const mockChatRuntimeAutoName = vi.hoisted(() => vi.fn());
 
-/** mock serviceModelStore.getAvailableServiceConfig */
-const mockGetAvailableServiceConfig = vi.hoisted(() => vi.fn());
-
-/** mock chatStore.updateSessionTitle */
-const mockUpdateSessionTitle = vi.hoisted(() => vi.fn());
-
-vi.mock('@/hooks/useChat', () => ({
-  useChat: () => ({
-    agent: { invoke: mockInvoke }
-  })
-}));
-
-vi.mock('@/stores/ai/serviceModel', () => ({
-  useServiceModelStore: () => ({
-    getAvailableServiceConfig: mockGetAvailableServiceConfig
-  })
-}));
-
-vi.mock('@/stores/chat/session', () => ({
-  useChatSessionStore: () => ({
-    updateSessionTitle: mockUpdateSessionTitle
-  })
+vi.mock('@/shared/platform/electron-api', () => ({
+  getElectronAPI: vi.fn(() => ({
+    chatRuntimeAutoName: mockChatRuntimeAutoName
+  }))
 }));
 
 /** 固定定时器，便于精确控制防抖 */
@@ -56,9 +38,7 @@ function createOptions(overrides?: {
 
 describe('useAutoName', () => {
   beforeEach((): void => {
-    mockInvoke.mockReset();
-    mockGetAvailableServiceConfig.mockReset();
-    mockUpdateSessionTitle.mockReset();
+    mockChatRuntimeAutoName.mockReset();
   });
 
   // ─── captureSnapshot ───
@@ -91,13 +71,8 @@ describe('useAutoName', () => {
   // ─── scheduleAutoName → doAutoName ───
 
   describe('doAutoName (via scheduleAutoName)', () => {
-    it('uses chat service config instead of autoname', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '聊天话题' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+    it('requests main process ChatRuntime autoname with the frozen snapshot', async (): Promise<void> => {
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '聊天话题' } });
 
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
       const snap = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
@@ -105,30 +80,28 @@ describe('useAutoName', () => {
 
       await vi.advanceTimersByTimeAsync(300);
 
-      // 验证读取的是 chat 配置
-      expect(mockGetAvailableServiceConfig).toHaveBeenCalledWith('chat');
+      expect(mockChatRuntimeAutoName).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        userMessage: '用户首条消息',
+        aiResponse: 'AI回复'
+      });
     });
 
-    it('skips naming when chat config is unavailable', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue(null);
+    it('skips UI updates when main process skips naming', async (): Promise<void> => {
+      const currentSession = { id: 'session-1', title: '旧标题' };
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'skipped', reason: 'no_model_config' } });
 
-      const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
+      const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions({ currentSession }));
       const snap = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
       scheduleAutoName(snap, () => false);
 
       await vi.advanceTimersByTimeAsync(300);
 
-      expect(mockInvoke).not.toHaveBeenCalled();
-      expect(mockUpdateSessionTitle).not.toHaveBeenCalled();
+      expect(currentSession.title).toBe('旧标题');
     });
 
-    it('persists title and updates current session UI', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: 'Vue组件设计' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+    it('updates current session UI after successful naming', async (): Promise<void> => {
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: 'Vue组件设计' } });
 
       const currentSession = { id: 'session-1', title: '旧标题' };
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions({ currentSession }));
@@ -137,17 +110,11 @@ describe('useAutoName', () => {
 
       await vi.advanceTimersByTimeAsync(300);
 
-      expect(mockUpdateSessionTitle).toHaveBeenCalledWith('session-1', 'Vue组件设计');
       expect(currentSession.title).toBe('Vue组件设计');
     });
 
     it('does not update UI when current session differs', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '其他话题' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '其他话题' } });
 
       const currentSession = { id: 'session-other', title: '旧标题' };
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions({ currentSession }));
@@ -156,93 +123,42 @@ describe('useAutoName', () => {
 
       await vi.advanceTimersByTimeAsync(300);
 
-      // 持久化仍执行（写入 session-1）
-      expect(mockUpdateSessionTitle).toHaveBeenCalledWith('session-1', '其他话题');
-      // 但当前 UI 会话标题不变
       expect(currentSession.title).toBe('旧标题');
     });
 
-    it('strips quotes from LLM output', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '"带引号的标题"' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+    it('skips UI updates when main process fails naming', async (): Promise<void> => {
+      const currentSession = { id: 'session-1', title: '旧标题' };
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'failed', errorMessage: '网络错误' } });
 
-      const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
+      const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions({ currentSession }));
       const snap = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
       scheduleAutoName(snap, () => false);
 
       await vi.advanceTimersByTimeAsync(300);
 
-      expect(mockUpdateSessionTitle).toHaveBeenCalledWith('session-1', '带引号的标题');
-    });
-
-    it('skips naming when LLM returns empty text', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '' }]);
-
-      const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
-      const snap = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
-      scheduleAutoName(snap, () => false);
-
-      await vi.advanceTimersByTimeAsync(300);
-
-      expect(mockUpdateSessionTitle).not.toHaveBeenCalled();
-    });
-
-    it('skips naming when LLM invoke fails', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([{ message: '网络错误' }, undefined]);
-
-      const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
-      const snap = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
-      scheduleAutoName(snap, () => false);
-
-      await vi.advanceTimersByTimeAsync(300);
-
-      expect(mockUpdateSessionTitle).not.toHaveBeenCalled();
+      expect(currentSession.title).toBe('旧标题');
     });
 
     it('does not rename the same session twice', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '首次标题' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '首次标题' } });
 
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
 
-      // 第一次命名
       const snap1 = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
       scheduleAutoName(snap1, () => false);
       await vi.advanceTimersByTimeAsync(300);
 
-      expect(mockUpdateSessionTitle).toHaveBeenCalledTimes(1);
+      expect(mockChatRuntimeAutoName).toHaveBeenCalledTimes(1);
 
-      // 第二次对同一 session 触发，应跳过
       const snap2 = captureSnapshot({ content: 'AI回复2' }, 'session-1')!;
       scheduleAutoName(snap2, () => false);
       await vi.advanceTimersByTimeAsync(300);
 
-      expect(mockUpdateSessionTitle).toHaveBeenCalledTimes(1);
+      expect(mockChatRuntimeAutoName).toHaveBeenCalledTimes(1);
     });
 
     it('calls onTitlePersisted after successful naming', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '持久化测试' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '持久化测试' } });
 
       const onTitlePersisted = vi.fn();
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions({ onTitlePersisted }));
@@ -254,13 +170,8 @@ describe('useAutoName', () => {
       expect(onTitlePersisted).toHaveBeenCalledWith('session-1', '持久化测试');
     });
 
-    it('still persists title when onTitlePersisted throws', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '异常回调' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+    it('marks session named even when onTitlePersisted throws', async (): Promise<void> => {
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '异常回调' } });
 
       const onTitlePersisted = vi.fn().mockRejectedValue(new Error('回调异常'));
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions({ onTitlePersisted }));
@@ -269,8 +180,11 @@ describe('useAutoName', () => {
 
       await vi.advanceTimersByTimeAsync(300);
 
-      // 持久化已成功，回调异常不影响
-      expect(mockUpdateSessionTitle).toHaveBeenCalledWith('session-1', '异常回调');
+      const snap2 = captureSnapshot({ content: 'AI回复2' }, 'session-1')!;
+      scheduleAutoName(snap2, () => false);
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(mockChatRuntimeAutoName).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -278,61 +192,40 @@ describe('useAutoName', () => {
 
   describe('debounce scheduling', () => {
     it('delays naming by 300ms', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '延迟标题' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '延迟标题' } });
 
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
       const snap = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
       scheduleAutoName(snap, () => false);
 
-      // 299ms 时还未执行
       await vi.advanceTimersByTimeAsync(299);
-      expect(mockInvoke).not.toHaveBeenCalled();
+      expect(mockChatRuntimeAutoName).not.toHaveBeenCalled();
 
-      // 300ms 时执行
       await vi.advanceTimersByTimeAsync(1);
-      expect(mockInvoke).toHaveBeenCalledTimes(1);
+      expect(mockChatRuntimeAutoName).toHaveBeenCalledTimes(1);
     });
 
     it('resets debounce timer when scheduling again for the same session', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '最终标题' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '最终标题' } });
 
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
 
-      // 第一次调度
       const snap1 = captureSnapshot({ content: 'AI回复1' }, 'session-1')!;
       scheduleAutoName(snap1, () => false);
       await vi.advanceTimersByTimeAsync(200);
 
-      // 第二次调度，重置定时器
       const snap2 = captureSnapshot({ content: 'AI回复2' }, 'session-1')!;
       scheduleAutoName(snap2, () => false);
       await vi.advanceTimersByTimeAsync(200);
 
-      // 第二次调度后只过了 200ms，还没到 300ms
-      expect(mockInvoke).not.toHaveBeenCalled();
+      expect(mockChatRuntimeAutoName).not.toHaveBeenCalled();
 
-      // 再过 100ms，达到 300ms
       await vi.advanceTimersByTimeAsync(100);
-      expect(mockInvoke).toHaveBeenCalledTimes(1);
+      expect(mockChatRuntimeAutoName).toHaveBeenCalledTimes(1);
     });
 
     it('reschedules when isLoading is true at debounce expiry', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '加载后标题' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '加载后标题' } });
 
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
       const isLoading: Mock<() => boolean> = vi.fn().mockReturnValue(true);
@@ -340,23 +233,16 @@ describe('useAutoName', () => {
       const snap = captureSnapshot({ content: 'AI回复' }, 'session-1')!;
       scheduleAutoName(snap, isLoading);
 
-      // 300ms 后 isLoading 仍为 true，应重新调度
       await vi.advanceTimersByTimeAsync(300);
-      expect(mockInvoke).not.toHaveBeenCalled();
+      expect(mockChatRuntimeAutoName).not.toHaveBeenCalled();
 
-      // isLoading 变为 false
       isLoading.mockReturnValue(false);
       await vi.advanceTimersByTimeAsync(300);
-      expect(mockInvoke).toHaveBeenCalledTimes(1);
+      expect(mockChatRuntimeAutoName).toHaveBeenCalledTimes(1);
     });
 
     it('handles independent sessions concurrently', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '并发标题' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
+      mockChatRuntimeAutoName.mockResolvedValue({ ok: true, data: { status: 'success', title: '并发标题' } });
 
       const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
 
@@ -367,34 +253,7 @@ describe('useAutoName', () => {
 
       await vi.advanceTimersByTimeAsync(300);
 
-      // 两个会话各自独立命名
-      expect(mockInvoke).toHaveBeenCalledTimes(2);
-      expect(mockUpdateSessionTitle).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  // ─── Prompt 构建 ───
-
-  describe('prompt construction', () => {
-    it('replaces USER_MESSAGE and AI_RESPONSE variables in prompt', async (): Promise<void> => {
-      mockGetAvailableServiceConfig.mockResolvedValue({
-        providerId: 'provider-chat',
-        modelId: 'model-chat'
-      });
-      mockInvoke.mockResolvedValue([null, { text: '变量测试标题' }]);
-      mockUpdateSessionTitle.mockResolvedValue(undefined);
-
-      const { captureSnapshot, scheduleAutoName } = useAutoName(createOptions());
-      const snap = captureSnapshot({ content: 'AI的回复内容' }, 'session-1')!;
-      scheduleAutoName(snap, () => false);
-
-      await vi.advanceTimersByTimeAsync(300);
-
-      const invokePayload = mockInvoke.mock.calls[0][0];
-      expect(invokePayload.prompt).toContain('用户首条消息');
-      expect(invokePayload.prompt).toContain('AI的回复内容');
-      expect(invokePayload.prompt).not.toContain('{{USER_MESSAGE}}');
-      expect(invokePayload.prompt).not.toContain('{{AI_RESPONSE}}');
+      expect(mockChatRuntimeAutoName).toHaveBeenCalledTimes(2);
     });
   });
 });

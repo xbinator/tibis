@@ -16,6 +16,23 @@ import type {
   MCPStatusResponse
 } from './ai';
 import type { ChatSession, ChatSessionType, ChatMessageRecord, ChatMessageHistoryCursor, PaginatedSessionsResult, SessionPaginationParams } from './chat';
+import type {
+  ChatRuntimeAbortInput,
+  ChatRuntimeAutoNameInput,
+  ChatRuntimeAutoNameResult,
+  ChatRuntimeCompactInput,
+  ChatRuntimeCompactResult,
+  ChatRuntimeContinueInput,
+  ChatRuntimeContextUsageEvent,
+  ChatRuntimeEventMap,
+  ChatRuntimeHandlerResult,
+  ChatRuntimeMessageDeletedEvent,
+  ChatRuntimeMessageEvent,
+  ChatRuntimeSendInput,
+  ChatRuntimeStartResult,
+  ChatRuntimeSubmitToolResultInput,
+  ChatRuntimeToolRequestEvent
+} from './chat-runtime';
 import type { CompressionRecord, CompressionRecordStatus } from './compression';
 
 /** Chat IPC handler 统一返回类型 */
@@ -556,6 +573,21 @@ export interface ElectronAPI {
   aiInvoke: (createOptions: AICreateOptions, request: AIRequestOptions) => Promise<AsyncResult<AIInvokeResult, AIServiceError>>;
   aiStream: (createOptions: AICreateOptions, request: AIRequestOptions) => Promise<void>;
   aiStreamAbort: (requestId: string) => Promise<void>;
+
+  // Chat runtime 操作
+  chatRuntimeSend: (input: ChatRuntimeSendInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
+  chatRuntimeContinue: (input: ChatRuntimeContinueInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
+  chatRuntimeAutoName: (input: ChatRuntimeAutoNameInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeAutoNameResult>>;
+  chatRuntimeAbort: (input: ChatRuntimeAbortInput) => Promise<ChatRuntimeHandlerResult<void>>;
+  chatRuntimeCompact: (input: ChatRuntimeCompactInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeCompactResult>>;
+  chatRuntimeSubmitToolResult: (input: ChatRuntimeSubmitToolResultInput) => Promise<ChatRuntimeHandlerResult<void>>;
+  chatRuntimeOnMessageCreated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;
+  chatRuntimeOnMessageUpdated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;
+  chatRuntimeOnMessageDeleted: (callback: (event: ChatRuntimeMessageDeletedEvent) => void) => () => void;
+  chatRuntimeOnContextUsageUpdated: (callback: (event: ChatRuntimeContextUsageEvent) => void) => () => void;
+  chatRuntimeOnToolRequest: (callback: (event: ChatRuntimeToolRequestEvent) => void) => () => void;
+  chatRuntimeOnError: (callback: (event: ChatRuntimeEventMap['chat:runtime:error']) => void) => () => void;
+  chatRuntimeOnComplete: (callback: (event: ChatRuntimeEventMap['chat:runtime:complete']) => void) => () => void;
 
   // MCP runtime 操作
   getMcpStatus: (serverIds: string[]) => Promise<MCPStatusResponse[]>;

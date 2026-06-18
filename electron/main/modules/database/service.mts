@@ -53,6 +53,11 @@ function migrateDatabase(): void {
   ensureColumn('chat_messages', 'compression_json', 'compression_json TEXT');
   ensureColumn('chat_messages', 'loading', 'loading INTEGER');
   ensureColumn('chat_messages', 'finished', 'finished INTEGER');
+  ensureColumn('chat_messages', 'summary', 'summary INTEGER');
+  ensureColumn('chat_messages', 'meta_json', 'meta_json TEXT');
+  ensureColumn('chat_messages', 'agent_id', 'agent_id TEXT');
+  ensureColumn('chat_messages', 'runtime_id', 'runtime_id TEXT');
+  ensureColumn('chat_messages', 'parent_runtime_id', 'parent_runtime_id TEXT');
   ensureColumn('chat_session_compression_records', 'token_count_snapshot', 'token_count_snapshot INTEGER');
   ensureColumn('chat_session_compression_records', 'degrade_reason', 'degrade_reason TEXT');
   ensureColumn('chat_session_compression_records', 'record_set_id', 'record_set_id TEXT');
@@ -108,7 +113,12 @@ export async function initDatabase(): Promise<void> {
       compression_json TEXT,
       created_at TEXT NOT NULL,
       loading INTEGER,
-      finished INTEGER
+      finished INTEGER,
+      summary INTEGER,
+      meta_json TEXT,
+      agent_id TEXT,
+      runtime_id TEXT,
+      parent_runtime_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS chat_session_compression_records (

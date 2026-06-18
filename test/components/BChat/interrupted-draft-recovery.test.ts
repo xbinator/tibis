@@ -65,14 +65,23 @@ describe('interrupted assistant draft recovery', () => {
     const sourceMessages = [createInterruptedAssistantDraft()];
     const result = recoverInterruptedAssistantDrafts(sourceMessages);
     const recoveredMessage = result.messages[0];
+    const interruptMessage = result.messages[1];
     const toolPart = recoveredMessage.parts.find((part) => part.type === 'tool');
 
     expect(result.recovered).toBe(true);
+    expect(recoveredMessage.role).toBe('assistant');
     expect(recoveredMessage.loading).toBe(false);
     expect(recoveredMessage.finished).toBe(true);
     expect(recoveredMessage.content).toContain('已经生成的半截内容');
-    expect(recoveredMessage.content).toContain(HARD_INTERRUPTED_ASSISTANT_MESSAGE);
-    expect(recoveredMessage.parts.at(-1)).toEqual({ type: 'error', text: HARD_INTERRUPTED_ASSISTANT_MESSAGE });
+    expect(recoveredMessage.content).not.toContain(HARD_INTERRUPTED_ASSISTANT_MESSAGE);
+    expect(interruptMessage).toMatchObject({
+      id: 'assistant-draft-1-interrupt',
+      role: 'interrupt',
+      content: HARD_INTERRUPTED_ASSISTANT_MESSAGE,
+      parts: [],
+      loading: false,
+      finished: true
+    });
     expect(toolPart).toMatchObject({
       type: 'tool',
       status: 'done',

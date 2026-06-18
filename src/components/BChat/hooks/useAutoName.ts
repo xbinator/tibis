@@ -4,35 +4,10 @@
  */
 import { ref } from 'vue';
 import type { Message } from '@/components/BChat/utils/types';
-import { useChat } from '@/hooks/useChat';
-import { useServiceModelStore } from '@/stores/ai/serviceModel';
-import { useChatSessionStore } from '@/stores/chat/session';
+import { getElectronAPI } from '@/shared/platform/electron-api';
 import { asyncTo } from '@/utils/asyncTo';
 
 const DEBOUNCE_MS = 300;
-
-/**
- * 自动命名的默认 Prompt 模板。
- */
-const AUTONAME_DEFAULT_PROMPT = `# Role
-你是一个会话标题生成器。
-
-# Task
-根据用户与 AI 的对话内容，生成一个简洁准确的会话标题。
-
-# Rules
-1. 标题长度不超过 20 个汉字
-2. 标题应概括对话的核心主题，而非描述对话格式
-3. 只输出标题文本，不要包含引号、标点或任何额外说明
-4. 使用用户使用的语言（中文对话输出中文标题，英文对话输出英文标题）
-
-# Conversation
-用户: {{USER_MESSAGE}}
-
-AI: {{AI_RESPONSE}}
-
-# Title
-`;
 
 /**
  * 自动命名快照。
@@ -81,12 +56,8 @@ export function useAutoName(options: AutoNameOptions): {
   const namedSessionIds = ref(new Set<string>());
   /** 按会话隔离的待执行任务。 */
   const pendingTasks = ref(new Map<string, PendingAutoNameTask>());
-  /** LLM 调用代理。 */
-  const { agent } = useChat({});
-  /** 服务模型配置 Store。 */
-  const serviceModelStore = useServiceModelStore();
-  /** 聊天数据 Store。 */
-  const chatStore = useChatSessionStore();
+  /** Electron API。 */
+  const electronAPI = getElectronAPI();
 
   /**
    * 在任何异步持久化之前冻结会话 ID 与首轮内容。
@@ -116,45 +87,24 @@ export function useAutoName(options: AutoNameOptions): {
       return;
     }
 
-    const serviceConfig = await serviceModelStore.getAvailableServiceConfig('chat');
-    if (!serviceConfig?.providerId || !serviceConfig?.modelId) {
-      namedSessionIds.value.add(snapshot.sessionId);
-      return;
-    }
-
-    const promptTemplate = AUTONAME_DEFAULT_PROMPT;
-    const prompt = promptTemplate.replace(/\{\{USER_MESSAGE\}\}/g, snapshot.userMessage).replace(/\{\{AI_RESPONSE\}\}/g, snapshot.aiResponse);
-
-    const [invokeError, result] = await agent.invoke({
-      providerId: serviceConfig.providerId,
-      modelId: serviceConfig.modelId,
-      prompt
+    const result = await electronAPI.chatRuntimeAutoName({
+      sessionId: snapshot.sessionId,
+      userMessage: snapshot.userMessage,
+      aiResponse: snapshot.aiResponse
     });
 
-    if (invokeError || !result?.text) {
-      namedSessionIds.value.add(snapshot.sessionId);
-      return;
-    }
-
-    const title = result.text.replace(/(^["'\u201c\u201d\u2018\u2019]+)|(["'\u201c\u201d\u2018\u2019]+$)/g, '').trim();
-    if (!title) {
-      namedSessionIds.value.add(snapshot.sessionId);
-      return;
-    }
-
-    const [persistError] = await asyncTo(chatStore.updateSessionTitle(snapshot.sessionId, title));
-    if (persistError) {
+    if (!result.ok || result.data?.status !== 'success') {
       namedSessionIds.value.add(snapshot.sessionId);
       return;
     }
 
     const currentSession = options.getCurrentSession();
     if (currentSession?.id === snapshot.sessionId) {
-      currentSession.title = title;
+      currentSession.title = result.data.title;
     }
 
     // 列表刷新失败不影响已完成的持久化。
-    await asyncTo(Promise.resolve(options.onTitlePersisted?.(snapshot.sessionId, title)));
+    await asyncTo(Promise.resolve(options.onTitlePersisted?.(snapshot.sessionId, result.data.title)));
     namedSessionIds.value.add(snapshot.sessionId);
   }
 

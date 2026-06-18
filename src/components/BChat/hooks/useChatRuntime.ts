@@ -1,0 +1,393 @@
+/**
+ * @file useChatRuntime.ts
+ * @description BChat renderer 侧 ChatRuntime 桥接 hook。
+ */
+import type { Message } from '../utils/types';
+import type { AIServiceError, AIToolContext, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
+import type { ChatMessageRecord } from 'types/chat';
+import type {
+  ChatRuntimeContinueInput,
+  ChatRuntimeContextUsageSnapshot,
+  ChatRuntimeEventMap,
+  ChatRuntimeHandlerResult,
+  ChatRuntimeMessageDeletedEvent,
+  ChatRuntimeMessageSnapshot,
+  ChatRuntimeMessageEvent,
+  ChatRuntimeSendInput,
+  ChatRuntimeStartResult,
+  ChatRuntimeToolRequestEvent
+} from 'types/chat-runtime';
+import type { Ref } from 'vue';
+import { onScopeDispose, ref, toRaw } from 'vue';
+import { executeToolCall } from '@/ai/tools/stream';
+import { getElectronAPI } from '@/shared/platform/electron-api';
+
+/** ChatRuntime hook 选项。 */
+interface UseChatRuntimeOptions {
+  /** 当前消息列表。 */
+  messages: Ref<Message[]>;
+  /** 获取当前会话 ID。 */
+  getSessionId: () => string | undefined;
+  /** runtime 完成回调。 */
+  onComplete?: (message: Message) => Promise<void> | void;
+  /** runtime 错误回调。 */
+  onError?: (error: AIServiceError) => Promise<void> | void;
+  /** runtime 上下文用量更新回调。 */
+  onContextUsageUpdated?: (snapshot: ChatRuntimeContextUsageSnapshot) => Promise<void> | void;
+  /** renderer client id。 */
+  clientId?: string;
+  /** 当前 agent id。 */
+  agentId?: string;
+  /** 可由 renderer 执行的本地工具。 */
+  tools?: AIToolExecutor[] | (() => AIToolExecutor[]);
+  /** 获取 renderer 工具上下文。 */
+  getToolContext?: () => AIToolContext | undefined;
+}
+
+/** ChatRuntime 发送输入。 */
+export type BChatRuntimeSendInput = Pick<
+  ChatRuntimeSendInput,
+  'sessionId' | 'content' | 'files' | 'userMessageId' | 'userMessageCreatedAt' | 'contextWindow' | 'system' | 'tools' | 'tavily' | 'mcp'
+>;
+
+/** ChatRuntime 续轮输入。 */
+export type BChatRuntimeContinueInput = Pick<ChatRuntimeContinueInput, 'sessionId' | 'contextWindow' | 'system' | 'tools' | 'tavily' | 'mcp'> & {
+  /** renderer 消息列表，发送到主进程前会转换为纯 runtime 快照。 */
+  messages: Message[];
+};
+
+/**
+ * 可能包含主进程 runtime 扩展字段的 renderer 消息。
+ */
+interface RuntimeMessageLike extends Message {
+  /** 所属会话 ID，runtime 回写消息中可能存在。 */
+  sessionId?: string;
+  /** 是否为压缩摘要消息。 */
+  summary?: boolean;
+  /** runtime 扩展元数据。 */
+  meta?: ChatMessageRecord['meta'];
+}
+
+/**
+ * 判断 runtime 事件是否属于当前 renderer 会话。
+ * @param event - runtime 事件
+ * @param sessionId - 当前会话 ID
+ * @param clientId - renderer client id
+ * @returns 是否应处理该事件
+ */
+function isCurrentRuntimeEvent(event: ChatRuntimeEventMap[keyof ChatRuntimeEventMap], sessionId: string | undefined, clientId: string): boolean {
+  return Boolean(sessionId && event.sessionId === sessionId && event.clientId === clientId);
+}
+
+/**
+ * 将 runtime 消息写入本地列表。
+ * @param messages - 本地消息列表
+ * @param nextMessage - runtime 消息
+ */
+function upsertRuntimeMessage(messages: Message[], nextMessage: Message): void {
+  const index = messages.findIndex((message) => message.id === nextMessage.id);
+  if (index === -1) {
+    messages.push(nextMessage);
+    return;
+  }
+
+  messages.splice(index, 1, { ...messages[index], ...nextMessage });
+}
+
+/**
+ * 从本地列表移除 runtime 消息。
+ * @param messages - 本地消息列表
+ * @param messageId - 待移除消息 ID
+ */
+function removeRuntimeMessage(messages: Message[], messageId: string): void {
+  const index = messages.findIndex((message) => message.id === messageId);
+  if (index !== -1) {
+    messages.splice(index, 1);
+  }
+}
+
+/**
+ * 查找 runtime 最近完成的 assistant 消息。
+ * @param messages - 本地消息列表
+ * @param runtimeId - runtime ID
+ * @returns assistant 消息
+ */
+function findCompletedAssistantMessage(messages: Message[], runtimeId: string): Message | undefined {
+  return [...messages].reverse().find((message) => message.role === 'assistant' && message.runtimeId === runtimeId && message.finished === true);
+}
+
+/**
+ * 将值转换为可通过 Electron IPC structured clone 的纯数据。
+ * @param value - 待转换值
+ * @returns 去除 Vue Proxy 后的 JSON 兼容数据
+ */
+function toCloneableData<T>(value: T): T {
+  if (value === undefined) return value;
+
+  return JSON.parse(JSON.stringify(toRaw(value))) as T;
+}
+
+/**
+ * 将 renderer 消息转换为 ChatRuntime continuation 使用的纯快照。
+ * @param message - renderer 消息
+ * @param sessionId - 当前会话 ID
+ * @returns 可 structured clone 的 runtime 消息快照
+ */
+function toRuntimeMessageSnapshot(message: Message, sessionId: string): ChatRuntimeMessageSnapshot {
+  const rawMessage = toRaw(message) as RuntimeMessageLike;
+
+  return {
+    id: rawMessage.id,
+    sessionId: rawMessage.sessionId ?? sessionId,
+    role: rawMessage.role,
+    content: rawMessage.content,
+    parts: toCloneableData(rawMessage.parts),
+    ...(rawMessage.thinking !== undefined ? { thinking: rawMessage.thinking } : {}),
+    ...(rawMessage.files !== undefined ? { files: toCloneableData(rawMessage.files) } : {}),
+    ...(rawMessage.usage !== undefined ? { usage: toCloneableData(rawMessage.usage) } : {}),
+    ...(rawMessage.compression !== undefined ? { compression: toCloneableData(rawMessage.compression) } : {}),
+    ...(rawMessage.summary !== undefined ? { summary: rawMessage.summary } : {}),
+    ...(rawMessage.agentId !== undefined ? { agentId: rawMessage.agentId } : {}),
+    ...(rawMessage.runtimeId !== undefined ? { runtimeId: rawMessage.runtimeId } : {}),
+    ...(rawMessage.parentRuntimeId !== undefined ? { parentRuntimeId: rawMessage.parentRuntimeId } : {}),
+    ...(rawMessage.meta !== undefined ? { meta: toCloneableData(rawMessage.meta) } : {}),
+    createdAt: rawMessage.createdAt,
+    ...(rawMessage.loading !== undefined ? { loading: rawMessage.loading } : {}),
+    ...(rawMessage.finished !== undefined ? { finished: rawMessage.finished } : {})
+  };
+}
+
+/**
+ * 将续轮输入转换为 Electron IPC 可传输的命令。
+ * @param input - renderer 续轮输入
+ * @param clientId - renderer client id
+ * @param agentId - 当前 agent id
+ * @returns 可传输的 ChatRuntime 续轮命令
+ */
+function toRuntimeContinueCommand(input: BChatRuntimeContinueInput, clientId: string, agentId: string): ChatRuntimeContinueInput {
+  return {
+    ...input,
+    clientId,
+    agentId,
+    messages: input.messages.map((message) => toRuntimeMessageSnapshot(message, input.sessionId))
+  };
+}
+
+/**
+ * 解包 runtime IPC 结果。
+ * @param result - handler 结果
+ * @returns handler data
+ */
+function unwrapRuntimeResult<T>(result: ChatRuntimeHandlerResult<T>): T {
+  if (!result.ok || result.data === undefined) {
+    throw new Error(result.error ?? 'ChatRuntime 请求失败');
+  }
+
+  return result.data;
+}
+
+/**
+ * 解析当前可用 renderer 工具列表。
+ * @param tools - 静态工具列表或动态 getter
+ * @returns 工具列表
+ */
+function resolveRuntimeTools(tools: UseChatRuntimeOptions['tools']): AIToolExecutor[] {
+  return typeof tools === 'function' ? tools() : tools ?? [];
+}
+
+/**
+ * 创建工具执行失败结果。
+ * @param toolName - 工具名称
+ * @param error - 原始错误
+ * @returns 工具执行失败结果
+ */
+function createRuntimeToolFailureResult(toolName: string, error: unknown): AIToolExecutionResult {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return {
+    toolName,
+    status: 'failure',
+    error: {
+      code: 'EXECUTION_FAILED',
+      message
+    }
+  };
+}
+
+/**
+ * 确保 runtime IPC 调用成功。
+ * @param result - handler 结果
+ */
+function assertRuntimeResult(result: ChatRuntimeHandlerResult<void>): void {
+  if (!result.ok) {
+    throw new Error(result.error ?? 'ChatRuntime 请求失败');
+  }
+}
+
+/**
+ * BChat renderer 侧主进程 ChatRuntime hook。
+ * @param options - hook 选项
+ * @returns runtime 操作
+ */
+export function useChatRuntime(options: UseChatRuntimeOptions) {
+  const clientId = options.clientId ?? 'bchat';
+  const agentId = options.agentId ?? 'default';
+  const electronAPI = getElectronAPI();
+  const activeRuntimeId = ref<string | null>(null);
+
+  /**
+   * 处理 runtime 消息事件。
+   * @param event - runtime 消息事件
+   */
+  function handleMessageEvent(event: ChatRuntimeMessageEvent): void {
+    if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+
+    upsertRuntimeMessage(options.messages.value, event.message as Message);
+  }
+
+  /**
+   * 处理 runtime 删除消息事件。
+   * @param event - runtime 删除消息事件
+   */
+  function handleMessageDeletedEvent(event: ChatRuntimeMessageDeletedEvent): void {
+    if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+
+    removeRuntimeMessage(options.messages.value, event.messageId);
+  }
+
+  /**
+   * 处理 runtime 完成事件。
+   * @param event - runtime 完成事件
+   */
+  function handleCompleteEvent(event: ChatRuntimeEventMap['chat:runtime:complete']): void {
+    if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+    if (activeRuntimeId.value === event.runtimeId) {
+      activeRuntimeId.value = null;
+    }
+
+    const completedMessage = findCompletedAssistantMessage(options.messages.value, event.runtimeId);
+    if (completedMessage) {
+      Promise.resolve(options.onComplete?.(completedMessage)).catch(() => undefined);
+    }
+  }
+
+  /**
+   * 处理 runtime 错误事件。
+   * @param event - runtime 错误事件
+   */
+  function handleErrorEvent(event: ChatRuntimeEventMap['chat:runtime:error']): void {
+    if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+
+    Promise.resolve(options.onError?.(event.error)).catch(() => undefined);
+  }
+
+  /**
+   * 处理 runtime 上下文用量更新事件。
+   * @param event - runtime 上下文用量事件
+   */
+  function handleContextUsageEvent(event: ChatRuntimeEventMap['chat:runtime:context-usage-updated']): void {
+    if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+
+    Promise.resolve(options.onContextUsageUpdated?.(event.snapshot)).catch(() => undefined);
+  }
+
+  /**
+   * 提交 renderer 工具执行结果。
+   * @param event - 工具请求事件
+   * @param result - 工具执行结果
+   */
+  async function submitToolResult(event: ChatRuntimeToolRequestEvent, result: AIToolExecutionResult): Promise<void> {
+    assertRuntimeResult(
+      await electronAPI.chatRuntimeSubmitToolResult({
+        runtimeId: event.runtimeId,
+        toolCallId: event.toolCallId,
+        result
+      })
+    );
+  }
+
+  /**
+   * 处理 runtime 工具请求事件。
+   * @param event - 工具请求事件
+   */
+  async function handleToolRequestEvent(event: ChatRuntimeToolRequestEvent): Promise<void> {
+    if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+
+    try {
+      const executedToolCall = await executeToolCall(
+        { toolCallId: event.toolCallId, toolName: event.toolName, input: event.input },
+        resolveRuntimeTools(options.tools),
+        options.getToolContext?.()
+      );
+      await submitToolResult(event, executedToolCall.result);
+    } catch (error) {
+      await submitToolResult(event, createRuntimeToolFailureResult(event.toolName, error));
+    }
+  }
+
+  const disposeMessageCreated = electronAPI.chatRuntimeOnMessageCreated(handleMessageEvent);
+  const disposeMessageUpdated = electronAPI.chatRuntimeOnMessageUpdated(handleMessageEvent);
+  const disposeMessageDeleted = electronAPI.chatRuntimeOnMessageDeleted(handleMessageDeletedEvent);
+  const disposeContextUsage = electronAPI.chatRuntimeOnContextUsageUpdated(handleContextUsageEvent);
+  const disposeToolRequest = electronAPI.chatRuntimeOnToolRequest((event) => {
+    handleToolRequestEvent(event).catch(() => undefined);
+  });
+  const disposeComplete = electronAPI.chatRuntimeOnComplete(handleCompleteEvent);
+  const disposeError = electronAPI.chatRuntimeOnError(handleErrorEvent);
+
+  onScopeDispose(() => {
+    disposeMessageCreated();
+    disposeMessageUpdated();
+    disposeMessageDeleted();
+    disposeContextUsage();
+    disposeToolRequest();
+    disposeComplete();
+    disposeError();
+  });
+
+  /**
+   * 通过主进程 ChatRuntime 发送一轮消息。
+   * @param input - 发送输入
+   * @returns runtime 启动结果
+   */
+  async function send(input: BChatRuntimeSendInput): Promise<ChatRuntimeStartResult> {
+    const result = unwrapRuntimeResult(
+      await electronAPI.chatRuntimeSend({
+        ...input,
+        clientId,
+        agentId
+      })
+    );
+    activeRuntimeId.value = result.runtimeId;
+    return result;
+  }
+
+  /**
+   * 通过主进程 ChatRuntime 继续一轮暂停消息。
+   * @param input - 续轮输入
+   * @returns runtime 启动结果
+   */
+  async function continueTurn(input: BChatRuntimeContinueInput): Promise<ChatRuntimeStartResult> {
+    const result = unwrapRuntimeResult(await electronAPI.chatRuntimeContinue(toRuntimeContinueCommand(input, clientId, agentId)));
+    activeRuntimeId.value = result.runtimeId;
+    return result;
+  }
+
+  /**
+   * 中止当前活跃 runtime。
+   */
+  async function abort(): Promise<void> {
+    const runtimeId = activeRuntimeId.value;
+    if (!runtimeId) return;
+
+    assertRuntimeResult(await electronAPI.chatRuntimeAbort({ runtimeId }));
+    activeRuntimeId.value = null;
+  }
+
+  return {
+    activeRuntimeId,
+    abort,
+    continueTurn,
+    send
+  };
+}

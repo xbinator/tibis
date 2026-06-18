@@ -16,6 +16,7 @@ import type {
   SessionCursor,
   SessionPaginationParams
 } from 'types/chat';
+import type { ChatMessageRuntimeMeta } from 'types/chat-runtime';
 import type { CompressionBuildMode, CompressionRecord, CompressionRecordStatus, StructuredConversationSummary, TriggerReason } from 'types/compression';
 import dayjs from 'dayjs';
 import { dbExecute, dbSelect, transaction } from '../database/service.mjs';
@@ -59,18 +60,21 @@ const UPDATE_SESSION_TITLE_SQL = `
 `;
 const SELECT_SESSION_USAGE_SQL = 'SELECT usage_json FROM chat_sessions WHERE id = ?';
 const UPDATE_SESSION_USAGE_SQL = 'UPDATE chat_sessions SET usage_json = ? WHERE id = ?';
+const SELECT_MESSAGE_USAGE_SQL = 'SELECT usage_json FROM chat_messages WHERE session_id = ? AND id = ?';
 
 // ==================== SQL — 消息 (5 条) ====================
 
 const SELECT_MESSAGES_BY_SESSION_SQL = `
-  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished,
+         summary, meta_json, agent_id, runtime_id, parent_runtime_id
   FROM chat_messages
   WHERE session_id = ?
   ORDER BY created_at DESC, id DESC
   LIMIT ?
 `;
 const SELECT_MESSAGES_BEFORE_CURSOR_SQL = `
-  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished
+  SELECT id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished,
+         summary, meta_json, agent_id, runtime_id, parent_runtime_id
   FROM chat_messages
   WHERE session_id = ?
     AND (created_at < ? OR (created_at = ? AND id < ?))
@@ -79,11 +83,13 @@ const SELECT_MESSAGES_BEFORE_CURSOR_SQL = `
 `;
 const UPSERT_MESSAGE_SQL = `
   INSERT OR REPLACE INTO chat_messages
-    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, session_id, role, content, parts_json, thinking, files_json, usage_json, compression_json, created_at, loading, finished,
+     summary, meta_json, agent_id, runtime_id, parent_runtime_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 const DELETE_SESSION_SQL = 'DELETE FROM chat_sessions WHERE id = ?';
 const DELETE_MESSAGES_BY_SESSION_SQL = 'DELETE FROM chat_messages WHERE session_id = ?';
+const DELETE_MESSAGE_SQL = 'DELETE FROM chat_messages WHERE session_id = ? AND id = ?';
 
 // ==================== SQL — 压缩记录 (4 条) ====================
 
@@ -143,6 +149,11 @@ interface ChatMessageRow {
   created_at: string;
   loading: number | null;
   finished: number | null;
+  summary: number | null;
+  meta_json: string | null;
+  agent_id: string | null;
+  runtime_id: string | null;
+  parent_runtime_id: string | null;
 }
 
 interface ChatSessionUsageRow {
@@ -209,9 +220,57 @@ function addUsage(currentUsage: AIUsage | undefined, nextUsage: AIUsage): AIUsag
   };
 }
 
+/**
+ * 计算新旧消息用量之间的差量。
+ * @param nextUsage - 即将写入消息的新用量。
+ * @param previousUsage - 当前已持久化的旧用量。
+ * @returns 需要累加到会话用量的差量。
+ */
+function subtractUsage(nextUsage: AIUsage, previousUsage: AIUsage | undefined): AIUsage {
+  return {
+    inputTokens: nextUsage.inputTokens - (previousUsage?.inputTokens ?? 0),
+    outputTokens: nextUsage.outputTokens - (previousUsage?.outputTokens ?? 0),
+    totalTokens: nextUsage.totalTokens - (previousUsage?.totalTokens ?? 0)
+  };
+}
+
+/**
+ * 判断用量差量是否会改变会话累计值。
+ * @param usage - 用量差量。
+ * @returns 差量不为零时返回 true。
+ */
+function hasUsageDelta(usage: AIUsage): boolean {
+  return usage.inputTokens !== 0 || usage.outputTokens !== 0 || usage.totalTokens !== 0;
+}
+
+/**
+ * 获取同一时间戳下的消息角色排序权重。
+ * @param role - 消息角色
+ * @returns 排序权重，数值越小越靠前
+ */
+function getMessageRoleOrder(role: ChatMessageRecord['role']): number {
+  const roleOrder: Record<ChatMessageRecord['role'], number> = {
+    system: 0,
+    compression: 1,
+    user: 2,
+    assistant: 3,
+    interrupt: 4,
+    error: 5
+  };
+
+  return roleOrder[role];
+}
+
+/**
+ * 按会话展示顺序排序消息。
+ * @param messages - 待排序消息
+ * @returns 已排序消息
+ */
 function sortMessages(messages: ChatMessageRecord[]): ChatMessageRecord[] {
   return [...messages].sort((left, right) => {
     if (left.createdAt !== right.createdAt) return left.createdAt.localeCompare(right.createdAt);
+    const roleOrderDelta = getMessageRoleOrder(left.role) - getMessageRoleOrder(right.role);
+    if (roleOrderDelta !== 0) return roleOrderDelta;
     return left.id.localeCompare(right.id);
   });
 }
@@ -242,7 +301,12 @@ function mapMessageRow(row: ChatMessageRow): ChatMessageRecord {
     compression: parseJson<ChatCompressionMeta>(row.compression_json),
     createdAt: row.created_at,
     loading: row.loading === null ? undefined : row.loading === 1,
-    finished: row.finished === null ? undefined : row.finished === 1
+    finished: row.finished === null ? undefined : row.finished === 1,
+    summary: row.summary === null ? undefined : row.summary === 1,
+    agentId: row.agent_id ?? undefined,
+    runtimeId: row.runtime_id ?? undefined,
+    parentRuntimeId: row.parent_runtime_id ?? undefined,
+    meta: parseJson<ChatMessageRuntimeMeta>(row.meta_json)
   };
 }
 
@@ -274,7 +338,12 @@ function buildMessageUpsertParams(message: ChatMessageRecord): unknown[] {
     stringifyJson(message.compression),
     message.createdAt,
     toSqlBoolean(message.loading),
-    toSqlBoolean(message.finished)
+    toSqlBoolean(message.finished),
+    toSqlBoolean(message.summary),
+    stringifyJson(message.meta),
+    message.agentId ?? null,
+    message.runtimeId ?? null,
+    message.parentRuntimeId ?? null
   ];
 }
 
@@ -425,9 +494,31 @@ class ChatSessionManager {
    */
   updateMessage(message: ChatMessageRecord): void {
     transaction(() => {
+      const previousMessageUsage =
+        message.usage === undefined
+          ? undefined
+          : parseJson<AIUsage>(dbSelect<ChatSessionUsageRow>(SELECT_MESSAGE_USAGE_SQL, [message.sessionId, message.id])[0]?.usage_json ?? null);
+
       dbExecute(UPSERT_MESSAGE_SQL, buildMessageUpsertParams(message));
       dbExecute(UPDATE_SESSION_LAST_MESSAGE_AT_SQL, [message.createdAt, message.sessionId]);
+      if (message.usage) {
+        const usageDelta = subtractUsage(message.usage, previousMessageUsage);
+        if (hasUsageDelta(usageDelta)) {
+          const rows = dbSelect<ChatSessionUsageRow>(SELECT_SESSION_USAGE_SQL, [message.sessionId]);
+          const current = parseJson<AIUsage>(rows[0]?.usage_json ?? null);
+          dbExecute(UPDATE_SESSION_USAGE_SQL, [stringifyJson(addUsage(current, usageDelta)), message.sessionId]);
+        }
+      }
     });
+  }
+
+  /**
+   * 删除指定会话中的单条消息。
+   * @param sessionId - 会话 ID。
+   * @param messageId - 消息 ID。
+   */
+  deleteMessage(sessionId: string, messageId: string): void {
+    dbExecute(DELETE_MESSAGE_SQL, [sessionId, messageId]);
   }
 
   setSessionMessages(sessionId: string, messages: ChatMessageRecord[]): void {

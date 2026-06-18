@@ -266,10 +266,6 @@ export const create = {
     const parts: ChatMessagePart[] = content ? [{ type: 'text', text: content }] : [];
 
     return createBase({ role: 'user', content, parts, references, finished: true });
-  },
-  // 创建中断消息
-  interruptMessage(): Message {
-    return createBase({ role: 'interrupt', content: '已中断', finished: true });
   }
 } as const;
 

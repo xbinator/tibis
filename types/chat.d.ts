@@ -3,6 +3,7 @@
  * @description 聊天会话、消息与附件类型定义
  */
 import type { AIToolExecutionResult, AIUsage } from './ai';
+import type { ChatMessageCompactionPart, ChatMessageRuntimeMeta } from './chat-runtime';
 
 /**
  * 聊天会话类型
@@ -270,7 +271,13 @@ export interface ChatMessageErrorPart {
 /**
  * 聊天消息结构化片段
  */
-export type ChatMessagePart = ChatMessageTextPart | ChatMessageErrorPart | ChatMessageThinkingPart | ChatMessageToolPart | ChatMessageConfirmationPart;
+export type ChatMessagePart =
+  | ChatMessageTextPart
+  | ChatMessageErrorPart
+  | ChatMessageThinkingPart
+  | ChatMessageToolPart
+  | ChatMessageConfirmationPart
+  | ChatMessageCompactionPart;
 
 /**
  * 聊天会话
@@ -314,6 +321,16 @@ export interface ChatMessageRecord {
   usage?: AIUsage;
   /** 压缩消息元数据 */
   compression?: ChatCompressionMeta;
+  /** 是否为压缩摘要消息 */
+  summary?: boolean;
+  /** 执行该消息的 agent ID */
+  agentId?: string;
+  /** 创建或更新该消息的 runtime ID */
+  runtimeId?: string;
+  /** 父 runtime ID，预留给多 agent 调度 */
+  parentRuntimeId?: string;
+  /** runtime 扩展元数据 */
+  meta?: ChatMessageRuntimeMeta;
   /** 创建时间 */
   createdAt: string;
   /** 是否处于加载中，用于恢复硬中断前的 assistant 草稿 */

@@ -90,7 +90,7 @@ export function useUsagePanel() {
     }
 
     loading.value = true;
-    await refresh(sessionId);
+    await refresh(sessionId, currentSessionId);
   }
 
   /**

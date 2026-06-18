@@ -87,11 +87,8 @@ function buildEstimateSignature(messages: Message[]): string {
 export function useContextUsage(options: UseContextUsageOptions): UseContextUsageReturn {
   const { messages, contextWindow, selectedModel, streaming } = options;
 
-  /** 当前模型对应的 token 估算器（异步加载） */
+  /** 当前模型对应的 token 估算器 */
   const estimator = ref<TokenEstimator | null>(null);
-
-  /** 估算器是否正在加载中 */
-  const estimatorLoading = ref(false);
 
   // 模型切换时重新创建估算器
   watch(
@@ -102,10 +99,8 @@ export function useContextUsage(options: UseContextUsageOptions): UseContextUsag
         return;
       }
       estimator.value = null;
-      estimatorLoading.value = true;
       const est = await createTokenEstimator(newModelId);
-      estimator.value = est ?? null;
-      estimatorLoading.value = false;
+      estimator.value = est;
     },
     { immediate: true }
   );
@@ -120,7 +115,7 @@ export function useContextUsage(options: UseContextUsageOptions): UseContextUsag
 
   /**
    * 使用估算器计算当前消息列表的 Token 数。
-   * 估算器可用时使用 tiktoken，否则降级到字符级估算。
+   * 当前使用本地字符启发式估算，保证上下文面板不依赖 tokenizer 包。
    * @param activeEstimator - 本次估算使用的估算器
    * @returns 当前模型上下文估算 token 数
    */

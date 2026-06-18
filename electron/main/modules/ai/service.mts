@@ -4,7 +4,6 @@
  */
 import type { FlexibleSchema, ToolExecutionOptions, ToolSet } from 'ai';
 import type { AICreateOptions, AIRequestOptions, AIInvokeResult, AIStreamResult, AIServiceError, MCPDiscoveredToolSnapshot } from 'types/ai';
-import { tavilyExtract, tavilySearch } from '@tavily/ai-sdk';
 import { generateText, jsonSchema, Output, stepCountIs, streamText, tool } from 'ai';
 import { log } from '../logger/service.mjs';
 import { connectMcpServer, executeMcpTool, getMcpDiscoveryCache } from '../mcp/session.mjs';
@@ -14,13 +13,34 @@ import { AIProviderRegistry } from './providers/_index.mjs';
 
 // ─── 纯工具函数 ──────────────────────────────────────────────────────────────
 
+/** Tavily API 基础地址。 */
+const TAVILY_API_BASE_URL = 'https://api.tavily.com';
+
+/** Tavily API 端点。 */
+type TavilyEndpoint = '/search' | '/extract';
+
+/** Tavily 搜索深度。 */
+type TavilySearchDepth = 'basic' | 'advanced';
+
+/** Tavily 搜索主题。 */
+type TavilySearchTopic = 'general' | 'news' | 'finance';
+
+/** Tavily 搜索时间范围。 */
+type TavilyTimeRange = 'day' | 'month' | 'year' | 'd' | 'y' | 'm' | 'week' | 'w';
+
+/** Tavily 提取深度。 */
+type TavilyExtractDepth = 'basic' | 'advanced';
+
+/** Tavily 提取输出格式。 */
+type TavilyExtractFormat = 'markdown' | 'text';
+
 /**
  * Tavily Search 硬编码默认参数。
  */
 const TAVILY_SEARCH_DEFAULTS = {
-  searchDepth: 'basic' as const,
-  topic: 'general' as const,
-  timeRange: undefined as 'day' | 'month' | 'year' | 'd' | 'y' | 'm' | 'week' | 'w' | undefined,
+  searchDepth: 'basic' as TavilySearchDepth,
+  topic: 'general' as TavilySearchTopic,
+  timeRange: undefined as TavilyTimeRange | undefined,
   country: 'china' as string | undefined,
   maxResults: 5,
   includeAnswer: true,
@@ -33,10 +53,36 @@ const TAVILY_SEARCH_DEFAULTS = {
  * Tavily Extract 硬编码默认参数。
  */
 const TAVILY_EXTRACT_DEFAULTS = {
-  extractDepth: 'basic' as const,
-  format: 'markdown' as const,
+  extractDepth: 'basic' as TavilyExtractDepth,
+  format: 'markdown' as TavilyExtractFormat,
   includeImages: false
 };
+
+/**
+ * Tavily Search 工具输入。
+ */
+interface TavilySearchInput {
+  /** 搜索查询。 */
+  query: string;
+  /** 搜索深度。 */
+  searchDepth?: TavilySearchDepth;
+  /** 搜索主题。 */
+  topic?: TavilySearchTopic;
+  /** 搜索时间范围。 */
+  timeRange?: TavilyTimeRange;
+  /** 本地化搜索国家。 */
+  country?: string;
+  /** 最大结果数。 */
+  maxResults?: number;
+  /** 是否包含 Tavily 生成的答案。 */
+  includeAnswer?: boolean;
+  /** 是否包含图片。 */
+  includeImages?: boolean;
+  /** 限定搜索域名。 */
+  includeDomains?: string[];
+  /** 排除搜索域名。 */
+  excludeDomains?: string[];
+}
 
 /**
  * Tavily Extract 单 URL 输入。
@@ -51,16 +97,221 @@ interface TavilyExtractSingleUrlInput {
 }
 
 /**
+ * Tavily Search API 请求体。
+ */
+interface TavilySearchRequest {
+  /** 搜索查询。 */
+  query: string;
+  /** Tavily API snake_case 搜索深度。 */
+  search_depth: TavilySearchDepth;
+  /** 搜索主题。 */
+  topic: TavilySearchTopic;
+  /** 搜索时间范围。 */
+  time_range?: TavilyTimeRange;
+  /** 本地化搜索国家。 */
+  country?: string;
+  /** 最大结果数。 */
+  max_results: number;
+  /** 是否包含 Tavily 生成的答案。 */
+  include_answer: boolean;
+  /** 是否包含图片。 */
+  include_images: boolean;
+  /** 限定搜索域名。 */
+  include_domains: string[];
+  /** 排除搜索域名。 */
+  exclude_domains: string[];
+}
+
+/**
+ * Tavily Extract API 请求体。
+ */
+interface TavilyExtractRequest {
+  /** 待提取 URL 列表。 */
+  urls: string[];
+  /** 提取深度。 */
+  extract_depth: TavilyExtractDepth;
+  /** 输出格式。 */
+  format: TavilyExtractFormat;
+  /** 是否包含图片。 */
+  include_images: boolean;
+  /** 可选的重排意图查询。 */
+  query?: string;
+}
+
+/** Tavily API 请求体联合类型。 */
+type TavilyRequestPayload = TavilySearchRequest | TavilyExtractRequest;
+
+/**
+ * 判断值是否为普通记录对象。
+ * @param value - 待判断值
+ * @returns 是否为普通记录对象
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * 从 Tavily 错误响应中读取可展示错误信息。
+ * @param payload - Tavily 响应体
+ * @returns 错误信息，不存在时返回 null
+ */
+function readTavilyErrorMessage(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+
+  for (const key of ['detail', 'error', 'message']) {
+    const value = payload[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 读取 Tavily JSON 响应体。
+ * @param response - fetch 响应
+ * @returns JSON 响应，非 JSON 时返回原始文本
+ */
+async function readTavilyResponseBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * 调用 Tavily JSON API。
+ * @param endpoint - Tavily API 端点
+ * @param apiKey - Tavily API Key
+ * @param payload - 请求体
+ * @param abortSignal - 可选中止信号
+ * @returns Tavily JSON 响应
+ */
+async function postTavilyJson(endpoint: TavilyEndpoint, apiKey: string, payload: TavilyRequestPayload, abortSignal?: AbortSignal): Promise<unknown> {
+  const response = await fetch(`${TAVILY_API_BASE_URL}${endpoint}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload),
+    signal: abortSignal
+  });
+  const body = await readTavilyResponseBody(response);
+
+  if (!response.ok) {
+    const message = readTavilyErrorMessage(body) ?? `Tavily API request failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return body;
+}
+
+/**
+ * 构建 Tavily Search 工具输入 schema。
+ * @returns AI SDK flexible schema
+ */
+function createTavilySearchInputSchema(): FlexibleSchema<TavilySearchInput> {
+  return jsonSchema({
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'The web search query'
+      },
+      searchDepth: {
+        type: 'string',
+        enum: ['basic', 'advanced'],
+        description: "Search depth - 'basic' for quick results, 'advanced' for deeper search"
+      },
+      topic: {
+        type: 'string',
+        enum: ['general', 'news', 'finance'],
+        description: 'Search category'
+      },
+      timeRange: {
+        type: 'string',
+        enum: ['day', 'month', 'year', 'd', 'y', 'm', 'week', 'w'],
+        description: 'Optional time range for search results'
+      },
+      country: {
+        type: 'string',
+        description: 'Optional country code or country name for localized results'
+      },
+      maxResults: {
+        type: 'number',
+        description: 'Maximum number of results to return'
+      },
+      includeAnswer: {
+        type: 'boolean',
+        description: 'Whether to include Tavily generated answer'
+      },
+      includeImages: {
+        type: 'boolean',
+        description: 'Whether to include images'
+      },
+      includeDomains: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Domains to include'
+      },
+      excludeDomains: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Domains to exclude'
+      }
+    },
+    required: ['query'],
+    additionalProperties: false
+  }) as FlexibleSchema<TavilySearchInput>;
+}
+
+/**
+ * 构建 Tavily Search API 请求体。
+ * @param input - 工具输入
+ * @returns Tavily Search 请求体
+ */
+function createTavilySearchRequest(input: TavilySearchInput): TavilySearchRequest {
+  return {
+    query: input.query,
+    search_depth: input.searchDepth ?? TAVILY_SEARCH_DEFAULTS.searchDepth,
+    topic: input.topic ?? TAVILY_SEARCH_DEFAULTS.topic,
+    ...(input.timeRange ?? TAVILY_SEARCH_DEFAULTS.timeRange ? { time_range: input.timeRange ?? TAVILY_SEARCH_DEFAULTS.timeRange } : {}),
+    ...(input.country ?? TAVILY_SEARCH_DEFAULTS.country ? { country: input.country ?? TAVILY_SEARCH_DEFAULTS.country } : {}),
+    max_results: input.maxResults ?? TAVILY_SEARCH_DEFAULTS.maxResults,
+    include_answer: input.includeAnswer ?? TAVILY_SEARCH_DEFAULTS.includeAnswer,
+    include_images: input.includeImages ?? TAVILY_SEARCH_DEFAULTS.includeImages,
+    include_domains: input.includeDomains ?? TAVILY_SEARCH_DEFAULTS.includeDomains,
+    exclude_domains: input.excludeDomains ?? TAVILY_SEARCH_DEFAULTS.excludeDomains
+  };
+}
+
+/**
+ * 创建 Tavily Search AI SDK 工具。
+ * @param apiKey - Tavily API Key
+ * @returns AI SDK 工具
+ */
+function createTavilySearchTool(apiKey: string) {
+  return tool({
+    description: 'Search the web for real-time, AI-optimized information using Tavily Search.',
+    inputSchema: createTavilySearchInputSchema(),
+    execute: async (input: TavilySearchInput, options: ToolExecutionOptions) => {
+      return postTavilyJson('/search', apiKey, createTavilySearchRequest(input), options.abortSignal);
+    }
+  });
+}
+
+/**
  * 对外暴露单 URL 版本的 Tavily Extract 工具。
- * @description SDK 原生工具要求 `urls: string[]`，这里收敛成第一版产品约定的单 `url` 输入。
+ * @param apiKey - Tavily API Key
+ * @returns AI SDK 工具
  */
 function createTavilyExtractTool(apiKey: string) {
-  const sdkTool = tavilyExtract({
-    apiKey,
-    includeImages: TAVILY_EXTRACT_DEFAULTS.includeImages,
-    extractDepth: TAVILY_EXTRACT_DEFAULTS.extractDepth,
-    format: TAVILY_EXTRACT_DEFAULTS.format
-  });
   const inputSchema = jsonSchema({
     type: 'object',
     properties: {
@@ -86,41 +337,39 @@ function createTavilyExtractTool(apiKey: string) {
     description: 'Extract clean, structured content from a single URL. Returns parsed content in markdown or text format, optimized for AI consumption.',
     inputSchema,
     execute: async ({ url, extractDepth, query }: TavilyExtractSingleUrlInput, options: ToolExecutionOptions) => {
-      return sdkTool.execute?.({ urls: [url], extractDepth, query }, options);
+      const request: TavilyExtractRequest = {
+        urls: [url],
+        extract_depth: extractDepth ?? TAVILY_EXTRACT_DEFAULTS.extractDepth,
+        format: TAVILY_EXTRACT_DEFAULTS.format,
+        include_images: TAVILY_EXTRACT_DEFAULTS.includeImages,
+        ...(query?.trim() ? { query } : {})
+      };
+      return postTavilyJson('/extract', apiKey, request, options.abortSignal);
     }
   });
 }
 
 /**
- * 根据 Tavily 配置创建 SDK 工具集。
+ * 根据 Tavily 配置创建主进程 Tavily 工具集。
  * 配置缺失或未启用时返回空对象。
+ * @param tavily - Tavily 配置
+ * @returns Tavily 工具集
  */
-function createTavilySdkTools(tavily: AIRequestOptions['tavily']): ToolSet {
+function createTavilyHttpTools(tavily: AIRequestOptions['tavily']): ToolSet {
   if (!tavily?.enabled || !tavily.apiKey.trim()) return {};
 
   return {
-    tavily_search: tavilySearch({
-      apiKey: tavily.apiKey,
-      topic: TAVILY_SEARCH_DEFAULTS.topic,
-      country: TAVILY_SEARCH_DEFAULTS.country,
-      maxResults: TAVILY_SEARCH_DEFAULTS.maxResults,
-      includeAnswer: TAVILY_SEARCH_DEFAULTS.includeAnswer,
-      includeImages: TAVILY_SEARCH_DEFAULTS.includeImages,
-      includeDomains: TAVILY_SEARCH_DEFAULTS.includeDomains,
-      excludeDomains: TAVILY_SEARCH_DEFAULTS.excludeDomains,
-      searchDepth: TAVILY_SEARCH_DEFAULTS.searchDepth,
-      timeRange: TAVILY_SEARCH_DEFAULTS.timeRange
-    }),
+    tavily_search: createTavilySearchTool(tavily.apiKey),
     tavily_extract: createTavilyExtractTool(tavily.apiKey)
   };
 }
 
 /**
- * 判断当前请求是否启用了主进程可直接执行的 Tavily SDK 工具。
+ * 判断当前请求是否启用了主进程可直接执行的 Tavily HTTP 工具。
  * @param tavily - Tavily 配置
- * @returns 是否需要开启 SDK 多步工具循环
+ * @returns 是否需要开启多步工具循环
  */
-function hasTavilySdkTools(tavily: AIRequestOptions['tavily']): boolean {
+function hasTavilyHttpTools(tavily: AIRequestOptions['tavily']): boolean {
   return Boolean(tavily?.enabled && tavily.apiKey.trim());
 }
 
@@ -227,7 +476,7 @@ async function toSdkTools(tools: AIRequestOptions['tools'], tavily: AIRequestOpt
     );
   }
 
-  const merged: ToolSet = { ...rendererTools, ...createTavilySdkTools(tavily), ...mcpTools };
+  const merged: ToolSet = { ...rendererTools, ...createTavilyHttpTools(tavily), ...mcpTools };
   if (Object.keys(merged).length === 0) {
     return undefined;
   }
@@ -304,7 +553,7 @@ class AIService {
       temperature: request.temperature,
       maxOutputTokens: request.maxOutputTokens,
       tools: await toSdkTools(request.tools, request.tavily, request.mcp),
-      ...(hasTavilySdkTools(request.tavily) || hasMcpSdkTools(request.mcp) ? { stopWhen: stepCountIs(5) } : {})
+      ...(hasTavilyHttpTools(request.tavily) || hasMcpSdkTools(request.mcp) ? { stopWhen: stepCountIs(5) } : {})
     };
   }
 

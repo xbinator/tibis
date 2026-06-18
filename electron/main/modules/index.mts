@@ -4,6 +4,7 @@
  */
 import { registerAIHandlers } from './ai/ipc.mjs';
 import { registerChatHandlers } from './chat/ipc.mjs';
+import { registerChatRuntimeHandlers } from './chat/runtime/ipc.mjs';
 import { registerDatabaseHandlers } from './database/ipc.mjs';
 import { registerDialogHandlers } from './dialog/ipc.mjs';
 import { registerExportHandlers } from './export/ipc.mjs';
@@ -26,6 +27,7 @@ export function registerAllIpcHandlers() {
   registerUiHandlers();
   registerDatabaseHandlers();
   registerChatHandlers();
+  registerChatRuntimeHandlers();
   registerStoreHandlers();
   registerShellCommandHandlers();
   registerAIHandlers();
@@ -46,6 +48,7 @@ export {
   registerUiHandlers,
   registerDatabaseHandlers,
   registerChatHandlers,
+  registerChatRuntimeHandlers,
   registerStoreHandlers,
   registerShellCommandHandlers,
   registerAIHandlers,

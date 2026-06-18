@@ -13,6 +13,13 @@ import type {
   AIStreamToolInputStartChunk,
   AIStreamToolResultChunk
 } from 'types/ai';
+import type {
+  ChatRuntimeContextUsageEvent,
+  ChatRuntimeEventMap,
+  ChatRuntimeMessageDeletedEvent,
+  ChatRuntimeMessageEvent,
+  ChatRuntimeToolRequestEvent
+} from 'types/chat-runtime';
 import type { ElectronAPI, ElectronShellCommandOutputChunk, ElectronSpeechInstallProgress, FileChangeEvent } from 'types/electron-api';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { formatPreloadErrorMessage, shouldIgnorePreloadError } from './error-collector.mjs';
@@ -430,6 +437,148 @@ const electronAPI: ElectronAPI = {
    * @param requestId 请求唯一标识
    */
   aiStreamAbort: (requestId) => ipcRenderer.invoke('ai:stream:abort', requestId),
+
+  // ==================== Chat runtime 操作 ====================
+
+  /**
+   * 通过主进程 ChatRuntime 发送一轮对话。
+   * @param input - 本轮发送内容与 renderer 快照
+   * @returns runtime 启动结果
+   */
+  chatRuntimeSend: (input) => ipcRenderer.invoke('chat:runtime:send', input),
+
+  /**
+   * 通过主进程 ChatRuntime 继续一轮暂停对话。
+   * @param input - 续轮输入
+   * @returns runtime 启动结果
+   */
+  chatRuntimeContinue: (input) => ipcRenderer.invoke('chat:runtime:continue', input),
+
+  /**
+   * 通过主进程 ChatRuntime 自动生成并持久化会话标题。
+   * @param input - 自动命名输入
+   * @returns 自动命名结果
+   */
+  chatRuntimeAutoName: (input) => ipcRenderer.invoke('chat:runtime:auto-name', input),
+
+  /**
+   * 中止正在运行的 ChatRuntime。
+   * @param input - runtime 中止参数
+   * @returns 中止结果
+   */
+  chatRuntimeAbort: (input) => ipcRenderer.invoke('chat:runtime:abort', input),
+
+  /**
+   * 通过主进程 ChatRuntime 执行上下文压缩。
+   * @param input - 压缩命令参数
+   * @returns 压缩结果
+   */
+  chatRuntimeCompact: (input) => ipcRenderer.invoke('chat:runtime:compact', input),
+
+  /**
+   * 提交 renderer 本地工具执行结果。
+   * @param input - 工具执行结果
+   * @returns 提交结果
+   */
+  chatRuntimeSubmitToolResult: (input) => ipcRenderer.invoke('chat:runtime:tool-result', input),
+
+  /**
+   * 监听 ChatRuntime 创建消息事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnMessageCreated: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeMessageEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:message-created', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:message-created', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime 更新消息事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnMessageUpdated: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeMessageEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:message-updated', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:message-updated', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime 删除消息事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnMessageDeleted: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeMessageDeletedEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:message-deleted', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:message-deleted', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime 上下文用量更新事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnContextUsageUpdated: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeContextUsageEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:context-usage-updated', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:context-usage-updated', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime 工具执行请求事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnToolRequest: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeToolRequestEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:tool-request', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:tool-request', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime 错误事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnError: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeEventMap['chat:runtime:error']) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:error', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:error', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime 完成事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnComplete: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeEventMap['chat:runtime:complete']) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:complete', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:complete', handler);
+    };
+  },
 
   // ==================== MCP runtime 操作 ====================
 

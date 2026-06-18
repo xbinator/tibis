@@ -49,6 +49,12 @@ export interface Message {
   files?: ChatMessageFile[];
   /** Token 使用统计 */
   usage?: AIUsage;
+  /** 执行该消息的 agent ID */
+  agentId?: string;
+  /** 创建或更新该消息的 runtime ID */
+  runtimeId?: string;
+  /** 父 runtime ID，预留给多 agent 调度 */
+  parentRuntimeId?: string;
   /** 创建时间 */
   createdAt: string;
   /** 是否处于加载中 */

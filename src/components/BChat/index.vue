@@ -69,7 +69,7 @@
           :can-submit="canSubmit"
           :used-tokens="usedTokens"
           :context-window="contextWindow"
-          :context-usage="contextUsageSnapshot"
+          :context-usage="displayedContextUsageSnapshot"
           @submit="handleChatSubmit"
           @abort="handleAbort"
           @image-select="imageUpload.appendImages"
@@ -87,12 +87,13 @@
 </template>
 
 <script setup lang="ts">
+import type { ContextUsageBudgetSnapshot } from './utils/contextUsageBudget';
 import type { BChatProps, Message } from './utils/types';
-import type { AIToolExecutor } from 'types/ai';
+import type { AIMCPRequestConfig, AITavilyRuntimeConfig, AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession } from 'types/chat';
+import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { throttle } from 'lodash-es';
 import {
   createBuiltinTools,
   isBuiltinToolName,
@@ -107,6 +108,7 @@ import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
 import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
+import { toTransportTools } from '@/ai/tools/stream';
 import BModelSelect from '@/components/BModelSelect/index.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
@@ -117,6 +119,7 @@ import { useOpenFile } from '@/hooks/useOpenFile';
 import { useWorkspaceRoot } from '@/hooks/useWorkspaceRoot';
 import { native } from '@/shared/platform';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
+import { useMemoryStore } from '@/stores/ai/memory';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useChatSessionStore } from '@/stores/chat/session';
@@ -136,20 +139,20 @@ import UsagePanel from './components/UsagePanel.vue';
 import { useAutoName } from './hooks/useAutoName';
 import { useChatHistory } from './hooks/useChatHistory';
 import { useChatInput } from './hooks/useChatInput';
-import { useChatStream } from './hooks/useChatStream';
+import { useChatRuntime } from './hooks/useChatRuntime';
+import { useChatServiceConfig } from './hooks/useChatServiceConfig';
 import { useChatTaskRuntime } from './hooks/useChatTaskRuntime';
-import { useCompactContext } from './hooks/useCompactContext';
 import { useContextUsage } from './hooks/useContextUsage';
 import { useFileReference } from './hooks/useFileReference';
 import { useImageUpload } from './hooks/useImageUpload';
 import { useInteractionState } from './hooks/useInteractionState';
 import { useModelSelection } from './hooks/useModelSelection';
 import { useRollback } from './hooks/useRollback';
+import { useRuntimeCompactContext } from './hooks/useRuntimeCompactContext';
 import { useSkillInit } from './hooks/useSkillInit';
 import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
 import { useUsagePanel } from './hooks/useUsagePanel';
 import { createFileRefChipResolver } from './utils/chipResolver';
-import { shouldAutoCompactByContextUsage } from './utils/compression/policy';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { create, userChoice, buildMessageReferences } from './utils/messageHelper';
 
@@ -166,9 +169,6 @@ const emit = defineEmits<{
   (e: 'loading-change', loading: boolean): void;
   (e: 'navigate-to-provider'): void;
 }>();
-
-/** assistant 草稿节流持久化间隔。 */
-const ASSISTANT_DRAFT_PERSIST_INTERVAL_MS = 500;
 
 /** 聊天数据存储 */
 const chatStore = useChatSessionStore();
@@ -430,6 +430,7 @@ const { isDragging: isInputDragActive } = useFileDrop({
 /** 聊天工具列表 */
 const filesStore = useFilesStore();
 const { openDraft } = useOpenDraft();
+const memoryStore = useMemoryStore();
 
 const { workspaceRoot, getWorkspaceRoot } = useWorkspaceRoot();
 
@@ -549,13 +550,6 @@ function handleConfirmationSheetAction(action: ChatMessageConfirmationAction): v
 }
 
 /**
- * 处理聊天流中的确认卡片操作（已废弃，由底部弹窗接管）。
- */
-function handleConfirmationAction(_confirmationId: string, action: ChatMessageConfirmationAction): void {
-  handleConfirmationSheetAction(action);
-}
-
-/**
  * 消息重新生成前的处理函数。
  * @param nextMessages - 重新生成后的消息列表
  */
@@ -586,116 +580,51 @@ async function ensureActiveSession(title: string): Promise<string> {
 }
 
 /**
- * 消息发送前的处理函数。
- * @param nextMessage - 待发送的消息
- * @returns 当前有效会话 ID
- */
-async function handleBeforeSend(nextMessage: Message): Promise<string> {
-  confirmationController.expirePendingConfirmation();
-
-  const sessionId = await ensureActiveSession(nextMessage.content);
-
-  await chatStore.addSessionMessage(sessionId, nextMessage);
-  return sessionId;
-}
-
-/**
  * 判断消息是否为刚创建的空 assistant 草稿。
  * 空草稿需要立即持久化，确保硬中断时至少能恢复本轮生成状态。
  * @param message - 待检查消息
  * @returns 是否为空 assistant 草稿
  */
-function isEmptyAssistantDraft(message: Message): boolean {
-  return message.role === 'assistant' && message.loading === true && message.finished === false && !message.content && message.parts.length === 0;
-}
+/** Chat 服务配置解析 hook。 */
+const chatServiceConfig = useChatServiceConfig();
 
-/**
- * 将当前 assistant 草稿单条更新到数据库。
- * @param message - 当前 assistant 草稿消息
- */
-async function persistAssistantDraft(message: Message): Promise<void> {
-  const sessionId = activeSessionId.value;
-  if (!sessionId) return;
-
-  await chatStore.updateSessionMessage(sessionId, message);
-}
-
-/** 当前仍在执行的 assistant 草稿持久化任务。 */
-let pendingAssistantDraftPersistence: Promise<void> = Promise.resolve();
-
-/**
- * 串行执行 assistant 草稿持久化，避免旧草稿写入晚于最终消息落库。
- * @param message - 当前 assistant 草稿消息
- */
-function queueAssistantDraftPersistence(message: Message): void {
-  const persistenceTask = pendingAssistantDraftPersistence.catch(() => undefined).then(() => persistAssistantDraft(message));
-  pendingAssistantDraftPersistence = persistenceTask.catch(() => undefined);
-}
-
-/**
- * 等待已启动的 assistant 草稿持久化完成。
- */
-async function waitForAssistantDraftPersistence(): Promise<void> {
-  await pendingAssistantDraftPersistence;
-}
-
-/** 节流后的 assistant 草稿持久化，避免 token 高频输出时频繁写库。 */
-const persistAssistantDraftThrottled = throttle(
-  (message: Message): void => {
-    queueAssistantDraftPersistence(message);
-  },
-  ASSISTANT_DRAFT_PERSIST_INTERVAL_MS,
-  { leading: false, trailing: true }
-);
-
-/**
- * 处理 assistant 草稿变化。
- * @param message - 当前 assistant 草稿消息
- */
-function handleAssistantDraftChange(message: Message): void {
-  if (isEmptyAssistantDraft(message)) {
-    queueAssistantDraftPersistence(message);
-    return;
-  }
-
-  persistAssistantDraftThrottled(message);
-}
-
-/**
- * 取消待执行的草稿持久化。
- * 最终消息落库会写入同一条记录，避免旧的 trailing 写入覆盖终态。
- */
-function cancelAssistantDraftPersistence(): void {
-  persistAssistantDraftThrottled.cancel();
-}
-
-/** 聊天流式处理 hook */
-const { stream, loading: streamLoading } = useChatStream({
-  messages,
-  tools: getActiveTools,
-  getToolContext: editorToolContextRegistry.getCurrentContext,
-  getSessionId: () => activeSessionId.value ?? undefined,
-  onBeforeRegenerate: handleBeforeRegenerate,
-  onComplete: async (nextMessage: Message) => {
-    cancelAssistantDraftPersistence();
-    await waitForAssistantDraftPersistence();
-    // eslint-disable-next-line no-use-before-define
-    await handleComplete(nextMessage);
-  },
-  onAssistantDraftChange: handleAssistantDraftChange,
-  onConfirmationAction: handleConfirmationAction
-});
+/** 当前 runtime 聊天任务的中止函数。 */
+let abortRuntimeChatTask: (() => Promise<void>) | null = null;
 
 /** 统一任务运行时。 */
 const taskRuntime = useChatTaskRuntime({
-  abortChatTask: () => stream.abort?.()
+  abortChatTask: async () => {
+    await abortRuntimeChatTask?.();
+  }
 });
 
 /** 当前是否有活跃任务。 */
-const loading = computed<boolean>(() => taskRuntime.loading.value || streamLoading.value);
+const loading = computed<boolean>(() => taskRuntime.loading.value);
 
 /** 上下文窗口用量 hook（混合策略：空闲态用 API 上报值，流式中用估算器） */
 const { usedTokens, snapshot: contextUsageSnapshot } = useContextUsage({ messages, contextWindow, selectedModel, streaming: loading });
+/** 主进程 runtime 上报的上下文窗口用量快照。 */
+const runtimeContextUsageSnapshot = ref<ContextUsageBudgetSnapshot | undefined>(undefined);
+/** 当前展示给工具栏的上下文窗口用量快照。 */
+const displayedContextUsageSnapshot = computed<ContextUsageBudgetSnapshot>(() => runtimeContextUsageSnapshot.value ?? contextUsageSnapshot.value);
+
+/**
+ * 将主进程 runtime 上下文用量快照转换为 renderer 工具栏使用的形状。
+ * @param snapshot - 主进程 runtime 上下文用量快照
+ * @returns renderer 上下文用量快照
+ */
+function toContextUsageBudgetSnapshot(snapshot: ChatRuntimeContextUsageSnapshot): ContextUsageBudgetSnapshot {
+  return {
+    usedTokens: snapshot.estimatedInputTokens,
+    contextWindow: snapshot.contextWindow,
+    reservedOutputTokens: snapshot.reservedOutputTokens,
+    safetyMarginTokens: snapshot.compactionBufferTokens,
+    usableInputTokens: snapshot.usableInputTokens,
+    usagePercent: snapshot.usagePercent,
+    remainingInputTokens: snapshot.remainingInputTokens,
+    status: snapshot.status
+  };
+}
 
 watch(
   loading,
@@ -712,6 +641,7 @@ async function resetDraftSessionState(): Promise<void> {
   confirmationController.dispose();
   createdSessionId.value = null;
   currentSessionForAutoName.value = undefined;
+  runtimeContextUsageSnapshot.value = undefined;
   usagePanel.reset();
   setLoadedMessages([]);
   hasMoreHistory.value = false;
@@ -726,6 +656,7 @@ async function resetDraftSessionState(): Promise<void> {
 async function loadSessionMessages(sessionId: string): Promise<void> {
   confirmationController.dispose();
   usagePanel.reset();
+  runtimeContextUsageSnapshot.value = undefined;
   hasMoreHistory.value = false;
   setLoadedMessages(await chatStore.getSessionMessages(sessionId));
 }
@@ -785,15 +716,15 @@ const { captureSnapshot, scheduleAutoName } = useAutoName({
 });
 
 /**
- * 消息完成后的处理函数。
- * @param nextMessage - 完成的消息
+ * 处理主进程 ChatRuntime 完成事件。
+ * Runtime 已在主进程完成消息持久化，这里只做 UI 状态、用量刷新和自动命名。
+ * @param nextMessage - runtime 完成的 assistant 消息
  */
-async function handleComplete(nextMessage: Message): Promise<void> {
+async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
   const sessionId = activeSessionId.value;
   const snapshot = captureSnapshot(nextMessage, sessionId);
 
   try {
-    await chatStore.addSessionMessage(sessionId, nextMessage);
     if (sessionId) {
       await usagePanel.refresh(sessionId, currentSessionForAutoName.value?.id ?? sessionId);
     }
@@ -804,92 +735,6 @@ async function handleComplete(nextMessage: Message): Promise<void> {
   if (!snapshot) return;
 
   scheduleAutoName(snapshot, () => loading.value);
-}
-
-/**
- * 处理消息编辑。
- * @param nextMessage - 要编辑的消息
- */
-function handleChatEdit(nextMessage: Message): void {
-  inputEvents.restoreFromMessage(nextMessage);
-}
-
-/**
- * 处理消息重新生成。
- * @param nextMessage - 要重新生成的消息
- */
-async function handleChatRegenerate(nextMessage: Message): Promise<void> {
-  const startResult = taskRuntime.beginTask('chat');
-  if (!startResult.ok) {
-    return;
-  }
-
-  const regenerated = await stream.regenerate(nextMessage);
-  if (!regenerated) {
-    taskRuntime.finishTask('chat');
-  }
-}
-
-/**
- * 处理用户选择提交。
- * @param answer - 用户选择的答案数据
- */
-async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promise<void> {
-  const startResult = taskRuntime.beginTask('chat');
-  if (!startResult.ok) {
-    return;
-  }
-
-  const submitted = await stream.submitUserChoice(answer);
-  if (!submitted) {
-    taskRuntime.finishTask('chat');
-  }
-}
-
-/** 手动上下文压缩命令 hook。 */
-const { handleAutoCompactContext, handleCompactContext } = useCompactContext({
-  messages,
-  getSessionId: () => activeSessionId.value ?? undefined,
-  getContextWindow: () => contextWindow.value,
-  beginCompactTask: (onAbort?: () => void) => taskRuntime.beginTask('compact', onAbort),
-  finishCompactTask: () => taskRuntime.finishTask('compact'),
-  persistMessage: (sessionId, nextMessage) => chatStore.addSessionMessage(sessionId, nextMessage),
-  persistMessages: (sessionId, nextMessages) => chatStore.setSessionMessages(sessionId, nextMessages),
-  scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
-  showToast: interactionAPI.showToast
-});
-
-/** 用户消息回退 hook。 */
-const rollbackController = useRollback({
-  messages,
-  getSessionId: () => activeSessionId.value ?? undefined,
-  fetchAllPriorHistory,
-  persistMessages: (sessionId, nextMessages) => chatStore.setSessionMessages(sessionId, nextMessages),
-  invalidateCompressionRecords: async (recordIds) => {
-    for (const recordId of recordIds) {
-      // eslint-disable-next-line no-await-in-loop
-      const result = await getElectronAPI().chatCompressionUpdateStatus(recordId, 'invalid', 'rollback_truncation');
-      unwrap(result);
-    }
-  },
-  restoreInput: (nextMessage) => inputEvents.restoreFromMessage(nextMessage),
-  expireConfirmation: () => confirmationController.expirePendingConfirmation(),
-  focusInput
-});
-
-/**
- * 在发送用户消息前按上下文用量自动压缩旧消息。
- */
-async function compactBeforeSendIfNeeded(): Promise<void> {
-  if (!messages.value.length) {
-    return;
-  }
-
-  if (!shouldAutoCompactByContextUsage(usedTokens.value, contextWindow.value)) {
-    return;
-  }
-
-  await handleAutoCompactContext();
 }
 
 /**
@@ -917,6 +762,257 @@ function showNoModelConfigToast(): void {
   });
 }
 
+/** 主进程 ChatRuntime hook。 */
+const chatRuntime = useChatRuntime({
+  messages,
+  getSessionId: () => activeSessionId.value ?? undefined,
+  tools: getActiveTools,
+  getToolContext: editorToolContextRegistry.getCurrentContext,
+  onComplete: handleRuntimeComplete,
+  onContextUsageUpdated: (snapshot) => {
+    runtimeContextUsageSnapshot.value = toContextUsageBudgetSnapshot(snapshot);
+  },
+  onError: (error) => {
+    if (error.code === 'MODEL_NOT_FOUND') {
+      showNoModelConfigToast();
+      return;
+    }
+
+    interactionAPI.showToast({ type: 'error', content: error.message });
+  }
+});
+
+abortRuntimeChatTask = () => chatRuntime.abort();
+
+/**
+ * 处理消息编辑。
+ * @param nextMessage - 要编辑的消息
+ */
+function handleChatEdit(nextMessage: Message): void {
+  inputEvents.restoreFromMessage(nextMessage);
+}
+
+/** 手动上下文压缩命令 hook。 */
+const { handleCompactContext } = useRuntimeCompactContext({
+  messages,
+  getSessionId: () => activeSessionId.value ?? undefined,
+  getContextWindow: () => contextWindow.value,
+  beginCompactTask: (onAbort) => taskRuntime.beginTask('compact', onAbort),
+  finishCompactTask: () => taskRuntime.finishTask('compact'),
+  scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
+  showToast: interactionAPI.showToast
+});
+
+/**
+ * 判断 MCP server 是否可在主进程执行。
+ * @param server - MCP server 配置
+ * @returns 是否可执行
+ */
+function isRuntimeEnabledMcpServer(server: AIMCPRequestConfig['servers'][number]): boolean {
+  if (!server.enabled) return false;
+  if (server.transport === 'stdio') return server.command.trim().length > 0;
+
+  return Boolean(server.url?.trim());
+}
+
+/**
+ * 解析可交给主进程执行的 Tavily 配置。
+ * @returns Tavily runtime 配置
+ */
+function resolveRuntimeTavilyConfig(): AITavilyRuntimeConfig | undefined {
+  const { tavily } = toolSettingsStore;
+  if (!tavily?.enabled || !tavily.apiKey.trim()) return undefined;
+
+  return {
+    enabled: tavily.enabled,
+    apiKey: tavily.apiKey
+  };
+}
+
+/**
+ * 解析可交给主进程执行的 MCP 配置。
+ * @returns MCP runtime 请求配置
+ */
+function resolveRuntimeMcpRequestConfig(): AIMCPRequestConfig | undefined {
+  const servers = toolSettingsStore.mcp.servers.map((server) => ({
+    ...server,
+    args: [...server.args],
+    env: { ...server.env },
+    headers: { ...server.headers },
+    toolAllowlist: [...server.toolAllowlist]
+  }));
+  const enabledServerIds = servers.filter(isRuntimeEnabledMcpServer).map((server) => server.id);
+  if (!servers.length && !enabledServerIds.length) return undefined;
+
+  return {
+    servers,
+    enabledServerIds,
+    enabledTools: [],
+    toolInstructions: ''
+  };
+}
+
+/**
+ * 解析 runtime system prompt 上下文。
+ * @returns system prompt
+ */
+async function resolveRuntimeSystemPrompt(): Promise<string | undefined> {
+  if (!memoryStore.loaded) {
+    await memoryStore.loadMemory();
+  }
+
+  const memoryContext = memoryStore.buildSystemPromptContext();
+  return memoryContext.trim() ? memoryContext : undefined;
+}
+
+/**
+ * 查找重新生成时需要保留到哪条 user 消息。
+ * @param targetMessage - 目标 assistant 消息
+ * @returns 起始 user 消息索引，不存在时返回 -1
+ */
+function findRuntimeRegenerateStartIndex(targetMessage: Message): number {
+  const targetIndex = messages.value.findIndex((item) => item.id === targetMessage.id);
+  if (targetIndex === -1 || targetMessage.role !== 'assistant') {
+    return -1;
+  }
+
+  for (let index = targetIndex - 1; index >= 0; index -= 1) {
+    if (messages.value[index].role === 'user') {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * 通过主进程 ChatRuntime 重新生成 assistant 回复。
+ * @param targetMessage - 要重新生成的 assistant 消息
+ * @returns 是否成功启动 runtime
+ */
+async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> {
+  const startIndex = findRuntimeRegenerateStartIndex(targetMessage);
+  if (startIndex === -1) {
+    return false;
+  }
+
+  const sessionId = activeSessionId.value;
+  if (!sessionId) {
+    return false;
+  }
+
+  const sourceMessages = messages.value.slice(0, startIndex + 1);
+  const removedMessages = messages.value.slice(startIndex + 1);
+  const assistantPlaceholder = create.assistantPlaceholder();
+  messages.value.splice(0, messages.value.length, ...sourceMessages, assistantPlaceholder);
+  conversationRef.value?.scrollToBottom({ behavior: 'auto' });
+
+  const config = await chatServiceConfig.resolveServiceConfig();
+  if (!config) {
+    messages.value.splice(0, messages.value.length, ...sourceMessages, ...removedMessages);
+    showNoModelConfigToast();
+    return false;
+  }
+
+  await handleBeforeRegenerate(sourceMessages);
+  await chatStore.addSessionMessage(sessionId, assistantPlaceholder);
+  await chatRuntime.continueTurn({
+    sessionId,
+    messages: [...sourceMessages, assistantPlaceholder],
+    contextWindow: contextWindow.value,
+    system: await resolveRuntimeSystemPrompt(),
+    tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
+    tavily: resolveRuntimeTavilyConfig(),
+    mcp: resolveRuntimeMcpRequestConfig()
+  });
+
+  return true;
+}
+
+/**
+ * 处理消息重新生成。
+ * @param nextMessage - 要重新生成的消息
+ */
+async function handleChatRegenerate(nextMessage: Message): Promise<void> {
+  const startResult = taskRuntime.beginTask('chat');
+  if (!startResult.ok) {
+    return;
+  }
+
+  try {
+    const regenerated = await startRuntimeRegenerate(nextMessage);
+    if (!regenerated) {
+      taskRuntime.finishTask('chat');
+    }
+  } catch (error) {
+    taskRuntime.finishTask('chat');
+    throw error;
+  }
+}
+
+/**
+ * 处理用户选择提交。
+ * @param answer - 用户选择的答案数据
+ */
+async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promise<void> {
+  const startResult = taskRuntime.beginTask('chat');
+  if (!startResult.ok) {
+    return;
+  }
+
+  try {
+    const submitted = userChoice.submitAnswer(messages.value, answer);
+    if (!submitted) {
+      taskRuntime.finishTask('chat');
+      return;
+    }
+
+    const sessionId = activeSessionId.value;
+    if (!sessionId) {
+      taskRuntime.finishTask('chat');
+      return;
+    }
+
+    const config = await chatServiceConfig.resolveServiceConfig();
+    if (!config) {
+      showNoModelConfigToast();
+      taskRuntime.finishTask('chat');
+      return;
+    }
+
+    await chatRuntime.continueTurn({
+      sessionId,
+      messages: messages.value,
+      contextWindow: contextWindow.value,
+      system: await resolveRuntimeSystemPrompt(),
+      tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
+      tavily: resolveRuntimeTavilyConfig(),
+      mcp: resolveRuntimeMcpRequestConfig()
+    });
+  } catch (error) {
+    taskRuntime.finishTask('chat');
+    throw error;
+  }
+}
+
+/** 用户消息回退 hook。 */
+const rollbackController = useRollback({
+  messages,
+  getSessionId: () => activeSessionId.value ?? undefined,
+  fetchAllPriorHistory,
+  persistMessages: (sessionId, nextMessages) => chatStore.setSessionMessages(sessionId, nextMessages),
+  invalidateCompressionRecords: async (recordIds) => {
+    for (const recordId of recordIds) {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await getElectronAPI().chatCompressionUpdateStatus(recordId, 'invalid', 'rollback_truncation');
+      unwrap(result);
+    }
+  },
+  restoreInput: (nextMessage) => inputEvents.restoreFromMessage(nextMessage),
+  expireConfirmation: () => confirmationController.expirePendingConfirmation(),
+  focusInput
+});
+
 /**
  * 提交用户文本消息并启动新一轮流式对话。
  * @param content - 用户输入内容
@@ -927,15 +1023,13 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
   const trimmedContent = content.trim();
   if (!trimmedContent && !images.length) return;
 
-  await compactBeforeSendIfNeeded();
-
   const startResult = taskRuntime.beginTask('chat');
   if (!startResult.ok) {
     return;
   }
 
   try {
-    const config = await stream.resolveServiceConfig();
+    const config = await chatServiceConfig.resolveServiceConfig();
     if (!config) {
       showNoModelConfigToast();
       taskRuntime.finishTask('chat');
@@ -949,13 +1043,25 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
       userMessage.files = [...images];
     }
 
-    await handleBeforeSend(userMessage);
+    const sessionId = await ensureActiveSession(userMessage.content);
+    confirmationController.expirePendingConfirmation();
     messages.value.push(userMessage);
     conversationRef.value?.scrollToBottom({ behavior: 'auto' });
     focusInput();
     clearDraft && inputEvents.clear();
 
-    await stream.streamMessages(messages.value, config);
+    await chatRuntime.send({
+      sessionId,
+      content: userMessage.content,
+      contextWindow: contextWindow.value,
+      system: await resolveRuntimeSystemPrompt(),
+      tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
+      tavily: resolveRuntimeTavilyConfig(),
+      mcp: resolveRuntimeMcpRequestConfig(),
+      files: userMessage.files,
+      userMessageId: userMessage.id,
+      userMessageCreatedAt: userMessage.createdAt
+    });
   } catch (error) {
     taskRuntime.finishTask('chat');
     throw error;
@@ -975,22 +1081,11 @@ async function handleChatSubmit(): Promise<void> {
 
 /**
  * 处理中止流式输出。
- * 等待助手消息持久化完成后再保存 interrupt 消息，确保数据库中消息顺序一致。
+ * 交由当前活跃任务运行时区分聊天生成与上下文压缩取消。
  */
 async function handleAbort(): Promise<void> {
   confirmationController.expirePendingConfirmation();
-  const abortedTask = await taskRuntime.abortActiveTask();
-
-  if (abortedTask === 'compact') {
-    return;
-  }
-
-  const sessionId = activeSessionId.value;
-  if (sessionId) {
-    const interruptMessage = create.interruptMessage();
-    messages.value.push(interruptMessage);
-    await chatStore.addSessionMessage(sessionId, interruptMessage);
-  }
+  await taskRuntime.abortActiveTask();
 }
 
 /**
@@ -1088,7 +1183,6 @@ onMounted(async () => {
 
 /** 组件卸载时清理 */
 onUnmounted(() => {
-  cancelAssistantDraftPersistence();
   taskRuntime.dispose();
   confirmationController.dispose();
 });

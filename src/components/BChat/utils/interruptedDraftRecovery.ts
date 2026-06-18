@@ -40,18 +40,23 @@ function isInterruptedAssistantDraft(message: Message): boolean {
 }
 
 /**
- * 为恢复后的消息补充硬中断提示。
- * @param message - 待补充提示的消息。
+ * 创建硬中断提示消息。
+ * @param sourceMessage - 被恢复的 assistant 草稿。
+ * @returns interrupt 消息。
  */
-function appendInterruptedNotice(message: Message): void {
-  const hasNoticePart = message.parts.some((part) => part.type === 'error' && part.text === HARD_INTERRUPTED_ASSISTANT_MESSAGE);
-  if (!hasNoticePart) {
-    message.parts.push({ type: 'error', text: HARD_INTERRUPTED_ASSISTANT_MESSAGE });
-  }
-
-  if (!message.content.includes(HARD_INTERRUPTED_ASSISTANT_MESSAGE)) {
-    message.content = message.content ? `${message.content}\n${HARD_INTERRUPTED_ASSISTANT_MESSAGE}` : HARD_INTERRUPTED_ASSISTANT_MESSAGE;
-  }
+function createRecoveredInterruptMessage(sourceMessage: Message): Message {
+  return {
+    id: `${sourceMessage.id}-interrupt`,
+    role: 'interrupt',
+    content: HARD_INTERRUPTED_ASSISTANT_MESSAGE,
+    parts: [],
+    createdAt: sourceMessage.createdAt,
+    loading: false,
+    finished: true,
+    agentId: sourceMessage.agentId,
+    runtimeId: sourceMessage.runtimeId,
+    parentRuntimeId: sourceMessage.parentRuntimeId
+  };
 }
 
 /**
@@ -63,7 +68,6 @@ function recoverInterruptedAssistantDraft(sourceMessage: Message): Message {
   const nextMessage = cloneDeep(sourceMessage);
 
   finalizeToolPartsAsCancelled(nextMessage);
-  appendInterruptedNotice(nextMessage);
   nextMessage.loading = false;
   nextMessage.finished = true;
 
@@ -79,15 +83,16 @@ export function recoverInterruptedAssistantDrafts(sourceMessages: Message[]): In
   let recovered = false;
   const recoveredMessages: Message[] = [];
 
-  const messages = sourceMessages.map((message) => {
+  const messages = sourceMessages.flatMap((message) => {
     if (!isInterruptedAssistantDraft(message)) {
-      return message;
+      return [message];
     }
 
     const nextMessage = recoverInterruptedAssistantDraft(message);
+    const interruptMessage = createRecoveredInterruptMessage(nextMessage);
     recovered = true;
     recoveredMessages.push(nextMessage);
-    return nextMessage;
+    return [nextMessage, interruptMessage];
   });
 
   return { messages, recovered, recoveredMessages };
