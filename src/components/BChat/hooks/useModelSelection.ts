@@ -15,15 +15,19 @@ export function useModelSelection() {
   const serviceModelStore = useServiceModelStore();
   const providerStore = useProviderStore();
 
-  /** 当前选中的模型标识，从 store 读取 */
-  const selectedModel = computed(() => serviceModelStore.chatModel);
-
   /** 当前选中的模型配置，从 providerStore 响应式派生 */
   const currentModelConfig = computed(() => {
-    const model = selectedModel.value;
+    const model = serviceModelStore.chatModel;
     if (!model) return undefined;
     const provider = providerStore.providers.find((p) => p.id === model.providerId);
-    return provider?.models?.find((m) => m.id === model.modelId);
+    if (!provider?.isEnabled) return undefined;
+    return provider.models?.find((m) => m.id === model.modelId && m.isEnabled);
+  });
+
+  /** 当前选中的模型标识，仅在服务商与模型仍可用时暴露给 UI。 */
+  const selectedModel = computed(() => {
+    const model = serviceModelStore.chatModel;
+    return model && currentModelConfig.value ? model : undefined;
   });
 
   /** 当前模型是否支持视觉识别，从 providerStore 响应式派生 */

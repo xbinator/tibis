@@ -164,6 +164,7 @@ const emit = defineEmits<{
   (e: 'session-title-persisted', sessionId: string, title: string): void;
   (e: 'draft-session-created'): void;
   (e: 'loading-change', loading: boolean): void;
+  (e: 'navigate-to-provider'): void;
 }>();
 
 /** assistant 草稿节流持久化间隔。 */
@@ -903,7 +904,10 @@ function showNoModelConfigToast(): void {
         'span',
         {
           class: 'text-primary underline cursor-pointer',
-          onClick: () => router.push('/settings/service-model')
+          onClick: () => {
+            emit('navigate-to-provider');
+            router.push('/settings/provider');
+          }
         },
         '去配置'
       )

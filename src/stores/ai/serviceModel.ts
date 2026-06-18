@@ -90,6 +90,9 @@ export const useServiceModelStore = defineStore('serviceModel', {
       const provider = await providerStorage.getProvider(config.providerId);
       if (!provider?.isEnabled) return null;
 
+      const model = provider.models?.find((item) => item.id === config.modelId);
+      if (!model?.isEnabled) return null;
+
       return { ...config, providerId: config.providerId, modelId: config.modelId };
     },
 

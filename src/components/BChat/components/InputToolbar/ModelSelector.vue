@@ -6,7 +6,7 @@
   <BDropdown v-if="groupedModels.length" v-model:open="open">
     <BButton size="small" type="text">
       <div class="model-button-content">
-        <span v-if="currentModelName" class="model-name">{{ currentModelName }}</span>
+        <span class="model-name" :class="{ 'model-name--placeholder': !currentModelName }">{{ currentModelName || '请选择模型' }}</span>
         <BIcon class="dropdown-icon" icon="lucide:chevron-down" :rotate="open ? 180 : 0" />
       </div>
     </BButton>
@@ -251,6 +251,10 @@ defineExpose({
   font-size: 12px;
   color: var(--text-primary);
   white-space: nowrap;
+}
+
+.model-name--placeholder {
+  color: var(--text-secondary);
 }
 
 .dropdown-icon {

@@ -45,6 +45,7 @@
         @session-created="handleSessionCreated"
         @session-title-persisted="handleSessionTitlePersisted"
         @loading-change="handleChatLoadingChange"
+        @navigate-to-provider="handleNavigateToProvider"
       />
     </div>
   </BPanelSplitter>
@@ -148,6 +149,15 @@ async function handleSessionTitlePersisted(sessionId: string, title: string): Pr
  */
 function handleChatLoadingChange(loading: boolean): void {
   chatLoading.value = loading;
+}
+
+/**
+ * 处理导航到配置页事件，展开状态下先关闭侧栏。
+ */
+function handleNavigateToProvider(): void {
+  if (isSidebarExpanded.value) {
+    settingStore.setChatSidebarExpanded(false);
+  }
 }
 
 watch(
