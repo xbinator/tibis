@@ -47,6 +47,45 @@ import { registerRichCodeBlockLowlightAliases } from '../utils/richCodeBlockLowl
 const lowlight = createLowlight(common);
 registerRichCodeBlockLowlightAliases(lowlight);
 
+/**
+ * Rich 编辑器默认空内容占位文案。
+ */
+export const RICH_EDITOR_DEFAULT_PLACEHOLDER = '请输入内容';
+
+/**
+ * Rich 编辑器占位文案解析上下文。
+ */
+export interface RichEditorPlaceholderContext {
+  /** 当前空块节点 */
+  node: {
+    /** 当前节点类型 */
+    type?: {
+      /** 当前节点类型名称 */
+      name?: string;
+    };
+    /** 当前节点属性 */
+    attrs?: Record<string, unknown>;
+  };
+}
+
+/**
+ * 根据当前空块类型解析 Rich 编辑器占位文案。
+ * @param context - 当前占位文案解析上下文
+ * @returns 当前空块应展示的占位文案
+ */
+export function resolveRichEditorPlaceholder(context: RichEditorPlaceholderContext): string {
+  const { node } = context;
+
+  if (node.type?.name === 'heading') {
+    const level = Number(node.attrs?.level);
+    if (Number.isInteger(level) && level >= 1 && level <= 6) {
+      return `H${level}`;
+    }
+  }
+
+  return RICH_EDITOR_DEFAULT_PLACEHOLDER;
+}
+
 interface UseEditorExtensionsResult {
   assignHeadingIds: (editor: Editor, headingOptions?: { silent?: boolean }) => void;
   editorExtensions: AnyExtension[];
@@ -961,7 +1000,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
       // 禁用间隙光标
       gapcursor: false
     }),
-    Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: '请输入内容' }),
+    Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: resolveRichEditorPlaceholder }),
     Markdown,
     HtmlComment,
     LinkDefinitionAsText,
@@ -1465,7 +1504,7 @@ export function createRichEditorRuntimeOnlyExtensions(
   options?: { onSearchMatchFocus?: (context: SearchScrollContext) => void }
 ): AnyExtension[] {
   return toAnyExtensions([
-    Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: '请输入内容' }),
+    Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: resolveRichEditorPlaceholder }),
     AISelectionHighlight,
     InlineCommentMark,
     Search.configure({

@@ -642,9 +642,33 @@ defineExpose({
       height: 0;
       font-size: 14px;
       line-height: 1.74;
-      color: var(--editor-placeholder);
+      color: color-mix(in srgb, var(--editor-placeholder) 64%, var(--bg-primary));
       pointer-events: none;
       content: attr(data-placeholder);
+    }
+
+    h1.is-editor-empty:first-child::before {
+      font-size: 24px;
+    }
+
+    h2.is-editor-empty:first-child::before {
+      font-size: 20px;
+    }
+
+    h3.is-editor-empty:first-child::before {
+      font-size: 16px;
+    }
+
+    h4.is-editor-empty:first-child::before {
+      font-size: 14px;
+    }
+
+    h5.is-editor-empty:first-child::before {
+      font-size: 12px;
+    }
+
+    h6.is-editor-empty:first-child::before {
+      font-size: 11px;
     }
   }
 
