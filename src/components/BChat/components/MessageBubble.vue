@@ -25,21 +25,24 @@
       <div :class="bem('parts')">
         <BubblePartCompression v-if="isCompressionMessage || isInterruptMessage" :message="message" />
 
-        <template v-for="(item, index) in renderableParts" :key="`${item.type}-${index}`">
-          <BubblePartUserInput v-if="isUserMessage" :part="item as ChatMessageTextPart" />
+        <!-- 非压缩消息才渲染各片段，压缩消息仅显示 BubblePartCompression -->
+        <template v-if="!isCompressionMessage">
+          <template v-for="(item, index) in renderableParts" :key="`${item.type}-${index}`">
+            <BubblePartUserInput v-if="isUserMessage" :part="item as ChatMessageTextPart" />
 
-          <BubblePartText v-else-if="!isCompressionMessage && (item.type === 'text' || item.type === 'error')" :item="item" :part="item" />
+            <BubblePartText v-else-if="item.type === 'text' || item.type === 'error'" :item="item" :part="item" />
 
-          <BubblePartThinking v-else-if="!isCompressionMessage && item.type === 'thinking'" :part="item" />
+            <BubblePartThinking v-else-if="item.type === 'thinking'" :part="item" />
 
-          <QuestionCard
-            v-else-if="!isCompressionMessage && !disabled && isAwaitingUserChoiceResult(item)"
-            :question="item.result.data"
-            :disabled="disabled"
-            @submit-choice="$emit('user-choice-submit', $event)"
-          />
+            <QuestionCard
+              v-else-if="!disabled && isAwaitingUserChoiceResult(item)"
+              :question="item.result.data"
+              :disabled="disabled"
+              @submit-choice="$emit('user-choice-submit', $event)"
+            />
 
-          <BubblePartTool v-else-if="!isCompressionMessage && item.type === 'tool'" :part="item" />
+            <BubblePartTool v-else-if="item.type === 'tool'" :part="item" />
+          </template>
         </template>
       </div>
     </BBubble>
