@@ -40,7 +40,7 @@
     </div>
 
     <div :class="bem('input')">
-      <div :class="bem('input-container')">
+      <div ref="inputContainerRef" :class="bem('input-container', { dragover: isInputDragActive })">
         <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
 
         <BPromptEditor
@@ -110,6 +110,7 @@ import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import BModelSelect from '@/components/BModelSelect/index.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
+import { useFileDrop } from '@/hooks/useFileDrop';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
 import { useOpenFile } from '@/hooks/useOpenFile';
@@ -239,6 +240,8 @@ provide('interaction', interactionAPI);
 
 /** 输入框编辑器引用 */
 const promptEditorRef = ref<InstanceType<typeof BPromptEditor>>();
+/** 输入框容器引用 */
+const inputContainerRef = ref<HTMLElement>();
 /** 通用文件打开导航能力 */
 const { openFile, openWebview } = useNavigate();
 /** 文件打开能力（供 open_resource 工具使用） */
@@ -385,6 +388,32 @@ const fileReference = useFileReference({
   insertTextAtCursor,
   saveCursorPosition,
   focusInput
+});
+
+/**
+ * 处理投放到输入容器的文件。
+ * @param files - 拖拽文件列表
+ */
+async function handleInputDropFiles(files: File[]): Promise<void> {
+  const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+  const otherFiles = files.filter((file) => !file.type.startsWith('image/'));
+
+  if (imageFiles.length > 0) {
+    await imageUpload.appendImages(imageFiles);
+  }
+
+  if (otherFiles.length > 0) {
+    const tokenText = fileReference.onPasteFiles(otherFiles);
+    if (tokenText) {
+      insertTextAtCursor(tokenText);
+    }
+  }
+}
+
+/** 输入容器文件拖拽 hook */
+const { isDragging: isInputDragActive } = useFileDrop({
+  targetRef: inputContainerRef,
+  onDropFiles: handleInputDropFiles
 });
 
 /** 聊天工具列表 */
@@ -1102,7 +1131,13 @@ onUnmounted(() => {
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
-  transition: background 0.3s ease-in-out;
+  transition: background 0.3s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+
+  &.b-chat__input-container--dragover {
+    background: var(--color-primary-bg);
+    border-color: var(--input-focus-border);
+    box-shadow: inset 0 0 0 1px var(--color-control-outline);
+  }
 }
 
 .b-chat__input-container .b-prompt-editor {

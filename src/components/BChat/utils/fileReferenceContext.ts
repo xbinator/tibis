@@ -6,6 +6,7 @@ import type { FileReference } from '../types';
 import type { Message } from './types';
 import { recentFilesStorage } from '@/shared/storage';
 import type { StoredFile } from '@/shared/storage/files/types';
+import { decodeFileReferencePath } from '@/utils/file/reference';
 import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 
 // ─── 类型定义 ────────────────────────────────────────────────────────────────
@@ -41,7 +42,8 @@ export const MESSAGE_REF_PATTERN = /\{\{#(\S+)(?:\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))
  * @returns 文件引用解析结果，文件不存在时返回空内容
  */
 export async function extractFileReferenceLines(token: string, references: string[]): Promise<FileReference> {
-  const [path, startLine, endLine, renderStartLine, renderEndLine] = references;
+  const [rawPath, startLine, endLine, renderStartLine, renderEndLine] = references;
+  const path = rawPath ? decodeFileReferencePath(rawPath) : rawPath;
 
   if (!path) return { token, path: '', startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };
 

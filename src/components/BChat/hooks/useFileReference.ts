@@ -4,9 +4,11 @@
  */
 import type { FileReferenceChip } from '../types';
 import { nextTick, onMounted, onUnmounted } from 'vue';
+import { resolveDroppedFilePath } from '@/hooks/useFileDrop';
 import type { ChatFileReferenceInsertPayload } from '@/shared/chat/fileReference';
 import { onChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import { useSettingStore } from '@/stores/ui/setting';
+import { encodeFileReferencePath } from '@/utils/file/reference';
 import { buildUnsavedPath } from '@/utils/file/unsaved';
 
 /**
@@ -40,7 +42,10 @@ export function useFileReference(options: FileReferenceOptions) {
    */
   function onPasteFiles(files: File[]): string {
     return Array.from(files)
-      .map((file) => `{{#[](${file.name})}}`)
+      .map((file) => {
+        const filePath = resolveDroppedFilePath(file);
+        return `{{#${encodeFileReferencePath(filePath || file.name)}}}`;
+      })
       .join('');
   }
 
