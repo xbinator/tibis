@@ -36,6 +36,8 @@ export interface ActiveChatRuntime {
   contextWindow?: number;
   /** 系统提示上下文。 */
   system?: string;
+  /** 当前工作区根目录。 */
+  workspaceRoot?: string;
   /** 传输工具 schema。 */
   tools?: AITransportTool[];
   /** Tavily 运行时配置。 */
@@ -121,6 +123,21 @@ export interface ChatRuntimeRendererToolExecutionInput {
 /** Renderer 工具执行函数。 */
 export type ChatRuntimeRendererToolExecutor = (input: ChatRuntimeRendererToolExecutionInput) => Promise<AIToolExecutionResult>;
 
+/** 主进程工具执行输入。 */
+export interface ChatRuntimeMainToolExecutionInput {
+  /** runtime 状态。 */
+  runtime: ActiveChatRuntime;
+  /** 工具调用 ID。 */
+  toolCallId: string;
+  /** 工具名称。 */
+  toolName: string;
+  /** 工具输入。 */
+  input: unknown;
+}
+
+/** 主进程工具执行函数。 */
+export type ChatRuntimeMainToolExecutor = (input: ChatRuntimeMainToolExecutionInput) => Promise<AIToolExecutionResult>;
+
 /** Runtime assistant 草稿更新函数。 */
 export type ChatRuntimeAssistantUpdater = (message: ChatMessageRecord) => Promise<void>;
 
@@ -164,6 +181,8 @@ export interface ChatRuntimeServiceDependencies {
   streamExecutor: ChatRuntimeStreamExecutor;
   /** runtime 流式中止函数。 */
   streamAbort: ChatRuntimeStreamAborter;
+  /** Renderer 本地工具超时时间。 */
+  rendererToolTimeoutMs: number;
   /** 创建 runtime 消息 ID。 */
   createMessageId: (kind: ChatRuntimeMessageKind) => string;
   /** 获取当前 ISO 时间。 */

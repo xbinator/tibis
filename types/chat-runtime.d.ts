@@ -2,8 +2,18 @@
  * @file chat-runtime.d.ts
  * @description Shared chat runtime command, event, and context usage types.
  */
-import type { AIMCPRequestConfig, AIServiceError, AITavilyRuntimeConfig, AIToolExecutionResult, AITransportTool, AIUsage } from './ai';
-import type { ChatMessagePart, ChatMessageRecord } from './chat';
+import type {
+  AIMCPRequestConfig,
+  AIServiceError,
+  AITavilyRuntimeConfig,
+  AIToolExecutionError,
+  AIToolExecutionResult,
+  AIToolGrantScope,
+  AIToolRiskLevel,
+  AITransportTool,
+  AIUsage
+} from './ai';
+import type { AIUserChoiceAnswerData, ChatMessageConfirmationCustomInputConfig, ChatMessagePart, ChatMessageRecord } from './chat';
 
 /** Runtime event channel names emitted from main process to renderer. */
 export type ChatRuntimeEventName =
@@ -12,6 +22,8 @@ export type ChatRuntimeEventName =
   | 'chat:runtime:message-deleted'
   | 'chat:runtime:context-usage-updated'
   | 'chat:runtime:tool-request'
+  | 'chat:runtime:confirmation-requested'
+  | 'chat:runtime:bridge-requested'
   | 'chat:runtime:error'
   | 'chat:runtime:complete';
 
@@ -79,6 +91,8 @@ export interface ChatRuntimeSendInput {
   contextWindow?: number;
   /** System prompt context owned by renderer state until main process owns memory. */
   system?: string;
+  /** Current workspace root used by main-process file tools. */
+  workspaceRoot?: string;
   /** Transport tool schemas executable by main process AI runtime. */
   tools?: AITransportTool[];
   /** Tavily runtime config executable in main process. */
@@ -105,6 +119,8 @@ export interface ChatRuntimeContinueInput {
   contextWindow?: number;
   /** System prompt context owned by renderer state until main process owns memory. */
   system?: string;
+  /** Current workspace root used by main-process file tools. */
+  workspaceRoot?: string;
   /** Transport tool schemas executable by main process AI runtime. */
   tools?: AITransportTool[];
   /** Tavily runtime config executable in main process. */
@@ -113,6 +129,101 @@ export interface ChatRuntimeContinueInput {
   mcp?: AIMCPRequestConfig;
   /** Renderer-updated message snapshot to continue from. */
   messages: ChatRuntimeMessageSnapshot[];
+}
+
+/** Submit-user-choice command input for resuming an awaiting assistant turn from persisted runtime messages. */
+export interface ChatRuntimeSubmitUserChoiceInput {
+  /** Existing session id. */
+  sessionId: string;
+  /** Renderer chat panel id. */
+  clientId: string;
+  /** Agent id for this turn. */
+  agentId: string;
+  /** Parent runtime id for future multi-agent flows. */
+  parentRuntimeId?: string;
+  /** Current model context window for usage estimation. */
+  contextWindow?: number;
+  /** System prompt context owned by renderer state until main process owns memory. */
+  system?: string;
+  /** Current workspace root used by main-process file tools. */
+  workspaceRoot?: string;
+  /** Transport tool schemas executable by main process AI runtime. */
+  tools?: AITransportTool[];
+  /** Tavily runtime config executable in main process. */
+  tavily?: AITavilyRuntimeConfig;
+  /** MCP runtime config executable in main process. */
+  mcp?: AIMCPRequestConfig;
+  /** User choice answer submitted by renderer UI. */
+  answer: AIUserChoiceAnswerData;
+}
+
+/** Runtime confirmation decision submitted by renderer UI. */
+export type ChatRuntimeConfirmationDecision =
+  | { approved: false }
+  | {
+      /** Whether the operation is approved. */
+      approved: true;
+      /** Optional permission grant scope. */
+      grantScope?: AIToolGrantScope;
+    };
+
+/** Runtime confirmation request shown by renderer UI. */
+export interface ChatRuntimeConfirmationRequest {
+  /** Related tool call id. */
+  toolCallId?: string;
+  /** Tool name. */
+  toolName: string;
+  /** Confirmation title. */
+  title: string;
+  /** Confirmation description. */
+  description: string;
+  /** Operation risk level. */
+  riskLevel: AIToolRiskLevel;
+  /** Text before the operation. */
+  beforeText?: string;
+  /** Text after the operation. */
+  afterText?: string;
+  /** Whether renderer may offer remembered approvals. */
+  allowRemember?: boolean;
+  /** Available remembered approval scopes. */
+  rememberScopes?: AIToolGrantScope[];
+  /** Custom input config associated with the confirmation UI. */
+  customInput?: ChatMessageConfirmationCustomInputConfig;
+}
+
+/** Submit-confirmation command input. */
+export interface ChatRuntimeSubmitConfirmationInput {
+  /** Runtime id waiting for this confirmation. */
+  runtimeId: string;
+  /** Confirmation request id. */
+  confirmationId: string;
+  /** Renderer confirmation decision. */
+  decision: ChatRuntimeConfirmationDecision;
+}
+
+/** Runtime renderer bridge result. */
+export type ChatRuntimeBridgeResult =
+  | {
+      /** Bridge request succeeded. */
+      status: 'success';
+      /** JSON-cloneable bridge payload. */
+      data: unknown;
+    }
+  | {
+      /** Bridge request failed. */
+      status: 'failure';
+      /** Failure details. */
+      error: AIToolExecutionError;
+    };
+
+/** Submit-bridge-response command input. */
+export interface ChatRuntimeBridgeResponseInput {
+  /** Runtime id waiting for this bridge response. */
+  runtimeId: string;
+  /** Bridge request id. */
+  requestId: string;
+  /** Bridge result. */
+  result: ChatRuntimeBridgeResult;
 }
 
 /** Abort command input. */
@@ -296,6 +407,28 @@ export interface ChatRuntimeToolRequestEvent extends ChatRuntimeEventBase {
   input: unknown;
 }
 
+/** Runtime confirmation request sent to renderer. */
+export interface ChatRuntimeConfirmationRequestEvent extends ChatRuntimeEventBase {
+  /** Confirmation request id. */
+  confirmationId: string;
+  /** Related tool call id. */
+  toolCallId?: string;
+  /** Confirmation request shown by UI. */
+  request: ChatRuntimeConfirmationRequest;
+}
+
+/** Runtime renderer bridge request sent to renderer. */
+export interface ChatRuntimeBridgeRequestEvent extends ChatRuntimeEventBase {
+  /** Bridge request id. */
+  requestId: string;
+  /** Related tool call id. */
+  toolCallId?: string;
+  /** Bridge request kind. */
+  kind: string;
+  /** JSON-cloneable bridge request payload. */
+  payload?: unknown;
+}
+
 /** Runtime error event. */
 export interface ChatRuntimeErrorEvent extends ChatRuntimeEventBase {
   /** Normalized AI or runtime error. */
@@ -315,6 +448,8 @@ export interface ChatRuntimeEventMap {
   'chat:runtime:message-deleted': ChatRuntimeMessageDeletedEvent;
   'chat:runtime:context-usage-updated': ChatRuntimeContextUsageEvent;
   'chat:runtime:tool-request': ChatRuntimeToolRequestEvent;
+  'chat:runtime:confirmation-requested': ChatRuntimeConfirmationRequestEvent;
+  'chat:runtime:bridge-requested': ChatRuntimeBridgeRequestEvent;
   'chat:runtime:error': ChatRuntimeErrorEvent;
   'chat:runtime:complete': ChatRuntimeCompleteEvent;
 }

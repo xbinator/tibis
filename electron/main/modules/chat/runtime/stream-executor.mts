@@ -3,11 +3,37 @@
  * @description ChatRuntime 主进程模型流式执行器。
  */
 import type { ChatModelResolver } from './chat-model-resolver.mjs';
-import type { ActiveChatRuntime, ChatRuntimeRendererToolExecutor, ChatRuntimeStreamExecutor, ChatRuntimeStreamExecutorResult } from './types.mjs';
-import type { AIRequestOptions, AIServiceError, AIStreamFinishReason, AIStreamResult, AIUsage, AIToolExecutionResult } from 'types/ai';
+import type {
+  ActiveChatRuntime,
+  ChatRuntimeMainToolExecutor,
+  ChatRuntimeRendererToolExecutor,
+  ChatRuntimeStreamExecutor,
+  ChatRuntimeStreamExecutorResult
+} from './types.mjs';
+import type { AIRequestOptions, AIServiceError, AIStreamFinishReason, AIStreamResult, AIUsage, AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
 import { toRuntimeModelMessages } from './model-message-context.mjs';
+import { MAIN_PROCESS_TOOL_NAMES } from './tools/constants.mjs';
+
+/** Renderer 本地工具默认超时时间。 */
+const DEFAULT_RENDERER_TOOL_TIMEOUT_MS = 60_000;
+
+/** 可透传到工具失败结果的稳定错误码。 */
+const TOOL_EXECUTION_ERROR_CODES = new Set([
+  'INVALID_INPUT',
+  'NO_ACTIVE_DOCUMENT',
+  'NO_SELECTION',
+  'NO_CURSOR',
+  'PERMISSION_DENIED',
+  'USER_CANCELLED',
+  'EDITOR_UNAVAILABLE',
+  'STALE_CONTEXT',
+  'TOOL_TIMEOUT',
+  'UNSUPPORTED_PROVIDER',
+  'CONFIRMATION_DISMISSED',
+  'EXECUTION_FAILED'
+]);
 
 /** Runtime 模型流式调用函数。 */
 export type RuntimeStreamText = (
@@ -23,6 +49,10 @@ export interface RuntimeStreamExecutorDependencies {
   streamText: RuntimeStreamText;
   /** Renderer 本地工具执行函数。 */
   executeRendererTool?: ChatRuntimeRendererToolExecutor;
+  /** 主进程工具执行函数。 */
+  executeMainTool?: ChatRuntimeMainToolExecutor;
+  /** Renderer 本地工具超时时间。 */
+  rendererToolTimeoutMs?: number;
 }
 
 /** AI SDK 文本增量 chunk。 */
@@ -248,6 +278,114 @@ function normalizeRuntimeError(error: unknown): AIServiceError {
 }
 
 /**
+ * 从未知错误中读取可用于工具结果的稳定错误码。
+ * @param error - 原始异常
+ * @returns 工具错误码
+ */
+function getToolExecutionErrorCode(error: unknown): AIToolExecutionError['code'] {
+  if (isRecord(error) && typeof error.code === 'string' && TOOL_EXECUTION_ERROR_CODES.has(error.code)) {
+    return error.code as AIToolExecutionError['code'];
+  }
+
+  return 'EXECUTION_FAILED';
+}
+
+/**
+ * 将工具异常转为工具失败结果。
+ * @param toolName - 工具名称
+ * @param error - 原始异常
+ * @returns 工具失败结果
+ */
+function createToolFailureResultFromError(toolName: string, error: unknown): AIToolExecutionResult {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    toolName,
+    status: 'failure',
+    error: {
+      code: getToolExecutionErrorCode(error),
+      message
+    }
+  };
+}
+
+/**
+ * 创建 renderer 工具超时结果。
+ * @param toolName - 工具名称
+ * @param timeoutMs - 超时时间
+ * @returns 工具失败结果
+ */
+function createRendererToolTimeoutResult(toolName: string, timeoutMs: number): AIToolExecutionResult {
+  return {
+    toolName,
+    status: 'failure',
+    error: {
+      code: 'TOOL_TIMEOUT',
+      message: `Renderer tool ${toolName} timed out after ${timeoutMs}ms`
+    }
+  };
+}
+
+/**
+ * 规整 renderer 工具超时时间。
+ * @param timeoutMs - 原始超时时间
+ * @returns 可使用的超时时间
+ */
+function normalizeRendererToolTimeoutMs(timeoutMs: number | undefined): number {
+  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return DEFAULT_RENDERER_TOOL_TIMEOUT_MS;
+
+  return Math.floor(timeoutMs);
+}
+
+/**
+ * 执行 renderer 本地工具，并把异常或超时转换为工具失败结果。
+ * @param executeRendererTool - renderer 工具执行器
+ * @param input - renderer 工具输入
+ * @param timeoutMs - 超时时间
+ * @returns 工具执行结果
+ */
+async function executeRendererToolSafely(
+  executeRendererTool: ChatRuntimeRendererToolExecutor,
+  input: Parameters<ChatRuntimeRendererToolExecutor>[0],
+  timeoutMs: number
+): Promise<AIToolExecutionResult> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      executeRendererTool(input),
+      new Promise<AIToolExecutionResult>((resolve) => {
+        timeoutId = setTimeout(() => {
+          resolve(createRendererToolTimeoutResult(input.toolName, timeoutMs));
+        }, timeoutMs);
+      })
+    ]);
+  } catch (error: unknown) {
+    return createToolFailureResultFromError(input.toolName, error);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+/**
+ * 执行主进程工具，并把异常转换为工具失败结果。
+ * @param executeMainTool - 主进程工具执行器
+ * @param input - 主进程工具输入
+ * @returns 工具执行结果
+ */
+async function executeMainToolSafely(
+  executeMainTool: ChatRuntimeMainToolExecutor,
+  input: Parameters<ChatRuntimeMainToolExecutor>[0]
+): Promise<AIToolExecutionResult> {
+  try {
+    return await executeMainTool(input);
+  } catch (error: unknown) {
+    return createToolFailureResultFromError(input.toolName, error);
+  }
+}
+
+/**
  * 将文本增量写入 assistant 消息。
  * @param message - assistant 消息
  * @param text - 文本增量
@@ -381,13 +519,22 @@ function appendToolResult(message: ChatMessageRecord, chunk: RuntimeToolResultCh
 }
 
 /**
+ * 判断工具是否由主进程执行。
+ * @param toolName - 工具名称
+ * @returns 是否为主进程工具
+ */
+function isMainProcessTool(toolName: string): boolean {
+  return MAIN_PROCESS_TOOL_NAMES.has(toolName);
+}
+
+/**
  * 判断工具是否由 renderer 本地执行。
  * @param runtime - runtime 状态
  * @param toolName - 工具名称
  * @returns 是否为 renderer 工具
  */
 function isRendererManagedTool(runtime: ActiveChatRuntime, toolName: string): boolean {
-  return Boolean(runtime.tools?.some((tool) => tool.name === toolName));
+  return !isMainProcessTool(toolName) && Boolean(runtime.tools?.some((tool) => tool.name === toolName));
 }
 
 /**
@@ -453,7 +600,8 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
 
     let usage: AIUsage | undefined;
     let finishReason: AIStreamFinishReason | undefined;
-    let shouldContinueAfterRendererTool = false;
+    let shouldContinueAfterExecutedTool = false;
+    const rendererToolTimeoutMs = normalizeRendererToolTimeoutMs(dependencies.rendererToolTimeoutMs);
     for await (const rawChunk of result.stream as AsyncIterable<unknown>) {
       const chunk = toRuntimeStreamChunk(rawChunk);
       if (!chunk) continue;
@@ -483,20 +631,31 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       } else if (chunk.type === 'tool-call') {
         appendToolCall(assistantMessage, chunk);
         await updateAssistant(assistantMessage);
-        if (dependencies.executeRendererTool && isRendererManagedTool(runtime, chunk.toolName)) {
-          const toolResult = await dependencies.executeRendererTool({
-            runtime,
-            toolCallId: chunk.toolCallId,
-            toolName: chunk.toolName,
-            input: chunk.input
-          });
+        const toolExecutionInput = {
+          runtime,
+          toolCallId: chunk.toolCallId,
+          toolName: chunk.toolName,
+          input: chunk.input
+        };
+        if (dependencies.executeMainTool && isMainProcessTool(chunk.toolName)) {
+          const toolResult = await executeMainToolSafely(dependencies.executeMainTool, toolExecutionInput);
           appendToolResult(assistantMessage, {
             type: 'tool-result',
             toolCallId: chunk.toolCallId,
             toolName: chunk.toolName,
             result: toolResult
           });
-          shouldContinueAfterRendererTool = toolResult.status !== 'awaiting_user_input';
+          shouldContinueAfterExecutedTool = toolResult.status !== 'awaiting_user_input';
+          await updateAssistant(assistantMessage);
+        } else if (dependencies.executeRendererTool && isRendererManagedTool(runtime, chunk.toolName)) {
+          const toolResult = await executeRendererToolSafely(dependencies.executeRendererTool, toolExecutionInput, rendererToolTimeoutMs);
+          appendToolResult(assistantMessage, {
+            type: 'tool-result',
+            toolCallId: chunk.toolCallId,
+            toolName: chunk.toolName,
+            result: toolResult
+          });
+          shouldContinueAfterExecutedTool = toolResult.status !== 'awaiting_user_input';
           await updateAssistant(assistantMessage);
         }
       } else if (chunk.type === 'tool-result') {
@@ -510,7 +669,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       await updateAssistant(assistantMessage);
     }
 
-    const shouldContinue = finishReason === 'tool-calls' && shouldContinueAfterRendererTool;
+    const shouldContinue = finishReason === 'tool-calls' && shouldContinueAfterExecutedTool;
     return shouldContinue ? { usage, shouldContinue } : { usage };
   };
 }

@@ -5,7 +5,14 @@
  */
 import type { AIToolContext, AIToolExecutor } from 'types/ai';
 import type { ChatMessageRecord } from 'types/chat';
-import type { ChatRuntimeEventMap, ChatRuntimeMessageDeletedEvent, ChatRuntimeMessageEvent, ChatRuntimeToolRequestEvent } from 'types/chat-runtime';
+import type {
+  ChatRuntimeBridgeRequestEvent,
+  ChatRuntimeConfirmationRequestEvent,
+  ChatRuntimeEventMap,
+  ChatRuntimeMessageDeletedEvent,
+  ChatRuntimeMessageEvent,
+  ChatRuntimeToolRequestEvent
+} from 'types/chat-runtime';
 import { effectScope, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatRuntime } from '@/components/BChat/hooks/useChatRuntime';
@@ -27,6 +34,10 @@ interface RuntimeListeners {
   contextUsage?: (event: ChatRuntimeEventMap['chat:runtime:context-usage-updated']) => void;
   /** 工具请求监听器。 */
   toolRequest?: (event: ChatRuntimeToolRequestEvent) => void;
+  /** 确认请求监听器。 */
+  confirmationRequest?: (event: ChatRuntimeConfirmationRequestEvent) => void;
+  /** Bridge 请求监听器。 */
+  bridgeRequest?: (event: ChatRuntimeBridgeRequestEvent) => void;
 }
 
 const listeners = vi.hoisted<RuntimeListeners>(() => ({}));
@@ -41,6 +52,9 @@ const executeToolCallMock = vi.hoisted(() =>
 const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeSend: vi.fn(),
   chatRuntimeContinue: vi.fn(),
+  chatRuntimeSubmitUserChoice: vi.fn(),
+  chatRuntimeSubmitConfirmation: vi.fn(),
+  chatRuntimeSubmitBridgeResponse: vi.fn(),
   chatRuntimeAbort: vi.fn(),
   chatRuntimeSubmitToolResult: vi.fn(),
   chatRuntimeOnMessageCreated: vi.fn((callback: (event: ChatRuntimeMessageEvent) => void) => {
@@ -69,6 +83,14 @@ const electronAPIMock = vi.hoisted(() => ({
   }),
   chatRuntimeOnToolRequest: vi.fn((callback: (event: ChatRuntimeToolRequestEvent) => void) => {
     listeners.toolRequest = callback;
+    return vi.fn();
+  }),
+  chatRuntimeOnConfirmationRequested: vi.fn((callback: (event: ChatRuntimeConfirmationRequestEvent) => void) => {
+    listeners.confirmationRequest = callback;
+    return vi.fn();
+  }),
+  chatRuntimeOnBridgeRequested: vi.fn((callback: (event: ChatRuntimeBridgeRequestEvent) => void) => {
+    listeners.bridgeRequest = callback;
     return vi.fn();
   })
 }));
@@ -107,9 +129,14 @@ describe('useChatRuntime', (): void => {
     listeners.error = undefined;
     listeners.contextUsage = undefined;
     listeners.toolRequest = undefined;
+    listeners.confirmationRequest = undefined;
+    listeners.bridgeRequest = undefined;
     executeToolCallMock.mockClear();
     electronAPIMock.chatRuntimeSend.mockReset();
     electronAPIMock.chatRuntimeContinue.mockReset();
+    electronAPIMock.chatRuntimeSubmitUserChoice.mockReset();
+    electronAPIMock.chatRuntimeSubmitConfirmation.mockReset();
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockReset();
     electronAPIMock.chatRuntimeAbort.mockReset();
     electronAPIMock.chatRuntimeSubmitToolResult.mockReset();
     electronAPIMock.chatRuntimeOnMessageCreated.mockClear();
@@ -119,6 +146,8 @@ describe('useChatRuntime', (): void => {
     electronAPIMock.chatRuntimeOnError.mockClear();
     electronAPIMock.chatRuntimeOnContextUsageUpdated.mockClear();
     electronAPIMock.chatRuntimeOnToolRequest.mockClear();
+    electronAPIMock.chatRuntimeOnConfirmationRequested.mockClear();
+    electronAPIMock.chatRuntimeOnBridgeRequested.mockClear();
     electronAPIMock.chatRuntimeSend.mockResolvedValue({
       ok: true,
       data: { runtimeId: 'runtime-1', sessionId: 'session-1' }
@@ -127,6 +156,12 @@ describe('useChatRuntime', (): void => {
       ok: true,
       data: { runtimeId: 'runtime-continued', sessionId: 'session-1' }
     });
+    electronAPIMock.chatRuntimeSubmitUserChoice.mockResolvedValue({
+      ok: true,
+      data: { runtimeId: 'runtime-choice', sessionId: 'session-1' }
+    });
+    electronAPIMock.chatRuntimeSubmitConfirmation.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
   });
@@ -316,6 +351,135 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('submits user choice answers through main process runtime without sending message snapshots', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      const result = await runtime.submitUserChoice({
+        sessionId: 'session-1',
+        contextWindow: 200000,
+        answer: {
+          questionId: 'question-1',
+          toolCallId: 'tool-call-1',
+          answers: ['yes'],
+          otherText: ''
+        }
+      });
+
+      expect(result).toEqual({ runtimeId: 'runtime-choice', sessionId: 'session-1' });
+      expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        contextWindow: 200000,
+        clientId: 'bchat',
+        agentId: 'default',
+        answer: {
+          questionId: 'question-1',
+          toolCallId: 'tool-call-1',
+          answers: ['yes'],
+          otherText: ''
+        }
+      });
+      expect(electronAPIMock.chatRuntimeSubmitUserChoice.mock.calls[0]?.[0]).not.toHaveProperty('messages');
+      expect(runtime.activeRuntimeId.value).toBe('runtime-choice');
+    });
+
+    scope.stop();
+  });
+
+  it('routes runtime confirmation requests to the confirmation callback and submits decisions', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const requestConfirmation = vi.fn(async () => ({ approved: true as const, grantScope: 'session' as const }));
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        requestConfirmation
+      });
+
+      listeners.confirmationRequest?.({
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-1',
+        toolCallId: 'tool-call-1',
+        request: {
+          toolCallId: 'tool-call-1',
+          toolName: 'write_file',
+          title: '写入文件',
+          description: '是否写入？',
+          riskLevel: 'write'
+        }
+      });
+      await Promise.resolve();
+
+      expect(requestConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'write_file',
+          title: '写入文件'
+        })
+      );
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-1',
+        decision: { approved: true, grantScope: 'session' }
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('routes runtime bridge requests to the bridge handler and submits responses', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const handleBridgeRequest = vi.fn(async () => ({ title: 'index.ts', content: 'hello' }));
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        handleBridgeRequest
+      });
+
+      listeners.bridgeRequest?.({
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        toolCallId: 'tool-call-1',
+        kind: 'document-snapshot',
+        payload: { includeSelection: true }
+      });
+      await Promise.resolve();
+
+      expect(handleBridgeRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'document-snapshot',
+          payload: { includeSelection: true }
+        })
+      );
+      expect(electronAPIMock.chatRuntimeSubmitBridgeResponse).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        requestId: 'bridge-1',
+        result: {
+          status: 'success',
+          data: { title: 'index.ts', content: 'hello' }
+        }
+      });
+    });
+
+    scope.stop();
+  });
+
   it('keeps the active runtime when abort command fails', async (): Promise<void> => {
     const messages = ref<Message[]>([]);
     const scope = effectScope();
@@ -454,6 +618,88 @@ describe('useChatRuntime', (): void => {
         runtimeId: 'runtime-1',
         toolCallId: 'tool-call-1',
         result: { toolName: 'read_file', status: 'success', data: { content: 'ok' } }
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('preserves renderer tool error codes when submitting failed runtime tool results', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+    const error = new Error('用户取消确认') as Error & { code: string };
+    error.code = 'CONFIRMATION_DISMISSED';
+    executeToolCallMock.mockRejectedValueOnce(error);
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        tools: []
+      });
+
+      listeners.toolRequest?.({
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        toolCallId: 'tool-call-1',
+        toolName: 'write_file',
+        input: { path: 'src/index.ts' }
+      });
+      await Promise.resolve();
+
+      expect(electronAPIMock.chatRuntimeSubmitToolResult).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        toolCallId: 'tool-call-1',
+        result: {
+          toolName: 'write_file',
+          status: 'failure',
+          error: {
+            code: 'CONFIRMATION_DISMISSED',
+            message: '用户取消确认'
+          }
+        }
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('fails same-client runtime tool requests when the session has switched', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-2',
+        tools: []
+      });
+
+      listeners.toolRequest?.({
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        toolCallId: 'tool-call-1',
+        toolName: 'read_current_document',
+        input: {}
+      });
+      await Promise.resolve();
+
+      expect(executeToolCallMock).not.toHaveBeenCalled();
+      expect(electronAPIMock.chatRuntimeSubmitToolResult).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        toolCallId: 'tool-call-1',
+        result: {
+          toolName: 'read_current_document',
+          status: 'failure',
+          error: {
+            code: 'EDITOR_UNAVAILABLE',
+            message: '当前会话已切换，无法执行工具'
+          }
+        }
       });
     });
 

@@ -25,7 +25,7 @@ export type ResolveResult =
   | { error: AIToolExecutionResult<never> };
 
 /**
- * 未保存草稿读写能力接口，FileEditTool 和 FileWriteTool 的 options 均满足此约束。
+ * 未保存草稿读写能力接口，供文件编辑与写入工具共用。
  */
 export interface UnsavedDraftOptions {
   /** 按草稿 ID 读取未保存文件。 */

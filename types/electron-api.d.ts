@@ -20,8 +20,11 @@ import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
   ChatRuntimeAutoNameResult,
+  ChatRuntimeBridgeRequestEvent,
+  ChatRuntimeBridgeResponseInput,
   ChatRuntimeCompactInput,
   ChatRuntimeCompactResult,
+  ChatRuntimeConfirmationRequestEvent,
   ChatRuntimeContinueInput,
   ChatRuntimeContextUsageEvent,
   ChatRuntimeEventMap,
@@ -30,6 +33,8 @@ import type {
   ChatRuntimeMessageEvent,
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
+  ChatRuntimeSubmitConfirmationInput,
+  ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeSubmitToolResultInput,
   ChatRuntimeToolRequestEvent
 } from './chat-runtime';
@@ -577,6 +582,9 @@ export interface ElectronAPI {
   // Chat runtime 操作
   chatRuntimeSend: (input: ChatRuntimeSendInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
   chatRuntimeContinue: (input: ChatRuntimeContinueInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
+  chatRuntimeSubmitUserChoice: (input: ChatRuntimeSubmitUserChoiceInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeStartResult>>;
+  chatRuntimeSubmitConfirmation: (input: ChatRuntimeSubmitConfirmationInput) => Promise<ChatRuntimeHandlerResult<void>>;
+  chatRuntimeSubmitBridgeResponse: (input: ChatRuntimeBridgeResponseInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeAutoName: (input: ChatRuntimeAutoNameInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeAutoNameResult>>;
   chatRuntimeAbort: (input: ChatRuntimeAbortInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeCompact: (input: ChatRuntimeCompactInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeCompactResult>>;
@@ -586,6 +594,8 @@ export interface ElectronAPI {
   chatRuntimeOnMessageDeleted: (callback: (event: ChatRuntimeMessageDeletedEvent) => void) => () => void;
   chatRuntimeOnContextUsageUpdated: (callback: (event: ChatRuntimeContextUsageEvent) => void) => () => void;
   chatRuntimeOnToolRequest: (callback: (event: ChatRuntimeToolRequestEvent) => void) => () => void;
+  chatRuntimeOnConfirmationRequested: (callback: (event: ChatRuntimeConfirmationRequestEvent) => void) => () => void;
+  chatRuntimeOnBridgeRequested: (callback: (event: ChatRuntimeBridgeRequestEvent) => void) => () => void;
   chatRuntimeOnError: (callback: (event: ChatRuntimeEventMap['chat:runtime:error']) => void) => () => void;
   chatRuntimeOnComplete: (callback: (event: ChatRuntimeEventMap['chat:runtime:complete']) => void) => () => void;
 

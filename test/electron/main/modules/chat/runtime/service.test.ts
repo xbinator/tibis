@@ -48,6 +48,26 @@ function createContinueInput(overrides: Partial<ChatRuntimeContinueInput> = {}):
 }
 
 /**
+ * 创建聊天消息记录测试夹具。
+ * @param id - 消息 ID
+ * @param role - 消息角色
+ * @param content - 文本内容
+ * @param createdAt - 创建时间
+ * @returns 聊天消息记录
+ */
+function createMessageRecord(id: string, role: ChatMessageRecord['role'], content: string, createdAt: string): ChatMessageRecord {
+  return {
+    id,
+    sessionId: 'session-1',
+    role,
+    content,
+    parts: content ? [{ type: 'text', text: content }] : [],
+    createdAt,
+    finished: true
+  };
+}
+
+/**
  * 创建收集 runtime 事件的 emitter。
  * @returns 事件列表与 emitter
  */
@@ -205,6 +225,26 @@ describe('chat runtime service shell', (): void => {
       status: 'failed',
       errorMessage: 'network failed'
     });
+  });
+
+  it('passes workspaceRoot into active runtimes for main-process file tools', async (): Promise<void> => {
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async () => ({}));
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      messageWriter: createNoopMessageWriter(),
+      messageReader: createNoopMessageReader(),
+      streamExecutor
+    });
+
+    await service.send(createInput({ content: 'read file', workspaceRoot: '/workspace' }));
+    await flushRuntimeTasks();
+
+    expect(streamExecutor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtime: expect.objectContaining({ workspaceRoot: '/workspace' })
+      }),
+      expect.any(Function)
+    );
   });
 
   it('starts a runtime and emits a complete event for the shell implementation', async (): Promise<void> => {
@@ -377,6 +417,62 @@ describe('chat runtime service shell', (): void => {
     expect(completeEvent?.payload).toMatchObject({
       usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 }
     });
+  });
+
+  it('auto-compacts after completion when provider usage exceeds usable input budget', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const compact = vi.fn().mockResolvedValue({ status: 'success' as const, messageId: 'compression-1', recordId: 'record-1' });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: createNoopMessageWriter(),
+      compactionService: { compact },
+      streamExecutor: async ({ assistantMessage }, updateAssistant) => {
+        assistantMessage.content = 'large answer';
+        assistantMessage.parts = [{ type: 'text', text: 'large answer' }];
+        assistantMessage.loading = false;
+        assistantMessage.finished = true;
+        assistantMessage.usage = { inputTokens: 6_000, outputTokens: 2_000, totalTokens: 8_000 };
+        await updateAssistant(assistantMessage);
+
+        return { usage: assistantMessage.usage };
+      }
+    });
+
+    const result = await service.send(createInput({ content: 'hello runtime', contextWindow: 20_000 }));
+    await flushRuntimeTasks();
+
+    expect(compact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeId: result.runtimeId,
+        sessionId: 'session-1',
+        clientId: 'client-1',
+        agentId: 'agent-1',
+        reason: 'auto',
+        contextWindow: 20_000,
+        messages: expect.arrayContaining([
+          expect.objectContaining({ id: 'user-message-1', role: 'user' }),
+          expect.objectContaining({ id: 'assistant-message-1', role: 'assistant', usage: { inputTokens: 6_000, outputTokens: 2_000, totalTokens: 8_000 } })
+        ])
+      })
+    );
+    const contextUsageEvent = collector.events
+      .filter((event) => event.name === 'chat:runtime:context-usage-updated' && event.payload.runtimeId === result.runtimeId)
+      .at(-1);
+    expect(contextUsageEvent?.payload).toMatchObject({
+      snapshot: expect.objectContaining({
+        providerUsageTokens: 8_000,
+        status: 'danger'
+      })
+    });
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:complete',
+        payload: expect.objectContaining({ runtimeId: result.runtimeId, usage: { inputTokens: 6_000, outputTokens: 2_000, totalTokens: 8_000 } })
+      })
+    );
   });
 
   it('returns the runtime start result before the stream executor finishes', async (): Promise<void> => {
@@ -590,6 +686,295 @@ describe('chat runtime service shell', (): void => {
     );
   });
 
+  it('waits for renderer confirmation decisions through the runtime confirmation bridge', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      messageWriter: createNoopMessageWriter(),
+      messageReader: createNoopMessageReader(),
+      streamExecutor: createNoopStreamExecutor(),
+      keepRuntimeOpenForTest: true
+    });
+
+    const result = await service.send(createInput({ content: 'edit file' }));
+    const decisionPromise = service.requestConfirmation({
+      runtimeId: result.runtimeId,
+      toolCallId: 'tool-call-1',
+      confirmationId: 'confirmation-1',
+      request: {
+        toolCallId: 'tool-call-1',
+        toolName: 'write_file',
+        title: '写入文件',
+        description: '是否写入 src/index.ts？',
+        riskLevel: 'write'
+      }
+    });
+
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:confirmation-requested',
+        payload: expect.objectContaining({
+          runtimeId: result.runtimeId,
+          sessionId: 'session-1',
+          clientId: 'client-1',
+          agentId: 'agent-1',
+          toolCallId: 'tool-call-1',
+          confirmationId: 'confirmation-1',
+          request: expect.objectContaining({ toolName: 'write_file', title: '写入文件' })
+        })
+      })
+    );
+
+    service.submitConfirmation({
+      runtimeId: result.runtimeId,
+      confirmationId: 'confirmation-1',
+      decision: { approved: true, grantScope: 'session' }
+    });
+
+    await expect(decisionPromise).resolves.toEqual({ approved: true, grantScope: 'session' });
+  });
+
+  it('times out renderer confirmation requests when no decision is submitted', async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      const collector = createEventCollector();
+      const service = createChatRuntimeService({
+        emit: collector.emit,
+        messageWriter: createNoopMessageWriter(),
+        messageReader: createNoopMessageReader(),
+        streamExecutor: createNoopStreamExecutor(),
+        keepRuntimeOpenForTest: true
+      });
+
+      const result = await service.send(createInput({ content: 'edit file' }));
+      const decisionPromise = service.requestConfirmation({
+        runtimeId: result.runtimeId,
+        toolCallId: 'tool-call-timeout',
+        confirmationId: 'confirmation-timeout',
+        request: {
+          toolCallId: 'tool-call-timeout',
+          toolName: 'write_file',
+          title: '写入文件',
+          description: '是否写入 src/index.ts？',
+          riskLevel: 'write'
+        }
+      });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      await expect(decisionPromise).resolves.toEqual({ approved: false });
+      expect(() =>
+        service.submitConfirmation({
+          runtimeId: result.runtimeId,
+          confirmationId: 'confirmation-timeout',
+          decision: { approved: true }
+        })
+      ).not.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('waits for renderer bridge responses through the runtime bridge', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      messageWriter: createNoopMessageWriter(),
+      messageReader: createNoopMessageReader(),
+      streamExecutor: createNoopStreamExecutor(),
+      keepRuntimeOpenForTest: true
+    });
+
+    const result = await service.send(createInput({ content: 'read current document' }));
+    const responsePromise = service.requestBridge({
+      runtimeId: result.runtimeId,
+      requestId: 'bridge-1',
+      toolCallId: 'tool-call-1',
+      kind: 'document-snapshot',
+      payload: { includeSelection: true }
+    });
+
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:bridge-requested',
+        payload: expect.objectContaining({
+          runtimeId: result.runtimeId,
+          sessionId: 'session-1',
+          clientId: 'client-1',
+          agentId: 'agent-1',
+          requestId: 'bridge-1',
+          toolCallId: 'tool-call-1',
+          kind: 'document-snapshot',
+          payload: { includeSelection: true }
+        })
+      })
+    );
+
+    service.submitBridgeResponse({
+      runtimeId: result.runtimeId,
+      requestId: 'bridge-1',
+      result: {
+        status: 'success',
+        data: { title: 'index.ts', content: 'hello' }
+      }
+    });
+
+    await expect(responsePromise).resolves.toEqual({
+      status: 'success',
+      data: { title: 'index.ts', content: 'hello' }
+    });
+  });
+
+  it('times out renderer bridge requests when no response is submitted', async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      const collector = createEventCollector();
+      const service = createChatRuntimeService({
+        emit: collector.emit,
+        messageWriter: createNoopMessageWriter(),
+        messageReader: createNoopMessageReader(),
+        streamExecutor: createNoopStreamExecutor(),
+        keepRuntimeOpenForTest: true
+      });
+
+      const result = await service.send(createInput({ content: 'read current document' }));
+      const responsePromise = service.requestBridge({
+        runtimeId: result.runtimeId,
+        requestId: 'bridge-timeout',
+        toolCallId: 'tool-call-timeout',
+        kind: 'document-snapshot',
+        payload: { includeSelection: true }
+      });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      await expect(responsePromise).resolves.toMatchObject({
+        status: 'failure',
+        error: { code: 'TOOL_TIMEOUT' }
+      });
+      expect(() =>
+        service.submitBridgeResponse({
+          runtimeId: result.runtimeId,
+          requestId: 'bridge-timeout',
+          result: { status: 'success', data: { title: 'late' } }
+        })
+      ).not.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('prunes old large tool results after a successful turn', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const largeContent = 'x'.repeat(12_000);
+    const oldAssistant: ChatMessageRecord = {
+      id: 'old-assistant',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: '',
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-old',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/large.ts' },
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { path: 'src/large.ts', totalLines: 400, readLines: 400, content: largeContent }
+          }
+        }
+      ],
+      createdAt: '2026-06-19T00:00:01.000Z',
+      finished: true
+    };
+    const recentAssistant: ChatMessageRecord = {
+      id: 'recent-assistant',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: '',
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-recent',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/recent.ts' },
+          result: {
+            toolName: 'read_file',
+            status: 'success',
+            data: { path: 'src/recent.ts', totalLines: 1, readLines: 1, content: largeContent }
+          }
+        }
+      ],
+      createdAt: '2026-06-19T00:00:05.000Z',
+      finished: true
+    };
+    const persistedMessages = [
+      createMessageRecord('old-user', 'user', 'old question', '2026-06-19T00:00:00.000Z'),
+      oldAssistant,
+      createMessageRecord('middle-user', 'user', 'middle question', '2026-06-19T00:00:02.000Z'),
+      createMessageRecord('middle-assistant', 'assistant', 'middle answer', '2026-06-19T00:00:03.000Z'),
+      createMessageRecord('recent-user', 'user', 'recent question', '2026-06-19T00:00:04.000Z'),
+      recentAssistant
+    ];
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:06.000Z',
+      messageReader: { getMessages: () => persistedMessages },
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      streamExecutor: async ({ assistantMessage }, updateAssistant) => {
+        assistantMessage.content = 'done';
+        assistantMessage.parts = [{ type: 'text', text: 'done' }];
+        assistantMessage.loading = false;
+        assistantMessage.finished = true;
+        await updateAssistant(assistantMessage);
+        return {};
+      }
+    });
+
+    const result = await service.send(createInput({ content: 'current question' }));
+    await flushRuntimeTasks();
+
+    const prunedMessage = updatedMessages.find((message) => message.id === 'old-assistant');
+    const oldToolPart = prunedMessage?.parts[0];
+    expect(oldToolPart).toMatchObject({
+      type: 'tool',
+      toolCallId: 'tool-call-old',
+      toolName: 'read_file',
+      status: 'done',
+      result: {
+        toolName: 'read_file',
+        status: 'success',
+        data: expect.objectContaining({
+          pruned: true,
+          path: 'src/large.ts',
+          totalLines: 400,
+          readLines: 400
+        })
+      }
+    });
+    expect(JSON.stringify(oldToolPart)).not.toContain(largeContent);
+    expect(updatedMessages.some((message) => message.id === 'recent-assistant')).toBe(false);
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:message-updated',
+        payload: expect.objectContaining({
+          runtimeId: result.runtimeId,
+          message: expect.objectContaining({ id: 'old-assistant' })
+        })
+      })
+    );
+  });
+
   it('accumulates usage from multiple continuation stream rounds', async (): Promise<void> => {
     const collector = createEventCollector();
     const updatedMessages: ChatMessageRecord[] = [];
@@ -730,6 +1115,124 @@ describe('chat runtime service shell', (): void => {
     );
   });
 
+  it('submits a user choice answer from persisted messages and continues the runtime', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const userMessage: ChatMessageRecord = {
+      id: 'user-1',
+      sessionId: 'session-1',
+      role: 'user',
+      content: 'choose',
+      parts: [{ type: 'text', text: 'choose' }],
+      createdAt: '2026-06-19T00:00:00.000Z',
+      finished: true
+    };
+    const assistantMessage: ChatMessageRecord = {
+      id: 'assistant-1',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: '',
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-1',
+          toolName: 'ask_user_choice',
+          status: 'done',
+          input: { question: 'Continue?' },
+          result: {
+            toolName: 'ask_user_choice',
+            status: 'awaiting_user_input',
+            data: {
+              questionId: 'question-1',
+              toolCallId: 'tool-call-1',
+              question: 'Continue?',
+              mode: 'single',
+              options: [{ label: 'Yes', value: 'yes' }]
+            }
+          }
+        }
+      ],
+      createdAt: '2026-06-19T00:00:01.000Z',
+      finished: false,
+      loading: false
+    };
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ sourceMessages, assistantMessage: draft }, updateAssistant) => {
+      expect(sourceMessages?.find((message) => message.id === 'assistant-1')?.parts[0]).toMatchObject({
+        type: 'tool',
+        result: {
+          status: 'success',
+          data: {
+            questionId: 'question-1',
+            toolCallId: 'tool-call-1',
+            answers: ['yes']
+          }
+        }
+      });
+      draft.content = 'continued answer';
+      draft.parts = [...draft.parts, { type: 'text', text: 'continued answer' }];
+      draft.loading = false;
+      draft.finished = true;
+      await updateAssistant(draft);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:02.000Z',
+      messageReader: { getMessages: () => [userMessage, assistantMessage] },
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      streamExecutor
+    });
+
+    const result = await service.submitUserChoice({
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      contextWindow: 200_000,
+      answer: {
+        questionId: 'question-1',
+        toolCallId: 'tool-call-1',
+        answers: ['yes']
+      }
+    });
+    await flushRuntimeTasks();
+
+    expect(result.runtimeId).toMatch(/^runtime-/);
+    expect(streamExecutor).toHaveBeenCalledOnce();
+    expect(updatedMessages[0]).toEqual(
+      expect.objectContaining({
+        id: 'assistant-1',
+        runtimeId: result.runtimeId,
+        loading: true,
+        finished: false,
+        parts: [
+          expect.objectContaining({
+            result: {
+              toolName: 'ask_user_choice',
+              status: 'success',
+              data: {
+                questionId: 'question-1',
+                toolCallId: 'tool-call-1',
+                answers: ['yes']
+              }
+            }
+          })
+        ]
+      })
+    );
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:complete',
+        payload: expect.objectContaining({ runtimeId: result.runtimeId })
+      })
+    );
+  });
+
   it('marks assistant message as failed and emits runtime error when stream executor fails', async (): Promise<void> => {
     const collector = createEventCollector();
     const updatedMessages: Array<ChatRuntimeEventMap['chat:runtime:message-updated']['message']> = [];
@@ -766,6 +1269,168 @@ describe('chat runtime service shell', (): void => {
     const completeEvent = collector.events.find((event) => event.name === 'chat:runtime:complete' && event.payload.runtimeId === result.runtimeId);
     expect(errorEvent?.payload).toMatchObject({ error: runtimeError });
     expect(completeEvent).toBeDefined();
+  });
+
+  it('compacts and replays the user turn when the provider reports context overflow', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const priorMessage = createInput({ content: 'prior' });
+    const persistedPrior: ChatMessageRecord = {
+      id: 'prior-user',
+      sessionId: 'session-1',
+      role: 'user',
+      content: priorMessage.content,
+      parts: [{ type: 'text', text: priorMessage.content }],
+      createdAt: '2026-06-19T00:00:00.000Z',
+      finished: true
+    };
+    const compressionBoundary: ChatMessageRecord = {
+      id: 'compression-1',
+      sessionId: 'session-1',
+      role: 'compression',
+      content: 'COMPRESSED_CONTEXT',
+      parts: [{ type: 'text', text: 'COMPRESSED_CONTEXT' }],
+      createdAt: '2026-06-19T00:00:00.000Z',
+      finished: true,
+      compression: {
+        status: 'success',
+        recordText: 'COMPRESSED_CONTEXT',
+        coveredUntilMessageId: 'prior-user'
+      }
+    };
+    const getMessages = vi.fn<() => ChatMessageRecord[]>().mockReturnValueOnce([persistedPrior]).mockReturnValueOnce([compressionBoundary]);
+    const overflowError = { code: 'REQUEST_FAILED', message: 'Request failed: maximum context length exceeded (413)' } as AIServiceError;
+    const compact = vi.fn().mockResolvedValue({ status: 'success' as const, messageId: 'compression-1', recordId: 'record-1' });
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
+      if (streamExecutor.mock.calls.length === 1) {
+        throw overflowError;
+      }
+
+      assistantMessage.content = 'replayed answer';
+      assistantMessage.parts = [{ type: 'text', text: 'replayed answer' }];
+      assistantMessage.loading = false;
+      assistantMessage.finished = true;
+      await updateAssistant(assistantMessage);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: { getMessages },
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      compactionService: { compact },
+      streamExecutor
+    });
+
+    const result = await service.send(
+      createInput({
+        content: 'describe image',
+        contextWindow: 128_000,
+        files: [{ id: 'image-1', name: 'cat.png', type: 'image', mimeType: 'image/png', url: 'file://cat.png' }]
+      })
+    );
+    await flushRuntimeTasks();
+
+    expect(streamExecutor).toHaveBeenCalledTimes(2);
+    expect(compact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeId: result.runtimeId,
+        sessionId: 'session-1',
+        clientId: 'client-1',
+        agentId: 'agent-1',
+        reason: 'auto',
+        messages: expect.arrayContaining([expect.objectContaining({ id: 'prior-user' }), expect.objectContaining({ id: 'user-message-1' })])
+      })
+    );
+    expect(streamExecutor.mock.calls[1]?.[0].sourceMessages?.map((message) => message.id)).toEqual(['compression-1', 'user-message-1']);
+    const replayUserMessage = streamExecutor.mock.calls[1]?.[0].sourceMessages?.find((message) => message.id === 'user-message-1');
+    expect(replayUserMessage?.content).toContain('[Attached image/png: cat.png]');
+    expect(replayUserMessage?.files?.[0]).not.toHaveProperty('url');
+    expect(updatedMessages.at(-1)).toMatchObject({
+      id: 'assistant-message-1',
+      content: 'replayed answer',
+      loading: false,
+      finished: true
+    });
+    expect(collector.events.some((event) => event.name === 'chat:runtime:error' && event.payload.runtimeId === result.runtimeId)).toBe(false);
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:complete',
+        payload: expect.objectContaining({ runtimeId: result.runtimeId })
+      })
+    );
+  });
+
+  it('marks assistant failed when overflow replay fails after successful compaction', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const compressionBoundary: ChatMessageRecord = {
+      id: 'compression-1',
+      sessionId: 'session-1',
+      role: 'compression',
+      content: 'COMPRESSED_CONTEXT',
+      parts: [{ type: 'text', text: 'COMPRESSED_CONTEXT' }],
+      createdAt: '2026-06-19T00:00:00.000Z',
+      finished: true,
+      compression: {
+        status: 'success',
+        recordText: 'COMPRESSED_CONTEXT',
+        coveredUntilMessageId: 'user-message-1'
+      }
+    };
+    const getMessages = vi.fn<() => ChatMessageRecord[]>().mockReturnValueOnce([]).mockReturnValueOnce([compressionBoundary]);
+    const overflowError = { code: 'REQUEST_FAILED', message: 'maximum context length exceeded' } as AIServiceError;
+    const replayError = { code: 'REQUEST_FAILED', message: 'model failed after replay' } as AIServiceError;
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async () => {
+      if (streamExecutor.mock.calls.length === 1) throw overflowError;
+      throw replayError;
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: { getMessages },
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      compactionService: {
+        compact: vi.fn().mockResolvedValue({ status: 'success' as const, messageId: 'compression-1', recordId: 'record-1' })
+      },
+      streamExecutor
+    });
+
+    const result = await service.send(createInput({ content: 'hello runtime', contextWindow: 128_000 }));
+    await flushRuntimeTasks();
+
+    expect(streamExecutor).toHaveBeenCalledTimes(2);
+    expect(updatedMessages.at(-1)).toMatchObject({
+      id: 'assistant-message-1',
+      content: 'model failed after replay',
+      parts: [{ type: 'error', text: 'model failed after replay' }],
+      loading: false,
+      finished: true
+    });
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:error',
+        payload: expect.objectContaining({ runtimeId: result.runtimeId, error: replayError })
+      })
+    );
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:complete',
+        payload: expect.objectContaining({ runtimeId: result.runtimeId })
+      })
+    );
   });
 
   it('rejects a second runtime for the same session while the first is active', async (): Promise<void> => {

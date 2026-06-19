@@ -1,0 +1,482 @@
+/**
+ * @file runtime-bridge.test.ts
+ * @description BChat ChatRuntime renderer bridge 快照处理测试。
+ */
+import type { AIToolContext } from 'types/ai';
+import { describe, expect, it, vi } from 'vitest';
+import { handleBChatRuntimeBridgeRequest } from '@/components/BChat/utils/runtimeBridge';
+
+/**
+ * 创建编辑器工具上下文测试夹具。
+ * @returns 编辑器工具上下文
+ */
+function createEditorContext(): AIToolContext {
+  return {
+    document: {
+      id: 'doc-1',
+      title: 'index.ts',
+      path: '/workspace/src/index.ts',
+      locator: 'file:///workspace/src/index.ts',
+      getContent: () => 'hello document'
+    },
+    editor: {
+      getSelection: () => ({ from: 0, to: 5, text: 'hello' }),
+      insertAtCursor: vi.fn(),
+      replaceSelection: vi.fn(),
+      replaceDocument: vi.fn()
+    }
+  };
+}
+
+describe('handleBChatRuntimeBridgeRequest', (): void => {
+  it('returns the current editor document snapshot', async (): Promise<void> => {
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'document-snapshot'
+      },
+      {
+        getEditorContext: createEditorContext,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined
+      }
+    );
+
+    expect(result).toEqual({
+      id: 'doc-1',
+      title: 'index.ts',
+      path: '/workspace/src/index.ts',
+      locator: 'file:///workspace/src/index.ts',
+      content: 'hello document',
+      selection: { from: 0, to: 5, text: 'hello' }
+    });
+  });
+
+  it('returns the current drawing snapshot', async (): Promise<void> => {
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'drawing-snapshot'
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => ({
+          id: 'drawing-1',
+          title: 'diagram',
+          path: '/workspace/diagram.draw',
+          getData: () => ({ elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } }),
+          replaceData: vi.fn()
+        }),
+        getWebviewContext: () => undefined
+      }
+    );
+
+    expect(result).toEqual({
+      id: 'drawing-1',
+      title: 'diagram',
+      path: '/workspace/diagram.draw',
+      data: { elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } }
+    });
+  });
+
+  it('applies drawing data through the bridge', async (): Promise<void> => {
+    const replaceData = vi.fn().mockImplementation(async (data) => data);
+    const nextData = { elements: [], edges: [], viewport: { center: { x: 1, y: 2 }, zoom: 1 } };
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'apply-drawing-data',
+        payload: { data: nextData }
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => ({
+          id: 'drawing-1',
+          title: 'diagram',
+          path: null,
+          getData: () => ({ elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } }),
+          replaceData
+        }),
+        getWebviewContext: () => undefined
+      }
+    );
+
+    expect(replaceData).toHaveBeenCalledWith(nextData);
+    expect(result).toEqual({
+      id: 'drawing-1',
+      title: 'diagram',
+      path: null,
+      data: nextData
+    });
+  });
+
+  it('returns the current webview snapshot', async (): Promise<void> => {
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'webview-snapshot'
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => ({
+          readPageSnapshot: async () => ({
+            url: 'https://example.com',
+            title: 'Example',
+            text: 'page',
+            selectedText: '',
+            headings: [],
+            links: [],
+            capturedAt: 1,
+            truncated: { text: false, headings: false, links: false, selectedText: false }
+          })
+        })
+      }
+    );
+
+    expect(result).toEqual({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'page',
+      selectedText: '',
+      headings: [],
+      links: [],
+      capturedAt: 1,
+      truncated: { text: false, headings: false, links: false, selectedText: false }
+    });
+  });
+
+  it('returns an opened editor file content snapshot by path', async (): Promise<void> => {
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'file-content-snapshot',
+        payload: { path: 'src/index.ts', workspaceRoot: '/workspace' }
+      },
+      {
+        getEditorContext: createEditorContext,
+        getEditorContextByDocumentId: (documentId) => (documentId === 'doc-1' ? createEditorContext() : undefined),
+        findFileByPath: async (filePath) => (filePath === '/workspace/src/index.ts' ? { id: 'doc-1' } : null),
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined
+      }
+    );
+
+    expect(result).toEqual({
+      path: 'src/index.ts',
+      content: 'hello document'
+    });
+  });
+
+  it('returns an unsaved draft file content snapshot by virtual path', async (): Promise<void> => {
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'file-content-snapshot',
+        payload: { path: 'unsaved://draft-1/note.md' }
+      },
+      {
+        getEditorContext: () => undefined,
+        getRecentFileById: async (fileId) =>
+          fileId === 'draft-1'
+            ? {
+                id: 'draft-1',
+                type: 'file',
+                name: 'note',
+                ext: 'md',
+                path: null,
+                content: 'draft content'
+              }
+            : undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined
+      }
+    );
+
+    expect(result).toEqual({
+      path: 'unsaved://draft-1/note.md',
+      content: 'draft content'
+    });
+  });
+
+  it('writes an opened editor file content by path', async (): Promise<void> => {
+    const replaceDocument = vi.fn();
+    const context = createEditorContext();
+    context.editor.replaceDocument = replaceDocument;
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'write-file-content',
+        payload: { path: 'src/index.ts', content: 'next content', workspaceRoot: '/workspace' }
+      },
+      {
+        getEditorContext: createEditorContext,
+        getEditorContextByDocumentId: (documentId) => (documentId === 'doc-1' ? context : undefined),
+        findFileByPath: async (filePath) => (filePath === '/workspace/src/index.ts' ? { id: 'doc-1' } : null),
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined
+      }
+    );
+
+    expect(replaceDocument).toHaveBeenCalledWith('next content');
+    expect(result).toEqual({
+      path: 'src/index.ts',
+      content: 'next content'
+    });
+  });
+
+  it('writes an unsaved draft file content by virtual path', async (): Promise<void> => {
+    const updateRecentFileById = vi.fn().mockResolvedValue({
+      id: 'draft-1',
+      type: 'file',
+      name: 'note',
+      ext: 'md',
+      path: null,
+      content: 'next draft'
+    });
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'write-file-content',
+        payload: { path: 'unsaved://draft-1/note.md', content: 'next draft' }
+      },
+      {
+        getEditorContext: () => undefined,
+        updateRecentFileById,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined
+      }
+    );
+
+    expect(updateRecentFileById).toHaveBeenCalledWith('draft-1', expect.objectContaining({ content: 'next draft' }));
+    expect(result).toEqual({
+      path: 'unsaved://draft-1/note.md',
+      content: 'next draft'
+    });
+  });
+
+  it('returns the current settings snapshot', async (): Promise<void> => {
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'settings-snapshot'
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined,
+        getSettingsSnapshot: () => ({
+          settings: {
+            theme: 'dark',
+            themePreset: 'default',
+            sourceMode: true,
+            editorPageWidth: 'wide'
+          }
+        })
+      }
+    );
+
+    expect(result).toEqual({
+      settings: {
+        theme: 'dark',
+        themePreset: 'default',
+        sourceMode: true,
+        editorPageWidth: 'wide'
+      }
+    });
+  });
+
+  it('opens a file resource through the bridge', async (): Promise<void> => {
+    const openFileByPath = vi.fn().mockResolvedValue({ id: 'file-1' });
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'open-resource',
+        payload: { path: 'src/index.ts', resourceType: 'file' }
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined,
+        openFileByPath
+      }
+    );
+
+    expect(openFileByPath).toHaveBeenCalledWith('src/index.ts');
+    expect(result).toEqual({
+      path: 'src/index.ts',
+      resourceType: 'file',
+      opened: true,
+      fileId: 'file-1'
+    });
+  });
+
+  it('opens a webview resource through the bridge', async (): Promise<void> => {
+    const openInWebview = vi.fn();
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'open-resource',
+        payload: { path: 'https://example.com', resourceType: 'webview' }
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined,
+        openInWebview
+      }
+    );
+
+    expect(openInWebview).toHaveBeenCalledWith('https://example.com');
+    expect(result).toEqual({
+      path: 'https://example.com',
+      resourceType: 'webview',
+      opened: true
+    });
+  });
+
+  it('applies a settings update through the bridge', async (): Promise<void> => {
+    const applySetting = vi.fn().mockReturnValue({
+      applied: true,
+      key: 'theme',
+      previousValue: 'light',
+      currentValue: 'dark'
+    });
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'apply-setting',
+        payload: { key: 'theme', value: 'dark' }
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined,
+        applySetting
+      }
+    );
+
+    expect(applySetting).toHaveBeenCalledWith({ key: 'theme', value: 'dark' });
+    expect(result).toEqual({
+      applied: true,
+      key: 'theme',
+      previousValue: 'light',
+      currentValue: 'dark'
+    });
+  });
+
+  it('opens a draft document through the bridge', async (): Promise<void> => {
+    const openDraft = vi.fn().mockResolvedValue({
+      file: {
+        id: 'draft-1',
+        type: 'file',
+        name: 'Notes',
+        ext: 'md',
+        path: null,
+        content: '# Notes'
+      },
+      unsavedPath: 'unsaved://draft-1/Notes.md'
+    });
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'open-draft',
+        payload: { originalPath: 'Notes.md', content: '# Notes' }
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => undefined,
+        openDraft
+      }
+    );
+
+    expect(openDraft).toHaveBeenCalledWith({ originalPath: 'Notes.md', content: '# Notes' });
+    expect(result).toEqual({
+      file: {
+        id: 'draft-1',
+        type: 'file',
+        name: 'Notes',
+        ext: 'md',
+        path: null,
+        content: '# Notes'
+      },
+      unsavedPath: 'unsaved://draft-1/Notes.md'
+    });
+  });
+
+  it('throws a stable editor unavailable error when the requested context is missing', async (): Promise<void> => {
+    await expect(
+      handleBChatRuntimeBridgeRequest(
+        {
+          runtimeId: 'runtime-1',
+          sessionId: 'session-1',
+          clientId: 'bchat',
+          agentId: 'default',
+          requestId: 'bridge-1',
+          kind: 'document-snapshot'
+        },
+        {
+          getEditorContext: () => undefined,
+          getDrawingContext: () => undefined,
+          getWebviewContext: () => undefined
+        }
+      )
+    ).rejects.toMatchObject({
+      code: 'EDITOR_UNAVAILABLE',
+      message: '当前没有可用的编辑器文档'
+    });
+  });
+});

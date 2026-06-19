@@ -88,6 +88,7 @@
 
 <script setup lang="ts">
 import type { ContextUsageBudgetSnapshot } from './utils/contextUsageBudget';
+import type { BChatRuntimeApplySettingInput, BChatRuntimeApplySettingResult, BChatRuntimeSettingKey } from './utils/runtimeBridge';
 import type { BChatProps, Message } from './utils/types';
 import type { AIMCPRequestConfig, AITavilyRuntimeConfig, AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession } from 'types/chat';
@@ -125,7 +126,12 @@ import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useTodoStore } from '@/stores/chat/todo';
 import type { TodoItem } from '@/stores/chat/todo';
+import type { EditorPageWidth, EditorViewMode } from '@/stores/editor/preferences';
+import { useEditorPreferencesStore } from '@/stores/editor/preferences';
+import type { ThemeMode } from '@/stores/ui/setting';
+import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
+import { getPresetList } from '@/theme/core/registry';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { Modal } from '@/utils/modal';
 import { createNamespace } from '@/utils/namespace';
@@ -155,6 +161,7 @@ import { useUsagePanel } from './hooks/useUsagePanel';
 import { createFileRefChipResolver } from './utils/chipResolver';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { create, userChoice, buildMessageReferences } from './utils/messageHelper';
+import { handleBChatRuntimeBridgeRequest } from './utils/runtimeBridge';
 
 const [, bem] = createNamespace('chat');
 
@@ -429,10 +436,84 @@ const { isDragging: isInputDragActive } = useFileDrop({
 
 /** 聊天工具列表 */
 const filesStore = useFilesStore();
+const settingStore = useSettingStore();
+const editorPreferencesStore = useEditorPreferencesStore();
 const { openDraft } = useOpenDraft();
 const memoryStore = useMemoryStore();
 
 const { workspaceRoot, getWorkspaceRoot } = useWorkspaceRoot();
+
+/**
+ * 判断值是否为主题模式。
+ * @param value - 待判断值
+ * @returns 是否为主题模式
+ */
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === 'dark' || value === 'light' || value === 'system';
+}
+
+/**
+ * 判断值是否为编辑器页宽模式。
+ * @param value - 待判断值
+ * @returns 是否为编辑器页宽模式
+ */
+function isEditorPageWidth(value: unknown): value is EditorPageWidth {
+  return value === 'default' || value === 'wide' || value === 'full';
+}
+
+/**
+ * 判断值是否为主题预设 ID。
+ * @param value - 待判断值
+ * @returns 是否为主题预设 ID
+ */
+function isThemePresetId(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+
+  return getPresetList().some((preset) => preset.id === value);
+}
+
+/**
+ * 读取当前设置值。
+ * @param key - 设置键
+ * @returns 当前设置值
+ */
+function getRuntimeSettingValue(key: BChatRuntimeSettingKey): string | boolean | number {
+  if (key === 'theme') return settingStore.theme;
+  if (key === 'themePreset') return settingStore.themePreset;
+  if (key === 'sourceMode') return editorPreferencesStore.viewMode === 'source';
+  if (key === 'editorPageWidth') return editorPreferencesStore.pageWidth;
+
+  return '';
+}
+
+/**
+ * 应用 ChatRuntime 设置修改。
+ * @param input - 设置修改输入
+ * @returns 设置修改结果
+ */
+function applyRuntimeSetting(input: BChatRuntimeApplySettingInput): BChatRuntimeApplySettingResult {
+  const previousValue = getRuntimeSettingValue(input.key);
+
+  if (input.key === 'theme' && isThemeMode(input.value)) {
+    settingStore.setTheme(input.value);
+  } else if (input.key === 'themePreset' && isThemePresetId(input.value)) {
+    settingStore.setThemePreset(input.value);
+  } else if (input.key === 'sourceMode' && typeof input.value === 'boolean') {
+    const viewMode: EditorViewMode = input.value ? 'source' : 'rich';
+    editorPreferencesStore.setViewMode(viewMode);
+  } else if (input.key === 'editorPageWidth' && isEditorPageWidth(input.value)) {
+    editorPreferencesStore.setPageWidth(input.value);
+  } else {
+    throw new Error(`设置值无效：${input.key}`);
+  }
+
+  return {
+    applied: true,
+    key: input.key,
+    previousValue,
+    currentValue: getRuntimeSettingValue(input.key)
+  };
+}
 
 /** 最近文件列表，用于 @ 文件提及功能（实时响应 filesStore.recentFiles） */
 const fileMentionOptions = computed<FileMentionOption[]>(() => {
@@ -768,6 +849,35 @@ const chatRuntime = useChatRuntime({
   getSessionId: () => activeSessionId.value ?? undefined,
   tools: getActiveTools,
   getToolContext: editorToolContextRegistry.getCurrentContext,
+  requestConfirmation: (request) => confirmationController.requestConfirmation(request),
+  handleBridgeRequest: (event) =>
+    handleBChatRuntimeBridgeRequest(event, {
+      getEditorContext: editorToolContextRegistry.getCurrentContext,
+      getEditorContextByDocumentId: (documentId) => editorToolContextRegistry.getContext(documentId),
+      findFileByPath: async (filePath) => {
+        const file = await filesStore.getFileByPath(filePath);
+        return file ? { id: file.id } : null;
+      },
+      getRecentFileById: (fileId) => filesStore.getFileById(fileId),
+      updateRecentFileById: (fileId, updates) => filesStore.updateFile(fileId, updates),
+      getDrawingContext: drawingToolContextRegistry.getCurrentContext,
+      getWebviewContext: webviewToolContextRegistry.getCurrentContext,
+      getSettingsSnapshot: () => ({
+        settings: {
+          theme: settingStore.theme,
+          themePreset: settingStore.themePreset,
+          sourceMode: editorPreferencesStore.viewMode === 'source',
+          editorPageWidth: editorPreferencesStore.pageWidth
+        }
+      }),
+      applySetting: applyRuntimeSetting,
+      openDraft,
+      openFileByPath,
+      openInWebview: (url) => {
+        openWebview(new URL(url));
+      },
+      openExternal: (url) => native.openExternal(url)
+    }),
   onComplete: handleRuntimeComplete,
   onContextUsageUpdated: (snapshot) => {
     runtimeContextUsageSnapshot.value = toContextUsageBudgetSnapshot(snapshot);
@@ -921,6 +1031,7 @@ async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> 
     messages: [...sourceMessages, assistantPlaceholder],
     contextWindow: contextWindow.value,
     system: await resolveRuntimeSystemPrompt(),
+    workspaceRoot: workspaceRoot.value || undefined,
     tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
     tavily: resolveRuntimeTavilyConfig(),
     mcp: resolveRuntimeMcpRequestConfig()
@@ -961,12 +1072,6 @@ async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promi
   }
 
   try {
-    const submitted = userChoice.submitAnswer(messages.value, answer);
-    if (!submitted) {
-      taskRuntime.finishTask('chat');
-      return;
-    }
-
     const sessionId = activeSessionId.value;
     if (!sessionId) {
       taskRuntime.finishTask('chat');
@@ -980,11 +1085,12 @@ async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promi
       return;
     }
 
-    await chatRuntime.continueTurn({
+    await chatRuntime.submitUserChoice({
       sessionId,
-      messages: messages.value,
       contextWindow: contextWindow.value,
       system: await resolveRuntimeSystemPrompt(),
+      workspaceRoot: workspaceRoot.value || undefined,
+      answer,
       tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
       tavily: resolveRuntimeTavilyConfig(),
       mcp: resolveRuntimeMcpRequestConfig()
@@ -1055,6 +1161,7 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
       content: userMessage.content,
       contextWindow: contextWindow.value,
       system: await resolveRuntimeSystemPrompt(),
+      workspaceRoot: workspaceRoot.value || undefined,
       tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
       tavily: resolveRuntimeTavilyConfig(),
       mcp: resolveRuntimeMcpRequestConfig(),

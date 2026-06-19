@@ -5,6 +5,7 @@
 import type { RuntimeCompactionService } from './compaction.mjs';
 import type {
   ActiveChatRuntime,
+  ChatRuntimeMainToolExecutionInput,
   ChatRuntimeMessageReader,
   ChatRuntimeMessageKind,
   ChatRuntimeMessageWriter,
@@ -14,17 +15,23 @@ import type {
   ChatRuntimeStreamExecutor
 } from './types.mjs';
 import type { AIServiceError, AIToolExecutionCancelledResult, AIToolExecutionResult, AIUsage } from 'types/ai';
-import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessageFile, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
   ChatRuntimeAutoNameResult,
+  ChatRuntimeBridgeResponseInput,
+  ChatRuntimeBridgeResult,
   ChatRuntimeCompactInput,
   ChatRuntimeCompactResult,
+  ChatRuntimeConfirmationDecision,
+  ChatRuntimeConfirmationRequest,
   ChatRuntimeContinueInput,
   ChatRuntimeContextUsageSnapshot,
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
+  ChatRuntimeSubmitConfirmationInput,
+  ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeSubmitToolResultInput
 } from 'types/chat-runtime';
 import type { CompressionRecord, CompressionRecordStatus, CompressionRecordStorage } from 'types/compression';
@@ -42,9 +49,56 @@ import { createRuntimeLockRegistry } from './locks.mjs';
 import { toRuntimeModelMessages } from './model-message-context.mjs';
 import { createRuntimeStreamExecutor } from './stream-executor.mjs';
 import { createRuntimeStructuredSummaryGenerator, createRuntimeSummaryInvoke } from './structured-summary-generator.mjs';
+import { createMainToolExecutor } from './tools/index.mjs';
 
 /** 单个 runtime 内工具续轮最大次数。 */
 const MAX_RUNTIME_CONTINUATION_ROUNDS = 25;
+
+/** Renderer 请求默认超时时间。 */
+const RUNTIME_RENDERER_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Provider 上下文超限错误文案模式。 */
+const CONTEXT_OVERFLOW_MESSAGE_PATTERNS = [
+  /\b413\b/i,
+  /context[_\s-]*length[_\s-]*exceeded/i,
+  /maximum context length/i,
+  /context window/i,
+  /prompt is too long/i,
+  /input is too long/i,
+  /too many tokens/i,
+  /exceed(?:ed|s)?.{0,32}(?:context|token)/i,
+  /context.{0,32}(?:overflow|exceed|too long)/i
+];
+
+/** Tool output prune 至少保护的最近用户轮数。 */
+const TOOL_OUTPUT_PRUNE_PROTECTED_USER_TURNS = 2;
+
+/** 超过该 JSON 长度的旧 tool result 会被软剪枝。 */
+const TOOL_OUTPUT_PRUNE_MIN_JSON_LENGTH = 4_000;
+
+/** 剪枝摘要最大长度。 */
+const TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH = 500;
+
+/** 不参与 tool output prune 的工具。 */
+const TOOL_OUTPUT_PRUNE_PROTECTED_TOOL_NAMES = new Set(['skill', 'ask_user_choice', 'ask_user_question', 'question']);
+
+/** 会暂停并等待用户选择的工具名称。 */
+const USER_CHOICE_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
+
+/** 剪枝后保留的工具结果字段。 */
+const TOOL_OUTPUT_PRUNE_PRESERVED_DATA_KEYS = [
+  'path',
+  'filePath',
+  'url',
+  'title',
+  'totalLines',
+  'readLines',
+  'returnedCount',
+  'count',
+  'status',
+  'summary',
+  'message'
+];
 
 /** 自动命名默认 Prompt 模板。 */
 const AUTONAME_DEFAULT_PROMPT = `# Role
@@ -73,6 +127,54 @@ interface PendingRendererToolRequest {
   resolve: (result: AIToolExecutionResult) => void;
   /** 拒绝工具请求。 */
   reject: (error: Error) => void;
+  /** 请求超时定时器。 */
+  timeoutId: ReturnType<typeof setTimeout>;
+}
+
+/** 等待 renderer 回传的确认请求。 */
+interface PendingRuntimeConfirmationRequest {
+  /** 完成确认请求。 */
+  resolve: (decision: ChatRuntimeConfirmationDecision) => void;
+  /** 拒绝确认请求。 */
+  reject: (error: Error) => void;
+  /** 请求超时定时器。 */
+  timeoutId: ReturnType<typeof setTimeout>;
+}
+
+/** 等待 renderer 回传的通用 bridge 请求。 */
+interface PendingRuntimeBridgeRequest {
+  /** 完成 bridge 请求。 */
+  resolve: (result: ChatRuntimeBridgeResult) => void;
+  /** 拒绝 bridge 请求。 */
+  reject: (error: Error) => void;
+  /** 请求超时定时器。 */
+  timeoutId: ReturnType<typeof setTimeout>;
+}
+
+/** Runtime 确认请求输入。 */
+interface ChatRuntimeRequestConfirmationInput {
+  /** Runtime id。 */
+  runtimeId: string;
+  /** 关联工具调用 ID。 */
+  toolCallId?: string;
+  /** 确认请求 id，缺省时自动生成。 */
+  confirmationId?: string;
+  /** 确认请求详情。 */
+  request: ChatRuntimeConfirmationRequest;
+}
+
+/** Runtime bridge 请求输入。 */
+interface ChatRuntimeRequestBridgeInput {
+  /** Runtime id。 */
+  runtimeId: string;
+  /** Bridge 请求 id，缺省时自动生成。 */
+  requestId?: string;
+  /** 关联工具调用 ID。 */
+  toolCallId?: string;
+  /** Bridge 请求类型。 */
+  kind: string;
+  /** Bridge 请求载荷。 */
+  payload?: unknown;
 }
 
 /** Runtime 稳定错误。 */
@@ -184,13 +286,17 @@ function createDefaultMessageReader(): ChatRuntimeMessageReader {
  * @returns runtime 流式执行器
  */
 function createDefaultStreamExecutor(
-  executeRendererTool?: (input: ChatRuntimeRendererToolExecutionInput) => Promise<AIToolExecutionResult>
+  executeRendererTool?: (input: ChatRuntimeRendererToolExecutionInput) => Promise<AIToolExecutionResult>,
+  executeMainTool?: (input: ChatRuntimeMainToolExecutionInput) => Promise<AIToolExecutionResult>,
+  rendererToolTimeoutMs?: number
 ): ChatRuntimeStreamExecutor {
   const resolver = createDefaultChatModelResolver();
   return createRuntimeStreamExecutor({
     resolver,
     streamText: (createOptions, request) => aiService.streamText(createOptions, request),
-    executeRendererTool
+    executeRendererTool,
+    executeMainTool,
+    rendererToolTimeoutMs
   });
 }
 
@@ -329,6 +435,7 @@ function createContinuationRuntime(input: ChatRuntimeContinueInput, runtimeId: s
     parentRuntimeId: input.parentRuntimeId,
     contextWindow: input.contextWindow,
     system: input.system,
+    workspaceRoot: input.workspaceRoot,
     tools: input.tools,
     tavily: input.tavily,
     mcp: input.mcp,
@@ -336,6 +443,90 @@ function createContinuationRuntime(input: ChatRuntimeContinueInput, runtimeId: s
     abortController: new AbortController(),
     createdAt: Date.now()
   };
+}
+
+/**
+ * 根据用户选择输入创建续轮 runtime 状态。
+ * @param input - 用户选择提交输入
+ * @param runtimeId - runtime id
+ * @returns runtime 状态
+ */
+function createUserChoiceRuntime(input: ChatRuntimeSubmitUserChoiceInput, runtimeId: string): ActiveChatRuntime {
+  return {
+    runtimeId,
+    sessionId: input.sessionId,
+    clientId: input.clientId,
+    agentId: input.agentId,
+    parentRuntimeId: input.parentRuntimeId,
+    contextWindow: input.contextWindow,
+    system: input.system,
+    workspaceRoot: input.workspaceRoot,
+    tools: input.tools,
+    tavily: input.tavily,
+    mcp: input.mcp,
+    status: 'running',
+    abortController: new AbortController(),
+    createdAt: Date.now()
+  };
+}
+
+/**
+ * 浅克隆消息与 part，便于安全替换 tool result。
+ * @param message - 原始消息
+ * @returns 克隆后的消息
+ */
+function cloneRuntimeMessage(message: ChatMessageRecord): ChatMessageRecord {
+  return {
+    ...message,
+    parts: message.parts.map((part) => ({ ...part }))
+  };
+}
+
+/**
+ * 判断 tool part 是否正在等待用户选择。
+ * @param part - 消息片段
+ * @param answer - 用户选择答案
+ * @returns 是否匹配待提交问题
+ */
+function isMatchingAwaitingUserChoicePart(part: ChatMessageRecord['parts'][number], answer: AIUserChoiceAnswerData): part is ChatMessageToolPart {
+  return (
+    part.type === 'tool' &&
+    USER_CHOICE_TOOL_NAMES.has(part.toolName) &&
+    part.toolCallId === answer.toolCallId &&
+    part.result?.status === 'awaiting_user_input' &&
+    part.result.data.questionId === answer.questionId
+  );
+}
+
+/**
+ * 判断用户选择答案是否表示取消。
+ * @param answer - 用户选择答案
+ * @returns 是否取消
+ */
+function isCancelledUserChoiceAnswer(answer: AIUserChoiceAnswerData): boolean {
+  const questionAnswers = answer.questionAnswers ?? [];
+  return answer.answers.length === 0 && (answer.otherText ?? '') === '' && questionAnswers.every((item) => item.answers.length === 0);
+}
+
+/**
+ * 将用户选择答案写入待回答的 assistant tool part。
+ * @param messages - 会话消息
+ * @param answer - 用户选择答案
+ * @returns 被更新的 assistant 消息
+ */
+function applyUserChoiceAnswer(messages: ChatMessageRecord[], answer: AIUserChoiceAnswerData): ChatMessageRecord | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const resultPart = message.parts.find((part) => isMatchingAwaitingUserChoicePart(part, answer));
+    if (!resultPart) continue;
+
+    resultPart.result = isCancelledUserChoiceAnswer(answer)
+      ? { toolName: resultPart.toolName, status: 'cancelled', error: { code: 'USER_CANCELLED', message: '用户取消了选择' } }
+      : { toolName: resultPart.toolName, status: 'success', data: answer };
+    return message;
+  }
+
+  return undefined;
 }
 
 /**
@@ -401,6 +592,15 @@ function hasAssistantResponseContent(message: ChatMessageRecord): boolean {
 }
 
 /**
+ * 判断错误是否为 provider 上下文超限。
+ * @param error - runtime 错误
+ * @returns 是否可触发 overflow replay
+ */
+function isContextOverflowError(error: AIServiceError): boolean {
+  return CONTEXT_OVERFLOW_MESSAGE_PATTERNS.some((pattern) => pattern.test(error.message));
+}
+
+/**
  * 汇总多轮模型流的 usage。
  * @param current - 当前累计 usage
  * @param next - 新一轮流式 usage
@@ -424,6 +624,177 @@ function addRuntimeUsage(current: AIUsage | undefined, next: AIUsage | undefined
  */
 function isSameRuntimeUsage(left: AIUsage | undefined, right: AIUsage | undefined): boolean {
   return left?.inputTokens === right?.inputTokens && left?.outputTokens === right?.outputTokens && left?.totalTokens === right?.totalTokens;
+}
+
+/**
+ * 创建附件降级占位文本。
+ * @param file - 消息附件
+ * @returns 占位文本
+ */
+function createAttachmentPlaceholder(file: ChatMessageFile): string {
+  return `[Attached ${file.mimeType ?? file.type}: ${file.name}]`;
+}
+
+/**
+ * 移除会被模型当作媒体输入发送的远程地址。
+ * @param file - 消息附件
+ * @returns 降级后的附件
+ */
+function removeModelMediaUrl(file: ChatMessageFile): ChatMessageFile {
+  const downgradedFile = { ...file };
+  delete downgradedFile.url;
+  return downgradedFile;
+}
+
+/**
+ * 为 overflow replay 降级当前用户消息中的媒体附件。
+ * @param message - 当前用户消息
+ * @returns 降级后的用户消息
+ */
+function downgradeUserMessageForOverflowReplay(message: ChatMessageRecord): ChatMessageRecord {
+  if (!message.files?.length) return message;
+
+  const content = [message.content.trim(), ...message.files.map(createAttachmentPlaceholder)].filter((item) => item.length > 0).join('\n');
+  return {
+    ...message,
+    content,
+    parts: content ? [{ type: 'text', text: content }] : [],
+    files: message.files.map(removeModelMediaUrl)
+  };
+}
+
+/**
+ * 降级 replay 源消息中的当前用户消息。
+ * @param sourceMessages - 原始源消息
+ * @param userMessage - 当前用户消息
+ * @returns 降级后的源消息
+ */
+function downgradeOverflowReplaySourceMessages(sourceMessages: ChatMessageRecord[], userMessage: ChatMessageRecord): ChatMessageRecord[] {
+  return sourceMessages.map((message) => (message.id === userMessage.id ? downgradeUserMessageForOverflowReplay(message) : message));
+}
+
+/**
+ * 安全序列化 JSON。
+ * @param value - 待序列化值
+ * @returns JSON 字符串
+ */
+function safeStringifyJson(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * 查找 tool output prune 的保护区起点。
+ * @param messages - 完整消息列表
+ * @returns 最近用户轮保护区起点
+ */
+function findToolOutputPruneProtectedStartIndex(messages: ChatMessageRecord[]): number {
+  let seenUserTurns = 0;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role !== 'user') continue;
+
+    seenUserTurns += 1;
+    if (seenUserTurns >= TOOL_OUTPUT_PRUNE_PROTECTED_USER_TURNS) return index;
+  }
+
+  return 0;
+}
+
+/**
+ * 判断工具结果是否可剪枝。
+ * @param part - 工具片段
+ * @returns 是否可剪枝
+ */
+function shouldPruneToolResult(part: ChatMessageToolPart): boolean {
+  if (part.status !== 'done' || part.result?.status !== 'success') return false;
+  if (TOOL_OUTPUT_PRUNE_PROTECTED_TOOL_NAMES.has(part.toolName)) return false;
+
+  return safeStringifyJson(part.result.data).length > TOOL_OUTPUT_PRUNE_MIN_JSON_LENGTH;
+}
+
+/**
+ * 提取剪枝后仍应保留的工具结果字段。
+ * @param data - 原始工具结果数据
+ * @returns 可保留字段
+ */
+function pickPrunedToolResultFields(data: unknown): Record<string, unknown> {
+  if (!data || typeof data !== 'object') return {};
+
+  const source = data as Record<string, unknown>;
+  const picked: Record<string, unknown> = {};
+  for (const key of TOOL_OUTPUT_PRUNE_PRESERVED_DATA_KEYS) {
+    const value = source[key];
+    if (value === undefined) continue;
+    picked[key] =
+      typeof value === 'string' && value.length > TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH ? `${value.slice(0, TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH)}...` : value;
+  }
+
+  return picked;
+}
+
+/**
+ * 创建剪枝后的工具结果摘要数据。
+ * @param data - 原始工具结果数据
+ * @param serializedData - 原始序列化数据
+ * @returns 剪枝摘要数据
+ */
+function createPrunedToolResultData(data: unknown, serializedData: string): Record<string, unknown> {
+  const preservedFields = pickPrunedToolResultFields(data);
+  const fallbackSummary = serializedData.slice(0, TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH);
+  const summary =
+    typeof preservedFields.summary === 'string' && preservedFields.summary.trim()
+      ? preservedFields.summary
+      : `Large tool result pruned. Preview: ${fallbackSummary}`;
+
+  return {
+    ...preservedFields,
+    pruned: true,
+    summary,
+    originalBytes: serializedData.length
+  };
+}
+
+/**
+ * 剪枝单个工具片段。
+ * @param part - 工具片段
+ * @returns 剪枝后的工具片段，未剪枝时返回原片段
+ */
+function pruneToolPartIfNeeded(part: ChatMessageToolPart): ChatMessageToolPart {
+  if (!shouldPruneToolResult(part) || part.result?.status !== 'success') return part;
+
+  const serializedData = safeStringifyJson(part.result.data);
+  return {
+    ...part,
+    result: {
+      ...part.result,
+      data: createPrunedToolResultData(part.result.data, serializedData)
+    }
+  };
+}
+
+/**
+ * 剪枝单条消息中的旧 tool output。
+ * @param message - 消息
+ * @returns 剪枝后的消息，无需更新时返回 undefined
+ */
+function pruneMessageToolOutputs(message: ChatMessageRecord): ChatMessageRecord | undefined {
+  if (message.role !== 'assistant') return undefined;
+
+  let changed = false;
+  const parts = message.parts.map((part) => {
+    if (part.type !== 'tool') return part;
+
+    const nextPart = pruneToolPartIfNeeded(part);
+    if (nextPart !== part) changed = true;
+    return nextPart;
+  });
+  if (!changed) return undefined;
+
+  return { ...message, parts };
 }
 
 /**
@@ -455,12 +826,15 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const messageWriter = dependencies.messageWriter ?? createDefaultMessageWriter();
   const messageReader = dependencies.messageReader ?? createDefaultMessageReader();
   const pendingRendererToolRequests = new Map<string, PendingRendererToolRequest>();
+  const pendingConfirmationRequests = new Map<string, PendingRuntimeConfirmationRequest>();
+  const pendingBridgeRequests = new Map<string, PendingRuntimeBridgeRequest>();
   const streamAbort = dependencies.streamAbort ?? createDefaultStreamAborter();
   const createMessageId = dependencies.createMessageId ?? createDefaultMessageId;
   const now = dependencies.now ?? (() => new Date().toISOString());
   const autoNameResolver = dependencies.autoNameResolveModel ?? (() => createDefaultChatModelResolver().resolve());
   const autoNameGenerateText = dependencies.autoNameGenerateText ?? ((createOptions, request) => aiService.generateText(createOptions, request));
   const autoNameUpdateSessionTitle = dependencies.autoNameUpdateSessionTitle ?? ((sessionId, title) => chatSessionManager.updateSessionTitle(sessionId, title));
+  const { rendererToolTimeoutMs } = dependencies;
   const contextBudget = createContextBudgetService();
   const locks = createRuntimeLockRegistry();
   const activeRuntimes = new Map<string, ActiveChatRuntime>();
@@ -477,6 +851,26 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 创建确认请求 key。
+   * @param runtimeId - runtime id
+   * @param confirmationId - 确认请求 id
+   * @returns pending key
+   */
+  function createConfirmationRequestKey(runtimeId: string, confirmationId: string): string {
+    return `${runtimeId}:${confirmationId}`;
+  }
+
+  /**
+   * 创建 bridge 请求 key。
+   * @param runtimeId - runtime id
+   * @param requestId - bridge 请求 id
+   * @returns pending key
+   */
+  function createBridgeRequestKey(runtimeId: string, requestId: string): string {
+    return `${runtimeId}:${requestId}`;
+  }
+
+  /**
    * 拒绝指定 runtime 所有等待中的工具请求。
    * @param runtimeId - runtime id
    * @param reason - 拒绝原因
@@ -485,10 +879,115 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     for (const [key, request] of pendingRendererToolRequests) {
       if (!key.startsWith(`${runtimeId}:`)) continue;
 
+      clearTimeout(request.timeoutId);
       request.reject(new ChatRuntimeError('TOOL_REQUEST_CANCELLED', reason));
       pendingRendererToolRequests.delete(key);
     }
   }
+
+  /**
+   * 拒绝指定 runtime 所有等待中的确认请求。
+   * @param runtimeId - runtime id
+   * @param reason - 拒绝原因
+   */
+  function rejectRuntimeConfirmationRequests(runtimeId: string, reason: string): void {
+    for (const [key, request] of pendingConfirmationRequests) {
+      if (!key.startsWith(`${runtimeId}:`)) continue;
+
+      clearTimeout(request.timeoutId);
+      request.reject(new ChatRuntimeError('CONFIRMATION_DISMISSED', reason));
+      pendingConfirmationRequests.delete(key);
+    }
+  }
+
+  /**
+   * 请求 renderer 展示确认弹窗并等待决策。
+   * @param input - 确认请求输入
+   * @returns renderer 确认决策
+   */
+  function requestRuntimeConfirmation(input: ChatRuntimeRequestConfirmationInput): Promise<ChatRuntimeConfirmationDecision> {
+    const runtime = activeRuntimes.get(input.runtimeId);
+    if (!runtime) {
+      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtimeId} is not active`);
+    }
+
+    const confirmationId = input.confirmationId ?? `confirmation-${nanoid()}`;
+    const key = createConfirmationRequestKey(input.runtimeId, confirmationId);
+    return new Promise<ChatRuntimeConfirmationDecision>((resolve, reject) => {
+      const timeoutId = setTimeout((): void => {
+        pendingConfirmationRequests.delete(key);
+        resolve({ approved: false });
+      }, RUNTIME_RENDERER_REQUEST_TIMEOUT_MS);
+      pendingConfirmationRequests.set(key, { resolve, reject, timeoutId });
+      emit('chat:runtime:confirmation-requested', {
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        confirmationId,
+        toolCallId: input.toolCallId,
+        request: input.request
+      });
+    });
+  }
+
+  /**
+   * 拒绝指定 runtime 所有等待中的 bridge 请求。
+   * @param runtimeId - runtime id
+   * @param reason - 拒绝原因
+   */
+  function rejectRuntimeBridgeRequests(runtimeId: string, reason: string): void {
+    for (const [key, request] of pendingBridgeRequests) {
+      if (!key.startsWith(`${runtimeId}:`)) continue;
+
+      clearTimeout(request.timeoutId);
+      request.reject(new ChatRuntimeError('EDITOR_UNAVAILABLE', reason));
+      pendingBridgeRequests.delete(key);
+    }
+  }
+
+  /**
+   * 请求 renderer 执行通用 bridge 操作并等待结果。
+   * @param input - bridge 请求输入
+   * @returns renderer bridge 结果
+   */
+  function requestRuntimeBridge(input: ChatRuntimeRequestBridgeInput): Promise<ChatRuntimeBridgeResult> {
+    const runtime = activeRuntimes.get(input.runtimeId);
+    if (!runtime) {
+      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtimeId} is not active`);
+    }
+
+    const requestId = input.requestId ?? `bridge-${nanoid()}`;
+    const key = createBridgeRequestKey(input.runtimeId, requestId);
+    return new Promise<ChatRuntimeBridgeResult>((resolve, reject) => {
+      const timeoutId = setTimeout((): void => {
+        pendingBridgeRequests.delete(key);
+        resolve({
+          status: 'failure',
+          error: { code: 'TOOL_TIMEOUT', message: 'Renderer bridge request timed out' }
+        });
+      }, RUNTIME_RENDERER_REQUEST_TIMEOUT_MS);
+      pendingBridgeRequests.set(key, { resolve, reject, timeoutId });
+      emit('chat:runtime:bridge-requested', {
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        requestId,
+        toolCallId: input.toolCallId,
+        kind: input.kind,
+        payload: input.payload
+      });
+    });
+  }
+
+  const executeMainTool = createMainToolExecutor({
+    now,
+    requestBridge: requestRuntimeBridge,
+    requestConfirmation: requestRuntimeConfirmation
+  });
 
   /**
    * 请求 renderer 执行本地工具。
@@ -502,7 +1001,15 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
     const key = createToolRequestKey(input.runtime.runtimeId, input.toolCallId);
     return new Promise<AIToolExecutionResult>((resolve, reject) => {
-      pendingRendererToolRequests.set(key, { resolve, reject });
+      const timeoutId = setTimeout((): void => {
+        pendingRendererToolRequests.delete(key);
+        resolve({
+          toolName: input.toolName,
+          status: 'failure',
+          error: { code: 'TOOL_TIMEOUT', message: 'Renderer tool request timed out' }
+        });
+      }, RUNTIME_RENDERER_REQUEST_TIMEOUT_MS);
+      pendingRendererToolRequests.set(key, { resolve, reject, timeoutId });
       emit('chat:runtime:tool-request', {
         runtimeId: input.runtime.runtimeId,
         sessionId: input.runtime.sessionId,
@@ -516,7 +1023,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     });
   }
 
-  const streamExecutor = dependencies.streamExecutor ?? createDefaultStreamExecutor(executeRendererTool);
+  const streamExecutor = dependencies.streamExecutor ?? createDefaultStreamExecutor(executeRendererTool, executeMainTool, rendererToolTimeoutMs);
 
   /**
    * 完成 runtime 并释放 session 写入锁。
@@ -528,6 +1035,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     activeRuntimes.delete(runtime.runtimeId);
     activeAssistantMessages.delete(runtime.runtimeId);
     rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime completed');
+    rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime completed');
+    rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime completed');
     locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
     emit('chat:runtime:complete', {
       runtimeId: runtime.runtimeId,
@@ -559,6 +1068,30 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 成功 turn 后剪枝旧的大型 tool output。
+   * @param runtime - runtime 状态
+   * @param sourceMessages - 当前源消息
+   * @param assistantMessage - 当前 assistant 终态消息
+   */
+  async function pruneOldToolOutputsIfNeeded(
+    runtime: ActiveChatRuntime,
+    sourceMessages: ChatMessageRecord[],
+    assistantMessage: ChatMessageRecord
+  ): Promise<void> {
+    const completedMessages = [...sourceMessages.filter((message) => message.id !== assistantMessage.id), assistantMessage];
+    const protectedStartIndex = findToolOutputPruneProtectedStartIndex(completedMessages);
+    const prunableMessages = completedMessages.slice(0, protectedStartIndex);
+
+    for (const message of prunableMessages) {
+      const prunedMessage = pruneMessageToolOutputs(message);
+      if (!prunedMessage) continue;
+
+      // eslint-disable-next-line no-await-in-loop
+      await updateAssistantMessage(runtime, prunedMessage);
+    }
+  }
+
+  /**
    * 读取当前 runtime 可发送给模型的源消息。
    * @param runtime - runtime 状态
    * @param userMessage - 当前用户消息
@@ -583,7 +1116,11 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
    * @param sourceMessages - 当前源消息
    * @returns 上下文用量快照
    */
-  function emitContextUsageSnapshot(runtime: ActiveChatRuntime, sourceMessages: ChatMessageRecord[]): ChatRuntimeContextUsageSnapshot | undefined {
+  function emitContextUsageSnapshot(
+    runtime: ActiveChatRuntime,
+    sourceMessages: ChatMessageRecord[],
+    providerUsageTokens?: number
+  ): ChatRuntimeContextUsageSnapshot | undefined {
     if (runtime.contextWindow === undefined) return undefined;
 
     const modelMessages = toRuntimeModelMessages(sourceMessages);
@@ -592,7 +1129,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       sessionId: runtime.sessionId,
       agentId: runtime.agentId,
       contextWindow: runtime.contextWindow,
-      estimatedInputTokens: estimateSerializedModelMessages(modelMessages)
+      estimatedInputTokens: estimateSerializedModelMessages(modelMessages),
+      providerUsageTokens
     });
     emit('chat:runtime:context-usage-updated', {
       runtimeId: runtime.runtimeId,
@@ -651,6 +1189,124 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 根据 provider usage 在完成后触发自动压缩。
+   * @param runtime - runtime 状态
+   * @param sourceMessages - 当前源消息
+   * @param assistantMessage - assistant 终态消息
+   * @param usage - provider usage
+   */
+  async function compactAfterProviderUsageIfNeeded(
+    runtime: ActiveChatRuntime,
+    sourceMessages: ChatMessageRecord[],
+    assistantMessage: ChatMessageRecord,
+    usage: AIUsage | undefined
+  ): Promise<void> {
+    if (!usage || runtime.contextWindow === undefined) return;
+
+    const completedMessages = createContinuationSourceMessages(sourceMessages, assistantMessage);
+    const snapshot = emitContextUsageSnapshot(runtime, completedMessages, usage.totalTokens);
+    if (!snapshot || snapshot.usableInputTokens === 0 || usage.totalTokens < snapshot.usableInputTokens) return;
+
+    await compactionService.compact({
+      runtimeId: runtime.runtimeId,
+      sessionId: runtime.sessionId,
+      clientId: runtime.clientId,
+      agentId: runtime.agentId,
+      parentRuntimeId: runtime.parentRuntimeId,
+      reason: 'auto',
+      contextWindow: runtime.contextWindow,
+      messages: completedMessages,
+      signal: runtime.abortController.signal
+    });
+  }
+
+  /**
+   * 执行模型流与工具续轮，并把多轮 usage 汇总回 assistant。
+   * @param runtime - runtime 状态
+   * @param sourceMessages - 当前源消息
+   * @param userMessage - user 消息
+   * @param assistantMessage - assistant 草稿消息
+   * @returns 汇总后的 usage
+   */
+  async function executeRuntimeStreamRounds(
+    runtime: ActiveChatRuntime,
+    sourceMessages: ChatMessageRecord[],
+    userMessage: ChatMessageRecord,
+    assistantMessage: ChatMessageRecord
+  ): Promise<AIUsage | undefined> {
+    let currentSourceMessages = sourceMessages;
+    let streamResult = await streamExecutor({ runtime, sourceMessages: currentSourceMessages, userMessage, assistantMessage }, (message) =>
+      updateAssistantMessage(runtime, message)
+    );
+    if (!activeRuntimes.has(runtime.runtimeId)) {
+      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
+    }
+
+    let accumulatedUsage = addRuntimeUsage(undefined, streamResult.usage);
+    let continuationRound = 0;
+    while (streamResult.shouldContinue && continuationRound < MAX_RUNTIME_CONTINUATION_ROUNDS) {
+      continuationRound += 1;
+      currentSourceMessages = createContinuationSourceMessages(currentSourceMessages, assistantMessage);
+      // eslint-disable-next-line no-await-in-loop
+      streamResult = await streamExecutor({ runtime, sourceMessages: currentSourceMessages, userMessage, assistantMessage }, (message) =>
+        updateAssistantMessage(runtime, message)
+      );
+      if (!activeRuntimes.has(runtime.runtimeId)) {
+        throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
+      }
+      accumulatedUsage = addRuntimeUsage(accumulatedUsage, streamResult.usage);
+    }
+
+    if (accumulatedUsage && !isSameRuntimeUsage(assistantMessage.usage, accumulatedUsage)) {
+      assistantMessage.usage = accumulatedUsage;
+      await updateAssistantMessage(runtime, assistantMessage);
+    }
+
+    return accumulatedUsage;
+  }
+
+  /**
+   * 尝试在上下文超限后压缩并重放当前用户轮次。
+   * @param runtime - runtime 状态
+   * @param sourceMessages - 溢出时使用的源消息
+   * @param userMessage - user 消息
+   * @param assistantMessage - assistant 草稿消息
+   * @param error - 规范化 runtime 错误
+   * @returns 是否已经完成重放处理
+   */
+  async function replayAfterContextOverflow(
+    runtime: ActiveChatRuntime,
+    sourceMessages: ChatMessageRecord[],
+    userMessage: ChatMessageRecord,
+    assistantMessage: ChatMessageRecord,
+    error: AIServiceError
+  ): Promise<boolean> {
+    if (!isContextOverflowError(error) || hasAssistantResponseContent(assistantMessage)) return false;
+
+    const compactResult = await compactionService.compact({
+      runtimeId: runtime.runtimeId,
+      sessionId: runtime.sessionId,
+      clientId: runtime.clientId,
+      agentId: runtime.agentId,
+      parentRuntimeId: runtime.parentRuntimeId,
+      reason: 'auto',
+      contextWindow: runtime.contextWindow,
+      messages: sourceMessages,
+      signal: runtime.abortController.signal
+    });
+    if (!activeRuntimes.has(runtime.runtimeId)) return true;
+    if (compactResult.status !== 'success') return false;
+
+    const replaySourceMessages = downgradeOverflowReplaySourceMessages(await readRuntimeSourceMessages(runtime, userMessage, assistantMessage), userMessage);
+    const replayUserMessage = downgradeUserMessageForOverflowReplay(userMessage);
+    const usage = await executeRuntimeStreamRounds(runtime, replaySourceMessages, replayUserMessage, assistantMessage);
+    await compactAfterProviderUsageIfNeeded(runtime, replaySourceMessages, assistantMessage, usage);
+    await pruneOldToolOutputsIfNeeded(runtime, replaySourceMessages, assistantMessage);
+    completeRuntime(runtime, usage);
+    return true;
+  }
+
+  /**
    * 后台执行模型流并收尾 runtime。
    * @param runtime - runtime 状态
    * @param userMessage - user 消息
@@ -663,35 +1319,26 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     assistantMessage: ChatMessageRecord,
     sourceMessageSnapshot?: ChatMessageRecord[]
   ): Promise<void> {
+    let sourceMessages: ChatMessageRecord[] = [];
     try {
       const initialSourceMessages = sourceMessageSnapshot ?? (await readRuntimeSourceMessages(runtime, userMessage, assistantMessage));
-      let sourceMessages = sourceMessageSnapshot ?? (await compactBeforeStreamIfNeeded(runtime, initialSourceMessages, userMessage, assistantMessage));
+      sourceMessages = sourceMessageSnapshot ?? (await compactBeforeStreamIfNeeded(runtime, initialSourceMessages, userMessage, assistantMessage));
       if (sourceMessageSnapshot) emitContextUsageSnapshot(runtime, sourceMessageSnapshot);
-      let streamResult = await streamExecutor({ runtime, sourceMessages, userMessage, assistantMessage }, (message) =>
-        updateAssistantMessage(runtime, message)
-      );
-      if (!activeRuntimes.has(runtime.runtimeId)) return;
-
-      let accumulatedUsage = addRuntimeUsage(undefined, streamResult.usage);
-      let continuationRound = 0;
-      while (streamResult.shouldContinue && continuationRound < MAX_RUNTIME_CONTINUATION_ROUNDS) {
-        continuationRound += 1;
-        sourceMessages = createContinuationSourceMessages(sourceMessages, assistantMessage);
-        // eslint-disable-next-line no-await-in-loop
-        streamResult = await streamExecutor({ runtime, sourceMessages, userMessage, assistantMessage }, (message) => updateAssistantMessage(runtime, message));
-        if (!activeRuntimes.has(runtime.runtimeId)) return;
-        accumulatedUsage = addRuntimeUsage(accumulatedUsage, streamResult.usage);
-      }
-
-      if (accumulatedUsage && !isSameRuntimeUsage(assistantMessage.usage, accumulatedUsage)) {
-        assistantMessage.usage = accumulatedUsage;
-        await updateAssistantMessage(runtime, assistantMessage);
-      }
+      const accumulatedUsage = await executeRuntimeStreamRounds(runtime, sourceMessages, userMessage, assistantMessage);
+      await compactAfterProviderUsageIfNeeded(runtime, sourceMessages, assistantMessage, accumulatedUsage);
+      await pruneOldToolOutputsIfNeeded(runtime, sourceMessages, assistantMessage);
       completeRuntime(runtime, accumulatedUsage);
     } catch (error) {
       if (!activeRuntimes.has(runtime.runtimeId)) return;
 
-      const runtimeError = normalizeRuntimeStreamError(error);
+      let runtimeError = normalizeRuntimeStreamError(error);
+      try {
+        if (await replayAfterContextOverflow(runtime, sourceMessages, userMessage, assistantMessage, runtimeError)) return;
+      } catch (replayError: unknown) {
+        if (!activeRuntimes.has(runtime.runtimeId)) return;
+        runtimeError = normalizeRuntimeStreamError(replayError);
+      }
+
       markAssistantMessageFailed(assistantMessage, runtimeError);
       await updateAssistantMessage(runtime, assistantMessage);
       emit('chat:runtime:error', {
@@ -729,6 +1376,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         parentRuntimeId: input.parentRuntimeId,
         contextWindow: input.contextWindow,
         system: input.system,
+        workspaceRoot: input.workspaceRoot,
         tools: input.tools,
         tavily: input.tavily,
         mcp: input.mcp,
@@ -771,6 +1419,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         activeRuntimes.delete(runtime.runtimeId);
         activeAssistantMessages.delete(runtime.runtimeId);
         rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime start failed');
+        rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime start failed');
+        rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime start failed');
         locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
         throw error;
       }
@@ -826,11 +1476,116 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         activeRuntimes.delete(runtime.runtimeId);
         activeAssistantMessages.delete(runtime.runtimeId);
         rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime continue failed');
+        rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime continue failed');
+        rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime continue failed');
         locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
         throw error;
       }
 
       return { runtimeId, sessionId: runtime.sessionId };
+    },
+
+    /**
+     * 提交用户选择答案并从主进程持久化消息续跑。
+     * @param input - 用户选择提交输入
+     * @returns 已启动 runtime 标识
+     */
+    async submitUserChoice(input: ChatRuntimeSubmitUserChoiceInput): Promise<ChatRuntimeStartResult> {
+      const runtimeId = `runtime-${nanoid()}`;
+      const lock = locks.acquireWritingLock({ sessionId: input.sessionId, runtimeId });
+      if (!lock.ok) {
+        throw new ChatRuntimeError('SESSION_BUSY', `Session ${input.sessionId} is already running ${lock.ownerRuntimeId}`);
+      }
+
+      const continuationMessages = (await messageReader.getMessages(input.sessionId)).map(cloneRuntimeMessage);
+      const assistantMessage = applyUserChoiceAnswer(continuationMessages, input.answer);
+      const userMessage = findLastRuntimeUserMessage(continuationMessages);
+      if (!userMessage || !assistantMessage) {
+        locks.releaseWritingLock({ sessionId: input.sessionId, runtimeId });
+        throw new ChatRuntimeError('USER_CHOICE_NOT_FOUND', 'No pending user choice was found');
+      }
+
+      const runtime = createUserChoiceRuntime(input, runtimeId);
+      activeRuntimes.set(runtimeId, runtime);
+      assistantMessage.runtimeId = runtimeId;
+      assistantMessage.agentId = runtime.agentId;
+      assistantMessage.parentRuntimeId = runtime.parentRuntimeId;
+      assistantMessage.loading = true;
+      assistantMessage.finished = false;
+      activeAssistantMessages.set(runtimeId, assistantMessage);
+      const sourceMessageSnapshot = continuationMessages.map((message) => (message.id === assistantMessage.id ? assistantMessage : message));
+
+      try {
+        await messageWriter.updateMessage(assistantMessage);
+        emit('chat:runtime:message-updated', {
+          runtimeId,
+          sessionId: runtime.sessionId,
+          clientId: runtime.clientId,
+          agentId: runtime.agentId,
+          parentRuntimeId: runtime.parentRuntimeId,
+          message: assistantMessage
+        });
+
+        if (!dependencies.keepRuntimeOpenForTest) {
+          runRuntimeStream(runtime, userMessage, assistantMessage, sourceMessageSnapshot).catch(() => undefined);
+        }
+      } catch (error) {
+        activeRuntimes.delete(runtime.runtimeId);
+        activeAssistantMessages.delete(runtime.runtimeId);
+        rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime user choice submit failed');
+        rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime user choice submit failed');
+        rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime user choice submit failed');
+        locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
+        throw error;
+      }
+
+      return { runtimeId, sessionId: runtime.sessionId };
+    },
+
+    /**
+     * 请求 renderer 展示确认弹窗并等待决策。
+     * @param input - 确认请求输入
+     * @returns renderer 确认决策
+     */
+    requestConfirmation(input: ChatRuntimeRequestConfirmationInput): Promise<ChatRuntimeConfirmationDecision> {
+      return requestRuntimeConfirmation(input);
+    },
+
+    /**
+     * 提交 renderer 确认决策。
+     * @param input - 确认决策输入
+     */
+    submitConfirmation(input: ChatRuntimeSubmitConfirmationInput): void {
+      const key = createConfirmationRequestKey(input.runtimeId, input.confirmationId);
+      const pendingRequest = pendingConfirmationRequests.get(key);
+      if (!pendingRequest) return;
+
+      pendingConfirmationRequests.delete(key);
+      clearTimeout(pendingRequest.timeoutId);
+      pendingRequest.resolve(input.decision);
+    },
+
+    /**
+     * 请求 renderer 执行通用 bridge 操作并等待结果。
+     * @param input - bridge 请求输入
+     * @returns renderer bridge 结果
+     */
+    requestBridge(input: ChatRuntimeRequestBridgeInput): Promise<ChatRuntimeBridgeResult> {
+      return requestRuntimeBridge(input);
+    },
+
+    /**
+     * 提交 renderer bridge 响应。
+     * @param input - bridge 响应输入
+     */
+    submitBridgeResponse(input: ChatRuntimeBridgeResponseInput): void {
+      const key = createBridgeRequestKey(input.runtimeId, input.requestId);
+      const pendingRequest = pendingBridgeRequests.get(key);
+      if (!pendingRequest) return;
+
+      pendingBridgeRequests.delete(key);
+      clearTimeout(pendingRequest.timeoutId);
+      pendingRequest.resolve(input.result);
     },
 
     /**
@@ -881,6 +1636,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       const assistantMessage = activeAssistantMessages.get(runtime.runtimeId);
       activeAssistantMessages.delete(runtime.runtimeId);
       rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime aborted');
+      rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime aborted');
+      rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime aborted');
       locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
       await streamAbort(runtime.runtimeId);
 
@@ -957,6 +1714,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       if (!pendingRequest) return;
 
       pendingRendererToolRequests.delete(key);
+      clearTimeout(pendingRequest.timeoutId);
       pendingRequest.resolve(input.result);
     },
 

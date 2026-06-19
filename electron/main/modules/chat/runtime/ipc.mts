@@ -5,10 +5,13 @@
 import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
+  ChatRuntimeBridgeResponseInput,
   ChatRuntimeCompactInput,
   ChatRuntimeContinueInput,
   ChatRuntimeHandlerResult,
   ChatRuntimeSendInput,
+  ChatRuntimeSubmitConfirmationInput,
+  ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeSubmitToolResultInput
 } from 'types/chat-runtime';
 import { ipcMain } from 'electron';
@@ -57,6 +60,21 @@ export function registerChatRuntimeHandlers(): void {
   ipcMain.handle(
     'chat:runtime:continue',
     wrapRuntimeHandler((_event, input) => chatRuntimeService.continue(input as ChatRuntimeContinueInput))
+  );
+
+  ipcMain.handle(
+    'chat:runtime:submit-user-choice',
+    wrapRuntimeHandler((_event, input) => chatRuntimeService.submitUserChoice(input as ChatRuntimeSubmitUserChoiceInput))
+  );
+
+  ipcMain.handle(
+    'chat:runtime:submit-confirmation',
+    wrapRuntimeHandler((_event, input) => chatRuntimeService.submitConfirmation(input as ChatRuntimeSubmitConfirmationInput))
+  );
+
+  ipcMain.handle(
+    'chat:runtime:bridge-response',
+    wrapRuntimeHandler((_event, input) => chatRuntimeService.submitBridgeResponse(input as ChatRuntimeBridgeResponseInput))
   );
 
   ipcMain.handle(

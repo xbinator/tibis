@@ -3,10 +3,15 @@
  * @description BChat renderer 侧 ChatRuntime 桥接 hook。
  */
 import type { Message } from '../utils/types';
-import type { AIServiceError, AIToolContext, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
+import type { AIServiceError, AIToolContext, AIToolExecutionError, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
 import type { ChatMessageRecord } from 'types/chat';
 import type {
   ChatRuntimeContinueInput,
+  ChatRuntimeConfirmationDecision,
+  ChatRuntimeConfirmationRequest,
+  ChatRuntimeConfirmationRequestEvent,
+  ChatRuntimeBridgeRequestEvent,
+  ChatRuntimeBridgeResult,
   ChatRuntimeContextUsageSnapshot,
   ChatRuntimeEventMap,
   ChatRuntimeHandlerResult,
@@ -15,6 +20,7 @@ import type {
   ChatRuntimeMessageEvent,
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
+  ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
 import type { Ref } from 'vue';
@@ -34,6 +40,10 @@ interface UseChatRuntimeOptions {
   onError?: (error: AIServiceError) => Promise<void> | void;
   /** runtime 上下文用量更新回调。 */
   onContextUsageUpdated?: (snapshot: ChatRuntimeContextUsageSnapshot) => Promise<void> | void;
+  /** runtime 确认请求回调。 */
+  requestConfirmation?: (request: ChatRuntimeConfirmationRequest) => Promise<ChatRuntimeConfirmationDecision> | ChatRuntimeConfirmationDecision;
+  /** runtime 通用 renderer bridge 请求回调。 */
+  handleBridgeRequest?: (event: ChatRuntimeBridgeRequestEvent) => Promise<unknown> | unknown;
   /** renderer client id。 */
   clientId?: string;
   /** 当前 agent id。 */
@@ -47,14 +57,40 @@ interface UseChatRuntimeOptions {
 /** ChatRuntime 发送输入。 */
 export type BChatRuntimeSendInput = Pick<
   ChatRuntimeSendInput,
-  'sessionId' | 'content' | 'files' | 'userMessageId' | 'userMessageCreatedAt' | 'contextWindow' | 'system' | 'tools' | 'tavily' | 'mcp'
+  'sessionId' | 'content' | 'files' | 'userMessageId' | 'userMessageCreatedAt' | 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp'
 >;
 
+/** Runtime renderer 工具失败可透传的稳定错误码。 */
+const RUNTIME_TOOL_ERROR_CODES: AIToolExecutionError['code'][] = [
+  'TOOL_NOT_FOUND',
+  'INVALID_INPUT',
+  'NO_ACTIVE_DOCUMENT',
+  'NO_SELECTION',
+  'NO_CURSOR',
+  'PERMISSION_DENIED',
+  'USER_CANCELLED',
+  'EDITOR_UNAVAILABLE',
+  'STALE_CONTEXT',
+  'TOOL_TIMEOUT',
+  'UNSUPPORTED_PROVIDER',
+  'CONFIRMATION_DISMISSED',
+  'EXECUTION_FAILED'
+];
+
 /** ChatRuntime 续轮输入。 */
-export type BChatRuntimeContinueInput = Pick<ChatRuntimeContinueInput, 'sessionId' | 'contextWindow' | 'system' | 'tools' | 'tavily' | 'mcp'> & {
+export type BChatRuntimeContinueInput = Pick<
+  ChatRuntimeContinueInput,
+  'sessionId' | 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp'
+> & {
   /** renderer 消息列表，发送到主进程前会转换为纯 runtime 快照。 */
   messages: Message[];
 };
+
+/** ChatRuntime 用户选择提交输入。 */
+export type BChatRuntimeSubmitUserChoiceInput = Pick<
+  ChatRuntimeSubmitUserChoiceInput,
+  'sessionId' | 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp' | 'answer'
+>;
 
 /**
  * 可能包含主进程 runtime 扩展字段的 renderer 消息。
@@ -196,6 +232,15 @@ function resolveRuntimeTools(tools: UseChatRuntimeOptions['tools']): AIToolExecu
 }
 
 /**
+ * 判断未知错误码是否为工具执行稳定错误码。
+ * @param code - 待判断错误码
+ * @returns 是否为工具执行错误码
+ */
+function isRuntimeToolErrorCode(code: unknown): code is AIToolExecutionError['code'] {
+  return typeof code === 'string' && RUNTIME_TOOL_ERROR_CODES.includes(code as AIToolExecutionError['code']);
+}
+
+/**
  * 创建工具执行失败结果。
  * @param toolName - 工具名称
  * @param error - 原始错误
@@ -203,12 +248,48 @@ function resolveRuntimeTools(tools: UseChatRuntimeOptions['tools']): AIToolExecu
  */
 function createRuntimeToolFailureResult(toolName: string, error: unknown): AIToolExecutionResult {
   const message = error instanceof Error ? error.message : String(error);
+  const rawCode = typeof error === 'object' && error !== null && 'code' in error ? (error as { code?: unknown }).code : undefined;
 
   return {
     toolName,
     status: 'failure',
     error: {
-      code: 'EXECUTION_FAILED',
+      code: isRuntimeToolErrorCode(rawCode) ? rawCode : 'EXECUTION_FAILED',
+      message
+    }
+  };
+}
+
+/**
+ * 创建 runtime renderer 工具不可用结果。
+ * @param toolName - 工具名称
+ * @param message - 失败描述
+ * @returns 工具失败结果
+ */
+function createRuntimeToolUnavailableResult(toolName: string, message: string): AIToolExecutionResult {
+  return {
+    toolName,
+    status: 'failure',
+    error: {
+      code: 'EDITOR_UNAVAILABLE',
+      message
+    }
+  };
+}
+
+/**
+ * 创建 runtime bridge 失败结果。
+ * @param error - 原始错误
+ * @returns bridge 失败结果
+ */
+function createRuntimeBridgeFailureResult(error: unknown): ChatRuntimeBridgeResult {
+  const message = error instanceof Error ? error.message : String(error);
+  const rawCode = typeof error === 'object' && error !== null && 'code' in error ? (error as { code?: unknown }).code : undefined;
+
+  return {
+    status: 'failure',
+    error: {
+      code: isRuntimeToolErrorCode(rawCode) ? rawCode : 'EXECUTION_FAILED',
       message
     }
   };
@@ -307,11 +388,45 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
   }
 
   /**
+   * 提交 runtime 确认决策。
+   * @param event - 确认请求事件
+   * @param decision - 确认决策
+   */
+  async function submitConfirmationDecision(event: ChatRuntimeConfirmationRequestEvent, decision: ChatRuntimeConfirmationDecision): Promise<void> {
+    assertRuntimeResult(
+      await electronAPI.chatRuntimeSubmitConfirmation({
+        runtimeId: event.runtimeId,
+        confirmationId: event.confirmationId,
+        decision
+      })
+    );
+  }
+
+  /**
+   * 提交 runtime bridge 响应。
+   * @param event - bridge 请求事件
+   * @param result - bridge 结果
+   */
+  async function submitBridgeResponse(event: ChatRuntimeBridgeRequestEvent, result: ChatRuntimeBridgeResult): Promise<void> {
+    assertRuntimeResult(
+      await electronAPI.chatRuntimeSubmitBridgeResponse({
+        runtimeId: event.runtimeId,
+        requestId: event.requestId,
+        result
+      })
+    );
+  }
+
+  /**
    * 处理 runtime 工具请求事件。
    * @param event - 工具请求事件
    */
   async function handleToolRequestEvent(event: ChatRuntimeToolRequestEvent): Promise<void> {
-    if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+    if (event.clientId !== clientId) return;
+    if (event.sessionId !== options.getSessionId()) {
+      await submitToolResult(event, createRuntimeToolUnavailableResult(event.toolName, '当前会话已切换，无法执行工具'));
+      return;
+    }
 
     try {
       const executedToolCall = await executeToolCall(
@@ -325,12 +440,55 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     }
   }
 
+  /**
+   * 处理 runtime 确认请求事件。
+   * @param event - 确认请求事件
+   */
+  async function handleConfirmationRequestEvent(event: ChatRuntimeConfirmationRequestEvent): Promise<void> {
+    if (event.clientId !== clientId) return;
+    if (event.sessionId !== options.getSessionId()) {
+      await submitConfirmationDecision(event, { approved: false });
+      return;
+    }
+
+    const decision = options.requestConfirmation ? await options.requestConfirmation(event.request) : { approved: false };
+    await submitConfirmationDecision(event, decision);
+  }
+
+  /**
+   * 处理 runtime bridge 请求事件。
+   * @param event - bridge 请求事件
+   */
+  async function handleBridgeRequestEvent(event: ChatRuntimeBridgeRequestEvent): Promise<void> {
+    if (event.clientId !== clientId) return;
+    if (event.sessionId !== options.getSessionId()) {
+      await submitBridgeResponse(event, {
+        status: 'failure',
+        error: { code: 'EDITOR_UNAVAILABLE', message: '当前会话已切换，无法执行 bridge 请求' }
+      });
+      return;
+    }
+
+    try {
+      const data = options.handleBridgeRequest ? await options.handleBridgeRequest(event) : undefined;
+      await submitBridgeResponse(event, { status: 'success', data });
+    } catch (error) {
+      await submitBridgeResponse(event, createRuntimeBridgeFailureResult(error));
+    }
+  }
+
   const disposeMessageCreated = electronAPI.chatRuntimeOnMessageCreated(handleMessageEvent);
   const disposeMessageUpdated = electronAPI.chatRuntimeOnMessageUpdated(handleMessageEvent);
   const disposeMessageDeleted = electronAPI.chatRuntimeOnMessageDeleted(handleMessageDeletedEvent);
   const disposeContextUsage = electronAPI.chatRuntimeOnContextUsageUpdated(handleContextUsageEvent);
   const disposeToolRequest = electronAPI.chatRuntimeOnToolRequest((event) => {
     handleToolRequestEvent(event).catch(() => undefined);
+  });
+  const disposeConfirmationRequest = electronAPI.chatRuntimeOnConfirmationRequested((event) => {
+    handleConfirmationRequestEvent(event).catch(() => undefined);
+  });
+  const disposeBridgeRequest = electronAPI.chatRuntimeOnBridgeRequested((event) => {
+    handleBridgeRequestEvent(event).catch(() => undefined);
   });
   const disposeComplete = electronAPI.chatRuntimeOnComplete(handleCompleteEvent);
   const disposeError = electronAPI.chatRuntimeOnError(handleErrorEvent);
@@ -341,6 +499,8 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     disposeMessageDeleted();
     disposeContextUsage();
     disposeToolRequest();
+    disposeConfirmationRequest();
+    disposeBridgeRequest();
     disposeComplete();
     disposeError();
   });
@@ -374,6 +534,23 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
   }
 
   /**
+   * 通过主进程 ChatRuntime 提交用户选择答案并续跑。
+   * @param input - 用户选择提交输入
+   * @returns runtime 启动结果
+   */
+  async function submitUserChoice(input: BChatRuntimeSubmitUserChoiceInput): Promise<ChatRuntimeStartResult> {
+    const result = unwrapRuntimeResult(
+      await electronAPI.chatRuntimeSubmitUserChoice({
+        ...input,
+        clientId,
+        agentId
+      })
+    );
+    activeRuntimeId.value = result.runtimeId;
+    return result;
+  }
+
+  /**
    * 中止当前活跃 runtime。
    */
   async function abort(): Promise<void> {
@@ -388,6 +565,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     activeRuntimeId,
     abort,
     continueTurn,
-    send
+    send,
+    submitUserChoice
   };
 }

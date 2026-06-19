@@ -6,55 +6,88 @@ import type { BuiltinToolBaseOptions } from '../shared/types';
 import type { AIToolExecutor } from 'types/ai';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
-import { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME, createBuiltinDocumentWriteTool, createBuiltinReadTools } from './DocumentTool';
-import { APPLY_DRAWING_OPERATIONS_TOOL_NAME, CREATE_DRAWING_TOOL_NAME, READ_CURRENT_DRAWING_TOOL_NAME, createBuiltinDrawingTools } from './DrawingTool';
-import { GET_CURRENT_TIME_TOOL_NAME, createBuiltinEnvironmentTools } from './EnvironmentTool';
-import { EDIT_FILE_TOOL_NAME, createBuiltinEditFileTool } from './FileEditTool';
-import { createBuiltinReadDirectoryTool, createBuiltinReadFileTool, READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool';
-import { createBuiltinWriteFileTool, WRITE_FILE_TOOL_NAME } from './FileWriteTool';
-import { createBuiltinLogTools, QUERY_LOGS_TOOL_NAME } from './LogsTool';
 import {
   ADD_MCP_SERVER_TOOL_NAME,
-  createBuiltinMCPTools,
+  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
+  CREATE_DOCUMENT_TOOL_NAME,
+  CREATE_DRAWING_TOOL_NAME,
+  EDIT_FILE_TOOL_NAME,
+  GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
-  hasMcpServers,
+  GET_SETTINGS_TOOL_NAME,
+  OPEN_RESOURCE_TOOL_NAME,
+  QUERY_LOGS_TOOL_NAME,
+  READ_CURRENT_DOCUMENT_TOOL_NAME,
+  READ_CURRENT_DRAWING_TOOL_NAME,
+  READ_CURRENT_WEBPAGE_TOOL_NAME,
+  READ_DIRECTORY_TOOL_NAME,
+  READ_FILE_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
-  type MCPStoreLike
-} from './MCPTool';
+  UPDATE_SETTINGS_TOOL_NAME,
+  WRITE_FILE_TOOL_NAME,
+  createAddMcpServerTool,
+  createApplyDrawingOperationsTool,
+  createCreateDocumentTool,
+  createCreateDrawingTool,
+  createEditFileTool,
+  createGetCurrentTimeTool,
+  createGetMcpSettingsTool,
+  createGetSettingsTool,
+  createOpenResourceTool,
+  createQueryLogsTool,
+  createReadCurrentDocumentTool,
+  createReadCurrentDrawingTool,
+  createReadCurrentWebpageTool,
+  createReadDirectoryTool,
+  createReadFileTool,
+  createRefreshMcpDiscoveryTool,
+  createRemoveMcpServerTool,
+  createUpdateMcpServerTool,
+  createUpdateSettingsTool,
+  createWriteFileTool
+} from '../catalog/runtimeTools';
 import { EDIT_MEMORY_TOOL_NAME, createBuiltinEditMemoryTool } from './MemoryTool';
-import { createOpenResourceTool, OPEN_RESOURCE_TOOL_NAME } from './OpenResourceTool';
 import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } from './QuestionTool';
-import { createBuiltinSettingsTools, GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
 import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteTool';
-import { createBuiltinWebpageTool, READ_CURRENT_WEBPAGE_TOOL_NAME, type CreateBuiltinWebpageToolOptions } from './WebpageTool';
 
 // 重新导出工具名称
-export { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool';
-export { APPLY_DRAWING_OPERATIONS_TOOL_NAME, CREATE_DRAWING_TOOL_NAME, READ_CURRENT_DRAWING_TOOL_NAME, UPDATE_CURRENT_DRAWING_TOOL_NAME } from './DrawingTool';
-export { OPEN_RESOURCE_TOOL_NAME } from './OpenResourceTool';
-export { GET_CURRENT_TIME_TOOL_NAME } from './EnvironmentTool';
-export { EDIT_FILE_TOOL_NAME } from './FileEditTool';
-export { READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool';
-export { WRITE_FILE_TOOL_NAME } from './FileWriteTool';
-export { QUERY_LOGS_TOOL_NAME } from './LogsTool';
 export {
   ADD_MCP_SERVER_TOOL_NAME,
+  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
+  CREATE_DOCUMENT_TOOL_NAME,
+  CREATE_DRAWING_TOOL_NAME,
+  EDIT_FILE_TOOL_NAME,
+  GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
+  GET_SETTINGS_TOOL_NAME,
+  OPEN_RESOURCE_TOOL_NAME,
+  QUERY_LOGS_TOOL_NAME,
+  READ_CURRENT_DOCUMENT_TOOL_NAME,
+  READ_CURRENT_DRAWING_TOOL_NAME,
+  READ_CURRENT_WEBPAGE_TOOL_NAME,
+  READ_DIRECTORY_TOOL_NAME,
+  READ_FILE_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
+  UPDATE_CURRENT_DRAWING_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME
-} from './MCPTool';
+} from '../catalog/runtimeTools';
 export { LEGACY_ASK_USER_QUESTION_TOOL_NAME, QUESTION_TOOL_NAME } from './QuestionTool';
-export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool';
+export { UPDATE_SETTINGS_TOOL_NAME, WRITE_FILE_TOOL_NAME } from '../catalog/runtimeTools';
 export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
 export { TODO_WRITE_TOOL_NAME } from './TodoWriteTool';
 export { EDIT_MEMORY_TOOL_NAME } from './MemoryTool';
-export { READ_CURRENT_WEBPAGE_TOOL_NAME } from './WebpageTool';
+
+/** MCP 工具 store 接口，仅声明条件注册所需字段。 */
+export interface MCPStoreLike {
+  /** 是否存在已启用且配置完整的 MCP server。 */
+  hasEnabledMcpServers: boolean;
+}
 
 /**
  * 由主进程 AI SDK 直接执行的远端工具名称。
@@ -172,7 +205,7 @@ export function isDefaultBuiltinWritableToolName(toolName: string): boolean {
 /**
  * 创建内置工具的选项
  */
-interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions, CreateBuiltinWebpageToolOptions {
+interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions {
   /** 获取当前待回答问题，用于避免重复发起用户选择 */
   getPendingQuestion?: () => PendingQuestionSnapshot | null;
   /** 创建用户选择问题 ID */
@@ -183,14 +216,16 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions, CreateBuilti
   skillStore?: SkillStoreLike;
   /** 获取当前活跃会话 ID，用于 todowrite 工具 */
   getSessionId?: () => string | undefined;
+  /** 获取当前 WebView 上下文，保留给调用方传参兼容。 */
+  getWebviewContext?: () => unknown;
   /** 通过文件路径打开文件标签页，用于 open_resource 工具 */
   openFileByPath?: (filePath: string) => Promise<{ id: string } | null>;
   /** 在内置 webview 中打开 URL，用于 open_resource 工具 */
   openInWebview?: (url: string) => void;
   /** 在系统浏览器中打开 URL，用于 open_resource 工具 */
   openExternal?: (url: string) => void;
-  /** 获取当前活动 Drawing 上下文 */
-  getDrawingContext?: Parameters<typeof createBuiltinDrawingTools>[0]['getDrawingContext'];
+  /** 获取当前活动 Drawing 上下文，保留给调用方传参兼容。 */
+  getDrawingContext?: () => unknown;
 }
 
 /**
@@ -199,67 +234,35 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions, CreateBuilti
  * @returns 工具执行器列表
  */
 export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIToolExecutor[] {
-  // 创建文档只读工具
-  const readTools = createBuiltinReadTools();
-  // 创建环境只读工具
-  const environmentTools = createBuiltinEnvironmentTools();
-  // 创建日志只读工具
-  const logTools = createBuiltinLogTools();
-  // 创建 Drawing 工具
-  const drawingTools = createBuiltinDrawingTools({
-    getDrawingContext: options.getDrawingContext,
-    openDraft: options.openDraft
-  });
-  // 先汇总全部只读工具，再通过共享清单筛选默认暴露项。
+  // 先汇总全部只读 schema-only 工具，再通过共享清单筛选默认暴露项。
   const allReadonlyTools: AIToolExecutor[] = [
-    readTools.readCurrentDocument,
-    drawingTools.readCurrentDrawing,
-    environmentTools.getCurrentTime,
+    createReadCurrentDocumentTool(),
+    createReadCurrentDrawingTool(),
+    createReadCurrentWebpageTool(),
+    createGetCurrentTimeTool(),
     createQuestionTool({
       getPendingQuestion: options.getPendingQuestion ?? (() => null),
       createQuestionId: options.createQuestionId ?? (() => nanoid())
     }),
-    createBuiltinWebpageTool({
-      getWebviewContext: options.getWebviewContext
-    }),
-    createBuiltinReadFileTool({
-      confirm: options.confirm,
-      getWorkspaceRoot: options.getWorkspaceRoot,
-      isFileInRecent: options.isFileInRecent,
-      findFileByPath: options.findFileByPath,
-      getEditorContext: options.getEditorContext
-    }),
-    createOpenResourceTool({
-      confirm: options.confirm,
-      getWorkspaceRoot: options.getWorkspaceRoot,
-      isFileInRecent: options.isFileInRecent,
-      openFileByPath: options.openFileByPath,
-      openInWebview: options.openInWebview,
-      openExternal: options.openExternal
-    }),
-    createBuiltinSettingsTools(options.confirm ?? { confirm: async () => false }).getSettings,
-    logTools.queryLogs
+    createReadFileTool(),
+    createGetSettingsTool(),
+    createQueryLogsTool(),
+    createOpenResourceTool()
   ];
   const readonlyTools = allReadonlyTools.filter((tool) => isDefaultBuiltinReadonlyToolName(tool.definition.name));
 
   // read_directory 工具：仅当存在工作区根目录时注册
   const hasWorkspace = Boolean(options.getWorkspaceRoot?.());
-  const readDirectoryTool = hasWorkspace
-    ? createBuiltinReadDirectoryTool({
-        confirm: options.confirm,
-        getWorkspaceRoot: options.getWorkspaceRoot,
-        isFileInRecent: options.isFileInRecent
-      })
-    : null;
+  const readDirectoryTool = hasWorkspace ? createReadDirectoryTool() : null;
 
   // MCP 只读工具：仅当存在已配置的 MCP server 时注册
-  const mcpHasContent = options.mcpStore ? hasMcpServers(options.mcpStore) : false;
-  const mcpReadTool = mcpHasContent ? createBuiltinMCPTools(options.confirm ?? { confirm: async () => false }).getMcpSettings : null;
+  const mcpHasContent = options.mcpStore?.hasEnabledMcpServers === true;
+  const mcpReadTool = mcpHasContent ? createGetMcpSettingsTool() : null;
 
-  // 创建文档写工具（创建新文档），始终注册，不依赖确认适配器
-  const documentWriteTools = createBuiltinDocumentWriteTool({
-    openDraft: options.openDraft
-  });
+  // 创建文档和画板写工具 schema，实际执行在主进程。
+  const createDocumentTool = createCreateDocumentTool();
+  const createDrawingTool = createCreateDrawingTool();
+  const applyDrawingOperationsTool = createApplyDrawingOperationsTool();
 
   // 没有确认适配器时只返回只读工具 + 始终注册的写工具
   if (!options.confirm) {
@@ -268,24 +271,12 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       ...(readDirectoryTool ? [readDirectoryTool] : []),
       ...(mcpReadTool ? [mcpReadTool] : []),
       createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) }),
-      documentWriteTools.createDocument,
-      drawingTools.createDrawing,
-      drawingTools.applyDrawingOperations,
+      createDocumentTool,
+      createDrawingTool,
+      applyDrawingOperationsTool,
       createBuiltinEditMemoryTool()
     ];
   }
-  // 创建文件级写入工具
-  const editFileTool = createBuiltinEditFileTool({
-    confirm: options.confirm!,
-    getWorkspaceRoot: options.getWorkspaceRoot
-  });
-  const writeFileTool = createBuiltinWriteFileTool({
-    confirm: options.confirm!,
-    getWorkspaceRoot: options.getWorkspaceRoot,
-    openDraft: options.openDraft
-  });
-  // 创建设置修改工具
-  const settingsTools = createBuiltinSettingsTools(options.confirm);
   // 已启用 Skill 的目录也可作为 Shell 执行安全边界，用于运行 Skill 自带脚本。
   // 注意：skillStore 在 onMounted 中异步初始化，不能在工具创建时静态捕获 skill 列表，
   // getAdditionalShellWorkspaceRoots 必须在每次调用时动态从 store 读取最新数据。
@@ -300,20 +291,21 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     : null;
   // 先汇总默认文件写工具，再通过共享清单筛选默认暴露项。
   const allDefaultWritableTools: AIToolExecutor[] = [
-    documentWriteTools.createDocument,
-    drawingTools.createDrawing,
-    drawingTools.applyDrawingOperations,
-    drawingTools.updateCurrentDrawing,
-    editFileTool,
-    writeFileTool,
-    settingsTools.updateSettings,
+    createDocumentTool,
+    createDrawingTool,
+    applyDrawingOperationsTool,
+    createEditFileTool(),
+    createWriteFileTool(),
+    createUpdateSettingsTool(),
     ...(shellCommandTool ? [shellCommandTool] : []),
     createBuiltinEditMemoryTool()
   ];
   const writableTools = allDefaultWritableTools.filter((tool) => isDefaultBuiltinWritableToolName(tool.definition.name));
 
   // MCP 写工具：仅当存在已配置的 MCP server 时注册
-  const mcpWriteTools = mcpHasContent ? createBuiltinMCPTools(options.confirm) : null;
+  const mcpWriteTools = mcpHasContent
+    ? [createAddMcpServerTool(), createUpdateMcpServerTool(), createRemoveMcpServerTool(), createRefreshMcpDiscoveryTool()]
+    : [];
 
   // Skill 工具：仅当有可用 skill 时注册
   const skillTool = options.skillStore?.initialized && enabledSkills.length > 0 ? createSkillTool(options.skillStore) : null;
@@ -328,7 +320,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     ...(readDirectoryTool ? [readDirectoryTool] : []),
     ...(mcpReadTool ? [mcpReadTool] : []),
     ...writableTools,
-    ...(mcpWriteTools ? [mcpWriteTools.addMcpServer, mcpWriteTools.updateMcpServer, mcpWriteTools.removeMcpServer, mcpWriteTools.refreshMcpDiscovery] : []),
+    ...mcpWriteTools,
     ...(skillTool ? [skillTool] : []),
     todoWriteTool
   ];

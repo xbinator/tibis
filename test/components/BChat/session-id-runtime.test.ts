@@ -59,9 +59,12 @@ const electronAPIMock = vi.hoisted(() => ({
   chatCompressionUpdateStatus: vi.fn(),
   chatRuntimeSend: vi.fn(),
   chatRuntimeContinue: vi.fn(),
+  chatRuntimeSubmitUserChoice: vi.fn(),
   chatRuntimeAbort: vi.fn(),
   chatRuntimeCompact: vi.fn(),
   chatRuntimeSubmitToolResult: vi.fn(),
+  chatRuntimeSubmitConfirmation: vi.fn(),
+  chatRuntimeSubmitBridgeResponse: vi.fn(),
   chatRuntimeOnMessageCreated: vi.fn(() => vi.fn()),
   chatRuntimeOnMessageUpdated: vi.fn((callback: RuntimeMessageListener) => {
     runtimeListeners.messageUpdated = callback;
@@ -76,6 +79,8 @@ const electronAPIMock = vi.hoisted(() => ({
     return vi.fn();
   }),
   chatRuntimeOnToolRequest: vi.fn(() => vi.fn()),
+  chatRuntimeOnConfirmationRequested: vi.fn(() => vi.fn()),
+  chatRuntimeOnBridgeRequested: vi.fn(() => vi.fn()),
   chatRuntimeOnError: vi.fn(() => vi.fn()),
   chatRuntimeOnComplete: vi.fn(() => vi.fn())
 }));
@@ -468,14 +473,19 @@ describe('BChat sessionId runtime', (): void => {
     electronAPIMock.chatCompressionUpdateStatus.mockReset();
     electronAPIMock.chatRuntimeSend.mockReset();
     electronAPIMock.chatRuntimeContinue.mockReset();
+    electronAPIMock.chatRuntimeSubmitUserChoice.mockReset();
     electronAPIMock.chatRuntimeAbort.mockReset();
     electronAPIMock.chatRuntimeCompact.mockReset();
     electronAPIMock.chatRuntimeSubmitToolResult.mockReset();
+    electronAPIMock.chatRuntimeSubmitConfirmation.mockReset();
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockReset();
     electronAPIMock.chatRuntimeOnMessageCreated.mockClear();
     electronAPIMock.chatRuntimeOnMessageUpdated.mockClear();
     electronAPIMock.chatRuntimeOnMessageDeleted.mockClear();
     electronAPIMock.chatRuntimeOnContextUsageUpdated.mockClear();
     electronAPIMock.chatRuntimeOnToolRequest.mockClear();
+    electronAPIMock.chatRuntimeOnConfirmationRequested.mockClear();
+    electronAPIMock.chatRuntimeOnBridgeRequested.mockClear();
     electronAPIMock.chatRuntimeOnError.mockClear();
     electronAPIMock.chatRuntimeOnComplete.mockClear();
     getAvailableServiceConfigMock.mockReset();
@@ -517,12 +527,18 @@ describe('BChat sessionId runtime', (): void => {
       ok: true,
       data: { runtimeId: 'runtime-continued', sessionId: 'session-active' }
     });
+    electronAPIMock.chatRuntimeSubmitUserChoice.mockResolvedValue({
+      ok: true,
+      data: { runtimeId: 'runtime-choice', sessionId: 'session-active' }
+    });
     electronAPIMock.chatRuntimeCompact.mockResolvedValue({
       ok: true,
       data: { status: 'skipped', reason: 'no_messages' }
     });
     electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeSubmitConfirmation.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
     getAvailableServiceConfigMock.mockResolvedValue({
       providerId: 'provider-1',
       modelId: 'model-1'
@@ -654,27 +670,17 @@ describe('BChat sessionId runtime', (): void => {
     wrapper.findComponent(ConversationViewStub).vm.$emit('user-choice-submit', answer);
     await flushPromises();
 
-    expect(electronAPIMock.chatRuntimeContinue).toHaveBeenCalledWith(
+    expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-active',
         clientId: 'bchat',
         agentId: 'default',
-        contextWindow: 200000
+        contextWindow: 200000,
+        answer
       })
     );
-    const [continueInput] = electronAPIMock.chatRuntimeContinue.mock.calls[0] as [ChatRuntimeContinueInput];
-    expect(continueInput.messages).toEqual([
-      expect.objectContaining({ id: 'user-choice', role: 'user' }),
-      expect.objectContaining({
-        id: 'assistant-choice',
-        parts: [
-          expect.objectContaining({
-            toolCallId: 'tool-call-1',
-            result: { toolName: 'ask_user_choice', status: 'success', data: answer }
-          })
-        ]
-      })
-    ]);
+    expect(electronAPIMock.chatRuntimeSubmitUserChoice.mock.calls[0]?.[0]).not.toHaveProperty('messages');
+    expect(electronAPIMock.chatRuntimeContinue).not.toHaveBeenCalled();
   });
 
   it('regenerates assistant messages through main process ChatRuntime', async (): Promise<void> => {

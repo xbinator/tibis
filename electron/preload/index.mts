@@ -14,6 +14,8 @@ import type {
   AIStreamToolResultChunk
 } from 'types/ai';
 import type {
+  ChatRuntimeBridgeRequestEvent,
+  ChatRuntimeConfirmationRequestEvent,
   ChatRuntimeContextUsageEvent,
   ChatRuntimeEventMap,
   ChatRuntimeMessageDeletedEvent,
@@ -455,6 +457,27 @@ const electronAPI: ElectronAPI = {
   chatRuntimeContinue: (input) => ipcRenderer.invoke('chat:runtime:continue', input),
 
   /**
+   * 通过主进程 ChatRuntime 提交用户选择答案并续跑。
+   * @param input - 用户选择提交输入
+   * @returns runtime 启动结果
+   */
+  chatRuntimeSubmitUserChoice: (input) => ipcRenderer.invoke('chat:runtime:submit-user-choice', input),
+
+  /**
+   * 提交 ChatRuntime 确认决策。
+   * @param input - 确认决策输入
+   * @returns 提交结果
+   */
+  chatRuntimeSubmitConfirmation: (input) => ipcRenderer.invoke('chat:runtime:submit-confirmation', input),
+
+  /**
+   * 提交 ChatRuntime bridge 响应。
+   * @param input - bridge 响应输入
+   * @returns 提交结果
+   */
+  chatRuntimeSubmitBridgeResponse: (input) => ipcRenderer.invoke('chat:runtime:bridge-response', input),
+
+  /**
    * 通过主进程 ChatRuntime 自动生成并持久化会话标题。
    * @param input - 自动命名输入
    * @returns 自动命名结果
@@ -549,6 +572,34 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('chat:runtime:tool-request', handler);
     return () => {
       ipcRenderer.removeListener('chat:runtime:tool-request', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime 确认请求事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnConfirmationRequested: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeConfirmationRequestEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:confirmation-requested', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:confirmation-requested', handler);
+    };
+  },
+
+  /**
+   * 监听 ChatRuntime bridge 请求事件。
+   * @param callback - 事件回调
+   * @returns 取消监听函数
+   */
+  chatRuntimeOnBridgeRequested: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: ChatRuntimeBridgeRequestEvent) => callback(payload);
+
+    ipcRenderer.on('chat:runtime:bridge-requested', handler);
+    return () => {
+      ipcRenderer.removeListener('chat:runtime:bridge-requested', handler);
     };
   },
 
