@@ -56,8 +56,8 @@
     <!-- 用户消息底部：时间戳 + 回退按钮 + 复制按钮（hover 可见） -->
     <div v-if="isUserMessage && message.finished" :class="bem('toolbar', { right: isUserMessage })">
       <span :class="bem('time')">{{ formatMessageTime(message.createdAt) }}</span>
-      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" tooltip="回退到此" @click="$emit('rollback', message)" />
-      <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" tooltip="复制消息" @click="handleCopy(message)" />
+      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" @click="$emit('rollback', message)" />
+      <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
     </div>
   </div>
 </template>

@@ -98,6 +98,7 @@ export function registerAIHandlers(): void {
       // 遍历流式响应，根据类型分发不同事件
       const thinkingState = { value: false };
       for await (const chunk of result.stream) {
+        console.log('🚀 ~ registerAIHandlers ~ chunk:', chunk);
         if (chunk.type === 'text-delta') {
           // 检测 <think> 标签来识别思考内容
           emitTextDelta(chunk.text, thinkingState, win.webContents);
