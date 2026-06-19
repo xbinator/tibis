@@ -19,6 +19,8 @@ export interface InterruptedDraftRecoveryResult {
   recovered: boolean;
   /** 被恢复的消息列表。 */
   recoveredMessages: Message[];
+  /** 恢复过程中新增的辅助消息列表。 */
+  createdMessages: Message[];
 }
 
 /**
@@ -82,6 +84,8 @@ function recoverInterruptedAssistantDraft(sourceMessage: Message): Message {
 export function recoverInterruptedAssistantDrafts(sourceMessages: Message[]): InterruptedDraftRecoveryResult {
   let recovered = false;
   const recoveredMessages: Message[] = [];
+  const createdMessages: Message[] = [];
+  const sourceMessageIds = new Set(sourceMessages.map((message) => message.id));
 
   const messages = sourceMessages.flatMap((message) => {
     if (!isInterruptedAssistantDraft(message)) {
@@ -89,11 +93,18 @@ export function recoverInterruptedAssistantDrafts(sourceMessages: Message[]): In
     }
 
     const nextMessage = recoverInterruptedAssistantDraft(message);
-    const interruptMessage = createRecoveredInterruptMessage(nextMessage);
     recovered = true;
     recoveredMessages.push(nextMessage);
+
+    const interruptMessageId = `${nextMessage.id}-interrupt`;
+    if (sourceMessageIds.has(interruptMessageId)) {
+      return [nextMessage];
+    }
+
+    const interruptMessage = createRecoveredInterruptMessage(nextMessage);
+    createdMessages.push(interruptMessage);
     return [nextMessage, interruptMessage];
   });
 
-  return { messages, recovered, recoveredMessages };
+  return { messages, recovered, recoveredMessages, createdMessages };
 }

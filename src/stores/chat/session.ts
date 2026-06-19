@@ -63,7 +63,10 @@ export const useChatSessionStore = defineStore('chat', {
         const recoveryResult = recoverInterruptedAssistantDrafts(loadedMessages);
 
         if (recoveryResult.recovered) {
-          await Promise.all(recoveryResult.recoveredMessages.map((message) => this.updateSessionMessage(sessionId, message)));
+          await Promise.all([
+            ...recoveryResult.recoveredMessages.map((message) => this.updateSessionMessage(sessionId, message)),
+            ...recoveryResult.createdMessages.map((message) => this.addSessionMessage(sessionId, message))
+          ]);
         }
 
         return recoveryResult.messages;

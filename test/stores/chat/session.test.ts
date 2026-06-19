@@ -10,6 +10,7 @@ import { useChatSessionStore } from '@/stores/chat/session';
 
 const mockElectronAPI = vi.hoisted(() => ({
   chatMessageList: vi.fn<(sessionId: string) => Promise<{ ok: true; data: ChatMessageRecord[] }>>(),
+  chatMessageAdd: vi.fn<(message: ChatMessageRecord) => Promise<{ ok: true; data: void }>>(),
   chatMessageUpdate: vi.fn<(message: ChatMessageRecord) => Promise<{ ok: true; data: void }>>()
 }));
 
@@ -42,12 +43,14 @@ describe('useChatSessionStore', () => {
   beforeEach((): void => {
     setActivePinia(createPinia());
     mockElectronAPI.chatMessageList.mockReset();
+    mockElectronAPI.chatMessageAdd.mockReset();
     mockElectronAPI.chatMessageUpdate.mockReset();
   });
 
-  it('recovers interrupted assistant drafts while loading persisted messages', async (): Promise<void> => {
+  it('recovers interrupted assistant drafts and persists the interrupt marker while loading messages', async (): Promise<void> => {
     const store = useChatSessionStore();
     mockElectronAPI.chatMessageList.mockResolvedValue({ ok: true, data: [createInterruptedAssistantRecord()] });
+    mockElectronAPI.chatMessageAdd.mockResolvedValue({ ok: true, data: undefined });
     mockElectronAPI.chatMessageUpdate.mockResolvedValue({ ok: true, data: undefined });
 
     const messages = await store.getSessionMessages('session-1');
@@ -58,11 +61,28 @@ describe('useChatSessionStore', () => {
       loading: false,
       finished: true
     });
-    expect(messages[0].content).toContain(HARD_INTERRUPTED_ASSISTANT_MESSAGE);
+    expect(messages[0].content).toBe('半截内容');
+    expect(messages[1]).toMatchObject({
+      id: 'assistant-draft-1-interrupt',
+      role: 'interrupt',
+      content: HARD_INTERRUPTED_ASSISTANT_MESSAGE,
+      loading: false,
+      finished: true
+    });
     expect(mockElectronAPI.chatMessageUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'assistant-draft-1',
         sessionId: 'session-1',
+        loading: false,
+        finished: true
+      })
+    );
+    expect(mockElectronAPI.chatMessageAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'assistant-draft-1-interrupt',
+        sessionId: 'session-1',
+        role: 'interrupt',
+        content: HARD_INTERRUPTED_ASSISTANT_MESSAGE,
         loading: false,
         finished: true
       })

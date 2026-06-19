@@ -17,6 +17,7 @@ const runtime: ActiveChatRuntime = {
   clientId: 'client-1',
   agentId: 'agent-1',
   status: 'running',
+  phase: 'streaming',
   abortController: new AbortController(),
   createdAt: 0
 };

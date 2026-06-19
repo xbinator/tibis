@@ -1756,4 +1756,55 @@ describe('chat runtime service shell', (): void => {
     compactDeferred.resolve();
     await expect(compactPromise).resolves.toEqual({ status: 'cancelled', messageId: 'compression-1' });
   });
+
+  it('aborts automatic compaction inside a chat runtime without creating an interrupt message', async (): Promise<void> => {
+    let compactSignal: AbortSignal | undefined;
+    const compactDeferred = createDeferred();
+    const addedMessages: ChatMessageRecord[] = [];
+    const deletedMessages: Array<{ sessionId: string; messageId: string }> = [];
+    const priorMessage: ChatMessageRecord = {
+      id: 'prior-user',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '大量历史上下文'.repeat(40_000),
+      parts: [{ type: 'text', text: '大量历史上下文'.repeat(40_000) }],
+      createdAt: '2026-06-19T00:00:00.000Z'
+    };
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: {
+        getMessages: () => [priorMessage]
+      },
+      messageWriter: {
+        addMessage: (message) => {
+          addedMessages.push({ ...message, parts: [...message.parts] });
+        },
+        updateMessage: (): void => undefined,
+        deleteMessage: (sessionId, messageId) => {
+          deletedMessages.push({ sessionId, messageId });
+        }
+      },
+      streamExecutor: createNoopStreamExecutor(),
+      compactionService: {
+        compact: async (input) => {
+          compactSignal = input.signal;
+          await compactDeferred.promise;
+          return { status: 'cancelled', messageId: 'compression-1' };
+        }
+      }
+    });
+
+    const result = await service.send(createInput({ content: 'current question', contextWindow: 20_000 }));
+    await flushRuntimeTasks();
+
+    await service.abort({ runtimeId: result.runtimeId });
+
+    expect(compactSignal?.aborted).toBe(true);
+    expect(addedMessages).not.toContainEqual(expect.objectContaining({ role: 'interrupt' }));
+    expect(deletedMessages).toContainEqual({ sessionId: 'session-1', messageId: 'assistant-message-1' });
+
+    compactDeferred.resolve();
+  });
 });

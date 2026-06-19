@@ -26,6 +26,7 @@ export function createSendRuntime(input: ChatRuntimeSendInput, runtimeId: string
     tavily: input.tavily,
     mcp: input.mcp,
     status: 'running',
+    phase: 'streaming',
     abortController: new AbortController(),
     createdAt: Date.now()
   };
@@ -51,6 +52,7 @@ export function createContinuationRuntime(input: ChatRuntimeContinueInput, runti
     tavily: input.tavily,
     mcp: input.mcp,
     status: 'running',
+    phase: 'streaming',
     abortController: new AbortController(),
     createdAt: Date.now()
   };
@@ -76,6 +78,7 @@ export function createUserChoiceRuntime(input: ChatRuntimeSubmitUserChoiceInput,
     tavily: input.tavily,
     mcp: input.mcp,
     status: 'running',
+    phase: 'streaming',
     abortController: new AbortController(),
     createdAt: Date.now()
   };
@@ -95,6 +98,7 @@ export function createCompactRuntime(input: ChatRuntimeCompactInput): ActiveChat
     parentRuntimeId: input.parentRuntimeId,
     contextWindow: input.contextWindow,
     status: 'running',
+    phase: 'compacting',
     abortController: new AbortController(),
     createdAt: Date.now()
   };

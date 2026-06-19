@@ -20,6 +20,9 @@ import type { ChatRuntimeEventMap } from 'types/chat-runtime';
 /** Runtime 生命周期状态。 */
 export type ChatRuntimeStatus = 'running' | 'aborting' | 'completed';
 
+/** Runtime 当前执行阶段。 */
+export type ChatRuntimePhase = 'streaming' | 'compacting';
+
 /** 活跃 runtime 状态。 */
 export interface ActiveChatRuntime {
   /** Runtime id。 */
@@ -46,6 +49,8 @@ export interface ActiveChatRuntime {
   mcp?: AIMCPRequestConfig;
   /** 当前生命周期状态。 */
   status: ChatRuntimeStatus;
+  /** 当前执行阶段，用于中止时区分模型生成与压缩。 */
+  phase: ChatRuntimePhase;
   /** 后续模型流和工具执行共用的中止控制器。 */
   abortController: AbortController;
   /** 创建时间戳。 */

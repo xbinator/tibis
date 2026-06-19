@@ -298,6 +298,43 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 在指定 runtime 阶段内执行异步任务，结束后恢复原阶段。
+   * @param runtime - runtime 状态
+   * @param phase - 临时切换到的阶段
+   * @param task - 需要执行的异步任务
+   * @returns 异步任务结果
+   */
+  async function runRuntimePhase<T>(runtime: ActiveChatRuntime, phase: ActiveChatRuntime['phase'], task: () => Promise<T>): Promise<T> {
+    const previousPhase = runtime.phase;
+    runtime.phase = phase;
+
+    try {
+      return await task();
+    } finally {
+      if (activeRuntimes.has(runtime.runtimeId) && runtime.status === 'running') {
+        runtime.phase = previousPhase;
+      }
+    }
+  }
+
+  /**
+   * 删除空 assistant 占位并广播删除事件。
+   * @param runtime - runtime 状态
+   * @param assistantMessage - assistant 占位消息
+   */
+  async function deleteAssistantMessage(runtime: ActiveChatRuntime, assistantMessage: ChatMessageRecord): Promise<void> {
+    await messageWriter.deleteMessage?.(assistantMessage.sessionId, assistantMessage.id);
+    emit('chat:runtime:message-deleted', {
+      runtimeId: runtime.runtimeId,
+      sessionId: runtime.sessionId,
+      clientId: runtime.clientId,
+      agentId: runtime.agentId,
+      parentRuntimeId: runtime.parentRuntimeId,
+      messageId: assistantMessage.id
+    });
+  }
+
+  /**
    * 成功 turn 后剪枝旧的大型 tool output。
    * @param runtime - runtime 状态
    * @param sourceMessages - 当前源消息
@@ -391,17 +428,19 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     const snapshot = emitContextUsageSnapshot(runtime, sourceMessages);
     if (!snapshot?.shouldCompactBeforeSend) return sourceMessages;
 
-    const result = await compactionService.compact({
-      runtimeId: runtime.runtimeId,
-      sessionId: runtime.sessionId,
-      clientId: runtime.clientId,
-      agentId: runtime.agentId,
-      parentRuntimeId: runtime.parentRuntimeId,
-      reason: 'auto',
-      contextWindow: runtime.contextWindow,
-      messages: sourceMessages,
-      signal: runtime.abortController.signal
-    });
+    const result = await runRuntimePhase(runtime, 'compacting', () =>
+      compactionService.compact({
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        reason: 'auto',
+        contextWindow: runtime.contextWindow,
+        messages: sourceMessages,
+        signal: runtime.abortController.signal
+      })
+    );
     if (result.status !== 'success') return sourceMessages;
 
     return readRuntimeSourceMessages(runtime, userMessage, assistantMessage);
@@ -437,17 +476,19 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     const snapshot = emitContextUsageSnapshot(runtime, completedMessages, usage.totalTokens);
     if (!snapshot || snapshot.usableInputTokens === 0 || usage.totalTokens < snapshot.usableInputTokens) return;
 
-    await compactionService.compact({
-      runtimeId: runtime.runtimeId,
-      sessionId: runtime.sessionId,
-      clientId: runtime.clientId,
-      agentId: runtime.agentId,
-      parentRuntimeId: runtime.parentRuntimeId,
-      reason: 'auto',
-      contextWindow: runtime.contextWindow,
-      messages: completedMessages,
-      signal: runtime.abortController.signal
-    });
+    await runRuntimePhase(runtime, 'compacting', () =>
+      compactionService.compact({
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        reason: 'auto',
+        contextWindow: runtime.contextWindow,
+        messages: completedMessages,
+        signal: runtime.abortController.signal
+      })
+    );
   }
 
   /**
@@ -513,17 +554,19 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   ): Promise<boolean> {
     if (!isContextOverflowError(error) || hasAssistantResponseContent(assistantMessage)) return false;
 
-    const compactResult = await compactionService.compact({
-      runtimeId: runtime.runtimeId,
-      sessionId: runtime.sessionId,
-      clientId: runtime.clientId,
-      agentId: runtime.agentId,
-      parentRuntimeId: runtime.parentRuntimeId,
-      reason: 'auto',
-      contextWindow: runtime.contextWindow,
-      messages: sourceMessages,
-      signal: runtime.abortController.signal
-    });
+    const compactResult = await runRuntimePhase(runtime, 'compacting', () =>
+      compactionService.compact({
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        reason: 'auto',
+        contextWindow: runtime.contextWindow,
+        messages: sourceMessages,
+        signal: runtime.abortController.signal
+      })
+    );
     if (!activeRuntimes.has(runtime.runtimeId)) return true;
     if (compactResult.status !== 'success') return false;
 
@@ -864,16 +907,15 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
       if (!assistantMessage) return;
 
+      if (runtime.phase === 'compacting') {
+        if (!hasAssistantResponseContent(assistantMessage)) {
+          await deleteAssistantMessage(runtime, assistantMessage);
+        }
+        return;
+      }
+
       if (!hasAssistantResponseContent(assistantMessage)) {
-        await messageWriter.deleteMessage?.(assistantMessage.sessionId, assistantMessage.id);
-        emit('chat:runtime:message-deleted', {
-          runtimeId: runtime.runtimeId,
-          sessionId: runtime.sessionId,
-          clientId: runtime.clientId,
-          agentId: runtime.agentId,
-          parentRuntimeId: runtime.parentRuntimeId,
-          messageId: assistantMessage.id
-        });
+        await deleteAssistantMessage(runtime, assistantMessage);
       } else {
         finishAssistantMessageInterrupted(assistantMessage);
         await messageWriter.updateMessage(assistantMessage);

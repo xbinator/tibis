@@ -82,6 +82,7 @@ describe('interrupted assistant draft recovery', () => {
       loading: false,
       finished: true
     });
+    expect(result.createdMessages).toEqual([interruptMessage]);
     expect(toolPart).toMatchObject({
       type: 'tool',
       status: 'done',
@@ -98,5 +99,15 @@ describe('interrupted assistant draft recovery', () => {
 
     expect(result.recovered).toBe(false);
     expect(result.messages[0]).toEqual(awaitingMessage);
+  });
+
+  it('does not create duplicate interrupt messages for an already recovered draft', (): void => {
+    const sourceMessages = recoverInterruptedAssistantDrafts([createInterruptedAssistantDraft()]).messages;
+    const result = recoverInterruptedAssistantDrafts(sourceMessages);
+
+    expect(result.recovered).toBe(false);
+    expect(result.createdMessages).toEqual([]);
+    expect(result.messages.filter((message) => message.role === 'interrupt')).toHaveLength(1);
+    expect(result.messages.map((message) => message.id)).toEqual(['assistant-draft-1', 'assistant-draft-1-interrupt']);
   });
 });
