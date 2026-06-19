@@ -15,7 +15,7 @@ import type {
   ChatRuntimeStreamExecutor
 } from './types.mjs';
 import type { AIServiceError, AIToolExecutionResult, AIUsage } from 'types/ai';
-import type { AIUserChoiceAnswerData, ChatMessageFile, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
+import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
@@ -57,6 +57,7 @@ import {
   hasAssistantResponseContent,
   markAssistantMessageFailed
 } from './messages/finalizer.mjs';
+import { applyUserChoiceAnswer, cloneRuntimeMessage, USER_CHOICE_TOOL_NAMES } from './messages/user-choice.mjs';
 import { toRuntimeModelMessages } from './model-message-context.mjs';
 import { createCompactRuntime, createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
 import { createRuntimeStreamExecutor } from './stream-executor.mjs';
@@ -92,10 +93,7 @@ const TOOL_OUTPUT_PRUNE_MIN_JSON_LENGTH = 4_000;
 const TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH = 500;
 
 /** 不参与 tool output prune 的工具。 */
-const TOOL_OUTPUT_PRUNE_PROTECTED_TOOL_NAMES = new Set(['skill', 'ask_user_choice', 'ask_user_question', 'question']);
-
-/** 会暂停并等待用户选择的工具名称。 */
-const USER_CHOICE_TOOL_NAMES = new Set(['ask_user_choice', 'ask_user_question', 'question']);
+const TOOL_OUTPUT_PRUNE_PROTECTED_TOOL_NAMES = new Set(['skill', ...USER_CHOICE_TOOL_NAMES]);
 
 /** 剪枝后保留的工具结果字段。 */
 const TOOL_OUTPUT_PRUNE_PRESERVED_DATA_KEYS = [
@@ -258,65 +256,6 @@ function createDefaultStreamAborter(): ChatRuntimeStreamAborter {
  */
 function createDefaultMessageId(kind: ChatRuntimeMessageKind): string {
   return `${kind}-${nanoid()}`;
-}
-
-/**
- * 浅克隆消息与 part，便于安全替换 tool result。
- * @param message - 原始消息
- * @returns 克隆后的消息
- */
-function cloneRuntimeMessage(message: ChatMessageRecord): ChatMessageRecord {
-  return {
-    ...message,
-    parts: message.parts.map((part) => ({ ...part }))
-  };
-}
-
-/**
- * 判断 tool part 是否正在等待用户选择。
- * @param part - 消息片段
- * @param answer - 用户选择答案
- * @returns 是否匹配待提交问题
- */
-function isMatchingAwaitingUserChoicePart(part: ChatMessageRecord['parts'][number], answer: AIUserChoiceAnswerData): part is ChatMessageToolPart {
-  return (
-    part.type === 'tool' &&
-    USER_CHOICE_TOOL_NAMES.has(part.toolName) &&
-    part.toolCallId === answer.toolCallId &&
-    part.result?.status === 'awaiting_user_input' &&
-    part.result.data.questionId === answer.questionId
-  );
-}
-
-/**
- * 判断用户选择答案是否表示取消。
- * @param answer - 用户选择答案
- * @returns 是否取消
- */
-function isCancelledUserChoiceAnswer(answer: AIUserChoiceAnswerData): boolean {
-  const questionAnswers = answer.questionAnswers ?? [];
-  return answer.answers.length === 0 && (answer.otherText ?? '') === '' && questionAnswers.every((item) => item.answers.length === 0);
-}
-
-/**
- * 将用户选择答案写入待回答的 assistant tool part。
- * @param messages - 会话消息
- * @param answer - 用户选择答案
- * @returns 被更新的 assistant 消息
- */
-function applyUserChoiceAnswer(messages: ChatMessageRecord[], answer: AIUserChoiceAnswerData): ChatMessageRecord | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    const resultPart = message.parts.find((part) => isMatchingAwaitingUserChoicePart(part, answer));
-    if (!resultPart) continue;
-
-    resultPart.result = isCancelledUserChoiceAnswer(answer)
-      ? { toolName: resultPart.toolName, status: 'cancelled', error: { code: 'USER_CANCELLED', message: '用户取消了选择' } }
-      : { toolName: resultPart.toolName, status: 'success', data: answer };
-    return message;
-  }
-
-  return undefined;
 }
 
 /**
