@@ -25,7 +25,6 @@ import type {
   ChatRuntimeCompactInput,
   ChatRuntimeCompactResult,
   ChatRuntimeConfirmationDecision,
-  ChatRuntimeConfirmationRequest,
   ChatRuntimeContinueInput,
   ChatRuntimeContextUsageSnapshot,
   ChatRuntimeSendInput,
@@ -45,6 +44,10 @@ import { createRuntimeCompactionService } from './compaction.mjs';
 import { createRuntimeCompressionExecutor } from './compression-executor.mjs';
 import { createContextBudgetService } from './context-budget.mjs';
 import { estimateSerializedModelMessages } from './context-estimator.mjs';
+import { createRuntimeBridgeRequests, type RuntimeBridgeRequestInput } from './controllers/bridge.mjs';
+import { createRuntimeConfirmationRequests, type RuntimeConfirmationRequestInput } from './controllers/confirmation.mjs';
+import { createRuntimeRendererToolRequests } from './controllers/renderer-tool.mjs';
+import { ChatRuntimeError } from './errors.mjs';
 import { createRuntimeLockRegistry } from './locks.mjs';
 import { toRuntimeModelMessages } from './model-message-context.mjs';
 import { createRuntimeStreamExecutor } from './stream-executor.mjs';
@@ -121,78 +124,7 @@ AI: {{AI_RESPONSE}}
 # Title
 `;
 
-/** 等待 renderer 回传的工具请求。 */
-interface PendingRendererToolRequest {
-  /** 完成工具请求。 */
-  resolve: (result: AIToolExecutionResult) => void;
-  /** 拒绝工具请求。 */
-  reject: (error: Error) => void;
-  /** 请求超时定时器。 */
-  timeoutId: ReturnType<typeof setTimeout>;
-}
-
-/** 等待 renderer 回传的确认请求。 */
-interface PendingRuntimeConfirmationRequest {
-  /** 完成确认请求。 */
-  resolve: (decision: ChatRuntimeConfirmationDecision) => void;
-  /** 拒绝确认请求。 */
-  reject: (error: Error) => void;
-  /** 请求超时定时器。 */
-  timeoutId?: ReturnType<typeof setTimeout>;
-}
-
-/** 等待 renderer 回传的通用 bridge 请求。 */
-interface PendingRuntimeBridgeRequest {
-  /** 完成 bridge 请求。 */
-  resolve: (result: ChatRuntimeBridgeResult) => void;
-  /** 拒绝 bridge 请求。 */
-  reject: (error: Error) => void;
-  /** 请求超时定时器。 */
-  timeoutId: ReturnType<typeof setTimeout>;
-}
-
-/** Runtime 确认请求输入。 */
-interface ChatRuntimeRequestConfirmationInput {
-  /** Runtime id。 */
-  runtimeId: string;
-  /** 关联工具调用 ID。 */
-  toolCallId?: string;
-  /** 确认请求 id，缺省时自动生成。 */
-  confirmationId?: string;
-  /** 确认请求详情。 */
-  request: ChatRuntimeConfirmationRequest;
-}
-
-/** Runtime bridge 请求输入。 */
-interface ChatRuntimeRequestBridgeInput {
-  /** Runtime id。 */
-  runtimeId: string;
-  /** Bridge 请求 id，缺省时自动生成。 */
-  requestId?: string;
-  /** 关联工具调用 ID。 */
-  toolCallId?: string;
-  /** Bridge 请求类型。 */
-  kind: string;
-  /** Bridge 请求载荷。 */
-  payload?: unknown;
-}
-
-/** Runtime 稳定错误。 */
-export class ChatRuntimeError extends Error {
-  /** 稳定错误码。 */
-  code: string;
-
-  /**
-   * 创建 runtime 错误。
-   * @param code - 稳定错误码
-   * @param message - 错误描述
-   */
-  constructor(code: string, message: string) {
-    super(message);
-    this.name = 'ChatRuntimeError';
-    this.code = code;
-  }
-}
+export { ChatRuntimeError } from './errors.mjs';
 
 /**
  * 创建默认 Electron runtime 事件发送器。
@@ -836,9 +768,6 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const compactionService = dependencies.compactionService ?? createDefaultCompactionService(emit);
   const messageWriter = dependencies.messageWriter ?? createDefaultMessageWriter();
   const messageReader = dependencies.messageReader ?? createDefaultMessageReader();
-  const pendingRendererToolRequests = new Map<string, PendingRendererToolRequest>();
-  const pendingConfirmationRequests = new Map<string, PendingRuntimeConfirmationRequest>();
-  const pendingBridgeRequests = new Map<string, PendingRuntimeBridgeRequest>();
   const streamAbort = dependencies.streamAbort ?? createDefaultStreamAborter();
   const createMessageId = dependencies.createMessageId ?? createDefaultMessageId;
   const now = dependencies.now ?? (() => new Date().toISOString());
@@ -850,187 +779,26 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const locks = createRuntimeLockRegistry();
   const activeRuntimes = new Map<string, ActiveChatRuntime>();
   const activeAssistantMessages = new Map<string, ChatMessageRecord>();
-
-  /**
-   * 创建 renderer 工具请求 key。
-   * @param runtimeId - runtime id
-   * @param toolCallId - 工具调用 id
-   * @returns pending key
-   */
-  function createToolRequestKey(runtimeId: string, toolCallId: string): string {
-    return `${runtimeId}:${toolCallId}`;
-  }
-
-  /**
-   * 创建确认请求 key。
-   * @param runtimeId - runtime id
-   * @param confirmationId - 确认请求 id
-   * @returns pending key
-   */
-  function createConfirmationRequestKey(runtimeId: string, confirmationId: string): string {
-    return `${runtimeId}:${confirmationId}`;
-  }
-
-  /**
-   * 创建 bridge 请求 key。
-   * @param runtimeId - runtime id
-   * @param requestId - bridge 请求 id
-   * @returns pending key
-   */
-  function createBridgeRequestKey(runtimeId: string, requestId: string): string {
-    return `${runtimeId}:${requestId}`;
-  }
-
-  /**
-   * 拒绝指定 runtime 所有等待中的工具请求。
-   * @param runtimeId - runtime id
-   * @param reason - 拒绝原因
-   */
-  function rejectRuntimeToolRequests(runtimeId: string, reason: string): void {
-    for (const [key, request] of pendingRendererToolRequests) {
-      if (!key.startsWith(`${runtimeId}:`)) continue;
-
-      clearTimeout(request.timeoutId);
-      request.reject(new ChatRuntimeError('TOOL_REQUEST_CANCELLED', reason));
-      pendingRendererToolRequests.delete(key);
-    }
-  }
-
-  /**
-   * 拒绝指定 runtime 所有等待中的确认请求。
-   * @param runtimeId - runtime id
-   * @param reason - 拒绝原因
-   */
-  function rejectRuntimeConfirmationRequests(runtimeId: string, reason: string): void {
-    for (const [key, request] of pendingConfirmationRequests) {
-      if (!key.startsWith(`${runtimeId}:`)) continue;
-
-      if (request.timeoutId !== undefined) clearTimeout(request.timeoutId);
-      request.reject(new ChatRuntimeError('CONFIRMATION_DISMISSED', reason));
-      pendingConfirmationRequests.delete(key);
-    }
-  }
-
-  /**
-   * 请求 renderer 展示确认弹窗并等待决策。
-   * @param input - 确认请求输入
-   * @returns renderer 确认决策
-   */
-  function requestRuntimeConfirmation(input: ChatRuntimeRequestConfirmationInput): Promise<ChatRuntimeConfirmationDecision> {
-    const runtime = activeRuntimes.get(input.runtimeId);
-    if (!runtime) {
-      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtimeId} is not active`);
-    }
-
-    const confirmationId = input.confirmationId ?? `confirmation-${nanoid()}`;
-    const key = createConfirmationRequestKey(input.runtimeId, confirmationId);
-    return new Promise<ChatRuntimeConfirmationDecision>((resolve, reject) => {
-      pendingConfirmationRequests.set(key, { resolve, reject });
-      emit('chat:runtime:confirmation-requested', {
-        runtimeId: runtime.runtimeId,
-        sessionId: runtime.sessionId,
-        clientId: runtime.clientId,
-        agentId: runtime.agentId,
-        parentRuntimeId: runtime.parentRuntimeId,
-        confirmationId,
-        toolCallId: input.toolCallId,
-        request: input.request
-      });
-    });
-  }
-
-  /**
-   * 拒绝指定 runtime 所有等待中的 bridge 请求。
-   * @param runtimeId - runtime id
-   * @param reason - 拒绝原因
-   */
-  function rejectRuntimeBridgeRequests(runtimeId: string, reason: string): void {
-    for (const [key, request] of pendingBridgeRequests) {
-      if (!key.startsWith(`${runtimeId}:`)) continue;
-
-      clearTimeout(request.timeoutId);
-      request.reject(new ChatRuntimeError('EDITOR_UNAVAILABLE', reason));
-      pendingBridgeRequests.delete(key);
-    }
-  }
-
-  /**
-   * 请求 renderer 执行通用 bridge 操作并等待结果。
-   * @param input - bridge 请求输入
-   * @returns renderer bridge 结果
-   */
-  function requestRuntimeBridge(input: ChatRuntimeRequestBridgeInput): Promise<ChatRuntimeBridgeResult> {
-    const runtime = activeRuntimes.get(input.runtimeId);
-    if (!runtime) {
-      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtimeId} is not active`);
-    }
-
-    const requestId = input.requestId ?? `bridge-${nanoid()}`;
-    const key = createBridgeRequestKey(input.runtimeId, requestId);
-    return new Promise<ChatRuntimeBridgeResult>((resolve, reject) => {
-      const timeoutId = setTimeout((): void => {
-        pendingBridgeRequests.delete(key);
-        resolve({
-          status: 'failure',
-          error: { code: 'TOOL_TIMEOUT', message: 'Renderer bridge request timed out' }
-        });
-      }, RUNTIME_RENDERER_REQUEST_TIMEOUT_MS);
-      pendingBridgeRequests.set(key, { resolve, reject, timeoutId });
-      emit('chat:runtime:bridge-requested', {
-        runtimeId: runtime.runtimeId,
-        sessionId: runtime.sessionId,
-        clientId: runtime.clientId,
-        agentId: runtime.agentId,
-        parentRuntimeId: runtime.parentRuntimeId,
-        requestId,
-        toolCallId: input.toolCallId,
-        kind: input.kind,
-        payload: input.payload
-      });
-    });
-  }
+  const getRuntime = (runtimeId: string): ActiveChatRuntime | undefined => activeRuntimes.get(runtimeId);
+  const confirmationRequests = createRuntimeConfirmationRequests({ emit, getRuntime });
+  const bridgeRequests = createRuntimeBridgeRequests({
+    emit,
+    getRuntime,
+    timeoutMs: RUNTIME_RENDERER_REQUEST_TIMEOUT_MS
+  });
+  const rendererToolRequests = createRuntimeRendererToolRequests({
+    emit,
+    getRuntime,
+    timeoutMs: RUNTIME_RENDERER_REQUEST_TIMEOUT_MS
+  });
 
   const executeMainTool = createMainToolExecutor({
     now,
-    requestBridge: requestRuntimeBridge,
-    requestConfirmation: requestRuntimeConfirmation
+    requestBridge: bridgeRequests.request,
+    requestConfirmation: confirmationRequests.request
   });
 
-  /**
-   * 请求 renderer 执行本地工具。
-   * @param input - 工具执行输入
-   * @returns 工具执行结果
-   */
-  function executeRendererTool(input: ChatRuntimeRendererToolExecutionInput): Promise<AIToolExecutionResult> {
-    if (!activeRuntimes.has(input.runtime.runtimeId)) {
-      throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtime.runtimeId} is not active`);
-    }
-
-    const key = createToolRequestKey(input.runtime.runtimeId, input.toolCallId);
-    return new Promise<AIToolExecutionResult>((resolve, reject) => {
-      const timeoutId = setTimeout((): void => {
-        pendingRendererToolRequests.delete(key);
-        resolve({
-          toolName: input.toolName,
-          status: 'failure',
-          error: { code: 'TOOL_TIMEOUT', message: 'Renderer tool request timed out' }
-        });
-      }, RUNTIME_RENDERER_REQUEST_TIMEOUT_MS);
-      pendingRendererToolRequests.set(key, { resolve, reject, timeoutId });
-      emit('chat:runtime:tool-request', {
-        runtimeId: input.runtime.runtimeId,
-        sessionId: input.runtime.sessionId,
-        clientId: input.runtime.clientId,
-        agentId: input.runtime.agentId,
-        parentRuntimeId: input.runtime.parentRuntimeId,
-        toolCallId: input.toolCallId,
-        toolName: input.toolName,
-        input: input.input
-      });
-    });
-  }
-
-  const streamExecutor = dependencies.streamExecutor ?? createDefaultStreamExecutor(executeRendererTool, executeMainTool, rendererToolTimeoutMs);
+  const streamExecutor = dependencies.streamExecutor ?? createDefaultStreamExecutor(rendererToolRequests.request, executeMainTool, rendererToolTimeoutMs);
 
   /**
    * 完成 runtime 并释放 session 写入锁。
@@ -1041,9 +809,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     runtime.status = 'completed';
     activeRuntimes.delete(runtime.runtimeId);
     activeAssistantMessages.delete(runtime.runtimeId);
-    rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime completed');
-    rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime completed');
-    rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime completed');
+    rendererToolRequests.rejectRuntime(runtime.runtimeId, 'Runtime completed');
+    confirmationRequests.rejectRuntime(runtime.runtimeId, 'Runtime completed');
+    bridgeRequests.rejectRuntime(runtime.runtimeId, 'Runtime completed');
     locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
     emit('chat:runtime:complete', {
       runtimeId: runtime.runtimeId,
@@ -1425,9 +1193,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       } catch (error) {
         activeRuntimes.delete(runtime.runtimeId);
         activeAssistantMessages.delete(runtime.runtimeId);
-        rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime start failed');
-        rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime start failed');
-        rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime start failed');
+        rendererToolRequests.rejectRuntime(runtime.runtimeId, 'Runtime start failed');
+        confirmationRequests.rejectRuntime(runtime.runtimeId, 'Runtime start failed');
+        bridgeRequests.rejectRuntime(runtime.runtimeId, 'Runtime start failed');
         locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
         throw error;
       }
@@ -1499,9 +1267,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       } catch (error) {
         activeRuntimes.delete(runtime.runtimeId);
         activeAssistantMessages.delete(runtime.runtimeId);
-        rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime continue failed');
-        rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime continue failed');
-        rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime continue failed');
+        rendererToolRequests.rejectRuntime(runtime.runtimeId, 'Runtime continue failed');
+        confirmationRequests.rejectRuntime(runtime.runtimeId, 'Runtime continue failed');
+        bridgeRequests.rejectRuntime(runtime.runtimeId, 'Runtime continue failed');
         locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
         throw error;
       }
@@ -1557,9 +1325,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       } catch (error) {
         activeRuntimes.delete(runtime.runtimeId);
         activeAssistantMessages.delete(runtime.runtimeId);
-        rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime user choice submit failed');
-        rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime user choice submit failed');
-        rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime user choice submit failed');
+        rendererToolRequests.rejectRuntime(runtime.runtimeId, 'Runtime user choice submit failed');
+        confirmationRequests.rejectRuntime(runtime.runtimeId, 'Runtime user choice submit failed');
+        bridgeRequests.rejectRuntime(runtime.runtimeId, 'Runtime user choice submit failed');
         locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
         throw error;
       }
@@ -1572,8 +1340,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * @param input - 确认请求输入
      * @returns renderer 确认决策
      */
-    requestConfirmation(input: ChatRuntimeRequestConfirmationInput): Promise<ChatRuntimeConfirmationDecision> {
-      return requestRuntimeConfirmation(input);
+    requestConfirmation(input: RuntimeConfirmationRequestInput): Promise<ChatRuntimeConfirmationDecision> {
+      return confirmationRequests.request(input);
     },
 
     /**
@@ -1581,13 +1349,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * @param input - 确认决策输入
      */
     submitConfirmation(input: ChatRuntimeSubmitConfirmationInput): void {
-      const key = createConfirmationRequestKey(input.runtimeId, input.confirmationId);
-      const pendingRequest = pendingConfirmationRequests.get(key);
-      if (!pendingRequest) return;
-
-      pendingConfirmationRequests.delete(key);
-      if (pendingRequest.timeoutId !== undefined) clearTimeout(pendingRequest.timeoutId);
-      pendingRequest.resolve(input.decision);
+      confirmationRequests.submit(input);
     },
 
     /**
@@ -1595,8 +1357,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * @param input - bridge 请求输入
      * @returns renderer bridge 结果
      */
-    requestBridge(input: ChatRuntimeRequestBridgeInput): Promise<ChatRuntimeBridgeResult> {
-      return requestRuntimeBridge(input);
+    requestBridge(input: RuntimeBridgeRequestInput): Promise<ChatRuntimeBridgeResult> {
+      return bridgeRequests.request(input);
     },
 
     /**
@@ -1604,13 +1366,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * @param input - bridge 响应输入
      */
     submitBridgeResponse(input: ChatRuntimeBridgeResponseInput): void {
-      const key = createBridgeRequestKey(input.runtimeId, input.requestId);
-      const pendingRequest = pendingBridgeRequests.get(key);
-      if (!pendingRequest) return;
-
-      pendingBridgeRequests.delete(key);
-      clearTimeout(pendingRequest.timeoutId);
-      pendingRequest.resolve(input.result);
+      bridgeRequests.submit(input);
     },
 
     /**
@@ -1660,9 +1416,9 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       activeRuntimes.delete(runtime.runtimeId);
       const assistantMessage = activeAssistantMessages.get(runtime.runtimeId);
       activeAssistantMessages.delete(runtime.runtimeId);
-      rejectRuntimeToolRequests(runtime.runtimeId, 'Runtime aborted');
-      rejectRuntimeConfirmationRequests(runtime.runtimeId, 'Runtime aborted');
-      rejectRuntimeBridgeRequests(runtime.runtimeId, 'Runtime aborted');
+      rendererToolRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
+      confirmationRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
+      bridgeRequests.rejectRuntime(runtime.runtimeId, 'Runtime aborted');
       locks.releaseWritingLock({ sessionId: runtime.sessionId, runtimeId: runtime.runtimeId });
       await streamAbort(runtime.runtimeId);
 
@@ -1734,13 +1490,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * @param input - 工具结果
      */
     submitToolResult(input: ChatRuntimeSubmitToolResultInput): void {
-      const key = createToolRequestKey(input.runtimeId, input.toolCallId);
-      const pendingRequest = pendingRendererToolRequests.get(key);
-      if (!pendingRequest) return;
-
-      pendingRendererToolRequests.delete(key);
-      clearTimeout(pendingRequest.timeoutId);
-      pendingRequest.resolve(input.result);
+      rendererToolRequests.submit(input);
     },
 
     /**
