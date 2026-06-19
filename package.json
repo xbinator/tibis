@@ -6,7 +6,7 @@
   "author": "Tibis contributors",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
-  "main": "dist-electron/main/index.mjs",
+  "main": "dist-electron/electron/main/index.mjs",
   "scripts": {
     "serve": "vite",
     "build": "vite build",
@@ -15,7 +15,7 @@
     "electron:dev": "pnpm run dev",
     "electron:build-main": "node scripts/clean-dist-electron.mjs && tsc -p electron/tsconfig.json",
     "electron:watch-main": "tsc -p electron/tsconfig.json -w",
-    "electron:run": "wait-on dist-electron/main/index.mjs && node --watch-path=dist-electron --watch-preserve-output ./node_modules/electron/cli.js .",
+    "electron:run": "wait-on dist-electron/electron/main/index.mjs && node --watch-path=dist-electron --watch-preserve-output ./node_modules/electron/cli.js .",
     "electron:build": "pnpm run build && pnpm run electron:build-main && electron-builder --publish never",
     "postinstall": "electron-rebuild --only better-sqlite3",
     "test": "cross-env HOST=127.0.0.1 vitest run",

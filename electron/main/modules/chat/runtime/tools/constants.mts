@@ -2,90 +2,49 @@
  * @file constants.mts
  * @description ChatRuntime 主进程工具常量。
  */
+import { getToolNamesByRuntimeGroup } from '../../../../../../shared/ai/tools/toolRegistry.js';
 
-/** 读取当前文档的内置工具名称。 */
-export const READ_CURRENT_DOCUMENT_TOOL_NAME = 'read_current_document';
-
-/** 读取当前画板的内置工具名称。 */
-export const READ_CURRENT_DRAWING_TOOL_NAME = 'read_current_drawing';
-
-/** 读取当前网页的内置工具名称。 */
-export const READ_CURRENT_WEBPAGE_TOOL_NAME = 'read_current_webpage';
-
-/** 获取当前时间的内置工具名称。 */
-export const GET_CURRENT_TIME_TOOL_NAME = 'get_current_time';
-
-/** 查询日志的内置工具名称。 */
-export const QUERY_LOGS_TOOL_NAME = 'query_logs';
-
-/** 读取文件的内置工具名称。 */
-export const READ_FILE_TOOL_NAME = 'read_file';
-
-/** 读取目录的内置工具名称。 */
-export const READ_DIRECTORY_TOOL_NAME = 'read_directory';
-
-/** 获取设置的内置工具名称。 */
-export const GET_SETTINGS_TOOL_NAME = 'get_settings';
-
-/** 获取 MCP 设置的内置工具名称。 */
-export const GET_MCP_SETTINGS_TOOL_NAME = 'get_mcp_settings';
-
-/** 新增 MCP server 的内置工具名称。 */
-export const ADD_MCP_SERVER_TOOL_NAME = 'add_mcp_server';
-
-/** 更新 MCP server 的内置工具名称。 */
-export const UPDATE_MCP_SERVER_TOOL_NAME = 'update_mcp_server';
-
-/** 删除 MCP server 的内置工具名称。 */
-export const REMOVE_MCP_SERVER_TOOL_NAME = 'remove_mcp_server';
-
-/** 刷新 MCP discovery 的内置工具名称。 */
-export const REFRESH_MCP_DISCOVERY_TOOL_NAME = 'refresh_mcp_discovery';
-
-/** 打开资源的内置工具名称。 */
-export const OPEN_RESOURCE_TOOL_NAME = 'open_resource';
-
-/** 修改设置的内置工具名称。 */
-export const UPDATE_SETTINGS_TOOL_NAME = 'update_settings';
-
-/** 创建文档的内置工具名称。 */
-export const CREATE_DOCUMENT_TOOL_NAME = 'create_document';
-
-/** 写入文件的内置工具名称。 */
-export const WRITE_FILE_TOOL_NAME = 'write_file';
-
-/** 编辑文件的内置工具名称。 */
-export const EDIT_FILE_TOOL_NAME = 'edit_file';
-
-/** 创建画板的内置工具名称。 */
-export const CREATE_DRAWING_TOOL_NAME = 'create_drawing';
-
-/** 操作当前画板的内置工具名称。 */
-export const APPLY_DRAWING_OPERATIONS_TOOL_NAME = 'apply_drawing_operations';
-
-/** 主进程可执行工具名称集合。 */
-export const MAIN_PROCESS_TOOL_NAMES = new Set([
+export {
+  ADD_MCP_SERVER_TOOL_NAME,
+  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
+  CREATE_DOCUMENT_TOOL_NAME,
+  CREATE_DRAWING_TOOL_NAME,
+  EDIT_FILE_TOOL_NAME,
+  GET_CURRENT_TIME_TOOL_NAME,
+  GET_MCP_SETTINGS_TOOL_NAME,
+  GET_SETTINGS_TOOL_NAME,
+  OPEN_RESOURCE_TOOL_NAME,
+  QUERY_LOGS_TOOL_NAME,
   READ_CURRENT_DOCUMENT_TOOL_NAME,
   READ_CURRENT_DRAWING_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
-  GET_CURRENT_TIME_TOOL_NAME,
-  QUERY_LOGS_TOOL_NAME,
-  READ_FILE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
-  GET_SETTINGS_TOOL_NAME,
-  GET_MCP_SETTINGS_TOOL_NAME,
-  ADD_MCP_SERVER_TOOL_NAME,
-  UPDATE_MCP_SERVER_TOOL_NAME,
-  REMOVE_MCP_SERVER_TOOL_NAME,
+  READ_FILE_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
-  OPEN_RESOURCE_TOOL_NAME,
+  REMOVE_MCP_SERVER_TOOL_NAME,
+  UPDATE_CURRENT_DRAWING_TOOL_NAME,
+  UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
-  CREATE_DOCUMENT_TOOL_NAME,
-  WRITE_FILE_TOOL_NAME,
-  EDIT_FILE_TOOL_NAME,
-  CREATE_DRAWING_TOOL_NAME,
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME
-]);
+  WRITE_FILE_TOOL_NAME
+} from '../../../../../../shared/ai/tools/toolRegistry.js';
+
+/** 主进程只读工具名称集合。 */
+export const READ_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'read'));
+
+/** 主进程文件工具名称集合。 */
+export const FILE_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'file'));
+
+/** 主进程设置工具名称集合。 */
+export const SETTINGS_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'settings'));
+
+/** 主进程画板工具名称集合。 */
+export const DRAWING_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'drawing'));
+
+/** 主进程资源工具名称集合。 */
+export const RESOURCE_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'resource'));
+
+/** 主进程可执行工具名称集合。 */
+export const MAIN_PROCESS_TOOL_NAMES = new Set([...READ_TOOL_NAMES, ...FILE_TOOL_NAMES, ...SETTINGS_TOOL_NAMES, ...DRAWING_TOOL_NAMES, ...RESOURCE_TOOL_NAMES]);
 
 /** 默认文件读取起始行。 */
 export const DEFAULT_READ_FILE_OFFSET = 1;

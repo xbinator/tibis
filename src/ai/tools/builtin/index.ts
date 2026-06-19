@@ -6,27 +6,8 @@ import type { BuiltinToolBaseOptions } from '../shared/types';
 import type { AIToolExecutor } from 'types/ai';
 import { nanoid } from 'nanoid';
 import { native } from '@/shared/platform';
+import { getToolNamesByExposure } from '../../../../shared/ai/tools/toolRegistry.ts';
 import {
-  ADD_MCP_SERVER_TOOL_NAME,
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
-  CREATE_DOCUMENT_TOOL_NAME,
-  CREATE_DRAWING_TOOL_NAME,
-  EDIT_FILE_TOOL_NAME,
-  GET_CURRENT_TIME_TOOL_NAME,
-  GET_MCP_SETTINGS_TOOL_NAME,
-  GET_SETTINGS_TOOL_NAME,
-  OPEN_RESOURCE_TOOL_NAME,
-  QUERY_LOGS_TOOL_NAME,
-  READ_CURRENT_DOCUMENT_TOOL_NAME,
-  READ_CURRENT_DRAWING_TOOL_NAME,
-  READ_CURRENT_WEBPAGE_TOOL_NAME,
-  READ_DIRECTORY_TOOL_NAME,
-  READ_FILE_TOOL_NAME,
-  REFRESH_MCP_DISCOVERY_TOOL_NAME,
-  REMOVE_MCP_SERVER_TOOL_NAME,
-  UPDATE_MCP_SERVER_TOOL_NAME,
-  UPDATE_SETTINGS_TOOL_NAME,
-  WRITE_FILE_TOOL_NAME,
   createAddMcpServerTool,
   createApplyDrawingOperationsTool,
   createCreateDocumentTool,
@@ -114,47 +95,27 @@ export function isSdkManagedToolName(toolName: string): boolean {
  * 默认开放的只读内置工具名称列表。
  * MCP 工具和 Skill 工具为条件注册，不在此默认列表中。
  */
-export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
-  READ_CURRENT_DOCUMENT_TOOL_NAME,
-  READ_CURRENT_DRAWING_TOOL_NAME,
-  READ_CURRENT_WEBPAGE_TOOL_NAME,
-  GET_CURRENT_TIME_TOOL_NAME,
-  QUESTION_TOOL_NAME,
-  READ_FILE_TOOL_NAME,
-  GET_SETTINGS_TOOL_NAME,
-  QUERY_LOGS_TOOL_NAME,
-  OPEN_RESOURCE_TOOL_NAME
-] as const;
+export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [...getToolNamesByExposure('default-readonly'), QUESTION_TOOL_NAME] as readonly string[];
 
 /**
  * 默认开放的内置写工具名称列表。
  * MCP 写工具为条件注册，不在此默认列表中。
  */
 export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [
-  CREATE_DOCUMENT_TOOL_NAME,
-  CREATE_DRAWING_TOOL_NAME,
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
-  EDIT_FILE_TOOL_NAME,
-  WRITE_FILE_TOOL_NAME,
-  UPDATE_SETTINGS_TOOL_NAME,
+  ...getToolNamesByExposure('default-writable'),
   RUN_SHELL_COMMAND_TOOL_NAME,
   EDIT_MEMORY_TOOL_NAME
-] as const;
+] as readonly string[];
 
 /**
  * 条件注册的只读工具名称列表（MCP/Skill 等，有内容时才注册）。
  */
-export const CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES = [READ_DIRECTORY_TOOL_NAME, GET_MCP_SETTINGS_TOOL_NAME, SKILL_TOOL_NAME] as const;
+export const CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES = [...getToolNamesByExposure('conditional-readonly'), SKILL_TOOL_NAME] as readonly string[];
 
 /**
  * 条件注册的写工具名称列表（MCP 写操作等，有内容时才注册）。
  */
-export const CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES = [
-  ADD_MCP_SERVER_TOOL_NAME,
-  UPDATE_MCP_SERVER_TOOL_NAME,
-  REMOVE_MCP_SERVER_TOOL_NAME,
-  REFRESH_MCP_DISCOVERY_TOOL_NAME
-] as const;
+export const CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES = getToolNamesByExposure('conditional-writable') as readonly string[];
 
 /**
  * 所有内置工具名称列表（默认 + 条件），用于聊天侧白名单过滤。
@@ -165,7 +126,7 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   ...CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES,
   ...CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES,
   TODO_WRITE_TOOL_NAME
-] as const;
+] as readonly string[];
 
 /**
  * 获取默认聊天工具名称列表。
@@ -181,7 +142,7 @@ export function getDefaultBuiltinChatToolNames(): string[] {
  * @returns 是否为内置工具
  */
 export function isBuiltinToolName(toolName: string): boolean {
-  return ALL_BUILTIN_TOOL_NAMES.includes(toolName as (typeof ALL_BUILTIN_TOOL_NAMES)[number]);
+  return ALL_BUILTIN_TOOL_NAMES.includes(toolName);
 }
 
 /**
@@ -190,7 +151,7 @@ export function isBuiltinToolName(toolName: string): boolean {
  * @returns 是否为默认只读工具
  */
 export function isDefaultBuiltinReadonlyToolName(toolName: string): boolean {
-  return DEFAULT_BUILTIN_READONLY_TOOL_NAMES.includes(toolName as (typeof DEFAULT_BUILTIN_READONLY_TOOL_NAMES)[number]);
+  return DEFAULT_BUILTIN_READONLY_TOOL_NAMES.includes(toolName);
 }
 
 /**
@@ -199,7 +160,7 @@ export function isDefaultBuiltinReadonlyToolName(toolName: string): boolean {
  * @returns 是否为默认低风险写工具
  */
 export function isDefaultBuiltinWritableToolName(toolName: string): boolean {
-  return DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES.includes(toolName as (typeof DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES)[number]);
+  return DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES.includes(toolName);
 }
 
 /**

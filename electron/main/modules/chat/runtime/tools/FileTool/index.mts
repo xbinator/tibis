@@ -18,6 +18,7 @@ import {
   CREATE_DOCUMENT_TOOL_NAME,
   DEFAULT_READ_FILE_OFFSET,
   EDIT_FILE_TOOL_NAME,
+  FILE_TOOL_NAMES,
   READ_DIRECTORY_TOOL_NAME,
   READ_FILE_TOOL_NAME,
   WRITE_FILE_TOOL_NAME
@@ -25,9 +26,6 @@ import {
 import { isRecord, isRuntimeFileContentSnapshot, isRuntimeOpenDraftResult } from '../guards.mjs';
 import { resolveRuntimeReadTarget, resolveRuntimeWriteTarget } from '../paths.mjs';
 import { createBridgeFailureResult, createMainToolCancelledResult, createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';
-
-/** 文件工具名称集合。 */
-const FILE_TOOL_NAMES = new Set([READ_FILE_TOOL_NAME, READ_DIRECTORY_TOOL_NAME, CREATE_DOCUMENT_TOOL_NAME, WRITE_FILE_TOOL_NAME, EDIT_FILE_TOOL_NAME]);
 
 /**
  * 判断工具是否属于文件工具模块。

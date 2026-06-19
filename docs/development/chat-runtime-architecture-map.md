@@ -46,6 +46,8 @@ flowchart LR
 | `electron/main/modules/chat/runtime/service.mts` | Runtime lifecycle, session locks, message creation/update/delete, abort, continue, user choice resume, confirmation/bridge request bookkeeping, compaction orchestration, complete/error events. | Tool-specific business logic after migration; renderer UI updates. |
 | `electron/main/modules/chat/runtime/stream-executor.mts` | Consumes model stream chunks, updates assistant draft, executes tool rounds, decides whether to continue after tool results. | Persists session history directly outside the updater contract; owns no renderer UI state. |
 | `electron/main/modules/chat/runtime/tools/index.mts` | Main-process tool dispatcher. Routes a tool call to a grouped tool module. | Runtime lifecycle or model stream handling. |
+| `shared/ai/tools/toolRegistry.ts` | Single metadata source for migrated tool names, runtime owner, group, exposure, and schema definitions. | Runtime execution of migrated tools. |
+| `electron/main/modules/chat/runtime/tools/constants.mts` | Main-process runtime constants and grouped tool-name Sets derived from `shared/ai/tools/toolRegistry.ts`. | Tool schema definitions or duplicated tool-name literals. |
 | `electron/main/modules/chat/runtime/tools/**/index.mts` | Tool-specific main-process semantics, validation, confirmation, bridge calls, and structured tool results. | Renderer component or store access. |
 | `electron/main/modules/chat/runtime/tools/README.md` | Main-process tool directory guide: group ownership, adding-tool steps, schema/runtime split. | Runtime implementation logic. |
 | `electron/main/modules/chat/runtime/types.mts` | Internal runtime service, stream executor, message writer/reader, and tool executor contracts. | Cross-process IPC DTO definitions. Those live under `types/chat-runtime`. |
@@ -57,7 +59,7 @@ flowchart LR
 | `src/components/BChat/hooks/useRuntimeCompactContext.ts` | Starts manual/auto runtime compaction and mirrors compression runtime events for the active client/session. | Shows compression toast or creates interrupt messages. |
 | `src/components/BChat/utils/runtimeBridge.ts` | Handles main-to-renderer bridge requests: editor/drawing/WebView snapshots, unsaved/open file content, settings application, resource opening, draft creation. | Tool policy or model stream execution. |
 | `src/components/BChat/utils/confirmationController.ts` | Serializes confirmation requests so only one sheet is active while later requests wait. | Decides tool permissions itself. |
-| `src/ai/tools/catalog/runtimeTools.ts` | Schema-only definitions for tools migrated to main process. | Runtime execution of migrated tools. |
+| `src/ai/tools/catalog/runtimeTools.ts` | Schema-only factory wrapper with a registry-derived `RUNTIME_TOOL_FACTORIES` map and compatibility named factories. | Owns duplicated schema literals or a registry wrapper. |
 | `src/ai/tools/builtin/index.ts` | Builds the renderer-visible tool catalog and keeps local renderer tools registered. | Executes migrated main-process tools locally. |
 | `src/ai/tools/builtin/**` | Renderer-local tools that still need renderer state or local app affordances: Question, Todo, Memory, Shell, Skill. | Migrated document/file/drawing/settings/MCP/log/resource/webpage tools. |
 

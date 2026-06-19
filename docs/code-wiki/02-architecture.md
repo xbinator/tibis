@@ -85,7 +85,7 @@ sequenceDiagram
 ### Electron 构建
 
 - TypeScript：`electron/tsconfig.json` 编译到 `dist-electron/`
-- 运行入口（package.json main）：`dist-electron/main/index.mjs`
+- 运行入口（package.json main）：`dist-electron/electron/main/index.mjs`
 - 打包：`electron-builder.yml`
 
 ## 错误与日志

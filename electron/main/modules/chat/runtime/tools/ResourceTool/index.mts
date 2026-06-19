@@ -5,13 +5,10 @@
 import type { ChatRuntimeMainToolExecutionInput } from '../../types.mjs';
 import type { MainToolsDependencies, RuntimeOpenResourceInput, RuntimeOpenResourceType } from '../types.mjs';
 import type { AIToolExecutionResult } from 'types/ai';
-import { OPEN_RESOURCE_TOOL_NAME, RUNTIME_URL_PROTOCOL_RE } from '../constants.mjs';
+import { OPEN_RESOURCE_TOOL_NAME, RESOURCE_TOOL_NAMES, RUNTIME_URL_PROTOCOL_RE } from '../constants.mjs';
 import { isRecord, isRuntimeOpenResourceResult, isRuntimeOpenResourceType } from '../guards.mjs';
 import { resolveRuntimeReadTarget } from '../paths.mjs';
 import { createBridgeFailureResult, createMainToolCancelledResult, createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';
-
-/** 资源工具名称集合。 */
-const RESOURCE_TOOL_NAMES = new Set([OPEN_RESOURCE_TOOL_NAME]);
 
 /**
  * 判断工具是否属于资源工具模块。

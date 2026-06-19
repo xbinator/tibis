@@ -35,7 +35,7 @@ pnpm electron:build
 ### Electron dev
 
 - `electron:watch-main`：`tsc -p electron/tsconfig.json -w` 输出到 `dist-electron/`
-- `electron:run`：等待 `dist-electron/main/index.mjs` 存在后启动 Electron，并监控 `dist-electron` 变化自动重启
+- `electron:run`：等待 `dist-electron/electron/main/index.mjs` 存在后启动 Electron，并监控 `dist-electron` 变化自动重启
 
 ## 代码质量与检查
 

@@ -28,6 +28,7 @@ import {
   MIN_TOOL_CALL_TIMEOUT_MS,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
+  SETTINGS_TOOL_NAMES,
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME
 } from '../constants.mjs';
@@ -42,17 +43,6 @@ import {
   readRuntimeMcpSettings,
   updateRuntimeMcpSettings
 } from '../settings-file.mjs';
-
-/** 设置工具名称集合。 */
-const SETTINGS_TOOL_NAMES = new Set([
-  GET_SETTINGS_TOOL_NAME,
-  UPDATE_SETTINGS_TOOL_NAME,
-  GET_MCP_SETTINGS_TOOL_NAME,
-  ADD_MCP_SERVER_TOOL_NAME,
-  UPDATE_MCP_SERVER_TOOL_NAME,
-  REMOVE_MCP_SERVER_TOOL_NAME,
-  REFRESH_MCP_DISCOVERY_TOOL_NAME
-]);
 
 /**
  * 判断工具是否属于设置工具模块。

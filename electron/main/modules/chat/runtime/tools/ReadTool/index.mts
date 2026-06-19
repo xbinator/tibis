@@ -12,21 +12,13 @@ import {
   MAX_QUERY_LOG_LIMIT,
   QUERY_LOGS_TOOL_NAME,
   READ_CURRENT_DOCUMENT_TOOL_NAME,
+  READ_TOOL_NAMES,
   READ_CURRENT_DRAWING_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
   DEFAULT_QUERY_LOG_LIMIT
 } from '../constants.mjs';
 import { isRuntimeDocumentSnapshot, isRuntimeDrawingSnapshot, isRuntimeWebpageSnapshot } from '../guards.mjs';
 import { createBridgeFailureResult, createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';
-
-/** 只读工具名称集合。 */
-const READ_TOOL_NAMES = new Set([
-  READ_CURRENT_DOCUMENT_TOOL_NAME,
-  READ_CURRENT_DRAWING_TOOL_NAME,
-  READ_CURRENT_WEBPAGE_TOOL_NAME,
-  GET_CURRENT_TIME_TOOL_NAME,
-  QUERY_LOGS_TOOL_NAME
-]);
 
 /**
  * 判断工具是否属于只读工具模块。

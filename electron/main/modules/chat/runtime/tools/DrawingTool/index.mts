@@ -12,12 +12,9 @@ import {
   createEmptyDrawingData,
   normalizeDrawingTitle
 } from '../../drawing-runtime.mjs';
-import { APPLY_DRAWING_OPERATIONS_TOOL_NAME, CREATE_DRAWING_TOOL_NAME } from '../constants.mjs';
+import { APPLY_DRAWING_OPERATIONS_TOOL_NAME, CREATE_DRAWING_TOOL_NAME, DRAWING_TOOL_NAMES } from '../constants.mjs';
 import { isRecord, isRuntimeDrawingSnapshot, isRuntimeOpenDraftResult } from '../guards.mjs';
 import { createBridgeFailureResult, createMainToolCancelledResult, createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';
-
-/** 画板工具名称集合。 */
-const DRAWING_TOOL_NAMES = new Set([CREATE_DRAWING_TOOL_NAME, APPLY_DRAWING_OPERATIONS_TOOL_NAME]);
 
 /**
  * 判断工具是否属于画板工具模块。

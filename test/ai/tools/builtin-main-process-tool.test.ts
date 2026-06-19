@@ -14,7 +14,15 @@ import {
   createBuiltinTools
 } from '@/ai/tools/builtin';
 import { createReadFileTool as createCatalogReadFileTool } from '@/ai/tools/catalog/runtimeTools';
-import { MAIN_PROCESS_TOOL_NAMES } from '../../../electron/main/modules/chat/runtime/tools/constants.mjs';
+import {
+  DRAWING_TOOL_NAMES,
+  FILE_TOOL_NAMES,
+  MAIN_PROCESS_TOOL_NAMES,
+  READ_TOOL_NAMES,
+  RESOURCE_TOOL_NAMES,
+  SETTINGS_TOOL_NAMES
+} from '../../../electron/main/modules/chat/runtime/tools/constants.mjs';
+import { getToolNamesByRuntimeGroup } from '../../../shared/ai/tools/toolRegistry.js';
 
 describe('builtin main-process tools', (): void => {
   it('exposes migrated tool schemas from the catalog namespace', (): void => {
@@ -45,6 +53,14 @@ describe('builtin main-process tools', (): void => {
 
     expect(runtimeSchemaNames).not.toEqual([]);
     expect(runtimeSchemaNames.filter((toolName) => !MAIN_PROCESS_TOOL_NAMES.has(toolName))).toEqual([]);
+  });
+
+  it('keeps main-process group sets aligned with the shared tool registry', (): void => {
+    expect([...READ_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'read').sort());
+    expect([...FILE_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'file').sort());
+    expect([...SETTINGS_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'settings').sort());
+    expect([...DRAWING_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'drawing').sort());
+    expect([...RESOURCE_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'resource').sort());
   });
 
   it('fails clearly if a migrated tool is accidentally executed in renderer', async (): Promise<void> => {

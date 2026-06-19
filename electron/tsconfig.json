@@ -10,8 +10,8 @@
     "noEmit": false,
     "allowImportingTsExtensions": false,
     "outDir": "../dist-electron",
-    "rootDir": ".",
+    "rootDir": "..",
     "types": ["node", "electron"]
   },
-  "include": ["**/*.mts"]
+  "include": ["**/*.mts", "../shared/**/*.ts"]
 }
