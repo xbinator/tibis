@@ -1,518 +1,345 @@
-# `src/ai/tools` 新工具开发指南
+# AI 工具开发指南
 
-日期：2026-04-24
+日期：2026-06-19
 
-本文档面向仓库开发者，说明如何在 `src/ai/tools` 中新增一个 AI 工具，并把它安全地接入聊天工具链。
+本文档说明如何在当前工具架构下新增或修改 AI 工具。现在工具定义和执行已经拆成两层：
 
-目标是让新增工具保持和现有内置工具一致的结构：
+- `shared/ai/tools/toolRegistry.ts` 是已迁移 ChatRuntime 工具的单一元数据源，包含工具名、schema、风险等级、运行时归属、分组和暴露策略。
+- `electron/main/modules/chat/runtime/tools/**/index.mts` 是已迁移工具的主进程执行入口。
+- `src/ai/tools/catalog/runtimeTools.ts` 只为 renderer 暴露 schema-only 工具，执行时会提示该工具已迁移到主进程。
+- `src/ai/tools/builtin/**/index.ts` 只保留仍需 renderer 本地状态或本地交互的工具。
 
-- 工具定义清晰，参数和返回值可序列化。
-- 风险等级明确，写操作走统一权限流程。
-- 是否依赖当前编辑器上下文有明确边界。
-- 能被 `stream.ts` 正常执行并回注到模型消息历史。
-- 默认是否暴露给聊天侧由 `catalog.ts` 统一控制。
+新增工具前，先判断工具属于哪一类，再决定写在哪里。
 
-## 目录职责
+## 工具类型
 
-`src/ai/tools` 当前可以按下面理解：
+### 主进程工具
 
-- `builtin/`
-  负责内置工具实现与默认暴露清单。
-- `results.ts`
-  负责统一创建工具执行结果。
-- `permission.ts`
-  负责写工具权限、确认、自动放行与授权记忆。
-- `confirmation.ts`
-  定义确认请求和确认适配器接口。
-- `stream.ts`
-  负责把工具定义转成 transport tools，并执行模型发出的 tool call。
-- `editor-context.ts`
-  提供当前活动编辑器上下文。
-- `policy.ts`
-  负责 provider/model 是否支持工具调用，以及默认聊天工具集。
+优先选择这一类。适合：
 
-如果是“新增一个内置工具”，通常会同时改到：
+- 文件、目录、日志、设置、MCP、资源打开等系统或应用级能力。
+- 需要统一确认、路径校验、工作区边界、主进程文件系统访问的能力。
+- 不应该依赖 Vue store、DOM、当前组件实例的能力。
 
-- `src/ai/tools/builtin/*.ts`
-- `src/ai/tools/builtin/catalog.ts`
+代码落点：
+
+- 元数据：`shared/ai/tools/toolRegistry.ts`
+- 执行逻辑：`electron/main/modules/chat/runtime/tools/<GroupTool>/index.mts`
+- 分发入口：`electron/main/modules/chat/runtime/tools/index.mts`
+- 共享工具 helper：`electron/main/modules/chat/runtime/tools/*.mts`
+- renderer schema-only wrapper：通常由 `src/ai/tools/catalog/runtimeTools.ts` 从 registry 自动派生，不要重复写 schema 字面量。
+
+### Renderer-local 工具
+
+仅当工具必须依赖 renderer 本地状态时使用。当前包括：
+
+- `QuestionTool`
+- `TodoWriteTool`
+- `MemoryTool`
+- `ShellTool`
+- `SkillTool`
+
+代码落点：
+
+- `src/ai/tools/builtin/<ToolName>/index.ts`
 - `src/ai/tools/builtin/index.ts`
-- `test/ai/tools/*`
 
-## 先判断工具类型
+不要把已经能在主进程完成的工具继续放进 renderer-local 目录。
 
-新增工具前，先确认它属于哪一类。
+### SDK-managed 工具
 
-### 1. 只读工具
+由 AI SDK 或 provider 集成处理，例如 Tavily 和 MCP provider 工具。通常不需要放入本地 builtin 执行器。
 
-适合读取信息，不修改状态，例如：
+## 主进程工具新增步骤
 
-- 读取当前文档
-- 搜索当前文档
-- 获取应用设置
-- 获取系统时间
+### 1. 选定工具分组
 
-这类工具通常：
+主进程工具按目录分组：
 
-- `riskLevel` 为 `read`
-- 可以直接返回 `createToolSuccessResult`
-- 不需要走 `executeWithPermission`
+- `ReadTool`：只读环境、当前文档、当前网页、日志、MCP 设置等。
+- `FileTool`：文件和目录读取、创建、写入、编辑。
+- `SettingsTool`：应用设置和 MCP server 配置写入。
+- `DrawingTool`：画板读取、创建和操作。
+- `ResourceTool`：打开文件、网页或其他资源。
 
-补充说明：
+如果新工具不属于这些分组，先判断是否真的需要新分组。新分组需要同步：
 
-- 只读工具不等于永远不需要用户确认。
-- 如果工具允许读取工作区外的绝对路径资源，例如本地文件或本地目录，仍然应该在无工作区约束时要求用户确认。
-- `read_file` 和 `read_directory` 都属于这种“只读但有边界风险”的工具。
+- `shared/ai/tools/toolRegistry.ts` 的 `ToolRuntimeGroup`
+- `electron/main/modules/chat/runtime/tools/constants.mts`
+- `electron/main/modules/chat/runtime/tools/index.mts`
+- 对应测试
 
-### 2. 写工具
+### 2. 在 registry 增加工具定义
 
-适合修改编辑器内容或应用状态，例如：
+在 `shared/ai/tools/toolRegistry.ts` 中新增：
 
-- 插入文本
-- 替换选区
-- 修改设置
+- 工具名常量
+- schema 常量或内联 schema
+- `TOOL_REGISTRY` 条目
 
-这类工具通常：
+条目需要包含：
 
-- `riskLevel` 为 `write`
-- 低风险且可自动授权的工具，可设置 `safeAutoApprove: true`
-- 通过 `executeWithPermission` 或明确确认流程执行
+- `runtime`
+- `group`
+- `exposure`
+- `definition`
 
-### 3. 危险工具
-
-适合大范围覆盖、不可逆或高误伤风险的操作，例如：
-
-- 替换整篇文档
-
-这类工具通常：
-
-- `riskLevel` 为 `dangerous`
-- 不允许记住授权
-- 不应放入默认低风险可写工具清单
-
-## 新工具文件放在哪里
-
-如果是内置工具，优先放在 `src/ai/tools/builtin/`。
-
-建议按能力归类，而不是“一个文件一个项目需求”：
-
-- 文档读取相关：并入 `read.ts`
-- 文件读取相关：并入 `read-file.ts`
-- 编辑器写入相关：并入 `write.ts`
-- 设置相关：并入 `settings.ts`
-- 环境类信息：并入 `environment.ts`
-
-只有当新能力和现有文件职责明显不匹配时，再新建一个 `builtin/*.ts` 文件。
-
-## 工具定义的最小结构
-
-每个工具都要实现 `AIToolExecutor`：
+示例：
 
 ```ts
-export interface AIToolExecutor<TInput = unknown, TResult = unknown> {
-  definition: AIToolDefinition;
-  execute(input: TInput, context?: AIToolContext): Promise<AIToolExecutionResult<TResult>>;
-}
-```
-
-核心定义在 `types/ai.d.ts`：
-
-- `name`
-- `description`
-- `source`
-- `riskLevel`
-- `parameters`
-- `requiresActiveDocument`
-- `permissionCategory`
-- `safeAutoApprove`
-
-推荐做法：
-
-1. 先定义输入和输出类型。
-2. 再导出共享工具名常量。
-3. 再实现 `definition` 和 `execute`。
-
-示例结构：
-
-```ts
-/**
- * 工具名称常量。
- */
+/** 示例工具名称。 */
 export const EXAMPLE_TOOL_NAME = 'example_tool';
 
-/**
- * 工具输入。
- */
-export interface ExampleToolInput {
-  /** 查询关键字。 */
-  query: string;
-}
-
-/**
- * 工具输出。
- */
-export interface ExampleToolResult {
-  /** 原始查询。 */
-  query: string;
-}
+/** 已迁移到主进程的工具 registry。 */
+export const TOOL_REGISTRY = [
+  // ...existing tools
+  {
+    runtime: 'main',
+    group: 'read',
+    exposure: 'default-readonly',
+    definition: {
+      name: EXAMPLE_TOOL_NAME,
+      description: '读取示例信息并返回结构化结果。',
+      source: 'builtin',
+      riskLevel: 'read',
+      requiresActiveDocument: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '查询关键字。' }
+        },
+        required: ['query'],
+        additionalProperties: false
+      }
+    }
+  }
+] as const satisfies ToolRegistryEntry[];
 ```
 
-这里的共享工具名常量很重要。`catalog.ts`、测试、错误结果和定义中的 `name` 都应该引用同一个常量，避免字符串散落。
+不要在 renderer 和 main 各写一份 schema。registry 是唯一来源。
 
-## 什么时候需要 `requiresActiveDocument`
+### 3. 实现主进程执行逻辑
 
-默认情况下，工具会被视为依赖当前编辑器上下文。
+在对应 `tools/<GroupTool>/index.mts` 中实现：
 
-因为 `stream.ts` 里有这段保护逻辑：
+- `is<Group>Tool(toolName: string): boolean`
+- 输入归一化函数
+- 具体执行函数
+- 分组入口 `execute<Group>Tool`
 
-- 如果 `executor.definition.requiresActiveDocument !== false`
-- 且当前没有 editor context
-- 则直接返回 `NO_ACTIVE_DOCUMENT`
+结果统一使用：
 
-因此：
+- `createMainToolSuccessResult`
+- `createMainToolFailureResult`
+- `createMainToolCancelledResult`
+- `createBridgeFailureResult`
 
-- 依赖 `context.document` 或 `context.editor` 的工具，不用额外声明
-- 不依赖当前文档的全局工具，要显式写 `requiresActiveDocument: false`
+这些 helper 在 `electron/main/modules/chat/runtime/tools/results.mts`。
 
-典型例子：
+### 4. 处理确认和 bridge
 
-- `get_current_time` 是全局工具，应设为 `false`
-- `get_settings` 是全局工具，应设为 `false`
-- `read_current_document` 依赖活动文档，不需要设为 `false`
+主进程工具依赖来自 `MainToolsDependencies`：
 
-## 什么时候走 `results.ts`
+- `requestConfirmation`
+- `requestBridge`
+- `now`
 
-所有工具结果都应该通过统一结果结构返回。
+需要用户确认时，通过 `requestConfirmation`。用户拒绝时返回 cancelled，不要伪装成普通 failure。
 
-优先使用：
+主进程无法直接读取 renderer 状态时，通过 `requestBridge`，例如：
 
-- `createToolSuccessResult`
-- `createToolFailureResult`
-- `createToolCancelledResult`
-- `createAwaitingUserInputResult`
+- 当前编辑器内容
+- 未保存草稿内容
+- 当前画板数据
+- 当前 WebView 页面快照
+- 让 renderer 打开资源或创建草稿
 
-不要直接手写各种形状不一致的对象，除非已有模块为了兼容历史代码而保留了极少数直接返回对象的写法。新增代码建议统一走 `results.ts`。
+bridge 不是第二套工具运行时，只是主进程向 renderer 请求 UI 状态或 UI 动作的受控 RPC。
 
-常见错误码建议：
+### 5. 更新分发入口
 
-- 输入不合法：`INVALID_INPUT`
-- 无活动文档：`NO_ACTIVE_DOCUMENT`
-- 当前没有选区：`NO_SELECTION`
-- 权限不允许：`PERMISSION_DENIED`
-- 用户拒绝：`USER_CANCELLED`
-- 平台不支持：`UNSUPPORTED_PROVIDER`
-- 运行期异常：`EXECUTION_FAILED`
+如果使用已有分组，通常只需要在该分组的 `is<Group>Tool` 和 `execute<Group>Tool` 中接入。
 
-如果是“只读但需要确认”的工具，也应该在用户拒绝时返回 `createToolCancelledResult`，而不是把这类场景混成普通失败。
+如果新增分组，需要更新：
 
-## 什么时候走 `permission.ts`
+- `electron/main/modules/chat/runtime/tools/index.mts`
+- `electron/main/modules/chat/runtime/tools/constants.mts`
+- `shared/ai/tools/toolRegistry.ts`
 
-结论很简单：
+### 6. 补测试
 
-- 只读工具通常不走 `executeWithPermission`
-- 写工具优先走 `executeWithPermission`
-- 危险写工具至少要有确认流程
+主进程工具测试通常放在：
 
-`executeWithPermission` 适合这类场景：
+- `test/electron/main/modules/chat/runtime/main-tools.test.ts`
+- 或新增更聚焦的工具测试文件
 
-- 工具有明确的 `definition`
-- 需要根据 `toolPermissionMode` 判断是否允许执行
-- 需要利用 session / always grant
-- 需要支持 `safeAutoApprove`
+至少覆盖：
 
-例如 `update_settings` 就是标准用法：
+- 成功路径
+- 输入非法
+- 用户取消确认
+- bridge 失败
+- 工作区路径边界
+- 结果结构是否可序列化
 
-1. 先校验输入
-2. 构造确认请求
-3. 通过 `executeWithPermission` 包装真实操作
-4. 在 `operation` 中执行实际修改
+如果修改 registry，还要覆盖：
 
-如果工具不是简单的“写入后返回”，而是像 `replace_selection` 这样要先确认、再重新检查上下文是否过期，也可以像 `write.ts` 一样保留定制执行流程。
+- `test/ai/tools/builtin-index.test.ts`
+- `test/electron/main/modules/chat/runtime/main-tools.test.ts`
+- registry / constants 对齐相关测试
 
-## 参数和结果的约束
+## Renderer-local 工具新增步骤
 
-工具参数和结果最终会进入模型工具调用链，因此必须遵守几个约束：
+只有工具必须依赖 renderer 本地执行时才走这条路径。
 
-### 1. 参数 schema 要和输入类型一致
+### 1. 创建工具目录
 
-`definition.parameters` 里的 JSON Schema 需要和 `TInput` 对齐。
+使用目录结构：
 
-如果类型上要求必填，schema 里也要放进 `required`。
+```text
+src/ai/tools/builtin/<ToolName>/index.ts
+```
 
-### 2. 结果必须可 JSON 序列化
+每个工具文件需要：
 
-`stream.ts` 会通过 `JSON.stringify -> JSON.parse` 把结果转成 JSON 值。
+- 文件头说明
+- 明确输入/输出类型
+- JSDoc 注释
+- 禁止 `any`
+- 统一结果工厂
 
-所以不要返回：
+### 2. 在 builtin index 注册
+
+更新：
+
+- `src/ai/tools/builtin/index.ts`
+
+renderer-local 工具不要写入 `shared/ai/tools/toolRegistry.ts`，除非它未来要迁移到主进程。
+
+### 3. 测试
+
+测试放在：
+
+- `test/ai/tools/*`
+
+覆盖成功、失败、上下文缺失和权限分支。
+
+## 风险等级和暴露策略
+
+### riskLevel
+
+- `read`：读取信息，不修改状态。
+- `write`：修改文件、设置、画板或应用状态。
+- `dangerous`：可能大范围覆盖、删除、逃逸工作区或造成高误伤风险。
+
+只读不等于永远不确认。读取工作区外绝对路径、敏感设置或本地资源时，仍应走确认。
+
+### exposure
+
+registry 的 `exposure` 决定聊天侧默认是否暴露：
+
+- `default-readonly`：默认只读工具。
+- `default-writable`：默认写工具。
+- `conditional-readonly`：条件启用的只读工具。
+- `conditional-writable`：条件启用的写工具。
+- `compat-hidden`：兼容保留，不默认暴露。
+
+不要在其他地方再维护重复默认清单。
+
+## 参数和结果约束
+
+### schema 和输入类型一致
+
+`definition.parameters` 必须和输入归一化逻辑一致。类型必填的字段，要放进 `required`。
+
+### 结果必须可结构化克隆和 JSON 序列化
+
+不要返回：
 
 - 函数
 - `Map`
 - `Set`
-- `Date` 实例本身
+- `Date` 实例
 - DOM 对象
 - class 实例
+- `AbortSignal`
+- Vue Proxy
 
-建议只返回普通对象、数组、字符串、数字、布尔值和 `null`。
+返回普通对象、数组、字符串、数字、布尔值和 `null`。
 
-### 3. 描述文案要写给模型看
+### 描述写给模型看
 
-`definition.description` 不是写给开发者看的注释，而是给模型决定“何时调用此工具”的提示。
+`definition.description` 是模型选择工具的依据。要说明：
 
-因此要写清楚：
+- 工具做什么
+- 什么时候用
+- 需要什么输入
+- 返回什么信息
+- 不适合什么场景
 
-- 它做什么
-- 输入什么
-- 返回什么
-- 是否有边界条件
-
-## 新增内置工具的接入步骤
-
-### 1. 在工具实现文件中新增工具
-
-先在对应 `builtin/*.ts` 文件中：
-
-- 定义工具名常量
-- 定义输入输出类型
-- 定义 `definition`
-- 实现 `execute`
-
-### 2. 暴露到对应工具集合
-
-例如：
-
-- `BuiltinReadTools`
-- `BuiltinWriteTools`
-- `BuiltinSettingsTools`
-
-这样 `createBuiltinTools` 才能拿到它。
-
-### 3. 在 `builtin/index.ts` 组装
-
-把工具加入：
-
-- `allReadonlyTools`
-- 或 `allDefaultWritableTools`
-
-如果是非默认开放工具，也可以只在特定开关下暴露。
-
-这里有一个很容易漏掉的点：
-
-- 如果工具实现支持确认流程，例如绝对路径读取确认
-- 那么在 `createBuiltinTools` 里组装它时，要把 `confirm: options.confirm` 一并传进去
-
-不要只传 `getWorkspaceRoot`，否则工具内部虽然写了确认逻辑，但聊天侧真正创建出来的实例拿不到确认适配器，最终只会返回“需要用户确认”，却不会弹出确认卡片。
-
-`read_directory` 就踩过这个坑，修复方式就是在 `builtin/index.ts` 中改成：
-
-```ts
-createBuiltinReadDirectoryTool({
-  confirm: options.confirm,
-  getWorkspaceRoot: options.getWorkspaceRoot
-})
-```
-
-### 4. 在 `builtin/catalog.ts` 决定是否默认开放
-
-这里不要写裸字符串，要引用共享常量，例如：
-
-```ts
-export const DEFAULT_BUILTIN_READONLY_TOOL_NAMES = [
-  READ_CURRENT_DOCUMENT_TOOL_NAME,
-  GET_SETTINGS_TOOL_NAME
-] as const;
-```
-
-如果工具只是“存在但默认不开放”，那就不要加进默认清单。
-
-### 5. 如有 provider 层限制，确认 `policy.ts`
-
-目前 `policy.ts` 主要负责：
-
-- 模型是否支持工具调用
-- 默认聊天工具名集合
-
-一般新增默认工具后，不需要单独修改逻辑，只要默认清单正确即可。
-
-## 只读工具的绝对路径确认模式
-
-当工具既是只读工具，又可能访问工作区外的本地资源时，推荐沿用 `read_file` / `read_directory` 这套模式：
-
-1. 有 `workspaceRoot` 时：
-   只允许读取工作区内路径，由底层平台层做安全校验。
-2. 没有 `workspaceRoot` 时：
-   相对路径直接拒绝。
-3. 没有 `workspaceRoot` 且传入绝对路径时：
-   先通过 `AIToolConfirmationAdapter` 请求用户确认，再继续执行。
-4. 如果当前工具实例没有拿到 `confirm`：
-   返回 `PERMISSION_DENIED`，明确说明“需要用户确认”。
-
-这样做的好处是：
-
-- 默认仍然安全
-- 不会静默读取任意本地路径
-- 在用户显式授权时，又能支持跨工作区读取
-
-这类确认一般不走 `executeWithPermission`，因为它不是“写操作授权记忆”问题，而是“对当前一次绝对路径读取做单次确认”。
-
-## 新建一个 `builtin/*.ts` 文件时的建议模板
+## 主进程工具模板
 
 ```ts
 /**
- * @file example.ts
- * @description 示例工具实现。
+ * @file index.mts
+ * @description ChatRuntime 主进程示例工具。
  */
-import type { AIToolExecutor } from 'types/ai';
-import { createToolFailureResult, createToolSuccessResult } from '../results';
-
-/** 示例工具名称。 */
-export const EXAMPLE_TOOL_NAME = 'example_tool';
+import type { AIToolExecutionResult } from 'types/ai';
+import type { ChatRuntimeMainToolExecutionInput } from '../../types.mjs';
+import type { MainToolsDependencies } from '../types.mjs';
+import { EXAMPLE_TOOL_NAME } from '../constants.mjs';
+import { createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';
 
 /**
- * 示例工具输入。
+ * 判断是否为示例工具。
+ * @param toolName - 工具名称
+ * @returns 是否为示例工具
  */
-export interface ExampleToolInput {
-  /** 示例文本。 */
-  text: string;
+export function isExampleTool(toolName: string): boolean {
+  return toolName === EXAMPLE_TOOL_NAME;
 }
 
 /**
- * 示例工具输出。
+ * 执行示例工具。
+ * @param input - 工具执行输入
+ * @param deps - 主进程工具依赖
+ * @returns 工具执行结果
  */
-export interface ExampleToolResult {
-  /** 处理后的文本。 */
-  normalizedText: string;
-}
+export async function executeExampleTool(input: ChatRuntimeMainToolExecutionInput, deps: MainToolsDependencies): Promise<AIToolExecutionResult> {
+  void deps;
+  if (typeof input.input !== 'object' || input.input === null) {
+    return createMainToolFailureResult(input.toolName, 'INVALID_INPUT', '工具输入必须是对象');
+  }
 
-/**
- * 示例工具集合。
- */
-export interface ExampleTools {
-  /** 示例工具。 */
-  exampleTool: AIToolExecutor<ExampleToolInput, ExampleToolResult>;
-}
-
-/**
- * 创建示例工具。
- * @returns 示例工具集合
- */
-export function createExampleTools(): ExampleTools {
-  return {
-    exampleTool: {
-      definition: {
-        name: EXAMPLE_TOOL_NAME,
-        description: '对输入文本做示例处理并返回结果。',
-        source: 'builtin',
-        riskLevel: 'read',
-        requiresActiveDocument: false,
-        parameters: {
-          type: 'object',
-          properties: {
-            text: { type: 'string', description: '要处理的文本。' }
-          },
-          required: ['text'],
-          additionalProperties: false
-        }
-      },
-      async execute(input: ExampleToolInput) {
-        if (!input.text.trim()) {
-          return createToolFailureResult(EXAMPLE_TOOL_NAME, 'INVALID_INPUT', 'text 不能为空');
-        }
-
-        return createToolSuccessResult(EXAMPLE_TOOL_NAME, {
-          normalizedText: input.text.trim()
-        });
-      }
-    }
-  };
+  return createMainToolSuccessResult(EXAMPLE_TOOL_NAME, { ok: true });
 }
 ```
-
-## 测试建议
-
-新增工具后，至少覆盖下面几类测试。
-
-### 1. 工具自身行为测试
-
-通常新增到 `test/ai/tools/`：
-
-- 成功路径
-- 输入校验失败
-- 权限拒绝或用户取消
-- 特殊上下文分支
-- 无工作区时的绝对路径确认分支
-
-例如：
-
-- `test/ai/tools/builtin-settings.test.ts`
-- `test/ai/tools/builtin-read-file.test.ts`
-
-### 2. `builtin/index.ts` 暴露测试
-
-如果工具接进了 `createBuiltinTools`，要更新：
-
-- `test/ai/tools/builtin-index.test.ts`
-
-确认默认工具集合是否符合预期。
-
-如果工具依赖 `confirm` 或 `getWorkspaceRoot`，这里还应该补一条“宿主参数是否真的传进工具实例”的回归测试。否则工具本身测试可能是绿的，但聊天侧实际接线仍然可能失效。
-
-### 3. `catalog.ts` 默认清单测试
-
-如果工具加入了默认清单，要更新：
-
-- `test/ai/tools/builtin-catalog.test.ts`
-
-并优先断言共享工具名常量，而不是手写字符串。
-
-### 4. 集成链路测试
-
-如果工具改变了聊天侧工具循环、确认卡片、消息回注或平台调用链，还要补对应测试。
-
-常见位置包括：
-
-- `test/components/BChat/*`
-- `test/components/BChatSidebar/*`
-- `test/electron/*`
 
 ## 开发检查清单
 
-提 PR 或交付前，至少自查下面这些点。
-
-- 是否导出了共享工具名常量
-- 是否为输入、输出、工具集合补了类型
-- 是否写了文件头注释和 JSDoc 注释
-- 是否避免了 `any`
-- 是否明确了 `riskLevel`
-- 是否明确了 `requiresActiveDocument`
-- 是否使用统一结果工厂
-- 写工具是否接入权限或确认流程
-- 只读绝对路径工具是否接入单次确认流程
-- 是否更新了 `catalog.ts`
-- 是否更新了 `builtin/index.ts`
-- `builtin/index.ts` 是否把 `confirm` / `getWorkspaceRoot` 等依赖真实传入
-- 是否补了相关测试
-- 是否把改动记录进当日 changelog
-
-## 相关文件
-
-- `types/ai.d.ts`
-- `src/ai/tools/results.ts`
-- `src/ai/tools/permission.ts`
-- `src/ai/tools/confirmation.ts`
-- `src/ai/tools/stream.ts`
-- `src/ai/tools/editor-context.ts`
-- `src/ai/tools/policy.ts`
-- `src/ai/tools/builtin/index.ts`
-- `src/ai/tools/builtin/catalog.ts`
+- 工具是否真的需要 renderer-local？能主进程化就主进程化。
+- 工具名是否只在 `shared/ai/tools/toolRegistry.ts` 定义一次？
+- registry 的 `runtime`、`group`、`exposure`、`riskLevel` 是否正确？
+- schema 是否和输入归一化一致？
+- 主进程执行结果是否使用 `tools/results.mts` helper？
+- 写操作、工作区外路径、危险读取是否有确认？
+- bridge 失败是否返回稳定错误，而不是抛出到 runtime 外层？
+- 结果是否可结构化克隆？
+- 是否补测试？
+- 是否更新 `docs/development/chat-runtime-architecture-map.md` 或相关 README？
+- 是否记录到当天 changelog？
 
 ## 推荐阅读顺序
 
-如果第一次接触这块代码，推荐按这个顺序读：
+第一次接触这块代码，建议按顺序读：
 
-1. `types/ai.d.ts`
-2. `src/ai/tools/results.ts`
-3. `src/ai/tools/stream.ts`
-4. `src/ai/tools/builtin/catalog.ts`
-5. `src/ai/tools/builtin/index.ts`
-6. 目标工具所在的 `builtin/*.ts`
+1. `shared/ai/tools/toolRegistry.ts`
+2. `src/ai/tools/catalog/runtimeTools.ts`
+3. `src/ai/tools/builtin/index.ts`
+4. `electron/main/modules/chat/runtime/README.md`
+5. `electron/main/modules/chat/runtime/tools/index.mts`
+6. `electron/main/modules/chat/runtime/tools/types.mts`
+7. 目标工具分组的 `electron/main/modules/chat/runtime/tools/**/index.mts`
+8. `src/components/BChat/utils/runtimeBridge.ts`
 
-这样会比较容易建立“工具定义 -> 工具执行 -> tool result 回注 -> 默认暴露策略”的完整心智模型。
+这样能先建立“registry 定义 -> renderer schema-only 暴露 -> 主进程执行 -> 必要时 bridge 到 renderer”的完整链路。
