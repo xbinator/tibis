@@ -9,6 +9,16 @@ import { createToolFailureResult } from './results';
 
 /** Shell 命令工具名称。 */
 const RUN_SHELL_COMMAND_TOOL_NAME = 'run_shell_command';
+/** Todo 写入工具名称。 */
+const TODO_WRITE_TOOL_NAME = 'todowrite';
+
+/**
+ * 工具执行元数据。
+ */
+export interface ToolExecutionMetadata {
+  /** 触发工具请求的 runtime ID */
+  runtimeId?: string;
+}
 
 /**
  * 已执行的工具调用
@@ -69,10 +79,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * @param toolName - 工具名称
  * @param input - 原始输入
  * @param toolCallId - 工具调用 ID
+ * @param metadata - 工具执行元数据
  * @returns 工具执行输入
  */
-function createExecutionInput(toolName: string, input: unknown, toolCallId: string): unknown {
-  if (toolName !== RUN_SHELL_COMMAND_TOOL_NAME || !isRecord(input)) {
+function createExecutionInput(toolName: string, input: unknown, toolCallId: string, metadata: ToolExecutionMetadata = {}): unknown {
+  if (!isRecord(input)) {
+    return input;
+  }
+
+  if (toolName === TODO_WRITE_TOOL_NAME && metadata.runtimeId) {
+    return {
+      ...input,
+      sourceRuntimeId: metadata.runtimeId
+    };
+  }
+
+  if (toolName !== RUN_SHELL_COMMAND_TOOL_NAME) {
     return input;
   }
 
@@ -100,9 +122,15 @@ export function toTransportTools(tools: AIToolExecutor[]) {
  * @param call - 工具调用数据块
  * @param tools - 可用工具列表
  * @param context - 编辑器上下文
+ * @param metadata - 工具执行元数据
  * @returns 执行结果
  */
-export async function executeToolCall(call: AIStreamToolCallChunk, tools: AIToolExecutor[], context: AIToolContext | undefined): Promise<ExecutedToolCall> {
+export async function executeToolCall(
+  call: AIStreamToolCallChunk,
+  tools: AIToolExecutor[],
+  context: AIToolContext | undefined,
+  metadata: ToolExecutionMetadata = {}
+): Promise<ExecutedToolCall> {
   // 查找对应的工具执行器
   const executor = tools.find((item) => item.definition.name === call.toolName);
 
@@ -126,7 +154,7 @@ export async function executeToolCall(call: AIStreamToolCallChunk, tools: AITool
   }
 
   // 执行工具，等待用户输入结果仍作为普通终态 tool-result 进入消息历史。
-  const executionInput = createExecutionInput(call.toolName, call.input, call.toolCallId);
+  const executionInput = createExecutionInput(call.toolName, call.input, call.toolCallId, metadata);
   const enrichedContext = context ? { ...context, toolCallId: call.toolCallId } : undefined;
   const rawResult = await executor.execute(executionInput, enrichedContext);
 

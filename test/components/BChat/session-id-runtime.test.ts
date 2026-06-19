@@ -97,11 +97,16 @@ const memoryStoreMock = vi.hoisted(() => ({
   buildSystemPromptContext: vi.fn<() => string>(() => '')
 }));
 
+const modalMock = vi.hoisted(() => ({
+  confirm: vi.fn<(title: string, content: string, options?: unknown) => Promise<[boolean]>>()
+}));
+
 const todoStoreMock = vi.hoisted(
   (): {
     todosBySession: Map<string, TodoItem[]>;
     clearTodos: ReturnType<typeof vi.fn<(sessionId: string) => void>>;
     getTodos: ReturnType<typeof vi.fn<(sessionId: string) => TodoItem[]>>;
+    restoreBeforeRuntimeIds: ReturnType<typeof vi.fn<(sessionId: string, runtimeIds: string[]) => boolean>>;
   } => {
     const todosBySession = new Map<string, TodoItem[]>();
 
@@ -110,7 +115,8 @@ const todoStoreMock = vi.hoisted(
       clearTodos: vi.fn<(sessionId: string) => void>((sessionId: string): void => {
         todosBySession.delete(sessionId);
       }),
-      getTodos: vi.fn<(sessionId: string) => TodoItem[]>((sessionId: string) => todosBySession.get(sessionId) ?? [])
+      getTodos: vi.fn<(sessionId: string) => TodoItem[]>((sessionId: string) => todosBySession.get(sessionId) ?? []),
+      restoreBeforeRuntimeIds: vi.fn<(sessionId: string, runtimeIds: string[]) => boolean>(() => false)
     };
   }
 );
@@ -262,9 +268,7 @@ vi.mock('@/components/BChat/hooks/useAutoName', () => ({
 }));
 
 vi.mock('@/utils/modal', () => ({
-  Modal: {
-    confirm: vi.fn()
-  }
+  Modal: modalMock
 }));
 
 const BPromptEditorStub = defineComponent({
@@ -319,7 +323,7 @@ const ConversationViewStub = defineComponent({
       default: () => []
     }
   },
-  emits: ['regenerate', 'user-choice-submit'],
+  emits: ['regenerate', 'rollback', 'user-choice-submit'],
   setup(_props, { expose, slots }) {
     expose({
       scrollToBottom: conversationViewMockState.scrollToBottom
@@ -481,6 +485,10 @@ describe('BChat sessionId runtime', (): void => {
     todoStoreMock.todosBySession.clear();
     todoStoreMock.clearTodos.mockReset();
     todoStoreMock.getTodos.mockClear();
+    todoStoreMock.restoreBeforeRuntimeIds.mockReset();
+    todoStoreMock.restoreBeforeRuntimeIds.mockReturnValue(false);
+    modalMock.confirm.mockReset();
+    modalMock.confirm.mockResolvedValue([false]);
     autoNameMockState.options = undefined;
     toolSettingsMockState.tavily = undefined;
     toolSettingsMockState.mcp.servers = [];
@@ -690,6 +698,32 @@ describe('BChat sessionId runtime', (): void => {
     );
     const [continueInput] = electronAPIMock.chatRuntimeContinue.mock.calls[0] as [ChatRuntimeContinueInput];
     expect(continueInput.messages).toEqual([expect.objectContaining({ id: 'user-regenerate', role: 'user' })]);
+  });
+
+  it('restores todo snapshots for runtime ids removed by rollback', async (): Promise<void> => {
+    const firstUserMessage = { ...createMessage('user-1', '第一轮'), runtimeId: 'runtime-1', finished: true };
+    const firstAssistantMessage = createAssistantMessage({
+      id: 'assistant-1',
+      content: '第一轮回答',
+      runtimeId: 'runtime-1'
+    });
+    const secondUserMessage = { ...createMessage('user-2', '第二轮'), runtimeId: 'runtime-2', finished: true };
+    const secondAssistantMessage = createAssistantMessage({
+      id: 'assistant-2',
+      content: '第二轮回答',
+      runtimeId: 'runtime-2'
+    });
+    chatStoreMock.getSessionMessages
+      .mockResolvedValueOnce([firstUserMessage, firstAssistantMessage, secondUserMessage, secondAssistantMessage])
+      .mockResolvedValueOnce([]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit('rollback', secondUserMessage);
+    await flushPromises();
+
+    expect(chatStoreMock.setSessionMessages).toHaveBeenCalledWith('session-active', [firstUserMessage, firstAssistantMessage]);
+    expect(todoStoreMock.restoreBeforeRuntimeIds).toHaveBeenCalledWith('session-active', ['runtime-2']);
   });
 
   it('leaves automatic compaction to the main process runtime before sending', async (): Promise<void> => {

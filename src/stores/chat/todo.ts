@@ -19,6 +19,28 @@ export interface TodoItem {
   priority: 'high' | 'medium' | 'low';
 }
 
+/**
+ * Todo 写入快照
+ */
+export interface TodoWriteSnapshot {
+  /** 产生本次写入的 runtime ID */
+  sourceRuntimeId: string;
+  /** 写入前的待办列表 */
+  beforeTodos: TodoItem[];
+  /** 写入后的待办列表 */
+  afterTodos: TodoItem[];
+  /** 快照创建时间 */
+  createdAt: string;
+}
+
+/**
+ * 设置 Todo 列表的选项
+ */
+export interface SetTodosOptions {
+  /** 产生本次写入的 runtime ID，用于回退时恢复快照 */
+  sourceRuntimeId?: string;
+}
+
 const TODO_STORAGE_KEY = 'chat_session_todos';
 
 /**
@@ -27,11 +49,83 @@ const TODO_STORAGE_KEY = 'chat_session_todos';
 interface PersistedTodoState {
   /** 按 sessionId 存储的待办列表 */
   sessionTodos: Record<string, TodoItem[]>;
+  /** 按 sessionId 存储的 Todo 写入快照 */
+  sessionTodoSnapshots: Record<string, TodoWriteSnapshot[]>;
 }
 
 const DEFAULT_TODO_STATE: PersistedTodoState = {
-  sessionTodos: {}
+  sessionTodos: {},
+  sessionTodoSnapshots: {}
 };
+
+/**
+ * 克隆待办列表，避免快照受外部引用后续修改影响。
+ * @param todos - 待克隆的待办列表
+ * @returns 克隆后的待办列表
+ */
+function cloneTodos(todos: TodoItem[]): TodoItem[] {
+  return todos.map((todo) => ({ ...todo }));
+}
+
+/**
+ * 克隆按会话分组的待办列表。
+ * @param sessionTodos - 原始会话待办映射
+ * @returns 克隆后的会话待办映射
+ */
+function cloneSessionTodos(sessionTodos: Record<string, TodoItem[]>): Record<string, TodoItem[]> {
+  return Object.fromEntries(Object.entries(sessionTodos).map(([sessionId, todos]) => [sessionId, cloneTodos(todos)]));
+}
+
+/**
+ * 克隆按会话分组的写入快照。
+ * @param sessionTodoSnapshots - 原始会话快照映射
+ * @returns 克隆后的会话快照映射
+ */
+function cloneSessionTodoSnapshots(sessionTodoSnapshots: Record<string, TodoWriteSnapshot[]>): Record<string, TodoWriteSnapshot[]> {
+  return Object.fromEntries(
+    Object.entries(sessionTodoSnapshots).map(([sessionId, snapshots]) => [
+      sessionId,
+      snapshots.map((snapshot) => ({
+        sourceRuntimeId: snapshot.sourceRuntimeId,
+        beforeTodos: cloneTodos(snapshot.beforeTodos),
+        afterTodos: cloneTodos(snapshot.afterTodos),
+        createdAt: snapshot.createdAt
+      }))
+    ])
+  );
+}
+
+/**
+ * 归一化待办列表。
+ * @param value - 原始待办列表
+ * @returns 合法待办列表，非法时返回 null
+ */
+function normalizeTodoItems(value: unknown): TodoItem[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.filter((item): item is TodoItem => isPlainObject(item) && isString(item.content) && isString(item.status) && isString(item.priority));
+}
+
+/**
+ * 判断值是否为合法 Todo 写入快照。
+ * @param value - 原始快照值
+ * @returns 是否为合法快照
+ */
+function isTodoWriteSnapshot(value: unknown): value is TodoWriteSnapshot {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  const snapshot = value as Partial<TodoWriteSnapshot>;
+  return (
+    isString(snapshot.sourceRuntimeId) &&
+    isString(snapshot.createdAt) &&
+    normalizeTodoItems(snapshot.beforeTodos) !== null &&
+    normalizeTodoItems(snapshot.afterTodos) !== null
+  );
+}
 
 /**
  * 归一化持久化数据，确保结构合法
@@ -51,14 +145,31 @@ function normalizeTodoState(value: unknown): PersistedTodoState {
     const validSessions: Record<string, TodoItem[]> = {};
 
     for (const [sessionId, todos] of Object.entries(sessions)) {
-      if (Array.isArray(todos)) {
-        validSessions[sessionId] = todos.filter(
-          (item): item is TodoItem => isPlainObject(item) && isString(item.content) && isString(item.status) && isString(item.priority)
-        );
+      const normalizedTodos = normalizeTodoItems(todos);
+      if (normalizedTodos) {
+        validSessions[sessionId] = normalizedTodos;
       }
     }
 
     normalized.sessionTodos = validSessions;
+  }
+
+  if (isPlainObject(state.sessionTodoSnapshots)) {
+    const sessions = state.sessionTodoSnapshots as Record<string, unknown>;
+    const validSnapshots: Record<string, TodoWriteSnapshot[]> = {};
+
+    for (const [sessionId, snapshots] of Object.entries(sessions)) {
+      if (Array.isArray(snapshots)) {
+        validSnapshots[sessionId] = snapshots.filter(isTodoWriteSnapshot).map((snapshot) => ({
+          sourceRuntimeId: snapshot.sourceRuntimeId,
+          beforeTodos: cloneTodos(snapshot.beforeTodos),
+          afterTodos: cloneTodos(snapshot.afterTodos),
+          createdAt: snapshot.createdAt
+        }));
+      }
+    }
+
+    normalized.sessionTodoSnapshots = validSnapshots;
   }
 
   return normalized;
@@ -71,9 +182,13 @@ const TODO_PERSIST_CONFIG: PersistConfig<PersistedTodoState> = {
 };
 
 export const useTodoStore = defineStore('todo', {
-  state: (): PersistedTodoState => ({
-    ...loadPersistedState(TODO_PERSIST_CONFIG)
-  }),
+  state: (): PersistedTodoState => {
+    const persisted = loadPersistedState(TODO_PERSIST_CONFIG);
+    return {
+      sessionTodos: cloneSessionTodos(persisted.sessionTodos),
+      sessionTodoSnapshots: cloneSessionTodoSnapshots(persisted.sessionTodoSnapshots)
+    };
+  },
 
   getters: {
     /**
@@ -92,7 +207,8 @@ export const useTodoStore = defineStore('todo', {
      */
     persist(): void {
       persistState(TODO_PERSIST_CONFIG.storageKey, {
-        sessionTodos: this.sessionTodos
+        sessionTodos: this.sessionTodos,
+        sessionTodoSnapshots: this.sessionTodoSnapshots
       });
     },
 
@@ -101,14 +217,53 @@ export const useTodoStore = defineStore('todo', {
      * 传入空数组时删除该会话的条目。
      * @param sessionId - 会话 ID
      * @param todos - 新的待办列表
+     * @param options - 设置选项
      */
-    setTodos(sessionId: string, todos: TodoItem[]): void {
+    setTodos(sessionId: string, todos: TodoItem[], options: SetTodosOptions = {}): void {
+      if (options.sourceRuntimeId) {
+        const snapshots = this.sessionTodoSnapshots[sessionId] ?? [];
+        snapshots.push({
+          sourceRuntimeId: options.sourceRuntimeId,
+          beforeTodos: cloneTodos(this.sessionTodos[sessionId] ?? []),
+          afterTodos: cloneTodos(todos),
+          createdAt: new Date().toISOString()
+        });
+        this.sessionTodoSnapshots[sessionId] = snapshots;
+      }
+
       if (todos.length === 0) {
         delete this.sessionTodos[sessionId];
       } else {
-        this.sessionTodos[sessionId] = todos;
+        this.sessionTodos[sessionId] = cloneTodos(todos);
       }
       this.persist();
+    },
+
+    /**
+     * 按被回退消息的 runtime ID 恢复到最早匹配快照之前。
+     * @param sessionId - 会话 ID
+     * @param runtimeIds - 被回退消息区间包含的 runtime ID
+     * @returns 是否执行了恢复
+     */
+    restoreBeforeRuntimeIds(sessionId: string, runtimeIds: string[]): boolean {
+      const runtimeIdSet = new Set(runtimeIds);
+      const snapshots = this.sessionTodoSnapshots[sessionId] ?? [];
+      const snapshotIndex = snapshots.findIndex((snapshot) => runtimeIdSet.has(snapshot.sourceRuntimeId));
+
+      if (snapshotIndex === -1) {
+        return false;
+      }
+
+      const snapshot = snapshots[snapshotIndex];
+      if (snapshot.beforeTodos.length === 0) {
+        delete this.sessionTodos[sessionId];
+      } else {
+        this.sessionTodos[sessionId] = cloneTodos(snapshot.beforeTodos);
+      }
+
+      this.sessionTodoSnapshots[sessionId] = snapshots.slice(0, snapshotIndex);
+      this.persist();
+      return true;
     },
 
     /**
@@ -116,8 +271,9 @@ export const useTodoStore = defineStore('todo', {
      * @param sessionId - 会话 ID
      */
     clearTodos(sessionId: string): void {
-      if (this.sessionTodos[sessionId]) {
+      if (this.sessionTodos[sessionId] || this.sessionTodoSnapshots[sessionId]) {
         delete this.sessionTodos[sessionId];
+        delete this.sessionTodoSnapshots[sessionId];
         this.persist();
       }
     },
@@ -127,6 +283,7 @@ export const useTodoStore = defineStore('todo', {
      */
     clearAllTodos(): void {
       this.sessionTodos = {};
+      this.sessionTodoSnapshots = {};
       this.persist();
     }
   }

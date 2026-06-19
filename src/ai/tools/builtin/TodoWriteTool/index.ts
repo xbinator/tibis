@@ -25,6 +25,8 @@ const VALID_PRIORITIES = new Set(['high', 'medium', 'low']);
 export interface TodoWriteInput {
   /** 完整的任务列表，将替换现有列表 */
   todos: TodoItem[];
+  /** 内部注入的 runtime ID，不暴露给模型 schema */
+  sourceRuntimeId?: string;
 }
 
 /**
@@ -143,7 +145,7 @@ export function createBuiltinTodoWriteTool(options: CreateTodoWriteToolOptions):
       });
 
       const todoStore = useTodoStore();
-      todoStore.setTodos(sessionId, normalizedTodos);
+      todoStore.setTodos(sessionId, normalizedTodos, input.sourceRuntimeId ? { sourceRuntimeId: input.sourceRuntimeId } : undefined);
 
       const stats = { pending: 0, in_progress: 0, completed: 0, cancelled: 0 };
       for (const todo of normalizedTodos) {

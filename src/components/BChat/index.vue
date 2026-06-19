@@ -95,6 +95,7 @@ import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession
 import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { uniq } from 'lodash-es';
 import {
   createBuiltinTools,
   isBuiltinToolName,
@@ -215,6 +216,20 @@ function clearFinishedTodos(sessionId: string): void {
   todoStore.clearTodos(sessionId);
   todoPanelVisible.value = false;
   todoPanelDismissed.value = true;
+}
+
+/**
+ * 按回退消息区间恢复对应的 Todo 快照。
+ * @param sessionId - 当前会话 ID
+ * @param rolledBackMessages - 被回退删除的消息列表
+ */
+function restoreTodoSnapshotsForMessages(sessionId: string | null, rolledBackMessages: Message[]): void {
+  if (!sessionId) return;
+
+  const runtimeIds = uniq(rolledBackMessages.map((message) => message.runtimeId).filter((runtimeId): runtimeId is string => typeof runtimeId === 'string'));
+  if (runtimeIds.length === 0) return;
+
+  todoStore.restoreBeforeRuntimeIds(sessionId, runtimeIds);
 }
 
 /**
@@ -1219,7 +1234,9 @@ async function handleRollback(message: Message): Promise<void> {
   });
   if (cancelled) return;
 
+  const rolledBackMessages = messages.value.slice(index);
   await rollbackController.rollback(message);
+  restoreTodoSnapshotsForMessages(activeSessionId.value, rolledBackMessages);
 }
 
 /**

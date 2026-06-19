@@ -607,7 +607,8 @@ describe('useChatRuntime', (): void => {
       });
       await Promise.resolve();
 
-      expect(executeToolCallMock).toHaveBeenCalledWith({ toolCallId: 'tool-call-1', toolName: 'read_file', input: { path: 'src/index.ts' } }, [tool], context);
+      const expectedToolCall = { toolCallId: 'tool-call-1', toolName: 'read_file', input: { path: 'src/index.ts' } };
+      expect(executeToolCallMock).toHaveBeenCalledWith(expectedToolCall, [tool], context, { runtimeId: 'runtime-1' });
       expect(electronAPIMock.chatRuntimeSubmitToolResult).toHaveBeenCalledWith({
         runtimeId: 'runtime-1',
         toolCallId: 'tool-call-1',

@@ -467,7 +467,8 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       const executedToolCall = await executeToolCall(
         { toolCallId: event.toolCallId, toolName: event.toolName, input: event.input },
         resolveRuntimeTools(options.tools),
-        options.getToolContext?.()
+        options.getToolContext?.(),
+        { runtimeId: event.runtimeId }
       );
       await submitToolResult(event, executedToolCall.result);
     } catch (error) {
