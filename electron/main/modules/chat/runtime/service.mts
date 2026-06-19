@@ -49,6 +49,7 @@ import { createRuntimeConfirmationRequests, type RuntimeConfirmationRequestInput
 import { createRuntimeRendererToolRequests } from './controllers/renderer-tool.mjs';
 import { ChatRuntimeError } from './errors.mjs';
 import { createRuntimeLockRegistry } from './locks.mjs';
+import { findLastRuntimeAssistantMessage, findLastRuntimeUserMessage, normalizeContinuationMessages } from './messages/continuation.mjs';
 import { createRuntimeAssistantPlaceholder, createRuntimeInterruptMessage, createRuntimeUserMessage } from './messages/factory.mjs';
 import {
   ensureRuntimeMessageCreatedAt,
@@ -57,6 +58,7 @@ import {
   markAssistantMessageFailed
 } from './messages/finalizer.mjs';
 import { toRuntimeModelMessages } from './model-message-context.mjs';
+import { createCompactRuntime, createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
 import { createRuntimeStreamExecutor } from './stream-executor.mjs';
 import { createRuntimeStructuredSummaryGenerator, createRuntimeSummaryInvoke } from './structured-summary-generator.mjs';
 import { createMainToolExecutor } from './tools/index.mjs';
@@ -256,86 +258,6 @@ function createDefaultStreamAborter(): ChatRuntimeStreamAborter {
  */
 function createDefaultMessageId(kind: ChatRuntimeMessageKind): string {
   return `${kind}-${nanoid()}`;
-}
-
-/**
- * 从消息快照中查找最后一条 user 消息。
- * @param messages - 消息快照
- * @returns user 消息
- */
-function findLastRuntimeUserMessage(messages: ChatMessageRecord[]): ChatMessageRecord | undefined {
-  return [...messages].reverse().find((message) => message.role === 'user');
-}
-
-/**
- * 从消息快照中查找最后一条 assistant 消息。
- * @param messages - 消息快照
- * @returns assistant 消息
- */
-function findLastRuntimeAssistantMessage(messages: ChatMessageRecord[]): ChatMessageRecord | undefined {
-  return [...messages].reverse().find((message) => message.role === 'assistant');
-}
-
-/**
- * 将 renderer 续轮消息快照补齐为主进程持久化消息。
- * @param input - 续轮输入
- * @returns 可写入主进程存储的消息列表
- */
-function normalizeContinuationMessages(input: ChatRuntimeContinueInput): ChatMessageRecord[] {
-  return input.messages.map((message) => ({
-    ...message,
-    sessionId: message.sessionId ?? input.sessionId
-  }));
-}
-
-/**
- * 创建续轮 runtime 状态。
- * @param input - 续轮输入
- * @param runtimeId - runtime id
- * @returns runtime 状态
- */
-function createContinuationRuntime(input: ChatRuntimeContinueInput, runtimeId: string): ActiveChatRuntime {
-  return {
-    runtimeId,
-    sessionId: input.sessionId,
-    clientId: input.clientId,
-    agentId: input.agentId,
-    parentRuntimeId: input.parentRuntimeId,
-    contextWindow: input.contextWindow,
-    system: input.system,
-    workspaceRoot: input.workspaceRoot,
-    tools: input.tools,
-    tavily: input.tavily,
-    mcp: input.mcp,
-    status: 'running',
-    abortController: new AbortController(),
-    createdAt: Date.now()
-  };
-}
-
-/**
- * 根据用户选择输入创建续轮 runtime 状态。
- * @param input - 用户选择提交输入
- * @param runtimeId - runtime id
- * @returns runtime 状态
- */
-function createUserChoiceRuntime(input: ChatRuntimeSubmitUserChoiceInput, runtimeId: string): ActiveChatRuntime {
-  return {
-    runtimeId,
-    sessionId: input.sessionId,
-    clientId: input.clientId,
-    agentId: input.agentId,
-    parentRuntimeId: input.parentRuntimeId,
-    contextWindow: input.contextWindow,
-    system: input.system,
-    workspaceRoot: input.workspaceRoot,
-    tools: input.tools,
-    tavily: input.tavily,
-    mcp: input.mcp,
-    status: 'running',
-    abortController: new AbortController(),
-    createdAt: Date.now()
-  };
 }
 
 /**
@@ -1018,22 +940,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         throw new ChatRuntimeError('SESSION_BUSY', `Session ${sessionId} is already running ${lock.ownerRuntimeId}`);
       }
 
-      const runtime: ActiveChatRuntime = {
-        runtimeId,
-        sessionId,
-        clientId: input.clientId,
-        agentId: input.agentId,
-        parentRuntimeId: input.parentRuntimeId,
-        contextWindow: input.contextWindow,
-        system: input.system,
-        workspaceRoot: input.workspaceRoot,
-        tools: input.tools,
-        tavily: input.tavily,
-        mcp: input.mcp,
-        status: 'running',
-        abortController: new AbortController(),
-        createdAt: Date.now()
-      };
+      const runtime = createSendRuntime(input, runtimeId, sessionId);
       activeRuntimes.set(runtimeId, runtime);
 
       try {
@@ -1340,17 +1247,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      * @returns 压缩结果
      */
     async compact(input: ChatRuntimeCompactInput): Promise<ChatRuntimeCompactResult> {
-      const runtime: ActiveChatRuntime = {
-        runtimeId: input.runtimeId,
-        sessionId: input.sessionId,
-        clientId: input.clientId,
-        agentId: input.agentId,
-        parentRuntimeId: input.parentRuntimeId,
-        contextWindow: input.contextWindow,
-        status: 'running',
-        abortController: new AbortController(),
-        createdAt: Date.now()
-      };
+      const runtime = createCompactRuntime(input);
       activeRuntimes.set(runtime.runtimeId, runtime);
 
       try {
