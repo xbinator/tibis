@@ -12,6 +12,7 @@ import type { StoredFile } from '@/shared/storage/files/types';
 import { isAbsoluteFilePath } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 
+/** Bridge settings domain types. */
 /** 可通过 ChatRuntime 暴露给模型的设置键。 */
 export type BChatRuntimeSettingKey = 'theme' | 'themePreset' | 'sourceMode' | 'editorPageWidth';
 
@@ -41,6 +42,7 @@ export interface BChatRuntimeApplySettingResult {
   currentValue: string | boolean | number;
 }
 
+/** Bridge dependency surface. */
 /** BChat runtime bridge 依赖。 */
 export interface BChatRuntimeBridgeDependencies {
   /** 获取当前编辑器工具上下文。 */
@@ -71,6 +73,7 @@ export interface BChatRuntimeBridgeDependencies {
   openExternal?: (url: string) => Promise<void> | void;
 }
 
+/** Bridge response snapshot types. */
 /** 编辑器文档快照。 */
 export interface BChatRuntimeDocumentSnapshot {
   /** 文档 ID。 */
@@ -122,6 +125,7 @@ interface BChatRuntimeOpenResourceResult {
   fileId?: string;
 }
 
+/** Shared bridge helpers. */
 /**
  * 创建带稳定错误码的 bridge 错误。
  * @param code - 工具错误码
@@ -143,6 +147,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** Editor document bridge handlers. */
 /**
  * 读取当前编辑器文档快照。
  * @param dependencies - bridge 依赖
@@ -164,6 +169,7 @@ function readDocumentSnapshot(dependencies: BChatRuntimeBridgeDependencies): BCh
   };
 }
 
+/** Drawing bridge handlers. */
 /**
  * 读取当前画板快照。
  * @param dependencies - bridge 依赖
@@ -227,6 +233,7 @@ async function applyDrawingData(event: ChatRuntimeBridgeRequestEvent, dependenci
   };
 }
 
+/** File content bridge handlers. */
 /**
  * 解析编辑器文件查找路径。
  * @param filePath - 原始文件路径
@@ -342,6 +349,7 @@ async function writeFileContent(event: ChatRuntimeBridgeRequestEvent, dependenci
   return { path: filePath, content };
 }
 
+/** Settings bridge handlers. */
 /**
  * 读取应用设置快照。
  * @param dependencies - bridge 依赖
@@ -386,6 +394,7 @@ function applySetting(event: ChatRuntimeBridgeRequestEvent, dependencies: BChatR
   });
 }
 
+/** Draft and resource bridge handlers. */
 /**
  * 创建并打开未保存草稿。
  * @param event - bridge 请求事件
@@ -460,6 +469,7 @@ async function openResource(event: ChatRuntimeBridgeRequestEvent, dependencies: 
   return { path, resourceType, opened: true, fileId: file.id };
 }
 
+/** Bridge request dispatcher. */
 /**
  * 处理 BChat runtime bridge 请求。
  * @param event - runtime bridge 请求事件

@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatSession } from 'types/chat';
-import type { ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeMessageDeletedEvent, ChatRuntimeMessageEvent } from 'types/chat-runtime';
+import type { ChatRuntimeContinueInput } from 'types/chat-runtime';
 import { defineComponent, h } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
@@ -13,21 +13,7 @@ import BChat from '@/components/BChat/index.vue';
 import type { Message } from '@/components/BChat/utils/types';
 import type { TodoItem } from '@/stores/chat/todo';
 import { useSettingStore } from '@/stores/ui/setting';
-
-/**
- * 运行时上下文用量事件监听函数。
- */
-type ContextUsageUpdatedListener = (event: ChatRuntimeEventMap['chat:runtime:context-usage-updated']) => void;
-
-/**
- * 运行时消息事件监听函数。
- */
-type RuntimeMessageListener = (event: ChatRuntimeMessageEvent) => void;
-
-/**
- * 运行时消息删除事件监听函数。
- */
-type RuntimeMessageDeletedListener = (event: ChatRuntimeMessageDeletedEvent) => void;
+import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
 
 const chatStoreMock = vi.hoisted(() => ({
   createSession: vi.fn<(type: 'assistant', options: { title: string }) => Promise<ChatSession>>(),
@@ -37,8 +23,6 @@ const chatStoreMock = vi.hoisted(() => ({
   getSessionMessages: vi.fn<(sessionId: string) => Promise<Message[]>>(),
   getSessions: vi.fn()
 }));
-
-const mockCompressSessionManually = vi.hoisted(() => vi.fn<(input: { sessionId: string; messages: Message[]; signal?: AbortSignal }) => Promise<undefined>>());
 
 const promptEditorMockState = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -50,11 +34,7 @@ const promptEditorMockState = vi.hoisted(() => ({
 const getPathForFileMock = vi.hoisted(() => vi.fn<(_file: File) => string | null>().mockReturnValue('/workspace/My Notes/note.md'));
 const getAvailableServiceConfigMock = vi.hoisted(() => vi.fn());
 const getModelToolSupportMock = vi.hoisted(() => vi.fn());
-const runtimeListeners = vi.hoisted(() => ({
-  contextUsageUpdated: undefined as ContextUsageUpdatedListener | undefined,
-  messageDeleted: undefined as RuntimeMessageDeletedListener | undefined,
-  messageUpdated: undefined as RuntimeMessageListener | undefined
-}));
+const runtimeListeners = vi.hoisted<RuntimeEventListeners>(() => ({}));
 const electronAPIMock = vi.hoisted(() => ({
   chatCompressionUpdateStatus: vi.fn(),
   chatRuntimeSend: vi.fn(),
@@ -66,16 +46,16 @@ const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeSubmitConfirmation: vi.fn(),
   chatRuntimeSubmitBridgeResponse: vi.fn(),
   chatRuntimeOnMessageCreated: vi.fn(() => vi.fn()),
-  chatRuntimeOnMessageUpdated: vi.fn((callback: RuntimeMessageListener) => {
+  chatRuntimeOnMessageUpdated: vi.fn((callback: NonNullable<typeof runtimeListeners.messageUpdated>) => {
     runtimeListeners.messageUpdated = callback;
     return vi.fn();
   }),
-  chatRuntimeOnMessageDeleted: vi.fn((callback: RuntimeMessageDeletedListener) => {
+  chatRuntimeOnMessageDeleted: vi.fn((callback: NonNullable<typeof runtimeListeners.messageDeleted>) => {
     runtimeListeners.messageDeleted = callback;
     return vi.fn();
   }),
-  chatRuntimeOnContextUsageUpdated: vi.fn((callback: ContextUsageUpdatedListener) => {
-    runtimeListeners.contextUsageUpdated = callback;
+  chatRuntimeOnContextUsageUpdated: vi.fn((callback: NonNullable<typeof runtimeListeners.contextUsage>) => {
+    runtimeListeners.contextUsage = callback;
     return vi.fn();
   }),
   chatRuntimeOnToolRequest: vi.fn(() => vi.fn()),
@@ -279,12 +259,6 @@ vi.mock('@/components/BChat/hooks/useAutoName', () => ({
       scheduleAutoName: vi.fn()
     };
   })
-}));
-
-vi.mock('@/components/BChat/utils/compression/coordinator', () => ({
-  createCompressionCoordinator: vi.fn(() => ({
-    compressSessionManually: mockCompressSessionManually
-  }))
 }));
 
 vi.mock('@/utils/modal', () => ({
@@ -496,7 +470,6 @@ describe('BChat sessionId runtime', (): void => {
     electronAPIMock.chatRuntimeOnComplete.mockClear();
     getAvailableServiceConfigMock.mockReset();
     getModelToolSupportMock.mockReset();
-    mockCompressSessionManually.mockReset();
     promptEditorMockState.focus.mockReset();
     promptEditorMockState.saveCursorPosition.mockReset();
     promptEditorMockState.insertTextAtCursor.mockReset();
@@ -516,9 +489,7 @@ describe('BChat sessionId runtime', (): void => {
     memoryStoreMock.loadMemory.mockResolvedValue();
     memoryStoreMock.buildSystemPromptContext.mockReset();
     memoryStoreMock.buildSystemPromptContext.mockReturnValue('');
-    runtimeListeners.contextUsageUpdated = undefined;
-    runtimeListeners.messageDeleted = undefined;
-    runtimeListeners.messageUpdated = undefined;
+    resetRuntimeEventListeners(runtimeListeners);
     conversationViewMockState.scrollToBottom.mockReset();
     chatStoreMock.getSessionMessages.mockResolvedValue([]);
     chatStoreMock.getSessions.mockResolvedValue({ items: [], hasMore: false });
@@ -616,7 +587,7 @@ describe('BChat sessionId runtime', (): void => {
     await flushPromises();
     conversationViewMockState.scrollToBottom.mockReset();
 
-    runtimeListeners.messageUpdated?.({
+    emitRuntimeEvent(runtimeListeners, 'messageUpdated', {
       runtimeId: 'runtime-1',
       sessionId: 'session-active',
       clientId: 'bchat',
@@ -787,7 +758,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    runtimeListeners.contextUsageUpdated?.({
+    emitRuntimeEvent(runtimeListeners, 'contextUsage', {
       runtimeId: 'runtime-1',
       sessionId: 'session-active',
       clientId: 'bchat',

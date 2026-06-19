@@ -5,42 +5,13 @@
  */
 import type { AIToolContext, AIToolExecutor } from 'types/ai';
 import type { ChatMessageRecord } from 'types/chat';
-import type {
-  ChatRuntimeBridgeRequestEvent,
-  ChatRuntimeConfirmationRequestEvent,
-  ChatRuntimeEventMap,
-  ChatRuntimeMessageDeletedEvent,
-  ChatRuntimeMessageEvent,
-  ChatRuntimeToolRequestEvent
-} from 'types/chat-runtime';
 import { effectScope, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatRuntime } from '@/components/BChat/hooks/useChatRuntime';
 import type { Message } from '@/components/BChat/utils/types';
+import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
 
-/** Runtime 事件监听器集合。 */
-interface RuntimeListeners {
-  /** 消息创建监听器。 */
-  messageCreated?: (event: ChatRuntimeMessageEvent) => void;
-  /** 消息更新监听器。 */
-  messageUpdated?: (event: ChatRuntimeMessageEvent) => void;
-  /** 消息删除监听器。 */
-  messageDeleted?: (event: ChatRuntimeMessageDeletedEvent) => void;
-  /** 完成监听器。 */
-  complete?: (event: ChatRuntimeEventMap['chat:runtime:complete']) => void;
-  /** 错误监听器。 */
-  error?: (event: ChatRuntimeEventMap['chat:runtime:error']) => void;
-  /** 上下文用量监听器。 */
-  contextUsage?: (event: ChatRuntimeEventMap['chat:runtime:context-usage-updated']) => void;
-  /** 工具请求监听器。 */
-  toolRequest?: (event: ChatRuntimeToolRequestEvent) => void;
-  /** 确认请求监听器。 */
-  confirmationRequest?: (event: ChatRuntimeConfirmationRequestEvent) => void;
-  /** Bridge 请求监听器。 */
-  bridgeRequest?: (event: ChatRuntimeBridgeRequestEvent) => void;
-}
-
-const listeners = vi.hoisted<RuntimeListeners>(() => ({}));
+const listeners = vi.hoisted<RuntimeEventListeners>(() => ({}));
 const executeToolCallMock = vi.hoisted(() =>
   vi.fn(async () => ({
     toolCallId: 'tool-call-1',
@@ -57,39 +28,39 @@ const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeSubmitBridgeResponse: vi.fn(),
   chatRuntimeAbort: vi.fn(),
   chatRuntimeSubmitToolResult: vi.fn(),
-  chatRuntimeOnMessageCreated: vi.fn((callback: (event: ChatRuntimeMessageEvent) => void) => {
+  chatRuntimeOnMessageCreated: vi.fn((callback: NonNullable<typeof listeners.messageCreated>) => {
     listeners.messageCreated = callback;
     return vi.fn();
   }),
-  chatRuntimeOnMessageUpdated: vi.fn((callback: (event: ChatRuntimeMessageEvent) => void) => {
+  chatRuntimeOnMessageUpdated: vi.fn((callback: NonNullable<typeof listeners.messageUpdated>) => {
     listeners.messageUpdated = callback;
     return vi.fn();
   }),
-  chatRuntimeOnMessageDeleted: vi.fn((callback: (event: ChatRuntimeMessageDeletedEvent) => void) => {
+  chatRuntimeOnMessageDeleted: vi.fn((callback: NonNullable<typeof listeners.messageDeleted>) => {
     listeners.messageDeleted = callback;
     return vi.fn();
   }),
-  chatRuntimeOnComplete: vi.fn((callback: (event: ChatRuntimeEventMap['chat:runtime:complete']) => void) => {
+  chatRuntimeOnComplete: vi.fn((callback: NonNullable<typeof listeners.complete>) => {
     listeners.complete = callback;
     return vi.fn();
   }),
-  chatRuntimeOnError: vi.fn((callback: (event: ChatRuntimeEventMap['chat:runtime:error']) => void) => {
+  chatRuntimeOnError: vi.fn((callback: NonNullable<typeof listeners.error>) => {
     listeners.error = callback;
     return vi.fn();
   }),
-  chatRuntimeOnContextUsageUpdated: vi.fn((callback: (event: ChatRuntimeEventMap['chat:runtime:context-usage-updated']) => void) => {
+  chatRuntimeOnContextUsageUpdated: vi.fn((callback: NonNullable<typeof listeners.contextUsage>) => {
     listeners.contextUsage = callback;
     return vi.fn();
   }),
-  chatRuntimeOnToolRequest: vi.fn((callback: (event: ChatRuntimeToolRequestEvent) => void) => {
+  chatRuntimeOnToolRequest: vi.fn((callback: NonNullable<typeof listeners.toolRequest>) => {
     listeners.toolRequest = callback;
     return vi.fn();
   }),
-  chatRuntimeOnConfirmationRequested: vi.fn((callback: (event: ChatRuntimeConfirmationRequestEvent) => void) => {
+  chatRuntimeOnConfirmationRequested: vi.fn((callback: NonNullable<typeof listeners.confirmationRequest>) => {
     listeners.confirmationRequest = callback;
     return vi.fn();
   }),
-  chatRuntimeOnBridgeRequested: vi.fn((callback: (event: ChatRuntimeBridgeRequestEvent) => void) => {
+  chatRuntimeOnBridgeRequested: vi.fn((callback: NonNullable<typeof listeners.bridgeRequest>) => {
     listeners.bridgeRequest = callback;
     return vi.fn();
   })
@@ -122,15 +93,7 @@ function createMessage(overrides: Partial<ChatMessageRecord>): ChatMessageRecord
 
 describe('useChatRuntime', (): void => {
   beforeEach((): void => {
-    listeners.messageCreated = undefined;
-    listeners.messageUpdated = undefined;
-    listeners.messageDeleted = undefined;
-    listeners.complete = undefined;
-    listeners.error = undefined;
-    listeners.contextUsage = undefined;
-    listeners.toolRequest = undefined;
-    listeners.confirmationRequest = undefined;
-    listeners.bridgeRequest = undefined;
+    resetRuntimeEventListeners(listeners);
     executeToolCallMock.mockClear();
     electronAPIMock.chatRuntimeSend.mockReset();
     electronAPIMock.chatRuntimeContinue.mockReset();
@@ -200,21 +163,21 @@ describe('useChatRuntime', (): void => {
         })
       );
 
-      listeners.messageCreated?.({
+      emitRuntimeEvent(listeners, 'messageCreated', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
         agentId: 'default',
         message: createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ type: 'text', text: 'hello' }], runtimeId: 'runtime-1' })
       });
-      listeners.messageCreated?.({
+      emitRuntimeEvent(listeners, 'messageCreated', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
         agentId: 'default',
         message: createMessage({ id: 'assistant-1', runtimeId: 'runtime-1', loading: true, finished: false })
       });
-      listeners.messageUpdated?.({
+      emitRuntimeEvent(listeners, 'messageUpdated', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -228,7 +191,7 @@ describe('useChatRuntime', (): void => {
           finished: true
         })
       });
-      listeners.complete?.({
+      emitRuntimeEvent(listeners, 'complete', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -255,14 +218,14 @@ describe('useChatRuntime', (): void => {
         getSessionId: () => 'session-1'
       });
 
-      listeners.messageCreated?.({
+      emitRuntimeEvent(listeners, 'messageCreated', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
         agentId: 'default',
         message: createMessage({ id: 'assistant-1', runtimeId: 'runtime-1', loading: true, finished: false })
       });
-      listeners.messageCreated?.({
+      emitRuntimeEvent(listeners, 'messageCreated', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -289,7 +252,7 @@ describe('useChatRuntime', (): void => {
         getSessionId: () => 'session-1'
       });
 
-      listeners.messageDeleted?.({
+      emitRuntimeEvent(listeners, 'messageDeleted', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -435,7 +398,7 @@ describe('useChatRuntime', (): void => {
         requestConfirmation
       });
 
-      listeners.confirmationRequest?.({
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -480,7 +443,7 @@ describe('useChatRuntime', (): void => {
         handleBridgeRequest
       });
 
-      listeners.bridgeRequest?.({
+      emitRuntimeEvent(listeners, 'bridgeRequest', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -570,7 +533,7 @@ describe('useChatRuntime', (): void => {
         onContextUsageUpdated
       });
 
-      listeners.contextUsage?.({
+      emitRuntimeEvent(listeners, 'contextUsage', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -633,7 +596,7 @@ describe('useChatRuntime', (): void => {
         getToolContext: () => context
       });
 
-      listeners.toolRequest?.({
+      emitRuntimeEvent(listeners, 'toolRequest', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -669,7 +632,7 @@ describe('useChatRuntime', (): void => {
         tools: []
       });
 
-      listeners.toolRequest?.({
+      emitRuntimeEvent(listeners, 'toolRequest', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
@@ -708,7 +671,7 @@ describe('useChatRuntime', (): void => {
         tools: []
       });
 
-      listeners.toolRequest?.({
+      emitRuntimeEvent(listeners, 'toolRequest', {
         runtimeId: 'runtime-1',
         sessionId: 'session-1',
         clientId: 'bchat',
