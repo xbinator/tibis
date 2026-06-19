@@ -4,7 +4,7 @@
  */
 import type { ChatMessageRecord } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { toRuntimeModelMessages } from '../../../../../../electron/main/modules/chat/runtime/model-message-context.mjs';
+import { toRuntimeModelMessages } from '../../../../../../electron/main/modules/chat/runtime/context/model-message.mjs';
 
 /**
  * 创建测试消息。

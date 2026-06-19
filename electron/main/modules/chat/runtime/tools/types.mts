@@ -3,7 +3,7 @@
  * @description ChatRuntime 主进程工具共享类型。
  */
 import type { LogLevel, LogScope } from '../../../logger/types.mjs';
-import type { DrawingData } from '../drawing-runtime.mjs';
+import type { DrawingData } from '../domain/drawing-runtime.mjs';
 import type { ChatRuntimeMainToolExecutionInput } from '../types.mjs';
 import type { SUPPORTED_SETTING_KEYS } from './constants.mjs';
 import type { AIToolExecutionResult, MCPServerConfig, MCPToolSettings } from 'types/ai';

@@ -2,7 +2,7 @@
  * @file compaction.mts
  * @description ChatRuntime 主进程上下文压缩消息生命周期服务。
  */
-import type { ChatRuntimeEventEmitter } from './types.mjs';
+import type { ChatRuntimeEventEmitter } from '../types.mjs';
 import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import type { ChatRuntimeCompactInput, ChatRuntimeCompactResult } from 'types/chat-runtime';
 import type { CompressionRecord, GeneralConversationSummary, StructuredConversationSummary } from 'types/compression';

@@ -2,7 +2,7 @@
  * @file stream-executor.mts
  * @description ChatRuntime 主进程模型流式执行器。
  */
-import type { ChatModelResolver } from './chat-model-resolver.mjs';
+import type { ChatModelResolver } from './model/resolver.mjs';
 import type {
   ActiveChatRuntime,
   ChatRuntimeMainToolExecutor,
@@ -13,7 +13,7 @@ import type {
 import type { AIRequestOptions, AIServiceError, AIStreamFinishReason, AIStreamResult, AIUsage, AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
 import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
-import { toRuntimeModelMessages } from './model-message-context.mjs';
+import { toRuntimeModelMessages } from './context/model-message.mjs';
 import { MAIN_PROCESS_TOOL_NAMES } from './tools/constants.mjs';
 
 /** Renderer 本地工具默认超时时间。 */

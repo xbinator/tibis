@@ -2,7 +2,7 @@
  * @file compression-executor.mts
  * @description ChatRuntime 主进程压缩记录执行器。
  */
-import type { RuntimeCompressionExecutor } from './compaction.mjs';
+import type { RuntimeCompressionExecutor } from './service.mjs';
 import type { RuntimeStructuredSummaryGenerator, RuntimeTrimmedMessageItem } from './structured-summary-generator.mjs';
 import type { ChatMessageRecord } from 'types/chat';
 import type { CompressionRecord, CompressionRecordStorage, StructuredConversationSummary } from 'types/compression';

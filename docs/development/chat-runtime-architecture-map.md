@@ -47,6 +47,11 @@ flowchart LR
 | `electron/main/modules/chat/runtime/controllers/**.mts` | Pending runtime request controllers for renderer tools, confirmations, and bridge RPC. | Model streaming, message persistence, or compaction decisions. |
 | `electron/main/modules/chat/runtime/messages/**.mts` | Runtime message factories, continuation snapshot helpers, user-choice answer application, and assistant terminal-state helpers for user, assistant placeholder, interrupt, failure, and abort finalization. | Runtime lifecycle orchestration, persistence adapters, or renderer UI state. |
 | `electron/main/modules/chat/runtime/runners/**.mts` | Active runtime state factories for send, continue, user-choice resume, and compaction. | Runtime lifecycle decisions, stream execution, or message persistence. |
+| `electron/main/modules/chat/runtime/context/**.mts` | Model-message conversion, token estimation, budget calculation, overflow replay downgrade, usage helpers, and old tool-output pruning. | Runtime lifecycle orchestration or compaction record persistence. |
+| `electron/main/modules/chat/runtime/compaction/**.mts` | Compression message lifecycle, compression executor, and structured summary generation. | Renderer slash-command UI handling or general runtime lifecycle. |
+| `electron/main/modules/chat/runtime/model/**.mts` | Chat model resolver plus auto-name prompt construction and generated title normalization. | Model streaming execution or session title persistence. |
+| `electron/main/modules/chat/runtime/domain/**.mts` | Domain-specific pure runtime logic shared by tools, currently drawing data operations. | Tool dispatching or renderer bridge access. |
+| `electron/main/modules/chat/runtime/infrastructure/**.mts` | Low-level runtime infrastructure such as session write locks. | Business decisions or message mutation. |
 | `electron/main/modules/chat/runtime/stream-executor.mts` | Consumes model stream chunks, updates assistant draft, executes tool rounds, decides whether to continue after tool results. | Persists session history directly outside the updater contract; owns no renderer UI state. |
 | `electron/main/modules/chat/runtime/tools/index.mts` | Main-process tool dispatcher. Routes a tool call to a grouped tool module. | Runtime lifecycle or model stream handling. |
 | `shared/ai/tools/toolRegistry.ts` | Single metadata source for migrated tool names, runtime owner, group, exposure, and schema definitions. | Runtime execution of migrated tools. |
@@ -55,8 +60,6 @@ flowchart LR
 | `electron/main/modules/chat/runtime/tools/README.md` | Main-process tool directory guide: group ownership, adding-tool steps, schema/runtime split. | Runtime implementation logic. |
 | `electron/main/modules/chat/runtime/types.mts` | Internal runtime service, stream executor, message writer/reader, and tool executor contracts. | Cross-process IPC DTO definitions. Those live under `types/chat-runtime`. |
 | `electron/main/modules/chat/runtime/ipc.mts` | Registers Electron IPC handlers and wraps runtime errors into stable handler results. | Runtime business logic. |
-| `electron/main/modules/chat/runtime/model-message-context.mts` | Converts persisted chat messages and compression boundaries into model messages. | UI message rendering. |
-| `electron/main/modules/chat/runtime/compaction.mts` | Runtime compression message creation/update and compaction service boundary. | Renderer slash-command UI handling. |
 | `src/components/BChat/index.vue` | Wires UI events to runtime commands, input state, task state, confirmation controller, bridge dependencies, and panels. | Creates runtime user/assistant messages locally. |
 | `src/components/BChat/hooks/useChatRuntime.ts` | Sends runtime commands, subscribes to runtime events, keeps the local message mirror sorted, handles renderer tool requests, confirmations, bridge requests, completion and errors. | Owns main process lifecycle or persistence. |
 | `src/components/BChat/hooks/useRuntimeCompactContext.ts` | Starts manual/auto runtime compaction and mirrors compression runtime events for the active client/session. | Shows compression toast or creates interrupt messages. |

@@ -2,7 +2,7 @@
  * @file structured-summary-generator.mts
  * @description ChatRuntime 主进程结构化摘要生成器。
  */
-import type { ChatModelResolver } from './chat-model-resolver.mjs';
+import type { ChatModelResolver } from '../model/resolver.mjs';
 import type { JSONSchema7 } from 'json-schema';
 import type { AIRequestOptions } from 'types/ai';
 import type { StructuredConversationSummary } from 'types/compression';

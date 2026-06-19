@@ -11,7 +11,7 @@ import {
   createDrawingDraftResult,
   createEmptyDrawingData,
   normalizeDrawingTitle
-} from '../../drawing-runtime.mjs';
+} from '../../domain/drawing-runtime.mjs';
 import { APPLY_DRAWING_OPERATIONS_TOOL_NAME, CREATE_DRAWING_TOOL_NAME, DRAWING_TOOL_NAMES } from '../constants.mjs';
 import { isRecord, isRuntimeDrawingSnapshot, isRuntimeOpenDraftResult } from '../guards.mjs';
 import { createBridgeFailureResult, createMainToolCancelledResult, createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';

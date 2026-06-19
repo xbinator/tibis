@@ -3,7 +3,7 @@
  * @description ChatRuntime session 写入锁测试。
  */
 import { describe, expect, it } from 'vitest';
-import { createRuntimeLockRegistry } from '../../../../../../electron/main/modules/chat/runtime/locks.mjs';
+import { createRuntimeLockRegistry } from '../../../../../../electron/main/modules/chat/runtime/infrastructure/locks.mjs';
 
 describe('chat runtime locks', (): void => {
   it('allows one writing runtime per session', (): void => {

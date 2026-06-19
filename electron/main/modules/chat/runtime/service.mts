@@ -2,7 +2,7 @@
  * @file service.mts
  * @description 主进程 ChatRuntime 服务骨架。
  */
-import type { RuntimeCompactionService } from './compaction.mjs';
+import type { RuntimeCompactionService } from './compaction/service.mjs';
 import type {
   ActiveChatRuntime,
   ChatRuntimeMainToolExecutionInput,
@@ -15,7 +15,7 @@ import type {
   ChatRuntimeStreamExecutor
 } from './types.mjs';
 import type { AIServiceError, AIToolExecutionResult, AIUsage } from 'types/ai';
-import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
+import type { ChatMessageRecord } from 'types/chat';
 import type {
   ChatRuntimeAbortInput,
   ChatRuntimeAutoNameInput,
@@ -39,16 +39,20 @@ import { nanoid } from 'nanoid';
 import { AI_ERROR_CODE, createAIServiceError, isAIServiceError } from '../../ai/errors/codes.mjs';
 import { aiService } from '../../ai/service.mjs';
 import { chatSessionManager } from '../service.mjs';
-import { createDefaultChatModelResolver } from './chat-model-resolver.mjs';
-import { createRuntimeCompactionService } from './compaction.mjs';
-import { createRuntimeCompressionExecutor } from './compression-executor.mjs';
-import { createContextBudgetService } from './context-budget.mjs';
-import { estimateSerializedModelMessages } from './context-estimator.mjs';
+import { createRuntimeCompressionExecutor } from './compaction/executor.mjs';
+import { createRuntimeCompactionService } from './compaction/service.mjs';
+import { createRuntimeStructuredSummaryGenerator, createRuntimeSummaryInvoke } from './compaction/structured-summary-generator.mjs';
+import { createContextBudgetService } from './context/budget.mjs';
+import { estimateSerializedModelMessages } from './context/estimator.mjs';
+import { toRuntimeModelMessages } from './context/model-message.mjs';
+import { downgradeOverflowReplaySourceMessages, downgradeUserMessageForOverflowReplay, isContextOverflowError } from './context/overflow.mjs';
+import { findToolOutputPruneProtectedStartIndex, pruneMessageToolOutputs } from './context/tool-output-prune.mjs';
+import { addRuntimeUsage, isSameRuntimeUsage } from './context/usage.mjs';
 import { createRuntimeBridgeRequests, type RuntimeBridgeRequestInput } from './controllers/bridge.mjs';
 import { createRuntimeConfirmationRequests, type RuntimeConfirmationRequestInput } from './controllers/confirmation.mjs';
 import { createRuntimeRendererToolRequests } from './controllers/renderer-tool.mjs';
 import { ChatRuntimeError } from './errors.mjs';
-import { createRuntimeLockRegistry } from './locks.mjs';
+import { createRuntimeLockRegistry } from './infrastructure/locks.mjs';
 import { findLastRuntimeAssistantMessage, findLastRuntimeUserMessage, normalizeContinuationMessages } from './messages/continuation.mjs';
 import { createRuntimeAssistantPlaceholder, createRuntimeInterruptMessage, createRuntimeUserMessage } from './messages/factory.mjs';
 import {
@@ -57,11 +61,11 @@ import {
   hasAssistantResponseContent,
   markAssistantMessageFailed
 } from './messages/finalizer.mjs';
-import { applyUserChoiceAnswer, cloneRuntimeMessage, USER_CHOICE_TOOL_NAMES } from './messages/user-choice.mjs';
-import { toRuntimeModelMessages } from './model-message-context.mjs';
+import { applyUserChoiceAnswer, cloneRuntimeMessage } from './messages/user-choice.mjs';
+import { createAutoNamePrompt, normalizeAutoNameTitle } from './model/auto-name.mjs';
+import { createDefaultChatModelResolver } from './model/resolver.mjs';
 import { createCompactRuntime, createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
 import { createRuntimeStreamExecutor } from './stream-executor.mjs';
-import { createRuntimeStructuredSummaryGenerator, createRuntimeSummaryInvoke } from './structured-summary-generator.mjs';
 import { createMainToolExecutor } from './tools/index.mjs';
 
 /** 单个 runtime 内工具续轮最大次数。 */
@@ -69,67 +73,6 @@ const MAX_RUNTIME_CONTINUATION_ROUNDS = 25;
 
 /** Renderer 请求默认超时时间。 */
 const RUNTIME_RENDERER_REQUEST_TIMEOUT_MS = 30_000;
-
-/** Provider 上下文超限错误文案模式。 */
-const CONTEXT_OVERFLOW_MESSAGE_PATTERNS = [
-  /\b413\b/i,
-  /context[_\s-]*length[_\s-]*exceeded/i,
-  /maximum context length/i,
-  /context window/i,
-  /prompt is too long/i,
-  /input is too long/i,
-  /too many tokens/i,
-  /exceed(?:ed|s)?.{0,32}(?:context|token)/i,
-  /context.{0,32}(?:overflow|exceed|too long)/i
-];
-
-/** Tool output prune 至少保护的最近用户轮数。 */
-const TOOL_OUTPUT_PRUNE_PROTECTED_USER_TURNS = 2;
-
-/** 超过该 JSON 长度的旧 tool result 会被软剪枝。 */
-const TOOL_OUTPUT_PRUNE_MIN_JSON_LENGTH = 4_000;
-
-/** 剪枝摘要最大长度。 */
-const TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH = 500;
-
-/** 不参与 tool output prune 的工具。 */
-const TOOL_OUTPUT_PRUNE_PROTECTED_TOOL_NAMES = new Set(['skill', ...USER_CHOICE_TOOL_NAMES]);
-
-/** 剪枝后保留的工具结果字段。 */
-const TOOL_OUTPUT_PRUNE_PRESERVED_DATA_KEYS = [
-  'path',
-  'filePath',
-  'url',
-  'title',
-  'totalLines',
-  'readLines',
-  'returnedCount',
-  'count',
-  'status',
-  'summary',
-  'message'
-];
-
-/** 自动命名默认 Prompt 模板。 */
-const AUTONAME_DEFAULT_PROMPT = `# Role
-你是一个会话标题生成器。
-
-# Task
-根据用户与 AI 的对话内容，生成一个简洁准确的会话标题。
-
-# Rules
-1. 标题长度不超过 20 个汉字
-2. 标题应概括对话的核心主题，而非描述对话格式
-3. 只输出标题文本，不要包含引号、标点或任何额外说明
-4. 使用用户使用的语言（中文对话输出中文标题，英文对话输出英文标题）
-
-# Conversation
-用户: {{USER_MESSAGE}}
-
-AI: {{AI_RESPONSE}}
-
-# Title
-`;
 
 export { ChatRuntimeError } from './errors.mjs';
 
@@ -268,230 +211,6 @@ function normalizeRuntimeStreamError(error: unknown): AIServiceError {
   if (error instanceof Error) return createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, error.message);
 
   return createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, 'ChatRuntime stream failed');
-}
-
-/**
- * 判断错误是否为 provider 上下文超限。
- * @param error - runtime 错误
- * @returns 是否可触发 overflow replay
- */
-function isContextOverflowError(error: AIServiceError): boolean {
-  return CONTEXT_OVERFLOW_MESSAGE_PATTERNS.some((pattern) => pattern.test(error.message));
-}
-
-/**
- * 汇总多轮模型流的 usage。
- * @param current - 当前累计 usage
- * @param next - 新一轮流式 usage
- * @returns 累加后的 usage
- */
-function addRuntimeUsage(current: AIUsage | undefined, next: AIUsage | undefined): AIUsage | undefined {
-  if (!next) return current;
-
-  return {
-    inputTokens: (current?.inputTokens ?? 0) + next.inputTokens,
-    outputTokens: (current?.outputTokens ?? 0) + next.outputTokens,
-    totalTokens: (current?.totalTokens ?? 0) + next.totalTokens
-  };
-}
-
-/**
- * 判断两份 usage 是否一致。
- * @param left - 左侧 usage
- * @param right - 右侧 usage
- * @returns 是否一致
- */
-function isSameRuntimeUsage(left: AIUsage | undefined, right: AIUsage | undefined): boolean {
-  return left?.inputTokens === right?.inputTokens && left?.outputTokens === right?.outputTokens && left?.totalTokens === right?.totalTokens;
-}
-
-/**
- * 创建附件降级占位文本。
- * @param file - 消息附件
- * @returns 占位文本
- */
-function createAttachmentPlaceholder(file: ChatMessageFile): string {
-  return `[Attached ${file.mimeType ?? file.type}: ${file.name}]`;
-}
-
-/**
- * 移除会被模型当作媒体输入发送的远程地址。
- * @param file - 消息附件
- * @returns 降级后的附件
- */
-function removeModelMediaUrl(file: ChatMessageFile): ChatMessageFile {
-  const downgradedFile = { ...file };
-  delete downgradedFile.url;
-  return downgradedFile;
-}
-
-/**
- * 为 overflow replay 降级当前用户消息中的媒体附件。
- * @param message - 当前用户消息
- * @returns 降级后的用户消息
- */
-function downgradeUserMessageForOverflowReplay(message: ChatMessageRecord): ChatMessageRecord {
-  if (!message.files?.length) return message;
-
-  const content = [message.content.trim(), ...message.files.map(createAttachmentPlaceholder)].filter((item) => item.length > 0).join('\n');
-  return {
-    ...message,
-    content,
-    parts: content ? [{ type: 'text', text: content }] : [],
-    files: message.files.map(removeModelMediaUrl)
-  };
-}
-
-/**
- * 降级 replay 源消息中的当前用户消息。
- * @param sourceMessages - 原始源消息
- * @param userMessage - 当前用户消息
- * @returns 降级后的源消息
- */
-function downgradeOverflowReplaySourceMessages(sourceMessages: ChatMessageRecord[], userMessage: ChatMessageRecord): ChatMessageRecord[] {
-  return sourceMessages.map((message) => (message.id === userMessage.id ? downgradeUserMessageForOverflowReplay(message) : message));
-}
-
-/**
- * 安全序列化 JSON。
- * @param value - 待序列化值
- * @returns JSON 字符串
- */
-function safeStringifyJson(value: unknown): string {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-/**
- * 查找 tool output prune 的保护区起点。
- * @param messages - 完整消息列表
- * @returns 最近用户轮保护区起点
- */
-function findToolOutputPruneProtectedStartIndex(messages: ChatMessageRecord[]): number {
-  let seenUserTurns = 0;
-
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index].role !== 'user') continue;
-
-    seenUserTurns += 1;
-    if (seenUserTurns >= TOOL_OUTPUT_PRUNE_PROTECTED_USER_TURNS) return index;
-  }
-
-  return 0;
-}
-
-/**
- * 判断工具结果是否可剪枝。
- * @param part - 工具片段
- * @returns 是否可剪枝
- */
-function shouldPruneToolResult(part: ChatMessageToolPart): boolean {
-  if (part.status !== 'done' || part.result?.status !== 'success') return false;
-  if (TOOL_OUTPUT_PRUNE_PROTECTED_TOOL_NAMES.has(part.toolName)) return false;
-
-  return safeStringifyJson(part.result.data).length > TOOL_OUTPUT_PRUNE_MIN_JSON_LENGTH;
-}
-
-/**
- * 提取剪枝后仍应保留的工具结果字段。
- * @param data - 原始工具结果数据
- * @returns 可保留字段
- */
-function pickPrunedToolResultFields(data: unknown): Record<string, unknown> {
-  if (!data || typeof data !== 'object') return {};
-
-  const source = data as Record<string, unknown>;
-  const picked: Record<string, unknown> = {};
-  for (const key of TOOL_OUTPUT_PRUNE_PRESERVED_DATA_KEYS) {
-    const value = source[key];
-    if (value === undefined) continue;
-    picked[key] =
-      typeof value === 'string' && value.length > TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH ? `${value.slice(0, TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH)}...` : value;
-  }
-
-  return picked;
-}
-
-/**
- * 创建剪枝后的工具结果摘要数据。
- * @param data - 原始工具结果数据
- * @param serializedData - 原始序列化数据
- * @returns 剪枝摘要数据
- */
-function createPrunedToolResultData(data: unknown, serializedData: string): Record<string, unknown> {
-  const preservedFields = pickPrunedToolResultFields(data);
-  const fallbackSummary = serializedData.slice(0, TOOL_OUTPUT_PRUNE_SUMMARY_LENGTH);
-  const summary =
-    typeof preservedFields.summary === 'string' && preservedFields.summary.trim()
-      ? preservedFields.summary
-      : `Large tool result pruned. Preview: ${fallbackSummary}`;
-
-  return {
-    ...preservedFields,
-    pruned: true,
-    summary,
-    originalBytes: serializedData.length
-  };
-}
-
-/**
- * 剪枝单个工具片段。
- * @param part - 工具片段
- * @returns 剪枝后的工具片段，未剪枝时返回原片段
- */
-function pruneToolPartIfNeeded(part: ChatMessageToolPart): ChatMessageToolPart {
-  if (!shouldPruneToolResult(part) || part.result?.status !== 'success') return part;
-
-  const serializedData = safeStringifyJson(part.result.data);
-  return {
-    ...part,
-    result: {
-      ...part.result,
-      data: createPrunedToolResultData(part.result.data, serializedData)
-    }
-  };
-}
-
-/**
- * 剪枝单条消息中的旧 tool output。
- * @param message - 消息
- * @returns 剪枝后的消息，无需更新时返回 undefined
- */
-function pruneMessageToolOutputs(message: ChatMessageRecord): ChatMessageRecord | undefined {
-  if (message.role !== 'assistant') return undefined;
-
-  let changed = false;
-  const parts = message.parts.map((part) => {
-    if (part.type !== 'tool') return part;
-
-    const nextPart = pruneToolPartIfNeeded(part);
-    if (nextPart !== part) changed = true;
-    return nextPart;
-  });
-  if (!changed) return undefined;
-
-  return { ...message, parts };
-}
-
-/**
- * 构建自动命名 prompt。
- * @param input - 自动命名输入
- * @returns prompt 文本
- */
-function createAutoNamePrompt(input: ChatRuntimeAutoNameInput): string {
-  return AUTONAME_DEFAULT_PROMPT.replace(/\{\{USER_MESSAGE\}\}/g, input.userMessage).replace(/\{\{AI_RESPONSE\}\}/g, input.aiResponse);
-}
-
-/**
- * 清理模型输出的标题文本。
- * @param text - 原始模型输出
- * @returns 标题文本
- */
-function normalizeAutoNameTitle(text: string): string {
-  return text.replace(/(^["'\u201c\u201d\u2018\u2019]+)|(["'\u201c\u201d\u2018\u2019]+$)/g, '').trim();
 }
 
 /**

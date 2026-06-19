@@ -4,7 +4,7 @@
  */
 import type { AIProvider } from 'types/ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createChatModelResolver, mergeProviderSettings } from '../../../../../../electron/main/modules/chat/runtime/chat-model-resolver.mjs';
+import { createChatModelResolver, mergeProviderSettings } from '../../../../../../electron/main/modules/chat/runtime/model/resolver.mjs';
 
 describe('createChatModelResolver', (): void => {
   it('resolves enabled chat provider and model into AI create options', async (): Promise<void> => {

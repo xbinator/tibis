@@ -2,7 +2,7 @@
  * @file types.mts
  * @description ChatRuntime 主进程内部类型。
  */
-import type { RuntimeCompactionService } from './compaction.mjs';
+import type { RuntimeCompactionService } from './compaction/service.mjs';
 import type {
   AICreateOptions,
   AIInvokeResult,

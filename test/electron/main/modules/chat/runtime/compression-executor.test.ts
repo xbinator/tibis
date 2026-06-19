@@ -5,7 +5,7 @@
 import type { ChatMessageRecord } from 'types/chat';
 import type { CompressionRecord, CompressionRecordStorage } from 'types/compression';
 import { describe, expect, it, vi } from 'vitest';
-import { createRuntimeCompressionExecutor } from '../../../../../../electron/main/modules/chat/runtime/compression-executor.mjs';
+import { createRuntimeCompressionExecutor } from '../../../../../../electron/main/modules/chat/runtime/compaction/executor.mjs';
 
 /**
  * 创建测试消息。

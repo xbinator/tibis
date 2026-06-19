@@ -3,7 +3,7 @@
  * @description ChatRuntime 上下文预算计算测试。
  */
 import { describe, expect, it } from 'vitest';
-import { createContextBudgetService } from '../../../../../../electron/main/modules/chat/runtime/context-budget.mjs';
+import { createContextBudgetService } from '../../../../../../electron/main/modules/chat/runtime/context/budget.mjs';
 
 describe('createContextBudgetService', (): void => {
   it('computes usable input budget with output and compaction reserves', (): void => {

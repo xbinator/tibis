@@ -6,7 +6,7 @@ import type { ChatMessageRecord } from 'types/chat';
 import type { ChatRuntimeEventMap } from 'types/chat-runtime';
 import type { CompressionRecord } from 'types/compression';
 import { describe, expect, it, vi } from 'vitest';
-import { createRuntimeCompactionService } from '../../../../../../electron/main/modules/chat/runtime/compaction.mjs';
+import { createRuntimeCompactionService } from '../../../../../../electron/main/modules/chat/runtime/compaction/service.mjs';
 
 /** 已捕获的 runtime 事件。 */
 type CapturedRuntimeEvent = {

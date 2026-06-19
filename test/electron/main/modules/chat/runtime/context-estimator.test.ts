@@ -4,7 +4,7 @@
  */
 import type { ModelMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { estimateSerializedModelMessages, estimateTextTokens } from '../../../../../../electron/main/modules/chat/runtime/context-estimator.mjs';
+import { estimateSerializedModelMessages, estimateTextTokens } from '../../../../../../electron/main/modules/chat/runtime/context/estimator.mjs';
 
 describe('chat runtime context estimator', (): void => {
   it('estimates serialized model messages with four characters per token', (): void => {

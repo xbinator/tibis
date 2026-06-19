@@ -5,8 +5,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { AICreateOptions, AIProvider, AIProviderType } from 'types/ai';
-import { dbSelect } from '../../database/service.mjs';
-import { ensureTibisWorkspaceRoot } from '../../workspace/root.mjs';
+import { dbSelect } from '../../../database/service.mjs';
+import { ensureTibisWorkspaceRoot } from '../../../workspace/root.mjs';
 
 /** settings.json 中的 provider 条目形状。 */
 export interface StoredChatProviderEntry {

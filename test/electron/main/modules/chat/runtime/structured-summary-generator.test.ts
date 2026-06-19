@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createRuntimeStructuredSummaryGenerator,
   createRuntimeSummaryInvoke
-} from '../../../../../../electron/main/modules/chat/runtime/structured-summary-generator.mjs';
+} from '../../../../../../electron/main/modules/chat/runtime/compaction/structured-summary-generator.mjs';
 
 describe('createRuntimeStructuredSummaryGenerator', (): void => {
   it('uses AI structured output and merges explicit user requirements', async (): Promise<void> => {
