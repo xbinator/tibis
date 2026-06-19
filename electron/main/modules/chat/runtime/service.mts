@@ -14,7 +14,7 @@ import type {
   ChatRuntimeStreamAborter,
   ChatRuntimeStreamExecutor
 } from './types.mjs';
-import type { AIServiceError, AIToolExecutionCancelledResult, AIToolExecutionResult, AIUsage } from 'types/ai';
+import type { AIServiceError, AIToolExecutionResult, AIUsage } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageFile, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import type {
   ChatRuntimeAbortInput,
@@ -49,6 +49,13 @@ import { createRuntimeConfirmationRequests, type RuntimeConfirmationRequestInput
 import { createRuntimeRendererToolRequests } from './controllers/renderer-tool.mjs';
 import { ChatRuntimeError } from './errors.mjs';
 import { createRuntimeLockRegistry } from './locks.mjs';
+import { createRuntimeAssistantPlaceholder, createRuntimeInterruptMessage, createRuntimeUserMessage } from './messages/factory.mjs';
+import {
+  ensureRuntimeMessageCreatedAt,
+  finishAssistantMessageInterrupted,
+  hasAssistantResponseContent,
+  markAssistantMessageFailed
+} from './messages/finalizer.mjs';
 import { toRuntimeModelMessages } from './model-message-context.mjs';
 import { createRuntimeStreamExecutor } from './stream-executor.mjs';
 import { createRuntimeStructuredSummaryGenerator, createRuntimeSummaryInvoke } from './structured-summary-generator.mjs';
@@ -252,77 +259,6 @@ function createDefaultMessageId(kind: ChatRuntimeMessageKind): string {
 }
 
 /**
- * 创建 runtime user 消息。
- * @param input - 发送参数
- * @param runtime - runtime 状态
- * @param id - 消息 ID
- * @param createdAt - 创建时间
- * @returns user 消息
- */
-function createRuntimeUserMessage(input: ChatRuntimeSendInput, runtime: ActiveChatRuntime, id: string, createdAt: string): ChatMessageRecord {
-  return {
-    id,
-    sessionId: runtime.sessionId,
-    role: 'user',
-    content: input.content,
-    parts: input.content ? [{ type: 'text', text: input.content }] : [],
-    files: input.files,
-    createdAt,
-    finished: true,
-    loading: false,
-    agentId: runtime.agentId,
-    runtimeId: runtime.runtimeId,
-    parentRuntimeId: runtime.parentRuntimeId
-  };
-}
-
-/**
- * 创建 runtime assistant 占位消息。
- * @param runtime - runtime 状态
- * @param id - 消息 ID
- * @param createdAt - 创建时间
- * @returns assistant 占位消息
- */
-function createRuntimeAssistantPlaceholder(runtime: ActiveChatRuntime, id: string, createdAt: string): ChatMessageRecord {
-  return {
-    id,
-    sessionId: runtime.sessionId,
-    role: 'assistant',
-    content: '',
-    parts: [],
-    createdAt,
-    loading: true,
-    finished: false,
-    agentId: runtime.agentId,
-    runtimeId: runtime.runtimeId,
-    parentRuntimeId: runtime.parentRuntimeId
-  };
-}
-
-/**
- * 创建 runtime 中断状态消息。
- * @param runtime - runtime 状态
- * @param id - 消息 ID
- * @param createdAt - 创建时间
- * @returns 中断消息
- */
-function createRuntimeInterruptMessage(runtime: ActiveChatRuntime, id: string, createdAt: string): ChatMessageRecord {
-  return {
-    id,
-    sessionId: runtime.sessionId,
-    role: 'interrupt',
-    content: '已中断',
-    parts: [],
-    createdAt,
-    loading: false,
-    finished: true,
-    agentId: runtime.agentId,
-    runtimeId: runtime.runtimeId,
-    parentRuntimeId: runtime.parentRuntimeId
-  };
-}
-
-/**
  * 从消息快照中查找最后一条 user 消息。
  * @param messages - 消息快照
  * @returns user 消息
@@ -350,17 +286,6 @@ function normalizeContinuationMessages(input: ChatRuntimeContinueInput): ChatMes
     ...message,
     sessionId: message.sessionId ?? input.sessionId
   }));
-}
-
-/**
- * 补齐续跑 assistant 的创建时间。
- * @param message - assistant 消息
- * @param fallbackCreatedAt - 兜底创建时间
- */
-function ensureRuntimeMessageCreatedAt(message: ChatMessageRecord, fallbackCreatedAt: string): void {
-  if (!message.createdAt) {
-    message.createdAt = fallbackCreatedAt;
-  }
 }
 
 /**
@@ -482,56 +407,6 @@ function normalizeRuntimeStreamError(error: unknown): AIServiceError {
   if (error instanceof Error) return createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, error.message);
 
   return createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, 'ChatRuntime stream failed');
-}
-
-/**
- * 将 assistant 草稿标记为失败终态。
- * @param message - assistant 草稿消息
- * @param error - runtime 错误
- */
-function markAssistantMessageFailed(message: ChatMessageRecord, error: AIServiceError): void {
-  message.content = message.content ? `${message.content}\n${error.message}` : error.message;
-  message.parts.push({ type: 'error', text: error.message });
-  message.loading = false;
-  message.finished = true;
-}
-
-/**
- * 将未完成工具片段标记为已取消。
- * @param message - assistant 草稿消息
- */
-function finalizeToolPartsAsCancelled(message: ChatMessageRecord): void {
-  for (const part of message.parts) {
-    if (part.type !== 'tool' || part.status === 'done') continue;
-
-    const toolPart = part as ChatMessageToolPart;
-    toolPart.status = 'done';
-    toolPart.result = {
-      toolName: toolPart.toolName,
-      status: 'cancelled',
-      error: { code: 'USER_CANCELLED', message: '用户中止了操作' }
-    } satisfies AIToolExecutionCancelledResult;
-    delete toolPart.inputText;
-  }
-}
-
-/**
- * 将 assistant 草稿标记为中断后的稳定终态。
- * @param message - assistant 草稿消息
- */
-function finishAssistantMessageInterrupted(message: ChatMessageRecord): void {
-  finalizeToolPartsAsCancelled(message);
-  message.loading = false;
-  message.finished = true;
-}
-
-/**
- * 判断 assistant 草稿是否已有可保留的模型响应。
- * @param message - assistant 草稿消息
- * @returns 是否已有模型输出内容
- */
-function hasAssistantResponseContent(message: ChatMessageRecord): boolean {
-  return Boolean(message.content.trim() || message.thinking?.trim() || message.parts.length > 0);
 }
 
 /**

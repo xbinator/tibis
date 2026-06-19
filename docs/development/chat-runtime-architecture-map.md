@@ -43,8 +43,9 @@ flowchart LR
 | File | Does | Does Not Do |
 | --- | --- | --- |
 | `electron/main/modules/chat/runtime/README.md` | Local directory guide for main runtime modules, common change entry points, and runtime boundaries. | Runtime implementation logic. |
-| `electron/main/modules/chat/runtime/service.mts` | Runtime lifecycle, session locks, message creation/update/delete, abort, continue, user choice resume, compaction orchestration, complete/error events. | Tool-specific business logic after migration; renderer UI updates; pending renderer request storage. |
+| `electron/main/modules/chat/runtime/service.mts` | Runtime lifecycle, session locks, message persistence orchestration, abort, continue, user choice resume, compaction orchestration, complete/error events. | Tool-specific business logic after migration; renderer UI updates; pending renderer request storage; message shape factories. |
 | `electron/main/modules/chat/runtime/controllers/**.mts` | Pending runtime request controllers for renderer tools, confirmations, and bridge RPC. | Model streaming, message persistence, or compaction decisions. |
+| `electron/main/modules/chat/runtime/messages/**.mts` | Runtime message factories and assistant terminal-state helpers for user, assistant placeholder, interrupt, failure, and abort finalization. | Runtime lifecycle orchestration, persistence adapters, or renderer UI state. |
 | `electron/main/modules/chat/runtime/stream-executor.mts` | Consumes model stream chunks, updates assistant draft, executes tool rounds, decides whether to continue after tool results. | Persists session history directly outside the updater contract; owns no renderer UI state. |
 | `electron/main/modules/chat/runtime/tools/index.mts` | Main-process tool dispatcher. Routes a tool call to a grouped tool module. | Runtime lifecycle or model stream handling. |
 | `shared/ai/tools/toolRegistry.ts` | Single metadata source for migrated tool names, runtime owner, group, exposure, and schema definitions. | Runtime execution of migrated tools. |
