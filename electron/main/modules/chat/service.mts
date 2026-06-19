@@ -494,10 +494,12 @@ class ChatSessionManager {
    */
   updateMessage(message: ChatMessageRecord): void {
     transaction(() => {
-      const previousMessageUsage =
-        message.usage === undefined
-          ? undefined
-          : parseJson<AIUsage>(dbSelect<ChatSessionUsageRow>(SELECT_MESSAGE_USAGE_SQL, [message.sessionId, message.id])[0]?.usage_json ?? null);
+      // 查询当前消息已有的用量记录，用于后续计算用量差值
+      let previousMessageUsage: AIUsage | undefined;
+      if (message.usage !== undefined) {
+        const rows = dbSelect<ChatSessionUsageRow>(SELECT_MESSAGE_USAGE_SQL, [message.sessionId, message.id]);
+        previousMessageUsage = parseJson<AIUsage>(rows[0]?.usage_json ?? null);
+      }
 
       dbExecute(UPSERT_MESSAGE_SQL, buildMessageUpsertParams(message));
       dbExecute(UPDATE_SESSION_LAST_MESSAGE_AT_SQL, [message.createdAt, message.sessionId]);
