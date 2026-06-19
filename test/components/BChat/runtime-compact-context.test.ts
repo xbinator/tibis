@@ -106,8 +106,7 @@ describe('useRuntimeCompactContext', (): void => {
         getContextWindow: () => 128_000,
         beginCompactTask: () => ({ ok: true }),
         finishCompactTask,
-        scrollToBottom: vi.fn(),
-        showToast: vi.fn()
+        scrollToBottom: vi.fn()
       })
     );
 
@@ -145,7 +144,6 @@ describe('useRuntimeCompactContext', (): void => {
         beginCompactTask: () => ({ ok: true }),
         finishCompactTask: vi.fn(),
         scrollToBottom: vi.fn(),
-        showToast: vi.fn(),
         clientId: 'client-active'
       })
     );
@@ -199,8 +197,7 @@ describe('useRuntimeCompactContext', (): void => {
         getSessionId: () => 'session-1',
         beginCompactTask: () => ({ ok: true }),
         finishCompactTask: vi.fn(),
-        scrollToBottom: vi.fn(),
-        showToast: vi.fn()
+        scrollToBottom: vi.fn()
       })
     );
 
@@ -219,10 +216,9 @@ describe('useRuntimeCompactContext', (): void => {
     scope.stop();
   });
 
-  it('does not show toast when the compact IPC command fails', async (): Promise<void> => {
+  it('finishes the compact task without throwing when the compact IPC command fails', async (): Promise<void> => {
     const scope = effectScope();
     const messages = ref<Message[]>([createMessage('u1', 'user', '旧用户消息'), createMessage('a1', 'assistant', '旧助手回复')]);
-    const showToast = vi.fn();
     const finishCompactTask = vi.fn();
     electronAPIMock.chatRuntimeCompact.mockRejectedValue(new Error('An object could not be cloned.'));
 
@@ -232,14 +228,12 @@ describe('useRuntimeCompactContext', (): void => {
         getSessionId: () => 'session-1',
         beginCompactTask: () => ({ ok: true }),
         finishCompactTask,
-        scrollToBottom: vi.fn(),
-        showToast
+        scrollToBottom: vi.fn()
       })
     );
 
     await expect(compact?.handleCompactContext()).resolves.toBeUndefined();
 
-    expect(showToast).not.toHaveBeenCalled();
     expect(finishCompactTask).toHaveBeenCalledTimes(1);
 
     scope.stop();

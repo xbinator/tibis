@@ -909,8 +909,7 @@ const { handleCompactContext } = useRuntimeCompactContext({
   getContextWindow: () => contextWindow.value,
   beginCompactTask: (onAbort) => taskRuntime.beginTask('compact', onAbort),
   finishCompactTask: () => taskRuntime.finishTask('compact'),
-  scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
-  showToast: interactionAPI.showToast
+  scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' })
 });
 
 /**
@@ -1013,9 +1012,7 @@ async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> 
 
   const sourceMessages = messages.value.slice(0, startIndex + 1);
   const removedMessages = messages.value.slice(startIndex + 1);
-  const assistantPlaceholder = create.assistantPlaceholder();
-  messages.value.splice(0, messages.value.length, ...sourceMessages, assistantPlaceholder);
-  conversationRef.value?.scrollToBottom({ behavior: 'auto' });
+  messages.value.splice(0, messages.value.length, ...sourceMessages);
 
   const config = await chatServiceConfig.resolveServiceConfig();
   if (!config) {
@@ -1025,10 +1022,9 @@ async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> 
   }
 
   await handleBeforeRegenerate(sourceMessages);
-  await chatStore.addSessionMessage(sessionId, assistantPlaceholder);
   await chatRuntime.continueTurn({
     sessionId,
-    messages: [...sourceMessages, assistantPlaceholder],
+    messages: sourceMessages,
     contextWindow: contextWindow.value,
     system: await resolveRuntimeSystemPrompt(),
     workspaceRoot: workspaceRoot.value || undefined,
@@ -1151,8 +1147,6 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
 
     const sessionId = await ensureActiveSession(userMessage.content);
     confirmationController.expirePendingConfirmation();
-    messages.value.push(userMessage);
-    conversationRef.value?.scrollToBottom({ behavior: 'auto' });
     focusInput();
     clearDraft && inputEvents.clear();
 

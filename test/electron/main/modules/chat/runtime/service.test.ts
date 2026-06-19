@@ -1122,6 +1122,82 @@ describe('chat runtime service shell', (): void => {
     );
   });
 
+  it('creates an assistant placeholder when continuing from a user-only snapshot', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const addedMessages: ChatMessageRecord[] = [];
+    const updatedMessages: ChatMessageRecord[] = [];
+    const userMessage: ChatMessageRecord = {
+      id: 'user-regenerate',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '重新回答',
+      parts: [{ type: 'text', text: '重新回答' }],
+      createdAt: '2026-06-19T00:00:00.000Z',
+      finished: true
+    };
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage: draft }, updateAssistant) => {
+      draft.content = '新回答';
+      draft.parts = [{ type: 'text', text: '新回答' }];
+      draft.loading = false;
+      draft.finished = true;
+      await updateAssistant(draft);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:02.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (message) => {
+          addedMessages.push({ ...message, parts: [...message.parts] });
+        },
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      streamExecutor
+    });
+
+    const result = await service.continue(createContinueInput({ messages: [userMessage], contextWindow: 200_000 }));
+    await flushRuntimeTasks();
+
+    expect(addedMessages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-message-1',
+        role: 'assistant',
+        runtimeId: result.runtimeId,
+        content: '',
+        parts: [],
+        loading: true,
+        finished: false,
+        createdAt: '2026-06-19T00:00:02.000Z'
+      })
+    ]);
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:message-created',
+        payload: expect.objectContaining({
+          runtimeId: result.runtimeId,
+          message: expect.objectContaining({ id: 'assistant-message-1', role: 'assistant' })
+        })
+      })
+    );
+    expect(streamExecutor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessage,
+        assistantMessage: expect.objectContaining({ id: 'assistant-message-1', runtimeId: result.runtimeId }),
+        sourceMessages: [userMessage, expect.objectContaining({ id: 'assistant-message-1', runtimeId: result.runtimeId })]
+      }),
+      expect.any(Function)
+    );
+    expect(updatedMessages.at(-1)).toMatchObject({
+      id: 'assistant-message-1',
+      content: '新回答',
+      finished: true
+    });
+  });
+
   it('submits a user choice answer from persisted messages and continues the runtime', async (): Promise<void> => {
     const collector = createEventCollector();
     const updatedMessages: ChatMessageRecord[] = [];

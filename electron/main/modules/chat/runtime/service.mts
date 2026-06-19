@@ -1449,33 +1449,49 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
       const continuationMessages = normalizeContinuationMessages(input);
       const userMessage = findLastRuntimeUserMessage(continuationMessages);
-      const assistantMessage = findLastRuntimeAssistantMessage(continuationMessages);
-      if (!userMessage || !assistantMessage) {
+      const existingAssistantMessage = findLastRuntimeAssistantMessage(continuationMessages);
+      if (!userMessage) {
         locks.releaseWritingLock({ sessionId: input.sessionId, runtimeId });
-        throw new ChatRuntimeError('INVALID_CONTINUATION', 'Continuation requires user and assistant messages');
+        throw new ChatRuntimeError('INVALID_CONTINUATION', 'Continuation requires a user message');
       }
 
       const runtime = createContinuationRuntime(input, runtimeId);
       activeRuntimes.set(runtimeId, runtime);
-      ensureRuntimeMessageCreatedAt(assistantMessage, now());
+      const createdAt = now();
+      const assistantMessage = existingAssistantMessage ?? createRuntimeAssistantPlaceholder(runtime, createMessageId('assistant'), createdAt);
+      ensureRuntimeMessageCreatedAt(assistantMessage, createdAt);
       assistantMessage.runtimeId = runtimeId;
       assistantMessage.agentId = runtime.agentId;
       assistantMessage.parentRuntimeId = runtime.parentRuntimeId;
       assistantMessage.loading = true;
       assistantMessage.finished = false;
       activeAssistantMessages.set(runtimeId, assistantMessage);
-      const sourceMessageSnapshot = continuationMessages.map((message) => (message.id === assistantMessage.id ? assistantMessage : message));
+      const sourceMessageSnapshot = existingAssistantMessage
+        ? continuationMessages.map((message) => (message.id === assistantMessage.id ? assistantMessage : message))
+        : [...continuationMessages, assistantMessage];
 
       try {
-        await messageWriter.updateMessage(assistantMessage);
-        emit('chat:runtime:message-updated', {
-          runtimeId,
-          sessionId: runtime.sessionId,
-          clientId: runtime.clientId,
-          agentId: runtime.agentId,
-          parentRuntimeId: runtime.parentRuntimeId,
-          message: assistantMessage
-        });
+        if (existingAssistantMessage) {
+          await messageWriter.updateMessage(assistantMessage);
+          emit('chat:runtime:message-updated', {
+            runtimeId,
+            sessionId: runtime.sessionId,
+            clientId: runtime.clientId,
+            agentId: runtime.agentId,
+            parentRuntimeId: runtime.parentRuntimeId,
+            message: assistantMessage
+          });
+        } else {
+          await messageWriter.addMessage(assistantMessage);
+          emit('chat:runtime:message-created', {
+            runtimeId,
+            sessionId: runtime.sessionId,
+            clientId: runtime.clientId,
+            agentId: runtime.agentId,
+            parentRuntimeId: runtime.parentRuntimeId,
+            message: assistantMessage
+          });
+        }
 
         if (!dependencies.keepRuntimeOpenForTest) {
           runRuntimeStream(runtime, userMessage, assistantMessage, sourceMessageSnapshot).catch(() => undefined);

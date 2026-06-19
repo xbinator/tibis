@@ -1,8 +1,7 @@
 /**
  * @file useCompactContext.ts
- * @description 手动上下文压缩命令 hook，负责 pending 压缩消息的创建、回填、提示反馈以及实际压缩执行。
+ * @description 手动上下文压缩命令 hook，负责 pending 压缩消息的创建、回填以及实际压缩执行。
  */
-import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { CompressionRecord } from '../utils/compression/types';
 import type { Message } from '../utils/types';
 import type { ChatCompressionStatus } from 'types/chat';
@@ -88,8 +87,6 @@ interface UseCompactContextOptions {
   persistMessages: (sessionId: string | undefined, nextMessages: Message[]) => Promise<void>;
   /** 将对话滚动到底部 */
   scrollToBottom: () => void;
-  /** 显示交互提示 */
-  showToast: InteractionAPI['showToast'];
 }
 
 /**
@@ -211,7 +208,7 @@ function isAlreadyCompactWithoutNewModelMessages(sourceMessages: Message[]): boo
  * @returns 手动压缩命令处理函数
  */
 export function useCompactContext(options: UseCompactContextOptions) {
-  const { messages, getSessionId, getContextWindow, beginCompactTask, finishCompactTask, persistMessage, persistMessages, scrollToBottom, showToast } = options;
+  const { messages, getSessionId, getContextWindow, beginCompactTask, finishCompactTask, persistMessage, persistMessages, scrollToBottom } = options;
 
   /** 压缩状态 */
   const compressing = ref(false);
@@ -352,19 +349,14 @@ export function useCompactContext(options: UseCompactContextOptions) {
   async function runCompactContext(triggerSource: CompactTriggerSource): Promise<boolean> {
     const sessionId = getSessionId();
     if (!sessionId) {
-      showToast({ type: 'error', content: '没有活跃的会话' });
       return false;
     }
 
     if (messages.value.length === 0) {
-      showToast({ type: 'error', content: '没有可压缩的消息' });
       return false;
     }
 
     if (isAlreadyCompactWithoutNewModelMessages(messages.value)) {
-      if (triggerSource === 'manual') {
-        showToast({ type: 'info', content: '当前上下文已经压缩过，暂无新增对话需要压缩' });
-      }
       return false;
     }
 
@@ -374,9 +366,6 @@ export function useCompactContext(options: UseCompactContextOptions) {
       asyncTo(updateCompressionMessage(pendingMessage.id, createCancelledCompressionMessage()));
     });
     if (!task.ok) {
-      if (triggerSource === 'manual') {
-        showToast({ type: 'info', content: '当前有任务正在执行，请先等待完成或停止当前任务' });
-      }
       return false;
     }
     try {

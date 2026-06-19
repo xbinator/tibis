@@ -131,8 +131,7 @@ describe('useCompactContext compression observability', () => {
         .mockImplementation(async (_sessionId, nextMessages) => {
           persistedLists.push(nextMessages.map((message) => ({ ...message, parts: [...message.parts] })));
         }),
-      scrollToBottom: vi.fn<() => void>(),
-      showToast: vi.fn()
+      scrollToBottom: vi.fn<() => void>()
     });
 
     await compact.handleCompactContext();

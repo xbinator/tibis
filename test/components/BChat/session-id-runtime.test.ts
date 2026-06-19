@@ -339,6 +339,12 @@ const InputToolbarStub = defineComponent({
 
 const ConversationViewStub = defineComponent({
   name: 'ConversationView',
+  props: {
+    messages: {
+      type: Array,
+      default: () => []
+    }
+  },
   emits: ['regenerate', 'user-choice-submit'],
   setup(_props, { expose, slots }) {
     expose({
@@ -586,6 +592,7 @@ describe('BChat sessionId runtime', (): void => {
         userMessageCreatedAt: expect.any(String)
       })
     );
+    expect(wrapper.findComponent(ConversationViewStub).props('messages')).toEqual([]);
     expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-created', expect.objectContaining({ role: 'user', content: 'hello' }));
   });
 
@@ -698,7 +705,7 @@ describe('BChat sessionId runtime', (): void => {
     await flushPromises();
 
     expect(chatStoreMock.setSessionMessages).toHaveBeenCalledWith('session-active', [userMessage]);
-    expect(chatStoreMock.addSessionMessage).toHaveBeenCalledWith(
+    expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith(
       'session-active',
       expect.objectContaining({ role: 'assistant', content: '', loading: true, finished: false })
     );
@@ -711,10 +718,7 @@ describe('BChat sessionId runtime', (): void => {
       })
     );
     const [continueInput] = electronAPIMock.chatRuntimeContinue.mock.calls[0] as [ChatRuntimeContinueInput];
-    expect(continueInput.messages).toEqual([
-      expect.objectContaining({ id: 'user-regenerate', role: 'user' }),
-      expect.objectContaining({ role: 'assistant', content: '', loading: true, finished: false })
-    ]);
+    expect(continueInput.messages).toEqual([expect.objectContaining({ id: 'user-regenerate', role: 'user' })]);
   });
 
   it('leaves automatic compaction to the main process runtime before sending', async (): Promise<void> => {

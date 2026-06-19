@@ -2,7 +2,6 @@
  * @file useRuntimeCompactContext.ts
  * @description 基于主进程 ChatRuntime 的上下文压缩 hook。
  */
-import type { InteractionAPI } from '../components/InteractionContainer/types';
 import type { Message } from '../utils/types';
 import type { ChatMessageRecord } from 'types/chat';
 import type { ChatRuntimeHandlerResult, ChatRuntimeMessageEvent } from 'types/chat-runtime';
@@ -28,8 +27,6 @@ interface UseRuntimeCompactContextOptions {
   finishCompactTask: () => void;
   /** 将对话滚动到底部。 */
   scrollToBottom: () => void;
-  /** 显示交互提示。 */
-  showToast: InteractionAPI['showToast'];
   /** renderer client id。 */
   clientId?: string;
   /** 当前 agent id。 */
