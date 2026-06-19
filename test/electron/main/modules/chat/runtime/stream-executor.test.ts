@@ -85,6 +85,25 @@ async function* createRendererToolStream(): AsyncGenerator<unknown> {
 }
 
 /**
+ * 创建主进程 read_file 工具调用的测试流。
+ * @returns AI stream chunk 序列
+ */
+async function* createMainReadFileToolCallStream(): AsyncGenerator<unknown> {
+  yield { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'read_file', input: { path: 'secret.md' } };
+  yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 } };
+}
+
+/**
+ * 创建同一模型流内包含两个工具调用的测试流。
+ * @returns AI stream chunk 序列
+ */
+async function* createTwoMainToolCallStream(): AsyncGenerator<unknown> {
+  yield { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'read_file', input: { path: 'secret.md' } };
+  yield { type: 'tool-call', toolCallId: 'tool-call-2', toolName: 'run_shell_command', input: { command: 'echo should-not-run' } };
+  yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 12, outputTokens: 6, totalTokens: 18 } };
+}
+
+/**
  * 创建主进程 bridge 工具调用的测试流。
  * @returns AI stream chunk 序列
  */
@@ -584,6 +603,118 @@ describe('runtime stream executor', (): void => {
           }
         }
       ]
+    });
+  });
+
+  it('does not continue tool rounds after a main-process tool is cancelled', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const updates: ChatMessageRecord[] = [];
+    const executeMainTool = vi.fn().mockResolvedValue({
+      toolName: 'read_file',
+      status: 'cancelled',
+      error: { code: 'USER_CANCELLED', message: '用户取消了工具调用' }
+    });
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        providerType: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1'
+      },
+      modelId: 'gpt-test'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createMainReadFileToolCallStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeMainTool });
+
+    const result = await executor(
+      {
+        runtime: {
+          ...runtime,
+          tools: [{ name: 'read_file', description: 'Read file', parameters: { type: 'object', properties: {} } }]
+        },
+        userMessage,
+        assistantMessage
+      },
+      async (message) => {
+        updates.push({ ...message, parts: [...message.parts] });
+      }
+    );
+
+    expect(result).toEqual({});
+    expect(updates.at(-1)).toMatchObject({
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-1',
+          toolName: 'read_file',
+          status: 'done',
+          result: {
+            toolName: 'read_file',
+            status: 'cancelled',
+            error: { code: 'USER_CANCELLED', message: '用户取消了工具调用' }
+          }
+        }
+      ]
+    });
+  });
+
+  it('stops consuming same-stream tool calls after a main-process tool is cancelled', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const updates: ChatMessageRecord[] = [];
+    const executeMainTool = vi.fn().mockResolvedValue({
+      toolName: 'read_file',
+      status: 'cancelled',
+      error: { code: 'USER_CANCELLED', message: '用户取消了工具调用' }
+    });
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        providerType: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1'
+      },
+      modelId: 'gpt-test'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createTwoMainToolCallStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeMainTool });
+
+    const result = await executor(
+      {
+        runtime: {
+          ...runtime,
+          tools: [
+            { name: 'read_file', description: 'Read file', parameters: { type: 'object', properties: {} } },
+            { name: 'run_shell_command', description: 'Run shell command', parameters: { type: 'object', properties: {} } }
+          ]
+        },
+        userMessage,
+        assistantMessage
+      },
+      async (message) => {
+        updates.push({ ...message, parts: [...message.parts] });
+      }
+    );
+
+    expect(result).toEqual({});
+    expect(executeMainTool).toHaveBeenCalledTimes(1);
+    expect(executeMainTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCallId: 'tool-call-1',
+        toolName: 'read_file'
+      })
+    );
+    expect(updates.at(-1)?.parts).toHaveLength(1);
+    expect(updates.at(-1)?.parts[0]).toMatchObject({
+      type: 'tool',
+      toolCallId: 'tool-call-1',
+      toolName: 'read_file',
+      result: {
+        toolName: 'read_file',
+        status: 'cancelled',
+        error: { code: 'USER_CANCELLED', message: '用户取消了工具调用' }
+      }
     });
   });
 

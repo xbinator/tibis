@@ -3,7 +3,7 @@
  * @description BChat 压缩边界后的模型上下文组装测试。
  */
 import { describe, expect, it } from 'vitest';
-import { convert, sliceMessagesFromCompressionBoundary } from '@/components/BChat/utils/messageHelper';
+import { convert, create, sliceMessagesFromCompressionBoundary } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
 
 /**
@@ -50,6 +50,13 @@ function createCompressionMessage(coveredUntilMessageId: string): Message {
 }
 
 describe('messageHelper compression boundary assembly', () => {
+  it('creates assistant placeholders with a real timestamp', (): void => {
+    const placeholder = create.assistantPlaceholder();
+
+    expect(placeholder.createdAt).not.toBe('');
+    expect(Number.isNaN(Date.parse(placeholder.createdAt))).toBe(false);
+  });
+
   it('restores preserved tail messages after the latest compression boundary', (): void => {
     const messages: Message[] = [
       createModelMessage('u1', 'user', '旧用户消息'),

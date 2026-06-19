@@ -337,6 +337,24 @@ function normalizeRendererToolTimeoutMs(timeoutMs: number | undefined): number {
 }
 
 /**
+ * 判断工具结果是否允许 runtime 进入下一轮续跑。
+ * @param result - 工具执行结果
+ * @returns 是否继续工具续轮
+ */
+function shouldContinueAfterToolResult(result: AIToolExecutionResult): boolean {
+  return result.status !== 'awaiting_user_input' && result.status !== 'cancelled';
+}
+
+/**
+ * 判断工具结果是否应停止继续消费当前模型流。
+ * @param result - 工具执行结果
+ * @returns 是否停止当前模型流
+ */
+function shouldStopStreamAfterToolResult(result: AIToolExecutionResult): boolean {
+  return result.status === 'awaiting_user_input' || result.status === 'cancelled';
+}
+
+/**
  * 执行 renderer 本地工具，并把异常或超时转换为工具失败结果。
  * @param executeRendererTool - renderer 工具执行器
  * @param input - renderer 工具输入
@@ -601,6 +619,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
     let usage: AIUsage | undefined;
     let finishReason: AIStreamFinishReason | undefined;
     let shouldContinueAfterExecutedTool = false;
+    let shouldStopStreamAfterExecutedTool = false;
     const rendererToolTimeoutMs = normalizeRendererToolTimeoutMs(dependencies.rendererToolTimeoutMs);
     for await (const rawChunk of result.stream as AsyncIterable<unknown>) {
       const chunk = toRuntimeStreamChunk(rawChunk);
@@ -645,8 +664,10 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
             toolName: chunk.toolName,
             result: toolResult
           });
-          shouldContinueAfterExecutedTool = toolResult.status !== 'awaiting_user_input';
+          shouldContinueAfterExecutedTool = shouldContinueAfterToolResult(toolResult);
+          shouldStopStreamAfterExecutedTool = shouldStopStreamAfterToolResult(toolResult);
           await updateAssistant(assistantMessage);
+          if (shouldStopStreamAfterExecutedTool) break;
         } else if (dependencies.executeRendererTool && isRendererManagedTool(runtime, chunk.toolName)) {
           const toolResult = await executeRendererToolSafely(dependencies.executeRendererTool, toolExecutionInput, rendererToolTimeoutMs);
           appendToolResult(assistantMessage, {
@@ -655,8 +676,10 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
             toolName: chunk.toolName,
             result: toolResult
           });
-          shouldContinueAfterExecutedTool = toolResult.status !== 'awaiting_user_input';
+          shouldContinueAfterExecutedTool = shouldContinueAfterToolResult(toolResult);
+          shouldStopStreamAfterExecutedTool = shouldStopStreamAfterToolResult(toolResult);
           await updateAssistant(assistantMessage);
+          if (shouldStopStreamAfterExecutedTool) break;
         }
       } else if (chunk.type === 'tool-result') {
         appendToolResult(assistantMessage, chunk);
@@ -670,6 +693,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
     }
 
     const shouldContinue = finishReason === 'tool-calls' && shouldContinueAfterExecutedTool;
-    return shouldContinue ? { usage, shouldContinue } : { usage };
+    if (shouldContinue) return { usage, shouldContinue };
+    return usage ? { usage } : {};
   };
 }

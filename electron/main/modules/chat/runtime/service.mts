@@ -138,7 +138,7 @@ interface PendingRuntimeConfirmationRequest {
   /** 拒绝确认请求。 */
   reject: (error: Error) => void;
   /** 请求超时定时器。 */
-  timeoutId: ReturnType<typeof setTimeout>;
+  timeoutId?: ReturnType<typeof setTimeout>;
 }
 
 /** 等待 renderer 回传的通用 bridge 请求。 */
@@ -418,6 +418,17 @@ function normalizeContinuationMessages(input: ChatRuntimeContinueInput): ChatMes
     ...message,
     sessionId: message.sessionId ?? input.sessionId
   }));
+}
+
+/**
+ * 补齐续跑 assistant 的创建时间。
+ * @param message - assistant 消息
+ * @param fallbackCreatedAt - 兜底创建时间
+ */
+function ensureRuntimeMessageCreatedAt(message: ChatMessageRecord, fallbackCreatedAt: string): void {
+  if (!message.createdAt) {
+    message.createdAt = fallbackCreatedAt;
+  }
 }
 
 /**
@@ -894,7 +905,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     for (const [key, request] of pendingConfirmationRequests) {
       if (!key.startsWith(`${runtimeId}:`)) continue;
 
-      clearTimeout(request.timeoutId);
+      if (request.timeoutId !== undefined) clearTimeout(request.timeoutId);
       request.reject(new ChatRuntimeError('CONFIRMATION_DISMISSED', reason));
       pendingConfirmationRequests.delete(key);
     }
@@ -914,11 +925,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     const confirmationId = input.confirmationId ?? `confirmation-${nanoid()}`;
     const key = createConfirmationRequestKey(input.runtimeId, confirmationId);
     return new Promise<ChatRuntimeConfirmationDecision>((resolve, reject) => {
-      const timeoutId = setTimeout((): void => {
-        pendingConfirmationRequests.delete(key);
-        resolve({ approved: false });
-      }, RUNTIME_RENDERER_REQUEST_TIMEOUT_MS);
-      pendingConfirmationRequests.set(key, { resolve, reject, timeoutId });
+      pendingConfirmationRequests.set(key, { resolve, reject });
       emit('chat:runtime:confirmation-requested', {
         runtimeId: runtime.runtimeId,
         sessionId: runtime.sessionId,
@@ -1450,6 +1457,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
       const runtime = createContinuationRuntime(input, runtimeId);
       activeRuntimes.set(runtimeId, runtime);
+      ensureRuntimeMessageCreatedAt(assistantMessage, now());
       assistantMessage.runtimeId = runtimeId;
       assistantMessage.agentId = runtime.agentId;
       assistantMessage.parentRuntimeId = runtime.parentRuntimeId;
@@ -1507,6 +1515,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
       const runtime = createUserChoiceRuntime(input, runtimeId);
       activeRuntimes.set(runtimeId, runtime);
+      ensureRuntimeMessageCreatedAt(assistantMessage, now());
       assistantMessage.runtimeId = runtimeId;
       assistantMessage.agentId = runtime.agentId;
       assistantMessage.parentRuntimeId = runtime.parentRuntimeId;
@@ -1561,7 +1570,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       if (!pendingRequest) return;
 
       pendingConfirmationRequests.delete(key);
-      clearTimeout(pendingRequest.timeoutId);
+      if (pendingRequest.timeoutId !== undefined) clearTimeout(pendingRequest.timeoutId);
       pendingRequest.resolve(input.decision);
     },
 

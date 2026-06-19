@@ -734,7 +734,7 @@ describe('chat runtime service shell', (): void => {
     await expect(decisionPromise).resolves.toEqual({ approved: true, grantScope: 'session' });
   });
 
-  it('times out renderer confirmation requests when no decision is submitted', async (): Promise<void> => {
+  it('keeps renderer confirmation requests pending until a decision is submitted', async (): Promise<void> => {
     vi.useFakeTimers();
     try {
       const collector = createEventCollector();
@@ -760,16 +760,22 @@ describe('chat runtime service shell', (): void => {
         }
       });
 
-      await vi.advanceTimersByTimeAsync(30_000);
+      let settled = false;
+      decisionPromise.then(() => {
+        settled = true;
+      });
 
-      await expect(decisionPromise).resolves.toEqual({ approved: false });
-      expect(() =>
-        service.submitConfirmation({
-          runtimeId: result.runtimeId,
-          confirmationId: 'confirmation-timeout',
-          decision: { approved: true }
-        })
-      ).not.toThrow();
+      await vi.advanceTimersByTimeAsync(30_000);
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+      service.submitConfirmation({
+        runtimeId: result.runtimeId,
+        confirmationId: 'confirmation-timeout',
+        decision: { approved: true }
+      });
+
+      await expect(decisionPromise).resolves.toEqual({ approved: true });
     } finally {
       vi.useRealTimers();
     }
@@ -1063,7 +1069,7 @@ describe('chat runtime service shell', (): void => {
           }
         }
       ],
-      createdAt: '2026-06-19T00:00:01.000Z',
+      createdAt: '',
       finished: false,
       loading: false
     };
@@ -1105,6 +1111,7 @@ describe('chat runtime service shell', (): void => {
       id: 'assistant-1',
       runtimeId: result.runtimeId,
       content: 'continued answer',
+      createdAt: '2026-06-19T00:00:02.000Z',
       finished: true
     });
     expect(collector.events).toContainEqual(

@@ -25,12 +25,38 @@ interface PendingConfirmation {
  */
 export function createChatConfirmationController() {
   let pendingConfirmation: PendingConfirmation | null = null;
+  const queuedConfirmations: PendingConfirmation[] = [];
 
   /** 当前等待确认的请求，供 UI 消费渲染底部弹出卡片 */
   const currentConfirmationRequest: Ref<AIToolConfirmationRequest | null> = ref(null);
 
   /** 当前等待确认的确认项 ID */
   const currentConfirmationId: Ref<string | null> = ref(null);
+
+  /**
+   * 展示当前确认项。
+   * @param confirmation - 待展示确认项
+   */
+  function activateConfirmation(confirmation: PendingConfirmation): void {
+    pendingConfirmation = confirmation;
+    currentConfirmationRequest.value = confirmation.request;
+    currentConfirmationId.value = confirmation.id;
+  }
+
+  /**
+   * 展示下一项排队确认。
+   */
+  function activateNextConfirmation(): void {
+    const nextConfirmation = queuedConfirmations.shift();
+    if (!nextConfirmation) {
+      pendingConfirmation = null;
+      currentConfirmationRequest.value = null;
+      currentConfirmationId.value = null;
+      return;
+    }
+
+    activateConfirmation(nextConfirmation);
+  }
 
   /**
    * 结束当前挂起确认项。
@@ -42,9 +68,7 @@ export function createChatConfirmationController() {
     }
 
     const current = pendingConfirmation;
-    pendingConfirmation = null;
-    currentConfirmationRequest.value = null;
-    currentConfirmationId.value = null;
+    activateNextConfirmation();
     current.resolve(decision);
   }
 
@@ -54,14 +78,16 @@ export function createChatConfirmationController() {
    * @returns 用户是否确认
    */
   async function requestConfirmation(request: AIToolConfirmationRequest): Promise<AIToolConfirmationDecision> {
-    expirePendingConfirmation();
-
     const confirmationId = nanoid();
-    currentConfirmationRequest.value = request;
-    currentConfirmationId.value = confirmationId;
 
     return new Promise<AIToolConfirmationDecision>((resolve) => {
-      pendingConfirmation = { id: confirmationId, request, resolve };
+      const confirmation: PendingConfirmation = { id: confirmationId, request, resolve };
+      if (!pendingConfirmation) {
+        activateConfirmation(confirmation);
+        return;
+      }
+
+      queuedConfirmations.push(confirmation);
     });
   }
 
@@ -94,11 +120,18 @@ export function createChatConfirmationController() {
    * 让当前挂起确认项过期。
    */
   function expirePendingConfirmation(): void {
-    if (!pendingConfirmation) {
-      return;
+    if (pendingConfirmation) {
+      const current = pendingConfirmation;
+      pendingConfirmation = null;
+      currentConfirmationRequest.value = null;
+      currentConfirmationId.value = null;
+      current.resolve({ approved: false });
     }
 
-    settlePendingConfirmation({ approved: false });
+    while (queuedConfirmations.length > 0) {
+      const queuedConfirmation = queuedConfirmations.shift();
+      queuedConfirmation?.resolve({ approved: false });
+    }
   }
 
   /**

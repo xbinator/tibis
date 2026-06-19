@@ -245,6 +245,37 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('keeps runtime messages in display order when events arrive out of order', (): void => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    scope.run(() => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      listeners.messageCreated?.({
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        message: createMessage({ id: 'assistant-1', runtimeId: 'runtime-1', loading: true, finished: false })
+      });
+      listeners.messageCreated?.({
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        message: createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ type: 'text', text: 'hello' }], runtimeId: 'runtime-1' })
+      });
+
+      expect(messages.value.map((message) => message.id)).toEqual(['user-1', 'assistant-1']);
+    });
+
+    scope.stop();
+  });
+
   it('removes a local runtime message when the main process deletes it', (): void => {
     const messages = ref<Message[]>([
       createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ type: 'text', text: 'hello' }] }) as Message,

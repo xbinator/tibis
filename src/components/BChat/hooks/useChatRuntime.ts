@@ -116,6 +116,39 @@ function isCurrentRuntimeEvent(event: ChatRuntimeEventMap[keyof ChatRuntimeEvent
 }
 
 /**
+ * 获取同一时间戳下的消息展示顺序。
+ * @param role - 消息角色
+ * @returns 展示顺序权重
+ */
+function getRuntimeMessageRoleOrder(role: Message['role']): number {
+  const roleOrder: Record<Message['role'], number> = {
+    system: 0,
+    compression: 1,
+    user: 2,
+    assistant: 3,
+    interrupt: 4,
+    error: 5
+  };
+
+  return roleOrder[role];
+}
+
+/**
+ * 按 ChatRuntime 展示顺序比较消息。
+ * @param left - 左侧消息
+ * @param right - 右侧消息
+ * @returns 排序比较值
+ */
+function compareRuntimeMessages(left: Message, right: Message): number {
+  if (left.createdAt !== right.createdAt) return left.createdAt.localeCompare(right.createdAt);
+
+  const roleOrderDelta = getRuntimeMessageRoleOrder(left.role) - getRuntimeMessageRoleOrder(right.role);
+  if (roleOrderDelta !== 0) return roleOrderDelta;
+
+  return left.id.localeCompare(right.id);
+}
+
+/**
  * 将 runtime 消息写入本地列表。
  * @param messages - 本地消息列表
  * @param nextMessage - runtime 消息
@@ -124,10 +157,12 @@ function upsertRuntimeMessage(messages: Message[], nextMessage: Message): void {
   const index = messages.findIndex((message) => message.id === nextMessage.id);
   if (index === -1) {
     messages.push(nextMessage);
+    messages.sort(compareRuntimeMessages);
     return;
   }
 
   messages.splice(index, 1, { ...messages[index], ...nextMessage });
+  messages.sort(compareRuntimeMessages);
 }
 
 /**
