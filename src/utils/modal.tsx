@@ -223,7 +223,11 @@ export class Modal {
     return RenderAlertModal({ content, title, confirmText });
   }
 
-  static confirm(title: string, content: string | VNode, options?: { confirmText?: string; cancelText?: string; width?: string | number }): Promise<[boolean, boolean]> {
+  static confirm(
+    title: string,
+    content: string | VNode,
+    options?: { confirmText?: string; cancelText?: string; width?: string | number }
+  ): Promise<[boolean, boolean]> {
     return RenderConfirmModal({ content, title, ...options });
   }
 
