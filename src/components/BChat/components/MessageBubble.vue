@@ -1,6 +1,6 @@
 <template>
   <div :class="name">
-    <BBubble :show-container="showContainer" :placement="bubblePlacement" :loading="message.loading" :size="message.role === 'user' ? 'auto' : 'fill'">
+    <BBubble :show-container="showContainer" :placement="bubblePlacement" :loading="message.loading" :size="bubbleSize">
       <template v-if="showHeader" #header>
         <div :class="bem('header')">
           <div v-if="imageFiles.length" :class="bem('images')">
@@ -23,25 +23,24 @@
       </template>
 
       <div :class="bem('parts')">
-        <BubblePartCompression v-if="isCompressionMessage || isInterruptMessage" :message="message" />
+        <BubblePartStatus v-if="showStatusPart" :message="message" />
 
-        <!-- 非压缩消息才渲染各片段，压缩消息仅显示 BubblePartCompression -->
-        <template v-if="!isCompressionMessage">
-          <template v-for="(item, index) in renderableParts" :key="`${item.type}-${index}`">
-            <BubblePartUserInput v-if="isUserMessage" :part="item as ChatMessageTextPart" />
+        <BubblePartUserInput v-else-if="isUserMessage" :part="userInputPart" />
 
-            <BubblePartText v-else-if="item.type === 'text' || item.type === 'error'" :item="item" :part="item" />
+        <template v-else>
+          <template v-for="item in renderItems" :key="item.key">
+            <BubblePartText v-if="item.kind === 'text'" :part="item.part" />
 
-            <BubblePartThinking v-else-if="item.type === 'thinking'" :part="item" />
+            <BubblePartThinking v-else-if="item.kind === 'thinking'" :part="item.part" />
 
             <QuestionCard
-              v-else-if="!disabled && isAwaitingUserChoiceResult(item)"
-              :question="item.result.data"
+              v-else-if="item.kind === 'question'"
+              :question="item.question"
               :disabled="disabled"
               @submit-choice="$emit('user-choice-submit', $event)"
             />
 
-            <BubblePartTool v-else-if="item.type === 'tool'" :part="item" />
+            <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
           </template>
         </template>
       </div>
@@ -68,7 +67,15 @@
  * @description 聊天气泡组件，按结构化消息片段渲染文本、思考、工具调用和工具结果。
  */
 import type { Message } from '../utils/types';
-import type { AIUserChoiceAnswerData, ChatMessageTextPart } from 'types/chat';
+import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
+import type {
+  AIUserChoiceAnswerData,
+  ChatMessageErrorPart,
+  ChatMessagePart,
+  ChatMessageTextPart,
+  ChatMessageThinkingPart,
+  ChatMessageToolPart
+} from 'types/chat';
 import { computed } from 'vue';
 import BBubble from '@/components/BBubble/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -77,7 +84,7 @@ import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
-import BubblePartCompression from './MessageBubble/BubblePartCompression.vue';
+import BubblePartStatus from './MessageBubble/BubblePartStatus.vue';
 import BubblePartText from './MessageBubble/BubblePartText.vue';
 import BubblePartThinking from './MessageBubble/BubblePartThinking.vue';
 import BubblePartTool from './MessageBubble/BubblePartTool.vue';
@@ -106,6 +113,22 @@ defineEmits<{
   (e: 'rollback', message: Message): void;
 }>();
 
+/** 正文渲染条目。 */
+type MessageBubbleRenderItem =
+  | { key: string; kind: 'text'; part: ChatMessageTextPart | ChatMessageErrorPart }
+  | { key: string; kind: 'thinking'; part: ChatMessageThinkingPart }
+  | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
+  | { key: string; kind: 'tool'; part: ChatMessageToolPart };
+
+/**
+ * 判断消息片段是否为文本或错误片段。
+ * @param part - 消息片段
+ * @returns 是否为文本或错误片段
+ */
+function isTextLikePart(part: ChatMessagePart): part is ChatMessageTextPart | ChatMessageErrorPart {
+  return part.type === 'text' || part.type === 'error';
+}
+
 /** 图片文件列表（有 url 或 path 的图片类型文件） */
 const imageFiles = computed(() => props.message.files?.filter((file) => file.type === 'image' && (file.url || file.path)) ?? []);
 /** 是否为单图模式 */
@@ -122,15 +145,21 @@ const isCompressionMessage = computed(() => props.message.role === 'compression'
 const isInterruptMessage = computed(() => props.message.role === 'interrupt');
 /** 气泡位置：助手和错误消息靠左，用户消息靠右 */
 const bubblePlacement = computed(() => (isUserMessage.value ? 'right' : 'left'));
+/** 气泡尺寸。 */
+const bubbleSize = computed(() => (isUserMessage.value ? 'auto' : 'fill'));
 /** 是否显示头部（用户消息且有文件时显示） */
 const showHeader = computed(() => isUserMessage.value && (imageFiles.value.length || otherFiles.value.length));
 /** 是否显示气泡容器（用户消息且有文件时显示） */
 const showContainer = computed(() => isCompressionMessage.value || isInterruptMessage.value || !!props.message.parts?.length);
+/** 是否显示状态正文。 */
+const showStatusPart = computed(() => isCompressionMessage.value || isInterruptMessage.value);
 /** 是否显示助手工具栏 */
 const showAssistantToolbar = computed(() => props.message.finished === true && isAssistantMessage.value);
 
 /** 是否显示回退按钮（仅在后面还有消息时显示） */
 const showRollback = computed(() => isUserMessage.value && props.message.finished === true && props.canRollback?.(props.message));
+/** 用户输入按原始 content 展示，file parts 仅用于历史快照与模型上下文。 */
+const userInputPart = computed<ChatMessageTextPart>(() => ({ type: 'text', text: props.message.content }));
 
 /** 图片预览条目列表 */
 const imagePreviewItems = computed<ImagePreviewItem[]>(() =>
@@ -141,10 +170,18 @@ const imagePreviewItems = computed<ImagePreviewItem[]>(() =>
   }))
 );
 
-/**
- * 过滤后的消息片段。排除已移至底部弹窗的 confirmation 片段。
- */
-const renderableParts = computed(() => props.message.parts.filter((p) => p.type !== 'confirmation'));
+/** 正文渲染条目。 */
+const renderItems = computed<MessageBubbleRenderItem[]>(() =>
+  props.message.parts.flatMap((part, index): MessageBubbleRenderItem[] => {
+    const key = `${part.type}-${index}`;
+    if (part.type === 'confirmation') return [];
+    if (isTextLikePart(part)) return [{ key, kind: 'text', part }];
+    if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
+    if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
+    if (part.type === 'tool') return [{ key, kind: 'tool', part }];
+    return [];
+  })
+);
 
 /**
  * 打开图片预览。

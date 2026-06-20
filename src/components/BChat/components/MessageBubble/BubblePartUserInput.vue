@@ -38,6 +38,7 @@ import { MESSAGE_REF_PATTERN } from '../../utils/fileReferenceContext';
 defineOptions({ name: 'BubblePartUserInput' });
 
 interface Props {
+  /** 用户输入消息片段 */
   part: ChatMessageTextPart;
 }
 
@@ -71,7 +72,7 @@ type Segment = TextSegment | FileRefSegment;
  * 将原始文本解析为纯文本与文件引用片段的交替序列。
  * 匹配格式：{{#filePath startLine-endLine}}
  */
-function parseSegments(text: string): Segment[] {
+function parseTextSegments(text: string): Segment[] {
   const result: Segment[] = [];
   const pattern = new RegExp(MESSAGE_REF_PATTERN.source, 'g');
   let lastIndex = 0;
@@ -136,7 +137,7 @@ function onChipClick(segment: FileRefSegment): void {
 
 // ─── 计算属性 ────────────────────────────────────────────────────────────────
 
-const segments = computed<Segment[]>(() => parseSegments(props.part.text ?? ''));
+const segments = computed<Segment[]>(() => parseTextSegments(props.part.text ?? ''));
 </script>
 
 <style scoped lang="less">
@@ -145,10 +146,10 @@ const segments = computed<Segment[]>(() => parseSegments(props.part.text ?? ''))
 .message-bubble-user-input {
   word-break: normal;
   white-space: pre-wrap;
+}
 
-  &__text {
-    word-break: normal;
-    white-space: pre-wrap;
-  }
+.message-bubble-user-input__text {
+  word-break: normal;
+  white-space: pre-wrap;
 }
 </style>

@@ -1,22 +1,22 @@
 <!--
-  @file BubblePartCompression.vue
-  @description 压缩消息片段，展示上下文压缩边界状态节点。
+  @file BubblePartStatus.vue
+  @description 聊天气泡状态片段，展示上下文压缩或中断状态节点。
 -->
 <template>
-  <div class="compression-node" :class="`compression-node--${statusClassName}`">
-    <div class="compression-node__rail">
-      <span class="compression-node__line"></span>
-      <span class="compression-node__pill">{{ statusLabel }}</span>
-      <span class="compression-node__line"></span>
+  <div class="status-node" :class="`status-node--${statusClassName}`">
+    <div class="status-node__rail">
+      <span class="status-node__line"></span>
+      <span class="status-node__pill">{{ statusLabel }}</span>
+      <span class="status-node__line"></span>
     </div>
-    <div v-if="errorText" class="compression-node__error">{{ errorText }}</div>
+    <div v-if="errorText" class="status-node__error">{{ errorText }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
 /**
- * @file BubblePartCompression.vue
- * @description 压缩消息片段，展示上下文压缩边界状态节点。
+ * @file BubblePartStatus.vue
+ * @description 聊天气泡状态片段，展示上下文压缩或中断状态节点。
  */
 import type { Message } from '../../utils/types';
 import { computed } from 'vue';
@@ -25,14 +25,16 @@ import { computed } from 'vue';
  * 组件属性。
  */
 interface Props {
-  /** 压缩消息 */
+  /** 状态消息 */
   message: Message;
 }
+
+defineOptions({ name: 'BubblePartStatus' });
 
 const props = defineProps<Props>();
 
 /**
- * 压缩状态文案。
+ * 状态文案。
  */
 const statusLabel = computed<string>(() => {
   if (props.message.role === 'interrupt') {
@@ -55,7 +57,7 @@ const statusLabel = computed<string>(() => {
 });
 
 /**
- * 压缩状态样式类名。
+ * 状态样式类名。
  */
 const statusClassName = computed<string>(() => {
   if (props.message.role === 'interrupt') {
@@ -74,7 +76,7 @@ const errorText = computed<string | undefined>(() => {
 </script>
 
 <style scoped lang="less">
-.compression-node {
+.status-node {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -83,21 +85,21 @@ const errorText = computed<string | undefined>(() => {
   padding: 6px 0;
 }
 
-.compression-node__rail {
+.status-node__rail {
   display: flex;
   gap: 10px;
   align-items: center;
   width: 100%;
 }
 
-.compression-node__line {
+.status-node__line {
   flex: 1;
   height: 1px;
   background: var(--border-primary);
   opacity: 0.75;
 }
 
-.compression-node__pill {
+.status-node__pill {
   padding: 4px 10px;
   font-size: 11px;
   line-height: 1;
@@ -107,7 +109,7 @@ const errorText = computed<string | undefined>(() => {
   border-radius: 999px;
 }
 
-.compression-node__error {
+.status-node__error {
   max-width: 420px;
   font-size: 12px;
   line-height: 1.5;
@@ -115,22 +117,22 @@ const errorText = computed<string | undefined>(() => {
   text-align: center;
 }
 
-.compression-node--pending {
-  .compression-node__pill {
+.status-node--pending {
+  .status-node__pill {
     color: var(--text-primary);
   }
 }
 
-.compression-node--cancelled {
-  .compression-node__pill {
+.status-node--cancelled {
+  .status-node__pill {
     color: var(--text-tertiary);
     background: var(--bg-hover);
     border-color: var(--border-primary);
   }
 }
 
-.compression-node--failed {
-  .compression-node__pill {
+.status-node--failed {
+  .status-node__pill {
     color: var(--color-warning);
     background: var(--color-warning-bg);
     border-color: var(--color-warning-border);
