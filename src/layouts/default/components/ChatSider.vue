@@ -39,7 +39,6 @@
       </div>
 
       <BChat
-        v-if="initialized"
         :session-id="settingStore.chatSidebarActiveSessionId"
         @draft-session-created="handleCreateDraftSession"
         @session-created="handleSessionCreated"
@@ -53,13 +52,13 @@
 
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
 import BChat from '@/components/BChat/index.vue';
 import { useSettingStore } from '@/stores/ui/setting';
 import { createNamespace } from '@/utils/namespace';
-import { useChatSiderSession } from '../hooks/useChatSiderSession';
+import { useChatSession } from '../hooks/useChatSession';
 
 const [, bem] = createNamespace('chat-sider', '');
 
@@ -69,15 +68,13 @@ const settingStore = useSettingStore();
 const chatLoading = ref(false);
 
 const {
-  initialized,
   currentSession,
   loading: sessionLoading,
-  initializeActiveSession,
   switchSession,
   createDraftSession,
   handleDeletedSession,
   setCurrentSession
-} = useChatSiderSession({
+} = useChatSession({
   isChatLoading: () => chatLoading.value
 });
 
@@ -168,10 +165,6 @@ watch(
     }
   }
 );
-
-onMounted(() => {
-  Promise.resolve(initializeActiveSession()).catch(() => undefined);
-});
 
 onUnmounted(() => {
   settingStore.setChatSidebarExpanded(false);
