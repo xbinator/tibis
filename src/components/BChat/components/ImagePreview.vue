@@ -99,7 +99,7 @@ function handleRemoveImage(imageId: string): void {
   width: 100%;
   height: 100%;
   cursor: pointer;
-  object-fit: contain;
+  object-fit: cover;
   border-radius: 8px;
 }
 
