@@ -9,19 +9,9 @@ export interface LineRange {
 }
 
 /**
- * 渲染行号范围信息
- */
-export interface RenderLineRange {
-  /** 渲染时的起始行号（1-based），0 表示无行号 */
-  renderStartLine?: number;
-  /** 渲染时的结束行号（1-based），等于 renderStartLine 时表示单行 */
-  renderEndLine?: number;
-}
-
-/**
  * 文件位置信息
  */
-export interface FileLocation extends LineRange, RenderLineRange {
+export interface FileLocation extends LineRange {
   /** 完整文件路径（可用时），未保存的引用则为 `null` */
   filePath: string | null;
   /** Chip 内显示的展示名称 */
@@ -39,7 +29,7 @@ export interface FileReferenceChip extends FileLocation {
 /**
  * 文件引用解析结果
  */
-export interface FileReference extends LineRange, RenderLineRange {
+export interface FileReference extends LineRange {
   /** 原始文件引用令牌 */
   token: string;
   /** 文件路径 */

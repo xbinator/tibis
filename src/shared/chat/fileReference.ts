@@ -24,10 +24,6 @@ export interface ChatFileReferenceInsertPayload {
   startLine: number;
   /** 结束行号（1-based），等于 startLine 时表示单行，0 仅与 startLine=0 配对 */
   endLine: number;
-  /** 渲染视图中的起始行号（1-based），0 表示无行号 */
-  renderStartLine: number;
-  /** 渲染视图中的结束行号（1-based），等于 renderStartLine 时表示单行，0 仅与 renderStartLine=0 配对 */
-  renderEndLine: number;
 }
 
 function isValidLineRange(start: number, end: number): boolean {
@@ -37,15 +33,9 @@ function isValidLineRange(start: number, end: number): boolean {
 export function isChatFileReferenceInsertPayload(payload: unknown): payload is ChatFileReferenceInsertPayload {
   if (!isObject(payload) || isArray(payload)) return false;
 
-  const { filePath, fileName, startLine, endLine, renderStartLine, renderEndLine } = payload as ChatFileReferenceInsertPayload;
+  const { filePath, fileName, startLine, endLine } = payload as ChatFileReferenceInsertPayload;
 
-  return (
-    ((isString(filePath) && filePath.length > 0) || isNull(filePath)) &&
-    isString(fileName) &&
-    fileName.length > 0 &&
-    isValidLineRange(startLine, endLine) &&
-    isValidLineRange(renderStartLine, renderEndLine)
-  );
+  return ((isString(filePath) && filePath.length > 0) || isNull(filePath)) && isString(fileName) && fileName.length > 0 && isValidLineRange(startLine, endLine);
 }
 /**
  * 发出聊天输入框文件引用插入事件。

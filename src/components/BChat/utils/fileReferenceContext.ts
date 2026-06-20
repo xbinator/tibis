@@ -10,8 +10,8 @@ import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 
 // ─── 常量定义 ────────────────────────────────────────────────────────────────
 
-/** 消息中的文件引用正则表达式（含双花括号），行号可选，无行号时表示引用整个文件。 */
-export const MESSAGE_REF_PATTERN = /\{\{#(\S+)(?:\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?)?\}\}/g;
+/** 消息中的文件引用正则表达式（含双花括号），行号可选，兼容历史渲染行号片段。 */
+export const MESSAGE_REF_PATTERN = /\{\{#(\S+)(?:\s+(\d+)-(\d+)(?:\|\d+-\d+)?)?\}\}/g;
 
 // ─── 内部工具函数 ────────────────────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ export const MESSAGE_REF_PATTERN = /\{\{#(\S+)(?:\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))
  * @returns 文件引用解析结果，文件不存在时返回空内容
  */
 export async function extractFileReferenceLines(token: string, references: string[]): Promise<FileReference> {
-  const [rawPath, startLine, endLine, renderStartLine, renderEndLine] = references;
+  const [rawPath, startLine, endLine] = references;
   const path = rawPath ? decodeFileReferencePath(rawPath) : rawPath;
 
   if (!path) return { token, path: '', startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };
@@ -61,8 +61,6 @@ export async function extractFileReferenceLines(token: string, references: strin
     fullContent: storedFile.content,
     path,
     startLine: _startLine,
-    endLine: _endLine,
-    renderStartLine: renderStartLine ? parseInt(renderStartLine, 10) : _startLine,
-    renderEndLine: renderEndLine ? parseInt(renderEndLine, 10) : _endLine
+    endLine: _endLine
   };
 }

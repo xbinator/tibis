@@ -28,4 +28,30 @@ describe('parseFileReferenceToken', (): void => {
     expect(matches).toHaveLength(1);
     expect(matches[0]?.[1]).toBe('[](%2Fworkspace%2FMy%20Notes%2Fnote.md)');
   });
+
+  it('parses source line ranges without render line fields', (): void => {
+    const parsed = parseFileReferenceToken('#[](%2Fworkspace%2Fnote.md) 3-5');
+
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        startLine: 3,
+        endLine: 5
+      })
+    );
+    expect(parsed).not.toHaveProperty('renderStartLine');
+    expect(parsed).not.toHaveProperty('renderEndLine');
+  });
+
+  it('ignores legacy render line ranges when parsing file references', (): void => {
+    const parsed = parseFileReferenceToken('#[](%2Fworkspace%2Fnote.md) 3-5|8-10');
+
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        startLine: 3,
+        endLine: 5
+      })
+    );
+    expect(parsed).not.toHaveProperty('renderStartLine');
+    expect(parsed).not.toHaveProperty('renderEndLine');
+  });
 });

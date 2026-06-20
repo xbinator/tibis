@@ -21,10 +21,6 @@ export interface ParsedFileReference {
   startLine: number;
   /** 源码结束行号（1-based） */
   endLine: number;
-  /** 渲染起始行号（1-based） */
-  renderStartLine: number;
-  /** 渲染结束行号（1-based） */
-  renderEndLine: number;
   /** 展示用源码行号文本 */
   lineText: string;
   /** 是否为未保存草稿引用 */
@@ -49,8 +45,8 @@ export interface FileReferenceNavigationTarget {
   endLine: number;
 }
 
-/** 文件引用 token 正则表达式。行号为可选，无行号时表示引用整个文件。 */
-const FILE_REFERENCE_TOKEN_PATTERN = /^#(\S+)(?:\s+(\d+)-(\d+)(?:\|(\d+)-(\d+))?)?$/;
+/** 文件引用 token 正则表达式。行号为可选，兼容历史渲染行号片段。 */
+const FILE_REFERENCE_TOKEN_PATTERN = /^#(\S+)(?:\s+(\d+)-(\d+)(?:\|\d+-\d+)?)?$/;
 /** 编码路径 token 片段，形如 [](%2Fworkspace%2Fnote.md)。 */
 const ENCODED_PATH_TOKEN_PATTERN = /^\[\]\((.*)\)$/;
 
@@ -100,7 +96,7 @@ export function parseFileReferenceToken(tokenContent: string): ParsedFileReferen
     return null;
   }
 
-  const [, rawPathText, startLineText, endLineText, renderStartLineText, renderEndLineText] = matched;
+  const [, rawPathText, startLineText, endLineText] = matched;
   const rawPath = decodeFileReferencePath(rawPathText.trim());
   const unsavedReference = parseUnsavedPath(rawPath);
   const hasLineNumber = startLineText !== undefined;
@@ -114,8 +110,6 @@ export function parseFileReferenceToken(tokenContent: string): ParsedFileReferen
     fileName: unsavedReference?.fileName ?? extractFileName(rawPath),
     startLine,
     endLine,
-    renderStartLine: renderStartLineText ? Number(renderStartLineText) : startLine,
-    renderEndLine: renderEndLineText ? Number(renderEndLineText) : endLine,
     lineText: hasLineNumber ? `${startLine}-${endLine}` : '',
     isUnsaved: Boolean(unsavedReference)
   };

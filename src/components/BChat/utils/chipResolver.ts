@@ -25,7 +25,6 @@ function toNavigationTarget(parsed: ParsedFileReference): FileReferenceNavigatio
 
 /**
  * 文件引用 Chip Widget，由 chipResolver 返回。
- * 当前统一显示 `fileName:renderStart-renderEnd`，缺失渲染行号时回退到源码行号。
  */
 class FileRefWidget extends WidgetType {
   constructor(private readonly location: ParsedFileReference, private readonly onOpenFile: (target: FileReferenceNavigationTarget) => void) {
@@ -36,9 +35,7 @@ class FileRefWidget extends WidgetType {
     return (
       this.location.fileName === other.location.fileName &&
       this.location.startLine === other.location.startLine &&
-      this.location.endLine === other.location.endLine &&
-      this.location.renderStartLine === other.location.renderStartLine &&
-      this.location.renderEndLine === other.location.renderEndLine
+      this.location.endLine === other.location.endLine
     );
   }
 
@@ -46,8 +43,8 @@ class FileRefWidget extends WidgetType {
     const presentation = createFileRefChipPresentation({
       title: this.location.filePath ?? this.location.fileName,
       fileName: this.location.fileName,
-      startLine: this.location.renderStartLine,
-      endLine: this.location.renderEndLine
+      startLine: this.location.startLine,
+      endLine: this.location.endLine
     });
     const chip = createFileRefChipElement(presentation);
 

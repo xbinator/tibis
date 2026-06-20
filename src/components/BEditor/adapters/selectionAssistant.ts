@@ -53,8 +53,6 @@ export interface SelectionReferencePayload {
   fileName: string;
   startLine: number;
   endLine: number;
-  renderStartLine: number;
-  renderEndLine: number;
 }
 
 /**

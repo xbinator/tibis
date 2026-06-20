@@ -617,6 +617,10 @@ defineExpose({
       }
     }
 
+    code .ai-selection-highlight {
+      box-shadow: 0 0.4em 0 0 var(--selection-bg), 0 -0.4em 0 0 var(--selection-bg);
+    }
+
     .b-markdown-table.ai-selection-highlight {
       background: transparent;
       border-radius: 8px;

@@ -362,7 +362,7 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
     },
 
     /**
-     * 构造文件引用载荷，计算源码行号与渲染行号。
+     * 构造文件引用载荷，计算源码行号。
      * 优先使用基于 Markdown 原文的精确行号映射，回退到基于 ProseMirror node attr 的方案。
      * @param range - 当前选区范围
      * @returns 文件引用载荷，无法构造时返回 null
@@ -375,12 +375,6 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
         getSelectionSourceLineRangeFromMarkdown(editor.state.doc, range.from, range.to, editorState.content || '') ||
         getSelectionSourceLineRange(editor.state.doc, range.from, range.to);
 
-      // 计算渲染行号（基于 ProseMirror 文档文本的换行符计数）
-      const textBeforeStart = editor.state.doc.textBetween(0, range.from, '\n', '\n');
-      const textBeforeEnd = editor.state.doc.textBetween(0, range.to, '\n', '\n');
-      const renderStartLine = textBeforeStart.split(/\r?\n/).length;
-      const renderEndLine = textBeforeEnd.split(/\r?\n/).length;
-
       const { id = '', ext = '', path: filePath, name: fileName } = editorState;
       const { startLine = 0, endLine = 0 } = sourceLineRange || {};
 
@@ -390,9 +384,7 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
         filePath: filePath || '',
         fileName,
         startLine,
-        endLine,
-        renderStartLine,
-        renderEndLine
+        endLine
       };
     },
 

@@ -69,7 +69,7 @@ type Segment = TextSegment | FileRefSegment;
 
 /**
  * 将原始文本解析为纯文本与文件引用片段的交替序列。
- * 匹配格式：{{#filePath startLine-endLine|renderStartLine-renderEndLine}}
+ * 匹配格式：{{#filePath startLine-endLine}}
  */
 function parseSegments(text: string): Segment[] {
   const result: Segment[] = [];

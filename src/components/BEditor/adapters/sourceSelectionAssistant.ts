@@ -310,7 +310,7 @@ export function createSourceSelectionAssistantAdapter(
 
     /**
      * 构造文件引用载荷。
-     * 基于源码文本直接计算行号，renderStartLine/renderEndLine 与 startLine/endLine 一致。
+     * 基于源码文本直接计算行号。
      * @param range - 当前选区范围
      * @returns 文件引用载荷
      */
@@ -331,10 +331,7 @@ export function createSourceSelectionAssistantAdapter(
         filePath: filePath || '',
         fileName,
         startLine,
-        endLine,
-        // source 模式下渲染行号与源码行号一致
-        renderStartLine: startLine,
-        renderEndLine: endLine
+        endLine
       };
     },
 
