@@ -310,17 +310,21 @@ watch(keyword, async (value) => {
   }
 });
 
-watch(visible, (value) => {
-  if (!value) {
-    keyword.value = '';
-    absolutePathCandidate.value = null;
-    urlCandidate.value = null;
-    pathSearchToken += 1;
-    return;
-  }
-  focusInput();
-  recentStore.ensureLoaded();
-});
+watch(
+  visible,
+  (value) => {
+    if (!value) {
+      keyword.value = '';
+      absolutePathCandidate.value = null;
+      urlCandidate.value = null;
+      pathSearchToken += 1;
+      return;
+    }
+    focusInput();
+    recentStore.ensureLoaded();
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>
