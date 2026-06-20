@@ -45,8 +45,24 @@ export interface FileReferenceNavigationTarget {
   endLine: number;
 }
 
+/**
+ * 文件引用 token 匹配结果。
+ */
+export interface FileReferenceTokenMatch {
+  /** 原始完整 token，含双花括号 */
+  token: string;
+  /** token 起始 offset */
+  start: number;
+  /** token 结束 offset */
+  end: number;
+  /** 结构化文件引用 */
+  reference: ParsedFileReference;
+}
+
 /** 文件引用 token 正则表达式。行号为可选，兼容历史渲染行号片段。 */
 const FILE_REFERENCE_TOKEN_PATTERN = /^#(\S+)(?:\s+(\d+)-(\d+)(?:\|\d+-\d+)?)?$/;
+/** 消息中的文件引用 token 正则表达式。 */
+export const FILE_REFERENCE_MESSAGE_TOKEN_PATTERN = /\{\{(#\S+(?:\s+\d+-\d+(?:\|\d+-\d+)?)?)\}\}/g;
 /** 编码路径 token 片段，形如 [](%2Fworkspace%2Fnote.md)。 */
 const ENCODED_PATH_TOKEN_PATTERN = /^\[\]\((.*)\)$/;
 
@@ -113,4 +129,26 @@ export function parseFileReferenceToken(tokenContent: string): ParsedFileReferen
     lineText: hasLineNumber ? `${startLine}-${endLine}` : '',
     isUnsaved: Boolean(unsavedReference)
   };
+}
+
+/**
+ * 查找文本中的文件引用 token，并保留源码位置。
+ * @param content - 输入文本
+ * @returns 文件引用 token 列表
+ */
+export function findFileReferenceTokens(content: string): FileReferenceTokenMatch[] {
+  return [...content.matchAll(FILE_REFERENCE_MESSAGE_TOKEN_PATTERN)]
+    .map((match): FileReferenceTokenMatch | null => {
+      const [token, tokenContent] = match;
+      const reference = parseFileReferenceToken(tokenContent);
+      if (!reference || match.index === undefined) return null;
+
+      return {
+        token,
+        start: match.index,
+        end: match.index + token.length,
+        reference
+      };
+    })
+    .filter((item): item is FileReferenceTokenMatch => item !== null);
 }

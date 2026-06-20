@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { MESSAGE_REF_PATTERN } from '@/components/BChat/utils/fileReferenceContext';
-import { parseFileReferenceToken } from '@/utils/file/reference';
+import { findFileReferenceTokens, parseFileReferenceToken } from '@/utils/file/reference';
 
 describe('parseFileReferenceToken', (): void => {
   it('parses encoded bracket file paths with spaces', (): void => {
@@ -53,5 +53,26 @@ describe('parseFileReferenceToken', (): void => {
     );
     expect(parsed).not.toHaveProperty('renderStartLine');
     expect(parsed).not.toHaveProperty('renderEndLine');
+  });
+});
+
+describe('findFileReferenceTokens', (): void => {
+  it('returns decoded file references with source offsets', (): void => {
+    const content = `fix {{#[](${encodeURIComponent('src/foo.ts')}) 10-20}} please`;
+    const tokens = findFileReferenceTokens(content);
+
+    expect(tokens).toEqual([
+      {
+        token: `{{#[](${encodeURIComponent('src/foo.ts')}) 10-20}}`,
+        start: 4,
+        end: content.length - 7,
+        reference: expect.objectContaining({
+          rawPath: 'src/foo.ts',
+          startLine: 10,
+          endLine: 20,
+          fileName: 'foo.ts'
+        })
+      }
+    ]);
   });
 });
