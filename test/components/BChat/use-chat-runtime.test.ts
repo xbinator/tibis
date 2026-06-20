@@ -3,7 +3,7 @@
  * @description BChat 主进程 ChatRuntime renderer hook 测试。
  * @vitest-environment jsdom
  */
-import type { AIToolContext, AIToolExecutor } from 'types/ai';
+import type { AIMCPRequestConfig, AIToolContext, AIToolExecutor } from 'types/ai';
 import type { ChatMessageFile, ChatMessageRecord } from 'types/chat';
 import { effectScope, reactive, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -397,6 +397,42 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('converts continue input into cloneable data before crossing IPC', async (): Promise<void> => {
+    const messages = ref<Message[]>([createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ type: 'text', text: 'choose' }] }) as Message]);
+    const scope = effectScope();
+
+    electronAPIMock.chatRuntimeContinue.mockImplementation(async (input: unknown) => {
+      structuredClone(input);
+      return {
+        ok: true,
+        data: { runtimeId: 'runtime-continued', sessionId: 'session-1' }
+      };
+    });
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+      const mcp = reactive<AIMCPRequestConfig>({
+        servers: [],
+        enabledServerIds: [],
+        enabledTools: [],
+        toolInstructions: ''
+      });
+
+      await runtime.continueTurn({
+        sessionId: 'session-1',
+        messages: messages.value,
+        mcp
+      });
+
+      expect(electronAPIMock.chatRuntimeContinue).toHaveBeenCalledWith(expect.objectContaining({ mcp: expect.objectContaining({ servers: [] }) }));
+    });
+
+    scope.stop();
+  });
+
   it('submits user choice answers through main process runtime without sending message snapshots', async (): Promise<void> => {
     const messages = ref<Message[]>([]);
     const scope = effectScope();
@@ -521,6 +557,48 @@ describe('useChatRuntime', (): void => {
           data: { title: 'index.ts', content: 'hello' }
         }
       });
+    });
+
+    scope.stop();
+  });
+
+  it('converts bridge response data into cloneable data before crossing IPC', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const handleBridgeRequest = vi.fn(async () => reactive({ title: 'index.ts', content: 'hello' }));
+    const scope = effectScope();
+
+    electronAPIMock.chatRuntimeSubmitBridgeResponse.mockImplementation(async (input: unknown) => {
+      structuredClone(input);
+      return { ok: true };
+    });
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        handleBridgeRequest
+      });
+
+      emitRuntimeEvent(listeners, 'bridgeRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        toolCallId: 'tool-call-1',
+        kind: 'document-snapshot',
+        payload: { includeSelection: true }
+      });
+      await Promise.resolve();
+
+      expect(electronAPIMock.chatRuntimeSubmitBridgeResponse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          result: {
+            status: 'success',
+            data: { title: 'index.ts', content: 'hello' }
+          }
+        })
+      );
     });
 
     scope.stop();
@@ -661,6 +739,49 @@ describe('useChatRuntime', (): void => {
 
       const expectedToolCall = { toolCallId: 'tool-call-1', toolName: 'read_file', input: { path: 'src/index.ts' } };
       expect(executeToolCallMock).toHaveBeenCalledWith(expectedToolCall, [tool], context, { runtimeId: 'runtime-1' });
+      expect(electronAPIMock.chatRuntimeSubmitToolResult).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        toolCallId: 'tool-call-1',
+        result: { toolName: 'read_file', status: 'success', data: { content: 'ok' } }
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('converts renderer tool results into cloneable data before crossing IPC', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    executeToolCallMock.mockResolvedValueOnce({
+      toolCallId: 'tool-call-1',
+      toolName: 'read_file',
+      input: { path: 'src/index.ts' },
+      result: reactive({ toolName: 'read_file', status: 'success' as const, data: { content: 'ok' } })
+    });
+    electronAPIMock.chatRuntimeSubmitToolResult.mockImplementation(async (input: unknown) => {
+      structuredClone(input);
+      return { ok: true };
+    });
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        tools: []
+      });
+
+      emitRuntimeEvent(listeners, 'toolRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        toolCallId: 'tool-call-1',
+        toolName: 'read_file',
+        input: { path: 'src/index.ts' }
+      });
+      await Promise.resolve();
+
       expect(electronAPIMock.chatRuntimeSubmitToolResult).toHaveBeenCalledWith({
         runtimeId: 'runtime-1',
         toolCallId: 'tool-call-1',

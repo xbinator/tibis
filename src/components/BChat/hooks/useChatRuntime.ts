@@ -236,12 +236,9 @@ function toRuntimeMessageSnapshot(message: Message, sessionId: string): ChatRunt
  * @returns 可传输的 ChatRuntime 续轮命令
  */
 function toRuntimeContinueCommand(input: BChatRuntimeContinueInput, clientId: string, agentId: string): ChatRuntimeContinueInput {
-  return {
-    ...input,
-    clientId,
-    agentId,
-    messages: input.messages.map((message) => toRuntimeMessageSnapshot(message, input.sessionId))
-  };
+  const messages = input.messages.map((message) => toRuntimeMessageSnapshot(message, input.sessionId));
+
+  return toCloneableData({ ...input, clientId, agentId, messages });
 }
 
 /**
@@ -424,13 +421,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    * @param result - 工具执行结果
    */
   async function submitToolResult(event: ChatRuntimeToolRequestEvent, result: AIToolExecutionResult): Promise<void> {
-    assertRuntimeResult(
-      await electronAPI.chatRuntimeSubmitToolResult({
-        runtimeId: event.runtimeId,
-        toolCallId: event.toolCallId,
-        result
-      })
-    );
+    assertRuntimeResult(await electronAPI.chatRuntimeSubmitToolResult(toCloneableData({ runtimeId: event.runtimeId, toolCallId: event.toolCallId, result })));
   }
 
   /**
@@ -440,11 +431,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   async function submitConfirmationDecision(event: ChatRuntimeConfirmationRequestEvent, decision: ChatRuntimeConfirmationDecision): Promise<void> {
     assertRuntimeResult(
-      await electronAPI.chatRuntimeSubmitConfirmation({
-        runtimeId: event.runtimeId,
-        confirmationId: event.confirmationId,
-        decision
-      })
+      await electronAPI.chatRuntimeSubmitConfirmation(toCloneableData({ runtimeId: event.runtimeId, confirmationId: event.confirmationId, decision }))
     );
   }
 
@@ -454,13 +441,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    * @param result - bridge 结果
    */
   async function submitBridgeResponse(event: ChatRuntimeBridgeRequestEvent, result: ChatRuntimeBridgeResult): Promise<void> {
-    assertRuntimeResult(
-      await electronAPI.chatRuntimeSubmitBridgeResponse({
-        runtimeId: event.runtimeId,
-        requestId: event.requestId,
-        result
-      })
-    );
+    assertRuntimeResult(await electronAPI.chatRuntimeSubmitBridgeResponse(toCloneableData({ runtimeId: event.runtimeId, requestId: event.requestId, result })));
   }
 
   /**
@@ -580,13 +561,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    * @returns runtime 启动结果
    */
   async function submitUserChoice(input: BChatRuntimeSubmitUserChoiceInput): Promise<ChatRuntimeStartResult> {
-    const result = unwrapRuntimeResult(
-      await electronAPI.chatRuntimeSubmitUserChoice({
-        ...input,
-        clientId,
-        agentId
-      })
-    );
+    const result = unwrapRuntimeResult(await electronAPI.chatRuntimeSubmitUserChoice(toCloneableData({ ...input, clientId, agentId })));
     activeRuntimeId.value = result.runtimeId;
     return result;
   }
