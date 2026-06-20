@@ -67,7 +67,7 @@
         </RouterView>
       </div>
 
-      <ChatSider v-if="settingStore.sidebarVisible" />
+      <ChatSider v-show="settingStore.sidebarVisible" />
     </div>
 
     <BSearchRecent v-if="visible.searchRecent" v-model:visible="visible.searchRecent" />
@@ -86,6 +86,7 @@ import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
+import ChatSider from './components/ChatSider.vue';
 import HeaderEditorActions from './components/HeaderEditorActions.vue';
 import HeaderTabs from './components/HeaderTabs.vue';
 import HeaderUpdateNotice from './components/HeaderUpdateNotice.vue';
@@ -103,8 +104,6 @@ const settingStore = useSettingStore();
 const tabsStore = useTabsStore();
 const { getRouteCacheKey, getRouteCacheComponent } = useKeepAlive();
 
-/** 聊天侧栏体量较大，首屏隐藏时延迟加载以减少首次白屏等待。 */
-const ChatSider = defineAsyncComponent(() => import('./components/ChatSider.vue'));
 /** 最近记录搜索弹窗仅在打开时加载，避免首屏提前解析搜索组件依赖。 */
 const BSearchRecent = defineAsyncComponent(() => import('@/components/BSearchRecent/index.vue'));
 /** 快捷键帮助抽屉仅在打开时加载，减少默认布局首屏组件体积。 */

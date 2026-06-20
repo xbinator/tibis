@@ -52,13 +52,14 @@
 
 <script setup lang="ts">
 import type { ChatSession } from 'types/chat';
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onUnmounted, ref, watch } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import SessionHistory from '@/components/BChat/components/SessionHistory.vue';
-import BChat from '@/components/BChat/index.vue';
 import { useSettingStore } from '@/stores/ui/setting';
 import { createNamespace } from '@/utils/namespace';
 import { useChatSession } from '../hooks/useChatSession';
+
+const BChat = defineAsyncComponent(() => import('@/components/BChat/index.vue'));
 
 const [, bem] = createNamespace('chat-sider', '');
 
