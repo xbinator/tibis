@@ -7,20 +7,6 @@ import { nanoid } from 'nanoid';
 import { logger } from '@/shared/logger';
 
 /**
- * 将 File 对象转为 Base64 Data URL（未经压缩，保留供其他模块使用）。
- * @param file - 浏览器 File 对象
- * @returns Base64 Data URL
- */
-export function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
  * 将 ArrayBuffer 转为 Base64 Data URL。
  * @param buffer - 二进制图片数据
  * @param mimeType - MIME 类型（如 image/jpeg）
