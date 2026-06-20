@@ -13,7 +13,14 @@ import type {
   AITransportTool,
   AIUsage
 } from './ai';
-import type { AIUserChoiceAnswerData, ChatMessageConfirmationCustomInputConfig, ChatMessagePart, ChatMessageRecord } from './chat';
+import type {
+  AIUserChoiceAnswerData,
+  ChatMessageConfirmationCustomInputConfig,
+  ChatMessageFilePartInput,
+  ChatMessagePart,
+  ChatMessageRecord,
+  ChatMessageTextPart
+} from './chat';
 
 /** Runtime event channel names emitted from main process to renderer. */
 export type ChatRuntimeEventName =
@@ -71,6 +78,9 @@ export type ChatRuntimeMessageSnapshot = Omit<ChatMessageRecord, 'sessionId'> & 
   sessionId?: string;
 };
 
+/** Renderer-created user input parts accepted by runtime send commands. */
+export type ChatRuntimeUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput;
+
 /** Send command input. */
 export interface ChatRuntimeSendInput {
   /** Existing session id; omitted for draft sessions. */
@@ -83,6 +93,8 @@ export interface ChatRuntimeSendInput {
   parentRuntimeId?: string;
   /** User message text. */
   content: string;
+  /** Ordered user input parts parsed by renderer before file snapshots are materialized. */
+  parts?: ChatRuntimeUserInputPart[];
   /** Renderer-created user message id, used to avoid duplicate local/runtime messages. */
   userMessageId?: string;
   /** Renderer-created user message timestamp. */

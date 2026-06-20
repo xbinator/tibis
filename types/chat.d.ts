@@ -94,6 +94,63 @@ export interface ChatMessageFile {
 }
 
 /**
+ * 聊天消息文件输入片段。
+ * Renderer 发送前使用该形态，不包含 snapshot。
+ */
+export interface ChatMessageFilePartInput {
+  /** 片段类型 */
+  type: 'file';
+  /** 文件 part 唯一标识 */
+  id: string;
+  /** 展示文件名 */
+  filename: string;
+  /** MIME 类型 */
+  mime: string;
+  /** 规范化资源 URL */
+  url: string;
+  /** 用户输入来源路径 */
+  path: string;
+  /** 用户原始输入中的引用文本及位置 */
+  sourceText: {
+    /** token 起始 offset */
+    start: number;
+    /** token 结束 offset */
+    end: number;
+    /** 原始 token 文本 */
+    value: string;
+  };
+}
+
+/**
+ * 聊天消息文件内容快照。
+ */
+export interface ChatMessageFilePartSnapshot {
+  /** 固化后的文件内容 */
+  content: string;
+  /** 快照起始行号 */
+  startLine: number;
+  /** 快照结束行号 */
+  endLine: number;
+  /** 文件总行数 */
+  totalLines: number;
+  /** 快照内容哈希 */
+  contentHash: string;
+  /** 快照创建时间 */
+  capturedAt: string;
+  /** 是否被截断 */
+  truncated?: boolean;
+}
+
+/**
+ * 聊天消息文件片段。
+ * 进入聊天历史前必须包含 snapshot。
+ */
+export interface ChatMessageFilePart extends ChatMessageFilePartInput {
+  /** 发送时固化的文件内容快照 */
+  snapshot: ChatMessageFilePartSnapshot;
+}
+
+/**
  * 聊天消息文本片段
  */
 export interface ChatMessageTextPart {
@@ -273,6 +330,7 @@ export interface ChatMessageErrorPart {
  */
 export type ChatMessagePart =
   | ChatMessageTextPart
+  | ChatMessageFilePart
   | ChatMessageErrorPart
   | ChatMessageThinkingPart
   | ChatMessageToolPart
