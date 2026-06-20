@@ -260,6 +260,47 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('passes parsed user input parts through runtime send', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      await runtime.send({
+        sessionId: 'session-1',
+        content: 'fix {{#src/foo.ts}}',
+        parts: [
+          { type: 'text', text: 'fix ' },
+          {
+            type: 'file',
+            id: 'file-part-1',
+            filename: 'foo.ts',
+            mime: 'text/plain',
+            url: 'file:///workspace/src/foo.ts',
+            path: 'src/foo.ts',
+            sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' }
+          }
+        ]
+      });
+
+      expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: 'fix {{#src/foo.ts}}',
+          parts: [
+            { type: 'text', text: 'fix ' },
+            expect.objectContaining({ type: 'file', path: 'src/foo.ts' })
+          ]
+        })
+      );
+    });
+
+    scope.stop();
+  });
+
   it('keeps runtime messages in display order when events arrive out of order', (): void => {
     const messages = ref<Message[]>([]);
     const scope = effectScope();

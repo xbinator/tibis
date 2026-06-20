@@ -57,7 +57,18 @@ interface UseChatRuntimeOptions {
 /** ChatRuntime 发送输入。 */
 export type BChatRuntimeSendInput = Pick<
   ChatRuntimeSendInput,
-  'sessionId' | 'content' | 'files' | 'userMessageId' | 'userMessageCreatedAt' | 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp'
+  | 'sessionId'
+  | 'content'
+  | 'parts'
+  | 'files'
+  | 'userMessageId'
+  | 'userMessageCreatedAt'
+  | 'contextWindow'
+  | 'system'
+  | 'workspaceRoot'
+  | 'tools'
+  | 'tavily'
+  | 'mcp'
 >;
 
 /** Runtime renderer 工具失败可透传的稳定错误码。 */

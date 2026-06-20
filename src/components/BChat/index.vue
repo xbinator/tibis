@@ -139,7 +139,8 @@ import { useUsagePanel } from './hooks/useUsagePanel';
 import { useVoiceInput } from './hooks/useVoiceInput';
 import { createFileRefChipResolver } from './utils/chipResolver';
 import { createChatConfirmationController } from './utils/confirmationController';
-import { create, userChoice, buildMessageReferences } from './utils/messageHelper';
+import { buildUserInputParts } from './utils/filePartParser';
+import { create, userChoice } from './utils/messageHelper';
 import { handleBChatRuntimeBridgeRequest } from './utils/runtimeBridge';
 
 const [, bem] = createNamespace('chat');
@@ -762,9 +763,8 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
       return;
     }
 
-    const references = await buildMessageReferences(trimmedContent);
-
-    const userMessage = create.userMessage(trimmedContent, references);
+    const userParts = buildUserInputParts(trimmedContent, workspaceRoot.value || undefined);
+    const userMessage = create.userMessage(trimmedContent);
     if (images.length && supportsVision.value) {
       userMessage.files = [...images];
     }
@@ -780,6 +780,7 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
       contextWindow: contextWindow.value,
       system: await resolveRuntimeSystemPrompt(),
       workspaceRoot: workspaceRoot.value || undefined,
+      parts: userParts,
       tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
       tavily: resolveRuntimeTavilyConfig(),
       mcp: resolveRuntimeMcpRequestConfig(),
@@ -789,6 +790,8 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
     });
   } catch (error) {
     taskRuntime.finishTask('chat');
+    const message = error instanceof Error ? error.message : '发送消息失败';
+    interactionAPI.showToast({ type: 'error', content: message });
     throw error;
   }
 }

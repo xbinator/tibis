@@ -575,6 +575,29 @@ describe('BChat sessionId runtime', (): void => {
     expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-created', expect.objectContaining({ role: 'user', content: 'hello' }));
   });
 
+  it('sends parsed file input parts to ChatRuntime', async (): Promise<void> => {
+    const createdSession = createSession('session-created', 'fix {{#src/foo.ts}}');
+    chatStoreMock.createSession.mockResolvedValue(createdSession);
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    wrapper.findComponent(BPromptEditorStub).vm.$emit('update:value', 'fix {{#src/foo.ts}}');
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-created',
+        content: 'fix {{#src/foo.ts}}',
+        parts: [
+          { type: 'text', text: 'fix ' },
+          expect.objectContaining({ type: 'file', path: 'src/foo.ts' })
+        ]
+      })
+    );
+  });
+
   it('does not append a renderer-side interrupt message when aborting a chat runtime', async (): Promise<void> => {
     const wrapper = mountBChat('session-active');
     await flushPromises();

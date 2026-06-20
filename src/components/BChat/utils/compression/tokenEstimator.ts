@@ -82,6 +82,7 @@ export function buildMessageContentHash(msg: Message): string {
   const parts = msg.parts
     .map((p) => {
       if (p.type === 'text') return p.text;
+      if (p.type === 'file') return `${p.path}:${p.snapshot.startLine}-${p.snapshot.endLine}:${p.snapshot.contentHash}`;
       if (p.type === 'tool') return p.result ? `tr:${p.toolName}` : `tc:${p.toolName}`;
       return p.type;
     })
