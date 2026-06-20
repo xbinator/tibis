@@ -30,8 +30,8 @@
 
 ### Task 2: 迁移 `create_drawing`
 
-- [x] 在 `test/electron/main/modules/chat/runtime/stream-executor.test.ts` 添加 RED 测试，证明 `create_drawing` 应由 main executor 执行。
-- [x] 在 `electron/main/modules/chat/runtime/stream-executor.mts` 将 `create_drawing` 加入 `MAIN_PROCESS_TOOL_NAMES`。
+- [x] 在 `test/electron/main/modules/chat/runtime/stream/executor.test.ts` 添加 RED 测试，证明 `create_drawing` 应由 main executor 执行。
+- [x] 在 `electron/main/modules/chat/runtime/stream/tools.mts` 将 `create_drawing` 加入 `MAIN_PROCESS_TOOL_NAMES`。
 - [x] 在 `src/components/BChat/utils/runtimeBridge.ts` 复用或扩展 `open-draft` bridge，用于创建 `.tibis` 未保存画板草稿。
 - [x] 在 `electron/main/modules/chat/runtime/service.mts` 添加 `create_drawing` 分支：归一化标题、应用初始 operations、生成草稿内容、调用 `open-draft` bridge、返回 Drawing 结果。
 - [x] 更新 `changelog/2026-06-19.md`。
@@ -39,7 +39,7 @@
 
 ### Task 3: 迁移 `apply_drawing_operations`
 
-- [x] 在 `test/electron/main/modules/chat/runtime/stream-executor.test.ts` 添加 RED 测试，证明 `apply_drawing_operations` 应由 main executor 执行。
+- [x] 在 `test/electron/main/modules/chat/runtime/stream/executor.test.ts` 添加 RED 测试，证明 `apply_drawing_operations` 应由 main executor 执行。
 - [x] 在 `test/components/BChat/runtime-bridge.test.ts` 添加 bridge 测试，覆盖读取当前画板数据和写回当前画板数据。
 - [x] 在 `src/components/BChat/utils/runtimeBridge.ts` 增加 `apply-drawing-data` 或等价 bridge kind，renderer 只负责替换当前画板数据。
 - [x] 在 `electron/main/modules/chat/runtime/service.mts` 添加 `apply_drawing_operations` 分支：通过 `drawing-snapshot` 读取当前数据，主进程应用 operations，发起确认，确认后调用 bridge 写回。
@@ -58,7 +58,7 @@
 - 主进程直接按 `src/shared/storage/tool-settings/types.ts` 的 MCP 数据模型读取/写入 `~/.tibis/settings.json`；renderer `toolSettingsStorage` 会穿过 `native` 抽象，不在主进程直接 import。
 - `refresh_mcp_discovery` 可直接调用 `electron/main/modules/mcp/session.mts` 的 `refreshMcpDiscovery(server)`，不需要经由 preload IPC。
 - 迁移代码落点：优先先放入 `electron/main/modules/chat/runtime/service.mts` 的 main tool 分支，后续 Task 7 再按 `electron/main/modules/chat/runtime/tools/**/index.mts` 文件夹结构拆分。
-- 测试落点：先补 `test/electron/main/modules/chat/runtime/stream-executor.test.ts` 的 main executor 路由测试；涉及入口分发的细粒度逻辑在 Task 7 抽出后补 `test/electron/main/modules/chat/runtime/main-tools.test.ts`。
+- 测试落点：先补 `test/electron/main/modules/chat/runtime/stream/executor.test.ts` 的 main executor 路由测试；涉及入口分发的细粒度逻辑在 Task 7 抽出后补 `test/electron/main/modules/chat/runtime/main-tools.test.ts`。
 
 ### Task 5: 迁移 MCP 只读工具
 
@@ -102,8 +102,8 @@
 ## Verification Commands
 
 ```bash
-pnpm test test/components/BChat/runtime-bridge.test.ts test/electron/main/modules/chat/runtime/stream-executor.test.ts test/electron/main/modules/chat/runtime/service.test.ts test/components/BChat/use-chat-runtime.test.ts -- --runInBand
+pnpm test test/components/BChat/runtime-bridge.test.ts test/electron/main/modules/chat/runtime/stream/executor.test.ts test/electron/main/modules/chat/runtime/service.test.ts test/components/BChat/use-chat-runtime.test.ts -- --runInBand
 pnpm test test/ai/tools/builtin-index.test.ts test/ai/tools/builtin-main-process-tool.test.ts test/electron/main/modules/chat/runtime/main-tools.test.ts -- --runInBand
 pnpm exec tsc --noEmit
-pnpm exec eslint electron/main/modules/chat/runtime/service.mts electron/main/modules/chat/runtime/stream-executor.mts electron/main/modules/chat/runtime/tools/**/*.mts src/ai/tools/builtin/index.ts src/ai/tools/catalog/runtimeTools.ts src/components/BChat/utils/runtimeBridge.ts src/components/BChat/index.vue test/ai/tools/builtin-main-process-tool.test.ts test/components/BChat/runtime-bridge.test.ts test/electron/main/modules/chat/runtime/stream-executor.test.ts test/electron/main/modules/chat/runtime/main-tools.test.ts --ext .mts,.ts,.vue
+pnpm exec eslint electron/main/modules/chat/runtime/service.mts electron/main/modules/chat/runtime/stream/**/*.mts electron/main/modules/chat/runtime/tools/**/*.mts src/ai/tools/builtin/index.ts src/ai/tools/catalog/runtimeTools.ts src/components/BChat/utils/runtimeBridge.ts src/components/BChat/index.vue test/ai/tools/builtin-main-process-tool.test.ts test/components/BChat/runtime-bridge.test.ts test/electron/main/modules/chat/runtime/stream/executor.test.ts test/electron/main/modules/chat/runtime/main-tools.test.ts --ext .mts,.ts,.vue
 ```

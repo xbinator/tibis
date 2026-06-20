@@ -1,11 +1,11 @@
 /**
- * @file stream-executor.test.ts
+ * @file stream/executor.test.ts
  * @description ChatRuntime 主进程流式执行器测试。
  */
-import type { ActiveChatRuntime } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
+import type { ActiveChatRuntime } from '../../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import type { ChatMessageRecord } from 'types/chat';
 import { describe, expect, it, vi } from 'vitest';
-import { createRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/stream-executor.mjs';
+import { createRuntimeStreamExecutor } from '../../../../../../../electron/main/modules/chat/runtime/stream/index.mjs';
 
 /** 测试 runtime 状态。 */
 const runtime: ActiveChatRuntime = {
@@ -2230,7 +2230,7 @@ describe('runtime stream executor', (): void => {
             result: {
               toolName: 'renderer_echo',
               status: 'failure',
-              error: { code: 'TOOL_TIMEOUT', message: 'Renderer tool renderer_echo timed out after 5ms' }
+              error: { code: 'TOOL_TIMEOUT', message: 'Renderer 工具 renderer_echo 执行超时，已等待 5ms' }
             }
           }
         ]
@@ -2238,5 +2238,194 @@ describe('runtime stream executor', (): void => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('returns TOOL_NOT_FOUND failure for unregistered tool calls', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const updates: ChatMessageRecord[] = [];
+
+    async function* createUnknownToolStream(): AsyncGenerator<unknown> {
+      yield { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'unknown_tool', input: {} };
+      yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 } };
+    }
+
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        providerType: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1'
+      },
+      modelId: 'gpt-test'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createUnknownToolStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText });
+
+    const result = await executor({ runtime, userMessage, assistantMessage }, async (message) => {
+      updates.push({ ...message, parts: [...message.parts] });
+    });
+
+    expect(result).toEqual({
+      usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
+      shouldContinue: true
+    });
+    expect(updates.at(-1)?.parts[0]).toMatchObject({
+      type: 'tool',
+      toolCallId: 'tool-call-1',
+      toolName: 'unknown_tool',
+      status: 'done',
+      result: {
+        toolName: 'unknown_tool',
+        status: 'failure',
+        error: {
+          code: 'TOOL_NOT_FOUND',
+          message: expect.stringContaining('unknown_tool')
+        }
+      }
+    });
+  });
+
+  it('stops stream when earlier tool call is cancelled, even if later ones succeed', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const updates: ChatMessageRecord[] = [];
+
+    async function* createMixedToolStream(): AsyncGenerator<unknown> {
+      yield { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'read_file', input: { path: 'a.md' } };
+      yield { type: 'tool-call', toolCallId: 'tool-call-2', toolName: 'read_file', input: { path: 'b.md' } };
+      yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 } };
+    }
+
+    const executeMainTool = vi
+      .fn()
+      .mockResolvedValueOnce({
+        toolName: 'read_file',
+        status: 'cancelled',
+        error: { code: 'USER_CANCELLED', message: 'cancelled' }
+      })
+      .mockResolvedValueOnce({
+        toolName: 'read_file',
+        status: 'success',
+        data: { content: 'b' }
+      });
+
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        providerType: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1'
+      },
+      modelId: 'gpt-test'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createMixedToolStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeMainTool });
+
+    const result = await executor(
+      {
+        runtime: {
+          ...runtime,
+          tools: [{ name: 'read_file', description: 'Read file', parameters: { type: 'object', properties: {} } }]
+        },
+        userMessage,
+        assistantMessage
+      },
+      async (message) => {
+        updates.push({ ...message, parts: [...message.parts] });
+      }
+    );
+
+    expect(executeMainTool).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({});
+    expect(updates.at(-1)?.parts).toHaveLength(1);
+  });
+
+  it('does not reset parsed tool input to null on invalid JSON delta', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const updates: ChatMessageRecord[] = [];
+
+    async function* createFlickerToolStream(): AsyncGenerator<unknown> {
+      yield { type: 'tool-input-start', id: 'tool-call-1', toolName: 'read_file' };
+      yield { type: 'tool-input-delta', id: 'tool-call-1', delta: '{"path":"src/index.ts"}' };
+      yield { type: 'tool-input-delta', id: 'tool-call-1', delta: ',' };
+      yield { type: 'tool-input-end', id: 'tool-call-1' };
+      yield { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'read_file', input: { path: 'src/index.ts' } };
+      yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 } };
+    }
+
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        providerType: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1'
+      },
+      modelId: 'gpt-test'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createFlickerToolStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText });
+
+    await executor({ runtime, userMessage, assistantMessage }, async (message) => {
+      updates.push({ ...message, parts: [...message.parts] });
+    });
+
+    const afterInvalidDelta = updates.find((message) => {
+      const part = message.parts[0];
+      return part?.type === 'tool' && part.inputText === '{"path":"src/index.ts"},';
+    });
+    expect(afterInvalidDelta).toBeDefined();
+    expect(afterInvalidDelta?.parts[0]).toMatchObject({
+      type: 'tool',
+      input: { path: 'src/index.ts' }
+    });
+  });
+
+  it('includes image files in model request when sourceMessages are empty', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const imageUserMessage: ChatMessageRecord = {
+      ...userMessage,
+      content: 'describe this image',
+      files: [
+        {
+          id: 'file-1',
+          type: 'image',
+          name: 'test.png',
+          url: 'https://example.com/test.png',
+          mimeType: 'image/png'
+        }
+      ]
+    };
+
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        providerType: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1'
+      },
+      modelId: 'gpt-test'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createTextStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText });
+
+    await executor({ runtime, userMessage: imageUserMessage, assistantMessage }, async () => undefined);
+
+    expect(streamText).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'openai' }),
+      expect.objectContaining({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'describe this image' },
+              { type: 'image', image: 'https://example.com/test.png', mediaType: 'image/png' }
+            ]
+          }
+        ]
+      })
+    );
   });
 });

@@ -16,7 +16,7 @@ flowchart LR
   RuntimeCompact --> PreloadIPC
   PreloadIPC --> IPC["Runtime IPC handlers\nelectron/main/modules/chat/runtime/ipc.mts"]
   IPC --> Service["Runtime service\nelectron/main/modules/chat/runtime/service.mts"]
-  Service --> StreamExecutor["Stream executor\nelectron/main/modules/chat/runtime/stream-executor.mts"]
+  Service --> StreamExecutor["Stream executor\nelectron/main/modules/chat/runtime/stream/index.mts"]
   StreamExecutor --> MainTools["Main tools\nelectron/main/modules/chat/runtime/tools/**/index.mts"]
   MainTools --> Bridge["Renderer bridge\nsrc/components/BChat/utils/runtimeBridge.ts"]
   Service --> Events["Runtime events\nmessage-created / message-updated / complete / error"]
@@ -52,7 +52,7 @@ flowchart LR
 | `electron/main/modules/chat/runtime/model/**.mts` | Chat model resolver plus auto-name prompt construction and generated title normalization. | Model streaming execution or session title persistence. |
 | `electron/main/modules/chat/runtime/domain/**.mts` | Domain-specific pure runtime logic shared by tools, currently drawing data operations. | Tool dispatching or renderer bridge access. |
 | `electron/main/modules/chat/runtime/infrastructure/**.mts` | Low-level runtime infrastructure such as session write locks. | Business decisions or message mutation. |
-| `electron/main/modules/chat/runtime/stream-executor.mts` | Consumes model stream chunks, updates assistant draft, executes tool rounds, decides whether to continue after tool results. | Persists session history directly outside the updater contract; owns no renderer UI state. |
+| `electron/main/modules/chat/runtime/stream/index.mts` | Consumes model stream chunks, updates assistant draft, executes tool rounds, decides whether to continue after tool results. | Persists session history directly outside the updater contract; owns no renderer UI state. |
 | `electron/main/modules/chat/runtime/tools/index.mts` | Main-process tool dispatcher. Routes a tool call to a grouped tool module. | Runtime lifecycle or model stream handling. |
 | `shared/ai/tools/toolRegistry.ts` | Single metadata source for migrated tool names, runtime owner, group, exposure, and schema definitions. | Runtime execution of migrated tools. |
 | `electron/main/modules/chat/runtime/tools/constants.mts` | Main-process runtime constants and grouped tool-name Sets derived from `shared/ai/tools/toolRegistry.ts`. | Tool schema definitions or duplicated tool-name literals. |
@@ -77,7 +77,7 @@ flowchart LR
 2. `service.mts` creates and persists the user message and assistant placeholder.
 3. Main emits `message-created` for both messages.
 4. `useChatRuntime.ts` mirrors those events into the renderer message list.
-5. `stream-executor.mts` updates the assistant message as text, reasoning, tool parts, usage, and final status arrive.
+5. `stream/index.mts` updates the assistant message as text, reasoning, tool parts, usage, and final status arrive.
 
 Renderer should not locally append the runtime user message. It waits for the main event.
 
@@ -186,7 +186,7 @@ The compression data model intentionally remains `role: 'compression'`. A cancel
 | --- | --- |
 | User/assistant duplicated or reversed | `useChatRuntime.ts` event mirroring and `service.mts` message creation branch. |
 | Regenerate creates empty assistant artifacts | `index.vue` regenerate path and `service.mts` `continue` placeholder branch. |
-| Tool continues after user cancel | `stream-executor.mts` tool-result continuation decision. |
+| Tool continues after user cancel | `stream/index.mts` tool-result continuation decision. |
 | Confirmation disappears or is overwritten | `confirmationController.ts` queue behavior and `service.mts` pending confirmation map. |
 | Compression shows wrong status | `useRuntimeCompactContext.ts`, `compaction.mts`, and compression message event payloads. |
 | `/usage` shows no data | Main completion usage writeback in `service.mts`, context usage snapshot events, and `UsagePanel.vue` refresh session id. |

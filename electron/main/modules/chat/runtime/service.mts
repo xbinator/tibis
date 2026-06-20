@@ -65,7 +65,7 @@ import { applyUserChoiceAnswer, cloneRuntimeMessage } from './messages/user-choi
 import { createAutoNamePrompt, normalizeAutoNameTitle } from './model/auto-name.mjs';
 import { createDefaultChatModelResolver } from './model/resolver.mjs';
 import { createCompactRuntime, createContinuationRuntime, createSendRuntime, createUserChoiceRuntime } from './runners/factory.mjs';
-import { createRuntimeStreamExecutor } from './stream-executor.mjs';
+import { createRuntimeStreamExecutor } from './stream/index.mjs';
 import { createMainToolExecutor } from './tools/index.mjs';
 
 /** 单个 runtime 内工具续轮最大次数。 */
