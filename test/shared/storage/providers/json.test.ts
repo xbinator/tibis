@@ -53,6 +53,40 @@ describe('providerStorage.listProviders', () => {
     expect(providers.find((provider) => provider.id === 'openai')?.isEnabled).toBe(true);
   });
 
+  it('stores built-in providers as complete snapshots after provider config updates', async (): Promise<void> => {
+    const baseProvider = DEFAULT_PROVIDERS.find((provider) => provider.id === 'openai');
+    expect(baseProvider).toBeDefined();
+
+    if (!baseProvider) {
+      throw new Error('测试需要 OpenAI 内置服务商');
+    }
+
+    let settings = createSettingsFile([]);
+
+    mockSettingsFileStorage.read.mockImplementation(async (): Promise<SettingsFileContent> => settings);
+    mockSettingsFileStorage.update.mockImplementation(
+      async (transformer: (current: SettingsFileContent) => SettingsFileContent): Promise<SettingsFileContent> => {
+        settings = transformer(settings);
+        return settings;
+      }
+    );
+
+    await providerStorage.saveProviderConfig(baseProvider.id, { baseUrl: 'https://example.test/v1' });
+
+    const storedProvider = settings.providers.find((provider) => provider.id === baseProvider.id);
+
+    expect(storedProvider).toMatchObject({
+      id: baseProvider.id,
+      name: baseProvider.name,
+      description: baseProvider.description,
+      type: baseProvider.type,
+      baseUrl: 'https://example.test/v1',
+      isEnabled: baseProvider.isEnabled,
+      readonly: baseProvider.readonly
+    });
+    expect(storedProvider?.models).toEqual(baseProvider.models);
+  });
+
   it('stores deleted default models as isDelete markers and overwrites them when recreated', async (): Promise<void> => {
     const baseProvider = DEFAULT_PROVIDERS.find((provider) => (provider.models?.length ?? 0) > 1);
     expect(baseProvider).toBeDefined();

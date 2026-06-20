@@ -56,7 +56,8 @@ function sanitizeProviderEntry(raw: Partial<StoredProviderEntry>): StoredProvide
   if (isString(raw.description)) result.description = raw.description;
   if (isProviderRequestFormat(raw.type)) result.type = raw.type;
   if (isString(raw.logo)) result.logo = raw.logo;
-  if (raw.isCustom === true) result.isCustom = true;
+  if (isBoolean(raw.readonly)) result.readonly = raw.readonly;
+  if (isBoolean(raw.isCustom)) result.isCustom = raw.isCustom;
 
   return result;
 }
@@ -166,6 +167,44 @@ function mergeProvider(base: AIProvider, stored?: StoredProviderEntry): AIProvid
     ...providerOverrides,
     models: mergedModels
   };
+}
+
+/**
+ * 构造内置服务商的完整持久化快照。
+ * @param base 内置服务商默认配置
+ * @param existing 已保存的服务商配置
+ * @param patch 本次要写入的用户覆盖配置
+ * @returns 可直接写入 settings.json 的完整服务商条目
+ */
+function buildCompleteBuiltInEntry(base: AIProvider, existing: StoredProviderEntry | undefined, patch: StoredProviderSettings): StoredProviderEntry {
+  const sanitizedPatch = sanitizeProviderSettings(patch);
+  const mergedProvider = mergeProvider(base, existing);
+  const nextModels = sanitizedPatch.models ?? mergedProvider.models ?? [];
+
+  return sanitizeProviderEntry({
+    id: base.id,
+    name: base.name,
+    description: base.description,
+    type: base.type,
+    logo: base.logo,
+    isEnabled: sanitizedPatch.isEnabled ?? mergedProvider.isEnabled,
+    apiKey: sanitizedPatch.apiKey ?? mergedProvider.apiKey,
+    baseUrl: sanitizedPatch.baseUrl ?? mergedProvider.baseUrl,
+    readonly: base.readonly,
+    models: buildStoredModels(base, existing, nextModels),
+    isCustom: false
+  });
+}
+
+/**
+ * 将旧的稀疏内置服务商条目补齐为完整快照。
+ * @param entry settings.json 中的服务商条目
+ * @returns 补齐后的服务商条目
+ */
+function completeStoredProviderEntry(entry: StoredProviderEntry): StoredProviderEntry {
+  const base = getDefaultProvider(entry.id);
+  if (!base) return sanitizeProviderEntry(entry);
+  return buildCompleteBuiltInEntry(base, entry, {});
 }
 
 /** 将自定义服务商的 StoredProviderEntry 转换为 AIProvider */
@@ -307,6 +346,7 @@ export const providerStorage = {
         apiKey: normalized.apiKey ?? existing?.apiKey,
         baseUrl: normalized.baseUrl ?? existing?.baseUrl,
         models: existing?.models ?? [],
+        readonly: false,
         isCustom: true
       };
       return { ...current, providers: upsertEntry(current.providers, entry) };
@@ -325,15 +365,7 @@ export const providerStorage = {
       // 内置服务商：更新覆盖设置
       const result = await enqueueWrite((current) => {
         const existing = current.providers.find((e) => e.id === normalizedId);
-        const sanitized = sanitizeProviderSettings(patch);
-        const entry: StoredProviderEntry = {
-          ...existing,
-          id: normalizedId,
-          ...sanitized
-        };
-        if (sanitized.models) {
-          entry.models = buildStoredModels(base, existing, sanitized.models);
-        }
+        const entry = buildCompleteBuiltInEntry(base, existing, patch);
         return { ...current, providers: upsertEntry(current.providers, entry) };
       });
 
@@ -350,7 +382,9 @@ export const providerStorage = {
       const updated: StoredProviderEntry = {
         ...existing,
         ...sanitized,
-        models: sanitized.models ?? existing.models
+        models: sanitized.models ?? existing.models,
+        readonly: false,
+        isCustom: true
       };
       const next = [...current.providers];
       const index = next.findIndex((e) => e.id === normalizedId);
@@ -397,7 +431,8 @@ export const providerStorage = {
   /** 重新排序服务商列表 */
   async reorderProviders(orderedIds: string[]): Promise<AIProvider[]> {
     await enqueueWrite((current) => {
-      return { ...current, providers: reorderEntries(current.providers, orderedIds) };
+      const completeEntries = current.providers.map((entry) => completeStoredProviderEntry(entry));
+      return { ...current, providers: reorderEntries(completeEntries, orderedIds) };
     });
 
     return this.listProviders();
@@ -416,6 +451,8 @@ export {
   mergeProvider,
   isDeletedModel,
   buildStoredModels,
+  buildCompleteBuiltInEntry,
+  completeStoredProviderEntry,
   entryToCustomProvider,
   upsertEntry,
   reorderEntries,
