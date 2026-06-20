@@ -324,11 +324,17 @@ function selectLineRange(startLine: number, endLine: number): boolean {
   const safeEndLine = Math.min(Math.max(safeStartLine, endLine), totalLines);
   const fromLine = view.state.doc.line(safeStartLine);
   const toLine = view.state.doc.line(safeEndLine);
+  const selectionRange = {
+    from: fromLine.from,
+    to: toLine.to,
+    text: view.state.sliceDoc(fromLine.from, toLine.to)
+  };
 
   view.dispatch({
-    selection: EditorSelection.range(fromLine.from, toLine.to),
+    selection: EditorSelection.range(selectionRange.from, selectionRange.to),
     scrollIntoView: true
   });
+  adapter.value?.showSelectionHighlight(selectionRange);
   view.focus();
   return true;
 }
