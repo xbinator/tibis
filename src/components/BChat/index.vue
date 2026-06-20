@@ -88,25 +88,11 @@
 
 <script setup lang="ts">
 import type { ContextUsageBudgetSnapshot } from './utils/contextUsageBudget';
-import type { BChatRuntimeApplySettingInput, BChatRuntimeApplySettingResult, BChatRuntimeSettingKey } from './utils/runtimeBridge';
 import type { BChatProps, Message } from './utils/types';
-import type { AIMCPRequestConfig, AITavilyRuntimeConfig, AIToolExecutor } from 'types/ai';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession } from 'types/chat';
 import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { uniq } from 'lodash-es';
-import {
-  createBuiltinTools,
-  isBuiltinToolName,
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
-  READ_CURRENT_DRAWING_TOOL_NAME,
-  READ_CURRENT_WEBPAGE_TOOL_NAME,
-  READ_DIRECTORY_TOOL_NAME,
-  SKILL_TOOL_NAME,
-  UPDATE_CURRENT_DRAWING_TOOL_NAME
-} from '@/ai/tools/builtin';
-import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
 import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
@@ -116,23 +102,10 @@ import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { useFileDrop } from '@/hooks/useFileDrop';
 import { useNavigate } from '@/hooks/useNavigate';
-import { useOpenDraft } from '@/hooks/useOpenDraft';
-import { useOpenFile } from '@/hooks/useOpenFile';
-import { useWorkspaceRoot } from '@/hooks/useWorkspaceRoot';
 import { native } from '@/shared/platform';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
-import { useMemoryStore } from '@/stores/ai/memory';
-import { useSkillStore } from '@/stores/ai/skill';
-import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 import { useChatSessionStore } from '@/stores/chat/session';
-import { useTodoStore } from '@/stores/chat/todo';
-import type { TodoItem } from '@/stores/chat/todo';
-import type { EditorPageWidth, EditorViewMode } from '@/stores/editor/preferences';
-import { useEditorPreferencesStore } from '@/stores/editor/preferences';
-import type { ThemeMode } from '@/stores/ui/setting';
-import { useSettingStore } from '@/stores/ui/setting';
 import { useFilesStore } from '@/stores/workspace/files';
-import { getPresetList } from '@/theme/core/registry';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { Modal } from '@/utils/modal';
 import { createNamespace } from '@/utils/namespace';
@@ -156,9 +129,14 @@ import { useInteractionState } from './hooks/useInteractionState';
 import { useModelSelection } from './hooks/useModelSelection';
 import { useRollback } from './hooks/useRollback';
 import { useRuntimeCompactContext } from './hooks/useRuntimeCompactContext';
+import { useRuntimeConfig } from './hooks/useRuntimeConfig';
+import { useRuntimeSettings } from './hooks/useRuntimeSettings';
+import { useRuntimeTools } from './hooks/useRuntimeTools';
 import { useSkillInit } from './hooks/useSkillInit';
 import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
+import { useTodoPanel } from './hooks/useTodoPanel';
 import { useUsagePanel } from './hooks/useUsagePanel';
+import { useVoiceInput } from './hooks/useVoiceInput';
 import { createFileRefChipResolver } from './utils/chipResolver';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { create, userChoice, buildMessageReferences } from './utils/messageHelper';
@@ -180,88 +158,15 @@ const emit = defineEmits<{
 
 /** 聊天数据存储 */
 const chatStore = useChatSessionStore();
-/** Skill 存储 */
-const skillStore = useSkillStore();
-const toolSettingsStore = useToolSettingsStore();
 
-/** Todo 存储 */
-const todoStore = useTodoStore();
-/** Todo 面板可见性 */
-const todoPanelVisible = ref(false);
-/** Todo 面板是否已因当前任务全部结束而隐藏 */
-const todoPanelDismissed = ref(false);
 /** BChat 内部为新会话草稿创建出的会话 ID。 */
 const createdSessionId = ref<string | null>(null);
 /** 自动命名时需要的当前会话镜像。 */
 const currentSessionForAutoName = ref<{ id: string; title: string } | undefined>(undefined);
 /** 当前聊天运行时使用的有效会话 ID。 */
 const activeSessionId = computed<string | null>(() => props.sessionId ?? createdSessionId.value);
-/** 当前会话的待办列表 */
-const currentSessionTodos = computed(() => todoStore.getTodos(activeSessionId.value ?? ''));
-
-/**
- * 判断任务列表是否已经全部结束。
- * @param todos - 当前会话的任务列表
- * @returns 所有任务均完成或取消时返回 true
- */
-function areTodosFinished(todos: TodoItem[]): boolean {
-  return todos.length > 0 && todos.every((todo) => todo.status === 'completed' || todo.status === 'cancelled');
-}
-
-/**
- * 清理已结束任务并隐藏任务面板。
- * @param sessionId - 当前会话 ID
- */
-function clearFinishedTodos(sessionId: string): void {
-  todoStore.clearTodos(sessionId);
-  todoPanelVisible.value = false;
-  todoPanelDismissed.value = true;
-}
-
-/**
- * 按回退消息区间恢复对应的 Todo 快照。
- * @param sessionId - 当前会话 ID
- * @param rolledBackMessages - 被回退删除的消息列表
- */
-function restoreTodoSnapshotsForMessages(sessionId: string | null, rolledBackMessages: Message[]): void {
-  if (!sessionId) return;
-
-  const runtimeIds = uniq(rolledBackMessages.map((message) => message.runtimeId).filter((runtimeId): runtimeId is string => typeof runtimeId === 'string'));
-  if (runtimeIds.length === 0) return;
-
-  todoStore.restoreBeforeRuntimeIds(sessionId, runtimeIds);
-}
-
-/**
- * 判断待办面板是否应由当前待办更新自动展开。
- * @param sessionId - 当前会话 ID
- * @param previousSessionId - 上一次监听到的会话 ID
- * @returns 同一会话的后续待办更新可自动展开时返回 true
- */
-function shouldAutoShowTodoPanel(sessionId: string | null, previousSessionId: string | null | undefined): boolean {
-  return previousSessionId !== undefined && sessionId === previousSessionId && !todoPanelVisible.value;
-}
-
-/** LLM 调用 todowrite 时自动打开/关闭面板 */
-watch(
-  () => [activeSessionId.value, todoStore.getTodos(activeSessionId.value ?? '')] as const,
-  ([sessionId, newTodos], previousValue) => {
-    if (newTodos.length === 0) {
-      todoPanelVisible.value = false;
-      todoPanelDismissed.value = false;
-    } else if (areTodosFinished(newTodos)) {
-      if (sessionId) {
-        clearFinishedTodos(sessionId);
-      }
-    } else if (shouldAutoShowTodoPanel(sessionId, previousValue?.[0])) {
-      todoPanelVisible.value = true;
-      todoPanelDismissed.value = false;
-    } else {
-      todoPanelDismissed.value = false;
-    }
-  },
-  { deep: true, immediate: true }
-);
+/** Todo 面板状态和回退恢复能力。 */
+const { currentSessionTodos, todoPanelVisible, todoPanelDismissed, restoreTodoSnapshotsForMessages } = useTodoPanel({ activeSessionId });
 
 const router = useRouter();
 
@@ -277,8 +182,6 @@ const promptEditorRef = ref<InstanceType<typeof BPromptEditor>>();
 const inputContainerRef = ref<HTMLElement>();
 /** 通用文件打开导航能力 */
 const { openFile, openWebview } = useNavigate();
-/** 文件打开能力（供 open_resource 工具使用） */
-const { openFileByPath } = useOpenFile();
 /** 全局模型选择器引用。 */
 const modelSelectRef = ref<InstanceType<typeof BModelSelect>>();
 /** 全局模型选择器显示状态。 */
@@ -291,6 +194,15 @@ const { setLoadedMessages, fetchAllPriorHistory, messages, hasMoreHistory, loadH
 
 /** 确认控制器，管理工具调用的用户确认流程 */
 const confirmationController = createChatConfirmationController();
+/** Runtime 可读写设置能力。 */
+const { getSettingsSnapshot, applyRuntimeSetting } = useRuntimeSettings();
+/** Runtime 内置工具能力。 */
+const { workspaceRoot, getActiveTools, openDraft, openFileByPath } = useRuntimeTools({
+  messages,
+  confirm: confirmationController.createAdapter(),
+  getSessionId: () => activeSessionId.value ?? undefined,
+  openWebview
+});
 
 /** 聚焦输入框 */
 function focusInput(options?: { moveToEnd?: boolean }): void {
@@ -321,85 +233,25 @@ function saveCursorPosition(): void {
   promptEditorRef.value?.saveCursorPosition();
 }
 
-/**
- * 当前语音实时转写在输入框中的占位范围。
- */
-const activeVoiceInsertionRange = ref<{ start: number; end: number } | null>(null);
-
 /** 插入文本到光标位置 */
 function insertTextAtCursor(text: string): void {
   promptEditorRef.value?.insertTextAtCursor(text);
 }
 
-/**
- * 替换语音占位范围中的文本。
- * @param text - 新的占位文本
- */
-function replaceVoiceInsertionText(text: string): void {
-  const range = activeVoiceInsertionRange.value;
-  const editor = promptEditorRef.value;
-
-  if (!range || !editor) {
-    return;
-  }
-
-  editor.replaceTextRange(range.start, range.end, text);
-  activeVoiceInsertionRange.value = {
-    start: range.start,
-    end: range.start + text.length
-  };
-}
-
-/**
- * 记录本次语音输入在编辑器中的插入起点。
- */
-function handleVoiceStart(): void {
-  const editor = promptEditorRef.value;
-  if (!editor) {
-    activeVoiceInsertionRange.value = null;
-    return;
-  }
-
-  saveCursorPosition();
-  const cursorPosition = editor.getCursorPosition();
-  activeVoiceInsertionRange.value = {
-    start: cursorPosition,
-    end: cursorPosition
-  };
-}
-
-/**
- * 处理语音实时转写增量文本。
- * @param payload - 增量转写文本
- */
-function handleVoicePartial(payload: { text: string }): void {
-  replaceVoiceInsertionText(payload.text);
-}
-
-/**
- * 使用最终转写文本插入到光标位置。
- * @param payload - 语音转写结果
- */
-function handleVoiceComplete(payload: { text: string }): void {
-  const hadActiveVoiceInsertion = Boolean(activeVoiceInsertionRange.value);
-
-  if (!payload.text.trim()) {
-    if (hadActiveVoiceInsertion) {
-      replaceVoiceInsertionText('');
-      activeVoiceInsertionRange.value = null;
-    }
+/** 语音输入转写事件处理器。 */
+const { handleVoiceStart, handleVoicePartial, handleVoiceComplete } = useVoiceInput({
+  editor: {
+    saveCursorPosition,
+    getCursorPosition: () => promptEditorRef.value?.getCursorPosition() ?? 0,
+    replaceTextRange: (from: number, to: number, text: string) => {
+      promptEditorRef.value?.replaceTextRange(from, to, text);
+    },
+    insertTextAtCursor
+  },
+  showEmptyTranscriptionToast: () => {
     interactionAPI.showToast({ content: '语音转写结果为空，请重试', type: 'error' });
-    return;
   }
-
-  if (hadActiveVoiceInsertion) {
-    replaceVoiceInsertionText(payload.text);
-    activeVoiceInsertionRange.value = null;
-    return;
-  }
-
-  insertTextAtCursor(payload.text);
-}
+});
 
 /** 用量面板 hook */
 const usagePanel = useUsagePanel();
@@ -449,182 +301,14 @@ const { isDragging: isInputDragActive } = useFileDrop({
   onDropFiles: handleInputDropFiles
 });
 
-/** 聊天工具列表 */
+/** 文件存储，用于文件提及和 bridge 文件查询。 */
 const filesStore = useFilesStore();
-const settingStore = useSettingStore();
-const editorPreferencesStore = useEditorPreferencesStore();
-const { openDraft } = useOpenDraft();
-const memoryStore = useMemoryStore();
-
-const { workspaceRoot, getWorkspaceRoot } = useWorkspaceRoot();
-
-/**
- * 判断值是否为主题模式。
- * @param value - 待判断值
- * @returns 是否为主题模式
- */
-function isThemeMode(value: unknown): value is ThemeMode {
-  return value === 'dark' || value === 'light' || value === 'system';
-}
-
-/**
- * 判断值是否为编辑器页宽模式。
- * @param value - 待判断值
- * @returns 是否为编辑器页宽模式
- */
-function isEditorPageWidth(value: unknown): value is EditorPageWidth {
-  return value === 'default' || value === 'wide' || value === 'full';
-}
-
-/**
- * 判断值是否为主题预设 ID。
- * @param value - 待判断值
- * @returns 是否为主题预设 ID
- */
-function isThemePresetId(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-
-  return getPresetList().some((preset) => preset.id === value);
-}
-
-/**
- * 读取当前设置值。
- * @param key - 设置键
- * @returns 当前设置值
- */
-function getRuntimeSettingValue(key: BChatRuntimeSettingKey): string | boolean | number {
-  if (key === 'theme') return settingStore.theme;
-  if (key === 'themePreset') return settingStore.themePreset;
-  if (key === 'sourceMode') return editorPreferencesStore.viewMode === 'source';
-  if (key === 'editorPageWidth') return editorPreferencesStore.pageWidth;
-
-  return '';
-}
-
-/**
- * 应用 ChatRuntime 设置修改。
- * @param input - 设置修改输入
- * @returns 设置修改结果
- */
-function applyRuntimeSetting(input: BChatRuntimeApplySettingInput): BChatRuntimeApplySettingResult {
-  const previousValue = getRuntimeSettingValue(input.key);
-
-  if (input.key === 'theme' && isThemeMode(input.value)) {
-    settingStore.setTheme(input.value);
-  } else if (input.key === 'themePreset' && isThemePresetId(input.value)) {
-    settingStore.setThemePreset(input.value);
-  } else if (input.key === 'sourceMode' && typeof input.value === 'boolean') {
-    const viewMode: EditorViewMode = input.value ? 'source' : 'rich';
-    editorPreferencesStore.setViewMode(viewMode);
-  } else if (input.key === 'editorPageWidth' && isEditorPageWidth(input.value)) {
-    editorPreferencesStore.setPageWidth(input.value);
-  } else {
-    throw new Error(`设置值无效：${input.key}`);
-  }
-
-  return {
-    applied: true,
-    key: input.key,
-    previousValue,
-    currentValue: getRuntimeSettingValue(input.key)
-  };
-}
 
 /** 最近文件列表，用于 @ 文件提及功能（实时响应 filesStore.recentFiles） */
 const fileMentionOptions = computed<FileMentionOption[]>(() => {
   const files = filesStore.recentFiles ?? [];
   return files.map((file) => ({ id: file.id, name: file.name, path: file.path, ext: file.ext }));
 });
-
-const allBuiltinTools = createBuiltinTools({
-  confirm: confirmationController.createAdapter(),
-  skillStore,
-  mcpStore: toolSettingsStore,
-  getWorkspaceRoot,
-  isFileInRecent: (filePath: string) => {
-    return Boolean(filesStore.recentFiles?.some((file) => file.path === filePath));
-  },
-  /**
-   * 通过文件绝对路径查找文件 ID。
-   * 封装 filesStore.getFileByPath。
-   */
-  findFileByPath: async (filePath: string) => {
-    const file = await filesStore.getFileByPath(filePath);
-    return file ? { id: file.id } : null;
-  },
-  /**
-   * 通过文件 ID 获取编辑器上下文。
-   * 封装 editorToolContextRegistry.getContext。
-   */
-  getEditorContext: (documentId: string) => {
-    return editorToolContextRegistry.getContext(documentId);
-  },
-  getDrawingContext: () => drawingToolContextRegistry.getCurrentContext(),
-  getWebviewContext: () => webviewToolContextRegistry.getCurrentContext(),
-  openDraft,
-  /**
-   * 通过文件路径打开文件标签页。
-   * 封装 useOpenFile().openFileByPath，返回 { id } 或 null。
-   */
-  openFileByPath,
-  /**
-   * 在内置 webview 中打开 URL。
-   * 通过 Vue Router 导航到 webview-web 页面。
-   */
-  openInWebview: (url: string) => {
-    openWebview(new URL(url));
-  },
-  /**
-   * 在系统浏览器中打开 URL。
-   * 通过 Electron shell.openExternal 实现。
-   */
-  openExternal: (url: string) => {
-    native.openExternal(url);
-  },
-  getPendingQuestion: () => {
-    const pendingQuestion = userChoice.findPending(messages.value);
-    if (!pendingQuestion) return null;
-
-    return {
-      questionId: pendingQuestion.questionId,
-      toolCallId: pendingQuestion.toolCallId
-    };
-  },
-  getSessionId: () => activeSessionId.value ?? undefined
-});
-
-/**
- * 动态获取当前可用的工具列表。
- * 每次调用时根据运行时状态（编辑器、MCP、Skill）过滤条件工具。
- * @returns 当前可用工具列表
- */
-function getActiveTools(): AIToolExecutor[] {
-  const hasActiveEditor = Boolean(editorToolContextRegistry.getCurrentContext());
-  const hasActiveDrawing = Boolean(drawingToolContextRegistry.getCurrentContext());
-  const hasActiveWebview = Boolean(webviewToolContextRegistry.getCurrentContext());
-  const hasWorkspace = Boolean(workspaceRoot.value);
-
-  // skillStore 在 onMounted 中异步初始化，allBuiltinTools 创建时 skillStore.initialized 为 false，
-  // 因此需要在每次获取工具时动态判断是否需要追加 Skill 工具
-  const dynamicTools: AIToolExecutor[] = [];
-  if (skillStore.initialized && skillStore.getEnabledSkills().length > 0) {
-    const hasSkillTool = allBuiltinTools.some((t) => t.definition.name === SKILL_TOOL_NAME);
-    if (!hasSkillTool) {
-      dynamicTools.push(createSkillTool(skillStore));
-    }
-  }
-
-  return [...allBuiltinTools, ...dynamicTools].filter((tool) => {
-    if (!isBuiltinToolName(tool.definition.name)) return false;
-    if (tool.definition.name === 'read_current_document' && !hasActiveEditor) return false;
-    if (tool.definition.name === APPLY_DRAWING_OPERATIONS_TOOL_NAME && !hasActiveDrawing) return false;
-    if (tool.definition.name === READ_CURRENT_DRAWING_TOOL_NAME && !hasActiveDrawing) return false;
-    if (tool.definition.name === UPDATE_CURRENT_DRAWING_TOOL_NAME && !hasActiveDrawing) return false;
-    if (tool.definition.name === READ_CURRENT_WEBPAGE_TOOL_NAME && !hasActiveWebview) return false;
-    if (tool.definition.name === READ_DIRECTORY_TOOL_NAME && !hasWorkspace) return false;
-    return true;
-  });
-}
 
 /**
  * 处理底部确认弹窗操作。
@@ -675,14 +359,10 @@ async function ensureActiveSession(title: string): Promise<string> {
   return session.id;
 }
 
-/**
- * 判断消息是否为刚创建的空 assistant 草稿。
- * 空草稿需要立即持久化，确保硬中断时至少能恢复本轮生成状态。
- * @param message - 待检查消息
- * @returns 是否为空 assistant 草稿
- */
 /** Chat 服务配置解析 hook。 */
 const chatServiceConfig = useChatServiceConfig();
+/** Runtime 请求配置解析 hook。 */
+const { resolveRuntimeSystemPrompt, resolveRuntimeTavilyConfig, resolveRuntimeMcpRequestConfig } = useRuntimeConfig();
 
 /** 当前 runtime 聊天任务的中止函数。 */
 let abortRuntimeChatTask: (() => Promise<void>) | null = null;
@@ -877,14 +557,7 @@ const chatRuntime = useChatRuntime({
       updateRecentFileById: (fileId, updates) => filesStore.updateFile(fileId, updates),
       getDrawingContext: drawingToolContextRegistry.getCurrentContext,
       getWebviewContext: webviewToolContextRegistry.getCurrentContext,
-      getSettingsSnapshot: () => ({
-        settings: {
-          theme: settingStore.theme,
-          themePreset: settingStore.themePreset,
-          sourceMode: editorPreferencesStore.viewMode === 'source',
-          editorPageWidth: editorPreferencesStore.pageWidth
-        }
-      }),
+      getSettingsSnapshot,
       applySetting: applyRuntimeSetting,
       openDraft,
       openFileByPath,
@@ -926,68 +599,6 @@ const { handleCompactContext } = useRuntimeCompactContext({
   finishCompactTask: () => taskRuntime.finishTask('compact'),
   scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' })
 });
-
-/**
- * 判断 MCP server 是否可在主进程执行。
- * @param server - MCP server 配置
- * @returns 是否可执行
- */
-function isRuntimeEnabledMcpServer(server: AIMCPRequestConfig['servers'][number]): boolean {
-  if (!server.enabled) return false;
-  if (server.transport === 'stdio') return server.command.trim().length > 0;
-
-  return Boolean(server.url?.trim());
-}
-
-/**
- * 解析可交给主进程执行的 Tavily 配置。
- * @returns Tavily runtime 配置
- */
-function resolveRuntimeTavilyConfig(): AITavilyRuntimeConfig | undefined {
-  const { tavily } = toolSettingsStore;
-  if (!tavily?.enabled || !tavily.apiKey.trim()) return undefined;
-
-  return {
-    enabled: tavily.enabled,
-    apiKey: tavily.apiKey
-  };
-}
-
-/**
- * 解析可交给主进程执行的 MCP 配置。
- * @returns MCP runtime 请求配置
- */
-function resolveRuntimeMcpRequestConfig(): AIMCPRequestConfig | undefined {
-  const servers = toolSettingsStore.mcp.servers.map((server) => ({
-    ...server,
-    args: [...server.args],
-    env: { ...server.env },
-    headers: { ...server.headers },
-    toolAllowlist: [...server.toolAllowlist]
-  }));
-  const enabledServerIds = servers.filter(isRuntimeEnabledMcpServer).map((server) => server.id);
-  if (!servers.length && !enabledServerIds.length) return undefined;
-
-  return {
-    servers,
-    enabledServerIds,
-    enabledTools: [],
-    toolInstructions: ''
-  };
-}
-
-/**
- * 解析 runtime system prompt 上下文。
- * @returns system prompt
- */
-async function resolveRuntimeSystemPrompt(): Promise<string | undefined> {
-  if (!memoryStore.loaded) {
-    await memoryStore.loadMemory();
-  }
-
-  const memoryContext = memoryStore.buildSystemPromptContext();
-  return memoryContext.trim() ? memoryContext : undefined;
-}
 
 /**
  * 查找重新生成时需要保留到哪条 user 消息。
@@ -1141,9 +752,7 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
   if (!trimmedContent && !images.length) return;
 
   const startResult = taskRuntime.beginTask('chat');
-  if (!startResult.ok) {
-    return;
-  }
+  if (!startResult.ok) return;
 
   try {
     const config = await chatServiceConfig.resolveServiceConfig();
