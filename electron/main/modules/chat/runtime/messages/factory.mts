@@ -3,8 +3,24 @@
  * @description ChatRuntime 消息创建工厂。
  */
 import type { ActiveChatRuntime } from '../types.mjs';
-import type { ChatMessageRecord } from 'types/chat';
+import type { ChatMessagePart, ChatMessageRecord } from 'types/chat';
 import type { ChatRuntimeSendInput } from 'types/chat-runtime';
+
+/** 已可持久化的 runtime user message 输入。 */
+type RuntimeUserMessageInput = Omit<ChatRuntimeSendInput, 'parts'> & {
+  /** 已固化为持久化形态的消息片段。 */
+  parts?: ChatMessagePart[];
+};
+
+/**
+ * 读取 runtime user message 的持久化 parts。
+ * @param input - 发送参数
+ * @returns 消息片段
+ */
+function createRuntimeUserMessageParts(input: RuntimeUserMessageInput): ChatMessagePart[] {
+  if (input.parts?.length) return input.parts;
+  return input.content ? [{ type: 'text', text: input.content }] : [];
+}
 
 /**
  * 创建 runtime user 消息。
@@ -14,13 +30,13 @@ import type { ChatRuntimeSendInput } from 'types/chat-runtime';
  * @param createdAt - 创建时间
  * @returns user 消息
  */
-export function createRuntimeUserMessage(input: ChatRuntimeSendInput, runtime: ActiveChatRuntime, id: string, createdAt: string): ChatMessageRecord {
+export function createRuntimeUserMessage(input: RuntimeUserMessageInput, runtime: ActiveChatRuntime, id: string, createdAt: string): ChatMessageRecord {
   return {
     id,
     sessionId: runtime.sessionId,
     role: 'user',
     content: input.content,
-    parts: input.content ? [{ type: 'text', text: input.content }] : [],
+    parts: createRuntimeUserMessageParts(input),
     files: input.files,
     createdAt,
     finished: true,

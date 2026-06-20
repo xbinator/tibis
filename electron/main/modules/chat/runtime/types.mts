@@ -3,6 +3,7 @@
  * @description ChatRuntime 主进程内部类型。
  */
 import type { RuntimeCompactionService } from './compaction/service.mjs';
+import type { RuntimeFilePartMaterializer } from './messages/file-parts.mjs';
 import type {
   AICreateOptions,
   AIInvokeResult,
@@ -184,6 +185,8 @@ export interface ChatRuntimeServiceDependencies {
   messageReader: ChatRuntimeMessageReader;
   /** runtime 流式执行器。 */
   streamExecutor: ChatRuntimeStreamExecutor;
+  /** 文件 part 固化函数。 */
+  materializeFileParts: RuntimeFilePartMaterializer;
   /** runtime 流式中止函数。 */
   streamAbort: ChatRuntimeStreamAborter;
   /** Renderer 本地工具超时时间。 */

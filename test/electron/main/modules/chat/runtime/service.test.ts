@@ -4,7 +4,7 @@
  */
 import type { ChatRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import type { AIServiceError } from 'types/ai';
-import type { ChatMessageRecord } from 'types/chat';
+import type { ChatMessagePart, ChatMessageRecord } from 'types/chat';
 import type { ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { createChatRuntimeService } from '../../../../../../electron/main/modules/chat/runtime/service.mjs';
@@ -324,6 +324,74 @@ describe('chat runtime service shell', (): void => {
       return [(event.payload as ChatRuntimeEventMap['chat:runtime:message-created']).message.id];
     });
     expect(createdMessageIds).toEqual(['user-message-1', 'assistant-message-1']);
+  });
+
+  it('materializes file input parts before persisting user messages', async (): Promise<void> => {
+    const persistedMessages: ChatMessageRecord[] = [];
+    const materializedParts: ChatMessagePart[] = [
+      { type: 'text', text: 'fix ' },
+      {
+        type: 'file',
+        id: 'file-part-1',
+        filename: 'foo.ts',
+        mime: 'text/plain',
+        url: 'file:///workspace/src/foo.ts',
+        path: 'src/foo.ts',
+        sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' },
+        snapshot: {
+          content: 'editor content',
+          startLine: 1,
+          endLine: 1,
+          totalLines: 1,
+          contentHash: 'hash-1',
+          capturedAt: '2026-06-20T00:00:00.000Z'
+        }
+      }
+    ];
+    const materializeFileParts = vi.fn().mockResolvedValue(materializedParts);
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      messageWriter: {
+        addMessage: (message) => {
+          persistedMessages.push(message);
+        },
+        updateMessage: vi.fn(),
+        deleteMessage: vi.fn()
+      },
+      messageReader: createNoopMessageReader(),
+      streamExecutor: createNoopStreamExecutor(),
+      materializeFileParts,
+      now: () => '2026-06-20T00:00:00.000Z'
+    });
+
+    await service.send(
+      createInput({
+        content: 'fix {{#src/foo.ts}}',
+        workspaceRoot: '/workspace',
+        parts: [
+          { type: 'text', text: 'fix ' },
+          {
+            type: 'file',
+            id: 'file-part-1',
+            filename: 'foo.ts',
+            mime: 'text/plain',
+            url: 'file:///workspace/src/foo.ts',
+            path: 'src/foo.ts',
+            sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' }
+          }
+        ]
+      })
+    );
+
+    expect(materializeFileParts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: expect.arrayContaining([expect.objectContaining({ type: 'file', path: 'src/foo.ts' })])
+      })
+    );
+    expect(persistedMessages[0].parts[1]).toMatchObject({
+      type: 'file',
+      snapshot: expect.objectContaining({ startLine: 1, endLine: expect.any(Number) })
+    });
   });
 
   it('uses renderer supplied user message identity when provided', async (): Promise<void> => {

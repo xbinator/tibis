@@ -3,7 +3,7 @@
  * @description ChatRuntime 主进程模型上下文转换。
  */
 import type { JSONValue, ModelMessage } from 'ai';
-import type { ChatMessagePart, ChatMessageRecord } from 'types/chat';
+import type { ChatMessageFilePart, ChatMessagePart, ChatMessageRecord } from 'types/chat';
 
 /** 可发送给模型的聊天消息。 */
 type RuntimeModelMessageRecord = Extract<ChatMessageRecord, { role: 'user' | 'assistant' }> | (ChatMessageRecord & { role: 'user' | 'assistant' });
@@ -24,6 +24,9 @@ type ToolModelMessageContent = Array<{
   toolName: string;
   output: { type: 'json'; value: JSONValue };
 }>;
+
+/** User 模型消息内容片段。 */
+type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType?: string }>;
 
 /**
  * 判断消息是否为成功压缩边界。
@@ -101,26 +104,71 @@ function collectCompletedToolCallIds(parts: ChatMessagePart[]): Set<string> {
 }
 
 /**
+ * 判断消息片段是否为 file part。
+ * @param part - 消息片段
+ * @returns 是否为 file part
+ */
+function isFilePart(part: ChatMessagePart): part is ChatMessageFilePart {
+  return part.type === 'file';
+}
+
+/**
+ * 转义 XML 属性值。
+ * @param value - 原始属性值
+ * @returns 转义后的属性值
+ */
+function escapeXmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * 将 file part 转为模型兼容的 XML 文本。
+ * @param part - 文件片段
+ * @returns XML 文本片段
+ */
+function toUserFileXmlText(part: ChatMessageFilePart): string {
+  const lines = `${part.snapshot.startLine}-${part.snapshot.endLine}`;
+  return `<file path="${escapeXmlAttribute(part.path)}" lines="${lines}">\n${part.snapshot.content}\n</file>`;
+}
+
+/**
+ * 将用户消息片段合并为单个模型文本。
+ * @param message - 用户消息
+ * @returns 模型文本
+ */
+function createUserModelText(message: RuntimeUserMessageRecord): string {
+  if (message.parts.length) {
+    let text = '';
+    for (const part of message.parts) {
+      if (part.type === 'text' && part.text) {
+        text += part.text;
+      } else if (isFilePart(part)) {
+        text += toUserFileXmlText(part);
+      }
+    }
+    return text;
+  }
+
+  return message.content;
+}
+
+/**
  * 转换 user 消息。
  * @param message - user 消息
  * @returns 模型消息
  */
 function toUserModelMessage(message: RuntimeUserMessageRecord): ModelMessage | undefined {
+  const userText = createUserModelText(message);
   const imageFiles = message.files?.filter((file) => file.type === 'image' && file.url) ?? [];
-  if (!message.content && !imageFiles.length) return undefined;
-  if (!imageFiles.length) return { role: 'user', content: message.content };
+  if (!imageFiles.length) return userText ? { role: 'user', content: userText } : undefined;
 
-  return {
-    role: 'user',
-    content: [
-      { type: 'text', text: message.content },
-      ...imageFiles.map((file) => ({
-        type: 'image' as const,
-        image: file.url as string,
-        mediaType: file.mimeType
-      }))
-    ]
-  };
+  const contentParts: UserModelMessageContent = [];
+  if (userText) contentParts.push({ type: 'text', text: userText });
+  for (const file of imageFiles) {
+    contentParts.push({ type: 'image', image: file.url as string, mediaType: file.mimeType });
+  }
+
+  return { role: 'user', content: contentParts };
 }
 
 /**

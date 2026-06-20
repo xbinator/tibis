@@ -55,6 +55,7 @@ import { ChatRuntimeError } from './errors.mjs';
 import { createRuntimeLockRegistry } from './infrastructure/locks.mjs';
 import { findLastRuntimeAssistantMessage, findLastRuntimeUserMessage, normalizeContinuationMessages } from './messages/continuation.mjs';
 import { createRuntimeAssistantPlaceholder, createRuntimeInterruptMessage, createRuntimeUserMessage } from './messages/factory.mjs';
+import { materializeRuntimeFileParts } from './messages/file-parts.mjs';
 import {
   ensureRuntimeMessageCreatedAt,
   finishAssistantMessageInterrupted,
@@ -223,6 +224,7 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   const compactionService = dependencies.compactionService ?? createDefaultCompactionService(emit);
   const messageWriter = dependencies.messageWriter ?? createDefaultMessageWriter();
   const messageReader = dependencies.messageReader ?? createDefaultMessageReader();
+  const materializeFileParts = dependencies.materializeFileParts ?? materializeRuntimeFileParts;
   const streamAbort = dependencies.streamAbort ?? createDefaultStreamAborter();
   const createMessageId = dependencies.createMessageId ?? createDefaultMessageId;
   const now = dependencies.now ?? (() => new Date().toISOString());
@@ -646,7 +648,15 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
 
       try {
         const createdAt = input.userMessageCreatedAt ?? now();
-        const userMessage = createRuntimeUserMessage(input, runtime, input.userMessageId ?? createMessageId('user'), createdAt);
+        const userParts = input.parts?.length
+          ? await materializeFileParts({
+              parts: input.parts,
+              runtime,
+              now,
+              requestBridge: bridgeRequests.request
+            })
+          : undefined;
+        const userMessage = createRuntimeUserMessage({ ...input, parts: userParts }, runtime, input.userMessageId ?? createMessageId('user'), createdAt);
         const assistantMessage = createRuntimeAssistantPlaceholder(runtime, createMessageId('assistant'), createdAt);
         activeAssistantMessages.set(runtimeId, assistantMessage);
 

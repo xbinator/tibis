@@ -69,6 +69,46 @@ describe('runtime model message context', (): void => {
     ]);
   });
 
+  it('converts user file parts into one XML text content for model compatibility', (): void => {
+    const messages = toRuntimeModelMessages([
+      {
+        id: 'user-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'fix {{#src/foo.ts 10-20}}',
+        parts: [
+          { type: 'text', text: 'fix ' },
+          {
+            type: 'file',
+            id: 'file-part-1',
+            filename: 'foo.ts',
+            mime: 'text/plain',
+            url: 'file:///workspace/src/foo.ts?start=10&end=20',
+            path: 'src/foo.ts',
+            sourceText: { start: 4, end: 25, value: '{{#src/foo.ts 10-20}}' },
+            snapshot: {
+              content: 'export const foo = 1;',
+              startLine: 10,
+              endLine: 20,
+              totalLines: 100,
+              contentHash: 'hash-1',
+              capturedAt: '2026-06-20T00:00:00.000Z'
+            }
+          }
+        ],
+        createdAt: '2026-06-20T00:00:00.000Z',
+        finished: true
+      }
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toEqual({
+      role: 'user',
+      content: 'fix <file path="src/foo.ts" lines="10-20">\nexport const foo = 1;\n</file>'
+    });
+    expect(JSON.stringify(messages)).not.toContain('"type":"file"');
+  });
+
   it('converts completed tool parts into assistant tool calls and tool results', (): void => {
     const assistant = createMessage('a-tool', 'assistant', '');
     assistant.parts = [
