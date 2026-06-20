@@ -245,6 +245,17 @@ function toRuntimeContinueCommand(input: BChatRuntimeContinueInput, clientId: st
 }
 
 /**
+ * 将新会话发送输入转换为 Electron IPC 可传输的命令。
+ * @param input - renderer 发送输入
+ * @param clientId - renderer client id
+ * @param agentId - 当前 agent id
+ * @returns 可 structured clone 的 ChatRuntime 发送命令
+ */
+function toRuntimeSendCommand(input: BChatRuntimeSendInput, clientId: string, agentId: string): ChatRuntimeSendInput {
+  return toCloneableData({ ...input, clientId, agentId });
+}
+
+/**
  * 解包 runtime IPC 结果。
  * @param result - handler 结果
  * @returns handler data
@@ -547,13 +558,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    * @returns runtime 启动结果
    */
   async function send(input: BChatRuntimeSendInput): Promise<ChatRuntimeStartResult> {
-    const result = unwrapRuntimeResult(
-      await electronAPI.chatRuntimeSend({
-        ...input,
-        clientId,
-        agentId
-      })
-    );
+    const result = unwrapRuntimeResult(await electronAPI.chatRuntimeSend(toRuntimeSendCommand(input, clientId, agentId)));
     activeRuntimeId.value = result.runtimeId;
     return result;
   }

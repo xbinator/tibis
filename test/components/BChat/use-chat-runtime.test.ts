@@ -4,8 +4,8 @@
  * @vitest-environment jsdom
  */
 import type { AIToolContext, AIToolExecutor } from 'types/ai';
-import type { ChatMessageRecord } from 'types/chat';
-import { effectScope, ref } from 'vue';
+import type { ChatMessageFile, ChatMessageRecord } from 'types/chat';
+import { effectScope, reactive, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatRuntime } from '@/components/BChat/hooks/useChatRuntime';
 import type { Message } from '@/components/BChat/utils/types';
@@ -203,6 +203,58 @@ describe('useChatRuntime', (): void => {
         expect.objectContaining({ id: 'assistant-1', content: 'answer', finished: true })
       ]);
       expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant-1', content: 'answer' }));
+    });
+
+    scope.stop();
+  });
+
+  it('converts send input into cloneable data before crossing IPC', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    electronAPIMock.chatRuntimeSend.mockImplementation(async (input: unknown) => {
+      structuredClone(input);
+      return {
+        ok: true,
+        data: { runtimeId: 'runtime-1', sessionId: 'session-1' }
+      };
+    });
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      const files = reactive<ChatMessageFile[]>([
+        {
+          id: 'file-1',
+          name: 'image.png',
+          type: 'image',
+          mimeType: 'image/png',
+          size: 128,
+          extension: 'png',
+          url: 'data:image/png;base64,AAAA',
+          contentHash: 'hash-1'
+        }
+      ]);
+
+      await runtime.send({
+        sessionId: 'session-1',
+        content: 'describe image',
+        files
+      });
+
+      expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          files: [
+            expect.objectContaining({
+              id: 'file-1',
+              url: 'data:image/png;base64,AAAA'
+            })
+          ]
+        })
+      );
     });
 
     scope.stop();
