@@ -6,7 +6,14 @@ import type { Message } from './types';
 import type { FileReference } from '../types';
 import type { JSONValue, ModelMessage } from 'ai';
 import type { AIAwaitingUserChoiceQuestion, AIToolExecutionAwaitingUserInputResult, AIToolExecutionCancelledResult } from 'types/ai';
-import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageRole, ChatMessageShellOutputChunk, ChatMessageToolPart } from 'types/chat';
+import type {
+  AIUserChoiceAnswerData,
+  ChatMessageFilePart,
+  ChatMessagePart,
+  ChatMessageRole,
+  ChatMessageShellOutputChunk,
+  ChatMessageToolPart
+} from 'types/chat';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { asyncTo } from '@/utils/asyncTo';
@@ -48,6 +55,9 @@ export type ToolModelMessageContent = Array<{
   toolName: string;
   output: { type: 'json'; value: JSONValue };
 }>;
+
+/** User 模型消息内容片段 */
+type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType?: string }>;
 
 /** 工具结果类型 */
 export type ToolResult = NonNullable<ChatMessageToolPart['result']>;
@@ -524,6 +534,73 @@ function canReuseCachedEntry(entry: CachedModelMessageEntry, message: Message): 
   return entry.sourceMessage.id === message.id && entry.sourceMessage.role === message.role && entry.signature === createModelMessageSignature(message);
 }
 
+/**
+ * 判断消息片段是否为 file part。
+ * @param part - 消息片段
+ * @returns 是否为 file part
+ */
+function isFilePart(part: ChatMessagePart): part is ChatMessageFilePart {
+  return part.type === 'file';
+}
+
+/**
+ * 转义 XML 属性值。
+ * @param value - 原始属性值
+ * @returns 转义后的属性值
+ */
+function escapeXmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * 将文件片段转为模型兼容的 XML 文本。
+ * @param part - 文件片段
+ * @returns XML 文本片段
+ */
+function toUserFileXmlText(part: ChatMessageFilePart): string {
+  const lines = `${part.snapshot.startLine}-${part.snapshot.endLine}`;
+  return `<file path="${escapeXmlAttribute(part.path)}" lines="${lines}">\n${part.snapshot.content}\n</file>`;
+}
+
+/**
+ * 将用户消息片段合并为单个模型文本。
+ * @param message - 用户消息
+ * @returns 模型文本
+ */
+function createUserModelText(message: ModelCompatibleMessage): string {
+  if (message.parts.length) {
+    let text = '';
+    for (const part of message.parts) {
+      if (part.type === 'text' && part.text) {
+        text += part.text;
+      } else if (isFilePart(part)) {
+        text += toUserFileXmlText(part);
+      }
+    }
+    return text;
+  }
+
+  return message.content;
+}
+
+/**
+ * 将用户消息转换为模型内容片段。
+ * @param message - 用户消息
+ * @returns 模型内容片段
+ */
+function toUserContentParts(message: ModelCompatibleMessage): UserModelMessageContent {
+  const contentParts: UserModelMessageContent = [];
+  const userText = createUserModelText(message);
+  if (userText) contentParts.push({ type: 'text', text: userText });
+
+  const imageFiles = message.files?.filter((file) => file.type === 'image' && file.url) ?? [];
+  for (const file of imageFiles) {
+    contentParts.push({ type: 'image', image: file.url!, mediaType: file.mimeType });
+  }
+
+  return contentParts;
+}
+
 /** 将单条组件消息转换为 AI SDK 的 ModelMessage 列表 */
 function toModelMessagesForMessage(message: Message): ModelMessage[] {
   if (message.role === 'compression') {
@@ -538,21 +615,14 @@ function toModelMessagesForMessage(message: Message): ModelMessage[] {
   if (!is.modelMessage(message)) return [];
   if (message.role === 'user') {
     const imageFiles = message.files?.filter((file) => file.type === 'image' && file.url) ?? [];
-    if (!imageFiles.length) return [{ role: 'user', content: message.content }];
+    if (!imageFiles.length) {
+      const userText = createUserModelText(message);
+      return userText ? [{ role: 'user', content: userText }] : [];
+    }
 
-    return [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: message.content },
-          ...imageFiles.map((file) => ({
-            type: 'image' as const,
-            image: file.url!,
-            mediaType: file.mimeType
-          }))
-        ]
-      }
-    ];
+    const contentParts = toUserContentParts(message);
+    if (!contentParts.length) return [];
+    return [{ role: 'user', content: contentParts }];
   }
   return toAssistantModelMessages(message.parts);
 }

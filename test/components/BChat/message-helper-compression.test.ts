@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { convert, create, sliceMessagesFromCompressionBoundary } from '@/components/BChat/utils/messageHelper';
+import { buildMessageContentHash } from '@/components/BChat/utils/compression/tokenEstimator';
 import type { Message } from '@/components/BChat/utils/types';
 
 /**
@@ -88,5 +89,75 @@ describe('messageHelper compression boundary assembly', () => {
     expect(modelMessages[1]).toEqual({ role: 'user', content: 'tail 用户消息' });
     expect(modelMessages[2]?.role).toBe('assistant');
     expect(modelMessages[3]).toEqual({ role: 'user', content: '压缩后的新问题' });
+  });
+
+  it('converts persisted file parts into one XML text content', (): void => {
+    const message: Message = {
+      id: 'user-file',
+      role: 'user',
+      content: 'fix {{#src/foo.ts}}',
+      parts: [
+        { type: 'text', text: 'fix ' },
+        {
+          type: 'file',
+          id: 'file-part-1',
+          filename: 'foo.ts',
+          mime: 'text/plain',
+          url: 'file:///workspace/src/foo.ts',
+          path: 'src/foo.ts',
+          sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' },
+          snapshot: {
+            content: 'export const foo = 1;',
+            startLine: 1,
+            endLine: 1,
+            totalLines: 1,
+            contentHash: 'hash-1',
+            capturedAt: '2026-06-20T00:00:00.000Z'
+          }
+        }
+      ],
+      createdAt: '2026-06-20T00:00:00.000Z',
+      finished: true
+    };
+
+    const modelMessages = convert.toModelMessages([message]);
+
+    expect(modelMessages[0]).toEqual({
+      role: 'user',
+      content: 'fix <file path="src/foo.ts" lines="1-1">\nexport const foo = 1;\n</file>'
+    });
+    expect(JSON.stringify(modelMessages)).not.toContain('"type":"file"');
+  });
+
+  it('includes file part snapshots in message context signatures', (): void => {
+    const message: Message = {
+      id: 'user-file',
+      role: 'user',
+      content: 'fix {{#src/foo.ts}}',
+      parts: [
+        { type: 'text', text: 'fix ' },
+        {
+          type: 'file',
+          id: 'file-part-1',
+          filename: 'foo.ts',
+          mime: 'text/plain',
+          url: 'file:///workspace/src/foo.ts',
+          path: 'src/foo.ts',
+          sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' },
+          snapshot: {
+            content: 'export const foo = 1;',
+            startLine: 1,
+            endLine: 1,
+            totalLines: 1,
+            contentHash: 'hash-1',
+            capturedAt: '2026-06-20T00:00:00.000Z'
+          }
+        }
+      ],
+      createdAt: '2026-06-20T00:00:00.000Z',
+      finished: true
+    };
+
+    expect(buildMessageContentHash(message)).toContain('src/foo.ts:1-1:hash-1');
   });
 });
