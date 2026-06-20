@@ -274,7 +274,7 @@ function normalizeRuntimeError(error: unknown): AIServiceError {
   if (isAIServiceError(error)) return error;
   if (error instanceof Error) return createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, error.message);
 
-  return createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, 'ChatRuntime stream failed');
+  return createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, 'ChatRuntime 流式调用失败');
 }
 
 /**
@@ -320,7 +320,7 @@ function createRendererToolTimeoutResult(toolName: string, timeoutMs: number): A
     status: 'failure',
     error: {
       code: 'TOOL_TIMEOUT',
-      message: `Renderer tool ${toolName} timed out after ${timeoutMs}ms`
+      message: `Renderer 工具 ${toolName} 执行超时，已等待 ${timeoutMs}ms`
     }
   };
 }
@@ -602,7 +602,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
   return async ({ runtime, sourceMessages, userMessage, assistantMessage }, updateAssistant): Promise<ChatRuntimeStreamExecutorResult> => {
     const resolution = await dependencies.resolver.resolve();
     if (!resolution) {
-      throw createAIServiceError(AI_ERROR_CODE.MODEL_NOT_FOUND, 'No available chat model');
+      throw createAIServiceError(AI_ERROR_CODE.MODEL_NOT_FOUND, '没有可用的聊天模型');
     }
 
     const [error, result] = await dependencies.streamText(
@@ -613,7 +613,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       throw error;
     }
     if (!result) {
-      throw createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, 'ChatRuntime stream returned no result');
+      throw createAIServiceError(AI_ERROR_CODE.REQUEST_FAILED, 'ChatRuntime 流式调用未返回结果');
     }
 
     let usage: AIUsage | undefined;

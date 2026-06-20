@@ -4,7 +4,7 @@
  */
 import type { AIProvider } from 'types/ai';
 import { describe, expect, it, vi } from 'vitest';
-import { createChatModelResolver, mergeProviderSettings } from '../../../../../../electron/main/modules/chat/runtime/model/resolver.mjs';
+import { createChatModelResolver } from '../../../../../../electron/main/modules/chat/runtime/model/resolver.mjs';
 
 describe('createChatModelResolver', (): void => {
   it('resolves enabled chat provider and model into AI create options', async (): Promise<void> => {
@@ -49,22 +49,5 @@ describe('createChatModelResolver', (): void => {
     });
 
     await expect(resolver.resolve()).resolves.toBeNull();
-  });
-
-  it('merges stored builtin provider settings with main-process metadata', (): void => {
-    expect(
-      mergeProviderSettings({
-        id: 'openai',
-        apiKey: 'sk-main',
-        isEnabled: true
-      })
-    ).toMatchObject({
-      id: 'openai',
-      name: 'OpenAI',
-      type: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: 'sk-main',
-      isEnabled: true
-    });
   });
 });

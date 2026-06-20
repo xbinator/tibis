@@ -30,45 +30,6 @@ export interface StoredChatProviderEntry {
   models?: AIProvider['models'];
 }
 
-/** 主进程内置 provider 轻量元数据。 */
-const BUILTIN_PROVIDER_METADATA: Record<string, Pick<AIProvider, 'id' | 'name' | 'description' | 'type' | 'baseUrl'>> = {
-  anthropic: {
-    id: 'anthropic',
-    name: 'Anthropic',
-    description: 'Anthropic provider',
-    type: 'anthropic',
-    baseUrl: 'https://api.anthropic.com'
-  },
-  deepseek: {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    description: 'DeepSeek provider',
-    type: 'deepseek',
-    baseUrl: 'https://api.deepseek.com/v1'
-  },
-  google: {
-    id: 'google',
-    name: 'Google AI',
-    description: 'Google AI provider',
-    type: 'openai',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai'
-  },
-  openai: {
-    id: 'openai',
-    name: 'OpenAI',
-    description: 'OpenAI provider',
-    type: 'openai',
-    baseUrl: 'https://api.openai.com/v1'
-  },
-  siliconflow: {
-    id: 'siliconflow',
-    name: 'SiliconFlow',
-    description: 'SiliconFlow provider',
-    type: 'openai',
-    baseUrl: 'https://api.siliconflow.cn/v1'
-  }
-};
-
 /** service_models 行结构。 */
 interface ChatServiceModelRow {
   /** Provider id。 */
@@ -177,33 +138,6 @@ function hasEnabledModel(provider: AIProvider, modelId: string): boolean {
 }
 
 /**
- * 将 settings.json provider 条目合并为 AIProvider。
- * @param entry - settings provider 条目
- * @returns AIProvider，不可识别时返回 null
- */
-export function mergeProviderSettings(entry: StoredChatProviderEntry): AIProvider | null {
-  const id = entry.id.trim().toLowerCase();
-  const base = BUILTIN_PROVIDER_METADATA[id];
-  const isCustom = entry.isCustom === true;
-
-  if (!base && (!isCustom || !entry.name || !entry.type)) {
-    return null;
-  }
-
-  return {
-    id,
-    name: entry.name ?? base?.name ?? id,
-    description: entry.description ?? base?.description ?? 'Custom provider',
-    type: entry.type ?? base?.type ?? 'openai',
-    baseUrl: entry.baseUrl ?? base?.baseUrl,
-    apiKey: entry.apiKey,
-    isEnabled: entry.isEnabled ?? false,
-    isCustom,
-    models: entry.models
-  };
-}
-
-/**
  * 读取主进程 provider 配置。
  * @param providerId - provider id
  * @returns provider 配置
@@ -213,7 +147,7 @@ async function getDefaultProvider(providerId: string): Promise<AIProvider | null
   const normalizedId = providerId.trim().toLowerCase();
   const entry = settings.providers?.find((provider) => provider.id.trim().toLowerCase() === normalizedId);
 
-  return mergeProviderSettings(entry ?? { id: normalizedId });
+  return (entry as AIProvider) ?? null;
 }
 
 /**
