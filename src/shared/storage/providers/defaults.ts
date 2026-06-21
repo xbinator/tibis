@@ -311,58 +311,10 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     ]
   },
   {
-    id: 'alibaba_plan',
-    name: '阿里云 Plan',
-    description: '提供通义千问系列模型，支持中文优化、多模态处理与企业级应用。',
-    baseUrl: 'https://coding.dashscope.aliyuncs.com/v1',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'qwen3.7-max',
-        name: 'Qwen3.7 Max',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      }
-    ]
-  },
-  {
     id: 'baidu',
-    name: '百度',
+    name: '百度智能云',
     description: '提供文心一言系列模型，深耕中文场景，支持知识增强与对话生成。',
     baseUrl: 'https://qianfan.baidubce.com/v2',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'ernie-5.1',
-        name: 'ERNIE 5.1',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 128000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      }
-    ]
-  },
-  {
-    id: 'baidu_plan',
-    name: '百度 Plan',
-    description: '提供文心一言系列模型，深耕中文场景，支持知识增强与对话生成。',
-    baseUrl: 'https://qianfan.baidubce.com/v2/coding',
     type: 'openai',
     isEnabled: false,
     readonly: true,
@@ -420,43 +372,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     ]
   },
   {
-    id: 'volcengine_plan',
-    name: '火山引擎 Plan',
-    description: '提供豆包系列模型，适用于对话生成、内容创作与智能助手场景。',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
-    type: 'anthropic',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'doubao-seed-2.0-code',
-        name: 'Doubao Seed 2.0 Code',
-        type: 'code',
-        isEnabled: true,
-        contextWindow: 256000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: false
-      },
-      {
-        id: 'doubao-seed-2.0-pro',
-        name: 'Doubao Seed 2.0 Pro',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 256000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      }
-    ]
-  },
-  {
     id: 'tencentcloud',
     name: '腾讯云',
     description: '提供混元系列大模型，擅长对话、创作、代码与企业级智能服务。',
@@ -481,58 +396,10 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     ]
   },
   {
-    id: 'tencentcloud_plan',
-    name: '腾讯云 Plan',
-    description: '提供混元系列大模型，擅长对话、创作、代码与企业级智能服务。',
-    baseUrl: 'https://api.lkeap.cloud.tencent.com/coding/v3',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'hy3-preview',
-        name: 'Hy3 Preview',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 256000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      }
-    ]
-  },
-  {
     id: 'xiaomi',
     name: '小米',
     description: '提供小米 MiMo 系列大模型，支持超长上下文、原生多模态与 Agent 能力。',
     baseUrl: 'https://api.xiaomimimo.com/v1',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'mimo-v2.5-pro',
-        name: 'MiMo V2.5 Pro',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
-      }
-    ]
-  },
-  {
-    id: 'xiaomi_plan',
-    name: '小米 Plan',
-    description: '提供小米 MiMo 系列大模型，支持超长上下文、原生多模态与 Agent 能力。',
-    baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
     type: 'openai',
     isEnabled: false,
     readonly: true,
@@ -598,30 +465,6 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
         supportsWebSearch: false,
         supportsImageGeneration: true,
         supportsVideoRecognition: false
-      }
-    ]
-  },
-  {
-    id: 'zhipu_plan',
-    name: '智谱 AI Plan',
-    description: '提供 GLM 系列模型，支持中文场景优化、对话生成与智能问答。',
-    baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
-    type: 'openai',
-    isEnabled: false,
-    readonly: true,
-    models: [
-      {
-        id: 'glm-5.2',
-        name: 'GLM-5.2',
-        type: 'reasoning',
-        isEnabled: true,
-        contextWindow: 1000000,
-        supportsTools: true,
-        supportsVision: true,
-        supportsDeepThought: true,
-        supportsWebSearch: true,
-        supportsImageGeneration: false,
-        supportsVideoRecognition: true
       }
     ]
   }

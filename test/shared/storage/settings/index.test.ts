@@ -24,14 +24,12 @@ describe('normalizeSettingsFile', () => {
       description: defaultOpenAIProvider?.description,
       type: defaultOpenAIProvider?.type,
       baseUrl: 'https://example.test/v1',
-      readonly: defaultOpenAIProvider?.readonly,
-      isCustom: false
+      readonly: defaultOpenAIProvider?.readonly
     });
     expect(openAIProvider?.models).toEqual(defaultOpenAIProvider?.models);
     expect(anthropicProvider).toMatchObject({
       id: 'anthropic',
-      type: 'anthropic',
-      isCustom: false
+      type: 'anthropic'
     });
   });
 });

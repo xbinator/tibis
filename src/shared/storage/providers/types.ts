@@ -66,8 +66,6 @@ export interface StoredProviderEntry {
   logo?: string;
   /** 服务商是否只读 */
   readonly?: boolean;
-  /** 是否为自定义服务商 */
-  isCustom?: boolean;
 }
 
 /**

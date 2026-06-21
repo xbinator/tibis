@@ -24,8 +24,6 @@ export interface StoredChatProviderEntry {
   description?: string;
   /** 请求格式类型。 */
   type?: AIProviderType;
-  /** 是否自定义 provider。 */
-  isCustom?: boolean;
   /** 模型列表。 */
   models?: AIProvider['models'];
 }

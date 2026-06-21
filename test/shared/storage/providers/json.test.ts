@@ -39,9 +39,9 @@ describe('providerStorage.listProviders', () => {
     mockSettingsFileStorage.read.mockResolvedValue(
       createSettingsFile([
         { id: 'openai', isEnabled: true },
-        { id: 'custom-beta', name: 'Custom Beta', type: 'openai', isCustom: true },
+        { id: 'custom-beta', name: 'Custom Beta', type: 'openai' },
         { id: 'anthropic', isEnabled: true },
-        { id: 'custom-alpha', name: 'Custom Alpha', type: 'openai', isCustom: true },
+        { id: 'custom-alpha', name: 'Custom Alpha', type: 'openai' },
         { id: 'deepseek', isEnabled: true }
       ])
     );

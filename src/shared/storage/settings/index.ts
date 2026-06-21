@@ -81,8 +81,7 @@ function completeBuiltInProviderEntry(base: AIProvider, existing?: StoredProvide
     apiKey: existing?.apiKey,
     baseUrl: existing?.baseUrl ?? base.baseUrl,
     models: buildCompleteStoredModels(base, existing),
-    readonly: base.readonly,
-    isCustom: false
+    readonly: base.readonly
   };
 }
 
@@ -101,7 +100,7 @@ function normalizeProviderEntries(entries: StoredProviderEntry[]): StoredProvide
 
   for (const entry of normalizedEntries) {
     if (!seenIds.has(entry.id)) {
-      result.push(entry.isCustom === true ? { ...entry, readonly: false, isCustom: true } : entry);
+      result.push({ ...entry, readonly: false });
       seenIds.add(entry.id);
     }
   }

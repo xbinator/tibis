@@ -57,7 +57,6 @@ function sanitizeProviderEntry(raw: Partial<StoredProviderEntry>): StoredProvide
   if (isProviderRequestFormat(raw.type)) result.type = raw.type;
   if (isString(raw.logo)) result.logo = raw.logo;
   if (isBoolean(raw.readonly)) result.readonly = raw.readonly;
-  if (isBoolean(raw.isCustom)) result.isCustom = raw.isCustom;
 
   return result;
 }
@@ -191,8 +190,7 @@ function buildCompleteBuiltInEntry(base: AIProvider, existing: StoredProviderEnt
     apiKey: sanitizedPatch.apiKey ?? mergedProvider.apiKey,
     baseUrl: sanitizedPatch.baseUrl ?? mergedProvider.baseUrl,
     readonly: base.readonly,
-    models: buildStoredModels(base, existing, nextModels),
-    isCustom: false
+    models: buildStoredModels(base, existing, nextModels)
   });
 }
 
@@ -299,7 +297,7 @@ export const providerStorage = {
 
     // 自定义服务商继续按 settings.json 中的顺序追加。
     for (const entry of entries) {
-      if (entry.isCustom && !seenIds.has(entry.id)) {
+      if (!getDefaultProvider(entry.id) && !seenIds.has(entry.id)) {
         merged.push(entryToCustomProvider(entry));
         seenIds.add(entry.id);
       }
@@ -321,8 +319,8 @@ export const providerStorage = {
 
     // 自定义服务商
     const settings = normalizeSettingsFile(await settingsFileStorage.read());
-    const entry = settings.providers.find((e) => e.id === normalizedId && e.isCustom);
-    return entry ? entryToCustomProvider(entry) : null;
+    const entry = settings.providers.find((e) => e.id === normalizedId);
+    return entry && !getDefaultProvider(entry.id) ? entryToCustomProvider(entry) : null;
   },
 
   /** 创建或更新自定义服务商 */
@@ -335,7 +333,7 @@ export const providerStorage = {
     }
 
     const result = await enqueueWrite((current) => {
-      const existing = current.providers.find((e) => e.id === id && e.isCustom);
+      const existing = current.providers.find((e) => e.id === id);
       const entry: StoredProviderEntry = {
         id,
         name: normalized.name,
@@ -346,14 +344,13 @@ export const providerStorage = {
         apiKey: normalized.apiKey ?? existing?.apiKey,
         baseUrl: normalized.baseUrl ?? existing?.baseUrl,
         models: existing?.models ?? [],
-        readonly: false,
-        isCustom: true
+        readonly: false
       };
       return { ...current, providers: upsertEntry(current.providers, entry) };
     });
 
     const entry = result.providers.find((e) => e.id === id);
-    return entry ? entryToCustomProvider(entry) : null;
+    return entry && !getDefaultProvider(entry.id) ? entryToCustomProvider(entry) : null;
   },
 
   /** 更新服务商设置 */
@@ -375,7 +372,7 @@ export const providerStorage = {
 
     // 自定义服务商
     const result = await enqueueWrite((current) => {
-      const existing = current.providers.find((e) => e.id === normalizedId && e.isCustom);
+      const existing = current.providers.find((e) => e.id === normalizedId);
       if (!existing) return current;
 
       const sanitized = sanitizeProviderSettings(patch);
@@ -383,8 +380,7 @@ export const providerStorage = {
         ...existing,
         ...sanitized,
         models: sanitized.models ?? existing.models,
-        readonly: false,
-        isCustom: true
+        readonly: false
       };
       const next = [...current.providers];
       const index = next.findIndex((e) => e.id === normalizedId);
@@ -393,7 +389,7 @@ export const providerStorage = {
     });
 
     const entry = result.providers.find((e) => e.id === normalizedId);
-    return entry && entry.isCustom ? entryToCustomProvider(entry) : null;
+    return entry && !getDefaultProvider(entry.id) ? entryToCustomProvider(entry) : null;
   },
 
   /** 切换服务商启用状态 */
@@ -415,17 +411,17 @@ export const providerStorage = {
   async deleteCustomProvider(id: string): Promise<boolean> {
     const normalizedId = sanitizeProviderId(id);
 
-    const existedBefore = normalizeSettingsFile(await settingsFileStorage.read()).providers.some((e) => e.id === normalizedId && e.isCustom);
+    const existedBefore = normalizeSettingsFile(await settingsFileStorage.read()).providers.some((e) => e.id === normalizedId && !getDefaultProvider(e.id));
     if (!existedBefore) return false;
 
     const result = await enqueueWrite((current) => {
-      const existing = current.providers.find((e) => e.id === normalizedId && e.isCustom);
+      const existing = current.providers.find((e) => e.id === normalizedId);
       if (!existing) return current;
 
       return { ...current, providers: current.providers.filter((e) => e.id !== normalizedId) };
     });
 
-    return !result.providers.some((e) => e.id === normalizedId && e.isCustom);
+    return !result.providers.some((e) => e.id === normalizedId && !getDefaultProvider(e.id));
   },
 
   /** 重新排序服务商列表 */
