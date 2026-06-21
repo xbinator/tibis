@@ -617,8 +617,17 @@ defineExpose({
       }
     }
 
-    code .ai-selection-highlight {
-      box-shadow: 0 0.4em 0 0 var(--selection-bg), 0 -0.4em 0 0 var(--selection-bg);
+    :not(pre) > code {
+      vertical-align: middle;
+
+      .ai-selection-highlight {
+        vertical-align: baseline;
+        box-shadow: 0 0.4em 0 0 var(--selection-bg), 0 -0.4em 0 0 var(--selection-bg);
+      }
+    }
+
+    pre code .ai-selection-highlight {
+      box-shadow: 0 0.18em 0 0 var(--selection-bg), 0 -0.18em 0 0 var(--selection-bg);
     }
 
     .b-markdown-table.ai-selection-highlight {
