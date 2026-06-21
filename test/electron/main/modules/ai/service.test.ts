@@ -6,6 +6,7 @@ import type { AIInvokeResult } from 'types/ai';
 import { describe, expect, it } from 'vitest';
 import { AlibabaProvider } from '../../../../../electron/main/modules/ai/providers/alibaba.mjs';
 import { DeepSeekProvider } from '../../../../../electron/main/modules/ai/providers/deepseek.mjs';
+import { VolcengineProvider } from '../../../../../electron/main/modules/ai/providers/volcengine.mjs';
 import { createAIInvokeResult } from '../../../../../electron/main/modules/ai/service.mjs';
 
 /** AI 文本生成结果夹具类型。 */
@@ -120,5 +121,33 @@ describe('AlibabaProvider.createProviderOptions', (): void => {
     const provider = new AlibabaProvider();
 
     expect(provider.createProviderOptions({ modelId: 'qwen3.7-max' })).toBeUndefined();
+  });
+});
+
+describe('VolcengineProvider.createProviderOptions', (): void => {
+  it('maps enabled generic reasoning to Volcengine thinking enabled options', (): void => {
+    const provider = new VolcengineProvider();
+
+    expect(provider.createProviderOptions({ modelId: 'doubao-seed-2.0-pro', reasoning: { enabled: true } })).toEqual({
+      volcengine: {
+        thinking: { type: 'enabled' }
+      }
+    });
+  });
+
+  it('maps disabled generic reasoning to Volcengine thinking disabled options', (): void => {
+    const provider = new VolcengineProvider();
+
+    expect(provider.createProviderOptions({ modelId: 'doubao-seed-2.0-pro', reasoning: { enabled: false } })).toEqual({
+      volcengine: {
+        thinking: { type: 'disabled' }
+      }
+    });
+  });
+
+  it('does not add Volcengine provider options unless reasoning is explicit', (): void => {
+    const provider = new VolcengineProvider();
+
+    expect(provider.createProviderOptions({ modelId: 'doubao-seed-2.0-pro' })).toBeUndefined();
   });
 });

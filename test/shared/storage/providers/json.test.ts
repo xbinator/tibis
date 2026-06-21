@@ -69,6 +69,37 @@ describe('providerStorage.listProviders', () => {
     });
   });
 
+  it('preserves Volcengine request format for custom providers', async (): Promise<void> => {
+    mockSettingsFileStorage.read.mockResolvedValue(
+      createSettingsFile([{ id: 'custom-volcengine', name: 'Custom Volcengine', type: 'volcengine', baseUrl: 'https://example.test/api/v3' }])
+    );
+
+    const providers = await providerStorage.listProviders();
+    const provider = providers.find((item) => item.id === 'custom-volcengine');
+
+    expect(provider).toMatchObject({
+      id: 'custom-volcengine',
+      name: 'Custom Volcengine',
+      type: 'volcengine',
+      baseUrl: 'https://example.test/api/v3'
+    });
+  });
+
+  it('uses Volcengine request format for the built-in Volcengine provider', async (): Promise<void> => {
+    mockSettingsFileStorage.read.mockResolvedValue(createSettingsFile([{ id: 'volcengine', isEnabled: true }]));
+
+    const providers = await providerStorage.listProviders();
+    const provider = providers.find((item) => item.id === 'volcengine');
+
+    expect(provider).toMatchObject({
+      id: 'volcengine',
+      name: '火山引擎',
+      type: 'volcengine',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+      isEnabled: true
+    });
+  });
+
   it('stores built-in providers as complete snapshots after provider config updates', async (): Promise<void> => {
     const baseProvider = DEFAULT_PROVIDERS.find((provider) => provider.id === 'openai');
     expect(baseProvider).toBeDefined();

@@ -58,7 +58,8 @@ export const providerFormatOptions: ProviderFormatOption[] = [
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'google', label: 'Google' },
   { value: 'deepseek', label: 'Deepseek' },
-  { value: 'alibaba', label: '阿里云' }
+  { value: 'alibaba', label: '阿里云' },
+  { value: 'volcengine', label: '火山引擎' }
 ];
 
 export const providerFormatLabels = Object.fromEntries(providerFormatOptions.map((option) => [option.value, option.label]));

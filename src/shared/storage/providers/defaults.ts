@@ -339,7 +339,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     name: '火山引擎',
     description: '提供豆包系列模型，适用于对话生成、内容创作与智能助手场景。',
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-    type: 'openai',
+    type: 'volcengine',
     isEnabled: false,
     readonly: true,
     models: [

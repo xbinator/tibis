@@ -16,6 +16,7 @@ describe('normalizeSettingsFile', () => {
     const openAIProvider = normalized.providers.find((provider) => provider.id === 'openai');
     const alibabaProvider = normalized.providers.find((provider) => provider.id === 'alibaba');
     const anthropicProvider = normalized.providers.find((provider) => provider.id === 'anthropic');
+    const volcengineProvider = normalized.providers.find((provider) => provider.id === 'volcengine');
     const defaultOpenAIProvider = DEFAULT_PROVIDERS.find((provider) => provider.id === 'openai');
 
     expect(defaultOpenAIProvider).toBeDefined();
@@ -36,6 +37,11 @@ describe('normalizeSettingsFile', () => {
     expect(anthropicProvider).toMatchObject({
       id: 'anthropic',
       type: 'anthropic'
+    });
+    expect(volcengineProvider).toMatchObject({
+      id: 'volcengine',
+      type: 'volcengine',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3'
     });
   });
 });

@@ -11,6 +11,7 @@ import { AnthropicProvider } from './anthropic.mjs';
 import { DeepSeekProvider } from './deepseek.mjs';
 import { GoogleProvider } from './google.mjs';
 import { OpenAIProvider } from './openai.mjs';
+import { VolcengineProvider } from './volcengine.mjs';
 
 /**
  * AI 服务商注册表
@@ -27,6 +28,7 @@ export class AIProviderRegistry {
     this.register(new AnthropicProvider());
     this.register(new GoogleProvider());
     this.register(new DeepSeekProvider());
+    this.register(new VolcengineProvider());
   }
 
   /**

@@ -48,6 +48,7 @@
     "@ai-sdk/gateway": "3.0.114",
     "@ai-sdk/google": "^3.0.73",
     "@ai-sdk/openai": "^3.0.63",
+    "@ai-sdk/openai-compatible": "2.0.51",
     "@ai-sdk/provider": "3.0.10",
     "@ai-sdk/provider-utils": "4.0.27",
     "@modelcontextprotocol/sdk": "^1.29.0",
