@@ -57,7 +57,9 @@ const providerIcons: Record<string, string> = {
   longcat: 'longcat-color',
   tencentcloud: 'tencentcloud-color',
   ollama: 'ollama',
-  volcengine: 'volcengine-color'
+  volcengine: 'volcengine-color',
+  glm: 'zhipu-color',
+  mimo: 'xiaomimimo'
 };
 
 const modelIcons: Record<string, string> = {
