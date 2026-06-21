@@ -4,11 +4,11 @@ Tibis 是一款基于 Electron + Vue 3 + TypeScript 的桌面端 Markdown 编辑
 
 **核心能力**：
 - 双视图 Markdown 编辑器（富文本 TipTap + 源码 CodeMirror）
-- AI 聊天侧边栏（流式对话、工具调用、上下文压缩与用量指示、语音输入）
+- AI 聊天侧边栏（流式对话、主进程 ChatRuntime、工具调用、文件/图片 part 输入、上下文压缩与用量指示、语音输入）
 - 多 AI 服务商支持（OpenAI / Anthropic / Google / DeepSeek / AI Gateway）
 - 文件系统操作（读写、工作区监听、未保存草稿管理）
 - MCP（Model Context Protocol）工具集成
-- 提示词编辑器（斜杠命令 `/`、文件引用 `@`、技能调用）
+- 提示词编辑器（斜杠命令 `/`、文件引用 `@`、变量插入）
 - 上下文压缩与记忆系统
 - 绘图/白板功能（形状创建、连接线、样式面板、无限画布）
 - 主题系统（10 套预设主题，支持自定义色彩令牌）
@@ -20,17 +20,17 @@ Tibis 是一款基于 Electron + Vue 3 + TypeScript 的桌面端 Markdown 编辑
 
 | 层级 | 技术 |
 |------|------|
-| 桌面框架 | Electron 41 |
+| 桌面框架 | Electron 41.6 |
 | 前端框架 | Vue 3.5 + Composition API |
 | 构建工具 | Vite 8（Rolldown） |
 | 语言 | TypeScript 5.9（strict） |
-| 包管理 | pnpm 10 |
+| 包管理 | pnpm 10.33 |
 | 状态管理 | Pinia 3（6 个领域、19 个 store） |
 | 路由 | Vue Router 5（Hash + KeepAlive） |
 | 富文本编辑器 | TipTap 3（ProseMirror） |
 | 源码编辑器 | CodeMirror 6 |
 | JSON/代码编辑 | Monaco Editor 0.55 |
-| UI 组件库 | Ant Design Vue 4 + B 系列自研组件（28 个） |
+| UI 组件库 | Ant Design Vue 4 + B 系列自研组件（27 个） |
 | 原子化 CSS | UnoCSS（presetWind3 + presetAttributify） |
 | 样式预处理 | Less |
 | 拖拽排序 | @atlaskit/pragmatic-drag-and-drop |
@@ -45,7 +45,7 @@ Tibis 是一款基于 Electron + Vue 3 + TypeScript 的桌面端 Markdown 编辑
 | 文件监听 | Chokidar 5 |
 | 图片处理 | sharp |
 | Markdown 渲染 | marked + KaTeX（数学公式）+ Mermaid（图表） |
-| Token 估算 | js-tiktoken |
+| Token 估算 | ai SDK / tiktoken |
 | 离线存储 | localforage |
 | Schema 校验 | zod |
 
@@ -63,7 +63,7 @@ tibis/
 │   │   ├── editor/                   # 编辑器页面（核心：自动保存、文件监听、会话管理）
 │   │   │   ├── index.vue
 │   │   │   ├── types.ts
-│   │   │   ├── hooks/                # useAutoSave / useBindings / useFileSelection / useFileState / useFileWatcher / useSavePolicy / useSession
+│   │   │   ├── hooks/                # useBindings / useFileSelection / useFileState / useFileWatcher / useSession
 │   │   │   └── utils/                # filePath / reconcileFileContent
 │   │   ├── drawing/                  # 绘图/白板页面
 │   │   ├── settings/
@@ -84,38 +84,39 @@ tibis/
 │   │   │   └── components/DropZone.vue
 │   │   └── error/                    # 404 页面
 │   │
-│   ├── components/                   # B 系列组件（unplugin-vue-components 全局自动注册，28 个）
+│   ├── components/                   # B 系列组件（unplugin-vue-components 全局自动注册，27 个）
 │   │   ├── BEditor/                  # Markdown 统一编辑器
 │   │   │   ├── index.vue             # 入口（双视图路由）
 │   │   │   ├── Markdown.vue          # 纯渲染组件
-│   │   │   ├── types.ts / constants/
+│   │   │   ├── Monaco.vue            # Monaco 嵌入编辑
+│   │   │   ├── types.ts / constants/resolver.ts
 │   │   │   ├── adapters/             # 15 个适配器（选区、导航、搜索、行映射、布局主题等）
-│   │   │   ├── components/           # 8 个 UI 组件（AnchorContent、CodeBlock、CurrentBlockMenu、FrontMatterCard、HoverIndicator、LinkPopover、Sidebar、TableView）
+│   │   │   ├── components/           # 9 个 UI 组件（AnchorContent、CodeBlock、CurrentBlockMenu、FrontMatterCard、HoverIndicator、LinkPopover、MathBlock、Sidebar、TableView）
 │   │   │   ├── extensions/           # 7 个 CodeMirror/TipTap 扩展（AI 高亮、装饰、搜索、表格控件等）
 │   │   │   ├── hooks/                # 11 个编辑器 hooks（useAnchors、useContent、useRichEditor、useEditorController、useEditorResolver 等）
 │   │   │   ├── panes/                # PaneRichEditor / PaneSourceEditor
-│   │   │   ├── shared/               # 7 个共享组件（FindBar、SelectionToolbar、SelectionAIInput、CommentCard 等）
-│   │   │   └── utils/                # 6 个工具（editorMarkdown、exportToPdf、mermaidRenderId、richCodeBlockLowlight 等）
-│   │   ├── BChatSidebar/             # AI 聊天侧边栏
+│   │   │   ├── shared/               # 7 个共享组件（FindBar、SelectionToolbar、SelectionAIInput、SelectionCommentInput、CommentCard 等）
+│   │   │   └── utils/                # 7 个工具（editorMarkdown、exportToPdf、mermaidRenderId、richCodeBlockLowlight、richMarkdownParser 等）
+│   │   ├── BChat/                    # AI 聊天侧边栏（原 BChatSidebar 已重命名）
 │   │   │   ├── index.vue / types.ts
 │   │   │   ├── components/           # 14 个组件（ConversationView、MessageBubble、SessionHistory、InputToolbar、QuestionCard、ConfirmationSheet、UsagePanel、TodoPanel、FileRefChip、ImagePreview、InteractionContainer 等）
 │   │   │   │   ├── InputToolbar/     # ContextUsage / ModelSelector / VoiceInput / VoiceWaveform
-│   │   │   │   ├── MessageBubble/    # 7 个子组件（BubblePart、Compression、Text、Thinking、Tool、ToolCode、UserInput）
+│   │   │   │   ├── MessageBubble/    # 7 个子组件（BubblePart、BubblePartStatus、BubblePartText、BubblePartThinking、BubblePartTool、BubblePartToolCode、BubblePartUserInput）
 │   │   │   │   └── InteractionContainer/ # ToastItem 交互反馈
-│   │   │   ├── hooks/                # 20 个 hooks（useChatStream、useAutoName、useCompactContext、useVoiceRecorder、useSkillInit、useSlashCommands、useChatHistory、useRollback、useContextUsage 等）
-│   │   │   └── utils/                # 15 个工具 + compression/ 子目录（15 个压缩模块）
-│   │   │       └── compression/      # compressionMetrics / coordinator / planner / policy / segmentRecall / structuredSummaryGenerator / summaryAdapter / summaryRenderer / tailPolicy / tokenEstimator / topicSegmenter / types 等
+│   │   │   ├── hooks/                # 25 个 hooks（useChatRuntime、useAutoName、useRuntimeCompactContext、useVoiceInput、useVoiceSession、useSkillInit、useSlashCommands、useChatHistory、useRollback、useContextUsage 等）
+│   │   │   └── utils/                # 15 个工具 + compression/ 子目录（tokenEstimator、chipResolver、filePartParser、messageHelper、runtimeBridge、toolResultSummary 等）
 │   │   ├── BDrawing/                 # 绘图/白板组件
 │   │   │   ├── index.vue / types.ts
-│   │   │   ├── components/           # 6 个子组件（InfiniteViewport、Minimap、MoveableLayer、SelectoLayer、StylePanel、Toolbar）
-│   │   │   ├── hooks/                # 3 个 hooks（useDrawingBoard、useDrawingInteraction、useDrawingViewport）
-│   │   │   ├── renderers/            # 5 个渲染器（Canvas、Connector、CreatePreview、Edge、Node）
+│   │   │   ├── components/           # 8 个子组件（InfiniteViewport、Minimap、MoveableLayer、SelectoLayer、StylePanel、Toolbar、ColorPalette、TextEditorOverlay）
+│   │   │   ├── constants/            # 7 组常量（board / dom / interaction / minimap / style / text / viewport）
+│   │   │   ├── hooks/                # 6 个 hooks（useDrawingBoard、useDrawingInteraction、useDrawingViewport、useModelSync、useTextEditing、useViewportSize）
+│   │   │   ├── renderers/            # 4 个渲染器（Canvas、Connector、CreatePreview、Node）
 │   │   │   └── utils/                # 3 个工具（boardTransforms、drawingGeometry、drawingTextMetrics）
-│   │   ├── BPromptEditor/            # 提示词输入框（斜杠命令 `/`、文件引用 `@`、变量插入、6 个 ProseMirror 扩展）
+│   │   ├── BPromptEditor/            # 提示词输入框（斜杠命令 `/`、文件引用 `@`、变量插入、ProseMirror 扩展）
 │   │   ├── BMonaco/                  # Monaco Editor 封装
 │   │   ├── BPanelSplitter/           # 可拖拽面板分割器（closeThreshold 拖拽关闭）
 │   │   ├── BSearchRecent/            # 最近文件搜索弹窗
-│   │   ├── BModelIcon/               # 33 个 AI 模型提供商图标（亮/暗色主题）
+│   │   ├── BModelIcon/               # AI 模型提供商图标（亮/暗色主题）
 │   │   ├── BModelSelect/             # AI 模型选择器（模态框搜索、Provider 分组）
 │   │   ├── BToolbar/                 # 工具栏菜单
 │   │   ├── BBubble/                  # 气泡消息（头像 + 折叠 + Loading）
@@ -133,19 +134,19 @@ tibis/
 │   │   ├── BIcon/                    # 图标组件
 │   │   ├── BMessage/                 # 全局消息提示组件
 │   │   ├── BButton / BModal / BSelect  # 通用 UI 组件
-│   │   └── BTldraw/                  # Tldraw 适配器（开发中）
+│   │   └── BTldraw/                  # 已移除，由 BDrawing 取代
 │   │
-│   ├── layouts/default/              # 默认布局（标题栏 + Tab 栏 + RouterView/KeepAlive + 侧边栏）
+│   ├── layouts/default/              # 默认布局（标题栏 + Tab 栏 + RouterView/KeepAlive + 聊天侧边栏）
 │   │   ├── index.vue / types.ts
-│   │   ├── components/               # HeaderTabs（Pragmatic Drag and Drop 排序）/ HeaderEditorActions / HeaderUpdateNotice / ShortcutsHelp
-│   │   ├── hooks/                    # useKeepAlive / useTabDragger / useFileActive / useEditActive / useViewActive / useHelpActive
+│   │   ├── components/               # HeaderTabs / HeaderEditorActions / HeaderUpdateNotice / ShortcutsHelp / ChatSider
+│   │   ├── hooks/                    # useKeepAlive / useTabDragger / useChatSession / useFileActive / useEditActive / useViewActive / useHelpActive
 │   │   └── utils/                    # headerTabsScroll
 │   │
 │   ├── router/                       # 路由配置
 │   │   ├── index.ts                  # createWebHashHistory + import.meta.glob 聚合模块
 │   │   ├── cache.ts / type.ts
 │   │   └── routes/
-│   │       ├── index.ts              # 聚合入口（import.meta.glob('./modules/**.ts'））
+│   │       ├── index.ts              # 聚合入口（import.meta.glob('./modules/**.ts')）
 │   │       └── modules/              # drawing.ts / editor.ts / settings.ts / webview.ts / welcome.ts
 │   │
 │   ├── stores/                       # Pinia 状态管理
@@ -158,24 +159,15 @@ tibis/
 │   │
 │   ├── ai/                           # AI 子系统
 │   │   ├── tools/                    # 工具系统
-│   │   │   ├── builtin/              # 15 个内置工具（每工具独立目录）
-│   │   │   │   ├── DocumentTool/     # 读取/编辑当前编辑器文档
-│   │   │   │   ├── EnvironmentTool/  # 环境信息查询
-│   │   │   │   ├── FileEditTool/     # 编辑本地文件（搜索/替换）
-│   │   │   │   ├── FileReadTool/     # 读取文件 + 列出目录
-│   │   │   │   ├── FileWriteTool/    # 写入文件（支持 unsaved:// 虚拟路径）
-│   │   │   │   ├── LogsTool/         # 查询应用运行日志
-│   │   │   │   ├── MCPTool/          # MCP 服务器配置读写
+│   │   │   ├── builtin/              # 5 个保留在渲染进程执行的内置工具
 │   │   │   │   ├── MemoryTool/       # 记忆管理
-│   │   │   │   ├── OpenResourceTool/ # 打开资源
 │   │   │   │   ├── QuestionTool/     # 向用户提问（多选/单选）
-│   │   │   │   ├── SettingsTool/     # 应用设置读写
 │   │   │   │   ├── ShellTool/        # Shell 命令执行
 │   │   │   │   ├── SkillTool/        # 技能注册与调用
 │   │   │   │   ├── TodoWriteTool/    # 待办列表管理
-│   │   │   │   ├── WebpageTool/      # 网页内容抓取与摘要
-│   │   │   │   └── index.ts
-│   │   │   ├── context/              # 工具上下文（editor.ts / webview.ts）
+│   │   │   │   └── index.ts          # 内置工具清单、暴露策略、schema-only 工厂聚合
+│   │   │   ├── catalog/              # runtimeTools.ts（ChatRuntime 主进程工具的 renderer 侧 schema-only 工厂）
+│   │   │   ├── context/              # 工具上下文（editor.ts / webview.ts / drawing.ts）
 │   │   │   ├── shared/               # fileErrors / fileTool / types
 │   │   │   ├── confirmation.ts       # 用户确认适配器接口
 │   │   │   ├── permission.ts         # 权限执行引擎（readonly/ask/autoSafe）
@@ -200,30 +192,34 @@ tibis/
 │   │   │   ├── service-models/       # 服务模型配置
 │   │   │   ├── settings/             # 应用设置持久化
 │   │   │   ├── tool-settings/        # MCP/搜索工具配置
-│   │   │   ├── memories/             # 记忆存储（开发中）
-│   │   │   └── utils/                # 数据库连接 + 序列化
+│   │   │   ├── utils/                # 数据库连接 + 序列化
+│   │   │   └── index.ts
 │   │   ├── chat/                     # 文件引用事件桥接
 │   │   ├── logger/                   # 日志类型与工具
 │   │   ├── utils/                    # hash 工具
 │   │   └── workspace/                # 路径工具
 │   │
-│   ├── hooks/                        # 全局组合式函数（13 个）
+│   ├── hooks/                        # 全局组合式函数（17 个）
 │   │   ├── useAntdTheme.ts           # Ant Design 明暗主题
 │   │   ├── useAutoCollapse.ts        # ResizeObserver 自动折叠
 │   │   ├── useChat.ts                # AI 流式聊天（invoke/stream/abort）
 │   │   ├── useClipboard.ts           # 剪贴板操作
+│   │   ├── useFileAutoSave.ts        # 文件自动保存
+│   │   ├── useFileDrop.ts            # 文件拖拽处理
+│   │   ├── useFileSession.ts         # 文件会话关联
 │   │   ├── useImagePreview.ts        # 图片预览（跨平台：Electron 原生 / Web）
 │   │   ├── useMenuAction.ts          # 系统菜单动作注册
 │   │   ├── useNavigate.ts            # 统一导航
 │   │   ├── useOpenDraft.ts           # 草稿文件打开
 │   │   ├── useOpenFile.ts            # 统一文件打开
+│   │   ├── useSavePolicy.ts          # 保存策略
 │   │   ├── useScroller.ts            # DOM 滚动包装
 │   │   ├── useShortcuts.ts           # 键盘快捷键（@vueuse/core useMagicKeys）
 │   │   ├── useSystem.ts              # 系统信息查询
 │   │   └── useWorkspaceRoot.ts       # 工作区根目录
 │   │
-│   ├── utils/                        # 工具函数（15 个）
-│   │   ├── asyncTo.ts / css.ts / emitter.ts / env.ts / is.ts / json.ts
+│   ├── utils/                        # 工具函数（16 个）
+│   │   ├── asyncTo.ts / css.ts / emitter.ts / env.ts / image.ts / is.ts / json.ts
 │   │   ├── logger.ts / modal.tsx / namespace.ts / scroll.ts / shortcut.ts
 │   │   └── file/                     # icons / reference / title / unsaved
 │   │
@@ -232,16 +228,34 @@ tibis/
 │   ├── constants/                    # extensions / shortcuts
 │   └── assets/styles/                # 全局样式（global / normalize / reset / markdown / scrollbar）
 │
+├── shared/                           # 主进程与渲染进程共享代码
+│   └── ai/
+│       └── tools/
+│           └── toolRegistry.ts       # ChatRuntime 已迁移工具的跨进程纯元数据 registry
+│
 ├── electron/                         # Electron 主进程 + preload
 │   ├── main/
 │   │   ├── index.mts                 # 主进程入口（初始化流程：日志→存储→数据库→IPC→菜单→窗口）
 │   │   ├── lifecycle.mts             # 生命周期管理
 │   │   ├── window.mts                # 窗口管理（无边框、macOS 红绿灯、preload 注入）
 │   │   ├── env.mts / types.ts
-│   │   └── modules/                  # IPC 模块（17 个注册模块）
+│   │   └── modules/                  # IPC 模块
 │   │       ├── index.mts             # 统一注册入口
-│   │       ├── ai/                   # AI 流式/非流式调用（4 个 Provider：openai/anthropic/google/deepseek + errors/）
-│   │       ├── chat/                 # 聊天会话持久化（支持单条消息更新）
+│   │       ├── ai/                   # AI 流式/非流式调用（Provider：openai/anthropic/google/deepseek + errors/）
+│   │       ├── chat/                 # 聊天会话持久化 + ChatRuntime 主进程服务
+│   │       │   ├── runtime/          # ChatRuntime 核心
+│   │       │   │   ├── compaction/   # 上下文压缩（executor / service / structured-summary-generator）
+│   │       │   │   ├── context/      # 上下文预算/估算/模型消息/溢出降级/工具输出裁剪（budget / estimator / model-message / overflow / tool-output-prune / usage）
+│   │       │   │   ├── controllers/  # renderer bridge / 确认请求 / renderer 工具请求（bridge / confirmation / renderer-tool）
+│   │       │   │   ├── domain/       # 画板 runtime 桥接（drawing-runtime）
+│   │       │   │   ├── infrastructure/ # 锁（locks）
+│   │       │   │   ├── messages/     # 消息工厂/续接/文件 part 物化/最终化/用户选择（continuation / factory / file-parts / finalizer / user-choice）
+│   │       │   │   ├── model/        # 模型解析/自动命名（resolver / auto-name）
+│   │       │   │   ├── runners/      # runtime 工厂（factory）
+│   │       │   │   ├── stream/       # 流式执行器（chunks / index / message-parts / request / tools / types）
+│   │       │   │   ├── tools/        # 主进程工具执行器（DrawingTool / FileTool / ReadTool / ResourceTool / SettingsTool）
+│   │       │   │   ├── errors.mts / ipc.mts / service.mts / types.mts
+│   │       │   ├── ipc.mts / service.mts
 │   │       ├── database/             # SQLite 操作（execute / select / transaction）
 │   │       ├── dialog/               # 原生文件对话框
 │   │       ├── export/               # PDF 导出
@@ -262,32 +276,34 @@ tibis/
 │       ├── error-collector.mts       # 全局错误收集 preload
 │       └── webview.mts               # WebView 页面 preload
 │
-├── types/                            # 全局 TypeScript 类型声明（9 个 .d.ts 文件）
-│   ├── ai.d.ts / chat.d.ts / compression.d.ts / electron-api.d.ts
+├── types/                            # 全局 TypeScript 类型声明
+│   ├── ai.d.ts / chat.d.ts / chat-runtime.d.ts / compression.d.ts / electron-api.d.ts
 │   ├── global.d.ts / model.d.ts / webview.d.ts / vite-env.d.ts
 │   └── components.d.ts              # 自动生成的组件类型
 │
-├── test/                             # 测试套件（54 个测试文件，按 src 结构镜像组织）
-│   ├── components/                   # BChat（21）、BColorPicker、BDrawing（3）、BMessage
-│   ├── electron/                     # 主进程测试（lifecycle、mcp/transport、ui、updater）
-│   ├── hooks/                        # useImagePreview
-│   ├── layouts/                      # HeaderTabs、useHelpActive 等
+├── test/                             # 测试套件（128 个测试文件，按 src/electron/shared 结构镜像组织）
+│   ├── ai/                           # 工具系统测试（builtin / drawing-context / tool-registry）
+│   ├── components/                   # BChat（22）、BColorPicker、BDrawing（10）、BEditor（13）、BMessage（4）、BMonaco
+│   ├── electron/                     # 主进程测试（ai/errors、chat/runtime、lifecycle、mcp/transport、ui、updater）
+│   ├── hooks/                        # useClipboard / useFileAutoSave / useFileSession / useImagePreview / useOpenFile / useSavePolicy / useSystem
+│   ├── layouts/                      # ChatSider、HeaderTabs、useHelpActive 等
 │   ├── router/                       # drawing 路由
-│   ├── shared/storage/               # files、providers、tool-settings、database
-│   ├── stores/                       # session、headerToolbar
-│   ├── views/                        # editor、settings/mcp+memory、webview、welcome
+│   ├── shared/storage/               # files、providers、settings、tool-settings、database
+│   ├── stores/                       # ai/memory-loading / service-model、chat/session+todo、ui/header-toolbar
+│   ├── utils/                        # file/reference、image
+│   ├── views/                        # editor、drawing、settings/provider+service-model+mcp+memory、webview、welcome
 │   └── theme/                        # 主题测试
 │
 ├── docs/                             # 项目文档
 │   ├── code-wiki/                    # 代码百科（概述/架构/前端/编辑器/Electron/存储/AI/开发指南/依赖地图，10 篇）
-│   ├── ai-tools/                     # AI 工具系统分析 + 6 个任务文档
+│   ├── ai-tools/                     # AI 工具系统分析 + 任务文档
 │   ├── web-view/                     # WebView 设计文档
 │   ├── speech/                       # 语音功能说明
 │   ├── development/                  # 开发问题与注意事项
 │   ├── markdown-symbol-highlight/    # Markdown 符号高亮方案
-│   └── superpowers/                  # ~194 篇技术文档（92 plans + 95 specs + 7 reviews）
+│   └── superpowers/                  # 技术文档（103 plans + 106 specs + 7 reviews）
 │
-├── changelog/                        # 变更日志（按日期 .md，覆盖 2026-03-26 至今，74 篇）
+├── changelog/                        # 变更日志（按日期 .md，覆盖 2026-03-26 至今，82 篇）
 ├── scripts/                          # 构建与工具脚本
 │   ├── clean-dist-electron.mjs       # 清理 dist-electron
 │   └── speech/                       # 语音运行时脚本（dev-runtime / manifest-tool）
@@ -306,7 +322,7 @@ tibis/
 │                      渲染进程 (Vue 3)                            │
 │                                                                  │
 │  ┌──────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────┐   │
-│  │  BEditor  │  │ BChatSidebar │  │ BDrawing │  │ Settings │   │
+│  │  BEditor  │  │    BChat     │  │ BDrawing │  │ Settings │   │
 │  │ (Markdown)│  │  (AI 聊天)   │  │ (绘图)   │  │(服务商配置)│   │
 │  └─────┬─────┘  └──────┬───────┘  └────┬─────┘  └────┬─────┘   │
 │        │               │               │              │          │
@@ -320,20 +336,26 @@ tibis/
 │                    主进程 (Electron)                              │
 │                         │                                        │
 │   ┌─────────┐  ┌───────┴──────┐  ┌──────────┐  ┌──────────┐   │
-│   │ AI 服务  │  │   文件操作    │  │  数据库   │  │   MCP    │   │
-│   │(多Provider)│ │ (读写/监听)  │  │ (SQLite) │  │(stdio)   │   │
+│   │ AI 服务  │  │  ChatRuntime │  │  数据库   │  │   MCP    │   │
+│   │(多Provider)│ │(模型调用/主进程 │  │ (SQLite) │  │(stdio)   │   │
+│   │          │  │  工具/压缩)   │  │          │  │          │   │
 │   └─────────┘  └──────────────┘  └──────────┘  └──────────┘   │
+│   ┌─────────┐  ┌──────────────┐  ┌──────────┐                  │
+│   │ 文件操作 │  │    语音服务   │  │   日志    │                  │
+│   │(读写/监听)│ │ (whisper.cpp)│  │          │                  │
+│   └─────────┘  └──────────────┘  └──────────┘                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### 关键数据流
 
 1. **编辑文件**：渲染进程 → `electronAPI.readFile/writeFile` → IPC → 主进程 file 模块 → 本地文件系统
-2. **AI 流式聊天**：渲染进程 → `electronAPI.aiStream` → IPC → 主进程 AI 服务 → Vercel AI SDK → 外部 API → 流式回传（text / thinking / tool-call / tool-input / tool-result / finish / error 事件）
-3. **数据持久化**：渲染进程 → `electronAPI.dbExecute/dbSelect` → IPC → 主进程 better-sqlite3
-4. **文件监听**：主进程 Chokidar 监听工作区 → 变更事件 → IPC push → 渲染进程 fileWatch store → 编辑器自动重载
-5. **MCP 工具调用**：AI 服务识别 tool-call → 渲染进程工具系统 → 需要时回调主进程 MCP 运行时 → stdio 执行 → 结果回传
-6. **绘图操作**：渲染进程 BDrawing → moveable/selecto 本地交互 → v-model 双向绑定 → 文档内容同步
+2. **AI 流式聊天**：渲染进程 `useChatRuntime` → `chat:runtime:start` IPC → 主进程 ChatRuntime → 模型解析 → Vercel AI SDK → 外部 API → 流式回传 → 主进程更新消息 → 渲染进程同步
+3. **主进程工具执行**：AI 流中识别 tool-call → ChatRuntime 判断归属 → 主进程工具（file/read/settings/drawing/resource）直接在主进程执行；renderer 工具通过 `chat:runtime:tool-requested` bridge 到渲染进程执行
+4. **数据持久化**：渲染进程 → `electronAPI.dbExecute/dbSelect` → IPC → 主进程 better-sqlite3
+5. **文件监听**：主进程 Chokidar 监听工作区 → 变更事件 → IPC push → 渲染进程 fileWatch store → 编辑器自动重载
+6. **MCP/Tavily 工具**：由 Vercel AI SDK 直接调用（`mcp_*`、`tavily_search`、`tavily_extract`）
+7. **绘图操作**：渲染进程 BDrawing → moveable/selecto 本地交互 → v-model 双向绑定 → 文档内容同步
 
 ### 安全边界
 
@@ -352,7 +374,7 @@ tibis/
 2. 初始化日志（控制台）
 3. 清理过期日志 → 启动日志维护定时器
 4. 初始化 electron-store（加密存储）→ 初始化 SQLite 数据库
-5. 注册全部 IPC handler（17 个模块）
+5. 注册全部 IPC handler（各模块统一在 `modules/index.mts` 注册）
 6. 设置系统菜单 → 刷新平台快捷入口
 7. 创建窗口 → 处理启动时的快捷动作（open-file / second-instance）
 8. 生命周期管理（lifecycle.mts 管理应用退出/重启流程）
@@ -404,18 +426,18 @@ tibis/
 
 ## B 系列组件体系
 
-项目采用 `unplugin-vue-components` 实现 B 系列组件全局自动注册，命名规范为 `B` + 功能名，无需手动 import。当前共 28 个组件。
+项目采用 `unplugin-vue-components` 实现 B 系列组件全局自动注册，命名规范为 `B` + 功能名，无需手动 import。当前共 27 个组件（BTldraw 已移除，由 BDrawing 取代）。
 
 | 组件 | 说明 |
 |------|------|
 | **BEditor** | Markdown 双视图编辑器（TipTap 富文本 + CodeMirror 源码），含 15 个适配器、11 个 hooks、7 个扩展 |
-| **BChatSidebar** | AI 聊天侧边栏（流式对话、工具调用、会话历史、文件引用、语音输入、上下文压缩与用量指示、侧边栏放大覆盖），含 20 个 hooks |
-| **BDrawing** | 绘图/白板组件（形状创建/拖拽/旋转/缩放、连接线/贝塞尔曲线/箭头、样式面板、无限画布、小地图），含 6 个子组件、3 个 hooks、5 个渲染器 |
-| **BPromptEditor** | 提示词输入框（斜杠命令、@mention 文件引用、变量插入、6 个 ProseMirror 扩展） |
+| **BChat** | AI 聊天侧边栏（原 `BChatSidebar` 重命名），流式对话、工具调用、会话历史、文件引用、语音输入、上下文压缩与用量指示，含 25 个 hooks |
+| **BDrawing** | 绘图/白板组件（形状创建/拖拽/旋转/缩放、连接线/贝塞尔曲线/箭头、样式面板、无限画布、小地图、文本编辑），含 8 个子组件、6 个 hooks、4 个渲染器 |
+| **BPromptEditor** | 提示词输入框（斜杠命令、@mention 文件引用、变量插入、ProseMirror 扩展） |
 | **BMonaco** | Monaco Editor 封装（JSON/代码编辑） |
 | **BPanelSplitter** | 可拖拽面板分割器（支持 closeThreshold 拖拽关闭） |
 | **BSearchRecent** | 最近文件搜索弹窗（支持绝对路径打开） |
-| **BModelIcon** | AI 模型图标（33 个提供商，亮/暗色主题） |
+| **BModelIcon** | AI 模型图标（多提供商，亮/暗色主题） |
 | **BModelSelect** | AI 模型选择器（搜索、Provider 分组） |
 | **BToolbar** | 工具栏菜单（文件/编辑/视图/帮助） |
 | **BBubble** | 气泡消息（Avatar + Loading + 折叠） |
@@ -433,7 +455,6 @@ tibis/
 | **BMessage** | 全局消息提示组件 |
 | **BButton / BModal / BSelect** | 通用 UI 组件 |
 | **BDropdown** | 下拉菜单 |
-| **BTldraw** | Tldraw 适配器（开发中） |
 
 ---
 
@@ -471,7 +492,7 @@ Pinia stores 按业务领域分为 6 个目录，19 个 store 文件：
 
 | Store | 职责 |
 |-------|------|
-| `setting` | 应用设置（主题、语言、快捷键等） |
+| `setting` | 应用设置（主题、语言、快捷键、侧边栏可见性等） |
 | `headerToolbar` | 标题栏工具栏状态 |
 
 ### workspace/ — 工作区
@@ -494,43 +515,58 @@ Pinia stores 按业务领域分为 6 个目录，19 个 store 文件：
 
 ## AI 工具系统
 
-### 工具定义架构
+### 工具执行架构
+
+当前工具系统已经迁移到以 ChatRuntime 主进程执行为核心，渲染进程负责需要 UI/编辑器上下文的工具，Vercel AI SDK 直接托管 MCP/Tavily 工具。
 
 ```
 src/ai/tools/
-├── builtin/              # 15 个内置工具，每工具独立目录
-│   ├── DocumentTool/     # 读写当前编辑器文档
-│   ├── EnvironmentTool/  # 环境信息查询
-│   ├── FileEditTool/     # 编辑本地文件（搜索/替换，支持未保存草稿）
-│   ├── FileReadTool/     # 读取文件 + 列出目录
-│   ├── FileWriteTool/    # 写入文件（支持 unsaved:// 虚拟路径）
-│   ├── LogsTool/         # 查询应用日志
-│   ├── MCPTool/          # MCP 服务器配置读写
-│   ├── MemoryTool/       # 记忆管理
-│   ├── OpenResourceTool/ # 打开资源文件
-│   ├── QuestionTool/     # 向用户提问（多选/单选，支持自定义输入）
-│   ├── SettingsTool/     # 应用设置读写
+├── builtin/              # 5 个保留在渲染进程执行的内置工具
+│   ├── MemoryTool/       # 记忆读写
+│   ├── QuestionTool/     # 向用户提问
 │   ├── ShellTool/        # Shell 命令执行
-│   ├── SkillTool/        # 技能注册与调用（斜杠命令路由、参数解析）
+│   ├── SkillTool/        # 技能注册与调用
 │   ├── TodoWriteTool/    # 待办列表管理
-│   ├── WebpageTool/      # 网页内容抓取与摘要
-│   └── index.ts
-├── context/              # 工具上下文（editor.ts 编辑器上下文 / webview.ts WebView 上下文）
+│   └── index.ts          # 内置工具清单、暴露策略、默认暴露与条件暴露列表
+├── catalog/
+│   └── runtimeTools.ts   # ChatRuntime 主进程工具的 renderer 侧 schema-only 工厂
+├── context/              # 工具上下文（editor.ts / webview.ts / drawing.ts）
 ├── shared/               # fileErrors / fileTool / types
 ├── confirmation.ts       # 用户确认适配器接口
 ├── permission.ts         # 权限执行引擎（readonly / ask / autoSafe）
 ├── policy.ts             # 模型工具支持策略
 ├── results.ts            # 工具结果工厂函数
 └── stream.ts             # 工具流式执行适配
+
+electron/main/modules/chat/runtime/tools/
+├── DrawingTool/          # 画板操作（create_drawing / read_current_drawing / apply_drawing_operations）
+├── FileTool/             # 文件操作（create_document / read_file / read_directory / write_file / edit_file）
+├── ReadTool/             # 只读工具（read_current_document / get_current_time / query_logs / read_current_webpage）
+├── ResourceTool/         # 资源打开（open_resource）
+├── SettingsTool/         # 设置读写（get_settings / update_settings / get_mcp_settings / add_mcp_server / update_mcp_server / remove_mcp_server / refresh_mcp_discovery）
+├── constants.mts / guards.mts / paths.mts / results.mts / types.mts
+└── index.mts             # 主进程工具执行入口
+
+shared/ai/tools/toolRegistry.ts   # 已迁移工具的跨进程纯元数据 registry（runtime / group / exposure / definition）
 ```
 
-### 编辑器上下文
+### 工具运行时归属
 
-编辑器上下文（当前文档内容、选区、未保存草稿路径等）由 BEditor 内部通过 `useEditorToolContext` 提供，工具通过 `context/editor.ts` 中的注册表获取，确保工具调用能正确操作当前文档。WebView 上下文由 `context/webview.ts` 管理。
+| 归属 | 说明 | 示例 |
+|------|------|------|
+| `main` | ChatRuntime 主进程直接执行 | `read_file`、`write_file`、`get_settings`、`create_drawing` |
+| `renderer` | 通过 IPC bridge 到渲染进程执行 | `question_user`、`skill_*`、`memory`、`todo_write`、`shell_command` |
+| `sdk` | Vercel AI SDK 直接调用 | `tavily_search`、`tavily_extract`、`mcp_*` |
 
-### 未保存文档路径
+### 跨进程工具注册表
 
-未保存文档使用 `unsaved://` 虚拟路径协议（格式：`unsaved://{id}/{fileName}.{ext}`），通过 `src/utils/file/unsaved.ts` 管理，允许 AI 工具在文档保存前进行读写。
+`shared/ai/tools/toolRegistry.ts` 集中定义已迁移工具的元数据：
+- `runtime`：main / renderer / sdk
+- `group`：read / file / settings / drawing / resource
+- `exposure`：default-readonly / default-writable / conditional-readonly / conditional-writable / compat-hidden
+- `definition`：工具名称、描述、风险等级、参数 schema、权限类别、safeAutoApprove 等
+
+渲染进程 `src/ai/tools/builtin/index.ts` 通过 `getToolNamesByExposure` 动态派生默认/条件暴露的工具白名单，与 `catalog/runtimeTools.ts` 中的 schema-only 工厂组合，向 AI SDK 注册可用工具。
 
 ### 权限执行引擎
 
@@ -545,47 +581,69 @@ src/ai/tools/
 
 ## 聊天系统
 
-### 流式对话
+### ChatRuntime 主进程架构
 
-`useChatStream` hook 管理完整流式对话生命周期：
-1. 用户输入 → send 消息
-2. 渲染进程 `electronAPI.aiStream` → IPC → 主进程 AI 服务
-3. Vercel AI SDK 调用外部 API（按 provider 路由）
-4. 流式事件回传（text / thinking / tool-call / tool-input / tool-result / finish / error）
-5. 工具调用 → 渲染进程工具执行 → 结果注入 → 继续生成
-6. 对话完成 → 自动命名会话（检测无 pending 交互时触发）
+聊天核心已重构为 **ChatRuntime 主进程服务**（`electron/main/modules/chat/runtime/`），渲染进程通过 `useChatRuntime` hook 与主进程协同。
+
+```
+electron/main/modules/chat/runtime/
+├── service.mts           # ChatRuntime 服务骨架：start / continue / compact / abort / submitConfirmation / submitUserChoice / submitToolResult / autoName
+├── stream/               # 模型流式执行器
+│   ├── index.mts         # 主循环（text-delta / reasoning-delta / tool-call / tool-result / finish / error）
+│   ├── tools.mts         # 工具执行分发、未注册工具兜底、continue/stop 状态累积
+│   ├── message-parts.mts # assistant 消息 part 追加与最终化
+│   ├── request.mts       # runtime 请求构建
+│   └── chunks.mts        # 流 chunk 归一化
+├── tools/                # 主进程工具执行器
+├── context/              # 上下文预算、估算、模型消息转换、溢出降级、工具输出裁剪
+├── compaction/           # 上下文压缩服务与执行器
+├── messages/             # 消息工厂、续接、文件 part 物化、最终化、用户选择
+├── controllers/          # renderer bridge / 确认请求 / renderer 工具请求
+├── model/                # 模型解析与自动命名
+├── runners/              # send / continue / compact / user-choice runtime 工厂
+└── infrastructure/       # runtime 锁
+```
+
+### 流式对话生命周期
+
+1. 用户输入（文本 / 文件引用 / 图片 file part）→ 渲染进程 `useChatRuntime.send`
+2. `chat:runtime:start` IPC → 主进程 ChatRuntime 创建 runtime
+3. 模型解析（`model/resolver.mts`）→ Vercel AI SDK 调用外部 API
+4. 流式事件回传（text / reasoning / tool-call / tool-input / tool-result / finish / error）
+5. 工具调用 → ChatRuntime 判断归属：
+   - 主进程工具：直接执行并回传结果
+   - renderer 工具：通过 `chat:runtime:tool-requested` 请求渲染进程执行并等待结果
+   - SDK 工具：由 AI SDK 在流中直接完成
+6. 需要继续时自动 continuation（最多 25 轮），完成时返回 usage 并触发自动命名
 7. Assistant 草稿持久化 → 硬中断恢复（interruptedDraftRecovery）
 
 ### 上下文压缩（/compact）
 
 - **触发**：`/compact` 斜杠命令手动触发，或发送前根据 token 使用率自动触发
-- **策略**：保留最后 2 轮原始消息作锚点，对更早消息生成结构化摘要（目标、约束、决策、事实、文件线索、待办）
-- **增量压缩**：基于上次摘要边界继续压缩，支持多段摘要
-- **Schema v3**：改进压缩保真度，优化结构化摘要生成
-- **持久化**：压缩消息写入 `chat_session_summaries` 表，支持会话恢复
+- **策略**：保留最后 2 轮原始消息作锚点，对更早消息生成结构化摘要
+- **执行**：`compaction/executor.mts` 调用压缩模型，`structured-summary-generator.mts` 生成摘要
+- **持久化**：压缩记录写入 `chat_session_records` 表，支持会话恢复
 
 ### 上下文用量指示
 
 - **ContextUsage 组件**：输入工具栏中显示当前 token 用量
 - **useContextUsage hook**：追踪上下文窗口使用率
 - **contextUsageBudget 工具**：基于当前消息切片估算 token 消耗
+- **context/budget.mts**：主进程上下文预算服务
 
-### 文件引用
+### 文件引用与 file part
 
-聊天输入支持 `{{@fileName:startLine-endLine}}` 格式的 token：
-- 粘贴/拖拽文件自动生成 file-ref
-- 编辑器选中文本 → 触发文件引用事件 → 插入 token → 自动聚焦
-- FileRefChip 组件统一渲染（聊天消息和输入框中复用同一套渲染逻辑）
+聊天输入支持两种文件形式：
+- `{{@fileName:startLine-endLine}}` 文件引用 token：粘贴/拖拽文件自动生成，编辑器选中文本可触发插入
+- `file` part：用户直接粘贴/拖拽图片或文件，作为 message part 发送
+
+FileRefChip 组件统一渲染文件引用，ImagePreview 组件处理图片预览。
 
 ### 用户确认与交互
 
-- **confirmationController**：管理工具调用确认流程（approve / approve-session / approve-always / cancel）
+- **ConfirmationSheet**：工具调用确认流程（approve / approve-session / approve-always / cancel）
 - **QuestionTool**：向用户提问（产生 pending 状态，影响自动命名触发判断）
-- **InteractionContainer**：统一管理 Toast 通知、Confirm 弹窗等交互反馈
-
-### 聊天侧边栏放大覆盖
-
-支持聊天侧边栏放大为全屏覆盖模式，提供更大的对话空间。
+- **InteractionContainer**：统一管理 Toast 通知等交互反馈
 
 ### 语音输入
 
@@ -627,17 +685,20 @@ BEditor 提供两个视图面板，通过 Tab 切换：
 
 ### 编辑器扩展
 
-- CodeMirror 扩展：AI 高亮、Markdown 装饰、搜索面板、表格控件
-- TipTap 扩展：行内评论、空内容占位、自定义节点
-- 共享组件：FindBar、SelectionToolbar、SelectionAIInput、CommentCard
+- CodeMirror 扩展：AI 高亮、Markdown 装饰、搜索面板、表格控件、绘制选区、标题锚点
+- TipTap 扩展：行内评论、空内容占位、自定义节点、表格控制命令
+- 共享组件：FindBar、SelectionToolbar、SelectionAIInput、SelectionCommentInput、CommentCard
 
 ### 页面级功能
 
 编辑器页面（`views/editor/`）通过 hooks 提供：
-- **useAutoSave**：自动保存（基于 debounce 策略）
-- **useFileWatcher**：外部文件变更监听与冲突处理
 - **useFileState**：文件状态管理（已保存/未保存/外部修改）
+- **useFileWatcher**：外部文件变更监听与冲突处理
+- **useFileSelection**：文件选区/行范围导航
 - **useSession**：编辑器与会话联动
+- **useBindings**：编辑器与全局快捷键/命令绑定
+
+全局 `src/hooks/useFileAutoSave.ts`、`useSavePolicy.ts`、`useFileSession.ts`、`useFileDrop.ts` 提供跨页面复用的文件生命周期能力。
 
 ---
 
@@ -655,24 +716,26 @@ BDrawing 提供完整的绘图/白板能力，基于 moveable + selecto + vue3-m
 | DrawingSelectoLayer | 多选交互层（selecto 集成） |
 | DrawingStylePanel | 节点/边样式面板（填充色/描边/字号等） |
 | DrawingToolbar | 绘图工具栏（形状选择、图层排序） |
+| ColorPalette | 调色板 |
+| TextEditorOverlay | 节点文本编辑浮层 |
 
 | 渲染器 | 职责 |
 |--------|------|
 | DrawingCanvas | SVG 画布渲染 |
 | DrawingConnector | 连接线渲染（贝塞尔曲线、箭头、锚点） |
 | DrawingCreatePreview | 形状创建预览 |
-| DrawingEdge | 边渲染 |
 | DrawingNode | 节点渲染（矩形、椭圆、文本） |
 
 ### 关键特性
 
-- 形状创建（矩形、椭圆、文本节点）
+- 形状创建（矩形、椭圆、文本节点等）
 - 拖拽/旋转/缩放（moveable 集成）
 - 多选操作（selecto 集成）
 - 连接线（贝塞尔曲线、箭头标记、四方向锚点）
 - 样式面板（填充色、描边宽度/颜色、文本颜色/字号/对齐）
 - 图层排序（前移/后移）
 - v-model 双向绑定
+- 节点文本就地编辑
 
 ---
 
@@ -719,8 +782,8 @@ better-sqlite3 在主进程运行，渲染进程通过 `electronAPI.dbExecute/db
 | `service-models/` | 服务模型配置 |
 | `settings/` | 应用设置持久化 |
 | `tool-settings/` | MCP 服务器和搜索工具配置 |
-| `memories/` | 记忆存储（开发中） |
 | `utils/` | 数据库连接管理（含初始化竞态重试）、JSON 序列化 |
+| `index.ts` | 统一导出 |
 
 ### Store 持久化
 
@@ -734,12 +797,12 @@ better-sqlite3 在主进程运行，渲染进程通过 `electronAPI.dbExecute/db
 
 ## IPC 模块一览
 
-主进程按领域模块拆分，各模块在 `electron/main/modules/index.mts` 统一注册（17 个注册模块）：
+主进程按领域模块拆分，各模块在 `electron/main/modules/index.mts` 统一注册：
 
 | 模块 | 职责 |
 |------|------|
-| `ai` | AI 流式/非流式调用、Provider 路由、工具调用适配 |
-| `chat` | 聊天会话持久化 IPC（支持单条消息更新） |
+| `ai` | AI 流式/非流式调用、Provider 路由 |
+| `chat` | 聊天会话持久化 + ChatRuntime 主进程服务（模型调用、主进程工具、上下文压缩、自动命名） |
 | `database` | SQLite 执行与查询 |
 | `dialog` | 原生文件对话框（打开/保存） |
 | `export` | PDF 导出 |
@@ -781,7 +844,7 @@ better-sqlite3 在主进程运行，渲染进程通过 `electronAPI.dbExecute/db
 
 ## 构建配置
 
-### 依赖拆包（19 组）
+### 依赖拆包
 
 Vite 对第三方依赖做细粒度拆包，提升 Electron 内嵌 Web 首屏性能与缓存命中率：
 
@@ -806,18 +869,20 @@ Vite 对第三方依赖做细粒度拆包，提升 Electron 内嵌 Web 首屏性
 
 ## 测试体系
 
-运行 `pnpm test` 执行 Vitest 测试套件，`test/` 目录按 `src/` 结构镜像组织，包含 54 个测试文件：
+运行 `pnpm test` 执行 Vitest 测试套件，`test/` 目录按源码结构镜像组织，包含 128 个测试文件：
 
 | 测试范围 | 说明 |
 |----------|------|
-| `components/` | BChat（21）、BColorPicker、BDrawing（3）、BMessage |
-| `electron/` | 主进程 lifecycle、mcp/transport、ui（image-preview + menu + model）、updater |
-| `hooks/` | useImagePreview |
-| `layouts/` | HeaderTabs（结构 + 滚动）、useHelpActive |
+| `ai/` | 工具系统（builtin-index、builtin-main-process-tool、todo-write、drawing-context、tool-registry） |
+| `components/` | BChat（22）、BColorPicker、BDrawing（10）、BEditor（13）、BMessage（4）、BMonaco |
+| `electron/` | 主进程 ai/errors、chat/runtime（compaction/context/messages/model/stream/tools）、lifecycle、mcp/transport、ui、updater |
+| `hooks/` | useClipboard、useFileAutoSave、useFileSession、useImagePreview、useOpenFile、useSavePolicy、useSystem |
+| `layouts/` | ChatSider、HeaderTabs（结构 + 滚动）、useHelpActive 等 |
 | `router/` | drawing 路由 |
-| `shared/` | 存储层（files、providers、tool-settings、database） |
-| `stores/` | session、headerToolbar |
-| `views/` | editor、settings（mcp/oauth + memory）、webview（4）、welcome（2） |
+| `shared/` | 存储层（files、providers、settings、tool-settings、database） |
+| `stores/` | ai/memory-loading + service-model、chat/session + todo、ui/header-toolbar |
+| `utils/` | file/reference、image |
+| `views/` | editor、drawing、settings（provider/service-model/mcp/memory）、webview、welcome |
 
 ---
 
@@ -830,7 +895,7 @@ Vite 对第三方依赖做细粒度拆包，提升 Electron 内嵌 Web 首屏性
 | `pnpm electron:build-main` | 编译主进程 TypeScript |
 | `pnpm electron:build` | 完整打包（前端 + 主进程 + electron-builder） |
 | `pnpm test` | 运行 Vitest 测试 |
-| `pnpm lint` | ESLint 检查 + 自动修复 |
+| `pnpm lint` | ESLint 检查 + 自动修复（覆盖 `.vue`、`.ts`、`.tsx`、`.js`、`.jsx`、`.mts`） |
 | `pnpm lint:style` | Stylelint 样式检查 + 修复 |
 | `pnpm preview` | 预览构建结果 |
 | `pnpm speech:dev:*` | 语音运行时开发环境相关命令 |
@@ -842,12 +907,12 @@ Vite 对第三方依赖做细粒度拆包，提升 Electron 内嵌 Web 首屏性
 | 目录 | 内容 |
 |------|------|
 | `docs/code-wiki/` | 项目代码百科（概述、架构、前端、编辑器、Electron、存储、AI、开发指南、依赖地图，10 篇） |
-| `docs/superpowers/plans/` | 技术实现计划（92 篇，按日期组织） |
-| `docs/superpowers/specs/` | 设计规范文档（95 篇） |
+| `docs/superpowers/plans/` | 技术实现计划（103 篇，按日期组织） |
+| `docs/superpowers/specs/` | 设计规范文档（106 篇） |
 | `docs/superpowers/reviews/` | 代码审查记录（7 篇） |
 | `docs/ai-tools/` | AI 工具系统分析与开发指南 + 6 个任务文档 |
 | `docs/web-view/` | WebView 功能设计文档 |
 | `docs/development/` | 开发问题与注意事项 |
 | `docs/speech/` | 语音功能完整说明 |
 | `docs/markdown-symbol-highlight/` | Markdown 符号高亮方案 |
-| `changelog/` | 变更日志（按日期 .md，覆盖 2026-03-26 至今，74 篇） |
+| `changelog/` | 变更日志（按日期 .md，覆盖 2026-03-26 至今，82 篇） |
