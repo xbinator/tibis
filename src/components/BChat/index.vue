@@ -774,6 +774,8 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
     focusInput();
     clearDraft && inputEvents.clear();
 
+    conversationRef.value?.scrollToBottom({ behavior: 'auto' });
+
     await chatRuntime.send({
       sessionId,
       content: userMessage.content,
