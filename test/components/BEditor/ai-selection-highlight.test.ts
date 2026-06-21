@@ -53,6 +53,34 @@ function createDoc(): PMNode {
 }
 
 /**
+ * 创建包含行内 code mark 的 ProseMirror 文档。
+ * @param text - code mark 包裹的文本内容
+ * @returns ProseMirror 文档节点
+ */
+function createInlineCodeDoc(text: string): PMNode {
+  const schema = new Schema({
+    nodes: {
+      doc: { content: 'block+' },
+      paragraph: {
+        content: 'text*',
+        group: 'block',
+        parseDOM: [{ tag: 'p' }],
+        toDOM: () => ['p', 0]
+      },
+      text: { group: 'inline' }
+    },
+    marks: {
+      code: {
+        parseDOM: [{ tag: 'code' }],
+        toDOM: () => ['code', 0]
+      }
+    }
+  });
+
+  return schema.node('doc', null, [schema.node('paragraph', null, schema.text(text, [schema.marks.code.create()]))]);
+}
+
+/**
  * 创建包含表格的 ProseMirror 文档。
  * @returns ProseMirror 表格文档节点
  */
@@ -89,6 +117,37 @@ describe('createAISelectionDecorationSet', (): void => {
 
     expect(decorationInfo.type.constructor.name).toBe('InlineType');
     expect(decorationInfo.type.attrs).toEqual({ class: 'ai-selection-highlight' });
+  });
+
+  it('marks inline code selection when it starts at the code mark boundary', (): void => {
+    const doc = createInlineCodeDoc('packages/core');
+    const decorations = createAISelectionDecorationSet(doc, { from: 1, to: 9 });
+    const [decoration] = decorations.find();
+    const decorationInfo = getRuntimeDecorationInfo(decoration);
+
+    expect(decorationInfo.type.attrs.class).toContain('ai-selection-highlight');
+    expect(decorationInfo.type.attrs.class).toContain('ai-selection-highlight--code-start');
+    expect(decorationInfo.type.attrs.class).not.toContain('ai-selection-highlight--code-end');
+  });
+
+  it('does not mark inline code start padding when selection begins inside the code mark', (): void => {
+    const doc = createInlineCodeDoc('packages/core');
+    const decorations = createAISelectionDecorationSet(doc, { from: 2, to: 9 });
+    const [decoration] = decorations.find();
+    const decorationInfo = getRuntimeDecorationInfo(decoration);
+
+    expect(decorationInfo.type.attrs.class).toBe('ai-selection-highlight');
+  });
+
+  it('marks inline code selection when it ends at the code mark boundary', (): void => {
+    const doc = createInlineCodeDoc('packages/core');
+    const decorations = createAISelectionDecorationSet(doc, { from: 9, to: 14 });
+    const [decoration] = decorations.find();
+    const decorationInfo = getRuntimeDecorationInfo(decoration);
+
+    expect(decorationInfo.type.attrs.class).toContain('ai-selection-highlight');
+    expect(decorationInfo.type.attrs.class).not.toContain('ai-selection-highlight--code-start');
+    expect(decorationInfo.type.attrs.class).toContain('ai-selection-highlight--code-end');
   });
 
   it('uses node decorations when table selections need container highlighting', (): void => {

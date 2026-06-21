@@ -604,26 +604,32 @@ defineExpose({
     }
 
     .ai-selection-highlight {
-      color: var(--selection-color);
       background: var(--selection-bg);
       box-shadow: 0 0.2em 0 0 var(--selection-bg), 0 -0.2em 0 0 var(--selection-bg);
       -webkit-box-decoration-break: clone;
       box-decoration-break: clone;
-
-      // 覆盖富文本 token 的显式颜色，确保 AI 高亮范围内统一显示选区前景色。
-      &,
-      & * {
-        color: var(--selection-color) !important;
-      }
     }
 
     :not(pre) > code {
+      display: inline-block;
+      margin: 0 0 2px;
+      line-height: 1.2;
       vertical-align: middle;
 
       .ai-selection-highlight {
         vertical-align: baseline;
-        box-shadow: 0 0.4em 0 0 var(--selection-bg), 0 -0.4em 0 0 var(--selection-bg);
+        box-shadow: 0 0.34em 0 0 var(--selection-bg), 0 -0.38em 0 0 var(--selection-bg);
       }
+    }
+
+    :not(pre) > code .ai-selection-highlight--code-start {
+      padding-left: 0.25em;
+      margin-left: -0.25em;
+    }
+
+    :not(pre) > code .ai-selection-highlight--code-end {
+      padding-right: 0.25em;
+      margin-right: -0.25em;
     }
 
     pre code .ai-selection-highlight {

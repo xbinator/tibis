@@ -19,6 +19,9 @@ interface AISelectionHighlightMeta {
 }
 
 const aiSelectionHighlightPluginKey = new PluginKey<AISelectionHighlightState>('b-markdown-ai-selection-highlight');
+const baseHighlightClassName = 'ai-selection-highlight';
+const codeStartHighlightClassName = 'ai-selection-highlight--code-start';
+const codeEndHighlightClassName = 'ai-selection-highlight--code-end';
 
 /**
  * 当前节点是否为 Rich 表格节点。
@@ -27,6 +30,61 @@ const aiSelectionHighlightPluginKey = new PluginKey<AISelectionHighlightState>('
  */
 function isTableNode(node: PMNode): boolean {
   return node.type.name === 'table';
+}
+
+/**
+ * 当前节点是否带有 Rich 行内 code mark。
+ * @param node - ProseMirror 节点
+ * @returns 节点是否带有 code mark
+ */
+function hasCodeMark(node: PMNode): boolean {
+  return node.marks.some((mark) => mark.type.name === 'code');
+}
+
+/**
+ * 指定文档字符位置是否位于行内 code mark 文本中。
+ * @param doc - 当前 ProseMirror 文档
+ * @param position - 需要检查的文档位置
+ * @returns 该位置对应字符是否带有 code mark
+ */
+function hasCodeMarkAt(doc: PMNode, position: number): boolean {
+  if (position < 0 || position >= doc.content.size) {
+    return false;
+  }
+
+  let result = false;
+  doc.nodesBetween(position, position + 1, (node, pos) => {
+    if (!node.isText || pos > position || pos + node.nodeSize <= position) {
+      return true;
+    }
+
+    result = hasCodeMark(node);
+    return false;
+  });
+
+  return result;
+}
+
+/**
+ * 创建 AI 高亮 className。
+ * @param doc - 当前 ProseMirror 文档
+ * @param from - 高亮起点
+ * @param to - 高亮终点
+ * @param isCodeMarked - 当前高亮片段是否位于行内 code mark 内
+ * @returns 高亮 className
+ */
+function createHighlightClassName(doc: PMNode, from: number, to: number, isCodeMarked: boolean): string {
+  const classNames = [baseHighlightClassName];
+
+  if (isCodeMarked && !hasCodeMarkAt(doc, from - 1)) {
+    classNames.push(codeStartHighlightClassName);
+  }
+
+  if (isCodeMarked && !hasCodeMarkAt(doc, to)) {
+    classNames.push(codeEndHighlightClassName);
+  }
+
+  return classNames.join(' ');
 }
 
 /**
@@ -56,26 +114,56 @@ function createTableContainerDecorations(doc: PMNode, range: AISelectionRange): 
 
 /**
  * 创建普通 inline 文本高亮，并跳过已经用 node decoration 高亮的表格容器。
+ * @param doc - 当前 ProseMirror 文档
  * @param range - 当前高亮范围
  * @param tableDecorations - 已创建的表格容器装饰
  * @returns inline decorations
  */
-function createInlineDecorationsOutsideTables(range: AISelectionRange, tableDecorations: Decoration[]): Decoration[] {
+function createInlineDecorationsOutsideTables(doc: PMNode, range: AISelectionRange, tableDecorations: Decoration[]): Decoration[] {
   const decorations: Decoration[] = [];
   let cursor = range.from;
+
+  /**
+   * 追加普通 inline 高亮，并在 code mark 边界处加上 padding 补偿所需的修饰类。
+   * @param from - 高亮起点
+   * @param to - 高亮终点
+   */
+  function pushInlineDecorations(from: number, to: number): void {
+    let segmentCursor = from;
+
+    doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText || !hasCodeMark(node)) {
+        return true;
+      }
+
+      const codeFrom = Math.max(from, pos);
+      const codeTo = Math.min(to, pos + node.nodeSize);
+      if (segmentCursor < codeFrom) {
+        decorations.push(Decoration.inline(segmentCursor, codeFrom, { class: baseHighlightClassName }));
+      }
+
+      decorations.push(Decoration.inline(codeFrom, codeTo, { class: createHighlightClassName(doc, codeFrom, codeTo, true) }));
+      segmentCursor = codeTo;
+      return false;
+    });
+
+    if (segmentCursor < to) {
+      decorations.push(Decoration.inline(segmentCursor, to, { class: baseHighlightClassName }));
+    }
+  }
 
   tableDecorations
     .map((decoration) => ({ from: decoration.from, to: decoration.to }))
     .sort((left, right) => left.from - right.from)
     .forEach((tableRange) => {
       if (cursor < tableRange.from) {
-        decorations.push(Decoration.inline(cursor, tableRange.from, { class: 'ai-selection-highlight' }));
+        pushInlineDecorations(cursor, tableRange.from);
       }
       cursor = Math.max(cursor, tableRange.to);
     });
 
   if (cursor < range.to) {
-    decorations.push(Decoration.inline(cursor, range.to, { class: 'ai-selection-highlight' }));
+    pushInlineDecorations(cursor, range.to);
   }
 
   return decorations;
@@ -94,11 +182,11 @@ export function createAISelectionDecorationSet(doc: PMNode, range: AISelectionRa
   }
 
   if (range.highlightKind === 'node') {
-    return DecorationSet.create(doc, [Decoration.node(range.from, range.to, { class: 'ai-selection-highlight' })]);
+    return DecorationSet.create(doc, [Decoration.node(range.from, range.to, { class: baseHighlightClassName })]);
   }
 
   const tableDecorations = createTableContainerDecorations(doc, range);
-  const inlineDecorations = createInlineDecorationsOutsideTables(range, tableDecorations);
+  const inlineDecorations = createInlineDecorationsOutsideTables(doc, range, tableDecorations);
 
   return DecorationSet.create(doc, [...inlineDecorations, ...tableDecorations]);
 }

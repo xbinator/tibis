@@ -703,7 +703,7 @@ defineExpose({
   height: 100%;
 
   // --selection-color: var(--color-primary);
-  --selection-bg: var(--color-primary-bg);
+  --selection-bg: var(--color-primary-border);
   --native-selection-color: var(--selection-color);
   --native-selection-bg: var(--selection-bg);
 

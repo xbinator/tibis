@@ -27,6 +27,17 @@ function extractStyleRuleBody(source: string, selector: string): string {
 }
 
 describe('BEditor rich selection styles', (): void => {
+  it('extends inline code selection highlight into code padding only at code boundaries', (): void => {
+    const source = readPaneRichEditorSource();
+    const inlineCodeStartRuleBody = extractStyleRuleBody(source, ':not(pre) > code .ai-selection-highlight--code-start');
+    const inlineCodeEndRuleBody = extractStyleRuleBody(source, ':not(pre) > code .ai-selection-highlight--code-end');
+
+    expect(inlineCodeStartRuleBody).toContain('margin-left: -0.25em;');
+    expect(inlineCodeStartRuleBody).toContain('padding-left: 0.25em;');
+    expect(inlineCodeEndRuleBody).toContain('margin-right: -0.25em;');
+    expect(inlineCodeEndRuleBody).toContain('padding-right: 0.25em;');
+  });
+
   it('renders table container selection as a filled table state instead of an outline ring', (): void => {
     const source = readPaneRichEditorSource();
     const tableRuleBody = extractStyleRuleBody(source, '.b-markdown-table.ai-selection-highlight');
