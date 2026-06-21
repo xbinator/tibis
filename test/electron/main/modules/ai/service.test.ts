@@ -4,6 +4,7 @@
  */
 import type { AIInvokeResult } from 'types/ai';
 import { describe, expect, it } from 'vitest';
+import { AlibabaProvider } from '../../../../../electron/main/modules/ai/providers/alibaba.mjs';
 import { DeepSeekProvider } from '../../../../../electron/main/modules/ai/providers/deepseek.mjs';
 import { createAIInvokeResult } from '../../../../../electron/main/modules/ai/service.mjs';
 
@@ -91,5 +92,33 @@ describe('DeepSeekProvider.createProviderOptions', (): void => {
 
     expect(provider.createProviderOptions({ modelId: 'deepseek-chat' })).toBeUndefined();
     expect(provider.createProviderOptions({ modelId: 'deepseek-chat', reasoning: { enabled: true } })).toBeUndefined();
+  });
+});
+
+describe('AlibabaProvider.createProviderOptions', (): void => {
+  it('maps enabled generic reasoning to Alibaba enableThinking options', (): void => {
+    const provider = new AlibabaProvider();
+
+    expect(provider.createProviderOptions({ modelId: 'qwen3.7-max', reasoning: { enabled: true } })).toEqual({
+      alibaba: {
+        enableThinking: true
+      }
+    });
+  });
+
+  it('maps disabled generic reasoning to Alibaba enableThinking options', (): void => {
+    const provider = new AlibabaProvider();
+
+    expect(provider.createProviderOptions({ modelId: 'qwen3.7-max', reasoning: { enabled: false } })).toEqual({
+      alibaba: {
+        enableThinking: false
+      }
+    });
+  });
+
+  it('does not add Alibaba provider options unless reasoning is explicit', (): void => {
+    const provider = new AlibabaProvider();
+
+    expect(provider.createProviderOptions({ modelId: 'qwen3.7-max' })).toBeUndefined();
   });
 });

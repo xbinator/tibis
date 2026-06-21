@@ -53,6 +53,22 @@ describe('providerStorage.listProviders', () => {
     expect(providers.find((provider) => provider.id === 'openai')?.isEnabled).toBe(true);
   });
 
+  it('preserves Alibaba request format for custom providers', async (): Promise<void> => {
+    mockSettingsFileStorage.read.mockResolvedValue(
+      createSettingsFile([{ id: 'custom-qwen', name: 'Custom Qwen', type: 'alibaba', baseUrl: 'https://example.test/v1' }])
+    );
+
+    const providers = await providerStorage.listProviders();
+    const provider = providers.find((item) => item.id === 'custom-qwen');
+
+    expect(provider).toMatchObject({
+      id: 'custom-qwen',
+      name: 'Custom Qwen',
+      type: 'alibaba',
+      baseUrl: 'https://example.test/v1'
+    });
+  });
+
   it('stores built-in providers as complete snapshots after provider config updates', async (): Promise<void> => {
     const baseProvider = DEFAULT_PROVIDERS.find((provider) => provider.id === 'openai');
     expect(baseProvider).toBeDefined();

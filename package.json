@@ -42,6 +42,7 @@
     }
   },
   "dependencies": {
+    "@ai-sdk/alibaba": "^1.0.29",
     "@ai-sdk/anthropic": "^3.0.77",
     "@ai-sdk/deepseek": "^2.0.35",
     "@ai-sdk/gateway": "3.0.114",

@@ -6,6 +6,7 @@ import type { AIProvider } from '../types.mjs';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import type { LanguageModel } from 'ai';
 import type { AIServiceError, AIProviderType, AICreateOptions, AIRequestOptions } from 'types/ai';
+import { AlibabaProvider } from './alibaba.mjs';
 import { AnthropicProvider } from './anthropic.mjs';
 import { DeepSeekProvider } from './deepseek.mjs';
 import { GoogleProvider } from './google.mjs';
@@ -22,6 +23,7 @@ export class AIProviderRegistry {
   constructor() {
     // 注册内置服务商
     this.register(new OpenAIProvider());
+    this.register(new AlibabaProvider());
     this.register(new AnthropicProvider());
     this.register(new GoogleProvider());
     this.register(new DeepSeekProvider());

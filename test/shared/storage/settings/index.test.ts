@@ -14,6 +14,7 @@ describe('normalizeSettingsFile', () => {
     });
 
     const openAIProvider = normalized.providers.find((provider) => provider.id === 'openai');
+    const alibabaProvider = normalized.providers.find((provider) => provider.id === 'alibaba');
     const anthropicProvider = normalized.providers.find((provider) => provider.id === 'anthropic');
     const defaultOpenAIProvider = DEFAULT_PROVIDERS.find((provider) => provider.id === 'openai');
 
@@ -27,6 +28,11 @@ describe('normalizeSettingsFile', () => {
       readonly: defaultOpenAIProvider?.readonly
     });
     expect(openAIProvider?.models).toEqual(defaultOpenAIProvider?.models);
+    expect(alibabaProvider).toMatchObject({
+      id: 'alibaba',
+      type: 'alibaba',
+      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    });
     expect(anthropicProvider).toMatchObject({
       id: 'anthropic',
       type: 'anthropic'

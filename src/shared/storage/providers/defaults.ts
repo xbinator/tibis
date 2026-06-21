@@ -266,7 +266,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     name: '阿里云',
     description: '提供通义千问系列模型，支持中文优化、多模态处理与企业级应用。',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    type: 'openai',
+    type: 'alibaba',
     isEnabled: false,
     readonly: true,
     models: [
