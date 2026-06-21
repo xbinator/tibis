@@ -3,16 +3,78 @@
  * @description Source inline completion adapter tests.
  * @vitest-environment jsdom
  */
+import type { AIInvokeResult, AIRequestOptions } from 'types/ai';
 import { nextTick } from 'vue';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createSourceInlineCompletionAdapter,
   createSourceInlineCompletionExtension,
   sourceInlineCompletionField
 } from '@/components/BEditor/extensions/sourceInlineCompletion';
 import { useInlineCompletion } from '@/components/BEditor/hooks/useInlineCompletion';
+import type { AvailableServiceModelConfig } from '@/stores/ai/serviceModel';
+
+const sourceMocks = vi.hoisted(() => ({
+  config: null as AvailableServiceModelConfig | null,
+  result: { text: '' } as AIInvokeResult,
+  invokeCalls: [] as AIRequestOptions[],
+  slowMode: false,
+  pendingResolvers: [] as Array<() => void>
+}));
+
+vi.mock('@/hooks/useChat', () => ({
+  useChat: () => ({
+    agent: {
+      /**
+       * 记录 AI 调用，slowMode 下会挂起直到手动结算。
+       * @param payload - AI 请求载荷
+       * @returns AI 调用结果
+       */
+      invoke: async (payload: AIRequestOptions): AsyncResult<AIInvokeResult, { message: string }> => {
+        sourceMocks.invokeCalls.push(payload);
+        if (sourceMocks.slowMode) {
+          await new Promise<void>((resolve) => {
+            sourceMocks.pendingResolvers.push(resolve);
+          });
+        }
+
+        return [undefined, sourceMocks.result];
+      }
+    }
+  })
+}));
+
+vi.mock('@/stores/ai/serviceModel', () => ({
+  useServiceModelStore: () => ({
+    getAvailableServiceConfig: async (): Promise<AvailableServiceModelConfig | null> => sourceMocks.config
+  })
+}));
+
+/**
+ * 挂载内联补全 hook。
+ * @param adapter - 内联补全 adapter
+ * @param editorState - 编辑器状态 getter
+ * @returns hook controller
+ */
+function mountCompletion(
+  adapter: ReturnType<typeof createSourceInlineCompletionAdapter>,
+  editorState: () => { content: string; name: string; path: string | null; id: string; ext: string }
+): ReturnType<typeof useInlineCompletion> {
+  sourceMocks.config = { providerId: 'provider-1', modelId: 'model-1', updatedAt: 1 };
+  const completion = useInlineCompletion();
+  completion.mount({ adapter, editorState });
+  return completion;
+}
+
+/**
+ * 立即结算所有挂起的 invoke。
+ */
+function flushPendingInvokes(): void {
+  const resolvers = sourceMocks.pendingResolvers.splice(0);
+  resolvers.forEach((resolve) => resolve());
+}
 
 /**
  * 创建 Source inline completion 测试 editor。
@@ -32,6 +94,19 @@ function createView(doc: string): EditorView {
 }
 
 describe('source inline completion adapter', (): void => {
+  beforeEach((): void => {
+    sourceMocks.config = null;
+    sourceMocks.result = { text: '' };
+    sourceMocks.invokeCalls.length = 0;
+    sourceMocks.slowMode = false;
+    sourceMocks.pendingResolvers.length = 0;
+  });
+
+  afterEach((): void => {
+    flushPendingInvokes();
+    vi.useRealTimers();
+  });
+
   it('renders and clears ghost text through state field', (): void => {
     const view = createView('hello');
     const adapter = createSourceInlineCompletionAdapter(view, () => true);
@@ -140,15 +215,10 @@ describe('source inline completion adapter', (): void => {
     vi.useFakeTimers();
     const view = createView('hello');
     const adapter = createSourceInlineCompletionAdapter(view, () => true);
-    const invokeCompletion = vi.fn(async (): Promise<string> => ' world');
+    sourceMocks.result = { text: ' world' };
+    sourceMocks.invokeCalls.length = 0;
 
-    useInlineCompletion({
-      adapter,
-      editorState: () => ({ content: view.state.doc.toString(), name: 'note.md', path: null, id: 'note-1', ext: 'md' }),
-      invokeCompletion,
-      debounceMs: 10,
-      timeoutMs: 1000
-    });
+    mountCompletion(adapter, () => ({ content: view.state.doc.toString(), name: 'note.md', path: null, id: 'note-1', ext: 'md' }));
 
     view.dispatch({
       changes: {
@@ -159,10 +229,10 @@ describe('source inline completion adapter', (): void => {
       userEvent: 'input.type'
     });
     view.dom.dispatchEvent(new KeyboardEvent('keyup', { key: '!', bubbles: true }));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(700);
     await nextTick();
 
-    expect(invokeCompletion).toHaveBeenCalledOnce();
+    expect(sourceMocks.invokeCalls).toHaveLength(1);
     expect(view.state.field(sourceInlineCompletionField).text).toBe(' world');
     vi.useRealTimers();
     view.destroy();
@@ -172,32 +242,11 @@ describe('source inline completion adapter', (): void => {
     vi.useFakeTimers();
     const view = createView('hello');
     const adapter = createSourceInlineCompletionAdapter(view, () => true);
-    let resolveCompletion: ((text: string) => void) | null = null;
-    const invokeCompletion = vi.fn(
-      async (): Promise<string> =>
-        new Promise((resolve): void => {
-          resolveCompletion = resolve;
-        })
-    );
-    /**
-     * 解析当前挂起的补全请求。
-     * @param text - 模型返回文本
-     */
-    function resolvePendingCompletion(text: string): void {
-      if (!resolveCompletion) {
-        throw new Error('INLINE_COMPLETION_RESOLVER_NOT_READY');
-      }
+    sourceMocks.result = { text: ' stale' };
+    sourceMocks.invokeCalls.length = 0;
+    sourceMocks.slowMode = true;
 
-      resolveCompletion(text);
-    }
-
-    useInlineCompletion({
-      adapter,
-      editorState: () => ({ content: view.state.doc.toString(), name: 'note.md', path: null, id: 'note-1', ext: 'md' }),
-      invokeCompletion,
-      debounceMs: 10,
-      timeoutMs: 1000
-    });
+    mountCompletion(adapter, () => ({ content: view.state.doc.toString(), name: 'note.md', path: null, id: 'note-1', ext: 'md' }));
 
     view.dispatch({
       changes: {
@@ -207,8 +256,8 @@ describe('source inline completion adapter', (): void => {
       selection: EditorSelection.cursor(6),
       userEvent: 'input.type'
     });
-    await vi.advanceTimersByTimeAsync(10);
-    expect(invokeCompletion).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(700);
+    expect(sourceMocks.invokeCalls).toHaveLength(1);
 
     view.dispatch({
       changes: {
@@ -219,7 +268,7 @@ describe('source inline completion adapter', (): void => {
       selection: EditorSelection.cursor(6),
       userEvent: 'input.type'
     });
-    resolvePendingCompletion(' stale');
+    flushPendingInvokes();
     await vi.advanceTimersByTimeAsync(0);
     await nextTick();
 

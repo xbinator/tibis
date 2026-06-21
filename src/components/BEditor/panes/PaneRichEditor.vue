@@ -63,7 +63,7 @@ import { setAISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { getSearchSnapshot } from '../extensions/editorSearch';
 import { createRichInlineCompletionAdapter } from '../extensions/richInlineCompletion';
 import { useFrontMatter } from '../hooks/useFrontMatter';
-import { usePaneInlineCompletion } from '../hooks/useInlineCompletion';
+import { useInlineCompletion } from '../hooks/useInlineCompletion';
 import { useRichEditor } from '../hooks/useRichEditor';
 import { getPersistedMarkdown } from '../utils/editorMarkdown';
 
@@ -223,7 +223,7 @@ watch(
 // ---- Adapter & Orchestration ----
 
 const adapter = shallowRef<SelectionAssistantAdapter | null>(null);
-const paneInlineCompletion = usePaneInlineCompletion();
+const paneInlineCompletion = useInlineCompletion();
 
 watch(
   [editorInstance, overlayRootRef, () => props.editorState],

@@ -5,9 +5,28 @@
  */
 import type { VueWrapper } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PaneSourceEditor from '@/components/BEditor/panes/PaneSourceEditor.vue';
+
+vi.mock('@/hooks/useChat', () => ({
+  useChat: () => ({
+    agent: {
+      /**
+       * 测试桩实现，不会被本测试调用。
+       * @returns 空结果
+       */
+      invoke: async (): AsyncResult<unknown, { message: string }> => [undefined, { text: '' }]
+    }
+  })
+}));
+
+vi.mock('@/stores/ai/serviceModel', () => ({
+  useServiceModelStore: () => ({
+    getAvailableServiceConfig: async (): Promise<null> => null
+  })
+}));
 
 /**
  * Source 编辑器组件公开实例。
@@ -45,6 +64,10 @@ async function mountSourceEditor(content: string): Promise<PaneSourceEditorExpos
 }
 
 describe('PaneSourceEditor selectLineRange', (): void => {
+  beforeEach((): void => {
+    setActivePinia(createPinia());
+  });
+
   afterEach((): void => {
     wrapper?.unmount();
     wrapper = null;

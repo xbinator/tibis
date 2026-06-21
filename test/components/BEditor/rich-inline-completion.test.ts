@@ -3,12 +3,74 @@
  * @description Rich inline completion adapter tests.
  * @vitest-environment jsdom
  */
+import type { AIInvokeResult, AIRequestOptions } from 'types/ai';
 import { nextTick } from 'vue';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RichInlineCompletion, createRichInlineCompletionAdapter, richInlineCompletionPluginKey } from '@/components/BEditor/extensions/richInlineCompletion';
 import { useInlineCompletion } from '@/components/BEditor/hooks/useInlineCompletion';
+import type { AvailableServiceModelConfig } from '@/stores/ai/serviceModel';
+
+const richMocks = vi.hoisted(() => ({
+  config: null as AvailableServiceModelConfig | null,
+  result: { text: '' } as AIInvokeResult,
+  invokeCalls: [] as AIRequestOptions[],
+  slowMode: false,
+  pendingResolvers: [] as Array<() => void>
+}));
+
+vi.mock('@/hooks/useChat', () => ({
+  useChat: () => ({
+    agent: {
+      /**
+       * 记录 AI 调用，slowMode 下会挂起直到手动结算。
+       * @param payload - AI 请求载荷
+       * @returns AI 调用结果
+       */
+      invoke: async (payload: AIRequestOptions): AsyncResult<AIInvokeResult, { message: string }> => {
+        richMocks.invokeCalls.push(payload);
+        if (richMocks.slowMode) {
+          await new Promise<void>((resolve) => {
+            richMocks.pendingResolvers.push(resolve);
+          });
+        }
+
+        return [undefined, richMocks.result];
+      }
+    }
+  })
+}));
+
+vi.mock('@/stores/ai/serviceModel', () => ({
+  useServiceModelStore: () => ({
+    getAvailableServiceConfig: async (): Promise<AvailableServiceModelConfig | null> => richMocks.config
+  })
+}));
+
+/**
+ * 挂载内联补全 hook。
+ * @param adapter - 内联补全 adapter
+ * @param editorState - 编辑器状态 getter
+ * @returns hook controller
+ */
+function mountCompletion(
+  adapter: ReturnType<typeof createRichInlineCompletionAdapter>,
+  editorState: () => { content: string; name: string; path: string | null; id: string; ext: string }
+): ReturnType<typeof useInlineCompletion> {
+  richMocks.config = { providerId: 'provider-1', modelId: 'model-1', updatedAt: 1 };
+  const completion = useInlineCompletion();
+  completion.mount({ adapter, editorState });
+  return completion;
+}
+
+/**
+ * 立即结算所有挂起的 invoke。
+ */
+function flushPendingInvokes(): void {
+  const resolvers = richMocks.pendingResolvers.splice(0);
+  resolvers.forEach((resolve) => resolve());
+}
 
 /**
  * 在 Rich 编辑器文档中定位指定文本的 ProseMirror 位置。
@@ -39,6 +101,19 @@ function findTextPosition(editor: Editor, text: string, offset = 0): number {
 }
 
 describe('rich inline completion adapter', (): void => {
+  beforeEach((): void => {
+    richMocks.config = null;
+    richMocks.result = { text: '' };
+    richMocks.invokeCalls.length = 0;
+    richMocks.slowMode = false;
+    richMocks.pendingResolvers.length = 0;
+  });
+
+  afterEach((): void => {
+    flushPendingInvokes();
+    vi.useRealTimers();
+  });
+
   it('renders and clears ghost text through plugin state', (): void => {
     const editor = new Editor({
       content: 'hello',
@@ -291,22 +366,17 @@ describe('rich inline completion adapter', (): void => {
       () => true,
       () => `# Title\n\nhello ${editor.getText().includes('!') ? '!' : ''}**world**`
     );
-    const invokeCompletion = vi.fn(async (_prompt: string): Promise<string> => ' again');
+    richMocks.result = { text: ' again' };
+    richMocks.invokeCalls.length = 0;
 
     editor.commands.setTextSelection(findTextPosition(editor, 'world'));
-    useInlineCompletion({
-      adapter,
-      editorState: () => ({ content: editor.getText(), name: 'note.md', path: null, id: 'note-1', ext: 'md' }),
-      invokeCompletion,
-      debounceMs: 10,
-      timeoutMs: 1000
-    });
+    mountCompletion(adapter, () => ({ content: editor.getText(), name: 'note.md', path: null, id: 'note-1', ext: 'md' }));
     editor.commands.insertContent('!');
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(700);
     await nextTick();
 
-    expect(invokeCompletion).toHaveBeenCalledOnce();
-    const prompt = invokeCompletion.mock.calls[0]?.[0] ?? '';
+    expect(richMocks.invokeCalls).toHaveLength(1);
+    const prompt = richMocks.invokeCalls[0]?.prompt ?? '';
     expect(prompt).toContain('## Current heading path\nTitle');
     expect(prompt).toContain('## Text before cursor\nTitle\nhello !<cursor>');
     expect(prompt).toContain('## Text after cursor\nworld');

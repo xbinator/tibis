@@ -40,9 +40,23 @@ export interface InlineCompletionState {
 }
 
 /**
- * 内联补全 hook 入参。
+ * 内联补全状态机返回值。
  */
-export interface UseInlineCompletionOptions {
+interface InlineCompletionStateMachine {
+  /** 只读状态 */
+  state: DeepReadonly<Ref<InlineCompletionState>>;
+  /** 接受当前 ghost text */
+  accept: () => Promise<void>;
+  /** 取消当前补全 */
+  cancel: (reason?: InlineCompletionUserInteraction | 'timeout' | 'stale' | 'error') => void;
+  /** 销毁状态机与 adapter */
+  destroy: () => void;
+}
+
+/**
+ * 内联补全状态机入参。
+ */
+interface InlineCompletionStateMachineOptions {
   /** pane 级适配器 */
   adapter: InlineCompletionAdapter;
   /** 当前编辑器元数据 getter */
@@ -56,23 +70,9 @@ export interface UseInlineCompletionOptions {
 }
 
 /**
- * 内联补全 hook 返回值。
+ * 内联补全挂载参数。
  */
-export interface UseInlineCompletionResult {
-  /** 只读状态 */
-  state: DeepReadonly<Ref<InlineCompletionState>>;
-  /** 接受当前 ghost text */
-  accept: () => Promise<void>;
-  /** 取消当前补全 */
-  cancel: (reason?: InlineCompletionUserInteraction | 'timeout' | 'stale' | 'error') => void;
-  /** 销毁状态机与 adapter */
-  destroy: () => void;
-}
-
-/**
- * Pane 内联补全挂载参数。
- */
-export interface PaneInlineCompletionMountOptions {
+export interface InlineCompletionMountOptions {
   /** 当前 pane 的内联补全适配器。 */
   adapter: InlineCompletionAdapter;
   /** 当前编辑器状态 getter。 */
@@ -80,13 +80,13 @@ export interface PaneInlineCompletionMountOptions {
 }
 
 /**
- * Pane 内联补全 hook 返回值。
+ * 内联补全 hook 返回值。
  */
-export interface UsePaneInlineCompletionResult {
+export interface UseInlineCompletionResult {
   /** 当前状态机实例。 */
-  instance: ShallowRef<UseInlineCompletionResult | null>;
+  instance: ShallowRef<InlineCompletionStateMachine | null>;
   /** 挂载新的内联补全状态机。 */
-  mount: (options: PaneInlineCompletionMountOptions) => void;
+  mount: (options: InlineCompletionMountOptions) => void;
   /** 销毁当前内联补全状态机。 */
   destroy: () => void;
 }
@@ -186,10 +186,10 @@ function getCompletionContext(adapter: InlineCompletionAdapter, requestToken: In
 
 /**
  * 创建 BEditor 内联补全共享状态机。
- * @param options - hook 入参
+ * @param options - 状态机入参
  * @returns 内联补全状态与操作
  */
-export function useInlineCompletion(options: UseInlineCompletionOptions): UseInlineCompletionResult {
+function createInlineCompletionStateMachine(options: InlineCompletionStateMachineOptions): InlineCompletionStateMachine {
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const state = ref<InlineCompletionState>(createInitialState());
@@ -350,7 +350,7 @@ export function useInlineCompletion(options: UseInlineCompletionOptions): UseInl
     });
 
     try {
-      const rawText = await withTimeout(options.invokeCompletion(prompt), timeoutMs);
+      const rawText = await withTimeout<string>(options.invokeCompletion(prompt), timeoutMs);
       if (latestRequestId !== requestToken.requestId || state.value.status !== 'loading' || !isRequestTokenCurrent(options.adapter, requestToken)) {
         cancel('stale');
         return true;
@@ -573,10 +573,10 @@ export function useInlineCompletion(options: UseInlineCompletionOptions): UseInl
  * 创建 pane 级内联补全编排器。
  * @returns pane 内联补全生命周期控制器
  */
-export function usePaneInlineCompletion(): UsePaneInlineCompletionResult {
+export function useInlineCompletion(): UseInlineCompletionResult {
   const serviceModelStore = useServiceModelStore();
   const { agent } = useChat({ ignoreEnabled: false });
-  const instance = shallowRef<UseInlineCompletionResult | null>(null);
+  const instance = shallowRef<InlineCompletionStateMachine | null>(null);
 
   /**
    * 销毁当前内联补全状态机。
@@ -616,9 +616,9 @@ export function usePaneInlineCompletion(): UsePaneInlineCompletionResult {
    * 挂载新的内联补全状态机。
    * @param options - 挂载参数
    */
-  function mount(options: PaneInlineCompletionMountOptions): void {
+  function mount(options: InlineCompletionMountOptions): void {
     destroy();
-    instance.value = useInlineCompletion({
+    instance.value = createInlineCompletionStateMachine({
       adapter: options.adapter,
       editorState: options.editorState,
       invokeCompletion

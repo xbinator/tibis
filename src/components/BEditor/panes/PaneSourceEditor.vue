@@ -49,7 +49,7 @@ import {
 import { createSourceSelectionAssistantAdapter, createSourceSelectionHighlightExtension } from '../adapters/sourceSelectionAssistant';
 import { createSourceInlineCompletionAdapter, createSourceInlineCompletionExtension } from '../extensions/sourceInlineCompletion';
 import { useFrontMatter } from '../hooks/useFrontMatter';
-import { usePaneInlineCompletion } from '../hooks/useInlineCompletion';
+import { useInlineCompletion } from '../hooks/useInlineCompletion';
 
 const [name, bem] = createNamespace('', 'b-markdown-source');
 
@@ -106,7 +106,7 @@ const headingAnchorCompartment = new Compartment();
 const { bodyContent } = useFrontMatter(editorContent);
 
 const adapter = shallowRef<SelectionAssistantAdapter | null>(null);
-const paneInlineCompletion = usePaneInlineCompletion();
+const paneInlineCompletion = useInlineCompletion();
 let cleanupSelectionOverlayPosition: (() => void) | null = null;
 
 /**
