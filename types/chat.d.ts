@@ -403,6 +403,8 @@ export interface ChatMessageRecord {
 export interface ChatMessageHistoryCursor {
   /** 仅加载早于该创建时间的消息 */
   beforeCreatedAt: string;
+  /** 同创建时间下的边界消息角色，用于保持分页顺序与展示顺序一致 */
+  beforeRole: ChatMessageRole;
   /** 同创建时间下的边界消息 ID，用于规避时间戳精度冲突 */
   beforeId: string;
 }

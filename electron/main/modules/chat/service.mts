@@ -25,6 +25,17 @@ import { dbExecute, dbSelect, transaction } from '../database/service.mjs';
 
 const CHAT_MESSAGE_HISTORY_LIMIT = 30;
 const CURRENT_SCHEMA_VERSION = 2;
+const MESSAGE_ROLE_ORDER_SQL = `
+  CASE role
+    WHEN 'system' THEN 0
+    WHEN 'compression' THEN 1
+    WHEN 'user' THEN 2
+    WHEN 'assistant' THEN 3
+    WHEN 'interrupt' THEN 4
+    WHEN 'error' THEN 5
+    ELSE 2
+  END
+`;
 
 // ==================== SQL — 会话 (7 条) ====================
 
@@ -69,7 +80,7 @@ const SELECT_MESSAGES_BY_SESSION_SQL = `
          summary, meta_json, agent_id, runtime_id, parent_runtime_id
   FROM chat_messages
   WHERE session_id = ?
-  ORDER BY created_at DESC, id DESC
+  ORDER BY created_at DESC, ${MESSAGE_ROLE_ORDER_SQL} DESC, id DESC
   LIMIT ?
 `;
 const SELECT_MESSAGES_BEFORE_CURSOR_SQL = `
@@ -77,8 +88,17 @@ const SELECT_MESSAGES_BEFORE_CURSOR_SQL = `
          summary, meta_json, agent_id, runtime_id, parent_runtime_id
   FROM chat_messages
   WHERE session_id = ?
-    AND (created_at < ? OR (created_at = ? AND id < ?))
-  ORDER BY created_at DESC, id DESC
+    AND (
+      created_at < ?
+      OR (
+        created_at = ?
+        AND (
+          ${MESSAGE_ROLE_ORDER_SQL} < ?
+          OR (${MESSAGE_ROLE_ORDER_SQL} = ? AND id < ?)
+        )
+      )
+    )
+  ORDER BY created_at DESC, ${MESSAGE_ROLE_ORDER_SQL} DESC, id DESC
   LIMIT ?
 `;
 const UPSERT_MESSAGE_SQL = `
@@ -467,6 +487,8 @@ class ChatSessionManager {
           sessionId,
           cursor.beforeCreatedAt,
           cursor.beforeCreatedAt,
+          getMessageRoleOrder(cursor.beforeRole),
+          getMessageRoleOrder(cursor.beforeRole),
           cursor.beforeId,
           CHAT_MESSAGE_HISTORY_LIMIT
         ])

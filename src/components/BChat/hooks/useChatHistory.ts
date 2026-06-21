@@ -28,7 +28,7 @@ export function useChatHistory() {
       return undefined;
     }
 
-    return { beforeCreatedAt: firstMessage.createdAt, beforeId: firstMessage.id };
+    return { beforeCreatedAt: firstMessage.createdAt, beforeRole: firstMessage.role, beforeId: firstMessage.id };
   }
 
   /**
@@ -59,7 +59,7 @@ export function useChatHistory() {
 
       historyMessages.unshift(...batchMessages);
       const firstMessage = batchMessages[0];
-      cursor = { beforeCreatedAt: firstMessage.createdAt, beforeId: firstMessage.id };
+      cursor = { beforeCreatedAt: firstMessage.createdAt, beforeRole: firstMessage.role, beforeId: firstMessage.id };
     }
 
     return historyMessages;

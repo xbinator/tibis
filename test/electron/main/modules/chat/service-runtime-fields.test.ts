@@ -106,6 +106,28 @@ describe('chat main service runtime fields', (): void => {
     expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
   });
 
+  it('uses role order as part of the history cursor boundary for shared createdAt records', (): void => {
+    const cursor = {
+      beforeCreatedAt: '2026-06-19T00:00:00.000Z',
+      beforeId: 'user-runtime-1',
+      beforeRole: 'user'
+    } as Parameters<typeof chatSessionManager.getMessages>[1] & { beforeRole: 'user' };
+
+    databaseMock.dbSelect.mockReturnValue([]);
+
+    chatSessionManager.getMessages('session-1', cursor);
+
+    expect(databaseMock.dbSelect).toHaveBeenCalledWith(expect.stringContaining('CASE role'), [
+      'session-1',
+      cursor.beforeCreatedAt,
+      cursor.beforeCreatedAt,
+      2,
+      2,
+      cursor.beforeId,
+      expect.any(Number)
+    ]);
+  });
+
   it('adds only the new usage delta when updating a runtime assistant message', (): void => {
     databaseMock.dbSelect
       .mockReturnValueOnce([{ usage_json: JSON.stringify({ inputTokens: 1, outputTokens: 2, totalTokens: 3 }) }])
