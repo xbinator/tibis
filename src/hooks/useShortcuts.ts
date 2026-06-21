@@ -20,6 +20,8 @@ interface ShortcutOptions {
   handler: () => void;
   /** 快捷键作用域守卫，返回 false 时不触发回调也不阻止默认行为 */
   guard?: (event: KeyboardEvent) => boolean;
+  /** 是否响应长按产生的重复 keydown 事件 */
+  repeatable?: boolean;
   /** 是否启用，默认 true */
   enabled?: boolean;
   /** 是否阻止默认行为，默认 true */
@@ -58,6 +60,8 @@ interface GuardedShortcutRule extends ParsedShortcut {
   handler: () => void;
   /** 快捷键作用域守卫 */
   guard: (event: KeyboardEvent) => boolean;
+  /** 是否响应长按产生的重复 keydown 事件 */
+  repeatable: boolean;
   /** 是否阻止默认行为 */
   preventDefault: boolean;
 }
@@ -120,6 +124,10 @@ export function useShortcuts(): UseShortcutsReturn {
         const ctrlMatch = isMac() ? e.metaKey === rule.ctrl : e.ctrlKey === rule.ctrl;
 
         if (ctrlMatch && e.shiftKey === rule.shift && e.altKey === rule.alt && e.key.toLowerCase() === rule.key && rule.guard(e)) {
+          if (e.repeat && !rule.repeatable) {
+            return;
+          }
+
           if (rule.preventDefault) {
             e.preventDefault();
           }
@@ -149,15 +157,16 @@ export function useShortcuts(): UseShortcutsReturn {
    * @returns 取消快捷键注册的函数
    */
   function register(options: ShortcutOptions): ShortcutCleanup {
-    const { key, handler, guard, enabled = true, preventDefault = true } = options;
+    const { key, handler, guard, repeatable = false, enabled = true, preventDefault = true } = options;
 
     if (!enabled) return () => undefined;
 
-    if (guard) {
+    if (guard || repeatable) {
       const rule: GuardedShortcutRule = {
         ...parseShortcut(key),
         handler,
-        guard,
+        guard: guard ?? ((): boolean => true),
+        repeatable,
         preventDefault
       };
       guardedShortcutRules.push(rule);

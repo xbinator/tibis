@@ -3,8 +3,9 @@
  * @description DeepSeek AI 服务商实现
  */
 import type { AIProvider } from '../types.mjs';
+import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import type { LanguageModel } from 'ai';
-import type { AIServiceError, AICreateOptions } from 'types/ai';
+import type { AIServiceError, AICreateOptions, AIRequestOptions } from 'types/ai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { AI_ERROR_CODE, createAIServiceError } from '../errors/codes.mjs';
 import { mapCommonError } from '../errors/common.mjs';
@@ -29,6 +30,23 @@ export class DeepSeekProvider implements AIProvider {
 
     const deepseek = createDeepSeek({ apiKey, baseURL });
     return deepseek(modelId) as LanguageModel;
+  }
+
+  /**
+   * 创建 DeepSeek 专属 providerOptions。
+   * @param request - 当前 AI 请求
+   * @returns DeepSeek providerOptions；未显式禁用推理时返回 undefined
+   */
+  createProviderOptions(request: AIRequestOptions): ProviderOptions | undefined {
+    if (request.reasoning?.enabled !== false) {
+      return undefined;
+    }
+
+    return {
+      deepseek: {
+        thinking: { type: 'disabled' }
+      }
+    };
   }
 
   /**

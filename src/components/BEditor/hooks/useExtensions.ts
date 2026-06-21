@@ -42,6 +42,7 @@ import TableView from '../components/TableView.vue';
 import { AISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { Search, type SearchScrollContext } from '../extensions/editorSearch';
 import { InlineCommentMark } from '../extensions/inlineCommentMark';
+import { RichInlineCompletion } from '../extensions/richInlineCompletion';
 import { registerRichCodeBlockLowlightAliases } from '../utils/richCodeBlockLowlight';
 
 const lowlight = createLowlight(common);
@@ -1053,7 +1054,8 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
       katexOptions: {
         throwOnError: false
       }
-    })
+    }),
+    RichInlineCompletion
   ]);
 
   function assignHeadingIds(editor: Editor, headingOptions?: { silent?: boolean }): void {

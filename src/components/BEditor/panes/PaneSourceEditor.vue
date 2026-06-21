@@ -47,7 +47,9 @@ import {
   setSourceEditorSearchTerm
 } from '../adapters/sourceEditorSearch';
 import { createSourceSelectionAssistantAdapter, createSourceSelectionHighlightExtension } from '../adapters/sourceSelectionAssistant';
+import { createSourceInlineCompletionAdapter, createSourceInlineCompletionExtension } from '../extensions/sourceInlineCompletion';
 import { useFrontMatter } from '../hooks/useFrontMatter';
+import { usePaneInlineCompletion } from '../hooks/useInlineCompletion';
 
 const [name, bem] = createNamespace('', 'b-markdown-source');
 
@@ -104,6 +106,7 @@ const headingAnchorCompartment = new Compartment();
 const { bodyContent } = useFrontMatter(editorContent);
 
 const adapter = shallowRef<SelectionAssistantAdapter | null>(null);
+const paneInlineCompletion = usePaneInlineCompletion();
 let cleanupSelectionOverlayPosition: (() => void) | null = null;
 
 /**
@@ -132,6 +135,7 @@ function createEditorExtensions(): Extension[] {
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({ spellcheck: 'false' }),
     editableCompartment.of(createEditableExtension(props.editable)),
+    createSourceInlineCompletionExtension(),
     EditorView.updateListener.of((update: ViewUpdate): void => {
       if (!update.docChanged) {
         return;
@@ -145,6 +149,17 @@ function createEditorExtensions(): Extension[] {
     createSourceEditorDrawSelectionExtension(),
     createSourceSelectionHighlightExtension()
   ];
+}
+
+/**
+ * 挂载 Source pane 内联补全。
+ * @param view - 当前 CodeMirror 视图
+ */
+function mountInlineCompletion(view: EditorView): void {
+  paneInlineCompletion.mount({
+    adapter: createSourceInlineCompletionAdapter(view, () => props.editable === true),
+    editorState: () => props.editorState
+  });
 }
 
 function getView(): EditorView | null {
@@ -423,6 +438,10 @@ watch(
     view.dispatch({
       effects: editableCompartment.reconfigure(createEditableExtension(editable))
     });
+    paneInlineCompletion.destroy();
+    if (editable) {
+      mountInlineCompletion(view);
+    }
   }
 );
 
@@ -475,9 +494,14 @@ onMounted((): void => {
     overlayRoot,
     adapter: adapter.value
   });
+
+  if (props.editable) {
+    mountInlineCompletion(editorView.value);
+  }
 });
 
 onBeforeUnmount((): void => {
+  paneInlineCompletion.destroy();
   props.onSelectionHostChange?.(null);
   cleanupSelectionOverlayPosition?.();
   cleanupSelectionOverlayPosition = null;
@@ -748,5 +772,11 @@ defineExpose(controller);
   .md-comment-attr {
     color: var(--source-editor-markdown-escape);
   }
+}
+
+.b-markdown-source__inline-completion-ghost {
+  color: var(--editor-placeholder);
+  pointer-events: none;
+  user-select: none;
 }
 </style>

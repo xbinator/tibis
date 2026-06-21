@@ -3,7 +3,7 @@
  * @description AI 服务核心类，封装文本生成和流式文本生成能力
  */
 import type { FlexibleSchema, ToolExecutionOptions, ToolSet } from 'ai';
-import type { AICreateOptions, AIRequestOptions, AIInvokeResult, AIStreamResult, AIServiceError, MCPDiscoveredToolSnapshot } from 'types/ai';
+import type { AICreateOptions, AIRequestOptions, AIInvokeResult, AIStreamResult, AIServiceError, AIUsage, MCPDiscoveredToolSnapshot } from 'types/ai';
 import { generateText, jsonSchema, Output, stepCountIs, streamText, tool } from 'ai';
 import { log } from '../logger/service.mjs';
 import { connectMcpServer, executeMcpTool, getMcpDiscoveryCache } from '../mcp/session.mjs';
@@ -492,6 +492,37 @@ function toOutput(output: AIRequestOptions['output']) {
   return Output.object({ schema: jsonSchema(output.schema), name: output.name, description: output.description });
 }
 
+/** AI SDK 文本生成结果的最小可读形状。 */
+interface GenerateTextResultLike {
+  /** 生成文本。 */
+  readonly text: string;
+  /** 结构化输出，未请求结构化输出时访问可能抛出 AI SDK 错误。 */
+  readonly output?: unknown;
+  /** token 使用量。 */
+  readonly usage?: Partial<AIUsage> | null;
+}
+
+/**
+ * 将 AI SDK 文本生成结果转换为渲染进程可消费的调用结果。
+ * @param result - AI SDK 文本生成结果
+ * @param includeStructuredOutput - 是否读取并传递结构化输出
+ * @returns 主进程 AI 调用结果
+ */
+export function createAIInvokeResult(result: GenerateTextResultLike, includeStructuredOutput: boolean): AIInvokeResult {
+  const { inputTokens = 0, outputTokens = 0, totalTokens = 0 } = result.usage ?? {};
+  const invokeResult: AIInvokeResult = {
+    text: result.text,
+    usage: { inputTokens, outputTokens, totalTokens }
+  };
+
+  // AI SDK 在没有结构化输出时会通过 getter 抛 NoOutputGeneratedError，因此仅在显式请求 output 时读取。
+  if (includeStructuredOutput) {
+    invokeResult.output = result.output;
+  }
+
+  return invokeResult;
+}
+
 /**
  * 判断是否为可预期的临时服务错误（限流 / 服务不可用）。
  */
@@ -552,6 +583,7 @@ class AIService {
       system: appendMcpToolInstructions(request.system, request.mcp),
       temperature: request.temperature,
       maxOutputTokens: request.maxOutputTokens,
+      providerOptions: this.aiProvider.createProviderOptions(createOptions.providerType, request),
       tools: await toSdkTools(request.tools, request.tavily, request.mcp),
       ...(hasTavilyHttpTools(request.tavily) || hasMcpSdkTools(request.mcp) ? { stopWhen: stepCountIs(5) } : {})
     };
@@ -592,8 +624,7 @@ class AIService {
 
       log.info(`[AIService] generateText result:`, result);
 
-      const { inputTokens = 0, outputTokens = 0, totalTokens = 0 } = result.usage ?? {};
-      return [undefined, { text: result.text, output: result.output, usage: { inputTokens, outputTokens, totalTokens } }];
+      return [undefined, createAIInvokeResult(result, Boolean(request.output))];
     } catch (error) {
       return this.handleError('generateText', error, createOptions.providerType);
     }

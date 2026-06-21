@@ -3,8 +3,9 @@
  * @description AI 服务商注册表，管理所有 AI 服务商的创建和错误处理
  */
 import type { AIProvider } from '../types.mjs';
+import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import type { LanguageModel } from 'ai';
-import type { AIServiceError, AIProviderType, AICreateOptions } from 'types/ai';
+import type { AIServiceError, AIProviderType, AICreateOptions, AIRequestOptions } from 'types/ai';
 import { AnthropicProvider } from './anthropic.mjs';
 import { DeepSeekProvider } from './deepseek.mjs';
 import { GoogleProvider } from './google.mjs';
@@ -44,6 +45,18 @@ export class AIProviderRegistry {
     const driver = this.providers.get(options.providerType);
 
     return driver?.create(options, modelId) as LanguageModel;
+  }
+
+  /**
+   * 创建供应商专属 providerOptions。
+   * @param providerType - 服务商类型
+   * @param request - 当前 AI 请求
+   * @returns AI SDK providerOptions；无供应商专属参数时返回 undefined
+   */
+  createProviderOptions(providerType: AIProviderType, request: AIRequestOptions): ProviderOptions | undefined {
+    const driver = this.providers.get(providerType);
+
+    return driver?.createProviderOptions?.(request);
   }
 
   /**

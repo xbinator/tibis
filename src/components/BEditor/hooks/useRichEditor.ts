@@ -191,16 +191,12 @@ export function useRichEditor({ bodyContent, editable, editorInstanceId, onConte
         }
 
         if (isUndo || isRedo) {
-          if (!canEdit) return true;
-          event.preventDefault();
-          const instance = editorInstanceRef.value;
-          if (!instance) return true;
-          if (isUndo) {
-            instance.commands.undo();
+          if (!canEdit) {
+            event.preventDefault();
             return true;
           }
-          instance.commands.redo();
-          return true;
+
+          return false;
         }
         return false;
       },

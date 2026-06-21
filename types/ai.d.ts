@@ -308,6 +308,15 @@ export interface AIOutputOptions {
 }
 
 /**
+ * AI 推理控制选项。
+ * @description 只表达业务语义，供应商专属参数由对应 provider 实现映射。
+ */
+export interface AIReasoningOptions {
+  /** 是否允许模型输出 reasoning / thinking。 */
+  enabled: boolean;
+}
+
+/**
  * Tavily 运行时配置。
  */
 export interface AITavilyRuntimeConfig {
@@ -501,6 +510,8 @@ export interface AIRequestOptions {
   toolResults?: AITransportToolResult[];
   /** 输出配置。 */
   output?: AIOutputOptions;
+  /** 推理控制配置。 */
+  reasoning?: AIReasoningOptions;
 }
 
 export interface AIStreamToolCallChunk {

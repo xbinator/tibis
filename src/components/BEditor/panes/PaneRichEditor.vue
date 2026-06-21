@@ -61,7 +61,9 @@ import CurrentBlockMenu from '../components/CurrentBlockMenu.vue';
 import FrontMatterCard from '../components/FrontMatterCard.vue';
 import { setAISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { getSearchSnapshot } from '../extensions/editorSearch';
+import { createRichInlineCompletionAdapter } from '../extensions/richInlineCompletion';
 import { useFrontMatter } from '../hooks/useFrontMatter';
+import { usePaneInlineCompletion } from '../hooks/useInlineCompletion';
 import { useRichEditor } from '../hooks/useRichEditor';
 import { getPersistedMarkdown } from '../utils/editorMarkdown';
 
@@ -221,6 +223,7 @@ watch(
 // ---- Adapter & Orchestration ----
 
 const adapter = shallowRef<SelectionAssistantAdapter | null>(null);
+const paneInlineCompletion = usePaneInlineCompletion();
 
 watch(
   [editorInstance, overlayRootRef, () => props.editorState],
@@ -254,7 +257,29 @@ watch(
   { immediate: true }
 );
 
+watch(
+  [editorInstance, () => props.editable, () => richLoadState.value.phase],
+  ([editor, editable, loadPhase]) => {
+    paneInlineCompletion.destroy();
+    if (!editor || !editable || loadPhase !== 'ready') {
+      return;
+    }
+
+    const nextAdapter = createRichInlineCompletionAdapter(
+      editor,
+      () => props.editable === true && richLoadState.value.phase === 'ready',
+      () => getPersistedMarkdown(editor)
+    );
+    paneInlineCompletion.mount({
+      adapter: nextAdapter,
+      editorState: () => props.editorState || { content: '', name: '', path: '', id: '', ext: '' }
+    });
+  },
+  { immediate: true }
+);
+
 onBeforeUnmount(() => {
+  paneInlineCompletion.destroy();
   props.onSelectionHostChange?.(null);
   adapter.value?.dispose?.();
   adapter.value = null;
@@ -557,6 +582,12 @@ defineExpose({
 
 .b-markdown-rich {
   position: relative;
+}
+
+.b-markdown-rich__inline-completion-ghost {
+  color: var(--editor-placeholder);
+  pointer-events: none;
+  user-select: none;
 }
 
 .b-markdown-rich__content {
