@@ -13,7 +13,7 @@ import { DEFAULT_PROVIDERS } from './defaults';
 // 常量
 // ─────────────────────────────────────────────
 
-const REQUEST_FORMATS: AIProviderType[] = ['openai', 'anthropic', 'google', 'deepseek', 'alibaba', 'volcengine'];
+const REQUEST_FORMATS: AIProviderType[] = ['openai', 'anthropic', 'google', 'deepseek', 'alibaba', 'volcengine', 'moonshot', 'glm', 'minimax', 'mimo'];
 
 // ─────────────────────────────────────────────
 // 类型守卫

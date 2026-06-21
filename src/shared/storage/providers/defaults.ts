@@ -146,7 +146,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     name: 'MiniMax',
     description: '提供 MiniMax 系列模型，支持超长上下文、原生多模态与 Agent 能力。',
     baseUrl: 'https://api.minimaxi.com/v1',
-    type: 'openai',
+    type: 'minimax',
     isEnabled: false,
     readonly: true,
     models: [
@@ -170,7 +170,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     name: 'Moonshot',
     description: '提供 Kimi 系列大模型，擅长长上下文处理、Agent 协作与代码生成。',
     baseUrl: 'https://api.moonshot.cn/v1',
-    type: 'openai',
+    type: 'moonshot',
     isEnabled: false,
     readonly: true,
     models: [
@@ -400,7 +400,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     name: '小米',
     description: '提供小米 MiMo 系列大模型，支持超长上下文、原生多模态与 Agent 能力。',
     baseUrl: 'https://api.xiaomimimo.com/v1',
-    type: 'openai',
+    type: 'mimo',
     isEnabled: false,
     readonly: true,
     models: [
@@ -424,7 +424,7 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     name: '智谱 AI',
     description: '提供 GLM 系列模型，支持中文场景优化、对话生成与智能问答。',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    type: 'openai',
+    type: 'glm',
     isEnabled: false,
     readonly: true,
     models: [

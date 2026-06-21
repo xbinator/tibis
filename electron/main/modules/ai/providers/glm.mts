@@ -1,6 +1,6 @@
 /**
- * @file volcengine.mts
- * @description Volcengine Ark AI 服务商实现
+ * @file glm.mts
+ * @description GLM / 智谱 AI 服务商实现
  */
 import type { AIProvider } from '../types.mjs';
 import type { ProviderOptions } from '@ai-sdk/provider-utils';
@@ -8,39 +8,38 @@ import type { LanguageModel } from 'ai';
 import type { AIServiceError, AICreateOptions, AIRequestOptions } from 'types/ai';
 import { createOpenAICompatibleChatModel, normalizeOpenAICompatibleError } from '../helper/openai-compatible.mjs';
 
-/** 火山方舟默认 OpenAI 兼容接口地址。 */
-const DEFAULT_VOLCENGINE_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
+/** GLM / 智谱默认 OpenAI 兼容接口地址。 */
+const DEFAULT_GLM_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4';
 
-/** 通用 reasoning 开关可映射到的火山思考模式。 */
 type ThinkingType = 'enabled' | 'disabled';
 
 /**
- * Volcengine Ark 服务商
- * @description 实现火山方舟模型的创建、思考模式映射和错误处理
+ * GLM / 智谱服务商。
+ * @description 实现 GLM 模型的创建和错误处理
  */
-export class VolcengineProvider implements AIProvider {
+export class GLMProvider implements AIProvider {
   /** 服务商类型标识 */
-  readonly type = 'volcengine' as const;
+  readonly type = 'glm' as const;
 
   /**
-   * 创建 Volcengine 语言模型实例。
+   * 创建 GLM 语言模型实例。
    * @param options - 创建选项（包含 API Key、Base URL 等）
-   * @param modelId - 模型 ID 或 Endpoint ID
+   * @param modelId - 模型 ID
    * @returns 语言模型实例
    */
   create(options: AICreateOptions, modelId: string): LanguageModel {
     return createOpenAICompatibleChatModel({
       options,
       modelId,
-      providerName: 'volcengine',
-      defaultBaseUrl: DEFAULT_VOLCENGINE_BASE_URL
+      providerName: 'glm',
+      defaultBaseUrl: DEFAULT_GLM_BASE_URL
     });
   }
 
   /**
-   * 创建 Volcengine 专属 providerOptions。
+   * 创建 GLM 专属 providerOptions。
    * @param request - 当前 AI 请求
-   * @returns Volcengine providerOptions；未显式设置推理开关时返回 undefined
+   * @returns 暂无安全映射，始终返回 undefined
    */
   createProviderOptions(request: AIRequestOptions): ProviderOptions | undefined {
     if (request.reasoning?.enabled === undefined) {
@@ -50,19 +49,19 @@ export class VolcengineProvider implements AIProvider {
     const thinkingType: ThinkingType = request.reasoning.enabled ? 'enabled' : 'disabled';
 
     return {
-      volcengine: {
-        thinking: { type: thinkingType }
+      glm: {
+        enableThinking: thinkingType
       }
     };
   }
 
   /**
-   * 标准化 Volcengine 错误。
+   * 标准化 GLM / 智谱错误。
    * @param error - 原始错误
    * @param fallbackMessage - 默认错误消息
    * @returns 标准化的 AIServiceError
    */
   normalizeError(error: unknown, fallbackMessage = '服务调用失败'): AIServiceError {
-    return normalizeOpenAICompatibleError(error, 'Volcengine/火山引擎', fallbackMessage);
+    return normalizeOpenAICompatibleError(error, 'GLM / 智谱', fallbackMessage);
   }
 }

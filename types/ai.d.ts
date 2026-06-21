@@ -8,7 +8,7 @@ import type { JSONSchema7 } from 'json-schema';
 /**
  * 服务商请求格式类型。
  */
-export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'deepseek' | 'alibaba' | 'volcengine';
+export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'deepseek' | 'alibaba' | 'volcengine' | 'moonshot' | 'glm' | 'minimax' | 'mimo';
 
 /** AI 工具来源类型。 */
 export type AIToolSource = 'builtin' | 'custom' | 'mcp';

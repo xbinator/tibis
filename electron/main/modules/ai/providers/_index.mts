@@ -9,7 +9,11 @@ import type { AIServiceError, AIProviderType, AICreateOptions, AIRequestOptions 
 import { AlibabaProvider } from './alibaba.mjs';
 import { AnthropicProvider } from './anthropic.mjs';
 import { DeepSeekProvider } from './deepseek.mjs';
+import { GLMProvider } from './glm.mjs';
 import { GoogleProvider } from './google.mjs';
+import { MiMoProvider } from './mimo.mjs';
+import { MiniMaxProvider } from './minimax.mjs';
+import { MoonshotProvider } from './moonshot.mjs';
 import { OpenAIProvider } from './openai.mjs';
 import { VolcengineProvider } from './volcengine.mjs';
 
@@ -29,6 +33,10 @@ export class AIProviderRegistry {
     this.register(new GoogleProvider());
     this.register(new DeepSeekProvider());
     this.register(new VolcengineProvider());
+    this.register(new MoonshotProvider());
+    this.register(new GLMProvider());
+    this.register(new MiniMaxProvider());
+    this.register(new MiMoProvider());
   }
 
   /**

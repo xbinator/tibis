@@ -6,6 +6,10 @@ import type { AIInvokeResult } from 'types/ai';
 import { describe, expect, it } from 'vitest';
 import { AlibabaProvider } from '../../../../../electron/main/modules/ai/providers/alibaba.mjs';
 import { DeepSeekProvider } from '../../../../../electron/main/modules/ai/providers/deepseek.mjs';
+import { GLMProvider } from '../../../../../electron/main/modules/ai/providers/glm.mjs';
+import { MiMoProvider } from '../../../../../electron/main/modules/ai/providers/mimo.mjs';
+import { MiniMaxProvider } from '../../../../../electron/main/modules/ai/providers/minimax.mjs';
+import { MoonshotProvider } from '../../../../../electron/main/modules/ai/providers/moonshot.mjs';
 import { VolcengineProvider } from '../../../../../electron/main/modules/ai/providers/volcengine.mjs';
 import { createAIInvokeResult } from '../../../../../electron/main/modules/ai/service.mjs';
 
@@ -149,5 +153,44 @@ describe('VolcengineProvider.createProviderOptions', (): void => {
     const provider = new VolcengineProvider();
 
     expect(provider.createProviderOptions({ modelId: 'doubao-seed-2.0-pro' })).toBeUndefined();
+  });
+});
+
+describe('MoonshotProvider.createProviderOptions', (): void => {
+  it('maps enabled generic reasoning to Kimi thinking enabled options', (): void => {
+    const provider = new MoonshotProvider();
+
+    expect(provider.createProviderOptions({ modelId: 'kimi-k2.7-code', reasoning: { enabled: true } })).toEqual({
+      moonshot: {
+        thinking: { type: 'enabled', keep: 'all' }
+      }
+    });
+  });
+
+  it('does not send unsupported Kimi thinking disabled options', (): void => {
+    const provider = new MoonshotProvider();
+
+    expect(provider.createProviderOptions({ modelId: 'kimi-k2.7-code', reasoning: { enabled: false } })).toBeUndefined();
+    expect(provider.createProviderOptions({ modelId: 'kimi-k2.7-code' })).toBeUndefined();
+  });
+});
+
+describe('OpenAI-compatible provider option defaults', (): void => {
+  it('does not add provider options for GLM unless a supported mapping is introduced', (): void => {
+    const provider = new GLMProvider();
+
+    expect(provider.createProviderOptions?.({ modelId: 'glm-5.2', reasoning: { enabled: true } })).toBeUndefined();
+  });
+
+  it('does not add provider options for MiniMax unless a supported mapping is introduced', (): void => {
+    const provider = new MiniMaxProvider();
+
+    expect(provider.createProviderOptions?.({ modelId: 'MiniMax-M3', reasoning: { enabled: true } })).toBeUndefined();
+  });
+
+  it('does not add provider options for MiMo unless a supported mapping is introduced', (): void => {
+    const provider = new MiMoProvider();
+
+    expect(provider.createProviderOptions?.({ modelId: 'mimo-v2.5-pro', reasoning: { enabled: true } })).toBeUndefined();
   });
 });

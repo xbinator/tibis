@@ -85,6 +85,24 @@ describe('providerStorage.listProviders', () => {
     });
   });
 
+  it('preserves additional OpenAI-compatible request formats for custom providers', async (): Promise<void> => {
+    mockSettingsFileStorage.read.mockResolvedValue(
+      createSettingsFile([
+        { id: 'custom-moonshot', name: 'Custom Moonshot', type: 'moonshot', baseUrl: 'https://example.test/moonshot/v1' },
+        { id: 'custom-glm', name: 'Custom GLM', type: 'glm', baseUrl: 'https://example.test/glm/v4' },
+        { id: 'custom-minimax', name: 'Custom MiniMax', type: 'minimax', baseUrl: 'https://example.test/minimax/v1' },
+        { id: 'custom-mimo', name: 'Custom MiMo', type: 'mimo', baseUrl: 'https://example.test/mimo/v1' }
+      ])
+    );
+
+    const providers = await providerStorage.listProviders();
+
+    expect(providers.find((item) => item.id === 'custom-moonshot')).toMatchObject({ type: 'moonshot' });
+    expect(providers.find((item) => item.id === 'custom-glm')).toMatchObject({ type: 'glm' });
+    expect(providers.find((item) => item.id === 'custom-minimax')).toMatchObject({ type: 'minimax' });
+    expect(providers.find((item) => item.id === 'custom-mimo')).toMatchObject({ type: 'mimo' });
+  });
+
   it('uses Volcengine request format for the built-in Volcengine provider', async (): Promise<void> => {
     mockSettingsFileStorage.read.mockResolvedValue(createSettingsFile([{ id: 'volcengine', isEnabled: true }]));
 
@@ -98,6 +116,17 @@ describe('providerStorage.listProviders', () => {
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
       isEnabled: true
     });
+  });
+
+  it('uses dedicated request formats for built-in OpenAI-compatible providers', async (): Promise<void> => {
+    mockSettingsFileStorage.read.mockResolvedValue(createSettingsFile([{ id: 'moonshot', isEnabled: true }]));
+
+    const providers = await providerStorage.listProviders();
+
+    expect(providers.find((item) => item.id === 'moonshot')).toMatchObject({ type: 'moonshot', baseUrl: 'https://api.moonshot.cn/v1', isEnabled: true });
+    expect(providers.find((item) => item.id === 'zhipu')).toMatchObject({ type: 'glm', baseUrl: 'https://open.bigmodel.cn/api/paas/v4' });
+    expect(providers.find((item) => item.id === 'minimax')).toMatchObject({ type: 'minimax', baseUrl: 'https://api.minimaxi.com/v1' });
+    expect(providers.find((item) => item.id === 'xiaomi')).toMatchObject({ type: 'mimo', baseUrl: 'https://api.xiaomimimo.com/v1' });
   });
 
   it('stores built-in providers as complete snapshots after provider config updates', async (): Promise<void> => {
