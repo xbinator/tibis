@@ -34,3 +34,29 @@ export interface WebViewBounds {
   /** 高度 */
   height: number;
 }
+
+/**
+ * Chrome DevTools Protocol 截图裁剪区域。
+ */
+export interface WebViewProtocolScreenshotClip {
+  /** 页面坐标系中的横向起点 */
+  x: number;
+  /** 页面坐标系中的纵向起点 */
+  y: number;
+  /** 裁剪宽度 */
+  width: number;
+  /** 裁剪高度 */
+  height: number;
+  /** CSS 像素到输出图片像素的缩放比例 */
+  scale: number;
+}
+
+/**
+ * WebView 协议截图请求。
+ */
+export interface WebViewProtocolScreenshotRequest {
+  /** 需要截图的 Electron WebContents ID */
+  webContentsId: number;
+  /** 页面坐标系中的截图裁剪区域 */
+  clip: WebViewProtocolScreenshotClip;
+}

@@ -9,6 +9,7 @@ import type {
   ReadWorkspaceDirectoryOptions,
   ReadWorkspaceDirectoryResult
 } from './types';
+import type { WebViewProtocolScreenshotRequest } from 'types/webview';
 import { OPEN_FILE_FILTER } from '@/constants/extensions';
 
 export class WebNative {
@@ -98,5 +99,15 @@ export class WebNative {
 
     const blob = new Blob([content], { type: 'image/png' });
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  }
+
+  /**
+   * Web 平台没有 Electron WebContents，返回 null 让业务层走原有截图兜底。
+   * @param _request - 协议截图请求
+   * @returns 固定返回 null
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async captureWebviewScreenshot(_request: WebViewProtocolScreenshotRequest): Promise<ArrayBuffer | null> {
+    return null;
   }
 }

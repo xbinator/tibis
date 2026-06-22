@@ -14,6 +14,7 @@ import type {
   TibisWorkspaceRoot
 } from './types';
 import type { RecentFileShortcutInput } from 'types/electron-api';
+import type { WebViewProtocolScreenshotRequest } from 'types/webview';
 import { OPEN_FILE_FILTER, SAVE_FILE_FILTER } from '@/constants/extensions';
 import { getElectronAPI } from '../electron-api';
 
@@ -84,6 +85,10 @@ export class ElectronNative implements Native {
 
   async copyImageToClipboard(content: ArrayBuffer): Promise<void> {
     await getElectronAPI().copyImageToClipboard(content);
+  }
+
+  async captureWebviewScreenshot(request: WebViewProtocolScreenshotRequest): Promise<ArrayBuffer | null> {
+    return getElectronAPI().webview.captureProtocolScreenshot(request);
   }
 
   async exportPdf(options: ExportPdfOptions): Promise<string | null> {

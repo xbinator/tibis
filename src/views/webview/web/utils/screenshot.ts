@@ -562,7 +562,7 @@ export function createElementCaptureMetricsScript(): string {
 export function createElementPickerLayerVisibilityScript(visible: boolean): string {
   return `
 (() => new Promise((resolve) => {
-  const layerSelector = '.tibis-element-picker-highlight,.tibis-element-picker-selected';
+	  const layerSelector = '.tibis-element-picker-highlight,.tibis-element-picker-selected';
   const previousHiddenAttribute = 'data-tibis-capture-previous-hidden';
 
   function hideElementPickerLayer(element) {

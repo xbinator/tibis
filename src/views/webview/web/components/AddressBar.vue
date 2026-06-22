@@ -85,6 +85,8 @@ interface Props {
   isInspectorOpen?: boolean | null;
   /** 是否存在已选中的页面元素 */
   hasSelectedElement?: boolean;
+  /** 是否正在执行截图任务 */
+  isScreenshotCapturing?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -94,7 +96,8 @@ const props = withDefaults(defineProps<Props>(), {
   isElementSelecting: false,
   isDeviceToolbarVisible: false,
   isInspectorOpen: false,
-  hasSelectedElement: false
+  hasSelectedElement: false,
+  isScreenshotCapturing: false
 });
 
 const emit = defineEmits<{
@@ -124,6 +127,7 @@ const screenshotActionOptions = computed<DropdownOption[]>(() => {
       value: 'capture-viewport',
       label: '当前视图',
       icon: 'lucide:image',
+      disabled: props.isScreenshotCapturing,
       onClick: () => emit('captureViewportScreenshot')
     },
     {
@@ -131,6 +135,7 @@ const screenshotActionOptions = computed<DropdownOption[]>(() => {
       value: 'capture-full-page',
       label: '完整视图尺寸',
       icon: 'lucide:scroll-text',
+      disabled: props.isScreenshotCapturing,
       onClick: () => emit('captureFullPageScreenshot')
     }
   ];
@@ -141,6 +146,7 @@ const screenshotActionOptions = computed<DropdownOption[]>(() => {
       value: 'capture-selected-element',
       label: '选中元素',
       icon: 'lucide:scan',
+      disabled: props.isScreenshotCapturing,
       onClick: () => emit('captureSelectedElementScreenshot')
     });
   }
@@ -157,6 +163,7 @@ const moreActionOptions = computed<DropdownOption[]>(() => [
     value: 'screenshot',
     label: '截图',
     icon: 'lucide:camera',
+    disabled: props.isScreenshotCapturing,
     children: screenshotActionOptions.value
   },
   {

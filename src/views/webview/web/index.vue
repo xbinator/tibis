@@ -9,6 +9,7 @@
       :is-device-toolbar-visible="deviceMode.isToolbarVisible.value"
       :is-inspector-open="isInspectorOpen"
       :has-selected-element="Boolean(webview.selectedElement)"
+      :is-screenshot-capturing="screenshot.isCapturing.value"
       supports-element-selection
       supports-device-toolbar
       supports-inspector
@@ -76,7 +77,6 @@ const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as st
 
 const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
-const screenshot = useScreenshot({ webviewElementRef, webviewState: webview.state });
 const cacheControl = useCacheControl();
 
 webviewToolContextRegistry.register(routeFullPath, { readPageSnapshot: webview.readPageSnapshot });
@@ -104,6 +104,11 @@ const viewportStyle = computed<CSSProperties>(() => {
 const { requestSyncHostLayerBounds } = useHostLayer(routeFullPath, webviewContainerRef, webviewContentRef, webviewElementRef);
 
 // ---- Wheel 转发（早返回简化）----
+
+const screenshot = useScreenshot({
+  webviewElementRef,
+  webviewState: webview.state
+});
 
 /**
  * 在设备视口被宿主层覆盖时转发滚轮到外层滚动容器。

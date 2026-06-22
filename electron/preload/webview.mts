@@ -13,6 +13,7 @@ const webview: WebViewAPI = {
   show: (tabId) => ipcRenderer.invoke('webview:show', tabId),
   hide: (tabId) => ipcRenderer.invoke('webview:hide', tabId),
   clearCache: () => ipcRenderer.invoke('webview:clear-cache'),
+  captureProtocolScreenshot: (request) => ipcRenderer.invoke('webview:capture-protocol-screenshot', request),
 
   onStateChanged: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, tabId: string, state: WebViewState) => {

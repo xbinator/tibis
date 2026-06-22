@@ -56,9 +56,10 @@ const BDropdownStub = defineComponent({
 
 /**
  * 挂载 WebView 地址栏。
+ * @param props - 需要覆盖的属性
  * @returns 地址栏包装器
  */
-function mountAddressBar(props: { hasSelectedElement?: boolean } = {}): ReturnType<typeof shallowMount> {
+function mountAddressBar(props: { hasSelectedElement?: boolean; isScreenshotCapturing?: boolean } = {}): ReturnType<typeof shallowMount> {
   return shallowMount(AddressBar, {
     props: {
       url: 'https://example.com',
@@ -146,5 +147,20 @@ describe('webview web AddressBar', () => {
 
     selectedElementOption.onClick?.();
     expect(withSelectionWrapper.emitted('captureSelectedElementScreenshot')).toHaveLength(1);
+  });
+
+  it('disables screenshot actions while a screenshot is running', (): void => {
+    const wrapper = mountAddressBar({ hasSelectedElement: true, isScreenshotCapturing: true });
+    const options = getMoreActionOptions(wrapper);
+    const screenshotOption = options.find((option): boolean => option.type !== 'divider' && option.value === 'screenshot');
+
+    if (!screenshotOption || screenshotOption.type === 'divider') {
+      throw new Error('Screenshot menu option should exist');
+    }
+
+    const screenshotChildren = screenshotOption.children?.filter((option): boolean => option.type !== 'divider') ?? [];
+
+    expect(screenshotOption.disabled).toBe(true);
+    expect(screenshotChildren.every((option) => option.type !== 'divider' && option.disabled)).toBe(true);
   });
 });

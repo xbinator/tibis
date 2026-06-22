@@ -3,7 +3,8 @@
  * @description 封装 WebView 视图截图与完整页面长截屏能力。
  */
 import type { WebviewTag } from 'electron';
-import type { Ref } from 'vue';
+import type { WebViewProtocolScreenshotClip } from 'types/webview';
+import { getCurrentInstance, nextTick, onBeforeUnmount, ref, type Ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { native } from '@/shared/platform';
 import type { WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
@@ -40,6 +41,14 @@ import {
 type ScreenshotState = Pick<WebviewPageState, 'title' | 'url'>;
 
 /**
+ * 截图遮罩显隐回调。
+ */
+type CaptureMaskVisibleChange = (visible: boolean) => void | Promise<void>;
+
+/** 截图遮罩延迟显示时间，避免短任务闪烁。 */
+const CAPTURE_MASK_DELAY_MS = 180;
+
+/**
  * 创建截图 Hook 时需要注入的依赖。
  */
 export interface UseScreenshotOptions {
@@ -47,6 +56,8 @@ export interface UseScreenshotOptions {
   webviewElementRef: Ref<WebviewTag | null>;
   /** 当前页面标题与地址 */
   webviewState: Ref<ScreenshotState>;
+  /** 长截图期间切换宿主层遮罩；不传时默认挂载到 `<webview>` 宿主层 */
+  onCaptureMaskVisibleChange?: CaptureMaskVisibleChange;
 }
 
 /**
@@ -58,6 +69,54 @@ interface RenderedCaptureSlice {
   /** 可绘制图片 */
   image: HTMLImageElement;
 }
+
+/**
+ * WebView 原生截图裁剪区域。
+ */
+interface WebviewCapturePageRect {
+  /** WebView 截图中的横向起点 */
+  x: number;
+  /** WebView 截图中的纵向起点 */
+  y: number;
+  /** 裁剪宽度 */
+  width: number;
+  /** 裁剪高度 */
+  height: number;
+}
+
+/**
+ * 选中元素截图过程配置。
+ */
+interface CaptureSelectedElementPngOptions {
+  /** 长截图期间是否显示宿主层遮罩 */
+  onCaptureMaskVisibleChange?: CaptureMaskVisibleChange;
+}
+
+/**
+ * 延迟截图遮罩会话。
+ */
+interface DelayedCaptureMaskSession {
+  /** 结束遮罩会话，并在已显示时隐藏遮罩 */
+  stop: () => Promise<void>;
+}
+
+/**
+ * 截图帧准备配置。
+ */
+interface CaptureFramePreparationOptions {
+  /** 当前选中元素选择器 */
+  selector?: string;
+  /** 需要隐藏遮挡层的截图区域 */
+  obstructionRect?: WebviewCapturePageRect;
+}
+
+/**
+ * 带 Electron WebContents ID 读取能力的 `<webview>`。
+ */
+type WebviewTagWithWebContentsId = WebviewTag & {
+  /** 获取当前 `<webview>` 对应的 Electron WebContents ID */
+  getWebContentsId?: () => number;
+};
 
 /**
  * 选中元素某个轴向上的截图切片。
@@ -305,6 +364,124 @@ function buildElementCaptureSegments(rect: WebviewElementCaptureRect): ElementCa
 }
 
 /**
+ * 计算无需滚动即可直接裁剪的 WebView 截图区域。
+ * @param rect - 元素可截图区域
+ * @returns 原生截图裁剪区域，不完整可见时返回 null
+ */
+function buildDirectVisibleElementCaptureRect(rect: WebviewElementCaptureRect): WebviewCapturePageRect | null {
+  const sourceX = rect.isViewportAnchored ? rect.viewportX + rect.pageX : rect.viewportX + rect.pageX - rect.scrollLeft;
+  const sourceY = rect.isViewportAnchored ? rect.viewportY + rect.pageY : rect.viewportY + rect.pageY - rect.scrollTop;
+  const sourceRight = sourceX + rect.width;
+  const sourceBottom = sourceY + rect.height;
+  const viewportLeft = rect.viewportX;
+  const viewportTop = rect.viewportY;
+  const viewportRight = rect.viewportX + rect.viewportWidth;
+  const viewportBottom = rect.viewportY + rect.viewportHeight;
+  const isFullyVisible =
+    sourceX >= viewportLeft &&
+    sourceY >= viewportTop &&
+    sourceRight <= viewportRight &&
+    sourceBottom <= viewportBottom &&
+    sourceX >= 0 &&
+    sourceY >= 0 &&
+    sourceRight <= rect.captureViewportWidth &&
+    sourceBottom <= rect.captureViewportHeight;
+
+  if (!isFullyVisible) {
+    return null;
+  }
+
+  const x = Math.max(0, Math.floor(sourceX));
+  const y = Math.max(0, Math.floor(sourceY));
+  const width = Math.max(1, Math.ceil(sourceRight) - x);
+  const height = Math.max(1, Math.ceil(sourceBottom) - y);
+
+  return { x, y, width, height };
+}
+
+/**
+ * 读取 `<webview>` 的 Electron WebContents ID。
+ * @param element - `<webview>` 实例
+ * @returns WebContents ID，不可用时返回 null
+ */
+function readWebviewWebContentsId(element: WebviewTag): number | null {
+  const idReader = (element as WebviewTagWithWebContentsId).getWebContentsId;
+  if (typeof idReader !== 'function') {
+    return null;
+  }
+
+  const webContentsId = idReader.call(element);
+  if (!Number.isFinite(webContentsId) || webContentsId <= 0) {
+    return null;
+  }
+
+  return webContentsId;
+}
+
+/**
+ * 构建协议层选中元素截图区域。
+ * @param rect - 元素可截图区域
+ * @returns 协议截图区域，不适合协议截图时返回 null
+ */
+function buildProtocolElementScreenshotClip(rect: WebviewElementCaptureRect): WebViewProtocolScreenshotClip | null {
+  if (rect.isViewportAnchored || rect.scrollTarget.type !== 'window') {
+    return null;
+  }
+
+  const maxCapturableX = rect.maxScrollLeft + rect.viewportWidth;
+  const maxCapturableY = rect.maxScrollTop + rect.viewportHeight;
+  const left = Math.max(0, rect.pageX);
+  const top = Math.max(0, rect.pageY);
+  const right = Math.min(maxCapturableX, rect.pageX + rect.width);
+  const bottom = Math.min(maxCapturableY, rect.pageY + rect.height);
+  const width = right - left;
+  const height = bottom - top;
+
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return {
+    x: left,
+    y: top,
+    width,
+    height,
+    scale: 1
+  };
+}
+
+/**
+ * 尝试通过主进程协议层截取选中元素，避免滚动当前 WebView。
+ * @param element - `<webview>` 实例
+ * @param rect - 元素可截图区域
+ * @returns PNG 图片二进制；不可用或失败时返回 null
+ */
+async function captureSelectedElementProtocolPng(element: WebviewTag, rect: WebviewElementCaptureRect): Promise<ArrayBuffer | null> {
+  const clip = buildProtocolElementScreenshotClip(rect);
+  const webContentsId = readWebviewWebContentsId(element);
+  if (!clip || !webContentsId || typeof native.captureWebviewScreenshot !== 'function') {
+    return null;
+  }
+
+  let pickerLayerHidden = false;
+  try {
+    await element.executeJavaScript(createElementPickerLayerVisibilityScript(false));
+    pickerLayerHidden = true;
+    return await native.captureWebviewScreenshot({
+      webContentsId,
+      clip
+    });
+  } catch (error: unknown) {
+    console.warn('Protocol selected element screenshot failed, fallback to stitched capture.', error);
+    return null;
+  } finally {
+    if (pickerLayerHidden) {
+      await element.executeJavaScript(createElementPickerLayerVisibilityScript(true)).catch(console.error);
+    }
+  }
+}
+
+/**
  * 读取选中元素当前可截图区域。
  * @param element - `<webview>` 实例
  * @param selection - 当前选中元素
@@ -427,22 +604,130 @@ function drawElementCaptureSegment(
 }
 
 /**
+ * 准备截图帧，统一等待选择框和遮挡层状态完成刷新。
+ * @param element - `<webview>` 实例
+ * @param options - 截图帧准备配置
+ */
+async function prepareCaptureFrame(element: WebviewTag, options: CaptureFramePreparationOptions = {}): Promise<void> {
+  if (options.selector && options.obstructionRect) {
+    await element.executeJavaScript(createElementCaptureObstructionVisibilityScript(options.selector, false, options.obstructionRect));
+  }
+
+  await element.executeJavaScript(createElementPickerLayerVisibilityScript(false));
+}
+
+/**
+ * 应用截图遮罩基础样式。
+ * @param maskElement - 截图遮罩元素
+ */
+function applyWebviewCaptureMaskStyle(maskElement: HTMLDivElement): void {
+  maskElement.className = 'webview-capture-mask';
+  maskElement.textContent = '正在截图...';
+  maskElement.style.position = 'absolute';
+  maskElement.style.inset = '0';
+  maskElement.style.zIndex = '2';
+  maskElement.style.display = 'flex';
+  maskElement.style.alignItems = 'center';
+  maskElement.style.justifyContent = 'center';
+  maskElement.style.color = 'var(--text-secondary)';
+  maskElement.style.fontSize = '13px';
+  maskElement.style.fontWeight = '500';
+  maskElement.style.background = 'rgba(255, 255, 255, 0.82)';
+  maskElement.style.backdropFilter = 'blur(2px)';
+  maskElement.style.pointerEvents = 'auto';
+}
+
+/**
+ * 等待宿主遮罩完成一次绘制。
+ */
+function waitForWebviewCaptureMaskPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+/**
+ * 启动延迟截图遮罩，短任务完成前不会显示遮罩。
+ * @param onCaptureMaskVisibleChange - 遮罩显隐回调
+ * @returns 延迟遮罩会话
+ */
+function startDelayedCaptureMask(onCaptureMaskVisibleChange: CaptureMaskVisibleChange | undefined): DelayedCaptureMaskSession {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let isMaskVisible = false;
+  let showTask: Promise<void> | null = null;
+
+  if (onCaptureMaskVisibleChange) {
+    timeoutId = setTimeout(() => {
+      timeoutId = null;
+      isMaskVisible = true;
+      showTask = Promise.resolve(onCaptureMaskVisibleChange(true)).catch((error: unknown) => {
+        isMaskVisible = false;
+        console.error(error);
+      });
+    }, CAPTURE_MASK_DELAY_MS);
+  }
+
+  return {
+    async stop(): Promise<void> {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+        return;
+      }
+
+      if (showTask) {
+        await showTask;
+      }
+
+      if (onCaptureMaskVisibleChange && isMaskVisible) {
+        isMaskVisible = false;
+        await onCaptureMaskVisibleChange(false);
+      }
+    }
+  };
+}
+
+/**
  * 采样并拼接选中元素完整截图。
  * @param element - `<webview>` 实例
  * @param rect - 选中元素完整页面区域
  * @param selector - 当前选中元素选择器
  * @returns 选中元素截图 PNG
  */
-async function captureSelectedElementPng(element: WebviewTag, rect: WebviewElementCaptureRect, selector: string): Promise<ArrayBuffer> {
+async function captureSelectedElementPng(
+  element: WebviewTag,
+  rect: WebviewElementCaptureRect,
+  selector: string,
+  options: CaptureSelectedElementPngOptions = {}
+): Promise<ArrayBuffer> {
   let captureRect = rect;
   let canvas: HTMLCanvasElement | null = null;
   let context: CanvasRenderingContext2D | null = null;
   let scaleX = 1;
   let scaleY = 1;
+  let captureMaskSession: DelayedCaptureMaskSession | null = null;
+  let hasScrolledForStitching = false;
 
   try {
     captureRect = clampElementCaptureRect(rect);
+    const directCaptureRect = buildDirectVisibleElementCaptureRect(captureRect);
+    if (directCaptureRect) {
+      // 完整可见的元素直接使用 WebView 原生裁剪，避免为了截图滚动页面。
+      await prepareCaptureFrame(element, { selector, obstructionRect: directCaptureRect });
+      const capturedImage = await element.capturePage(directCaptureRect);
+      return toArrayBuffer(capturedImage.toPNG());
+    }
+
+    const protocolPng = await captureSelectedElementProtocolPng(element, captureRect);
+    if (protocolPng) {
+      return protocolPng;
+    }
+
     const segments = buildElementCaptureSegments(captureRect);
+    captureMaskSession = startDelayedCaptureMask(options.onCaptureMaskVisibleChange);
+    hasScrolledForStitching = true;
 
     for (const segment of segments) {
       // 选中元素可能跨多个视口，必须按切片顺序滚动、截图、绘制。
@@ -450,17 +735,15 @@ async function captureSelectedElementPng(element: WebviewTag, rect: WebviewEleme
       await element.executeJavaScript(createElementCaptureScrollScript(captureRect.scrollTarget, segment.scrollTop, segment.scrollLeft));
       // 隐藏与选中元素无关的 fixed/sticky 遮挡层，避免截到顶部导航等覆盖物。
       // eslint-disable-next-line no-await-in-loop
-      await element.executeJavaScript(
-        createElementCaptureObstructionVisibilityScript(selector, false, {
+      await prepareCaptureFrame(element, {
+        selector,
+        obstructionRect: {
           x: segment.sourceX,
           y: segment.sourceY,
           width: segment.width,
           height: segment.height
-        })
-      );
-      // 滚动会触发选择器脚本重新显示选中框，截图前需要再次隐藏。
-      // eslint-disable-next-line no-await-in-loop
-      await element.executeJavaScript(createElementPickerLayerVisibilityScript(false));
+        }
+      });
       // eslint-disable-next-line no-await-in-loop
       const capturedImage = await element.capturePage();
       const pngBytes = toArrayBuffer(capturedImage.toPNG());
@@ -486,7 +769,9 @@ async function captureSelectedElementPng(element: WebviewTag, rect: WebviewEleme
       drawElementCaptureSegment(context, image, segment, scaleX, scaleY);
     }
   } finally {
-    await element.executeJavaScript(createElementCaptureScrollScript(rect.scrollTarget, rect.scrollTop, rect.scrollLeft)).catch(console.error);
+    if (hasScrolledForStitching || rect.scrollTarget.type === 'element') {
+      await element.executeJavaScript(createElementCaptureScrollScript(rect.scrollTarget, rect.scrollTop, rect.scrollLeft)).catch(console.error);
+    }
     await element
       .executeJavaScript(
         createElementCaptureObstructionVisibilityScript(selector, true, { x: 0, y: 0, width: rect.captureViewportWidth, height: rect.captureViewportHeight })
@@ -494,6 +779,9 @@ async function captureSelectedElementPng(element: WebviewTag, rect: WebviewEleme
       .catch(console.error);
     await element.executeJavaScript(createElementPickerLayerVisibilityScript(true)).catch(console.error);
     await element.executeJavaScript(createElementCaptureCleanupScript(rect.scrollTarget)).catch(console.error);
+    if (captureMaskSession) {
+      await captureMaskSession.stop().catch(console.error);
+    }
   }
 
   if (!canvas) {
@@ -608,38 +896,128 @@ async function captureFullPagePng(element: WebviewTag): Promise<ArrayBuffer> {
  * @returns 截图方法
  */
 export function useScreenshot(options: UseScreenshotOptions): {
+  isCapturing: Ref<boolean>;
   captureViewportScreenshot: () => Promise<void>;
   captureFullPageScreenshot: () => Promise<void>;
   captureSelectedElementScreenshot: (selection: WebviewElementSelection | null) => Promise<void>;
 } {
+  const isCapturing = ref(false);
+  let webviewCaptureMaskElement: HTMLDivElement | null = null;
+
+  /**
+   * 获取当前 WebView 所在的宿主层。
+   * @returns 宿主层元素，不存在时返回 null
+   */
+  function getWebviewHostLayer(): HTMLElement | null {
+    const hostLayer = options.webviewElementRef.value?.parentElement;
+    return hostLayer instanceof HTMLElement ? hostLayer : null;
+  }
+
+  /**
+   * 确保当前宿主层存在截图遮罩。
+   * @returns 截图遮罩元素，不存在宿主层时返回 null
+   */
+  function ensureWebviewCaptureMaskElement(): HTMLDivElement | null {
+    const hostLayer = getWebviewHostLayer();
+    if (!hostLayer) {
+      return null;
+    }
+
+    if (webviewCaptureMaskElement?.isConnected) {
+      return webviewCaptureMaskElement;
+    }
+
+    const maskElement = document.createElement('div');
+    applyWebviewCaptureMaskStyle(maskElement);
+    maskElement.hidden = true;
+    hostLayer.appendChild(maskElement);
+    webviewCaptureMaskElement = maskElement;
+    return maskElement;
+  }
+
+  /**
+   * 切换默认宿主层截图遮罩。
+   * @param visible - 是否显示遮罩
+   */
+  async function setHostedCaptureMaskVisible(visible: boolean): Promise<void> {
+    const maskElement = ensureWebviewCaptureMaskElement();
+    if (!maskElement) {
+      return;
+    }
+
+    maskElement.hidden = !visible;
+    if (visible) {
+      await nextTick();
+      await waitForWebviewCaptureMaskPaint();
+    }
+  }
+
+  /**
+   * 清理默认宿主层截图遮罩。
+   */
+  function cleanupHostedCaptureMask(): void {
+    webviewCaptureMaskElement?.remove();
+    webviewCaptureMaskElement = null;
+  }
+
+  const onCaptureMaskVisibleChange = options.onCaptureMaskVisibleChange ?? setHostedCaptureMaskVisible;
+
+  if (getCurrentInstance()) {
+    onBeforeUnmount(cleanupHostedCaptureMask);
+  }
+
+  /**
+   * 串行执行截图任务，避免重复点击导致状态恢复互相覆盖。
+   * @param task - 截图任务
+   */
+  async function runCaptureTask(task: () => Promise<void>): Promise<void> {
+    if (isCapturing.value) {
+      return;
+    }
+
+    isCapturing.value = true;
+    try {
+      await task();
+    } finally {
+      isCapturing.value = false;
+    }
+  }
+
   /**
    * 截取当前视图并复制为剪贴板 PNG。
    */
   async function captureViewportScreenshot(): Promise<void> {
-    try {
-      const element = getReadyWebviewElement(options.webviewElementRef);
-      const image = await element.capturePage();
-      await native.copyImageToClipboard(toArrayBuffer(image.toPNG()));
+    await runCaptureTask(async (): Promise<void> => {
+      try {
+        const element = getReadyWebviewElement(options.webviewElementRef);
+        const image = await element.capturePage();
+        await native.copyImageToClipboard(toArrayBuffer(image.toPNG()));
 
-      message.success('截图已保存到剪贴板');
-    } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : '截取当前视图失败');
-    }
+        message.success('截图已保存到剪贴板');
+      } catch (error: unknown) {
+        message.error(error instanceof Error ? error.message : '截取当前视图失败');
+      }
+    });
   }
 
   /**
    * 截取完整页面长图并复制为剪贴板 PNG。
    */
   async function captureFullPageScreenshot(): Promise<void> {
-    try {
-      const element = getReadyWebviewElement(options.webviewElementRef);
-      const pngBuffer = await captureFullPagePng(element);
-      await native.copyImageToClipboard(pngBuffer);
+    await runCaptureTask(async (): Promise<void> => {
+      const captureMaskSession = startDelayedCaptureMask(onCaptureMaskVisibleChange);
+      try {
+        const element = getReadyWebviewElement(options.webviewElementRef);
+        const pngBuffer = await captureFullPagePng(element);
+        await native.copyImageToClipboard(pngBuffer);
 
-      message.success('截图已保存到剪贴板');
-    } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : '截取完整页面失败');
-    }
+        message.success('截图已保存到剪贴板');
+      } catch (error: unknown) {
+        message.error(error instanceof Error ? error.message : '截取完整页面失败');
+      } finally {
+        await captureMaskSession.stop().catch(console.error);
+      }
+    });
   }
 
   /**
@@ -647,23 +1025,28 @@ export function useScreenshot(options: UseScreenshotOptions): {
    * @param selection - 当前选中的页面元素
    */
   async function captureSelectedElementScreenshot(selection: WebviewElementSelection | null): Promise<void> {
-    try {
-      if (!selection) {
-        throw new Error('请先选择页面元素');
+    await runCaptureTask(async (): Promise<void> => {
+      try {
+        if (!selection) {
+          throw new Error('请先选择页面元素');
+        }
+
+        const element = getReadyWebviewElement(options.webviewElementRef);
+        const rect = await readSelectedElementCaptureRect(element, selection);
+        const pngBuffer = await captureSelectedElementPng(element, rect, selection.selector, {
+          onCaptureMaskVisibleChange
+        });
+        await native.copyImageToClipboard(pngBuffer);
+
+        message.success('截图已保存到剪贴板');
+      } catch (error: unknown) {
+        message.error(error instanceof Error ? error.message : '截取选中元素失败');
       }
-
-      const element = getReadyWebviewElement(options.webviewElementRef);
-      const rect = await readSelectedElementCaptureRect(element, selection);
-      const pngBuffer = await captureSelectedElementPng(element, rect, selection.selector);
-      await native.copyImageToClipboard(pngBuffer);
-
-      message.success('截图已保存到剪贴板');
-    } catch (error: unknown) {
-      message.error(error instanceof Error ? error.message : '截取选中元素失败');
-    }
+    });
   }
 
   return {
+    isCapturing,
     captureViewportScreenshot,
     captureFullPageScreenshot,
     captureSelectedElementScreenshot

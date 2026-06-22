@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { WebViewState } from 'types/webview';
-import { ipcMain, WebContentsView, BrowserWindow, session, shell } from 'electron';
+import type { WebViewProtocolScreenshotRequest, WebViewState } from 'types/webview';
+import { ipcMain, WebContentsView, BrowserWindow, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { captureWebviewProtocolScreenshot } from './capture.mjs';
 
 // 获取当前文件的目录路径
 const __filename = fileURLToPath(import.meta.url);
@@ -248,5 +249,11 @@ export function registerWebviewHandlers(): void {
 
   ipcMain.handle('webview:clear-cache', async () => {
     await session.fromPartition(WEBVIEW_TAG_PARTITION).clearCache();
+  });
+
+  ipcMain.handle('webview:capture-protocol-screenshot', async (event: IpcMainInvokeEvent, request: WebViewProtocolScreenshotRequest): Promise<ArrayBuffer> => {
+    return captureWebviewProtocolScreenshot(request, {
+      expectedHostWebContentsId: event.sender.id
+    });
   });
 }

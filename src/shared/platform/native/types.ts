@@ -11,6 +11,7 @@ import type {
   ElectronShellCommandSafetyRequest,
   RecentFileShortcutInput
 } from 'types/electron-api';
+import type { WebViewProtocolScreenshotRequest } from 'types/webview';
 
 export type FileFilter = ElectronDialogFilter;
 
@@ -136,6 +137,9 @@ export interface Native {
 
   /** 将 PNG 图片二进制内容复制到系统剪贴板。 */
   copyImageToClipboard(content: ArrayBuffer): Promise<void>;
+
+  /** 通过 Electron 主进程协议截图 WebView 页面区域，不支持时返回 null。 */
+  captureWebviewScreenshot(request: WebViewProtocolScreenshotRequest): Promise<ArrayBuffer | null>;
 
   exportPdf(options: ExportPdfOptions): Promise<string | null>;
 

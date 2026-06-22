@@ -347,26 +347,38 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
     return value.replace(/[^a-zA-Z0-9_-]/g, '\\\\$&');
   };
 
-  const buildSimpleSelector = (element) => {
-    if (element.id) {
-      return element.tagName.toLowerCase() + '#' + escapeCss(element.id);
-    }
+	  const buildClassSelector = (element) => {
+	    const classes = Array.from(element.classList).slice(0, 3).map((className) => '.' + escapeCss(className)).join('');
+	    return element.tagName.toLowerCase() + classes;
+	  };
 
-    const classes = Array.from(element.classList).slice(0, 3).map((className) => '.' + escapeCss(className)).join('');
-    return element.tagName.toLowerCase() + classes;
-  };
+	  const buildSimpleSelector = (element) => {
+	    if (element.id) {
+	      return element.tagName.toLowerCase() + '#' + escapeCss(element.id);
+	    }
+	
+	    return buildClassSelector(element);
+	  };
 
-  const buildSelectorSegment = (element) => {
-    const simpleSelector = buildSimpleSelector(element);
-    if (element.id || !element.parentElement) {
-      return simpleSelector;
-    }
-
-    const sameTagSiblings = Array.from(element.parentElement.children).filter((child) => child.tagName === element.tagName);
-    const siblingIndex = sameTagSiblings.indexOf(element) + 1;
-
-    return simpleSelector + ':nth-of-type(' + siblingIndex + ')';
-  };
+	  const buildSelectorSegment = (element) => {
+	    const simpleSelector = buildSimpleSelector(element);
+	    if (!element.parentElement) {
+	      return simpleSelector;
+	    }
+	
+	    const sameTagSiblings = Array.from(element.parentElement.children).filter((child) => child.tagName === element.tagName);
+	    const siblingIndex = sameTagSiblings.indexOf(element) + 1;
+	    if (element.id) {
+	      const sameSimpleSiblings = Array.from(element.parentElement.children).filter((child) => child.matches(simpleSelector));
+	      if (sameSimpleSiblings.length <= 1) {
+	        return simpleSelector;
+	      }
+	
+	      return buildClassSelector(element) + ':nth-of-type(' + siblingIndex + ')';
+	    }
+	
+	    return simpleSelector + ':nth-of-type(' + siblingIndex + ')';
+	  };
 
   const buildSelector = (element) => {
     const segments = [];
@@ -526,6 +538,13 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
     return target === highlight || target === selectedHighlight;
   }
 
+  function emitSelectedElement(element) {
+    const selectedElement = readElement(element);
+    console.log('Tibis WebView selected element', selectedElement);
+    console.log(${messagePrefix} + JSON.stringify(selectedElement));
+    return selectedElement;
+  }
+
   function handleMouseMove(event) {
     const target = event.target;
     if (!(target instanceof HTMLElement) || isPickerLayer(target)) {
@@ -553,13 +572,11 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
 
     event.preventDefault();
     event.stopPropagation();
-    event.stopImmediatePropagation();
-    activeSelectedElement = target;
-    syncSelectedHighlight(target);
-    const selectedElement = readElement(target);
-    console.log('Tibis WebView selected element', selectedElement);
-    console.log(${messagePrefix} + JSON.stringify(selectedElement));
-  }
+	    event.stopImmediatePropagation();
+	    activeSelectedElement = target;
+	    syncSelectedHighlight(target);
+	    emitSelectedElement(target);
+	  }
 
   function handleScrollOrResize() {
     if (activeHoverElement) {
@@ -1026,7 +1043,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
         selectedElement.value = normalizeElementSelection(payload);
       }
     } catch (error) {
-      console.error('Failed to parse webview element selection message:', error);
+      console.error('Failed to parse webview element picker message:', error);
     }
   }
 

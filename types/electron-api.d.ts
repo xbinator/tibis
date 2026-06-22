@@ -39,6 +39,7 @@ import type {
   ChatRuntimeToolRequestEvent
 } from './chat-runtime';
 import type { CompressionRecord, CompressionRecordStatus } from './compression';
+import type { WebViewProtocolScreenshotRequest } from './webview';
 
 /** Chat IPC handler 统一返回类型 */
 export type ChatHandlerResult<T> = { ok: true; data: T } | { ok: false; error: string; code: string };
@@ -307,6 +308,7 @@ export interface WebViewAPI {
   show: (tabId: string) => Promise<void>; // 显示
   hide: (tabId: string) => Promise<void>; // 隐藏
   clearCache: () => Promise<void>; // 清理 WebView 持久化分区缓存
+  captureProtocolScreenshot: (request: WebViewProtocolScreenshotRequest) => Promise<ArrayBuffer>; // 通过 CDP 截取 WebView 页面区域
   onStateChanged: (callback: (tabId: string, state: WebViewState) => void) => () => void; // 加载状态变化
   onTitleUpdated: (callback: (tabId: string, title: string) => void) => () => void; // 标题更新
   onNavigationStateChanged: (callback: (tabId: string, canGoBack: boolean, canGoForward: boolean) => void) => () => void; // 导航状态变化

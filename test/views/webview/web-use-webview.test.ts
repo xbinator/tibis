@@ -145,4 +145,74 @@ describe('useWebView', () => {
     expect(selection.selector).not.toBe('article#article-card');
     expect(document.querySelector(selection.selector)).toBe(seventhItem);
   });
+
+  it('adds sibling position when duplicate ids share the same parent', (): void => {
+    document.body.innerHTML = `
+      <section class="article-section">
+        <article id="article-card" class="article-item"><span>第一条</span></article>
+        <article id="article-card" class="article-item"><span>第七条</span></article>
+      </section>
+    `;
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const seventhItem = document.querySelectorAll('#article-card')[1];
+
+    if (!(seventhItem instanceof HTMLElement)) {
+      throw new Error('seventh item should exist');
+    }
+
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Element: window.Element,
+      HTMLElement: window.HTMLElement,
+      Promise,
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
+    new Script(createElementSelectionScript()).runInContext(scriptContext);
+    seventhItem.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
+
+    const selectionMessage = consoleLogSpy.mock.calls
+      .map(([message]) => String(message))
+      .find((message) => message.startsWith('__TIBIS_ELEMENT_PICKER_SELECTION__'));
+    if (!selectionMessage) {
+      throw new Error('selection message should be logged');
+    }
+
+    const selection = JSON.parse(selectionMessage.slice('__TIBIS_ELEMENT_PICKER_SELECTION__'.length)) as { selector: string };
+
+    expect(selection.selector).toContain(':nth-of-type(2)');
+    expect(document.querySelector(selection.selector)).toBe(seventhItem);
+  });
+
+  it('does not render screenshot action button inside selected element overlay', (): void => {
+    document.body.innerHTML = `
+      <section class="article-section">
+        <article class="article-item"><span>第七条</span></article>
+      </section>
+    `;
+    const item = document.querySelector('.article-item');
+
+    if (!(item instanceof HTMLElement)) {
+      throw new Error('item should exist');
+    }
+
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Element: window.Element,
+      HTMLElement: window.HTMLElement,
+      Promise,
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
+    new Script(createElementSelectionScript()).runInContext(scriptContext);
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    const captureButton = document.querySelector('.tibis-element-picker-action-button');
+    (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
+
+    expect(captureButton).toBeNull();
+  });
 });

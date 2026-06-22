@@ -20,6 +20,18 @@ const originalCanvasToBlob = HTMLCanvasElement.prototype.toBlob;
 const originalCreateObjectURL = URL.createObjectURL;
 const originalRevokeObjectURL = URL.revokeObjectURL;
 
+/**
+ * 测试中手动控制 Promise 完成时机的工具。
+ */
+interface Deferred<T> {
+  /** 等待外部完成的 Promise */
+  promise: Promise<T>;
+  /** 标记 Promise 成功 */
+  resolve: (value: T) => void;
+  /** 标记 Promise 失败 */
+  reject: (reason?: unknown) => void;
+}
+
 vi.mock('ant-design-vue', () => ({
   message: {
     success: vi.fn(),
@@ -30,9 +42,33 @@ vi.mock('ant-design-vue', () => ({
 vi.mock('@/shared/platform/native', () => ({
   native: {
     copyImageToClipboard: vi.fn().mockResolvedValue(undefined),
+    captureWebviewScreenshot: vi.fn().mockResolvedValue(null),
     saveBinaryFile: vi.fn().mockResolvedValue('/tmp/webview.png')
   }
 }));
+
+/**
+ * 创建可由测试手动完成的 Promise。
+ * @returns Promise 与完成函数
+ */
+function createDeferred<T>(): Deferred<T> {
+  let resolvePromise: ((value: T) => void) | null = null;
+  let rejectPromise: ((reason?: unknown) => void) | null = null;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  if (!resolvePromise || !rejectPromise) {
+    throw new Error('Deferred promise should initialize synchronously');
+  }
+
+  return {
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise
+  };
+}
 
 /**
  * 创建可截图的 WebView 测试替身。
@@ -51,6 +87,15 @@ function createScreenshotWebview(pngBytes: Uint8Array, executeJavaScriptResult: 
     toPNG: () => pngBytes
   });
   return element;
+}
+
+/**
+ * 给 WebView 测试替身补充可供主进程定位的 webContentsId。
+ * @param element - WebView 测试替身
+ * @param webContentsId - Electron WebContents ID
+ */
+function attachWebContentsId(element: WebviewTag, webContentsId: number): void {
+  (element as WebviewTag & { getWebContentsId: () => number }).getWebContentsId = vi.fn(() => webContentsId);
 }
 
 /**
@@ -181,6 +226,7 @@ describe('useScreenshot', () => {
   });
 
   afterEach((): void => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -213,8 +259,165 @@ describe('useScreenshot', () => {
     expect(native.saveBinaryFile).not.toHaveBeenCalled();
   });
 
+  it('does not show capture mask when full page screenshot finishes before the delay', async (): Promise<void> => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71, 10]);
+    const maskChanges: boolean[] = [];
+    const webviewElement = createScreenshotWebview(pngBytes, [
+      {
+        contentHeight: 120,
+        viewportWidth: 200,
+        viewportHeight: 100,
+        maxScrollTop: 20,
+        scrollTop: 0
+      },
+      null,
+      null,
+      null,
+      [],
+      null,
+      null,
+      null,
+      [],
+      null
+    ]);
+    const screenshot = useScreenshot({
+      webviewElementRef: ref<WebviewTag | null>(webviewElement),
+      webviewState: ref({ title: 'Example', url: 'https://example.com' }),
+      onCaptureMaskVisibleChange: (visible: boolean): void => {
+        maskChanges.push(visible);
+      }
+    });
+
+    await screenshot.captureFullPageScreenshot();
+
+    expect(maskChanges).toEqual([]);
+    expect(webviewElement.capturePage).toHaveBeenCalledTimes(2);
+    expect(native.copyImageToClipboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows capture mask only after a slow screenshot exceeds the delay', async (): Promise<void> => {
+    vi.useFakeTimers();
+    const pngBytes = new Uint8Array([137, 80, 78, 71, 13]);
+    const maskChanges: boolean[] = [];
+    const captureDeferred = createDeferred<{ toPNG: () => Uint8Array }>();
+    const webviewElement = createScreenshotWebview(pngBytes, [
+      {
+        contentHeight: 100,
+        viewportWidth: 200,
+        viewportHeight: 100,
+        maxScrollTop: 0,
+        scrollTop: 0
+      },
+      null,
+      null,
+      null,
+      [],
+      null,
+      null,
+      null
+    ]);
+    webviewElement.capturePage = vi.fn().mockReturnValue(captureDeferred.promise);
+    const screenshot = useScreenshot({
+      webviewElementRef: ref<WebviewTag | null>(webviewElement),
+      webviewState: ref({ title: 'Example', url: 'https://example.com' }),
+      onCaptureMaskVisibleChange: (visible: boolean): void => {
+        maskChanges.push(visible);
+      }
+    });
+
+    const captureTask = screenshot.captureFullPageScreenshot();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(maskChanges).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(179);
+    expect(maskChanges).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(maskChanges).toEqual([true]);
+
+    captureDeferred.resolve({ toPNG: () => pngBytes });
+    await captureTask;
+
+    expect(maskChanges).toEqual([true, false]);
+  });
+
+  it('uses hosted capture mask by default when no mask callback is provided', async (): Promise<void> => {
+    vi.useFakeTimers();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+      callback(0);
+      return 0;
+    });
+    const pngBytes = new Uint8Array([137, 80, 78, 71, 15]);
+    const captureDeferred = createDeferred<{ toPNG: () => Uint8Array }>();
+    const hostLayer = document.createElement('div');
+    const webviewElement = createScreenshotWebview(pngBytes, [
+      {
+        contentHeight: 100,
+        viewportWidth: 200,
+        viewportHeight: 100,
+        maxScrollTop: 0,
+        scrollTop: 0
+      },
+      null,
+      null,
+      null,
+      [],
+      null,
+      null,
+      null
+    ]);
+    hostLayer.appendChild(webviewElement as unknown as Node);
+    document.body.appendChild(hostLayer);
+    webviewElement.capturePage = vi.fn().mockReturnValue(captureDeferred.promise);
+    const screenshot = useScreenshot({
+      webviewElementRef: ref<WebviewTag | null>(webviewElement),
+      webviewState: ref({ title: 'Example', url: 'https://example.com' })
+    });
+
+    const captureTask = screenshot.captureFullPageScreenshot();
+
+    await vi.advanceTimersByTimeAsync(180);
+
+    const maskElement = hostLayer.querySelector('.webview-capture-mask') as HTMLDivElement | null;
+
+    expect(maskElement).toBeInstanceOf(HTMLDivElement);
+    expect(maskElement?.hidden).toBe(false);
+
+    captureDeferred.resolve({ toPNG: () => pngBytes });
+    await captureTask;
+
+    expect(maskElement?.hidden).toBe(true);
+  });
+
+  it('ignores repeated screenshot requests while one capture is running', async (): Promise<void> => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71, 14]);
+    const captureDeferred = createDeferred<{ toPNG: () => Uint8Array }>();
+    const webviewElement = createScreenshotWebview(pngBytes);
+    webviewElement.capturePage = vi.fn().mockReturnValue(captureDeferred.promise);
+    const screenshot = useScreenshot({
+      webviewElementRef: ref<WebviewTag | null>(webviewElement),
+      webviewState: ref({ title: 'Example', url: 'https://example.com' })
+    });
+
+    const firstCaptureTask = screenshot.captureViewportScreenshot();
+    const secondCaptureTask = screenshot.captureViewportScreenshot();
+
+    expect(screenshot.isCapturing.value).toBe(true);
+    expect(webviewElement.capturePage).toHaveBeenCalledTimes(1);
+
+    captureDeferred.resolve({ toPNG: () => pngBytes });
+    await Promise.all([firstCaptureTask, secondCaptureTask]);
+
+    expect(screenshot.isCapturing.value).toBe(false);
+    expect(native.copyImageToClipboard).toHaveBeenCalledTimes(1);
+  });
+
   it('stitches selected element screenshot across viewport boundaries', async (): Promise<void> => {
     const pngBytes = new Uint8Array([137, 80, 78, 71, 1]);
+    const maskChanges: boolean[] = [];
     const webviewElement = createScreenshotWebview(pngBytes, {
       pageX: 12,
       pageY: 90,
@@ -236,7 +439,10 @@ describe('useScreenshot', () => {
     });
     const screenshot = useScreenshot({
       webviewElementRef: ref<WebviewTag | null>(webviewElement),
-      webviewState: ref({ title: 'Example', url: 'https://example.com' })
+      webviewState: ref({ title: 'Example', url: 'https://example.com' }),
+      onCaptureMaskVisibleChange: (visible: boolean): void => {
+        maskChanges.push(visible);
+      }
     });
 
     await screenshot.captureSelectedElementScreenshot(createElementSelection());
@@ -267,10 +473,96 @@ describe('useScreenshot', () => {
     expect(hideCallOrders[1]).toBeLessThan(vi.mocked(webviewElement.capturePage).mock.invocationCallOrder[1] ?? 0);
     expect(drawImageMock).toHaveBeenNthCalledWith(1, expect.any(Object), 24, 0, 240, 200, 0, 0, 240, 200);
     expect(drawImageMock).toHaveBeenNthCalledWith(2, expect.any(Object), 24, 0, 240, 120, 0, 200, 240, 120);
+    expect(maskChanges).toEqual([]);
     expect(native.copyImageToClipboard).toHaveBeenCalledTimes(1);
     const copiedBuffer = vi.mocked(native.copyImageToClipboard).mock.calls[0]?.[0];
 
     expect(Array.from(new Uint8Array(copiedBuffer ?? new ArrayBuffer(0)))).toEqual(Array.from(croppedPngBytes));
+  });
+
+  it('captures offscreen document selected element with protocol screenshot before scrolling', async (): Promise<void> => {
+    const viewportPngBytes = new Uint8Array([137, 80, 78, 71, 11]);
+    const protocolPngBytes = new Uint8Array([137, 80, 78, 71, 12]);
+    const protocolBuffer = protocolPngBytes.buffer.slice(protocolPngBytes.byteOffset, protocolPngBytes.byteOffset + protocolPngBytes.byteLength);
+    const webviewElement = createScreenshotWebview(viewportPngBytes, {
+      pageX: 12,
+      pageY: 90,
+      width: 120,
+      height: 160,
+      viewportX: 0,
+      viewportY: 0,
+      viewportWidth: 200,
+      viewportHeight: 100,
+      captureViewportWidth: 200,
+      captureViewportHeight: 100,
+      maxScrollLeft: 0,
+      maxScrollTop: 200,
+      scrollLeft: 0,
+      scrollTop: 0,
+      scrollTarget: {
+        type: 'window'
+      }
+    });
+    attachWebContentsId(webviewElement, 42);
+    vi.mocked(native.captureWebviewScreenshot).mockResolvedValue(protocolBuffer);
+    const screenshot = useScreenshot({
+      webviewElementRef: ref<WebviewTag | null>(webviewElement),
+      webviewState: ref({ title: 'Example', url: 'https://example.com' })
+    });
+
+    await screenshot.captureSelectedElementScreenshot(createElementSelection());
+
+    expect(native.captureWebviewScreenshot).toHaveBeenCalledWith({
+      webContentsId: 42,
+      clip: {
+        x: 12,
+        y: 90,
+        width: 120,
+        height: 160,
+        scale: 1
+      }
+    });
+    expect(webviewElement.capturePage).not.toHaveBeenCalled();
+    expect(drawImageMock).not.toHaveBeenCalled();
+    expect(vi.mocked(webviewElement.executeJavaScript).mock.calls.some(([script]) => String(script).includes('window.scrollTo'))).toBe(false);
+    expect(native.copyImageToClipboard).toHaveBeenCalledWith(protocolBuffer);
+  });
+
+  it('captures fully visible selected element with a direct WebView crop', async (): Promise<void> => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71, 9]);
+    const webviewElement = createScreenshotWebview(pngBytes, {
+      pageX: 12,
+      pageY: 16,
+      width: 120,
+      height: 40,
+      viewportX: 0,
+      viewportY: 0,
+      viewportWidth: 200,
+      viewportHeight: 100,
+      captureViewportWidth: 200,
+      captureViewportHeight: 100,
+      maxScrollLeft: 0,
+      maxScrollTop: 200,
+      scrollLeft: 0,
+      scrollTop: 0,
+      scrollTarget: {
+        type: 'window'
+      }
+    });
+    const screenshot = useScreenshot({
+      webviewElementRef: ref<WebviewTag | null>(webviewElement),
+      webviewState: ref({ title: 'Example', url: 'https://example.com' })
+    });
+
+    await screenshot.captureSelectedElementScreenshot(createElementSelection());
+
+    expect(webviewElement.capturePage).toHaveBeenCalledWith({ x: 12, y: 16, width: 120, height: 40 });
+    expect(vi.mocked(webviewElement.executeJavaScript).mock.calls.some(([script]) => String(script).includes('window.scrollTo(0, 16)'))).toBe(false);
+    expect(drawImageMock).not.toHaveBeenCalled();
+    expect(native.copyImageToClipboard).toHaveBeenCalledTimes(1);
+    const copiedBuffer = vi.mocked(native.copyImageToClipboard).mock.calls[0]?.[0];
+
+    expect(Array.from(new Uint8Array(copiedBuffer ?? new ArrayBuffer(0)))).toEqual(Array.from(pngBytes));
   });
 
   it('uses cached selected element position when selected element is outside queryable viewport', async (): Promise<void> => {
@@ -404,10 +696,9 @@ describe('useScreenshot', () => {
 
     await screenshot.captureSelectedElementScreenshot(createElementSelection());
 
-    expect(webviewElement.capturePage).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(webviewElement.executeJavaScript).mock.calls.some(([script]) => String(script).includes('window.scrollTo(0, 260)'))).toBe(true);
-    expect(vi.mocked(webviewElement.executeJavaScript).mock.calls.some(([script]) => String(script).includes('window.scrollTo(0, 30)'))).toBe(false);
-    expect(drawImageMock).toHaveBeenCalledWith(expect.any(Object), 80, 60, 200, 80, 0, 0, 200, 80);
+    expect(webviewElement.capturePage).toHaveBeenCalledWith({ x: 40, y: 30, width: 100, height: 40 });
+    expect(vi.mocked(webviewElement.executeJavaScript).mock.calls.some(([script]) => String(script).includes('window.scrollTo'))).toBe(false);
+    expect(drawImageMock).not.toHaveBeenCalled();
     expect(native.copyImageToClipboard).toHaveBeenCalledTimes(1);
   });
 
@@ -469,8 +760,8 @@ describe('useScreenshot', () => {
 
     await screenshot.captureSelectedElementScreenshot(createElementSelection());
 
-    expect(webviewElement.capturePage).toHaveBeenCalledTimes(1);
-    expect(drawImageMock).toHaveBeenCalledWith(expect.any(Object), 0, 0, 160, 60, 0, 0, 160, 60);
+    expect(webviewElement.capturePage).toHaveBeenCalledWith({ x: 0, y: 0, width: 80, height: 30 });
+    expect(drawImageMock).not.toHaveBeenCalled();
     expect(native.copyImageToClipboard).toHaveBeenCalledTimes(1);
   });
 
