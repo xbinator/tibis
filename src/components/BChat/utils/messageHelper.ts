@@ -59,6 +59,9 @@ export type ToolModelMessageContent = Array<{
 /** User 模型消息内容片段 */
 type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType?: string }>;
 
+/** 创建中断消息时可继承的 runtime 关联字段。 */
+type InterruptSourceMessage = Pick<Message, 'agentId' | 'runtimeId' | 'parentRuntimeId'>;
+
 /** 工具结果类型 */
 export type ToolResult = NonNullable<ChatMessageToolPart['result']>;
 
@@ -263,15 +266,44 @@ export function createBase(overrides: Partial<Message>): Message {
 }
 
 export const create = {
-  // 创建 assistant 消息占位符
+  /**
+   * 创建 assistant 消息占位符。
+   * @returns assistant 占位消息
+   */
   assistantPlaceholder(): Message {
     return createBase({ role: 'assistant', content: '', thinking: '', loading: true, finished: false });
   },
-  // 创建错误消息
+  /**
+   * 创建错误消息。
+   * @param content - 错误内容
+   * @returns 错误消息
+   */
   errorMessage(content: string): Message {
     return createBase({ role: 'assistant', content, parts: [{ type: 'error', text: content }], finished: true });
   },
-  // 创建用户消息
+  /**
+   * 创建中断消息。
+   * @param sourceMessage - 可选的源消息，用于继承 runtime 关联字段
+   * @returns 中断消息
+   */
+  interruptMessage(sourceMessage?: InterruptSourceMessage): Message {
+    return createBase({
+      role: 'interrupt',
+      content: '已中断',
+      parts: [],
+      loading: false,
+      finished: true,
+      ...(sourceMessage?.agentId !== undefined ? { agentId: sourceMessage.agentId } : {}),
+      ...(sourceMessage?.runtimeId !== undefined ? { runtimeId: sourceMessage.runtimeId } : {}),
+      ...(sourceMessage?.parentRuntimeId !== undefined ? { parentRuntimeId: sourceMessage.parentRuntimeId } : {})
+    });
+  },
+  /**
+   * 创建用户消息。
+   * @param content - 用户输入文本
+   * @param references - 文件引用列表
+   * @returns 用户消息
+   */
   userMessage(content: string, references?: FileReference[]): Message {
     const parts: ChatMessagePart[] = content ? [{ type: 'text', text: content }] : [];
 
@@ -286,6 +318,34 @@ export function isAwaitingUserChoiceResult(part: ChatMessagePart): part is ChatM
 }
 
 export const userChoice = {
+  /**
+   * 将最后一个等待用户输入的问题标记为已取消。
+   * @param sourceMessages - 待更新的消息列表
+   * @returns 被更新的 assistant 消息；不存在待取消问题时返回 null
+   */
+  cancelPending(sourceMessages: Message[]): Message | null {
+    for (let i = sourceMessages.length - 1; i >= 0; i -= 1) {
+      const sourceMessage = sourceMessages[i];
+      const pendingPart = sourceMessage.parts.find(isAwaitingUserChoiceResult);
+
+      if (!pendingPart) continue;
+
+      const resultPart: ChatMessageToolPart = pendingPart;
+      resultPart.status = 'done';
+      resultPart.result = {
+        toolName: resultPart.toolName,
+        status: 'cancelled',
+        error: { code: 'USER_CANCELLED', message: '用户中止了操作' }
+      } satisfies AIToolExecutionCancelledResult;
+      delete resultPart.inputText;
+      sourceMessage.loading = false;
+      sourceMessage.finished = true;
+      return sourceMessage;
+    }
+
+    return null;
+  },
+
   /**
    * 查找消息历史中尚未回答的用户选择问题。
    */

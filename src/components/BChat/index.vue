@@ -93,6 +93,7 @@ import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession
 import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { cloneDeep } from 'lodash-es';
 import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
@@ -689,9 +690,12 @@ async function handleChatRegenerate(nextMessage: Message): Promise<void> {
  * @param answer - 用户选择的答案数据
  */
 async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promise<void> {
-  const startResult = taskRuntime.beginTask('chat');
-  if (!startResult.ok) {
-    return;
+  const isActiveChatTask = taskRuntime.activeTask.value === 'chat';
+  if (!isActiveChatTask) {
+    const startResult = taskRuntime.beginTask('chat');
+    if (!startResult.ok) {
+      return;
+    }
   }
 
   try {
@@ -708,7 +712,7 @@ async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promi
       return;
     }
 
-    await chatRuntime.submitUserChoice({
+    const result = await chatRuntime.submitUserChoice({
       sessionId,
       contextWindow: contextWindow.value,
       system: await resolveRuntimeSystemPrompt(),
@@ -718,6 +722,9 @@ async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promi
       tavily: resolveRuntimeTavilyConfig(),
       mcp: resolveRuntimeMcpRequestConfig()
     });
+    if (result.completed === true) {
+      taskRuntime.finishTask('chat');
+    }
   } catch (error) {
     taskRuntime.finishTask('chat');
     throw error;
@@ -810,11 +817,43 @@ async function handleChatSubmit(): Promise<void> {
 }
 
 /**
+ * 取消等待用户补充输入的问题，并写入中断状态消息。
+ * @returns 是否处理了等待用户输入的中止
+ */
+async function abortPendingUserChoiceIfNeeded(): Promise<boolean> {
+  const sessionId = activeSessionId.value;
+  if (!sessionId) {
+    return false;
+  }
+
+  const nextMessages = cloneDeep(messages.value);
+  const cancelledAssistantMessage = userChoice.cancelPending(nextMessages);
+  if (!cancelledAssistantMessage) {
+    return false;
+  }
+
+  const visibleMessages = [...nextMessages, create.interruptMessage(cancelledAssistantMessage)];
+  const historyMessages = await fetchAllPriorHistory(sessionId);
+  await chatStore.setSessionMessages(sessionId, [...historyMessages, ...visibleMessages]);
+  setLoadedMessages(visibleMessages);
+  await nextTick();
+  conversationRef.value?.scrollToBottom({ behavior: 'auto' });
+
+  return true;
+}
+
+/**
  * 处理中止流式输出。
  * 交由当前活跃任务运行时区分聊天生成与上下文压缩取消。
  */
 async function handleAbort(): Promise<void> {
   confirmationController.expirePendingConfirmation();
+
+  if (taskRuntime.activeTask.value !== 'compact' && !chatRuntime.activeRuntimeId.value && (await abortPendingUserChoiceIfNeeded())) {
+    taskRuntime.finishTask('chat');
+    return;
+  }
+
   await taskRuntime.abortActiveTask();
 }
 

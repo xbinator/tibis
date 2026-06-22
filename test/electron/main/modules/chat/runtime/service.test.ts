@@ -1395,6 +1395,93 @@ describe('chat runtime service shell', (): void => {
     });
   });
 
+  it('does not reuse a previous turn assistant when continuation history ends with a user message', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const addedMessages: ChatMessageRecord[] = [];
+    const updatedMessages: ChatMessageRecord[] = [];
+    const previousUserMessage: ChatMessageRecord = {
+      id: 'user-previous',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '上一轮问题',
+      parts: [{ type: 'text', text: '上一轮问题' }],
+      createdAt: '2026-06-19T00:00:00.000Z',
+      finished: true
+    };
+    const previousAssistantMessage: ChatMessageRecord = {
+      id: 'assistant-previous',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: '上一轮回答',
+      parts: [{ type: 'text', text: '上一轮回答' }],
+      createdAt: '2026-06-19T00:00:00.000Z',
+      finished: true,
+      loading: false
+    };
+    const currentUserMessage: ChatMessageRecord = {
+      id: 'user-current',
+      sessionId: 'session-1',
+      role: 'user',
+      content: '重新生成当前回答',
+      parts: [{ type: 'text', text: '重新生成当前回答' }],
+      createdAt: '2026-06-19T00:00:01.000Z',
+      finished: true
+    };
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage: draft }, updateAssistant) => {
+      draft.content = '当前新回答';
+      draft.parts = [{ type: 'text', text: '当前新回答' }];
+      draft.loading = false;
+      draft.finished = true;
+      await updateAssistant(draft);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:02.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (message) => {
+          addedMessages.push({ ...message, parts: [...message.parts] });
+        },
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      streamExecutor
+    });
+
+    const result = await service.continue(
+      createContinueInput({ messages: [previousUserMessage, previousAssistantMessage, currentUserMessage], contextWindow: 200_000 })
+    );
+    await flushRuntimeTasks();
+
+    expect(addedMessages).toEqual([
+      expect.objectContaining({
+        id: 'assistant-message-1',
+        role: 'assistant',
+        runtimeId: result.runtimeId,
+        loading: true,
+        finished: false,
+        createdAt: '2026-06-19T00:00:02.000Z'
+      })
+    ]);
+    expect(updatedMessages).not.toContainEqual(expect.objectContaining({ id: 'assistant-previous', loading: true }));
+    expect(streamExecutor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessage: currentUserMessage,
+        assistantMessage: expect.objectContaining({ id: 'assistant-message-1', runtimeId: result.runtimeId }),
+        sourceMessages: [
+          previousUserMessage,
+          previousAssistantMessage,
+          currentUserMessage,
+          expect.objectContaining({ id: 'assistant-message-1', runtimeId: result.runtimeId })
+        ]
+      }),
+      expect.any(Function)
+    );
+  });
+
   it('submits a user choice answer from persisted messages and continues the runtime', async (): Promise<void> => {
     const collector = createEventCollector();
     const updatedMessages: ChatMessageRecord[] = [];
@@ -1500,6 +1587,118 @@ describe('chat runtime service shell', (): void => {
                 toolCallId: 'tool-call-1',
                 answers: ['yes']
               }
+            }
+          })
+        ]
+      })
+    );
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:complete',
+        payload: expect.objectContaining({ runtimeId: result.runtimeId })
+      })
+    );
+  });
+
+  it('continues the runtime with a cancelled user choice result', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const userMessage: ChatMessageRecord = {
+      id: 'user-1',
+      sessionId: 'session-1',
+      role: 'user',
+      content: 'choose',
+      parts: [{ type: 'text', text: 'choose' }],
+      createdAt: '2026-06-19T00:00:00.000Z',
+      finished: true
+    };
+    const assistantMessage: ChatMessageRecord = {
+      id: 'assistant-1',
+      sessionId: 'session-1',
+      role: 'assistant',
+      content: '',
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-1',
+          toolName: 'ask_user_choice',
+          status: 'done',
+          input: { question: 'Continue?' },
+          result: {
+            toolName: 'ask_user_choice',
+            status: 'awaiting_user_input',
+            data: {
+              questionId: 'question-1',
+              toolCallId: 'tool-call-1',
+              question: 'Continue?',
+              mode: 'single',
+              options: [{ label: 'Yes', value: 'yes' }]
+            }
+          }
+        }
+      ],
+      createdAt: '2026-06-19T00:00:01.000Z',
+      finished: false,
+      loading: false
+    };
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ sourceMessages, assistantMessage: draft }, updateAssistant) => {
+      expect(sourceMessages?.find((message) => message.id === 'assistant-1')?.parts[0]).toMatchObject({
+        type: 'tool',
+        result: {
+          status: 'cancelled',
+          error: { code: 'USER_CANCELLED', message: '用户取消了选择' }
+        }
+      });
+      draft.content = 'cancel acknowledged';
+      draft.parts = [...draft.parts, { type: 'text', text: 'cancel acknowledged' }];
+      draft.loading = false;
+      draft.finished = true;
+      await updateAssistant(draft);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:02.000Z',
+      messageReader: { getMessages: () => [userMessage, assistantMessage] },
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      streamExecutor
+    });
+
+    const result = await service.submitUserChoice({
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      contextWindow: 200_000,
+      answer: {
+        questionId: 'question-1',
+        toolCallId: 'tool-call-1',
+        answers: [],
+        questionAnswers: [],
+        otherText: ''
+      }
+    });
+    await flushRuntimeTasks();
+
+    expect(result).toEqual({ runtimeId: expect.stringMatching(/^runtime-/), sessionId: 'session-1' });
+    expect(streamExecutor).toHaveBeenCalledOnce();
+    expect(updatedMessages[0]).toEqual(
+      expect.objectContaining({
+        id: 'assistant-1',
+        runtimeId: result.runtimeId,
+        loading: true,
+        finished: false,
+        parts: [
+          expect.objectContaining({
+            result: {
+              toolName: 'ask_user_choice',
+              status: 'cancelled',
+              error: { code: 'USER_CANCELLED', message: '用户取消了选择' }
             }
           })
         ]

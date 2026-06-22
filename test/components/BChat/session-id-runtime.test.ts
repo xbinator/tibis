@@ -63,7 +63,10 @@ const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeOnConfirmationRequested: vi.fn(() => vi.fn()),
   chatRuntimeOnBridgeRequested: vi.fn(() => vi.fn()),
   chatRuntimeOnError: vi.fn(() => vi.fn()),
-  chatRuntimeOnComplete: vi.fn(() => vi.fn())
+  chatRuntimeOnComplete: vi.fn((callback: NonNullable<typeof runtimeListeners.complete>) => {
+    runtimeListeners.complete = callback;
+    return vi.fn();
+  })
 }));
 
 const autoNameMockState = vi.hoisted(() => ({
@@ -617,10 +620,7 @@ describe('BChat sessionId runtime', (): void => {
       expect.objectContaining({
         sessionId: 'session-created',
         content: 'fix {{#src/foo.ts}}',
-        parts: [
-          { type: 'text', text: 'fix ' },
-          expect.objectContaining({ type: 'file', path: 'src/foo.ts' })
-        ]
+        parts: [{ type: 'text', text: 'fix ' }, expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
       })
     );
   });
@@ -638,6 +638,69 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(electronAPIMock.chatRuntimeAbort).toHaveBeenCalledWith({ runtimeId: 'runtime-1' });
     expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-active', expect.objectContaining({ role: 'interrupt' }));
+  });
+
+  it('marks a pending question as cancelled and appends interrupt when aborting after runtime waits for user input', async (): Promise<void> => {
+    const pendingToolPart: ChatMessageToolPart = {
+      type: 'tool',
+      toolCallId: 'tool-call-1',
+      toolName: 'ask_user_choice',
+      status: 'done',
+      input: {},
+      result: {
+        toolName: 'ask_user_choice',
+        status: 'awaiting_user_input',
+        data: {
+          questionId: 'question-1',
+          toolCallId: 'tool-call-1',
+          mode: 'single',
+          question: '继续吗？',
+          options: [{ label: '继续', value: 'yes' }]
+        }
+      }
+    };
+    const userMessage = createMessage('user-choice', '需要选择');
+    const assistantMessage = createAssistantMessage({
+      id: 'assistant-choice',
+      content: '需要补充信息',
+      parts: [pendingToolPart],
+      runtimeId: 'runtime-1',
+      loading: false,
+      finished: false
+    });
+    chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(BPromptEditorStub).vm.$emit('update:value', '下一轮');
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+    emitRuntimeEvent(runtimeListeners, 'complete', {
+      runtimeId: 'runtime-1',
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'default'
+    });
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('abort');
+    await flushPromises();
+
+    const lastPersistCall = chatStoreMock.setSessionMessages.mock.calls.at(-1);
+    expect(lastPersistCall?.[0]).toBe('session-active');
+    const persistedMessages = lastPersistCall?.[1] ?? [];
+    const persistedAssistant = persistedMessages.find((message) => message.id === 'assistant-choice');
+    expect(persistedAssistant?.parts[0]).toMatchObject({
+      type: 'tool',
+      result: expect.objectContaining({ status: 'cancelled' })
+    });
+    expect(persistedMessages.at(-1)).toMatchObject({
+      role: 'interrupt',
+      content: '已中断',
+      loading: false,
+      finished: true
+    });
+    expect(electronAPIMock.chatRuntimeAbort).not.toHaveBeenCalled();
   });
 
   it('does not scroll to bottom when runtime streams message updates', async (): Promise<void> => {
@@ -717,6 +780,32 @@ describe('BChat sessionId runtime', (): void => {
     );
     expect(electronAPIMock.chatRuntimeSubmitUserChoice.mock.calls[0]?.[0]).not.toHaveProperty('messages');
     expect(electronAPIMock.chatRuntimeContinue).not.toHaveBeenCalled();
+  });
+
+  it('submits cancelled user choices while the chat task is waiting for the answer', async (): Promise<void> => {
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    wrapper.findComponent(BPromptEditorStub).vm.$emit('update:value', '需要选择');
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+    const answer: AIUserChoiceAnswerData = {
+      questionId: 'question-1',
+      toolCallId: 'tool-call-1',
+      answers: [],
+      questionAnswers: [],
+      otherText: ''
+    };
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit('user-choice-submit', answer);
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-active',
+        answer
+      })
+    );
   });
 
   it('regenerates assistant messages through main process ChatRuntime', async (): Promise<void> => {

@@ -15,12 +15,36 @@ export function findLastRuntimeUserMessage(messages: ChatMessageRecord[]): ChatM
 }
 
 /**
- * 从消息快照中查找最后一条 assistant 消息。
+ * 查找最后一条 user 消息的索引。
+ * @param messages - 消息快照
+ * @returns user 消息索引，不存在时返回 -1
+ */
+function findLastRuntimeUserMessageIndex(messages: ChatMessageRecord[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === 'user') {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * 从最后一条 user 之后查找可续跑的 assistant 消息。
+ * 历史上下文中的上一轮 assistant 不能被当作当前 user 的续跑草稿。
  * @param messages - 消息快照
  * @returns assistant 消息
  */
 export function findLastRuntimeAssistantMessage(messages: ChatMessageRecord[]): ChatMessageRecord | undefined {
-  return [...messages].reverse().find((message) => message.role === 'assistant');
+  const userIndex = findLastRuntimeUserMessageIndex(messages);
+  if (userIndex === -1) {
+    return undefined;
+  }
+
+  return messages
+    .slice(userIndex + 1)
+    .reverse()
+    .find((message) => message.role === 'assistant');
 }
 
 /**
