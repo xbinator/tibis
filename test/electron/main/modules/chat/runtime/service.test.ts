@@ -274,7 +274,8 @@ describe('chat runtime service shell', (): void => {
 
   it('persists and emits user and assistant shell messages when sending', async (): Promise<void> => {
     const collector = createEventCollector();
-    const persistedMessages: Array<ChatRuntimeEventMap['chat:runtime:message-created']['message']> = [];
+    const addedMessages: ChatMessageRecord[] = [];
+    const updatedMessages: ChatMessageRecord[] = [];
     const service = createChatRuntimeService({
       emit: collector.emit,
       createMessageId: (role) => `${role}-message-1`,
@@ -283,10 +284,10 @@ describe('chat runtime service shell', (): void => {
       messageReader: createNoopMessageReader(),
       messageWriter: {
         addMessage: (message) => {
-          persistedMessages.push(message);
+          addedMessages.push({ ...message, parts: [...message.parts] });
         },
         updateMessage: (message) => {
-          persistedMessages.push(message);
+          updatedMessages.push({ ...message, parts: [...message.parts] });
         }
       }
     });
@@ -294,8 +295,8 @@ describe('chat runtime service shell', (): void => {
     const result = await service.send(createInput({ content: 'hello runtime' }));
     await flushRuntimeTasks();
 
-    expect(persistedMessages).toHaveLength(2);
-    expect(persistedMessages[0]).toMatchObject({
+    expect(addedMessages).toHaveLength(2);
+    expect(addedMessages[0]).toMatchObject({
       id: 'user-message-1',
       sessionId: 'session-1',
       role: 'user',
@@ -306,7 +307,7 @@ describe('chat runtime service shell', (): void => {
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true
     });
-    expect(persistedMessages[1]).toMatchObject({
+    expect(addedMessages[1]).toMatchObject({
       id: 'assistant-message-1',
       sessionId: 'session-1',
       role: 'assistant',
@@ -317,6 +318,11 @@ describe('chat runtime service shell', (): void => {
       createdAt: '2026-06-19T00:00:00.000Z',
       loading: true,
       finished: false
+    });
+    expect(updatedMessages.at(-1)).toMatchObject({
+      id: 'assistant-message-1',
+      loading: false,
+      finished: true
     });
     const createdMessageIds = collector.events.flatMap((event) => {
       if (event.name !== 'chat:runtime:message-created') return [];
@@ -752,6 +758,48 @@ describe('chat runtime service shell', (): void => {
         payload: expect.objectContaining({ runtimeId: result.runtimeId })
       })
     );
+  });
+
+  it('marks assistant message finished after continuation rounds stop at the runtime limit', async (): Promise<void> => {
+    const updatedMessages: ChatMessageRecord[] = [];
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
+      assistantMessage.parts = [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-1',
+          toolName: 'read_file',
+          status: 'done',
+          input: { path: 'src/index.ts' },
+          result: { toolName: 'read_file', status: 'success', data: { content: 'ok' } }
+        }
+      ];
+      assistantMessage.loading = false;
+      assistantMessage.finished = false;
+      await updateAssistant(assistantMessage);
+      return { shouldContinue: true };
+    });
+    const service = createChatRuntimeService({
+      emit: createEventCollector().emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      streamExecutor
+    });
+
+    await service.send(createInput({ content: 'inspect file' }));
+    await flushRuntimeTasks();
+
+    expect(streamExecutor).toHaveBeenCalledTimes(26);
+    expect(updatedMessages.at(-1)).toMatchObject({
+      loading: false,
+      finished: true
+    });
   });
 
   it('waits for renderer confirmation decisions through the runtime confirmation bridge', async (): Promise<void> => {

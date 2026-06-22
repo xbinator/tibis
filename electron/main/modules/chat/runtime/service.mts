@@ -361,6 +361,27 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 在所有模型续轮结束后兜底标记 assistant 消息完成。
+   * @param runtime - runtime 状态
+   * @param assistantMessage - assistant 草稿消息
+   * @param usage - 汇总后的 provider usage
+   */
+  async function finishAssistantMessageIfNeeded(
+    runtime: ActiveChatRuntime,
+    assistantMessage: ChatMessageRecord,
+    usage: AIUsage | undefined
+  ): Promise<void> {
+    if (assistantMessage.finished === true) return;
+
+    assistantMessage.loading = false;
+    assistantMessage.finished = true;
+    if (usage) {
+      assistantMessage.usage = usage;
+    }
+    await updateAssistantMessage(runtime, assistantMessage);
+  }
+
+  /**
    * 读取当前 runtime 可发送给模型的源消息。
    * @param runtime - runtime 状态
    * @param userMessage - 当前用户消息
@@ -529,6 +550,8 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       }
       accumulatedUsage = addRuntimeUsage(accumulatedUsage, streamResult.usage);
     }
+
+    await finishAssistantMessageIfNeeded(runtime, assistantMessage, accumulatedUsage);
 
     if (accumulatedUsage && !isSameRuntimeUsage(assistantMessage.usage, accumulatedUsage)) {
       assistantMessage.usage = accumulatedUsage;

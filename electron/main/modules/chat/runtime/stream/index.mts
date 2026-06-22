@@ -75,8 +75,6 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       } else if (chunk.type === 'finish') {
         finishReason = chunk.finishReason;
         usage = chunk.totalUsage ? normalizeUsage(chunk.totalUsage) : undefined;
-        finishAssistantMessage(assistantMessage, usage);
-        await updateAssistant(assistantMessage);
       } else if (chunk.type === 'error') {
         throw normalizeRuntimeError(chunk.error);
       } else if (chunk.type === 'tool-input-start') {
@@ -145,13 +143,14 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       anyToolStopped = anyToolStopped || shouldStopStreamAfterToolResult(toolResult);
     }
 
+    const shouldContinue = finishReason === 'tool-calls' && executedToolCount > 0 && allToolsContinueable;
+    if (shouldContinue) return { usage, shouldContinue };
+
     if (assistantMessage.finished !== true) {
       finishAssistantMessage(assistantMessage, usage);
       await updateAssistant(assistantMessage);
     }
 
-    const shouldContinue = finishReason === 'tool-calls' && executedToolCount > 0 && allToolsContinueable;
-    if (shouldContinue) return { usage, shouldContinue };
     return usage ? { usage } : {};
   };
 }
