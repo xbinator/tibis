@@ -100,6 +100,8 @@ export interface RuntimeWebpageOperateResult {
   target: Record<string, unknown> | null;
   /** 给模型看的结果说明。 */
   message: string;
+  /** 滚动动作的实际滚动结果。 */
+  scroll?: Record<string, unknown>;
   /** 操作是否触发导航。 */
   navigationStarted: boolean;
   /** 页面是否可能发生变化。 */

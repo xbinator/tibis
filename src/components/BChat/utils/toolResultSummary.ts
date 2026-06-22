@@ -432,6 +432,117 @@ function summarizeReadCurrentWebpage(data: Record<string, unknown>): ToolResultS
   };
 }
 
+/** WebView 操作动作的中文映射。 */
+const WEBPAGE_ACTION_LABEL_MAP: Record<string, string> = {
+  click: '点击',
+  input: '输入',
+  select: '选择',
+  scroll: '滚动',
+  navigate: '导航',
+  wait: '等待'
+};
+
+/** WebView 操作结果文本映射。 */
+const WEBPAGE_ACTION_TEXT_MAP: Record<string, string> = {
+  click: '已点击网页元素',
+  input: '已输入网页内容',
+  select: '已选择网页选项',
+  scroll: '已滚动网页',
+  navigate: '已打开网页',
+  wait: '已等待网页更新'
+};
+
+/**
+ * 判断值是否为对象记录。
+ * @param value - 待判断值
+ * @returns 是否为对象记录
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * 读取 WebView 操作目标摘要。
+ * @param value - 工具结果中的目标对象
+ * @returns 目标摘要
+ */
+function readWebpageTargetLabel(value: unknown): string {
+  if (!isRecord(value)) {
+    return '';
+  }
+
+  const index = typeof value.index === 'number' ? `#${value.index}` : '';
+  const label = typeof value.label === 'string' ? value.label : '';
+  return [index, label].filter(Boolean).join(' ');
+}
+
+/**
+ * 读取 WebView 滚动坐标。
+ * @param value - 滚动坐标对象
+ * @returns 坐标字符串
+ */
+function readWebpageScrollPosition(value: unknown): string {
+  if (!isRecord(value) || typeof value.x !== 'number' || typeof value.y !== 'number') {
+    return '';
+  }
+
+  return `${value.x},${value.y}`;
+}
+
+/**
+ * 读取 WebView 滚动目标类型标签。
+ * @param value - 滚动目标类型
+ * @returns 中文滚动目标
+ */
+function readWebpageScrollTargetType(value: unknown): string {
+  if (value === 'element') {
+    return '元素';
+  }
+
+  if (value === 'window') {
+    return '页面';
+  }
+
+  return '';
+}
+
+/**
+ * 格式化 operate_webpage 工具的结果。
+ * @param data - 工具结果数据
+ * @returns 网页操作摘要
+ */
+function summarizeOperateWebpage(data: Record<string, unknown>): ToolResultSummary {
+  const action = typeof data.action === 'string' ? data.action : '';
+  const tags: ToolSummaryTag[] = [];
+  const actionLabel = WEBPAGE_ACTION_LABEL_MAP[action] ?? action;
+
+  if (actionLabel) {
+    tags.push({ label: '动作', value: actionLabel });
+  }
+
+  const targetLabel = readWebpageTargetLabel(data.target);
+  if (targetLabel) {
+    tags.push({ label: '目标', value: targetLabel });
+  }
+
+  if (isRecord(data.scroll)) {
+    const targetType = readWebpageScrollTargetType(data.scroll.targetType);
+    const before = readWebpageScrollPosition(data.scroll.before);
+    const after = readWebpageScrollPosition(data.scroll.after);
+    if (targetType) {
+      tags.push({ label: '滚动目标', value: targetType });
+    }
+    if (before && after) {
+      tags.push({ label: '位置', value: `${before} → ${after}` });
+    }
+  }
+
+  return {
+    text: data.message === 'no scroll movement' ? '网页未滚动' : WEBPAGE_ACTION_TEXT_MAP[action] ?? '已操作网页',
+    tags
+  };
+}
+
 /**
  * 格式化 edit_file 工具的结果。
  * @param data - 工具结果数据
@@ -517,6 +628,7 @@ const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   apply_drawing_operations: (data) => summarizeDrawing(data as Record<string, unknown>),
   update_current_drawing: (data) => summarizeDrawing(data as Record<string, unknown>),
   read_current_webpage: (data) => summarizeReadCurrentWebpage(data as Record<string, unknown>),
+  operate_webpage: (data) => summarizeOperateWebpage(data as Record<string, unknown>),
   edit_file: (data) => summarizeEditFile(data as Record<string, unknown>),
   edit_memory: (data) => summarizeEditMemory(data as Record<string, unknown>),
   open_resource: (data) => summarizeOpenResource(data as Record<string, unknown>)

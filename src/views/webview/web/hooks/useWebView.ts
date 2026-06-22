@@ -9,6 +9,7 @@ import type {
   WebviewAgentElement,
   WebviewOperateInput,
   WebviewOperateResult,
+  WebviewOperateScrollResult,
   WebviewPageHeading,
   WebviewPageLink,
   WebviewPageSnapshot,
@@ -105,6 +106,34 @@ export interface WebviewConsoleMessageEvent {
 }
 
 /**
+ * 当前有效快照中的元素身份信息。
+ */
+interface ActiveWebviewSnapshotElement {
+  /** 本次快照内元素索引。 */
+  index: number;
+  /** 元素标签名。 */
+  tagName: string;
+  /** 模型可读标签。 */
+  label: string;
+  /** 元素身份指纹。 */
+  fingerprint?: string;
+}
+
+/**
+ * 当前有效 WebView Agent 快照。
+ */
+interface ActiveWebviewSnapshot {
+  /** 快照 ID。 */
+  id: string;
+  /** 快照采集时页面地址。 */
+  url: string;
+  /** renderer 本地采集时间。 */
+  capturedAtMs: number;
+  /** 快照中的元素身份信息。 */
+  elements: ActiveWebviewSnapshotElement[];
+}
+
+/**
  * 判断事件是否包含 WebView console message。
  * @param event - 待判断的事件对象
  * @returns 是否包含可解析的 message
@@ -186,6 +215,60 @@ function createWebviewOperationError(code: WebviewOperationErrorCode, message?: 
 }
 
 /**
+ * 判断错误是否为 Electron 导航被主动中断。
+ * @param error - 原始加载错误
+ * @returns 是否为可忽略的导航中断
+ */
+function isWebviewLoadAbortError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return message.includes('ERR_ABORTED') || message.includes('(-3)');
+}
+
+/**
+ * 处理 `<webview>.loadURL` 的异步加载错误。
+ * @param error - 原始加载错误
+ * @param url - 目标地址
+ */
+function handleWebviewLoadError(error: unknown, url: string): void {
+  if (isWebviewLoadAbortError(error)) {
+    return;
+  }
+
+  console.error(`Failed to load WebView URL ${url}:`, error);
+}
+
+/**
+ * 判断值是否支持 Promise catch。
+ * @param value - 待判断值
+ * @returns 是否为可捕获加载结果
+ */
+function isCatchableLoadResult(value: unknown): value is { catch: (onRejected: (error: unknown) => void) => unknown } {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  return typeof (value as { catch?: unknown }).catch === 'function';
+}
+
+/**
+ * 安全加载 WebView 地址，避免导航中断成为未捕获 Promise。
+ * @param instance - WebView 实例
+ * @param url - 目标地址
+ */
+function loadWebviewUrl(instance: WebviewTag, url: string): void {
+  const { loadURL } = instance;
+  if (typeof loadURL === 'function') {
+    const loadResult: unknown = loadURL.call(instance, url);
+    if (isCatchableLoadResult(loadResult)) {
+      loadResult.catch((error: unknown) => handleWebviewLoadError(error, url));
+    }
+    return;
+  }
+
+  instance.setAttribute('src', url);
+}
+
+/**
  * 从页面脚本错误消息中提取稳定错误码。
  * @param message - 原始错误消息
  * @returns 操作错误码或 undefined
@@ -253,6 +336,7 @@ function isAgentElementArray(value: unknown): value is WebviewAgentElement[] {
         typeof element.tagName === 'string' &&
         typeof element.text === 'string' &&
         typeof element.label === 'string' &&
+        (element.fingerprint === undefined || typeof element.fingerprint === 'string') &&
         typeof element.disabled === 'boolean' &&
         typeof element.isNew === 'boolean' &&
         Array.isArray(element.actions)
@@ -287,6 +371,7 @@ function normalizeAgentElements(elements: WebviewAgentElement[] | undefined): We
     ...(element.role ? { role: truncateText(element.role, 80).value } : {}),
     text: truncateText(element.text, 300).value,
     label: truncateText(element.label, 300).value,
+    ...(element.fingerprint ? { fingerprint: truncateText(element.fingerprint, 500).value } : {}),
     ...(element.placeholder ? { placeholder: truncateText(element.placeholder, 300).value } : {}),
     ...(element.href ? { href: element.href } : {}),
     ...(element.valuePreview ? { valuePreview: truncateText(element.valuePreview, 300).value } : {}),
@@ -296,6 +381,35 @@ function normalizeAgentElements(elements: WebviewAgentElement[] | undefined): We
     isNew: element.isNew,
     actions: element.actions.filter((action) => action === 'click' || action === 'input' || action === 'select' || action === 'scroll')
   }));
+}
+
+/**
+ * 提取当前快照可用于后续操作校验的元素身份信息。
+ * @param elements - 快照元素列表
+ * @returns 元素身份信息
+ */
+function createActiveSnapshotElements(elements: WebviewAgentElement[] | undefined): ActiveWebviewSnapshotElement[] {
+  return (elements ?? []).map((element) => ({
+    index: element.index,
+    tagName: element.tagName,
+    label: element.label,
+    ...(element.fingerprint ? { fingerprint: element.fingerprint } : {})
+  }));
+}
+
+/**
+ * 创建返回给 AI 的页面快照，剥离仅供内部校验使用的元素指纹。
+ * @param snapshot - renderer 内部页面快照
+ * @returns 对外网页快照
+ */
+function createPublicWebviewPageSnapshot(snapshot: WebviewPageSnapshot): WebviewPageSnapshot {
+  const elements = snapshot.elements?.map((element) => {
+    const publicElement: WebviewAgentElement = { ...element };
+    delete publicElement.fingerprint;
+    return publicElement;
+  });
+
+  return { ...snapshot, ...(elements ? { elements } : {}) };
 }
 
 /**
@@ -393,6 +507,35 @@ export function withWebviewPageOperationTimeout<T>(promise: Promise<T>): Promise
 }
 
 /**
+ * 判断值是否为 WebView 滚动坐标。
+ * @param value - 待判断值
+ * @returns 是否为滚动坐标
+ */
+function isWebviewOperateScrollPosition(value: unknown): value is WebviewOperateScrollResult['before'] {
+  if (!value || typeof value !== 'object') return false;
+
+  const position = value as Partial<WebviewOperateScrollResult['before']>;
+  return typeof position.x === 'number' && typeof position.y === 'number';
+}
+
+/**
+ * 判断值是否为 WebView 滚动操作结果。
+ * @param value - 待判断值
+ * @returns 是否为滚动操作结果
+ */
+function isWebviewOperateScrollResult(value: unknown): value is WebviewOperateScrollResult {
+  if (!value || typeof value !== 'object') return false;
+
+  const scroll = value as Partial<WebviewOperateScrollResult>;
+  return (
+    (scroll.targetType === 'window' || scroll.targetType === 'element') &&
+    isWebviewOperateScrollPosition(scroll.before) &&
+    isWebviewOperateScrollPosition(scroll.after) &&
+    typeof scroll.changed === 'boolean'
+  );
+}
+
+/**
  * 判断值是否为 WebView 操作结果。
  * @param value - 待判断值
  * @returns 是否为 WebView 操作结果
@@ -406,6 +549,7 @@ function isWebviewOperateResult(value: unknown): value is WebviewOperateResult {
     typeof result.action === 'string' &&
     (result.target === null || (typeof result.target === 'object' && result.target !== null)) &&
     typeof result.message === 'string' &&
+    (result.scroll === undefined || isWebviewOperateScrollResult(result.scroll)) &&
     typeof result.navigationStarted === 'boolean' &&
     typeof result.pageChanged === 'boolean' &&
     typeof result.shouldReadAgain === 'boolean'
@@ -486,9 +630,35 @@ function createPageSnapshotScript(): string {
     element.textContent ||
     element.getAttribute('value')
   );
+  const readFingerprint = (element) => [
+    element.tagName,
+    element.getAttribute('role') || '',
+    element.getAttribute('type') || '',
+    element.getAttribute('name') || '',
+    element instanceof HTMLAnchorElement ? element.href : element.getAttribute('href') || '',
+    element.getAttribute('placeholder') || '',
+    readLabel(element).slice(0, 120),
+    readText(element.innerText || element.textContent).slice(0, 120)
+  ].join('|');
+  const isScrollableOverflow = (value) => /(auto|scroll|overlay)/.test(String(value || ''));
+  const canScrollElement = (element) => {
+    const style = window.getComputedStyle(element);
+    const maxTop = Math.max((element.scrollHeight || 0) - (element.clientHeight || 0), 0);
+    const maxLeft = Math.max((element.scrollWidth || 0) - (element.clientWidth || 0), 0);
+    return (isScrollableOverflow(style.overflowY) && maxTop > 1) || (isScrollableOverflow(style.overflowX) && maxLeft > 1);
+  };
+  const hasScrollableAncestor = (element) => {
+    let current = element;
+    while (current && current !== document.body && current !== document.documentElement) {
+      if (canScrollElement(current)) return true;
+      current = current.parentElement;
+    }
+    return false;
+  };
   const readActions = (element) => {
     const tagName = element.tagName.toLowerCase();
     const role = element.getAttribute('role') || '';
+    const clickableRoles = ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'];
     const actions = [];
     if (element instanceof HTMLInputElement) {
       const inputType = String(element.type || 'text').toLowerCase();
@@ -501,8 +671,8 @@ function createPageSnapshotScript(): string {
       actions.push('input');
     }
     if (tagName === 'select') actions.push('select');
-    if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || role) actions.push('click');
-    actions.push('scroll');
+    if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || clickableRoles.includes(role)) actions.push('click');
+    if (hasScrollableAncestor(element)) actions.push('scroll');
     return Array.from(new Set(actions));
   };
   const readValuePreview = (element) => {
@@ -512,8 +682,10 @@ function createPageSnapshotScript(): string {
   };
   const elements = Array.from(document.querySelectorAll(interactiveSelector))
     .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
+    .map((element) => ({ element, actions: readActions(element) }))
+    .filter((item) => item.actions.length > 0)
     .slice(0, ${WEBVIEW_PAGE_ELEMENT_LIMIT})
-    .map((element, index) => {
+    .map(({ element, actions }, index) => {
       const input = element instanceof HTMLInputElement ? element : null;
       const option = element instanceof HTMLOptionElement ? element : null;
       return {
@@ -522,6 +694,7 @@ function createPageSnapshotScript(): string {
         role: element.getAttribute('role') || undefined,
         text: readText(element.innerText || element.textContent).slice(0, 300),
         label: readLabel(element).slice(0, 300),
+        fingerprint: readFingerprint(element),
         placeholder: element.getAttribute('placeholder') || undefined,
         href: element instanceof HTMLAnchorElement ? element.href : undefined,
         valuePreview: readValuePreview(element),
@@ -529,7 +702,7 @@ function createPageSnapshotScript(): string {
         checked: input && (input.type === 'checkbox' || input.type === 'radio') ? input.checked : undefined,
         selected: option ? option.selected : undefined,
         isNew: false,
-        actions: readActions(element)
+        actions
       };
     });
   const scrollX = window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
@@ -572,13 +745,16 @@ function createPageSnapshotScript(): string {
 /**
  * 构建页面操作脚本。
  * @param input - WebView 操作输入
+ * @param snapshotElements - 快照中的元素身份信息
  * @returns 可通过 `executeJavaScript` 执行的脚本
  */
-function createPageOperationScript(input: WebviewOperateInput): string {
+function createPageOperationScript(input: WebviewOperateInput, snapshotElements: ActiveWebviewSnapshotElement[] = []): string {
   const serializedInput = JSON.stringify(input);
+  const serializedSnapshotElements = JSON.stringify(snapshotElements);
   return `
 (async () => {
   const input = ${serializedInput};
+  const snapshotElements = ${serializedSnapshotElements};
   const readText = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
   const interactiveSelector = [
     'button',
@@ -611,38 +787,114 @@ function createPageOperationScript(input: WebviewOperateInput): string {
     element.textContent ||
     element.getAttribute('value')
   );
-  const elements = Array.from(document.querySelectorAll(interactiveSelector)).filter((element) => (
-    element instanceof HTMLElement &&
-    isVisible(element) &&
-    !(element instanceof HTMLInputElement && element.type === 'hidden')
-  ));
+  const readFingerprint = (element) => [
+    element.tagName,
+    element.getAttribute('role') || '',
+    element.getAttribute('type') || '',
+    element.getAttribute('name') || '',
+    element instanceof HTMLAnchorElement ? element.href : element.getAttribute('href') || '',
+    element.getAttribute('placeholder') || '',
+    readLabel(element).slice(0, 120),
+    readText(element.innerText || element.textContent).slice(0, 120)
+  ].join('|');
+  const isScrollableOverflow = (value) => /(auto|scroll|overlay)/.test(String(value || ''));
+  const canScrollElementInDirection = (element, direction) => {
+    const style = window.getComputedStyle(element);
+    if (direction === 'up' || direction === 'down') {
+      if (!isScrollableOverflow(style.overflowY)) return false;
+      const maxTop = Math.max((element.scrollHeight || 0) - (element.clientHeight || 0), 0);
+      if (maxTop <= 1) return false;
+      return direction === 'up' ? element.scrollTop > 1 : element.scrollTop < maxTop - 1;
+    }
+
+    if (!isScrollableOverflow(style.overflowX)) return false;
+    const maxLeft = Math.max((element.scrollWidth || 0) - (element.clientWidth || 0), 0);
+    if (maxLeft <= 1) return false;
+    return direction === 'left' ? element.scrollLeft > 1 : element.scrollLeft < maxLeft - 1;
+  };
+  const canScrollElement = (element) => ['up', 'down', 'left', 'right'].some((direction) => canScrollElementInDirection(element, direction));
+  const hasScrollableAncestor = (element) => {
+    let current = element;
+    while (current && current !== document.body && current !== document.documentElement) {
+      if (canScrollElement(current)) return true;
+      current = current.parentElement;
+    }
+    return false;
+  };
+  const readActions = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    const role = element.getAttribute('role') || '';
+    const clickableRoles = ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'];
+    const actions = [];
+    if (element instanceof HTMLInputElement) {
+      const inputType = String(element.type || 'text').toLowerCase();
+      if (['button', 'submit', 'reset', 'checkbox', 'radio'].includes(inputType)) {
+        actions.push('click');
+      } else {
+        actions.push('input');
+      }
+    } else if (tagName === 'textarea' || element.isContentEditable) {
+      actions.push('input');
+    }
+    if (tagName === 'select') actions.push('select');
+    if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || clickableRoles.includes(role)) actions.push('click');
+    if (hasScrollableAncestor(element)) actions.push('scroll');
+    return Array.from(new Set(actions));
+  };
+  const elements = Array.from(document.querySelectorAll(interactiveSelector))
+    .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
+    .map((element) => ({ element, actions: readActions(element) }))
+    .filter((item) => item.actions.length > 0)
+    .map((item) => item.element);
   const findElement = (index) => elements[index - 1] || null;
+  const findExpectedElement = (index) => snapshotElements.find((item) => item && item.index === index) || null;
+  const assertElementMatchesSnapshot = (element, index) => {
+    const expected = findExpectedElement(index);
+    if (!expected || typeof expected.fingerprint !== 'string' || !expected.fingerprint) return;
+    if (readFingerprint(element) !== expected.fingerprint) throw new Error('STALE_SNAPSHOT');
+  };
   const createTarget = (element, index) => element ? { index, label: readLabel(element).slice(0, 300), tagName: element.tagName } : null;
   const dispatchInputEvents = (element) => {
     element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: element.value || element.innerText || '' }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   };
-  const findScrollableAncestor = (element) => {
+  const findScrollableAncestor = (element, direction) => {
     let current = element;
     while (current && current !== document.body && current !== document.documentElement) {
-      const style = window.getComputedStyle(current);
-      const canScrollY = /(auto|scroll|overlay)/.test(style.overflowY) && current.scrollHeight > current.clientHeight;
-      const canScrollX = /(auto|scroll|overlay)/.test(style.overflowX) && current.scrollWidth > current.clientWidth;
-      if (canScrollY || canScrollX) return current;
+      if (canScrollElementInDirection(current, direction)) return current;
       current = current.parentElement;
     }
     return null;
+  };
+  const readScrollPosition = (target) => {
+    if (target) {
+      return { x: Number(target.scrollLeft || 0), y: Number(target.scrollTop || 0) };
+    }
+
+    return {
+      x: Number(window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0),
+      y: Number(window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0)
+    };
   };
   const scrollTarget = (target, direction, pixels) => {
     const numericPixels = Number(pixels);
     const amount = Number.isFinite(numericPixels) && numericPixels > 0 ? numericPixels : Math.round(window.innerHeight * 0.7);
     const left = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
     const top = direction === 'up' ? -amount : direction === 'down' ? amount : 0;
+    const before = readScrollPosition(target);
     if (target) {
       target.scrollBy({ left, top, behavior: 'auto' });
-      return;
+    } else {
+      window.scrollBy({ left, top, behavior: 'auto' });
     }
-    window.scrollBy({ left, top, behavior: 'auto' });
+
+    const after = readScrollPosition(target);
+    return {
+      targetType: target ? 'element' : 'window',
+      before,
+      after,
+      changed: before.x !== after.x || before.y !== after.y
+    };
   };
   const readWaitSeconds = (value) => {
     const seconds = Number(value);
@@ -668,21 +920,26 @@ function createPageOperationScript(input: WebviewOperateInput): string {
   }
   if (action.type === 'scroll' && typeof action.index !== 'number') {
     if (!isScrollDirection(action.direction)) throw new Error('INVALID_INPUT');
-    scrollTarget(null, action.direction, action.pixels);
+    const scroll = scrollTarget(null, action.direction, action.pixels);
     return {
       ok: true,
       action: 'scroll',
       target: null,
-      message: 'executed',
+      message: scroll.changed ? 'executed' : 'no scroll movement',
+      scroll,
       navigationStarted: document.readyState === 'loading',
-      pageChanged: true,
-      shouldReadAgain: true
+      pageChanged: scroll.changed,
+      shouldReadAgain: scroll.changed
     };
   }
   const element = typeof action.index === 'number' ? findElement(action.index) : null;
   if (!element) throw new Error('ELEMENT_NOT_FOUND');
+  assertElementMatchesSnapshot(element, action.index);
   if (element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true') throw new Error('ACTION_NOT_SUPPORTED');
-  element.scrollIntoView({ block: 'center', inline: 'center' });
+  if (action.type !== 'scroll') {
+    element.scrollIntoView({ block: 'center', inline: 'center' });
+  }
+  let scroll = null;
   if (action.type === 'click') {
     const PointerEventClass = window.PointerEvent || MouseEvent;
     element.dispatchEvent(new PointerEventClass('pointerdown', { bubbles: true }));
@@ -721,9 +978,8 @@ function createPageOperationScript(input: WebviewOperateInput): string {
     element.dispatchEvent(new Event('change', { bubbles: true }));
   } else if (action.type === 'scroll') {
     if (!isScrollDirection(action.direction)) throw new Error('INVALID_INPUT');
-    const target = findScrollableAncestor(element);
-    if (!target) throw new Error('SCROLL_TARGET_NOT_FOUND');
-    scrollTarget(target, action.direction, action.pixels);
+    const target = findScrollableAncestor(element, action.direction);
+    scroll = scrollTarget(target, action.direction, action.pixels);
   } else {
     throw new Error('ACTION_NOT_SUPPORTED');
   }
@@ -731,10 +987,11 @@ function createPageOperationScript(input: WebviewOperateInput): string {
     ok: true,
     action: action.type,
     target: createTarget(element, action.index),
-    message: 'executed',
+    message: scroll && !scroll.changed ? 'no scroll movement' : 'executed',
+    ...(scroll ? { scroll } : {}),
     navigationStarted: document.readyState === 'loading',
-    pageChanged: true,
-    shouldReadAgain: true
+    pageChanged: scroll ? scroll.changed : true,
+    shouldReadAgain: scroll ? scroll.changed : true
   };
 })();
 `;
@@ -1245,7 +1502,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
   let isDomReady = false;
   let pendingUserAgent = '';
   let pendingPageSnapshotRead: Promise<WebviewPageSnapshot> | null = null;
-  let activeSnapshot: { id: string; url: string; capturedAtMs: number } | null = null;
+  let activeSnapshot: ActiveWebviewSnapshot | null = null;
 
   /**
    * 读取 renderer 本地单调时间。
@@ -1309,7 +1566,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     }
 
     if (isDomReady) {
-      webviewRef.value.loadURL(url);
+      loadWebviewUrl(webviewRef.value, url);
       return;
     }
 
@@ -1393,8 +1650,8 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
 
         const snapshotId = typeof value.snapshotId === 'string' && value.snapshotId ? value.snapshotId : createSnapshotId();
         const snapshot = normalizeWebviewPageSnapshot({ ...value, snapshotId });
-        activeSnapshot = { id: snapshotId, url: snapshot.url, capturedAtMs: nowMs() };
-        return snapshot;
+        activeSnapshot = { id: snapshotId, url: snapshot.url, capturedAtMs: nowMs(), elements: createActiveSnapshotElements(snapshot.elements) };
+        return createPublicWebviewPageSnapshot(snapshot);
       })
     )
       .catch((error: unknown) => {
@@ -1419,24 +1676,12 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
       throw createWebviewOperationError('EDITOR_UNAVAILABLE');
     }
 
-    if (!activeSnapshot || activeSnapshot.id !== input.snapshotId || nowMs() - activeSnapshot.capturedAtMs > WEBVIEW_PAGE_SNAPSHOT_TTL_MS) {
-      throw createWebviewOperationError('STALE_SNAPSHOT');
-    }
-
-    if (state.value.url && state.value.url !== activeSnapshot.url) {
-      throw createWebviewOperationError('STALE_SNAPSHOT');
-    }
-
     if (input.action.type === 'navigate') {
       try {
         const targetUrl = normalizeWebviewUrl(input.action.url);
         state.value.url = targetUrl;
         activeSnapshot = null;
-        if (typeof instance.loadURL === 'function') {
-          instance.loadURL(targetUrl);
-        } else {
-          instance.setAttribute('src', targetUrl);
-        }
+        loadWebviewUrl(instance, targetUrl);
 
         return {
           ok: true,
@@ -1452,12 +1697,25 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
       }
     }
 
+    if (
+      !input.snapshotId ||
+      !activeSnapshot ||
+      activeSnapshot.id !== input.snapshotId ||
+      nowMs() - activeSnapshot.capturedAtMs > WEBVIEW_PAGE_SNAPSHOT_TTL_MS
+    ) {
+      throw createWebviewOperationError('STALE_SNAPSHOT');
+    }
+
+    if (state.value.url && state.value.url !== activeSnapshot.url) {
+      throw createWebviewOperationError('STALE_SNAPSHOT');
+    }
+
     if (state.value.isLoading && input.action.type !== 'wait') {
       throw createWebviewOperationError('PAGE_LOADING');
     }
 
     try {
-      const rawOperation = executeJavaScript.call(instance, createPageOperationScript(input)) as Promise<unknown>;
+      const rawOperation = executeJavaScript.call(instance, createPageOperationScript(input, activeSnapshot.elements)) as Promise<unknown>;
       const result = await withWebviewPageOperationTimeout(rawOperation);
       if (!isWebviewOperateResult(result)) {
         throw createWebviewOperationError('EXECUTION_FAILED', '页面操作结果格式无效');

@@ -746,7 +746,7 @@ export const TOOL_REGISTRY = [
     definition: {
       name: OPERATE_WEBPAGE_TOOL_NAME,
       description:
-        '操作当前激活 WebView 页面。必须先调用 read_current_webpage，并使用它返回的 snapshotId；点击、输入、选择和元素滚动还要使用元素 index。' +
+        '操作当前激活 WebView 页面。打开或切换网页可直接使用 navigate，无需 snapshotId；wait 以及点击、输入、选择、元素滚动必须先调用 read_current_webpage，元素动作还要使用返回的 index。' +
         '支持 click、input、select、scroll、navigate、wait；打开或切换当前网页请使用 navigate；不接受 CSS selector 或任意 JavaScript。',
       source: 'builtin',
       riskLevel: 'write',
@@ -756,10 +756,10 @@ export const TOOL_REGISTRY = [
       parameters: {
         type: 'object',
         properties: {
-          snapshotId: { type: 'string', description: 'read_current_webpage 返回的 snapshotId。' },
+          snapshotId: { type: 'string', description: 'read_current_webpage 返回的 snapshotId；非 navigate 动作必须提供。' },
           action: WEBPAGE_OPERATION_ACTION_SCHEMA
         },
-        required: ['snapshotId', 'action'],
+        required: ['action'],
         additionalProperties: false
       }
     }

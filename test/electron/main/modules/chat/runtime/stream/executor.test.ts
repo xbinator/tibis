@@ -528,6 +528,7 @@ describe('runtime stream executor', (): void => {
     });
     expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
+      finished: false,
       parts: [
         {
           type: 'tool',
@@ -2387,6 +2388,7 @@ describe('runtime stream executor', (): void => {
     const imageUserMessage: ChatMessageRecord = {
       ...userMessage,
       content: 'describe this image',
+      parts: [{ type: 'text', text: 'describe this image' }],
       files: [
         {
           id: 'file-1',

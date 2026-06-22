@@ -68,6 +68,14 @@ describe('toolRegistry', (): void => {
     expect(String(openResourceDefinition?.description)).toContain('没有激活 WebView');
   });
 
+  it('allows operate_webpage navigate without a snapshot id in the public schema', (): void => {
+    const operateDefinition = getToolDefinitionByName(OPERATE_WEBPAGE_TOOL_NAME);
+    const snapshotIdSchema = operateDefinition?.parameters.properties.snapshotId as { description?: string } | undefined;
+
+    expect(operateDefinition?.parameters.required).toEqual(['action']);
+    expect(snapshotIdSchema?.description).toContain('非 navigate');
+  });
+
   it('can derive tool names by renderer exposure policy', (): void => {
     expect(getToolNamesByExposure('default-readonly')).toEqual(
       expect.arrayContaining(['read_current_document', 'read_current_drawing', 'get_current_time', 'read_file', 'get_settings', 'query_logs', 'open_resource'])

@@ -78,6 +78,8 @@ export interface WebviewAgentElement {
   text: string;
   /** 模型可读标签。 */
   label: string;
+  /** 元素身份指纹，用于操作前识别过期快照。 */
+  fingerprint?: string;
   /** 输入占位符。 */
   placeholder?: string;
   /** 链接地址。 */
@@ -141,10 +143,34 @@ export type WebviewOperateAction =
  * WebView 操作输入。
  */
 export interface WebviewOperateInput {
-  /** read_current_webpage 返回的观察快照 ID。 */
-  snapshotId: string;
+  /** read_current_webpage 返回的观察快照 ID，非 navigate 动作必填。 */
+  snapshotId?: string;
   /** 要执行的操作。 */
   action: WebviewOperateAction;
+}
+
+/**
+ * WebView 滚动位置。
+ */
+export interface WebviewOperateScrollPosition {
+  /** 水平滚动偏移。 */
+  x: number;
+  /** 垂直滚动偏移。 */
+  y: number;
+}
+
+/**
+ * WebView 滚动操作结果。
+ */
+export interface WebviewOperateScrollResult {
+  /** 实际滚动目标类型。 */
+  targetType: 'window' | 'element';
+  /** 滚动前位置。 */
+  before: WebviewOperateScrollPosition;
+  /** 滚动后位置。 */
+  after: WebviewOperateScrollPosition;
+  /** 位置是否发生变化。 */
+  changed: boolean;
 }
 
 /**
@@ -159,6 +185,8 @@ export interface WebviewOperateResult {
   target: { index: number; label: string; tagName: string } | null;
   /** 给模型看的结果说明。 */
   message: string;
+  /** 滚动动作的实际滚动结果。 */
+  scroll?: WebviewOperateScrollResult;
   /** 操作是否触发导航。 */
   navigationStarted: boolean;
   /** 页面是否可能发生变化。 */

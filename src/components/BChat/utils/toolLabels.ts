@@ -16,6 +16,7 @@ export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
   edit_file: { alias: '修改文件' },
   apply_drawing_operations: { alias: '操作当前画板' },
   update_current_drawing: { alias: '更新当前画板' },
+  operate_webpage: { alias: '操作当前网页' },
   edit_memory: { alias: '管理记忆' },
   run_shell_command: { alias: '终端命令' },
   get_current_time: { alias: '获取当前时间' },

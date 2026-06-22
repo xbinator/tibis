@@ -93,4 +93,58 @@ describe('toolResultSummary open file metadata', (): void => {
       ]
     });
   });
+
+  it('summarizes operate_webpage click results with the target element', (): void => {
+    const summary = getToolResultSummary(
+      'operate_webpage',
+      successResult('operate_webpage', {
+        ok: true,
+        action: 'click',
+        target: { index: 2, label: '预约挂号', tagName: 'BUTTON' },
+        message: 'executed',
+        navigationStarted: false,
+        pageChanged: true,
+        shouldReadAgain: true
+      })
+    );
+
+    expect(summary).toEqual({
+      text: '已点击网页元素',
+      tags: [
+        { label: '动作', value: '点击' },
+        { label: '目标', value: '#2 预约挂号' }
+      ]
+    });
+  });
+
+  it('summarizes operate_webpage scroll results with movement details', (): void => {
+    const summary = getToolResultSummary(
+      'operate_webpage',
+      successResult('operate_webpage', {
+        ok: true,
+        action: 'scroll',
+        target: { index: 1, label: '列表', tagName: 'DIV' },
+        message: 'executed',
+        navigationStarted: false,
+        pageChanged: true,
+        shouldReadAgain: true,
+        scroll: {
+          targetType: 'element',
+          before: { x: 0, y: 0 },
+          after: { x: 0, y: 240 },
+          changed: true
+        }
+      })
+    );
+
+    expect(summary).toEqual({
+      text: '已滚动网页',
+      tags: [
+        { label: '动作', value: '滚动' },
+        { label: '目标', value: '#1 列表' },
+        { label: '滚动目标', value: '元素' },
+        { label: '位置', value: '0,0 → 0,240' }
+      ]
+    });
+  });
 });

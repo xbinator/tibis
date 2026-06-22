@@ -78,6 +78,26 @@ export function isRuntimeWebpageSnapshot(value: unknown): value is RuntimeWebpag
 }
 
 /**
+ * 判断值是否为网页滚动操作结果。
+ * @param value - 待判断值
+ * @returns 是否为网页滚动操作结果
+ */
+function isRuntimeWebpageOperateScrollResult(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || !isRecord(value.before) || !isRecord(value.after)) {
+    return false;
+  }
+
+  return (
+    (value.targetType === 'window' || value.targetType === 'element') &&
+    typeof value.before.x === 'number' &&
+    typeof value.before.y === 'number' &&
+    typeof value.after.x === 'number' &&
+    typeof value.after.y === 'number' &&
+    typeof value.changed === 'boolean'
+  );
+}
+
+/**
  * 判断 bridge payload 是否为网页操作结果。
  * @param value - bridge payload
  * @returns 是否为网页操作结果
@@ -89,6 +109,7 @@ export function isRuntimeWebpageOperateResult(value: unknown): value is RuntimeW
     typeof value.action === 'string' &&
     (value.target === null || isRecord(value.target)) &&
     typeof value.message === 'string' &&
+    (value.scroll === undefined || isRuntimeWebpageOperateScrollResult(value.scroll)) &&
     typeof value.navigationStarted === 'boolean' &&
     typeof value.pageChanged === 'boolean' &&
     typeof value.shouldReadAgain === 'boolean'

@@ -147,6 +147,82 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/**
+ * 判断值是否为有限数字。
+ * @param value - 待判断值
+ * @returns 是否为有限数字
+ */
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * 判断值是否为网页滚动方向。
+ * @param value - 待判断值
+ * @returns 是否为网页滚动方向
+ */
+function isWebviewScrollDirection(value: unknown): value is 'up' | 'down' | 'left' | 'right' {
+  return value === 'up' || value === 'down' || value === 'left' || value === 'right';
+}
+
+/**
+ * 判断值是否为 WebView 操作动作。
+ * @param value - 待判断值
+ * @returns 是否为 WebView 操作动作
+ */
+function isWebviewOperateAction(value: unknown): value is WebviewOperateInput['action'] {
+  if (!isRecord(value) || typeof value.type !== 'string') {
+    return false;
+  }
+
+  if (value.type === 'click') {
+    return isFiniteNumber(value.index);
+  }
+
+  if (value.type === 'input') {
+    return isFiniteNumber(value.index) && typeof value.text === 'string' && (value.clear === undefined || typeof value.clear === 'boolean');
+  }
+
+  if (value.type === 'select') {
+    return isFiniteNumber(value.index) && typeof value.optionText === 'string';
+  }
+
+  if (value.type === 'scroll') {
+    return (
+      (value.index === undefined || isFiniteNumber(value.index)) &&
+      isWebviewScrollDirection(value.direction) &&
+      (value.pixels === undefined || isFiniteNumber(value.pixels))
+    );
+  }
+
+  if (value.type === 'navigate') {
+    return typeof value.url === 'string';
+  }
+
+  if (value.type === 'wait') {
+    return value.seconds === undefined || isFiniteNumber(value.seconds);
+  }
+
+  return false;
+}
+
+/**
+ * 判断 bridge payload 是否为 WebView 操作输入。
+ * @param value - 待判断值
+ * @returns 是否为 WebView 操作输入
+ */
+function isWebviewOperateInput(value: unknown): value is WebviewOperateInput {
+  if (!isRecord(value) || !isWebviewOperateAction(value.action)) {
+    return false;
+  }
+
+  if (value.action.type === 'navigate') {
+    return value.snapshotId === undefined || typeof value.snapshotId === 'string';
+  }
+
+  return typeof value.snapshotId === 'string' && value.snapshotId.length > 0;
+}
+
 /** Editor document bridge handlers. */
 /**
  * 读取当前编辑器文档快照。
@@ -502,7 +578,11 @@ export async function handleBChatRuntimeBridgeRequest(event: ChatRuntimeBridgeRe
     if (!context) {
       throw createBridgeError('EDITOR_UNAVAILABLE', '当前没有可操作的网页');
     }
-    return context.operatePage(event.payload as WebviewOperateInput);
+    if (!isWebviewOperateInput(event.payload)) {
+      throw createBridgeError('INVALID_INPUT', '网页操作参数无效');
+    }
+
+    return context.operatePage(event.payload);
   }
 
   if (event.kind === 'file-content-snapshot') {

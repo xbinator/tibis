@@ -208,6 +208,33 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     expect(operatePage).toHaveBeenCalledWith(payload);
   });
 
+  it('rejects invalid webview operation payloads before dispatching to the WebView context', async (): Promise<void> => {
+    const operatePage = vi.fn();
+
+    await expect(
+      handleBChatRuntimeBridgeRequest(
+        {
+          runtimeId: 'runtime-1',
+          sessionId: 'session-1',
+          clientId: 'bchat',
+          agentId: 'default',
+          requestId: 'bridge-1',
+          kind: 'webview-operate',
+          payload: { snapshotId: 123, action: { type: 'click', index: 1 } }
+        },
+        {
+          getEditorContext: () => undefined,
+          getDrawingContext: () => undefined,
+          getWebviewContext: () => ({
+            readPageSnapshot: vi.fn(),
+            operatePage
+          })
+        }
+      )
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(operatePage).not.toHaveBeenCalled();
+  });
+
   it('returns an opened editor file content snapshot by path', async (): Promise<void> => {
     const result = await handleBChatRuntimeBridgeRequest(
       {

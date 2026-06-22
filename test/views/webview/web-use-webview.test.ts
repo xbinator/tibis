@@ -29,6 +29,18 @@ interface TestDevToolsWebview {
   isDevToolsOpened: () => boolean;
 }
 
+/** 原始 scrollIntoView 实现，测试后恢复。 */
+const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
+
+/**
+ * 创建可观测 catch 注册的 loadURL 返回值。
+ * @returns loadURL 返回值与 catch spy
+ */
+function createCatchableLoadResult(): { promise: Promise<void>; catchSpy: ReturnType<typeof vi.fn<(_handler: (error: unknown) => void) => Promise<void>>> } {
+  const catchSpy = vi.fn<(_handler: (error: unknown) => void) => Promise<void>>(() => Promise.resolve());
+  return { promise: { catch: catchSpy } as unknown as Promise<void>, catchSpy };
+}
+
 /**
  * 创建测试用 WebView 元素。
  * @param isOpened - 开发者工具是否已打开
@@ -61,10 +73,139 @@ function createScriptableWebview(results: unknown[]): WebviewTag {
   return element;
 }
 
+/**
+ * 创建第二次调用会执行页面脚本的 WebView 测试替身。
+ * @param snapshot - 第一次读取快照返回的数据
+ * @returns WebView 测试替身
+ */
+function createPageOperationExecutingWebview(snapshot: unknown): WebviewTag {
+  const element = document.createElement('webview') as unknown as WebviewTag;
+  let callCount = 0;
+  element.executeJavaScript = vi.fn((script: string): Promise<unknown> => {
+    callCount += 1;
+    if (callCount === 1) return Promise.resolve(snapshot);
+
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Error,
+      Event: window.Event,
+      HTMLAnchorElement: window.HTMLAnchorElement,
+      HTMLInputElement: window.HTMLInputElement,
+      HTMLElement: window.HTMLElement,
+      HTMLSelectElement: window.HTMLSelectElement,
+      HTMLTextAreaElement: window.HTMLTextAreaElement,
+      InputEvent: window.InputEvent,
+      MouseEvent: window.MouseEvent,
+      PointerEvent: window.PointerEvent,
+      Promise
+    });
+    return new Script(script).runInContext(scriptContext) as Promise<unknown>;
+  });
+  return element;
+}
+
+/**
+ * 创建会在 jsdom 页面中执行脚本的 WebView 测试替身。
+ * @returns WebView 测试替身
+ */
+function createPageScriptExecutingWebview(): WebviewTag {
+  const element = document.createElement('webview') as unknown as WebviewTag;
+  element.executeJavaScript = vi.fn((script: string): Promise<unknown> => {
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      location: window.location,
+      Error,
+      Event: window.Event,
+      HTMLAnchorElement: window.HTMLAnchorElement,
+      HTMLInputElement: window.HTMLInputElement,
+      HTMLElement: window.HTMLElement,
+      HTMLOptionElement: window.HTMLOptionElement,
+      HTMLSelectElement: window.HTMLSelectElement,
+      HTMLTextAreaElement: window.HTMLTextAreaElement,
+      InputEvent: window.InputEvent,
+      MouseEvent: window.MouseEvent,
+      PointerEvent: window.PointerEvent,
+      Promise
+    });
+    return Promise.resolve(new Script(script).runInContext(scriptContext));
+  });
+  return element;
+}
+
+/**
+ * 设置元素在 jsdom 中可见。
+ * @param element - 目标元素
+ */
+function installVisibleRect(element: HTMLElement): void {
+  element.getBoundingClientRect = vi.fn(
+    (): DOMRect =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 120,
+        bottom: 32,
+        width: 120,
+        height: 32,
+        toJSON: () => ({})
+      } as DOMRect)
+  );
+}
+
+/**
+ * 给 jsdom 元素安装可滚动尺寸和 scrollBy 行为。
+ * @param element - 目标元素
+ * @param metrics - 滚动尺寸
+ */
+function installScrollableElementMetrics(
+  element: HTMLElement,
+  metrics: { clientHeight: number; scrollHeight: number; clientWidth: number; scrollWidth: number }
+): void {
+  let scrollTop = 0;
+  let scrollLeft = 0;
+  Object.defineProperties(element, {
+    clientHeight: { configurable: true, get: () => metrics.clientHeight },
+    scrollHeight: { configurable: true, get: () => metrics.scrollHeight },
+    clientWidth: { configurable: true, get: () => metrics.clientWidth },
+    scrollWidth: { configurable: true, get: () => metrics.scrollWidth },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = Math.max(0, Math.min(value, Math.max(metrics.scrollHeight - metrics.clientHeight, 0)));
+      }
+    },
+    scrollLeft: {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (value: number) => {
+        scrollLeft = Math.max(0, Math.min(value, Math.max(metrics.scrollWidth - metrics.clientWidth, 0)));
+      }
+    },
+    scrollBy: {
+      configurable: true,
+      value: (options: ScrollToOptions): void => {
+        element.scrollTop += Number(options.top || 0);
+        element.scrollLeft += Number(options.left || 0);
+      }
+    }
+  });
+}
+
 describe('useWebView', () => {
   afterEach((): void => {
     (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
     document.body.innerHTML = '';
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      writable: true,
+      value: originalScrollIntoView
+    });
     vi.restoreAllMocks();
   });
 
@@ -263,6 +404,36 @@ describe('useWebView', () => {
     expect(snapshot.elements?.[0]).toMatchObject({ index: 1, label: 'Search', actions: ['click'] });
   });
 
+  it('exposes only meaningful webpage element actions in snapshots', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <div id="decorative" tabindex="0">Decorative</div>
+      <button>Save</button>
+      <section id="page-scroller" style="overflow-y: auto;">
+        <span id="row" tabindex="0">Row</span>
+      </section>
+    `;
+    const decorative = document.querySelector('#decorative');
+    const button = document.querySelector('button');
+    const pageScroller = document.querySelector('#page-scroller');
+    const row = document.querySelector('#row');
+    if (!(decorative instanceof HTMLElement) || !(button instanceof HTMLElement) || !(pageScroller instanceof HTMLElement) || !(row instanceof HTMLElement)) {
+      throw new Error('snapshot action test elements should exist');
+    }
+
+    installVisibleRect(decorative);
+    installVisibleRect(button);
+    installVisibleRect(row);
+    installScrollableElementMetrics(pageScroller, { clientHeight: 100, scrollHeight: 900, clientWidth: 300, scrollWidth: 300 });
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([
+      { label: 'Save', actions: ['click'] },
+      { label: 'Row', actions: ['scroll'] }
+    ]);
+  });
+
   it('operates the current page using the active snapshot', async (): Promise<void> => {
     const webviewElement = createScriptableWebview([
       {
@@ -305,6 +476,36 @@ describe('useWebView', () => {
     expect(webviewElement.executeJavaScript).toHaveBeenCalledTimes(2);
   });
 
+  it('handles aborted loadURL promises when navigating from the address bar', (): void => {
+    const webviewElement = createScriptableWebview([]);
+    const loadResult = createCatchableLoadResult();
+    webviewElement.loadURL = vi.fn<(_url: string) => Promise<void>>(() => loadResult.promise);
+    webviewElement.canGoBack = vi.fn(() => false);
+    webviewElement.canGoForward = vi.fn(() => false);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    controller.handleDomReady();
+
+    controller.navigate('https://example.com/');
+
+    expect(webviewElement.loadURL).toHaveBeenCalledWith('https://example.com/');
+    expect(loadResult.catchSpy).toHaveBeenCalledTimes(1);
+    expect(() => loadResult.catchSpy.mock.calls[0]?.[0](new Error("ERR_ABORTED (-3) loading 'https://example.com/'"))).not.toThrow();
+  });
+
+  it('navigates the current WebView without requiring an active snapshot', async (): Promise<void> => {
+    const webviewElement = createScriptableWebview([]);
+    const loadResult = createCatchableLoadResult();
+    webviewElement.loadURL = vi.fn<(_url: string) => Promise<void>>(() => loadResult.promise);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+
+    const result = await controller.operatePage({ action: { type: 'navigate', url: 'example.org' } });
+
+    expect(webviewElement.loadURL).toHaveBeenCalledWith('https://example.org/');
+    expect(loadResult.catchSpy).toHaveBeenCalledTimes(1);
+    expect(webviewElement.executeJavaScript).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, action: 'navigate', pageChanged: true, shouldReadAgain: true });
+  });
+
   it('rejects operation when the active snapshot becomes stale', async (): Promise<void> => {
     const webviewElement = createScriptableWebview([
       {
@@ -323,6 +524,46 @@ describe('useWebView', () => {
     const snapshot = await controller.readPageSnapshot();
 
     controller.handleDidStartLoading();
+    await expect(controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } })).rejects.toMatchObject({
+      code: 'STALE_SNAPSHOT'
+    });
+  });
+
+  it('rejects operation when the indexed element no longer matches the snapshot fingerprint', async (): Promise<void> => {
+    document.body.innerHTML = '<button>New button</button>';
+    const button = document.querySelector('button');
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('button should exist');
+    }
+
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(button);
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [
+        {
+          index: 1,
+          tagName: 'BUTTON',
+          text: 'Old button',
+          label: 'Old button',
+          fingerprint: 'BUTTON|Old button',
+          disabled: false,
+          isNew: false,
+          actions: ['click']
+        }
+      ]
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.[0].fingerprint).toBeUndefined();
     await expect(controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } })).rejects.toMatchObject({
       code: 'STALE_SNAPSHOT'
     });
@@ -376,5 +617,85 @@ describe('useWebView', () => {
     expect(webviewElement.loadURL).toHaveBeenCalledWith('https://example.org/');
     expect(webviewElement.executeJavaScript).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ ok: true, action: 'navigate', pageChanged: true, shouldReadAgain: true });
+  });
+
+  it('scrolls the ancestor that can move in the requested direction', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <section id="page-scroller" style="overflow-y: auto;">
+        <div id="horizontal-scroller" style="overflow-x: auto;">
+          <button>More</button>
+        </div>
+      </section>
+    `;
+    const pageScroller = document.querySelector('#page-scroller');
+    const horizontalScroller = document.querySelector('#horizontal-scroller');
+    const button = document.querySelector('button');
+    if (!(pageScroller instanceof HTMLElement) || !(horizontalScroller instanceof HTMLElement) || !(button instanceof HTMLElement)) {
+      throw new Error('scroll test elements should exist');
+    }
+
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(button);
+    installScrollableElementMetrics(pageScroller, { clientHeight: 100, scrollHeight: 900, clientWidth: 300, scrollWidth: 300 });
+    installScrollableElementMetrics(horizontalScroller, { clientHeight: 100, scrollHeight: 100, clientWidth: 100, scrollWidth: 600 });
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'BUTTON', text: 'More', label: 'More', disabled: false, isNew: false, actions: ['scroll'] }]
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    const result = await controller.operatePage({
+      snapshotId: snapshot.snapshotId ?? '',
+      action: { type: 'scroll', index: 1, direction: 'down', pixels: 120 }
+    });
+
+    expect(pageScroller.scrollTop).toBe(120);
+    expect(horizontalScroller.scrollTop).toBe(0);
+    expect(result).toMatchObject({
+      scroll: {
+        targetType: 'element',
+        before: { x: 0, y: 0 },
+        after: { x: 0, y: 120 },
+        changed: true
+      }
+    });
+  });
+
+  it('falls back to page scrolling when indexed element has no scrollable ancestor', async (): Promise<void> => {
+    document.body.innerHTML = '<button>More</button>';
+    const button = document.querySelector('button');
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('button should exist');
+    }
+
+    const scrollBy = vi.fn<(_options: ScrollToOptions) => void>();
+    Object.defineProperty(window, 'scrollBy', { configurable: true, writable: true, value: scrollBy });
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(button);
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'BUTTON', text: 'More', label: 'More', disabled: false, isNew: false, actions: ['scroll'] }]
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'scroll', index: 1, direction: 'down', pixels: 140 } });
+
+    expect(scrollBy).toHaveBeenCalledWith({ left: 0, top: 140, behavior: 'auto' });
   });
 });

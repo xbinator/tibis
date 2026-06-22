@@ -206,6 +206,15 @@ describe('createMainToolExecutor', (): void => {
     expect(result.status).toBe('success');
     expect(result.toolName).toBe('operate_webpage');
     expect(requestConfirmation).toHaveBeenCalledTimes(1);
+    expect(requestConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          toolName: 'operate_webpage',
+          allowRemember: true,
+          rememberScopes: ['session', 'always']
+        })
+      })
+    );
     expect(bridgeRequests).toEqual([
       {
         runtimeId: 'runtime-1',
