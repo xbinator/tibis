@@ -101,12 +101,15 @@ describe('createMainToolExecutor', (): void => {
           data: {
             url: 'https://example.com',
             title: 'Example',
+            header: 'Page info: 800x600px [Start of page]',
+            content: '[1]<button>Search</button>',
+            footer: '[End of page]',
             text: 'Hello',
             selectedText: '',
             headings: [],
             links: [],
             capturedAt: 1,
-            truncated: {},
+            truncated: { content: false },
             snapshotId: 'snap-1',
             loading: false,
             scroll: {
@@ -134,7 +137,7 @@ describe('createMainToolExecutor', (): void => {
 
     expect(result.status).toBe('success');
     expect(result.toolName).toBe('read_current_webpage');
-    expect(result.data).toMatchObject({ snapshotId: 'snap-1', title: 'Example' });
+    expect(result.data).toMatchObject({ snapshotId: 'snap-1', title: 'Example', content: '[1]<button>Search</button>' });
     expect(bridgeRequests).toEqual([
       {
         runtimeId: 'runtime-1',
@@ -143,6 +146,42 @@ describe('createMainToolExecutor', (): void => {
         payload: {}
       }
     ]);
+  });
+
+  it('rejects read_current_webpage payloads without simplified DOM content', async (): Promise<void> => {
+    const bridgeRequests: MainToolBridgeRequest[] = [];
+    const executeMainTool = createMainToolExecutor({
+      ...createMainToolDependencies(bridgeRequests),
+      async requestBridge(input: MainToolBridgeRequest) {
+        bridgeRequests.push(input);
+        return {
+          status: 'success',
+          data: {
+            url: 'https://example.com',
+            title: 'Example',
+            text: 'Hello',
+            selectedText: '',
+            headings: [],
+            links: [],
+            capturedAt: 1,
+            truncated: {}
+          }
+        };
+      }
+    });
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-web-missing-content-1',
+      toolName: 'read_current_webpage',
+      input: {}
+    });
+
+    expect(result).toMatchObject({
+      toolName: 'read_current_webpage',
+      status: 'failure',
+      error: { code: 'INVALID_INPUT', message: '当前网页快照格式无效' }
+    });
   });
 
   it('rejects invalid read_current_webpage bridge payloads', async (): Promise<void> => {

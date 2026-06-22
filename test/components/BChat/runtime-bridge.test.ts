@@ -139,12 +139,15 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
           readPageSnapshot: async () => ({
             url: 'https://example.com',
             title: 'Example',
+            header: 'Page info: 800x600px [Start of page]',
+            content: '[1]<button>Example</button>',
+            footer: '[End of page]',
             text: 'page',
             selectedText: '',
             headings: [],
             links: [],
             capturedAt: 1,
-            truncated: { text: false, headings: false, links: false, selectedText: false }
+            truncated: { text: false, content: false, headings: false, links: false, selectedText: false }
           }),
           operatePage: vi.fn()
         })
@@ -154,12 +157,15 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     expect(result).toEqual({
       url: 'https://example.com',
       title: 'Example',
+      header: 'Page info: 800x600px [Start of page]',
+      content: '[1]<button>Example</button>',
+      footer: '[End of page]',
       text: 'page',
       selectedText: '',
       headings: [],
       links: [],
       capturedAt: 1,
-      truncated: { text: false, headings: false, links: false, selectedText: false }
+      truncated: { text: false, content: false, headings: false, links: false, selectedText: false }
     });
   });
 
@@ -192,12 +198,15 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
           readPageSnapshot: async () => ({
             url: 'https://example.com',
             title: 'Example',
+            header: 'Page info: 800x600px [Start of page]',
+            content: '[1]<button>Example</button>',
+            footer: '[End of page]',
             text: 'page',
             selectedText: '',
             headings: [],
             links: [],
             capturedAt: 1,
-            truncated: { text: false, headings: false, links: false, selectedText: false }
+            truncated: { text: false, content: false, headings: false, links: false, selectedText: false }
           }),
           operatePage
         })
@@ -205,6 +214,42 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     );
 
     expect(result).toMatchObject({ ok: true, action: 'click' });
+    expect(operatePage).toHaveBeenCalledWith(payload);
+  });
+
+  it('accepts webview press operations through the bridge', async (): Promise<void> => {
+    const operatePage = vi.fn(async () => ({
+      ok: true,
+      action: 'press' as const,
+      target: { index: 1, label: '搜索医院', tagName: 'INPUT' },
+      message: 'executed',
+      navigationStarted: false,
+      pageChanged: true,
+      shouldReadAgain: true
+    }));
+    const payload = { snapshotId: 'snap-1', action: { type: 'press' as const, index: 1, key: 'Enter' } };
+
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-press-1',
+        kind: 'webview-operate',
+        payload
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => ({
+          readPageSnapshot: vi.fn(),
+          operatePage
+        })
+      }
+    );
+
+    expect(result).toMatchObject({ ok: true, action: 'press' });
     expect(operatePage).toHaveBeenCalledWith(payload);
   });
 

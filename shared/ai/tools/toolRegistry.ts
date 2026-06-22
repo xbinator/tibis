@@ -113,6 +113,8 @@ const SUPPORTED_SETTING_KEYS = ['theme', 'themePreset', 'sourceMode', 'editorPag
 const SUPPORTED_DRAWING_SHAPES = ['process', 'decision', 'actor', 'service', 'database', 'text', 'rect', 'ellipse', 'diamond'] as const;
 /** AI 支持使用的连接线锚点。 */
 const SUPPORTED_CONNECTOR_ANCHORS = ['top', 'right', 'bottom', 'left', 'center'] as const;
+/** WebView 支持模拟的按键。 */
+const SUPPORTED_WEBPAGE_PRESS_KEYS = ['Enter', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'] as const;
 
 /** 内部 JSON Schema 对象类型。 */
 type ToolJsonSchema = Record<string, unknown>;
@@ -257,6 +259,16 @@ const WEBPAGE_OPERATION_ACTION_SCHEMA: ToolJsonSchema = {
         optionText: { type: 'string', description: '要选择的 option 可见文本。存在多个同名 option 时工具会返回歧义错误。' }
       },
       required: ['type', 'index', 'optionText'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['press'] },
+        index: { type: 'number', description: '来自 read_current_webpage 最新 snapshot 的可聚焦元素索引。' },
+        key: { type: 'string', enum: SUPPORTED_WEBPAGE_PRESS_KEYS, description: '要模拟的按键。搜索框回车提交请使用 Enter。' }
+      },
+      required: ['type', 'index', 'key'],
       additionalProperties: false
     },
     {
@@ -731,7 +743,7 @@ export const TOOL_REGISTRY = [
     definition: {
       name: READ_CURRENT_WEBPAGE_TOOL_NAME,
       description:
-        '读取当前内置 WebView 页面的标题、URL、可见文本、选中文本、标题结构、链接摘要、滚动状态和可操作元素索引。需要操作网页前必须先调用此工具获取 snapshotId 和元素 index。',
+        '读取当前内置 WebView 页面的标题、URL、页面位置提示、简化 DOM 结构、可见文本、选中文本、标题结构、链接摘要、滚动状态和可操作元素索引。需要操作网页前必须先调用此工具获取 snapshotId 和元素 index。',
       source: 'builtin',
       riskLevel: 'read',
       requiresActiveDocument: false,
@@ -747,7 +759,7 @@ export const TOOL_REGISTRY = [
       name: OPERATE_WEBPAGE_TOOL_NAME,
       description:
         '操作当前激活 WebView 页面。打开或切换网页可直接使用 navigate，无需 snapshotId；wait 以及点击、输入、选择、元素滚动必须先调用 read_current_webpage，元素动作还要使用返回的 index。' +
-        '支持 click、input、select、scroll、navigate、wait；打开或切换当前网页请使用 navigate；不接受 CSS selector 或任意 JavaScript。',
+        '支持 click、input、select、press、scroll、navigate、wait；搜索框输入后需要回车时使用 press Enter；打开或切换当前网页请使用 navigate；不接受 CSS selector 或任意 JavaScript。',
       source: 'builtin',
       riskLevel: 'write',
       requiresActiveDocument: false,

@@ -92,11 +92,13 @@ function createPageOperationExecutingWebview(snapshot: unknown): WebviewTag {
       Error,
       Event: window.Event,
       HTMLAnchorElement: window.HTMLAnchorElement,
+      HTMLFormElement: window.HTMLFormElement,
       HTMLInputElement: window.HTMLInputElement,
       HTMLElement: window.HTMLElement,
       HTMLSelectElement: window.HTMLSelectElement,
       HTMLTextAreaElement: window.HTMLTextAreaElement,
       InputEvent: window.InputEvent,
+      KeyboardEvent: window.KeyboardEvent,
       MouseEvent: window.MouseEvent,
       PointerEvent: window.PointerEvent,
       Promise
@@ -434,6 +436,93 @@ describe('useWebView', () => {
     ]);
   });
 
+  it('exposes non-semantic clickable webpage elements in snapshots', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <section>
+        <div id="doctor-card" class="doctor-card" data-testid="doctor-card" style="cursor: pointer;">预约专家</div>
+        <span id="plain-text">普通文本</span>
+      </section>
+    `;
+    const section = document.querySelector('section');
+    const card = document.querySelector('#doctor-card');
+    const plainText = document.querySelector('#plain-text');
+    if (!(section instanceof HTMLElement) || !(card instanceof HTMLElement) || !(plainText instanceof HTMLElement)) {
+      throw new Error('non-semantic clickable snapshot elements should exist');
+    }
+
+    installVisibleRect(section);
+    installVisibleRect(card);
+    installVisibleRect(plainText);
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([{ label: '预约专家', actions: ['click'] }]);
+    expect(snapshot.content).toContain('[1]<div');
+    expect(snapshot.content).toContain('class="doctor-card"');
+    expect(snapshot.content).toContain('data-testid="doctor-card"');
+    expect(snapshot.content).toContain('预约专家</div>');
+  });
+
+  it('returns simplified DOM browser state in webpage snapshots', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main id="register-page">
+        <h1>预约挂号</h1>
+        <form aria-label="搜索表单">
+          <input name="keyword" placeholder="医院名" value="眼科" />
+          <button type="submit" aria-label="搜索">搜索</button>
+        </form>
+        <div role="menuitem" aria-haspopup="menu">更多医院</div>
+      </main>
+    `;
+    const visibleElements = Array.from(document.querySelectorAll<HTMLElement>('main,h1,form,input,button,[role="menuitem"]'));
+    visibleElements.forEach((element) => installVisibleRect(element));
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.header).toContain('Page info:');
+    expect(snapshot.content).toContain('<h1>预约挂号</h1>');
+    expect(snapshot.content).toContain('[1]<input name="keyword" value="眼科" placeholder="医院名" />');
+    expect(snapshot.content).toContain('[2]<button type="submit" aria-label="搜索">搜索</button>');
+    expect(snapshot.content).toContain('[3]<div role="menuitem" aria-haspopup="menu">更多医院</div>');
+    expect(snapshot.footer.length).toBeGreaterThan(0);
+    expect(snapshot.truncated.content).toBe(false);
+  });
+
+  it('clicks non-semantic clickable webpage elements by index', async (): Promise<void> => {
+    document.body.innerHTML = '<div id="submit-card" style="cursor: pointer;">确认预约</div>';
+    const card = document.querySelector('#submit-card');
+    if (!(card instanceof HTMLElement)) {
+      throw new Error('non-semantic clickable operation element should exist');
+    }
+
+    let clickCount = 0;
+    card.addEventListener('click', () => {
+      clickCount += 1;
+    });
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(card);
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'DIV', text: '确认预约', label: '确认预约', disabled: false, isNew: false, actions: ['click'] }]
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
+
+    expect(clickCount).toBe(1);
+    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '确认预约', tagName: 'DIV' } });
+  });
+
   it('operates the current page using the active snapshot', async (): Promise<void> => {
     const webviewElement = createScriptableWebview([
       {
@@ -617,6 +706,51 @@ describe('useWebView', () => {
     expect(webviewElement.loadURL).toHaveBeenCalledWith('https://example.org/');
     expect(webviewElement.executeJavaScript).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ ok: true, action: 'navigate', pageChanged: true, shouldReadAgain: true });
+  });
+
+  it('presses Enter on an indexed input and submits the owning form', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <form id="search-form">
+        <input name="keyword" placeholder="搜索医院" />
+      </form>
+    `;
+    const input = document.querySelector('input');
+    const form = document.querySelector('form');
+    if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
+      throw new Error('press test form should exist');
+    }
+
+    const observedKeys: string[] = [];
+    let submitCount = 0;
+    input.addEventListener('keydown', (event) => observedKeys.push(`down:${event.key}`));
+    input.addEventListener('keypress', (event) => observedKeys.push(`press:${event.key}`));
+    input.addEventListener('keyup', (event) => observedKeys.push(`up:${event.key}`));
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitCount += 1;
+    });
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(form);
+    installVisibleRect(input);
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'INPUT', text: '', label: '搜索医院', disabled: false, isNew: false, actions: ['input'] }]
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'press', index: 1, key: 'Enter' } });
+
+    expect(observedKeys).toEqual(['down:Enter', 'press:Enter', 'up:Enter']);
+    expect(submitCount).toBe(1);
+    expect(result).toMatchObject({ ok: true, action: 'press', pageChanged: true, shouldReadAgain: true });
   });
 
   it('scrolls the ancestor that can move in the requested direction', async (): Promise<void> => {

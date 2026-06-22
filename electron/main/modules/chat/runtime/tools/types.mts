@@ -76,6 +76,12 @@ export interface RuntimeWebpageSnapshot {
   url: string;
   /** 页面标题。 */
   title: string;
+  /** 页面视口与滚动位置提示。 */
+  header: string;
+  /** LLM 可读的简化 DOM 结构。 */
+  content: string;
+  /** 页面底部与剩余滚动提示。 */
+  footer: string;
   /** 页面可见文本。 */
   text: string;
   /** 页面选中文本。 */

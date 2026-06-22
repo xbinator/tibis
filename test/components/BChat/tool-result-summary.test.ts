@@ -21,6 +21,35 @@ function successResult(toolName: string, data: Record<string, unknown>): AIToolE
 }
 
 describe('toolResultSummary open file metadata', (): void => {
+  it('summarizes read_current_webpage with simplified DOM metadata', (): void => {
+    const summary = getToolResultSummary(
+      'read_current_webpage',
+      successResult('read_current_webpage', {
+        url: 'https://example.com/register',
+        title: '挂号',
+        header: 'Page info: 800x600px [Start of page]',
+        content: '[1]<button>搜索</button>',
+        footer: '[End of page]',
+        text: '搜索',
+        selectedText: '',
+        headings: [{ level: 1, text: '挂号' }],
+        links: [],
+        capturedAt: 1,
+        truncated: { text: false, content: false, headings: false, links: false, selectedText: false }
+      })
+    );
+
+    expect(summary).toEqual({
+      text: '已读取网页: 挂号',
+      tags: [
+        { label: '网址', value: 'https://example.com/register' },
+        { label: '页面标题数', value: '1' },
+        { label: '页面链接数', value: '0' },
+        { label: '结构内容', value: '有' }
+      ]
+    });
+  });
+
   it('marks write_file file tag as openable when a file is created', (): void => {
     const summary = getToolResultSummary('write_file', successResult('write_file', { path: '/workspace/docs/report.md', content: '# Report', created: true }));
 
@@ -113,6 +142,29 @@ describe('toolResultSummary open file metadata', (): void => {
       tags: [
         { label: '动作', value: '点击' },
         { label: '目标', value: '#2 预约挂号' }
+      ]
+    });
+  });
+
+  it('summarizes operate_webpage press results with the target element', (): void => {
+    const summary = getToolResultSummary(
+      'operate_webpage',
+      successResult('operate_webpage', {
+        ok: true,
+        action: 'press',
+        target: { index: 1, label: '搜索医院', tagName: 'INPUT' },
+        message: 'executed',
+        navigationStarted: false,
+        pageChanged: true,
+        shouldReadAgain: true
+      })
+    );
+
+    expect(summary).toEqual({
+      text: '已按下网页按键',
+      tags: [
+        { label: '动作', value: '按键' },
+        { label: '目标', value: '#1 搜索医院' }
       ]
     });
   });

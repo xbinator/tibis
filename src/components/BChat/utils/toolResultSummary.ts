@@ -406,6 +406,7 @@ function hasTruncatedWebpageField(value: unknown): boolean {
 function summarizeReadCurrentWebpage(data: Record<string, unknown>): ToolResultSummary {
   const url = typeof data.url === 'string' ? data.url : '';
   const title = typeof data.title === 'string' ? data.title : '';
+  const content = typeof data.content === 'string' ? data.content : '';
   const selectedText = typeof data.selectedText === 'string' ? data.selectedText : '';
   const headings = Array.isArray(data.headings) ? data.headings : [];
   const links = Array.isArray(data.links) ? data.links : [];
@@ -417,6 +418,10 @@ function summarizeReadCurrentWebpage(data: Record<string, unknown>): ToolResultS
 
   tags.push({ label: '页面标题数', value: String(headings.length) });
   tags.push({ label: '页面链接数', value: String(links.length) });
+
+  if (content.trim()) {
+    tags.push({ label: '结构内容', value: '有' });
+  }
 
   if (selectedText.trim()) {
     tags.push({ label: '选中文本', value: '有' });
@@ -437,6 +442,7 @@ const WEBPAGE_ACTION_LABEL_MAP: Record<string, string> = {
   click: '点击',
   input: '输入',
   select: '选择',
+  press: '按键',
   scroll: '滚动',
   navigate: '导航',
   wait: '等待'
@@ -447,6 +453,7 @@ const WEBPAGE_ACTION_TEXT_MAP: Record<string, string> = {
   click: '已点击网页元素',
   input: '已输入网页内容',
   select: '已选择网页选项',
+  press: '已按下网页按键',
   scroll: '已滚动网页',
   navigate: '已打开网页',
   wait: '已等待网页更新'

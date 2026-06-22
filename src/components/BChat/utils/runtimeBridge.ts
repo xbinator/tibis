@@ -5,7 +5,7 @@
 import type { AIToolContext, AIToolExecutionError } from 'types/ai';
 import type { ChatRuntimeBridgeRequestEvent } from 'types/chat-runtime';
 import type { DrawingToolContext } from '@/ai/tools/context/drawing';
-import type { WebviewOperateInput, WebviewToolContext } from '@/ai/tools/context/webview';
+import type { WebviewOperateInput, WebviewPressKey, WebviewToolContext } from '@/ai/tools/context/webview';
 import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
 import type { DrawingData } from '@/components/BDrawing/types';
 import type { StoredFile } from '@/shared/storage/files/types';
@@ -166,6 +166,23 @@ function isWebviewScrollDirection(value: unknown): value is 'up' | 'down' | 'lef
 }
 
 /**
+ * 判断值是否为支持的网页按键。
+ * @param value - 待判断值
+ * @returns 是否为支持的网页按键
+ */
+function isWebviewPressKey(value: unknown): value is WebviewPressKey {
+  return (
+    value === 'Enter' ||
+    value === 'Tab' ||
+    value === 'Escape' ||
+    value === 'ArrowUp' ||
+    value === 'ArrowDown' ||
+    value === 'ArrowLeft' ||
+    value === 'ArrowRight'
+  );
+}
+
+/**
  * 判断值是否为 WebView 操作动作。
  * @param value - 待判断值
  * @returns 是否为 WebView 操作动作
@@ -185,6 +202,10 @@ function isWebviewOperateAction(value: unknown): value is WebviewOperateInput['a
 
   if (value.type === 'select') {
     return isFiniteNumber(value.index) && typeof value.optionText === 'string';
+  }
+
+  if (value.type === 'press') {
+    return isFiniteNumber(value.index) && isWebviewPressKey(value.key);
   }
 
   if (value.type === 'scroll') {

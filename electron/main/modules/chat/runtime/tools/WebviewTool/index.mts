@@ -23,6 +23,8 @@ interface WebviewActionSummary {
   optionText?: unknown;
   /** 滚动方向。 */
   direction?: unknown;
+  /** 模拟按键。 */
+  key?: unknown;
   /** 导航地址。 */
   url?: unknown;
 }
@@ -68,6 +70,7 @@ function readOperateSummary(input: unknown): WebviewOperateSummary {
       text: input.action.text,
       optionText: input.action.optionText,
       direction: input.action.direction,
+      key: input.action.key,
       url: input.action.url
     }
   };
@@ -85,6 +88,7 @@ function createOperateConfirmationDescription(input: unknown): string {
   if (action.type === 'click') return `点击当前网页元素 #${String(action.index ?? '')}`;
   if (action.type === 'input') return `向当前网页元素 #${String(action.index ?? '')} 输入文本：${String(action.text ?? '')}`;
   if (action.type === 'select') return `在当前网页元素 #${String(action.index ?? '')} 选择：${String(action.optionText ?? '')}`;
+  if (action.type === 'press') return `在当前网页元素 #${String(action.index ?? '')} 按下：${String(action.key ?? '')}`;
   if (action.type === 'scroll') return `滚动当前网页：${String(action.direction ?? '')}`;
   if (action.type === 'navigate') return `在当前 WebView 中打开：${String(action.url ?? '')}`;
   if (action.type === 'wait') return '等待当前网页状态更新。';

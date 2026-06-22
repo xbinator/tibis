@@ -29,6 +29,8 @@ export interface WebviewPageLink {
 export interface WebviewPageTruncation {
   /** 正文是否被截断。 */
   text: boolean;
+  /** 简化 DOM 内容是否被截断。 */
+  content: boolean;
   /** 标题列表是否被截断。 */
   headings: boolean;
   /** 链接列表是否被截断。 */
@@ -62,7 +64,12 @@ export interface WebviewPageScrollState {
 /**
  * WebView Agent 元素动作。
  */
-export type WebviewAgentElementAction = 'click' | 'input' | 'select' | 'scroll';
+export type WebviewAgentElementAction = 'click' | 'input' | 'select' | 'press' | 'scroll';
+
+/**
+ * WebView 可模拟的按键。
+ */
+export type WebviewPressKey = 'Enter' | 'Tab' | 'Escape' | 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
 
 /**
  * WebView Agent 可交互元素。
@@ -106,6 +113,12 @@ export interface WebviewPageSnapshot {
   url: string;
   /** 页面标题。 */
   title: string;
+  /** 页面视口与滚动位置提示。 */
+  header: string;
+  /** LLM 可读的简化 DOM 结构。 */
+  content: string;
+  /** 页面底部与剩余滚动提示。 */
+  footer: string;
   /** 可见正文。 */
   text: string;
   /** 当前页面选中文本。 */
@@ -135,6 +148,7 @@ export type WebviewOperateAction =
   | { type: 'click'; index: number }
   | { type: 'input'; index: number; text: string; clear?: boolean }
   | { type: 'select'; index: number; optionText: string }
+  | { type: 'press'; index: number; key: WebviewPressKey }
   | { type: 'scroll'; index?: number; direction: 'up' | 'down' | 'left' | 'right'; pixels?: number }
   | { type: 'navigate'; url: string }
   | { type: 'wait'; seconds?: number };

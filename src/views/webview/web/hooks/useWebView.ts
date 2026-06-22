@@ -134,6 +134,12 @@ interface ActiveWebviewSnapshot {
 }
 
 /**
+ * 页面脚本原始快照，允许旧脚本缺省 BrowserState 三段式字段。
+ */
+type RawWebviewPageSnapshot = Omit<WebviewPageSnapshot, 'capturedAt' | 'truncated' | 'header' | 'content' | 'footer'> &
+  Partial<Pick<WebviewPageSnapshot, 'header' | 'content' | 'footer'>>;
+
+/**
  * 判断事件是否包含 WebView console message。
  * @param event - 待判断的事件对象
  * @returns 是否包含可解析的 message
@@ -144,6 +150,8 @@ function isWebviewConsoleMessageEvent(event: Event | WebviewConsoleMessageEvent)
 
 /** 页面正文最大字符数。 */
 export const WEBVIEW_PAGE_TEXT_LIMIT = 20000;
+/** 页面简化 DOM 最大字符数。 */
+export const WEBVIEW_PAGE_CONTENT_LIMIT = 24000;
 /** 页面标题最大数量。 */
 export const WEBVIEW_PAGE_HEADING_LIMIT = 120;
 /** 页面链接最大数量。 */
@@ -379,7 +387,7 @@ function normalizeAgentElements(elements: WebviewAgentElement[] | undefined): We
     ...(typeof element.checked === 'boolean' ? { checked: element.checked } : {}),
     ...(typeof element.selected === 'boolean' ? { selected: element.selected } : {}),
     isNew: element.isNew,
-    actions: element.actions.filter((action) => action === 'click' || action === 'input' || action === 'select' || action === 'scroll')
+    actions: element.actions.filter((action) => action === 'click' || action === 'input' || action === 'select' || action === 'press' || action === 'scroll')
   }));
 }
 
@@ -417,7 +425,7 @@ function createPublicWebviewPageSnapshot(snapshot: WebviewPageSnapshot): Webview
  * @param value - 待判断的值
  * @returns 是否为页面快照
  */
-export function isWebviewPageSnapshot(value: unknown): value is Omit<WebviewPageSnapshot, 'capturedAt' | 'truncated'> {
+export function isWebviewPageSnapshot(value: unknown): value is RawWebviewPageSnapshot {
   if (!value || typeof value !== 'object') {
     return false;
   }
@@ -426,6 +434,9 @@ export function isWebviewPageSnapshot(value: unknown): value is Omit<WebviewPage
   return (
     typeof snapshot.url === 'string' &&
     typeof snapshot.title === 'string' &&
+    (snapshot.header === undefined || typeof snapshot.header === 'string') &&
+    (snapshot.content === undefined || typeof snapshot.content === 'string') &&
+    (snapshot.footer === undefined || typeof snapshot.footer === 'string') &&
     typeof snapshot.text === 'string' &&
     typeof snapshot.selectedText === 'string' &&
     isHeadingArray(snapshot.headings) &&
@@ -439,8 +450,9 @@ export function isWebviewPageSnapshot(value: unknown): value is Omit<WebviewPage
  * @param value - 页面脚本返回值
  * @returns 带截断标记的页面快照
  */
-export function normalizeWebviewPageSnapshot(value: Omit<WebviewPageSnapshot, 'capturedAt' | 'truncated'>): WebviewPageSnapshot {
+export function normalizeWebviewPageSnapshot(value: RawWebviewPageSnapshot): WebviewPageSnapshot {
   const text = truncateText(value.text, WEBVIEW_PAGE_TEXT_LIMIT);
+  const content = truncateText(value.content || '', WEBVIEW_PAGE_CONTENT_LIMIT);
   const selectedText = truncateText(value.selectedText, WEBVIEW_PAGE_SELECTED_TEXT_LIMIT);
   const headings = value.headings.slice(0, WEBVIEW_PAGE_HEADING_LIMIT).map((heading) => ({
     level: heading.level,
@@ -452,6 +464,7 @@ export function normalizeWebviewPageSnapshot(value: Omit<WebviewPageSnapshot, 'c
   }));
   const truncated: WebviewPageTruncation = {
     text: text.truncated,
+    content: content.truncated,
     headings: value.headings.length > WEBVIEW_PAGE_HEADING_LIMIT,
     links: value.links.length > WEBVIEW_PAGE_LINK_LIMIT,
     selectedText: selectedText.truncated
@@ -460,6 +473,9 @@ export function normalizeWebviewPageSnapshot(value: Omit<WebviewPageSnapshot, 'c
   return {
     url: value.url,
     title: value.title,
+    header: value.header || '',
+    content: content.value,
+    footer: value.footer || '',
     text: text.value,
     selectedText: selectedText.value,
     headings,
@@ -599,6 +615,8 @@ function createPageSnapshotScript(): string {
   return `
 (() => {
   const readText = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+  const escapeText = (value) => readText(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const escapeAttribute = (value) => escapeText(value).replace(/"/g, '&quot;');
   const interactiveSelector = [
     'button',
     'a[href]',
@@ -615,6 +633,36 @@ function createPageSnapshotScript(): string {
     '[role="menuitem"]',
     '[tabindex]'
   ].join(',');
+  const clickableHintSelector = [
+    '[onclick]',
+    '[data-action]',
+    '[data-ai-action]',
+    '[data-click]',
+    '[data-command]',
+    '[data-href]',
+    '[style*="cursor"]',
+    '[class*="btn"]',
+    '[class*="Btn"]',
+    '[class*="button"]',
+    '[class*="Button"]',
+    '[class*="click"]',
+    '[class*="Click"]',
+    '[class*="card"]',
+    '[class*="Card"]',
+    '[class*="item"]',
+    '[class*="Item"]',
+    '[class*="row"]',
+    '[class*="Row"]',
+    '[class*="cell"]',
+    '[class*="Cell"]',
+    '[class*="option"]',
+    '[class*="Option"]',
+    '[class*="tab"]',
+    '[class*="Tab"]',
+    '[class*="link"]',
+    '[class*="Link"]'
+  ].join(',');
+  const actionableCandidateSelector = [interactiveSelector, clickableHintSelector].join(',');
   const isVisible = (element) => {
     if (!(element instanceof HTMLElement)) return false;
     const rect = element.getBoundingClientRect();
@@ -630,8 +678,17 @@ function createPageSnapshotScript(): string {
     element.textContent ||
     element.getAttribute('value')
   );
+  const readClassName = (element) => typeof element.className === 'string' ? element.className : '';
   const readFingerprint = (element) => [
     element.tagName,
+    element.id || '',
+    readClassName(element),
+    element.getAttribute('data-testid') || '',
+    element.getAttribute('data-test') || '',
+    element.getAttribute('data-cy') || '',
+    element.getAttribute('data-id') || '',
+    element.getAttribute('data-action') || '',
+    element.getAttribute('data-ai-action') || '',
     element.getAttribute('role') || '',
     element.getAttribute('type') || '',
     element.getAttribute('name') || '',
@@ -655,10 +712,21 @@ function createPageSnapshotScript(): string {
     }
     return false;
   };
+  const hasDirectClickHandler = (element) => typeof element.onclick === 'function' || element.hasAttribute('onclick');
+  const hasPointerCursor = (element) => window.getComputedStyle(element).cursor === 'pointer';
+  const hasActionDataAttribute = (element) =>
+    ['data-action', 'data-ai-action', 'data-click', 'data-command', 'data-href'].some((name) => element.hasAttribute(name));
+  const hasClickableClass = (element) =>
+    /(^|[-_\\s])(btn|button|click|clickable|card|item|row|cell|option|tab|menuitem|link)([-_\\s]|$)/i.test(readClassName(element));
+  const hasNonSemanticClickHint = (element) => {
+    if (!readLabel(element)) return false;
+    return hasDirectClickHandler(element) || hasPointerCursor(element) || hasActionDataAttribute(element) || hasClickableClass(element);
+  };
   const readActions = (element) => {
     const tagName = element.tagName.toLowerCase();
     const role = element.getAttribute('role') || '';
     const clickableRoles = ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'];
+    const keyboardTags = ['input', 'textarea', 'select'];
     const actions = [];
     if (element instanceof HTMLInputElement) {
       const inputType = String(element.type || 'text').toLowerCase();
@@ -672,6 +740,8 @@ function createPageSnapshotScript(): string {
     }
     if (tagName === 'select') actions.push('select');
     if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || clickableRoles.includes(role)) actions.push('click');
+    if (hasNonSemanticClickHint(element)) actions.push('click');
+    if (keyboardTags.includes(tagName) || element.isContentEditable) actions.push('press');
     if (hasScrollableAncestor(element)) actions.push('scroll');
     return Array.from(new Set(actions));
   };
@@ -680,11 +750,152 @@ function createPageSnapshotScript(): string {
     if (element.type === 'password' || element.type === 'hidden') return undefined;
     return readText(element.value).slice(0, 300);
   };
-  const elements = Array.from(document.querySelectorAll(interactiveSelector))
+  const elementEntries = Array.from(document.querySelectorAll(actionableCandidateSelector))
     .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
     .map((element) => ({ element, actions: readActions(element) }))
     .filter((item) => item.actions.length > 0)
-    .slice(0, ${WEBVIEW_PAGE_ELEMENT_LIMIT})
+    .slice(0, ${WEBVIEW_PAGE_ELEMENT_LIMIT});
+  const elementIndexMap = new Map(elementEntries.map((item, index) => [item.element, index + 1]));
+  const readSerializableAttribute = (element, name) => {
+    if (name === 'checked' && element instanceof HTMLInputElement) return element.checked ? 'true' : '';
+    if (name === 'value') return readValuePreview(element) || '';
+    const value = element.getAttribute(name);
+    return value === null ? '' : readText(value);
+  };
+  const readSerializedAttributes = (element) => {
+    const attributeNames = [
+      'title',
+      'type',
+      'checked',
+      'name',
+      'role',
+      'value',
+      'placeholder',
+      'aria-label',
+      'aria-expanded',
+      'aria-checked',
+      'data-state',
+      'aria-haspopup',
+      'aria-controls',
+      'aria-owns',
+      'contenteditable',
+      'id',
+      'class',
+      'data-testid',
+      'data-test',
+      'data-cy',
+      'data-id',
+      'data-action',
+      'data-ai-action',
+      'data-click',
+      'data-command',
+      'data-href',
+      'for',
+      'target',
+      'alt',
+      'data-date-format'
+    ];
+    const seenValues = new Set();
+    const preserveDuplicateAttributeNames = new Set([
+      'class',
+      'data-testid',
+      'data-test',
+      'data-cy',
+      'data-id',
+      'data-action',
+      'data-ai-action',
+      'data-click',
+      'data-command',
+      'data-href'
+    ]);
+    return attributeNames
+      .map((name) => {
+        const value = readSerializableAttribute(element, name);
+        if (!value) return '';
+        const tagName = element.tagName.toLowerCase();
+        if (name === 'role' && value.toLowerCase() === tagName) return '';
+        const shouldDedupe = !preserveDuplicateAttributeNames.has(name);
+        if (shouldDedupe && value.length > 5 && seenValues.has(value)) return '';
+        if (shouldDedupe && value.length > 5) seenValues.add(value);
+        return name + '="' + escapeAttribute(value).slice(0, 200) + '"';
+      })
+      .filter(Boolean)
+      .join(' ');
+  };
+  const readDirectText = (element) =>
+    Array.from(element.childNodes)
+      .filter((node) => node.nodeType === 3)
+      .map((node) => node.textContent || '')
+      .join(' ');
+  const semanticTags = new Set([
+    'main',
+    'nav',
+    'menu',
+    'header',
+    'footer',
+    'section',
+    'article',
+    'aside',
+    'form',
+    'label',
+    'ul',
+    'ol',
+    'li',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'td',
+    'th',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6'
+  ]);
+  const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+  const isHiddenForSnapshot = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    if (['script', 'style', 'template', 'noscript'].includes(tagName)) return true;
+    const style = window.getComputedStyle(element);
+    return style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0;
+  };
+  const createSimplifiedLine = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    const index = elementIndexMap.get(element);
+    const directText = readText(readDirectText(element));
+    const label = index ? readLabel(element) : '';
+    const text = (directText || label).slice(0, 240);
+    if (!index && !text && !semanticTags.has(tagName)) return { line: '', hasText: false };
+    const attrs = readSerializedAttributes(element);
+    const openTag = '<' + tagName + (attrs ? ' ' + attrs : '') + '>';
+    const prefix = index ? '[' + index + ']' : '';
+    if (voidTags.has(tagName)) {
+      return { line: prefix + '<' + tagName + (attrs ? ' ' + attrs : '') + ' />', hasText: false };
+    }
+    return { line: prefix + openTag + escapeText(text) + '</' + tagName + '>', hasText: Boolean(text) };
+  };
+  const simplifiedLines = [];
+  const appendSimplifiedNode = (node, depth) => {
+    if (simplifiedLines.length >= 260) return;
+    if (node.nodeType === 3) {
+      const text = escapeText(node.textContent || '');
+      if (text) simplifiedLines.push('\\t'.repeat(Math.min(depth, 6)) + text.slice(0, 240));
+      return;
+    }
+    if (!(node instanceof HTMLElement) || isHiddenForSnapshot(node)) return;
+    const { line, hasText } = createSimplifiedLine(node);
+    const nextDepth = line ? depth + 1 : depth;
+    if (line) simplifiedLines.push('\\t'.repeat(Math.min(depth, 6)) + line);
+    Array.from(node.childNodes).forEach((child) => {
+      if (hasText && child.nodeType === 3) return;
+      appendSimplifiedNode(child, nextDepth);
+    });
+  };
+  if (document.body) appendSimplifiedNode(document.body, 0);
+  const content = simplifiedLines.length ? simplifiedLines.join('\\n') : '<EMPTY>';
+  const elements = elementEntries
     .map(({ element, actions }, index) => {
       const input = element instanceof HTMLInputElement ? element : null;
       const option = element instanceof HTMLOptionElement ? element : null;
@@ -709,6 +920,23 @@ function createPageSnapshotScript(): string {
   const scrollY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
   const scrollWidth = Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0, window.innerWidth);
   const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, window.innerHeight);
+  const remainingBottom = Math.max(scrollHeight - (scrollY + window.innerHeight), 0);
+  const header = [
+    'Page info: ',
+    window.innerWidth,
+    'x',
+    window.innerHeight,
+    'px, scroll ',
+    Math.round(scrollX),
+    ',',
+    Math.round(scrollY),
+    ' of ',
+    Math.round(scrollWidth),
+    'x',
+    Math.round(scrollHeight),
+    scrollY <= 0 ? ' [Start of page]' : ''
+  ].join('');
+  const footer = remainingBottom <= 2 ? '[End of page]' : '... ' + Math.round(remainingBottom) + ' pixels below ...';
   const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6')).map((element) => ({
     level: Number(element.tagName.slice(1)),
     text: readText(element.innerText || element.textContent)
@@ -721,6 +949,9 @@ function createPageSnapshotScript(): string {
   return {
     url: location.href,
     title: document.title || '',
+    header,
+    content,
+    footer,
     text: readText(document.body ? document.body.innerText : ''),
     selectedText: readText(window.getSelection ? window.getSelection().toString() : ''),
     headings,
@@ -772,6 +1003,36 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     '[role="menuitem"]',
     '[tabindex]'
   ].join(',');
+  const clickableHintSelector = [
+    '[onclick]',
+    '[data-action]',
+    '[data-ai-action]',
+    '[data-click]',
+    '[data-command]',
+    '[data-href]',
+    '[style*="cursor"]',
+    '[class*="btn"]',
+    '[class*="Btn"]',
+    '[class*="button"]',
+    '[class*="Button"]',
+    '[class*="click"]',
+    '[class*="Click"]',
+    '[class*="card"]',
+    '[class*="Card"]',
+    '[class*="item"]',
+    '[class*="Item"]',
+    '[class*="row"]',
+    '[class*="Row"]',
+    '[class*="cell"]',
+    '[class*="Cell"]',
+    '[class*="option"]',
+    '[class*="Option"]',
+    '[class*="tab"]',
+    '[class*="Tab"]',
+    '[class*="link"]',
+    '[class*="Link"]'
+  ].join(',');
+  const actionableCandidateSelector = [interactiveSelector, clickableHintSelector].join(',');
   const isVisible = (element) => {
     if (!(element instanceof HTMLElement)) return false;
     const rect = element.getBoundingClientRect();
@@ -787,8 +1048,17 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     element.textContent ||
     element.getAttribute('value')
   );
+  const readClassName = (element) => typeof element.className === 'string' ? element.className : '';
   const readFingerprint = (element) => [
     element.tagName,
+    element.id || '',
+    readClassName(element),
+    element.getAttribute('data-testid') || '',
+    element.getAttribute('data-test') || '',
+    element.getAttribute('data-cy') || '',
+    element.getAttribute('data-id') || '',
+    element.getAttribute('data-action') || '',
+    element.getAttribute('data-ai-action') || '',
     element.getAttribute('role') || '',
     element.getAttribute('type') || '',
     element.getAttribute('name') || '',
@@ -821,10 +1091,21 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     }
     return false;
   };
+  const hasDirectClickHandler = (element) => typeof element.onclick === 'function' || element.hasAttribute('onclick');
+  const hasPointerCursor = (element) => window.getComputedStyle(element).cursor === 'pointer';
+  const hasActionDataAttribute = (element) =>
+    ['data-action', 'data-ai-action', 'data-click', 'data-command', 'data-href'].some((name) => element.hasAttribute(name));
+  const hasClickableClass = (element) =>
+    /(^|[-_\\s])(btn|button|click|clickable|card|item|row|cell|option|tab|menuitem|link)([-_\\s]|$)/i.test(readClassName(element));
+  const hasNonSemanticClickHint = (element) => {
+    if (!readLabel(element)) return false;
+    return hasDirectClickHandler(element) || hasPointerCursor(element) || hasActionDataAttribute(element) || hasClickableClass(element);
+  };
   const readActions = (element) => {
     const tagName = element.tagName.toLowerCase();
     const role = element.getAttribute('role') || '';
     const clickableRoles = ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'];
+    const keyboardTags = ['input', 'textarea', 'select'];
     const actions = [];
     if (element instanceof HTMLInputElement) {
       const inputType = String(element.type || 'text').toLowerCase();
@@ -838,10 +1119,12 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     }
     if (tagName === 'select') actions.push('select');
     if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || clickableRoles.includes(role)) actions.push('click');
+    if (hasNonSemanticClickHint(element)) actions.push('click');
+    if (keyboardTags.includes(tagName) || element.isContentEditable) actions.push('press');
     if (hasScrollableAncestor(element)) actions.push('scroll');
     return Array.from(new Set(actions));
   };
-  const elements = Array.from(document.querySelectorAll(interactiveSelector))
+  const elements = Array.from(document.querySelectorAll(actionableCandidateSelector))
     .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
     .map((element) => ({ element, actions: readActions(element) }))
     .filter((item) => item.actions.length > 0)
@@ -895,6 +1178,47 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
       after,
       changed: before.x !== after.x || before.y !== after.y
     };
+  };
+  const pressKeyMap = {
+    Enter: { code: 'Enter', keyCode: 13 },
+    Tab: { code: 'Tab', keyCode: 9 },
+    Escape: { code: 'Escape', keyCode: 27 },
+    ArrowUp: { code: 'ArrowUp', keyCode: 38 },
+    ArrowDown: { code: 'ArrowDown', keyCode: 40 },
+    ArrowLeft: { code: 'ArrowLeft', keyCode: 37 },
+    ArrowRight: { code: 'ArrowRight', keyCode: 39 }
+  };
+  const isPressKey = (key) => Object.prototype.hasOwnProperty.call(pressKeyMap, key);
+  const dispatchKeyboardEvent = (target, type, key) => {
+    const meta = pressKeyMap[key];
+    const event = new KeyboardEvent(type, {
+      key,
+      code: meta.code,
+      keyCode: meta.keyCode,
+      which: meta.keyCode,
+      bubbles: true,
+      cancelable: true,
+      composed: true
+    });
+    return target.dispatchEvent(event);
+  };
+  const submitClosestFormForEnter = (target) => {
+    if (!(target instanceof HTMLElement)) return false;
+    const form = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement
+      ? target.form
+      : target.closest('form');
+    if (!(form instanceof HTMLFormElement)) return false;
+    return form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) === false;
+  };
+  const pressTarget = (target, key) => {
+    if (!isPressKey(key)) throw new Error('INVALID_INPUT');
+    target.focus({ preventScroll: true });
+    const keydownAllowed = dispatchKeyboardEvent(target, 'keydown', key);
+    const shouldSendKeypress = key === 'Enter';
+    const keypressAllowed = shouldSendKeypress ? dispatchKeyboardEvent(target, 'keypress', key) : true;
+    const submitted = key === 'Enter' && keydownAllowed && keypressAllowed ? submitClosestFormForEnter(target) : false;
+    dispatchKeyboardEvent(target, 'keyup', key);
+    return { submitted };
   };
   const readWaitSeconds = (value) => {
     const seconds = Number(value);
@@ -976,6 +1300,9 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     if (matches.length < 1) throw new Error('ELEMENT_NOT_FOUND');
     element.value = matches[0].value;
     element.dispatchEvent(new Event('change', { bubbles: true }));
+  } else if (action.type === 'press') {
+    if (typeof action.key !== 'string') throw new Error('INVALID_INPUT');
+    pressTarget(element, action.key);
   } else if (action.type === 'scroll') {
     if (!isScrollDirection(action.direction)) throw new Error('INVALID_INPUT');
     const target = findScrollableAncestor(element, action.direction);

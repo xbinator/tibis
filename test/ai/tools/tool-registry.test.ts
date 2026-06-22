@@ -68,6 +68,17 @@ describe('toolRegistry', (): void => {
     expect(String(openResourceDefinition?.description)).toContain('没有激活 WebView');
   });
 
+  it('exposes operate_webpage press action in the public schema', (): void => {
+    const operateDefinition = getToolDefinitionByName(OPERATE_WEBPAGE_TOOL_NAME);
+    const actionSchema = operateDefinition?.parameters.properties.action as {
+      oneOf?: Array<{ properties?: { type?: { enum?: string[] }; key?: { enum?: string[] } } }>;
+    };
+    const pressSchema = actionSchema.oneOf?.find((schema) => schema.properties?.type?.enum?.includes('press'));
+
+    expect(pressSchema?.properties?.key?.enum).toEqual(expect.arrayContaining(['Enter']));
+    expect(String(operateDefinition?.description)).toContain('press');
+  });
+
   it('allows operate_webpage navigate without a snapshot id in the public schema', (): void => {
     const operateDefinition = getToolDefinitionByName(OPERATE_WEBPAGE_TOOL_NAME);
     const snapshotIdSchema = operateDefinition?.parameters.properties.snapshotId as { description?: string } | undefined;
