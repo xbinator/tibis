@@ -74,6 +74,10 @@ export interface WebviewElementSelection {
     x: number;
     /** 纵向位置 */
     y: number;
+    /** 元素在页面中的横向位置 */
+    pageX?: number;
+    /** 元素在页面中的纵向位置 */
+    pageY?: number;
     /** 宽度 */
     width: number;
     /** 高度 */

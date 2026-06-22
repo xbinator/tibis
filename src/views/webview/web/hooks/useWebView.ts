@@ -291,7 +291,7 @@ function createPageSnapshotScript(): string {
  * @param theme - 元素选择器主题
  * @returns 可通过 `executeJavaScript` 执行的脚本
  */
-function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT_ELEMENT_PICKER_THEME): string {
+export function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT_ELEMENT_PICKER_THEME): string {
   const borderStyle = JSON.stringify(`border:2px solid ${theme.color || DEFAULT_ELEMENT_PICKER_THEME.color};`);
   const backgroundStyle = JSON.stringify(`background:${theme.background || DEFAULT_ELEMENT_PICKER_THEME.background};`);
   const messagePrefix = JSON.stringify(ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX);
@@ -347,13 +347,51 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
     return value.replace(/[^a-zA-Z0-9_-]/g, '\\\\$&');
   };
 
-  const buildSelector = (element) => {
+  const buildSimpleSelector = (element) => {
     if (element.id) {
       return element.tagName.toLowerCase() + '#' + escapeCss(element.id);
     }
 
     const classes = Array.from(element.classList).slice(0, 3).map((className) => '.' + escapeCss(className)).join('');
     return element.tagName.toLowerCase() + classes;
+  };
+
+  const buildSelectorSegment = (element) => {
+    const simpleSelector = buildSimpleSelector(element);
+    if (element.id || !element.parentElement) {
+      return simpleSelector;
+    }
+
+    const sameTagSiblings = Array.from(element.parentElement.children).filter((child) => child.tagName === element.tagName);
+    const siblingIndex = sameTagSiblings.indexOf(element) + 1;
+
+    return simpleSelector + ':nth-of-type(' + siblingIndex + ')';
+  };
+
+  const buildSelector = (element) => {
+    const segments = [];
+    let current = element;
+
+    while (current && current instanceof Element) {
+      segments.unshift(buildSelectorSegment(current));
+      const candidate = segments.join(' > ');
+
+      try {
+        if (document.querySelectorAll(candidate).length === 1) {
+          return candidate;
+        }
+      } catch {
+        return buildSimpleSelector(element);
+      }
+
+      if (current === document.documentElement) {
+        return candidate;
+      }
+
+      current = current.parentElement;
+    }
+
+    return buildSimpleSelector(element);
   };
 
   const cleanup = () => {
@@ -439,6 +477,8 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
 
   const readElement = (element) => {
     const rect = element.getBoundingClientRect();
+    const scrollLeft = window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+    const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
     return {
       tagName: element.tagName,
       id: element.id || '',
@@ -452,6 +492,8 @@ function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT
       rect: {
         x: rect.x,
         y: rect.y,
+        pageX: scrollLeft + rect.x,
+        pageY: scrollTop + rect.y,
         width: rect.width,
         height: rect.height
       }

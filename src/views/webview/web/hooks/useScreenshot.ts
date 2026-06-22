@@ -6,10 +6,16 @@ import type { WebviewTag } from 'electron';
 import type { Ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { native } from '@/shared/platform';
-import type { WebviewPageState } from '@/views/webview/shared/types';
+import type { WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
 import {
   buildFixedElementOverlayCaptures,
   buildPageCaptureSlices,
+  createElementCaptureCleanupScript,
+  createElementCaptureMetricsScript,
+  createElementCaptureObstructionVisibilityScript,
+  createElementCaptureRectScript,
+  createElementCaptureScrollScript,
+  createElementPickerLayerVisibilityScript,
   createFixedElementCaptureCleanupScript,
   createFixedElementCaptureSetupScript,
   createFixedElementVisibilityScript,
@@ -17,8 +23,11 @@ import {
   createPageScrollScript,
   createPngBlob,
   createVisiblePositionedElementSnapshotScript,
+  isWebviewElementCaptureMetrics,
+  isWebviewElementCaptureRect,
   isWebviewFixedElementSnapshotArray,
   isWebviewPageCaptureMetrics,
+  type WebviewElementCaptureRect,
   type WebviewFixedElementOverlayCapture,
   type WebviewFixedElementSnapshot,
   type WebviewPageCaptureMetrics,
@@ -48,6 +57,42 @@ interface RenderedCaptureSlice {
   slice: WebviewPageCaptureSlice;
   /** 可绘制图片 */
   image: HTMLImageElement;
+}
+
+/**
+ * 选中元素某个轴向上的截图切片。
+ */
+interface ElementCaptureAxisSegment {
+  /** 采样前滚动位置 */
+  scrollOffset: number;
+  /** 当前截图中的源起点 */
+  sourceOffset: number;
+  /** 最终元素截图中的目标起点 */
+  targetOffset: number;
+  /** 当前切片长度 */
+  length: number;
+}
+
+/**
+ * 选中元素截图切片。
+ */
+interface ElementCaptureSegment {
+  /** 横向滚动位置 */
+  scrollLeft: number;
+  /** 纵向滚动位置 */
+  scrollTop: number;
+  /** 当前视口截图中的横向源起点 */
+  sourceX: number;
+  /** 当前视口截图中的纵向源起点 */
+  sourceY: number;
+  /** 最终元素截图中的横向目标起点 */
+  targetX: number;
+  /** 最终元素截图中的纵向目标起点 */
+  targetY: number;
+  /** 当前切片宽度 */
+  width: number;
+  /** 当前切片高度 */
+  height: number;
 }
 
 /**
@@ -81,6 +126,202 @@ async function readPageCaptureMetrics(element: WebviewTag): Promise<WebviewPageC
   }
 
   return metrics;
+}
+
+/**
+ * 判断选择结果是否包含选择时缓存的页面坐标。
+ * @param selection - 当前选中元素
+ * @returns 是否包含可用于 fallback 的页面坐标
+ */
+function hasCachedElementPageRect(
+  selection: WebviewElementSelection
+): selection is WebviewElementSelection & { rect: WebviewElementSelection['rect'] & { pageX: number; pageY: number } } {
+  return (
+    typeof selection.rect.pageX === 'number' &&
+    Number.isFinite(selection.rect.pageX) &&
+    typeof selection.rect.pageY === 'number' &&
+    Number.isFinite(selection.rect.pageY)
+  );
+}
+
+/**
+ * 读取元素截图所需的页面指标。
+ * @param element - `<webview>` 实例
+ * @returns 页面与视口指标
+ */
+async function readElementCaptureMetrics(element: WebviewTag): Promise<Omit<WebviewElementCaptureRect, 'pageX' | 'pageY' | 'width' | 'height'>> {
+  const metrics = (await element.executeJavaScript(createElementCaptureMetricsScript())) as unknown;
+
+  if (!isWebviewElementCaptureMetrics(metrics)) {
+    throw new Error('读取页面截图指标失败');
+  }
+
+  return metrics;
+}
+
+/**
+ * 从选择时缓存的页面坐标恢复元素截图区域。
+ * @param element - `<webview>` 实例
+ * @param selection - 当前选中元素
+ * @returns 元素当前可截图区域
+ */
+async function readCachedElementCaptureRect(element: WebviewTag, selection: WebviewElementSelection): Promise<WebviewElementCaptureRect> {
+  if (!hasCachedElementPageRect(selection)) {
+    throw new Error('读取选中元素位置失败');
+  }
+
+  const metrics = await readElementCaptureMetrics(element);
+  return {
+    pageX: selection.rect.pageX,
+    pageY: selection.rect.pageY,
+    width: selection.rect.width,
+    height: selection.rect.height,
+    ...metrics
+  };
+}
+
+/**
+ * 将元素截图区域裁剪到页面实际可截图边界内。
+ * @param rect - 元素完整截图区域
+ * @returns 页面实际可采样的元素区域
+ */
+function clampElementCaptureRect(rect: WebviewElementCaptureRect): WebviewElementCaptureRect {
+  if (rect.isViewportAnchored) {
+    const visibleLeft = Math.max(0, rect.pageX);
+    const visibleTop = Math.max(0, rect.pageY);
+    const visibleRight = Math.min(rect.captureViewportWidth, rect.pageX + rect.width);
+    const visibleBottom = Math.min(rect.captureViewportHeight, rect.pageY + rect.height);
+    const width = Math.max(0, visibleRight - visibleLeft);
+    const height = Math.max(0, visibleBottom - visibleTop);
+
+    if (width <= 0 || height <= 0) {
+      throw new Error('选中的元素不在当前页面可截图范围内');
+    }
+
+    return {
+      ...rect,
+      pageX: visibleLeft,
+      pageY: visibleTop,
+      width,
+      height
+    };
+  }
+
+  const maxCapturableX = rect.maxScrollLeft + rect.viewportWidth;
+  const maxCapturableY = rect.maxScrollTop + rect.viewportHeight;
+  const width = Math.max(0, Math.min(rect.width, maxCapturableX - rect.pageX));
+  const height = Math.max(0, Math.min(rect.height, maxCapturableY - rect.pageY));
+
+  if (width <= 0 || height <= 0) {
+    throw new Error('选中的元素不在当前页面可截图范围内');
+  }
+
+  return {
+    ...rect,
+    width,
+    height
+  };
+}
+
+/**
+ * 按某个轴向构建覆盖元素完整范围的截图切片。
+ * @param start - 元素在页面中的轴向起点
+ * @param length - 元素轴向长度
+ * @param viewportLength - 视口轴向长度
+ * @param maxScrollOffset - 页面最大滚动距离
+ * @returns 轴向截图切片
+ */
+function buildElementCaptureAxisSegments(start: number, length: number, viewportLength: number, maxScrollOffset: number): ElementCaptureAxisSegment[] {
+  const normalizedStart = Math.max(0, Math.floor(start));
+  const normalizedLength = Math.max(1, Math.ceil(length));
+  const normalizedViewportLength = Math.max(1, Math.floor(viewportLength));
+  const normalizedMaxScrollOffset = Math.max(0, Math.floor(maxScrollOffset));
+  const segments: ElementCaptureAxisSegment[] = [];
+  let capturedLength = 0;
+
+  while (capturedLength < normalizedLength) {
+    const pageOffset = normalizedStart + capturedLength;
+    const scrollOffset = Math.min(Math.max(pageOffset, 0), normalizedMaxScrollOffset);
+    const sourceOffset = Math.max(0, pageOffset - scrollOffset);
+    const availableLength = Math.min(normalizedViewportLength - sourceOffset, normalizedLength - capturedLength);
+
+    if (availableLength <= 0) {
+      throw new Error('选中的元素超出当前页面可截图范围');
+    }
+
+    segments.push({
+      scrollOffset,
+      sourceOffset,
+      targetOffset: capturedLength,
+      length: availableLength
+    });
+    capturedLength += availableLength;
+  }
+
+  return segments;
+}
+
+/**
+ * 构建选中元素完整截图需要的二维切片。
+ * @param rect - 元素可截图区域
+ * @returns 二维截图切片
+ */
+function buildElementCaptureSegments(rect: WebviewElementCaptureRect): ElementCaptureSegment[] {
+  if (rect.isViewportAnchored) {
+    return [
+      {
+        scrollLeft: rect.scrollLeft,
+        scrollTop: rect.scrollTop,
+        sourceX: rect.viewportX + rect.pageX,
+        sourceY: rect.viewportY + rect.pageY,
+        targetX: 0,
+        targetY: 0,
+        width: rect.width,
+        height: rect.height
+      }
+    ];
+  }
+
+  const xSegments = buildElementCaptureAxisSegments(rect.pageX, rect.width, rect.viewportWidth, rect.maxScrollLeft);
+  const ySegments = buildElementCaptureAxisSegments(rect.pageY, rect.height, rect.viewportHeight, rect.maxScrollTop);
+  const segments: ElementCaptureSegment[] = [];
+
+  ySegments.forEach((ySegment) => {
+    xSegments.forEach((xSegment) => {
+      segments.push({
+        scrollLeft: xSegment.scrollOffset,
+        scrollTop: ySegment.scrollOffset,
+        sourceX: rect.viewportX + xSegment.sourceOffset,
+        sourceY: rect.viewportY + ySegment.sourceOffset,
+        targetX: xSegment.targetOffset,
+        targetY: ySegment.targetOffset,
+        width: xSegment.length,
+        height: ySegment.length
+      });
+    });
+  });
+
+  return segments;
+}
+
+/**
+ * 读取选中元素当前可截图区域。
+ * @param element - `<webview>` 实例
+ * @param selection - 当前选中元素
+ * @returns 元素当前可截图区域
+ */
+async function readSelectedElementCaptureRect(element: WebviewTag, selection: WebviewElementSelection): Promise<WebviewElementCaptureRect> {
+  const rect = (await element.executeJavaScript(createElementCaptureRectScript(selection.selector))) as unknown;
+
+  if (!isWebviewElementCaptureRect(rect)) {
+    return readCachedElementCaptureRect(element, selection);
+  }
+
+  if (rect.width <= 0 || rect.height <= 0) {
+    throw new Error('选中的元素不在当前视图中');
+  }
+
+  return rect;
 }
 
 /**
@@ -158,6 +399,108 @@ async function exportCanvasAsPng(canvas: HTMLCanvasElement): Promise<ArrayBuffer
   });
 
   return blob.arrayBuffer();
+}
+
+/**
+ * 绘制选中元素截图切片。
+ * @param context - 目标画布上下文
+ * @param image - 当前视口截图
+ * @param segment - 截图切片
+ * @param scaleX - 横向缩放比例
+ * @param scaleY - 纵向缩放比例
+ */
+function drawElementCaptureSegment(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  segment: ElementCaptureSegment,
+  scaleX: number,
+  scaleY: number
+): void {
+  const sourceX = Math.round(segment.sourceX * scaleX);
+  const sourceY = Math.round(segment.sourceY * scaleY);
+  const width = Math.max(1, Math.round(segment.width * scaleX));
+  const height = Math.max(1, Math.round(segment.height * scaleY));
+  const targetX = Math.round(segment.targetX * scaleX);
+  const targetY = Math.round(segment.targetY * scaleY);
+
+  context.drawImage(image, sourceX, sourceY, width, height, targetX, targetY, width, height);
+}
+
+/**
+ * 采样并拼接选中元素完整截图。
+ * @param element - `<webview>` 实例
+ * @param rect - 选中元素完整页面区域
+ * @param selector - 当前选中元素选择器
+ * @returns 选中元素截图 PNG
+ */
+async function captureSelectedElementPng(element: WebviewTag, rect: WebviewElementCaptureRect, selector: string): Promise<ArrayBuffer> {
+  let captureRect = rect;
+  let canvas: HTMLCanvasElement | null = null;
+  let context: CanvasRenderingContext2D | null = null;
+  let scaleX = 1;
+  let scaleY = 1;
+
+  try {
+    captureRect = clampElementCaptureRect(rect);
+    const segments = buildElementCaptureSegments(captureRect);
+
+    for (const segment of segments) {
+      // 选中元素可能跨多个视口，必须按切片顺序滚动、截图、绘制。
+      // eslint-disable-next-line no-await-in-loop
+      await element.executeJavaScript(createElementCaptureScrollScript(captureRect.scrollTarget, segment.scrollTop, segment.scrollLeft));
+      // 隐藏与选中元素无关的 fixed/sticky 遮挡层，避免截到顶部导航等覆盖物。
+      // eslint-disable-next-line no-await-in-loop
+      await element.executeJavaScript(
+        createElementCaptureObstructionVisibilityScript(selector, false, {
+          x: segment.sourceX,
+          y: segment.sourceY,
+          width: segment.width,
+          height: segment.height
+        })
+      );
+      // 滚动会触发选择器脚本重新显示选中框，截图前需要再次隐藏。
+      // eslint-disable-next-line no-await-in-loop
+      await element.executeJavaScript(createElementPickerLayerVisibilityScript(false));
+      // eslint-disable-next-line no-await-in-loop
+      const capturedImage = await element.capturePage();
+      const pngBytes = toArrayBuffer(capturedImage.toPNG());
+      // eslint-disable-next-line no-await-in-loop
+      const image = await loadPngImage(pngBytes);
+
+      if (!canvas) {
+        scaleX = image.width / Math.max(captureRect.captureViewportWidth, 1);
+        scaleY = image.height / Math.max(captureRect.captureViewportHeight, 1);
+        canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(captureRect.width * scaleX));
+        canvas.height = Math.max(1, Math.round(captureRect.height * scaleY));
+        context = canvas.getContext('2d');
+        if (!context) {
+          throw new Error('创建选中元素截图画布失败');
+        }
+      }
+
+      if (!context) {
+        throw new Error('创建选中元素截图画布失败');
+      }
+
+      drawElementCaptureSegment(context, image, segment, scaleX, scaleY);
+    }
+  } finally {
+    await element.executeJavaScript(createElementCaptureScrollScript(rect.scrollTarget, rect.scrollTop, rect.scrollLeft)).catch(console.error);
+    await element
+      .executeJavaScript(
+        createElementCaptureObstructionVisibilityScript(selector, true, { x: 0, y: 0, width: rect.captureViewportWidth, height: rect.captureViewportHeight })
+      )
+      .catch(console.error);
+    await element.executeJavaScript(createElementPickerLayerVisibilityScript(true)).catch(console.error);
+    await element.executeJavaScript(createElementCaptureCleanupScript(rect.scrollTarget)).catch(console.error);
+  }
+
+  if (!canvas) {
+    throw new Error('当前页面没有可截取的选中元素');
+  }
+
+  return exportCanvasAsPng(canvas);
 }
 
 /**
@@ -267,6 +610,7 @@ async function captureFullPagePng(element: WebviewTag): Promise<ArrayBuffer> {
 export function useScreenshot(options: UseScreenshotOptions): {
   captureViewportScreenshot: () => Promise<void>;
   captureFullPageScreenshot: () => Promise<void>;
+  captureSelectedElementScreenshot: (selection: WebviewElementSelection | null) => Promise<void>;
 } {
   /**
    * 截取当前视图并复制为剪贴板 PNG。
@@ -298,8 +642,30 @@ export function useScreenshot(options: UseScreenshotOptions): {
     }
   }
 
+  /**
+   * 截取当前选中的页面元素并复制为剪贴板 PNG。
+   * @param selection - 当前选中的页面元素
+   */
+  async function captureSelectedElementScreenshot(selection: WebviewElementSelection | null): Promise<void> {
+    try {
+      if (!selection) {
+        throw new Error('请先选择页面元素');
+      }
+
+      const element = getReadyWebviewElement(options.webviewElementRef);
+      const rect = await readSelectedElementCaptureRect(element, selection);
+      const pngBuffer = await captureSelectedElementPng(element, rect, selection.selector);
+      await native.copyImageToClipboard(pngBuffer);
+
+      message.success('截图已保存到剪贴板');
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : '截取选中元素失败');
+    }
+  }
+
   return {
     captureViewportScreenshot,
-    captureFullPageScreenshot
+    captureFullPageScreenshot,
+    captureSelectedElementScreenshot
   };
 }

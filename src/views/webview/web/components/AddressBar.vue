@@ -45,7 +45,6 @@
         @click="emit('toggleInspector')"
       />
       <BButton type="ghost" size="small" square tooltip="在浏览器打开" placement="bottomRight" icon="lucide:external-link" @click="emit('openInBrowser')" />
-      <BButton type="ghost" size="small" square tooltip="打开开发者工具" icon="lucide:bug" @click="emit('openDevTools')" />
 
       <BDropdown placement="bottomRight">
         <BButton type="ghost" size="small" square icon="lucide:more-vertical" />
@@ -84,6 +83,8 @@ interface Props {
   isDeviceToolbarVisible?: boolean;
   /** CSS 查看器是否打开 */
   isInspectorOpen?: boolean | null;
+  /** 是否存在已选中的页面元素 */
+  hasSelectedElement?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -92,7 +93,8 @@ const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
   isElementSelecting: false,
   isDeviceToolbarVisible: false,
-  isInspectorOpen: false
+  isInspectorOpen: false,
+  hasSelectedElement: false
 });
 
 const emit = defineEmits<{
@@ -107,9 +109,44 @@ const emit = defineEmits<{
   toggleInspector: [];
   captureViewportScreenshot: [];
   captureFullPageScreenshot: [];
+  captureSelectedElementScreenshot: [];
   clearCache: [];
   submitUrl: [value: string];
 }>();
+
+/**
+ * 截图子菜单项。
+ */
+const screenshotActionOptions = computed<DropdownOption[]>(() => {
+  const options: DropdownOption[] = [
+    {
+      type: 'item',
+      value: 'capture-viewport',
+      label: '当前视图',
+      icon: 'lucide:image',
+      onClick: () => emit('captureViewportScreenshot')
+    },
+    {
+      type: 'item',
+      value: 'capture-full-page',
+      label: '完整视图尺寸',
+      icon: 'lucide:scroll-text',
+      onClick: () => emit('captureFullPageScreenshot')
+    }
+  ];
+
+  if (props.hasSelectedElement) {
+    options.push({
+      type: 'item',
+      value: 'capture-selected-element',
+      label: '选中元素',
+      icon: 'lucide:scan',
+      onClick: () => emit('captureSelectedElementScreenshot')
+    });
+  }
+
+  return options;
+});
 
 /**
  * 更多操作菜单项。
@@ -120,22 +157,14 @@ const moreActionOptions = computed<DropdownOption[]>(() => [
     value: 'screenshot',
     label: '截图',
     icon: 'lucide:camera',
-    children: [
-      {
-        type: 'item',
-        value: 'capture-viewport',
-        label: '当前视图',
-        icon: 'lucide:image',
-        onClick: () => emit('captureViewportScreenshot')
-      },
-      {
-        type: 'item',
-        value: 'capture-full-page',
-        label: '完整视图尺寸',
-        icon: 'lucide:scroll-text',
-        onClick: () => emit('captureFullPageScreenshot')
-      }
-    ]
+    children: screenshotActionOptions.value
+  },
+  {
+    type: 'item',
+    value: 'open-dev-tools',
+    label: '打开开发者工具',
+    icon: 'lucide:bug',
+    onClick: () => emit('openDevTools')
   },
   {
     type: 'divider'

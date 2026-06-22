@@ -8,6 +8,7 @@
       :is-element-selecting="webview.state.value.isElementSelecting"
       :is-device-toolbar-visible="deviceMode.isToolbarVisible.value"
       :is-inspector-open="isInspectorOpen"
+      :has-selected-element="Boolean(webview.selectedElement)"
       supports-element-selection
       supports-device-toolbar
       supports-inspector
@@ -23,6 +24,7 @@
       @toggle-inspector="toggleInspector"
       @capture-viewport-screenshot="screenshot.captureViewportScreenshot"
       @capture-full-page-screenshot="screenshot.captureFullPageScreenshot"
+      @capture-selected-element-screenshot="handleCaptureSelectedElementScreenshot"
       @clear-cache="cacheControl.clearCache"
     />
 
@@ -251,6 +253,13 @@ function handleCloseDomInspector(): void {
  */
 function toggleInspector(): void {
   isInspectorOpen.value = isInspectorOpen.value === null ? true : !isInspectorOpen.value;
+}
+
+/**
+ * 按当前选中 DOM 元素截图。
+ */
+function handleCaptureSelectedElementScreenshot(): void {
+  screenshot.captureSelectedElementScreenshot(webview.selectedElement).catch(console.error);
 }
 
 /**

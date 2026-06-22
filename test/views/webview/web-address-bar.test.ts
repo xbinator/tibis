@@ -1,11 +1,13 @@
 /**
  * @file web-address-bar.test.ts
- * @description 验证 WebView 地址栏调试按钮事件。
+ * @description 验证 WebView 地址栏更多操作菜单事件。
  * @vitest-environment jsdom
  */
+/* eslint-disable vue/one-component-per-file */
 import { defineComponent } from 'vue';
 import { shallowMount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import type { DropdownOption } from '@/components/BDropdown/type';
 import AddressBar from '@/views/webview/web/components/AddressBar.vue';
 
 /**
@@ -30,34 +32,119 @@ const BButtonStub = defineComponent({
 });
 
 /**
+ * BDropdownMenu 测试替身，暴露菜单配置便于断言。
+ */
+const BDropdownMenuStub = defineComponent({
+  name: 'BDropdownMenu',
+  props: {
+    /** 下拉菜单选项。 */
+    options: {
+      type: Array,
+      required: true
+    }
+  },
+  template: '<div class="b-dropdown-menu-stub"></div>'
+});
+
+/**
+ * BDropdown 测试替身，直接渲染触发器与 overlay 插槽。
+ */
+const BDropdownStub = defineComponent({
+  name: 'BDropdown',
+  template: '<div class="b-dropdown-stub"><slot /><slot name="overlay" /></div>'
+});
+
+/**
  * 挂载 WebView 地址栏。
  * @returns 地址栏包装器
  */
-function mountAddressBar(): ReturnType<typeof shallowMount> {
+function mountAddressBar(props: { hasSelectedElement?: boolean } = {}): ReturnType<typeof shallowMount> {
   return shallowMount(AddressBar, {
     props: {
-      url: 'https://example.com'
+      url: 'https://example.com',
+      ...props
     },
     global: {
       stubs: {
         BButton: BButtonStub,
-        BDropdown: true,
-        BDropdownMenu: true,
+        BDropdown: BDropdownStub,
+        BDropdownMenu: BDropdownMenuStub,
         BIcon: true
       }
     }
   });
 }
 
+/**
+ * 获取更多操作菜单配置。
+ * @param wrapper - 地址栏包装器
+ * @returns 更多操作菜单配置
+ */
+function getMoreActionOptions(wrapper: ReturnType<typeof shallowMount>): DropdownOption[] {
+  return wrapper.findComponent({ name: 'BDropdownMenu' }).props('options') as DropdownOption[];
+}
+
+/**
+ * 判断是否为选中元素截图菜单项。
+ * @param option - 下拉菜单项
+ * @returns 是否为选中元素截图菜单项
+ */
+function isSelectedElementScreenshotOption(option: DropdownOption): boolean {
+  return option.type !== 'divider' && option.value === 'capture-selected-element';
+}
+
 describe('webview web AddressBar', () => {
-  it('emits openDevTools when debug button is clicked', async (): Promise<void> => {
+  it('moves devtools action into the more action menu', (): void => {
     const wrapper = mountAddressBar();
-    const debugButton = wrapper.find('[data-tooltip="打开开发者工具"]');
+    const debugButton = wrapper.find('.action-buttons [data-tooltip="打开开发者工具"]');
+    const options = getMoreActionOptions(wrapper);
+    const devToolsOption = options.find((option): boolean => option.type !== 'divider' && option.value === 'open-dev-tools');
 
-    expect(debugButton.exists()).toBe(true);
+    expect(debugButton.exists()).toBe(false);
+    expect(devToolsOption).toMatchObject({
+      type: 'item',
+      label: '打开开发者工具',
+      icon: 'lucide:bug'
+    });
 
-    await debugButton.trigger('click');
+    if (!devToolsOption || devToolsOption.type === 'divider') {
+      throw new Error('DevTools menu option should exist');
+    }
 
+    devToolsOption.onClick?.();
     expect(wrapper.emitted('openDevTools')).toHaveLength(1);
+  });
+
+  it('shows selected element screenshot action only when an element is selected', (): void => {
+    const withoutSelectionWrapper = mountAddressBar();
+    const withSelectionWrapper = mountAddressBar({ hasSelectedElement: true });
+    const withoutSelectionOptions = getMoreActionOptions(withoutSelectionWrapper);
+    const withSelectionOptions = getMoreActionOptions(withSelectionWrapper);
+    const withoutSelectionScreenshotOption = withoutSelectionOptions.find((option): boolean => option.type !== 'divider' && option.value === 'screenshot');
+    const withSelectionScreenshotOption = withSelectionOptions.find((option): boolean => option.type !== 'divider' && option.value === 'screenshot');
+
+    if (!withoutSelectionScreenshotOption || withoutSelectionScreenshotOption.type === 'divider') {
+      throw new Error('Screenshot menu option should exist');
+    }
+    if (!withSelectionScreenshotOption || withSelectionScreenshotOption.type === 'divider') {
+      throw new Error('Screenshot menu option should exist');
+    }
+
+    expect(withoutSelectionScreenshotOption.children?.some(isSelectedElementScreenshotOption)).toBe(false);
+
+    const selectedElementOption = withSelectionScreenshotOption.children?.find(isSelectedElementScreenshotOption);
+
+    expect(selectedElementOption).toMatchObject({
+      type: 'item',
+      label: '选中元素',
+      icon: 'lucide:scan'
+    });
+
+    if (!selectedElementOption || selectedElementOption.type === 'divider') {
+      throw new Error('Selected element screenshot menu option should exist');
+    }
+
+    selectedElementOption.onClick?.();
+    expect(withSelectionWrapper.emitted('captureSelectedElementScreenshot')).toHaveLength(1);
   });
 });

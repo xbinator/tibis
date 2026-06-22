@@ -89,6 +89,125 @@ export interface WebviewFixedElementOverlayCapture {
 }
 
 /**
+ * 元素截图滚动目标：页面本身。
+ */
+export interface WebviewElementWindowScrollTarget {
+  /** 滚动目标类型 */
+  type: 'window';
+}
+
+/**
+ * 元素截图滚动目标：页面内部滚动容器。
+ */
+export interface WebviewElementContainerScrollTarget {
+  /** 滚动目标类型 */
+  type: 'element';
+  /** 临时标记值，用于跨脚本定位同一个滚动容器 */
+  marker: string;
+}
+
+/**
+ * 元素截图滚动目标。
+ */
+export type WebviewElementScrollTarget = WebviewElementWindowScrollTarget | WebviewElementContainerScrollTarget;
+
+/**
+ * 页面元素在当前视口中的可截图区域。
+ */
+export interface WebviewElementCaptureRect {
+  /** 元素在滚动目标内容中的横向位置 */
+  pageX: number;
+  /** 元素在滚动目标内容中的纵向位置 */
+  pageY: number;
+  /** 宽度 */
+  width: number;
+  /** 高度 */
+  height: number;
+  /** 滚动目标可见区域在 WebView 截图中的横向位置 */
+  viewportX: number;
+  /** 滚动目标可见区域在 WebView 截图中的纵向位置 */
+  viewportY: number;
+  /** 滚动目标可见区域宽度 */
+  viewportWidth: number;
+  /** 滚动目标可见区域高度 */
+  viewportHeight: number;
+  /** WebView 当前可截图视口宽度 */
+  captureViewportWidth: number;
+  /** WebView 当前可截图视口高度 */
+  captureViewportHeight: number;
+  /** 滚动目标最大横向可滚动距离 */
+  maxScrollLeft: number;
+  /** 滚动目标最大纵向可滚动距离 */
+  maxScrollTop: number;
+  /** 截图前横向滚动位置 */
+  scrollLeft: number;
+  /** 截图前纵向滚动位置 */
+  scrollTop: number;
+  /** 执行截图采样时需要滚动的目标 */
+  scrollTarget: WebviewElementScrollTarget;
+  /** 是否为 fixed/sticky 等绑定在当前视口位置的目标 */
+  isViewportAnchored?: boolean;
+}
+
+/**
+ * 页面元素截图所需的页面与视口指标。
+ */
+export type WebviewElementCaptureMetrics = Pick<
+  WebviewElementCaptureRect,
+  | 'viewportX'
+  | 'viewportY'
+  | 'viewportWidth'
+  | 'viewportHeight'
+  | 'captureViewportWidth'
+  | 'captureViewportHeight'
+  | 'maxScrollLeft'
+  | 'maxScrollTop'
+  | 'scrollLeft'
+  | 'scrollTop'
+  | 'scrollTarget'
+>;
+
+/** 用于在元素截图期间标记内部滚动容器的属性名。 */
+const ELEMENT_CAPTURE_SCROLL_CONTAINER_ATTRIBUTE = 'data-tibis-element-capture-scroll-container';
+/** 用于在元素截图期间标记临时隐藏遮挡层的属性名。 */
+const ELEMENT_CAPTURE_OBSTRUCTION_ATTRIBUTE = 'data-tibis-element-capture-obstruction-hidden';
+/** 用于保存遮挡层原始 visibility 的属性名。 */
+const ELEMENT_CAPTURE_OBSTRUCTION_VISIBILITY_ATTRIBUTE = 'data-tibis-element-capture-obstruction-visibility';
+/** 用于保存遮挡层原始 visibility 优先级的属性名。 */
+const ELEMENT_CAPTURE_OBSTRUCTION_PRIORITY_ATTRIBUTE = 'data-tibis-element-capture-obstruction-priority';
+
+/**
+ * 判断值是否为有限数字。
+ * @param value - 待校验的值
+ * @returns 是否为有限数字
+ */
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * 判断值是否为元素截图滚动目标。
+ * @param value - 待校验的值
+ * @returns 是否为合法的滚动目标
+ */
+function isWebviewElementScrollTarget(value: unknown): value is WebviewElementScrollTarget {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const target = value as { type?: unknown; marker?: unknown };
+  if (target.type === 'window') {
+    return true;
+  }
+
+  if (target.type === 'element') {
+    return typeof target.marker === 'string' && target.marker.length > 0;
+  }
+
+  return false;
+}
+
+/**
  * 判断值是否为页面截屏尺寸信息。
  * @param value - 待校验的值
  * @returns 是否为合法的尺寸信息
@@ -99,8 +218,64 @@ export function isWebviewPageCaptureMetrics(value: unknown): value is WebviewPag
   }
 
   const metrics = value as Partial<WebviewPageCaptureMetrics>;
-  return [metrics.contentHeight, metrics.viewportWidth, metrics.viewportHeight, metrics.maxScrollTop, metrics.scrollTop].every(
-    (item) => typeof item === 'number' && Number.isFinite(item)
+  return [metrics.contentHeight, metrics.viewportWidth, metrics.viewportHeight, metrics.maxScrollTop, metrics.scrollTop].every((item) => isFiniteNumber(item));
+}
+
+/**
+ * 判断值是否为元素截图区域。
+ * @param value - 待校验的值
+ * @returns 是否为合法的元素截图区域
+ */
+export function isWebviewElementCaptureRect(value: unknown): value is WebviewElementCaptureRect {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const rect = value as Partial<WebviewElementCaptureRect>;
+  return (
+    [
+      rect.pageX,
+      rect.pageY,
+      rect.width,
+      rect.height,
+      rect.viewportX,
+      rect.viewportY,
+      rect.viewportWidth,
+      rect.viewportHeight,
+      rect.captureViewportWidth,
+      rect.captureViewportHeight,
+      rect.maxScrollLeft,
+      rect.maxScrollTop,
+      rect.scrollLeft,
+      rect.scrollTop
+    ].every((item) => isFiniteNumber(item)) && isWebviewElementScrollTarget(rect.scrollTarget)
+  );
+}
+
+/**
+ * 判断值是否为元素截图指标。
+ * @param value - 待校验的值
+ * @returns 是否为合法的元素截图指标
+ */
+export function isWebviewElementCaptureMetrics(value: unknown): value is WebviewElementCaptureMetrics {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const metrics = value as Partial<WebviewElementCaptureMetrics>;
+  return (
+    [
+      metrics.viewportX,
+      metrics.viewportY,
+      metrics.viewportWidth,
+      metrics.viewportHeight,
+      metrics.captureViewportWidth,
+      metrics.captureViewportHeight,
+      metrics.maxScrollLeft,
+      metrics.maxScrollTop,
+      metrics.scrollLeft,
+      metrics.scrollTop
+    ].every((item) => isFiniteNumber(item)) && isWebviewElementScrollTarget(metrics.scrollTarget)
   );
 }
 
@@ -133,6 +308,394 @@ export function createPageCaptureMetricsScript(): string {
     scrollTop
   };
 })();
+  `;
+}
+
+/**
+ * 构建读取选中元素当前可视区域的脚本。
+ * @param selector - 元素选择器
+ * @returns 可执行脚本文本
+ */
+export function createElementCaptureRectScript(selector: string): string {
+  return `
+(() => {
+  const element = document.querySelector(${JSON.stringify(selector)});
+  if (!(element instanceof Element)) {
+    return null;
+  }
+
+  const rect = element.getBoundingClientRect();
+  const doc = document.documentElement;
+  const body = document.body;
+  const markerAttribute = ${JSON.stringify(ELEMENT_CAPTURE_SCROLL_CONTAINER_ATTRIBUTE)};
+  const captureViewportWidth = Math.max(window.innerWidth || 0, doc?.clientWidth || 0);
+  const captureViewportHeight = Math.max(window.innerHeight || 0, doc?.clientHeight || 0);
+  const scrollLeft = Math.max(window.scrollX || 0, doc?.scrollLeft || 0, body?.scrollLeft || 0);
+  const scrollTop = Math.max(window.scrollY || 0, doc?.scrollTop || 0, body?.scrollTop || 0);
+
+	  function parseStickyInset(value) {
+	    if (!value || value === 'auto') {
+	      return null;
+	    }
+
+	    const parsed = Number.parseFloat(value);
+	    return Number.isFinite(parsed) ? parsed : null;
+	  }
+
+	  function isStickyPinned(element, style) {
+	    const elementRect = element.getBoundingClientRect();
+	    const top = parseStickyInset(style.top);
+	    const bottom = parseStickyInset(style.bottom);
+	    const left = parseStickyInset(style.left);
+	    const right = parseStickyInset(style.right);
+	    const isPinnedTop = top !== null && Math.abs(elementRect.top - top) <= 1;
+	    const isPinnedBottom = bottom !== null && Math.abs(captureViewportHeight - elementRect.bottom - bottom) <= 1;
+	    const isPinnedLeft = left !== null && Math.abs(elementRect.left - left) <= 1;
+	    const isPinnedRight = right !== null && Math.abs(captureViewportWidth - elementRect.right - right) <= 1;
+
+	    return isPinnedTop || isPinnedBottom || isPinnedLeft || isPinnedRight;
+	  }
+
+	  function isViewportAnchoredElement(element) {
+	    const style = window.getComputedStyle(element);
+	    if (style.position === 'fixed') {
+	      return true;
+	    }
+
+	    return style.position === 'sticky' && isStickyPinned(element, style);
+	  }
+
+	  function findViewportAnchoredAncestor(startElement) {
+	    let current = startElement;
+	    while (current && current instanceof HTMLElement && current !== body && current !== doc) {
+	      if (isViewportAnchoredElement(current)) {
+	        return current;
+	      }
+
+      current = current.parentElement;
+    }
+
+    return null;
+  }
+
+  function isScrollableElement(candidate) {
+    if (!(candidate instanceof HTMLElement) || candidate === body || candidate === doc) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(candidate);
+    const canScrollX = /(auto|scroll|overlay)/.test(style.overflowX || '') && candidate.scrollWidth > candidate.clientWidth + 1;
+    const canScrollY = /(auto|scroll|overlay)/.test(style.overflowY || '') && candidate.scrollHeight > candidate.clientHeight + 1;
+
+    return canScrollX || canScrollY;
+  }
+
+  function findScrollableAncestor(startElement) {
+    let current = startElement.parentElement;
+    while (current) {
+      if (isScrollableElement(current)) {
+        return current;
+      }
+
+      current = current.parentElement;
+    }
+
+    return null;
+  }
+
+  function markScrollContainer(scrollContainer) {
+    const existingMarker = scrollContainer.getAttribute(markerAttribute);
+    if (existingMarker) {
+      return existingMarker;
+    }
+
+    const marker = 'tibis-scroll-container-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    scrollContainer.setAttribute(markerAttribute, marker);
+    return marker;
+  }
+
+  const viewportAnchoredElement = findViewportAnchoredAncestor(element);
+  if (viewportAnchoredElement) {
+    return {
+      pageX: rect.left,
+      pageY: rect.top,
+      width: rect.width,
+      height: rect.height,
+      viewportX: 0,
+      viewportY: 0,
+      viewportWidth: captureViewportWidth,
+      viewportHeight: captureViewportHeight,
+      captureViewportWidth,
+      captureViewportHeight,
+      maxScrollLeft: 0,
+      maxScrollTop: 0,
+      scrollLeft,
+      scrollTop,
+      scrollTarget: {
+        type: 'window'
+      },
+      isViewportAnchored: true
+    };
+  }
+
+  const scrollContainer = findScrollableAncestor(element);
+  if (scrollContainer) {
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const viewportWidth = Math.max(scrollContainer.clientWidth || 0, containerRect.width || 0);
+    const viewportHeight = Math.max(scrollContainer.clientHeight || 0, containerRect.height || 0);
+
+    return {
+      pageX: scrollContainer.scrollLeft + rect.left - containerRect.left,
+      pageY: scrollContainer.scrollTop + rect.top - containerRect.top,
+      width: rect.width,
+      height: rect.height,
+      viewportX: containerRect.left,
+      viewportY: containerRect.top,
+      viewportWidth,
+      viewportHeight,
+      captureViewportWidth,
+      captureViewportHeight,
+      maxScrollLeft: Math.max((scrollContainer.scrollWidth || 0) - viewportWidth, 0),
+      maxScrollTop: Math.max((scrollContainer.scrollHeight || 0) - viewportHeight, 0),
+      scrollLeft: scrollContainer.scrollLeft || 0,
+      scrollTop: scrollContainer.scrollTop || 0,
+      scrollTarget: {
+        type: 'element',
+        marker: markScrollContainer(scrollContainer)
+      },
+      isViewportAnchored: false
+    };
+  }
+
+  const contentWidth = Math.max(
+    doc?.scrollWidth || 0,
+    body?.scrollWidth || 0,
+    doc?.offsetWidth || 0,
+    body?.offsetWidth || 0,
+    captureViewportWidth
+  );
+  const contentHeight = Math.max(
+    doc?.scrollHeight || 0,
+    body?.scrollHeight || 0,
+    doc?.offsetHeight || 0,
+    body?.offsetHeight || 0,
+    captureViewportHeight
+  );
+
+  return {
+    pageX: scrollLeft + rect.left,
+    pageY: scrollTop + rect.top,
+    width: rect.width,
+    height: rect.height,
+    viewportX: 0,
+    viewportY: 0,
+    viewportWidth: captureViewportWidth,
+    viewportHeight: captureViewportHeight,
+    captureViewportWidth,
+    captureViewportHeight,
+    maxScrollLeft: Math.max(contentWidth - captureViewportWidth, 0),
+    maxScrollTop: Math.max(contentHeight - captureViewportHeight, 0),
+    scrollLeft,
+    scrollTop,
+    scrollTarget: {
+      type: 'window'
+    },
+    isViewportAnchored: false
+  };
+})();
+`;
+}
+
+/**
+ * 构建读取元素截图页面指标的脚本。
+ * @returns 可执行脚本文本
+ */
+export function createElementCaptureMetricsScript(): string {
+  return `
+(() => {
+  const doc = document.documentElement;
+  const body = document.body;
+  const contentWidth = Math.max(
+    doc?.scrollWidth || 0,
+    body?.scrollWidth || 0,
+    doc?.offsetWidth || 0,
+    body?.offsetWidth || 0,
+    window.innerWidth || 0
+  );
+  const contentHeight = Math.max(
+    doc?.scrollHeight || 0,
+    body?.scrollHeight || 0,
+    doc?.offsetHeight || 0,
+    body?.offsetHeight || 0,
+    window.innerHeight || 0
+  );
+  const viewportWidth = Math.max(window.innerWidth || 0, doc?.clientWidth || 0);
+  const viewportHeight = Math.max(window.innerHeight || 0, doc?.clientHeight || 0);
+  const scrollLeft = Math.max(window.scrollX || 0, doc?.scrollLeft || 0, body?.scrollLeft || 0);
+  const scrollTop = Math.max(window.scrollY || 0, doc?.scrollTop || 0, body?.scrollTop || 0);
+
+  return {
+    viewportX: 0,
+    viewportY: 0,
+    viewportWidth,
+    viewportHeight,
+    captureViewportWidth: viewportWidth,
+    captureViewportHeight: viewportHeight,
+    maxScrollLeft: Math.max(contentWidth - viewportWidth, 0),
+    maxScrollTop: Math.max(contentHeight - viewportHeight, 0),
+    scrollLeft,
+    scrollTop,
+    scrollTarget: {
+      type: 'window'
+    },
+    isViewportAnchored: false
+  };
+})();
+`;
+}
+
+/**
+ * 构建控制元素选择器高亮层显隐的脚本。
+ * @param visible - 是否恢复原始显隐状态
+ * @returns 可执行脚本文本
+ */
+export function createElementPickerLayerVisibilityScript(visible: boolean): string {
+  return `
+(() => new Promise((resolve) => {
+  const layerSelector = '.tibis-element-picker-highlight,.tibis-element-picker-selected';
+  const previousHiddenAttribute = 'data-tibis-capture-previous-hidden';
+
+  function hideElementPickerLayer(element) {
+    if (!(element instanceof HTMLElement)) {
+      return;
+    }
+
+    if (!element.hasAttribute(previousHiddenAttribute)) {
+      element.setAttribute(previousHiddenAttribute, element.hidden ? 'true' : 'false');
+    }
+    element.hidden = true;
+  }
+
+  function restoreElementPickerLayer(element) {
+    if (!(element instanceof HTMLElement)) {
+      return;
+    }
+
+    const previousHidden = element.getAttribute(previousHiddenAttribute);
+    if (previousHidden === null) {
+      return;
+    }
+
+    element.hidden = previousHidden === 'true';
+    element.removeAttribute(previousHiddenAttribute);
+  }
+
+  const handler = ${visible ? 'restoreElementPickerLayer' : 'hideElementPickerLayer'};
+  document.querySelectorAll(layerSelector).forEach((element) => handler(element));
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => resolve(null));
+  });
+}))();
+`;
+}
+
+/**
+ * 构建控制元素截图遮挡层显隐的脚本。
+ * @param selector - 当前选中元素选择器
+ * @param visible - 是否恢复原始显隐状态
+ * @param captureRect - 当前切片在 WebView 视口中的裁剪区域
+ * @returns 可执行脚本文本
+ */
+export function createElementCaptureObstructionVisibilityScript(
+  selector: string,
+  visible: boolean,
+  captureRect: { x: number; y: number; width: number; height: number }
+): string {
+  const normalizedRect = {
+    x: Math.max(0, Math.floor(captureRect.x)),
+    y: Math.max(0, Math.floor(captureRect.y)),
+    width: Math.max(1, Math.ceil(captureRect.width)),
+    height: Math.max(1, Math.ceil(captureRect.height))
+  };
+
+  return `
+(() => new Promise((resolve) => {
+  const selectedSelector = ${JSON.stringify(selector)};
+  const captureRect = ${JSON.stringify(normalizedRect)};
+  const hiddenAttribute = ${JSON.stringify(ELEMENT_CAPTURE_OBSTRUCTION_ATTRIBUTE)};
+  const visibilityAttribute = ${JSON.stringify(ELEMENT_CAPTURE_OBSTRUCTION_VISIBILITY_ATTRIBUTE)};
+  const priorityAttribute = ${JSON.stringify(ELEMENT_CAPTURE_OBSTRUCTION_PRIORITY_ATTRIBUTE)};
+  const targetElement = document.querySelector(selectedSelector);
+
+  function intersectsCaptureRect(element) {
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      return false;
+    }
+
+    return (
+      rect.left < captureRect.x + captureRect.width &&
+      rect.right > captureRect.x &&
+      rect.top < captureRect.y + captureRect.height &&
+      rect.bottom > captureRect.y
+    );
+  }
+
+  function isRelatedToTarget(element) {
+    if (!(targetElement instanceof Element)) {
+      return false;
+    }
+
+    return element === targetElement || element.contains(targetElement) || targetElement.contains(element);
+  }
+
+  function shouldHideElement(element) {
+    if (!(element instanceof HTMLElement) || isRelatedToTarget(element)) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(element);
+    if (style.position !== 'fixed' && style.position !== 'sticky') {
+      return false;
+    }
+
+    return intersectsCaptureRect(element);
+  }
+
+  function hideElementCaptureObstruction(element) {
+    if (!(element instanceof HTMLElement) || !shouldHideElement(element)) {
+      return;
+    }
+
+    if (!element.hasAttribute(hiddenAttribute)) {
+      element.setAttribute(hiddenAttribute, 'true');
+      element.setAttribute(visibilityAttribute, element.style.getPropertyValue('visibility'));
+      element.setAttribute(priorityAttribute, element.style.getPropertyPriority('visibility'));
+    }
+
+    element.style.setProperty('visibility', 'hidden', 'important');
+  }
+
+  function restoreElementCaptureObstruction(element) {
+    if (!(element instanceof HTMLElement) || !element.hasAttribute(hiddenAttribute)) {
+      return;
+    }
+
+    const previousVisibility = element.getAttribute(visibilityAttribute) || '';
+    const previousPriority = element.getAttribute(priorityAttribute) || '';
+    element.style.setProperty('visibility', previousVisibility, previousPriority);
+    element.removeAttribute(hiddenAttribute);
+    element.removeAttribute(visibilityAttribute);
+    element.removeAttribute(priorityAttribute);
+  }
+
+  const handler = ${visible ? 'restoreElementCaptureObstruction' : 'hideElementCaptureObstruction'};
+  const candidates = ${visible ? "Array.from(document.querySelectorAll('[' + hiddenAttribute + ']'))" : "Array.from(document.querySelectorAll('*'))"};
+  candidates.forEach((element) => handler(element));
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => resolve(null));
+  });
+}))();
 `;
 }
 
@@ -141,18 +704,98 @@ export function createPageCaptureMetricsScript(): string {
  * @param scrollTop - 目标滚动位置
  * @returns 可执行脚本文本
  */
-export function createPageScrollScript(scrollTop: number): string {
+export function createPageScrollScript(scrollTop: number, scrollLeft = 0): string {
   const normalizedScrollTop = Math.max(0, Math.floor(scrollTop));
+  const normalizedScrollLeft = Math.max(0, Math.floor(scrollLeft));
 
   return `
 (() => new Promise((resolve) => {
-  window.scrollTo(0, ${normalizedScrollTop});
+  window.scrollTo(${normalizedScrollLeft}, ${normalizedScrollTop});
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      resolve(window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0);
+      resolve({
+        scrollLeft: window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0,
+        scrollTop: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+      });
     });
   });
 }))();
+`;
+}
+
+/**
+ * 构建滚动元素截图目标后等待两帧再返回的脚本。
+ * @param scrollTarget - 需要滚动的目标
+ * @param scrollTop - 目标纵向滚动位置
+ * @param scrollLeft - 目标横向滚动位置
+ * @returns 可执行脚本文本
+ */
+export function createElementCaptureScrollScript(scrollTarget: WebviewElementScrollTarget, scrollTop: number, scrollLeft = 0): string {
+  const normalizedScrollTop = Math.max(0, Math.floor(scrollTop));
+  const normalizedScrollLeft = Math.max(0, Math.floor(scrollLeft));
+
+  return `
+(() => new Promise((resolve, reject) => {
+  const target = ${JSON.stringify(scrollTarget)};
+  const markerAttribute = ${JSON.stringify(ELEMENT_CAPTURE_SCROLL_CONTAINER_ATTRIBUTE)};
+
+  function resolveAfterFrames(getPosition) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve(getPosition()));
+    });
+  }
+
+  if (target.type === 'element') {
+    const scrollContainer = Array.from(document.querySelectorAll('[' + markerAttribute + ']'))
+      .find((candidate) => candidate.getAttribute(markerAttribute) === target.marker);
+
+    if (!(scrollContainer instanceof HTMLElement)) {
+      reject(new Error('读取内部滚动容器失败'));
+      return;
+    }
+
+    scrollContainer.scrollLeft = ${normalizedScrollLeft};
+    scrollContainer.scrollTop = ${normalizedScrollTop};
+    resolveAfterFrames(() => ({
+      scrollLeft: scrollContainer.scrollLeft || 0,
+      scrollTop: scrollContainer.scrollTop || 0
+    }));
+    return;
+  }
+
+  window.scrollTo(${normalizedScrollLeft}, ${normalizedScrollTop});
+  resolveAfterFrames(() => ({
+    scrollLeft: window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0,
+    scrollTop: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+  }));
+}))();
+`;
+}
+
+/**
+ * 构建清理元素截图临时滚动容器标记的脚本。
+ * @param scrollTarget - 截图期间使用的滚动目标
+ * @returns 可执行脚本文本
+ */
+export function createElementCaptureCleanupScript(scrollTarget: WebviewElementScrollTarget): string {
+  const marker = scrollTarget.type === 'element' ? scrollTarget.marker : '';
+
+  return `
+(() => {
+  const markerAttribute = ${JSON.stringify(ELEMENT_CAPTURE_SCROLL_CONTAINER_ATTRIBUTE)};
+  const marker = ${JSON.stringify(marker)};
+  if (!marker) {
+    return null;
+  }
+
+  Array.from(document.querySelectorAll('[' + markerAttribute + ']')).forEach((element) => {
+    if (element.getAttribute(markerAttribute) === marker) {
+      element.removeAttribute(markerAttribute);
+    }
+  });
+
+  return null;
+})();
 `;
 }
 
