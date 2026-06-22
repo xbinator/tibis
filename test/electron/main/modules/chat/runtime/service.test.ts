@@ -760,6 +760,87 @@ describe('chat runtime service shell', (): void => {
     );
   });
 
+  it('keeps assistant message unfinished when the stream pauses for user choice', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
+      assistantMessage.parts = [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-question',
+          toolName: 'question',
+          status: 'done',
+          input: {
+            question: '确认下单生椰拿铁，实付 9.9?',
+            mode: 'single',
+            options: [
+              { label: '确认下单!', value: 'confirm' },
+              { label: '再想想...', value: 'cancel' }
+            ]
+          },
+          result: {
+            toolName: 'question',
+            status: 'awaiting_user_input',
+            data: {
+              questionId: 'question-1',
+              toolCallId: 'tool-call-question',
+              question: '确认下单生椰拿铁，实付 9.9?',
+              mode: 'single',
+              options: [
+                { label: '确认下单!', value: 'confirm' },
+                { label: '再想想...', value: 'cancel' }
+              ]
+            }
+          }
+        }
+      ];
+      assistantMessage.loading = false;
+      assistantMessage.finished = false;
+      await updateAssistant(assistantMessage);
+      return {};
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      streamExecutor
+    });
+
+    const result = await service.send(createInput({ content: 'order coffee' }));
+    await flushRuntimeTasks();
+
+    expect(updatedMessages.at(-1)).toMatchObject({
+      id: 'assistant-message-1',
+      loading: false,
+      finished: false,
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-question',
+          toolName: 'question',
+          result: {
+            toolName: 'question',
+            status: 'awaiting_user_input',
+            data: expect.objectContaining({ questionId: 'question-1' })
+          }
+        }
+      ]
+    });
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:complete',
+        payload: expect.objectContaining({ runtimeId: result.runtimeId })
+      })
+    );
+  });
+
   it('marks assistant message finished after continuation rounds stop at the runtime limit', async (): Promise<void> => {
     const updatedMessages: ChatMessageRecord[] = [];
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {

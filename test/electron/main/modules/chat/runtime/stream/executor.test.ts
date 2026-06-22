@@ -86,6 +86,27 @@ async function* createRendererToolStream(): AsyncGenerator<unknown> {
 }
 
 /**
+ * 创建等待用户回答的 question 工具调用测试流。
+ * @returns AI stream chunk 序列
+ */
+async function* createQuestionToolStream(): AsyncGenerator<unknown> {
+  yield {
+    type: 'tool-call',
+    toolCallId: 'tool-call-question',
+    toolName: 'question',
+    input: {
+      question: '确认下单生椰拿铁，实付 9.9?',
+      mode: 'single',
+      options: [
+        { label: '确认下单!', value: 'confirm' },
+        { label: '再想想...', value: 'cancel' }
+      ]
+    }
+  };
+  yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 } };
+}
+
+/**
  * 创建主进程 read_file 工具调用的测试流。
  * @returns AI stream chunk 序列
  */
@@ -658,6 +679,70 @@ describe('runtime stream executor', (): void => {
           }
         }
       ]
+    });
+  });
+
+  it('keeps assistant message unfinished while waiting for a question tool answer', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const updates: ChatMessageRecord[] = [];
+    const executeRendererTool = vi.fn().mockResolvedValue({
+      toolName: 'question',
+      status: 'awaiting_user_input',
+      data: {
+        questionId: 'question-1',
+        toolCallId: 'tool-call-question',
+        question: '确认下单生椰拿铁，实付 9.9?',
+        mode: 'single',
+        options: [
+          { label: '确认下单!', value: 'confirm' },
+          { label: '再想想...', value: 'cancel' }
+        ]
+      }
+    });
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        providerType: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1'
+      },
+      modelId: 'gpt-test'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createQuestionToolStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeRendererTool });
+
+    const result = await executor(
+      {
+        runtime: {
+          ...runtime,
+          tools: [{ name: 'question', description: 'Ask user', parameters: { type: 'object', properties: {} } }]
+        },
+        userMessage,
+        assistantMessage
+      },
+      async (message) => {
+        updates.push({ ...message, parts: [...message.parts] });
+      }
+    );
+
+    expect(result).toEqual({});
+    expect(updates.at(-1)).toMatchObject({
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-question',
+          toolName: 'question',
+          status: 'done',
+          result: {
+            toolName: 'question',
+            status: 'awaiting_user_input',
+            data: expect.objectContaining({ questionId: 'question-1' })
+          }
+        }
+      ],
+      loading: false,
+      finished: false
     });
   });
 

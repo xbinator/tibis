@@ -361,17 +361,23 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 判断 assistant 是否正暂停等待用户输入。
+   * @param message - assistant 消息
+   * @returns 是否存在等待用户输入的工具结果
+   */
+  function isAssistantAwaitingUserInput(message: ChatMessageRecord): boolean {
+    return message.parts.some((part) => part.type === 'tool' && part.result?.status === 'awaiting_user_input');
+  }
+
+  /**
    * 在所有模型续轮结束后兜底标记 assistant 消息完成。
    * @param runtime - runtime 状态
    * @param assistantMessage - assistant 草稿消息
    * @param usage - 汇总后的 provider usage
    */
-  async function finishAssistantMessageIfNeeded(
-    runtime: ActiveChatRuntime,
-    assistantMessage: ChatMessageRecord,
-    usage: AIUsage | undefined
-  ): Promise<void> {
+  async function finishAssistantMessageIfNeeded(runtime: ActiveChatRuntime, assistantMessage: ChatMessageRecord, usage: AIUsage | undefined): Promise<void> {
     if (assistantMessage.finished === true) return;
+    if (isAssistantAwaitingUserInput(assistantMessage)) return;
 
     assistantMessage.loading = false;
     assistantMessage.finished = true;

@@ -60,6 +60,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
     let executedToolCount = 0;
     let allToolsContinueable = true;
     let anyToolStopped = false;
+    let isWaitingForUserInput = false;
     const rendererToolTimeoutMs = normalizeRendererToolTimeoutMs(dependencies.rendererToolTimeoutMs);
 
     for await (const rawChunk of result.stream as AsyncIterable<unknown>) {
@@ -115,12 +116,14 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
           executedToolCount += 1;
           allToolsContinueable = allToolsContinueable && shouldContinueAfterToolResult(toolResult);
           anyToolStopped = anyToolStopped || shouldStopStreamAfterToolResult(toolResult);
+          isWaitingForUserInput = isWaitingForUserInput || toolResult.status === 'awaiting_user_input';
 
           await updateAssistant(assistantMessage);
           if (anyToolStopped) break;
         }
       } else if (chunk.type === 'tool-result') {
         appendToolResult(assistantMessage, chunk);
+        isWaitingForUserInput = isWaitingForUserInput || chunk.result.status === 'awaiting_user_input';
         await updateAssistant(assistantMessage);
       }
     }
@@ -145,6 +148,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
 
     const shouldContinue = finishReason === 'tool-calls' && executedToolCount > 0 && allToolsContinueable;
     if (shouldContinue) return { usage, shouldContinue };
+    if (isWaitingForUserInput) return usage ? { usage } : {};
 
     if (assistantMessage.finished !== true) {
       finishAssistantMessage(assistantMessage, usage);
