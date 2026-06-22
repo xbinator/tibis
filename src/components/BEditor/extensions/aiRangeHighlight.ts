@@ -1,6 +1,7 @@
 import type { DecorationRange } from './editorDecorations';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import type { EditorView as PMEditorView } from '@tiptap/pm/view';
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -22,6 +23,58 @@ const aiSelectionHighlightPluginKey = new PluginKey<AISelectionHighlightState>('
 const baseHighlightClassName = 'ai-selection-highlight';
 const codeStartHighlightClassName = 'ai-selection-highlight--code-start';
 const codeEndHighlightClassName = 'ai-selection-highlight--code-end';
+const tableInlineHighlightName = 'b-markdown-ai-selection-highlight';
+
+/** CSS Custom Highlight 实例。 */
+type CSSHighlightLike = object;
+
+/**
+ * CSS Custom Highlight 构造器。
+ */
+interface CSSHighlightConstructorLike {
+  /**
+   * 创建 Custom Highlight。
+   * @param ranges - 需要高亮的 DOM Range
+   * @returns Custom Highlight 实例
+   */
+  new (...ranges: Range[]): CSSHighlightLike;
+}
+
+/**
+ * CSS Custom Highlight 注册表。
+ */
+interface CSSHighlightRegistryLike {
+  /**
+   * 注册指定名称的 Custom Highlight。
+   * @param name - highlight 名称
+   * @param highlight - highlight 实例
+   */
+  set(name: string, highlight: CSSHighlightLike): void;
+  /**
+   * 删除指定名称的 Custom Highlight。
+   * @param name - highlight 名称
+   * @returns 是否删除成功
+   */
+  delete(name: string): boolean;
+}
+
+/**
+ * 支持 CSS Custom Highlight 的 CSS 对象。
+ */
+interface CSSWithHighlights {
+  /** CSS Custom Highlight 注册表 */
+  highlights?: CSSHighlightRegistryLike;
+}
+
+/**
+ * 支持 CSS Custom Highlight 的全局对象。
+ */
+interface GlobalWithHighlights {
+  /** CSS 对象 */
+  CSS?: CSSWithHighlights;
+  /** Highlight 构造器 */
+  Highlight?: CSSHighlightConstructorLike;
+}
 
 /**
  * 当前节点是否为 Rich 表格节点。
@@ -30,6 +83,62 @@ const codeEndHighlightClassName = 'ai-selection-highlight--code-end';
  */
 function isTableNode(node: PMNode): boolean {
   return node.type.name === 'table';
+}
+
+/**
+ * 收集当前选区与 Rich 表格相交但未完整覆盖表格的范围。
+ * @param doc - 当前 ProseMirror 文档
+ * @param range - 当前高亮范围
+ * @returns 表格内局部高亮范围
+ */
+function collectPartialTableRanges(doc: PMNode, range: AISelectionRange): DecorationRange[] {
+  if (range.highlightKind === 'node') {
+    return [];
+  }
+
+  const ranges: DecorationRange[] = [];
+
+  doc.descendants((node, pos) => {
+    if (!isTableNode(node)) {
+      return true;
+    }
+
+    const tableFrom = pos;
+    const tableTo = pos + node.nodeSize;
+    const from = Math.max(range.from, tableFrom);
+    const to = Math.min(range.to, tableTo);
+    const isFullyCoveredTable = range.from <= tableFrom && range.to >= tableTo;
+
+    if (from < to && !isFullyCoveredTable) {
+      ranges.push({ from, to });
+    }
+
+    return false;
+  });
+
+  return ranges;
+}
+
+/**
+ * 合并并排序需要跳过 inline decoration 的范围。
+ * @param ranges - 原始范围列表
+ * @returns 合并后的范围列表
+ */
+function mergeDecorationRanges(ranges: DecorationRange[]): DecorationRange[] {
+  const sortedRanges = [...ranges].sort((left, right) => left.from - right.from);
+  const mergedRanges: DecorationRange[] = [];
+
+  sortedRanges.forEach((range) => {
+    const previousRange = mergedRanges.at(-1);
+    if (!previousRange || range.from > previousRange.to) {
+      mergedRanges.push({ ...range });
+      return;
+    }
+
+    previousRange.to = Math.max(previousRange.to, range.to);
+  });
+
+  return mergedRanges;
 }
 
 /**
@@ -116,10 +225,10 @@ function createTableContainerDecorations(doc: PMNode, range: AISelectionRange): 
  * 创建普通 inline 文本高亮，并跳过已经用 node decoration 高亮的表格容器。
  * @param doc - 当前 ProseMirror 文档
  * @param range - 当前高亮范围
- * @param tableDecorations - 已创建的表格容器装饰
+ * @param skippedRanges - 不应创建 inline decoration 的范围
  * @returns inline decorations
  */
-function createInlineDecorationsOutsideTables(doc: PMNode, range: AISelectionRange, tableDecorations: Decoration[]): Decoration[] {
+function createInlineDecorationsOutsideTables(doc: PMNode, range: AISelectionRange, skippedRanges: DecorationRange[]): Decoration[] {
   const decorations: Decoration[] = [];
   let cursor = range.from;
 
@@ -152,21 +261,100 @@ function createInlineDecorationsOutsideTables(doc: PMNode, range: AISelectionRan
     }
   }
 
-  tableDecorations
-    .map((decoration) => ({ from: decoration.from, to: decoration.to }))
-    .sort((left, right) => left.from - right.from)
-    .forEach((tableRange) => {
-      if (cursor < tableRange.from) {
-        pushInlineDecorations(cursor, tableRange.from);
-      }
-      cursor = Math.max(cursor, tableRange.to);
-    });
+  mergeDecorationRanges(skippedRanges).forEach((skippedRange) => {
+    if (cursor < skippedRange.from) {
+      pushInlineDecorations(cursor, skippedRange.from);
+    }
+    cursor = Math.max(cursor, skippedRange.to);
+  });
 
   if (cursor < range.to) {
     pushInlineDecorations(cursor, range.to);
   }
 
   return decorations;
+}
+
+/**
+ * 获取 CSS Custom Highlight runtime。
+ * @returns Custom Highlight runtime，不支持时返回 null
+ */
+function getCSSHighlightRuntime(): { HighlightConstructor: CSSHighlightConstructorLike; registry: CSSHighlightRegistryLike } | null {
+  const globalObject = globalThis as typeof globalThis & GlobalWithHighlights;
+  const registry = globalObject.CSS?.highlights;
+  const HighlightConstructor = globalObject.Highlight;
+
+  if (!registry || !HighlightConstructor) {
+    return null;
+  }
+
+  return { HighlightConstructor, registry };
+}
+
+/**
+ * 清理表格内联 CSS Custom Highlight。
+ */
+function clearTableInlineCSSHighlight(): void {
+  getCSSHighlightRuntime()?.registry.delete(tableInlineHighlightName);
+}
+
+/**
+ * 将 ProseMirror 位置转换为 DOM Range。
+ * @param view - ProseMirror 编辑器视图
+ * @param range - ProseMirror 范围
+ * @returns DOM Range，转换失败时返回 null
+ */
+function createDOMRangeFromEditorRange(view: PMEditorView, range: DecorationRange): Range | null {
+  const domRange = document.createRange();
+  const start = view.domAtPos(range.from);
+  const end = view.domAtPos(range.to);
+
+  try {
+    domRange.setStart(start.node, start.offset);
+    domRange.setEnd(end.node, end.offset);
+  } catch {
+    return null;
+  }
+
+  return domRange.collapsed ? null : domRange;
+}
+
+/**
+ * 同步表格内联选区到 CSS Custom Highlight，避免插入额外 inline DOM。
+ * @param view - ProseMirror 编辑器视图
+ */
+function syncTableInlineCSSHighlight(view: PMEditorView): void {
+  const runtime = getCSSHighlightRuntime();
+  if (!runtime) {
+    return;
+  }
+
+  const pluginState = aiSelectionHighlightPluginKey.getState(view.state);
+  if (!pluginState?.range) {
+    clearTableInlineCSSHighlight();
+    return;
+  }
+
+  const domRanges = collectPartialTableRanges(view.state.doc, pluginState.range)
+    .map((range) => createDOMRangeFromEditorRange(view, range))
+    .filter((range): range is Range => range !== null);
+
+  if (domRanges.length === 0) {
+    clearTableInlineCSSHighlight();
+    return;
+  }
+
+  runtime.registry.set(tableInlineHighlightName, new runtime.HighlightConstructor(...domRanges));
+}
+
+/**
+ * 创建应跳过 inline decoration 的表格范围。
+ * @param tableDecorations - 表格容器 decorations
+ * @param tableInlineRanges - 表格内局部高亮范围
+ * @returns 需要跳过 inline decoration 的范围
+ */
+function createSkippedTableRanges(tableDecorations: Decoration[], tableInlineRanges: DecorationRange[]): DecorationRange[] {
+  return [...tableDecorations.map((decoration) => ({ from: decoration.from, to: decoration.to })), ...tableInlineRanges];
 }
 
 /**
@@ -186,7 +374,8 @@ export function createAISelectionDecorationSet(doc: PMNode, range: AISelectionRa
   }
 
   const tableDecorations = createTableContainerDecorations(doc, range);
-  const inlineDecorations = createInlineDecorationsOutsideTables(doc, range, tableDecorations);
+  const tableInlineRanges = collectPartialTableRanges(doc, range);
+  const inlineDecorations = createInlineDecorationsOutsideTables(doc, range, createSkippedTableRanges(tableDecorations, tableInlineRanges));
 
   return DecorationSet.create(doc, [...inlineDecorations, ...tableDecorations]);
 }
@@ -264,6 +453,18 @@ export const AISelectionHighlight = Extension.create({
           decorations(state) {
             return aiSelectionHighlightPluginKey.getState(state)?.decorations ?? DecorationSet.create(state.doc, []);
           }
+        },
+        view(view) {
+          syncTableInlineCSSHighlight(view);
+
+          return {
+            update(nextView: PMEditorView): void {
+              syncTableInlineCSSHighlight(nextView);
+            },
+            destroy(): void {
+              clearTableInlineCSSHighlight();
+            }
+          };
         }
       })
     ];

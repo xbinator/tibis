@@ -641,6 +641,10 @@ defineExpose({
       box-decoration-break: clone;
     }
 
+    &::highlight(b-markdown-ai-selection-highlight) {
+      background-color: var(--selection-bg);
+    }
+
     :not(pre) > code {
       display: inline-block;
       margin: 0 0 2px;

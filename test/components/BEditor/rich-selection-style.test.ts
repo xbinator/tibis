@@ -61,4 +61,18 @@ describe('BEditor rich selection styles', (): void => {
     expect(source).toContain('background-color: var(--editor-table-selection-header-bg);');
     expect(source).toContain('background-color: var(--editor-table-selection-cell-bg);');
   });
+
+  it('keeps table cell paragraphs wrappable', (): void => {
+    const source = readPaneRichEditorSource();
+    const tableParagraphRuleBody = extractStyleRuleBody(source, 'th p,\n  td p');
+
+    expect(tableParagraphRuleBody).not.toContain('white-space: nowrap;');
+  });
+
+  it('styles table inline custom highlights without inserting layout-affecting spans', (): void => {
+    const source = readPaneRichEditorSource();
+    const customHighlightRuleBody = extractStyleRuleBody(source, '&::highlight(b-markdown-ai-selection-highlight)');
+
+    expect(customHighlightRuleBody).toContain('background-color: var(--selection-bg);');
+  });
 });

@@ -1,11 +1,14 @@
 /**
  * @file ai-selection-highlight.test.ts
  * @description BEditor Rich 模式 AI 选区高亮装饰回归测试。
+ * @vitest-environment jsdom
  */
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Schema } from '@tiptap/pm/model';
+import { EditorState, Plugin } from '@tiptap/pm/state';
 import { tableNodes } from '@tiptap/pm/tables';
-import { describe, expect, it } from 'vitest';
+import { EditorView } from '@tiptap/pm/view';
+import { describe, expect, it, afterEach } from 'vitest';
 import { createAISelectionDecorationSet } from '@/components/BEditor/extensions/aiRangeHighlight';
 
 /**
@@ -28,6 +31,32 @@ interface RuntimeDecorationInfo {
  */
 function getRuntimeDecorationInfo(decoration: unknown): RuntimeDecorationInfo {
   return decoration as RuntimeDecorationInfo;
+}
+
+/**
+ * 查找指定文本在 ProseMirror 文档中的起始位置。
+ * @param doc - ProseMirror 文档节点
+ * @param text - 需要查找的文本
+ * @returns 文本起始位置，未命中时返回 -1
+ */
+function findTextStartPosition(doc: PMNode, text: string): number {
+  let result = -1;
+
+  doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) {
+      return true;
+    }
+
+    const textIndex = node.text.indexOf(text);
+    if (textIndex < 0) {
+      return true;
+    }
+
+    result = pos + textIndex;
+    return false;
+  });
+
+  return result;
 }
 
 /**
@@ -109,6 +138,13 @@ function createTableDoc(): PMNode {
 }
 
 describe('createAISelectionDecorationSet', (): void => {
+  let editorView: EditorView | null = null;
+
+  afterEach((): void => {
+    editorView?.destroy();
+    editorView = null;
+  });
+
   it('uses inline decorations for normal rich text selections', (): void => {
     const doc = createDoc();
     const decorations = createAISelectionDecorationSet(doc, { from: 1, to: 4 });
@@ -174,5 +210,39 @@ describe('createAISelectionDecorationSet', (): void => {
     const decorationTypes = decorations.find().map((decoration) => getRuntimeDecorationInfo(decoration).type.constructor.name);
 
     expect(decorationTypes).toEqual(['NodeType']);
+  });
+
+  it('does not create inline decoration spans for partial table text highlights', (): void => {
+    const doc = createTableDoc();
+    const textStart = findTextStartPosition(doc, 'A1');
+    const decorations = createAISelectionDecorationSet(doc, { from: textStart, to: textStart + 1 });
+    const decorationTypes = decorations.find().map((decoration) => getRuntimeDecorationInfo(decoration).type.constructor.name);
+
+    expect(textStart).toBeGreaterThanOrEqual(0);
+    expect(decorationTypes).toEqual([]);
+  });
+
+  it('keeps partial table text highlight out of the rendered DOM flow', (): void => {
+    const doc = createTableDoc();
+    const textStart = findTextStartPosition(doc, 'A1');
+    const decorations = createAISelectionDecorationSet(doc, { from: textStart, to: textStart + 1 });
+    const root = document.createElement('div');
+
+    editorView = new EditorView(root, {
+      state: EditorState.create({
+        doc,
+        plugins: [
+          new Plugin({
+            props: {
+              decorations: () => decorations
+            }
+          })
+        ]
+      })
+    });
+
+    const paragraph = root.querySelector('td p');
+
+    expect(paragraph?.innerHTML).toBe('A1');
   });
 });
