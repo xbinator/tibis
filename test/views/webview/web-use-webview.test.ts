@@ -139,24 +139,33 @@ function createPageScriptExecutingWebview(): WebviewTag {
 }
 
 /**
+ * 设置元素在 jsdom 中的视口矩形。
+ * @param element - 目标元素
+ * @param rect - 视口矩形
+ */
+function installElementRect(element: HTMLElement, rect: { x: number; y: number; width: number; height: number }): void {
+  element.getBoundingClientRect = vi.fn(
+    (): DOMRect =>
+      ({
+        x: rect.x,
+        y: rect.y,
+        top: rect.y,
+        left: rect.x,
+        right: rect.x + rect.width,
+        bottom: rect.y + rect.height,
+        width: rect.width,
+        height: rect.height,
+        toJSON: () => ({})
+      } as DOMRect)
+  );
+}
+
+/**
  * 设置元素在 jsdom 中可见。
  * @param element - 目标元素
  */
 function installVisibleRect(element: HTMLElement): void {
-  element.getBoundingClientRect = vi.fn(
-    (): DOMRect =>
-      ({
-        x: 0,
-        y: 0,
-        top: 0,
-        left: 0,
-        right: 120,
-        bottom: 32,
-        width: 120,
-        height: 32,
-        toJSON: () => ({})
-      } as DOMRect)
-  );
+  installElementRect(element, { x: 0, y: 0, width: 120, height: 32 });
 }
 
 /**
@@ -488,6 +497,58 @@ describe('useWebView', () => {
     expect(snapshot.content).toContain('[3]<div role="menuitem" aria-haspopup="menu">更多医院</div>');
     expect(snapshot.footer.length).toBeGreaterThan(0);
     expect(snapshot.truncated.content).toBe(false);
+  });
+
+  it('returns viewport top layer context for visible dialogs', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main>
+        <button id="register-button">挂号</button>
+      </main>
+      <div id="mask" style="position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);"></div>
+      <section id="confirm-dialog" role="dialog" aria-modal="true" style="position: fixed; background: #fff;">
+        <h2>温馨提示</h2>
+        <p>医生在多个院区/科室出诊，请确认预约信息</p>
+        <button>取消</button>
+        <button>确认</button>
+      </section>
+    `;
+    const registerButton = document.querySelector('#register-button');
+    const mask = document.querySelector('#mask');
+    const dialog = document.querySelector('#confirm-dialog');
+    const cancelButton = document.querySelector('#confirm-dialog button:first-of-type');
+    const confirmButton = document.querySelector('#confirm-dialog button:last-of-type');
+    if (
+      !(registerButton instanceof HTMLElement) ||
+      !(mask instanceof HTMLElement) ||
+      !(dialog instanceof HTMLElement) ||
+      !(cancelButton instanceof HTMLElement) ||
+      !(confirmButton instanceof HTMLElement)
+    ) {
+      throw new Error('dialog viewport test elements should exist');
+    }
+
+    installElementRect(registerButton, { x: 112, y: 620, width: 130, height: 88 });
+    installElementRect(mask, { x: 0, y: 0, width: 1024, height: 768 });
+    installElementRect(dialog, { x: 120, y: 180, width: 760, height: 360 });
+    installElementRect(cancelButton, { x: 180, y: 470, width: 260, height: 72 });
+    installElementRect(confirmButton, { x: 520, y: 470, width: 260, height: 72 });
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.viewport?.topLayer).toMatchObject({
+      kind: 'dialog',
+      label: '温馨提示',
+      elementIndexes: [2, 3],
+      primaryActionIndex: 3,
+      dimmed: true
+    });
+    expect(snapshot.viewport?.elements).toEqual([
+      expect.objectContaining({ index: 1, label: '挂号', covered: true, layer: 'background', primary: false }),
+      expect.objectContaining({ index: 2, label: '取消', covered: false, layer: 'top', primary: false }),
+      expect.objectContaining({ index: 3, label: '确认', covered: false, layer: 'top', primary: true })
+    ]);
+    expect(snapshot.elements?.[2]).toMatchObject({ index: 3, label: '确认', primary: true, layer: 'top' });
   });
 
   it('clicks non-semantic clickable webpage elements by index', async (): Promise<void> => {

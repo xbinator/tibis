@@ -62,9 +62,28 @@ export interface WebviewPageScrollState {
 }
 
 /**
+ * WebView 视口内矩形。
+ */
+export interface WebviewViewportRect {
+  /** 相对当前视口左侧的 X 坐标。 */
+  x: number;
+  /** 相对当前视口顶部的 Y 坐标。 */
+  y: number;
+  /** 元素宽度。 */
+  width: number;
+  /** 元素高度。 */
+  height: number;
+}
+
+/**
  * WebView Agent 元素动作。
  */
 export type WebviewAgentElementAction = 'click' | 'input' | 'select' | 'press' | 'scroll';
+
+/**
+ * WebView 可交互元素所在视觉层。
+ */
+export type WebviewViewportElementLayer = 'page' | 'top' | 'background';
 
 /**
  * WebView 可模拟的按键。
@@ -101,8 +120,80 @@ export interface WebviewAgentElement {
   selected?: boolean;
   /** 是否为本轮新出现元素。 */
   isNew: boolean;
+  /** 元素相对当前视口的矩形。 */
+  rect?: WebviewViewportRect;
+  /** 元素在当前视口内可见面积比例。 */
+  visibleRatio?: number;
+  /** 元素是否被顶层浮层遮挡。 */
+  covered?: boolean;
+  /** 元素所在视觉层。 */
+  layer?: WebviewViewportElementLayer;
+  /** 是否为当前顶层上下文的主操作。 */
+  primary?: boolean;
   /** 支持的动作列表。 */
   actions: WebviewAgentElementAction[];
+}
+
+/**
+ * WebView 当前视口内可交互元素摘要。
+ */
+export interface WebviewViewportElement {
+  /** 本次快照内元素索引。 */
+  index: number;
+  /** 元素标签名。 */
+  tagName: string;
+  /** 模型可读标签。 */
+  label: string;
+  /** 支持的动作列表。 */
+  actions: WebviewAgentElementAction[];
+  /** 元素相对当前视口的矩形。 */
+  rect: WebviewViewportRect;
+  /** 元素在当前视口内可见面积比例。 */
+  visibleRatio: number;
+  /** 元素是否被顶层浮层遮挡。 */
+  covered: boolean;
+  /** 元素所在视觉层。 */
+  layer: WebviewViewportElementLayer;
+  /** 是否为当前顶层上下文的主操作。 */
+  primary: boolean;
+}
+
+/**
+ * WebView 顶层浮层摘要。
+ */
+export interface WebviewViewportTopLayer {
+  /** 浮层类型。 */
+  kind: 'dialog' | 'panel';
+  /** 浮层可读标题。 */
+  label: string;
+  /** 浮层可读文本。 */
+  text: string;
+  /** 浮层相对当前视口的矩形。 */
+  rect: WebviewViewportRect;
+  /** 浮层内可交互元素索引。 */
+  elementIndexes: number[];
+  /** 浮层内主操作元素索引。 */
+  primaryActionIndex?: number;
+  /** 页面背景是否存在遮罩。 */
+  dimmed: boolean;
+}
+
+/**
+ * WebView 当前视口视觉摘要。
+ */
+export interface WebviewViewportSnapshot {
+  /** 视口宽度。 */
+  width: number;
+  /** 视口高度。 */
+  height: number;
+  /** 页面横向滚动位置。 */
+  scrollX: number;
+  /** 页面纵向滚动位置。 */
+  scrollY: number;
+  /** 当前顶层浮层。 */
+  topLayer?: WebviewViewportTopLayer;
+  /** 当前视口内可交互元素摘要。 */
+  elements: WebviewViewportElement[];
 }
 
 /**
@@ -137,6 +228,8 @@ export interface WebviewPageSnapshot {
   loading?: boolean;
   /** 页面滚动信息。 */
   scroll?: WebviewPageScrollState;
+  /** 当前视口视觉摘要。 */
+  viewport?: WebviewViewportSnapshot;
   /** 当前可交互元素列表。 */
   elements?: WebviewAgentElement[];
 }

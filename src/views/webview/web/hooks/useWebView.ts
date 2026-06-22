@@ -13,7 +13,11 @@ import type {
   WebviewPageHeading,
   WebviewPageLink,
   WebviewPageSnapshot,
-  WebviewPageTruncation
+  WebviewPageTruncation,
+  WebviewViewportElement,
+  WebviewViewportRect,
+  WebviewViewportSnapshot,
+  WebviewViewportTopLayer
 } from '@/ai/tools/context/webview';
 import type { WebviewController, WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
@@ -354,6 +358,81 @@ function isAgentElementArray(value: unknown): value is WebviewAgentElement[] {
 }
 
 /**
+ * 判断值是否为视口矩形。
+ * @param value - 待判断值
+ * @returns 是否为视口矩形
+ */
+function isViewportRect(value: unknown): value is WebviewViewportRect {
+  if (!value || typeof value !== 'object') return false;
+
+  const rect = value as Partial<WebviewViewportRect>;
+  return typeof rect.x === 'number' && typeof rect.y === 'number' && typeof rect.width === 'number' && typeof rect.height === 'number';
+}
+
+/**
+ * 判断值是否为视口可交互元素。
+ * @param value - 待判断值
+ * @returns 是否为视口可交互元素
+ */
+function isViewportElement(value: unknown): value is WebviewViewportElement {
+  if (!value || typeof value !== 'object') return false;
+
+  const element = value as Partial<WebviewViewportElement>;
+  return (
+    typeof element.index === 'number' &&
+    typeof element.tagName === 'string' &&
+    typeof element.label === 'string' &&
+    Array.isArray(element.actions) &&
+    isViewportRect(element.rect) &&
+    typeof element.visibleRatio === 'number' &&
+    typeof element.covered === 'boolean' &&
+    (element.layer === 'page' || element.layer === 'top' || element.layer === 'background') &&
+    typeof element.primary === 'boolean'
+  );
+}
+
+/**
+ * 判断值是否为顶层浮层摘要。
+ * @param value - 待判断值
+ * @returns 是否为顶层浮层摘要
+ */
+function isViewportTopLayer(value: unknown): value is WebviewViewportTopLayer {
+  if (!value || typeof value !== 'object') return false;
+
+  const layer = value as Partial<WebviewViewportTopLayer>;
+  return (
+    (layer.kind === 'dialog' || layer.kind === 'panel') &&
+    typeof layer.label === 'string' &&
+    typeof layer.text === 'string' &&
+    isViewportRect(layer.rect) &&
+    Array.isArray(layer.elementIndexes) &&
+    layer.elementIndexes.every((index) => typeof index === 'number') &&
+    (layer.primaryActionIndex === undefined || typeof layer.primaryActionIndex === 'number') &&
+    typeof layer.dimmed === 'boolean'
+  );
+}
+
+/**
+ * 判断值是否为视口摘要。
+ * @param value - 待判断值
+ * @returns 是否为视口摘要
+ */
+function isViewportSnapshot(value: unknown): value is WebviewViewportSnapshot {
+  if (!value || typeof value !== 'object') return false;
+
+  const viewport = value as Partial<WebviewViewportSnapshot>;
+  return (
+    typeof viewport.width === 'number' &&
+    typeof viewport.height === 'number' &&
+    typeof viewport.scrollX === 'number' &&
+    typeof viewport.scrollY === 'number' &&
+    (viewport.topLayer === undefined || isViewportTopLayer(viewport.topLayer)) &&
+    Array.isArray(viewport.elements) &&
+    viewport.elements.every(isViewportElement)
+  );
+}
+
+/**
  * 裁剪字符串并返回截断标记。
  * @param value - 原始字符串
  * @param limit - 最大长度
@@ -365,6 +444,74 @@ function truncateText(value: string, limit: number): { value: string; truncated:
   }
 
   return { value: value.slice(0, limit), truncated: true };
+}
+
+/**
+ * 规范化视口矩形。
+ * @param rect - 页面脚本返回的矩形
+ * @returns 裁剪后的视口矩形
+ */
+function normalizeViewportRect(rect: WebviewViewportRect): WebviewViewportRect {
+  return {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height)
+  };
+}
+
+/**
+ * 规范化顶层浮层摘要。
+ * @param layer - 页面脚本返回的浮层摘要
+ * @returns 裁剪后的顶层浮层摘要
+ */
+function normalizeViewportTopLayer(layer: WebviewViewportTopLayer): WebviewViewportTopLayer {
+  return {
+    kind: layer.kind,
+    label: truncateText(layer.label, 160).value,
+    text: truncateText(layer.text, 1000).value,
+    rect: normalizeViewportRect(layer.rect),
+    elementIndexes: layer.elementIndexes.slice(0, WEBVIEW_PAGE_ELEMENT_LIMIT),
+    ...(typeof layer.primaryActionIndex === 'number' ? { primaryActionIndex: layer.primaryActionIndex } : {}),
+    dimmed: layer.dimmed
+  };
+}
+
+/**
+ * 规范化视口可交互元素。
+ * @param element - 页面脚本返回的视口元素
+ * @returns 裁剪后的视口元素
+ */
+function normalizeViewportElement(element: WebviewViewportElement): WebviewViewportElement {
+  return {
+    index: element.index,
+    tagName: truncateText(element.tagName, 40).value,
+    label: truncateText(element.label, 300).value,
+    actions: element.actions.filter((action) => action === 'click' || action === 'input' || action === 'select' || action === 'press' || action === 'scroll'),
+    rect: normalizeViewportRect(element.rect),
+    visibleRatio: Math.max(0, Math.min(1, Number(element.visibleRatio.toFixed(3)))),
+    covered: element.covered,
+    layer: element.layer,
+    primary: element.primary
+  };
+}
+
+/**
+ * 规范化视口视觉摘要。
+ * @param viewport - 页面脚本返回的视口摘要
+ * @returns 裁剪后的视口摘要
+ */
+function normalizeViewportSnapshot(viewport: WebviewViewportSnapshot | undefined): WebviewViewportSnapshot | undefined {
+  if (!viewport) return undefined;
+
+  return {
+    width: Math.round(viewport.width),
+    height: Math.round(viewport.height),
+    scrollX: Math.round(viewport.scrollX),
+    scrollY: Math.round(viewport.scrollY),
+    ...(viewport.topLayer ? { topLayer: normalizeViewportTopLayer(viewport.topLayer) } : {}),
+    elements: viewport.elements.slice(0, WEBVIEW_PAGE_ELEMENT_LIMIT).map(normalizeViewportElement)
+  };
 }
 
 /**
@@ -387,6 +534,11 @@ function normalizeAgentElements(elements: WebviewAgentElement[] | undefined): We
     ...(typeof element.checked === 'boolean' ? { checked: element.checked } : {}),
     ...(typeof element.selected === 'boolean' ? { selected: element.selected } : {}),
     isNew: element.isNew,
+    ...(element.rect ? { rect: normalizeViewportRect(element.rect) } : {}),
+    ...(typeof element.visibleRatio === 'number' ? { visibleRatio: Math.max(0, Math.min(1, Number(element.visibleRatio.toFixed(3)))) } : {}),
+    ...(typeof element.covered === 'boolean' ? { covered: element.covered } : {}),
+    ...(element.layer ? { layer: element.layer } : {}),
+    ...(typeof element.primary === 'boolean' ? { primary: element.primary } : {}),
     actions: element.actions.filter((action) => action === 'click' || action === 'input' || action === 'select' || action === 'press' || action === 'scroll')
   }));
 }
@@ -441,6 +593,7 @@ export function isWebviewPageSnapshot(value: unknown): value is RawWebviewPageSn
     typeof snapshot.selectedText === 'string' &&
     isHeadingArray(snapshot.headings) &&
     isLinkArray(snapshot.links) &&
+    (snapshot.viewport === undefined || isViewportSnapshot(snapshot.viewport)) &&
     (snapshot.elements === undefined || isAgentElementArray(snapshot.elements))
   );
 }
@@ -485,6 +638,7 @@ export function normalizeWebviewPageSnapshot(value: RawWebviewPageSnapshot): Web
     ...(value.snapshotId ? { snapshotId: value.snapshotId } : {}),
     ...(typeof value.loading === 'boolean' ? { loading: value.loading } : {}),
     ...(value.scroll ? { scroll: value.scroll } : {}),
+    ...(value.viewport ? { viewport: normalizeViewportSnapshot(value.viewport) } : {}),
     elements: normalizeAgentElements(value.elements)
   };
 }
@@ -895,10 +1049,142 @@ function createPageSnapshotScript(): string {
   };
   if (document.body) appendSimplifiedNode(document.body, 0);
   const content = simplifiedLines.length ? simplifiedLines.join('\\n') : '<EMPTY>';
+  const readViewportRect = (element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    };
+  };
+  const readVisibleRatio = (rect) => {
+    const visibleLeft = Math.max(rect.x, 0);
+    const visibleTop = Math.max(rect.y, 0);
+    const visibleRight = Math.min(rect.x + rect.width, window.innerWidth);
+    const visibleBottom = Math.min(rect.y + rect.height, window.innerHeight);
+    const visibleArea = Math.max(visibleRight - visibleLeft, 0) * Math.max(visibleBottom - visibleTop, 0);
+    const area = Math.max(rect.width * rect.height, 1);
+    return Math.max(0, Math.min(1, visibleArea / area));
+  };
+  const intersectsRect = (first, second) =>
+    first.x < second.x + second.width &&
+    first.x + first.width > second.x &&
+    first.y < second.y + second.height &&
+    first.y + first.height > second.y;
+  const readCssAlpha = (color) => {
+    const value = String(color || '').trim();
+    if (!value || value === 'transparent') return 0;
+    const match = value.match(/rgba?\\(([^)]+)\\)/i);
+    if (!match) return 1;
+    const parts = match[1].split(',').map((part) => part.trim());
+    if (parts.length < 4) return 1;
+    const alpha = Number(parts[3]);
+    return Number.isFinite(alpha) ? alpha : 1;
+  };
+  const hasVisibleBackground = (style) => readCssAlpha(style.backgroundColor) > 0.02;
+  const readNumericZIndex = (style) => {
+    const value = Number(style.zIndex);
+    return Number.isFinite(value) ? value : 0;
+  };
+  const readContainedElementIndexes = (container) =>
+    elementEntries
+      .map((item, index) => ({ item, index: index + 1 }))
+      .filter(({ item }) => container.contains(item.element))
+      .map(({ index }) => index);
+  const readLayerLabel = (element) => {
+    const heading = element.querySelector('h1,h2,h3,h4,h5,h6,[role="heading"]');
+    return readText(
+      (heading && (heading.getAttribute('aria-label') || heading.textContent)) ||
+        element.getAttribute('aria-label') ||
+        element.getAttribute('title') ||
+        element.textContent
+    ).slice(0, 160);
+  };
+  const isDialogLikeElement = (element) => {
+    const role = String(element.getAttribute('role') || '').toLowerCase();
+    const isNativeDialog = typeof HTMLDialogElement !== 'undefined' && element instanceof HTMLDialogElement && element.open;
+    return role === 'dialog' || role === 'alertdialog' || element.getAttribute('aria-modal') === 'true' || isNativeDialog;
+  };
+  const readPrimaryActionIndex = (indexes) => {
+    const primaryTextPattern = /^(确认|确定|提交|完成|继续|下一步|保存|ok|yes|confirm)$/i;
+    const clickableIndexes = indexes.filter((index) => {
+      const entry = elementEntries[index - 1];
+      return entry && entry.actions.includes('click');
+    });
+    const exactMatch = clickableIndexes.find((index) => primaryTextPattern.test(readLabel(elementEntries[index - 1].element)));
+    return exactMatch || clickableIndexes[clickableIndexes.length - 1];
+  };
+  const isDimmedBackdrop = (element, excludedElement) => {
+    if (element === excludedElement || excludedElement.contains(element)) return false;
+    const rect = readViewportRect(element);
+    const viewportArea = Math.max(window.innerWidth * window.innerHeight, 1);
+    const rectArea = rect.width * rect.height;
+    if (rectArea / viewportArea < 0.55) return false;
+    const style = window.getComputedStyle(element);
+    return hasVisibleBackground(style) && (readCssAlpha(style.backgroundColor) < 0.95 || Number(style.opacity || '1') < 0.95);
+  };
+  const readTopLayerInfo = () => {
+    const viewportArea = Math.max(window.innerWidth * window.innerHeight, 1);
+    const candidates = Array.from(document.querySelectorAll('*'))
+      .filter((element) => element instanceof HTMLElement && isVisible(element) && element !== document.body && element !== document.documentElement)
+      .map((element) => {
+        const rect = readViewportRect(element);
+        const areaRatio = (rect.width * rect.height) / viewportArea;
+        const elementIndexes = readContainedElementIndexes(element);
+        if (!elementIndexes.length || readVisibleRatio(rect) <= 0 || areaRatio > 0.96) return null;
+        const style = window.getComputedStyle(element);
+        const isDialog = isDialogLikeElement(element);
+        const isLayerPosition = ['fixed', 'absolute', 'sticky'].includes(style.position);
+        const hasBackground = hasVisibleBackground(style);
+        if (!isDialog && !isLayerPosition && readNumericZIndex(style) <= 0) return null;
+        if (!isDialog && !hasBackground && areaRatio < 0.12) return null;
+        const score =
+          (isDialog ? 1000 : 0) +
+          (isLayerPosition ? 200 : 0) +
+          (hasBackground ? 120 : 0) +
+          Math.min(readNumericZIndex(style), 1000) +
+          elementIndexes.length * 20 +
+          Math.round(areaRatio * 100);
+        return { element, rect, elementIndexes, score, kind: isDialog ? 'dialog' : 'panel' };
+      })
+      .filter(Boolean)
+      .sort((first, second) => second.score - first.score);
+    const topCandidate = candidates[0];
+    if (!topCandidate) return null;
+    const text = readText(topCandidate.element.textContent).slice(0, 1000);
+    const label = readLayerLabel(topCandidate.element) || text.slice(0, 80) || '当前浮层';
+    const dimmed = Array.from(document.querySelectorAll('*')).some(
+      (element) => element instanceof HTMLElement && isVisible(element) && isDimmedBackdrop(element, topCandidate.element)
+    );
+    const primaryActionIndex = readPrimaryActionIndex(topCandidate.elementIndexes);
+    return {
+      element: topCandidate.element,
+      summary: {
+        kind: topCandidate.kind,
+        label,
+        text,
+        rect: topCandidate.rect,
+        elementIndexes: topCandidate.elementIndexes,
+        ...(typeof primaryActionIndex === 'number' ? { primaryActionIndex } : {}),
+        dimmed
+      }
+    };
+  };
+  const topLayerInfo = readTopLayerInfo();
+  const readElementLayer = (element, rect) => {
+    if (!topLayerInfo) return 'page';
+    if (topLayerInfo.element.contains(element)) return 'top';
+    return topLayerInfo.summary.dimmed || intersectsRect(rect, topLayerInfo.summary.rect) ? 'background' : 'page';
+  };
   const elements = elementEntries
     .map(({ element, actions }, index) => {
       const input = element instanceof HTMLInputElement ? element : null;
       const option = element instanceof HTMLOptionElement ? element : null;
+      const rect = readViewportRect(element);
+      const visibleRatio = readVisibleRatio(rect);
+      const layer = readElementLayer(element, rect);
+      const primary = topLayerInfo?.summary.primaryActionIndex === index + 1;
       return {
         index: index + 1,
         tagName: element.tagName,
@@ -913,6 +1199,11 @@ function createPageSnapshotScript(): string {
         checked: input && (input.type === 'checkbox' || input.type === 'radio') ? input.checked : undefined,
         selected: option ? option.selected : undefined,
         isNew: false,
+        rect,
+        visibleRatio,
+        covered: layer === 'background',
+        layer,
+        primary,
         actions
       };
     });
@@ -945,6 +1236,26 @@ function createPageSnapshotScript(): string {
     text: readText(element.innerText || element.textContent || element.getAttribute('aria-label')),
     href: element.href
   })).filter((item) => item.href);
+  const viewport = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    scrollX,
+    scrollY,
+    ...(topLayerInfo ? { topLayer: topLayerInfo.summary } : {}),
+    elements: elements
+      .filter((element) => typeof element.visibleRatio === 'number' && element.visibleRatio > 0)
+      .map((element) => ({
+        index: element.index,
+        tagName: element.tagName,
+        label: element.label,
+        actions: element.actions,
+        rect: element.rect,
+        visibleRatio: element.visibleRatio,
+        covered: element.covered,
+        layer: element.layer,
+        primary: element.primary
+      }))
+  };
 
   return {
     url: location.href,
@@ -967,6 +1278,7 @@ function createPageSnapshotScript(): string {
       atTop: scrollY <= 0,
       atBottom: scrollY + window.innerHeight >= scrollHeight - 2
     },
+    viewport,
     elements
   };
 })();

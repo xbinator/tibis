@@ -2,10 +2,10 @@
  * @file types.mts
  * @description ChatRuntime 主进程工具共享类型。
  */
+import type { SUPPORTED_SETTING_KEYS } from './constants.mjs';
 import type { LogLevel, LogScope } from '../../../logger/types.mjs';
 import type { DrawingData } from '../domain/drawing-runtime.mjs';
 import type { ChatRuntimeMainToolExecutionInput } from '../types.mjs';
-import type { SUPPORTED_SETTING_KEYS } from './constants.mjs';
 import type { AIToolExecutionResult, MCPServerConfig, MCPToolSettings } from 'types/ai';
 import type { ChatRuntimeBridgeResult, ChatRuntimeConfirmationDecision, ChatRuntimeConfirmationRequest } from 'types/chat-runtime';
 
@@ -94,6 +94,8 @@ export interface RuntimeWebpageSnapshot {
   capturedAt: number;
   /** 字段截断状态。 */
   truncated: Record<string, unknown>;
+  /** 当前视口视觉摘要。 */
+  viewport?: Record<string, unknown>;
 }
 
 /** Runtime 网页操作结果。 */

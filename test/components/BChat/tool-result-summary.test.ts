@@ -50,6 +50,43 @@ describe('toolResultSummary open file metadata', (): void => {
     });
   });
 
+  it('summarizes read_current_webpage with top layer metadata', (): void => {
+    const summary = getToolResultSummary(
+      'read_current_webpage',
+      successResult('read_current_webpage', {
+        url: 'https://example.com/register',
+        title: '挂号',
+        header: 'Page info: 800x600px [Start of page]',
+        content: '[1]<button>确认</button>',
+        footer: '[End of page]',
+        text: '温馨提示 确认',
+        selectedText: '',
+        headings: [],
+        links: [],
+        capturedAt: 1,
+        truncated: { text: false, content: false, headings: false, links: false, selectedText: false },
+        viewport: {
+          width: 800,
+          height: 600,
+          scrollX: 0,
+          scrollY: 0,
+          topLayer: {
+            kind: 'dialog',
+            label: '温馨提示',
+            text: '医生在多个院区/科室出诊，请确认预约信息',
+            rect: { x: 80, y: 140, width: 640, height: 360 },
+            elementIndexes: [1],
+            primaryActionIndex: 1,
+            dimmed: true
+          },
+          elements: []
+        }
+      })
+    );
+
+    expect(summary?.tags).toContainEqual({ label: '顶层浮层', value: '温馨提示' });
+  });
+
   it('marks write_file file tag as openable when a file is created', (): void => {
     const summary = getToolResultSummary('write_file', successResult('write_file', { path: '/workspace/docs/report.md', content: '# Report', created: true }));
 

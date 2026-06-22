@@ -423,6 +423,13 @@ function summarizeReadCurrentWebpage(data: Record<string, unknown>): ToolResultS
     tags.push({ label: '结构内容', value: '有' });
   }
 
+  const viewport = typeof data.viewport === 'object' && data.viewport !== null ? (data.viewport as Record<string, unknown>) : null;
+  const topLayer = viewport && typeof viewport.topLayer === 'object' && viewport.topLayer !== null ? (viewport.topLayer as Record<string, unknown>) : null;
+  if (topLayer) {
+    const topLayerLabel = typeof topLayer.label === 'string' ? topLayer.label : '';
+    tags.push({ label: '顶层浮层', value: topLayerLabel || '有' });
+  }
+
   if (selectedText.trim()) {
     tags.push({ label: '选中文本', value: '有' });
   }
