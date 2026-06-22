@@ -13,6 +13,7 @@ export {
   GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
+  OPERATE_WEBPAGE_TOOL_NAME,
   OPEN_RESOURCE_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME,
   READ_CURRENT_DOCUMENT_TOOL_NAME,
@@ -43,8 +44,18 @@ export const DRAWING_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'dr
 /** 主进程资源工具名称集合。 */
 export const RESOURCE_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'resource'));
 
+/** 主进程 WebView 工具名称集合。 */
+export const WEBVIEW_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'webview'));
+
 /** 主进程可执行工具名称集合。 */
-export const MAIN_PROCESS_TOOL_NAMES = new Set([...READ_TOOL_NAMES, ...FILE_TOOL_NAMES, ...SETTINGS_TOOL_NAMES, ...DRAWING_TOOL_NAMES, ...RESOURCE_TOOL_NAMES]);
+export const MAIN_PROCESS_TOOL_NAMES = new Set([
+  ...READ_TOOL_NAMES,
+  ...FILE_TOOL_NAMES,
+  ...SETTINGS_TOOL_NAMES,
+  ...DRAWING_TOOL_NAMES,
+  ...RESOURCE_TOOL_NAMES,
+  ...WEBVIEW_TOOL_NAMES
+]);
 
 /** 默认文件读取起始行。 */
 export const DEFAULT_READ_FILE_OFFSET = 1;

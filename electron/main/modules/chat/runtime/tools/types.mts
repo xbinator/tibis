@@ -90,6 +90,24 @@ export interface RuntimeWebpageSnapshot {
   truncated: Record<string, unknown>;
 }
 
+/** Runtime 网页操作结果。 */
+export interface RuntimeWebpageOperateResult {
+  /** 操作是否完成。 */
+  ok: boolean;
+  /** 实际执行的动作类型。 */
+  action: string;
+  /** 被操作目标摘要。 */
+  target: Record<string, unknown> | null;
+  /** 给模型看的结果说明。 */
+  message: string;
+  /** 操作是否触发导航。 */
+  navigationStarted: boolean;
+  /** 页面是否可能发生变化。 */
+  pageChanged: boolean;
+  /** 是否建议重新读取网页。 */
+  shouldReadAgain: boolean;
+}
+
 /** Runtime 文件内容快照。 */
 export interface RuntimeFileContentSnapshot {
   /** 原始请求路径。 */

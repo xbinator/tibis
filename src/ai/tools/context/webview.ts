@@ -38,6 +38,65 @@ export interface WebviewPageTruncation {
 }
 
 /**
+ * WebView 页面滚动状态。
+ */
+export interface WebviewPageScrollState {
+  /** 横向滚动位置。 */
+  x: number;
+  /** 纵向滚动位置。 */
+  y: number;
+  /** 视口宽度。 */
+  viewportWidth: number;
+  /** 视口高度。 */
+  viewportHeight: number;
+  /** 页面可滚动宽度。 */
+  scrollWidth: number;
+  /** 页面可滚动高度。 */
+  scrollHeight: number;
+  /** 是否处于顶部。 */
+  atTop: boolean;
+  /** 是否处于底部。 */
+  atBottom: boolean;
+}
+
+/**
+ * WebView Agent 元素动作。
+ */
+export type WebviewAgentElementAction = 'click' | 'input' | 'select' | 'scroll';
+
+/**
+ * WebView Agent 可交互元素。
+ */
+export interface WebviewAgentElement {
+  /** 本次快照内元素索引。 */
+  index: number;
+  /** 元素标签名。 */
+  tagName: string;
+  /** ARIA role。 */
+  role?: string;
+  /** 元素可读文本。 */
+  text: string;
+  /** 模型可读标签。 */
+  label: string;
+  /** 输入占位符。 */
+  placeholder?: string;
+  /** 链接地址。 */
+  href?: string;
+  /** 非敏感值预览。 */
+  valuePreview?: string;
+  /** 是否禁用。 */
+  disabled: boolean;
+  /** 是否选中。 */
+  checked?: boolean;
+  /** 是否被选择。 */
+  selected?: boolean;
+  /** 是否为本轮新出现元素。 */
+  isNew: boolean;
+  /** 支持的动作列表。 */
+  actions: WebviewAgentElementAction[];
+}
+
+/**
  * WebView 页面快照。
  */
 export interface WebviewPageSnapshot {
@@ -57,6 +116,55 @@ export interface WebviewPageSnapshot {
   capturedAt: number;
   /** 各字段截断状态。 */
   truncated: WebviewPageTruncation;
+  /** 页面 Agent 观察快照 ID。 */
+  snapshotId?: string;
+  /** 页面是否正在加载。 */
+  loading?: boolean;
+  /** 页面滚动信息。 */
+  scroll?: WebviewPageScrollState;
+  /** 当前可交互元素列表。 */
+  elements?: WebviewAgentElement[];
+}
+
+/**
+ * WebView 操作动作。
+ */
+export type WebviewOperateAction =
+  | { type: 'click'; index: number }
+  | { type: 'input'; index: number; text: string; clear?: boolean }
+  | { type: 'select'; index: number; optionText: string }
+  | { type: 'scroll'; index?: number; direction: 'up' | 'down' | 'left' | 'right'; pixels?: number }
+  | { type: 'navigate'; url: string }
+  | { type: 'wait'; seconds?: number };
+
+/**
+ * WebView 操作输入。
+ */
+export interface WebviewOperateInput {
+  /** read_current_webpage 返回的观察快照 ID。 */
+  snapshotId: string;
+  /** 要执行的操作。 */
+  action: WebviewOperateAction;
+}
+
+/**
+ * WebView 操作结果。
+ */
+export interface WebviewOperateResult {
+  /** 操作是否完成。 */
+  ok: boolean;
+  /** 实际执行的动作类型。 */
+  action: WebviewOperateAction['type'];
+  /** 被操作目标摘要。 */
+  target: { index: number; label: string; tagName: string } | null;
+  /** 给模型看的结果说明。 */
+  message: string;
+  /** 操作是否触发导航。 */
+  navigationStarted: boolean;
+  /** 页面是否可能发生变化。 */
+  pageChanged: boolean;
+  /** 是否建议重新读取网页。 */
+  shouldReadAgain: boolean;
 }
 
 /**
@@ -68,6 +176,12 @@ export interface WebviewToolContext {
    * @returns 当前网页快照
    */
   readPageSnapshot(): Promise<WebviewPageSnapshot>;
+  /**
+   * 操作当前网页。
+   * @param input - 网页操作输入
+   * @returns 网页操作结果
+   */
+  operatePage(input: WebviewOperateInput): Promise<WebviewOperateResult>;
 }
 
 /**

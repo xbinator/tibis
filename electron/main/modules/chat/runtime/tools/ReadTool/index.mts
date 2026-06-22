@@ -14,10 +14,9 @@ import {
   READ_CURRENT_DOCUMENT_TOOL_NAME,
   READ_TOOL_NAMES,
   READ_CURRENT_DRAWING_TOOL_NAME,
-  READ_CURRENT_WEBPAGE_TOOL_NAME,
   DEFAULT_QUERY_LOG_LIMIT
 } from '../constants.mjs';
-import { isRuntimeDocumentSnapshot, isRuntimeDrawingSnapshot, isRuntimeWebpageSnapshot } from '../guards.mjs';
+import { isRuntimeDocumentSnapshot, isRuntimeDrawingSnapshot } from '../guards.mjs';
 import { createBridgeFailureResult, createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';
 
 /**
@@ -229,18 +228,6 @@ export async function executeReadTool(input: ChatRuntimeMainToolExecutionInput, 
     if (bridgeResult.status === 'failure') return createBridgeFailureResult(input.toolName, bridgeResult.error);
     if (!isRuntimeDrawingSnapshot(bridgeResult.data)) return createMainToolFailureResult(input.toolName, 'INVALID_INPUT', '当前画板快照格式无效');
     return createMainToolSuccessResult(READ_CURRENT_DRAWING_TOOL_NAME, bridgeResult.data);
-  }
-
-  if (input.toolName === READ_CURRENT_WEBPAGE_TOOL_NAME) {
-    const bridgeResult = await deps.requestBridge({
-      runtimeId: input.runtime.runtimeId,
-      toolCallId: input.toolCallId,
-      kind: 'webview-snapshot',
-      payload: input.input
-    });
-    if (bridgeResult.status === 'failure') return createBridgeFailureResult(input.toolName, bridgeResult.error);
-    if (!isRuntimeWebpageSnapshot(bridgeResult.data)) return createMainToolFailureResult(input.toolName, 'INVALID_INPUT', '当前网页快照格式无效');
-    return createMainToolSuccessResult(READ_CURRENT_WEBPAGE_TOOL_NAME, bridgeResult.data);
   }
 
   if (input.toolName === GET_CURRENT_TIME_TOOL_NAME) {

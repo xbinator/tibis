@@ -16,6 +16,7 @@ import {
   createGetCurrentTimeTool,
   createGetMcpSettingsTool,
   createGetSettingsTool,
+  createOperateWebpageTool,
   createOpenResourceTool,
   createQueryLogsTool,
   createReadCurrentDocumentTool,
@@ -45,6 +46,7 @@ export {
   GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
+  OPERATE_WEBPAGE_TOOL_NAME,
   OPEN_RESOURCE_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME,
   READ_CURRENT_DOCUMENT_TOOL_NAME,
@@ -224,6 +226,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const createDocumentTool = createCreateDocumentTool();
   const createDrawingTool = createCreateDrawingTool();
   const applyDrawingOperationsTool = createApplyDrawingOperationsTool();
+  const readCurrentWebpageTool = createReadCurrentWebpageTool();
+  const operateWebpageTool = createOperateWebpageTool();
 
   // 没有确认适配器时只返回只读工具 + 始终注册的写工具
   if (!options.confirm) {
@@ -231,10 +235,12 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       ...readonlyTools,
       ...(readDirectoryTool ? [readDirectoryTool] : []),
       ...(mcpReadTool ? [mcpReadTool] : []),
+      readCurrentWebpageTool,
       createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) }),
       createDocumentTool,
       createDrawingTool,
       applyDrawingOperationsTool,
+      operateWebpageTool,
       createBuiltinEditMemoryTool()
     ];
   }
@@ -280,8 +286,10 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     ...readonlyTools,
     ...(readDirectoryTool ? [readDirectoryTool] : []),
     ...(mcpReadTool ? [mcpReadTool] : []),
+    readCurrentWebpageTool,
     ...writableTools,
     ...mcpWriteTools,
+    operateWebpageTool,
     ...(skillTool ? [skillTool] : []),
     todoWriteTool
   ];

@@ -79,7 +79,10 @@ const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
 const cacheControl = useCacheControl();
 
-webviewToolContextRegistry.register(routeFullPath, { readPageSnapshot: webview.readPageSnapshot });
+webviewToolContextRegistry.register(routeFullPath, {
+  readPageSnapshot: webview.readPageSnapshot,
+  operatePage: webview.operatePage
+});
 
 /** DOM 检查看板宽度 */
 const domPanelWidth = ref(360);

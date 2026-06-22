@@ -7,7 +7,7 @@ import { Script, createContext } from 'node:vm';
 import type { WebviewTag } from 'electron';
 import { ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createElementSelectionScript, useWebView } from '@/views/webview/web/hooks/useWebView';
+import { createElementSelectionScript, normalizeWebviewPageSnapshot, useWebView } from '@/views/webview/web/hooks/useWebView';
 
 /**
  * 测试环境中注入的元素选择清理函数。
@@ -39,6 +39,25 @@ function createDevToolsWebview(isOpened: boolean): WebviewTag & TestDevToolsWebv
   element.openDevTools = vi.fn();
   element.closeDevTools = vi.fn();
   element.isDevToolsOpened = vi.fn(() => isOpened);
+  return element;
+}
+
+/**
+ * 创建可执行脚本的 WebView 测试替身。
+ * @param results - executeJavaScript 依次返回的结果
+ * @returns WebView 测试替身
+ */
+function createScriptableWebview(results: unknown[]): WebviewTag {
+  const element = document.createElement('webview') as unknown as WebviewTag;
+  const pendingResults = [...results];
+  element.executeJavaScript = vi.fn().mockImplementation((): Promise<unknown> => {
+    const nextResult = pendingResults.shift() ?? null;
+    if (nextResult instanceof Error) {
+      return Promise.reject(nextResult);
+    }
+
+    return Promise.resolve(nextResult);
+  });
   return element;
 }
 
@@ -214,5 +233,148 @@ describe('useWebView', () => {
     (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
 
     expect(captureButton).toBeNull();
+  });
+
+  it('normalizes webpage agent snapshot fields', (): void => {
+    const snapshot = normalizeWebviewPageSnapshot({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      scroll: {
+        x: 0,
+        y: 0,
+        viewportWidth: 800,
+        viewportHeight: 600,
+        scrollWidth: 800,
+        scrollHeight: 1200,
+        atTop: true,
+        atBottom: false
+      },
+      elements: [{ index: 1, tagName: 'BUTTON', text: 'Search', label: 'Search', disabled: false, isNew: true, actions: ['click'] }]
+    });
+
+    expect(snapshot.snapshotId).toBe('snap-1');
+    expect(snapshot.scroll).toMatchObject({ viewportWidth: 800, scrollHeight: 1200 });
+    expect(snapshot.elements?.[0]).toMatchObject({ index: 1, label: 'Search', actions: ['click'] });
+  });
+
+  it('operates the current page using the active snapshot', async (): Promise<void> => {
+    const webviewElement = createScriptableWebview([
+      {
+        url: 'https://example.com',
+        title: 'Example',
+        text: 'Hello',
+        selectedText: '',
+        headings: [],
+        links: [],
+        snapshotId: 'snap-1',
+        loading: false,
+        scroll: {
+          x: 0,
+          y: 0,
+          viewportWidth: 800,
+          viewportHeight: 600,
+          scrollWidth: 800,
+          scrollHeight: 1200,
+          atTop: true,
+          atBottom: false
+        },
+        elements: [{ index: 1, tagName: 'BUTTON', text: 'Search', label: 'Search', disabled: false, isNew: true, actions: ['click'] }]
+      },
+      {
+        ok: true,
+        action: 'click',
+        target: { index: 1, label: 'Search', tagName: 'BUTTON' },
+        message: 'clicked',
+        navigationStarted: false,
+        pageChanged: true,
+        shouldReadAgain: true
+      }
+    ]);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
+
+    expect(result).toMatchObject({ ok: true, action: 'click', shouldReadAgain: true });
+    expect(webviewElement.executeJavaScript).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects operation when the active snapshot becomes stale', async (): Promise<void> => {
+    const webviewElement = createScriptableWebview([
+      {
+        url: 'https://example.com',
+        title: 'Example',
+        text: 'Hello',
+        selectedText: '',
+        headings: [],
+        links: [],
+        snapshotId: 'snap-1',
+        loading: false,
+        elements: []
+      }
+    ]);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    controller.handleDidStartLoading();
+    await expect(controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } })).rejects.toMatchObject({
+      code: 'STALE_SNAPSHOT'
+    });
+  });
+
+  it('normalizes page operation error codes from rejected scripts', async (): Promise<void> => {
+    const webviewElement = createScriptableWebview([
+      {
+        url: 'https://example.com',
+        title: 'Example',
+        text: 'Hello',
+        selectedText: '',
+        headings: [],
+        links: [],
+        snapshotId: 'snap-1',
+        loading: false,
+        elements: [{ index: 1, tagName: 'SELECT', text: 'Other', label: 'Other', disabled: false, isNew: false, actions: ['select'] }]
+      },
+      new Error('Error: OPTION_AMBIGUOUS')
+    ]);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    await expect(
+      controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'select', index: 1, optionText: 'Other' } })
+    ).rejects.toMatchObject({
+      code: 'OPTION_AMBIGUOUS'
+    });
+  });
+
+  it('navigates the current WebView through operatePage without executing page JavaScript', async (): Promise<void> => {
+    const webviewElement = createScriptableWebview([
+      {
+        url: 'https://example.com',
+        title: 'Example',
+        text: 'Hello',
+        selectedText: '',
+        headings: [],
+        links: [],
+        snapshotId: 'snap-1',
+        loading: false,
+        elements: []
+      }
+    ]);
+    webviewElement.loadURL = vi.fn();
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'navigate', url: 'example.org' } });
+
+    expect(webviewElement.loadURL).toHaveBeenCalledWith('https://example.org/');
+    expect(webviewElement.executeJavaScript).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ ok: true, action: 'navigate', pageChanged: true, shouldReadAgain: true });
   });
 });

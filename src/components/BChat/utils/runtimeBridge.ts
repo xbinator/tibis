@@ -5,7 +5,7 @@
 import type { AIToolContext, AIToolExecutionError } from 'types/ai';
 import type { ChatRuntimeBridgeRequestEvent } from 'types/chat-runtime';
 import type { DrawingToolContext } from '@/ai/tools/context/drawing';
-import type { WebviewToolContext } from '@/ai/tools/context/webview';
+import type { WebviewOperateInput, WebviewToolContext } from '@/ai/tools/context/webview';
 import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
 import type { DrawingData } from '@/components/BDrawing/types';
 import type { StoredFile } from '@/shared/storage/files/types';
@@ -495,6 +495,14 @@ export async function handleBChatRuntimeBridgeRequest(event: ChatRuntimeBridgeRe
       throw createBridgeError('EDITOR_UNAVAILABLE', '当前没有可用的网页');
     }
     return context.readPageSnapshot();
+  }
+
+  if (event.kind === 'webview-operate') {
+    const context = dependencies.getWebviewContext();
+    if (!context) {
+      throw createBridgeError('EDITOR_UNAVAILABLE', '当前没有可操作的网页');
+    }
+    return context.operatePage(event.payload as WebviewOperateInput);
   }
 
   if (event.kind === 'file-content-snapshot') {

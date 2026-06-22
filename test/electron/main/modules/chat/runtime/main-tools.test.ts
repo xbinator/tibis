@@ -90,6 +90,163 @@ describe('createMainToolExecutor', (): void => {
     ]);
   });
 
+  it('routes read_current_webpage through WebviewTool bridge', async (): Promise<void> => {
+    const bridgeRequests: MainToolBridgeRequest[] = [];
+    const executeMainTool = createMainToolExecutor({
+      ...createMainToolDependencies(bridgeRequests),
+      async requestBridge(input: MainToolBridgeRequest) {
+        bridgeRequests.push(input);
+        return {
+          status: 'success',
+          data: {
+            url: 'https://example.com',
+            title: 'Example',
+            text: 'Hello',
+            selectedText: '',
+            headings: [],
+            links: [],
+            capturedAt: 1,
+            truncated: {},
+            snapshotId: 'snap-1',
+            loading: false,
+            scroll: {
+              x: 0,
+              y: 0,
+              viewportWidth: 800,
+              viewportHeight: 600,
+              scrollWidth: 800,
+              scrollHeight: 1200,
+              atTop: true,
+              atBottom: false
+            },
+            elements: []
+          }
+        };
+      }
+    });
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-web-1',
+      toolName: 'read_current_webpage',
+      input: {}
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.toolName).toBe('read_current_webpage');
+    expect(result.data).toMatchObject({ snapshotId: 'snap-1', title: 'Example' });
+    expect(bridgeRequests).toEqual([
+      {
+        runtimeId: 'runtime-1',
+        toolCallId: 'tool-call-web-1',
+        kind: 'webview-snapshot',
+        payload: {}
+      }
+    ]);
+  });
+
+  it('rejects invalid read_current_webpage bridge payloads', async (): Promise<void> => {
+    const bridgeRequests: MainToolBridgeRequest[] = [];
+    const executeMainTool = createMainToolExecutor({
+      ...createMainToolDependencies(bridgeRequests),
+      async requestBridge(input: MainToolBridgeRequest) {
+        bridgeRequests.push(input);
+        return {
+          status: 'success',
+          data: { title: 'Missing required webpage fields' }
+        };
+      }
+    });
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-web-invalid-1',
+      toolName: 'read_current_webpage',
+      input: {}
+    });
+
+    expect(result).toMatchObject({
+      toolName: 'read_current_webpage',
+      status: 'failure',
+      error: { code: 'INVALID_INPUT', message: '当前网页快照格式无效' }
+    });
+  });
+
+  it('confirms operate_webpage before requesting renderer operation', async (): Promise<void> => {
+    const bridgeRequests: MainToolBridgeRequest[] = [];
+    const requestConfirmation = vi.fn(async () => ({ approved: true }));
+    const executeMainTool = createMainToolExecutor({
+      now: () => '2026-06-22T00:00:00.000Z',
+      requestConfirmation,
+      async requestBridge(input: MainToolBridgeRequest) {
+        bridgeRequests.push(input);
+        return {
+          status: 'success',
+          data: {
+            ok: true,
+            action: 'click',
+            target: { index: 2, label: 'Search', tagName: 'BUTTON' },
+            message: '已点击 Search',
+            navigationStarted: false,
+            pageChanged: true,
+            shouldReadAgain: true
+          }
+        };
+      }
+    });
+    const toolInput = { snapshotId: 'snap-1', action: { type: 'click', index: 2 } };
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-web-2',
+      toolName: 'operate_webpage',
+      input: toolInput
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.toolName).toBe('operate_webpage');
+    expect(requestConfirmation).toHaveBeenCalledTimes(1);
+    expect(bridgeRequests).toEqual([
+      {
+        runtimeId: 'runtime-1',
+        toolCallId: 'tool-call-web-2',
+        kind: 'webview-operate',
+        payload: toolInput
+      }
+    ]);
+  });
+
+  it('rejects invalid operate_webpage bridge payloads', async (): Promise<void> => {
+    const bridgeRequests: MainToolBridgeRequest[] = [];
+    const executeMainTool = createMainToolExecutor({
+      now: () => '2026-06-22T00:00:00.000Z',
+      async requestConfirmation() {
+        return { approved: true };
+      },
+      async requestBridge(input: MainToolBridgeRequest) {
+        bridgeRequests.push(input);
+        return {
+          status: 'success',
+          data: { ok: true, action: 'click' }
+        };
+      }
+    });
+
+    const result = await executeMainTool({
+      runtime,
+      toolCallId: 'tool-call-web-invalid-2',
+      toolName: 'operate_webpage',
+      input: { snapshotId: 'snap-1', action: { type: 'click', index: 2 } }
+    });
+
+    expect(result).toMatchObject({
+      toolName: 'operate_webpage',
+      status: 'failure',
+      error: { code: 'INVALID_INPUT', message: '网页操作结果格式无效' }
+    });
+    expect(bridgeRequests).toHaveLength(1);
+  });
+
   it('returns a stable failure for unknown main tools', async (): Promise<void> => {
     const executeMainTool = createMainToolExecutor(createMainToolDependencies([]));
 

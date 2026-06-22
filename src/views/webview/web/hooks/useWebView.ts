@@ -3,9 +3,19 @@
  * @description 封装 `<webview>` 标签页面状态与导航控制。
  */
 import type { DidNavigateEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
+import type { AIToolExecutionError } from 'types/ai';
 import { ref, type Ref } from 'vue';
-import type { WebviewPageHeading, WebviewPageLink, WebviewPageSnapshot, WebviewPageTruncation } from '@/ai/tools/context/webview';
+import type {
+  WebviewAgentElement,
+  WebviewOperateInput,
+  WebviewOperateResult,
+  WebviewPageHeading,
+  WebviewPageLink,
+  WebviewPageSnapshot,
+  WebviewPageTruncation
+} from '@/ai/tools/context/webview';
 import type { WebviewController, WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
+import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 
 /**
  * 默认 WebView 页面状态。
@@ -113,6 +123,80 @@ export const WEBVIEW_PAGE_LINK_LIMIT = 100;
 export const WEBVIEW_PAGE_SELECTED_TEXT_LIMIT = 4000;
 /** 页面读取超时时间。 */
 export const WEBVIEW_PAGE_SNAPSHOT_TIMEOUT_MS = 10000;
+/** 页面操作超时时间。 */
+export const WEBVIEW_PAGE_OPERATION_TIMEOUT_MS = 10000;
+/** 页面操作快照有效期。 */
+export const WEBVIEW_PAGE_SNAPSHOT_TTL_MS = 60000;
+/** 页面可操作元素最大数量。 */
+export const WEBVIEW_PAGE_ELEMENT_LIMIT = 180;
+
+/**
+ * WebView 操作可稳定透传给 ChatRuntime 的错误码。
+ */
+type WebviewOperationErrorCode = Extract<
+  AIToolExecutionError['code'],
+  | 'EDITOR_UNAVAILABLE'
+  | 'STALE_SNAPSHOT'
+  | 'PAGE_LOADING'
+  | 'ELEMENT_NOT_FOUND'
+  | 'ACTION_NOT_SUPPORTED'
+  | 'OPTION_AMBIGUOUS'
+  | 'SCROLL_TARGET_NOT_FOUND'
+  | 'BRIDGE_TIMEOUT'
+  | 'INVALID_INPUT'
+  | 'EXECUTION_FAILED'
+>;
+
+/** WebView 操作错误对象。 */
+type WebviewOperationError = Error & { code: WebviewOperationErrorCode };
+
+/** WebView 操作错误消息映射。 */
+const WEBVIEW_OPERATION_ERROR_MESSAGES: Record<WebviewOperationErrorCode, string> = {
+  EDITOR_UNAVAILABLE: '当前页面尚未准备好操作，请稍后重试',
+  STALE_SNAPSHOT: '网页快照已过期，请重新读取当前网页',
+  PAGE_LOADING: '页面正在导航，请等待加载完成后重试',
+  ELEMENT_NOT_FOUND: '未找到快照中的目标元素，请重新读取当前网页',
+  ACTION_NOT_SUPPORTED: '目标元素不支持该网页操作',
+  OPTION_AMBIGUOUS: '存在多个同名选项，请重新读取网页后选择更明确的目标',
+  SCROLL_TARGET_NOT_FOUND: '目标元素没有可滚动容器',
+  BRIDGE_TIMEOUT: '网页操作超时，请稍后重试',
+  INVALID_INPUT: '网页操作参数无效',
+  EXECUTION_FAILED: '网页操作失败'
+};
+
+/**
+ * 判断值是否为 WebView 操作错误码。
+ * @param value - 待判断值
+ * @returns 是否为操作错误码
+ */
+function isWebviewOperationErrorCode(value: unknown): value is WebviewOperationErrorCode {
+  return typeof value === 'string' && value in WEBVIEW_OPERATION_ERROR_MESSAGES;
+}
+
+/**
+ * 创建带稳定错误码的 WebView 操作错误。
+ * @param code - 操作错误码
+ * @param message - 可选错误说明
+ * @returns 操作错误
+ */
+function createWebviewOperationError(code: WebviewOperationErrorCode, message?: string): WebviewOperationError {
+  const error = new Error(message || WEBVIEW_OPERATION_ERROR_MESSAGES[code]) as WebviewOperationError;
+  error.code = code;
+  return error;
+}
+
+/**
+ * 从页面脚本错误消息中提取稳定错误码。
+ * @param message - 原始错误消息
+ * @returns 操作错误码或 undefined
+ */
+function readWebviewOperationErrorCodeFromMessage(message: string): WebviewOperationErrorCode | undefined {
+  const trimmedMessage = message.trim();
+  if (isWebviewOperationErrorCode(trimmedMessage)) return trimmedMessage;
+
+  const suffix = trimmedMessage.split(':').at(-1)?.trim();
+  return isWebviewOperationErrorCode(suffix) ? suffix : undefined;
+}
 
 /**
  * 判断值是否为页面标题数组。
@@ -153,6 +237,68 @@ function isLinkArray(value: unknown): value is WebviewPageLink[] {
 }
 
 /**
+ * 判断值是否为 WebView Agent 元素数组。
+ * @param value - 待判断值
+ * @returns 是否为可交互元素数组
+ */
+function isAgentElementArray(value: unknown): value is WebviewAgentElement[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => {
+      if (!item || typeof item !== 'object') return false;
+
+      const element = item as Partial<WebviewAgentElement>;
+      return (
+        typeof element.index === 'number' &&
+        typeof element.tagName === 'string' &&
+        typeof element.text === 'string' &&
+        typeof element.label === 'string' &&
+        typeof element.disabled === 'boolean' &&
+        typeof element.isNew === 'boolean' &&
+        Array.isArray(element.actions)
+      );
+    })
+  );
+}
+
+/**
+ * 裁剪字符串并返回截断标记。
+ * @param value - 原始字符串
+ * @param limit - 最大长度
+ * @returns 裁剪结果
+ */
+function truncateText(value: string, limit: number): { value: string; truncated: boolean } {
+  if (value.length <= limit) {
+    return { value, truncated: false };
+  }
+
+  return { value: value.slice(0, limit), truncated: true };
+}
+
+/**
+ * 规范化可交互元素。
+ * @param elements - 页面脚本返回的元素列表
+ * @returns 裁剪后的元素列表
+ */
+function normalizeAgentElements(elements: WebviewAgentElement[] | undefined): WebviewAgentElement[] {
+  return (elements ?? []).slice(0, WEBVIEW_PAGE_ELEMENT_LIMIT).map((element) => ({
+    index: element.index,
+    tagName: element.tagName,
+    ...(element.role ? { role: truncateText(element.role, 80).value } : {}),
+    text: truncateText(element.text, 300).value,
+    label: truncateText(element.label, 300).value,
+    ...(element.placeholder ? { placeholder: truncateText(element.placeholder, 300).value } : {}),
+    ...(element.href ? { href: element.href } : {}),
+    ...(element.valuePreview ? { valuePreview: truncateText(element.valuePreview, 300).value } : {}),
+    disabled: element.disabled,
+    ...(typeof element.checked === 'boolean' ? { checked: element.checked } : {}),
+    ...(typeof element.selected === 'boolean' ? { selected: element.selected } : {}),
+    isNew: element.isNew,
+    actions: element.actions.filter((action) => action === 'click' || action === 'input' || action === 'select' || action === 'scroll')
+  }));
+}
+
+/**
  * 判断值是否为未裁剪的页面快照。
  * @param value - 待判断的值
  * @returns 是否为页面快照
@@ -169,22 +315,9 @@ export function isWebviewPageSnapshot(value: unknown): value is Omit<WebviewPage
     typeof snapshot.text === 'string' &&
     typeof snapshot.selectedText === 'string' &&
     isHeadingArray(snapshot.headings) &&
-    isLinkArray(snapshot.links)
+    isLinkArray(snapshot.links) &&
+    (snapshot.elements === undefined || isAgentElementArray(snapshot.elements))
   );
-}
-
-/**
- * 裁剪字符串并返回截断标记。
- * @param value - 原始字符串
- * @param limit - 最大长度
- * @returns 裁剪结果
- */
-function truncateText(value: string, limit: number): { value: string; truncated: boolean } {
-  if (value.length <= limit) {
-    return { value, truncated: false };
-  }
-
-  return { value: value.slice(0, limit), truncated: true };
 }
 
 /**
@@ -218,7 +351,11 @@ export function normalizeWebviewPageSnapshot(value: Omit<WebviewPageSnapshot, 'c
     headings,
     links,
     capturedAt: Date.now(),
-    truncated
+    truncated,
+    ...(value.snapshotId ? { snapshotId: value.snapshotId } : {}),
+    ...(typeof value.loading === 'boolean' ? { loading: value.loading } : {}),
+    ...(value.scroll ? { scroll: value.scroll } : {}),
+    elements: normalizeAgentElements(value.elements)
   };
 }
 
@@ -235,6 +372,44 @@ export function withWebviewPageReadTimeout<T>(promise: Promise<T>): Promise<T> {
       .catch(reject)
       .finally(() => globalThis.clearTimeout(timer));
   });
+}
+
+/**
+ * 为页面操作 Promise 添加超时保护。
+ * @param promise - 页面操作 Promise
+ * @returns 带超时保护的 Promise
+ */
+export function withWebviewPageOperationTimeout<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer: ReturnType<typeof globalThis.setTimeout> = globalThis.setTimeout(
+      () => reject(createWebviewOperationError('BRIDGE_TIMEOUT')),
+      WEBVIEW_PAGE_OPERATION_TIMEOUT_MS
+    );
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => globalThis.clearTimeout(timer));
+  });
+}
+
+/**
+ * 判断值是否为 WebView 操作结果。
+ * @param value - 待判断值
+ * @returns 是否为 WebView 操作结果
+ */
+function isWebviewOperateResult(value: unknown): value is WebviewOperateResult {
+  if (!value || typeof value !== 'object') return false;
+
+  const result = value as Partial<WebviewOperateResult>;
+  return (
+    typeof result.ok === 'boolean' &&
+    typeof result.action === 'string' &&
+    (result.target === null || (typeof result.target === 'object' && result.target !== null)) &&
+    typeof result.message === 'string' &&
+    typeof result.navigationStarted === 'boolean' &&
+    typeof result.pageChanged === 'boolean' &&
+    typeof result.shouldReadAgain === 'boolean'
+  );
 }
 
 /**
@@ -258,13 +433,109 @@ export function normalizeWebviewPageReadError(error: unknown): Error {
 }
 
 /**
+ * 归一化 WebView 操作错误，确保 ChatRuntime bridge 能透传稳定错误码。
+ * @param error - 原始错误
+ * @returns 带稳定错误码的操作错误
+ */
+export function normalizeWebviewPageOperationError(error: unknown): WebviewOperationError {
+  if (error instanceof Error && 'code' in error && isWebviewOperationErrorCode((error as { code?: unknown }).code)) {
+    return error as WebviewOperationError;
+  }
+
+  const message = error instanceof Error ? error.message : String(error || WEBVIEW_OPERATION_ERROR_MESSAGES.EXECUTION_FAILED);
+  const code = readWebviewOperationErrorCodeFromMessage(message) ?? 'EXECUTION_FAILED';
+  return createWebviewOperationError(code, code === 'EXECUTION_FAILED' ? message : undefined);
+}
+
+/**
  * 构建页面快照读取脚本。
  * @returns 可通过 `executeJavaScript` 执行的脚本
  */
 function createPageSnapshotScript(): string {
   return `
 (() => {
-  const readText = (value) => String(value || '').trim();
+  const readText = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+  const interactiveSelector = [
+    'button',
+    'a[href]',
+    'input',
+    'textarea',
+    'select',
+    'summary',
+    '[contenteditable="true"]',
+    '[role="button"]',
+    '[role="link"]',
+    '[role="checkbox"]',
+    '[role="radio"]',
+    '[role="tab"]',
+    '[role="menuitem"]',
+    '[tabindex]'
+  ].join(',');
+  const isVisible = (element) => {
+    if (!(element instanceof HTMLElement)) return false;
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') > 0;
+  };
+  const readLabel = (element) => readText(
+    element.getAttribute('aria-label') ||
+    element.getAttribute('title') ||
+    element.getAttribute('alt') ||
+    element.getAttribute('placeholder') ||
+    element.innerText ||
+    element.textContent ||
+    element.getAttribute('value')
+  );
+  const readActions = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    const role = element.getAttribute('role') || '';
+    const actions = [];
+    if (element instanceof HTMLInputElement) {
+      const inputType = String(element.type || 'text').toLowerCase();
+      if (['button', 'submit', 'reset', 'checkbox', 'radio'].includes(inputType)) {
+        actions.push('click');
+      } else {
+        actions.push('input');
+      }
+    } else if (tagName === 'textarea' || element.isContentEditable) {
+      actions.push('input');
+    }
+    if (tagName === 'select') actions.push('select');
+    if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || role) actions.push('click');
+    actions.push('scroll');
+    return Array.from(new Set(actions));
+  };
+  const readValuePreview = (element) => {
+    if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return undefined;
+    if (element.type === 'password' || element.type === 'hidden') return undefined;
+    return readText(element.value).slice(0, 300);
+  };
+  const elements = Array.from(document.querySelectorAll(interactiveSelector))
+    .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
+    .slice(0, ${WEBVIEW_PAGE_ELEMENT_LIMIT})
+    .map((element, index) => {
+      const input = element instanceof HTMLInputElement ? element : null;
+      const option = element instanceof HTMLOptionElement ? element : null;
+      return {
+        index: index + 1,
+        tagName: element.tagName,
+        role: element.getAttribute('role') || undefined,
+        text: readText(element.innerText || element.textContent).slice(0, 300),
+        label: readLabel(element).slice(0, 300),
+        placeholder: element.getAttribute('placeholder') || undefined,
+        href: element instanceof HTMLAnchorElement ? element.href : undefined,
+        valuePreview: readValuePreview(element),
+        disabled: Boolean(element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true'),
+        checked: input && (input.type === 'checkbox' || input.type === 'radio') ? input.checked : undefined,
+        selected: option ? option.selected : undefined,
+        isNew: false,
+        actions: readActions(element)
+      };
+    });
+  const scrollX = window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+  const scrollY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  const scrollWidth = Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0, window.innerWidth);
+  const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, window.innerHeight);
   const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6')).map((element) => ({
     level: Number(element.tagName.slice(1)),
     text: readText(element.innerText || element.textContent)
@@ -280,7 +551,190 @@ function createPageSnapshotScript(): string {
     text: readText(document.body ? document.body.innerText : ''),
     selectedText: readText(window.getSelection ? window.getSelection().toString() : ''),
     headings,
-    links
+    links,
+    loading: document.readyState === 'loading',
+    scroll: {
+      x: scrollX,
+      y: scrollY,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      scrollWidth,
+      scrollHeight,
+      atTop: scrollY <= 0,
+      atBottom: scrollY + window.innerHeight >= scrollHeight - 2
+    },
+    elements
+  };
+})();
+`;
+}
+
+/**
+ * 构建页面操作脚本。
+ * @param input - WebView 操作输入
+ * @returns 可通过 `executeJavaScript` 执行的脚本
+ */
+function createPageOperationScript(input: WebviewOperateInput): string {
+  const serializedInput = JSON.stringify(input);
+  return `
+(async () => {
+  const input = ${serializedInput};
+  const readText = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+  const interactiveSelector = [
+    'button',
+    'a[href]',
+    'input',
+    'textarea',
+    'select',
+    'summary',
+    '[contenteditable="true"]',
+    '[role="button"]',
+    '[role="link"]',
+    '[role="checkbox"]',
+    '[role="radio"]',
+    '[role="tab"]',
+    '[role="menuitem"]',
+    '[tabindex]'
+  ].join(',');
+  const isVisible = (element) => {
+    if (!(element instanceof HTMLElement)) return false;
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') > 0;
+  };
+  const readLabel = (element) => readText(
+    element.getAttribute('aria-label') ||
+    element.getAttribute('title') ||
+    element.getAttribute('alt') ||
+    element.getAttribute('placeholder') ||
+    element.innerText ||
+    element.textContent ||
+    element.getAttribute('value')
+  );
+  const elements = Array.from(document.querySelectorAll(interactiveSelector)).filter((element) => (
+    element instanceof HTMLElement &&
+    isVisible(element) &&
+    !(element instanceof HTMLInputElement && element.type === 'hidden')
+  ));
+  const findElement = (index) => elements[index - 1] || null;
+  const createTarget = (element, index) => element ? { index, label: readLabel(element).slice(0, 300), tagName: element.tagName } : null;
+  const dispatchInputEvents = (element) => {
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: element.value || element.innerText || '' }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const findScrollableAncestor = (element) => {
+    let current = element;
+    while (current && current !== document.body && current !== document.documentElement) {
+      const style = window.getComputedStyle(current);
+      const canScrollY = /(auto|scroll|overlay)/.test(style.overflowY) && current.scrollHeight > current.clientHeight;
+      const canScrollX = /(auto|scroll|overlay)/.test(style.overflowX) && current.scrollWidth > current.clientWidth;
+      if (canScrollY || canScrollX) return current;
+      current = current.parentElement;
+    }
+    return null;
+  };
+  const scrollTarget = (target, direction, pixels) => {
+    const numericPixels = Number(pixels);
+    const amount = Number.isFinite(numericPixels) && numericPixels > 0 ? numericPixels : Math.round(window.innerHeight * 0.7);
+    const left = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
+    const top = direction === 'up' ? -amount : direction === 'down' ? amount : 0;
+    if (target) {
+      target.scrollBy({ left, top, behavior: 'auto' });
+      return;
+    }
+    window.scrollBy({ left, top, behavior: 'auto' });
+  };
+  const readWaitSeconds = (value) => {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds)) return 1;
+    return Math.max(0, Math.min(5, seconds));
+  };
+  const isScrollDirection = (direction) => ['up', 'down', 'left', 'right'].includes(direction);
+  const action = input.action || {};
+  if (document.readyState === 'loading' && action.type !== 'wait') {
+    throw new Error('PAGE_LOADING');
+  }
+  if (action.type === 'wait') {
+    await new Promise((resolve) => window.setTimeout(resolve, readWaitSeconds(action.seconds) * 1000));
+    return {
+      ok: true,
+      action: 'wait',
+      target: null,
+      message: 'waited',
+      navigationStarted: document.readyState === 'loading',
+      pageChanged: document.readyState === 'loading',
+      shouldReadAgain: document.readyState === 'loading'
+    };
+  }
+  if (action.type === 'scroll' && typeof action.index !== 'number') {
+    if (!isScrollDirection(action.direction)) throw new Error('INVALID_INPUT');
+    scrollTarget(null, action.direction, action.pixels);
+    return {
+      ok: true,
+      action: 'scroll',
+      target: null,
+      message: 'executed',
+      navigationStarted: document.readyState === 'loading',
+      pageChanged: true,
+      shouldReadAgain: true
+    };
+  }
+  const element = typeof action.index === 'number' ? findElement(action.index) : null;
+  if (!element) throw new Error('ELEMENT_NOT_FOUND');
+  if (element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true') throw new Error('ACTION_NOT_SUPPORTED');
+  element.scrollIntoView({ block: 'center', inline: 'center' });
+  if (action.type === 'click') {
+    const PointerEventClass = window.PointerEvent || MouseEvent;
+    element.dispatchEvent(new PointerEventClass('pointerdown', { bubbles: true }));
+    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    element.focus({ preventScroll: true });
+    element.dispatchEvent(new PointerEventClass('pointerup', { bubbles: true }));
+    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    element.click();
+  } else if (action.type === 'input') {
+    if (typeof action.text !== 'string') throw new Error('INVALID_INPUT');
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+      const nextValue = action.clear === false ? element.value + action.text : action.text;
+      const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value');
+      if (descriptor && typeof descriptor.set === 'function') {
+        descriptor.set.call(element, nextValue);
+      } else {
+        element.value = nextValue;
+      }
+      dispatchInputEvents(element);
+    } else if (element.isContentEditable) {
+      element.textContent = action.clear === false ? String(element.textContent || '') + action.text : action.text;
+      element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: action.text }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      throw new Error('ACTION_NOT_SUPPORTED');
+    }
+  } else if (action.type === 'select') {
+    if (typeof action.optionText !== 'string') throw new Error('INVALID_INPUT');
+    if (!(element instanceof HTMLSelectElement)) throw new Error('ACTION_NOT_SUPPORTED');
+    const matches = Array.from(element.options).filter(
+      (option) => option.text === action.optionText || option.text.trim() === String(action.optionText || '').trim()
+    );
+    if (matches.length > 1) throw new Error('OPTION_AMBIGUOUS');
+    if (matches.length < 1) throw new Error('ELEMENT_NOT_FOUND');
+    element.value = matches[0].value;
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  } else if (action.type === 'scroll') {
+    if (!isScrollDirection(action.direction)) throw new Error('INVALID_INPUT');
+    const target = findScrollableAncestor(element);
+    if (!target) throw new Error('SCROLL_TARGET_NOT_FOUND');
+    scrollTarget(target, action.direction, action.pixels);
+  } else {
+    throw new Error('ACTION_NOT_SUPPORTED');
+  }
+  return {
+    ok: true,
+    action: action.type,
+    target: createTarget(element, action.index),
+    message: 'executed',
+    navigationStarted: document.readyState === 'loading',
+    pageChanged: true,
+    shouldReadAgain: true
   };
 })();
 `;
@@ -791,6 +1245,23 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
   let isDomReady = false;
   let pendingUserAgent = '';
   let pendingPageSnapshotRead: Promise<WebviewPageSnapshot> | null = null;
+  let activeSnapshot: { id: string; url: string; capturedAtMs: number } | null = null;
+
+  /**
+   * 读取 renderer 本地单调时间。
+   * @returns 当前单调时间
+   */
+  function nowMs(): number {
+    return globalThis.performance?.now?.() ?? Date.now();
+  }
+
+  /**
+   * 创建页面快照 ID。
+   * @returns 页面快照 ID
+   */
+  function createSnapshotId(): string {
+    return `webview-snapshot-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
 
   /**
    * 首次把初始 URL 附着到 `<webview>` 实例。
@@ -920,7 +1391,10 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
           throw new Error('页面快照格式无效');
         }
 
-        return normalizeWebviewPageSnapshot(value);
+        const snapshotId = typeof value.snapshotId === 'string' && value.snapshotId ? value.snapshotId : createSnapshotId();
+        const snapshot = normalizeWebviewPageSnapshot({ ...value, snapshotId });
+        activeSnapshot = { id: snapshotId, url: snapshot.url, capturedAtMs: nowMs() };
+        return snapshot;
       })
     )
       .catch((error: unknown) => {
@@ -931,6 +1405,68 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
       });
 
     return pendingPageSnapshotRead;
+  }
+
+  /**
+   * 操作当前网页。
+   * @param input - WebView 操作输入
+   * @returns WebView 操作结果
+   */
+  async function operatePage(input: WebviewOperateInput): Promise<WebviewOperateResult> {
+    const instance = webviewRef.value;
+    const executeJavaScript = instance?.executeJavaScript;
+    if (!instance || typeof executeJavaScript !== 'function') {
+      throw createWebviewOperationError('EDITOR_UNAVAILABLE');
+    }
+
+    if (!activeSnapshot || activeSnapshot.id !== input.snapshotId || nowMs() - activeSnapshot.capturedAtMs > WEBVIEW_PAGE_SNAPSHOT_TTL_MS) {
+      throw createWebviewOperationError('STALE_SNAPSHOT');
+    }
+
+    if (state.value.url && state.value.url !== activeSnapshot.url) {
+      throw createWebviewOperationError('STALE_SNAPSHOT');
+    }
+
+    if (input.action.type === 'navigate') {
+      try {
+        const targetUrl = normalizeWebviewUrl(input.action.url);
+        state.value.url = targetUrl;
+        activeSnapshot = null;
+        if (typeof instance.loadURL === 'function') {
+          instance.loadURL(targetUrl);
+        } else {
+          instance.setAttribute('src', targetUrl);
+        }
+
+        return {
+          ok: true,
+          action: 'navigate',
+          target: null,
+          message: `navigating to ${targetUrl}`,
+          navigationStarted: true,
+          pageChanged: true,
+          shouldReadAgain: true
+        };
+      } catch {
+        throw createWebviewOperationError('INVALID_INPUT', '网页地址无效，仅支持 http/https');
+      }
+    }
+
+    if (state.value.isLoading && input.action.type !== 'wait') {
+      throw createWebviewOperationError('PAGE_LOADING');
+    }
+
+    try {
+      const rawOperation = executeJavaScript.call(instance, createPageOperationScript(input)) as Promise<unknown>;
+      const result = await withWebviewPageOperationTimeout(rawOperation);
+      if (!isWebviewOperateResult(result)) {
+        throw createWebviewOperationError('EXECUTION_FAILED', '页面操作结果格式无效');
+      }
+
+      return result;
+    } catch (error) {
+      throw normalizeWebviewPageOperationError(error);
+    }
   }
 
   /**
@@ -1054,6 +1590,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     state.value.isLoading = true;
     state.value.isElementSelecting = false;
     state.value.loadProgress = 0.1;
+    activeSnapshot = null;
     selectedElement.value = null;
   }
 
@@ -1137,6 +1674,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     stopElementSelection,
     clearSelectedElement,
     readPageSnapshot,
+    operatePage,
     setTouchSimulationEnabled,
     setUserAgent
   };

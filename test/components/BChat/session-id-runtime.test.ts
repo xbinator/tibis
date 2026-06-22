@@ -144,6 +144,7 @@ vi.mock('@/components/BButton/index.vue', () => ({
 vi.mock('@/ai/tools/builtin', () => ({
   createBuiltinTools: vi.fn(() => []),
   isBuiltinToolName: vi.fn(() => true),
+  OPERATE_WEBPAGE_TOOL_NAME: 'operate_webpage',
   READ_CURRENT_WEBPAGE_TOOL_NAME: 'read_current_webpage',
   READ_DIRECTORY_TOOL_NAME: 'read_directory',
   SKILL_TOOL_NAME: 'skill'

@@ -12,6 +12,7 @@ import type {
   RuntimeSettingKey,
   RuntimeSettingsSnapshot,
   RuntimeSettingValue,
+  RuntimeWebpageOperateResult,
   RuntimeUpdateSettingsResult,
   RuntimeWebpageSnapshot
 } from './types.mjs';
@@ -73,6 +74,24 @@ export function isRuntimeWebpageSnapshot(value: unknown): value is RuntimeWebpag
     Array.isArray(value.links) &&
     typeof value.capturedAt === 'number' &&
     isRecord(value.truncated)
+  );
+}
+
+/**
+ * 判断 bridge payload 是否为网页操作结果。
+ * @param value - bridge payload
+ * @returns 是否为网页操作结果
+ */
+export function isRuntimeWebpageOperateResult(value: unknown): value is RuntimeWebpageOperateResult {
+  return (
+    isRecord(value) &&
+    typeof value.ok === 'boolean' &&
+    typeof value.action === 'string' &&
+    (value.target === null || isRecord(value.target)) &&
+    typeof value.message === 'string' &&
+    typeof value.navigationStarted === 'boolean' &&
+    typeof value.pageChanged === 'boolean' &&
+    typeof value.shouldReadAgain === 'boolean'
   );
 }
 

@@ -9,6 +9,8 @@ import {
   APPLY_DRAWING_OPERATIONS_TOOL_NAME,
   createBuiltinTools,
   isBuiltinToolName,
+  OPERATE_WEBPAGE_TOOL_NAME,
+  OPEN_RESOURCE_TOOL_NAME,
   READ_CURRENT_DRAWING_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
@@ -157,6 +159,8 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
       if (tool.definition.name === READ_CURRENT_DRAWING_TOOL_NAME && !hasActiveDrawing) return false;
       if (tool.definition.name === UPDATE_CURRENT_DRAWING_TOOL_NAME && !hasActiveDrawing) return false;
       if (tool.definition.name === READ_CURRENT_WEBPAGE_TOOL_NAME && !hasActiveWebview) return false;
+      if (tool.definition.name === OPERATE_WEBPAGE_TOOL_NAME && !hasActiveWebview) return false;
+      if (tool.definition.name === OPEN_RESOURCE_TOOL_NAME && hasActiveWebview) return false;
       if (tool.definition.name === READ_DIRECTORY_TOOL_NAME && !hasWorkspace) return false;
       return true;
     });

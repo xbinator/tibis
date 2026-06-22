@@ -6,7 +6,14 @@ import type { AIToolExecutor } from 'types/ai';
 import { describe, expect, it } from 'vitest';
 import * as runtimeTools from '@/ai/tools/catalog/runtimeTools';
 import { createReadFileTool, READ_FILE_TOOL_NAME } from '@/ai/tools/catalog/runtimeTools';
-import { TOOL_REGISTRY, getToolDefinitionByName, getToolNamesByExposure, getToolNamesByRuntimeGroup } from '../../../shared/ai/tools/toolRegistry.js';
+import {
+  OPERATE_WEBPAGE_TOOL_NAME,
+  OPEN_RESOURCE_TOOL_NAME,
+  TOOL_REGISTRY,
+  getToolDefinitionByName,
+  getToolNamesByExposure,
+  getToolNamesByRuntimeGroup
+} from '../../../shared/ai/tools/toolRegistry.js';
 
 /** runtimeTools 模块带工厂映射的测试视图。 */
 type RuntimeToolsWithFactoryMap = typeof runtimeTools & {
@@ -44,25 +51,33 @@ describe('toolRegistry', (): void => {
     expect(fileToolNames).toEqual(expect.arrayContaining(['read_file', 'read_directory', 'create_document', 'write_file', 'edit_file']));
   });
 
+  it('can derive WebView tool names by runtime group', (): void => {
+    const webviewToolNames = getToolNamesByRuntimeGroup('main', 'webview');
+
+    expect(webviewToolNames).toEqual(expect.arrayContaining(['read_current_webpage', 'operate_webpage']));
+  });
+
+  it('prefers operate_webpage for active WebView navigation', (): void => {
+    const operateDefinition = getToolDefinitionByName(OPERATE_WEBPAGE_TOOL_NAME);
+    const openResourceDefinition = getToolDefinitionByName(OPEN_RESOURCE_TOOL_NAME);
+    const actionSchema = operateDefinition?.parameters.properties.action as { oneOf?: Array<{ properties?: { type?: { enum?: string[] } } }> };
+    const actionTypes = actionSchema.oneOf?.flatMap((schema) => schema.properties?.type?.enum ?? []) ?? [];
+
+    expect(actionTypes).toContain('navigate');
+    expect(String(operateDefinition?.description)).toContain('navigate');
+    expect(String(openResourceDefinition?.description)).toContain('没有激活 WebView');
+  });
+
   it('can derive tool names by renderer exposure policy', (): void => {
     expect(getToolNamesByExposure('default-readonly')).toEqual(
-      expect.arrayContaining([
-        'read_current_document',
-        'read_current_drawing',
-        'read_current_webpage',
-        'get_current_time',
-        'read_file',
-        'get_settings',
-        'query_logs',
-        'open_resource'
-      ])
+      expect.arrayContaining(['read_current_document', 'read_current_drawing', 'get_current_time', 'read_file', 'get_settings', 'query_logs', 'open_resource'])
     );
     expect(getToolNamesByExposure('default-writable')).toEqual(
       expect.arrayContaining(['create_document', 'create_drawing', 'apply_drawing_operations', 'edit_file', 'write_file', 'update_settings'])
     );
-    expect(getToolNamesByExposure('conditional-readonly')).toEqual(expect.arrayContaining(['read_directory', 'get_mcp_settings']));
+    expect(getToolNamesByExposure('conditional-readonly')).toEqual(expect.arrayContaining(['read_directory', 'get_mcp_settings', 'read_current_webpage']));
     expect(getToolNamesByExposure('conditional-writable')).toEqual(
-      expect.arrayContaining(['add_mcp_server', 'update_mcp_server', 'remove_mcp_server', 'refresh_mcp_discovery'])
+      expect.arrayContaining(['add_mcp_server', 'update_mcp_server', 'remove_mcp_server', 'refresh_mcp_discovery', 'operate_webpage'])
     );
   });
 });

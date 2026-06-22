@@ -45,7 +45,7 @@ export interface SharedToolDefinition {
 export type ToolRuntimeOwner = 'main' | 'renderer' | 'sdk';
 
 /** 主进程工具分组。 */
-export type ToolRuntimeGroup = 'read' | 'file' | 'settings' | 'drawing' | 'resource';
+export type ToolRuntimeGroup = 'read' | 'file' | 'settings' | 'drawing' | 'resource' | 'webview';
 
 /** 工具暴露策略。 */
 export type ToolExposure = 'default-readonly' | 'default-writable' | 'conditional-readonly' | 'conditional-writable' | 'compat-hidden';
@@ -104,6 +104,8 @@ export const GET_SETTINGS_TOOL_NAME = 'get_settings';
 export const UPDATE_SETTINGS_TOOL_NAME = 'update_settings';
 /** 读取当前网页工具名称。 */
 export const READ_CURRENT_WEBPAGE_TOOL_NAME = 'read_current_webpage';
+/** 操作当前网页工具名称。 */
+export const OPERATE_WEBPAGE_TOOL_NAME = 'operate_webpage';
 
 /** 支持读取或修改的设置键。 */
 const SUPPORTED_SETTING_KEYS = ['theme', 'themePreset', 'sourceMode', 'editorPageWidth'] as const;
@@ -222,6 +224,71 @@ const DRAWING_OPERATIONS_PARAMETER_SCHEMA: ToolJsonSchema = {
       }
     ]
   }
+};
+
+/** 网页操作动作参数 Schema。 */
+const WEBPAGE_OPERATION_ACTION_SCHEMA: ToolJsonSchema = {
+  oneOf: [
+    {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['click'] },
+        index: { type: 'number', description: '来自 read_current_webpage 最新 snapshot 的元素索引。' }
+      },
+      required: ['type', 'index'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['input'] },
+        index: { type: 'number', description: '来自 read_current_webpage 最新 snapshot 的输入元素索引。' },
+        text: { type: 'string', description: '要输入的文本。' },
+        clear: { type: 'boolean', description: '是否先清空原内容，默认 true。' }
+      },
+      required: ['type', 'index', 'text'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['select'] },
+        index: { type: 'number', description: '来自 read_current_webpage 最新 snapshot 的 select 元素索引。' },
+        optionText: { type: 'string', description: '要选择的 option 可见文本。存在多个同名 option 时工具会返回歧义错误。' }
+      },
+      required: ['type', 'index', 'optionText'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['scroll'] },
+        index: { type: 'number', description: '可选，来自 read_current_webpage 最新 snapshot 的元素索引；提供时滚动其可滚动祖先。' },
+        direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] },
+        pixels: { type: 'number', minimum: 1, maximum: 5000 }
+      },
+      required: ['type', 'direction'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['navigate'] },
+        url: { type: 'string', description: '要在当前激活 WebView 中打开的 http/https 地址，可省略协议。' }
+      },
+      required: ['type', 'url'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['wait'] },
+        seconds: { type: 'number', minimum: 0.1, maximum: 5 }
+      },
+      required: ['type'],
+      additionalProperties: false
+    }
+  ]
 };
 
 /** 已迁移到主进程的工具 registry。 */
@@ -640,7 +707,8 @@ export const TOOL_REGISTRY = [
     definition: {
       name: OPEN_RESOURCE_TOOL_NAME,
       description:
-        '根据用户指令打开文件或网址。文件路径支持相对工作区路径或绝对路径（外部路径需用户确认），http/https 网址在内置浏览器中打开，mailto/ftp 链接使用系统默认程序打开。',
+        '根据用户指令打开文件或外部链接。文件路径支持相对工作区路径或绝对路径（外部路径需用户确认）；mailto/ftp 链接使用系统默认程序打开；' +
+        '仅当没有激活 WebView 且用户要创建新的内置浏览器页时，才用它打开 http/https 网址。若当前已有激活 WebView，要打开或切换网页请使用 operate_webpage 的 navigate 动作。',
       source: 'builtin',
       riskLevel: 'read',
       requiresActiveDocument: false,
@@ -658,16 +726,42 @@ export const TOOL_REGISTRY = [
   },
   {
     runtime: 'main',
-    group: 'read',
-    exposure: 'default-readonly',
+    group: 'webview',
+    exposure: 'conditional-readonly',
     definition: {
       name: READ_CURRENT_WEBPAGE_TOOL_NAME,
-      description: '读取当前内置 WebView 页面的标题、URL、可见文本、选中文本、标题结构和链接摘要。',
+      description:
+        '读取当前内置 WebView 页面的标题、URL、可见文本、选中文本、标题结构、链接摘要、滚动状态和可操作元素索引。需要操作网页前必须先调用此工具获取 snapshotId 和元素 index。',
       source: 'builtin',
       riskLevel: 'read',
       requiresActiveDocument: false,
       permissionCategory: 'system',
       parameters: { type: 'object', properties: {}, additionalProperties: false }
+    }
+  },
+  {
+    runtime: 'main',
+    group: 'webview',
+    exposure: 'conditional-writable',
+    definition: {
+      name: OPERATE_WEBPAGE_TOOL_NAME,
+      description:
+        '操作当前激活 WebView 页面。必须先调用 read_current_webpage，并使用它返回的 snapshotId；点击、输入、选择和元素滚动还要使用元素 index。' +
+        '支持 click、input、select、scroll、navigate、wait；打开或切换当前网页请使用 navigate；不接受 CSS selector 或任意 JavaScript。',
+      source: 'builtin',
+      riskLevel: 'write',
+      requiresActiveDocument: false,
+      permissionCategory: 'system',
+      safeAutoApprove: false,
+      parameters: {
+        type: 'object',
+        properties: {
+          snapshotId: { type: 'string', description: 'read_current_webpage 返回的 snapshotId。' },
+          action: WEBPAGE_OPERATION_ACTION_SCHEMA
+        },
+        required: ['snapshotId', 'action'],
+        additionalProperties: false
+      }
     }
   }
 ] as const satisfies ToolRegistryEntry[];

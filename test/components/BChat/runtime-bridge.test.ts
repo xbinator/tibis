@@ -145,7 +145,8 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
             links: [],
             capturedAt: 1,
             truncated: { text: false, headings: false, links: false, selectedText: false }
-          })
+          }),
+          operatePage: vi.fn()
         })
       }
     );
@@ -160,6 +161,51 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       capturedAt: 1,
       truncated: { text: false, headings: false, links: false, selectedText: false }
     });
+  });
+
+  it('dispatches webview operation to the active WebView context', async (): Promise<void> => {
+    const operatePage = vi.fn(async () => ({
+      ok: true,
+      action: 'click' as const,
+      target: { index: 1, label: 'Search', tagName: 'BUTTON' },
+      message: 'clicked',
+      navigationStarted: false,
+      pageChanged: true,
+      shouldReadAgain: true
+    }));
+    const payload = { snapshotId: 'snap-1', action: { type: 'click' as const, index: 1 } };
+
+    const result = await handleBChatRuntimeBridgeRequest(
+      {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        requestId: 'bridge-1',
+        kind: 'webview-operate',
+        payload
+      },
+      {
+        getEditorContext: () => undefined,
+        getDrawingContext: () => undefined,
+        getWebviewContext: () => ({
+          readPageSnapshot: async () => ({
+            url: 'https://example.com',
+            title: 'Example',
+            text: 'page',
+            selectedText: '',
+            headings: [],
+            links: [],
+            capturedAt: 1,
+            truncated: { text: false, headings: false, links: false, selectedText: false }
+          }),
+          operatePage
+        })
+      }
+    );
+
+    expect(result).toMatchObject({ ok: true, action: 'click' });
+    expect(operatePage).toHaveBeenCalledWith(payload);
   });
 
   it('returns an opened editor file content snapshot by path', async (): Promise<void> => {
