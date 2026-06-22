@@ -49,7 +49,7 @@ export interface SelectionAssistantPosition {
 export interface SelectionReferencePayload {
   id: string;
   ext: string;
-  filePath: string;
+  filePath: string | null;
   fileName: string;
   startLine: number;
   endLine: number;

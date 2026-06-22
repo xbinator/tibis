@@ -328,7 +328,7 @@ export function createSourceSelectionAssistantAdapter(
       return {
         id,
         ext,
-        filePath: filePath || '',
+        filePath: filePath || null,
         fileName,
         startLine,
         endLine

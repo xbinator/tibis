@@ -11,6 +11,7 @@ import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BChat from '@/components/BChat/index.vue';
 import type { Message } from '@/components/BChat/utils/types';
+import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import type { TodoItem } from '@/stores/chat/todo';
 import { useSettingStore } from '@/stores/ui/setting';
 import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
@@ -530,6 +531,31 @@ describe('BChat sessionId runtime', (): void => {
     });
     getModelToolSupportMock.mockResolvedValue({ supported: true });
     useSettingStore().setSidebarVisible(true);
+  });
+
+  it('consumes a pending selection reference emitted before BChat is mounted', async (): Promise<void> => {
+    const settingStore = useSettingStore();
+    settingStore.setSidebarVisible(false);
+
+    emitChatFileReferenceInsert({
+      id: 'doc-1',
+      ext: 'md',
+      filePath: '/workspace/note.md',
+      fileName: 'note',
+      startLine: 2,
+      endLine: 4
+    });
+    expect(promptEditorMockState.insertTextAtCursor).not.toHaveBeenCalled();
+
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    expect(settingStore.sidebarVisible).toBe(true);
+    expect(promptEditorMockState.saveCursorPosition).toHaveBeenCalledTimes(1);
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{#/workspace/note.md 2-4}} ');
+    expect(promptEditorMockState.focus).toHaveBeenCalled();
+
+    wrapper.unmount();
   });
 
   it('creates a session on first submit when sessionId is empty and starts runtime with the new id', async (): Promise<void> => {

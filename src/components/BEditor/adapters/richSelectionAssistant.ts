@@ -381,7 +381,7 @@ export function createRichSelectionAssistantAdapter(editor: Editor, context: Sel
       return {
         id,
         ext,
-        filePath: filePath || '',
+        filePath: filePath || null,
         fileName,
         startLine,
         endLine
