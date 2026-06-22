@@ -4,6 +4,7 @@
       <div :class="$style.title">
         <span>组件</span>
       </div>
+      <BButton type="text" size="small" square icon="lucide:x" :class="$style.closeButton" @click="emit('close')" />
     </header>
 
     <BScrollbar v-if="selection" :class="$style.body">
@@ -121,6 +122,13 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), { selection: null });
 
 /**
+ * 面板事件。点击关闭按钮时触发，由父组件决定如何隐藏面板与停止元素选择模式。
+ */
+const emit = defineEmits<{
+  close: [];
+}>();
+
+/**
  * DOM 层级展示项。
  */
 interface HierarchyItem {
@@ -222,6 +230,10 @@ function copyText(value: string): void {
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
+}
+
+.closeButton {
+  flex-shrink: 0;
 }
 
 .body {
