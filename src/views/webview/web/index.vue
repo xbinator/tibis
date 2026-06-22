@@ -243,10 +243,6 @@ function handleStartElementSelection(): void {
  */
 function handleCloseDomInspector(): void {
   isInspectorOpen.value = false;
-  webview.clearSelectedElement();
-  if (webview.state.value.isElementSelecting) {
-    webview.stopElementSelection().catch((err: unknown) => console.error('Failed to stop element selection:', err));
-  }
 }
 
 /**
