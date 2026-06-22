@@ -1,10 +1,11 @@
 import type { DefineComponent, VNode } from 'vue';
-import { createApp, h, ref } from 'vue';
+import { createApp, h, ref, withDirectives } from 'vue';
 import { Input } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
 import type { BButtonProps } from '@/components/BButton/types';
 import BModal from '@/components/BModal/index.vue';
 import type { BModalProps } from '@/components/BModal/types';
+import { vFocus } from '@/directives/focus';
 
 // ——— 类型 ———
 
@@ -46,10 +47,18 @@ interface ConfirmModalOptions {
   danger?: boolean;
 }
 
+/**
+ * 输入弹窗可选项
+ */
 interface InputOptions {
+  /** 输入框初始值 */
   defaultValue?: string;
+  /** 占位提示文本 */
   placeholder?: string;
+  /** 确认按钮文案，默认"确定" */
   okText?: string;
+  /** 是否在弹窗打开后自动聚焦输入框，默认 true */
+  autofocus?: boolean;
 }
 
 type DeleteOptions = Pick<ModalOptions, 'title' | 'width'>;
@@ -182,7 +191,7 @@ function RenderConfirmModal({ content, title, width, confirmText, cancelText, da
 }
 
 function RenderInputModal(title: string, options: InputOptions = {}): Promise<[false, string] | [true]> {
-  const { defaultValue = '', placeholder = '', okText = '确定' } = options;
+  const { defaultValue = '', placeholder = '', okText = '确定', autofocus = true } = options;
 
   return new Promise((resolve) => {
     let instance: ModalInstance;
@@ -197,22 +206,22 @@ function RenderInputModal(title: string, options: InputOptions = {}): Promise<[f
       instance.close();
     };
 
-    instance = createModalInstance((controlProps) =>
-      h(RenderModal, {
+    instance = createModalInstance((controlProps) => {
+      /* 复用 v-focus 指令：nextTick + 100ms 等待 AInput 内部 input 渲染，
+         且每次更新按 binding 变化重新触发，避免二次打开失效 */
+      const inputVNode = h(Input, {
+        value: inputValue.value,
+        style: { width: '100%' },
+        'onUpdate:value': (val: string) => (inputValue.value = val),
+        placeholder
+      });
+      return h(RenderModal, {
         ...controlProps,
         title,
-        content: () => (
-          <Input
-            value={inputValue.value}
-            style={{ width: '100%' }}
-            onUpdate:value={(val: string) => (inputValue.value = val)}
-            placeholder={placeholder}
-            autofocus
-          />
-        ),
+        content: () => (autofocus ? withDirectives(inputVNode, [[vFocus, true]]) : inputVNode),
         footer: () => <FooterButtons onCancel={onCancel} onConfirm={onConfirm} confirmText={okText} />
-      })
-    );
+      });
+    });
   });
 }
 

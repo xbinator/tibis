@@ -244,7 +244,7 @@ export function useSession(fileId: Ref<string>) {
   async function onRename() {
     await fileStateActions.ensureStoredFile();
 
-    const [cancelled, newName] = await Modal.input('重命名', { defaultValue: fileState.value.name, placeholder: '请输入文件名' });
+    const [cancelled, newName] = await Modal.input('重命名', { defaultValue: fileState.value.name, placeholder: '请输入文件名', autofocus: true });
 
     const normalizedName = String(newName || '').trim();
 
