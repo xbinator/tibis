@@ -7,7 +7,7 @@
           <MessageBubble
             v-for="item in messages"
             :key="item.id"
-            v-memo="[item.id, item.finished, item.loading, item.content?.length ?? 0, item.thinking?.length ?? 0, item.parts.length]"
+            v-memo="[item.id, item.finished, item.loading, item.content?.length ?? 0, item.thinking?.length ?? 0, item.parts.length, getToolPartsMemoKey(item)]"
             :message="item"
             :disabled="disabled"
             :can-rollback="canRollback"
@@ -73,6 +73,21 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   canRollback: undefined
 });
+
+/**
+ * 生成工具片段的渲染记忆签名。
+ * @param message - 聊天消息
+ * @returns 工具片段状态签名
+ */
+function getToolPartsMemoKey(message: Message): string {
+  return message.parts
+    .map((part): string => {
+      if (part.type !== 'tool') return '';
+
+      return [part.toolCallId, part.status, part.result?.status ?? '', part.inputText?.length ?? 0].join(':');
+    })
+    .join('|');
+}
 
 defineEmits<{
   (e: 'edit', message: Message): void;

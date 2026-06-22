@@ -609,7 +609,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   async function send(input: BChatRuntimeSendInput): Promise<ChatRuntimeStartResult> {
     const result = unwrapRuntimeResult(await electronAPI.chatRuntimeSend(toRuntimeSendCommand(input, clientId, agentId)));
-    activeRuntimeId.value = result.runtimeId;
+    activeRuntimeId.value = result.completed === true ? null : result.runtimeId;
     return result;
   }
 
@@ -620,7 +620,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   async function continueTurn(input: BChatRuntimeContinueInput): Promise<ChatRuntimeStartResult> {
     const result = unwrapRuntimeResult(await electronAPI.chatRuntimeContinue(toRuntimeContinueCommand(input, clientId, agentId)));
-    activeRuntimeId.value = result.runtimeId;
+    activeRuntimeId.value = result.completed === true ? null : result.runtimeId;
     return result;
   }
 
@@ -631,7 +631,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   async function submitUserChoice(input: BChatRuntimeSubmitUserChoiceInput): Promise<ChatRuntimeStartResult> {
     const result = unwrapRuntimeResult(await electronAPI.chatRuntimeSubmitUserChoice(toCloneableData({ ...input, clientId, agentId })));
-    activeRuntimeId.value = result.runtimeId;
+    activeRuntimeId.value = result.completed === true ? null : result.runtimeId;
     return result;
   }
 

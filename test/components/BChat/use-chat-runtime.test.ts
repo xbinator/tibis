@@ -516,6 +516,38 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('does not keep an active runtime when a user choice submit completes immediately', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+    electronAPIMock.chatRuntimeSubmitUserChoice.mockResolvedValueOnce({
+      ok: true,
+      data: { runtimeId: 'runtime-choice-cancelled', sessionId: 'session-1', completed: true }
+    });
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      const result = await runtime.submitUserChoice({
+        sessionId: 'session-1',
+        answer: {
+          questionId: 'question-1',
+          toolCallId: 'tool-call-1',
+          answers: [],
+          questionAnswers: [],
+          otherText: ''
+        }
+      });
+
+      expect(result).toEqual({ runtimeId: 'runtime-choice-cancelled', sessionId: 'session-1', completed: true });
+      expect(runtime.activeRuntimeId.value).toBeNull();
+    });
+
+    scope.stop();
+  });
+
   it('routes runtime confirmation requests to the confirmation callback and submits decisions', async (): Promise<void> => {
     const messages = ref<Message[]>([]);
     const requestConfirmation = vi.fn(async () => ({ approved: true as const, grantScope: 'session' as const }));

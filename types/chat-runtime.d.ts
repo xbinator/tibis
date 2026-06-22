@@ -342,6 +342,8 @@ export interface ChatRuntimeStartResult {
   runtimeId: string;
   /** Session id owned by the runtime. */
   sessionId: string;
+  /** Whether the command completed synchronously without leaving an active runtime. */
+  completed?: boolean;
 }
 
 /** Context usage visual state. */
