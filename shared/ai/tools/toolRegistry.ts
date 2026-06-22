@@ -743,7 +743,7 @@ export const TOOL_REGISTRY = [
     definition: {
       name: READ_CURRENT_WEBPAGE_TOOL_NAME,
       description:
-        '读取当前内置 WebView 页面的标题、URL、页面位置提示、简化 DOM 结构、当前视口可见元素、顶层浮层/弹窗、可见文本、选中文本、标题结构、链接摘要、滚动状态和可操作元素索引。' +
+        '读取当前内置 WebView 页面的标题、URL、页面位置提示、简化 DOM 结构、open Shadow DOM、当前视口可见元素、顶层浮层/弹窗、可见文本、选中文本、标题结构、链接摘要、滚动状态和可操作元素索引。' +
         '需要操作网页前必须先调用此工具获取 snapshotId 和元素 index；若存在顶层浮层，应优先使用 viewport.topLayer 内的元素。',
       source: 'builtin',
       riskLevel: 'read',

@@ -1,3 +1,7 @@
+<!--
+  @file ConversationView.vue
+  @description 聊天消息列表视图，负责消息气泡渲染、滚动到底部和空态展示。
+-->
 <template>
   <div class="conversation-view">
     <div class="conversation-view__main">
@@ -7,7 +11,7 @@
           <MessageBubble
             v-for="item in messages"
             :key="item.id"
-            v-memo="[item.id, item.finished, item.loading, item.content?.length ?? 0, item.thinking?.length ?? 0, item.parts.length, getToolPartsMemoKey(item)]"
+            v-memo="getMessageMemoDeps(item)"
             :message="item"
             :disabled="disabled"
             :can-rollback="canRollback"
@@ -54,6 +58,7 @@ import MessageBubble from './MessageBubble.vue';
 
 defineOptions({ name: 'ConversationView' });
 
+/** ConversationView 组件属性。 */
 interface Props {
   // 对话消息列表
   messages: Message[];
@@ -67,6 +72,21 @@ interface Props {
   canRollback?: (message: Message) => boolean;
 }
 
+/** 消息气泡 v-memo 依赖元组。 */
+type MessageMemoDeps = readonly [
+  id: string,
+  role: Message['role'],
+  finished: boolean,
+  loading: boolean,
+  contentLength: number,
+  thinkingLength: number,
+  partsLength: number,
+  filesKey: string,
+  toolPartsKey: string,
+  disabled: boolean,
+  rollbackVisible: boolean
+];
+
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
   onLoadHistory: undefined,
@@ -75,18 +95,50 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 /**
- * 生成工具片段的渲染记忆签名。
+ * 生成附件展示相关的渲染记忆签名。
  * @param message - 聊天消息
+ * @returns 附件展示状态签名
+ */
+function getFilesMemoKey(message: Message): string {
+  return message.files?.map((file): string => [file.id, file.type, file.name, file.url ?? '', file.path ?? ''].join(':')).join('|') ?? '';
+}
+
+/**
+ * 生成工具片段的渲染记忆签名。
+ * @param parts - 聊天消息片段列表
  * @returns 工具片段状态签名
  */
-function getToolPartsMemoKey(message: Message): string {
-  return message.parts
-    .map((part): string => {
-      if (part.type !== 'tool') return '';
+function getToolPartsMemoKey(parts: Message['parts']): string {
+  const toolPartKeys: string[] = [];
 
-      return [part.toolCallId, part.status, part.result?.status ?? '', part.inputText?.length ?? 0].join(':');
-    })
-    .join('|');
+  parts.forEach((part, index): void => {
+    if (part.type !== 'tool') return;
+
+    toolPartKeys.push([index, part.toolCallId, part.toolName, part.status, part.result?.status ?? '', part.inputText?.length ?? 0].join(':'));
+  });
+
+  return toolPartKeys.join('|');
+}
+
+/**
+ * 生成消息气泡的渲染记忆依赖。
+ * @param message - 聊天消息
+ * @returns 用于 v-memo 比较的依赖元组
+ */
+function getMessageMemoDeps(message: Message): MessageMemoDeps {
+  return [
+    message.id,
+    message.role,
+    message.finished === true,
+    message.loading === true,
+    message.content?.length ?? 0,
+    message.thinking?.length ?? 0,
+    message.parts.length,
+    getFilesMemoKey(message),
+    getToolPartsMemoKey(message.parts),
+    props.disabled,
+    props.canRollback?.(message) === true
+  ];
 }
 
 defineEmits<{

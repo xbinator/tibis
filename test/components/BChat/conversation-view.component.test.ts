@@ -18,9 +18,24 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
       message: {
         type: Object,
         required: true
+      },
+      disabled: {
+        type: Boolean,
+        default: false
+      },
+      canRollback: {
+        type: Function,
+        default: undefined
       }
     },
-    template: '<div data-testid="message-bubble">{{ message.parts[0].status }}:{{ message.parts[0].result?.status ?? "" }}</div>'
+    template: [
+      '<div data-testid="message-bubble">',
+      '{{ message.parts[0]?.status ?? message.role }}:',
+      '{{ message.parts[0]?.result?.status ?? "" }}:',
+      '{{ disabled ? "disabled" : "enabled" }}:',
+      '{{ canRollback && canRollback(message) ? "rollback" : "no-rollback" }}',
+      '</div>'
+    ].join('')
   }
 }));
 
@@ -32,6 +47,8 @@ interface ConversationViewTestProps {
   loading: boolean;
   /** 是否禁用问题交互 */
   disabled: boolean;
+  /** 判断消息是否可回退 */
+  canRollback?: (message: Message) => boolean;
 }
 
 /** 带测试 props 类型的 ConversationView。 */
@@ -90,6 +107,23 @@ function createAssistantMessage(part: ChatMessageToolPart): Message {
   };
 }
 
+/**
+ * 创建用户消息。
+ * @param id - 消息 ID
+ * @returns 用户消息
+ */
+function createUserMessage(id: string): Message {
+  return {
+    id,
+    role: 'user',
+    content: '你好',
+    parts: [{ type: 'text', text: '你好' }],
+    createdAt: '2026-06-22T00:00:00.000Z',
+    loading: false,
+    finished: true
+  };
+}
+
 describe('ConversationView', (): void => {
   it('updates a tool part when status changes without message finished changing', async (): Promise<void> => {
     const wrapper = mount(ConversationViewForTest, {
@@ -105,7 +139,7 @@ describe('ConversationView', (): void => {
       }
     });
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('inputting:');
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('inputting::enabled:no-rollback');
 
     await wrapper.setProps({
       messages: [createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))],
@@ -114,6 +148,69 @@ describe('ConversationView', (): void => {
     });
     await nextTick();
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input');
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input:enabled:no-rollback');
+  });
+
+  it('updates disabled state without message content changing', async (): Promise<void> => {
+    const messages = [createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))];
+    const wrapper = mount(ConversationViewForTest, {
+      props: {
+        messages,
+        loading: true,
+        disabled: false
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input:enabled:no-rollback');
+
+    await wrapper.setProps({
+      messages,
+      loading: true,
+      disabled: true
+    });
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input:disabled:no-rollback');
+  });
+
+  it('updates rollback visibility when following messages change', async (): Promise<void> => {
+    const userMessage = createUserMessage('user-1');
+    let messages: Message[] = [userMessage];
+    const canRollback = (message: Message): boolean => {
+      const index = messages.findIndex((item) => item.id === message.id);
+
+      return index >= 0 && messages.slice(index + 1).some((item) => item.role === 'assistant' || item.role === 'interrupt');
+    };
+    const wrapper = mount(ConversationViewForTest, {
+      props: {
+        messages,
+        loading: true,
+        disabled: false,
+        canRollback
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('user::enabled:no-rollback');
+
+    messages = [userMessage, createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))];
+    await wrapper.setProps({
+      messages,
+      loading: true,
+      disabled: false,
+      canRollback
+    });
+    await nextTick();
+
+    expect(wrapper.findAll('[data-testid="message-bubble"]')[0].text()).toBe('user::enabled:rollback');
   });
 });

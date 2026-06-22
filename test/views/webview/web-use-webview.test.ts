@@ -499,6 +499,32 @@ describe('useWebView', () => {
     expect(snapshot.truncated.content).toBe(false);
   });
 
+  it('returns open shadow DOM elements in webpage snapshots', async (): Promise<void> => {
+    document.body.innerHTML = '<booking-dialog></booking-dialog>';
+    const host = document.querySelector('booking-dialog');
+    if (!(host instanceof HTMLElement)) {
+      throw new Error('shadow DOM host should exist');
+    }
+
+    const shadowRoot = host.attachShadow({ mode: 'open' });
+    shadowRoot.innerHTML = '<section><h2>温馨提示</h2><button>确认</button></section>';
+    const confirmButton = shadowRoot.querySelector('button');
+    if (!(confirmButton instanceof HTMLElement)) {
+      throw new Error('shadow DOM button should exist');
+    }
+
+    installVisibleRect(host);
+    installVisibleRect(confirmButton);
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([{ label: '确认', actions: ['click'] }]);
+    expect(snapshot.content).toContain('<booking-dialog>');
+    expect(snapshot.content).toContain('#shadow-root');
+    expect(snapshot.content).toContain('[1]<button>确认</button>');
+  });
+
   it('returns viewport top layer context for visible dialogs', async (): Promise<void> => {
     document.body.innerHTML = `
       <main>
@@ -582,6 +608,47 @@ describe('useWebView', () => {
 
     expect(clickCount).toBe(1);
     expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '确认预约', tagName: 'DIV' } });
+  });
+
+  it('clicks open shadow DOM elements by index', async (): Promise<void> => {
+    document.body.innerHTML = '<booking-dialog></booking-dialog>';
+    const host = document.querySelector('booking-dialog');
+    if (!(host instanceof HTMLElement)) {
+      throw new Error('shadow DOM operation host should exist');
+    }
+
+    const shadowRoot = host.attachShadow({ mode: 'open' });
+    shadowRoot.innerHTML = '<button>确认</button>';
+    const confirmButton = shadowRoot.querySelector('button');
+    if (!(confirmButton instanceof HTMLElement)) {
+      throw new Error('shadow DOM operation button should exist');
+    }
+
+    let clickCount = 0;
+    confirmButton.addEventListener('click', () => {
+      clickCount += 1;
+    });
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(host);
+    installVisibleRect(confirmButton);
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'BUTTON', text: '确认', label: '确认', disabled: false, isNew: false, actions: ['click'] }]
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
+
+    expect(clickCount).toBe(1);
+    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '确认', tagName: 'BUTTON' } });
   });
 
   it('operates the current page using the active snapshot', async (): Promise<void> => {

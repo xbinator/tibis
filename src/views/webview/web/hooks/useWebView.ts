@@ -817,6 +817,31 @@ function createPageSnapshotScript(): string {
     '[class*="Link"]'
   ].join(',');
   const actionableCandidateSelector = [interactiveSelector, clickableHintSelector].join(',');
+  const collectComposedElements = (root) => {
+    const elements = [];
+    const visit = (node) => {
+      if (!node) return;
+      if (node instanceof HTMLElement) {
+        elements.push(node);
+        if (node.shadowRoot) visit(node.shadowRoot);
+      }
+      Array.from(node.childNodes || []).forEach(visit);
+    };
+    visit(root);
+    return elements;
+  };
+  const matchesSelector = (element, selector) => {
+    try {
+      return element.matches(selector);
+    } catch {
+      return false;
+    }
+  };
+  const containsComposedElement = (container, target) => {
+    if (container === target || container.contains(target)) return true;
+    if (!container.shadowRoot) return false;
+    return collectComposedElements(container.shadowRoot).includes(target);
+  };
   const isVisible = (element) => {
     if (!(element instanceof HTMLElement)) return false;
     const rect = element.getBoundingClientRect();
@@ -904,7 +929,8 @@ function createPageSnapshotScript(): string {
     if (element.type === 'password' || element.type === 'hidden') return undefined;
     return readText(element.value).slice(0, 300);
   };
-  const elementEntries = Array.from(document.querySelectorAll(actionableCandidateSelector))
+  const elementEntries = collectComposedElements(document)
+    .filter((element) => matchesSelector(element, actionableCandidateSelector))
     .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
     .map((element) => ({ element, actions: readActions(element) }))
     .filter((item) => item.actions.length > 0)
@@ -1015,13 +1041,14 @@ function createPageSnapshotScript(): string {
     const style = window.getComputedStyle(element);
     return style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0;
   };
+  const isOpenShadowRoot = (node) => node && node.nodeType === 11 && node.host instanceof HTMLElement;
   const createSimplifiedLine = (element) => {
     const tagName = element.tagName.toLowerCase();
     const index = elementIndexMap.get(element);
     const directText = readText(readDirectText(element));
     const label = index ? readLabel(element) : '';
     const text = (directText || label).slice(0, 240);
-    if (!index && !text && !semanticTags.has(tagName)) return { line: '', hasText: false };
+    if (!index && !text && !semanticTags.has(tagName) && !element.shadowRoot) return { line: '', hasText: false };
     const attrs = readSerializedAttributes(element);
     const openTag = '<' + tagName + (attrs ? ' ' + attrs : '') + '>';
     const prefix = index ? '[' + index + ']' : '';
@@ -1038,11 +1065,17 @@ function createPageSnapshotScript(): string {
       if (text) simplifiedLines.push('\\t'.repeat(Math.min(depth, 6)) + text.slice(0, 240));
       return;
     }
+    if (isOpenShadowRoot(node)) {
+      simplifiedLines.push('\\t'.repeat(Math.min(depth, 6)) + '#shadow-root');
+      Array.from(node.childNodes).forEach((child) => appendSimplifiedNode(child, depth + 1));
+      return;
+    }
     if (!(node instanceof HTMLElement) || isHiddenForSnapshot(node)) return;
     const { line, hasText } = createSimplifiedLine(node);
     const nextDepth = line ? depth + 1 : depth;
     if (line) simplifiedLines.push('\\t'.repeat(Math.min(depth, 6)) + line);
-    Array.from(node.childNodes).forEach((child) => {
+    const childNodes = [...Array.from(node.childNodes), ...(node.shadowRoot ? [node.shadowRoot] : [])];
+    childNodes.forEach((child) => {
       if (hasText && child.nodeType === 3) return;
       appendSimplifiedNode(child, nextDepth);
     });
@@ -1090,10 +1123,12 @@ function createPageSnapshotScript(): string {
   const readContainedElementIndexes = (container) =>
     elementEntries
       .map((item, index) => ({ item, index: index + 1 }))
-      .filter(({ item }) => container.contains(item.element))
+      .filter(({ item }) => containsComposedElement(container, item.element))
       .map(({ index }) => index);
   const readLayerLabel = (element) => {
-    const heading = element.querySelector('h1,h2,h3,h4,h5,h6,[role="heading"]');
+    const heading = collectComposedElements(element).find(
+      (candidate) => candidate !== element && matchesSelector(candidate, 'h1,h2,h3,h4,h5,h6,[role="heading"]')
+    );
     return readText(
       (heading && (heading.getAttribute('aria-label') || heading.textContent)) ||
         element.getAttribute('aria-label') ||
@@ -1116,7 +1151,7 @@ function createPageSnapshotScript(): string {
     return exactMatch || clickableIndexes[clickableIndexes.length - 1];
   };
   const isDimmedBackdrop = (element, excludedElement) => {
-    if (element === excludedElement || excludedElement.contains(element)) return false;
+    if (element === excludedElement || containsComposedElement(excludedElement, element)) return false;
     const rect = readViewportRect(element);
     const viewportArea = Math.max(window.innerWidth * window.innerHeight, 1);
     const rectArea = rect.width * rect.height;
@@ -1126,7 +1161,7 @@ function createPageSnapshotScript(): string {
   };
   const readTopLayerInfo = () => {
     const viewportArea = Math.max(window.innerWidth * window.innerHeight, 1);
-    const candidates = Array.from(document.querySelectorAll('*'))
+    const candidates = collectComposedElements(document)
       .filter((element) => element instanceof HTMLElement && isVisible(element) && element !== document.body && element !== document.documentElement)
       .map((element) => {
         const rect = readViewportRect(element);
@@ -1154,7 +1189,7 @@ function createPageSnapshotScript(): string {
     if (!topCandidate) return null;
     const text = readText(topCandidate.element.textContent).slice(0, 1000);
     const label = readLayerLabel(topCandidate.element) || text.slice(0, 80) || '当前浮层';
-    const dimmed = Array.from(document.querySelectorAll('*')).some(
+    const dimmed = collectComposedElements(document).some(
       (element) => element instanceof HTMLElement && isVisible(element) && isDimmedBackdrop(element, topCandidate.element)
     );
     const primaryActionIndex = readPrimaryActionIndex(topCandidate.elementIndexes);
@@ -1345,6 +1380,26 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     '[class*="Link"]'
   ].join(',');
   const actionableCandidateSelector = [interactiveSelector, clickableHintSelector].join(',');
+  const collectComposedElements = (root) => {
+    const elements = [];
+    const visit = (node) => {
+      if (!node) return;
+      if (node instanceof HTMLElement) {
+        elements.push(node);
+        if (node.shadowRoot) visit(node.shadowRoot);
+      }
+      Array.from(node.childNodes || []).forEach(visit);
+    };
+    visit(root);
+    return elements;
+  };
+  const matchesSelector = (element, selector) => {
+    try {
+      return element.matches(selector);
+    } catch {
+      return false;
+    }
+  };
   const isVisible = (element) => {
     if (!(element instanceof HTMLElement)) return false;
     const rect = element.getBoundingClientRect();
@@ -1436,7 +1491,8 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     if (hasScrollableAncestor(element)) actions.push('scroll');
     return Array.from(new Set(actions));
   };
-  const elements = Array.from(document.querySelectorAll(actionableCandidateSelector))
+  const elements = collectComposedElements(document)
+    .filter((element) => matchesSelector(element, actionableCandidateSelector))
     .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
     .map((element) => ({ element, actions: readActions(element) }))
     .filter((item) => item.actions.length > 0)
