@@ -3,6 +3,7 @@
     :visible="visible && files.length > 0"
     :items="files"
     :active-index="activeIndex"
+    :scroll-active-into-view="scrollActiveIntoView"
     data-testid="file-mention-menu"
     @select="handleSelect"
     @update:active-index="handleMouseEnter"
@@ -30,10 +31,13 @@ interface Props {
   files: readonly FileMentionOption[];
   /** 当前选中项索引 */
   activeIndex?: number;
+  /** 活动项变化时是否滚动到可视区 */
+  scrollActiveIntoView?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
-  activeIndex: 0
+  activeIndex: 0,
+  scrollActiveIntoView: false
 });
 
 const emit = defineEmits<{

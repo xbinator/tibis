@@ -3,6 +3,7 @@
     :visible="visible && commands.length > 0"
     :items="commands"
     :active-index="activeIndex"
+    :scroll-active-into-view="scrollActiveIntoView"
     data-testid="slash-command-menu"
     @select="handleSelect"
     @update:active-index="handleMouseEnter"
@@ -28,10 +29,13 @@ interface Props {
   commands: readonly SlashCommandOption[];
   /** 当前高亮项索引 */
   activeIndex?: number;
+  /** 活动项变化时是否滚动到可视区 */
+  scrollActiveIntoView?: boolean;
 }
 
 withDefaults(defineProps<Props>(), {
-  activeIndex: 0
+  activeIndex: 0,
+  scrollActiveIntoView: false
 });
 
 const emit = defineEmits<{

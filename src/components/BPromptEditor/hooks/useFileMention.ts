@@ -16,6 +16,8 @@ export interface UseFileMentionReturn {
   mentionVisible: Ref<boolean>;
   /** 当前高亮索引 */
   mentionActiveIndex: Ref<number>;
+  /** 当前活动项是否需要滚动到可视区 */
+  mentionShouldScrollActive: Ref<boolean>;
   /** 过滤后的文件列表 */
   filteredFileMentions: ComputedRef<FileMentionOption[]>;
   /** 当前活动范围 */
@@ -58,6 +60,7 @@ export function useFileMention(
   // 状态
   const mentionVisible = ref(false);
   const mentionActiveIndex = ref(0);
+  const mentionShouldScrollActive = ref(false);
   const mentionQuery = ref('');
   const mentionRange = ref<{ from: number; to: number } | null>(null);
   const suppressMentionSync = ref(false);
@@ -117,6 +120,7 @@ export function useFileMention(
       suppressMentionSync.value = true;
     }
     mentionVisible.value = false;
+    mentionShouldScrollActive.value = false;
     mentionQuery.value = '';
     mentionRange.value = null;
   }
@@ -145,14 +149,25 @@ export function useFileMention(
     mentionVisible.value = true;
     mentionQuery.value = context.query;
     mentionRange.value = { from: context.from, to: context.to };
+    mentionShouldScrollActive.value = false;
     mentionActiveIndex.value = 0;
+  }
+
+  /**
+   * 更新高亮文件提及索引，并记录是否需要滚动到可视区。
+   * @param index - 新的高亮索引
+   * @param shouldScrollActive - 是否需要滚动当前活动项
+   */
+  function updateMentionActiveIndex(index: number, shouldScrollActive: boolean): void {
+    mentionShouldScrollActive.value = shouldScrollActive;
+    mentionActiveIndex.value = index;
   }
 
   /**
    * 更新高亮文件提及的索引
    */
   function handleMentionActiveIndexChange(index: number): void {
-    mentionActiveIndex.value = index;
+    updateMentionActiveIndex(index, false);
   }
 
   /**
@@ -197,7 +212,7 @@ export function useFileMention(
     if (list.length === 0) return true;
 
     const newIndex = (mentionActiveIndex.value - 1 + list.length) % list.length;
-    handleMentionActiveIndexChange(newIndex);
+    updateMentionActiveIndex(newIndex, true);
     return true;
   }
 
@@ -210,13 +225,14 @@ export function useFileMention(
     if (list.length === 0) return true;
 
     const newIndex = (mentionActiveIndex.value + 1) % list.length;
-    handleMentionActiveIndexChange(newIndex);
+    updateMentionActiveIndex(newIndex, true);
     return true;
   }
 
   return {
     mentionVisible,
     mentionActiveIndex,
+    mentionShouldScrollActive,
     filteredFileMentions,
     mentionRange,
     syncMentionState,

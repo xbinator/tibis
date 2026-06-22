@@ -15,6 +15,8 @@ export interface UseSlashCommandReturn {
   slashVisible: Ref<boolean>;
   /** 当前高亮索引 */
   slashActiveIndex: Ref<number>;
+  /** 当前活动项是否需要滚动到可视区 */
+  slashShouldScrollActive: Ref<boolean>;
   /** 过滤后的命令列表 */
   filteredSlashCommands: ComputedRef<readonly SlashCommandOption[]>;
   /** 当前活动范围 */
@@ -50,6 +52,7 @@ export function useSlashCommand(
   // 状态
   const slashVisible = ref(false);
   const slashActiveIndex = ref(0);
+  const slashShouldScrollActive = ref(false);
   const slashQuery = ref('');
   const slashRange = ref<{ from: number; to: number } | null>(null);
   const suppressSlashSync = ref(false);
@@ -111,6 +114,7 @@ export function useSlashCommand(
       suppressSlashSync.value = true;
     }
     slashVisible.value = false;
+    slashShouldScrollActive.value = false;
     slashQuery.value = '';
     slashRange.value = null;
   }
@@ -139,14 +143,25 @@ export function useSlashCommand(
     slashVisible.value = true;
     slashQuery.value = context.query;
     slashRange.value = { from: context.from, to: context.to };
+    slashShouldScrollActive.value = false;
     slashActiveIndex.value = 0;
+  }
+
+  /**
+   * 更新高亮斜杠命令索引，并记录是否需要滚动到可视区。
+   * @param index - 新的高亮索引
+   * @param shouldScrollActive - 是否需要滚动当前活动项
+   */
+  function updateSlashActiveIndex(index: number, shouldScrollActive: boolean): void {
+    slashShouldScrollActive.value = shouldScrollActive;
+    slashActiveIndex.value = index;
   }
 
   /**
    * 更新高亮斜杠命令的索引
    */
   function handleSlashActiveIndexChange(index: number): void {
-    slashActiveIndex.value = index;
+    updateSlashActiveIndex(index, false);
   }
 
   /**
@@ -188,7 +203,7 @@ export function useSlashCommand(
     if (list.length === 0) return true;
 
     const newIndex = (slashActiveIndex.value - 1 + list.length) % list.length;
-    handleSlashActiveIndexChange(newIndex);
+    updateSlashActiveIndex(newIndex, true);
     return true;
   }
 
@@ -201,13 +216,14 @@ export function useSlashCommand(
     if (list.length === 0) return true;
 
     const newIndex = (slashActiveIndex.value + 1) % list.length;
-    handleSlashActiveIndexChange(newIndex);
+    updateSlashActiveIndex(newIndex, true);
     return true;
   }
 
   return {
     slashVisible,
     slashActiveIndex,
+    slashShouldScrollActive,
     filteredSlashCommands,
     slashRange,
     syncSlashCommandState,

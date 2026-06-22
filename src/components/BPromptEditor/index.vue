@@ -4,6 +4,7 @@
       :visible="slashCommand.slashVisible.value"
       :commands="slashCommand.filteredSlashCommands.value"
       :active-index="slashCommand.slashActiveIndex.value"
+      :scroll-active-into-view="slashCommand.slashShouldScrollActive.value"
       @select="slashCommand.handleSlashCommandSelect"
       @update:active-index="slashCommand.handleSlashActiveIndexChange"
     />
@@ -11,6 +12,7 @@
       :visible="fileMention.mentionVisible.value"
       :files="fileMention.filteredFileMentions.value"
       :active-index="fileMention.mentionActiveIndex.value"
+      :scroll-active-into-view="fileMention.mentionShouldScrollActive.value"
       @select="fileMention.handleFileMentionSelect"
       @update:active-index="fileMention.handleMentionActiveIndexChange"
     />

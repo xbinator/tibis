@@ -38,6 +38,8 @@ interface Props {
   items: readonly T[];
   /** 当前高亮项索引 */
   activeIndex?: number;
+  /** 活动项变化时是否滚动到可视区 */
+  scrollActiveIntoView?: boolean;
   /** 是否使用 Teleport 传送到 body */
   teleport?: boolean;
   /** Teleport 模式下的锚点位置，用于自动计算弹出方向 */
@@ -50,6 +52,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   activeIndex: 0,
+  scrollActiveIntoView: false,
   teleport: false,
   position: undefined,
   dropdownWidth: 300,
@@ -119,6 +122,22 @@ watch(
   },
   { immediate: true }
 );
+
+/**
+ * 将当前活动项滚动到列表可视区内。
+ * @param index - 当前活动项索引
+ */
+function scrollActiveItemIntoView(index: number): void {
+  const activeItem = dropdownRef.value?.querySelectorAll<HTMLElement>('.select-dropdown__item')[index];
+  activeItem?.scrollIntoView({ block: 'nearest' });
+}
+
+watch([() => props.activeIndex, () => props.scrollActiveIntoView, () => props.visible], async ([activeIndex, scrollActiveIntoView, visible]) => {
+  if (!visible || !scrollActiveIntoView) return;
+
+  await nextTick();
+  scrollActiveItemIntoView(activeIndex);
+});
 
 /**
  * 计算最终的菜单样式：Teleport 模式使用动态定位，内联模式使用默认或自定义样式
