@@ -21,7 +21,7 @@ const EXT_ICON_MAP: Record<string, string> = {
   svelte: 'vscode-icons:file-type-svelte',
 
   // 数据 / 配置
-  json: 'vscode-icons:file-type-json-official',
+  json: 'vscode-icons:file-type-json',
   yaml: 'vscode-icons:file-type-yaml',
   yml: 'vscode-icons:file-type-yaml',
   toml: 'vscode-icons:file-type-toml',
@@ -39,6 +39,9 @@ const EXT_ICON_MAP: Record<string, string> = {
   ppt: 'vscode-icons:file-type-powerpoint',
   pptx: 'vscode-icons:file-type-powerpoint',
   txt: 'vscode-icons:file-type-text',
+
+  // Tibis 内置格式本质为 JSON 结构，按 JSON 图标展示。
+  tibis: 'vscode-icons:file-type-json',
 
   // 后端 / 脚本
   py: 'vscode-icons:file-type-python',
@@ -73,7 +76,7 @@ const EXT_ICON_MAP: Record<string, string> = {
 
   // 锁 / 包管理
   lock: 'vscode-icons:file-type-lock',
-  packagejson: 'vscode-icons:file-type-node',
+  packagejson: 'vscode-icons:file-type-npm',
 
   // Docker
   dockerfile: 'vscode-icons:file-type-docker'
@@ -89,4 +92,18 @@ const DEFAULT_ICON = 'vscode-icons:default-file';
  */
 export function getFileIcon(ext: string): string {
   return EXT_ICON_MAP[ext.toLowerCase()] ?? DEFAULT_ICON;
+}
+
+/**
+ * 根据完整文件名获取对应的 Iconify 图标名。
+ * @param fileName - 完整文件名，如 `package.json`、`README.md`
+ * @returns Iconify 图标名
+ */
+export function getFileIconByName(fileName: string): string {
+  const normalizedFileName = fileName.toLowerCase();
+  if (normalizedFileName === 'package.json') {
+    return getFileIcon('packagejson');
+  }
+
+  return getFileIcon(normalizedFileName.split('.').at(-1) ?? '');
 }

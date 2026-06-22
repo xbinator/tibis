@@ -64,6 +64,7 @@ import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import type { RecentRecord } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
+import { getFileIconByName } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 import DropZone from './components/DropZone.vue';
 
@@ -130,10 +131,10 @@ function handleShowShortcuts(): void {
  */
 function getRecentRecordIcon(record: RecentRecord): string {
   if (record.type === 'webview') {
-    return 'lucide:globe';
+    return 'vscode-icons:file-type-geojson';
   }
 
-  return record.ext === 'tibis' ? 'lucide:pen-line' : 'lucide:file-text';
+  return getFileIconByName(resolveFileTitle(record));
 }
 </script>
 
