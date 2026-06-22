@@ -87,6 +87,39 @@ describe('toolResultSummary open file metadata', (): void => {
     expect(summary?.tags).toContainEqual({ label: '顶层浮层', value: '温馨提示' });
   });
 
+  it('summarizes read_current_webpage with manually selected element metadata', (): void => {
+    const summary = getToolResultSummary(
+      'read_current_webpage',
+      successResult('read_current_webpage', {
+        url: 'https://example.com/register',
+        title: '挂号',
+        header: 'Page info: 800x600px [Start of page]',
+        content: '[1]<button>确认</button>',
+        footer: '[End of page]',
+        text: '确认',
+        selectedText: '',
+        headings: [],
+        links: [],
+        capturedAt: 1,
+        truncated: { text: false, content: false, headings: false, links: false, selectedText: false },
+        selectedElement: {
+          tagName: 'BUTTON',
+          id: 'confirm-button',
+          className: 'primary-action',
+          text: '确认',
+          selector: 'button#confirm-button',
+          attributes: [],
+          ancestors: [],
+          computedStyles: {},
+          rect: { x: 20, y: 30, width: 120, height: 40 },
+          matchedIndex: 1
+        }
+      })
+    );
+
+    expect(summary?.tags).toContainEqual({ label: '选中元素', value: '#1 确认' });
+  });
+
   it('marks write_file file tag as openable when a file is created', (): void => {
     const summary = getToolResultSummary('write_file', successResult('write_file', { path: '/workspace/docs/report.md', content: '# Report', created: true }));
 

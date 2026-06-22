@@ -430,6 +430,15 @@ function summarizeReadCurrentWebpage(data: Record<string, unknown>): ToolResultS
     tags.push({ label: '顶层浮层', value: topLayerLabel || '有' });
   }
 
+  const selectedElement = typeof data.selectedElement === 'object' && data.selectedElement !== null ? (data.selectedElement as Record<string, unknown>) : null;
+  if (selectedElement) {
+    const selectedElementText = typeof selectedElement.text === 'string' ? selectedElement.text.trim() : '';
+    const selector = typeof selectedElement.selector === 'string' ? selectedElement.selector.trim() : '';
+    const matchedIndex = typeof selectedElement.matchedIndex === 'number' ? selectedElement.matchedIndex : null;
+    const value = matchedIndex !== null ? `#${matchedIndex} ${selectedElementText || selector || '已选中'}` : selectedElementText || selector || '有';
+    tags.push({ label: '选中元素', value });
+  }
+
   if (selectedText.trim()) {
     tags.push({ label: '选中文本', value: '有' });
   }

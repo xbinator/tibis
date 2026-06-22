@@ -77,7 +77,8 @@ export function isRuntimeWebpageSnapshot(value: unknown): value is RuntimeWebpag
     Array.isArray(value.links) &&
     typeof value.capturedAt === 'number' &&
     isRecord(value.truncated) &&
-    (value.viewport === undefined || isRecord(value.viewport))
+    (value.viewport === undefined || isRecord(value.viewport)) &&
+    (value.selectedElement === undefined || isRecord(value.selectedElement))
   );
 }
 

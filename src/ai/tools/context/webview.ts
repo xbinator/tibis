@@ -24,6 +24,26 @@ export interface WebviewPageLink {
 }
 
 /**
+ * WebView 选中元素属性。
+ */
+export interface WebviewSelectedElementAttribute {
+  /** 属性名。 */
+  name: string;
+  /** 属性值。 */
+  value: string;
+}
+
+/**
+ * WebView 选中元素祖先节点。
+ */
+export interface WebviewSelectedElementAncestor {
+  /** 元素标签名。 */
+  tagName: string;
+  /** 祖先节点选择器。 */
+  selector: string;
+}
+
+/**
  * WebView 页面字段截断标记。
  */
 export interface WebviewPageTruncation {
@@ -79,6 +99,38 @@ export interface WebviewViewportRect {
  * WebView Agent 元素动作。
  */
 export type WebviewAgentElementAction = 'click' | 'input' | 'select' | 'press' | 'scroll';
+
+/**
+ * WebView 用户手动选中的元素摘要。
+ */
+export interface WebviewSelectedElementSnapshot {
+  /** 元素标签名。 */
+  tagName: string;
+  /** 元素 ID。 */
+  id: string;
+  /** 元素 className。 */
+  className: string;
+  /** 元素可读文本。 */
+  text: string;
+  /** 元素中的图标字体私有字区字符。 */
+  glyph?: string;
+  /** 可复用的 CSS 选择器。 */
+  selector: string;
+  /** 元素属性列表。 */
+  attributes: WebviewSelectedElementAttribute[];
+  /** 当前元素的祖先层级。 */
+  ancestors: WebviewSelectedElementAncestor[];
+  /** 精选计算样式。 */
+  computedStyles: Record<string, string>;
+  /** 元素相对当前视口的矩形。 */
+  rect: WebviewViewportRect & { pageX?: number; pageY?: number };
+  /** 若该元素匹配当前可操作元素列表，则为对应 index。 */
+  matchedIndex?: number;
+  /** 匹配到的可操作元素标签。 */
+  matchedLabel?: string;
+  /** 匹配到的可操作元素动作。 */
+  matchedActions?: WebviewAgentElementAction[];
+}
 
 /**
  * WebView 可交互元素所在视觉层。
@@ -230,6 +282,8 @@ export interface WebviewPageSnapshot {
   scroll?: WebviewPageScrollState;
   /** 当前视口视觉摘要。 */
   viewport?: WebviewViewportSnapshot;
+  /** 用户手动选择的页面元素摘要。 */
+  selectedElement?: WebviewSelectedElementSnapshot;
   /** 当前可交互元素列表。 */
   elements?: WebviewAgentElement[];
 }

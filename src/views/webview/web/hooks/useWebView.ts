@@ -14,6 +14,7 @@ import type {
   WebviewPageLink,
   WebviewPageSnapshot,
   WebviewPageTruncation,
+  WebviewSelectedElementSnapshot,
   WebviewViewportElement,
   WebviewViewportRect,
   WebviewViewportSnapshot,
@@ -511,6 +512,136 @@ function normalizeViewportSnapshot(viewport: WebviewViewportSnapshot | undefined
     scrollY: Math.round(viewport.scrollY),
     ...(viewport.topLayer ? { topLayer: normalizeViewportTopLayer(viewport.topLayer) } : {}),
     elements: viewport.elements.slice(0, WEBVIEW_PAGE_ELEMENT_LIMIT).map(normalizeViewportElement)
+  };
+}
+
+/**
+ * 规范化选中元素矩形。
+ * @param rect - 元素选择器返回的矩形
+ * @returns 裁剪后的选中元素矩形
+ */
+function normalizeSelectedElementRect(rect: WebviewElementSelection['rect']): WebviewSelectedElementSnapshot['rect'] {
+  return {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    ...(typeof rect.pageX === 'number' ? { pageX: Math.round(rect.pageX) } : {}),
+    ...(typeof rect.pageY === 'number' ? { pageY: Math.round(rect.pageY) } : {}),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height)
+  };
+}
+
+/**
+ * 计算两个视口矩形的重叠比例。
+ * @param first - 第一个矩形
+ * @param second - 第二个矩形
+ * @returns 以较小矩形为基准的重叠比例
+ */
+function getViewportRectOverlapRatio(first: WebviewViewportRect, second: WebviewViewportRect): number {
+  const left = Math.max(first.x, second.x);
+  const top = Math.max(first.y, second.y);
+  const right = Math.min(first.x + first.width, second.x + second.width);
+  const bottom = Math.min(first.y + first.height, second.y + second.height);
+  const overlapArea = Math.max(right - left, 0) * Math.max(bottom - top, 0);
+  const firstArea = Math.max(first.width * first.height, 1);
+  const secondArea = Math.max(second.width * second.height, 1);
+  return overlapArea / Math.min(firstArea, secondArea);
+}
+
+/**
+ * 规范化用于选中元素匹配的文本。
+ * @param value - 原始文本
+ * @returns 去除图标字形后的可读文本
+ */
+function normalizeSelectedElementMatchText(value: string): string {
+  return value.replace(PRIVATE_USE_ICON_GLYPH_PATTERN, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * 计算选中元素与可操作元素的匹配分数。
+ * @param selection - 用户选中元素
+ * @param element - 快照可操作元素
+ * @returns 匹配分数
+ */
+function scoreSelectedElementMatch(selection: WebviewElementSelection, element: WebviewAgentElement): number {
+  let score = 0;
+  const selectedText = normalizeSelectedElementMatchText(selection.text);
+  const elementLabel = normalizeSelectedElementMatchText(element.label || element.text);
+
+  if (selection.tagName.toUpperCase() === element.tagName.toUpperCase()) {
+    score += 20;
+  }
+
+  if (selectedText && elementLabel) {
+    if (selectedText === elementLabel) {
+      score += 40;
+    } else if (selectedText.includes(elementLabel) || elementLabel.includes(selectedText)) {
+      score += 20;
+    }
+  }
+
+  if (element.rect) {
+    const selectedRect = normalizeSelectedElementRect(selection.rect);
+    const xClose = Math.abs(selectedRect.x - element.rect.x) <= 4;
+    const yClose = Math.abs(selectedRect.y - element.rect.y) <= 4;
+    const widthClose = Math.abs(selectedRect.width - element.rect.width) <= 4;
+    const heightClose = Math.abs(selectedRect.height - element.rect.height) <= 4;
+    if (xClose && yClose && widthClose && heightClose) {
+      score += 50;
+    } else if (getViewportRectOverlapRatio(selectedRect, element.rect) >= 0.6) {
+      score += 30;
+    }
+  }
+
+  return score;
+}
+
+/**
+ * 查找用户选中元素对应的快照可操作元素。
+ * @param selection - 用户选中元素
+ * @param elements - 快照可操作元素列表
+ * @returns 匹配到的可操作元素
+ */
+function findSelectedElementMatch(selection: WebviewElementSelection, elements: WebviewAgentElement[] | undefined): WebviewAgentElement | null {
+  const scoredElements = (elements ?? [])
+    .map((element) => ({ element, score: scoreSelectedElementMatch(selection, element) }))
+    .filter((item) => item.score >= 40)
+    .sort((first, second) => second.score - first.score);
+
+  return scoredElements[0]?.element ?? null;
+}
+
+/**
+ * 创建 AI 工具可读的用户选中元素摘要。
+ * @param selection - 用户选中元素
+ * @param elements - 当前快照可操作元素列表
+ * @returns 用户选中元素摘要
+ */
+function createSelectedElementSnapshot(
+  selection: WebviewElementSelection | null,
+  elements: WebviewAgentElement[] | undefined
+): WebviewSelectedElementSnapshot | undefined {
+  if (!selection) return undefined;
+
+  const matchedElement = findSelectedElementMatch(selection, elements);
+  return {
+    tagName: truncateText(selection.tagName, 40).value,
+    id: truncateText(selection.id, 120).value,
+    className: truncateText(selection.className, 240).value,
+    text: truncateText(selection.text, 500).value,
+    ...(selection.glyph ? { glyph: truncateText(selection.glyph, 80).value } : {}),
+    selector: truncateText(selection.selector, 500).value,
+    attributes: selection.attributes.slice(0, 40).map((attribute) => ({
+      name: truncateText(attribute.name, 120).value,
+      value: truncateText(attribute.value, 500).value
+    })),
+    ancestors: selection.ancestors.slice(0, 20).map((ancestor) => ({
+      tagName: truncateText(ancestor.tagName, 40).value,
+      selector: truncateText(ancestor.selector, 500).value
+    })),
+    computedStyles: Object.fromEntries(Object.entries(selection.computedStyles).map(([key, value]) => [key, truncateText(value, 240).value])),
+    rect: normalizeSelectedElementRect(selection.rect),
+    ...(matchedElement ? { matchedIndex: matchedElement.index, matchedLabel: matchedElement.label, matchedActions: matchedElement.actions } : {})
   };
 }
 
@@ -2345,8 +2476,10 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
 
         const snapshotId = typeof value.snapshotId === 'string' && value.snapshotId ? value.snapshotId : createSnapshotId();
         const snapshot = normalizeWebviewPageSnapshot({ ...value, snapshotId });
+        const selectedElementSnapshot = createSelectedElementSnapshot(selectedElement.value, snapshot.elements);
+        const snapshotWithSelection = selectedElementSnapshot ? { ...snapshot, selectedElement: selectedElementSnapshot } : snapshot;
         activeSnapshot = { id: snapshotId, url: snapshot.url, capturedAtMs: nowMs(), elements: createActiveSnapshotElements(snapshot.elements) };
-        return createPublicWebviewPageSnapshot(snapshot);
+        return createPublicWebviewPageSnapshot(snapshotWithSelection);
       })
     )
       .catch((error: unknown) => {

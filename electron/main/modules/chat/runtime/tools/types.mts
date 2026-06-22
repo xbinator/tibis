@@ -96,6 +96,8 @@ export interface RuntimeWebpageSnapshot {
   truncated: Record<string, unknown>;
   /** 当前视口视觉摘要。 */
   viewport?: Record<string, unknown>;
+  /** 用户手动选择的页面元素摘要。 */
+  selectedElement?: Record<string, unknown>;
 }
 
 /** Runtime 网页操作结果。 */

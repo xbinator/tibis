@@ -525,6 +525,61 @@ describe('useWebView', () => {
     expect(snapshot.content).toContain('[1]<button>确认</button>');
   });
 
+  it('includes the manually selected element in webpage snapshots', async (): Promise<void> => {
+    const selectedElement = {
+      tagName: 'BUTTON',
+      id: 'confirm-button',
+      className: 'primary-action',
+      text: '确认',
+      selector: 'button#confirm-button',
+      attributes: [{ name: 'id', value: 'confirm-button' }],
+      ancestors: [{ tagName: 'SECTION', selector: 'section.dialog' }],
+      computedStyles: { display: 'block', position: 'static' },
+      rect: { x: 20, y: 30, pageX: 20, pageY: 30, width: 120, height: 40 }
+    };
+    const webviewElement = createScriptableWebview([
+      selectedElement,
+      {
+        url: 'https://example.com',
+        title: 'Example',
+        text: '确认',
+        selectedText: '',
+        headings: [],
+        links: [],
+        snapshotId: 'snap-1',
+        loading: false,
+        elements: [
+          {
+            index: 1,
+            tagName: 'BUTTON',
+            text: '确认',
+            label: '确认',
+            disabled: false,
+            isNew: false,
+            actions: ['click'],
+            rect: { x: 20, y: 30, width: 120, height: 40 },
+            visibleRatio: 1,
+            covered: false,
+            layer: 'page',
+            primary: false
+          }
+        ]
+      }
+    ]);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+
+    await controller.startElementSelection();
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.selectedElement).toMatchObject({
+      selector: 'button#confirm-button',
+      text: '确认',
+      matchedIndex: 1,
+      matchedLabel: '确认',
+      matchedActions: ['click']
+    });
+  });
+
   it('returns viewport top layer context for visible dialogs', async (): Promise<void> => {
     document.body.innerHTML = `
       <main>
