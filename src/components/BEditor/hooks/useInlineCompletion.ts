@@ -170,6 +170,16 @@ function isRequestTokenCurrent(adapter: InlineCompletionAdapter, token: InlineCo
 }
 
 /**
+ * 判断请求令牌是否仍是当前状态机的活跃请求。
+ * @param latestRequestId - 最近一次请求 ID
+ * @param token - 待校验请求令牌
+ * @returns 请求仍活跃时返回 true
+ */
+function isRequestStillActive(latestRequestId: string, token: InlineCompletionRequestToken): boolean {
+  return latestRequestId === token.requestId;
+}
+
+/**
  * 读取用于 prompt 的文档上下文。
  * @param adapter - 当前 pane 适配器
  * @param requestToken - 请求令牌
@@ -330,7 +340,8 @@ function createInlineCompletionStateMachine(options: InlineCompletionStateMachin
     });
 
     latestRequestId = requestToken.requestId;
-    activeTraceId = crypto.randomUUID();
+    const requestTraceId = crypto.randomUUID();
+    activeTraceId = requestTraceId;
     const requestStartedAt = Date.now();
     state.value = {
       status: 'loading',
@@ -338,20 +349,24 @@ function createInlineCompletionStateMachine(options: InlineCompletionStateMachin
       requestToken
     };
     logInlineCompletionEvent('inline_completion.triggered', {
-      traceId: activeTraceId,
+      traceId: requestTraceId,
       pane: options.adapter.pane,
       docVersion: requestToken.docVersion,
       cursor: requestToken.cursorPosition.absolutePosition,
       contextLength: prefix.length + suffix.length
     });
     logInlineCompletionEvent('inline_completion.requested', {
-      traceId: activeTraceId,
+      traceId: requestTraceId,
       pane: options.adapter.pane
     });
 
     try {
       const rawText = await withTimeout<string>(options.invokeCompletion(prompt), timeoutMs);
-      if (latestRequestId !== requestToken.requestId || state.value.status !== 'loading' || !isRequestTokenCurrent(options.adapter, requestToken)) {
+      if (!isRequestStillActive(latestRequestId, requestToken)) {
+        return true;
+      }
+
+      if (state.value.status !== 'loading' || !isRequestTokenCurrent(options.adapter, requestToken)) {
         cancel('stale');
         return true;
       }
@@ -369,16 +384,20 @@ function createInlineCompletionStateMachine(options: InlineCompletionStateMachin
       };
       options.adapter.showGhost(normalizedText, requestToken);
       logInlineCompletionEvent('inline_completion.received', {
-        traceId: activeTraceId,
+        traceId: requestTraceId,
         pane: options.adapter.pane,
         latencyMs: Date.now() - requestStartedAt,
         outputLength: normalizedText.length
       });
       return true;
     } catch (error) {
+      if (!isRequestStillActive(latestRequestId, requestToken)) {
+        return true;
+      }
+
       state.value.status = 'error';
       logInlineCompletionEvent('inline_completion.error', {
-        traceId: activeTraceId,
+        traceId: requestTraceId,
         pane: options.adapter.pane,
         message: error instanceof Error ? error.message : String(error)
       });

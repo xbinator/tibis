@@ -300,6 +300,33 @@ describe('useInlineCompletion', (): void => {
       expect(adapter.hideGhost).toHaveBeenCalled();
     });
 
+    it('keeps newer ghost text when an older request resolves late', async (): Promise<void> => {
+      vi.useFakeTimers();
+      stubInvokeResult(' current');
+      hookMocks.slowDelayMs = 1000;
+      const adapter = createAdapter();
+      const completion = mountCompletion(adapter);
+
+      adapter.emit('input');
+      await advance(700);
+      adapter.emit('input');
+      await advance(700);
+
+      expect(hookMocks.invokeCalls).toHaveLength(2);
+      hookMocks.pendingResolvers[1]?.();
+      await advance(0);
+
+      expect(adapter.showGhost).toHaveBeenCalledWith(' current', expect.objectContaining({ docVersion: 1 }));
+      expect(completion.instance.value?.state.value.status).toBe('showing');
+      expect(adapter.hideGhost).toHaveBeenCalledTimes(1);
+
+      hookMocks.pendingResolvers[0]?.();
+      await advance(0);
+
+      expect(completion.instance.value?.state.value.status).toBe('showing');
+      expect(adapter.hideGhost).toHaveBeenCalledTimes(1);
+    });
+
     it('accepts visible ghost text with a single adapter call', async (): Promise<void> => {
       vi.useFakeTimers();
       stubInvokeResult(' accepted');
