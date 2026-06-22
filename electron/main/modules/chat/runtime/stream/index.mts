@@ -87,7 +87,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       } else if (chunk.type === 'tool-input-end') {
         appendToolInputEnd(assistantMessage, chunk);
         await updateAssistant(assistantMessage);
-      } else if (chunk.type === 'tool-call') {
+      } else if (chunk.type === 'tool-call' || chunk.type === 'tool-input-available') {
         appendToolCall(assistantMessage, chunk);
         await updateAssistant(assistantMessage);
 

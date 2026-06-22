@@ -4,6 +4,7 @@
  */
 import type { ActiveChatRuntime } from '../../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import type { ChatMessageRecord } from 'types/chat';
+import { cloneDeep } from 'lodash-es';
 import { describe, expect, it, vi } from 'vitest';
 import { createRuntimeStreamExecutor } from '../../../../../../../electron/main/modules/chat/runtime/stream/index.mjs';
 
@@ -101,6 +102,28 @@ async function* createQuestionToolStream(): AsyncGenerator<unknown> {
         { label: '确认下单!', value: 'confirm' },
         { label: '再想想...', value: 'cancel' }
       ]
+    }
+  };
+  yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 } };
+}
+
+/**
+ * 创建 AI SDK 6 的工具输入可用事件测试流。
+ * @returns AI stream chunk 序列
+ */
+async function* createQuestionToolInputAvailableStream(): AsyncGenerator<unknown> {
+  yield { type: 'tool-input-start', toolCallId: 'tool-call-question', toolName: 'question' };
+  yield { type: 'tool-input-delta', toolCallId: 'tool-call-question', inputTextDelta: '{"question":"确认下单生椰拿铁，实付 9.9?","mode":"single","options":[' };
+  yield { type: 'tool-input-delta', toolCallId: 'tool-call-question', inputTextDelta: '{"label":"确认下单!","value":"confirm"}]}' };
+  yield { type: 'tool-input-end', toolCallId: 'tool-call-question' };
+  yield {
+    type: 'tool-input-available',
+    toolCallId: 'tool-call-question',
+    toolName: 'question',
+    input: {
+      question: '确认下单生椰拿铁，实付 9.9?',
+      mode: 'single',
+      options: [{ label: '确认下单!', value: 'confirm' }]
     }
   };
   yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 } };
@@ -727,6 +750,90 @@ describe('runtime stream executor', (): void => {
     );
 
     expect(result).toEqual({});
+    expect(updates.at(-1)).toMatchObject({
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-question',
+          toolName: 'question',
+          status: 'done',
+          result: {
+            toolName: 'question',
+            status: 'awaiting_user_input',
+            data: expect.objectContaining({ questionId: 'question-1' })
+          }
+        }
+      ],
+      loading: false,
+      finished: false
+    });
+  });
+
+  it('executes renderer question tools from AI SDK tool-input-available chunks', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const updates: ChatMessageRecord[] = [];
+    const executeRendererTool = vi.fn().mockResolvedValue({
+      toolName: 'question',
+      status: 'awaiting_user_input',
+      data: {
+        questionId: 'question-1',
+        toolCallId: 'tool-call-question',
+        question: '确认下单生椰拿铁，实付 9.9?',
+        mode: 'single',
+        options: [{ label: '确认下单!', value: 'confirm' }]
+      }
+    });
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        providerType: 'openai',
+        apiKey: 'sk-test',
+        baseUrl: 'https://api.openai.com/v1'
+      },
+      modelId: 'gpt-test'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createQuestionToolInputAvailableStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeRendererTool });
+
+    const result = await executor(
+      {
+        runtime: {
+          ...runtime,
+          tools: [{ name: 'question', description: 'Ask user', parameters: { type: 'object', properties: {} } }]
+        },
+        userMessage,
+        assistantMessage
+      },
+      async (message) => {
+        updates.push(cloneDeep(message));
+      }
+    );
+
+    expect(result).toEqual({});
+    expect(updates).toContainEqual(
+      expect.objectContaining({
+        parts: [
+          expect.objectContaining({
+            type: 'tool',
+            toolCallId: 'tool-call-question',
+            toolName: 'question',
+            status: 'executing',
+            inputText: '{"question":"确认下单生椰拿铁，实付 9.9?","mode":"single","options":[{"label":"确认下单!","value":"confirm"}]}'
+          })
+        ]
+      })
+    );
+    expect(executeRendererTool).toHaveBeenCalledWith({
+      runtime: expect.objectContaining({ runtimeId: 'runtime-1' }),
+      toolCallId: 'tool-call-question',
+      toolName: 'question',
+      input: {
+        question: '确认下单生椰拿铁，实付 9.9?',
+        mode: 'single',
+        options: [{ label: '确认下单!', value: 'confirm' }]
+      }
+    });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {

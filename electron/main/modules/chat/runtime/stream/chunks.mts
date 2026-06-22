@@ -9,6 +9,7 @@ import type {
   RuntimeStreamChunk,
   RuntimeTextDeltaChunk,
   RuntimeToolCallChunk,
+  RuntimeToolInputAvailableChunk,
   RuntimeToolInputDeltaChunk,
   RuntimeToolInputEndChunk,
   RuntimeToolInputStartChunk,
@@ -46,6 +47,28 @@ export function normalizeUsage(usage: Partial<AIUsage>): AIUsage {
  */
 function isToolExecutionResult(value: unknown): value is AIToolExecutionResult {
   return isRecord(value) && typeof value.toolName === 'string' && typeof value.status === 'string';
+}
+
+/**
+ * 读取工具调用 ID，兼容 AI SDK 6 的 toolCallId 与旧版 id 字段。
+ * @param chunk - AI SDK 原始工具 chunk
+ * @returns 工具调用 ID
+ */
+function readToolCallId(chunk: Record<string, unknown>): string | undefined {
+  if (typeof chunk.toolCallId === 'string') return chunk.toolCallId;
+  if (typeof chunk.id === 'string') return chunk.id;
+  return undefined;
+}
+
+/**
+ * 读取工具输入文本增量，兼容 AI SDK 6 的 inputTextDelta 与旧版 delta 字段。
+ * @param chunk - AI SDK 原始工具输入增量 chunk
+ * @returns 输入文本增量
+ */
+function readToolInputTextDelta(chunk: Record<string, unknown>): string | undefined {
+  if (typeof chunk.inputTextDelta === 'string') return chunk.inputTextDelta;
+  if (typeof chunk.delta === 'string') return chunk.delta;
+  return undefined;
 }
 
 /**
@@ -98,16 +121,35 @@ export function toRuntimeStreamChunk(chunk: unknown): RuntimeStreamChunk | undef
     return { type: 'tool-call', toolCallId: chunk.toolCallId, toolName: chunk.toolName, input: chunk.input } as RuntimeToolCallChunk;
   }
 
-  if (chunk.type === 'tool-input-start' && typeof chunk.id === 'string' && typeof chunk.toolName === 'string') {
-    return { type: 'tool-input-start', toolCallId: chunk.id, toolName: chunk.toolName } as RuntimeToolInputStartChunk;
+  if (chunk.type === 'tool-input-available' && typeof chunk.toolCallId === 'string' && typeof chunk.toolName === 'string') {
+    return {
+      type: 'tool-input-available',
+      toolCallId: chunk.toolCallId,
+      toolName: chunk.toolName,
+      input: chunk.input
+    } as RuntimeToolInputAvailableChunk;
   }
 
-  if (chunk.type === 'tool-input-delta' && typeof chunk.id === 'string' && typeof chunk.delta === 'string') {
-    return { type: 'tool-input-delta', toolCallId: chunk.id, inputTextDelta: chunk.delta } as RuntimeToolInputDeltaChunk;
+  if (chunk.type === 'tool-input-start' && typeof chunk.toolName === 'string') {
+    const toolCallId = readToolCallId(chunk);
+    if (toolCallId !== undefined) {
+      return { type: 'tool-input-start', toolCallId, toolName: chunk.toolName } as RuntimeToolInputStartChunk;
+    }
   }
 
-  if (chunk.type === 'tool-input-end' && typeof chunk.id === 'string') {
-    return { type: 'tool-input-end', toolCallId: chunk.id } as RuntimeToolInputEndChunk;
+  if (chunk.type === 'tool-input-delta') {
+    const toolCallId = readToolCallId(chunk);
+    const inputTextDelta = readToolInputTextDelta(chunk);
+    if (toolCallId !== undefined && inputTextDelta !== undefined) {
+      return { type: 'tool-input-delta', toolCallId, inputTextDelta } as RuntimeToolInputDeltaChunk;
+    }
+  }
+
+  if (chunk.type === 'tool-input-end') {
+    const toolCallId = readToolCallId(chunk);
+    if (toolCallId !== undefined) {
+      return { type: 'tool-input-end', toolCallId } as RuntimeToolInputEndChunk;
+    }
   }
 
   if (chunk.type === 'tool-result' && typeof chunk.toolCallId === 'string' && typeof chunk.toolName === 'string') {

@@ -72,6 +72,21 @@ export interface RuntimeToolCallChunk {
   input: unknown;
 }
 
+/** AI SDK 工具输入已可执行 chunk。 */
+export interface RuntimeToolInputAvailableChunk {
+  /** chunk 类型。 */
+  type: 'tool-input-available';
+  /** 工具调用 ID。 */
+  toolCallId: string;
+  /** 工具名称。 */
+  toolName: string;
+  /** 工具输入。 */
+  input: unknown;
+}
+
+/** Runtime 可执行工具调用 chunk。 */
+export type RuntimeExecutableToolCallChunk = RuntimeToolCallChunk | RuntimeToolInputAvailableChunk;
+
 /** AI SDK 工具输入开始 chunk。 */
 export interface RuntimeToolInputStartChunk {
   /** chunk 类型。 */
@@ -125,6 +140,7 @@ export type RuntimeStreamChunk =
   | RuntimeErrorChunk
   | RuntimeFinishChunk
   | RuntimeToolCallChunk
+  | RuntimeToolInputAvailableChunk
   | RuntimeToolInputStartChunk
   | RuntimeToolInputDeltaChunk
   | RuntimeToolInputEndChunk

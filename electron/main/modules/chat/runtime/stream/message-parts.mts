@@ -3,7 +3,7 @@
  * @description ChatRuntime assistant 消息片段写入。
  */
 import type {
-  RuntimeToolCallChunk,
+  RuntimeExecutableToolCallChunk,
   RuntimeToolInputDeltaChunk,
   RuntimeToolInputEndChunk,
   RuntimeToolInputStartChunk,
@@ -121,11 +121,11 @@ export function appendToolInputEnd(message: ChatMessageRecord, chunk: RuntimeToo
 }
 
 /**
- * 写入工具调用片段。
+ * 写入工具调用或可执行工具输入片段。
  * @param message - assistant 消息
- * @param chunk - 工具调用 chunk
+ * @param chunk - 可执行工具调用 chunk
  */
-export function appendToolCall(message: ChatMessageRecord, chunk: RuntimeToolCallChunk): void {
+export function appendToolCall(message: ChatMessageRecord, chunk: RuntimeExecutableToolCallChunk): void {
   const toolPart = ensureToolPart(message, chunk.toolCallId, chunk.toolName);
   toolPart.status = 'executing';
   toolPart.input = chunk.input;
