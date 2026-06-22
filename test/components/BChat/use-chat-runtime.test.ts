@@ -6,9 +6,11 @@
 import type { AIMCPRequestConfig, AIToolContext, AIToolExecutor } from 'types/ai';
 import type { ChatMessageFile, ChatMessageRecord } from 'types/chat';
 import { effectScope, reactive, ref } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatRuntime } from '@/components/BChat/hooks/useChatRuntime';
 import type { Message } from '@/components/BChat/utils/types';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
 
 const listeners = vi.hoisted<RuntimeEventListeners>(() => ({}));
@@ -93,6 +95,8 @@ function createMessage(overrides: Partial<ChatMessageRecord>): ChatMessageRecord
 
 describe('useChatRuntime', (): void => {
   beforeEach((): void => {
+    setActivePinia(createPinia());
+    useToolPermissionStore().clearToolPermissionGrants();
     resetRuntimeEventListeners(listeners);
     executeToolCallMock.mockClear();
     electronAPIMock.chatRuntimeSend.mockReset();
@@ -290,10 +294,7 @@ describe('useChatRuntime', (): void => {
       expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
         expect.objectContaining({
           content: 'fix {{#src/foo.ts}}',
-          parts: [
-            { type: 'text', text: 'fix ' },
-            expect.objectContaining({ type: 'file', path: 'src/foo.ts' })
-          ]
+          parts: [{ type: 'text', text: 'fix ' }, expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
         })
       );
     });
@@ -554,6 +555,78 @@ describe('useChatRuntime', (): void => {
         runtimeId: 'runtime-1',
         confirmationId: 'confirmation-1',
         decision: { approved: true, grantScope: 'session' }
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('remembers runtime confirmation grants and auto-approves later matching requests', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const requestConfirmation = vi.fn(async () => ({ approved: true as const, grantScope: 'always' as const }));
+    const toolPermissionStore = useToolPermissionStore();
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        requestConfirmation
+      });
+
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-remember-1',
+        toolCallId: 'tool-call-web-1',
+        request: {
+          toolCallId: 'tool-call-web-1',
+          toolName: 'operate_webpage',
+          title: '操作当前网页',
+          description: '点击当前网页元素 #2',
+          riskLevel: 'write',
+          allowRemember: true,
+          rememberScopes: ['session', 'always']
+        }
+      });
+      await Promise.resolve();
+
+      expect(toolPermissionStore.alwaysToolPermissionGrants.operate_webpage).toBe(true);
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-remember-1',
+        decision: { approved: true, grantScope: 'always' }
+      });
+
+      requestConfirmation.mockClear();
+      electronAPIMock.chatRuntimeSubmitConfirmation.mockClear();
+
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-remember-2',
+        toolCallId: 'tool-call-web-2',
+        request: {
+          toolCallId: 'tool-call-web-2',
+          toolName: 'operate_webpage',
+          title: '操作当前网页',
+          description: '滚动当前网页：down',
+          riskLevel: 'write',
+          allowRemember: true,
+          rememberScopes: ['session', 'always']
+        }
+      });
+      await Promise.resolve();
+
+      expect(requestConfirmation).not.toHaveBeenCalled();
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-remember-2',
+        decision: { approved: true }
       });
     });
 

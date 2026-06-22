@@ -51,12 +51,52 @@
         </div>
       </div>
     </BSettingsSection>
+
+    <BSettingsSection title="AI 工具权限">
+      <div class="basic-settings__permission-panel">
+        <div class="basic-settings__permission-header">
+          <div class="basic-settings__meta">
+            <div class="basic-settings__label">始终允许</div>
+            <div class="basic-settings__hint">这些工具后续执行时会跳过确认</div>
+          </div>
+          <BButton
+            v-if="alwaysToolPermissionGrants.length"
+            data-testid="clear-always-tool-permissions"
+            size="small"
+            type="secondary"
+            @click="handleClearAlwaysToolPermissions"
+          >
+            清除全部
+          </BButton>
+        </div>
+
+        <div v-if="alwaysToolPermissionGrants.length === 0" class="basic-settings__permission-empty">暂无始终允许的工具</div>
+        <div v-else class="basic-settings__permission-list">
+          <div v-for="grant in alwaysToolPermissionGrants" :key="grant.toolName" class="basic-settings__permission-row">
+            <div class="basic-settings__permission-info">
+              <div class="basic-settings__permission-name">{{ grant.label }}</div>
+              <div class="basic-settings__permission-code">{{ grant.toolName }}</div>
+            </div>
+            <BButton
+              size="small"
+              type="text"
+              danger
+              :data-testid="`revoke-tool-permission-${grant.toolName}`"
+              @click="handleRevokeToolPermission(grant.toolName)"
+            >
+              撤销
+            </BButton>
+          </div>
+        </div>
+      </div>
+    </BSettingsSection>
   </BSettingsPage>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { SelectOption } from '@/components/BSelect/types';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import type { EditorViewMode, EditorPageWidth, EditorSaveStrategy } from '@/stores/editor/preferences';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { ThemeMode } from '@/stores/ui/setting';
@@ -66,6 +106,23 @@ import { MENU_ITEMS } from '@/views/settings/constants';
 
 const editorStore = useEditorPreferencesStore();
 const settingStore = useSettingStore();
+const toolPermissionStore = useToolPermissionStore();
+
+/**
+ * 工具授权展示项。
+ */
+interface ToolPermissionGrantItem {
+  /** 工具名称 */
+  toolName: string;
+  /** 展示名称 */
+  label: string;
+}
+
+/** 工具名称中文标签。 */
+const TOOL_PERMISSION_LABELS: Record<string, string> = {
+  operate_webpage: '操作当前网页',
+  update_settings: '修改应用设置'
+};
 
 /**
  * 配色方案选项。
@@ -108,6 +165,27 @@ const saveStrategyOptions: SelectOption[] = [
 ];
 
 /**
+ * 读取工具展示名称。
+ * @param toolName - 工具名称
+ * @returns 工具展示名称
+ */
+function getToolPermissionLabel(toolName: string): string {
+  return TOOL_PERMISSION_LABELS[toolName] ?? toolName;
+}
+
+/**
+ * 已持久授权的 AI 工具列表。
+ */
+const alwaysToolPermissionGrants = computed<ToolPermissionGrantItem[]>(() =>
+  Object.keys(toolPermissionStore.alwaysToolPermissionGrants)
+    .sort()
+    .map((toolName) => ({
+      toolName,
+      label: getToolPermissionLabel(toolName)
+    }))
+);
+
+/**
  * 处理配色方案变更。
  * @param value - 新的主题模式
  */
@@ -123,16 +201,45 @@ function handlePresetChange(value: string | number): void {
   settingStore.setThemePreset(value as string);
 }
 
+/**
+ * 处理默认视图模式变更。
+ * @param value - 新的默认视图模式
+ */
 function handleViewModeChange(value: string | number): void {
   editorStore.setViewMode(value as EditorViewMode);
 }
 
+/**
+ * 处理页面宽度变更。
+ * @param value - 新的页面宽度模式
+ */
 function handlePageWidthChange(value: string | number): void {
   editorStore.setPageWidth(value as EditorPageWidth);
 }
 
+/**
+ * 处理自动保存策略变更。
+ * @param value - 新的自动保存策略
+ */
 function handleSaveStrategyChange(value: string | number): void {
   editorStore.setSaveStrategy(value as EditorSaveStrategy);
+}
+
+/**
+ * 撤销指定工具的始终允许授权。
+ * @param toolName - 工具名称
+ */
+function handleRevokeToolPermission(toolName: string): void {
+  toolPermissionStore.revokeToolPermission(toolName);
+}
+
+/**
+ * 清除全部始终允许授权。
+ */
+function handleClearAlwaysToolPermissions(): void {
+  for (const toolName of Object.keys(toolPermissionStore.alwaysToolPermissionGrants)) {
+    toolPermissionStore.revokeToolPermission(toolName);
+  }
 }
 </script>
 
@@ -170,6 +277,73 @@ function handleSaveStrategyChange(value: string | number): void {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.basic-settings__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.basic-settings__permission-panel {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--border-tertiary);
+}
+
+.basic-settings__permission-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.basic-settings__permission-empty {
+  padding: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-primary);
+  border-radius: 6px;
+}
+
+.basic-settings__permission-list {
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-tertiary);
+  border-radius: 6px;
+}
+
+.basic-settings__permission-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+}
+
+.basic-settings__permission-row + .basic-settings__permission-row {
+  border-top: 1px solid var(--border-tertiary);
+}
+
+.basic-settings__permission-info {
+  min-width: 0;
+}
+
+.basic-settings__permission-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.basic-settings__permission-code {
+  margin-top: 2px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 // ─── Responsive ───────────────────────────────────────────────────────────────

@@ -127,7 +127,8 @@ async function executeOperateWebpage(input: ChatRuntimeMainToolExecutionInput, d
       title: '操作当前网页',
       description: createOperateConfirmationDescription(input.input),
       riskLevel: 'write',
-      allowRemember: false
+      allowRemember: true,
+      rememberScopes: ['session', 'always']
     }
   });
   if (!decision.approved) return createMainToolCancelledResult(OPERATE_WEBPAGE_TOOL_NAME);

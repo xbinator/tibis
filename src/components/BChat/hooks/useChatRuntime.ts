@@ -3,7 +3,7 @@
  * @description BChat renderer 侧 ChatRuntime 桥接 hook。
  */
 import type { Message } from '../utils/types';
-import type { AIServiceError, AIToolContext, AIToolExecutionError, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
+import type { AIServiceError, AIToolContext, AIToolExecutionError, AIToolExecutionResult, AIToolExecutor, AIToolGrantScope } from 'types/ai';
 import type { ChatMessageRecord } from 'types/chat';
 import type {
   ChatRuntimeContinueInput,
@@ -27,6 +27,7 @@ import type { Ref } from 'vue';
 import { onScopeDispose, ref, toRaw } from 'vue';
 import { executeToolCall } from '@/ai/tools/stream';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 
 /** ChatRuntime hook 选项。 */
 interface UseChatRuntimeOptions {
@@ -131,6 +132,49 @@ interface RuntimeMessageLike extends Message {
  */
 function isCurrentRuntimeEvent(event: ChatRuntimeEventMap[keyof ChatRuntimeEventMap], sessionId: string | undefined, clientId: string): boolean {
   return Boolean(sessionId && event.sessionId === sessionId && event.clientId === clientId);
+}
+
+/**
+ * 读取已记住的 runtime 工具确认决策。
+ * @param request - runtime 确认请求
+ * @returns 可自动批准的确认决策，不存在授权时返回 null
+ */
+function getRememberedRuntimeConfirmationDecision(request: ChatRuntimeConfirmationRequest): ChatRuntimeConfirmationDecision | null {
+  if (request.allowRemember !== true) return null;
+
+  const toolPermissionStore = useToolPermissionStore();
+  if (toolPermissionStore.alwaysToolPermissionGrants[request.toolName] || toolPermissionStore.sessionToolPermissionGrants[request.toolName]) {
+    return { approved: true };
+  }
+
+  return null;
+}
+
+/**
+ * 判断 runtime 确认决策是否允许被记住。
+ * @param request - runtime 确认请求
+ * @param decision - 用户确认决策
+ * @returns 是否可以写入工具授权记录
+ */
+function canRememberRuntimeConfirmationDecision(
+  request: ChatRuntimeConfirmationRequest,
+  decision: ChatRuntimeConfirmationDecision
+): decision is { approved: true; grantScope: AIToolGrantScope } {
+  if (!decision.approved || request.allowRemember !== true || !decision.grantScope) return false;
+
+  return request.rememberScopes?.includes(decision.grantScope) === true;
+}
+
+/**
+ * 记住 runtime 工具确认授权。
+ * @param request - runtime 确认请求
+ * @param decision - 用户确认决策
+ */
+function rememberRuntimeConfirmationDecision(request: ChatRuntimeConfirmationRequest, decision: ChatRuntimeConfirmationDecision): void {
+  if (!canRememberRuntimeConfirmationDecision(request, decision)) return;
+
+  const toolPermissionStore = useToolPermissionStore();
+  toolPermissionStore.grantToolPermission(request.toolName, decision.grantScope);
 }
 
 /**
@@ -497,7 +541,14 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       return;
     }
 
+    const rememberedDecision = getRememberedRuntimeConfirmationDecision(event.request);
+    if (rememberedDecision) {
+      await submitConfirmationDecision(event, rememberedDecision);
+      return;
+    }
+
     const decision = options.requestConfirmation ? await options.requestConfirmation(event.request) : { approved: false };
+    rememberRuntimeConfirmationDecision(event.request, decision);
     await submitConfirmationDecision(event, decision);
   }
 
