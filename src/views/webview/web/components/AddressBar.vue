@@ -179,7 +179,7 @@ const moreActionOptions = computed<DropdownOption[]>(() => [
   {
     type: 'item',
     value: 'clear-cache',
-    label: '清除缓存',
+    label: '删除缓存数据',
     icon: 'lucide:eraser',
     onClick: () => emit('clearCache')
   }

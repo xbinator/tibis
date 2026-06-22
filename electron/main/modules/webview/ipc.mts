@@ -14,6 +14,17 @@ const __dirname = path.dirname(__filename);
 export const WEBVIEW_TAG_PARTITION = 'persist:tibis-webview';
 
 /**
+ * 清理 WebView 持久化分区时需要覆盖的浏览数据类型。
+ */
+const WEBVIEW_CLEAR_STORAGE_TYPES: NonNullable<Electron.ClearStorageDataOptions['storages']> = [
+  'cookies',
+  'localstorage',
+  'indexdb',
+  'serviceworkers',
+  'cachestorage'
+];
+
+/**
  * 标准化待附加的 `<webview>` 地址。
  * @param rawUrl - 原始地址
  * @returns 标准化 URL
@@ -40,6 +51,38 @@ export function sanitizeAttachedWebPreferences(preferences: Record<string, unkno
     partition: WEBVIEW_TAG_PARTITION,
     webSecurity: true
   };
+}
+
+/**
+ * 判断错误是否为 Electron 导航被主动中断。
+ * @param error - 原始加载错误
+ * @returns 是否为可忽略的导航中断
+ */
+function isWebviewLoadAbortError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return message.includes('ERR_ABORTED') || message.includes('(-3)');
+}
+
+/**
+ * 处理 WebContents 加载错误。
+ * @param error - 原始加载错误
+ * @param url - 目标地址
+ */
+function handleWebviewLoadError(error: unknown, url: string): void {
+  if (isWebviewLoadAbortError(error)) {
+    return;
+  }
+
+  console.error(`Failed to load WebView URL ${url}:`, error);
+}
+
+/**
+ * 安全加载 WebContents 地址，避免导航中断成为未捕获 Promise。
+ * @param webContents - WebContents 实例
+ * @param url - 目标地址
+ */
+function loadWebContentsUrl(webContents: Electron.WebContents, url: string): void {
+  webContents.loadURL(url).catch((error: unknown) => handleWebviewLoadError(error, url));
 }
 
 class WebViewManager {
@@ -79,7 +122,7 @@ class WebViewManager {
 
     const win = BrowserWindow.getAllWindows()[0];
     win.contentView.addChildView(view);
-    view.webContents.loadURL(url);
+    loadWebContentsUrl(view.webContents, url);
 
     this.views.set(tabId, view);
     this.tabIdMap.set(view.webContents.id, tabId);
@@ -101,7 +144,7 @@ class WebViewManager {
   navigate(tabId: string, url: string): void {
     const view = this.views.get(tabId);
     if (!view) return;
-    view.webContents.loadURL(url);
+    loadWebContentsUrl(view.webContents, url);
   }
 
   goBack(tabId: string): void {
@@ -248,7 +291,13 @@ export function registerWebviewHandlers(): void {
   });
 
   ipcMain.handle('webview:clear-cache', async () => {
-    await session.fromPartition(WEBVIEW_TAG_PARTITION).clearCache();
+    const webviewSession = session.fromPartition(WEBVIEW_TAG_PARTITION);
+    await Promise.all([
+      webviewSession.clearCache(),
+      webviewSession.clearStorageData({
+        storages: WEBVIEW_CLEAR_STORAGE_TYPES
+      })
+    ]);
   });
 
   ipcMain.handle('webview:capture-protocol-screenshot', async (event: IpcMainInvokeEvent, request: WebViewProtocolScreenshotRequest): Promise<ArrayBuffer> => {

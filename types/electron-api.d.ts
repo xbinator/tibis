@@ -307,7 +307,7 @@ export interface WebViewAPI {
   setBounds: (tabId: string, bounds: { x: number; y: number; width: number; height: number }) => Promise<void>; // 设置边界
   show: (tabId: string) => Promise<void>; // 显示
   hide: (tabId: string) => Promise<void>; // 隐藏
-  clearCache: () => Promise<void>; // 清理 WebView 持久化分区缓存
+  clearCache: () => Promise<void>; // 清理 WebView 持久化分区缓存与站点数据
   captureProtocolScreenshot: (request: WebViewProtocolScreenshotRequest) => Promise<ArrayBuffer>; // 通过 CDP 截取 WebView 页面区域
   onStateChanged: (callback: (tabId: string, state: WebViewState) => void) => () => void; // 加载状态变化
   onTitleUpdated: (callback: (tabId: string, title: string) => void) => () => void; // 标题更新

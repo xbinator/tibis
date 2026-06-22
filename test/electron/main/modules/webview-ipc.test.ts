@@ -7,20 +7,43 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { captureWebviewProtocolScreenshot } from '../../../../electron/main/modules/webview/capture.mjs';
 import { registerWebviewHandlers } from '../../../../electron/main/modules/webview/ipc.mts';
 
+/**
+ * 测试用 BrowserWindow 最小能力。
+ */
+interface TestBrowserWindow {
+  /** 内容视图容器。 */
+  contentView: {
+    /** 添加子视图。 */
+    addChildView: (_view: unknown) => void;
+    /** 移除子视图。 */
+    removeChildView: (_view: unknown) => void;
+  };
+  /** 宿主 WebContents。 */
+  webContents: {
+    /** 发送 IPC 消息。 */
+    send: (_channel: string, ..._args: unknown[]) => void;
+  };
+}
+
 const handleMock = vi.hoisted(() => vi.fn());
 const captureWebviewProtocolScreenshotMock = vi.hoisted(() => vi.fn().mockResolvedValue(new ArrayBuffer(1)));
+const webContentsViewMock = vi.hoisted(() => vi.fn());
+const getAllWindowsMock = vi.hoisted(() => vi.fn<() => TestBrowserWindow[]>(() => []));
+const clearCacheMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const clearStorageDataMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('electron', () => ({
   ipcMain: {
     handle: handleMock
   },
-  WebContentsView: vi.fn(),
+  WebContentsView: webContentsViewMock,
   BrowserWindow: {
-    getAllWindows: vi.fn(() => [])
+    getAllWindows: getAllWindowsMock
   },
   session: {
     fromPartition: vi.fn(() => ({
-      clearCache: vi.fn().mockResolvedValue(undefined)
+      clearCache: clearCacheMock,
+      clearStorageData: clearStorageDataMock
     }))
   },
   shell: {
@@ -49,24 +72,131 @@ interface TestIpcInvokeEvent {
 type CaptureProtocolScreenshotHandler = (event: TestIpcInvokeEvent, request: WebViewProtocolScreenshotRequest) => Promise<ArrayBuffer>;
 
 /**
+ * WebView create IPC 处理函数。
+ */
+type CreateWebviewHandler = (_event: unknown, tabId: string, url: string) => void;
+
+/**
+ * WebView navigate IPC 处理函数。
+ */
+type NavigateWebviewHandler = (_event: unknown, tabId: string, url: string) => void;
+
+/**
+ * 测试用 WebContents 最小能力。
+ */
+interface TestWebContents {
+  /** WebContents ID。 */
+  id: number;
+  /** 加载 URL。 */
+  loadURL: (_url: string) => Promise<void>;
+  /** 设置新窗口处理器。 */
+  setWindowOpenHandler: (_handler: (input: { url: string }) => { action: 'deny' }) => void;
+  /** WebContents session。 */
+  session: { setPermissionRequestHandler: (_handler: unknown) => void };
+  /** 导航历史。 */
+  navigationHistory: {
+    canGoBack: () => boolean;
+    canGoForward: () => boolean;
+    goBack: () => void;
+    goForward: () => void;
+  };
+  /** 监听事件。 */
+  on: (_eventName: string, _listener: (...args: unknown[]) => void) => void;
+  /** 读取标题。 */
+  getTitle: () => string;
+  /** 刷新页面。 */
+  reload: () => void;
+  /** 停止加载。 */
+  stop: () => void;
+  /** 关闭页面。 */
+  close: () => void;
+}
+
+/**
+ * 测试用 WebContentsView 最小能力。
+ */
+interface TestWebContentsView {
+  /** WebContents。 */
+  webContents: TestWebContents;
+  /** 设置圆角。 */
+  setBorderRadius: (_radius: number) => void;
+  /** 设置 bounds。 */
+  setBounds: (_bounds: Electron.Rectangle) => void;
+  /** 读取 bounds。 */
+  getBounds: () => Electron.Rectangle;
+}
+
+/**
+ * 创建可观测 catch 注册的 loadURL 返回值。
+ * @returns loadURL 返回值与 catch spy
+ */
+function createCatchableLoadResult(): { promise: Promise<void>; catchSpy: ReturnType<typeof vi.fn<(_handler: (error: unknown) => void) => Promise<void>>> } {
+  const catchSpy = vi.fn<(_handler: (error: unknown) => void) => Promise<void>>(() => Promise.resolve());
+  return { promise: { catch: catchSpy } as unknown as Promise<void>, catchSpy };
+}
+
+/**
+ * 创建测试用 WebContentsView。
+ * @param loadURL - loadURL 替身
+ * @returns WebContentsView 替身
+ */
+function createTestWebContentsView(loadURL: TestWebContents['loadURL']): TestWebContentsView {
+  return {
+    webContents: {
+      id: 42,
+      loadURL,
+      setWindowOpenHandler: vi.fn(),
+      session: { setPermissionRequestHandler: vi.fn() },
+      navigationHistory: {
+        canGoBack: vi.fn(() => false),
+        canGoForward: vi.fn(() => false),
+        goBack: vi.fn(),
+        goForward: vi.fn()
+      },
+      on: vi.fn(),
+      getTitle: vi.fn(() => 'Example'),
+      reload: vi.fn(),
+      stop: vi.fn(),
+      close: vi.fn()
+    },
+    setBorderRadius: vi.fn(),
+    setBounds: vi.fn(),
+    getBounds: vi.fn(() => ({ x: 0, y: 0, width: 800, height: 600 }))
+  };
+}
+
+/**
+ * 读取已注册的 WebView IPC handler。
+ * @param channel - IPC channel
+ * @returns IPC handler
+ */
+function getWebviewHandler<THandler>(channel: string): THandler {
+  const entry = handleMock.mock.calls.find(([registeredChannel]) => registeredChannel === channel);
+  const handler = entry?.[1];
+
+  if (typeof handler !== 'function') {
+    throw new Error(`${channel} handler should be registered`);
+  }
+
+  return handler as THandler;
+}
+
+/**
  * 读取已注册的协议截图 IPC handler。
  * @returns 协议截图 IPC handler
  */
 function getCaptureProtocolScreenshotHandler(): CaptureProtocolScreenshotHandler {
-  const entry = handleMock.mock.calls.find(([channel]) => channel === 'webview:capture-protocol-screenshot');
-  const handler = entry?.[1];
-
-  if (typeof handler !== 'function') {
-    throw new Error('capture handler should be registered');
-  }
-
-  return handler as CaptureProtocolScreenshotHandler;
+  return getWebviewHandler<CaptureProtocolScreenshotHandler>('webview:capture-protocol-screenshot');
 }
 
 describe('registerWebviewHandlers', () => {
   beforeEach((): void => {
     handleMock.mockClear();
+    webContentsViewMock.mockReset();
+    getAllWindowsMock.mockReturnValue([]);
     captureWebviewProtocolScreenshotMock.mockClear();
+    clearCacheMock.mockClear();
+    clearStorageDataMock.mockClear();
   });
 
   it('limits protocol screenshots to the invoking host webContents', async (): Promise<void> => {
@@ -87,6 +217,52 @@ describe('registerWebviewHandlers', () => {
 
     expect(captureWebviewProtocolScreenshot).toHaveBeenCalledWith(request, {
       expectedHostWebContentsId: 88
+    });
+  });
+
+  it('attaches rejection handlers to WebContentsView loadURL calls', (): void => {
+    const loadResult = createCatchableLoadResult();
+    const loadURL = vi.fn<(_url: string) => Promise<void>>(() => loadResult.promise);
+    const view = createTestWebContentsView(loadURL);
+    webContentsViewMock.mockImplementation(function WebContentsViewConstructor() {
+      return view;
+    });
+    getAllWindowsMock.mockReturnValue([
+      {
+        contentView: {
+          addChildView: vi.fn(),
+          removeChildView: vi.fn()
+        },
+        webContents: {
+          send: vi.fn()
+        }
+      }
+    ]);
+    registerWebviewHandlers();
+    const createHandler = getWebviewHandler<CreateWebviewHandler>('webview:create');
+    const navigateHandler = getWebviewHandler<NavigateWebviewHandler>('webview:navigate');
+
+    createHandler({}, 'tab-load', 'https://example.com/');
+    expect(loadURL).toHaveBeenCalledWith('https://example.com/');
+    expect(loadResult.catchSpy).toHaveBeenCalledTimes(1);
+
+    loadResult.catchSpy.mockClear();
+    navigateHandler({}, 'tab-load', 'https://example.org/');
+
+    expect(loadURL).toHaveBeenCalledWith('https://example.org/');
+    expect(loadResult.catchSpy).toHaveBeenCalledTimes(1);
+    expect(() => loadResult.catchSpy.mock.calls[0]?.[0](new Error("ERR_ABORTED (-3) loading 'https://example.org/'"))).not.toThrow();
+  });
+
+  it('clears WebView cache and persistent browsing storage', async (): Promise<void> => {
+    registerWebviewHandlers();
+    const handler = getWebviewHandler<() => Promise<void>>('webview:clear-cache');
+
+    await handler();
+
+    expect(clearCacheMock).toHaveBeenCalledTimes(1);
+    expect(clearStorageDataMock).toHaveBeenCalledWith({
+      storages: ['cookies', 'localstorage', 'indexdb', 'serviceworkers', 'cachestorage']
     });
   });
 });

@@ -77,7 +77,7 @@ const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as st
 
 const webview = useWebView(webviewElementRef);
 const deviceMode = useDeviceMode();
-const cacheControl = useCacheControl();
+const cacheControl = useCacheControl(webviewElementRef);
 
 webviewToolContextRegistry.register(routeFullPath, {
   readPageSnapshot: webview.readPageSnapshot,
