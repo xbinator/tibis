@@ -32,9 +32,9 @@ import { computed } from 'vue';
 import type { FileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
 import { createFileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
 import { useNavigate } from '@/hooks/useNavigate';
-import { parseFileReferenceToken } from '@/utils/file/reference';
+import { findFileReferenceTokens } from '@/utils/file/reference';
+import type { ParsedFileReference } from '@/utils/file/reference';
 import { createNamespace } from '@/utils/namespace';
-import { MESSAGE_REF_PATTERN } from '../../utils/fileReferenceContext';
 
 defineOptions({ name: 'BubblePartUserInput' });
 
@@ -70,46 +70,48 @@ type Segment = TextSegment | FileRefSegment;
 // ─── 工具函数 ────────────────────────────────────────────────────────────────
 
 /**
+ * 将结构化文件引用转换为消息气泡片段。
+ * @param parsed - 已解析文件引用
+ * @returns 文件引用片段
+ */
+function createFileRefSegment(parsed: ParsedFileReference): FileRefSegment {
+  const presentation = createFileRefChipPresentation({
+    title: parsed.filePath ?? parsed.fileName,
+    fileName: parsed.fileName,
+    startLine: parsed.startLine,
+    endLine: parsed.endLine
+  });
+
+  return {
+    type: 'fileRef',
+    fullPath: parsed.filePath,
+    fileId: parsed.fileId,
+    startLine: parsed.startLine,
+    endLine: parsed.endLine,
+    isUnsaved: parsed.isUnsaved,
+    presentation
+  };
+}
+
+/**
  * 将原始文本解析为纯文本与文件引用片段的交替序列。
  * 匹配格式：{{#filePath startLine-endLine}}
  */
 function parseTextSegments(text: string): Segment[] {
   const result: Segment[] = [];
-  const pattern = new RegExp(MESSAGE_REF_PATTERN.source, 'g');
+  const matches = findFileReferenceTokens(text);
   let lastIndex = 0;
 
-  for (const match of text.matchAll(pattern)) {
-    const matchStart = match.index!;
+  for (const match of matches) {
+    const matchStart = match.start;
 
     // 匹配前的纯文本
     if (matchStart > lastIndex) {
       result.push({ type: 'text', text: text.slice(lastIndex, matchStart) });
     }
 
-    // 去掉 {{ }} 后直接交给 parseFileReferenceToken 解析，避免手动拆组再拼回
-    const tokenContent = match[0].slice(2, -2);
-    const parsed = parseFileReferenceToken(tokenContent);
-
-    if (parsed) {
-      const presentation = createFileRefChipPresentation({
-        title: parsed.filePath ?? parsed.fileName,
-        fileName: parsed.fileName,
-        startLine: parsed.startLine,
-        endLine: parsed.endLine
-      });
-
-      result.push({
-        type: 'fileRef',
-        fullPath: parsed.filePath,
-        fileId: parsed.fileId,
-        startLine: parsed.startLine,
-        endLine: parsed.endLine,
-        isUnsaved: parsed.isUnsaved,
-        presentation
-      });
-    }
-
-    lastIndex = matchStart + match[0].length;
+    result.push(createFileRefSegment(match.reference));
+    lastIndex = match.end;
   }
 
   // 尾部剩余纯文本

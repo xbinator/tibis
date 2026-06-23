@@ -17,7 +17,7 @@ import type {
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { asyncTo } from '@/utils/asyncTo';
-import { extractFileReferenceLines, MESSAGE_REF_PATTERN } from './fileReferenceContext';
+import { extractFileReferenceLines, findFileReferenceTokens } from '@/utils/file/reference';
 
 // ─── 公开类型 ────────────────────────────────────────────────────────────────
 
@@ -87,13 +87,13 @@ function toJsonValue(value: unknown): JSONValue {
  * @returns 文件引用数组，无引用时返回 undefined
  */
 export async function buildMessageReferences(content: string) {
-  const matches = [...content.matchAll(MESSAGE_REF_PATTERN)];
+  const matches = findFileReferenceTokens(content);
   if (!matches.length) return undefined;
 
   // 去重：相同 token 只处理一次，避免重复读取文件
-  const uniqueMatches = [...new Map(matches.map((m) => [m[0], m])).values()];
+  const uniqueMatches = [...new Map(matches.map((match) => [match.token, match])).values()];
 
-  const values = uniqueMatches.map(([token, ...match]) => extractFileReferenceLines(token, match));
+  const values = uniqueMatches.map(extractFileReferenceLines);
 
   const [, result] = await asyncTo(Promise.all(values));
 

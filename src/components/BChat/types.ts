@@ -26,16 +26,4 @@ export interface FileReferenceChip extends FileLocation {
   id: string;
 }
 
-/**
- * 文件引用解析结果
- */
-export interface FileReference extends LineRange {
-  /** 原始文件引用令牌 */
-  token: string;
-  /** 文件路径 */
-  path: string;
-  /** 指定行号范围的内容 */
-  selectedContent: string;
-  /** 文件完整内容 */
-  fullContent: string;
-}
+export type { FileReference } from '@/utils/file/reference';

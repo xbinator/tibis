@@ -67,4 +67,25 @@ describe('BubblePartUserInput', (): void => {
     expect(icon.attributes('data-file-name')).toBe('package.json');
     expect(icon.attributes('data-size')).toBe('14');
   });
+
+  it('renders unencoded file references with spaces as chips', (): void => {
+    const wrapper = mount(BubblePartUserInput, {
+      props: {
+        part: {
+          type: 'text',
+          text: 'read {{#/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}'
+        }
+      },
+      global: {
+        stubs: {
+          BRecentIcon: BRecentIconStub
+        }
+      }
+    });
+
+    const icon = wrapper.find('.b-recent-icon-stub');
+
+    expect(wrapper.text()).toContain('Markdown 语法全量渲染测试.md');
+    expect(icon.attributes('data-file-name')).toBe('Markdown 语法全量渲染测试.md');
+  });
 });

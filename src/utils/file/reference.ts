@@ -3,7 +3,9 @@
  * @description 聊天与输入框共用的文件引用 token 解析及类型定义。
  */
 
-import { parseUnsavedPath } from './unsaved';
+import { recentFilesStorage } from '@/shared/storage';
+import type { StoredFile } from '@/shared/storage/files/types';
+import { isUnsavedPath, parseUnsavedPath } from './unsaved';
 
 /**
  * 文件引用解析结果
@@ -59,10 +61,28 @@ export interface FileReferenceTokenMatch {
   reference: ParsedFileReference;
 }
 
-/** 文件引用 token 正则表达式。行号为可选，兼容历史渲染行号片段。 */
-const FILE_REFERENCE_TOKEN_PATTERN = /^#(\S+)(?:\s+(\d+)-(\d+)(?:\|\d+-\d+)?)?$/;
-/** 消息中的文件引用 token 正则表达式。 */
-export const FILE_REFERENCE_MESSAGE_TOKEN_PATTERN = /\{\{(#\S+(?:\s+\d+-\d+(?:\|\d+-\d+)?)?)\}\}/g;
+/**
+ * 文件引用内容提取结果。
+ */
+export interface FileReference {
+  /** 原始文件引用令牌 */
+  token: string;
+  /** 文件路径 */
+  path: string;
+  /** 源码起始行号（1-based），0 表示无行号 */
+  startLine: number;
+  /** 源码结束行号（1-based），0 表示无行号 */
+  endLine: number;
+  /** 指定行号范围的内容 */
+  selectedContent: string;
+  /** 文件完整内容 */
+  fullContent: string;
+}
+
+/** 文件引用 token 正则表达式。路径允许空格，末尾行号可选，兼容历史渲染行号片段。 */
+const FILE_REFERENCE_TOKEN_PATTERN = /^#(.+?)(?:\s+(\d+)-(\d+)(?:\|\d+-\d+)?)?$/;
+/** 消息中的文件引用 token 正则表达式。路径允许空格，末尾行号可选。 */
+export const FILE_REFERENCE_MESSAGE_TOKEN_PATTERN = /\{\{(#.+?(?:\s+\d+-\d+(?:\|\d+-\d+)?)?)\}\}/g;
 /** 编码路径 token 片段，形如 [](%2Fworkspace%2Fnote.md)。 */
 const ENCODED_PATH_TOKEN_PATTERN = /^\[\]\((.*)\)$/;
 
@@ -151,4 +171,56 @@ export function findFileReferenceTokens(content: string): FileReferenceTokenMatc
       };
     })
     .filter((item): item is FileReferenceTokenMatch => item !== null);
+}
+
+/**
+ * 从最近记录中查找文件引用对应的文件。
+ * @param path - 文件路径或 unsaved:// 引用
+ * @returns 命中的文件记录，不存在时返回 null
+ */
+async function findStoredFileByReferencePath(path: string): Promise<StoredFile | null> {
+  if (isUnsavedPath(path)) {
+    const unsavedReference = parseUnsavedPath(path);
+    const record = unsavedReference ? await recentFilesStorage.getRecentFile(unsavedReference.fileId) : null;
+
+    return record?.type === 'file' ? record : null;
+  }
+
+  const files = await recentFilesStorage.getAllRecentFiles();
+  return (files.find((item) => item.type === 'file' && item.path === path) as StoredFile | undefined) || null;
+}
+
+/**
+ * 从文件中提取指定行号范围的内容和完整内容。
+ * 支持已保存文件路径与 unsaved:// 未保存草稿引用。
+ * @param match - 文件引用 token 匹配结果
+ * @returns 文件引用解析结果，文件不存在时返回空内容
+ */
+export async function extractFileReferenceLines(match: FileReferenceTokenMatch): Promise<FileReference> {
+  const { token, reference } = match;
+  const path = reference.rawPath;
+
+  if (!path) {
+    return { token, path: '', startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };
+  }
+
+  const storedFile = await findStoredFileByReferencePath(path);
+  if (!storedFile) {
+    return { token, path, startLine: 0, endLine: 0, selectedContent: '', fullContent: '' };
+  }
+
+  const hasLineNumber = reference.startLine > 0 && reference.endLine > 0;
+  const lines = storedFile.content.split('\n');
+  const selectedContent = hasLineNumber
+    ? lines.slice(Math.max(0, reference.startLine - 1), Math.min(lines.length, reference.endLine)).join('\n')
+    : storedFile.content;
+
+  return {
+    token,
+    selectedContent,
+    fullContent: storedFile.content,
+    path,
+    startLine: reference.startLine,
+    endLine: reference.endLine
+  };
 }
