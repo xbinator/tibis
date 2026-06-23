@@ -73,7 +73,7 @@ function handleMouseEnter(index: number): void {
 .file-mention-item__name {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;

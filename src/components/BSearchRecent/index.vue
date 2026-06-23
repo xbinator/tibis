@@ -406,7 +406,7 @@ watch(
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 18px;
   color: var(--text-primary);
