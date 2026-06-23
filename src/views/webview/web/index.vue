@@ -456,15 +456,11 @@ onBeforeUnmount(() => {
 }
 
 .webview-agent-activity {
-  --webview-agent-activity-color: var(--color-warning, var(--color-primary));
-  --webview-agent-activity-bg: var(--color-warning-bg, var(--color-primary-bg));
-  --webview-agent-activity-border: var(--color-warning-border, var(--webview-agent-activity-color));
-
   position: absolute;
   inset: 0;
   z-index: 3;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: center;
   padding: 12px;
   pointer-events: none;
@@ -475,10 +471,10 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   content: '';
-  border: 2px solid var(--webview-agent-activity-color);
+  border: 2px solid var(--color-warning, var(--color-primary));
   border-radius: inherit;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--webview-agent-activity-border) 48%, transparent),
-    0 0 22px color-mix(in srgb, var(--webview-agent-activity-color) 42%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-warning-border, var(--color-warning, var(--color-primary))) 48%, transparent),
+    0 0 22px color-mix(in srgb, var(--color-warning, var(--color-primary)) 42%, transparent);
   animation: webview-agent-activity-breathe 1.6s ease-in-out infinite;
 }
 
@@ -493,9 +489,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
   font-size: 12px;
   line-height: 18px;
-  color: var(--webview-agent-activity-color);
-  background: color-mix(in srgb, var(--webview-agent-activity-bg) 82%, var(--bg-primary));
-  border: 1px solid color-mix(in srgb, var(--webview-agent-activity-border) 78%, transparent);
+  color: var(--color-warning, var(--color-primary));
+  background: color-mix(in srgb, var(--color-warning-bg, var(--color-primary-bg)) 82%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--color-warning-border, var(--color-warning, var(--color-primary))) 78%, transparent);
   border-radius: 8px;
   box-shadow: 0 10px 26px rgb(0 0 0 / 12%);
   backdrop-filter: blur(10px);
@@ -505,9 +501,9 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   width: 8px;
   height: 8px;
-  background: var(--webview-agent-activity-color);
+  background: var(--color-warning, var(--color-primary));
   border-radius: 50%;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--webview-agent-activity-color) 18%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-warning, var(--color-primary)) 18%, transparent);
   animation: webview-agent-activity-dot 1.2s ease-in-out infinite;
 }
 
@@ -518,31 +514,49 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.webview-agent-activity--success {
-  --webview-agent-activity-color: var(--color-success, var(--color-primary));
-  --webview-agent-activity-bg: var(--color-success-bg, var(--color-primary-bg));
-  --webview-agent-activity-border: var(--color-success, var(--webview-agent-activity-color));
+.webview-agent-activity--success::before {
+  border-color: var(--color-success, var(--color-primary));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-success, var(--color-primary)) 48%, transparent),
+    0 0 22px color-mix(in srgb, var(--color-success, var(--color-primary)) 42%, transparent);
+  animation-duration: 900ms;
 }
 
-.webview-agent-activity--success::before {
-  animation-duration: 900ms;
+.webview-agent-activity--success .webview-agent-activity__badge {
+  color: var(--color-success, var(--color-primary));
+  background: color-mix(in srgb, var(--color-success-bg, var(--color-primary-bg)) 82%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--color-success, var(--color-primary)) 78%, transparent);
 }
 
 .webview-agent-activity--success .webview-agent-activity__dot {
+  background: var(--color-success, var(--color-primary));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success, var(--color-primary)) 18%, transparent);
   animation-duration: 900ms;
+}
+
+.webview-agent-activity--error::before {
+  border-color: var(--color-error, var(--color-danger));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-danger, var(--color-error, var(--color-primary))) 48%, transparent),
+    0 0 22px color-mix(in srgb, var(--color-error, var(--color-danger)) 42%, transparent);
+}
+
+.webview-agent-activity--error .webview-agent-activity__badge {
+  color: var(--color-error, var(--color-danger));
+  background: color-mix(in srgb, var(--color-error-bg, var(--color-primary-bg)) 82%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--color-danger, var(--color-error, var(--color-primary))) 78%, transparent);
+}
+
+.webview-agent-activity--error .webview-agent-activity__dot {
+  background: var(--color-error, var(--color-danger));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-error, var(--color-danger)) 18%, transparent);
 }
 
 @keyframes webview-agent-activity-breathe {
   0%,
   100% {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--webview-agent-activity-border) 38%, transparent),
-      0 0 16px color-mix(in srgb, var(--webview-agent-activity-color) 30%, transparent);
     opacity: 0.62;
   }
 
   50% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--webview-agent-activity-border) 62%, transparent),
-      0 0 30px color-mix(in srgb, var(--webview-agent-activity-color) 52%, transparent);
     opacity: 1;
   }
 }
