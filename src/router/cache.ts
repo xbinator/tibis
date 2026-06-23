@@ -13,6 +13,20 @@ import type { RouteTabField } from '@/router/type';
 const ROUTE_CACHE_NAME_PREFIX = 'RouteCache';
 
 /**
+ * 已解析的路由标签页信息。
+ */
+export interface ResolvedRouteTabInfo {
+  /** 标签页唯一标识 */
+  tabId: string;
+  /** 标签页对应的 KeepAlive 缓存 key */
+  cacheKey: string;
+  /** 标签页显示标题 */
+  title: string;
+  /** 标签页显示图标 */
+  icon?: string;
+}
+
+/**
  * 解析路由的默认标签页标题。
  * 优先使用 meta.title，其次使用路由名称，最后使用路由路径。
  * @param route - 当前路由
@@ -42,18 +56,24 @@ function resolveRouteTabField(field: RouteTabField | undefined, route: RouteLoca
 }
 
 /**
- * 解析路由对应的标签页 ID、KeepAlive 缓存 key 以及标签页标题。
+ * 解析路由对应的标签页 ID、KeepAlive 缓存 key、标题以及图标。
  * @param route - 当前路由
- * @returns 包含 tabId、cacheKey 和 title 的对象
+ * @returns 标签页信息
  */
-export function resolveRouteTabInfo(route: RouteLocationNormalizedLoaded): { tabId: string; cacheKey: string; title: string } {
+export function resolveRouteTabInfo(route: RouteLocationNormalizedLoaded): ResolvedRouteTabInfo {
   const fallback = route.fullPath || route.path;
   const metaTab = route.meta?.tab;
   const tabId = resolveRouteTabField(metaTab?.id, route) || fallback;
   const cacheKey = resolveRouteTabField(metaTab?.cacheKey, route) || tabId;
   const title = resolveRouteTabField(metaTab?.title, route) || resolveRouteTitle(route);
+  const icon = resolveRouteTabField(metaTab?.icon, route);
 
-  return { tabId, cacheKey, title };
+  return {
+    tabId,
+    cacheKey,
+    title,
+    ...(icon ? { icon } : {})
+  };
 }
 
 /**

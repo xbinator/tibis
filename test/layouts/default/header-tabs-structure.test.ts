@@ -30,9 +30,10 @@ describe('HeaderTabs drag region structure', (): void => {
 
   it('renders tab icons through the shared BRecentIcon component', (): void => {
     expect(headerTabsSource).toContain('<BRecentIcon');
-    expect(headerTabsSource).toContain(':record="resolveTabRecentRecord(tab)"');
+    expect(headerTabsSource).toContain(':record="resolveTabIconRecentRecord(tab)"');
     expect(headerTabsSource).toContain(':file-name="resolveTabIconFileName(tab)"');
-    expect(headerTabsSource).toContain(':icon="resolveTabFallbackIcon(tab)"');
+    expect(headerTabsSource).toContain(':icon="resolveTabIcon(tab)"');
+    expect(headerTabsSource).toContain('function resolveConfiguredTabIcon(tab: Tab): string');
     expect(headerTabsSource).toContain('function resolveWebviewUrlFromTabPath(path: string): string');
   });
 });

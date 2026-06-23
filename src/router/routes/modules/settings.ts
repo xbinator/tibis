@@ -17,7 +17,8 @@ const routes: AppRouteRecordRaw[] = [
       tab: {
         id: 'settings',
         cacheKey: 'settings',
-        title: '设置'
+        title: '设置',
+        icon: 'lucide:settings'
       }
     },
     children: [

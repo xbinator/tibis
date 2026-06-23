@@ -19,9 +19,9 @@
             <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
             <BRecentIcon
               class="header-tab__icon"
-              :record="resolveTabRecentRecord(tab)"
+              :record="resolveTabIconRecentRecord(tab)"
               :file-name="resolveTabIconFileName(tab)"
-              :icon="resolveTabFallbackIcon(tab)"
+              :icon="resolveTabIcon(tab)"
               :size="14"
             />
             <span class="header-tab__title-text">{{ tab.title }}</span>
@@ -249,11 +249,37 @@ function resolveTabRecentRecord(tab: Tab): RecentRecord | undefined {
 }
 
 /**
+ * 解析标签页配置的显式图标。
+ * @param tab - 标签页
+ * @returns Iconify 图标名，未配置时返回空字符串
+ */
+function resolveConfiguredTabIcon(tab: Tab): string {
+  return tab.icon?.trim() ?? '';
+}
+
+/**
+ * 解析图标组件可使用的最近记录；显式配置图标时不再传入记录，避免 favicon 覆盖配置图标。
+ * @param tab - 标签页
+ * @returns 匹配的最近记录，未命中或已有配置图标时返回 undefined
+ */
+function resolveTabIconRecentRecord(tab: Tab): RecentRecord | undefined {
+  if (resolveConfiguredTabIcon(tab)) {
+    return undefined;
+  }
+
+  return resolveTabRecentRecord(tab);
+}
+
+/**
  * 解析标签页图标组件的文件名入参。
  * @param tab - 标签页
  * @returns 用于文件图标推断的文件名
  */
 function resolveTabIconFileName(tab: Tab): string {
+  if (resolveConfiguredTabIcon(tab)) {
+    return '';
+  }
+
   if (resolveTabRecentRecord(tab) || isWebviewTabPath(tab.path)) {
     return '';
   }
@@ -272,6 +298,20 @@ function resolveTabFallbackIcon(tab: Tab): string {
   }
 
   return '';
+}
+
+/**
+ * 解析传给图标组件的显式图标，配置图标优先于默认回退图标。
+ * @param tab - 标签页
+ * @returns Iconify 图标名，未命中时返回空字符串
+ */
+function resolveTabIcon(tab: Tab): string {
+  const configuredIcon = resolveConfiguredTabIcon(tab);
+  if (configuredIcon) {
+    return configuredIcon;
+  }
+
+  return resolveTabFallbackIcon(tab);
 }
 
 /**

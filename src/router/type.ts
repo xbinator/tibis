@@ -25,6 +25,8 @@ export interface RouteTabMeta {
   cacheKey?: RouteTabField;
   /** 标签页显示标题，不配置时使用路由默认标题 */
   title?: RouteTabField;
+  /** 标签页显示图标，使用 Iconify 图标名 */
+  icon?: RouteTabField;
 }
 
 /**

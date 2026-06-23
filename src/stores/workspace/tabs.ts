@@ -44,6 +44,8 @@ export interface Tab {
   title: string;
   /** 标签页对应的 KeepAlive 缓存 key */
   cacheKey?: string;
+  /** 标签页显示图标，使用 Iconify 图标名 */
+  icon?: string;
 }
 
 /**
@@ -109,7 +111,15 @@ const DEFAULT_TABS_STATE: TabsState = {
  * @returns 带有缓存 key 的标签页
  */
 function normalizeTab(tab: Tab): Tab {
-  return { id: tab.id, path: tab.path, title: tab.title, cacheKey: tab.cacheKey || tab.id };
+  const icon = typeof tab.icon === 'string' ? tab.icon.trim() : '';
+
+  return {
+    id: tab.id,
+    path: tab.path,
+    title: tab.title,
+    cacheKey: tab.cacheKey || tab.id,
+    ...(icon ? { icon } : {})
+  };
 }
 
 /**
