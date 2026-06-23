@@ -4,6 +4,8 @@
  */
 import type { ActiveWebviewSnapshotElement } from './types';
 import type { WebviewOperateInput } from '@/ai/tools/context/webview';
+import { WEBVIEW_PAGE_ELEMENT_LIMIT } from './constants';
+import { createRuntimeScript } from './engine/runtime';
 
 /**
  * 构建页面操作脚本。
@@ -18,243 +20,21 @@ export function createPageOperationScript(input: WebviewOperateInput, snapshotEl
 (async () => {
   const input = ${serializedInput};
   const snapshotElements = ${serializedSnapshotElements};
-  const readText = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
-  const interactiveSelector = [
-    'button',
-    'a[href]',
-    'input',
-    'textarea',
-    'select',
-    'summary',
-    '[contenteditable="true"]',
-    '[role="button"]',
-    '[role="link"]',
-    '[role="checkbox"]',
-    '[role="radio"]',
-    '[role="tab"]',
-    '[role="menuitem"]',
-    '[tabindex]'
-  ].join(',');
-  const clickableHintSelector = [
-    '[onclick]',
-    '[data-action]',
-    '[data-ai-action]',
-    '[data-click]',
-    '[data-command]',
-    '[data-href]',
-    '[style*="cursor"]',
-    '[class*="btn"]',
-    '[class*="Btn"]',
-    '[class*="button"]',
-    '[class*="Button"]',
-    '[class*="click"]',
-    '[class*="Click"]',
-    '[class*="card"]',
-    '[class*="Card"]',
-    '[class*="item"]',
-    '[class*="Item"]',
-    '[class*="row"]',
-    '[class*="Row"]',
-    '[class*="cell"]',
-    '[class*="Cell"]',
-    '[class*="option"]',
-    '[class*="Option"]',
-    '[class*="tab"]',
-    '[class*="Tab"]',
-    '[class*="link"]',
-    '[class*="Link"]'
-  ].join(',');
-  const actionableCandidateSelector = [interactiveSelector, clickableHintSelector].join(',');
-  const collectComposedElements = (root) => {
-    const elements = [];
-    const visit = (node) => {
-      if (!node) return;
-      if (node instanceof HTMLElement) {
-        elements.push(node);
-        if (node.shadowRoot) visit(node.shadowRoot);
-      }
-      Array.from(node.childNodes || []).forEach(visit);
-    };
-    visit(root);
-    return elements;
-  };
-  const containsComposedElement = (container, target) => {
-    if (container === target || container.contains(target)) return true;
-    if (!container.shadowRoot) return false;
-    return collectComposedElements(container.shadowRoot).includes(target);
-  };
-  const matchesSelector = (element, selector) => {
-    try {
-      return element.matches(selector);
-    } catch {
-      return false;
-    }
-  };
-  const isVisible = (element) => {
-    if (!(element instanceof HTMLElement)) return false;
-    const rect = element.getBoundingClientRect();
-    const style = window.getComputedStyle(element);
-    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') > 0;
-  };
-  const readLabel = (element) => readText(
-    element.getAttribute('aria-label') ||
-    element.getAttribute('title') ||
-    element.getAttribute('alt') ||
-    element.getAttribute('placeholder') ||
-    element.innerText ||
-    element.textContent ||
-    element.getAttribute('value')
-  );
-  const readClassName = (element) => typeof element.className === 'string' ? element.className : '';
-  const readFingerprint = (element) => [
-    element.tagName,
-    element.id || '',
-    readClassName(element),
-    element.getAttribute('data-testid') || '',
-    element.getAttribute('data-test') || '',
-    element.getAttribute('data-cy') || '',
-    element.getAttribute('data-id') || '',
-    element.getAttribute('data-action') || '',
-    element.getAttribute('data-ai-action') || '',
-    element.getAttribute('role') || '',
-    element.getAttribute('type') || '',
-    element.getAttribute('name') || '',
-    element instanceof HTMLAnchorElement ? element.href : element.getAttribute('href') || '',
-    element.getAttribute('placeholder') || '',
-    readLabel(element).slice(0, 120),
-    readText(element.innerText || element.textContent).slice(0, 120)
-  ].join('|');
-  const isScrollableOverflow = (value) => /(auto|scroll|overlay)/.test(String(value || ''));
-  const canScrollElementInDirection = (element, direction) => {
-    const style = window.getComputedStyle(element);
-    if (direction === 'up' || direction === 'down') {
-      if (!isScrollableOverflow(style.overflowY)) return false;
-      const maxTop = Math.max((element.scrollHeight || 0) - (element.clientHeight || 0), 0);
-      if (maxTop <= 1) return false;
-      return direction === 'up' ? element.scrollTop > 1 : element.scrollTop < maxTop - 1;
-    }
+  ${createRuntimeScript()}
 
-    if (!isScrollableOverflow(style.overflowX)) return false;
-    const maxLeft = Math.max((element.scrollWidth || 0) - (element.clientWidth || 0), 0);
-    if (maxLeft <= 1) return false;
-    return direction === 'left' ? element.scrollLeft > 1 : element.scrollLeft < maxLeft - 1;
-  };
-  const canScrollElement = (element) => ['up', 'down', 'left', 'right'].some((direction) => canScrollElementInDirection(element, direction));
-  const hasScrollableAncestor = (element) => {
-    let current = element;
-    while (current && current !== document.body && current !== document.documentElement) {
-      if (canScrollElement(current)) return true;
-      current = current.parentElement;
-    }
-    return false;
-  };
-  const hasDirectClickHandler = (element) => typeof element.onclick === 'function' || element.hasAttribute('onclick');
-  const hasPointerCursor = (element) => window.getComputedStyle(element).cursor === 'pointer';
-  const hasActionDataAttribute = (element) =>
-    ['data-action', 'data-ai-action', 'data-click', 'data-command', 'data-href'].some((name) => element.hasAttribute(name));
-  const hasClickableClass = (element) =>
-    /(^|[-_\\s])(btn|button|click|clickable|card|item|row|cell|option|tab|menuitem|link)([-_\\s]|$)/i.test(readClassName(element));
-  const compactNavigationSelector = [
-    'header',
-    'nav',
-    '[role="navigation"]',
-    '[role="toolbar"]',
-    '[class*="nav"]',
-    '[class*="Nav"]',
-    '[class*="header"]',
-    '[class*="Header"]',
-    '[class*="bar"]',
-    '[class*="Bar"]',
-    '[class*="action"]',
-    '[class*="Action"]',
-    '[class*="toolbar"]',
-    '[class*="Toolbar"]'
-  ].join(',');
-  const isCompactTextElement = (element) => {
-    const tagName = element.tagName.toLowerCase();
-    if (!['span', 'div', 'li', 'label', 'i', 'em', 'strong'].includes(tagName)) return false;
-    const label = readLabel(element);
-    return label.length >= 2 && label.length <= 12 && !/[。！？!?，,；;：:]/.test(label);
-  };
-  const isVisibleTopbarRect = (element) => {
-    const rect = element.getBoundingClientRect();
-    const maxTop = Math.min(160, window.innerHeight * 0.25);
-    if (rect.width <= 0 || rect.height <= 0 || rect.top < -4 || rect.top > maxTop) return false;
-    return rect.width <= Math.min(220, window.innerWidth * 0.45) && rect.height <= 80;
-  };
-  const hasCompactTextSiblingCluster = (element) => {
-    const parent = element.parentElement;
-    if (!parent) return false;
-
-    const rect = element.getBoundingClientRect();
-    const centerY = rect.top + rect.height / 2;
-    return (
-      Array.from(parent.children).filter((child) => {
-        if (!(child instanceof HTMLElement) || !isCompactTextElement(child) || !isVisible(child)) return false;
-        const childRect = child.getBoundingClientRect();
-        return Math.abs(childRect.top + childRect.height / 2 - centerY) <= 24;
-      }).length >= 2
-    );
-  };
-  const hasCompactNavigationText = (element) => isCompactTextElement(element) && Boolean(element.closest(compactNavigationSelector));
-  const hasCompactTopbarText = (element) => {
-    if (!isCompactTextElement(element) || element.closest(compactNavigationSelector)) return false;
-    if (element.closest('main,article,section,form,table')) return false;
-    return isVisibleTopbarRect(element) && hasCompactTextSiblingCluster(element);
-  };
-  const hasNonSemanticClickHint = (element) => {
-    if (!readLabel(element)) return false;
-    return hasDirectClickHandler(element) || hasPointerCursor(element) || hasActionDataAttribute(element) || hasClickableClass(element);
-  };
-  const readActions = (element) => {
-    const tagName = element.tagName.toLowerCase();
-    const role = element.getAttribute('role') || '';
-    const clickableRoles = ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'];
-    const keyboardTags = ['input', 'textarea', 'select'];
-    const actions = [];
-    if (element instanceof HTMLInputElement) {
-      const inputType = String(element.type || 'text').toLowerCase();
-      if (['button', 'submit', 'reset', 'checkbox', 'radio'].includes(inputType)) {
-        actions.push('click');
-      } else {
-        actions.push('input');
-      }
-    } else if (tagName === 'textarea' || element.isContentEditable) {
-      actions.push('input');
-    }
-    if (tagName === 'select') actions.push('select');
-    if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || clickableRoles.includes(role)) actions.push('click');
-    if (hasNonSemanticClickHint(element)) actions.push('click');
-    if (hasCompactNavigationText(element) || hasCompactTopbarText(element)) actions.push('click');
-    if (keyboardTags.includes(tagName) || element.isContentEditable) actions.push('press');
-    if (hasScrollableAncestor(element)) actions.push('scroll');
-    return Array.from(new Set(actions));
-  };
-  const elements = collectComposedElements(document)
-    .filter((element) => matchesSelector(element, actionableCandidateSelector) || hasCompactNavigationText(element) || hasCompactTopbarText(element))
-    .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
-    .map((element) => ({ element, actions: readActions(element) }))
-    .filter((item) => item.actions.length > 0)
-    .map((item) => item.element);
-  const findElement = (index) => elements[index - 1] || null;
+  const { refs, indexedNodes } = __tibisWebviewEngine.collectFlatDomTree({ elementLimit: ${WEBVIEW_PAGE_ELEMENT_LIMIT} });
+  const findElement = (index) => refs.get(index) || null;
+  const findNode = (index) => indexedNodes.find((node) => node.highlightIndex === index) || null;
   const findExpectedElement = (index) => snapshotElements.find((item) => item && item.index === index) || null;
-  const assertElementMatchesSnapshot = (element, index) => {
+  const assertElementMatchesSnapshot = (node, index) => {
     const expected = findExpectedElement(index);
     if (!expected || typeof expected.fingerprint !== 'string' || !expected.fingerprint) return;
-    if (readFingerprint(element) !== expected.fingerprint) throw new Error('STALE_SNAPSHOT');
+    if (!node || node.fingerprint !== expected.fingerprint) throw new Error('STALE_SNAPSHOT');
   };
-  const createTarget = (element, index) => element ? { index, label: readLabel(element).slice(0, 300), tagName: element.tagName } : null;
+  const createTarget = (element, index) => element ? { index, label: __tibisWebviewEngine.readLabel(element).slice(0, 300), tagName: element.tagName } : null;
   const dispatchInputEvents = (element) => {
     element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: element.value || element.innerText || '' }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
-  };
-  const findScrollableAncestor = (element, direction) => {
-    let current = element;
-    while (current && current !== document.body && current !== document.documentElement) {
-      if (canScrollElementInDirection(current, direction)) return current;
-      current = current.parentElement;
-    }
-    return null;
   };
   const readScrollPosition = (target) => {
     if (target) {
@@ -286,19 +66,10 @@ export function createPageOperationScript(input: WebviewOperateInput, snapshotEl
       changed: before.x !== after.x || before.y !== after.y
     };
   };
-  const readViewportRect = (element) => {
-    const rect = element.getBoundingClientRect();
-    return {
-      x: Math.round(rect.left),
-      y: Math.round(rect.top),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height)
-    };
-  };
   const resolveClickTarget = (element) => {
     if (typeof document.elementsFromPoint !== 'function') return element;
 
-    const rect = readViewportRect(element);
+    const rect = __tibisWebviewEngine.readViewportRect(element);
     if (rect.width <= 0 || rect.height <= 0) return element;
 
     const x = Math.max(0, Math.min(window.innerWidth - 1, rect.x + rect.width / 2));
@@ -310,7 +81,7 @@ export function createPageOperationScript(input: WebviewOperateInput, snapshotEl
           candidate instanceof HTMLElement &&
           candidate !== document.body &&
           candidate !== document.documentElement &&
-          containsComposedElement(element, candidate)
+          __tibisWebviewEngine.containsComposedElement(element, candidate)
       );
     return hit instanceof HTMLElement ? hit : element;
   };
@@ -391,9 +162,10 @@ export function createPageOperationScript(input: WebviewOperateInput, snapshotEl
       shouldReadAgain: scroll.changed
     };
   }
+  const node = typeof action.index === 'number' ? findNode(action.index) : null;
   const element = typeof action.index === 'number' ? findElement(action.index) : null;
-  if (!element) throw new Error('ELEMENT_NOT_FOUND');
-  assertElementMatchesSnapshot(element, action.index);
+  if (!element || !node) throw new Error('ELEMENT_NOT_FOUND');
+  assertElementMatchesSnapshot(node, action.index);
   if (element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true') throw new Error('ACTION_NOT_SUPPORTED');
   if (action.type !== 'scroll') {
     element.scrollIntoView({ block: 'center', inline: 'center' });
@@ -441,7 +213,8 @@ export function createPageOperationScript(input: WebviewOperateInput, snapshotEl
     pressTarget(element, action.key);
   } else if (action.type === 'scroll') {
     if (!isScrollDirection(action.direction)) throw new Error('INVALID_INPUT');
-    const target = findScrollableAncestor(element, action.direction);
+    const directTarget = __tibisWebviewEngine.canScrollElementInDirection(element, action.direction) ? element : null;
+    const target = directTarget || __tibisWebviewEngine.findScrollableAncestor(element, action.direction);
     scroll = scrollTarget(target, action.direction, action.pixels);
   } else {
     throw new Error('ACTION_NOT_SUPPORTED');

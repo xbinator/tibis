@@ -489,7 +489,38 @@ describe('useWebView', () => {
     expect(snapshot.content).toContain('[1]<div');
     expect(snapshot.content).toContain('class="service-card"');
     expect(snapshot.content).toContain('data-testid="service-card"');
-    expect(snapshot.content).toContain('服务卡片</div>');
+    expect(snapshot.content).toContain('服务卡片 />');
+  });
+
+  it('indexes scrollable webpage containers as direct operation targets', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main>
+        <section id="result-list" aria-label="结果列表" style="overflow-y: auto;">
+          <button>第一项</button>
+        </section>
+      </main>
+    `;
+    const main = document.querySelector('main');
+    const resultList = document.querySelector('#result-list');
+    const firstItem = document.querySelector('button');
+    if (!(main instanceof HTMLElement) || !(resultList instanceof HTMLElement) || !(firstItem instanceof HTMLElement)) {
+      throw new Error('scrollable container snapshot elements should exist');
+    }
+
+    installVisibleRect(main);
+    installVisibleRect(resultList);
+    installScrollableElementMetrics(resultList, { clientHeight: 120, scrollHeight: 900, clientWidth: 320, scrollWidth: 320 });
+    installVisibleRect(firstItem);
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.find((element) => element.label === '结果列表')).toMatchObject({
+      tagName: 'SECTION',
+      actions: ['scroll']
+    });
+    expect(snapshot.content).toContain('[1]<section');
+    expect(snapshot.content).toContain('data-scrollable');
   });
 
   it('adds clickability metadata for Vue-style delegated cards', async (): Promise<void> => {
@@ -671,10 +702,37 @@ describe('useWebView', () => {
     expect(summary).toContain('[End of page]');
     expect(snapshot.content).toContain('<h1>示例页面</h1>');
     expect(snapshot.content).toContain('[1]<input name="keyword" value="示例值" placeholder="关键词" />');
-    expect(snapshot.content).toContain('[2]<button type="submit" aria-label="筛选">筛选</button>');
-    expect(snapshot.content).toContain('[3]<div role="menuitem" aria-haspopup="menu">扩展入口</div>');
+    expect(snapshot.content).toContain('[2]<button type="submit" aria-label="筛选">筛选 />');
+    expect(snapshot.content).toContain('[3]<div role="menuitem" aria-haspopup="menu">扩展入口 />');
     expect(snapshot.footer.length).toBeGreaterThan(0);
     expect(snapshot.truncated.content).toBe(false);
+  });
+
+  it('marks newly discovered webpage elements in page-agent content', async (): Promise<void> => {
+    document.body.innerHTML = '<main><button id="first">已有入口</button></main>';
+    const first = document.querySelector('#first');
+    if (!(first instanceof HTMLElement)) {
+      throw new Error('initial new-element marker button should exist');
+    }
+
+    installVisibleRect(first);
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    await controller.readPageSnapshot();
+
+    const second = document.createElement('button');
+    second.id = 'second';
+    second.textContent = '新增入口';
+    document.querySelector('main')?.appendChild(second);
+    installVisibleRect(second);
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.find((element) => element.label === '新增入口')).toMatchObject({
+      isNew: true,
+      actions: ['click']
+    });
+    expect(snapshot.content).toContain('*[2]<button');
   });
 
   it('returns open shadow DOM elements in webpage snapshots', async (): Promise<void> => {
@@ -700,7 +758,7 @@ describe('useWebView', () => {
     expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([{ label: '主操作', actions: ['click'] }]);
     expect(snapshot.content).toContain('<booking-dialog>');
     expect(snapshot.content).toContain('#shadow-root');
-    expect(snapshot.content).toContain('[1]<button>主操作</button>');
+    expect(snapshot.content).toContain('[1]<button>主操作 />');
   });
 
   it('includes the manually selected element in webpage snapshots', async (): Promise<void> => {
@@ -869,6 +927,45 @@ describe('useWebView', () => {
 
     expect(clickCount).toBe(1);
     expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '卡片入口', tagName: 'DIV' } });
+  });
+
+  it('operates elements resolved by the shared flat DOM collector', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main>
+        <div id="delegated-card" class="service-entry" style="cursor: pointer;">
+          <span>共享索引入口</span>
+        </div>
+      </main>
+    `;
+    const card = document.querySelector('#delegated-card');
+    const label = document.querySelector('span');
+    if (!(card instanceof HTMLElement) || !(label instanceof HTMLElement)) {
+      throw new Error('shared collector operation elements should exist');
+    }
+
+    let clickCount = 0;
+    card.addEventListener('click', () => {
+      clickCount += 1;
+    });
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn(() => [label, card, document.body, document.documentElement])
+    });
+    installVisibleRect(card);
+    installVisibleRect(label);
+    const webviewElement = createPageScriptExecutingWebview();
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+
+    const snapshot = await controller.readPageSnapshot();
+    const target = snapshot.elements?.find((element) => element.label === '共享索引入口');
+    if (!target) {
+      throw new Error('shared collector target should exist');
+    }
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: target.index } });
+
+    expect(clickCount).toBe(1);
+    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: target.index, label: '共享索引入口', tagName: 'DIV' } });
   });
 
   it('clicks the deepest hit-tested child inside an indexed card', async (): Promise<void> => {
