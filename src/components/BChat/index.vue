@@ -957,6 +957,9 @@ onUnmounted(() => {
   taskRuntime.dispose();
   confirmationController.dispose();
 });
+
+/** 暴露聚焦输入框方法供父组件调用 */
+defineExpose({ focusInput });
 </script>
 
 <style lang="less">

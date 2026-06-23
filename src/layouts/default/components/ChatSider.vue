@@ -39,6 +39,7 @@
       </div>
 
       <BChat
+        ref="bChatRef"
         :session-id="settingStore.chatSidebarActiveSessionId"
         @draft-session-created="handleCreateDraftSession"
         @session-created="handleSessionCreated"
@@ -81,6 +82,8 @@ const {
 
 /** 会话历史组件实例引用。 */
 const sessionHistoryRef = ref<InstanceType<typeof SessionHistory>>();
+/** BChat 组件实例引用，用于调用聚焦输入框等方法。 */
+const bChatRef = ref<InstanceType<typeof BChat>>();
 /** 聊天侧栏是否处于放大覆盖状态。 */
 const isSidebarExpanded = computed<boolean>(() => settingStore.chatSidebarExpanded);
 /** 当前标题。 */
@@ -108,6 +111,8 @@ function handleClose(): void {
  */
 async function handleCreateDraftSession(): Promise<void> {
   await createDraftSession();
+  // 草稿态切换后聚焦输入框（已在草稿态时 watch 不会触发，需显式调用）
+  bChatRef.value?.focusInput();
 }
 
 /**
