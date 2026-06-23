@@ -343,7 +343,7 @@ describe('chat runtime service shell', (): void => {
         mime: 'text/plain',
         url: 'file:///workspace/src/foo.ts',
         path: 'src/foo.ts',
-        sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' },
+        sourceText: { start: 4, end: 19, value: '{{@src/foo.ts}}' },
         snapshot: {
           content: 'editor content',
           startLine: 1,
@@ -372,7 +372,7 @@ describe('chat runtime service shell', (): void => {
 
     await service.send(
       createInput({
-        content: 'fix {{#src/foo.ts}}',
+        content: 'fix {{@src/foo.ts}}',
         workspaceRoot: '/workspace',
         parts: [
           { type: 'text', text: 'fix ' },
@@ -383,7 +383,7 @@ describe('chat runtime service shell', (): void => {
             mime: 'text/plain',
             url: 'file:///workspace/src/foo.ts',
             path: 'src/foo.ts',
-            sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' }
+            sourceText: { start: 4, end: 19, value: '{{@src/foo.ts}}' }
           }
         ]
       })

@@ -36,7 +36,7 @@ describe('BubblePartUserInput', (): void => {
       props: {
         part: {
           type: 'text',
-          text: 'fix {{#src/foo.ts 10-20}} please'
+          text: 'fix {{@src/foo.ts#L10-L20}} please'
         }
       }
     });
@@ -52,7 +52,7 @@ describe('BubblePartUserInput', (): void => {
       props: {
         part: {
           type: 'text',
-          text: 'read {{#package.json}}'
+          text: 'read {{@package.json}}'
         }
       },
       global: {
@@ -73,7 +73,7 @@ describe('BubblePartUserInput', (): void => {
       props: {
         part: {
           type: 'text',
-          text: 'read {{#/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}'
+          text: 'read {{@/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}'
         }
       },
       global: {

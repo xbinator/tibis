@@ -607,7 +607,7 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(settingStore.sidebarVisible).toBe(true);
     expect(promptEditorMockState.saveCursorPosition).toHaveBeenCalledTimes(1);
-    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{#/workspace/note.md 2-4}} ');
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{@/workspace/note.md#L2-L4}} ');
     expect(promptEditorMockState.focus).toHaveBeenCalled();
 
     wrapper.unmount();
@@ -657,12 +657,12 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('sends parsed file input parts to ChatRuntime', async (): Promise<void> => {
-    const createdSession = createSession('session-created', 'fix {{#src/foo.ts}}');
+    const createdSession = createSession('session-created', 'fix {{@src/foo.ts}}');
     chatStoreMock.createSession.mockResolvedValue(createdSession);
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    wrapper.findComponent(BPromptEditorStub).vm.$emit('update:value', 'fix {{#src/foo.ts}}');
+    wrapper.findComponent(BPromptEditorStub).vm.$emit('update:value', 'fix {{@src/foo.ts}}');
     await flushPromises();
     wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
     await flushPromises();
@@ -670,7 +670,7 @@ describe('BChat sessionId runtime', (): void => {
     expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-created',
-        content: 'fix {{#src/foo.ts}}',
+        content: 'fix {{@src/foo.ts}}',
         parts: [{ type: 'text', text: 'fix ' }, expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
       })
     );
@@ -1148,7 +1148,7 @@ describe('BChat sessionId runtime', (): void => {
       .element.dispatchEvent(createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
     await flushPromises();
 
-    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)}}');
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{@/workspace/My Notes/note.md}}');
   });
 
   it('adds image files when images are dropped on the input container', async (): Promise<void> => {
@@ -1174,7 +1174,7 @@ describe('BChat sessionId runtime', (): void => {
       );
     await flushPromises();
 
-    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)}}');
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{@/workspace/My Notes/note.md}}');
   });
 
   it('falls back to filename token when dropped file path cannot be resolved', async (): Promise<void> => {
@@ -1187,7 +1187,7 @@ describe('BChat sessionId runtime', (): void => {
       .element.dispatchEvent(createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
     await flushPromises();
 
-    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{#[](note.md)}}');
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{@note.md}}');
   });
 
   it('clears input drag state without duplicate processing when an inner editor already handled the drop', async (): Promise<void> => {

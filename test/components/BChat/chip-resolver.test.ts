@@ -29,7 +29,7 @@ vi.mock('@/components/BRecent/Icon.vue', () => bRecentIconModuleMock);
 describe('createFileRefChipResolver', (): void => {
   it('renders file reference widgets with the shared recent icon component', (): void => {
     const resolver = createFileRefChipResolver(vi.fn());
-    const result = resolver('#package.json');
+    const result = resolver('@package.json');
 
     if (!result || !('widget' in result)) {
       throw new Error('Expected file reference widget result');

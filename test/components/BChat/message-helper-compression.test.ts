@@ -3,8 +3,8 @@
  * @description BChat 压缩边界后的模型上下文组装测试。
  */
 import { describe, expect, it } from 'vitest';
-import { convert, create, sliceMessagesFromCompressionBoundary } from '@/components/BChat/utils/messageHelper';
 import { buildMessageContentHash } from '@/components/BChat/utils/compression/tokenEstimator';
+import { convert, create, sliceMessagesFromCompressionBoundary } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
 
 /**
@@ -95,7 +95,7 @@ describe('messageHelper compression boundary assembly', () => {
     const message: Message = {
       id: 'user-file',
       role: 'user',
-      content: 'fix {{#src/foo.ts}}',
+      content: 'fix {{@src/foo.ts}}',
       parts: [
         { type: 'text', text: 'fix ' },
         {
@@ -105,7 +105,7 @@ describe('messageHelper compression boundary assembly', () => {
           mime: 'text/plain',
           url: 'file:///workspace/src/foo.ts',
           path: 'src/foo.ts',
-          sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' },
+          sourceText: { start: 4, end: 19, value: '{{@src/foo.ts}}' },
           snapshot: {
             content: 'export const foo = 1;',
             startLine: 1,
@@ -133,7 +133,7 @@ describe('messageHelper compression boundary assembly', () => {
     const message: Message = {
       id: 'user-file',
       role: 'user',
-      content: 'fix {{#src/foo.ts}}',
+      content: 'fix {{@src/foo.ts}}',
       parts: [
         { type: 'text', text: 'fix ' },
         {
@@ -143,7 +143,7 @@ describe('messageHelper compression boundary assembly', () => {
           mime: 'text/plain',
           url: 'file:///workspace/src/foo.ts',
           path: 'src/foo.ts',
-          sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' },
+          sourceText: { start: 4, end: 19, value: '{{@src/foo.ts}}' },
           snapshot: {
             content: 'export const foo = 1;',
             startLine: 1,

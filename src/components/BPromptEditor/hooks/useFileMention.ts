@@ -6,6 +6,7 @@ import type { FileMentionOption } from '../types';
 import type { EditorState } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { computed, ref, type Ref, type ComputedRef, type ShallowRef } from 'vue';
+import { buildFileReferenceToken } from '@/utils/file/reference';
 import { filterAndSortFiles } from '../utils/fileScoring';
 
 /**
@@ -179,7 +180,7 @@ export function useFileMention(
     const { from, to } = mentionRange.value;
     // 使用文件路径构建 token，无路径时使用 unsaved:// 格式
     const path = file.path ?? `unsaved://${file.id}/${file.name}`;
-    const insertText = `{{#${path}}} `;
+    const insertText = `${buildFileReferenceToken(path)} `;
     view.value.dispatch({
       changes: { from, to, insert: insertText },
       selection: { anchor: from + insertText.length }

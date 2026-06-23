@@ -3,7 +3,13 @@
  * @description 文件引用 token 解析测试。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FILE_REFERENCE_MESSAGE_TOKEN_PATTERN, extractFileReferenceLines, findFileReferenceTokens, parseFileReferenceToken } from '@/utils/file/reference';
+import {
+  FILE_REFERENCE_MESSAGE_TOKEN_PATTERN,
+  buildFileReferenceToken,
+  extractFileReferenceLines,
+  findFileReferenceTokens,
+  parseFileReferenceToken
+} from '@/utils/file/reference';
 
 const recentRecordsMock = vi.hoisted<{ value: unknown[] }>(() => ({
   value: []
@@ -23,22 +29,8 @@ beforeEach((): void => {
 });
 
 describe('parseFileReferenceToken', (): void => {
-  it('parses encoded bracket file paths with spaces', (): void => {
-    const parsed = parseFileReferenceToken('#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)');
-
-    expect(parsed).toEqual(
-      expect.objectContaining({
-        rawPath: '/workspace/My Notes/note.md',
-        filePath: '/workspace/My Notes/note.md',
-        fileName: 'note.md',
-        startLine: 0,
-        endLine: 0
-      })
-    );
-  });
-
-  it('parses unencoded file paths with spaces', (): void => {
-    const parsed = parseFileReferenceToken('#/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md');
+  it('parses whole-file references with raw paths that include spaces', (): void => {
+    const parsed = parseFileReferenceToken('@/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md');
 
     expect(parsed).toEqual(
       expect.objectContaining({
@@ -51,57 +43,47 @@ describe('parseFileReferenceToken', (): void => {
     );
   });
 
-  it('matches encoded bracket file references in message text', (): void => {
-    const content = '引用 {{#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)}} 继续';
-    const matches = [...content.matchAll(FILE_REFERENCE_MESSAGE_TOKEN_PATTERN)];
-
-    expect(matches).toHaveLength(1);
-    expect(matches[0]?.[1]).toBe('#[](%2Fworkspace%2FMy%20Notes%2Fnote.md)');
-  });
-
-  it('matches unencoded file references with spaces in message text', (): void => {
-    const content = '引用 {{#/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}} 继续';
-    const matches = [...content.matchAll(FILE_REFERENCE_MESSAGE_TOKEN_PATTERN)];
-
-    expect(matches).toHaveLength(1);
-    expect(matches[0]?.[1]).toBe('#/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md');
-  });
-
-  it('parses source line ranges without render line fields', (): void => {
-    const parsed = parseFileReferenceToken('#[](%2Fworkspace%2Fnote.md) 3-5');
+  it('parses single-line references as one-line ranges', (): void => {
+    const parsed = parseFileReferenceToken('@src/foo.ts#L644');
 
     expect(parsed).toEqual(
       expect.objectContaining({
-        startLine: 3,
-        endLine: 5
+        rawPath: 'src/foo.ts',
+        filePath: 'src/foo.ts',
+        fileName: 'foo.ts',
+        startLine: 644,
+        endLine: 644,
+        lineText: '644'
       })
     );
-    expect(parsed).not.toHaveProperty('renderStartLine');
-    expect(parsed).not.toHaveProperty('renderEndLine');
   });
 
-  it('ignores legacy render line ranges when parsing file references', (): void => {
-    const parsed = parseFileReferenceToken('#[](%2Fworkspace%2Fnote.md) 3-5|8-10');
+  it('parses source line ranges with L-prefixed bounds', (): void => {
+    const parsed = parseFileReferenceToken('@src/foo.ts#L644-L685');
 
     expect(parsed).toEqual(
       expect.objectContaining({
-        startLine: 3,
-        endLine: 5
+        rawPath: 'src/foo.ts',
+        startLine: 644,
+        endLine: 685,
+        lineText: '644-685'
       })
     );
-    expect(parsed).not.toHaveProperty('renderStartLine');
-    expect(parsed).not.toHaveProperty('renderEndLine');
+  });
+
+  it('does not parse legacy hash-prefixed references', (): void => {
+    expect(parseFileReferenceToken('#src/foo.ts')).toBeNull();
   });
 });
 
 describe('findFileReferenceTokens', (): void => {
-  it('returns decoded file references with source offsets', (): void => {
-    const content = `fix {{#[](${encodeURIComponent('src/foo.ts')}) 10-20}} please`;
+  it('returns file references with source offsets', (): void => {
+    const content = 'fix {{@src/foo.ts#L10-L20}} please';
     const tokens = findFileReferenceTokens(content);
 
     expect(tokens).toEqual([
       {
-        token: `{{#[](${encodeURIComponent('src/foo.ts')}) 10-20}}`,
+        token: '{{@src/foo.ts#L10-L20}}',
         start: 4,
         end: content.length - 7,
         reference: expect.objectContaining({
@@ -115,12 +97,12 @@ describe('findFileReferenceTokens', (): void => {
   });
 
   it('returns unencoded file references with spaces from message text', (): void => {
-    const content = '读一下 {{#/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}';
+    const content = '读一下 {{@/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}';
     const tokens = findFileReferenceTokens(content);
 
     expect(tokens).toEqual([
       {
-        token: '{{#/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}',
+        token: '{{@/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}',
         start: 4,
         end: content.length,
         reference: expect.objectContaining({
@@ -132,11 +114,35 @@ describe('findFileReferenceTokens', (): void => {
       }
     ]);
   });
+
+  it('matches file references in message text with the shared pattern', (): void => {
+    const content = '引用 {{@/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md#L3-L8}} 继续';
+    const matches = [...content.matchAll(FILE_REFERENCE_MESSAGE_TOKEN_PATTERN)];
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.[1]).toBe('@/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md#L3-L8');
+  });
+
+  it('ignores legacy message references', (): void => {
+    expect(findFileReferenceTokens('fix {{#src/foo.ts}}')).toEqual([]);
+  });
+
+  it('ignores multiline message references to match editor chip behavior', (): void => {
+    expect(findFileReferenceTokens('fix {{@src/foo.ts\n#L1}}')).toEqual([]);
+  });
+});
+
+describe('buildFileReferenceToken', (): void => {
+  it('builds readable whole-file and line-range references', (): void => {
+    expect(buildFileReferenceToken('/tmp/My Note.md')).toBe('{{@/tmp/My Note.md}}');
+    expect(buildFileReferenceToken('/tmp/My Note.md', 644)).toBe('{{@/tmp/My Note.md#L644}}');
+    expect(buildFileReferenceToken('/tmp/My Note.md', 644, 685)).toBe('{{@/tmp/My Note.md#L644-L685}}');
+  });
 });
 
 describe('extractFileReferenceLines', (): void => {
   it('extracts full content for a matched saved file reference', async (): Promise<void> => {
-    const token = findFileReferenceTokens('读 {{#/tmp/My Note.md}}')[0];
+    const token = findFileReferenceTokens('读 {{@/tmp/My Note.md}}')[0];
     if (!token) {
       throw new Error('Expected file reference token');
     }
@@ -155,7 +161,7 @@ describe('extractFileReferenceLines', (): void => {
     const reference = await extractFileReferenceLines(token);
 
     expect(reference).toEqual({
-      token: '{{#/tmp/My Note.md}}',
+      token: '{{@/tmp/My Note.md}}',
       path: '/tmp/My Note.md',
       startLine: 0,
       endLine: 0,

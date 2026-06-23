@@ -54,7 +54,7 @@ describe('chat runtime shared types', (): void => {
       mime: 'text/plain',
       url: 'file:///workspace/src/foo.ts?start=10&end=20',
       path: 'src/foo.ts',
-      sourceText: { start: 4, end: 25, value: '{{#src/foo.ts 10-20}}' }
+      sourceText: { start: 4, end: 27, value: '{{@src/foo.ts#L10-L20}}' }
     };
 
     const persistedPart: ChatMessageFilePart = {

@@ -75,7 +75,7 @@ describe('runtime model message context', (): void => {
         id: 'user-1',
         sessionId: 'session-1',
         role: 'user',
-        content: 'fix {{#src/foo.ts 10-20}}',
+        content: 'fix {{@src/foo.ts#L10-L20}}',
         parts: [
           { type: 'text', text: 'fix ' },
           {
@@ -85,7 +85,7 @@ describe('runtime model message context', (): void => {
             mime: 'text/plain',
             url: 'file:///workspace/src/foo.ts?start=10&end=20',
             path: 'src/foo.ts',
-            sourceText: { start: 4, end: 25, value: '{{#src/foo.ts 10-20}}' },
+            sourceText: { start: 4, end: 27, value: '{{@src/foo.ts#L10-L20}}' },
             snapshot: {
               content: 'export const foo = 1;',
               startLine: 10,

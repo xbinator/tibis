@@ -95,7 +95,7 @@ function createFileRefSegment(parsed: ParsedFileReference): FileRefSegment {
 
 /**
  * 将原始文本解析为纯文本与文件引用片段的交替序列。
- * 匹配格式：{{#filePath startLine-endLine}}
+ * 匹配格式：{{@filePath}}、{{@filePath#Lstart}}、{{@filePath#Lstart-Lend}}
  */
 function parseTextSegments(text: string): Segment[] {
   const result: Segment[] = [];

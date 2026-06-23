@@ -8,7 +8,7 @@ import { resolveDroppedFilePath } from '@/hooks/useFileDrop';
 import type { ChatFileReferenceInsertPayload } from '@/shared/chat/fileReference';
 import { onChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import { useSettingStore } from '@/stores/ui/setting';
-import { encodeFileReferencePath } from '@/utils/file/reference';
+import { buildFileReferenceToken } from '@/utils/file/reference';
 import { buildUnsavedPath } from '@/utils/file/unsaved';
 
 /**
@@ -44,7 +44,7 @@ export function useFileReference(options: FileReferenceOptions) {
     return Array.from(files)
       .map((file) => {
         const filePath = resolveDroppedFilePath(file);
-        return `{{#${encodeFileReferencePath(filePath || file.name)}}}`;
+        return buildFileReferenceToken(filePath || file.name);
       })
       .join('');
   }
@@ -57,7 +57,8 @@ export function useFileReference(options: FileReferenceOptions) {
   function insertReference(reference: FileReferenceChip) {
     const { id, fileName, filePath, startLine, endLine } = reference;
 
-    const token = `{{#${filePath || buildUnsavedPath({ id, fileName })} ${startLine}-${endLine}}} `;
+    const referencePath = filePath || buildUnsavedPath({ id, fileName });
+    const token = `${buildFileReferenceToken(referencePath, startLine, endLine)} `;
 
     options.insertTextAtCursor(token);
   }

@@ -79,37 +79,42 @@ export interface FileReference {
   fullContent: string;
 }
 
-/** 文件引用 token 正则表达式。路径允许空格，末尾行号可选，兼容历史渲染行号片段。 */
-const FILE_REFERENCE_TOKEN_PATTERN = /^#(.+?)(?:\s+(\d+)-(\d+)(?:\|\d+-\d+)?)?$/;
-/** 消息中的文件引用 token 正则表达式。路径允许空格，末尾行号可选。 */
-export const FILE_REFERENCE_MESSAGE_TOKEN_PATTERN = /\{\{(#.+?(?:\s+\d+-\d+(?:\|\d+-\d+)?)?)\}\}/g;
-/** 编码路径 token 片段，形如 [](%2Fworkspace%2Fnote.md)。 */
-const ENCODED_PATH_TOKEN_PATTERN = /^\[\]\((.*)\)$/;
+/** 文件引用 token 前缀。 */
+const FILE_REFERENCE_TOKEN_PREFIX = '@';
+/** 文件引用行号后缀，支持 #L644 与 #L644-L685。 */
+const FILE_REFERENCE_LINE_SUFFIX_PATTERN = /#L(\d+)(?:-L(\d+))?$/;
+/** 消息中的文件引用 token 正则表达式。路径允许空格，行号后缀由解析器校验。 */
+export const FILE_REFERENCE_MESSAGE_TOKEN_PATTERN = /\{\{(@[^{}\n]+?)\}\}/g;
 
 /**
- * 将文件路径编码为可安全放入 file-ref token 的路径片段。
- * @param rawPath - 原始文件路径或文件名
- * @returns 编码后的路径片段
+ * 格式化文件引用行号展示文本。
+ * @param startLine - 起始行号
+ * @param endLine - 结束行号
+ * @returns 行号展示文本，无行号时返回空字符串
  */
-export function encodeFileReferencePath(rawPath: string): string {
-  return `[](${encodeURIComponent(rawPath)})`;
+function formatFileReferenceLineText(startLine: number, endLine: number): string {
+  if (startLine <= 0 || endLine <= 0) return '';
+  return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
 }
 
 /**
- * 解码 file-ref token 中的路径片段。
- * @param rawPath - token 内路径片段
- * @returns 解码后的原始路径
+ * 构建统一的文件引用 token。
+ * @param rawPath - 原始文件路径或 unsaved:// 引用
+ * @param startLine - 起始行号，0 表示引用整个文件
+ * @param endLine - 结束行号，默认等于 startLine
+ * @returns 文件引用 token
  */
-export function decodeFileReferencePath(rawPath: string): string {
-  const matched = rawPath.match(ENCODED_PATH_TOKEN_PATTERN);
-  if (!matched) return rawPath;
+export function buildFileReferenceToken(rawPath: string, startLine?: number, endLine?: number): string {
+  const normalizedStartLine = startLine ?? 0;
+  const inputEndLine = endLine ?? normalizedStartLine;
 
-  const [, encodedPath] = matched;
-  try {
-    return decodeURIComponent(encodedPath);
-  } catch {
-    return encodedPath;
+  if (normalizedStartLine <= 0 || inputEndLine <= 0) {
+    return `{{@${rawPath}}}`;
   }
+
+  const normalizedEndLine = inputEndLine < normalizedStartLine ? normalizedStartLine : inputEndLine;
+  const lineSuffix = normalizedStartLine === normalizedEndLine ? `#L${normalizedStartLine}` : `#L${normalizedStartLine}-L${normalizedEndLine}`;
+  return `{{@${rawPath}${lineSuffix}}}`;
 }
 
 /**
@@ -123,21 +128,34 @@ function extractFileName(rawPath: string): string {
 
 /**
  * 解析文件引用 token。
- * @param tokenContent - token 内容，包含 `#`
+ * @param tokenContent - token 内容，包含 `@`
  * @returns 结构化解析结果；非法格式返回 null
  */
 export function parseFileReferenceToken(tokenContent: string): ParsedFileReference | null {
-  const matched = tokenContent.match(FILE_REFERENCE_TOKEN_PATTERN);
-  if (!matched) {
+  if (!tokenContent.startsWith(FILE_REFERENCE_TOKEN_PREFIX)) {
     return null;
   }
 
-  const [, rawPathText, startLineText, endLineText] = matched;
-  const rawPath = decodeFileReferencePath(rawPathText.trim());
+  const referenceText = tokenContent.slice(FILE_REFERENCE_TOKEN_PREFIX.length).trim();
+  if (!referenceText) {
+    return null;
+  }
+
+  const lineSuffixMatch = referenceText.match(FILE_REFERENCE_LINE_SUFFIX_PATTERN);
+  const lineSuffixStartIndex = lineSuffixMatch?.index;
+  const rawPathText = lineSuffixStartIndex === undefined ? referenceText : referenceText.slice(0, lineSuffixStartIndex);
+  const rawPath = rawPathText.trim();
+  if (!rawPath) {
+    return null;
+  }
+
   const unsavedReference = parseUnsavedPath(rawPath);
-  const hasLineNumber = startLineText !== undefined;
-  const startLine = hasLineNumber ? Number(startLineText) : 0;
-  const endLine = hasLineNumber ? Number(endLineText) : 0;
+  const hasLineNumber = lineSuffixMatch !== null;
+  const startLine = hasLineNumber ? Number(lineSuffixMatch[1]) : 0;
+  const endLine = hasLineNumber ? Number(lineSuffixMatch[2] ?? lineSuffixMatch[1]) : 0;
+  if (hasLineNumber && (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine <= 0 || endLine < startLine)) {
+    return null;
+  }
 
   return {
     rawPath,
@@ -146,7 +164,7 @@ export function parseFileReferenceToken(tokenContent: string): ParsedFileReferen
     fileName: unsavedReference?.fileName ?? extractFileName(rawPath),
     startLine,
     endLine,
-    lineText: hasLineNumber ? `${startLine}-${endLine}` : '',
+    lineText: formatFileReferenceLineText(startLine, endLine),
     isUnsaved: Boolean(unsavedReference)
   };
 }

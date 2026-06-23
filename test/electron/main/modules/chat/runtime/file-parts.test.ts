@@ -13,6 +13,8 @@ import { materializeRuntimeFileParts } from '../../../../../../electron/main/mod
  * @returns 文件输入片段
  */
 function createInput(path: string, url = `file:///workspace/${path}`): ChatMessageFilePartInput {
+  const sourceValue = `{{@${path}}}`;
+
   return {
     type: 'file',
     id: 'file-part-1',
@@ -20,7 +22,7 @@ function createInput(path: string, url = `file:///workspace/${path}`): ChatMessa
     mime: 'text/plain',
     url,
     path,
-    sourceText: { start: 0, end: 10, value: `{{#${path}}}` }
+    sourceText: { start: 0, end: sourceValue.length, value: sourceValue }
   };
 }
 

@@ -276,7 +276,7 @@ describe('useChatRuntime', (): void => {
 
       await runtime.send({
         sessionId: 'session-1',
-        content: 'fix {{#src/foo.ts}}',
+        content: 'fix {{@src/foo.ts}}',
         parts: [
           { type: 'text', text: 'fix ' },
           {
@@ -286,14 +286,14 @@ describe('useChatRuntime', (): void => {
             mime: 'text/plain',
             url: 'file:///workspace/src/foo.ts',
             path: 'src/foo.ts',
-            sourceText: { start: 4, end: 19, value: '{{#src/foo.ts}}' }
+            sourceText: { start: 4, end: 19, value: '{{@src/foo.ts}}' }
           }
         ]
       });
 
       expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: 'fix {{#src/foo.ts}}',
+          content: 'fix {{@src/foo.ts}}',
           parts: [{ type: 'text', text: 'fix ' }, expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
         })
       );

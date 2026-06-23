@@ -103,7 +103,7 @@ class FileRefWidget extends WidgetType {
  */
 export function createFileRefChipResolver(onOpenFile: (target: FileReferenceNavigationTarget) => void): ChipResolver {
   return (content) => {
-    if (!content.startsWith('#')) return null;
+    if (!content.startsWith('@')) return null;
 
     const parsed = parseFileReferenceToken(content);
     if (!parsed) {
