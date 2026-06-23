@@ -139,6 +139,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
           readPageSnapshot: async () => ({
             url: 'https://example.com',
             title: 'Example',
+            summary: 'Current Page: [Example](https://example.com)\nPage info: 800x600px [Start of page]\n[1]<button>Example</button>\n[End of page]',
             header: 'Page info: 800x600px [Start of page]',
             content: '[1]<button>Example</button>',
             footer: '[End of page]',
@@ -157,6 +158,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     expect(result).toEqual({
       url: 'https://example.com',
       title: 'Example',
+      summary: 'Current Page: [Example](https://example.com)\nPage info: 800x600px [Start of page]\n[1]<button>Example</button>\n[End of page]',
       header: 'Page info: 800x600px [Start of page]',
       content: '[1]<button>Example</button>',
       footer: '[End of page]',
@@ -198,6 +200,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
           readPageSnapshot: async () => ({
             url: 'https://example.com',
             title: 'Example',
+            summary: 'Current Page: [Example](https://example.com)\nPage info: 800x600px [Start of page]\n[1]<button>Example</button>\n[End of page]',
             header: 'Page info: 800x600px [Start of page]',
             content: '[1]<button>Example</button>',
             footer: '[End of page]',
@@ -221,7 +224,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     const operatePage = vi.fn(async () => ({
       ok: true,
       action: 'press' as const,
-      target: { index: 1, label: '搜索医院', tagName: 'INPUT' },
+      target: { index: 1, label: '输入内容', tagName: 'INPUT' },
       message: 'executed',
       navigationStarted: false,
       pageChanged: true,

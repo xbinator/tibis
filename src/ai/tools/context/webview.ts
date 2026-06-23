@@ -143,6 +143,18 @@ export type WebviewViewportElementLayer = 'page' | 'top' | 'background';
 export type WebviewPressKey = 'Enter' | 'Tab' | 'Escape' | 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
 
 /**
+ * WebView 命中测试目标摘要。
+ */
+export interface WebviewAgentHitTarget {
+  /** 命中的元素标签名。 */
+  tagName: string;
+  /** 命中元素的可读标签。 */
+  label: string;
+  /** 命中元素是否位于当前可操作元素内部。 */
+  insideTarget: boolean;
+}
+
+/**
  * WebView Agent 可交互元素。
  */
 export interface WebviewAgentElement {
@@ -156,6 +168,8 @@ export interface WebviewAgentElement {
   text: string;
   /** 模型可读标签。 */
   label: string;
+  /** 推断出的交互角色提示。 */
+  roleHint?: string;
   /** 元素身份指纹，用于操作前识别过期快照。 */
   fingerprint?: string;
   /** 输入占位符。 */
@@ -182,6 +196,14 @@ export interface WebviewAgentElement {
   layer?: WebviewViewportElementLayer;
   /** 是否为当前顶层上下文的主操作。 */
   primary?: boolean;
+  /** 可点击/可操作置信分，0 到 1。 */
+  clickableScore?: number;
+  /** 推断该元素可操作的原因。 */
+  reasons?: string[];
+  /** 当前元素所在的语义路径。 */
+  semanticPath?: string[];
+  /** 当前元素中心点命中测试结果。 */
+  hitTarget?: WebviewAgentHitTarget;
   /** 支持的动作列表。 */
   actions: WebviewAgentElementAction[];
 }
@@ -196,6 +218,8 @@ export interface WebviewViewportElement {
   tagName: string;
   /** 模型可读标签。 */
   label: string;
+  /** 推断出的交互角色提示。 */
+  roleHint?: string;
   /** 支持的动作列表。 */
   actions: WebviewAgentElementAction[];
   /** 元素相对当前视口的矩形。 */
@@ -208,6 +232,14 @@ export interface WebviewViewportElement {
   layer: WebviewViewportElementLayer;
   /** 是否为当前顶层上下文的主操作。 */
   primary: boolean;
+  /** 可点击/可操作置信分，0 到 1。 */
+  clickableScore?: number;
+  /** 推断该元素可操作的原因。 */
+  reasons?: string[];
+  /** 当前元素所在的语义路径。 */
+  semanticPath?: string[];
+  /** 当前元素中心点命中测试结果。 */
+  hitTarget?: WebviewAgentHitTarget;
 }
 
 /**
@@ -256,6 +288,8 @@ export interface WebviewPageSnapshot {
   url: string;
   /** 页面标题。 */
   title: string;
+  /** 给模型优先阅读的 BrowserState 风格摘要。 */
+  summary: string;
   /** 页面视口与滚动位置提示。 */
   header: string;
   /** LLM 可读的简化 DOM 结构。 */

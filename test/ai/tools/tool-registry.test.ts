@@ -87,6 +87,18 @@ describe('toolRegistry', (): void => {
     expect(snapshotIdSchema?.description).toContain('非 navigate');
   });
 
+  it('documents navigate as address-bar navigation instead of a DOM action substitute', (): void => {
+    const operateDefinition = getToolDefinitionByName(OPERATE_WEBPAGE_TOOL_NAME);
+    const actionSchema = operateDefinition?.parameters.properties.action as {
+      oneOf?: Array<{ properties?: { type?: { enum?: string[] }; url?: { description?: string } } }>;
+    };
+    const navigateSchema = actionSchema.oneOf?.find((schema) => schema.properties?.type?.enum?.includes('navigate'));
+
+    expect(String(operateDefinition?.description)).toContain('navigate 仅用于用户明确提供 URL');
+    expect(String(operateDefinition?.description)).toContain('页面内可操作项必须使用 read_current_webpage 返回的 [N]');
+    expect(navigateSchema?.properties?.url?.description).toContain('不要替代页面内可操作项的 [N]');
+  });
+
   it('can derive tool names by renderer exposure policy', (): void => {
     expect(getToolNamesByExposure('default-readonly')).toEqual(
       expect.arrayContaining(['read_current_document', 'read_current_drawing', 'get_current_time', 'read_file', 'get_settings', 'query_logs', 'open_resource'])

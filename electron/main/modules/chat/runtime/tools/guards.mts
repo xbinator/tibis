@@ -68,6 +68,7 @@ export function isRuntimeWebpageSnapshot(value: unknown): value is RuntimeWebpag
     isRecord(value) &&
     typeof value.url === 'string' &&
     typeof value.title === 'string' &&
+    typeof value.summary === 'string' &&
     typeof value.header === 'string' &&
     typeof value.content === 'string' &&
     typeof value.footer === 'string' &&

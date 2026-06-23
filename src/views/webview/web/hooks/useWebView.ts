@@ -142,8 +142,8 @@ interface ActiveWebviewSnapshot {
 /**
  * 页面脚本原始快照，允许旧脚本缺省 BrowserState 三段式字段。
  */
-type RawWebviewPageSnapshot = Omit<WebviewPageSnapshot, 'capturedAt' | 'truncated' | 'header' | 'content' | 'footer'> &
-  Partial<Pick<WebviewPageSnapshot, 'header' | 'content' | 'footer'>>;
+type RawWebviewPageSnapshot = Omit<WebviewPageSnapshot, 'capturedAt' | 'truncated' | 'header' | 'content' | 'footer' | 'summary'> &
+  Partial<Pick<WebviewPageSnapshot, 'header' | 'content' | 'footer' | 'summary'>>;
 
 /**
  * 判断事件是否包含 WebView console message。
@@ -343,6 +343,27 @@ function isLinkArray(value: unknown): value is WebviewPageLink[] {
 }
 
 /**
+ * 判断值是否为字符串数组。
+ * @param value - 待判断值
+ * @returns 是否为字符串数组
+ */
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+/**
+ * 判断值是否为 WebView 命中测试目标摘要。
+ * @param value - 待判断值
+ * @returns 是否为 WebView 命中测试目标摘要
+ */
+function isAgentHitTarget(value: unknown): value is NonNullable<WebviewAgentElement['hitTarget']> {
+  if (!value || typeof value !== 'object') return false;
+
+  const target = value as Partial<NonNullable<WebviewAgentElement['hitTarget']>>;
+  return typeof target.tagName === 'string' && typeof target.label === 'string' && typeof target.insideTarget === 'boolean';
+}
+
+/**
  * 判断值是否为 WebView Agent 元素数组。
  * @param value - 待判断值
  * @returns 是否为可交互元素数组
@@ -359,9 +380,14 @@ function isAgentElementArray(value: unknown): value is WebviewAgentElement[] {
         typeof element.tagName === 'string' &&
         typeof element.text === 'string' &&
         typeof element.label === 'string' &&
+        (element.roleHint === undefined || typeof element.roleHint === 'string') &&
         (element.fingerprint === undefined || typeof element.fingerprint === 'string') &&
         typeof element.disabled === 'boolean' &&
         typeof element.isNew === 'boolean' &&
+        (element.clickableScore === undefined || typeof element.clickableScore === 'number') &&
+        (element.reasons === undefined || isStringArray(element.reasons)) &&
+        (element.semanticPath === undefined || isStringArray(element.semanticPath)) &&
+        (element.hitTarget === undefined || isAgentHitTarget(element.hitTarget)) &&
         Array.isArray(element.actions)
       );
     })
@@ -393,12 +419,17 @@ function isViewportElement(value: unknown): value is WebviewViewportElement {
     typeof element.index === 'number' &&
     typeof element.tagName === 'string' &&
     typeof element.label === 'string' &&
+    (element.roleHint === undefined || typeof element.roleHint === 'string') &&
     Array.isArray(element.actions) &&
     isViewportRect(element.rect) &&
     typeof element.visibleRatio === 'number' &&
     typeof element.covered === 'boolean' &&
     (element.layer === 'page' || element.layer === 'top' || element.layer === 'background') &&
-    typeof element.primary === 'boolean'
+    typeof element.primary === 'boolean' &&
+    (element.clickableScore === undefined || typeof element.clickableScore === 'number') &&
+    (element.reasons === undefined || isStringArray(element.reasons)) &&
+    (element.semanticPath === undefined || isStringArray(element.semanticPath)) &&
+    (element.hitTarget === undefined || isAgentHitTarget(element.hitTarget))
   );
 }
 
@@ -498,12 +529,25 @@ function normalizeViewportElement(element: WebviewViewportElement): WebviewViewp
     index: element.index,
     tagName: truncateText(element.tagName, 40).value,
     label: truncateText(element.label, 300).value,
+    ...(element.roleHint ? { roleHint: truncateText(element.roleHint, 80).value } : {}),
     actions: element.actions.filter((action) => action === 'click' || action === 'input' || action === 'select' || action === 'press' || action === 'scroll'),
     rect: normalizeViewportRect(element.rect),
     visibleRatio: Math.max(0, Math.min(1, Number(element.visibleRatio.toFixed(3)))),
     covered: element.covered,
     layer: element.layer,
-    primary: element.primary
+    primary: element.primary,
+    ...(typeof element.clickableScore === 'number' ? { clickableScore: Math.max(0, Math.min(1, Number(element.clickableScore.toFixed(3)))) } : {}),
+    ...(element.reasons ? { reasons: element.reasons.map((reason) => truncateText(reason, 80).value).slice(0, 12) } : {}),
+    ...(element.semanticPath ? { semanticPath: element.semanticPath.map((item) => truncateText(item, 120).value).slice(0, 6) } : {}),
+    ...(element.hitTarget
+      ? {
+          hitTarget: {
+            tagName: truncateText(element.hitTarget.tagName, 40).value,
+            label: truncateText(element.hitTarget.label, 300).value,
+            insideTarget: element.hitTarget.insideTarget
+          }
+        }
+      : {})
   };
 }
 
@@ -667,6 +711,7 @@ function normalizeAgentElements(elements: WebviewAgentElement[] | undefined): We
     ...(element.role ? { role: truncateText(element.role, 80).value } : {}),
     text: truncateText(element.text, 300).value,
     label: truncateText(element.label, 300).value,
+    ...(element.roleHint ? { roleHint: truncateText(element.roleHint, 80).value } : {}),
     ...(element.fingerprint ? { fingerprint: truncateText(element.fingerprint, 500).value } : {}),
     ...(element.placeholder ? { placeholder: truncateText(element.placeholder, 300).value } : {}),
     ...(element.href ? { href: element.href } : {}),
@@ -680,6 +725,18 @@ function normalizeAgentElements(elements: WebviewAgentElement[] | undefined): We
     ...(typeof element.covered === 'boolean' ? { covered: element.covered } : {}),
     ...(element.layer ? { layer: element.layer } : {}),
     ...(typeof element.primary === 'boolean' ? { primary: element.primary } : {}),
+    ...(typeof element.clickableScore === 'number' ? { clickableScore: Math.max(0, Math.min(1, Number(element.clickableScore.toFixed(3)))) } : {}),
+    ...(element.reasons ? { reasons: element.reasons.map((reason) => truncateText(reason, 80).value).slice(0, 12) } : {}),
+    ...(element.semanticPath ? { semanticPath: element.semanticPath.map((item) => truncateText(item, 120).value).slice(0, 6) } : {}),
+    ...(element.hitTarget
+      ? {
+          hitTarget: {
+            tagName: truncateText(element.hitTarget.tagName, 40).value,
+            label: truncateText(element.hitTarget.label, 300).value,
+            insideTarget: element.hitTarget.insideTarget
+          }
+        }
+      : {}),
     actions: element.actions.filter((action) => action === 'click' || action === 'input' || action === 'select' || action === 'press' || action === 'scroll')
   }));
 }
@@ -696,6 +753,33 @@ function createActiveSnapshotElements(elements: WebviewAgentElement[] | undefine
     label: element.label,
     ...(element.fingerprint ? { fingerprint: element.fingerprint } : {})
   }));
+}
+
+/**
+ * 创建给模型优先阅读的 BrowserState 风格摘要。
+ * @param snapshot - 已规范化的页面快照字段
+ * @returns BrowserState 风格摘要文本
+ */
+function createWebviewPageSummary(snapshot: { url: string; title: string; header: string; content: string; footer: string }): string {
+  const title = snapshot.title || 'Untitled Page';
+  const currentPage = snapshot.url ? `Current Page: [${title}](${snapshot.url})` : `Current Page: ${title}`;
+  return [
+    currentPage,
+    snapshot.header,
+    '',
+    'Interactive elements from top layer of the current page:',
+    snapshot.content || '<EMPTY>',
+    '',
+    snapshot.footer,
+    '',
+    'Rules:',
+    '- Use [N] as the element handle for operate_webpage.',
+    '- Do not use navigate for page-visible links or text; use [N] with click.',
+    '- Treat [N] as a handle from the latest snapshotId, not as a stable position across reads.',
+    '- If the footer says more content exists above or below, use operate_webpage scroll and read again.'
+  ]
+    .filter((line, index, lines) => line || (index > 0 && lines[index - 1]))
+    .join('\n');
 }
 
 /**
@@ -727,6 +811,7 @@ export function isWebviewPageSnapshot(value: unknown): value is RawWebviewPageSn
   return (
     typeof snapshot.url === 'string' &&
     typeof snapshot.title === 'string' &&
+    (snapshot.summary === undefined || typeof snapshot.summary === 'string') &&
     (snapshot.header === undefined || typeof snapshot.header === 'string') &&
     (snapshot.content === undefined || typeof snapshot.content === 'string') &&
     (snapshot.footer === undefined || typeof snapshot.footer === 'string') &&
@@ -764,12 +849,17 @@ export function normalizeWebviewPageSnapshot(value: RawWebviewPageSnapshot): Web
     selectedText: selectedText.truncated
   };
 
-  return {
+  const baseSnapshot = {
     url: value.url,
     title: value.title,
     header: value.header || '',
     content: content.value,
-    footer: value.footer || '',
+    footer: value.footer || ''
+  };
+
+  return {
+    ...baseSnapshot,
+    summary: value.summary || createWebviewPageSummary(baseSnapshot),
     text: text.value,
     selectedText: selectedText.value,
     headings,
@@ -971,17 +1061,17 @@ function createPageSnapshotScript(): string {
     visit(root);
     return elements;
   };
+  const containsComposedElement = (container, target) => {
+    if (container === target || container.contains(target)) return true;
+    if (!container.shadowRoot) return false;
+    return collectComposedElements(container.shadowRoot).includes(target);
+  };
   const matchesSelector = (element, selector) => {
     try {
       return element.matches(selector);
     } catch {
       return false;
     }
-  };
-  const containsComposedElement = (container, target) => {
-    if (container === target || container.contains(target)) return true;
-    if (!container.shadowRoot) return false;
-    return collectComposedElements(container.shadowRoot).includes(target);
   };
   const isVisible = (element) => {
     if (!(element instanceof HTMLElement)) return false;
@@ -1038,9 +1128,100 @@ function createPageSnapshotScript(): string {
     ['data-action', 'data-ai-action', 'data-click', 'data-command', 'data-href'].some((name) => element.hasAttribute(name));
   const hasClickableClass = (element) =>
     /(^|[-_\\s])(btn|button|click|clickable|card|item|row|cell|option|tab|menuitem|link)([-_\\s]|$)/i.test(readClassName(element));
+  const compactNavigationSelector = [
+    'header',
+    'nav',
+    '[role="navigation"]',
+    '[role="toolbar"]',
+    '[class*="nav"]',
+    '[class*="Nav"]',
+    '[class*="header"]',
+    '[class*="Header"]',
+    '[class*="bar"]',
+    '[class*="Bar"]',
+    '[class*="action"]',
+    '[class*="Action"]',
+    '[class*="toolbar"]',
+    '[class*="Toolbar"]'
+  ].join(',');
+  const isCompactTextElement = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    if (!['span', 'div', 'li', 'label', 'i', 'em', 'strong'].includes(tagName)) return false;
+    const label = readLabel(element);
+    return label.length >= 2 && label.length <= 12 && !/[。！？!?，,；;：:]/.test(label);
+  };
+  const isVisibleTopbarRect = (element) => {
+    const rect = element.getBoundingClientRect();
+    const maxTop = Math.min(160, window.innerHeight * 0.25);
+    if (rect.width <= 0 || rect.height <= 0 || rect.top < -4 || rect.top > maxTop) return false;
+    return rect.width <= Math.min(220, window.innerWidth * 0.45) && rect.height <= 80;
+  };
+  const hasCompactTextSiblingCluster = (element) => {
+    const parent = element.parentElement;
+    if (!parent) return false;
+
+    const rect = element.getBoundingClientRect();
+    const centerY = rect.top + rect.height / 2;
+    return (
+      Array.from(parent.children).filter((child) => {
+        if (!(child instanceof HTMLElement) || !isCompactTextElement(child) || !isVisible(child)) return false;
+        const childRect = child.getBoundingClientRect();
+        return Math.abs(childRect.top + childRect.height / 2 - centerY) <= 24;
+      }).length >= 2
+    );
+  };
+  const hasCompactNavigationText = (element) => isCompactTextElement(element) && Boolean(element.closest(compactNavigationSelector));
+  const hasCompactTopbarText = (element) => {
+    if (!isCompactTextElement(element) || element.closest(compactNavigationSelector)) return false;
+    if (element.closest('main,article,section,form,table')) return false;
+    return isVisibleTopbarRect(element) && hasCompactTextSiblingCluster(element);
+  };
+  const hasNativeClickAction = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    if (tagName === 'a' || tagName === 'button' || tagName === 'summary') return true;
+    return element instanceof HTMLInputElement && ['button', 'submit', 'reset', 'checkbox', 'radio'].includes(String(element.type || 'text').toLowerCase());
+  };
   const hasNonSemanticClickHint = (element) => {
     if (!readLabel(element)) return false;
     return hasDirectClickHandler(element) || hasPointerCursor(element) || hasActionDataAttribute(element) || hasClickableClass(element);
+  };
+  const readRoleHint = (element, actions) => {
+    const tagName = element.tagName.toLowerCase();
+    const role = String(element.getAttribute('role') || '').toLowerCase();
+    const className = readClassName(element).toLowerCase();
+    if (element instanceof HTMLInputElement || tagName === 'textarea' || element.isContentEditable) return 'text-input';
+    if (tagName === 'select') return 'select';
+    if (tagName === 'a' || role === 'link') return 'link';
+    if (tagName === 'button' || role === 'button') return 'button';
+    if (role === 'tab' || /(^|[-_\\s])tab([-_\\s]|$)/i.test(className)) return 'tab';
+    if (/(service|shortcut|entry|grid)/i.test(className)) return 'service-entry';
+    if (/(card|panel)/i.test(className)) return 'card';
+    if (/(item|cell|row|option)/i.test(className)) return 'list-item';
+    if (actions.includes('scroll') && actions.length === 1) return 'scroll-target';
+    if (actions.includes('click')) return 'clickable';
+    return 'control';
+  };
+  const readSemanticPath = (element) => {
+    const label = readLabel(element);
+    const labels = [];
+    let current = element.parentElement;
+    while (current && current !== document.body && current !== document.documentElement && labels.length < 6) {
+      const tagName = current.tagName.toLowerCase();
+      const heading = current.querySelector?.(':scope > h1,:scope > h2,:scope > h3,:scope > h4,:scope > h5,:scope > h6,[role="heading"]');
+      const currentLabel = readText(
+        current.getAttribute('aria-label') ||
+          current.getAttribute('title') ||
+          (heading && (heading.getAttribute('aria-label') || heading.textContent)) ||
+          ''
+      );
+      if (currentLabel && currentLabel !== label && !labels.includes(currentLabel)) {
+        labels.unshift(currentLabel.slice(0, 120));
+      } else if ((tagName === 'main' || tagName === 'nav' || tagName === 'section' || tagName === 'form') && current.id && !labels.includes(current.id)) {
+        labels.unshift(current.id.slice(0, 120));
+      }
+      current = current.parentElement;
+    }
+    return labels;
   };
   const readActions = (element) => {
     const tagName = element.tagName.toLowerCase();
@@ -1061,9 +1242,44 @@ function createPageSnapshotScript(): string {
     if (tagName === 'select') actions.push('select');
     if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || clickableRoles.includes(role)) actions.push('click');
     if (hasNonSemanticClickHint(element)) actions.push('click');
+    if (hasCompactNavigationText(element) || hasCompactTopbarText(element)) actions.push('click');
     if (keyboardTags.includes(tagName) || element.isContentEditable) actions.push('press');
     if (hasScrollableAncestor(element)) actions.push('scroll');
     return Array.from(new Set(actions));
+  };
+  const readClickabilityReasons = (element, actions, hitTarget) => {
+    const reasons = [];
+    const role = element.getAttribute('role') || '';
+    if (hasNativeClickAction(element)) reasons.push('native-control');
+    if (['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'].includes(role)) reasons.push('aria-role');
+    if (hasDirectClickHandler(element)) reasons.push('inline-handler');
+    if (hasPointerCursor(element)) reasons.push('pointer-cursor');
+    if (hasActionDataAttribute(element)) reasons.push('action-data');
+    if (hasClickableClass(element)) reasons.push('clickable-class');
+    if (hasCompactNavigationText(element)) reasons.push('compact-navigation-text');
+    if (hasCompactTopbarText(element)) reasons.push('compact-topbar-text');
+    if (readLabel(element)) reasons.push('visible-label');
+    if (hitTarget?.insideTarget) reasons.push('hit-test-pass');
+    if (actions.includes('input')) reasons.push('editable-control');
+    if (actions.includes('select')) reasons.push('select-control');
+    if (actions.includes('scroll')) reasons.push('scrollable-ancestor');
+    return Array.from(new Set(reasons));
+  };
+  const readClickableScore = (actions, reasons, visibleRatio, layer) => {
+    let score = actions.includes('click') ? 0.32 : actions.length > 0 ? 0.18 : 0;
+    if (reasons.includes('native-control')) score += 0.28;
+    if (reasons.includes('aria-role')) score += 0.22;
+    if (reasons.includes('inline-handler')) score += 0.2;
+    if (reasons.includes('pointer-cursor')) score += 0.18;
+    if (reasons.includes('action-data')) score += 0.18;
+    if (reasons.includes('clickable-class')) score += 0.14;
+    if (reasons.includes('compact-navigation-text')) score += 0.12;
+    if (reasons.includes('compact-topbar-text')) score += 0.1;
+    if (reasons.includes('visible-label')) score += 0.08;
+    if (reasons.includes('hit-test-pass')) score += 0.12;
+    if (layer === 'background') score -= 0.2;
+    score *= Math.max(0.2, Math.min(1, visibleRatio || 0));
+    return Math.max(0, Math.min(1, Number(score.toFixed(3))));
   };
   const readValuePreview = (element) => {
     if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) return undefined;
@@ -1071,7 +1287,7 @@ function createPageSnapshotScript(): string {
     return readText(element.value).slice(0, 300);
   };
   const elementEntries = collectComposedElements(document)
-    .filter((element) => matchesSelector(element, actionableCandidateSelector))
+    .filter((element) => matchesSelector(element, actionableCandidateSelector) || hasCompactNavigationText(element) || hasCompactTopbarText(element))
     .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
     .map((element) => ({ element, actions: readActions(element) }))
     .filter((item) => item.actions.length > 0)
@@ -1232,6 +1448,22 @@ function createPageSnapshotScript(): string {
       height: Math.round(rect.height)
     };
   };
+  const readHitTarget = (element, rect) => {
+    if (typeof document.elementsFromPoint !== 'function' || rect.width <= 0 || rect.height <= 0) return undefined;
+
+    const x = Math.max(0, Math.min(window.innerWidth - 1, rect.x + rect.width / 2));
+    const y = Math.max(0, Math.min(window.innerHeight - 1, rect.y + rect.height / 2));
+    const hit = document
+      .elementsFromPoint(x, y)
+      .find((candidate) => candidate instanceof HTMLElement && candidate !== document.body && candidate !== document.documentElement);
+    if (!(hit instanceof HTMLElement)) return undefined;
+
+    return {
+      tagName: hit.tagName,
+      label: readLabel(hit).slice(0, 300),
+      insideTarget: containsComposedElement(element, hit)
+    };
+  };
   const readVisibleRatio = (rect) => {
     const visibleLeft = Math.max(rect.x, 0);
     const visibleTop = Math.max(rect.y, 0);
@@ -1283,13 +1515,11 @@ function createPageSnapshotScript(): string {
     return role === 'dialog' || role === 'alertdialog' || element.getAttribute('aria-modal') === 'true' || isNativeDialog;
   };
   const readPrimaryActionIndex = (indexes) => {
-    const primaryTextPattern = /^(确认|确定|提交|完成|继续|下一步|保存|ok|yes|confirm)$/i;
     const clickableIndexes = indexes.filter((index) => {
       const entry = elementEntries[index - 1];
       return entry && entry.actions.includes('click');
     });
-    const exactMatch = clickableIndexes.find((index) => primaryTextPattern.test(readLabel(elementEntries[index - 1].element)));
-    return exactMatch || clickableIndexes[clickableIndexes.length - 1];
+    return clickableIndexes[clickableIndexes.length - 1];
   };
   const isDimmedBackdrop = (element, excludedElement) => {
     if (element === excludedElement || containsComposedElement(excludedElement, element)) return false;
@@ -1311,6 +1541,7 @@ function createPageSnapshotScript(): string {
         if (!elementIndexes.length || readVisibleRatio(rect) <= 0 || areaRatio > 0.96) return null;
         const style = window.getComputedStyle(element);
         const isDialog = isDialogLikeElement(element);
+        if (!isDialog && areaRatio < 0.18) return null;
         const isLayerPosition = ['fixed', 'absolute', 'sticky'].includes(style.position);
         const hasBackground = hasVisibleBackground(style);
         if (!isDialog && !isLayerPosition && readNumericZIndex(style) <= 0) return null;
@@ -1361,12 +1592,15 @@ function createPageSnapshotScript(): string {
       const visibleRatio = readVisibleRatio(rect);
       const layer = readElementLayer(element, rect);
       const primary = topLayerInfo?.summary.primaryActionIndex === index + 1;
+      const hitTarget = readHitTarget(element, rect);
+      const reasons = readClickabilityReasons(element, actions, hitTarget);
       return {
         index: index + 1,
         tagName: element.tagName,
         role: element.getAttribute('role') || undefined,
         text: readText(element.innerText || element.textContent).slice(0, 300),
         label: readLabel(element).slice(0, 300),
+        roleHint: readRoleHint(element, actions),
         fingerprint: readFingerprint(element),
         placeholder: element.getAttribute('placeholder') || undefined,
         href: element instanceof HTMLAnchorElement ? element.href : undefined,
@@ -1380,6 +1614,10 @@ function createPageSnapshotScript(): string {
         covered: layer === 'background',
         layer,
         primary,
+        clickableScore: readClickableScore(actions, reasons, visibleRatio, layer),
+        reasons,
+        semanticPath: readSemanticPath(element),
+        ...(hitTarget ? { hitTarget } : {}),
         actions
       };
     });
@@ -1424,12 +1662,17 @@ function createPageSnapshotScript(): string {
         index: element.index,
         tagName: element.tagName,
         label: element.label,
+        roleHint: element.roleHint,
         actions: element.actions,
         rect: element.rect,
         visibleRatio: element.visibleRatio,
         covered: element.covered,
         layer: element.layer,
-        primary: element.primary
+        primary: element.primary,
+        clickableScore: element.clickableScore,
+        reasons: element.reasons,
+        semanticPath: element.semanticPath,
+        hitTarget: element.hitTarget
       }))
   };
 
@@ -1534,6 +1777,11 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     visit(root);
     return elements;
   };
+  const containsComposedElement = (container, target) => {
+    if (container === target || container.contains(target)) return true;
+    if (!container.shadowRoot) return false;
+    return collectComposedElements(container.shadowRoot).includes(target);
+  };
   const matchesSelector = (element, selector) => {
     try {
       return element.matches(selector);
@@ -1605,6 +1853,54 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     ['data-action', 'data-ai-action', 'data-click', 'data-command', 'data-href'].some((name) => element.hasAttribute(name));
   const hasClickableClass = (element) =>
     /(^|[-_\\s])(btn|button|click|clickable|card|item|row|cell|option|tab|menuitem|link)([-_\\s]|$)/i.test(readClassName(element));
+  const compactNavigationSelector = [
+    'header',
+    'nav',
+    '[role="navigation"]',
+    '[role="toolbar"]',
+    '[class*="nav"]',
+    '[class*="Nav"]',
+    '[class*="header"]',
+    '[class*="Header"]',
+    '[class*="bar"]',
+    '[class*="Bar"]',
+    '[class*="action"]',
+    '[class*="Action"]',
+    '[class*="toolbar"]',
+    '[class*="Toolbar"]'
+  ].join(',');
+  const isCompactTextElement = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    if (!['span', 'div', 'li', 'label', 'i', 'em', 'strong'].includes(tagName)) return false;
+    const label = readLabel(element);
+    return label.length >= 2 && label.length <= 12 && !/[。！？!?，,；;：:]/.test(label);
+  };
+  const isVisibleTopbarRect = (element) => {
+    const rect = element.getBoundingClientRect();
+    const maxTop = Math.min(160, window.innerHeight * 0.25);
+    if (rect.width <= 0 || rect.height <= 0 || rect.top < -4 || rect.top > maxTop) return false;
+    return rect.width <= Math.min(220, window.innerWidth * 0.45) && rect.height <= 80;
+  };
+  const hasCompactTextSiblingCluster = (element) => {
+    const parent = element.parentElement;
+    if (!parent) return false;
+
+    const rect = element.getBoundingClientRect();
+    const centerY = rect.top + rect.height / 2;
+    return (
+      Array.from(parent.children).filter((child) => {
+        if (!(child instanceof HTMLElement) || !isCompactTextElement(child) || !isVisible(child)) return false;
+        const childRect = child.getBoundingClientRect();
+        return Math.abs(childRect.top + childRect.height / 2 - centerY) <= 24;
+      }).length >= 2
+    );
+  };
+  const hasCompactNavigationText = (element) => isCompactTextElement(element) && Boolean(element.closest(compactNavigationSelector));
+  const hasCompactTopbarText = (element) => {
+    if (!isCompactTextElement(element) || element.closest(compactNavigationSelector)) return false;
+    if (element.closest('main,article,section,form,table')) return false;
+    return isVisibleTopbarRect(element) && hasCompactTextSiblingCluster(element);
+  };
   const hasNonSemanticClickHint = (element) => {
     if (!readLabel(element)) return false;
     return hasDirectClickHandler(element) || hasPointerCursor(element) || hasActionDataAttribute(element) || hasClickableClass(element);
@@ -1628,12 +1924,13 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
     if (tagName === 'select') actions.push('select');
     if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || clickableRoles.includes(role)) actions.push('click');
     if (hasNonSemanticClickHint(element)) actions.push('click');
+    if (hasCompactNavigationText(element) || hasCompactTopbarText(element)) actions.push('click');
     if (keyboardTags.includes(tagName) || element.isContentEditable) actions.push('press');
     if (hasScrollableAncestor(element)) actions.push('scroll');
     return Array.from(new Set(actions));
   };
   const elements = collectComposedElements(document)
-    .filter((element) => matchesSelector(element, actionableCandidateSelector))
+    .filter((element) => matchesSelector(element, actionableCandidateSelector) || hasCompactNavigationText(element) || hasCompactTopbarText(element))
     .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
     .map((element) => ({ element, actions: readActions(element) }))
     .filter((item) => item.actions.length > 0)
@@ -1687,6 +1984,34 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
       after,
       changed: before.x !== after.x || before.y !== after.y
     };
+  };
+  const readViewportRect = (element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    };
+  };
+  const resolveClickTarget = (element) => {
+    if (typeof document.elementsFromPoint !== 'function') return element;
+
+    const rect = readViewportRect(element);
+    if (rect.width <= 0 || rect.height <= 0) return element;
+
+    const x = Math.max(0, Math.min(window.innerWidth - 1, rect.x + rect.width / 2));
+    const y = Math.max(0, Math.min(window.innerHeight - 1, rect.y + rect.height / 2));
+    const hit = document
+      .elementsFromPoint(x, y)
+      .find(
+        (candidate) =>
+          candidate instanceof HTMLElement &&
+          candidate !== document.body &&
+          candidate !== document.documentElement &&
+          containsComposedElement(element, candidate)
+      );
+    return hit instanceof HTMLElement ? hit : element;
   };
   const pressKeyMap = {
     Enter: { code: 'Enter', keyCode: 13 },
@@ -1774,13 +2099,14 @@ function createPageOperationScript(input: WebviewOperateInput, snapshotElements:
   }
   let scroll = null;
   if (action.type === 'click') {
+    const clickTarget = resolveClickTarget(element);
     const PointerEventClass = window.PointerEvent || MouseEvent;
-    element.dispatchEvent(new PointerEventClass('pointerdown', { bubbles: true }));
-    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    element.focus({ preventScroll: true });
-    element.dispatchEvent(new PointerEventClass('pointerup', { bubbles: true }));
-    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-    element.click();
+    clickTarget.dispatchEvent(new PointerEventClass('pointerdown', { bubbles: true }));
+    clickTarget.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    clickTarget.focus({ preventScroll: true });
+    clickTarget.dispatchEvent(new PointerEventClass('pointerup', { bubbles: true }));
+    clickTarget.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    clickTarget.click();
   } else if (action.type === 'input') {
     if (typeof action.text !== 'string') throw new Error('INVALID_INPUT');
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
@@ -2687,7 +3013,6 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     state.value.isElementSelecting = false;
     state.value.loadProgress = 0.1;
     state.value.favicon = '';
-    activeSnapshot = null;
     selectedElement.value = null;
   }
 
@@ -2711,7 +3036,12 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
    * @param event - 导航事件
    */
   function handleDidNavigate(event: DidNavigateEvent): void {
+    const shouldInvalidateSnapshot = !activeSnapshot || activeSnapshot.url !== event.url;
     state.value.url = event.url;
+    if (shouldInvalidateSnapshot) {
+      activeSnapshot = null;
+      selectedElement.value = null;
+    }
     syncNavigationState();
   }
 

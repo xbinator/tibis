@@ -101,6 +101,12 @@ describe('createMainToolExecutor', (): void => {
           data: {
             url: 'https://example.com',
             title: 'Example',
+            summary: [
+              'Current Page: [Example](https://example.com)',
+              'Page info: 800x600px [Start of page]',
+              '[1]<button>Search</button>',
+              '[End of page]'
+            ].join('\n'),
             header: 'Page info: 800x600px [Start of page]',
             content: '[1]<button>Search</button>',
             footer: '[End of page]',
@@ -137,7 +143,12 @@ describe('createMainToolExecutor', (): void => {
 
     expect(result.status).toBe('success');
     expect(result.toolName).toBe('read_current_webpage');
-    expect(result.data).toMatchObject({ snapshotId: 'snap-1', title: 'Example', content: '[1]<button>Search</button>' });
+    expect(result.data).toMatchObject({
+      snapshotId: 'snap-1',
+      title: 'Example',
+      summary: expect.stringContaining('Current Page: [Example](https://example.com)'),
+      content: '[1]<button>Search</button>'
+    });
     expect(bridgeRequests).toEqual([
       {
         runtimeId: 'runtime-1',

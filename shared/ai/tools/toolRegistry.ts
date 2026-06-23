@@ -286,7 +286,10 @@ const WEBPAGE_OPERATION_ACTION_SCHEMA: ToolJsonSchema = {
       type: 'object',
       properties: {
         type: { type: 'string', enum: ['navigate'] },
-        url: { type: 'string', description: '要在当前激活 WebView 中打开的 http/https 地址，可省略协议。' }
+        url: {
+          type: 'string',
+          description: '用户明确给出的 http/https 地址或地址栏目标，可省略协议；不要替代页面内可操作项的 [N]。'
+        }
       },
       required: ['type', 'url'],
       additionalProperties: false
@@ -720,7 +723,7 @@ export const TOOL_REGISTRY = [
       name: OPEN_RESOURCE_TOOL_NAME,
       description:
         '根据用户指令打开文件或外部链接。文件路径支持相对工作区路径或绝对路径（外部路径需用户确认）；mailto/ftp 链接使用系统默认程序打开；' +
-        '仅当没有激活 WebView 且用户要创建新的内置浏览器页时，才用它打开 http/https 网址。若当前已有激活 WebView，要打开或切换网页请使用 operate_webpage 的 navigate 动作。',
+        '仅当没有激活 WebView 且用户要创建新的内置浏览器页时，才用它打开 http/https 网址。若当前已有激活 WebView 且用户明确给出 URL，要在地址栏导航请使用 operate_webpage 的 navigate 动作。',
       source: 'builtin',
       riskLevel: 'read',
       requiresActiveDocument: false,
@@ -743,8 +746,8 @@ export const TOOL_REGISTRY = [
     definition: {
       name: READ_CURRENT_WEBPAGE_TOOL_NAME,
       description:
-        '读取当前内置 WebView 页面的标题、URL、页面位置提示、简化 DOM 结构、open Shadow DOM、当前视口可见元素、顶层浮层/弹窗、用户手动选中元素、可见文本、选中文本、标题结构、链接摘要、滚动状态和可操作元素索引。' +
-        '需要操作网页前必须先调用此工具获取 snapshotId 和元素 index；若存在顶层浮层，应优先使用 viewport.topLayer 内的元素。',
+        '读取当前内置 WebView 页面的 BrowserState。模型应优先阅读 summary：其中包含 Current Page、Page info、简化 DOM 树、[N] 元素句柄和滚动提示。' +
+        '需要操作网页前必须先调用此工具获取 snapshotId，并从 summary/content 中选择 [N] 作为 operate_webpage 的 index；elements、viewport 和 selectedElement 仅作为辅助元数据。',
       source: 'builtin',
       riskLevel: 'read',
       requiresActiveDocument: false,
@@ -759,8 +762,8 @@ export const TOOL_REGISTRY = [
     definition: {
       name: OPERATE_WEBPAGE_TOOL_NAME,
       description:
-        '操作当前激活 WebView 页面。打开或切换网页可直接使用 navigate，无需 snapshotId；wait 以及点击、输入、选择、元素滚动必须先调用 read_current_webpage，元素动作还要使用返回的 index。' +
-        '支持 click、input、select、press、scroll、navigate、wait；搜索框输入后需要回车时使用 press Enter；打开或切换当前网页请使用 navigate；不接受 CSS selector 或任意 JavaScript。',
+        '操作当前激活 WebView 页面。页面内可操作项必须使用 read_current_webpage 返回的 [N]，再执行 click、input、select、press 或 scroll；不要用 navigate 替代页面文字、链接、按钮或卡片。' +
+        'navigate 仅用于用户明确提供 URL、要求地址栏导航或切换到某网址，无需 snapshotId。文本框输入后需要按键时使用 press Enter；不接受 CSS selector 或任意 JavaScript。',
       source: 'builtin',
       riskLevel: 'write',
       requiresActiveDocument: false,
@@ -769,7 +772,7 @@ export const TOOL_REGISTRY = [
       parameters: {
         type: 'object',
         properties: {
-          snapshotId: { type: 'string', description: 'read_current_webpage 返回的 snapshotId；非 navigate 动作必须提供。' },
+          snapshotId: { type: 'string', description: 'read_current_webpage 返回的 snapshotId；非 navigate 动作必须提供。页面内可操作项不得改用 navigate。' },
           action: WEBPAGE_OPERATION_ACTION_SCHEMA
         },
         required: ['action'],

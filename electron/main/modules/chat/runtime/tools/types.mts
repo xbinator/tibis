@@ -76,6 +76,8 @@ export interface RuntimeWebpageSnapshot {
   url: string;
   /** 页面标题。 */
   title: string;
+  /** 给模型优先阅读的 BrowserState 风格摘要。 */
+  summary: string;
   /** 页面视口与滚动位置提示。 */
   header: string;
   /** LLM 可读的简化 DOM 结构。 */

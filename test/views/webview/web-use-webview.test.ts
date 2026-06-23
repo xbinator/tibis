@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import { Script, createContext } from 'node:vm';
-import type { PageFaviconUpdatedEvent, WebviewTag } from 'electron';
+import type { DidNavigateEvent, PageFaviconUpdatedEvent, WebviewTag } from 'electron';
 import { ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElementSelectionScript, normalizeWebviewPageSnapshot, useWebView } from '@/views/webview/web/hooks/useWebView';
@@ -33,8 +33,8 @@ interface TestDevToolsWebview {
 const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
 
 /**
- * 创建可观测 catch 注册的 loadURL 返回值。
- * @returns loadURL 返回值与 catch spy
+ * 创建可观测 catch 绑定的 loadURL 结果。
+ * @returns loadURL 结果与 catch spy
  */
 function createCatchableLoadResult(): { promise: Promise<void>; catchSpy: ReturnType<typeof vi.fn<(_handler: (error: unknown) => void) => Promise<void>>> } {
   const catchSpy = vi.fn<(_handler: (error: unknown) => void) => Promise<void>>(() => Promise.resolve());
@@ -56,7 +56,7 @@ function createDevToolsWebview(isOpened: boolean): WebviewTag & TestDevToolsWebv
 
 /**
  * 创建可执行脚本的 WebView 测试替身。
- * @param results - executeJavaScript 依次返回的结果
+ * @param results - executeJavaScript 依次产出的结果
  * @returns WebView 测试替身
  */
 function createScriptableWebview(results: unknown[]): WebviewTag {
@@ -75,7 +75,7 @@ function createScriptableWebview(results: unknown[]): WebviewTag {
 
 /**
  * 创建第二次调用会执行页面脚本的 WebView 测试替身。
- * @param snapshot - 第一次读取快照返回的数据
+ * @param snapshot - 第一次读取快照的数据
  * @returns WebView 测试替身
  */
 function createPageOperationExecutingWebview(snapshot: unknown): WebviewTag {
@@ -467,12 +467,12 @@ describe('useWebView', () => {
   it('exposes non-semantic clickable webpage elements in snapshots', async (): Promise<void> => {
     document.body.innerHTML = `
       <section>
-        <div id="doctor-card" class="doctor-card" data-testid="doctor-card" style="cursor: pointer;">预约专家</div>
+        <div id="service-card" class="service-card" data-testid="service-card" style="cursor: pointer;">服务卡片</div>
         <span id="plain-text">普通文本</span>
       </section>
     `;
     const section = document.querySelector('section');
-    const card = document.querySelector('#doctor-card');
+    const card = document.querySelector('#service-card');
     const plainText = document.querySelector('#plain-text');
     if (!(section instanceof HTMLElement) || !(card instanceof HTMLElement) || !(plainText instanceof HTMLElement)) {
       throw new Error('non-semantic clickable snapshot elements should exist');
@@ -485,22 +485,144 @@ describe('useWebView', () => {
 
     const snapshot = await controller.readPageSnapshot();
 
-    expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([{ label: '预约专家', actions: ['click'] }]);
+    expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([{ label: '服务卡片', actions: ['click'] }]);
     expect(snapshot.content).toContain('[1]<div');
-    expect(snapshot.content).toContain('class="doctor-card"');
-    expect(snapshot.content).toContain('data-testid="doctor-card"');
-    expect(snapshot.content).toContain('预约专家</div>');
+    expect(snapshot.content).toContain('class="service-card"');
+    expect(snapshot.content).toContain('data-testid="service-card"');
+    expect(snapshot.content).toContain('服务卡片</div>');
+  });
+
+  it('adds clickability metadata for Vue-style delegated cards', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main aria-label="示例首页">
+        <section aria-label="常用区域">
+          <div id="service-entry" class="van-grid-item service-entry" style="cursor: pointer;">
+            <i class="entry-icon"></i>
+            <span>服务入口</span>
+          </div>
+        </section>
+      </main>
+    `;
+    const main = document.querySelector('main');
+    const section = document.querySelector('section');
+    const entry = document.querySelector('#service-entry');
+    const icon = document.querySelector('.entry-icon');
+    const label = document.querySelector('span');
+    if (
+      !(main instanceof HTMLElement) ||
+      !(section instanceof HTMLElement) ||
+      !(entry instanceof HTMLElement) ||
+      !(icon instanceof HTMLElement) ||
+      !(label instanceof HTMLElement)
+    ) {
+      throw new Error('delegated card snapshot elements should exist');
+    }
+
+    installVisibleRect(main);
+    installVisibleRect(section);
+    installVisibleRect(entry);
+    installVisibleRect(icon);
+    installVisibleRect(label);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn(() => [label, entry, section, main, document.body, document.documentElement])
+    });
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.[0]).toMatchObject({
+      label: '服务入口',
+      roleHint: 'service-entry',
+      actions: ['click'],
+      semanticPath: ['示例首页', '常用区域'],
+      reasons: expect.arrayContaining(['pointer-cursor', 'clickable-class', 'hit-test-pass']),
+      clickableScore: expect.any(Number),
+      hitTarget: { tagName: 'SPAN', label: '服务入口', insideTarget: true }
+    });
+    expect(snapshot.viewport?.elements[0]).toMatchObject({
+      index: 1,
+      label: '服务入口',
+      roleHint: 'service-entry',
+      clickableScore: expect.any(Number)
+    });
+  });
+
+  it('treats compact navigation text as a clickable candidate', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <header aria-label="顶部导航">
+        <span id="account-entry">账号入口</span>
+      </header>
+    `;
+    const header = document.querySelector('header');
+    const accountEntry = document.querySelector('#account-entry');
+    if (!(header instanceof HTMLElement) || !(accountEntry instanceof HTMLElement)) {
+      throw new Error('navigation text snapshot elements should exist');
+    }
+
+    installVisibleRect(header);
+    installVisibleRect(accountEntry);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn(() => [accountEntry, header, document.body, document.documentElement])
+    });
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.[0]).toMatchObject({
+      label: '账号入口',
+      roleHint: 'clickable',
+      actions: ['click'],
+      semanticPath: ['顶部导航'],
+      reasons: expect.arrayContaining(['compact-navigation-text', 'hit-test-pass'])
+    });
+  });
+
+  it('treats compact top utility text as a clickable candidate without semantic containers', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <div id="utility-row">
+        <span id="account-entry">账号入口</span>
+        <span id="help-entry">帮助中心</span>
+      </div>
+      <main>
+        <h1>示例页面</h1>
+      </main>
+    `;
+    const utilityRow = document.querySelector('#utility-row');
+    const accountEntry = document.querySelector('#account-entry');
+    const helpEntry = document.querySelector('#help-entry');
+    if (!(utilityRow instanceof HTMLElement) || !(accountEntry instanceof HTMLElement) || !(helpEntry instanceof HTMLElement)) {
+      throw new Error('top utility text snapshot elements should exist');
+    }
+
+    installElementRect(utilityRow, { x: 0, y: 0, width: 1024, height: 40 });
+    installElementRect(accountEntry, { x: 820, y: 8, width: 72, height: 24 });
+    installElementRect(helpEntry, { x: 910, y: 8, width: 72, height: 24 });
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn(() => [accountEntry, utilityRow, document.body, document.documentElement])
+    });
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.find((element) => element.label === '账号入口')).toMatchObject({
+      roleHint: 'clickable',
+      actions: ['click'],
+      reasons: expect.arrayContaining(['compact-topbar-text', 'hit-test-pass'])
+    });
   });
 
   it('returns simplified DOM browser state in webpage snapshots', async (): Promise<void> => {
     document.body.innerHTML = `
-      <main id="register-page">
-        <h1>预约挂号</h1>
-        <form aria-label="搜索表单">
-          <input name="keyword" placeholder="医院名" value="眼科" />
-          <button type="submit" aria-label="搜索">搜索</button>
+      <main id="sample-page">
+        <h1>示例页面</h1>
+        <form aria-label="筛选表单">
+          <input name="keyword" placeholder="关键词" value="示例值" />
+          <button type="submit" aria-label="筛选">筛选</button>
         </form>
-        <div role="menuitem" aria-haspopup="menu">更多医院</div>
+        <div role="menuitem" aria-haspopup="menu">扩展入口</div>
       </main>
     `;
     const visibleElements = Array.from(document.querySelectorAll<HTMLElement>('main,h1,form,input,button,[role="menuitem"]'));
@@ -508,12 +630,18 @@ describe('useWebView', () => {
     const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
 
     const snapshot = await controller.readPageSnapshot();
+    const summary = (snapshot as { summary?: string }).summary ?? '';
 
     expect(snapshot.header).toContain('Page info:');
-    expect(snapshot.content).toContain('<h1>预约挂号</h1>');
-    expect(snapshot.content).toContain('[1]<input name="keyword" value="眼科" placeholder="医院名" />');
-    expect(snapshot.content).toContain('[2]<button type="submit" aria-label="搜索">搜索</button>');
-    expect(snapshot.content).toContain('[3]<div role="menuitem" aria-haspopup="menu">更多医院</div>');
+    expect(summary).toContain('Current Page:');
+    expect(summary).toContain('Interactive elements from top layer of the current page');
+    expect(summary).toContain('Use [N] as the element handle for operate_webpage.');
+    expect(summary).toContain('Do not use navigate for page-visible links or text; use [N] with click.');
+    expect(summary).toContain('[End of page]');
+    expect(snapshot.content).toContain('<h1>示例页面</h1>');
+    expect(snapshot.content).toContain('[1]<input name="keyword" value="示例值" placeholder="关键词" />');
+    expect(snapshot.content).toContain('[2]<button type="submit" aria-label="筛选">筛选</button>');
+    expect(snapshot.content).toContain('[3]<div role="menuitem" aria-haspopup="menu">扩展入口</div>');
     expect(snapshot.footer.length).toBeGreaterThan(0);
     expect(snapshot.truncated.content).toBe(false);
   });
@@ -526,7 +654,7 @@ describe('useWebView', () => {
     }
 
     const shadowRoot = host.attachShadow({ mode: 'open' });
-    shadowRoot.innerHTML = '<section><h2>温馨提示</h2><button>确认</button></section>';
+    shadowRoot.innerHTML = '<section><h2>提示信息</h2><button>主操作</button></section>';
     const confirmButton = shadowRoot.querySelector('button');
     if (!(confirmButton instanceof HTMLElement)) {
       throw new Error('shadow DOM button should exist');
@@ -538,20 +666,20 @@ describe('useWebView', () => {
 
     const snapshot = await controller.readPageSnapshot();
 
-    expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([{ label: '确认', actions: ['click'] }]);
+    expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([{ label: '主操作', actions: ['click'] }]);
     expect(snapshot.content).toContain('<booking-dialog>');
     expect(snapshot.content).toContain('#shadow-root');
-    expect(snapshot.content).toContain('[1]<button>确认</button>');
+    expect(snapshot.content).toContain('[1]<button>主操作</button>');
   });
 
   it('includes the manually selected element in webpage snapshots', async (): Promise<void> => {
     const selectedElement = {
       tagName: 'BUTTON',
-      id: 'confirm-button',
+      id: 'primary-button',
       className: 'primary-action',
-      text: '确认',
-      selector: 'button#confirm-button',
-      attributes: [{ name: 'id', value: 'confirm-button' }],
+      text: '主操作',
+      selector: 'button#primary-button',
+      attributes: [{ name: 'id', value: 'primary-button' }],
       ancestors: [{ tagName: 'SECTION', selector: 'section.dialog' }],
       computedStyles: { display: 'block', position: 'static' },
       rect: { x: 20, y: 30, pageX: 20, pageY: 30, width: 120, height: 40 }
@@ -561,7 +689,7 @@ describe('useWebView', () => {
       {
         url: 'https://example.com',
         title: 'Example',
-        text: '确认',
+        text: '主操作',
         selectedText: '',
         headings: [],
         links: [],
@@ -571,8 +699,8 @@ describe('useWebView', () => {
           {
             index: 1,
             tagName: 'BUTTON',
-            text: '确认',
-            label: '确认',
+            text: '主操作',
+            label: '主操作',
             disabled: false,
             isNew: false,
             actions: ['click'],
@@ -591,10 +719,10 @@ describe('useWebView', () => {
     const snapshot = await controller.readPageSnapshot();
 
     expect(snapshot.selectedElement).toMatchObject({
-      selector: 'button#confirm-button',
-      text: '确认',
+      selector: 'button#primary-button',
+      text: '主操作',
       matchedIndex: 1,
-      matchedLabel: '确认',
+      matchedLabel: '主操作',
       matchedActions: ['click']
     });
   });
@@ -602,21 +730,21 @@ describe('useWebView', () => {
   it('returns viewport top layer context for visible dialogs', async (): Promise<void> => {
     document.body.innerHTML = `
       <main>
-        <button id="register-button">挂号</button>
+        <button id="background-button">背景按钮</button>
       </main>
       <div id="mask" style="position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);"></div>
-      <section id="confirm-dialog" role="dialog" aria-modal="true" style="position: fixed; background: #fff;">
-        <h2>温馨提示</h2>
-        <p>医生在多个院区/科室出诊，请确认预约信息</p>
-        <button>取消</button>
-        <button>确认</button>
+      <section id="info-dialog" role="dialog" aria-modal="true" style="position: fixed; background: #fff;">
+        <h2>提示信息</h2>
+        <p>说明内容位于当前浮层中</p>
+        <button>次要项</button>
+        <button>主操作</button>
       </section>
     `;
-    const registerButton = document.querySelector('#register-button');
+    const registerButton = document.querySelector('#background-button');
     const mask = document.querySelector('#mask');
-    const dialog = document.querySelector('#confirm-dialog');
-    const cancelButton = document.querySelector('#confirm-dialog button:first-of-type');
-    const confirmButton = document.querySelector('#confirm-dialog button:last-of-type');
+    const dialog = document.querySelector('#info-dialog');
+    const cancelButton = document.querySelector('#info-dialog button:first-of-type');
+    const confirmButton = document.querySelector('#info-dialog button:last-of-type');
     if (
       !(registerButton instanceof HTMLElement) ||
       !(mask instanceof HTMLElement) ||
@@ -638,21 +766,49 @@ describe('useWebView', () => {
 
     expect(snapshot.viewport?.topLayer).toMatchObject({
       kind: 'dialog',
-      label: '温馨提示',
+      label: '提示信息',
       elementIndexes: [2, 3],
       primaryActionIndex: 3,
       dimmed: true
     });
     expect(snapshot.viewport?.elements).toEqual([
-      expect.objectContaining({ index: 1, label: '挂号', covered: true, layer: 'background', primary: false }),
-      expect.objectContaining({ index: 2, label: '取消', covered: false, layer: 'top', primary: false }),
-      expect.objectContaining({ index: 3, label: '确认', covered: false, layer: 'top', primary: true })
+      expect.objectContaining({ index: 1, label: '背景按钮', covered: true, layer: 'background', primary: false }),
+      expect.objectContaining({ index: 2, label: '次要项', covered: false, layer: 'top', primary: false }),
+      expect.objectContaining({ index: 3, label: '主操作', covered: false, layer: 'top', primary: true })
     ]);
-    expect(snapshot.elements?.[2]).toMatchObject({ index: 3, label: '确认', primary: true, layer: 'top' });
+    expect(snapshot.elements?.[2]).toMatchObject({ index: 3, label: '主操作', primary: true, layer: 'top' });
+  });
+
+  it('does not treat compact fixed toolbars as top layer dialogs', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <header id="fixed-toolbar" style="position: fixed; top: 0; left: 0; width: 100%; height: 48px; background: #fff;">
+        <button>工具入口</button>
+      </header>
+      <main>
+        <button>内容入口</button>
+      </main>
+    `;
+    const toolbar = document.querySelector('#fixed-toolbar');
+    const toolbarButton = document.querySelector('#fixed-toolbar button');
+    const contentButton = document.querySelector('main button');
+    if (!(toolbar instanceof HTMLElement) || !(toolbarButton instanceof HTMLElement) || !(contentButton instanceof HTMLElement)) {
+      throw new Error('fixed toolbar test elements should exist');
+    }
+
+    installElementRect(toolbar, { x: 0, y: 0, width: 1024, height: 48 });
+    installElementRect(toolbarButton, { x: 24, y: 8, width: 96, height: 32 });
+    installElementRect(contentButton, { x: 32, y: 120, width: 120, height: 36 });
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.viewport?.topLayer).toBeUndefined();
+    expect(snapshot.viewport?.elements.find((element) => element.label === '工具入口')).toMatchObject({ layer: 'page', covered: false, primary: false });
+    expect(snapshot.viewport?.elements.find((element) => element.label === '内容入口')).toMatchObject({ layer: 'page', covered: false, primary: false });
   });
 
   it('clicks non-semantic clickable webpage elements by index', async (): Promise<void> => {
-    document.body.innerHTML = '<div id="submit-card" style="cursor: pointer;">确认预约</div>';
+    document.body.innerHTML = '<div id="submit-card" style="cursor: pointer;">卡片入口</div>';
     const card = document.querySelector('#submit-card');
     if (!(card instanceof HTMLElement)) {
       throw new Error('non-semantic clickable operation element should exist');
@@ -673,7 +829,7 @@ describe('useWebView', () => {
       links: [],
       snapshotId: 'snap-1',
       loading: false,
-      elements: [{ index: 1, tagName: 'DIV', text: '确认预约', label: '确认预约', disabled: false, isNew: false, actions: ['click'] }]
+      elements: [{ index: 1, tagName: 'DIV', text: '卡片入口', label: '卡片入口', disabled: false, isNew: false, actions: ['click'] }]
     });
     const controller = useWebView(ref<WebviewTag | null>(webviewElement));
     const snapshot = await controller.readPageSnapshot();
@@ -681,7 +837,51 @@ describe('useWebView', () => {
     const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
 
     expect(clickCount).toBe(1);
-    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '确认预约', tagName: 'DIV' } });
+    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '卡片入口', tagName: 'DIV' } });
+  });
+
+  it('clicks the deepest hit-tested child inside an indexed card', async (): Promise<void> => {
+    document.body.innerHTML = '<div id="submit-card" style="cursor: pointer;"><span id="submit-label">操作入口</span></div>';
+    const card = document.querySelector('#submit-card');
+    const label = document.querySelector('#submit-label');
+    if (!(card instanceof HTMLElement) || !(label instanceof HTMLElement)) {
+      throw new Error('hit-tested clickable card elements should exist');
+    }
+
+    let cardClickCount = 0;
+    let labelPointerDownCount = 0;
+    card.addEventListener('click', () => {
+      cardClickCount += 1;
+    });
+    label.addEventListener('pointerdown', () => {
+      labelPointerDownCount += 1;
+    });
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn(() => [label, card, document.body, document.documentElement])
+    });
+    installElementRect(card, { x: 40, y: 80, width: 180, height: 44 });
+    installElementRect(label, { x: 60, y: 92, width: 120, height: 20 });
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'DIV', text: '操作入口', label: '操作入口', disabled: false, isNew: false, actions: ['click'] }]
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
+
+    expect(labelPointerDownCount).toBe(1);
+    expect(cardClickCount).toBe(1);
+    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '操作入口', tagName: 'DIV' } });
   });
 
   it('clicks open shadow DOM elements by index', async (): Promise<void> => {
@@ -692,7 +892,7 @@ describe('useWebView', () => {
     }
 
     const shadowRoot = host.attachShadow({ mode: 'open' });
-    shadowRoot.innerHTML = '<button>确认</button>';
+    shadowRoot.innerHTML = '<button>主操作</button>';
     const confirmButton = shadowRoot.querySelector('button');
     if (!(confirmButton instanceof HTMLElement)) {
       throw new Error('shadow DOM operation button should exist');
@@ -714,7 +914,7 @@ describe('useWebView', () => {
       links: [],
       snapshotId: 'snap-1',
       loading: false,
-      elements: [{ index: 1, tagName: 'BUTTON', text: '确认', label: '确认', disabled: false, isNew: false, actions: ['click'] }]
+      elements: [{ index: 1, tagName: 'BUTTON', text: '主操作', label: '主操作', disabled: false, isNew: false, actions: ['click'] }]
     });
     const controller = useWebView(ref<WebviewTag | null>(webviewElement));
     const snapshot = await controller.readPageSnapshot();
@@ -722,7 +922,7 @@ describe('useWebView', () => {
     const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
 
     expect(clickCount).toBe(1);
-    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '确认', tagName: 'BUTTON' } });
+    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '主操作', tagName: 'BUTTON' } });
   });
 
   it('operates the current page using the active snapshot', async (): Promise<void> => {
@@ -765,6 +965,109 @@ describe('useWebView', () => {
 
     expect(result).toMatchObject({ ok: true, action: 'click', shouldReadAgain: true });
     expect(webviewElement.executeJavaScript).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports page loading instead of stale snapshot during transient same-page loading', async (): Promise<void> => {
+    document.body.innerHTML = '<button>临时入口</button>';
+    const button = document.querySelector('button');
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('transient loading button should exist');
+    }
+
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(button);
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'BUTTON', text: '临时入口', label: '临时入口', disabled: false, isNew: false, actions: ['click'] }]
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    controller.handleDidStartLoading();
+
+    await expect(controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } })).rejects.toMatchObject({
+      code: 'PAGE_LOADING'
+    });
+  });
+
+  it('keeps the active snapshot after transient same-page loading stops', async (): Promise<void> => {
+    document.body.innerHTML = '<button>恢复入口</button>';
+    const button = document.querySelector('button');
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('recovered loading button should exist');
+    }
+
+    let clickCount = 0;
+    button.addEventListener('click', () => {
+      clickCount += 1;
+    });
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(button);
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'BUTTON', text: '恢复入口', label: '恢复入口', disabled: false, isNew: false, actions: ['click'] }]
+    });
+    webviewElement.canGoBack = vi.fn(() => false);
+    webviewElement.canGoForward = vi.fn(() => false);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    controller.handleDidStartLoading();
+    controller.handleDidStopLoading();
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
+
+    expect(clickCount).toBe(1);
+    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '恢复入口', tagName: 'BUTTON' } });
+  });
+
+  it('keeps the active snapshot after same-url navigation events', async (): Promise<void> => {
+    document.body.innerHTML = '<button>同页入口</button>';
+    const button = document.querySelector('button');
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('same-url navigation button should exist');
+    }
+
+    let clickCount = 0;
+    button.addEventListener('click', () => {
+      clickCount += 1;
+    });
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() });
+    installVisibleRect(button);
+    const webviewElement = createPageOperationExecutingWebview({
+      url: 'https://example.com',
+      title: 'Example',
+      text: 'Hello',
+      selectedText: '',
+      headings: [],
+      links: [],
+      snapshotId: 'snap-1',
+      loading: false,
+      elements: [{ index: 1, tagName: 'BUTTON', text: '同页入口', label: '同页入口', disabled: false, isNew: false, actions: ['click'] }]
+    });
+    webviewElement.canGoBack = vi.fn(() => false);
+    webviewElement.canGoForward = vi.fn(() => false);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    controller.handleDidNavigate({ url: 'https://example.com' } as DidNavigateEvent);
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
+
+    expect(clickCount).toBe(1);
+    expect(result).toMatchObject({ ok: true, action: 'click', target: { index: 1, label: '同页入口', tagName: 'BUTTON' } });
   });
 
   it('handles aborted loadURL promises when navigating from the address bar', (): void => {
@@ -811,10 +1114,12 @@ describe('useWebView', () => {
         elements: []
       }
     ]);
+    webviewElement.canGoBack = vi.fn(() => false);
+    webviewElement.canGoForward = vi.fn(() => false);
     const controller = useWebView(ref<WebviewTag | null>(webviewElement));
     const snapshot = await controller.readPageSnapshot();
 
-    controller.handleDidStartLoading();
+    controller.handleDidNavigate({ url: 'https://example.org' } as DidNavigateEvent);
     await expect(controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } })).rejects.toMatchObject({
       code: 'STALE_SNAPSHOT'
     });
@@ -912,8 +1217,8 @@ describe('useWebView', () => {
 
   it('presses Enter on an indexed input and submits the owning form', async (): Promise<void> => {
     document.body.innerHTML = `
-      <form id="search-form">
-        <input name="keyword" placeholder="搜索医院" />
+      <form id="entry-form">
+        <input name="keyword" placeholder="输入内容" />
       </form>
     `;
     const input = document.querySelector('input');
@@ -943,7 +1248,7 @@ describe('useWebView', () => {
       links: [],
       snapshotId: 'snap-1',
       loading: false,
-      elements: [{ index: 1, tagName: 'INPUT', text: '', label: '搜索医院', disabled: false, isNew: false, actions: ['input'] }]
+      elements: [{ index: 1, tagName: 'INPUT', text: '', label: '输入内容', disabled: false, isNew: false, actions: ['input'] }]
     });
     const controller = useWebView(ref<WebviewTag | null>(webviewElement));
     const snapshot = await controller.readPageSnapshot();
