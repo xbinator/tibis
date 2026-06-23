@@ -319,7 +319,9 @@ export type ChatRuntimeCompactResult =
       /** Compaction was skipped before creating a pending message. */
       status: 'skipped';
       /** Stable skip reason. */
-      reason: 'no_messages' | 'already_compact';
+      reason: 'no_messages' | 'already_compact' | 'not_enough_content' | 'no_compressible_messages';
+      /** Compression status message id, when a user-facing notice was created. */
+      messageId?: string;
     }
   | {
       /** Compaction failed and the boundary message was marked failed. */

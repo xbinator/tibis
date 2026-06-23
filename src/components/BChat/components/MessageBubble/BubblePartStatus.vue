@@ -53,6 +53,10 @@ const statusLabel = computed<string>(() => {
     return '压缩失败';
   }
 
+  if (props.message.compression?.status === 'skipped') {
+    return '无需压缩';
+  }
+
   return '上下文已压缩';
 });
 
@@ -124,6 +128,14 @@ const errorText = computed<string | undefined>(() => {
 }
 
 .status-node--cancelled {
+  .status-node__pill {
+    color: var(--text-tertiary);
+    background: var(--bg-hover);
+    border-color: var(--border-primary);
+  }
+}
+
+.status-node--skipped {
   .status-node__pill {
     color: var(--text-tertiary);
     background: var(--bg-hover);

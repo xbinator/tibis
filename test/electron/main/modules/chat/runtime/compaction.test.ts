@@ -160,6 +160,88 @@ describe('runtime compaction service', (): void => {
     }
   });
 
+  it('compresses a single user turn when tail preservation would otherwise consume all model messages', async (): Promise<void> => {
+    const messages = [createMessage('u1', 'user', '请完成一个较长任务'), createMessage('a1', 'assistant', '任务执行记录'.repeat(400))];
+    const updatedMessages: ChatMessageRecord[] = [];
+    const collector = createEventCollector();
+    const compressSessionManually = vi.fn(async (input: { messages: ChatMessageRecord[] }) => (input.messages.length ? createRecord() : undefined));
+    const service = createRuntimeCompactionService({
+      emit: collector.emit,
+      createMessageId: () => 'compression-message-single-turn',
+      now: () => '2026-06-18T00:00:00.000Z',
+      persistMessage: vi.fn(),
+      updateMessage: (message) => {
+        updatedMessages.push(message);
+      },
+      compressor: { compressSessionManually },
+      renderBoundary: () => 'COMPRESSED_CONTEXT\n## Raw User Requirements\n- 请完成一个较长任务'
+    });
+
+    const result = await service.compact({
+      runtimeId: 'runtime-single-turn',
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      reason: 'manual',
+      contextWindow: 128_000,
+      messages
+    });
+
+    expect(result).toEqual({ status: 'success', messageId: 'compression-message-single-turn', recordId: 'record-1' });
+    expect(compressSessionManually.mock.calls[0][0].messages.map((message: ChatMessageRecord) => message.id)).toEqual(['u1', 'a1']);
+    expect(updatedMessages.at(-1)).toMatchObject({
+      id: 'compression-message-single-turn',
+      role: 'compression',
+      loading: false,
+      finished: true,
+      compression: {
+        status: 'success',
+        sourceMessageIds: ['u1', 'a1']
+      }
+    });
+  });
+
+  it('marks a short single user turn as skipped instead of failed when there is not enough content to compress', async (): Promise<void> => {
+    const messages = [createMessage('u1', 'user', '你好'), createMessage('a1', 'assistant', '你好，有什么可以帮你？')];
+    const updatedMessages: ChatMessageRecord[] = [];
+    const collector = createEventCollector();
+    const compressSessionManually = vi.fn();
+    const service = createRuntimeCompactionService({
+      emit: collector.emit,
+      createMessageId: () => 'compression-message-short-turn',
+      now: () => '2026-06-18T00:00:00.000Z',
+      persistMessage: vi.fn(),
+      updateMessage: (message) => {
+        updatedMessages.push(message);
+      },
+      compressor: { compressSessionManually }
+    });
+
+    const result = await service.compact({
+      runtimeId: 'runtime-short-turn',
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      reason: 'manual',
+      contextWindow: 128_000,
+      messages
+    });
+
+    expect(result).toEqual({ status: 'skipped', reason: 'not_enough_content', messageId: 'compression-message-short-turn' });
+    expect(compressSessionManually).not.toHaveBeenCalled();
+    expect(updatedMessages.at(-1)).toMatchObject({
+      id: 'compression-message-short-turn',
+      role: 'compression',
+      content: '内容较少，无需压缩',
+      loading: false,
+      finished: true,
+      compression: {
+        status: 'skipped',
+        recordText: '内容较少，无需压缩'
+      }
+    });
+  });
+
   it('skips compression when no new model messages exist after the latest boundary', async (): Promise<void> => {
     const boundary = createMessage('c1', 'compression', 'COMPRESSED_CONTEXT');
     boundary.compression = {
@@ -191,7 +273,7 @@ describe('runtime compaction service', (): void => {
   });
 
   it('updates the pending compression message to cancelled when the signal is aborted', async (): Promise<void> => {
-    const messages = [createMessage('u1', 'user', '需要压缩'), createMessage('a1', 'assistant', '压缩内容')];
+    const messages = [createMessage('u1', 'user', '需要压缩'), createMessage('a1', 'assistant', '压缩内容'.repeat(500))];
     const updatedMessages: ChatMessageRecord[] = [];
     const collector = createEventCollector();
     const abortController = new AbortController();

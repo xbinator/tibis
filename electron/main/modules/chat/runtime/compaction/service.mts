@@ -20,11 +20,17 @@ const MAX_TAIL_BUDGET_TOKENS = 8_000;
 /** 至少保留最近用户轮数。 */
 const MIN_RECENT_USER_TURNS = 2;
 
+/** tail 吃空时，单轮消息达到该估算 token 数才回退压缩完整模型快照。 */
+const MIN_FALLBACK_COMPRESSION_TOKENS = 800;
+
 /** 压缩上下文内保留的关键工具结果最大数量。 */
 const MAX_KEY_TOOL_RESULT_CONTEXT_COUNT = 5;
 
 /** 对继续任务有高价值的工具结果名称片段。 */
 const KEY_TOOL_RESULT_NAME_PATTERNS = ['read', 'write', 'edit', 'file', 'reference', 'ask_user', 'choice', 'settings'];
+
+/** 短内容无需压缩时的用户可见提示。 */
+const SKIPPED_COMPRESSION_CONTENT = '内容较少，无需压缩';
 
 /** Runtime 压缩执行器。 */
 export interface RuntimeCompressionExecutor {
@@ -69,6 +75,24 @@ export interface RuntimeCompactionService {
    */
   compact(input: RuntimeCompactRequest): Promise<ChatRuntimeCompactResult>;
 }
+
+/** Runtime 模型消息。 */
+type RuntimeModelMessageRecord = ChatMessageRecord & { role: 'user' | 'assistant' };
+
+/** 压缩源消息选择结果。 */
+type CompressionSourceSelection =
+  | {
+      /** 应继续执行压缩。 */
+      status: 'compress';
+      /** 本次实际进入压缩执行器的消息列表。 */
+      messages: ChatMessageRecord[];
+    }
+  | {
+      /** 应跳过压缩并展示友好提示。 */
+      status: 'skipped';
+      /** 跳过原因。 */
+      reason: 'not_enough_content';
+    };
 
 /**
  * 渲染 Markdown bullet 列表。
@@ -299,6 +323,50 @@ function estimateMessageTokens(message: ChatMessageRecord): number {
 }
 
 /**
+ * 估算消息片段对压缩价值的贡献。
+ * @param message - 聊天消息
+ * @returns 估算 token 数
+ */
+function estimateMessagePartsCompressionTokens(message: ChatMessageRecord): number {
+  const partTextLength = message.parts.reduce((total, part) => {
+    if (part.type === 'text') {
+      return total + part.text.length;
+    }
+
+    if (part.type === 'thinking') {
+      return total + part.thinking.length;
+    }
+
+    if (part.type === 'tool') {
+      const resultText = part.result ? summarizeToolResultData(part.result.data) : '';
+      return total + `${part.toolName} ${part.status} ${resultText}`.length;
+    }
+
+    return total + part.type.length;
+  }, 0);
+
+  return Math.ceil(partTextLength / 2);
+}
+
+/**
+ * 估算 tail 吃空时是否值得回退压缩完整模型快照。
+ * @param messages - 模型消息列表
+ * @returns 估算 token 数
+ */
+function estimateFallbackCompressionTokens(messages: ChatMessageRecord[]): number {
+  return messages.reduce((total, message) => total + Math.max(estimateMessageTokens(message), estimateMessagePartsCompressionTokens(message)), 0);
+}
+
+/**
+ * 获取可进入模型上下文的 user/assistant 消息。
+ * @param messages - 当前完整消息列表
+ * @returns 模型消息列表
+ */
+function getRuntimeModelMessages(messages: ChatMessageRecord[]): RuntimeModelMessageRecord[] {
+  return messages.filter((item): item is RuntimeModelMessageRecord => item.role === 'user' || item.role === 'assistant');
+}
+
+/**
  * 找到 mandatory tail 起点。
  * @param modelMessages - user/assistant 消息列表
  * @param minRecentUserTurns - 至少保留最近用户轮数
@@ -347,7 +415,7 @@ function estimateMessagesTokens(messages: ChatMessageRecord[]): number {
  * @returns tail 消息 ID 集合
  */
 export function selectRuntimeTailPreservedMessageIds(messages: ChatMessageRecord[], contextWindow?: number): Set<string> {
-  const modelMessages = messages.filter((item) => item.role === 'user' || item.role === 'assistant');
+  const modelMessages = getRuntimeModelMessages(messages);
   if (!modelMessages.length) return new Set<string>();
 
   const budget = computeTailTokenBudget(contextWindow);
@@ -385,13 +453,29 @@ export function selectRuntimeTailPreservedMessageIds(messages: ChatMessageRecord
  * 创建手动压缩使用的消息快照。
  * @param messages - 当前完整消息列表
  * @param contextWindow - 当前模型上下文窗口
- * @returns 本次实际进入压缩执行器的消息列表
+ * @returns 压缩源消息选择结果
  */
-function createCompressionSourceMessages(messages: ChatMessageRecord[], contextWindow?: number): ChatMessageRecord[] {
+function createCompressionSourceSelection(messages: ChatMessageRecord[], contextWindow?: number): CompressionSourceSelection {
   const preservedIds = selectRuntimeTailPreservedMessageIds(messages, contextWindow);
-  if (!preservedIds.size) return [...messages];
+  if (!preservedIds.size) return { status: 'compress', messages: [...messages] };
 
-  return messages.filter((item) => !preservedIds.has(item.id));
+  const sourceMessages = messages.filter((item) => !preservedIds.has(item.id));
+  const hasSourceModelMessages = sourceMessages.some((item) => item.role === 'user' || item.role === 'assistant');
+  if (hasSourceModelMessages) {
+    return { status: 'compress', messages: sourceMessages };
+  }
+
+  const modelMessages = getRuntimeModelMessages(messages);
+  if (!modelMessages.length) {
+    return { status: 'compress', messages: sourceMessages };
+  }
+
+  if (estimateFallbackCompressionTokens(modelMessages) < MIN_FALLBACK_COMPRESSION_TOKENS) {
+    return { status: 'skipped', reason: 'not_enough_content' };
+  }
+
+  // 单轮长任务也需要可被压缩；当 tail 策略吃空模型消息时，回退压缩完整模型快照。
+  return { status: 'compress', messages: modelMessages };
 }
 
 /**
@@ -433,7 +517,7 @@ function createCompressionMessage(input: {
   runtimeId: string;
   agentId: string;
   content: string;
-  status: 'pending' | 'success' | 'failed' | 'cancelled';
+  status: 'pending' | 'success' | 'failed' | 'cancelled' | 'skipped';
   createdAt: string;
   record?: CompressionRecord;
   sourceMessageIds?: string[];
@@ -539,7 +623,23 @@ export function createRuntimeCompactionService(dependencies: RuntimeCompactionSe
       await dependencies.persistMessage(pendingMessage);
       emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-created', pendingMessage);
 
-      const sourceMessages = createCompressionSourceMessages(messages, input.contextWindow);
+      const sourceSelection = createCompressionSourceSelection(messages, input.contextWindow);
+      if (sourceSelection.status === 'skipped') {
+        const skippedMessage = createCompressionMessage({
+          id: messageId,
+          sessionId: input.sessionId,
+          runtimeId: input.runtimeId,
+          agentId: input.agentId,
+          content: SKIPPED_COMPRESSION_CONTENT,
+          status: 'skipped',
+          createdAt: pendingMessage.createdAt
+        });
+        await dependencies.updateMessage(skippedMessage);
+        emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', skippedMessage);
+        return { status: 'skipped', reason: sourceSelection.reason, messageId };
+      }
+
+      const sourceMessages = sourceSelection.messages;
 
       try {
         const record = await dependencies.compressor.compressSessionManually({ sessionId: input.sessionId, messages: sourceMessages, signal: input.signal });
@@ -558,19 +658,18 @@ export function createRuntimeCompactionService(dependencies: RuntimeCompactionSe
           return { status: 'cancelled', messageId };
         }
         if (!record) {
-          const failedMessage = createCompressionMessage({
+          const skippedMessage = createCompressionMessage({
             id: messageId,
             sessionId: input.sessionId,
             runtimeId: input.runtimeId,
             agentId: input.agentId,
-            content: '上下文压缩失败',
-            status: 'failed',
-            createdAt: pendingMessage.createdAt,
-            errorMessage: '没有可压缩的消息'
+            content: SKIPPED_COMPRESSION_CONTENT,
+            status: 'skipped',
+            createdAt: pendingMessage.createdAt
           });
-          await dependencies.updateMessage(failedMessage);
-          emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', failedMessage);
-          return { status: 'failed', messageId, errorMessage: '没有可压缩的消息' };
+          await dependencies.updateMessage(skippedMessage);
+          emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', skippedMessage);
+          return { status: 'skipped', reason: 'no_compressible_messages', messageId };
         }
 
         const boundaryText = renderBoundary(record, sourceMessages);

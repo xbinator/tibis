@@ -127,4 +127,25 @@ describe('MessageBubble', (): void => {
       content: '模型调用失败'
     });
   });
+
+  it('shows skipped compression messages as a friendly neutral notice', (): void => {
+    const wrapper = mountMessageBubble({
+      id: 'compression-skipped-1',
+      role: 'compression',
+      content: '内容较少，无需压缩',
+      parts: [{ type: 'text', text: '内容较少，无需压缩' }],
+      createdAt: '2026-06-23T00:00:00.000Z',
+      loading: false,
+      finished: true,
+      compression: {
+        status: 'skipped',
+        recordText: '内容较少，无需压缩'
+      }
+    });
+
+    expect(wrapper.text()).toContain('无需压缩');
+    expect(wrapper.text()).not.toContain('上下文已压缩');
+    expect(wrapper.text()).not.toContain('压缩失败');
+    expect(wrapper.find('.status-node__error').exists()).toBe(false);
+  });
 });
