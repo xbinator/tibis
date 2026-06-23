@@ -12,6 +12,7 @@ import type { WebviewPageState } from '@/views/webview/shared/types';
 const DEFAULT_STATE: WebviewPageState = {
   url: '',
   title: '',
+  favicon: '',
   isLoading: false,
   isElementSelecting: false,
   isTouchSimulationEnabled: false,

@@ -15,11 +15,11 @@ describe('Default layout chat sidebar loading', (): void => {
   });
 
   it('loads optional dialogs lazily only after they become visible', (): void => {
-    expect(defaultLayoutSource).toContain("defineAsyncComponent(() => import('@/components/BSearchRecent/index.vue'))");
+    expect(defaultLayoutSource).toContain("defineAsyncComponent(() => import('@/components/BRecent/index.vue'))");
     expect(defaultLayoutSource).toContain("defineAsyncComponent(() => import('./components/ShortcutsHelp.vue'))");
-    expect(defaultLayoutSource).toContain('<BSearchRecent v-if="visible.searchRecent" v-model:visible="visible.searchRecent" />');
+    expect(defaultLayoutSource).toContain('<BRecent v-if="visible.searchRecent" v-model:visible="visible.searchRecent" />');
     expect(defaultLayoutSource).toContain('<ShortcutsHelp v-if="visible.shortcutsHelp" v-model:visible="visible.shortcutsHelp" />');
-    expect(defaultLayoutSource).not.toContain("import BSearchRecent from '@/components/BSearchRecent/index.vue'");
+    expect(defaultLayoutSource).not.toContain("import BRecent from '@/components/BRecent/index.vue'");
     expect(defaultLayoutSource).not.toContain("import ShortcutsHelp from './components/ShortcutsHelp.vue'");
   });
 });

@@ -30,7 +30,9 @@ interface TestWebviewElement extends HTMLElement {
   setUserAgent: (userAgent: string) => void;
 }
 
-const addWebviewRecordMock = vi.hoisted(() => vi.fn<(_url: string, _title: string) => Promise<void>>().mockResolvedValue(undefined));
+const addWebviewRecordMock = vi.hoisted(() =>
+  vi.fn<(_url: string, _title: string, _options?: { favicon?: string }) => Promise<void>>().mockResolvedValue(undefined)
+);
 const registerToolContextMock = vi.hoisted(() => vi.fn());
 const unregisterToolContextMock = vi.hoisted(() => vi.fn());
 const setCurrentToolContextMock = vi.hoisted(() => vi.fn());
@@ -143,6 +145,28 @@ function createNavigateEvent(url: string): Event {
   return event;
 }
 
+/**
+ * 创建带 title 字段的页面标题事件。
+ * @param title - 页面标题
+ * @returns WebView 标题事件
+ */
+function createTitleEvent(title: string): Event {
+  const event = new Event('page-title-updated');
+  Object.defineProperty(event, 'title', { value: title });
+  return event;
+}
+
+/**
+ * 创建带 favicons 字段的页面 favicon 事件。
+ * @param favicons - 页面 favicon URL 列表
+ * @returns WebView favicon 事件
+ */
+function createFaviconEvent(favicons: string[]): Event {
+  const event = new Event('page-favicon-updated');
+  Object.defineProperty(event, 'favicons', { value: favicons });
+  return event;
+}
+
 describe('webview recent record', () => {
   beforeEach((): void => {
     vi.useFakeTimers();
@@ -171,7 +195,24 @@ describe('webview recent record', () => {
     await vi.advanceTimersByTimeAsync(350);
 
     expect(addWebviewRecordMock).toHaveBeenCalledTimes(1);
-    expect(addWebviewRecordMock).toHaveBeenCalledWith('https://example.com', 'https://example.com');
+    expect(addWebviewRecordMock).toHaveBeenCalledWith('https://example.com', 'https://example.com', undefined);
+
+    wrapper.unmount();
+  });
+
+  it('writes the page favicon together with the latest title', async (): Promise<void> => {
+    const wrapper = mountWebviewPage();
+    const element = webviewElementHolder.value;
+
+    expect(element).not.toBeNull();
+
+    element?.dispatchEvent(createNavigateEvent('https://example.com'));
+    element?.dispatchEvent(createTitleEvent('Example Domain'));
+    element?.dispatchEvent(createFaviconEvent(['https://example.com/favicon.ico']));
+    await vi.advanceTimersByTimeAsync(350);
+
+    expect(addWebviewRecordMock).toHaveBeenCalledTimes(1);
+    expect(addWebviewRecordMock).toHaveBeenCalledWith('https://example.com', 'Example Domain', { favicon: 'https://example.com/favicon.ico' });
 
     wrapper.unmount();
   });

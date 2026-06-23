@@ -12,6 +12,8 @@ export interface WebviewPageState {
   url: string;
   /** 页面标题 */
   title: string;
+  /** 页面 favicon URL */
+  favicon: string;
   /** 是否正在加载 */
   isLoading: boolean;
   /** 是否正在选择页面 DOM 元素 */

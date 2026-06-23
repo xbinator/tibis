@@ -3,12 +3,12 @@
  * @description 定义最近记录搜索弹窗的属性、候选项和归一化展示项类型。
  */
 
-import type { StoredFile } from '@/shared/storage';
+import type { StoredFile, RecentRecord } from '@/shared/storage';
 
 /**
  * 最近记录搜索弹窗属性。
  */
-export interface BSearchRecentProps {
+export interface BRecentProps {
   /** 搜索结果列表最大高度。 */
   maxHeight?: number;
 }
@@ -45,8 +45,12 @@ export interface NormalizedItem {
   key: string;
   /** 主标题。 */
   title: string;
-  /** 左侧类型图标。 */
-  icon: string;
+  /** 最近记录；传入图标组件后自动解析文件图标或 WebView favicon。 */
+  record?: RecentRecord;
+  /** 左侧显式类型图标。 */
+  icon?: string;
+  /** 用于路径候选项解析图标的文件名。 */
+  fileName?: string;
   /** 路径或 URL 展示文案。 */
   pathLabel: string;
   /** 路径展示状态类。 */
@@ -66,7 +70,7 @@ export interface NormalizedItem {
 /**
  * 最近记录搜索弹窗事件。
  */
-export interface BSearchRecentEmits {
+export interface BRecentEmits {
   (e: 'select', file: StoredFile): void;
   (e: 'remove', id: string): void;
 }

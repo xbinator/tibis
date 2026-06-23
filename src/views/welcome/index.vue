@@ -34,7 +34,7 @@
             @click="record.type === 'file' ? handleOpenRecentFile(record.id) : handleOpenWebview(record.url)"
           >
             <div class="recent-file-icon">
-              <Icon :icon="getRecentRecordIcon(record)" width="14" height="14" />
+              <BRecentIcon :record="record" :size="14" />
             </div>
             <div class="recent-file-info">
               <div class="recent-file-name">{{ record.type === 'file' ? resolveFileTitle(record) : record.title }}</div>
@@ -47,7 +47,7 @@
         </div>
       </div>
 
-      <BSearchRecent v-if="visibleSearchRecent" v-model:visible="visibleSearchRecent" />
+      <BRecent v-if="visibleSearchRecent" v-model:visible="visibleSearchRecent" />
     </div>
   </DropZone>
 </template>
@@ -62,9 +62,7 @@ import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
-import type { RecentRecord } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
-import { getFileIconByName } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 import DropZone from './components/DropZone.vue';
 
@@ -74,7 +72,7 @@ const { createNewFile, createNewDrawingFile, openFileById, openNativeFile } = us
 const visibleSearchRecent = ref(false);
 
 /** 最近记录搜索弹窗仅在用户点击“更多”后加载，降低欢迎页首屏成本。 */
-const BSearchRecent = defineAsyncComponent(() => import('@/components/BSearchRecent/index.vue'));
+const BRecent = defineAsyncComponent(() => import('@/components/BRecent/index.vue'));
 
 const topRecentRecords = computed(() => recentStore.topRecentRecords);
 
@@ -122,19 +120,6 @@ function handleOpenWebview(url: string): void {
  */
 function handleShowShortcuts(): void {
   visibleSearchRecent.value = true;
-}
-
-/**
- * 读取最近记录图标。
- * @param record - 最近记录
- * @returns 图标名称
- */
-function getRecentRecordIcon(record: RecentRecord): string {
-  if (record.type === 'webview') {
-    return 'vscode-icons:file-type-geojson';
-  }
-
-  return getFileIconByName(resolveFileTitle(record));
 }
 </script>
 

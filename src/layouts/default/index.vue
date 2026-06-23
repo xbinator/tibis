@@ -70,7 +70,7 @@
       <ChatSider v-show="settingStore.sidebarVisible" />
     </div>
 
-    <BSearchRecent v-if="visible.searchRecent" v-model:visible="visible.searchRecent" />
+    <BRecent v-if="visible.searchRecent" v-model:visible="visible.searchRecent" />
 
     <ShortcutsHelp v-if="visible.shortcutsHelp" v-model:visible="visible.shortcutsHelp" />
   </div>
@@ -105,7 +105,7 @@ const tabsStore = useTabsStore();
 const { getRouteCacheKey, getRouteCacheComponent } = useKeepAlive();
 
 /** 最近记录搜索弹窗仅在打开时加载，避免首屏提前解析搜索组件依赖。 */
-const BSearchRecent = defineAsyncComponent(() => import('@/components/BSearchRecent/index.vue'));
+const BRecent = defineAsyncComponent(() => import('@/components/BRecent/index.vue'));
 /** 快捷键帮助抽屉仅在打开时加载，减少默认布局首屏组件体积。 */
 const ShortcutsHelp = defineAsyncComponent(() => import('./components/ShortcutsHelp.vue'));
 

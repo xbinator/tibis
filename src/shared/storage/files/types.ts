@@ -51,7 +51,15 @@ export interface WebviewRecord {
   createdAt: number;
   /** 最近一次打开/跳转到该 URL 的时间戳 */
   openedAt: number;
-  /** 网站 favicon URL，预留字段，当前版本不写入 */
+  /** 网站 favicon URL */
+  favicon?: string;
+}
+
+/**
+ * 添加或更新 WebView 最近记录的可选参数。
+ */
+export interface WebviewRecordOptions {
+  /** 网站 favicon URL */
   favicon?: string;
 }
 

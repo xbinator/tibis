@@ -9,7 +9,7 @@
         <template v-if="searchResultItems.length">
           <div :class="bem('list')">
             <button v-for="item in searchResultItems" :key="item.key" :class="bem('item', { active: item.isActive })" @click="item.onSelect">
-              <BIcon :icon="item.icon" :class="bem('item-icon')" />
+              <BRecentIcon :record="item.record" :file-name="item.fileName" :icon="item.icon" :class="bem('item-icon')" :size="14" />
 
               <div :class="bem('item-main')">
                 <span :class="bem('item-title')">{{ item.title }}</span>
@@ -35,7 +35,7 @@
  * @description 渲染最近文件搜索弹窗，并支持按路径直接打开文件。
  */
 
-import type { BSearchRecentProps, AbsolutePathSearchResult, NormalizedItem, UrlSearchResult } from './types';
+import type { BRecentProps, AbsolutePathSearchResult, NormalizedItem, UrlSearchResult } from './types';
 import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import BModal from '@/components/BModal/index.vue';
@@ -46,16 +46,15 @@ import { native } from '@/shared/platform';
 import type { StoredFile, RecentRecord } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import { getFileIconByName } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 import { createNamespace } from '@/utils/namespace';
 
-const [, bem] = createNamespace('search-recent');
+const [, bem] = createNamespace('recent');
 const WEB_RECORD_ICON = 'vscode-icons:file-type-geojson';
 
 // ---------- props / emits ----------
 
-withDefaults(defineProps<BSearchRecentProps>(), {
+withDefaults(defineProps<BRecentProps>(), {
   maxHeight: 420
 });
 
@@ -212,7 +211,7 @@ const searchResultItems = computed(() => {
     items.push({
       key: candidate.path,
       title: candidate.fileName,
-      icon: getFileIconByName(candidate.fileName),
+      fileName: candidate.fileName,
       pathLabel: candidate.path,
       pathClass: '',
       meta: '按路径打开',
@@ -231,7 +230,7 @@ const searchResultItems = computed(() => {
       items.push({
         key: record.id,
         title: record.title,
-        icon: WEB_RECORD_ICON,
+        record,
         pathLabel: record.url,
         pathClass: '',
         meta: '',
@@ -246,7 +245,7 @@ const searchResultItems = computed(() => {
       items.push({
         key: record.id,
         title,
-        icon: getFileIconByName(title),
+        record,
         pathLabel: isUnsaved ? '未保存文件' : record.path!,
         pathClass: isUnsaved ? 'is-unsaved' : '',
         meta: '',
@@ -347,24 +346,24 @@ watch(
 </script>
 
 <style scoped>
-.b-search-recent {
+.b-recent {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.b-search-recent__toolbar {
+.b-recent__toolbar {
   display: flex;
   align-items: center;
 }
 
-.b-search-recent__list {
+.b-recent__list {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.b-search-recent__item {
+.b-recent__item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -379,22 +378,22 @@ watch(
   transition: background-color 0.2s;
 }
 
-.b-search-recent__item:hover {
+.b-recent__item:hover {
   background: var(--bg-secondary);
 }
 
-.b-search-recent__item--active {
+.b-recent__item--active {
   background: var(--bg-secondary);
 }
 
-.b-search-recent__item-icon {
+.b-recent__item-icon {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
   margin-right: 8px;
 }
 
-.b-search-recent__item-main {
+.b-recent__item-main {
   display: flex;
   flex: 1;
   flex-direction: row;
@@ -402,7 +401,7 @@ watch(
   min-width: 0;
 }
 
-.b-search-recent__item-title {
+.b-recent__item-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -413,7 +412,7 @@ watch(
   white-space: nowrap;
 }
 
-.b-search-recent__item-path {
+.b-recent__item-path {
   flex: 1;
   min-width: 0;
   margin-left: 6px;
@@ -425,16 +424,16 @@ watch(
   white-space: nowrap;
 }
 
-.b-search-recent__item-path--unsaved {
+.b-recent__item-path--unsaved {
   color: var(--color-orange);
 }
 
-.b-search-recent__item-meta {
+.b-recent__item-meta {
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.b-search-recent__item-delete {
+.b-recent__item-delete {
   display: none;
   align-items: center;
   justify-content: center;
@@ -449,16 +448,16 @@ watch(
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.b-search-recent__item-delete:hover {
+.b-recent__item-delete:hover {
   color: var(--text-primary);
   background: var(--bg-active);
 }
 
-.b-search-recent__item:hover .b-search-recent__item-delete {
+.b-recent__item:hover .b-recent__item-delete {
   display: flex;
 }
 
-.b-search-recent__empty {
+.b-recent__empty {
   padding: 36px 0;
   font-size: 13px;
   color: var(--text-tertiary);

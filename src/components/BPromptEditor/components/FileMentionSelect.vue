@@ -9,7 +9,7 @@
     @update:active-index="handleMouseEnter"
   >
     <template #item="{ item }">
-      <BIcon :icon="getFileIcon(item.ext)" class="file-mention-item__icon" />
+      <BRecentIcon :file-name="item.name" class="file-mention-item__icon" :size="18" />
       <span class="file-mention-item__name">{{ item.name }}</span>
       <span class="file-mention-item__path">{{ item.path }}</span>
     </template>
@@ -18,7 +18,6 @@
 
 <script setup lang="ts">
 import type { FileMentionOption } from '../types';
-import { getFileIcon } from '@/utils/file/icons';
 import SelectDropdown from './_SelectDropdown.vue';
 
 /**

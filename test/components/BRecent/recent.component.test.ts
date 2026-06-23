@@ -1,5 +1,5 @@
 /**
- * @file search-recent.component.test.ts
+ * @file recent.component.test.ts
  * @description 验证最近记录搜索弹窗的紧凑结果项图标展示。
  * @vitest-environment jsdom
  */
@@ -8,7 +8,8 @@ import { readFileSync } from 'node:fs';
 import { defineComponent, nextTick } from 'vue';
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import BSearchRecent from '@/components/BSearchRecent/index.vue';
+import BRecentIcon from '@/components/BRecent/Icon.vue';
+import BRecent from '@/components/BRecent/index.vue';
 import type { RecentRecord } from '@/shared/storage';
 
 /**
@@ -153,16 +154,18 @@ function createFileRecord(overrides: Partial<Extract<RecentRecord, { type: 'file
 
 /**
  * 创建 WebView 最近记录。
+ * @param overrides - 需要覆盖的字段
  * @returns WebView 最近记录
  */
-function createWebviewRecord(): Extract<RecentRecord, { type: 'webview' }> {
+function createWebviewRecord(overrides: Partial<Extract<RecentRecord, { type: 'webview' }>> = {}): Extract<RecentRecord, { type: 'webview' }> {
   return {
     type: 'webview',
     id: 'web-1',
     url: 'https://example.com/docs',
     title: 'Example Docs',
     createdAt: 1,
-    openedAt: 2
+    openedAt: 2,
+    ...overrides
   };
 }
 
@@ -171,11 +174,14 @@ function createWebviewRecord(): Extract<RecentRecord, { type: 'webview' }> {
  * @returns 组件包装器
  */
 function mountSearchRecent(): VueWrapper {
-  return mount(BSearchRecent, {
+  return mount(BRecent, {
     props: {
       visible: true
     },
     global: {
+      components: {
+        BRecentIcon
+      },
       stubs: {
         AInput: AInputStub,
         BIcon: BIconStub,
@@ -191,7 +197,7 @@ function mountSearchRecent(): VueWrapper {
  * @returns Vue 单文件组件源码
  */
 function readSearchRecentSource(): string {
-  return readFileSync('src/components/BSearchRecent/index.vue', 'utf8');
+  return readFileSync('src/components/BRecent/index.vue', 'utf8');
 }
 
 /**
@@ -207,7 +213,7 @@ function extractRuleBlock(source: string, selector: string): string {
   return match?.[1] ?? '';
 }
 
-describe('BSearchRecent result icons', (): void => {
+describe('BRecent result icons', (): void => {
   beforeEach((): void => {
     routeMock.name = 'editor';
     routeMock.params.id = 'file-1';
@@ -221,7 +227,7 @@ describe('BSearchRecent result icons', (): void => {
   it('renders file type and webview icons for recent records', (): void => {
     const wrapper = mountSearchRecent();
     const icons = wrapper
-      .findAll('.b-search-recent__item-icon.b-icon-stub')
+      .findAll('.b-recent__item-icon.b-icon-stub')
       .map((iconWrapper: DOMWrapper<Element>): string | undefined => iconWrapper.attributes('data-icon'));
 
     expect(icons).toContain('vscode-icons:file-type-typescript-official');
@@ -235,20 +241,34 @@ describe('BSearchRecent result icons', (): void => {
     await input.setValue('https://openai.com/docs');
     await nextTick();
 
-    expect(wrapper.find('.b-search-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-geojson');
+    expect(wrapper.find('.b-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-geojson');
 
     getPathStatusMock.mockResolvedValue({ exists: true, isFile: true });
     await input.setValue('/tmp/sketch.md');
     await flushPromises();
 
-    expect(wrapper.find('.b-search-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-markdown');
+    expect(wrapper.find('.b-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-markdown');
+  });
+
+  it('renders stored webview favicons before the fallback icon', (): void => {
+    recentStoreMock.recentRecords = [
+      createWebviewRecord({
+        favicon: 'https://example.com/favicon.ico'
+      })
+    ];
+    const wrapper = mountSearchRecent();
+    const favicon = wrapper.find('img.b-recent__item-icon');
+
+    expect(favicon.exists()).toBe(true);
+    expect(favicon.attributes('src')).toBe('https://example.com/favicon.ico');
+    expect(wrapper.find('.b-recent__item-icon.b-icon-stub').exists()).toBe(false);
   });
 
   it('renders the standard vscode json icon for json records', (): void => {
     recentStoreMock.recentRecords = [createFileRecord({ ext: 'json', name: 'config', path: '/tmp/config.json' })];
     const wrapper = mountSearchRecent();
 
-    expect(wrapper.find('.b-search-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-json');
+    expect(wrapper.find('.b-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-json');
   });
 
   it('renders json icons for tibis recent records and path candidates', async (): Promise<void> => {
@@ -256,13 +276,13 @@ describe('BSearchRecent result icons', (): void => {
     const wrapper = mountSearchRecent();
     const input = wrapper.find('input.a-input-stub');
 
-    expect(wrapper.find('.b-search-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-json');
+    expect(wrapper.find('.b-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-json');
 
     getPathStatusMock.mockResolvedValue({ exists: true, isFile: true });
     await input.setValue('/tmp/board.tibis');
     await flushPromises();
 
-    expect(wrapper.find('.b-search-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-json');
+    expect(wrapper.find('.b-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-json');
   });
 
   it('renders npm package icons for package.json records and path candidates', async (): Promise<void> => {
@@ -270,18 +290,18 @@ describe('BSearchRecent result icons', (): void => {
     const wrapper = mountSearchRecent();
     const input = wrapper.find('input.a-input-stub');
 
-    expect(wrapper.find('.b-search-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-npm');
+    expect(wrapper.find('.b-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-npm');
 
     getPathStatusMock.mockResolvedValue({ exists: true, isFile: true });
     await input.setValue('/tmp/package.json');
     await flushPromises();
 
-    expect(wrapper.find('.b-search-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-npm');
+    expect(wrapper.find('.b-recent__item-icon.b-icon-stub').attributes('data-icon')).toBe('vscode-icons:file-type-npm');
   });
 
   it('keeps icon, title and path in one horizontal row', (): void => {
     const source = readSearchRecentSource();
-    const itemMainRule = extractRuleBlock(source, '.b-search-recent__item-main');
+    const itemMainRule = extractRuleBlock(source, '.b-recent__item-main');
 
     expect(itemMainRule).toMatch(/flex-direction:\s*row;/);
     expect(itemMainRule).not.toMatch(/flex-direction:\s*column;/);
@@ -289,9 +309,9 @@ describe('BSearchRecent result icons', (): void => {
 
   it('uses compact row sizing with smaller result icons', (): void => {
     const source = readSearchRecentSource();
-    const itemRule = extractRuleBlock(source, '.b-search-recent__item');
-    const iconRule = extractRuleBlock(source, '.b-search-recent__item-icon');
-    const pathRule = extractRuleBlock(source, '.b-search-recent__item-path');
+    const itemRule = extractRuleBlock(source, '.b-recent__item');
+    const iconRule = extractRuleBlock(source, '.b-recent__item-icon');
+    const pathRule = extractRuleBlock(source, '.b-recent__item-path');
 
     expect(itemRule).toMatch(/height:\s*32px;/);
     expect(itemRule).toMatch(/padding:\s*0 6px;/);
@@ -310,8 +330,8 @@ describe('BSearchRecent result icons', (): void => {
 
   it('hides the delete action until the row is hovered', (): void => {
     const source = readSearchRecentSource();
-    const deleteRule = extractRuleBlock(source, '.b-search-recent__item-delete');
-    const hoverDeleteRule = extractRuleBlock(source, '.b-search-recent__item:hover .b-search-recent__item-delete');
+    const deleteRule = extractRuleBlock(source, '.b-recent__item-delete');
+    const hoverDeleteRule = extractRuleBlock(source, '.b-recent__item:hover .b-recent__item-delete');
 
     expect(deleteRule).toMatch(/display:\s*none;/);
     expect(deleteRule).toMatch(/width:\s*18px;/);

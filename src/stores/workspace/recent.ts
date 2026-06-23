@@ -6,7 +6,7 @@
 import { defineStore } from 'pinia';
 import { customAlphabet } from 'nanoid';
 import { native } from '@/shared/platform';
-import type { StoredFile, WebviewRecord, RecentRecord } from '@/shared/storage';
+import type { StoredFile, WebviewRecord, RecentRecord, WebviewRecordOptions } from '@/shared/storage';
 import { recentFilesStorage, sortRecentFiles } from '@/shared/storage';
 
 /**
@@ -330,10 +330,11 @@ export const useRecentStore = defineStore('recent', {
      * 添加或更新 webview 记录。
      * @param url - 打开的 URL
      * @param title - 页面标题
+     * @param options - WebView 最近记录可选参数
      * @returns 创建或更新后的 webview 记录
      */
-    async addWebviewRecord(url: string, title: string): Promise<WebviewRecord> {
-      const result = await recentFilesStorage.addWebviewRecord(url, title);
+    async addWebviewRecord(url: string, title: string, options?: WebviewRecordOptions): Promise<WebviewRecord> {
+      const result = await recentFilesStorage.addWebviewRecord(url, title, options);
       this.patchCache(result);
       this.syncRecentFiles();
       return result;

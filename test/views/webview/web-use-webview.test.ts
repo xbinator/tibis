@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import { Script, createContext } from 'node:vm';
-import type { WebviewTag } from 'electron';
+import type { PageFaviconUpdatedEvent, WebviewTag } from 'electron';
 import { ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElementSelectionScript, normalizeWebviewPageSnapshot, useWebView } from '@/views/webview/web/hooks/useWebView';
@@ -139,6 +139,17 @@ function createPageScriptExecutingWebview(): WebviewTag {
 }
 
 /**
+ * 创建 WebView favicon 更新事件。
+ * @param favicons - favicon URL 列表
+ * @returns favicon 更新事件
+ */
+function createFaviconUpdatedEvent(favicons: string[]): PageFaviconUpdatedEvent {
+  const event = new Event('page-favicon-updated') as PageFaviconUpdatedEvent;
+  Object.defineProperty(event, 'favicons', { value: favicons });
+  return event;
+}
+
+/**
  * 设置元素在 jsdom 中的视口矩形。
  * @param element - 目标元素
  * @param rect - 视口矩形
@@ -233,6 +244,14 @@ describe('useWebView', () => {
 
     expect(element.closeDevTools).toHaveBeenCalledTimes(1);
     expect(element.openDevTools).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores the first favicon URL from page favicon updates', (): void => {
+    const controller = useWebView(ref<WebviewTag | null>(null));
+
+    controller.handleFaviconUpdated(createFaviconUpdatedEvent(['', 'https://example.com/favicon.ico']));
+
+    expect(controller.state.value.favicon).toBe('https://example.com/favicon.ico');
   });
 
   it('builds a unique selector for repeated sibling elements', (): void => {

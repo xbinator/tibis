@@ -2,7 +2,7 @@
  * @file useWebView.ts
  * @description 封装 `<webview>` 标签页面状态与导航控制。
  */
-import type { DidNavigateEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
+import type { DidNavigateEvent, PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import type { AIToolExecutionError } from 'types/ai';
 import { ref, type Ref } from 'vue';
 import type {
@@ -29,6 +29,7 @@ import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 const DEFAULT_STATE: WebviewPageState = {
   url: '',
   title: '',
+  favicon: '',
   isLoading: false,
   isElementSelecting: false,
   isTouchSimulationEnabled: false,
@@ -248,6 +249,15 @@ function handleWebviewLoadError(error: unknown, url: string): void {
   }
 
   console.error(`Failed to load WebView URL ${url}:`, error);
+}
+
+/**
+ * 读取 favicon 更新事件中的第一个有效 URL。
+ * @param favicons - WebView 上报的 favicon URL 列表
+ * @returns 第一个有效 favicon URL，缺失时返回空字符串
+ */
+function readFirstFavicon(favicons: string[]): string {
+  return favicons.find((favicon) => favicon.trim())?.trim() ?? '';
 }
 
 /**
@@ -2676,6 +2686,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     state.value.isLoading = true;
     state.value.isElementSelecting = false;
     state.value.loadProgress = 0.1;
+    state.value.favicon = '';
     activeSnapshot = null;
     selectedElement.value = null;
   }
@@ -2710,6 +2721,19 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
    */
   function handleTitleUpdated(event: PageTitleUpdatedEvent): void {
     state.value.title = event.title;
+  }
+
+  /**
+   * 处理页面 favicon 更新事件。
+   * @param event - favicon 更新事件
+   */
+  function handleFaviconUpdated(event: PageFaviconUpdatedEvent): void {
+    const favicon = readFirstFavicon(event.favicons);
+    if (!favicon) {
+      return;
+    }
+
+    state.value.favicon = favicon;
   }
 
   /**
@@ -2753,6 +2777,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     handleDomReady,
     handleDidNavigate,
     handleTitleUpdated,
+    handleFaviconUpdated,
     handleDidStopLoading,
     handleAttachRejected,
     handleConsoleMessage,

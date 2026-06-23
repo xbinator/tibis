@@ -4,6 +4,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { recentFilesStorage } from '@/shared/storage/files/recent';
+import { hashString } from '@/shared/utils/hash';
 
 /** Electron Store 测试替身。 */
 const mockElectronAPI = vi.hoisted(() => ({
@@ -45,5 +46,47 @@ describe('recentFilesStorage.getAllRecentFiles', () => {
       }
     ]);
     expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
+  });
+});
+
+describe('recentFilesStorage.addWebviewRecord', () => {
+  beforeEach((): void => {
+    mockElectronAPI.storeGet.mockReset();
+    mockElectronAPI.storeSet.mockReset();
+    mockElectronAPI.storeSet.mockResolvedValue(undefined);
+  });
+
+  it('persists favicon when creating a webview record', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([]);
+
+    const record = await recentFilesStorage.addWebviewRecord('https://example.com', 'Example Domain', {
+      favicon: 'https://example.com/favicon.ico'
+    });
+
+    expect(record).toMatchObject({
+      type: 'webview',
+      url: 'https://example.com',
+      title: 'Example Domain',
+      favicon: 'https://example.com/favicon.ico'
+    });
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', [record]);
+  });
+
+  it('preserves an existing favicon when a later update has no favicon', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([
+      {
+        type: 'webview',
+        id: hashString('https://example.com'),
+        url: 'https://example.com',
+        title: 'Example Domain',
+        favicon: 'https://example.com/favicon.ico',
+        createdAt: 1,
+        openedAt: 2
+      }
+    ]);
+
+    const record = await recentFilesStorage.addWebviewRecord('https://example.com', 'Example Domain Updated');
+
+    expect(record.favicon).toBe('https://example.com/favicon.ico');
   });
 });

@@ -3,7 +3,7 @@
  * @description 最近记录存储的读写、排序派生与时间字段归一化（支持文件 + WebView 网页）。
  */
 
-import type { StoredFile, WebviewRecord, RecentRecord } from './types';
+import type { StoredFile, WebviewRecord, RecentRecord, WebviewRecordOptions } from './types';
 import { isEqual, isNumber, noop } from 'lodash-es';
 import { getElectronAPI } from '../../platform/electron-api';
 import { hashString } from '../../utils/hash';
@@ -38,6 +38,16 @@ function normalizePathField(value: unknown): string | null {
  */
 function normalizeContentField(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+/**
+ * 将可选 favicon 字段归一化为非空字符串。
+ * @param value - 原始 favicon 字段
+ * @returns 归一化后的 favicon URL，缺失或空串时返回 undefined
+ */
+function normalizeOptionalFavicon(value: unknown): string | undefined {
+  const normalized = normalizeTextField(value);
+  return normalized || undefined;
 }
 
 /**
@@ -265,18 +275,19 @@ export const recentFilesStorage = {
    * 添加或覆盖 webview 记录。
    * 根据 URL 生成 hash id，同 URL 自动去重（更新 title 和 openedAt）。
    */
-  async addWebviewRecord(url: string, title: string): Promise<WebviewRecord> {
+  async addWebviewRecord(url: string, title: string, options?: WebviewRecordOptions): Promise<WebviewRecord> {
     return enqueueWrite(async () => {
       const files = await readRecentFiles();
       const id = hashString(url);
       const now = Date.now();
+      const normalizedFavicon = normalizeOptionalFavicon(options?.favicon);
 
       // 查找是否已有该 URL 的记录
       const existingIndex = files.findIndex((item) => item.type === 'webview' && (item as WebviewRecord).id === id);
       if (existingIndex !== -1) {
         // 更新已有记录
         const existing = files[existingIndex] as WebviewRecord;
-        const updated: WebviewRecord = { ...existing, title, openedAt: now };
+        const updated: WebviewRecord = { ...existing, title, openedAt: now, ...(normalizedFavicon ? { favicon: normalizedFavicon } : {}) };
         files[existingIndex] = updated;
         await writeRecentFiles(files);
         return updated;
@@ -289,7 +300,8 @@ export const recentFilesStorage = {
         url,
         title,
         createdAt: now,
-        openedAt: now
+        openedAt: now,
+        ...(normalizedFavicon ? { favicon: normalizedFavicon } : {})
       };
       files.unshift(record);
       await writeRecentFiles(files);

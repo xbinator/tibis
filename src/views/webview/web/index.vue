@@ -48,7 +48,7 @@
  * @file index.vue
  * @description `<webview>` 标签页面入口。
  */
-import type { WebviewTag } from 'electron';
+import type { PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch, type CSSProperties } from 'vue';
 import { useRoute } from 'vue-router';
 import { debounce } from 'lodash-es';
@@ -145,27 +145,58 @@ function handleHostedWheelEvent(event: Event): void {
 }
 
 const recentStore = useRecentStore();
-let hasWrittenRecentWebviewRecord = false;
+const RECENT_RECORD_WRITE_DELAY_MS = 300;
+let recentWebviewRecordUrl = '';
+let lastRecentWebviewPayload = '';
 
 /**
- * 导航事件回调，将当前 webview 页面写入最近记录。
- * debounce 300ms 避免重定向链产生多条记录。
+ * 将当前 webview 页面写入最近记录。
+ * debounce 避免重定向链、标题和 favicon 连续事件产生重复写入。
  */
 const writeRecentWebviewRecord = debounce(() => {
-  if (hasWrittenRecentWebviewRecord) return;
-
-  const { url, title } = webview.state.value;
+  const { url, title, favicon } = webview.state.value;
   if (!url) return;
-  hasWrittenRecentWebviewRecord = true;
-  recentStore.addWebviewRecord(url, title || url).catch(console.error);
-}, 300);
+
+  if (!recentWebviewRecordUrl) {
+    recentWebviewRecordUrl = url;
+  }
+  if (url !== recentWebviewRecordUrl) {
+    return;
+  }
+
+  const normalizedTitle = title || url;
+  const normalizedFavicon = favicon || undefined;
+  const payload = [url, normalizedTitle, normalizedFavicon ?? ''].join('\0');
+  if (payload === lastRecentWebviewPayload) {
+    return;
+  }
+
+  lastRecentWebviewPayload = payload;
+  recentStore.addWebviewRecord(url, normalizedTitle, normalizedFavicon ? { favicon: normalizedFavicon } : undefined).catch(console.error);
+}, RECENT_RECORD_WRITE_DELAY_MS);
 
 /**
  * 导航完成事件处理，触发记录写入。
  */
 function handleDidNavigateRecord(): void {
-  if (hasWrittenRecentWebviewRecord) return;
+  writeRecentWebviewRecord();
+}
 
+/**
+ * 页面标题更新事件处理，同步状态后刷新最近记录标题。
+ * @param event - 页面标题更新事件
+ */
+function handlePageTitleUpdated(event: PageTitleUpdatedEvent): void {
+  webview.handleTitleUpdated(event);
+  writeRecentWebviewRecord();
+}
+
+/**
+ * 页面 favicon 更新事件处理，同步状态后刷新最近记录图标。
+ * @param event - 页面 favicon 更新事件
+ */
+function handlePageFaviconUpdated(event: PageFaviconUpdatedEvent): void {
+  webview.handleFaviconUpdated(event);
   writeRecentWebviewRecord();
 }
 
@@ -177,7 +208,8 @@ const webviewEventMap: Array<{ name: string; handler: EventListener | ((event: E
   { name: 'dom-ready', handler: webview.handleDomReady as EventListener },
   { name: 'did-navigate', handler: webview.handleDidNavigate as EventListener },
   { name: 'did-navigate-in-page', handler: webview.handleDidNavigate as EventListener },
-  { name: 'page-title-updated', handler: webview.handleTitleUpdated as EventListener },
+  { name: 'page-title-updated', handler: handlePageTitleUpdated as EventListener },
+  { name: 'page-favicon-updated', handler: handlePageFaviconUpdated as EventListener },
   { name: 'did-stop-loading', handler: webview.handleDidStopLoading as EventListener },
   { name: 'console-message', handler: webview.handleConsoleMessage },
   { name: 'wheel', handler: handleHostedWheelEvent },
