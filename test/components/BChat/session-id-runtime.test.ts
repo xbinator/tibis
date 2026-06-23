@@ -64,7 +64,10 @@ const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeOnToolRequest: vi.fn(() => vi.fn()),
   chatRuntimeOnConfirmationRequested: vi.fn(() => vi.fn()),
   chatRuntimeOnBridgeRequested: vi.fn(() => vi.fn()),
-  chatRuntimeOnError: vi.fn(() => vi.fn()),
+  chatRuntimeOnError: vi.fn((callback: NonNullable<typeof runtimeListeners.error>) => {
+    runtimeListeners.error = callback;
+    return vi.fn();
+  }),
   chatRuntimeOnComplete: vi.fn((callback: NonNullable<typeof runtimeListeners.complete>) => {
     runtimeListeners.complete = callback;
     return vi.fn();
@@ -674,6 +677,68 @@ describe('BChat sessionId runtime', (): void => {
         parts: [{ type: 'text', text: 'fix ' }, expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
       })
     );
+  });
+
+  it('renders a send startup error as a conversation error message', async (): Promise<void> => {
+    const createdSession = createSession('session-created', 'read {{@/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}');
+    const missingFilePath = '/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md';
+    chatStoreMock.createSession.mockResolvedValue(createdSession);
+    electronAPIMock.chatRuntimeSend.mockResolvedValueOnce({
+      ok: false,
+      code: 'ENOENT',
+      error: `ENOENT: no such file or directory, stat '${missingFilePath}'`
+    });
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    wrapper.findComponent(BPromptEditorStub).vm.$emit('update:value', `read {{@${missingFilePath}}}`);
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
+    expect(visibleMessages).toHaveLength(2);
+    expect(visibleMessages[0]).toMatchObject({
+      role: 'user',
+      content: `read {{@${missingFilePath}}}`,
+      parts: [{ type: 'text', text: `read {{@${missingFilePath}}}` }]
+    });
+    expect(visibleMessages[1]).toMatchObject({
+      role: 'error',
+      content: `文件不存在或已被移动：${missingFilePath}`,
+      parts: [{ type: 'error', text: `文件不存在或已被移动：${missingFilePath}` }],
+      loading: false,
+      finished: true
+    });
+    expect(chatStoreMock.setSessionMessages).toHaveBeenCalledWith('session-created', [
+      expect.objectContaining({ role: 'user', content: `read {{@${missingFilePath}}}` }),
+      expect.objectContaining({ role: 'error', content: `文件不存在或已被移动：${missingFilePath}` })
+    ]);
+  });
+
+  it('renders runtime error events as conversation error messages', async (): Promise<void> => {
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    emitRuntimeEvent(runtimeListeners, 'error', {
+      runtimeId: 'runtime-1',
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'default',
+      error: { code: 'REQUEST_FAILED', message: '模型调用失败' }
+    });
+    await flushPromises();
+
+    const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
+    expect(visibleMessages).toHaveLength(1);
+    expect(visibleMessages[0]).toMatchObject({
+      role: 'error',
+      content: '模型调用失败',
+      parts: [{ type: 'error', text: '模型调用失败' }],
+      loading: false,
+      finished: true
+    });
+    expect(chatStoreMock.setSessionMessages).toHaveBeenCalledWith('session-active', [expect.objectContaining({ role: 'error', content: '模型调用失败' })]);
   });
 
   it('does not append a renderer-side interrupt message when aborting a chat runtime', async (): Promise<void> => {

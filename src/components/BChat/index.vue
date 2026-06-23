@@ -143,6 +143,7 @@ import { createChatConfirmationController } from './utils/confirmationController
 import { buildUserInputParts } from './utils/filePartParser';
 import { create, userChoice } from './utils/messageHelper';
 import { handleBChatRuntimeBridgeRequest } from './utils/runtimeBridge';
+import { appendRuntimeErrorMessage } from './utils/runtimeError';
 
 const [, bem] = createNamespace('chat');
 
@@ -572,13 +573,30 @@ const chatRuntime = useChatRuntime({
   onContextUsageUpdated: (snapshot) => {
     runtimeContextUsageSnapshot.value = toContextUsageBudgetSnapshot(snapshot);
   },
-  onError: (error) => {
+  onError: async (error) => {
     if (error.code === 'MODEL_NOT_FOUND') {
       showNoModelConfigToast();
       return;
     }
 
-    interactionAPI.showToast({ type: 'error', content: error.message });
+    const sessionId = activeSessionId.value;
+    if (!sessionId) {
+      interactionAPI.showToast({ type: 'error', content: error.message });
+      return;
+    }
+
+    await appendRuntimeErrorMessage({
+      sessionId,
+      content: error.message,
+      visibleMessages: messages.value,
+      fetchAllPriorHistory,
+      persistMessages: (targetSessionId, nextMessages) => chatStore.setSessionMessages(targetSessionId, nextMessages),
+      setLoadedMessages,
+      afterMessagesUpdated: async () => {
+        await nextTick();
+        conversationRef.value?.scrollToBottom({ behavior: 'auto' });
+      }
+    });
   }
 });
 
@@ -762,6 +780,9 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
   const startResult = taskRuntime.beginTask('chat');
   if (!startResult.ok) return;
 
+  let pendingSessionId: string | null = null;
+  let pendingUserMessage: Message | null = null;
+
   try {
     const config = await chatServiceConfig.resolveServiceConfig();
     if (!config) {
@@ -777,6 +798,8 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
     }
 
     const sessionId = await ensureActiveSession(userMessage.content);
+    pendingSessionId = sessionId;
+    pendingUserMessage = userMessage;
     confirmationController.expirePendingConfirmation();
     focusInput();
     clearDraft && inputEvents.clear();
@@ -800,8 +823,24 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
   } catch (error) {
     taskRuntime.finishTask('chat');
     const message = error instanceof Error ? error.message : '发送消息失败';
+    if (pendingSessionId && pendingUserMessage) {
+      await appendRuntimeErrorMessage({
+        sessionId: pendingSessionId,
+        content: message,
+        visibleMessages: messages.value,
+        precedingMessage: pendingUserMessage,
+        fetchAllPriorHistory,
+        persistMessages: (targetSessionId, nextMessages) => chatStore.setSessionMessages(targetSessionId, nextMessages),
+        setLoadedMessages,
+        afterMessagesUpdated: async () => {
+          await nextTick();
+          conversationRef.value?.scrollToBottom({ behavior: 'auto' });
+        }
+      });
+      return;
+    }
+
     interactionAPI.showToast({ type: 'error', content: message });
-    throw error;
   }
 }
 
