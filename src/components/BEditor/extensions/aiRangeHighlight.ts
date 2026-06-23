@@ -1,3 +1,7 @@
+/**
+ * @file aiRangeHighlight.ts
+ * @description BEditor Rich 模式 AI 选区高亮装饰与 CSS Custom Highlight 同步。
+ */
 import type { DecorationRange } from './editorDecorations';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
@@ -24,6 +28,12 @@ const baseHighlightClassName = 'ai-selection-highlight';
 const codeStartHighlightClassName = 'ai-selection-highlight--code-start';
 const codeEndHighlightClassName = 'ai-selection-highlight--code-end';
 const tableInlineHighlightName = 'b-markdown-ai-selection-highlight';
+const tableInlineHighlightStyleId = 'b-markdown-ai-selection-highlight-style';
+const tableInlineHighlightStyleContent = [
+  `.b-markdown-rich__content .ProseMirror::highlight(${tableInlineHighlightName}) {`,
+  '  background-color: var(--selection-bg);',
+  '}'
+].join('\n');
 
 /** CSS Custom Highlight 实例。 */
 type CSSHighlightLike = object;
@@ -292,6 +302,34 @@ function getCSSHighlightRuntime(): { HighlightConstructor: CSSHighlightConstruct
 }
 
 /**
+ * 注入表格内联 CSS Custom Highlight 样式。
+ * 该选择器需要保持 `::highlight()` 原始语义，因此放在运行时 style 中避开构建期 CSS minifier 校验。
+ * @returns 已注入的 style 元素，非 DOM 环境返回 null
+ */
+export function ensureTableInlineCSSHighlightStyle(): HTMLStyleElement | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const existingElement = document.getElementById(tableInlineHighlightStyleId);
+  if (existingElement instanceof HTMLStyleElement) {
+    if (existingElement.textContent !== tableInlineHighlightStyleContent) {
+      existingElement.textContent = tableInlineHighlightStyleContent;
+    }
+
+    return existingElement;
+  }
+
+  existingElement?.remove();
+
+  const style = document.createElement('style');
+  style.id = tableInlineHighlightStyleId;
+  style.textContent = tableInlineHighlightStyleContent;
+  document.head.appendChild(style);
+  return style;
+}
+
+/**
  * 清理表格内联 CSS Custom Highlight。
  */
 function clearTableInlineCSSHighlight(): void {
@@ -344,6 +382,7 @@ function syncTableInlineCSSHighlight(view: PMEditorView): void {
     return;
   }
 
+  ensureTableInlineCSSHighlightStyle();
   runtime.registry.set(tableInlineHighlightName, new runtime.HighlightConstructor(...domRanges));
 }
 

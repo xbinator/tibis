@@ -69,10 +69,9 @@ describe('BEditor rich selection styles', (): void => {
     expect(tableParagraphRuleBody).not.toContain('white-space: nowrap;');
   });
 
-  it('styles table inline custom highlights without inserting layout-affecting spans', (): void => {
+  it('keeps table inline custom highlight styles out of the compiled Less pipeline', (): void => {
     const source = readPaneRichEditorSource();
-    const customHighlightRuleBody = extractStyleRuleBody(source, '&::highlight(b-markdown-ai-selection-highlight)');
 
-    expect(customHighlightRuleBody).toContain('background-color: var(--selection-bg);');
+    expect(source).not.toContain('::highlight(b-markdown-ai-selection-highlight)');
   });
 });

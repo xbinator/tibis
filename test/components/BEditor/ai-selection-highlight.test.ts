@@ -9,7 +9,9 @@ import { EditorState, Plugin } from '@tiptap/pm/state';
 import { tableNodes } from '@tiptap/pm/tables';
 import { EditorView } from '@tiptap/pm/view';
 import { describe, expect, it, afterEach } from 'vitest';
-import { createAISelectionDecorationSet } from '@/components/BEditor/extensions/aiRangeHighlight';
+import { createAISelectionDecorationSet, ensureTableInlineCSSHighlightStyle } from '@/components/BEditor/extensions/aiRangeHighlight';
+
+const tableInlineHighlightStyleId = 'b-markdown-ai-selection-highlight-style';
 
 /**
  * ProseMirror Decoration 运行时持有的装饰类型信息。
@@ -143,6 +145,7 @@ describe('createAISelectionDecorationSet', (): void => {
   afterEach((): void => {
     editorView?.destroy();
     editorView = null;
+    document.getElementById(tableInlineHighlightStyleId)?.remove();
   });
 
   it('uses inline decorations for normal rich text selections', (): void => {
@@ -244,5 +247,17 @@ describe('createAISelectionDecorationSet', (): void => {
     const paragraph = root.querySelector('td p');
 
     expect(paragraph?.innerHTML).toBe('A1');
+  });
+
+  it('injects table inline custom highlight styles once at runtime', (): void => {
+    const style = ensureTableInlineCSSHighlightStyle();
+    const duplicateStyle = ensureTableInlineCSSHighlightStyle();
+    const injectedStyles = document.head.querySelectorAll(`#${tableInlineHighlightStyleId}`);
+
+    expect(style).toBeInstanceOf(HTMLStyleElement);
+    expect(duplicateStyle).toBe(style);
+    expect(injectedStyles).toHaveLength(1);
+    expect(style?.textContent).toContain('.b-markdown-rich__content .ProseMirror::highlight(b-markdown-ai-selection-highlight)');
+    expect(style?.textContent).toContain('background-color: var(--selection-bg);');
   });
 });
