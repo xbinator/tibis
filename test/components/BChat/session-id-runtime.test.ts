@@ -5,13 +5,15 @@
  */
 import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatSession } from 'types/chat';
 import type { ChatRuntimeContinueInput } from 'types/chat-runtime';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, type PropType } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BChat from '@/components/BChat/index.vue';
 import type { Message } from '@/components/BChat/utils/types';
+import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
+import type { StoredFile } from '@/shared/storage';
 import type { TodoItem } from '@/stores/chat/todo';
 import { useSettingStore } from '@/stores/ui/setting';
 import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
@@ -99,6 +101,12 @@ const memoryStoreMock = vi.hoisted(() => ({
   loaded: true,
   loadMemory: vi.fn<() => Promise<void>>(),
   buildSystemPromptContext: vi.fn<() => string>(() => '')
+}));
+
+const filesStoreMock = vi.hoisted(() => ({
+  recentFiles: [] as StoredFile[],
+  ensureLoaded: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  getFileByPath: vi.fn()
 }));
 
 const modalMock = vi.hoisted(() => ({
@@ -205,11 +213,7 @@ vi.mock('@/hooks/useOpenDraft', () => ({
 }));
 
 vi.mock('@/stores/workspace/files', () => ({
-  useFilesStore: vi.fn(() => ({
-    recentFiles: [],
-    ensureLoaded: vi.fn(() => Promise.resolve()),
-    getFileByPath: vi.fn()
-  }))
+  useFilesStore: vi.fn(() => filesStoreMock)
 }));
 
 vi.mock('@/stores/chat/session', () => ({
@@ -282,6 +286,10 @@ const BPromptEditorStub = defineComponent({
     value: {
       type: String,
       default: ''
+    },
+    fileMentions: {
+      type: Array as PropType<FileMentionOption[]>,
+      default: () => []
     }
   },
   emits: ['update:value', 'submit', 'slash-command', 'file-mention-select'],
@@ -419,6 +427,23 @@ function createFileDragEvent(type: 'dragenter' | 'dragover' | 'dragleave' | 'dro
 }
 
 /**
+ * 创建最近文件记录。
+ * @param overrides - 需要覆盖的字段
+ * @returns 最近文件记录
+ */
+function createStoredFile(overrides: Partial<StoredFile> = {}): StoredFile {
+  return {
+    type: 'file',
+    id: 'file-1',
+    path: '/workspace/note.md',
+    content: '',
+    name: 'note.md',
+    ext: 'md',
+    ...overrides
+  };
+}
+
+/**
  * 挂载 BChat。
  * @param sessionId - 当前会话 ID
  * @returns 组件包装器
@@ -502,6 +527,10 @@ describe('BChat sessionId runtime', (): void => {
     memoryStoreMock.loadMemory.mockResolvedValue();
     memoryStoreMock.buildSystemPromptContext.mockReset();
     memoryStoreMock.buildSystemPromptContext.mockReturnValue('');
+    filesStoreMock.recentFiles = [];
+    filesStoreMock.ensureLoaded.mockReset();
+    filesStoreMock.ensureLoaded.mockResolvedValue();
+    filesStoreMock.getFileByPath.mockReset();
     resetRuntimeEventListeners(runtimeListeners);
     conversationViewMockState.scrollToBottom.mockReset();
     chatStoreMock.getSessionMessages.mockResolvedValue([]);
@@ -535,6 +564,28 @@ describe('BChat sessionId runtime', (): void => {
     });
     getModelToolSupportMock.mockResolvedValue({ supported: true });
     useSettingStore().setSidebarVisible(true);
+  });
+
+  it('passes only markdown recent files to prompt editor file mentions', async (): Promise<void> => {
+    filesStoreMock.recentFiles = [
+      createStoredFile({ id: 'md-1', name: 'note.md', path: '/workspace/note.md', ext: 'md' }),
+      createStoredFile({ id: 'json-1', name: 'config.json', path: '/workspace/config.json', ext: 'json' }),
+      createStoredFile({ id: 'tibis-1', name: 'sketch.tibis', path: '/workspace/sketch.tibis', ext: 'tibis' })
+    ];
+
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    expect(wrapper.findComponent(BPromptEditorStub).props('fileMentions')).toEqual([
+      {
+        id: 'md-1',
+        name: 'note.md',
+        path: '/workspace/note.md',
+        ext: 'md'
+      }
+    ]);
+
+    wrapper.unmount();
   });
 
   it('consumes a pending selection reference emitted before BChat is mounted', async (): Promise<void> => {
