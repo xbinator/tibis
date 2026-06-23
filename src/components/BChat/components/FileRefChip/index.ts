@@ -6,6 +6,7 @@
 export type { FileRefChipPresentation, FileRefChipPresentationOptions } from './presentation';
 export {
   FILE_REF_CHIP_CLASS,
+  FILE_REF_CHIP_ICON_CLASS,
   FILE_REF_CHIP_FILENAME_CLASS,
   FILE_REF_CHIP_LINES_CLASS,
   createFileRefChipElement,

@@ -9,6 +9,8 @@
 export interface FileRefChipPresentation {
   /** 根节点类名。 */
   rootClass: string;
+  /** 图标节点类名。 */
+  iconClass: string;
   /** 文件名节点类名。 */
   fileNameClass: string;
   /** 行号节点类名。 */
@@ -38,6 +40,9 @@ export interface FileRefChipPresentationOptions {
 /** 文件引用 Chip 根节点类名。 */
 export const FILE_REF_CHIP_CLASS = 'b-file-ref-chip';
 
+/** 文件引用 Chip 图标节点类名。 */
+export const FILE_REF_CHIP_ICON_CLASS = 'b-file-ref-chip__icon';
+
 /** 文件引用 Chip 文件名节点类名。 */
 export const FILE_REF_CHIP_FILENAME_CLASS = 'b-file-ref-chip__filename';
 
@@ -65,6 +70,7 @@ export function formatFileRefChipLineText(startLine: number, endLine: number): s
 export function createFileRefChipPresentation(options: FileRefChipPresentationOptions): FileRefChipPresentation {
   return {
     rootClass: FILE_REF_CHIP_CLASS,
+    iconClass: FILE_REF_CHIP_ICON_CLASS,
     fileNameClass: FILE_REF_CHIP_FILENAME_CLASS,
     lineTextClass: FILE_REF_CHIP_LINES_CLASS,
     title: options.title,

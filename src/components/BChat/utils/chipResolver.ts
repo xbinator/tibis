@@ -2,9 +2,11 @@
  * @file chipResolver.ts
  * @description 聊天输入框 Chip 解析器，将 file-ref token 解析为渲染 Widget。
  */
+import { createApp, type App } from 'vue';
 import { WidgetType } from '@codemirror/view';
 import { createFileRefChipElement, createFileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
 import type { ChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
+import BRecentIcon from '@/components/BRecent/Icon.vue';
 import { parseFileReferenceToken, type FileReferenceNavigationTarget, type ParsedFileReference } from '@/utils/file/reference';
 
 /**
@@ -27,6 +29,9 @@ function toNavigationTarget(parsed: ParsedFileReference): FileReferenceNavigatio
  * 文件引用 Chip Widget，由 chipResolver 返回。
  */
 class FileRefWidget extends WidgetType {
+  /** 当前 Widget 创建过的图标 Vue 应用，随 DOM 销毁卸载。 */
+  private readonly iconApps = new WeakMap<HTMLElement, App<Element>>();
+
   constructor(private readonly location: ParsedFileReference, private readonly onOpenFile: (target: FileReferenceNavigationTarget) => void) {
     super();
   }
@@ -47,6 +52,16 @@ class FileRefWidget extends WidgetType {
       endLine: this.location.endLine
     });
     const chip = createFileRefChipElement(presentation);
+    const iconHost = document.createElement('span');
+    iconHost.className = presentation.iconClass;
+    const iconApp = createApp(BRecentIcon, {
+      fileName: presentation.fileName,
+      size: 14
+    });
+
+    iconApp.mount(iconHost);
+    chip.insertBefore(iconHost, chip.firstChild);
+    this.iconApps.set(chip, iconApp);
 
     chip.addEventListener('mousedown', (event) => {
       event.preventDefault();
@@ -64,6 +79,16 @@ class FileRefWidget extends WidgetType {
     });
 
     return chip;
+  }
+
+  destroy(dom: HTMLElement): void {
+    const iconApp = this.iconApps.get(dom);
+    if (!iconApp) {
+      return;
+    }
+
+    iconApp.unmount();
+    this.iconApps.delete(dom);
   }
 
   ignoreEvent(): boolean {

@@ -13,6 +13,7 @@
           @keydown.enter.prevent="onChipClick(segment)"
           @keydown.space.prevent="onChipClick(segment)"
         >
+          <BRecentIcon :class="segment.presentation.iconClass" :file-name="segment.presentation.fileName" :size="14" />
           <span :class="segment.presentation.fileNameClass">{{ segment.presentation.fileName }}</span>
           <span :class="segment.presentation.lineTextClass">{{ segment.presentation.lineText }}</span>
         </span>
