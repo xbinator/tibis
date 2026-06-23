@@ -87,6 +87,15 @@ async function* createRendererToolStream(): AsyncGenerator<unknown> {
 }
 
 /**
+ * 创建 provider 以 stop 结束但实际包含工具调用的测试流。
+ * @returns AI stream chunk 序列
+ */
+async function* createRendererToolStopFinishStream(): AsyncGenerator<unknown> {
+  yield { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'renderer_echo', input: { value: 'ping' } };
+  yield { type: 'finish', finishReason: 'stop', totalUsage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 } };
+}
+
+/**
  * 创建等待用户回答的 question 工具调用测试流。
  * @returns AI stream chunk 序列
  */
@@ -584,6 +593,41 @@ describe('runtime stream executor', (): void => {
         }
       ]
     });
+  });
+
+  it('continues after executed tools even when the provider finishes with stop', async (): Promise<void> => {
+    const assistantMessage = createAssistantMessage();
+    const executeRendererTool = vi.fn().mockResolvedValue({
+      toolName: 'renderer_echo',
+      status: 'success',
+      data: { value: 'pong' }
+    });
+    const resolve = vi.fn().mockResolvedValue({
+      createOptions: {
+        providerId: 'openai-compatible',
+        providerName: 'OpenAI Compatible',
+        providerType: 'openai-compatible',
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com/v1'
+      },
+      modelId: 'compatible-model'
+    });
+    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createRendererToolStopFinishStream() }]);
+    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeRendererTool });
+
+    const result = await executor(
+      {
+        runtime: {
+          ...runtime,
+          tools: [{ name: 'renderer_echo', description: 'Renderer echo', parameters: { type: 'object', properties: {} } }]
+        },
+        userMessage,
+        assistantMessage
+      },
+      async () => undefined
+    );
+
+    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
   });
 
   it('executes read_current_document through the main-process tool executor', async (): Promise<void> => {

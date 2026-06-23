@@ -4,7 +4,7 @@
  */
 import type { ChatRuntimeStreamExecutor, ChatRuntimeStreamExecutorResult } from '../types.mjs';
 import type { RuntimeStreamExecutorDependencies, RuntimeStreamText } from './types.mjs';
-import type { AIStreamFinishReason, AIUsage, AIToolExecutionResult } from 'types/ai';
+import type { AIUsage, AIToolExecutionResult } from 'types/ai';
 import { AI_ERROR_CODE, createAIServiceError } from '../../../ai/errors/codes.mjs';
 import { normalizeUsage, toRuntimeStreamChunk } from './chunks.mjs';
 import {
@@ -56,7 +56,6 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
     }
 
     let usage: AIUsage | undefined;
-    let finishReason: AIStreamFinishReason | undefined;
     let executedToolCount = 0;
     let allToolsContinueable = true;
     let anyToolStopped = false;
@@ -74,7 +73,6 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
         appendReasoningDelta(assistantMessage, chunk.text);
         await updateAssistant(assistantMessage);
       } else if (chunk.type === 'finish') {
-        finishReason = chunk.finishReason;
         usage = chunk.totalUsage ? normalizeUsage(chunk.totalUsage) : undefined;
       } else if (chunk.type === 'error') {
         throw normalizeRuntimeError(chunk.error);
@@ -146,7 +144,7 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
       anyToolStopped = anyToolStopped || shouldStopStreamAfterToolResult(toolResult);
     }
 
-    const shouldContinue = finishReason === 'tool-calls' && executedToolCount > 0 && allToolsContinueable;
+    const shouldContinue = executedToolCount > 0 && allToolsContinueable;
     if (shouldContinue) return { usage, shouldContinue };
     if (isWaitingForUserInput) return usage ? { usage } : {};
 
