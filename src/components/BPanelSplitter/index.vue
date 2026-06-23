@@ -9,11 +9,15 @@
       <div :class="bem('bar')"></div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div v-if="isDragging" :class="bem('drag-shield')" @mousemove.stop="handleMouseMove" @mouseup.stop="handleMouseUp"></div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import type { BPanelSplitterProps as Props } from './types';
-import { computed, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import { clamp } from 'lodash-es';
 import { createNamespace } from '@/utils/namespace';
@@ -40,6 +44,9 @@ const emit = defineEmits<{
 
 const isDragging = ref(false);
 const rootRef = ref<HTMLElement>();
+
+/** 当前拖拽周期的全局事件控制器，用于一次性移除 move/up 监听。 */
+let dragAbortController: AbortController | null = null;
 
 const state = reactive({
   startX: 0,
@@ -156,16 +163,23 @@ function handleMouseMove(e: MouseEvent): void {
 }
 
 /**
- * 处理鼠标松开：清理拖拽状态。
+ * 清理全局拖拽副作用。
  */
-function handleMouseUp(): void {
+function cleanupDragSideEffects(): void {
   isDragging.value = false;
 
   document.body.classList.remove('cursor-col-resize');
   document.body.style.userSelect = '';
 
-  window.removeEventListener('mousemove', handleMouseMove);
-  window.removeEventListener('mouseup', handleMouseUp);
+  dragAbortController?.abort();
+  dragAbortController = null;
+}
+
+/**
+ * 处理鼠标松开：清理拖拽状态。
+ */
+function handleMouseUp(): void {
+  cleanupDragSideEffects();
 
   if (size.value === 0) {
     emit('close');
@@ -186,8 +200,10 @@ function handleMouseDown(e: MouseEvent): void {
   document.body.classList.add('cursor-col-resize');
   document.body.style.userSelect = 'none';
 
-  window.addEventListener('mousemove', handleMouseMove);
-  window.addEventListener('mouseup', handleMouseUp);
+  dragAbortController?.abort();
+  dragAbortController = new AbortController();
+  window.addEventListener('mousemove', handleMouseMove, { signal: dragAbortController.signal });
+  window.addEventListener('mouseup', handleMouseUp, { signal: dragAbortController.signal });
 }
 
 /**
@@ -195,6 +211,13 @@ function handleMouseDown(e: MouseEvent): void {
  */
 useResizeObserver(containerRef, () => {
   syncSizeWithinBounds();
+});
+
+/**
+ * 组件卸载时兜底清理拖拽监听，避免拖拽中离开页面后遗留全局状态。
+ */
+onBeforeUnmount((): void => {
+  cleanupDragSideEffects();
 });
 </script>
 
@@ -244,5 +267,14 @@ useResizeObserver(containerRef, () => {
   background-color: var(--border-secondary);
   border-radius: 2px;
   transform: translate(-50%, -50%);
+}
+
+.b-panel-splitter__drag-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  cursor: col-resize;
+  user-select: none;
+  background: transparent;
 }
 </style>
