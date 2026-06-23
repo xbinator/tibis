@@ -83,9 +83,17 @@ function handleCopyPath(): void {
   }
 }
 
-/** 返回技能列表页。 */
+/**
+ * 返回技能列表页。
+ * 优先沿用浏览器历史，以保留列表页的 `?page=` 等查询参数；
+ * 当无历史记录（如直接通过 URL 进入、刷新详情页）时回退到列表路由。
+ */
 function handleGoBack(): void {
-  router.push({ name: 'skill-list' });
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push({ name: 'skill-list' });
+  }
 }
 </script>
 

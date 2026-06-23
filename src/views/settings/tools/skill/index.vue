@@ -44,8 +44,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useSkillStore } from '@/stores/ai/skill';
 import { MENU_ITEMS } from '@/views/settings/constants';
@@ -55,17 +55,46 @@ import SkillItemRow from './components/SkillItemRow.vue';
 /** 每页显示数量。 */
 const PAGE_SIZE = 8;
 
+const route = useRoute();
 const router = useRouter();
 const store = useSkillStore();
-const currentPage = ref(1);
 /** 创建技能模态框可见性。 */
 const creatorVisible = ref(false);
+
+/**
+ * 当前页码，来源为路由查询参数 `page`，缺省值为 1。
+ * 切换分页时通过 `router.replace` 同步到 URL，便于从详情页返回时保持原页码。
+ */
+const currentPage = computed<number>({
+  get(): number {
+    const raw = route.query.page;
+    const value = Number(Array.isArray(raw) ? raw[0] : raw);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+  },
+  set(value: number): void {
+    router.replace({ query: { ...route.query, page: String(value) } });
+  }
+});
+
+/** 总页数，最少为 1，用于在页码越界时兜底。 */
+const totalPages = computed<number>(() => Math.max(1, Math.ceil(store.skills.length / PAGE_SIZE)));
 
 /** 当前页的 skill 列表。 */
 const pagedSkills = computed(() => {
   const start = (currentPage.value - 1) * PAGE_SIZE;
   return store.skills.slice(start, start + PAGE_SIZE);
 });
+
+/** 当技能列表收缩导致当前页码越界时，自动回退到最后一页。 */
+watch(
+  [currentPage, totalPages],
+  ([page, pages]) => {
+    if (page > pages) {
+      currentPage.value = pages;
+    }
+  },
+  { immediate: true }
+);
 
 /**
  * 跳转到 Skill 详情页。

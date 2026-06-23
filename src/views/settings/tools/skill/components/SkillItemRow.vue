@@ -16,8 +16,8 @@
       <!-- 解析错误详情 -->
       <div v-if="skill.parseError" class="skill-settings__item-parse-error">{{ skill.parseError }}</div>
     </div>
-    <div class="skill-settings__item-actions">
-      <ASwitch :checked="skill.enabled" size="small" :disabled="!!skill.parseError" @click.stop @change="handleToggle" />
+    <div class="skill-settings__item-actions" @click.stop>
+      <ASwitch :checked="skill.enabled" size="small" :disabled="!!skill.parseError" @change="handleToggle" />
     </div>
   </div>
 </template>
