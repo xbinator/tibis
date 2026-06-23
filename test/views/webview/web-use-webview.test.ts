@@ -492,6 +492,122 @@ describe('useWebView', () => {
     expect(snapshot.content).toContain('服务卡片 />');
   });
 
+  it('indexes expanded interactive webpage signals', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main>
+        <div id="grab-entry" style="cursor: grab;">拖拽入口</div>
+        <div id="switch-entry" role="switch" aria-checked="false">开关入口</div>
+        <div id="keyboard-entry" onkeydown="return true">键盘入口</div>
+      </main>
+    `;
+    const interactiveElements = Array.from(document.querySelectorAll<HTMLElement>('#grab-entry,#switch-entry,#keyboard-entry'));
+    if (interactiveElements.length !== 3) {
+      throw new Error('expanded interactive signal elements should exist');
+    }
+
+    interactiveElements.forEach((element) => installVisibleRect(element));
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([
+      { label: '拖拽入口', actions: ['click'] },
+      { label: '开关入口', actions: ['click'] },
+      { label: '键盘入口', actions: ['click', 'press'] }
+    ]);
+  });
+
+  it('filters disabled hidden and nested accessory webpage targets', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main>
+        <button disabled>禁用入口</button>
+        <button aria-disabled="true">禁用 ARIA</button>
+        <button hidden>隐藏入口</button>
+        <button id="parent-button">
+          父级入口
+          <span class="clickable">附属文本</span>
+        </button>
+      </main>
+    `;
+    const elements = Array.from(document.querySelectorAll<HTMLElement>('button,span'));
+    if (elements.length !== 5) {
+      throw new Error('filtered interactive elements should exist');
+    }
+
+    elements.forEach((element) => installVisibleRect(element));
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.map((element) => ({ tagName: element.tagName, label: element.label, actions: element.actions }))).toEqual([
+      { tagName: 'BUTTON', label: '父级入口 附属文本', actions: ['click'] }
+    ]);
+  });
+
+  it('uses multi-point hit testing for partially covered webpage targets', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main>
+        <div id="covered-entry" style="cursor: pointer;">部分可点入口</div>
+        <div id="overlay">遮挡层</div>
+      </main>
+    `;
+    const entry = document.querySelector('#covered-entry');
+    const overlay = document.querySelector('#overlay');
+    if (!(entry instanceof HTMLElement) || !(overlay instanceof HTMLElement)) {
+      throw new Error('multi-point hit test elements should exist');
+    }
+
+    installElementRect(entry, { x: 20, y: 20, width: 100, height: 40 });
+    installElementRect(overlay, { x: 45, y: 25, width: 50, height: 30 });
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn((x: number, y: number) => {
+        if (x >= 45 && x <= 95 && y >= 25 && y <= 55) {
+          return [overlay, document.body, document.documentElement];
+        }
+
+        return [entry, document.body, document.documentElement];
+      })
+    });
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.[0]).toMatchObject({
+      label: '部分可点入口',
+      actions: ['click'],
+      reasons: expect.arrayContaining(['hit-test-pass']),
+      hitTarget: { tagName: 'DIV', label: '部分可点入口', insideTarget: true }
+    });
+  });
+
+  it('indexes clickable children inside webpage links as direct targets', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <main>
+        <a href="/details">
+          <span id="link-child">链接子入口</span>
+        </a>
+      </main>
+    `;
+    const link = document.querySelector('a');
+    const linkChild = document.querySelector('#link-child');
+    if (!(link instanceof HTMLElement) || !(linkChild instanceof HTMLElement)) {
+      throw new Error('link child interactive elements should exist');
+    }
+
+    installVisibleRect(link);
+    installVisibleRect(linkChild);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: vi.fn(() => [linkChild, link, document.body, document.documentElement])
+    });
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.elements?.some((element) => element.tagName === 'SPAN' && element.label === '链接子入口' && element.actions.includes('click'))).toBe(true);
+  });
+
   it('indexes scrollable webpage containers as direct operation targets', async (): Promise<void> => {
     document.body.innerHTML = `
       <main>

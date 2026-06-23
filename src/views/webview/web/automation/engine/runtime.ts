@@ -37,6 +37,87 @@ const __tibisWebviewEngine = (() => {
     'aria-valuemin',
     'aria-autocomplete'
   ];
+  const INTERACTIVE_CURSORS = new Set([
+    'pointer',
+    'move',
+    'text',
+    'grab',
+    'grabbing',
+    'cell',
+    'copy',
+    'alias',
+    'all-scroll',
+    'col-resize',
+    'context-menu',
+    'crosshair',
+    'e-resize',
+    'ew-resize',
+    'help',
+    'n-resize',
+    'ne-resize',
+    'nesw-resize',
+    'ns-resize',
+    'nw-resize',
+    'nwse-resize',
+    'row-resize',
+    's-resize',
+    'se-resize',
+    'sw-resize',
+    'vertical-text',
+    'w-resize',
+    'zoom-in',
+    'zoom-out'
+  ]);
+  const NON_INTERACTIVE_CURSORS = new Set(['not-allowed', 'no-drop', 'wait', 'progress', 'initial', 'inherit']);
+  const INTERACTIVE_TAGS = new Set([
+    'a',
+    'button',
+    'input',
+    'select',
+    'textarea',
+    'details',
+    'summary',
+    'label',
+    'option',
+    'optgroup',
+    'fieldset',
+    'legend',
+    'form'
+  ]);
+  const CLICKABLE_ROLES = new Set([
+    'button',
+    'link',
+    'menuitem',
+    'menuitemradio',
+    'menuitemcheckbox',
+    'radio',
+    'checkbox',
+    'tab',
+    'switch',
+    'slider',
+    'spinbutton',
+    'combobox',
+    'searchbox',
+    'textbox',
+    'listbox',
+    'option',
+    'scrollbar'
+  ]);
+  const PRESS_EVENT_NAMES = new Set(['keydown', 'keyup']);
+  const COMMON_INTERACTION_EVENT_NAMES = [
+    'click',
+    'mousedown',
+    'mouseup',
+    'dblclick',
+    'keydown',
+    'keyup',
+    'submit',
+    'change',
+    'input',
+    'focus',
+    'blur'
+  ];
+  const COMMON_INTERACTION_EVENT_ATTRS = COMMON_INTERACTION_EVENT_NAMES.map((name) => 'on' + name);
   const ACTIONABLE_SELECTOR = [
     'button',
     'a[href]',
@@ -224,12 +305,60 @@ const __tibisWebviewEngine = (() => {
     }
     return null;
   };
+  const readCursor = (element) => String(window.getComputedStyle(element).cursor || '').trim();
   const hasDirectClickHandler = (element) => typeof element.onclick === 'function' || element.hasAttribute('onclick');
-  const hasPointerCursor = (element) => window.getComputedStyle(element).cursor === 'pointer';
+  const hasInteractiveCursor = (element) => INTERACTIVE_CURSORS.has(readCursor(element));
+  const hasPointerCursor = (element) => readCursor(element) === 'pointer';
+  const hasNonInteractiveCursor = (element) => NON_INTERACTIVE_CURSORS.has(readCursor(element));
   const hasActionDataAttribute = (element) =>
     ['data-action', 'data-ai-action', 'data-click', 'data-command', 'data-href'].some((name) => element.hasAttribute(name));
   const hasClickableClass = (element) =>
     /(^|[-_\\s])(btn|button|click|clickable|card|item|row|cell|option|menuitem|link)([-_\\s]|$)/i.test(readClassName(element));
+  const hasCommonEventAttribute = (element) =>
+    COMMON_INTERACTION_EVENT_ATTRS.some((name) => element.hasAttribute(name) || typeof element[name] === 'function');
+  const hasPressEventAttribute = (element) =>
+    Array.from(PRESS_EVENT_NAMES).some((name) => element.hasAttribute('on' + name) || typeof element['on' + name] === 'function');
+  const hasRegisteredInteractionListener = (element) => {
+    try {
+      if (typeof getEventListeners === 'function') {
+        const listenerMap = getEventListeners(element);
+        if (COMMON_INTERACTION_EVENT_NAMES.some((name) => Array.isArray(listenerMap[name]) && listenerMap[name].length > 0)) return true;
+      }
+      const getListeners =
+        (element.ownerDocument && element.ownerDocument.defaultView && element.ownerDocument.defaultView.getEventListenersForNode) ||
+        window.getEventListenersForNode;
+      if (typeof getListeners === 'function') {
+        const listeners = getListeners(element);
+        if (Array.isArray(listeners) && listeners.some((listener) => listener && COMMON_INTERACTION_EVENT_NAMES.includes(listener.type))) return true;
+      }
+    } catch {
+      return false;
+    }
+
+    return false;
+  };
+  const hasInteractionEvent = (element) => hasCommonEventAttribute(element) || hasRegisteredInteractionListener(element);
+  const hasParentAnchor = (element) => {
+    const anchor = element.closest('a[href]');
+    return Boolean(anchor && anchor !== element);
+  };
+  const isHiddenByAttribute = (element) =>
+    Boolean(
+      element.hidden ||
+        element.inert ||
+        element.closest('[hidden],[inert],[aria-hidden="true"]') ||
+        element.getAttribute('aria-hidden') === 'true'
+    );
+  const isDisabledElement = (element) =>
+    Boolean(
+      element.hasAttribute('disabled') ||
+        element.getAttribute('aria-disabled') === 'true' ||
+        element.hasAttribute('readonly') ||
+        element.getAttribute('aria-readonly') === 'true' ||
+        element.disabled ||
+        element.readOnly
+    );
+  const isInteractionBlocked = (element) => isHiddenByAttribute(element) || isDisabledElement(element) || hasNonInteractiveCursor(element);
   const isCompactTextElement = (element) => {
     const tagName = element.tagName.toLowerCase();
     if (!['span', 'div', 'li', 'label', 'i', 'em', 'strong'].includes(tagName)) return false;
@@ -261,29 +390,50 @@ const __tibisWebviewEngine = (() => {
     if (element.closest('main,article,section,form,table')) return false;
     return isVisibleTopbarRect(element) && hasCompactTextSiblingCluster(element);
   };
+  const hasInteractiveRole = (element) => {
+    const role = String(element.getAttribute('role') || '').toLowerCase();
+    const ariaRole = String(element.getAttribute('aria-role') || '').toLowerCase();
+    return CLICKABLE_ROLES.has(role) || CLICKABLE_ROLES.has(ariaRole);
+  };
   const hasNativeClickAction = (element) => {
     const tagName = element.tagName.toLowerCase();
-    if (tagName === 'a' || tagName === 'button' || tagName === 'summary') return true;
+    if (['a', 'button', 'details', 'summary', 'label', 'option', 'legend'].includes(tagName)) return true;
     return element instanceof HTMLInputElement && ['button', 'submit', 'reset', 'checkbox', 'radio'].includes(String(element.type || 'text').toLowerCase());
   };
   const hasInteractiveAria = (element) => INTERACTIVE_ARIA_ATTRS.some((name) => element.hasAttribute(name));
+  const hasFocusableTabIndex = (element) => element.hasAttribute('tabindex') && Number(element.tabIndex) >= 0;
   const hasNonSemanticClickHint = (element) => {
     if (!readLabel(element)) return false;
     return (
       hasDirectClickHandler(element) ||
-      hasPointerCursor(element) ||
+      hasInteractiveCursor(element) ||
       hasActionDataAttribute(element) ||
       hasClickableClass(element) ||
-      hasInteractiveAria(element)
+      hasInteractiveAria(element) ||
+      hasInteractionEvent(element) ||
+      hasParentAnchor(element)
     );
   };
   const hasDirectScrollableLabel = (element) => canScrollElement(element) && Boolean(readExplicitElementLabel(element));
-  const isActionableCandidate = (element) =>
-    matchesSelector(element, ACTIONABLE_SELECTOR) || hasCompactNavigationText(element) || hasCompactTopbarText(element) || hasDirectScrollableLabel(element);
+  const isNativeInteractiveCandidate = (element) => INTERACTIVE_TAGS.has(element.tagName.toLowerCase());
+  const isActionableCandidate = (element) => {
+    if (isInteractionBlocked(element)) return false;
+    return (
+      matchesSelector(element, ACTIONABLE_SELECTOR) ||
+      isNativeInteractiveCandidate(element) ||
+      hasInteractiveRole(element) ||
+      hasInteractiveCursor(element) ||
+      hasInteractionEvent(element) ||
+      hasParentAnchor(element) ||
+      hasFocusableTabIndex(element) ||
+      hasCompactNavigationText(element) ||
+      hasCompactTopbarText(element) ||
+      hasDirectScrollableLabel(element)
+    );
+  };
   const readActions = (element) => {
+    if (isInteractionBlocked(element)) return [];
     const tagName = element.tagName.toLowerCase();
-    const role = element.getAttribute('role') || '';
-    const clickableRoles = ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'];
     const keyboardTags = ['input', 'textarea', 'select'];
     const actions = [];
     if (element instanceof HTMLInputElement) {
@@ -297,10 +447,10 @@ const __tibisWebviewEngine = (() => {
       actions.push('input');
     }
     if (tagName === 'select') actions.push('select');
-    if (tagName === 'a' || tagName === 'button' || tagName === 'summary' || clickableRoles.includes(role)) actions.push('click');
+    if (hasNativeClickAction(element) || hasInteractiveRole(element)) actions.push('click');
     if (hasNonSemanticClickHint(element)) actions.push('click');
     if (hasCompactNavigationText(element) || hasCompactTopbarText(element)) actions.push('click');
-    if (keyboardTags.includes(tagName) || element.isContentEditable) actions.push('press');
+    if (keyboardTags.includes(tagName) || element.isContentEditable || hasPressEventAttribute(element)) actions.push('press');
     if (hasDirectScrollableLabel(element) || hasScrollableAncestor(element)) actions.push('scroll');
     return Array.from(new Set(actions));
   };
@@ -342,18 +492,44 @@ const __tibisWebviewEngine = (() => {
     }
     return labels;
   };
-  const readHitTarget = (element, rect) => {
-    if (typeof document.elementsFromPoint !== 'function' || rect.width <= 0 || rect.height <= 0) return undefined;
-    const x = Math.max(0, Math.min(window.innerWidth - 1, rect.x + rect.width / 2));
-    const y = Math.max(0, Math.min(window.innerHeight - 1, rect.y + rect.height / 2));
-    const hit = document
+  const readHitTestPoints = (rect) => {
+    const marginX = Math.min(5, Math.max(rect.width / 2 - 1, 0));
+    const marginY = Math.min(5, Math.max(rect.height / 2 - 1, 0));
+    return [
+      { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+      { x: rect.x + marginX, y: rect.y + marginY },
+      { x: rect.x + rect.width - marginX, y: rect.y + marginY },
+      { x: rect.x + marginX, y: rect.y + rect.height - marginY },
+      { x: rect.x + rect.width - marginX, y: rect.y + rect.height - marginY }
+    ].map((point) => ({
+      x: Math.max(0, Math.min(window.innerWidth - 1, point.x)),
+      y: Math.max(0, Math.min(window.innerHeight - 1, point.y))
+    }));
+  };
+  const readFirstHitAtPoint = (x, y) =>
+    document
       .elementsFromPoint(x, y)
       .find((candidate) => candidate instanceof HTMLElement && candidate !== document.body && candidate !== document.documentElement);
-    if (!(hit instanceof HTMLElement)) return undefined;
+  const readHitTarget = (element, rect) => {
+    if (typeof document.elementsFromPoint !== 'function' || rect.width <= 0 || rect.height <= 0) return undefined;
+    let fallbackHit = null;
+    let hit = null;
+    readHitTestPoints(rect).some((point) => {
+      const candidate = readFirstHitAtPoint(point.x, point.y);
+      if (!fallbackHit && candidate instanceof HTMLElement) fallbackHit = candidate;
+      if (candidate instanceof HTMLElement && containsComposedElement(element, candidate)) {
+        hit = candidate;
+        return true;
+      }
+
+      return false;
+    });
+    const target = hit || fallbackHit;
+    if (!(target instanceof HTMLElement)) return undefined;
     return {
-      tagName: hit.tagName,
-      label: readLabel(hit).slice(0, 300),
-      insideTarget: containsComposedElement(element, hit)
+      tagName: target.tagName,
+      label: readLabel(target).slice(0, 300),
+      insideTarget: containsComposedElement(element, target)
     };
   };
   const readVisibleRatio = (rect) => {
@@ -479,11 +655,14 @@ const __tibisWebviewEngine = (() => {
     const reasons = [];
     const role = element.getAttribute('role') || '';
     if (hasNativeClickAction(element)) reasons.push('native-control');
-    if (['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'].includes(role)) reasons.push('aria-role');
+    if (hasInteractiveRole(element)) reasons.push('aria-role');
     if (hasDirectClickHandler(element)) reasons.push('inline-handler');
     if (hasPointerCursor(element)) reasons.push('pointer-cursor');
+    if (hasInteractiveCursor(element) && !hasPointerCursor(element)) reasons.push('interactive-cursor');
     if (hasActionDataAttribute(element)) reasons.push('action-data');
     if (hasClickableClass(element)) reasons.push('clickable-class');
+    if (hasInteractionEvent(element)) reasons.push('interaction-event');
+    if (hasParentAnchor(element)) reasons.push('parent-anchor');
     if (hasCompactNavigationText(element)) reasons.push('compact-navigation-text');
     if (hasCompactTopbarText(element)) reasons.push('compact-topbar-text');
     if (readLabel(element)) reasons.push('visible-label');
@@ -499,8 +678,11 @@ const __tibisWebviewEngine = (() => {
     if (reasons.includes('aria-role')) score += 0.22;
     if (reasons.includes('inline-handler')) score += 0.2;
     if (reasons.includes('pointer-cursor')) score += 0.18;
+    if (reasons.includes('interactive-cursor')) score += 0.16;
     if (reasons.includes('action-data')) score += 0.18;
     if (reasons.includes('clickable-class')) score += 0.14;
+    if (reasons.includes('interaction-event')) score += 0.18;
+    if (reasons.includes('parent-anchor')) score += 0.12;
     if (reasons.includes('compact-navigation-text')) score += 0.12;
     if (reasons.includes('compact-topbar-text')) score += 0.1;
     if (reasons.includes('visible-label')) score += 0.08;
@@ -563,9 +745,9 @@ const __tibisWebviewEngine = (() => {
     if (element === document.body || element === document.documentElement) return true;
     const rect = readViewportRect(element);
     if (rect.width <= 0 || rect.height <= 0) return false;
-    const x = Math.max(0, Math.min(window.innerWidth - 1, rect.x + rect.width / 2));
-    const y = Math.max(0, Math.min(window.innerHeight - 1, rect.y + rect.height / 2));
-    return document.elementsFromPoint(x, y).some((candidate) => candidate instanceof HTMLElement && containsComposedElement(element, candidate));
+    return readHitTestPoints(rect).some((point) =>
+      document.elementsFromPoint(point.x, point.y).some((candidate) => candidate instanceof HTMLElement && containsComposedElement(element, candidate))
+    );
   };
   const markSeen = (fingerprint) => {
     const globalKey = '__tibisWebviewSeenElementFingerprints';
@@ -575,13 +757,33 @@ const __tibisWebviewEngine = (() => {
     seen.add(fingerprint);
     return isNew;
   };
-  const readElementEntries = (limit) =>
+  const hasAutomationIdentity = (element) =>
+    ['data-testid', 'data-test', 'data-cy'].some((name) => element.hasAttribute(name));
+  const isElementDistinctInteraction = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    if (hasParentAnchor(element)) return true;
+    if (['a', 'button', 'input', 'select', 'textarea', 'summary', 'details', 'label', 'option'].includes(tagName)) return true;
+    if (hasInteractiveRole(element) || element.isContentEditable || element.getAttribute('contenteditable') === 'true') return true;
+    if (hasAutomationIdentity(element) || hasDirectClickHandler(element) || hasInteractionEvent(element)) return true;
+    if (hasInteractiveAria(element) || hasDirectScrollableLabel(element)) return true;
+    return false;
+  };
+  const hasIndexedInteractiveAncestor = (element, entries) =>
+    entries.some((entry) => entry.element !== element && containsComposedElement(entry.element, element));
+  const readElementEntries = (limit) => {
+    const entries = [];
     collectComposedElements(document)
       .filter((element) => isActionableCandidate(element))
       .filter((element) => element instanceof HTMLElement && isVisible(element) && !(element instanceof HTMLInputElement && element.type === 'hidden'))
       .map((element) => ({ element, actions: readActions(element) }))
       .filter((item) => item.actions.length > 0)
-      .slice(0, limit);
+      .some((item) => {
+        if (hasIndexedInteractiveAncestor(item.element, entries) && !isElementDistinctInteraction(item.element)) return false;
+        entries.push(item);
+        return entries.length >= limit;
+      });
+    return entries;
+  };
   const readIndexedNodes = (flatTree) =>
     Object.values(flatTree.map)
       .filter((node) => node && node.type === 'ELEMENT_NODE' && typeof node.highlightIndex === 'number')
