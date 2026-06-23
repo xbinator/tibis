@@ -14,6 +14,8 @@ export interface UseChatScrollOptions {
   backBottomHeight?: number;
   /** 回到底部按钮停止滚动后隐藏延迟 */
   backBottomIdleHideDelay?: number;
+  /** 是否在远离底部时保持回到底部按钮可见 */
+  keepBackBottomVisible?: Ref<boolean>;
   /** 加载历史回调 */
   onLoadHistory?: () => Promise<void> | void;
 }
@@ -41,7 +43,7 @@ interface UseChatScrollReturn {
  */
 export function useChatScroll(scrollOptions: UseChatScrollOptions): UseChatScrollReturn {
   const containerRef = useTemplateRef<HTMLElement>('container');
-  const { historyLoadThreshold = 160, backBottomHeight = 300, backBottomIdleHideDelay = 1200, onLoadHistory } = scrollOptions;
+  const { historyLoadThreshold = 160, backBottomHeight = 300, backBottomIdleHideDelay = 1200, keepBackBottomVisible, onLoadHistory } = scrollOptions;
 
   const scroller = useScroller(containerRef);
   const isBackBottom = ref(false);
@@ -63,7 +65,7 @@ export function useChatScroll(scrollOptions: UseChatScrollOptions): UseChatScrol
   function resetBackBottomHideTimer(): void {
     clearBackBottomHideTimer();
 
-    if (backBottomIdleHideDelay <= 0) {
+    if (backBottomIdleHideDelay <= 0 || keepBackBottomVisible?.value === true) {
       return;
     }
 
@@ -124,6 +126,25 @@ export function useChatScroll(scrollOptions: UseChatScrollOptions): UseChatScrol
       if (isNearHistoryEdge()) {
         onLoadHistory?.();
       }
+    }
+  );
+
+  // 生成中仅在已经远离底部时接管隐藏计时；接近底部仍交给滚动状态隐藏按钮。
+  watch(
+    () => keepBackBottomVisible?.value === true,
+    (shouldKeepVisible) => {
+      if (Math.abs(scroller.scrollTop) <= backBottomHeight) {
+        return;
+      }
+
+      isBackBottom.value = true;
+
+      if (shouldKeepVisible) {
+        clearBackBottomHideTimer();
+        return;
+      }
+
+      resetBackBottomHideTimer();
     }
   );
 

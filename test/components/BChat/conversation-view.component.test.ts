@@ -125,6 +125,23 @@ function createUserMessage(id: string): Message {
 }
 
 describe('ConversationView', (): void => {
+  it('hides the back bottom button while loading at the bottom', (): void => {
+    const wrapper = mount(ConversationViewForTest, {
+      props: {
+        messages: [],
+        loading: true,
+        disabled: false
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.get('.to-bottom').classes()).not.toContain('to-bottom--visible');
+  });
+
   it('updates a tool part when status changes without message finished changing', async (): Promise<void> => {
     const wrapper = mount(ConversationViewForTest, {
       props: {

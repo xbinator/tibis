@@ -3,7 +3,7 @@
  * @description BChat 滚动返回底部按钮显示时机测试。
  * @vitest-environment jsdom
  */
-import { defineComponent, nextTick } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useChatScroll } from '@/components/BChat/hooks/useChatScroll';
@@ -14,6 +14,8 @@ import { useChatScroll } from '@/components/BChat/hooks/useChatScroll';
 interface ChatScrollHostVm {
   /** 回到底部按钮是否显示 */
   isBackBottom: boolean;
+  /** 是否保持回到底部按钮可见 */
+  keepBackBottomVisible: boolean;
   /** 暂停回到底部按钮自动隐藏 */
   pauseBackBottomHideTimer: () => void;
   /** 恢复回到底部按钮自动隐藏 */
@@ -21,20 +23,32 @@ interface ChatScrollHostVm {
 }
 
 /**
+ * useChatScroll 测试宿主组件配置。
+ */
+interface ChatScrollHostOptions {
+  /** 是否保持回到底部按钮可见 */
+  keepBackBottomVisible?: boolean;
+}
+
+/**
  * 创建 useChatScroll 测试宿主组件。
+ * @param options - 测试宿主配置
  * @returns 测试宿主组件
  */
-function createChatScrollHost(): ReturnType<typeof defineComponent> {
+function createChatScrollHost(options: ChatScrollHostOptions = {}): ReturnType<typeof defineComponent> {
   return defineComponent({
     name: 'ChatScrollHost',
     setup() {
+      const keepBackBottomVisible = ref(options.keepBackBottomVisible === true);
       const scrollState = useChatScroll({
         backBottomHeight: 300,
-        backBottomIdleHideDelay: 200
+        backBottomIdleHideDelay: 200,
+        keepBackBottomVisible
       });
 
       return {
         isBackBottom: scrollState.isBackBottom,
+        keepBackBottomVisible,
         pauseBackBottomHideTimer: scrollState.pauseBackBottomHideTimer,
         resumeBackBottomHideTimer: scrollState.resumeBackBottomHideTimer
       };
@@ -152,6 +166,25 @@ describe('useChatScroll', (): void => {
     await nextTick();
 
     expect(vm.isBackBottom).toBe(false);
+  });
+
+  it('keeps back bottom visible after idle while the keep-visible flag is active', async (): Promise<void> => {
+    vi.useFakeTimers();
+    const wrapper = mount(createChatScrollHost({ keepBackBottomVisible: true }));
+    const vm = wrapper.vm as unknown as ChatScrollHostVm;
+    await nextTick();
+    const container = wrapper.element;
+    mockScrollMetrics(container);
+
+    container.scrollTop = 420;
+    container.dispatchEvent(new Event('scroll'));
+    await nextTick();
+
+    expect(vm.isBackBottom).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(vm.isBackBottom).toBe(true);
   });
 
   it('keeps only one external visibility state for the back bottom button', (): void => {

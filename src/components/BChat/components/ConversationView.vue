@@ -53,6 +53,7 @@
 <script setup lang="ts">
 import type { Message } from '../utils/types';
 import type { AIUserChoiceAnswerData } from 'types/chat';
+import { toRef } from 'vue';
 import { useChatScroll } from '../hooks/useChatScroll';
 import MessageBubble from './MessageBubble.vue';
 
@@ -149,7 +150,10 @@ defineEmits<{
   (e: 'rollback', message: Message): void;
 }>();
 
-const { isBackBottom, scrollToBottom, pauseBackBottomHideTimer, resumeBackBottomHideTimer } = useChatScroll({ onLoadHistory: props.onLoadHistory });
+const { isBackBottom, scrollToBottom, pauseBackBottomHideTimer, resumeBackBottomHideTimer } = useChatScroll({
+  keepBackBottomVisible: toRef(props, 'loading'),
+  onLoadHistory: props.onLoadHistory
+});
 
 defineExpose({ scrollToBottom });
 </script>
