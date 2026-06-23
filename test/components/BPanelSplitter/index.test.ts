@@ -114,4 +114,21 @@ describe('BPanelSplitter', (): void => {
     await nextTick();
     expect(wrapper.find('.b-panel-splitter__section').attributes('style')).toContain('width: 360px;');
   });
+
+  it('keeps external classes on the splitter root for layout states', (): void => {
+    const updateSize = vi.fn<(_value: number) => void>();
+    const wrapper = mount(BPanelSplitter, {
+      props: {
+        class: 'chat-sider--expanded',
+        size: 300,
+        'onUpdate:size': updateSize
+      },
+      slots: {
+        default: '<div>content</div>'
+      },
+      attachTo: document.body
+    });
+
+    expect(wrapper.find('.b-panel-splitter').classes()).toContain('chat-sider--expanded');
+  });
 });

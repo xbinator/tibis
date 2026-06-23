@@ -8,11 +8,11 @@
       <div :class="bem('resizer')"></div>
       <div :class="bem('bar')"></div>
     </div>
-  </div>
 
-  <Teleport to="body">
-    <div v-if="isDragging" :class="bem('drag-shield')" @mousemove.stop="handleMouseMove" @mouseup.stop="handleMouseUp"></div>
-  </Teleport>
+    <Teleport to="body">
+      <div v-if="isDragging" :class="bem('drag-shield')" @mousemove.stop="handleMouseMove" @mouseup.stop="handleMouseUp"></div>
+    </Teleport>
+  </div>
 </template>
 
 <script setup lang="ts">
