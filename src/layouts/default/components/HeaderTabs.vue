@@ -17,6 +17,13 @@
         <div :ref="setTabRef(tab.id)" :data-tab-id="tab.id" class="header-tab" :class="getTabClassName(tab)" @click="handleClickTab(tab.path)">
           <div class="header-tab__title">
             <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
+            <BRecentIcon
+              class="header-tab__icon"
+              :record="resolveTabRecentRecord(tab)"
+              :file-name="resolveTabIconFileName(tab)"
+              :icon="resolveTabFallbackIcon(tab)"
+              :size="14"
+            />
             <span class="header-tab__title-text">{{ tab.title }}</span>
           </div>
 
@@ -39,24 +46,33 @@
  * @description 渲染顶部标签栏的交互逻辑，拖拽排序委托给 useTabDragger 模块。
  */
 
-import { computed, shallowRef, onUnmounted, watch } from 'vue';
+import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { Dropdown } from 'ant-design-vue';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { getHeaderTabsWheelScrollDelta } from '@/layouts/default/utils/headerTabsScroll';
 import { isMac } from '@/shared/platform/env';
+import type { RecentRecord } from '@/shared/storage';
 import { useSettingStore } from '@/stores/ui/setting';
+import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import type { Tab, TabCloseAction, TabClosePlan, TabMovePosition } from '@/stores/workspace/tabs';
 import { Modal } from '@/utils/modal';
 import { useTabDragger } from '../hooks/useTabDragger';
 
 const tabsStore = useTabsStore();
+const recentStore = useRecentStore();
 const settingStore = useSettingStore();
 const route = useRoute();
 const router = useRouter();
 const CONTEXT_MENU_CLOSE_DELAY_MS = 200;
+const WEBVIEW_FALLBACK_ICON = 'vscode-icons:file-type-geojson';
+
+/**
+ * WebView 最近记录。
+ */
+type WebviewRecentRecord = Extract<RecentRecord, { type: 'webview' }>;
 
 /** 横向滚动容器 ref，供拖拽模块初始化 auto-scroll */
 const scrollContainer = shallowRef<HTMLElement | null>(null);
@@ -99,6 +115,18 @@ const dragModule = useTabDragger(scrollContainer, handleMoveTab, handleDragEnded
 
 const { draggingTabId, dropIndicatorOffset } = dragModule.state;
 
+/** 最近记录 ID 到记录的索引，用于文件标签直接按 tab id 命中。 */
+const recentRecordsById = computed<Map<string, RecentRecord>>(() => new Map((recentStore.recentRecords ?? []).map((record) => [record.id, record])));
+
+/** WebView URL 到记录的索引，用于从路由路径恢复 favicon。 */
+const webviewRecordsByUrl = computed<Map<string, WebviewRecentRecord>>(() => {
+  const entries = (recentStore.recentRecords ?? [])
+    .filter((record): record is WebviewRecentRecord => record.type === 'webview')
+    .map((record) => [record.url, record] as const);
+
+  return new Map(entries);
+});
+
 /**
  * 清理右键菜单关闭冷却计时器。
  */
@@ -132,6 +160,11 @@ onUnmounted(() => {
 });
 
 /**
+ * 组件挂载后加载最近记录，让标签栏可复用 WebView favicon 和文件记录元数据。
+ */
+onMounted(() => recentStore.ensureLoaded());
+
+/**
  * 判断标签页是否为当前激活状态。
  * @param tab - 待判断的标签页
  * @returns 是否与当前路由匹配
@@ -151,6 +184,94 @@ function getTabClassName(tab: Tab): Record<string, boolean> {
     'is-missing': tabsStore.isMissing(tab.id),
     'is-dragging': draggingTabId.value === tab.id
   };
+}
+
+/**
+ * 判断标签页路径是否来自 WebView 路由。
+ * @param path - 标签页路由路径
+ * @returns 是否为 WebView 标签页
+ */
+function isWebviewTabPath(path: string): boolean {
+  return path.startsWith('/webview/');
+}
+
+/**
+ * 安全解码路由 query 字段，保留无法解码的原始值。
+ * @param value - query 字段值
+ * @returns 解码后的字段值
+ */
+function decodeRouteQueryValue(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * 从 WebView 标签页路径中解析原始 URL。
+ * @param path - 标签页路由路径
+ * @returns WebView URL，非 WebView 标签或缺失 URL 时返回空字符串
+ */
+function resolveWebviewUrlFromTabPath(path: string): string {
+  if (!isWebviewTabPath(path)) {
+    return '';
+  }
+
+  const queryStartIndex = path.indexOf('?');
+  if (queryStartIndex === -1) {
+    return '';
+  }
+
+  const query = path.slice(queryStartIndex + 1);
+  const url = new URLSearchParams(query).get('url') ?? '';
+
+  return url ? decodeRouteQueryValue(url).trim() : '';
+}
+
+/**
+ * 解析标签页对应的最近记录。
+ * @param tab - 标签页
+ * @returns 匹配的最近记录，未命中时返回 undefined
+ */
+function resolveTabRecentRecord(tab: Tab): RecentRecord | undefined {
+  const record = recentRecordsById.value.get(tab.id);
+  if (record) {
+    return record;
+  }
+
+  const webviewUrl = resolveWebviewUrlFromTabPath(tab.path);
+  if (!webviewUrl) {
+    return undefined;
+  }
+
+  return webviewRecordsByUrl.value.get(webviewUrl);
+}
+
+/**
+ * 解析标签页图标组件的文件名入参。
+ * @param tab - 标签页
+ * @returns 用于文件图标推断的文件名
+ */
+function resolveTabIconFileName(tab: Tab): string {
+  if (resolveTabRecentRecord(tab) || isWebviewTabPath(tab.path)) {
+    return '';
+  }
+
+  return tab.title;
+}
+
+/**
+ * 解析标签页图标组件的显式回退图标。
+ * @param tab - 标签页
+ * @returns Iconify 图标名，无需显式回退时返回空字符串
+ */
+function resolveTabFallbackIcon(tab: Tab): string {
+  if (isWebviewTabPath(tab.path) && !resolveTabRecentRecord(tab)) {
+    return WEBVIEW_FALLBACK_ICON;
+  }
+
+  return '';
 }
 
 /**
@@ -469,18 +590,31 @@ function handleWheel(event: WheelEvent): void {
 }
 
 .header-tab__title {
+  display: flex;
+  flex-shrink: 1;
+  align-items: center;
+  min-width: 0;
   max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 13px;
   color: var(--text-primary);
-  white-space: nowrap;
   user-select: none;
 }
 
 .header-tab__dirty-mark {
+  flex-shrink: 0;
   margin-right: 2px;
   font-weight: 700;
+}
+
+.header-tab__icon {
+  margin-right: 6px;
+}
+
+.header-tab__title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-tab__close {

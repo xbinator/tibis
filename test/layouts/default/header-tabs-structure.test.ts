@@ -27,4 +27,12 @@ describe('HeaderTabs drag region structure', (): void => {
     expect(headerTabsSource).toContain('() => route.fullPath');
     expect(headerTabsSource).toContain('settingStore.setChatSidebarExpanded(false)');
   });
+
+  it('renders tab icons through the shared BRecentIcon component', (): void => {
+    expect(headerTabsSource).toContain('<BRecentIcon');
+    expect(headerTabsSource).toContain(':record="resolveTabRecentRecord(tab)"');
+    expect(headerTabsSource).toContain(':file-name="resolveTabIconFileName(tab)"');
+    expect(headerTabsSource).toContain(':icon="resolveTabFallbackIcon(tab)"');
+    expect(headerTabsSource).toContain('function resolveWebviewUrlFromTabPath(path: string): string');
+  });
 });
