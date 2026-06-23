@@ -614,6 +614,37 @@ describe('useWebView', () => {
     });
   });
 
+  it('does not merge child tab labels into one container summary line', async (): Promise<void> => {
+    document.body.innerHTML = `
+      <section aria-label="切换区域">
+        <div class="tab">
+          <span>方式一</span>
+          <span>方式二</span>
+        </div>
+      </section>
+    `;
+    const section = document.querySelector('section');
+    const tab = document.querySelector('.tab');
+    const first = document.querySelector('.tab span:first-child');
+    const second = document.querySelector('.tab span:last-child');
+    if (!(section instanceof HTMLElement) || !(tab instanceof HTMLElement) || !(first instanceof HTMLElement) || !(second instanceof HTMLElement)) {
+      throw new Error('tab summary test elements should exist');
+    }
+
+    installVisibleRect(section);
+    installVisibleRect(tab);
+    installVisibleRect(first);
+    installVisibleRect(second);
+    const controller = useWebView(ref<WebviewTag | null>(createPageScriptExecutingWebview()));
+
+    const snapshot = await controller.readPageSnapshot();
+
+    expect(snapshot.content).not.toContain('<div class="tab">方式一 方式二</div>');
+    expect(snapshot.content).toContain('<div class="tab"></div>');
+    expect(snapshot.content).toContain('<span>方式一</span>');
+    expect(snapshot.content).toContain('<span>方式二</span>');
+  });
+
   it('returns simplified DOM browser state in webpage snapshots', async (): Promise<void> => {
     document.body.innerHTML = `
       <main id="sample-page">
