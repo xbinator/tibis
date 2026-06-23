@@ -73,6 +73,143 @@ describe('messageHelper compression boundary assembly', () => {
     expect(sliced.map((message) => message.id)).toEqual(['compression-1', 'u2', 'a2', 'u3']);
   });
 
+  it('uses an assistant compaction part as the latest compression boundary', (): void => {
+    const compactedAssistant = createModelMessage('assistant-active', 'assistant', '');
+    compactedAssistant.parts = [
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordId: 'record-1',
+        recordText: 'COMPRESSED_CONTEXT\n## Conversation Continuity\n- 自动压缩后的上下文',
+        coveredUntilMessageId: 'a1',
+        sourceMessageIds: ['u1', 'a1']
+      }
+    ];
+    const messages: Message[] = [
+      createModelMessage('u1', 'user', '旧用户消息'),
+      createModelMessage('a1', 'assistant', '旧助手回复'),
+      compactedAssistant,
+      createModelMessage('u2', 'user', '压缩后的新问题')
+    ];
+
+    const sliced = sliceMessagesFromCompressionBoundary(messages);
+    const modelMessages = convert.toModelMessages(messages);
+
+    expect(sliced.map((message) => message.id)).toEqual(['assistant-active:compaction-boundary', 'u2']);
+    expect(modelMessages).toEqual([
+      { role: 'system', content: expect.stringContaining('COMPRESSED_CONTEXT') },
+      { role: 'user', content: '压缩后的新问题' }
+    ]);
+  });
+
+  it('adds a user continuation prompt when compaction covers the active assistant message', (): void => {
+    const activeAssistant = createModelMessage('assistant-active', 'assistant', '');
+    activeAssistant.parts = [
+      {
+        type: 'tool',
+        toolCallId: 'tool-call-1',
+        toolName: 'operate_webpage',
+        status: 'done',
+        input: { index: 9 },
+        result: { toolName: 'operate_webpage', status: 'success', data: { clicked: true } }
+      },
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordId: 'record-1',
+        recordText: 'COMPRESSED_CONTEXT\n## Conversation Continuity\n- 自动压缩后的上下文',
+        coveredUntilMessageId: 'assistant-active',
+        sourceMessageIds: ['u1', 'assistant-active']
+      }
+    ];
+    const messages: Message[] = [createModelMessage('u1', 'user', '旧用户消息'), activeAssistant];
+
+    const modelMessages = convert.toModelMessages(messages);
+
+    expect(modelMessages).toEqual([
+      { role: 'system', content: expect.stringContaining('COMPRESSED_CONTEXT') },
+      {
+        role: 'user',
+        content: expect.stringContaining('继续完成当前用户任务')
+      }
+    ]);
+  });
+
+  it('serializes assistant content appended after a compaction part as neutral context before a later user turn', (): void => {
+    const compactedAssistant = createModelMessage('assistant-active', 'assistant', '');
+    compactedAssistant.parts = [
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordId: 'record-1',
+        recordText: 'COMPRESSED_CONTEXT\n## Conversation Continuity\n- 自动压缩后的上下文',
+        coveredUntilMessageId: 'a1',
+        sourceMessageIds: ['u1', 'a1']
+      },
+      { type: 'text', text: '继续后的回答' }
+    ];
+    const messages: Message[] = [
+      createModelMessage('u1', 'user', '旧用户消息'),
+      createModelMessage('a1', 'assistant', '旧助手回复'),
+      compactedAssistant,
+      createModelMessage('u2', 'user', '压缩后的新问题')
+    ];
+
+    const modelMessages = convert.toModelMessages(messages);
+
+    expect(modelMessages).toEqual([
+      { role: 'system', content: expect.stringContaining('COMPRESSED_CONTEXT') },
+      { role: 'user', content: expect.stringContaining('继续后的回答') },
+      { role: 'user', content: '压缩后的新问题' }
+    ]);
+    expect(modelMessages[1]?.content).not.toContain('继续完成当前用户任务');
+  });
+
+  it('serializes post-compaction tool progress as user continuation context', (): void => {
+    const compactedAssistant = createModelMessage('assistant-active', 'assistant', '');
+    compactedAssistant.parts = [
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordId: 'record-1',
+        recordText: 'COMPRESSED_CONTEXT\n## Conversation Continuity\n- 自动压缩后的上下文',
+        coveredUntilMessageId: 'a1',
+        sourceMessageIds: ['u1', 'a1']
+      },
+      { type: 'thinking', thinking: 'Let me continue the task.' },
+      {
+        type: 'tool',
+        toolCallId: 'tool-call-read-page',
+        toolName: 'read_current_webpage',
+        status: 'done',
+        input: { include_structure: true },
+        result: { toolName: 'read_current_webpage', status: 'success', data: { title: '160云医院-张哥中医理疗馆' } }
+      }
+    ];
+    const messages: Message[] = [createModelMessage('u1', 'user', '旧用户消息'), createModelMessage('a1', 'assistant', '旧助手回复'), compactedAssistant];
+
+    const modelMessages = convert.toModelMessages(messages);
+
+    expect(modelMessages.map((message) => message.role)).toEqual(['system', 'user']);
+    expect(JSON.stringify(modelMessages)).not.toContain('"role":"tool"');
+    expect(modelMessages[1]).toEqual({
+      role: 'user',
+      content: expect.stringContaining('read_current_webpage')
+    });
+    expect(modelMessages[1]).toEqual({
+      role: 'user',
+      content: expect.stringContaining('继续完成当前用户任务')
+    });
+  });
+
   it('converts the compression boundary as assistant context before tail messages', (): void => {
     const messages: Message[] = [
       createModelMessage('u1', 'user', '旧用户消息'),
@@ -85,7 +222,7 @@ describe('messageHelper compression boundary assembly', () => {
 
     const modelMessages = convert.toModelMessages(messages);
 
-    expect(modelMessages[0]).toEqual({ role: 'assistant', content: expect.stringContaining('COMPRESSED_CONTEXT') });
+    expect(modelMessages[0]).toEqual({ role: 'system', content: expect.stringContaining('COMPRESSED_CONTEXT') });
     expect(modelMessages[1]).toEqual({ role: 'user', content: 'tail 用户消息' });
     expect(modelMessages[2]?.role).toBe('assistant');
     expect(modelMessages[3]).toEqual({ role: 'user', content: '压缩后的新问题' });

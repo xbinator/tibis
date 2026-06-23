@@ -148,4 +148,26 @@ describe('MessageBubble', (): void => {
     expect(wrapper.text()).not.toContain('压缩失败');
     expect(wrapper.find('.status-node__error').exists()).toBe(false);
   });
+
+  it('renders assistant compaction parts as inline compression status', (): void => {
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [
+          {
+            type: 'compaction',
+            auto: true,
+            reason: 'auto',
+            status: 'success',
+            recordId: 'record-1',
+            recordText: 'COMPRESSED_CONTEXT',
+            coveredUntilMessageId: 'assistant-previous'
+          }
+        ]
+      })
+    );
+
+    expect(wrapper.text()).toContain('上下文已压缩');
+    expect(wrapper.text()).not.toContain('压缩失败');
+  });
 });

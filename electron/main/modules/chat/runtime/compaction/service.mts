@@ -4,7 +4,7 @@
  */
 import type { ChatRuntimeEventEmitter } from '../types.mjs';
 import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
-import type { ChatRuntimeCompactInput, ChatRuntimeCompactResult } from 'types/chat-runtime';
+import type { ChatMessageCompactionPart, ChatRuntimeCompactInput, ChatRuntimeCompactResult } from 'types/chat-runtime';
 import type { CompressionRecord, GeneralConversationSummary, StructuredConversationSummary } from 'types/compression';
 import { nanoid } from 'nanoid';
 
@@ -92,6 +92,42 @@ type CompressionSourceSelection =
       status: 'skipped';
       /** 跳过原因。 */
       reason: 'not_enough_content';
+    };
+
+/** 压缩状态更新目标。 */
+type CompressionStatusTarget =
+  | {
+      /** 使用独立 compression 消息展示状态。 */
+      kind: 'message';
+      /** compression 消息 ID。 */
+      messageId: string;
+      /** compression 消息创建时间。 */
+      createdAt: string;
+    }
+  | {
+      /** 使用当前 assistant 的 compaction part 展示状态。 */
+      kind: 'part';
+      /** 目标 assistant 消息。 */
+      message: ChatMessageRecord;
+    };
+
+/** 最近成功压缩边界。 */
+type SuccessfulCompressionBoundary =
+  | {
+      /** 独立 compression 消息边界。 */
+      kind: 'message';
+      /** 边界消息索引。 */
+      index: number;
+    }
+  | {
+      /** assistant 消息内 compaction part 边界。 */
+      kind: 'part';
+      /** 持有边界 part 的消息索引。 */
+      index: number;
+      /** 持有边界 part 的消息。 */
+      message: ChatMessageRecord;
+      /** 边界 part 索引。 */
+      partIndex: number;
     };
 
 /**
@@ -479,14 +515,22 @@ function createCompressionSourceSelection(messages: ChatMessageRecord[], context
 }
 
 /**
- * 查找最新成功压缩边界索引。
- * @param messages - 消息列表
- * @returns 最新边界索引
+ * 判断消息片段是否为成功 compaction 边界。
+ * @param part - 消息片段
+ * @returns 是否为成功 compaction 边界
  */
-function findLatestCompressionBoundaryIndex(messages: ChatMessageRecord[]): number {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === 'compression' && message.compression?.status === 'success' && message.compression.coveredUntilMessageId) {
+function isSuccessfulCompactionBoundaryPart(part: ChatMessageRecord['parts'][number]): part is ChatMessageCompactionPart {
+  return part.type === 'compaction' && part.status === 'success' && Boolean(part.recordText) && Boolean(part.coveredUntilMessageId);
+}
+
+/**
+ * 查找消息中最后一个成功 compaction 边界。
+ * @param message - 聊天消息
+ * @returns 成功 compaction 边界索引，不存在时返回 -1
+ */
+function findLastSuccessfulCompactionPartIndex(message: ChatMessageRecord): number {
+  for (let index = message.parts.length - 1; index >= 0; index -= 1) {
+    if (isSuccessfulCompactionBoundaryPart(message.parts[index])) {
       return index;
     }
   }
@@ -495,15 +539,50 @@ function findLatestCompressionBoundaryIndex(messages: ChatMessageRecord[]): numb
 }
 
 /**
+ * 查找最新成功压缩边界。
+ * @param messages - 消息列表
+ * @returns 最新边界
+ */
+function findLatestCompressionBoundary(messages: ChatMessageRecord[]): SuccessfulCompressionBoundary | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === 'compression' && message.compression?.status === 'success' && message.compression.coveredUntilMessageId) {
+      return { kind: 'message', index };
+    }
+
+    const partIndex = findLastSuccessfulCompactionPartIndex(message);
+    if (partIndex >= 0) {
+      return { kind: 'part', index, message, partIndex };
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * 判断 compaction part 之后是否已有新的 assistant 进展。
+ * @param message - 持有 compaction part 的消息
+ * @param partIndex - compaction part 索引
+ * @returns 是否存在新的模型进展
+ */
+function hasModelProgressAfterCompactionPart(message: ChatMessageRecord, partIndex: number): boolean {
+  return message.parts.slice(partIndex + 1).some((part) => part.type !== 'compaction');
+}
+
+/**
  * 判断最新压缩边界之后是否没有新增模型消息。
  * @param messages - 消息列表
  * @returns 没有新增 user/assistant 消息时返回 true
  */
 function isAlreadyCompactWithoutNewModelMessages(messages: ChatMessageRecord[]): boolean {
-  const boundaryIndex = findLatestCompressionBoundaryIndex(messages);
-  if (boundaryIndex === -1) return false;
+  const boundary = findLatestCompressionBoundary(messages);
+  if (!boundary) return false;
 
-  return !messages.slice(boundaryIndex + 1).some((item) => item.role === 'user' || item.role === 'assistant');
+  if (boundary.kind === 'part' && hasModelProgressAfterCompactionPart(boundary.message, boundary.partIndex)) {
+    return false;
+  }
+
+  return !messages.slice(boundary.index + 1).some((item) => item.role === 'user' || item.role === 'assistant');
 }
 
 /**
@@ -553,6 +632,84 @@ function createCompressionMessage(input: {
           }
         : undefined
   };
+}
+
+/**
+ * 创建 compaction part。
+ * @param input - compaction part 输入
+ * @returns compaction part
+ */
+function createCompactionPart(input: {
+  reason: 'manual' | 'auto';
+  status: ChatMessageCompactionPart['status'];
+  recordText?: string;
+  record?: CompressionRecord;
+  sourceMessageIds?: string[];
+  errorMessage?: string;
+}): ChatMessageCompactionPart {
+  return {
+    type: 'compaction',
+    auto: input.reason === 'auto',
+    reason: input.reason,
+    status: input.status,
+    recordId: input.record?.id,
+    recordText: input.recordText,
+    coveredUntilMessageId: input.record?.coveredUntilMessageId,
+    sourceMessageIds: input.sourceMessageIds,
+    errorMessage: input.errorMessage
+  };
+}
+
+/**
+ * 判断 compaction part 是否属于自动压缩生命周期。
+ * @param part - 消息片段
+ * @returns 是否为自动压缩 part
+ */
+function isAutoCompactionPart(part: ChatMessageRecord['parts'][number]): part is ChatMessageCompactionPart {
+  return part.type === 'compaction' && part.auto === true;
+}
+
+/**
+ * 判断旧自动压缩 part 是否应在写入新状态时保留。
+ * @param part - 旧消息片段
+ * @param nextPart - 即将写入的新 compaction part
+ * @returns 是否保留旧 part
+ */
+function shouldKeepExistingAutoCompactionPart(part: ChatMessageRecord['parts'][number], nextPart: ChatMessageCompactionPart): boolean {
+  if (!isAutoCompactionPart(part)) {
+    return true;
+  }
+
+  return nextPart.status !== 'success' && part.status === 'success';
+}
+
+/**
+ * 在目标 assistant 上替换自动 compaction part。
+ * @param message - 目标 assistant 消息
+ * @param part - 新 compaction part
+ * @param meta - 可选 runtime meta
+ * @returns 更新后的 assistant 消息
+ */
+function withAutoCompactionPart(message: ChatMessageRecord, part: ChatMessageCompactionPart, meta?: ChatMessageRecord['meta']): ChatMessageRecord {
+  const nextParts: ChatMessageRecord['parts'] = message.parts.filter((item) => shouldKeepExistingAutoCompactionPart(item, part));
+  nextParts.push(part);
+
+  return {
+    ...message,
+    parts: nextParts,
+    meta: meta ? { ...message.meta, ...meta } : message.meta
+  };
+}
+
+/**
+ * 将 part 模式下的状态消息同步回运行中的 assistant 引用。
+ * @param target - part 模式压缩状态目标
+ * @param message - 更新后的 assistant 消息
+ * @returns 已同步的 assistant 消息
+ */
+function applyCompactionTargetMessageUpdate(target: Extract<CompressionStatusTarget, { kind: 'part' }>, message: ChatMessageRecord): ChatMessageRecord {
+  Object.assign(target.message, message);
+  return target.message;
 }
 
 /**
@@ -609,34 +766,57 @@ export function createRuntimeCompactionService(dependencies: RuntimeCompactionSe
         return { status: 'skipped', reason: 'already_compact' };
       }
 
-      const messageId = createMessageId();
-      const pendingMessage = createCompressionMessage({
-        id: messageId,
-        sessionId: input.sessionId,
-        runtimeId: input.runtimeId,
-        agentId: input.agentId,
-        content: input.reason === 'auto' ? '正在自动压缩上下文…' : '正在压缩上下文…',
-        status: 'pending',
-        createdAt: now()
-      });
+      const target: CompressionStatusTarget =
+        input.reason === 'auto' && input.targetMessage
+          ? { kind: 'part', message: input.targetMessage }
+          : { kind: 'message', messageId: createMessageId(), createdAt: now() };
 
-      await dependencies.persistMessage(pendingMessage);
-      emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-created', pendingMessage);
+      if (target.kind === 'message') {
+        const pendingMessage = createCompressionMessage({
+          id: target.messageId,
+          sessionId: input.sessionId,
+          runtimeId: input.runtimeId,
+          agentId: input.agentId,
+          content: input.reason === 'auto' ? '正在自动压缩上下文…' : '正在压缩上下文…',
+          status: 'pending',
+          createdAt: target.createdAt
+        });
+
+        await dependencies.persistMessage(pendingMessage);
+        emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-created', pendingMessage);
+      } else {
+        const pendingTargetMessage = applyCompactionTargetMessageUpdate(
+          target,
+          withAutoCompactionPart(target.message, createCompactionPart({ reason: input.reason, status: 'pending' }))
+        );
+        await dependencies.updateMessage(pendingTargetMessage);
+        emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', pendingTargetMessage);
+      }
 
       const sourceSelection = createCompressionSourceSelection(messages, input.contextWindow);
       if (sourceSelection.status === 'skipped') {
+        if (target.kind === 'part') {
+          const skippedTargetMessage = applyCompactionTargetMessageUpdate(
+            target,
+            withAutoCompactionPart(target.message, createCompactionPart({ reason: input.reason, status: 'skipped' }))
+          );
+          await dependencies.updateMessage(skippedTargetMessage);
+          emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', skippedTargetMessage);
+          return { status: 'skipped', reason: sourceSelection.reason, messageId: skippedTargetMessage.id };
+        }
+
         const skippedMessage = createCompressionMessage({
-          id: messageId,
+          id: target.messageId,
           sessionId: input.sessionId,
           runtimeId: input.runtimeId,
           agentId: input.agentId,
           content: SKIPPED_COMPRESSION_CONTENT,
           status: 'skipped',
-          createdAt: pendingMessage.createdAt
+          createdAt: target.createdAt
         });
         await dependencies.updateMessage(skippedMessage);
         emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', skippedMessage);
-        return { status: 'skipped', reason: sourceSelection.reason, messageId };
+        return { status: 'skipped', reason: sourceSelection.reason, messageId: target.messageId };
       }
 
       const sourceMessages = sourceSelection.messages;
@@ -644,80 +824,145 @@ export function createRuntimeCompactionService(dependencies: RuntimeCompactionSe
       try {
         const record = await dependencies.compressor.compressSessionManually({ sessionId: input.sessionId, messages: sourceMessages, signal: input.signal });
         if (isCompactAborted(input)) {
+          if (target.kind === 'part') {
+            const cancelledTargetMessage = applyCompactionTargetMessageUpdate(
+              target,
+              withAutoCompactionPart(target.message, createCompactionPart({ reason: input.reason, status: 'cancelled' }))
+            );
+            await dependencies.updateMessage(cancelledTargetMessage);
+            emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', cancelledTargetMessage);
+            return { status: 'cancelled', messageId: cancelledTargetMessage.id };
+          }
+
           const cancelledMessage = createCompressionMessage({
-            id: messageId,
+            id: target.messageId,
             sessionId: input.sessionId,
             runtimeId: input.runtimeId,
             agentId: input.agentId,
             content: '压缩已取消',
             status: 'cancelled',
-            createdAt: pendingMessage.createdAt
+            createdAt: target.createdAt
           });
           await dependencies.updateMessage(cancelledMessage);
           emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', cancelledMessage);
-          return { status: 'cancelled', messageId };
+          return { status: 'cancelled', messageId: target.messageId };
         }
         if (!record) {
+          if (target.kind === 'part') {
+            const skippedTargetMessage = applyCompactionTargetMessageUpdate(
+              target,
+              withAutoCompactionPart(target.message, createCompactionPart({ reason: input.reason, status: 'skipped' }))
+            );
+            await dependencies.updateMessage(skippedTargetMessage);
+            emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', skippedTargetMessage);
+            return { status: 'skipped', reason: 'no_compressible_messages', messageId: skippedTargetMessage.id };
+          }
+
           const skippedMessage = createCompressionMessage({
-            id: messageId,
+            id: target.messageId,
             sessionId: input.sessionId,
             runtimeId: input.runtimeId,
             agentId: input.agentId,
             content: SKIPPED_COMPRESSION_CONTENT,
             status: 'skipped',
-            createdAt: pendingMessage.createdAt
+            createdAt: target.createdAt
           });
           await dependencies.updateMessage(skippedMessage);
           emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', skippedMessage);
-          return { status: 'skipped', reason: 'no_compressible_messages', messageId };
+          return { status: 'skipped', reason: 'no_compressible_messages', messageId: target.messageId };
         }
 
         const boundaryText = renderBoundary(record, sourceMessages);
+        if (target.kind === 'part') {
+          const successTargetMessage = applyCompactionTargetMessageUpdate(
+            target,
+            withAutoCompactionPart(
+              target.message,
+              createCompactionPart({
+                reason: input.reason,
+                status: 'success',
+                record,
+                recordText: boundaryText,
+                sourceMessageIds: record.sourceMessageIds
+              }),
+              {
+                compaction: {
+                  anchorSummary: record.recordText,
+                  hiddenMessageIds: record.sourceMessageIds
+                }
+              }
+            )
+          );
+          await dependencies.updateMessage(successTargetMessage);
+          emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', successTargetMessage);
+          return { status: 'success', messageId: successTargetMessage.id, recordId: record.id };
+        }
+
         const successMessage = createCompressionMessage({
-          id: messageId,
+          id: target.messageId,
           sessionId: input.sessionId,
           runtimeId: input.runtimeId,
           agentId: input.agentId,
           content: boundaryText,
           status: 'success',
-          createdAt: pendingMessage.createdAt,
+          createdAt: target.createdAt,
           record,
           sourceMessageIds: record.sourceMessageIds
         });
 
         await dependencies.updateMessage(successMessage);
         emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', successMessage);
-        return { status: 'success', messageId, recordId: record.id };
+        return { status: 'success', messageId: target.messageId, recordId: record.id };
       } catch (error: unknown) {
         if (isCompactAborted(input)) {
+          if (target.kind === 'part') {
+            const cancelledTargetMessage = applyCompactionTargetMessageUpdate(
+              target,
+              withAutoCompactionPart(target.message, createCompactionPart({ reason: input.reason, status: 'cancelled' }))
+            );
+            await dependencies.updateMessage(cancelledTargetMessage);
+            emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', cancelledTargetMessage);
+            return { status: 'cancelled', messageId: cancelledTargetMessage.id };
+          }
+
           const cancelledMessage = createCompressionMessage({
-            id: messageId,
+            id: target.messageId,
             sessionId: input.sessionId,
             runtimeId: input.runtimeId,
             agentId: input.agentId,
             content: '压缩已取消',
             status: 'cancelled',
-            createdAt: pendingMessage.createdAt
+            createdAt: target.createdAt
           });
           await dependencies.updateMessage(cancelledMessage);
           emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', cancelledMessage);
-          return { status: 'cancelled', messageId };
+          return { status: 'cancelled', messageId: target.messageId };
         }
         const errorMessage = error instanceof Error ? error.message : '压缩失败';
+        if (target.kind === 'part') {
+          const failedTargetMessage = applyCompactionTargetMessageUpdate(
+            target,
+            withAutoCompactionPart(target.message, createCompactionPart({ reason: input.reason, status: 'failed', errorMessage }))
+          );
+          await dependencies.updateMessage(failedTargetMessage);
+          emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', failedTargetMessage);
+          return { status: 'failed', messageId: failedTargetMessage.id, errorMessage };
+        }
+
         const failedMessage = createCompressionMessage({
-          id: messageId,
+          id: target.messageId,
           sessionId: input.sessionId,
           runtimeId: input.runtimeId,
           agentId: input.agentId,
           content: '上下文压缩失败',
           status: 'failed',
-          createdAt: pendingMessage.createdAt,
+          createdAt: target.createdAt,
           errorMessage
         });
 
         await dependencies.updateMessage(failedMessage);
         emitCompressionMessageEvent(dependencies, input, 'chat:runtime:message-updated', failedMessage);
-        return { status: 'failed', messageId, errorMessage };
+        return { status: 'failed', messageId: target.messageId, errorMessage };
       }
     }
   };

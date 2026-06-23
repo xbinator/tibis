@@ -5,7 +5,7 @@
 import type { ChatRuntimeStreamExecutor } from '../../../../../../electron/main/modules/chat/runtime/types.mjs';
 import type { AIServiceError } from 'types/ai';
 import type { ChatMessagePart, ChatMessageRecord } from 'types/chat';
-import type { ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
+import type { ChatRuntimeCompactInput, ChatRuntimeContinueInput, ChatRuntimeEventMap, ChatRuntimeSendInput } from 'types/chat-runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { createChatRuntimeService } from '../../../../../../electron/main/modules/chat/runtime/service.mjs';
 
@@ -15,6 +15,14 @@ type CapturedRuntimeEvent = {
   name: keyof ChatRuntimeEventMap;
   /** 事件载荷。 */
   payload: ChatRuntimeEventMap[keyof ChatRuntimeEventMap];
+};
+
+/** 捕获到的上下文用量事件。 */
+type CapturedContextUsageEvent = {
+  /** 事件名。 */
+  name: 'chat:runtime:context-usage-updated';
+  /** 事件载荷。 */
+  payload: ChatRuntimeEventMap['chat:runtime:context-usage-updated'];
 };
 
 /**
@@ -83,6 +91,15 @@ function createEventCollector(): {
       events.push({ name, payload });
     }
   };
+}
+
+/**
+ * 判断捕获事件是否为上下文用量事件。
+ * @param event - 捕获的 runtime 事件
+ * @returns 是否为上下文用量事件
+ */
+function isContextUsageEvent(event: CapturedRuntimeEvent): event is CapturedContextUsageEvent {
+  return event.name === 'chat:runtime:context-usage-updated';
 }
 
 /**
@@ -532,15 +549,16 @@ describe('chat runtime service shell', (): void => {
         ])
       })
     );
-    const contextUsageEvent = collector.events
-      .filter((event) => event.name === 'chat:runtime:context-usage-updated' && event.payload.runtimeId === result.runtimeId)
-      .at(-1);
-    expect(contextUsageEvent?.payload).toMatchObject({
+    const contextUsageEvents = collector.events.filter(isContextUsageEvent).filter((event) => event.payload.runtimeId === result.runtimeId);
+    const preCompactionUsageEvent = contextUsageEvents.find((event) => event.payload.snapshot.providerUsageTokens === 8_000);
+    expect(preCompactionUsageEvent?.payload).toMatchObject({
       snapshot: expect.objectContaining({
         providerUsageTokens: 8_000,
         status: 'danger'
       })
     });
+    expect(contextUsageEvents.at(-1)?.payload.snapshot.providerUsageTokens).toBeUndefined();
+    expect(contextUsageEvents.at(-1)?.payload.snapshot.status).toBe('safe');
     expect(collector.events).toContainEqual(
       expect.objectContaining({
         name: 'chat:runtime:complete',
@@ -633,7 +651,7 @@ describe('chat runtime service shell', (): void => {
     const result = await service.send(createInput({ content: 'current question', contextWindow: 128_000 }));
     await flushRuntimeTasks();
 
-    const usageEvent = collector.events.find((event) => event.name === 'chat:runtime:context-usage-updated' && event.payload.runtimeId === result.runtimeId);
+    const usageEvent = collector.events.filter(isContextUsageEvent).find((event) => event.payload.runtimeId === result.runtimeId);
     expect(usageEvent?.payload).toMatchObject({
       runtimeId: result.runtimeId,
       sessionId: 'session-1',
@@ -712,6 +730,41 @@ describe('chat runtime service shell', (): void => {
     expect(streamExecutor.mock.calls[0]?.[0].sourceMessages?.map((message) => message.id)).toEqual(['compression-1', 'prior-user', 'current-user']);
   });
 
+  it('emits a refreshed context usage snapshot after automatic compaction succeeds', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const priorMessage = createMessageRecord('prior-user', 'user', '大量历史上下文'.repeat(40_000), '2026-06-19T00:00:00.000Z');
+    const compact = vi.fn(async (input: ChatRuntimeCompactInput) => {
+      input.targetMessage?.parts.push({
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordId: 'record-1',
+        recordText: 'COMPRESSED_CONTEXT',
+        coveredUntilMessageId: 'current-user',
+        sourceMessageIds: ['prior-user', 'current-user']
+      });
+
+      return { status: 'success' as const, messageId: input.targetMessage?.id ?? 'assistant-message-1', recordId: 'record-1' };
+    });
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageWriter: createNoopMessageWriter(),
+      messageReader: { getMessages: () => [priorMessage] },
+      compactionService: { compact },
+      streamExecutor: createNoopStreamExecutor()
+    });
+
+    await service.send(createInput({ content: 'current question', contextWindow: 20_000, userMessageId: 'current-user' }));
+    await flushRuntimeTasks();
+
+    const usageEvents = collector.events.filter(isContextUsageEvent);
+    expect(usageEvents.length).toBeGreaterThanOrEqual(2);
+    expect(usageEvents.at(-1)?.payload.snapshot.estimatedInputTokens).toBeLessThan(usageEvents[0].payload.snapshot.estimatedInputTokens);
+  });
+
   it('continues the runtime stream after renderer tool results are written', async (): Promise<void> => {
     const collector = createEventCollector();
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
@@ -756,6 +809,73 @@ describe('chat runtime service shell', (): void => {
       expect.objectContaining({
         name: 'chat:runtime:complete',
         payload: expect.objectContaining({ runtimeId: result.runtimeId })
+      })
+    );
+  });
+
+  it('compacts before the next continuation round without finishing the active assistant message', async (): Promise<void> => {
+    const operations: string[] = [];
+    const compactTargetFinishedStates: Array<boolean | undefined> = [];
+    const compact = vi.fn(async (input: ChatRuntimeCompactInput & { signal?: AbortSignal }) => {
+      operations.push('compact');
+      compactTargetFinishedStates.push(input.targetMessage?.finished);
+      if (input.targetMessage) {
+        input.targetMessage.parts.push({
+          type: 'compaction',
+          auto: true,
+          reason: 'auto',
+          status: 'success',
+          recordId: 'record-1',
+          recordText: 'COMPRESSED_CONTEXT',
+          coveredUntilMessageId: 'user-message-1',
+          sourceMessageIds: ['user-message-1']
+        });
+      }
+
+      return { status: 'success' as const, messageId: input.targetMessage?.id ?? 'assistant-message-1', recordId: 'record-1' };
+    });
+    const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
+      if (streamExecutor.mock.calls.length === 1) {
+        operations.push('stream-1');
+        assistantMessage.parts.push({
+          type: 'tool',
+          toolCallId: 'tool-call-1',
+          toolName: 'operate_webpage',
+          status: 'done',
+          input: { index: 25 },
+          result: { toolName: 'operate_webpage', status: 'success', data: { clicked: true } }
+        });
+        await updateAssistant(assistantMessage);
+        return { usage: { inputTokens: 15_000, outputTokens: 6_000, totalTokens: 21_000 }, shouldContinue: true };
+      }
+
+      operations.push('stream-2');
+      assistantMessage.content = '继续检查页面';
+      assistantMessage.parts.push({ type: 'text', text: '继续检查页面' });
+      await updateAssistant(assistantMessage);
+      return { usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } };
+    });
+    const service = createChatRuntimeService({
+      emit: vi.fn(),
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: createNoopMessageWriter(),
+      compactionService: { compact },
+      streamExecutor
+    });
+
+    await service.send(createInput({ content: '继续网页长任务', contextWindow: 20_000 }));
+    await flushRuntimeTasks();
+
+    expect(operations).toEqual(['stream-1', 'compact', 'stream-2']);
+    expect(compactTargetFinishedStates).toEqual([false]);
+    expect(streamExecutor).toHaveBeenCalledTimes(2);
+    expect(streamExecutor.mock.calls[1]?.[0].sourceMessages?.find((message) => message.id === 'assistant-message-1')?.parts).toContainEqual(
+      expect.objectContaining({
+        type: 'compaction',
+        status: 'success',
+        recordId: 'record-1'
       })
     );
   });
@@ -2111,6 +2231,46 @@ describe('chat runtime service shell', (): void => {
       messages: [],
       signal: expect.any(AbortSignal)
     });
+  });
+
+  it('emits a refreshed context usage snapshot after manual compaction succeeds', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const priorMessage = createMessageRecord('prior-user', 'user', '大量历史上下文'.repeat(40_000), '2026-06-19T00:00:00.000Z');
+    const compactedBoundary: ChatMessageRecord = {
+      id: 'compression-1',
+      sessionId: 'session-1',
+      role: 'compression',
+      content: 'COMPRESSED_CONTEXT',
+      parts: [{ type: 'text', text: 'COMPRESSED_CONTEXT' }],
+      createdAt: '2026-06-19T00:01:00.000Z',
+      compression: {
+        status: 'success',
+        recordText: 'COMPRESSED_CONTEXT',
+        coveredUntilMessageId: 'prior-user'
+      }
+    };
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      messageWriter: createNoopMessageWriter(),
+      messageReader: { getMessages: () => [priorMessage, compactedBoundary] },
+      streamExecutor: createNoopStreamExecutor(),
+      compactionService: {
+        compact: vi.fn().mockResolvedValue({ status: 'success', messageId: 'compression-1', recordId: 'record-1' })
+      }
+    });
+
+    await service.compact({
+      runtimeId: 'runtime-manual-compact',
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      reason: 'manual',
+      contextWindow: 20_000,
+      messages: [priorMessage]
+    });
+
+    const usageEvent = collector.events.find(isContextUsageEvent);
+    expect(usageEvent?.payload.snapshot.estimatedInputTokens).toBeLessThan(1_000);
   });
 
   it('aborts an active compact runtime without creating an interrupt message', async (): Promise<void> => {

@@ -64,9 +64,137 @@ describe('runtime model message context', (): void => {
     };
 
     expect(toRuntimeModelMessages([oldUser, covered, boundary, failedBoundary, createMessage('u2', 'user', 'new question')])).toEqual([
-      { role: 'assistant', content: 'COMPRESSED_CONTEXT' },
+      { role: 'system', content: 'COMPRESSED_CONTEXT' },
       { role: 'user', content: 'new question' }
     ]);
+  });
+
+  it('starts from an automatic assistant compaction part without requiring a separate compression message', (): void => {
+    const oldUser = createMessage('u1', 'user', 'old question');
+    const covered = createMessage('a1', 'assistant', 'old answer');
+    const compactedAssistant = createMessage('a2', 'assistant', '');
+    compactedAssistant.parts = [
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordText: 'COMPRESSED_CONTEXT',
+        recordId: 'record-1',
+        coveredUntilMessageId: covered.id,
+        sourceMessageIds: [oldUser.id, covered.id]
+      }
+    ];
+    const nextUser = createMessage('u2', 'user', 'new question');
+
+    expect(toRuntimeModelMessages([oldUser, covered, compactedAssistant, nextUser])).toEqual([
+      { role: 'system', content: 'COMPRESSED_CONTEXT' },
+      { role: 'user', content: 'new question' }
+    ]);
+  });
+
+  it('adds a user continuation prompt when automatic compaction covers the active assistant turn', (): void => {
+    const currentUser = createMessage('u1', 'user', 'finish the task');
+    const activeAssistant = createMessage('a1', 'assistant', '');
+    activeAssistant.parts = [
+      {
+        type: 'tool',
+        toolCallId: 'tool-call-1',
+        toolName: 'operate_webpage',
+        status: 'done',
+        input: { index: 9 },
+        result: { toolName: 'operate_webpage', status: 'success', data: { clicked: true } }
+      },
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordText: 'COMPRESSED_CONTEXT',
+        recordId: 'record-1',
+        coveredUntilMessageId: activeAssistant.id,
+        sourceMessageIds: [currentUser.id, activeAssistant.id]
+      }
+    ];
+
+    const modelMessages = toRuntimeModelMessages([currentUser, activeAssistant]);
+
+    expect(modelMessages).toEqual([
+      { role: 'system', content: 'COMPRESSED_CONTEXT' },
+      {
+        role: 'user',
+        content: expect.stringContaining('继续完成当前用户任务')
+      }
+    ]);
+  });
+
+  it('serializes assistant parts written after an automatic compaction boundary as neutral context before a later user turn', (): void => {
+    const oldUser = createMessage('u1', 'user', 'old question');
+    const covered = createMessage('a1', 'assistant', 'old answer');
+    const compactedAssistant = createMessage('a2', 'assistant', '');
+    compactedAssistant.parts = [
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordText: 'COMPRESSED_CONTEXT',
+        recordId: 'record-1',
+        coveredUntilMessageId: covered.id,
+        sourceMessageIds: [oldUser.id, covered.id]
+      },
+      { type: 'text', text: 'continued answer' }
+    ];
+    const nextUser = createMessage('u2', 'user', 'new question');
+
+    const modelMessages = toRuntimeModelMessages([oldUser, covered, compactedAssistant, nextUser]);
+
+    expect(modelMessages).toEqual([
+      { role: 'system', content: 'COMPRESSED_CONTEXT' },
+      { role: 'user', content: expect.stringContaining('continued answer') },
+      { role: 'user', content: 'new question' }
+    ]);
+    expect(modelMessages[1]?.content).not.toContain('继续完成当前用户任务');
+  });
+
+  it('serializes post-compaction tool progress as user continuation context', (): void => {
+    const oldUser = createMessage('u1', 'user', 'navigate the backend');
+    const covered = createMessage('a1', 'assistant', 'clicked menu');
+    const compactedAssistant = createMessage('a2', 'assistant', '');
+    compactedAssistant.parts = [
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordText: 'COMPRESSED_CONTEXT',
+        recordId: 'record-1',
+        coveredUntilMessageId: covered.id,
+        sourceMessageIds: [oldUser.id, covered.id]
+      },
+      { type: 'thinking', thinking: 'Let me continue the task.' },
+      {
+        type: 'tool',
+        toolCallId: 'tool-call-read-page',
+        toolName: 'read_current_webpage',
+        status: 'done',
+        input: { include_structure: true },
+        result: { toolName: 'read_current_webpage', status: 'success', data: { title: '160云医院-张哥中医理疗馆' } }
+      }
+    ];
+
+    const modelMessages = toRuntimeModelMessages([oldUser, covered, compactedAssistant]);
+
+    expect(modelMessages.map((message) => message.role)).toEqual(['system', 'user']);
+    expect(JSON.stringify(modelMessages)).not.toContain('"role":"tool"');
+    expect(modelMessages[1]).toEqual({
+      role: 'user',
+      content: expect.stringContaining('read_current_webpage')
+    });
+    expect(modelMessages[1]).toEqual({
+      role: 'user',
+      content: expect.stringContaining('继续完成当前用户任务')
+    });
   });
 
   it('converts user file parts into one XML text content for model compatibility', (): void => {

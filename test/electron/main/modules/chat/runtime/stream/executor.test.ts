@@ -468,7 +468,7 @@ describe('runtime stream executor', (): void => {
       updates.push({ ...message, parts: [...message.parts] });
     });
 
-    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 } });
+    expect(result).toEqual({ usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }, shouldContinue: true });
     expect(updates.at(-1)).toMatchObject({
       parts: [
         {
@@ -482,8 +482,7 @@ describe('runtime stream executor', (): void => {
         }
       ],
       loading: false,
-      finished: true,
-      usage: { inputTokens: 8, outputTokens: 5, totalTokens: 13 }
+      finished: false
     });
   });
 

@@ -121,8 +121,12 @@ export function createRuntimeStreamExecutor(dependencies: RuntimeStreamExecutorD
         }
       } else if (chunk.type === 'tool-result') {
         appendToolResult(assistantMessage, chunk);
+        executedToolCount += 1;
+        allToolsContinueable = allToolsContinueable && shouldContinueAfterToolResult(chunk.result);
+        anyToolStopped = anyToolStopped || shouldStopStreamAfterToolResult(chunk.result);
         isWaitingForUserInput = isWaitingForUserInput || chunk.result.status === 'awaiting_user_input';
         await updateAssistant(assistantMessage);
+        if (anyToolStopped) break;
       }
     }
 

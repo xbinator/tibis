@@ -19,7 +19,12 @@
  * @description 聊天气泡状态片段，展示上下文压缩或中断状态节点。
  */
 import type { Message } from '../../utils/types';
+import type { ChatCompressionStatus } from 'types/chat';
+import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import { computed } from 'vue';
+
+/** 可展示的压缩状态。 */
+type StatusNodeStatus = ChatCompressionStatus | ChatMessageCompactionPart['status'];
 
 /**
  * 组件属性。
@@ -27,11 +32,18 @@ import { computed } from 'vue';
 interface Props {
   /** 状态消息 */
   message: Message;
+  /** assistant 消息内的压缩状态片段 */
+  compactionPart?: ChatMessageCompactionPart;
 }
 
 defineOptions({ name: 'BubblePartStatus' });
 
 const props = defineProps<Props>();
+
+/**
+ * 当前压缩状态。
+ */
+const compressionStatus = computed<StatusNodeStatus | undefined>(() => props.compactionPart?.status ?? props.message.compression?.status);
 
 /**
  * 状态文案。
@@ -41,19 +53,19 @@ const statusLabel = computed<string>(() => {
     return '已中断';
   }
 
-  if (props.message.compression?.status === 'pending') {
+  if (compressionStatus.value === 'pending') {
     return '正在压缩上下文';
   }
 
-  if (props.message.compression?.status === 'cancelled') {
+  if (compressionStatus.value === 'cancelled') {
     return '压缩已取消';
   }
 
-  if (props.message.compression?.status === 'failed') {
+  if (compressionStatus.value === 'failed') {
     return '压缩失败';
   }
 
-  if (props.message.compression?.status === 'skipped') {
+  if (compressionStatus.value === 'skipped') {
     return '无需压缩';
   }
 
@@ -68,14 +80,18 @@ const statusClassName = computed<string>(() => {
     return 'cancelled';
   }
 
-  return props.message.compression?.status ?? 'success';
+  return compressionStatus.value ?? 'success';
 });
 
 /**
  * 压缩失败错误信息。
  */
 const errorText = computed<string | undefined>(() => {
-  return props.message.compression?.status === 'failed' ? props.message.compression.errorMessage : undefined;
+  if (compressionStatus.value !== 'failed') {
+    return undefined;
+  }
+
+  return props.compactionPart?.errorMessage ?? props.message.compression?.errorMessage;
 });
 </script>
 

@@ -44,7 +44,21 @@ export interface UseRollbackReturns {
  * @returns 需要清理的压缩记录 ID 列表
  */
 function collectCompressionRecordIds(messages: Message[]): string[] {
-  return messages.filter((m) => m.role === 'compression' && m.compression?.recordId).map((m) => m.compression!.recordId!);
+  const recordIds: string[] = [];
+
+  for (const message of messages) {
+    if (message.role === 'compression' && message.compression?.recordId) {
+      recordIds.push(message.compression.recordId);
+    }
+
+    for (const part of message.parts) {
+      if (part.type === 'compaction' && part.recordId) {
+        recordIds.push(part.recordId);
+      }
+    }
+  }
+
+  return [...new Set(recordIds)];
 }
 
 /**

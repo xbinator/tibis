@@ -262,6 +262,8 @@ export interface ChatRuntimeCompactInput {
   contextWindow?: number;
   /** Message snapshot to compact until main runtime fully owns chat history. */
   messages?: ChatMessageRecord[];
+  /** Assistant message to receive automatic compaction status parts. */
+  targetMessage?: ChatMessageRecord;
 }
 
 /** Renderer local tool result submission input. */
@@ -470,7 +472,7 @@ export interface ChatRuntimeEventMap {
   'chat:runtime:complete': ChatRuntimeCompleteEvent;
 }
 
-/** Compaction part inserted into user messages by future runtime phases. */
+/** Compaction part inserted into assistant messages by runtime phases. */
 export interface ChatMessageCompactionPart {
   /** Part discriminator. */
   type: 'compaction';
@@ -479,9 +481,17 @@ export interface ChatMessageCompactionPart {
   /** Why compaction started. */
   reason: 'manual' | 'auto' | 'overflow';
   /** Current compaction status. */
-  status: 'pending' | 'success' | 'failed' | 'cancelled';
+  status: 'pending' | 'success' | 'failed' | 'cancelled' | 'skipped';
   /** First tail message preserved verbatim. */
   tailStartMessageId?: string;
+  /** Compression record id. */
+  recordId?: string;
+  /** Compression record text injected into later model context. */
+  recordText?: string;
+  /** Message id covered by this compaction boundary. */
+  coveredUntilMessageId?: string;
+  /** Source message ids covered by this compaction boundary. */
+  sourceMessageIds?: string[];
   /** Failure message when status is failed. */
   errorMessage?: string;
 }

@@ -160,6 +160,174 @@ describe('runtime compaction service', (): void => {
     }
   });
 
+  it('stores automatic compaction on the target assistant message instead of creating a compression message', async (): Promise<void> => {
+    const messages = [createMessage('u1', 'user', '第一轮用户消息，需要压缩'), createMessage('a1', 'assistant', '第一轮助手回复，需要压缩'.repeat(400))];
+    const targetMessage = createMessage('assistant-active', 'assistant', '');
+    targetMessage.parts = [];
+    targetMessage.loading = true;
+    targetMessage.finished = false;
+    const persistedMessages: ChatMessageRecord[] = [];
+    const updatedMessages: ChatMessageRecord[] = [];
+    const collector = createEventCollector();
+    const compressSessionManually = vi.fn().mockResolvedValue(createRecord());
+    const service = createRuntimeCompactionService({
+      emit: collector.emit,
+      createMessageId: () => 'compression-message-auto',
+      now: () => '2026-06-18T00:00:00.000Z',
+      persistMessage: (message) => {
+        persistedMessages.push(message);
+      },
+      updateMessage: (message) => {
+        updatedMessages.push({ ...message, parts: [...message.parts] });
+      },
+      compressor: { compressSessionManually },
+      renderBoundary: () => 'COMPRESSED_CONTEXT\n## Raw User Requirements\n- 替换 /compact 和自动压缩流程'
+    });
+
+    const result = await service.compact({
+      runtimeId: 'runtime-auto-compact',
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      reason: 'auto',
+      contextWindow: 128_000,
+      messages,
+      targetMessage
+    });
+
+    expect(result).toEqual({ status: 'success', messageId: 'assistant-active', recordId: 'record-1' });
+    expect(persistedMessages).toEqual([]);
+    expect(updatedMessages[0]).toMatchObject({
+      id: 'assistant-active',
+      parts: [
+        {
+          type: 'compaction',
+          auto: true,
+          reason: 'auto',
+          status: 'pending'
+        }
+      ]
+    });
+    expect(updatedMessages.at(-1)).toMatchObject({
+      id: 'assistant-active',
+      parts: [
+        {
+          type: 'compaction',
+          auto: true,
+          reason: 'auto',
+          status: 'success',
+          recordId: 'record-1',
+          recordText: expect.stringContaining('COMPRESSED_CONTEXT'),
+          coveredUntilMessageId: 'a1',
+          sourceMessageIds: ['u1', 'a1']
+        }
+      ],
+      meta: {
+        compaction: {
+          anchorSummary: '目标：继续主进程压缩迁移',
+          hiddenMessageIds: ['u1', 'a1']
+        }
+      }
+    });
+    expect(collector.events.map((event) => event.name)).toEqual(['chat:runtime:message-updated', 'chat:runtime:message-updated']);
+  });
+
+  it('does not treat post-compaction assistant progress as already compact', async (): Promise<void> => {
+    const targetMessage = createMessage('assistant-active', 'assistant', '');
+    targetMessage.parts = [
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordId: 'record-old',
+        recordText: 'OLD_COMPRESSED_CONTEXT',
+        coveredUntilMessageId: 'a1',
+        sourceMessageIds: ['u1', 'a1']
+      },
+      { type: 'text', text: '压缩之后继续执行的新进展'.repeat(200) }
+    ];
+    const collector = createEventCollector();
+    const compressSessionManually = vi.fn().mockResolvedValue(createRecord());
+    const service = createRuntimeCompactionService({
+      emit: collector.emit,
+      persistMessage: vi.fn(),
+      updateMessage: vi.fn(),
+      compressor: { compressSessionManually },
+      renderBoundary: () => 'COMPRESSED_CONTEXT'
+    });
+
+    const result = await service.compact({
+      runtimeId: 'runtime-post-progress',
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      reason: 'auto',
+      contextWindow: 128_000,
+      messages: [createMessage('u1', 'user', '旧用户消息'), createMessage('a1', 'assistant', '旧助手回复'), targetMessage],
+      targetMessage
+    });
+
+    expect(result).toEqual({ status: 'success', messageId: 'assistant-active', recordId: 'record-1' });
+    expect(compressSessionManually).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the previous successful compaction boundary while a later auto compaction is pending', async (): Promise<void> => {
+    const targetMessage = createMessage('assistant-active', 'assistant', '');
+    targetMessage.parts = [
+      {
+        type: 'compaction',
+        auto: true,
+        reason: 'auto',
+        status: 'success',
+        recordId: 'record-old',
+        recordText: 'OLD_COMPRESSED_CONTEXT',
+        coveredUntilMessageId: 'a1',
+        sourceMessageIds: ['u1', 'a1']
+      }
+    ];
+    const updatedMessages: ChatMessageRecord[] = [];
+    const collector = createEventCollector();
+    const compressSessionManually = vi.fn().mockResolvedValue(createRecord());
+    const service = createRuntimeCompactionService({
+      emit: collector.emit,
+      persistMessage: vi.fn(),
+      updateMessage: (message) => {
+        updatedMessages.push({ ...message, parts: [...message.parts] });
+      },
+      compressor: { compressSessionManually },
+      renderBoundary: () => 'COMPRESSED_CONTEXT'
+    });
+
+    await service.compact({
+      runtimeId: 'runtime-preserve-boundary',
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      reason: 'auto',
+      contextWindow: 128_000,
+      messages: [
+        createMessage('u1', 'user', '旧用户消息'.repeat(200)),
+        createMessage('a1', 'assistant', '旧助手回复'.repeat(200)),
+        targetMessage,
+        createMessage('u2', 'user', '压缩后的新问题')
+      ],
+      targetMessage
+    });
+
+    expect(updatedMessages[0].parts).toEqual([
+      expect.objectContaining({
+        type: 'compaction',
+        status: 'success',
+        recordId: 'record-old'
+      }),
+      expect.objectContaining({
+        type: 'compaction',
+        status: 'pending'
+      })
+    ]);
+  });
+
   it('compresses a single user turn when tail preservation would otherwise consume all model messages', async (): Promise<void> => {
     const messages = [createMessage('u1', 'user', '请完成一个较长任务'), createMessage('a1', 'assistant', '任务执行记录'.repeat(400))];
     const updatedMessages: ChatMessageRecord[] = [];

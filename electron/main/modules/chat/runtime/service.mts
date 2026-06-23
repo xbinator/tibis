@@ -407,6 +407,42 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 将当前 assistant 草稿纳入下一轮模型上下文。
+   * @param sourceMessages - 上一轮源消息
+   * @param assistantMessage - 当前 assistant 草稿
+   * @returns 下一轮源消息
+   */
+  function createContinuationSourceMessages(sourceMessages: ChatMessageRecord[], assistantMessage: ChatMessageRecord): ChatMessageRecord[] {
+    const nextMessages = sourceMessages.filter((message) => message.id !== assistantMessage.id);
+    return [...nextMessages, assistantMessage];
+  }
+
+  /**
+   * 判断 assistant 是否持有成功的自动压缩边界。
+   * @param assistantMessage - 当前 assistant 消息
+   * @returns 是否存在成功 compaction part
+   */
+  function hasSuccessfulAssistantCompactionBoundary(assistantMessage: ChatMessageRecord): boolean {
+    return assistantMessage.parts.some(
+      (part) => part.type === 'compaction' && part.status === 'success' && Boolean(part.recordText) && Boolean(part.coveredUntilMessageId)
+    );
+  }
+
+  /**
+   * 自动压缩成功后，将持有 compaction part 的 assistant 纳入后续上下文。
+   * @param sourceMessages - 最新持久化源消息
+   * @param assistantMessage - 当前 assistant 消息
+   * @returns 后续 streaming 使用的源消息
+   */
+  function createAutoCompactedSourceMessages(sourceMessages: ChatMessageRecord[], assistantMessage: ChatMessageRecord): ChatMessageRecord[] {
+    if (!hasSuccessfulAssistantCompactionBoundary(assistantMessage)) {
+      return sourceMessages;
+    }
+
+    return createContinuationSourceMessages(sourceMessages, assistantMessage);
+  }
+
+  /**
    * 计算并广播 runtime 上下文用量。
    * @param runtime - runtime 状态
    * @param sourceMessages - 当前源消息
@@ -441,6 +477,15 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 压缩成功后重新广播上下文用量。
+   * @param runtime - runtime 状态
+   * @param sourceMessages - 压缩后的源消息
+   */
+  function emitContextUsageSnapshotAfterCompaction(runtime: ActiveChatRuntime, sourceMessages: ChatMessageRecord[]): void {
+    emitContextUsageSnapshot(runtime, sourceMessages);
+  }
+
+  /**
    * 在需要时执行发送前自动压缩，并返回最新源消息。
    * @param runtime - runtime 状态
    * @param sourceMessages - 压缩前源消息
@@ -467,23 +512,60 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         reason: 'auto',
         contextWindow: runtime.contextWindow,
         messages: sourceMessages,
+        targetMessage: assistantMessage,
         signal: runtime.abortController.signal
       })
     );
     if (result.status !== 'success') return sourceMessages;
 
-    return readRuntimeSourceMessages(runtime, userMessage, assistantMessage);
+    const compactedSourceMessages = createAutoCompactedSourceMessages(
+      await readRuntimeSourceMessages(runtime, userMessage, assistantMessage),
+      assistantMessage
+    );
+    emitContextUsageSnapshotAfterCompaction(runtime, compactedSourceMessages);
+    return compactedSourceMessages;
   }
 
   /**
-   * 将当前 assistant 草稿纳入下一轮模型上下文。
-   * @param sourceMessages - 上一轮源消息
-   * @param assistantMessage - 当前 assistant 草稿
-   * @returns 下一轮源消息
+   * 根据 provider usage 在续轮前触发自动压缩，并返回下一轮源消息。
+   * @param runtime - runtime 状态
+   * @param sourceMessages - 当前源消息
+   * @param assistantMessage - assistant 当前消息
+   * @param usage - 当前累计 provider usage
+   * @returns 下一轮模型调用使用的源消息
    */
-  function createContinuationSourceMessages(sourceMessages: ChatMessageRecord[], assistantMessage: ChatMessageRecord): ChatMessageRecord[] {
-    const nextMessages = sourceMessages.filter((message) => message.id !== assistantMessage.id);
-    return [...nextMessages, assistantMessage];
+  async function compactSourceMessagesForUsageIfNeeded(
+    runtime: ActiveChatRuntime,
+    sourceMessages: ChatMessageRecord[],
+    assistantMessage: ChatMessageRecord,
+    usage: AIUsage | undefined
+  ): Promise<ChatMessageRecord[]> {
+    const completedMessages = createContinuationSourceMessages(sourceMessages, assistantMessage);
+    if (!usage || runtime.contextWindow === undefined) return completedMessages;
+
+    const snapshot = emitContextUsageSnapshot(runtime, completedMessages, usage.totalTokens);
+    if (!snapshot || snapshot.usableInputTokens === 0 || usage.totalTokens < snapshot.usableInputTokens) return completedMessages;
+
+    const result = await runRuntimePhase(runtime, 'compacting', () =>
+      compactionService.compact({
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.sessionId,
+        clientId: runtime.clientId,
+        agentId: runtime.agentId,
+        parentRuntimeId: runtime.parentRuntimeId,
+        reason: 'auto',
+        contextWindow: runtime.contextWindow,
+        messages: completedMessages,
+        targetMessage: assistantMessage,
+        signal: runtime.abortController.signal
+      })
+    );
+
+    if (result.status !== 'success') return completedMessages;
+
+    const compactedSourceMessages = createAutoCompactedSourceMessages(completedMessages, assistantMessage);
+    emitContextUsageSnapshotAfterCompaction(runtime, compactedSourceMessages);
+    return compactedSourceMessages;
   }
 
   /**
@@ -499,25 +581,10 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     assistantMessage: ChatMessageRecord,
     usage: AIUsage | undefined
   ): Promise<void> {
-    if (!usage || runtime.contextWindow === undefined) return;
+    // 当前 assistant 已经在续轮前压缩过时，避免完成后再次压缩导致 UI 误以为任务已收口。
+    if (hasSuccessfulAssistantCompactionBoundary(assistantMessage)) return;
 
-    const completedMessages = createContinuationSourceMessages(sourceMessages, assistantMessage);
-    const snapshot = emitContextUsageSnapshot(runtime, completedMessages, usage.totalTokens);
-    if (!snapshot || snapshot.usableInputTokens === 0 || usage.totalTokens < snapshot.usableInputTokens) return;
-
-    await runRuntimePhase(runtime, 'compacting', () =>
-      compactionService.compact({
-        runtimeId: runtime.runtimeId,
-        sessionId: runtime.sessionId,
-        clientId: runtime.clientId,
-        agentId: runtime.agentId,
-        parentRuntimeId: runtime.parentRuntimeId,
-        reason: 'auto',
-        contextWindow: runtime.contextWindow,
-        messages: completedMessages,
-        signal: runtime.abortController.signal
-      })
-    );
+    await compactSourceMessagesForUsageIfNeeded(runtime, sourceMessages, assistantMessage, usage);
   }
 
   /**
@@ -546,7 +613,11 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
     let continuationRound = 0;
     while (streamResult.shouldContinue && continuationRound < MAX_RUNTIME_CONTINUATION_ROUNDS) {
       continuationRound += 1;
-      currentSourceMessages = createContinuationSourceMessages(currentSourceMessages, assistantMessage);
+      // eslint-disable-next-line no-await-in-loop
+      currentSourceMessages = await compactSourceMessagesForUsageIfNeeded(runtime, currentSourceMessages, assistantMessage, accumulatedUsage);
+      if (!activeRuntimes.has(runtime.runtimeId)) {
+        throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${runtime.runtimeId} is not active`);
+      }
       // eslint-disable-next-line no-await-in-loop
       streamResult = await streamExecutor({ runtime, sourceMessages: currentSourceMessages, userMessage, assistantMessage }, (message) =>
         updateAssistantMessage(runtime, message)
@@ -595,13 +666,18 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
         reason: 'auto',
         contextWindow: runtime.contextWindow,
         messages: sourceMessages,
+        targetMessage: assistantMessage,
         signal: runtime.abortController.signal
       })
     );
     if (!activeRuntimes.has(runtime.runtimeId)) return true;
     if (compactResult.status !== 'success') return false;
 
-    const replaySourceMessages = downgradeOverflowReplaySourceMessages(await readRuntimeSourceMessages(runtime, userMessage, assistantMessage), userMessage);
+    const replaySourceMessages = downgradeOverflowReplaySourceMessages(
+      createAutoCompactedSourceMessages(await readRuntimeSourceMessages(runtime, userMessage, assistantMessage), assistantMessage),
+      userMessage
+    );
+    emitContextUsageSnapshotAfterCompaction(runtime, replaySourceMessages);
     const replayUserMessage = downgradeUserMessageForOverflowReplay(userMessage);
     const usage = await executeRuntimeStreamRounds(runtime, replaySourceMessages, replayUserMessage, assistantMessage);
     await compactAfterProviderUsageIfNeeded(runtime, replaySourceMessages, assistantMessage, usage);
@@ -990,7 +1066,13 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       activeRuntimes.set(runtime.runtimeId, runtime);
 
       try {
-        return await compactionService.compact({ ...input, signal: runtime.abortController.signal });
+        const result = await compactionService.compact({ ...input, signal: runtime.abortController.signal });
+        if (result.status === 'success') {
+          const latestMessages = await messageReader.getMessages(input.sessionId);
+          emitContextUsageSnapshotAfterCompaction(runtime, latestMessages.length ? latestMessages : input.messages ?? []);
+        }
+
+        return result;
       } finally {
         activeRuntimes.delete(runtime.runtimeId);
       }

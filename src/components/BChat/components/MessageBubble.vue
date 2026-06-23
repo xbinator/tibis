@@ -33,6 +33,8 @@
 
             <BubblePartThinking v-else-if="item.kind === 'thinking'" :part="item.part" />
 
+            <BubblePartStatus v-else-if="item.kind === 'compaction'" :message="message" :compaction-part="item.part" />
+
             <QuestionCard
               v-else-if="item.kind === 'question'"
               :question="item.question"
@@ -76,6 +78,7 @@ import type {
   ChatMessageThinkingPart,
   ChatMessageToolPart
 } from 'types/chat';
+import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import { computed } from 'vue';
 import BBubble from '@/components/BBubble/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -117,6 +120,7 @@ defineEmits<{
 type MessageBubbleRenderItem =
   | { key: string; kind: 'text'; part: ChatMessageTextPart | ChatMessageErrorPart }
   | { key: string; kind: 'thinking'; part: ChatMessageThinkingPart }
+  | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart }
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
   | { key: string; kind: 'tool'; part: ChatMessageToolPart };
 
@@ -177,6 +181,7 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'confirmation') return [];
     if (isTextLikePart(part)) return [{ key, kind: 'text', part }];
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
+    if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
     return [];
