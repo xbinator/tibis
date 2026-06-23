@@ -1,10 +1,11 @@
 /**
  * @file tokenEstimator.ts
- * @description 本地 token 启发式估算器，用于上下文窗口用量与压缩预算预估。
+ * @description 本地 token 启发式估算器，用于上下文窗口用量与压缩预算预估，复用共享 AI 上下文估算口径。
  */
 import type { ModelMessage } from 'ai';
 import { convert } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
+import { estimateModelMessagesTokens, estimateTextTokens } from '../../../../../shared/ai/context/tokenEstimator.ts';
 
 /**
  * token 估算器接口。
@@ -20,39 +21,16 @@ export interface TokenEstimator {
 const estimatorCache = new Map<string, TokenEstimator>();
 
 /**
- * 字符级 token 启发式估算。
- * 平均英文 1 token ≈ 4 字符，中文 1 token ≈ 1.5 字符。
- * 使用保守系数 0.5（即 2 字符 ≈ 1 token）。
- * @param text - 待估算文本
- * @returns 估算 token 数
- */
-function charLevelEstimate(text: string): number {
-  return Math.ceil(text.length / 2);
-}
-
-/**
  * 创建字符级 token 估算器。
  * @returns 字符级 TokenEstimator
  */
 export function createCharLevelEstimator(): TokenEstimator {
   return {
     estimate(messages: ModelMessage[]): number {
-      let total = 0;
-      for (const msg of messages) {
-        if (typeof msg.content === 'string') {
-          total += charLevelEstimate(msg.content);
-        } else if (Array.isArray(msg.content)) {
-          for (const part of msg.content) {
-            if (part && typeof part === 'object') {
-              total += charLevelEstimate(JSON.stringify(part));
-            }
-          }
-        }
-      }
-      return total;
+      return estimateModelMessagesTokens(messages);
     },
     estimateText(text: string): number {
-      return charLevelEstimate(text);
+      return estimateTextTokens(text);
     }
   };
 }

@@ -81,4 +81,23 @@ describe('createContextBudgetService', (): void => {
     expect(snapshot.status).toBe('safe');
     expect(snapshot.shouldCompactBeforeSend).toBe(false);
   });
+
+  it('keeps estimated input and triggers compaction when reserves exceed a small context window', (): void => {
+    const service = createContextBudgetService();
+
+    const snapshot = service.calculate({
+      runtimeId: 'runtime-5',
+      sessionId: 'session-5',
+      agentId: 'agent-1',
+      contextWindow: 8_000,
+      estimatedInputTokens: 1_000
+    });
+
+    expect(snapshot.contextWindow).toBe(8_000);
+    expect(snapshot.usableInputTokens).toBe(0);
+    expect(snapshot.estimatedInputTokens).toBe(1_000);
+    expect(snapshot.usagePercent).toBe(100);
+    expect(snapshot.status).toBe('danger');
+    expect(snapshot.shouldCompactBeforeSend).toBe(true);
+  });
 });

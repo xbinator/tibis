@@ -7,7 +7,7 @@ import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import ContextUsage from '@/components/BChat/components/InputToolbar/ContextUsage.vue';
-import { createContextUsageBudgetSnapshot } from '@/components/BChat/utils/contextUsageBudget';
+import { createContextUsageBudgetSnapshot } from '../../../shared/ai/context/usageBudget.js';
 
 /** BDropdown 测试替身，直接渲染默认插槽和 overlay 插槽。 */
 const BDropdownStub = defineComponent({
@@ -35,9 +35,8 @@ describe('ContextUsage', () => {
     expect(wrapper.text()).toContain('可用输入预算');
     expect(wrapper.text()).toContain('输出预留');
     expect(wrapper.text()).toContain('剩余输入');
-    expect(wrapper.text()).toContain('194.9K');
-    expect(wrapper.text()).toContain('4.1K');
-    expect(wrapper.text()).toContain('194.8K');
+    expect(wrapper.text()).toContain('187.8K');
+    expect(wrapper.text()).toContain('8.2K');
   });
 
   it('uses danger status classes when input budget is nearly exhausted', (): void => {

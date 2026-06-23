@@ -87,8 +87,8 @@
 </template>
 
 <script setup lang="ts">
-import type { ContextUsageBudgetSnapshot } from './utils/contextUsageBudget';
 import type { BChatProps, Message } from './utils/types';
+import type { ContextUsageBudgetSnapshot } from '../../../shared/ai/context/usageBudget.ts';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession } from 'types/chat';
 import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';

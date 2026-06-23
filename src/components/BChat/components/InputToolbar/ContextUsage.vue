@@ -65,9 +65,9 @@
 </template>
 
 <script setup lang="ts">
+import type { ContextUsageBudgetSnapshot } from '../../../../../shared/ai/context/usageBudget.ts';
 import { computed, ref } from 'vue';
-import type { ContextUsageBudgetSnapshot } from '@/components/BChat/utils/contextUsageBudget';
-import { createContextUsageBudgetSnapshot } from '@/components/BChat/utils/contextUsageBudget';
+import { createContextUsageBudgetSnapshot } from '../../../../../shared/ai/context/usageBudget.ts';
 
 /**
  * 上下文用量指示器属性。
