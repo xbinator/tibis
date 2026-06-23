@@ -29,6 +29,25 @@ export interface WebviewPageState {
 }
 
 /**
+ * WebView Agent 活动阶段。
+ */
+export type WebviewAgentActivityPhase = 'idle' | 'reading' | 'operating' | 'success' | 'error';
+
+/**
+ * WebView Agent 当前活动状态。
+ */
+export interface WebviewAgentActivity {
+  /** 当前活动阶段 */
+  phase: WebviewAgentActivityPhase;
+  /** 展示给用户的状态文案 */
+  label: string;
+  /** 活动开始时间 */
+  startedAt: number;
+  /** 活动完成时间 */
+  finishedAt?: number;
+}
+
+/**
  * WebView 元素属性。
  */
 export interface WebviewElementAttribute {

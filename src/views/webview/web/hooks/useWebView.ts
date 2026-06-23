@@ -5,7 +5,13 @@
 import type { DidNavigateEvent, PageFaviconUpdatedEvent, PageTitleUpdatedEvent, WebviewTag } from 'electron';
 import { ref, type Ref } from 'vue';
 import type { WebviewOperateInput, WebviewOperateResult, WebviewPageSnapshot } from '@/ai/tools/context/webview';
-import type { WebviewController, WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
+import type {
+  WebviewAgentActivity,
+  WebviewAgentActivityPhase,
+  WebviewController,
+  WebviewElementSelection,
+  WebviewPageState
+} from '@/views/webview/shared/types';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 import { WEBVIEW_PAGE_SNAPSHOT_TTL_MS } from '@/views/webview/web/automation/constants';
 import {
@@ -53,6 +59,20 @@ const DEFAULT_STATE: WebviewPageState = {
   canGoForward: false,
   loadProgress: 0
 };
+
+/**
+ * 默认 WebView Agent 活动状态。
+ */
+const DEFAULT_AGENT_ACTIVITY: WebviewAgentActivity = {
+  phase: 'idle',
+  label: '',
+  startedAt: 0
+};
+
+/**
+ * Agent 活动完成后保留视觉反馈的时长。
+ */
+const AGENT_ACTIVITY_CLEAR_DELAY_MS = 900;
 
 /**
  * WebView 页面元素选择器主题。
@@ -714,11 +734,13 @@ function createTouchSimulationScript(enabled: boolean): string {
 export function useWebView(webviewRef: Ref<WebviewTag | null>) {
   const state = ref<WebviewPageState>({ ...DEFAULT_STATE });
   const selectedElement = ref<WebviewElementSelection | null>(null);
+  const agentActivity = ref<WebviewAgentActivity>({ ...DEFAULT_AGENT_ACTIVITY });
   let initialUrlAttached = false;
   let isDomReady = false;
   let pendingUserAgent = '';
   let pendingPageSnapshotRead: Promise<WebviewPageSnapshot> | null = null;
   let activeSnapshot: ActiveWebviewSnapshot | null = null;
+  let agentActivityClearTimer: number | null = null;
 
   /**
    * 读取 renderer 本地单调时间。
@@ -734,6 +756,52 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
    */
   function createSnapshotId(): string {
     return `webview-snapshot-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  /**
+   * 清理延迟隐藏 Agent 活动状态的定时器。
+   */
+  function clearAgentActivityTimer(): void {
+    if (agentActivityClearTimer === null) {
+      return;
+    }
+
+    window.clearTimeout(agentActivityClearTimer);
+    agentActivityClearTimer = null;
+  }
+
+  /**
+   * 开始展示 Agent 活动反馈。
+   * @param phase - 活动阶段
+   * @param label - 状态文案
+   */
+  function startAgentActivity(phase: Extract<WebviewAgentActivityPhase, 'reading' | 'operating'>, label: string): void {
+    clearAgentActivityTimer();
+    agentActivity.value = {
+      phase,
+      label,
+      startedAt: nowMs()
+    };
+  }
+
+  /**
+   * 完成 Agent 活动反馈，并短暂保留完成状态。
+   * @param phase - 完成阶段
+   * @param label - 状态文案
+   */
+  function finishAgentActivity(phase: Extract<WebviewAgentActivityPhase, 'success' | 'error'>, label: string): void {
+    const finishedAt = nowMs();
+    agentActivity.value = {
+      phase,
+      label,
+      startedAt: agentActivity.value.startedAt || finishedAt,
+      finishedAt
+    };
+    clearAgentActivityTimer();
+    agentActivityClearTimer = window.setTimeout(() => {
+      agentActivity.value = { ...DEFAULT_AGENT_ACTIVITY };
+      agentActivityClearTimer = null;
+    }, AGENT_ACTIVITY_CLEAR_DELAY_MS);
   }
 
   /**
@@ -857,7 +925,15 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
       throw new Error('当前页面尚未准备好读取，请稍后重试');
     }
 
-    const rawRead = executeJavaScript.call(instance, createPageSnapshotScript()) as Promise<unknown>;
+    startAgentActivity('reading', '正在读取网页');
+    let rawRead: Promise<unknown>;
+    try {
+      rawRead = executeJavaScript.call(instance, createPageSnapshotScript()) as Promise<unknown>;
+    } catch (error: unknown) {
+      finishAgentActivity('error', '读取失败');
+      throw normalizeWebviewPageReadError(error);
+    }
+
     pendingPageSnapshotRead = withWebviewPageReadTimeout(
       rawRead.then((value: unknown) => {
         if (!isWebviewPageSnapshot(value)) {
@@ -872,7 +948,12 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
         return createPublicWebviewPageSnapshot(snapshotWithSelection);
       })
     )
+      .then((snapshot: WebviewPageSnapshot) => {
+        finishAgentActivity('success', '读取完成');
+        return snapshot;
+      })
       .catch((error: unknown) => {
+        finishAgentActivity('error', '读取失败');
         throw normalizeWebviewPageReadError(error);
       })
       .finally(() => {
@@ -895,13 +976,14 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     }
 
     if (input.action.type === 'navigate') {
+      startAgentActivity('operating', '正在操作网页');
       try {
         const targetUrl = normalizeWebviewUrl(input.action.url);
         state.value.url = targetUrl;
         activeSnapshot = null;
         loadWebviewUrl(instance, targetUrl);
 
-        return {
+        const result: WebviewOperateResult = {
           ok: true,
           action: 'navigate',
           target: null,
@@ -910,7 +992,10 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
           pageChanged: true,
           shouldReadAgain: true
         };
+        finishAgentActivity('success', '操作完成');
+        return result;
       } catch {
+        finishAgentActivity('error', '操作失败');
         throw createWebviewOperationError('INVALID_INPUT', '网页地址无效，仅支持 http/https');
       }
     }
@@ -932,6 +1017,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
       throw createWebviewOperationError('PAGE_LOADING');
     }
 
+    startAgentActivity('operating', '正在操作网页');
     try {
       const rawOperation = executeJavaScript.call(instance, createPageOperationScript(input, activeSnapshot.elements)) as Promise<unknown>;
       const result = await withWebviewPageOperationTimeout(rawOperation);
@@ -939,8 +1025,10 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
         throw createWebviewOperationError('EXECUTION_FAILED', '页面操作结果格式无效');
       }
 
+      finishAgentActivity('success', '操作完成');
       return result;
     } catch (error) {
+      finishAgentActivity('error', '操作失败');
       throw normalizeWebviewPageOperationError(error);
     }
   }
@@ -1155,6 +1243,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
       return selectedElement.value;
     },
     selectedElementRef: selectedElement,
+    agentActivity,
 
     attachInitialUrl,
     handleDidStartLoading,

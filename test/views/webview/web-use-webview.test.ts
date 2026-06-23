@@ -29,6 +29,18 @@ interface TestDevToolsWebview {
   isDevToolsOpened: () => boolean;
 }
 
+/**
+ * 测试中手动推进的 Promise。
+ */
+interface Deferred<T> {
+  /** Promise 实例。 */
+  promise: Promise<T>;
+  /** 将 Promise 标记为成功。 */
+  resolve: (value: T | PromiseLike<T>) => void;
+  /** 将 Promise 标记为失败。 */
+  reject: (reason?: unknown) => void;
+}
+
 /** 原始 scrollIntoView 实现，测试后恢复。 */
 const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
 
@@ -71,6 +83,54 @@ function createScriptableWebview(results: unknown[]): WebviewTag {
     return Promise.resolve(nextResult);
   });
   return element;
+}
+
+/**
+ * 创建测试中可手动完成的 Promise。
+ * @returns Promise 与 resolve/reject 控制函数
+ */
+function createDeferred<T>(): Deferred<T> {
+  let resolveDeferred: Deferred<T>['resolve'] | undefined;
+  let rejectDeferred: Deferred<T>['reject'] | undefined;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveDeferred = resolve;
+    rejectDeferred = reject;
+  });
+
+  if (!resolveDeferred || !rejectDeferred) {
+    throw new Error('deferred promise should initialize callbacks');
+  }
+
+  return { promise, resolve: resolveDeferred, reject: rejectDeferred };
+}
+
+/**
+ * 创建测试用原始网页快照。
+ * @param snapshotId - 快照 ID
+ * @returns 原始快照对象
+ */
+function createRawPageSnapshot(snapshotId = 'snap-1'): unknown {
+  return {
+    url: 'https://example.com',
+    title: 'Example',
+    text: 'Hello',
+    selectedText: '',
+    headings: [],
+    links: [],
+    snapshotId,
+    loading: false,
+    scroll: {
+      x: 0,
+      y: 0,
+      viewportWidth: 800,
+      viewportHeight: 600,
+      scrollWidth: 800,
+      scrollHeight: 1200,
+      atTop: true,
+      atBottom: false
+    },
+    elements: [{ index: 1, tagName: 'BUTTON', text: 'Search', label: 'Search', disabled: false, isNew: true, actions: ['click'] }]
+  };
 }
 
 /**
@@ -228,6 +288,7 @@ describe('useWebView', () => {
       writable: true,
       value: originalScrollIntoView
     });
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -432,6 +493,63 @@ describe('useWebView', () => {
     expect(snapshot.snapshotId).toBe('snap-1');
     expect(snapshot.scroll).toMatchObject({ viewportWidth: 800, scrollHeight: 1200 });
     expect(snapshot.elements?.[0]).toMatchObject({ index: 1, label: 'Search', actions: ['click'] });
+  });
+
+  it('shows webpage agent read activity while a snapshot is pending', async (): Promise<void> => {
+    const deferredSnapshot = createDeferred<unknown>();
+    const webviewElement = createScriptableWebview([]);
+    webviewElement.executeJavaScript = vi.fn(() => deferredSnapshot.promise);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+
+    const readPromise = controller.readPageSnapshot();
+
+    expect(controller.agentActivity.value).toMatchObject({ phase: 'reading', label: '正在读取网页' });
+
+    deferredSnapshot.resolve(createRawPageSnapshot());
+    await expect(readPromise).resolves.toMatchObject({ snapshotId: 'snap-1' });
+    expect(controller.agentActivity.value).toMatchObject({ phase: 'success', label: '读取完成' });
+  });
+
+  it('shows webpage agent operation activity while an operation is pending', async (): Promise<void> => {
+    const deferredOperation = createDeferred<unknown>();
+    const webviewElement = createScriptableWebview([createRawPageSnapshot()]);
+    webviewElement.executeJavaScript = vi.fn().mockImplementation((): Promise<unknown> => {
+      if (webviewElement.executeJavaScript && vi.mocked(webviewElement.executeJavaScript).mock.calls.length === 1) {
+        return Promise.resolve(createRawPageSnapshot());
+      }
+
+      return deferredOperation.promise;
+    });
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    const operationPromise = controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
+
+    expect(controller.agentActivity.value).toMatchObject({ phase: 'operating', label: '正在操作网页' });
+
+    deferredOperation.resolve({
+      ok: true,
+      action: 'click',
+      target: { index: 1, label: 'Search', tagName: 'BUTTON' },
+      message: 'clicked',
+      navigationStarted: false,
+      pageChanged: true,
+      shouldReadAgain: true
+    });
+    await expect(operationPromise).resolves.toMatchObject({ ok: true, action: 'click' });
+    expect(controller.agentActivity.value).toMatchObject({ phase: 'success', label: '操作完成' });
+  });
+
+  it('keeps webpage agent operation errors visible after rejected scripts', async (): Promise<void> => {
+    const webviewElement = createScriptableWebview([createRawPageSnapshot(), new Error('Error: OPTION_AMBIGUOUS')]);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    await expect(controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'select', index: 1, optionText: 'Other' } })).rejects.toMatchObject({
+      code: 'OPTION_AMBIGUOUS'
+    });
+
+    expect(controller.agentActivity.value).toMatchObject({ phase: 'error', label: '操作失败' });
   });
 
   it('exposes only meaningful webpage element actions in snapshots', async (): Promise<void> => {

@@ -40,6 +40,15 @@
         <InspectorPanel :selection="webview.selectedElement" @close="handleCloseDomInspector" />
       </BPanelSplitter>
     </div>
+
+    <Teleport v-if="webviewHostLayerRef" :to="webviewHostLayerRef">
+      <div v-if="isAgentActivityVisible" class="webview-agent-activity" :class="agentActivityClass" role="status" aria-live="polite">
+        <div class="webview-agent-activity__badge">
+          <span class="webview-agent-activity__dot"></span>
+          <span class="webview-agent-activity__label">{{ agentActivity.label }}</span>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -71,6 +80,7 @@ const route = useRoute();
 const webviewContentRef = ref<HTMLElement | null>(null);
 const webviewContainerRef = ref<HTMLElement | null>(null);
 const webviewElementRef = ref<WebviewTag | null>(null);
+const webviewHostLayerRef = ref<HTMLElement | null>(null);
 
 const routeFullPath = route.fullPath;
 const initialUrl = normalizeWebviewUrl(decodeURIComponent((route.query.url as string) || ''));
@@ -93,6 +103,12 @@ const isInspectorOpen = ref<boolean | null>(null);
 const isDeviceFramed = computed(() => deviceMode.isToolbarVisible.value);
 
 const activeUserAgent = computed(() => (deviceMode.isToolbarVisible.value ? deviceMode.activePreset.value.userAgent : ''));
+
+const agentActivity = computed(() => webview.agentActivity.value);
+
+const isAgentActivityVisible = computed(() => agentActivity.value.phase !== 'idle');
+
+const agentActivityClass = computed(() => `webview-agent-activity--${agentActivity.value.phase}`);
 
 const viewportStyle = computed<CSSProperties>(() => {
   if (!isDeviceFramed.value) {
@@ -322,6 +338,7 @@ function ensureWebviewElement(): WebviewTag {
   }
 
   const hostLayer = ensureWebviewHostLayer(document, routeFullPath);
+  webviewHostLayerRef.value = hostLayer;
   const element = ensureHostedWebviewElement(hostLayer);
   bindWebviewEvents(element);
   webviewElementRef.value = element;
@@ -378,6 +395,7 @@ onBeforeUnmount(() => {
     unbindWebviewEvents(element);
     element.parentElement?.remove();
     webviewElementRef.value = null;
+    webviewHostLayerRef.value = null;
   }
   offAttachRejected?.();
 });
@@ -435,5 +453,117 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   max-width: 100%;
   height: auto;
+}
+
+.webview-agent-activity {
+  --webview-agent-activity-color: var(--color-warning, var(--color-primary));
+  --webview-agent-activity-bg: var(--color-warning-bg, var(--color-primary-bg));
+  --webview-agent-activity-border: var(--color-warning-border, var(--webview-agent-activity-color));
+
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12px;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.webview-agent-activity::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  border: 2px solid var(--webview-agent-activity-color);
+  border-radius: inherit;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--webview-agent-activity-border) 48%, transparent),
+    0 0 22px color-mix(in srgb, var(--webview-agent-activity-color) 42%, transparent);
+  animation: webview-agent-activity-breathe 1.6s ease-in-out infinite;
+}
+
+.webview-agent-activity__badge {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  max-width: min(320px, 100%);
+  padding: 6px 10px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--webview-agent-activity-color);
+  background: color-mix(in srgb, var(--webview-agent-activity-bg) 82%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--webview-agent-activity-border) 78%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 12%);
+  backdrop-filter: blur(10px);
+}
+
+.webview-agent-activity__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  background: var(--webview-agent-activity-color);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--webview-agent-activity-color) 18%, transparent);
+  animation: webview-agent-activity-dot 1.2s ease-in-out infinite;
+}
+
+.webview-agent-activity__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.webview-agent-activity--success {
+  --webview-agent-activity-color: var(--color-success, var(--color-primary));
+  --webview-agent-activity-bg: var(--color-success-bg, var(--color-primary-bg));
+  --webview-agent-activity-border: var(--color-success, var(--webview-agent-activity-color));
+}
+
+.webview-agent-activity--success::before {
+  animation-duration: 900ms;
+}
+
+.webview-agent-activity--success .webview-agent-activity__dot {
+  animation-duration: 900ms;
+}
+
+@keyframes webview-agent-activity-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--webview-agent-activity-border) 38%, transparent),
+      0 0 16px color-mix(in srgb, var(--webview-agent-activity-color) 30%, transparent);
+    opacity: 0.62;
+  }
+
+  50% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--webview-agent-activity-border) 62%, transparent),
+      0 0 30px color-mix(in srgb, var(--webview-agent-activity-color) 52%, transparent);
+    opacity: 1;
+  }
+}
+
+@keyframes webview-agent-activity-dot {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .webview-agent-activity::before,
+  .webview-agent-activity__dot {
+    animation: none;
+  }
 }
 </style>
