@@ -302,6 +302,33 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('localizes missing file runtime errors before surfacing them to the chat UI', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    electronAPIMock.chatRuntimeSend.mockResolvedValue({
+      ok: false,
+      code: 'ENOENT',
+      error: "ENOENT: no such file or directory, stat '/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md'"
+    });
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      await expect(
+        runtime.send({
+          sessionId: 'session-1',
+          content: 'read {{@/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md}}'
+        })
+      ).rejects.toThrow('文件不存在或已被移动：/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md');
+    });
+
+    scope.stop();
+  });
+
   it('keeps runtime messages in display order when events arrive out of order', (): void => {
     const messages = ref<Message[]>([]);
     const scope = effectScope();
