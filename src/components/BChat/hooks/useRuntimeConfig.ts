@@ -70,19 +70,18 @@ export function useRuntimeConfig(): UseRuntimeConfigReturn {
    * @returns MCP runtime 请求配置
    */
   function resolveRuntimeMcpRequestConfig(): AIMCPRequestConfig | undefined {
-    const servers = toolSettingsStore.mcp.servers.map((server) => ({
+    const servers = toolSettingsStore.mcp.servers.filter(isRuntimeEnabledMcpServer).map((server) => ({
       ...server,
       args: [...server.args],
       env: { ...server.env },
       headers: { ...server.headers },
       toolAllowlist: [...server.toolAllowlist]
     }));
-    const enabledServerIds = servers.filter(isRuntimeEnabledMcpServer).map((server) => server.id);
-    if (!servers.length && !enabledServerIds.length) return undefined;
+    if (!servers.length) return undefined;
 
     return {
       servers,
-      enabledServerIds,
+      enabledServerIds: servers.map((server) => server.id),
       enabledTools: [],
       toolInstructions: ''
     };
