@@ -48,6 +48,22 @@ function isWordChar(char: string): boolean {
 }
 
 /**
+ * 判断 @ 是否位于 {{...}} token 内部。
+ * @param text - 当前行从行首到光标前的文本
+ * @param atIndex - @ 在 text 中的位置
+ * @returns 位于 token 内部时返回 true
+ */
+function isInsideVariableToken(text: string, atIndex: number): boolean {
+  const tokenOpenIndex = text.lastIndexOf('{{', atIndex);
+  if (tokenOpenIndex === -1) {
+    return false;
+  }
+
+  const tokenCloseIndex = text.lastIndexOf('}}', atIndex);
+  return tokenOpenIndex > tokenCloseIndex;
+}
+
+/**
  * 文件提及 Hook
  * @param view - EditorView 引用
  * @param fileMentions - 文件提及列表
@@ -91,6 +107,10 @@ export function useFileMention(
     // 找最后一个 @
     const atIndex = text.lastIndexOf('@');
     if (atIndex === -1) {
+      return null;
+    }
+
+    if (isInsideVariableToken(text, atIndex)) {
       return null;
     }
 
