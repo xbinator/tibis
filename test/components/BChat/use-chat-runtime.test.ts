@@ -329,6 +329,40 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('localizes missing file runtime error events before calling onError', (): void => {
+    const messages = ref<Message[]>([]);
+    const onError = vi.fn();
+    const scope = effectScope();
+
+    scope.run(() => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        onError
+      });
+
+      emitRuntimeEvent(listeners, 'error', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        error: {
+          code: 'REQUEST_FAILED',
+          message: "ENOENT: no such file or directory, stat '/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md'"
+        }
+      });
+
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'REQUEST_FAILED',
+          message: '文件不存在或已被移动：/Users/zhangbin/Desktop/Markdown 语法全量渲染测试.md'
+        })
+      );
+    });
+
+    scope.stop();
+  });
+
   it('keeps runtime messages in display order when events arrive out of order', (): void => {
     const messages = ref<Message[]>([]);
     const scope = effectScope();

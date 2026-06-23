@@ -28,6 +28,7 @@ import { onScopeDispose, ref, toRaw } from 'vue';
 import { executeToolCall } from '@/ai/tools/stream';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
+import { createRuntimeRequestError, localizeRuntimeServiceError } from '../utils/runtimeError';
 
 /** ChatRuntime hook 选项。 */
 interface UseChatRuntimeOptions {
@@ -95,52 +96,6 @@ const RUNTIME_TOOL_ERROR_CODES: AIToolExecutionError['code'][] = [
   'CONFIRMATION_DISMISSED',
   'EXECUTION_FAILED'
 ];
-
-/**
- * Runtime IPC 请求错误。
- */
-interface RuntimeRequestError extends Error {
-  /** 主进程返回的稳定错误码。 */
-  code?: string;
-}
-
-/**
- * 从 Node 文件系统错误文案中提取路径。
- * @param message - 原始错误文案
- * @returns 文件路径，不存在时返回 null
- */
-function extractPathFromNodeFileError(message: string): string | null {
-  const matched = message.match(/(?:stat|open|access|lstat|readlink)\s+['"]([^'"]+)['"]$/);
-  return matched?.[1] ?? null;
-}
-
-/**
- * 将 Runtime IPC 错误转换为面向用户的中文文案。
- * @param result - handler 结果
- * @returns 用户可读错误文案
- */
-function formatRuntimeErrorMessage(result: ChatRuntimeHandlerResult<unknown>): string {
-  const rawMessage = result.error ?? 'ChatRuntime 请求失败';
-  const code = result.code ?? '';
-
-  if (code === 'ENOENT' || rawMessage.startsWith('ENOENT:')) {
-    const path = extractPathFromNodeFileError(rawMessage);
-    return path ? `文件不存在或已被移动：${path}` : '文件不存在或已被移动';
-  }
-
-  return rawMessage;
-}
-
-/**
- * 创建 Runtime IPC 请求错误。
- * @param result - handler 结果
- * @returns 带稳定错误码的错误对象
- */
-function createRuntimeRequestError(result: ChatRuntimeHandlerResult<unknown>): RuntimeRequestError {
-  const error = new Error(formatRuntimeErrorMessage(result)) as RuntimeRequestError;
-  error.code = result.code;
-  return error;
-}
 
 /** ChatRuntime 续轮输入。 */
 export type BChatRuntimeContinueInput = Pick<
@@ -510,7 +465,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
   function handleErrorEvent(event: ChatRuntimeEventMap['chat:runtime:error']): void {
     if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
 
-    Promise.resolve(options.onError?.(event.error)).catch(() => undefined);
+    Promise.resolve(options.onError?.(localizeRuntimeServiceError(event.error))).catch(() => undefined);
   }
 
   /**

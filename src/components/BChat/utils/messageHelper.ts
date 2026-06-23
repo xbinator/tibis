@@ -279,7 +279,7 @@ export const create = {
    * @returns 错误消息
    */
   errorMessage(content: string): Message {
-    return createBase({ role: 'assistant', content, parts: [{ type: 'error', text: content }], finished: true });
+    return createBase({ role: 'error', content, parts: [{ type: 'error', text: content }], finished: true });
   },
   /**
    * 创建中断消息。

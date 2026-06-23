@@ -9,6 +9,7 @@ import type { Ref } from 'vue';
 import { onScopeDispose, toRaw } from 'vue';
 import { nanoid } from 'nanoid';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { createRuntimeRequestError } from '../utils/runtimeError';
 
 /** 压缩触发来源。 */
 type CompactTriggerSource = 'manual' | 'auto';
@@ -105,7 +106,7 @@ function toRuntimeMessages(messages: Message[], sessionId: string): ChatMessageR
  */
 function unwrapRuntimeResult<T>(result: ChatRuntimeHandlerResult<T>): T {
   if (!result.ok || result.data === undefined) {
-    throw new Error(result.error ?? 'ChatRuntime 请求失败');
+    throw createRuntimeRequestError(result);
   }
 
   return result.data;
