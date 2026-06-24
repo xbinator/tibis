@@ -307,17 +307,16 @@ describe('BRecent result icons', (): void => {
     expect(itemMainRule).not.toMatch(/flex-direction:\s*column;/);
   });
 
-  it('uses compact row sizing with smaller result icons', (): void => {
+  it('uses consistent row sizing aligned with BModelSelect', (): void => {
     const source = readSearchRecentSource();
     const itemRule = extractRuleBlock(source, '.b-recent__item');
     const iconRule = extractRuleBlock(source, '.b-recent__item-icon');
     const pathRule = extractRuleBlock(source, '.b-recent__item-path');
 
-    expect(itemRule).toMatch(/height:\s*32px;/);
-    expect(itemRule).toMatch(/padding:\s*0 6px;/);
-    expect(iconRule).toMatch(/width:\s*14px;/);
-    expect(iconRule).toMatch(/height:\s*14px;/);
-    expect(iconRule).toMatch(/margin-right:\s*8px;/);
+    expect(itemRule).toMatch(/padding:\s*6px 8px;/);
+    expect(itemRule).toMatch(/border-radius:\s*8px;/);
+    expect(iconRule).toMatch(/width:\s*26px;/);
+    expect(iconRule).toMatch(/height:\s*26px;/);
     expect(pathRule).toMatch(/margin-left:\s*6px;/);
   });
 

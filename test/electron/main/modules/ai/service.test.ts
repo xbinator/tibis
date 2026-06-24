@@ -2,6 +2,7 @@
  * @file service.test.ts
  * @description AI 主进程服务返回值封装测试。
  */
+import type { AIProvider } from '../../../../../electron/main/modules/ai/types.mjs';
 import type { AIInvokeResult } from 'types/ai';
 import { describe, expect, it } from 'vitest';
 import { AlibabaProvider } from '../../../../../electron/main/modules/ai/providers/alibaba.mjs';
@@ -177,19 +178,19 @@ describe('MoonshotProvider.createProviderOptions', (): void => {
 
 describe('OpenAI-compatible provider option defaults', (): void => {
   it('does not add provider options for GLM unless a supported mapping is introduced', (): void => {
-    const provider = new GLMProvider();
+    const provider: AIProvider = new GLMProvider();
 
     expect(provider.createProviderOptions?.({ modelId: 'glm-5.2', reasoning: { enabled: true } })).toBeUndefined();
   });
 
   it('does not add provider options for MiniMax unless a supported mapping is introduced', (): void => {
-    const provider = new MiniMaxProvider();
+    const provider: AIProvider = new MiniMaxProvider();
 
     expect(provider.createProviderOptions?.({ modelId: 'MiniMax-M3', reasoning: { enabled: true } })).toBeUndefined();
   });
 
   it('does not add provider options for MiMo unless a supported mapping is introduced', (): void => {
-    const provider = new MiMoProvider();
+    const provider: AIProvider = new MiMoProvider();
 
     expect(provider.createProviderOptions?.({ modelId: 'mimo-v2.5-pro', reasoning: { enabled: true } })).toBeUndefined();
   });
