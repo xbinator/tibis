@@ -3,12 +3,12 @@
  * @description 上下文窗口用量 hook，混合策略计算当前会话的 Token 占用。
  * 始终基于当前将发送给模型的消息切片估算，避免把历史 API usage 当作当前窗口用量。
  */
-import type { ContextUsageBudgetSnapshot } from '../../../../shared/ai/context/usageBudget.ts';
 import type { TokenEstimator } from '../utils/compression/tokenEstimator';
 import type { Message } from '../utils/types';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
-import { createContextUsageBudgetSnapshot } from '../../../../shared/ai/context/usageBudget.ts';
+import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
+import { createContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
 import { createCharLevelEstimator, createTokenEstimator } from '../utils/compression/tokenEstimator';
 import { convert } from '../utils/messageHelper';
 

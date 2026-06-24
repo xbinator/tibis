@@ -2,8 +2,8 @@
  * @file elementPicker.ts
  * @description 构建 WebView 页面元素选择器脚本并解析元素选择器宿主消息。
  */
+import { TIBIS_WEBVIEW_HOST_CHANNEL } from '@@/shared/webview/host-bridge';
 import type { WebviewElementSelection, WebviewElementToolbarActionType } from '@/views/webview/shared/types';
-import { TIBIS_WEBVIEW_HOST_CHANNEL } from '../../../../../shared/webview/host-bridge';
 
 /**
  * WebView 页面元素选择器主题。

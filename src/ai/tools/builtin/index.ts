@@ -5,8 +5,8 @@
 import type { BuiltinToolBaseOptions } from '../shared/types';
 import type { AIToolExecutor } from 'types/ai';
 import { nanoid } from 'nanoid';
+import { getToolNamesByExposure } from '@@/shared/ai/tools/toolRegistry.ts';
 import { native } from '@/shared/platform';
-import { getToolNamesByExposure } from '../../../../shared/ai/tools/toolRegistry.ts';
 import {
   createAddMcpServerTool,
   createApplyDrawingOperationsTool,

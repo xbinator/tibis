@@ -42,8 +42,8 @@
 </template>
 
 <script setup lang="ts">
-import type { ContextUsageBudgetSnapshot } from '../../../../shared/ai/context/usageBudget.ts';
 import { computed, ref } from 'vue';
+import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
 import BButton from '@/components/BButton/index.vue';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 import ContextUsage from './InputToolbar/ContextUsage.vue';

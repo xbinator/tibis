@@ -3,9 +3,9 @@
  * @description 本地 token 启发式估算器，用于上下文窗口用量与压缩预算预估，复用共享 AI 上下文估算口径。
  */
 import type { ModelMessage } from 'ai';
+import { estimateModelMessagesTokens, estimateTextTokens } from '@@/shared/ai/context/tokenEstimator.ts';
 import { convert } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
-import { estimateModelMessagesTokens, estimateTextTokens } from '../../../../../shared/ai/context/tokenEstimator.ts';
 
 /**
  * token 估算器接口。

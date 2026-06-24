@@ -88,12 +88,12 @@
 
 <script setup lang="ts">
 import type { BChatProps, Message } from './utils/types';
-import type { ContextUsageBudgetSnapshot } from '../../../shared/ai/context/usageBudget.ts';
 import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession } from 'types/chat';
 import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
+import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
 import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
