@@ -334,6 +334,7 @@ defineExpose<BModelSelectExpose>({
 .model-list {
   display: flex;
   flex-direction: column;
+  padding-bottom: 10px;
   margin-right: 4px;
 }
 
