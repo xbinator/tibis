@@ -31,10 +31,19 @@ vi.mock('@/components/BButton/index.vue', () => ({
 }));
 
 vi.mock('@/components/BChat/index.vue', () => ({
+  __esModule: true,
+  __isKeepAlive: false,
+  __isTeleport: false,
   default: {
     name: 'BChat',
     props: ['sessionId'],
     emits: ['session-created', 'session-title-persisted', 'draft-session-created', 'loading-change'],
+    setup(_props: unknown, { expose }: { expose: (exposed: { focusInput: () => void }) => void }) {
+      expose({
+        focusInput: (): void => undefined
+      });
+      return {};
+    },
     template: '<div data-testid="b-chat" :data-session-id="sessionId || \'\'"></div>'
   }
 }));
@@ -125,13 +134,17 @@ describe('ChatSider', (): void => {
     sessionHistoryRefreshMock.mockReset();
   });
 
-  it('renders BChat after active session initialization and passes session id', async (): Promise<void> => {
+  it('renders BChat with the active session id and displays the SessionHistory current session', async (): Promise<void> => {
     const latestSession = createSession('session-latest', '最近会话');
     chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
-    useSettingStore().setSidebarVisible(true);
+    const settingStore = useSettingStore();
+    settingStore.setSidebarVisible(true);
+    settingStore.setChatSidebarActiveSessionId('session-latest');
 
     const wrapper = mountChatSider();
     await flushPromises();
+    await nextTick();
+    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
     await nextTick();
 
     expect(wrapper.find('[data-testid="b-chat"]').attributes('data-session-id')).toBe('session-latest');
@@ -189,8 +202,11 @@ describe('ChatSider', (): void => {
     chatStoreMock.getSessions.mockResolvedValue(createSessionPage([latestSession]));
     const settingStore = useSettingStore();
     settingStore.setSidebarVisible(true);
+    settingStore.setChatSidebarActiveSessionId('session-latest');
     const wrapper = mountChatSider();
     await flushPromises();
+    await nextTick();
+    wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
     await nextTick();
 
     wrapper.findComponent({ name: 'BChat' }).vm.$emit('session-title-persisted', 'session-latest', '生成标题');
