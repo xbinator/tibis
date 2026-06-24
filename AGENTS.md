@@ -289,6 +289,11 @@ import { debounce } from 'lodash-es'
 }
 ```
 
+### 使用 `createNamespace` 生成 BEM 类名
+- ✅ **必须**: B 开头的组件在 `<script setup>` 中通过 `src/utils/namespace.ts` 的 `createNamespace(name)` 拿到类名和 `bem` 函数
+- ✅ **必须**: B 开头组件的 `<style>` 中使用其生成的类名（`b-{name}` / `b-{name}__{element}` / `b-{name}--{modifier}`），保持模板与样式一致
+- ❌ **禁止**: 手写与 `createNamespace` 不一致的类名前缀
+
 ### `&` 允许使用的场景
 以下场景中 `&` 的使用是允许的，因为不涉及类名省略，不影响搜索：
 - 伪类：`&:hover`、`&:focus`、`&:active`
