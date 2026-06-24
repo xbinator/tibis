@@ -1,8 +1,11 @@
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { NodeViewProps } from '@tiptap/vue-3';
 import type { Component, Ref } from 'vue';
 import {
   Extension,
   Mark,
+  mergeAttributes,
+  Node as TiptapNode,
   type AnyExtension,
   type JSONContent,
   type MarkdownParseHelpers,
@@ -32,21 +35,25 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { Typography } from '@tiptap/extension-typography';
 import { Underline } from '@tiptap/extension-underline';
 import { Markdown } from '@tiptap/markdown';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { VueNodeViewRenderer } from '@tiptap/vue-3';
 import { common, createLowlight } from 'lowlight';
 import { captureSourceLineRange, createSourceLineTracker, resetSourceLineTracker } from '../adapters/sourceLineMapping';
 import CodeBlockView from '../components/CodeBlock.vue';
+import FrontMatterBlockView from '../components/FrontMatterBlock.vue';
 import MathBlockView from '../components/MathBlock.vue';
 import TableView from '../components/TableView.vue';
 import { AISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { Search, type SearchScrollContext } from '../extensions/editorSearch';
 import { InlineCommentMark } from '../extensions/inlineCommentMark';
 import { RichInlineCompletion } from '../extensions/richInlineCompletion';
+import { parseFrontMatterData, parseFrontMatterYaml, serializeFrontMatterData, serializeFrontMatterYaml, type FrontMatterData } from '../hooks/useFrontMatter';
 import { registerRichCodeBlockLowlightAliases } from '../utils/richCodeBlockLowlight';
 
 const lowlight = createLowlight(common);
 registerRichCodeBlockLowlightAliases(lowlight);
+const FRONT_MATTER_BOUNDARY_PLUGIN_KEY = new PluginKey('b-editor-front-matter-boundary');
 
 /**
  * Rich 编辑器默认空内容占位文案。
@@ -102,6 +109,26 @@ interface UseEditorExtensionsResult {
 
 interface UseExtensionsOptions {
   onSearchMatchFocus?: (context: SearchScrollContext) => void;
+}
+
+/**
+ * Front Matter Markdown token。
+ */
+interface FrontMatterMarkdownToken extends MarkdownToken {
+  /** YAML 原文 */
+  text?: string;
+}
+
+/**
+ * Front Matter 节点属性。
+ */
+interface FrontMatterNodeAttributes {
+  /** 结构化 Front Matter 数据 */
+  data: FrontMatterData;
+  /** YAML 原文，解析失败时保留 */
+  raw: string | null;
+  /** 是否存在 YAML 解析错误 */
+  parseError: boolean;
 }
 
 /**
@@ -163,6 +190,206 @@ interface InlineMarkdownMark {
   type: string;
   /** mark 属性 */
   attrs?: Record<string, string | null>;
+}
+
+/**
+ * 判断值是否为 Front Matter 数据对象。
+ * @param value - 待判断的值
+ * @returns 是普通对象时返回 true
+ */
+function isFrontMatterData(value: unknown): value is FrontMatterData {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+/**
+ * 读取节点上的 Front Matter 数据。
+ * @param node - 当前 JSON 节点
+ * @returns Front Matter 数据
+ */
+function getFrontMatterDataFromNode(node: JSONContent): FrontMatterData {
+  const data = node.attrs?.data;
+  return isFrontMatterData(data) ? data : {};
+}
+
+/**
+ * 读取节点上的 Front Matter YAML 原文。
+ * @param node - 当前 JSON 节点
+ * @returns YAML 原文，不存在时返回 null
+ */
+function getFrontMatterRawFromNode(node: JSONContent): string | null {
+  const raw = node.attrs?.raw;
+  return typeof raw === 'string' ? raw : null;
+}
+
+/**
+ * 判断 Front Matter 节点是否携带解析错误。
+ * @param node - 当前 JSON 节点
+ * @returns 存在解析错误时返回 true
+ */
+function hasFrontMatterParseError(node: JSONContent): boolean {
+  return node.attrs?.parseError === true;
+}
+
+/**
+ * 用原始 YAML 重建 Front Matter Markdown 块。
+ * @param raw - YAML 原文
+ * @returns Front Matter Markdown 块
+ */
+function serializeRawFrontMatter(raw: string): string {
+  return raw.endsWith('\n') ? `---\n${raw}---` : `---\n${raw}\n---`;
+}
+
+/**
+ * 从 YAML 原文创建 Front Matter 节点属性。
+ * @param raw - YAML 原文
+ * @returns Front Matter 节点属性
+ */
+function createFrontMatterNodeAttributes(raw: string): FrontMatterNodeAttributes {
+  const result = parseFrontMatterYaml(raw);
+  return {
+    data: result.data,
+    parseError: result.parseError,
+    raw: result.parseError ? result.raw : null
+  };
+}
+
+/**
+ * 查找顶层 Front Matter 节点位置。
+ * @param doc - 当前 ProseMirror 文档
+ * @returns Front Matter 顶层索引，不存在时返回 -1
+ */
+function getTopLevelFrontMatterIndex(doc: ProseMirrorNode): number {
+  let frontMatterIndex = -1;
+
+  doc.forEach((node: ProseMirrorNode, _offset: number, index: number): void => {
+    if (frontMatterIndex >= 0) {
+      return;
+    }
+
+    if (node.type.name === 'frontMatter') {
+      frontMatterIndex = index;
+    }
+  });
+
+  return frontMatterIndex;
+}
+
+/**
+ * 判断文档是否满足 Front Matter 必须置顶的约束。
+ * @param doc - 当前 ProseMirror 文档
+ * @returns Front Matter 不存在或位于第一个顶层块时返回 true
+ */
+function keepsFrontMatterAtDocumentStart(doc: ProseMirrorNode): boolean {
+  const frontMatterIndex = getTopLevelFrontMatterIndex(doc);
+  return frontMatterIndex < 0 || frontMatterIndex === 0;
+}
+
+/**
+ * 创建 Front Matter 节点扩展。
+ * @param withNodeView - 是否挂载 Vue NodeView
+ * @returns Front Matter Tiptap 扩展
+ */
+function createFrontMatterExtension(withNodeView: boolean): AnyExtension {
+  const extension = TiptapNode.create({
+    name: 'frontMatter',
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: false,
+    addAttributes() {
+      return {
+        data: {
+          default: {},
+          parseHTML: (element: HTMLElement) => parseFrontMatterData(element.getAttribute('data-yaml') ?? ''),
+          renderHTML: (attributes) => {
+            const raw = typeof attributes.raw === 'string' ? attributes.raw : '';
+            if (attributes.parseError === true) {
+              return {
+                'data-parse-error': 'true',
+                'data-yaml': raw
+              };
+            }
+
+            const data = isFrontMatterData(attributes.data) ? attributes.data : {};
+            return { 'data-yaml': serializeFrontMatterYaml(data) };
+          }
+        },
+        raw: {
+          default: null,
+          parseHTML: (element: HTMLElement) => element.getAttribute('data-yaml'),
+          renderHTML: () => ({})
+        },
+        parseError: {
+          default: false,
+          parseHTML: (element: HTMLElement) =>
+            parseFrontMatterYaml(element.getAttribute('data-yaml') ?? '').parseError || element.getAttribute('data-parse-error') === 'true',
+          renderHTML: () => ({})
+        }
+      };
+    },
+    parseHTML() {
+      return [
+        {
+          tag: 'section[data-type="front-matter"]'
+        }
+      ];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ['section', mergeAttributes(HTMLAttributes, { 'data-type': 'front-matter' })];
+    },
+    parseMarkdown: (token: FrontMatterMarkdownToken, helpers: MarkdownParseHelpers): MarkdownParseResult =>
+      helpers.createNode('frontMatter', createFrontMatterNodeAttributes(token.text ?? '')),
+    renderMarkdown: (node: JSONContent): string => {
+      if (hasFrontMatterParseError(node)) {
+        return serializeRawFrontMatter(getFrontMatterRawFromNode(node) ?? '');
+      }
+
+      return serializeFrontMatterData(getFrontMatterDataFromNode(node));
+    },
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          key: FRONT_MATTER_BOUNDARY_PLUGIN_KEY,
+          filterTransaction: (transaction): boolean => {
+            if (!transaction.docChanged) {
+              return true;
+            }
+
+            return keepsFrontMatterAtDocumentStart(transaction.doc);
+          }
+        })
+      ];
+    },
+    markdownTokenizer: {
+      name: 'frontMatter',
+      level: 'block',
+      start: (source: string): number => (source.startsWith('---') ? 0 : -1),
+      tokenize: (source: string, tokens: MarkdownToken[]): FrontMatterMarkdownToken | undefined => {
+        if (tokens.length > 0 || !source.startsWith('---')) {
+          return undefined;
+        }
+
+        const match = /^---[ \t]*\r?\n(?:---[ \t]*(?:\r?\n|$)|([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$))/.exec(source);
+        if (!match) {
+          return undefined;
+        }
+
+        return {
+          type: 'frontMatter',
+          raw: match[0],
+          text: match[1] ?? ''
+        };
+      }
+    }
+  });
+
+  if (!withNodeView) {
+    return extension;
+  }
+
+  return extension.extend({
+    addNodeView: () => VueNodeViewRenderer(FrontMatterBlockView as unknown as Component<NodeViewProps>)
+  });
 }
 
 /**
@@ -991,6 +1218,8 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     }
   });
 
+  const FrontMatter = createFrontMatterExtension(true);
+
   const editorExtensions = toAnyExtensions([
     StarterKit.configure({
       code: false,
@@ -1008,6 +1237,7 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     }),
     Placeholder.configure({ emptyEditorClass: 'is-editor-empty', placeholder: resolveRichEditorPlaceholder }),
     Markdown,
+    FrontMatter,
     HtmlComment,
     LinkDefinitionAsText,
     AISelectionHighlight,
@@ -1408,6 +1638,8 @@ export function createRichMarkdownSchemaExtensions(
     }
   });
 
+  const FrontMatter = createFrontMatterExtension(false);
+
   const extensions = toAnyExtensions([
     StarterKit.configure({
       code: false,
@@ -1422,6 +1654,7 @@ export function createRichMarkdownSchemaExtensions(
       gapcursor: false
     }),
     Markdown,
+    FrontMatter,
     HtmlComment,
     LinkDefinitionAsText,
     Heading,

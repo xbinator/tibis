@@ -1,16 +1,5 @@
 <template>
   <div ref="overlayRootRef" :class="name" @click="handleEditorClick" @focusout="handleEditorFocusOut">
-    <!-- Front Matter 卡片 -->
-    <FrontMatterCard
-      v-if="shouldShowFrontMatterCard"
-      :data="frontMatterData"
-      @click.stop
-      @update="handleFrontMatterUpdate"
-      @update-field="handleFrontMatterFieldUpdate"
-      @remove-field="handleFrontMatterFieldRemove"
-      @add-field="handleFrontMatterFieldAdd"
-    />
-
     <!-- 当前选中块菜单 -->
     <CurrentBlockMenu
       v-if="!isLoadingRich && !isFailedRich"
@@ -51,10 +40,10 @@
 import type { SelectionAssistantAdapter } from '../adapters/selectionAssistant';
 import type { EditorController, EditorSearchState, EditorSelection as EditorSelectionRange } from '../adapters/types';
 import type { SearchScrollContext } from '../extensions/editorSearch';
-import type { FrontMatterData } from '../hooks/useFrontMatter';
 import type { EditorState } from '../types';
 import type { Editor as TiptapEditor } from '@tiptap/vue-3';
 import { computed, onBeforeUnmount, ref, shallowRef, toRef, watch } from 'vue';
+import { NodeSelection } from '@tiptap/pm/state';
 import { EditorContent } from '@tiptap/vue-3';
 import { useEventListener } from '@vueuse/core';
 import { useNavigate } from '@/hooks/useNavigate';
@@ -63,7 +52,6 @@ import { findHeadingElementByHash, scrollHeadingIntoView } from '../adapters/ric
 import { createRichSelectionAssistantAdapter } from '../adapters/richSelectionAssistant';
 import { mapSourceLineRangeToProseMirrorRange } from '../adapters/sourceLineMapping';
 import CurrentBlockMenu from '../components/CurrentBlockMenu.vue';
-import FrontMatterCard from '../components/FrontMatterCard.vue';
 import { setAISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { getSearchSnapshot } from '../extensions/editorSearch';
 import { createRichInlineCompletionAdapter } from '../extensions/richInlineCompletion';
@@ -125,18 +113,14 @@ const overlayRootRef = ref<HTMLElement | null>(null);
 
 const editorInstanceId = computed<string>(() => props.editorState?.id || '');
 
-const { bodyContent, frontMatterData, hasFrontMatter, updateFrontMatter, reconstructContent } = useFrontMatter(editorContent);
-
-const shouldShowFrontMatterCard = computed<boolean>(() => Boolean(hasFrontMatter.value));
+const { bodyContent, hasFrontMatter } = useFrontMatter(editorContent);
 
 /**
- * 同步内容到外部 model
+ * 同步内容到外部 model。
+ * Rich 模式现在直接持久化完整 Markdown，此回调用于保持 useRichEditor 的统一接口。
  */
 function syncToExternal(): void {
-  const nextContent = reconstructContent();
-  if (editorContent.value !== nextContent) {
-    editorContent.value = nextContent;
-  }
+  // 内容写回已由 useContent.onEditorUpdate 完成。
 }
 
 /**
@@ -154,7 +138,7 @@ const {
   loadState: richLoadState,
   retryLoad
 } = useRichEditor({
-  bodyContent,
+  bodyContent: editorContent,
   editable: toRef(props, 'editable'),
   editorInstanceId,
   onContentChange: syncToExternal,
@@ -290,60 +274,6 @@ onBeforeUnmount(() => {
   adapter.value = null;
 });
 
-// ---- Front Matter ----
-
-/**
- * 处理 Front Matter 整体更新
- * @param data - 新的 Front Matter 数据
- */
-function handleFrontMatterUpdate(data: FrontMatterData): void {
-  updateFrontMatter(data);
-  syncToExternal();
-}
-
-/**
- * 处理 Front Matter 字段更新
- * @param key - 字段名
- * @param value - 字段值
- */
-function handleFrontMatterFieldUpdate(key: string, value: unknown): void {
-  frontMatterData.value = { ...frontMatterData.value, [key]: value };
-  syncToExternal();
-}
-
-/**
- * 处理 Front Matter 字段删除
- * @param key - 字段名
- */
-function handleFrontMatterFieldRemove(key: string): void {
-  const rest = Object.fromEntries(Object.entries(frontMatterData.value).filter(([k]) => k !== key));
-  updateFrontMatter(rest);
-  syncToExternal();
-}
-
-/**
- * 处理 Front Matter 字段添加
- * @param key - 字段名
- * @param value - 字段值
- */
-function handleFrontMatterFieldAdd(key: string, value: unknown): void {
-  if (key in frontMatterData.value) return;
-  frontMatterData.value = { ...frontMatterData.value, [key]: value };
-  syncToExternal();
-}
-
-/**
- * 为当前文档创建默认 Front Matter。
- */
-function handleAddFrontMatter(): void {
-  if (hasFrontMatter.value) {
-    return;
-  }
-
-  updateFrontMatter(createDefaultFrontMatterData(props.editorState?.name));
-  syncToExternal();
-}
-
 /**
  * 统一编辑守卫
  * @throws Error 当 editable 为 false 或加载状态非 ready
@@ -355,6 +285,33 @@ function guardEdit(): TiptapEditor {
   const instance = editorInstance.value;
   if (!instance) throw new Error('编辑器未初始化');
   return instance;
+}
+
+/**
+ * 为当前文档创建默认 Front Matter。
+ */
+function handleAddFrontMatter(): void {
+  if (hasFrontMatter.value) {
+    return;
+  }
+
+  const instance = guardEdit();
+  const inserted = instance
+    .chain()
+    .focus('start')
+    .insertContentAt(0, {
+      type: 'frontMatter',
+      attrs: {
+        data: createDefaultFrontMatterData(props.editorState?.name)
+      }
+    })
+    .run();
+
+  if (!inserted) {
+    return;
+  }
+
+  instance.view.dispatch(instance.state.tr.setSelection(NodeSelection.create(instance.state.doc, 0)));
 }
 
 // ---- Editor Commands ----
