@@ -6,8 +6,8 @@
 import { defineComponent, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DrawingSize } from '@/components/BDrawing/types';
 import { useViewportSize } from '@/components/BDrawing/hooks/useViewportSize';
+import type { DrawingSize } from '@/components/BDrawing/types';
 
 /**
  * 暴露给测试断言的宿主组件实例。

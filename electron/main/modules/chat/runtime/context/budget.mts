@@ -2,8 +2,8 @@
  * @file context-budget.mts
  * @description ChatRuntime 上下文预算与压缩阈值计算，复用共享 AI 上下文预算口径。
  */
-import type { ChatRuntimeContextUsageSnapshot, ChatRuntimeContextUsageStatus } from 'types/chat-runtime';
 import type { ContextUsageBudgetOptions } from '../../../../../../shared/ai/context/usageBudget.js';
+import type { ChatRuntimeContextUsageSnapshot, ChatRuntimeContextUsageStatus } from 'types/chat-runtime';
 import { createContextUsageBudgetSnapshot } from '../../../../../../shared/ai/context/usageBudget.js';
 
 /** 上下文预算计算参数。 */

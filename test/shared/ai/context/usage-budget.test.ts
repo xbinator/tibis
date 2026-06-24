@@ -3,7 +3,12 @@
  * @description 共享 AI 上下文预算计算工具测试。
  */
 import { describe, expect, it } from 'vitest';
-import { computeReservedOutputTokens, computeSafetyMarginTokens, computeUsableInputTokens, createContextUsageBudgetSnapshot } from '../../../../shared/ai/context/usageBudget.js';
+import {
+  computeReservedOutputTokens,
+  computeSafetyMarginTokens,
+  computeUsableInputTokens,
+  createContextUsageBudgetSnapshot
+} from '../../../../shared/ai/context/usageBudget.js';
 
 describe('shared AI context usage budget', (): void => {
   it('uses the unified default reserves for renderer and main process snapshots', (): void => {

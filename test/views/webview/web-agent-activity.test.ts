@@ -5,9 +5,8 @@
  */
 import type { VueWrapper } from '@vue/test-utils';
 import type { WebviewTag } from 'electron';
-import type { Ref } from 'vue';
+import { nextTick, type Ref } from 'vue';
 import { shallowMount } from '@vue/test-utils';
-import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebviewToolContext } from '@/ai/tools/context/webview';
 import type { WebviewPageState } from '@/views/webview/shared/types';
@@ -107,12 +106,16 @@ vi.mock('@/views/webview/shared/hooks/useWebviewTabTitle', () => ({
 }));
 
 vi.mock('@/views/webview/web/hooks/useScreenshot.ts', () => ({
-  useScreenshot: (_options: TestUseScreenshotOptions) => ({
-    isCapturing: { value: false },
-    captureViewportScreenshot: vi.fn().mockResolvedValue(undefined),
-    captureFullPageScreenshot: vi.fn().mockResolvedValue(undefined),
-    captureSelectedElementScreenshot: vi.fn().mockResolvedValue(undefined)
-  })
+  useScreenshot: (options: TestUseScreenshotOptions) => {
+    const isCapturing = { value: options.webviewElementRef.value !== null && false };
+
+    return {
+      isCapturing,
+      captureViewportScreenshot: vi.fn().mockResolvedValue(undefined),
+      captureFullPageScreenshot: vi.fn().mockResolvedValue(undefined),
+      captureSelectedElementScreenshot: vi.fn().mockResolvedValue(undefined)
+    };
+  }
 }));
 
 vi.mock('@/views/webview/web/components/AddressBar.vue', () => ({

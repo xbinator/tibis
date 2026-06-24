@@ -4,8 +4,8 @@
  * @vitest-environment jsdom
  */
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { shallowMount } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HeaderEditorActions from '@/layouts/default/components/HeaderEditorActions.vue';
 import { useHeaderToolbarStore } from '@/stores/ui/headerToolbar';
 

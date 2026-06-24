@@ -6,7 +6,7 @@
 import { defineComponent, nextTick, ref } from 'vue';
 import { EditorContent, useEditor, type Editor } from '@tiptap/vue-3';
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import MathBlock from '@/components/BEditor/components/MathBlock.vue';
 import { useExtensions } from '@/components/BEditor/hooks/useExtensions';
 
@@ -19,6 +19,9 @@ interface MathBlockMountResult {
   /** Tiptap NodeView 属性更新函数 */
   updateAttributes: Mock;
 }
+
+/** 原始 document.elementFromPoint 实现。 */
+let originalElementFromPoint: typeof document.elementFromPoint | undefined;
 
 /**
  * 挂载块级数学公式 NodeView。
@@ -38,6 +41,21 @@ function mountMathBlock(latex = 'a^2+b^2=c^2'): MathBlockMountResult {
 }
 
 describe('MathBlock', (): void => {
+  beforeEach((): void => {
+    originalElementFromPoint = document.elementFromPoint;
+    if (!document.elementFromPoint) {
+      document.elementFromPoint = (): Element | null => document.body;
+    }
+  });
+
+  afterEach((): void => {
+    if (originalElementFromPoint) {
+      document.elementFromPoint = originalElementFromPoint;
+    } else {
+      Reflect.deleteProperty(document, 'elementFromPoint');
+    }
+  });
+
   it('renders KaTeX preview by default', (): void => {
     const { wrapper } = mountMathBlock();
 

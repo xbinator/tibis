@@ -118,7 +118,10 @@ function hashSnapshotContent(content: string): string {
  * @param input - materialize 输入
  * @returns 文件内容，无法读取时返回 null
  */
-async function readFileContentFromBridge(part: ChatMessageFilePartInput, input: MaterializeRuntimeFilePartsInput): Promise<{ path: string; content: string } | null> {
+async function readFileContentFromBridge(
+  part: ChatMessageFilePartInput,
+  input: MaterializeRuntimeFilePartsInput
+): Promise<{ path: string; content: string } | null> {
   const result = await input.requestBridge({
     runtimeId: input.runtime.runtimeId,
     toolCallId: part.id,

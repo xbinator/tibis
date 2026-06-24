@@ -5,13 +5,8 @@
 import { effectScope, nextTick, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DrawingData } from '@/components/BDrawing/types';
+import { createTibisDocumentContent, parseTibisDocumentContent, resolveTibisDocumentRoute, useFileSession } from '@/hooks/useFileSession';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
-import {
-  createTibisDocumentContent,
-  parseTibisDocumentContent,
-  resolveTibisDocumentRoute,
-  useFileSession
-} from '@/hooks/useFileSession';
 
 const getFileByIdMock = vi.hoisted(() => vi.fn());
 const addFileMock = vi.hoisted(() => vi.fn());
@@ -180,11 +175,7 @@ describe('tibis document helpers', (): void => {
   });
 
   it('routes supported drawing documents to drawing and invalid content to editor', (): void => {
-    expect(
-      resolveTibisDocumentRoute(
-        '{"type":"drawing","version":1,"elements":[],"edges":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}'
-      )
-    ).toEqual({
+    expect(resolveTibisDocumentRoute('{"type":"drawing","version":1,"elements":[],"edges":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}')).toEqual({
       routeName: 'drawing'
     });
 
