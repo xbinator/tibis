@@ -131,6 +131,9 @@ importers:
       mime-types:
         specifier: ^2.1.35
         version: 2.1.35
+      nanoid:
+        specifier: ^5.1.11
+        version: 5.1.11
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -390,9 +393,6 @@ importers:
       moveable:
         specifier: ^0.53.0
         version: 0.53.0
-      nanoid:
-        specifier: ^5.1.11
-        version: 5.1.11
       p-limit:
         specifier: ^7.3.0
         version: 7.3.0
