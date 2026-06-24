@@ -66,8 +66,6 @@
               <BIcon icon="mdi:check" />
             </button>
           </div>
-
-          <div v-if="Object.keys(frontMatterData).length === 0 && !newKey" :class="bem('empty')">暂无元数据</div>
         </div>
       </Transition>
 
@@ -592,6 +590,12 @@ function confirmComplexEditInline(): void {
   padding: 8px 0 0;
   margin-top: 8px;
   border-top: 1px dashed var(--frontmatter-divider);
+
+  &:first-child {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
 }
 
 .b-markdown-frontmatter__new-key {
@@ -615,13 +619,6 @@ function confirmComplexEditInline(): void {
   &:disabled {
     cursor: not-allowed;
   }
-}
-
-.b-markdown-frontmatter__empty {
-  padding: 12px 0;
-  font-size: 13px;
-  color: var(--tag-placeholder);
-  text-align: center;
 }
 
 .b-markdown-frontmatter-collapse-enter-active,
