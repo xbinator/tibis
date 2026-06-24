@@ -8,66 +8,64 @@
       <div :class="bem('header')">
         <span :class="bem('title')">元数据</span>
         <div data-export-ignore :class="bem('actions')">
-          <button :class="[bem('action-btn'), bem('toggle-btn')]" :title="collapsed ? '展开' : '折叠'" @click="collapsed = !collapsed">
+          <button :class="[bem('action-btn')]" @click="collapsed = !collapsed">
             <BIcon :icon="collapsed ? 'mdi:chevron-down' : 'mdi:chevron-up'" />
           </button>
         </div>
       </div>
 
-      <Transition name="b-markdown-frontmatter-collapse">
-        <div v-show="!collapsed" :class="bem('content')">
-          <div v-for="(value, key) in frontMatterData" :key="key" :class="bem('item')">
-            <input
-              v-if="editingKey === key"
-              v-model="editKeyInput"
-              v-focus="{ selectAll: true }"
-              :class="bem('key', 'editing')"
-              placeholder="键名"
-              @blur="handleKeyEditComplete(String(key))"
-              @keydown.enter="handleKeyEditComplete(String(key))"
-              @keydown.escape="cancelKeyEdit"
+      <div v-show="!collapsed" :class="bem('content')">
+        <div v-for="(value, key) in frontMatterData" :key="key" :class="bem('item')">
+          <input
+            v-if="editingKey === key"
+            v-model="editKeyInput"
+            v-focus="{ selectAll: true }"
+            :class="bem('key', 'editing')"
+            placeholder="键名"
+            @blur="handleKeyEditComplete(String(key))"
+            @keydown.enter="handleKeyEditComplete(String(key))"
+            @keydown.escape="cancelKeyEdit"
+          />
+          <div v-else :class="bem('key')" @dblclick="startKeyEdit(String(key))">
+            {{ key }}
+          </div>
+
+          <div :class="bem('value-wrapper')">
+            <AInput
+              v-if="isSimpleValue(value)"
+              :value="getInputValue(String(key))"
+              :class="bem('value')"
+              placeholder="值"
+              @change="(v) => handleInputChange(String(key), v.target.value)"
             />
-            <div v-else :class="bem('key')" @dblclick="startKeyEdit(String(key))">
-              {{ key }}
+            <ADatePicker
+              v-else-if="isDateValue(value)"
+              :value="getDatePickerValue(String(key))"
+              :class="bem('value')"
+              show-time
+              value-format="YYYY-MM-DD"
+              input-read-only
+              placeholder="选择日期"
+              @change="(v) => handleDateChange(String(key), v)"
+            />
+            <div v-else :class="[bem('value'), bem('value', 'complex')]" @click="toggleComplexEdit(String(key))">
+              {{ formatComplexValue(value) }}
             </div>
-
-            <div :class="bem('value-wrapper')">
-              <AInput
-                v-if="isSimpleValue(value)"
-                :value="getInputValue(String(key))"
-                :class="bem('value')"
-                placeholder="值"
-                @change="(v) => handleInputChange(String(key), v.target.value)"
-              />
-              <ADatePicker
-                v-else-if="isDateValue(value)"
-                :value="getDatePickerValue(String(key))"
-                :class="bem('value')"
-                show-time
-                value-format="YYYY-MM-DD"
-                input-read-only
-                placeholder="选择日期"
-                @change="(v) => handleDateChange(String(key), v)"
-              />
-              <div v-else :class="[bem('value'), bem('value', 'complex')]" @click="toggleComplexEdit(String(key))">
-                {{ formatComplexValue(value) }}
-              </div>
-            </div>
-
-            <button :class="bem('delete')" data-export-ignore title="删除" @click="handleDeleteField(String(key))">
-              <BIcon icon="mdi:close" />
-            </button>
           </div>
 
-          <div data-export-ignore :class="bem('add-row')">
-            <input v-model="newKey" :class="[bem('key'), bem('new-key')]" placeholder="新键名" @keydown.enter="confirmAddField" />
-            <input v-model="newValue" :class="[bem('value'), bem('new-value')]" placeholder="新值" @keydown.enter="confirmAddField" />
-            <button :class="[bem('action-btn'), bem('add-btn')]" title="添加" :disabled="!newKey.trim()" @click="confirmAddField">
-              <BIcon icon="mdi:check" />
-            </button>
-          </div>
+          <button :class="bem('delete')" data-export-ignore title="删除" @click="handleDeleteField(String(key))">
+            <BIcon icon="mdi:close" />
+          </button>
         </div>
-      </Transition>
+
+        <div data-export-ignore :class="bem('add-row')">
+          <input v-model="newKey" :class="[bem('key'), bem('new-key')]" placeholder="新键名" @keydown.enter="confirmAddField" />
+          <input v-model="newValue" :class="[bem('value'), bem('new-value')]" placeholder="新值" @keydown.enter="confirmAddField" />
+          <button :class="[bem('action-btn'), bem('add-btn')]" title="添加" :disabled="!newKey.trim()" @click="confirmAddField">
+            <BIcon icon="mdi:check" />
+          </button>
+        </div>
+      </div>
 
       <BModal v-model:open="complexEditOpen" title="编辑元数据值" :width="520">
         <ATextarea v-model:value="complexEditValue" :autosize="{ minRows: 16, maxRows: 20 }" placeholder="输入 YAML 格式的值" />
@@ -433,13 +431,15 @@ function confirmComplexEditInline(): void {
   background-color: var(--frontmatter-bg);
   border: 1px solid var(--frontmatter-border);
   border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 .b-markdown-frontmatter__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  height: 42px;
+  padding: 0 14px;
 }
 
 .b-markdown-frontmatter__title {
@@ -619,25 +619,5 @@ function confirmComplexEditInline(): void {
   &:disabled {
     cursor: not-allowed;
   }
-}
-
-.b-markdown-frontmatter-collapse-enter-active,
-.b-markdown-frontmatter-collapse-leave-active {
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.b-markdown-frontmatter-collapse-enter-from,
-.b-markdown-frontmatter-collapse-leave-to {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
-}
-
-.b-markdown-frontmatter-collapse-enter-to,
-.b-markdown-frontmatter-collapse-leave-from {
-  max-height: 500px;
-  opacity: 1;
 }
 </style>
