@@ -105,6 +105,7 @@ import { useFileDrop } from '@/hooks/useFileDrop';
 import { useNavigate } from '@/hooks/useNavigate';
 import { native } from '@/shared/platform';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
+import { useProviderStore } from '@/stores/ai/provider';
 import { useChatSessionStore } from '@/stores/chat/session';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
@@ -189,6 +190,10 @@ const { openFile, openWebview } = useNavigate();
 const modelSelectRef = ref<InstanceType<typeof BModelSelect>>();
 /** 全局模型选择器显示状态。 */
 const modelSelectOpen = ref(false);
+/** Provider 数据源。 */
+const providerStore = useProviderStore();
+/** 是否存在至少一个已启用的模型，用于「去配置」点击分支。 */
+const hasAvailableModels = computed<boolean>(() => providerStore.availableModels.length > 0);
 /** 对话视图引用 */
 const conversationRef = ref<InstanceType<typeof ConversationView>>();
 
@@ -529,8 +534,16 @@ function showNoModelConfigToast(): void {
         {
           class: 'text-primary underline cursor-pointer',
           onClick: () => {
-            emit('navigate-to-provider');
-            router.push('/settings/provider');
+            // 始终先关闭当前 Toast，避免与后续打开的对话框视觉堆叠
+            removeToast('no-model-config-toast');
+            if (hasAvailableModels.value) {
+              // 已配置过模型，直接打开选择器让用户挑选
+              modelSelectRef.value?.open();
+            } else {
+              // 没有任何可用模型，跳转配置页
+              emit('navigate-to-provider');
+              router.push('/settings/provider');
+            }
           }
         },
         '去配置'
