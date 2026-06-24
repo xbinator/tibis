@@ -3,14 +3,14 @@
   @description 模型选择器组件，以模态对话框形式展示可用模型列表。
 -->
 <template>
-  <BModal v-model:open="open" :closable="false" main-style="padding: 16px;">
+  <BModal v-model:open="open" :closable="false" main-style="padding: 10px 0 0 10px;">
     <!-- 搜索框 -->
     <div class="model-search">
-      <input ref="searchInputRef" v-model="searchQuery" placeholder="搜索模型..." class="model-search__input" @keydown="handleKeydown" />
+      <AInput ref="searchInputRef" v-model:value="searchQuery" placeholder="搜索模型..." class="model-search__input" @keydown="handleKeydown" />
     </div>
 
     <!-- 模型列表 -->
-    <BScrollbar max-height="400px">
+    <BScrollbar max-height="400px" inset="vertical">
       <div class="model-list">
         <div v-for="(group, groupIndex) in filteredGroups" :key="group.providerId" class="model-group">
           <div class="model-group__header">{{ group.providerName }}</div>
@@ -340,36 +340,15 @@ defineExpose<BModelSelectExpose>({
   position: relative;
   display: flex;
   align-items: center;
+  padding-right: 10px;
   margin-bottom: 12px;
-}
-
-.model-search__input {
-  width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  font-size: 13px;
-  color: var(--text-primary);
-  outline: none;
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: 8px;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.model-search__input:focus {
-  border-color: var(--input-focus-border);
-  box-shadow: 0 0 0 3px var(--input-focus-shadow);
-}
-
-.model-search__input::placeholder {
-  color: var(--text-placeholder);
 }
 
 /* ── 模型列表 ────────────────────────────────── */
 .model-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  margin-right: 4px;
 }
 
 /* ── 分组标题 ────────────────────────────────── */

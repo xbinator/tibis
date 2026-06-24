@@ -470,12 +470,12 @@ watch(
   align-items: center;
   width: 100%;
   height: 32px;
-  padding: 6px 8px;
+  padding: 0 8px;
   text-align: left;
   cursor: pointer;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   transition: background-color 0.15s, border-color 0.15s;
 }
 
