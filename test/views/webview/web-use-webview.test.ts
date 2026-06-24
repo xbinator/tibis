@@ -5,9 +5,10 @@
  */
 import { Script, createContext } from 'node:vm';
 import type { DidNavigateEvent, PageFaviconUpdatedEvent, WebviewTag } from 'electron';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElementSelectionScript, normalizeWebviewPageSnapshot, useWebView } from '@/views/webview/web/hooks/useWebView';
+import { TIBIS_WEBVIEW_HOST_CHANNEL } from '../../../shared/webview/host-bridge';
 
 /**
  * 测试环境中注入的元素选择清理函数。
@@ -15,6 +16,11 @@ import { createElementSelectionScript, normalizeWebviewPageSnapshot, useWebView 
 interface WindowWithElementPickerCleanup extends Window {
   /** 清理页面元素选择器 */
   __tibisElementPickerCleanup?: () => void;
+  /** WebView preload 暴露给页面脚本的宿主消息桥 */
+  __tibisWebviewHost?: {
+    /** 向宿主页面发送消息 */
+    postMessage: (channel: string, payload: unknown) => void;
+  };
 }
 
 /**
@@ -39,6 +45,16 @@ interface Deferred<T> {
   resolve: (value: T | PromiseLike<T>) => void;
   /** 将 Promise 标记为失败。 */
   reject: (reason?: unknown) => void;
+}
+
+/**
+ * 测试用 WebView 宿主消息。
+ */
+interface TestWebviewHostMessage {
+  /** 消息通道。 */
+  channel: string;
+  /** 消息负载。 */
+  payload: unknown;
 }
 
 /** 原始 scrollIntoView 实现，测试后恢复。 */
@@ -199,6 +215,17 @@ function createPageScriptExecutingWebview(): WebviewTag {
 }
 
 /**
+ * 创建会在指定 VM 上下文中执行脚本的 WebView 测试替身。
+ * @param scriptContext - 页面脚本执行上下文
+ * @returns WebView 测试替身
+ */
+function createVmScriptExecutingWebview(scriptContext: ReturnType<typeof createContext>): WebviewTag {
+  const element = document.createElement('webview') as unknown as WebviewTag;
+  element.executeJavaScript = vi.fn((script: string): Promise<unknown> => Promise.resolve(new Script(script).runInContext(scriptContext)));
+  return element;
+}
+
+/**
  * 创建 WebView favicon 更新事件。
  * @param favicons - favicon URL 列表
  * @returns favicon 更新事件
@@ -279,10 +306,75 @@ function installScrollableElementMetrics(
   });
 }
 
+/**
+ * 安装测试用 WebView 宿主消息桥。
+ * @returns 已收集的宿主消息列表
+ */
+function installWebviewHostBridge(): TestWebviewHostMessage[] {
+  const messages: TestWebviewHostMessage[] = [];
+  (window as WindowWithElementPickerCleanup).__tibisWebviewHost = {
+    postMessage: (channel: string, payload: unknown): void => {
+      messages.push({ channel, payload });
+    }
+  };
+  return messages;
+}
+
+/**
+ * 判断值是否为元素选择宿主消息。
+ * @param entry - 宿主消息
+ * @returns 是否为元素选择宿主消息
+ */
+function isSelectionHostMessage(
+  entry: TestWebviewHostMessage
+): entry is TestWebviewHostMessage & { payload: { kind: string; selection?: { selector?: string } } } {
+  return (
+    entry.channel === TIBIS_WEBVIEW_HOST_CHANNEL &&
+    typeof entry.payload === 'object' &&
+    entry.payload !== null &&
+    'kind' in entry.payload &&
+    entry.payload.kind === 'element-picker-selection'
+  );
+}
+
+/**
+ * 读取最近一次元素选择消息。
+ * @param messages - WebView 宿主消息列表
+ * @returns 元素选择消息负载
+ */
+function readLastSelectionMessage(messages: TestWebviewHostMessage[]): { kind: string; selection?: { selector?: string } } {
+  const message = messages.findLast(isSelectionHostMessage);
+  if (!message) {
+    throw new Error('selection host message should be posted');
+  }
+
+  return message.payload;
+}
+
+/**
+ * 判断值是否为工具条动作宿主消息。
+ * @param entry - 宿主消息
+ * @returns 是否为工具条动作宿主消息
+ */
+function isToolbarActionHostMessage(entry: TestWebviewHostMessage): entry is TestWebviewHostMessage & { payload: { kind: string; actionType?: string } } {
+  return (
+    entry.channel === TIBIS_WEBVIEW_HOST_CHANNEL &&
+    typeof entry.payload === 'object' &&
+    entry.payload !== null &&
+    'kind' in entry.payload &&
+    entry.payload.kind === 'element-picker-action'
+  );
+}
+
 describe('useWebView', () => {
   afterEach((): void => {
     (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
+    delete (window as WindowWithElementPickerCleanup).__tibisWebviewHost;
     document.body.innerHTML = '';
+    document.documentElement.scrollLeft = 0;
+    document.documentElement.scrollTop = 0;
+    document.body.scrollLeft = 0;
+    document.body.scrollTop = 0;
     Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
       writable: true,
@@ -322,7 +414,7 @@ describe('useWebView', () => {
         <li class="article-item"><span>第七条</span></li>
       </ul>
     `;
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const hostMessages = installWebviewHostBridge();
     const secondItem = document.querySelectorAll('.article-item')[1];
 
     if (!(secondItem instanceof HTMLElement)) {
@@ -342,17 +434,10 @@ describe('useWebView', () => {
     secondItem.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
 
-    const selectionMessage = consoleLogSpy.mock.calls
-      .map(([message]) => String(message))
-      .find((message) => message.startsWith('__TIBIS_ELEMENT_PICKER_SELECTION__'));
-    if (!selectionMessage) {
-      throw new Error('selection message should be logged');
-    }
+    const { selection } = readLastSelectionMessage(hostMessages);
 
-    const selection = JSON.parse(selectionMessage.slice('__TIBIS_ELEMENT_PICKER_SELECTION__'.length)) as { selector: string };
-
-    expect(selection.selector).not.toBe('li.article-item');
-    expect(document.querySelector(selection.selector)).toBe(secondItem);
+    expect(selection?.selector).not.toBe('li.article-item');
+    expect(document.querySelector(selection?.selector ?? '')).toBe(secondItem);
   });
 
   it('keeps building selector path when duplicate ids are present', (): void => {
@@ -364,7 +449,7 @@ describe('useWebView', () => {
         <article id="article-card" class="article-item"><span>第七条</span></article>
       </section>
     `;
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const hostMessages = installWebviewHostBridge();
     const seventhItem = document.querySelectorAll('#article-card')[1];
 
     if (!(seventhItem instanceof HTMLElement)) {
@@ -384,17 +469,10 @@ describe('useWebView', () => {
     seventhItem.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
 
-    const selectionMessage = consoleLogSpy.mock.calls
-      .map(([message]) => String(message))
-      .find((message) => message.startsWith('__TIBIS_ELEMENT_PICKER_SELECTION__'));
-    if (!selectionMessage) {
-      throw new Error('selection message should be logged');
-    }
+    const { selection } = readLastSelectionMessage(hostMessages);
 
-    const selection = JSON.parse(selectionMessage.slice('__TIBIS_ELEMENT_PICKER_SELECTION__'.length)) as { selector: string };
-
-    expect(selection.selector).not.toBe('article#article-card');
-    expect(document.querySelector(selection.selector)).toBe(seventhItem);
+    expect(selection?.selector).not.toBe('article#article-card');
+    expect(document.querySelector(selection?.selector ?? '')).toBe(seventhItem);
   });
 
   it('adds sibling position when duplicate ids share the same parent', (): void => {
@@ -404,7 +482,7 @@ describe('useWebView', () => {
         <article id="article-card" class="article-item"><span>第七条</span></article>
       </section>
     `;
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const hostMessages = installWebviewHostBridge();
     const seventhItem = document.querySelectorAll('#article-card')[1];
 
     if (!(seventhItem instanceof HTMLElement)) {
@@ -424,17 +502,10 @@ describe('useWebView', () => {
     seventhItem.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
 
-    const selectionMessage = consoleLogSpy.mock.calls
-      .map(([message]) => String(message))
-      .find((message) => message.startsWith('__TIBIS_ELEMENT_PICKER_SELECTION__'));
-    if (!selectionMessage) {
-      throw new Error('selection message should be logged');
-    }
+    const { selection } = readLastSelectionMessage(hostMessages);
 
-    const selection = JSON.parse(selectionMessage.slice('__TIBIS_ELEMENT_PICKER_SELECTION__'.length)) as { selector: string };
-
-    expect(selection.selector).toContain(':nth-of-type(2)');
-    expect(document.querySelector(selection.selector)).toBe(seventhItem);
+    expect(selection?.selector).toContain(':nth-of-type(2)');
+    expect(document.querySelector(selection?.selector ?? '')).toBe(seventhItem);
   });
 
   it('renders themed selected element toolbar and emits screenshot action', (): void => {
@@ -444,7 +515,7 @@ describe('useWebView', () => {
       </section>
     `;
     const item = document.querySelector('.article-item');
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const hostMessages = installWebviewHostBridge();
 
     if (!(item instanceof HTMLElement)) {
       throw new Error('item should exist');
@@ -491,7 +562,7 @@ describe('useWebView', () => {
     captureIconLens.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
 
-    const actionMessage = consoleLogSpy.mock.calls.map(([message]) => String(message)).find((message) => message.startsWith('__TIBIS_ELEMENT_PICKER_ACTION__'));
+    const actionMessage = hostMessages.find(isToolbarActionHostMessage);
 
     expect(toolbar).toBeInstanceOf(HTMLElement);
     expect(tagName?.textContent).toBe('article');
@@ -501,6 +572,7 @@ describe('useWebView', () => {
     expect(captureIconLens?.tagName.toLowerCase()).toBe('circle');
     expect((toolbar as HTMLElement).style.left).toBe('332px');
     expect((toolbar as HTMLElement).style.top).toBe('59px');
+    expect(toolbarStyle).toContain('.tibis-element-picker-toolbar{position:absolute;');
     expect(toolbarStyle).toContain('color:#123456;');
     expect(toolbarStyle).toContain('background:#eaf2ff;');
     expect(toolbarStyle).not.toContain('border:1px solid #123456;');
@@ -513,7 +585,7 @@ describe('useWebView', () => {
     expect(toolbarStyle).not.toContain('.tibis-element-picker-toolbar__action:hover{background:');
     expect(toolbarStyle).toContain('transform:scale(.92);');
     expect(toolbarStyle).toContain('font-size:14px;');
-    expect(actionMessage).toBe('__TIBIS_ELEMENT_PICKER_ACTION__{"type":"capture-selected-element-screenshot"}');
+    expect(actionMessage?.payload.actionType).toBe('capture-selected-element-screenshot');
   });
 
   it('moves selected element toolbar below the selection when top-right has no room', (): void => {
@@ -544,6 +616,174 @@ describe('useWebView', () => {
     expect(toolbar).toBeInstanceOf(HTMLElement);
     expect((toolbar as HTMLElement).style.left).toBe('112px');
     expect((toolbar as HTMLElement).style.top).toBe('41px');
+  });
+
+  it('uses page coordinates for the absolute selected element toolbar position', (): void => {
+    document.body.innerHTML = '<button id="scrolled-entry">滚动入口</button>';
+    document.documentElement.scrollLeft = 12;
+    document.documentElement.scrollTop = 34;
+    const button = document.querySelector('#scrolled-entry');
+
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('button should exist');
+    }
+
+    installElementRect(button, { x: 80, y: 8, width: 160, height: 32 });
+
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Element: window.Element,
+      HTMLElement: window.HTMLElement,
+      Promise,
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
+    new Script(createElementSelectionScript()).runInContext(scriptContext);
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    const toolbar = document.querySelector('.tibis-element-picker-toolbar');
+    (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
+
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+    expect((toolbar as HTMLElement).style.left).toBe('124px');
+    expect((toolbar as HTMLElement).style.top).toBe('21px');
+  });
+
+  it('keeps selected element toolbar aligned to the selection box instead of the viewport edge', (): void => {
+    document.body.innerHTML = '<button id="right-entry">右侧入口</button>';
+    const button = document.querySelector('#right-entry');
+
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('button should exist');
+    }
+
+    installElementRect(button, { x: 980, y: 120, width: 160, height: 32 });
+
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Element: window.Element,
+      HTMLElement: window.HTMLElement,
+      Promise,
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
+    new Script(createElementSelectionScript()).runInContext(scriptContext);
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    const toolbar = document.querySelector('.tibis-element-picker-toolbar');
+    (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
+
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+    expect((toolbar as HTMLElement).style.left).toBe('1012px');
+    expect((toolbar as HTMLElement).style.top).toBe('99px');
+  });
+
+  it('drains selected element messages when the preload bridge is unavailable', async (): Promise<void> => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<button id="primary-button">主操作</button>';
+    const button = document.querySelector('#primary-button');
+
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('button should exist');
+    }
+
+    installElementRect(button, { x: 20, y: 30, width: 120, height: 40 });
+
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Element: window.Element,
+      HTMLElement: window.HTMLElement,
+      Promise,
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
+    const webviewElement = createVmScriptExecutingWebview(scriptContext);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const selectionTask = controller.startElementSelection();
+
+    await Promise.resolve();
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await vi.advanceTimersByTimeAsync(160);
+
+    expect(controller.selectedElement?.selector).toBe('button#primary-button');
+
+    const captureIconLens = document.querySelector('.tibis-element-picker-toolbar__action-icon circle');
+    if (!(captureIconLens instanceof Element)) {
+      throw new Error('capture icon lens should exist');
+    }
+
+    captureIconLens.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await vi.advanceTimersByTimeAsync(160);
+
+    expect(controller.selectedElementToolbarActionRef.value?.type).toBe('capture-selected-element-screenshot');
+
+    await controller.stopElementSelection();
+    await selectionTask;
+  });
+
+  it('deduplicates element picker toolbar actions delivered through ipc and the fallback queue', async (): Promise<void> => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<button id="dual-channel-button">双通道</button>';
+    const button = document.querySelector('#dual-channel-button');
+
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('button should exist');
+    }
+
+    installElementRect(button, { x: 24, y: 36, width: 120, height: 40 });
+    const hostMessages = installWebviewHostBridge();
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Element: window.Element,
+      HTMLElement: window.HTMLElement,
+      Promise,
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
+    const webviewElement = createVmScriptExecutingWebview(scriptContext);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const toolbarActionTypes: string[] = [];
+    const stopWatchingToolbarActions = watch(
+      controller.selectedElementToolbarActionRef,
+      (action): void => {
+        if (action) {
+          toolbarActionTypes.push(action.type);
+        }
+      },
+      { flush: 'sync' }
+    );
+    const selectionTask = controller.startElementSelection();
+
+    try {
+      await Promise.resolve();
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+
+      const captureIconLens = document.querySelector('.tibis-element-picker-toolbar__action-icon circle');
+      if (!(captureIconLens instanceof Element)) {
+        throw new Error('capture icon lens should exist');
+      }
+
+      captureIconLens.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      const actionMessage = hostMessages.findLast(isToolbarActionHostMessage);
+      if (!actionMessage) {
+        throw new Error('toolbar action host message should be posted');
+      }
+
+      controller.handleIpcMessage({ channel: TIBIS_WEBVIEW_HOST_CHANNEL, args: [actionMessage.payload] });
+      await vi.advanceTimersByTimeAsync(160);
+
+      expect(toolbarActionTypes).toEqual(['capture-selected-element-screenshot']);
+    } finally {
+      stopWatchingToolbarActions();
+      await controller.stopElementSelection();
+      await selectionTask;
+    }
   });
 
   it('normalizes webpage agent snapshot fields', (): void => {

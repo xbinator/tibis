@@ -10,6 +10,7 @@ import { shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
 import WebviewPage from '@/views/webview/web/index.vue';
+import { TIBIS_WEBVIEW_HOST_CHANNEL } from '../../../shared/webview/host-bridge';
 
 /**
  * 测试用 WebView 元素最小能力集合。
@@ -201,13 +202,14 @@ function createElementSelection(): WebviewElementSelection {
 }
 
 /**
- * 发送 WebView console-message 事件。
+ * 发送 WebView ipc-message 事件。
  * @param element - WebView 元素
- * @param message - console 消息
+ * @param payload - IPC 消息负载
  */
-function dispatchConsoleMessage(element: Element, message: string): void {
-  const event = new Event('console-message') as Event & { message: string };
-  Object.defineProperty(event, 'message', { value: message });
+function dispatchHostMessage(element: Element, payload: unknown): void {
+  const event = new Event('ipc-message') as Event & { channel: string; args: unknown[] };
+  Object.defineProperty(event, 'channel', { value: TIBIS_WEBVIEW_HOST_CHANNEL });
+  Object.defineProperty(event, 'args', { value: [payload] });
   element.dispatchEvent(event);
 }
 
@@ -249,19 +251,79 @@ describe('webview screenshot wiring', () => {
       throw new Error('webview element should exist');
     }
 
-    dispatchConsoleMessage(webviewElement, `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify(selection)}`);
+    dispatchHostMessage(webviewElement, { kind: 'element-picker-selection', selection });
     await nextTick();
 
     expect(wrapper.findComponent({ name: 'InspectorPanel' }).exists()).toBe(true);
 
     wrapper.findComponent({ name: 'InspectorPanel' }).vm.$emit('close');
     await nextTick();
-    dispatchConsoleMessage(webviewElement, `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify({ ...selection, selector: 'div#target-2' })}`);
+    dispatchHostMessage(webviewElement, { kind: 'element-picker-selection', selection: { ...selection, selector: 'div#target-2' } });
     await nextTick();
 
     expect(wrapper.findComponent({ name: 'InspectorPanel' }).exists()).toBe(false);
 
     wrapper.unmount();
+  });
+
+  it('stops element selection when the inspector is closed', async (): Promise<void> => {
+    const wrapper = mountWebviewPage();
+    const webviewElement = hostLayerHolder.value?.querySelector('webview');
+    const executeJavaScriptMock = executeJavaScriptMockHolder.value;
+    const selection = createElementSelection();
+
+    if (!webviewElement || !executeJavaScriptMock) {
+      throw new Error('webview element should be ready');
+    }
+
+    executeJavaScriptMock.mockImplementationOnce(
+      () =>
+        new Promise((): void => {
+          // 保持元素选择脚本挂起，用于模拟真实的持续选择模式。
+        })
+    );
+    wrapper.findComponent({ name: 'AddressBar' }).vm.$emit('select-element');
+    await nextTick();
+    await Promise.resolve();
+    executeJavaScriptMock.mockClear();
+
+    dispatchHostMessage(webviewElement, { kind: 'element-picker-selection', selection });
+    await nextTick();
+
+    wrapper.findComponent({ name: 'InspectorPanel' }).vm.$emit('close');
+    await nextTick();
+    await Promise.resolve();
+
+    expect(executeJavaScriptMock).toHaveBeenCalledTimes(1);
+    expect(executeJavaScriptMock.mock.calls.at(-1)?.[0]).toContain('__tibisElementPickerCleanup');
+
+    wrapper.unmount();
+  });
+
+  it('stops active element selection when the page unmounts', async (): Promise<void> => {
+    const wrapper = mountWebviewPage();
+    const executeJavaScriptMock = executeJavaScriptMockHolder.value;
+
+    if (!executeJavaScriptMock) {
+      throw new Error('executeJavaScript mock should exist');
+    }
+
+    executeJavaScriptMock.mockImplementationOnce(
+      () =>
+        new Promise((): void => {
+          // 保持元素选择脚本挂起，用于模拟离开页面时仍处于持续选择模式。
+        })
+    );
+    wrapper.findComponent({ name: 'AddressBar' }).vm.$emit('select-element');
+    await nextTick();
+    await Promise.resolve();
+    executeJavaScriptMock.mockClear();
+
+    wrapper.unmount();
+    await Promise.resolve();
+
+    expect(executeJavaScriptMock).toHaveBeenCalledTimes(1);
+    expect(executeJavaScriptMock.mock.calls.at(-1)?.[0]).toContain('__tibisElementPickerCleanup');
   });
 
   it('uses an opaque light theme background and distinct hover color for the element picker toolbar', async (): Promise<void> => {
@@ -307,8 +369,8 @@ describe('webview screenshot wiring', () => {
       throw new Error('webview element should exist');
     }
 
-    dispatchConsoleMessage(webviewElement, `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify(selection)}`);
-    dispatchConsoleMessage(webviewElement, '__TIBIS_ELEMENT_PICKER_ACTION__{"type":"capture-selected-element-screenshot"}');
+    dispatchHostMessage(webviewElement, { kind: 'element-picker-selection', selection });
+    dispatchHostMessage(webviewElement, { kind: 'element-picker-action', actionType: 'capture-selected-element-screenshot' });
     await nextTick();
 
     expect(captureSelectedElementScreenshotMock).toHaveBeenCalledWith(expect.objectContaining({ selector: 'div#target' }));
@@ -332,10 +394,10 @@ describe('webview screenshot wiring', () => {
       });
     });
 
-    dispatchConsoleMessage(webviewElement, `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify(selection)}`);
-    dispatchConsoleMessage(webviewElement, '__TIBIS_ELEMENT_PICKER_ACTION__{"type":"capture-selected-element-screenshot"}');
+    dispatchHostMessage(webviewElement, { kind: 'element-picker-selection', selection });
+    dispatchHostMessage(webviewElement, { kind: 'element-picker-action', actionType: 'capture-selected-element-screenshot' });
     await nextTick();
-    dispatchConsoleMessage(webviewElement, '__TIBIS_ELEMENT_PICKER_ACTION__{"type":"capture-selected-element-screenshot"}');
+    dispatchHostMessage(webviewElement, { kind: 'element-picker-action', actionType: 'capture-selected-element-screenshot' });
     await nextTick();
 
     expect(captureSelectedElementScreenshotMock).toHaveBeenCalledTimes(1);
