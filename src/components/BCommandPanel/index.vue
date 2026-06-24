@@ -1,0 +1,580 @@
+<!--
+  @file index.vue
+  @description 统一命令面板，整合最近记录搜索、跳转语法与模型选择入口。
+-->
+<template>
+  <BModal v-model:open="visible" :mask-closable="true" :width="560" :main-style="{ padding: '10px 0 0 10px' }" @close="closePanel">
+    <div :class="bem()">
+      <div ref="inputRef" :class="bem('toolbar')">
+        <AInput v-model:value="keyword" placeholder="搜索..." @keydown="handleKeydown" />
+      </div>
+
+      <BScrollbar max-height="420px" inset="vertical">
+        <div v-if="hasItems" ref="listRef" :class="bem('list')">
+          <template v-for="group in groups" :key="group.key">
+            <div v-if="group.title" :class="bem('group-title')">{{ group.title }}</div>
+            <button
+              v-for="commandItem in group.items"
+              :key="commandItem.key"
+              :class="bem('item', { active: isKeyboardActive(commandItem), current: commandItem.active })"
+              type="button"
+              @click="handleSelectItemSafely(commandItem)"
+            >
+              <RenderItemIcon v-if="!commandItem.hideIcon" :item="commandItem" />
+
+              <div :class="bem('item-main')">
+                <span :class="bem('item-title')">{{ commandItem.title }}</span>
+                <span v-if="commandItem.description" :class="bem('item-description', { unsaved: commandItem.descriptionClass === 'is-unsaved' })">
+                  {{ commandItem.description }}
+                </span>
+              </div>
+
+              <span v-if="commandItem.meta" :class="bem('item-meta')">{{ commandItem.meta }}</span>
+
+              <div v-if="isRemovableItem(commandItem)" :class="bem('item-delete')" @click.stop="handleRemoveItemSafely(commandItem)">
+                <BIcon icon="ic:round-close" :size="12" />
+              </div>
+            </button>
+          </template>
+        </div>
+
+        <div v-else :class="bem('empty')">{{ emptyText }}</div>
+      </BScrollbar>
+    </div>
+  </BModal>
+</template>
+
+<script setup lang="tsx">
+import type { CommandPanelActionItem, CommandPanelGroup, CommandPanelItem, CommandPanelJumpItem, CommandPanelSource, CommandPanelSourceId } from './types';
+import type { VNodeChild } from 'vue';
+import { computed, h, nextTick, ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import BIcon from '@/components/BIcon/index.vue';
+import BModal from '@/components/BModal/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
+import BRecentIcon from '@/components/BRecent/Icon.vue';
+import BScrollbar from '@/components/BScrollbar/index.vue';
+import { useNavigate } from '@/hooks/useNavigate';
+import { useOpenFile } from '@/hooks/useOpenFile';
+import { native } from '@/shared/platform';
+import { useProviderStore } from '@/stores/ai/provider';
+import { useServiceModelStore } from '@/stores/ai/serviceModel';
+import { useCommandPanelStore } from '@/stores/ui/commandPanel';
+import { useRecentStore } from '@/stores/workspace/recent';
+import { useTabsStore } from '@/stores/workspace/tabs';
+import { asyncTo } from '@/utils/asyncTo';
+import { createNamespace } from '@/utils/namespace';
+import { createJumpSource } from './sources/jump';
+import { createModelSource } from './sources/model';
+import { createRecentSource } from './sources/recent';
+import { parseCommandPanelQuery } from './utils/query';
+
+/** 命令面板 BEM 命名空间。 */
+const [, bem] = createNamespace('command-panel');
+
+/**
+ * 搜索输入框聚焦选项。
+ */
+interface FocusInputOptions {
+  /** 是否选中输入框全部内容。 */
+  select?: boolean;
+  /** 是否将光标移动到文本末尾。 */
+  moveToEnd?: boolean;
+}
+
+/** 最近记录 store。 */
+const recentStore = useRecentStore();
+/** 标签页 store。 */
+const tabsStore = useTabsStore();
+/** Provider store。 */
+const providerStore = useProviderStore();
+/** 服务模型 store。 */
+const serviceModelStore = useServiceModelStore();
+/** 文件打开能力。 */
+const { openFile, openFileByPath } = useOpenFile();
+/** WebView 打开能力。 */
+const { openWebview } = useNavigate();
+/** 全局命令面板 Store。 */
+const commandPanelStore = useCommandPanelStore();
+/** 全局命令面板响应式状态。 */
+const { visible, scope, keyword } = storeToRefs(commandPanelStore);
+
+/** 搜索框容器引用。 */
+const inputRef = ref<HTMLElement | null>(null);
+/** 列表容器引用。 */
+const listRef = ref<HTMLElement | null>(null);
+/** 当前结果分组。 */
+const groups = ref<CommandPanelGroup[]>([]);
+/** 当前键盘高亮扁平索引。 */
+const activeIndex = ref<number>(-1);
+/** 是否已有用户键盘高亮。 */
+const hasKeyboardActiveIndex = ref<boolean>(false);
+/** 搜索请求 token，用于丢弃过期异步结果。 */
+const searchToken = ref<number>(0);
+
+/**
+ * 渲染结果项图标。
+ * @param props - 图标渲染属性
+ * @returns 图标 vnode
+ */
+function RenderItemIcon(props: { item: CommandPanelItem }): VNodeChild {
+  const iconClass = bem('item-icon') as string;
+  const customIcon = props.item.renderIcon?.({ className: iconClass, size: 16 });
+
+  if (customIcon) {
+    return customIcon;
+  }
+
+  return h(BIcon, { class: iconClass, icon: 'lucide:circle', size: 16 });
+}
+
+/** 跳转命令 source。 */
+const jumpSource = createJumpSource();
+/** 最近记录 source。 */
+const recentSource = createRecentSource({
+  getRecords: () => recentStore.recentRecords ?? [],
+  ensureLoaded: () => recentStore.ensureLoaded(),
+  openFile,
+  openFileByPath,
+  openWebview,
+  removeRecent: (id: string) => recentStore.removeFile(id),
+  removeTab: (id: string) => tabsStore.removeTab(id),
+  getPathStatus: native.getPathStatus,
+  renderRecentIcon: (item, context) =>
+    h(BRecentIcon, { record: item.record, fileName: item.fileName, icon: item.icon, class: context.className, size: context.size })
+});
+/** 模型 source。 */
+const modelSource = createModelSource({
+  loadProviders: () => providerStore.loadProviders(),
+  loadChatModel: () => serviceModelStore.loadChatModel(),
+  setChatModel: (model) => serviceModelStore.setChatModel(model),
+  getAvailableModels: () => providerStore.availableModels,
+  getCurrentModel: () => serviceModelStore.chatModel,
+  renderModelIcon: (model, context) => h(BModelIcon, { provider: model.providerId, model: model.modelId, class: context.className, size: context.size })
+});
+/** source 映射表。 */
+const sources: Record<CommandPanelSourceId, CommandPanelSource> = {
+  jump: jumpSource,
+  model: modelSource,
+  recent: recentSource
+};
+
+/** 当前输入路由。 */
+const currentRoute = computed(() => parseCommandPanelQuery(scope.value, keyword.value));
+
+/** 扁平结果项。 */
+const flatItems = computed<CommandPanelItem[]>(() => groups.value.flatMap((group) => group.items));
+
+/** 当前是否有可展示项。 */
+const hasItems = computed<boolean>(() => flatItems.value.length > 0);
+
+/** 当前空状态文案。 */
+const emptyText = computed<string>(() => {
+  const textMap: Record<CommandPanelSourceId, string> = {
+    jump: '没有匹配的跳转命令',
+    model: '未找到匹配的模型',
+    recent: '没有匹配的最近记录'
+  };
+
+  return textMap[currentRoute.value.sourceId];
+});
+
+/**
+ * 判断是否为跳转项。
+ * @param item - 结果项
+ * @returns 是否为跳转项
+ */
+function isJumpItem(item: CommandPanelItem): item is CommandPanelJumpItem {
+  return item.kind === 'jump';
+}
+
+/**
+ * 判断是否为普通动作项。
+ * @param item - 结果项
+ * @returns 是否为普通动作项
+ */
+function isActionItem(item: CommandPanelItem): item is CommandPanelActionItem {
+  return item.kind !== 'jump';
+}
+
+/**
+ * 判断是否为可删除项。
+ * @param item - 结果项
+ * @returns 是否可删除
+ */
+function isRemovableItem(item: CommandPanelItem): item is CommandPanelActionItem {
+  return isActionItem(item) && Boolean(item.removable && item.onRemove);
+}
+
+/**
+ * 判断结果项是否为当前键盘高亮项。
+ * @param item - 结果项
+ * @returns 是否键盘高亮
+ */
+function isKeyboardActive(item: CommandPanelItem): boolean {
+  return flatItems.value[activeIndex.value]?.key === item.key;
+}
+
+/**
+ * 聚焦搜索输入框。
+ * @param options - 聚焦行为选项
+ */
+function focusInput(options: FocusInputOptions = { select: true }): void {
+  nextTick(() => {
+    const input = inputRef.value?.querySelector('input');
+    if (!input) return;
+
+    input.focus();
+    if (options.moveToEnd) {
+      const position = input.value.length;
+      input.setSelectionRange(position, position);
+      return;
+    }
+
+    if (options.select !== false) {
+      input.select();
+    }
+  });
+}
+
+/**
+ * 将当前键盘高亮项滚动到可视区域。
+ */
+function scrollActiveItemIntoView(): void {
+  nextTick(() => {
+    const item = listRef.value?.querySelectorAll<HTMLElement>('.b-command-panel__item')[activeIndex.value];
+    item?.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+/**
+ * 根据搜索结果同步高亮索引。
+ */
+function syncActiveIndex(): void {
+  const items = flatItems.value;
+  if (!items.length) {
+    activeIndex.value = -1;
+    return;
+  }
+
+  if (hasKeyboardActiveIndex.value) {
+    activeIndex.value = activeIndex.value >= 0 ? Math.min(activeIndex.value, items.length - 1) : -1;
+    return;
+  }
+
+  activeIndex.value = items.findIndex((item) => item.active);
+}
+
+/**
+ * 重置命令面板组件内部运行时状态。
+ */
+function resetRuntimeState(): void {
+  groups.value = [];
+  activeIndex.value = -1;
+  hasKeyboardActiveIndex.value = false;
+}
+
+/**
+ * 刷新当前 source 的搜索结果。
+ */
+async function refreshResults(): Promise<void> {
+  if (!visible.value) return;
+
+  const token = searchToken.value + 1;
+  searchToken.value = token;
+  const route = currentRoute.value;
+  const source = sources[route.sourceId];
+
+  const [error] = await asyncTo(
+    (async (): Promise<void> => {
+      await source.load();
+      const nextGroups = await source.search(route.keyword);
+      if (token !== searchToken.value) return;
+
+      groups.value = nextGroups;
+      syncActiveIndex();
+    })()
+  );
+
+  if (error) {
+    if (token !== searchToken.value) return;
+
+    groups.value = [];
+    syncActiveIndex();
+  }
+}
+
+/**
+ * 安全触发搜索刷新并记录异常。
+ */
+function refreshResultsSafely(): void {
+  asyncTo(refreshResults());
+}
+
+/**
+ * 关闭命令面板。
+ */
+function closePanel(): void {
+  if (!visible.value) return;
+
+  searchToken.value += 1;
+  resetRuntimeState();
+  commandPanelStore.close();
+}
+
+/**
+ * 选择结果项。
+ * @param item - 结果项
+ */
+async function handleSelectItem(item: CommandPanelItem): Promise<void> {
+  if (isJumpItem(item)) {
+    commandPanelStore.setKeyword(`${item.routeInput} `);
+    hasKeyboardActiveIndex.value = false;
+    focusInput({ moveToEnd: true, select: false });
+    return;
+  }
+
+  await item.onSelect();
+  if (item.closeOnSelect !== false) {
+    closePanel();
+  }
+}
+
+/**
+ * 安全选择结果项，避免模板事件直接暴露异步错误。
+ * @param item - 结果项
+ */
+function handleSelectItemSafely(item: CommandPanelItem): void {
+  asyncTo(handleSelectItem(item));
+}
+
+/**
+ * 删除结果项。
+ * @param item - 结果项
+ */
+async function handleRemoveItem(item: CommandPanelItem): Promise<void> {
+  if (!isRemovableItem(item)) return;
+
+  await item.onRemove?.();
+  await refreshResults();
+}
+
+/**
+ * 安全删除结果项，避免模板事件直接暴露异步错误。
+ * @param item - 结果项
+ */
+function handleRemoveItemSafely(item: CommandPanelItem): void {
+  asyncTo(handleRemoveItem(item));
+}
+
+/**
+ * 移动键盘高亮位置。
+ * @param direction - 移动方向
+ */
+function moveActiveIndex(direction: 1 | -1): void {
+  const total = flatItems.value.length;
+  if (!total) {
+    activeIndex.value = -1;
+    return;
+  }
+
+  if (activeIndex.value === -1) {
+    activeIndex.value = direction === 1 ? 0 : total - 1;
+  } else if (direction === 1) {
+    activeIndex.value = activeIndex.value >= total - 1 ? 0 : activeIndex.value + 1;
+  } else {
+    activeIndex.value = activeIndex.value <= 0 ? total - 1 : activeIndex.value - 1;
+  }
+
+  hasKeyboardActiveIndex.value = true;
+  scrollActiveItemIntoView();
+}
+
+/**
+ * 处理输入框键盘事件。
+ * @param event - 键盘事件
+ */
+function handleKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const item = activeIndex.value >= 0 ? flatItems.value[activeIndex.value] : flatItems.value[0];
+    if (item) {
+      handleSelectItemSafely(item);
+    }
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    closePanel();
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    moveActiveIndex(1);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveActiveIndex(-1);
+  }
+}
+
+watch(keyword, () => {
+  if (!visible.value) return;
+
+  hasKeyboardActiveIndex.value = false;
+  refreshResultsSafely();
+});
+
+watch([visible, scope], ([nextVisible]): void => {
+  if (!nextVisible) {
+    searchToken.value += 1;
+    resetRuntimeState();
+    return;
+  }
+
+  resetRuntimeState();
+  focusInput();
+  refreshResultsSafely();
+});
+</script>
+
+<style scoped lang="less">
+.b-command-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.b-command-panel__toolbar {
+  display: flex;
+  align-items: center;
+  padding-right: 10px;
+}
+
+.b-command-panel__toolbar :deep(.ant-input) {
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.b-command-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 4px;
+  padding-bottom: 10px;
+}
+
+.b-command-panel__group-title {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.b-command-panel__item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.b-command-panel__item:hover,
+.b-command-panel__item--active {
+  background: var(--bg-hover);
+}
+
+.b-command-panel__item--current {
+  background: var(--bg-active, var(--bg-hover));
+}
+
+.b-command-panel__item-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.b-command-panel__item-main {
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  min-width: 0;
+}
+
+.b-command-panel__item-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.b-command-panel__item-description {
+  flex: 1;
+  min-width: 0;
+  margin-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.b-command-panel__item-description--unsaved {
+  color: var(--color-orange);
+}
+
+.b-command-panel__item-meta {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.b-command-panel__item-delete {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.b-command-panel__item-delete:hover {
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
+
+.b-command-panel__item:hover .b-command-panel__item-delete {
+  display: flex;
+}
+
+.b-command-panel__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 48px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+</style>

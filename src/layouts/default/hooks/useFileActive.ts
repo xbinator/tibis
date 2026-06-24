@@ -9,13 +9,10 @@ import { useToolbarShortcuts } from '@/components/BToolbar/hooks/useToolbarShort
 import type { ToolbarOptions } from '@/components/BToolbar/types';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { isElectron } from '@/shared/platform/env';
+import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useFilesStore } from '@/stores/workspace/files';
 import { emitter } from '@/utils/emitter';
 import { EditorShortcuts } from '../../../constants/shortcuts';
-
-interface UseFileActiveOptions {
-  visible: { searchRecent: boolean };
-}
 
 interface UseFileActiveResult {
   toolbarFileOptions: ComputedRef<ToolbarOptions>;
@@ -23,11 +20,11 @@ interface UseFileActiveResult {
 
 /**
  * 绑定文件菜单和全局事件。
- * @param visible - 页面可见状态
  * @returns 工具栏文件菜单配置
  */
-export function useFileActive(visible: UseFileActiveOptions['visible']): UseFileActiveResult {
+export function useFileActive(): UseFileActiveResult {
   const filesStore = useFilesStore();
+  const commandPanelStore = useCommandPanelStore();
   const { register: registerShortcuts } = useToolbarShortcuts();
   const { createNewFile, openFileById, openNativeFile } = useOpenFile();
 
@@ -52,7 +49,7 @@ export function useFileActive(visible: UseFileActiveOptions['visible']): UseFile
   async function handleOpenRecentFile(id: string): Promise<void> {
     const file = await filesStore.getFileById(id);
     if (!file) {
-      visible.searchRecent = true;
+      commandPanelStore.openRecent();
       return;
     }
 
@@ -82,7 +79,7 @@ export function useFileActive(visible: UseFileActiveOptions['visible']): UseFile
       label: '打开最近的文件',
       shortcut: EditorShortcuts.FILE_RECENT,
       onClick: () => {
-        visible.searchRecent = true;
+        commandPanelStore.openRecent();
       }
     },
     { type: 'divider' },
@@ -133,7 +130,7 @@ export function useFileActive(visible: UseFileActiveOptions['visible']): UseFile
   });
 
   const unregisterRecent = emitter.on('file:recent', () => {
-    visible.searchRecent = true;
+    commandPanelStore.openRecent();
   });
 
   const unregisterOpenRecent = emitter.on('file:openRecent', async (payload: unknown) => {

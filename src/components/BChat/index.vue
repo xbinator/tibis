@@ -81,9 +81,6 @@
       </div>
     </div>
   </div>
-
-  <!-- 全局模型选择器 -->
-  <BModelSelect ref="modelSelectRef" v-model:open="modelSelectOpen" :model="selectedModel" @change="handleGlobalModelChange" />
 </template>
 
 <script setup lang="ts">
@@ -98,7 +95,6 @@ import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { toTransportTools } from '@/ai/tools/stream';
-import BModelSelect from '@/components/BModel/select.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { useFileDrop } from '@/hooks/useFileDrop';
@@ -107,6 +103,7 @@ import { native } from '@/shared/platform';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { useProviderStore } from '@/stores/ai/provider';
 import { useChatSessionStore } from '@/stores/chat/session';
+import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
 import { Modal } from '@/utils/modal';
@@ -186,10 +183,8 @@ const promptEditorRef = ref<InstanceType<typeof BPromptEditor>>();
 const inputContainerRef = ref<HTMLElement>();
 /** 通用文件打开导航能力 */
 const { openFile, openWebview } = useNavigate();
-/** 全局模型选择器引用。 */
-const modelSelectRef = ref<InstanceType<typeof BModelSelect>>();
-/** 全局模型选择器显示状态。 */
-const modelSelectOpen = ref(false);
+/** 全局命令面板 Store。 */
+const commandPanelStore = useCommandPanelStore();
 /** Provider 数据源。 */
 const providerStore = useProviderStore();
 /** 是否存在至少一个已启用的模型，用于「去配置」点击分支。 */
@@ -522,6 +517,15 @@ async function handleRuntimeComplete(nextMessage: Message): Promise<void> {
 }
 
 /**
+ * 打开模型范围的命令面板。
+ */
+function openModelCommandPanel(): void {
+  commandPanelStore.openModel({
+    onClose: () => promptEditorRef.value?.focus()
+  });
+}
+
+/**
  * 显示"未找到模型配置"的 Toast 提示，引导用户去配置页。
  */
 function showNoModelConfigToast(): void {
@@ -537,8 +541,8 @@ function showNoModelConfigToast(): void {
             // 始终先关闭当前 Toast，避免与后续打开的对话框视觉堆叠
             removeToast('no-model-config-toast');
             if (hasAvailableModels.value) {
-              // 已配置过模型，直接打开选择器让用户挑选
-              modelSelectRef.value?.open();
+              // 已配置过模型，直接打开模型范围的命令面板让用户挑选
+              openModelCommandPanel();
             } else {
               // 没有任何可用模型，跳转配置页
               emit('navigate-to-provider');
@@ -979,19 +983,9 @@ function handleModelChange(model: { providerId: string; modelId: string }): void
   modelSelectionEvents.onModelChange(model);
 }
 
-/**
- * 处理全局模型选择器变更。
- * 选择完成后聚焦输入框。
- * @param model - 新选中的模型标识
- */
-function handleGlobalModelChange(model: { providerId: string; modelId: string }): void {
-  handleModelChange(model);
-  promptEditorRef.value?.focus();
-}
-
 /** 斜杠命令处理 hook */
 const { handleSlashCommand } = useSlashCommands({
-  openModelSelector: () => modelSelectRef.value?.open(),
+  openModelSelector: openModelCommandPanel,
   openUsagePanel: () => usagePanel.openPanel(activeSessionId.value ?? undefined),
   createNewSession: createDraftSession,
   clearInput: () => inputEvents.clear(),

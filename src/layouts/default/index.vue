@@ -27,7 +27,7 @@
           <HeaderUpdateNotice />
           <HeaderEditorActions />
           <!-- 搜索按钮 -->
-          <BButton type="secondary" size="small" square @click="visible.searchRecent = true">
+          <BButton type="secondary" size="small" square @click="commandPanelStore.openRecent()">
             <Icon icon="tabler:search" width="16" height="16" />
           </BButton>
           <!-- 辅助工具侧边栏切换按钮 -->
@@ -70,7 +70,7 @@
       <ChatSider v-show="settingStore.sidebarVisible" />
     </div>
 
-    <BRecent v-if="visible.searchRecent" v-model:visible="visible.searchRecent" />
+    <BCommandPanel />
 
     <ShortcutsHelp v-if="visible.shortcutsHelp" v-model:visible="visible.shortcutsHelp" />
   </div>
@@ -82,8 +82,10 @@ import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
 import BButton from '@/components/BButton/index.vue';
+import BCommandPanel from '@/components/BCommandPanel/index.vue';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { isMac } from '@/shared/platform/env';
+import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import ChatSider from './components/ChatSider.vue';
@@ -98,18 +100,17 @@ import { useViewActive } from './hooks/useViewActive';
 
 const router = useRouter();
 
-const visible = reactive({ searchRecent: false, shortcutsHelp: false });
+const visible = reactive({ shortcutsHelp: false });
 
+const commandPanelStore = useCommandPanelStore();
 const settingStore = useSettingStore();
 const tabsStore = useTabsStore();
 const { getRouteCacheKey, getRouteCacheComponent } = useKeepAlive();
 
-/** 最近记录搜索弹窗仅在打开时加载，避免首屏提前解析搜索组件依赖。 */
-const BRecent = defineAsyncComponent(() => import('@/components/BRecent/index.vue'));
 /** 快捷键帮助抽屉仅在打开时加载，减少默认布局首屏组件体积。 */
 const ShortcutsHelp = defineAsyncComponent(() => import('./components/ShortcutsHelp.vue'));
 
-const { toolbarFileOptions } = useFileActive(visible);
+const { toolbarFileOptions } = useFileActive();
 const { toolbarEditOptions } = useEditActive();
 const { toolbarViewOptions } = useViewActive();
 const { toolbarHelpOptions } = useHelpActive(visible);

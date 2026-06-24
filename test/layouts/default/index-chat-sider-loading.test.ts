@@ -15,12 +15,21 @@ describe('Default layout chat sidebar mounting', (): void => {
     expect(defaultLayoutSource).not.toContain("defineAsyncComponent(() => import('./components/ChatSider.vue'))");
   });
 
-  it('loads optional dialogs lazily only after they become visible', (): void => {
-    expect(defaultLayoutSource).toContain("defineAsyncComponent(() => import('@/components/BRecent/index.vue'))");
+  it('mounts the global command panel from the default layout', (): void => {
+    expect(defaultLayoutSource).toContain('<BCommandPanel />');
+    expect(defaultLayoutSource).toContain("import BCommandPanel from '@/components/BCommandPanel/index.vue';");
+    expect(defaultLayoutSource).toContain("import { useCommandPanelStore } from '@/stores/ui/commandPanel';");
+    expect(defaultLayoutSource).toContain('const commandPanelStore = useCommandPanelStore();');
+    expect(defaultLayoutSource).toContain('commandPanelStore.openRecent()');
+    expect(defaultLayoutSource).not.toContain('commandPanelRef');
+    expect(defaultLayoutSource).not.toContain('visible.searchRecent');
+    expect(defaultLayoutSource).not.toContain("defineAsyncComponent(() => import('@/components/BCommandPanel/index.vue'))");
+  });
+
+  it('loads optional help dialog lazily only after it becomes visible', (): void => {
     expect(defaultLayoutSource).toContain("defineAsyncComponent(() => import('./components/ShortcutsHelp.vue'))");
-    expect(defaultLayoutSource).toContain('<BRecent v-if="visible.searchRecent" v-model:visible="visible.searchRecent" />');
     expect(defaultLayoutSource).toContain('<ShortcutsHelp v-if="visible.shortcutsHelp" v-model:visible="visible.shortcutsHelp" />');
-    expect(defaultLayoutSource).not.toContain("import BRecent from '@/components/BRecent/index.vue'");
+    expect(defaultLayoutSource).not.toContain("defineAsyncComponent(() => import('@/components/BRecent/index.vue'))");
     expect(defaultLayoutSource).not.toContain("import ShortcutsHelp from './components/ShortcutsHelp.vue'");
   });
 });

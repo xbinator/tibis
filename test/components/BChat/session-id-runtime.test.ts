@@ -349,14 +349,14 @@ const ConversationViewStub = defineComponent({
   }
 });
 
-const ModelSelectStub = defineComponent({
-  name: 'BModelSelect',
+const CommandPanelStub = defineComponent({
+  name: 'BCommandPanel',
   setup(_props, { expose }) {
     expose({
       open: vi.fn()
     });
 
-    return () => h('div', { 'data-testid': 'model-select' });
+    return () => h('div', { 'data-testid': 'command-panel' });
   }
 });
 
@@ -459,7 +459,7 @@ function mountBChat(sessionId: string | null = null): ReturnType<typeof shallowM
     global: {
       stubs: {
         BIcon: true,
-        BModelSelect: ModelSelectStub,
+        BCommandPanel: CommandPanelStub,
         BPanelSplitter: {
           template: '<div><slot /></div>'
         },

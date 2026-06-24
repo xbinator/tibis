@@ -4,6 +4,7 @@
  * @vitest-environment jsdom
  */
 import { readFileSync } from 'node:fs';
+import { createPinia, setActivePinia } from 'pinia';
 import { shallowMount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RecentRecord } from '@/shared/storage';
@@ -118,6 +119,7 @@ function mountWelcomePage(): VueWrapper {
 
 describe('WelcomePage', (): void => {
   beforeEach((): void => {
+    setActivePinia(createPinia());
     routerPushMock.mockClear();
     createNewDrawingFileMock.mockClear();
     ensureLoadedMock.mockClear();

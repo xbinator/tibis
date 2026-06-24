@@ -46,8 +46,6 @@
           <span>更多</span>
         </div>
       </div>
-
-      <BRecent v-if="visibleSearchRecent" v-model:visible="visibleSearchRecent" />
     </div>
   </DropZone>
 </template>
@@ -58,21 +56,19 @@
  * @description 渲染欢迎页快捷入口与最近文件列表，并支持拖拽打开文件。
  */
 
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
+import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { resolveFileTitle } from '@/utils/file/title';
 import DropZone from './components/DropZone.vue';
 
 const { openWebview } = useNavigate();
+const commandPanelStore = useCommandPanelStore();
 const recentStore = useRecentStore();
 const { createNewFile, createNewDrawingFile, openFileById, openNativeFile } = useOpenFile();
-const visibleSearchRecent = ref(false);
-
-/** 最近记录搜索弹窗仅在用户点击“更多”后加载，降低欢迎页首屏成本。 */
-const BRecent = defineAsyncComponent(() => import('@/components/BRecent/index.vue'));
 
 const topRecentRecords = computed(() => recentStore.topRecentRecords);
 
@@ -119,7 +115,7 @@ function handleOpenWebview(url: string): void {
  * 打开最近文件搜索弹窗。
  */
 function handleShowShortcuts(): void {
-  visibleSearchRecent.value = true;
+  commandPanelStore.openRecent();
 }
 </script>
 

@@ -22,9 +22,23 @@ const mockProviders = vi.hoisted(() => [
     ]
   }
 ]);
+const mockAvailableModels = vi.hoisted(() => [
+  {
+    providerId: 'provider-1',
+    providerName: 'Provider 1',
+    models: [
+      {
+        value: 'provider-1:model-1',
+        modelId: 'model-1',
+        modelName: 'Model 1'
+      }
+    ]
+  }
+]);
 
 vi.mock('@/stores/ai/provider', () => ({
   useProviderStore: () => ({
+    availableModels: mockAvailableModels,
     providers: mockProviders,
     loadProviders: mockLoadProviders
   })
