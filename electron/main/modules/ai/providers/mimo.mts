@@ -3,15 +3,12 @@
  * @description MiMo / 小米 AI 服务商实现
  */
 import type { AIProvider } from '../types.mjs';
-import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import type { LanguageModel } from 'ai';
-import type { AIServiceError, AICreateOptions, AIRequestOptions } from 'types/ai';
+import type { AIServiceError, AICreateOptions } from 'types/ai';
 import { createOpenAICompatibleChatModel, normalizeOpenAICompatibleError } from '../helper/openai-compatible.mjs';
 
 /** MiMo / 小米默认 OpenAI 兼容接口地址。 */
 const DEFAULT_MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1';
-
-type ThinkingType = 'enabled' | 'disabled';
 
 /**
  * MiMo / 小米服务商。
@@ -34,25 +31,6 @@ export class MiMoProvider implements AIProvider {
       providerName: 'mimo',
       defaultBaseUrl: DEFAULT_MIMO_BASE_URL
     });
-  }
-
-  /**
-   * 创建 MiMo 专属 providerOptions。
-   * @param request - 当前 AI 请求
-   * @returns 暂无安全映射，始终返回 undefined
-   */
-  createProviderOptions(request: AIRequestOptions): ProviderOptions | undefined {
-    if (request.reasoning?.enabled === undefined) {
-      return undefined;
-    }
-
-    const thinkingType: ThinkingType = request.reasoning.enabled ? 'enabled' : 'disabled';
-
-    return {
-      mimo: {
-        enableThinking: thinkingType
-      }
-    };
   }
 
   /**

@@ -3,15 +3,12 @@
  * @description GLM / 智谱 AI 服务商实现
  */
 import type { AIProvider } from '../types.mjs';
-import type { ProviderOptions } from '@ai-sdk/provider-utils';
 import type { LanguageModel } from 'ai';
-import type { AIServiceError, AICreateOptions, AIRequestOptions } from 'types/ai';
+import type { AIServiceError, AICreateOptions } from 'types/ai';
 import { createOpenAICompatibleChatModel, normalizeOpenAICompatibleError } from '../helper/openai-compatible.mjs';
 
 /** GLM / 智谱默认 OpenAI 兼容接口地址。 */
 const DEFAULT_GLM_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4';
-
-type ThinkingType = 'enabled' | 'disabled';
 
 /**
  * GLM / 智谱服务商。
@@ -34,25 +31,6 @@ export class GLMProvider implements AIProvider {
       providerName: 'glm',
       defaultBaseUrl: DEFAULT_GLM_BASE_URL
     });
-  }
-
-  /**
-   * 创建 GLM 专属 providerOptions。
-   * @param request - 当前 AI 请求
-   * @returns 暂无安全映射，始终返回 undefined
-   */
-  createProviderOptions(request: AIRequestOptions): ProviderOptions | undefined {
-    if (request.reasoning?.enabled === undefined) {
-      return undefined;
-    }
-
-    const thinkingType: ThinkingType = request.reasoning.enabled ? 'enabled' : 'disabled';
-
-    return {
-      glm: {
-        enableThinking: thinkingType
-      }
-    };
   }
 
   /**

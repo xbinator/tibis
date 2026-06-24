@@ -11,8 +11,6 @@ import { createOpenAICompatibleChatModel, normalizeOpenAICompatibleError } from 
 /** Moonshot/Kimi 默认 OpenAI 兼容接口地址。 */
 const DEFAULT_MOONSHOT_BASE_URL = 'https://api.moonshot.cn/v1';
 
-type ThinkingType = 'enabled' | 'disabled';
-
 /**
  * Moonshot/Kimi 服务商。
  * @description 实现 Kimi 模型的创建、思考模式映射和错误处理
@@ -42,15 +40,13 @@ export class MoonshotProvider implements AIProvider {
    * @returns Moonshot providerOptions；未显式启用推理时返回 undefined
    */
   createProviderOptions(request: AIRequestOptions): ProviderOptions | undefined {
-    if (request.reasoning?.enabled === undefined) {
+    if (request.reasoning?.enabled !== true) {
       return undefined;
     }
 
-    const thinkingType: ThinkingType = request.reasoning.enabled ? 'enabled' : 'disabled';
-
     return {
       moonshot: {
-        thinking: { type: thinkingType }
+        thinking: { type: 'enabled', keep: 'all' }
       }
     };
   }
