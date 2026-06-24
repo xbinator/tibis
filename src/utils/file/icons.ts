@@ -86,6 +86,16 @@ const EXT_ICON_MAP: Record<string, string> = {
 const DEFAULT_ICON = 'vscode-icons:default-file';
 
 /**
+ * Web 记录（如 URL 候选项、WebView 记录回退）展示用的统一图标。
+ */
+export const WEB_RECORD_ICON = 'vscode-icons:file-type-geojson';
+
+/**
+ * 图标组件的默认回退图标，用于无任何上下文信息时的兜底展示。
+ */
+export const DEFAULT_FALLBACK_ICON = 'vscode-icons:default-file';
+
+/**
  * 根据文件扩展名获取对应的 Iconify 图标名
  * @param ext - 文件扩展名（不含点号），如 'ts'、'vue'
  * @returns Iconify 图标名

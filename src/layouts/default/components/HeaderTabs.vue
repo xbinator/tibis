@@ -58,6 +58,7 @@ import { useSettingStore } from '@/stores/ui/setting';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import type { Tab, TabCloseAction, TabClosePlan, TabMovePosition } from '@/stores/workspace/tabs';
+import { WEB_RECORD_ICON } from '@/utils/file/icons';
 import { Modal } from '@/utils/modal';
 import { useTabDragger } from '../hooks/useTabDragger';
 
@@ -67,7 +68,6 @@ const settingStore = useSettingStore();
 const route = useRoute();
 const router = useRouter();
 const CONTEXT_MENU_CLOSE_DELAY_MS = 200;
-const WEBVIEW_FALLBACK_ICON = 'vscode-icons:file-type-geojson';
 
 /**
  * WebView 最近记录。
@@ -294,7 +294,7 @@ function resolveTabIconFileName(tab: Tab): string {
  */
 function resolveTabFallbackIcon(tab: Tab): string {
   if (isWebviewTabPath(tab.path) && !resolveTabRecentRecord(tab)) {
-    return WEBVIEW_FALLBACK_ICON;
+    return WEB_RECORD_ICON;
   }
 
   return '';

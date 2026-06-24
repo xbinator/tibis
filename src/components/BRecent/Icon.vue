@@ -18,15 +18,12 @@
  */
 import { computed, ref, type CSSProperties } from 'vue';
 import type { RecentRecord } from '@/shared/storage';
-import { getFileIconByName } from '@/utils/file/icons';
+import { DEFAULT_FALLBACK_ICON, getFileIconByName, WEB_RECORD_ICON } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 
 defineOptions({
   inheritAttrs: false
 });
-
-const WEBVIEW_FALLBACK_ICON = 'vscode-icons:file-type-geojson';
-const DEFAULT_FALLBACK_ICON = 'vscode-icons:default-file';
 
 /**
  * 最近记录图标组件属性。
@@ -78,7 +75,7 @@ const resolvedIcon = computed<string>(() => {
   }
 
   if (props.record?.type === 'webview') {
-    return WEBVIEW_FALLBACK_ICON;
+    return WEB_RECORD_ICON;
   }
 
   if (props.record?.type === 'file') {
