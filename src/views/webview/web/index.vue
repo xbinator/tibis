@@ -229,7 +229,7 @@ const webviewEventMap: Array<{ name: string; handler: EventListener | ((event: E
   { name: 'page-title-updated', handler: handlePageTitleUpdated as EventListener },
   { name: 'page-favicon-updated', handler: handlePageFaviconUpdated as EventListener },
   { name: 'did-stop-loading', handler: webview.handleDidStopLoading as EventListener },
-  { name: 'console-message', handler: webview.handleConsoleMessage },
+  { name: 'ipc-message', handler: webview.handleIpcMessage },
   { name: 'wheel', handler: handleHostedWheelEvent },
   { name: 'did-navigate', handler: handleDidNavigateRecord },
   { name: 'did-navigate-in-page', handler: handleDidNavigateRecord }
@@ -309,6 +309,11 @@ function handleStartElementSelection(): void {
  */
 function handleCloseDomInspector(): void {
   isInspectorOpen.value = false;
+  if (!webview.state.value.isElementSelecting) {
+    return;
+  }
+
+  webview.stopElementSelection().catch((err: unknown) => console.error('Element selection error:', err));
 }
 
 /**
@@ -408,6 +413,10 @@ onDeactivated(() => {
 });
 
 onBeforeUnmount(() => {
+  if (webview.state.value.isElementSelecting) {
+    webview.stopElementSelection().catch((err: unknown) => console.error('Element selection error:', err));
+  }
+
   webviewToolContextRegistry.unregister(routeFullPath);
   const element = webviewElementRef.value;
   if (element) {

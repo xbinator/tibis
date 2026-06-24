@@ -17,6 +17,14 @@ export function getPreloadPath(): string {
   return path.join(__dirname, '../preload/index.mjs');
 }
 
+/**
+ * 获取 `<webview>` 访客页 preload 脚本路径。
+ * @returns `<webview>` 访客页 preload 脚本绝对路径
+ */
+export function getWebviewTagPreloadPath(): string {
+  return path.join(__dirname, '../preload/webview-tag.mjs');
+}
+
 export function getDistPath(): string {
   return path.join(__dirname, '../../dist/index.html');
 }
@@ -79,6 +87,7 @@ export function createWindow(): BrowserWindow {
       delete mutableParams.preload;
 
       Object.assign(webPreferences, sanitizeAttachedWebPreferences(webPreferences as Record<string, unknown>));
+      webPreferences.preload = getWebviewTagPreloadPath();
     } catch (error) {
       event.preventDefault();
       mainWindow?.webContents.send('webview:attach-rejected', {
