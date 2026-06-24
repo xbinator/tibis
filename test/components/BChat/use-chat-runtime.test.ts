@@ -858,6 +858,114 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('ignores late events for rollback-invalidated runtimes', async (): Promise<void> => {
+    const messages = ref<Message[]>([
+      createMessage({
+        id: 'user-1',
+        role: 'user',
+        content: '执行长任务',
+        parts: [{ type: 'text', text: '执行长任务' }],
+        runtimeId: 'runtime-rollback'
+      }) as Message,
+      createMessage({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        parts: [],
+        runtimeId: 'runtime-rollback',
+        loading: true,
+        finished: false
+      }) as Message
+    ]);
+    const ignoredRuntimeIds = new Set<string>();
+    const onComplete = vi.fn();
+    const onError = vi.fn();
+    const onContextUsageUpdated = vi.fn();
+    const scope = effectScope();
+
+    scope.run(() => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        isRuntimeEventIgnored: (runtimeId: string): boolean => ignoredRuntimeIds.has(runtimeId),
+        onComplete,
+        onError,
+        onContextUsageUpdated
+      });
+    });
+
+    ignoredRuntimeIds.add('runtime-rollback');
+    messages.value.splice(0, messages.value.length);
+    emitRuntimeEvent(listeners, 'messageUpdated', {
+      runtimeId: 'runtime-rollback',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'default',
+      message: createMessage({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '迟到回答',
+        parts: [{ type: 'text', text: '迟到回答' }],
+        runtimeId: 'runtime-rollback',
+        loading: false,
+        finished: true
+      })
+    });
+    emitRuntimeEvent(listeners, 'messageCreated', {
+      runtimeId: 'runtime-rollback',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'default',
+      message: createMessage({
+        id: 'interrupt-1',
+        role: 'interrupt',
+        content: '已中断',
+        runtimeId: 'runtime-rollback',
+        loading: false,
+        finished: true
+      })
+    });
+    emitRuntimeEvent(listeners, 'complete', {
+      runtimeId: 'runtime-rollback',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'default'
+    });
+    emitRuntimeEvent(listeners, 'error', {
+      runtimeId: 'runtime-rollback',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'default',
+      error: { code: 'AI_SERVICE_ERROR', message: '迟到错误' }
+    });
+    emitRuntimeEvent(listeners, 'contextUsage', {
+      runtimeId: 'runtime-rollback',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'default',
+      snapshot: {
+        runtimeId: 'runtime-rollback',
+        sessionId: 'session-1',
+        agentId: 'default',
+        contextWindow: 128_000,
+        reservedOutputTokens: 8_192,
+        compactionBufferTokens: 4_000,
+        usableInputTokens: 115_808,
+        estimatedInputTokens: 1_000,
+        usagePercent: 1,
+        remainingInputTokens: 114_808,
+        status: 'safe',
+        shouldCompactBeforeSend: false
+      }
+    });
+
+    expect(messages.value).toEqual([]);
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(onContextUsageUpdated).not.toHaveBeenCalled();
+    scope.stop();
+  });
+
   it('forwards context usage updates for the current session', async (): Promise<void> => {
     const messages = ref<Message[]>([]);
     const onContextUsageUpdated = vi.fn();

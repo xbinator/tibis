@@ -300,6 +300,29 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
   }
 
   /**
+   * 判断 compacting 阶段的 assistant 是否已有需要保留的真实回答。
+   * @param message - assistant 草稿消息
+   * @returns 是否存在非 compaction 的可见回答内容
+   */
+  function hasAssistantRetainableContentDuringCompaction(message: ChatMessageRecord): boolean {
+    return Boolean(message.content.trim() || message.thinking?.trim() || message.parts.some((part) => part.type !== 'compaction'));
+  }
+
+  /**
+   * 将自动压缩中的 pending part 标记为已取消。
+   * @param message - assistant 草稿消息
+   */
+  function cancelPendingAutoCompactionParts(message: ChatMessageRecord): void {
+    message.parts = message.parts.map((part) => {
+      if (part.type === 'compaction' && part.auto === true && part.status === 'pending') {
+        return { ...part, status: 'cancelled' };
+      }
+
+      return part;
+    });
+  }
+
+  /**
    * 在指定 runtime 阶段内执行异步任务，结束后恢复原阶段。
    * @param runtime - runtime 状态
    * @param phase - 临时切换到的阶段
@@ -1023,9 +1046,22 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
       if (!assistantMessage) return;
 
       if (runtime.phase === 'compacting') {
-        if (!hasAssistantResponseContent(assistantMessage)) {
+        if (!hasAssistantRetainableContentDuringCompaction(assistantMessage)) {
           await deleteAssistantMessage(runtime, assistantMessage);
+          return;
         }
+
+        cancelPendingAutoCompactionParts(assistantMessage);
+        finishAssistantMessageInterrupted(assistantMessage);
+        await messageWriter.updateMessage(assistantMessage);
+        emit('chat:runtime:message-updated', {
+          runtimeId: runtime.runtimeId,
+          sessionId: runtime.sessionId,
+          clientId: runtime.clientId,
+          agentId: runtime.agentId,
+          parentRuntimeId: runtime.parentRuntimeId,
+          message: assistantMessage
+        });
         return;
       }
 

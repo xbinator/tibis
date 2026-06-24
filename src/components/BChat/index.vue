@@ -541,12 +541,37 @@ function showNoModelConfigToast(): void {
   });
 }
 
+/** 已被回退删除的 runtime ID 集合，用于丢弃迟到的主进程事件。 */
+const rollbackIgnoredRuntimeIds = new Set<string>();
+
+/**
+ * 记录回退删除区间内的 runtime ID。
+ * @param rolledBackMessages - 本次回退删除的消息列表
+ */
+function rememberRolledBackRuntimeIds(rolledBackMessages: Message[]): void {
+  for (const message of rolledBackMessages) {
+    if (message.runtimeId) {
+      rollbackIgnoredRuntimeIds.add(message.runtimeId);
+    }
+  }
+}
+
+/**
+ * 判断 runtime 事件是否已被回退流程作废。
+ * @param runtimeId - runtime ID
+ * @returns 是否忽略该 runtime 的迟到事件
+ */
+function isRollbackRuntimeEventIgnored(runtimeId: string): boolean {
+  return rollbackIgnoredRuntimeIds.has(runtimeId);
+}
+
 /** 主进程 ChatRuntime hook。 */
 const chatRuntime = useChatRuntime({
   messages,
   getSessionId: () => activeSessionId.value ?? undefined,
   tools: getActiveTools,
   getToolContext: editorToolContextRegistry.getCurrentContext,
+  isRuntimeEventIgnored: isRollbackRuntimeEventIgnored,
   requestConfirmation: (request) => confirmationController.requestConfirmation(request),
   handleBridgeRequest: (event) =>
     handleBChatRuntimeBridgeRequest(event, {
@@ -617,7 +642,8 @@ const { handleCompactContext } = useRuntimeCompactContext({
   getContextWindow: () => contextWindow.value,
   beginCompactTask: (onAbort) => taskRuntime.beginTask('compact', onAbort),
   finishCompactTask: () => taskRuntime.finishTask('compact'),
-  scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' })
+  scrollToBottom: () => conversationRef.value?.scrollToBottom({ behavior: 'auto' }),
+  isRuntimeEventIgnored: isRollbackRuntimeEventIgnored
 });
 
 /**
@@ -927,6 +953,7 @@ async function handleRollback(message: Message): Promise<void> {
   if (cancelled) return;
 
   const rolledBackMessages = messages.value.slice(index);
+  rememberRolledBackRuntimeIds(rolledBackMessages);
   await rollbackController.rollback(message);
   restoreTodoSnapshotsForMessages(activeSessionId.value, rolledBackMessages);
 }

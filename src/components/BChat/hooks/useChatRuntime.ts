@@ -46,6 +46,8 @@ interface UseChatRuntimeOptions {
   requestConfirmation?: (request: ChatRuntimeConfirmationRequest) => Promise<ChatRuntimeConfirmationDecision> | ChatRuntimeConfirmationDecision;
   /** runtime 通用 renderer bridge 请求回调。 */
   handleBridgeRequest?: (event: ChatRuntimeBridgeRequestEvent) => Promise<unknown> | unknown;
+  /** 判断指定 runtime 事件是否应被忽略。 */
+  isRuntimeEventIgnored?: (runtimeId: string) => boolean;
   /** renderer client id。 */
   clientId?: string;
   /** 当前 agent id。 */
@@ -428,6 +430,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   function handleMessageEvent(event: ChatRuntimeMessageEvent): void {
     if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+    if (options.isRuntimeEventIgnored?.(event.runtimeId) === true) return;
 
     upsertRuntimeMessage(options.messages.value, event.message as Message);
   }
@@ -438,6 +441,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   function handleMessageDeletedEvent(event: ChatRuntimeMessageDeletedEvent): void {
     if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+    if (options.isRuntimeEventIgnored?.(event.runtimeId) === true) return;
 
     removeRuntimeMessage(options.messages.value, event.messageId);
   }
@@ -448,6 +452,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   function handleCompleteEvent(event: ChatRuntimeEventMap['chat:runtime:complete']): void {
     if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+    if (options.isRuntimeEventIgnored?.(event.runtimeId) === true) return;
     if (activeRuntimeId.value === event.runtimeId) {
       activeRuntimeId.value = null;
     }
@@ -464,6 +469,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   function handleErrorEvent(event: ChatRuntimeEventMap['chat:runtime:error']): void {
     if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+    if (options.isRuntimeEventIgnored?.(event.runtimeId) === true) return;
 
     Promise.resolve(options.onError?.(localizeRuntimeServiceError(event.error))).catch(() => undefined);
   }
@@ -474,6 +480,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
    */
   function handleContextUsageEvent(event: ChatRuntimeEventMap['chat:runtime:context-usage-updated']): void {
     if (!isCurrentRuntimeEvent(event, options.getSessionId(), clientId)) return;
+    if (options.isRuntimeEventIgnored?.(event.runtimeId) === true) return;
 
     Promise.resolve(options.onContextUsageUpdated?.(event.snapshot)).catch(() => undefined);
   }

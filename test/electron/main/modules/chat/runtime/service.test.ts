@@ -2288,6 +2288,7 @@ describe('chat runtime service shell', (): void => {
       compactionService: {
         compact: async (input) => {
           compactSignal = input.signal;
+          input.targetMessage?.parts.push({ type: 'compaction', auto: true, reason: 'auto', status: 'pending' });
           await compactDeferred.promise;
           return { status: 'cancelled', messageId: 'compression-1' };
         }

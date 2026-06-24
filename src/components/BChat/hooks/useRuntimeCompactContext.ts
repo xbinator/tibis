@@ -32,6 +32,8 @@ interface UseRuntimeCompactContextOptions {
   clientId?: string;
   /** 当前 agent id。 */
   agentId?: string;
+  /** 判断指定 runtime 事件是否应被忽略。 */
+  isRuntimeEventIgnored?: (runtimeId: string) => boolean;
 }
 
 /**
@@ -129,6 +131,7 @@ export function useRuntimeCompactContext(options: UseRuntimeCompactContextOption
    */
   function handleRuntimeMessageEvent(event: ChatRuntimeMessageEvent): void {
     if (!isCurrentSessionEvent(event, getSessionId(), clientId)) return;
+    if (options.isRuntimeEventIgnored?.(event.runtimeId) === true) return;
 
     applyRuntimeMessage(messages.value, event.message as Message);
   }

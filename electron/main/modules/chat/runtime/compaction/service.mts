@@ -825,6 +825,11 @@ export function createRuntimeCompactionService(dependencies: RuntimeCompactionSe
         const record = await dependencies.compressor.compressSessionManually({ sessionId: input.sessionId, messages: sourceMessages, signal: input.signal });
         if (isCompactAborted(input)) {
           if (target.kind === 'part') {
+            // 自动压缩取消后由 ChatRuntime abort 同步处理可见 assistant，避免迟到更新复活已回退消息。
+            if (input.reason === 'auto') {
+              return { status: 'cancelled', messageId: target.message.id };
+            }
+
             const cancelledTargetMessage = applyCompactionTargetMessageUpdate(
               target,
               withAutoCompactionPart(target.message, createCompactionPart({ reason: input.reason, status: 'cancelled' }))
@@ -916,6 +921,11 @@ export function createRuntimeCompactionService(dependencies: RuntimeCompactionSe
       } catch (error: unknown) {
         if (isCompactAborted(input)) {
           if (target.kind === 'part') {
+            // 自动压缩取消后由 ChatRuntime abort 同步处理可见 assistant，避免迟到更新复活已回退消息。
+            if (input.reason === 'auto') {
+              return { status: 'cancelled', messageId: target.message.id };
+            }
+
             const cancelledTargetMessage = applyCompactionTargetMessageUpdate(
               target,
               withAutoCompactionPart(target.message, createCompactionPart({ reason: input.reason, status: 'cancelled' }))

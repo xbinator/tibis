@@ -492,4 +492,53 @@ describe('runtime compaction service', (): void => {
       })
     });
   });
+
+  it('does not emit a late assistant update when automatic compaction is aborted', async (): Promise<void> => {
+    const messages = [createMessage('u1', 'user', '需要压缩'), createMessage('a1', 'assistant', '压缩内容'.repeat(500))];
+    const targetMessage = createMessage('assistant-active', 'assistant', '');
+    targetMessage.loading = true;
+    targetMessage.finished = false;
+    const updatedMessages: ChatMessageRecord[] = [];
+    const collector = createEventCollector();
+    const abortController = new AbortController();
+    const compressSessionManually = vi.fn(async (input: { signal?: AbortSignal }) => {
+      abortController.abort();
+      expect(input.signal?.aborted).toBe(true);
+      return undefined;
+    });
+    const service = createRuntimeCompactionService({
+      emit: collector.emit,
+      persistMessage: vi.fn(),
+      updateMessage: (message) => {
+        updatedMessages.push(structuredClone(message));
+      },
+      compressor: { compressSessionManually }
+    });
+
+    const result = await service.compact({
+      runtimeId: 'runtime-auto-compact-cancelled',
+      sessionId: 'session-1',
+      clientId: 'client-1',
+      agentId: 'agent-1',
+      reason: 'auto',
+      messages,
+      targetMessage,
+      signal: abortController.signal
+    });
+
+    expect(result).toEqual({ status: 'cancelled', messageId: 'assistant-active' });
+    expect(updatedMessages).toHaveLength(1);
+    expect(updatedMessages[0].parts).toEqual([expect.objectContaining({ type: 'compaction', status: 'pending' })]);
+    expect(collector.events).toEqual([
+      expect.objectContaining({
+        name: 'chat:runtime:message-updated',
+        payload: expect.objectContaining({
+          message: expect.objectContaining({
+            id: 'assistant-active',
+            parts: [expect.objectContaining({ type: 'compaction', status: 'pending' })]
+          })
+        })
+      })
+    ]);
+  });
 });

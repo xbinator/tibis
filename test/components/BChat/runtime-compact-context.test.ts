@@ -168,6 +168,41 @@ describe('useRuntimeCompactContext', (): void => {
     scope.stop();
   });
 
+  it('ignores compact runtime messages rejected by the event guard', (): void => {
+    const scope = effectScope();
+    const messages = ref<Message[]>([createMessage('u1', 'user', '旧用户消息')]);
+
+    scope.run(() =>
+      useRuntimeCompactContext({
+        messages,
+        getSessionId: () => 'session-1',
+        beginCompactTask: () => ({ ok: true }),
+        finishCompactTask: vi.fn(),
+        scrollToBottom: vi.fn(),
+        isRuntimeEventIgnored: (runtimeId: string): boolean => runtimeId === 'runtime-rollback'
+      })
+    );
+    messageCreatedListener?.({
+      runtimeId: 'runtime-rollback',
+      sessionId: 'session-1',
+      clientId: 'bchat',
+      agentId: 'agent-1',
+      message: {
+        id: 'interrupt-rollback',
+        sessionId: 'session-1',
+        role: 'interrupt',
+        content: '已中断',
+        parts: [],
+        createdAt: '2026-06-18T00:00:00.000Z',
+        loading: false,
+        finished: true
+      }
+    });
+
+    expect(messages.value.map((message) => message.id)).toEqual(['u1']);
+    scope.stop();
+  });
+
   it('sends cloneable message snapshots to the main-process compact command', async (): Promise<void> => {
     const scope = effectScope();
     const messages = ref<Message[]>([
