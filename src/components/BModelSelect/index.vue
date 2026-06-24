@@ -3,7 +3,7 @@
   @description 模型选择器组件，以模态对话框形式展示可用模型列表。
 -->
 <template>
-  <BModal v-model:open="open" :closable="false" main-style="padding: 24px;">
+  <BModal v-model:open="open" :closable="false" main-style="padding: 16px;">
     <!-- 搜索框 -->
     <div class="model-search">
       <input ref="searchInputRef" v-model="searchQuery" placeholder="搜索模型..." class="model-search__input" @keydown="handleKeydown" />
@@ -370,7 +370,6 @@ defineExpose<BModelSelectExpose>({
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 2px 0 4px;
 }
 
 /* ── 分组标题 ────────────────────────────────── */
@@ -393,6 +392,7 @@ defineExpose<BModelSelectExpose>({
   gap: 10px;
   align-items: center;
   padding: 6px 8px;
+  margin-top: 4px;
   cursor: pointer;
   border-radius: 8px;
   transition: background-color 0.15s, border-color 0.15s;
