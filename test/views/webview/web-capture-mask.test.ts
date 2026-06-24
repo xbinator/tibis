@@ -5,10 +5,10 @@
  */
 import type { VueWrapper } from '@vue/test-utils';
 import type { WebviewTag } from 'electron';
-import type { Ref } from 'vue';
+import { nextTick, type Ref } from 'vue';
 import { shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WebviewPageState } from '@/views/webview/shared/types';
+import type { WebviewElementSelection, WebviewPageState } from '@/views/webview/shared/types';
 import WebviewPage from '@/views/webview/web/index.vue';
 
 /**
@@ -31,6 +31,8 @@ interface TestWebviewElement extends HTMLElement {
   stop: () => void;
   /** 设置 User-Agent。 */
   setUserAgent: (userAgent: string) => void;
+  /** 执行页面脚本。 */
+  executeJavaScript: (script: string) => Promise<unknown>;
 }
 
 /**
@@ -51,6 +53,9 @@ const registerToolContextMock = vi.hoisted(() => vi.fn());
 const unregisterToolContextMock = vi.hoisted(() => vi.fn());
 const setCurrentToolContextMock = vi.hoisted(() => vi.fn());
 const clearCurrentToolContextMock = vi.hoisted(() => vi.fn());
+const screenshotCapturingHolder = vi.hoisted<{ value: boolean }>(() => ({ value: false }));
+const captureSelectedElementScreenshotMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const executeJavaScriptMockHolder = vi.hoisted<{ value: ReturnType<typeof vi.fn<(script: string) => Promise<unknown>>> | null }>(() => ({ value: null }));
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -90,10 +95,10 @@ vi.mock('@/views/webview/web/hooks/useScreenshot.ts', () => ({
   useScreenshot: (options: TestUseScreenshotOptions) => {
     screenshotOptionsHolder.value = options;
     return {
-      isCapturing: { value: false },
+      isCapturing: screenshotCapturingHolder,
       captureViewportScreenshot: vi.fn().mockResolvedValue(undefined),
       captureFullPageScreenshot: vi.fn().mockResolvedValue(undefined),
-      captureSelectedElementScreenshot: vi.fn().mockResolvedValue(undefined)
+      captureSelectedElementScreenshot: captureSelectedElementScreenshotMock
     };
   }
 }));
@@ -142,6 +147,9 @@ vi.mock('@/views/webview/web/utils/hosting', () => ({
     element.reload = vi.fn();
     element.stop = vi.fn();
     element.setUserAgent = vi.fn();
+    const executeJavaScriptMock = vi.fn<(script: string) => Promise<unknown>>(() => Promise.resolve(null));
+    element.executeJavaScript = executeJavaScriptMock;
+    executeJavaScriptMockHolder.value = executeJavaScriptMock;
     hostLayer.appendChild(element);
     return element;
   }
@@ -156,7 +164,10 @@ function mountWebviewPage(): VueWrapper {
     global: {
       stubs: {
         AddressBar: true,
-        BPanelSplitter: true,
+        BPanelSplitter: {
+          name: 'BPanelSplitter',
+          template: '<div><slot /></div>'
+        },
         DeviceToolbar: true,
         InspectorPanel: true
       }
@@ -164,10 +175,49 @@ function mountWebviewPage(): VueWrapper {
   });
 }
 
+/**
+ * 创建测试用元素选择结果。
+ * @returns 元素选择结果
+ */
+function createElementSelection(): WebviewElementSelection {
+  return {
+    tagName: 'DIV',
+    id: 'target',
+    className: 'target-card',
+    text: '目标元素',
+    selector: 'div#target',
+    attributes: [],
+    ancestors: [],
+    computedStyles: {},
+    rect: {
+      x: 12,
+      y: 24,
+      pageX: 12,
+      pageY: 24,
+      width: 120,
+      height: 36
+    }
+  };
+}
+
+/**
+ * 发送 WebView console-message 事件。
+ * @param element - WebView 元素
+ * @param message - console 消息
+ */
+function dispatchConsoleMessage(element: Element, message: string): void {
+  const event = new Event('console-message') as Event & { message: string };
+  Object.defineProperty(event, 'message', { value: message });
+  element.dispatchEvent(event);
+}
+
 describe('webview screenshot wiring', () => {
   beforeEach((): void => {
     hostLayerHolder.value = null;
     screenshotOptionsHolder.value = null;
+    screenshotCapturingHolder.value = false;
+    executeJavaScriptMockHolder.value = null;
+    captureSelectedElementScreenshotMock.mockClear();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
       callback(0);
       return 0;
@@ -176,6 +226,7 @@ describe('webview screenshot wiring', () => {
 
   afterEach((): void => {
     vi.unstubAllGlobals();
+    document.documentElement.removeAttribute('style');
     document.body.innerHTML = '';
   });
 
@@ -185,6 +236,109 @@ describe('webview screenshot wiring', () => {
 
     expect(screenshotOptions?.webviewElementRef.value).toBe(hostLayerHolder.value?.querySelector('webview'));
     expect(screenshotOptions?.onCaptureMaskVisibleChange).toBeUndefined();
+
+    wrapper.unmount();
+  });
+
+  it('opens the inspector on the first selected element and respects manual close', async (): Promise<void> => {
+    const wrapper = mountWebviewPage();
+    const webviewElement = hostLayerHolder.value?.querySelector('webview');
+    const selection = createElementSelection();
+
+    if (!webviewElement) {
+      throw new Error('webview element should exist');
+    }
+
+    dispatchConsoleMessage(webviewElement, `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify(selection)}`);
+    await nextTick();
+
+    expect(wrapper.findComponent({ name: 'InspectorPanel' }).exists()).toBe(true);
+
+    wrapper.findComponent({ name: 'InspectorPanel' }).vm.$emit('close');
+    await nextTick();
+    dispatchConsoleMessage(webviewElement, `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify({ ...selection, selector: 'div#target-2' })}`);
+    await nextTick();
+
+    expect(wrapper.findComponent({ name: 'InspectorPanel' }).exists()).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  it('uses an opaque light theme background and distinct hover color for the element picker toolbar', async (): Promise<void> => {
+    document.documentElement.style.setProperty('--color-primary', '#123456');
+    document.documentElement.style.setProperty('--color-primary-bg', 'rgb(18 52 86 / 10%)');
+    document.documentElement.style.setProperty('--color-primary-border', '#789abc');
+    document.documentElement.style.setProperty('--color-primary-hover', '#0f2f55');
+    document.documentElement.style.setProperty('--bg-elevated', '#ffffff');
+
+    const wrapper = mountWebviewPage();
+    const executeJavaScriptMock = executeJavaScriptMockHolder.value;
+
+    if (!executeJavaScriptMock) {
+      throw new Error('executeJavaScript mock should exist');
+    }
+
+    wrapper.findComponent({ name: 'AddressBar' }).vm.$emit('select-element');
+    await nextTick();
+    await Promise.resolve();
+
+    const [script] = executeJavaScriptMock.mock.calls[0] ?? [];
+
+    if (typeof script !== 'string') {
+      throw new Error('element picker script should be generated');
+    }
+
+    expect(script).toContain('color:#123456;');
+    expect(script).toContain('background:#e7ebee;');
+    expect(script).toContain('color:#0f2f55;');
+    expect(script).not.toContain('background:#123456;');
+    expect(script.match(/background:#e7ebee;/g) ?? []).toHaveLength(2);
+    expect(script).not.toContain('color:rgb(18 52 86 / 10%);');
+
+    wrapper.unmount();
+  });
+
+  it('captures the selected element when the in-page toolbar action is clicked', async (): Promise<void> => {
+    const wrapper = mountWebviewPage();
+    const webviewElement = hostLayerHolder.value?.querySelector('webview');
+    const selection = createElementSelection();
+
+    if (!webviewElement) {
+      throw new Error('webview element should exist');
+    }
+
+    dispatchConsoleMessage(webviewElement, `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify(selection)}`);
+    dispatchConsoleMessage(webviewElement, '__TIBIS_ELEMENT_PICKER_ACTION__{"type":"capture-selected-element-screenshot"}');
+    await nextTick();
+
+    expect(captureSelectedElementScreenshotMock).toHaveBeenCalledWith(expect.objectContaining({ selector: 'div#target' }));
+
+    wrapper.unmount();
+  });
+
+  it('ignores repeated selected element toolbar screenshot clicks while a screenshot is running', async (): Promise<void> => {
+    const wrapper = mountWebviewPage();
+    const webviewElement = hostLayerHolder.value?.querySelector('webview');
+    const selection = createElementSelection();
+
+    if (!webviewElement) {
+      throw new Error('webview element should exist');
+    }
+
+    captureSelectedElementScreenshotMock.mockImplementation((): Promise<void> => {
+      screenshotCapturingHolder.value = true;
+      return new Promise((): void => {
+        // 保持截图任务挂起，用于验证后续点击会被进行中状态拦截。
+      });
+    });
+
+    dispatchConsoleMessage(webviewElement, `__TIBIS_ELEMENT_PICKER_SELECTION__${JSON.stringify(selection)}`);
+    dispatchConsoleMessage(webviewElement, '__TIBIS_ELEMENT_PICKER_ACTION__{"type":"capture-selected-element-screenshot"}');
+    await nextTick();
+    dispatchConsoleMessage(webviewElement, '__TIBIS_ELEMENT_PICKER_ACTION__{"type":"capture-selected-element-screenshot"}');
+    await nextTick();
+
+    expect(captureSelectedElementScreenshotMock).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
   });

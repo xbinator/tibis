@@ -64,7 +64,9 @@ import { debounce } from 'lodash-es';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { native } from '@/shared/platform';
 import { useRecentStore } from '@/stores/workspace/recent';
+import { resolveRuntimeThemeColors } from '@/theme';
 import { useWebviewTabTitle } from '@/views/webview/shared/hooks/useWebviewTabTitle';
+import type { WebviewElementSelection } from '@/views/webview/shared/types';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
 import AddressBar from './components/AddressBar.vue';
 import DeviceToolbar from './components/DeviceToolbar.vue';
@@ -73,7 +75,7 @@ import { useCacheControl } from './hooks/useCacheControl.ts';
 import { useDeviceMode, type WebviewDevicePresetKey } from './hooks/useDeviceMode.ts';
 import { useHostLayer } from './hooks/useHostLayer.ts';
 import { useScreenshot } from './hooks/useScreenshot.ts';
-import { useWebView } from './hooks/useWebView.ts';
+import { useWebView, type WebviewElementPickerTheme } from './hooks/useWebView.ts';
 import { ensureHostedWebviewElement, ensureWebviewHostLayer } from './utils/hosting';
 
 const route = useRoute();
@@ -280,11 +282,17 @@ function handleSelectDevicePreset(presetKey: WebviewDevicePresetKey): void {
  * 读取当前应用主题中的元素选择器高亮色。
  * @returns 页面元素选择器主题
  */
-function resolveElementPickerTheme(): { color: string; background: string } {
-  const rootStyle = getComputedStyle(document.documentElement);
-  const color = rootStyle.getPropertyValue('--color-primary').trim() || '#2563eb';
-  const background = rootStyle.getPropertyValue('--color-primary-bg').trim() || 'rgba(37,99,235,.12)';
-  return { color, background };
+function resolveElementPickerTheme(): WebviewElementPickerTheme {
+  const colors = resolveRuntimeThemeColors();
+  return {
+    color: colors.primary,
+    background: colors.primaryBg,
+    border: colors.primaryBorder,
+    toolbarText: colors.primary,
+    toolbarBackground: colors.primarySolidBg,
+    toolbarHoverText: colors.primaryHover,
+    toolbarShadow: 'none'
+  };
 }
 
 /**
@@ -313,9 +321,14 @@ function toggleInspector(): void {
 
 /**
  * 按当前选中 DOM 元素截图。
+ * @param selection - 需要截图的选中元素，缺省使用当前选中元素
  */
-function handleCaptureSelectedElementScreenshot(): void {
-  screenshot.captureSelectedElementScreenshot(webview.selectedElement).catch(console.error);
+function handleCaptureSelectedElementScreenshot(selection: WebviewElementSelection | null = webview.selectedElement): void {
+  if (screenshot.isCapturing.value) {
+    return;
+  }
+
+  screenshot.captureSelectedElementScreenshot(selection).catch(console.error);
 }
 
 /**
@@ -365,6 +378,12 @@ watch([deviceMode.isToolbarVisible, deviceMode.activePreset], () => nextTick(req
 watch(webview.selectedElementRef, (value) => {
   if (value && isInspectorOpen.value === null) {
     isInspectorOpen.value = true;
+  }
+});
+
+watch(webview.selectedElementToolbarActionRef, (action) => {
+  if (action?.type === 'capture-selected-element-screenshot') {
+    handleCaptureSelectedElementScreenshot(action.selection);
   }
 });
 

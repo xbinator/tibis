@@ -10,6 +10,8 @@ import type {
   WebviewAgentActivityPhase,
   WebviewController,
   WebviewElementSelection,
+  WebviewElementToolbarAction,
+  WebviewElementToolbarActionType,
   WebviewPageState
 } from '@/views/webview/shared/types';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
@@ -82,6 +84,16 @@ export interface WebviewElementPickerTheme {
   color: string;
   /** 高亮背景色 */
   background: string;
+  /** 高亮描边色 */
+  border?: string;
+  /** 工具条文字色 */
+  toolbarText?: string;
+  /** 工具条背景色 */
+  toolbarBackground?: string;
+  /** 工具条按钮悬停文字色 */
+  toolbarHoverText?: string;
+  /** 工具条阴影 */
+  toolbarShadow?: string;
 }
 
 /**
@@ -96,6 +108,11 @@ const DEFAULT_ELEMENT_PICKER_THEME: WebviewElementPickerTheme = {
  * 页面脚本上报元素选择结果的 console 消息前缀。
  */
 const ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX = '__TIBIS_ELEMENT_PICKER_SELECTION__';
+
+/**
+ * 页面脚本上报元素工具条动作的 console 消息前缀。
+ */
+const ELEMENT_PICKER_ACTION_MESSAGE_PREFIX = '__TIBIS_ELEMENT_PICKER_ACTION__';
 
 /**
  * 页面元素选择脚本需要读取的精选计算样式。
@@ -171,6 +188,35 @@ function isWebviewConsoleMessageEvent(event: Event | WebviewConsoleMessageEvent)
 }
 
 /**
+ * 判断值是否为元素工具条动作类型。
+ * @param value - 待判断的值
+ * @returns 是否为已支持的工具条动作类型
+ */
+function isWebviewElementToolbarActionType(value: unknown): value is WebviewElementToolbarActionType {
+  return value === 'capture-selected-element-screenshot';
+}
+
+/**
+ * 从工具条动作 console 消息中读取动作类型。
+ * @param message - WebView console 消息
+ * @returns 工具条动作类型，解析失败时返回 null
+ */
+function readElementToolbarActionType(message: string): WebviewElementToolbarActionType | null {
+  try {
+    const payload = JSON.parse(message.slice(ELEMENT_PICKER_ACTION_MESSAGE_PREFIX.length)) as unknown;
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const { type } = payload as { type?: unknown };
+    return isWebviewElementToolbarActionType(type) ? type : null;
+  } catch (error) {
+    console.error('Failed to parse webview element toolbar action message:', error);
+    return null;
+  }
+}
+
+/**
  * 判断错误是否为 Electron 导航被主动中断。
  * @param error - 原始加载错误
  * @returns 是否为可忽略的导航中断
@@ -239,9 +285,21 @@ function loadWebviewUrl(instance: WebviewTag, url: string): void {
  * @returns 可通过 `executeJavaScript` 执行的脚本
  */
 export function createElementSelectionScript(theme: WebviewElementPickerTheme = DEFAULT_ELEMENT_PICKER_THEME): string {
-  const borderStyle = JSON.stringify(`border:2px solid ${theme.color || DEFAULT_ELEMENT_PICKER_THEME.color};`);
-  const backgroundStyle = JSON.stringify(`background:${theme.background || DEFAULT_ELEMENT_PICKER_THEME.background};`);
-  const messagePrefix = JSON.stringify(ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX);
+  const pickerColor = theme.color || DEFAULT_ELEMENT_PICKER_THEME.color;
+  const pickerBackground = theme.background || DEFAULT_ELEMENT_PICKER_THEME.background;
+  const pickerBorder = theme.border || pickerColor;
+  const toolbarText = theme.toolbarText || '#fff';
+  const toolbarBackground = theme.toolbarBackground || pickerColor;
+  const toolbarHoverText = theme.toolbarHoverText || 'rgba(255,255,255,.72)';
+  const toolbarShadow = theme.toolbarShadow || 'none';
+  const borderStyle = JSON.stringify(`border:2px solid ${pickerBorder};`);
+  const backgroundStyle = JSON.stringify(`background:${pickerBackground};`);
+  const toolbarTextStyle = JSON.stringify(`color:${toolbarText};`);
+  const toolbarBackgroundStyle = JSON.stringify(`background:${toolbarBackground};`);
+  const toolbarHoverTextStyle = JSON.stringify(`color:${toolbarHoverText};`);
+  const toolbarShadowStyle = JSON.stringify(`box-shadow:${toolbarShadow};`);
+  const selectionMessagePrefix = JSON.stringify(ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX);
+  const actionMessagePrefix = JSON.stringify(ELEMENT_PICKER_ACTION_MESSAGE_PREFIX);
   const styleProperties = JSON.stringify(ELEMENT_PICKER_STYLE_PROPERTIES);
 
   return `
@@ -270,6 +328,115 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
     'background:transparent;',
     'box-sizing:border-box;',
     'border-radius:4px;',
+    '}',
+    '.tibis-element-picker-toolbar{',
+    'position:fixed;',
+    'z-index:2147483647;',
+    'display:flex;',
+    'gap:2px;',
+    'align-items:flex-end;',
+    'max-width:calc(100vw - 8px);',
+    'font:12px/18px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
+    ${toolbarTextStyle},
+    'box-sizing:border-box;',
+    'pointer-events:auto;',
+    'animation:tibis-element-picker-toolbar-enter 120ms ease-out;',
+    '}',
+    '.tibis-element-picker-toolbar[hidden]{',
+    'display:none;',
+    '}',
+    '.tibis-element-picker-toolbar__tag{',
+    'display:inline-flex;',
+    'flex:0 0 auto;',
+    'align-items:center;',
+    'height:20px;',
+    'max-width:120px;',
+    'padding:0 8px;',
+    'overflow:hidden;',
+    'box-sizing:border-box;',
+    'font-size:12px;',
+    'font-weight:500;',
+    'line-height:20px;',
+    'text-overflow:ellipsis;',
+    'text-transform:lowercase;',
+    'white-space:nowrap;',
+    ${toolbarBackgroundStyle},
+    ${toolbarShadowStyle},
+    'border-radius:3px;',
+    '}',
+    '.tibis-element-picker-toolbar__actions{',
+    'display:flex;',
+    'flex:0 0 auto;',
+    'height:20px;',
+    'gap:1px;',
+    'align-items:center;',
+    'padding:0 1px;',
+    'box-sizing:border-box;',
+    ${toolbarBackgroundStyle},
+    ${toolbarShadowStyle},
+    'border-radius:3px;',
+    '}',
+    '.tibis-element-picker-toolbar__action{',
+    'display:inline-flex;',
+    'align-items:center;',
+    'justify-content:center;',
+    'width:20px;',
+    'min-width:20px;',
+    'height:18px;',
+    'padding:0;',
+    'font:inherit;',
+    'font-size:12px;',
+    'font-weight:500;',
+    'line-height:1;',
+    'color:inherit;',
+    'box-sizing:border-box;',
+    'cursor:pointer;',
+    'background:transparent;',
+    'border:0;',
+    'border-radius:3px;',
+    'transition:color 120ms ease,transform 120ms ease;',
+    '}',
+    '.tibis-element-picker-toolbar__action:active{',
+    'transform:scale(.92);',
+    '}',
+    '.tibis-element-picker-toolbar__action-icon{',
+    'display:block;',
+    'width:14px;',
+    'height:14px;',
+    'font-size:14px;',
+    'stroke:currentColor;',
+    'stroke-width:2;',
+    'fill:none;',
+    'stroke-linecap:round;',
+    'stroke-linejoin:round;',
+    '}',
+    '.tibis-element-picker-toolbar__action:hover{',
+    ${toolbarHoverTextStyle},
+    '}',
+    '.tibis-element-picker-toolbar__action:focus-visible{',
+    'outline:2px solid currentColor;',
+    'outline-offset:1px;',
+    '}',
+    '.tibis-element-picker-toolbar__action-label{',
+    'position:absolute;',
+    'width:1px;',
+    'height:1px;',
+    'padding:0;',
+    'margin:-1px;',
+    'overflow:hidden;',
+    'clip:rect(0,0,0,0);',
+    'white-space:nowrap;',
+    'border:0;',
+    '}',
+    '@keyframes tibis-element-picker-toolbar-enter{',
+    'from{',
+    'opacity:0;',
+    'transform:translateY(2px);',
+    '}',
+    'to{',
+    'opacity:1;',
+    'transform:translateY(0);',
+    '}',
     '}'
   ].join('');
   document.documentElement.appendChild(style);
@@ -283,6 +450,20 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
   selectedHighlight.className = 'tibis-element-picker-selected';
   selectedHighlight.hidden = true;
   document.documentElement.appendChild(selectedHighlight);
+
+  const selectedToolbar = document.createElement('div');
+  selectedToolbar.className = 'tibis-element-picker-toolbar';
+  selectedToolbar.hidden = true;
+  document.documentElement.appendChild(selectedToolbar);
+
+  const toolbarActions = [
+    {
+      type: 'capture-selected-element-screenshot',
+      label: '截图',
+      title: '截取选中元素',
+      icon: 'screenshot'
+    }
+  ];
 
   let activeHoverElement = null;
   let activeSelectedElement = null;
@@ -358,10 +539,12 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
     document.removeEventListener('mouseout', handleMouseOut, true);
     document.removeEventListener('click', handleClick, true);
     document.removeEventListener('keydown', handleKeydown, true);
+    selectedToolbar.removeEventListener('click', handleToolbarClick);
     window.removeEventListener('scroll', handleScrollOrResize, true);
     window.removeEventListener('resize', handleScrollOrResize, true);
     highlight.remove();
     selectedHighlight.remove();
+    selectedToolbar.remove();
     style.remove();
     delete window.__tibisElementPickerCleanup;
   };
@@ -479,17 +662,122 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
 
   function syncSelectedHighlight(element) {
     syncLayerPosition(selectedHighlight, element);
+    syncToolbarPosition(element);
   }
 
   function isPickerLayer(target) {
-    return target === highlight || target === selectedHighlight;
+    return target === highlight || target === selectedHighlight || selectedToolbar.contains(target);
+  }
+
+  function renderSelectedToolbar(element) {
+    selectedToolbar.replaceChildren();
+
+    const tag = document.createElement('span');
+    tag.className = 'tibis-element-picker-toolbar__tag';
+    tag.textContent = element.tagName.toLowerCase();
+    selectedToolbar.appendChild(tag);
+
+    const actions = document.createElement('div');
+    actions.className = 'tibis-element-picker-toolbar__actions';
+    toolbarActions.forEach((action) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tibis-element-picker-toolbar__action';
+      button.dataset.tibisElementPickerAction = action.type;
+      button.title = action.title;
+      button.setAttribute('aria-label', action.title);
+
+      button.appendChild(createToolbarActionIcon(action.icon));
+
+      const label = document.createElement('span');
+      label.className = 'tibis-element-picker-toolbar__action-label';
+      label.textContent = action.label;
+      button.appendChild(label);
+      actions.appendChild(button);
+    });
+    selectedToolbar.appendChild(actions);
+  }
+
+  function createToolbarActionIcon(icon) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'tibis-element-picker-toolbar__action-icon');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+
+    if (icon === 'screenshot') {
+      const body = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      body.setAttribute('d', 'M5 8h3l1.5-2h5L16 8h3v9H5z');
+      svg.appendChild(body);
+
+      const lens = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      lens.setAttribute('cx', '12');
+      lens.setAttribute('cy', '12.5');
+      lens.setAttribute('r', '2.5');
+      svg.appendChild(lens);
+      return svg;
+    }
+
+    const fallback = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    fallback.setAttribute('cx', '12');
+    fallback.setAttribute('cy', '12');
+    fallback.setAttribute('r', '4');
+    svg.appendChild(fallback);
+    return svg;
+  }
+
+  function syncToolbarPosition(element) {
+    if (!element.isConnected) {
+      selectedToolbar.hidden = true;
+      return;
+    }
+
+    renderSelectedToolbar(element);
+    selectedToolbar.hidden = false;
+
+    const rect = element.getBoundingClientRect();
+    const toolbarRect = selectedToolbar.getBoundingClientRect();
+    const toolbarWidth = toolbarRect.width || selectedToolbar.offsetWidth || 128;
+    const toolbarHeight = toolbarRect.height || selectedToolbar.offsetHeight || 20;
+    const margin = 4;
+    const toolbarGap = 1;
+    const preferredTop = rect.top - toolbarHeight - toolbarGap;
+    const fallbackTop = rect.bottom + toolbarGap;
+    const maxTop = Math.max(margin, window.innerHeight - toolbarHeight - margin);
+    const top = preferredTop >= margin ? preferredTop : Math.min(fallbackTop, maxTop);
+    const maxLeft = Math.max(margin, window.innerWidth - toolbarWidth - margin);
+    const preferredLeft = rect.right - toolbarWidth;
+    const left = Math.min(Math.max(preferredLeft, margin), maxLeft);
+
+    selectedToolbar.style.left = Math.round(left) + 'px';
+    selectedToolbar.style.top = Math.round(Math.max(margin, top)) + 'px';
   }
 
   function emitSelectedElement(element) {
     const selectedElement = readElement(element);
     console.log('Tibis WebView selected element', selectedElement);
-    console.log(${messagePrefix} + JSON.stringify(selectedElement));
+    console.log(${selectionMessagePrefix} + JSON.stringify(selectedElement));
     return selectedElement;
+  }
+
+  function emitToolbarAction(type) {
+    console.log(${actionMessagePrefix} + JSON.stringify({ type }));
+  }
+
+  function handleToolbarClick(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const button = target.closest('[data-tibis-element-picker-action]');
+    if (!(button instanceof HTMLElement)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    emitToolbarAction(button.dataset.tibisElementPickerAction || '');
   }
 
   function handleMouseMove(event) {
@@ -552,6 +840,7 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
   document.addEventListener('mouseout', handleMouseOut, true);
   document.addEventListener('click', handleClick, true);
   document.addEventListener('keydown', handleKeydown, true);
+  selectedToolbar.addEventListener('click', handleToolbarClick);
   window.addEventListener('scroll', handleScrollOrResize, true);
   window.addEventListener('resize', handleScrollOrResize, true);
 }))();
@@ -734,6 +1023,7 @@ function createTouchSimulationScript(enabled: boolean): string {
 export function useWebView(webviewRef: Ref<WebviewTag | null>) {
   const state = ref<WebviewPageState>({ ...DEFAULT_STATE });
   const selectedElement = ref<WebviewElementSelection | null>(null);
+  const selectedElementToolbarAction = ref<WebviewElementToolbarAction | null>(null);
   const agentActivity = ref<WebviewAgentActivity>({ ...DEFAULT_AGENT_ACTIVITY });
   let initialUrlAttached = false;
   let isDomReady = false;
@@ -1133,6 +1423,20 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
     }
 
     const { message } = event;
+    if (message.startsWith(ELEMENT_PICKER_ACTION_MESSAGE_PREFIX)) {
+      const type = readElementToolbarActionType(message);
+      if (!type) {
+        return;
+      }
+
+      selectedElementToolbarAction.value = {
+        type,
+        selection: selectedElement.value,
+        triggeredAt: Date.now()
+      };
+      return;
+    }
+
     if (!message.startsWith(ELEMENT_PICKER_SELECTION_MESSAGE_PREFIX)) {
       return;
     }
@@ -1243,6 +1547,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
       return selectedElement.value;
     },
     selectedElementRef: selectedElement,
+    selectedElementToolbarActionRef: selectedElementToolbarAction,
     agentActivity,
 
     attachInitialUrl,

@@ -19,5 +19,7 @@ export { toCssVars, toAntdToken, toMonacoColors } from './core/derive';
 export { applyCssVars, validateTokens } from './core/apply';
 export { registerPreset, getPresetList, getResolvedTokens } from './core/registry';
 export { createThemeTokens } from './core/factory';
+export { resolveRuntimeThemeColors } from './core/runtime';
 export type { BasePalette } from './core/factory';
+export type { RuntimeThemeColors } from './core/runtime';
 export type { ThemePreset } from './core/registry';

@@ -437,17 +437,94 @@ describe('useWebView', () => {
     expect(document.querySelector(selection.selector)).toBe(seventhItem);
   });
 
-  it('does not render screenshot action button inside selected element overlay', (): void => {
+  it('renders themed selected element toolbar and emits screenshot action', (): void => {
     document.body.innerHTML = `
       <section class="article-section">
         <article class="article-item"><span>第七条</span></article>
       </section>
     `;
     const item = document.querySelector('.article-item');
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     if (!(item instanceof HTMLElement)) {
       throw new Error('item should exist');
     }
+
+    installElementRect(item, { x: 200, y: 80, width: 260, height: 48 });
+
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Element: window.Element,
+      HTMLElement: window.HTMLElement,
+      Promise,
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
+    new Script(
+      createElementSelectionScript({
+        color: '#123456',
+        background: '#eaf2ff',
+        border: '#789abc',
+        toolbarText: '#123456',
+        toolbarBackground: '#eaf2ff',
+        toolbarHoverText: '#0f2f55'
+      })
+    ).runInContext(scriptContext);
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    const toolbar = document.querySelector('.tibis-element-picker-toolbar');
+    const tagName = document.querySelector('.tibis-element-picker-toolbar__tag');
+    const actions = document.querySelector('.tibis-element-picker-toolbar__actions');
+    const captureButton = document.querySelector(
+      '.tibis-element-picker-toolbar__action[data-tibis-element-picker-action="capture-selected-element-screenshot"]'
+    );
+    const captureIconLens = document.querySelector('.tibis-element-picker-toolbar__action-icon circle');
+    const toolbarStyle = Array.from(document.querySelectorAll('style'))
+      .map((style) => style.textContent ?? '')
+      .find((content) => content.includes('.tibis-element-picker-toolbar'));
+
+    if (!(captureIconLens instanceof Element)) {
+      throw new Error('capture icon lens should exist');
+    }
+
+    captureIconLens.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
+
+    const actionMessage = consoleLogSpy.mock.calls.map(([message]) => String(message)).find((message) => message.startsWith('__TIBIS_ELEMENT_PICKER_ACTION__'));
+
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+    expect(tagName?.textContent).toBe('article');
+    expect(tagName?.parentElement).toBe(toolbar);
+    expect(actions?.parentElement).toBe(toolbar);
+    expect(captureButton).toBeInstanceOf(HTMLElement);
+    expect(captureIconLens?.tagName.toLowerCase()).toBe('circle');
+    expect((toolbar as HTMLElement).style.left).toBe('332px');
+    expect((toolbar as HTMLElement).style.top).toBe('59px');
+    expect(toolbarStyle).toContain('color:#123456;');
+    expect(toolbarStyle).toContain('background:#eaf2ff;');
+    expect(toolbarStyle).not.toContain('border:1px solid #123456;');
+    expect(toolbarStyle).toContain('height:20px;');
+    expect(toolbarStyle).toContain('font-size:12px;');
+    expect(toolbarStyle).toContain('border-radius:3px;');
+    expect(toolbarStyle).toContain('animation:tibis-element-picker-toolbar-enter 120ms ease-out;');
+    expect(toolbarStyle).toContain('transition:color 120ms ease,transform 120ms ease;');
+    expect(toolbarStyle).toContain('.tibis-element-picker-toolbar__action:hover{color:#0f2f55;}');
+    expect(toolbarStyle).not.toContain('.tibis-element-picker-toolbar__action:hover{background:');
+    expect(toolbarStyle).toContain('transform:scale(.92);');
+    expect(toolbarStyle).toContain('font-size:14px;');
+    expect(actionMessage).toBe('__TIBIS_ELEMENT_PICKER_ACTION__{"type":"capture-selected-element-screenshot"}');
+  });
+
+  it('moves selected element toolbar below the selection when top-right has no room', (): void => {
+    document.body.innerHTML = '<button id="top-entry">顶部入口</button>';
+    const button = document.querySelector('#top-entry');
+
+    if (!(button instanceof HTMLElement)) {
+      throw new Error('button should exist');
+    }
+
+    installElementRect(button, { x: 80, y: 8, width: 160, height: 32 });
 
     const scriptContext = createContext({
       window,
@@ -459,12 +536,14 @@ describe('useWebView', () => {
       requestAnimationFrame: window.requestAnimationFrame.bind(window)
     });
     new Script(createElementSelectionScript()).runInContext(scriptContext);
-    item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 
-    const captureButton = document.querySelector('.tibis-element-picker-action-button');
+    const toolbar = document.querySelector('.tibis-element-picker-toolbar');
     (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
 
-    expect(captureButton).toBeNull();
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+    expect((toolbar as HTMLElement).style.left).toBe('112px');
+    expect((toolbar as HTMLElement).style.top).toBe('41px');
   });
 
   it('normalizes webpage agent snapshot fields', (): void => {
@@ -545,7 +624,9 @@ describe('useWebView', () => {
     const controller = useWebView(ref<WebviewTag | null>(webviewElement));
     const snapshot = await controller.readPageSnapshot();
 
-    await expect(controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'select', index: 1, optionText: 'Other' } })).rejects.toMatchObject({
+    await expect(
+      controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'select', index: 1, optionText: 'Other' } })
+    ).rejects.toMatchObject({
       code: 'OPTION_AMBIGUOUS'
     });
 
