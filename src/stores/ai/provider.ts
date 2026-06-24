@@ -11,6 +11,26 @@ interface ProviderState {
   loading: boolean;
 }
 
+/** 渲染到选择器中的单个模型项。 */
+export interface ModelItem {
+  /** 组合后的选择器值（providerId:modelId）。 */
+  value: string;
+  /** 模型 ID。 */
+  modelId: string;
+  /** 模型显示名称。 */
+  modelName: string;
+}
+
+/** 按提供方分组后的可用模型集合。 */
+export interface ModelGroup {
+  /** 提供方 ID。 */
+  providerId: string;
+  /** 提供方显示名称。 */
+  providerName: string;
+  /** 当前提供方下可用模型列表。 */
+  models: ModelItem[];
+}
+
 /** Provider Store */
 export const useProviderStore = defineStore('provider', {
   state: (): ProviderState => ({
@@ -23,7 +43,24 @@ export const useProviderStore = defineStore('provider', {
     providerList: (state) => state.providers.map((p) => ({ label: p.name, value: p.id })),
 
     /** 启用的服务商列表 */
-    enabledProviders: (state) => state.providers.filter((p) => p.isEnabled)
+    enabledProviders: (state) => state.providers.filter((p) => p.isEnabled),
+
+    /**
+     * 按提供方分组的可用模型列表。
+     * 过滤口径：仅保留已启用 provider 下的已启用 model，作为模型选择器的事实源。
+     */
+    availableModels: (state): ModelGroup[] => {
+      const result: ModelGroup[] = [];
+      for (const provider of state.providers) {
+        if (!provider.isEnabled || !provider.models?.length) continue;
+
+        const models = provider.models.filter((m) => m.isEnabled).map((m) => ({ value: `${provider.id}:${m.id}`, modelId: m.id, modelName: m.name }));
+        if (!models.length) continue;
+
+        result.push({ providerId: provider.id, providerName: provider.name, models });
+      }
+      return result;
+    }
   },
 
   actions: {

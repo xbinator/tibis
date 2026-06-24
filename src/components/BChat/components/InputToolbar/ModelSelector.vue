@@ -38,32 +38,9 @@ import { computed, onMounted, ref, watch } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
 import BModelIcon from '@/components/BModel/Icon.vue';
+import type { ModelGroup } from '@/stores/ai/provider';
 import { useProviderStore } from '@/stores/ai/provider';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
-
-/**
- * 渲染到下拉菜单中的单个模型项。
- */
-interface ModelItem {
-  /** 组合后的选择器值。 */
-  value: string;
-  /** 模型 ID。 */
-  modelId: string;
-  /** 模型显示名称。 */
-  modelName: string;
-}
-
-/**
- * 按提供方分组后的模型集合。
- */
-interface ModelGroup {
-  /** 提供方 ID。 */
-  providerId: string;
-  /** 提供方显示名称。 */
-  providerName: string;
-  /** 当前提供方下可选模型。 */
-  models: ModelItem[];
-}
 
 /**
  * 组件属性。
@@ -126,30 +103,10 @@ const currentModelName = computed<string>(() => {
 });
 
 /**
- * 将所有启用的模型按提供方分组，用于渲染下拉菜单。
- * 只包含已启用的 provider 和已启用的模型。
- * 返回按 provider 分组的模型列表，每个分组包含 provider 信息和该 provider 下可选的模型列表。
+ * 将所有可用模型按提供方分组，用于渲染下拉菜单。
+ * 数据来自 store 的 `availableModels` 事实源，过滤口径已统一。
  */
-const groupedModels = computed<ModelGroup[]>(() => {
-  const result: ModelGroup[] = [];
-
-  // 遍历所有 provider
-  for (const provider of providers.value) {
-    // 跳过未启用或没有模型的 provider
-    if (!provider.isEnabled || !provider.models?.length) continue;
-
-    // 过滤出已启用的模型，并转换为下拉菜单所需的格式
-    const models = provider.models.filter((m) => m.isEnabled).map((m) => ({ value: `${provider.id}:${m.id}`, modelId: m.id, modelName: m.name }));
-
-    // 如果该 provider 下没有启用的模型，跳过
-    if (!models.length) continue;
-
-    // 将分组添加到结果列表
-    result.push({ providerId: provider.id, providerName: provider.name, models });
-  }
-
-  return result;
-});
+const groupedModels = computed<ModelGroup[]>(() => store.availableModels);
 
 function handleModelChange(value: string): void {
   const parsed = parseModelValue(value);

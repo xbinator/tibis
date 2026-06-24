@@ -1,32 +1,13 @@
 /**
  * @file types.ts
  * @description BModel/Select 组件类型定义。
+ *
+ * `ModelItem` / `ModelGroup` 的实际定义已下沉到 `useProviderStore`，
+ * 此处仅 re-export 以保持既有 import 路径可用，避免循环依赖。
  */
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 
-/**
- * 渲染到对话框中的单个模型项。
- */
-export interface ModelItem {
-  /** 组合后的选择器值（providerId:modelId）。 */
-  value: string;
-  /** 模型 ID。 */
-  modelId: string;
-  /** 模型显示名称。 */
-  modelName: string;
-}
-
-/**
- * 按提供方分组后的模型集合。
- */
-export interface ModelGroup {
-  /** 提供方 ID。 */
-  providerId: string;
-  /** 提供方显示名称。 */
-  providerName: string;
-  /** 当前提供方下可选模型。 */
-  models: ModelItem[];
-}
+export type { ModelItem, ModelGroup } from '@/stores/ai/provider';
 
 /**
  * 解析后的模型标识。
