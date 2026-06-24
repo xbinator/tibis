@@ -11,13 +11,12 @@
 
     <!-- 模型列表 -->
     <BScrollbar max-height="400px" inset="vertical">
-      <div class="model-list">
+      <div ref="listRef" class="model-list">
         <div v-for="(group, groupIndex) in filteredGroups" :key="group.providerId" class="model-group">
           <div class="model-group__header">{{ group.providerName }}</div>
           <div
             v-for="(item, modelIndex) in group.models"
             :key="item.value"
-            :ref="(el) => setItemRef(el, groupIndex, modelIndex)"
             class="model-item"
             :class="{
               'is-focused': isFocused(groupIndex, modelIndex)
@@ -78,8 +77,8 @@ const open = defineModel<boolean>('open', { default: false });
 /** 搜索框引用。 */
 const searchInputRef = ref<HTMLInputElement>();
 
-/** DOM 引用表：itemRefs[groupIndex][modelIndex] = HTMLElement */
-const itemRefs = ref<HTMLElement[][]>([]);
+/** 模型列表容器引用。 */
+const listRef = ref<HTMLElement | null>(null);
 
 /** 搜索关键词。 */
 const searchQuery = ref<string>('');
@@ -144,25 +143,22 @@ function getFocusedModel(): ModelItem | undefined {
 }
 
 /**
- * 将 DOM 节点写入 itemRefs 二维数组。
- * @param el - DOM 元素
- * @param groupIndex - 分组索引
- * @param modelIndex - 模型索引
- */
-function setItemRef(el: unknown, groupIndex: number, modelIndex: number): void {
-  if (!itemRefs.value[groupIndex]) itemRefs.value[groupIndex] = [];
-  if (el instanceof HTMLElement) {
-    itemRefs.value[groupIndex][modelIndex] = el;
-  }
-}
-
-/**
  * 将当前 focused item 滚动到视口内。
  */
 function scrollFocusedIntoView(): void {
   nextTick(() => {
-    const el = itemRefs.value[focusedGroupIndex.value]?.[focusedModelIndex.value];
-    el?.scrollIntoView({ block: 'nearest' });
+    const groupIndex = focusedGroupIndex.value;
+    const items = listRef.value?.querySelectorAll<HTMLElement>('.model-item');
+    if (!items || !items.length) return;
+
+    // 计算 focused item 在扁平列表中的索引（位于当前分组之前的所有分组项数 + 当前分组内偏移）
+    let flatIndex = 0;
+    for (let i = 0; i < groupIndex; i++) {
+      flatIndex += filteredGroups.value[i]?.models.length ?? 0;
+    }
+    flatIndex += focusedModelIndex.value;
+
+    items[flatIndex]?.scrollIntoView({ block: 'center' });
   });
 }
 
@@ -281,7 +277,6 @@ watch(
 watch(open, (isOpen) => {
   if (isOpen) {
     searchQuery.value = '';
-    itemRefs.value = [];
     nextTick(() => {
       searchInputRef.value?.focus();
       initFocusToActiveModel();
@@ -295,7 +290,6 @@ watch(open, (isOpen) => {
 watch(searchQuery, () => {
   focusedGroupIndex.value = 0;
   focusedModelIndex.value = 0;
-  itemRefs.value = [];
 });
 
 // ── Lifecycle ─────────────────────────────────────
