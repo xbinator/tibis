@@ -206,10 +206,6 @@ function handleMouseEnter(index: number): void {
   &:hover,
   &.active {
     background: var(--bg-secondary);
-
-    :deep(.slash-command-item-trigger) {
-      background: var(--bg-secondary);
-    }
   }
 }
 </style>
