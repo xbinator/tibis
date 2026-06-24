@@ -9,6 +9,15 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 
+/**
+ * 判断主进程目录是否来自编译后的 dist-electron 输出。
+ * @param mainModuleDir - 主进程模块目录
+ * @returns 是否为 dist-electron/electron/main 目录
+ */
+function isBuiltMainModuleDir(mainModuleDir: string): boolean {
+  return path.normalize(mainModuleDir).endsWith(path.join('dist-electron', 'electron', 'main'));
+}
+
 export function isDev(): boolean {
   return process.env.NODE_ENV === 'development' || !app.isPackaged;
 }
@@ -25,8 +34,19 @@ export function getWebviewTagPreloadPath(): string {
   return path.join(__dirname, '../preload/webview-tag.mjs');
 }
 
+/**
+ * 解析渲染进程入口 HTML 路径。
+ * @param mainModuleDir - 主进程模块目录
+ * @returns 渲染进程入口 HTML 绝对路径
+ */
+export function resolveRendererIndexPath(mainModuleDir: string): string {
+  const appRoot = isBuiltMainModuleDir(mainModuleDir) ? path.resolve(mainModuleDir, '../../..') : path.resolve(mainModuleDir, '../..');
+
+  return path.join(appRoot, 'dist/index.html');
+}
+
 export function getDistPath(): string {
-  return path.join(__dirname, '../../dist/index.html');
+  return resolveRendererIndexPath(__dirname);
 }
 
 export function getDevServerUrl(): string {
