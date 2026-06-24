@@ -12,7 +12,12 @@
     />
 
     <!-- 当前选中块菜单 -->
-    <CurrentBlockMenu v-if="!isLoadingRich && !isFailedRich" :editor="editorInstance" />
+    <CurrentBlockMenu
+      v-if="!isLoadingRich && !isFailedRich"
+      :editor="editorInstance"
+      :has-front-matter="hasFrontMatter"
+      :on-add-front-matter="handleAddFrontMatter"
+    />
 
     <!-- Loading overlay -->
     <div v-if="isLoadingRich" class="b-markdown-rich__loading-overlay">
@@ -62,7 +67,7 @@ import FrontMatterCard from '../components/FrontMatterCard.vue';
 import { setAISelectionHighlight } from '../extensions/aiRangeHighlight';
 import { getSearchSnapshot } from '../extensions/editorSearch';
 import { createRichInlineCompletionAdapter } from '../extensions/richInlineCompletion';
-import { useFrontMatter } from '../hooks/useFrontMatter';
+import { createDefaultFrontMatterData, useFrontMatter } from '../hooks/useFrontMatter';
 import { useInlineCompletion } from '../hooks/useInlineCompletion';
 import { useRichEditor } from '../hooks/useRichEditor';
 import { getPersistedMarkdown } from '../utils/editorMarkdown';
@@ -324,6 +329,18 @@ function handleFrontMatterFieldRemove(key: string): void {
 function handleFrontMatterFieldAdd(key: string, value: unknown): void {
   if (key in frontMatterData.value) return;
   frontMatterData.value = { ...frontMatterData.value, [key]: value };
+  syncToExternal();
+}
+
+/**
+ * 为当前文档创建默认 Front Matter。
+ */
+function handleAddFrontMatter(): void {
+  if (hasFrontMatter.value) {
+    return;
+  }
+
+  updateFrontMatter(createDefaultFrontMatterData(props.editorState?.name));
   syncToExternal();
 }
 

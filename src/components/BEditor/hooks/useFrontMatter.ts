@@ -20,6 +20,36 @@ interface UseFrontMatterResult {
 
 const FRONT_MATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
+/**
+ * 从文件名解析默认 Front Matter 标题。
+ * @param fileName - 当前文件名
+ * @returns 默认标题
+ */
+function resolveDefaultFrontMatterTitle(fileName: string | null | undefined): string {
+  const trimmedName = fileName?.trim() ?? '';
+  if (!trimmedName) {
+    return 'Untitled';
+  }
+
+  const extensionStart = trimmedName.lastIndexOf('.');
+  if (extensionStart > 0) {
+    return trimmedName.slice(0, extensionStart);
+  }
+
+  return trimmedName;
+}
+
+/**
+ * 创建默认 Front Matter 数据。
+ * @param fileName - 当前文件名
+ * @returns 默认 Front Matter 数据
+ */
+export function createDefaultFrontMatterData(fileName: string | null | undefined): FrontMatterData {
+  return {
+    title: resolveDefaultFrontMatterTitle(fileName)
+  };
+}
+
 export function useFrontMatter(content: Ref<string | undefined>): UseFrontMatterResult {
   const frontMatterRaw = ref<string>('');
   const frontMatterData = ref<FrontMatterData>({});

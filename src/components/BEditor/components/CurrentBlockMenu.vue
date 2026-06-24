@@ -49,7 +49,12 @@ import { scroll } from '@/utils/scroll';
 const [name] = createNamespace('', 'b-markdown-blockmenu');
 
 interface Props {
+  /** 当前富文本编辑器实例 */
   editor?: Editor | null;
+  /** 当前文档是否已有 Front Matter */
+  hasFrontMatter?: boolean;
+  /** 请求为当前文档添加 Front Matter */
+  onAddFrontMatter?: () => void;
 }
 
 interface BlockPosition {
@@ -81,7 +86,9 @@ interface MenuDivider {
 type MenuItem = MenuAction | MenuDivider;
 
 const props = withDefaults(defineProps<Props>(), {
-  editor: null
+  editor: null,
+  hasFrontMatter: false,
+  onAddFrontMatter: undefined
 });
 
 const rootRef = ref<HTMLElement | null>(null);
@@ -471,12 +478,34 @@ function duplicateCurrentBlock(): void {
   open.value = false;
 }
 
+/**
+ * 请求宿主创建文档元数据。
+ */
+function handleAddFrontMatter(): void {
+  props.onAddFrontMatter?.();
+  syncCurrentBlock();
+  open.value = false;
+}
+
 const menuItems = computed<MenuItem[]>(() => {
   const { editor } = props;
   const block = currentBlock.value;
   if (!editor || !block) {
     return [];
   }
+
+  const frontMatterMenuItems: MenuItem[] =
+    !props.hasFrontMatter && props.onAddFrontMatter
+      ? [
+          {
+            type: 'item',
+            value: 'add-front-matter',
+            label: '添加元数据',
+            icon: 'lucide:tags',
+            onClick: handleAddFrontMatter
+          }
+        ]
+      : [];
 
   return [
     {
@@ -551,6 +580,7 @@ const menuItems = computed<MenuItem[]>(() => {
       active: editor.isActive('table'),
       onClick: () => runCommand(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())
     },
+    ...frontMatterMenuItems,
     {
       type: 'divider',
       value: 'divider-block-actions'
