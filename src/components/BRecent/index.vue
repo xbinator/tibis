@@ -1,27 +1,25 @@
 <template>
-  <BModal v-model:open="visible" :mask-closable="true" :width="560" :main-style="{ padding: '16px' }">
+  <BModal v-model:open="visible" :mask-closable="true" :width="560" :main-style="{ padding: '10px 0 0 10px' }">
     <div :class="bem()">
       <div ref="inputRef" :class="bem('toolbar')">
         <AInput v-model:value="keyword" placeholder="搜索最近记录" @keydown="handleKeydown" />
       </div>
 
-      <BScrollbar :max-height="maxHeight" inset="auto">
-        <template v-if="searchResultItems.length">
-          <div :class="bem('list')">
-            <button v-for="item in searchResultItems" :key="item.key" :class="bem('item', { active: item.isActive })" @click="item.onSelect">
-              <BRecentIcon :record="item.record" :file-name="item.fileName" :icon="item.icon" :class="bem('item-icon')" :size="14" />
+      <BScrollbar :max-height="maxHeight" inset="vertical">
+        <div v-if="searchResultItems.length" :class="bem('list')">
+          <button v-for="item in searchResultItems" :key="item.key" :class="bem('item', { active: item.isActive })" @click="item.onSelect">
+            <BRecentIcon :record="item.record" :file-name="item.fileName" :icon="item.icon" :class="bem('item-icon')" :size="16" />
 
-              <div :class="bem('item-main')">
-                <span :class="bem('item-title')">{{ item.title }}</span>
-                <span :class="bem('item-path', { unsaved: item.pathClass === 'is-unsaved' })">{{ item.pathLabel }}</span>
-              </div>
+            <div :class="bem('item-main')">
+              <span :class="bem('item-title')">{{ item.title }}</span>
+              <span :class="bem('item-path', { unsaved: item.pathClass === 'is-unsaved' })">{{ item.pathLabel }}</span>
+            </div>
 
-              <div v-if="item.removable" :class="bem('item-delete')" @click.stop="item.onRemove">
-                <BIcon icon="ic:round-close" :size="12" />
-              </div>
-            </button>
-          </div>
-        </template>
+            <div v-if="item.removable" :class="bem('item-delete')" @click.stop="item.onRemove">
+              <BIcon icon="ic:round-close" :size="12" />
+            </div>
+          </button>
+        </div>
 
         <div v-else :class="bem('empty')">没有匹配的最近记录</div>
       </BScrollbar>
@@ -350,13 +348,14 @@ watch(
 .b-recent {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* ── 搜索栏 ────────────────────────────────── */
 .b-recent__toolbar {
   display: flex;
   align-items: center;
+  padding-right: 10px;
 }
 
 /* ── 列表 ──────────────────────────────────── */
@@ -364,15 +363,18 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding-right: 4px;
+  padding-bottom: 10px;
 }
 
 /* ── 条目 ──────────────────────────────────── */
 .b-recent__item {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   align-items: center;
   width: 100%;
-  padding: 6px 8px;
+  height: 32px;
+  padding: 0 8px;
   text-align: left;
   cursor: pointer;
   background: transparent;
@@ -388,8 +390,6 @@ watch(
 
 .b-recent__item-icon {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
 }
 
 .b-recent__item-main {
