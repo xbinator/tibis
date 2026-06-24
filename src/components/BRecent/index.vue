@@ -345,52 +345,51 @@ watch(
 );
 </script>
 
-<style scoped>
+<style scoped lang="less">
+/* ── 容器 ──────────────────────────────────── */
 .b-recent {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
+/* ── 搜索栏 ────────────────────────────────── */
 .b-recent__toolbar {
   display: flex;
   align-items: center;
 }
 
+/* ── 列表 ──────────────────────────────────── */
 .b-recent__list {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
+/* ── 条目 ──────────────────────────────────── */
 .b-recent__item {
   display: flex;
+  gap: 10px;
   align-items: center;
-  justify-content: space-between;
   width: 100%;
-  height: 32px;
-  padding: 0 6px;
+  padding: 6px 8px;
   text-align: left;
   cursor: pointer;
   background: transparent;
   border: none;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  border-radius: 8px;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
-.b-recent__item:hover {
-  background: var(--bg-secondary);
-}
-
+.b-recent__item:hover,
 .b-recent__item--active {
-  background: var(--bg-secondary);
+  background: var(--bg-hover);
 }
 
 .b-recent__item-icon {
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  margin-right: 8px;
+  width: 26px;
+  height: 26px;
 }
 
 .b-recent__item-main {
@@ -405,7 +404,7 @@ watch(
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 500;
   line-height: 18px;
   color: var(--text-primary);
@@ -418,7 +417,7 @@ watch(
   margin-left: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 16px;
   color: var(--text-tertiary);
   white-space: nowrap;
@@ -429,7 +428,7 @@ watch(
 }
 
 .b-recent__item-meta {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
@@ -445,7 +444,7 @@ watch(
   background: transparent;
   border: none;
   border-radius: 4px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .b-recent__item-delete:hover {
@@ -457,10 +456,14 @@ watch(
   display: flex;
 }
 
+/* ── 空状态 ────────────────────────────────── */
 .b-recent__empty {
-  padding: 36px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 48px 0;
   font-size: 13px;
-  color: var(--text-tertiary);
-  text-align: center;
+  color: var(--text-secondary);
 }
 </style>
