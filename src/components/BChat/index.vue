@@ -98,7 +98,7 @@ import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { toTransportTools } from '@/ai/tools/stream';
-import BModelSelect from '@/components/BModelSelect/index.vue';
+import BModelSelect from '@/components/BModel/select.vue';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { useFileDrop } from '@/hooks/useFileDrop';

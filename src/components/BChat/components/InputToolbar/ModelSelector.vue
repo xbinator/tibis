@@ -37,7 +37,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import BDropdown from '@/components/BDropdown/index.vue';
-import BModelIcon from '@/components/BModelIcon/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
 import { useProviderStore } from '@/stores/ai/provider';
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 

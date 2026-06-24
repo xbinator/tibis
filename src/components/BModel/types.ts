@@ -1,6 +1,6 @@
 /**
  * @file types.ts
- * @description BModelSelect 组件类型定义。
+ * @description BModel/Select 组件类型定义。
  */
 import type { SelectedModel } from '@/stores/ai/serviceModel';
 
@@ -39,7 +39,7 @@ export interface ParsedModel {
 }
 
 /**
- * BModelSelect 组件属性。
+ * BModel/Select 组件属性。
  */
 export interface BModelSelectProps {
   /** 当前选中的模型。 */
@@ -49,7 +49,7 @@ export interface BModelSelectProps {
 }
 
 /**
- * BModelSelect 组件暴露的方法。
+ * BModel/Select 组件暴露的方法。
  */
 export interface BModelSelectExpose {
   /** 程序化打开对话框。 */

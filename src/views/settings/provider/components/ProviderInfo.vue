@@ -28,7 +28,7 @@
 <script setup lang="ts">
 import type { AIProvider } from 'types/ai';
 import { Icon } from '@iconify/vue';
-import BModelIcon from '@/components/BModelIcon/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
 
 interface Props {
   provider?: Partial<AIProvider>;

@@ -1,3 +1,7 @@
+<!--
+  @file Icon.vue
+  @description 模型图标组件，支持 light/dark 主题切换。
+-->
 <template>
   <div class="model-icon" :style="containerStyle">
     <img v-if="iconUrl" :src="iconUrl" :alt="alt" :style="imgStyle" @error="handleError" />

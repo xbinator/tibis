@@ -12,7 +12,7 @@
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
-import BModelIcon from '@/components/BModelIcon/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
 
 interface Props {
   active?: boolean;

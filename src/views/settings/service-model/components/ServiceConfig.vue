@@ -44,6 +44,7 @@ import type { ModelServiceType } from 'types/model';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import BModal from '@/components/BModal/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
 import type { ChipResult } from '@/components/BPromptEditor/extensions/variableChip';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { VariableOptionGroup } from '@/components/BPromptEditor/types';

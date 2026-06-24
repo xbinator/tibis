@@ -44,7 +44,7 @@ import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import BButton from '@/components/BButton/index.vue';
-import BModelIcon from '@/components/BModelIcon/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
 import { useProviderStore } from '@/stores/ai/provider';
 import { Modal } from '@/utils/modal';
 import ModelModal from './ModelModal.vue';

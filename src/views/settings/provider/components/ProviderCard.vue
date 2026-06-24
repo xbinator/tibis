@@ -24,7 +24,7 @@
 import type { AIProvider } from 'types/ai';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import BModelIcon from '@/components/BModelIcon/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
 
 const router = useRouter();
 

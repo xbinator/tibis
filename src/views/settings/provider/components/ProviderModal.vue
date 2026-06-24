@@ -45,6 +45,7 @@ import type { AIProvider, AIProviderType } from 'types/ai';
 import { computed, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { message, Form } from 'ant-design-vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
 import { useProviderStore } from '@/stores/ai/provider';
 import { asyncTo } from '@/utils/asyncTo';
 import { providerFormatOptions } from '../../constants';

@@ -51,7 +51,7 @@ vi.mock('@/components/BDropdown/index.vue', () => ({
   }
 }));
 
-vi.mock('@/components/BModelIcon/index.vue', () => ({
+vi.mock('@/components/BModel/Icon.vue', () => ({
   default: {
     name: 'BModelIcon',
     template: '<span class="model-icon-stub"></span>'

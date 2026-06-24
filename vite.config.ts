@@ -28,7 +28,6 @@ const COMPONENT_DIRS = [
   'BMessage',
   'BModal',
   'BRecent',
-  'BModelIcon',
   'BButton',
   'BDropdown',
   'BMonaco',

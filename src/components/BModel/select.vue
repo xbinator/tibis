@@ -1,5 +1,5 @@
 <!--
-  @file index.vue
+  @file select.vue
   @description 模型选择器组件，以模态对话框形式展示可用模型列表。
 -->
 <template>
@@ -47,7 +47,7 @@
 import type { BModelSelectExpose, BModelSelectProps, ModelGroup, ModelItem, ParsedModel, SelectedModel } from './types';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import BModal from '@/components/BModal/index.vue';
-import BModelIcon from '@/components/BModelIcon/index.vue';
+import BModelIcon from '@/components/BModel/Icon.vue';
 import BScrollbar from '@/components/BScrollbar/index.vue';
 import { useProviderStore } from '@/stores/ai/provider';
 
