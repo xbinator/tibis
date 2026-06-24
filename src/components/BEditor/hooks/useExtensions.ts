@@ -77,6 +77,11 @@ export interface RichEditorPlaceholderContext {
 export function resolveRichEditorPlaceholder(context: RichEditorPlaceholderContext): string {
   const { node } = context;
 
+  // 空代码块已有独立 NodeView 外壳，避免显示文档级占位文案。
+  if (node.type?.name === 'codeBlock') {
+    return '';
+  }
+
   if (node.type?.name === 'heading') {
     const level = Number(node.attrs?.level);
     if (Number.isInteger(level) && level >= 1 && level <= 6) {

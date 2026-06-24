@@ -55,6 +55,10 @@ describe('resolveRichEditorPlaceholder', (): void => {
   it('keeps the default placeholder for non-heading blocks', (): void => {
     expect(resolveRichEditorPlaceholder(createPlaceholderContext('paragraph'))).toBe('请输入内容');
   });
+
+  it('hides the editor placeholder for empty code blocks', (): void => {
+    expect(resolveRichEditorPlaceholder(createPlaceholderContext('codeBlock'))).toBe('');
+  });
 });
 
 describe('BEditor rich placeholder styles', (): void => {
