@@ -243,7 +243,7 @@ function focusInput(options: FocusInputOptions = { select: true }): void {
 function scrollActiveItemIntoView(): void {
   nextTick(() => {
     const item = listRef.value?.querySelectorAll<HTMLElement>('.b-command-panel__item')[activeIndex.value];
-    item?.scrollIntoView({ block: 'nearest' });
+    item?.scrollIntoView({ block: 'center' });
   });
 }
 
