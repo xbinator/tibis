@@ -36,6 +36,7 @@ const recentStoreMock = vi.hoisted<RecentStoreMock>(() => ({
   removeFile: vi.fn()
 }));
 const getPathStatusMock = vi.hoisted(() => vi.fn<(_path: string) => Promise<{ exists: boolean; isFile: boolean }>>());
+const scrollIntoViewMock = vi.hoisted(() => vi.fn<(_arg?: boolean | ScrollIntoViewOptions) => void>());
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeMock
@@ -215,11 +216,16 @@ function extractRuleBlock(source: string, selector: string): string {
 
 describe('BRecent result icons', (): void => {
   beforeEach((): void => {
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoViewMock
+    });
     routeMock.name = 'editor';
     routeMock.params.id = 'file-1';
     recentStoreMock.recentRecords = [createFileRecord(), createWebviewRecord()];
     recentStoreMock.ensureLoaded.mockClear();
     recentStoreMock.removeFile.mockClear();
+    scrollIntoViewMock.mockClear();
     getPathStatusMock.mockReset();
     getPathStatusMock.mockResolvedValue({ exists: false, isFile: false });
   });
@@ -307,7 +313,7 @@ describe('BRecent result icons', (): void => {
     expect(itemMainRule).not.toMatch(/flex-direction:\s*column;/);
   });
 
-  it('uses consistent row sizing aligned with BModelSelect', (): void => {
+  it('uses compact icon and path sizing for recent rows', (): void => {
     const source = readSearchRecentSource();
     const itemRule = extractRuleBlock(source, '.b-recent__item');
     const iconRule = extractRuleBlock(source, '.b-recent__item-icon');
@@ -315,9 +321,10 @@ describe('BRecent result icons', (): void => {
 
     expect(itemRule).toMatch(/padding:\s*6px 8px;/);
     expect(itemRule).toMatch(/border-radius:\s*8px;/);
-    expect(iconRule).toMatch(/width:\s*26px;/);
-    expect(iconRule).toMatch(/height:\s*26px;/);
+    expect(iconRule).toMatch(/width:\s*16px;/);
+    expect(iconRule).toMatch(/height:\s*16px;/);
     expect(pathRule).toMatch(/margin-left:\s*6px;/);
+    expect(pathRule).toMatch(/font-size:\s*12px;/);
   });
 
   it('uses one icon style without a web-specific modifier', (): void => {
@@ -336,5 +343,65 @@ describe('BRecent result icons', (): void => {
     expect(deleteRule).toMatch(/width:\s*18px;/);
     expect(deleteRule).toMatch(/height:\s*18px;/);
     expect(hoverDeleteRule).toMatch(/display:\s*flex;/);
+  });
+
+  it('cycles keyboard highlight through rows and scrolls the highlighted row into view', async (): Promise<void> => {
+    routeMock.params.id = 'missing-file';
+    recentStoreMock.recentRecords = [
+      createFileRecord({ id: 'file-1', name: 'alpha', path: '/tmp/alpha.md' }),
+      createFileRecord({ id: 'file-2', name: 'beta', path: '/tmp/beta.md' })
+    ];
+    const wrapper = mountSearchRecent();
+    const input = wrapper.find('input.a-input-stub');
+
+    expect(wrapper.find('.b-recent__item--active').exists()).toBe(false);
+
+    await input.trigger('keydown', { key: 'ArrowDown' });
+    await nextTick();
+    expect(wrapper.findAll('.b-recent__item')[0].classes()).toContain('b-recent__item--active');
+
+    await input.trigger('keydown', { key: 'ArrowUp' });
+    await nextTick();
+    expect(wrapper.findAll('.b-recent__item')[1].classes()).toContain('b-recent__item--active');
+
+    await input.trigger('keydown', { key: 'ArrowDown' });
+    await nextTick();
+    expect(wrapper.findAll('.b-recent__item')[0].classes()).toContain('b-recent__item--active');
+    expect(scrollIntoViewMock).toHaveBeenLastCalledWith({ block: 'nearest' });
+  });
+
+  it('keeps keyboard highlight when a late path candidate refreshes results', async (): Promise<void> => {
+    routeMock.params.id = 'missing-file';
+    recentStoreMock.recentRecords = [
+      createFileRecord({ id: 'file-1', name: 'alpha', path: '/tmp/alpha.md' }),
+      createFileRecord({ id: 'file-2', name: 'beta', path: '/tmp/beta.md' })
+    ];
+    let resolveStatus: ((status: { exists: boolean; isFile: boolean }) => void) | undefined;
+    getPathStatusMock.mockReturnValue(
+      new Promise((resolve: (status: { exists: boolean; isFile: boolean }) => void): void => {
+        resolveStatus = resolve;
+      })
+    );
+    const wrapper = mountSearchRecent();
+    const input = wrapper.find('input.a-input-stub');
+
+    await input.setValue('/tmp');
+    await input.trigger('keydown', { key: 'ArrowDown' });
+    await nextTick();
+
+    expect(wrapper.find('.b-recent__item--active').exists()).toBe(true);
+
+    resolveStatus?.({ exists: true, isFile: true });
+    await flushPromises();
+
+    expect(wrapper.find('.b-recent__item--active').exists()).toBe(true);
+  });
+
+  it('keeps behavior callbacks out of normalized result items', (): void => {
+    const source = readSearchRecentSource();
+
+    expect(source).not.toContain('isActive');
+    expect(source).not.toContain('onSelect:');
+    expect(source).not.toContain('onRemove:');
   });
 });

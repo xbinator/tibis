@@ -6,8 +6,13 @@
       </div>
 
       <BScrollbar :max-height="maxHeight" inset="vertical">
-        <div v-if="searchResultItems.length" :class="bem('list')">
-          <button v-for="item in searchResultItems" :key="item.key" :class="bem('item', { active: item.isActive })" @click="item.onSelect">
+        <div v-if="searchResultItems.length" ref="listRef" :class="bem('list')">
+          <button
+            v-for="(item, index) in searchResultItems"
+            :key="item.key"
+            :class="bem('item', { active: index === activeIndex })"
+            @click="handleSelectItem(item)"
+          >
             <BRecentIcon :record="item.record" :file-name="item.fileName" :icon="item.icon" :class="bem('item-icon')" :size="16" />
 
             <div :class="bem('item-main')">
@@ -15,7 +20,7 @@
               <span :class="bem('item-path', { unsaved: item.pathClass === 'is-unsaved' })">{{ item.pathLabel }}</span>
             </div>
 
-            <div v-if="item.removable" :class="bem('item-delete')" @click.stop="item.onRemove">
+            <div v-if="item.removable" :class="bem('item-delete')" @click.stop="handleRemoveItem(item)">
               <BIcon icon="ic:round-close" :size="12" />
             </div>
           </button>
@@ -44,11 +49,11 @@ import { native } from '@/shared/platform';
 import type { StoredFile, RecentRecord } from '@/shared/storage';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
+import { WEB_RECORD_ICON } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 import { createNamespace } from '@/utils/namespace';
 
 const [, bem] = createNamespace('recent');
-const WEB_RECORD_ICON = 'vscode-icons:file-type-geojson';
 
 // ---------- props / emits ----------
 
@@ -72,6 +77,9 @@ const { openFile, openFileByPath } = useOpenFile();
 const visible = defineModel<boolean>('visible', { default: false });
 const keyword = ref('');
 const inputRef = ref<HTMLElement | null>(null);
+const listRef = ref<HTMLElement | null>(null);
+const activeIndex = ref(-1);
+const hasKeyboardActiveIndex = ref(false);
 const absolutePathCandidate = ref<AbsolutePathSearchResult | null>(null);
 const urlCandidate = ref<UrlSearchResult | null>(null);
 let pathSearchToken = 0;
@@ -104,6 +112,87 @@ const filteredRecords = computed<RecentRecord[]>(() => {
   });
 });
 
+/** 归一化后的展示列表，模板只关心渲染，不再做类型判断 */
+const searchResultItems = computed(() => {
+  const candidate = absolutePathCandidate.value;
+  const url = urlCandidate.value;
+  const items: NormalizedItem[] = [];
+
+  // URL 候选项排在最前
+  if (url) {
+    items.push({
+      key: url.url,
+      kind: 'url',
+      title: url.host,
+      url: url.url,
+      icon: WEB_RECORD_ICON,
+      pathLabel: url.url,
+      pathClass: '',
+      meta: '在 Webview 中打开',
+      removable: false
+    });
+  }
+
+  // 绝对路径候选项次之
+  if (candidate) {
+    items.push({
+      key: candidate.path,
+      kind: 'absolute-path',
+      title: candidate.fileName,
+      path: candidate.path,
+      fileName: candidate.fileName,
+      pathLabel: candidate.path,
+      pathClass: '',
+      meta: '按路径打开',
+      removable: false
+    });
+  }
+
+  for (const record of filteredRecords.value) {
+    // 若绝对路径候选与某条文件记录路径重合，则跳过该条（避免重复）
+    if (candidate && record.type === 'file' && record.path === candidate.path) continue;
+
+    if (record.type === 'webview') {
+      items.push({
+        key: record.id,
+        kind: 'webview',
+        title: record.title,
+        record,
+        pathLabel: record.url,
+        pathClass: '',
+        meta: '',
+        removable: true
+      });
+    } else {
+      const isUnsaved = !record.path;
+      const title = resolveFileTitle(record);
+      items.push({
+        key: record.id,
+        kind: 'file',
+        title,
+        record,
+        pathLabel: isUnsaved ? '未保存文件' : record.path!,
+        pathClass: isUnsaved ? 'is-unsaved' : '',
+        meta: '',
+        removable: true
+      });
+    }
+  }
+
+  return items;
+});
+
+/**
+ * 根据当前路由记录计算默认高亮项；没有命中时让键盘光标保持在 -1。
+ */
+const defaultActiveIndex = computed<number>(() => {
+  if (!visible.value || !activeId.value) {
+    return -1;
+  }
+
+  return searchResultItems.value.findIndex((item) => item.key === activeId.value);
+});
+
 // ---------- handlers ----------
 
 function handleClose(): void {
@@ -111,6 +200,7 @@ function handleClose(): void {
   keyword.value = '';
   absolutePathCandidate.value = null;
   urlCandidate.value = null;
+  hasKeyboardActiveIndex.value = false;
 }
 
 async function handleSelect(file: StoredFile): Promise<void> {
@@ -127,40 +217,6 @@ async function handleOpenPath(path: string): Promise<void> {
 async function handleOpenUrl(url: string): Promise<void> {
   handleClose();
   openWebview(new URL(url));
-}
-
-async function handleEnter(): Promise<void> {
-  // 优先处理 URL 候选项
-  if (urlCandidate.value) {
-    await handleOpenUrl(urlCandidate.value.url);
-    return;
-  }
-  if (absolutePathCandidate.value) {
-    await handleOpenPath(absolutePathCandidate.value.path);
-    return;
-  }
-  const first = filteredRecords.value[0];
-  if (!first) return;
-  if (first.type === 'webview') {
-    await handleOpenUrl(first.url);
-  } else {
-    await handleSelect(first);
-  }
-}
-
-/**
- * 统一处理输入框键盘事件：Enter 触发选择，Esc 关闭弹窗。
- * @param event - 键盘事件
- */
-function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    handleEnter();
-  } else if (event.key === 'Escape') {
-    event.preventDefault();
-    handleClose();
-  }
 }
 
 /**
@@ -182,81 +238,103 @@ async function handleRemoveWebview(id: string): Promise<void> {
   emit('remove', id);
 }
 
-/** 归一化后的展示列表，模板只关心渲染，不再做类型判断 */
-const searchResultItems = computed(() => {
-  const candidate = absolutePathCandidate.value;
-  const url = urlCandidate.value;
-  const items: NormalizedItem[] = [];
-
-  // URL 候选项排在最前
-  if (url) {
-    items.push({
-      key: url.url,
-      title: url.host,
-      icon: WEB_RECORD_ICON,
-      pathLabel: url.url,
-      pathClass: '',
-      meta: '在 Webview 中打开',
-      isActive: false,
-      removable: false,
-      onSelect: () => handleOpenUrl(url.url),
-      onRemove: undefined
-    });
+/**
+ * 选择归一化结果项。
+ * @param item - 需要选择的结果项
+ */
+async function handleSelectItem(item: NormalizedItem): Promise<void> {
+  if (item.kind === 'url') {
+    await handleOpenUrl(item.url);
+    return;
   }
 
-  // 绝对路径候选项次之
-  if (candidate) {
-    items.push({
-      key: candidate.path,
-      title: candidate.fileName,
-      fileName: candidate.fileName,
-      pathLabel: candidate.path,
-      pathClass: '',
-      meta: '按路径打开',
-      isActive: false,
-      removable: false,
-      onSelect: () => handleOpenPath(candidate.path),
-      onRemove: undefined
-    });
+  if (item.kind === 'absolute-path') {
+    await handleOpenPath(item.path);
+    return;
   }
 
-  for (const record of filteredRecords.value) {
-    // 若绝对路径候选与某条文件记录路径重合，则跳过该条（避免重复）
-    if (candidate && record.type === 'file' && record.path === candidate.path) continue;
-
-    if (record.type === 'webview') {
-      items.push({
-        key: record.id,
-        title: record.title,
-        record,
-        pathLabel: record.url,
-        pathClass: '',
-        meta: '',
-        isActive: false,
-        removable: true,
-        onSelect: () => handleOpenUrl(record.url),
-        onRemove: () => handleRemoveWebview(record.id)
-      });
-    } else {
-      const isUnsaved = !record.path;
-      const title = resolveFileTitle(record);
-      items.push({
-        key: record.id,
-        title,
-        record,
-        pathLabel: isUnsaved ? '未保存文件' : record.path!,
-        pathClass: isUnsaved ? 'is-unsaved' : '',
-        meta: '',
-        isActive: record.id === activeId.value,
-        removable: true,
-        onSelect: () => handleSelect(record),
-        onRemove: () => handleRemoveFile(record.id)
-      });
-    }
+  if (item.kind === 'webview') {
+    await handleOpenUrl(item.record.url);
+    return;
   }
 
-  return items;
-});
+  await handleSelect(item.record);
+}
+
+/**
+ * 移除归一化结果项。
+ * @param item - 需要移除的结果项
+ */
+async function handleRemoveItem(item: NormalizedItem): Promise<void> {
+  if (item.kind === 'file') {
+    await handleRemoveFile(item.record.id);
+  } else if (item.kind === 'webview') {
+    await handleRemoveWebview(item.record.id);
+  }
+}
+
+/**
+ * 将当前键盘高亮项滚动到可视区域内。
+ */
+function scrollActiveItemIntoView(): void {
+  nextTick(() => {
+    const item = listRef.value?.querySelectorAll<HTMLElement>('.b-recent__item')[activeIndex.value];
+
+    item?.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+/**
+ * 打开当前键盘高亮项；没有高亮时保留原有的候选项优先打开逻辑。
+ */
+async function handleEnter(): Promise<void> {
+  const targetItem = searchResultItems.value[activeIndex.value] ?? searchResultItems.value[0];
+  if (targetItem) {
+    await handleSelectItem(targetItem);
+  }
+}
+
+/**
+ * 移动键盘高亮位置，并在首尾处循环。
+ * @param direction - 移动方向，1 表示向下，-1 表示向上
+ */
+function moveActiveIndex(direction: 1 | -1): void {
+  const total = searchResultItems.value.length;
+  if (!total) {
+    activeIndex.value = -1;
+    return;
+  }
+
+  if (direction === 1) {
+    activeIndex.value = activeIndex.value >= total - 1 ? 0 : activeIndex.value + 1;
+  } else {
+    activeIndex.value = activeIndex.value <= 0 ? total - 1 : activeIndex.value - 1;
+  }
+
+  hasKeyboardActiveIndex.value = true;
+  scrollActiveItemIntoView();
+}
+
+/**
+ * 统一处理输入框键盘事件：Enter 触发选择，方向键移动高亮，Esc 关闭弹窗。
+ * @param event - 键盘事件
+ */
+function handleKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    handleEnter();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    handleClose();
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    moveActiveIndex(1);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveActiveIndex(-1);
+  }
+}
 
 // ---------- helpers ----------
 
@@ -295,6 +373,7 @@ function focusInput(): void {
 watch(keyword, async (value) => {
   const normalized = value.trim();
   const token = ++pathSearchToken;
+  hasKeyboardActiveIndex.value = false;
 
   // 检测 http/https URL 输入
   if (isHttpUrlInput(normalized)) {
@@ -327,15 +406,32 @@ watch(keyword, async (value) => {
 });
 
 watch(
+  defaultActiveIndex,
+  (value: number): void => {
+    if (hasKeyboardActiveIndex.value) {
+      const lastIndex = searchResultItems.value.length - 1;
+      activeIndex.value = lastIndex >= 0 ? Math.min(activeIndex.value, lastIndex) : -1;
+      return;
+    }
+
+    activeIndex.value = value;
+  },
+  { immediate: true }
+);
+
+watch(
   visible,
   (value) => {
     if (!value) {
       keyword.value = '';
       absolutePathCandidate.value = null;
       urlCandidate.value = null;
+      activeIndex.value = -1;
+      hasKeyboardActiveIndex.value = false;
       pathSearchToken += 1;
       return;
     }
+    hasKeyboardActiveIndex.value = false;
     focusInput();
     recentStore.ensureLoaded();
   },
@@ -374,7 +470,7 @@ watch(
   align-items: center;
   width: 100%;
   height: 32px;
-  padding: 0 8px;
+  padding: 6px 8px;
   text-align: left;
   cursor: pointer;
   background: transparent;
@@ -389,7 +485,12 @@ watch(
 }
 
 .b-recent__item-icon {
+  display: flex;
   flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
 }
 
 .b-recent__item-main {
@@ -404,7 +505,7 @@ watch(
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 18px;
   color: var(--text-primary);
@@ -417,7 +518,7 @@ watch(
   margin-left: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 16px;
   color: var(--text-tertiary);
   white-space: nowrap;
