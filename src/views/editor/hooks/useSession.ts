@@ -15,7 +15,7 @@ import { useTabsStore } from '@/stores/workspace/tabs';
 import { resolveFileTitle } from '@/utils/file/title';
 import { Modal } from '@/utils/modal';
 import { getDefaultSavePath, getRecoveredSavePath, parseFileName, replaceFileName } from '../utils/filePath';
-import { resolveFileReconcileAction } from '../utils/reconcileFileContent';
+import { resolveFileReconcileDecision } from '../utils/reconcileFileContent';
 import { useFileState } from './useFileState';
 import { useFileWatcher } from './useFileWatcher';
 import { type SaveToDiskResult, useSavePolicy } from './useSavePolicy';
@@ -336,18 +336,13 @@ export function useSession(fileId: Ref<string>) {
     fileState.value.name = diskMeta.name || fileState.value.name;
     fileState.value.ext = diskMeta.ext || diskFile.ext || fileState.value.ext;
     fileStateActions.savedContent.value = diskFile.content;
+    fileStateActions.hasUnsavedDraft.value = false;
     tabsStore.clearDirty(fileId.value);
     await fileStateActions.persistCurrentFile();
   }
 
   async function reconcileStoredFileWithDisk() {
     if (!fileState.value.path) return;
-
-    // 当前内容与已保存基线一致时，不存在未保存草稿，不可能产生冲突，跳过磁盘读取。
-    // 典型场景：openOrRefreshByPathFromDisk 刚从磁盘刷新过，存储中 content === savedContent。
-    if (fileStateActions.hasSavedContentBaseline.value && fileState.value.content === fileStateActions.savedContent.value) {
-      return;
-    }
 
     let diskFile: ReadFileResult;
 
@@ -360,6 +355,7 @@ export function useSession(fileId: Ref<string>) {
     if (!fileStateActions.hasSavedContentBaseline.value) {
       fileStateActions.savedContent.value = diskFile.content;
       fileStateActions.hasSavedContentBaseline.value = true;
+      fileStateActions.hasUnsavedDraft.value = false;
       fileStateActions.syncDirtyState();
       await fileStateActions.persistCurrentFile();
       return;
@@ -368,28 +364,30 @@ export function useSession(fileId: Ref<string>) {
     const currentContent = fileState.value.content;
     const lastSavedContent = fileStateActions.savedContent.value;
     const diskMeta = parseFileName(fileState.value.path);
-    const action = resolveFileReconcileAction({
+    const decision = resolveFileReconcileDecision({
       currentContent,
       savedContent: lastSavedContent,
       currentName: fileState.value.name,
       currentExt: fileState.value.ext,
       diskFile,
       diskName: diskMeta.name,
-      diskExt: diskMeta.ext
+      diskExt: diskMeta.ext,
+      hasUnsavedDraft: fileStateActions.hasUnsavedDraft.value
     });
 
-    if (action === 'keepDraft') {
+    if (decision === 'keepDraft') {
       return;
     }
 
-    if (action === 'markSaved') {
+    if (decision === 'markSaved') {
       fileStateActions.savedContent.value = currentContent;
+      fileStateActions.hasUnsavedDraft.value = false;
       tabsStore.clearDirty(fileId.value);
       await fileStateActions.persistCurrentFile();
       return;
     }
 
-    if (currentContent === lastSavedContent) {
+    if (decision === 'applyDisk') {
       await applyDiskState(diskFile);
       return;
     }

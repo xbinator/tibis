@@ -19,6 +19,7 @@ interface SessionPersistenceOptions {
 interface SessionPersistenceResult {
   savedContent: Ref<string>;
   hasSavedContentBaseline: Ref<boolean>;
+  hasUnsavedDraft: Ref<boolean>;
   ensureStoredFile: () => Promise<void>;
   persistCurrentFile: () => Promise<void>;
   markCurrentContentSaved: (savedAt?: number) => Promise<void>;
@@ -42,6 +43,7 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
   // 与当前编辑内容对比，用来判断标签页 dirty 状态和外部变更后的“已保存”基线。
   const savedContent = ref<string>('');
   const hasSavedContentBaseline = ref(false);
+  const hasUnsavedDraft = ref(false);
   const isDirtyTrackingPaused = ref(false);
 
   /**
@@ -61,13 +63,16 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
    */
   function syncDirtyState(): void {
     if (!hasSavedContentBaseline.value) {
+      hasUnsavedDraft.value = false;
       tabsStore.clearDirty(fileId.value);
       return;
     }
 
     if (fileState.value.content !== savedContent.value) {
+      hasUnsavedDraft.value = true;
       tabsStore.setDirty(fileId.value);
     } else {
+      hasUnsavedDraft.value = false;
       tabsStore.clearDirty(fileId.value);
     }
   }
@@ -114,6 +119,7 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
     fileState.value.content = event.content;
     savedContent.value = event.content;
     hasSavedContentBaseline.value = true;
+    hasUnsavedDraft.value = false;
     tabsStore.clearDirty(fileId.value);
     persistCurrentFile().catch((error: unknown) => {
       console.error('Failed to persist externally changed file:', error);
@@ -176,6 +182,8 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
 
   // 加载编辑文件时，优先恢复存储中的草稿；没有记录时创建一个新的空文件状态。
   async function initializeFileState(stored: StoredFile | undefined, currentFileId: string): Promise<void> {
+    const wasDirtyDraft = stored ? tabsStore.isDirty(currentFileId) : false;
+
     if (stored) {
       fileState.value = { ...stored };
     } else {
@@ -186,12 +194,20 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
 
     hasSavedContentBaseline.value = stored?.savedContent !== undefined || !fileState.value.path;
     savedContent.value = stored?.savedContent ?? fileState.value.content;
-    syncDirtyState();
+    hasUnsavedDraft.value = wasDirtyDraft && hasSavedContentBaseline.value && fileState.value.content !== savedContent.value;
+
+    if (hasUnsavedDraft.value) {
+      syncDirtyState();
+      return;
+    }
+
+    tabsStore.clearDirty(currentFileId);
   }
 
   return {
     savedContent,
     hasSavedContentBaseline,
+    hasUnsavedDraft,
     ensureStoredFile,
     persistCurrentFile,
     markCurrentContentSaved,
