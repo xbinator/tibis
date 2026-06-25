@@ -2,23 +2,17 @@
  * @file interaction.ts
  * @description BDrawing 工具模式、拖拽和选择交互常量。
  */
-import type { DrawingShapeType } from '../types';
 import type { SnapDirections } from 'moveable';
 
 /**
  * 可创建形状的工具列表。
  */
-export const DRAWING_SHAPE_TOOLS: readonly DrawingShapeType[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
+export const DRAWING_SHAPE_TOOLS: readonly string[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
 
 /**
  * 文本工具点击创建的最大拖动距离。
  */
 export const DRAWING_TEXT_CREATE_CLICK_TOLERANCE = 4;
-
-/**
- * 文本工具点击已有元素后等待双击优先的延迟。
- */
-export const DRAWING_TEXT_ELEMENT_CLICK_CREATE_DELAY = 220;
 
 /**
  * Moveable 控制框与节点边界之间的视觉留白。
@@ -67,8 +61,5 @@ export const DRAWING_SELECTO_BLOCKED_DRAG_SELECTOR = [
   '.moveable-area',
   '.moveable-control-box',
   '.moveable-direction',
-  '.b-drawing-connector__endpoint',
-  '.b-drawing-connector__endpoints',
-  '.b-drawing-element.is-selected',
-  '.b-drawing-style-panel'
+  '.b-drawing-element.is-selected'
 ].join(', ');

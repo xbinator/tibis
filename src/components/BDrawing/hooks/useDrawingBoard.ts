@@ -5,21 +5,16 @@
 import type {
   DrawingBoardSnapshot,
   DrawingBoardState,
-  DrawingConnectorDraftOptions,
-  DrawingConnectorEndpoint,
-  DrawingConnectorEndpointPlacement,
-  DrawingConnectorOptionsChange,
+  DrawingElement,
   DrawingElementStyle,
   DrawingElementStyleChange,
   DrawingGeometryChange,
   DrawingLayerAction,
-  DrawingPoint,
-  DrawingShapeType
+  DrawingPoint
 } from '../types';
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 import {
-  addDrawingConnector,
   addDrawingShape,
   createDrawingBoardState,
   deleteDrawingSelection,
@@ -28,12 +23,42 @@ import {
   reorderDrawingElement,
   resizeDrawingElements,
   undoDrawingBoard,
-  updateDrawingConnectorEndpoint,
-  updateDrawingConnectorLabel,
-  updateDrawingConnectorOptions,
   updateDrawingElementStyle,
   updateDrawingNodeText
 } from '../utils/boardTransforms';
+
+/**
+ * 读取自动生成 ID 中的序号。
+ * @param id - 元素 ID
+ * @param prefix - 自动生成 ID 前缀
+ * @returns 序号，不匹配时返回 null
+ */
+function getGeneratedElementIdIndex(id: string, prefix: string): number | null {
+  if (!id.startsWith(prefix)) {
+    return null;
+  }
+
+  const rawIndex = id.slice(prefix.length);
+  if (!/^\d+$/.test(rawIndex)) {
+    return null;
+  }
+
+  return Number(rawIndex);
+}
+
+/**
+ * 读取已有元素中指定前缀的最大自动生成序号。
+ * @param elements - 元素列表
+ * @param prefix - 自动生成 ID 前缀
+ * @returns 最大序号
+ */
+function getMaxGeneratedElementIdIndex(elements: DrawingElement[], prefix: string): number {
+  return elements.reduce<number>((maxIndex: number, element: DrawingElement): number => {
+    const index = getGeneratedElementIdIndex(element.id, prefix);
+
+    return index === null ? maxIndex : Math.max(maxIndex, index);
+  }, 0);
+}
 
 /**
  * BDrawing 画板 hook 返回值。
@@ -42,17 +67,11 @@ export interface UseDrawingBoardReturn {
   /** 响应式画板状态 */
   state: Ref<DrawingBoardState>;
   /** 开始创建形状草稿 */
-  startCreateShapeDraft: (shape: DrawingShapeType, start: DrawingPoint) => void;
+  startCreateShapeDraft: (name: string, start: DrawingPoint) => void;
   /** 更新当前草稿坐标 */
   updateDraftPoint: (point: DrawingPoint) => void;
   /** 提交创建形状草稿 */
   commitCreateShapeDraft: (style?: DrawingElementStyle) => void;
-  /** 开始创建连接线草稿 */
-  startCreateConnectorDraft: (source: DrawingConnectorEndpoint, current: DrawingPoint) => void;
-  /** 更新当前连接线草稿坐标 */
-  updateConnectorDraftPoint: (point: DrawingPoint) => void;
-  /** 提交创建连接线草稿 */
-  commitCreateConnectorDraft: (target: DrawingConnectorEndpoint, options?: DrawingConnectorDraftOptions) => void;
   /** 清空交互草稿 */
   clearDraft: () => void;
   /** 撤销 */
@@ -65,12 +84,6 @@ export interface UseDrawingBoardReturn {
   resizeElements: (changes: DrawingGeometryChange[]) => void;
   /** 更新元素样式 */
   updateElementStyle: (elementId: string, style: DrawingElementStyleChange) => void;
-  /** 更新连接线配置 */
-  updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange) => void;
-  /** 更新连接线端点 */
-  updateConnectorEndpoint: (connectorId: string, placement: DrawingConnectorEndpointPlacement, endpoint: DrawingConnectorEndpoint) => void;
-  /** 更新连接线标签 */
-  updateConnectorLabel: (connectorId: string, label: string) => void;
   /** 删除选区 */
   deleteSelection: () => void;
   /** 更新节点文本 */
@@ -90,18 +103,15 @@ export interface UseDrawingBoardReturn {
  */
 export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDrawingBoardReturn {
   const state = ref<DrawingBoardState>(createDrawingBoardState(snapshot));
-  let nodeIndex = state.value.elements.length;
-  let shapeIndex = state.value.elements.length;
-  let connectorIndex = state.value.elements.length;
+  let nodeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-node-');
+  let shapeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-shape-');
 
   /**
    * 按当前元素数量同步自动生成 ID 的起始序号。
    */
   function syncElementIndexes(): void {
-    const elementCount = state.value.elements.length;
-    nodeIndex = elementCount;
-    shapeIndex = elementCount;
-    connectorIndex = elementCount;
+    nodeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-node-');
+    shapeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-shape-');
   }
 
   /**
@@ -114,12 +124,12 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
 
   return {
     state,
-    startCreateShapeDraft: (shape: DrawingShapeType, start: DrawingPoint): void => {
+    startCreateShapeDraft: (name: string, start: DrawingPoint): void => {
       state.value = {
         ...state.value,
         draft: {
           kind: 'creating-shape',
-          shape,
+          name,
           start,
           current: start
         },
@@ -145,7 +155,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
         return;
       }
 
-      const isProcessShape = draft.shape === 'process';
+      const isProcessShape = draft.name === 'process';
       const shapeId = isProcessShape ? `drawing-node-${++nodeIndex}` : `drawing-shape-${++shapeIndex}`;
 
       setState(
@@ -156,58 +166,10 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
           },
           {
             id: shapeId,
-            shape: draft.shape,
+            name: draft.name,
             start: draft.start,
             end: draft.current,
             style
-          }
-        )
-      );
-    },
-    startCreateConnectorDraft: (source: DrawingConnectorEndpoint, current: DrawingPoint): void => {
-      state.value = {
-        ...state.value,
-        draft: {
-          kind: 'creating-connector',
-          source,
-          current
-        },
-        selection: []
-      };
-    },
-    updateConnectorDraftPoint: (point: DrawingPoint): void => {
-      if (state.value.draft?.kind !== 'creating-connector') {
-        return;
-      }
-
-      state.value = {
-        ...state.value,
-        draft: {
-          ...state.value.draft,
-          current: point
-        }
-      };
-    },
-    commitCreateConnectorDraft: (target: DrawingConnectorEndpoint, options?: DrawingConnectorDraftOptions): void => {
-      if (state.value.draft?.kind !== 'creating-connector') {
-        return;
-      }
-
-      connectorIndex += 1;
-      setState(
-        addDrawingConnector(
-          {
-            ...state.value,
-            draft: undefined
-          },
-          {
-            id: `drawing-connector-${connectorIndex}`,
-            source: state.value.draft.source,
-            target,
-            style: options?.style,
-            markerStart: options?.markerStart,
-            markerEnd: options?.markerEnd,
-            curve: options?.curve
           }
         )
       );
@@ -223,11 +185,6 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     moveElements: (changes: DrawingGeometryChange[]): void => setState(moveDrawingElements(state.value, changes)),
     resizeElements: (changes: DrawingGeometryChange[]): void => setState(resizeDrawingElements(state.value, changes)),
     updateElementStyle: (elementId: string, style: DrawingElementStyleChange): void => setState(updateDrawingElementStyle(state.value, elementId, style)),
-    updateConnectorOptions: (connectorId: string, options: DrawingConnectorOptionsChange): void =>
-      setState(updateDrawingConnectorOptions(state.value, connectorId, options)),
-    updateConnectorEndpoint: (connectorId: string, placement: DrawingConnectorEndpointPlacement, endpoint: DrawingConnectorEndpoint): void =>
-      setState(updateDrawingConnectorEndpoint(state.value, connectorId, placement, endpoint)),
-    updateConnectorLabel: (connectorId: string, label: string): void => setState(updateDrawingConnectorLabel(state.value, connectorId, label)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
     updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),
     reorderElement: (elementId: string, action: DrawingLayerAction): void => setState(reorderDrawingElement(state.value, elementId, action)),

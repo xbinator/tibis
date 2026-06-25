@@ -18,20 +18,12 @@ import {
 /**
  * 渲染文本行。
  */
-export interface DrawingTextLineItem {
+interface DrawingTextLineItem {
   /** 渲染文本 */
   text: string;
   /** 是否为空行 */
   empty: boolean;
 }
-
-export {
-  DRAWING_TEXT_DEFAULT_FONT_SIZE,
-  DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
-  DRAWING_TEXT_HORIZONTAL_PADDING,
-  DRAWING_TEXT_LINE_HEIGHT_RATIO,
-  DRAWING_TEXT_VERTICAL_PADDING
-} from '../constants/text';
 /** 文本测量画布缓存。 */
 let drawingTextMeasureCanvas: HTMLCanvasElement | null = null;
 
@@ -144,15 +136,6 @@ function measureDrawingTextLineWidth(line: string, fontSize: number, fontWeight:
  */
 function getDrawingTextLineWidth(line: string, fontSize: number, fontWeight: number): number {
   return measureDrawingTextLineWidth(line, fontSize, fontWeight) ?? estimateDrawingTextLineWidth(line, fontSize);
-}
-
-/**
- * 创建不自动换行的文本行。
- * @param text - 文本内容
- * @returns 文本行
- */
-export function createDrawingTextLineItems(text: string): DrawingTextLineItem[] {
-  return text.split('\n').map((line: string): DrawingTextLineItem => ({ empty: !line, text: line || '\u00a0' }));
 }
 
 /**

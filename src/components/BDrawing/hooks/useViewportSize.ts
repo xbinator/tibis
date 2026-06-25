@@ -10,12 +10,12 @@ import { useResizeObserver } from '@vueuse/core';
 /**
  * 视口尺寸 hook 返回值。
  */
-export interface UseViewportSizeReturn {
+interface UseViewportSizeReturn {
   /** 画板根节点 */
   rootRef: Ref<HTMLElement | null>;
   /** 当前画布视口实际渲染尺寸 */
   viewportSize: Ref<DrawingSize>;
-  /** 画布首轮尺寸稳定后再显示 SVG，避免初始布局抖动产生黑框 */
+  /** 画布首轮尺寸稳定后再显示舞台，避免初始布局抖动产生黑框 */
   isViewportReady: Ref<boolean>;
   /** 从 DOM 读取并同步根视口尺寸 */
   syncViewportSizeFromRoot: () => void;
@@ -91,7 +91,7 @@ export function useViewportSize(): UseViewportSizeReturn {
   }
 
   /**
-   * 等待根视口尺寸跨帧稳定后再显示 SVG。
+   * 等待根视口尺寸跨帧稳定后再显示画布舞台。
    */
   function scheduleViewportReadyCheck(): void {
     if (isViewportReady.value) {

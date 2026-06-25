@@ -7,7 +7,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingSize, DrawingToolMode, DrawingViewport } from '../types';
+import type { DrawingSize, DrawingViewport } from '../types';
 import { onBeforeUnmount, onMounted, watch } from 'vue';
 import Selecto from 'selecto';
 import { DRAWING_SELECTO_BLOCKED_DRAG_SELECTOR } from '../constants/interaction';
@@ -41,7 +41,7 @@ interface Props {
   /** 画板根节点 */
   root: HTMLElement | null;
   /** 当前工具模式 */
-  activeTool: DrawingToolMode;
+  activeTool: string;
   /** 当前选区 */
   selection: string[];
   /** 当前视口 */

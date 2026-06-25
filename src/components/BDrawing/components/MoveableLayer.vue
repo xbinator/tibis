@@ -3,10 +3,13 @@
   @description BDrawing Moveable 控制器适配层。
 -->
 <template>
-  <div v-if="shouldShowMoveableLayer" class="b-drawing-moveable-layer">
+  <div v-if="shouldShowMoveableLayer" class="b-drawing-moveable-layer" @pointerdown.stop @pointermove.stop @pointerup.stop>
     <VueMoveable
       ref="moveableRef"
       :target="targets"
+      :container="root"
+      :root-container="root"
+      :use-accurate-position="true"
       :draggable="true"
       :resizable="canResizeSelection"
       :snappable="singleTarget"
@@ -37,7 +40,6 @@
 
 <script setup lang="ts">
 import type { DrawingElement, DrawingGeometryChange, DrawingSize, DrawingViewport } from '../types';
-import type { DrawingConnectorPathElementOverride } from '../utils/drawingGeometry';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import VueMoveable from 'vue3-moveable/dist/moveable.js';
 import {
@@ -47,20 +49,7 @@ import {
   DRAWING_MOVEABLE_SNAP_THRESHOLD,
   DRAWING_MOVEABLE_THROTTLE
 } from '../constants/interaction';
-import {
-  createDrawingConnectorMarkerPath,
-  createDrawingConnectorPath,
-  createDrawingDiamondPoints,
-  createDrawingElementTransform,
-  getDrawingConnectorEndpointElementId,
-  getDrawingElementRenderSize,
-  getDrawingElementId,
-  isDrawingConnectorElement,
-  isDrawingDiamondShape,
-  isDrawingShapeElement,
-  queryDrawingElementTarget,
-  resolveDrawingConnectorEndpointPoints
-} from '../utils/drawingGeometry';
+import { createDrawingElementCssTransform, getDrawingElementId, queryDrawingElementTarget } from '../utils/drawingGeometry';
 import { createDrawingTextFitSize } from '../utils/drawingTextMetrics';
 
 /**
@@ -72,37 +61,41 @@ interface MoveableTargetEvent {
 }
 
 /**
- * Moveable 拖动结束事件。
+ * Moveable 二维向量。
  */
-interface MoveableDragEndEvent extends MoveableTargetEvent {
-  /** 最后一帧拖动事件 */
-  lastEvent?: {
-    /** DOM 坐标平移量 */
-    translate?: [number, number];
-  };
-}
+type MoveableVector = [number, number];
 
 /**
  * Moveable 拖动过程事件。
  */
 interface MoveableDragEvent extends MoveableTargetEvent {
-  /** DOM 坐标平移量 */
-  translate?: [number, number];
+  /** Moveable 拖拽总位移 */
+  dist?: MoveableVector;
+  /** Moveable 兼容平移量，部分测试替身仍按增量传入 */
+  translate?: MoveableVector;
+}
+
+/**
+ * Moveable 拖动结束事件。
+ */
+interface MoveableDragEndEvent extends MoveableTargetEvent {
+  /** 最后一帧拖动事件 */
+  lastEvent?: MoveableDragEvent;
 }
 
 /**
  * Moveable 缩放尺寸数据。
  */
 interface MoveableResizePayload {
-  /** DOM 宽度 */
+  /** Moveable 宽度 */
   width?: number;
-  /** DOM 高度 */
+  /** Moveable 高度 */
   height?: number;
   /** 缩放方向 */
   direction?: [number, number];
   /** 缩放期间的拖动补偿 */
   drag?: {
-    /** DOM 坐标平移量 */
+    /** Moveable 平移量 */
     beforeTranslate?: [number, number];
   };
 }
@@ -111,13 +104,13 @@ interface MoveableResizePayload {
  * Moveable 缩放结束事件。
  */
 interface MoveableResizeEndEvent extends MoveableTargetEvent {
-  /** DOM 宽度 */
+  /** Moveable 宽度 */
   width?: number;
-  /** DOM 高度 */
+  /** Moveable 高度 */
   height?: number;
   /** 缩放期间的拖动补偿 */
   drag?: {
-    /** DOM 坐标平移量 */
+    /** Moveable 平移量 */
     beforeTranslate?: [number, number];
   };
   /** Moveable resizeEnd 携带的最后一帧缩放数据 */
@@ -209,7 +202,7 @@ function getElementById(id: string): DrawingElement | undefined {
  * @returns 是否为文本节点
  */
 function isDrawingTextElement(element: DrawingElement): boolean {
-  return isDrawingShapeElement(element) && element.shape === 'text';
+  return element.name === 'text';
 }
 
 /** 当前选中的画板元素。 */
@@ -226,15 +219,6 @@ const canResizeSelection = computed<boolean>(() => selectedElements.value.every(
  */
 function getTargetById(id: string): Element | null {
   return queryDrawingElementTarget(props.root, id);
-}
-
-/**
- * 通过元素 ID 读取全部 DOM target。
- * @param id - 元素 ID
- * @returns DOM target 列表
- */
-function getTargetsById(id: string): Element[] {
-  return Array.from(props.root?.querySelectorAll(`[data-drawing-element-id="${id}"]`) ?? []);
 }
 
 /**
@@ -261,7 +245,7 @@ function cancelMoveableRectRefresh(): void {
 }
 
 /**
- * 将 Moveable 控制框刷新排到下一帧，等待 SVG viewBox 完成布局。
+ * 将 Moveable 控制框刷新排到下一帧，等待 HTML 舞台完成布局。
  */
 function scheduleMoveableRectRefresh(): void {
   if (!props.enabled || !targets.value.length || moveableRectRefreshFrame !== null) {
@@ -275,39 +259,41 @@ function scheduleMoveableRectRefresh(): void {
 }
 
 /**
- * DOM 位移转换为世界坐标值。
- * @param value - DOM 坐标值
- * @returns 世界坐标值
+ * Moveable 事件值转换为画板坐标值。
+ * @param value - Moveable 事件值
+ * @returns 画板坐标值
  */
-function domDeltaToWorld(value: number): number {
-  return value / props.viewport.zoom;
+function moveableValueToWorld(value: number): number {
+  return value;
 }
 
 /**
- * 读取元素预览尺寸。
+ * 创建 HTML 节点 transform 字符串。
  * @param element - 画板元素
- * @returns 预览尺寸
+ * @param distance - Moveable 拖拽总位移
+ * @returns CSS transform
  */
-function getElementPreviewSize(element: DrawingElement): DrawingSize {
-  return getDrawingElementRenderSize(element);
-}
-
-/**
- * 创建 SVG 元素 transform 字符串。
- * @param element - 画板元素
- * @param translate - DOM 坐标平移量
- * @param size - 预览尺寸
- * @returns SVG transform
- */
-function createPreviewTransform(element: DrawingElement, translate: [number, number], size: DrawingSize = getElementPreviewSize(element)): string {
-  return createDrawingElementTransform(
+function createPreviewTransform(element: DrawingElement, distance: MoveableVector): string {
+  return createDrawingElementCssTransform(
     {
-      x: element.position.x + domDeltaToWorld(translate[0]),
-      y: element.position.y + domDeltaToWorld(translate[1])
+      x: element.position.x + moveableValueToWorld(distance[0]),
+      y: element.position.y + moveableValueToWorld(distance[1])
     },
-    size,
     element.rotation
   );
+}
+
+/**
+ * 读取 Moveable 拖拽总位移。
+ * @param event - Moveable 拖拽事件
+ * @returns 拖拽总位移
+ */
+function getMoveableDragDistance(event: MoveableDragEvent | undefined): MoveableVector | null {
+  if (!event) {
+    return null;
+  }
+
+  return event.dist ?? event.translate ?? null;
 }
 
 /**
@@ -317,8 +303,8 @@ function createPreviewTransform(element: DrawingElement, translate: [number, num
  */
 function groupResizeSizeToWorld(size: DrawingSize): DrawingSize {
   return {
-    width: domDeltaToWorld(size.width),
-    height: domDeltaToWorld(size.height)
+    width: moveableValueToWorld(size.width),
+    height: moveableValueToWorld(size.height)
   };
 }
 
@@ -328,7 +314,7 @@ function groupResizeSizeToWorld(size: DrawingSize): DrawingSize {
  * @returns 是否为带文本的普通形状
  */
 function shouldFitShapeTextSize(element: DrawingElement): boolean {
-  return isDrawingShapeElement(element) && element.shape !== 'text' && Boolean(element.text);
+  return element.name !== 'text' && Boolean(element.text);
 }
 
 /**
@@ -390,32 +376,17 @@ function clearResizeGestureBaseSizes(): void {
 }
 
 /**
- * 更新 SVG 形状的预览尺寸。
- * @param target - SVG 元素目标
- * @param element - 画板元素
+ * 更新 HTML 节点的预览尺寸。
+ * @param target - HTML 元素目标
  * @param size - 预览尺寸
  */
-function updateShapePreviewSize(target: Element, element: DrawingElement, size: DrawingSize): void {
-  const shape = target.querySelector('.b-drawing-node__shape');
-  if (!shape) {
+function updateNodePreviewSize(target: Element, size: DrawingSize): void {
+  if (!(target instanceof HTMLElement)) {
     return;
   }
 
-  if (element.kind === 'shape' && element.shape === 'ellipse') {
-    shape.setAttribute('cx', String(size.width / 2));
-    shape.setAttribute('cy', String(size.height / 2));
-    shape.setAttribute('rx', String(size.width / 2));
-    shape.setAttribute('ry', String(size.height / 2));
-    return;
-  }
-
-  if (element.kind === 'shape' && isDrawingDiamondShape(element.shape)) {
-    shape.setAttribute('points', createDrawingDiamondPoints(size));
-    return;
-  }
-
-  shape.setAttribute('width', String(size.width));
-  shape.setAttribute('height', String(size.height));
+  target.style.width = `${size.width}px`;
+  target.style.height = `${size.height}px`;
 }
 
 /**
@@ -425,53 +396,11 @@ function updateShapePreviewSize(target: Element, element: DrawingElement, size: 
  * @returns 文本适配后的预览尺寸
  */
 function createTextFitPreviewSize(element: DrawingElement, size: DrawingSize): DrawingSize {
-  if (!isDrawingShapeElement(element) || element.shape === 'text' || !element.text) {
+  if (element.name === 'text' || !element.text) {
     return size;
   }
 
   return createDrawingTextFitSize(element.text, size, element.style);
-}
-
-/**
- * 更新关联连接线的预览路径。
- * @param overrides - 预览几何覆盖
- */
-function updateConnectedConnectorPreviews(overrides: DrawingConnectorPathElementOverride[]): void {
-  const overrideIds = new Set<string>(overrides.map((override: DrawingConnectorPathElementOverride): string => override.id));
-  const connectors = props.elements.filter(
-    (element: DrawingElement): boolean =>
-      isDrawingConnectorElement(element) &&
-      (overrideIds.has(getDrawingConnectorEndpointElementId(element.source) ?? '') ||
-        overrideIds.has(getDrawingConnectorEndpointElementId(element.target) ?? ''))
-  );
-
-  for (const connector of connectors) {
-    if (!isDrawingConnectorElement(connector)) {
-      continue;
-    }
-
-    const pathData = createDrawingConnectorPath(props.elements, connector, overrides);
-    const markerStartPath = createDrawingConnectorMarkerPath(props.elements, connector, 'start', overrides);
-    const markerEndPath = createDrawingConnectorMarkerPath(props.elements, connector, 'end', overrides);
-    const endpointPoints = resolveDrawingConnectorEndpointPoints(props.elements, connector, overrides);
-    const connectorTargets = getTargetsById(connector.id);
-    connectorTargets.forEach((target: Element): void => {
-      const paths = target.querySelectorAll('.b-drawing-connector__line, .b-drawing-connector__hit');
-      paths.forEach((path: Element): void => {
-        path.setAttribute('d', pathData);
-      });
-      target.querySelector('.b-drawing-connector__marker-arrow--start')?.setAttribute('d', markerStartPath);
-      target.querySelector('.b-drawing-connector__marker-arrow--end')?.setAttribute('d', markerEndPath);
-
-      const endpoints = target.querySelectorAll('.b-drawing-connector__endpoint');
-      if (endpointPoints && endpoints.length >= 2) {
-        endpoints[0].setAttribute('cx', String(endpointPoints.source.x));
-        endpoints[0].setAttribute('cy', String(endpointPoints.source.y));
-        endpoints[1].setAttribute('cx', String(endpointPoints.target.x));
-        endpoints[1].setAttribute('cy', String(endpointPoints.target.y));
-      }
-    });
-  }
 }
 
 /**
@@ -482,16 +411,16 @@ function updateConnectedConnectorPreviews(overrides: DrawingConnectorPathElement
 function createMoveChange(event: MoveableDragEndEvent): DrawingGeometryChange | null {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
-  const translate = event.lastEvent?.translate;
-  if (!id || !element || !translate) {
+  const distance = getMoveableDragDistance(event.lastEvent);
+  if (!id || !element || !distance) {
     return null;
   }
 
   return {
     id,
     position: {
-      x: element.position.x + domDeltaToWorld(translate[0]),
-      y: element.position.y + domDeltaToWorld(translate[1])
+      x: element.position.x + moveableValueToWorld(distance[0]),
+      y: element.position.y + moveableValueToWorld(distance[1])
     }
   };
 }
@@ -508,7 +437,7 @@ function getResizePayload(event: MoveableResizeEndEvent): MoveableResizePayload 
 /**
  * 从缩放结束事件创建几何尺寸变更。
  * @param event - Moveable 缩放结束事件
- * @param shouldConvertGroupSize - 是否将多选缩放尺寸从 DOM 坐标转换为画板坐标
+ * @param shouldConvertGroupSize - 是否按多选缩放路径转换尺寸
  * @returns 几何变更，事件不完整时返回 null
  */
 function createResizeChange(event: MoveableResizeEndEvent, shouldConvertGroupSize = false): DrawingGeometryChange | null {
@@ -527,30 +456,33 @@ function createResizeChange(event: MoveableResizeEndEvent, shouldConvertGroupSiz
   return {
     id,
     position: {
-      x: element.position.x + domDeltaToWorld(translate[0]),
-      y: element.position.y + domDeltaToWorld(translate[1])
+      x: element.position.x + moveableValueToWorld(translate[0]),
+      y: element.position.y + moveableValueToWorld(translate[1])
     },
     size: manualSize
   };
 }
 
 /**
- * 预览 Moveable 拖动并返回连接线重算所需的几何覆盖。
+ * 预览 Moveable 拖动并返回几何预览变更。
  * @param event - Moveable 拖动过程事件
- * @returns 预览几何覆盖，事件不完整时返回 null
+ * @returns 预览几何变更，事件不完整时返回 null
  */
-function previewDragEvent(event: MoveableDragEvent): DrawingConnectorPathElementOverride | null {
+function previewDragEvent(event: MoveableDragEvent): DrawingGeometryChange | null {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
-  if (!event.target || !id || !element || !event.translate) {
+  const distance = getMoveableDragDistance(event);
+  if (!event.target || !id || !element || !distance) {
     return null;
   }
 
   const position = {
-    x: element.position.x + domDeltaToWorld(event.translate[0]),
-    y: element.position.y + domDeltaToWorld(event.translate[1])
+    x: element.position.x + moveableValueToWorld(distance[0]),
+    y: element.position.y + moveableValueToWorld(distance[1])
   };
-  event.target.setAttribute('transform', createPreviewTransform(element, event.translate));
+  if (event.target instanceof HTMLElement) {
+    event.target.style.transform = createPreviewTransform(element, distance);
+  }
 
   return {
     id,
@@ -559,12 +491,12 @@ function previewDragEvent(event: MoveableDragEvent): DrawingConnectorPathElement
 }
 
 /**
- * 预览 Moveable 缩放并返回连接线重算所需的几何覆盖。
+ * 预览 Moveable 缩放并返回几何预览变更。
  * @param event - Moveable 缩放过程事件
- * @param shouldConvertGroupSize - 是否将多选缩放尺寸从 DOM 坐标转换为画板坐标
- * @returns 预览几何覆盖，事件不完整时返回 null
+ * @param shouldConvertGroupSize - 是否按多选缩放路径转换尺寸
+ * @returns 预览几何变更，事件不完整时返回 null
  */
-function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize = false): DrawingConnectorPathElementOverride | null {
+function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize = false): DrawingGeometryChange | null {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
   if (!event.target || !id || !element || isDrawingTextElement(element) || event.width === undefined || event.height === undefined) {
@@ -576,12 +508,14 @@ function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize =
   const manualSize = createGestureManualSize(id, element, size, event);
   const fittedSize = createTextFitPreviewSize(element, manualSize);
   const position = {
-    x: element.position.x + domDeltaToWorld(translate[0]),
-    y: element.position.y + domDeltaToWorld(translate[1])
+    x: element.position.x + moveableValueToWorld(translate[0]),
+    y: element.position.y + moveableValueToWorld(translate[1])
   };
 
-  event.target.setAttribute('transform', createPreviewTransform(element, translate, fittedSize));
-  updateShapePreviewSize(event.target, element, fittedSize);
+  if (event.target instanceof HTMLElement) {
+    event.target.style.transform = createPreviewTransform(element, translate);
+  }
+  updateNodePreviewSize(event.target, fittedSize);
 
   return {
     id,
@@ -601,7 +535,7 @@ async function syncTargets(): Promise<void> {
     return;
   }
 
-  const shapeIds = new Set<string>(props.elements.filter(isDrawingShapeElement).map((element) => element.id));
+  const shapeIds = new Set<string>(props.elements.map((element) => element.id));
   const selectedTargets = props.selection
     .filter((id: string): boolean => shapeIds.has(id))
     .map(getTargetById)
@@ -612,7 +546,7 @@ async function syncTargets(): Promise<void> {
   guidelineTargets.value =
     selectedTargets.length === 1
       ? props.elements
-          .filter((element) => isDrawingShapeElement(element) && !selectedIds.has(element.id))
+          .filter((element) => !selectedIds.has(element.id))
           .map((element) => getTargetById(element.id))
           .filter((target): target is Element => target !== null)
       : [];
@@ -625,27 +559,21 @@ async function syncTargets(): Promise<void> {
  * @param event - Moveable 拖动过程事件
  */
 function handleDrag(event: MoveableDragEvent): void {
-  const override = previewDragEvent(event);
-  if (!override) {
-    return;
-  }
-
-  updateConnectedConnectorPreviews([override]);
+  previewDragEvent(event);
 }
 
 /**
  * 处理 Moveable 缩放过程。
  * @param event - Moveable 缩放过程事件
- * @param shouldConvertGroupSize - 是否将多选缩放尺寸从 DOM 坐标转换为画板坐标
+ * @param shouldConvertGroupSize - 是否按多选缩放路径转换尺寸
  */
 function handleResize(event: MoveableResizeEvent, shouldConvertGroupSize = false): void {
-  const override = previewResizeEvent(event, shouldConvertGroupSize);
-  if (!override) {
+  const change = previewResizeEvent(event, shouldConvertGroupSize);
+  if (!change) {
     return;
   }
 
-  emit('resize-preview', [override]);
-  updateConnectedConnectorPreviews([override]);
+  emit('resize-preview', [change]);
 }
 
 /**
@@ -666,12 +594,9 @@ function handleDragEnd(event: MoveableDragEndEvent): void {
  * @param event - Moveable 多目标拖动过程事件
  */
 function handleDragGroup(event: MoveableGroupEvent<MoveableDragEvent>): void {
-  const overrides = event.events?.map(previewDragEvent).filter((override): override is DrawingConnectorPathElementOverride => override !== null) ?? [];
-  if (!overrides.length) {
-    return;
-  }
-
-  updateConnectedConnectorPreviews(overrides);
+  event.events?.forEach((dragEvent: MoveableDragEvent): void => {
+    previewDragEvent(dragEvent);
+  });
 }
 
 /**
@@ -709,16 +634,15 @@ function handleResizeEnd(event: MoveableResizeEndEvent): void {
  * @param event - Moveable 多目标缩放过程事件
  */
 function handleResizeGroup(event: MoveableGroupEvent<MoveableResizeEvent>): void {
-  const overrides =
+  const changes =
     event.events
-      ?.map((resizeEvent: MoveableResizeEvent): DrawingConnectorPathElementOverride | null => previewResizeEvent(resizeEvent, true))
-      .filter((override): override is DrawingConnectorPathElementOverride => override !== null) ?? [];
-  if (!overrides.length) {
+      ?.map((resizeEvent: MoveableResizeEvent): DrawingGeometryChange | null => previewResizeEvent(resizeEvent, true))
+      .filter((change): change is DrawingGeometryChange => change !== null) ?? [];
+  if (!changes.length) {
     return;
   }
 
-  emit('resize-preview', overrides);
-  updateConnectedConnectorPreviews(overrides);
+  emit('resize-preview', changes);
 }
 
 /**
@@ -774,6 +698,10 @@ watch(
 .b-drawing-moveable-layer {
   --moveable-control-padding: 12;
 
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+
   :deep(.moveable-control) {
     width: 8px !important;
     height: 8px !important;
@@ -786,6 +714,7 @@ watch(
 
   :deep(.moveable-control-box) {
     z-index: 1;
+    pointer-events: auto;
   }
 
   :deep(.moveable-control:hover) {

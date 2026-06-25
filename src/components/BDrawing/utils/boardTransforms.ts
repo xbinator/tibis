@@ -3,15 +3,9 @@
  * @description BDrawing 画板状态变换、历史记录与元素数据模型。
  */
 import type {
-  DrawingAddConnectorOptions,
   DrawingAddShapeOptions,
   DrawingBoardSnapshot,
   DrawingBoardState,
-  DrawingConnectorAnchor,
-  DrawingConnectorEndpoint,
-  DrawingConnectorEndpointPlacement,
-  DrawingConnectorElement,
-  DrawingConnectorOptionsChange,
   DrawingData,
   DrawingElementStyle,
   DrawingElementStyleChange,
@@ -20,28 +14,12 @@ import type {
   DrawingPoint,
   DrawingSize,
   DrawingShapeElement,
-  DrawingShapeType,
   DrawingViewport
 } from '../types';
 import { cloneDeep } from 'lodash-es';
 import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/board';
 import { DRAWING_DEFAULT_TEXT, DRAWING_TEXT_DEFAULT_FONT_SIZE, DRAWING_TEXT_DEFAULT_FONT_WEIGHT } from '../constants/text';
-import { getDrawingConnectorEndpointElementId, isDrawingConnectorElement, isDrawingConnectorElementEndpoint, isDrawingShapeElement } from './drawingGeometry';
 import { createDrawingTextFitSize, measureDrawingTextElementSize } from './drawingTextMetrics';
-
-export {
-  DRAWING_TEXT_DEFAULT_FONT_SIZE,
-  DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
-  DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_SIZE,
-  DRAWING_CONNECTOR_LABEL_DEFAULT_FONT_WEIGHT,
-  DRAWING_CONNECTOR_LABEL_EDITOR_MIN_WIDTH,
-  DRAWING_TEXT_EDITOR_VIEWPORT_MARGIN,
-  DRAWING_TEXT_HORIZONTAL_PADDING,
-  DRAWING_TEXT_LINE_HEIGHT_RATIO,
-  DRAWING_TEXT_VERTICAL_PADDING
-} from '../constants/text';
-
-export { measureDrawingTextElementSize } from './drawingTextMetrics';
 
 /**
  * 创建默认视口。
@@ -55,20 +33,6 @@ function createDefaultViewport(): DrawingViewport {
 }
 
 /**
- * 创建画板快照。
- * @param state - 画板状态
- * @returns 快照
- */
-function createSnapshot(state: DrawingBoardSnapshot): DrawingBoardSnapshot {
-  return {
-    elements: cloneDeep(state.elements),
-    edges: [],
-    selection: [...state.selection],
-    viewport: cloneDeep(state.viewport)
-  };
-}
-
-/**
  * 归一化几何数值，减少 DOM 坐标换算带来的浮点噪声。
  * @param value - 原始数值
  * @returns 归一化数值
@@ -78,12 +42,111 @@ function normalizeGeometryValue(value: number): number {
 }
 
 /**
+ * 旧版画板元素快照候选，兼容曾经写入的 kind 与 shape 字段。
+ */
+type DrawingElementSnapshotCandidate = Partial<Omit<DrawingShapeElement, 'metadata'>> & {
+  /** 旧版元素类别 */
+  kind?: unknown;
+  /** 旧版形状类型 */
+  shape?: unknown;
+  /** 元信息 */
+  metadata?: Partial<DrawingShapeElement['metadata']>;
+};
+
+/**
+ * 判断坐标点是否可用于画板元素。
+ * @param point - 待检查坐标
+ * @returns 是否为有效坐标
+ */
+function isDrawingPointLike(point: DrawingPoint | undefined): point is DrawingPoint {
+  return typeof point?.x === 'number' && typeof point.y === 'number';
+}
+
+/**
+ * 判断尺寸是否可用于画板元素。
+ * @param size - 待检查尺寸
+ * @returns 是否为有效尺寸
+ */
+function isDrawingSizeLike(size: DrawingSize | undefined): size is DrawingSize {
+  return typeof size?.width === 'number' && typeof size.height === 'number';
+}
+
+/**
+ * 读取元素注册名称，优先使用新版 name，兼容旧版 shape。
+ * @param element - 元素快照候选
+ * @returns 元素注册名称，无法读取时返回 null
+ */
+function readDrawingElementName(element: DrawingElementSnapshotCandidate): string | null {
+  if (typeof element.name === 'string') {
+    return element.name;
+  }
+
+  if (typeof element.shape === 'string') {
+    return element.shape;
+  }
+
+  return null;
+}
+
+/**
+ * 创建不包含旧版冗余字段的元素快照。
+ * @param element - 元素快照候选
+ * @returns 元素快照，无法识别时返回 null
+ */
+function createSupportedElementSnapshot(element: DrawingElementSnapshotCandidate): DrawingShapeElement | null {
+  const name = readDrawingElementName(element);
+  if (!name || typeof element.id !== 'string' || !isDrawingPointLike(element.position) || !isDrawingSizeLike(element.size)) {
+    return null;
+  }
+
+  return {
+    id: element.id,
+    name,
+    text: typeof element.text === 'string' ? element.text : '',
+    position: cloneDeep(element.position),
+    size: cloneDeep(element.size),
+    rotation: typeof element.rotation === 'number' ? element.rotation : 0,
+    style: cloneDeep(element.style),
+    description: element.description,
+    metadata: {
+      source: 'user',
+      createdAt: typeof element.metadata?.createdAt === 'number' ? element.metadata.createdAt : Date.now(),
+      manualSize: cloneDeep(element.metadata?.manualSize)
+    }
+  };
+}
+
+/**
+ * 仅保留当前支持的形状元素。
+ * @param elements - 输入元素列表
+ * @returns 形状元素列表
+ */
+function cloneSupportedElements(elements: DrawingBoardSnapshot['elements'] | undefined): DrawingShapeElement[] {
+  return (elements ?? [])
+    .map((element: DrawingElementSnapshotCandidate): DrawingShapeElement | null => createSupportedElementSnapshot(element))
+    .filter((element: DrawingShapeElement | null): element is DrawingShapeElement => element !== null);
+}
+
+/**
+ * 创建画板快照。
+ * @param state - 画板状态
+ * @returns 快照
+ */
+function createSnapshot(state: DrawingBoardSnapshot): DrawingBoardSnapshot {
+  return {
+    elements: cloneSupportedElements(state.elements),
+    selection: [...state.selection],
+    viewport: cloneDeep(state.viewport)
+  };
+}
+
+/**
  * 获取形状默认文案。
  * @param shape - 形状类型
  * @returns 默认文案
  */
-function getShapeDefaultText(shape: DrawingShapeType): string {
-  if (shape === 'text') {
+function getShapeDefaultText(name: string): string {
+  if (name === 'text') {
     return DRAWING_DEFAULT_TEXT;
   }
 
@@ -113,8 +176,8 @@ function createTextShapeGeometry(start: DrawingPoint, text: string, style?: Draw
  * @param style - 外部传入样式
  * @returns 初始样式
  */
-function createShapeInitialStyle(shape: DrawingShapeType, style?: DrawingElementStyle): DrawingElementStyle | undefined {
-  if (shape !== 'text') {
+function createShapeInitialStyle(name: string, style?: DrawingElementStyle): DrawingElementStyle | undefined {
+  if (name !== 'text') {
     return cloneDeep(style);
   }
 
@@ -174,7 +237,7 @@ function createManualResizeSize(element: DrawingShapeElement, size: DrawingSize)
  * @param element - 待更新的形状元素
  */
 function fitRegularShapeSizeToText(element: DrawingShapeElement): void {
-  if (element.shape === 'text' || !element.text) {
+  if (element.name === 'text' || !element.text) {
     return;
   }
 
@@ -273,98 +336,15 @@ function applyGeometryChanges(
     if (!element) {
       return withError(state, new Error(`找不到元素: ${change.id}`));
     }
-    if (element.kind !== 'shape') {
-      return withError(state, new Error(`元素不支持几何变换: ${change.id}`));
-    }
 
     applyChange(element, change);
   }
 
   return withHistory(state, {
     elements: nextElements,
-    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
-}
-
-/**
- * 从兼容参数创建连接线端点。
- * @param endpoint - 显式端点
- * @param elementId - 兼容旧参数的元素 ID
- * @param anchor - 兼容旧参数的锚点
- * @returns 连接线端点
- */
-function createConnectorEndpoint(
-  endpoint: DrawingConnectorEndpoint | undefined,
-  elementId: string | undefined,
-  anchor?: DrawingConnectorAnchor
-): DrawingConnectorEndpoint | null {
-  if (endpoint) {
-    return cloneDeep(endpoint);
-  }
-  if (!elementId) {
-    return null;
-  }
-
-  return {
-    elementId,
-    anchor: anchor ?? 'center'
-  };
-}
-
-/**
- * 验证连接线元素端点是否指向存在的形状。
- * @param state - 当前画板状态
- * @param endpoint - 待验证端点
- * @param message - 错误信息
- * @returns 错误对象，验证通过时返回 null
- */
-function validateConnectorElementEndpoint(state: DrawingBoardState, endpoint: DrawingConnectorEndpoint, message: string): Error | null {
-  if (!isDrawingConnectorElementEndpoint(endpoint)) {
-    return null;
-  }
-
-  const element = state.elements.find((item) => item.id === endpoint.elementId);
-
-  return element && isDrawingShapeElement(element) ? null : new Error(message);
-}
-
-/**
- * 判断端点是否引用指定形状。
- * @param endpoint - 连接线端点
- * @param shapeIds - 形状 ID 集合
- * @returns 是否引用指定形状
- */
-function doesConnectorEndpointReferenceShape(endpoint: DrawingConnectorEndpoint, shapeIds: Set<string>): boolean {
-  const elementId = getDrawingConnectorEndpointElementId(endpoint);
-
-  return elementId ? shapeIds.has(elementId) : false;
-}
-
-/**
- * 验证连接线两个端点组合是否合法。
- * @param state - 当前画板状态
- * @param source - 起点
- * @param target - 终点
- * @returns 错误对象，验证通过时返回 null
- */
-function validateConnectorEndpoints(state: DrawingBoardState, source: DrawingConnectorEndpoint, target: DrawingConnectorEndpoint): Error | null {
-  const sourceError = validateConnectorElementEndpoint(state, source, `找不到连接起点: ${getDrawingConnectorEndpointElementId(source) ?? ''}`);
-  if (sourceError) {
-    return sourceError;
-  }
-
-  const targetError = validateConnectorElementEndpoint(state, target, `找不到连接目标: ${getDrawingConnectorEndpointElementId(target) ?? ''}`);
-  if (targetError) {
-    return targetError;
-  }
-
-  if (isDrawingConnectorElementEndpoint(source) && isDrawingConnectorElementEndpoint(target) && source.elementId === target.elementId) {
-    return new Error('连接线起点和终点不能相同');
-  }
-
-  return null;
 }
 
 /**
@@ -374,8 +354,7 @@ function validateConnectorEndpoints(state: DrawingBoardState, source: DrawingCon
  */
 export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>): DrawingBoardState {
   return {
-    elements: cloneDeep(snapshot?.elements ?? []),
-    edges: [],
+    elements: cloneSupportedElements(snapshot?.elements),
     selection: [...(snapshot?.selection ?? [])],
     viewport: cloneDeep(snapshot?.viewport ?? createDefaultViewport()),
     draft: cloneDeep(snapshot?.draft),
@@ -391,10 +370,9 @@ export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>
  * @param snapshot - 画板快照或状态
  * @returns 画板绑定数据
  */
-export function createDrawingDataSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'edges' | 'viewport'>): DrawingData {
+export function createDrawingDataSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'viewport'>): DrawingData {
   return {
-    elements: cloneDeep(snapshot.elements),
-    edges: [],
+    elements: cloneSupportedElements(snapshot.elements),
     viewport: cloneDeep(snapshot.viewport)
   };
 }
@@ -410,13 +388,12 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
     return withError(state, new Error(`元素已存在: ${options.id}`));
   }
 
-  const text = options.text ?? getShapeDefaultText(options.shape);
-  const style = createShapeInitialStyle(options.shape, options.style);
-  const geometry = options.shape === 'text' ? createTextShapeGeometry(options.start, text, style) : createShapeGeometry(options.start, options.end);
+  const text = options.text ?? getShapeDefaultText(options.name);
+  const style = createShapeInitialStyle(options.name, options.style);
+  const geometry = options.name === 'text' ? createTextShapeGeometry(options.start, text, style) : createShapeGeometry(options.start, options.end);
   const element: DrawingShapeElement = {
     id: options.id,
-    kind: 'shape',
-    shape: options.shape,
+    name: options.name,
     text,
     position: cloneDeep(geometry.position),
     size: cloneDeep(geometry.size),
@@ -430,98 +407,7 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
 
   return withHistory(state, {
     elements: [...cloneDeep(state.elements), element],
-    edges: [],
     selection: [element.id],
-    viewport: cloneDeep(state.viewport)
-  });
-}
-
-/**
- * 新增一个连接线元素。
- * @param state - 当前画板状态
- * @param options - 新连接线参数
- * @returns 新画板状态
- */
-export function addDrawingConnector(state: DrawingBoardState, options: DrawingAddConnectorOptions): DrawingBoardState {
-  if (state.elements.some((element) => element.id === options.id)) {
-    return withError(state, new Error(`元素已存在: ${options.id}`));
-  }
-
-  const source = createConnectorEndpoint(options.source, options.sourceId, options.sourceAnchor);
-  const target = createConnectorEndpoint(options.target, options.targetId, options.targetAnchor);
-  if (!source) {
-    return withError(state, new Error('缺少连接起点'));
-  }
-  if (!target) {
-    return withError(state, new Error('缺少连接目标'));
-  }
-
-  const endpointError = validateConnectorEndpoints(state, source, target);
-  if (endpointError) {
-    return withError(state, endpointError);
-  }
-
-  const connector: DrawingConnectorElement = {
-    id: options.id,
-    kind: 'connector',
-    source,
-    target,
-    style: cloneDeep(options.style),
-    markerStart: options.markerStart,
-    markerEnd: options.markerEnd,
-    curve: options.curve,
-    label: options.label,
-    position: { x: 0, y: 0 },
-    size: { width: 0, height: 0 },
-    rotation: 0,
-    metadata: {
-      source: 'user',
-      createdAt: options.createdAt ?? Date.now()
-    }
-  };
-
-  return withHistory(state, {
-    elements: [...cloneDeep(state.elements), connector],
-    edges: [],
-    selection: [connector.id],
-    viewport: cloneDeep(state.viewport)
-  });
-}
-
-/**
- * 更新连接线端点。
- * @param state - 当前画板状态
- * @param connectorId - 连接线 ID
- * @param placement - 端点位置
- * @param endpoint - 新端点
- * @returns 新画板状态
- */
-export function updateDrawingConnectorEndpoint(
-  state: DrawingBoardState,
-  connectorId: string,
-  placement: DrawingConnectorEndpointPlacement,
-  endpoint: DrawingConnectorEndpoint
-): DrawingBoardState {
-  const nextElements = cloneDeep(state.elements);
-  const connector = nextElements.find((item) => item.id === connectorId);
-  if (!connector || !isDrawingConnectorElement(connector)) {
-    return withError(state, new Error(`找不到连接线: ${connectorId}`));
-  }
-
-  const nextSource = placement === 'source' ? cloneDeep(endpoint) : connector.source;
-  const nextTarget = placement === 'target' ? cloneDeep(endpoint) : connector.target;
-  const endpointError = validateConnectorEndpoints(state, nextSource, nextTarget);
-  if (endpointError) {
-    return withError(state, endpointError);
-  }
-
-  connector.source = nextSource;
-  connector.target = nextTarget;
-
-  return withHistory(state, {
-    elements: nextElements,
-    edges: [],
-    selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
 }
@@ -621,7 +507,7 @@ export function resizeDrawingElements(state: DrawingBoardState, changes: Drawing
 export function updateDrawingElementStyle(state: DrawingBoardState, elementId: string, style: DrawingElementStyleChange): DrawingBoardState {
   const nextElements = cloneDeep(state.elements);
   const element = nextElements.find((item) => item.id === elementId);
-  if (!element || (!isDrawingShapeElement(element) && !isDrawingConnectorElement(element))) {
+  if (!element) {
     return withError(state, new Error(`找不到元素: ${elementId}`));
   }
 
@@ -629,65 +515,14 @@ export function updateDrawingElementStyle(state: DrawingBoardState, elementId: s
     ...element.style,
     ...style
   };
-  if (isDrawingShapeElement(element) && element.shape === 'text') {
+  if (element.name === 'text') {
     element.size = measureDrawingTextElementSize(element.text, element.style);
-  } else if (isDrawingShapeElement(element)) {
+  } else {
     fitRegularShapeSizeToText(element);
   }
 
   return withHistory(state, {
     elements: nextElements,
-    edges: [],
-    selection: [...state.selection],
-    viewport: cloneDeep(state.viewport)
-  });
-}
-
-/**
- * 更新连接线配置。
- * @param state - 当前画板状态
- * @param connectorId - 连接线 ID
- * @param options - 连接线配置变更
- * @returns 新画板状态
- */
-export function updateDrawingConnectorOptions(state: DrawingBoardState, connectorId: string, options: DrawingConnectorOptionsChange): DrawingBoardState {
-  const nextElements = cloneDeep(state.elements);
-  const connector = nextElements.find((item) => item.id === connectorId);
-  if (!connector || !isDrawingConnectorElement(connector)) {
-    return withError(state, new Error(`找不到连接线: ${connectorId}`));
-  }
-
-  connector.markerStart = options.markerStart ?? connector.markerStart;
-  connector.markerEnd = options.markerEnd ?? connector.markerEnd;
-  connector.curve = options.curve ?? connector.curve;
-
-  return withHistory(state, {
-    elements: nextElements,
-    edges: [],
-    selection: [...state.selection],
-    viewport: cloneDeep(state.viewport)
-  });
-}
-
-/**
- * 更新连接线标签。
- * @param state - 当前画板状态
- * @param connectorId - 连接线 ID
- * @param label - 新标签文本
- * @returns 新画板状态
- */
-export function updateDrawingConnectorLabel(state: DrawingBoardState, connectorId: string, label: string): DrawingBoardState {
-  const nextElements = cloneDeep(state.elements);
-  const connector = nextElements.find((item) => item.id === connectorId);
-  if (!connector || !isDrawingConnectorElement(connector)) {
-    return withError(state, new Error(`找不到连接线: ${connectorId}`));
-  }
-
-  connector.label = label.trim() ? label : undefined;
-
-  return withHistory(state, {
-    elements: nextElements,
-    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
@@ -704,20 +539,9 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
   }
 
   const selected = new Set(state.selection);
-  const selectedShapeIds = new Set(state.elements.filter((element) => selected.has(element.id) && isDrawingShapeElement(element)).map((element) => element.id));
-  const nextElements = state.elements.filter((element) => {
-    if (selected.has(element.id)) {
-      return false;
-    }
-    if (isDrawingConnectorElement(element)) {
-      return !doesConnectorEndpointReferenceShape(element.source, selectedShapeIds) && !doesConnectorEndpointReferenceShape(element.target, selectedShapeIds);
-    }
-
-    return true;
-  });
+  const nextElements = state.elements.filter((element) => !selected.has(element.id));
   return withHistory(state, {
     elements: nextElements,
-    edges: [],
     selection: [],
     viewport: cloneDeep(state.viewport)
   });
@@ -733,12 +557,12 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
 export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, text: string): DrawingBoardState {
   const nextElements = cloneDeep(state.elements);
   const node = nextElements.find((item) => item.id === nodeId);
-  if (!node || !isDrawingShapeElement(node)) {
+  if (!node) {
     return withError(state, new Error(`找不到节点: ${nodeId}`));
   }
 
   node.text = text;
-  if (node.shape === 'text') {
+  if (node.name === 'text') {
     node.size = measureDrawingTextElementSize(text, node.style);
   } else {
     fitRegularShapeSizeToText(node);
@@ -746,7 +570,6 @@ export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, 
 
   return withHistory(state, {
     elements: nextElements,
-    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });
@@ -801,7 +624,6 @@ export function reorderDrawingElement(state: DrawingBoardState, elementId: strin
 
   return withHistory(state, {
     elements: nextElements,
-    edges: [],
     selection: [...state.selection],
     viewport: cloneDeep(state.viewport)
   });

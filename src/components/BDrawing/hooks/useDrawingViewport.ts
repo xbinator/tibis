@@ -10,7 +10,7 @@ import { clientDeltaToDrawingDelta, getDrawingResponsiveViewBoxSize } from '../u
 /**
  * 缩放锚点信息。
  */
-export interface DrawingZoomAnchor {
+interface DrawingZoomAnchor {
   /** 鼠标当前指向的画板坐标 */
   boardPoint: DrawingPoint;
   /** 鼠标在画布渲染区域中的比例坐标 */
@@ -22,7 +22,7 @@ export interface DrawingZoomAnchor {
 /**
  * BDrawing 视口 hook 返回值。
  */
-export interface UseDrawingViewportReturn {
+interface UseDrawingViewportReturn {
   /** 设置视口中心 */
   setCenter: (center: DrawingPoint) => void;
   /** 按浏览器像素位移平移视口 */

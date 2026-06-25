@@ -7,7 +7,7 @@ import type { UseDrawingBoardReturn } from './useDrawingBoard';
 /**
  * BDrawing 交互 hook 返回值。
  */
-export interface UseDrawingInteractionReturn {
+interface UseDrawingInteractionReturn {
   /** 清空选区 */
   clearSelection: () => void;
   /** 删除选区 */

@@ -4,8 +4,8 @@
 -->
 <template>
   <div class="b-drawing-toolbar">
-    <!-- 顶部水平居中：工具选择 -->
-    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--top">
+    <!-- 左下角：历史记录 / 缩放控制 / 小地图 -->
+    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left">
       <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'select' }" @click="emit('set-tool', 'select')">
         <BIcon icon="lucide:mouse-pointer-2" :size="16" />
       </BButton>
@@ -13,25 +13,6 @@
         <BIcon icon="lucide:hand" :size="16" />
       </BButton>
       <span class="b-drawing-toolbar__divider"></span>
-      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'rect' }" @click="emit('set-tool', 'rect')">
-        <BIcon icon="lucide:square" :size="16" />
-      </BButton>
-      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'ellipse' }" @click="emit('set-tool', 'ellipse')">
-        <BIcon icon="lucide:circle" :size="16" />
-      </BButton>
-      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'diamond' }" @click="emit('set-tool', 'diamond')">
-        <BIcon icon="lucide:diamond" :size="16" />
-      </BButton>
-      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'text' }" @click="emit('set-tool', 'text')">
-        <BIcon icon="lucide:type" :size="16" />
-      </BButton>
-      <BButton type="text" square size="small" :class="{ 'is-active': activeTool === 'connector' }" @click="emit('set-tool', 'connector')">
-        <BIcon icon="lucide:arrow-right" :size="16" />
-      </BButton>
-    </div>
-
-    <!-- 左下角：历史记录 / 缩放控制 / 小地图 -->
-    <div class="b-drawing-toolbar__group b-drawing-toolbar__group--bottom-left">
       <BButton type="text" square size="small" aria-label="撤销" :disabled="!canUndo" @click="emit('undo')">
         <BIcon icon="lucide:undo-2" :size="16" />
       </BButton>
@@ -67,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingElement, DrawingPoint, DrawingSize, DrawingToolMode, DrawingViewport } from '../types';
+import type { DrawingElement, DrawingPoint, DrawingSize, DrawingViewport } from '../types';
 import { computed } from 'vue';
 import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM } from '../constants/viewport';
 import Minimap from './Minimap.vue';
@@ -79,7 +60,7 @@ interface Props {
   /** 缩放比例 */
   zoom: number;
   /** 当前工具模式 */
-  activeTool: DrawingToolMode;
+  activeTool: string;
   /** 画板元素列表 */
   elements: DrawingElement[];
   /** 当前视口 */
@@ -95,7 +76,7 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits<{
   /** 设置工具模式 */
-  'set-tool': [tool: DrawingToolMode];
+  'set-tool': [tool: string];
   /** 撤销 */
   undo: [];
   /** 重做 */
@@ -137,7 +118,7 @@ const canZoomIn = computed<boolean>(() => props.zoom < DRAWING_MAX_ZOOM);
   padding: 4px;
   pointer-events: auto;
   background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
-  border: 1px solid var(--border-primary);
+  border: 1px solid var(--border-secondary);
   border-radius: 8px;
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(12px);
@@ -150,10 +131,10 @@ const canZoomIn = computed<boolean>(() => props.zoom < DRAWING_MAX_ZOOM);
   transform: translateX(-50%);
 }
 
-/** 左下角 - 历史记录 / 缩放控制 / 小地图 */
+/** 右下角 - 历史记录 / 缩放控制 / 小地图 */
 .b-drawing-toolbar__group--bottom-left {
+  right: 12px;
   bottom: 12px;
-  left: 12px;
   gap: 4px;
 }
 
@@ -179,7 +160,7 @@ const canZoomIn = computed<boolean>(() => props.zoom < DRAWING_MAX_ZOOM);
   height: 28px;
   padding: 0 4px;
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   text-align: center;
   cursor: pointer;
   user-select: none;

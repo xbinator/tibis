@@ -4,26 +4,6 @@
  */
 
 /**
- * 画板支持的节点类型。
- */
-export type DrawingNodeType = 'process' | 'decision' | 'actor' | 'service' | 'database' | 'text';
-
-/**
- * 画板工具模式。
- */
-export type DrawingToolMode = 'select' | 'hand' | 'process' | 'rect' | 'ellipse' | 'diamond' | 'text' | 'connector';
-
-/**
- * 画板元素类别。
- */
-export type DrawingElementKind = 'shape' | 'connector';
-
-/**
- * 画板形状类型。
- */
-export type DrawingShapeType = DrawingNodeType | 'rect' | 'ellipse' | 'diamond';
-
-/**
  * 画布坐标点。
  */
 export interface DrawingPoint {
@@ -44,28 +24,6 @@ export interface DrawingSize {
 }
 
 /**
- * 画图元素元信息。
- */
-export interface DrawingElementMetadata {
-  /** 元素创建来源 */
-  source: 'user';
-  /** 创建时间戳 */
-  createdAt: number;
-  /** 用户手动设置的基础尺寸，文本自动撑高时用于恢复高度 */
-  manualSize?: DrawingSize;
-}
-
-/**
- * 文本对齐方式。
- */
-export type DrawingTextAlign = 'left' | 'center' | 'right';
-
-/**
- * 文本垂直对齐方式。
- */
-export type DrawingTextVerticalAlign = 'top' | 'middle' | 'bottom';
-
-/**
  * 画板元素样式。
  */
 export interface DrawingElementStyle {
@@ -82,9 +40,9 @@ export interface DrawingElementStyle {
   /** 文字字重 */
   fontWeight?: number;
   /** 文字对齐方式 */
-  textAlign?: DrawingTextAlign;
+  textAlign?: 'left' | 'center' | 'right';
   /** 文字垂直对齐方式 */
-  textVerticalAlign?: DrawingTextVerticalAlign;
+  textVerticalAlign?: 'top' | 'middle' | 'bottom';
   /** 透明度 */
   opacity?: number;
 }
@@ -100,13 +58,13 @@ export type DrawingElementStyleChange = Partial<DrawingElementStyle>;
 export type DrawingLayerAction = 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack';
 
 /**
- * 画板元素基础字段。
+ * 自由形状元素。
  */
-export interface DrawingElementBase {
+export interface DrawingShapeElement {
   /** 真实元素 ID */
   id: string;
-  /** 元素类别 */
-  kind: DrawingElementKind;
+  /** 元素注册名称 */
+  name: string;
   /** 元素位置 */
   position: DrawingPoint;
   /** 元素尺寸 */
@@ -115,111 +73,25 @@ export interface DrawingElementBase {
   rotation: number;
   /** 元素样式 */
   style?: DrawingElementStyle;
-  /** 元信息 */
-  metadata: DrawingElementMetadata;
-}
-
-/**
- * 自由形状元素。
- */
-export interface DrawingShapeElement extends DrawingElementBase {
-  /** 元素类别 */
-  kind: 'shape';
-  /** 形状类型 */
-  shape: DrawingShapeType;
   /** 节点主文本 */
   text: string;
   /** 节点说明 */
   description?: string;
-}
-
-/**
- * 连接线锚点类型。
- */
-export type DrawingConnectorAnchor = 'top' | 'right' | 'bottom' | 'left' | 'center';
-
-/**
- * 连接线端点标记类型。
- */
-export type DrawingConnectorMarkerType = 'none' | 'arrow';
-
-/**
- * 连接线路径类型。
- */
-export type DrawingConnectorCurveType = 'straight' | 'bezier';
-
-/**
- * 连接线元素锚点端点。
- */
-export interface DrawingConnectorElementEndpoint {
-  /** 端点元素 ID */
-  elementId: string;
-  /** 端点锚点 */
-  anchor: DrawingConnectorAnchor;
-}
-
-/**
- * 连接线画布点位端点。
- */
-export interface DrawingConnectorPointEndpoint {
-  /** 端点画布坐标 */
-  point: DrawingPoint;
-}
-
-/**
- * 连接线端点。
- */
-export type DrawingConnectorEndpoint = DrawingConnectorElementEndpoint | DrawingConnectorPointEndpoint;
-
-/**
- * 连接线端点位置。
- */
-export type DrawingConnectorEndpointPlacement = 'source' | 'target';
-
-/**
- * 连接线元素。
- */
-export interface DrawingConnectorElement extends DrawingElementBase {
-  /** 元素类别 */
-  kind: 'connector';
-  /** 起点 */
-  source: DrawingConnectorEndpoint;
-  /** 终点 */
-  target: DrawingConnectorEndpoint;
-  /** 起点标记 */
-  markerStart?: DrawingConnectorMarkerType;
-  /** 终点标记 */
-  markerEnd?: DrawingConnectorMarkerType;
-  /** 路径类型 */
-  curve?: DrawingConnectorCurveType;
-  /** 连线标签 */
-  label?: string;
-}
-
-/**
- * 连接线配置变更。
- */
-export interface DrawingConnectorOptionsChange {
-  /** 起点标记 */
-  markerStart?: DrawingConnectorMarkerType;
-  /** 终点标记 */
-  markerEnd?: DrawingConnectorMarkerType;
-  /** 路径类型 */
-  curve?: DrawingConnectorCurveType;
-}
-
-/**
- * 创建连接线时的草稿配置。
- */
-export interface DrawingConnectorDraftOptions extends DrawingConnectorOptionsChange {
-  /** 连接线初始样式 */
-  style?: DrawingElementStyle;
+  /** 元信息 */
+  metadata: {
+    /** 元素创建来源 */
+    source: 'user';
+    /** 创建时间戳 */
+    createdAt: number;
+    /** 用户手动设置的基础尺寸，文本自动撑高时用于恢复高度 */
+    manualSize?: DrawingSize;
+  };
 }
 
 /**
  * 画板元素。
  */
-export type DrawingElement = DrawingShapeElement | DrawingConnectorElement;
+export type DrawingElement = DrawingShapeElement;
 
 /**
  * 新增形状参数。
@@ -227,8 +99,8 @@ export type DrawingElement = DrawingShapeElement | DrawingConnectorElement;
 export interface DrawingAddShapeOptions {
   /** 元素 ID */
   id: string;
-  /** 形状类型 */
-  shape: DrawingShapeType;
+  /** 元素注册名称 */
+  name: string;
   /** 拖拽起点 */
   start: DrawingPoint;
   /** 拖拽终点 */
@@ -237,38 +109,6 @@ export interface DrawingAddShapeOptions {
   text?: string;
   /** 元素初始样式 */
   style?: DrawingElementStyle;
-  /** 创建时间戳 */
-  createdAt?: number;
-}
-
-/**
- * 新增连接线参数。
- */
-export interface DrawingAddConnectorOptions {
-  /** 连接线 ID */
-  id: string;
-  /** 起点端点 */
-  source?: DrawingConnectorEndpoint;
-  /** 起点元素 ID */
-  sourceId?: string;
-  /** 起点锚点 */
-  sourceAnchor?: DrawingConnectorAnchor;
-  /** 终点端点 */
-  target?: DrawingConnectorEndpoint;
-  /** 终点元素 ID */
-  targetId?: string;
-  /** 终点锚点 */
-  targetAnchor?: DrawingConnectorAnchor;
-  /** 元素初始样式 */
-  style?: DrawingElementStyle;
-  /** 起点标记 */
-  markerStart?: DrawingConnectorMarkerType;
-  /** 终点标记 */
-  markerEnd?: DrawingConnectorMarkerType;
-  /** 路径类型 */
-  curve?: DrawingConnectorCurveType;
-  /** 连线标签 */
-  label?: string;
   /** 创建时间戳 */
   createdAt?: number;
 }
@@ -286,29 +126,6 @@ export interface DrawingGeometryChange {
 }
 
 /**
- * 画板交互草稿。
- */
-export type DrawingInteractionDraft =
-  | {
-      /** 草稿类型 */
-      kind: 'creating-shape';
-      /** 形状类型 */
-      shape: DrawingShapeType;
-      /** 拖拽起点 */
-      start: DrawingPoint;
-      /** 当前指针点 */
-      current: DrawingPoint;
-    }
-  | {
-      /** 草稿类型 */
-      kind: 'creating-connector';
-      /** 起点 */
-      source: DrawingConnectorEndpoint;
-      /** 当前指针点 */
-      current: DrawingPoint;
-    };
-
-/**
  * 画板视口状态。
  */
 export interface DrawingViewport {
@@ -324,8 +141,6 @@ export interface DrawingViewport {
 export interface DrawingData {
   /** 元素数据 */
   elements: DrawingElement[];
-  /** 旧版 edge 输入占位，内部会归一化为空数组 */
-  edges: unknown[];
   /** 视口数据 */
   viewport: DrawingViewport;
 }
@@ -336,24 +151,21 @@ export interface DrawingData {
 export interface DrawingBoardSnapshot {
   /** 元素快照 */
   elements: DrawingElement[];
-  /** 旧版 edge 输入占位，内部会归一化为空数组 */
-  edges: unknown[];
   /** 选区快照 */
   selection: string[];
   /** 视口快照 */
   viewport: DrawingViewport;
   /** 当前交互草稿 */
-  draft?: DrawingInteractionDraft;
-}
-
-/**
- * 画板历史状态。
- */
-export interface DrawingBoardHistory {
-  /** 可撤销快照 */
-  past: DrawingBoardSnapshot[];
-  /** 可重做快照 */
-  future: DrawingBoardSnapshot[];
+  draft?: {
+    /** 草稿类型 */
+    kind: 'creating-shape';
+    /** 元素注册名称 */
+    name: string;
+    /** 拖拽起点 */
+    start: DrawingPoint;
+    /** 当前指针点 */
+    current: DrawingPoint;
+  };
 }
 
 /**
@@ -361,7 +173,12 @@ export interface DrawingBoardHistory {
  */
 export interface DrawingBoardState extends DrawingBoardSnapshot {
   /** 历史记录 */
-  history: DrawingBoardHistory;
+  history: {
+    /** 可撤销快照 */
+    past: DrawingBoardSnapshot[];
+    /** 可重做快照 */
+    future: DrawingBoardSnapshot[];
+  };
   /** 最近一次错误 */
   lastError?: Error;
 }
