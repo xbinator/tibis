@@ -4,28 +4,24 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
   CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES,
   CONDITIONAL_BUILTIN_WRITABLE_TOOL_NAMES,
-  CREATE_DRAWING_TOOL_NAME,
   createBuiltinTools,
   DEFAULT_BUILTIN_READONLY_TOOL_NAMES,
   DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES,
   OPERATE_WEBPAGE_TOOL_NAME,
-  READ_CURRENT_DRAWING_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
-  UPDATE_CURRENT_DRAWING_TOOL_NAME
 } from '@/ai/tools/builtin';
 import { getToolNamesByExposure } from '../../../shared/ai/tools/toolRegistry.js';
 
 describe('builtin tools index', (): void => {
-  it('exposes the Drawing operation tool but not the full replacement tool by default', (): void => {
+  it('does not expose Drawing tools by default', (): void => {
     const toolNames = createBuiltinTools().map((tool) => tool.definition.name);
 
-    expect(toolNames).toContain(READ_CURRENT_DRAWING_TOOL_NAME);
-    expect(toolNames).toContain(CREATE_DRAWING_TOOL_NAME);
-    expect(toolNames).toContain(APPLY_DRAWING_OPERATIONS_TOOL_NAME);
-    expect(toolNames).not.toContain(UPDATE_CURRENT_DRAWING_TOOL_NAME);
+    expect(toolNames).not.toContain('read_current_drawing');
+    expect(toolNames).not.toContain('create_drawing');
+    expect(toolNames).not.toContain('apply_drawing_operations');
+    expect(toolNames).not.toContain('update_current_drawing');
   });
 
   it('derives migrated tool exposure lists from the shared tool registry', (): void => {

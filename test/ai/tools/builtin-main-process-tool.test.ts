@@ -15,7 +15,6 @@ import {
 } from '@/ai/tools/builtin';
 import { createReadFileTool as createCatalogReadFileTool } from '@/ai/tools/catalog/runtimeTools';
 import {
-  DRAWING_TOOL_NAMES,
   FILE_TOOL_NAMES,
   MAIN_PROCESS_TOOL_NAMES,
   READ_TOOL_NAMES,
@@ -59,7 +58,6 @@ describe('builtin main-process tools', (): void => {
     expect([...READ_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'read').sort());
     expect([...FILE_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'file').sort());
     expect([...SETTINGS_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'settings').sort());
-    expect([...DRAWING_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'drawing').sort());
     expect([...RESOURCE_TOOL_NAMES].sort()).toEqual(getToolNamesByRuntimeGroup('main', 'resource').sort());
   });
 

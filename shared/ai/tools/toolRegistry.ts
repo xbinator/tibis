@@ -45,10 +45,10 @@ export interface SharedToolDefinition {
 export type ToolRuntimeOwner = 'main' | 'renderer' | 'sdk';
 
 /** 主进程工具分组。 */
-export type ToolRuntimeGroup = 'read' | 'file' | 'settings' | 'drawing' | 'resource' | 'webview';
+export type ToolRuntimeGroup = 'read' | 'file' | 'settings' | 'resource' | 'webview';
 
 /** 工具暴露策略。 */
-export type ToolExposure = 'default-readonly' | 'default-writable' | 'conditional-readonly' | 'conditional-writable' | 'compat-hidden';
+export type ToolExposure = 'default-readonly' | 'default-writable' | 'conditional-readonly' | 'conditional-writable';
 
 /** 工具 registry 条目。 */
 export interface ToolRegistryEntry {
@@ -66,14 +66,6 @@ export interface ToolRegistryEntry {
 export const READ_CURRENT_DOCUMENT_TOOL_NAME = 'read_current_document';
 /** 创建文档工具名称。 */
 export const CREATE_DOCUMENT_TOOL_NAME = 'create_document';
-/** 创建画板草稿工具名称。 */
-export const CREATE_DRAWING_TOOL_NAME = 'create_drawing';
-/** 读取当前画板工具名称。 */
-export const READ_CURRENT_DRAWING_TOOL_NAME = 'read_current_drawing';
-/** 操作当前画板工具名称。 */
-export const APPLY_DRAWING_OPERATIONS_TOOL_NAME = 'apply_drawing_operations';
-/** 旧版完整更新当前画板工具名称，保留常量用于过滤兼容。 */
-export const UPDATE_CURRENT_DRAWING_TOOL_NAME = 'update_current_drawing';
 /** 获取当前时间工具名称。 */
 export const GET_CURRENT_TIME_TOOL_NAME = 'get_current_time';
 /** 编辑文件工具名称。 */
@@ -109,124 +101,11 @@ export const OPERATE_WEBPAGE_TOOL_NAME = 'operate_webpage';
 
 /** 支持读取或修改的设置键。 */
 const SUPPORTED_SETTING_KEYS = ['theme', 'themePreset', 'sourceMode', 'editorPageWidth'] as const;
-/** AI 支持创建的形状类型。 */
-const SUPPORTED_DRAWING_SHAPES = ['process', 'decision', 'actor', 'service', 'database', 'text', 'rect', 'ellipse', 'diamond'] as const;
-/** AI 支持使用的连接线锚点。 */
-const SUPPORTED_CONNECTOR_ANCHORS = ['top', 'right', 'bottom', 'left', 'center'] as const;
 /** WebView 支持模拟的按键。 */
 const SUPPORTED_WEBPAGE_PRESS_KEYS = ['Enter', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'] as const;
 
 /** 内部 JSON Schema 对象类型。 */
 type ToolJsonSchema = Record<string, unknown>;
-
-/** 画板坐标点参数 Schema。 */
-const DRAWING_POINT_PARAMETER_SCHEMA: ToolJsonSchema = {
-  type: 'object',
-  properties: {
-    x: { type: 'number' },
-    y: { type: 'number' }
-  },
-  required: ['x', 'y'],
-  additionalProperties: false
-};
-
-/** 画板尺寸参数 Schema。 */
-const DRAWING_SIZE_PARAMETER_SCHEMA: ToolJsonSchema = {
-  type: 'object',
-  properties: {
-    width: { type: 'number', minimum: 0 },
-    height: { type: 'number', minimum: 0 }
-  },
-  required: ['width', 'height'],
-  additionalProperties: false
-};
-
-/** 画板样式参数 Schema。 */
-const DRAWING_STYLE_PARAMETER_SCHEMA: ToolJsonSchema = {
-  type: 'object',
-  properties: {
-    fill: { type: 'string' },
-    stroke: { type: 'string' },
-    strokeWidth: { type: 'number' },
-    color: { type: 'string' },
-    fontSize: { type: 'number' },
-    fontWeight: { type: 'number' },
-    textAlign: { type: 'string', enum: ['left', 'center', 'right'] },
-    textVerticalAlign: { type: 'string', enum: ['top', 'middle', 'bottom'] },
-    opacity: { type: 'number' }
-  },
-  additionalProperties: false
-};
-
-/** 批量画板操作参数 Schema。 */
-const DRAWING_OPERATIONS_PARAMETER_SCHEMA: ToolJsonSchema = {
-  type: 'array',
-  description:
-    '按顺序执行的操作列表。支持 add_shape、update_shape_text、move_shape、add_connector、delete_element。' +
-    'add_shape 可传 shape/text/position/size/style；add_connector 可传 sourceId/targetId/sourceAnchor/targetAnchor/label/style。',
-  items: {
-    oneOf: [
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['add_shape'] },
-          id: { type: 'string' },
-          shape: { type: 'string', enum: SUPPORTED_DRAWING_SHAPES },
-          text: { type: 'string' },
-          position: DRAWING_POINT_PARAMETER_SCHEMA,
-          size: DRAWING_SIZE_PARAMETER_SCHEMA,
-          style: DRAWING_STYLE_PARAMETER_SCHEMA
-        },
-        required: ['type', 'shape', 'position'],
-        additionalProperties: false
-      },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['update_shape_text'] },
-          id: { type: 'string' },
-          text: { type: 'string' }
-        },
-        required: ['type', 'id', 'text'],
-        additionalProperties: false
-      },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['move_shape'] },
-          id: { type: 'string' },
-          position: DRAWING_POINT_PARAMETER_SCHEMA
-        },
-        required: ['type', 'id', 'position'],
-        additionalProperties: false
-      },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['add_connector'] },
-          id: { type: 'string' },
-          sourceId: { type: 'string' },
-          targetId: { type: 'string' },
-          sourceAnchor: { type: 'string', enum: SUPPORTED_CONNECTOR_ANCHORS },
-          targetAnchor: { type: 'string', enum: SUPPORTED_CONNECTOR_ANCHORS },
-          label: { type: 'string' },
-          style: DRAWING_STYLE_PARAMETER_SCHEMA
-        },
-        required: ['type', 'sourceId', 'targetId'],
-        additionalProperties: false
-      },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['delete_element'] },
-          id: { type: 'string' }
-        },
-        required: ['type', 'id'],
-        additionalProperties: false
-      }
-    ]
-  }
-};
 
 /** 网页操作动作参数 Schema。 */
 const WEBPAGE_OPERATION_ACTION_SCHEMA: ToolJsonSchema = {
@@ -340,69 +219,6 @@ export const TOOL_REGISTRY = [
           ext: { type: 'string', description: '文件扩展名，默认为 "md"。支持 md、txt、json 等。' }
         },
         required: ['title', 'content'],
-        additionalProperties: false
-      }
-    }
-  },
-  {
-    runtime: 'main',
-    group: 'drawing',
-    exposure: 'default-writable',
-    definition: {
-      name: CREATE_DRAWING_TOOL_NAME,
-      description:
-        '创建新的 BDrawing 画板草稿并打开。可传入初始 operations，一次性创建并绘制初始节点、连线或布局；适合用户要求新建流程图、结构图、思维草图时使用。',
-      source: 'builtin',
-      riskLevel: 'write',
-      requiresActiveDocument: false,
-      permissionCategory: 'document',
-      safeAutoApprove: true,
-      parameters: {
-        type: 'object',
-        properties: {
-          title: { type: 'string', description: '画板标题/文件名主体，如 "产品流程图"。' },
-          operations: {
-            ...DRAWING_OPERATIONS_PARAMETER_SCHEMA,
-            description: '创建草稿后立即应用的初始画板操作列表。省略时创建空画板。'
-          }
-        },
-        required: ['title'],
-        additionalProperties: false
-      }
-    }
-  },
-  {
-    runtime: 'main',
-    group: 'read',
-    exposure: 'default-readonly',
-    definition: {
-      name: READ_CURRENT_DRAWING_TOOL_NAME,
-      description: '读取当前画板的文件信息与完整 Drawing JSON 数据。',
-      source: 'builtin',
-      riskLevel: 'read',
-      requiresActiveDocument: false,
-      parameters: { type: 'object', properties: {}, additionalProperties: false }
-    }
-  },
-  {
-    runtime: 'main',
-    group: 'drawing',
-    exposure: 'default-writable',
-    definition: {
-      name: APPLY_DRAWING_OPERATIONS_TOOL_NAME,
-      description: '按顺序对当前画板执行结构化操作。优先用于新增形状、移动形状、更新节点文本、创建连线或删除元素；比直接重写完整 Drawing JSON 更安全。',
-      source: 'builtin',
-      riskLevel: 'write',
-      requiresActiveDocument: false,
-      permissionCategory: 'document',
-      parameters: {
-        type: 'object',
-        properties: {
-          operations: {
-            ...DRAWING_OPERATIONS_PARAMETER_SCHEMA
-          }
-        },
-        required: ['operations'],
         additionalProperties: false
       }
     }

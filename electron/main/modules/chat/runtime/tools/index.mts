@@ -4,7 +4,6 @@
  */
 import type { ChatRuntimeMainToolExecutionInput } from '../types.mjs';
 import type { MainToolExecutor, MainToolsDependencies } from './types.mjs';
-import { executeDrawingTool, isDrawingTool } from './DrawingTool/index.mjs';
 import { executeFileTool, isFileTool } from './FileTool/index.mjs';
 import { executeReadTool, isReadTool } from './ReadTool/index.mjs';
 import { executeResourceTool, isResourceTool } from './ResourceTool/index.mjs';
@@ -22,7 +21,6 @@ export function createMainToolExecutor(deps: MainToolsDependencies): MainToolExe
     if (isReadTool(input.toolName)) return executeReadTool(input, deps);
     if (isFileTool(input.toolName)) return executeFileTool(input, deps);
     if (isSettingsTool(input.toolName)) return executeSettingsTool(input, deps);
-    if (isDrawingTool(input.toolName)) return executeDrawingTool(input, deps);
     if (isResourceTool(input.toolName)) return executeResourceTool(input, deps);
     if (isWebviewTool(input.toolName)) return executeWebviewTool(input, deps);
 

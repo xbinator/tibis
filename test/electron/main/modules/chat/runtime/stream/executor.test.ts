@@ -167,15 +167,6 @@ async function* createMainBridgeToolStream(): AsyncGenerator<unknown> {
 }
 
 /**
- * 创建主进程画板读取工具调用的测试流。
- * @returns AI stream chunk 序列
- */
-async function* createMainDrawingToolStream(): AsyncGenerator<unknown> {
-  yield { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'read_current_drawing', input: {} };
-  yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 7, outputTokens: 4, totalTokens: 11 } };
-}
-
-/**
  * 创建主进程网页读取工具调用的测试流。
  * @returns AI stream chunk 序列
  */
@@ -299,34 +290,6 @@ async function* createMainUpdateSettingsToolStream(): AsyncGenerator<unknown> {
 async function* createMainCreateDocumentToolStream(): AsyncGenerator<unknown> {
   yield { type: 'tool-call', toolCallId: 'tool-call-1', toolName: 'create_document', input: { title: 'Notes', content: '# Notes', ext: 'md' } };
   yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 } };
-}
-
-/**
- * 创建主进程画板创建工具调用的测试流。
- * @returns AI stream chunk 序列
- */
-async function* createMainCreateDrawingToolStream(): AsyncGenerator<unknown> {
-  yield {
-    type: 'tool-call',
-    toolCallId: 'tool-call-1',
-    toolName: 'create_drawing',
-    input: { title: '流程图', operations: [{ type: 'add_shape', shape: 'rect', text: '开始', position: { x: 20, y: 30 } }] }
-  };
-  yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 } };
-}
-
-/**
- * 创建主进程画板操作工具调用的测试流。
- * @returns AI stream chunk 序列
- */
-async function* createMainApplyDrawingOperationsToolStream(): AsyncGenerator<unknown> {
-  yield {
-    type: 'tool-call',
-    toolCallId: 'tool-call-1',
-    toolName: 'apply_drawing_operations',
-    input: { operations: [{ type: 'update_shape_text', id: 'node-1', text: '开始' }] }
-  };
-  yield { type: 'finish', finishReason: 'tool-calls', totalUsage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 } };
 }
 
 /**
@@ -952,73 +915,6 @@ describe('runtime stream executor', (): void => {
         status: 'cancelled',
         error: { code: 'USER_CANCELLED', message: '用户取消了工具调用' }
       }
-    });
-  });
-
-  it('executes read_current_drawing through the main-process tool executor', async (): Promise<void> => {
-    const assistantMessage = createAssistantMessage();
-    const updates: ChatMessageRecord[] = [];
-    const drawingData = { elements: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } };
-    const executeMainTool = vi.fn().mockResolvedValue({
-      toolName: 'read_current_drawing',
-      status: 'success',
-      data: { id: 'drawing-1', title: 'Flow', path: '/tmp/flow.tibis', data: drawingData }
-    });
-    const executeRendererTool = vi.fn().mockResolvedValue({
-      toolName: 'read_current_drawing',
-      status: 'failure',
-      error: { code: 'EXECUTION_FAILED', message: 'renderer should not run' }
-    });
-    const resolve = vi.fn().mockResolvedValue({
-      createOptions: {
-        providerId: 'openai',
-        providerName: 'OpenAI',
-        providerType: 'openai',
-        apiKey: 'sk-test',
-        baseUrl: 'https://api.openai.com/v1'
-      },
-      modelId: 'gpt-test'
-    });
-    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createMainDrawingToolStream() }]);
-    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeRendererTool, executeMainTool });
-
-    const result = await executor(
-      {
-        runtime: {
-          ...runtime,
-          tools: [{ name: 'read_current_drawing', description: 'Read current drawing', parameters: { type: 'object', properties: {} } }]
-        },
-        userMessage,
-        assistantMessage
-      },
-      async (message) => {
-        updates.push({ ...message, parts: [...message.parts] });
-      }
-    );
-
-    expect(executeMainTool).toHaveBeenCalledWith({
-      runtime: expect.objectContaining({ runtimeId: 'runtime-1', tools: expect.arrayContaining([expect.objectContaining({ name: 'read_current_drawing' })]) }),
-      toolCallId: 'tool-call-1',
-      toolName: 'read_current_drawing',
-      input: {}
-    });
-    expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 7, outputTokens: 4, totalTokens: 11 }, shouldContinue: true });
-    expect(updates.at(-1)).toMatchObject({
-      parts: [
-        {
-          type: 'tool',
-          toolCallId: 'tool-call-1',
-          toolName: 'read_current_drawing',
-          status: 'done',
-          input: {},
-          result: {
-            toolName: 'read_current_drawing',
-            status: 'success',
-            data: { id: 'drawing-1', title: 'Flow', path: '/tmp/flow.tibis', data: drawingData }
-          }
-        }
-      ]
     });
   });
 
@@ -2021,149 +1917,6 @@ describe('runtime stream executor', (): void => {
             toolName: 'create_document',
             status: 'success',
             data: createDocumentResult
-          }
-        }
-      ]
-    });
-  });
-
-  it('executes create_drawing through the main-process tool executor', async (): Promise<void> => {
-    const assistantMessage = createAssistantMessage();
-    const updates: ChatMessageRecord[] = [];
-    const createDrawingResult = {
-      id: 'drawing-1',
-      title: '流程图',
-      path: 'unsaved://drawing-1/flow.tibis',
-      data: { elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } }
-    };
-    const executeMainTool = vi.fn().mockResolvedValue({
-      toolName: 'create_drawing',
-      status: 'success',
-      data: createDrawingResult
-    });
-    const executeRendererTool = vi.fn().mockResolvedValue({
-      toolName: 'create_drawing',
-      status: 'failure',
-      error: { code: 'EXECUTION_FAILED', message: 'renderer should not run' }
-    });
-    const resolve = vi.fn().mockResolvedValue({
-      createOptions: {
-        providerId: 'openai',
-        providerName: 'OpenAI',
-        providerType: 'openai',
-        apiKey: 'sk-test',
-        baseUrl: 'https://api.openai.com/v1'
-      },
-      modelId: 'gpt-test'
-    });
-    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createMainCreateDrawingToolStream() }]);
-    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeRendererTool, executeMainTool });
-
-    const result = await executor(
-      {
-        runtime: {
-          ...runtime,
-          tools: [{ name: 'create_drawing', description: 'Create drawing', parameters: { type: 'object', properties: {} } }]
-        },
-        userMessage,
-        assistantMessage
-      },
-      async (message) => {
-        updates.push({ ...message, parts: [...message.parts] });
-      }
-    );
-
-    expect(executeMainTool).toHaveBeenCalledWith({
-      runtime: expect.objectContaining({ runtimeId: 'runtime-1' }),
-      toolCallId: 'tool-call-1',
-      toolName: 'create_drawing',
-      input: { title: '流程图', operations: [{ type: 'add_shape', shape: 'rect', text: '开始', position: { x: 20, y: 30 } }] }
-    });
-    expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14 }, shouldContinue: true });
-    expect(updates.at(-1)).toMatchObject({
-      parts: [
-        {
-          type: 'tool',
-          toolCallId: 'tool-call-1',
-          toolName: 'create_drawing',
-          status: 'done',
-          result: {
-            toolName: 'create_drawing',
-            status: 'success',
-            data: createDrawingResult
-          }
-        }
-      ]
-    });
-  });
-
-  it('executes apply_drawing_operations through the main-process tool executor', async (): Promise<void> => {
-    const assistantMessage = createAssistantMessage();
-    const updates: ChatMessageRecord[] = [];
-    const applyDrawingResult = {
-      id: 'drawing-1',
-      title: '流程图.tibis',
-      path: null,
-      data: { elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } },
-      appliedOperations: 1
-    };
-    const executeMainTool = vi.fn().mockResolvedValue({
-      toolName: 'apply_drawing_operations',
-      status: 'success',
-      data: applyDrawingResult
-    });
-    const executeRendererTool = vi.fn().mockResolvedValue({
-      toolName: 'apply_drawing_operations',
-      status: 'failure',
-      error: { code: 'EXECUTION_FAILED', message: 'renderer should not run' }
-    });
-    const resolve = vi.fn().mockResolvedValue({
-      createOptions: {
-        providerId: 'openai',
-        providerName: 'OpenAI',
-        providerType: 'openai',
-        apiKey: 'sk-test',
-        baseUrl: 'https://api.openai.com/v1'
-      },
-      modelId: 'gpt-test'
-    });
-    const streamText = vi.fn().mockResolvedValue([undefined, { stream: createMainApplyDrawingOperationsToolStream() }]);
-    const executor = createRuntimeStreamExecutor({ resolver: { resolve }, streamText, executeRendererTool, executeMainTool });
-
-    const result = await executor(
-      {
-        runtime: {
-          ...runtime,
-          tools: [{ name: 'apply_drawing_operations', description: 'Apply drawing operations', parameters: { type: 'object', properties: {} } }]
-        },
-        userMessage,
-        assistantMessage
-      },
-      async (message) => {
-        updates.push({ ...message, parts: [...message.parts] });
-      }
-    );
-
-    expect(executeMainTool).toHaveBeenCalledWith({
-      runtime: expect.objectContaining({ runtimeId: 'runtime-1' }),
-      toolCallId: 'tool-call-1',
-      toolName: 'apply_drawing_operations',
-      input: { operations: [{ type: 'update_shape_text', id: 'node-1', text: '开始' }] }
-    });
-    expect(executeRendererTool).not.toHaveBeenCalled();
-    expect(result).toEqual({ usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 }, shouldContinue: true });
-    expect(updates.at(-1)).toMatchObject({
-      parts: [
-        {
-          type: 'tool',
-          toolCallId: 'tool-call-1',
-          toolName: 'apply_drawing_operations',
-          status: 'done',
-          result: {
-            toolName: 'apply_drawing_operations',
-            status: 'success',
-            data: applyDrawingResult
           }
         }
       ]

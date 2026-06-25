@@ -51,9 +51,6 @@ const registryMockState = vi.hoisted(() => ({
     getCurrentContext: vi.fn(() => undefined),
     getContext: vi.fn(() => undefined)
   },
-  drawingToolContextRegistry: {
-    getCurrentContext: vi.fn(() => undefined)
-  },
   webviewToolContextRegistry: {
     getCurrentContext: vi.fn((): unknown => undefined)
   }
@@ -79,26 +76,19 @@ const workspaceMockState = vi.hoisted(() => ({
 }));
 
 vi.mock('@/ai/tools/builtin', () => ({
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME: 'apply_drawing_operations',
   createBuiltinTools: builtinMockState.createBuiltinTools,
   isBuiltinToolName: vi.fn((toolName: string): boolean =>
     ['read_current_webpage', 'operate_webpage', 'open_resource', 'read_directory', 'skill'].includes(toolName)
   ),
   OPERATE_WEBPAGE_TOOL_NAME: 'operate_webpage',
   OPEN_RESOURCE_TOOL_NAME: 'open_resource',
-  READ_CURRENT_DRAWING_TOOL_NAME: 'read_current_drawing',
   READ_CURRENT_WEBPAGE_TOOL_NAME: 'read_current_webpage',
   READ_DIRECTORY_TOOL_NAME: 'read_directory',
-  SKILL_TOOL_NAME: 'skill',
-  UPDATE_CURRENT_DRAWING_TOOL_NAME: 'update_current_drawing'
+  SKILL_TOOL_NAME: 'skill'
 }));
 
 vi.mock('@/ai/tools/builtin/SkillTool', () => ({
   createSkillTool: vi.fn()
-}));
-
-vi.mock('@/ai/tools/context/drawing', () => ({
-  drawingToolContextRegistry: registryMockState.drawingToolContextRegistry
 }));
 
 vi.mock('@/ai/tools/context/editor', () => ({

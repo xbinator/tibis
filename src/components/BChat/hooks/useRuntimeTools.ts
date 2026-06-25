@@ -6,20 +6,16 @@ import type { Message } from '../utils/types';
 import type { AIToolExecutor } from 'types/ai';
 import type { Ref } from 'vue';
 import {
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
   createBuiltinTools,
   isBuiltinToolName,
   OPERATE_WEBPAGE_TOOL_NAME,
   OPEN_RESOURCE_TOOL_NAME,
-  READ_CURRENT_DRAWING_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
-  SKILL_TOOL_NAME,
-  UPDATE_CURRENT_DRAWING_TOOL_NAME
+  SKILL_TOOL_NAME
 } from '@/ai/tools/builtin';
 import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
 import type { AIToolConfirmationAdapter } from '@/ai/tools/confirmation';
-import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
@@ -97,7 +93,6 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
     getEditorContext: (documentId: string) => {
       return editorToolContextRegistry.getContext(documentId);
     },
-    getDrawingContext: () => drawingToolContextRegistry.getCurrentContext(),
     getWebviewContext: () => webviewToolContextRegistry.getCurrentContext(),
     openDraft,
     /**
@@ -138,7 +133,6 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
    */
   function getActiveTools(): AIToolExecutor[] {
     const hasActiveEditor = Boolean(editorToolContextRegistry.getCurrentContext());
-    const hasActiveDrawing = Boolean(drawingToolContextRegistry.getCurrentContext());
     const hasActiveWebview = Boolean(webviewToolContextRegistry.getCurrentContext());
     const hasWorkspace = Boolean(workspaceRoot.value);
 
@@ -155,9 +149,6 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
     return [...allBuiltinTools, ...dynamicTools].filter((tool) => {
       if (!isBuiltinToolName(tool.definition.name)) return false;
       if (tool.definition.name === 'read_current_document' && !hasActiveEditor) return false;
-      if (tool.definition.name === APPLY_DRAWING_OPERATIONS_TOOL_NAME && !hasActiveDrawing) return false;
-      if (tool.definition.name === READ_CURRENT_DRAWING_TOOL_NAME && !hasActiveDrawing) return false;
-      if (tool.definition.name === UPDATE_CURRENT_DRAWING_TOOL_NAME && !hasActiveDrawing) return false;
       if (tool.definition.name === READ_CURRENT_WEBPAGE_TOOL_NAME && !hasActiveWebview) return false;
       if (tool.definition.name === OPERATE_WEBPAGE_TOOL_NAME && !hasActiveWebview) return false;
       if (tool.definition.name === OPEN_RESOURCE_TOOL_NAME && hasActiveWebview) return false;

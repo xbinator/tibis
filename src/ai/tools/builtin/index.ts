@@ -9,9 +9,7 @@ import { getToolNamesByExposure } from '@@/shared/ai/tools/toolRegistry.ts';
 import { native } from '@/shared/platform';
 import {
   createAddMcpServerTool,
-  createApplyDrawingOperationsTool,
   createCreateDocumentTool,
-  createCreateDrawingTool,
   createEditFileTool,
   createGetCurrentTimeTool,
   createGetMcpSettingsTool,
@@ -20,7 +18,6 @@ import {
   createOpenResourceTool,
   createQueryLogsTool,
   createReadCurrentDocumentTool,
-  createReadCurrentDrawingTool,
   createReadCurrentWebpageTool,
   createReadDirectoryTool,
   createReadFileTool,
@@ -39,9 +36,7 @@ import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteToo
 // 重新导出工具名称
 export {
   ADD_MCP_SERVER_TOOL_NAME,
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
   CREATE_DOCUMENT_TOOL_NAME,
-  CREATE_DRAWING_TOOL_NAME,
   EDIT_FILE_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
@@ -50,13 +45,11 @@ export {
   OPEN_RESOURCE_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME,
   READ_CURRENT_DOCUMENT_TOOL_NAME,
-  READ_CURRENT_DRAWING_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
   READ_FILE_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
-  UPDATE_CURRENT_DRAWING_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME
 } from '../catalog/runtimeTools';
 export { LEGACY_ASK_USER_QUESTION_TOOL_NAME, QUESTION_TOOL_NAME } from './QuestionTool';
@@ -187,8 +180,6 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions {
   openInWebview?: (url: string) => void;
   /** 在系统浏览器中打开 URL，用于 open_resource 工具 */
   openExternal?: (url: string) => void;
-  /** 获取当前活动 Drawing 上下文，保留给调用方传参兼容。 */
-  getDrawingContext?: () => unknown;
 }
 
 /**
@@ -200,7 +191,6 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   // 先汇总全部只读 schema-only 工具，再通过共享清单筛选默认暴露项。
   const allReadonlyTools: AIToolExecutor[] = [
     createReadCurrentDocumentTool(),
-    createReadCurrentDrawingTool(),
     createReadCurrentWebpageTool(),
     createGetCurrentTimeTool(),
     createQuestionTool({
@@ -222,10 +212,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   const mcpHasContent = options.mcpStore?.hasEnabledMcpServers === true;
   const mcpReadTool = mcpHasContent ? createGetMcpSettingsTool() : null;
 
-  // 创建文档和画板写工具 schema，实际执行在主进程。
+  // 创建文档写工具 schema，实际执行在主进程。
   const createDocumentTool = createCreateDocumentTool();
-  const createDrawingTool = createCreateDrawingTool();
-  const applyDrawingOperationsTool = createApplyDrawingOperationsTool();
   const readCurrentWebpageTool = createReadCurrentWebpageTool();
   const operateWebpageTool = createOperateWebpageTool();
 
@@ -238,8 +226,6 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
       readCurrentWebpageTool,
       createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) }),
       createDocumentTool,
-      createDrawingTool,
-      applyDrawingOperationsTool,
       operateWebpageTool,
       createBuiltinEditMemoryTool()
     ];
@@ -259,8 +245,6 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   // 先汇总默认文件写工具，再通过共享清单筛选默认暴露项。
   const allDefaultWritableTools: AIToolExecutor[] = [
     createDocumentTool,
-    createDrawingTool,
-    applyDrawingOperationsTool,
     createEditFileTool(),
     createWriteFileTool(),
     createUpdateSettingsTool(),

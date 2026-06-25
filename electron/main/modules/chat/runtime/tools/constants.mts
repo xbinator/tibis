@@ -6,9 +6,7 @@ import { getToolNamesByRuntimeGroup } from '../../../../../../shared/ai/tools/to
 
 export {
   ADD_MCP_SERVER_TOOL_NAME,
-  APPLY_DRAWING_OPERATIONS_TOOL_NAME,
   CREATE_DOCUMENT_TOOL_NAME,
-  CREATE_DRAWING_TOOL_NAME,
   EDIT_FILE_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
@@ -17,13 +15,11 @@ export {
   OPEN_RESOURCE_TOOL_NAME,
   QUERY_LOGS_TOOL_NAME,
   READ_CURRENT_DOCUMENT_TOOL_NAME,
-  READ_CURRENT_DRAWING_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
   READ_FILE_TOOL_NAME,
   REFRESH_MCP_DISCOVERY_TOOL_NAME,
   REMOVE_MCP_SERVER_TOOL_NAME,
-  UPDATE_CURRENT_DRAWING_TOOL_NAME,
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
   WRITE_FILE_TOOL_NAME
@@ -38,9 +34,6 @@ export const FILE_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'file'
 /** 主进程设置工具名称集合。 */
 export const SETTINGS_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'settings'));
 
-/** 主进程画板工具名称集合。 */
-export const DRAWING_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'drawing'));
-
 /** 主进程资源工具名称集合。 */
 export const RESOURCE_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'resource'));
 
@@ -48,14 +41,7 @@ export const RESOURCE_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'r
 export const WEBVIEW_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'webview'));
 
 /** 主进程可执行工具名称集合。 */
-export const MAIN_PROCESS_TOOL_NAMES = new Set([
-  ...READ_TOOL_NAMES,
-  ...FILE_TOOL_NAMES,
-  ...SETTINGS_TOOL_NAMES,
-  ...DRAWING_TOOL_NAMES,
-  ...RESOURCE_TOOL_NAMES,
-  ...WEBVIEW_TOOL_NAMES
-]);
+export const MAIN_PROCESS_TOOL_NAMES = new Set([...READ_TOOL_NAMES, ...FILE_TOOL_NAMES, ...SETTINGS_TOOL_NAMES, ...RESOURCE_TOOL_NAMES, ...WEBVIEW_TOOL_NAMES]);
 
 /** 默认文件读取起始行。 */
 export const DEFAULT_READ_FILE_OFFSET = 1;

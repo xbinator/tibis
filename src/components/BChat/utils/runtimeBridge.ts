@@ -4,10 +4,8 @@
  */
 import type { AIToolContext, AIToolExecutionError } from 'types/ai';
 import type { ChatRuntimeBridgeRequestEvent } from 'types/chat-runtime';
-import type { DrawingToolContext } from '@/ai/tools/context/drawing';
 import type { WebviewOperateInput, WebviewPressKey, WebviewToolContext } from '@/ai/tools/context/webview';
 import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
-import type { DrawingData } from '@/components/BDrawing/types';
 import type { StoredFile } from '@/shared/storage/files/types';
 import { isAbsoluteFilePath } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
@@ -55,8 +53,6 @@ export interface BChatRuntimeBridgeDependencies {
   getRecentFileById?: (fileId: string) => StoredFile | undefined | Promise<StoredFile | undefined>;
   /** 更新最近文件记录。 */
   updateRecentFileById?: (fileId: string, updates: Partial<StoredFile>) => Promise<StoredFile>;
-  /** 获取当前画板工具上下文。 */
-  getDrawingContext: () => DrawingToolContext | undefined;
   /** 获取当前 WebView 工具上下文。 */
   getWebviewContext: () => WebviewToolContext | undefined;
   /** 获取应用设置快照。 */
@@ -88,18 +84,6 @@ export interface BChatRuntimeDocumentSnapshot {
   content: string;
   /** 当前选区。 */
   selection: ReturnType<AIToolContext['editor']['getSelection']>;
-}
-
-/** 画板 bridge 快照。 */
-export interface BChatRuntimeDrawingSnapshot {
-  /** 画板 ID。 */
-  id: string;
-  /** 画板标题。 */
-  title: string;
-  /** 磁盘路径。 */
-  path: string | null;
-  /** 画板数据。 */
-  data: ReturnType<DrawingToolContext['getData']>;
 }
 
 /** 文件内容 bridge 快照。 */
@@ -263,70 +247,6 @@ function readDocumentSnapshot(dependencies: BChatRuntimeBridgeDependencies): BCh
     ...(context.document.locator ? { locator: context.document.locator } : {}),
     content: context.document.getContent(),
     selection: context.editor.getSelection()
-  };
-}
-
-/** Drawing bridge handlers. */
-/**
- * 读取当前画板快照。
- * @param dependencies - bridge 依赖
- * @returns 画板快照
- */
-function readDrawingSnapshot(dependencies: BChatRuntimeBridgeDependencies): BChatRuntimeDrawingSnapshot {
-  const context = dependencies.getDrawingContext();
-  if (!context) {
-    throw createBridgeError('EDITOR_UNAVAILABLE', '当前没有可用的画板');
-  }
-
-  return {
-    id: context.id,
-    title: context.title,
-    path: context.path,
-    data: context.getData()
-  };
-}
-
-/**
- * 判断值是否为 DrawingData。
- * @param value - 待判断值
- * @returns 是否为 DrawingData
- */
-function isDrawingData(value: unknown): value is DrawingData {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.elements) &&
-    Array.isArray(value.edges) &&
-    isRecord(value.viewport) &&
-    isRecord(value.viewport.center) &&
-    typeof value.viewport.center.x === 'number' &&
-    typeof value.viewport.center.y === 'number' &&
-    typeof value.viewport.zoom === 'number'
-  );
-}
-
-/**
- * 写回当前画板数据。
- * @param event - bridge 请求事件
- * @param dependencies - bridge 依赖
- * @returns 写回后的画板快照
- */
-async function applyDrawingData(event: ChatRuntimeBridgeRequestEvent, dependencies: BChatRuntimeBridgeDependencies): Promise<BChatRuntimeDrawingSnapshot> {
-  const context = dependencies.getDrawingContext();
-  if (!context) {
-    throw createBridgeError('EDITOR_UNAVAILABLE', '当前没有可用的画板');
-  }
-
-  const payload = isRecord(event.payload) ? event.payload : {};
-  if (!isDrawingData(payload.data)) {
-    throw createBridgeError('INVALID_INPUT', '画板数据格式无效');
-  }
-
-  const data = await context.replaceData(payload.data);
-  return {
-    id: context.id,
-    title: context.title,
-    path: context.path,
-    data
   };
 }
 
@@ -576,14 +496,6 @@ async function openResource(event: ChatRuntimeBridgeRequestEvent, dependencies: 
 export async function handleBChatRuntimeBridgeRequest(event: ChatRuntimeBridgeRequestEvent, dependencies: BChatRuntimeBridgeDependencies): Promise<unknown> {
   if (event.kind === 'document-snapshot') {
     return readDocumentSnapshot(dependencies);
-  }
-
-  if (event.kind === 'drawing-snapshot') {
-    return readDrawingSnapshot(dependencies);
-  }
-
-  if (event.kind === 'apply-drawing-data') {
-    return applyDrawingData(event, dependencies);
   }
 
   if (event.kind === 'webview-snapshot') {

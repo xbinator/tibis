@@ -41,7 +41,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: createEditorContext,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined
       }
     );
@@ -56,69 +55,46 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     });
   });
 
-  it('returns the current drawing snapshot', async (): Promise<void> => {
-    const result = await handleBChatRuntimeBridgeRequest(
-      {
-        runtimeId: 'runtime-1',
-        sessionId: 'session-1',
-        clientId: 'bchat',
-        agentId: 'default',
-        requestId: 'bridge-1',
-        kind: 'drawing-snapshot'
-      },
-      {
-        getEditorContext: () => undefined,
-        getDrawingContext: () => ({
-          id: 'drawing-1',
-          title: 'diagram',
-          path: '/workspace/diagram.draw',
-          getData: () => ({ elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } }),
-          replaceData: vi.fn()
-        }),
-        getWebviewContext: () => undefined
-      }
-    );
-
-    expect(result).toEqual({
-      id: 'drawing-1',
-      title: 'diagram',
-      path: '/workspace/diagram.draw',
-      data: { elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } }
+  it('rejects drawing bridge requests as unsupported', async (): Promise<void> => {
+    await expect(
+      handleBChatRuntimeBridgeRequest(
+        {
+          runtimeId: 'runtime-1',
+          sessionId: 'session-1',
+          clientId: 'bchat',
+          agentId: 'default',
+          requestId: 'bridge-1',
+          kind: 'drawing-snapshot'
+        },
+        {
+          getEditorContext: () => undefined,
+          getWebviewContext: () => undefined
+        }
+      )
+    ).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: '不支持的 bridge 请求类型：drawing-snapshot'
     });
-  });
 
-  it('applies drawing data through the bridge', async (): Promise<void> => {
-    const replaceData = vi.fn().mockImplementation(async (data) => data);
-    const nextData = { elements: [], edges: [], viewport: { center: { x: 1, y: 2 }, zoom: 1 } };
-    const result = await handleBChatRuntimeBridgeRequest(
-      {
-        runtimeId: 'runtime-1',
-        sessionId: 'session-1',
-        clientId: 'bchat',
-        agentId: 'default',
-        requestId: 'bridge-1',
-        kind: 'apply-drawing-data',
-        payload: { data: nextData }
-      },
-      {
-        getEditorContext: () => undefined,
-        getDrawingContext: () => ({
-          id: 'drawing-1',
-          title: 'diagram',
-          path: null,
-          getData: () => ({ elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } }),
-          replaceData
-        }),
-        getWebviewContext: () => undefined
-      }
-    );
-
-    expect(replaceData).toHaveBeenCalledWith(nextData);
-    expect(result).toEqual({
-      id: 'drawing-1',
-      title: 'diagram',
-      path: null,
-      data: nextData
+    await expect(
+      handleBChatRuntimeBridgeRequest(
+        {
+          runtimeId: 'runtime-1',
+          sessionId: 'session-1',
+          clientId: 'bchat',
+          agentId: 'default',
+          requestId: 'bridge-2',
+          kind: 'apply-drawing-data',
+          payload: { data: { elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } } }
+        },
+        {
+          getEditorContext: () => undefined,
+          getWebviewContext: () => undefined
+        }
+      )
+    ).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: '不支持的 bridge 请求类型：apply-drawing-data'
     });
   });
 
@@ -134,7 +110,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: () => undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => ({
           readPageSnapshot: async () => ({
             url: 'https://example.com',
@@ -195,7 +170,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: () => undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => ({
           readPageSnapshot: async () => ({
             url: 'https://example.com',
@@ -244,7 +218,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: () => undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => ({
           readPageSnapshot: vi.fn(),
           operatePage
@@ -272,7 +245,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
         },
         {
           getEditorContext: () => undefined,
-          getDrawingContext: () => undefined,
           getWebviewContext: () => ({
             readPageSnapshot: vi.fn(),
             operatePage
@@ -298,7 +270,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
         getEditorContext: createEditorContext,
         getEditorContextByDocumentId: (documentId) => (documentId === 'doc-1' ? createEditorContext() : undefined),
         findFileByPath: async (filePath) => (filePath === '/workspace/src/index.ts' ? { id: 'doc-1' } : null),
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined
       }
     );
@@ -333,7 +304,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
                 content: 'draft content'
               }
             : undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined
       }
     );
@@ -362,7 +332,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
         getEditorContext: createEditorContext,
         getEditorContextByDocumentId: (documentId) => (documentId === 'doc-1' ? context : undefined),
         findFileByPath: async (filePath) => (filePath === '/workspace/src/index.ts' ? { id: 'doc-1' } : null),
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined
       }
     );
@@ -396,7 +365,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       {
         getEditorContext: () => undefined,
         updateRecentFileById,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined
       }
     );
@@ -420,7 +388,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: () => undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined,
         getSettingsSnapshot: () => ({
           settings: {
@@ -457,7 +424,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: () => undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined,
         openFileByPath
       }
@@ -486,7 +452,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: () => undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined,
         openInWebview
       }
@@ -519,7 +484,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: () => undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined,
         applySetting
       }
@@ -558,7 +522,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       },
       {
         getEditorContext: () => undefined,
-        getDrawingContext: () => undefined,
         getWebviewContext: () => undefined,
         openDraft
       }
@@ -591,7 +554,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
         },
         {
           getEditorContext: () => undefined,
-          getDrawingContext: () => undefined,
           getWebviewContext: () => undefined
         }
       )

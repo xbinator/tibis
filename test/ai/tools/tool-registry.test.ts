@@ -101,14 +101,25 @@ describe('toolRegistry', (): void => {
 
   it('can derive tool names by renderer exposure policy', (): void => {
     expect(getToolNamesByExposure('default-readonly')).toEqual(
-      expect.arrayContaining(['read_current_document', 'read_current_drawing', 'get_current_time', 'read_file', 'get_settings', 'query_logs', 'open_resource'])
+      expect.arrayContaining(['read_current_document', 'get_current_time', 'read_file', 'get_settings', 'query_logs', 'open_resource'])
     );
     expect(getToolNamesByExposure('default-writable')).toEqual(
-      expect.arrayContaining(['create_document', 'create_drawing', 'apply_drawing_operations', 'edit_file', 'write_file', 'update_settings'])
+      expect.arrayContaining(['create_document', 'edit_file', 'write_file', 'update_settings'])
     );
+    expect(getToolNamesByExposure('default-readonly')).not.toEqual(expect.arrayContaining(['read_current_drawing']));
+    expect(getToolNamesByExposure('default-writable')).not.toEqual(expect.arrayContaining(['create_drawing', 'apply_drawing_operations']));
     expect(getToolNamesByExposure('conditional-readonly')).toEqual(expect.arrayContaining(['read_directory', 'get_mcp_settings', 'read_current_webpage']));
     expect(getToolNamesByExposure('conditional-writable')).toEqual(
       expect.arrayContaining(['add_mcp_server', 'update_mcp_server', 'remove_mcp_server', 'refresh_mcp_discovery', 'operate_webpage'])
     );
+  });
+
+  it('does not keep Drawing tools in the shared registry', (): void => {
+    const registryToolNames = TOOL_REGISTRY.map((entry) => entry.definition.name);
+
+    expect(getToolDefinitionByName('create_drawing')).toBeUndefined();
+    expect(getToolDefinitionByName('read_current_drawing')).toBeUndefined();
+    expect(getToolDefinitionByName('apply_drawing_operations')).toBeUndefined();
+    expect(registryToolNames).not.toEqual(expect.arrayContaining(['create_drawing', 'read_current_drawing', 'apply_drawing_operations']));
   });
 });

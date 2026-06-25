@@ -91,7 +91,6 @@ import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } fr
 import { useRouter } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
 import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
-import { drawingToolContextRegistry } from '@/ai/tools/context/drawing';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { toTransportTools } from '@/ai/tools/stream';
@@ -600,7 +599,6 @@ const chatRuntime = useChatRuntime({
       },
       getRecentFileById: (fileId) => filesStore.getFileById(fileId),
       updateRecentFileById: (fileId, updates) => filesStore.updateFile(fileId, updates),
-      getDrawingContext: drawingToolContextRegistry.getCurrentContext,
       getWebviewContext: webviewToolContextRegistry.getCurrentContext,
       getSettingsSnapshot,
       applySetting: applyRuntimeSetting,
