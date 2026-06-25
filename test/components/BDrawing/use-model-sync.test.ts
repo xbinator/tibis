@@ -16,8 +16,7 @@ import type { DrawingData, DrawingElement, DrawingShapeElement } from '@/compone
 function createShapeElement(id: string): DrawingShapeElement {
   return {
     id,
-    kind: 'shape',
-    shape: 'rect',
+    name: 'rect',
     text: '外部节点',
     position: { x: 24, y: 36 },
     size: { width: 180, height: 72 },
@@ -37,7 +36,6 @@ function createShapeElement(id: string): DrawingShapeElement {
 function createDrawingData(id: string): DrawingData {
   return {
     elements: [createShapeElement(id)],
-    edges: [],
     viewport: {
       center: { x: 10, y: 20 },
       zoom: 1
@@ -80,10 +78,14 @@ describe('useModelSync', (): void => {
 
     expect(emitted).toHaveLength(1);
     expect(emitted[0]?.elements).toHaveLength(2);
+    expect(Object.keys(emitted[0] ?? {}).sort()).toEqual(['elements', 'viewport']);
+    expect('kind' in (emitted[0]?.elements[0] ?? {})).toBe(false);
+    expect(emitted[0]?.elements[0]?.name).toBe('rect');
+    expect('shape' in (emitted[0]?.elements[0] ?? {})).toBe(false);
     expect(hasInternalStateFields(emitted[0] as DrawingData)).toBe(false);
   });
 
-  it('does not emit model updates when only the viewport changes', async (): Promise<void> => {
+  it('emits lightweight model data when only the viewport changes', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<DrawingData | undefined>(createDrawingData('node-1'));
     const emitted: DrawingData[] = [];
@@ -110,10 +112,13 @@ describe('useModelSync', (): void => {
     await nextTick();
     scope.stop();
 
-    expect(emitted).toEqual([]);
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]?.elements).toEqual(modelValue.value?.elements);
+    expect(emitted[0]?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
+    expect(hasInternalStateFields(emitted[0] as DrawingData)).toBe(false);
   });
 
-  it('preserves the external viewport snapshot when emitting content changes', async (): Promise<void> => {
+  it('uses the current board viewport when emitting content changes', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<DrawingData | undefined>(createDrawingData('node-1'));
     const emitted: DrawingData[] = [];
@@ -143,8 +148,21 @@ describe('useModelSync', (): void => {
     await nextTick();
     scope.stop();
 
-    expect(emitted).toHaveLength(1);
-    expect(emitted[0]?.viewport).toEqual({ center: { x: 10, y: 20 }, zoom: 1 });
+    expect(emitted.at(-1)?.elements).toHaveLength(2);
+    expect(emitted.at(-1)?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
+  });
+
+  it('continues generated shape ids after the highest existing generated id', (): void => {
+    const board = useDrawingBoard({
+      elements: [createShapeElement('drawing-shape-2')]
+    });
+
+    board.startCreateShapeDraft('rect', { x: 20, y: 30 });
+    board.updateDraftPoint({ x: 140, y: 90 });
+    board.commitCreateShapeDraft();
+
+    expect(board.state.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['drawing-shape-2', 'drawing-shape-3']);
+    expect(board.state.value.lastError).toBeUndefined();
   });
 
   it('resets board from external model without echoing the same update', async (): Promise<void> => {

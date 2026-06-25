@@ -3,24 +3,19 @@
  * @description 验证 BDrawing 手动画板 element transform 与历史记录。
  */
 import { describe, expect, it } from 'vitest';
-import type { DrawingBoardState, DrawingConnectorElement, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import type { DrawingBoardState, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import {
-  addDrawingConnector,
   addDrawingShape,
   createDrawingBoardState,
-  deleteDrawingSelection,
-  measureDrawingTextElementSize,
   moveDrawingElements,
   redoDrawingBoard,
   reorderDrawingElement,
   resizeDrawingElements,
   undoDrawingBoard,
-  updateDrawingConnectorOptions,
-  updateDrawingConnectorLabel,
   updateDrawingElementStyle,
   updateDrawingNodeText
 } from '@/components/BDrawing/utils/boardTransforms';
-import { getDrawingConnectorAnchorPoint } from '@/components/BDrawing/utils/drawingGeometry';
+import { measureDrawingTextElementSize } from '@/components/BDrawing/utils/drawingTextMetrics';
 
 /**
  * 创建测试形状元素。
@@ -30,8 +25,7 @@ import { getDrawingConnectorAnchorPoint } from '@/components/BDrawing/utils/draw
 function createShapeElement(id: string): DrawingShapeElement {
   return {
     id,
-    kind: 'shape',
-    shape: 'process',
+    name: 'process',
     text: '流程节点',
     position: { x: 100, y: 120 },
     size: { width: 180, height: 72 },
@@ -41,23 +35,43 @@ function createShapeElement(id: string): DrawingShapeElement {
 }
 
 /**
+ * 旧版形状元素快照。
+ */
+type LegacyShapeElementSnapshot = Omit<DrawingShapeElement, 'name'> & {
+  /** 旧版元素类别 */
+  kind: 'shape';
+  /** 旧版形状类型 */
+  shape: string;
+};
+
+/**
+ * 创建带旧版 kind 字段的测试形状元素。
+ * @param id - 元素 ID
+ * @returns 旧版形状元素
+ */
+function createLegacyShapeElement(id: string): DrawingShapeElement {
+  const legacyElement: LegacyShapeElementSnapshot = {
+    id,
+    kind: 'shape',
+    shape: 'rect',
+    text: '旧版节点',
+    position: { x: 100, y: 120 },
+    size: { width: 180, height: 72 },
+    rotation: 0,
+    metadata: { source: 'user', createdAt: 1 }
+  };
+
+  return legacyElement as unknown as DrawingShapeElement;
+}
+
+/**
  * 断言元素为形状元素。
  * @param element - 待检查元素
  * @returns 形状元素
  */
 function expectShapeElement(element: DrawingElement | undefined): DrawingShapeElement {
-  expect(element?.kind).toBe('shape');
+  expect(element).toBeDefined();
   return element as DrawingShapeElement;
-}
-
-/**
- * 断言元素为连接线元素。
- * @param element - 待检查元素
- * @returns 连接线元素
- */
-function expectConnectorElement(element: DrawingElement | undefined): DrawingConnectorElement {
-  expect(element?.kind).toBe('connector');
-  return element as DrawingConnectorElement;
 }
 
 describe('boardTransforms', (): void => {
@@ -71,7 +85,7 @@ describe('boardTransforms', (): void => {
   it('supports undo and redo after adding a shape', (): void => {
     const added = addDrawingShape(createDrawingBoardState(), {
       id: 'shape-1',
-      shape: 'rect',
+      name: 'rect',
       start: { x: 40, y: 60 },
       end: { x: 160, y: 120 }
     });
@@ -84,22 +98,14 @@ describe('boardTransforms', (): void => {
     expect(redone.history.future).toHaveLength(0);
   });
 
-  it('drops legacy edge snapshots when creating board state', (): void => {
+  it('normalizes legacy shape kind out of board snapshots', (): void => {
     const initial = createDrawingBoardState({
-      elements: [createShapeElement('node-1'), createShapeElement('node-2')],
-      edges: [
-        {
-          id: 'edge-1',
-          type: 'arrow',
-          sourceId: 'node-1',
-          targetId: 'node-2',
-          metadata: { source: 'user', createdAt: 1 }
-        }
-      ],
-      selection: ['node-1']
+      elements: [createLegacyShapeElement('node-1')]
     });
 
-    expect(initial.edges).toEqual([]);
+    expect('kind' in (initial.elements[0] ?? {})).toBe(false);
+    expect('shape' in (initial.elements[0] ?? {})).toBe(false);
+    expect(initial.elements[0]?.name).toBe('rect');
   });
 
   it('updates node text through a manual board command', (): void => {
@@ -154,7 +160,7 @@ describe('boardTransforms', (): void => {
     const initial = createDrawingBoardState();
     const added = addDrawingShape(initial, {
       id: 'shape-1',
-      shape: 'diamond',
+      name: 'diamond',
       start: { x: 260, y: 220 },
       end: { x: 100, y: 120 },
       createdAt: 20
@@ -162,8 +168,7 @@ describe('boardTransforms', (): void => {
 
     expect(added.elements[0]).toMatchObject({
       id: 'shape-1',
-      kind: 'shape',
-      shape: 'diamond',
+      name: 'diamond',
       position: { x: 100, y: 120 },
       size: { width: 160, height: 100 },
       rotation: 0
@@ -176,7 +181,7 @@ describe('boardTransforms', (): void => {
     const initial = createDrawingBoardState();
     const added = addDrawingShape(initial, {
       id: 'shape-1',
-      shape: 'ellipse',
+      name: 'ellipse',
       start: { x: 200, y: 180 },
       end: { x: 203, y: 184 },
       createdAt: 20
@@ -192,7 +197,7 @@ describe('boardTransforms', (): void => {
     const initial = createDrawingBoardState();
     const added = addDrawingShape(initial, {
       id: 'text-1',
-      shape: 'text',
+      name: 'text',
       start: { x: 200, y: 180 },
       end: { x: 200, y: 180 },
       text: 'Hi',
@@ -207,29 +212,6 @@ describe('boardTransforms', (): void => {
 
     const updated = updateDrawingNodeText(added, 'text-1', '更长的文本内容');
     expect(expectShapeElement(updated.elements[0]).size.width).toBeGreaterThan(textElement.size.width);
-  });
-
-  it('uses measured text size for text connector anchors even when node size is stale', (): void => {
-    const textElement: DrawingShapeElement = {
-      id: 'text-1',
-      kind: 'shape',
-      metadata: { createdAt: 1, source: 'user' },
-      position: { x: 40, y: 50 },
-      rotation: 0,
-      shape: 'text',
-      size: { height: 120, width: 260 },
-      style: {
-        fontSize: 13,
-        fontWeight: 650,
-        textAlign: 'center'
-      },
-      text: 'Hi'
-    };
-    const measuredSize = measureDrawingTextElementSize(textElement.text, textElement.style);
-    const anchor = getDrawingConnectorAnchorPoint(textElement, 'right');
-
-    expect(anchor.x).toBe(textElement.position.x + measuredSize.width);
-    expect(anchor.y).toBe(textElement.position.y + measuredSize.height / 2);
   });
 
   it('moves multiple elements as one history entry', (): void => {
@@ -318,112 +300,6 @@ describe('boardTransforms', (): void => {
     expect(widenedShape.size.width).toBe(260);
     expect(widenedShape.size.height).toBeLessThan(narrowedShape.size.height);
     expect(widenedShape.size.height).toBe(72);
-  });
-
-  it('adds a connector element between two shapes', (): void => {
-    const initial = createDrawingBoardState({
-      elements: [createShapeElement('node-1'), createShapeElement('node-2')]
-    });
-    const connected = addDrawingConnector(initial, {
-      id: 'connector-1',
-      sourceId: 'node-1',
-      targetId: 'node-2',
-      style: { stroke: '#ef4444', strokeWidth: 3 },
-      curve: 'bezier',
-      markerEnd: 'none',
-      markerStart: 'arrow',
-      createdAt: 30
-    });
-
-    expect(connected.elements[2]).toMatchObject({
-      id: 'connector-1',
-      kind: 'connector',
-      source: { elementId: 'node-1', anchor: 'center' },
-      target: { elementId: 'node-2', anchor: 'center' },
-      style: { stroke: '#ef4444', strokeWidth: 3 },
-      curve: 'bezier',
-      markerEnd: 'none',
-      markerStart: 'arrow'
-    });
-    expect(connected.selection).toEqual(['connector-1']);
-    expect(connected.history.past).toHaveLength(1);
-  });
-
-  it('updates connector options as one undoable history entry', (): void => {
-    const connected = addDrawingConnector(
-      createDrawingBoardState({
-        elements: [createShapeElement('node-1'), createShapeElement('node-2')]
-      }),
-      {
-        id: 'connector-1',
-        sourceId: 'node-1',
-        targetId: 'node-2'
-      }
-    );
-    const updated = updateDrawingConnectorOptions(connected, 'connector-1', {
-      curve: 'bezier',
-      markerEnd: 'none',
-      markerStart: 'arrow'
-    });
-
-    expect(expectConnectorElement(updated.elements[2])).toMatchObject({
-      curve: 'bezier',
-      markerEnd: 'none',
-      markerStart: 'arrow'
-    });
-    expect(updated.history.past).toHaveLength(2);
-  });
-
-  it('updates connector label as one undoable history entry', (): void => {
-    const connected = addDrawingConnector(
-      createDrawingBoardState({
-        elements: [createShapeElement('node-1'), createShapeElement('node-2')]
-      }),
-      {
-        id: 'connector-1',
-        sourceId: 'node-1',
-        targetId: 'node-2'
-      }
-    );
-    const updated = updateDrawingConnectorLabel(connected, 'connector-1', '通过');
-
-    expect(expectConnectorElement(updated.elements[2]).label).toBe('通过');
-    expect(updated.history.past).toHaveLength(2);
-  });
-
-  it('keeps the board unchanged when connector endpoints are missing', (): void => {
-    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
-    const result = addDrawingConnector(initial, {
-      id: 'connector-1',
-      sourceId: 'node-1',
-      targetId: 'missing'
-    });
-
-    expect(result.elements).toEqual(initial.elements);
-    expect(result.lastError?.message).toContain('找不到连接目标');
-    expect(result.history.past).toHaveLength(0);
-  });
-
-  it('deletes connectors attached to a deleted shape and restores them on undo', (): void => {
-    const connected = addDrawingConnector(
-      createDrawingBoardState({
-        elements: [createShapeElement('node-1'), createShapeElement('node-2')]
-      }),
-      {
-        id: 'connector-1',
-        sourceId: 'node-1',
-        targetId: 'node-2'
-      }
-    );
-    const selectedShape = {
-      ...connected,
-      selection: ['node-1']
-    };
-    const deleted = deleteDrawingSelection(selectedShape);
-    const restored = undoDrawingBoard(deleted);
-
-    expect(deleted.elements.map((element) => element.id)).toEqual(['node-2']);
-    expect(restored.elements.map((element) => element.id)).toEqual(['node-1', 'node-2', 'connector-1']);
   });
 
   describe('reorderDrawingElement', (): void => {

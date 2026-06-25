@@ -47,7 +47,6 @@ vi.mock('@/hooks/useFileSession', () => ({
     data: {
       value: {
         elements: [],
-        edges: [],
         viewport: {
           center: { x: 0, y: 0 },
           zoom: 1

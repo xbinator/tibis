@@ -93,7 +93,6 @@ vi.mock('@/shared/platform', () => ({
 function createDrawingData(): DrawingData {
   return {
     elements: [],
-    edges: [],
     viewport: {
       center: { x: 0, y: 0 },
       zoom: 1
@@ -123,7 +122,6 @@ describe('tibis document helpers', (): void => {
       type: 'drawing',
       version: 1,
       elements: [],
-      edges: [],
       viewport: {
         center: { x: 0, y: 0 },
         zoom: 1
@@ -137,7 +135,6 @@ describe('tibis document helpers', (): void => {
         type: 'drawing',
         version: 1,
         elements: [],
-        edges: [],
         viewport: {
           center: { x: 1, y: 2 },
           zoom: 1.5
@@ -150,7 +147,6 @@ describe('tibis document helpers', (): void => {
     expect(parsed.version).toBe(1);
     expect(parsed.data).toEqual({
       elements: [],
-      edges: [],
       viewport: {
         center: { x: 1, y: 2 },
         zoom: 1.5
@@ -175,7 +171,7 @@ describe('tibis document helpers', (): void => {
   });
 
   it('routes supported drawing documents to drawing and invalid content to editor', (): void => {
-    expect(resolveTibisDocumentRoute('{"type":"drawing","version":1,"elements":[],"edges":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}')).toEqual({
+    expect(resolveTibisDocumentRoute('{"type":"drawing","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}')).toEqual({
       routeName: 'drawing'
     });
 
@@ -232,7 +228,6 @@ describe('useFileSession', (): void => {
       type: 'drawing',
       version: 1,
       elements: [],
-      edges: [],
       viewport: {
         center: { x: 0, y: 0 },
         zoom: 1
@@ -276,7 +271,7 @@ describe('useFileSession', (): void => {
   });
 
   it('does not mark stored tibis content dirty while loading', async (): Promise<void> => {
-    const content = '{"type":"drawing","version":1,"elements":[],"edges":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}';
+    const content = '{"type":"drawing","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}';
     getFileByIdMock.mockResolvedValue({
       type: 'file',
       id: 'drawing-1',

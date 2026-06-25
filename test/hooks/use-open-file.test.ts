@@ -64,7 +64,7 @@ describe('useOpenFile', (): void => {
       path: '/tmp/board.tibis',
       name: 'board',
       ext: 'tibis',
-      content: '{"type":"drawing","version":1,"elements":[],"edges":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}',
+      content: '{"type":"drawing","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}',
       savedContent: ''
     });
 

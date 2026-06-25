@@ -85,7 +85,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
           agentId: 'default',
           requestId: 'bridge-2',
           kind: 'apply-drawing-data',
-          payload: { data: { elements: [], edges: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } } }
+          payload: { data: { elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } } }
         },
         {
           getEditorContext: () => undefined,

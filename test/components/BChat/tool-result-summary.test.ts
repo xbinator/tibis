@@ -155,7 +155,6 @@ describe('toolResultSummary open file metadata', (): void => {
         appliedOperations: 3,
         data: {
           elements: [{ id: 'node-1' }],
-          edges: [],
           viewport: { center: { x: 0, y: 0 }, zoom: 1 }
         }
       })
@@ -178,7 +177,6 @@ describe('toolResultSummary open file metadata', (): void => {
         path: 'unsaved://draft-1/flow.tibis',
         data: {
           elements: [{ id: 'node-1' }],
-          edges: [],
           viewport: { center: { x: 0, y: 0 }, zoom: 1 }
         }
       })
