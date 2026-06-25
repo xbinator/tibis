@@ -65,7 +65,7 @@ function handleDevicePresetChange(record: DropdownOptionItem): void {
   align-items: center;
   justify-content: flex-start;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--border-secondary);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .device-size-info {

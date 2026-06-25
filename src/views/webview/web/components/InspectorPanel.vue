@@ -189,7 +189,7 @@ function copyText(value: string): void {
 <style module lang="less">
 .section {
   padding: 12px;
-  border-bottom: 1px solid var(--border-secondary);
+  border-bottom: 1px solid var(--border-primary);
 
   &:last-child {
     border-bottom: none;
@@ -210,7 +210,7 @@ function copyText(value: string): void {
   overflow: hidden;
   color: var(--text-primary);
   background: var(--bg-primary);
-  border-left: 1px solid var(--border-secondary);
+  border-left: 1px solid var(--border-primary);
 }
 
 .header {
@@ -220,7 +220,7 @@ function copyText(value: string): void {
   justify-content: space-between;
   min-height: 42px;
   padding: 0 10px 0 12px;
-  border-bottom: 1px solid var(--border-secondary);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .title {
