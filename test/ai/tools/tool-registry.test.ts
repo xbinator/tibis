@@ -6,6 +6,22 @@ import type { AIToolExecutor } from 'types/ai';
 import { describe, expect, it } from 'vitest';
 import * as runtimeTools from '@/ai/tools/catalog/runtimeTools';
 import { createReadFileTool, READ_FILE_TOOL_NAME } from '@/ai/tools/catalog/runtimeTools';
+import { createDocumentToolRegistryEntry, readCurrentDocumentToolRegistryEntry } from '../../../shared/ai/tools/DocumentTool/index.js';
+import { getCurrentTimeToolRegistryEntry } from '../../../shared/ai/tools/EnvironmentTool/index.js';
+import { editFileToolRegistryEntry } from '../../../shared/ai/tools/FileEditTool/index.js';
+import { readDirectoryToolRegistryEntry, readFileToolRegistryEntry } from '../../../shared/ai/tools/FileReadTool/index.js';
+import { writeFileToolRegistryEntry } from '../../../shared/ai/tools/FileWriteTool/index.js';
+import { queryLogsToolRegistryEntry } from '../../../shared/ai/tools/LogsTool/index.js';
+import {
+  addMcpServerToolRegistryEntry,
+  getMcpSettingsToolRegistryEntry,
+  refreshMcpDiscoveryToolRegistryEntry,
+  removeMcpServerToolRegistryEntry,
+  updateMcpServerToolRegistryEntry
+} from '../../../shared/ai/tools/MCPSettingsTool/index.js';
+import { openResourceToolRegistryEntry } from '../../../shared/ai/tools/OpenResourceTool/index.js';
+import { getSettingsToolRegistryEntry, updateSettingsToolRegistryEntry } from '../../../shared/ai/tools/SettingsTool/index.js';
+import { operateWebpageToolRegistryEntry, readCurrentWebpageToolRegistryEntry } from '../../../shared/ai/tools/WebviewTool/index.js';
 import {
   OPERATE_WEBPAGE_TOOL_NAME,
   OPEN_RESOURCE_TOOL_NAME,
@@ -13,7 +29,7 @@ import {
   getToolDefinitionByName,
   getToolNamesByExposure,
   getToolNamesByRuntimeGroup
-} from '../../../shared/ai/tools/toolRegistry.js';
+} from '../../../shared/ai/tools/index.js';
 
 /** runtimeTools 模块带工厂映射的测试视图。 */
 type RuntimeToolsWithFactoryMap = typeof runtimeTools & {
@@ -24,6 +40,29 @@ type RuntimeToolsWithFactoryMap = typeof runtimeTools & {
 describe('toolRegistry', (): void => {
   it('exposes the shared registry as the single source', (): void => {
     expect(TOOL_REGISTRY.length).toBeGreaterThan(0);
+  });
+
+  it('assembles registry entries from one Tool directory per tool domain', (): void => {
+    expect(TOOL_REGISTRY).toEqual([
+      readCurrentDocumentToolRegistryEntry,
+      createDocumentToolRegistryEntry,
+      getCurrentTimeToolRegistryEntry,
+      readFileToolRegistryEntry,
+      readDirectoryToolRegistryEntry,
+      writeFileToolRegistryEntry,
+      editFileToolRegistryEntry,
+      queryLogsToolRegistryEntry,
+      getSettingsToolRegistryEntry,
+      updateSettingsToolRegistryEntry,
+      getMcpSettingsToolRegistryEntry,
+      addMcpServerToolRegistryEntry,
+      updateMcpServerToolRegistryEntry,
+      removeMcpServerToolRegistryEntry,
+      refreshMcpDiscoveryToolRegistryEntry,
+      openResourceToolRegistryEntry,
+      readCurrentWebpageToolRegistryEntry,
+      operateWebpageToolRegistryEntry
+    ]);
   });
 
   it('is the source of schema definitions used by runtimeTools factories', (): void => {

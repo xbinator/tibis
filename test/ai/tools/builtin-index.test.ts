@@ -12,7 +12,7 @@ import {
   OPERATE_WEBPAGE_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
 } from '@/ai/tools/builtin';
-import { getToolNamesByExposure } from '../../../shared/ai/tools/toolRegistry.js';
+import { getToolNamesByExposure } from '../../../shared/ai/tools/index.js';
 
 describe('builtin tools index', (): void => {
   it('does not expose Drawing tools by default', (): void => {

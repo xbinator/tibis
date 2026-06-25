@@ -21,7 +21,7 @@ import {
   RESOURCE_TOOL_NAMES,
   SETTINGS_TOOL_NAMES
 } from '../../../electron/main/modules/chat/runtime/tools/constants.mjs';
-import { getToolNamesByRuntimeGroup } from '../../../shared/ai/tools/toolRegistry.js';
+import { getToolNamesByRuntimeGroup } from '../../../shared/ai/tools/index.js';
 
 describe('builtin main-process tools', (): void => {
   it('exposes migrated tool schemas from the catalog namespace', (): void => {

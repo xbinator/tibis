@@ -2,7 +2,7 @@
  * @file constants.mts
  * @description ChatRuntime 主进程工具常量。
  */
-import { getToolNamesByRuntimeGroup } from '../../../../../../shared/ai/tools/toolRegistry.js';
+import { getToolNamesByRuntimeGroup } from '../../../../../../shared/ai/tools/index.js';
 
 export {
   ADD_MCP_SERVER_TOOL_NAME,
@@ -23,7 +23,7 @@ export {
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
   WRITE_FILE_TOOL_NAME
-} from '../../../../../../shared/ai/tools/toolRegistry.js';
+} from '../../../../../../shared/ai/tools/index.js';
 
 /** 主进程只读工具名称集合。 */
 export const READ_TOOL_NAMES = new Set(getToolNamesByRuntimeGroup('main', 'read'));

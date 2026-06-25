@@ -1,0 +1,99 @@
+/**
+ * @file index.ts
+ * @description ChatRuntime 跨进程工具 registry 聚合出口。
+ */
+import type { SharedToolDefinition, ToolExposure, ToolRegistryEntry, ToolRuntimeGroup, ToolRuntimeOwner } from './types.js';
+import { createDocumentToolRegistryEntry, readCurrentDocumentToolRegistryEntry } from './DocumentTool/index.js';
+import { getCurrentTimeToolRegistryEntry } from './EnvironmentTool/index.js';
+import { editFileToolRegistryEntry } from './FileEditTool/index.js';
+import { readDirectoryToolRegistryEntry, readFileToolRegistryEntry } from './FileReadTool/index.js';
+import { writeFileToolRegistryEntry } from './FileWriteTool/index.js';
+import { queryLogsToolRegistryEntry } from './LogsTool/index.js';
+import {
+  addMcpServerToolRegistryEntry,
+  getMcpSettingsToolRegistryEntry,
+  refreshMcpDiscoveryToolRegistryEntry,
+  removeMcpServerToolRegistryEntry,
+  updateMcpServerToolRegistryEntry
+} from './MCPSettingsTool/index.js';
+import { openResourceToolRegistryEntry } from './OpenResourceTool/index.js';
+import { getSettingsToolRegistryEntry, updateSettingsToolRegistryEntry } from './SettingsTool/index.js';
+import { operateWebpageToolRegistryEntry, readCurrentWebpageToolRegistryEntry } from './WebviewTool/index.js';
+
+export type {
+  SharedToolDefinition,
+  SharedToolParameterSchema,
+  SharedToolRiskLevel,
+  SharedToolSource,
+  ToolExposure,
+  ToolJsonSchema,
+  ToolRegistryEntry,
+  ToolRuntimeGroup,
+  ToolRuntimeOwner
+} from './types.js';
+export { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool/index.js';
+export { GET_CURRENT_TIME_TOOL_NAME } from './EnvironmentTool/index.js';
+export { EDIT_FILE_TOOL_NAME } from './FileEditTool/index.js';
+export { READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool/index.js';
+export { WRITE_FILE_TOOL_NAME } from './FileWriteTool/index.js';
+export { QUERY_LOGS_TOOL_NAME } from './LogsTool/index.js';
+export {
+  ADD_MCP_SERVER_TOOL_NAME,
+  GET_MCP_SETTINGS_TOOL_NAME,
+  REFRESH_MCP_DISCOVERY_TOOL_NAME,
+  REMOVE_MCP_SERVER_TOOL_NAME,
+  UPDATE_MCP_SERVER_TOOL_NAME
+} from './MCPSettingsTool/index.js';
+export { OPEN_RESOURCE_TOOL_NAME } from './OpenResourceTool/index.js';
+export { GET_SETTINGS_TOOL_NAME, UPDATE_SETTINGS_TOOL_NAME } from './SettingsTool/index.js';
+export { OPERATE_WEBPAGE_TOOL_NAME, READ_CURRENT_WEBPAGE_TOOL_NAME } from './WebviewTool/index.js';
+
+/** 已迁移到主进程的工具 registry。 */
+export const TOOL_REGISTRY = [
+  readCurrentDocumentToolRegistryEntry,
+  createDocumentToolRegistryEntry,
+  getCurrentTimeToolRegistryEntry,
+  readFileToolRegistryEntry,
+  readDirectoryToolRegistryEntry,
+  writeFileToolRegistryEntry,
+  editFileToolRegistryEntry,
+  queryLogsToolRegistryEntry,
+  getSettingsToolRegistryEntry,
+  updateSettingsToolRegistryEntry,
+  getMcpSettingsToolRegistryEntry,
+  addMcpServerToolRegistryEntry,
+  updateMcpServerToolRegistryEntry,
+  removeMcpServerToolRegistryEntry,
+  refreshMcpDiscoveryToolRegistryEntry,
+  openResourceToolRegistryEntry,
+  readCurrentWebpageToolRegistryEntry,
+  operateWebpageToolRegistryEntry
+] as const satisfies ToolRegistryEntry[];
+
+/**
+ * 按名称读取工具定义。
+ * @param toolName - 工具名称
+ * @returns 工具定义
+ */
+export function getToolDefinitionByName(toolName: string): SharedToolDefinition | undefined {
+  return TOOL_REGISTRY.find((entry) => entry.definition.name === toolName)?.definition;
+}
+
+/**
+ * 按 runtime 和 group 派生工具名称。
+ * @param runtime - 工具运行时归属
+ * @param group - 工具分组
+ * @returns 工具名称列表
+ */
+export function getToolNamesByRuntimeGroup(runtime: ToolRuntimeOwner, group: ToolRuntimeGroup): string[] {
+  return TOOL_REGISTRY.filter((entry) => entry.runtime === runtime && entry.group === group).map((entry) => entry.definition.name);
+}
+
+/**
+ * 按 renderer 暴露策略派生工具名称。
+ * @param exposure - 工具暴露策略
+ * @returns 工具名称列表
+ */
+export function getToolNamesByExposure(exposure: ToolExposure): string[] {
+  return TOOL_REGISTRY.filter((entry) => entry.exposure === exposure).map((entry) => entry.definition.name);
+}

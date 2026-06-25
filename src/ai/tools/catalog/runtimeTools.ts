@@ -24,7 +24,7 @@ import {
   UPDATE_SETTINGS_TOOL_NAME,
   WRITE_FILE_TOOL_NAME,
   getToolDefinitionByName
-} from '@@/shared/ai/tools/toolRegistry.ts';
+} from '@@/shared/ai/tools/index.ts';
 import { createToolFailureResult } from '../results';
 
 export {
@@ -46,7 +46,7 @@ export {
   UPDATE_MCP_SERVER_TOOL_NAME,
   UPDATE_SETTINGS_TOOL_NAME,
   WRITE_FILE_TOOL_NAME
-} from '@@/shared/ai/tools/toolRegistry.ts';
+} from '@@/shared/ai/tools/index.ts';
 
 /**
  * 创建主进程工具的 renderer 侧 schema-only 执行器。
