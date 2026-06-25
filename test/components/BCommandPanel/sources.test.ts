@@ -105,6 +105,25 @@ describe('BCommandPanel sources', (): void => {
     expect(removeTabMock).toHaveBeenCalledWith('file-1');
   });
 
+  it('does not match file records by hidden content', async (): Promise<void> => {
+    const source = createRecentSource({
+      getRecords: () => [fileRecord({ name: 'visible-title', path: '/tmp/visible-title.md', content: 'hidden-needle' })],
+      ensureLoaded: vi.fn(),
+      openFile: openFileMock,
+      openFileByPath: openFileByPathMock,
+      openWebview: openWebviewMock,
+      removeRecent: removeFileMock,
+      removeTab: removeTabMock,
+      getPathStatus: getPathStatusMock,
+      pathDebounceMs: 0,
+      renderRecentIcon: () => h('span', { class: 'recent-icon-stub' })
+    });
+
+    const groups = await source.search('hidden-needle');
+
+    expect(groups).toEqual([{ key: 'recent', items: [] }]);
+  });
+
   it('creates model groups and marks current chat model active', async (): Promise<void> => {
     const source = createModelSource({
       loadProviders: loadProvidersMock,

@@ -219,7 +219,7 @@ async function createAbsolutePathItem(
  */
 function isRecordMatched(record: RecentRecord, re: RegExp): boolean {
   if (record.type === 'file') {
-    const searchable = [resolveFileTitle(record), record.name, record.ext, record.path, record.content].filter(Boolean).join('\0');
+    const searchable = [resolveFileTitle(record), record.name, record.ext, record.path].filter(Boolean).join('\0');
     return re.test(searchable);
   }
 

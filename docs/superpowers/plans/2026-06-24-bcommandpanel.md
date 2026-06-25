@@ -499,7 +499,7 @@ Implementation requirements:
 
 - `load()` calls `ensureLoaded()`.
 - `search(keyword)` returns `[{ key: 'recent', items }]`.
-- Plain keyword search filters file records by `resolveFileTitle(record)`, `record.name`, `record.ext`, `record.path`, and `record.content`; filters webview records by `record.url` and `record.title`.
+- Plain keyword search filters file records by `resolveFileTitle(record)`, `record.name`, `record.ext`, and `record.path`; filters webview records by `record.url` and `record.title`.
 - URL input matching `/^https?:\/\//i` creates a `url` item before recent records.
 - Absolute path input matching `value.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(value)` calls a debounced path-status helper and creates an `absolute-path` item only when the path exists and is a file.
 - File items set `descriptionClass: 'is-unsaved'` when `record.path` is empty.

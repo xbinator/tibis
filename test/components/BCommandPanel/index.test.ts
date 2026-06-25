@@ -301,7 +301,7 @@ describe('BCommandPanel', (): void => {
     await input.trigger('keydown', { key: 'ArrowUp' });
     await nextTick();
     expect(wrapper.findAll('.b-command-panel__item')[1].classes()).toContain('b-command-panel__item--active');
-    expect(scrollIntoViewMock).toHaveBeenLastCalledWith({ block: 'nearest' });
+    expect(scrollIntoViewMock).toHaveBeenLastCalledWith({ block: 'center' });
   });
 
   it('removes recent items without closing the panel', async (): Promise<void> => {
