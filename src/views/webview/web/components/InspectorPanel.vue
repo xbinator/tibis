@@ -179,7 +179,6 @@ function copyText(value: string): void {
   }
 
   :deep(.b-section-item__label) {
-    font-size: 12px;
     line-height: 28px;
   }
 }
