@@ -25,6 +25,7 @@ const COMPONENT_DIRS = [
   'BLayout',
   'BToolbar',
   'BSelect',
+  'BSegmented',
   'BMessage',
   'BModal',
   'BRecent',
