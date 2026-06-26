@@ -13,18 +13,8 @@ export interface BColorPickerProps {
   value?: string;
   /** 默认颜色 */
   defaultValue?: string;
-  /** 输入框占位文本 */
-  placeholder?: string;
-  /** 是否允许清除 */
-  allowClear?: boolean;
   /** 颜色输出格式 */
   format?: ColorFormat;
-  /** 是否显示边框 */
-  bordered?: boolean;
-  /** 是否只读 */
-  readonly?: boolean;
-  /** 输入框测试 ID */
-  inputTestId?: string;
   /** 面板宽度，默认取 trigger 元素宽度 */
   width?: number | string;
   /** 下拉菜单位置 */

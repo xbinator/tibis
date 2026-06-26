@@ -3,7 +3,7 @@
   @description BColorPicker 颜色选择器组件，支持 SV 面板、色相条、透明度条拖拽选择。
 -->
 <template>
-  <BDropdown v-model:open="visible" :disabled="readonly" :get-popup-container="(triggerNode) => triggerNode" :placement="placement" :align="align">
+  <BDropdown v-model:open="visible" :get-popup-container="(triggerNode) => triggerNode" :placement="placement" :align="align">
     <div ref="triggerRef" :class="bem('trigger')">
       <slot></slot>
     </div>
@@ -32,21 +32,10 @@
           <div :class="bem('alpha-thumb')" :style="alphaThumbStyle"></div>
         </div>
 
-        <AInput
-          :value="inputColor"
-          :class="bem('input')"
-          :data-testid="inputTestId"
-          :readonly="readonly"
-          :bordered="bordered"
-          :allow-clear="allowClear"
-          :placeholder="placeholder"
-          @blur="handleInputBlur"
-          @update:value="handleInputUpdate"
-        >
-          <template #suffix>
-            <div :class="bem('color-block')" :style="{ background: currentColor }"></div>
-          </template>
-        </AInput>
+        <!-- 预设色板 -->
+        <div :class="bem('presets')">
+          <div v-for="color in presetColors" :key="color" :class="bem('preset-item')" :style="{ background: color }" @click="onPresetClick(color)"></div>
+        </div>
       </div>
     </template>
   </BDropdown>
@@ -62,12 +51,35 @@ import type { BColorPickerProps } from './types';
 import type { CSSProperties } from 'vue';
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { usePointer } from '@vueuse/core';
-import { Input as AInput } from 'ant-design-vue';
 import { clamp } from 'lodash-es';
 import tinycolor from 'tinycolor2';
 import BDropdown from '@/components/BDropdown/index.vue';
 import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
+
+/** 预设常用颜色 */
+const PRESET_COLORS = [
+  '#ff4d4f',
+  '#ff7a45',
+  '#ffa940',
+  '#fadb14',
+  '#52c41a',
+  '#13c2c2',
+  '#1890ff',
+  '#2f54eb',
+  '#722ed1',
+  '#eb2f96',
+  '#ffffff',
+  '#f5f5f5',
+  '#d9d9d9',
+  '#bfbfbf',
+  '#8c8c8c',
+  '#595959',
+  '#434343',
+  '#262626',
+  '#1f1f1f',
+  '#000000'
+];
 
 defineOptions({ name: 'BColorPicker' });
 
@@ -75,13 +87,8 @@ const [, bem] = createNamespace('color-picker');
 
 const props = withDefaults(defineProps<BColorPickerProps>(), {
   value: '',
-  format: 'rgb',
-  bordered: true,
+  format: 'hex',
   defaultValue: '',
-  allowClear: false,
-  placeholder: '请输入',
-  readonly: false,
-  inputTestId: undefined,
   width: undefined
 });
 
@@ -102,10 +109,10 @@ const visible = ref<boolean>(false);
 const triggerRef = ref<HTMLElement | null>(null);
 /** 当前颜色（rgb 字符串） */
 const currentColor = ref<string>('');
-/** 输入框显示值 */
-const inputColor = ref<string>('');
 /** HSV + Alpha 状态 */
 const hsva = reactive({ h: 0, s: 0, v: 0, a: 1 });
+/** 预设色板列表 */
+const presetColors = PRESET_COLORS;
 
 /** SV 面板 DOM 引用 */
 const svPanelRef = ref<HTMLElement | null>(null);
@@ -153,13 +160,6 @@ function formatColor(value: string): string {
   };
 
   return formatters[props.format]?.() ?? '';
-}
-
-/**
- * 更新内部颜色显示值
- */
-function updateInnerColor(): void {
-  inputColor.value = formatColor(currentColor.value);
 }
 
 /**
@@ -235,7 +235,6 @@ function handleSvMove(): void {
   hsva.v = clamp(-(y / height) + 1, 0, 1);
 
   updateColor(hsva);
-  updateInnerColor();
 }
 
 /**
@@ -267,7 +266,6 @@ function handleHueMove(): void {
   }
 
   updateColor(hsva);
-  updateInnerColor();
 }
 
 /**
@@ -300,7 +298,6 @@ function handleAlphaMove(): void {
   }
 
   updateColor(hsva);
-  updateInnerColor();
 }
 
 /**
@@ -373,27 +370,11 @@ function updatePositionFromColor(): void {
 }
 
 /**
- * 输入框输入时同步有效颜色，避免外部在失焦前读取到旧值
- * @param value - 输入框当前值
+ * 点击预设色块
+ * @param color - 预设颜色值
  */
-function handleInputUpdate(value: string): void {
-  inputColor.value = value;
-
-  if (!tinycolor(value).isValid()) {
-    return;
-  }
-
-  updateColor(value);
-  updatePositionFromColor();
-}
-
-/**
- * 输入框失焦处理，解析输入值
- */
-function handleInputBlur(): void {
-  const color = tinycolor(inputColor.value);
-  updateColor(color.isValid() ? color.toHex8() : props.defaultValue);
-  updateInnerColor();
+function onPresetClick(color: string): void {
+  updateColor(color);
   updatePositionFromColor();
 }
 
@@ -415,7 +396,6 @@ watch(
     const color = props.value || props.defaultValue;
     const value = tinycolor(color).isValid() ? tinycolor(color).toRgbString() : '';
     currentColor.value = value;
-    updateInnerColor();
     updatePositionFromColor();
   },
   { immediate: true }
@@ -427,26 +407,24 @@ watch(
   width: 100%;
 }
 
-.b-color-picker__input {
-  width: 100%;
-  height: 28px;
-  padding-top: 0;
-  padding-bottom: 0;
+.b-color-picker__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-top: 10px;
-  font-size: 12px;
-  border-radius: 6px;
 }
 
-.b-color-picker__input .ant-input {
-  height: 26px;
-  font-size: 12px;
-}
-
-.b-color-picker__color-block {
-  width: 14px;
-  height: 14px;
-  outline: 1px solid var(--border-primary, #d9d9d9);
+.b-color-picker__preset-item {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  border: 1px solid var(--border-primary, #d9d9d9);
   border-radius: 3px;
+  transition: transform 0.15s;
+}
+
+.b-color-picker__preset-item:hover {
+  transform: scale(1.2);
 }
 
 .b-color-picker__panel {
