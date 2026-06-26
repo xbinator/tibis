@@ -10,11 +10,13 @@ import { mount } from '@vue/test-utils';
 import { Input as AInput } from 'ant-design-vue';
 import { describe, expect, it } from 'vitest';
 import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import ControlPanel from '@/views/drawing/components/DesignSetter/ControlPanel.vue';
 import DesignSetter from '@/views/drawing/components/DesignSetter.vue';
-import SettingsPanel from '@/views/drawing/components/SettingsPanel.vue';
+import SettingsPanel from '@/views/drawing/components/PanelSettings.vue';
 
 const designSetterSource = readFileSync(resolve(process.cwd(), 'src/views/drawing/components/DesignSetter.vue'), 'utf8');
-const settingsPanelSource = readFileSync(resolve(process.cwd(), 'src/views/drawing/components/SettingsPanel.vue'), 'utf8');
+const controlPanelSource = readFileSync(resolve(process.cwd(), 'src/views/drawing/components/DesignSetter/ControlPanel.vue'), 'utf8');
+const settingsPanelSource = readFileSync(resolve(process.cwd(), 'src/views/drawing/components/PanelSettings.vue'), 'utf8');
 
 /**
  * 通用设置分组测试替身。
@@ -31,6 +33,27 @@ const sectionItemStub = {
   props: ['label', 'icon'],
   template: '<label><span>{{ label }}</span><slot /></label>'
 };
+
+/**
+ * 文本输入测试替身。
+ */
+const inputStub = defineComponent({
+  name: 'AInput',
+  props: {
+    value: {
+      type: [Number, String],
+      default: undefined
+    },
+    placeholder: {
+      type: String,
+      default: undefined
+    }
+  },
+  emits: ['change', 'update:value'],
+  template:
+    '<input :data-testid="$attrs[\'data-testid\']" :placeholder="placeholder" :value="value ?? \'\'" ' +
+    '@change="$emit(\'change\', $event.target.value)" @input="$emit(\'update:value\', $event.target.value)" />'
+});
 
 /**
  * 创建测试画图元素。
@@ -85,11 +108,43 @@ describe('Drawing SettingsPanel', (): void => {
     expect(settingsPanelSource).not.toContain('<DesignSetter :element="select" />');
   });
 
+  it('uses a compact expandable value control instead of the direction picker layout', (): void => {
+    expect(controlPanelSource).toContain('lucide:grid-2x2');
+    expect(controlPanelSource).toContain('isExpanded');
+    expect(controlPanelSource).toContain('<BSectionItem :label="label">');
+    expect(controlPanelSource).toContain('<BSectionItem v-for="option in targetOptions"');
+    expect(controlPanelSource).toContain('<AInput v-model:value="allValue"');
+    expect(controlPanelSource).toContain('v-model:value="allValue"');
+    expect(controlPanelSource).toContain('placeholder="自定义"');
+    expect(controlPanelSource).toContain('@change="handleAllValueChange"');
+    expect(controlPanelSource).toContain('class="control-panel"');
+    expect(controlPanelSource).not.toContain('DirectionPicker');
+    expect(controlPanelSource).not.toContain('aria-label');
+    expect(controlPanelSource).not.toContain('data-testid');
+    expect(controlPanelSource).not.toContain('testId');
+    expect(controlPanelSource).not.toContain('AInputNumber');
+    expect(controlPanelSource).not.toContain('InputNumber');
+    expect(controlPanelSource).not.toContain('.ant-input-number');
+    expect(controlPanelSource).not.toContain('drawing-box-value-control');
+    expect(controlPanelSource).not.toContain('class="drawing-box-value-control__field"');
+    expect(controlPanelSource).not.toContain('class="drawing-box-value-control__advanced-field"');
+    expect(controlPanelSource).not.toMatch(/:data-testid="`\$\{testId\}-input`"/);
+    expect(designSetterSource).not.toContain('DirectionPicker');
+  });
+
   it('binds design fields directly to the selected element', (): void => {
     expect(designSetterSource).toContain('v-model:value="dataItem.title"');
     expect(designSetterSource).toContain('v-model:value="dataItem.style.fontSize"');
     expect(designSetterSource).toContain('v-model:value="dataItem.position.x"');
     expect(designSetterSource).toContain('v-model:value="dataItem.size.height"');
+    expect(designSetterSource).toContain('ControlPanel');
+    expect(designSetterSource).toContain('v-model:value="dataItem.style.borderWidth"');
+    expect(designSetterSource).toContain('v-model:value="dataItem.style.borderStyle"');
+    expect(designSetterSource).toContain('v-model:value="dataItem.style.borderColor"');
+    expect(designSetterSource).toContain('v-model:value="dataItem.style.borderRadius"');
+    expect(designSetterSource).toContain('v-model:value="dataItem.style.padding"');
+    expect(designSetterSource).toContain('label="线形"');
+    expect(designSetterSource).toContain('label="颜色"');
     expect(designSetterSource).not.toContain('updateElementText');
     expect(designSetterSource).not.toContain('dataItem.text');
     expect(designSetterSource).not.toContain('selectedElementFields');
@@ -220,5 +275,129 @@ describe('Drawing SettingsPanel', (): void => {
 
     expect(wrapper.emitted('update:element')).toBeUndefined();
     expect(element.style.textAlign).toBe('left');
+  });
+
+  it('keeps individual side inputs hidden until the control panel is expanded', async (): Promise<void> => {
+    const wrapper = mount(ControlPanel, {
+      global: {
+        stubs: {
+          AInput: inputStub,
+          BSectionItem: sectionItemStub,
+          BIcon: true
+        }
+      },
+      props: {
+        label: '宽度',
+        mode: 'sides',
+        value: 2
+      }
+    });
+
+    expect(wrapper.find('.control-panel__advanced').exists()).toBe(false);
+
+    await wrapper.find('.control-panel__toggle').trigger('click');
+
+    expect(wrapper.find('.control-panel__advanced').exists()).toBe(true);
+  });
+
+  it('updates an individual side from the expanded control panel', async (): Promise<void> => {
+    const wrapper = mount(ControlPanel, {
+      global: {
+        stubs: {
+          AInput: inputStub,
+          BSectionItem: sectionItemStub,
+          BIcon: true
+        }
+      },
+      props: {
+        label: '宽度',
+        mode: 'sides',
+        value: 2
+      }
+    });
+
+    await wrapper.find('.control-panel__toggle').trigger('click');
+    await wrapper.findAll('input')[1].setValue('5');
+
+    expect(wrapper.emitted('update:value')?.at(-1)?.[0]).toEqual({
+      top: 5,
+      right: 2,
+      bottom: 2,
+      left: 2
+    });
+  });
+
+  it('shows a custom placeholder when individual side values are active', (): void => {
+    const wrapper = mount(ControlPanel, {
+      global: {
+        stubs: {
+          AInput: inputStub,
+          BSectionItem: sectionItemStub,
+          BIcon: true
+        }
+      },
+      props: {
+        label: '宽度',
+        mode: 'sides',
+        value: {
+          top: 1,
+          right: 2,
+          bottom: 3,
+          left: 4
+        }
+      }
+    });
+    const mainInput = wrapper.find('input');
+
+    expect(mainInput.element.value).toBe('');
+    expect(mainInput.attributes('placeholder')).toBe('自定义');
+  });
+
+  it('shows a placeholder "请输入" when no individual values are active', (): void => {
+    const wrapper = mount(ControlPanel, {
+      global: {
+        stubs: {
+          AInput: inputStub,
+          BSectionItem: sectionItemStub,
+          BIcon: true
+        }
+      },
+      props: {
+        label: '宽度',
+        mode: 'sides',
+        value: 2
+      }
+    });
+    const mainInput = wrapper.find('input');
+
+    expect(mainInput.element.value).toBe('2');
+    expect(mainInput.attributes('placeholder')).toBe('请输入');
+  });
+
+  it('updates an individual corner from the control panel', async (): Promise<void> => {
+    const wrapper = mount(ControlPanel, {
+      global: {
+        stubs: {
+          AInput: inputStub,
+          BSectionItem: sectionItemStub,
+          BIcon: true
+        }
+      },
+      props: {
+        label: '圆角',
+        mode: 'corners',
+        value: 3
+      }
+    });
+
+    await wrapper.find('.control-panel__toggle').trigger('click');
+    await wrapper.findAll('input')[1].setValue('7');
+
+    expect(wrapper.emitted('update:value')?.at(-1)?.[0]).toEqual({
+      topLeft: 7,
+      topRight: 3,
+      bottomRight: 3,
+      bottomLeft: 3
+    });
   });
 });

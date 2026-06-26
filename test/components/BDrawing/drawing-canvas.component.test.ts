@@ -174,6 +174,40 @@ describe('BDrawing canvas component', (): void => {
     wrapper.unmount();
   });
 
+  it('renders rectangle box style properties on the element view', (): void => {
+    const data = createDrawingDataFixture();
+    const element = data.elements[0];
+    element.style = {
+      backgroundColor: '#f8fafc',
+      borderColor: '#123456',
+      borderStyle: 'dashed',
+      borderWidth: { top: 1, right: 2, bottom: 3, left: 4 },
+      borderRadius: { topLeft: 5, topRight: 6, bottomRight: 7, bottomLeft: 8 },
+      padding: { top: 9, right: 10, bottom: 11, left: 12 }
+    };
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: data
+      },
+      attachTo: document.body
+    });
+    const rectStyle = findNodeById(wrapper, 'external-node-1').find('.drawing-rect-element-view').attributes('style');
+
+    expect(rectStyle).toContain('background-color: rgb(248, 250, 252)');
+    expect(rectStyle).toContain('border-color: rgb(18, 52, 86)');
+    expect(rectStyle).toContain('border-style: dashed');
+    expect(rectStyle).toContain('border-top-width: 1px');
+    expect(rectStyle).toContain('border-right-width: 2px');
+    expect(rectStyle).toContain('border-bottom-width: 3px');
+    expect(rectStyle).toContain('border-left-width: 4px');
+    expect(rectStyle).toContain('border-top-left-radius: 5px');
+    expect(rectStyle).toContain('border-top-right-radius: 6px');
+    expect(rectStyle).toContain('border-bottom-right-radius: 7px');
+    expect(rectStyle).toContain('border-bottom-left-radius: 8px');
+    expect(rectStyle).toContain('padding: 9px 10px 11px 12px');
+    wrapper.unmount();
+  });
+
   it('creates a rectangle through the exposed registered element command', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {

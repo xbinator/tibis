@@ -43,9 +43,15 @@ function createShapeElement(id: string, position = { x: 40, y: 60 }): DrawingSha
  * @param id - 元素 ID
  * @param title - 文本标题
  * @param position - 元素位置
+ * @param style - 文本样式
  * @returns 测试文本元素
  */
-function createTextElement(id: string, title = '标题', position = { x: 400, y: 260 }): DrawingShapeElement {
+function createTextElement(
+  id: string,
+  title = '标题',
+  position = { x: 400, y: 260 },
+  style: DrawingShapeElement['style'] = { fontSize: 20 }
+): DrawingShapeElement {
   return {
     id,
     name: 'text',
@@ -55,7 +61,7 @@ function createTextElement(id: string, title = '标题', position = { x: 400, y:
     position,
     size: { width: 180, height: 72 },
     rotation: 0,
-    style: { fontSize: 20 },
+    style,
     metadata: {}
   };
 }
@@ -130,6 +136,20 @@ describe('drawingGeometry', (): void => {
   it('uses schema content size for text element render bounds', (): void => {
     expect(getDrawingShapeRenderSize(createShapeElement('node-1'))).toEqual({ width: 120, height: 80 });
     expect(getDrawingShapeRenderSize(createTextElement('text-1'))).toEqual({ width: 46, height: 31 });
+  });
+
+  it('includes text element padding style in content render bounds', (): void => {
+    const element = createTextElement(
+      'text-1',
+      '标题',
+      { x: 400, y: 260 },
+      {
+        fontSize: 20,
+        padding: { top: 4, right: 5, bottom: 6, left: 7 }
+      }
+    );
+
+    expect(getDrawingShapeRenderSize(element)).toEqual({ width: 52, height: 37 });
   });
 
   it('creates a viewport from schema render sizes instead of stored model sizes', (): void => {
