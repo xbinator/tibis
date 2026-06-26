@@ -105,7 +105,7 @@ const indicatorVisible = computed<boolean>(() => {
 /** 激活滑块样式。 */
 const navBarStyle = computed<Record<string, string>>(() => {
   return {
-    width: `${Math.max(0, tabWidth.value - 4)}px`,
+    width: `${Math.max(0, tabWidth.value)}px`,
     transform: `translateX(${tabWidth.value * activeIndex.value}px)`
   };
 });
@@ -153,9 +153,7 @@ function isContentVisible(value: BSegmentedValue): boolean {
 function readTrackWidth(entry?: ResizeObserverEntry): number {
   const observedWidth = entry?.contentRect.width;
 
-  if (observedWidth && observedWidth > 0) {
-    return observedWidth;
-  }
+  if (observedWidth && observedWidth > 0) return observedWidth;
 
   return trackRef.value?.getBoundingClientRect().width ?? trackRef.value?.offsetWidth ?? 0;
 }
