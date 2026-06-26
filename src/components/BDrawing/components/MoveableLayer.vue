@@ -50,7 +50,6 @@ import {
   DRAWING_MOVEABLE_THROTTLE
 } from '../constants/interaction';
 import { createDrawingElementCssTransform, getDrawingElementId, queryDrawingElementTarget } from '../utils/drawingGeometry';
-import { createDrawingTextFitSize } from '../utils/drawingTextMetrics';
 
 /**
  * Moveable 结束事件中的 DOM target。
@@ -171,8 +170,6 @@ interface MoveableInstance {
 const targets = ref<Element[]>([]);
 const moveableRef = ref<MoveableInstance | null>(null);
 let moveableRectRefreshFrame: ReturnType<typeof requestAnimationFrame> | null = null;
-/** 本轮 Moveable 缩放手势的基础尺寸，用于区分手动高度和文本自动撑高高度。 */
-const resizeGestureBaseSizes = new Map<string, DrawingSize>();
 /** 单选拖拽时用于元素间吸附的其它画板节点。 */
 const guidelineTargets = ref<Element[]>([]);
 const singleTarget = computed<boolean>(() => targets.value.length === 1);
@@ -309,73 +306,6 @@ function groupResizeSizeToWorld(size: DrawingSize): DrawingSize {
 }
 
 /**
- * 判断元素是否需要按文本自动适配尺寸。
- * @param element - 画板元素
- * @returns 是否为带文本的普通形状
- */
-function shouldFitShapeTextSize(element: DrawingElement): boolean {
-  return element.name !== 'text' && Boolean(element.text);
-}
-
-/**
- * 读取本轮缩放手势的基础尺寸。
- * @param id - 元素 ID
- * @param element - 画板元素
- * @returns 缩放手势基础尺寸
- */
-function getResizeGestureBaseSize(id: string, element: DrawingElement): DrawingSize {
-  const existing = resizeGestureBaseSizes.get(id);
-  if (existing) {
-    return existing;
-  }
-
-  const baseSize = {
-    width: element.metadata.manualSize?.width ?? element.size.width,
-    height: element.metadata.manualSize?.height ?? element.size.height
-  };
-  resizeGestureBaseSizes.set(id, baseSize);
-
-  return baseSize;
-}
-
-/**
- * 判断本次缩放是否包含垂直方向的手动高度变化。
- * @param event - Moveable 缩放事件
- * @returns 是否包含垂直方向
- */
-function hasVerticalResizeDirection(event: MoveableResizePayload): boolean {
-  return event.direction?.[1] !== undefined && event.direction[1] !== 0;
-}
-
-/**
- * 创建带文本形状在当前缩放手势中的手动基础尺寸。
- * @param id - 元素 ID
- * @param element - 画板元素
- * @param size - Moveable 原始尺寸
- * @param event - Moveable 缩放事件
- * @returns 手动基础尺寸
- */
-function createGestureManualSize(id: string, element: DrawingElement, size: DrawingSize, event: MoveableResizePayload): DrawingSize {
-  if (!shouldFitShapeTextSize(element)) {
-    return size;
-  }
-
-  const baseSize = getResizeGestureBaseSize(id, element);
-
-  return {
-    width: size.width,
-    height: hasVerticalResizeDirection(event) ? size.height : baseSize.height
-  };
-}
-
-/**
- * 清理 Moveable 缩放手势缓存。
- */
-function clearResizeGestureBaseSizes(): void {
-  resizeGestureBaseSizes.clear();
-}
-
-/**
  * 更新 HTML 节点的预览尺寸。
  * @param target - HTML 元素目标
  * @param size - 预览尺寸
@@ -387,20 +317,6 @@ function updateNodePreviewSize(target: Element, size: DrawingSize): void {
 
   target.style.width = `${size.width}px`;
   target.style.height = `${size.height}px`;
-}
-
-/**
- * 根据预览宽度计算可容纳节点文字的预览尺寸。
- * @param element - 画板元素
- * @param size - Moveable 原始预览尺寸
- * @returns 文本适配后的预览尺寸
- */
-function createTextFitPreviewSize(element: DrawingElement, size: DrawingSize): DrawingSize {
-  if (element.name === 'text' || !element.text) {
-    return size;
-  }
-
-  return createDrawingTextFitSize(element.text, size, element.style);
 }
 
 /**
@@ -452,14 +368,13 @@ function createResizeChange(event: MoveableResizeEndEvent, shouldConvertGroupSiz
   const size = shouldConvertGroupSize
     ? groupResizeSizeToWorld({ width: payload.width, height: payload.height })
     : { width: payload.width, height: payload.height };
-  const manualSize = createGestureManualSize(id, element, size, payload);
   return {
     id,
     position: {
       x: element.position.x + moveableValueToWorld(translate[0]),
       y: element.position.y + moveableValueToWorld(translate[1])
     },
-    size: manualSize
+    size
   };
 }
 
@@ -505,8 +420,6 @@ function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize =
 
   const translate = event.drag?.beforeTranslate ?? [0, 0];
   const size = shouldConvertGroupSize ? groupResizeSizeToWorld({ width: event.width, height: event.height }) : { width: event.width, height: event.height };
-  const manualSize = createGestureManualSize(id, element, size, event);
-  const fittedSize = createTextFitPreviewSize(element, manualSize);
   const position = {
     x: element.position.x + moveableValueToWorld(translate[0]),
     y: element.position.y + moveableValueToWorld(translate[1])
@@ -515,12 +428,12 @@ function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize =
   if (event.target instanceof HTMLElement) {
     event.target.style.transform = createPreviewTransform(element, translate);
   }
-  updateNodePreviewSize(event.target, fittedSize);
+  updateNodePreviewSize(event.target, size);
 
   return {
     id,
     position,
-    size: fittedSize
+    size
   };
 }
 
@@ -620,13 +533,11 @@ function handleResizeEnd(event: MoveableResizeEndEvent): void {
   const change = createResizeChange(event);
   if (!change) {
     emit('preview-end');
-    clearResizeGestureBaseSizes();
     return;
   }
 
   emit('resize', [change]);
   emit('preview-end');
-  clearResizeGestureBaseSizes();
 }
 
 /**
@@ -656,13 +567,11 @@ function handleResizeGroupEnd(event: MoveableGroupEvent<MoveableResizeEndEvent>)
       .filter((change): change is DrawingGeometryChange => change !== null) ?? [];
   if (!changes.length) {
     emit('preview-end');
-    clearResizeGestureBaseSizes();
     return;
   }
 
   emit('resize', changes);
   emit('preview-end');
-  clearResizeGestureBaseSizes();
 }
 
 onMounted(() => {

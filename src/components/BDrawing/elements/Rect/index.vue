@@ -3,7 +3,7 @@
   @description BDrawing 矩形元素中间画布视图。
 -->
 <template>
-  <div class="drawing-rect-element-view">{{ element?.text }}</div>
+  <div class="drawing-rect-element-view">{{ element?.title }}</div>
 </template>
 
 <script setup lang="ts">

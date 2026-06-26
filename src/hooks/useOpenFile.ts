@@ -52,6 +52,7 @@ interface OpenFileActions {
  */
 function createEmptyDrawingData(): DrawingData {
   return {
+    metadata: {},
     elements: [],
     viewport: {
       center: { x: 0, y: 0 },

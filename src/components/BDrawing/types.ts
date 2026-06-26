@@ -28,11 +28,11 @@ export interface DrawingSize {
  */
 export interface DrawingElementStyle {
   /** 填充色 */
-  fill?: string;
+  backgroundColor?: string;
   /** 描边色 */
-  stroke?: string;
+  borderColor?: string;
   /** 描边宽度 */
-  strokeWidth?: number;
+  borderColorWidth?: number;
   /** 文字颜色 */
   color?: string;
   /** 文字字号 */
@@ -65,6 +65,12 @@ export interface DrawingShapeElement {
   id: string;
   /** 元素注册名称 */
   name: string;
+  /** 元素显示名称，来自注册配置，不支持编辑 */
+  label: string;
+  /** 元素图标，来自注册配置 */
+  icon: string;
+  /** 用户自定义中文名称 */
+  title: string;
   /** 元素位置 */
   position: DrawingPoint;
   /** 元素尺寸 */
@@ -72,20 +78,9 @@ export interface DrawingShapeElement {
   /** 旋转角度，单位为度 */
   rotation: number;
   /** 元素样式 */
-  style?: DrawingElementStyle;
-  /** 节点主文本 */
-  text: string;
-  /** 节点说明 */
-  description?: string;
-  /** 元信息 */
-  metadata: {
-    /** 元素创建来源 */
-    source: 'user';
-    /** 创建时间戳 */
-    createdAt: number;
-    /** 用户手动设置的基础尺寸，文本自动撑高时用于恢复高度 */
-    manualSize?: DrawingSize;
-  };
+  style: DrawingElementStyle;
+  /** 组件自定义元数据 */
+  metadata: Record<string, unknown>;
 }
 
 /**
@@ -101,16 +96,16 @@ export interface DrawingAddShapeOptions {
   id: string;
   /** 元素注册名称 */
   name: string;
+  /** 元素显示名称 */
+  label: string;
+  /** 元素图标 */
+  icon: string;
   /** 拖拽起点 */
   start: DrawingPoint;
   /** 拖拽终点 */
   end: DrawingPoint;
-  /** 节点文本 */
-  text?: string;
   /** 元素初始样式 */
   style?: DrawingElementStyle;
-  /** 创建时间戳 */
-  createdAt?: number;
 }
 
 /**
@@ -136,14 +131,29 @@ export interface DrawingViewport {
 }
 
 /**
+ * 画板元信息。
+ */
+export interface DrawingMetadata {
+  /** 预留扩展字段 */
+  [key: string]: unknown;
+}
+
+/**
  * 画板外部双向绑定数据。
  */
 export interface DrawingData {
+  /** 画板元信息 */
+  metadata: DrawingMetadata;
   /** 元素数据 */
   elements: DrawingElement[];
   /** 视口数据 */
   viewport: DrawingViewport;
 }
+
+/**
+ * 当前设置面板可编辑目标。
+ */
+export type DrawingSelectTarget = DrawingElement | DrawingMetadata | null;
 
 /**
  * 画板历史快照。

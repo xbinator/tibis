@@ -5,7 +5,6 @@
 import type { DrawingElement, DrawingPoint, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
 import { DRAWING_ELEMENT_ID_ATTRIBUTE } from '../constants/dom';
 import { DRAWING_MIN_ZOOM, DRAWING_VIEWBOX_SIZE } from '../constants/viewport';
-import { measureDrawingTextElementSize } from './drawingTextMetrics';
 
 /**
  * 浏览器矩形信息。
@@ -231,10 +230,6 @@ export function findDrawingShapeElement(elements: DrawingElement[], id: string):
  * @returns 渲染尺寸
  */
 export function getDrawingShapeRenderSize(element: DrawingShapeElement): DrawingSize {
-  if (element.name === 'text') {
-    return measureDrawingTextElementSize(element.text, element.style);
-  }
-
   return element.size;
 }
 

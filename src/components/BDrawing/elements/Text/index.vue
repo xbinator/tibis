@@ -3,7 +3,7 @@
   @description BDrawing 文本元素中间画布视图。
 -->
 <template>
-  <div class="drawing-text-element-view">{{ element?.text || '文本' }}</div>
+  <div class="drawing-text-element-view">{{ element?.title }}</div>
 </template>
 
 <script setup lang="ts">

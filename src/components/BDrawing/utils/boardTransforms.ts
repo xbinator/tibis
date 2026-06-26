@@ -11,6 +11,7 @@ import type {
   DrawingElementStyleChange,
   DrawingGeometryChange,
   DrawingLayerAction,
+  DrawingMetadata,
   DrawingPoint,
   DrawingSize,
   DrawingShapeElement,
@@ -18,8 +19,7 @@ import type {
 } from '../types';
 import { cloneDeep } from 'lodash-es';
 import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/board';
-import { DRAWING_DEFAULT_TEXT, DRAWING_TEXT_DEFAULT_FONT_SIZE, DRAWING_TEXT_DEFAULT_FONT_WEIGHT } from '../constants/text';
-import { createDrawingTextFitSize, measureDrawingTextElementSize } from './drawingTextMetrics';
+import { getDrawingElementSchema } from '../elements';
 
 /**
  * 创建默认视口。
@@ -30,6 +30,14 @@ function createDefaultViewport(): DrawingViewport {
     center: { x: 0, y: 0 },
     zoom: 1
   };
+}
+
+/**
+ * 创建默认画板元信息。
+ * @returns 默认画板元信息
+ */
+function createDefaultMetadata(): DrawingMetadata {
+  return {};
 }
 
 /**
@@ -44,13 +52,19 @@ function normalizeGeometryValue(value: number): number {
 /**
  * 旧版画板元素快照候选，兼容曾经写入的 kind 与 shape 字段。
  */
-type DrawingElementSnapshotCandidate = Partial<Omit<DrawingShapeElement, 'metadata'>> & {
+type DrawingElementSnapshotCandidate = Partial<Omit<DrawingShapeElement, 'metadata' | 'style'>> & {
   /** 旧版元素类别 */
   kind?: unknown;
   /** 旧版形状类型 */
   shape?: unknown;
+  /** 旧版节点文本 */
+  text?: unknown;
+  /** 旧版节点说明 */
+  description?: unknown;
+  /** 样式 */
+  style?: Partial<DrawingElementStyle>;
   /** 元信息 */
-  metadata?: Partial<DrawingShapeElement['metadata']>;
+  metadata?: Record<string, unknown>;
 };
 
 /**
@@ -89,6 +103,34 @@ function readDrawingElementName(element: DrawingElementSnapshotCandidate): strin
 }
 
 /**
+ * 读取元素注册展示信息。
+ * @param name - 元素注册名称
+ * @returns 注册展示信息
+ */
+function getElementRegistryDisplay(name: string): { label: string; icon: string } {
+  const schema = getDrawingElementSchema(name);
+
+  return {
+    label: schema?.label ?? name,
+    icon: schema?.icon ?? 'lucide:box'
+  };
+}
+
+/**
+ * 归一化组件自定义元数据，移除旧版通用系统字段。
+ * @param metadata - 原始元数据
+ * @returns 自定义元数据
+ */
+function normalizeElementMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+  const nextMetadata = cloneDeep(metadata ?? {});
+  delete nextMetadata.source;
+  delete nextMetadata.createdAt;
+  delete nextMetadata.manualSize;
+
+  return nextMetadata;
+}
+
+/**
  * 创建不包含旧版冗余字段的元素快照。
  * @param element - 元素快照候选
  * @returns 元素快照，无法识别时返回 null
@@ -99,20 +141,21 @@ function createSupportedElementSnapshot(element: DrawingElementSnapshotCandidate
     return null;
   }
 
+  const registryDisplay = getElementRegistryDisplay(name);
+  const label = typeof element.label === 'string' ? element.label : registryDisplay.label;
+  const icon = typeof element.icon === 'string' ? element.icon : registryDisplay.icon;
+
   return {
     id: element.id,
     name,
-    text: typeof element.text === 'string' ? element.text : '',
+    label,
+    icon,
+    title: typeof element.title === 'string' ? element.title : label,
     position: cloneDeep(element.position),
     size: cloneDeep(element.size),
     rotation: typeof element.rotation === 'number' ? element.rotation : 0,
-    style: cloneDeep(element.style),
-    description: element.description,
-    metadata: {
-      source: 'user',
-      createdAt: typeof element.metadata?.createdAt === 'number' ? element.metadata.createdAt : Date.now(),
-      manualSize: cloneDeep(element.metadata?.manualSize)
-    }
+    style: cloneDeep(element.style ?? {}),
+    metadata: normalizeElementMetadata(element.metadata)
   };
 }
 
@@ -141,110 +184,12 @@ function createSnapshot(state: DrawingBoardSnapshot): DrawingBoardSnapshot {
 }
 
 /**
- * 获取形状默认文案。
- * @param shape - 形状类型
- * @returns 默认文案
- */
-function getShapeDefaultText(name: string): string {
-  if (name === 'text') {
-    return DRAWING_DEFAULT_TEXT;
-  }
-
-  return '';
-}
-
-/**
- * 创建文本形状几何信息。
- * @param start - 创建起点
- * @param text - 文本内容
- * @param style - 文本样式
- * @returns 文本形状几何信息
- */
-function createTextShapeGeometry(start: DrawingPoint, text: string, style?: DrawingElementStyle): { position: DrawingPoint; size: DrawingSize } {
-  return {
-    position: {
-      x: normalizeGeometryValue(start.x),
-      y: normalizeGeometryValue(start.y)
-    },
-    size: measureDrawingTextElementSize(text, style)
-  };
-}
-
-/**
  * 创建形状初始样式。
- * @param shape - 形状类型
  * @param style - 外部传入样式
  * @returns 初始样式
  */
-function createShapeInitialStyle(name: string, style?: DrawingElementStyle): DrawingElementStyle | undefined {
-  if (name !== 'text') {
-    return cloneDeep(style);
-  }
-
-  return {
-    fill: 'transparent',
-    stroke: 'transparent',
-    fontSize: DRAWING_TEXT_DEFAULT_FONT_SIZE,
-    fontWeight: DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
-    textAlign: 'center',
-    ...cloneDeep(style)
-  };
-}
-
-/**
- * 读取普通形状的手动基础尺寸。
- * @param element - 形状元素
- * @returns 手动基础尺寸
- */
-function getRegularShapeManualSize(element: DrawingShapeElement): DrawingSize {
-  return cloneDeep(element.metadata.manualSize ?? element.size);
-}
-
-/**
- * 记录普通形状的手动基础尺寸。
- * @param element - 待更新的形状元素
- * @param manualSize - 手动基础尺寸
- */
-function setRegularShapeManualSize(element: DrawingShapeElement, manualSize: DrawingSize): void {
-  element.metadata = {
-    ...element.metadata,
-    manualSize: cloneDeep(manualSize)
-  };
-}
-
-/**
- * 根据 resize 输入推断新的手动基础尺寸。
- * @param element - 待更新的形状元素
- * @param size - resize 输入尺寸
- * @returns 新的手动基础尺寸
- */
-function createManualResizeSize(element: DrawingShapeElement, size: DrawingSize): DrawingSize {
-  const nextSize = {
-    width: Math.max(DRAWING_MIN_ELEMENT_SIZE.width, normalizeGeometryValue(size.width)),
-    height: Math.max(DRAWING_MIN_ELEMENT_SIZE.height, normalizeGeometryValue(size.height))
-  };
-  const currentManualSize = getRegularShapeManualSize(element);
-  const isHeightChangedByUser = nextSize.height !== normalizeGeometryValue(element.size.height);
-
-  return {
-    width: nextSize.width,
-    height: isHeightChangedByUser ? nextSize.height : currentManualSize.height
-  };
-}
-
-/**
- * 确保普通形状尺寸能容纳换行后的文本内容。
- * @param element - 待更新的形状元素
- */
-function fitRegularShapeSizeToText(element: DrawingShapeElement): void {
-  if (element.name === 'text' || !element.text) {
-    return;
-  }
-
-  const manualSize = getRegularShapeManualSize(element);
-  setRegularShapeManualSize(element, manualSize);
-
-  element.size = createDrawingTextFitSize(element.text, manualSize, element.style);
+function createShapeInitialStyle(style?: DrawingElementStyle): DrawingElementStyle {
+  return cloneDeep(style ?? {});
 }
 
 /**
@@ -370,8 +315,9 @@ export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>
  * @param snapshot - 画板快照或状态
  * @returns 画板绑定数据
  */
-export function createDrawingDataSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'viewport'>): DrawingData {
+export function createDrawingDataSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'viewport'> & { metadata?: DrawingMetadata }): DrawingData {
   return {
+    metadata: cloneDeep(snapshot.metadata ?? createDefaultMetadata()),
     elements: cloneSupportedElements(snapshot.elements),
     viewport: cloneDeep(snapshot.viewport)
   };
@@ -388,21 +334,19 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
     return withError(state, new Error(`元素已存在: ${options.id}`));
   }
 
-  const text = options.text ?? getShapeDefaultText(options.name);
-  const style = createShapeInitialStyle(options.name, options.style);
-  const geometry = options.name === 'text' ? createTextShapeGeometry(options.start, text, style) : createShapeGeometry(options.start, options.end);
+  const style = createShapeInitialStyle(options.style);
+  const geometry = createShapeGeometry(options.start, options.end);
   const element: DrawingShapeElement = {
     id: options.id,
     name: options.name,
-    text,
+    label: options.label,
+    icon: options.icon,
+    title: options.label,
     position: cloneDeep(geometry.position),
     size: cloneDeep(geometry.size),
     rotation: 0,
     style,
-    metadata: {
-      source: 'user',
-      createdAt: options.createdAt ?? Date.now()
-    }
+    metadata: {}
   };
 
   return withHistory(state, {
@@ -489,10 +433,10 @@ export function resizeDrawingElements(state: DrawingBoardState, changes: Drawing
     }
 
     if (change.size) {
-      const manualSize = createManualResizeSize(element, change.size);
-      setRegularShapeManualSize(element, manualSize);
-      element.size = manualSize;
-      fitRegularShapeSizeToText(element);
+      element.size = {
+        width: Math.max(DRAWING_MIN_ELEMENT_SIZE.width, normalizeGeometryValue(change.size.width)),
+        height: Math.max(DRAWING_MIN_ELEMENT_SIZE.height, normalizeGeometryValue(change.size.height))
+      };
     }
   });
 }
@@ -515,11 +459,6 @@ export function updateDrawingElementStyle(state: DrawingBoardState, elementId: s
     ...element.style,
     ...style
   };
-  if (element.name === 'text') {
-    element.size = measureDrawingTextElementSize(element.text, element.style);
-  } else {
-    fitRegularShapeSizeToText(element);
-  }
 
   return withHistory(state, {
     elements: nextElements,
@@ -548,25 +487,20 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
 }
 
 /**
- * 更新节点文本。
+ * 更新元素自定义名称。
  * @param state - 当前画板状态
- * @param nodeId - 节点 ID
- * @param text - 新文本
+ * @param elementId - 元素 ID
+ * @param title - 新名称
  * @returns 新画板状态
  */
-export function updateDrawingNodeText(state: DrawingBoardState, nodeId: string, text: string): DrawingBoardState {
+export function updateDrawingElementTitle(state: DrawingBoardState, elementId: string, title: string): DrawingBoardState {
   const nextElements = cloneDeep(state.elements);
-  const node = nextElements.find((item) => item.id === nodeId);
-  if (!node) {
-    return withError(state, new Error(`找不到节点: ${nodeId}`));
+  const element = nextElements.find((item) => item.id === elementId);
+  if (!element) {
+    return withError(state, new Error(`找不到元素: ${elementId}`));
   }
 
-  node.text = text;
-  if (node.name === 'text') {
-    node.size = measureDrawingTextElementSize(text, node.style);
-  } else {
-    fitRegularShapeSizeToText(node);
-  }
+  element.title = title;
 
   return withHistory(state, {
     elements: nextElements,

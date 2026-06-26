@@ -14,7 +14,7 @@
     @pointerup="emit('release', node.id, $event)"
   >
     <component :is="nodeView" v-if="nodeView" :element="node" />
-    <div v-else class="b-drawing-node__fallback">{{ node.text }}</div>
+    <div v-else class="b-drawing-node__fallback">{{ node.title }}</div>
   </div>
 </template>
 
@@ -64,7 +64,7 @@ const nodeView = computed<Component | null>(() => getDrawingElementView(props.no
 const nodeStyle = computed<CSSProperties>(() => ({
   width: `${renderSize.value.width}px`,
   height: `${renderSize.value.height}px`,
-  opacity: props.node.style?.opacity,
+  opacity: props.node.style.opacity,
   transform: createDrawingElementCssTransform(renderPosition.value, props.node.rotation)
 }));
 </script>
