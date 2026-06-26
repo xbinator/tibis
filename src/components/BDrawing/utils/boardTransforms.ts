@@ -210,24 +210,31 @@ function createShapeGeometry(
     x: (start.x + end.x) / 2,
     y: (start.y + end.y) / 2
   };
-
-  if (width < DRAWING_MIN_CREATE_SIZE || height < DRAWING_MIN_CREATE_SIZE) {
-    if (createAnchor === 'top-left') {
-      return {
-        position: {
-          x: normalizeGeometryValue(start.x),
-          y: normalizeGeometryValue(start.y)
-        },
-        size: DRAWING_DEFAULT_NODE_SIZE
+  const shouldUseDefaultSize = width < DRAWING_MIN_CREATE_SIZE || height < DRAWING_MIN_CREATE_SIZE;
+  const size = shouldUseDefaultSize
+    ? DRAWING_DEFAULT_NODE_SIZE
+    : {
+        width,
+        height
       };
-    }
 
+  if (createAnchor === 'top-left') {
+    return {
+      position: {
+        x: normalizeGeometryValue(start.x),
+        y: normalizeGeometryValue(start.y)
+      },
+      size
+    };
+  }
+
+  if (shouldUseDefaultSize) {
     return {
       position: {
         x: normalizeGeometryValue(center.x - DRAWING_DEFAULT_NODE_SIZE.width / 2),
         y: normalizeGeometryValue(center.y - DRAWING_DEFAULT_NODE_SIZE.height / 2)
       },
-      size: DRAWING_DEFAULT_NODE_SIZE
+      size
     };
   }
 
@@ -236,10 +243,7 @@ function createShapeGeometry(
       x: normalizeGeometryValue(Math.min(start.x, end.x)),
       y: normalizeGeometryValue(Math.min(start.y, end.y))
     },
-    size: {
-      width,
-      height
-    }
+    size
   };
 }
 

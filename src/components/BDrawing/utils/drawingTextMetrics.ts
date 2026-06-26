@@ -15,15 +15,6 @@ import {
   DRAWING_TEXT_VERTICAL_PADDING
 } from '../constants/text';
 
-/**
- * 渲染文本行。
- */
-interface DrawingTextLineItem {
-  /** 渲染文本 */
-  text: string;
-  /** 是否为空行 */
-  empty: boolean;
-}
 /** 文本测量画布缓存。 */
 let drawingTextMeasureCanvas: HTMLCanvasElement | null = null;
 
@@ -139,43 +130,6 @@ function getDrawingTextLineWidth(line: string, fontSize: number, fontWeight: num
 }
 
 /**
- * 按最大宽度拆分文本行。
- * @param text - 文本内容
- * @param maxWidth - 文本容器宽度
- * @param style - 文本样式
- * @returns 拆分后的文本行
- */
-export function wrapDrawingTextLineItems(text: string, maxWidth: number, style?: DrawingElementStyle): DrawingTextLineItem[] {
-  const fontSize = style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
-  const fontWeight = style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT;
-  const maxContentWidth = Math.max(1, maxWidth - DRAWING_TEXT_HORIZONTAL_PADDING);
-
-  return text.split('\n').flatMap((paragraph: string): DrawingTextLineItem[] => {
-    if (!paragraph) {
-      return [{ empty: true, text: '\u00a0' }];
-    }
-
-    const lines: DrawingTextLineItem[] = [];
-    let currentLine = '';
-
-    for (const character of Array.from(paragraph)) {
-      const nextLine = `${currentLine}${character}`;
-      if (currentLine && getDrawingTextLineWidth(nextLine, fontSize, fontWeight) > maxContentWidth) {
-        lines.push({ empty: false, text: currentLine });
-        currentLine = character;
-        continue;
-      }
-
-      currentLine = nextLine;
-    }
-
-    lines.push({ empty: false, text: currentLine });
-
-    return lines;
-  });
-}
-
-/**
  * 按文本内容估算文本元素尺寸。
  * @param text - 文本内容
  * @param style - 文本样式
@@ -191,34 +145,5 @@ export function measureDrawingTextElementSize(text: string, style?: DrawingEleme
   return {
     width: normalizeTextMetricValue(maxLineWidth + DRAWING_TEXT_HORIZONTAL_PADDING),
     height: normalizeTextMetricValue(Math.max(1, lines.length) * lineHeight + DRAWING_TEXT_VERTICAL_PADDING)
-  };
-}
-
-/**
- * 按容器宽度估算普通形状中换行文本需要的高度。
- * @param text - 文本内容
- * @param width - 文本容器宽度
- * @param style - 文本样式
- * @returns 换行文本所需高度
- */
-export function measureWrappedDrawingTextHeight(text: string, width: number, style?: DrawingElementStyle): number {
-  const fontSize = style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
-  const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
-  const lineCount = wrapDrawingTextLineItems(text, width, style).length;
-
-  return normalizeTextMetricValue(Math.max(1, lineCount) * lineHeight + DRAWING_TEXT_VERTICAL_PADDING);
-}
-
-/**
- * 根据文本换行高度修正普通形状尺寸。
- * @param text - 文本内容
- * @param size - 用户手动设置的基础尺寸
- * @param style - 文本样式
- * @returns 至少能容纳文本的形状尺寸
- */
-export function createDrawingTextFitSize(text: string, size: DrawingSize, style?: DrawingElementStyle): DrawingSize {
-  return {
-    width: size.width,
-    height: Math.max(size.height, measureWrappedDrawingTextHeight(text, size.width, style))
   };
 }

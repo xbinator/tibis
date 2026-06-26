@@ -6,7 +6,7 @@
   <aside class="sidebar-panel">
     <div class="sidebar__tabs">
       <template v-for="tab in sidebarTabs" :key="tab.key">
-        <BButton :type="activeSidebarTab === tab.key ? 'secondary' : 'ghost'" square :icon="tab.icon" @click="handleSidebarTabClick(tab.key)" />
+        <BButton :type="activeSidebarTab === tab.key ? 'secondary' : 'ghost'" square :icon="tab.icon" @click="handleTabClick(tab.key)" />
       </template>
     </div>
 
@@ -101,7 +101,7 @@ let toolDragPreviewElement: HTMLElement | null = null;
  * 切换左侧侧边栏页签。
  * @param key - 目标页签标识
  */
-function handleSidebarTabClick(key: DrawingSidebarTabKey): void {
+function handleTabClick(key: DrawingSidebarTabKey): void {
   activeSidebarTab.value = key;
 }
 

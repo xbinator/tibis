@@ -4,11 +4,6 @@
  */
 
 /**
- * 文本元素默认文案。
- */
-export const DRAWING_DEFAULT_TEXT = '文本';
-
-/**
  * 文本元素默认字号。
  */
 export const DRAWING_TEXT_DEFAULT_FONT_SIZE = 13;

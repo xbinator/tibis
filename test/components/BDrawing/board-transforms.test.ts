@@ -228,6 +228,22 @@ describe('boardTransforms', (): void => {
     expect(added.history.past).toHaveLength(1);
   });
 
+  it('keeps the creation start point for a top-left anchored shape', (): void => {
+    const initial = createDrawingBoardState();
+    const added = addDrawingShape(initial, {
+      id: 'shape-1',
+      name: 'text',
+      label: '文本',
+      icon: 'lucide:type',
+      createAnchor: 'top-left',
+      start: { x: 320, y: 260 },
+      end: { x: 200, y: 180 }
+    });
+
+    expect(added.elements[0]?.position).toEqual({ x: 320, y: 260 });
+    expect(added.elements[0]?.size).toEqual({ width: 120, height: 80 });
+  });
+
   it('moves multiple elements as one history entry', (): void => {
     const initial = createDrawingBoardState({
       elements: [createShapeElement('node-1'), createShapeElement('node-2')]
