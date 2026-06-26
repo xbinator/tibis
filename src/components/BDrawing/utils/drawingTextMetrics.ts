@@ -14,6 +14,7 @@ import {
   DRAWING_TEXT_SPACE_CHARACTER_WIDTH_RATIO,
   DRAWING_TEXT_VERTICAL_PADDING
 } from '../constants/text';
+import { resolveDrawingBoxSideNumbers } from './drawingStyle';
 
 /** 文本测量画布缓存。 */
 let drawingTextMeasureCanvas: HTMLCanvasElement | null = null;
@@ -130,6 +131,27 @@ function getDrawingTextLineWidth(line: string, fontSize: number, fontWeight: num
 }
 
 /**
+ * 读取文本元素测量时使用的内边距。
+ * @param style - 文本样式
+ * @returns 横向与纵向内边距总和
+ */
+function getDrawingTextPaddingMetrics(style?: DrawingElementStyle): { horizontal: number; vertical: number } {
+  if (style?.padding === undefined) {
+    return {
+      horizontal: DRAWING_TEXT_HORIZONTAL_PADDING,
+      vertical: DRAWING_TEXT_VERTICAL_PADDING
+    };
+  }
+
+  const padding = resolveDrawingBoxSideNumbers(style.padding, 0);
+
+  return {
+    horizontal: padding.left + padding.right,
+    vertical: padding.top + padding.bottom
+  };
+}
+
+/**
  * 按文本内容估算文本元素尺寸。
  * @param text - 文本内容
  * @param style - 文本样式
@@ -141,9 +163,10 @@ export function measureDrawingTextElementSize(text: string, style?: DrawingEleme
   const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
   const lines = text.split('\n');
   const maxLineWidth = Math.max(1, ...lines.map((line: string): number => getDrawingTextLineWidth(line, fontSize, fontWeight)));
+  const padding = getDrawingTextPaddingMetrics(style);
 
   return {
-    width: normalizeTextMetricValue(maxLineWidth + DRAWING_TEXT_HORIZONTAL_PADDING),
-    height: normalizeTextMetricValue(Math.max(1, lines.length) * lineHeight + DRAWING_TEXT_VERTICAL_PADDING)
+    width: normalizeTextMetricValue(maxLineWidth + padding.horizontal),
+    height: normalizeTextMetricValue(Math.max(1, lines.length) * lineHeight + padding.vertical)
   };
 }

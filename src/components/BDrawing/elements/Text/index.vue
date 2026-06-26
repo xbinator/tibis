@@ -10,6 +10,7 @@
 import type { DrawingShapeElement } from '../../types';
 import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
+import { createDrawingElementStyleProperties } from '../../utils/drawingStyle';
 
 /**
  * 文本元素中间画布视图入参。
@@ -68,6 +69,7 @@ const textStyle = computed<CSSProperties>(() => {
   const style = props.element?.style;
 
   return {
+    ...createDrawingElementStyleProperties(style),
     alignItems: resolveVerticalAlign(style?.textVerticalAlign),
     color: style?.color,
     fontSize: style?.fontSize === undefined ? undefined : `${style.fontSize}px`,

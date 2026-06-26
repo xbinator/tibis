@@ -24,6 +24,49 @@ export interface DrawingSize {
 }
 
 /**
+ * 盒模型四边数值。
+ */
+export interface DrawingBoxSides {
+  /** 上边数值 */
+  top: number;
+  /** 右边数值 */
+  right: number;
+  /** 下边数值 */
+  bottom: number;
+  /** 左边数值 */
+  left: number;
+}
+
+/**
+ * 盒模型四角圆角数值。
+ */
+export interface DrawingCornerRadius {
+  /** 左上圆角 */
+  topLeft: number;
+  /** 右上圆角 */
+  topRight: number;
+  /** 右下圆角 */
+  bottomRight: number;
+  /** 左下圆角 */
+  bottomLeft: number;
+}
+
+/**
+ * 可统一或四边独立设置的盒模型数值。
+ */
+export type DrawingBoxSideValue = number | DrawingBoxSides;
+
+/**
+ * 可统一或四角独立设置的圆角数值。
+ */
+export type DrawingCornerRadiusValue = number | DrawingCornerRadius;
+
+/**
+ * 画板元素边框线型。
+ */
+export type DrawingBorderStyle = 'none' | 'solid' | 'dashed' | 'dotted';
+
+/**
  * 画板元素样式。
  */
 export interface DrawingElementStyle {
@@ -31,8 +74,16 @@ export interface DrawingElementStyle {
   backgroundColor?: string;
   /** 描边色 */
   borderColor?: string;
-  /** 描边宽度 */
+  /** 描边线型 */
+  borderStyle?: DrawingBorderStyle;
+  /** 描边宽度，支持统一或四边独立设置 */
+  borderWidth?: DrawingBoxSideValue;
+  /** 描边宽度旧字段，仅用于兼容历史数据 */
   borderColorWidth?: number;
+  /** 圆角，支持统一或四角独立设置 */
+  borderRadius?: DrawingCornerRadiusValue;
+  /** 内边距，支持统一或四边独立设置 */
+  padding?: DrawingBoxSideValue;
   /** 文字颜色 */
   color?: string;
   /** 文字字号 */
