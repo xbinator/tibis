@@ -4,12 +4,14 @@
 -->
 <template>
   <aside class="setter-panel">
-    <PageSetter v-if="!selectedElements.length" :drawing-data="drawingData" />
+    <PageSetter v-if="select && !isElementTarget(select)" :drawing-data="drawingData" :metadata="select" />
+    <div v-else-if="select === null" class="setter-panel__empty">已选择多个元素</div>
     <template v-else>
       <ATabs>
         <ATabPane key="design" tab="设计">
-          <DesignSetter :selected-elements="selectedElements" />
+          <DesignSetter v-model:element="select" />
         </ATabPane>
+
         <ATabPane key="style" tab="属性">1</ATabPane>
       </ATabs>
     </template>
@@ -17,9 +19,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
-import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
 import DesignSetter from './DesignSetter.vue';
 import PageSetter from './PageSetter.vue';
 
@@ -29,15 +30,20 @@ import PageSetter from './PageSetter.vue';
 interface Props {
   /** 当前画图数据 */
   drawingData: DrawingData;
-  /** 当前选中的画图元素 */
-  selectedElements?: DrawingElement[];
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  selectedElements: (): DrawingElement[] => []
-});
-/** 当前选中元素列表。 */
-const selectedElements = computed<DrawingElement[]>(() => props.selectedElements);
+defineProps<Props>();
+
+const select = defineModel<DrawingSelectTarget>('select', { default: null });
+
+/**
+ * 判断当前设置目标是否为画图元素。
+ * @param target - 当前设置目标
+ * @returns 是否为画图元素
+ */
+function isElementTarget(target: DrawingSelectTarget): target is DrawingElement {
+  return typeof target === 'object' && target !== null && 'id' in target && typeof target.id === 'string';
+}
 </script>
 
 <style lang="less" scoped>
@@ -65,5 +71,10 @@ const selectedElements = computed<DrawingElement[]>(() => props.selectedElements
     height: 38px;
     padding: 0;
   }
+}
+
+.setter-panel__empty {
+  padding: 16px 12px;
+  color: var(--text-secondary);
 }
 </style>

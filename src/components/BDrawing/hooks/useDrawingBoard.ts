@@ -14,6 +14,7 @@ import type {
 } from '../types';
 import { ref } from 'vue';
 import type { Ref } from 'vue';
+import { getDrawingElementSchema } from '../elements';
 import {
   addDrawingShape,
   createDrawingBoardState,
@@ -24,7 +25,7 @@ import {
   resizeDrawingElements,
   undoDrawingBoard,
   updateDrawingElementStyle,
-  updateDrawingNodeText
+  updateDrawingElementTitle
 } from '../utils/boardTransforms';
 
 /**
@@ -86,8 +87,8 @@ export interface UseDrawingBoardReturn {
   updateElementStyle: (elementId: string, style: DrawingElementStyleChange) => void;
   /** 删除选区 */
   deleteSelection: () => void;
-  /** 更新节点文本 */
-  updateNodeText: (nodeId: string, text: string) => void;
+  /** 更新元素自定义名称 */
+  updateElementTitle: (elementId: string, title: string) => void;
   /** 调整元素层级 */
   reorderElement: (elementId: string, action: DrawingLayerAction) => void;
   /** 设置选区 */
@@ -157,6 +158,15 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
 
       const isProcessShape = draft.name === 'process';
       const shapeId = isProcessShape ? `drawing-node-${++nodeIndex}` : `drawing-shape-${++shapeIndex}`;
+      const schema = getDrawingElementSchema(draft.name);
+      if (!schema) {
+        state.value = {
+          ...state.value,
+          draft: undefined,
+          lastError: new Error(`找不到元素注册配置: ${draft.name}`)
+        };
+        return;
+      }
 
       setState(
         addDrawingShape(
@@ -167,6 +177,8 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
           {
             id: shapeId,
             name: draft.name,
+            label: schema.label,
+            icon: schema.icon,
             start: draft.start,
             end: draft.current,
             style
@@ -186,7 +198,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     resizeElements: (changes: DrawingGeometryChange[]): void => setState(resizeDrawingElements(state.value, changes)),
     updateElementStyle: (elementId: string, style: DrawingElementStyleChange): void => setState(updateDrawingElementStyle(state.value, elementId, style)),
     deleteSelection: (): void => setState(deleteDrawingSelection(state.value)),
-    updateNodeText: (nodeId: string, text: string): void => setState(updateDrawingNodeText(state.value, nodeId, text)),
+    updateElementTitle: (elementId: string, title: string): void => setState(updateDrawingElementTitle(state.value, elementId, title)),
     reorderElement: (elementId: string, action: DrawingLayerAction): void => setState(reorderDrawingElement(state.value, elementId, action)),
     setSelection: (selection: string[]): void => {
       state.value = { ...state.value, selection };

@@ -2,7 +2,7 @@
  * @file useModelSync.ts
  * @description BDrawing 外部 v-model 与内部画板状态同步。
  */
-import type { DrawingBoardSnapshot, DrawingData } from '../types';
+import type { DrawingBoardSnapshot, DrawingData, DrawingElement } from '../types';
 import type { UseDrawingBoardReturn } from './useDrawingBoard';
 import { nextTick, watch } from 'vue';
 import type { Ref } from 'vue';
@@ -14,11 +14,9 @@ import { createDrawingDataSnapshot } from '../utils/boardTransforms';
  */
 export interface UseModelSyncOptions {
   /** 外部双向绑定数据 */
-  modelValue: Readonly<Ref<DrawingData | undefined>>;
+  drawingData: Ref<DrawingData | undefined>;
   /** 内部画板状态与命令 */
   board: UseDrawingBoardReturn;
-  /** 向外部发出画板数据更新 */
-  emitUpdate: (value: DrawingData) => void;
 }
 
 /**
@@ -35,21 +33,40 @@ function createDrawingModelSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elemen
 
 /**
  * 判断外部画板内容与内部状态是否一致。
- * @param modelValue - 外部画板数据
+ * @param drawingData - 外部画板数据
  * @param board - 内部画板状态与命令
  * @returns 是否一致
  */
-function isModelContentEqualToBoard(modelValue: DrawingData, board: UseDrawingBoardReturn): boolean {
-  return isEqual(createDrawingModelSnapshot(modelValue), createDrawingModelSnapshot(board.state.value));
+function isModelContentEqualToBoard(drawingData: DrawingData, board: UseDrawingBoardReturn): boolean {
+  return isEqual(createDrawingModelSnapshot(drawingData), createDrawingModelSnapshot(board.state.value));
 }
 
 /**
  * 创建对外同步的画板数据。
  * @param board - 内部画板状态与命令
+ * @param drawingData - 当前外部画板数据
  * @returns 对外同步数据
  */
-function createModelUpdateSnapshot(board: UseDrawingBoardReturn): DrawingData {
-  return createDrawingDataSnapshot(board.state.value);
+function createModelUpdateSnapshot(board: UseDrawingBoardReturn, drawingData: DrawingData | undefined): DrawingData {
+  return createDrawingDataSnapshot({
+    ...board.state.value,
+    metadata: drawingData?.metadata
+  });
+}
+
+/**
+ * 创建外部模型回灌到画板时使用的快照，保留仍然存在的内部选区。
+ * @param drawingData - 外部画板数据
+ * @param board - 内部画板状态与命令
+ * @returns 画板重置快照
+ */
+function createModelResetSnapshot(drawingData: DrawingData, board: UseDrawingBoardReturn): Partial<DrawingBoardSnapshot> {
+  const modelElementIds = new Set(drawingData.elements.map((element: DrawingElement): string => element.id));
+
+  return {
+    ...drawingData,
+    selection: board.state.value.selection.filter((elementId: string): boolean => modelElementIds.has(elementId))
+  };
 }
 
 /**
@@ -57,23 +74,23 @@ function createModelUpdateSnapshot(board: UseDrawingBoardReturn): DrawingData {
  * @param options - 模型同步配置
  */
 export function useModelSync(options: UseModelSyncOptions): void {
-  let syncingModelValueToBoard = false;
+  let syncingDrawingDataToBoard = false;
 
   watch(
-    () => options.modelValue.value,
-    (modelValue: DrawingData | undefined): void => {
-      if (!modelValue || isModelContentEqualToBoard(modelValue, options.board)) {
+    () => options.drawingData.value,
+    (drawingData: DrawingData | undefined): void => {
+      if (!drawingData || isModelContentEqualToBoard(drawingData, options.board)) {
         return;
       }
 
-      syncingModelValueToBoard = true;
-      options.board.reset(modelValue);
+      syncingDrawingDataToBoard = true;
+      options.board.reset(createModelResetSnapshot(drawingData, options.board));
       nextTick()
         .then((): void => {
-          syncingModelValueToBoard = false;
+          syncingDrawingDataToBoard = false;
         })
         .catch((error: unknown): void => {
-          syncingModelValueToBoard = false;
+          syncingDrawingDataToBoard = false;
           console.warn('BDrawing model sync failed', error);
         });
     },
@@ -83,15 +100,15 @@ export function useModelSync(options: UseModelSyncOptions): void {
   watch(
     () => [options.board.state.value.elements, options.board.state.value.viewport],
     (): void => {
-      if (options.modelValue.value === undefined || syncingModelValueToBoard) {
+      if (options.drawingData.value === undefined || syncingDrawingDataToBoard) {
         return;
       }
 
-      if (isModelContentEqualToBoard(options.modelValue.value, options.board)) {
+      if (isModelContentEqualToBoard(options.drawingData.value, options.board)) {
         return;
       }
 
-      options.emitUpdate(createModelUpdateSnapshot(options.board));
+      options.drawingData.value = createModelUpdateSnapshot(options.board, options.drawingData.value);
     },
     { deep: true }
   );

@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingMetadata } from '@/components/BDrawing/types';
 
 /**
  * 画布设置面板入参。
@@ -38,6 +38,8 @@ import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
 interface Props {
   /** 当前画图数据 */
   drawingData: DrawingData;
+  /** 当前画板元信息 */
+  metadata: DrawingMetadata;
 }
 
 const props = defineProps<Props>();

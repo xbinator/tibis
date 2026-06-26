@@ -63,9 +63,18 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingData, DrawingElement, DrawingElementStyle, DrawingGeometryChange, DrawingPoint, DrawingShapeElement, DrawingSize } from './types';
+import type {
+  DrawingData,
+  DrawingElement,
+  DrawingElementStyle,
+  DrawingGeometryChange,
+  DrawingPoint,
+  DrawingSelectTarget,
+  DrawingShapeElement,
+  DrawingSize
+} from './types';
 import type { DrawingCanvasPointProjection } from './utils/drawingGeometry';
-import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useShortcuts } from '@/hooks/useShortcuts';
 import InfiniteViewport from './components/InfiniteViewport.vue';
 import MoveableLayer from './components/MoveableLayer.vue';
@@ -88,36 +97,23 @@ import {
   queryDrawingElementTarget
 } from './utils/drawingGeometry';
 
-/**
- * 画图组件入参。
- */
-interface Props {
-  /** 外部双向绑定的轻量画板数据 */
-  modelValue?: DrawingData;
-}
-
-const props = defineProps<Props>();
-const emit = defineEmits<{
-  /** 更新外部双向绑定画板数据 */
-  'update:modelValue': [value: DrawingData];
-  /** 通知外部当前内部选区 */
-  'selection-change': [selection: string[]];
-}>();
-
-const board = useDrawingBoard(props.modelValue);
+const drawingData = defineModel<DrawingData>('value', {
+  default: (): DrawingData => ({ metadata: {}, elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } })
+});
+/** 当前选中的绘图目标（元素或锚点），支持双向绑定。 */
+const selectedTarget = defineModel<DrawingSelectTarget>('select', { default: null });
+/** 画板实例，管理绘图元素数据与状态。 */
+const board = useDrawingBoard(drawingData.value);
+/** 视口控制器，处理画布的平移与缩放。 */
 const viewport = useDrawingViewport(board);
+/** 交互控制器，处理鼠标/触控事件与元素操作。 */
 const interaction = useDrawingInteraction(board);
+/** 当前激活的工具名称，默认为选择工具。 */
 const activeTool = ref<string>('select');
 /** 创建工具激活时应用到下一个形状的样式。 */
 const creationStyle = ref<DrawingElementStyle>({});
 const { rootRef, viewportSize, isViewportReady } = useViewportSize();
-useModelSync({
-  board,
-  emitUpdate: (value: DrawingData): void => {
-    emit('update:modelValue', value);
-  },
-  modelValue: toRef(props, 'modelValue')
-});
+useModelSync({ board, drawingData });
 const { registerShortcuts } = useShortcuts();
 /** 当前历史栈是否允许撤销。 */
 const canUndo = computed<boolean>(() => board.state.value.history.past.length > 0);
@@ -129,6 +125,29 @@ const initialContentViewportFitted = ref<boolean>(false);
 const hideMoveableDuringDirectDrag = ref<boolean>(false);
 /** Moveable 拖拽缩放过程中的临时几何预览。 */
 const moveablePreviewChanges = ref<DrawingGeometryChange[]>([]);
+/**
+ * 根据内部选区创建外部可编辑目标。
+ * @param selection - 内部选区 ID 列表
+ * @returns 外部可编辑目标
+ */
+function createSelectedTargetFromSelection(selection: string[]): DrawingSelectTarget {
+  if (selection.length === 0) return drawingData.value.metadata;
+
+  if (selection.length > 1) return null;
+
+  const selectedId = selection[0];
+  const element = drawingData.value.elements.find((item: DrawingElement): boolean => item.id === selectedId);
+
+  return element ?? drawingData.value.metadata;
+}
+
+/**
+ * 处理内部选区变化。
+ * @param selection - 内部选区 ID 列表
+ */
+function handleSelectionChange(selection: string[]): void {
+  selectedTarget.value = createSelectedTargetFromSelection(selection);
+}
 
 /**
  * 首次打开已有内容时自动适配视口。
@@ -160,13 +179,7 @@ watch(
   { immediate: true }
 );
 
-watch(
-  () => board.state.value.selection,
-  (selection: string[]): void => {
-    emit('selection-change', [...selection]);
-  },
-  { immediate: true }
-);
+watch(() => board.state.value.selection, handleSelectionChange, { immediate: true });
 
 /**
  * 直接拖拽节点会话。
@@ -645,16 +658,12 @@ function handleCanvasPointerup(point: DrawingPoint): void {
  */
 async function createElementFromClientPoint(name: string, clientPoint: DrawingPoint): Promise<void> {
   const schema = getDrawingElementSchema(name);
-  if (!schema) {
-    return;
-  }
+  if (!schema) return;
 
   cancelDirectDrag();
   board.clearDraft();
   const point = getBoardPointFromClient(clientPoint.x, clientPoint.y);
-  if (!point) {
-    return;
-  }
+  if (!point) return;
 
   createElementAtPoint(schema.name, point);
 }

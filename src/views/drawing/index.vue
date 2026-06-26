@@ -4,11 +4,13 @@
 -->
 <template>
   <main class="drawing-page" tabindex="0" @blur="session.actions.onBlur">
-    <SidebarPanel :elements="session.data.value.elements" :selected-element-ids="selectedElementIds" />
+    <SidebarPanel :elements="session.data.value.elements" />
+
     <section class="drawing-page__canvas" @dragover="handleCanvasDragOver" @drop="handleCanvasDrop">
-      <BDrawing ref="drawingRef" v-model="session.data.value" @selection-change="handleDrawingSelectionChange" />
+      <BDrawing ref="drawingRef" v-model:value="session.data.value" v-model:select="selectedTarget" />
     </section>
-    <SettingsPanel :drawing-data="session.data.value" :selected-elements="selectedElements" />
+
+    <SettingsPanel v-model:select="selectedTarget" :drawing-data="session.data.value" />
   </main>
 </template>
 
@@ -16,7 +18,7 @@
 import { computed, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type BDrawingComponent from '@/components/BDrawing/index.vue';
-import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingSelectTarget } from '@/components/BDrawing/types';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import SettingsPanel from './components/SettingsPanel.vue';
@@ -29,37 +31,21 @@ const tabsStore = useTabsStore();
 const fileId = ref(String(route.params.id || ''));
 const isActive = ref(true);
 const drawingRef = ref<InstanceType<typeof BDrawingComponent>>();
-const selectedElementIds = ref<string[]>([]);
 const routePath = computed<string>(() => route.fullPath || `/drawing/${fileId.value}`);
-
-/**
- * 创建空画图数据。
- * @returns 空画图数据
- */
-function createEmptyDrawingData(): DrawingData {
-  return {
-    elements: [],
-    viewport: { center: { x: 0, y: 0 }, zoom: 1 }
-  };
-}
 
 const session = useFileSession<DrawingData>({
   fileId,
   kind: 'tibis',
   defaultName: 'Untitled',
   defaultExt: 'tibis',
-  defaultData: createEmptyDrawingData(),
+  defaultData: { metadata: {}, elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } },
   type: 'drawing',
   version: 1,
   routeName: 'drawing',
   fallbackRouteName: 'editor'
 });
-/** 当前用于右侧设置栏展示的选中元素列表。 */
-const selectedElements = computed<DrawingElement[]>(() => {
-  const selectedIdSet = new Set(selectedElementIds.value);
-
-  return session.data.value.elements.filter((element: DrawingElement): boolean => selectedIdSet.has(element.id));
-});
+/** 当前右侧设置栏可编辑目标。 */
+const selectedTarget = ref<DrawingSelectTarget>(session.data.value.metadata);
 
 /**
  * 将当前画图文件同步到标签页列表。
@@ -75,14 +61,6 @@ function syncDrawingTab(): void {
     title: session.currentTitle.value,
     cacheKey: `drawing:${fileId.value}`
   });
-}
-
-/**
- * 同步 BDrawing 内部选区到页面侧边栏。
- * @param selection - 当前选中元素 ID 列表
- */
-function handleDrawingSelectionChange(selection: string[]): void {
-  selectedElementIds.value = selection;
 }
 
 /**
@@ -103,13 +81,9 @@ function handleCanvasDragOver(event: DragEvent): void {
 function handleCanvasDrop(event: DragEvent): void {
   event.preventDefault();
   const dragData = getDrawingElementDragData(event.dataTransfer);
-  if (!dragData) {
-    return;
-  }
+  if (!dragData) return;
 
-  drawingRef.value?.createElementFromClientPoint(dragData.name, { x: event.clientX, y: event.clientY }).catch((error: unknown): void => {
-    console.warn('BDrawing drop create failed', error);
-  });
+  drawingRef.value?.createElementFromClientPoint(dragData.name, { x: event.clientX, y: event.clientY });
 }
 
 watch([fileId, session.currentTitle], syncDrawingTab, { immediate: true });

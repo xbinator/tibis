@@ -31,10 +31,10 @@
         </div>
 
         <div v-else-if="elements.length" class="sidebar-panel__layer-list">
-          <div v-for="(element, index) in elements" :key="element.id" class="sidebar-panel__layer-item" :class="{ 'is-active': isElementSelected(element) }">
+          <div v-for="element in elements" :key="element.id" class="sidebar-panel__layer-item" :class="{ 'is-active': isElementSelected(element) }">
             <BIcon :icon="getElementIcon(element)" :size="15" />
             <div class="sidebar-panel__layer-main">
-              <span class="sidebar-panel__layer-title">{{ getElementTitle(element, index) }}</span>
+              <span class="sidebar-panel__layer-title">{{ element.title }}</span>
             </div>
           </div>
         </div>
@@ -94,10 +94,6 @@ const sidebarTabs: DrawingSidebarTab[] = [
 ];
 /** 当前可创建元素列表。 */
 const drawingElementSchemas = DRAWING_ELEMENT_SCHEMAS;
-/** 元素注册名到侧边栏展示配置的索引。 */
-const drawingElementSchemaByName = new Map<string, DrawingElementSchema>(
-  drawingElementSchemas.map((schema: DrawingElementSchema): [string, DrawingElementSchema] => [schema.name, schema])
-);
 /** 当前拖拽工具的自定义预览节点。 */
 let toolDragPreviewElement: HTMLElement | null = null;
 
@@ -174,22 +170,12 @@ function handleToolDragEnd(): void {
 }
 
 /**
- * 读取图层标题。
- * @param element - 画图元素
- * @param index - 元素下标
- * @returns 图层标题
- */
-function getElementTitle(element: DrawingElement, index: number): string {
-  return drawingElementSchemaByName.get(element.name)?.label ?? `元素 ${index + 1}`;
-}
-
-/**
  * 读取图层图标。
  * @param element - 画图元素
  * @returns 图层图标名称
  */
 function getElementIcon(element: DrawingElement): string {
-  return drawingElementSchemaByName.get(element.name)?.icon ?? 'lucide:box';
+  return element.icon;
 }
 
 /**
