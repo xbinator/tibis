@@ -5,7 +5,7 @@
 <template>
   <div
     class="b-drawing-node b-drawing-element"
-    :class="{ 'is-selected': selected, 'is-text': isTextShape }"
+    :class="{ 'is-text': isTextShape }"
     data-testid="drawing-node"
     :data-drawing-element-id="node.id"
     :data-drawing-name="node.name"
@@ -77,11 +77,6 @@ const nodeStyle = computed<CSSProperties>(() => ({
   box-sizing: border-box;
   cursor: pointer;
   transform-origin: center center;
-}
-
-.b-drawing-node.is-selected {
-  outline: 1px solid var(--color-primary);
-  outline-offset: 0;
 }
 
 .b-drawing-node__fallback {

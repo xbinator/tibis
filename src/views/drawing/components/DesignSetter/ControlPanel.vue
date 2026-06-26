@@ -300,7 +300,6 @@ function handleTargetValueUpdate(target: ControlPanelTarget, value: ValueType): 
 .control-panel__toggle:hover,
 .control-panel__toggle.is-active {
   color: var(--color-primary);
-  background: var(--color-primary-bg);
   border-color: var(--color-primary-border);
 }
 
