@@ -3,7 +3,7 @@
   @description Skill 详情独立页面，从路由参数获取 skill 名称并展示详情。
 -->
 <template>
-  <BSettingsPage title="Skill 详情" class="skill-detail">
+  <SettingsPage title="Skill 详情" class="skill-detail">
     <template #title>
       <div class="skill-detail__title-row">
         <BButton type="text" square size="small" title="返回列表" @click="handleGoBack">
@@ -47,7 +47,7 @@
       <Icon icon="lucide:search-x" :width="24" />
       <span>未找到该技能</span>
     </div>
-  </BSettingsPage>
+  </SettingsPage>
 </template>
 
 <script setup lang="ts">
@@ -56,6 +56,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import { useSkillStore } from '@/stores/ai/skill';
+import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SkillPreview from './components/SkillPreview.vue';
 
 const route = useRoute();
@@ -106,7 +107,7 @@ function handleGoBack(): void {
   user-select: text;
 }
 
-.skill-detail :deep(.b-settings-page__body) {
+.skill-detail :deep(.settings-page__body) {
   display: flex;
   flex-direction: column;
   gap: 12px;

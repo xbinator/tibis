@@ -3,7 +3,7 @@
   @description 语音组件设置页，负责展示当前运行时状态并提供安装、重装和删除入口。
 -->
 <template>
-  <BSettingsPage :title="MENU_ITEMS.speech.label">
+  <SettingsPage :title="MENU_ITEMS.speech.label">
     <div class="speech-settings__overview">
       <div class="speech-settings__overview-icon">
         <Icon icon="lucide:mic-2" />
@@ -22,7 +22,7 @@
       <SpeechActionMenu :status="status?.state" :installing="installing" @install="handleInstall" @refresh="refreshStatus" @remove="handleRemove" />
     </div>
 
-    <BSettingsSection title="运行环境">
+    <SettingsSection title="运行环境">
       <SpeechSettingsItem icon="lucide:activity" label="状态" hint="当前语音运行时检测结果">
         <span class="speech-settings__status-dot" :class="`speech-settings__status-dot--${status?.state ?? 'unknown'}`"></span>
         {{ statusConfig.label }}
@@ -35,9 +35,9 @@
       <SpeechSettingsItem icon="lucide:binary" label="架构" hint="运行时 CPU 架构">
         {{ status?.arch ?? '-' }}
       </SpeechSettingsItem>
-    </BSettingsSection>
+    </SettingsSection>
 
-    <BSettingsSection title="模型信息">
+    <SettingsSection title="模型信息">
       <SpeechSettingsItem icon="lucide:brain" label="模型" hint="当前使用的语音识别模型">
         {{ status?.modelName ?? '-' }}
       </SpeechSettingsItem>
@@ -49,8 +49,8 @@
       <SpeechSettingsItem icon="lucide:folder" label="安装目录" hint="语音组件本地存储路径" :path="true">
         {{ status?.installDir ?? '-' }}
       </SpeechSettingsItem>
-    </BSettingsSection>
-  </BSettingsPage>
+    </SettingsSection>
+  </SettingsPage>
 </template>
 
 <script setup lang="ts">
@@ -60,6 +60,8 @@ import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { getElectronAPI, hasElectronAPI } from '@/shared/platform/electron-api';
 import { Modal } from '@/utils/modal';
+import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
+import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import SpeechActionMenu from './components/SpeechActionMenu.vue';
 import SpeechSettingsItem from './components/SpeechSettingsItem.vue';

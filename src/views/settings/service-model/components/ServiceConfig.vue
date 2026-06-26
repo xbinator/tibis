@@ -1,5 +1,5 @@
 <template>
-  <BSettingsSection :title="title">
+  <SettingsSection :title="title">
     <div class="config-row">
       <div class="config-info">
         <div class="config-label">模型</div>
@@ -36,7 +36,7 @@
         <BButton @click="confirmPromptEdit">确定</BButton>
       </template>
     </BModal>
-  </BSettingsSection>
+  </SettingsSection>
 </template>
 
 <script setup lang="ts">
@@ -52,6 +52,7 @@ import BSelect from '@/components/BSelect/index.vue';
 import { serviceModelsStorage } from '@/shared/storage';
 import { dispatchServiceModelUpdated } from '@/shared/storage/service-models/events';
 import { useProviderStore } from '@/stores/ai/provider';
+import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
 
 interface Props {
   serviceType: ModelServiceType;
@@ -212,7 +213,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="less">
-:deep(.b-settings-section) {
+:deep(.settings-section) {
   width: 100%;
   max-width: 800px;
 }

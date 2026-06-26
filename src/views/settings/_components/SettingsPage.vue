@@ -1,22 +1,26 @@
+<!--
+  @file SettingsPage.vue
+  @description 设置模块私有页面布局组件，提供标题栏、扩展操作区和内容滚动区域。
+-->
 <template>
-  <div :class="bem()">
-    <div :class="bem('header')">
-      <div :class="bem('title')">
+  <div class="settings-page">
+    <div class="settings-page__header">
+      <div class="settings-page__title">
         <slot name="title">{{ title }}</slot>
       </div>
 
-      <div :class="bem('extra')">
+      <div class="settings-page__extra">
         <slot name="extra"></slot>
       </div>
     </div>
-    <div :class="bem('body')">
+    <div class="settings-page__body">
       <slot></slot>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { createNamespace } from '@/utils/namespace';
+defineOptions({ name: 'SettingsPage' });
 
 /**
  * 设置页面布局 props。
@@ -29,12 +33,10 @@ interface Props {
 withDefaults(defineProps<Props>(), {
   title: ''
 });
-
-const [, bem] = createNamespace('settings-page');
 </script>
 
 <style scoped lang="less">
-.b-settings-page {
+.settings-page {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -42,7 +44,7 @@ const [, bem] = createNamespace('settings-page');
   border-radius: 8px;
 }
 
-.b-settings-page__header {
+.settings-page__header {
   display: flex;
   flex-shrink: 0;
   gap: 6px;
@@ -52,7 +54,7 @@ const [, bem] = createNamespace('settings-page');
   border-bottom: 1px solid var(--border-primary);
 }
 
-.b-settings-page__title {
+.settings-page__title {
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -61,14 +63,14 @@ const [, bem] = createNamespace('settings-page');
   color: var(--text-primary);
 }
 
-.b-settings-page__extra {
+.settings-page__extra {
   display: flex;
   gap: 8px;
   align-items: center;
   margin-left: auto;
 }
 
-.b-settings-page__body {
+.settings-page__body {
   flex: 1;
   width: 100%;
   padding: 20px;

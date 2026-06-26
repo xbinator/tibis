@@ -3,8 +3,8 @@
   @description 记忆设置页，管理记忆开关、查看记忆内容、编辑记忆。
 -->
 <template>
-  <BSettingsPage :title="MENU_ITEMS.memory.label">
-    <BSettingsSection title="功能开关">
+  <SettingsPage :title="MENU_ITEMS.memory.label">
+    <SettingsSection title="功能开关">
       <div class="memory-settings__item">
         <div class="memory-settings__meta">
           <div class="memory-settings__label">启用记忆</div>
@@ -14,9 +14,9 @@
           <ASwitch :checked="settingStore.memoryEnabled" @change="handleToggleEnabled" />
         </div>
       </div>
-    </BSettingsSection>
+    </SettingsSection>
 
-    <BSettingsSection title="记忆内容">
+    <SettingsSection title="记忆内容">
       <template #extra>
         <BButton size="small" icon="lucide:pencil" @click="startEdit">编辑</BButton>
       </template>
@@ -31,8 +31,8 @@
       <MemoryContent v-else :content="memoryStore.rawContent" />
 
       <MemoryInput v-model:open="editing" />
-    </BSettingsSection>
-  </BSettingsPage>
+    </SettingsSection>
+  </SettingsPage>
 </template>
 
 <script setup lang="ts">
@@ -43,6 +43,8 @@
 import { onMounted, ref } from 'vue';
 import { useMemoryStore } from '@/stores/ai/memory';
 import { useSettingStore } from '@/stores/ui/setting';
+import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
+import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import MemoryContent from './components/MemoryContent.vue';
 import MemoryInput from './components/MemoryInput.vue';

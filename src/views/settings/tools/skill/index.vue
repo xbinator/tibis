@@ -3,17 +3,17 @@
   @description Skill 设置页，管理搜索路径、查看和启用/禁用 Skill。
 -->
 <template>
-  <BSettingsPage class="skill-settings" :title="MENU_ITEMS.skill.label">
+  <SettingsPage class="skill-settings" :title="MENU_ITEMS.skill.label">
     <template #extra>
       <BButton icon="lucide:plus" type="primary" size="small" @click="creatorVisible = true">创建技能</BButton>
     </template>
     <!-- 搜索路径说明 -->
-    <BSettingsSection title="搜索路径" content-class="skill-settings__content">
+    <SettingsSection title="搜索路径" content-class="skill-settings__content">
       <div class="skill-settings__hint">Skill 文件放置在 <code>.agents/skills/&lt;name&gt;/SKILL.md</code> 目录下即可自动发现</div>
-    </BSettingsSection>
+    </SettingsSection>
 
     <!-- Skill 列表 -->
-    <BSettingsSection title="已安装">
+    <SettingsSection title="已安装">
       <div v-if="store.skills.length === 0" class="skill-settings__empty">
         {{ store.initialized ? '未发现任何 Skill' : '正在扫描…' }}
       </div>
@@ -36,11 +36,11 @@
           </template>
         </APagination>
       </div>
-    </BSettingsSection>
+    </SettingsSection>
 
     <!-- 创建技能模态框 -->
     <SkillCreator v-model:open="creatorVisible" />
-  </BSettingsPage>
+  </SettingsPage>
 </template>
 
 <script setup lang="ts">
@@ -48,6 +48,8 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useSkillStore } from '@/stores/ai/skill';
+import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
+import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import SkillCreator from './components/SkillCreator.vue';
 import SkillItemRow from './components/SkillItemRow.vue';

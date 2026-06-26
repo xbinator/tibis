@@ -1,21 +1,25 @@
+<!--
+  @file SettingsSection.vue
+  @description 设置模块私有分区布局组件，提供分区标题、扩展操作区和内容插槽。
+-->
 <template>
-  <section :class="name">
-    <div :class="bem('header')">
-      <span :class="bem('header-text')">{{ title }}</span>
+  <section class="settings-section">
+    <div class="settings-section__header">
+      <span class="settings-section__header-text">{{ title }}</span>
 
-      <div :class="bem('header-extra')">
+      <div class="settings-section__header-extra">
         <slot name="extra"></slot>
       </div>
     </div>
 
-    <div :class="[bem('content'), contentClass]">
+    <div :class="['settings-section__content', contentClass]">
       <slot></slot>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { createNamespace } from '@/utils/namespace';
+defineOptions({ name: 'SettingsSection' });
 
 /**
  * 设置分区容器 props。
@@ -23,19 +27,17 @@ import { createNamespace } from '@/utils/namespace';
 interface Props {
   /** 分区标题 */
   title: string;
-  // 分区内容类名
+  /** 分区内容类名 */
   contentClass?: string;
 }
 
 withDefaults(defineProps<Props>(), {
   contentClass: ''
 });
-
-const [name, bem] = createNamespace('settings-section');
 </script>
 
 <style scoped lang="less">
-.b-settings-section {
+.settings-section {
   max-width: 820px;
   margin: 0 auto;
   overflow: hidden;
@@ -45,12 +47,12 @@ const [name, bem] = createNamespace('settings-section');
   border-radius: 14px;
   box-shadow: var(--shadow-sm);
 
-  + .b-settings-section {
+  + .settings-section {
     margin-top: 16px;
   }
 }
 
-.b-settings-section__header {
+.settings-section__header {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -64,11 +66,11 @@ const [name, bem] = createNamespace('settings-section');
   border-bottom: 1px solid var(--border-primary);
 }
 
-.b-settings-section__header-text {
+.settings-section__header-text {
   flex-shrink: 0;
 }
 
-.b-settings-section__header-extra {
+.settings-section__header-extra {
   display: flex;
   gap: 8px;
   align-items: center;

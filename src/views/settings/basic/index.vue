@@ -3,8 +3,8 @@
   @description 基础设置页，管理配色方案、编辑器视图偏好与保存策略。
 -->
 <template>
-  <BSettingsPage :title="MENU_ITEMS.basic.label">
-    <BSettingsSection title="配色方案">
+  <SettingsPage :title="MENU_ITEMS.basic.label">
+    <SettingsSection title="配色方案">
       <div class="basic-settings__item">
         <div class="basic-settings__meta">
           <div class="basic-settings__label">外观</div>
@@ -21,9 +21,9 @@
           <BSelect :value="settingStore.themePreset" :options="presetOptions" :width="280" @change="handlePresetChange" />
         </div>
       </div>
-    </BSettingsSection>
+    </SettingsSection>
 
-    <BSettingsSection title="编辑器">
+    <SettingsSection title="编辑器">
       <div class="basic-settings__item">
         <div class="basic-settings__meta">
           <div class="basic-settings__label">自动保存</div>
@@ -50,9 +50,9 @@
           <BSelect :value="editorStore.pageWidth" :options="pageWidthOptions" :width="280" @change="handlePageWidthChange" />
         </div>
       </div>
-    </BSettingsSection>
+    </SettingsSection>
 
-    <BSettingsSection title="AI 工具权限">
+    <SettingsSection title="AI 工具权限">
       <div class="basic-settings__permission-panel">
         <div class="basic-settings__permission-header">
           <div class="basic-settings__meta">
@@ -89,8 +89,8 @@
           </div>
         </div>
       </div>
-    </BSettingsSection>
-  </BSettingsPage>
+    </SettingsSection>
+  </SettingsPage>
 </template>
 
 <script setup lang="ts">
@@ -102,6 +102,8 @@ import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import type { ThemeMode } from '@/stores/ui/setting';
 import { useSettingStore } from '@/stores/ui/setting';
 import { getPresetList } from '@/theme';
+import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
+import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
 import { MENU_ITEMS } from '@/views/settings/constants';
 
 const editorStore = useEditorPreferencesStore();

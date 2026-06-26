@@ -35,13 +35,12 @@ const COMPONENT_DIRS = [
   'BJsonViewer',
   'BSuspense',
   'BScrollbar',
-  'BSettingsSection',
-  'BSettingsPage',
   'BTruncateText',
   'BImageViewer',
   'BUpload',
   'BDrawing',
-  'BColorPicker'
+  'BColorPicker',
+  'BSection'
 ];
 
 /**

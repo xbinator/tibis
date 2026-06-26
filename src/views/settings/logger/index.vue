@@ -4,7 +4,7 @@
   首次加载在 onMounted 中触发初始日志拉取。
 -->
 <template>
-  <BSettingsPage :title="MENU_ITEMS.logger.label">
+  <SettingsPage :title="MENU_ITEMS.logger.label">
     <template #extra>
       <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
     </template>
@@ -30,7 +30,7 @@
         <ASpin />
       </div>
     </BScrollbar>
-  </BSettingsPage>
+  </SettingsPage>
 </template>
 
 <script setup lang="ts">
@@ -39,6 +39,7 @@ import dayjs from 'dayjs';
 import { pickBy } from 'lodash-es';
 import { logger } from '@/shared/logger';
 import type { LogEntry, LogFileInfo, LogQueryOptions } from '@/shared/logger/types';
+import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import LogFilterBar, { type LogFilterBarDataItem } from './components/LogFilterBar.vue';
 import LogTimeline from './components/LogTimeline.vue';

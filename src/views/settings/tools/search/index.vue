@@ -3,8 +3,8 @@
   @description 搜索工具设置页，负责管理 Tavily 的启用状态与 API Key。
 -->
 <template>
-  <BSettingsPage :title="MENU_ITEMS.search.label">
-    <BSettingsSection title="基础配置">
+  <SettingsPage :title="MENU_ITEMS.search.label">
+    <SettingsSection title="基础配置">
       <div class="search-tools-settings__item">
         <div class="search-tools-settings__meta">
           <div class="search-tools-settings__label">启用 Tavily 工具</div>
@@ -21,12 +21,14 @@
           <AInputPassword :value="store.tavily.apiKey" placeholder="请输入 Tavily API Key" @update:value="handleApiKeyChange" />
         </div>
       </div>
-    </BSettingsSection>
-  </BSettingsPage>
+    </SettingsSection>
+  </SettingsPage>
 </template>
 
 <script setup lang="ts">
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
+import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
+import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
 import { MENU_ITEMS } from '@/views/settings/constants';
 
 const store = useToolSettingsStore();
