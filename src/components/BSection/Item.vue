@@ -3,7 +3,7 @@
  * @description 区块字段行组件，封装"前缀 + 控件"的 flex 行布局，支持文字标签和图标前缀。
 -->
 <template>
-  <label :class="name">
+  <div :class="name">
     <!-- 文字前缀 -->
     <div :class="bem('prefix')">
       <span v-if="label && !icon" :class="bem('label')">{{ label }}</span>
@@ -12,7 +12,7 @@
     </div>
     <!-- 控件插槽 -->
     <slot></slot>
-  </label>
+  </div>
 </template>
 
 <script setup lang="ts">
