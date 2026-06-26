@@ -5,16 +5,6 @@
 import type { SnapDirections } from 'moveable';
 
 /**
- * 可创建形状的工具列表。
- */
-export const DRAWING_SHAPE_TOOLS: readonly string[] = ['process', 'rect', 'ellipse', 'diamond', 'text'];
-
-/**
- * 文本工具点击创建的最大拖动距离。
- */
-export const DRAWING_TEXT_CREATE_CLICK_TOLERANCE = 4;
-
-/**
  * Moveable 控制框与节点边界之间的视觉留白。
  */
 export const DRAWING_MOVEABLE_SELECTION_PADDING = {

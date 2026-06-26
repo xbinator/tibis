@@ -43,4 +43,4 @@ export function getDrawingElementView(name: string): Component | null {
   return drawingElementViewByName.get(name) ?? null;
 }
 
-export type { DrawingElementSchema } from './types';
+export type { DrawingElementRenderSizeConfig, DrawingElementRenderSizeSource, DrawingElementSchema } from './types';

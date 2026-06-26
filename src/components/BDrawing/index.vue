@@ -13,6 +13,8 @@
         :viewport-size="viewportSize"
         :viewport-ready="isViewportReady"
         :active-tool="activeTool"
+        :create-cursor="activeCreateCursor"
+        :is-create-tool="isCreateToolActive"
         :is-panning="isPanning"
         @select="handleElementSelect"
         @element-pointerup="handleElementPointerup"
@@ -63,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import type { DrawingElementSchema } from './elements';
 import type {
   DrawingData,
   DrawingElement,
@@ -80,7 +83,6 @@ import InfiniteViewport from './components/InfiniteViewport.vue';
 import MoveableLayer from './components/MoveableLayer.vue';
 import SelectoLayer from './components/SelectoLayer.vue';
 import Toolbar from './components/Toolbar.vue';
-import { DRAWING_SHAPE_TOOLS, DRAWING_TEXT_CREATE_CLICK_TOLERANCE } from './constants/interaction';
 import { getDrawingElementSchema } from './elements';
 import { useDrawingBoard } from './hooks/useDrawingBoard';
 import { useDrawingInteraction } from './hooks/useDrawingInteraction';
@@ -125,6 +127,12 @@ const initialContentViewportFitted = ref<boolean>(false);
 const hideMoveableDuringDirectDrag = ref<boolean>(false);
 /** Moveable 拖拽缩放过程中的临时几何预览。 */
 const moveablePreviewChanges = ref<DrawingGeometryChange[]>([]);
+/** 当前激活工具对应的可创建元素配置。 */
+const activeCreateSchema = computed<DrawingElementSchema | null>(() => getDrawingElementSchema(activeTool.value));
+/** 当前是否激活可创建元素工具。 */
+const isCreateToolActive = computed<boolean>(() => activeCreateSchema.value !== null);
+/** 当前创建工具光标。 */
+const activeCreateCursor = computed<string | undefined>(() => (activeCreateSchema.value ? activeCreateSchema.value.createCursor ?? 'crosshair' : undefined));
 /**
  * 根据内部选区创建外部可编辑目标。
  * @param selection - 内部选区 ID 列表
@@ -232,7 +240,7 @@ const isPanning = ref<boolean>(false);
  * @returns 可创建元素名称，不是创建工具时返回 null
  */
 function getActiveCreateName(): string | null {
-  return DRAWING_SHAPE_TOOLS.includes(activeTool.value) ? activeTool.value : null;
+  return activeCreateSchema.value?.name ?? null;
 }
 
 /**
@@ -391,16 +399,6 @@ function setActiveTool(tool: string): void {
   if (tool !== 'select') {
     board.setSelection([]);
   }
-}
-
-/**
- * 判断文本创建手势是否为点击。
- * @param start - 创建起点
- * @param end - 创建终点
- * @returns 是否为点击创建
- */
-function isTextCreateClick(start: DrawingPoint, end: DrawingPoint): boolean {
-  return Math.hypot(end.x - start.x, end.y - start.y) <= DRAWING_TEXT_CREATE_CLICK_TOLERANCE;
 }
 
 /**
@@ -587,11 +585,7 @@ function handleElementSelect(id: string, _event: PointerEvent): void {
     return;
   }
 
-  if (activeTool.value === 'text') {
-    return;
-  }
-
-  /* 形状创建工具（rect/ellipse/diamond/text/process）激活时，禁止选中已有节点，让点击穿透到画布创建形状 */
+  /* 元素创建工具激活时，禁止选中已有节点，让点击穿透到画布创建元素 */
   if (getActiveCreateName()) {
     return;
   }
@@ -638,11 +632,6 @@ function handleCanvasPointermove(point: DrawingPoint): void {
 function handleCanvasPointerup(point: DrawingPoint): void {
   const { draft } = board.state.value;
   if (draft?.kind !== 'creating-shape') {
-    return;
-  }
-
-  if (draft.name === 'text' && !isTextCreateClick(draft.start, point)) {
-    board.clearDraft();
     return;
   }
 

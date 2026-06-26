@@ -5,7 +5,7 @@
 <template>
   <div
     class="b-drawing-canvas"
-    :class="[`is-tool-${activeTool}`, { 'is-panning': isPanning }]"
+    :class="[`is-tool-${activeTool}`, { 'is-create-tool': isCreateTool, 'is-panning': isPanning }]"
     :style="canvasStyle"
     data-testid="drawing-canvas"
     @pointerdown="handlePointerDown"
@@ -53,6 +53,10 @@ interface Props {
   viewportReady: boolean;
   /** 当前工具模式 */
   activeTool: string;
+  /** 是否为元素创建工具 */
+  isCreateTool?: boolean;
+  /** 元素创建工具光标 */
+  createCursor?: string;
   /** 是否正在平移（手型工具拖拽中） */
   isPanning?: boolean;
 }
@@ -79,7 +83,7 @@ const geometryPreviewById = computed<Map<string, DrawingGeometryChange>>(
 );
 /** 画布根节点内联样式。 */
 const canvasStyle = computed<CSSProperties>(() => ({
-  cursor: props.activeTool === 'text' ? 'text' : undefined
+  cursor: props.createCursor
 }));
 /** 承载画板世界坐标的 HTML 舞台样式。 */
 const stageStyle = computed<CSSProperties>(() => {
@@ -216,25 +220,8 @@ function handleWheel(event: WheelEvent): void {
   pointer-events: none;
 }
 
-.b-drawing-canvas.is-tool-process {
-  cursor: crosshair;
-}
-
-.b-drawing-canvas.is-tool-rect,
-.b-drawing-canvas.is-tool-ellipse,
-.b-drawing-canvas.is-tool-diamond {
-  cursor: crosshair;
-}
-
-.b-drawing-canvas.is-tool-text {
-  cursor: text;
-}
-
-/* 形状创建工具激活时，禁止已有节点拦截指针事件，让点击穿透到画布以创建新形状 */
-.b-drawing-canvas.is-tool-rect .b-drawing-element,
-.b-drawing-canvas.is-tool-ellipse .b-drawing-element,
-.b-drawing-canvas.is-tool-diamond .b-drawing-element,
-.b-drawing-canvas.is-tool-process .b-drawing-element {
+/* 元素创建工具激活时，禁止已有节点拦截指针事件，让点击穿透到画布以创建新元素 */
+.b-drawing-canvas.is-create-tool .b-drawing-element {
   pointer-events: none;
 }
 

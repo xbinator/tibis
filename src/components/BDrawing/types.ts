@@ -58,6 +58,11 @@ export type DrawingElementStyleChange = Partial<DrawingElementStyle>;
 export type DrawingLayerAction = 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack';
 
 /**
+ * 元素创建锚点。
+ */
+export type DrawingElementCreateAnchor = 'center' | 'top-left';
+
+/**
  * 自由形状元素。
  */
 export interface DrawingShapeElement {
@@ -104,6 +109,8 @@ export interface DrawingAddShapeOptions {
   start: DrawingPoint;
   /** 拖拽终点 */
   end: DrawingPoint;
+  /** 点击创建时的锚点 */
+  createAnchor?: DrawingElementCreateAnchor;
   /** 元素初始样式 */
   style?: DrawingElementStyle;
 }

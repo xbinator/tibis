@@ -5,6 +5,7 @@
 import type { DrawingElement, DrawingPoint, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
 import { DRAWING_ELEMENT_ID_ATTRIBUTE } from '../constants/dom';
 import { DRAWING_MIN_ZOOM, DRAWING_VIEWBOX_SIZE } from '../constants/viewport';
+import { getDrawingElementSchema } from '../elements';
 
 /**
  * 浏览器矩形信息。
@@ -47,12 +48,13 @@ interface DrawingContentBounds {
 }
 
 /**
- * 判断形状是否按菱形渲染。
- * @param name - 元素注册名称
- * @returns 是否为菱形
+ * 可见元素及其渲染尺寸。
  */
-export function isDrawingDiamondShape(name: string): boolean {
-  return name === 'decision' || name === 'diamond';
+interface DrawingVisibleElement {
+  /** 画板元素 */
+  element: DrawingElement;
+  /** 渲染尺寸 */
+  renderSize: DrawingSize;
 }
 
 /**
@@ -85,28 +87,54 @@ export function getDrawingResponsiveViewBoxSize(zoom: number, viewportSize: Draw
 }
 
 /**
+ * 读取形状渲染时使用的有效尺寸。
+ * @param element - 形状元素
+ * @returns 渲染尺寸
+ */
+export function getDrawingShapeRenderSize(element: DrawingShapeElement): DrawingSize {
+  const renderSize = getDrawingElementSchema(element.name)?.renderSize;
+  if (!renderSize) {
+    return element.size;
+  }
+
+  const contentSize = renderSize.measureContent(element);
+
+  return {
+    width: renderSize.width === 'content' ? contentSize.width : element.size.width,
+    height: renderSize.height === 'content' ? contentSize.height : element.size.height
+  };
+}
+
+/**
  * 根据元素列表计算内容边界。
  * @param elements - 画板元素列表
  * @returns 内容边界，无可见元素时返回 null
  */
 function getDrawingContentBounds(elements: DrawingElement[]): DrawingContentBounds | null {
-  const visibleElements = elements.filter((element: DrawingElement): boolean => element.size.width > 0 && element.size.height > 0);
+  const visibleElements = elements
+    .map(
+      (element: DrawingElement): DrawingVisibleElement => ({
+        element,
+        renderSize: getDrawingShapeRenderSize(element)
+      })
+    )
+    .filter((item: DrawingVisibleElement): boolean => item.renderSize.width > 0 && item.renderSize.height > 0);
   if (!visibleElements.length) {
     return null;
   }
 
   return visibleElements.reduce<DrawingContentBounds>(
-    (bounds: DrawingContentBounds, element: DrawingElement): DrawingContentBounds => ({
-      minX: Math.min(bounds.minX, element.position.x),
-      minY: Math.min(bounds.minY, element.position.y),
-      maxX: Math.max(bounds.maxX, element.position.x + element.size.width),
-      maxY: Math.max(bounds.maxY, element.position.y + element.size.height)
+    (bounds: DrawingContentBounds, item: DrawingVisibleElement): DrawingContentBounds => ({
+      minX: Math.min(bounds.minX, item.element.position.x),
+      minY: Math.min(bounds.minY, item.element.position.y),
+      maxX: Math.max(bounds.maxX, item.element.position.x + item.renderSize.width),
+      maxY: Math.max(bounds.maxY, item.element.position.y + item.renderSize.height)
     }),
     {
-      minX: visibleElements[0].position.x,
-      minY: visibleElements[0].position.y,
-      maxX: visibleElements[0].position.x + visibleElements[0].size.width,
-      maxY: visibleElements[0].position.y + visibleElements[0].size.height
+      minX: visibleElements[0].element.position.x,
+      minY: visibleElements[0].element.position.y,
+      maxX: visibleElements[0].element.position.x + visibleElements[0].renderSize.width,
+      maxY: visibleElements[0].element.position.y + visibleElements[0].renderSize.height
     }
   );
 }
@@ -225,15 +253,6 @@ export function findDrawingShapeElement(elements: DrawingElement[], id: string):
 }
 
 /**
- * 读取形状渲染时使用的有效尺寸。
- * @param element - 形状元素
- * @returns 渲染尺寸
- */
-export function getDrawingShapeRenderSize(element: DrawingShapeElement): DrawingSize {
-  return element.size;
-}
-
-/**
  * 创建 HTML 元素 transform 字符串。
  * @param position - 元素位置
  * @param rotation - 旋转角度
@@ -243,21 +262,4 @@ export function createDrawingElementCssTransform(position: DrawingPoint, rotatio
   const translate = `translate(${position.x}px, ${position.y}px)`;
 
   return rotation ? `${translate} rotate(${rotation}deg)` : translate;
-}
-
-/**
- * 生成菱形 SVG polygon 点位。
- * @param size - 元素尺寸
- * @param position - 可选左上角位置
- * @returns SVG polygon points 属性值
- */
-export function createDrawingDiamondPoints(size: DrawingSize, position: DrawingPoint = { x: 0, y: 0 }): string {
-  const halfWidth = size.width / 2;
-  const halfHeight = size.height / 2;
-  const left = position.x;
-  const top = position.y;
-  const right = left + size.width;
-  const bottom = top + size.height;
-
-  return `${left + halfWidth},${top} ${right},${top + halfHeight} ${left + halfWidth},${bottom} ${left},${top + halfHeight}`;
 }

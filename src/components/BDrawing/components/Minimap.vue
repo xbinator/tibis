@@ -10,27 +10,12 @@
       <div class="b-drawing-minimap__panel">
         <svg class="b-drawing-minimap__svg" :viewBox="viewBox" @pointerdown="handlePointerdown" @wheel.prevent="handleWheel">
           <template v-for="element in shapeElements" :key="element.id">
-            <polygon
-              v-if="isDrawingDiamondShape(element.name)"
-              class="b-drawing-minimap__shape"
-              :points="createDrawingDiamondPoints(getDrawingShapeRenderSize(element), element.position)"
-            ></polygon>
-            <ellipse
-              v-else-if="element.name === 'ellipse'"
-              class="b-drawing-minimap__shape"
-              :cx="element.position.x + getDrawingShapeRenderSize(element).width / 2"
-              :cy="element.position.y + getDrawingShapeRenderSize(element).height / 2"
-              :rx="getDrawingShapeRenderSize(element).width / 2"
-              :ry="getDrawingShapeRenderSize(element).height / 2"
-            ></ellipse>
             <rect
-              v-else
               class="b-drawing-minimap__shape"
               :x="element.position.x"
               :y="element.position.y"
               :width="getDrawingShapeRenderSize(element).width"
               :height="getDrawingShapeRenderSize(element).height"
-              :rx="element.name === 'process' ? 10 : undefined"
             ></rect>
           </template>
           <rect
@@ -57,7 +42,7 @@ import { throttle } from 'lodash-es';
 import BDropdown from '@/components/BDropdown/index.vue';
 import { DRAWING_MINIMAP_DROPDOWN_ALIGN, DRAWING_MINIMAP_EMPTY_SIZE, DRAWING_MINIMAP_VIEWBOX_PADDING } from '../constants/minimap';
 import { DRAWING_MAX_ZOOM, DRAWING_MIN_ZOOM, DRAWING_ZOOM_STEP } from '../constants/viewport';
-import { createDrawingDiamondPoints, getDrawingResponsiveViewBoxSize, getDrawingShapeRenderSize, isDrawingDiamondShape } from '../utils/drawingGeometry';
+import { getDrawingResponsiveViewBoxSize, getDrawingShapeRenderSize } from '../utils/drawingGeometry';
 
 /**
  * 小地图边界。

@@ -8,12 +8,11 @@ import { DRAWING_ELEMENT_ID_ATTRIBUTE } from '@/components/BDrawing/constants/do
 import type { DrawingElement, DrawingShapeElement, DrawingViewport } from '@/components/BDrawing/types';
 import {
   clientDeltaToDrawingDelta,
-  createDrawingDiamondPoints,
   createDrawingElementCssTransform,
   createDrawingViewportForElements,
   findDrawingShapeElement,
   getDrawingResponsiveViewBoxSize,
-  isDrawingDiamondShape,
+  getDrawingShapeRenderSize,
   projectClientPointToDrawingBoard,
   queryDrawingElementTarget
 } from '@/components/BDrawing/utils/drawingGeometry';
@@ -35,6 +34,28 @@ function createShapeElement(id: string, position = { x: 40, y: 60 }): DrawingSha
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
+    metadata: {}
+  };
+}
+
+/**
+ * 创建测试文本元素。
+ * @param id - 元素 ID
+ * @param title - 文本标题
+ * @param position - 元素位置
+ * @returns 测试文本元素
+ */
+function createTextElement(id: string, title = '标题', position = { x: 400, y: 260 }): DrawingShapeElement {
+  return {
+    id,
+    name: 'text',
+    label: '文本',
+    icon: 'lucide:type',
+    title,
+    position,
+    size: { width: 180, height: 72 },
+    rotation: 0,
+    style: { fontSize: 20 },
     metadata: {}
   };
 }
@@ -106,6 +127,23 @@ describe('drawingGeometry', (): void => {
     });
   });
 
+  it('uses schema content size for text element render bounds', (): void => {
+    expect(getDrawingShapeRenderSize(createShapeElement('node-1'))).toEqual({ width: 120, height: 80 });
+    expect(getDrawingShapeRenderSize(createTextElement('text-1'))).toEqual({ width: 46, height: 31 });
+  });
+
+  it('creates a viewport from schema render sizes instead of stored model sizes', (): void => {
+    const viewport = createDrawingViewportForElements([createShapeElement('node-1'), createTextElement('text-1')], {
+      width: 800,
+      height: 600
+    });
+
+    expect(viewport).toEqual({
+      center: { x: 243, y: 175.5 },
+      zoom: 1
+    });
+  });
+
   it('queries DOM targets by drawing element id', (): void => {
     const root = document.createElement('div');
     const node = document.createElement('div');
@@ -123,12 +161,8 @@ describe('drawingGeometry', (): void => {
     expect(findDrawingShapeElement(elements, 'missing-node')).toBeNull();
   });
 
-  it('creates reusable transform and shape geometry strings', (): void => {
+  it('creates reusable transform strings', (): void => {
     expect(createDrawingElementCssTransform({ x: 10, y: 20 }, 0)).toBe('translate(10px, 20px)');
     expect(createDrawingElementCssTransform({ x: 10, y: 20 }, 90)).toBe('translate(10px, 20px) rotate(90deg)');
-    expect(createDrawingDiamondPoints({ width: 40, height: 20 })).toBe('20,0 40,10 20,20 0,10');
-    expect(createDrawingDiamondPoints({ width: 40, height: 20 }, { x: 5, y: 10 })).toBe('25,10 45,20 25,30 5,20');
-    expect(isDrawingDiamondShape('decision')).toBe(true);
-    expect(isDrawingDiamondShape('rect')).toBe(false);
   });
 });

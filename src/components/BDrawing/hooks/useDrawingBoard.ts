@@ -104,14 +104,12 @@ export interface UseDrawingBoardReturn {
  */
 export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDrawingBoardReturn {
   const state = ref<DrawingBoardState>(createDrawingBoardState(snapshot));
-  let nodeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-node-');
   let shapeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-shape-');
 
   /**
    * 按当前元素数量同步自动生成 ID 的起始序号。
    */
   function syncElementIndexes(): void {
-    nodeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-node-');
     shapeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-shape-');
   }
 
@@ -156,8 +154,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
         return;
       }
 
-      const isProcessShape = draft.name === 'process';
-      const shapeId = isProcessShape ? `drawing-node-${++nodeIndex}` : `drawing-shape-${++shapeIndex}`;
+      const shapeId = `drawing-shape-${++shapeIndex}`;
       const schema = getDrawingElementSchema(draft.name);
       if (!schema) {
         state.value = {
@@ -179,6 +176,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
             name: draft.name,
             label: schema.label,
             icon: schema.icon,
+            createAnchor: schema.createAnchor,
             start: draft.start,
             end: draft.current,
             style

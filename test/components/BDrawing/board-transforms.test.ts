@@ -186,19 +186,19 @@ describe('boardTransforms', (): void => {
     const initial = createDrawingBoardState();
     const added = addDrawingShape(initial, {
       id: 'shape-1',
-      name: 'diamond',
-      label: '菱形',
-      icon: 'lucide:diamond',
+      name: 'rect',
+      label: '矩形',
+      icon: 'lucide:square',
       start: { x: 260, y: 220 },
       end: { x: 100, y: 120 }
     });
 
     expect(added.elements[0]).toMatchObject({
       id: 'shape-1',
-      name: 'diamond',
-      label: '菱形',
-      icon: 'lucide:diamond',
-      title: '菱形',
+      name: 'rect',
+      label: '矩形',
+      icon: 'lucide:square',
+      title: '矩形',
       position: { x: 100, y: 120 },
       size: { width: 160, height: 100 },
       rotation: 0,
@@ -214,17 +214,17 @@ describe('boardTransforms', (): void => {
     const initial = createDrawingBoardState();
     const added = addDrawingShape(initial, {
       id: 'shape-1',
-      name: 'ellipse',
-      label: '椭圆',
-      icon: 'lucide:circle',
+      name: 'rect',
+      label: '矩形',
+      icon: 'lucide:square',
       start: { x: 200, y: 180 },
       end: { x: 203, y: 184 }
     });
 
     expect(added.elements[0]?.position).toEqual({ x: 111.5, y: 146 });
     expect(added.elements[0]?.size).toEqual({ width: 180, height: 72 });
-    expect(expectShapeElement(added.elements[0]).label).toBe('椭圆');
-    expect(expectShapeElement(added.elements[0]).title).toBe('椭圆');
+    expect(expectShapeElement(added.elements[0]).label).toBe('矩形');
+    expect(expectShapeElement(added.elements[0]).title).toBe('矩形');
     expect(added.history.past).toHaveLength(1);
   });
 

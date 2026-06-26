@@ -7,6 +7,7 @@ import type {
   DrawingBoardSnapshot,
   DrawingBoardState,
   DrawingData,
+  DrawingElementCreateAnchor,
   DrawingElementStyle,
   DrawingElementStyleChange,
   DrawingGeometryChange,
@@ -198,7 +199,11 @@ function createShapeInitialStyle(style?: DrawingElementStyle): DrawingElementSty
  * @param end - 拖拽终点
  * @returns 归一化后的元素位置和尺寸
  */
-function createShapeGeometry(start: DrawingPoint, end: DrawingPoint): { position: DrawingPoint; size: DrawingSize } {
+function createShapeGeometry(
+  start: DrawingPoint,
+  end: DrawingPoint,
+  createAnchor: DrawingElementCreateAnchor = 'center'
+): { position: DrawingPoint; size: DrawingSize } {
   const width = normalizeGeometryValue(Math.abs(end.x - start.x));
   const height = normalizeGeometryValue(Math.abs(end.y - start.y));
   const center = {
@@ -207,6 +212,16 @@ function createShapeGeometry(start: DrawingPoint, end: DrawingPoint): { position
   };
 
   if (width < DRAWING_MIN_CREATE_SIZE || height < DRAWING_MIN_CREATE_SIZE) {
+    if (createAnchor === 'top-left') {
+      return {
+        position: {
+          x: normalizeGeometryValue(start.x),
+          y: normalizeGeometryValue(start.y)
+        },
+        size: DRAWING_DEFAULT_NODE_SIZE
+      };
+    }
+
     return {
       position: {
         x: normalizeGeometryValue(center.x - DRAWING_DEFAULT_NODE_SIZE.width / 2),
@@ -335,7 +350,7 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
   }
 
   const style = createShapeInitialStyle(options.style);
-  const geometry = createShapeGeometry(options.start, options.end);
+  const geometry = createShapeGeometry(options.start, options.end, options.createAnchor);
   const element: DrawingShapeElement = {
     id: options.id,
     name: options.name,
