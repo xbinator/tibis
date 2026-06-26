@@ -47,9 +47,11 @@ withDefaults(defineProps<Props>(), {
 
 .b-section-item__prefix {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   min-width: 18px;
+  font-size: 12px;
 }
 
 .b-section-item__label {
