@@ -57,13 +57,39 @@
         </BColorPicker>
       </BSectionItem>
     </BSectionBlock>
+
+    <!-- 边框 -->
+    <BSectionBlock title="边框">
+      <BSectionItem label="线形">
+        <BSelect v-model:value="dataItem.style.borderStyle" placeholder="线形" :options="borderStyleOptions" />
+      </BSectionItem>
+
+      <ControlPanel v-model:value="dataItem.style.borderWidth" label="宽度" mode="sides" />
+
+      <BSectionItem label="颜色">
+        <BColorPicker v-model:value="dataItem.style.borderColor">
+          <AInput v-model:value="dataItem.style.borderColor" placeholder="边框颜色" />
+        </BColorPicker>
+      </BSectionItem>
+    </BSectionBlock>
+
+    <!-- 圆角 -->
+    <BSectionBlock title="圆角">
+      <ControlPanel v-model:value="dataItem.style.borderRadius" label="圆角" mode="corners" />
+    </BSectionBlock>
+
+    <!-- 内边距 -->
+    <BSectionBlock title="内边距">
+      <ControlPanel v-model:value="dataItem.style.padding" label="内距" mode="sides" />
+    </BSectionBlock>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useCssModule } from 'vue';
 import { Input as AInput, InputNumber as AInputNumber } from 'ant-design-vue';
-import type { DrawingElement, DrawingElementStyle } from '@/components/BDrawing/types';
+import type { DrawingBorderStyle, DrawingElement, DrawingElementStyle } from '@/components/BDrawing/types';
+import ControlPanel from './DesignSetter/ControlPanel.vue';
 
 const $style = useCssModule();
 
@@ -90,6 +116,14 @@ const textAlignOptions = [
   { value: 'left', label: '左对齐' },
   { value: 'center', label: '居中' },
   { value: 'right', label: '右对齐' }
+];
+
+/** 边框线形选项。 */
+const borderStyleOptions: Array<{ value: DrawingBorderStyle; label: string }> = [
+  { value: 'none', label: '无' },
+  { value: 'solid', label: '实线' },
+  { value: 'dashed', label: '虚线' },
+  { value: 'dotted', label: '点线' }
 ];
 </script>
 
