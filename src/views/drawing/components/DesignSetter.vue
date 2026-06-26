@@ -71,10 +71,7 @@
           <AInput v-model:value="dataItem.style.borderColor" placeholder="边框颜色" />
         </BColorPicker>
       </BSectionItem>
-    </BSectionBlock>
 
-    <!-- 圆角 -->
-    <BSectionBlock title="圆角">
       <ControlPanel v-model:value="dataItem.style.borderRadius" label="圆角" mode="corners" />
     </BSectionBlock>
 
