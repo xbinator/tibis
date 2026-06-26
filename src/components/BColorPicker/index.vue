@@ -4,35 +4,37 @@
 -->
 <template>
   <BDropdown v-model:open="visible" :disabled="readonly" :get-popup-container="(triggerNode) => triggerNode" :placement="placement" :align="align">
-    <slot></slot>
+    <div :class="bem('trigger')">
+      <slot></slot>
+    </div>
 
     <template #overlay>
-      <div class="b-color-picker__panel is-compact">
+      <div :class="[bem('panel'), 'is-compact']">
         <!-- SV 面板 + 色相条 -->
-        <div class="b-color-picker__main">
+        <div :class="bem('main')">
           <!-- 饱和度/明度面板 -->
-          <div ref="svPanelRef" class="b-color-picker__sv-panel" :style="{ background: bgColor }" @pointerdown="onSvPanelDown">
-            <div class="b-color-picker__sv-white"></div>
-            <div class="b-color-picker__sv-black"></div>
-            <div class="b-color-picker__sv-cursor" :style="cursorStyle">
+          <div ref="svPanelRef" :class="bem('sv-panel')" :style="{ background: bgColor }" @pointerdown="onSvPanelDown">
+            <div :class="bem('sv-white')"></div>
+            <div :class="bem('sv-black')"></div>
+            <div :class="bem('sv-cursor')" :style="cursorStyle">
               <div></div>
             </div>
           </div>
 
           <!-- 色相条 -->
-          <div ref="hueBarRef" class="b-color-picker__hue-bar" @pointerdown="onHueBarDown">
-            <div class="b-color-picker__hue-thumb" :style="hueThumbStyle"></div>
+          <div ref="hueBarRef" :class="bem('hue-bar')" @pointerdown="onHueBarDown">
+            <div :class="bem('hue-thumb')" :style="hueThumbStyle"></div>
           </div>
         </div>
 
         <!-- 透明度条 -->
-        <div ref="alphaBarRef" class="b-color-picker__alpha-bar" @pointerdown="onAlphaBarDown">
-          <div class="b-color-picker__alpha-thumb" :style="alphaThumbStyle"></div>
+        <div ref="alphaBarRef" :class="bem('alpha-bar')" @pointerdown="onAlphaBarDown">
+          <div :class="bem('alpha-thumb')" :style="alphaThumbStyle"></div>
         </div>
 
         <AInput
           :value="inputColor"
-          class="b-color-picker__input"
+          :class="bem('input')"
           :data-testid="inputTestId"
           :readonly="readonly"
           :bordered="bordered"
@@ -42,7 +44,7 @@
           @update:value="handleInputUpdate"
         >
           <template #suffix>
-            <div class="b-color-picker__color-block" :style="{ background: currentColor }"></div>
+            <div :class="bem('color-block')" :style="{ background: currentColor }"></div>
           </template>
         </AInput>
       </div>
@@ -58,14 +60,17 @@
  */
 import type { BColorPickerProps } from './types';
 import type { CSSProperties } from 'vue';
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { usePointer } from '@vueuse/core';
 import { Input as AInput } from 'ant-design-vue';
 import { clamp } from 'lodash-es';
 import tinycolor from 'tinycolor2';
 import BDropdown from '@/components/BDropdown/index.vue';
+import { createNamespace } from '@/utils/namespace';
 
 defineOptions({ name: 'BColorPicker' });
+
+const [, bem] = createNamespace('color-picker');
 
 const props = withDefaults(defineProps<BColorPickerProps>(), {
   value: '',
@@ -118,8 +123,12 @@ const pointer = usePointer();
 /** 拖拽状态标记 */
 let dragging: 'sv' | 'hue' | 'alpha' | null = null;
 
+/** 当前拖拽的事件清理函数 */
+let cleanupDragListeners: (() => void) | null = null;
+
 /** SV 面板背景色（纯色相） */
 const bgColor = computed<string>(() => `hsl(${hsva.h}, 100%, 50%)`);
+
 /**
  * 根据输出格式格式化颜色值
  * @param value - 颜色字符串
@@ -170,6 +179,37 @@ function getLocalPosition(el: HTMLElement): { x: number; y: number; width: numbe
   };
 }
 
+/**
+ * 注册拖拽事件监听，返回清理函数
+ * @param type - 拖拽类型
+ * @param onMove - 移动回调
+ */
+function startDrag(type: 'sv' | 'hue' | 'alpha', onMove: () => void): void {
+  // 先清理上一次未完成的拖拽监听
+  cleanupDragListeners?.();
+
+  dragging = type;
+
+  const handleMove = (): void => {
+    if (dragging === type) onMove();
+  };
+  const handleUp = (): void => {
+    dragging = null;
+    cleanupDragListeners = null;
+    window.removeEventListener('pointermove', handleMove);
+    window.removeEventListener('pointerup', handleUp);
+  };
+
+  cleanupDragListeners = () => {
+    dragging = null;
+    window.removeEventListener('pointermove', handleMove);
+    window.removeEventListener('pointerup', handleUp);
+  };
+
+  window.addEventListener('pointermove', handleMove);
+  window.addEventListener('pointerup', handleUp);
+}
+
 // ==================== SV 面板拖拽 ====================
 
 /**
@@ -194,19 +234,8 @@ function handleSvMove(): void {
  */
 function onSvPanelDown(): void {
   if (!svPanelRef.value) return;
-  dragging = 'sv';
   handleSvMove();
-
-  const onMove = (): void => {
-    if (dragging === 'sv') handleSvMove();
-  };
-  const onUp = (): void => {
-    dragging = null;
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', onUp);
-  };
-  window.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', onUp);
+  startDrag('sv', handleSvMove);
 }
 
 // ==================== 色相条拖拽 ====================
@@ -237,19 +266,8 @@ function handleHueMove(): void {
  */
 function onHueBarDown(): void {
   if (!hueBarRef.value) return;
-  dragging = 'hue';
   handleHueMove();
-
-  const onMove = (): void => {
-    if (dragging === 'hue') handleHueMove();
-  };
-  const onUp = (): void => {
-    dragging = null;
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', onUp);
-  };
-  window.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', onUp);
+  startDrag('hue', handleHueMove);
 }
 
 // ==================== 透明度条拖拽 ====================
@@ -268,7 +286,8 @@ function handleAlphaMove(): void {
   } else if (x >= width) {
     hsva.a = 1;
   } else {
-    hsva.a = +(x / width).toFixed(1);
+    // 保留 2 位小数，提高透明度精度
+    hsva.a = +(x / width).toFixed(2);
   }
 
   updateColor(hsva);
@@ -280,53 +299,46 @@ function handleAlphaMove(): void {
  */
 function onAlphaBarDown(): void {
   if (!alphaBarRef.value) return;
-  dragging = 'alpha';
   handleAlphaMove();
-
-  const onMove = (): void => {
-    if (dragging === 'alpha') handleAlphaMove();
-  };
-  const onUp = (): void => {
-    dragging = null;
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', onUp);
-  };
-  window.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', onUp);
+  startDrag('alpha', handleAlphaMove);
 }
 
 // ==================== 位置计算 ====================
 
 /**
- * 计算 SV 面板光标位置
+ * 计算 SV 面板光标横向位置
  */
 function getCursorLeft(): number {
-  return SV_PANEL_SIZE.width * hsva.s;
+  if (!svPanelRef.value) return SV_PANEL_SIZE.width * hsva.s;
+  return svPanelRef.value.clientWidth * hsva.s;
 }
 
 /**
  * 计算 SV 面板光标纵向位置
  */
 function getCursorTop(): number {
-  return (hsva.v - 1) * SV_PANEL_SIZE.height * -1;
+  const height = svPanelRef.value?.clientHeight ?? SV_PANEL_SIZE.height;
+  return (hsva.v - 1) * height * -1;
 }
 
 /**
  * 计算色相滑块纵向位置
  */
 function getHueThumbTop(): number {
-  if (hsva.h === 0) return SV_PANEL_SIZE.height;
+  const height = hueBarRef.value?.clientHeight ?? SV_PANEL_SIZE.height;
+  if (hsva.h === 0) return height;
   if (hsva.h === 360) return 0;
-  return (hsva.h / 360) * SV_PANEL_SIZE.height - THUMB_SIZE.height / 2;
+  return (hsva.h / 360) * height - THUMB_SIZE.height / 2;
 }
 
 /**
  * 计算透明度滑块横向位置
  */
 function getAlphaThumbLeft(): number {
+  const width = alphaBarRef.value?.clientWidth ?? SV_PANEL_SIZE.width;
   if (hsva.a === 0) return 0;
-  if (hsva.a === 1) return SV_PANEL_SIZE.width;
-  return hsva.a * SV_PANEL_SIZE.width - THUMB_SIZE.width / 2;
+  if (hsva.a === 1) return width;
+  return hsva.a * width - THUMB_SIZE.width / 2;
 }
 
 /**
@@ -352,7 +364,7 @@ function updatePositionFromColor(): void {
 }
 
 /**
- * 输入框输入时同步有效颜色，避免外部在失焦前读取到旧值。
+ * 输入框输入时同步有效颜色，避免外部在失焦前读取到旧值
  * @param value - 输入框当前值
  */
 function handleInputUpdate(value: string): void {
@@ -376,6 +388,11 @@ function handleInputBlur(): void {
   updatePositionFromColor();
 }
 
+/** 组件卸载前清理拖拽事件监听 */
+onBeforeUnmount(() => {
+  cleanupDragListeners?.();
+});
+
 /** 弹出层打开时同步位置 */
 watch(
   () => visible.value,
@@ -397,22 +414,26 @@ watch(
 </script>
 
 <style lang="less">
+.b-color-picker__trigger {
+  width: 100%;
+}
+
 .b-color-picker__input {
   width: 100%;
   height: 28px;
   margin-top: 10px;
   font-size: 12px;
+}
 
-  &.ant-input-affix-wrapper {
-    padding-top: 0;
-    padding-bottom: 0;
-    border-radius: 6px;
-  }
+.b-color-picker__input.ant-input-affix-wrapper {
+  padding-top: 0;
+  padding-bottom: 0;
+  border-radius: 6px;
+}
 
-  .ant-input {
-    height: 26px;
-    font-size: 12px;
-  }
+.b-color-picker__input .ant-input {
+  height: 26px;
+  font-size: 12px;
 }
 
 .b-color-picker__color-block {
@@ -459,14 +480,14 @@ watch(
 
 .b-color-picker__sv-cursor {
   position: absolute;
+}
 
-  div {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    box-shadow: 0 0 0 1.5px #fff, inset 0 0 1px 1px #0000004d, 0 0 1px 2px #0006;
-    transform: translate(-2px, -2px);
-  }
+.b-color-picker__sv-cursor div {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #fff, inset 0 0 1px 1px #0000004d, 0 0 1px 2px #0006;
+  transform: translate(-2px, -2px);
 }
 
 .b-color-picker__hue-bar {
