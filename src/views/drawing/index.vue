@@ -4,13 +4,13 @@
 -->
 <template>
   <main class="drawing-page" tabindex="0" @blur="session.actions.onBlur">
-    <SidebarPanel :elements="session.data.value.elements" />
+    <PanelSidebar :elements="session.data.value.elements" />
 
     <section class="drawing-page__canvas" @dragover="handleCanvasDragOver" @drop="handleCanvasDrop">
       <BDrawing ref="drawingRef" v-model:value="session.data.value" v-model:select="selectedTarget" />
     </section>
 
-    <SettingsPanel v-model:select="selectedTarget" :drawing-data="session.data.value" />
+    <PanelSettings v-model:select="selectedTarget" :drawing-data="session.data.value" />
   </main>
 </template>
 
@@ -21,8 +21,8 @@ import type BDrawingComponent from '@/components/BDrawing/index.vue';
 import type { DrawingData, DrawingSelectTarget } from '@/components/BDrawing/types';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import SettingsPanel from './components/SettingsPanel.vue';
-import SidebarPanel from './components/SidebarPanel.vue';
+import PanelSettings from './components/PanelSettings.vue';
+import PanelSidebar from './components/PanelSidebar.vue';
 import { useBindings } from './hooks/useBindings';
 import { getDrawingElementDragData } from './utils/drag';
 

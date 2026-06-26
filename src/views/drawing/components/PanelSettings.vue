@@ -1,5 +1,5 @@
 <!--
-  @file SettingsPanel.vue
+  @file PanelSettings.vue
   @description 画图页面右侧属性设置调度面板。
 -->
 <template>
@@ -61,6 +61,8 @@ function isElementTarget(target: DrawingSelectTarget): target is DrawingElement 
 }
 
 :deep(.ant-tabs) {
+  height: 100%;
+
   .ant-tabs-nav {
     padding: 0 12px;
     margin-bottom: 0;
@@ -70,6 +72,10 @@ function isElementTarget(target: DrawingSelectTarget): target is DrawingElement 
   .ant-tabs-tab {
     height: 38px;
     padding: 0;
+  }
+
+  .ant-tabs-content-holder {
+    overflow: auto;
   }
 }
 
