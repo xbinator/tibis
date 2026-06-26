@@ -1,115 +1,88 @@
 <template>
-  <div :class="$style.panel">
-    <header :class="$style.header">
-      <div :class="$style.title">
+  <div class="inspector-panel">
+    <header class="inspector-panel__header">
+      <div class="inspector-panel__title">
         <span>组件</span>
       </div>
-      <BButton type="text" size="small" square icon="lucide:x" :class="$style.closeButton" @click="emit('close')" />
+      <BButton type="text" size="small" square icon="lucide:x" class="inspector-panel__close-btn" @click="emit('close')" />
     </header>
 
-    <BScrollbar v-if="selection" :class="$style.body">
-      <RenderSectionBlock title="元素">
-        <RenderSectionItem label="选择器">
-          <code :class="$style.infoValueItem">{{ selection.selector }}</code>
+    <BScrollbar v-if="selection">
+      <BSectionBlock title="元素">
+        <BSectionItem label="选择器">
+          <code class="inspector-panel__value-tag">{{ selection.selector }}</code>
           <BButton type="text" size="small" square icon="lucide:copy" @click="copyText(selection.selector)" />
-        </RenderSectionItem>
-        <RenderSectionItem label="位置" :values="[roundedRect.x, roundedRect.y]" />
-        <RenderSectionItem label="大小" :values="[roundedRect.width, roundedRect.height]" />
-        <RenderSectionItem v-if="selection.text" label="文本" :values="[selection.text]" />
-      </RenderSectionBlock>
+        </BSectionItem>
+        <BSectionItem label="位置">
+          <div class="inspector-panel__value-group">
+            <span class="inspector-panel__value-tag">{{ roundedRect.x }}</span>
+            <span class="inspector-panel__value-tag">{{ roundedRect.y }}</span>
+          </div>
+        </BSectionItem>
+        <BSectionItem label="大小">
+          <div class="inspector-panel__value-group">
+            <span class="inspector-panel__value-tag">{{ roundedRect.width }}</span>
+            <span class="inspector-panel__value-tag">{{ roundedRect.height }}</span>
+          </div>
+        </BSectionItem>
+        <BSectionItem v-if="selection.text" label="文本">
+          <span class="inspector-panel__value-tag">{{ selection.text }}</span>
+        </BSectionItem>
+      </BSectionBlock>
 
-      <RenderSectionBlock title="层级">
-        <ol :class="$style.tree">
-          <li v-for="item in hierarchyItems" :key="item.selector" :class="[$style.treeItem, { [$style.treeItemActive]: item.isActive }]">
-            <span :class="$style.treeItemTag">{{ item.tagName }}</span>
-            <code :class="$style.treeItemSelector">{{ item.displaySelector }}</code>
+      <BSectionBlock title="层级">
+        <ol class="inspector-panel__tree">
+          <li
+            v-for="item in hierarchyItems"
+            :key="item.selector"
+            :class="['inspector-panel__tree-item', { 'inspector-panel__tree-item--active': item.isActive }]"
+          >
+            <span class="inspector-panel__tree-tag">{{ item.tagName }}</span>
+            <code class="inspector-panel__tree-selector">{{ item.displaySelector }}</code>
           </li>
         </ol>
-      </RenderSectionBlock>
+      </BSectionBlock>
 
-      <RenderSectionBlock v-if="attributes.length" title="属性">
-        <RenderSectionItem v-for="attribute in attributes" :key="attribute.name" :label="attribute.name" :values="[attribute.value]" />
-      </RenderSectionBlock>
+      <BSectionBlock v-if="attributes.length" title="属性">
+        <BSectionItem v-for="attribute in attributes" :key="attribute.name" :label="attribute.name">
+          <span class="inspector-panel__value-tag">{{ attribute.value }}</span>
+        </BSectionItem>
+      </BSectionBlock>
 
-      <RenderSectionBlock v-if="styleEntries.length" title="CSS 样式">
-        <div :class="$style.styleEntries">
-          <div v-for="styleEntry in styleEntries" :key="styleEntry.name" :class="$style.styleEntry">
-            <span :class="$style.styleEntryName">{{ styleEntry.name }}:</span>
-            <span :class="$style.styleEntryValue">{{ styleEntry.value }};</span>
+      <BSectionBlock v-if="styleEntries.length" title="CSS 样式">
+        <div class="inspector-panel__style-entries">
+          <div v-for="styleEntry in styleEntries" :key="styleEntry.name" class="inspector-panel__style-entry">
+            <span class="inspector-panel__style-name">{{ styleEntry.name }}:</span>
+            <span class="inspector-panel__style-value">{{ styleEntry.value }};</span>
           </div>
         </div>
-      </RenderSectionBlock>
+      </BSectionBlock>
     </BScrollbar>
 
-    <div v-else :class="$style.emptyState">
-      <div :class="$style.emptyStateIcon">
+    <div v-else class="inspector-panel__empty">
+      <div class="inspector-panel__empty-icon">
         <BIcon icon="lucide:mouse-pointer-click" :size="20" />
       </div>
-      <div :class="$style.emptyStateText">
-        <span :class="$style.emptyStateTitle">选择页面元素</span>
-        <span :class="$style.emptyStateDesc">点击页面中的元素，查看其层级结构、属性和样式信息</span>
+      <div class="inspector-panel__empty-text">
+        <span class="inspector-panel__empty-title">选择页面元素</span>
+        <span class="inspector-panel__empty-desc">点击页面中的元素，查看其层级结构、属性和样式信息</span>
       </div>
     </div>
   </div>
 </template>
 
-<script setup lang="tsx">
+<script setup lang="ts">
 /**
  * @file InspectorPanel.vue
  * @description 展示 WebView 页面 DOM 元素层级、属性与计算样式。
  */
-import { computed, useCssModule } from 'vue';
-import type { SetupContext, VNode } from 'vue';
+import { computed } from 'vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import type { WebviewElementSelection } from '@/views/webview/shared/types';
 import { filterStyleEntries } from '@/views/webview/web/utils/styles';
 import type { StyleEntry } from '@/views/webview/web/utils/styles';
 
-const $style = useCssModule();
 const { clipboard } = useClipboard();
-
-/**
- * 面板分区块组件，封装统一的 section 标题 + 内容插槽结构。
- */
-function RenderSectionBlock({ title }: { title: string }, { slots }: SetupContext) {
-  return (
-    <div class={$style.section}>
-      <div class={$style.sectionTitle}>{title}</div>
-      {slots.default?.()}
-    </div>
-  );
-}
-
-/**
- * 信息行组件，封装标签 + 值的布局。
- * 支持传入数组，让多个值平分剩余空间。
- */
-function RenderSectionItem({ label, values }: { label: string; values?: (string | number)[] }, { slots }: SetupContext) {
-  let contentNode: VNode | undefined;
-
-  if (slots.default) {
-    contentNode = <div class={$style.infoValue}>{slots.default()}</div>;
-  } else if (values && values.length > 0) {
-    contentNode = (
-      <div class={$style.infoValueGroup}>
-        {values.map((value, index) => (
-          <span key={index} class={$style.infoValueItem}>
-            {value}
-          </span>
-        ))}
-      </div>
-    );
-  } else {
-    contentNode = <span class={$style.infoValue}>-</span>;
-  }
-
-  return (
-    <div class={$style.infoRow}>
-      <span class={$style.infoLabel}>{label}</span>
-      {contentNode}
-    </div>
-  );
-}
 
 /**
  * DOM 看板组件属性。
@@ -186,24 +159,8 @@ function copyText(value: string): void {
 }
 </script>
 
-<style module lang="less">
-.section {
-  padding: 12px;
-  border-bottom: 1px solid var(--border-primary);
-
-  &:last-child {
-    border-bottom: none;
-  }
-}
-
-.sectionTitle {
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.panel {
+<style scoped lang="less">
+.inspector-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -211,9 +168,23 @@ function copyText(value: string): void {
   color: var(--text-primary);
   background: var(--bg-primary);
   border-left: 1px solid var(--border-primary);
+
+  :deep(.b-section-block) {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  :deep(.b-section-item) {
+    align-items: flex-start;
+  }
+
+  :deep(.b-section-item__label) {
+    font-size: 12px;
+    line-height: 28px;
+  }
 }
 
-.header {
+.inspector-panel__header {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -223,7 +194,7 @@ function copyText(value: string): void {
   border-bottom: 1px solid var(--border-primary);
 }
 
-.title {
+.inspector-panel__title {
   display: inline-flex;
   gap: 8px;
   align-items: center;
@@ -232,50 +203,12 @@ function copyText(value: string): void {
   font-weight: 600;
 }
 
-.closeButton {
+.inspector-panel__close-btn {
   flex-shrink: 0;
 }
 
-.body {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.infoRow {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin-bottom: 8px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.infoLabel {
-  flex-shrink: 0;
-  width: 72px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.infoValue {
-  display: flex;
-  flex: 1 1 auto;
-  gap: 6px;
-  align-items: flex-start;
-  min-width: 0;
-  font-size: 12px;
-  user-select: text;
-}
-
-.infoValueGroup {
-  display: flex;
-  flex: 1;
-  gap: 8px;
-}
-
-.infoValueItem {
+/* 值标签：单值展示的背景框 */
+.inspector-panel__value-tag {
   display: flex;
   flex: 1;
   gap: 6px;
@@ -283,7 +216,7 @@ function copyText(value: string): void {
   min-width: 0;
   min-height: 28px;
   padding: 4px 6px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
   user-select: text;
@@ -291,7 +224,14 @@ function copyText(value: string): void {
   border-radius: 6px;
 }
 
-.styleEntries {
+/* 多值并排容器 */
+.inspector-panel__value-group {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+}
+
+.inspector-panel__style-entries {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -301,26 +241,26 @@ function copyText(value: string): void {
   border-radius: 6px;
 }
 
-.styleEntry {
+.inspector-panel__style-entry {
   display: flex;
   gap: 6px;
   align-items: flex-start;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.styleEntryName {
+.inspector-panel__style-name {
   flex-shrink: 0;
   color: var(--text-secondary);
 }
 
-.styleEntryValue {
+.inspector-panel__style-value {
   flex: 1;
   min-width: 0;
 }
 
-.tree {
+.inspector-panel__tree {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -330,27 +270,24 @@ function copyText(value: string): void {
   list-style: none;
 }
 
-.tree-item {
+.inspector-panel__tree-item {
   display: flex;
   gap: 6px;
-  align-items: center;
-  padding: 4px 6px;
+  padding: 4px 0;
   font-size: 12px;
   overflow-wrap: anywhere;
-  background: var(--bg-tertiary);
   border-radius: 6px;
 }
 
-.tree-item--active {
+.inspector-panel__tree-item--active {
   color: var(--color-primary);
-  background: var(--color-primary-bg);
 }
 
-.treeItemTag {
+.inspector-panel__tree-tag {
   flex-shrink: 0;
+  height: max-content;
   padding: 1px 5px;
-  margin-right: 4px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 10px;
   line-height: 16px;
   color: var(--text-secondary);
@@ -359,19 +296,19 @@ function copyText(value: string): void {
   border-radius: 4px;
 }
 
-.tree-item--active .treeItemTag {
+.inspector-panel__tree-item--active .inspector-panel__tree-tag {
   color: var(--color-primary);
   background: var(--color-primary-bg);
 }
 
-.treeItemSelector {
+.inspector-panel__tree-selector {
   min-width: 0;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.emptyState {
+.inspector-panel__empty {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -381,7 +318,7 @@ function copyText(value: string): void {
   padding: 32px 24px;
 }
 
-.emptyStateIcon {
+.inspector-panel__empty-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -392,7 +329,7 @@ function copyText(value: string): void {
   border-radius: 12px;
 }
 
-.emptyStateText {
+.inspector-panel__empty-text {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -401,13 +338,13 @@ function copyText(value: string): void {
   text-align: center;
 }
 
-.emptyStateTitle {
+.inspector-panel__empty-title {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
 }
 
-.emptyStateDesc {
+.inspector-panel__empty-desc {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-tertiary);
