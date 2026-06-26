@@ -46,6 +46,20 @@ describe('BMessage image viewer', () => {
     vi.unstubAllGlobals();
   });
 
+  it('renders markdown images through the ImageNode component', async (): Promise<void> => {
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '![first](https://example.com/first.png)'
+      }
+    });
+
+    await nextTick();
+
+    expect(wrapper.findComponent({ name: 'ImageNode' }).exists()).toBe(true);
+    expect(wrapper.find('.b-message__image-img').exists()).toBe(true);
+  });
+
   it('opens markdown images through previewImage without selecting text', async (): Promise<void> => {
     const wrapper = mount(BMessage, {
       props: {
