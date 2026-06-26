@@ -12,15 +12,15 @@
       :use-accurate-position="true"
       :draggable="true"
       :resizable="canResizeSelection"
-      :snappable="singleTarget"
+      :snappable="canSnapSelection"
       :snap-center="true"
-      :snap-gap="true"
+      :snap-gap="canSnapSelection"
       :snap-threshold="DRAWING_MOVEABLE_SNAP_THRESHOLD"
       :snap-render-threshold="DRAWING_MOVEABLE_SNAP_THRESHOLD"
       :snap-directions="DRAWING_MOVEABLE_SNAP_DIRECTIONS"
       :element-snap-directions="DRAWING_MOVEABLE_SNAP_DIRECTIONS"
-      :element-guidelines="guidelineTargets"
-      :padding="DRAWING_MOVEABLE_SELECTION_PADDING"
+      :element-guidelines="activeGuidelineTargets"
+      :padding="moveableSelectionPadding"
       :render-directions="DRAWING_MOVEABLE_RENDER_DIRECTIONS"
       :zoom="viewport.zoom"
       :origin="false"
@@ -167,11 +167,32 @@ interface MoveableInstance {
   updateRect: () => void;
 }
 
+/**
+ * Moveable 控制间距配置。
+ */
+interface MoveableSelectionPadding {
+  /** 下侧留白 */
+  bottom: number;
+  /** 左侧留白 */
+  left: number;
+  /** 右侧留白 */
+  right: number;
+  /** 上侧留白 */
+  top: number;
+}
+
 const targets = ref<Element[]>([]);
 const moveableRef = ref<MoveableInstance | null>(null);
 let moveableRectRefreshFrame: ReturnType<typeof requestAnimationFrame> | null = null;
 /** 单选拖拽时用于元素间吸附的其它画板节点。 */
 const guidelineTargets = ref<Element[]>([]);
+/** 不展示 Moveable 控制间距时使用的零留白配置。 */
+const disabledMoveableSelectionPadding: MoveableSelectionPadding = {
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: 0
+};
 const singleTarget = computed<boolean>(() => targets.value.length === 1);
 /** 是否展示 Moveable 控制层。 */
 const shouldShowMoveableLayer = computed<boolean>(() => props.enabled && targets.value.length > 0);
@@ -208,6 +229,14 @@ const selectedElements = computed<DrawingElement[]>(() =>
 );
 /** 当前选区是否允许通过 Moveable 修改尺寸。 */
 const canResizeSelection = computed<boolean>(() => selectedElements.value.every((element: DrawingElement): boolean => !isDrawingTextElement(element)));
+/** 当前选区是否允许展示 Moveable 吸附辅助线。 */
+const canSnapSelection = computed<boolean>(() => singleTarget.value && selectedElements.value.length === 1);
+/** 当前选区使用的 Moveable 控制间距。 */
+const moveableSelectionPadding = computed<MoveableSelectionPadding>(() =>
+  canResizeSelection.value ? DRAWING_MOVEABLE_SELECTION_PADDING : disabledMoveableSelectionPadding
+);
+/** 当前实际传给 Moveable 的吸附参考节点。 */
+const activeGuidelineTargets = computed<Element[]>(() => (canSnapSelection.value ? guidelineTargets.value : []));
 
 /**
  * 通过元素 ID 读取 DOM target。
@@ -459,8 +488,8 @@ async function syncTargets(): Promise<void> {
   guidelineTargets.value =
     selectedTargets.length === 1
       ? props.elements
-          .filter((element) => !selectedIds.has(element.id))
-          .map((element) => getTargetById(element.id))
+          .filter((element: DrawingElement): boolean => !selectedIds.has(element.id))
+          .map((element: DrawingElement): Element | null => getTargetById(element.id))
           .filter((target): target is Element => target !== null)
       : [];
   await nextTick();
