@@ -866,13 +866,6 @@ defineExpose({
     }
   }
 
-  img {
-    max-width: 100%;
-    margin: 0.75em 0;
-    border-radius: 4px;
-    box-shadow: var(--shadow-md);
-  }
-
   th {
     min-width: 120px;
     padding: 0.5em 0.75em;
