@@ -7,7 +7,7 @@
       <BButton type="text" size="small" square icon="lucide:x" class="inspector-panel__close-btn" @click="emit('close')" />
     </header>
 
-    <BScrollbar v-if="selection">
+    <div v-if="selection" class="inspector-panel__content">
       <BSectionBlock title="元素">
         <BSectionItem label="选择器">
           <code class="inspector-panel__value-tag">{{ selection.selector }}</code>
@@ -57,7 +57,7 @@
           </div>
         </div>
       </BSectionBlock>
-    </BScrollbar>
+    </div>
 
     <div v-else class="inspector-panel__empty">
       <div class="inspector-panel__empty-icon">
@@ -222,6 +222,11 @@ function copyText(value: string): void {
   user-select: text;
   background: var(--bg-tertiary);
   border-radius: 6px;
+}
+
+.inspector-panel__content {
+  padding-bottom: 12px;
+  overflow: auto;
 }
 
 /* 多值并排容器 */
