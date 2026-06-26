@@ -25,6 +25,8 @@ export interface BColorPickerProps {
   readonly?: boolean;
   /** 输入框测试 ID */
   inputTestId?: string;
+  /** 面板宽度，默认取 trigger 元素宽度 */
+  width?: number | string;
   /** 下拉菜单位置 */
   placement?: BDropdownProps['placement'];
   /** 对齐方式 */

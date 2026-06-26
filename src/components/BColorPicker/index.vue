@@ -4,12 +4,12 @@
 -->
 <template>
   <BDropdown v-model:open="visible" :disabled="readonly" :get-popup-container="(triggerNode) => triggerNode" :placement="placement" :align="align">
-    <div :class="bem('trigger')">
+    <div ref="triggerRef" :class="bem('trigger')">
       <slot></slot>
     </div>
 
     <template #overlay>
-      <div :class="[bem('panel'), 'is-compact']">
+      <div :class="[bem('panel')]" :style="panelStyle">
         <!-- SV 面板 + 色相条 -->
         <div :class="bem('main')">
           <!-- 饱和度/明度面板 -->
@@ -66,6 +66,7 @@ import { Input as AInput } from 'ant-design-vue';
 import { clamp } from 'lodash-es';
 import tinycolor from 'tinycolor2';
 import BDropdown from '@/components/BDropdown/index.vue';
+import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
 
 defineOptions({ name: 'BColorPicker' });
@@ -80,7 +81,8 @@ const props = withDefaults(defineProps<BColorPickerProps>(), {
   allowClear: false,
   placeholder: '请输入',
   readonly: false,
-  inputTestId: undefined
+  inputTestId: undefined,
+  width: undefined
 });
 
 const emit = defineEmits<{
@@ -96,6 +98,8 @@ const SV_PANEL_SIZE = { width: 220, height: 140 } as const;
 const THUMB_SIZE = { width: 4, height: 4 } as const;
 /** 弹出层可见状态 */
 const visible = ref<boolean>(false);
+/** trigger 元素引用，用于获取默认宽度 */
+const triggerRef = ref<HTMLElement | null>(null);
 /** 当前颜色（rgb 字符串） */
 const currentColor = ref<string>('');
 /** 输入框显示值 */
@@ -128,6 +132,11 @@ let cleanupDragListeners: (() => void) | null = null;
 
 /** SV 面板背景色（纯色相） */
 const bgColor = computed<string>(() => `hsl(${hsva.h}, 100%, 50%)`);
+
+/** 面板容器样式：优先使用 prop，否则取 trigger 元素宽度，兜底 220px */
+const panelStyle = computed<CSSProperties>(() => ({
+  width: addCssUnit(props.width ?? triggerRef.value?.offsetWidth ?? SV_PANEL_SIZE.width)
+}));
 
 /**
  * 根据输出格式格式化颜色值
@@ -421,13 +430,10 @@ watch(
 .b-color-picker__input {
   width: 100%;
   height: 28px;
-  margin-top: 10px;
-  font-size: 12px;
-}
-
-.b-color-picker__input.ant-input-affix-wrapper {
   padding-top: 0;
   padding-bottom: 0;
+  margin-top: 10px;
+  font-size: 12px;
   border-radius: 6px;
 }
 
@@ -459,7 +465,7 @@ watch(
 
 .b-color-picker__sv-panel {
   position: relative;
-  width: 220px;
+  width: 100%;
   height: 140px;
   touch-action: none;
   cursor: crosshair;
@@ -513,7 +519,7 @@ watch(
 
 .b-color-picker__alpha-bar {
   position: relative;
-  width: 220px;
+  width: 100%;
   height: 12px;
   touch-action: none;
   cursor: pointer;
