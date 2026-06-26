@@ -42,6 +42,7 @@ import { common, createLowlight } from 'lowlight';
 import { captureSourceLineRange, createSourceLineTracker, resetSourceLineTracker } from '../adapters/sourceLineMapping';
 import CodeBlockView from '../components/CodeBlock.vue';
 import FrontMatterBlockView from '../components/FrontMatterBlock.vue';
+import ImageBlockView from '../components/ImageBlock.vue';
 import MathBlockView from '../components/MathBlock.vue';
 import TableView from '../components/TableView.vue';
 import { AISelectionHighlight } from '../extensions/aiRangeHighlight';
@@ -1254,7 +1255,9 @@ export function useExtensions(editorInstanceId: Ref<string>, options: UseExtensi
     Search.configure({
       onMatchFocus: options.onSearchMatchFocus ?? null
     }),
-    Image.configure({
+    Image.extend({
+      addNodeView: () => VueNodeViewRenderer(ImageBlockView as unknown as Component<NodeViewProps>)
+    }).configure({
       inline: false,
       allowBase64: true,
       HTMLAttributes: {
@@ -1666,7 +1669,9 @@ export function createRichMarkdownSchemaExtensions(
     TableRow,
     TableHeader,
     TableCell,
-    Image.configure({
+    Image.extend({
+      addNodeView: () => VueNodeViewRenderer(ImageBlockView as unknown as Component<NodeViewProps>)
+    }).configure({
       inline: false,
       allowBase64: true,
       HTMLAttributes: {
