@@ -3,7 +3,7 @@
  * @description 验证 BDrawing HTML 画布渲染和注册元素创建能力。
  * @vitest-environment jsdom
  */
-import { defineComponent, nextTick } from 'vue';
+import { defineComponent, nextTick, toRaw } from 'vue';
 import type { ComponentPublicInstance } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -43,26 +43,14 @@ interface BDrawingExpose {
  * ResizeObserver 测试替身。
  */
 class ResizeObserverMock {
-  /**
-   * 创建 ResizeObserver 测试替身。
-   * @param _callback - 尺寸变化回调
-   */
-  public constructor(_callback: ResizeObserverCallback) {}
+  /** 监听目标元素尺寸。 */
+  public observe = vi.fn();
 
-  /**
-   * 监听目标元素尺寸。
-   */
-  public observe(): void {}
+  /** 停止监听目标元素。 */
+  public unobserve = vi.fn();
 
-  /**
-   * 停止监听目标元素。
-   */
-  public unobserve(): void {}
-
-  /**
-   * 断开全部尺寸监听。
-   */
-  public disconnect(): void {}
+  /** 断开全部尺寸监听。 */
+  public disconnect = vi.fn();
 }
 
 /**
@@ -71,18 +59,19 @@ class ResizeObserverMock {
  */
 function createDrawingDataFixture(): DrawingData {
   return {
+    metadata: {},
     elements: [
       {
         id: 'external-node-1',
         name: 'rect',
-        text: '外部节点',
+        label: '矩形',
+        icon: 'lucide:square',
+        title: '外部节点',
         position: { x: 24, y: 36 },
         size: { width: 180, height: 72 },
         rotation: 0,
-        metadata: {
-          source: 'user',
-          createdAt: 1
-        }
+        style: {},
+        metadata: {}
       }
     ],
     viewport: {
@@ -98,6 +87,7 @@ function createDrawingDataFixture(): DrawingData {
  */
 function createEmptyDrawingData(): DrawingData {
   return {
+    metadata: {},
     elements: [],
     viewport: {
       center: { x: 0, y: 0 },
@@ -154,13 +144,10 @@ async function flushDrawingUpdates(): Promise<void> {
 describe('BDrawing canvas component', (): void => {
   beforeEach((): void => {
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
-    vi.stubGlobal(
-      'requestAnimationFrame',
-      (callback: FrameRequestCallback): number => {
-        callback(0);
-        return 1;
-      }
-    );
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+      callback(0);
+      return 1;
+    });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
   });
 
@@ -171,7 +158,7 @@ describe('BDrawing canvas component', (): void => {
   it('renders existing drawing data as HTML nodes with registered element views', (): void => {
     const wrapper = mount(BDrawing, {
       props: {
-        modelValue: createDrawingDataFixture()
+        value: createDrawingDataFixture()
       },
       attachTo: document.body
     });
@@ -190,7 +177,7 @@ describe('BDrawing canvas component', (): void => {
   it('creates a rectangle through the exposed registered element command', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        modelValue: createEmptyDrawingData()
+        value: createEmptyDrawingData()
       },
       attachTo: document.body
     });
@@ -200,7 +187,7 @@ describe('BDrawing canvas component', (): void => {
     await flushDrawingUpdates();
 
     const node = findNodeById(wrapper, 'drawing-shape-1');
-    const emitted = wrapper.emitted('update:modelValue') as Array<[DrawingData]> | undefined;
+    const emitted = wrapper.emitted('update:value') as Array<[DrawingData]> | undefined;
     const latestData = emitted?.at(-1)?.[0];
 
     expect(node.exists()).toBe(true);
@@ -208,6 +195,14 @@ describe('BDrawing canvas component', (): void => {
     expect(node.attributes('style')).toContain('translate(-90px, -36px)');
     expect(latestData?.elements).toHaveLength(1);
     expect(latestData?.elements[0]?.id).toBe('drawing-shape-1');
+    expect(latestData?.elements[0]).toMatchObject({
+      name: 'rect',
+      label: '矩形',
+      icon: 'lucide:square',
+      title: '矩形',
+      style: {},
+      metadata: {}
+    });
     expect(latestData?.viewport).toEqual({ center: { x: 0, y: 0 }, zoom: 1 });
     wrapper.unmount();
   });
@@ -215,7 +210,7 @@ describe('BDrawing canvas component', (): void => {
   it('creates a text node without opening the removed text editor', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        modelValue: createEmptyDrawingData()
+        value: createEmptyDrawingData()
       },
       attachTo: document.body
     });
@@ -234,7 +229,7 @@ describe('BDrawing canvas component', (): void => {
   it('ignores unknown registered element names', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        modelValue: createEmptyDrawingData()
+        value: createEmptyDrawingData()
       },
       attachTo: document.body
     });
@@ -244,6 +239,25 @@ describe('BDrawing canvas component', (): void => {
     await flushDrawingUpdates();
 
     expect(wrapper.findAll('[data-testid="drawing-node"]')).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it('emits metadata select target for empty selection without changing drawing data', async (): Promise<void> => {
+    const data = createEmptyDrawingData();
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: data
+      },
+      attachTo: document.body
+    });
+
+    await flushDrawingUpdates();
+
+    const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as DrawingData['metadata'];
+
+    expect(selectedPayload).toEqual({});
+    expect(toRaw(selectedPayload)).toBe(data.metadata);
+    expect(wrapper.emitted('update:value')).toBeUndefined();
     wrapper.unmount();
   });
 });

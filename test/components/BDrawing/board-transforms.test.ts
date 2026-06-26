@@ -13,9 +13,8 @@ import {
   resizeDrawingElements,
   undoDrawingBoard,
   updateDrawingElementStyle,
-  updateDrawingNodeText
+  updateDrawingElementTitle
 } from '@/components/BDrawing/utils/boardTransforms';
-import { measureDrawingTextElementSize } from '@/components/BDrawing/utils/drawingTextMetrics';
 
 /**
  * 创建测试形状元素。
@@ -25,24 +24,48 @@ import { measureDrawingTextElementSize } from '@/components/BDrawing/utils/drawi
 function createShapeElement(id: string): DrawingShapeElement {
   return {
     id,
-    name: 'process',
-    text: '流程节点',
+    name: 'rect',
+    label: '矩形',
+    icon: 'lucide:square',
+    title: '矩形',
     position: { x: 100, y: 120 },
     size: { width: 180, height: 72 },
     rotation: 0,
-    metadata: { source: 'user', createdAt: 1 }
+    style: {},
+    metadata: {}
   };
 }
 
 /**
  * 旧版形状元素快照。
  */
-type LegacyShapeElementSnapshot = Omit<DrawingShapeElement, 'name'> & {
+interface LegacyShapeElementSnapshot {
+  /** 元素 ID */
+  id: string;
   /** 旧版元素类别 */
   kind: 'shape';
   /** 旧版形状类型 */
   shape: string;
-};
+  /** 旧版节点文本 */
+  text: string;
+  /** 旧版节点说明 */
+  description?: string;
+  /** 元素位置 */
+  position: { x: number; y: number };
+  /** 元素尺寸 */
+  size: { width: number; height: number };
+  /** 旋转角度 */
+  rotation: number;
+  /** 旧版元信息 */
+  metadata: {
+    /** 元素创建来源 */
+    source: 'user';
+    /** 创建时间戳 */
+    createdAt: number;
+    /** 旧版手动尺寸 */
+    manualSize?: { width: number; height: number };
+  };
+}
 
 /**
  * 创建带旧版 kind 字段的测试形状元素。
@@ -55,10 +78,11 @@ function createLegacyShapeElement(id: string): DrawingShapeElement {
     kind: 'shape',
     shape: 'rect',
     text: '旧版节点',
+    description: '旧版说明',
     position: { x: 100, y: 120 },
     size: { width: 180, height: 72 },
     rotation: 0,
-    metadata: { source: 'user', createdAt: 1 }
+    metadata: { source: 'user', createdAt: 1, manualSize: { width: 160, height: 60 } }
   };
 
   return legacyElement as unknown as DrawingShapeElement;
@@ -75,17 +99,12 @@ function expectShapeElement(element: DrawingElement | undefined): DrawingShapeEl
 }
 
 describe('boardTransforms', (): void => {
-  it('measures CJK text wider than narrow latin text with the same character count', (): void => {
-    const cjkSize = measureDrawingTextElementSize('标题标题', { fontSize: 20 });
-    const latinSize = measureDrawingTextElementSize('iiii', { fontSize: 20 });
-
-    expect(cjkSize.width).toBeGreaterThan(latinSize.width);
-  });
-
   it('supports undo and redo after adding a shape', (): void => {
     const added = addDrawingShape(createDrawingBoardState(), {
       id: 'shape-1',
       name: 'rect',
+      label: '矩形',
+      icon: 'lucide:square',
       start: { x: 40, y: 60 },
       end: { x: 160, y: 120 }
     });
@@ -108,39 +127,46 @@ describe('boardTransforms', (): void => {
     expect(initial.elements[0]?.name).toBe('rect');
   });
 
-  it('updates node text through a manual board command', (): void => {
-    const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
-    const updated = updateDrawingNodeText(initial, 'node-1', '用户手动修改');
+  it('normalizes legacy snapshots into required shape element fields', (): void => {
+    const initial = createDrawingBoardState({
+      elements: [createLegacyShapeElement('node-1')]
+    });
+    const element = expectShapeElement(initial.elements[0]);
 
-    expect(expectShapeElement(updated.elements[0]).text).toBe('用户手动修改');
-    expect(updated.history.past).toHaveLength(1);
+    expect(element).toMatchObject({
+      id: 'node-1',
+      name: 'rect',
+      label: '矩形',
+      icon: 'lucide:square',
+      title: '矩形',
+      style: {},
+      metadata: {}
+    });
+    expect('text' in element).toBe(false);
+    expect('description' in element).toBe(false);
+    expect('source' in element.metadata).toBe(false);
+    expect('createdAt' in element.metadata).toBe(false);
+    expect('manualSize' in element.metadata).toBe(false);
   });
 
-  it('grows regular shape height when committed text needs more wrapped lines', (): void => {
+  it('updates element title through a manual board command', (): void => {
     const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
-    const original = expectShapeElement(initial.elements[0]);
-    const updated = updateDrawingNodeText(
-      initial,
-      'node-1',
-      '这是一段会在普通形状中自动换行并需要更多高度展示的长文本内容，用来验证矩形等节点会随着文本内容增高'
-    );
-    const updatedShape = expectShapeElement(updated.elements[0]);
+    const updated = updateDrawingElementTitle(initial, 'node-1', '审批节点');
 
-    expect(updatedShape.size.width).toBe(original.size.width);
-    expect(updatedShape.size.height).toBeGreaterThan(original.size.height);
+    expect(expectShapeElement(updated.elements[0]).title).toBe('审批节点');
     expect(updated.history.past).toHaveLength(1);
   });
 
   it('updates element style as one undoable history entry', (): void => {
     const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
     const updated = updateDrawingElementStyle(initial, 'node-1', {
-      fill: '#f97316',
-      strokeWidth: 3
+      backgroundColor: '#f97316',
+      borderColorWidth: 3
     });
 
     expect(expectShapeElement(updated.elements[0]).style).toEqual({
-      fill: '#f97316',
-      strokeWidth: 3
+      backgroundColor: '#f97316',
+      borderColorWidth: 3
     });
     expect(updated.history.past).toHaveLength(1);
   });
@@ -148,7 +174,7 @@ describe('boardTransforms', (): void => {
   it('keeps board unchanged when updating style for an unknown element', (): void => {
     const initial = createDrawingBoardState({ elements: [createShapeElement('node-1')] });
     const updated = updateDrawingElementStyle(initial, 'missing-node', {
-      fill: '#f97316'
+      backgroundColor: '#f97316'
     });
 
     expect(updated.elements).toEqual(initial.elements);
@@ -161,18 +187,25 @@ describe('boardTransforms', (): void => {
     const added = addDrawingShape(initial, {
       id: 'shape-1',
       name: 'diamond',
+      label: '菱形',
+      icon: 'lucide:diamond',
       start: { x: 260, y: 220 },
-      end: { x: 100, y: 120 },
-      createdAt: 20
+      end: { x: 100, y: 120 }
     });
 
     expect(added.elements[0]).toMatchObject({
       id: 'shape-1',
       name: 'diamond',
+      label: '菱形',
+      icon: 'lucide:diamond',
+      title: '菱形',
       position: { x: 100, y: 120 },
       size: { width: 160, height: 100 },
-      rotation: 0
+      rotation: 0,
+      style: {},
+      metadata: {}
     });
+    expect('text' in expectShapeElement(added.elements[0])).toBe(false);
     expect(added.selection).toEqual(['shape-1']);
     expect(added.history.past).toHaveLength(1);
   });
@@ -182,36 +215,17 @@ describe('boardTransforms', (): void => {
     const added = addDrawingShape(initial, {
       id: 'shape-1',
       name: 'ellipse',
+      label: '椭圆',
+      icon: 'lucide:circle',
       start: { x: 200, y: 180 },
-      end: { x: 203, y: 184 },
-      createdAt: 20
+      end: { x: 203, y: 184 }
     });
 
     expect(added.elements[0]?.position).toEqual({ x: 111.5, y: 146 });
     expect(added.elements[0]?.size).toEqual({ width: 180, height: 72 });
-    expect(expectShapeElement(added.elements[0]).text).toBe('');
+    expect(expectShapeElement(added.elements[0]).label).toBe('椭圆');
+    expect(expectShapeElement(added.elements[0]).title).toBe('椭圆');
     expect(added.history.past).toHaveLength(1);
-  });
-
-  it('sizes text shapes from their text content instead of the default node size', (): void => {
-    const initial = createDrawingBoardState();
-    const added = addDrawingShape(initial, {
-      id: 'text-1',
-      name: 'text',
-      start: { x: 200, y: 180 },
-      end: { x: 200, y: 180 },
-      text: 'Hi',
-      createdAt: 20
-    });
-
-    const textElement = expectShapeElement(added.elements[0]);
-    expect(textElement.position).toEqual({ x: 200, y: 180 });
-    expect(textElement.size.width).toBeLessThan(180);
-    expect(textElement.size.height).toBeLessThan(72);
-    expect(textElement.style?.fill).toBe('transparent');
-
-    const updated = updateDrawingNodeText(added, 'text-1', '更长的文本内容');
-    expect(expectShapeElement(updated.elements[0]).size.width).toBeGreaterThan(textElement.size.width);
   });
 
   it('moves multiple elements as one history entry', (): void => {
@@ -232,12 +246,7 @@ describe('boardTransforms', (): void => {
 
   it('resizes an element with the minimum size clamp', (): void => {
     const initial = createDrawingBoardState({
-      elements: [
-        {
-          ...createShapeElement('node-1'),
-          text: ''
-        }
-      ]
+      elements: [createShapeElement('node-1')]
     });
     const resized = resizeDrawingElements(initial, [
       {
@@ -250,56 +259,6 @@ describe('boardTransforms', (): void => {
     expect(resized.elements[0]?.position).toEqual({ x: 80, y: 90 });
     expect(resized.elements[0]?.size).toEqual({ width: 16, height: 16 });
     expect(resized.history.past).toHaveLength(1);
-  });
-
-  it('keeps manual width changes and grows height when resizing a text-bearing shape narrower', (): void => {
-    const initial = createDrawingBoardState({
-      elements: [
-        {
-          ...createShapeElement('node-1'),
-          text: '这是一段已经存在于节点内部的长文本，拖拽修改宽度后需要重新计算换行高度'
-        }
-      ]
-    });
-    const resized = resizeDrawingElements(initial, [
-      {
-        id: 'node-1',
-        size: { width: 80, height: 72 }
-      }
-    ]);
-    const resizedShape = expectShapeElement(resized.elements[0]);
-
-    expect(resizedShape.size.width).toBe(80);
-    expect(resizedShape.size.height).toBeGreaterThan(72);
-  });
-
-  it('restores auto-grown text height when resizing a text-bearing shape wider', (): void => {
-    const initial = createDrawingBoardState({
-      elements: [
-        {
-          ...createShapeElement('node-1'),
-          text: '这是一段已经存在于节点内部的长文本，拖拽修改宽度后需要重新计算换行高度'
-        }
-      ]
-    });
-    const narrowed = resizeDrawingElements(initial, [
-      {
-        id: 'node-1',
-        size: { width: 80, height: 72 }
-      }
-    ]);
-    const narrowedShape = expectShapeElement(narrowed.elements[0]);
-    const widened = resizeDrawingElements(narrowed, [
-      {
-        id: 'node-1',
-        size: { width: 260, height: narrowedShape.size.height }
-      }
-    ]);
-    const widenedShape = expectShapeElement(widened.elements[0]);
-
-    expect(widenedShape.size.width).toBe(260);
-    expect(widenedShape.size.height).toBeLessThan(narrowedShape.size.height);
-    expect(widenedShape.size.height).toBe(72);
   });
 
   describe('reorderDrawingElement', (): void => {

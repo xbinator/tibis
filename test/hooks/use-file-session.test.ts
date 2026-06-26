@@ -92,6 +92,7 @@ vi.mock('@/shared/platform', () => ({
  */
 function createDrawingData(): DrawingData {
   return {
+    metadata: {},
     elements: [],
     viewport: {
       center: { x: 0, y: 0 },
@@ -121,6 +122,7 @@ describe('tibis document helpers', (): void => {
     expect(JSON.parse(content)).toEqual({
       type: 'drawing',
       version: 1,
+      metadata: {},
       elements: [],
       viewport: {
         center: { x: 0, y: 0 },
@@ -134,6 +136,7 @@ describe('tibis document helpers', (): void => {
       JSON.stringify({
         type: 'drawing',
         version: 1,
+        metadata: {},
         elements: [],
         viewport: {
           center: { x: 1, y: 2 },
@@ -146,6 +149,7 @@ describe('tibis document helpers', (): void => {
     expect(parsed.type).toBe('drawing');
     expect(parsed.version).toBe(1);
     expect(parsed.data).toEqual({
+      metadata: {},
       elements: [],
       viewport: {
         center: { x: 1, y: 2 },
@@ -227,6 +231,7 @@ describe('useFileSession', (): void => {
     expect(JSON.parse(content)).toEqual({
       type: 'drawing',
       version: 1,
+      metadata: {},
       elements: [],
       viewport: {
         center: { x: 0, y: 0 },

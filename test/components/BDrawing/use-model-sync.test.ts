@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { useDrawingBoard } from '@/components/BDrawing/hooks/useDrawingBoard';
 import { useModelSync } from '@/components/BDrawing/hooks/useModelSync';
 import type { DrawingData, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
+import { createDrawingDataSnapshot } from '@/components/BDrawing/utils/boardTransforms';
 
 /**
  * 创建测试形状元素。
@@ -17,14 +18,14 @@ function createShapeElement(id: string): DrawingShapeElement {
   return {
     id,
     name: 'rect',
-    text: '外部节点',
+    label: '矩形',
+    icon: 'lucide:square',
+    title: '外部节点',
     position: { x: 24, y: 36 },
     size: { width: 180, height: 72 },
     rotation: 0,
-    metadata: {
-      source: 'user',
-      createdAt: 1
-    }
+    style: {},
+    metadata: {}
   };
 }
 
@@ -35,6 +36,7 @@ function createShapeElement(id: string): DrawingShapeElement {
  */
 function createDrawingData(id: string): DrawingData {
   return {
+    metadata: {},
     elements: [createShapeElement(id)],
     viewport: {
       center: { x: 10, y: 20 },
@@ -56,16 +58,12 @@ describe('useModelSync', (): void => {
   it('emits lightweight model data when board content changes', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<DrawingData | undefined>(createDrawingData('node-1'));
-    const emitted: DrawingData[] = [];
 
     scope.run((): void => {
       const board = useDrawingBoard(modelValue.value);
       useModelSync({
         board,
-        emitUpdate: (value: DrawingData): void => {
-          emitted.push(value);
-        },
-        modelValue
+        drawingData: modelValue
       });
 
       board.startCreateShapeDraft('rect', { x: 20, y: 30 });
@@ -76,28 +74,79 @@ describe('useModelSync', (): void => {
     await nextTick();
     scope.stop();
 
-    expect(emitted).toHaveLength(1);
-    expect(emitted[0]?.elements).toHaveLength(2);
-    expect(Object.keys(emitted[0] ?? {}).sort()).toEqual(['elements', 'viewport']);
-    expect('kind' in (emitted[0]?.elements[0] ?? {})).toBe(false);
-    expect(emitted[0]?.elements[0]?.name).toBe('rect');
-    expect('shape' in (emitted[0]?.elements[0] ?? {})).toBe(false);
-    expect(hasInternalStateFields(emitted[0] as DrawingData)).toBe(false);
+    expect(modelValue.value?.elements).toHaveLength(2);
+    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['elements', 'metadata', 'viewport']);
+    expect('kind' in (modelValue.value?.elements[0] ?? {})).toBe(false);
+    expect(modelValue.value?.elements[0]?.name).toBe('rect');
+    expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(false);
+    expect(hasInternalStateFields(modelValue.value as DrawingData)).toBe(false);
+  });
+
+  it('normalizes old drawing data without metadata to an empty metadata object', async (): Promise<void> => {
+    const scope = effectScope();
+    const legacyData = {
+      elements: [createShapeElement('node-1')],
+      viewport: {
+        center: { x: 10, y: 20 },
+        zoom: 1
+      }
+    } as DrawingData;
+    const modelValue = ref<DrawingData | undefined>(legacyData);
+    let readBoardData: () => DrawingData = (): DrawingData => createDrawingData('fallback');
+
+    scope.run((): void => {
+      const board = useDrawingBoard(modelValue.value);
+      useModelSync({
+        board,
+        drawingData: modelValue
+      });
+
+      readBoardData = (): DrawingData => createDrawingDataSnapshot(board.state.value);
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(readBoardData().metadata).toEqual({});
+  });
+
+  it('preserves model metadata when emitting board content changes', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<DrawingData | undefined>({
+      ...createDrawingData('node-1'),
+      metadata: {
+        title: '流程图'
+      }
+    });
+
+    scope.run((): void => {
+      const board = useDrawingBoard(modelValue.value);
+      useModelSync({
+        board,
+        drawingData: modelValue
+      });
+
+      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
+      board.updateDraftPoint({ x: 140, y: 90 });
+      board.commitCreateShapeDraft();
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(modelValue.value?.metadata).toEqual({ title: '流程图' });
   });
 
   it('emits lightweight model data when only the viewport changes', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<DrawingData | undefined>(createDrawingData('node-1'));
-    const emitted: DrawingData[] = [];
+    const initialElements = modelValue.value?.elements;
 
     scope.run((): void => {
       const board = useDrawingBoard(modelValue.value);
       useModelSync({
         board,
-        emitUpdate: (value: DrawingData): void => {
-          emitted.push(value);
-        },
-        modelValue
+        drawingData: modelValue
       });
 
       board.state.value = {
@@ -112,25 +161,20 @@ describe('useModelSync', (): void => {
     await nextTick();
     scope.stop();
 
-    expect(emitted).toHaveLength(1);
-    expect(emitted[0]?.elements).toEqual(modelValue.value?.elements);
-    expect(emitted[0]?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
-    expect(hasInternalStateFields(emitted[0] as DrawingData)).toBe(false);
+    expect(modelValue.value?.elements).toEqual(initialElements);
+    expect(modelValue.value?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
+    expect(hasInternalStateFields(modelValue.value as DrawingData)).toBe(false);
   });
 
   it('uses the current board viewport when emitting content changes', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<DrawingData | undefined>(createDrawingData('node-1'));
-    const emitted: DrawingData[] = [];
 
     scope.run((): void => {
       const board = useDrawingBoard(modelValue.value);
       useModelSync({
         board,
-        emitUpdate: (value: DrawingData): void => {
-          emitted.push(value);
-        },
-        modelValue
+        drawingData: modelValue
       });
 
       board.state.value = {
@@ -148,8 +192,8 @@ describe('useModelSync', (): void => {
     await nextTick();
     scope.stop();
 
-    expect(emitted.at(-1)?.elements).toHaveLength(2);
-    expect(emitted.at(-1)?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
+    expect(modelValue.value?.elements).toHaveLength(2);
+    expect(modelValue.value?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
   });
 
   it('continues generated shape ids after the highest existing generated id', (): void => {
@@ -168,17 +212,13 @@ describe('useModelSync', (): void => {
   it('resets board from external model without echoing the same update', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<DrawingData | undefined>(createDrawingData('node-1'));
-    const emitted: DrawingData[] = [];
     let readBoardElements: () => DrawingElement[] = (): DrawingElement[] => [];
 
     scope.run((): void => {
       const board = useDrawingBoard(modelValue.value);
       useModelSync({
         board,
-        emitUpdate: (value: DrawingData): void => {
-          emitted.push(value);
-        },
-        modelValue
+        drawingData: modelValue
       });
 
       modelValue.value = createDrawingData('node-2');
@@ -189,6 +229,43 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(readBoardElements().map((element: DrawingElement): string => element.id)).toEqual(['node-2']);
-    expect(emitted).toEqual([]);
+    expect(modelValue.value?.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-2']);
+  });
+
+  it('preserves selected ids that still exist when resetting from external model', async (): Promise<void> => {
+    const scope = effectScope();
+    const initialData = createDrawingData('node-1');
+    const nextData = createDrawingData('node-1');
+    const nextElement = nextData.elements[0];
+    if (!nextElement) {
+      throw new Error('测试数据缺少画图元素');
+    }
+    nextData.elements = [
+      {
+        ...nextElement,
+        title: '外部更新节点'
+      }
+    ];
+    const modelValue = ref<DrawingData | undefined>(initialData);
+    let readBoardSelection: () => string[] = (): string[] => [];
+
+    scope.run((): void => {
+      const board = useDrawingBoard({
+        ...initialData,
+        selection: ['node-1']
+      });
+      useModelSync({
+        board,
+        drawingData: modelValue
+      });
+
+      modelValue.value = nextData;
+      readBoardSelection = (): string[] => board.state.value.selection;
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(readBoardSelection()).toEqual(['node-1']);
   });
 });

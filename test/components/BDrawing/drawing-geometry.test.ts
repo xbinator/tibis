@@ -28,11 +28,14 @@ function createShapeElement(id: string, position = { x: 40, y: 60 }): DrawingSha
   return {
     id,
     name: 'rect',
-    text: '矩形',
+    label: '矩形',
+    icon: 'lucide:square',
+    title: '矩形',
     position,
     size: { width: 120, height: 80 },
     rotation: 0,
-    metadata: { source: 'user', createdAt: 1 }
+    style: {},
+    metadata: {}
   };
 }
 

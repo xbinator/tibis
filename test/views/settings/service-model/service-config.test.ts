@@ -80,7 +80,7 @@ vi.mock('@/components/BSelect/index.vue', () => ({
  */
 const serviceConfigGlobal = {
   stubs: {
-    BSettingsSection: { template: '<section><slot /></section>' },
+    SettingsSection: { template: '<section><slot /></section>' },
     BModelIcon: true
   }
 };
@@ -164,7 +164,7 @@ describe('ServiceModelSettings', (): void => {
     mount(ServiceModelSettings, {
       global: {
         stubs: {
-          BSettingsPage: { template: '<main><slot /></main>' },
+          SettingsPage: { template: '<main><slot /></main>' },
           ServiceConfig: ServiceConfigStub
         }
       }

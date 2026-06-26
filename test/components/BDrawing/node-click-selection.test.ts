@@ -3,12 +3,12 @@
  * @description 验证 BDrawing 节点点击选中后不会让节点消失。
  * @vitest-environment jsdom
  */
-import { defineComponent, nextTick } from 'vue';
+import { defineComponent, nextTick, toRaw } from 'vue';
 import type { ComponentPublicInstance } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
-import type { DrawingData, DrawingPoint } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingPoint, DrawingSelectTarget } from '@/components/BDrawing/types';
 
 /**
  * 带内部选区的测试画板数据。
@@ -63,23 +63,13 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         default: (): Element[] => []
       }
     },
-    template: `
-      <div v-if="target.length" data-testid="moveable-stub">
-        <button
-          data-testid="moveable-absolute-drag-group"
-          @click="$emit('drag-group', createAbsoluteDragGroupEvent(target))"
-        ></button>
-        <button
-          data-testid="moveable-absolute-drag-group-end"
-          @click="$emit('drag-group-end', createAbsoluteDragGroupEndEvent(target))"
-        ></button>
-      </div>
-    `,
     methods: {
       /**
        * 模拟 Moveable 对外暴露的位置刷新方法。
        */
-      updateRect(): void {},
+      updateRect(): void {
+        return undefined;
+      },
       /**
        * 读取目标元素当前 CSS translate。
        * @param target - Moveable 目标元素
@@ -104,17 +94,15 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
        */
       createAbsoluteDragGroupEvent(targets: Element[]): { events: MoveableDragTestEvent[] } {
         return {
-          events: targets.map(
-            (target: Element): MoveableDragTestEvent => {
-              const currentTranslate = this.readTargetTranslate(target);
+          events: targets.map((target: Element): MoveableDragTestEvent => {
+            const currentTranslate = this.readTargetTranslate(target);
 
-              return {
-                target,
-                dist: [40, 20],
-                translate: [currentTranslate[0] + 40, currentTranslate[1] + 20]
-              };
-            }
-          )
+            return {
+              target,
+              dist: [40, 20],
+              translate: [currentTranslate[0] + 40, currentTranslate[1] + 20]
+            };
+          })
         };
       },
       /**
@@ -134,7 +122,19 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
           )
         };
       }
-    }
+    },
+    template: `
+      <div v-if="target.length" data-testid="moveable-stub">
+        <button
+          data-testid="moveable-absolute-drag-group"
+          @click="$emit('drag-group', createAbsoluteDragGroupEvent(target))"
+        ></button>
+        <button
+          data-testid="moveable-absolute-drag-group-end"
+          @click="$emit('drag-group-end', createAbsoluteDragGroupEndEvent(target))"
+        ></button>
+      </div>
+    `
   })
 }));
 
@@ -142,26 +142,14 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
  * ResizeObserver 测试替身。
  */
 class ResizeObserverMock {
-  /**
-   * 创建 ResizeObserver 测试替身。
-   * @param _callback - 尺寸变化回调
-   */
-  public constructor(_callback: ResizeObserverCallback) {}
+  /** 监听目标元素尺寸。 */
+  public observe = vi.fn();
 
-  /**
-   * 监听目标元素尺寸。
-   */
-  public observe(): void {}
+  /** 停止监听目标元素。 */
+  public unobserve = vi.fn();
 
-  /**
-   * 停止监听目标元素。
-   */
-  public unobserve(): void {}
-
-  /**
-   * 断开全部尺寸监听。
-   */
-  public disconnect(): void {}
+  /** 断开全部尺寸监听。 */
+  public disconnect = vi.fn();
 }
 
 /**
@@ -170,18 +158,19 @@ class ResizeObserverMock {
  */
 function createNodeClickDrawingData(): DrawingData {
   return {
+    metadata: {},
     elements: [
       {
         id: 'node-1',
         name: 'rect',
-        text: '节点',
+        label: '矩形',
+        icon: 'lucide:square',
+        title: '节点',
         position: { x: 80, y: 60 },
         size: { width: 180, height: 72 },
         rotation: 0,
-        metadata: {
-          source: 'user',
-          createdAt: 1
-        }
+        style: {},
+        metadata: {}
       }
     ],
     viewport: {
@@ -197,30 +186,31 @@ function createNodeClickDrawingData(): DrawingData {
  */
 function createMultiSelectedDrawingData(): DrawingDataWithSelection {
   return {
+    metadata: {},
     elements: [
       {
         id: 'node-1',
         name: 'rect',
-        text: '节点 1',
+        label: '矩形',
+        icon: 'lucide:square',
+        title: '节点 1',
         position: { x: 80, y: 60 },
         size: { width: 180, height: 72 },
         rotation: 0,
-        metadata: {
-          source: 'user',
-          createdAt: 1
-        }
+        style: {},
+        metadata: {}
       },
       {
         id: 'node-2',
         name: 'rect',
-        text: '节点 2',
+        label: '矩形',
+        icon: 'lucide:square',
+        title: '节点 2',
         position: { x: 260, y: 120 },
         size: { width: 180, height: 72 },
         rotation: 0,
-        metadata: {
-          source: 'user',
-          createdAt: 2
-        }
+        style: {},
+        metadata: {}
       }
     ],
     selection: ['node-1', 'node-2'],
@@ -237,6 +227,7 @@ function createMultiSelectedDrawingData(): DrawingDataWithSelection {
  */
 function createEmptyDrawingData(): DrawingData {
   return {
+    metadata: {},
     elements: [],
     viewport: {
       center: { x: 0, y: 0 },
@@ -319,13 +310,10 @@ async function dispatchPointerEvent(target: Element | Window, type: string, poin
 describe('BDrawing node click selection', () => {
   beforeEach((): void => {
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
-    vi.stubGlobal(
-      'requestAnimationFrame',
-      (callback: FrameRequestCallback): number => {
-        callback(0);
-        return 1;
-      }
-    );
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+      callback(0);
+      return 1;
+    });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
   });
 
@@ -334,9 +322,10 @@ describe('BDrawing node click selection', () => {
   });
 
   it('keeps the clicked node visible and positioned after selection', async (): Promise<void> => {
+    const data = createNodeClickDrawingData();
     const wrapper = mount(BDrawing, {
       props: {
-        modelValue: createNodeClickDrawingData()
+        value: data
       },
       attachTo: document.body
     });
@@ -348,9 +337,14 @@ describe('BDrawing node click selection', () => {
     await nextTick();
 
     const selectedNode = findNode(wrapper);
+    const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as DrawingSelectTarget;
+    const latestData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? data;
+
     expect(selectedNode.exists()).toBe(true);
     expect(selectedNode.classes()).toContain('is-selected');
     expect(selectedNode.attributes('style')).toBe(initialTransform);
+    expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-1');
+    expect(toRaw(selectedPayload)).toBe(latestData.elements[0]);
     expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
     wrapper.unmount();
   });
@@ -358,7 +352,7 @@ describe('BDrawing node click selection', () => {
   it('creates a visible text node without opening the text editor', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        modelValue: createEmptyDrawingData()
+        value: createEmptyDrawingData()
       },
       attachTo: document.body
     });
@@ -377,7 +371,7 @@ describe('BDrawing node click selection', () => {
   it('does not open the text editor when a node is double clicked', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        modelValue: createNodeClickDrawingData()
+        value: createNodeClickDrawingData()
       },
       attachTo: document.body
     });
@@ -394,12 +388,15 @@ describe('BDrawing node click selection', () => {
   it('keeps multi selected nodes under the pointer when Moveable reports absolute translate', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        modelValue: createMultiSelectedDrawingData()
+        value: createMultiSelectedDrawingData(),
+        select: {}
       },
       attachTo: document.body
     });
     await nextTick();
     await nextTick();
+
+    expect(wrapper.emitted('update:select')?.at(-1)?.[0]).toBeNull();
 
     await wrapper.find('[data-testid="moveable-absolute-drag-group"]').trigger('click');
     await nextTick();

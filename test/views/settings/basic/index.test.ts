@@ -17,10 +17,10 @@ vi.mock('@/theme', () => ({
 }));
 
 /**
- * BSettingsPage 测试替身。
+ * SettingsPage 测试替身。
  */
-const BSettingsPageStub = defineComponent({
-  name: 'BSettingsPage',
+const SettingsPageStub = defineComponent({
+  name: 'SettingsPage',
   props: {
     title: { type: String, required: true }
   },
@@ -28,10 +28,10 @@ const BSettingsPageStub = defineComponent({
 });
 
 /**
- * BSettingsSection 测试替身。
+ * SettingsSection 测试替身。
  */
-const BSettingsSectionStub = defineComponent({
-  name: 'BSettingsSection',
+const SettingsSectionStub = defineComponent({
+  name: 'SettingsSection',
   props: {
     title: { type: String, required: true }
   },
@@ -89,8 +89,8 @@ function mountBasicSettingsPage(): VueWrapper {
   return mount(BasicSettingsPage, {
     global: {
       stubs: {
-        BSettingsPage: BSettingsPageStub,
-        BSettingsSection: BSettingsSectionStub,
+        SettingsPage: SettingsPageStub,
+        SettingsSection: SettingsSectionStub,
         BSelect: BSelectStub,
         BButton: BButtonStub
       }
