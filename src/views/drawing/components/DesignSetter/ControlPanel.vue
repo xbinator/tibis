@@ -6,30 +6,35 @@
   <div class="control-panel">
     <BSectionItem :label="label">
       <span class="control-panel__main">
-        <AInput v-model:value="allValue" addon-after="px" :placeholder="isIndividualValue ? '自定义' : '请输入'" @change="handleAllValueChange" />
-        <button
-          class="control-panel__toggle"
-          :class="{ 'is-active': isPanelExpanded }"
-          :aria-pressed="isPanelExpanded"
-          :title="isPanelExpanded ? '收起单独设置' : '展开单独设置'"
-          @click="toggleExpanded"
-        >
+        <AInputNumber
+          v-model:value="allValue"
+          :min="0"
+          :controls="false"
+          :placeholder="isIndividualValue ? '自定义' : '请输入'"
+          @change="handleAllValueChange"
+        />
+        <button class="control-panel__toggle" :class="{ 'is-active': isPanelExpanded }" @click="toggleExpanded">
           <BIcon icon="lucide:grid-2x2" :size="15" />
         </button>
       </span>
     </BSectionItem>
 
-    <div v-if="isPanelExpanded" class="control-panel__advanced">
+    <div v-if="isManuallyExpanded" class="control-panel__advanced">
       <BSectionItem v-for="option in targetOptions" :key="option.value" :label="option.label">
-        <AInput :value="String(getTargetValue(option.value))" @update:value="(value) => handleTargetValueUpdate(option.value, value)" />
+        <AInputNumber
+          :min="0"
+          :value="getTargetValue(option.value)"
+          :controls="false"
+          @change="(value: ValueType) => handleTargetValueUpdate(option.value, value)"
+        />
       </BSectionItem>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import type { ValueType } from 'ant-design-vue/es/input-number/src/utils/MiniDecimal';
 import { computed, ref, watch } from 'vue';
-import { Input as AInput } from 'ant-design-vue';
 import type { DrawingBoxSides, DrawingBoxSideValue, DrawingCornerRadius, DrawingCornerRadiusValue } from '@/components/BDrawing/types';
 
 /**
@@ -161,17 +166,8 @@ function getAllValue(value: ControlPanelValue | undefined): number {
   return 0;
 }
 
-/**
- * 读取统一输入框显示值。
- * @param value - 当前值
- * @returns 统一数值，独立值时返回空值以显示自定义占位
- */
-function getAllInputValue(value: ControlPanelValue | undefined): string {
-  return typeof value === 'object' && value !== null ? '' : String(getAllValue(value));
-}
-
 /** 统一输入框显示值。 */
-const allValue = ref<string>(getAllInputValue(props.value));
+const allValue = ref<ValueType | undefined>(typeof props.value === 'number' ? props.value : undefined);
 
 /** 当前值是否为独立值（四边或四角分别设置）。 */
 const isIndividualValue = computed<boolean>(() => typeof props.value === 'object' && props.value !== null);
@@ -185,7 +181,7 @@ const isPanelExpanded = computed<boolean>(() => isManuallyExpanded.value || isIn
 watch(
   (): ControlPanelValue => props.value,
   (value: ControlPanelValue): void => {
-    allValue.value = getAllInputValue(value);
+    allValue.value = typeof value === 'number' ? value : undefined;
   }
 );
 
@@ -246,10 +242,10 @@ function toggleExpanded(): void {
 
 /**
  * 处理统一数字输入提交。
- * @param value - 原生 change 事件
+ * @param value - AInputNumber change 事件值
  */
-function handleAllValueChange(value: Event): void {
-  const nextValue = normalizeInputValue(value);
+function handleAllValueChange(value: ValueType): void {
+  const nextValue = typeof value === 'number' ? value : Number(value) || 0;
 
   emit('update:value', nextValue);
 }
@@ -259,10 +255,10 @@ function handleAllValueChange(value: Event): void {
  * @param target - 独立目标
  * @param value - 输入值
  */
-function handleTargetValueUpdate(target: ControlPanelTarget, value: string): void {
-  const nextValue = normalizeInputValue(value);
+function handleTargetValueUpdate(target: ControlPanelTarget, value: ValueType): void {
+  const nextValue = typeof value === 'number' ? value : Number(value) || 0;
 
-  allValue.value = '';
+  allValue.value = undefined;
 
   const nextBoxValue: ControlPanelValue =
     props.mode === 'sides' ? { ...currentSides.value, [target]: nextValue } : { ...currentCorners.value, [target]: nextValue };
