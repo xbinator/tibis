@@ -30,6 +30,7 @@ const COMPONENT_DIRS = [
   'BModal',
   'BRecent',
   'BButton',
+  'BDraggable',
   'BDropdown',
   'BMonaco',
   'BJsonViewer',
