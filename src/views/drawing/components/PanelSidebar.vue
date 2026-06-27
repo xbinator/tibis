@@ -19,6 +19,7 @@
         <SidebarTools v-if="activeSidebarTab === 'tools'" />
         <SidebarLayer
           v-else-if="elements.length"
+          :active-element-id="activeElementId"
           :elements="elements"
           :selected-element-ids="selectedElementIds"
           @select-element="handleElementSelect"
@@ -63,6 +64,8 @@ interface DrawingSidebarTab {
  * 画图侧边栏入参。
  */
 interface Props {
+  /** 组合选区内当前编辑的元素 ID */
+  activeElementId?: string | null;
   /** 当前画图元素列表 */
   elements: DrawingElement[];
   /** 当前选中的画图元素 ID 列表 */
@@ -70,6 +73,7 @@ interface Props {
 }
 
 withDefaults(defineProps<Props>(), {
+  activeElementId: null,
   selectedElementIds: (): string[] => []
 });
 const emit = defineEmits<{

@@ -5,6 +5,7 @@
 <template>
   <main class="drawing-page" tabindex="0" @blur="session.actions.onBlur">
     <PanelSidebar
+      :active-element-id="activeSidebarElementId"
       :elements="session.data.value.elements"
       :selected-element-ids="selectedElementIds"
       @select-element="handleSidebarElementSelect"
@@ -82,6 +83,15 @@ const selectedElementIds = ref<string[]>([]);
 function isDrawingElementTarget(target: DrawingSelectTarget): target is DrawingElement {
   return Boolean(target && typeof target === 'object' && 'id' in target);
 }
+
+/** 当前侧栏需要额外高亮的组合子元素 ID。 */
+const activeSidebarElementId = computed<string | null>(() => {
+  if (!isDrawingElementTarget(selectedTarget.value)) {
+    return null;
+  }
+
+  return getDrawingElementGroupId(selectedTarget.value) ? selectedTarget.value.id : null;
+});
 
 /**
  * 读取自动生成 ID 中的序号。
@@ -273,6 +283,10 @@ function insertLayerCopiesAboveSources(elements: DrawingElement[], sourceElement
  */
 function syncSidebarSelectedElementIds(target: DrawingSelectTarget): void {
   if (isDrawingElementTarget(target)) {
+    if (getDrawingElementGroupId(target)) {
+      return;
+    }
+
     selectedElementIds.value = [target.id];
     return;
   }

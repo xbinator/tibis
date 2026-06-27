@@ -295,6 +295,33 @@ describe('DrawingPage', (): void => {
     wrapper.unmount();
   });
 
+  it('keeps the selected group and active child highlighted from canvas selection changes', async (): Promise<void> => {
+    const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
+    const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [firstElement, secondElement, createDrawingElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const drawing = wrapper.findComponent({ name: 'BDrawing' });
+
+    drawing.vm.$emit('update:select', secondElement);
+    drawing.vm.$emit('selection-change', ['node-1', 'node-2']);
+    await nextTick();
+
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-1', 'node-2']);
+    expect(panelSidebar.props('activeElementId')).toBe('node-2');
+    wrapper.unmount();
+  });
+
   it('copies the drawing element when the sidebar layer emits copy', async (): Promise<void> => {
     const copiedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {

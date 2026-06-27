@@ -33,7 +33,7 @@
           </div>
         </div>
         <div v-if="isGroupExpanded(entry)" class="sidebar-panel__layer-children">
-          <div v-for="child in entry.elements" :key="child.id" class="sidebar-panel__layer-child" :class="{ 'is-active': isElementSelected(child) }">
+          <div v-for="child in entry.elements" :key="child.id" class="sidebar-panel__layer-child" :class="{ 'is-active': isActiveChildElement(child) }">
             <button type="button" class="sidebar-panel__layer-select" @click.stop="handleElementClick(child)">
               <BIcon :icon="getElementIcon(child)" :size="15" />
               <div class="sidebar-panel__layer-main">
@@ -104,6 +104,8 @@ type SidebarLayerEntry = SidebarLayerElementEntry | SidebarLayerGroupEntry;
  * 图层列表入参。
  */
 interface Props {
+  /** 组合选区内当前编辑的元素 ID */
+  activeElementId?: string | null;
   /** 当前画图元素列表 */
   elements: DrawingElement[];
   /** 当前选中的画图元素 ID 列表 */
@@ -111,6 +113,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  activeElementId: null,
   selectedElementIds: (): string[] => []
 });
 const emit = defineEmits<{
@@ -271,6 +274,15 @@ function isElementSelected(element: DrawingElement): boolean {
 }
 
 /**
+ * 判断组合内子元素是否为当前编辑目标。
+ * @param element - 组合内子元素
+ * @returns 是否为当前编辑目标
+ */
+function isActiveChildElement(element: DrawingElement): boolean {
+  return props.activeElementId === element.id;
+}
+
+/**
  * 判断展示项是否处于选中态。
  * @param entry - 图层展示项
  * @returns 是否选中
@@ -419,7 +431,7 @@ function handleDraggableMove(event: BDraggableMoveEvent<SidebarLayerEntry>): voi
 
   &:not(.is-group).is-active,
   &.is-group .sidebar-panel__layer-group-header.is-active,
-  &:not(.is-active) .sidebar-panel__layer-child.is-active {
+  .sidebar-panel__layer-child.is-active {
     color: var(--color-primary);
     background: var(--color-primary-bg);
     border-color: var(--color-primary-border);
@@ -427,10 +439,6 @@ function handleDraggableMove(event: BDraggableMoveEvent<SidebarLayerEntry>): voi
 
   &.is-dragging {
     opacity: 0.55;
-
-    .sidebar-panel__layer-drag-handle {
-      cursor: grabbing;
-    }
   }
 
   &.is-active.is-dragging {

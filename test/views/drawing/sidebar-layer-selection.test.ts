@@ -77,7 +77,7 @@ function mountSidebarLayer(): VueWrapper {
  * 挂载包含组合图层的图层列表组件。
  * @returns 图层列表包装器
  */
-function mountGroupedSidebarLayer(): VueWrapper {
+function mountGroupedSidebarLayer(activeElementId: string | null = null): VueWrapper {
   return mount(SidebarLayer, {
     props: {
       elements: [
@@ -85,6 +85,7 @@ function mountGroupedSidebarLayer(): VueWrapper {
         createLayerElement('node-2', '节点 2', 'drawing-group-1'),
         createLayerElement('node-3', '节点 3')
       ],
+      activeElementId,
       selectedElementIds: ['node-1', 'node-2']
     },
     global: {
@@ -139,6 +140,16 @@ describe('SidebarLayer selection', (): void => {
     await wrapper.find('.sidebar-panel__layer-group-header').trigger('click');
 
     expect(wrapper.emitted('select-elements')?.[0]).toEqual([[expect.objectContaining({ id: 'node-2' }), expect.objectContaining({ id: 'node-1' })]]);
+    wrapper.unmount();
+  });
+
+  it('highlights only the active child row inside the selected group', (): void => {
+    const wrapper = mountGroupedSidebarLayer('node-2');
+    const childRows = wrapper.findAll('.sidebar-panel__layer-child');
+
+    expect(wrapper.find('.sidebar-panel__layer-item.is-group').classes()).toContain('is-active');
+    expect(childRows[0].classes()).toContain('is-active');
+    expect(childRows[1].classes()).not.toContain('is-active');
     wrapper.unmount();
   });
 
