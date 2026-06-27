@@ -179,7 +179,8 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
             createAnchor: schema.createAnchor,
             start: draft.start,
             end: draft.current,
-            style
+            style,
+            metadata: schema.metadata
           }
         )
       );

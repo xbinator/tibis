@@ -114,6 +114,14 @@ export type DrawingLayerAction = 'bringToFront' | 'bringForward' | 'sendBackward
 export type DrawingElementCreateAnchor = 'center' | 'top-left';
 
 /**
+ * 画板元信息。
+ */
+export interface DrawingMetadata {
+  /** 预留扩展字段 */
+  [key: string]: unknown;
+}
+
+/**
  * 自由形状元素。
  */
 export interface DrawingShapeElement {
@@ -136,7 +144,7 @@ export interface DrawingShapeElement {
   /** 元素样式 */
   style: DrawingElementStyle;
   /** 组件自定义元数据 */
-  metadata: Record<string, unknown>;
+  metadata: DrawingMetadata;
 }
 
 /**
@@ -164,6 +172,8 @@ export interface DrawingAddShapeOptions {
   createAnchor?: DrawingElementCreateAnchor;
   /** 元素初始样式 */
   style?: DrawingElementStyle;
+  /** 元素默认自定义元数据 */
+  metadata?: DrawingMetadata;
 }
 
 /**
@@ -186,14 +196,6 @@ export interface DrawingViewport {
   center: DrawingPoint;
   /** 缩放比例 */
   zoom: number;
-}
-
-/**
- * 画板元信息。
- */
-export interface DrawingMetadata {
-  /** 预留扩展字段 */
-  [key: string]: unknown;
 }
 
 /**

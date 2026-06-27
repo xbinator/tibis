@@ -3,7 +3,7 @@
   @description BDrawing 文本元素中间画布视图。
 -->
 <template>
-  <div class="drawing-text-element-view" :style="textStyle">{{ element?.title }}</div>
+  <div class="drawing-text-element-view" :style="textStyle">{{ textContent }}</div>
 </template>
 
 <script setup lang="ts">
@@ -11,6 +11,7 @@ import type { DrawingShapeElement } from '../../types';
 import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { createDrawingElementStyleProperties } from '../../utils/drawingStyle';
+import { readDrawingTextElementContent } from './schema';
 
 /**
  * 文本元素中间画布视图入参。
@@ -21,6 +22,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+/** 当前文本正文内容。 */
+const textContent = computed<string>(() => (props.element ? readDrawingTextElementContent(props.element) : ''));
 
 /**
  * 解析文字横向对齐到 flex 对齐方式。

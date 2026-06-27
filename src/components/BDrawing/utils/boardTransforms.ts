@@ -365,7 +365,7 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
     size: cloneDeep(geometry.size),
     rotation: 0,
     style,
-    metadata: {}
+    metadata: normalizeElementMetadata(options.metadata)
   };
 
   return withHistory(state, {
