@@ -296,13 +296,14 @@ import { debounce } from 'lodash-es'
 
 ### `&` 允许使用的场景
 以下场景中 `&` 的使用是允许的，因为不涉及类名省略，不影响搜索：
-- 伪类：`&:hover`、`&:focus`、`&:active`
+- 伪类：`&:hover`、`&:focus`、`&:active`、`&:focus-within`
 - 伪元素：`&::before`、`&::after`
-- 修饰符：`&.is-active`、`&.is-disabled`
+- 修饰符：`&.is-active`、`&.is-disabled`、`&.is-dragging`、`&.is-group`
+- 组合选择器嵌套：`&:not(.is-group).is-active`、`& .child-class`
 - 媒体查询嵌套：`@media` 内部的 `&`
 
 ```less
-// ✅ 允许 - 伪类 / 伪元素 / 修饰符
+// ✅ 允许 - 伪类 / 伪元素 / 修饰符 / 组合选择器嵌套
 .excalidraw-page__toolbar {
   background: #fff;
 
@@ -312,6 +313,18 @@ import { debounce } from 'lodash-es'
 
   &.is-active {
     border-color: #1890ff;
+  }
+
+  &.is-dragging {
+    opacity: 0.55;
+  }
+
+  &:not(.is-group).is-active {
+    color: var(--color-primary);
+  }
+
+  &:hover .excalidraw-page__toolbar-actions {
+    opacity: 1;
   }
 }
 ```
