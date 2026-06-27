@@ -6,7 +6,7 @@
   <main class="drawing-page" tabindex="0" @blur="session.actions.onBlur">
     <PanelSidebar :elements="session.data.value.elements" :selected-element-ids="selectedElementIds" @select-element="handleSidebarElementSelect" />
 
-    <section class="drawing-page__canvas" @dragover="handleCanvasDragOver" @drop="handleCanvasDrop">
+    <section ref="canvasRef" class="drawing-page__canvas">
       <BDrawing ref="drawingRef" v-model:value="session.data.value" v-model:select="selectedTarget" />
     </section>
 
@@ -24,13 +24,14 @@ import { useTabsStore } from '@/stores/workspace/tabs';
 import PanelSettings from './components/PanelSettings.vue';
 import PanelSidebar from './components/PanelSidebar.vue';
 import { useBindings } from './hooks/useBindings';
-import { getDrawingElementDragData } from './utils/drag';
+import { provideDragger, useDragger, type DraggerItem, type DraggerPoint } from './hooks/useDragger';
 
 const route = useRoute();
 const tabsStore = useTabsStore();
 const fileId = ref(String(route.params.id || ''));
 const isActive = ref(true);
 const drawingRef = ref<InstanceType<typeof BDrawingComponent>>();
+const canvasRef = ref<HTMLElement | null>(null);
 const routePath = computed<string>(() => route.fullPath || `/drawing/${fileId.value}`);
 
 const session = useFileSession<DrawingData>({
@@ -75,28 +76,13 @@ function syncDrawingTab(): void {
   });
 }
 
-/**
- * 处理画布拖拽悬停。
- * @param event - 拖拽事件
- */
-function handleCanvasDragOver(event: DragEvent): void {
-  event.preventDefault();
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'copy';
+const elementDrag = useDragger({
+  dropTargetRef: canvasRef,
+  onDrop: (item: DraggerItem, point: DraggerPoint): void => {
+    drawingRef.value?.createElementFromClientPoint(item.name, point);
   }
-}
-
-/**
- * 处理画布拖拽放置。
- * @param event - 拖拽事件
- */
-function handleCanvasDrop(event: DragEvent): void {
-  event.preventDefault();
-  const dragData = getDrawingElementDragData(event.dataTransfer);
-  if (!dragData) return;
-
-  drawingRef.value?.createElementFromClientPoint(dragData.name, { x: event.clientX, y: event.clientY });
-}
+});
+provideDragger(elementDrag);
 
 /**
  * 处理侧栏图层选择。
