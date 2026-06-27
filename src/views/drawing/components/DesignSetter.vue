@@ -3,7 +3,7 @@
   @description 画图页面右侧设计设置面板，用于编辑选中元素的基础、文字、布局和填充属性。
 -->
 <template>
-  <div :class="$style.panel">
+  <div>
     <!-- 基础 -->
     <BSectionBlock title="基础">
       <BSectionItem label="名称">
@@ -47,6 +47,8 @@
           <AInputNumber v-model:value="dataItem.size.height" :controls="false" />
         </BSectionItem>
       </div>
+
+      <ControlPanel v-model:value="dataItem.style.padding" label="内边距" mode="sides" />
     </BSectionBlock>
 
     <!-- 填充 -->
@@ -73,11 +75,6 @@
       </BSectionItem>
 
       <ControlPanel v-model:value="dataItem.style.borderRadius" label="圆角" mode="corners" />
-    </BSectionBlock>
-
-    <!-- 内边距 -->
-    <BSectionBlock title="内边距">
-      <ControlPanel v-model:value="dataItem.style.padding" label="内距" mode="sides" />
     </BSectionBlock>
   </div>
 </template>
@@ -125,11 +122,6 @@ const borderStyleOptions: Array<{ value: DrawingBorderStyle; label: string }> = 
 </script>
 
 <style module lang="less">
-.panel {
-  min-height: 0;
-  padding: 12px;
-}
-
 .fieldGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
