@@ -151,3 +151,61 @@ export function createDrawingElementStyleProperties(style?: DrawingElementStyle)
 
   return properties;
 }
+
+/**
+ * 解析文字横向对齐到 flex 对齐方式。
+ * @param textAlign - 文字横向对齐
+ * @returns flex 主轴对齐方式
+ */
+export function resolveDrawingElementHorizontalAlign(textAlign: DrawingElementStyle['textAlign']): string | undefined {
+  if (textAlign === 'left') {
+    return 'flex-start';
+  }
+
+  if (textAlign === 'right') {
+    return 'flex-end';
+  }
+
+  if (textAlign === 'center') {
+    return 'center';
+  }
+
+  return undefined;
+}
+
+/**
+ * 解析文字纵向对齐到 flex 对齐方式。
+ * @param textVerticalAlign - 文字纵向对齐
+ * @returns flex 交叉轴对齐方式
+ */
+export function resolveDrawingElementVerticalAlign(textVerticalAlign: DrawingElementStyle['textVerticalAlign']): string | undefined {
+  if (textVerticalAlign === 'top') {
+    return 'flex-start';
+  }
+
+  if (textVerticalAlign === 'bottom') {
+    return 'flex-end';
+  }
+
+  if (textVerticalAlign === 'middle') {
+    return 'center';
+  }
+
+  return undefined;
+}
+
+/**
+ * 创建画图元素内容排版 CSS 属性。
+ * @param style - 元素样式
+ * @returns Vue CSS 属性对象
+ */
+export function createDrawingElementContentStyleProperties(style?: DrawingElementStyle): CSSProperties {
+  return {
+    alignItems: resolveDrawingElementVerticalAlign(style?.textVerticalAlign),
+    color: style?.color,
+    fontSize: style?.fontSize === undefined ? undefined : `${style.fontSize}px`,
+    fontWeight: style?.fontWeight,
+    justifyContent: resolveDrawingElementHorizontalAlign(style?.textAlign),
+    textAlign: style?.textAlign
+  };
+}

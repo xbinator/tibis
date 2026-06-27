@@ -3,10 +3,8 @@
   @description BDrawing 文本元素专属属性设置面板。
 -->
 <template>
-  <BSectionBlock data-testid="drawing-text-setter" title="文本属性">
-    <BSectionItem label="内容">
-      <ATextarea v-model:value="textContent" :auto-size="{ minRows: 4, maxRows: 8 }" placeholder="输入文本内容" />
-    </BSectionItem>
+  <BSectionBlock data-testid="drawing-text-setter" title="内容">
+    <ATextarea v-model:value="textContent" :auto-size="{ minRows: 4, maxRows: 8 }" placeholder="输入文本内容" />
   </BSectionBlock>
 </template>
 

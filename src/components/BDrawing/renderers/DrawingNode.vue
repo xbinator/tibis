@@ -24,6 +24,7 @@ import type { Component, CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { getDrawingElementView } from '../elements';
 import { createDrawingElementCssTransform, getDrawingShapeRenderSize } from '../utils/drawingGeometry';
+import { createDrawingElementContentStyleProperties, createDrawingElementStyleProperties } from '../utils/drawingStyle';
 
 /**
  * 节点组件入参。
@@ -62,6 +63,8 @@ const renderPosition = computed<DrawingPoint>(() => props.previewPosition ?? pro
 const nodeView = computed<Component | null>(() => getDrawingElementView(props.node.name));
 /** HTML 节点定位和几何样式。 */
 const nodeStyle = computed<CSSProperties>(() => ({
+  ...createDrawingElementStyleProperties(props.node.style),
+  ...createDrawingElementContentStyleProperties(props.node.style),
   width: `${renderSize.value.width}px`,
   height: `${renderSize.value.height}px`,
   opacity: props.node.style.opacity,
@@ -75,24 +78,29 @@ const nodeStyle = computed<CSSProperties>(() => ({
   top: 0;
   left: 0;
   box-sizing: border-box;
-  cursor: pointer;
-  transform-origin: center center;
-}
-
-.b-drawing-node__fallback {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
-  padding: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 13px;
   color: var(--text-primary);
-  white-space: pre-wrap;
+  cursor: pointer;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
+  transform-origin: center center;
+}
+
+.b-drawing-node.is-text {
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre;
+  background: transparent;
+  border-color: transparent;
+}
+
+.b-drawing-node__fallback {
+  padding: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre-wrap;
 }
 </style>
