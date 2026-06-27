@@ -56,7 +56,7 @@ function getAddFocusCell(hit: DividerHit): TableCellPosition {
     return { row: 0, column: 0 };
   }
 
-  return { row: Math.max(0, hit.index), column: 0 };
+  return { row: Math.max(0, hit.index - (hit.edge === 'inner' ? 1 : 0)), column: 0 };
 }
 
 /**
