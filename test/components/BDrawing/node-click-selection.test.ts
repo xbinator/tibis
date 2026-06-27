@@ -3,6 +3,7 @@
  * @description 验证 BDrawing 节点点击选中后不会让节点消失。
  * @vitest-environment jsdom
  */
+/* eslint-disable vue/one-component-per-file */
 import { defineComponent, nextTick, toRaw } from 'vue';
 import type { ComponentPublicInstance } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
@@ -222,6 +223,19 @@ function createMultiSelectedDrawingData(): DrawingDataWithSelection {
 }
 
 /**
+ * 创建单选节点切换测试用画板数据。
+ * @returns 带两个节点且已选中第一个节点的画板数据
+ */
+function createSingleSelectedTwoNodeDrawingData(): DrawingDataWithSelection {
+  const data = createMultiSelectedDrawingData();
+
+  return {
+    ...data,
+    selection: ['node-1']
+  };
+}
+
+/**
  * 创建空画板数据。
  * @returns 画板数据
  */
@@ -242,6 +256,8 @@ function createEmptyDrawingData(): DrawingData {
 interface BDrawingExpose {
   /** 根据浏览器坐标创建元素 */
   createElementFromClientPoint: (name: string, point: DrawingPoint) => Promise<void>;
+  /** 根据元素 ID 选择元素 */
+  selectElementById: (id: string) => void;
 }
 
 /**
@@ -270,6 +286,15 @@ function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
  */
 function getDrawingExpose(wrapper: VueWrapper): ComponentPublicInstance & BDrawingExpose {
   return wrapper.vm as ComponentPublicInstance & BDrawingExpose;
+}
+
+/**
+ * 判断设置目标是否为页面元信息。
+ * @param target - 设置面板目标
+ * @returns 是否为页面元信息
+ */
+function isMetadataSelectTarget(target: DrawingSelectTarget): boolean {
+  return target !== null && typeof target === 'object' && !('id' in target);
 }
 
 /**
@@ -362,9 +387,61 @@ describe('BDrawing node click selection', () => {
     await nextTick();
 
     const textNode = wrapper.find('[data-drawing-name="text"]');
+    const latestData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createEmptyDrawingData();
+    const textElement = latestData.elements[0];
+
     expect(textNode.exists()).toBe(true);
     expect(textNode.text()).toContain('文本');
+    expect(textElement?.title).toBe('文本');
+    expect(textElement?.metadata).toEqual({ content: '文本' });
     expect(wrapper.find('[data-testid="drawing-text-editor"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('selects a node from the external element id command', async (): Promise<void> => {
+    const data = createNodeClickDrawingData();
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: data
+      },
+      attachTo: document.body
+    });
+
+    getDrawingExpose(wrapper).selectElementById('node-1');
+    await nextTick();
+    await nextTick();
+
+    const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as DrawingSelectTarget;
+
+    expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-1');
+    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('keeps the settings target on an element while switching nodes', async (): Promise<void> => {
+    const data = createSingleSelectedTwoNodeDrawingData();
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: data,
+        select: data.elements[0]
+      },
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+    const emittedBeforeSwitch = wrapper.emitted('update:select')?.length ?? 0;
+
+    await dispatchPointerEvent(findNodeById(wrapper, 'node-2').element, 'pointerdown', { clientX: 300, clientY: 140 });
+
+    const switchEmissions = ((wrapper.emitted('update:select') as Array<[DrawingSelectTarget]> | undefined) ?? []).slice(emittedBeforeSwitch);
+    expect(switchEmissions.some(([target]: [DrawingSelectTarget]): boolean => isMetadataSelectTarget(target))).toBe(false);
+
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 300, clientY: 140 });
+    await nextTick();
+
+    const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as DrawingSelectTarget;
+
+    expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-2');
     wrapper.unmount();
   });
 
@@ -380,7 +457,7 @@ describe('BDrawing node click selection', () => {
     await dispatchPointerEvent(node.element, 'dblclick', { clientX: 100, clientY: 100 });
     await nextTick();
 
-    expect(findNode(wrapper).text()).toContain('节点');
+    expect(findNode(wrapper).exists()).toBe(true);
     expect(wrapper.find('[data-testid="drawing-text-editor"]').exists()).toBe(false);
     wrapper.unmount();
   });

@@ -5,7 +5,7 @@
 <template>
   <div
     class="b-drawing-node b-drawing-element"
-    :class="{ 'is-text': isTextShape }"
+    :class="{ 'is-selected': selected, 'is-text': isTextShape }"
     data-testid="drawing-node"
     :data-drawing-element-id="node.id"
     :data-drawing-name="node.name"

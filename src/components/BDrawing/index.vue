@@ -594,7 +594,7 @@ function handleElementSelect(id: string, _event: PointerEvent): void {
     return;
   }
 
-  board.setSelection([]);
+  board.setSelection([id]);
   startDirectDrag(id, _event, true);
 }
 
@@ -655,6 +655,21 @@ async function createElementFromClientPoint(name: string, clientPoint: DrawingPo
   if (!point) return;
 
   createElementAtPoint(schema.name, point);
+}
+
+/**
+ * 根据元素 ID 选中画布元素。
+ * @param id - 元素 ID
+ */
+function selectElementById(id: string): void {
+  const hasElement = board.state.value.elements.some((element: DrawingElement): boolean => element.id === id);
+  if (!hasElement) {
+    return;
+  }
+
+  cancelDirectDrag();
+  setActiveTool('select');
+  board.setSelection([id]);
 }
 
 /**
@@ -787,7 +802,8 @@ onBeforeUnmount((): void => {
 });
 
 defineExpose({
-  createElementFromClientPoint
+  createElementFromClientPoint,
+  selectElementById
 });
 </script>
 

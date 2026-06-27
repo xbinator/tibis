@@ -4,12 +4,20 @@
 -->
 <template>
   <div class="sidebar-panel__layer-list">
-    <div v-for="element in elements" :key="element.id" class="sidebar-panel__layer-item" :class="{ 'is-active': isElementSelected(element) }">
+    <button
+      v-for="element in elements"
+      :key="element.id"
+      type="button"
+      class="sidebar-panel__layer-item"
+      :class="{ 'is-active': isElementSelected(element) }"
+      :aria-pressed="isElementSelected(element)"
+      @click="handleElementClick(element)"
+    >
       <BIcon :icon="getElementIcon(element)" :size="15" />
       <div class="sidebar-panel__layer-main">
         <span class="sidebar-panel__layer-title">{{ element.title }}</span>
       </div>
-    </div>
+    </button>
   </div>
 </template>
 
@@ -30,6 +38,10 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   selectedElementIds: (): string[] => []
 });
+const emit = defineEmits<{
+  /** 选择图层元素 */
+  'select-element': [element: DrawingElement];
+}>();
 
 /** 当前选中元素 ID 集合。 */
 const selectedElementIdSet = computed<Set<string>>(() => new Set(props.selectedElementIds));
@@ -51,6 +63,14 @@ function getElementIcon(element: DrawingElement): string {
 function isElementSelected(element: DrawingElement): boolean {
   return selectedElementIdSet.value.has(element.id);
 }
+
+/**
+ * 处理图层元素点击。
+ * @param element - 被点击的画图元素
+ */
+function handleElementClick(element: DrawingElement): void {
+  emit('select-element', element);
+}
 </script>
 
 <style lang="less" scoped>
@@ -67,10 +87,15 @@ function isElementSelected(element: DrawingElement): boolean {
   display: flex;
   gap: 9px;
   align-items: center;
+  width: 100%;
   min-width: 0;
   height: 32px;
   padding: 0 10px;
+  font: inherit;
   color: var(--text-secondary);
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
   background: var(--bg-secondary);
   border: 1px solid transparent;
   border-radius: 6px;

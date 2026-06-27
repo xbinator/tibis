@@ -17,7 +17,7 @@
 
       <div class="sidebar-panel__panel-content">
         <SidebarTools v-if="activeSidebarTab === 'tools'" />
-        <SidebarLayer v-else-if="elements.length" :elements="elements" :selected-element-ids="selectedElementIds" />
+        <SidebarLayer v-else-if="elements.length" :elements="elements" :selected-element-ids="selectedElementIds" @select-element="handleElementSelect" />
       </div>
     </div>
   </aside>
@@ -59,6 +59,10 @@ interface Props {
 withDefaults(defineProps<Props>(), {
   selectedElementIds: (): string[] => []
 });
+const emit = defineEmits<{
+  /** 选择侧栏图层元素 */
+  'select-element': [element: DrawingElement];
+}>();
 
 const activeSidebarTab = ref<DrawingSidebarTabKey>('tools');
 /** 当前面板标题。 */
@@ -75,6 +79,14 @@ const sidebarTabs: DrawingSidebarTab[] = [
  */
 function handleTabClick(key: DrawingSidebarTabKey): void {
   activeSidebarTab.value = key;
+}
+
+/**
+ * 处理图层列表选择。
+ * @param element - 被选择的画图元素
+ */
+function handleElementSelect(element: DrawingElement): void {
+  emit('select-element', element);
 }
 </script>
 

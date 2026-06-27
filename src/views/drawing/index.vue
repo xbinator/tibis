@@ -4,7 +4,7 @@
 -->
 <template>
   <main class="drawing-page" tabindex="0" @blur="session.actions.onBlur">
-    <PanelSidebar :elements="session.data.value.elements" />
+    <PanelSidebar :elements="session.data.value.elements" :selected-element-ids="selectedElementIds" @select-element="handleSidebarElementSelect" />
 
     <section class="drawing-page__canvas" @dragover="handleCanvasDragOver" @drop="handleCanvasDrop">
       <BDrawing ref="drawingRef" v-model:value="session.data.value" v-model:select="selectedTarget" />
@@ -18,7 +18,7 @@
 import { computed, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type BDrawingComponent from '@/components/BDrawing/index.vue';
-import type { DrawingData, DrawingSelectTarget } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import PanelSettings from './components/PanelSettings.vue';
@@ -46,6 +46,18 @@ const session = useFileSession<DrawingData>({
 });
 /** 当前右侧设置栏可编辑目标。 */
 const selectedTarget = ref<DrawingSelectTarget>(session.data.value.metadata);
+
+/**
+ * 判断当前设置目标是否为画图元素。
+ * @param target - 当前设置目标
+ * @returns 是否为画图元素
+ */
+function isDrawingElementTarget(target: DrawingSelectTarget): target is DrawingElement {
+  return Boolean(target && typeof target === 'object' && 'id' in target);
+}
+
+/** 当前侧栏需要高亮的单选元素 ID。 */
+const selectedElementIds = computed<string[]>((): string[] => (isDrawingElementTarget(selectedTarget.value) ? [selectedTarget.value.id] : []));
 
 /**
  * 将当前画图文件同步到标签页列表。
@@ -84,6 +96,15 @@ function handleCanvasDrop(event: DragEvent): void {
   if (!dragData) return;
 
   drawingRef.value?.createElementFromClientPoint(dragData.name, { x: event.clientX, y: event.clientY });
+}
+
+/**
+ * 处理侧栏图层选择。
+ * @param element - 被选择的画图元素
+ */
+function handleSidebarElementSelect(element: DrawingElement): void {
+  selectedTarget.value = element;
+  drawingRef.value?.selectElementById(element.id);
 }
 
 watch([fileId, session.currentTitle], syncDrawingTab, { immediate: true });
