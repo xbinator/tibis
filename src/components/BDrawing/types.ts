@@ -91,7 +91,7 @@ export interface DrawingElementStyle {
   /** 文字字重 */
   fontWeight?: number;
   /** 文字对齐方式 */
-  textAlign?: 'left' | 'center' | 'right';
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
   /** 文字垂直对齐方式 */
   textVerticalAlign?: 'top' | 'middle' | 'bottom';
   /** 透明度 */

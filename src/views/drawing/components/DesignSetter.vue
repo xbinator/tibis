@@ -28,7 +28,11 @@
         </BColorPicker>
       </BSectionItem>
       <!-- 文字对齐 -->
-      <BSegmented v-model:value="dataItem.style.textAlign" block :options="textAlignOptions" />
+      <BSegmented v-model:value="dataItem.style.textAlign" block :options="textAlignOptions">
+        <template #label="{ record }">
+          <BIcon :icon="textAlignIconMap[record.value as keyof typeof textAlignIconMap]" :size="16" />
+        </template>
+      </BSegmented>
     </BSectionBlock>
 
     <!-- 布局 -->
@@ -109,8 +113,17 @@ const fontWeightOptions = [
 const textAlignOptions = [
   { value: 'left', label: '左对齐' },
   { value: 'center', label: '居中' },
-  { value: 'right', label: '右对齐' }
+  { value: 'right', label: '右对齐' },
+  { value: 'justify', label: '两端对齐' }
 ];
+
+/** 文本对齐选项值到图标的映射。 */
+const textAlignIconMap: Record<string, string> = {
+  left: 'lucide:align-left',
+  center: 'lucide:align-center',
+  right: 'lucide:align-right',
+  justify: 'lucide:align-justify'
+};
 
 /** 边框线形选项。 */
 const borderStyleOptions: Array<{ value: DrawingBorderStyle; label: string }> = [

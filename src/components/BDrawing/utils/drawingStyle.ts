@@ -170,6 +170,10 @@ export function resolveDrawingElementHorizontalAlign(textAlign: DrawingElementSt
     return 'center';
   }
 
+  if (textAlign === 'justify') {
+    return 'space-between';
+  }
+
   return undefined;
 }
 
