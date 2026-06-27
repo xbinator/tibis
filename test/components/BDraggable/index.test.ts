@@ -11,6 +11,7 @@ import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/clo
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BDraggable from '@/components/BDraggable/index.vue';
+import { B_DRAGGABLE_DATA_KEY } from '@/components/BDraggable/utils';
 
 /** BDraggable 组件源码。 */
 const bDraggableSource = readFileSync('src/components/BDraggable/index.vue', 'utf8');
@@ -29,6 +30,10 @@ interface CapturedDropTargetOptions {
  * 捕获的 draggable 配置。
  */
 interface CapturedDraggableOptions {
+  /** 注册拖拽的元素 */
+  element?: Element;
+  /** 拖拽手柄元素 */
+  dragHandle?: Element;
   /** 读取拖拽初始数据 */
   getInitialData?: () => Record<string | symbol, unknown>;
   /** 生成原生拖拽预览 */
@@ -38,9 +43,29 @@ interface CapturedDraggableOptions {
 /**
  * 捕获的 monitor 配置。
  */
+interface CapturedMonitorDropArgs {
+  /** 拖拽源数据 */
+  source: { data: Record<string | symbol, unknown> };
+  /** 当前拖拽位置 */
+  location: {
+    /** 当前命中状态 */
+    current: {
+      /** 当前输入信息 */
+      input: Input;
+      /** 当前命中的投放目标 */
+      dropTargets: Array<{ data: Record<string | symbol, unknown> }>;
+    };
+  };
+}
+
+/**
+ * 捕获的 monitor 配置。
+ */
 interface CapturedMonitorOptions {
   /** 判断当前拖拽源是否应该由该 monitor 处理 */
   canMonitor?: (args: { source: { data: Record<string | symbol, unknown> } }) => boolean;
+  /** 拖拽释放回调 */
+  onDrop?: (args: CapturedMonitorDropArgs) => void;
 }
 
 /** draggable 配置捕获列表。 */
@@ -131,6 +156,48 @@ function createDraggableHost(): ReturnType<typeof defineComponent> {
 }
 
 /**
+ * 创建不传 handle-class 的 BDraggable 测试宿主组件。
+ * @returns 测试宿主组件
+ */
+function createDefaultHandleDraggableHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'DefaultHandleDraggableHost',
+    components: { BDraggable },
+    setup(): { items: TestItem[] } {
+      return { items: testItems };
+    },
+    template: `
+      <BDraggable :list="items" item-key="id" item-class="default-row">
+        <template #default="{ item, handleClass }">
+          <button class="default-row__content" :data-handle-class="handleClass" type="button">{{ item.title }}</button>
+        </template>
+      </BDraggable>
+    `
+  });
+}
+
+/**
+ * 创建不传 item-key 的 BDraggable 测试宿主组件。
+ * @returns 测试宿主组件
+ */
+function createDefaultItemKeyDraggableHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'DefaultItemKeyDraggableHost',
+    components: { BDraggable },
+    setup(): { items: TestItem[] } {
+      return { items: testItems };
+    },
+    template: `
+      <BDraggable :list="items" item-class="default-key-row">
+        <template #default="{ item, itemKey }">
+          <button class="default-key-row__content" :data-item-key="itemKey" type="button">{{ item.title }}</button>
+        </template>
+      </BDraggable>
+    `
+  });
+}
+
+/**
  * 创建两个 BDraggable 共存的测试宿主组件。
  * @returns 测试宿主组件
  */
@@ -180,6 +247,25 @@ describe('BDraggable', (): void => {
     expect(wrapper.findAll('.draggable-row').map((row) => row.text())).toEqual(['节点 1', '节点 2']);
     expect(wrapper.findAll('.draggable-row.is-dragging')).toHaveLength(0);
     expect(wrapper.findAll('.draggable-row__handle')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
+  it('uses the item wrapper as the default drag handle when handle class is omitted', (): void => {
+    const wrapper = mount(createDefaultHandleDraggableHost());
+    const firstDraggable = capturedDraggableOptions[0];
+
+    expect(wrapper.find('.default-row__content').attributes('data-handle-class')).toBe('');
+    expect(firstDraggable?.element).toBeInstanceOf(HTMLElement);
+    expect(firstDraggable?.dragHandle).toBe(firstDraggable?.element);
+    wrapper.unmount();
+  });
+
+  it('uses id as the default item key when item-key is omitted', (): void => {
+    const wrapper = mount(createDefaultItemKeyDraggableHost());
+    const firstDragData = capturedDraggableOptions[0]?.getInitialData?.() ?? {};
+
+    expect(wrapper.findAll('.default-key-row__content').map((row) => row.attributes('data-item-key'))).toEqual(['node-1', 'node-2']);
+    expect(firstDragData[B_DRAGGABLE_DATA_KEY]).toBe('node-1');
     wrapper.unmount();
   });
 
@@ -242,6 +328,25 @@ describe('BDraggable', (): void => {
 
     expect(rightDropTarget?.canDrop?.({ source: { data: leftDragData } })).toBe(false);
     expect(rightMonitor?.canMonitor?.({ source: { data: leftDragData } })).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('emits drag-end when the monitored drag session drops without a move', (): void => {
+    const wrapper = mount(createDraggableHost());
+    const draggableWrapper = wrapper.findComponent(BDraggable);
+    const sourceData = capturedDraggableOptions[0]?.getInitialData?.() ?? {};
+
+    capturedMonitorOptions[0]?.onDrop?.({
+      source: { data: sourceData },
+      location: {
+        current: {
+          input: createInput(0, 0),
+          dropTargets: []
+        }
+      }
+    });
+
+    expect(draggableWrapper.emitted('drag-end')).toHaveLength(1);
     wrapper.unmount();
   });
 });

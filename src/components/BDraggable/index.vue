@@ -53,7 +53,6 @@ import {
 } from './utils';
 
 const [, bem] = createNamespace('draggable');
-const DEFAULT_HANDLE_CLASS = 'b-draggable__handle';
 const DRAG_PREVIEW_CLASS = 'b-draggable__native-preview';
 
 /**
@@ -67,15 +66,15 @@ type NativeDragImageSetter = (element: Element, x: number, y: number) => void;
 interface Props {
   /** 视觉顺序下的列表数据 */
   list: TItem[];
-  /** 列表项 key 字段名或 key 读取函数 */
-  itemKey: string | ((item: TItem, index: number) => string);
+  /** 列表项 key 字段名或 key 读取函数，默认读取 id 字段 */
+  itemKey?: string | ((item: TItem, index: number) => string);
   /** 拖拽排序方向 */
   direction?: BDraggableDirection;
   /** 是否禁用拖拽 */
   disabled?: boolean;
   /** 列表项 class，支持静态 class 或按列表项动态生成 */
   itemClass?: BDraggableItemClass<TItem>;
-  /** 拖拽手柄 class，组件会在列表项内部查找该 class 对应元素 */
+  /** 拖拽手柄 class；不传时使用当前列表项容器作为手柄 */
   handleClass?: string;
 }
 
@@ -100,14 +99,17 @@ function createDraggableInstanceId(): symbol {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  itemKey: 'id',
   direction: 'vertical',
   disabled: false,
   itemClass: '',
-  handleClass: DEFAULT_HANDLE_CLASS
+  handleClass: ''
 });
 const emit = defineEmits<{
   /** 完成拖拽排序 */
   move: [event: BDraggableMoveEvent<TItem>];
+  /** 拖拽会话结束 */
+  'drag-end': [];
   /** 点击列表项 */
   'item-click': [item: TItem, index: number];
 }>();
@@ -176,7 +178,7 @@ const draggableEntries = computed<DraggableEntry[]>((): DraggableEntry[] =>
   )
 );
 /** 实际使用的拖拽手柄 class。 */
-const resolvedHandleClass = computed<string>((): string => props.handleClass.trim() || DEFAULT_HANDLE_CLASS);
+const resolvedHandleClass = computed<string>((): string => props.handleClass.trim());
 
 /**
  * 读取 ref 对应的 HTML 元素。
@@ -200,15 +202,15 @@ function resolveTemplateRefElement(element: Element | ComponentPublicInstance | 
 /**
  * 读取列表项内部拖拽手柄元素。
  * @param element - 列表项元素
- * @returns 拖拽手柄元素，不存在时返回 undefined
+ * @returns 拖拽手柄元素
  */
-function getDragHandleElement(element: HTMLElement): HTMLElement | undefined {
+function getDragHandleElement(element: HTMLElement): HTMLElement {
   const handleClass = resolvedHandleClass.value.split(/\s+/).find((className: string): boolean => className.length > 0);
   if (!handleClass) {
-    return undefined;
+    return element;
   }
 
-  return element.querySelector<HTMLElement>(`.${handleClass}`) ?? undefined;
+  return element.querySelector<HTMLElement>(`.${handleClass}`) ?? element;
 }
 
 /**
@@ -661,6 +663,7 @@ monitorCleanup = monitorForElements({
     }
 
     resetDragState();
+    emit('drag-end');
   }
 });
 

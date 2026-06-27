@@ -3,53 +3,60 @@
   @description 渲染应用顶部标签栏，并处理切换、关闭、横向滚动与拖拽排序交互。
 -->
 <template>
-  <div ref="scrollContainer" class="header-tabs" @wheel="handleWheel">
-    <div v-if="dropIndicatorStyle" class="header-tabs__drop-indicator" :style="dropIndicatorStyle"></div>
-    <div v-if="!settingStore.chatSidebarExpanded" class="header-tabs__track">
+  <BDraggable
+    class="header-tabs"
+    :list="visibleTabs"
+    direction="horizontal"
+    item-class="header-tabs__item"
+    @wheel="handleWheel"
+    @move="handleDraggableMove"
+    @drag-end="handleDragEnded"
+  >
+    <template #default="{ item, dragging }">
       <Dropdown
-        v-for="tab in tabsStore.tabs"
-        :key="tab.id"
-        :open="openContextTabId === tab.id"
+        :key="item.id"
+        :open="openContextTabId === item.id"
         :trigger="['contextmenu']"
         placement="bottomLeft"
-        @open-change="handleContextMenuOpenChange(tab.id, $event)"
+        @open-change="handleContextMenuOpenChange(item.id, $event)"
       >
-        <div :ref="setTabRef(tab.id)" :data-tab-id="tab.id" class="header-tab" :class="getTabClassName(tab)" @click="handleClickTab(tab.path)">
+        <div :data-tab-id="item.id" class="header-tab" :class="getTabClassName(item, dragging)" @click="handleClickTab(item.path)">
           <div class="header-tab__title">
-            <span v-if="tabsStore.isDirty(tab.id)" class="header-tab__dirty-mark">*</span>
+            <span v-if="tabsStore.isDirty(item.id)" class="header-tab__dirty-mark">*</span>
             <BRecentIcon
               class="header-tab__icon"
-              :record="resolveTabIconRecentRecord(tab)"
-              :file-name="resolveTabIconFileName(tab)"
-              :icon="resolveTabIcon(tab)"
+              :record="resolveTabIconRecentRecord(item)"
+              :file-name="resolveTabIconFileName(item)"
+              :icon="resolveTabIcon(item)"
               :size="14"
             />
-            <span class="header-tab__title-text">{{ tab.title }}</span>
+            <span class="header-tab__title-text">{{ item.title }}</span>
           </div>
 
-          <button class="header-tab__close" @click.stop="handleCloseButton(tab)">
+          <button class="header-tab__close" @pointerdown.stop @click.stop="handleCloseButton(item)">
             <Icon icon="ic:round-close" width="12" height="12" />
           </button>
         </div>
 
         <template #overlay>
-          <BDropdownMenu :value="''" :width="200" :options="getContextMenuOptions(tab)" row-class="header-tab__menu-item" />
+          <BDropdownMenu :value="''" :width="200" :options="getContextMenuOptions(item)" row-class="header-tab__menu-item" />
         </template>
       </Dropdown>
-    </div>
-  </div>
+    </template>
+  </BDraggable>
 </template>
 
 <script setup lang="ts">
 /**
  * @file HeaderTabs.vue
- * @description 渲染顶部标签栏的交互逻辑，拖拽排序委托给 useTabDragger 模块。
+ * @description 渲染顶部标签栏的交互逻辑，拖拽排序委托给 BDraggable 公共组件。
  */
 
 import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { Dropdown } from 'ant-design-vue';
+import type { BDraggableMoveEvent } from '@/components/BDraggable/types';
 import type { DropdownOption } from '@/components/BDropdown/type';
 import { getHeaderTabsWheelScrollDelta } from '@/layouts/default/utils/headerTabsScroll';
 import { isMac } from '@/shared/platform/env';
@@ -57,10 +64,9 @@ import type { RecentRecord } from '@/shared/storage';
 import { useSettingStore } from '@/stores/ui/setting';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import type { Tab, TabCloseAction, TabClosePlan, TabMovePosition } from '@/stores/workspace/tabs';
+import type { Tab, TabCloseAction, TabClosePlan } from '@/stores/workspace/tabs';
 import { WEB_RECORD_ICON } from '@/utils/file/icons';
 import { Modal } from '@/utils/modal';
-import { useTabDragger } from '../hooks/useTabDragger';
 
 const tabsStore = useTabsStore();
 const recentStore = useRecentStore();
@@ -73,9 +79,6 @@ const CONTEXT_MENU_CLOSE_DELAY_MS = 200;
  * WebView 最近记录。
  */
 type WebviewRecentRecord = Extract<RecentRecord, { type: 'webview' }>;
-
-/** 横向滚动容器 ref，供拖拽模块初始化 auto-scroll */
-const scrollContainer = shallowRef<HTMLElement | null>(null);
 
 /** 拖拽结束后最近一次的时间戳，用于抑制拖后误点击 */
 const lastDragEndedAt = shallowRef(0);
@@ -91,14 +94,15 @@ const isContextMenuClosing = shallowRef(false);
 
 let contextMenuCloseTimer: number | null = null;
 
+/** 当前可见标签；聊天放大态下保持标签栏内容为空。 */
+const visibleTabs = computed<Tab[]>((): Tab[] => (settingStore.chatSidebarExpanded ? [] : tabsStore.tabs));
+
 /**
- * 拖拽排序回调：将拖拽结果传递给 store。
- * @param fromId - 被拖拽标签 ID
- * @param toId - 目标标签 ID
- * @param position - 插入位置
+ * 拖拽排序回调：将 BDraggable 的排序结果传递给 store。
+ * @param event - BDraggable 移动事件
  */
-function handleMoveTab(fromId: string, toId: string, position: TabMovePosition): void {
-  tabsStore.moveTab(fromId, toId, position);
+function handleDraggableMove(event: BDraggableMoveEvent<Tab>): void {
+  tabsStore.moveTab(event.sourceKey, event.targetKey, event.position);
 }
 
 /**
@@ -107,13 +111,6 @@ function handleMoveTab(fromId: string, toId: string, position: TabMovePosition):
 function handleDragEnded(): void {
   lastDragEndedAt.value = Date.now();
 }
-
-/**
- * 拖拽模块：封装 draggable/dropTarget 注册、命中计算和 auto-scroll。
- */
-const dragModule = useTabDragger(scrollContainer, handleMoveTab, handleDragEnded);
-
-const { draggingTabId, dropIndicatorOffset } = dragModule.state;
 
 /** 最近记录 ID 到记录的索引，用于文件标签直接按 tab id 命中。 */
 const recentRecordsById = computed<Map<string, RecentRecord>>(() => new Map((recentStore.recentRecords ?? []).map((record) => [record.id, record])));
@@ -137,25 +134,8 @@ function clearContextMenuCloseTimer(): void {
   }
 }
 
-/**
- * Vue 模板 ref 函数：将 v-for 中的 DOM 元素传给拖拽模块注册。
- * @param tabId - 标签 ID
- * @returns ref 回调函数
- */
-function setTabRef(tabId: string): (el: unknown) => void {
-  return (el: unknown) => {
-    if (el instanceof HTMLElement) {
-      dragModule.registerTabElement(tabId, el);
-    } else {
-      // el 为 null 时表示该标签元素已卸载，执行清理
-      dragModule.unregisterTabElement(tabId);
-    }
-  };
-}
-
-/** 组件卸载时清理所有拖拽注册 */
+/** 组件卸载时清理右键菜单计时器 */
 onUnmounted(() => {
-  dragModule.cleanup();
   clearContextMenuCloseTimer();
 });
 
@@ -176,13 +156,14 @@ function isActiveTab(tab: Pick<Tab, 'path'>): boolean {
 /**
  * 生成标签页样式状态。
  * @param tab - 当前渲染的标签页
+ * @param dragging - 当前标签是否正在被 BDraggable 拖拽
  * @returns 标签页样式映射
  */
-function getTabClassName(tab: Tab): Record<string, boolean> {
+function getTabClassName(tab: Tab, dragging = false): Record<string, boolean> {
   return {
     'is-active': isActiveTab(tab),
     'is-missing': tabsStore.isMissing(tab.id),
-    'is-dragging': draggingTabId.value === tab.id
+    'is-dragging': dragging
   };
 }
 
@@ -313,23 +294,6 @@ function resolveTabIcon(tab: Tab): string {
 
   return resolveTabFallbackIcon(tab);
 }
-
-/**
- * 生成独立插入指示线的样式。
- * @returns 指示线样式，无有效拖拽目标时返回 null
- */
-function getDropIndicatorStyle(): Record<string, string> | null {
-  if (dropIndicatorOffset.value === null) {
-    return null;
-  }
-
-  return {
-    left: `${Math.max(dropIndicatorOffset.value - 1, 0)}px`
-  };
-}
-
-/** 当前独立插入指示线的样式。 */
-const dropIndicatorStyle = computed(() => getDropIndicatorStyle());
 
 /** 当前激活的标签页 */
 const activeTab = computed(() => tabsStore.tabs.find((tab) => tab.path === route.fullPath));
@@ -527,7 +491,8 @@ async function handleCloseButton(tab: Tab): Promise<void> {
  * @param event - 鼠标滚轮事件
  */
 function handleWheel(event: WheelEvent): void {
-  if (!scrollContainer.value) {
+  const scrollContainer = event.currentTarget;
+  if (!(scrollContainer instanceof HTMLElement)) {
     return;
   }
 
@@ -543,7 +508,7 @@ function handleWheel(event: WheelEvent): void {
   }
 
   event.preventDefault();
-  scrollContainer.value.scrollLeft += scrollDelta;
+  scrollContainer.scrollLeft += scrollDelta;
 }
 </script>
 
@@ -570,24 +535,19 @@ function handleWheel(event: WheelEvent): void {
   -webkit-app-region: drag;
 }
 
-.header-tabs__track {
+.header-tabs :deep(.header-tabs__item) {
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  width: max-content;
   height: 100%;
+  margin-right: 4px;
   -webkit-app-region: no-drag;
 }
 
-.header-tabs__drop-indicator {
-  position: absolute;
+.header-tabs :deep(.b-draggable__indicator--horizontal) {
   top: 4px;
   bottom: 4px;
-  z-index: 1;
-  width: 2px;
-  pointer-events: none;
   background-color: var(--color-primary);
-  border-radius: 999px;
 }
 
 .header-tab {
@@ -597,7 +557,6 @@ function handleWheel(event: WheelEvent): void {
   align-items: center;
   height: 28px;
   padding: 0 4px 0 10px;
-  margin-right: 4px;
   cursor: pointer;
   background-color: transparent;
   border-radius: 6px;
