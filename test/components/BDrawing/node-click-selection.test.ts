@@ -398,6 +398,39 @@ describe('BDrawing node click selection', () => {
     wrapper.unmount();
   });
 
+  it('creates new elements with schema default styles', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: createEmptyDrawingData()
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+
+    await getDrawingExpose(wrapper).createElementFromClientPoint('rect', { x: 240, y: 220 });
+    await nextTick();
+    const rectData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createEmptyDrawingData();
+
+    await getDrawingExpose(wrapper).createElementFromClientPoint('text', { x: 400, y: 300 });
+    await nextTick();
+    const textData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createEmptyDrawingData();
+
+    expect(rectData.elements[0]?.style).toEqual({
+      backgroundColor: '#ffffff',
+      borderColor: '#d9d9d9',
+      borderRadius: 6,
+      borderStyle: 'solid',
+      borderWidth: 1,
+      color: '#1f2937',
+      fontSize: 14,
+      fontWeight: 400,
+      textAlign: 'center',
+      textVerticalAlign: 'middle'
+    });
+    expect(textData.elements[1]?.style).toEqual(rectData.elements[0]?.style);
+    wrapper.unmount();
+  });
+
   it('selects a node from the external element id command', async (): Promise<void> => {
     const data = createNodeClickDrawingData();
     const wrapper = mount(BDrawing, {

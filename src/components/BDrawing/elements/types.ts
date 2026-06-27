@@ -3,7 +3,7 @@
  * @description BDrawing 元素注册配置类型。
  * BDrawing 元素注册配置，仅描述侧边栏展示元信息。
  */
-import type { DrawingElementCreateAnchor, DrawingMetadata, DrawingShapeElement, DrawingSize } from '../types';
+import type { DrawingElementCreateAnchor, DrawingElementStyle, DrawingMetadata, DrawingShapeElement, DrawingSize } from '../types';
 
 /**
  * 元素渲染尺寸来源。
@@ -44,4 +44,6 @@ export interface DrawingElementSchema {
   createCursor?: string;
   /** 创建元素时写入元素的默认自定义元数据 */
   metadata?: DrawingMetadata;
+  /** 创建元素时写入元素的默认样式 */
+  style?: DrawingElementStyle;
 }

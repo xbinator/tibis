@@ -4,6 +4,7 @@
  */
 import type { DrawingMetadata, DrawingShapeElement, DrawingSize } from '../../types';
 import type { DrawingElementSchema } from '../types';
+import { DRAWING_DEFAULT_ELEMENT_STYLE } from '../../constants/style';
 import { measureDrawingTextElementSize } from '../../utils/drawingTextMetrics';
 
 /** 文本元素默认内容。 */
@@ -38,6 +39,7 @@ export const textElementSchema: DrawingElementSchema = {
   metadata: {
     content: DRAWING_TEXT_DEFAULT_CONTENT
   } satisfies DrawingTextElementMetadata,
+  style: DRAWING_DEFAULT_ELEMENT_STYLE,
   renderSize: {
     width: 'content',
     height: 'content',

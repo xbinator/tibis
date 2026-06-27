@@ -121,6 +121,16 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
     state.value = nextState;
   }
 
+  /**
+   * 创建元素初始样式，临时创建样式优先覆盖 schema 默认样式。
+   * @param schemaStyle - 元素注册默认样式
+   * @param creationStyle - 创建时指定样式
+   * @returns 合并后的初始样式
+   */
+  function createInitialElementStyle(schemaStyle: DrawingElementStyle | undefined, creationStyle: DrawingElementStyle | undefined): DrawingElementStyle {
+    return { ...(schemaStyle ?? {}), ...(creationStyle ?? {}) };
+  }
+
   return {
     state,
     startCreateShapeDraft: (name: string, start: DrawingPoint): void => {
@@ -179,7 +189,7 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
             createAnchor: schema.createAnchor,
             start: draft.start,
             end: draft.current,
-            style,
+            style: createInitialElementStyle(schema.style, style),
             metadata: schema.metadata
           }
         )
