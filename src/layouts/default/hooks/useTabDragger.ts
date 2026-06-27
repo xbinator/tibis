@@ -4,6 +4,7 @@
  *   封装 draggable/dropTarget 注册、命中判定、auto-scroll 和状态生命周期。
  */
 
+import type { ElementDropTargetGetFeedbackArgs } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { shallowRef, type ShallowRef } from 'vue';
 import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
@@ -64,6 +65,26 @@ export interface ResolveDragIndicatorPlacementParams {
  */
 export function closestEdgeToMovePosition(edge: ClosestEdge | null): TabMovePosition {
   return edge === 'left' ? 'before' : 'after';
+}
+
+/**
+ * 判断拖拽数据是否属于 HeaderTabs 标签拖拽。
+ * @param data - Pragmatic Drag and Drop 的 user data
+ * @returns 是否为标签拖拽数据
+ */
+export function isTabDragData(data: Record<string | symbol, unknown>): boolean {
+  return typeof data.tabId === 'string';
+}
+
+/**
+ * 从拖拽数据中读取标签 ID。
+ * @param data - Pragmatic Drag and Drop 的 user data
+ * @returns 标签 ID，不存在时返回 null
+ */
+function getTabIdFromData(data: Record<string | symbol, unknown>): string | null {
+  const value = data.tabId;
+
+  return typeof value === 'string' ? value : null;
 }
 
 /**
@@ -340,22 +361,23 @@ export function useTabDragger(
     // Pragmatic 的 dropTargetForElements 使用 userData + attachClosestEdge 模式记录命中边
     const dropCleanup = dropTargetForElements({
       element,
-      getData: (): Record<string | symbol, unknown> => ({ tabId }),
+      getData({ input }: ElementDropTargetGetFeedbackArgs): Record<string | symbol, unknown> {
+        return attachClosestEdge(
+          { tabId },
+          {
+            element,
+            input,
+            allowedEdges: ['left', 'right']
+          }
+        );
+      },
       getIsSticky: () => true,
       canDrop({ source }) {
         // 不允许拖到自己身上
-        return source.data.tabId !== tabId;
-      },
-      onDrag({ self, location }) {
-        // 在每次指针移动时附着最近边信息到 self.data
-        attachClosestEdge(self.data, {
-          element,
-          input: location.current.input,
-          allowedEdges: ['left', 'right']
-        });
+        return isTabDragData(source.data) && source.data.tabId !== tabId;
       },
       onDragEnter({ source }) {
-        if (source.data.tabId === tabId) return;
+        if (getTabIdFromData(source.data) === tabId) return;
         dropTargetTabId.value = tabId;
       },
       onDragLeave() {
@@ -376,18 +398,27 @@ export function useTabDragger(
 
   // 激活全局 monitor（单例，整个模块生命周期仅一次）
   monitorCleanup = monitorForElements({
+    canMonitor({ source }) {
+      return isTabDragData(source.data);
+    },
     onDragStart({ source }) {
-      draggingTabId.value = source.data.tabId as string;
+      draggingTabId.value = getTabIdFromData(source.data);
     },
     onDrag({ location, source }) {
+      const sourceTabId = getTabIdFromData(source.data);
+      if (!sourceTabId) {
+        resetIndicatorState();
+        return;
+      }
+
       const target = location.current.dropTargets[0];
-      const targetTabId = target ? (target.data.tabId as string) : null;
+      const targetTabId = target ? getTabIdFromData(target.data) : null;
       const targetEdge = target ? extractClosestEdge(target.data) : null;
 
       if (
         !applyIndicatorFromDragState({
           clientX: location.current.input.clientX,
-          sourceTabId: source.data.tabId as string,
+          sourceTabId,
           targetTabId,
           targetEdge
         })
@@ -396,9 +427,14 @@ export function useTabDragger(
       }
     },
     onDrop({ source, location }) {
+      const fromId = getTabIdFromData(source.data);
+      if (!fromId) {
+        resetDragState();
+        return;
+      }
+
       const target = location.current.dropTargets[0];
-      const fromId = source.data.tabId as string;
-      const targetTabId = target ? (target.data.tabId as string) : null;
+      const targetTabId = target ? getTabIdFromData(target.data) : null;
       const targetEdge = target ? extractClosestEdge(target.data) : null;
       const hasPlacement = applyIndicatorFromDragState({
         clientX: location.current.input.clientX,
