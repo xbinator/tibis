@@ -1,0 +1,89 @@
+/**
+ * @file panel-settings.test.ts
+ * @description 验证画图右侧设置面板会在属性页签渲染元素专属 Setter。
+ * @vitest-environment jsdom
+ */
+/* eslint-disable vue/one-component-per-file */
+import { defineComponent } from 'vue';
+import { mount } from '@vue/test-utils';
+import { describe, expect, it, vi } from 'vitest';
+import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import PanelSettings from '@/views/drawing/components/PanelSettings.vue';
+
+vi.mock('ant-design-vue', () => ({
+  Tabs: defineComponent({
+    name: 'ATabsStub',
+    template: '<div data-testid="settings-tabs"><slot></slot></div>'
+  }),
+  TabPane: defineComponent({
+    name: 'ATabPaneStub',
+    props: {
+      tab: {
+        type: String,
+        required: true
+      }
+    },
+    template: '<section :data-tab="tab"><slot></slot></section>'
+  })
+}));
+
+vi.mock('@/views/drawing/components/DesignSetter.vue', () => ({
+  default: defineComponent({
+    name: 'DesignSetterStub',
+    template: '<div data-testid="design-setter"></div>'
+  })
+}));
+
+/**
+ * 创建测试画图元素。
+ * @param id - 元素 ID
+ * @param name - 元素注册名称
+ * @returns 测试画图元素
+ */
+function createDrawingElement(id: string, name: 'rect' | 'text'): DrawingElement {
+  return {
+    id,
+    name,
+    label: name === 'text' ? '文本' : '矩形',
+    icon: name === 'text' ? 'lucide:type' : 'lucide:square',
+    title: name === 'text' ? '文本节点' : '矩形节点',
+    position: { x: 12, y: 24 },
+    size: { width: 160, height: 64 },
+    rotation: 0,
+    style: {},
+    metadata: {}
+  };
+}
+
+/**
+ * 创建测试画图数据。
+ * @param element - 画图元素
+ * @returns 测试画图数据
+ */
+function createDrawingData(element: DrawingElement): DrawingData {
+  return {
+    metadata: {},
+    elements: [element],
+    viewport: {
+      center: { x: 0, y: 0 },
+      zoom: 1
+    }
+  };
+}
+
+describe('PanelSettings', (): void => {
+  it('renders the selected element Setter.vue inside the property tab', (): void => {
+    const element = createDrawingElement('text-1', 'text');
+    const wrapper = mount(PanelSettings, {
+      props: {
+        drawingData: createDrawingData(element),
+        select: element
+      }
+    });
+
+    expect(wrapper.find('[data-testid="design-setter"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="drawing-text-setter"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('暂无专属属性');
+    wrapper.unmount();
+  });
+});

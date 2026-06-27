@@ -3,7 +3,7 @@
  * @description 区块字段行组件，封装"前缀 + 控件"的 flex 行布局，支持文字标签和图标前缀。
 -->
 <template>
-  <div :class="name">
+  <div :class="bem({ vertical: direction === 'vertical' })">
     <!-- 文字前缀 -->
     <div :class="bem('prefix')">
       <span v-if="label && !icon" :class="bem('label')">{{ label }}</span>
@@ -21,12 +21,13 @@ import { createNamespace } from '@/utils/namespace';
 
 defineOptions({ name: 'BSectionItem' });
 
-const [name, bem] = createNamespace('section-item');
+const [, bem] = createNamespace('section-item');
 
 withDefaults(defineProps<Props>(), {
   label: undefined,
   icon: undefined,
-  iconSize: 16
+  iconSize: 16,
+  direction: 'horizontal'
 });
 </script>
 
@@ -62,5 +63,16 @@ withDefaults(defineProps<Props>(), {
 .b-section-item__icon {
   flex-shrink: 0;
   color: var(--text-secondary);
+}
+
+/* 垂直布局：前缀与控件纵向排列 */
+.b-section-item--vertical {
+  flex-direction: column;
+  align-items: stretch;
+
+  .b-section-item__prefix {
+    justify-content: flex-start;
+    min-width: 0;
+  }
 }
 </style>

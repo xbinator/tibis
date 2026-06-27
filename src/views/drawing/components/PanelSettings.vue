@@ -12,14 +12,20 @@
           <DesignSetter v-model:element="select" />
         </ATabPane>
 
-        <ATabPane key="style" tab="属性">1</ATabPane>
+        <ATabPane key="style" tab="属性">
+          <component :is="elementSetter" v-if="elementSetter" v-model:element="select" />
+          <div v-else class="setter-panel__empty">暂无专属属性</div>
+        </ATabPane>
       </ATabs>
     </template>
   </aside>
 </template>
 
 <script setup lang="ts">
+import type { Component } from 'vue';
+import { computed } from 'vue';
 import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
+import { getDrawingElementSetter } from '@/components/BDrawing/elements';
 import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
 import DesignSetter from './DesignSetter.vue';
 import PageSetter from './PageSetter.vue';
@@ -44,6 +50,9 @@ const select = defineModel<DrawingSelectTarget>('select', { default: null });
 function isElementTarget(target: DrawingSelectTarget): target is DrawingElement {
   return typeof target === 'object' && target !== null && 'id' in target && typeof target.id === 'string';
 }
+
+/** 当前选中元素对应的专属属性设置面板。 */
+const elementSetter = computed<Component | null>(() => (isElementTarget(select.value) ? getDrawingElementSetter(select.value.name) : null));
 </script>
 
 <style lang="less" scoped>
@@ -72,6 +81,10 @@ function isElementTarget(target: DrawingSelectTarget): target is DrawingElement 
   .ant-tabs-tab {
     height: 38px;
     padding: 0;
+  }
+
+  .ant-tabs-content {
+    padding: 12px;
   }
 
   .ant-tabs-content-holder {
