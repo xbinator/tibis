@@ -4,10 +4,12 @@
 -->
 <template>
   <div
+    ref="canvasRef"
     class="b-drawing-canvas"
     :class="[`is-tool-${activeTool}`, { 'is-create-tool': isCreateTool, 'is-panning': isPanning }]"
     :style="canvasStyle"
     data-testid="drawing-canvas"
+    @contextmenu.prevent="handleCanvasContextMenu"
     @pointerdown="handlePointerDown"
     @pointermove="handlePointerMove"
     @pointerup="handlePointerUp"
@@ -21,6 +23,7 @@
         :preview-position="getElementPreviewPosition(element.id)"
         :preview-size="getElementPreviewSize(element.id)"
         :selected="selection.includes(element.id)"
+        @context-menu="handleElementContextMenu"
         @select="handleElementSelect"
         @release="handleElementRelease"
       />
@@ -29,9 +32,17 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingElement, DrawingGeometryChange, DrawingPoint, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
+import type {
+  DrawingContextMenuPayload,
+  DrawingElement,
+  DrawingGeometryChange,
+  DrawingPoint,
+  DrawingShapeElement,
+  DrawingSize,
+  DrawingViewport
+} from '../types';
 import type { CSSProperties } from 'vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { projectClientPointToDrawingBoard } from '../utils/drawingGeometry';
 import DrawingNodeRenderer from './DrawingNode.vue';
 
@@ -75,8 +86,12 @@ const emit = defineEmits<{
   'canvas-pointerup': [point: DrawingPoint, event: PointerEvent];
   /** 画布滚轮 */
   'canvas-wheel': [event: WheelEvent];
+  /** 打开右键菜单 */
+  'context-menu': [payload: DrawingContextMenuPayload];
 }>();
 
+/** 画布根节点，用于统一坐标投影基准。 */
+const canvasRef = ref<HTMLElement | null>(null);
 /** Moveable 几何预览索引。 */
 const geometryPreviewById = computed<Map<string, DrawingGeometryChange>>(
   () => new Map((props.geometryPreviewChanges ?? []).map((change: DrawingGeometryChange): [string, DrawingGeometryChange] => [change.id, change]))
@@ -140,8 +155,8 @@ function handleElementRelease(id: string, event: PointerEvent): void {
  * @param event - 指针事件
  * @returns 画板坐标
  */
-function getBoardPointFromClient(event: PointerEvent): DrawingPoint {
-  const target = event.currentTarget as HTMLElement;
+function getBoardPointFromClient(event: PointerEvent | MouseEvent): DrawingPoint {
+  const target = canvasRef.value ?? (event.currentTarget as HTMLElement);
   const rect = target.getBoundingClientRect();
   if (!rect.width || !rect.height) {
     return { ...props.viewport.center };
@@ -153,10 +168,45 @@ function getBoardPointFromClient(event: PointerEvent): DrawingPoint {
 }
 
 /**
+ * 创建右键菜单事件载荷。
+ * @param elementId - 命中的元素 ID
+ * @param event - 鼠标事件
+ * @returns 右键菜单事件载荷
+ */
+function createContextMenuPayload(elementId: string | null, event: MouseEvent): DrawingContextMenuPayload {
+  return {
+    elementId,
+    clientPoint: { x: event.clientX, y: event.clientY },
+    boardPoint: getBoardPointFromClient(event)
+  };
+}
+
+/**
+ * 处理节点右键菜单。
+ * @param id - 元素 ID
+ * @param event - 鼠标事件
+ */
+function handleElementContextMenu(id: string, event: MouseEvent): void {
+  emit('context-menu', createContextMenuPayload(id, event));
+}
+
+/**
+ * 处理画布空白区域右键菜单。
+ * @param event - 鼠标事件
+ */
+function handleCanvasContextMenu(event: MouseEvent): void {
+  emit('context-menu', createContextMenuPayload(null, event));
+}
+
+/**
  * 处理画布空白区域点击。
  * @param event - 指针事件
  */
 function handlePointerDown(event: PointerEvent): void {
+  if (event.button !== 0) {
+    return;
+  }
+
   const target = event.currentTarget as HTMLElement;
   if (typeof target.setPointerCapture === 'function') {
     target.setPointerCapture(event.pointerId);

@@ -22,6 +22,7 @@
         @canvas-pointermove="handleCanvasPointermove"
         @canvas-pointerup="handleCanvasPointerup"
         @canvas-wheel="handleCanvasWheel"
+        @context-menu="handleDrawingContextMenu"
       />
     </InfiniteViewport>
     <MoveableLayer
@@ -42,7 +43,14 @@
       :selection="board.state.value.selection"
       :viewport="board.state.value.viewport"
       :viewport-size="viewportSize"
-      @set-selection="board.setSelection"
+      @set-selection="setBoardSelection"
+    />
+    <DrawingContextMenu
+      :open="contextMenuState.open"
+      :position="contextMenuState.clientPoint"
+      :items="contextMenuItems"
+      @select="handleContextMenuCommand"
+      @close="closeContextMenu"
     />
     <Toolbar
       :zoom="board.state.value.viewport.zoom"
@@ -68,6 +76,7 @@
 import type { DrawingElementSchema } from './elements';
 import type {
   DrawingData,
+  DrawingContextMenuPayload,
   DrawingElement,
   DrawingElementStyle,
   DrawingGeometryChange,
@@ -79,6 +88,7 @@ import type {
 import type { DrawingCanvasPointProjection } from './utils/drawingGeometry';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useShortcuts } from '@/hooks/useShortcuts';
+import DrawingContextMenu from './components/ContextMenu.vue';
 import InfiniteViewport from './components/InfiniteViewport.vue';
 import MoveableLayer from './components/MoveableLayer.vue';
 import SelectoLayer from './components/SelectoLayer.vue';
@@ -98,6 +108,59 @@ import {
   projectClientPointToDrawingBoard,
   queryDrawingElementTarget
 } from './utils/drawingGeometry';
+import { expandDrawingSelectionToGroups, hasDrawingGroupedSelection } from './utils/drawingGroups';
+
+/**
+ * 右键菜单命令。
+ */
+type DrawingContextMenuCommand = 'copy' | 'paste' | 'group' | 'ungroup' | 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack' | 'delete';
+
+/**
+ * 右键菜单项。
+ */
+interface DrawingContextMenuItem {
+  /** 菜单项类型 */
+  type?: 'item';
+  /** 菜单命令 */
+  key: DrawingContextMenuCommand;
+  /** 展示文案 */
+  label: string;
+  /** 图标 */
+  icon: string;
+  /** 是否禁用 */
+  disabled?: boolean;
+  /** 是否危险操作 */
+  danger?: boolean;
+}
+
+/**
+ * 右键菜单分割线。
+ */
+interface DrawingContextMenuDivider {
+  /** 菜单项类型 */
+  type: 'divider';
+  /** 分割线唯一标识 */
+  key: string;
+}
+
+/**
+ * 右键菜单条目。
+ */
+type DrawingContextMenuEntry = DrawingContextMenuItem | DrawingContextMenuDivider;
+
+/**
+ * 右键菜单状态。
+ */
+interface DrawingContextMenuState {
+  /** 是否打开 */
+  open: boolean;
+  /** 右键命中的元素 ID */
+  elementId: string | null;
+  /** 浏览器坐标 */
+  clientPoint: DrawingPoint;
+  /** 画板坐标 */
+  boardPoint: DrawingPoint;
+}
 
 const drawingData = defineModel<DrawingData>('value', {
   default: (): DrawingData => ({ metadata: {}, elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } })
@@ -127,12 +190,45 @@ const initialContentViewportFitted = ref<boolean>(false);
 const hideMoveableDuringDirectDrag = ref<boolean>(false);
 /** Moveable 拖拽缩放过程中的临时几何预览。 */
 const moveablePreviewChanges = ref<DrawingGeometryChange[]>([]);
+/** 右键菜单状态。 */
+const contextMenuState = ref<DrawingContextMenuState>({
+  open: false,
+  elementId: null,
+  clientPoint: { x: 0, y: 0 },
+  boardPoint: { x: 0, y: 0 }
+});
 /** 当前激活工具对应的可创建元素配置。 */
 const activeCreateSchema = computed<DrawingElementSchema | null>(() => getDrawingElementSchema(activeTool.value));
 /** 当前是否激活可创建元素工具。 */
 const isCreateToolActive = computed<boolean>(() => activeCreateSchema.value !== null);
 /** 当前创建工具光标。 */
 const activeCreateCursor = computed<string | undefined>(() => (activeCreateSchema.value ? activeCreateSchema.value.createCursor ?? 'crosshair' : undefined));
+/** 当前右键菜单项。 */
+const contextMenuItems = computed<DrawingContextMenuEntry[]>(() => {
+  const hasSelection = board.state.value.selection.length > 0;
+  const canGroup = board.state.value.selection.length > 1;
+  const canUngroup = hasDrawingGroupedSelection(board.state.value.elements, board.state.value.selection);
+  const groupEntries: DrawingContextMenuEntry[] = [];
+
+  if (canUngroup) {
+    groupEntries.push({ type: 'divider', key: 'divider-edit-group' }, { key: 'ungroup', label: '取消合并', icon: 'lucide:ungroup' });
+  } else if (canGroup) {
+    groupEntries.push({ type: 'divider', key: 'divider-edit-group' }, { key: 'group', label: '合并', icon: 'lucide:group' });
+  }
+
+  return [
+    { key: 'copy', label: '复制', icon: 'lucide:copy', disabled: !hasSelection },
+    { key: 'paste', label: '粘贴', icon: 'lucide:clipboard-paste', disabled: !board.hasClipboard.value },
+    ...groupEntries,
+    { type: 'divider', key: 'divider-group-layer' },
+    { key: 'bringForward', label: '上一层', icon: 'lucide:bring-to-front', disabled: !hasSelection },
+    { key: 'sendBackward', label: '下一层', icon: 'lucide:send-to-back', disabled: !hasSelection },
+    { key: 'bringToFront', label: '置顶', icon: 'lucide:chevrons-up', disabled: !hasSelection },
+    { key: 'sendToBack', label: '置底', icon: 'lucide:chevrons-down', disabled: !hasSelection },
+    { type: 'divider', key: 'divider-layer-danger' },
+    { key: 'delete', label: '删除', icon: 'lucide:trash-2', disabled: !hasSelection, danger: true }
+  ];
+});
 /**
  * 根据内部选区创建外部可编辑目标。
  * @param selection - 内部选区 ID 列表
@@ -155,6 +251,56 @@ function createSelectedTargetFromSelection(selection: string[]): DrawingSelectTa
  */
 function handleSelectionChange(selection: string[]): void {
   selectedTarget.value = createSelectedTargetFromSelection(selection);
+}
+
+/**
+ * 判断两个选区是否一致。
+ * @param current - 当前选区
+ * @param next - 目标选区
+ * @returns 是否一致
+ */
+function isSameSelection(current: string[], next: string[]): boolean {
+  return current.length === next.length && current.every((id: string, index: number): boolean => id === next[index]);
+}
+
+/**
+ * 按组合关系扩展并设置选区。
+ * @param selection - 原始选区
+ */
+function setBoardSelection(selection: string[]): void {
+  board.setSelection(expandDrawingSelectionToGroups(board.state.value.elements, selection));
+}
+
+/**
+ * 读取元素点击后应使用的选区。
+ * @param id - 元素 ID
+ * @returns 展开组合后的选区
+ */
+function getSelectionForElement(id: string): string[] {
+  return expandDrawingSelectionToGroups(board.state.value.elements, [id]);
+}
+
+/**
+ * 读取元素右键菜单应使用的选区。
+ * @param id - 元素 ID
+ * @returns 右键菜单选区
+ */
+function getContextMenuSelectionForElement(id: string): string[] {
+  if (board.state.value.selection.includes(id)) {
+    return expandDrawingSelectionToGroups(board.state.value.elements, board.state.value.selection);
+  }
+
+  return getSelectionForElement(id);
+}
+
+/**
+ * 关闭右键菜单。
+ */
+function closeContextMenu(): void {
+  contextMenuState.value = {
+    ...contextMenuState.value,
+    open: false
+  };
 }
 
 /**
@@ -402,6 +548,81 @@ function setActiveTool(tool: string): void {
 }
 
 /**
+ * 打开画布右键菜单。
+ * @param payload - 右键菜单事件载荷
+ */
+function handleDrawingContextMenu(payload: DrawingContextMenuPayload): void {
+  cancelDirectDrag();
+  setActiveTool('select');
+
+  if (payload.elementId) {
+    const selection = getContextMenuSelectionForElement(payload.elementId);
+    if (!isSameSelection(board.state.value.selection, selection)) {
+      board.setSelection(selection);
+    }
+  } else {
+    board.setSelection([]);
+  }
+
+  contextMenuState.value = {
+    open: true,
+    elementId: payload.elementId,
+    clientPoint: payload.clientPoint,
+    boardPoint: payload.boardPoint
+  };
+}
+
+/**
+ * 处理右键菜单命令。
+ * @param command - 菜单命令
+ */
+function handleContextMenuCommand(command: string): void {
+  switch (command) {
+    case 'copy': {
+      board.copySelection();
+      break;
+    }
+    case 'paste': {
+      board.pasteClipboard(contextMenuState.value.boardPoint);
+      break;
+    }
+    case 'group': {
+      board.groupSelection();
+      break;
+    }
+    case 'ungroup': {
+      board.ungroupSelection();
+      break;
+    }
+    case 'bringToFront': {
+      board.reorderSelection('bringToFront');
+      break;
+    }
+    case 'bringForward': {
+      board.reorderSelection('bringForward');
+      break;
+    }
+    case 'sendBackward': {
+      board.reorderSelection('sendBackward');
+      break;
+    }
+    case 'sendToBack': {
+      board.reorderSelection('sendToBack');
+      break;
+    }
+    case 'delete': {
+      board.deleteSelection();
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+
+  closeContextMenu();
+}
+
+/**
  * 在指定画板坐标创建元素。
  * @param name - 元素注册名称
  * @param point - 创建位置
@@ -580,7 +801,11 @@ function handleElementPointerup(): void {
  * @param id - 元素 ID
  * @param _event - 指针事件
  */
-function handleElementSelect(id: string, _event: PointerEvent): void {
+function handleElementSelect(id: string, event: PointerEvent): void {
+  if (event.button !== 0) {
+    return;
+  }
+
   if (activeTool.value === 'hand') {
     return;
   }
@@ -590,12 +815,15 @@ function handleElementSelect(id: string, _event: PointerEvent): void {
     return;
   }
 
-  if (board.state.value.selection.includes(id)) {
+  const selection = getSelectionForElement(id);
+  if (isSameSelection(board.state.value.selection, selection)) {
     return;
   }
 
-  board.setSelection([id]);
-  startDirectDrag(id, _event, true);
+  board.setSelection(selection);
+  if (selection.length === 1) {
+    startDirectDrag(id, event, true);
+  }
 }
 
 /**
@@ -669,7 +897,7 @@ function selectElementById(id: string): void {
 
   cancelDirectDrag();
   setActiveTool('select');
-  board.setSelection([id]);
+  board.setSelection(getSelectionForElement(id));
 }
 
 /**

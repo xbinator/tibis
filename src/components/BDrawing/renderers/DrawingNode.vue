@@ -10,6 +10,7 @@
     :data-drawing-element-id="node.id"
     :data-drawing-name="node.name"
     :style="nodeStyle"
+    @contextmenu.stop.prevent="emit('context-menu', node.id, $event)"
     @pointerdown.stop="emit('select', node.id, $event)"
     @pointerup="emit('release', node.id, $event)"
   >
@@ -51,6 +52,8 @@ const emit = defineEmits<{
   select: [id: string, event: PointerEvent];
   /** 在节点上释放指针 */
   release: [id: string, event: PointerEvent];
+  /** 打开节点右键菜单 */
+  'context-menu': [id: string, event: MouseEvent];
 }>();
 
 /** 是否为文本元素。 */
