@@ -133,12 +133,12 @@ describe('drawingGeometry', (): void => {
     });
   });
 
-  it('uses schema content size for text element render bounds', (): void => {
+  it('uses schema model size for text element render bounds', (): void => {
     expect(getDrawingShapeRenderSize(createShapeElement('node-1'))).toEqual({ width: 120, height: 80 });
-    expect(getDrawingShapeRenderSize(createTextElement('text-1'))).toEqual({ width: 46, height: 31 });
+    expect(getDrawingShapeRenderSize(createTextElement('text-1'))).toEqual({ width: 180, height: 72 });
   });
 
-  it('includes text element padding style in content render bounds', (): void => {
+  it('keeps text model height independent from content padding render bounds', (): void => {
     const element = createTextElement(
       'text-1',
       '标题',
@@ -149,17 +149,37 @@ describe('drawingGeometry', (): void => {
       }
     );
 
-    expect(getDrawingShapeRenderSize(element)).toEqual({ width: 52, height: 37 });
+    expect(getDrawingShapeRenderSize(element)).toEqual({ width: 180, height: 72 });
   });
 
-  it('creates a viewport from schema render sizes instead of stored model sizes', (): void => {
+  it('keeps text element render size from the stored model size', (): void => {
+    const wideElement = createTextElement('text-1', 'abcdef', { x: 400, y: 260 }, { fontSize: 10 });
+    const narrowElement = {
+      ...wideElement,
+      size: { width: 30, height: 72 }
+    };
+
+    expect(getDrawingShapeRenderSize(wideElement)).toEqual({ width: 180, height: 72 });
+    expect(getDrawingShapeRenderSize(narrowElement)).toEqual({ width: 30, height: 72 });
+  });
+
+  it('raises text render height to the wrapped content height when model height is too small', (): void => {
+    const element = {
+      ...createTextElement('text-1', 'abcdef', { x: 400, y: 260 }, { fontSize: 10 }),
+      size: { width: 30, height: 12 }
+    };
+
+    expect(getDrawingShapeRenderSize(element)).toEqual({ width: 30, height: 31 });
+  });
+
+  it('creates a viewport from schema render sizes', (): void => {
     const viewport = createDrawingViewportForElements([createShapeElement('node-1'), createTextElement('text-1')], {
       width: 800,
       height: 600
     });
 
     expect(viewport).toEqual({
-      center: { x: 243, y: 175.5 },
+      center: { x: 310, y: 196 },
       zoom: 1
     });
   });

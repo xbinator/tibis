@@ -70,6 +70,20 @@ function createModelResetSnapshot(drawingData: DrawingData, board: UseDrawingBoa
 }
 
 /**
+ * 回写外部模型中的规格化画板数据。
+ * @param drawingData - 外部画板数据
+ * @param options - 模型同步配置
+ */
+function syncNormalizedBoardToModel(drawingData: DrawingData, options: UseModelSyncOptions): void {
+  const normalizedData = createModelUpdateSnapshot(options.board, drawingData);
+  if (isEqual(drawingData, normalizedData)) {
+    return;
+  }
+
+  options.drawingData.value = normalizedData;
+}
+
+/**
  * 同步外部 v-model 与内部画板状态。
  * @param options - 模型同步配置
  */
@@ -85,6 +99,7 @@ export function useModelSync(options: UseModelSyncOptions): void {
 
       syncingDrawingDataToBoard = true;
       options.board.reset(createModelResetSnapshot(drawingData, options.board));
+      syncNormalizedBoardToModel(drawingData, options);
       nextTick()
         .then((): void => {
           syncingDrawingDataToBoard = false;

@@ -41,9 +41,13 @@ export const textElementSchema: DrawingElementSchema = {
   } satisfies DrawingTextElementMetadata,
   style: DRAWING_DEFAULT_ELEMENT_STYLE,
   renderSize: {
-    width: 'content',
-    height: 'content',
-    measureContent: (element: DrawingShapeElement): DrawingSize => measureDrawingTextElementSize(readDrawingTextElementContent(element), element.style)
+    width: 'model',
+    height: 'model-min-content',
+    measureContent: (element: DrawingShapeElement): DrawingSize =>
+      measureDrawingTextElementSize(readDrawingTextElementContent(element), element.style, { maxWidth: element.size.width })
+  },
+  resize: {
+    enabled: true
   },
   createAnchor: 'top-left',
   createCursor: 'text'

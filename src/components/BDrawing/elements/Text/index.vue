@@ -26,6 +26,8 @@ const textContent = computed<string>(() => (props.element ? readDrawingTextEleme
 
 <style lang="less" scoped>
 .drawing-text-element-view {
-  white-space: pre;
+  width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 </style>

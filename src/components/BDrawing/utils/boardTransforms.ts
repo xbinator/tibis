@@ -21,6 +21,7 @@ import type {
 import { cloneDeep } from 'lodash-es';
 import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/board';
 import { getDrawingElementSchema } from '../elements';
+import { getDrawingShapeRenderSize } from './drawingGeometry';
 
 /**
  * 创建默认视口。
@@ -132,6 +133,18 @@ function normalizeElementMetadata(metadata: Record<string, unknown> | undefined)
 }
 
 /**
+ * 按元素 schema 的尺寸来源同步模型尺寸。
+ * @param element - 原始元素
+ * @returns 已同步模型尺寸的元素
+ */
+function normalizeElementModelSize(element: DrawingShapeElement): DrawingShapeElement {
+  return {
+    ...element,
+    size: getDrawingShapeRenderSize(element)
+  };
+}
+
+/**
  * 创建不包含旧版冗余字段的元素快照。
  * @param element - 元素快照候选
  * @returns 元素快照，无法识别时返回 null
@@ -146,7 +159,7 @@ function createSupportedElementSnapshot(element: DrawingElementSnapshotCandidate
   const label = typeof element.label === 'string' ? element.label : registryDisplay.label;
   const icon = typeof element.icon === 'string' ? element.icon : registryDisplay.icon;
 
-  return {
+  return normalizeElementModelSize({
     id: element.id,
     name,
     label,
@@ -157,7 +170,7 @@ function createSupportedElementSnapshot(element: DrawingElementSnapshotCandidate
     rotation: typeof element.rotation === 'number' ? element.rotation : 0,
     style: cloneDeep(element.style ?? {}),
     metadata: normalizeElementMetadata(element.metadata)
-  };
+  });
 }
 
 /**
@@ -302,6 +315,7 @@ function applyGeometryChanges(
     }
 
     applyChange(element, change);
+    element.size = normalizeElementModelSize(element).size;
   }
 
   return withHistory(state, {
@@ -355,7 +369,7 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
 
   const style = createShapeInitialStyle(options.style);
   const geometry = createShapeGeometry(options.start, options.end, options.createAnchor);
-  const element: DrawingShapeElement = {
+  const element: DrawingShapeElement = normalizeElementModelSize({
     id: options.id,
     name: options.name,
     label: options.label,
@@ -366,7 +380,7 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
     rotation: 0,
     style,
     metadata: normalizeElementMetadata(options.metadata)
-  };
+  });
 
   return withHistory(state, {
     elements: [...cloneDeep(state.elements), element],
@@ -478,6 +492,7 @@ export function updateDrawingElementStyle(state: DrawingBoardState, elementId: s
     ...element.style,
     ...style
   };
+  element.size = normalizeElementModelSize(element).size;
 
   return withHistory(state, {
     elements: nextElements,
@@ -520,6 +535,7 @@ export function updateDrawingElementTitle(state: DrawingBoardState, elementId: s
   }
 
   element.title = title;
+  element.size = normalizeElementModelSize(element).size;
 
   return withHistory(state, {
     elements: nextElements,

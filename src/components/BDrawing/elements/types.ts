@@ -8,7 +8,7 @@ import type { DrawingElementCreateAnchor, DrawingElementStyle, DrawingMetadata, 
 /**
  * 元素渲染尺寸来源。
  */
-export type DrawingElementRenderSizeSource = 'model' | 'content';
+export type DrawingElementRenderSizeSource = 'model' | 'content' | 'model-min-content';
 
 /**
  * 元素渲染尺寸配置。
@@ -27,6 +27,14 @@ export interface DrawingElementRenderSizeConfig {
 }
 
 /**
+ * 元素 Moveable 缩放配置。
+ */
+export interface DrawingElementResizeConfig {
+  /** 是否允许通过控制框修改尺寸，默认允许 */
+  enabled?: boolean;
+}
+
+/**
  * BDrawing 元素注册配置。
  */
 export interface DrawingElementSchema {
@@ -42,6 +50,8 @@ export interface DrawingElementSchema {
   createAnchor?: DrawingElementCreateAnchor;
   /** 创建工具激活时的画布光标，默认使用 crosshair */
   createCursor?: string;
+  /** 元素缩放能力配置 */
+  resize?: DrawingElementResizeConfig;
   /** 创建元素时写入元素的默认自定义元数据 */
   metadata?: DrawingMetadata;
   /** 创建元素时写入元素的默认样式 */

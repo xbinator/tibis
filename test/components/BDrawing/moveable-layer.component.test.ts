@@ -41,6 +41,10 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         type: Boolean,
         default: false
       },
+      renderDirections: {
+        type: Array as PropType<string[]>,
+        default: (): string[] => []
+      },
       snapGap: {
         type: Boolean,
         default: false
@@ -71,6 +75,7 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         :data-padding-left="String(padding.left)"
         :data-padding-right="String(padding.right)"
         :data-padding-top="String(padding.top)"
+        :data-render-directions="renderDirections.join(',')"
         :data-resizable="String(resizable)"
         :data-snap-gap="String(snapGap)"
         :data-snappable="String(snappable)"
@@ -156,21 +161,22 @@ describe('MoveableLayer', (): void => {
     document.body.innerHTML = '';
   });
 
-  it('keeps text distance guides while removing Moveable selection padding', async (): Promise<void> => {
+  it('uses the shared resize handles for text while keeping schema resize enabled', async (): Promise<void> => {
     const { wrapper } = mountMoveableLayer(['text-1']);
 
     await flushMoveableLayerSync();
 
     const moveableProps = wrapper.find('[data-testid="moveable-props"]');
 
-    expect(moveableProps.attributes('data-resizable')).toBe('false');
+    expect(moveableProps.attributes('data-resizable')).toBe('true');
+    expect(moveableProps.attributes('data-render-directions')).toBe('nw,ne,sw,se');
     expect(moveableProps.attributes('data-snappable')).toBe('true');
     expect(moveableProps.attributes('data-snap-gap')).toBe('true');
     expect(moveableProps.attributes('data-guideline-count')).toBe('1');
-    expect(moveableProps.attributes('data-padding-top')).toBe('0');
-    expect(moveableProps.attributes('data-padding-right')).toBe('0');
-    expect(moveableProps.attributes('data-padding-bottom')).toBe('0');
-    expect(moveableProps.attributes('data-padding-left')).toBe('0');
+    expect(moveableProps.attributes('data-padding-top')).toBe('5');
+    expect(moveableProps.attributes('data-padding-right')).toBe('5');
+    expect(moveableProps.attributes('data-padding-bottom')).toBe('5');
+    expect(moveableProps.attributes('data-padding-left')).toBe('5');
     wrapper.unmount();
   });
 

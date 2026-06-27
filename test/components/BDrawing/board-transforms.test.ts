@@ -37,6 +37,27 @@ function createShapeElement(id: string): DrawingShapeElement {
 }
 
 /**
+ * 创建测试文本元素。
+ * @param id - 元素 ID
+ * @param content - 文本正文
+ * @returns 测试文本元素
+ */
+function createTextElement(id: string, content = 'abcdef'): DrawingShapeElement {
+  return {
+    id,
+    name: 'text',
+    label: '文本',
+    icon: 'lucide:type',
+    title: '文本',
+    position: { x: 100, y: 120 },
+    size: { width: 180, height: 72 },
+    rotation: 0,
+    style: { fontSize: 10 },
+    metadata: { content }
+  };
+}
+
+/**
  * 旧版形状元素快照。
  */
 interface LegacyShapeElementSnapshot {
@@ -275,6 +296,59 @@ describe('boardTransforms', (): void => {
     expect(resized.elements[0]?.position).toEqual({ x: 80, y: 90 });
     expect(resized.elements[0]?.size).toEqual({ width: 16, height: 16 });
     expect(resized.history.past).toHaveLength(1);
+  });
+
+  it('resizes a text element width and height while content wraps by width', (): void => {
+    const initial = createDrawingBoardState({
+      elements: [createTextElement('text-1')]
+    });
+    const resized = resizeDrawingElements(initial, [
+      {
+        id: 'text-1',
+        position: { x: 80, y: 90 },
+        size: { width: 30, height: 400 }
+      }
+    ]);
+
+    expect(resized.elements[0]?.position).toEqual({ x: 80, y: 90 });
+    expect(resized.elements[0]?.size).toEqual({ width: 30, height: 400 });
+    expect(resized.history.past).toHaveLength(1);
+  });
+
+  it('keeps text resize height at least as tall as wrapped content', (): void => {
+    const initial = createDrawingBoardState({
+      elements: [createTextElement('text-1')]
+    });
+    const resized = resizeDrawingElements(initial, [
+      {
+        id: 'text-1',
+        position: { x: 80, y: 90 },
+        size: { width: 30, height: 12 }
+      }
+    ]);
+
+    expect(resized.elements[0]?.size).toEqual({ width: 30, height: 31 });
+  });
+
+  it('preserves text model height when creating board state', (): void => {
+    const initial = createDrawingBoardState({
+      elements: [createTextElement('text-1')]
+    });
+
+    expect(initial.elements[0]?.size).toEqual({ width: 180, height: 72 });
+  });
+
+  it('normalizes text model height up to wrapped content height when loading', (): void => {
+    const initial = createDrawingBoardState({
+      elements: [
+        {
+          ...createTextElement('text-1'),
+          size: { width: 30, height: 12 }
+        }
+      ]
+    });
+
+    expect(initial.elements[0]?.size).toEqual({ width: 30, height: 31 });
   });
 
   describe('reorderDrawingElement', (): void => {

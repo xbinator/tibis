@@ -49,7 +49,8 @@ import {
   DRAWING_MOVEABLE_SNAP_THRESHOLD,
   DRAWING_MOVEABLE_THROTTLE
 } from '../constants/interaction';
-import { createDrawingElementCssTransform, getDrawingElementId, queryDrawingElementTarget } from '../utils/drawingGeometry';
+import { getDrawingElementSchema } from '../elements';
+import { createDrawingElementCssTransform, getDrawingElementId, getDrawingShapeRenderSize, queryDrawingElementTarget } from '../utils/drawingGeometry';
 
 /**
  * Moveable 结束事件中的 DOM target。
@@ -215,12 +216,25 @@ function getElementById(id: string): DrawingElement | undefined {
 }
 
 /**
- * 判断元素是否为文本节点。
+ * 判断元素是否允许通过 Moveable 修改尺寸。
  * @param element - 画板元素
- * @returns 是否为文本节点
+ * @returns 是否允许缩放
  */
-function isDrawingTextElement(element: DrawingElement): boolean {
-  return element.name === 'text';
+function isElementResizable(element: DrawingElement): boolean {
+  return getDrawingElementSchema(element.name)?.resize?.enabled ?? true;
+}
+
+/**
+ * 按元素 schema 归一化缩放后的尺寸。
+ * @param element - 画板元素
+ * @param size - Moveable 请求尺寸
+ * @returns 可写入模型的尺寸
+ */
+function normalizeResizeSize(element: DrawingElement, size: DrawingSize): DrawingSize {
+  return getDrawingShapeRenderSize({
+    ...element,
+    size
+  });
 }
 
 /** 当前选中的画板元素。 */
@@ -228,7 +242,7 @@ const selectedElements = computed<DrawingElement[]>(() =>
   props.selection.map(getElementById).filter((element: DrawingElement | undefined): element is DrawingElement => element !== undefined)
 );
 /** 当前选区是否允许通过 Moveable 修改尺寸。 */
-const canResizeSelection = computed<boolean>(() => selectedElements.value.every((element: DrawingElement): boolean => !isDrawingTextElement(element)));
+const canResizeSelection = computed<boolean>(() => selectedElements.value.every((element: DrawingElement): boolean => isElementResizable(element)));
 /** 当前选区是否允许展示 Moveable 吸附辅助线。 */
 const canSnapSelection = computed<boolean>(() => singleTarget.value && selectedElements.value.length === 1);
 /** 当前选区使用的 Moveable 控制间距。 */
@@ -389,14 +403,15 @@ function createResizeChange(event: MoveableResizeEndEvent, shouldConvertGroupSiz
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
   const payload = getResizePayload(event);
-  if (!id || !element || isDrawingTextElement(element) || payload.width === undefined || payload.height === undefined) {
+  if (!id || !element || !isElementResizable(element) || payload.width === undefined || payload.height === undefined) {
     return null;
   }
 
   const translate = payload.drag?.beforeTranslate ?? [0, 0];
-  const size = shouldConvertGroupSize
+  const requestedSize = shouldConvertGroupSize
     ? groupResizeSizeToWorld({ width: payload.width, height: payload.height })
     : { width: payload.width, height: payload.height };
+  const size = normalizeResizeSize(element, requestedSize);
   return {
     id,
     position: {
@@ -443,12 +458,15 @@ function previewDragEvent(event: MoveableDragEvent): DrawingGeometryChange | nul
 function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize = false): DrawingGeometryChange | null {
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
-  if (!event.target || !id || !element || isDrawingTextElement(element) || event.width === undefined || event.height === undefined) {
+  if (!event.target || !id || !element || !isElementResizable(element) || event.width === undefined || event.height === undefined) {
     return null;
   }
 
   const translate = event.drag?.beforeTranslate ?? [0, 0];
-  const size = shouldConvertGroupSize ? groupResizeSizeToWorld({ width: event.width, height: event.height }) : { width: event.width, height: event.height };
+  const requestedSize = shouldConvertGroupSize
+    ? groupResizeSizeToWorld({ width: event.width, height: event.height })
+    : { width: event.width, height: event.height };
+  const size = normalizeResizeSize(element, requestedSize);
   const position = {
     x: element.position.x + moveableValueToWorld(translate[0]),
     y: element.position.y + moveableValueToWorld(translate[1])

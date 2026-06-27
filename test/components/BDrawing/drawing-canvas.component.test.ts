@@ -255,8 +255,8 @@ describe('BDrawing canvas component', (): void => {
 
     const textNode = wrapper.find('[data-drawing-name="text"]');
     expect(textNode.exists()).toBe(true);
-    expect(textNode.attributes('style')).toContain('width: 32px');
-    expect(textNode.attributes('style')).toContain('height: 21.55px');
+    expect(textNode.attributes('style')).toContain('width: 180px');
+    expect(textNode.attributes('style')).toContain('height: 72px');
     expect(textNode.attributes('style')).toContain('translate(0px, 0px)');
     expect(textNode.text()).toContain('文本');
     expect(wrapper.find('[data-testid="drawing-text-editor"]').exists()).toBe(false);

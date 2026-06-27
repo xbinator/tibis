@@ -20,6 +20,14 @@ import { resolveDrawingBoxSideNumbers } from './drawingStyle';
 let drawingTextMeasureCanvas: HTMLCanvasElement | null = null;
 
 /**
+ * 文本元素尺寸测量选项。
+ */
+interface DrawingTextMeasureOptions {
+  /** 文本元素最大渲染宽度，用于自动换行 */
+  maxWidth?: number;
+}
+
+/**
  * 归一化文本尺寸数值，减少浮点噪声。
  * @param value - 原始数值
  * @returns 归一化数值
@@ -131,6 +139,52 @@ function getDrawingTextLineWidth(line: string, fontSize: number, fontWeight: num
 }
 
 /**
+ * 读取用于文本换行的内容宽度。
+ * @param maxWidth - 文本元素最大宽度
+ * @param padding - 文本内边距尺寸
+ * @returns 可用于文本内容的宽度，未限制时返回 null
+ */
+function getTextWrappingContentWidth(maxWidth: number | undefined, padding: { horizontal: number; vertical: number }): number | null {
+  if (maxWidth === undefined) {
+    return null;
+  }
+
+  return Math.max(1, maxWidth - padding.horizontal);
+}
+
+/**
+ * 按最大内容宽度拆分单行文本。
+ * @param line - 原始文本行
+ * @param maxLineWidth - 最大内容宽度
+ * @param fontSize - 字号
+ * @param fontWeight - 字重
+ * @returns 拆分后的渲染行
+ */
+function wrapDrawingTextLine(line: string, maxLineWidth: number | null, fontSize: number, fontWeight: number): string[] {
+  if (maxLineWidth === null || getDrawingTextLineWidth(line, fontSize, fontWeight) <= maxLineWidth) {
+    return [line];
+  }
+
+  const wrappedLines: string[] = [];
+  let currentLine = '';
+
+  Array.from(line).forEach((character: string): void => {
+    const candidateLine = `${currentLine}${character}`;
+    if (currentLine && getDrawingTextLineWidth(candidateLine, fontSize, fontWeight) > maxLineWidth) {
+      wrappedLines.push(currentLine);
+      currentLine = character;
+      return;
+    }
+
+    currentLine = candidateLine;
+  });
+
+  wrappedLines.push(currentLine);
+
+  return wrappedLines;
+}
+
+/**
  * 读取文本元素测量时使用的内边距。
  * @param style - 文本样式
  * @returns 横向与纵向内边距总和
@@ -155,18 +209,22 @@ function getDrawingTextPaddingMetrics(style?: DrawingElementStyle): { horizontal
  * 按文本内容估算文本元素尺寸。
  * @param text - 文本内容
  * @param style - 文本样式
+ * @param options - 文本测量选项
  * @returns 文本元素尺寸
  */
-export function measureDrawingTextElementSize(text: string, style?: DrawingElementStyle): DrawingSize {
+export function measureDrawingTextElementSize(text: string, style?: DrawingElementStyle, options: DrawingTextMeasureOptions = {}): DrawingSize {
   const fontSize = style?.fontSize ?? DRAWING_TEXT_DEFAULT_FONT_SIZE;
   const fontWeight = style?.fontWeight ?? DRAWING_TEXT_DEFAULT_FONT_WEIGHT;
   const lineHeight = fontSize * DRAWING_TEXT_LINE_HEIGHT_RATIO;
-  const lines = text.split('\n');
-  const maxLineWidth = Math.max(1, ...lines.map((line: string): number => getDrawingTextLineWidth(line, fontSize, fontWeight)));
   const padding = getDrawingTextPaddingMetrics(style);
+  const maxContentWidth = getTextWrappingContentWidth(options.maxWidth, padding);
+  const lines = text.split('\n').flatMap((line: string): string[] => wrapDrawingTextLine(line, maxContentWidth, fontSize, fontWeight));
+  const maxLineWidth = Math.max(1, ...lines.map((line: string): number => getDrawingTextLineWidth(line, fontSize, fontWeight)));
 
   return {
-    width: normalizeTextMetricValue(maxLineWidth + padding.horizontal),
+    width: normalizeTextMetricValue(
+      options.maxWidth === undefined ? maxLineWidth + padding.horizontal : Math.min(options.maxWidth, maxLineWidth + padding.horizontal)
+    ),
     height: normalizeTextMetricValue(Math.max(1, lines.length) * lineHeight + padding.vertical)
   };
 }

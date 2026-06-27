@@ -92,7 +92,8 @@ const nodeStyle = computed<CSSProperties>(() => ({
 .b-drawing-node.is-text {
   font-size: 13px;
   line-height: 1.35;
-  white-space: pre;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
   background: transparent;
   border-color: transparent;
 }

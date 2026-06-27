@@ -30,6 +30,27 @@ function createShapeElement(id: string): DrawingShapeElement {
 }
 
 /**
+ * 创建文本元素测试数据。
+ * @param id - 元素 ID
+ * @param content - 文本正文
+ * @returns 文本元素
+ */
+function createTextElement(id: string, content: string): DrawingShapeElement {
+  return {
+    id,
+    name: 'text',
+    label: '文本',
+    icon: 'lucide:type',
+    title: '文本',
+    position: { x: 24, y: 36 },
+    size: { width: 30, height: 17.5 },
+    rotation: 0,
+    style: { fontSize: 10 },
+    metadata: { content }
+  };
+}
+
+/**
  * 创建测试画板数据。
  * @param id - 元素 ID
  * @returns 测试画板数据
@@ -267,5 +288,41 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(readBoardSelection()).toEqual(['node-1']);
+  });
+
+  it('raises text model height after external content changes require more wrapped height', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<DrawingData | undefined>({
+      metadata: {},
+      elements: [createTextElement('text-1', 'abc')],
+      viewport: {
+        center: { x: 10, y: 20 },
+        zoom: 1
+      }
+    });
+
+    scope.run((): void => {
+      const board = useDrawingBoard(modelValue.value);
+      useModelSync({
+        board,
+        drawingData: modelValue
+      });
+
+      const element = modelValue.value?.elements[0];
+      if (!element) {
+        throw new Error('测试数据缺少文本元素');
+      }
+
+      element.metadata = {
+        ...element.metadata,
+        content: 'abcdef'
+      };
+    });
+
+    await nextTick();
+    await nextTick();
+    scope.stop();
+
+    expect(modelValue.value?.elements[0]?.size).toEqual({ width: 30, height: 31 });
   });
 });

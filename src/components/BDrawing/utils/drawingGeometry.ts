@@ -87,6 +87,25 @@ export function getDrawingResponsiveViewBoxSize(zoom: number, viewportSize: Draw
 }
 
 /**
+ * 按尺寸来源解析单轴渲染尺寸。
+ * @param source - 尺寸来源
+ * @param modelValue - 模型尺寸
+ * @param contentValue - 内容尺寸
+ * @returns 渲染尺寸
+ */
+function resolveDrawingRenderSizeValue(source: 'model' | 'content' | 'model-min-content', modelValue: number, contentValue: number): number {
+  if (source === 'content') {
+    return contentValue;
+  }
+
+  if (source === 'model-min-content') {
+    return Math.max(modelValue, contentValue);
+  }
+
+  return modelValue;
+}
+
+/**
  * 读取形状渲染时使用的有效尺寸。
  * @param element - 形状元素
  * @returns 渲染尺寸
@@ -100,8 +119,8 @@ export function getDrawingShapeRenderSize(element: DrawingShapeElement): Drawing
   const contentSize = renderSize.measureContent(element);
 
   return {
-    width: renderSize.width === 'content' ? contentSize.width : element.size.width,
-    height: renderSize.height === 'content' ? contentSize.height : element.size.height
+    width: resolveDrawingRenderSizeValue(renderSize.width, element.size.width, contentSize.width),
+    height: resolveDrawingRenderSizeValue(renderSize.height, element.size.height, contentSize.height)
   };
 }
 
