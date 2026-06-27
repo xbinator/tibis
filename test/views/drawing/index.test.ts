@@ -57,9 +57,7 @@ vi.mock('@/hooks/useFileSession', () => ({
       },
       __v_isRef: true
     },
-    data: {
-      value: drawingDataMock.value
-    },
+    data: drawingDataMock,
     actions: {
       onSave: onSaveMock,
       onSaveAs: onSaveAsMock,
@@ -210,6 +208,89 @@ describe('DrawingPage', (): void => {
     await nextTick();
 
     expect(selectElementByIdMock).toHaveBeenCalledWith('node-2');
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2']);
+    wrapper.unmount();
+  });
+
+  it('copies the drawing element when the sidebar layer emits copy', async (): Promise<void> => {
+    const copiedElement = createDrawingElement('node-2', '节点 2');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [createDrawingElement('node-1', '节点 1'), copiedElement, createDrawingElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('copy-element', copiedElement);
+    await flushPromises();
+
+    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-1', 'node-2', 'drawing-shape-1', 'node-3']);
+    expect(drawingDataMock.value.elements[2]).toMatchObject({
+      title: '节点 2',
+      position: {
+        x: 16,
+        y: 16
+      }
+    });
+    expect(selectElementByIdMock).toHaveBeenCalledWith('drawing-shape-1');
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['drawing-shape-1']);
+    wrapper.unmount();
+  });
+
+  it('deletes the drawing element when the sidebar layer emits delete', async (): Promise<void> => {
+    const selectedElement = createDrawingElement('node-2', '节点 2');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [createDrawingElement('node-1', '节点 1'), selectedElement]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    panelSidebar.vm.$emit('delete-element', selectedElement);
+    await nextTick();
+
+    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-1']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('reorders drawing elements when the sidebar layer emits move', async (): Promise<void> => {
+    const selectedElement = createDrawingElement('node-2', '节点 2');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [createDrawingElement('node-1', '节点 1'), selectedElement, createDrawingElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+    panelSidebar.vm.$emit('move-element', 'node-1', 'node-3', 'before');
+    await nextTick();
+
+    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-2', 'node-3', 'node-1']);
     expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2']);
     wrapper.unmount();
   });

@@ -83,8 +83,8 @@ describe('Text Setter', (): void => {
       }
     });
 
-    expect(wrapper.find('[data-testid="drawing-text-setter"]').attributes('data-title')).toBe('文本属性');
-    expect(wrapper.find('[data-testid="section-item"]').attributes('data-label')).toBe('内容');
+    expect(wrapper.find('[data-testid="drawing-text-setter"]').attributes('data-title')).toBe('内容');
+    expect(wrapper.find('[data-testid="text-setter-textarea"]').exists()).toBe(true);
 
     await wrapper.find('[data-testid="text-setter-textarea"]').setValue('更新后的文本');
 

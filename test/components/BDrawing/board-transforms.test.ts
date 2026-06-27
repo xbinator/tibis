@@ -6,11 +6,16 @@ import { describe, expect, it } from 'vitest';
 import type { DrawingBoardState, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import {
   addDrawingShape,
+  copyDrawingSelection,
   createDrawingBoardState,
+  groupDrawingSelection,
   moveDrawingElements,
+  pasteDrawingElements,
   redoDrawingBoard,
   reorderDrawingElement,
+  reorderDrawingSelection,
   resizeDrawingElements,
+  ungroupDrawingSelection,
   undoDrawingBoard,
   updateDrawingElementStyle,
   updateDrawingElementTitle
@@ -430,6 +435,81 @@ describe('boardTransforms', (): void => {
 
       expect(undone.elements.map((element) => element.id)).toEqual(['node-1', 'node-2', 'node-3']);
       expect(redone.elements.map((element) => element.id)).toEqual(['node-2', 'node-3', 'node-1']);
+    });
+  });
+
+  describe('selection commands', (): void => {
+    /** 创建包含 4 个元素的初始状态：node-1(底) → node-4(顶) */
+    function createFourElementState(selection: string[] = []): DrawingBoardState {
+      return createDrawingBoardState({
+        elements: [createShapeElement('node-1'), createShapeElement('node-2'), createShapeElement('node-3'), createShapeElement('node-4')],
+        selection
+      });
+    }
+
+    it('copies selected elements in layer order without mutating the source state', (): void => {
+      const state = createFourElementState(['node-3', 'node-1']);
+      const copied = copyDrawingSelection(state);
+
+      expect(copied.map((element) => element.id)).toEqual(['node-1', 'node-3']);
+      copied[0].position.x = 999;
+      expect(state.elements[0]?.position.x).toBe(100);
+    });
+
+    it('pastes copied elements at the requested board point with fresh ids and group ids', (): void => {
+      const groupedElements: DrawingShapeElement[] = [
+        {
+          ...createShapeElement('node-1'),
+          position: { x: 10, y: 20 },
+          metadata: { groupId: 'group-1' }
+        },
+        {
+          ...createShapeElement('node-2'),
+          position: { x: 50, y: 70 },
+          metadata: { groupId: 'group-1' }
+        }
+      ];
+      const state = createDrawingBoardState({
+        elements: groupedElements,
+        selection: ['node-1', 'node-2']
+      });
+      const copied = copyDrawingSelection(state);
+      const pasted = pasteDrawingElements(state, copied, {
+        anchorPoint: { x: 200, y: 300 },
+        createElementId: (_element: DrawingShapeElement, index: number): string => `copy-${index + 1}`,
+        createGroupId: (_groupId: string, index: number): string => `copy-group-${index + 1}`
+      });
+
+      expect(pasted.elements.map((element) => element.id)).toEqual(['node-1', 'node-2', 'copy-1', 'copy-2']);
+      expect(pasted.elements[2]?.position).toEqual({ x: 200, y: 300 });
+      expect(pasted.elements[3]?.position).toEqual({ x: 240, y: 350 });
+      expect(pasted.elements[2]?.metadata.groupId).toBe('copy-group-1');
+      expect(pasted.elements[3]?.metadata.groupId).toBe('copy-group-1');
+      expect(pasted.selection).toEqual(['copy-1', 'copy-2']);
+      expect(pasted.history.past).toHaveLength(1);
+    });
+
+    it('groups and ungroups the selected elements through metadata group ids', (): void => {
+      const grouped = groupDrawingSelection(createFourElementState(['node-1', 'node-2']), 'drawing-group-1');
+      const ungrouped = ungroupDrawingSelection({
+        ...grouped,
+        selection: ['node-1']
+      });
+
+      expect(grouped.elements[0]?.metadata.groupId).toBe('drawing-group-1');
+      expect(grouped.elements[1]?.metadata.groupId).toBe('drawing-group-1');
+      expect(grouped.elements[2]?.metadata.groupId).toBeUndefined();
+      expect(ungrouped.elements[0]?.metadata.groupId).toBeUndefined();
+      expect(ungrouped.elements[1]?.metadata.groupId).toBeUndefined();
+    });
+
+    it('reorders a multi-selection while preserving its relative order', (): void => {
+      const state = createFourElementState(['node-2', 'node-3']);
+      const front = reorderDrawingSelection(state, 'bringToFront');
+      const backward = reorderDrawingSelection(state, 'sendBackward');
+
+      expect(front.elements.map((element) => element.id)).toEqual(['node-1', 'node-4', 'node-2', 'node-3']);
+      expect(backward.elements.map((element) => element.id)).toEqual(['node-2', 'node-3', 'node-1', 'node-4']);
     });
   });
 });

@@ -4,12 +4,12 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import { defineComponent, nextTick, toRaw } from 'vue';
-import type { ComponentPublicInstance } from 'vue';
+import { computed, defineComponent, nextTick, ref, toRaw } from 'vue';
+import type { ComponentPublicInstance, ComputedRef, Ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
-import type { DrawingData, DrawingPoint, DrawingSelectTarget } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingPoint, DrawingSelectTarget } from '@/components/BDrawing/types';
 
 /**
  * 带内部选区的测试画板数据。
@@ -236,6 +236,20 @@ function createSingleSelectedTwoNodeDrawingData(): DrawingDataWithSelection {
 }
 
 /**
+ * 创建两个未内置选区的节点测试数据。
+ * @returns 两个节点的画板数据
+ */
+function createTwoNodeDrawingData(): DrawingData {
+  const data = createMultiSelectedDrawingData();
+
+  return {
+    metadata: data.metadata,
+    elements: data.elements,
+    viewport: data.viewport
+  };
+}
+
+/**
  * 创建空画板数据。
  * @returns 画板数据
  */
@@ -298,6 +312,55 @@ function isMetadataSelectTarget(target: DrawingSelectTarget): boolean {
 }
 
 /**
+ * 判断设置目标是否为画图元素。
+ * @param target - 设置面板目标
+ * @returns 是否为画图元素
+ */
+function isElementSelectTarget(target: DrawingSelectTarget): target is DrawingElement {
+  return target !== null && typeof target === 'object' && 'id' in target && typeof target.id === 'string';
+}
+
+/**
+ * 创建带真实 v-model 回写的 BDrawing 测试父组件。
+ * @returns 父组件定义
+ */
+function createDrawingRoundTripHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'DrawingRoundTripHost',
+    components: {
+      BDrawing
+    },
+    setup(): {
+      drawingData: Ref<DrawingData>;
+      selectedTarget: Ref<DrawingSelectTarget>;
+      selectedId: ComputedRef<string>;
+      isSelectedCurrentElement: ComputedRef<boolean>;
+    } {
+      const drawingData = ref<DrawingData>(createTwoNodeDrawingData());
+      const selectedTarget = ref<DrawingSelectTarget>(drawingData.value.metadata);
+      const selectedId = computed<string>(() => (isElementSelectTarget(selectedTarget.value) ? selectedTarget.value.id : ''));
+      const isSelectedCurrentElement = computed<boolean>(() =>
+        isElementSelectTarget(selectedTarget.value) ? drawingData.value.elements.includes(selectedTarget.value) : false
+      );
+
+      return {
+        drawingData,
+        selectedTarget,
+        selectedId,
+        isSelectedCurrentElement
+      };
+    },
+    template: `
+      <div>
+        <BDrawing v-model:value="drawingData" v-model:select="selectedTarget" />
+        <span data-testid="selected-id">{{ selectedId }}</span>
+        <span data-testid="selected-current">{{ isSelectedCurrentElement ? 'yes' : 'no' }}</span>
+      </div>
+    `
+  });
+}
+
+/**
  * 设置元素测试尺寸。
  * @param element - DOM 元素
  * @param rect - 目标尺寸
@@ -329,6 +392,21 @@ async function dispatchPointerEvent(target: Element | Window, type: string, poin
       clientY: point.clientY
     })
   );
+  await nextTick();
+}
+
+/**
+ * 点击右键菜单项。
+ * @param wrapper - BDrawing 测试包装器
+ * @param label - 菜单项文案
+ */
+async function clickContextMenuItem(wrapper: VueWrapper, label: string): Promise<void> {
+  const item = wrapper
+    .findAll<HTMLButtonElement>('.b-drawing-context-menu__item')
+    .find((menuItem: DOMWrapper<HTMLButtonElement>): boolean => menuItem.text().includes(label));
+  expect(item).toBeDefined();
+  await item?.trigger('click');
+  await nextTick();
   await nextTick();
 }
 
@@ -475,6 +553,51 @@ describe('BDrawing node click selection', () => {
     const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as DrawingSelectTarget;
 
     expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-2');
+    wrapper.unmount();
+  });
+
+  it('keeps the selected node and moveable handles after moving it one layer up from the context menu', async (): Promise<void> => {
+    const data = createSingleSelectedTwoNodeDrawingData();
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: data,
+        select: data.elements[0]
+      },
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 160, clientY: 120 });
+    await clickContextMenuItem(wrapper, '上一层');
+
+    const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as DrawingSelectTarget;
+    const latestData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? data;
+
+    expect(findNodeById(wrapper, 'node-1').classes()).toContain('is-selected');
+    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
+    expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-1');
+    expect(latestData.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-2', 'node-1']);
+    wrapper.unmount();
+  });
+
+  it('keeps the parent v-model select bound to the current element after moving a node one layer up', async (): Promise<void> => {
+    const wrapper = mount(createDrawingRoundTripHost(), {
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 160, clientY: 120 });
+    expect(wrapper.find('[data-testid="selected-id"]').text()).toBe('node-1');
+    expect(wrapper.find('[data-testid="selected-current"]').text()).toBe('yes');
+
+    await clickContextMenuItem(wrapper, '上一层');
+
+    expect(findNodeById(wrapper, 'node-1').classes()).toContain('is-selected');
+    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="selected-id"]').text()).toBe('node-1');
+    expect(wrapper.find('[data-testid="selected-current"]').text()).toBe('yes');
     wrapper.unmount();
   });
 

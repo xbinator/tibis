@@ -3,6 +3,7 @@
  * @description 验证 BDrawing HTML 画布渲染和注册元素创建能力。
  * @vitest-environment jsdom
  */
+/* eslint-disable vue/one-component-per-file */
 import { defineComponent, nextTick, toRaw } from 'vue';
 import type { ComponentPublicInstance } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
@@ -169,7 +170,8 @@ describe('BDrawing canvas component', (): void => {
     expect(node.attributes('style')).toContain('width: 180px');
     expect(node.attributes('style')).toContain('height: 72px');
     expect(node.attributes('style')).toContain('translate(24px, 36px)');
-    expect(node.find('.drawing-rect-element-view').text()).toBe('外部节点');
+    expect(node.find('.drawing-rect-element-view').exists()).toBe(true);
+    expect(node.find('.drawing-rect-element-view').attributes('aria-hidden')).toBe('true');
     expect(wrapper.find('svg').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -191,20 +193,19 @@ describe('BDrawing canvas component', (): void => {
       },
       attachTo: document.body
     });
-    const rectStyle = findNodeById(wrapper, 'external-node-1').find('.drawing-rect-element-view').attributes('style');
+    const nodeStyle = (findNodeById(wrapper, 'external-node-1').element as HTMLElement).style;
 
-    expect(rectStyle).toContain('background-color: rgb(248, 250, 252)');
-    expect(rectStyle).toContain('border-color: rgb(18, 52, 86)');
-    expect(rectStyle).toContain('border-style: dashed');
-    expect(rectStyle).toContain('border-top-width: 1px');
-    expect(rectStyle).toContain('border-right-width: 2px');
-    expect(rectStyle).toContain('border-bottom-width: 3px');
-    expect(rectStyle).toContain('border-left-width: 4px');
-    expect(rectStyle).toContain('border-top-left-radius: 5px');
-    expect(rectStyle).toContain('border-top-right-radius: 6px');
-    expect(rectStyle).toContain('border-bottom-right-radius: 7px');
-    expect(rectStyle).toContain('border-bottom-left-radius: 8px');
-    expect(rectStyle).toContain('padding: 9px 10px 11px 12px');
+    expect(nodeStyle.backgroundColor).toBe('rgb(248, 250, 252)');
+    expect(nodeStyle.borderColor).toBe('rgb(18, 52, 86)');
+    expect(nodeStyle.borderStyle).toBe('dashed');
+    expect(nodeStyle.borderTopWidth).toBe('1px');
+    expect(nodeStyle.borderRightWidth).toBe('2px');
+    expect(nodeStyle.borderBottomWidth).toBe('3px');
+    expect(nodeStyle.borderLeftWidth).toBe('4px');
+    expect(nodeStyle.borderTopLeftRadius).toBe('5px');
+    expect(nodeStyle.borderTopRightRadius).toBe('6px');
+    expect(nodeStyle.borderBottomRightRadius).toBe('7px');
+    expect(nodeStyle.borderBottomLeftRadius).toBe('8px');
     wrapper.unmount();
   });
 
