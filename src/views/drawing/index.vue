@@ -22,7 +22,12 @@
       <BDrawing ref="drawingRef" v-model:value="session.data.value" v-model:select="selectedTarget" @selection-change="handleDrawingSelectionChange" />
     </section>
 
-    <PanelSettings v-model:select="selectedTarget" :drawing-data="session.data.value" />
+    <PanelSettings
+      v-model:select="selectedTarget"
+      :drawing-data="session.data.value"
+      :selected-element-ids="selectedElementIds"
+      @multi-command="handleSettingsMultiCommand"
+    />
   </main>
 </template>
 
@@ -32,7 +37,7 @@ import { useRoute } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import type BDrawingComponent from '@/components/BDrawing/index.vue';
-import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingLayerAction, DrawingSelectTarget } from '@/components/BDrawing/types';
 import { DRAWING_GROUP_METADATA_KEY, getDrawingElementGroupId } from '@/components/BDrawing/utils/drawingGroups';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -93,6 +98,11 @@ const activeSidebarElementId = computed<string | null>(() => {
 
   return getDrawingElementGroupId(selectedTarget.value) ? selectedTarget.value.id : null;
 });
+
+/**
+ * 右侧多选面板快捷操作命令。
+ */
+type SettingsMultiCommand = 'copy' | 'group' | 'ungroup' | DrawingLayerAction | 'delete';
 
 /**
  * 读取自动生成组合 ID 中的序号。
@@ -369,6 +379,35 @@ async function handleSidebarElementsCopy(elements: DrawingElement[]): Promise<vo
   selectedElementIds.value = copiedElements.map((element: DrawingElement): string => element.id);
   await nextTick();
   drawingRef.value?.selectElementsByIds(selectedElementIds.value);
+}
+
+/**
+ * 处理右侧多选面板快捷操作。
+ * @param command - 快捷操作命令
+ */
+function handleSettingsMultiCommand(command: SettingsMultiCommand): void {
+  switch (command) {
+    case 'copy': {
+      drawingRef.value?.copySelection();
+      break;
+    }
+    case 'group': {
+      drawingRef.value?.groupSelection();
+      break;
+    }
+    case 'ungroup': {
+      drawingRef.value?.ungroupSelection();
+      break;
+    }
+    case 'delete': {
+      drawingRef.value?.deleteSelection();
+      break;
+    }
+    default: {
+      drawingRef.value?.reorderSelection(command);
+      break;
+    }
+  }
 }
 
 /**

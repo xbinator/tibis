@@ -5,6 +5,12 @@
 <template>
   <aside class="setter-panel">
     <PageSetter v-if="select && !isElementTarget(select)" :drawing-data="drawingData" :metadata="select" />
+    <MultiSelectSetter
+      v-else-if="select === null && selectedElementIds.length > 1"
+      :drawing-data="drawingData"
+      :selected-element-ids="selectedElementIds"
+      @command="emit('multi-command', $event)"
+    />
     <div v-else-if="select === null" class="setter-panel__empty">已选择多个元素</div>
     <template v-else>
       <ATabs>
@@ -28,6 +34,7 @@ import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
 import { getDrawingElementSetter } from '@/components/BDrawing/elements';
 import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
 import DesignSetter from './DesignSetter.vue';
+import MultiSelectSetter from './MultiSelectSetter.vue';
 import PageSetter from './PageSetter.vue';
 
 /**
@@ -36,9 +43,17 @@ import PageSetter from './PageSetter.vue';
 interface Props {
   /** 当前画图数据 */
   drawingData: DrawingData;
+  /** 当前选中的元素 ID 列表 */
+  selectedElementIds?: string[];
 }
 
-defineProps<Props>();
+withDefaults(defineProps<Props>(), {
+  selectedElementIds: (): string[] => []
+});
+const emit = defineEmits<{
+  /** 触发多选快捷操作 */
+  'multi-command': [command: 'copy' | 'group' | 'ungroup' | 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack' | 'delete'];
+}>();
 
 const select = defineModel<DrawingSelectTarget>('select', { default: null });
 

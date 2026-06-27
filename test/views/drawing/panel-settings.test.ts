@@ -57,13 +57,13 @@ function createDrawingElement(id: string, name: 'rect' | 'text'): DrawingElement
 
 /**
  * 创建测试画图数据。
- * @param element - 画图元素
+ * @param elements - 画图元素或元素列表
  * @returns 测试画图数据
  */
-function createDrawingData(element: DrawingElement): DrawingData {
+function createDrawingData(elements: DrawingElement | DrawingElement[]): DrawingData {
   return {
     metadata: {},
-    elements: [element],
+    elements: Array.isArray(elements) ? elements : [elements],
     viewport: {
       center: { x: 0, y: 0 },
       zoom: 1
@@ -84,6 +84,43 @@ describe('PanelSettings', (): void => {
     expect(wrapper.find('[data-testid="design-setter"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="drawing-text-setter"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('暂无专属属性');
+    wrapper.unmount();
+  });
+
+  it('renders a multi-selection dashboard and forwards quick commands', async (): Promise<void> => {
+    const firstRect = createDrawingElement('rect-1', 'rect');
+    const secondRect = createDrawingElement('rect-2', 'rect');
+    const textElement = createDrawingElement('text-1', 'text');
+    firstRect.position = { x: 10, y: 20 };
+    firstRect.size = { width: 100, height: 50 };
+    secondRect.position = { x: 40, y: 100 };
+    secondRect.size = { width: 80, height: 60 };
+    secondRect.metadata = { groupId: 'drawing-group-1' };
+    textElement.position = { x: -20, y: 30 };
+    textElement.size = { width: 60, height: 40 };
+    textElement.metadata = { groupId: 'drawing-group-2' };
+    const wrapper = mount(PanelSettings, {
+      props: {
+        drawingData: createDrawingData([firstRect, secondRect, textElement]),
+        select: null,
+        selectedElementIds: ['rect-1', 'rect-2', 'text-1']
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.text()).toContain('已选择 3 个元素');
+    expect(wrapper.text()).toContain('矩形 2');
+    expect(wrapper.text()).toContain('文本 1');
+    expect(wrapper.text()).toContain('多个组合');
+    expect(wrapper.text()).toContain('140 x 140');
+
+    await wrapper.find('[data-testid="multi-select-command-group"]').trigger('click');
+
+    expect(wrapper.emitted('multi-command')).toEqual([['group']]);
     wrapper.unmount();
   });
 });

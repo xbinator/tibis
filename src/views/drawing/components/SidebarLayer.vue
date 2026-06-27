@@ -3,7 +3,17 @@
   @description 画图页面侧边栏图层列表，展示画图元素图层项及选中态。
 -->
 <template>
+  <!-- 图层列表为空时的缺省提示 -->
+  <div v-if="layerEntries.length === 0" class="sidebar-panel__layer-empty">
+    <div class="sidebar-panel__layer-empty-icon">
+      <BIcon icon="lucide:rectangle-dashed" :size="24" />
+    </div>
+    <span class="sidebar-panel__layer-empty-text">暂无图层</span>
+    <span class="sidebar-panel__layer-empty-hint">添加画布元素后图层将在此展示</span>
+  </div>
+  <!-- 图层拖拽列表 -->
   <BDraggable
+    v-else
     class="sidebar-panel__layer-list"
     :list="layerEntries"
     item-key="id"
@@ -399,6 +409,38 @@ function handleDraggableMove(event: BDraggableMoveEvent<SidebarLayerEntry>): voi
 </script>
 
 <style lang="less" scoped>
+.sidebar-panel__layer-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+}
+
+.sidebar-panel__layer-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  color: var(--text-quaternary);
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+}
+
+.sidebar-panel__layer-empty-text {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.sidebar-panel__layer-empty-hint {
+  font-size: 12px;
+  color: var(--text-quaternary);
+}
+
 .sidebar-panel__layer-list {
   display: flex;
   flex: 1;

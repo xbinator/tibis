@@ -83,6 +83,7 @@ import type {
   DrawingElement,
   DrawingElementStyle,
   DrawingGeometryChange,
+  DrawingLayerAction,
   DrawingPoint,
   DrawingSelectTarget,
   DrawingShapeElement,
@@ -980,6 +981,42 @@ function selectElementsByIds(ids: string[]): void {
 }
 
 /**
+ * 复制当前画布选区。
+ */
+function copySelection(): void {
+  board.copySelection();
+}
+
+/**
+ * 合并当前画布选区。
+ */
+function groupSelection(): void {
+  board.groupSelection();
+}
+
+/**
+ * 取消当前画布选区中的组合。
+ */
+function ungroupSelection(): void {
+  board.ungroupSelection();
+}
+
+/**
+ * 删除当前画布选区。
+ */
+function deleteSelection(): void {
+  board.deleteSelection();
+}
+
+/**
+ * 调整当前画布选区层级。
+ * @param action - 层级操作
+ */
+function reorderSelection(action: DrawingLayerAction): void {
+  board.reorderSelection(action);
+}
+
+/**
  * 处理画布滚轮缩放。
  * @param event - 滚轮事件
  */
@@ -1111,7 +1148,12 @@ onBeforeUnmount((): void => {
 defineExpose({
   createElementFromClientPoint,
   selectElementById,
-  selectElementsByIds
+  selectElementsByIds,
+  copySelection,
+  groupSelection,
+  ungroupSelection,
+  deleteSelection,
+  reorderSelection
 });
 </script>
 

@@ -18,7 +18,7 @@
       <div class="sidebar-panel__panel-content">
         <SidebarTools v-if="activeSidebarTab === 'tools'" />
         <SidebarLayer
-          v-else-if="elements.length"
+          v-else
           :active-element-id="activeElementId"
           :elements="elements"
           :selected-element-ids="selectedElementIds"

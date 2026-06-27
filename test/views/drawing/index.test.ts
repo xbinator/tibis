@@ -16,6 +16,11 @@ const onSaveAsMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const onRenameMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const selectElementByIdMock = vi.hoisted(() => vi.fn());
 const selectElementsByIdsMock = vi.hoisted(() => vi.fn());
+const copySelectionMock = vi.hoisted(() => vi.fn());
+const groupSelectionMock = vi.hoisted(() => vi.fn());
+const ungroupSelectionMock = vi.hoisted(() => vi.fn());
+const deleteSelectionMock = vi.hoisted(() => vi.fn());
+const reorderSelectionMock = vi.hoisted(() => vi.fn());
 const nanoidMock = vi.hoisted(() => vi.fn<() => string>());
 const drawingDataMock = vi.hoisted((): { value: DrawingData } => ({
   value: {
@@ -126,7 +131,12 @@ function createBDrawingStub(): ReturnType<typeof defineComponent> {
       expose({
         createElementFromClientPoint: vi.fn(),
         selectElementById: selectElementByIdMock,
-        selectElementsByIds: selectElementsByIdsMock
+        selectElementsByIds: selectElementsByIdsMock,
+        copySelection: copySelectionMock,
+        groupSelection: groupSelectionMock,
+        ungroupSelection: ungroupSelectionMock,
+        deleteSelection: deleteSelectionMock,
+        reorderSelection: reorderSelectionMock
       });
 
       return {};
@@ -153,6 +163,11 @@ describe('DrawingPage', (): void => {
     onRenameMock.mockClear();
     selectElementByIdMock.mockClear();
     selectElementsByIdsMock.mockClear();
+    copySelectionMock.mockClear();
+    groupSelectionMock.mockClear();
+    ungroupSelectionMock.mockClear();
+    deleteSelectionMock.mockClear();
+    reorderSelectionMock.mockClear();
     nanoidMock.mockReset();
     drawingDataMock.value = createEmptyDrawingData();
   });
@@ -387,6 +402,36 @@ describe('DrawingPage', (): void => {
     expect(drawingDataMock.value.elements[3]?.metadata.groupId).toBe('drawing-group-2');
     expect(selectElementsByIdsMock).toHaveBeenCalledWith(['copy0001', 'copy0002']);
     expect(panelSidebar.props('selectedElementIds')).toEqual(['copy0001', 'copy0002']);
+    wrapper.unmount();
+  });
+
+  it('forwards settings multi-selection commands to the drawing canvas', async (): Promise<void> => {
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [createDrawingElement('node-1', '节点 1'), createDrawingElement('node-2', '节点 2')]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+
+    panelSettings.vm.$emit('multi-command', 'group');
+    panelSettings.vm.$emit('multi-command', 'ungroup');
+    panelSettings.vm.$emit('multi-command', 'copy');
+    panelSettings.vm.$emit('multi-command', 'delete');
+    panelSettings.vm.$emit('multi-command', 'bringToFront');
+    await nextTick();
+
+    expect(groupSelectionMock).toHaveBeenCalledTimes(1);
+    expect(ungroupSelectionMock).toHaveBeenCalledTimes(1);
+    expect(copySelectionMock).toHaveBeenCalledTimes(1);
+    expect(deleteSelectionMock).toHaveBeenCalledTimes(1);
+    expect(reorderSelectionMock).toHaveBeenCalledWith('bringToFront');
     wrapper.unmount();
   });
 
