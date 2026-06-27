@@ -17,13 +17,22 @@
 
       <div class="sidebar-panel__panel-content">
         <SidebarTools v-if="activeSidebarTab === 'tools'" />
-        <SidebarLayer v-else-if="elements.length" :elements="elements" :selected-element-ids="selectedElementIds" @select-element="handleElementSelect" />
+        <SidebarLayer
+          v-else-if="elements.length"
+          :elements="elements"
+          :selected-element-ids="selectedElementIds"
+          @select-element="handleElementSelect"
+          @copy-element="handleElementCopy"
+          @delete-element="handleElementDelete"
+          @move-element="handleElementMove"
+        />
       </div>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
+import type { DrawingLayerMovePosition } from '../utils/layerOrder';
 import { computed, ref } from 'vue';
 import type { DrawingElement } from '@/components/BDrawing/types';
 import SidebarLayer from './SidebarLayer.vue';
@@ -62,6 +71,12 @@ withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   /** 选择侧栏图层元素 */
   'select-element': [element: DrawingElement];
+  /** 复制侧栏图层元素 */
+  'copy-element': [element: DrawingElement];
+  /** 删除侧栏图层元素 */
+  'delete-element': [element: DrawingElement];
+  /** 移动侧栏图层元素 */
+  'move-element': [sourceElementId: string, targetElementId: string, position: DrawingLayerMovePosition];
 }>();
 
 const activeSidebarTab = ref<DrawingSidebarTabKey>('tools');
@@ -87,6 +102,32 @@ function handleTabClick(key: DrawingSidebarTabKey): void {
  */
 function handleElementSelect(element: DrawingElement): void {
   emit('select-element', element);
+}
+
+/**
+ * 处理图层列表复制。
+ * @param element - 被复制的画图元素
+ */
+function handleElementCopy(element: DrawingElement): void {
+  emit('copy-element', element);
+}
+
+/**
+ * 处理图层列表删除。
+ * @param element - 被删除的画图元素
+ */
+function handleElementDelete(element: DrawingElement): void {
+  emit('delete-element', element);
+}
+
+/**
+ * 处理图层列表拖拽排序。
+ * @param sourceElementId - 被移动元素 ID
+ * @param targetElementId - 目标元素 ID
+ * @param position - 基于侧栏视觉顺序的插入位置
+ */
+function handleElementMove(sourceElementId: string, targetElementId: string, position: DrawingLayerMovePosition): void {
+  emit('move-element', sourceElementId, targetElementId, position);
 }
 </script>
 
@@ -121,7 +162,9 @@ function handleElementSelect(element: DrawingElement): void {
 }
 
 .sidebar-panel__panel-content {
+  height: 100%;
   padding: 12px;
+  overflow: auto;
 }
 
 .sidebar-panel__panel-header {
