@@ -327,7 +327,7 @@ function installWebviewHostBridge(): TestWebviewHostMessage[] {
  */
 function isSelectionHostMessage(
   entry: TestWebviewHostMessage
-): entry is TestWebviewHostMessage & { payload: { kind: string; selection?: { selector?: string } } } {
+): entry is TestWebviewHostMessage & { payload: { kind: string; selection?: { selector?: string; text?: string } } } {
   return (
     entry.channel === TIBIS_WEBVIEW_HOST_CHANNEL &&
     typeof entry.payload === 'object' &&
@@ -342,7 +342,7 @@ function isSelectionHostMessage(
  * @param messages - WebView 宿主消息列表
  * @returns 元素选择消息负载
  */
-function readLastSelectionMessage(messages: TestWebviewHostMessage[]): { kind: string; selection?: { selector?: string } } {
+function readLastSelectionMessage(messages: TestWebviewHostMessage[]): { kind: string; selection?: { selector?: string; text?: string } } {
   const message = messages.findLast(isSelectionHostMessage);
   if (!message) {
     throw new Error('selection host message should be posted');
@@ -506,6 +506,37 @@ describe('useWebView', () => {
 
     expect(selection?.selector).toContain(':nth-of-type(2)');
     expect(document.querySelector(selection?.selector ?? '')).toBe(seventhItem);
+  });
+
+  it('prefers selected element visible text over ancestor accessible labels', (): void => {
+    document.body.innerHTML = `
+      <section class="plan-row" aria-label="4 / 7">
+        <div class="plan-column-title">较去年人数变化</div>
+      </section>
+    `;
+    const hostMessages = installWebviewHostBridge();
+    const columnTitle = document.querySelector('.plan-column-title');
+
+    if (!(columnTitle instanceof HTMLElement)) {
+      throw new Error('column title should exist');
+    }
+
+    const scriptContext = createContext({
+      window,
+      document,
+      console,
+      Element: window.Element,
+      HTMLElement: window.HTMLElement,
+      Promise,
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
+    new Script(createElementSelectionScript()).runInContext(scriptContext);
+    columnTitle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    (window as WindowWithElementPickerCleanup).__tibisElementPickerCleanup?.();
+
+    const { selection } = readLastSelectionMessage(hostMessages);
+
+    expect(selection?.text).toBe('较去年人数变化');
   });
 
   it('renders themed selected element toolbar and emits screenshot action', (): void => {

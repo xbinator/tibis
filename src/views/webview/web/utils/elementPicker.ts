@@ -477,12 +477,12 @@ export function createElementSelectionScript(theme: WebviewElementPickerTheme = 
   };
 
   const readElementText = (element) => {
-    const label = readElementLabel(element);
-    if (label) {
-      return label.slice(0, 200);
+    const visibleText = normalizeReadableText(element.innerText || element.textContent);
+    if (visibleText) {
+      return visibleText.slice(0, 200);
     }
 
-    return normalizeReadableText(element.innerText || element.textContent).slice(0, 200);
+    return readElementLabel(element).slice(0, 200);
   };
 
   const readElement = (element) => {

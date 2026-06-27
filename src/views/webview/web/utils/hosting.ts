@@ -10,6 +10,11 @@ import type { WebviewTag } from 'electron';
 export const WEBVIEW_HOST_LAYER_ID = 'tibis-webview-host-layer';
 
 /**
+ * 宿主层 ID 中保留的路由可读片段最大长度。
+ */
+const WEBVIEW_HOST_LAYER_SLUG_LIMIT = 24;
+
+/**
  * WebView 统一圆角半径。
  */
 export const WEBVIEW_BORDER_RADIUS_PX = 8;
@@ -45,6 +50,36 @@ export interface WebviewHostBounds {
 }
 
 /**
+ * 创建宿主层 ID 中便于调试的路由片段。
+ * @param hostKey - 标签页隔离 key
+ * @returns 可放入 DOM id 的短路由片段
+ */
+function createWebviewHostLayerSlug(hostKey: string): string {
+  const routePath = hostKey.split('?')[0] || 'webview';
+  const normalized = routePath
+    .replace(/^\/+/, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+
+  return (normalized || 'webview').slice(0, WEBVIEW_HOST_LAYER_SLUG_LIMIT).replace(/-+$/g, '') || 'webview';
+}
+
+/**
+ * 创建宿主层 ID 中用于区分完整 hostKey 的稳定哈希。
+ * @param hostKey - 标签页隔离 key
+ * @returns base36 短哈希
+ */
+function createWebviewHostLayerHash(hostKey: string): string {
+  let hash = 0;
+  for (let index = 0; index < hostKey.length; index += 1) {
+    hash = Math.imul(hash, 31) + hostKey.charCodeAt(index);
+  }
+
+  return (hash >>> 0).toString(36);
+}
+
+/**
  * 解析指定标签页对应的宿主层 ID。
  * @param hostKey - 标签页隔离 key，不传时使用默认宿主层 ID
  * @returns 宿主层 DOM id
@@ -54,7 +89,9 @@ function resolveWebviewHostLayerId(hostKey?: string): string {
     return WEBVIEW_HOST_LAYER_ID;
   }
 
-  return `${WEBVIEW_HOST_LAYER_ID}-${encodeURIComponent(hostKey)}`;
+  const slug = createWebviewHostLayerSlug(hostKey);
+  const hash = createWebviewHostLayerHash(hostKey);
+  return `${WEBVIEW_HOST_LAYER_ID}-${slug}-${hash}`;
 }
 
 /**

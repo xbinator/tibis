@@ -10,9 +10,6 @@
       :is-inspector-open="isInspectorOpen"
       :has-selected-element="Boolean(webview.selectedElement)"
       :is-screenshot-capturing="screenshot.isCapturing.value"
-      supports-element-selection
-      supports-device-toolbar
-      supports-inspector
       @go-back="webview.goBack"
       @go-forward="webview.goForward"
       @reload="webview.reload"

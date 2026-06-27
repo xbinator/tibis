@@ -1,5 +1,5 @@
 /**
- * @file useWebviewDeviceMode.ts
+ * @file useDeviceMode.ts
  * @description 管理 `<webview>` 页面设备尺寸工具栏状态。
  */
 import { computed, ref } from 'vue';
