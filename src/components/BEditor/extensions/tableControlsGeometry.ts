@@ -18,7 +18,7 @@ export interface DOMRectLike {
 /** 分割线 hover 命中结果。 */
 export interface DividerHit {
   type: 'row' | 'column';
-  /** 内部分割线的列索引表示"分割线右侧列" */
+  /** 内部分割线的索引表示“分割线右侧列”或“分割线下方行”。 */
   index: number;
   edge: 'leading' | 'inner' | 'trailing';
   /** 用于绘制高亮线的矩形 */

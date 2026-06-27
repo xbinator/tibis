@@ -3,10 +3,10 @@ import type { SearchScrollContext } from '../extensions/editorSearch';
 import type { Transaction } from '@tiptap/pm/state';
 import type { Ref, ComputedRef } from 'vue';
 import { ref, watch, computed } from 'vue';
-import { TextSelection } from '@tiptap/pm/state';
 import { useEditor, type Editor } from '@tiptap/vue-3';
 import { noop } from 'lodash-es';
 import { normalizeEditorContent } from '../extensions/emptyContent';
+import { handleRichSelectAllKeyboardEvent } from '../extensions/richSelectAll';
 import { getPersistedMarkdown } from '../utils/editorMarkdown';
 import { useContent } from './useContent';
 import { useExtensions } from './useExtensions';
@@ -36,49 +36,6 @@ interface UseRichEditorResult {
   retryLoad: () => Promise<void>;
   isLoadTransaction: (transaction: Transaction) => boolean;
   getLoadSource: () => string | null;
-}
-
-interface CodeBlockSelectionRange {
-  from: number;
-  to: number;
-}
-
-function getActiveCodeBlockRange(editor: Editor): CodeBlockSelectionRange | null {
-  const { selection } = editor.state;
-  const { $from } = selection;
-
-  for (let { depth } = $from; depth > 0; depth--) {
-    const node = $from.node(depth);
-
-    if (node.type.name === 'codeBlock') {
-      return {
-        from: $from.start(depth),
-        to: $from.end(depth)
-      };
-    }
-  }
-
-  return null;
-}
-
-function handleSelectAllInCodeBlock(editor: Editor, event: KeyboardEvent): boolean {
-  const range = getActiveCodeBlockRange(editor);
-
-  if (!range) {
-    return false;
-  }
-
-  const { selection } = editor.state;
-  const isCurrentCodeBlockSelected = selection.from === range.from && selection.to === range.to;
-
-  if (isCurrentCodeBlockSelected) {
-    return false;
-  }
-
-  event.preventDefault();
-  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to)));
-
-  return true;
 }
 
 export function useRichEditor({ bodyContent, editable, editorInstanceId, onContentChange, onSearchMatchFocus }: UseRichEditorParams): UseRichEditorResult {
@@ -170,7 +127,7 @@ export function useRichEditor({ bodyContent, editable, editorInstanceId, onConte
           const instance = editorInstanceRef.value;
           if (!instance) return false;
           if (!canEdit) return true;
-          if (handleSelectAllInCodeBlock(instance, event)) return true;
+          if (handleRichSelectAllKeyboardEvent(instance, event)) return true;
         }
 
         if (isTab && !event.ctrlKey && !event.metaKey && !event.altKey) {
