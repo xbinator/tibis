@@ -189,6 +189,18 @@ export interface DrawingGeometryChange {
 }
 
 /**
+ * 画布右键菜单事件载荷。
+ */
+export interface DrawingContextMenuPayload {
+  /** 右键命中的元素 ID，空白画布为 null */
+  elementId: string | null;
+  /** 浏览器坐标 */
+  clientPoint: DrawingPoint;
+  /** 画板坐标 */
+  boardPoint: DrawingPoint;
+}
+
+/**
  * 画板视口状态。
  */
 export interface DrawingViewport {

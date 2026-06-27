@@ -22,6 +22,10 @@ import { cloneDeep } from 'lodash-es';
 import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/board';
 import { getDrawingElementSchema } from '../elements';
 import { getDrawingShapeRenderSize } from './drawingGeometry';
+import { expandDrawingSelectionToGroups, getDrawingElementGroupId } from './drawingGroups';
+
+/** 粘贴元素未指定落点时使用的默认偏移量。 */
+const DRAWING_PASTE_DEFAULT_OFFSET: DrawingPoint = { x: 16, y: 16 };
 
 /**
  * 创建默认视口。
@@ -68,6 +72,20 @@ type DrawingElementSnapshotCandidate = Partial<Omit<DrawingShapeElement, 'metada
   /** 元信息 */
   metadata?: Record<string, unknown>;
 };
+
+/**
+ * 粘贴元素参数。
+ */
+export interface DrawingPasteElementsOptions {
+  /** 目标落点，按复制内容外接框左上角对齐 */
+  anchorPoint?: DrawingPoint;
+  /** 未指定目标落点时使用的整体偏移 */
+  offset?: DrawingPoint;
+  /** 创建粘贴元素新 ID */
+  createElementId: (element: DrawingShapeElement, index: number) => string;
+  /** 创建粘贴组合新 ID */
+  createGroupId?: (groupId: string, index: number) => string;
+}
 
 /**
  * 判断坐标点是否可用于画板元素。
@@ -130,6 +148,150 @@ function normalizeElementMetadata(metadata: Record<string, unknown> | undefined)
   delete nextMetadata.manualSize;
 
   return nextMetadata;
+}
+
+/**
+ * 移除元素组合 ID。
+ * @param metadata - 元素元数据
+ * @returns 移除组合 ID 后的元数据
+ */
+function removeElementGroupId(metadata: DrawingMetadata): DrawingMetadata {
+  const nextMetadata = cloneDeep(metadata);
+  delete nextMetadata.groupId;
+
+  return nextMetadata;
+}
+
+/**
+ * 计算元素集合外接框左上角。
+ * @param elements - 元素集合
+ * @returns 外接框左上角，空集合返回原点
+ */
+function getElementsTopLeft(elements: DrawingShapeElement[]): DrawingPoint {
+  if (!elements.length) {
+    return { x: 0, y: 0 };
+  }
+
+  return elements.reduce<DrawingPoint>(
+    (point: DrawingPoint, element: DrawingShapeElement): DrawingPoint => ({
+      x: Math.min(point.x, element.position.x),
+      y: Math.min(point.y, element.position.y)
+    }),
+    { x: elements[0].position.x, y: elements[0].position.y }
+  );
+}
+
+/**
+ * 读取粘贴元素整体偏移。
+ * @param elements - 待粘贴元素
+ * @param options - 粘贴参数
+ * @returns 位置偏移
+ */
+function getPasteDelta(elements: DrawingShapeElement[], options: DrawingPasteElementsOptions): DrawingPoint {
+  if (options.anchorPoint) {
+    const topLeft = getElementsTopLeft(elements);
+
+    return {
+      x: options.anchorPoint.x - topLeft.x,
+      y: options.anchorPoint.y - topLeft.y
+    };
+  }
+
+  return cloneDeep(options.offset ?? DRAWING_PASTE_DEFAULT_OFFSET);
+}
+
+/**
+ * 读取粘贴后的组合 ID。
+ * @param groupIdMap - 旧组合 ID 到新组合 ID 的映射
+ * @param sourceGroupId - 原组合 ID
+ * @param createGroupId - 新组合 ID 生成器
+ * @returns 新组合 ID
+ */
+function getPastedGroupId(
+  groupIdMap: Map<string, string>,
+  sourceGroupId: string,
+  createGroupId: NonNullable<DrawingPasteElementsOptions['createGroupId']>
+): string {
+  const existingGroupId = groupIdMap.get(sourceGroupId);
+  if (existingGroupId) {
+    return existingGroupId;
+  }
+
+  const nextGroupId = createGroupId(sourceGroupId, groupIdMap.size);
+  groupIdMap.set(sourceGroupId, nextGroupId);
+
+  return nextGroupId;
+}
+
+/**
+ * 判断元素 ID 是否发生重复。
+ * @param currentIds - 当前已有 ID 集合
+ * @param incomingIds - 新增 ID 列表
+ * @returns 是否存在重复 ID
+ */
+function hasDuplicateElementIds(currentIds: Set<string>, incomingIds: string[]): boolean {
+  const nextIds = new Set(currentIds);
+
+  return incomingIds.some((id: string): boolean => {
+    if (nextIds.has(id)) {
+      return true;
+    }
+
+    nextIds.add(id);
+    return false;
+  });
+}
+
+/**
+ * 交换元素数组中的两个位置。
+ * @param elements - 元素数组
+ * @param fromIndex - 第一个位置
+ * @param toIndex - 第二个位置
+ */
+function swapElements(elements: DrawingShapeElement[], fromIndex: number, toIndex: number): void {
+  const current = elements[fromIndex];
+  elements[fromIndex] = elements[toIndex];
+  elements[toIndex] = current;
+}
+
+/**
+ * 将选中元素向上一层移动。
+ * @param elements - 元素列表
+ * @param selectedIds - 选中 ID 集合
+ * @returns 调整后的元素列表
+ */
+function bringSelectionForward(elements: DrawingShapeElement[], selectedIds: Set<string>): DrawingShapeElement[] {
+  const nextElements = cloneDeep(elements);
+
+  for (let index = nextElements.length - 2; index >= 0; index -= 1) {
+    const current = nextElements[index];
+    const above = nextElements[index + 1];
+    if (selectedIds.has(current.id) && !selectedIds.has(above.id)) {
+      swapElements(nextElements, index, index + 1);
+    }
+  }
+
+  return nextElements;
+}
+
+/**
+ * 将选中元素向下一层移动。
+ * @param elements - 元素列表
+ * @param selectedIds - 选中 ID 集合
+ * @returns 调整后的元素列表
+ */
+function sendSelectionBackward(elements: DrawingShapeElement[], selectedIds: Set<string>): DrawingShapeElement[] {
+  const nextElements = cloneDeep(elements);
+
+  for (let index = 1; index < nextElements.length; index += 1) {
+    const current = nextElements[index];
+    const below = nextElements[index - 1];
+    if (selectedIds.has(current.id) && !selectedIds.has(below.id)) {
+      swapElements(nextElements, index, index - 1);
+    }
+  }
+
+  return nextElements;
 }
 
 /**
@@ -511,11 +673,143 @@ export function deleteDrawingSelection(state: DrawingBoardState): DrawingBoardSt
     return state;
   }
 
-  const selected = new Set(state.selection);
+  const selected = new Set(expandDrawingSelectionToGroups(state.elements, state.selection));
   const nextElements = state.elements.filter((element) => !selected.has(element.id));
   return withHistory(state, {
     elements: nextElements,
     selection: [],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 复制当前选区元素。
+ * @param state - 当前画板状态
+ * @returns 已复制元素快照
+ */
+export function copyDrawingSelection(state: DrawingBoardState): DrawingShapeElement[] {
+  const selected = new Set(expandDrawingSelectionToGroups(state.elements, state.selection));
+
+  return cloneDeep(state.elements.filter((element: DrawingShapeElement): boolean => selected.has(element.id)));
+}
+
+/**
+ * 粘贴元素快照。
+ * @param state - 当前画板状态
+ * @param elements - 待粘贴元素
+ * @param options - 粘贴参数
+ * @returns 新画板状态
+ */
+export function pasteDrawingElements(state: DrawingBoardState, elements: DrawingShapeElement[], options: DrawingPasteElementsOptions): DrawingBoardState {
+  if (!elements.length) {
+    return state;
+  }
+
+  const delta = getPasteDelta(elements, options);
+  const groupIdMap = new Map<string, string>();
+  const pastedElements = cloneDeep(elements).map((element: DrawingShapeElement, index: number): DrawingShapeElement => {
+    const nextGroupId = getDrawingElementGroupId(element);
+    const metadata =
+      nextGroupId && options.createGroupId
+        ? {
+            ...cloneDeep(element.metadata),
+            groupId: getPastedGroupId(groupIdMap, nextGroupId, options.createGroupId)
+          }
+        : cloneDeep(element.metadata);
+
+    return normalizeElementModelSize({
+      ...element,
+      id: options.createElementId(element, index),
+      position: {
+        x: normalizeGeometryValue(element.position.x + delta.x),
+        y: normalizeGeometryValue(element.position.y + delta.y)
+      },
+      metadata
+    });
+  });
+  const pastedIds = pastedElements.map((element: DrawingShapeElement): string => element.id);
+
+  if (hasDuplicateElementIds(new Set(state.elements.map((element: DrawingShapeElement): string => element.id)), pastedIds)) {
+    return withError(state, new Error('粘贴元素 ID 重复'));
+  }
+
+  return withHistory(state, {
+    elements: [...cloneDeep(state.elements), ...pastedElements],
+    selection: pastedIds,
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 将当前选区合并为组合。
+ * @param state - 当前画板状态
+ * @param groupId - 新组合 ID
+ * @returns 新画板状态
+ */
+export function groupDrawingSelection(state: DrawingBoardState, groupId: string): DrawingBoardState {
+  const selection = expandDrawingSelectionToGroups(state.elements, state.selection);
+  if (selection.length < 2) {
+    return state;
+  }
+
+  const selected = new Set(selection);
+  const nextElements = cloneDeep(state.elements).map((element: DrawingShapeElement): DrawingShapeElement => {
+    if (!selected.has(element.id)) {
+      return element;
+    }
+
+    return {
+      ...element,
+      metadata: {
+        ...element.metadata,
+        groupId
+      }
+    };
+  });
+
+  return withHistory(state, {
+    elements: nextElements,
+    selection,
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 取消当前选区命中的组合。
+ * @param state - 当前画板状态
+ * @returns 新画板状态
+ */
+export function ungroupDrawingSelection(state: DrawingBoardState): DrawingBoardState {
+  const groupIds = new Set<string>();
+  expandDrawingSelectionToGroups(state.elements, state.selection).forEach((elementId: string): void => {
+    const element = state.elements.find((item: DrawingShapeElement): boolean => item.id === elementId);
+    const groupId = element ? getDrawingElementGroupId(element) : null;
+    if (groupId) {
+      groupIds.add(groupId);
+    }
+  });
+
+  if (groupIds.size === 0) {
+    return state;
+  }
+
+  const nextSelection: string[] = [];
+  const nextElements = cloneDeep(state.elements).map((element: DrawingShapeElement): DrawingShapeElement => {
+    const groupId = getDrawingElementGroupId(element);
+    if (!groupId || !groupIds.has(groupId)) {
+      return element;
+    }
+
+    nextSelection.push(element.id);
+    return {
+      ...element,
+      metadata: removeElementGroupId(element.metadata)
+    };
+  });
+
+  return withHistory(state, {
+    elements: nextElements,
+    selection: nextSelection,
     viewport: cloneDeep(state.viewport)
   });
 }
@@ -594,6 +888,53 @@ export function reorderDrawingElement(state: DrawingBoardState, elementId: strin
   return withHistory(state, {
     elements: nextElements,
     selection: [...state.selection],
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
+ * 调整当前选区层级顺序。
+ * @param state - 当前画板状态
+ * @param action - 层级操作类型
+ * @returns 新画板状态
+ */
+export function reorderDrawingSelection(state: DrawingBoardState, action: DrawingLayerAction): DrawingBoardState {
+  const selection = expandDrawingSelectionToGroups(state.elements, state.selection);
+  if (!selection.length) {
+    return state;
+  }
+
+  const selectedIds = new Set(selection);
+  const selectedElements = state.elements.filter((element: DrawingShapeElement): boolean => selectedIds.has(element.id));
+  const unselectedElements = state.elements.filter((element: DrawingShapeElement): boolean => !selectedIds.has(element.id));
+  let nextElements: DrawingShapeElement[];
+
+  switch (action) {
+    case 'bringToFront': {
+      nextElements = [...cloneDeep(unselectedElements), ...cloneDeep(selectedElements)];
+      break;
+    }
+    case 'sendToBack': {
+      nextElements = [...cloneDeep(selectedElements), ...cloneDeep(unselectedElements)];
+      break;
+    }
+    case 'bringForward': {
+      nextElements = bringSelectionForward(state.elements, selectedIds);
+      break;
+    }
+    case 'sendBackward': {
+      nextElements = sendSelectionBackward(state.elements, selectedIds);
+      break;
+    }
+    default: {
+      nextElements = cloneDeep(state.elements);
+      break;
+    }
+  }
+
+  return withHistory(state, {
+    elements: nextElements,
+    selection,
     viewport: cloneDeep(state.viewport)
   });
 }

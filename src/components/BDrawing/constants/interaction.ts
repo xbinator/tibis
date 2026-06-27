@@ -45,6 +45,7 @@ export const DRAWING_MOVEABLE_THROTTLE = 0;
  * Selecto 不应该从这些交互目标启动，避免抢占 Moveable 拖拽和缩放。
  */
 export const DRAWING_SELECTO_BLOCKED_DRAG_SELECTOR = [
+  '.b-drawing-context-menu',
   '.b-drawing-moveable-layer',
   '.moveable-control',
   '.moveable-line',
