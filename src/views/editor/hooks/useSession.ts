@@ -1,3 +1,7 @@
+/**
+ * @file useSession.ts
+ * @description 编排编辑器页面的文件加载、保存、监听与标签状态。
+ */
 import type { EditorFile } from '../types';
 import type { Ref } from 'vue';
 import { computed, nextTick, onActivated, onDeactivated, onUnmounted, reactive, ref, watch } from 'vue';
@@ -33,7 +37,7 @@ export function useSession(fileId: Ref<string>) {
   const fileWatchStore = useEditorFileWatchStore();
   const editorPreferencesStore = useEditorPreferencesStore();
   const { clipboard } = useClipboard();
-  const { switchWatchedFile, clearWatchedFile, setOnFileChanged, setIsDirty, finishReload, suppressNextChange } = useFileWatcher();
+  const { switchWatchedFile, clearWatchedFile, setOnFileChanged, setIsDirty, finishReload, suppressNextChange, clearSuppressedChange } = useFileWatcher();
 
   const sessionPath = ref(route.fullPath);
   const sessionCacheKey = ref(resolveRouteTabInfo(route).cacheKey);
@@ -128,10 +132,20 @@ export function useSession(fileId: Ref<string>) {
    */
   async function saveWithDialog(defaultPathOverride?: string): Promise<boolean> {
     const defaultPath = defaultPathOverride || fileState.value.path || getDefaultSavePath(fileState.value);
-    const savedPath = await native.saveFile(fileState.value.content, undefined, { defaultPath });
+    const contentToSave = fileState.value.content;
 
-    if (!savedPath) return false;
+    if (fileState.value.path) {
+      suppressNextChange(fileState.value.path, contentToSave);
+    }
 
+    const savedPath = await native.saveFile(contentToSave, undefined, { defaultPath });
+
+    if (!savedPath) {
+      clearSuppressedChange(fileState.value.path ?? undefined);
+      return false;
+    }
+
+    suppressNextChange(savedPath, contentToSave);
     await fileStateActions.finalizeSave(savedPath);
     await updateGlobalWatchPath(fileId.value, savedPath);
     tabsStore.clearMissing(fileId.value);
@@ -157,7 +171,7 @@ export function useSession(fileId: Ref<string>) {
    * @param filePath - 写入目标路径
    */
   async function restoreCurrentFileAtPath(filePath: string): Promise<void> {
-    suppressNextChange(filePath);
+    suppressNextChange(filePath, fileState.value.content);
     await native.writeFile(filePath, fileState.value.content);
     await fileStateActions.markCurrentContentSaved();
     await switchWatchedFile(filePath);
@@ -177,7 +191,7 @@ export function useSession(fileId: Ref<string>) {
     }
 
     try {
-      suppressNextChange(filePath);
+      suppressNextChange(filePath, fileState.value.content);
       await native.writeFile(filePath, fileState.value.content);
       await fileStateActions.markCurrentContentSaved();
       tabsStore.clearMissing(fileId.value);

@@ -23,6 +23,18 @@ export interface IsDirtyCallback {
 }
 
 /**
+ * 内部写盘 change 事件抑制签名。
+ */
+interface SuppressedChangeSignature {
+  /** 需要抑制的文件路径 */
+  filePath: string;
+  /** 已知的内部写盘内容；未知时由首个事件回填 */
+  expectedContent: string | null;
+  /** 首个被抑制事件携带的内容，用于吞掉同一次写盘的重复事件 */
+  observedContent: string | null;
+}
+
+/**
  * 旧版外部文件删除回调类型；阶段一删除事件已交给全局 watcher 处理。
  */
 export interface FileDeletedCallback {
@@ -36,10 +48,10 @@ export interface FileDeletedCallback {
 export function useFileWatcher() {
   const watchedPath = ref<string | null>(null);
   const isReloading = ref(false);
-  const suppressedChangePath = ref<string | null>(null);
   let unsubscribe: (() => void) | null = null;
   let onFileChangedCallback: FileChangedCallback | null = null;
   let isDirtyCallback: IsDirtyCallback | null = null;
+  let suppressedChangeSignature: SuppressedChangeSignature | null = null;
 
   /**
    * 设置外部文件修改回调。
@@ -80,6 +92,8 @@ export function useFileWatcher() {
       unsubscribe = null;
     }
 
+    suppressedChangeSignature = null;
+
     if (nextPath) {
       watchedPath.value = nextPath;
       // eslint-disable-next-line no-use-before-define
@@ -114,9 +128,72 @@ export function useFileWatcher() {
   /**
    * 抑制当前会话对指定路径下一次 change 事件的处理，用于忽略自写入回调。
    * @param filePath - 需要抑制一次 change 事件的文件路径
+   * @param expectedContent - 本次内部写盘的内容；提供后仅抑制相同内容的 change 事件
    */
-  function suppressNextChange(filePath: string): void {
-    suppressedChangePath.value = filePath;
+  function suppressNextChange(filePath: string, expectedContent?: string): void {
+    suppressedChangeSignature = {
+      filePath,
+      expectedContent: expectedContent ?? null,
+      observedContent: null
+    };
+  }
+
+  /**
+   * 清理指定路径上的自写入 change 事件抑制签名。
+   * @param filePath - 需要清理的文件路径；不传时清理当前签名
+   */
+  function clearSuppressedChange(filePath?: string): void {
+    if (!filePath || suppressedChangeSignature?.filePath === filePath) {
+      suppressedChangeSignature = null;
+    }
+  }
+
+  /**
+   * 读取 change 事件携带的文本内容。
+   * @param event - 文件变化事件
+   * @returns 事件内容；未携带内容时返回 null
+   */
+  function readChangeContent(event: FileChangeEvent): string | null {
+    return typeof event.content === 'string' ? event.content : null;
+  }
+
+  /**
+   * 判断当前 change 事件是否来自本会话内部写盘并应被抑制。
+   * @param event - 文件变化事件
+   * @returns 是否应该抑制
+   */
+  function shouldSuppressChange(event: FileChangeEvent): boolean {
+    if (event.type !== 'change' || !suppressedChangeSignature || suppressedChangeSignature.filePath !== event.filePath) {
+      return false;
+    }
+
+    const eventContent = readChangeContent(event);
+
+    if (suppressedChangeSignature.expectedContent !== null) {
+      if (eventContent === suppressedChangeSignature.expectedContent) {
+        return true;
+      }
+
+      suppressedChangeSignature = null;
+      return false;
+    }
+
+    if (eventContent === null) {
+      suppressedChangeSignature = null;
+      return true;
+    }
+
+    if (suppressedChangeSignature.observedContent === null) {
+      suppressedChangeSignature.observedContent = eventContent;
+      return true;
+    }
+
+    if (suppressedChangeSignature.observedContent === eventContent) {
+      return true;
+    }
+
+    suppressedChangeSignature = null;
+    return false;
   }
 
   /**
@@ -137,8 +214,7 @@ export function useFileWatcher() {
     if (isReloading.value) return;
     if (event.filePath !== watchedPath.value) return;
 
-    if (event.type === 'change' && suppressedChangePath.value === event.filePath) {
-      suppressedChangePath.value = null;
+    if (shouldSuppressChange(event)) {
       return;
     }
 
@@ -176,6 +252,7 @@ export function useFileWatcher() {
     setOnFileDeleted,
     finishReload,
     suppressNextChange,
+    clearSuppressedChange,
     isReloading
   };
 }
