@@ -5,7 +5,7 @@
 <template>
   <section class="page-setter">
     <header class="page-setter-header">
-      <div class="page-setter-title">设置</div>
+      <div class="page-setter-title">基础设置</div>
     </header>
     <div class="page-setter-list">
       <div class="page-setter-row">
