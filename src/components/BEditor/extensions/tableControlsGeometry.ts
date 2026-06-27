@@ -1,6 +1,6 @@
 /**
  * @file tableControlsGeometry.ts
- * @description 表格 NodeView 控件所需的几何命中与按钮位置派生逻辑。
+ * @description 表格 NodeView 控件所需的几何派生逻辑。
  */
 
 // ─── 数据结构 ────────────────────────────────────────────────────────────────
@@ -38,216 +38,299 @@ export interface SegmentHover {
   column: SegmentHit | null;
 }
 
-/** 同一悬浮位置下的行列新增命中集合。 */
-export interface DividerHover {
-  row: DividerHit | null;
-  column: DividerHit | null;
-}
-
-/** 按钮定位结果。 */
-export interface ButtonPosition {
+/**
+ * 删除浮层相对表格区段的定位结果。
+ */
+export interface SegmentActionPlacement {
+  /** 浮层锚点顶部坐标。 */
   top: number;
+  /** 浮层锚点左侧坐标。 */
   left: number;
+  /** CSS transform，用于表达外侧悬挂或内侧回落。 */
+  transform: string;
+  /** 浮层位于表格区段外侧还是内侧。 */
+  side: 'outside' | 'inside';
 }
 
-/** 命中检测公共入参。 */
-export interface HitTestInput {
-  clientX: number;
-  clientY: number;
-  columnRects: DOMRectLike[];
-  rowRects: DOMRectLike[];
-  /** 单侧命中阈值（像素） */
-  threshold: number;
+/**
+ * 删除浮层定位所需的尺寸配置。
+ */
+export interface SegmentActionPlacementOptions {
+  /** 行列控制条宽度。 */
+  controlSize: number;
+  /** 控制条与删除浮层之间的间距。 */
+  actionOffset: number;
+  /** 删除浮层在单按钮场景下的外框尺寸。 */
+  actionGroupSize: number;
+  /** 当前 overlay 起点到浏览器视口起点的距离，用于判断真实可见空间。 */
+  viewportStartOffset?: number;
 }
+
+/**
+ * 当前被控制区选中的行或列。
+ */
+export interface SelectedTableSegment {
+  /** 选中区段类型。 */
+  type: 'row' | 'column';
+  /** 选中区段索引。 */
+  index: number;
+}
+
+/**
+ * DOM 单元格投影后的几何信息。
+ */
+export interface TableCellGeometry {
+  /** 单元格左边界。 */
+  left: number;
+  /** 单元格右边界。 */
+  right: number;
+  /** 单元格宽度。 */
+  width: number;
+  /** 单元格跨列数量。 */
+  colSpan: number;
+  /** 单元格跨行数量。 */
+  rowSpan: number;
+}
+
+/**
+ * 一行单元格几何。
+ */
+export type TableCellGeometryRow = TableCellGeometry[];
 
 // ─── 内部工具 ─────────────────────────────────────────────────────────────────
 
-/** 构造纯数据矩形。 */
-function createRect(left: number, top: number, width: number, height: number): DOMRectLike {
-  return { left, top, width, height, right: left + width, bottom: top + height };
-}
-
-/** 判断点是否落在矩形内部（含边界）。 */
-function isInsideRect({ left, right, top, bottom }: DOMRectLike, x: number, y: number): boolean {
-  return x >= left && x <= right && y >= top && y <= bottom;
+/**
+ * 确保边界候选列表存在对应索引的桶。
+ * @param candidates - 边界候选列表
+ * @param index - 逻辑列边界索引
+ */
+function ensureBoundaryBucket(candidates: number[][], index: number): void {
+  while (candidates.length <= index) {
+    candidates.push([]);
+  }
 }
 
 /**
- * 通用分割线构建器。
- *
- * 将"leading → inner × (n-1) → trailing"的模式统一处理，
- * 消除原先 buildColumnDividers / buildRowDividers 的重复结构。
- *
- * @param type      - 分割线方向
- * @param rects     - 当前轴向的矩形列表（列或行）
- * @param spanStart - 垂直轴起始坐标（列分割线取行顶，行分割线取列左）
- * @param spanEnd   - 垂直轴终止坐标
+ * 写入一个有效的列边界候选值。
+ * @param candidates - 边界候选列表
+ * @param index - 逻辑列边界索引
+ * @param value - 边界横坐标
  */
-function buildDividers(type: 'column' | 'row', rects: DOMRectLike[], spanStart: number, spanEnd: number): DividerHit[] {
-  if (rects.length === 0) return [];
-
-  const isColumn = type === 'column';
-
-  /**
-   * 将轴向坐标与跨度坐标组合成 lineRect：
-   * - 列分割线：竖线，width=0，height=span
-   * - 行分割线：横线，width=span，height=0
-   */
-  const makeLine = (axisPos: number): DOMRectLike =>
-    isColumn ? createRect(axisPos, spanStart, 0, spanEnd - spanStart) : createRect(spanStart, axisPos, spanEnd - spanStart, 0);
-
-  const hits: DividerHit[] = [{ type, index: 0, edge: 'leading', lineRect: makeLine(isColumn ? rects[0].left : rects[0].top) }];
-
-  for (let i = 1; i < rects.length; i++) {
-    const prevEdge = isColumn ? rects[i - 1].right : rects[i - 1].bottom;
-    hits.push({ type, index: i, edge: 'inner', lineRect: makeLine(prevEdge) });
+function pushBoundaryCandidate(candidates: number[][], index: number, value: number): void {
+  if (index < 0 || !Number.isFinite(value)) {
+    return;
   }
 
-  const last = rects[rects.length - 1];
-  hits.push({
-    type,
-    index: rects.length - 1,
-    edge: 'trailing',
-    lineRect: makeLine(isColumn ? last.right : last.bottom)
-  });
-
-  return hits;
+  ensureBoundaryBucket(candidates, index);
+  candidates[index].push(value);
 }
 
 /**
- * 判断鼠标是否在分割线阈值带内。
- *
- * leading  → 仅允许"轴坐标 + threshold"方向命中
- * trailing → 仅允许"轴坐标 - threshold"方向命中
- * inner    → 双向各 threshold
+ * 对同一逻辑边界的多个候选取中位数，降低跨行/子像素差异带来的抖动。
+ * @param values - 边界候选值
+ * @returns 中位数边界；无候选时返回 null
  */
-function matchesDivider({ type, edge, lineRect }: DividerHit, x: number, y: number, threshold: number): boolean {
-  const isColumn = type === 'column';
-  /** 轴向坐标：列分割线看 X，行分割线看 Y */
-  const axisPos = isColumn ? lineRect.left : lineRect.top;
-  /** 鼠标在当前轴向上的坐标 */
-  const axisCursor = isColumn ? x : y;
-  /** 鼠标是否在分割线的正交方向范围内 */
-  const inSpan = isColumn ? y >= lineRect.top && y <= lineRect.bottom : x >= lineRect.left && x <= lineRect.right;
-
-  if (!inSpan) return false;
-
-  if (edge === 'leading') return axisCursor >= axisPos && axisCursor <= axisPos + threshold;
-
-  if (edge === 'trailing') return axisCursor <= axisPos && axisCursor >= axisPos - threshold;
-
-  if (edge === 'inner') return Math.abs(axisCursor - axisPos) <= threshold;
-
-  return false;
-}
-
-/** 计算指针到分割线的轴向距离，用于最近优先排序。 */
-function dividerDistance({ type, lineRect }: DividerHit, x: number, y: number): number {
-  return type === 'column' ? Math.abs(x - lineRect.left) : Math.abs(y - lineRect.top);
-}
-
-/**
- * 从同方向候选中取距离最近的分割线。
- * @param hits - 同方向候选分割线
- * @param x - 指针横坐标
- * @param y - 指针纵坐标
- * @returns 最近的命中结果
- */
-function findClosestDivider(hits: DividerHit[], x: number, y: number): DividerHit | null {
-  if (hits.length === 0) {
+function readMedianBoundary(values: number[]): number | null {
+  if (values.length === 0) {
     return null;
   }
 
-  return hits.reduce((best, cur) => {
-    return dividerDistance(cur, x, y) < dividerDistance(best, x, y) ? cur : best;
+  const sortedValues = [...values].sort((first, second) => first - second);
+  const middleIndex = Math.floor(sortedValues.length / 2);
+  if (sortedValues.length % 2 === 1) {
+    return sortedValues[middleIndex];
+  }
+
+  return (sortedValues[middleIndex - 1] + sortedValues[middleIndex]) / 2;
+}
+
+/**
+ * 为跨列单元格补充内部逻辑列边界兜底候选。
+ * @param candidates - 兜底边界候选列表
+ * @param startColumnIndex - 单元格起始逻辑列
+ * @param cell - 单元格几何
+ */
+function pushSplitBoundaryFallbacks(candidates: number[][], startColumnIndex: number, cell: TableCellGeometry): void {
+  if (cell.colSpan <= 1) {
+    return;
+  }
+
+  const columnWidth = cell.width / cell.colSpan;
+  for (let offset = 1; offset < cell.colSpan; offset += 1) {
+    pushBoundaryCandidate(candidates, startColumnIndex + offset, cell.left + columnWidth * offset);
+  }
+}
+
+/**
+ * 根据边界列表创建列矩形。
+ * @param boundaries - 逻辑列边界横坐标列表
+ * @param tableTop - 表格顶部坐标
+ * @param tableBottom - 表格底部坐标
+ * @returns 列矩形列表
+ */
+function createColumnRectsFromBoundaries(boundaries: number[], tableTop: number, tableBottom: number): DOMRectLike[] {
+  return boundaries.slice(0, -1).map((left, index) => {
+    const right = boundaries[index + 1];
+    return {
+      top: tableTop,
+      right,
+      bottom: tableBottom,
+      left,
+      width: right - left,
+      height: tableBottom - tableTop
+    };
   });
 }
 
 // ─── 公开 API ─────────────────────────────────────────────────────────────────
 
 /**
- * 查找当前命中的行列新增分割线集合。
- * 交叉点附近可同时返回一条行分割线和一条列分割线。
+ * 从全表单元格采样逻辑列边界，优先使用真实单元格边缘，跨列内部再使用均分兜底。
+ * @param rows - 表格单元格几何行
+ * @returns 逻辑列边界横坐标列表
  */
-export function findHoveredDividers({ clientX: x, clientY: y, columnRects, rowRects, threshold }: HitTestInput): DividerHover | null {
-  if (columnRects.length === 0 || rowRects.length === 0) return null;
+export function readLogicalColumnBoundaries(rows: TableCellGeometryRow[]): number[] {
+  const edgeCandidates: number[][] = [];
+  const splitFallbackCandidates: number[][] = [];
+  const occupiedUntil: number[] = [];
 
-  const colDividers = buildDividers('column', columnRects, rowRects[0].top, rowRects[rowRects.length - 1].bottom);
-  const rowDividers = buildDividers('row', rowRects, columnRects[0].left, columnRects[columnRects.length - 1].right);
+  rows.forEach((row, rowIndex) => {
+    let columnIndex = 0;
 
-  const column = findClosestDivider(
-    colDividers.filter((hit) => matchesDivider(hit, x, y, threshold)),
-    x,
-    y
-  );
-  const row = findClosestDivider(
-    rowDividers.filter((hit) => matchesDivider(hit, x, y, threshold)),
-    x,
-    y
-  );
+    row.forEach((cell) => {
+      while ((occupiedUntil[columnIndex] ?? 0) > rowIndex) {
+        columnIndex += 1;
+      }
 
-  return row || column ? { row, column } : null;
-}
+      const colSpan = Math.max(1, cell.colSpan);
+      const rowSpan = Math.max(1, cell.rowSpan);
+      const startColumnIndex = columnIndex;
+      const endColumnIndex = startColumnIndex + colSpan;
+      const safeCell = { ...cell, colSpan, rowSpan };
 
-/**
- * 查找当前命中的分割线。
- * 多个候选时取轴向距离最近者；距离相同时列优先。
- */
-export function findHoveredDivider({ clientX: x, clientY: y, columnRects, rowRects, threshold }: HitTestInput): DividerHit | null {
-  const hover = findHoveredDividers({ clientX: x, clientY: y, columnRects, rowRects, threshold });
-  const candidates = [hover?.column, hover?.row].filter((hit): hit is DividerHit => hit !== null && hit !== undefined);
+      pushBoundaryCandidate(edgeCandidates, startColumnIndex, safeCell.left);
+      pushBoundaryCandidate(edgeCandidates, endColumnIndex, safeCell.right);
+      pushSplitBoundaryFallbacks(splitFallbackCandidates, startColumnIndex, safeCell);
 
-  if (candidates.length === 0) return null;
+      for (let index = startColumnIndex; index < endColumnIndex; index += 1) {
+        occupiedUntil[index] = Math.max(occupiedUntil[index] ?? 0, rowIndex + rowSpan);
+      }
 
-  return candidates.reduce((best, cur) => {
-    const diff = dividerDistance(cur, x, y) - dividerDistance(best, x, y);
-    if (diff !== 0) return diff < 0 ? cur : best;
-    // 距离相同：列优先
-    return best.type === 'column' ? best : cur;
+      columnIndex = endColumnIndex;
+    });
+  });
+
+  const boundaryCount = Math.max(edgeCandidates.length, splitFallbackCandidates.length);
+  return Array.from({ length: boundaryCount }, (_, index) => {
+    return readMedianBoundary(edgeCandidates[index] ?? []) ?? readMedianBoundary(splitFallbackCandidates[index] ?? []) ?? 0;
   });
 }
 
 /**
- * 查找当前命中的行列删除区块集合。
- * 鼠标命中分割线时返回 null（分割线优先）。
+ * 根据全表单元格几何创建逻辑列矩形。
+ * @param rows - 表格单元格几何行
+ * @param tableTop - 表格顶部坐标
+ * @param tableBottom - 表格底部坐标
+ * @returns 逻辑列矩形列表
  */
-export function findHoveredSegments(input: HitTestInput): SegmentHover | null {
-  if (findHoveredDivider(input)) return null;
-
-  const { clientX: x, clientY: y, rowRects, columnRects } = input;
-
-  const rowIdx = rowRects.findIndex((r) => isInsideRect(r, x, y));
-  const colIdx = columnRects.findIndex((r) => isInsideRect(r, x, y));
-
-  const row: SegmentHit | null = rowIdx === -1 ? null : { type: 'row', index: rowIdx, segmentRect: rowRects[rowIdx] };
-  const column: SegmentHit | null = colIdx === -1 ? null : { type: 'column', index: colIdx, segmentRect: columnRects[colIdx] };
-
-  return row || column ? { row, column } : null;
+export function createLogicalColumnRects(rows: TableCellGeometryRow[], tableTop: number, tableBottom: number): DOMRectLike[] {
+  return createColumnRectsFromBoundaries(readLogicalColumnBoundaries(rows), tableTop, tableBottom);
 }
 
 /**
- * 查找当前命中的删除区块（行优先）。
+ * 根据当前几何快照创建区段命中结果。
+ * @param type - 区段类型
+ * @param index - 区段索引
+ * @param columnRects - 列几何列表
+ * @param rowRects - 行几何列表
+ * @returns 区段命中结果；索引越界时返回 null
  */
-export function findHoveredSegment(input: HitTestInput): SegmentHit | null {
-  const hover = findHoveredSegments(input);
-  return hover?.row ?? hover?.column ?? null;
+export function createSegmentHit(type: SelectedTableSegment['type'], index: number, columnRects: DOMRectLike[], rowRects: DOMRectLike[]): SegmentHit | null {
+  const rects = type === 'row' ? rowRects : columnRects;
+  const segmentRect = rects[index];
+
+  return segmentRect ? { type, index, segmentRect } : null;
 }
 
 /**
- * 根据分割线派生新增按钮位置（按钮左上角对齐分割线起点）。
+ * 将当前选中区段投影到最新几何快照。
+ * @param selectedSegment - 当前选中的行或列
+ * @param columnRects - 列几何列表
+ * @param rowRects - 行几何列表
+ * @returns 当前选中区段命中集合；没有有效选中时返回 null
  */
-export function getAddButtonPosition({ lineRect }: DividerHit): ButtonPosition {
-  return { top: lineRect.top, left: lineRect.left };
+export function createSelectedSegmentHover(
+  selectedSegment: SelectedTableSegment | null,
+  columnRects: DOMRectLike[],
+  rowRects: DOMRectLike[]
+): SegmentHover | null {
+  if (!selectedSegment) {
+    return null;
+  }
+
+  const hit = createSegmentHit(selectedSegment.type, selectedSegment.index, columnRects, rowRects);
+  if (!hit) {
+    return null;
+  }
+
+  return {
+    row: hit.type === 'row' ? hit : null,
+    column: hit.type === 'column' ? hit : null
+  };
 }
 
 /**
- * 根据区块派生删除按钮位置（按钮居中于区块对应轴）。
- *
- * - 列删除：水平居中，贴顶
- * - 行删除：垂直居中，贴左
+ * 计算行删除浮层定位；左侧空间不足时回落到行内，避免被编辑器边界裁切。
+ * @param segmentRect - 选中行的区段矩形
+ * @param options - 控制条与浮层尺寸
+ * @returns 删除浮层定位结果
  */
-export function getRemoveButtonPosition({ type, segmentRect }: SegmentHit): ButtonPosition {
-  return type === 'column'
-    ? { top: segmentRect.top, left: segmentRect.left + segmentRect.width / 2 }
-    : { top: segmentRect.top + segmentRect.height / 2, left: segmentRect.left };
+export function getRowSegmentActionPlacement(segmentRect: DOMRectLike, options: SegmentActionPlacementOptions): SegmentActionPlacement {
+  const outsideLeft = segmentRect.left - options.controlSize - options.actionOffset;
+  const viewportStartOffset = options.viewportStartOffset ?? 0;
+  const hasOutsideSpace = viewportStartOffset + outsideLeft - options.actionGroupSize >= 0;
+
+  if (hasOutsideSpace) {
+    return {
+      top: segmentRect.top + segmentRect.height / 2,
+      left: outsideLeft,
+      transform: 'translate(-100%, -50%)',
+      side: 'outside'
+    };
+  }
+
+  return {
+    top: segmentRect.top + segmentRect.height / 2,
+    left: segmentRect.left + options.actionOffset,
+    transform: 'translate(0, -50%)',
+    side: 'inside'
+  };
+}
+
+/**
+ * 计算列删除浮层定位；上方空间不足时回落到列内，避免被编辑器边界裁切。
+ * @param segmentRect - 选中列的区段矩形
+ * @param options - 控制条与浮层尺寸
+ * @returns 删除浮层定位结果
+ */
+export function getColumnSegmentActionPlacement(segmentRect: DOMRectLike, options: SegmentActionPlacementOptions): SegmentActionPlacement {
+  const outsideTop = segmentRect.top - options.controlSize - options.actionOffset;
+  const viewportStartOffset = options.viewportStartOffset ?? 0;
+  const hasOutsideSpace = viewportStartOffset + outsideTop - options.actionGroupSize >= 0;
+
+  if (hasOutsideSpace) {
+    return {
+      top: outsideTop,
+      left: segmentRect.left + segmentRect.width / 2,
+      transform: 'translate(-50%, -100%)',
+      side: 'outside'
+    };
+  }
+
+  return {
+    top: segmentRect.top + options.actionOffset,
+    left: segmentRect.left + segmentRect.width / 2,
+    transform: 'translate(-50%, 0)',
+    side: 'inside'
+  };
 }

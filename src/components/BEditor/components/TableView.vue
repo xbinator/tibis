@@ -1,77 +1,93 @@
 <template>
   <NodeViewWrapper :class="name">
-    <div ref="viewportRef" :class="[bem('viewport'), { 'is-cell-dragging': isDraggingCellSelection }]" @mouseleave="handleViewportMouseLeave">
-      <div
-        ref="scrollerRef"
-        :class="bem('scroller')"
-        @mousedown="handleScrollerMouseDown"
-        @mousemove="handleMouseMove"
-        @mouseleave="handleScrollerMouseLeave"
-        @scroll="handleScroll"
-      >
+    <div :class="[bem('viewport'), { 'is-cell-dragging': isDraggingCellSelection }]">
+      <div ref="scrollerRef" :class="bem('scroller')" @mousedown="handleScrollerMouseDown" @mousemove="handleMouseMove" @scroll="handleScroll">
         <NodeViewContent as="table" :class="bem('table')" />
       </div>
 
-      <!-- 分割线 + 新增按钮 -->
-      <div v-show="showDividerOverlay" :class="bem('line-overlay')" contenteditable="false">
-        <div v-show="showAddColumnButton" :class="bem('line-highlight', 'column')" :style="columnLineHighlightStyle"></div>
-        <div v-show="showAddRowButton" :class="bem('line-highlight', 'row')" :style="rowLineHighlightStyle"></div>
-        <div v-show="showAddColumnButton" :class="[bem('add-button-group'), bem('add-button-group', 'column')]" :style="addColumnButtonStyle">
-          <button
-            ref="addColumnButtonRef"
-            type="button"
-            :class="bem('add-button')"
-            title="新增列"
-            aria-label="新增列"
-            @mousedown.prevent
-            @mouseenter="handleOverlayControlMouseEnter"
-            @click="handleAdd(addHover?.column ?? null)"
-          >
-            <BIcon :class="bem('button-icon')" :icon="ICONS.add" />
-          </button>
-        </div>
-        <div v-show="showAddRowButton" :class="[bem('add-button-group'), bem('add-button-group', 'row')]" :style="addRowButtonStyle">
-          <button
-            ref="addRowButtonRef"
-            type="button"
-            :class="bem('add-button')"
-            title="新增行"
-            aria-label="新增行"
-            @mousedown.prevent
-            @mouseenter="handleOverlayControlMouseEnter"
-            @click="handleAdd(addHover?.row ?? null)"
-          >
-            <BIcon :class="bem('button-icon')" :icon="ICONS.add" />
-          </button>
-        </div>
+      <!-- 焦点控制区 -->
+      <div v-show="showControlOverlay" :class="bem('control-overlay')" contenteditable="false">
+        <div v-show="showCornerControl" :class="bem('corner-control')" :style="cornerControlStyle"></div>
+        <button
+          v-for="control in columnControls"
+          :key="`column-${control.index}`"
+          type="button"
+          :class="[
+            bem('column-control'),
+            {
+              'is-first': control.isFirst,
+              'is-last': control.isLast,
+              'is-selected': selectedSegment?.type === 'column' && selectedSegment.index === control.index
+            }
+          ]"
+          :style="control.style"
+          title="选择列"
+          aria-label="选择列"
+          @mousedown.prevent
+          @click="handleColumnControlClick(control.index)"
+        ></button>
+        <button
+          v-for="control in rowControls"
+          :key="`row-${control.index}`"
+          type="button"
+          :class="[
+            bem('row-control'),
+            {
+              'is-first': control.isFirst,
+              'is-last': control.isLast,
+              'is-selected': selectedSegment?.type === 'row' && selectedSegment.index === control.index
+            }
+          ]"
+          :style="control.style"
+          title="选择行"
+          aria-label="选择行"
+          @mousedown.prevent
+          @click="handleRowControlClick(control.index)"
+        ></button>
+        <button
+          v-for="point in insertPoints"
+          :key="point.id"
+          type="button"
+          :class="[bem('insert-point', point.hit.type), { 'is-active': isHoveredInsertPoint(point) }]"
+          :style="point.style"
+          :title="point.title"
+          :aria-label="point.title"
+          @mousedown.prevent
+          @mouseenter="handleInsertPointEnter(point)"
+          @mouseleave="scheduleHoveredInsertClear"
+          @focus="handleInsertPointEnter(point)"
+          @blur="scheduleHoveredInsertClear"
+          @click="handleInsert(point.hit)"
+        >
+          <BIcon :class="bem('button-icon')" :icon="ICONS.add" />
+        </button>
+        <div v-show="showInsertGuide" :class="bem('insert-guide', hoveredInsert?.hit.type ?? 'column')" :style="insertGuideStyle"></div>
       </div>
 
-      <!-- 区段 + 删除按钮 -->
+      <!-- 区段 + 外侧动作按钮 -->
       <div v-show="showSegmentOverlay" :class="bem('segment-overlay')" contenteditable="false">
-        <div v-show="showRemoveRowButton" :class="bem('segment-button-group', 'row')" :style="removeRowButtonStyle">
+        <div v-show="selectedSegmentHover?.column" :class="bem('segment-highlight', 'column')" :style="columnSegmentHighlightStyle"></div>
+        <div v-show="selectedSegmentHover?.row" :class="bem('segment-highlight', 'row')" :style="rowSegmentHighlightStyle"></div>
+        <div v-show="showRowActionGroup" :class="bem('segment-action-group', 'row')" :style="rowActionGroupStyle">
           <button
-            ref="removeRowButtonRef"
             type="button"
             :class="bem('remove-button', 'row')"
             title="删除行"
             aria-label="删除行"
             @mousedown.prevent
-            @mouseenter="handleOverlayControlMouseEnter"
-            @click="handleRemove(segmentHover?.row ?? null)"
+            @click="handleRemove(selectedSegmentHover?.row ?? null)"
           >
             <BIcon :class="bem('button-icon')" :icon="ICONS.remove" />
           </button>
         </div>
-        <div v-show="showRemoveColumnButton" :class="bem('segment-button-group', 'column')" :style="removeColumnButtonStyle">
+        <div v-show="showColumnActionGroup" :class="bem('segment-action-group', 'column')" :style="columnActionGroupStyle">
           <button
-            ref="removeColumnButtonRef"
             type="button"
             :class="bem('remove-button', 'column')"
             title="删除列"
             aria-label="删除列"
             @mousedown.prevent
-            @mouseenter="handleOverlayControlMouseEnter"
-            @click="handleRemove(segmentHover?.column ?? null)"
+            @click="handleRemove(selectedSegmentHover?.column ?? null)"
           >
             <BIcon :class="bem('button-icon')" :icon="ICONS.remove" />
           </button>
@@ -84,25 +100,30 @@
 <script setup lang="ts">
 /**
  * @file TableView.vue
- * @description TipTap 表格 NodeView，负责富文本表格的 hover 增删控件。
+ * @description TipTap 表格 NodeView，负责富文本表格焦点控制区与行列删除。
  */
 
+import type {
+  DividerHit,
+  DOMRectLike,
+  SegmentActionPlacement,
+  SegmentActionPlacementOptions,
+  SegmentHit,
+  SelectedTableSegment,
+  TableCellGeometryRow
+} from '../extensions/tableControlsGeometry';
 import type { CSSProperties } from 'vue';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { TextSelection } from '@tiptap/pm/state';
 import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { NodeViewContent, NodeViewWrapper, nodeViewProps } from '@tiptap/vue-3';
 import { createNamespace } from '@/utils/namespace';
 import { applyAddAction, applyRemoveAction } from '../extensions/tableControlsCommands';
 import {
-  findHoveredDividers,
-  findHoveredSegments,
-  getAddButtonPosition,
-  getRemoveButtonPosition,
-  type DividerHit,
-  type DividerHover,
-  type DOMRectLike,
-  type SegmentHover,
-  type SegmentHit
+  createLogicalColumnRects,
+  createSelectedSegmentHover,
+  getColumnSegmentActionPlacement,
+  getRowSegmentActionPlacement
 } from '../extensions/tableControlsGeometry';
 
 const [name, bem] = createNamespace('', 'b-markdown-table');
@@ -112,18 +133,17 @@ const [name, bem] = createNamespace('', 'b-markdown-table');
 const props = defineProps(nodeViewProps);
 
 const UI = {
-  DIVIDER_THRESHOLD: 6,
-  LINE_THICKNESS: 2,
-  OVERLAY_GUTTER: 0,
-  SEGMENT_HIDE_DELAY: 90,
   DRAG_SELECTION_THRESHOLD: 4,
-  // 外侧按钮悬挂在表格边界外，需要更长缓冲时间让鼠标穿过间隙。
-  OVERLAY_HIDE_DELAY: 220
+  CONTROL_SIZE: 14,
+  ACTION_OFFSET: 8,
+  ACTION_GROUP_SIZE: 38,
+  GUIDE_THICKNESS: 2,
+  OVERLAY_GUTTER: 0
 } as const;
 
 const ICONS = {
   add: 'mdi:plus',
-  remove: 'mdi:minus'
+  remove: 'mdi:trash-can-outline'
 } as const;
 
 const FALLBACK = {
@@ -133,14 +153,15 @@ const FALLBACK = {
   COLUMN_COUNT: 3
 } as const;
 
+const SEGMENT_ACTION_PLACEMENT_OPTIONS = {
+  controlSize: UI.CONTROL_SIZE,
+  actionOffset: UI.ACTION_OFFSET,
+  actionGroupSize: UI.ACTION_GROUP_SIZE
+} as const;
+
 // ─── Refs ────────────────────────────────────────────────────────────────────
 
-const viewportRef = ref<HTMLElement | null>(null);
 const scrollerRef = ref<HTMLElement | null>(null);
-const addColumnButtonRef = ref<HTMLButtonElement | null>(null);
-const addRowButtonRef = ref<HTMLButtonElement | null>(null);
-const removeRowButtonRef = ref<HTMLButtonElement | null>(null);
-const removeColumnButtonRef = ref<HTMLButtonElement | null>(null);
 
 /**
  * 表格单元格的逻辑坐标。
@@ -175,77 +196,124 @@ interface PendingDragState {
   };
 }
 
-// ─── hover 状态 ─────────────────────────────────────────────────────────────
+/**
+ * 行列控制区渲染项。
+ */
+interface TableControlItem {
+  /** 控制区对应的行/列索引。 */
+  index: number;
+  /** 是否是当前控制条第一段。 */
+  isFirst: boolean;
+  /** 是否是当前控制条最后一段。 */
+  isLast: boolean;
+  /** 控制区定位样式。 */
+  style: CSSProperties;
+}
 
 /**
- * 当前命中的分割线；存在时显示新增控件。
+ * 控制区新增按钮的插入位置。
  */
-const addHover = ref<DividerHover | null>(null);
+type InsertPlacement = 'before' | 'after';
+
 /**
- * 当前命中的区段；存在时显示删除控件。
+ * 当前控制区 hover 派生出的新增目标。
  */
-const segmentHover = ref<SegmentHover | null>(null);
+interface InsertHoverState {
+  /** 新增命令使用的分割线命中结果。 */
+  hit: DividerHit;
+  /** 用户当前靠近目标区段的前半段或后半段。 */
+  placement: InsertPlacement;
+}
+
 /**
- * 当前实际显示的 overlay 类型。
+ * 表格常驻新增点渲染项。
  */
-const activeOverlay = ref<'none' | 'divider' | 'segment'>('none');
+interface InsertPointItem {
+  /** 渲染列表唯一标识。 */
+  id: string;
+  /** 新增命令使用的分割线命中结果。 */
+  hit: DividerHit;
+  /** 插入点对应前/后方向，用于 hover 状态表达。 */
+  placement: InsertPlacement;
+  /** 按钮提示文案。 */
+  title: string;
+  /** 插入点定位样式。 */
+  style: CSSProperties;
+}
+
+/**
+ * 单元格选区在表格映射中的矩形范围。
+ */
+interface TableSelectionRect {
+  /** 左侧逻辑列索引。 */
+  left: number;
+  /** 右侧逻辑列索引（开区间）。 */
+  right: number;
+  /** 顶部逻辑行索引。 */
+  top: number;
+  /** 底部逻辑行索引（开区间）。 */
+  bottom: number;
+}
+
+// ─── 控制区状态 ─────────────────────────────────────────────────────────────
+
+const isTableFocused = ref(false);
+const selectedSegment = ref<SelectedTableSegment | null>(null);
+const hoveredInsert = ref<InsertHoverState | null>(null);
+const tableGeometry = ref<{ columnRects: DOMRectLike[]; rowRects: DOMRectLike[] }>({ columnRects: [], rowRects: [] });
 const lastPointer = ref<{ clientX: number; clientY: number } | null>(null);
 const dragSelection = ref<DragSelectionState | null>(null);
 const pendingDrag = ref<PendingDragState | null>(null);
 
-let segmentHideTimer = 0;
-let overlayHideTimer = 0;
 let scrollFrame = 0;
+let geometryRefreshFrame = 0;
+let insertHideTimer = 0;
+let isComponentUnmounted = false;
 
 /**
- * 清理区段 overlay 的延时关闭定时器。
+ * 清空当前选中的删除目标。
  */
-function clearSegmentHideTimer(): void {
-  if (segmentHideTimer !== 0) {
-    window.clearTimeout(segmentHideTimer);
-    segmentHideTimer = 0;
+function clearSelectedSegment(): void {
+  selectedSegment.value = null;
+}
+
+/**
+ * 取消新增按钮的延迟隐藏。
+ */
+function cancelHoveredInsertClear(): void {
+  if (insertHideTimer !== 0) {
+    window.clearTimeout(insertHideTimer);
+    insertHideTimer = 0;
   }
 }
 
 /**
- * 清理整个 hover overlay 的延时关闭定时器。
+ * 取消等待中的表格几何刷新。
  */
-function clearOverlayHideTimer(): void {
-  if (overlayHideTimer !== 0) {
-    window.clearTimeout(overlayHideTimer);
-    overlayHideTimer = 0;
+function cancelTableGeometryRefresh(): void {
+  if (geometryRefreshFrame !== 0) {
+    cancelAnimationFrame(geometryRefreshFrame);
+    geometryRefreshFrame = 0;
   }
 }
 
 /**
- * 清空全部 hover 命中状态。
+ * 清空当前 hover 派生出的新增目标。
  */
-function clearHoverState(): void {
-  clearOverlayHideTimer();
-  clearSegmentHideTimer();
-  activeOverlay.value = 'none';
+function clearHoveredInsert(): void {
+  cancelHoveredInsertClear();
+  hoveredInsert.value = null;
 }
 
 /**
- * 延迟关闭区段 overlay，让快速移动到分割线时不至于闪烁。
+ * 延迟隐藏新增按钮，给鼠标从控制条移动到外侧按钮留出缓冲。
  */
-function scheduleSegmentHide(): void {
-  if (segmentHideTimer !== 0) return;
-  segmentHideTimer = window.setTimeout(() => {
-    segmentHideTimer = 0;
-    activeOverlay.value = addHover.value?.row || addHover.value?.column ? 'divider' : 'none';
-  }, UI.SEGMENT_HIDE_DELAY);
-}
-
-/**
- * 延迟关闭全部 overlay，给鼠标移向外层按钮留出缓冲时间。
- */
-function scheduleOverlayHide(): void {
-  if (overlayHideTimer !== 0) return;
-  overlayHideTimer = window.setTimeout(() => {
-    overlayHideTimer = 0;
-    clearHoverState();
-  }, UI.OVERLAY_HIDE_DELAY);
+function scheduleHoveredInsertClear(): void {
+  cancelHoveredInsertClear();
+  insertHideTimer = window.setTimeout(() => {
+    insertHideTimer = 0;
+    hoveredInsert.value = null;
+  }, 120);
 }
 
 // ─── 几何计算 ────────────────────────────────────────────────────────────────
@@ -262,52 +330,6 @@ function toLocalRect(rect: DOMRect, scrollerRect: DOMRect, scroller: HTMLElement
     width: rect.width,
     height: rect.height
   };
-}
-
-/**
- * 将 DOMRect 标准化为纯数据矩形，便于命中区复用。
- */
-function toRectLike(rect: DOMRect): DOMRectLike {
-  return {
-    top: rect.top,
-    right: rect.right,
-    bottom: rect.bottom,
-    left: rect.left,
-    width: rect.width,
-    height: rect.height
-  };
-}
-
-/**
- * 判断当前指针是否处于给定矩形范围内。
- */
-function isPointInsideRect(rect: DOMRectLike, clientX: number, clientY: number): boolean {
-  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
-}
-
-/**
- * 为命中矩形增加缓冲边距，提升外侧悬挂按钮的容错范围。
- */
-function expandRect(rect: DOMRectLike, padding: number): DOMRectLike {
-  return {
-    top: rect.top - padding,
-    right: rect.right + padding,
-    bottom: rect.bottom + padding,
-    left: rect.left - padding,
-    width: rect.width + padding * 2,
-    height: rect.height + padding * 2
-  };
-}
-
-/**
- * 合并两个矩形，生成覆盖二者的连续交互区。
- */
-function mergeRects(first: DOMRectLike, second: DOMRectLike): DOMRectLike {
-  const left = Math.min(first.left, second.left);
-  const right = Math.max(first.right, second.right);
-  const top = Math.min(first.top, second.top);
-  const bottom = Math.max(first.bottom, second.bottom);
-  return { top, right, bottom, left, width: right - left, height: bottom - top };
 }
 
 /**
@@ -338,22 +360,70 @@ function createFallbackGeometry(): { columnRects: DOMRectLike[]; rowRects: DOMRe
 }
 
 /**
- * 读取首行各列的局部矩形，列高度拉伸到整个表格范围。
+ * 读取单元格跨列数量，避免首行合并单元格把逻辑列控制点带偏。
+ * @param cell - 表格单元格元素
+ * @returns 至少为 1 的跨列数量
+ */
+function getCellColSpan(cell: Element): number {
+  if (cell instanceof HTMLTableCellElement) {
+    return Math.max(1, cell.colSpan || 1);
+  }
+
+  const parsedColSpan = Number.parseInt(cell.getAttribute('colspan') ?? '1', 10);
+  return Number.isFinite(parsedColSpan) ? Math.max(1, parsedColSpan) : 1;
+}
+
+/**
+ * 读取单元格跨行数量，用于跳过被上一行跨行单元格占用的逻辑列。
+ * @param cell - 表格单元格元素
+ * @returns 至少为 1 的跨行数量
+ */
+function getCellRowSpan(cell: Element): number {
+  if (cell instanceof HTMLTableCellElement) {
+    return Math.max(1, cell.rowSpan || 1);
+  }
+
+  const parsedRowSpan = Number.parseInt(cell.getAttribute('rowspan') ?? '1', 10);
+  return Number.isFinite(parsedRowSpan) ? Math.max(1, parsedRowSpan) : 1;
+}
+
+/**
+ * 将 DOM 表格行转换为纯数据单元格几何，便于几何模块计算逻辑列。
+ * @param rows - 表格行元素列表
+ * @param toLocal - DOM 元素到局部矩形的转换函数
+ * @returns 单元格几何行
+ */
+function readCellGeometryRows(rows: Element[], toLocal: (el: Element) => DOMRectLike): TableCellGeometryRow[] {
+  return rows.map((row) => {
+    return Array.from(row.querySelectorAll('th,td')).map((cell) => {
+      const cellRect = toLocal(cell);
+      return {
+        left: cellRect.left,
+        right: cellRect.right,
+        width: cellRect.width,
+        colSpan: getCellColSpan(cell),
+        rowSpan: getCellRowSpan(cell)
+      };
+    });
+  });
+}
+
+/**
+ * 读取全表逻辑列矩形，列高度拉伸到整个表格范围。
+ * @param rows - 表格行元素列表
+ * @param scroller - 表格滚动容器
+ * @param scrollerRect - 滚动容器视口矩形
+ * @returns 逻辑列矩形列表
  */
 function readColumnRects(rows: Element[], scroller: HTMLElement, scrollerRect: DOMRect): DOMRectLike[] {
-  const firstRow = rows[0];
-  if (!firstRow) return [];
+  if (rows.length === 0) return [];
 
   const toLocal = (el: Element) => toLocalRect(el.getBoundingClientRect(), scrollerRect, scroller);
   const rowRects = rows.map(toLocal);
   const tableTop = rowRects[0]?.top ?? 0;
   const tableBottom = rowRects[rowRects.length - 1]?.bottom ?? 0;
 
-  return Array.from(firstRow.querySelectorAll('th,td')).map((cell) => {
-    const cellRect = toLocal(cell);
-    // 列高度拉伸到整个表格范围
-    return { ...cellRect, top: tableTop, bottom: tableBottom, height: tableBottom - tableTop };
-  });
+  return createLogicalColumnRects(readCellGeometryRows(rows, toLocal), tableTop, tableBottom);
 }
 
 /**
@@ -470,146 +540,6 @@ function resolveCellPosition(target: EventTarget | null, clientX: number, client
   return pointedCell ? getCellPosition(pointedCell) : null;
 }
 
-// ─── 滚动区域矩形工具 ────────────────────────────────────────────────────────
-
-/**
- * 读取当前表格可视滚动区域的 client 坐标矩形。
- */
-function getScrollerClientRect(): DOMRectLike | null {
-  const rect = scrollerRef.value?.getBoundingClientRect();
-  return rect ? toRectLike(rect) : null;
-}
-
-/**
- * 构造边缘过渡带：沿滚动区域某条边缘的零高度/宽度矩形。
- * column 按钮悬挂在顶边，row 按钮悬挂在左边。
- */
-function getEdgeTransitionRect(type: 'row' | 'column'): DOMRectLike | null {
-  const r = getScrollerClientRect();
-  if (!r) return null;
-
-  if (type === 'column') {
-    // 顶边：零高度横带
-    return { top: r.top, right: r.right, bottom: r.top, left: r.left, width: r.width, height: 0 };
-  }
-  // 左边：零宽度竖带
-  return { top: r.top, right: r.left, bottom: r.bottom, left: r.left, width: 0, height: r.height };
-}
-
-// ─── 新增按钮可见性 ──────────────────────────────────────────────────────────
-
-/**
- * 判断新增按钮（行/列）是否应保持可见。
- * 指针在 scroller 内部，或仍在沿边缘通道内时，返回 true。
- * - type === 'row'：对应原 shouldShowRowAddButton，通道为左侧竖带
- * - type === 'column'：对应原 shouldShowColumnAddButton，通道为顶部横带
- */
-function shouldShowAddButton(type: 'row' | 'column'): boolean {
-  const hit = type === 'row' ? addHover.value?.row : addHover.value?.column;
-  if (!hit) return false;
-
-  const pointer = lastPointer.value;
-  const scrollerRect = getScrollerClientRect();
-  if (!pointer || !scrollerRect || scrollerRect.width === 0 || scrollerRect.height === 0) return true;
-
-  const p = UI.DIVIDER_THRESHOLD;
-  const insideScroller = isPointInsideRect(scrollerRect, pointer.clientX, pointer.clientY);
-  if (insideScroller) return true;
-
-  if (type === 'row') {
-    return pointer.clientX <= scrollerRect.left + p && pointer.clientY >= scrollerRect.top - p && pointer.clientY <= scrollerRect.bottom + p;
-  }
-  return pointer.clientY <= scrollerRect.top + p && pointer.clientX >= scrollerRect.left - p && pointer.clientX <= scrollerRect.right + p;
-}
-
-// ─── 过渡区命中检测 ──────────────────────────────────────────────────────────
-
-type TransitionTarget = { button: HTMLButtonElement | null; sourceRect: DOMRectLike | null };
-
-/**
- * 按当前 activeOverlay 返回需要检测的按钮与来源矩形对列表。
- */
-function getTransitionTargets(): TransitionTarget[] {
-  if (activeOverlay.value === 'divider') {
-    return [
-      { button: addColumnButtonRef.value, sourceRect: addHover.value?.column ? getEdgeTransitionRect('column') : null },
-      { button: addRowButtonRef.value, sourceRect: addHover.value?.row ? getEdgeTransitionRect('row') : null }
-    ];
-  }
-  if (activeOverlay.value === 'segment') {
-    return [
-      { button: removeRowButtonRef.value, sourceRect: segmentHover.value?.row ? getEdgeTransitionRect('row') : null },
-      { button: removeColumnButtonRef.value, sourceRect: segmentHover.value?.column ? getEdgeTransitionRect('column') : null }
-    ];
-  }
-  return [];
-}
-
-function isPointerWithinOverlayTransitionZone(clientX: number, clientY: number): boolean {
-  const padding = 8;
-  return getTransitionTargets().some(({ button, sourceRect }) => {
-    if (!button || !sourceRect) return false;
-    const buttonRect = toRectLike(button.getBoundingClientRect());
-    return isPointInsideRect(expandRect(mergeRects(sourceRect, buttonRect), padding), clientX, clientY);
-  });
-}
-
-// ─── 指针 & 滚动处理 ─────────────────────────────────────────────────────────
-
-/**
- * 将视口坐标转为 scroller 局部坐标。
- */
-function toLocalPointer(clientX: number, clientY: number, scroller: HTMLElement): { x: number; y: number } {
-  const rect = scroller.getBoundingClientRect();
-  return { x: clientX - rect.left + scroller.scrollLeft, y: clientY - rect.top + scroller.scrollTop };
-}
-
-/**
- * 根据当前指针坐标更新 hoverState。
- */
-function updateHoverState(clientX: number, clientY: number): void {
-  clearOverlayHideTimer();
-  if (!props.editor.isEditable || dragSelection.value) {
-    clearHoverState();
-    return;
-  }
-
-  const scroller = scrollerRef.value;
-  if (!scroller) {
-    clearHoverState();
-    return;
-  }
-
-  const { x, y } = toLocalPointer(clientX, clientY, scroller);
-  const geometry = readTableGeometry();
-  const params = { clientX: x, clientY: y, threshold: UI.DIVIDER_THRESHOLD, ...geometry };
-
-  const divider = findHoveredDividers(params);
-  if (divider) {
-    addHover.value = divider;
-    if (activeOverlay.value === 'segment' && segmentHover.value) {
-      scheduleSegmentHide();
-      return;
-    }
-    clearSegmentHideTimer();
-    activeOverlay.value = 'divider';
-    segmentHover.value = null;
-    return;
-  }
-
-  const segment = findHoveredSegments(params);
-  if (segment) {
-    clearSegmentHideTimer();
-    addHover.value = null;
-    segmentHover.value = segment;
-    activeOverlay.value = 'segment';
-    return;
-  }
-
-  // 鼠标离开命中线后，给移向外侧悬挂按钮留出短暂缓冲，避免控件立即消失。
-  scheduleOverlayHide();
-}
-
 /**
  * 判断两个单元格坐标是否相同。
  * @param first - 第一个坐标
@@ -631,49 +561,6 @@ function hasExceededDragThreshold(startPointer: { clientX: number; clientY: numb
   return Math.abs(clientX - startPointer.clientX) >= UI.DRAG_SELECTION_THRESHOLD || Math.abs(clientY - startPointer.clientY) >= UI.DRAG_SELECTION_THRESHOLD;
 }
 
-/**
- * 判断 relatedTarget 是否仍在当前表格控件的可交互区域内。
- */
-function isInsideViewport(target: EventTarget | null): boolean {
-  return target instanceof Node && viewportRef.value?.contains(target) === true;
-}
-
-/**
- * 鼠标离开 scroller 但仍在当前表格控件内部时，不应立即隐藏控件。
- */
-function handleScrollerMouseLeave(event: MouseEvent): void {
-  if (isInsideViewport(event.relatedTarget)) return;
-  scheduleOverlayHide();
-}
-
-/**
- * 只有真正离开整个表格控件时才清空 hover。
- */
-function handleViewportMouseLeave(event: MouseEvent): void {
-  if (isInsideViewport(event.relatedTarget)) return;
-  scheduleOverlayHide();
-}
-
-/**
- * 鼠标真正进入外侧悬挂按钮时，取消隐藏计时，避免按钮在点击前消失。
- */
-function handleOverlayControlMouseEnter(): void {
-  clearOverlayHideTimer();
-  clearSegmentHideTimer();
-}
-
-/**
- * 判断指针是否仍在 viewport 可见边界内。
- */
-function isPointerInsideViewportBounds(clientX: number, clientY: number): boolean {
-  const rect = viewportRef.value?.getBoundingClientRect();
-  if (!rect) return false;
-  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
-}
-
-/**
- * 在鼠标离开表格几何区域后，继续追踪通往外侧按钮的移动轨迹。
- */
 // ─── 编辑器操作 ──────────────────────────────────────────────────────────────
 
 /**
@@ -706,6 +593,107 @@ function getCurrentTableMap(): { map: TableMap; tablePos: number } | null {
 }
 
 /**
+ * 刷新当前表格的几何快照。
+ */
+function refreshTableGeometry(): void {
+  tableGeometry.value = readTableGeometry();
+}
+
+/**
+ * 在 Vue 与浏览器布局完成后刷新表格几何，避免新增行列后控制区使用旧矩形。
+ */
+function scheduleTableGeometryRefresh(): void {
+  nextTick(() => {
+    if (isComponentUnmounted) return;
+
+    cancelTableGeometryRefresh();
+    geometryRefreshFrame = requestAnimationFrame(() => {
+      geometryRefreshFrame = 0;
+      refreshTableGeometry();
+    });
+  }).catch(() => undefined);
+}
+
+/**
+ * 判断当前编辑器选区是否落在这个表格 NodeView 内。
+ */
+function isSelectionInsideCurrentTable(): boolean {
+  const tablePos = getCurrentTablePos();
+  if (tablePos === null) {
+    return false;
+  }
+
+  const { selection } = props.editor.state;
+  const tableEnd = tablePos + props.node.nodeSize;
+  return selection.from >= tablePos && selection.to <= tableEnd;
+}
+
+/**
+ * 读取单元格选区在当前表格映射中的矩形范围。
+ * @param selection - 当前单元格选区
+ * @param tableState - 当前表格映射信息
+ * @returns 单元格选区矩形；选区不属于当前表格时返回 null
+ */
+function getCellSelectionRect(selection: CellSelection, tableState: { map: TableMap; tablePos: number }): TableSelectionRect | null {
+  const anchorCell = selection.$anchorCell.pos - tableState.tablePos - 1;
+  const headCell = selection.$headCell.pos - tableState.tablePos - 1;
+  if (anchorCell < 0 || headCell < 0) {
+    return null;
+  }
+
+  return tableState.map.rectBetween(anchorCell, headCell);
+}
+
+/**
+ * 判断当前单元格选区是否仍然匹配控制区选中的整行或整列。
+ * @param selection - 当前单元格选区
+ * @param segment - 控制区选中的行或列
+ * @returns 选区仍覆盖同一个整行/整列时返回 true
+ */
+function isCellSelectionMatchingSelectedSegment(selection: CellSelection, segment: SelectedTableSegment): boolean {
+  const tableState = getCurrentTableMap();
+  if (!tableState) {
+    return false;
+  }
+
+  const rect = getCellSelectionRect(selection, tableState);
+  if (!rect) {
+    return false;
+  }
+
+  if (segment.type === 'column') {
+    return rect.left === segment.index && rect.right === segment.index + 1 && rect.top === 0 && rect.bottom === tableState.map.height;
+  }
+
+  return rect.top === segment.index && rect.bottom === segment.index + 1 && rect.left === 0 && rect.right === tableState.map.width;
+}
+
+/**
+ * 同步表格焦点态，并在离开表格时清空删除目标。
+ */
+function syncTableFocusState(): void {
+  const isFocused = props.editor.isFocused && isSelectionInsideCurrentTable();
+  isTableFocused.value = isFocused;
+
+  if (!isFocused) {
+    clearSelectedSegment();
+    clearHoveredInsert();
+    return;
+  }
+
+  refreshTableGeometry();
+  const { selection } = props.editor.state;
+  if (!(selection instanceof CellSelection)) {
+    clearSelectedSegment();
+    return;
+  }
+
+  if (selectedSegment.value && !isCellSelectionMatchingSelectedSegment(selection, selectedSegment.value)) {
+    clearSelectedSegment();
+  }
+}
+
+/**
  * 聚焦到当前表格中的目标单元格。
  */
 function focusCellAt(position: { row: number; column: number }): boolean {
@@ -717,8 +705,94 @@ function focusCellAt(position: { row: number; column: number }): boolean {
   const column = Math.min(position.column, tableState.map.width - 1);
   const cellPos = tableState.tablePos + 1 + tableState.map.map[row * tableState.map.width + column];
 
-  props.editor.view.dispatch(tr.setSelection(CellSelection.create(doc, cellPos)));
+  props.editor.view.dispatch(tr.setSelection(TextSelection.near(doc.resolve(cellPos + 1))));
   return true;
+}
+
+/**
+ * 选中指定列的全部单元格。
+ * @param columnIndex - 目标列索引
+ * @returns 是否成功选中列
+ */
+function selectColumnAt(columnIndex: number): boolean {
+  const tableState = getCurrentTableMap();
+  if (!tableState) return false;
+
+  const column = Math.min(Math.max(columnIndex, 0), tableState.map.width - 1);
+  const firstCell = tableState.tablePos + 1 + tableState.map.map[column];
+  const lastCell = tableState.tablePos + 1 + tableState.map.map[(tableState.map.height - 1) * tableState.map.width + column];
+  const { doc, tr } = props.editor.state;
+  props.editor.view.dispatch(tr.setSelection(CellSelection.create(doc, firstCell, lastCell)));
+  return true;
+}
+
+/**
+ * 选中指定行的全部单元格。
+ * @param rowIndex - 目标行索引
+ * @returns 是否成功选中行
+ */
+function selectRowAt(rowIndex: number): boolean {
+  const tableState = getCurrentTableMap();
+  if (!tableState) return false;
+
+  const row = Math.min(Math.max(rowIndex, 0), tableState.map.height - 1);
+  const firstCell = tableState.tablePos + 1 + tableState.map.map[row * tableState.map.width];
+  const lastCell = tableState.tablePos + 1 + tableState.map.map[row * tableState.map.width + tableState.map.width - 1];
+  const { doc, tr } = props.editor.state;
+  props.editor.view.dispatch(tr.setSelection(CellSelection.create(doc, firstCell, lastCell)));
+  return true;
+}
+
+/**
+ * 根据新增点 hover 更新当前新增目标。
+ * @param point - 当前 hover 的新增点
+ */
+function handleInsertPointEnter(point: InsertPointItem): void {
+  cancelHoveredInsertClear();
+  hoveredInsert.value = {
+    hit: point.hit,
+    placement: point.placement
+  };
+}
+
+/**
+ * 判断两个分割线命中是否表示同一个插入点。
+ * @param first - 第一个分割线命中
+ * @param second - 第二个分割线命中
+ * @returns 两者一致时返回 true
+ */
+function isSameDividerHit(first: DividerHit, second: DividerHit): boolean {
+  return first.type === second.type && first.index === second.index && first.edge === second.edge;
+}
+
+/**
+ * 判断新增点是否处于当前 hover 状态。
+ * @param point - 待判断的新增点
+ * @returns 当前点处于 hover 时返回 true
+ */
+function isHoveredInsertPoint(point: InsertPointItem): boolean {
+  const hit = hoveredInsert.value?.hit ?? null;
+  return hit ? isSameDividerHit(hit, point.hit) : false;
+}
+
+/**
+ * 点击列控制区时选中列并显示删除按钮。
+ * @param index - 列索引
+ */
+function handleColumnControlClick(index: number): void {
+  refreshTableGeometry();
+  if (!selectColumnAt(index)) return;
+  selectedSegment.value = { type: 'column', index };
+}
+
+/**
+ * 点击行控制区时选中行并显示删除按钮。
+ * @param index - 行索引
+ */
+function handleRowControlClick(index: number): void {
+  refreshTableGeometry();
+  if (!selectRowAt(index)) return;
+  selectedSegment.value = { type: 'row', index };
 }
 
 /**
@@ -769,6 +843,10 @@ function handleScrollerMouseDown(event: MouseEvent): void {
     return;
   }
 
+  isTableFocused.value = true;
+  clearSelectedSegment();
+  clearHoveredInsert();
+  refreshTableGeometry();
   lastPointer.value = { clientX: event.clientX, clientY: event.clientY };
   pendingDrag.value = {
     anchor: position,
@@ -820,7 +898,7 @@ function clearDomTextSelection(): void {
 
 /**
  * 处理表格内部鼠标移动。
- * 拖拽时优先扩展单元格选区，否则继续走 hover 控件逻辑。
+ * 拖拽时优先扩展单元格选区，未跨过阈值时保持候选拖拽状态。
  * @param event - 当前鼠标移动事件
  */
 function handleMouseMove(event: MouseEvent): void {
@@ -840,7 +918,7 @@ function handleMouseMove(event: MouseEvent): void {
       const hasCrossedIntoAnotherCell = currentCellPosition !== null && !isSameCellPosition(currentCellPosition, currentPendingDrag.anchor);
 
       if (hasExceededThreshold && hasCrossedIntoAnotherCell) {
-        clearHoverState();
+        clearSelectedSegment();
         clearDomTextSelection();
         dragSelection.value = {
           anchor: currentPendingDrag.anchor,
@@ -848,47 +926,31 @@ function handleMouseMove(event: MouseEvent): void {
         };
         pendingDrag.value = null;
         updateDragSelection(event.target, event.clientX, event.clientY);
-        return;
       }
-
-      return;
     }
   }
-
-  updateHoverState(event.clientX, event.clientY);
 }
 
 /**
- * 在鼠标离开表格几何区域后，继续追踪通往外侧按钮的移动轨迹。
- * 拖拽期间改为继续扩展单元格选区。
+ * 拖拽期间在窗口范围内继续扩展单元格选区。
  * @param event - 当前全局鼠标移动事件
  */
 function handleWindowMouseMove(event: MouseEvent): void {
   lastPointer.value = { clientX: event.clientX, clientY: event.clientY };
   if (dragSelection.value) {
     updateDragSelection(event.target, event.clientX, event.clientY);
-    return;
   }
-  if (activeOverlay.value === 'none') return;
-
-  if (isPointerInsideViewportBounds(event.clientX, event.clientY) || isPointerWithinOverlayTransitionZone(event.clientX, event.clientY)) {
-    clearOverlayHideTimer();
-    return;
-  }
-
-  scheduleOverlayHide();
 }
 
 /**
- * 滚动时用 rAF 节流，重新计算 hover 命中。
+ * 滚动时用 rAF 节流，刷新控制区几何。
  */
 function handleScroll(): void {
   cancelAnimationFrame(scrollFrame);
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = 0;
-    if (lastPointer.value) {
-      updateHoverState(lastPointer.value.clientX, lastPointer.value.clientY);
-    }
+    clearHoveredInsert();
+    refreshTableGeometry();
   });
 }
 
@@ -905,19 +967,25 @@ function getDimensions(): { rowCount: number; columnCount: number } {
 const editorContext = { editor: props.editor, focusCellAt, getDimensions };
 
 /**
- * 执行新增动作；行列按钮各自传入自己的命中目标。
- */
-function handleAdd(hit: DividerHit | null): void {
-  if (hit) applyAddAction(editorContext, hit);
-  clearHoverState();
-}
-
-/**
  * 执行删除动作；行列按钮各自传入自己的命中目标。
  */
 function handleRemove(hit: SegmentHit | null): void {
-  if (hit) applyRemoveAction(editorContext, hit);
-  clearHoverState();
+  if (hit && applyRemoveAction(editorContext, hit)) {
+    scheduleTableGeometryRefresh();
+  }
+  clearSelectedSegment();
+}
+
+/**
+ * 执行新增动作，按当前 hover 分割线插入行/列。
+ * @param hit - 当前 hover 派生出的分割线
+ */
+function handleInsert(hit: DividerHit | null): void {
+  if (hit && applyAddAction(editorContext, hit)) {
+    scheduleTableGeometryRefresh();
+  }
+  clearSelectedSegment();
+  clearHoveredInsert();
 }
 
 // ─── 样式计算 ────────────────────────────────────────────────────────────────
@@ -934,77 +1002,344 @@ function toViewportPosition(position: { top: number; left: number }): { top: num
   };
 }
 
+/**
+ * 将内容矩形转换为可视视口样式。
+ * @param rect - 内容坐标矩形
+ * @returns 绝对定位样式
+ */
+function toViewportRectStyle(rect: DOMRectLike): CSSProperties {
+  const vp = toViewportPosition({ top: rect.top, left: rect.left });
+  return {
+    top: `${vp.top}px`,
+    left: `${vp.left}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`
+  };
+}
+
+/**
+ * 根据列矩形生成顶部控制区样式。
+ * @param rect - 列矩形
+ * @returns 控制区定位样式
+ */
+function getColumnControlStyle(rect: DOMRectLike): CSSProperties {
+  const vp = toViewportPosition({ top: rect.top, left: rect.left });
+  return {
+    top: `${vp.top - UI.CONTROL_SIZE}px`,
+    left: `${vp.left}px`,
+    width: `${rect.width}px`,
+    height: `${UI.CONTROL_SIZE}px`
+  };
+}
+
+/**
+ * 根据行矩形生成左侧控制区样式。
+ * @param rect - 行矩形
+ * @returns 控制区定位样式
+ */
+function getRowControlStyle(rect: DOMRectLike): CSSProperties {
+  const vp = toViewportPosition({ top: rect.top, left: rect.left });
+  return {
+    top: `${vp.top}px`,
+    left: `${vp.left - UI.CONTROL_SIZE}px`,
+    width: `${UI.CONTROL_SIZE}px`,
+    height: `${rect.height}px`
+  };
+}
+
+/**
+ * 将内容坐标转换为绝对定位样式。
+ * @param position - 内容坐标
+ * @returns 可直接绑定到 overlay 元素的定位样式
+ */
 function toViewportStyle(position: { top: number; left: number }): CSSProperties {
   const vp = toViewportPosition(position);
   return { top: `${vp.top}px`, left: `${vp.left}px` };
 }
 
-function getLineHighlightStyle(hit: DividerHit | null): CSSProperties {
-  if (!hit) return {};
-  const { lineRect } = hit;
-  const t = UI.LINE_THICKNESS;
-  const vp = toViewportPosition({ top: lineRect.top, left: lineRect.left });
-
-  if (hit.type === 'column') {
-    return { left: `${vp.left - t / 2}px`, top: `${vp.top}px`, width: `${t}px`, height: `${lineRect.height}px` };
-  }
-  return { left: `${vp.left}px`, top: `${vp.top - t / 2}px`, width: `${lineRect.width}px`, height: `${t}px` };
+/**
+ * 将删除浮层定位转换为可绑定样式，保留几何模块给出的 transform。
+ * @param placement - 删除浮层定位结果
+ * @returns 可直接绑定到 overlay 元素的定位样式
+ */
+function toViewportActionStyle(placement: SegmentActionPlacement): CSSProperties {
+  const vp = toViewportPosition({ top: placement.top, left: placement.left });
+  return {
+    top: `${vp.top}px`,
+    left: `${vp.left}px`,
+    transform: placement.transform
+  };
 }
 
-const columnLineHighlightStyle = computed<CSSProperties>(() => getLineHighlightStyle(addHover.value?.column ?? null));
-const rowLineHighlightStyle = computed<CSSProperties>(() => getLineHighlightStyle(addHover.value?.row ?? null));
+/**
+ * 读取 overlay 起点到浏览器视口起点的距离，用于决定删除浮层是否有真实外侧空间。
+ * @param axis - 需要判断的轴向
+ * @returns 删除浮层定位配置
+ */
+function getSegmentActionPlacementOptions(axis: 'x' | 'y'): SegmentActionPlacementOptions {
+  const scrollerRect = scrollerRef.value?.getBoundingClientRect();
+  const viewportStartOffset = axis === 'x' ? scrollerRect?.left ?? 0 : scrollerRect?.top ?? 0;
 
-const addColumnButtonStyle = computed<CSSProperties | null>(() => {
-  const hit = addHover.value?.column ?? null;
-  return hit ? toViewportStyle(getAddButtonPosition(hit)) : null;
+  return {
+    ...SEGMENT_ACTION_PLACEMENT_OPTIONS,
+    viewportStartOffset: Math.max(0, viewportStartOffset)
+  };
+}
+
+/**
+ * 生成控制条渲染项并标记首尾段。
+ * @param rects - 行/列几何列表
+ * @param getStyle - 单段控制条样式生成函数
+ * @returns 控制条渲染项
+ */
+function createControlItems(rects: DOMRectLike[], getStyle: (rect: DOMRectLike) => CSSProperties): TableControlItem[] {
+  const lastIndex = rects.length - 1;
+  return rects.map((rect, index) => ({
+    index,
+    isFirst: index === 0,
+    isLast: index === lastIndex,
+    style: getStyle(rect)
+  }));
+}
+
+const columnControls = computed<TableControlItem[]>(() => createControlItems(tableGeometry.value.columnRects, getColumnControlStyle));
+
+const rowControls = computed<TableControlItem[]>(() => createControlItems(tableGeometry.value.rowRects, getRowControlStyle));
+
+/**
+ * 创建列方向的所有插入分割线。
+ * @param rects - 当前列几何列表
+ * @returns 列插入分割线列表
+ */
+function createColumnDividerHits(rects: DOMRectLike[]): DividerHit[] {
+  const first = rects[0];
+  if (!first) return [];
+
+  const createLine = (axis: number, index: number, edge: DividerHit['edge']): DividerHit => ({
+    type: 'column',
+    index,
+    edge,
+    lineRect: {
+      top: first.top,
+      right: axis,
+      bottom: first.bottom,
+      left: axis,
+      width: 0,
+      height: first.bottom - first.top
+    }
+  });
+
+  const hits = [createLine(first.left, 0, 'leading')];
+  for (let index = 1; index < rects.length; index++) {
+    hits.push(createLine(rects[index - 1].right, index, 'inner'));
+  }
+
+  const lastIndex = rects.length - 1;
+  hits.push(createLine(rects[lastIndex].right, lastIndex, 'trailing'));
+  return hits;
+}
+
+/**
+ * 创建行方向的所有插入分割线。
+ * @param rects - 当前行几何列表
+ * @returns 行插入分割线列表
+ */
+function createRowDividerHits(rects: DOMRectLike[]): DividerHit[] {
+  const first = rects[0];
+  if (!first) return [];
+
+  const createLine = (axis: number, index: number, edge: DividerHit['edge']): DividerHit => ({
+    type: 'row',
+    index,
+    edge,
+    lineRect: {
+      top: axis,
+      right: first.right,
+      bottom: axis,
+      left: first.left,
+      width: first.right - first.left,
+      height: 0
+    }
+  });
+
+  const hits = [createLine(first.top, 0, 'leading')];
+  for (let index = 1; index < rects.length; index++) {
+    hits.push(createLine(rects[index - 1].bottom, index, 'inner'));
+  }
+
+  const lastIndex = rects.length - 1;
+  hits.push(createLine(rects[lastIndex].bottom, lastIndex, 'trailing'));
+  return hits;
+}
+
+/**
+ * 读取插入点对应的前后方向。
+ * @param hit - 分割线命中结果
+ * @returns 插入方向
+ */
+function getInsertPointPlacement(hit: DividerHit): InsertPlacement {
+  return hit.edge === 'leading' ? 'before' : 'after';
+}
+
+/**
+ * 生成插入点提示文案。
+ * @param hit - 分割线命中结果
+ * @returns 提示文案
+ */
+function getInsertPointTitle(hit: DividerHit): string {
+  if (hit.type === 'column') {
+    if (hit.edge === 'leading') return '在左侧新增列';
+    if (hit.edge === 'trailing') return '在右侧新增列';
+    return '在此处新增列';
+  }
+
+  if (hit.edge === 'leading') return '在上方新增行';
+  if (hit.edge === 'trailing') return '在下方新增行';
+  return '在此处新增行';
+}
+
+/**
+ * 根据插入分割线生成常驻点定位样式。
+ * @param hit - 分割线命中结果
+ * @returns 插入点样式
+ */
+function getInsertPointStyle(hit: DividerHit): CSSProperties {
+  if (hit.type === 'column') {
+    return toViewportStyle({
+      top: hit.lineRect.top - UI.CONTROL_SIZE / 2,
+      left: hit.lineRect.left
+    });
+  }
+
+  return toViewportStyle({
+    top: hit.lineRect.top,
+    left: hit.lineRect.left - UI.CONTROL_SIZE / 2
+  });
+}
+
+/**
+ * 将分割线命中结果转换为插入点渲染项。
+ * @param hit - 分割线命中结果
+ * @returns 插入点渲染项
+ */
+function createInsertPointItem(hit: DividerHit): InsertPointItem {
+  return {
+    id: `${hit.type}-${hit.edge}-${hit.index}`,
+    hit,
+    placement: getInsertPointPlacement(hit),
+    title: getInsertPointTitle(hit),
+    style: getInsertPointStyle(hit)
+  };
+}
+
+/**
+ * 生成表格所有可插入位置的常驻点。
+ * @param columnRects - 列几何列表
+ * @param rowRects - 行几何列表
+ * @returns 插入点渲染列表
+ */
+function createInsertPoints(columnRects: DOMRectLike[], rowRects: DOMRectLike[]): InsertPointItem[] {
+  return [...createColumnDividerHits(columnRects), ...createRowDividerHits(rowRects)].map(createInsertPointItem);
+}
+
+const insertPoints = computed<InsertPointItem[]>(() => createInsertPoints(tableGeometry.value.columnRects, tableGeometry.value.rowRects));
+
+const selectedSegmentHover = computed(() => createSelectedSegmentHover(selectedSegment.value, tableGeometry.value.columnRects, tableGeometry.value.rowRects));
+
+const cornerControlStyle = computed<CSSProperties | null>(() => {
+  const firstColumn = tableGeometry.value.columnRects[0];
+  const firstRow = tableGeometry.value.rowRects[0];
+  if (!firstColumn || !firstRow) return null;
+
+  const vp = toViewportPosition({
+    top: firstRow.top - UI.CONTROL_SIZE,
+    left: firstColumn.left - UI.CONTROL_SIZE
+  });
+
+  return {
+    top: `${vp.top}px`,
+    left: `${vp.left}px`,
+    width: `${UI.CONTROL_SIZE}px`,
+    height: `${UI.CONTROL_SIZE}px`
+  };
 });
 
-const addRowButtonStyle = computed<CSSProperties | null>(() => {
-  const hit = addHover.value?.row ?? null;
-  return hit ? toViewportStyle(getAddButtonPosition(hit)) : null;
+const columnSegmentHighlightStyle = computed<CSSProperties>(() => {
+  const hit = selectedSegmentHover.value?.column ?? null;
+  return hit ? toViewportRectStyle(hit.segmentRect) : {};
 });
 
-const removeRowButtonStyle = computed<CSSProperties | null>(() => {
-  const hit = segmentHover.value?.row ?? null;
-  return hit ? toViewportStyle(getRemoveButtonPosition(hit)) : null;
+const rowSegmentHighlightStyle = computed<CSSProperties>(() => {
+  const hit = selectedSegmentHover.value?.row ?? null;
+  return hit ? toViewportRectStyle(hit.segmentRect) : {};
 });
 
-const removeColumnButtonStyle = computed<CSSProperties | null>(() => {
-  const hit = segmentHover.value?.column ?? null;
-  return hit ? toViewportStyle(getRemoveButtonPosition(hit)) : null;
+const rowActionGroupStyle = computed<CSSProperties | null>(() => {
+  const hit = selectedSegmentHover.value?.row ?? null;
+  if (!hit) return null;
+
+  return toViewportActionStyle(getRowSegmentActionPlacement(hit.segmentRect, getSegmentActionPlacementOptions('x')));
+});
+
+const columnActionGroupStyle = computed<CSSProperties | null>(() => {
+  const hit = selectedSegmentHover.value?.column ?? null;
+  if (!hit) return null;
+
+  return toViewportActionStyle(getColumnSegmentActionPlacement(hit.segmentRect, getSegmentActionPlacementOptions('y')));
+});
+
+const insertGuideStyle = computed<CSSProperties | null>(() => {
+  const hit = hoveredInsert.value?.hit ?? null;
+  if (!hit) return null;
+
+  if (hit.type === 'column') {
+    const vp = toViewportPosition({ top: hit.lineRect.top, left: hit.lineRect.left });
+    return {
+      top: `${vp.top}px`,
+      left: `${vp.left - UI.GUIDE_THICKNESS / 2}px`,
+      width: `${UI.GUIDE_THICKNESS}px`,
+      height: `${hit.lineRect.height}px`
+    };
+  }
+
+  const vp = toViewportPosition({ top: hit.lineRect.top, left: hit.lineRect.left });
+  return {
+    top: `${vp.top - UI.GUIDE_THICKNESS / 2}px`,
+    left: `${vp.left}px`,
+    width: `${hit.lineRect.width}px`,
+    height: `${UI.GUIDE_THICKNESS}px`
+  };
 });
 
 /**
- * 当前是否显示分割线 overlay。
+ * 当前是否显示焦点控制层。
  */
-const showDividerOverlay = computed<boolean>(() => {
-  return !dragSelection.value && activeOverlay.value === 'divider' && Boolean(addHover.value?.row || addHover.value?.column);
-});
+const showControlOverlay = computed<boolean>(() => props.editor.isEditable && isTableFocused.value && !dragSelection.value);
 
 /**
- * 当前是否显示区段 overlay。
+ * 当前是否显示左上角控制条接缝块。
  */
-const showSegmentOverlay = computed<boolean>(() => !dragSelection.value && activeOverlay.value === 'segment' && segmentHover.value !== null);
+const showCornerControl = computed<boolean>(() => showControlOverlay.value && cornerControlStyle.value !== null);
 
 /**
- * 当前是否显示新增行按钮。
+ * 当前是否显示 hover 新增指引线。
  */
-const showAddRowButton = computed<boolean>(() => !dragSelection.value && addRowButtonStyle.value !== null && shouldShowAddButton('row'));
+const showInsertGuide = computed<boolean>(() => showControlOverlay.value && insertGuideStyle.value !== null);
 
 /**
- * 当前是否显示新增列按钮。
+ * 当前是否显示删除操作层。
  */
-const showAddColumnButton = computed<boolean>(() => !dragSelection.value && addColumnButtonStyle.value !== null && shouldShowAddButton('column'));
+const showSegmentOverlay = computed<boolean>(() => showControlOverlay.value && selectedSegmentHover.value !== null);
 
 /**
- * 当前是否显示删除行按钮。
+ * 当前是否显示行外侧动作组。
  */
-const showRemoveRowButton = computed<boolean>(() => !dragSelection.value && removeRowButtonStyle.value !== null);
+const showRowActionGroup = computed<boolean>(() => !dragSelection.value && rowActionGroupStyle.value !== null);
 
 /**
- * 当前是否显示删除列按钮。
+ * 当前是否显示列外侧动作组。
  */
-const showRemoveColumnButton = computed<boolean>(() => !dragSelection.value && removeColumnButtonStyle.value !== null);
+const showColumnActionGroup = computed<boolean>(() => !dragSelection.value && columnActionGroupStyle.value !== null);
 
 /**
  * 当前是否处于表格矩形拖拽选区中。
@@ -1014,16 +1349,25 @@ const isDraggingCellSelection = computed<boolean>(() => dragSelection.value !== 
 // ─── 生命周期 ────────────────────────────────────────────────────────────────
 
 onMounted(() => {
+  isComponentUnmounted = false;
   window.addEventListener('mousemove', handleWindowMouseMove);
   window.addEventListener('mouseup', stopDragSelection);
+  props.editor.on('selectionUpdate', syncTableFocusState);
+  props.editor.on('focus', syncTableFocusState);
+  props.editor.on('blur', syncTableFocusState);
+  syncTableFocusState();
 });
 
 onBeforeUnmount(() => {
+  isComponentUnmounted = true;
   window.removeEventListener('mousemove', handleWindowMouseMove);
   window.removeEventListener('mouseup', stopDragSelection);
+  props.editor.off('selectionUpdate', syncTableFocusState);
+  props.editor.off('focus', syncTableFocusState);
+  props.editor.off('blur', syncTableFocusState);
   cancelAnimationFrame(scrollFrame);
-  clearOverlayHideTimer();
-  clearSegmentHideTimer();
+  cancelTableGeometryRefresh();
+  cancelHoveredInsertClear();
 });
 </script>
 
@@ -1086,66 +1430,165 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.b-markdown-table__line-overlay,
+.b-markdown-table__control-overlay,
 .b-markdown-table__segment-overlay {
   position: absolute;
   inset: 0;
+  overflow: visible;
   pointer-events: none;
 }
 
-.b-markdown-table__line-highlight {
+.b-markdown-table__column-control,
+.b-markdown-table__row-control {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  background-color: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  border: none;
+  border-radius: 0;
+  transition: background-color 0.16s ease;
+}
+
+.b-markdown-table__corner-control {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  pointer-events: none;
+  background-color: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  border: none;
+  border-top-left-radius: 6px;
+}
+
+.b-markdown-table__column-control.is-last {
+  border-top-right-radius: 6px;
+}
+
+.b-markdown-table__row-control.is-last {
+  border-bottom-left-radius: 6px;
+}
+
+.b-markdown-table__column-control:hover,
+.b-markdown-table__row-control:hover,
+.b-markdown-table__column-control.is-selected,
+.b-markdown-table__row-control.is-selected {
+  background-color: color-mix(in srgb, var(--color-primary) 78%, transparent);
+}
+
+.b-markdown-table__segment-highlight {
   position: absolute;
   z-index: 1;
   pointer-events: none;
-  background-color: color-mix(in srgb, var(--editor-link) 78%, transparent);
-  border-radius: 999px;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--editor-link) 22%, transparent);
+  background-color: color-mix(in srgb, var(--editor-link) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--editor-link) 20%, transparent);
 }
 
-.b-markdown-table__add-button,
-.b-markdown-table__remove-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  color: #fff;
-  cursor: pointer;
+.b-markdown-table__insert-guide {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
   background-color: var(--color-primary);
   border-radius: 999px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 
-.b-markdown-table__add-button {
-  pointer-events: auto;
-}
-
-.b-markdown-table__add-button-group,
-.b-markdown-table__segment-button-group {
+.b-markdown-table__segment-action-group {
   position: absolute;
   z-index: 3;
   display: inline-flex;
+  gap: 2px;
   align-items: center;
   justify-content: center;
+  padding: 4px;
   pointer-events: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
 }
 
-.b-markdown-table__add-button-group--column,
-.b-markdown-table__segment-button-group--column {
+.b-markdown-table__insert-point {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: #fff;
+  pointer-events: auto;
+  cursor: pointer;
+  background-color: transparent;
+  background-image: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--text-secondary) 62%, transparent) 0,
+    color-mix(in srgb, var(--text-secondary) 62%, transparent) 2.5px,
+    transparent 3px
+  );
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  border: none;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  transition: background-color 0.16s ease, background-image 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.b-markdown-table__insert-point .b-markdown-table__button-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  transform: scale(0.78);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.b-markdown-table__insert-point:hover,
+.b-markdown-table__insert-point.is-active {
+  background-color: var(--color-primary);
+  background-image: none;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--color-primary) 30%, transparent);
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.b-markdown-table__insert-point:hover .b-markdown-table__button-icon,
+.b-markdown-table__insert-point.is-active .b-markdown-table__button-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.b-markdown-table__segment-action-group--column {
+  flex-direction: row;
   transform: translate(-50%, -100%);
 }
 
-.b-markdown-table__add-button-group--row,
-.b-markdown-table__segment-button-group--row {
+.b-markdown-table__segment-action-group--row {
+  flex-direction: column;
   transform: translate(-100%, -50%);
 }
 
-.b-markdown-table__add-button:active {
-  transform: scale(0.96);
-}
-
 .b-markdown-table__remove-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
   pointer-events: auto;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
 
   &:active {
     transform: scale(0.96);
@@ -1153,8 +1596,8 @@ onBeforeUnmount(() => {
 }
 
 .b-markdown-table__button-icon {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   pointer-events: none;
 }
 </style>
