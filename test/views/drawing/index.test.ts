@@ -15,6 +15,7 @@ const onSaveMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const onSaveAsMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const onRenameMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const selectElementByIdMock = vi.hoisted(() => vi.fn());
+const selectElementsByIdsMock = vi.hoisted(() => vi.fn());
 const drawingDataMock = vi.hoisted((): { value: DrawingData } => ({
   value: {
     metadata: {},
@@ -90,9 +91,10 @@ function createEmptyDrawingData(): DrawingData {
  * 创建页面图层测试元素。
  * @param id - 元素 ID
  * @param title - 元素名称
+ * @param groupId - 组合 ID
  * @returns 测试元素
  */
-function createDrawingElement(id: string, title: string): DrawingElement {
+function createDrawingElement(id: string, title: string, groupId?: string): DrawingElement {
   return {
     id,
     name: 'rect',
@@ -103,7 +105,7 @@ function createDrawingElement(id: string, title: string): DrawingElement {
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
-    metadata: {}
+    metadata: groupId ? { groupId } : {}
   };
 }
 
@@ -114,10 +116,12 @@ function createDrawingElement(id: string, title: string): DrawingElement {
 function createBDrawingStub(): ReturnType<typeof defineComponent> {
   return defineComponent({
     name: 'BDrawing',
+    emits: ['selection-change', 'update:select', 'update:value'],
     setup(_props, { expose }): Record<string, never> {
       expose({
         createElementFromClientPoint: vi.fn(),
-        selectElementById: selectElementByIdMock
+        selectElementById: selectElementByIdMock,
+        selectElementsByIds: selectElementsByIdsMock
       });
 
       return {};
@@ -143,6 +147,7 @@ describe('DrawingPage', (): void => {
     onSaveAsMock.mockClear();
     onRenameMock.mockClear();
     selectElementByIdMock.mockClear();
+    selectElementsByIdsMock.mockClear();
     drawingDataMock.value = createEmptyDrawingData();
   });
 
@@ -212,6 +217,84 @@ describe('DrawingPage', (): void => {
     wrapper.unmount();
   });
 
+  it('selects a grouped child as the editable target when the sidebar layer emits child selection', async (): Promise<void> => {
+    const selectedElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [createDrawingElement('node-1', '节点 1', 'drawing-group-1'), selectedElement]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+
+    expect(selectElementByIdMock).toHaveBeenCalledWith('node-2', { activateElement: true });
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2']);
+    expect(panelSettings.props('select')).toEqual(selectedElement);
+    wrapper.unmount();
+  });
+
+  it('selects grouped drawing elements when the sidebar layer emits group selection', async (): Promise<void> => {
+    const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
+    const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [firstElement, secondElement, createDrawingElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [secondElement, firstElement]);
+    await nextTick();
+
+    expect(selectElementsByIdsMock).toHaveBeenCalledWith(['node-2', 'node-1']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2', 'node-1']);
+    wrapper.unmount();
+  });
+
+  it('syncs sidebar highlights from canvas multi-selection changes', async (): Promise<void> => {
+    const selectedElement = createDrawingElement('node-2', '节点 2');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [createDrawingElement('node-1', '节点 1'), selectedElement, createDrawingElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const drawing = wrapper.findComponent({ name: 'BDrawing' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+    drawing.vm.$emit('selection-change', ['node-1', 'node-3']);
+    drawing.vm.$emit('update:select', null);
+    await nextTick();
+
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-1', 'node-3']);
+    wrapper.unmount();
+  });
+
   it('copies the drawing element when the sidebar layer emits copy', async (): Promise<void> => {
     const copiedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
@@ -244,6 +327,40 @@ describe('DrawingPage', (): void => {
     wrapper.unmount();
   });
 
+  it('copies grouped drawing elements as a new group when the sidebar layer emits group copy', async (): Promise<void> => {
+    const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
+    const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [firstElement, secondElement, createDrawingElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('copy-elements', [secondElement, firstElement]);
+    await flushPromises();
+
+    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual([
+      'node-1',
+      'node-2',
+      'drawing-shape-1',
+      'drawing-shape-2',
+      'node-3'
+    ]);
+    expect(drawingDataMock.value.elements[2]?.metadata.groupId).toBe('drawing-group-2');
+    expect(drawingDataMock.value.elements[3]?.metadata.groupId).toBe('drawing-group-2');
+    expect(selectElementsByIdsMock).toHaveBeenCalledWith(['drawing-shape-1', 'drawing-shape-2']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['drawing-shape-1', 'drawing-shape-2']);
+    wrapper.unmount();
+  });
+
   it('deletes the drawing element when the sidebar layer emits delete', async (): Promise<void> => {
     const selectedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
@@ -265,6 +382,32 @@ describe('DrawingPage', (): void => {
     await nextTick();
 
     expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-1']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('deletes grouped drawing elements when the sidebar layer emits group delete', async (): Promise<void> => {
+    const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
+    const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [firstElement, secondElement, createDrawingElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [secondElement, firstElement]);
+    panelSidebar.vm.$emit('delete-elements', [secondElement, firstElement]);
+    await nextTick();
+
+    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-3']);
     expect(panelSidebar.props('selectedElementIds')).toEqual([]);
     wrapper.unmount();
   });

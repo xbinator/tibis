@@ -25,6 +25,14 @@ interface MoveablePadding {
   left: number;
 }
 
+/**
+ * Moveable 测试替身的目标类型。
+ */
+type MoveableStubTarget = Element[] | Element | null;
+
+/** Moveable updateRect 调用记录。 */
+const moveableUpdateRectMock = vi.hoisted(() => vi.fn<(className: string) => void>());
+
 vi.mock('vue3-moveable/dist/moveable.js', () => ({
   default: defineComponent({
     name: 'VueMoveableStub',
@@ -32,6 +40,26 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
       elementGuidelines: {
         type: Array as PropType<Element[]>,
         default: (): Element[] => []
+      },
+      className: {
+        type: String,
+        default: ''
+      },
+      draggable: {
+        type: Boolean,
+        default: false
+      },
+      hideDefaultLines: {
+        type: Boolean,
+        default: false
+      },
+      hideChildMoveableDefaultLines: {
+        type: Boolean,
+        default: false
+      },
+      origin: {
+        type: Boolean,
+        default: true
       },
       padding: {
         type: Object as PropType<MoveablePadding>,
@@ -54,23 +82,40 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         default: false
       },
       target: {
-        type: Array as PropType<Element[]>,
-        default: (): Element[] => []
+        type: [Array, Object] as PropType<MoveableStubTarget>,
+        default: null
       }
     },
     methods: {
       /**
+       * 读取 Moveable 测试目标数量。
+       * @param target - Moveable 目标
+       * @returns 目标数量
+       */
+      getTargetLength(target: MoveableStubTarget): number {
+        if (Array.isArray(target)) {
+          return target.length;
+        }
+
+        return target ? 1 : 0;
+      },
+      /**
        * 模拟 Moveable 对外暴露的位置刷新方法。
        */
-      updateRect(): void {
-        return undefined;
+      updateRect(this: { className: string }): void {
+        moveableUpdateRectMock(this.className);
       }
     },
     template: `
       <div
-        v-if="target.length"
+        v-if="getTargetLength(target)"
         data-testid="moveable-props"
+        :data-class-name="className"
+        :data-draggable="String(draggable)"
         :data-guideline-count="String(elementGuidelines.length)"
+        :data-hide-default-lines="String(hideDefaultLines)"
+        :data-hide-child-default-lines="String(hideChildMoveableDefaultLines)"
+        :data-origin="String(origin)"
         :data-padding-bottom="String(padding.bottom)"
         :data-padding-left="String(padding.left)"
         :data-padding-right="String(padding.right)"
@@ -79,6 +124,7 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         :data-resizable="String(resizable)"
         :data-snap-gap="String(snapGap)"
         :data-snappable="String(snappable)"
+        :data-target-count="String(getTargetLength(target))"
       ></div>
     `
   })
@@ -135,9 +181,10 @@ async function flushMoveableLayerSync(): Promise<void> {
 /**
  * 挂载 MoveableLayer 测试实例。
  * @param selection - 当前选区
+ * @param activeElementId - 组合选区内当前编辑的子元素 ID
  * @returns 测试包装器与根元素
  */
-function mountMoveableLayer(selection: string[]): { root: HTMLElement; wrapper: VueWrapper } {
+function mountMoveableLayer(selection: string[], activeElementId: string | null = null): { root: HTMLElement; wrapper: VueWrapper } {
   const root = createRootElement(['text-1', 'rect-1']);
   const viewport: DrawingViewport = { center: { x: 0, y: 0 }, zoom: 1 };
   const viewportSize: DrawingSize = { width: 800, height: 600 };
@@ -148,6 +195,7 @@ function mountMoveableLayer(selection: string[]): { root: HTMLElement; wrapper: 
       selection,
       viewport,
       viewportSize,
+      activeElementId,
       enabled: true
     },
     attachTo: document.body
@@ -159,6 +207,7 @@ function mountMoveableLayer(selection: string[]): { root: HTMLElement; wrapper: 
 describe('MoveableLayer', (): void => {
   afterEach((): void => {
     document.body.innerHTML = '';
+    moveableUpdateRectMock.mockClear();
   });
 
   it('uses the shared resize handles for text while keeping schema resize enabled', async (): Promise<void> => {
@@ -191,6 +240,63 @@ describe('MoveableLayer', (): void => {
     expect(moveableProps.attributes('data-snappable')).toBe('true');
     expect(moveableProps.attributes('data-snap-gap')).toBe('true');
     expect(moveableProps.attributes('data-guideline-count')).toBe('1');
+    wrapper.unmount();
+  });
+
+  it('hides child target default lines when editing a grouped child', async (): Promise<void> => {
+    const { wrapper } = mountMoveableLayer(['text-1', 'rect-1'], 'rect-1');
+
+    await flushMoveableLayerSync();
+
+    const moveableProps = wrapper.find('[data-testid="moveable-props"]');
+
+    expect(moveableProps.attributes('data-hide-child-default-lines')).toBe('true');
+    wrapper.unmount();
+  });
+
+  it('renders the active grouped child through a read-only Moveable control box', async (): Promise<void> => {
+    const { wrapper } = mountMoveableLayer(['text-1', 'rect-1'], 'rect-1');
+
+    await flushMoveableLayerSync();
+
+    const moveableProps = wrapper.findAll('[data-testid="moveable-props"]');
+    const activeMoveableProps = moveableProps.find((item): boolean => item.attributes('data-class-name') === 'b-drawing-moveable-layer__active-child');
+
+    expect(moveableProps).toHaveLength(2);
+    expect(activeMoveableProps?.attributes('data-target-count')).toBe('1');
+    expect(activeMoveableProps?.attributes('data-draggable')).toBe('false');
+    expect(activeMoveableProps?.attributes('data-resizable')).toBe('false');
+    expect(activeMoveableProps?.attributes('data-snappable')).toBe('false');
+    expect(activeMoveableProps?.attributes('data-origin')).toBe('false');
+    expect(activeMoveableProps?.attributes('data-padding-top')).toBe('0');
+    expect(activeMoveableProps?.attributes('data-padding-right')).toBe('0');
+    expect(activeMoveableProps?.attributes('data-padding-bottom')).toBe('0');
+    expect(activeMoveableProps?.attributes('data-padding-left')).toBe('0');
+    expect(activeMoveableProps?.attributes('data-render-directions')).toBe('');
+    wrapper.unmount();
+  });
+
+  it('refreshes the active grouped child control box while grouped targets are dragged', async (): Promise<void> => {
+    const { root, wrapper } = mountMoveableLayer(['text-1', 'rect-1'], 'rect-1');
+
+    await flushMoveableLayerSync();
+    moveableUpdateRectMock.mockClear();
+
+    const moveableComponents = wrapper.findAllComponents({ name: 'VueMoveableStub' });
+    const rectTarget = root.querySelector(`[${DRAWING_ELEMENT_ID_ATTRIBUTE}="rect-1"]`);
+
+    expect(rectTarget).not.toBeNull();
+    moveableComponents[0].vm.$emit('drag-group', {
+      events: [
+        {
+          target: rectTarget as Element,
+          dist: [16, 8]
+        }
+      ]
+    });
+    await nextTick();
+
+    expect(moveableUpdateRectMock).toHaveBeenCalledWith('b-drawing-moveable-layer__active-child');
     wrapper.unmount();
   });
 });

@@ -22,9 +22,13 @@
           :elements="elements"
           :selected-element-ids="selectedElementIds"
           @select-element="handleElementSelect"
+          @select-elements="handleElementsSelect"
           @copy-element="handleElementCopy"
+          @copy-elements="handleElementsCopy"
           @delete-element="handleElementDelete"
+          @delete-elements="handleElementsDelete"
           @move-element="handleElementMove"
+          @move-elements="handleElementsMove"
         />
       </div>
     </div>
@@ -71,12 +75,20 @@ withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   /** 选择侧栏图层元素 */
   'select-element': [element: DrawingElement];
+  /** 选择多个侧栏图层元素 */
+  'select-elements': [elements: DrawingElement[]];
   /** 复制侧栏图层元素 */
   'copy-element': [element: DrawingElement];
+  /** 复制多个侧栏图层元素 */
+  'copy-elements': [elements: DrawingElement[]];
   /** 删除侧栏图层元素 */
   'delete-element': [element: DrawingElement];
+  /** 删除多个侧栏图层元素 */
+  'delete-elements': [elements: DrawingElement[]];
   /** 移动侧栏图层元素 */
   'move-element': [sourceElementId: string, targetElementId: string, position: DrawingLayerMovePosition];
+  /** 移动多个侧栏图层元素 */
+  'move-elements': [sourceElementIds: string[], targetElementIds: string[], position: DrawingLayerMovePosition];
 }>();
 
 const activeSidebarTab = ref<DrawingSidebarTabKey>('tools');
@@ -105,11 +117,27 @@ function handleElementSelect(element: DrawingElement): void {
 }
 
 /**
+ * 处理图层列表多选。
+ * @param elements - 被选择的画图元素
+ */
+function handleElementsSelect(elements: DrawingElement[]): void {
+  emit('select-elements', elements);
+}
+
+/**
  * 处理图层列表复制。
  * @param element - 被复制的画图元素
  */
 function handleElementCopy(element: DrawingElement): void {
   emit('copy-element', element);
+}
+
+/**
+ * 处理图层列表多元素复制。
+ * @param elements - 被复制的画图元素
+ */
+function handleElementsCopy(elements: DrawingElement[]): void {
+  emit('copy-elements', elements);
 }
 
 /**
@@ -121,6 +149,14 @@ function handleElementDelete(element: DrawingElement): void {
 }
 
 /**
+ * 处理图层列表多元素删除。
+ * @param elements - 被删除的画图元素
+ */
+function handleElementsDelete(elements: DrawingElement[]): void {
+  emit('delete-elements', elements);
+}
+
+/**
  * 处理图层列表拖拽排序。
  * @param sourceElementId - 被移动元素 ID
  * @param targetElementId - 目标元素 ID
@@ -128,6 +164,16 @@ function handleElementDelete(element: DrawingElement): void {
  */
 function handleElementMove(sourceElementId: string, targetElementId: string, position: DrawingLayerMovePosition): void {
   emit('move-element', sourceElementId, targetElementId, position);
+}
+
+/**
+ * 处理图层列表多元素拖拽排序。
+ * @param sourceElementIds - 被移动元素 ID 列表
+ * @param targetElementIds - 目标元素 ID 列表
+ * @param position - 基于侧栏视觉顺序的插入位置
+ */
+function handleElementsMove(sourceElementIds: string[], targetElementIds: string[], position: DrawingLayerMovePosition): void {
+  emit('move-elements', sourceElementIds, targetElementIds, position);
 }
 </script>
 

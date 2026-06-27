@@ -3,6 +3,7 @@
  * @description 验证画图页面图层列表点击选择行为。
  * @vitest-environment jsdom
  */
+/* eslint-disable vue/one-component-per-file */
 import { readFileSync } from 'node:fs';
 import { defineComponent } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
@@ -18,9 +19,10 @@ const sidebarLayerSource = readFileSync('src/views/drawing/components/SidebarLay
  * 创建测试图层元素。
  * @param id - 元素 ID
  * @param title - 元素名称
+ * @param groupId - 组合 ID
  * @returns 测试图层元素
  */
-function createLayerElement(id: string, title: string): DrawingElement {
+function createLayerElement(id: string, title: string, groupId?: string): DrawingElement {
   return {
     id,
     name: 'rect',
@@ -31,7 +33,7 @@ function createLayerElement(id: string, title: string): DrawingElement {
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
-    metadata: {}
+    metadata: groupId ? { groupId } : {}
   };
 }
 
@@ -44,6 +46,46 @@ function mountSidebarLayer(): VueWrapper {
     props: {
       elements: [createLayerElement('node-1', '节点 1'), createLayerElement('node-2', '节点 2')],
       selectedElementIds: ['node-2']
+    },
+    global: {
+      components: {
+        BDraggable
+      },
+      stubs: {
+        BButton: defineComponent({
+          name: 'BButton',
+          props: {
+            danger: {
+              type: Boolean,
+              default: false
+            },
+            icon: {
+              type: String,
+              default: ''
+            }
+          },
+          emits: ['click'],
+          template: '<button type="button" :class="$attrs.class" :data-danger="String(danger)" :data-icon="icon" @click="$emit(\'click\', $event)"></button>'
+        }),
+        BIcon: true
+      }
+    }
+  });
+}
+
+/**
+ * 挂载包含组合图层的图层列表组件。
+ * @returns 图层列表包装器
+ */
+function mountGroupedSidebarLayer(): VueWrapper {
+  return mount(SidebarLayer, {
+    props: {
+      elements: [
+        createLayerElement('node-1', '节点 1', 'drawing-group-1'),
+        createLayerElement('node-2', '节点 2', 'drawing-group-1'),
+        createLayerElement('node-3', '节点 3')
+      ],
+      selectedElementIds: ['node-1', 'node-2']
     },
     global: {
       components: {
@@ -85,6 +127,34 @@ describe('SidebarLayer selection', (): void => {
     wrapper.unmount();
   });
 
+  it('renders grouped elements as a group row with child layers', async (): Promise<void> => {
+    const wrapper = mountGroupedSidebarLayer();
+
+    expect(wrapper.findAll('.sidebar-panel__layer-item')).toHaveLength(2);
+    expect(wrapper.find('.sidebar-panel__layer-group-title').text()).toBe('组合 (2)');
+    expect(wrapper.findAll('.sidebar-panel__layer-child .sidebar-panel__layer-title').map((item) => item.text())).toEqual(['节点 2', '节点 1']);
+    expect(wrapper.find('.sidebar-panel__layer-item.is-group').classes()).toContain('is-active');
+    expect(wrapper.find('.sidebar-panel__layer-item.is-group').classes()).not.toContain('has-group-background');
+
+    await wrapper.find('.sidebar-panel__layer-group-header').trigger('click');
+
+    expect(wrapper.emitted('select-elements')?.[0]).toEqual([[expect.objectContaining({ id: 'node-2' }), expect.objectContaining({ id: 'node-1' })]]);
+    wrapper.unmount();
+  });
+
+  it('collapses grouped children and keeps child rows aligned with regular layer styles', async (): Promise<void> => {
+    const wrapper = mountGroupedSidebarLayer();
+
+    expect(wrapper.findAll('.sidebar-panel__layer-child')).toHaveLength(2);
+    expect(wrapper.findAll('.sidebar-panel__layer-child .sidebar-panel__layer-select')).toHaveLength(2);
+    expect(sidebarLayerSource).toContain('padding: 0 0 0 24px;');
+
+    await wrapper.find('.sidebar-panel__layer-collapse').trigger('click');
+
+    expect(wrapper.findAll('.sidebar-panel__layer-child')).toHaveLength(0);
+    wrapper.unmount();
+  });
+
   it('emits copy and delete actions without selecting the layer row', async (): Promise<void> => {
     const wrapper = mountSidebarLayer();
     const actionButtons = wrapper.findAll('.sidebar-panel__layer-action');
@@ -106,8 +176,8 @@ describe('SidebarLayer selection', (): void => {
     expect(sidebarLayerSource).toContain('.sidebar-panel__layer-actions {');
     expect(sidebarLayerSource).toContain('opacity: 0;');
     expect(sidebarLayerSource).toContain('pointer-events: none;');
-    expect(sidebarLayerSource).toContain('.sidebar-panel__layer-item:hover .sidebar-panel__layer-actions');
-    expect(sidebarLayerSource).toContain('.sidebar-panel__layer-item:focus-within .sidebar-panel__layer-actions');
+    expect(sidebarLayerSource).toContain('&:hover .sidebar-panel__layer-actions');
+    expect(sidebarLayerSource).toContain('&:focus-within .sidebar-panel__layer-actions');
   });
 
   it('registers layer rows for dragging and renders insert indicators', (): void => {
@@ -120,6 +190,6 @@ describe('SidebarLayer selection', (): void => {
     expect(sidebarLayerSource).toContain('lucide:grip-vertical');
     expect(sidebarLayerSource).not.toContain('.sidebar-panel__layer-item.is-drop-before::before');
     expect(sidebarLayerSource).not.toContain('.sidebar-panel__layer-item.is-drop-after::after');
-    expect(sidebarLayerSource).toContain('.sidebar-panel__layer-item.is-active.is-dragging');
+    expect(sidebarLayerSource).toContain('&.is-active.is-dragging');
   });
 });

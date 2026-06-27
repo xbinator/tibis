@@ -250,6 +250,27 @@ function createTwoNodeDrawingData(): DrawingData {
 }
 
 /**
+ * 创建组合节点测试数据。
+ * @returns 带组合节点的画板数据
+ */
+function createGroupedDrawingData(): DrawingData {
+  const data = createMultiSelectedDrawingData();
+
+  return {
+    metadata: data.metadata,
+    elements: data.elements.map(
+      (element: DrawingElement): DrawingElement => ({
+        ...element,
+        metadata: {
+          groupId: 'drawing-group-1'
+        }
+      })
+    ),
+    viewport: data.viewport
+  };
+}
+
+/**
  * 创建空画板数据。
  * @returns 画板数据
  */
@@ -271,7 +292,7 @@ interface BDrawingExpose {
   /** 根据浏览器坐标创建元素 */
   createElementFromClientPoint: (name: string, point: DrawingPoint) => Promise<void>;
   /** 根据元素 ID 选择元素 */
-  selectElementById: (id: string) => void;
+  selectElementById: (id: string, options?: { activateElement?: boolean }) => void;
 }
 
 /**
@@ -529,6 +550,30 @@ describe('BDrawing node click selection', () => {
     wrapper.unmount();
   });
 
+  it('keeps a grouped child editable while highlighting the whole group', async (): Promise<void> => {
+    const data = createGroupedDrawingData();
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: data
+      },
+      attachTo: document.body
+    });
+
+    getDrawingExpose(wrapper).selectElementById('node-2', { activateElement: true });
+    await nextTick();
+    await nextTick();
+
+    const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as DrawingSelectTarget;
+
+    expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-2');
+    expect(findNodeById(wrapper, 'node-1').classes()).not.toContain('is-selected');
+    expect(findNodeById(wrapper, 'node-2').classes()).toContain('is-selected');
+    expect(findNodeById(wrapper, 'node-1').classes()).not.toContain('is-active-child');
+    expect(findNodeById(wrapper, 'node-2').classes()).not.toContain('is-active-child');
+    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('keeps the settings target on an element while switching nodes', async (): Promise<void> => {
     const data = createSingleSelectedTwoNodeDrawingData();
     const wrapper = mount(BDrawing, {
@@ -642,6 +687,30 @@ describe('BDrawing node click selection', () => {
 
     expect(findNodeById(wrapper, 'node-1').attributes('style')).toContain('translate(120px, 80px)');
     expect(findNodeById(wrapper, 'node-2').attributes('style')).toContain('translate(300px, 140px)');
+    wrapper.unmount();
+  });
+
+  it('opens the multi-selection context menu when right-clicking Moveable controls', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: createMultiSelectedDrawingData(),
+        select: {}
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    await nextTick();
+    await nextTick();
+
+    await wrapper.find('[data-testid="moveable-stub"]').trigger('contextmenu', { clientX: 300, clientY: 200 });
+    await nextTick();
+
+    const mergeItem = wrapper
+      .findAll<HTMLButtonElement>('.b-drawing-context-menu__item')
+      .find((menuItem: DOMWrapper<HTMLButtonElement>): boolean => menuItem.text().includes('合并'));
+
+    expect(mergeItem).toBeDefined();
+    expect(mergeItem?.attributes('disabled')).toBeUndefined();
     wrapper.unmount();
   });
 });

@@ -4,14 +4,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { DrawingElement } from '@/components/BDrawing/types';
-import { reorderDrawingLayerElementsByDisplayPosition } from '@/views/drawing/utils/layerOrder';
+import { reorderDrawingLayerElementGroupsByDisplayPosition, reorderDrawingLayerElementsByDisplayPosition } from '@/views/drawing/utils/layerOrder';
 
 /**
  * 创建排序测试用画图元素。
  * @param id - 元素 ID
+ * @param groupId - 组合 ID
  * @returns 画图元素
  */
-function createElement(id: string): DrawingElement {
+function createElement(id: string, groupId?: string): DrawingElement {
   return {
     id,
     name: 'rect',
@@ -22,7 +23,7 @@ function createElement(id: string): DrawingElement {
     size: { width: 100, height: 80 },
     rotation: 0,
     style: {},
-    metadata: {}
+    metadata: groupId ? { groupId } : {}
   };
 }
 
@@ -65,5 +66,13 @@ describe('layerOrder', (): void => {
 
     expect(reorderDrawingLayerElementsByDisplayPosition(elements, 'node-3', 'node-2', 'before')).toBe(elements);
     expect(reorderDrawingLayerElementsByDisplayPosition(elements, 'node-1', 'node-2', 'after')).toBe(elements);
+  });
+
+  it('moves grouped layers as a single visual block', (): void => {
+    const elements = [createElement('node-1', 'drawing-group-1'), createElement('node-2', 'drawing-group-1'), createElement('node-3')];
+
+    const nextElements = reorderDrawingLayerElementGroupsByDisplayPosition(elements, ['node-1', 'node-2'], ['node-3'], 'before');
+
+    expect(getElementIds(nextElements)).toEqual(['node-3', 'node-1', 'node-2']);
   });
 });

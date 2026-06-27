@@ -5,10 +5,11 @@
  */
 /* eslint-disable vue/one-component-per-file */
 import { defineComponent, nextTick } from 'vue';
+import type { ComponentPublicInstance } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
-import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
 
 /**
  * 带内部选区的测试画板数据。
@@ -17,6 +18,14 @@ type DrawingDataWithSelection = DrawingData & {
   /** 内部选区 */
   selection: string[];
 };
+
+/**
+ * BDrawing 暴露给页面层的测试命令。
+ */
+interface BDrawingExpose {
+  /** 根据元素 ID 选择元素 */
+  selectElementById: (id: string, options?: { activateElement?: boolean }) => void;
+}
 
 vi.mock('@/components/BDrawing/components/Toolbar.vue', () => ({
   default: defineComponent({
@@ -159,6 +168,15 @@ function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
 }
 
 /**
+ * 读取 BDrawing 暴露命令。
+ * @param wrapper - BDrawing 测试包装器
+ * @returns 暴露命令
+ */
+function getDrawingExpose(wrapper: VueWrapper): ComponentPublicInstance & BDrawingExpose {
+  return wrapper.vm as ComponentPublicInstance & BDrawingExpose;
+}
+
+/**
  * 点击右键菜单项。
  * @param wrapper - BDrawing 测试包装器
  * @param label - 菜单项文案
@@ -260,6 +278,35 @@ describe('BDrawing context menu actions', (): void => {
     const latestData = getLatestDrawingData(wrapper);
     expect(latestData?.elements[0]?.metadata.groupId).toBeUndefined();
     expect(latestData?.elements[1]?.metadata.groupId).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('clears the active grouped child settings target after ungrouping selection', async (): Promise<void> => {
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: createGroupedDrawingData(),
+        select: {}
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('[data-testid="drawing-canvas"]').element, { height: 600, left: 0, top: 0, width: 800 });
+
+    getDrawingExpose(wrapper).selectElementById('node-2', { activateElement: true });
+    await flushDrawingUpdates();
+
+    const activeChildPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as DrawingSelectTarget;
+    expect(activeChildPayload && 'id' in activeChildPayload ? activeChildPayload.id : '').toBe('node-2');
+
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+    await clickContextMenuItem(wrapper, '取消合并');
+
+    expect(wrapper.emitted('update:select')?.at(-1)?.[0]).toBeNull();
     wrapper.unmount();
   });
 

@@ -8,13 +8,17 @@
       :elements="session.data.value.elements"
       :selected-element-ids="selectedElementIds"
       @select-element="handleSidebarElementSelect"
+      @select-elements="handleSidebarElementsSelect"
       @copy-element="handleSidebarElementCopy"
+      @copy-elements="handleSidebarElementsCopy"
       @delete-element="handleSidebarElementDelete"
+      @delete-elements="handleSidebarElementsDelete"
       @move-element="handleSidebarElementMove"
+      @move-elements="handleSidebarElementsMove"
     />
 
     <section ref="canvasRef" class="drawing-page__canvas">
-      <BDrawing ref="drawingRef" v-model:value="session.data.value" v-model:select="selectedTarget" />
+      <BDrawing ref="drawingRef" v-model:value="session.data.value" v-model:select="selectedTarget" @selection-change="handleDrawingSelectionChange" />
     </section>
 
     <PanelSettings v-model:select="selectedTarget" :drawing-data="session.data.value" />
@@ -27,14 +31,18 @@ import { useRoute } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
 import type BDrawingComponent from '@/components/BDrawing/index.vue';
 import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
-import { DRAWING_GROUP_METADATA_KEY } from '@/components/BDrawing/utils/drawingGroups';
+import { DRAWING_GROUP_METADATA_KEY, getDrawingElementGroupId } from '@/components/BDrawing/utils/drawingGroups';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import PanelSettings from './components/PanelSettings.vue';
 import PanelSidebar from './components/PanelSidebar.vue';
 import { useBindings } from './hooks/useBindings';
 import { provideDragger, useDragger, type DraggerItem, type DraggerPoint } from './hooks/useDragger';
-import { reorderDrawingLayerElementsByDisplayPosition, type DrawingLayerMovePosition } from './utils/layerOrder';
+import {
+  reorderDrawingLayerElementsByDisplayPosition,
+  reorderDrawingLayerElementGroupsByDisplayPosition,
+  type DrawingLayerMovePosition
+} from './utils/layerOrder';
 
 const route = useRoute();
 const tabsStore = useTabsStore();
@@ -47,6 +55,8 @@ const routePath = computed<string>(() => route.fullPath || `/drawing/${fileId.va
 const DRAWING_LAYER_COPY_OFFSET = 16;
 /** 侧栏复制图层时使用的元素 ID 前缀。 */
 const DRAWING_LAYER_COPY_ID_PREFIX = 'drawing-shape-';
+/** 侧栏复制组合时使用的组合 ID 前缀。 */
+const DRAWING_LAYER_COPY_GROUP_ID_PREFIX = 'drawing-group-';
 
 const session = useFileSession<DrawingData>({
   fileId,
@@ -61,6 +71,8 @@ const session = useFileSession<DrawingData>({
 });
 /** 当前右侧设置栏可编辑目标。 */
 const selectedTarget = ref<DrawingSelectTarget>(session.data.value.metadata);
+/** 当前侧栏需要高亮的元素 ID。 */
+const selectedElementIds = ref<string[]>([]);
 
 /**
  * 判断当前设置目标是否为画图元素。
@@ -82,6 +94,24 @@ function getGeneratedElementIdIndex(id: string): number | null {
   }
 
   const rawIndex = id.slice(DRAWING_LAYER_COPY_ID_PREFIX.length);
+  if (!/^\d+$/.test(rawIndex)) {
+    return null;
+  }
+
+  return Number(rawIndex);
+}
+
+/**
+ * 读取自动生成组合 ID 中的序号。
+ * @param groupId - 组合 ID
+ * @returns 序号，不匹配时返回 null
+ */
+function getGeneratedGroupIdIndex(groupId: string): number | null {
+  if (!groupId.startsWith(DRAWING_LAYER_COPY_GROUP_ID_PREFIX)) {
+    return null;
+  }
+
+  const rawIndex = groupId.slice(DRAWING_LAYER_COPY_GROUP_ID_PREFIX.length);
   if (!/^\d+$/.test(rawIndex)) {
     return null;
   }
@@ -112,6 +142,31 @@ function createLayerCopyElementId(elements: DrawingElement[]): string {
 }
 
 /**
+ * 创建侧栏复制组合 ID。
+ * @param elements - 当前元素列表
+ * @returns 新组合 ID
+ */
+function createLayerCopyGroupId(elements: DrawingElement[]): string {
+  const existingGroupIds = new Set(
+    elements.map((element: DrawingElement): string | null => getDrawingElementGroupId(element)).filter((groupId): groupId is string => groupId !== null)
+  );
+  let nextIndex = elements.reduce<number>((maxIndex: number, element: DrawingElement): number => {
+    const groupId = getDrawingElementGroupId(element);
+    const index = groupId ? getGeneratedGroupIdIndex(groupId) : null;
+
+    return index === null ? maxIndex : Math.max(maxIndex, index);
+  }, 0);
+  let nextGroupId = `${DRAWING_LAYER_COPY_GROUP_ID_PREFIX}${nextIndex + 1}`;
+
+  while (existingGroupIds.has(nextGroupId)) {
+    nextIndex += 1;
+    nextGroupId = `${DRAWING_LAYER_COPY_GROUP_ID_PREFIX}${nextIndex + 1}`;
+  }
+
+  return nextGroupId;
+}
+
+/**
  * 创建侧栏复制出来的独立元素。
  * @param element - 原始元素
  * @param elements - 当前元素列表
@@ -129,6 +184,46 @@ function createLayerCopyElement(element: DrawingElement, elements: DrawingElemen
       y: element.position.y + DRAWING_LAYER_COPY_OFFSET
     }
   };
+}
+
+/**
+ * 按当前画布层级顺序整理目标元素。
+ * @param elements - 当前元素列表
+ * @param targetElements - 目标元素列表
+ * @returns 按画布层级排序后的目标元素
+ */
+function sortElementsByLayerOrder(elements: DrawingElement[], targetElements: DrawingElement[]): DrawingElement[] {
+  const targetIds = new Set(targetElements.map((element: DrawingElement): string => element.id));
+
+  return elements.filter((element: DrawingElement): boolean => targetIds.has(element.id));
+}
+
+/**
+ * 创建侧栏复制出来的元素列表。
+ * @param targetElements - 原始元素列表
+ * @param elements - 当前元素列表
+ * @returns 新画图元素列表
+ */
+function createLayerCopyElements(targetElements: DrawingElement[], elements: DrawingElement[]): DrawingElement[] {
+  const orderedElements = sortElementsByLayerOrder(elements, targetElements);
+  const groupIds = new Set(
+    orderedElements.map((element: DrawingElement): string | null => getDrawingElementGroupId(element)).filter((groupId): groupId is string => groupId !== null)
+  );
+  const nextGroupId = orderedElements.length > 1 && groupIds.size === 1 ? createLayerCopyGroupId(elements) : null;
+  const elementsWithCopies = [...elements];
+
+  return orderedElements.map((element: DrawingElement): DrawingElement => {
+    const copiedElement = createLayerCopyElement(element, elementsWithCopies);
+    if (nextGroupId) {
+      copiedElement.metadata = {
+        ...copiedElement.metadata,
+        [DRAWING_GROUP_METADATA_KEY]: nextGroupId
+      };
+    }
+
+    elementsWithCopies.push(copiedElement);
+    return copiedElement;
+  });
 }
 
 /**
@@ -150,8 +245,50 @@ function insertLayerCopyAboveSource(elements: DrawingElement[], sourceElementId:
   return nextElements;
 }
 
-/** 当前侧栏需要高亮的单选元素 ID。 */
-const selectedElementIds = computed<string[]>((): string[] => (isDrawingElementTarget(selectedTarget.value) ? [selectedTarget.value.id] : []));
+/**
+ * 将复制元素列表插入到原元素组上一层。
+ * @param elements - 当前元素列表
+ * @param sourceElements - 原始元素列表
+ * @param copiedElements - 复制元素列表
+ * @returns 插入后的元素列表
+ */
+function insertLayerCopiesAboveSources(elements: DrawingElement[], sourceElements: DrawingElement[], copiedElements: DrawingElement[]): DrawingElement[] {
+  const sourceIds = new Set(sourceElements.map((element: DrawingElement): string => element.id));
+  const sourceIndexes = elements
+    .map((element: DrawingElement, index: number): number => (sourceIds.has(element.id) ? index : -1))
+    .filter((index: number): boolean => index >= 0);
+  if (sourceIndexes.length === 0) {
+    return [...elements, ...copiedElements];
+  }
+
+  const nextElements = [...elements];
+  nextElements.splice(Math.max(...sourceIndexes) + 1, 0, ...copiedElements);
+
+  return nextElements;
+}
+
+/**
+ * 根据当前设置目标同步侧栏高亮选区。
+ * @param target - 当前设置目标
+ */
+function syncSidebarSelectedElementIds(target: DrawingSelectTarget): void {
+  if (isDrawingElementTarget(target)) {
+    selectedElementIds.value = [target.id];
+    return;
+  }
+
+  if (target !== null) {
+    selectedElementIds.value = [];
+  }
+}
+
+/**
+ * 处理画布内部选区同步。
+ * @param selection - 当前画布选区 ID 列表
+ */
+function handleDrawingSelectionChange(selection: string[]): void {
+  selectedElementIds.value = [...selection];
+}
 
 /**
  * 将当前画图文件同步到标签页列表。
@@ -183,7 +320,28 @@ provideDragger(elementDrag);
  */
 function handleSidebarElementSelect(element: DrawingElement): void {
   selectedTarget.value = element;
+  selectedElementIds.value = [element.id];
+  if (getDrawingElementGroupId(element)) {
+    drawingRef.value?.selectElementById(element.id, { activateElement: true });
+    return;
+  }
+
   drawingRef.value?.selectElementById(element.id);
+}
+
+/**
+ * 处理侧栏图层多选。
+ * @param elements - 被选择的画图元素
+ */
+function handleSidebarElementsSelect(elements: DrawingElement[]): void {
+  const elementIds = elements.map((element: DrawingElement): string => element.id);
+  if (elementIds.length === 0) {
+    return;
+  }
+
+  selectedTarget.value = elements.length === 1 ? elements[0] : null;
+  selectedElementIds.value = elementIds;
+  drawingRef.value?.selectElementsByIds(elementIds);
 }
 
 /**
@@ -197,8 +355,29 @@ async function handleSidebarElementCopy(element: DrawingElement): Promise<void> 
     elements: insertLayerCopyAboveSource(session.data.value.elements, element.id, copiedElement)
   };
   selectedTarget.value = copiedElement;
+  selectedElementIds.value = [copiedElement.id];
   await nextTick();
   drawingRef.value?.selectElementById(copiedElement.id);
+}
+
+/**
+ * 处理侧栏多图层复制。
+ * @param elements - 被复制的画图元素
+ */
+async function handleSidebarElementsCopy(elements: DrawingElement[]): Promise<void> {
+  const copiedElements = createLayerCopyElements(elements, session.data.value.elements);
+  if (copiedElements.length === 0) {
+    return;
+  }
+
+  session.data.value = {
+    ...session.data.value,
+    elements: insertLayerCopiesAboveSources(session.data.value.elements, elements, copiedElements)
+  };
+  selectedTarget.value = copiedElements.length === 1 ? copiedElements[0] : null;
+  selectedElementIds.value = copiedElements.map((element: DrawingElement): string => element.id);
+  await nextTick();
+  drawingRef.value?.selectElementsByIds(selectedElementIds.value);
 }
 
 /**
@@ -218,6 +397,33 @@ function handleSidebarElementDelete(element: DrawingElement): void {
 
   if (isDrawingElementTarget(selectedTarget.value) && selectedTarget.value.id === element.id) {
     selectedTarget.value = session.data.value.metadata;
+  }
+  if (selectedElementIds.value.includes(element.id)) {
+    selectedElementIds.value = [];
+  }
+}
+
+/**
+ * 处理侧栏多图层删除。
+ * @param elements - 被删除的画图元素
+ */
+function handleSidebarElementsDelete(elements: DrawingElement[]): void {
+  const deleteIds = new Set(elements.map((element: DrawingElement): string => element.id));
+  const nextElements = session.data.value.elements.filter((item: DrawingElement): boolean => !deleteIds.has(item.id));
+  if (nextElements.length === session.data.value.elements.length) {
+    return;
+  }
+
+  session.data.value = {
+    ...session.data.value,
+    elements: nextElements
+  };
+
+  if (isDrawingElementTarget(selectedTarget.value) && deleteIds.has(selectedTarget.value.id)) {
+    selectedTarget.value = session.data.value.metadata;
+  }
+  if (selectedElementIds.value.some((id: string): boolean => deleteIds.has(id))) {
+    selectedElementIds.value = [];
   }
 }
 
@@ -239,6 +445,25 @@ function handleSidebarElementMove(sourceElementId: string, targetElementId: stri
   };
 }
 
+/**
+ * 处理侧栏多图层拖拽排序。
+ * @param sourceElementIds - 被移动元素 ID 列表
+ * @param targetElementIds - 目标元素 ID 列表
+ * @param position - 基于侧栏视觉顺序的插入位置
+ */
+function handleSidebarElementsMove(sourceElementIds: string[], targetElementIds: string[], position: DrawingLayerMovePosition): void {
+  const nextElements = reorderDrawingLayerElementGroupsByDisplayPosition(session.data.value.elements, sourceElementIds, targetElementIds, position);
+  if (nextElements === session.data.value.elements) {
+    return;
+  }
+
+  session.data.value = {
+    ...session.data.value,
+    elements: nextElements
+  };
+}
+
+watch(selectedTarget, syncSidebarSelectedElementIds, { immediate: true });
 watch([fileId, session.currentTitle], syncDrawingTab, { immediate: true });
 
 useBindings({

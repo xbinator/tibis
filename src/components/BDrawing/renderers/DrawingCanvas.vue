@@ -22,7 +22,7 @@
         :node="element"
         :preview-position="getElementPreviewPosition(element.id)"
         :preview-size="getElementPreviewSize(element.id)"
-        :selected="selection.includes(element.id)"
+        :selected="isElementSelected(element.id)"
         @context-menu="handleElementContextMenu"
         @select="handleElementSelect"
         @release="handleElementRelease"
@@ -54,6 +54,8 @@ interface Props {
   elements: DrawingElement[];
   /** 选区 */
   selection: string[];
+  /** 组合选区内当前编辑的子元素 ID */
+  activeElementId?: string | null;
   /** Moveable 操作中的预览几何 */
   geometryPreviewChanges?: DrawingGeometryChange[];
   /** 视口 */
@@ -130,6 +132,19 @@ function getElementPreviewPosition(id: string): DrawingPoint | null {
  */
 function getElementPreviewSize(id: string): DrawingSize | null {
   return geometryPreviewById.value.get(id)?.size ?? null;
+}
+
+/**
+ * 判断元素节点是否需要显示自身选中态。
+ * @param id - 元素 ID
+ * @returns 是否显示节点选中态
+ */
+function isElementSelected(id: string): boolean {
+  if (props.activeElementId) {
+    return props.activeElementId === id;
+  }
+
+  return props.selection.includes(id);
 }
 
 /**

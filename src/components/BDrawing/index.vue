@@ -8,6 +8,7 @@
       <DrawingCanvas
         :elements="board.state.value.elements"
         :selection="board.state.value.selection"
+        :active-element-id="activeElementId"
         :geometry-preview-changes="moveablePreviewChanges"
         :viewport="board.state.value.viewport"
         :viewport-size="viewportSize"
@@ -30,8 +31,10 @@
       :root="rootRef"
       :elements="board.state.value.elements"
       :selection="board.state.value.selection"
+      :active-element-id="activeElementId"
       :viewport="board.state.value.viewport"
       :viewport-size="viewportSize"
+      @context-menu="handleDrawingContextMenu"
       @move="board.moveElements"
       @preview-end="handleMoveablePreviewEnd"
       @resize="handleMoveableResize"
@@ -162,11 +165,23 @@ interface DrawingContextMenuState {
   boardPoint: DrawingPoint;
 }
 
+/**
+ * 根据元素 ID 选中元素的配置。
+ */
+interface SelectElementByIdOptions {
+  /** 组合选区内是否将该元素作为当前编辑子元素 */
+  activateElement?: boolean;
+}
+
 const drawingData = defineModel<DrawingData>('value', {
   default: (): DrawingData => ({ metadata: {}, elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } })
 });
 /** 当前选中的绘图目标（元素或锚点），支持双向绑定。 */
 const selectedTarget = defineModel<DrawingSelectTarget>('select', { default: null });
+const emit = defineEmits<{
+  /** 同步内部选区 ID 列表 */
+  'selection-change': [selection: string[]];
+}>();
 /** 画板实例，管理绘图元素数据与状态。 */
 const board = useDrawingBoard(drawingData.value);
 /** 视口控制器，处理画布的平移与缩放。 */
@@ -175,6 +190,8 @@ const viewport = useDrawingViewport(board);
 const interaction = useDrawingInteraction(board);
 /** 当前激活的工具名称，默认为选择工具。 */
 const activeTool = ref<string>('select');
+/** 组合选区内当前作为设置面板编辑目标的子元素 ID。 */
+const activeElementId = ref<string | null>(null);
 /** 创建工具激活时应用到下一个形状的样式。 */
 const creationStyle = ref<DrawingElementStyle>({});
 const { rootRef, viewportSize, isViewportReady } = useViewportSize();
@@ -237,20 +254,20 @@ const contextMenuItems = computed<DrawingContextMenuEntry[]>(() => {
 function createSelectedTargetFromSelection(selection: string[]): DrawingSelectTarget {
   if (selection.length === 0) return drawingData.value.metadata;
 
+  if (activeElementId.value && selection.includes(activeElementId.value)) {
+    const activeElement = drawingData.value.elements.find((item: DrawingElement): boolean => item.id === activeElementId.value);
+
+    if (activeElement) {
+      return activeElement;
+    }
+  }
+
   if (selection.length > 1) return null;
 
   const selectedId = selection[0];
   const element = drawingData.value.elements.find((item: DrawingElement): boolean => item.id === selectedId);
 
   return element ?? drawingData.value.metadata;
-}
-
-/**
- * 处理内部选区变化。
- * @param selection - 内部选区 ID 列表
- */
-function handleSelectionChange(selection: string[]): void {
-  selectedTarget.value = createSelectedTargetFromSelection(selection);
 }
 
 /**
@@ -264,10 +281,46 @@ function isSameSelection(current: string[], next: string[]): boolean {
 }
 
 /**
+ * 判断当前激活子元素是否仍然对应一个完整组合选区。
+ * @param selection - 内部选区 ID 列表
+ * @returns 激活子元素是否有效
+ */
+function isActiveElementSelection(selection: string[]): boolean {
+  if (!activeElementId.value || !selection.includes(activeElementId.value)) {
+    return false;
+  }
+
+  const activeGroupSelection = expandDrawingSelectionToGroups(drawingData.value.elements, [activeElementId.value]);
+
+  return activeGroupSelection.length > 1 && isSameSelection(selection, activeGroupSelection);
+}
+
+/**
+ * 同步组合子元素激活态，避免激活 ID 脱离当前选区。
+ * @param selection - 内部选区 ID 列表
+ */
+function syncActiveElementId(selection: string[]): void {
+  if (activeElementId.value && !isActiveElementSelection(selection)) {
+    activeElementId.value = null;
+  }
+}
+
+/**
+ * 处理内部选区变化。
+ * @param selection - 内部选区 ID 列表
+ */
+function handleSelectionChange(selection: string[]): void {
+  syncActiveElementId(selection);
+  selectedTarget.value = createSelectedTargetFromSelection(selection);
+  emit('selection-change', [...selection]);
+}
+
+/**
  * 按组合关系扩展并设置选区。
  * @param selection - 原始选区
  */
 function setBoardSelection(selection: string[]): void {
+  activeElementId.value = null;
   board.setSelection(expandDrawingSelectionToGroups(board.state.value.elements, selection));
 }
 
@@ -817,9 +870,15 @@ function handleElementSelect(id: string, event: PointerEvent): void {
 
   const selection = getSelectionForElement(id);
   if (isSameSelection(board.state.value.selection, selection)) {
+    if (selection.length > 1 && activeElementId.value !== id) {
+      activeElementId.value = id;
+      selectedTarget.value = createSelectedTargetFromSelection(selection);
+    }
+
     return;
   }
 
+  activeElementId.value = selection.length > 1 ? id : null;
   board.setSelection(selection);
   if (selection.length === 1) {
     startDirectDrag(id, event, true);
@@ -888,8 +947,9 @@ async function createElementFromClientPoint(name: string, clientPoint: DrawingPo
 /**
  * 根据元素 ID 选中画布元素。
  * @param id - 元素 ID
+ * @param options - 选中配置
  */
-function selectElementById(id: string): void {
+function selectElementById(id: string, options: SelectElementByIdOptions = {}): void {
   const hasElement = board.state.value.elements.some((element: DrawingElement): boolean => element.id === id);
   if (!hasElement) {
     return;
@@ -897,7 +957,26 @@ function selectElementById(id: string): void {
 
   cancelDirectDrag();
   setActiveTool('select');
-  board.setSelection(getSelectionForElement(id));
+  const selection = getSelectionForElement(id);
+  activeElementId.value = options.activateElement && selection.length > 1 ? id : null;
+  board.setSelection(selection);
+}
+
+/**
+ * 根据元素 ID 列表选中画布元素。
+ * @param ids - 元素 ID 列表
+ */
+function selectElementsByIds(ids: string[]): void {
+  const elementIds = new Set(board.state.value.elements.map((element: DrawingElement): string => element.id));
+  const selection = ids.filter((id: string): boolean => elementIds.has(id));
+  if (selection.length === 0) {
+    return;
+  }
+
+  cancelDirectDrag();
+  setActiveTool('select');
+  activeElementId.value = null;
+  board.setSelection(expandDrawingSelectionToGroups(board.state.value.elements, selection));
 }
 
 /**
@@ -1031,7 +1110,8 @@ onBeforeUnmount((): void => {
 
 defineExpose({
   createElementFromClientPoint,
-  selectElementById
+  selectElementById,
+  selectElementsByIds
 });
 </script>
 

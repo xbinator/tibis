@@ -3,10 +3,14 @@
  * @description 验证 BDrawing 节点统一承接元素视觉样式。
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import DrawingNode from '@/components/BDrawing/renderers/DrawingNode.vue';
 import type { DrawingShapeElement } from '@/components/BDrawing/types';
+
+/** DrawingNode 组件源码。 */
+const drawingNodeSource = readFileSync('src/components/BDrawing/renderers/DrawingNode.vue', 'utf8');
 
 /**
  * 创建节点样式测试元素。
@@ -60,5 +64,12 @@ describe('DrawingNode', (): void => {
     expect(nodeStyle.justifyContent).toBe('flex-end');
     expect(nodeStyle.alignItems).toBe('center');
     wrapper.unmount();
+  });
+
+  it('does not render active child selection chrome on the node itself', (): void => {
+    expect(drawingNodeSource).not.toContain('is-active-child');
+    expect(drawingNodeSource).not.toContain('b-drawing-node__active-border');
+    expect(drawingNodeSource).not.toContain('border-radius: 0 !important;');
+    expect(drawingNodeSource).not.toContain('box-shadow: inset 0 0 0 1px var(--color-primary);');
   });
 });

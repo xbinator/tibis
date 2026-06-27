@@ -60,3 +60,44 @@ export function reorderDrawingLayerElementsByDisplayPosition(
 
   return isSameDrawingLayerOrder(elements, nextElements) ? elements : nextElements;
 }
+
+/**
+ * 按侧栏视觉顺序移动画图元素组，并返回画布真实层级顺序。
+ * @param elements - 当前画布元素列表
+ * @param sourceElementIds - 被拖拽元素 ID 列表
+ * @param targetElementIds - 命中的目标元素 ID 列表
+ * @param position - 插入到目标展示项视觉上的前方或后方
+ * @returns 调整后的画布元素列表；无效移动时返回原数组引用
+ */
+export function reorderDrawingLayerElementGroupsByDisplayPosition(
+  elements: DrawingElement[],
+  sourceElementIds: string[],
+  targetElementIds: string[],
+  position: DrawingLayerMovePosition
+): DrawingElement[] {
+  const sourceIds = new Set(sourceElementIds);
+  const targetIds = new Set(targetElementIds);
+  if (!sourceIds.size || !targetIds.size || sourceElementIds.some((id: string): boolean => targetIds.has(id))) {
+    return elements;
+  }
+
+  const displayElements = [...elements].reverse();
+  const sourceBlock = displayElements.filter((element: DrawingElement): boolean => sourceIds.has(element.id));
+  if (!sourceBlock.length) {
+    return elements;
+  }
+
+  const displayElementsWithoutSource = displayElements.filter((element: DrawingElement): boolean => !sourceIds.has(element.id));
+  const targetIndexes = displayElementsWithoutSource
+    .map((element: DrawingElement, index: number): number => (targetIds.has(element.id) ? index : -1))
+    .filter((index: number): boolean => index >= 0);
+  if (!targetIndexes.length) {
+    return elements;
+  }
+
+  const insertIndex = position === 'before' ? Math.min(...targetIndexes) : Math.max(...targetIndexes) + 1;
+  displayElementsWithoutSource.splice(insertIndex, 0, ...sourceBlock);
+  const nextElements = displayElementsWithoutSource.reverse();
+
+  return isSameDrawingLayerOrder(elements, nextElements) ? elements : nextElements;
+}

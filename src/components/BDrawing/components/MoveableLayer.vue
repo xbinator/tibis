@@ -3,7 +3,14 @@
   @description BDrawing Moveable 控制器适配层。
 -->
 <template>
-  <div v-if="shouldShowMoveableLayer" class="b-drawing-moveable-layer" @pointerdown.stop @pointermove.stop @pointerup.stop>
+  <div
+    v-if="shouldShowMoveableLayer"
+    class="b-drawing-moveable-layer"
+    @contextmenu.stop.prevent="handleContextMenu"
+    @pointerdown.stop
+    @pointermove.stop
+    @pointerup.stop
+  >
     <VueMoveable
       ref="moveableRef"
       :target="targets"
@@ -20,6 +27,7 @@
       :snap-directions="DRAWING_MOVEABLE_SNAP_DIRECTIONS"
       :element-snap-directions="DRAWING_MOVEABLE_SNAP_DIRECTIONS"
       :element-guidelines="activeGuidelineTargets"
+      :hide-child-moveable-default-lines="shouldHideChildMoveableDefaultLines"
       :padding="moveableSelectionPadding"
       :render-directions="DRAWING_MOVEABLE_RENDER_DIRECTIONS"
       :zoom="viewport.zoom"
@@ -35,11 +43,28 @@
       @resize-group="handleResizeGroup"
       @resize-group-end="handleResizeGroupEnd"
     />
+    <VueMoveable
+      v-if="activeChildTarget"
+      ref="activeChildMoveableRef"
+      class-name="b-drawing-moveable-layer__active-child"
+      :target="activeChildTarget"
+      :container="root"
+      :root-container="root"
+      :use-accurate-position="true"
+      :draggable="false"
+      :resizable="false"
+      :snappable="false"
+      :hide-default-lines="false"
+      :padding="disabledMoveableSelectionPadding"
+      :render-directions="[]"
+      :zoom="viewport.zoom"
+      :origin="false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { DrawingElement, DrawingGeometryChange, DrawingSize, DrawingViewport } from '../types';
+import type { DrawingContextMenuPayload, DrawingElement, DrawingGeometryChange, DrawingPoint, DrawingSize, DrawingViewport } from '../types';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import VueMoveable from 'vue3-moveable/dist/moveable.js';
 import {
@@ -50,7 +75,13 @@ import {
   DRAWING_MOVEABLE_THROTTLE
 } from '../constants/interaction';
 import { getDrawingElementSchema } from '../elements';
-import { createDrawingElementCssTransform, getDrawingElementId, getDrawingShapeRenderSize, queryDrawingElementTarget } from '../utils/drawingGeometry';
+import {
+  createDrawingElementCssTransform,
+  getDrawingElementId,
+  getDrawingShapeRenderSize,
+  projectClientPointToDrawingBoard,
+  queryDrawingElementTarget
+} from '../utils/drawingGeometry';
 
 /**
  * Moveable 结束事件中的 DOM target。
@@ -140,6 +171,8 @@ interface Props {
   elements: DrawingElement[];
   /** 当前选区 */
   selection: string[];
+  /** 组合选区内当前编辑的子元素 ID */
+  activeElementId?: string | null;
   /** 当前视口 */
   viewport: DrawingViewport;
   /** 当前视口渲染尺寸 */
@@ -152,6 +185,8 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   /** 提交移动变更 */
   move: [changes: DrawingGeometryChange[]];
+  /** 打开右键菜单 */
+  'context-menu': [payload: DrawingContextMenuPayload];
   /** 清理临时几何预览 */
   'preview-end': [];
   /** 提交缩放变更 */
@@ -184,6 +219,7 @@ interface MoveableSelectionPadding {
 
 const targets = ref<Element[]>([]);
 const moveableRef = ref<MoveableInstance | null>(null);
+const activeChildMoveableRef = ref<MoveableInstance | null>(null);
 let moveableRectRefreshFrame: ReturnType<typeof requestAnimationFrame> | null = null;
 /** 单选拖拽时用于元素间吸附的其它画板节点。 */
 const guidelineTargets = ref<Element[]>([]);
@@ -197,6 +233,8 @@ const disabledMoveableSelectionPadding: MoveableSelectionPadding = {
 const singleTarget = computed<boolean>(() => targets.value.length === 1);
 /** 是否展示 Moveable 控制层。 */
 const shouldShowMoveableLayer = computed<boolean>(() => props.enabled && targets.value.length > 0);
+/** 是否隐藏组合子目标默认线，避免非当前子元素也呈现激活框。 */
+const shouldHideChildMoveableDefaultLines = computed<boolean>(() => Boolean(props.activeElementId) && targets.value.length > 1);
 /**
  * 通过 DOM target 读取元素 ID。
  * @param target - Moveable 操作目标
@@ -213,6 +251,53 @@ function getTargetId(target?: Element): string | null {
  */
 function getElementById(id: string): DrawingElement | undefined {
   return props.elements.find((element) => element.id === id);
+}
+
+/**
+ * 读取当前选区可用于右键菜单的锚点元素。
+ * @returns 当前选区中的首个有效元素 ID
+ */
+function getContextMenuAnchorElementId(): string | null {
+  const elementIds = new Set(props.elements.map((element: DrawingElement): string => element.id));
+
+  return props.selection.find((id: string): boolean => elementIds.has(id)) ?? null;
+}
+
+/**
+ * 将浏览器指针位置转换为画板坐标。
+ * @param event - 鼠标事件
+ * @returns 画板坐标
+ */
+function getBoardPointFromClient(event: MouseEvent): DrawingPoint {
+  const rect = props.root?.getBoundingClientRect();
+  if (!rect) {
+    return { ...props.viewport.center };
+  }
+
+  const projection = projectClientPointToDrawingBoard({ x: event.clientX, y: event.clientY }, rect, props.viewport);
+
+  return projection?.boardPoint ?? { ...props.viewport.center };
+}
+
+/**
+ * 创建 Moveable 控制层右键菜单载荷。
+ * @param event - 鼠标事件
+ * @returns 右键菜单载荷
+ */
+function createContextMenuPayload(event: MouseEvent): DrawingContextMenuPayload {
+  return {
+    elementId: getContextMenuAnchorElementId(),
+    clientPoint: { x: event.clientX, y: event.clientY },
+    boardPoint: getBoardPointFromClient(event)
+  };
+}
+
+/**
+ * 处理 Moveable 控制层右键菜单。
+ * @param event - 鼠标事件
+ */
+function handleContextMenu(event: MouseEvent): void {
+  emit('context-menu', createContextMenuPayload(event));
 }
 
 /**
@@ -251,6 +336,14 @@ const moveableSelectionPadding = computed<MoveableSelectionPadding>(() =>
 );
 /** 当前实际传给 Moveable 的吸附参考节点。 */
 const activeGuidelineTargets = computed<Element[]>(() => (canSnapSelection.value ? guidelineTargets.value : []));
+/** 当前组合内正在编辑的子元素 Moveable target。 */
+const activeChildTarget = computed<Element | null>(() => {
+  if (!props.activeElementId || targets.value.length <= 1) {
+    return null;
+  }
+
+  return targets.value.find((target: Element): boolean => getTargetId(target) === props.activeElementId) ?? null;
+});
 
 /**
  * 通过元素 ID 读取 DOM target。
@@ -270,6 +363,14 @@ function refreshMoveableRect(): void {
   }
 
   moveableRef.value?.updateRect();
+  activeChildMoveableRef.value?.updateRect();
+}
+
+/**
+ * 在拖拽预览帧中刷新组合内当前子元素控制框。
+ */
+function refreshActiveChildMoveableRect(): void {
+  activeChildMoveableRef.value?.updateRect();
 }
 
 /**
@@ -557,6 +658,7 @@ function handleDragGroup(event: MoveableGroupEvent<MoveableDragEvent>): void {
   event.events?.forEach((dragEvent: MoveableDragEvent): void => {
     previewDragEvent(dragEvent);
   });
+  refreshActiveChildMoveableRect();
 }
 
 /**
@@ -600,6 +702,7 @@ function handleResizeGroup(event: MoveableGroupEvent<MoveableResizeEvent>): void
     return;
   }
 
+  refreshActiveChildMoveableRect();
   emit('resize-preview', changes);
 }
 
@@ -665,7 +768,7 @@ watch(
     margin-left: -4px !important;
     background: #fff !important;
     border: 1px solid var(--color-primary) !important;
-    border-radius: 2px !important;
+    border-radius: 0 !important;
   }
 
   :deep(.moveable-control-box) {
@@ -681,7 +784,7 @@ watch(
 
   :deep(.moveable-line) {
     background: var(--color-primary) !important;
-    box-shadow: 0 0 0 1px var(--color-primary-bg);
+    box-shadow: none;
   }
 
   :deep(.moveable-line.moveable-dashed) {
@@ -694,6 +797,15 @@ watch(
 
   :deep(.moveable-line.moveable-vertical.moveable-dashed) {
     border-left-color: var(--color-primary);
+  }
+
+  :deep(.b-drawing-moveable-layer__active-child) {
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  :deep(.b-drawing-moveable-layer__active-child .moveable-line) {
+    box-shadow: none;
   }
 
   :deep(.moveable-guideline) {
