@@ -162,6 +162,8 @@ export interface DrawingAddShapeOptions {
   name: string;
   /** 元素显示名称 */
   label: string;
+  /** 用户自定义中文名称 */
+  title?: string;
   /** 元素图标 */
   icon: string;
   /** 拖拽起点 */

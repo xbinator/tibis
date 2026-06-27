@@ -247,9 +247,9 @@ describe('BDrawing context menu actions', (): void => {
     const latestData = getLatestDrawingData(wrapper);
     expect(latestData?.elements).toHaveLength(2);
     expect(latestData?.elements[1]).toMatchObject({
-      id: 'drawing-shape-1',
       position: { x: 100, y: 60 }
     });
+    expect(latestData?.elements[1]?.id).toMatch(/^[A-Za-z0-9_-]{8}$/);
     wrapper.unmount();
   });
 
@@ -340,7 +340,10 @@ describe('BDrawing context menu actions', (): void => {
     await clickContextMenuItem(wrapper, '粘贴');
 
     const latestData = getLatestDrawingData(wrapper);
-    expect(latestData?.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-1', 'node-2', 'drawing-shape-1', 'drawing-shape-2']);
+    expect(latestData?.elements.map((element: DrawingElement): string => element.id).slice(0, 2)).toEqual(['node-1', 'node-2']);
+    expect(latestData?.elements.slice(2).map((element: DrawingElement): string => element.id)).toHaveLength(2);
+    expect(latestData?.elements[2]?.id).toMatch(/^[A-Za-z0-9_-]{8}$/);
+    expect(latestData?.elements[3]?.id).toMatch(/^[A-Za-z0-9_-]{8}$/);
     wrapper.unmount();
   });
 });

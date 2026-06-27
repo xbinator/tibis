@@ -536,7 +536,7 @@ export function addDrawingShape(state: DrawingBoardState, options: DrawingAddSha
     name: options.name,
     label: options.label,
     icon: options.icon,
-    title: options.label,
+    title: options.title ?? options.label,
     position: cloneDeep(geometry.position),
     size: cloneDeep(geometry.size),
     rotation: 0,

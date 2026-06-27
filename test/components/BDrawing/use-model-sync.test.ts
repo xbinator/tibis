@@ -217,16 +217,19 @@ describe('useModelSync', (): void => {
     expect(modelValue.value?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
   });
 
-  it('continues generated shape ids after the highest existing generated id', (): void => {
+  it('continues generated shape titles from current existing titles', (): void => {
+    const existingElement = createShapeElement('existing-rect');
+    existingElement.title = '矩形8';
     const board = useDrawingBoard({
-      elements: [createShapeElement('drawing-shape-2')]
+      elements: [existingElement]
     });
 
     board.startCreateShapeDraft('rect', { x: 20, y: 30 });
     board.updateDraftPoint({ x: 140, y: 90 });
     board.commitCreateShapeDraft();
 
-    expect(board.state.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['drawing-shape-2', 'drawing-shape-3']);
+    expect(board.state.value.elements[1]?.id).toMatch(/^[A-Za-z0-9_-]{8}$/);
+    expect(board.state.value.elements[1]?.title).toBe('矩形9');
     expect(board.state.value.lastError).toBeUndefined();
   });
 

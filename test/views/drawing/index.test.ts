@@ -16,6 +16,7 @@ const onSaveAsMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const onRenameMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const selectElementByIdMock = vi.hoisted(() => vi.fn());
 const selectElementsByIdsMock = vi.hoisted(() => vi.fn());
+const nanoidMock = vi.hoisted(() => vi.fn<() => string>());
 const drawingDataMock = vi.hoisted((): { value: DrawingData } => ({
   value: {
     metadata: {},
@@ -25,6 +26,10 @@ const drawingDataMock = vi.hoisted((): { value: DrawingData } => ({
       zoom: 1
     }
   }
+}));
+
+vi.mock('nanoid', () => ({
+  nanoid: nanoidMock
 }));
 
 vi.mock('vue-router', () => ({
@@ -148,6 +153,7 @@ describe('DrawingPage', (): void => {
     onRenameMock.mockClear();
     selectElementByIdMock.mockClear();
     selectElementsByIdsMock.mockClear();
+    nanoidMock.mockReset();
     drawingDataMock.value = createEmptyDrawingData();
   });
 
@@ -323,6 +329,7 @@ describe('DrawingPage', (): void => {
   });
 
   it('copies the drawing element when the sidebar layer emits copy', async (): Promise<void> => {
+    nanoidMock.mockReturnValueOnce('copy0001');
     const copiedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
       ...createEmptyDrawingData(),
@@ -341,7 +348,7 @@ describe('DrawingPage', (): void => {
     panelSidebar.vm.$emit('copy-element', copiedElement);
     await flushPromises();
 
-    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-1', 'node-2', 'drawing-shape-1', 'node-3']);
+    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-1', 'node-2', 'copy0001', 'node-3']);
     expect(drawingDataMock.value.elements[2]).toMatchObject({
       title: '节点 2',
       position: {
@@ -349,12 +356,13 @@ describe('DrawingPage', (): void => {
         y: 16
       }
     });
-    expect(selectElementByIdMock).toHaveBeenCalledWith('drawing-shape-1');
-    expect(panelSidebar.props('selectedElementIds')).toEqual(['drawing-shape-1']);
+    expect(selectElementByIdMock).toHaveBeenCalledWith('copy0001');
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['copy0001']);
     wrapper.unmount();
   });
 
   it('copies grouped drawing elements as a new group when the sidebar layer emits group copy', async (): Promise<void> => {
+    nanoidMock.mockReturnValueOnce('copy0001').mockReturnValueOnce('copy0002');
     const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
     const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
     drawingDataMock.value = {
@@ -374,17 +382,11 @@ describe('DrawingPage', (): void => {
     panelSidebar.vm.$emit('copy-elements', [secondElement, firstElement]);
     await flushPromises();
 
-    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual([
-      'node-1',
-      'node-2',
-      'drawing-shape-1',
-      'drawing-shape-2',
-      'node-3'
-    ]);
+    expect(drawingDataMock.value.elements.map((element: DrawingElement): string => element.id)).toEqual(['node-1', 'node-2', 'copy0001', 'copy0002', 'node-3']);
     expect(drawingDataMock.value.elements[2]?.metadata.groupId).toBe('drawing-group-2');
     expect(drawingDataMock.value.elements[3]?.metadata.groupId).toBe('drawing-group-2');
-    expect(selectElementsByIdsMock).toHaveBeenCalledWith(['drawing-shape-1', 'drawing-shape-2']);
-    expect(panelSidebar.props('selectedElementIds')).toEqual(['drawing-shape-1', 'drawing-shape-2']);
+    expect(selectElementsByIdsMock).toHaveBeenCalledWith(['copy0001', 'copy0002']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['copy0001', 'copy0002']);
     wrapper.unmount();
   });
 

@@ -15,6 +15,8 @@ import type {
 } from '../types';
 import { computed, ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
+import { escapeRegExp } from 'lodash-es';
+import { nanoid } from 'nanoid';
 import { getDrawingElementSchema } from '../elements';
 import {
   addDrawingShape,
@@ -35,6 +37,61 @@ import {
 } from '../utils/boardTransforms';
 import { getDrawingElementGroupId } from '../utils/drawingGroups';
 
+/** BDrawing 新元素 ID 长度。 */
+const DRAWING_ELEMENT_ID_SIZE = 8;
+
+/**
+ * 读取元素标题中的类型序号。
+ * @param element - 画板元素
+ * @param name - 元素注册名称
+ * @param label - 元素类型展示名
+ * @returns 标题序号，不匹配时返回 null
+ */
+function getElementTitleIndex(element: DrawingElement, name: string, label: string): number | null {
+  if (element.name !== name) {
+    return null;
+  }
+
+  const match = element.title.match(new RegExp(`^${escapeRegExp(label)}(\\d+)$`));
+  if (!match) {
+    return null;
+  }
+
+  const index = Number(match[1]);
+
+  return Number.isSafeInteger(index) && index > 0 ? index : null;
+}
+
+/**
+ * 读取现有标题中指定元素类型的最大序号。
+ * @param elements - 画板元素列表
+ * @param name - 元素注册名称
+ * @param label - 元素类型展示名
+ * @returns 最大标题序号
+ */
+function getMaxExistingElementTitleIndex(elements: DrawingElement[], name: string, label: string): number {
+  return elements.reduce<number>((maxIndex: number, element: DrawingElement): number => {
+    const index = getElementTitleIndex(element, name, label);
+
+    return index === null ? maxIndex : Math.max(maxIndex, index);
+  }, 0);
+}
+
+/**
+ * 生成不与已有元素冲突的 nanoid。
+ * @param existingIds - 已存在的元素 ID 集合
+ * @returns 新元素 ID
+ */
+function createUniqueDrawingElementId(existingIds: Set<string>): string {
+  let nextId = nanoid(DRAWING_ELEMENT_ID_SIZE);
+
+  while (existingIds.has(nextId)) {
+    nextId = nanoid(DRAWING_ELEMENT_ID_SIZE);
+  }
+
+  return nextId;
+}
+
 /**
  * 读取自动生成 ID 中的序号。
  * @param id - 元素 ID
@@ -52,20 +109,6 @@ function getGeneratedElementIdIndex(id: string, prefix: string): number | null {
   }
 
   return Number(rawIndex);
-}
-
-/**
- * 读取已有元素中指定前缀的最大自动生成序号。
- * @param elements - 元素列表
- * @param prefix - 自动生成 ID 前缀
- * @returns 最大序号
- */
-function getMaxGeneratedElementIdIndex(elements: DrawingElement[], prefix: string): number {
-  return elements.reduce<number>((maxIndex: number, element: DrawingElement): number => {
-    const index = getGeneratedElementIdIndex(element.id, prefix);
-
-    return index === null ? maxIndex : Math.max(maxIndex, index);
-  }, 0);
 }
 
 /**
@@ -143,16 +186,14 @@ export interface UseDrawingBoardReturn {
 export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDrawingBoardReturn {
   const state = ref<DrawingBoardState>(createDrawingBoardState(snapshot));
   const clipboard = ref<DrawingShapeElement[]>([]);
-  let shapeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-shape-');
   let groupIndex = getMaxGeneratedGroupIdIndex(state.value.elements, 'drawing-group-');
   /** 当前是否存在可粘贴元素。 */
   const hasClipboard = computed<boolean>(() => clipboard.value.length > 0);
 
   /**
-   * 按当前元素数量同步自动生成 ID 的起始序号。
+   * 按当前元素数量同步自动生成组合 ID 的起始序号。
    */
   function syncElementIndexes(): void {
-    shapeIndex = getMaxGeneratedElementIdIndex(state.value.elements, 'drawing-shape-');
     groupIndex = getMaxGeneratedGroupIdIndex(state.value.elements, 'drawing-group-');
   }
 
@@ -172,6 +213,26 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
    */
   function createInitialElementStyle(schemaStyle: DrawingElementStyle | undefined, creationStyle: DrawingElementStyle | undefined): DrawingElementStyle {
     return { ...(schemaStyle ?? {}), ...(creationStyle ?? {}) };
+  }
+
+  /**
+   * 创建不与当前画板元素冲突的新元素 ID。
+   * @returns 新元素 ID
+   */
+  function createDrawingElementId(): string {
+    return createUniqueDrawingElementId(new Set(state.value.elements.map((element: DrawingElement): string => element.id)));
+  }
+
+  /**
+   * 创建新元素标题。
+   * @param name - 元素注册名称
+   * @param label - 元素类型展示名
+   * @returns 新标题
+   */
+  function createElementTitle(name: string, label: string): string {
+    const existingMaxIndex = getMaxExistingElementTitleIndex(state.value.elements, name, label);
+
+    return `${label}${existingMaxIndex + 1}`;
   }
 
   return {
@@ -208,7 +269,6 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
         return;
       }
 
-      const shapeId = `drawing-shape-${++shapeIndex}`;
       const schema = getDrawingElementSchema(draft.name);
       if (!schema) {
         state.value = {
@@ -226,9 +286,10 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
             draft: undefined
           },
           {
-            id: shapeId,
+            id: createDrawingElementId(),
             name: draft.name,
             label: schema.label,
+            title: createElementTitle(draft.name, schema.label),
             icon: schema.icon,
             createAnchor: schema.createAnchor,
             start: draft.start,
@@ -259,10 +320,16 @@ export function useDrawingBoard(snapshot?: Partial<DrawingBoardSnapshot>): UseDr
         return;
       }
 
+      const usedElementIds = new Set(state.value.elements.map((element: DrawingElement): string => element.id));
       setState(
         pasteDrawingElements(state.value, clipboard.value, {
           anchorPoint,
-          createElementId: (): string => `drawing-shape-${++shapeIndex}`,
+          createElementId: (): string => {
+            const id = createUniqueDrawingElementId(usedElementIds);
+            usedElementIds.add(id);
+
+            return id;
+          },
           createGroupId: (): string => `drawing-group-${++groupIndex}`
         })
       );

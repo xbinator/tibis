@@ -30,6 +30,7 @@
 import { computed, nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
+import { nanoid } from 'nanoid';
 import type BDrawingComponent from '@/components/BDrawing/index.vue';
 import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
 import { DRAWING_GROUP_METADATA_KEY, getDrawingElementGroupId } from '@/components/BDrawing/utils/drawingGroups';
@@ -54,8 +55,8 @@ const canvasRef = ref<HTMLElement | null>(null);
 const routePath = computed<string>(() => route.fullPath || `/drawing/${fileId.value}`);
 /** 侧栏复制图层时使用的位置偏移。 */
 const DRAWING_LAYER_COPY_OFFSET = 16;
-/** 侧栏复制图层时使用的元素 ID 前缀。 */
-const DRAWING_LAYER_COPY_ID_PREFIX = 'drawing-shape-';
+/** 侧栏复制图层时使用的新元素 ID 长度。 */
+const DRAWING_LAYER_COPY_ID_SIZE = 8;
 /** 侧栏复制组合时使用的组合 ID 前缀。 */
 const DRAWING_LAYER_COPY_GROUP_ID_PREFIX = 'drawing-group-';
 
@@ -94,24 +95,6 @@ const activeSidebarElementId = computed<string | null>(() => {
 });
 
 /**
- * 读取自动生成 ID 中的序号。
- * @param id - 元素 ID
- * @returns 序号，不匹配时返回 null
- */
-function getGeneratedElementIdIndex(id: string): number | null {
-  if (!id.startsWith(DRAWING_LAYER_COPY_ID_PREFIX)) {
-    return null;
-  }
-
-  const rawIndex = id.slice(DRAWING_LAYER_COPY_ID_PREFIX.length);
-  if (!/^\d+$/.test(rawIndex)) {
-    return null;
-  }
-
-  return Number(rawIndex);
-}
-
-/**
  * 读取自动生成组合 ID 中的序号。
  * @param groupId - 组合 ID
  * @returns 序号，不匹配时返回 null
@@ -136,16 +119,10 @@ function getGeneratedGroupIdIndex(groupId: string): number | null {
  */
 function createLayerCopyElementId(elements: DrawingElement[]): string {
   const existingIds = new Set(elements.map((element: DrawingElement): string => element.id));
-  let nextIndex = elements.reduce<number>((maxIndex: number, element: DrawingElement): number => {
-    const index = getGeneratedElementIdIndex(element.id);
-
-    return index === null ? maxIndex : Math.max(maxIndex, index);
-  }, 0);
-  let nextId = `${DRAWING_LAYER_COPY_ID_PREFIX}${nextIndex + 1}`;
+  let nextId = nanoid(DRAWING_LAYER_COPY_ID_SIZE);
 
   while (existingIds.has(nextId)) {
-    nextIndex += 1;
-    nextId = `${DRAWING_LAYER_COPY_ID_PREFIX}${nextIndex + 1}`;
+    nextId = nanoid(DRAWING_LAYER_COPY_ID_SIZE);
   }
 
   return nextId;

@@ -491,7 +491,7 @@ describe('BDrawing node click selection', () => {
 
     expect(textNode.exists()).toBe(true);
     expect(textNode.text()).toContain('文本');
-    expect(textElement?.title).toBe('文本');
+    expect(textElement?.title).toBe('文本1');
     expect(textElement?.metadata).toEqual({ content: '文本' });
     expect(wrapper.find('[data-testid="drawing-text-editor"]').exists()).toBe(false);
     wrapper.unmount();

@@ -221,20 +221,21 @@ describe('BDrawing canvas component', (): void => {
     await getDrawingExpose(wrapper).createElementFromClientPoint('rect', { x: 400, y: 300 });
     await flushDrawingUpdates();
 
-    const node = findNodeById(wrapper, 'drawing-shape-1');
     const emitted = wrapper.emitted('update:value') as Array<[DrawingData]> | undefined;
     const latestData = emitted?.at(-1)?.[0];
+    const createdId = latestData?.elements[0]?.id ?? '';
+    const node = findNodeById(wrapper, createdId);
 
     expect(node.exists()).toBe(true);
     expect(node.attributes('data-drawing-name')).toBe('rect');
     expect(node.attributes('style')).toContain('translate(-90px, -36px)');
     expect(latestData?.elements).toHaveLength(1);
-    expect(latestData?.elements[0]?.id).toBe('drawing-shape-1');
+    expect(createdId).toMatch(/^[A-Za-z0-9_-]{8}$/);
     expect(latestData?.elements[0]).toMatchObject({
       name: 'rect',
       label: '矩形',
       icon: 'lucide:square',
-      title: '矩形',
+      title: '矩形1',
       style: {},
       metadata: {}
     });
