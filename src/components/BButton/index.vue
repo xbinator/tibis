@@ -18,7 +18,7 @@ export default defineComponent({
       default: 'primary'
     },
     size: {
-      type: String as PropType<'small' | 'middle' | 'large'>,
+      type: String as PropType<'mini' | 'small' | 'middle' | 'large'>,
       default: 'middle'
     },
     disabled: {
@@ -174,6 +174,18 @@ export default defineComponent({
   }
 
   // 尺寸
+  &--mini {
+    gap: 2px;
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+
+    .b-button__icon {
+      width: 12px;
+      height: 12px;
+    }
+  }
+
   &--small {
     gap: 4px;
     height: 28px;
@@ -324,10 +336,12 @@ export default defineComponent({
       background-color: transparent;
 
       &:hover:not(.b-button--disabled, .b-button--loading) {
+        color: var(--color-danger-hover);
         background-color: var(--color-primary-bg);
       }
 
       &:active:not(.b-button--disabled, .b-button--loading) {
+        color: var(--color-danger-hover);
         background-color: var(--color-primary-bg-hover);
       }
     }
@@ -403,6 +417,10 @@ export default defineComponent({
     justify-content: center;
     padding: 0;
     border-radius: 6px;
+
+    &.b-button--mini {
+      width: 24px;
+    }
 
     &.b-button--small {
       width: 28px;

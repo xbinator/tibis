@@ -2,7 +2,7 @@ export interface BButtonProps {
   // 按钮类型
   type?: 'primary' | 'secondary' | 'outline' | 'text' | 'ghost';
   // 按钮大小
-  size?: 'small' | 'middle' | 'large';
+  size?: 'mini' | 'small' | 'middle' | 'large';
   // 是否禁用
   disabled?: boolean;
   // 是否加载中
