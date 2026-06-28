@@ -10,6 +10,7 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
 import type { DrawingData, DrawingPoint } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 
 vi.mock('@/components/BDrawing/components/Toolbar.vue', () => ({
   default: defineComponent({
@@ -60,7 +61,7 @@ class ResizeObserverMock {
  */
 function createDrawingDataFixture(): DrawingData {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: [
       {
         id: 'external-node-1',
@@ -74,26 +75,7 @@ function createDrawingDataFixture(): DrawingData {
         style: {},
         metadata: {}
       }
-    ],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
-  };
-}
-
-/**
- * 创建空画板数据。
- * @returns 空画板数据
- */
-function createEmptyDrawingData(): DrawingData {
-  return {
-    metadata: {},
-    elements: [],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    ]
   };
 }
 
@@ -212,7 +194,7 @@ describe('BDrawing canvas component', (): void => {
   it('creates a rectangle through the exposed registered element command', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        value: createEmptyDrawingData()
+        value: createDefaultDrawingData()
       },
       attachTo: document.body
     });
@@ -246,7 +228,7 @@ describe('BDrawing canvas component', (): void => {
   it('creates a text node without opening the removed text editor', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        value: createEmptyDrawingData()
+        value: createDefaultDrawingData()
       },
       attachTo: document.body
     });
@@ -268,7 +250,7 @@ describe('BDrawing canvas component', (): void => {
   it('ignores unknown registered element names', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        value: createEmptyDrawingData()
+        value: createDefaultDrawingData()
       },
       attachTo: document.body
     });
@@ -282,7 +264,7 @@ describe('BDrawing canvas component', (): void => {
   });
 
   it('emits metadata select target for empty selection without changing drawing data', async (): Promise<void> => {
-    const data = createEmptyDrawingData();
+    const data = createDefaultDrawingData();
     const wrapper = mount(BDrawing, {
       props: {
         value: data

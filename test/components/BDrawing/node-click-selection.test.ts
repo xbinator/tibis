@@ -10,6 +10,7 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
 import type { DrawingData, DrawingElement, DrawingPoint, DrawingSelectTarget } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 
 /**
  * 带内部选区的测试画板数据。
@@ -159,7 +160,7 @@ class ResizeObserverMock {
  */
 function createNodeClickDrawingData(): DrawingData {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: [
       {
         id: 'node-1',
@@ -173,11 +174,7 @@ function createNodeClickDrawingData(): DrawingData {
         style: {},
         metadata: {}
       }
-    ],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    ]
   };
 }
 
@@ -187,7 +184,7 @@ function createNodeClickDrawingData(): DrawingData {
  */
 function createMultiSelectedDrawingData(): DrawingDataWithSelection {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: [
       {
         id: 'node-1',
@@ -214,11 +211,7 @@ function createMultiSelectedDrawingData(): DrawingDataWithSelection {
         metadata: {}
       }
     ],
-    selection: ['node-1', 'node-2'],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    selection: ['node-1', 'node-2']
   };
 }
 
@@ -243,6 +236,7 @@ function createTwoNodeDrawingData(): DrawingData {
   const data = createMultiSelectedDrawingData();
 
   return {
+    ...createDefaultDrawingData(),
     metadata: data.metadata,
     elements: data.elements,
     viewport: data.viewport
@@ -257,6 +251,7 @@ function createGroupedDrawingData(): DrawingData {
   const data = createMultiSelectedDrawingData();
 
   return {
+    ...createDefaultDrawingData(),
     metadata: data.metadata,
     elements: data.elements.map(
       (element: DrawingElement): DrawingElement => ({
@@ -267,21 +262,6 @@ function createGroupedDrawingData(): DrawingData {
       })
     ),
     viewport: data.viewport
-  };
-}
-
-/**
- * 创建空画板数据。
- * @returns 画板数据
- */
-function createEmptyDrawingData(): DrawingData {
-  return {
-    metadata: {},
-    elements: [],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
   };
 }
 
@@ -476,7 +456,7 @@ describe('BDrawing node click selection', () => {
   it('creates a visible text node without opening the text editor', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        value: createEmptyDrawingData()
+        value: createDefaultDrawingData()
       },
       attachTo: document.body
     });
@@ -486,7 +466,7 @@ describe('BDrawing node click selection', () => {
     await nextTick();
 
     const textNode = wrapper.find('[data-drawing-name="text"]');
-    const latestData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createEmptyDrawingData();
+    const latestData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createDefaultDrawingData();
     const textElement = latestData.elements[0];
 
     expect(textNode.exists()).toBe(true);
@@ -500,7 +480,7 @@ describe('BDrawing node click selection', () => {
   it('creates new elements with schema default styles', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {
-        value: createEmptyDrawingData()
+        value: createDefaultDrawingData()
       },
       attachTo: document.body
     });
@@ -508,11 +488,11 @@ describe('BDrawing node click selection', () => {
 
     await getDrawingExpose(wrapper).createElementFromClientPoint('rect', { x: 240, y: 220 });
     await nextTick();
-    const rectData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createEmptyDrawingData();
+    const rectData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createDefaultDrawingData();
 
     await getDrawingExpose(wrapper).createElementFromClientPoint('text', { x: 400, y: 300 });
     await nextTick();
-    const textData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createEmptyDrawingData();
+    const textData = (wrapper.emitted('update:value') as Array<[DrawingData]> | undefined)?.at(-1)?.[0] ?? createDefaultDrawingData();
 
     expect(rectData.elements[0]?.style).toEqual({
       backgroundColor: '#ffffff',

@@ -7,6 +7,7 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import DrawingCanvas from '@/components/BDrawing/renderers/DrawingCanvas.vue';
 import type { DrawingContextMenuPayload, DrawingData, DrawingShapeElement } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 
 /**
  * 创建右键菜单测试元素。
@@ -33,7 +34,7 @@ function createContextMenuElement(): DrawingShapeElement {
  */
 function createDrawingData(): DrawingData {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: [createContextMenuElement()],
     viewport: {
       center: { x: 0, y: 0 },

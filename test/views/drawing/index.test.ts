@@ -7,6 +7,7 @@ import { defineComponent, nextTick } from 'vue';
 import { shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 import { emitter } from '@/utils/emitter';
 import DrawingPage from '@/views/drawing/index.vue';
 
@@ -24,6 +25,18 @@ const reorderSelectionMock = vi.hoisted(() => vi.fn());
 const nanoidMock = vi.hoisted(() => vi.fn<() => string>());
 const drawingDataMock = vi.hoisted((): { value: DrawingData } => ({
   value: {
+    name: '',
+    description: '',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    },
     metadata: {},
     elements: [],
     viewport: {
@@ -81,21 +94,6 @@ vi.mock('@/hooks/useFileSession', () => ({
     }
   })
 }));
-
-/**
- * 创建空画图测试数据。
- * @returns 画图测试数据
- */
-function createEmptyDrawingData(): DrawingData {
-  return {
-    metadata: {},
-    elements: [],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
-  };
-}
 
 /**
  * 创建页面图层测试元素。
@@ -169,7 +167,7 @@ describe('DrawingPage', (): void => {
     deleteSelectionMock.mockClear();
     reorderSelectionMock.mockClear();
     nanoidMock.mockReset();
-    drawingDataMock.value = createEmptyDrawingData();
+    drawingDataMock.value = createDefaultDrawingData();
   });
 
   it('adds the drawing file tab with resolved file title', (): void => {
@@ -214,10 +212,35 @@ describe('DrawingPage', (): void => {
     wrapper.unmount();
   });
 
+  it('syncs page settings data through the value model', async (): Promise<void> => {
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: true,
+          Icon: true
+        }
+      }
+    });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+    const nextDrawingData: DrawingData = {
+      ...createDefaultDrawingData(),
+      name: 'profile_card',
+      description: '根据用户资料生成卡片节点'
+    };
+
+    expect(panelSettings.props('value')).toBe(drawingDataMock.value);
+
+    panelSettings.vm.$emit('update:value', nextDrawingData);
+    await nextTick();
+
+    expect(drawingDataMock.value).toEqual(nextDrawingData);
+    wrapper.unmount();
+  });
+
   it('selects the drawing element when the sidebar layer emits selection', async (): Promise<void> => {
     const selectedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [createDrawingElement('node-1', '节点 1'), selectedElement]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -241,7 +264,7 @@ describe('DrawingPage', (): void => {
   it('selects a grouped child as the editable target when the sidebar layer emits child selection', async (): Promise<void> => {
     const selectedElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [createDrawingElement('node-1', '节点 1', 'drawing-group-1'), selectedElement]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -268,7 +291,7 @@ describe('DrawingPage', (): void => {
     const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
     const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [firstElement, secondElement, createDrawingElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -292,7 +315,7 @@ describe('DrawingPage', (): void => {
   it('syncs sidebar highlights from canvas multi-selection changes', async (): Promise<void> => {
     const selectedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [createDrawingElement('node-1', '节点 1'), selectedElement, createDrawingElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -320,7 +343,7 @@ describe('DrawingPage', (): void => {
     const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
     const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [firstElement, secondElement, createDrawingElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -347,7 +370,7 @@ describe('DrawingPage', (): void => {
     nanoidMock.mockReturnValueOnce('copy0001');
     const copiedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [createDrawingElement('node-1', '节点 1'), copiedElement, createDrawingElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -381,7 +404,7 @@ describe('DrawingPage', (): void => {
     const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
     const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [firstElement, secondElement, createDrawingElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -407,7 +430,7 @@ describe('DrawingPage', (): void => {
 
   it('forwards settings multi-selection commands to the drawing canvas', async (): Promise<void> => {
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [createDrawingElement('node-1', '节点 1'), createDrawingElement('node-2', '节点 2')]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -437,7 +460,7 @@ describe('DrawingPage', (): void => {
 
   it('ungroups the current settings multi-selection by selected ids', async (): Promise<void> => {
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [
         createDrawingElement('node-1', '节点 1', 'drawing-group-1'),
         createDrawingElement('node-2', '节点 2', 'drawing-group-1'),
@@ -471,7 +494,7 @@ describe('DrawingPage', (): void => {
     const secondElement = createDrawingElement('node-2', '节点 2');
     const thirdElement = createDrawingElement('node-3', '节点 3');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [firstElement, secondElement, thirdElement]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -521,7 +544,7 @@ describe('DrawingPage', (): void => {
     secondElement.position = { x: 40, y: 100 };
     secondElement.size = { width: 80, height: 60 };
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [firstElement, secondElement, thirdElement]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -557,7 +580,7 @@ describe('DrawingPage', (): void => {
   it('deletes the drawing element when the sidebar layer emits delete', async (): Promise<void> => {
     const selectedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [createDrawingElement('node-1', '节点 1'), selectedElement]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -583,7 +606,7 @@ describe('DrawingPage', (): void => {
     const firstElement = createDrawingElement('node-1', '节点 1', 'drawing-group-1');
     const secondElement = createDrawingElement('node-2', '节点 2', 'drawing-group-1');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [firstElement, secondElement, createDrawingElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(DrawingPage, {
@@ -608,7 +631,7 @@ describe('DrawingPage', (): void => {
   it('reorders drawing elements when the sidebar layer emits move', async (): Promise<void> => {
     const selectedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
-      ...createEmptyDrawingData(),
+      ...createDefaultDrawingData(),
       elements: [createDrawingElement('node-1', '节点 1'), selectedElement, createDrawingElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(DrawingPage, {

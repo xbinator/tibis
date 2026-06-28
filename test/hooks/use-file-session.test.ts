@@ -5,6 +5,7 @@
 import { effectScope, nextTick, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DrawingData } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 import { createTibisDocumentContent, parseTibisDocumentContent, resolveTibisDocumentRoute, useFileSession } from '@/hooks/useFileSession';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
 
@@ -91,14 +92,7 @@ vi.mock('@/shared/platform', () => ({
  * @returns 画图数据
  */
 function createDrawingData(): DrawingData {
-  return {
-    metadata: {},
-    elements: [],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
-  };
+  return createDefaultDrawingData();
 }
 
 /**
@@ -122,6 +116,18 @@ describe('tibis document helpers', (): void => {
     expect(JSON.parse(content)).toEqual({
       type: 'drawing',
       version: 1,
+      name: '',
+      description: '',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      outputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
       metadata: {},
       elements: [],
       viewport: {
@@ -231,6 +237,18 @@ describe('useFileSession', (): void => {
     expect(JSON.parse(content)).toEqual({
       type: 'drawing',
       version: 1,
+      name: '',
+      description: '',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      outputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
       metadata: {},
       elements: [],
       viewport: {

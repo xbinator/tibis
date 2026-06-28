@@ -8,6 +8,7 @@ import {
   addDrawingShape,
   copyDrawingSelection,
   createDrawingBoardState,
+  createDrawingDataSnapshot,
   groupDrawingSelection,
   moveDrawingElements,
   pasteDrawingElements,
@@ -173,6 +174,34 @@ describe('boardTransforms', (): void => {
     expect('source' in element.metadata).toBe(false);
     expect('createdAt' in element.metadata).toBe(false);
     expect('manualSize' in element.metadata).toBe(false);
+  });
+
+  it('normalizes drawing data contract fields in lightweight snapshots', (): void => {
+    const legacySnapshot = {
+      metadata: {},
+      elements: [createShapeElement('node-1')],
+      viewport: {
+        center: { x: 10, y: 20 },
+        zoom: 1
+      }
+    };
+
+    const snapshot = createDrawingDataSnapshot(legacySnapshot);
+
+    expect(snapshot.name).toBe('');
+    expect(snapshot.description).toBe('');
+    expect(snapshot.inputSchema).toEqual({
+      type: 'object',
+      properties: {},
+      required: []
+    });
+    expect(snapshot.outputSchema).toEqual({
+      type: 'object',
+      properties: {},
+      required: []
+    });
+    expect(snapshot.elements).toHaveLength(1);
+    expect(snapshot.viewport).toEqual({ center: { x: 10, y: 20 }, zoom: 1 });
   });
 
   it('updates element title through a manual board command', (): void => {

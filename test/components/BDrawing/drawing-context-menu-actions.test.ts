@@ -10,6 +10,7 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BDrawing from '@/components/BDrawing/index.vue';
 import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 
 /**
  * 带内部选区的测试画板数据。
@@ -91,7 +92,7 @@ function createElement(id: string, x: number, y: number, groupId?: string): Draw
  */
 function createDrawingData(): DrawingData {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: [createElement('node-1', 80, 60)],
     viewport: {
       center: { x: 0, y: 0 },
@@ -106,7 +107,7 @@ function createDrawingData(): DrawingData {
  */
 function createGroupedDrawingData(): DrawingData {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: [createElement('node-1', 80, 60, 'drawing-group-1'), createElement('node-2', 220, 100, 'drawing-group-1')],
     viewport: {
       center: { x: 0, y: 0 },
@@ -121,7 +122,7 @@ function createGroupedDrawingData(): DrawingData {
  */
 function createMultiSelectedDrawingData(): DrawingDataWithSelection {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: [createElement('node-1', 80, 60), createElement('node-2', 220, 100)],
     selection: ['node-1', 'node-2'],
     viewport: {

@@ -8,6 +8,7 @@ import { useDrawingBoard } from '@/components/BDrawing/hooks/useDrawingBoard';
 import { useModelSync } from '@/components/BDrawing/hooks/useModelSync';
 import type { DrawingData, DrawingElement, DrawingShapeElement } from '@/components/BDrawing/types';
 import { createDrawingDataSnapshot } from '@/components/BDrawing/utils/boardTransforms';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 
 /**
  * 创建测试形状元素。
@@ -57,7 +58,7 @@ function createTextElement(id: string, content: string): DrawingShapeElement {
  */
 function createDrawingData(id: string): DrawingData {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: [createShapeElement(id)],
     viewport: {
       center: { x: 10, y: 20 },
@@ -96,7 +97,7 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(modelValue.value?.elements).toHaveLength(2);
-    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['elements', 'metadata', 'viewport']);
+    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['description', 'elements', 'inputSchema', 'metadata', 'name', 'outputSchema', 'viewport']);
     expect('kind' in (modelValue.value?.elements[0] ?? {})).toBe(false);
     expect(modelValue.value?.elements[0]?.name).toBe('rect');
     expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(false);
@@ -156,6 +157,56 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(modelValue.value?.metadata).toEqual({ title: '流程图' });
+  });
+
+  it('preserves drawing data contract fields when emitting board content changes', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<DrawingData | undefined>({
+      ...createDrawingData('node-1'),
+      name: 'profile_card',
+      description: '生成个人资料卡片',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          userName: {
+            type: 'string',
+            description: '用户姓名'
+          }
+        },
+        required: ['userName']
+      },
+      outputSchema: {
+        type: 'object',
+        properties: {
+          drawingId: {
+            type: 'string',
+            description: '画板 ID'
+          }
+        },
+        required: ['drawingId']
+      }
+    });
+
+    scope.run((): void => {
+      const board = useDrawingBoard(modelValue.value);
+      useModelSync({
+        board,
+        drawingData: modelValue
+      });
+
+      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
+      board.updateDraftPoint({ x: 140, y: 90 });
+      board.commitCreateShapeDraft();
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(modelValue.value?.name).toBe('profile_card');
+    expect(modelValue.value?.description).toBe('生成个人资料卡片');
+    expect(modelValue.value?.inputSchema.required).toEqual(['userName']);
+    expect(modelValue.value?.outputSchema.required).toEqual(['drawingId']);
+    expect(hasInternalStateFields(modelValue.value as DrawingData)).toBe(false);
   });
 
   it('emits lightweight model data when only the viewport changes', async (): Promise<void> => {
@@ -296,7 +347,7 @@ describe('useModelSync', (): void => {
   it('raises text model height after external content changes require more wrapped height', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<DrawingData | undefined>({
-      metadata: {},
+      ...createDefaultDrawingData(),
       elements: [createTextElement('text-1', 'abc')],
       viewport: {
         center: { x: 10, y: 20 },

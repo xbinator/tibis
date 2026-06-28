@@ -5,7 +5,7 @@
 
 import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
-import type { DrawingData } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/workspace/files';
@@ -44,21 +44,6 @@ interface OpenFileActions {
   createNewFile: () => Promise<StoredFile>;
   /** 创建新的 Tibis 画图文件 */
   createNewDrawingFile: () => Promise<StoredFile>;
-}
-
-/**
- * 创建空画图数据。
- * @returns 空画图数据
- */
-function createEmptyDrawingData(): DrawingData {
-  return {
-    metadata: {},
-    elements: [],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
-  };
 }
 
 /**
@@ -199,7 +184,7 @@ export function useOpenFile(): OpenFileActions {
    * @returns 创建后的文件记录
    */
   async function createNewDrawingFile(): Promise<StoredFile> {
-    const drawingData = createEmptyDrawingData();
+    const drawingData = createDefaultDrawingData();
     const content = createTibisDocumentContent({
       type: 'drawing',
       version: 1,

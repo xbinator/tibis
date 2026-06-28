@@ -5,9 +5,11 @@
  */
 /* eslint-disable vue/one-component-per-file */
 import { defineComponent } from 'vue';
+import type { PropType } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 import PanelSettings from '@/views/drawing/components/PanelSettings.vue';
 
 vi.mock('ant-design-vue', () => ({
@@ -86,6 +88,37 @@ vi.mock('@/views/drawing/components/DesignSetter.vue', () => ({
   })
 }));
 
+vi.mock('@/views/drawing/components/PageSetter.vue', () => ({
+  default: defineComponent({
+    name: 'PageSetterStub',
+    props: {
+      value: {
+        type: Object as PropType<DrawingData>,
+        required: true
+      },
+      metadata: {
+        type: Object,
+        required: true
+      }
+    },
+    emits: ['update:value'],
+    setup(props, { emit }) {
+      /**
+       * 模拟 PageSetter 修改画板配置后发出完整 DrawingData。
+       */
+      function emitDrawingDataChange(): void {
+        emit('update:value', {
+          ...props.value,
+          name: 'page_tool'
+        });
+      }
+
+      return { emitDrawingDataChange };
+    },
+    template: '<button data-testid="page-setter-forward" @click="emitDrawingDataChange"></button>'
+  })
+}));
+
 /**
  * 创建测试画图元素。
  * @param id - 元素 ID
@@ -114,7 +147,7 @@ function createDrawingElement(id: string, name: 'rect' | 'text'): DrawingElement
  */
 function createDrawingData(elements: DrawingElement | DrawingElement[]): DrawingData {
   return {
-    metadata: {},
+    ...createDefaultDrawingData(),
     elements: Array.isArray(elements) ? elements : [elements],
     viewport: {
       center: { x: 0, y: 0 },
@@ -124,11 +157,33 @@ function createDrawingData(elements: DrawingElement | DrawingElement[]): Drawing
 }
 
 describe('PanelSettings', (): void => {
+  it('forwards page setting drawing data changes', async (): Promise<void> => {
+    const drawingData = createDrawingData([]);
+    const wrapper = mount(PanelSettings, {
+      props: {
+        value: drawingData,
+        select: drawingData.metadata
+      }
+    });
+
+    await wrapper.find('[data-testid="page-setter-forward"]').trigger('click');
+
+    expect(wrapper.emitted('update:value')).toEqual([
+      [
+        {
+          ...drawingData,
+          name: 'page_tool'
+        }
+      ]
+    ]);
+    wrapper.unmount();
+  });
+
   it('renders the selected element Setter.vue inside the property tab', (): void => {
     const element = createDrawingElement('text-1', 'text');
     const wrapper = mount(PanelSettings, {
       props: {
-        drawingData: createDrawingData(element),
+        value: createDrawingData(element),
         select: element
       }
     });
@@ -153,7 +208,7 @@ describe('PanelSettings', (): void => {
     textElement.metadata = { groupId: 'drawing-group-2' };
     const wrapper = mount(PanelSettings, {
       props: {
-        drawingData: createDrawingData([firstRect, secondRect, textElement]),
+        value: createDrawingData([firstRect, secondRect, textElement]),
         select: null,
         selectedElementIds: ['rect-1', 'rect-2', 'text-1']
       },
@@ -213,7 +268,7 @@ describe('PanelSettings', (): void => {
     secondRect.size = { width: 74.135, height: 50.556 };
     const wrapper = mount(PanelSettings, {
       props: {
-        drawingData: createDrawingData([firstRect, secondRect]),
+        value: createDrawingData([firstRect, secondRect]),
         select: null,
         selectedElementIds: ['rect-1', 'rect-2']
       }
@@ -235,7 +290,7 @@ describe('PanelSettings', (): void => {
     secondRect.metadata = { groupId: 'drawing-group-1' };
     const wrapper = mount(PanelSettings, {
       props: {
-        drawingData: createDrawingData([firstRect, secondRect]),
+        value: createDrawingData([firstRect, secondRect]),
         select: null,
         selectedElementIds: ['rect-1', 'rect-2']
       },
@@ -253,7 +308,7 @@ describe('PanelSettings', (): void => {
 
     const ungroupedWrapper = mount(PanelSettings, {
       props: {
-        drawingData: createDrawingData([
+        value: createDrawingData([
           {
             ...firstRect,
             metadata: {}
