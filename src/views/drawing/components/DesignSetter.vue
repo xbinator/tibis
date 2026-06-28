@@ -58,9 +58,7 @@
     <!-- 填充 -->
     <BSectionBlock title="填充">
       <BSectionItem icon="lucide:paint-bucket">
-        <BColorPicker v-model:value="dataItem.style.backgroundColor">
-          <AInput v-model:value="dataItem.style.backgroundColor" placeholder="背景颜色" />
-        </BColorPicker>
+        <BColorPicker v-model:value="dataItem.style.backgroundColor" />
       </BSectionItem>
     </BSectionBlock>
 
@@ -73,9 +71,7 @@
       <ControlPanel v-model:value="dataItem.style.borderWidth" label="宽度" mode="sides" />
 
       <BSectionItem label="颜色">
-        <BColorPicker v-model:value="dataItem.style.borderColor">
-          <AInput v-model:value="dataItem.style.borderColor" placeholder="边框颜色" />
-        </BColorPicker>
+        <BColorPicker v-model:value="dataItem.style.borderColor" />
       </BSectionItem>
 
       <ControlPanel v-model:value="dataItem.style.borderRadius" label="圆角" mode="corners" />

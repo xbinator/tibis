@@ -35,9 +35,7 @@
       <!-- 填充 -->
       <BSectionBlock title="填充">
         <BSectionItem icon="lucide:paint-bucket">
-          <BColorPicker v-model:value="backgroundColorValue">
-            <AInput v-model:value="backgroundColorValue" placeholder="背景颜色" />
-          </BColorPicker>
+          <BColorPicker v-model:value="backgroundColorValue" />
         </BSectionItem>
       </BSectionBlock>
 
@@ -50,9 +48,7 @@
         <ControlPanel v-model:value="borderWidthValue" label="宽度" mode="sides" />
 
         <BSectionItem label="颜色">
-          <BColorPicker v-model:value="borderColorValue">
-            <AInput v-model:value="borderColorValue" placeholder="边框颜色" />
-          </BColorPicker>
+          <BColorPicker v-model:value="borderColorValue" />
         </BSectionItem>
 
         <ControlPanel v-model:value="borderRadiusValue" label="圆角" mode="corners" />
@@ -64,7 +60,6 @@
 <script setup lang="ts">
 import type { DrawingMultiSelectLayoutChange } from '../types';
 import { computed } from 'vue';
-import { Input as AInput, InputNumber as AInputNumber, TabPane as ATabPane, Tabs as ATabs } from 'ant-design-vue';
 import { isEqual } from 'lodash-es';
 import type { DrawingBorderStyle, DrawingData, DrawingElement, DrawingElementStyle, DrawingElementStyleChange } from '@/components/BDrawing/types';
 import { getDrawingElementGroupId } from '@/components/BDrawing/utils/drawingGroups';

@@ -5,7 +5,23 @@
 <template>
   <BDropdown v-model:open="visible" :get-popup-container="(triggerNode) => triggerNode" :placement="placement" :align="align">
     <div ref="triggerRef" :class="bem('trigger')">
-      <slot></slot>
+      <slot>
+        <AInput
+          v-model:value="inputValue"
+          :class="bem('input')"
+          :placeholder="placeholder"
+          :allow-clear="allowClear"
+          :readonly="readonly"
+          :disabled="disabled"
+          :bordered="bordered"
+          @blur="handleInputBlur"
+          @press-enter="handleInputBlur"
+        >
+          <template #suffix>
+            <div :class="bem('color-trigger')" :style="{ background: currentColor || 'transparent' }"></div>
+          </template>
+        </AInput>
+      </slot>
     </div>
 
     <template #overlay>
@@ -51,6 +67,7 @@ import type { BColorPickerProps } from './types';
 import type { CSSProperties } from 'vue';
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { usePointer } from '@vueuse/core';
+import { Input as AInput } from 'ant-design-vue';
 import { clamp } from 'lodash-es';
 import tinycolor from 'tinycolor2';
 import BDropdown from '@/components/BDropdown/index.vue';
@@ -89,7 +106,12 @@ const props = withDefaults(defineProps<BColorPickerProps>(), {
   value: '',
   format: 'hex',
   defaultValue: '',
-  width: undefined
+  width: undefined,
+  placeholder: '请输入',
+  allowClear: false,
+  readonly: false,
+  disabled: false,
+  bordered: true
 });
 
 const emit = defineEmits<{
@@ -113,6 +135,8 @@ const currentColor = ref<string>('');
 const hsva = reactive({ h: 0, s: 0, v: 0, a: 1 });
 /** 预设色板列表 */
 const presetColors = PRESET_COLORS;
+/** 输入框显示值 */
+const inputValue = ref<string>('');
 
 /** SV 面板 DOM 引用 */
 const svPanelRef = ref<HTMLElement | null>(null);
@@ -370,11 +394,42 @@ function updatePositionFromColor(): void {
 }
 
 /**
+ * 同步输入框显示值为当前颜色
+ */
+function syncInputValue(): void {
+  inputValue.value = formatColor(currentColor.value);
+}
+
+/**
+ * 处理输入框失焦或回车，校验并应用颜色
+ */
+function handleInputBlur(): void {
+  const raw = inputValue.value.trim();
+
+  if (!raw) {
+    if (props.allowClear) {
+      updateColor('');
+    }
+    syncInputValue();
+    updatePositionFromColor();
+    return;
+  }
+
+  const color = tinycolor(raw);
+  if (color.isValid()) {
+    updateColor(color.toHex8());
+  }
+  syncInputValue();
+  updatePositionFromColor();
+}
+
+/**
  * 点击预设色块
  * @param color - 预设颜色值
  */
 function onPresetClick(color: string): void {
   updateColor(color);
+  syncInputValue();
   updatePositionFromColor();
 }
 
@@ -396,6 +451,7 @@ watch(
     const color = props.value || props.defaultValue;
     const value = tinycolor(color).isValid() ? tinycolor(color).toRgbString() : '';
     currentColor.value = value;
+    syncInputValue();
     updatePositionFromColor();
   },
   { immediate: true }
@@ -516,5 +572,16 @@ watch(
   border: 1px solid #f0f0f0;
   box-shadow: 0 0 2px #0009;
   transform: translateX(-50%);
+}
+
+.b-color-picker__input {
+  cursor: pointer;
+}
+
+.b-color-picker__color-trigger {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
 }
 </style>

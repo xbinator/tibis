@@ -21,4 +21,14 @@ export interface BColorPickerProps {
   placement?: BDropdownProps['placement'];
   /** 对齐方式 */
   align?: BDropdownProps['align'];
+  /** 输入框占位提示 */
+  placeholder?: string;
+  /** 是否允许清空 */
+  allowClear?: boolean;
+  /** 是否只读 */
+  readonly?: boolean;
+  /** 是否禁用 */
+  disabled?: boolean;
+  /** 输入框是否有边框 */
+  bordered?: boolean;
 }
