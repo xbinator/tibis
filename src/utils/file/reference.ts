@@ -81,8 +81,8 @@ export interface FileReference {
 
 /** 文件引用 token 前缀。 */
 const FILE_REFERENCE_TOKEN_PREFIX = '@';
-/** 文件引用行号后缀，支持 #L644 与 #L644-L685。 */
-const FILE_REFERENCE_LINE_SUFFIX_PATTERN = /#L(\d+)(?:-L(\d+))?$/;
+/** 文件引用行号后缀，支持单行 `#L644`、新格式范围 `#L644-685` 与旧格式范围 `#L644-L685`（解析时兼容历史消息）。 */
+const FILE_REFERENCE_LINE_SUFFIX_PATTERN = /#L(\d+)(?:-L?(\d+))?$/;
 /** 消息中的文件引用 token 正则表达式。路径允许空格，行号后缀由解析器校验。 */
 export const FILE_REFERENCE_MESSAGE_TOKEN_PATTERN = /\{\{(@[^{}\n]+?)\}\}/g;
 
@@ -113,7 +113,8 @@ export function buildFileReferenceToken(rawPath: string, startLine?: number, end
   }
 
   const normalizedEndLine = inputEndLine < normalizedStartLine ? normalizedStartLine : inputEndLine;
-  const lineSuffix = normalizedStartLine === normalizedEndLine ? `#L${normalizedStartLine}` : `#L${normalizedStartLine}-L${normalizedEndLine}`;
+  // 新格式：范围行号用 `#L{start}-{end}`；旧格式 `#L{start}-L{end}` 仍由解析器兼容。
+  const lineSuffix = normalizedStartLine === normalizedEndLine ? `#L${normalizedStartLine}` : `#L${normalizedStartLine}-${normalizedEndLine}`;
   return `{{@${rawPath}${lineSuffix}}}`;
 }
 

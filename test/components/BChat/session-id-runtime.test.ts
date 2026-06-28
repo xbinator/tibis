@@ -610,7 +610,7 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(settingStore.sidebarVisible).toBe(true);
     expect(promptEditorMockState.saveCursorPosition).toHaveBeenCalledTimes(1);
-    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{@/workspace/note.md#L2-L4}} ');
+    expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{@/workspace/note.md#L2-4}} ');
     expect(promptEditorMockState.focus).toHaveBeenCalled();
 
     wrapper.unmount();

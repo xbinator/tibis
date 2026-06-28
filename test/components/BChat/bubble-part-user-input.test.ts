@@ -36,7 +36,7 @@ describe('BubblePartUserInput', (): void => {
       props: {
         part: {
           type: 'text',
-          text: 'fix {{@src/foo.ts#L10-L20}} please'
+          text: 'fix {{@src/foo.ts#L10-20}} please'
         }
       }
     });

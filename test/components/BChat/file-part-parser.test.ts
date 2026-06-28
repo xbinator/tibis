@@ -8,7 +8,7 @@ import { buildUserInputParts } from '@/components/BChat/utils/filePartParser';
 
 describe('buildUserInputParts', (): void => {
   it('splits text and file references in source order', (): void => {
-    const token = '{{@src/foo.ts#L10-L20}}';
+    const token = '{{@src/foo.ts#L10-20}}';
     const parts = buildUserInputParts(`fix ${token} please`, '/workspace');
 
     expect(parts[0]).toEqual({ type: 'text', text: 'fix ' });

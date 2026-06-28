@@ -58,7 +58,20 @@ describe('parseFileReferenceToken', (): void => {
     );
   });
 
-  it('parses source line ranges with L-prefixed bounds', (): void => {
+  it('parses source line ranges with new dash separator', (): void => {
+    const parsed = parseFileReferenceToken('@src/foo.ts#L644-685');
+
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        rawPath: 'src/foo.ts',
+        startLine: 644,
+        endLine: 685,
+        lineText: '644-685'
+      })
+    );
+  });
+
+  it('parses legacy source line ranges with L-prefixed end bound for backward compatibility', (): void => {
     const parsed = parseFileReferenceToken('@src/foo.ts#L644-L685');
 
     expect(parsed).toEqual(
@@ -78,12 +91,12 @@ describe('parseFileReferenceToken', (): void => {
 
 describe('findFileReferenceTokens', (): void => {
   it('returns file references with source offsets', (): void => {
-    const content = 'fix {{@src/foo.ts#L10-L20}} please';
+    const content = 'fix {{@src/foo.ts#L10-20}} please';
     const tokens = findFileReferenceTokens(content);
 
     expect(tokens).toEqual([
       {
-        token: '{{@src/foo.ts#L10-L20}}',
+        token: '{{@src/foo.ts#L10-20}}',
         start: 4,
         end: content.length - 7,
         reference: expect.objectContaining({
@@ -93,6 +106,22 @@ describe('findFileReferenceTokens', (): void => {
           fileName: 'foo.ts'
         })
       }
+    ]);
+  });
+
+  it('still parses legacy L-prefixed line range tokens from saved messages', (): void => {
+    const content = 'fix {{@src/foo.ts#L10-L20}} please';
+    const tokens = findFileReferenceTokens(content);
+
+    expect(tokens).toEqual([
+      expect.objectContaining({
+        token: '{{@src/foo.ts#L10-L20}}',
+        reference: expect.objectContaining({
+          rawPath: 'src/foo.ts',
+          startLine: 10,
+          endLine: 20
+        })
+      })
     ]);
   });
 
@@ -136,7 +165,7 @@ describe('buildFileReferenceToken', (): void => {
   it('builds readable whole-file and line-range references', (): void => {
     expect(buildFileReferenceToken('/tmp/My Note.md')).toBe('{{@/tmp/My Note.md}}');
     expect(buildFileReferenceToken('/tmp/My Note.md', 644)).toBe('{{@/tmp/My Note.md#L644}}');
-    expect(buildFileReferenceToken('/tmp/My Note.md', 644, 685)).toBe('{{@/tmp/My Note.md#L644-L685}}');
+    expect(buildFileReferenceToken('/tmp/My Note.md', 644, 685)).toBe('{{@/tmp/My Note.md#L644-685}}');
   });
 });
 
