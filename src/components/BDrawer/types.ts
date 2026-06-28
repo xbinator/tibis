@@ -7,13 +7,11 @@ export type BDrawerPlacement = 'left' | 'right' | 'top' | 'bottom';
 
 /**
  * 抽屉渲染容器类型
- * - string：CSS 选择器
- * - HTMLElement：DOM 节点
- * - function：返回 DOM 节点的函数
- * - false：渲染在当前 DOM 位置
+ * - string：CSS 选择器，作为 Teleport 的 to 目标
+ * - false：不使用 Teleport，渲染在当前 DOM 位置
  * - undefined：使用默认容器（布局的主内容区 `.b-layout__content__main`）
  */
-export type BDrawerContainer = string | HTMLElement | (() => HTMLElement) | false | undefined;
+export type BDrawerContainer = string | false | undefined;
 
 /**
  * BDrawer 抽屉组件 Props
@@ -39,7 +37,9 @@ export interface BDrawerProps {
   keyboard?: boolean;
   /**
    * 抽屉渲染容器
-   * 不传时默认使用布局注入的 `.b-layout__content__main` 容器
+   * - string：作为 Teleport 的 to 目标（CSS 选择器）
+   * - false：不使用 Teleport，渲染在当前 DOM 位置
+   * - undefined（默认）：Teleport 到 `.b-layout__content__main`
    */
   getContainer?: BDrawerContainer;
   /** 主体内容区额外类名 */
@@ -57,6 +57,6 @@ export interface BDrawerProps {
 /**
  * 默认抽屉容器选择器
  * 对应 `src/layouts/default/index.vue` 中的 `.b-layout__content__main` 节点，
- * BDrawer 未显式传入 `getContainer` 时会渲染到该节点，避免遮挡 header 与右侧 ChatSider。
+ * BDrawer 未显式传入 `getContainer` 时会通过 Teleport 渲染到该节点，避免遮挡 header 与右侧 ChatSider。
  */
 export const DEFAULT_DRAWER_CONTAINER = '.b-layout__content';

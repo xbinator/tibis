@@ -5,47 +5,49 @@
     默认渲染到布局注入的 `.b-layout__content__main` 容器中（不遮挡 header 与右侧 ChatSider）。
 -->
 <template>
-  <Drawer
-    v-model:open="visible"
-    :class="name"
-    :placement="placement"
-    :width="drawerWidth"
-    :height="drawerHeight"
-    :mask="mask"
-    :mask-closable="maskClosable"
-    :root-class-name="bem('root') as string"
-    :keyboard="keyboard"
-    :get-container="getContainer"
-    :z-index="zIndex"
-    :footer="null"
-    :closable="false"
-    :after-close="afterClose"
-    @cancel="handleClose"
-  >
-    <div v-if="title || $slots.title" :class="bem('header')">
-      <slot name="title">{{ title }}</slot>
+  <Teleport :to="teleportTarget" :disabled="teleportDisabled">
+    <ADrawer
+      v-model:open="visible"
+      :class="name"
+      :placement="placement"
+      :width="drawerWidth"
+      :height="drawerHeight"
+      :mask="mask"
+      :mask-closable="maskClosable"
+      :root-class-name="bem('root') as string"
+      :keyboard="keyboard"
+      :get-container="false"
+      :z-index="zIndex"
+      :footer="null"
+      :closable="false"
+      :after-close="afterClose"
+      @cancel="handleClose"
+    >
+      <div v-if="title || $slots.title" :class="bem('header')">
+        <slot name="title">{{ title }}</slot>
 
-      <div v-if="closable" :class="bem('closable')" @click="handleClose">
-        <BIcon icon="lucide:x" />
+        <div v-if="closable" :class="bem('closable')" @click="handleClose">
+          <BIcon icon="lucide:x" />
+        </div>
       </div>
-    </div>
 
-    <div :class="[bem('body'), mainClass]" :style="mainStyle">
-      <slot></slot>
-    </div>
+      <div :class="[bem('body'), mainClass]" :style="mainStyle">
+        <slot></slot>
+      </div>
 
-    <div v-if="$slots.footer" :class="bem('footer')">
-      <slot name="footer"></slot>
-    </div>
-  </Drawer>
+      <div v-if="$slots.footer" :class="bem('footer')">
+        <slot name="footer"></slot>
+      </div>
+    </ADrawer>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import type { BDrawerProps as Props } from './types';
 import { computed } from 'vue';
-import { Drawer } from 'ant-design-vue';
 import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
+import { DEFAULT_DRAWER_CONTAINER } from './types';
 
 defineOptions({ name: 'BDrawer' });
 
@@ -72,6 +74,15 @@ const emit = defineEmits(['update:open', 'close']);
 const [name, bem] = createNamespace('drawer');
 
 const visible = defineModel<boolean>('open');
+
+/** Teleport 目标容器选择器，未显式指定时默认为布局主内容区 */
+const teleportTarget = computed(() => {
+  if (props.getContainer === false) return 'body';
+  return props.getContainer || DEFAULT_DRAWER_CONTAINER;
+});
+
+/** 是否禁用 Teleport（getContainer 为 false 时不搬运，渲染在当前 DOM 位置） */
+const teleportDisabled = computed(() => props.getContainer === false);
 
 /** 宽度（left/right 生效），统一追加 CSS 单位 */
 const drawerWidth = computed(() => addCssUnit(props.width));

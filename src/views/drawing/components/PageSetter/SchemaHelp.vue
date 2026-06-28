@@ -3,7 +3,7 @@
   @description 画图页面 Schema 填写说明抽屉。
 -->
 <template>
-  <BDrawer v-model:open="open" :get-container="false" :keyboard="true" :mask-closable="true" :title="schemaHelpTitle" :width="480" placement="right">
+  <BDrawer v-model:open="open" :keyboard="true" :mask-closable="true" :title="schemaHelpTitle" :width="480" placement="right">
     <div class="schema-help">
       <section class="schema-help__intro" aria-label="示例场景">
         <div class="schema-help__intro-heading">
