@@ -50,6 +50,10 @@ function isModelContentEqualToBoard(drawingData: DrawingData, board: UseDrawingB
 function createModelUpdateSnapshot(board: UseDrawingBoardReturn, drawingData: DrawingData | undefined): DrawingData {
   return createDrawingDataSnapshot({
     ...board.state.value,
+    name: drawingData?.name,
+    description: drawingData?.description,
+    inputSchema: drawingData?.inputSchema,
+    outputSchema: drawingData?.outputSchema,
     metadata: drawingData?.metadata
   });
 }

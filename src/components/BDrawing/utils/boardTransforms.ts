@@ -15,36 +15,17 @@ import type {
   DrawingMetadata,
   DrawingPoint,
   DrawingSize,
-  DrawingShapeElement,
-  DrawingViewport
+  DrawingShapeElement
 } from '../types';
 import { cloneDeep } from 'lodash-es';
 import { DRAWING_DEFAULT_NODE_SIZE, DRAWING_MIN_CREATE_SIZE, DRAWING_MIN_ELEMENT_SIZE } from '../constants/board';
 import { getDrawingElementSchema } from '../elements';
+import { createDefaultDrawingViewport, normalizeDrawingDataContract, type DrawingDataContractCandidate } from './drawingData';
 import { getDrawingShapeRenderSize } from './drawingGeometry';
 import { expandDrawingSelectionToGroups, getDrawingElementGroupId } from './drawingGroups';
 
 /** 粘贴元素未指定落点时使用的默认偏移量。 */
 const DRAWING_PASTE_DEFAULT_OFFSET: DrawingPoint = { x: 16, y: 16 };
-
-/**
- * 创建默认视口。
- * @returns 默认视口
- */
-function createDefaultViewport(): DrawingViewport {
-  return {
-    center: { x: 0, y: 0 },
-    zoom: 1
-  };
-}
-
-/**
- * 创建默认画板元信息。
- * @returns 默认画板元信息
- */
-function createDefaultMetadata(): DrawingMetadata {
-  return {};
-}
 
 /**
  * 归一化几何数值，减少 DOM 坐标换算带来的浮点噪声。
@@ -496,7 +477,7 @@ export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>
   return {
     elements: cloneSupportedElements(snapshot?.elements),
     selection: [...(snapshot?.selection ?? [])],
-    viewport: cloneDeep(snapshot?.viewport ?? createDefaultViewport()),
+    viewport: cloneDeep(snapshot?.viewport ?? createDefaultDrawingViewport()),
     draft: cloneDeep(snapshot?.draft),
     history: {
       past: [],
@@ -510,9 +491,9 @@ export function createDrawingBoardState(snapshot?: Partial<DrawingBoardSnapshot>
  * @param snapshot - 画板快照或状态
  * @returns 画板绑定数据
  */
-export function createDrawingDataSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'viewport'> & { metadata?: DrawingMetadata }): DrawingData {
+export function createDrawingDataSnapshot(snapshot: Pick<DrawingBoardSnapshot, 'elements' | 'viewport'> & DrawingDataContractCandidate): DrawingData {
   return {
-    metadata: cloneDeep(snapshot.metadata ?? createDefaultMetadata()),
+    ...normalizeDrawingDataContract(snapshot),
     elements: cloneSupportedElements(snapshot.elements),
     viewport: cloneDeep(snapshot.viewport)
   };

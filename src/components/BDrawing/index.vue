@@ -104,6 +104,7 @@ import { useDrawingViewport } from './hooks/useDrawingViewport';
 import { useModelSync } from './hooks/useModelSync';
 import { useViewportSize } from './hooks/useViewportSize';
 import DrawingCanvas from './renderers/DrawingCanvas.vue';
+import { createDefaultDrawingData } from './utils/drawingData';
 import {
   clientDeltaToDrawingDelta,
   createDrawingElementCssTransform,
@@ -175,7 +176,7 @@ interface SelectElementByIdOptions {
 }
 
 const drawingData = defineModel<DrawingData>('value', {
-  default: (): DrawingData => ({ metadata: {}, elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } })
+  default: createDefaultDrawingData
 });
 /** 当前选中的绘图目标（元素或锚点），支持双向绑定。 */
 const selectedTarget = defineModel<DrawingSelectTarget>('select', { default: null });

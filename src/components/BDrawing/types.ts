@@ -122,6 +122,39 @@ export interface DrawingMetadata {
 }
 
 /**
+ * DrawingData 支持的 schema 字段类型。
+ */
+export type DrawingSchemaPropertyType = 'string' | 'number' | 'boolean' | 'object' | 'array';
+
+/**
+ * DrawingData 入参与出参 schema 属性。
+ */
+export interface DrawingSchemaProperty {
+  /** 字段类型 */
+  type: DrawingSchemaPropertyType;
+  /** 字段说明 */
+  description?: string;
+  /** 对象字段定义 */
+  properties?: Record<string, DrawingSchemaProperty>;
+  /** 数组元素结构 */
+  items?: DrawingSchemaProperty;
+}
+
+/**
+ * DrawingData 入参与出参对象 schema。
+ */
+export interface DrawingSchemaObject {
+  /** 顶层 schema 固定为对象 */
+  type: 'object';
+  /** schema 说明 */
+  description?: string;
+  /** 对象字段定义 */
+  properties: Record<string, DrawingSchemaProperty>;
+  /** 必填字段 */
+  required?: string[];
+}
+
+/**
  * 自由形状元素。
  */
 export interface DrawingShapeElement {
@@ -216,6 +249,14 @@ export interface DrawingViewport {
  * 画板外部双向绑定数据。
  */
 export interface DrawingData {
+  /** 画板能力标识符 */
+  name: string;
+  /** 画板能力描述 */
+  description: string;
+  /** 画板能力入参 schema */
+  inputSchema: DrawingSchemaObject;
+  /** 画板能力出参 schema */
+  outputSchema: DrawingSchemaObject;
   /** 画板元信息 */
   metadata: DrawingMetadata;
   /** 元素数据 */
