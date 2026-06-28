@@ -5,7 +5,12 @@
 <template>
   <section :class="bem({ collapsed: isCollapsed, collapsible })">
     <header :class="bem('header')" @click="handleHeaderClick">
-      <div :class="bem('title')">{{ title }}</div>
+      <div :class="bem('title-group')">
+        <div :class="bem('title')">{{ title }}</div>
+        <div v-if="$slots.help" :class="bem('help')" @click.stop>
+          <slot name="help"></slot>
+        </div>
+      </div>
       <div v-if="collapsible || $slots.extra" :class="bem('extra')">
         <slot name="extra"></slot>
         <BIcon v-if="collapsible" icon="lucide:chevron-right" :size="14" :class="bem('arrow')" />
@@ -74,6 +79,19 @@ function handleHeaderClick(): void {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.b-section-block__title-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.b-section-block__help {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
 }
 
 .b-section-block__extra {
