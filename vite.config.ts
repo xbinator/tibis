@@ -41,7 +41,8 @@ const COMPONENT_DIRS = [
   'BUpload',
   'BDrawing',
   'BColorPicker',
-  'BSection'
+  'BSection',
+  'BDrawer'
 ];
 
 /**
