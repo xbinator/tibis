@@ -62,7 +62,6 @@ export interface DrawingSchemaObject {
   /** 必填字段 */
   required?: string[];
   /** 是否允许未声明字段 */
-  additionalProperties?: boolean;
 }
 
 /**
@@ -93,7 +92,6 @@ export interface DrawingData {
   type: 'object',
   properties: {},
   required: [],
-  additionalProperties: false
 }
 ```
 
@@ -139,7 +137,6 @@ export interface DrawingData {
     }
   },
   "required": ["userName"],
-  "additionalProperties": false
 }
 ```
 
@@ -159,7 +156,6 @@ export interface DrawingData {
     }
   },
   "required": ["drawingId"],
-  "additionalProperties": false
 }
 ```
 
@@ -185,7 +181,7 @@ export interface DrawingData {
 
 采用以下策略：
 
-- `name`、`description`、`inputSchema`、`outputSchema` 作为 `DrawingData` 外部模型字段，由 `PageSetter` 直接编辑 `drawingData` 引用。
+- `name`、`description`、`inputSchema`、`outputSchema` 作为 `DrawingData` 外部模型字段，由 `PanelSettings` 和 `PageSetter` 通过 `v-model:value` 双向绑定完整 `DrawingData`。
 - `useModelSync` 在创建对外快照时保留现有契约字段，类似当前保留 `metadata`。
 - 如果外部模型替换了契约字段，但元素和视口未变，也不重置 board 内部状态。
 - 对外快照必须包含契约字段，避免保存后丢失。
@@ -199,17 +195,18 @@ export interface DrawingData {
 首版分区：
 
 - 基础信息：`name`、`description`。
-- 入参：`inputSchema` JSON 编辑区。
-- 出参：`outputSchema` JSON 编辑区。
+- 入参：`inputSchema` 预览区、extra 区域 mini 编辑按钮，以及 BSectionBlock 标题旁 help 插槽中的填写说明图标。
+- 出参：`outputSchema` 预览区、extra 区域 mini 编辑按钮，以及 BSectionBlock 标题旁 help 插槽中的填写说明图标。
 
 交互要求：
 
-- `name` 使用普通输入框，失焦或输入时校验标识符格式。
+- `name` 在页面上显示为“名称”，使用普通输入框编辑；作为后续工具注册标识时再做格式校验。
 - `description` 使用多行输入。
-- `inputSchema` 和 `outputSchema` 可以先使用 JSON textarea，不引入复杂 schema builder。
+- `inputSchema` 和 `outputSchema` 通过弹窗编辑 JSON，面板下方只做只读预览，不引入复杂 schema builder。
+- 填写说明入口通过 `BSectionBlock` 的 help 插槽放在“入参 / 出参”标题旁，以图标打开抽屉；抽屉使用参数表格说明字段、类型、必填和业务说明，并以“查天气”作为入参 / 出参示例。
 - JSON 输入解析失败时保留文本并显示错误，不写回 `DrawingData`。
 - JSON 解析成功但顶层不是 `{ "type": "object" }` 时显示错误，不写回 `DrawingData`。
-- 空 textarea 可以恢复默认空对象 schema。
+- 弹窗内容留空时可以恢复默认空对象 schema。
 
 后续可演进为结构化字段编辑器，但首版不做。
 
@@ -231,7 +228,7 @@ export interface DrawingData {
 - 旧数据归一化永不抛错，无法识别的 schema 回退为空对象 schema。
 - `PageSetter` 的 schema JSON 解析错误只影响当前输入框，不破坏已保存的 `DrawingData`。
 - `name` 非空但不符合标识符规则时不阻止页面使用，但应阻止把该画板注册为可调用能力。
-- 保存文件时仍保存当前有效的 `DrawingData`，不保存 textarea 中尚未解析成功的临时 JSON 文本。
+- 保存文件时仍保存当前有效的 `DrawingData`，不保存弹窗中尚未解析成功的临时 JSON 文本。
 
 ## Testing
 
@@ -244,6 +241,7 @@ export interface DrawingData {
 - `PageSetter` 能编辑 `name` 和 `description`。
 - `PageSetter` 能写回合法 `inputSchema` 和 `outputSchema`。
 - `PageSetter` 对非法 JSON 或非对象 schema 显示错误且不写回。
+- `PanelSettings` 与 `PageSetter` 通过 `v-model:value` 回写完整 `DrawingData`。
 - 旧 `.tibis` drawing 数据仍可加载并归一化。
 
 ## Non-Goals
