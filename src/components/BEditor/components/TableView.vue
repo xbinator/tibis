@@ -64,30 +64,46 @@
         <div v-show="showInsertGuide" :class="bem('insert-guide', hoveredInsert?.hit.type ?? 'column')" :style="insertGuideStyle"></div>
       </div>
 
-      <!-- 区段 + 外侧动作按钮 -->
+      <!-- 区段 + 外侧格式工具条 -->
       <div v-show="showSegmentOverlay" :class="bem('segment-overlay')" contenteditable="false">
         <div v-show="selectedSegmentHover?.column" :class="bem('segment-highlight', 'column')" :style="columnSegmentHighlightStyle"></div>
         <div v-show="selectedSegmentHover?.row" :class="bem('segment-highlight', 'row')" :style="rowSegmentHighlightStyle"></div>
-        <div v-show="showRowActionGroup" :class="bem('segment-action-group', 'row')" :style="rowActionGroupStyle">
+        <div v-show="showSegmentToolbar" :class="bem('segment-toolbar')" :style="selectedSegmentToolbarStyle">
           <button
+            v-for="button in SEGMENT_FORMAT_BUTTONS"
+            :key="button.command"
             type="button"
-            :class="bem('remove-button', 'row')"
-            title="删除行"
-            aria-label="删除行"
+            :class="[bem('segment-toolbar-button'), { 'is-active': isSegmentFormatActive(button.command) }]"
+            :title="button.title"
+            :aria-label="button.title"
             @mousedown.prevent
-            @click="handleRemove(selectedSegmentHover?.row ?? null)"
+            @click="handleSegmentFormat(button.command)"
           >
-            <BIcon :class="bem('button-icon')" :icon="ICONS.remove" />
+            <BIcon :class="bem('button-icon')" :icon="button.icon" />
           </button>
-        </div>
-        <div v-show="showColumnActionGroup" :class="bem('segment-action-group', 'column')" :style="columnActionGroupStyle">
+          <template v-if="showColumnAlignButtons">
+            <div :class="bem('segment-toolbar-divider')"></div>
+            <button
+              v-for="button in SEGMENT_COLUMN_ALIGN_BUTTONS"
+              :key="button.alignment"
+              type="button"
+              :class="[bem('segment-toolbar-button'), { 'is-active': isColumnAlignActive(button.alignment) }]"
+              :title="button.title"
+              :aria-label="button.title"
+              @mousedown.prevent
+              @click="handleColumnAlign(button.alignment)"
+            >
+              <BIcon :class="bem('button-icon')" :icon="button.icon" />
+            </button>
+          </template>
+          <div :class="bem('segment-toolbar-divider')"></div>
           <button
             type="button"
-            :class="bem('remove-button', 'column')"
-            title="删除列"
-            aria-label="删除列"
+            :class="[bem('segment-toolbar-button'), bem('segment-toolbar-button', 'danger')]"
+            :title="selectedSegmentRemoveTitle"
+            :aria-label="selectedSegmentRemoveTitle"
             @mousedown.prevent
-            @click="handleRemove(selectedSegmentHover?.column ?? null)"
+            @click="handleSelectedSegmentRemove"
           >
             <BIcon :class="bem('button-icon')" :icon="ICONS.remove" />
           </button>
@@ -136,14 +152,22 @@ const UI = {
   DRAG_SELECTION_THRESHOLD: 4,
   CONTROL_SIZE: 14,
   ACTION_OFFSET: 8,
-  ACTION_GROUP_SIZE: 38,
+  SEGMENT_ROW_TOOLBAR_WIDTH: 138,
+  SEGMENT_COLUMN_TOOLBAR_WIDTH: 238,
+  SEGMENT_TOOLBAR_HEIGHT: 38,
   GUIDE_THICKNESS: 2,
   OVERLAY_GUTTER: 0
 } as const;
 
 const ICONS = {
   add: 'mdi:plus',
-  remove: 'mdi:trash-can-outline'
+  remove: 'mdi:trash-can-outline',
+  bold: 'lucide:bold',
+  italic: 'lucide:italic',
+  strike: 'lucide:strikethrough',
+  alignLeft: 'lucide:align-left',
+  alignCenter: 'lucide:align-center',
+  alignRight: 'lucide:align-right'
 } as const;
 
 const FALLBACK = {
@@ -151,12 +175,6 @@ const FALLBACK = {
   ROW_HEIGHT: 40,
   ROW_COUNT: 3,
   COLUMN_COUNT: 3
-} as const;
-
-const SEGMENT_ACTION_PLACEMENT_OPTIONS = {
-  controlSize: UI.CONTROL_SIZE,
-  actionOffset: UI.ACTION_OFFSET,
-  actionGroupSize: UI.ACTION_GROUP_SIZE
 } as const;
 
 // ─── Refs ────────────────────────────────────────────────────────────────────
@@ -209,6 +227,58 @@ interface TableControlItem {
   /** 控制区定位样式。 */
   style: CSSProperties;
 }
+
+/**
+ * 表格行列工具条支持的文本格式命令。
+ */
+type TableSegmentFormatAction = 'bold' | 'italic' | 'strike';
+
+/**
+ * 表格列工具条支持的列对齐方式。
+ */
+type TableColumnAlignment = 'left' | 'center' | 'right';
+
+/**
+ * 表格行列工具条格式按钮。
+ */
+interface TableSegmentFormatButton {
+  /** 按钮对应的 TipTap 格式命令。 */
+  command: TableSegmentFormatAction;
+  /** Iconify 图标名称。 */
+  icon: string;
+  /** 按钮提示文案。 */
+  title: string;
+}
+
+/**
+ * 表格列对齐按钮。
+ */
+interface TableColumnAlignButton {
+  /** 目标列对齐方式。 */
+  alignment: TableColumnAlignment;
+  /** Iconify 图标名称。 */
+  icon: string;
+  /** 按钮提示文案。 */
+  title: string;
+}
+
+/**
+ * 选中行列时展示的轻量格式按钮。
+ */
+const SEGMENT_FORMAT_BUTTONS: readonly TableSegmentFormatButton[] = [
+  { command: 'bold', icon: ICONS.bold, title: '加粗' },
+  { command: 'italic', icon: ICONS.italic, title: '斜体' },
+  { command: 'strike', icon: ICONS.strike, title: '中划线' }
+] as const;
+
+/**
+ * 选中列时展示的列对齐按钮。
+ */
+const SEGMENT_COLUMN_ALIGN_BUTTONS: readonly TableColumnAlignButton[] = [
+  { alignment: 'left', icon: ICONS.alignLeft, title: '左对齐' },
+  { alignment: 'center', icon: ICONS.alignCenter, title: '居中对齐' },
+  { alignment: 'right', icon: ICONS.alignRight, title: '右对齐' }
+] as const;
 
 /**
  * 控制区新增按钮的插入位置。
@@ -796,6 +866,37 @@ function handleRowControlClick(index: number): void {
 }
 
 /**
+ * 恢复当前行列工具条对应的整行/整列选区。
+ * @returns 是否成功恢复选区
+ */
+function restoreSelectedSegmentSelection(): boolean {
+  const segment = selectedSegment.value;
+  if (!segment) {
+    return false;
+  }
+
+  return segment.type === 'column' ? selectColumnAt(segment.index) : selectRowAt(segment.index);
+}
+
+/**
+ * 判断格式命令在当前选区中是否处于激活状态。
+ * @param command - 文本格式命令
+ * @returns 当前格式是否激活
+ */
+function isSegmentFormatActive(command: TableSegmentFormatAction): boolean {
+  return props.editor.isActive(command);
+}
+
+/**
+ * 判断列对齐方式是否处于当前激活状态。
+ * @param alignment - 目标列对齐方式
+ * @returns 当前列是否使用该对齐方式
+ */
+function isColumnAlignActive(alignment: TableColumnAlignment): boolean {
+  return props.editor.isActive('tableCell', { align: alignment }) || props.editor.isActive('tableHeader', { align: alignment });
+}
+
+/**
  * 读取指定单元格的文档位置。
  * @param position - 单元格逻辑坐标
  * @returns 单元格位置；无法定位时返回 null
@@ -967,7 +1068,45 @@ function getDimensions(): { rowCount: number; columnCount: number } {
 const editorContext = { editor: props.editor, focusCellAt, getDimensions };
 
 /**
- * 执行删除动作；行列按钮各自传入自己的命中目标。
+ * 对当前选中的列设置对齐方式。
+ * @param alignment - 目标列对齐方式
+ */
+function handleColumnAlign(alignment: TableColumnAlignment): void {
+  if (selectedSegment.value?.type !== 'column' || !restoreSelectedSegmentSelection()) {
+    return;
+  }
+
+  props.editor.chain().focus().setCellAttribute('align', alignment).run();
+}
+
+/**
+ * 对当前选中的行或列执行文本格式命令。
+ * @param command - 文本格式命令
+ */
+function handleSegmentFormat(command: TableSegmentFormatAction): void {
+  if (!restoreSelectedSegmentSelection()) {
+    return;
+  }
+
+  const chain = props.editor.chain().focus();
+  switch (command) {
+    case 'bold':
+      chain.toggleBold().run();
+      break;
+    case 'italic':
+      chain.toggleItalic().run();
+      break;
+    case 'strike':
+      chain.toggleStrike().run();
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * 执行删除动作。
+ * @param hit - 当前选中的行或列命中结果
  */
 function handleRemove(hit: SegmentHit | null): void {
   if (hit && applyRemoveAction(editorContext, hit)) {
@@ -1079,9 +1218,12 @@ function toViewportActionStyle(placement: SegmentActionPlacement): CSSProperties
 function getSegmentActionPlacementOptions(axis: 'x' | 'y'): SegmentActionPlacementOptions {
   const scrollerRect = scrollerRef.value?.getBoundingClientRect();
   const viewportStartOffset = axis === 'x' ? scrollerRect?.left ?? 0 : scrollerRect?.top ?? 0;
+  const toolbarWidth = selectedSegment.value?.type === 'column' ? UI.SEGMENT_COLUMN_TOOLBAR_WIDTH : UI.SEGMENT_ROW_TOOLBAR_WIDTH;
 
   return {
-    ...SEGMENT_ACTION_PLACEMENT_OPTIONS,
+    controlSize: UI.CONTROL_SIZE,
+    actionOffset: UI.ACTION_OFFSET,
+    actionGroupSize: axis === 'x' ? toolbarWidth : UI.SEGMENT_TOOLBAR_HEIGHT,
     viewportStartOffset: Math.max(0, viewportStartOffset)
   };
 }
@@ -1246,6 +1388,15 @@ const insertPoints = computed<InsertPointItem[]>(() => createInsertPoints(tableG
 
 const selectedSegmentHover = computed(() => createSelectedSegmentHover(selectedSegment.value, tableGeometry.value.columnRects, tableGeometry.value.rowRects));
 
+const selectedSegmentHit = computed<SegmentHit | null>(() => selectedSegmentHover.value?.column ?? selectedSegmentHover.value?.row ?? null);
+
+/**
+ * 删除当前工具条所绑定的行或列。
+ */
+function handleSelectedSegmentRemove(): void {
+  handleRemove(selectedSegmentHit.value);
+}
+
 const cornerControlStyle = computed<CSSProperties | null>(() => {
   const firstColumn = tableGeometry.value.columnRects[0];
   const firstRow = tableGeometry.value.rowRects[0];
@@ -1274,19 +1425,21 @@ const rowSegmentHighlightStyle = computed<CSSProperties>(() => {
   return hit ? toViewportRectStyle(hit.segmentRect) : {};
 });
 
-const rowActionGroupStyle = computed<CSSProperties | null>(() => {
-  const hit = selectedSegmentHover.value?.row ?? null;
+const selectedSegmentToolbarStyle = computed<CSSProperties | null>(() => {
+  const hit = selectedSegmentHit.value;
   if (!hit) return null;
 
-  return toViewportActionStyle(getRowSegmentActionPlacement(hit.segmentRect, getSegmentActionPlacementOptions('x')));
+  const placement =
+    hit.type === 'row'
+      ? getRowSegmentActionPlacement(hit.segmentRect, getSegmentActionPlacementOptions('x'))
+      : getColumnSegmentActionPlacement(hit.segmentRect, getSegmentActionPlacementOptions('y'));
+
+  return toViewportActionStyle(placement);
 });
 
-const columnActionGroupStyle = computed<CSSProperties | null>(() => {
-  const hit = selectedSegmentHover.value?.column ?? null;
-  if (!hit) return null;
+const selectedSegmentRemoveTitle = computed<string>(() => (selectedSegment.value?.type === 'column' ? '删除列' : '删除行'));
 
-  return toViewportActionStyle(getColumnSegmentActionPlacement(hit.segmentRect, getSegmentActionPlacementOptions('y')));
-});
+const showColumnAlignButtons = computed<boolean>(() => selectedSegment.value?.type === 'column');
 
 const insertGuideStyle = computed<CSSProperties | null>(() => {
   const hit = hoveredInsert.value?.hit ?? null;
@@ -1327,19 +1480,14 @@ const showCornerControl = computed<boolean>(() => showControlOverlay.value && co
 const showInsertGuide = computed<boolean>(() => showControlOverlay.value && insertGuideStyle.value !== null);
 
 /**
- * 当前是否显示删除操作层。
+ * 当前是否显示行列操作层。
  */
 const showSegmentOverlay = computed<boolean>(() => showControlOverlay.value && selectedSegmentHover.value !== null);
 
 /**
- * 当前是否显示行外侧动作组。
+ * 当前是否显示行列工具条。
  */
-const showRowActionGroup = computed<boolean>(() => !dragSelection.value && rowActionGroupStyle.value !== null);
-
-/**
- * 当前是否显示列外侧动作组。
- */
-const showColumnActionGroup = computed<boolean>(() => !dragSelection.value && columnActionGroupStyle.value !== null);
+const showSegmentToolbar = computed<boolean>(() => !dragSelection.value && selectedSegmentToolbarStyle.value !== null);
 
 /**
  * 当前是否处于表格矩形拖拽选区中。
@@ -1494,7 +1642,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 
-.b-markdown-table__segment-action-group {
+.b-markdown-table__segment-toolbar {
   position: absolute;
   z-index: 3;
   display: inline-flex;
@@ -1559,17 +1707,7 @@ onBeforeUnmount(() => {
   transform: scale(1);
 }
 
-.b-markdown-table__segment-action-group--column {
-  flex-direction: row;
-  transform: translate(-50%, -100%);
-}
-
-.b-markdown-table__segment-action-group--row {
-  flex-direction: column;
-  transform: translate(-100%, -50%);
-}
-
-.b-markdown-table__remove-button {
+.b-markdown-table__segment-toolbar-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1585,14 +1723,30 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 
-  &:hover {
+  &:hover,
+  &.is-active {
     color: var(--text-primary);
     background: var(--bg-hover);
+  }
+
+  &.is-active {
+    color: var(--color-primary);
   }
 
   &:active {
     transform: scale(0.96);
   }
+}
+
+.b-markdown-table__segment-toolbar-button--danger:hover {
+  color: var(--color-danger);
+}
+
+.b-markdown-table__segment-toolbar-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border-primary);
 }
 
 .b-markdown-table__button-icon {

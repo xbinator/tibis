@@ -59,7 +59,7 @@ describe('BEditor TableView controls', (): void => {
     expect(source).not.toContain("bem('control-icon')");
   });
 
-  it('places persistent insert dots on every divider and remove actions outside the selected rail', (): void => {
+  it('places persistent insert dots on every divider and one segment toolbar outside the selected rail', (): void => {
     const source = readTableViewSource();
 
     expect(source).toContain('applyAddAction');
@@ -67,9 +67,50 @@ describe('BEditor TableView controls', (): void => {
     expect(source).toContain('insertPoints');
     expect(source).toContain('createInsertPoints');
     expect(source).toContain('handleInsertPointEnter');
-    expect(source).toContain("bem('segment-action-group'");
+    expect(source).toContain("bem('segment-toolbar'");
     expect(source).toContain("bem('insert-point'");
     expect(source).not.toContain("bem('insert-button-group'");
+  });
+
+  it('renders one selected segment toolbar with format actions and a single delete action', (): void => {
+    const source = readTableViewSource();
+
+    expect(source).toContain('SEGMENT_FORMAT_BUTTONS');
+    expect(source).toContain("command: 'bold'");
+    expect(source).toContain("command: 'italic'");
+    expect(source).toContain("command: 'strike'");
+    expect(source).toContain('handleSegmentFormat');
+    expect(source).toContain('handleSelectedSegmentRemove');
+    expect(source).toContain('selectedSegmentToolbarStyle');
+    expect(source).not.toContain('showRowActionGroup');
+    expect(source).not.toContain('showColumnActionGroup');
+    expect(source).not.toContain("bem('remove-button', 'row')");
+    expect(source).not.toContain("bem('remove-button', 'column')");
+  });
+
+  it('shows alignment actions only when the selected segment is a column', (): void => {
+    const source = readTableViewSource();
+    const alignSection = /function handleColumnAlign[\s\S]*?function handleSegmentFormat/.exec(source)?.[0] ?? '';
+
+    expect(source).toContain('SEGMENT_COLUMN_ALIGN_BUTTONS');
+    expect(source).toContain("alignment: 'left'");
+    expect(source).toContain("alignment: 'center'");
+    expect(source).toContain("alignment: 'right'");
+    expect(source).toContain('showColumnAlignButtons');
+    expect(source).toContain("selectedSegment.value?.type === 'column'");
+    expect(alignSection).toContain('restoreSelectedSegmentSelection()');
+    expect(alignSection).toContain("setCellAttribute('align', alignment)");
+  });
+
+  it('restores the selected row or column before formatting the selected segment', (): void => {
+    const source = readTableViewSource();
+    const formatSection = /function handleSegmentFormat[\s\S]*?function handleSelectedSegmentRemove/.exec(source)?.[0] ?? '';
+
+    expect(source).toContain('function restoreSelectedSegmentSelection(): boolean');
+    expect(formatSection).toContain('restoreSelectedSegmentSelection()');
+    expect(formatSection).toContain('toggleBold()');
+    expect(formatSection).toContain('toggleItalic()');
+    expect(formatSection).toContain('toggleStrike()');
   });
 
   it('refreshes table geometry after insert commands render the updated table', (): void => {
@@ -185,25 +226,29 @@ describe('BEditor TableView controls', (): void => {
     expect(source).not.toContain('.b-markdown-table__insert-point::before');
   });
 
-  it('renders selected segment delete actions like the selection toolbar', (): void => {
+  it('renders selected segment toolbar actions like the selection toolbar', (): void => {
     const source = readTableViewSource();
-    const actionGroupRuleBody = extractStyleRuleBody(source, '.b-markdown-table__segment-action-group');
-    const removeButtonRuleBody = extractStyleRuleBody(source, '.b-markdown-table__remove-button');
+    const toolbarRuleBody = extractStyleRuleBody(source, '.b-markdown-table__segment-toolbar');
+    const toolbarButtonRuleBody = extractStyleRuleBody(source, '.b-markdown-table__segment-toolbar-button');
+    const dividerRuleBody = extractStyleRuleBody(source, '.b-markdown-table__segment-toolbar-divider');
 
     expect(source).not.toContain('viewportRef');
-    expect(actionGroupRuleBody).toContain('gap: 2px;');
-    expect(actionGroupRuleBody).toContain('padding: 4px;');
-    expect(actionGroupRuleBody).toContain('background: var(--bg-primary);');
-    expect(actionGroupRuleBody).toContain('border: 1px solid var(--border-primary);');
-    expect(actionGroupRuleBody).toContain('border-radius: 8px;');
-    expect(actionGroupRuleBody).toContain('box-shadow: var(--shadow-lg);');
-    expect(removeButtonRuleBody).toContain('width: 28px;');
-    expect(removeButtonRuleBody).toContain('height: 28px;');
-    expect(removeButtonRuleBody).toContain('font-size: 14px;');
-    expect(removeButtonRuleBody).toContain('color: var(--text-secondary);');
-    expect(removeButtonRuleBody).toContain('background: transparent;');
-    expect(removeButtonRuleBody).toContain('border: none;');
-    expect(removeButtonRuleBody).toContain('border-radius: 6px;');
-    expect(removeButtonRuleBody).toContain('background: var(--bg-hover);');
+    expect(toolbarRuleBody).toContain('gap: 2px;');
+    expect(toolbarRuleBody).toContain('padding: 4px;');
+    expect(toolbarRuleBody).toContain('background: var(--bg-primary);');
+    expect(toolbarRuleBody).toContain('border: 1px solid var(--border-primary);');
+    expect(toolbarRuleBody).toContain('border-radius: 8px;');
+    expect(toolbarRuleBody).toContain('box-shadow: var(--shadow-lg);');
+    expect(toolbarButtonRuleBody).toContain('width: 28px;');
+    expect(toolbarButtonRuleBody).toContain('height: 28px;');
+    expect(toolbarButtonRuleBody).toContain('font-size: 14px;');
+    expect(toolbarButtonRuleBody).toContain('color: var(--text-secondary);');
+    expect(toolbarButtonRuleBody).toContain('background: transparent;');
+    expect(toolbarButtonRuleBody).toContain('border: none;');
+    expect(toolbarButtonRuleBody).toContain('border-radius: 6px;');
+    expect(toolbarButtonRuleBody).toContain('background: var(--bg-hover);');
+    expect(dividerRuleBody).toContain('width: 1px;');
+    expect(dividerRuleBody).toContain('height: 16px;');
+    expect(dividerRuleBody).toContain('background: var(--border-primary);');
   });
 });
