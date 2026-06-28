@@ -187,7 +187,7 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   z-index: 1;
   display: flex;
   flex-shrink: 0;
-  width: 320px;
+  width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;

@@ -81,7 +81,7 @@ const elementSetter = computed<Component | null>(() => (isElementTarget(select.v
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
-  width: 300px;
+  width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;

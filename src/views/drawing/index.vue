@@ -4,32 +4,36 @@
 -->
 <template>
   <main class="drawing-page" tabindex="0" @blur="session.actions.onBlur">
-    <PanelSidebar
-      :active-element-id="activeSidebarElementId"
-      :elements="session.data.value.elements"
-      :selected-element-ids="selectedElementIds"
-      @select-element="handleSidebarElementSelect"
-      @select-elements="handleSidebarElementsSelect"
-      @copy-element="handleSidebarElementCopy"
-      @copy-elements="handleSidebarElementsCopy"
-      @delete-element="handleSidebarElementDelete"
-      @delete-elements="handleSidebarElementsDelete"
-      @move-element="handleSidebarElementMove"
-      @move-elements="handleSidebarElementsMove"
-    />
+    <BPanelSplitter v-model:size="sidebarWidth" position="right" :closable="false" :min-width="300" :max-width="480">
+      <PanelSidebar
+        :active-element-id="activeSidebarElementId"
+        :elements="session.data.value.elements"
+        :selected-element-ids="selectedElementIds"
+        @select-element="handleSidebarElementSelect"
+        @select-elements="handleSidebarElementsSelect"
+        @copy-element="handleSidebarElementCopy"
+        @copy-elements="handleSidebarElementsCopy"
+        @delete-element="handleSidebarElementDelete"
+        @delete-elements="handleSidebarElementsDelete"
+        @move-element="handleSidebarElementMove"
+        @move-elements="handleSidebarElementsMove"
+      />
+    </BPanelSplitter>
 
     <section ref="canvasRef" class="drawing-page__canvas">
       <BDrawing ref="drawingRef" v-model:value="session.data.value" v-model:select="selectedTarget" @selection-change="handleDrawingSelectionChange" />
     </section>
 
-    <PanelSettings
-      v-model:value="session.data.value"
-      v-model:select="selectedTarget"
-      :selected-element-ids="selectedElementIds"
-      @multi-command="handleSettingsMultiCommand"
-      @multi-layout-change="handleSettingsMultiLayoutChange"
-      @multi-style-change="handleSettingsMultiStyleChange"
-    />
+    <BPanelSplitter v-model:size="settingsWidth" position="left" :closable="false" :min-width="240" :max-width="400">
+      <PanelSettings
+        v-model:value="session.data.value"
+        v-model:select="selectedTarget"
+        :selected-element-ids="selectedElementIds"
+        @multi-command="handleSettingsMultiCommand"
+        @multi-layout-change="handleSettingsMultiLayoutChange"
+        @multi-style-change="handleSettingsMultiStyleChange"
+      />
+    </BPanelSplitter>
   </main>
 </template>
 
@@ -81,6 +85,10 @@ const session = useFileSession<DrawingData>({
   fallbackRouteName: 'editor'
 });
 /** 当前右侧设置栏可编辑目标。 */
+/** 左侧图层面板宽度。 */
+const sidebarWidth = ref(320);
+/** 右侧设置面板宽度。 */
+const settingsWidth = ref(300);
 const selectedTarget = ref<DrawingSelectTarget>(session.data.value.metadata);
 /** 当前侧栏需要高亮的元素 ID。 */
 const selectedElementIds = ref<string[]>([]);
