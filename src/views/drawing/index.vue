@@ -23,8 +23,8 @@
     </section>
 
     <PanelSettings
+      v-model:value="session.data.value"
       v-model:select="selectedTarget"
-      :drawing-data="session.data.value"
       :selected-element-ids="selectedElementIds"
       @multi-command="handleSettingsMultiCommand"
       @multi-layout-change="handleSettingsMultiLayoutChange"
@@ -41,6 +41,7 @@ import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import type BDrawingComponent from '@/components/BDrawing/index.vue';
 import type { DrawingData, DrawingElement, DrawingElementStyleChange, DrawingLayerAction, DrawingSelectTarget } from '@/components/BDrawing/types';
+import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 import { DRAWING_GROUP_METADATA_KEY, getDrawingElementGroupId } from '@/components/BDrawing/utils/drawingGroups';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -73,7 +74,7 @@ const session = useFileSession<DrawingData>({
   kind: 'tibis',
   defaultName: 'Untitled',
   defaultExt: 'tibis',
-  defaultData: { metadata: {}, elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } },
+  defaultData: createDefaultDrawingData(),
   type: 'drawing',
   version: 1,
   routeName: 'drawing',

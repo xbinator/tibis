@@ -4,7 +4,7 @@
 -->
 <template>
   <aside class="setter-panel">
-    <PageSetter v-if="select && !isElementTarget(select)" :drawing-data="drawingData" :metadata="select" />
+    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="drawingData" :metadata="select" />
     <BatchSetter
       v-else-if="select === null && selectedElementIds.length > 1"
       :drawing-data="drawingData"
@@ -44,8 +44,6 @@ import PageSetter from './PageSetter.vue';
  * 画图设置栏入参。
  */
 interface Props {
-  /** 当前画图数据 */
-  drawingData: DrawingData;
   /** 当前选中的元素 ID 列表 */
   selectedElementIds?: string[];
 }
@@ -62,6 +60,7 @@ const emit = defineEmits<{
   'multi-style-change': [style: DrawingElementStyleChange];
 }>();
 
+const drawingData = defineModel<DrawingData>('value', { required: true });
 const select = defineModel<DrawingSelectTarget>('select', { default: null });
 
 /**
