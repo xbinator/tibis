@@ -27,17 +27,20 @@
       :drawing-data="session.data.value"
       :selected-element-ids="selectedElementIds"
       @multi-command="handleSettingsMultiCommand"
+      @multi-layout-change="handleSettingsMultiLayoutChange"
+      @multi-style-change="handleSettingsMultiStyleChange"
     />
   </main>
 </template>
 
 <script setup lang="ts">
+import type { DrawingMultiSelectLayoutChange } from './types';
 import { computed, nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import type BDrawingComponent from '@/components/BDrawing/index.vue';
-import type { DrawingData, DrawingElement, DrawingLayerAction, DrawingSelectTarget } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingElementStyleChange, DrawingLayerAction, DrawingSelectTarget } from '@/components/BDrawing/types';
 import { DRAWING_GROUP_METADATA_KEY, getDrawingElementGroupId } from '@/components/BDrawing/utils/drawingGroups';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
@@ -105,6 +108,32 @@ const activeSidebarElementId = computed<string | null>(() => {
 type SettingsMultiCommand = 'copy' | 'group' | 'ungroup' | DrawingLayerAction | 'delete';
 
 /**
+ * 多选外接框布局信息。
+ */
+interface MultiSelectionBounds {
+  /** 外接框左上横坐标 */
+  x: number;
+  /** 外接框左上纵坐标 */
+  y: number;
+  /** 外接框宽度 */
+  width: number;
+  /** 外接框高度 */
+  height: number;
+}
+
+/**
+ * 右侧设置面板拆分组合结果。
+ */
+interface SettingsUngroupResult {
+  /** 拆分后的元素列表 */
+  elements: DrawingElement[];
+  /** 拆分后应保持选中的元素 ID 列表 */
+  selectedElementIds: string[];
+  /** 是否实际拆分了组合 */
+  changed: boolean;
+}
+
+/**
  * 读取自动生成组合 ID 中的序号。
  * @param groupId - 组合 ID
  * @returns 序号，不匹配时返回 null
@@ -161,6 +190,67 @@ function createLayerCopyGroupId(elements: DrawingElement[]): string {
   }
 
   return nextGroupId;
+}
+
+/**
+ * 移除画图元素元数据中的组合 ID。
+ * @param metadata - 原始元素元数据
+ * @returns 移除组合 ID 后的元素元数据
+ */
+function removeDrawingElementGroupId(metadata: DrawingElement['metadata']): DrawingElement['metadata'] {
+  const nextMetadata = cloneDeep(metadata);
+  delete nextMetadata[DRAWING_GROUP_METADATA_KEY];
+
+  return nextMetadata;
+}
+
+/**
+ * 按右侧设置面板当前多选 ID 拆分命中的组合。
+ * @param elements - 当前画图元素列表
+ * @param selectedIds - 当前设置面板多选 ID 集合
+ * @returns 拆分结果
+ */
+function createSettingsUngroupResult(elements: DrawingElement[], selectedIds: Set<string>): SettingsUngroupResult {
+  const groupIds = new Set<string>();
+
+  elements.forEach((element: DrawingElement): void => {
+    if (!selectedIds.has(element.id)) {
+      return;
+    }
+
+    const groupId = getDrawingElementGroupId(element);
+    if (groupId) {
+      groupIds.add(groupId);
+    }
+  });
+
+  if (groupIds.size === 0) {
+    return {
+      elements,
+      selectedElementIds: [...selectedIds],
+      changed: false
+    };
+  }
+
+  const ungroupedElementIds: string[] = [];
+  const nextElements = elements.map((element: DrawingElement): DrawingElement => {
+    const groupId = getDrawingElementGroupId(element);
+    if (!groupId || !groupIds.has(groupId)) {
+      return element;
+    }
+
+    ungroupedElementIds.push(element.id);
+    return {
+      ...element,
+      metadata: removeDrawingElementGroupId(element.metadata)
+    };
+  });
+
+  return {
+    elements: nextElements,
+    selectedElementIds: ungroupedElementIds,
+    changed: true
+  };
 }
 
 /**
@@ -384,8 +474,9 @@ async function handleSidebarElementsCopy(elements: DrawingElement[]): Promise<vo
 /**
  * 处理右侧多选面板快捷操作。
  * @param command - 快捷操作命令
+ * @returns Promise
  */
-function handleSettingsMultiCommand(command: SettingsMultiCommand): void {
+async function handleSettingsMultiCommand(command: SettingsMultiCommand): Promise<void> {
   switch (command) {
     case 'copy': {
       drawingRef.value?.copySelection();
@@ -396,6 +487,18 @@ function handleSettingsMultiCommand(command: SettingsMultiCommand): void {
       break;
     }
     case 'ungroup': {
+      const result = createSettingsUngroupResult(session.data.value.elements, new Set(selectedElementIds.value));
+      if (result.changed) {
+        session.data.value = {
+          ...session.data.value,
+          elements: result.elements
+        };
+        selectedElementIds.value = result.selectedElementIds;
+        await nextTick();
+        drawingRef.value?.selectElementsByIds(result.selectedElementIds);
+        break;
+      }
+
       drawingRef.value?.ungroupSelection();
       break;
     }
@@ -408,6 +511,170 @@ function handleSettingsMultiCommand(command: SettingsMultiCommand): void {
       break;
     }
   }
+}
+
+/**
+ * 创建多选元素外接框。
+ * @param elements - 目标多选元素列表
+ * @returns 多选外接框，空列表返回 null
+ */
+function createMultiSelectionBounds(elements: DrawingElement[]): MultiSelectionBounds | null {
+  if (elements.length === 0) {
+    return null;
+  }
+
+  const left = Math.min(...elements.map((element: DrawingElement): number => element.position.x));
+  const top = Math.min(...elements.map((element: DrawingElement): number => element.position.y));
+  const right = Math.max(...elements.map((element: DrawingElement): number => element.position.x + element.size.width));
+  const bottom = Math.max(...elements.map((element: DrawingElement): number => element.position.y + element.size.height));
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top
+  };
+}
+
+/**
+ * 规范化布局数值，避免浮点缩放产生过长小数。
+ * @param value - 原始布局数值
+ * @returns 规范化后的布局数值
+ */
+function normalizeMultiSelectLayoutValue(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+/**
+ * 按布局变更创建目标外接框。
+ * @param bounds - 当前外接框
+ * @param layout - 布局变更
+ * @returns 目标外接框，非法尺寸返回 null
+ */
+function createNextMultiSelectionBounds(bounds: MultiSelectionBounds, layout: DrawingMultiSelectLayoutChange): MultiSelectionBounds | null {
+  const nextWidth = layout.width ?? bounds.width;
+  const nextHeight = layout.height ?? bounds.height;
+  if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight) || nextWidth <= 0 || nextHeight <= 0) {
+    return null;
+  }
+
+  return {
+    x: layout.x ?? bounds.x,
+    y: layout.y ?? bounds.y,
+    width: nextWidth,
+    height: nextHeight
+  };
+}
+
+/**
+ * 按目标外接框转换多选元素布局。
+ * @param element - 当前元素
+ * @param currentBounds - 当前外接框
+ * @param nextBounds - 目标外接框
+ * @returns 转换后的元素
+ */
+function transformElementByMultiSelectionBounds(
+  element: DrawingElement,
+  currentBounds: MultiSelectionBounds,
+  nextBounds: MultiSelectionBounds
+): DrawingElement {
+  const scaleX = currentBounds.width === 0 ? 1 : nextBounds.width / currentBounds.width;
+  const scaleY = currentBounds.height === 0 ? 1 : nextBounds.height / currentBounds.height;
+
+  return {
+    ...element,
+    position: {
+      x: normalizeMultiSelectLayoutValue(nextBounds.x + (element.position.x - currentBounds.x) * scaleX),
+      y: normalizeMultiSelectLayoutValue(nextBounds.y + (element.position.y - currentBounds.y) * scaleY)
+    },
+    size: {
+      width: Math.max(1, normalizeMultiSelectLayoutValue(element.size.width * scaleX)),
+      height: Math.max(1, normalizeMultiSelectLayoutValue(element.size.height * scaleY))
+    }
+  };
+}
+
+/**
+ * 批量更新选中元素布局。
+ * @param elements - 当前画图元素列表
+ * @param selectedIds - 当前多选元素 ID 集合
+ * @param layout - 布局变更
+ * @returns 更新布局后的元素列表
+ */
+function updateSelectedElementLayouts(elements: DrawingElement[], selectedIds: Set<string>, layout: DrawingMultiSelectLayoutChange): DrawingElement[] {
+  const selectedElements = elements.filter((element: DrawingElement): boolean => selectedIds.has(element.id));
+  const currentBounds = createMultiSelectionBounds(selectedElements);
+  if (!currentBounds) {
+    return elements;
+  }
+
+  const nextBounds = createNextMultiSelectionBounds(currentBounds, layout);
+  if (!nextBounds) {
+    return elements;
+  }
+
+  return elements.map((element: DrawingElement): DrawingElement => {
+    if (!selectedIds.has(element.id)) {
+      return element;
+    }
+
+    return transformElementByMultiSelectionBounds(element, currentBounds, nextBounds);
+  });
+}
+
+/**
+ * 处理右侧多选面板布局批量变更。
+ * @param layout - 布局变更
+ */
+function handleSettingsMultiLayoutChange(layout: DrawingMultiSelectLayoutChange): void {
+  const selectedIds = new Set(selectedElementIds.value);
+  if (selectedIds.size === 0) {
+    return;
+  }
+
+  session.data.value = {
+    ...session.data.value,
+    elements: updateSelectedElementLayouts(session.data.value.elements, selectedIds, layout)
+  };
+}
+
+/**
+ * 批量合并选中元素样式。
+ * @param elements - 当前画图元素列表
+ * @param selectedIds - 当前多选元素 ID 集合
+ * @param style - 样式变更
+ * @returns 合并样式后的元素列表
+ */
+function mergeSelectedElementStyles(elements: DrawingElement[], selectedIds: Set<string>, style: DrawingElementStyleChange): DrawingElement[] {
+  return elements.map((element: DrawingElement): DrawingElement => {
+    if (!selectedIds.has(element.id)) {
+      return element;
+    }
+
+    return {
+      ...element,
+      style: {
+        ...element.style,
+        ...style
+      }
+    };
+  });
+}
+
+/**
+ * 处理右侧多选面板样式批量变更。
+ * @param style - 样式变更
+ */
+function handleSettingsMultiStyleChange(style: DrawingElementStyleChange): void {
+  const selectedIds = new Set(selectedElementIds.value);
+  if (selectedIds.size === 0) {
+    return;
+  }
+
+  session.data.value = {
+    ...session.data.value,
+    elements: mergeSelectedElementStyles(session.data.value.elements, selectedIds, style)
+  };
 }
 
 /**

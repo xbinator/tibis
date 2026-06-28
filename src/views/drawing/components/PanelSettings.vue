@@ -5,11 +5,13 @@
 <template>
   <aside class="setter-panel">
     <PageSetter v-if="select && !isElementTarget(select)" :drawing-data="drawingData" :metadata="select" />
-    <MultiSelectSetter
+    <BatchSetter
       v-else-if="select === null && selectedElementIds.length > 1"
       :drawing-data="drawingData"
       :selected-element-ids="selectedElementIds"
       @command="emit('multi-command', $event)"
+      @layout-change="emit('multi-layout-change', $event)"
+      @style-change="emit('multi-style-change', $event)"
     />
     <div v-else-if="select === null" class="setter-panel__empty">已选择多个元素</div>
     <template v-else>
@@ -28,13 +30,14 @@
 </template>
 
 <script setup lang="ts">
+import type { DrawingMultiSelectLayoutChange } from '../types';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
 import { getDrawingElementSetter } from '@/components/BDrawing/elements';
-import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingElementStyleChange, DrawingSelectTarget } from '@/components/BDrawing/types';
+import BatchSetter from './BatchSetter.vue';
 import DesignSetter from './DesignSetter.vue';
-import MultiSelectSetter from './MultiSelectSetter.vue';
 import PageSetter from './PageSetter.vue';
 
 /**
@@ -53,6 +56,10 @@ withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   /** 触发多选快捷操作 */
   'multi-command': [command: 'copy' | 'group' | 'ungroup' | 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack' | 'delete'];
+  /** 批量更新多选元素布局 */
+  'multi-layout-change': [layout: DrawingMultiSelectLayoutChange];
+  /** 批量更新多选元素样式 */
+  'multi-style-change': [style: DrawingElementStyleChange];
 }>();
 
 const select = defineModel<DrawingSelectTarget>('select', { default: null });

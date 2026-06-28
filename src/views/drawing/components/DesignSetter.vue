@@ -65,7 +65,7 @@
     </BSectionBlock>
 
     <!-- 边框 -->
-    <BSectionBlock title="边框">
+    <BSectionBlock title="描边">
       <BSectionItem label="线形">
         <BSelect v-model:value="dataItem.style.borderStyle" placeholder="线形" :options="borderStyleOptions" />
       </BSectionItem>

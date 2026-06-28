@@ -435,6 +435,125 @@ describe('DrawingPage', (): void => {
     wrapper.unmount();
   });
 
+  it('ungroups the current settings multi-selection by selected ids', async (): Promise<void> => {
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [
+        createDrawingElement('node-1', '节点 1', 'drawing-group-1'),
+        createDrawingElement('node-2', '节点 2', 'drawing-group-1'),
+        createDrawingElement('node-3', '节点 3', 'drawing-group-2')
+      ]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const drawing = wrapper.findComponent({ name: 'BDrawing' });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+
+    drawing.vm.$emit('selection-change', ['node-1', 'node-2']);
+    await nextTick();
+    panelSettings.vm.$emit('multi-command', 'ungroup');
+    await nextTick();
+
+    expect(drawingDataMock.value.elements[0]?.metadata.groupId).toBeUndefined();
+    expect(drawingDataMock.value.elements[1]?.metadata.groupId).toBeUndefined();
+    expect(drawingDataMock.value.elements[2]?.metadata.groupId).toBe('drawing-group-2');
+    wrapper.unmount();
+  });
+
+  it('applies settings style changes to the current multi-selection only', async (): Promise<void> => {
+    const firstElement = createDrawingElement('node-1', '节点 1');
+    const secondElement = createDrawingElement('node-2', '节点 2');
+    const thirdElement = createDrawingElement('node-3', '节点 3');
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [firstElement, secondElement, thirdElement]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [firstElement, secondElement]);
+    await nextTick();
+
+    wrapper.findComponent({ name: 'PanelSettings' }).vm.$emit('multi-style-change', {
+      backgroundColor: '#fef3c7',
+      borderColor: '#f97316',
+      borderRadius: 6,
+      borderWidth: 2
+    });
+    await nextTick();
+
+    expect(drawingDataMock.value.elements[0]?.style).toEqual({
+      backgroundColor: '#fef3c7',
+      borderColor: '#f97316',
+      borderRadius: 6,
+      borderWidth: 2
+    });
+    expect(drawingDataMock.value.elements[1]?.style).toEqual({
+      backgroundColor: '#fef3c7',
+      borderColor: '#f97316',
+      borderRadius: 6,
+      borderWidth: 2
+    });
+    expect(drawingDataMock.value.elements[2]?.style).toEqual({});
+    expect(wrapper.findComponent({ name: 'PanelSettings' }).props('selectedElementIds')).toEqual(['node-1', 'node-2']);
+    wrapper.unmount();
+  });
+
+  it('applies settings layout changes to the current multi-selection bounds', async (): Promise<void> => {
+    const firstElement = createDrawingElement('node-1', '节点 1');
+    const secondElement = createDrawingElement('node-2', '节点 2');
+    const thirdElement = createDrawingElement('node-3', '节点 3');
+    firstElement.position = { x: 10, y: 20 };
+    firstElement.size = { width: 100, height: 50 };
+    secondElement.position = { x: 40, y: 100 };
+    secondElement.size = { width: 80, height: 60 };
+    drawingDataMock.value = {
+      ...createEmptyDrawingData(),
+      elements: [firstElement, secondElement, thirdElement]
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [firstElement, secondElement]);
+    await nextTick();
+
+    wrapper.findComponent({ name: 'PanelSettings' }).vm.$emit('multi-layout-change', {
+      x: 20,
+      y: 10,
+      width: 220,
+      height: 280
+    });
+    await nextTick();
+
+    expect(drawingDataMock.value.elements[0]?.position).toEqual({ x: 20, y: 10 });
+    expect(drawingDataMock.value.elements[0]?.size).toEqual({ width: 200, height: 100 });
+    expect(drawingDataMock.value.elements[1]?.position).toEqual({ x: 80, y: 170 });
+    expect(drawingDataMock.value.elements[1]?.size).toEqual({ width: 160, height: 120 });
+    expect(drawingDataMock.value.elements[2]?.position).toEqual({ x: 0, y: 0 });
+    expect(drawingDataMock.value.elements[2]?.size).toEqual({ width: 120, height: 80 });
+    wrapper.unmount();
+  });
+
   it('deletes the drawing element when the sidebar layer emits delete', async (): Promise<void> => {
     const selectedElement = createDrawingElement('node-2', '节点 2');
     drawingDataMock.value = {
