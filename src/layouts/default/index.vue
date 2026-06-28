@@ -68,11 +68,11 @@
       </div>
 
       <ChatSider v-show="settingStore.sidebarVisible" />
+
+      <ShortcutsHelp v-model:visible="visible.shortcutsHelp" />
     </div>
 
     <BCommandPanel />
-
-    <ShortcutsHelp v-if="visible.shortcutsHelp" v-model:visible="visible.shortcutsHelp" />
   </div>
 </template>
 
@@ -211,8 +211,7 @@ useEventListener(window, 'resize', validateWindowState);
   flex: 1;
   gap: 6px;
   height: 0;
-  padding-bottom: 6px;
-  margin: 0 6px;
+  margin: 0 6px 6px;
 
   .b-layout__content__main {
     flex: 1;

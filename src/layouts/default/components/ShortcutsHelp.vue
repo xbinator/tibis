@@ -1,50 +1,80 @@
+<!--
+  @file ShortcutsHelp.vue
+  @description 默认布局快捷键帮助抽屉。
+-->
 <template>
-  <ADrawer v-model:open="visible" placement="right" :width="480" :closable="false" :mask-closable="true" :keyboard="true" :get-container="false">
+  <BDrawer v-model:open="visible" :width="500" :get-container="false">
     <template #title>
-      <span>快捷键</span>
+      <div class="shortcuts-help__title">
+        <BIcon icon="lucide:keyboard" :size="17" />
+        <span>快捷键</span>
+      </div>
     </template>
-    <template #extra>
-      <button type="button" class="drawer-close-btn" @click="visible = false">
-        <Icon icon="lucide:x" />
-      </button>
-    </template>
-    <BScrollbar class="shortcuts-dialog">
-      <div v-for="group in shortcutGroups" :key="group.title" class="shortcut-group">
-        <div class="shortcut-group-title" role="heading" aria-level="3">{{ group.title }}</div>
-        <div class="shortcut-list" role="list">
-          <div v-for="item in group.items" :key="item.label" class="shortcut-item" role="listitem" tabindex="0">
-            <span class="shortcut-label">{{ item.label }}</span>
-            <div class="shortcut-keys" :aria-label="`快捷键: ${item.shortcut}`">
-              <kbd v-for="(part, index) in getShortcutParts(item.shortcut)" :key="`${part}-${index}`" class="shortcut-key">
+
+    <div class="shortcuts-help" role="region" aria-label="快捷键速查">
+      <section v-for="group in shortcutGroups" :key="group.title" class="shortcuts-help__group">
+        <div class="shortcuts-help__group-header">
+          <div class="shortcuts-help__group-title-wrap">
+            <span class="shortcuts-help__group-icon">
+              <BIcon :icon="group.icon" :size="14" />
+            </span>
+            <div>
+              <div class="shortcuts-help__group-title" role="heading" aria-level="3">{{ group.title }}</div>
+              <div class="shortcuts-help__group-description">{{ group.description }}</div>
+            </div>
+          </div>
+          <span class="shortcuts-help__group-count">{{ group.items.length }}</span>
+        </div>
+
+        <div class="shortcuts-help__list" role="list">
+          <div v-for="item in group.items" :key="item.label" class="shortcuts-help__item" role="listitem" tabindex="0">
+            <span class="shortcuts-help__label">{{ item.label }}</span>
+            <div class="shortcuts-help__keys" :aria-label="formatShortcutAriaLabel(item.shortcut)">
+              <kbd v-for="(part, index) in getShortcutParts(item.shortcut)" :key="`${part}-${index}`" class="shortcuts-help__key">
                 {{ part }}
               </kbd>
             </div>
           </div>
         </div>
-      </div>
-    </BScrollbar>
-  </ADrawer>
+      </section>
+    </div>
+  </BDrawer>
 </template>
 
 <script setup lang="ts">
-import { Icon } from '@iconify/vue';
-import BScrollbar from '@/components/BScrollbar/index.vue';
 import { EditorShortcuts } from '@/constants/shortcuts';
 import { getShortcutParts } from '@/utils/shortcut';
 
+/**
+ * 快捷键条目。
+ */
 interface ShortcutItem {
+  /** 操作名称 */
   label: string;
+  /** 快捷键组合 */
   shortcut: string;
 }
 
+/**
+ * 快捷键分组。
+ */
 interface ShortcutGroup {
+  /** 分组标题 */
   title: string;
+  /** 分组说明 */
+  description: string;
+  /** 分组图标 */
+  icon: string;
+  /** 分组内快捷键列表 */
   items: ShortcutItem[];
 }
 
+/** 快捷键帮助分组配置。 */
 const shortcutGroups: ShortcutGroup[] = [
   {
     title: '文件操作',
+    description: '新建、打开与保存',
+    icon: 'lucide:file-text',
     items: [
       { label: '新建文件', shortcut: EditorShortcuts.FILE_NEW },
       { label: '打开文件', shortcut: EditorShortcuts.FILE_OPEN },
@@ -57,6 +87,8 @@ const shortcutGroups: ShortcutGroup[] = [
   },
   {
     title: '编辑操作',
+    description: '撤销与重做',
+    icon: 'lucide:pencil-line',
     items: [
       { label: '撤销', shortcut: EditorShortcuts.EDIT_UNDO },
       { label: '重做', shortcut: EditorShortcuts.EDIT_REDO }
@@ -64,108 +96,169 @@ const shortcutGroups: ShortcutGroup[] = [
   },
   {
     title: '视图操作',
+    description: '编辑模式切换',
+    icon: 'lucide:panel-top',
     items: [{ label: '源代码模式', shortcut: EditorShortcuts.VIEW_SOURCE }]
   }
 ];
 
 const visible = defineModel<boolean>('visible', { default: false });
+
+/**
+ * 格式化快捷键的无障碍标签。
+ * @param shortcut - 快捷键字符串
+ * @returns 可读的快捷键说明
+ */
+function formatShortcutAriaLabel(shortcut: string): string {
+  return `快捷键: ${getShortcutParts(shortcut).join(' + ')}`;
+}
 </script>
 
 <style lang="less" scoped>
-.drawer-close-btn {
+.shortcuts-help {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 6px;
+}
+
+.shortcuts-help__title {
   display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-primary);
+}
+
+.shortcuts-help__group-icon {
+  display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  padding: 0;
-  font-size: 16px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  background: transparent;
-  border: none;
+  color: var(--color-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
-  transition: background-color 0.15s ease, color 0.15s ease;
-
-  &:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-  }
 }
 
-.shortcuts-dialog {
-  height: calc(100vh - 110px);
-}
-
-.shortcut-group {
-  margin-bottom: 24px;
-
-  &:last-child {
-    margin-bottom: 4px;
-  }
-}
-
-.shortcut-group-title {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding-bottom: 10px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  border-bottom: 1px solid var(--border-secondary);
-}
-
-.shortcut-list {
+.shortcuts-help__group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-.shortcut-item {
+.shortcuts-help__group-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  min-height: 34px;
 }
 
-.shortcut-label {
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-  user-select: none;
-}
-
-.shortcut-keys {
+.shortcuts-help__group-title-wrap {
   display: flex;
-  flex-shrink: 0;
-  gap: 3px;
+  gap: 9px;
   align-items: center;
-  margin-left: 12px;
+  min-width: 0;
 }
 
-.shortcut-key {
+.shortcuts-help__group-title {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.shortcuts-help__group-description {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+}
+
+.shortcuts-help__group-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
+  min-width: 22px;
   height: 22px;
-  padding: 0 6px;
-  font-family: inherit;
+  padding: 0 7px;
   font-size: 11px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: 650;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 999px;
+}
+
+.shortcuts-help__list {
+  overflow: hidden;
   background: var(--bg-primary);
   border: 1px solid var(--border-primary);
+  border-radius: 8px;
+}
+
+.shortcuts-help__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 10px 8px 12px;
+  outline: none;
+  border-bottom: 1px solid var(--border-secondary);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.shortcuts-help__item:last-child {
+  border-bottom: 0;
+}
+
+.shortcuts-help__item:hover,
+.shortcuts-help__item:focus-visible {
+  background: var(--bg-hover);
+}
+
+.shortcuts-help__item:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.shortcuts-help__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.shortcuts-help__keys {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  align-items: center;
+}
+
+.shortcuts-help__key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 25px;
+  height: 23px;
+  padding: 0 7px;
+  font-family: 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  color: var(--text-primary);
+  letter-spacing: 0;
+  background: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+  border: 1px solid var(--border-primary);
+  border-bottom-color: color-mix(in srgb, var(--border-primary) 65%, var(--text-tertiary));
   border-bottom-width: 2px;
-  border-radius: 4px;
-  box-shadow: 0 1px 0 rgb(0 0 0 / 8%), inset 0 1px 0 rgb(255 255 255 / 6%);
-  transition: box-shadow 0.1s ease;
+  border-radius: 5px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 1px 1px rgb(0 0 0 / 6%);
 }
 </style>
