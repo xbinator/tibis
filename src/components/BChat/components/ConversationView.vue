@@ -177,7 +177,7 @@ defineExpose({ scrollToBottom });
   display: flex;
   flex-direction: column-reverse;
   height: 100%;
-  padding: 12px;
+  padding: 12px 6px 12px 12px;
   overflow-y: auto;
   scrollbar-gutter: stable;
 
