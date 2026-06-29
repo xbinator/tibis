@@ -28,10 +28,11 @@
           />
         </template>
         <template #extra>
-          <BButton size="mini" type="secondary" @click="openSchemaEditor('input')">编辑</BButton>
+          <BButton icon="lucide:plus" size="mini" type="secondary" @click="addRootSchemaField('input')">添加字段</BButton>
+          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('input')">JSON导入</BButton>
         </template>
         <div class="schema-body">
-          <pre class="schema-preview">{{ inputSchemaPreview }}</pre>
+          <SchemaTreeEditor v-model:schema="inputSchema" />
         </div>
       </BSectionBlock>
 
@@ -58,10 +59,11 @@
           />
         </template>
         <template #extra>
-          <BButton size="mini" type="secondary" @click="openSchemaEditor('output')">编辑</BButton>
+          <BButton icon="lucide:plus" size="mini" type="secondary" @click="addRootSchemaField('output')">添加字段</BButton>
+          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('output')">JSON导入</BButton>
         </template>
         <div class="schema-body">
-          <pre class="schema-preview">{{ outputSchemaPreview }}</pre>
+          <SchemaTreeEditor v-model:schema="outputSchema" />
         </div>
       </BSectionBlock>
 
@@ -88,19 +90,21 @@
     </ATabPane>
   </ATabs>
 
-  <SchemaEditor v-model:open="schemaEditorOpen" :kind="activeSchemaKind" :schema="activeSchema" @confirm="handleSchemaEditorConfirm" />
+  <SchemaInputEditor v-model:open="schemaInputEditorOpen" :kind="activeSchemaKind" :schema="activeSchema" @confirm="handleSchemaInputEditorConfirm" />
   <MethodEditor v-model:open="methodEditorOpen" :code="mainMethodCode" @confirm="handleMethodEditorConfirm" />
   <SchemaHelp v-model:open="schemaHelpDrawerOpen" :kind="activeSchemaHelpKind" />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { DrawingData, DrawingRenderContext, DrawingSchemaObject, DrawingSkillMethod } from '@/components/BDrawing/types';
+import { cloneDeep } from 'lodash-es';
+import type { DrawingData, DrawingRenderContext, DrawingSchemaObject, DrawingSchemaProperty, DrawingSkillMethod } from '@/components/BDrawing/types';
 import type { DrawingSchemaKind } from '@/components/BDrawing/utils/drawingData';
 import { readDrawingPreviewRenderContext, writeDrawingPreviewRenderContext } from '@/components/BDrawing/utils/drawingPreviewContext';
 import MethodEditor from './PageSetter/MethodEditor.vue';
-import SchemaEditor from './PageSetter/SchemaEditor.vue';
 import SchemaHelp from './PageSetter/SchemaHelp.vue';
+import SchemaInputEditor from './PageSetter/SchemaInputEditor.vue';
+import SchemaTreeEditor from './PageSetter/SchemaTreeEditor.vue';
 
 /**
  * 预览上下文 JSON 解析成功结果。
@@ -129,6 +133,8 @@ type PreviewContextParseResult = PreviewContextParseSuccess | PreviewContextPars
 const DRAWING_SKILL_EXECUTE_METHOD_NAME = 'execute';
 /** Drawing Skill 默认方法超时时间。 */
 const DRAWING_SKILL_DEFAULT_METHOD_TIMEOUT = 10000;
+/** Schema 默认新增字段名。 */
+const DEFAULT_SCHEMA_FIELD_NAME = 'field';
 /** Drawing Skill 默认方法代码。 */
 const DRAWING_SKILL_DEFAULT_METHOD_CODE = [
   'export async function execute(ctx: DrawingSkillContext): Promise<ExecutionResult> {',
@@ -148,8 +154,8 @@ const DRAWING_SKILL_DEFAULT_METHOD_CODE = [
 
 const drawingData = defineModel<DrawingData>('value', { required: true });
 
-/** Schema 编辑弹窗开关状态。 */
-const schemaEditorOpen = ref(false);
+/** Schema JSON 编辑弹窗开关状态。 */
+const schemaInputEditorOpen = ref(false);
 /** 执行方法编辑弹窗开关。 */
 const methodEditorOpen = ref(false);
 /** 当前编辑的 schema 类型。 */
@@ -216,6 +222,50 @@ function readDrawingSkillMethod(value: unknown): DrawingSkillMethod {
     timeout: typeof value.timeout === 'number' && Number.isFinite(value.timeout) ? value.timeout : DRAWING_SKILL_DEFAULT_METHOD_TIMEOUT,
     code: typeof value.code === 'string' && value.code.trim().length > 0 ? value.code : DRAWING_SKILL_DEFAULT_METHOD_CODE
   };
+}
+
+/**
+ * 创建默认 schema 字段。
+ * @returns 默认 schema 字段
+ */
+function createDefaultSchemaField(): DrawingSchemaProperty {
+  return { type: 'string' };
+}
+
+/**
+ * 创建根级唯一 schema 字段名。
+ * @param schema - schema 对象
+ * @returns 唯一字段名
+ */
+function createUniqueRootSchemaFieldName(schema: DrawingSchemaObject): string {
+  if (!Object.prototype.hasOwnProperty.call(schema.properties, DEFAULT_SCHEMA_FIELD_NAME)) {
+    return DEFAULT_SCHEMA_FIELD_NAME;
+  }
+
+  let index = 1;
+  while (Object.prototype.hasOwnProperty.call(schema.properties, `${DEFAULT_SCHEMA_FIELD_NAME}${index}`)) {
+    index += 1;
+  }
+
+  return `${DEFAULT_SCHEMA_FIELD_NAME}${index}`;
+}
+
+/**
+ * 添加根级 schema 字段。
+ * @param kind - schema 类型
+ */
+function addRootSchemaField(kind: DrawingSchemaKind): void {
+  const nextSchema = cloneDeep(kind === 'input' ? drawingData.value.inputSchema : drawingData.value.outputSchema);
+  const fieldName = createUniqueRootSchemaFieldName(nextSchema);
+
+  nextSchema.properties[fieldName] = createDefaultSchemaField();
+
+  if (kind === 'input') {
+    updateDrawingDataConfig({ inputSchema: nextSchema });
+    return;
+  }
+
+  updateDrawingDataConfig({ outputSchema: nextSchema });
 }
 
 /**
@@ -419,6 +469,38 @@ const drawingDescription = computed<string>({
   }
 });
 
+/** 入参 schema。 */
+const inputSchema = computed<DrawingSchemaObject>({
+  /**
+   * 读取入参 schema。
+   * @returns 入参 schema
+   */
+  get: (): DrawingSchemaObject => drawingData.value.inputSchema,
+  /**
+   * 写入入参 schema。
+   * @param value - 新入参 schema
+   */
+  set: (value: DrawingSchemaObject): void => {
+    updateDrawingDataConfig({ inputSchema: value });
+  }
+});
+
+/** 出参 schema。 */
+const outputSchema = computed<DrawingSchemaObject>({
+  /**
+   * 读取出参 schema。
+   * @returns 出参 schema
+   */
+  get: (): DrawingSchemaObject => drawingData.value.outputSchema,
+  /**
+   * 写入出参 schema。
+   * @param value - 新出参 schema
+   */
+  set: (value: DrawingSchemaObject): void => {
+    updateDrawingDataConfig({ outputSchema: value });
+  }
+});
+
 /** 当前 execute 方法。 */
 const mainMethod = computed<DrawingSkillMethod>({
   /**
@@ -455,21 +537,12 @@ const mainMethodCode = computed<string>({
 });
 
 /**
- * 格式化 schema 为预览 JSON 文本。
- * @param schema - schema 对象
- * @returns JSON 文本
- */
-function formatSchemaText(schema: DrawingSchemaObject): string {
-  return JSON.stringify(schema, null, 2);
-}
-
-/**
- * 打开 Schema 编辑弹窗。
+ * 打开 Schema JSON 编辑弹窗。
  * @param kind - schema 类型
  */
-function openSchemaEditor(kind: DrawingSchemaKind): void {
+function openSchemaInputEditor(kind: DrawingSchemaKind): void {
   activeSchemaKind.value = kind;
-  schemaEditorOpen.value = true;
+  schemaInputEditorOpen.value = true;
 }
 
 /**
@@ -492,7 +565,7 @@ function openSchemaHelp(kind: DrawingSchemaKind): void {
  * 保存指定类型的 Schema。
  * @param schema - 标准化后的 schema
  */
-function handleSchemaEditorConfirm(schema: DrawingSchemaObject): void {
+function handleSchemaInputEditorConfirm(schema: DrawingSchemaObject): void {
   if (activeSchemaKind.value === 'input') {
     updateDrawingDataConfig({ inputSchema: schema });
     return;
@@ -511,10 +584,6 @@ function handleMethodEditorConfirm(code: string): void {
 
 /** 当前正在编辑的 Schema。 */
 const activeSchema = computed<DrawingSchemaObject>(() => (activeSchemaKind.value === 'input' ? drawingData.value.inputSchema : drawingData.value.outputSchema));
-/** 入参 schema 预览文本。 */
-const inputSchemaPreview = computed<string>(() => formatSchemaText(drawingData.value.inputSchema));
-/** 出参 schema 预览文本。 */
-const outputSchemaPreview = computed<string>(() => formatSchemaText(drawingData.value.outputSchema));
 
 watch(() => drawingData.value.metadata, syncPreviewContextText, { deep: true, immediate: true });
 </script>
@@ -539,21 +608,6 @@ watch(() => drawingData.value.metadata, syncPreviewContextText, { deep: true, im
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.schema-preview {
-  max-height: 140px;
-  padding: 8px;
-  margin: 0;
-  overflow: auto;
-  font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace);
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
 }
 
 .preview-context-error {

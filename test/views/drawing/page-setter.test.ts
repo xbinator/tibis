@@ -4,9 +4,10 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
+import { readFileSync } from 'node:fs';
 import { defineComponent, nextTick, ref } from 'vue';
 import type { ComponentPublicInstance, Ref } from 'vue';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
 import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
@@ -30,6 +31,10 @@ const globalStubs = {
   AInput: defineComponent({
     name: 'AInputStub',
     props: {
+      size: {
+        type: String,
+        default: undefined
+      },
       value: {
         type: String,
         default: ''
@@ -81,6 +86,31 @@ const globalStubs = {
       return { handleBlur, handleInput };
     },
     template: '<textarea :value="value" @blur="handleBlur" @input="handleInput"></textarea>'
+  }),
+  ACheckbox: defineComponent({
+    name: 'ACheckboxStub',
+    props: {
+      checked: {
+        type: Boolean,
+        default: false
+      }
+    },
+    emits: ['change', 'update:checked'],
+    setup(_props, { emit }) {
+      /**
+       * 将原生 checkbox 事件转换为 ACheckbox 的 checked 更新事件。
+       * @param event - 原生变更事件
+       */
+      function handleChange(event: Event): void {
+        if (event.target instanceof HTMLInputElement) {
+          emit('update:checked', event.target.checked);
+          emit('change', event.target.checked);
+        }
+      }
+
+      return { handleChange };
+    },
+    template: '<label class="a-checkbox-stub"><input type="checkbox" :checked="checked" @change="handleChange" /><slot></slot></label>'
   }),
   BDrawer: defineComponent({
     name: 'BDrawerStub',
@@ -293,6 +323,39 @@ const globalStubs = {
       }
     },
     template: '<label><span>{{ label }}</span><slot></slot></label>'
+  }),
+  BSelect: defineComponent({
+    name: 'BSelectStub',
+    props: {
+      options: {
+        type: Array,
+        default: (): unknown[] => []
+      },
+      value: {
+        type: String,
+        default: ''
+      }
+    },
+    emits: ['change', 'update:value'],
+    setup(_props, { emit }) {
+      /**
+       * 将原生 select 事件转换为 BSelect 的 value 更新事件。
+       * @param event - 原生变更事件
+       */
+      function handleChange(event: Event): void {
+        if (event.target instanceof HTMLSelectElement) {
+          emit('update:value', event.target.value);
+          emit('change', event.target.value);
+        }
+      }
+
+      return { handleChange };
+    },
+    template: `
+      <select class="b-select-stub" :data-options="options.map((option) => option.label).join('|')" :value="value" @change="handleChange">
+        <option v-for="option in options" :key="option.value" :value="option.value">{{ option.label }}</option>
+      </select>
+    `
   })
 };
 
@@ -449,6 +512,38 @@ function findSectionEditButton(wrapper: VueWrapper<PageSetterHostVm>, title: str
 }
 
 /**
+ * 查找指定区块内的 JSON 导入按钮。
+ * @param wrapper - PageSetter 测试包装器
+ * @param title - 区块标题
+ * @returns 按钮包装器
+ */
+function findSectionJsonImportButton(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
+  const section = findSectionBlock(wrapper, title);
+  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => item.text() === 'JSON导入');
+  if (!button) {
+    throw new Error(`区块缺少 JSON 导入按钮：${title}`);
+  }
+
+  return button;
+}
+
+/**
+ * 查找指定区块内的添加字段按钮。
+ * @param wrapper - PageSetter 测试包装器
+ * @param title - 区块标题
+ * @returns 按钮包装器
+ */
+function findSectionAddFieldButton(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
+  const section = findSectionBlock(wrapper, title);
+  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => item.text().includes('添加字段'));
+  if (!button) {
+    throw new Error(`区块缺少添加字段按钮：${title}`);
+  }
+
+  return button;
+}
+
+/**
  * 查找指定区块标题旁边的说明图标。
  * @param wrapper - PageSetter 测试包装器
  * @param title - 区块标题
@@ -471,7 +566,127 @@ function findSectionHelpIcon(wrapper: VueWrapper<PageSetterHostVm>, title: strin
   return icon;
 }
 
+/**
+ * 查找指定字段名对应的 schema 字段行。
+ * @param section - Schema 所在区块
+ * @param name - schema 字段名
+ * @returns 字段行包装器
+ */
+function findSchemaRow(section: VueWrapper, name: string): DOMWrapper<Element> {
+  const row = section.findAll('.schema-editor__row').find((item: DOMWrapper<Element>): boolean => {
+    const input = item.find('.schema-editor__name-input input');
+
+    return input.exists() && (input.element as HTMLInputElement).value === name;
+  });
+  if (!row) {
+    throw new Error(`未找到 Schema 字段行：${name}`);
+  }
+
+  return row;
+}
+
+/**
+ * 判断指定字段名对应的 schema 字段行是否存在。
+ * @param section - Schema 所在区块
+ * @param name - schema 字段名
+ * @returns 字段行是否存在
+ */
+function hasSchemaRow(section: VueWrapper, name: string): boolean {
+  return section.findAll('.schema-editor__row').some((item: DOMWrapper<Element>): boolean => {
+    const input = item.find('.schema-editor__name-input input');
+
+    return input.exists() && (input.element as HTMLInputElement).value === name;
+  });
+}
+
+/**
+ * 读取指定 CSS 选择器对应的首个样式块。
+ * @param source - Vue 文件源码
+ * @param selector - CSS 选择器
+ * @returns 样式块内容
+ */
+function readStyleBlock(source: string, selector: string): string {
+  const blockStart = source.indexOf(`${selector} {`);
+  if (blockStart < 0) {
+    return '';
+  }
+
+  const openingBraceIndex = source.indexOf('{', blockStart);
+  let blockDepth = 0;
+  let blockEnd = source.length;
+
+  for (let index = openingBraceIndex; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '{') {
+      blockDepth += 1;
+    }
+
+    if (character === '}') {
+      blockDepth -= 1;
+      if (blockDepth === 0) {
+        blockEnd = index + 1;
+        break;
+      }
+    }
+  }
+
+  return source.slice(blockStart, blockEnd);
+}
+
 describe('PageSetter', (): void => {
+  it('keeps the schema editor row layout flexible without grid columns', (): void => {
+    const source = readFileSync('src/views/drawing/components/PageSetter/SchemaTreeEditor.vue', 'utf-8');
+    const rowStyle = readStyleBlock(source, '.schema-editor__row');
+
+    expect(rowStyle).toContain('display: flex;');
+    expect(rowStyle).not.toContain('display: grid;');
+    expect(rowStyle).not.toContain('grid-template-columns');
+  });
+
+  it('aligns schema header and rows on shared flex columns without is-fill', (): void => {
+    const source = readFileSync('src/views/drawing/components/PageSetter/SchemaTreeEditor.vue', 'utf-8');
+
+    expect(source).not.toContain('is-fill');
+    expect(readStyleBlock(source, '.schema-editor__header')).toContain('display: flex;');
+    expect(readStyleBlock(source, '.schema-editor__header')).not.toContain('grid-template-columns');
+    expect(readStyleBlock(source, '.schema-editor__header-name')).toContain('flex: 1 1 132px;');
+    expect(readStyleBlock(source, '.schema-editor__name-cell')).toContain('flex: 1 1 132px;');
+    expect(readStyleBlock(source, '.schema-editor')).toContain('--schema-editor-type-width: 100px;');
+    expect(readStyleBlock(source, '.schema-editor__header-type')).toContain('width: var(--schema-editor-type-width);');
+    expect(readStyleBlock(source, '.schema-editor__header-type')).not.toContain('flex: 0 1 220px;');
+    expect(readStyleBlock(source, '.schema-editor__type-select')).not.toContain('flex: 0 1 220px;');
+    expect(readStyleBlock(source, '.schema-editor__type-select')).toContain('width: var(--schema-editor-type-width);');
+    expect(readStyleBlock(source, '.schema-editor__header-controls')).toContain('flex: 0 0 60px;');
+    expect(readStyleBlock(source, '.schema-editor__header-controls')).toContain('grid-template-columns: 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__header-controls')).toContain('grid-template-columns: 28px 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__controls')).toContain('flex: 0 0 60px;');
+    expect(readStyleBlock(source, '.schema-editor__controls')).toContain('grid-template-columns: 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__controls')).toContain('grid-template-columns: 28px 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__header-controls')).not.toContain('40px');
+    expect(readStyleBlock(source, '.schema-editor__controls')).not.toContain('40px');
+    expect(source).not.toContain('schema-editor__required');
+    expect(source).not.toContain('schema-editor__action');
+    expect(source).not.toContain('schema-editor__action-placeholder');
+    expect(source).not.toContain('schema-editor__header-name-label');
+  });
+
+  it('keeps schema input and type selector text at 12px', (): void => {
+    const source = readFileSync('src/views/drawing/components/PageSetter/SchemaTreeEditor.vue', 'utf-8');
+
+    const typeSelectorFontSizePattern = new RegExp(
+      [
+        String.raw`\.schema-editor__type-select :deep\(\.b-select\),`,
+        String.raw`\s*\.schema-editor__type-select :deep\(\.ant-select-selector\),`,
+        String.raw`\s*\.schema-editor__type-select :deep\(\.ant-select-selection-item\),`,
+        String.raw`\s*\.schema-editor__type-select :deep\(select\) \{[^}]*font-size: 12px;`
+      ].join(''),
+      'u'
+    );
+
+    expect(source).toMatch(/\.schema-editor__name-input :deep\(\.ant-input\),\s*\.schema-editor__name-input :deep\(input\) \{[^}]*font-size: 12px;/);
+    expect(source).toMatch(typeSelectorFontSizePattern);
+  });
+
   it('edits drawing name and description on the selected page', async (): Promise<void> => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
@@ -489,25 +704,48 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('shows schemas as preview blocks and opens an input schema dialog for editing', async (): Promise<void> => {
+  it('shows schemas as inline tree editors and opens an input schema dialog for advanced editing', async (): Promise<void> => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
+    const inputSection = findSectionBlock(wrapper, '入参');
+    const outputSection = findSectionBlock(wrapper, '出参');
 
     expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(3);
     expect(findSectionBlock(wrapper, '动态预览').exists()).toBe(true);
-    expect(wrapper.findAll('.schema-body > span')).toHaveLength(0);
+    expect(wrapper.find('.schema-preview').exists()).toBe(false);
+    expect(inputSection.find('.schema-editor').exists()).toBe(true);
+    expect(outputSection.find('.schema-editor').exists()).toBe(true);
+    expect(inputSection.find('.schema-editor').html()).not.toContain('data-schema');
+    expect(inputSection.findAll('.schema-editor__row')).toHaveLength(3);
+    expect(outputSection.findAll('.schema-editor__row')).toHaveLength(3);
+    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__name-input input').element).toHaveProperty('value', 'city');
+    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__name-input').classes()).not.toContain('is-fill');
+    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__type-select select').attributes('data-options')).toBe(
+      'String|Number|Boolean|Object|Array'
+    );
+    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__toggle-placeholder').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'city').find('[data-tooltip="添加子字段"]').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__action-spacer').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__controls').exists()).toBe(true);
+    expect(findSchemaRow(inputSection, 'city').findAll('.schema-editor__control-cell')).toHaveLength(2);
+    expect(inputSection.find('.schema-editor__footer').exists()).toBe(false);
     expect(wrapper.text()).toContain('入参');
     expect(wrapper.text()).toContain('出参');
     expect(wrapper.text()).not.toContain('inputSchema');
     expect(wrapper.text()).not.toContain('outputSchema');
-    expect(wrapper.find('.schema-preview').text()).toContain('"type": "object"');
 
-    const editButton = findSectionEditButton(wrapper, '入参');
-    expect((editButton.props() as { size?: string }).size).toBe('mini');
+    const addButton = findSectionAddFieldButton(wrapper, '入参');
+    const importButton = findSectionJsonImportButton(wrapper, '入参');
+    expect((addButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:plus');
+    expect((addButton.props() as { size?: string }).size).toBe('mini');
+    expect((importButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:file-json');
+    expect((importButton.props() as { size?: string }).size).toBe('mini');
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__help').findComponent({ name: 'BIconStub' }).exists()).toBe(true);
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).toContain('编辑');
+    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).toContain('添加字段');
+    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).toContain('JSON导入');
+    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).not.toContain('+ 添加字段');
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').findComponent({ name: 'BIconStub' }).exists()).toBe(false);
-    await editButton.trigger('click');
+    await importButton.trigger('click');
     expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑入参');
 
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
@@ -534,6 +772,96 @@ describe('PageSetter', (): void => {
     });
     expect(wrapper.vm.drawingData.inputSchema.required).toEqual(['userName']);
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('edits schema fields inline from the page setter tree editor', async (): Promise<void> => {
+    const drawingData = createDrawingData();
+    const wrapper = mountPageSetterHost(drawingData);
+    const inputSection = findSectionBlock(wrapper, '入参');
+
+    await findSchemaRow(inputSection, 'city').find('.schema-editor__name-input input').setValue('location');
+
+    expect(wrapper.vm.drawingData.inputSchema.properties.city).toBeUndefined();
+    expect(wrapper.vm.drawingData.inputSchema.properties.location).toEqual({
+      type: 'string',
+      description: '城市名称，例如上海'
+    });
+    expect(wrapper.vm.drawingData.inputSchema.required).toEqual(['location']);
+
+    const locationRequiredInput = findSchemaRow(inputSection, 'location').findAll('.schema-editor__control-cell')[0]?.find('input');
+    if (!locationRequiredInput || !locationRequiredInput.exists()) {
+      throw new Error('缺少必填勾选框');
+    }
+    (locationRequiredInput.element as HTMLInputElement).checked = false;
+    await locationRequiredInput.trigger('change');
+
+    expect(wrapper.vm.drawingData.inputSchema.required).toEqual([]);
+
+    await findSchemaRow(inputSection, 'date').find('.schema-editor__type-select select').setValue('object');
+
+    expect(wrapper.vm.drawingData.inputSchema.properties.date).toEqual({
+      type: 'object',
+      description: '查询日期，例如今天或明天',
+      properties: {},
+      required: []
+    });
+    expect(findSchemaRow(inputSection, 'date').classes()).toContain('is-object');
+    expect(findSchemaRow(inputSection, 'date').find('.schema-editor__toggle').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'location').find('.schema-editor__toggle-placeholder').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'date').findAll('.schema-editor__control-cell')).toHaveLength(3);
+    expect(findSchemaRow(inputSection, 'date').find('[data-tooltip="添加子字段"]').attributes('data-icon')).toBe('lucide:git-branch-plus');
+
+    await findSchemaRow(inputSection, 'date').find('[data-tooltip="添加子字段"]').trigger('click');
+
+    expect(wrapper.vm.drawingData.inputSchema.properties.date.properties?.field).toEqual({
+      type: 'string'
+    });
+    expect(findSchemaRow(inputSection, 'field').exists()).toBe(true);
+    expect(findSchemaRow(inputSection, 'date').find('.schema-editor__toggle').exists()).toBe(true);
+    expect(findSchemaRow(inputSection, 'location').find('.schema-editor__toggle-placeholder').exists()).toBe(true);
+    expect(inputSection.find('.schema-editor__header-toggle-placeholder').exists()).toBe(true);
+    expect(inputSection.find('.schema-editor__header-name').text()).toBe('变量名');
+
+    await findSchemaRow(inputSection, 'date').find('.schema-editor__toggle').trigger('click');
+
+    expect(hasSchemaRow(inputSection, 'field')).toBe(false);
+
+    await findSchemaRow(inputSection, 'date').find('.schema-editor__toggle').trigger('click');
+    await findSchemaRow(inputSection, 'field').find('[data-tooltip="删除字段"]').trigger('click');
+
+    expect(wrapper.vm.drawingData.inputSchema.properties.date.properties?.field).toBeUndefined();
+
+    await findSectionAddFieldButton(wrapper, '入参').trigger('click');
+
+    expect(wrapper.vm.drawingData.inputSchema.properties.field).toEqual({
+      type: 'string'
+    });
+    wrapper.unmount();
+  });
+
+  it('keeps dotted schema field names editable as a single path segment', async (): Promise<void> => {
+    const drawingData = createDrawingData();
+    drawingData.inputSchema = {
+      type: 'object',
+      properties: {
+        'temperature.celsius': {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      required: []
+    };
+    const wrapper = mountPageSetterHost(drawingData);
+    const inputSection = findSectionBlock(wrapper, '入参');
+
+    await findSchemaRow(inputSection, 'temperature.celsius').find('[data-tooltip="添加子字段"]').trigger('click');
+
+    expect(wrapper.vm.drawingData.inputSchema.properties['temperature.celsius'].properties?.field).toEqual({
+      type: 'string'
+    });
+    expect(findSchemaRow(inputSection, 'field').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -574,7 +902,7 @@ describe('PageSetter', (): void => {
 
     expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('入参'));
     expect(sectionTitles.indexOf('执行方法')).toBeLessThan(sectionTitles.indexOf('出参'));
-    expect(methodSection.text()).toContain('AI 触发这个画布时，会执行这里配置的方法');
+    expect(methodSection.text()).toContain('触发这个画布时，会执行这里配置的方法');
     expect(methodSection.text()).not.toContain('export async function execute(ctx)');
     expect(
       wrapper.findAllComponents({ name: 'ATabPaneStub' }).map((pane: VueWrapper): string | undefined => (pane.props() as { tab?: string }).tab)
@@ -642,12 +970,13 @@ describe('PageSetter', (): void => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
 
-    const editButton = findSectionEditButton(wrapper, '出参');
-    expect((editButton.props() as { size?: string }).size).toBe('mini');
+    const importButton = findSectionJsonImportButton(wrapper, '出参');
+    expect((importButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:file-json');
+    expect((importButton.props() as { size?: string }).size).toBe('mini');
     expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__help').findComponent({ name: 'BIconStub' }).exists()).toBe(true);
-    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').text()).toContain('编辑');
+    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').text()).toContain('JSON导入');
     expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').findComponent({ name: 'BIconStub' }).exists()).toBe(false);
-    await editButton.trigger('click');
+    await importButton.trigger('click');
     expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑出参');
 
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
@@ -680,7 +1009,7 @@ describe('PageSetter', (): void => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
 
-    await findSectionEditButton(wrapper, '出参').trigger('click');
+    await findSectionJsonImportButton(wrapper, '出参').trigger('click');
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue('   ');
     await nextTick();
     await wrapper
@@ -714,7 +1043,7 @@ describe('PageSetter', (): void => {
     const previousInputSchema = drawingData.inputSchema;
     const wrapper = mountPageSetterHost(drawingData);
 
-    await findSectionEditButton(wrapper, '入参').trigger('click');
+    await findSectionJsonImportButton(wrapper, '入参').trigger('click');
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue('{broken');
     await nextTick();
     await wrapper

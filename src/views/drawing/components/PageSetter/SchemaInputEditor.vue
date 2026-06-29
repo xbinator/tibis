@@ -1,5 +1,5 @@
 <!--
-  @file SchemaEditor.vue
+  @file SchemaInputEditor.vue
   @description 画图页面 Schema JSON 编辑弹窗。
 -->
 <template>
@@ -7,7 +7,7 @@
     <div class="schema-editor">
       <div class="schema-editor__host">
         <BMonaco
-          ref="schemaEditorRef"
+          ref="schemaInputEditorRef"
           v-model:value="schemaDraftText"
           language="json"
           :editable="true"
@@ -15,8 +15,8 @@
           :options="{ wordWrap: true, search: false }"
         />
       </div>
-      <p v-if="schemaEditorError" class="schema-editor__error">
-        {{ schemaEditorError }}
+      <p v-if="schemaInputEditorError" class="schema-editor__error">
+        {{ schemaInputEditorError }}
       </p>
     </div>
 
@@ -61,10 +61,10 @@ const open = defineModel<boolean>('open', { required: true });
 
 /** Schema 编辑器草稿文本。 */
 const schemaDraftText = ref('');
-/** Schema 编辑器校验错误提示。 */
-const schemaEditorError = ref('');
-/** Schema Monaco 编辑器实例。 */
-const schemaEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
+/** Schema 输入编辑器校验错误提示。 */
+const schemaInputEditorError = ref('');
+/** Schema 输入 Monaco 编辑器实例。 */
+const schemaInputEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
 
 /**
  * 读取 schema 中文标题。
@@ -115,14 +115,14 @@ function parseSchemaText(value: string, kind: DrawingSchemaKind): DrawingSchemaO
 }
 
 /**
- * 聚焦 Schema 编辑器。
+ * 聚焦 Schema 输入编辑器。
  */
-function focusSchemaEditor(): void {
-  if (!schemaEditorRef.value || typeof schemaEditorRef.value.focusEditor !== 'function') {
+function focusSchemaInputEditor(): void {
+  if (!schemaInputEditorRef.value || typeof schemaInputEditorRef.value.focusEditor !== 'function') {
     return;
   }
 
-  schemaEditorRef.value.focusEditor();
+  schemaInputEditorRef.value.focusEditor();
 }
 
 /**
@@ -131,10 +131,10 @@ function focusSchemaEditor(): void {
  */
 async function resetSchemaDraft(): Promise<void> {
   schemaDraftText.value = formatSchemaText(props.schema);
-  schemaEditorError.value = '';
+  schemaInputEditorError.value = '';
 
   await nextTick();
-  focusSchemaEditor();
+  focusSchemaInputEditor();
 }
 
 /**
@@ -142,7 +142,7 @@ async function resetSchemaDraft(): Promise<void> {
  */
 function handleEditorCancel(): void {
   open.value = false;
-  schemaEditorError.value = '';
+  schemaInputEditorError.value = '';
 }
 
 /**
@@ -153,9 +153,9 @@ function handleEditorConfirm(): void {
     const schema = parseSchemaText(schemaDraftText.value, props.kind);
     emit('confirm', schema);
     open.value = false;
-    schemaEditorError.value = '';
+    schemaInputEditorError.value = '';
   } catch (_error: unknown) {
-    schemaEditorError.value = 'Schema 必须是合法 JSON 对象';
+    schemaInputEditorError.value = 'Schema 必须是合法 JSON 对象';
   }
 }
 
