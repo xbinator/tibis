@@ -29,7 +29,7 @@
         </template>
         <template #extra>
           <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField('input')" />
-          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('input')">编辑</BButton>
+          <BButton size="mini" type="secondary" @click="openSchemaInputEditor('input')">编辑</BButton>
         </template>
         <div class="schema-body">
           <SchemaTreeEditor v-model:schema="inputSchema" />
@@ -51,7 +51,7 @@
         </template>
         <template #extra>
           <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField('output')" />
-          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('output')">编辑</BButton>
+          <BButton size="mini" type="secondary" @click="openSchemaInputEditor('output')">编辑</BButton>
         </template>
         <div class="schema-body">
           <SchemaTreeEditor v-model:schema="outputSchema" />

@@ -747,7 +747,6 @@ describe('PageSetter', (): void => {
     const editButton = findSectionSchemaEditButton(wrapper, '入参');
     expect((addButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:plus');
     expect((addButton.props() as { size?: string }).size).toBe('mini');
-    expect((editButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:file-json');
     expect((editButton.props() as { size?: string }).size).toBe('mini');
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__help').findComponent({ name: 'BIconStub' }).exists()).toBe(true);
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).not.toContain('添加字段');
@@ -937,11 +936,9 @@ describe('PageSetter', (): void => {
     const wrapper = mountPageSetterHost(dataItem);
     const sectionTitles = readSectionBlockTitles(wrapper);
     const methodSection = findSectionBlock(wrapper, '执行方法');
-    const nextCode = [
-      'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
-      '  return ctx.result.success(ctx.input)',
-      '}'
-    ].join('\n');
+    const nextCode = ['export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {', '  return ctx.result.success(ctx.input)', '}'].join(
+      '\n'
+    );
 
     expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('入参'));
     expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('出参'));
@@ -1024,7 +1021,6 @@ describe('PageSetter', (): void => {
     const wrapper = mountPageSetterHost(dataItem);
 
     const editButton = findSectionSchemaEditButton(wrapper, '出参');
-    expect((editButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:file-json');
     expect((editButton.props() as { size?: string }).size).toBe('mini');
     expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__help').findComponent({ name: 'BIconStub' }).exists()).toBe(true);
     expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').text()).not.toContain('JSON导入');
