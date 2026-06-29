@@ -39,7 +39,7 @@ const COMPONENT_DIRS = [
   'BTruncateText',
   'BImageViewer',
   'BUpload',
-  'BDrawing',
+  'BWidget',
   'BColorPicker',
   'BSection',
   'BDrawer'
