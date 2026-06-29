@@ -10,7 +10,7 @@
       </template>
     </div>
 
-    <BPanelSplitter v-model:size="size" position="right" :min-width="300" :max-width="480" @close="handleSplitterClose">
+    <BPanelSplitter v-model:size="size" position="right" :min-width="200" :max-width="300" @close="handleSplitterClose">
       <div class="sidebar-panel__content">
         <header class="sidebar-panel__panel-header">
           <h2 class="sidebar-panel__panel-title">{{ activePanelTitle }}</h2>
@@ -84,8 +84,11 @@ withDefaults(defineProps<Props>(), {
   selectedElementIds: (): string[] => []
 });
 
+/** 内容区默认宽度；侧栏关闭后点击 tab 时恢复到该值。 */
+const SIDEBAR_DEFAULT_SIZE = 240;
+
 /** 内容区宽度（内部状态），为 0 时表示侧栏已关闭。 */
-const size = ref(320);
+const size = ref(SIDEBAR_DEFAULT_SIZE);
 
 const emit = defineEmits<{
   /** 选择侧栏图层元素 */
@@ -124,9 +127,6 @@ const sidebarTabs: WidgetSidebarTab[] = [
   { key: 'tools', label: '组件', icon: 'lucide:box' },
   { key: 'layers', label: '图层', icon: 'lucide:layers' }
 ];
-
-/** 内容区默认宽度；侧栏关闭后点击 tab 时恢复到该值。 */
-const SIDEBAR_DEFAULT_SIZE = 320;
 
 /**
  * 切换左侧侧边栏页签。
