@@ -2,7 +2,7 @@
   @file index.vue
   @description BDrawer 抽屉组件，基于 ant-design-vue Drawer 二次封装。
     默认从右侧滑出，关闭按钮位于 header 右上角；
-    默认渲染到布局注入的 `.b-layout__content__main` 容器中（不遮挡 header 与右侧 ChatSider）。
+    默认渲染到布局注入的 `.b-layout__content` 容器中（不遮挡 header 与右侧 ChatSider）。
 -->
 <template>
   <Teleport :to="teleportTarget" :disabled="teleportDisabled">
@@ -44,10 +44,15 @@
 
 <script setup lang="ts">
 import type { BDrawerProps as Props } from './types';
-import { computed } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
 import { DEFAULT_DRAWER_CONTAINER } from './types';
+
+/**
+ * Teleport 可接收的安全目标类型。
+ */
+type BDrawerTeleportTarget = string | HTMLElement;
 
 defineOptions({ name: 'BDrawer' });
 
@@ -75,19 +80,62 @@ const [name, bem] = createNamespace('drawer');
 
 const visible = defineModel<boolean>('open');
 
-/** Teleport 目标容器选择器，未显式指定时默认为布局主内容区 */
-const teleportTarget = computed(() => {
-  if (props.getContainer === false) return 'body';
-  return props.getContainer || DEFAULT_DRAWER_CONTAINER;
-});
+/** Teleport 实际目标，默认先落到 body，避免布局容器刷新期缺失时报错。 */
+const teleportTarget = ref<BDrawerTeleportTarget>('body');
 
-/** 是否禁用 Teleport（getContainer 为 false 时不搬运，渲染在当前 DOM 位置） */
-const teleportDisabled = computed(() => props.getContainer === false);
+/** 是否禁用 Teleport（getContainer 为 false 时不搬运，渲染在当前 DOM 位置）。 */
+const teleportDisabled = computed<boolean>(() => props.getContainer === false);
 
 /** 宽度（left/right 生效），统一追加 CSS 单位 */
 const drawerWidth = computed(() => addCssUnit(props.width));
 /** 高度（top/bottom 生效），统一追加 CSS 单位 */
 const drawerHeight = computed(() => addCssUnit(props.height));
+
+/**
+ * 获取当前期望的 Teleport 选择器。
+ * @returns Teleport 目标选择器
+ */
+function getTeleportSelector(): string {
+  return props.getContainer || DEFAULT_DRAWER_CONTAINER;
+}
+
+/**
+ * 解析 Teleport 目标：目标不存在时安全降级到 body，避免 Vue Teleport 在刷新期收到缺失选择器。
+ */
+function resolveTeleportTarget(): void {
+  if (props.getContainer === false || typeof document === 'undefined') {
+    teleportTarget.value = 'body';
+    return;
+  }
+
+  const target = document.querySelector(getTeleportSelector());
+  teleportTarget.value = target instanceof HTMLElement ? target : 'body';
+}
+
+/**
+ * 等待布局 DOM 更新后重新解析 Teleport 目标。
+ * @returns DOM 更新等待任务
+ */
+async function refreshTeleportTarget(): Promise<void> {
+  await nextTick();
+  resolveTeleportTarget();
+}
+
+/**
+ * 安排一次 Teleport 目标刷新，避免在生命周期钩子里留下未处理 Promise。
+ */
+function scheduleTeleportTargetRefresh(): void {
+  refreshTeleportTarget().catch((error: unknown): void => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[BDrawer] Teleport 目标刷新失败: ${message}`);
+  });
+}
+
+onMounted(scheduleTeleportTargetRefresh);
+
+watch([() => props.getContainer, visible], (): void => {
+  scheduleTeleportTargetRefresh();
+});
 
 /**
  * 触发关闭：依次执行 close 回调、emit close 事件，最后同步 visible 状态。
