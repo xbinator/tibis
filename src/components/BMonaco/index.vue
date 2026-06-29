@@ -91,6 +91,7 @@ const loadError = ref('');
 const ignoreModelChange = ref(false);
 const editorContent = ref(props.value);
 const settingStore = useSettingStore();
+const editorInitializationPromise = shallowRef<Promise<MonacoEditorHandle | null> | null>(null);
 const modelChangeDispose = ref<Monaco.IDisposable | null>(null);
 const scrollChangeDispose = ref<Monaco.IDisposable | null>(null);
 const searchDecorations = ref<Monaco.editor.IEditorDecorationsCollection | null>(null);
@@ -285,10 +286,11 @@ function bindScrollChange(): void {
 
 /**
  * 创建 Monaco 编辑器实例。
+ * @returns Monaco 编辑器句柄；初始化失败时返回 null
  */
-async function initializeEditor(): Promise<void> {
+async function initializeEditor(): Promise<MonacoEditorHandle | null> {
   if (!hostRef.value) {
-    return;
+    return null;
   }
 
   try {
@@ -307,9 +309,27 @@ async function initializeEditor(): Promise<void> {
     bindModelChange();
     bindScrollChange();
     refreshSearchState(false);
+    return editorHandle.value;
   } catch (error: unknown) {
     loadError.value = error instanceof Error ? error.message : 'Monaco 初始化失败';
+    return null;
   }
+}
+
+/**
+ * 确保 Monaco 初始化流程只启动一次，并允许早到的外部调用等待 editor ready。
+ * @returns Monaco 编辑器句柄；初始化失败时返回 null
+ */
+function ensureEditorInitialized(): Promise<MonacoEditorHandle | null> {
+  if (editorHandle.value) {
+    return Promise.resolve(editorHandle.value);
+  }
+
+  if (!editorInitializationPromise.value) {
+    editorInitializationPromise.value = initializeEditor();
+  }
+
+  return editorInitializationPromise.value;
 }
 
 /**
@@ -516,8 +536,8 @@ function canRedo(): boolean {
  * @param endLine - 结束行号
  * @returns 是否成功
  */
-function selectLineRange(startLine: number, endLine: number): boolean {
-  const handle = editorHandle.value;
+async function selectLineRange(startLine: number, endLine: number): Promise<boolean> {
+  const handle = editorHandle.value ?? (await ensureEditorInitialized());
   if (!handle) {
     return false;
   }
@@ -602,7 +622,7 @@ watch(monacoTheme, async (): Promise<void> => {
 });
 
 onMounted((): void => {
-  initializeEditor().catch((): void => {
+  ensureEditorInitialized().catch((): void => {
     // 错误已在 initializeEditor 内部收敛为 loadError，这里避免未处理 Promise。
   });
 });
@@ -677,5 +697,13 @@ defineExpose<EditorController & EditorScrollController>({
   outline: none;
   background: transparent;
   border: none;
+}
+
+.b-editor-monaco .monaco-editor .selected-text {
+  background-color: var(--monaco-inactive-selection-bg) !important;
+}
+
+.b-editor-monaco .monaco-editor .focused .selected-text {
+  background-color: var(--monaco-selection-bg) !important;
 }
 </style>

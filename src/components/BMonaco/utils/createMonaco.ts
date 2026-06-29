@@ -174,11 +174,6 @@ async function ensureJsonDefaults(monaco: typeof Monaco): Promise<void> {
 }
 
 /**
- * 已注册的 Monaco 主题名集合，用于幂等保护。
- */
-const definedThemes = new Set<string>();
-
-/**
  * 生成 Monaco 主题名称。
  * @param presetId - 主题预设 ID
  * @param mode - 明暗模式
@@ -189,7 +184,8 @@ export function getMonacoThemeName(presetId: string, mode: 'light' | 'dark'): st
 }
 
 /**
- * 注册指定预设和模式的 Monaco 主题，幂等保护。
+ * 注册指定预设和模式的 Monaco 主题。
+ * 同名主题也需要重新定义，确保开发热更新或 token 派生规则变更后能刷新 Monaco 颜色。
  * @param monaco - Monaco API
  * @param presetId - 主题预设 ID
  * @param mode - 明暗模式
@@ -197,10 +193,6 @@ export function getMonacoThemeName(presetId: string, mode: 'light' | 'dark'): st
  */
 export function ensureTheme(monaco: typeof Monaco, presetId: string, mode: 'light' | 'dark'): string {
   const themeName = getMonacoThemeName(presetId, mode);
-  if (definedThemes.has(themeName)) {
-    return themeName;
-  }
-
   const tokens = getResolvedTokens(presetId, mode);
   monaco.editor.defineTheme(themeName, {
     base: mode === 'dark' ? 'vs-dark' : 'vs',
@@ -209,7 +201,6 @@ export function ensureTheme(monaco: typeof Monaco, presetId: string, mode: 'ligh
     colors: toMonacoColors(tokens)
   });
 
-  definedThemes.add(themeName);
   return themeName;
 }
 
@@ -266,6 +257,8 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
       enabled: options.stickyScroll === true
     },
     contextmenu: false,
+    // 关闭同词 selection 高亮，避免选中一个字段时其它相同字段被误认为真实选区。
+    selectionHighlight: false,
     ...(hasSearch
       ? {
           find: {

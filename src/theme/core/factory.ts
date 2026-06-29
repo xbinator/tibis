@@ -256,9 +256,8 @@ export function createThemeTokens(palette: BasePalette, mode: 'light' | 'dark'):
     monaco: {
       foreground: palette.fg0,
       lineHighlightBg: palette.bg1,
-      // light 模式下直接使用 palette.selectionBg 往往与 bg0 过于接近，
-      // 导致 Monaco 选区高亮几乎不可见，因此改用强调色叠加以获得足够对比度。
-      selectionBg: isDark ? palette.selectionBg : accentOverlay(0.3),
+      // 浅色 Monaco 选区使用低透明度强调色，避免高饱和主题压暗语法高亮。
+      selectionBg: isDark ? palette.selectionBg : accentOverlay(0.18),
       inactiveSelectionBg: bgOverlay(isDark ? 0.3 : 0.15),
       lineNumber: palette.fg2,
       lineNumberActive: palette.fg1,
