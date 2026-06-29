@@ -43,4 +43,16 @@ describe('BMonaco theme registration', (): void => {
 
     expect(source).toContain('selectionHighlight: false');
   });
+
+  it('renders Monaco overflow widgets as fixed so modal containers do not clip suggestions', (): void => {
+    const source = readFileSync(new URL('../../../src/components/BMonaco/utils/createMonaco.ts', import.meta.url), 'utf8');
+
+    expect(source).toContain('fixedOverflowWidgets: true');
+  });
+
+  it('prevents Ctrl or Cmd S from triggering the browser save dialog while Monaco is focused', (): void => {
+    const source = readFileSync(new URL('../../../src/components/BMonaco/utils/createMonaco.ts', import.meta.url), 'utf8');
+
+    expect(source).toContain('monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS');
+  });
 });

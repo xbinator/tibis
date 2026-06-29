@@ -13,6 +13,21 @@ import { getResolvedTokens, toMonacoColors } from '@/theme';
 export type MonacoThemeName = string;
 
 /**
+ * Monaco 额外类型声明。
+ */
+export interface MonacoExtraLib {
+  /** 声明文件内容 */
+  content: string;
+  /** 虚拟声明文件路径 */
+  filePath?: string;
+}
+
+/**
+ * Monaco TypeScript 编译配置。
+ */
+export type MonacoCompilerOptions = Monaco.typescript.CompilerOptions;
+
+/**
  * Monaco 编辑器创建参数。
  */
 export interface CreateMonacoEditorOptions {
@@ -34,6 +49,10 @@ export interface CreateMonacoEditorOptions {
   wordWrap?: boolean;
   /** 是否启用内置搜索（Ctrl+F/Cmd+F），默认 true */
   search?: boolean;
+  /** 额外类型声明，用于 TypeScript/JavaScript 语言服务提示 */
+  extraLibs?: MonacoExtraLib[];
+  /** TypeScript/JavaScript 语言服务编译配置 */
+  typescriptCompilerOptions?: MonacoCompilerOptions;
   /** 是否启用格式校验（如 JSON 语法校验），默认 true */
   validation?: boolean;
   /** 是否只显示滚动条，隐藏其他装饰（glyph margin、折叠等），默认 false */
@@ -89,22 +108,25 @@ let monacoEnvironmentReady = false;
 let jsonDefaultsReady = false;
 let editorWorkerConstructor: MonacoWorkerModule['default'] | null = null;
 let jsonWorkerConstructor: MonacoWorkerModule['default'] | null = null;
+let typescriptWorkerConstructor: MonacoWorkerModule['default'] | null = null;
 
 /**
  * 懒加载 Monaco worker 构造器。
  */
 async function ensureWorkerConstructors(): Promise<void> {
-  if (editorWorkerConstructor && jsonWorkerConstructor) {
+  if (editorWorkerConstructor && jsonWorkerConstructor && typescriptWorkerConstructor) {
     return;
   }
 
-  const [editorWorkerModule, jsonWorkerModule] = await Promise.all([
+  const [editorWorkerModule, jsonWorkerModule, typescriptWorkerModule] = await Promise.all([
     import('monaco-editor/esm/vs/editor/editor.worker?worker') as Promise<MonacoWorkerModule>,
-    import('monaco-editor/esm/vs/language/json/json.worker?worker') as Promise<MonacoWorkerModule>
+    import('monaco-editor/esm/vs/language/json/json.worker?worker') as Promise<MonacoWorkerModule>,
+    import('monaco-editor/esm/vs/language/typescript/ts.worker?worker') as Promise<MonacoWorkerModule>
   ]);
 
   editorWorkerConstructor = editorWorkerModule.default;
   jsonWorkerConstructor = jsonWorkerModule.default;
+  typescriptWorkerConstructor = typescriptWorkerModule.default;
 }
 
 /**
@@ -123,6 +145,11 @@ async function ensureMonacoEnvironment(): Promise<void> {
       if (label === 'json' && jsonWorkerConstructor) {
         const JsonWorker = jsonWorkerConstructor;
         return new JsonWorker();
+      }
+
+      if ((label === 'typescript' || label === 'javascript') && typescriptWorkerConstructor) {
+        const TypescriptWorker = typescriptWorkerConstructor;
+        return new TypescriptWorker();
       }
 
       if (!editorWorkerConstructor) {
@@ -146,6 +173,10 @@ async function loadMonaco(): Promise<typeof Monaco> {
     return cachedMonaco;
   }
 
+  await Promise.all([
+    import('monaco-editor/esm/vs/language/json/monaco.contribution.js'),
+    import('monaco-editor/esm/vs/language/typescript/monaco.contribution.js')
+  ]);
   cachedMonaco = await import('monaco-editor/esm/vs/editor/editor.main.js');
   return cachedMonaco;
 }
@@ -171,6 +202,68 @@ async function ensureJsonDefaults(monaco: typeof Monaco): Promise<void> {
   });
 
   jsonDefaultsReady = true;
+}
+
+/**
+ * 判断当前语言是否使用 TypeScript 语言服务。
+ * @param language - 当前语言
+ * @returns 是否为 TypeScript 语言服务语言
+ */
+function isTypeScriptServiceLanguage(language: string): language is 'typescript' | 'javascript' {
+  return language === 'typescript' || language === 'javascript';
+}
+
+/**
+ * 读取指定语言的 TypeScript 默认服务配置。
+ * @param monaco - Monaco API
+ * @param language - 当前语言
+ * @returns TypeScript 语言服务默认配置
+ */
+function getTypeScriptLanguageDefaults(monaco: typeof Monaco, language: 'typescript' | 'javascript'): Monaco.typescript.LanguageServiceDefaults {
+  return language === 'typescript' ? monaco.typescript.typescriptDefaults : monaco.typescript.javascriptDefaults;
+}
+
+/**
+ * 临时应用当前编辑器需要的 TypeScript 编译配置。
+ * @param monaco - Monaco API
+ * @param language - 当前语言
+ * @param compilerOptions - 编译配置
+ * @returns 配置释放器
+ */
+function registerTypeScriptCompilerOptions(monaco: typeof Monaco, language: string, compilerOptions?: MonacoCompilerOptions): Monaco.IDisposable {
+  if (!compilerOptions || !isTypeScriptServiceLanguage(language)) {
+    return { dispose: noop };
+  }
+
+  const defaults = getTypeScriptLanguageDefaults(monaco, language);
+  const previousOptions = defaults.getCompilerOptions();
+  defaults.setCompilerOptions({
+    ...previousOptions,
+    ...compilerOptions
+  });
+
+  return {
+    dispose: (): void => {
+      defaults.setCompilerOptions(previousOptions);
+    }
+  };
+}
+
+/**
+ * 注册当前编辑器需要的额外类型声明。
+ * @param monaco - Monaco API
+ * @param language - 当前语言
+ * @param extraLibs - 类型声明列表
+ * @returns 声明释放器
+ */
+function registerExtraLibs(monaco: typeof Monaco, language: string, extraLibs: MonacoExtraLib[] = []): Monaco.IDisposable[] {
+  if (!isTypeScriptServiceLanguage(language)) {
+    return [];
+  }
+
+  const defaults = getTypeScriptLanguageDefaults(monaco, language);
+
+  return extraLibs.map((extraLib: MonacoExtraLib): Monaco.IDisposable => defaults.addExtraLib(extraLib.content, extraLib.filePath));
 }
 
 /**
@@ -225,7 +318,9 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
 
   monaco.editor.setTheme(themeName);
 
+  const compilerOptionsDisposable = registerTypeScriptCompilerOptions(monaco, options.language, options.typescriptCompilerOptions);
   const model = monaco.editor.createModel(options.value, options.language);
+  const extraLibDisposables = registerExtraLibs(monaco, options.language, options.extraLibs);
 
   const hasSearch = options.search !== false;
 
@@ -256,6 +351,8 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
     stickyScroll: {
       enabled: options.stickyScroll === true
     },
+    // 提示、hover 等浮层需要避开弹窗 overflow 裁剪。
+    fixedOverflowWidgets: true,
     contextmenu: false,
     // 关闭同词 selection 高亮，避免选中一个字段时其它相同字段被误认为真实选区。
     selectionHighlight: false,
@@ -276,6 +373,8 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, noop);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, noop);
   }
+  // 阻止浏览器/Electron 默认 Save As 对话框。
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, noop);
 
   return {
     getValue: () => model.getValue(),
@@ -285,6 +384,8 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
     getEditor: () => editor,
     getModel: () => model,
     dispose: () => {
+      extraLibDisposables.forEach((disposable: Monaco.IDisposable): void => disposable.dispose());
+      compilerOptionsDisposable.dispose();
       editor.dispose();
       model.dispose();
     }

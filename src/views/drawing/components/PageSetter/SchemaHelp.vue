@@ -237,6 +237,7 @@ watch(open, (isOpen: boolean): void => {
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-secondary);
+  user-select: text;
 }
 
 .schema-help__intro {
@@ -411,7 +412,6 @@ watch(open, (isOpen: boolean): void => {
   padding: 10px 12px;
   margin: 0;
   overflow: auto;
-  user-select: text;
   background: var(--bg-secondary);
   border: 0;
   border-radius: 0;
@@ -423,15 +423,9 @@ watch(open, (isOpen: boolean): void => {
 
 .schema-help__example-code code {
   font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace);
-  font-size: 11px;
-  line-height: 1.55;
+  font-size: 12px;
   color: var(--text-secondary);
   white-space: pre;
   background: transparent;
-}
-
-.schema-help__example.is-expanded .schema-help__example-code code {
-  font-size: 12px;
-  line-height: 1.65;
 }
 </style>

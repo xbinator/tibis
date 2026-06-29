@@ -122,6 +122,36 @@ export interface DrawingMetadata {
 }
 
 /**
+ * Drawing Skill 方法定义。
+ */
+export interface DrawingSkillMethod {
+  /** 方法是否启用 */
+  enabled?: boolean;
+  /** 方法说明，用于编辑器提示和后续权限确认 */
+  description?: string;
+  /** 方法执行超时时间，单位毫秒 */
+  timeout?: number;
+  /** 方法代码，要求导出 async function execute(ctx) 入口 */
+  code: string;
+}
+
+/**
+ * Drawing Skill 元信息。
+ */
+export interface DrawingSkillMetadata {
+  /** Skill 名称 */
+  name?: string;
+  /** Skill 描述 */
+  description?: string;
+  /** Skill 别名 */
+  aliases?: string[];
+  /** Skill 触发词 */
+  triggers?: string[];
+  /** Skill 方法集合 */
+  methods?: Record<string, DrawingSkillMethod>;
+}
+
+/**
  * DrawingData 支持的 schema 字段类型。
  */
 export type DrawingSchemaPropertyType = 'string' | 'number' | 'boolean' | 'object' | 'array';

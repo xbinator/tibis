@@ -35,6 +35,15 @@
         </div>
       </BSectionBlock>
 
+      <BSectionBlock title="执行方法">
+        <template #extra>
+          <BButton size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
+        </template>
+        <div class="method-summary">
+          <p class="method-summary__text">触发这个画布时，会执行这里配置的方法，用于读取入参、更新画布状态并返回结果。</p>
+        </div>
+      </BSectionBlock>
+
       <BSectionBlock title="出参">
         <template #help>
           <BIcon
@@ -80,14 +89,16 @@
   </ATabs>
 
   <SchemaEditor v-model:open="schemaEditorOpen" :kind="activeSchemaKind" :schema="activeSchema" @confirm="handleSchemaEditorConfirm" />
+  <MethodEditor v-model:open="methodEditorOpen" :code="mainMethodCode" @confirm="handleMethodEditorConfirm" />
   <SchemaHelp v-model:open="schemaHelpDrawerOpen" :kind="activeSchemaHelpKind" />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { DrawingData, DrawingRenderContext, DrawingSchemaObject } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingRenderContext, DrawingSchemaObject, DrawingSkillMethod } from '@/components/BDrawing/types';
 import type { DrawingSchemaKind } from '@/components/BDrawing/utils/drawingData';
 import { readDrawingPreviewRenderContext, writeDrawingPreviewRenderContext } from '@/components/BDrawing/utils/drawingPreviewContext';
+import MethodEditor from './PageSetter/MethodEditor.vue';
 import SchemaEditor from './PageSetter/SchemaEditor.vue';
 import SchemaHelp from './PageSetter/SchemaHelp.vue';
 
@@ -114,10 +125,33 @@ interface PreviewContextParseFailure {
 /** 预览上下文 JSON 解析结果。 */
 type PreviewContextParseResult = PreviewContextParseSuccess | PreviewContextParseFailure;
 
+/** Drawing Skill 默认入口方法名称。 */
+const DRAWING_SKILL_EXECUTE_METHOD_NAME = 'execute';
+/** Drawing Skill 默认方法超时时间。 */
+const DRAWING_SKILL_DEFAULT_METHOD_TIMEOUT = 10000;
+/** Drawing Skill 默认方法代码。 */
+const DRAWING_SKILL_DEFAULT_METHOD_CODE = [
+  'export async function execute(ctx: DrawingSkillContext): Promise<ExecutionResult> {',
+  '  const { input, state, setState, result } = ctx',
+  '',
+  "  setState('example', {",
+  '    input,',
+  '    state',
+  '  })',
+  '',
+  '  return result.success({',
+  "    message: '执行完成'",
+  '  })',
+  '}',
+  ''
+].join('\n');
+
 const drawingData = defineModel<DrawingData>('value', { required: true });
 
 /** Schema 编辑弹窗开关状态。 */
 const schemaEditorOpen = ref(false);
+/** 执行方法编辑弹窗开关。 */
+const methodEditorOpen = ref(false);
 /** 当前编辑的 schema 类型。 */
 const activeSchemaKind = ref<DrawingSchemaKind>('input');
 /** Schema 填写说明抽屉开关。 */
@@ -141,6 +175,97 @@ function updateDrawingDataConfig(patch: Partial<Pick<DrawingData, 'description' 
   drawingData.value = {
     ...drawingData.value,
     ...patch
+  };
+}
+
+/**
+ * 判断值是否为普通对象记录。
+ * @param value - 待判断值
+ * @returns 是否为普通对象记录
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 创建默认 Drawing Skill 方法。
+ * @returns 默认方法定义
+ */
+function createDefaultDrawingSkillMethod(): DrawingSkillMethod {
+  return {
+    enabled: true,
+    description: '',
+    timeout: DRAWING_SKILL_DEFAULT_METHOD_TIMEOUT,
+    code: DRAWING_SKILL_DEFAULT_METHOD_CODE
+  };
+}
+
+/**
+ * 从未知值读取 Drawing Skill 方法。
+ * @param value - 原始方法值
+ * @returns 标准方法定义
+ */
+function readDrawingSkillMethod(value: unknown): DrawingSkillMethod {
+  if (!isRecord(value)) {
+    return createDefaultDrawingSkillMethod();
+  }
+
+  return {
+    enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
+    description: typeof value.description === 'string' ? value.description : '',
+    timeout: typeof value.timeout === 'number' && Number.isFinite(value.timeout) ? value.timeout : DRAWING_SKILL_DEFAULT_METHOD_TIMEOUT,
+    code: typeof value.code === 'string' && value.code.trim().length > 0 ? value.code : DRAWING_SKILL_DEFAULT_METHOD_CODE
+  };
+}
+
+/**
+ * 读取当前 Skill metadata 记录。
+ * @returns Skill metadata 记录
+ */
+function readSkillMetadataRecord(): Record<string, unknown> {
+  const { skill } = drawingData.value.metadata;
+
+  return isRecord(skill) ? skill : {};
+}
+
+/**
+ * 读取当前 Skill 方法记录。
+ * @returns Skill 方法记录
+ */
+function readSkillMethodsRecord(): Record<string, unknown> {
+  const { methods } = readSkillMetadataRecord();
+
+  return isRecord(methods) ? methods : {};
+}
+
+/**
+ * 读取当前 execute 方法。
+ * @returns execute 方法定义
+ */
+function readMainMethod(): DrawingSkillMethod {
+  return readDrawingSkillMethod(readSkillMethodsRecord()[DRAWING_SKILL_EXECUTE_METHOD_NAME]);
+}
+
+/**
+ * 写入当前 execute 方法。
+ * @param method - execute 方法定义
+ */
+function writeMainMethod(method: DrawingSkillMethod): void {
+  const skill = readSkillMetadataRecord();
+  const methods = readSkillMethodsRecord();
+
+  drawingData.value = {
+    ...drawingData.value,
+    metadata: {
+      ...drawingData.value.metadata,
+      skill: {
+        ...skill,
+        methods: {
+          ...methods,
+          [DRAWING_SKILL_EXECUTE_METHOD_NAME]: method
+        }
+      }
+    }
   };
 }
 
@@ -294,6 +419,41 @@ const drawingDescription = computed<string>({
   }
 });
 
+/** 当前 execute 方法。 */
+const mainMethod = computed<DrawingSkillMethod>({
+  /**
+   * 读取 execute 方法。
+   * @returns execute 方法定义
+   */
+  get: (): DrawingSkillMethod => readMainMethod(),
+  /**
+   * 写入 execute 方法。
+   * @param value - execute 方法定义
+   */
+  set: (value: DrawingSkillMethod): void => {
+    writeMainMethod(value);
+  }
+});
+
+/** 当前 execute 方法代码。 */
+const mainMethodCode = computed<string>({
+  /**
+   * 读取 execute 方法代码。
+   * @returns execute 方法代码
+   */
+  get: (): string => mainMethod.value.code,
+  /**
+   * 写入 execute 方法代码。
+   * @param value - execute 方法代码
+   */
+  set: (value: string): void => {
+    mainMethod.value = {
+      ...mainMethod.value,
+      code: value
+    };
+  }
+});
+
 /**
  * 格式化 schema 为预览 JSON 文本。
  * @param schema - schema 对象
@@ -310,6 +470,13 @@ function formatSchemaText(schema: DrawingSchemaObject): string {
 function openSchemaEditor(kind: DrawingSchemaKind): void {
   activeSchemaKind.value = kind;
   schemaEditorOpen.value = true;
+}
+
+/**
+ * 打开执行方法编辑弹窗。
+ */
+function openMethodEditor(): void {
+  methodEditorOpen.value = true;
 }
 
 /**
@@ -332,6 +499,14 @@ function handleSchemaEditorConfirm(schema: DrawingSchemaObject): void {
   }
 
   updateDrawingDataConfig({ outputSchema: schema });
+}
+
+/**
+ * 保存执行方法代码。
+ * @param code - execute 方法代码
+ */
+function handleMethodEditorConfirm(code: string): void {
+  mainMethodCode.value = code;
 }
 
 /** 当前正在编辑的 Schema。 */
@@ -386,5 +561,22 @@ watch(() => drawingData.value.metadata, syncPreviewContextText, { deep: true, im
   font-size: 12px;
   line-height: 1.5;
   color: var(--color-danger);
+}
+
+.method-summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+}
+
+.method-summary__text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 </style>

@@ -42,7 +42,7 @@ const globalStubs = {
        * @param event - 原生输入事件
        */
       function handleInput(event: Event): void {
-        if (event.target instanceof HTMLInputElement) {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
           emit('update:value', event.target.value);
         }
       }
@@ -189,13 +189,14 @@ const globalStubs = {
         default: 500
       }
     },
-    emits: ['cancel', 'update:open'],
+    emits: ['cancel', 'close', 'update:open'],
     setup(_props, { emit }) {
       /**
        * 模拟弹窗取消。
        */
       function handleCancel(): void {
         emit('cancel');
+        emit('close');
         emit('update:open', false);
       }
 
@@ -212,6 +213,18 @@ const globalStubs = {
   BMonaco: defineComponent({
     name: 'BMonacoStub',
     props: {
+      extraLibs: {
+        type: Array,
+        default: (): unknown[] => []
+      },
+      language: {
+        type: String,
+        default: ''
+      },
+      options: {
+        type: Object,
+        default: (): Record<string, unknown> => ({})
+      },
       value: {
         type: String,
         default: ''
@@ -224,7 +237,7 @@ const globalStubs = {
        * @param event - 原生输入事件
        */
       function handleInput(event: Event): void {
-        if (event.target instanceof HTMLInputElement) {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
           emit('update:value', event.target.value);
         }
       }
@@ -240,7 +253,7 @@ const globalStubs = {
 
       return { handleInput };
     },
-    template: '<input class="schema-editor-monaco-stub" :value="value" @input="handleInput" />'
+    template: '<textarea class="schema-editor-monaco-stub" :value="value" @input="handleInput"></textarea>'
   }),
   BSectionBlock: defineComponent({
     name: 'BSectionBlockStub',
@@ -289,6 +302,33 @@ const globalStubs = {
 interface PageSetterHostVm extends ComponentPublicInstance {
   /** 当前画图数据 */
   drawingData: DrawingData;
+}
+
+/**
+ * Monaco 测试替身属性。
+ */
+interface BMonacoStubProps {
+  /** 编辑器语言 */
+  language?: string;
+  /** 类型提示声明 */
+  extraLibs?: Array<{ content: string; filePath?: string }>;
+  /** 编辑器配置 */
+  options?: {
+    wordWrap?: boolean;
+    typescriptCompilerOptions?: {
+      lib?: string[];
+    };
+  };
+  /** 当前代码文本 */
+  value?: string;
+}
+
+/**
+ * 设置面板区块标题快照。
+ */
+interface SectionBlockTitleSnapshot {
+  /** 区块标题 */
+  title: string;
 }
 
 /**
@@ -380,6 +420,19 @@ function findSectionBlock(wrapper: VueWrapper<PageSetterHostVm>, title: string):
 }
 
 /**
+ * 读取设置面板所有区块标题。
+ * @param wrapper - PageSetter 测试包装器
+ * @returns 区块标题列表
+ */
+function readSectionBlockTitles(wrapper: VueWrapper<PageSetterHostVm>): string[] {
+  return wrapper.findAllComponents({ name: 'BSectionBlockStub' }).map((item: VueWrapper): string => {
+    const props = item.props() as SectionBlockTitleSnapshot;
+
+    return props.title;
+  });
+}
+
+/**
  * 查找指定区块内的编辑按钮。
  * @param wrapper - PageSetter 测试包装器
  * @param title - 区块标题
@@ -457,7 +510,7 @@ describe('PageSetter', (): void => {
     await editButton.trigger('click');
     expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑入参');
 
-    await wrapper.find('.schema-editor-monaco-stub').setValue(
+    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
       JSON.stringify({
         type: 'object',
         properties: {
@@ -469,6 +522,7 @@ describe('PageSetter', (): void => {
         required: ['userName']
       })
     );
+    await nextTick();
     await wrapper
       .findAllComponents({ name: 'BButtonStub' })
       .find((button: VueWrapper): boolean => button.text() === '保存')
@@ -507,6 +561,65 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
+  it('opens an execution method dialog above output schema and saves execute method code', async (): Promise<void> => {
+    const drawingData = createDrawingData();
+    const wrapper = mountPageSetterHost(drawingData);
+    const sectionTitles = readSectionBlockTitles(wrapper);
+    const methodSection = findSectionBlock(wrapper, '执行方法');
+    const nextCode = [
+      'export async function execute(ctx: DrawingSkillContext): Promise<ExecutionResult> {',
+      '  return ctx.result.success(ctx.input)',
+      '}'
+    ].join('\n');
+
+    expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('入参'));
+    expect(sectionTitles.indexOf('执行方法')).toBeLessThan(sectionTitles.indexOf('出参'));
+    expect(methodSection.text()).toContain('AI 触发这个画布时，会执行这里配置的方法');
+    expect(methodSection.text()).not.toContain('export async function execute(ctx)');
+    expect(
+      wrapper.findAllComponents({ name: 'ATabPaneStub' }).map((pane: VueWrapper): string | undefined => (pane.props() as { tab?: string }).tab)
+    ).not.toContain('方法');
+
+    const editButton = findSectionEditButton(wrapper, '执行方法');
+    expect((editButton.props() as { size?: string }).size).toBe('mini');
+    await editButton.trigger('click');
+    expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑执行方法');
+    expect(wrapper.find('.method-editor__summary').text()).toContain('代码中可以使用 ctx.input、ctx.state、ctx.setState 和 ctx.result');
+    expect(wrapper.find('.method-editor__summary').text()).not.toContain('export async function execute(ctx)');
+
+    const methodEditor = wrapper.findComponent({ name: 'BMonacoStub' });
+    const editorProps = methodEditor.props() as BMonacoStubProps;
+    expect(editorProps.language).toBe('typescript');
+    expect(editorProps.options?.wordWrap).toBe(true);
+    expect(editorProps.options?.typescriptCompilerOptions?.lib).toEqual(['es2020']);
+    expect(editorProps.value).toContain('export async function execute(ctx: DrawingSkillContext): Promise<ExecutionResult>');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('interface DrawingSkillContext');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('调用画布时 AI 提取到的入参');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('setState(path: string, value: unknown): void');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('标记方法执行成功，并把 data 作为执行结果返回');
+
+    await methodEditor.find('textarea').setValue(nextCode);
+    await nextTick();
+    expect(wrapper.vm.drawingData.metadata.skill).toBeUndefined();
+    await wrapper
+      .findAllComponents({ name: 'BButtonStub' })
+      .find((button: VueWrapper): boolean => button.text() === '保存')
+      ?.trigger('click');
+
+    expect(wrapper.vm.drawingData.metadata.skill).toEqual({
+      methods: {
+        execute: {
+          enabled: true,
+          description: '',
+          timeout: 10000,
+          code: nextCode
+        }
+      }
+    });
+    expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('clears stale preview JSON errors after preview context is synced from metadata', async (): Promise<void> => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
@@ -537,7 +650,7 @@ describe('PageSetter', (): void => {
     await editButton.trigger('click');
     expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑出参');
 
-    await wrapper.find('.schema-editor-monaco-stub').setValue(
+    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
       JSON.stringify({
         type: 'object',
         properties: {
@@ -549,6 +662,7 @@ describe('PageSetter', (): void => {
         required: ['cardId']
       })
     );
+    await nextTick();
     await wrapper
       .findAllComponents({ name: 'BButtonStub' })
       .find((button: VueWrapper): boolean => button.text() === '保存')
@@ -567,7 +681,8 @@ describe('PageSetter', (): void => {
     const wrapper = mountPageSetterHost(drawingData);
 
     await findSectionEditButton(wrapper, '出参').trigger('click');
-    await wrapper.find('.schema-editor-monaco-stub').setValue('   ');
+    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue('   ');
+    await nextTick();
     await wrapper
       .findAllComponents({ name: 'BButtonStub' })
       .find((button: VueWrapper): boolean => button.text() === '保存')
@@ -600,7 +715,8 @@ describe('PageSetter', (): void => {
     const wrapper = mountPageSetterHost(drawingData);
 
     await findSectionEditButton(wrapper, '入参').trigger('click');
-    await wrapper.find('.schema-editor-monaco-stub').setValue('{broken');
+    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue('{broken');
+    await nextTick();
     await wrapper
       .findAllComponents({ name: 'BButtonStub' })
       .find((button: VueWrapper): boolean => button.text() === '保存')

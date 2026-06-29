@@ -14,7 +14,7 @@
  * @description 基于 Monaco 的低层编辑器组件，实现统一的 EditorController 协议。
  */
 
-import type { MonacoEditorHandle, MonacoThemeName } from './utils/createMonaco';
+import type { MonacoCompilerOptions, MonacoEditorHandle, MonacoExtraLib, MonacoThemeName } from './utils/createMonaco';
 import type * as Monaco from 'monaco-editor';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { EditorController, EditorScrollController, EditorSearchState, EditorSelection, EditorState } from '@/components/BEditor/types';
@@ -48,6 +48,8 @@ interface BMonacoOptions {
   search?: boolean;
   /** 是否启用粘性标题（函数名、类名固定在顶部），默认 false */
   stickyScroll?: boolean;
+  /** TypeScript/JavaScript 语言服务编译配置 */
+  typescriptCompilerOptions?: MonacoCompilerOptions;
 }
 
 /**
@@ -64,10 +66,13 @@ interface Props {
   editorState: EditorState;
   /** 编辑器运行时选项 */
   options?: BMonacoOptions;
+  /** 额外类型声明，用于 TypeScript/JavaScript 提示 */
+  extraLibs?: MonacoExtraLib[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
   editable: true,
+  extraLibs: () => [],
   options: () => ({ wordWrap: false, search: true })
 });
 
@@ -304,6 +309,8 @@ async function initializeEditor(): Promise<MonacoEditorHandle | null> {
       mode: settingStore.resolvedTheme === 'dark' ? 'dark' : 'light',
       wordWrap: effectiveWordWrap.value,
       search: effectiveSearch.value,
+      extraLibs: props.extraLibs,
+      typescriptCompilerOptions: props.options?.typescriptCompilerOptions,
       stickyScroll: effectiveStickyScroll.value
     });
     bindModelChange();
