@@ -2,7 +2,8 @@
  * @file drawingTextMetrics.ts
  * @description BDrawing 文本元素尺寸测量工具。
  */
-import type { DrawingElementStyle, DrawingSize } from '../types';
+import type { DrawingElementRenderSizeConfig } from '../elements/types';
+import type { DrawingElementStyle, DrawingRenderContext, DrawingShapeElement, DrawingSize } from '../types';
 import {
   DRAWING_TEXT_DEFAULT_FONT_SIZE,
   DRAWING_TEXT_DEFAULT_FONT_WEIGHT,
@@ -14,6 +15,7 @@ import {
   DRAWING_TEXT_SPACE_CHARACTER_WIDTH_RATIO,
   DRAWING_TEXT_VERTICAL_PADDING
 } from '../constants/text';
+import { resolveDrawingTemplateFieldText } from './drawingBindings';
 import { resolveDrawingBoxSideNumbers } from './drawingStyle';
 
 /** 文本测量画布缓存。 */
@@ -226,5 +228,21 @@ export function measureDrawingTextElementSize(text: string, style?: DrawingEleme
       options.maxWidth === undefined ? maxLineWidth + padding.horizontal : Math.min(options.maxWidth, maxLineWidth + padding.horizontal)
     ),
     height: normalizeTextMetricValue(Math.max(1, lines.length) * lineHeight + padding.vertical)
+  };
+}
+
+/**
+ * 创建按模板字段内容自适应高度的文本元素渲染尺寸配置。
+ * @param fieldName - 元数据字段名称
+ * @returns 文本元素渲染尺寸配置
+ */
+export function createDrawingTextRenderSize(fieldName: string): DrawingElementRenderSizeConfig {
+  return {
+    width: 'model',
+    height: 'model-min-content',
+    measureContent: (element: DrawingShapeElement, renderContext?: DrawingRenderContext): DrawingSize =>
+      measureDrawingTextElementSize(resolveDrawingTemplateFieldText(element.metadata, fieldName, renderContext), element.style, {
+        maxWidth: element.size.width
+      })
   };
 }

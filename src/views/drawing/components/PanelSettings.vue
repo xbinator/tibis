@@ -4,7 +4,7 @@
 -->
 <template>
   <aside class="setter-panel">
-    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="drawingData" :metadata="select" />
+    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="drawingData" />
     <BatchSetter
       v-else-if="select === null && selectedElementIds.length > 1"
       :drawing-data="drawingData"
@@ -21,7 +21,7 @@
         </ATabPane>
 
         <ATabPane key="style" tab="属性">
-          <component :is="elementSetter" v-if="elementSetter" v-model:element="select" />
+          <component :is="elementSetter" v-if="elementSetter" v-model:element="select" :drawing-data="drawingData" />
           <div v-else class="setter-panel__empty">暂无专属属性</div>
         </ATabPane>
       </ATabs>

@@ -3,7 +3,7 @@
  * @description BDrawing 元素注册配置类型。
  * BDrawing 元素注册配置，仅描述侧边栏展示元信息。
  */
-import type { DrawingElementCreateAnchor, DrawingElementStyle, DrawingMetadata, DrawingShapeElement, DrawingSize } from '../types';
+import type { DrawingElementCreateAnchor, DrawingElementStyle, DrawingMetadata, DrawingRenderContext, DrawingShapeElement, DrawingSize } from '../types';
 
 /**
  * 元素渲染尺寸来源。
@@ -21,9 +21,10 @@ export interface DrawingElementRenderSizeConfig {
   /**
    * 测量内容尺寸。
    * @param element - 画图元素
+   * @param renderContext - 画布渲染上下文
    * @returns 内容尺寸
    */
-  measureContent: (element: DrawingShapeElement) => DrawingSize;
+  measureContent: (element: DrawingShapeElement, renderContext?: DrawingRenderContext) => DrawingSize;
 }
 
 /**

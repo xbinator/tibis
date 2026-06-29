@@ -8,7 +8,7 @@ import { defineComponent, nextTick, ref } from 'vue';
 import type { ComponentPublicInstance, Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import type { DrawingData, DrawingElement, DrawingMetadata } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
 import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 import PageSetter from '@/views/drawing/components/PageSetter.vue';
 
@@ -328,14 +328,6 @@ function createDrawingData(): DrawingData {
 }
 
 /**
- * 创建测试画板元信息。
- * @returns 测试画板元信息
- */
-function createDrawingMetadata(): DrawingMetadata {
-  return {};
-}
-
-/**
  * 创建带 v-model 回写的 PageSetter 测试宿主。
  * @param initialData - 初始画图数据
  * @returns 测试宿主组件
@@ -346,13 +338,12 @@ function createPageSetterHost(initialData: DrawingData): ReturnType<typeof defin
     components: {
       PageSetter
     },
-    setup(): { drawingData: Ref<DrawingData>; metadata: DrawingMetadata } {
+    setup(): { drawingData: Ref<DrawingData> } {
       return {
-        drawingData: ref(initialData),
-        metadata: createDrawingMetadata()
+        drawingData: ref(initialData)
       };
     },
-    template: '<PageSetter v-model:value="drawingData" :metadata="metadata" />'
+    template: '<PageSetter v-model:value="drawingData" />'
   });
 }
 
@@ -449,7 +440,8 @@ describe('PageSetter', (): void => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
 
-    expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(1);
+    expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(3);
+    expect(findSectionBlock(wrapper, '动态预览').exists()).toBe(true);
     expect(wrapper.findAll('.schema-body > span')).toHaveLength(0);
     expect(wrapper.text()).toContain('入参');
     expect(wrapper.text()).toContain('出参');
@@ -488,6 +480,48 @@ describe('PageSetter', (): void => {
     });
     expect(wrapper.vm.drawingData.inputSchema.required).toEqual(['userName']);
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('edits the design preview input and state context', async (): Promise<void> => {
+    const drawingData = createDrawingData();
+    const wrapper = mountPageSetterHost(drawingData);
+    const previewSection = findSectionBlock(wrapper, '动态预览');
+    const previewEditors = previewSection.findAll('textarea');
+
+    await previewEditors[0]?.setValue('{ "city": "上海" }');
+    await previewEditors[0]?.trigger('blur');
+    await previewEditors[1]?.setValue('{ "weather": { "temperature": 28 } }');
+    await previewEditors[1]?.trigger('blur');
+
+    expect(wrapper.vm.drawingData.metadata.previewContext).toEqual({
+      input: {
+        city: '上海'
+      },
+      state: {
+        weather: {
+          temperature: 28
+        }
+      }
+    });
+    wrapper.unmount();
+  });
+
+  it('clears stale preview JSON errors after preview context is synced from metadata', async (): Promise<void> => {
+    const drawingData = createDrawingData();
+    const wrapper = mountPageSetterHost(drawingData);
+    const previewSection = findSectionBlock(wrapper, '动态预览');
+    const previewEditors = previewSection.findAll('textarea');
+
+    await previewEditors[0]?.setValue('{broken');
+    await previewEditors[0]?.trigger('blur');
+    expect(wrapper.text()).toContain('input 必须是合法 JSON');
+
+    await previewEditors[1]?.setValue('{ "weather": { "temperature": 28 } }');
+    await previewEditors[1]?.trigger('blur');
+    await nextTick();
+
+    expect(wrapper.text()).not.toContain('input 必须是合法 JSON');
     wrapper.unmount();
   });
 

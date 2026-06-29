@@ -9,8 +9,17 @@
 </template>
 
 <script setup lang="ts">
-import type { DrawingElement } from '../../types';
+import type { DrawingData, DrawingElement } from '../../types';
 
+/**
+ * 矩形元素 Setter 入参。
+ */
+interface Props {
+  /** 当前画图数据，保留给统一 Setter 调度透传 */
+  drawingData?: DrawingData;
+}
+
+defineProps<Props>();
 /** 当前编辑的矩形元素。 */
 defineModel<DrawingElement>('element', { required: true });
 </script>

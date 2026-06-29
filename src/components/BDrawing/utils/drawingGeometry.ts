@@ -2,7 +2,7 @@
  * @file drawingGeometry.ts
  * @description BDrawing 画布坐标、几何和 DOM 查询工具。
  */
-import type { DrawingElement, DrawingPoint, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
+import type { DrawingElement, DrawingPoint, DrawingRenderContext, DrawingShapeElement, DrawingSize, DrawingViewport } from '../types';
 import { DRAWING_ELEMENT_ID_ATTRIBUTE } from '../constants/dom';
 import { DRAWING_MIN_ZOOM, DRAWING_VIEWBOX_SIZE } from '../constants/viewport';
 import { getDrawingElementSchema } from '../elements';
@@ -108,15 +108,16 @@ function resolveDrawingRenderSizeValue(source: 'model' | 'content' | 'model-min-
 /**
  * 读取形状渲染时使用的有效尺寸。
  * @param element - 形状元素
+ * @param renderContext - 画布渲染上下文
  * @returns 渲染尺寸
  */
-export function getDrawingShapeRenderSize(element: DrawingShapeElement): DrawingSize {
+export function getDrawingShapeRenderSize(element: DrawingShapeElement, renderContext?: DrawingRenderContext): DrawingSize {
   const renderSize = getDrawingElementSchema(element.name)?.renderSize;
   if (!renderSize) {
     return element.size;
   }
 
-  const contentSize = renderSize.measureContent(element);
+  const contentSize = renderSize.measureContent(element, renderContext);
 
   return {
     width: resolveDrawingRenderSizeValue(renderSize.width, element.size.width, contentSize.width),

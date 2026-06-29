@@ -92,7 +92,6 @@ const settingsWidth = ref(300);
 const selectedTarget = ref<DrawingSelectTarget>(session.data.value.metadata);
 /** 当前侧栏需要高亮的元素 ID。 */
 const selectedElementIds = ref<string[]>([]);
-
 /**
  * 判断当前设置目标是否为画图元素。
  * @param target - 当前设置目标

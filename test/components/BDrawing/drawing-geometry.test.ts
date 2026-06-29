@@ -41,14 +41,14 @@ function createShapeElement(id: string, position = { x: 40, y: 60 }): DrawingSha
 /**
  * 创建测试文本元素。
  * @param id - 元素 ID
- * @param title - 文本标题
+ * @param content - 文本正文
  * @param position - 元素位置
  * @param style - 文本样式
  * @returns 测试文本元素
  */
 function createTextElement(
   id: string,
-  title = '标题',
+  content = '标题',
   position = { x: 400, y: 260 },
   style: DrawingShapeElement['style'] = { fontSize: 20 }
 ): DrawingShapeElement {
@@ -57,12 +57,14 @@ function createTextElement(
     name: 'text',
     label: '文本',
     icon: 'lucide:type',
-    title,
+    title: '文本',
     position,
     size: { width: 180, height: 72 },
     rotation: 0,
     style,
-    metadata: {}
+    metadata: {
+      content
+    }
   };
 }
 

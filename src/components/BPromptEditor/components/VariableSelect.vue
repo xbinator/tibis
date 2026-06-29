@@ -10,12 +10,14 @@
     @update:active-index="handleMouseEnter"
   >
     <template #item="{ item }">
-      <div class="variable-item-main">
-        <span class="variable-item-label">{{ item.label }}</span>
-        <span class="variable-item-value">{{ item.value }}</span>
-      </div>
-      <div v-if="item.description" class="variable-item-desc">
-        {{ item.description }}
+      <div class="variable-item">
+        <div class="variable-item-main">
+          <span class="variable-item-label">{{ item.label }}</span>
+          <span class="variable-item-value">{{ item.value }}</span>
+        </div>
+        <div v-if="item.description" class="variable-item-desc">
+          {{ item.description }}
+        </div>
       </div>
     </template>
   </SelectDropdown>
@@ -71,33 +73,50 @@ function handleMouseEnter(index: number): void {
   height: 14px;
 }
 
-.variable-item-main {
+.variable-item {
   display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   width: 100%;
+  min-width: 0;
+}
+
+.variable-item-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
 }
 
 .variable-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .variable-item-value {
+  max-width: 150px;
   padding: 2px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: 'SF Mono', Monaco, 'Courier New', monospace;
   font-size: 12px;
   color: var(--color-primary);
+  white-space: nowrap;
   background: var(--color-primary-bg);
   border-radius: 4px;
 }
 
 .variable-item-desc {
-  margin-top: 4px;
   font-size: 12px;
+  line-height: 1.45;
   color: var(--text-tertiary);
+  overflow-wrap: anywhere;
 }
 
 .variable-empty-state {

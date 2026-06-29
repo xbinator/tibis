@@ -102,6 +102,7 @@ import { useDrawingBoard } from './hooks/useDrawingBoard';
 import { useDrawingInteraction } from './hooks/useDrawingInteraction';
 import { useDrawingViewport } from './hooks/useDrawingViewport';
 import { useModelSync } from './hooks/useModelSync';
+import { provideRenderContext } from './hooks/useRenderContext';
 import { useViewportSize } from './hooks/useViewportSize';
 import DrawingCanvas from './renderers/DrawingCanvas.vue';
 import { createDefaultDrawingData } from './utils/drawingData';
@@ -114,6 +115,7 @@ import {
   queryDrawingElementTarget
 } from './utils/drawingGeometry';
 import { expandDrawingSelectionToGroups, hasDrawingGroupedSelection } from './utils/drawingGroups';
+import { readDrawingPreviewRenderContext } from './utils/drawingPreviewContext';
 
 /**
  * 右键菜单命令。
@@ -186,6 +188,9 @@ const emit = defineEmits<{
 }>();
 /** 画板实例，管理绘图元素数据与状态。 */
 const board = useDrawingBoard(drawingData.value);
+/** 当前画布数据内声明的预览渲染上下文。 */
+const renderContext = computed(() => readDrawingPreviewRenderContext(drawingData.value.metadata));
+provideRenderContext(renderContext);
 /** 视口控制器，处理画布的平移与缩放。 */
 const viewport = useDrawingViewport(board);
 /** 交互控制器，处理鼠标/触控事件与元素操作。 */

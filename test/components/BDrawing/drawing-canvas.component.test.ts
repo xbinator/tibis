@@ -247,6 +247,85 @@ describe('BDrawing canvas component', (): void => {
     wrapper.unmount();
   });
 
+  it('provides render context to registered text element views', (): void => {
+    const data = createDefaultDrawingData();
+    data.metadata = {
+      previewContext: {
+        input: {
+          city: '上海'
+        },
+        state: {
+          weather: {
+            temperature: 28
+          }
+        }
+      }
+    };
+    data.elements = [
+      {
+        id: 'text-context-node',
+        name: 'text',
+        label: '文本',
+        icon: 'lucide:type',
+        title: '天气文本',
+        position: { x: 0, y: 0 },
+        size: { width: 180, height: 72 },
+        rotation: 0,
+        style: {},
+        metadata: {
+          content: '{{ input.city }} 当前 {{ state.weather.temperature }}°C'
+        }
+      }
+    ];
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: data
+      },
+      attachTo: document.body
+    });
+
+    expect(findNodeById(wrapper, 'text-context-node').text()).toContain('上海 当前 28°C');
+    wrapper.unmount();
+  });
+
+  it('measures text node size from resolved render context content', (): void => {
+    const data = createDefaultDrawingData();
+    data.metadata = {
+      previewContext: {
+        input: {},
+        state: {
+          longText: ['第一行', '第二行', '第三行', '第四行', '第五行', '第六行'].join('\n')
+        }
+      }
+    };
+    data.elements = [
+      {
+        id: 'text-measure-node',
+        name: 'text',
+        label: '文本',
+        icon: 'lucide:type',
+        title: '天气文本',
+        position: { x: 0, y: 0 },
+        size: { width: 120, height: 24 },
+        rotation: 0,
+        style: {},
+        metadata: {
+          content: '{{ state.longText }}'
+        }
+      }
+    ];
+    const wrapper = mount(BDrawing, {
+      props: {
+        value: data
+      },
+      attachTo: document.body
+    });
+    const nodeStyle = (findNodeById(wrapper, 'text-measure-node').element as HTMLElement).style;
+
+    expect(Number.parseFloat(nodeStyle.height)).toBeGreaterThan(72);
+    wrapper.unmount();
+  });
+
   it('ignores unknown registered element names', async (): Promise<void> => {
     const wrapper = mount(BDrawing, {
       props: {

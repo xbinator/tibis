@@ -4,9 +4,10 @@
  * @vitest-environment jsdom
  */
 import { defineComponent, nextTick } from 'vue';
-import { shallowMount } from '@vue/test-utils';
+import type { ComponentPublicInstance, PropType } from 'vue';
+import { shallowMount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DrawingData, DrawingElement } from '@/components/BDrawing/types';
+import type { DrawingData, DrawingElement, DrawingSelectTarget } from '@/components/BDrawing/types';
 import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
 import { emitter } from '@/utils/emitter';
 import DrawingPage from '@/views/drawing/index.vue';
@@ -124,9 +125,20 @@ function createDrawingElement(id: string, title: string, groupId?: string): Draw
 function createBDrawingStub(): ReturnType<typeof defineComponent> {
   return defineComponent({
     name: 'BDrawing',
+    props: {
+      value: {
+        type: Object as PropType<DrawingData>,
+        required: true
+      },
+      select: {
+        type: Object as PropType<DrawingSelectTarget>,
+        default: null
+      }
+    },
     emits: ['selection-change', 'update:select', 'update:value'],
-    setup(_props, { expose }): Record<string, never> {
+    setup(_props, { attrs, expose }): Record<string, never> {
       expose({
+        readAttrs: (): Record<string, unknown> => attrs,
         createElementFromClientPoint: vi.fn(),
         selectElementById: selectElementByIdMock,
         selectElementsByIds: selectElementsByIdsMock,
@@ -141,6 +153,23 @@ function createBDrawingStub(): ReturnType<typeof defineComponent> {
     },
     template: '<div class="b-drawing-stub"></div>'
   });
+}
+
+/**
+ * BDrawing 测试替身暴露能力。
+ */
+interface BDrawingStubExpose {
+  /** 读取未声明为属性的透传参数 */
+  readAttrs: () => Record<string, unknown>;
+}
+
+/**
+ * 读取 BDrawing 测试替身暴露能力。
+ * @param wrapper - BDrawing 测试替身包装器
+ * @returns 替身暴露能力
+ */
+function getBDrawingStubExpose(wrapper: VueWrapper): ComponentPublicInstance & BDrawingStubExpose {
+  return wrapper.vm as ComponentPublicInstance & BDrawingStubExpose;
 }
 
 /**
@@ -234,6 +263,39 @@ describe('DrawingPage', (): void => {
     await nextTick();
 
     expect(drawingDataMock.value).toEqual(nextDrawingData);
+    wrapper.unmount();
+  });
+
+  it('keeps design preview context inside drawing value instead of passing a separate prop', (): void => {
+    drawingDataMock.value = {
+      ...createDefaultDrawingData(),
+      metadata: {
+        previewContext: {
+          input: {
+            city: '上海'
+          },
+          state: {
+            weather: {
+              temperature: 28
+            }
+          }
+        }
+      }
+    };
+    const wrapper = shallowMount(DrawingPage, {
+      global: {
+        stubs: {
+          BDrawing: createBDrawingStub(),
+          Icon: true
+        }
+      }
+    });
+    const drawing = wrapper.findComponent({ name: 'BDrawing' });
+    const drawingAttrs = getBDrawingStubExpose(drawing).readAttrs();
+
+    expect(drawing.props('value')).toEqual(drawingDataMock.value);
+    expect(drawingAttrs).not.toHaveProperty('renderContext');
+    expect(drawingAttrs).not.toHaveProperty('render-context');
     wrapper.unmount();
   });
 

@@ -24,6 +24,7 @@ import type { DrawingPoint, DrawingShapeElement, DrawingSize } from '../types';
 import type { Component, CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { getDrawingElementView } from '../elements';
+import { useRenderContext } from '../hooks/useRenderContext';
 import { createDrawingElementCssTransform, getDrawingShapeRenderSize } from '../utils/drawingGeometry';
 import { createDrawingElementContentStyleProperties, createDrawingElementStyleProperties } from '../utils/drawingStyle';
 
@@ -56,10 +57,12 @@ const emit = defineEmits<{
   'context-menu': [id: string, event: MouseEvent];
 }>();
 
+/** 当前画布渲染上下文。 */
+const renderContext = useRenderContext();
 /** 是否为文本元素。 */
 const isTextShape = computed<boolean>(() => props.node.name === 'text');
 /** 节点渲染尺寸，文本节点始终按内容重新测量。 */
-const renderSize = computed<DrawingSize>(() => props.previewSize ?? getDrawingShapeRenderSize(props.node));
+const renderSize = computed<DrawingSize>(() => props.previewSize ?? getDrawingShapeRenderSize(props.node, renderContext.value));
 /** 节点渲染位置，Moveable 预览时优先使用临时位置。 */
 const renderPosition = computed<DrawingPoint>(() => props.previewPosition ?? props.node.position);
 /** 当前节点对应的中间视图组件。 */
