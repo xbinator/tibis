@@ -2,9 +2,9 @@
  * @file variableChip.ts
  * @description {{...}} token 匹配 + chip 装饰渲染引擎，不包含任何业务语义
  */
-import type { DecorationSet, WidgetType } from '@codemirror/view';
+import type { DecorationSet } from '@codemirror/view';
 import { StateField, EditorState, StateEffect, type Range } from '@codemirror/state';
-import { Decoration, EditorView } from '@codemirror/view';
+import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 
 /** {{ ... }} 匹配模式，排除换行和花括号 */
 const VARIABLE_PATTERN = /\{\{([^{}\n]+)\}\}/g;
@@ -23,6 +23,86 @@ export type ChipResult = { widget: WidgetType } | { className: string };
  * 返回 null 表示不渲染为 chip（当做普通文本）。
  */
 export type ChipResolver = (body: string) => ChipResult | null;
+
+/**
+ * 默认变量 Chip 选项。
+ */
+export interface VariableChipOption {
+  /** 变量显示名称 */
+  label: string;
+  /** 变量值，必须与 {{...}} 内部文本一致 */
+  value: string;
+}
+
+/**
+ * 默认变量 value Chip Widget。
+ */
+class VariableValueChipWidget extends WidgetType {
+  /**
+   * 创建变量 value Chip Widget。
+   * @param label - 变量显示名称
+   * @param value - 变量原始值
+   */
+  constructor(private readonly label: string, private readonly value: string) {
+    super();
+  }
+
+  /**
+   * 判断两个 Widget 是否等价，避免 CodeMirror 不必要地重建 DOM。
+   * @param other - 另一个 Widget
+   * @returns 是否等价
+   */
+  eq(other: VariableValueChipWidget): boolean {
+    return this.label === other.label && this.value === other.value;
+  }
+
+  /**
+   * 创建变量 Chip DOM。
+   * @returns Chip DOM 元素
+   */
+  toDOM(): HTMLElement {
+    const chip = document.createElement('span');
+    chip.className = 'b-prompt-variable-chip';
+    chip.textContent = this.value;
+    chip.title = this.label;
+    chip.setAttribute('aria-label', `${this.value}: ${this.label}`);
+    return chip;
+  }
+
+  /**
+   * 允许编辑器继续处理鼠标和键盘事件。
+   * @returns 是否忽略事件
+   */
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/**
+ * 创建默认变量 value Chip 解析器。
+ * @param variables - 可识别的变量列表
+ * @param customResolver - 消费者自定义 Chip 解析器
+ * @returns 合并后的 Chip 解析器
+ */
+export function createVariableValueChipResolver(variables: readonly VariableChipOption[], customResolver?: ChipResolver): ChipResolver {
+  const variableMap = new Map<string, VariableChipOption>(variables.map((variable) => [variable.value, variable]));
+
+  return (body: string): ChipResult | null => {
+    const customResult = customResolver?.(body);
+    if (customResult) {
+      return customResult;
+    }
+
+    const variable = variableMap.get(body);
+    if (!variable) {
+      return null;
+    }
+
+    return {
+      widget: new VariableValueChipWidget(variable.label, variable.value)
+    };
+  };
+}
 
 // ─── StateEffect ─────────────────────────────────────────────────────────────
 

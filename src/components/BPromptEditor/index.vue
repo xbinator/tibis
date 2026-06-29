@@ -51,7 +51,7 @@ import { createPasteHandlerExtension } from './extensions/pasteHandler';
 import { createPlaceholderExtension } from './extensions/placeholder';
 import { createTriggerPlugin } from './extensions/triggerPlugin';
 import { closeTrigger, setTriggerActiveIndex, triggerStateField } from './extensions/triggerState';
-import { variableChipField, chipResolverEffect, getChipAtPos } from './extensions/variableChip';
+import { variableChipField, chipResolverEffect, getChipAtPos, createVariableValueChipResolver } from './extensions/variableChip';
 import { useEditorKeymap } from './hooks/useEditorKeymap';
 import { useFileMention } from './hooks/useFileMention';
 import { useSlashCommand } from './hooks/useSlashCommand';
@@ -105,6 +105,9 @@ const filteredVariables = computed<Variable[]>(() => {
 
 // 是否有可用于触发的变量
 const hasVariables = computed<boolean>(() => allVariables.value.length > 0);
+
+// 默认变量 Chip 解析器，自定义解析器优先，普通变量按 value 渲染
+const resolvedChipResolver = computed(() => createVariableValueChipResolver(allVariables.value, props.chipResolver));
 
 // 解析后的最大高度
 const resolvedMaxHeight = computed<string | undefined>(() => {
@@ -310,6 +313,17 @@ function createExtensions(): Extension[] {
 }
 
 /**
+ * 将当前 Chip 解析器同步到 CodeMirror 状态字段。
+ */
+function syncChipResolver(): void {
+  if (!instance.value) return;
+
+  instance.value.dispatch({
+    effects: chipResolverEffect.of(resolvedChipResolver.value)
+  });
+}
+
+/**
  * 初始化编辑器
  */
 function setupEditor(): void {
@@ -325,9 +339,7 @@ function setupEditor(): void {
   slashCommand.syncSlashCommandState(instance.value.state as EditorState, instance.value as EditorView);
   fileMention.syncMentionState(instance.value.state as EditorState, instance.value as EditorView);
 
-  if (props.chipResolver) {
-    instance.value.dispatch({ effects: chipResolverEffect.of(props.chipResolver) });
-  }
+  syncChipResolver();
 
   nextTick(() => {
     instance.value?.requestMeasure();
@@ -436,16 +448,10 @@ watch(editorIsEmpty, (isEmpty) => {
   });
 });
 
-// 监听 chipResolver 变化
-watch(
-  () => props.chipResolver,
-  (resolver) => {
-    if (!instance.value || !resolver) return;
-    instance.value.dispatch({
-      effects: chipResolverEffect.of(resolver)
-    });
-  }
-);
+// 监听 Chip 解析器变化
+watch(resolvedChipResolver, () => {
+  syncChipResolver();
+});
 
 onMounted(() => {
   setupEditor();
@@ -552,6 +558,24 @@ defineExpose({
   position: relative;
   width: 100%;
   height: 100%;
+}
+
+.b-prompt-variable-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  height: 20px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 20px;
+  vertical-align: middle;
+  color: var(--color-primary);
+  white-space: nowrap;
+  background: var(--color-primary-bg);
+  border: 1px solid rgb(var(--color-primary-value, 64, 128, 255), 0.18);
+  border-radius: 4px;
 }
 
 .b-prompt-editor__codemirror {
