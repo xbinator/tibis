@@ -65,6 +65,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { DrawingData, DrawingMetadata, DrawingSchemaObject } from '@/components/BDrawing/types';
+import type { DrawingSchemaKind } from '@/components/BDrawing/utils/drawingData';
 import SchemaEditor from './PageSetter/SchemaEditor.vue';
 import SchemaHelp from './PageSetter/SchemaHelp.vue';
 
@@ -76,11 +77,6 @@ interface Props {
   metadata: DrawingMetadata;
 }
 
-/**
- * Schema 配置类型。
- */
-type SchemaKind = 'input' | 'output';
-
 defineProps<Props>();
 
 const drawingData = defineModel<DrawingData>('value', { required: true });
@@ -88,11 +84,11 @@ const drawingData = defineModel<DrawingData>('value', { required: true });
 /** Schema 编辑弹窗开关状态。 */
 const schemaEditorOpen = ref(false);
 /** 当前编辑的 schema 类型。 */
-const activeSchemaKind = ref<SchemaKind>('input');
+const activeSchemaKind = ref<DrawingSchemaKind>('input');
 /** Schema 填写说明抽屉开关。 */
 const schemaHelpDrawerOpen = ref(false);
 /** 当前说明抽屉对应的 schema 类型。 */
-const activeSchemaHelpKind = ref<SchemaKind>('input');
+const activeSchemaHelpKind = ref<DrawingSchemaKind>('input');
 
 /**
  * 向当前画图数据写入画板配置变更。
@@ -150,7 +146,7 @@ function formatSchemaText(schema: DrawingSchemaObject): string {
  * 打开 Schema 编辑弹窗。
  * @param kind - schema 类型
  */
-function openSchemaEditor(kind: SchemaKind): void {
+function openSchemaEditor(kind: DrawingSchemaKind): void {
   activeSchemaKind.value = kind;
   schemaEditorOpen.value = true;
 }
@@ -159,7 +155,7 @@ function openSchemaEditor(kind: SchemaKind): void {
  * 打开 Schema 填写说明抽屉。
  * @param kind - schema 类型
  */
-function openSchemaHelp(kind: SchemaKind): void {
+function openSchemaHelp(kind: DrawingSchemaKind): void {
   activeSchemaHelpKind.value = kind;
   schemaHelpDrawerOpen.value = true;
 }

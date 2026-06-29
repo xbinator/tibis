@@ -63,19 +63,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-
-/**
- * Schema 说明类型。
- */
-type SchemaKind = 'input' | 'output';
+import { computed, ref, watch } from 'vue';
+import type { DrawingSchemaKind } from '@/components/BDrawing/utils/drawingData';
 
 /**
  * Schema 填写说明抽屉入参。
  */
 interface Props {
   /** 当前说明对应的 schema 类型 */
-  kind: SchemaKind;
+  kind: DrawingSchemaKind;
 }
 
 /**
@@ -114,7 +110,7 @@ const open = defineModel<boolean>('open', { required: true });
 const schemaExampleExpanded = ref(false);
 
 /** Schema 填写说明内容映射。 */
-const schemaHelpContentMap: Record<SchemaKind, SchemaHelpContent> = {
+const schemaHelpContentMap: Record<DrawingSchemaKind, SchemaHelpContent> = {
   input: {
     title: '入参填写说明',
     lead: '入参描述调用组件前需要提供的数据。以查天气为例，大模型需要知道要查询哪个城市、哪一天以及温度单位。',
@@ -222,6 +218,14 @@ const schemaHelpExample = computed<string>(() => schemaHelpContent.value.example
 function toggleSchemaExampleExpanded(): void {
   schemaExampleExpanded.value = !schemaExampleExpanded.value;
 }
+
+watch(open, (isOpen: boolean): void => {
+  if (isOpen) {
+    return;
+  }
+
+  schemaExampleExpanded.value = false;
+});
 </script>
 
 <style lang="less" scoped>

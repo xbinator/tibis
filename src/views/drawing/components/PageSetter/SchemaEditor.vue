@@ -30,21 +30,16 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import type { DrawingSchemaObject } from '@/components/BDrawing/types';
-import { createDefaultDrawingSchemaObject, normalizeDrawingSchemaObject } from '@/components/BDrawing/utils/drawingData';
+import { createDefaultDrawingSchemaObject, normalizeDrawingSchemaObject, type DrawingSchemaKind } from '@/components/BDrawing/utils/drawingData';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
-
-/**
- * Schema 编辑器类型。
- */
-type SchemaKind = 'input' | 'output';
 
 /**
  * Schema 编辑弹窗入参。
  */
 interface Props {
   /** 当前编辑的 schema 类型 */
-  kind: SchemaKind;
+  kind: DrawingSchemaKind;
   /** 当前 schema 值 */
   schema: DrawingSchemaObject;
 }
@@ -76,7 +71,7 @@ const schemaEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
  * @param kind - schema 类型
  * @returns schema 标题
  */
-function getSchemaTitle(kind: SchemaKind): string {
+function getSchemaTitle(kind: DrawingSchemaKind): string {
   return kind === 'input' ? '入参' : '出参';
 }
 
@@ -101,13 +96,14 @@ function formatSchemaText(schema: DrawingSchemaObject): string {
 /**
  * 解析 schema 编辑器文本。
  * @param value - JSON 文本
+ * @param kind - schema 类型
  * @returns 标准化后的对象 schema
  */
-function parseSchemaText(value: string): DrawingSchemaObject {
+function parseSchemaText(value: string, kind: DrawingSchemaKind): DrawingSchemaObject {
   const trimmedValue = value.trim();
 
   if (!trimmedValue) {
-    return createDefaultDrawingSchemaObject();
+    return createDefaultDrawingSchemaObject(kind);
   }
 
   const parsed = JSON.parse(trimmedValue) as unknown;
@@ -115,7 +111,7 @@ function parseSchemaText(value: string): DrawingSchemaObject {
     throw new Error('Schema must be an object JSON schema.');
   }
 
-  return normalizeDrawingSchemaObject(parsed);
+  return normalizeDrawingSchemaObject(parsed, kind);
 }
 
 /**
@@ -154,7 +150,7 @@ function handleEditorCancel(): void {
  */
 function handleEditorConfirm(): void {
   try {
-    const schema = parseSchemaText(schemaDraftText.value);
+    const schema = parseSchemaText(schemaDraftText.value, props.kind);
     emit('confirm', schema);
     open.value = false;
     schemaEditorError.value = '';
@@ -172,7 +168,7 @@ watch(open, async (isOpen: boolean): Promise<void> => {
 });
 
 watch(
-  (): [SchemaKind, DrawingSchemaObject] => [props.kind, props.schema],
+  (): [DrawingSchemaKind, DrawingSchemaObject] => [props.kind, props.schema],
   async (): Promise<void> => {
     if (!open.value) {
       return;

@@ -116,24 +116,7 @@ describe('tibis document helpers', (): void => {
     expect(JSON.parse(content)).toEqual({
       type: 'drawing',
       version: 1,
-      name: '',
-      description: '',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      outputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      metadata: {},
-      elements: [],
-      viewport: {
-        center: { x: 0, y: 0 },
-        zoom: 1
-      }
+      ...createDrawingData()
     });
   });
 
@@ -237,24 +220,7 @@ describe('useFileSession', (): void => {
     expect(JSON.parse(content)).toEqual({
       type: 'drawing',
       version: 1,
-      name: '',
-      description: '',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      outputSchema: {
-        type: 'object',
-        properties: {},
-        required: []
-      },
-      metadata: {},
-      elements: [],
-      viewport: {
-        center: { x: 0, y: 0 },
-        zoom: 1
-      }
+      ...createDrawingData()
     });
   });
 

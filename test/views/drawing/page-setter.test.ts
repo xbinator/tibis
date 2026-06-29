@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import { defineComponent, ref } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import type { ComponentPublicInstance, Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
@@ -528,6 +528,29 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
+  it('restores the weather output schema when saving an empty output schema dialog', async (): Promise<void> => {
+    const drawingData = createDrawingData();
+    const wrapper = mountPageSetterHost(drawingData);
+
+    await findSectionEditButton(wrapper, '出参').trigger('click');
+    await wrapper.find('.schema-editor-monaco-stub').setValue('   ');
+    await wrapper
+      .findAllComponents({ name: 'BButtonStub' })
+      .find((button: VueWrapper): boolean => button.text() === '保存')
+      ?.trigger('click');
+
+    expect(wrapper.vm.drawingData.outputSchema.properties.condition).toEqual({
+      type: 'string',
+      description: '天气概况'
+    });
+    expect(wrapper.vm.drawingData.outputSchema.properties.temperatureCelsius).toEqual({
+      type: 'number',
+      description: '摄氏温度'
+    });
+    expect(wrapper.vm.drawingData.outputSchema.required).toEqual(['condition', 'temperatureCelsius']);
+    wrapper.unmount();
+  });
+
   it('keeps previous schema and shows dialog validation feedback for invalid schema JSON', async (): Promise<void> => {
     const drawingData = createDrawingData();
     drawingData.inputSchema = {
@@ -604,6 +627,24 @@ describe('PageSetter', (): void => {
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
     expect(wrapper.find('.schema-help__example').text()).toContain('"required": ["city"]');
     expect(wrapper.find('.schema-help__example').text()).toContain('"description": "城市名称，例如上海"');
+    wrapper.unmount();
+  });
+
+  it('resets the JSON schema example expanded state after closing the guidance drawer', async (): Promise<void> => {
+    const wrapper = mountPageSetterHost(createDrawingData());
+
+    await findSectionHelpIcon(wrapper, '入参').trigger('click');
+    await wrapper.find('.schema-help__expand').trigger('click');
+    expect(wrapper.find('.schema-help__example').classes()).toContain('is-expanded');
+
+    wrapper.findComponent({ name: 'BDrawerStub' }).vm.$emit('update:open', false);
+    await nextTick();
+    expect(wrapper.find('.schema-help-drawer-stub').exists()).toBe(false);
+
+    await findSectionHelpIcon(wrapper, '入参').trigger('click');
+
+    expect(wrapper.find('.schema-help__example').classes()).not.toContain('is-expanded');
+    expect(wrapper.find('.schema-help__expand').attributes('data-icon')).toBe('lucide:maximize-2');
     wrapper.unmount();
   });
 });

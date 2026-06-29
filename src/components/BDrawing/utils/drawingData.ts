@@ -6,6 +6,11 @@ import type { DrawingData, DrawingMetadata, DrawingSchemaObject, DrawingViewport
 import { cloneDeep } from 'lodash-es';
 
 /**
+ * 画板能力 Schema 类型。
+ */
+export type DrawingSchemaKind = 'input' | 'output';
+
+/**
  * 可归一化为 DrawingData 契约字段的数据。
  */
 export interface DrawingDataContractCandidate {
@@ -21,16 +26,62 @@ export interface DrawingDataContractCandidate {
   metadata?: DrawingMetadata;
 }
 
+/** 查天气入参默认 schema。 */
+const DEFAULT_DRAWING_INPUT_SCHEMA: DrawingSchemaObject = {
+  type: 'object',
+  properties: {
+    city: {
+      type: 'string',
+      description: '城市名称，例如上海'
+    },
+    date: {
+      type: 'string',
+      description: '查询日期，例如今天或明天'
+    },
+    unit: {
+      type: 'string',
+      description: '温度单位，celsius 或 fahrenheit'
+    }
+  },
+  required: ['city']
+};
+
+/** 查天气出参默认 schema。 */
+const DEFAULT_DRAWING_OUTPUT_SCHEMA: DrawingSchemaObject = {
+  type: 'object',
+  properties: {
+    condition: {
+      type: 'string',
+      description: '天气概况'
+    },
+    temperatureCelsius: {
+      type: 'number',
+      description: '摄氏温度'
+    },
+    suggestion: {
+      type: 'string',
+      description: '出行建议'
+    }
+  },
+  required: ['condition', 'temperatureCelsius']
+};
+
+/**
+ * 读取指定类型的默认 schema 模板。
+ * @param kind - schema 类型
+ * @returns 默认 schema 模板
+ */
+function getDefaultDrawingSchemaTemplate(kind: DrawingSchemaKind): DrawingSchemaObject {
+  return kind === 'input' ? DEFAULT_DRAWING_INPUT_SCHEMA : DEFAULT_DRAWING_OUTPUT_SCHEMA;
+}
+
 /**
  * 创建默认对象 schema。
+ * @param kind - schema 类型
  * @returns 默认对象 schema
  */
-export function createDefaultDrawingSchemaObject(): DrawingSchemaObject {
-  return {
-    type: 'object',
-    properties: {},
-    required: []
-  };
+export function createDefaultDrawingSchemaObject(kind: DrawingSchemaKind = 'input'): DrawingSchemaObject {
+  return cloneDeep(getDefaultDrawingSchemaTemplate(kind));
 }
 
 /**
@@ -45,11 +96,12 @@ function isDrawingSchemaObject(value: unknown): value is DrawingSchemaObject {
 /**
  * 归一化 DrawingData 对象 schema。
  * @param value - 原始 schema
+ * @param kind - schema 类型
  * @returns 可保存对象 schema
  */
-export function normalizeDrawingSchemaObject(value: unknown): DrawingSchemaObject {
+export function normalizeDrawingSchemaObject(value: unknown, kind: DrawingSchemaKind = 'input'): DrawingSchemaObject {
   if (!isDrawingSchemaObject(value)) {
-    return createDefaultDrawingSchemaObject();
+    return createDefaultDrawingSchemaObject(kind);
   }
 
   return {
@@ -71,8 +123,8 @@ export function normalizeDrawingDataContract(
   return {
     name: typeof candidate.name === 'string' ? candidate.name : '',
     description: typeof candidate.description === 'string' ? candidate.description : '',
-    inputSchema: normalizeDrawingSchemaObject(candidate.inputSchema),
-    outputSchema: normalizeDrawingSchemaObject(candidate.outputSchema),
+    inputSchema: normalizeDrawingSchemaObject(candidate.inputSchema, 'input'),
+    outputSchema: normalizeDrawingSchemaObject(candidate.outputSchema, 'output'),
     metadata: cloneDeep(candidate.metadata ?? {})
   };
 }
