@@ -16,7 +16,7 @@ const oneLight: BasePalette = {
   bg0: '#fafafa',
   bg1: '#f0f0f0',
   bg2: '#e8e8e8',
-  bg3: '#e0e0e0',
+  bg3: '#f0f0f0',
   bg4: '#d8d8d8',
   fg0: '#383a42',
   fg1: '#636d83',
