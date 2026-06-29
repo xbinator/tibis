@@ -236,7 +236,7 @@ onBeforeUnmount((): void => {
   position: absolute;
   top: 0;
   bottom: 0;
-  z-index: 10;
+  z-index: 2;
   width: 6px;
   padding: 0 2px;
   cursor: col-resize;
