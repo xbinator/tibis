@@ -28,20 +28,11 @@
           />
         </template>
         <template #extra>
-          <BButton icon="lucide:plus" size="mini" type="secondary" @click="addRootSchemaField('input')">添加字段</BButton>
-          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('input')">JSON导入</BButton>
+          <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField('input')" />
+          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('input')">编辑</BButton>
         </template>
         <div class="schema-body">
           <SchemaTreeEditor v-model:schema="inputSchema" />
-        </div>
-      </BSectionBlock>
-
-      <BSectionBlock title="执行方法">
-        <template #extra>
-          <BButton size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
-        </template>
-        <div class="method-summary">
-          <p class="method-summary__text">触发这个画布时，会执行这里配置的方法，用于读取入参、更新画布状态并返回结果。</p>
         </div>
       </BSectionBlock>
 
@@ -59,11 +50,20 @@
           />
         </template>
         <template #extra>
-          <BButton icon="lucide:plus" size="mini" type="secondary" @click="addRootSchemaField('output')">添加字段</BButton>
-          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('output')">JSON导入</BButton>
+          <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField('output')" />
+          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('output')">编辑</BButton>
         </template>
         <div class="schema-body">
           <SchemaTreeEditor v-model:schema="outputSchema" />
+        </div>
+      </BSectionBlock>
+
+      <BSectionBlock title="执行方法">
+        <template #extra>
+          <BButton size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
+        </template>
+        <div class="method-summary">
+          <p class="method-summary__text">触发这个画布时，会执行这里配置的方法，用于读取入参、更新画布状态并返回结果。</p>
         </div>
       </BSectionBlock>
 

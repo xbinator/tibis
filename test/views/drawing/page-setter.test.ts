@@ -512,16 +512,16 @@ function findSectionEditButton(wrapper: VueWrapper<PageSetterHostVm>, title: str
 }
 
 /**
- * 查找指定区块内的 JSON 导入按钮。
+ * 查找指定区块内的 Schema 编辑按钮。
  * @param wrapper - PageSetter 测试包装器
  * @param title - 区块标题
  * @returns 按钮包装器
  */
-function findSectionJsonImportButton(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
+function findSectionSchemaEditButton(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
   const section = findSectionBlock(wrapper, title);
-  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => item.text() === 'JSON导入');
+  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => item.text() === '编辑');
   if (!button) {
-    throw new Error(`区块缺少 JSON 导入按钮：${title}`);
+    throw new Error(`区块缺少编辑 Schema 按钮：${title}`);
   }
 
   return button;
@@ -535,7 +535,11 @@ function findSectionJsonImportButton(wrapper: VueWrapper<PageSetterHostVm>, titl
  */
 function findSectionAddFieldButton(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
   const section = findSectionBlock(wrapper, title);
-  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => item.text().includes('添加字段'));
+  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => {
+    const props = item.props() as { icon?: string; tooltip?: string };
+
+    return props.icon === 'lucide:plus' && props.tooltip === '添加字段';
+  });
   if (!button) {
     throw new Error(`区块缺少添加字段按钮：${title}`);
   }
@@ -735,17 +739,18 @@ describe('PageSetter', (): void => {
     expect(wrapper.text()).not.toContain('outputSchema');
 
     const addButton = findSectionAddFieldButton(wrapper, '入参');
-    const importButton = findSectionJsonImportButton(wrapper, '入参');
+    const editButton = findSectionSchemaEditButton(wrapper, '入参');
     expect((addButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:plus');
     expect((addButton.props() as { size?: string }).size).toBe('mini');
-    expect((importButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:file-json');
-    expect((importButton.props() as { size?: string }).size).toBe('mini');
+    expect((editButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:file-json');
+    expect((editButton.props() as { size?: string }).size).toBe('mini');
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__help').findComponent({ name: 'BIconStub' }).exists()).toBe(true);
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).toContain('添加字段');
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).toContain('JSON导入');
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).not.toContain('+ 添加字段');
+    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).not.toContain('添加字段');
+    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').find('[data-tooltip="添加字段"]').exists()).toBe(true);
+    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).toContain('编辑');
+    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).not.toContain('JSON导入');
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').findComponent({ name: 'BIconStub' }).exists()).toBe(false);
-    await importButton.trigger('click');
+    await editButton.trigger('click');
     expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑入参');
 
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
@@ -889,7 +894,7 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('opens an execution method dialog above output schema and saves execute method code', async (): Promise<void> => {
+  it('opens an execution script dialog above output schema and saves execute method code', async (): Promise<void> => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
     const sectionTitles = readSectionBlockTitles(wrapper);
@@ -970,13 +975,15 @@ describe('PageSetter', (): void => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
 
-    const importButton = findSectionJsonImportButton(wrapper, '出参');
-    expect((importButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:file-json');
-    expect((importButton.props() as { size?: string }).size).toBe('mini');
+    const editButton = findSectionSchemaEditButton(wrapper, '出参');
+    expect((editButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:file-json');
+    expect((editButton.props() as { size?: string }).size).toBe('mini');
     expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__help').findComponent({ name: 'BIconStub' }).exists()).toBe(true);
-    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').text()).toContain('JSON导入');
+    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').text()).not.toContain('JSON导入');
+    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').text()).toContain('编辑');
+    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').find('[data-tooltip="添加字段"]').exists()).toBe(true);
     expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').findComponent({ name: 'BIconStub' }).exists()).toBe(false);
-    await importButton.trigger('click');
+    await editButton.trigger('click');
     expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑出参');
 
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
@@ -1009,7 +1016,7 @@ describe('PageSetter', (): void => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
 
-    await findSectionJsonImportButton(wrapper, '出参').trigger('click');
+    await findSectionSchemaEditButton(wrapper, '出参').trigger('click');
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue('   ');
     await nextTick();
     await wrapper
@@ -1043,7 +1050,7 @@ describe('PageSetter', (): void => {
     const previousInputSchema = drawingData.inputSchema;
     const wrapper = mountPageSetterHost(drawingData);
 
-    await findSectionJsonImportButton(wrapper, '入参').trigger('click');
+    await findSectionSchemaEditButton(wrapper, '入参').trigger('click');
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue('{broken');
     await nextTick();
     await wrapper
