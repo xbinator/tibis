@@ -148,49 +148,6 @@ describe('toolResultSummary open file metadata', (): void => {
     expect(webSummary?.tags).toEqual([{ label: '网址', value: 'https://example.com' }]);
   });
 
-  it('summarizes apply_widget_operations with the applied operation count', (): void => {
-    const summary = getToolResultSummary(
-      'apply_widget_operations',
-      successResult('apply_widget_operations', {
-        appliedOperations: 3,
-        data: {
-          elements: [{ id: 'node-1' }],
-          viewport: { center: { x: 0, y: 0 }, zoom: 1 }
-        }
-      })
-    );
-
-    expect(summary).toEqual({
-      text: '已操作小组件',
-      tags: [
-        { label: '元素', value: '1' },
-        { label: '操作', value: '3' }
-      ]
-    });
-  });
-
-  it('summarizes create_widget as a created widget draft', (): void => {
-    const summary = getToolResultSummary(
-      'create_widget',
-      successResult('create_widget', {
-        title: '流程图',
-        path: 'unsaved://draft-1/flow.tibis',
-        data: {
-          elements: [{ id: 'node-1' }],
-          viewport: { center: { x: 0, y: 0 }, zoom: 1 }
-        }
-      })
-    );
-
-    expect(summary).toEqual({
-      text: '已创建小组件: 流程图',
-      tags: [
-        { label: '元素', value: '1' },
-        { label: '文件', value: 'flow.tibis' }
-      ]
-    });
-  });
-
   it('summarizes operate_webpage click results with the target element', (): void => {
     const summary = getToolResultSummary(
       'operate_webpage',

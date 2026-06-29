@@ -15,15 +15,6 @@ import {
 import { getToolNamesByExposure } from '../../../shared/ai/tools/index.js';
 
 describe('builtin tools index', (): void => {
-  it('does not expose Widget tools by default', (): void => {
-    const toolNames = createBuiltinTools().map((tool) => tool.definition.name);
-
-    expect(toolNames).not.toContain('read_current_widget');
-    expect(toolNames).not.toContain('create_widget');
-    expect(toolNames).not.toContain('apply_widget_operations');
-    expect(toolNames).not.toContain('update_current_widget');
-  });
-
   it('derives migrated tool exposure lists from the shared tool registry', (): void => {
     expect(DEFAULT_BUILTIN_READONLY_TOOL_NAMES).toEqual(expect.arrayContaining(getToolNamesByExposure('default-readonly')));
     expect(DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES).toEqual(expect.arrayContaining(getToolNamesByExposure('default-writable')));

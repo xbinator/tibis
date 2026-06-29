@@ -55,49 +55,6 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     });
   });
 
-  it('rejects widget bridge requests as unsupported', async (): Promise<void> => {
-    await expect(
-      handleBChatRuntimeBridgeRequest(
-        {
-          runtimeId: 'runtime-1',
-          sessionId: 'session-1',
-          clientId: 'bchat',
-          agentId: 'default',
-          requestId: 'bridge-1',
-          kind: 'widget-snapshot'
-        },
-        {
-          getEditorContext: () => undefined,
-          getWebviewContext: () => undefined
-        }
-      )
-    ).rejects.toMatchObject({
-      code: 'INVALID_INPUT',
-      message: '不支持的 bridge 请求类型：widget-snapshot'
-    });
-
-    await expect(
-      handleBChatRuntimeBridgeRequest(
-        {
-          runtimeId: 'runtime-1',
-          sessionId: 'session-1',
-          clientId: 'bchat',
-          agentId: 'default',
-          requestId: 'bridge-2',
-          kind: 'apply-widget-data',
-          payload: { data: { elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } } }
-        },
-        {
-          getEditorContext: () => undefined,
-          getWebviewContext: () => undefined
-        }
-      )
-    ).rejects.toMatchObject({
-      code: 'INVALID_INPUT',
-      message: '不支持的 bridge 请求类型：apply-widget-data'
-    });
-  });
-
   it('returns the current webview snapshot', async (): Promise<void> => {
     const result = await handleBChatRuntimeBridgeRequest(
       {

@@ -145,20 +145,9 @@ describe('toolRegistry', (): void => {
     expect(getToolNamesByExposure('default-writable')).toEqual(
       expect.arrayContaining(['create_document', 'edit_file', 'write_file', 'update_settings'])
     );
-    expect(getToolNamesByExposure('default-readonly')).not.toEqual(expect.arrayContaining(['read_current_widget']));
-    expect(getToolNamesByExposure('default-writable')).not.toEqual(expect.arrayContaining(['create_widget', 'apply_widget_operations']));
     expect(getToolNamesByExposure('conditional-readonly')).toEqual(expect.arrayContaining(['read_directory', 'get_mcp_settings', 'read_current_webpage']));
     expect(getToolNamesByExposure('conditional-writable')).toEqual(
       expect.arrayContaining(['add_mcp_server', 'update_mcp_server', 'remove_mcp_server', 'refresh_mcp_discovery', 'operate_webpage'])
     );
-  });
-
-  it('does not keep Widget tools in the shared registry', (): void => {
-    const registryToolNames = TOOL_REGISTRY.map((entry) => entry.definition.name);
-
-    expect(getToolDefinitionByName('create_widget')).toBeUndefined();
-    expect(getToolDefinitionByName('read_current_widget')).toBeUndefined();
-    expect(getToolDefinitionByName('apply_widget_operations')).toBeUndefined();
-    expect(registryToolNames).not.toEqual(expect.arrayContaining(['create_widget', 'read_current_widget', 'apply_widget_operations']));
   });
 });

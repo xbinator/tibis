@@ -4,7 +4,6 @@
  */
 import type { SUPPORTED_SETTING_KEYS } from './constants.mjs';
 import type { LogLevel, LogScope } from '../../../logger/types.mjs';
-import type { WidgetData } from '../domain/widget-runtime.mjs';
 import type { ChatRuntimeMainToolExecutionInput } from '../types.mjs';
 import type { AIToolExecutionResult, MCPServerConfig, MCPToolSettings } from 'types/ai';
 import type { ChatRuntimeBridgeResult, ChatRuntimeConfirmationDecision, ChatRuntimeConfirmationRequest } from 'types/chat-runtime';
@@ -56,18 +55,6 @@ export interface RuntimeDocumentSnapshot {
   locator?: string;
   /** 文档内容。 */
   content: string;
-}
-
-/** Runtime Widget快照。 */
-export interface RuntimeWidgetSnapshot {
-  /** Widget ID。 */
-  id: string;
-  /** Widget标题。 */
-  title: string;
-  /** Widget真实路径，未保存时可为空。 */
-  path: string | null;
-  /** Widget数据。 */
-  data: WidgetData;
 }
 
 /** Runtime 网页快照。 */
@@ -215,14 +202,6 @@ export interface RuntimeCreateDocumentInput {
   content: string;
   /** 文档扩展名。 */
   ext: string;
-}
-
-/** Runtime 创建Widget输入。 */
-export interface RuntimeCreateWidgetInput {
-  /** Widget标题。 */
-  title: string;
-  /** 初始Widget操作。 */
-  operations: unknown[];
 }
 
 /** Runtime 写入文件输入。 */

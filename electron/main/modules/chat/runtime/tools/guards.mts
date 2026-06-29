@@ -4,7 +4,6 @@
  */
 import type {
   RuntimeDocumentSnapshot,
-  RuntimeWidgetSnapshot,
   RuntimeFileContentSnapshot,
   RuntimeOpenResourceResult,
   RuntimeOpenResourceType,
@@ -40,21 +39,6 @@ export function isRuntimeDocumentSnapshot(value: unknown): value is RuntimeDocum
     (typeof value.path === 'string' || value.path === null) &&
     (value.locator === undefined || typeof value.locator === 'string') &&
     typeof value.content === 'string'
-  );
-}
-
-/**
- * 判断 bridge payload 是否为Widget快照。
- * @param value - bridge payload
- * @returns 是否为Widget快照
- */
-export function isRuntimeWidgetSnapshot(value: unknown): value is RuntimeWidgetSnapshot {
-  return (
-    isRecord(value) &&
-    typeof value.id === 'string' &&
-    typeof value.title === 'string' &&
-    (typeof value.path === 'string' || value.path === null) &&
-    isRecord(value.data)
   );
 }
 
