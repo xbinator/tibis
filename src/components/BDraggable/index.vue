@@ -54,6 +54,7 @@ import {
 
 const [, bem] = createNamespace('draggable');
 const DRAG_PREVIEW_CLASS = 'b-draggable__native-preview';
+const SCROLLABLE_OVERFLOW_VALUES = new Set(['auto', 'scroll', 'overlay']);
 
 /**
  * 原生拖拽预览设置函数。
@@ -412,11 +413,45 @@ function applyIndicatorFromDragState(params: {
 }
 
 /**
+ * 判断容器在当前拖拽方向上是否声明了可滚动 overflow。
+ * @param container - 拖拽容器
+ * @returns 当前方向是否允许滚动
+ */
+function hasScrollableOverflow(container: HTMLElement): boolean {
+  const style = getComputedStyle(container);
+  const overflowValue = props.direction === 'horizontal' ? style.overflowX : style.overflowY;
+
+  return SCROLLABLE_OVERFLOW_VALUES.has(overflowValue);
+}
+
+/**
+ * 判断容器在当前拖拽方向上是否存在可滚动距离。
+ * @param container - 拖拽容器
+ * @returns 当前方向是否存在滚动距离
+ */
+function hasScrollableRange(container: HTMLElement): boolean {
+  if (props.direction === 'horizontal') {
+    return container.scrollWidth > container.clientWidth;
+  }
+
+  return container.scrollHeight > container.clientHeight;
+}
+
+/**
+ * 判断当前容器是否适合初始化 auto-scroll。
+ * @param container - 拖拽容器
+ * @returns 是否应绑定 auto-scroll
+ */
+function canAttachAutoScroll(container: HTMLElement): boolean {
+  return hasScrollableOverflow(container) && hasScrollableRange(container);
+}
+
+/**
  * 初始化 auto-scroll。
  */
 function initAutoScroll(): void {
   const container = containerRef.value;
-  if (!container || autoScrollCleanup) {
+  if (!container || autoScrollCleanup || !canAttachAutoScroll(container)) {
     return;
   }
 

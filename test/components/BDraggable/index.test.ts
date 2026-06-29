@@ -6,7 +6,7 @@
 /* eslint-disable vue/one-component-per-file */
 import { readFileSync } from 'node:fs';
 import type { Input } from '@atlaskit/pragmatic-drag-and-drop/types';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,6 +74,8 @@ const capturedDraggableOptions = vi.hoisted<CapturedDraggableOptions[]>(() => []
 const capturedDropTargetOptions = vi.hoisted<CapturedDropTargetOptions[]>(() => []);
 /** monitor 配置捕获列表。 */
 const capturedMonitorOptions = vi.hoisted<CapturedMonitorOptions[]>(() => []);
+/** auto-scroll 注册替身。 */
+const autoScrollForElementsMock = vi.hoisted(() => vi.fn((): (() => void) => vi.fn()));
 
 vi.mock('@atlaskit/pragmatic-drag-and-drop/element/adapter', () => ({
   draggable: vi.fn((options: CapturedDraggableOptions): (() => void) => {
@@ -94,7 +96,7 @@ vi.mock('@atlaskit/pragmatic-drag-and-drop/element/adapter', () => ({
 }));
 
 vi.mock('@atlaskit/pragmatic-drag-and-drop-auto-scroll/element', () => ({
-  autoScrollForElements: vi.fn(() => vi.fn())
+  autoScrollForElements: autoScrollForElementsMock
 }));
 
 /**
@@ -144,6 +146,29 @@ function createDraggableHost(): ReturnType<typeof defineComponent> {
     components: { BDraggable },
     setup(): { items: TestItem[] } {
       return { items: testItems };
+    },
+    template: `
+      <BDraggable :list="items" item-key="id" item-class="draggable-row" handle-class="draggable-row__handle">
+        <template #default="{ item }">
+          <button class="draggable-row__handle" type="button">{{ item.title }}</button>
+        </template>
+      </BDraggable>
+    `
+  });
+}
+
+/**
+ * 创建可动态增加列表项的 BDraggable 测试宿主组件。
+ * @returns 可变测试宿主组件
+ */
+function createMutableDraggableHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'MutableDraggableHost',
+    components: { BDraggable },
+    setup(): { items: ReturnType<typeof ref<TestItem[]>> } {
+      const items = ref<TestItem[]>([...testItems]);
+
+      return { items };
     },
     template: `
       <BDraggable :list="items" item-key="id" item-class="draggable-row" handle-class="draggable-row__handle">
@@ -239,6 +264,7 @@ describe('BDraggable', (): void => {
     capturedDraggableOptions.length = 0;
     capturedDropTargetOptions.length = 0;
     capturedMonitorOptions.length = 0;
+    autoScrollForElementsMock.mockClear();
   });
 
   it('renders item wrappers and exposes handle class through the default slot', (): void => {
@@ -318,6 +344,18 @@ describe('BDraggable', (): void => {
     expect(bDraggableSource).toContain('position: absolute;');
     expect(bDraggableSource).not.toContain('is-drop-before');
     expect(bDraggableSource).not.toContain('is-drop-after');
+  });
+
+  it('does not attach auto-scroll before the container has a scrollable range', async (): Promise<void> => {
+    const wrapper = mount(createMutableDraggableHost());
+
+    autoScrollForElementsMock.mockClear();
+    (wrapper.vm as unknown as { items: TestItem[] }).items = [...testItems, { id: 'node-3', title: '节点 3' }];
+    await nextTick();
+
+    expect(autoScrollForElementsMock).not.toHaveBeenCalled();
+
+    wrapper.unmount();
   });
 
   it('isolates drag data between different BDraggable instances', (): void => {
