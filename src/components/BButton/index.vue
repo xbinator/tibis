@@ -131,6 +131,7 @@ export default defineComponent({
 .b-button {
   position: relative;
   display: inline-flex;
+  flex-shrink: 0;
   gap: 6px;
   align-items: center;
   justify-content: center;
