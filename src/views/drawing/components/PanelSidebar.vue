@@ -1,6 +1,6 @@
 <!--
   @file PanelSidebar.vue
-  @description 画图页面左侧工具与图层侧边栏。
+  @description 画图页面左侧工具与图层侧边栏，tabs 列常驻显示，splitter 包裹内容区控制折叠；splitter 关闭时通过 @close 清空 tab 选中态，再次点击 tab 自动重新展开。
 -->
 <template>
   <aside class="sidebar-panel">
@@ -10,29 +10,31 @@
       </template>
     </div>
 
-    <div class="sidebar-panel__content">
-      <header class="sidebar-panel__panel-header">
-        <h2 class="sidebar-panel__panel-title">{{ activePanelTitle }}</h2>
-      </header>
+    <BPanelSplitter v-model:size="size" position="right" :min-width="300" :max-width="480" @close="handleSplitterClose">
+      <div class="sidebar-panel__content">
+        <header class="sidebar-panel__panel-header">
+          <h2 class="sidebar-panel__panel-title">{{ activePanelTitle }}</h2>
+        </header>
 
-      <div class="sidebar-panel__panel-content">
-        <SidebarTools v-if="activeSidebarTab === 'tools'" />
-        <SidebarLayer
-          v-else
-          :active-element-id="activeElementId"
-          :elements="elements"
-          :selected-element-ids="selectedElementIds"
-          @select-element="handleElementSelect"
-          @select-elements="handleElementsSelect"
-          @copy-element="handleElementCopy"
-          @copy-elements="handleElementsCopy"
-          @delete-element="handleElementDelete"
-          @delete-elements="handleElementsDelete"
-          @move-element="handleElementMove"
-          @move-elements="handleElementsMove"
-        />
+        <div class="sidebar-panel__panel-content">
+          <SidebarTools v-if="activeSidebarTab === 'tools'" />
+          <SidebarLayer
+            v-else-if="activeSidebarTab === 'layers'"
+            :active-element-id="activeElementId"
+            :elements="elements"
+            :selected-element-ids="selectedElementIds"
+            @select-element="handleElementSelect"
+            @select-elements="handleElementsSelect"
+            @copy-element="handleElementCopy"
+            @copy-elements="handleElementsCopy"
+            @delete-element="handleElementDelete"
+            @delete-elements="handleElementsDelete"
+            @move-element="handleElementMove"
+            @move-elements="handleElementsMove"
+          />
+        </div>
       </div>
-    </div>
+    </BPanelSplitter>
   </aside>
 </template>
 
@@ -47,6 +49,11 @@ import SidebarTools from './SidebarTools.vue';
  * 左侧侧边栏页签类型。
  */
 type DrawingSidebarTabKey = 'tools' | 'layers';
+
+/**
+ * 当前激活的左侧侧边栏页签；null 表示未选中（splitter 关闭态）。
+ */
+type ActiveDrawingSidebarTabKey = DrawingSidebarTabKey | null;
 
 /**
  * 左侧侧边栏页签配置。
@@ -76,6 +83,10 @@ withDefaults(defineProps<Props>(), {
   activeElementId: null,
   selectedElementIds: (): string[] => []
 });
+
+/** 内容区宽度（内部状态），为 0 时表示侧栏已关闭。 */
+const size = ref(320);
+
 const emit = defineEmits<{
   /** 选择侧栏图层元素 */
   'select-element': [element: DrawingElement];
@@ -95,21 +106,48 @@ const emit = defineEmits<{
   'move-elements': [sourceElementIds: string[], targetElementIds: string[], position: DrawingLayerMovePosition];
 }>();
 
-const activeSidebarTab = ref<DrawingSidebarTabKey>('tools');
-/** 当前面板标题。 */
-const activePanelTitle = computed<string>(() => (activeSidebarTab.value === 'tools' ? '组件' : '图层'));
+const activeSidebarTab = ref<ActiveDrawingSidebarTabKey>('tools');
+/** 当前面板标题；未选中时返回空串。 */
+const activePanelTitle = computed<string>((): string => {
+  if (activeSidebarTab.value === 'tools') {
+    return '组件';
+  }
+
+  if (activeSidebarTab.value === 'layers') {
+    return '图层';
+  }
+
+  return '';
+});
 /** 左侧侧边栏页签列表。 */
 const sidebarTabs: DrawingSidebarTab[] = [
   { key: 'tools', label: '组件', icon: 'lucide:box' },
   { key: 'layers', label: '图层', icon: 'lucide:layers' }
 ];
 
+/** 内容区默认宽度；侧栏关闭后点击 tab 时恢复到该值。 */
+const SIDEBAR_DEFAULT_SIZE = 320;
+
 /**
  * 切换左侧侧边栏页签。
+ *
+ * - 正常态（size > 0）：仅切换 tab
+ * - 关闭态（size = 0）：先恢复默认宽度，再切换 tab
  * @param key - 目标页签标识
  */
 function handleTabClick(key: DrawingSidebarTabKey): void {
+  if (size.value <= 0) {
+    size.value = SIDEBAR_DEFAULT_SIZE;
+  }
+
   activeSidebarTab.value = key;
+}
+
+/**
+ * 处理 splitter 关闭：清空当前 tab，避免关闭态仍显示选中状态。
+ */
+function handleSplitterClose(): void {
+  activeSidebarTab.value = null;
 }
 
 /**
@@ -187,10 +225,8 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   z-index: 1;
   display: flex;
   flex-shrink: 0;
-  width: 100%;
   height: 100%;
   min-height: 0;
-  overflow: hidden;
   box-shadow: 1px 0 0 0 var(--border-primary);
 }
 
@@ -207,8 +243,7 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-width: 0;
-  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-panel__panel-content {
