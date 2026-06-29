@@ -4,8 +4,8 @@
  */
 import { effectScope, nextTick, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DrawingData } from '@/components/BDrawing/types';
-import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
+import type { WidgetData } from '@/components/BWidget/types';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createTibisDocumentContent, parseTibisDocumentContent, resolveTibisDocumentRoute, useFileSession } from '@/hooks/useFileSession';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
 
@@ -88,11 +88,11 @@ vi.mock('@/shared/platform', () => ({
 }));
 
 /**
- * 创建测试画图数据。
- * @returns 画图数据
+ * 创建测试小组件数据。
+ * @returns 小组件数据
  */
-function createDrawingData(): DrawingData {
-  return createDefaultDrawingData();
+function createWidgetData(): WidgetData {
+  return createDefaultWidgetData();
 }
 
 /**
@@ -106,24 +106,24 @@ function flushPromises(): Promise<void> {
 }
 
 describe('tibis document helpers', (): void => {
-  it('serializes drawing data as flat top-level tibis JSON', (): void => {
+  it('serializes widget data as flat top-level tibis JSON', (): void => {
     const content = createTibisDocumentContent({
-      type: 'drawing',
+      type: 'widget',
       version: 1,
-      data: createDrawingData()
+      data: createWidgetData()
     });
 
     expect(JSON.parse(content)).toEqual({
-      type: 'drawing',
+      type: 'widget',
       version: 1,
-      ...createDrawingData()
+      ...createWidgetData()
     });
   });
 
   it('parses flat tibis JSON and strips type and version from data', (): void => {
-    const parsed = parseTibisDocumentContent<DrawingData>(
+    const parsed = parseTibisDocumentContent<WidgetData>(
       JSON.stringify({
-        type: 'drawing',
+        type: 'widget',
         version: 1,
         metadata: {},
         elements: [],
@@ -135,7 +135,7 @@ describe('tibis document helpers', (): void => {
     );
 
     expect(parsed.supported).toBe(true);
-    expect(parsed.type).toBe('drawing');
+    expect(parsed.type).toBe('widget');
     expect(parsed.version).toBe(1);
     expect(parsed.data).toEqual({
       metadata: {},
@@ -163,9 +163,9 @@ describe('tibis document helpers', (): void => {
     });
   });
 
-  it('routes supported drawing documents to drawing and invalid content to editor', (): void => {
-    expect(resolveTibisDocumentRoute('{"type":"drawing","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}')).toEqual({
-      routeName: 'drawing'
+  it('routes supported widget documents to widget and invalid content to editor', (): void => {
+    expect(resolveTibisDocumentRoute('{"type":"widget","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}')).toEqual({
+      routeName: 'widget'
     });
 
     expect(resolveTibisDocumentRoute('{broken')).toEqual({
@@ -192,23 +192,23 @@ describe('useFileSession', (): void => {
     onFileChangedMock.mockReturnValue(vi.fn());
   });
 
-  it('creates default drawing tibis content when no stored file exists', async (): Promise<void> => {
+  it('creates default widget tibis content when no stored file exists', async (): Promise<void> => {
     getFileByIdMock.mockResolvedValue(undefined);
     addFileMock.mockResolvedValue(undefined);
     const scope = effectScope();
-    const fileId = ref('drawing-1');
+    const fileId = ref('widget-1');
     let content = '';
 
     await scope.run(async (): Promise<void> => {
-      const session = useFileSession<DrawingData>({
+      const session = useFileSession<WidgetData>({
         fileId,
         kind: 'tibis',
         defaultName: 'Untitled',
         defaultExt: 'tibis',
-        defaultData: createDrawingData(),
-        type: 'drawing',
+        defaultData: createWidgetData(),
+        type: 'widget',
         version: 1,
-        routeName: 'drawing',
+        routeName: 'widget',
         fallbackRouteName: 'editor'
       });
 
@@ -218,17 +218,17 @@ describe('useFileSession', (): void => {
     scope.stop();
 
     expect(JSON.parse(content)).toEqual({
-      type: 'drawing',
+      type: 'widget',
       version: 1,
-      ...createDrawingData()
+      ...createWidgetData()
     });
   });
 
   it('writes to existing disk path on save', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'drawing', version: 1, data: createDrawingData() });
+    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
     getFileByIdMock.mockResolvedValue({
       type: 'file',
-      id: 'drawing-1',
+      id: 'widget-1',
       path: '/tmp/board.tibis',
       name: 'board',
       ext: 'tibis',
@@ -239,15 +239,15 @@ describe('useFileSession', (): void => {
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
-      const session = useFileSession<DrawingData>({
-        fileId: ref('drawing-1'),
+      const session = useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
         kind: 'tibis',
         defaultName: 'Untitled',
         defaultExt: 'tibis',
-        defaultData: createDrawingData(),
-        type: 'drawing',
+        defaultData: createWidgetData(),
+        type: 'widget',
         version: 1,
-        routeName: 'drawing',
+        routeName: 'widget',
         fallbackRouteName: 'editor'
       });
 
@@ -260,10 +260,10 @@ describe('useFileSession', (): void => {
   });
 
   it('does not mark stored tibis content dirty while loading', async (): Promise<void> => {
-    const content = '{"type":"drawing","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}';
+    const content = '{"type":"widget","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}';
     getFileByIdMock.mockResolvedValue({
       type: 'file',
-      id: 'drawing-1',
+      id: 'widget-1',
       path: '/tmp/board.tibis',
       name: 'board',
       ext: 'tibis',
@@ -273,15 +273,15 @@ describe('useFileSession', (): void => {
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
-      useFileSession<DrawingData>({
-        fileId: ref('drawing-1'),
+      useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
         kind: 'tibis',
         defaultName: 'Untitled',
         defaultExt: 'tibis',
-        defaultData: createDrawingData(),
-        type: 'drawing',
+        defaultData: createWidgetData(),
+        type: 'widget',
         version: 1,
-        routeName: 'drawing',
+        routeName: 'widget',
         fallbackRouteName: 'editor'
       });
 
@@ -301,15 +301,15 @@ describe('useFileSession', (): void => {
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
-      const session = useFileSession<DrawingData>({
-        fileId: ref('drawing-1'),
+      const session = useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
         kind: 'tibis',
         defaultName: 'Untitled',
         defaultExt: 'tibis',
-        defaultData: createDrawingData(),
-        type: 'drawing',
+        defaultData: createWidgetData(),
+        type: 'widget',
         version: 1,
-        routeName: 'drawing',
+        routeName: 'widget',
         fallbackRouteName: 'editor'
       });
 
@@ -356,10 +356,10 @@ describe('useFileSession', (): void => {
   });
 
   it('registers disk paths for missing file tracking', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'drawing', version: 1, data: createDrawingData() });
+    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
     getFileByIdMock.mockResolvedValue({
       type: 'file',
-      id: 'drawing-1',
+      id: 'widget-1',
       path: '/tmp/board.tibis',
       name: 'board',
       ext: 'tibis',
@@ -369,15 +369,15 @@ describe('useFileSession', (): void => {
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
-      useFileSession<DrawingData>({
-        fileId: ref('drawing-1'),
+      useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
         kind: 'tibis',
         defaultName: 'Untitled',
         defaultExt: 'tibis',
-        defaultData: createDrawingData(),
-        type: 'drawing',
+        defaultData: createWidgetData(),
+        type: 'widget',
         version: 1,
-        routeName: 'drawing',
+        routeName: 'widget',
         fallbackRouteName: 'editor'
       });
 
@@ -385,11 +385,11 @@ describe('useFileSession', (): void => {
     });
     scope.stop();
 
-    expect(registerWatchMock).toHaveBeenCalledWith('drawing-1', '/tmp/board.tibis');
+    expect(registerWatchMock).toHaveBeenCalledWith('widget-1', '/tmp/board.tibis');
   });
 
   it('routes to fallback when an external change makes tibis content unsupported', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'drawing', version: 1, data: createDrawingData() });
+    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
     let fileChangedHandler: ((event: FileChangeEvent) => void) | null = null;
     onFileChangedMock.mockImplementation((handler: (event: FileChangeEvent) => void): (() => void) => {
       fileChangedHandler = handler;
@@ -397,7 +397,7 @@ describe('useFileSession', (): void => {
     });
     getFileByIdMock.mockResolvedValue({
       type: 'file',
-      id: 'drawing-1',
+      id: 'widget-1',
       path: '/tmp/board.tibis',
       name: 'board',
       ext: 'tibis',
@@ -407,15 +407,15 @@ describe('useFileSession', (): void => {
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
-      useFileSession<DrawingData>({
-        fileId: ref('drawing-1'),
+      useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
         kind: 'tibis',
         defaultName: 'Untitled',
         defaultExt: 'tibis',
-        defaultData: createDrawingData(),
-        type: 'drawing',
+        defaultData: createWidgetData(),
+        type: 'widget',
         version: 1,
-        routeName: 'drawing',
+        routeName: 'widget',
         fallbackRouteName: 'editor'
       });
 
@@ -430,19 +430,19 @@ describe('useFileSession', (): void => {
     scope.stop();
 
     expect(updateFileMock).toHaveBeenCalledWith(
-      'drawing-1',
+      'widget-1',
       expect.objectContaining({
         content: '{"type":"workflow","version":1}'
       })
     );
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'editor', params: { id: 'drawing-1' } });
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'editor', params: { id: 'widget-1' } });
   });
 
   it('does not write disk when tibis serialization fails', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'drawing', version: 1, data: createDrawingData() });
+    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
     getFileByIdMock.mockResolvedValue({
       type: 'file',
-      id: 'drawing-1',
+      id: 'widget-1',
       path: '/tmp/board.tibis',
       name: 'board',
       ext: 'tibis',
@@ -450,19 +450,19 @@ describe('useFileSession', (): void => {
       savedContent: content
     });
     const scope = effectScope();
-    const circular = createDrawingData() as DrawingData & { self?: unknown };
+    const circular = createWidgetData() as WidgetData & { self?: unknown };
     circular.self = circular;
 
     await scope.run(async (): Promise<void> => {
-      const session = useFileSession<DrawingData>({
-        fileId: ref('drawing-1'),
+      const session = useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
         kind: 'tibis',
         defaultName: 'Untitled',
         defaultExt: 'tibis',
-        defaultData: createDrawingData(),
-        type: 'drawing',
+        defaultData: createWidgetData(),
+        type: 'widget',
         version: 1,
-        routeName: 'drawing',
+        routeName: 'widget',
         fallbackRouteName: 'editor'
       });
 

@@ -133,7 +133,7 @@ export interface TibisDocumentSupportOptions {
  */
 export interface TibisDocumentRouteTarget {
   /** 目标路由名称 */
-  routeName: 'drawing' | 'editor';
+  routeName: 'widget' | 'editor';
 }
 
 /**
@@ -169,7 +169,7 @@ export function createTibisDocumentContent<TData extends object>(options: Create
  */
 export function parseTibisDocumentContent<TData extends object>(
   content: string,
-  options: TibisDocumentSupportOptions = { type: 'drawing', version: 1 }
+  options: TibisDocumentSupportOptions = { type: 'widget', version: 1 }
 ): TibisDocumentParseResult<TData> {
   try {
     const parsed = JSON.parse(content) as unknown;
@@ -210,7 +210,7 @@ export function resolveTibisDocumentRoute(content: string): TibisDocumentRouteTa
   const parsed = parseTibisDocumentContent<Record<string, unknown>>(content);
 
   return {
-    routeName: parsed.supported ? 'drawing' : 'editor'
+    routeName: parsed.supported ? 'widget' : 'editor'
   };
 }
 

@@ -122,8 +122,8 @@ describe('DropZone', () => {
       path: null,
       name: 'board',
       ext: 'tibis',
-      content: '{"type":"drawing","version":1}',
-      savedContent: '{"type":"drawing","version":1}'
+      content: '{"type":"widget","version":1}',
+      savedContent: '{"type":"widget","version":1}'
     });
 
     const wrapper = shallowMount(DropZone, {
@@ -132,7 +132,7 @@ describe('DropZone', () => {
       }
     });
 
-    await wrapper.element.dispatchEvent(createDropEvent(new File(['{"type":"drawing","version":1}'], 'board.tibis', { type: 'application/json' })));
+    await wrapper.element.dispatchEvent(createDropEvent(new File(['{"type":"widget","version":1}'], 'board.tibis', { type: 'application/json' })));
     await flushPromises();
 
     expect(createAndOpenMock).toHaveBeenCalledWith(expect.objectContaining({ ext: 'tibis', name: 'board' }));

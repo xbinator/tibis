@@ -15,13 +15,13 @@ import {
 import { getToolNamesByExposure } from '../../../shared/ai/tools/index.js';
 
 describe('builtin tools index', (): void => {
-  it('does not expose Drawing tools by default', (): void => {
+  it('does not expose Widget tools by default', (): void => {
     const toolNames = createBuiltinTools().map((tool) => tool.definition.name);
 
-    expect(toolNames).not.toContain('read_current_drawing');
-    expect(toolNames).not.toContain('create_drawing');
-    expect(toolNames).not.toContain('apply_drawing_operations');
-    expect(toolNames).not.toContain('update_current_drawing');
+    expect(toolNames).not.toContain('read_current_widget');
+    expect(toolNames).not.toContain('create_widget');
+    expect(toolNames).not.toContain('apply_widget_operations');
+    expect(toolNames).not.toContain('update_current_widget');
   });
 
   it('derives migrated tool exposure lists from the shared tool registry', (): void => {

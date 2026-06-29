@@ -55,7 +55,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
     });
   });
 
-  it('rejects drawing bridge requests as unsupported', async (): Promise<void> => {
+  it('rejects widget bridge requests as unsupported', async (): Promise<void> => {
     await expect(
       handleBChatRuntimeBridgeRequest(
         {
@@ -64,7 +64,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
           clientId: 'bchat',
           agentId: 'default',
           requestId: 'bridge-1',
-          kind: 'drawing-snapshot'
+          kind: 'widget-snapshot'
         },
         {
           getEditorContext: () => undefined,
@@ -73,7 +73,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       )
     ).rejects.toMatchObject({
       code: 'INVALID_INPUT',
-      message: '不支持的 bridge 请求类型：drawing-snapshot'
+      message: '不支持的 bridge 请求类型：widget-snapshot'
     });
 
     await expect(
@@ -84,7 +84,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
           clientId: 'bchat',
           agentId: 'default',
           requestId: 'bridge-2',
-          kind: 'apply-drawing-data',
+          kind: 'apply-widget-data',
           payload: { data: { elements: [], viewport: { center: { x: 0, y: 0 }, zoom: 1 } } }
         },
         {
@@ -94,7 +94,7 @@ describe('handleBChatRuntimeBridgeRequest', (): void => {
       )
     ).rejects.toMatchObject({
       code: 'INVALID_INPUT',
-      message: '不支持的 bridge 请求类型：apply-drawing-data'
+      message: '不支持的 bridge 请求类型：apply-widget-data'
     });
   });
 

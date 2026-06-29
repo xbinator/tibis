@@ -11,7 +11,7 @@ import type { RecentRecord } from '@/shared/storage';
 import WelcomePage from '@/views/welcome/index.vue';
 
 const routerPushMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise<void>>().mockResolvedValue(undefined));
-const createNewDrawingFileMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'drawing-1' }));
+const createNewWidgetFileMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'widget-1' }));
 const topRecentRecordsMock = vi.hoisted<{ value: RecentRecord[] }>(() => ({ value: [] }));
 const ensureLoadedMock = vi.hoisted(() => vi.fn());
 
@@ -30,7 +30,7 @@ vi.mock('@/hooks/useNavigate', () => ({
 vi.mock('@/hooks/useOpenFile', () => ({
   useOpenFile: () => ({
     createNewFile: vi.fn(),
-    createNewDrawingFile: createNewDrawingFileMock,
+    createNewWidgetFile: createNewWidgetFileMock,
     openFileById: vi.fn(),
     openNativeFile: vi.fn()
   })
@@ -121,18 +121,18 @@ describe('WelcomePage', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
     routerPushMock.mockClear();
-    createNewDrawingFileMock.mockClear();
+    createNewWidgetFileMock.mockClear();
     ensureLoadedMock.mockClear();
     topRecentRecordsMock.value = [];
   });
 
-  it('creates a drawing file from the quick action entry', async (): Promise<void> => {
+  it('creates a widget file from the quick action entry', async (): Promise<void> => {
     const wrapper = mountWelcomePage();
 
-    await wrapper.find('[data-testid="welcome-open-drawing"]').trigger('click');
+    await wrapper.find('[data-testid="welcome-open-widget"]').trigger('click');
 
-    expect(createNewDrawingFileMock).toHaveBeenCalledTimes(1);
-    expect(routerPushMock).not.toHaveBeenCalledWith({ name: 'drawing' });
+    expect(createNewWidgetFileMock).toHaveBeenCalledTimes(1);
+    expect(routerPushMock).not.toHaveBeenCalledWith({ name: 'widget' });
   });
 
   it('delegates recent record icon rendering to BRecentIcon', (): void => {

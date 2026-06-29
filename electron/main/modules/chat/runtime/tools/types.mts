@@ -4,7 +4,7 @@
  */
 import type { SUPPORTED_SETTING_KEYS } from './constants.mjs';
 import type { LogLevel, LogScope } from '../../../logger/types.mjs';
-import type { DrawingData } from '../domain/drawing-runtime.mjs';
+import type { WidgetData } from '../domain/widget-runtime.mjs';
 import type { ChatRuntimeMainToolExecutionInput } from '../types.mjs';
 import type { AIToolExecutionResult, MCPServerConfig, MCPToolSettings } from 'types/ai';
 import type { ChatRuntimeBridgeResult, ChatRuntimeConfirmationDecision, ChatRuntimeConfirmationRequest } from 'types/chat-runtime';
@@ -58,16 +58,16 @@ export interface RuntimeDocumentSnapshot {
   content: string;
 }
 
-/** Runtime 画板快照。 */
-export interface RuntimeDrawingSnapshot {
-  /** 画板 ID。 */
+/** Runtime Widget快照。 */
+export interface RuntimeWidgetSnapshot {
+  /** Widget ID。 */
   id: string;
-  /** 画板标题。 */
+  /** Widget标题。 */
   title: string;
-  /** 画板真实路径，未保存时可为空。 */
+  /** Widget真实路径，未保存时可为空。 */
   path: string | null;
-  /** 画板数据。 */
-  data: DrawingData;
+  /** Widget数据。 */
+  data: WidgetData;
 }
 
 /** Runtime 网页快照。 */
@@ -217,11 +217,11 @@ export interface RuntimeCreateDocumentInput {
   ext: string;
 }
 
-/** Runtime 创建画板输入。 */
-export interface RuntimeCreateDrawingInput {
-  /** 画板标题。 */
+/** Runtime 创建Widget输入。 */
+export interface RuntimeCreateWidgetInput {
+  /** Widget标题。 */
   title: string;
-  /** 初始画板操作。 */
+  /** 初始Widget操作。 */
   operations: unknown[];
 }
 

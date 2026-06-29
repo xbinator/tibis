@@ -1,0 +1,718 @@
+/**
+ * @file index.test.ts
+ * @description 验证Widget 页面文件菜单事件绑定。
+ * @vitest-environment jsdom
+ */
+import { defineComponent, nextTick } from 'vue';
+import type { ComponentPublicInstance, PropType } from 'vue';
+import { shallowMount, type VueWrapper } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { emitter } from '@/utils/emitter';
+import WidgetPage from '@/views/widget/index.vue';
+
+const addTabMock = vi.hoisted(() => vi.fn());
+const onSaveMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const onSaveAsMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const onRenameMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const selectElementByIdMock = vi.hoisted(() => vi.fn());
+const selectElementsByIdsMock = vi.hoisted(() => vi.fn());
+const copySelectionMock = vi.hoisted(() => vi.fn());
+const groupSelectionMock = vi.hoisted(() => vi.fn());
+const ungroupSelectionMock = vi.hoisted(() => vi.fn());
+const deleteSelectionMock = vi.hoisted(() => vi.fn());
+const reorderSelectionMock = vi.hoisted(() => vi.fn());
+const nanoidMock = vi.hoisted(() => vi.fn<() => string>());
+const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
+  value: {
+    name: '',
+    description: '',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    },
+    metadata: {},
+    elements: [],
+    viewport: {
+      center: { x: 0, y: 0 },
+      zoom: 1
+    }
+  }
+}));
+
+vi.mock('nanoid', () => ({
+  nanoid: nanoidMock
+}));
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({
+    fullPath: '/widget/widget-1',
+    params: {
+      id: 'widget-1'
+    }
+  })
+}));
+
+vi.mock('@/stores/workspace/tabs', () => ({
+  useTabsStore: () => ({
+    addTab: addTabMock
+  })
+}));
+
+vi.mock('@/hooks/useFileSession', () => ({
+  useFileSession: () => ({
+    currentTitle: {
+      value: 'board.tibis',
+      __v_isRef: true
+    },
+    fileState: {
+      value: {
+        id: 'widget-1',
+        name: 'board',
+        ext: 'tibis',
+        path: null,
+        content: ''
+      },
+      __v_isRef: true
+    },
+    data: widgetDataMock,
+    actions: {
+      onSave: onSaveMock,
+      onSaveAs: onSaveAsMock,
+      onRename: onRenameMock,
+      onDelete: vi.fn(),
+      onShowInFolder: vi.fn(),
+      onCopyPath: vi.fn(),
+      onCopyRelativePath: vi.fn(),
+      onBlur: vi.fn()
+    }
+  })
+}));
+
+/**
+ * 创建页面图层测试元素。
+ * @param id - 元素 ID
+ * @param title - 元素名称
+ * @param groupId - 组合 ID
+ * @returns 测试元素
+ */
+function createWidgetElement(id: string, title: string, groupId?: string): WidgetElement {
+  return {
+    id,
+    name: 'rect',
+    label: '矩形',
+    icon: 'lucide:square',
+    title,
+    position: { x: 0, y: 0 },
+    size: { width: 120, height: 80 },
+    rotation: 0,
+    style: {},
+    metadata: groupId ? { groupId } : {}
+  };
+}
+
+/**
+ * 创建 BWidget 测试替身。
+ * @returns BWidget 测试组件
+ */
+function createBWidgetStub(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'BWidget',
+    props: {
+      value: {
+        type: Object as PropType<WidgetData>,
+        required: true
+      },
+      select: {
+        type: Object as PropType<WidgetSelectTarget>,
+        default: null
+      }
+    },
+    emits: ['selection-change', 'update:select', 'update:value'],
+    setup(_props, { attrs, expose }): Record<string, never> {
+      expose({
+        readAttrs: (): Record<string, unknown> => attrs,
+        createElementFromClientPoint: vi.fn(),
+        selectElementById: selectElementByIdMock,
+        selectElementsByIds: selectElementsByIdsMock,
+        copySelection: copySelectionMock,
+        groupSelection: groupSelectionMock,
+        ungroupSelection: ungroupSelectionMock,
+        deleteSelection: deleteSelectionMock,
+        reorderSelection: reorderSelectionMock
+      });
+
+      return {};
+    },
+    template: '<div class="b-widget-stub"></div>'
+  });
+}
+
+/**
+ * BWidget 测试替身暴露能力。
+ */
+interface BWidgetStubExpose {
+  /** 读取未声明为属性的透传参数 */
+  readAttrs: () => Record<string, unknown>;
+}
+
+/**
+ * 读取 BWidget 测试替身暴露能力。
+ * @param wrapper - BWidget 测试替身包装器
+ * @returns 替身暴露能力
+ */
+function getBWidgetStubExpose(wrapper: VueWrapper): ComponentPublicInstance & BWidgetStubExpose {
+  return wrapper.vm as ComponentPublicInstance & BWidgetStubExpose;
+}
+
+/**
+ * 等待异步事件处理完成。
+ * @returns Promise
+ */
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+describe('WidgetPage', (): void => {
+  beforeEach((): void => {
+    addTabMock.mockClear();
+    onSaveMock.mockClear();
+    onSaveAsMock.mockClear();
+    onRenameMock.mockClear();
+    selectElementByIdMock.mockClear();
+    selectElementsByIdsMock.mockClear();
+    copySelectionMock.mockClear();
+    groupSelectionMock.mockClear();
+    ungroupSelectionMock.mockClear();
+    deleteSelectionMock.mockClear();
+    reorderSelectionMock.mockClear();
+    nanoidMock.mockReset();
+    widgetDataMock.value = createDefaultWidgetData();
+  });
+
+  it('adds the widget file tab with resolved file title', (): void => {
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: true,
+          Icon: true
+        }
+      }
+    });
+
+    expect(addTabMock).toHaveBeenCalledWith({
+      id: 'widget-1',
+      path: '/widget/widget-1',
+      title: 'board.tibis',
+      cacheKey: 'widget:widget-1'
+    });
+
+    wrapper.unmount();
+  });
+
+  it('handles global file menu events while active', async (): Promise<void> => {
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: true,
+          Icon: true
+        }
+      }
+    });
+
+    emitter.emit('file:save');
+    emitter.emit('file:saveAs');
+    emitter.emit('file:rename');
+    await flushPromises();
+
+    expect(onSaveMock).toHaveBeenCalledTimes(1);
+    expect(onSaveAsMock).toHaveBeenCalledTimes(1);
+    expect(onRenameMock).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('syncs page settings data through the value model', async (): Promise<void> => {
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: true,
+          Icon: true
+        }
+      }
+    });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+    const nextWidgetData: WidgetData = {
+      ...createDefaultWidgetData(),
+      name: 'profile_card',
+      description: '根据用户资料生成卡片节点'
+    };
+
+    expect(panelSettings.props('value')).toBe(widgetDataMock.value);
+
+    panelSettings.vm.$emit('update:value', nextWidgetData);
+    await nextTick();
+
+    expect(widgetDataMock.value).toEqual(nextWidgetData);
+    wrapper.unmount();
+  });
+
+  it('keeps design preview context inside widget value instead of passing a separate prop', (): void => {
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      metadata: {
+        previewContext: {
+          input: {
+            city: '上海'
+          },
+          state: {
+            weather: {
+              temperature: 28
+            }
+          }
+        }
+      }
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const widget = wrapper.findComponent({ name: 'BWidget' });
+    const widgetAttrs = getBWidgetStubExpose(widget).readAttrs();
+
+    expect(widget.props('value')).toEqual(widgetDataMock.value);
+    expect(widgetAttrs).not.toHaveProperty('renderContext');
+    expect(widgetAttrs).not.toHaveProperty('render-context');
+    wrapper.unmount();
+  });
+
+  it('selects the widget element when the sidebar layer emits selection', async (): Promise<void> => {
+    const selectedElement = createWidgetElement('node-2', '节点 2');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [createWidgetElement('node-1', '节点 1'), selectedElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+
+    expect(selectElementByIdMock).toHaveBeenCalledWith('node-2');
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2']);
+    wrapper.unmount();
+  });
+
+  it('selects a grouped child as the editable target when the sidebar layer emits child selection', async (): Promise<void> => {
+    const selectedElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [createWidgetElement('node-1', '节点 1', 'widget-group-1'), selectedElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+
+    expect(selectElementByIdMock).toHaveBeenCalledWith('node-2', { activateElement: true });
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2']);
+    expect(panelSettings.props('select')).toEqual(selectedElement);
+    wrapper.unmount();
+  });
+
+  it('selects grouped widget elements when the sidebar layer emits group selection', async (): Promise<void> => {
+    const firstElement = createWidgetElement('node-1', '节点 1', 'widget-group-1');
+    const secondElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [firstElement, secondElement, createWidgetElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [secondElement, firstElement]);
+    await nextTick();
+
+    expect(selectElementsByIdsMock).toHaveBeenCalledWith(['node-2', 'node-1']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2', 'node-1']);
+    wrapper.unmount();
+  });
+
+  it('syncs sidebar highlights from canvas multi-selection changes', async (): Promise<void> => {
+    const selectedElement = createWidgetElement('node-2', '节点 2');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [createWidgetElement('node-1', '节点 1'), selectedElement, createWidgetElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const widget = wrapper.findComponent({ name: 'BWidget' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+    widget.vm.$emit('selection-change', ['node-1', 'node-3']);
+    widget.vm.$emit('update:select', null);
+    await nextTick();
+
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-1', 'node-3']);
+    wrapper.unmount();
+  });
+
+  it('keeps the selected group and active child highlighted from canvas selection changes', async (): Promise<void> => {
+    const firstElement = createWidgetElement('node-1', '节点 1', 'widget-group-1');
+    const secondElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [firstElement, secondElement, createWidgetElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const widget = wrapper.findComponent({ name: 'BWidget' });
+
+    widget.vm.$emit('update:select', secondElement);
+    widget.vm.$emit('selection-change', ['node-1', 'node-2']);
+    await nextTick();
+
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-1', 'node-2']);
+    expect(panelSidebar.props('activeElementId')).toBe('node-2');
+    wrapper.unmount();
+  });
+
+  it('copies the widget element when the sidebar layer emits copy', async (): Promise<void> => {
+    nanoidMock.mockReturnValueOnce('copy0001');
+    const copiedElement = createWidgetElement('node-2', '节点 2');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [createWidgetElement('node-1', '节点 1'), copiedElement, createWidgetElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('copy-element', copiedElement);
+    await flushPromises();
+
+    expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1', 'node-2', 'copy0001', 'node-3']);
+    expect(widgetDataMock.value.elements[2]).toMatchObject({
+      title: '节点 2',
+      position: {
+        x: 16,
+        y: 16
+      }
+    });
+    expect(selectElementByIdMock).toHaveBeenCalledWith('copy0001');
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['copy0001']);
+    wrapper.unmount();
+  });
+
+  it('copies grouped widget elements as a new group when the sidebar layer emits group copy', async (): Promise<void> => {
+    nanoidMock.mockReturnValueOnce('copy0001').mockReturnValueOnce('copy0002');
+    const firstElement = createWidgetElement('node-1', '节点 1', 'widget-group-1');
+    const secondElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [firstElement, secondElement, createWidgetElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('copy-elements', [secondElement, firstElement]);
+    await flushPromises();
+
+    expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1', 'node-2', 'copy0001', 'copy0002', 'node-3']);
+    expect(widgetDataMock.value.elements[2]?.metadata.groupId).toBe('widget-group-2');
+    expect(widgetDataMock.value.elements[3]?.metadata.groupId).toBe('widget-group-2');
+    expect(selectElementsByIdsMock).toHaveBeenCalledWith(['copy0001', 'copy0002']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['copy0001', 'copy0002']);
+    wrapper.unmount();
+  });
+
+  it('forwards settings multi-selection commands to the widget canvas', async (): Promise<void> => {
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [createWidgetElement('node-1', '节点 1'), createWidgetElement('node-2', '节点 2')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+
+    panelSettings.vm.$emit('multi-command', 'group');
+    panelSettings.vm.$emit('multi-command', 'ungroup');
+    panelSettings.vm.$emit('multi-command', 'copy');
+    panelSettings.vm.$emit('multi-command', 'delete');
+    panelSettings.vm.$emit('multi-command', 'bringToFront');
+    await nextTick();
+
+    expect(groupSelectionMock).toHaveBeenCalledTimes(1);
+    expect(ungroupSelectionMock).toHaveBeenCalledTimes(1);
+    expect(copySelectionMock).toHaveBeenCalledTimes(1);
+    expect(deleteSelectionMock).toHaveBeenCalledTimes(1);
+    expect(reorderSelectionMock).toHaveBeenCalledWith('bringToFront');
+    wrapper.unmount();
+  });
+
+  it('ungroups the current settings multi-selection by selected ids', async (): Promise<void> => {
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [
+        createWidgetElement('node-1', '节点 1', 'widget-group-1'),
+        createWidgetElement('node-2', '节点 2', 'widget-group-1'),
+        createWidgetElement('node-3', '节点 3', 'widget-group-2')
+      ]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const widget = wrapper.findComponent({ name: 'BWidget' });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+
+    widget.vm.$emit('selection-change', ['node-1', 'node-2']);
+    await nextTick();
+    panelSettings.vm.$emit('multi-command', 'ungroup');
+    await nextTick();
+
+    expect(widgetDataMock.value.elements[0]?.metadata.groupId).toBeUndefined();
+    expect(widgetDataMock.value.elements[1]?.metadata.groupId).toBeUndefined();
+    expect(widgetDataMock.value.elements[2]?.metadata.groupId).toBe('widget-group-2');
+    wrapper.unmount();
+  });
+
+  it('applies settings style changes to the current multi-selection only', async (): Promise<void> => {
+    const firstElement = createWidgetElement('node-1', '节点 1');
+    const secondElement = createWidgetElement('node-2', '节点 2');
+    const thirdElement = createWidgetElement('node-3', '节点 3');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [firstElement, secondElement, thirdElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [firstElement, secondElement]);
+    await nextTick();
+
+    wrapper.findComponent({ name: 'PanelSettings' }).vm.$emit('multi-style-change', {
+      backgroundColor: '#fef3c7',
+      borderColor: '#f97316',
+      borderRadius: 6,
+      borderWidth: 2
+    });
+    await nextTick();
+
+    expect(widgetDataMock.value.elements[0]?.style).toEqual({
+      backgroundColor: '#fef3c7',
+      borderColor: '#f97316',
+      borderRadius: 6,
+      borderWidth: 2
+    });
+    expect(widgetDataMock.value.elements[1]?.style).toEqual({
+      backgroundColor: '#fef3c7',
+      borderColor: '#f97316',
+      borderRadius: 6,
+      borderWidth: 2
+    });
+    expect(widgetDataMock.value.elements[2]?.style).toEqual({});
+    expect(wrapper.findComponent({ name: 'PanelSettings' }).props('selectedElementIds')).toEqual(['node-1', 'node-2']);
+    wrapper.unmount();
+  });
+
+  it('applies settings layout changes to the current multi-selection bounds', async (): Promise<void> => {
+    const firstElement = createWidgetElement('node-1', '节点 1');
+    const secondElement = createWidgetElement('node-2', '节点 2');
+    const thirdElement = createWidgetElement('node-3', '节点 3');
+    firstElement.position = { x: 10, y: 20 };
+    firstElement.size = { width: 100, height: 50 };
+    secondElement.position = { x: 40, y: 100 };
+    secondElement.size = { width: 80, height: 60 };
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [firstElement, secondElement, thirdElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [firstElement, secondElement]);
+    await nextTick();
+
+    wrapper.findComponent({ name: 'PanelSettings' }).vm.$emit('multi-layout-change', {
+      x: 20,
+      y: 10,
+      width: 220,
+      height: 280
+    });
+    await nextTick();
+
+    expect(widgetDataMock.value.elements[0]?.position).toEqual({ x: 20, y: 10 });
+    expect(widgetDataMock.value.elements[0]?.size).toEqual({ width: 200, height: 100 });
+    expect(widgetDataMock.value.elements[1]?.position).toEqual({ x: 80, y: 170 });
+    expect(widgetDataMock.value.elements[1]?.size).toEqual({ width: 160, height: 120 });
+    expect(widgetDataMock.value.elements[2]?.position).toEqual({ x: 0, y: 0 });
+    expect(widgetDataMock.value.elements[2]?.size).toEqual({ width: 120, height: 80 });
+    wrapper.unmount();
+  });
+
+  it('deletes the widget element when the sidebar layer emits delete', async (): Promise<void> => {
+    const selectedElement = createWidgetElement('node-2', '节点 2');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [createWidgetElement('node-1', '节点 1'), selectedElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    panelSidebar.vm.$emit('delete-element', selectedElement);
+    await nextTick();
+
+    expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('deletes grouped widget elements when the sidebar layer emits group delete', async (): Promise<void> => {
+    const firstElement = createWidgetElement('node-1', '节点 1', 'widget-group-1');
+    const secondElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [firstElement, secondElement, createWidgetElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [secondElement, firstElement]);
+    panelSidebar.vm.$emit('delete-elements', [secondElement, firstElement]);
+    await nextTick();
+
+    expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-3']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('reorders widget elements when the sidebar layer emits move', async (): Promise<void> => {
+    const selectedElement = createWidgetElement('node-2', '节点 2');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [createWidgetElement('node-1', '节点 1'), selectedElement, createWidgetElement('node-3', '节点 3')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+    panelSidebar.vm.$emit('move-element', 'node-1', 'node-3', 'before');
+    await nextTick();
+
+    expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2', 'node-3', 'node-1']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2']);
+    wrapper.unmount();
+  });
+});

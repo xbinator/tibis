@@ -16,11 +16,11 @@
           <span class="action-label">打开文件</span>
         </div>
 
-        <div class="action-card" data-testid="welcome-open-drawing" @click="handleOpenDrawing">
+        <div class="action-card" data-testid="welcome-open-widget" @click="handleOpenWidget">
           <div class="action-icon">
             <Icon icon="lucide:pen-line" width="16" height="16" />
           </div>
-          <span class="action-label">画图</span>
+          <span class="action-label">小组件</span>
         </div>
       </div>
 
@@ -68,7 +68,7 @@ import DropZone from './components/DropZone.vue';
 const { openWebview } = useNavigate();
 const commandPanelStore = useCommandPanelStore();
 const recentStore = useRecentStore();
-const { createNewFile, createNewDrawingFile, openFileById, openNativeFile } = useOpenFile();
+const { createNewFile, createNewWidgetFile, openFileById, openNativeFile } = useOpenFile();
 
 const topRecentRecords = computed(() => recentStore.topRecentRecords);
 
@@ -89,10 +89,10 @@ async function handleOpenFile(): Promise<void> {
 }
 
 /**
- * 创建并打开画图文件。
+ * 创建并打开 Widget 文件。
  */
-async function handleOpenDrawing(): Promise<void> {
-  await createNewDrawingFile();
+async function handleOpenWidget(): Promise<void> {
+  await createNewWidgetFile();
 }
 
 /**

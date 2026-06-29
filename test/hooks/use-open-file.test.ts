@@ -57,21 +57,21 @@ describe('useOpenFile', (): void => {
     createAndOpenMock.mockReset();
   });
 
-  it('routes supported drawing tibis files to drawing', async (): Promise<void> => {
+  it('routes supported widget tibis files to widget', async (): Promise<void> => {
     openOrRefreshByPathFromDiskMock.mockResolvedValue({
       type: 'file',
-      id: 'drawing-1',
+      id: 'widget-1',
       path: '/tmp/board.tibis',
       name: 'board',
       ext: 'tibis',
-      content: '{"type":"drawing","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}',
+      content: '{"type":"widget","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}',
       savedContent: ''
     });
 
     const { openFileByPath } = useOpenFile();
     await openFileByPath('/tmp/board.tibis');
 
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'drawing', params: { id: 'drawing-1' } });
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-1' } });
   });
 
   it('routes invalid tibis files to editor', async (): Promise<void> => {

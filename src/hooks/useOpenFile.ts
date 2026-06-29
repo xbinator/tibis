@@ -5,7 +5,7 @@
 
 import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
-import { createDefaultDrawingData } from '@/components/BDrawing/utils/drawingData';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { native } from '@/shared/platform';
 import type { StoredFile } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/workspace/files';
@@ -42,8 +42,8 @@ interface OpenFileActions {
   openNativeFile: () => Promise<StoredFile | null>;
   /** 创建新的 Markdown 文件 */
   createNewFile: () => Promise<StoredFile>;
-  /** 创建新的 Tibis 画图文件 */
-  createNewDrawingFile: () => Promise<StoredFile>;
+  /** 创建新的 Tibis Widget 文件 */
+  createNewWidgetFile: () => Promise<StoredFile>;
 }
 
 /**
@@ -180,15 +180,15 @@ export function useOpenFile(): OpenFileActions {
   }
 
   /**
-   * 创建一个新的未保存画图文件并打开。
+   * 创建一个新的未保存 Widget 文件并打开。
    * @returns 创建后的文件记录
    */
-  async function createNewDrawingFile(): Promise<StoredFile> {
-    const drawingData = createDefaultDrawingData();
+  async function createNewWidgetFile(): Promise<StoredFile> {
+    const dataItem = createDefaultWidgetData();
     const content = createTibisDocumentContent({
-      type: 'drawing',
+      type: 'widget',
       version: 1,
-      data: drawingData
+      data: dataItem
     });
     const createdFile = await filesStore.createAndOpen({
       type: 'file',
@@ -204,5 +204,5 @@ export function useOpenFile(): OpenFileActions {
     return createdFile;
   }
 
-  return { openFile, openFileById, openFileByPath, openNativeFile, createNewFile, createNewDrawingFile };
+  return { openFile, openFileById, openFileByPath, openNativeFile, createNewFile, createNewWidgetFile };
 }

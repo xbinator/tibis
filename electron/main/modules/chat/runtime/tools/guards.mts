@@ -4,7 +4,7 @@
  */
 import type {
   RuntimeDocumentSnapshot,
-  RuntimeDrawingSnapshot,
+  RuntimeWidgetSnapshot,
   RuntimeFileContentSnapshot,
   RuntimeOpenResourceResult,
   RuntimeOpenResourceType,
@@ -44,11 +44,11 @@ export function isRuntimeDocumentSnapshot(value: unknown): value is RuntimeDocum
 }
 
 /**
- * 判断 bridge payload 是否为画板快照。
+ * 判断 bridge payload 是否为Widget快照。
  * @param value - bridge payload
- * @returns 是否为画板快照
+ * @returns 是否为Widget快照
  */
-export function isRuntimeDrawingSnapshot(value: unknown): value is RuntimeDrawingSnapshot {
+export function isRuntimeWidgetSnapshot(value: unknown): value is RuntimeWidgetSnapshot {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&
