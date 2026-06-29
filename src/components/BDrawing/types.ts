@@ -166,6 +166,8 @@ export interface DrawingSchemaProperty {
   description?: string;
   /** 对象字段定义 */
   properties?: Record<string, DrawingSchemaProperty>;
+  /** 对象字段的必填子字段 */
+  required?: string[];
   /** 数组元素结构 */
   items?: DrawingSchemaProperty;
 }
