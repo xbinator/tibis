@@ -79,7 +79,7 @@
         <p v-if="readFieldNameError(row.path)" class="schema-editor__field-error">{{ readFieldNameError(row.path) }}</p>
         <div v-if="isDescriptionExpanded(row.path)" class="schema-editor__description">
           <ATextarea
-            :auto-size="{ minRows: 3, maxRows: 5 }"
+            :auto-size="{ minRows: 2, maxRows: 4 }"
             placeholder="输入字段描述"
             size="small"
             :value="readFieldDescription(row)"
