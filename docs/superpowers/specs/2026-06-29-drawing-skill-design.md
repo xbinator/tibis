@@ -356,7 +356,7 @@ resolveDrawingTemplateFieldText(metadata, 'content', context)
 
 ### 下一步：运行态只读容器
 
-下一步新增一个最小 `BDrawingRuntimeView`，只解决“聊天里展示画布”的问题：
+下一步新增一个最小 `BDrawingRuntimeView`，只解决“聊天里展示画布”的问题。运行态不使用无限画布，不读取编辑态 `viewport.center` / `viewport.zoom` 作为展示视口，而是把所有节点的渲染后边界当成内容容器边界：
 
 ```ts
 interface BDrawingRuntimeViewProps {
@@ -367,11 +367,35 @@ interface BDrawingRuntimeViewProps {
 
 它的职责：
 
-- 只读渲染画布元素，不展示左侧元素库、右侧 Setter、顶部编辑工具栏或选中态编辑交互。
+- 只读渲染画布元素，不展示左侧元素库、右侧 Setter、顶部编辑工具栏、无限画布或选中态编辑交互。
+- 使用所有节点的 `position` 和实际渲染尺寸计算内容边界：`minX`、`minY`、`maxX`、`maxY`。
+- 内容容器尺寸 = 节点边界尺寸 + padding。
+- 节点在运行态舞台内整体平移 `-minX + padding`、`-minY + padding`，让最左上节点从 padding 后开始显示。
+- 运行态舞台等比缩放到 chat 消息可用宽度，保证整张画布完整展示，不出现横向滚动。
+- 容器高度根据缩放比例自动计算。
 - 通过 `provideRenderContext` 把 `renderContext` 提供给元素。
 - 复用现有元素视图和几何计算，验证 Text 模板可以在聊天消息里按 session 数据更新。
 - 不修改传入的 `drawingData`，session state 更新由外层聊天/Skill 会话管理。
 - 第一版不处理元素事件、方法执行、权限确认或 HTTP。
+
+运行态布局计算可以抽成纯工具函数，供组件和测试共同验证：
+
+```ts
+interface DrawingRuntimeLayout {
+  bounds: {
+    minX: number
+    minY: number
+    maxX: number
+    maxY: number
+    width: number
+    height: number
+  }
+  contentSize: DrawingSize
+  offset: DrawingPoint
+}
+```
+
+空画布第一版返回一个最小内容尺寸，例如 `1 x 1`，运行态组件可以渲染为空内容区域。是否展示空状态文案留到 chat 接入阶段再决定。
 
 ## Setter 扩展
 
@@ -542,7 +566,9 @@ metadata: {
 下一步运行态只读容器应包含以下测试：
 
 - `BDrawingRuntimeView` 根据传入 `renderContext` 渲染模板字段。
-- `BDrawingRuntimeView` 不展示编辑器工具栏、Setter、元素库、选中态编辑入口。
+- `BDrawingRuntimeView` 使用节点渲染后边界作为内容容器边界，不使用无限画布。
+- `BDrawingRuntimeView` 等比缩放内容舞台到容器宽度，并按缩放比例计算容器高度。
+- `BDrawingRuntimeView` 不展示编辑器工具栏、Setter、元素库、无限画布、选中态编辑入口。
 - `BDrawingRuntimeView` 不修改来源 `DrawingData`。
 - `renderContext` 更新后，Text 元素展示内容同步更新。
 
@@ -563,7 +589,7 @@ metadata: {
 推荐实现顺序：
 
 1. 收口设计文档，确保协议只保留模板字段单来源。
-2. 新增 `BDrawingRuntimeView`，支持传入 `DrawingData` 和 `DrawingRenderContext` 做只读渲染。
+2. 新增 `BDrawingRuntimeView`，支持传入 `DrawingData` 和 `DrawingRenderContext`，按节点内容边界缩放为只读卡片。
 3. 在聊天消息里接入一个 mock Drawing session，先手动展示天气或咖啡画布。
 4. 建立 Drawing skill session 模型和状态字段，但暂不执行脚本。
 5. 从已加载或已索引画布中做简单 Skill 发现。
