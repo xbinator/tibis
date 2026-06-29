@@ -660,12 +660,17 @@ describe('PageSetter', (): void => {
     expect(readStyleBlock(source, '.schema-editor__header-type')).not.toContain('flex: 0 1 220px;');
     expect(readStyleBlock(source, '.schema-editor__type-select')).not.toContain('flex: 0 1 220px;');
     expect(readStyleBlock(source, '.schema-editor__type-select')).toContain('width: var(--schema-editor-type-width);');
-    expect(readStyleBlock(source, '.schema-editor__header-controls')).toContain('flex: 0 0 60px;');
-    expect(readStyleBlock(source, '.schema-editor__header-controls')).toContain('grid-template-columns: 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__header-controls')).toContain('flex: 0 0 92px;');
     expect(readStyleBlock(source, '.schema-editor__header-controls')).toContain('grid-template-columns: 28px 28px 28px;');
-    expect(readStyleBlock(source, '.schema-editor__controls')).toContain('flex: 0 0 60px;');
-    expect(readStyleBlock(source, '.schema-editor__controls')).toContain('grid-template-columns: 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__header-controls')).toContain('grid-template-columns: 28px 28px 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__controls')).toContain('flex: 0 0 92px;');
     expect(readStyleBlock(source, '.schema-editor__controls')).toContain('grid-template-columns: 28px 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__controls')).toContain('grid-template-columns: 28px 28px 28px 28px;');
+    expect(readStyleBlock(source, '.schema-editor__row-wrap')).toContain('&.is-description-expanded');
+    expect(readStyleBlock(source, '.schema-editor__row-wrap')).toContain('background: var(--bg-secondary);');
+    expect(readStyleBlock(source, '.schema-editor__description')).toContain('box-sizing: border-box;');
+    expect(readStyleBlock(source, '.schema-editor__description')).toContain('width: 100%;');
+    expect(readStyleBlock(source, '.schema-editor__description')).not.toContain('padding-left');
     expect(readStyleBlock(source, '.schema-editor__header-controls')).not.toContain('40px');
     expect(readStyleBlock(source, '.schema-editor__controls')).not.toContain('40px');
     expect(source).not.toContain('schema-editor__required');
@@ -731,7 +736,7 @@ describe('PageSetter', (): void => {
     expect(findSchemaRow(inputSection, 'city').find('[data-tooltip="添加子字段"]').exists()).toBe(false);
     expect(findSchemaRow(inputSection, 'city').find('.schema-editor__action-spacer').exists()).toBe(false);
     expect(findSchemaRow(inputSection, 'city').find('.schema-editor__controls').exists()).toBe(true);
-    expect(findSchemaRow(inputSection, 'city').findAll('.schema-editor__control-cell')).toHaveLength(2);
+    expect(findSchemaRow(inputSection, 'city').findAll('.schema-editor__control-cell')).toHaveLength(3);
     expect(inputSection.find('.schema-editor__footer').exists()).toBe(false);
     expect(wrapper.text()).toContain('入参');
     expect(wrapper.text()).toContain('出参');
@@ -814,7 +819,7 @@ describe('PageSetter', (): void => {
     expect(findSchemaRow(inputSection, 'date').classes()).toContain('is-object');
     expect(findSchemaRow(inputSection, 'date').find('.schema-editor__toggle').exists()).toBe(false);
     expect(findSchemaRow(inputSection, 'location').find('.schema-editor__toggle-placeholder').exists()).toBe(false);
-    expect(findSchemaRow(inputSection, 'date').findAll('.schema-editor__control-cell')).toHaveLength(3);
+    expect(findSchemaRow(inputSection, 'date').findAll('.schema-editor__control-cell')).toHaveLength(4);
     expect(findSchemaRow(inputSection, 'date').find('[data-tooltip="添加子字段"]').attributes('data-icon')).toBe('lucide:git-branch-plus');
 
     await findSchemaRow(inputSection, 'date').find('[data-tooltip="添加子字段"]').trigger('click');
@@ -842,6 +847,39 @@ describe('PageSetter', (): void => {
     expect(wrapper.vm.drawingData.inputSchema.properties.field).toEqual({
       type: 'string'
     });
+    wrapper.unmount();
+  });
+
+  it('expands schema rows to edit field descriptions inline', async (): Promise<void> => {
+    const drawingData = createDrawingData();
+    const wrapper = mountPageSetterHost(drawingData);
+    const inputSection = findSectionBlock(wrapper, '入参');
+    const collapsedDescriptionButton = findSchemaRow(inputSection, 'city').find('[data-icon="lucide:maximize-2"]');
+
+    expect(inputSection.find('.schema-editor__description').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'city').element.closest('.schema-editor__row-wrap')?.classList.contains('is-description-expanded')).toBe(false);
+    expect(collapsedDescriptionButton.exists()).toBe(true);
+    expect(collapsedDescriptionButton.attributes('data-tooltip')).toBe('');
+
+    await collapsedDescriptionButton.trigger('click');
+
+    const descriptionEditor = inputSection.find('.schema-editor__description textarea');
+    const expandedDescriptionButton = findSchemaRow(inputSection, 'city').find('[data-icon="lucide:minimize-2"]');
+    expect(descriptionEditor.exists()).toBe(true);
+    expect(findSchemaRow(inputSection, 'city').element.closest('.schema-editor__row-wrap')?.classList.contains('is-description-expanded')).toBe(true);
+    expect((descriptionEditor.element as HTMLTextAreaElement).value).toBe('城市名称，例如上海');
+    expect(expandedDescriptionButton.exists()).toBe(true);
+    expect(expandedDescriptionButton.attributes('data-tooltip')).toBe('');
+
+    await descriptionEditor.setValue('新的城市说明');
+    expect(wrapper.vm.drawingData.inputSchema.properties.city.description).toBe('新的城市说明');
+
+    await inputSection.find('.schema-editor__description textarea').setValue('');
+    expect(wrapper.vm.drawingData.inputSchema.properties.city.description).toBeUndefined();
+
+    await expandedDescriptionButton.trigger('click');
+    expect(inputSection.find('.schema-editor__description').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'city').element.closest('.schema-editor__row-wrap')?.classList.contains('is-description-expanded')).toBe(false);
     wrapper.unmount();
   });
 
@@ -894,7 +932,7 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('opens an execution script dialog above output schema and saves execute method code', async (): Promise<void> => {
+  it('opens an execution script dialog below output schema and saves execute method code', async (): Promise<void> => {
     const drawingData = createDrawingData();
     const wrapper = mountPageSetterHost(drawingData);
     const sectionTitles = readSectionBlockTitles(wrapper);
@@ -906,7 +944,8 @@ describe('PageSetter', (): void => {
     ].join('\n');
 
     expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('入参'));
-    expect(sectionTitles.indexOf('执行方法')).toBeLessThan(sectionTitles.indexOf('出参'));
+    expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('出参'));
+    expect(sectionTitles.indexOf('执行方法')).toBeLessThan(sectionTitles.indexOf('动态预览'));
     expect(methodSection.text()).toContain('触发这个画布时，会执行这里配置的方法');
     expect(methodSection.text()).not.toContain('export async function execute(ctx)');
     expect(
@@ -914,17 +953,26 @@ describe('PageSetter', (): void => {
     ).not.toContain('方法');
 
     const editButton = findSectionEditButton(wrapper, '执行方法');
+    expect((editButton.props() as { icon?: string }).icon).toBe('lucide:code-xml');
     expect((editButton.props() as { size?: string }).size).toBe('mini');
     await editButton.trigger('click');
     expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑执行方法');
-    expect(wrapper.find('.method-editor__summary').text()).toContain('代码中可以使用 ctx.input、ctx.state、ctx.setState 和 ctx.result');
-    expect(wrapper.find('.method-editor__summary').text()).not.toContain('export async function execute(ctx)');
+    expect(wrapper.find('.method-editor__summary').exists()).toBe(false);
 
     const methodEditor = wrapper.findComponent({ name: 'BMonacoStub' });
     const editorProps = methodEditor.props() as BMonacoStubProps;
     expect(editorProps.language).toBe('typescript');
     expect(editorProps.options?.wordWrap).toBe(true);
     expect(editorProps.options?.typescriptCompilerOptions?.lib).toEqual(['es2020']);
+    expect(editorProps.value?.startsWith('// 在这里，您可以通过 ctx.input 获取画布输入变量')).toBe(true);
+    expect(editorProps.value).toContain('您可以通过 ctx.input 获取画布输入变量');
+    expect(editorProps.value).toContain('并通过 ctx.result 输出执行结果');
+    expect(editorProps.value).toContain('ctx 已经被正确注入到执行环境中');
+    expect(editorProps.value).toContain("return ctx.result.success({ city: ctx.input.city, message: '执行完成' })");
+    expect(editorProps.value).not.toContain("name: '小明'");
+    expect(editorProps.value).not.toContain('hobbies');
+    expect(editorProps.value).toContain('const city = input.city');
+    expect(editorProps.value).toContain('return result.success({');
     expect(editorProps.value).toContain('export async function execute(ctx: DrawingSkillContext): Promise<ExecutionResult>');
     expect(editorProps.extraLibs?.[0]?.content).toContain('interface DrawingSkillContext');
     expect(editorProps.extraLibs?.[0]?.content).toContain('调用画布时 AI 提取到的入参');

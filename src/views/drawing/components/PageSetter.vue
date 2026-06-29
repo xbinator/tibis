@@ -29,7 +29,7 @@
         </template>
         <template #extra>
           <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField('input')" />
-          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('input')">编辑</BButton>
+          <BButton size="mini" type="secondary" @click="openSchemaInputEditor('input')">编辑</BButton>
         </template>
         <div class="schema-body">
           <SchemaTreeEditor v-model:schema="inputSchema" />
@@ -51,7 +51,7 @@
         </template>
         <template #extra>
           <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField('output')" />
-          <BButton icon="lucide:file-json" size="mini" type="secondary" @click="openSchemaInputEditor('output')">编辑</BButton>
+          <BButton size="mini" type="secondary" @click="openSchemaInputEditor('output')">编辑</BButton>
         </template>
         <div class="schema-body">
           <SchemaTreeEditor v-model:schema="outputSchema" />
@@ -60,7 +60,7 @@
 
       <BSectionBlock title="执行方法">
         <template #extra>
-          <BButton size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
+          <BButton icon="lucide:code-xml" size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
         </template>
         <div class="method-summary">
           <p class="method-summary__text">触发这个画布时，会执行这里配置的方法，用于读取入参、更新画布状态并返回结果。</p>
@@ -137,15 +137,24 @@ const DRAWING_SKILL_DEFAULT_METHOD_TIMEOUT = 10000;
 const DEFAULT_SCHEMA_FIELD_NAME = 'field';
 /** Drawing Skill 默认方法代码。 */
 const DRAWING_SKILL_DEFAULT_METHOD_CODE = [
+  '// 在这里，您可以通过 ctx.input 获取画布输入变量，并通过 ctx.result 输出执行结果。',
+  '// ctx 已经被正确注入到执行环境中，无需自行创建。',
+  '// 下面是一个示例，获取画布输入中字段名为 city 的值：',
+  '// const city = ctx.input.city',
+  '// 下面是一个示例，输出当前 city 和执行完成消息：',
+  "// return ctx.result.success({ city: ctx.input.city, message: '执行完成' })",
+  '',
   'export async function execute(ctx: DrawingSkillContext): Promise<ExecutionResult> {',
   '  const { input, state, setState, result } = ctx',
+  '  const city = input.city',
   '',
-  "  setState('example', {",
-  '    input,',
-  '    state',
+  "  setState('lastQuery', {",
+  '    city,',
+  '    stateSnapshot: state',
   '  })',
   '',
   '  return result.success({',
+  '    city,',
   "    message: '执行完成'",
   '  })',
   '}',

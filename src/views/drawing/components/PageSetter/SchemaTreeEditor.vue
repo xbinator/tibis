@@ -21,7 +21,13 @@
     </div>
 
     <div v-else class="schema-editor__rows">
-      <div v-for="row in schemaRows" :key="row.path" class="schema-editor__row-wrap" :style="readRowStyle(row.depth)">
+      <div
+        v-for="row in schemaRows"
+        :key="row.path"
+        class="schema-editor__row-wrap"
+        :class="{ 'is-description-expanded': isDescriptionExpanded(row.path) }"
+        :style="readRowStyle(row.depth)"
+      >
         <div class="schema-editor__row" :class="{ 'is-invalid': Boolean(readFieldNameError(row.path)), 'is-object': isObjectSchemaProperty(row.property) }">
           <div class="schema-editor__name-cell">
             <BButton
@@ -52,6 +58,15 @@
             <div class="schema-editor__control-cell">
               <ACheckbox :checked="isFieldRequired(row)" @update:checked="(checked: boolean) => handleRequiredChange(row, checked)" />
             </div>
+            <div class="schema-editor__control-cell">
+              <BButton
+                :icon="isDescriptionExpanded(row.path) ? 'lucide:minimize-2' : 'lucide:maximize-2'"
+                size="mini"
+                square
+                type="text"
+                @click="toggleDescription(row.path)"
+              />
+            </div>
             <div v-if="isObjectSchemaProperty(row.property)" class="schema-editor__control-cell">
               <BButton icon="lucide:git-branch-plus" size="mini" square tooltip="添加子字段" type="text" @click="handleChildFieldAdd(row)" />
             </div>
@@ -62,6 +77,15 @@
           </div>
         </div>
         <p v-if="readFieldNameError(row.path)" class="schema-editor__field-error">{{ readFieldNameError(row.path) }}</p>
+        <div v-if="isDescriptionExpanded(row.path)" class="schema-editor__description">
+          <ATextarea
+            :auto-size="{ minRows: 3, maxRows: 5 }"
+            placeholder="输入字段描述"
+            size="small"
+            :value="readFieldDescription(row)"
+            @update:value="(value: string) => handleDescriptionInput(row, value)"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -124,6 +148,8 @@ const schema = defineModel<DrawingSchemaObject>('schema', { required: true });
 
 /** 已展开的对象字段路径。 */
 const expandedPaths = ref<Set<string>>(new Set());
+/** 已展开描述编辑器的字段路径。 */
+const descriptionExpandedPaths = ref<Set<string>>(new Set());
 /** 字段名编辑草稿。 */
 const fieldNameDrafts = ref<Record<string, string>>({});
 /** 字段名校验错误。 */
@@ -412,6 +438,41 @@ function toggleRow(path: string): void {
 }
 
 /**
+ * 判断描述编辑器是否展开。
+ * @param path - 字段路径
+ * @returns 描述编辑器是否展开
+ */
+function isDescriptionExpanded(path: string): boolean {
+  return descriptionExpandedPaths.value.has(path);
+}
+
+/**
+ * 写入描述展开路径集合。
+ * @param updater - 描述展开路径修改函数
+ */
+function updateDescriptionExpandedPaths(updater: (draft: Set<string>) => void): void {
+  const draft = new Set(descriptionExpandedPaths.value);
+
+  updater(draft);
+  descriptionExpandedPaths.value = draft;
+}
+
+/**
+ * 切换字段描述编辑器展开状态。
+ * @param path - 字段路径
+ */
+function toggleDescription(path: string): void {
+  updateDescriptionExpandedPaths((draft: Set<string>): void => {
+    if (draft.has(path)) {
+      draft.delete(path);
+      return;
+    }
+
+    draft.add(path);
+  });
+}
+
+/**
  * 读取字段名草稿。
  * @param row - schema 字段行
  * @returns 字段名输入值
@@ -478,6 +539,13 @@ function clearDescendantLocalState(path: string): void {
       }
     }
   });
+  updateDescriptionExpandedPaths((draft: Set<string>): void => {
+    for (const key of [...draft]) {
+      if (isSameOrDescendantPath(key, path)) {
+        draft.delete(key);
+      }
+    }
+  });
 }
 
 /**
@@ -497,6 +565,14 @@ function syncLocalStateAfterRename(oldPath: string, newPath: string): void {
       .map(([key, value]: [string, string]): [string, string] => [replacePathPrefix(key, oldPath, newPath), value])
   );
   updateExpandedPaths((draft: Set<string>): void => {
+    const renamedPaths = [...draft].map((key: string): string => (isSameOrDescendantPath(key, oldPath) ? replacePathPrefix(key, oldPath, newPath) : key));
+
+    draft.clear();
+    renamedPaths.forEach((key: string): void => {
+      draft.add(key);
+    });
+  });
+  updateDescriptionExpandedPaths((draft: Set<string>): void => {
     const renamedPaths = [...draft].map((key: string): string => (isSameOrDescendantPath(key, oldPath) ? replacePathPrefix(key, oldPath, newPath) : key));
 
     draft.clear();
@@ -613,6 +689,38 @@ function handleRequiredChange(row: SchemaTreeEditorRow, checked: boolean): void 
 }
 
 /**
+ * 读取字段描述。
+ * @param row - schema 字段行
+ * @returns 字段描述输入值
+ */
+function readFieldDescription(row: SchemaTreeEditorRow): string {
+  return row.property.description ?? '';
+}
+
+/**
+ * 处理字段描述输入。
+ * @param row - schema 字段行
+ * @param value - 字段描述输入值
+ */
+function handleDescriptionInput(row: SchemaTreeEditorRow, value: string): void {
+  updateSchema((draft: DrawingSchemaObject): void => {
+    const draftContainer = readSchemaContainer(draft, row.parentPath);
+    const currentProperty = draftContainer?.properties[row.name];
+
+    if (!draftContainer || !currentProperty) {
+      return;
+    }
+
+    if (value.trim()) {
+      currentProperty.description = value;
+      return;
+    }
+
+    delete currentProperty.description;
+  });
+}
+
+/**
  * 添加对象子字段。
  * @param row - 对象字段行
  */
@@ -699,19 +807,23 @@ const hasObjectActionColumn = computed<boolean>(() => schemaRows.value.some((row
 
   .schema-editor__header-controls {
     display: grid;
-    flex: 0 0 60px;
-    grid-template-columns: 28px 28px;
+    flex: 0 0 92px;
+    grid-template-columns: 28px 28px 28px;
     gap: 4px;
     align-items: center;
-    width: 60px;
+    width: 92px;
+
+    .schema-editor__header-actions {
+      grid-column: 2 / 4;
+    }
 
     &.is-object {
-      flex-basis: 92px;
-      grid-template-columns: 28px 28px 28px;
-      width: 92px;
+      flex-basis: 124px;
+      grid-template-columns: 28px 28px 28px 28px;
+      width: 124px;
 
       .schema-editor__header-actions {
-        grid-column: 2 / 4;
+        grid-column: 2 / 5;
       }
     }
   }
@@ -731,6 +843,12 @@ const hasObjectActionColumn = computed<boolean>(() => schemaRows.value.some((row
     display: flex;
     flex-direction: column;
     gap: 4px;
+
+    &.is-description-expanded {
+      padding: 6px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+    }
   }
 
   .schema-editor__row {
@@ -791,18 +909,22 @@ const hasObjectActionColumn = computed<boolean>(() => schemaRows.value.some((row
     height: 28px;
   }
 
+  textarea.ant-input {
+    padding: 2px 7px;
+  }
+
   .schema-editor__controls {
     display: grid;
-    flex: 0 0 60px;
-    grid-template-columns: 28px 28px;
+    flex: 0 0 92px;
+    grid-template-columns: 28px 28px 28px;
     gap: 4px;
     align-items: center;
-    width: 60px;
+    width: 92px;
 
     &.is-object {
-      flex-basis: 92px;
-      grid-template-columns: 28px 28px 28px;
-      width: 92px;
+      flex-basis: 124px;
+      grid-template-columns: 28px 28px 28px 28px;
+      width: 124px;
     }
   }
 
@@ -816,6 +938,20 @@ const hasObjectActionColumn = computed<boolean>(() => schemaRows.value.some((row
     font-size: 12px;
     line-height: 1.4;
     color: var(--color-danger);
+  }
+
+  .schema-editor__description {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .schema-editor__description :deep(.ant-input),
+  .schema-editor__description :deep(textarea) {
+    box-sizing: border-box;
+    width: 100%;
+    font-size: 12px;
+    line-height: 1.5;
+    resize: vertical;
   }
 
   .schema-editor__empty {

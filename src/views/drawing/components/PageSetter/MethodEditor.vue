@@ -5,10 +5,6 @@
 <template>
   <BModal v-model:open="open" title="编辑执行方法" :width="860" @close="handleEditorCancel">
     <div class="method-editor">
-      <div class="method-editor__summary">
-        <p class="method-editor__text">触发画布时运行的入口方法，代码中可以使用 ctx.input、ctx.state、ctx.setState 和 ctx.result。</p>
-      </div>
-
       <div class="method-editor__host">
         <BMonaco
           ref="methodEditorRef"
@@ -180,23 +176,6 @@ const methodEditorState = computed<EditorState>(() => ({
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.method-editor__summary {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
-}
-
-.method-editor__text {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-secondary);
 }
 
 .method-editor__host {
