@@ -97,7 +97,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { cloneDeep } from 'lodash-es';
+import { cloneDeep, has, isBoolean, isFinite, isPlainObject, isString } from 'lodash-es';
 import type { DrawingData, DrawingRenderContext, DrawingSchemaObject, DrawingSchemaProperty, DrawingSkillMethod } from '@/components/BDrawing/types';
 import type { DrawingSchemaKind } from '@/components/BDrawing/utils/drawingData';
 import { readDrawingPreviewRenderContext, writeDrawingPreviewRenderContext } from '@/components/BDrawing/utils/drawingPreviewContext';
@@ -187,10 +187,7 @@ const previewStateError = ref<string>('');
  * @param patch - 画板配置增量
  */
 function updateDrawingDataConfig(patch: Partial<Pick<DrawingData, 'description' | 'inputSchema' | 'name' | 'outputSchema'>>): void {
-  drawingData.value = {
-    ...drawingData.value,
-    ...patch
-  };
+  drawingData.value = { ...drawingData.value, ...patch };
 }
 
 /**
@@ -199,7 +196,7 @@ function updateDrawingDataConfig(patch: Partial<Pick<DrawingData, 'description' 
  * @returns 是否为普通对象记录
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return isPlainObject(value);
 }
 
 /**
@@ -226,10 +223,10 @@ function readDrawingSkillMethod(value: unknown): DrawingSkillMethod {
   }
 
   return {
-    enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
-    description: typeof value.description === 'string' ? value.description : '',
-    timeout: typeof value.timeout === 'number' && Number.isFinite(value.timeout) ? value.timeout : DRAWING_SKILL_DEFAULT_METHOD_TIMEOUT,
-    code: typeof value.code === 'string' && value.code.trim().length > 0 ? value.code : DRAWING_SKILL_DEFAULT_METHOD_CODE
+    enabled: isBoolean(value.enabled) ? value.enabled : true,
+    description: isString(value.description) ? value.description : '',
+    timeout: isFinite(value.timeout) ? (value.timeout as number) : DRAWING_SKILL_DEFAULT_METHOD_TIMEOUT,
+    code: isString(value.code) && value.code.trim().length > 0 ? value.code : DRAWING_SKILL_DEFAULT_METHOD_CODE
   };
 }
 
@@ -247,12 +244,12 @@ function createDefaultSchemaField(): DrawingSchemaProperty {
  * @returns 唯一字段名
  */
 function createUniqueRootSchemaFieldName(schema: DrawingSchemaObject): string {
-  if (!Object.prototype.hasOwnProperty.call(schema.properties, DEFAULT_SCHEMA_FIELD_NAME)) {
+  if (!has(schema.properties, DEFAULT_SCHEMA_FIELD_NAME)) {
     return DEFAULT_SCHEMA_FIELD_NAME;
   }
 
   let index = 1;
-  while (Object.prototype.hasOwnProperty.call(schema.properties, `${DEFAULT_SCHEMA_FIELD_NAME}${index}`)) {
+  while (has(schema.properties, `${DEFAULT_SCHEMA_FIELD_NAME}${index}`)) {
     index += 1;
   }
 
@@ -381,7 +378,7 @@ function parsePreviewContextText(text: string, label: 'input' | 'state'): Previe
   try {
     const value = JSON.parse(normalizedText) as unknown;
 
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    if (!isPlainObject(value)) {
       return {
         ok: false,
         message: `${label} 必须是 JSON 对象`
