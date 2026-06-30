@@ -37,26 +37,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * @param value - 变量路径
  * @param label - 显示名称
  * @param description - 变量说明
+ * @param children - 子级变量选项
  * @returns 变量选项
  */
-function createVariable(value: string, label: string, description?: string): Variable {
-  return { label, value, description };
+function createVariable(value: string, label: string, description?: string, children: Variable[] = []): Variable {
+  const variable: Variable = { label, value };
+
+  if (description) {
+    variable.description = description;
+  }
+
+  if (children.length > 0) {
+    variable.children = children;
+  }
+
+  return variable;
 }
 
 /**
- * 从 schema 属性中收集变量路径。
+ * 从 schema 属性中收集子级变量路径。
  * @param root - 上下文根名称
  * @param properties - schema 属性集合
  * @param parentSegments - 父级路径片段
- * @returns 变量选项列表
+ * @returns 子级变量选项列表
  */
-function collectSchemaVariables(
+function collectSchemaVariableChildren(
   root: WidgetBindingContextRoot,
   properties: Record<string, WidgetSchemaProperty> | undefined,
   parentSegments: string[] = []
 ): Variable[] {
   if (!properties) {
-    return [createVariable(root, root)];
+    return [];
   }
 
   const variables = Object.entries(properties).flatMap(([key, property]: [string, WidgetSchemaProperty]): Variable[] => {
@@ -66,26 +77,22 @@ function collectSchemaVariables(
 
     const segments = [...parentSegments, key];
     const path = formatWidgetBindingPath(root, segments);
-    const current = createVariable(path, property.description ?? key);
+    const children = property.type === 'object' ? collectSchemaVariableChildren(root, property.properties, segments) : [];
 
-    if (property.type === 'object' && property.properties) {
-      return [current, ...collectSchemaVariables(root, property.properties, segments)];
-    }
-
-    return [current];
+    return [createVariable(path, property.description ?? key, undefined, children)];
   });
 
-  return variables.length > 0 ? variables : [createVariable(root, root)];
+  return variables;
 }
 
 /**
- * 从对象记录中收集变量路径。
+ * 从对象记录中收集子级变量路径。
  * @param root - 上下文根名称
  * @param value - 对象记录
  * @param parentSegments - 父级路径片段
- * @returns 变量选项列表
+ * @returns 子级变量选项列表
  */
-function collectRecordVariables(root: WidgetBindingContextRoot, value: Record<string, unknown>, parentSegments: string[] = []): Variable[] {
+function collectRecordVariableChildren(root: WidgetBindingContextRoot, value: Record<string, unknown>, parentSegments: string[] = []): Variable[] {
   const variables = Object.entries(value).flatMap(([key, item]: [string, unknown]): Variable[] => {
     if (!isWidgetBindingPathSegmentAllowed(key)) {
       return [];
@@ -93,16 +100,32 @@ function collectRecordVariables(root: WidgetBindingContextRoot, value: Record<st
 
     const segments = [...parentSegments, key];
     const path = formatWidgetBindingPath(root, segments);
-    const current = createVariable(path, key);
+    const children = isRecord(item) ? collectRecordVariableChildren(root, item, segments) : [];
 
-    if (isRecord(item)) {
-      return [current, ...collectRecordVariables(root, item, segments)];
-    }
-
-    return [current];
+    return [createVariable(path, key, undefined, children)];
   });
 
-  return variables.length > 0 ? variables : [createVariable(root, root)];
+  return variables;
+}
+
+/**
+ * 创建 schema 根变量。
+ * @param root - 上下文根名称
+ * @param properties - schema 属性集合
+ * @returns schema 根变量
+ */
+function createSchemaRootVariable(root: WidgetBindingContextRoot, properties: Record<string, WidgetSchemaProperty> | undefined): Variable {
+  return createVariable(root, root, undefined, collectSchemaVariableChildren(root, properties));
+}
+
+/**
+ * 创建记录对象根变量。
+ * @param root - 上下文根名称
+ * @param value - 对象记录
+ * @returns 记录对象根变量
+ */
+function createRecordRootVariable(root: WidgetBindingContextRoot, value: Record<string, unknown> | undefined): Variable {
+  return createVariable(root, root, undefined, value ? collectRecordVariableChildren(root, value) : []);
 }
 
 /**
@@ -126,11 +149,11 @@ export function useElementVariables(readDataItem: ElementDataItemReader): UseEle
   const variableOptions = computed<VariableOptionGroup[]>((): VariableOptionGroup[] => {
     const dataItem = readDataItem();
     const previewContext = dataItem ? readWidgetPreviewRenderContext(dataItem.metadata) : undefined;
-    const inputVariables = collectSchemaVariables('input', dataItem?.inputSchema.properties);
-    const stateVariables = previewContext?.state ? collectRecordVariables('state', previewContext.state) : [createVariable('state', 'state')];
-    const outputVariables = collectSchemaVariables('output', dataItem?.outputSchema.properties);
+    const inputVariable = createSchemaRootVariable('input', dataItem?.inputSchema.properties);
+    const stateVariable = createRecordRootVariable('state', previewContext?.state);
+    const outputVariable = createSchemaRootVariable('output', dataItem?.outputSchema.properties);
 
-    return [createVariableGroup([...inputVariables, ...stateVariables, ...outputVariables, createVariable('lastResult', 'lastResult')])];
+    return [createVariableGroup([inputVariable, stateVariable, outputVariable, createVariable('lastResult', 'lastResult')])];
   });
 
   return {

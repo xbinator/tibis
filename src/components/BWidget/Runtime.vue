@@ -95,13 +95,9 @@ const runtimeElements = computed<WidgetRuntimeRenderableElement[]>(() =>
   )
 );
 /** 运行态根节点样式。 */
-const rootStyle = computed<CSSProperties>(() => {
-  void rootRef.value;
-
-  return {
-    height: `${scaledHeight.value}px`
-  };
-});
+const rootStyle = computed<CSSProperties>(() => ({
+  height: `${scaledHeight.value}px`
+}));
 /** 运行态舞台裁剪容器样式。 */
 const stageViewportStyle = computed<CSSProperties>(() => ({
   height: `${scaledHeight.value}px`

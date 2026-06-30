@@ -98,12 +98,12 @@ import MoveableLayer from './components/MoveableLayer.vue';
 import SelectoLayer from './components/SelectoLayer.vue';
 import Toolbar from './components/Toolbar.vue';
 import { getWidgetElementSchema } from './elements';
-import { useWidgetBoard } from './hooks/useWidgetBoard';
-import { useWidgetInteraction } from './hooks/useWidgetInteraction';
-import { useWidgetViewport } from './hooks/useWidgetViewport';
 import { useModelSync } from './hooks/useModelSync';
 import { provideRenderContext } from './hooks/useRenderContext';
 import { useViewportSize } from './hooks/useViewportSize';
+import { useWidgetBoard } from './hooks/useWidgetBoard';
+import { useWidgetInteraction } from './hooks/useWidgetInteraction';
+import { useWidgetViewport } from './hooks/useWidgetViewport';
 import WidgetCanvas from './renderers/WidgetCanvas.vue';
 import { createDefaultWidgetData } from './utils/widgetData';
 import {

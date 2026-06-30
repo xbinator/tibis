@@ -8,9 +8,17 @@ import { defineComponent } from 'vue';
 import type { PropType } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
 import TextSetter from '@/components/BWidget/elements/Text/Setter.vue';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
-import type { VariableOptionGroup } from '@/components/BPromptEditor/types';
+
+/**
+ * 测试用变量树节点。
+ */
+interface VariableTreeNode extends Variable {
+  /** 子级变量节点 */
+  children?: VariableTreeNode[];
+}
 
 /**
  * 创建测试文本元素。
@@ -47,6 +55,16 @@ function createWidgetData(): WidgetData {
         city: {
           type: 'string',
           description: '城市名称'
+        },
+        user: {
+          type: 'object',
+          description: '用户',
+          properties: {
+            name: {
+              type: 'string',
+              description: '用户名'
+            }
+          }
         }
       }
     },
@@ -89,7 +107,7 @@ function mountTextSetter(element: WidgetElement, dataItem: WidgetData = createWi
   return mount(TextSetter, {
     props: {
       element,
-      dataItem: dataItem
+      dataItem
     },
     global: {
       components: {
@@ -128,6 +146,24 @@ function mountTextSetter(element: WidgetElement, dataItem: WidgetData = createWi
       }
     }
   });
+}
+
+/**
+ * 扁平化变量树。
+ * @param variables - 变量树节点列表
+ * @returns 扁平变量节点列表
+ */
+function flattenVariableTree(variables: VariableTreeNode[]): VariableTreeNode[] {
+  return variables.flatMap((item: VariableTreeNode): VariableTreeNode[] => [item, ...flattenVariableTree(item.children ?? [])]);
+}
+
+/**
+ * 读取变量分组中的全部变量。
+ * @param options - 变量分组选项
+ * @returns 扁平变量列表
+ */
+function readVariables(options: VariableOptionGroup[]): VariableTreeNode[] {
+  return options.flatMap((group: VariableOptionGroup): VariableTreeNode[] => flattenVariableTree(group.options as VariableTreeNode[]));
 }
 
 describe('Text Setter', (): void => {
@@ -176,13 +212,19 @@ describe('Text Setter', (): void => {
     const wrapper = mountTextSetter(createTextElement());
     const editor = wrapper.findComponent({ name: 'BPromptEditorStub' });
     const options = editor.props('options') as VariableOptionGroup[];
-    const variables = options.flatMap((group: VariableOptionGroup) => group.options.map((item): string => item.value));
-    const labels = options.flatMap((group: VariableOptionGroup) => group.options.map((item): string => item.label));
+    const rootVariables = options.flatMap((group: VariableOptionGroup): string[] => group.options.map((item): string => item.value));
+    const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
+    const labels = readVariables(options).map((item: VariableTreeNode): string => item.label);
 
+    expect(rootVariables).toEqual(['input', 'state', 'output', 'lastResult']);
     expect(variables).toContain('input.city');
+    expect(variables).toContain('input.user');
+    expect(variables).toContain('input.user.name');
     expect(variables).toContain('state.weather.temperature');
     expect(variables).toContain('output.condition');
     expect(labels).toContain('城市名称');
+    expect(labels).toContain('用户');
+    expect(labels).toContain('用户名');
     expect(labels).toContain('temperature');
     expect(labels).toContain('天气概况');
     wrapper.unmount();
