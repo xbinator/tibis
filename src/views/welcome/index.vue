@@ -15,13 +15,6 @@
           </div>
           <span class="action-label">打开文件</span>
         </div>
-
-        <div class="action-card" data-testid="welcome-open-widget" @click="handleOpenWidget">
-          <div class="action-icon">
-            <Icon icon="lucide:pen-line" width="16" height="16" />
-          </div>
-          <span class="action-label">小组件</span>
-        </div>
       </div>
 
       <div v-if="topRecentRecords.length" class="recent-files-section">
@@ -67,7 +60,7 @@ import { resolveFileTitle } from '@/utils/file/title';
 const { openWebview } = useNavigate();
 const commandPanelStore = useCommandPanelStore();
 const recentStore = useRecentStore();
-const { createNewFile, createNewWidgetFile, openFileById, openNativeFile } = useOpenFile();
+const { createNewFile, openFileById, openNativeFile } = useOpenFile();
 
 const topRecentRecords = computed(() => recentStore.topRecentRecords);
 
@@ -85,13 +78,6 @@ function handleNewFile(): void {
  */
 async function handleOpenFile(): Promise<void> {
   await openNativeFile();
-}
-
-/**
- * 创建并打开 Widget 文件。
- */
-async function handleOpenWidget(): Promise<void> {
-  await createNewWidgetFile();
 }
 
 /**

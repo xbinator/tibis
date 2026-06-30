@@ -10,16 +10,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RecentRecord } from '@/shared/storage';
 import WelcomePage from '@/views/welcome/index.vue';
 
-const routerPushMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise<void>>().mockResolvedValue(undefined));
-const createNewWidgetFileMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'widget-1' }));
 const topRecentRecordsMock = vi.hoisted<{ value: RecentRecord[] }>(() => ({ value: [] }));
 const ensureLoadedMock = vi.hoisted(() => vi.fn());
-
-vi.mock('vue-router', () => ({
-  useRouter: () => ({
-    push: routerPushMock
-  })
-}));
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
@@ -30,7 +22,6 @@ vi.mock('@/hooks/useNavigate', () => ({
 vi.mock('@/hooks/useOpenFile', () => ({
   useOpenFile: () => ({
     createNewFile: vi.fn(),
-    createNewWidgetFile: createNewWidgetFileMock,
     openFileById: vi.fn(),
     openNativeFile: vi.fn()
   })
@@ -117,19 +108,16 @@ function mountWelcomePage(): VueWrapper {
 describe('WelcomePage', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
-    routerPushMock.mockClear();
-    createNewWidgetFileMock.mockClear();
     ensureLoadedMock.mockClear();
     topRecentRecordsMock.value = [];
   });
 
-  it('creates a widget file from the quick action entry', async (): Promise<void> => {
-    const wrapper = mountWelcomePage();
+  it('does not expose widget creation as a quick action entry', (): void => {
+    const source = readWelcomePageSource();
 
-    await wrapper.find('[data-testid="welcome-open-widget"]').trigger('click');
-
-    expect(createNewWidgetFileMock).toHaveBeenCalledTimes(1);
-    expect(routerPushMock).not.toHaveBeenCalledWith({ name: 'widget' });
+    expect(source).not.toContain('welcome-open-widget');
+    expect(source).not.toContain('createNewWidgetFile');
+    expect(source).not.toContain('<span class="action-label">小组件</span>');
   });
 
   it('delegates recent record icon rendering to BRecentIcon', (): void => {

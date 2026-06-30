@@ -23,19 +23,7 @@
       </div>
 
       <!-- 分页 -->
-      <div v-if="store.skills.length > PAGE_SIZE" class="skill-settings__pagination">
-        <APagination v-model:current="currentPage" :total="store.skills.length" :page-size="PAGE_SIZE">
-          <template #itemRender="{ type, originalElement }">
-            <BButton v-if="type === 'prev'" square size="small" type="outline">
-              <Icon icon="lucide:chevron-left" :width="16" />
-            </BButton>
-            <BButton v-else-if="type === 'next'" square size="small" type="outline">
-              <Icon icon="lucide:chevron-right" :width="16" />
-            </BButton>
-            <component :is="originalElement" v-else />
-          </template>
-        </APagination>
-      </div>
+      <SettingsPagination v-model:current="currentPage" :total="store.skills.length" :page-size="PAGE_SIZE" />
     </SettingsSection>
 
     <!-- 创建技能模态框 -->
@@ -46,9 +34,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Icon } from '@iconify/vue';
 import { useSkillStore } from '@/stores/ai/skill';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
+import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';
 import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
 import { MENU_ITEMS } from '@/views/settings/constants';
 import SkillCreator from './components/SkillCreator.vue';
@@ -130,14 +118,6 @@ function handleOpenSkill(name: string): void {
   padding: 16px 20px;
 }
 
-:deep(.ant-pagination-item),
-:deep(.ant-pagination-next),
-:deep(.ant-pagination-prev) {
-  min-width: 28px;
-  height: 28px;
-  line-height: 28px;
-}
-
 .skill-settings__empty {
   padding: 16px;
   font-size: 12px;
@@ -154,12 +134,5 @@ function handleOpenSkill(name: string): void {
   &:not(:first-child) {
     border-top: 1px solid var(--border-tertiary);
   }
-}
-
-.skill-settings__pagination {
-  display: flex;
-  justify-content: flex-end;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border-tertiary);
 }
 </style>

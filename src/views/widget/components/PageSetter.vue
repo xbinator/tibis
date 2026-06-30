@@ -9,8 +9,12 @@
         <BSectionItem label="名称">
           <AInput v-model:value="widgetName" placeholder="小组件名称" />
         </BSectionItem>
-        <BSectionItem label="描述" direction="vertical">
-          <ATextarea v-model:value="widgetDescription" :auto-size="{ minRows: 3, maxRows: 6 }" placeholder="简要说明当前小组件的能力和用途" />
+        <BSectionItem label="AI 使用说明" direction="vertical">
+          <ATextarea
+            v-model:value="widgetDescription"
+            :auto-size="{ minRows: 3, maxRows: 6 }"
+            placeholder="描述这个小组件能做什么、适合什么场景，帮助 AI 判断何时展示"
+          />
         </BSectionItem>
       </BSectionBlock>
 
@@ -299,16 +303,16 @@ const widgetName = computed<string>({
   }
 });
 
-/** 当前 Widget 能力描述。 */
+/** 当前 Widget AI 使用说明。 */
 const widgetDescription = computed<string>({
   /**
-   * 读取 Widget 能力描述。
-   * @returns 功能描述
+   * 读取 Widget AI 使用说明。
+   * @returns AI 使用说明
    */
   get: (): string => dataItem.value.description,
   /**
-   * 写入 Widget 能力描述。
-   * @param value - 新功能描述
+   * 写入 Widget AI 使用说明。
+   * @param value - 新 AI 使用说明
    */
   set: (value: string): void => {
     updateWidgetDataConfig({ description: value });

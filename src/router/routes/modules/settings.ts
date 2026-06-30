@@ -72,6 +72,12 @@ const routes: AppRouteRecordRaw[] = [
             meta: { title: 'MCP' }
           },
           {
+            path: 'widget',
+            name: 'widget-tools-settings',
+            component: () => import('@/views/settings/tools/widget/index.vue'),
+            meta: { title: '小组件' }
+          },
+          {
             path: 'skill',
             name: 'skill-tools-settings',
             component: RouterView,

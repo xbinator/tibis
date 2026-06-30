@@ -1,6 +1,6 @@
 import type { AIProviderType } from 'types/ai';
 
-export type SettingsMenuKey = 'provider' | 'service-model' | 'search' | 'mcp' | 'skill' | 'memory' | 'basic' | 'speech' | 'logger';
+export type SettingsMenuKey = 'provider' | 'service-model' | 'search' | 'mcp' | 'widget' | 'skill' | 'memory' | 'basic' | 'speech' | 'logger';
 
 /**
  * 侧边栏菜单项定义
@@ -20,6 +20,7 @@ export const MENU_ITEMS: Record<SettingsMenuKey, MenuItem> = {
   'service-model': { key: 'service-model', label: '默认模型', icon: 'lucide:sparkles', path: '/settings/service-model' },
   search: { key: 'search', label: '网络搜索', icon: 'lucide:globe', path: '/settings/tools/search' },
   mcp: { key: 'mcp', label: 'MCP 服务器', icon: 'lucide:cable', path: '/settings/tools/mcp' },
+  widget: { key: 'widget', label: '小组件', icon: 'lucide:blocks', path: '/settings/tools/widget' },
   skill: { key: 'skill', label: '技能', icon: 'lucide:wrench', path: '/settings/tools/skill' },
   memory: { key: 'memory', label: '全局记忆', icon: 'lucide:brain', path: '/settings/tools/memory' },
   basic: { key: 'basic', label: '基础设置', icon: 'lucide:settings-2', path: '/settings/basic' },
@@ -44,7 +45,7 @@ export interface MenuGroup {
 export const menuGroups: MenuGroup[] = [
   { label: '基础', items: ['basic'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) },
   { label: 'AI 服务', items: ['provider', 'service-model'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) },
-  { label: '功能配置', items: ['memory', 'mcp', 'skill', 'search'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) },
+  { label: '功能配置', items: ['memory', 'mcp', 'skill', 'widget', 'search'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) },
   { label: '系统', items: ['logger'].map((k) => MENU_ITEMS[k as SettingsMenuKey]) }
 ];
 

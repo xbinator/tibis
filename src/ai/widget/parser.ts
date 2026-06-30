@@ -1,0 +1,171 @@
+/**
+ * @file parser.ts
+ * @description 小组件 JSON 文件解析器。
+ */
+import type { WidgetDefinition } from './types';
+import { cloneDeep } from 'lodash-es';
+import type { WidgetData, WidgetViewport } from '@/components/BWidget/types';
+import { createDefaultWidgetData, createDefaultWidgetViewport, normalizeWidgetDataContract } from '@/components/BWidget/utils/widgetData';
+
+/**
+ * 判断值是否为普通记录。
+ * @param value - 待判断值
+ * @returns 是否为普通记录
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 判断值是否为有限数字。
+ * @param value - 待判断值
+ * @returns 是否为有限数字
+ */
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * 拼接路径片段，统一使用 / 分隔。
+ * @param segments - 路径片段
+ * @returns 拼接后的路径
+ */
+export function joinPath(...segments: string[]): string {
+  return segments
+    .map((segment: string): string => segment.replace(/\\/g, '/').replace(/\/+$/u, ''))
+    .join('/')
+    .replace(/\/+/gu, '/');
+}
+
+/**
+ * 从小组件配置文件路径读取目录形式的小组件 ID。
+ * @param filePath - 小组件 JSON 文件路径
+ * @returns 小组件 ID
+ */
+export function readWidgetIdFromFilePath(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const pathSegments = normalizedPath.split('/').filter(Boolean);
+  const fileName = pathSegments.at(-1) ?? '';
+
+  if (fileName === 'widget.json') {
+    return pathSegments.at(-2) ?? fileName;
+  }
+
+  return fileName.endsWith('.json') ? fileName.slice(0, -'.json'.length) : fileName;
+}
+
+/**
+ * 归一化 Widget 视口。
+ * @param value - 原始视口值
+ * @returns 可用视口
+ */
+function normalizeWidgetViewport(value: unknown): WidgetViewport {
+  if (!isRecord(value) || !isRecord(value.center) || !isFiniteNumber(value.center.x) || !isFiniteNumber(value.center.y) || !isFiniteNumber(value.zoom)) {
+    return createDefaultWidgetViewport();
+  }
+
+  return {
+    center: {
+      x: value.center.x,
+      y: value.center.y
+    },
+    zoom: value.zoom
+  };
+}
+
+/**
+ * 从未知记录归一化 WidgetData。
+ * @param id - 小组件文件 ID
+ * @param value - 原始 JSON 数据
+ * @returns 小组件数据
+ */
+function normalizeWidgetData(id: string, value: Record<string, unknown>): WidgetData {
+  const defaults = createDefaultWidgetData();
+  const contract = normalizeWidgetDataContract(value);
+  const data: WidgetData = {
+    ...defaults,
+    ...contract,
+    elements: Array.isArray(value.elements) ? (cloneDeep(value.elements) as WidgetData['elements']) : defaults.elements,
+    viewport: normalizeWidgetViewport(value.viewport)
+  };
+
+  return {
+    ...data,
+    name: data.name || id
+  };
+}
+
+/**
+ * 创建解析失败的小组件定义。
+ * @param filePath - 小组件 JSON 文件路径
+ * @param message - 错误信息
+ * @returns 解析失败定义
+ */
+function createWidgetParseError(filePath: string, message: string): WidgetDefinition {
+  const id = readWidgetIdFromFilePath(filePath);
+  const data = createDefaultWidgetData();
+
+  return {
+    id,
+    name: id,
+    description: '',
+    data: {
+      ...data,
+      name: id
+    },
+    filePath: filePath.replace(/\\/g, '/'),
+    enabled: true,
+    parsedAt: Date.now(),
+    parseError: message
+  };
+}
+
+/**
+ * 解析小组件 JSON 文件内容。
+ * @param content - JSON 文件文本
+ * @param filePath - 小组件 JSON 文件路径
+ * @returns 小组件定义
+ */
+export function parseWidgetJson(content: string, filePath: string): WidgetDefinition {
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
+  const id = readWidgetIdFromFilePath(normalizedFilePath);
+
+  try {
+    const parsed: unknown = JSON.parse(content);
+
+    if (!isRecord(parsed)) {
+      return createWidgetParseError(normalizedFilePath, 'Widget JSON must be an object.');
+    }
+
+    const data = normalizeWidgetData(id, parsed);
+
+    return {
+      id,
+      name: data.name,
+      description: data.description,
+      data,
+      filePath: normalizedFilePath,
+      enabled: true,
+      parsedAt: Date.now()
+    };
+  } catch (error: unknown) {
+    return createWidgetParseError(normalizedFilePath, error instanceof Error ? error.message : String(error));
+  }
+}
+
+/**
+ * 将 WidgetData 序列化为可打开的 .tibis 文件内容。
+ * @param data - 小组件数据
+ * @returns .tibis 文件 JSON 文本
+ */
+export function createWidgetTibisDocumentContent(data: WidgetData): string {
+  return JSON.stringify(
+    {
+      type: 'widget',
+      version: 1,
+      ...data
+    },
+    null,
+    2
+  );
+}

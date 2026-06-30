@@ -42,7 +42,8 @@ const COMPONENT_DIRS = [
   'BWidget',
   'BColorPicker',
   'BSection',
-  'BDrawer'
+  'BDrawer',
+  'BPagination'
 ];
 
 /**
