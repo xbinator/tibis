@@ -6,6 +6,19 @@
   <BModal v-model:open="visible" title="创建小组件" :width="480" @close="handleCancel">
     <AForm layout="vertical">
       <div class="widget-creator">
+        <BUpload
+          v-model:drag-over="isImportDragOver"
+          accept=".zip"
+          draggable
+          class="widget-creator__dropzone"
+          :class="{ 'widget-creator__dropzone--active': isImportDragOver }"
+          @change="handleZipSelected"
+        >
+          <BIcon class="widget-creator__dropzone-icon" icon="lucide:package-plus" :size="26" />
+          <div class="widget-creator__dropzone-title">拖拽 .zip 到此处或点击添加</div>
+          <div v-if="importedSourceName" class="widget-creator__dropzone-file">{{ importedSourceName }}</div>
+        </BUpload>
+
         <AFormItem class="widget-creator__id" label="标识" required v-bind="validateInfos.id">
           <AInput v-model:value="dataItem.id" placeholder="例如 weather" @blur="handleIdBlur" />
         </AFormItem>
@@ -33,8 +46,11 @@
 
 <script setup lang="ts">
 import type { Rule } from 'ant-design-vue/es/form';
-import { reactive, watch } from 'vue';
-import { Form } from 'ant-design-vue';
+import { reactive, ref, shallowRef, watch } from 'vue';
+import { Form, message } from 'ant-design-vue';
+import { cloneDeep } from 'lodash-es';
+import { importWidgetZipFile, type WidgetImportResource } from '@/ai/widget';
+import type { WidgetData } from '@/components/BWidget/types';
 import { asyncTo } from '@/utils/asyncTo';
 
 /**
@@ -47,6 +63,10 @@ export interface WidgetCreatePayload {
   name: string;
   /** 小组件描述。 */
   description: string;
+  /** 从 zip 导入的小组件数据。 */
+  data?: WidgetData;
+  /** 从 zip 导入的小组件资源文件。 */
+  resources?: WidgetImportResource[];
 }
 
 /** 小组件标识符，仅允许英文、数字、下划线和短横线。 */
@@ -65,6 +85,14 @@ const dataItem = reactive<WidgetCreatePayload>({
   name: '',
   description: ''
 });
+/** 当前是否有 zip 文件拖拽悬停。 */
+const isImportDragOver = ref(false);
+/** 已导入的小组件数据。 */
+const importedWidgetData = shallowRef<WidgetData | null>(null);
+/** 已导入的小组件资源。 */
+const importedWidgetResources = shallowRef<WidgetImportResource[]>([]);
+/** 已导入来源文件名。 */
+const importedSourceName = ref('');
 
 /** 表单校验规则。 */
 const rules = reactive<Record<string, Rule[]>>({
@@ -95,6 +123,53 @@ function handleIdBlur(): void {
 }
 
 /**
+ * 清空 zip 导入态。
+ */
+function resetImportedWidgetPackage(): void {
+  importedWidgetData.value = null;
+  importedWidgetResources.value = [];
+  importedSourceName.value = '';
+}
+
+/**
+ * 应用 zip 导入结果到创建表单。
+ * @param file - zip 文件
+ * @returns 导入完成信号
+ */
+async function importWidgetFromZipFile(file: File): Promise<void> {
+  const result = await importWidgetZipFile(file);
+
+  importedWidgetData.value = result.data;
+  importedWidgetResources.value = result.resources;
+  importedSourceName.value = result.sourceName;
+  dataItem.id = result.suggestedId;
+  dataItem.name = result.data.name || result.suggestedId;
+  dataItem.description = result.data.description;
+  message.success(`已导入 ${result.sourceName}`);
+}
+
+/**
+ * 处理 zip 文件选择或拖拽添加。
+ * @param files - 文件列表
+ * @returns 处理完成信号
+ */
+async function handleZipSelected(files: FileList): Promise<void> {
+  const file = files[0];
+
+  if (!file) {
+    return;
+  }
+
+  resetImportedWidgetPackage();
+
+  const [error] = await asyncTo(importWidgetFromZipFile(file));
+
+  if (error) {
+    message.error(error instanceof Error ? error.message : '导入小组件失败');
+  }
+}
+
+/**
  * 取消创建小组件。
  */
 function handleCancel(): void {
@@ -119,7 +194,9 @@ async function handleConfirm(): Promise<void> {
   emit('confirm', {
     id: dataItem.id,
     name: dataItem.name,
-    description: dataItem.description
+    description: dataItem.description,
+    ...(importedWidgetData.value ? { data: cloneDeep(importedWidgetData.value) } : {}),
+    ...(importedWidgetResources.value.length > 0 ? { resources: importedWidgetResources.value } : {})
   });
 }
 
@@ -128,6 +205,8 @@ watch(
   (open: boolean): void => {
     if (open) {
       resetFields();
+      resetImportedWidgetPackage();
+      isImportDragOver.value = false;
     }
   }
 );
@@ -137,6 +216,55 @@ watch(
 .widget-creator {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
+}
+
+.widget-creator__dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 112px;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-secondary);
+  border-radius: 8px;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.widget-creator__dropzone:hover,
+.widget-creator__dropzone--active {
+  color: var(--color-primary);
+  background: var(--bg-hover);
+  border-color: var(--color-primary);
+}
+
+.widget-creator__dropzone-icon {
+  color: currentColor;
+}
+
+.widget-creator__dropzone-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.widget-creator__dropzone:hover .widget-creator__dropzone-title,
+.widget-creator__dropzone--active .widget-creator__dropzone-title {
+  color: var(--color-primary);
+}
+
+.widget-creator__dropzone-file {
+  max-width: 100%;
+  padding: 2px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--color-primary);
+  white-space: nowrap;
+  background: var(--color-primary-bg);
+  border-radius: 4px;
 }
 </style>

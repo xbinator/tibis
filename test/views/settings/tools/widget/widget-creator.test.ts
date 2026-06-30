@@ -6,7 +6,10 @@
 /* eslint-disable vue/one-component-per-file */
 import { defineComponent } from 'vue';
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
+import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
+import type { WidgetImportResource } from '@/ai/widget';
+import type { WidgetData } from '@/components/BWidget/types';
 import WidgetCreator from '@/views/settings/tools/widget/components/WidgetCreator.vue';
 
 /**
@@ -82,6 +85,61 @@ const BButtonStub = defineComponent({
 });
 
 /**
+ * 小组件创建事件负载快照。
+ */
+interface WidgetCreatePayloadSnapshot {
+  /** 小组件标识。 */
+  id: string;
+  /** 小组件名称。 */
+  name: string;
+  /** 小组件描述。 */
+  description: string;
+  /** 从 zip 导入的小组件数据。 */
+  data?: WidgetData;
+  /** 从 zip 导入的小组件资源文件。 */
+  resources?: WidgetImportResource[];
+}
+
+/**
+ * 上传组件测试替身。
+ */
+const BUploadStub = defineComponent({
+  name: 'BUpload',
+  props: {
+    accept: { type: String, default: '' },
+    draggable: { type: Boolean, default: false },
+    dragOver: { type: Boolean, default: false }
+  },
+  emits: ['change', 'update:dragOver'],
+  setup(_props, { emit }) {
+    /**
+     * 转发原生文件选择事件。
+     * @param event - 原生变更事件
+     */
+    function handleChange(event: Event): void {
+      if (event.target instanceof HTMLInputElement && event.target.files) {
+        emit('change', event.target.files);
+      }
+    }
+
+    return { handleChange };
+  },
+  template: '<div><slot></slot><input type="file" @change="handleChange" /></div>'
+});
+
+/**
+ * 图标测试替身。
+ */
+const BIconStub = defineComponent({
+  name: 'BIcon',
+  props: {
+    icon: { type: String, default: '' },
+    size: { type: Number, default: 16 }
+  },
+  template: '<i class="b-icon-stub" :data-icon="icon" :data-size="size"></i>'
+});
+
+/**
  * 挂载小组件创建弹窗。
  * @returns 组件包装器
  */
@@ -91,13 +149,17 @@ function mountWidgetCreator(): VueWrapper {
       open: true
     },
     global: {
+      components: {
+        BUpload: BUploadStub
+      },
       stubs: {
         BModal: BModalStub,
         AForm: AFormStub,
         AFormItem: AFormItemStub,
         AInput: AInputStub,
         ATextarea: ATextareaStub,
-        BButton: BButtonStub
+        BButton: BButtonStub,
+        BIcon: BIconStub
       }
     }
   });
@@ -117,6 +179,76 @@ function findButtonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLBut
   }
 
   return button;
+}
+
+/**
+ * 创建测试 zip 文件。
+ * @param widgetJson - widget.json 内容
+ * @returns zip 文件
+ */
+async function createWidgetZipFile(widgetJson: Record<string, unknown>, resources: Array<{ path: string; content: Uint8Array }> = []): Promise<File> {
+  const zip = new JSZip();
+  zip.file('widget.json', JSON.stringify(widgetJson));
+  resources.forEach((resource: { path: string; content: Uint8Array }): void => {
+    zip.file(resource.path, resource.content);
+  });
+  const buffer = await zip.generateAsync({ type: 'arraybuffer' });
+
+  return new File([buffer], 'coffee.zip', { type: 'application/zip' });
+}
+
+/**
+ * 读取确认事件负载。
+ * @param wrapper - 组件包装器
+ * @returns 创建负载
+ */
+function readConfirmPayload(wrapper: VueWrapper): WidgetCreatePayloadSnapshot {
+  const payload = wrapper.emitted('confirm')?.[0]?.[0];
+
+  if (!payload) {
+    throw new Error('未触发 confirm 事件');
+  }
+
+  return payload as WidgetCreatePayloadSnapshot;
+}
+
+/**
+ * 通过真实上传输入框选择 zip 文件。
+ * @param wrapper - 组件包装器
+ * @param file - zip 文件
+ */
+async function selectZipFile(wrapper: VueWrapper, file: File): Promise<void> {
+  const input = wrapper.find<HTMLInputElement>('.widget-creator__dropzone input[type="file"]');
+
+  if (!input.exists()) {
+    throw new Error('未找到 zip 上传输入框');
+  }
+
+  Object.defineProperty(input.element, 'files', {
+    value: [file],
+    configurable: true
+  });
+  await input.trigger('change');
+}
+
+/**
+ * 等待 zip 导入完成并回填创建表单。
+ * @param wrapper - 组件包装器
+ */
+async function waitForZipImport(wrapper: VueWrapper, remainAttempts = 16): Promise<void> {
+  await flushPromises();
+
+  const idInput = wrapper.find<HTMLInputElement>('.widget-creator__id input');
+
+  if (idInput.exists() && idInput.element.value) {
+    return;
+  }
+
+  if (remainAttempts <= 1) {
+    throw new Error('等待 zip 导入回填表单超时');
+  }
+
+  await waitForZipImport(wrapper, remainAttempts - 1);
 }
 
 describe('WidgetCreator', (): void => {
@@ -147,6 +279,105 @@ describe('WidgetCreator', (): void => {
     await flushPromises();
 
     expect(wrapper.emitted('confirm')).toBeUndefined();
+  });
+
+  it('fills form and emits imported widget data from a zip file', async (): Promise<void> => {
+    const wrapper = mountWidgetCreator();
+    const file = await createWidgetZipFile({
+      name: '咖啡菜单',
+      description: '展示咖啡列表',
+      elements: [
+        {
+          id: 'text-1',
+          name: 'text',
+          label: '文本',
+          icon: 'lucide:type',
+          title: '文本节点',
+          position: { x: 12, y: 24 },
+          size: { width: 120, height: 48 },
+          rotation: 0,
+          style: {},
+          metadata: {}
+        }
+      ]
+    });
+
+    await selectZipFile(wrapper, file);
+    await waitForZipImport(wrapper);
+
+    expect((wrapper.find('.widget-creator__id input').element as HTMLInputElement).value).toBe('coffee');
+    expect((wrapper.find('.widget-creator__name input').element as HTMLInputElement).value).toBe('咖啡菜单');
+    expect((wrapper.find('.widget-creator__description textarea').element as HTMLTextAreaElement).value).toBe('展示咖啡列表');
+
+    await findButtonByText(wrapper, '保存').trigger('click');
+    await flushPromises();
+
+    const payload = readConfirmPayload(wrapper);
+
+    expect(payload.id).toBe('coffee');
+    expect(payload.name).toBe('咖啡菜单');
+    expect(payload.description).toBe('展示咖啡列表');
+    expect(payload.data?.elements).toHaveLength(1);
+  });
+
+  it('emits imported zip resources with widget data', async (): Promise<void> => {
+    const wrapper = mountWidgetCreator();
+    const file = await createWidgetZipFile(
+      {
+        name: '咖啡菜单',
+        description: '展示咖啡列表'
+      },
+      [
+        {
+          path: 'assets/icon.png',
+          content: new Uint8Array([9, 8, 7])
+        }
+      ]
+    );
+
+    await selectZipFile(wrapper, file);
+    await waitForZipImport(wrapper);
+    await findButtonByText(wrapper, '保存').trigger('click');
+    await flushPromises();
+
+    const payload = readConfirmPayload(wrapper);
+
+    expect(payload.resources).toHaveLength(1);
+    expect(payload.resources?.[0]?.relativePath).toBe('assets/icon.png');
+    expect(Array.from(new Uint8Array(payload.resources?.[0]?.content ?? new ArrayBuffer(0)))).toEqual([9, 8, 7]);
+  });
+
+  it('clears previous imported data when the next zip import fails', async (): Promise<void> => {
+    const wrapper = mountWidgetCreator();
+    const validFile = await createWidgetZipFile(
+      {
+        name: '咖啡菜单',
+        description: '展示咖啡列表'
+      },
+      [
+        {
+          path: 'assets/icon.png',
+          content: new Uint8Array([9, 8, 7])
+        }
+      ]
+    );
+    const invalidZip = new JSZip();
+    invalidZip.file('nested/widget.json', JSON.stringify({ name: '错误包' }));
+    const invalidBuffer = await invalidZip.generateAsync({ type: 'arraybuffer' });
+    const invalidFile = new File([invalidBuffer], 'bad.zip', { type: 'application/zip' });
+
+    await selectZipFile(wrapper, validFile);
+    await waitForZipImport(wrapper);
+    await selectZipFile(wrapper, invalidFile);
+    await flushPromises();
+    await flushPromises();
+    await findButtonByText(wrapper, '保存').trigger('click');
+    await flushPromises();
+
+    const payload = readConfirmPayload(wrapper);
+
+    expect(payload.data).toBeUndefined();
+    expect(payload.resources).toBeUndefined();
   });
 
   it('closes when clicking cancel', async (): Promise<void> => {
