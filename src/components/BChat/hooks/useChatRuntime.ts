@@ -423,6 +423,20 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
   const agentId = options.agentId ?? 'default';
   const electronAPI = getElectronAPI();
   const activeRuntimeId = ref<string | null>(null);
+  /** 已发起中止的 runtime ID，用于拒绝中止后迟到的交互请求。 */
+  const abortedRuntimeIds = new Set<string>();
+
+  /**
+   * 判断 runtime 交互请求是否已经失效。
+   * @param runtimeId - runtime ID
+   * @returns 是否应拒绝处理
+   */
+  function isRuntimeInteractionRequestStale(runtimeId: string): boolean {
+    if (options.isRuntimeEventIgnored?.(runtimeId) === true) return true;
+    if (abortedRuntimeIds.has(runtimeId)) return true;
+
+    return activeRuntimeId.value !== null && activeRuntimeId.value !== runtimeId;
+  }
 
   /**
    * 处理 runtime 消息事件。
@@ -548,6 +562,10 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       await submitConfirmationDecision(event, { approved: false });
       return;
     }
+    if (isRuntimeInteractionRequestStale(event.runtimeId)) {
+      await submitConfirmationDecision(event, { approved: false });
+      return;
+    }
 
     const rememberedDecision = getRememberedRuntimeConfirmationDecision(event.request);
     if (rememberedDecision) {
@@ -650,8 +668,16 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     const runtimeId = activeRuntimeId.value;
     if (!runtimeId) return;
 
-    assertRuntimeResult(await electronAPI.chatRuntimeAbort({ runtimeId }));
-    activeRuntimeId.value = null;
+    abortedRuntimeIds.add(runtimeId);
+    try {
+      assertRuntimeResult(await electronAPI.chatRuntimeAbort({ runtimeId }));
+      if (activeRuntimeId.value === runtimeId) {
+        activeRuntimeId.value = null;
+      }
+    } catch (error) {
+      abortedRuntimeIds.delete(runtimeId);
+      throw error;
+    }
   }
 
   return {

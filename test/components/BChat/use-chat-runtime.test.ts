@@ -858,6 +858,115 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
+  it('rejects late confirmation requests after aborting the active runtime', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const requestConfirmation = vi.fn(async () => ({ approved: true as const }));
+    const scope = effectScope();
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        requestConfirmation
+      });
+
+      await runtime.send({
+        sessionId: 'session-1',
+        content: 'hello'
+      });
+      await runtime.abort();
+      electronAPIMock.chatRuntimeSubmitConfirmation.mockClear();
+
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-after-abort',
+        toolCallId: 'tool-call-after-abort',
+        request: {
+          toolCallId: 'tool-call-after-abort',
+          toolName: 'operate_webpage',
+          title: '操作当前网页',
+          description: '向当前网页元素 #2 输入文本',
+          riskLevel: 'write'
+        }
+      });
+      await Promise.resolve();
+
+      expect(requestConfirmation).not.toHaveBeenCalled();
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-after-abort',
+        decision: { approved: false }
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('rejects confirmation requests while abort command is still pending', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const requestConfirmation = vi.fn(async () => ({ approved: true as const }));
+    const scope = effectScope();
+    let resolveAbort: ((result: { ok: true }) => void) | null = null;
+
+    electronAPIMock.chatRuntimeAbort.mockImplementationOnce(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          resolveAbort = resolve;
+        })
+    );
+
+    await scope.run(async () => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1',
+        requestConfirmation
+      });
+
+      await runtime.send({
+        sessionId: 'session-1',
+        content: 'hello'
+      });
+      const abortPromise = runtime.abort();
+      electronAPIMock.chatRuntimeSubmitConfirmation.mockClear();
+
+      emitRuntimeEvent(listeners, 'confirmationRequest', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        confirmationId: 'confirmation-during-abort',
+        toolCallId: 'tool-call-during-abort',
+        request: {
+          toolCallId: 'tool-call-during-abort',
+          toolName: 'operate_webpage',
+          title: '操作当前网页',
+          description: '向当前网页元素 #2 输入文本',
+          riskLevel: 'write'
+        }
+      });
+      await Promise.resolve();
+
+      expect(requestConfirmation).not.toHaveBeenCalled();
+      expect(electronAPIMock.chatRuntimeSubmitConfirmation).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        confirmationId: 'confirmation-during-abort',
+        decision: { approved: false }
+      });
+
+      if (!resolveAbort) {
+        throw new Error('abort promise was not created');
+      }
+      resolveAbort({ ok: true });
+      await abortPromise;
+      expect(runtime.activeRuntimeId.value).toBeNull();
+    });
+
+    scope.stop();
+  });
+
   it('ignores late events for rollback-invalidated runtimes', async (): Promise<void> => {
     const messages = ref<Message[]>([
       createMessage({
