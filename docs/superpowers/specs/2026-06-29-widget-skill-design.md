@@ -2,7 +2,7 @@
 
 ## 概要
 
-这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以被聊天发现、被 AI 路由选中，并以交互式Widget卡片的形式展示给用户。Widget本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段。Skill 发现相关信息放在 `WidgetData.metadata.skill` 下；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互逻辑放在元素自己的 `metadata.handlers` 中，并由 `src/components/BWidget/elements/**/Setter.vue` 和 `src/components/BWidget/elements/**/index.vue` 分别负责编辑和渲染。
+这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以被聊天发现、被 AI 路由选中，并以交互式Widget卡片的形式展示给用户。Widget本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段。Skill 发现相关信息放在 `WidgetData.metadata.skill` 下；执行入口使用 `WidgetData.execute`，不放入 `metadata.skill.methods`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互逻辑放在元素自己的 `metadata.handlers` 中，并由 `src/components/BWidget/elements/**/Setter.vue` 和 `src/components/BWidget/elements/**/index.vue` 分别负责编辑和渲染。
 
 第一条纵向闭环应支持天气或咖啡Widget：
 
@@ -61,7 +61,9 @@ interface WidgetData {
   name: string
   description: string
   inputSchema: ObjectJsonSchema
+  stateSchema: ObjectJsonSchema
   outputSchema: ObjectJsonSchema
+  execute?: WidgetExecuteMethod
   metadata: WidgetMetadata
   elements: WidgetElement[]
   viewport: WidgetViewport
@@ -72,9 +74,9 @@ interface WidgetData {
 
 `state` 不作为用户需要手写维护的 schema 配置。编辑器通过 `buildWidgetStateSchema` 静态分析 Widget 方法代码中的 `setState(path, value)` / `ctx.setState(path, value)` 调用，生成可绑定的 `state.*` 变量候选。第一版只推导静态字符串路径、对象字面量、基础字面量，以及可对应到 `inputSchema` 的 `input.x` / `ctx.input.x` 类型；动态路径或复杂表达式不强行猜测。
 
-### Widget级 Skill 元信息
+### Widget Skill 发现与执行入口
 
-Skill 发现、权限和方法定义放在 `WidgetData.metadata.skill` 下：
+Skill 发现信息放在 `WidgetData.metadata.skill` 下；执行入口放在 `WidgetData.execute` 下。第一版只支持一个入口函数，不兼容旧的 `metadata.skill.methods.execute`，也不做旧数据迁移：
 
 ```ts
 interface WidgetSkillMetadata {
@@ -82,7 +84,6 @@ interface WidgetSkillMetadata {
   aliases?: string[]
   triggers?: string[]
   permissions?: WidgetSkillPermissions
-  methods?: Record<string, WidgetSkillMethod>
 }
 
 interface WidgetSkillPermissions {
@@ -97,8 +98,6 @@ interface WidgetSkillHttpPermission {
   origin: string
   /** 可选路径前缀或路径模式；不配置时表示该 origin 下所有路径 */
   paths?: string[]
-  /** 这条规则适用的Widget方法名；不配置时表示所有方法 */
-  methodNames?: string[]
   /** 允许的 HTTP method；不配置时默认只允许 GET */
   httpMethods?: WidgetHttpMethod[]
   /** 允许脚本显式携带的敏感 header 名称；未列出的敏感 header 需要确认或拒绝 */
@@ -107,7 +106,7 @@ interface WidgetSkillHttpPermission {
   requireConfirmation?: boolean
 }
 
-interface WidgetSkillMethod {
+interface WidgetExecuteMethod {
   /** 方法是否启用，默认 true */
   enabled?: boolean
   /** 方法说明，用于编辑器提示、AI 路由解释和权限确认文案 */
@@ -121,17 +120,14 @@ interface WidgetSkillMethod {
 }
 ```
 
-`name`、`description`、`aliases`、`triggers` 用于 Skill 路由。`methods` 是可被元素事件处理器复用的代码方法。方法代码应是一个完整函数，函数内部完成闭环：读取上下文、调用 HTTP/AI/其他方法、写入 session state，并返回统一 `ExecutionResult`。
+`name`、`description`、`aliases`、`triggers` 用于 Skill 路由。`execute` 是 Widget 唯一执行入口，方法代码应是一个完整函数，函数内部完成闭环：读取上下文、调用 HTTP/AI、写入 session state，并返回统一 `ExecutionResult`。
 
 方法执行控制规则：
 
-- `enabled` 缺省视为 `true`；禁用方法不会被路由、元素事件或其他方法调用。
+- `enabled` 缺省视为 `true`；禁用后不会被路由或元素事件触发。
 - `description` 用于编辑器提示、权限确认和调试记录，不参与执行逻辑。
 - `timeout` 只允许缩短系统默认超时；超过系统上限时按系统上限处理。
-- 方法可以通过 `ctx.methods.otherMethod()` 调用其他方法。
-- 允许方法间非循环调用，例如 `loadWeather` 调用 `normalizeWeather`。
-- 禁止方法同步或异步调用自身；执行器发现当前方法再次出现在调用栈时，返回 `status: 'failure'`、code 为 `EXECUTION_FAILED` 的结果。
-- 间接递归同样通过调用栈检测阻止，例如 `A -> B -> A`；另外设置全局调用深度上限，第一版建议默认 8 层，超过后返回 `TOOL_TIMEOUT` 或 `EXECUTION_FAILED`。
+- 第一版不提供 `ctx.methods`，因此不存在方法间递归调用问题。后续如引入多方法，需要重新定义调用深度和循环检测。
 
 ### 元素级动态元信息
 
@@ -149,24 +145,24 @@ metadata: {
 
 ```ts
 interface WidgetElementHandler {
-  /** 事件触发时调用的Widget级方法名 */
-  methodName: string
+  /** 事件触发时执行 Widget 顶层 execute */
+  action: 'execute'
 }
 ```
 
-`handlers` 默认只负责把元素事件连接到某个Widget级方法：
+`handlers` 默认只负责把元素事件连接到顶层 `execute`：
 
 ```ts
 metadata: {
   handlers: {
     click: {
-      methodName: 'loadWeather'
+      action: 'execute'
     }
   }
 }
 ```
 
-模板展示保持声明式，因为它只是简单展示逻辑。事件不再配置一段复杂流程，而是触发一个完整方法函数。复杂分支、API 调用、状态写入和结果返回都放在方法函数中完成。
+模板展示保持声明式，因为它只是简单展示逻辑。事件不再配置一段复杂流程，而是触发顶层 `execute`。复杂分支、API 调用、状态写入和结果返回都放在 `execute` 函数中完成。
 
 ### 模板表达式语法
 
@@ -416,15 +412,15 @@ interface WidgetRuntimeLayout {
 
 ## 脚本执行
 
-脚本以Widget级方法为主：
+脚本以 Widget 顶层 `execute` 为唯一入口：
 
-- Widget级方法：来自 `metadata.skill.methods`，方法代码是完整函数。
-- 元素级事件处理器：来自 `element.metadata.handlers`，默认只把事件转发给某个Widget级方法。
+- Widget 执行入口：来自 `WidgetData.execute`，方法代码是完整函数。
+- 元素级事件处理器：来自 `element.metadata.handlers`，默认只触发顶层 `execute`。
 
 方法代码运行在受控上下文中。推荐写成一个完整函数，一次完成闭环：
 
 ```ts
-async function loadWeather(ctx: WidgetScriptContext): Promise<ExecutionResult> {
+export async function execute(ctx: WidgetScriptContext): Promise<ExecutionResult> {
   const { input, http, setState, result } = ctx
   const response = await http.get('https://api.example.com/weather', {
     query: { city: input.city }
@@ -443,7 +439,6 @@ interface WidgetScriptContext {
   state: Record<string, unknown>
   output?: unknown
   event?: unknown
-  methods: Record<string, (inputOverride?: Record<string, unknown>) => Promise<ExecutionResult>>
   http: WidgetHttpClient
   ai: WidgetAIClient
   setState: (path: string, value: unknown) => void
@@ -454,7 +449,7 @@ interface WidgetScriptContext {
 
 脚本不能直接访问 `window`、Electron API、Node 文件系统 API、`process` 或不受限制的 import。
 
-轻量纯表达式求值可以在渲染进程执行。调用 `http`、`ai`、敏感方法或长耗时工作的代码，应在主进程 worker 或等价隔离边界中执行。所有脚本执行都需要超时、取消、异常捕获和结果归一化。
+轻量纯表达式求值可以在渲染进程执行。调用 `http`、`ai` 或长耗时工作的代码，应在主进程 worker 或等价隔离边界中执行。所有脚本执行都需要超时、取消、异常捕获和结果归一化。
 
 如果方法函数返回普通值，执行器自动包装为 `result.success(value)`。如果方法内部写入了 state，但没有显式返回结果，执行器可以返回 `result.success(null)` 并记录 state diff。
 
@@ -471,7 +466,6 @@ metadata: {
         {
           origin: 'https://api.example.com',
           paths: ['/weather'],
-          methodNames: ['loadWeather'],
           httpMethods: ['GET'],
           sensitiveHeaders: [],
           requireConfirmation: false
@@ -486,7 +480,6 @@ metadata: {
 
 - `origin`：请求 URL 的协议、主机和端口。执行器使用标准 `URL` 解析后比较，禁止用字符串前缀匹配完整 URL。
 - `paths`：可选路径前缀或路径模式；不配置时表示该 origin 下所有路径。权限匹配不依赖 query，query 只参与请求参数和审计记录。
-- `methodNames`：这条权限规则允许哪些Widget方法使用；不配置时表示所有Widget方法。
 - `httpMethods`：这条权限规则允许哪些 HTTP method；不配置时默认只允许 `GET`。
 - `sensitiveHeaders`：允许脚本显式携带的敏感 header 名称，例如 `authorization`、`cookie`、`x-api-key`。未声明的敏感 header 应按 `defaultHttpPolicy` 确认或拒绝。
 - `requireConfirmation`：即使命中规则也要求用户确认，适合付款、下单、发消息等有副作用操作。
@@ -545,7 +538,6 @@ metadata: {
 - 权限明确拒绝：返回 code 为 `PERMISSION_DENIED` 的 `failure`。
 - 权限确认被关闭或取消：返回 code 为 `CONFIRMATION_DISMISSED` 的 `failure`。
 - 用户取消当前Widget动作或等待输入：返回 code 为 `USER_CANCELLED` 的 `cancelled`。
-- 方法递归循环：返回 code 为 `EXECUTION_FAILED` 的 `failure`；如果已经触发全局超时，则返回 code 为 `TOOL_TIMEOUT` 的 `failure`。
 - `awaiting_user_input` 期间触发无关事件：返回 code 为 `ACTION_NOT_SUPPORTED` 的 `failure`，或在 UI 层禁用该事件入口。
 - HTTP 错误：返回带标准化消息的 `failure`。
 - 等待用户输入：session 状态变为 `awaiting_user_input`，聊天等待用户回答或元素交互。
@@ -573,11 +565,11 @@ metadata: {
 后续 Skill 执行阶段再补以下测试：
 
 - Widget skill metadata 归一化。
-- `WidgetSkillMethod.enabled`、`description`、`timeout` 的默认值、展示和执行控制。
+- `WidgetExecuteMethod.enabled`、`description`、`timeout` 的默认值、展示和执行控制。
 - 创建 session 时不修改源 `WidgetData`。
 - 脚本执行结果归一化。
-- `ctx.methods` 方法调用、禁用方法、直接递归、间接递归和调用深度上限。
-- HTTP 权限按 origin、路径、Widget方法名、HTTP method、敏感 header 匹配。
+- 第一版不提供 `ctx.methods`，不做多方法递归兼容。
+- HTTP 权限按 origin、路径、HTTP method、敏感 header 匹配。
 - HTTP 通配符、redirect 复核、主进程代理、确认、关闭确认、拒绝和失败路径。
 - Session 状态转换，以及 `running`、`awaiting_user_input` 下的并发和重入行为。
 - `ExecutionResult` 与现有聊天工具结果处理兼容。
@@ -593,8 +585,8 @@ metadata: {
 5. 从已加载或已索引Widget中做简单 Skill 发现。
 6. 天气或咖啡路由纵向闭环。
 7. 共享 schema 与执行结果别名。
-8. Widget skill metadata 类型、方法执行控制字段和归一化。
-9. 带结果归一化、超时和递归检测的脚本方法执行器。
+8. Widget skill metadata 类型、顶层 `execute` 执行控制字段和归一化。
+9. 带结果归一化和超时控制的脚本执行器。
 10. HTTP 主进程代理和细粒度权限检查。
 
 这个顺序可以先交付可用的纵向闭环，同时保持与更丰富元素类型和全局Widget能力库兼容。
