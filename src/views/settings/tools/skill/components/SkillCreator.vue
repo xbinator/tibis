@@ -17,7 +17,7 @@
         <div class="skill-creator__dropzone-icon">
           <Icon icon="lucide:cloud-upload" :width="28" />
         </div>
-        <div class="skill-creator__dropzone-title">拖拽文件到此处或点击上传</div>
+        <div class="skill-creator__dropzone-title">拖拽文件到此处或点击添加</div>
         <div class="skill-creator__dropzone-badges">
           <span class="skill-creator__badge">.skill</span>
           <span class="skill-creator__badge">.zip</span>
@@ -85,26 +85,19 @@ import { computed, ref, shallowRef, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { message } from 'ant-design-vue';
 import { nanoid } from 'nanoid';
+import type { SkillPackageResource } from '@/ai/skill/package';
 import type { SkillDefinition } from '@/ai/skill/types';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useSkillStore } from '@/stores/ai/skill';
 import { asyncTo } from '@/utils/asyncTo';
 import SkillPreview from './SkillPreview.vue';
 
-/** 资源文件（来自 Worker 解析结果）。 */
-interface ResourceFile {
-  relativePath: string;
-  content: string;
-  /** 编码方式，'base64' 表示二进制文件 */
-  encoding?: 'base64';
-}
-
 /** Worker 解析返回数据结构。 */
 interface WorkerParseResult {
   skill: SkillDefinition;
   /** 原始 SKILL.md 完整内容（含 frontmatter），安装时直接写入保留所有字段 */
   rawSkillMd: string;
-  resources: ResourceFile[];
+  resources: SkillPackageResource[];
   warnings: string[];
 }
 
@@ -127,7 +120,7 @@ const step = ref<Step>('upload');
 /** 拖拽悬停状态 */
 const isDragOver = ref(false);
 const parsedSkill = shallowRef<SkillDefinition | null>(null);
-const parsedResources = ref<ResourceFile[]>([]);
+const parsedResources = ref<SkillPackageResource[]>([]);
 const parsedWarnings = ref<string[]>([]);
 const installing = ref(false);
 /** 原始 SKILL.md 内容，安装时直接写入保留所有 frontmatter 字段。 */
@@ -160,7 +153,7 @@ const notices = computed<Notice[]>(() => {
 const previewFiles = computed<VirtualFile[]>(() => {
   const files: VirtualFile[] = rawSkillMd.value ? [{ path: 'SKILL.md', content: rawSkillMd.value }] : [];
 
-  return files.concat(parsedResources.value.map((r) => ({ path: r.relativePath, content: r.content })));
+  return files.concat(parsedResources.value.map((r: SkillPackageResource): VirtualFile => ({ path: r.relativePath, content: r.previewContent })));
 });
 
 /** 创建 Worker 实例。 */
@@ -290,7 +283,7 @@ async function handleInstall(): Promise<void> {
         const resourcePath = joinPath(tmpDir, resource.relativePath);
         const resourceDir = resourcePath.substring(0, resourcePath.lastIndexOf('/'));
         if (resourceDir) await api.ensureDir(resourceDir);
-        await api.writeFile(resourcePath, resource.content);
+        await api.saveBinaryFile(resource.content, resourcePath);
       })
     );
 
