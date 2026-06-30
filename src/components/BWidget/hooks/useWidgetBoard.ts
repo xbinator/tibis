@@ -309,7 +309,10 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
     undo: (): void => setState(undoWidgetBoard(state.value)),
     redo: (): void => setState(redoWidgetBoard(state.value)),
     moveElements: (changes: WidgetGeometryChange[]): void => setState(moveWidgetElements(state.value, changes)),
-    resizeElements: (changes: WidgetGeometryChange[]): void => setState(resizeWidgetElements(state.value, changes)),
+    resizeElements: (changes: WidgetGeometryChange[]): void => {
+      // MoveableLayer 已按当前渲染上下文归一化尺寸，避免纯模型层按模板源码二次测量。
+      setState(resizeWidgetElements(state.value, changes, { normalizeSize: false }));
+    },
     updateElementStyle: (elementId: string, style: WidgetElementStyleChange): void => setState(updateWidgetElementStyle(state.value, elementId, style)),
     deleteSelection: (): void => setState(deleteWidgetSelection(state.value)),
     copySelection: (): void => {

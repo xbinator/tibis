@@ -69,6 +69,38 @@ export interface WidgetPasteElementsOptions {
 }
 
 /**
+ * 元素快照克隆选项。
+ */
+interface WidgetElementSnapshotOptions {
+  /** 是否按元素 schema 重新归一化模型尺寸 */
+  normalizeSize?: boolean;
+}
+
+/**
+ * Widget数据快照选项。
+ */
+export interface WidgetDataSnapshotOptions {
+  /** 是否按元素 schema 重新归一化模型尺寸 */
+  normalizeSize?: boolean;
+}
+
+/**
+ * 几何变更应用选项。
+ */
+interface WidgetApplyGeometryChangesOptions {
+  /** 是否按元素 schema 重新归一化模型尺寸 */
+  normalizeSize?: boolean;
+}
+
+/**
+ * Widget元素缩放选项。
+ */
+export interface WidgetResizeElementsOptions {
+  /** 是否按元素 schema 重新归一化模型尺寸 */
+  normalizeSize?: boolean;
+}
+
+/**
  * 判断坐标点是否可用于Widget元素。
  * @param point - 待检查坐标
  * @returns 是否为有效坐标
@@ -290,9 +322,10 @@ function normalizeElementModelSize(element: WidgetShapeElement): WidgetShapeElem
 /**
  * 创建不包含旧版冗余字段的元素快照。
  * @param element - 元素快照候选
+ * @param options - 元素快照克隆选项
  * @returns 元素快照，无法识别时返回 null
  */
-function createSupportedElementSnapshot(element: WidgetElementSnapshotCandidate): WidgetShapeElement | null {
+function createSupportedElementSnapshot(element: WidgetElementSnapshotCandidate, options: WidgetElementSnapshotOptions = {}): WidgetShapeElement | null {
   const name = readWidgetElementName(element);
   if (!name || typeof element.id !== 'string' || !isWidgetPointLike(element.position) || !isWidgetSizeLike(element.size)) {
     return null;
@@ -302,7 +335,7 @@ function createSupportedElementSnapshot(element: WidgetElementSnapshotCandidate)
   const label = typeof element.label === 'string' ? element.label : registryDisplay.label;
   const icon = typeof element.icon === 'string' ? element.icon : registryDisplay.icon;
 
-  return normalizeElementModelSize({
+  const supportedElement: WidgetShapeElement = {
     id: element.id,
     name,
     label,
@@ -313,17 +346,20 @@ function createSupportedElementSnapshot(element: WidgetElementSnapshotCandidate)
     rotation: typeof element.rotation === 'number' ? element.rotation : 0,
     style: cloneDeep(element.style ?? {}),
     metadata: normalizeElementMetadata(element.metadata)
-  });
+  };
+
+  return options.normalizeSize ?? true ? normalizeElementModelSize(supportedElement) : supportedElement;
 }
 
 /**
  * 仅保留当前支持的形状元素。
  * @param elements - 输入元素列表
+ * @param options - 元素快照克隆选项
  * @returns 形状元素列表
  */
-function cloneSupportedElements(elements: WidgetBoardSnapshot['elements'] | undefined): WidgetShapeElement[] {
+function cloneSupportedElements(elements: WidgetBoardSnapshot['elements'] | undefined, options: WidgetElementSnapshotOptions = {}): WidgetShapeElement[] {
   return (elements ?? [])
-    .map((element: WidgetElementSnapshotCandidate): WidgetShapeElement | null => createSupportedElementSnapshot(element))
+    .map((element: WidgetElementSnapshotCandidate): WidgetShapeElement | null => createSupportedElementSnapshot(element, options))
     .filter((element: WidgetShapeElement | null): element is WidgetShapeElement => element !== null);
 }
 
@@ -447,7 +483,8 @@ function withError(state: WidgetBoardState, error: Error): WidgetBoardState {
 function applyGeometryChanges(
   state: WidgetBoardState,
   changes: WidgetGeometryChange[],
-  applyChange: (element: WidgetShapeElement, change: WidgetGeometryChange) => void
+  applyChange: (element: WidgetShapeElement, change: WidgetGeometryChange) => void,
+  options: WidgetApplyGeometryChangesOptions = {}
 ): WidgetBoardState {
   const nextElements = cloneDeep(state.elements);
 
@@ -458,7 +495,9 @@ function applyGeometryChanges(
     }
 
     applyChange(element, change);
-    element.size = normalizeElementModelSize(element).size;
+    if (options.normalizeSize ?? true) {
+      element.size = normalizeElementModelSize(element).size;
+    }
   }
 
   return withHistory(state, {
@@ -489,12 +528,16 @@ export function createWidgetBoardState(snapshot?: Partial<WidgetBoardSnapshot>):
 /**
  * 创建供外部双向绑定和持久化使用的轻量Widget数据。
  * @param snapshot - Widget快照或状态
+ * @param options - Widget数据快照选项
  * @returns Widget绑定数据
  */
-export function createWidgetDataSnapshot(snapshot: Pick<WidgetBoardSnapshot, 'elements' | 'viewport'> & WidgetDataContractCandidate): WidgetData {
+export function createWidgetDataSnapshot(
+  snapshot: Pick<WidgetBoardSnapshot, 'elements' | 'viewport'> & WidgetDataContractCandidate,
+  options: WidgetDataSnapshotOptions = {}
+): WidgetData {
   return {
     ...normalizeWidgetDataContract(snapshot),
-    elements: cloneSupportedElements(snapshot.elements),
+    elements: cloneSupportedElements(snapshot.elements, options),
     viewport: cloneDeep(snapshot.viewport)
   };
 }
@@ -597,24 +640,30 @@ export function moveWidgetElements(state: WidgetBoardState, changes: WidgetGeome
  * 缩放Widget元素。
  * @param state - 当前Widget状态
  * @param changes - 尺寸变更
+ * @param options - 缩放选项
  * @returns 新Widget状态
  */
-export function resizeWidgetElements(state: WidgetBoardState, changes: WidgetGeometryChange[]): WidgetBoardState {
-  return applyGeometryChanges(state, changes, (element: WidgetShapeElement, change: WidgetGeometryChange): void => {
-    if (change.position) {
-      element.position = {
-        x: normalizeGeometryValue(change.position.x),
-        y: normalizeGeometryValue(change.position.y)
-      };
-    }
+export function resizeWidgetElements(state: WidgetBoardState, changes: WidgetGeometryChange[], options: WidgetResizeElementsOptions = {}): WidgetBoardState {
+  return applyGeometryChanges(
+    state,
+    changes,
+    (element: WidgetShapeElement, change: WidgetGeometryChange): void => {
+      if (change.position) {
+        element.position = {
+          x: normalizeGeometryValue(change.position.x),
+          y: normalizeGeometryValue(change.position.y)
+        };
+      }
 
-    if (change.size) {
-      element.size = {
-        width: Math.max(WIDGET_MIN_ELEMENT_SIZE.width, normalizeGeometryValue(change.size.width)),
-        height: Math.max(WIDGET_MIN_ELEMENT_SIZE.height, normalizeGeometryValue(change.size.height))
-      };
-    }
-  });
+      if (change.size) {
+        element.size = {
+          width: Math.max(WIDGET_MIN_ELEMENT_SIZE.width, normalizeGeometryValue(change.size.width)),
+          height: Math.max(WIDGET_MIN_ELEMENT_SIZE.height, normalizeGeometryValue(change.size.height))
+        };
+      }
+    },
+    options
+  );
 }
 
 /**

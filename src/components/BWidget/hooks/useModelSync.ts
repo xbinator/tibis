@@ -48,15 +48,21 @@ function isModelContentEqualToBoard(dataItem: WidgetData, board: UseWidgetBoardR
  * @returns 对外同步数据
  */
 function createModelUpdateSnapshot(board: UseWidgetBoardReturn, dataItem: WidgetData | undefined): WidgetData {
-  return createWidgetDataSnapshot({
-    ...board.state.value,
-    name: dataItem?.name,
-    description: dataItem?.description,
-    inputSchema: dataItem?.inputSchema,
-    stateSchema: dataItem?.stateSchema,
-    outputSchema: dataItem?.outputSchema,
-    metadata: dataItem?.metadata
-  });
+  return createWidgetDataSnapshot(
+    {
+      ...board.state.value,
+      name: dataItem?.name,
+      description: dataItem?.description,
+      inputSchema: dataItem?.inputSchema,
+      stateSchema: dataItem?.stateSchema,
+      outputSchema: dataItem?.outputSchema,
+      metadata: dataItem?.metadata
+    },
+    {
+      // Board state 已由交互层或状态变换层归一化，回写模型时避免按无上下文模板再次测量。
+      normalizeSize: false
+    }
+  );
 }
 
 /**

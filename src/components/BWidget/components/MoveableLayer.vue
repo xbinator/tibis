@@ -34,12 +34,16 @@
       :origin="false"
       :throttle-drag="WIDGET_MOVEABLE_THROTTLE"
       :throttle-resize="WIDGET_MOVEABLE_THROTTLE"
+      @drag-start="handleDragStart"
       @drag="handleDrag"
       @drag-end="handleDragEnd"
+      @drag-group-start="handleDragGroupStart"
       @drag-group="handleDragGroup"
       @drag-group-end="handleDragGroupEnd"
+      @resize-start="handleResizeStart"
       @resize="handleResize"
       @resize-end="handleResizeEnd"
+      @resize-group-start="handleResizeGroupStart"
       @resize-group="handleResizeGroup"
       @resize-group-end="handleResizeGroupEnd"
     />
@@ -75,6 +79,7 @@ import {
   WIDGET_MOVEABLE_THROTTLE
 } from '../constants/interaction';
 import { getWidgetElementSchema } from '../elements';
+import { useRenderContext } from '../hooks/useRenderContext';
 import {
   createWidgetElementCssTransform,
   getWidgetElementId,
@@ -129,6 +134,14 @@ interface MoveableResizePayload {
     /** Moveable 平移量 */
     beforeTranslate?: [number, number];
   };
+}
+
+/**
+ * Moveable 缩放开始事件。
+ */
+interface MoveableResizeStartEvent extends MoveableTargetEvent {
+  /** 设置 Moveable 缩放开始尺寸 */
+  set?: (size: MoveableVector) => void;
 }
 
 /**
@@ -194,6 +207,8 @@ const emit = defineEmits<{
   /** 提交缩放过程预览 */
   'resize-preview': [changes: WidgetGeometryChange[]];
 }>();
+/** 当前Widget渲染上下文，用于文本绑定内容的尺寸测量。 */
+const renderContext = useRenderContext();
 
 /**
  * Moveable 组件公开实例。
@@ -316,10 +331,13 @@ function isElementResizable(element: WidgetElement): boolean {
  * @returns 可写入模型的尺寸
  */
 function normalizeResizeSize(element: WidgetElement, size: WidgetSize): WidgetSize {
-  return getWidgetShapeRenderSize({
-    ...element,
-    size
-  });
+  return getWidgetShapeRenderSize(
+    {
+      ...element,
+      size
+    },
+    renderContext.value
+  );
 }
 
 /** 当前选中的Widget元素。 */
@@ -464,6 +482,43 @@ function updateNodePreviewSize(target: Element, size: WidgetSize): void {
 }
 
 /**
+ * 将 Moveable 操作目标恢复到当前 schema 渲染尺寸。
+ * @param event - Moveable 目标事件
+ */
+function syncTargetRenderSize(event: MoveableTargetEvent): void {
+  const id = getTargetId(event.target);
+  const element = id ? getElementById(id) : undefined;
+  if (!event.target || !element) {
+    return;
+  }
+
+  updateNodePreviewSize(event.target, getWidgetShapeRenderSize(element, renderContext.value));
+}
+
+/**
+ * 将 Moveable 缩放开始尺寸对齐到当前 schema 渲染尺寸。
+ * @param event - Moveable 缩放开始事件
+ */
+function setResizeStartSize(event: MoveableResizeStartEvent): void {
+  const id = getTargetId(event.target);
+  const element = id ? getElementById(id) : undefined;
+  if (!element || !isElementResizable(element) || !event.set) {
+    return;
+  }
+
+  const renderSize = getWidgetShapeRenderSize(element, renderContext.value);
+  event.set([renderSize.width, renderSize.height]);
+}
+
+/**
+ * 立即完成控制框刷新。
+ */
+function flushMoveableRectRefresh(): void {
+  cancelMoveableRectRefresh();
+  refreshMoveableRect();
+}
+
+/**
  * 从拖拽结束事件创建几何移动变更。
  * @param event - Moveable 拖拽结束事件
  * @returns 几何变更，事件不完整时返回 null
@@ -567,12 +622,13 @@ function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize =
   const requestedSize = shouldConvertGroupSize
     ? groupResizeSizeToWorld({ width: event.width, height: event.height })
     : { width: event.width, height: event.height };
-  const size = normalizeResizeSize(element, requestedSize);
   const position = {
     x: element.position.x + moveableValueToWorld(translate[0]),
     y: element.position.y + moveableValueToWorld(translate[1])
   };
 
+  // 预览阶段保留 Moveable 原始尺寸，避免文本内容自适应高度反向影响拖拽帧。
+  const size = requestedSize;
   if (event.target instanceof HTMLElement) {
     event.target.style.transform = createPreviewTransform(element, translate);
   }
@@ -616,11 +672,29 @@ async function syncTargets(): Promise<void> {
 }
 
 /**
+ * 处理 Moveable 拖动开始。
+ * @param event - Moveable 拖动开始事件
+ */
+function handleDragStart(event: MoveableTargetEvent): void {
+  syncTargetRenderSize(event);
+  flushMoveableRectRefresh();
+}
+
+/**
  * 处理 Moveable 拖动过程。
  * @param event - Moveable 拖动过程事件
  */
 function handleDrag(event: MoveableDragEvent): void {
   previewDragEvent(event);
+}
+
+/**
+ * 处理 Moveable 缩放开始。
+ * @param event - Moveable 缩放开始事件
+ */
+function handleResizeStart(event: MoveableResizeStartEvent): void {
+  flushMoveableRectRefresh();
+  setResizeStartSize(event);
 }
 
 /**
@@ -651,6 +725,15 @@ function handleDragEnd(event: MoveableDragEndEvent): void {
 }
 
 /**
+ * 处理 Moveable 多目标拖动开始。
+ * @param event - Moveable 多目标拖动开始事件
+ */
+function handleDragGroupStart(event: MoveableGroupEvent<MoveableTargetEvent>): void {
+  event.events?.forEach(syncTargetRenderSize);
+  flushMoveableRectRefresh();
+}
+
+/**
  * 处理 Moveable 多目标拖动过程。
  * @param event - Moveable 多目标拖动过程事件
  */
@@ -672,6 +755,15 @@ function handleDragGroupEnd(event: MoveableGroupEvent<MoveableDragEndEvent>): vo
   }
 
   emit('move', changes);
+}
+
+/**
+ * 处理 Moveable 多目标缩放开始。
+ * @param event - Moveable 多目标缩放开始事件
+ */
+function handleResizeGroupStart(event: MoveableGroupEvent<MoveableResizeStartEvent>): void {
+  flushMoveableRectRefresh();
+  event.events?.forEach(setResizeStartSize);
 }
 
 /**

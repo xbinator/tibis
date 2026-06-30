@@ -3,13 +3,15 @@
  * @description 验证 BWidget Moveable 图层根据选中元素类型收敛控制器能力。
  * @vitest-environment jsdom
  */
-import { defineComponent, nextTick } from 'vue';
+/* eslint-disable vue/one-component-per-file */
+import { computed, defineComponent, nextTick } from 'vue';
 import type { PropType } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MoveableLayer from '@/components/BWidget/components/MoveableLayer.vue';
 import { WIDGET_ELEMENT_ID_ATTRIBUTE } from '@/components/BWidget/constants/dom';
-import type { WidgetElement, WidgetSize, WidgetViewport } from '@/components/BWidget/types';
+import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
+import type { WidgetElement, WidgetGeometryChange, WidgetRenderContext, WidgetSize, WidgetViewport } from '@/components/BWidget/types';
 
 /**
  * Moveable padding 配置。
@@ -131,12 +133,82 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
 }));
 
 /**
+ * MoveableLayer 测试宿主组件，用于提供与编辑器一致的渲染上下文。
+ */
+const MoveableLayerHost = defineComponent({
+  name: 'MoveableLayerHost',
+  components: {
+    MoveableLayer
+  },
+  props: {
+    activeElementId: {
+      type: String as PropType<string | null>,
+      default: null
+    },
+    elements: {
+      type: Array as PropType<WidgetElement[]>,
+      required: true
+    },
+    enabled: {
+      type: Boolean,
+      required: true
+    },
+    renderContext: {
+      type: Object as PropType<WidgetRenderContext | undefined>,
+      default: undefined
+    },
+    root: {
+      type: Object as PropType<HTMLElement | null>,
+      default: null
+    },
+    selection: {
+      type: Array as PropType<string[]>,
+      required: true
+    },
+    viewport: {
+      type: Object as PropType<WidgetViewport>,
+      required: true
+    },
+    viewportSize: {
+      type: Object as PropType<WidgetSize>,
+      required: true
+    }
+  },
+  emits: ['context-menu', 'move', 'preview-end', 'resize', 'resize-preview'],
+  setup(props) {
+    /** 测试中透传给子节点渲染和 Moveable 尺寸测量的上下文。 */
+    const providedRenderContext = computed<WidgetRenderContext | undefined>(() => props.renderContext);
+
+    provideRenderContext(providedRenderContext);
+  },
+  template: `
+    <MoveableLayer
+      :active-element-id="activeElementId"
+      :elements="elements"
+      :enabled="enabled"
+      :root="root"
+      :selection="selection"
+      :viewport="viewport"
+      :viewport-size="viewportSize"
+      @context-menu="$emit('context-menu', $event)"
+      @move="$emit('move', $event)"
+      @preview-end="$emit('preview-end')"
+      @resize="$emit('resize', $event)"
+      @resize-preview="$emit('resize-preview', $event)"
+    />
+  `
+});
+
+/**
  * 创建测试元素。
  * @param id - 元素 ID
  * @param name - 元素注册名称
  * @returns 测试元素
  */
 function createWidgetElement(id: string, name: 'rect' | 'text'): WidgetElement {
+  const textStyle: WidgetElement['style'] = name === 'text' ? { fontSize: 10 } : {};
+  const textMetadata: WidgetElement['metadata'] = name === 'text' ? { content: 'abcdef' } : {};
+
   return {
     id,
     name,
@@ -146,8 +218,8 @@ function createWidgetElement(id: string, name: 'rect' | 'text'): WidgetElement {
     position: { x: 20, y: 30 },
     size: { width: 120, height: 48 },
     rotation: 0,
-    style: {},
-    metadata: {}
+    style: textStyle,
+    metadata: textMetadata
   };
 }
 
@@ -182,21 +254,28 @@ async function flushMoveableLayerSync(): Promise<void> {
  * 挂载 MoveableLayer 测试实例。
  * @param selection - 当前选区
  * @param activeElementId - 组合选区内当前编辑的子元素 ID
+ * @param elements - 测试元素列表
  * @returns 测试包装器与根元素
  */
-function mountMoveableLayer(selection: string[], activeElementId: string | null = null): { root: HTMLElement; wrapper: VueWrapper } {
-  const root = createRootElement(['text-1', 'rect-1']);
+function mountMoveableLayer(
+  selection: string[],
+  activeElementId: string | null = null,
+  elements: WidgetElement[] = [createWidgetElement('text-1', 'text'), createWidgetElement('rect-1', 'rect')],
+  renderContext: WidgetRenderContext | undefined = undefined
+): { root: HTMLElement; wrapper: VueWrapper } {
+  const root = createRootElement(elements.map((element: WidgetElement): string => element.id));
   const viewport: WidgetViewport = { center: { x: 0, y: 0 }, zoom: 1 };
   const viewportSize: WidgetSize = { width: 800, height: 600 };
-  const wrapper = mount(MoveableLayer, {
+  const wrapper = mount(MoveableLayerHost, {
     props: {
       root,
-      elements: [createWidgetElement('text-1', 'text'), createWidgetElement('rect-1', 'rect')],
+      elements,
       selection,
       viewport,
       viewportSize,
       activeElementId,
-      enabled: true
+      enabled: true,
+      renderContext
     },
     attachTo: document.body
   });
@@ -297,6 +376,174 @@ describe('MoveableLayer', (): void => {
     await nextTick();
 
     expect(moveableUpdateRectMock).toHaveBeenCalledWith('b-widget-moveable-layer__active-child');
+    wrapper.unmount();
+  });
+
+  it('restores text target render size when a drag starts after a stale resize preview', async (): Promise<void> => {
+    const textElement: WidgetElement = {
+      ...createWidgetElement('text-1', 'text'),
+      size: { width: 30, height: 12 }
+    };
+    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')]);
+
+    await flushMoveableLayerSync();
+    moveableUpdateRectMock.mockClear();
+
+    const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
+    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+
+    expect(textTarget).not.toBeNull();
+    (textTarget as HTMLElement).style.width = '30px';
+    (textTarget as HTMLElement).style.height = '12px';
+    moveableComponent.vm.$emit('drag-start', {
+      target: textTarget as Element
+    });
+    await nextTick();
+
+    expect((textTarget as HTMLElement).style.width).toBe('30px');
+    expect((textTarget as HTMLElement).style.height).toBe('31px');
+    expect(moveableUpdateRectMock).toHaveBeenCalledWith('');
+    wrapper.unmount();
+  });
+
+  it('keeps text resize previews on the raw Moveable size before final content normalization', async (): Promise<void> => {
+    const { root, wrapper } = mountMoveableLayer(['text-1']);
+
+    await flushMoveableLayerSync();
+
+    const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
+    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+
+    expect(textTarget).not.toBeNull();
+    moveableComponent.vm.$emit('resize', {
+      target: textTarget as Element,
+      width: 30,
+      height: 12,
+      drag: {
+        beforeTranslate: [4, 6]
+      }
+    });
+    await nextTick();
+
+    const previewEvents = wrapper.emitted('resize-preview') as [WidgetGeometryChange[]][] | undefined;
+    const textTargetStyle = (textTarget as HTMLElement).style;
+
+    expect(previewEvents?.[0]?.[0][0]).toMatchObject({
+      id: 'text-1',
+      position: { x: 24, y: 36 },
+      size: { width: 30, height: 12 }
+    });
+    expect(textTargetStyle.width).toBe('30px');
+    expect(textTargetStyle.height).toBe('12px');
+    wrapper.unmount();
+  });
+
+  it('sets text resize start from the schema render size before the first resize frame', async (): Promise<void> => {
+    const textElement: WidgetElement = {
+      ...createWidgetElement('text-1', 'text'),
+      size: { width: 30, height: 12 }
+    };
+    const setStartSize = vi.fn<(size: [number, number]) => void>();
+    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')]);
+
+    await flushMoveableLayerSync();
+
+    const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
+    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+
+    expect(textTarget).not.toBeNull();
+    moveableComponent.vm.$emit('resize-start', {
+      target: textTarget as Element,
+      set: setStartSize
+    });
+    await nextTick();
+
+    expect(setStartSize).toHaveBeenCalledWith([30, 31]);
+    wrapper.unmount();
+  });
+
+  it('sets bound text resize start from the resolved render context content', async (): Promise<void> => {
+    const textElement: WidgetElement = {
+      ...createWidgetElement('text-1', 'text'),
+      size: { width: 30, height: 12 },
+      metadata: { content: '{{ state.shortText }}' }
+    };
+    const renderContext: WidgetRenderContext = {
+      input: {},
+      state: { shortText: 'abcdef' }
+    };
+    const setStartSize = vi.fn<(size: [number, number]) => void>();
+    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext);
+
+    await flushMoveableLayerSync();
+
+    const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
+    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+
+    expect(textTarget).not.toBeNull();
+    moveableComponent.vm.$emit('resize-start', {
+      target: textTarget as Element,
+      set: setStartSize
+    });
+    await nextTick();
+
+    expect(setStartSize).toHaveBeenCalledWith([30, 31]);
+    wrapper.unmount();
+  });
+
+  it('normalizes bound text resize end with the resolved render context content', async (): Promise<void> => {
+    const textElement: WidgetElement = {
+      ...createWidgetElement('text-1', 'text'),
+      size: { width: 30, height: 12 },
+      metadata: { content: '{{ state.shortText }}' }
+    };
+    const renderContext: WidgetRenderContext = {
+      input: {},
+      state: { shortText: 'abcdef' }
+    };
+    const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext);
+
+    await flushMoveableLayerSync();
+
+    const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
+    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+
+    expect(textTarget).not.toBeNull();
+    moveableComponent.vm.$emit('resize-end', {
+      target: textTarget as Element,
+      width: 30,
+      height: 12
+    });
+    await nextTick();
+
+    const resizeEvents = wrapper.emitted('resize') as [WidgetGeometryChange[]][] | undefined;
+
+    expect(resizeEvents?.[0]?.[0][0]).toMatchObject({
+      id: 'text-1',
+      size: { width: 30, height: 31 }
+    });
+    wrapper.unmount();
+  });
+
+  it('refreshes the control box immediately when a resize starts after initial layout changes', async (): Promise<void> => {
+    const setStartSize = vi.fn<(size: [number, number]) => void>();
+    const { root, wrapper } = mountMoveableLayer(['text-1']);
+
+    await flushMoveableLayerSync();
+    moveableUpdateRectMock.mockClear();
+
+    const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
+    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+
+    expect(textTarget).not.toBeNull();
+    moveableComponent.vm.$emit('resize-start', {
+      target: textTarget as Element,
+      set: setStartSize
+    });
+    await nextTick();
+
+    expect(moveableUpdateRectMock).toHaveBeenCalledWith('');
+    expect(setStartSize).toHaveBeenCalledWith([120, 48]);
     wrapper.unmount();
   });
 });

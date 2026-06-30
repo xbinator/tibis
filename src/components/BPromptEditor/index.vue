@@ -562,7 +562,7 @@ defineExpose({
 .b-prompt-editor {
   width: 100%;
   min-height: 80px;
-  padding: 12px;
+  padding: 4px 12px;
   overflow-y: auto;
   font-size: 14px;
   line-height: 1.6;
@@ -570,7 +570,6 @@ defineExpose({
   overflow-wrap: break-word;
   white-space: pre-wrap;
   outline: none;
-  background: var(--input-bg);
   border: 1px solid var(--input-border);
   border-radius: 6px;
   transition: all 0.2s;
@@ -580,7 +579,6 @@ defineExpose({
   }
 
   &:focus-within {
-    background: var(--input-bg);
     border-color: var(--input-focus-border);
     box-shadow: 0 0 0 2px var(--input-focus-shadow);
   }

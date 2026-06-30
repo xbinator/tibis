@@ -326,6 +326,54 @@ describe('BWidget canvas component', (): void => {
     wrapper.unmount();
   });
 
+  it('keeps bound text resize commits on the context-normalized size from Moveable', async (): Promise<void> => {
+    const data = createDefaultWidgetData();
+    data.metadata = {
+      previewContext: {
+        input: {},
+        state: {
+          shortText: 'abcdef'
+        }
+      }
+    };
+    data.elements = [
+      {
+        id: 'text-resize-node',
+        name: 'text',
+        label: '文本',
+        icon: 'lucide:type',
+        title: '绑定文本',
+        position: { x: 0, y: 0 },
+        size: { width: 30, height: 12 },
+        rotation: 0,
+        style: { fontSize: 10 },
+        metadata: {
+          content: '{{ state.shortText }}'
+        }
+      }
+    ];
+    const wrapper = mount(BWidget, {
+      props: {
+        value: data
+      },
+      attachTo: document.body
+    });
+
+    wrapper.findComponent({ name: 'MoveableLayerStub' }).vm.$emit('resize', [
+      {
+        id: 'text-resize-node',
+        size: { width: 30, height: 31 }
+      }
+    ]);
+    await flushWidgetUpdates();
+
+    const emitted = wrapper.emitted('update:value') as Array<[WidgetData]> | undefined;
+    const latestData = emitted?.at(-1)?.[0];
+
+    expect(latestData?.elements[0]?.size).toEqual({ width: 30, height: 31 });
+    wrapper.unmount();
+  });
+
   it('ignores unknown registered element names', async (): Promise<void> => {
     const wrapper = mount(BWidget, {
       props: {

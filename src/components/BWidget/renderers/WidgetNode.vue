@@ -61,8 +61,16 @@ const emit = defineEmits<{
 const renderContext = useRenderContext();
 /** 是否为文本元素。 */
 const isTextShape = computed<boolean>(() => props.node.name === 'text');
-/** 节点渲染尺寸，文本节点始终按内容重新测量。 */
-const renderSize = computed<WidgetSize>(() => props.previewSize ?? getWidgetShapeRenderSize(props.node, renderContext.value));
+/** 节点渲染尺寸，预览尺寸作为临时模型尺寸后仍按元素 schema 重新测量。 */
+const renderSize = computed<WidgetSize>(() =>
+  getWidgetShapeRenderSize(
+    {
+      ...props.node,
+      size: props.previewSize ?? props.node.size
+    },
+    renderContext.value
+  )
+);
 /** 节点渲染位置，Moveable 预览时优先使用临时位置。 */
 const renderPosition = computed<WidgetPoint>(() => props.previewPosition ?? props.node.position);
 /** 当前节点对应的中间视图组件。 */

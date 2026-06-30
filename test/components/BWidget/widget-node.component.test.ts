@@ -42,6 +42,26 @@ function createStyledNode(): WidgetShapeElement {
   };
 }
 
+/**
+ * 创建文本预览尺寸测试元素。
+ * @returns 文本节点
+ */
+function createPreviewTextNode(): WidgetShapeElement {
+  return {
+    ...createStyledNode(),
+    id: 'text-1',
+    name: 'text',
+    label: '文本',
+    icon: 'lucide:type',
+    title: '文本',
+    size: { width: 180, height: 72 },
+    style: { fontSize: 10 },
+    metadata: {
+      content: 'abcdef'
+    }
+  };
+}
+
 describe('WidgetNode', (): void => {
   it('applies shared element visual styles on the node root', (): void => {
     const wrapper = mount(WidgetNode, {
@@ -63,6 +83,20 @@ describe('WidgetNode', (): void => {
     expect(nodeStyle.fontWeight).toBe('700');
     expect(nodeStyle.justifyContent).toBe('flex-end');
     expect(nodeStyle.alignItems).toBe('center');
+    wrapper.unmount();
+  });
+
+  it('measures text preview size through the text render schema while resizing', (): void => {
+    const wrapper = mount(WidgetNode, {
+      props: {
+        node: createPreviewTextNode(),
+        previewSize: { width: 30, height: 12 }
+      }
+    });
+    const nodeStyle = (wrapper.element as HTMLElement).style;
+
+    expect(nodeStyle.width).toBe('30px');
+    expect(nodeStyle.height).toBe('31px');
     wrapper.unmount();
   });
 
