@@ -10,11 +10,11 @@
 - 聊天从工作区Widget和全局Widget能力库中找到匹配的 Widget Skill。
 - 高置信度匹配自动启动；候选模糊时让用户选择。
 - Widget在聊天中作为一次会话展示，而不是打开编辑器页面。
-- 元素根据会话的 `input`、`state`、`output`、`lastResult` 解析模板字段。
+- 元素根据会话的 `input`、`state`、`output` 解析模板字段。
 - 元素事件关联Widget方法，Widget方法是受控环境中执行的完整函数。
 - HTTP、AI、权限确认、取消、失败和等待用户输入统一返回同一种执行结果模型。
 
-当前已经完成第一段基础能力：文本元素可以通过 `{{ input.x }}`、`{{ state.y }}` 等模板读取Widget渲染上下文；编辑期通过 `WidgetData.metadata.previewContext` 预览动态内容；模板读写、变量候选和渲染上下文已抽离为 hooks。下一步只做运行态只读Widget渲染，让聊天可以先展示一张带 session 上下文的Widget。
+当前已经完成第一段基础能力：文本元素可以通过 `{{ input.x }}`、`{{ state.y }}` 等模板读取Widget渲染上下文；模板读写、变量候选和渲染上下文已抽离为 hooks。编辑期的 `state.*` 变量候选不再依赖手写状态声明，而是从 execute 方法代码里的 `setState` 调用推导。下一步只做运行态只读Widget渲染，让聊天可以先展示一张带 session 上下文的Widget。
 
 ## 目标
 
@@ -69,6 +69,8 @@ interface WidgetData {
 ```
 
 `inputSchema` 和 `outputSchema` 后续应与 AI 结构化输出使用同一种对象 JSON Schema 类型。Widget 页面仍然可以提供受限的编辑体验，但持久化时不应丢弃合法 JSON Schema 字段，例如 `enum`、`default`、`additionalProperties`、`items`、`minimum`、`maxLength` 等。
+
+`state` 不作为用户需要手写维护的 schema 配置。编辑器通过 `buildWidgetStateSchema` 静态分析 Widget 方法代码中的 `setState(path, value)` / `ctx.setState(path, value)` 调用，生成可绑定的 `state.*` 变量候选。第一版只推导静态字符串路径、对象字面量、基础字面量，以及可对应到 `inputSchema` 的 `input.x` / `ctx.input.x` 类型；动态路径或复杂表达式不强行猜测。
 
 ### Widget级 Skill 元信息
 
@@ -175,7 +177,6 @@ metadata: {
 - `input`：Widget启动入参，例如 `{{ input.city }}`。
 - `state`：Widget会话运行状态，例如 `{{ state.weather.temperature }}`。
 - `output`：Widget最终输出，例如 `{{ output.summary }}`。
-- `lastResult`：最近一次执行结果，例如 `{{ lastResult.status }}`。
 - `event`：仅在未来事件方法执行期间可用；当前渲染模板实现不支持 `event`，普通渲染模板中也不可用。
 
 支持的路径格式：
@@ -184,7 +185,6 @@ metadata: {
 {{ input.city }}
 {{ state.weather.temperature }}
 {{ state.coffeeList[0].name }}
-{{ lastResult.data.message }}
 ```
 
 解析规则：
@@ -288,7 +288,6 @@ interface WidgetSkillSession {
   input: Record<string, unknown>
   state: Record<string, unknown>
   output?: unknown
-  lastResult?: ExecutionResult
   status: 'idle' | 'running' | 'awaiting_user_input' | 'success' | 'failure' | 'cancelled'
 }
 ```
@@ -330,7 +329,6 @@ interface WidgetRenderContext {
   input: Record<string, unknown>
   state: Record<string, unknown>
   output?: unknown
-  lastResult?: ExecutionResult
 }
 ```
 
