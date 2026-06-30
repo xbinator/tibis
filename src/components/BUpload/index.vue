@@ -173,7 +173,7 @@ defineExpose({
 </script>
 
 <style scoped lang="less">
-.b-upload__input {
+.b-upload__input[type='file'] {
   display: none;
 }
 
