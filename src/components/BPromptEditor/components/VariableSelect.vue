@@ -10,7 +10,7 @@
     @update:active-index="handleMouseEnter"
   >
     <template #item="{ item }">
-      <div class="variable-item" :style="getVariableItemStyle(item)">
+      <div class="variable-item" :class="{ 'is-without-toggle': !hasToggleSlot(item) }" :style="getVariableItemStyle(item)">
         <BButton
           v-if="item.hasChildren"
           type="ghost"
@@ -20,7 +20,7 @@
           @click.stop="handleToggle(item)"
           @mousedown.stop.prevent
         />
-        <span v-else class="variable-item__toggle-placeholder"></span>
+        <span v-else-if="item.showTogglePlaceholder" class="variable-item__toggle-placeholder"></span>
         <div class="variable-item-main">
           <span class="variable-item-label">{{ item.label }}</span>
           <span class="variable-item-value">{{ item.value }}</span>
@@ -48,6 +48,8 @@ interface VariableSelectItem extends Variable {
   hasChildren?: boolean;
   /** 子级变量是否展开 */
   expanded?: boolean;
+  /** 是否需要展示折叠按钮占位 */
+  showTogglePlaceholder?: boolean;
 }
 
 /**
@@ -94,6 +96,15 @@ function getVariableItemStyle(item: VariableSelectItem): VariableItemStyle {
 }
 
 /**
+ * 判断变量项是否需要预留折叠控制列。
+ * @param item - 变量选择菜单项
+ * @returns 存在折叠按钮或同层占位时返回 true
+ */
+function hasToggleSlot(item: VariableSelectItem): boolean {
+  return Boolean(item.hasChildren || item.showTogglePlaceholder);
+}
+
+/**
  * 处理变量选择
  * @param variable - 被选中的变量
  */
@@ -130,7 +141,17 @@ function handleMouseEnter(index: number): void {
   column-gap: 4px;
   width: 100%;
   min-width: 0;
-  padding-left: calc(var(--variable-depth, 0) * 14px);
+  padding-left: calc(var(--variable-depth, 0) * 24px);
+}
+
+.variable-item.is-without-toggle {
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: calc(var(--variable-depth, 0) * 24px + 28px);
+}
+
+.variable-item.is-without-toggle .variable-item-main,
+.variable-item.is-without-toggle .variable-item-desc {
+  grid-column: 1;
 }
 
 .variable-item__toggle-placeholder {

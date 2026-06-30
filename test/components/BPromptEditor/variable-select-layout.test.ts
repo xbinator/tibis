@@ -20,6 +20,8 @@ interface VariableSelectTestItem extends Variable {
   hasChildren?: boolean;
   /** 子级变量是否展开 */
   expanded?: boolean;
+  /** 是否需要展示折叠按钮占位 */
+  showTogglePlaceholder?: boolean;
 }
 
 /** 变量选择菜单源码。 */
@@ -132,7 +134,7 @@ describe('VariableSelect layout', (): void => {
 
     expect(items[0].style.getPropertyValue('--variable-depth')).toBe('0');
     expect(items[1].style.getPropertyValue('--variable-depth')).toBe('1');
-    expect(variableSelectSource).toContain('padding-left: calc(var(--variable-depth, 0) * 14px);');
+    expect(variableSelectSource).toContain('padding-left: calc(var(--variable-depth, 0) * 24px);');
     wrapper.unmount();
   });
 
@@ -177,5 +179,79 @@ describe('VariableSelect layout', (): void => {
       })
     ]);
     wrapper.unmount();
+  });
+
+  it('renders toggle placeholders only when the visible item requests one', (): void => {
+    const wrapper = mount(VariableSelect, {
+      props: {
+        visible: true,
+        variables: [
+          {
+            label: '同层叶子',
+            value: 'input.leaf',
+            depth: 1,
+            showTogglePlaceholder: true
+          },
+          {
+            label: '纯叶子',
+            value: 'input.group.leaf',
+            depth: 2,
+            showTogglePlaceholder: false
+          }
+        ] as VariableSelectTestItem[],
+        position: {
+          top: 0,
+          left: 0,
+          bottom: 0
+        }
+      },
+      global: {
+        components: {
+          BButton: BButtonStub
+        }
+      }
+    });
+
+    expect(document.body.querySelectorAll('.variable-item__toggle-placeholder')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('lets leaf items without toggle slots use the full content row', (): void => {
+    const wrapper = mount(VariableSelect, {
+      props: {
+        visible: true,
+        variables: [
+          {
+            label: '叶子节点',
+            value: 'input.profile.name',
+            depth: 2,
+            showTogglePlaceholder: false
+          }
+        ] as VariableSelectTestItem[],
+        position: {
+          top: 0,
+          left: 0,
+          bottom: 0
+        }
+      },
+      global: {
+        components: {
+          BButton: BButtonStub
+        }
+      }
+    });
+    const item = document.body.querySelector<HTMLElement>('.variable-item');
+
+    expect(item?.classList.contains('is-without-toggle')).toBe(true);
+    expect(item?.querySelector('.variable-item__toggle-placeholder')).toBeNull();
+    expect(variableSelectSource).toContain('.variable-item.is-without-toggle');
+    expect(variableSelectSource).toContain('grid-template-columns: minmax(0, 1fr);');
+    expect(variableSelectSource).toContain('.variable-item.is-without-toggle .variable-item-main');
+    wrapper.unmount();
+  });
+
+  it('keeps leaf items without toggle slots visually nested under their parent', (): void => {
+    expect(variableSelectSource).toContain('padding-left: calc(var(--variable-depth, 0) * 24px);');
+    expect(variableSelectSource).toContain('padding-left: calc(var(--variable-depth, 0) * 24px + 28px);');
   });
 });

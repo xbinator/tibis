@@ -78,4 +78,41 @@ describe('BPromptEditor variable utilities', (): void => {
     expect(variables.map((variable): number => variable.depth)).toEqual([0, 1, 2]);
     expect(variables.every((variable): boolean => variable.expanded)).toBe(true);
   });
+
+  it('marks placeholders only for leaf nodes with foldable siblings in the same level', (): void => {
+    const variables = getVisibleVariables(
+      [
+        {
+          label: 'root',
+          value: 'root',
+          children: [
+            {
+              label: 'group',
+              value: 'root.group',
+              children: [
+                {
+                  label: 'leaf',
+                  value: 'root.group.leaf'
+                }
+              ]
+            },
+            {
+              label: 'plain',
+              value: 'root.plain'
+            }
+          ]
+        },
+        {
+          label: 'lastResult',
+          value: 'lastResult'
+        }
+      ],
+      new Set(),
+      ''
+    );
+
+    expect(variables.find((variable) => variable.value === 'root.plain')?.showTogglePlaceholder).toBe(true);
+    expect(variables.find((variable) => variable.value === 'root.group.leaf')?.showTogglePlaceholder).toBe(false);
+    expect(variables.find((variable) => variable.value === 'lastResult')?.showTogglePlaceholder).toBe(true);
+  });
 });
