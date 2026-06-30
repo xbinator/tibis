@@ -17,7 +17,5 @@ export const WEBVIEW_PAGE_SELECTED_TEXT_LIMIT = 4000;
 export const WEBVIEW_PAGE_SNAPSHOT_TIMEOUT_MS = 10000;
 /** 页面操作超时时间。 */
 export const WEBVIEW_PAGE_OPERATION_TIMEOUT_MS = 10000;
-/** 页面操作快照有效期。 */
-export const WEBVIEW_PAGE_SNAPSHOT_TTL_MS = 60000;
 /** 页面可操作元素最大数量。 */
 export const WEBVIEW_PAGE_ELEMENT_LIMIT = 180;

@@ -14,7 +14,6 @@ import type {
   WebviewPageState
 } from '@/views/webview/shared/types';
 import { normalizeWebviewUrl } from '@/views/webview/shared/utils/url';
-import { WEBVIEW_PAGE_SNAPSHOT_TTL_MS } from '@/views/webview/web/automation/constants';
 import {
   createActiveSnapshotElements,
   createPublicWebviewPageSnapshot,
@@ -54,7 +53,6 @@ export {
   WEBVIEW_PAGE_OPERATION_TIMEOUT_MS,
   WEBVIEW_PAGE_SELECTED_TEXT_LIMIT,
   WEBVIEW_PAGE_SNAPSHOT_TIMEOUT_MS,
-  WEBVIEW_PAGE_SNAPSHOT_TTL_MS,
   WEBVIEW_PAGE_TEXT_LIMIT
 } from '@/views/webview/web/automation/constants';
 
@@ -106,8 +104,6 @@ interface ActiveWebviewSnapshot {
   id: string;
   /** 快照采集时页面地址。 */
   url: string;
-  /** renderer 本地采集时间。 */
-  capturedAtMs: number;
   /** 快照中的元素身份信息。 */
   elements: ActiveWebviewSnapshotElement[];
 }
@@ -605,7 +601,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
         const snapshot = normalizeWebviewPageSnapshot({ ...value, snapshotId });
         const selectedElementSnapshot = createSelectedElementSnapshot(selectedElement.value, snapshot.elements);
         const snapshotWithSelection = selectedElementSnapshot ? { ...snapshot, selectedElement: selectedElementSnapshot } : snapshot;
-        activeSnapshot = { id: snapshotId, url: snapshot.url, capturedAtMs: nowMs(), elements: createActiveSnapshotElements(snapshot.elements) };
+        activeSnapshot = { id: snapshotId, url: snapshot.url, elements: createActiveSnapshotElements(snapshot.elements) };
         return createPublicWebviewPageSnapshot(snapshotWithSelection);
       })
     )
@@ -661,12 +657,7 @@ export function useWebView(webviewRef: Ref<WebviewTag | null>) {
       }
     }
 
-    if (
-      !input.snapshotId ||
-      !activeSnapshot ||
-      activeSnapshot.id !== input.snapshotId ||
-      nowMs() - activeSnapshot.capturedAtMs > WEBVIEW_PAGE_SNAPSHOT_TTL_MS
-    ) {
+    if (!input.snapshotId || !activeSnapshot || activeSnapshot.id !== input.snapshotId) {
       throw createWebviewOperationError('STALE_SNAPSHOT');
     }
 

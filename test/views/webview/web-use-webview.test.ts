@@ -1681,6 +1681,40 @@ describe('useWebView', () => {
     expect(webviewElement.executeJavaScript).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the active snapshot usable after the former time-only expiry window', async (): Promise<void> => {
+    const performanceNow = vi.spyOn(globalThis.performance, 'now').mockReturnValue(0);
+    const webviewElement = createScriptableWebview([
+      {
+        url: 'https://example.com',
+        title: 'Example',
+        text: 'Hello',
+        selectedText: '',
+        headings: [],
+        links: [],
+        snapshotId: 'snap-1',
+        loading: false,
+        elements: [{ index: 1, tagName: 'BUTTON', text: 'Search', label: 'Search', disabled: false, isNew: true, actions: ['click'] }]
+      },
+      {
+        ok: true,
+        action: 'click',
+        target: { index: 1, label: 'Search', tagName: 'BUTTON' },
+        message: 'clicked',
+        navigationStarted: false,
+        pageChanged: true,
+        shouldReadAgain: true
+      }
+    ]);
+    const controller = useWebView(ref<WebviewTag | null>(webviewElement));
+    const snapshot = await controller.readPageSnapshot();
+
+    performanceNow.mockReturnValue(61_000);
+    const result = await controller.operatePage({ snapshotId: snapshot.snapshotId ?? '', action: { type: 'click', index: 1 } });
+
+    expect(result).toMatchObject({ ok: true, action: 'click', shouldReadAgain: true });
+    expect(webviewElement.executeJavaScript).toHaveBeenCalledTimes(2);
+  });
+
   it('reports page loading instead of stale snapshot during transient same-page loading', async (): Promise<void> => {
     document.body.innerHTML = '<button>临时入口</button>';
     const button = document.querySelector('button');
