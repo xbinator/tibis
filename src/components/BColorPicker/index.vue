@@ -14,6 +14,7 @@
           :readonly="readonly"
           :disabled="disabled"
           :bordered="bordered"
+          @update:value="handleInputUpdate"
           @blur="handleInputBlur"
           @press-enter="handleInputBlur"
         >
@@ -398,6 +399,21 @@ function updatePositionFromColor(): void {
  */
 function syncInputValue(): void {
   inputValue.value = formatColor(currentColor.value);
+}
+
+/**
+ * 处理输入框内容更新，合法颜色立即同步到外部 v-model。
+ * @param value - 输入框最新值
+ */
+function handleInputUpdate(value: string): void {
+  const color = tinycolor(value.trim());
+
+  if (!color.isValid()) {
+    return;
+  }
+
+  updateColor(color.toHex8());
+  updatePositionFromColor();
 }
 
 /**

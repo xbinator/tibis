@@ -88,7 +88,6 @@ function mountColorPicker(propsOverrides: Record<string, unknown> = {}): VueWrap
   return mount(BColorPicker, {
     props: {
       format: 'hex',
-      inputTestId: 'color-picker-input',
       value: '#111827',
       ...propsOverrides
     }
@@ -105,7 +104,7 @@ describe('BColorPicker', (): void => {
     expect(wrapper.find('.b-color-picker__sv-panel').exists()).toBe(true);
     expect(wrapper.find('.b-color-picker__hue-bar').exists()).toBe(true);
     expect(wrapper.find('.b-color-picker__alpha-bar').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="color-picker-input"]').exists()).toBe(true);
+    expect(wrapper.find('input.b-color-picker__input').exists()).toBe(true);
   });
 
   it('passes placement prop to BDropdown', (): void => {
@@ -114,12 +113,12 @@ describe('BColorPicker', (): void => {
     expect(wrapper.find('.b-dropdown-stub').attributes('data-placement')).toBe('rightTop');
   });
 
-  it('applies is-compact class to the panel', async (): Promise<void> => {
+  it('renders the default panel class without compact state', async (): Promise<void> => {
     const wrapper = mountColorPicker();
 
     await wrapper.find('.b-dropdown-stub__trigger').trigger('click');
 
-    expect(wrapper.find('.b-color-picker__panel').classes()).toContain('is-compact');
+    expect(wrapper.find('.b-color-picker__panel').classes()).toEqual(['b-color-picker__panel']);
   });
 
   it('emits update:value and change when input value is valid', async (): Promise<void> => {
@@ -127,7 +126,7 @@ describe('BColorPicker', (): void => {
 
     await wrapper.find('.b-dropdown-stub__trigger').trigger('click');
 
-    const input = wrapper.find('input[data-testid="color-picker-input"]');
+    const input = wrapper.find('input.b-color-picker__input');
     await input.setValue('#ef4444');
 
     expect(wrapper.emitted('update:value')).toBeTruthy();
