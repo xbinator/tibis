@@ -1,6 +1,6 @@
 /**
- * @file use-element-display-content.test.ts
- * @description 验证 BWidget 元素展示内容 hook 读取模板字段并解析渲染上下文。
+ * @file use-element-content.test.ts
+ * @description 验证 BWidget 元素内容 hook 读取模板字段并解析渲染上下文。
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
@@ -9,7 +9,7 @@ import type { Component, VNode } from 'vue';
 import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import { useElementDisplayContent } from '@/components/BWidget/hooks/useElementDisplayContent';
+import { useElementContent } from '@/components/BWidget/hooks/useElementContent';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetRenderContext, WidgetShapeElement } from '@/components/BWidget/types';
 
@@ -46,15 +46,15 @@ function mountDisplayContent(element: WidgetShapeElement, renderContext?: Widget
   const elementRef = ref<WidgetShapeElement | undefined>(element);
   const contextRef = ref<WidgetRenderContext | undefined>(renderContext);
   const Consumer: Component = {
-    name: 'ElementDisplayContentConsumer',
+    name: 'ElementContentConsumer',
     setup(): () => VNode {
-      const content = useElementDisplayContent(elementRef, 'content');
+      const content = useElementContent(elementRef, 'content');
 
       return (): VNode => h('span', content.value);
     }
   };
   const Provider = defineComponent({
-    name: 'ElementDisplayContentProvider',
+    name: 'ElementContentProvider',
     setup(): () => VNode {
       provideRenderContext(contextRef);
 
@@ -65,7 +65,7 @@ function mountDisplayContent(element: WidgetShapeElement, renderContext?: Widget
   return mount(Provider);
 }
 
-describe('useElementDisplayContent', (): void => {
+describe('useElementContent', (): void => {
   it('reads a template field and resolves it from the widget render context', (): void => {
     const wrapper = mountDisplayContent(createDisplayElement('{{ input.city }} 天气'), {
       input: {
@@ -75,6 +75,22 @@ describe('useElementDisplayContent', (): void => {
     });
 
     expect(wrapper.text()).toBe('上海 天气');
+    wrapper.unmount();
+  });
+
+  it('formats complex binding values as readable JSON text', (): void => {
+    const wrapper = mountDisplayContent(createDisplayElement('{{ state.weather }}'), {
+      input: {},
+      state: {
+        weather: {
+          condition: '晴',
+          temperature: 28
+        }
+      }
+    });
+
+    expect(wrapper.text()).toBe('{\n  "condition": "晴",\n  "temperature": 28\n}');
+    expect(wrapper.text()).not.toContain('[object Object]');
     wrapper.unmount();
   });
 
@@ -94,15 +110,15 @@ describe('useElementDisplayContent', (): void => {
       state: {}
     });
     const Consumer: Component = {
-      name: 'ExplicitElementDisplayContentConsumer',
+      name: 'ExplicitElementContentConsumer',
       setup(): () => VNode {
-        const content = useElementDisplayContent(elementRef, 'subtitle');
+        const content = useElementContent(elementRef, 'subtitle');
 
         return (): VNode => h('span', content.value);
       }
     };
     const Provider = defineComponent({
-      name: 'ExplicitElementDisplayContentProvider',
+      name: 'ExplicitElementContentProvider',
       setup(): () => VNode {
         provideRenderContext(contextRef);
 

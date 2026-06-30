@@ -9,7 +9,7 @@
 <script setup lang="ts">
 import type { WidgetShapeElement } from '../../types';
 import { toRef } from 'vue';
-import { useElementDisplayContent } from '../../hooks/useElementDisplayContent';
+import { useElementContent } from '../../hooks/useElementContent';
 
 /**
  * 文本元素中间Widget视图入参。
@@ -21,7 +21,7 @@ interface Props {
 
 const props = defineProps<Props>();
 /** 当前文本正文内容。 */
-const textContent = useElementDisplayContent(toRef(props, 'element'), 'content');
+const textContent = useElementContent(toRef(props, 'element'), 'content');
 </script>
 
 <style lang="less" scoped>
