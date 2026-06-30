@@ -122,9 +122,9 @@ export interface WidgetMetadata {
 }
 
 /**
- * Widget Skill 方法定义。
+ * Widget执行方法定义。
  */
-export interface WidgetSkillMethod {
+export interface WidgetExecuteMethod {
   /** 方法是否启用 */
   enabled?: boolean;
   /** 方法说明，用于编辑器提示和后续权限确认 */
@@ -147,8 +147,6 @@ export interface WidgetSkillMetadata {
   aliases?: string[];
   /** Skill 触发词 */
   triggers?: string[];
-  /** Skill 方法集合 */
-  methods?: Record<string, WidgetSkillMethod>;
 }
 
 /**
@@ -291,6 +289,8 @@ export interface WidgetData {
   stateSchema: WidgetSchemaObject;
   /** Widget能力出参 schema */
   outputSchema: WidgetSchemaObject;
+  /** Widget执行入口方法 */
+  execute?: WidgetExecuteMethod;
   /** Widget元信息 */
   metadata: WidgetMetadata;
   /** 元素数据 */

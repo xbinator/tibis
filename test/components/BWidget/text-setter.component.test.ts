@@ -95,20 +95,16 @@ function createWidgetData(): WidgetData {
       type: 'object',
       properties: {}
     },
+    execute: {
+      code: [
+        'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
+        '  const { input, setState, result } = ctx',
+        '  setState("weather", { temperature: input.weather.temperature })',
+        '  return result.success()',
+        '}'
+      ].join('\n')
+    },
     metadata: {
-      skill: {
-        methods: {
-          execute: {
-            code: [
-              'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
-              '  const { input, setState, result } = ctx',
-              '  setState("weather", { temperature: input.weather.temperature })',
-              '  return result.success()',
-              '}'
-            ].join('\n')
-          }
-        }
-      },
       previewContext: {
         input: {
           city: '上海'

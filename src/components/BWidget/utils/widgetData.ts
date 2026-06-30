@@ -2,7 +2,7 @@
  * @file widgetData.ts
  * @description BWidget 外部 WidgetData 默认值与契约字段归一化工具。
  */
-import type { WidgetData, WidgetMetadata, WidgetSchemaObject, WidgetViewport } from '../types';
+import type { WidgetData, WidgetExecuteMethod, WidgetMetadata, WidgetSchemaObject, WidgetViewport } from '../types';
 import { cloneDeep } from 'lodash-es';
 
 /**
@@ -24,6 +24,8 @@ export interface WidgetDataContractCandidate {
   stateSchema?: unknown;
   /** 出参 schema */
   outputSchema?: unknown;
+  /** 执行入口方法 */
+  execute?: unknown;
   /** Widget元信息 */
   metadata?: WidgetMetadata;
 }
@@ -130,19 +132,49 @@ export function normalizeWidgetSchemaObject(value: unknown, kind: WidgetSchemaKi
 }
 
 /**
+ * 判断值是否为普通记录。
+ * @param value - 待判断值
+ * @returns 是否为普通记录
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * 归一化 Widget 执行入口方法。
+ * @param value - 原始执行方法
+ * @returns 可保存执行方法，缺失时返回 undefined
+ */
+function normalizeWidgetExecuteMethod(value: unknown): WidgetExecuteMethod | undefined {
+  if (!isRecord(value) || typeof value.code !== 'string') {
+    return undefined;
+  }
+
+  return {
+    ...(typeof value.enabled === 'boolean' ? { enabled: value.enabled } : {}),
+    ...(typeof value.description === 'string' ? { description: value.description } : {}),
+    ...(typeof value.timeout === 'number' && Number.isFinite(value.timeout) ? { timeout: value.timeout } : {}),
+    code: value.code
+  };
+}
+
+/**
  * 归一化 WidgetData 契约字段。
  * @param candidate - 原始候选值
  * @returns 契约字段
  */
 export function normalizeWidgetDataContract(
   candidate: WidgetDataContractCandidate
-): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'stateSchema' | 'outputSchema' | 'metadata'> {
+): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'stateSchema' | 'outputSchema' | 'execute' | 'metadata'> {
+  const execute = normalizeWidgetExecuteMethod(candidate.execute);
+
   return {
     name: typeof candidate.name === 'string' ? candidate.name : '',
     description: typeof candidate.description === 'string' ? candidate.description : '',
     inputSchema: normalizeWidgetSchemaObject(candidate.inputSchema, 'input'),
     stateSchema: normalizeWidgetSchemaObject(candidate.stateSchema, 'state'),
     outputSchema: normalizeWidgetSchemaObject(candidate.outputSchema, 'output'),
+    ...(execute ? { execute } : {}),
     metadata: cloneDeep(candidate.metadata ?? {})
   };
 }

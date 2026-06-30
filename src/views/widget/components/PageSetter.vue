@@ -78,7 +78,13 @@
   </ATabs>
 
   <SchemaInputEditor v-model:open="schemaInputEditorOpen" :kind="activeSchemaKind" :schema="activeSchema" @confirm="handleSchemaInputEditorConfirm" />
-  <MethodEditor v-model:open="methodEditorOpen" :code="mainMethodCode" @confirm="handleMethodEditorConfirm" />
+  <MethodEditor
+    v-model:open="methodEditorOpen"
+    :code="mainMethodCode"
+    :input-schema="inputSchema"
+    :output-schema="outputSchema"
+    @confirm="handleMethodEditorConfirm"
+  />
   <SchemaHelp v-model:open="schemaHelpDrawerOpen" :kind="activeSchemaHelpKind" />
 </template>
 
@@ -86,31 +92,29 @@
 import { computed, ref } from 'vue';
 import { castArray, cloneDeep, flatten, has, isBoolean, isFinite, isPlainObject, isString, split } from 'lodash-es';
 import { common, createLowlight } from 'lowlight';
-import type { WidgetData, WidgetSchemaObject, WidgetSchemaProperty, WidgetSkillMethod } from '@/components/BWidget/types';
+import type { WidgetData, WidgetExecuteMethod, WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
 import type { WidgetSchemaKind } from '@/components/BWidget/utils/widgetData';
 import MethodEditor from './PageSetter/MethodEditor.vue';
 import SchemaHelp from './PageSetter/SchemaHelp.vue';
 import SchemaInputEditor from './PageSetter/SchemaInputEditor.vue';
 import SchemaTreeEditor from './PageSetter/SchemaTreeEditor.vue';
 
-/** Widget Skill 默认入口方法名称。 */
-const WIDGET_SKILL_EXECUTE_METHOD_NAME = 'execute';
-/** Widget Skill 默认方法超时时间。 */
-const WIDGET_SKILL_DEFAULT_METHOD_TIMEOUT = 10000;
+/** Widget 执行方法默认超时时间。 */
+const WIDGET_EXECUTE_DEFAULT_METHOD_TIMEOUT = 10000;
 /** Schema 默认新增字段名。 */
 const DEFAULT_SCHEMA_FIELD_NAME = 'field';
 /** 执行方法摘要高亮语言。 */
 const METHOD_SUMMARY_HIGHLIGHT_LANGUAGE = 'typescript';
 /** 执行方法摘要 Lowlight 实例。 */
 const methodSummaryLowlight = createLowlight(common);
-/** Widget Skill 默认方法代码。 */
-const WIDGET_SKILL_DEFAULT_METHOD_CODE = [
+/** Widget 执行方法默认代码。 */
+const WIDGET_EXECUTE_DEFAULT_METHOD_CODE = [
   '// 在这里，您可以通过 ctx.input 获取小组件输入变量，并通过 ctx.result 输出执行结果。',
   '// ctx 已经被正确注入到执行环境中，无需自行创建。',
   '// 下面是一个示例，获取小组件输入中字段名为 city 的值：',
   '// const city = ctx.input.city',
-  '// 下面是一个示例，输出当前 city 和执行完成消息：',
-  "// return ctx.result.success({ city: ctx.input.city, message: '执行完成' })",
+  '// 下面是一个示例，输出符合出参 schema 的结果：',
+  "// return ctx.result.success({ condition: '晴', temperatureCelsius: 26, suggestion: '已查询 ' + ctx.input.city + ' 天气' })",
   '',
   'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
   '  const { input, setState, result } = ctx',
@@ -120,10 +124,7 @@ const WIDGET_SKILL_DEFAULT_METHOD_CODE = [
   '    city',
   '  })',
   '',
-  '  return result.success({',
-  '    city,',
-  "    message: '执行完成'",
-  '  })',
+  "  return result.success({ condition: '晴', temperatureCelsius: 26, suggestion: '已查询 ' + city + ' 天气' })",
   '}',
   ''
 ].join('\n');
@@ -158,33 +159,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 创建默认 Widget Skill 方法。
+ * 创建默认 Widget 执行方法。
  * @returns 默认方法定义
  */
-function createDefaultWidgetSkillMethod(): WidgetSkillMethod {
+function createDefaultWidgetExecuteMethod(): WidgetExecuteMethod {
   return {
     enabled: true,
     description: '',
-    timeout: WIDGET_SKILL_DEFAULT_METHOD_TIMEOUT,
-    code: WIDGET_SKILL_DEFAULT_METHOD_CODE
+    timeout: WIDGET_EXECUTE_DEFAULT_METHOD_TIMEOUT,
+    code: WIDGET_EXECUTE_DEFAULT_METHOD_CODE
   };
 }
 
 /**
- * 从未知值读取 Widget Skill 方法。
+ * 从未知值读取 Widget 执行方法。
  * @param value - 原始方法值
  * @returns 标准方法定义
  */
-function readWidgetSkillMethod(value: unknown): WidgetSkillMethod {
+function readWidgetExecuteMethod(value: unknown): WidgetExecuteMethod {
   if (!isRecord(value)) {
-    return createDefaultWidgetSkillMethod();
+    return createDefaultWidgetExecuteMethod();
   }
 
   return {
     enabled: isBoolean(value.enabled) ? value.enabled : true,
     description: isString(value.description) ? value.description : '',
-    timeout: isFinite(value.timeout) ? (value.timeout as number) : WIDGET_SKILL_DEFAULT_METHOD_TIMEOUT,
-    code: isString(value.code) && value.code.trim().length > 0 ? value.code : WIDGET_SKILL_DEFAULT_METHOD_CODE
+    timeout: isFinite(value.timeout) ? (value.timeout as number) : WIDGET_EXECUTE_DEFAULT_METHOD_TIMEOUT,
+    code: isString(value.code) && value.code.trim().length > 0 ? value.code : WIDGET_EXECUTE_DEFAULT_METHOD_CODE
   };
 }
 
@@ -264,53 +265,21 @@ function addRootSchemaField(kind: WidgetSchemaKind): void {
 }
 
 /**
- * 读取当前 Skill metadata 记录。
- * @returns Skill metadata 记录
- */
-function readSkillMetadataRecord(): Record<string, unknown> {
-  const { skill } = dataItem.value.metadata;
-
-  return isRecord(skill) ? skill : {};
-}
-
-/**
- * 读取当前 Skill 方法记录。
- * @returns Skill 方法记录
- */
-function readSkillMethodsRecord(): Record<string, unknown> {
-  const { methods } = readSkillMetadataRecord();
-
-  return isRecord(methods) ? methods : {};
-}
-
-/**
  * 读取当前 execute 方法。
  * @returns execute 方法定义
  */
-function readMainMethod(): WidgetSkillMethod {
-  return readWidgetSkillMethod(readSkillMethodsRecord()[WIDGET_SKILL_EXECUTE_METHOD_NAME]);
+function readMainMethod(): WidgetExecuteMethod {
+  return readWidgetExecuteMethod(dataItem.value.execute);
 }
 
 /**
  * 写入当前 execute 方法。
  * @param method - execute 方法定义
  */
-function writeMainMethod(method: WidgetSkillMethod): void {
-  const skill = readSkillMetadataRecord();
-  const methods = readSkillMethodsRecord();
-
+function writeMainMethod(method: WidgetExecuteMethod): void {
   dataItem.value = {
     ...dataItem.value,
-    metadata: {
-      ...dataItem.value.metadata,
-      skill: {
-        ...skill,
-        methods: {
-          ...methods,
-          [WIDGET_SKILL_EXECUTE_METHOD_NAME]: method
-        }
-      }
-    }
+    execute: method
   };
 }
 
@@ -379,17 +348,17 @@ const outputSchema = computed<WidgetSchemaObject>({
 });
 
 /** 当前 execute 方法。 */
-const mainMethod = computed<WidgetSkillMethod>({
+const mainMethod = computed<WidgetExecuteMethod>({
   /**
    * 读取 execute 方法。
    * @returns execute 方法定义
    */
-  get: (): WidgetSkillMethod => readMainMethod(),
+  get: (): WidgetExecuteMethod => readMainMethod(),
   /**
    * 写入 execute 方法。
    * @param value - execute 方法定义
    */
-  set: (value: WidgetSkillMethod): void => {
+  set: (value: WidgetExecuteMethod): void => {
     writeMainMethod(value);
   }
 });

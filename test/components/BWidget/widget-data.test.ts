@@ -69,4 +69,22 @@ describe('dataItem', (): void => {
     expect(contract.stateSchema).toEqual(emptyStateSchema);
     expect(contract.outputSchema).toEqual(weatherOutputSchema);
   });
+
+  it('keeps the top-level execute method when normalizing widget data contract fields', (): void => {
+    const contract = normalizeWidgetDataContract({
+      execute: {
+        enabled: true,
+        description: '查询天气',
+        timeout: 10000,
+        code: 'export async function execute(ctx) { return ctx.result.success(ctx.input) }'
+      }
+    });
+
+    expect(contract.execute).toEqual({
+      enabled: true,
+      description: '查询天气',
+      timeout: 10000,
+      code: 'export async function execute(ctx) { return ctx.result.success(ctx.input) }'
+    });
+  });
 });

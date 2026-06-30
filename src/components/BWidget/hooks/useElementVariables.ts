@@ -112,17 +112,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * @returns execute 方法代码
  */
 function readWidgetExecuteCode(dataItem: WidgetData | undefined): string {
-  const skill = dataItem?.metadata.skill;
-  if (!isRecord(skill)) {
-    return '';
-  }
-
-  const { methods } = skill;
-  if (!isRecord(methods)) {
-    return '';
-  }
-
-  const executeMethod = methods.execute;
+  const executeMethod = dataItem?.execute;
   if (!isRecord(executeMethod)) {
     return '';
   }
