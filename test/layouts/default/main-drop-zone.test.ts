@@ -1,11 +1,13 @@
 /**
- * @file drop-zone.test.ts
- * @description 验证欢迎页拖拽文件时使用原生路径打开本地文件。
+ * @file main-drop-zone.test.ts
+ * @description 验证默认布局主内容区拖拽文件时使用原生路径打开本地文件。
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import DropZone from '@/views/welcome/components/DropZone.vue';
+import MainDropZone from '@/layouts/default/components/MainDropZone.vue';
 
 /**
  * 测试用 FileList 最小实现。
@@ -24,6 +26,38 @@ const openFileMock = vi.hoisted(() => vi.fn<(_file: unknown) => Promise<unknown>
 const getPathForFileMock = vi.hoisted(() => vi.fn<(_file: File) => string | null>().mockReturnValue('/tmp/dropped.md'));
 const routerPushMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise<void>>().mockResolvedValue(undefined));
 const createAndOpenMock = vi.hoisted(() => vi.fn());
+
+/**
+ * 读取 MainDropZone 组件源码。
+ * @returns MainDropZone.vue 文件内容
+ */
+function readMainDropZoneSource(): string {
+  return readFileSync(resolvePath(process.cwd(), 'src/layouts/default/components/MainDropZone.vue'), 'utf8');
+}
+
+/**
+ * 从 Vue 组件源码中提取指定样式规则内容。
+ * @param source - Vue 组件源码
+ * @param selector - 需要匹配的 CSS 选择器
+ * @returns 样式规则内容；未命中时返回空字符串
+ */
+function extractStyleRuleBody(source: string, selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rule = new RegExp(`${escapedSelector}\\s*\\{(?<body>[\\s\\S]*?)\\n\\}`).exec(source);
+  return rule?.groups?.body ?? '';
+}
+
+/**
+ * 从样式规则中提取 z-index 数值。
+ * @param ruleBody - CSS 规则内容
+ * @returns z-index 数值；未命中时返回 null
+ */
+function extractZIndex(ruleBody: string): number | null {
+  const zIndexMatch = /z-index:\s*(?<value>\d+);/.exec(ruleBody);
+  if (!zIndexMatch?.groups?.value) return null;
+
+  return Number(zIndexMatch.groups.value);
+}
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
@@ -91,7 +125,16 @@ function flushPromises(): Promise<void> {
   });
 }
 
-describe('DropZone', () => {
+describe('MainDropZone', () => {
+  it('keeps the drag overlay above editor selection panels', (): void => {
+    const source = readMainDropZoneSource();
+    const overlayRuleBody = extractStyleRuleBody(source, '.main-drop-zone__overlay');
+    const overlayZIndex = extractZIndex(overlayRuleBody);
+
+    expect(overlayZIndex).not.toBeNull();
+    expect(overlayZIndex).toBeGreaterThan(1000);
+  });
+
   beforeEach((): void => {
     openFileByPathMock.mockClear();
     openFileMock.mockClear();
@@ -102,7 +145,7 @@ describe('DropZone', () => {
   });
 
   it('opens dropped local file by the native file path resolver', async (): Promise<void> => {
-    const wrapper = shallowMount(DropZone, {
+    const wrapper = shallowMount(MainDropZone, {
       slots: {
         default: '<div>content</div>'
       }
@@ -126,7 +169,7 @@ describe('DropZone', () => {
       savedContent: '{"type":"widget","version":1}'
     });
 
-    const wrapper = shallowMount(DropZone, {
+    const wrapper = shallowMount(MainDropZone, {
       slots: {
         default: '<div>content</div>'
       }

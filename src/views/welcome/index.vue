@@ -1,5 +1,5 @@
 <template>
-  <DropZone class="welcome-page">
+  <div class="welcome-page">
     <div class="welcome-container">
       <div class="actions-section">
         <div class="action-card" @click="handleNewFile">
@@ -47,7 +47,7 @@
         </div>
       </div>
     </div>
-  </DropZone>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -63,7 +63,6 @@ import { useOpenFile } from '@/hooks/useOpenFile';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { resolveFileTitle } from '@/utils/file/title';
-import DropZone from './components/DropZone.vue';
 
 const { openWebview } = useNavigate();
 const commandPanelStore = useCommandPanelStore();

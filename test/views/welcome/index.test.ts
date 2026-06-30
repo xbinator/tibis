@@ -108,9 +108,6 @@ function mountWelcomePage(): VueWrapper {
       stubs: {
         BRecent: true,
         BRecentIcon: BRecentIconStub,
-        DropZone: {
-          template: '<div><slot /></div>'
-        },
         Icon: IconStub
       }
     }

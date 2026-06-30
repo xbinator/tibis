@@ -3,7 +3,7 @@
   @description 聊天侧边栏组件，包含会话管理、消息列表、输入框和模型选择功能。
 -->
 <template>
-  <div :class="bem('container')">
+  <div ref="containerRef" :class="bem('container')">
     <div :class="bem('conversation-container')">
       <ConversationView
         ref="conversationRef"
@@ -40,7 +40,7 @@
     </div>
 
     <div :class="bem('input')">
-      <div ref="inputContainerRef" :class="bem('input-container', { dragover: isInputDragActive })">
+      <div :class="bem('input-container', { dragover: isContainerDragActive })">
         <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
 
         <BPromptEditor
@@ -179,8 +179,8 @@ provide('interaction', interactionAPI);
 
 /** 输入框编辑器引用 */
 const promptEditorRef = ref<InstanceType<typeof BPromptEditor>>();
-/** 输入框容器引用 */
-const inputContainerRef = ref<HTMLElement>();
+/** 聊天容器引用，用于接收整个聊天区域的文件拖拽。 */
+const containerRef = ref<HTMLElement>();
 /** 通用文件打开导航能力 */
 const { openFile, openWebview } = useNavigate();
 /** 全局命令面板 Store。 */
@@ -279,7 +279,7 @@ const fileReference = useFileReference({
 });
 
 /**
- * 处理投放到输入容器的文件。
+ * 处理投放到聊天容器的文件。
  * @param files - 拖拽文件列表
  */
 async function handleInputDropFiles(files: File[]): Promise<void> {
@@ -298,9 +298,9 @@ async function handleInputDropFiles(files: File[]): Promise<void> {
   }
 }
 
-/** 输入容器文件拖拽 hook */
-const { isDragging: isInputDragActive } = useFileDrop({
-  targetRef: inputContainerRef,
+/** 聊天容器文件拖拽 hook */
+const { isDragging: isContainerDragActive } = useFileDrop({
+  targetRef: containerRef,
   onDropFiles: handleInputDropFiles
 });
 

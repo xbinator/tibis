@@ -8,6 +8,13 @@ import { describe, expect, it } from 'vitest';
 const defaultLayoutSource = readFileSync(new URL('../../../src/layouts/default/index.vue', import.meta.url), 'utf8');
 
 describe('Default layout chat sidebar mounting', (): void => {
+  it('wraps the main router outlet with the layout file drop zone', (): void => {
+    expect(defaultLayoutSource).toContain("import MainDropZone from './components/MainDropZone.vue';");
+    expect(defaultLayoutSource).toContain('<MainDropZone class="b-layout__content__main">');
+    expect(defaultLayoutSource).toContain('</MainDropZone>');
+    expect(defaultLayoutSource).not.toContain('<div class="b-layout__content__main">');
+  });
+
   it('imports ChatSider directly and toggles visibility with v-show', (): void => {
     expect(defaultLayoutSource).toContain("import ChatSider from './components/ChatSider.vue';");
     expect(defaultLayoutSource).toContain('<ChatSider v-show="settingStore.sidebarVisible" />');

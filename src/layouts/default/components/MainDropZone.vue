@@ -1,7 +1,7 @@
 <template>
-  <div ref="dropZoneRef" class="drop-zone">
-    <div v-if="isDragging" class="drag-overlay">
-      <div class="drag-overlay-content"></div>
+  <div ref="dropZoneRef" class="main-drop-zone">
+    <div v-if="isDragging" class="main-drop-zone__overlay">
+      <div class="main-drop-zone__overlay-content"></div>
     </div>
     <slot></slot>
   </div>
@@ -9,14 +9,14 @@
 
 <script setup lang="ts">
 /**
- * @file DropZone.vue
- * @description 为欢迎页提供拖拽文件打开能力。
+ * @file MainDropZone.vue
+ * @description 为默认布局主内容区提供拖拽文件打开能力。
  */
 
 import { ref } from 'vue';
 import { customAlphabet } from 'nanoid';
 import { OPEN_FILE_EXTENSIONS } from '@/constants/extensions';
-import { useFileDrop, resolveDroppedFilePath } from '@/hooks/useFileDrop';
+import { resolveDroppedFilePath, useFileDrop } from '@/hooks/useFileDrop';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import type { StoredFile } from '@/shared/storage';
 import { useFilesStore } from '@/stores/workspace/files';
@@ -49,7 +49,7 @@ async function createDroppedDraft(file: File, ext: string): Promise<StoredFile> 
 
 /**
  * 处理拖拽打开文件。
- * @param e - 拖拽事件
+ * @param files - 拖拽得到的文件列表
  */
 async function handleDropFiles(files: File[]): Promise<void> {
   const file = files[0];
@@ -82,25 +82,26 @@ const { isDragging } = useFileDrop({
 </script>
 
 <style lang="less" scoped>
-.drop-zone {
+.main-drop-zone {
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-.drag-overlay {
+.main-drop-zone__overlay {
   position: absolute;
   inset: 0;
-  z-index: 100;
+  z-index: 1100;
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: var(--bg-primary);
+  border-radius: 8px;
   opacity: 0.6;
   backdrop-filter: blur(4px);
 }
 
-.drag-overlay-content {
+.main-drop-zone__overlay-content {
   display: flex;
   flex-direction: column;
   gap: 12px;

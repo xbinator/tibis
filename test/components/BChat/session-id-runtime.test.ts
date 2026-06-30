@@ -1211,41 +1211,38 @@ describe('BChat sessionId runtime', (): void => {
     expect(electronAPIMock.chatRuntimeCompact).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-active', reason: 'manual' }));
   });
 
-  it('highlights the input container while dragging files over it', async (): Promise<void> => {
+  it('highlights the input container while dragging files over the chat container', async (): Promise<void> => {
     const wrapper = mountBChat(null);
     await flushPromises();
+    const chatContainer = wrapper.find('.b-chat__container');
     const inputContainer = wrapper.find('.b-chat__input-container');
 
-    await inputContainer.element.dispatchEvent(createFileDragEvent('dragenter', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await chatContainer.element.dispatchEvent(createFileDragEvent('dragenter', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
     await wrapper.vm.$nextTick();
 
     expect(inputContainer.classes()).toContain('b-chat__input-container--dragover');
 
-    await inputContainer.element.dispatchEvent(createFileDragEvent('dragleave', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await chatContainer.element.dispatchEvent(createFileDragEvent('dragleave', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
     await wrapper.vm.$nextTick();
 
     expect(inputContainer.classes()).not.toContain('b-chat__input-container--dragover');
   });
 
-  it('inserts file reference tokens when non-image files are dropped on the input container', async (): Promise<void> => {
+  it('inserts file reference tokens when non-image files are dropped on the chat container', async (): Promise<void> => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    await wrapper
-      .find('.b-chat__input-container')
-      .element.dispatchEvent(createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await wrapper.find('.b-chat__container').element.dispatchEvent(createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
     await flushPromises();
 
     expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{@/workspace/My Notes/note.md}}');
   });
 
-  it('adds image files when images are dropped on the input container', async (): Promise<void> => {
+  it('adds image files when images are dropped on the chat container', async (): Promise<void> => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    await wrapper
-      .find('.b-chat__input-container')
-      .element.dispatchEvent(createFileDragEvent('drop', [new File(['image'], 'photo.png', { type: 'image/png' })]));
+    await wrapper.find('.b-chat__container').element.dispatchEvent(createFileDragEvent('drop', [new File(['image'], 'photo.png', { type: 'image/png' })]));
     await flushPromises();
 
     expect(promptEditorMockState.insertTextAtCursor).not.toHaveBeenCalled();
@@ -1256,7 +1253,7 @@ describe('BChat sessionId runtime', (): void => {
     await flushPromises();
 
     await wrapper
-      .find('.b-chat__input-container')
+      .find('.b-chat__container')
       .element.dispatchEvent(
         createFileDragEvent('drop', [new File(['image'], 'photo.png', { type: 'image/png' }), new File(['hello'], 'note.md', { type: 'text/markdown' })])
       );
@@ -1270,9 +1267,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat(null);
     await flushPromises();
 
-    await wrapper
-      .find('.b-chat__input-container')
-      .element.dispatchEvent(createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await wrapper.find('.b-chat__container').element.dispatchEvent(createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
     await flushPromises();
 
     expect(promptEditorMockState.insertTextAtCursor).toHaveBeenCalledWith('{{@note.md}}');
@@ -1281,14 +1276,15 @@ describe('BChat sessionId runtime', (): void => {
   it('clears input drag state without duplicate processing when an inner editor already handled the drop', async (): Promise<void> => {
     const wrapper = mountBChat(null);
     await flushPromises();
+    const chatContainer = wrapper.find('.b-chat__container');
     const inputContainer = wrapper.find('.b-chat__input-container');
 
-    await inputContainer.element.dispatchEvent(createFileDragEvent('dragenter', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
+    await chatContainer.element.dispatchEvent(createFileDragEvent('dragenter', [new File(['hello'], 'note.md', { type: 'text/markdown' })]));
     await wrapper.vm.$nextTick();
 
     const dropEvent = createFileDragEvent('drop', [new File(['hello'], 'note.md', { type: 'text/markdown' })]);
     dropEvent.preventDefault();
-    await inputContainer.element.dispatchEvent(dropEvent);
+    await chatContainer.element.dispatchEvent(dropEvent);
     await flushPromises();
 
     expect(inputContainer.classes()).not.toContain('b-chat__input-container--dragover');

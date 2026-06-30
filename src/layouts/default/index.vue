@@ -59,13 +59,13 @@
     </div>
 
     <div class="b-layout__content">
-      <div class="b-layout__content__main">
+      <MainDropZone class="b-layout__content__main">
         <RouterView v-slot="{ Component, route }">
           <KeepAlive :include="tabsStore.cachedComponentNames">
             <component :is="getRouteCacheComponent(route)" v-if="Component" :key="getRouteCacheKey(route)" :route-component="Component" />
           </KeepAlive>
         </RouterView>
-      </div>
+      </MainDropZone>
 
       <ChatSider v-show="settingStore.sidebarVisible" />
 
@@ -92,6 +92,7 @@ import ChatSider from './components/ChatSider.vue';
 import HeaderEditorActions from './components/HeaderEditorActions.vue';
 import HeaderTabs from './components/HeaderTabs.vue';
 import HeaderUpdateNotice from './components/HeaderUpdateNotice.vue';
+import MainDropZone from './components/MainDropZone.vue';
 import { useEditActive } from './hooks/useEditActive';
 import { useFileActive } from './hooks/useFileActive';
 import { useHelpActive } from './hooks/useHelpActive';
