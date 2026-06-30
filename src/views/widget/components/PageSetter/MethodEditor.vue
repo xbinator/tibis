@@ -48,23 +48,48 @@ declare interface WidgetSkillContext {
   state: Record<string, unknown>
   /** 最近一次方法返回的结构化出参。 */
   output?: unknown
-  /** 最近一次工具或方法执行结果。 */
-  lastResult?: unknown
   /** 触发当前执行的事件信息。 */
   event?: unknown
   /** 写入小组件运行态数据，path 支持点路径，例如 weather.temperature。 */
   setState(path: string, value: unknown): void
-  /** 构造标准执行结果。 */
-  result: {
-    /** 标记方法执行成功，并把 data 作为执行结果返回。 */
-    success(data?: unknown): ExecutionResult
-    /** 标记方法执行失败，并返回错误码与错误信息。 */
-    failure(code: string, message: string): ExecutionResult
-    /** 标记执行已取消，用于用户主动取消或流程被中止。 */
-    cancelled(code: string, message: string): ExecutionResult
-    /** 暂停执行并等待用户继续输入或选择。 */
-    awaitingUserInput(data?: unknown): ExecutionResult
-  }
+  /**
+   * 构造标准执行结果。
+   *
+   * - success：方法正常完成，返回可绑定到 output 的数据。
+   * - failure：方法执行失败，返回错误码与错误信息。
+   * - cancelled：方法被取消，用于用户主动取消或流程中止。
+   * - awaitingUserInput：暂停执行，等待用户继续输入或选择。
+   */
+  result: WidgetSkillResultFactory
+}
+
+declare interface WidgetSkillResultFactory {
+  /**
+   * 标记方法执行成功，并把 data 作为执行结果返回。
+   * @param data - 成功结果中携带的数据。
+   * @returns 标准成功执行结果。
+   */
+  success(data?: unknown): ExecutionResult
+  /**
+   * 标记方法执行失败，并返回错误码与错误信息。
+   * @param code - 机器可读错误码。
+   * @param message - 给用户或日志展示的错误说明。
+   * @returns 标准失败执行结果。
+   */
+  failure(code: string, message: string): ExecutionResult
+  /**
+   * 标记执行已取消，用于用户主动取消或流程被中止。
+   * @param code - 机器可读取消码。
+   * @param message - 给用户或日志展示的取消说明。
+   * @returns 标准取消执行结果。
+   */
+  cancelled(code: string, message: string): ExecutionResult
+  /**
+   * 暂停执行并等待用户继续输入或选择。
+   * @param data - 等待用户输入时携带的提示、选项或上下文数据。
+   * @returns 标准等待用户输入执行结果。
+   */
+  awaitingUserInput(data?: unknown): ExecutionResult
 }
 
 declare interface ExecutionResult {

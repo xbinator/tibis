@@ -46,11 +46,19 @@ const weatherOutputSchema: WidgetSchemaObject = {
   required: ['condition', 'temperatureCelsius']
 };
 
+/** 默认状态 schema。 */
+const emptyStateSchema: WidgetSchemaObject = {
+  type: 'object',
+  properties: {},
+  required: []
+};
+
 describe('dataItem', (): void => {
   it('creates weather query schemas for new widget data', (): void => {
     const dataItem = createDefaultWidgetData();
 
     expect(dataItem.inputSchema).toEqual(weatherInputSchema);
+    expect(dataItem.stateSchema).toEqual(emptyStateSchema);
     expect(dataItem.outputSchema).toEqual(weatherOutputSchema);
   });
 
@@ -58,6 +66,7 @@ describe('dataItem', (): void => {
     const contract = normalizeWidgetDataContract({});
 
     expect(contract.inputSchema).toEqual(weatherInputSchema);
+    expect(contract.stateSchema).toEqual(emptyStateSchema);
     expect(contract.outputSchema).toEqual(weatherOutputSchema);
   });
 });

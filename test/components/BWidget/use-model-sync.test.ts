@@ -4,8 +4,8 @@
  */
 import { effectScope, nextTick, ref } from 'vue';
 import { describe, expect, it } from 'vitest';
-import { useWidgetBoard } from '@/components/BWidget/hooks/useWidgetBoard';
 import { useModelSync } from '@/components/BWidget/hooks/useModelSync';
+import { useWidgetBoard } from '@/components/BWidget/hooks/useWidgetBoard';
 import type { WidgetData, WidgetElement, WidgetShapeElement } from '@/components/BWidget/types';
 import { createWidgetDataSnapshot } from '@/components/BWidget/utils/boardTransforms';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
@@ -97,7 +97,16 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(modelValue.value?.elements).toHaveLength(2);
-    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['description', 'elements', 'inputSchema', 'metadata', 'name', 'outputSchema', 'viewport']);
+    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual([
+      'description',
+      'elements',
+      'inputSchema',
+      'metadata',
+      'name',
+      'outputSchema',
+      'stateSchema',
+      'viewport'
+    ]);
     expect('kind' in (modelValue.value?.elements[0] ?? {})).toBe(false);
     expect(modelValue.value?.elements[0]?.name).toBe('rect');
     expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(false);

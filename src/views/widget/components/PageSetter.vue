@@ -63,29 +63,12 @@
           <BButton icon="lucide:code-xml" size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
         </template>
         <div class="method-summary">
-          <p class="method-summary__text">触发这个小组件时，会执行这里配置的方法，用于读取入参、更新状态并返回结果。</p>
+          <pre class="method-summary__code" aria-label="执行方法预览"><code class="method-summary__code-content"><span
+            v-for="(token, tokenIndex) in highlightedMethodPreviewTokens"
+            :key="tokenIndex"
+            :class="token.className"
+          >{{ token.text }}</span></code></pre>
         </div>
-      </BSectionBlock>
-
-      <BSectionBlock title="动态预览">
-        <BSectionItem label="input" direction="vertical">
-          <ATextarea
-            v-model:value="previewInputText"
-            :auto-size="{ minRows: 3, maxRows: 8 }"
-            :status="previewInputError ? 'error' : undefined"
-            @blur="applyPreviewInputText"
-          />
-          <p v-if="previewInputError" class="preview-context-error">{{ previewInputError }}</p>
-        </BSectionItem>
-        <BSectionItem label="state" direction="vertical">
-          <ATextarea
-            v-model:value="previewStateText"
-            :auto-size="{ minRows: 3, maxRows: 8 }"
-            :status="previewStateError ? 'error' : undefined"
-            @blur="applyPreviewStateText"
-          />
-          <p v-if="previewStateError" class="preview-context-error">{{ previewStateError }}</p>
-        </BSectionItem>
       </BSectionBlock>
     </ATabPane>
   </ATabs>
@@ -96,38 +79,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { cloneDeep, has, isBoolean, isFinite, isPlainObject, isString } from 'lodash-es';
-import type { WidgetData, WidgetRenderContext, WidgetSchemaObject, WidgetSchemaProperty, WidgetSkillMethod } from '@/components/BWidget/types';
+import { computed, ref } from 'vue';
+import { castArray, cloneDeep, flatten, has, isBoolean, isFinite, isPlainObject, isString, split } from 'lodash-es';
+import { common, createLowlight } from 'lowlight';
+import type { WidgetData, WidgetSchemaObject, WidgetSchemaProperty, WidgetSkillMethod } from '@/components/BWidget/types';
 import type { WidgetSchemaKind } from '@/components/BWidget/utils/widgetData';
-import { readWidgetPreviewRenderContext, writeWidgetPreviewRenderContext } from '@/components/BWidget/utils/widgetPreviewContext';
 import MethodEditor from './PageSetter/MethodEditor.vue';
 import SchemaHelp from './PageSetter/SchemaHelp.vue';
 import SchemaInputEditor from './PageSetter/SchemaInputEditor.vue';
 import SchemaTreeEditor from './PageSetter/SchemaTreeEditor.vue';
-
-/**
- * 预览上下文 JSON 解析成功结果。
- */
-interface PreviewContextParseSuccess {
-  /** 解析是否成功 */
-  ok: true;
-  /** 解析后的对象值 */
-  value: Record<string, unknown>;
-}
-
-/**
- * 预览上下文 JSON 解析失败结果。
- */
-interface PreviewContextParseFailure {
-  /** 解析是否成功 */
-  ok: false;
-  /** 错误提示 */
-  message: string;
-}
-
-/** 预览上下文 JSON 解析结果。 */
-type PreviewContextParseResult = PreviewContextParseSuccess | PreviewContextParseFailure;
 
 /** Widget Skill 默认入口方法名称。 */
 const WIDGET_SKILL_EXECUTE_METHOD_NAME = 'execute';
@@ -135,6 +95,10 @@ const WIDGET_SKILL_EXECUTE_METHOD_NAME = 'execute';
 const WIDGET_SKILL_DEFAULT_METHOD_TIMEOUT = 10000;
 /** Schema 默认新增字段名。 */
 const DEFAULT_SCHEMA_FIELD_NAME = 'field';
+/** 执行方法摘要高亮语言。 */
+const METHOD_SUMMARY_HIGHLIGHT_LANGUAGE = 'typescript';
+/** 执行方法摘要 Lowlight 实例。 */
+const methodSummaryLowlight = createLowlight(common);
 /** Widget Skill 默认方法代码。 */
 const WIDGET_SKILL_DEFAULT_METHOD_CODE = [
   '// 在这里，您可以通过 ctx.input 获取小组件输入变量，并通过 ctx.result 输出执行结果。',
@@ -145,12 +109,11 @@ const WIDGET_SKILL_DEFAULT_METHOD_CODE = [
   "// return ctx.result.success({ city: ctx.input.city, message: '执行完成' })",
   '',
   'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
-  '  const { input, state, setState, result } = ctx',
+  '  const { input, setState, result } = ctx',
   '  const city = input.city',
   '',
   "  setState('lastQuery', {",
-  '    city,',
-  '    stateSnapshot: state',
+  '    city',
   '  })',
   '',
   '  return result.success({',
@@ -173,20 +136,11 @@ const activeSchemaKind = ref<WidgetSchemaKind>('input');
 const schemaHelpDrawerOpen = ref(false);
 /** 当前说明抽屉对应的 schema 类型。 */
 const activeSchemaHelpKind = ref<WidgetSchemaKind>('input');
-/** 预览 input JSON 文本。 */
-const previewInputText = ref<string>('{}');
-/** 预览 state JSON 文本。 */
-const previewStateText = ref<string>('{}');
-/** 预览 input JSON 错误提示。 */
-const previewInputError = ref<string>('');
-/** 预览 state JSON 错误提示。 */
-const previewStateError = ref<string>('');
-
 /**
  * 向当前 Widget 数据写入配置变更。
  * @param patch - Widget 配置增量
  */
-function updateWidgetDataConfig(patch: Partial<Pick<WidgetData, 'description' | 'inputSchema' | 'name' | 'outputSchema'>>): void {
+function updateWidgetDataConfig(patch: Partial<Pick<WidgetData, 'description' | 'inputSchema' | 'stateSchema' | 'name' | 'outputSchema'>>): void {
   dataItem.value = { ...dataItem.value, ...patch };
 }
 
@@ -257,21 +211,52 @@ function createUniqueRootSchemaFieldName(schema: WidgetSchemaObject): string {
 }
 
 /**
+ * 按类型读取 Widget schema。
+ * @param kind - schema 类型
+ * @returns 对应 schema
+ */
+function readWidgetSchema(kind: WidgetSchemaKind): WidgetSchemaObject {
+  if (kind === 'input') {
+    return dataItem.value.inputSchema;
+  }
+
+  if (kind === 'state') {
+    return dataItem.value.stateSchema;
+  }
+
+  return dataItem.value.outputSchema;
+}
+
+/**
+ * 按类型写入 Widget schema。
+ * @param kind - schema 类型
+ * @param schema - 新 schema
+ */
+function updateWidgetSchema(kind: WidgetSchemaKind, schema: WidgetSchemaObject): void {
+  if (kind === 'input') {
+    updateWidgetDataConfig({ inputSchema: schema });
+    return;
+  }
+
+  if (kind === 'state') {
+    updateWidgetDataConfig({ stateSchema: schema });
+    return;
+  }
+
+  updateWidgetDataConfig({ outputSchema: schema });
+}
+
+/**
  * 添加根级 schema 字段。
  * @param kind - schema 类型
  */
 function addRootSchemaField(kind: WidgetSchemaKind): void {
-  const nextSchema = cloneDeep(kind === 'input' ? dataItem.value.inputSchema : dataItem.value.outputSchema);
+  const nextSchema = cloneDeep(readWidgetSchema(kind));
   const fieldName = createUniqueRootSchemaFieldName(nextSchema);
 
   nextSchema.properties[fieldName] = createDefaultSchemaField();
 
-  if (kind === 'input') {
-    updateWidgetDataConfig({ inputSchema: nextSchema });
-    return;
-  }
-
-  updateWidgetDataConfig({ outputSchema: nextSchema });
+  updateWidgetSchema(kind, nextSchema);
 }
 
 /**
@@ -323,124 +308,6 @@ function writeMainMethod(method: WidgetSkillMethod): void {
       }
     }
   };
-}
-
-/**
- * 格式化预览上下文对象为 JSON 文本。
- * @param value - 预览上下文对象
- * @returns JSON 文本
- */
-function formatPreviewContextText(value: Record<string, unknown>): string {
-  return JSON.stringify(value, null, 2);
-}
-
-/**
- * 从当前 Widget 读取预览上下文。
- * @returns 预览渲染上下文
- */
-function readCurrentPreviewContext(): WidgetRenderContext {
-  return (
-    readWidgetPreviewRenderContext(dataItem.value.metadata) ?? {
-      input: {},
-      state: {}
-    }
-  );
-}
-
-/**
- * 同步预览上下文编辑器文本。
- */
-function syncPreviewContextText(): void {
-  const previewContext = readCurrentPreviewContext();
-
-  previewInputText.value = formatPreviewContextText(previewContext.input);
-  previewStateText.value = formatPreviewContextText(previewContext.state);
-  previewInputError.value = '';
-  previewStateError.value = '';
-}
-
-/**
- * 解析预览上下文 JSON 文本。
- * @param text - JSON 文本
- * @param label - 上下文根名称
- * @returns 解析结果
- */
-function parsePreviewContextText(text: string, label: 'input' | 'state'): PreviewContextParseResult {
-  const normalizedText = text.trim();
-
-  if (normalizedText.length === 0) {
-    return {
-      ok: true,
-      value: {}
-    };
-  }
-
-  try {
-    const value = JSON.parse(normalizedText) as unknown;
-
-    if (!isPlainObject(value)) {
-      return {
-        ok: false,
-        message: `${label} 必须是 JSON 对象`
-      };
-    }
-
-    return {
-      ok: true,
-      value: value as Record<string, unknown>
-    };
-  } catch (_error: unknown) {
-    return {
-      ok: false,
-      message: `${label} 必须是合法 JSON`
-    };
-  }
-}
-
-/**
- * 更新预览上下文。
- * @param patch - 预览上下文增量
- */
-function updatePreviewContext(patch: Partial<Pick<WidgetRenderContext, 'input' | 'state'>>): void {
-  const previewContext = {
-    ...readCurrentPreviewContext(),
-    ...patch
-  };
-
-  dataItem.value = {
-    ...dataItem.value,
-    metadata: writeWidgetPreviewRenderContext(dataItem.value.metadata, previewContext)
-  };
-}
-
-/**
- * 保存预览 input JSON。
- */
-function applyPreviewInputText(): void {
-  const result = parsePreviewContextText(previewInputText.value, 'input');
-
-  if (!result.ok) {
-    previewInputError.value = result.message;
-    return;
-  }
-
-  previewInputError.value = '';
-  updatePreviewContext({ input: result.value });
-}
-
-/**
- * 保存预览 state JSON。
- */
-function applyPreviewStateText(): void {
-  const result = parsePreviewContextText(previewStateText.value, 'state');
-
-  if (!result.ok) {
-    previewStateError.value = result.message;
-    return;
-  }
-
-  previewStateError.value = '';
-  updatePreviewContext({ state: result.value });
 }
 
 /** 当前 Widget 能力名称。 */
@@ -543,6 +410,112 @@ const mainMethodCode = computed<string>({
 });
 
 /**
+ * Lowlight 文本节点。
+ */
+interface LowlightTextNode {
+  /** 节点类型 */
+  type: 'text';
+  /** 文本内容 */
+  value: string;
+}
+
+/**
+ * Lowlight 元素节点。
+ */
+interface LowlightElementNode {
+  /** 节点类型 */
+  type: 'element' | 'root';
+  /** 子节点 */
+  children?: Array<LowlightElementNode | LowlightTextNode>;
+  /** 节点属性 */
+  properties?: {
+    /** CSS 类名 */
+    className?: string[] | string;
+  };
+}
+
+/**
+ * Lowlight 节点。
+ */
+type LowlightNode = LowlightElementNode | LowlightTextNode;
+
+/**
+ * 执行方法代码摘要 token。
+ */
+interface MethodSummaryToken {
+  /** token 文本 */
+  text: string;
+  /** 安全 CSS 类名 */
+  className?: string;
+}
+
+/**
+ * 将纯文本转为摘要 token。
+ * @param text - 代码文本
+ * @returns 摘要 token
+ */
+function textToMethodSummaryTokens(text: string): MethodSummaryToken[] {
+  return text ? [{ text }] : [];
+}
+
+/**
+ * 读取 Lowlight 元素节点的安全类名。
+ * @param node - Lowlight 元素节点
+ * @returns 安全类名
+ */
+function getLowlightClassNames(node: LowlightElementNode): string[] {
+  const rawClassName = node.properties?.className;
+  const classNameItems = rawClassName ? castArray(rawClassName) : [];
+  const classNames = flatten(classNameItems.map((item: string | string[]): string[] => (isString(item) ? split(item, /\s+/u) : item)));
+
+  return classNames.filter((className: string): boolean => className.startsWith('hljs-'));
+}
+
+/**
+ * 将 Lowlight 节点拍平成摘要 token。
+ * @param node - Lowlight 节点
+ * @param activeClassNames - 父级继承的高亮类名
+ * @returns 摘要 token
+ */
+function lowlightNodeToMethodSummaryTokens(node: LowlightNode, activeClassNames: readonly string[] = []): MethodSummaryToken[] {
+  if (node.type === 'text') {
+    if (!node.value) {
+      return [];
+    }
+
+    const className = activeClassNames.join(' ');
+
+    return [{ text: node.value, className: className || undefined }];
+  }
+
+  const mergedClassNames = [...new Set([...activeClassNames, ...getLowlightClassNames(node)])];
+
+  return node.children?.flatMap((child: LowlightNode): MethodSummaryToken[] => lowlightNodeToMethodSummaryTokens(child, mergedClassNames)) ?? [];
+}
+
+/**
+ * 高亮执行方法代码。
+ * @param code - 执行方法代码
+ * @returns 高亮 token
+ */
+function highlightMethodCode(code: string): MethodSummaryToken[] {
+  if (!methodSummaryLowlight.registered(METHOD_SUMMARY_HIGHLIGHT_LANGUAGE)) {
+    return textToMethodSummaryTokens(code);
+  }
+
+  try {
+    const tree = methodSummaryLowlight.highlight(METHOD_SUMMARY_HIGHLIGHT_LANGUAGE, code) as LowlightNode;
+
+    return lowlightNodeToMethodSummaryTokens(tree);
+  } catch {
+    return textToMethodSummaryTokens(code);
+  }
+}
+
+/** 高亮后的执行方法摘要 token。 */
+const highlightedMethodPreviewTokens = computed<MethodSummaryToken[]>(() => highlightMethodCode(mainMethodCode.value));
+
+/**
  * 打开 Schema JSON 编辑弹窗。
  * @param kind - schema 类型
  */
@@ -572,12 +545,7 @@ function openSchemaHelp(kind: WidgetSchemaKind): void {
  * @param schema - 标准化后的 schema
  */
 function handleSchemaInputEditorConfirm(schema: WidgetSchemaObject): void {
-  if (activeSchemaKind.value === 'input') {
-    updateWidgetDataConfig({ inputSchema: schema });
-    return;
-  }
-
-  updateWidgetDataConfig({ outputSchema: schema });
+  updateWidgetSchema(activeSchemaKind.value, schema);
 }
 
 /**
@@ -589,12 +557,12 @@ function handleMethodEditorConfirm(code: string): void {
 }
 
 /** 当前正在编辑的 Schema。 */
-const activeSchema = computed<WidgetSchemaObject>(() => (activeSchemaKind.value === 'input' ? dataItem.value.inputSchema : dataItem.value.outputSchema));
-
-watch(() => dataItem.value.metadata, syncPreviewContextText, { deep: true, immediate: true });
+const activeSchema = computed<WidgetSchemaObject>(() => readWidgetSchema(activeSchemaKind.value));
 </script>
 
 <style lang="less" scoped>
+@import url('@/assets/styles/markdown.less');
+
 .page-setter {
   width: 100%;
 }
@@ -616,27 +584,29 @@ watch(() => dataItem.value.metadata, syncPreviewContextText, { deep: true, immed
   gap: 8px;
 }
 
-.preview-context-error {
-  margin: 6px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--color-danger);
-}
-
 .method-summary {
   display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
 }
 
-.method-summary__text {
+.method-summary__code {
+  max-height: 220px;
+  padding: 8px 10px;
   margin: 0;
+  overflow: auto;
+  font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace);
   font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-secondary);
+  line-height: 1.7;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  .code-highlight();
 }
 </style>

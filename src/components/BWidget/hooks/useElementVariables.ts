@@ -6,9 +6,8 @@ import type { Variable, VariableOptionGroup } from '../../BPromptEditor/types';
 import type { WidgetData, WidgetSchemaProperty } from '../types';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
-import { isPlainObject } from 'lodash-es';
 import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, type WidgetBindingContextRoot } from '../utils/widgetBindings';
-import { readWidgetPreviewRenderContext } from '../utils/widgetPreviewContext';
+import { buildWidgetStateSchema } from '../utils/widgetStateSchema';
 
 /**
  * Widget 数据读取函数。
@@ -24,18 +23,9 @@ export interface UseElementVariablesReturn {
 }
 
 /**
- * 判断未知值是否为可遍历对象记录。
- * @param value - 待判断的未知值
- * @returns 是否为对象记录
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value);
-}
-
-/**
  * 创建变量选项。
  * @param value - 变量路径
- * @param label - 显示名称
+ * @param label - 变量说明标签
  * @param description - 变量说明
  * @param children - 子级变量选项
  * @returns 变量选项
@@ -79,30 +69,7 @@ function collectSchemaVariableChildren(
     const path = formatWidgetBindingPath(root, segments);
     const children = property.type === 'object' ? collectSchemaVariableChildren(root, property.properties, segments) : [];
 
-    return [createVariable(path, property.description ?? key, undefined, children)];
-  });
-
-  return variables;
-}
-
-/**
- * 从对象记录中收集子级变量路径。
- * @param root - 上下文根名称
- * @param value - 对象记录
- * @param parentSegments - 父级路径片段
- * @returns 子级变量选项列表
- */
-function collectRecordVariableChildren(root: WidgetBindingContextRoot, value: Record<string, unknown>, parentSegments: string[] = []): Variable[] {
-  const variables = Object.entries(value).flatMap(([key, item]: [string, unknown]): Variable[] => {
-    if (!isWidgetBindingPathSegmentAllowed(key)) {
-      return [];
-    }
-
-    const segments = [...parentSegments, key];
-    const path = formatWidgetBindingPath(root, segments);
-    const children = isRecord(item) ? collectRecordVariableChildren(root, item, segments) : [];
-
-    return [createVariable(path, key, undefined, children)];
+    return [createVariable(path, property.description ?? '', undefined, children)];
   });
 
   return variables;
@@ -115,17 +82,7 @@ function collectRecordVariableChildren(root: WidgetBindingContextRoot, value: Re
  * @returns schema 根变量
  */
 function createSchemaRootVariable(root: WidgetBindingContextRoot, properties: Record<string, WidgetSchemaProperty> | undefined): Variable {
-  return createVariable(root, root, undefined, collectSchemaVariableChildren(root, properties));
-}
-
-/**
- * 创建记录对象根变量。
- * @param root - 上下文根名称
- * @param value - 对象记录
- * @returns 记录对象根变量
- */
-function createRecordRootVariable(root: WidgetBindingContextRoot, value: Record<string, unknown> | undefined): Variable {
-  return createVariable(root, root, undefined, value ? collectRecordVariableChildren(root, value) : []);
+  return createVariable(root, '', undefined, collectSchemaVariableChildren(root, properties));
 }
 
 /**
@@ -141,6 +98,39 @@ function createVariableGroup(options: Variable[]): VariableOptionGroup {
 }
 
 /**
+ * 判断值是否为普通记录。
+ * @param value - 待判断值
+ * @returns 是否为普通记录
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * 读取 Widget execute 方法代码。
+ * @param dataItem - Widget 数据
+ * @returns execute 方法代码
+ */
+function readWidgetExecuteCode(dataItem: WidgetData | undefined): string {
+  const skill = dataItem?.metadata.skill;
+  if (!isRecord(skill)) {
+    return '';
+  }
+
+  const { methods } = skill;
+  if (!isRecord(methods)) {
+    return '';
+  }
+
+  const executeMethod = methods.execute;
+  if (!isRecord(executeMethod)) {
+    return '';
+  }
+
+  return typeof executeMethod.code === 'string' ? executeMethod.code : '';
+}
+
+/**
  * 创建元素 Setter 可插入变量候选。
  * @param readDataItem - Widget 数据读取函数
  * @returns 变量候选响应式对象
@@ -148,12 +138,12 @@ function createVariableGroup(options: Variable[]): VariableOptionGroup {
 export function useElementVariables(readDataItem: ElementDataItemReader): UseElementVariablesReturn {
   const variableOptions = computed<VariableOptionGroup[]>((): VariableOptionGroup[] => {
     const dataItem = readDataItem();
-    const previewContext = dataItem ? readWidgetPreviewRenderContext(dataItem.metadata) : undefined;
+    const stateSchema = buildWidgetStateSchema(readWidgetExecuteCode(dataItem), dataItem?.inputSchema);
     const inputVariable = createSchemaRootVariable('input', dataItem?.inputSchema.properties);
-    const stateVariable = createRecordRootVariable('state', previewContext?.state);
+    const stateVariable = createSchemaRootVariable('state', stateSchema.properties);
     const outputVariable = createSchemaRootVariable('output', dataItem?.outputSchema.properties);
 
-    return [createVariableGroup([inputVariable, stateVariable, outputVariable, createVariable('lastResult', 'lastResult')])];
+    return [createVariableGroup([inputVariable, stateVariable, outputVariable])];
   });
 
   return {

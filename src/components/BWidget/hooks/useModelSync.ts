@@ -53,6 +53,7 @@ function createModelUpdateSnapshot(board: UseWidgetBoardReturn, dataItem: Widget
     name: dataItem?.name,
     description: dataItem?.description,
     inputSchema: dataItem?.inputSchema,
+    stateSchema: dataItem?.stateSchema,
     outputSchema: dataItem?.outputSchema,
     metadata: dataItem?.metadata
   });

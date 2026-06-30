@@ -226,6 +226,11 @@ describe('boardTransforms', (): void => {
       },
       required: ['condition', 'temperatureCelsius']
     });
+    expect(snapshot.stateSchema).toEqual({
+      type: 'object',
+      properties: {},
+      required: []
+    });
     expect(snapshot.elements).toHaveLength(1);
     expect(snapshot.viewport).toEqual({ center: { x: 10, y: 20 }, zoom: 1 });
   });

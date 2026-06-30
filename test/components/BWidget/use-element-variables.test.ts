@@ -1,12 +1,15 @@
 /**
  * @file use-element-variables.test.ts
- * @description 验证 BWidget 元素变量 hook 从Widget schema 与预览上下文生成变量候选。
+ * @description 验证 BWidget 元素变量 hook 从Widget schema 与执行方法代码生成变量候选。
  */
 import { ref } from 'vue';
 import { describe, expect, it } from 'vitest';
+import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
 import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
 import type { WidgetData } from '@/components/BWidget/types';
-import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
+
+/** 已移除的旧根变量名。 */
+const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
 
 /**
  * 测试用变量树节点。
@@ -48,6 +51,17 @@ function createWidgetData(): WidgetData {
         'wind-speed': {
           type: 'number',
           description: '风速'
+        },
+        weather: {
+          type: 'object',
+          description: '天气输入',
+          properties: {
+            temperature: {
+              type: 'number',
+              description: '温度'
+            }
+          },
+          required: []
         }
       }
     },
@@ -64,7 +78,25 @@ function createWidgetData(): WidgetData {
         }
       }
     },
+    stateSchema: {
+      type: 'object',
+      properties: {}
+    },
     metadata: {
+      skill: {
+        methods: {
+          execute: {
+            code: [
+              'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
+              '  const { input, setState, result } = ctx',
+              '  setState("weather", { temperature: input.weather.temperature })',
+              '  setState("weather-data", { "feels.like": 31 })',
+              '  return result.success()',
+              '}'
+            ].join('\n')
+          }
+        }
+      },
       previewContext: {
         input: {
           city: '上海'
@@ -143,7 +175,7 @@ function findVariable(groups: VariableOptionGroup[], value: string): VariableTre
 }
 
 describe('useElementVariables', (): void => {
-  it('provides variables from input schema, preview state, output schema and last result', (): void => {
+  it('provides variables from input schema, execute state updates and output schema', (): void => {
     const dataItem = ref<WidgetData | undefined>(createWidgetData());
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
     const values = readVariableValues(variableOptions.value);
@@ -154,17 +186,18 @@ describe('useElementVariables', (): void => {
     expect(values).toContain('input.user');
     expect(values).toContain('input.user.name');
     expect(values).toContain('input["wind-speed"]');
+    expect(values).toContain('input.weather.temperature');
     expect(values).toContain('state.weather');
     expect(values).toContain('state.weather.temperature');
     expect(values).toContain('state["weather-data"]["feels.like"]');
     expect(values).toContain('output.condition');
     expect(values).toContain('output["temperature.celsius"]');
-    expect(values).toContain('lastResult');
+    expect(values).not.toContain(REMOVED_LEGACY_ROOT);
     expect(labels).toContain('城市名称');
     expect(labels).toContain('温度单位');
     expect(labels).toContain('用户');
     expect(labels).toContain('用户名');
-    expect(labels).toContain('temperature');
+    expect(labels).toContain('温度');
     expect(labels).toContain('天气概况');
   });
 
@@ -177,12 +210,13 @@ describe('useElementVariables', (): void => {
     const stateVariable = findVariable(variableOptions.value, 'state');
     const weatherVariable = findVariable(variableOptions.value, 'state.weather');
 
-    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'state', 'output', 'lastResult']);
+    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'state', 'output']);
     expect(inputVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual([
       'input.city',
       'input.unit',
       'input.user',
-      'input["wind-speed"]'
+      'input["wind-speed"]',
+      'input.weather'
     ]);
     expect(userVariable).toMatchObject({
       label: '用户',
@@ -196,11 +230,11 @@ describe('useElementVariables', (): void => {
     });
     expect(stateVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual(['state.weather', 'state["weather-data"]']);
     expect(weatherVariable).toMatchObject({
-      label: 'weather',
+      label: '',
       value: 'state.weather',
       children: [
         {
-          label: 'temperature',
+          label: '',
           value: 'state.weather.temperature'
         }
       ]
@@ -219,16 +253,36 @@ describe('useElementVariables', (): void => {
       value: 'input.city'
     });
     expect(temperatureVariable).toEqual({
-      label: 'temperature',
+      label: '',
       value: 'state.weather.temperature'
     });
     expect(variables.filter((item: Variable): boolean => item.description === item.value)).toEqual([]);
+  });
+
+  it('ignores manually declared state schema when execute code defines state', (): void => {
+    const dataItem = ref<WidgetData | undefined>({
+      ...createWidgetData(),
+      stateSchema: {
+        type: 'object',
+        properties: {
+          stale: {
+            type: 'string',
+            description: '旧状态'
+          }
+        }
+      }
+    });
+    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const values = readVariableValues(variableOptions.value);
+
+    expect(values).toContain('state.weather.temperature');
+    expect(values).not.toContain('state.stale');
   });
 
   it('falls back to root variables when widget data is not ready', (): void => {
     const dataItem = ref<WidgetData | undefined>();
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
 
-    expect(readVariableValues(variableOptions.value)).toEqual(['input', 'state', 'output', 'lastResult']);
+    expect(readVariableValues(variableOptions.value)).toEqual(['input', 'state', 'output']);
   });
 });

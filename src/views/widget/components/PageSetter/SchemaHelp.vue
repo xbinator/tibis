@@ -154,6 +154,31 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
   "required": ["city"]
 }`
   },
+  state: {
+    title: '状态变量说明',
+    lead: '状态变量不需要单独填写 schema。编辑器会从执行方法代码中的 setState 调用推导 state 路径，供小组件元素动态绑定。',
+    fields: [
+      {
+        name: "setState('weather', {...})",
+        type: 'object',
+        required: false,
+        description: '对象字面量会递归生成 state.weather.* 子路径。'
+      },
+      {
+        name: "setState('lastQuery.city', input.city)",
+        type: 'string',
+        required: false,
+        description: '静态点路径会生成对应的嵌套 state 路径，并尽量复用 input 字段类型。'
+      }
+    ],
+    exampleTitle: '查天气状态写入',
+    example: `setState('weather', {
+  temperature: 28,
+  condition: '晴'
+})
+
+setState('lastQuery.city', input.city)`
+  },
   output: {
     title: '出参填写说明',
     lead: '出参描述组件执行后会返回的数据。以查天气为例，大模型可以继续使用天气概况、温度和建议等结果。',

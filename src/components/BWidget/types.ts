@@ -287,6 +287,8 @@ export interface WidgetData {
   description: string;
   /** Widget能力入参 schema */
   inputSchema: WidgetSchemaObject;
+  /** Widget运行状态 schema */
+  stateSchema: WidgetSchemaObject;
   /** Widget能力出参 schema */
   outputSchema: WidgetSchemaObject;
   /** Widget元信息 */
@@ -307,8 +309,6 @@ export interface WidgetRenderContext {
   state: Record<string, unknown>;
   /** Widget输出 */
   output?: unknown;
-  /** 最近一次执行结果 */
-  lastResult?: unknown;
 }
 
 /**

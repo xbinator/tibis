@@ -8,7 +8,7 @@ import { cloneDeep } from 'lodash-es';
 /**
  * Widget能力 Schema 类型。
  */
-export type WidgetSchemaKind = 'input' | 'output';
+export type WidgetSchemaKind = 'input' | 'state' | 'output';
 
 /**
  * 可归一化为 WidgetData 契约字段的数据。
@@ -20,6 +20,8 @@ export interface WidgetDataContractCandidate {
   description?: unknown;
   /** 入参 schema */
   inputSchema?: unknown;
+  /** 运行状态 schema */
+  stateSchema?: unknown;
   /** 出参 schema */
   outputSchema?: unknown;
   /** Widget元信息 */
@@ -66,13 +68,28 @@ const DEFAULT_WIDGET_OUTPUT_SCHEMA: WidgetSchemaObject = {
   required: ['condition', 'temperatureCelsius']
 };
 
+/** 运行状态默认 schema，实际字段由 execute 代码中的 setState 推导。 */
+const DEFAULT_WIDGET_STATE_SCHEMA: WidgetSchemaObject = {
+  type: 'object',
+  properties: {},
+  required: []
+};
+
 /**
  * 读取指定类型的默认 schema 模板。
  * @param kind - schema 类型
  * @returns 默认 schema 模板
  */
 function getDefaultWidgetSchemaTemplate(kind: WidgetSchemaKind): WidgetSchemaObject {
-  return kind === 'input' ? DEFAULT_WIDGET_INPUT_SCHEMA : DEFAULT_WIDGET_OUTPUT_SCHEMA;
+  if (kind === 'input') {
+    return DEFAULT_WIDGET_INPUT_SCHEMA;
+  }
+
+  if (kind === 'state') {
+    return DEFAULT_WIDGET_STATE_SCHEMA;
+  }
+
+  return DEFAULT_WIDGET_OUTPUT_SCHEMA;
 }
 
 /**
@@ -119,11 +136,12 @@ export function normalizeWidgetSchemaObject(value: unknown, kind: WidgetSchemaKi
  */
 export function normalizeWidgetDataContract(
   candidate: WidgetDataContractCandidate
-): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'outputSchema' | 'metadata'> {
+): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'stateSchema' | 'outputSchema' | 'metadata'> {
   return {
     name: typeof candidate.name === 'string' ? candidate.name : '',
     description: typeof candidate.description === 'string' ? candidate.description : '',
     inputSchema: normalizeWidgetSchemaObject(candidate.inputSchema, 'input'),
+    stateSchema: normalizeWidgetSchemaObject(candidate.stateSchema, 'state'),
     outputSchema: normalizeWidgetSchemaObject(candidate.outputSchema, 'output'),
     metadata: cloneDeep(candidate.metadata ?? {})
   };

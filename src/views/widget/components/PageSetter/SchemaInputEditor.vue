@@ -72,7 +72,15 @@ const schemaInputEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
  * @returns schema 标题
  */
 function getSchemaTitle(kind: WidgetSchemaKind): string {
-  return kind === 'input' ? '入参' : '出参';
+  if (kind === 'input') {
+    return '入参';
+  }
+
+  if (kind === 'state') {
+    return '状态';
+  }
+
+  return '出参';
 }
 
 /**

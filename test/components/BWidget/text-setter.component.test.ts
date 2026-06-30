@@ -12,6 +12,9 @@ import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/t
 import TextSetter from '@/components/BWidget/elements/Text/Setter.vue';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
 
+/** 已移除的旧根变量名。 */
+const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
+
 /**
  * 测试用变量树节点。
  */
@@ -65,6 +68,17 @@ function createWidgetData(): WidgetData {
               description: '用户名'
             }
           }
+        },
+        weather: {
+          type: 'object',
+          description: '天气输入',
+          properties: {
+            temperature: {
+              type: 'number',
+              description: '温度'
+            }
+          },
+          required: []
         }
       }
     },
@@ -77,7 +91,24 @@ function createWidgetData(): WidgetData {
         }
       }
     },
+    stateSchema: {
+      type: 'object',
+      properties: {}
+    },
     metadata: {
+      skill: {
+        methods: {
+          execute: {
+            code: [
+              'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
+              '  const { input, setState, result } = ctx',
+              '  setState("weather", { temperature: input.weather.temperature })',
+              '  return result.success()',
+              '}'
+            ].join('\n')
+          }
+        }
+      },
       previewContext: {
         input: {
           city: '上海'
@@ -216,16 +247,17 @@ describe('Text Setter', (): void => {
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
     const labels = readVariables(options).map((item: VariableTreeNode): string => item.label);
 
-    expect(rootVariables).toEqual(['input', 'state', 'output', 'lastResult']);
+    expect(rootVariables).toEqual(['input', 'state', 'output']);
     expect(variables).toContain('input.city');
     expect(variables).toContain('input.user');
     expect(variables).toContain('input.user.name');
     expect(variables).toContain('state.weather.temperature');
     expect(variables).toContain('output.condition');
+    expect(variables).not.toContain(REMOVED_LEGACY_ROOT);
     expect(labels).toContain('城市名称');
     expect(labels).toContain('用户');
     expect(labels).toContain('用户名');
-    expect(labels).toContain('temperature');
+    expect(labels).toContain('温度');
     expect(labels).toContain('天气概况');
     wrapper.unmount();
   });

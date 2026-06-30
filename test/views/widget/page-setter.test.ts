@@ -386,6 +386,9 @@ interface BMonacoStubProps {
   value?: string;
 }
 
+/** 已移除的旧根变量名。 */
+const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
+
 /**
  * 设置面板区块标题快照。
  */
@@ -718,9 +721,11 @@ describe('PageSetter', (): void => {
     const wrapper = mountPageSetterHost(dataItem);
     const inputSection = findSectionBlock(wrapper, '入参');
     const outputSection = findSectionBlock(wrapper, '出参');
+    const sectionTitles = readSectionBlockTitles(wrapper);
 
-    expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(3);
-    expect(findSectionBlock(wrapper, '动态预览').exists()).toBe(true);
+    expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(1);
+    expect(sectionTitles).not.toContain('状态');
+    expect(sectionTitles).not.toContain('动态预览');
     expect(wrapper.find('.schema-preview').exists()).toBe(false);
     expect(inputSection.find('.schema-editor').exists()).toBe(true);
     expect(outputSection.find('.schema-editor').exists()).toBe(true);
@@ -741,6 +746,7 @@ describe('PageSetter', (): void => {
     expect(wrapper.text()).toContain('入参');
     expect(wrapper.text()).toContain('出参');
     expect(wrapper.text()).not.toContain('inputSchema');
+    expect(wrapper.text()).not.toContain('stateSchema');
     expect(wrapper.text()).not.toContain('outputSchema');
 
     const addButton = findSectionAddFieldButton(wrapper, '入参');
@@ -907,30 +913,6 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('edits the design preview input and state context', async (): Promise<void> => {
-    const dataItem = createWidgetData();
-    const wrapper = mountPageSetterHost(dataItem);
-    const previewSection = findSectionBlock(wrapper, '动态预览');
-    const previewEditors = previewSection.findAll('textarea');
-
-    await previewEditors[0]?.setValue('{ "city": "上海" }');
-    await previewEditors[0]?.trigger('blur');
-    await previewEditors[1]?.setValue('{ "weather": { "temperature": 28 } }');
-    await previewEditors[1]?.trigger('blur');
-
-    expect(wrapper.vm.dataItem.metadata.previewContext).toEqual({
-      input: {
-        city: '上海'
-      },
-      state: {
-        weather: {
-          temperature: 28
-        }
-      }
-    });
-    wrapper.unmount();
-  });
-
   it('opens an execution script dialog below output schema and saves execute method code', async (): Promise<void> => {
     const dataItem = createWidgetData();
     const wrapper = mountPageSetterHost(dataItem);
@@ -942,9 +924,19 @@ describe('PageSetter', (): void => {
 
     expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('入参'));
     expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('出参'));
-    expect(sectionTitles.indexOf('执行方法')).toBeLessThan(sectionTitles.indexOf('动态预览'));
-    expect(methodSection.text()).toContain('触发这个小组件时，会执行这里配置的方法');
-    expect(methodSection.text()).not.toContain('export async function execute(ctx)');
+    expect(sectionTitles).not.toContain('动态预览');
+    expect(methodSection.find('.method-summary__text').exists()).toBe(false);
+    expect(methodSection.find('.method-summary__code').text()).toContain('export async function execute(ctx: WidgetSkillContext)');
+    expect(methodSection.find('.hljs-keyword').exists()).toBe(true);
+    expect(methodSection.find('.hljs-comment').exists()).toBe(true);
+    expect(methodSection.find('.method-summary__token--keyword').exists()).toBe(false);
+    expect(methodSection.find('.method-summary').classes()).not.toContain('is-expanded');
+    expect(methodSection.text()).not.toContain('展开');
+    expect(methodSection.text()).not.toContain('收起');
+    expect(methodSection.find('.method-summary__actions').exists()).toBe(false);
+    expect(methodSection.find('.method-summary__code').text()).not.toContain('stateSnapshot: state');
+    expect(readStyleBlock(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8'), '.method-summary__code')).toContain('overflow: auto;');
+    expect(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8')).toContain('.code-highlight();');
     expect(
       wrapper.findAllComponents({ name: 'ATabPaneStub' }).map((pane: VueWrapper): string | undefined => (pane.props() as { tab?: string }).tab)
     ).not.toContain('方法');
@@ -972,9 +964,17 @@ describe('PageSetter', (): void => {
     expect(editorProps.value).toContain('return result.success({');
     expect(editorProps.value).toContain('export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult>');
     expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillContext');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillResultFactory');
     expect(editorProps.extraLibs?.[0]?.content).toContain('调用小组件时 AI 提取到的入参');
     expect(editorProps.extraLibs?.[0]?.content).toContain('setState(path: string, value: unknown): void');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('- success：方法正常完成，返回可绑定到 output 的数据。');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('- failure：方法执行失败，返回错误码与错误信息。');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('- cancelled：方法被取消，用于用户主动取消或流程中止。');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('- awaitingUserInput：暂停执行，等待用户继续输入或选择。');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('result: WidgetSkillResultFactory');
     expect(editorProps.extraLibs?.[0]?.content).toContain('标记方法执行成功，并把 data 作为执行结果返回');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('@param data - 成功结果中携带的数据。');
+    expect(editorProps.extraLibs?.[0]?.content).not.toContain(REMOVED_LEGACY_ROOT);
 
     await methodEditor.find('textarea').setValue(nextCode);
     await nextTick();
@@ -994,25 +994,8 @@ describe('PageSetter', (): void => {
         }
       }
     });
+    expect(findSectionBlock(wrapper, '执行方法').find('.method-summary__code').text()).toContain('return ctx.result.success(ctx.input)');
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('clears stale preview JSON errors after preview context is synced from metadata', async (): Promise<void> => {
-    const dataItem = createWidgetData();
-    const wrapper = mountPageSetterHost(dataItem);
-    const previewSection = findSectionBlock(wrapper, '动态预览');
-    const previewEditors = previewSection.findAll('textarea');
-
-    await previewEditors[0]?.setValue('{broken');
-    await previewEditors[0]?.trigger('blur');
-    expect(wrapper.text()).toContain('input 必须是合法 JSON');
-
-    await previewEditors[1]?.setValue('{ "weather": { "temperature": 28 } }');
-    await previewEditors[1]?.trigger('blur');
-    await nextTick();
-
-    expect(wrapper.text()).not.toContain('input 必须是合法 JSON');
     wrapper.unmount();
   });
 
