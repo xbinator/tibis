@@ -47,7 +47,8 @@ import BModal from '@/components/BModal/index.vue';
 import BModelIcon from '@/components/BModel/Icon.vue';
 import type { ChipResult } from '@/components/BPromptEditor/extensions/variableChip';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
-import type { VariableOptionGroup } from '@/components/BPromptEditor/types';
+import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
+import { flattenVariables } from '@/components/BPromptEditor/utils/variables';
 import BSelect from '@/components/BSelect/index.vue';
 import { serviceModelsStorage } from '@/shared/storage';
 import { dispatchServiceModelUpdated } from '@/shared/storage/service-models/events';
@@ -89,7 +90,7 @@ const emit = defineEmits<{
  * 函数定义在 setup 顶层，引用稳定，不会触发频繁 reconfigure。
  */
 function chipResolver(body: string): ChipResult | null {
-  const allVars = props.options?.flatMap((g) => g.options) ?? [];
+  const allVars = flattenVariables(props.options?.flatMap((group: VariableOptionGroup): Variable[] => group.options) ?? []);
   if (allVars.some((v) => v.value === body)) {
     return { className: 'b-prompt-chip' };
   }

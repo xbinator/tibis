@@ -197,7 +197,7 @@ function handleMouseEnter(index: number): void {
   display: flex;
   align-items: center;
   min-height: 32px;
-  padding: 6px 8px;
+  padding: 2px 8px;
   margin: 0 6px;
   cursor: pointer;
   border-radius: 4px;

@@ -3,12 +3,25 @@
  * @description 验证 BPromptEditor 默认将变量 token 渲染为 value chip。
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs';
 import { nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
+import type { EditorView } from '@codemirror/view';
 import { describe, expect, it } from 'vitest';
 import { createVariableValueChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
-import type { VariableOptionGroup } from '@/components/BPromptEditor/types';
+import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
+
+/** BPromptEditor 源码。 */
+const promptEditorSource = readFileSync('src/components/BPromptEditor/index.vue', 'utf8');
+
+/**
+ * 测试用变量树节点。
+ */
+interface VariableTreeNode extends Variable {
+  /** 子级变量节点 */
+  children?: VariableTreeNode[];
+}
 
 /**
  * 创建测试变量选项。
@@ -20,11 +33,17 @@ function createVariableOptions(): VariableOptionGroup[] {
       type: 'variable',
       options: [
         {
-          label: '城市',
-          value: 'input.city',
-          description: '当前城市'
+          label: 'input',
+          value: 'input',
+          children: [
+            {
+              label: '城市',
+              value: 'input.city',
+              description: '当前城市'
+            }
+          ]
         }
-      ]
+      ] as VariableTreeNode[]
     }
   ];
 }
@@ -82,9 +101,22 @@ describe('BPromptEditor default variable chip', (): void => {
     wrapper.unmount();
   });
 
+  it('matches nested variable options in the default chip resolver', (): void => {
+    const resolver = createVariableValueChipResolver(createVariableOptions()[0].options);
+    const result = resolver('input.city');
+
+    expect(result).not.toBeNull();
+    expect(result && 'widget' in result ? result.widget.toDOM({} as EditorView).textContent : '').toBe('input.city');
+  });
+
   it('keeps custom chip resolver results before default variable chips', (): void => {
     const resolver = createVariableValueChipResolver(createVariableOptions()[0].options, () => ({ className: 'custom-chip' }));
 
     expect(resolver('input.city')).toEqual({ className: 'custom-chip' });
+  });
+
+  it('uses defined theme tokens for variable chip and selection colors', (): void => {
+    expect(promptEditorSource).not.toContain('--color-primary-value');
+    expect(promptEditorSource).toContain('var(--color-primary-border)');
   });
 });

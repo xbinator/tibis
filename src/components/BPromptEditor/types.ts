@@ -54,6 +54,8 @@ export interface Variable {
   value: string;
   /** 变量描述（可选） */
   description?: string;
+  /** 子级变量选项，用于表达对象变量的层级结构 */
+  children?: Variable[];
 }
 
 /**

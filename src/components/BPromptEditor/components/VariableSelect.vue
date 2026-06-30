@@ -10,7 +10,17 @@
     @update:active-index="handleMouseEnter"
   >
     <template #item="{ item }">
-      <div class="variable-item">
+      <div class="variable-item" :style="getVariableItemStyle(item)">
+        <BButton
+          v-if="item.hasChildren"
+          type="ghost"
+          size="mini"
+          square
+          :icon="item.expanded ? 'lucide:chevron-down' : 'lucide:chevron-right'"
+          @click.stop="handleToggle(item)"
+          @mousedown.stop.prevent
+        />
+        <span v-else class="variable-item__toggle-placeholder"></span>
         <div class="variable-item-main">
           <span class="variable-item-label">{{ item.label }}</span>
           <span class="variable-item-value">{{ item.value }}</span>
@@ -25,7 +35,28 @@
 
 <script setup lang="ts">
 import type { Variable } from '../types';
+import type { CSSProperties } from 'vue';
 import SelectDropdown from './_SelectDropdown.vue';
+
+/**
+ * 变量选择菜单项。
+ */
+interface VariableSelectItem extends Variable {
+  /** 变量树深度 */
+  depth?: number;
+  /** 是否存在子级变量 */
+  hasChildren?: boolean;
+  /** 子级变量是否展开 */
+  expanded?: boolean;
+}
+
+/**
+ * 带变量深度 CSS 自定义属性的样式。
+ */
+type VariableItemStyle = CSSProperties & {
+  /** 变量树深度 */
+  '--variable-depth': string;
+};
 
 /**
  * VariableSelect 组件属性定义
@@ -34,7 +65,7 @@ interface Props {
   /** 是否显示菜单 */
   visible: boolean;
   /** 可选变量列表 */
-  variables: Variable[];
+  variables: VariableSelectItem[];
   /** 锚点位置，用于 Teleport 定位计算 */
   position: { top: number; left: number; bottom: number };
   /** 当前高亮项索引 */
@@ -47,8 +78,20 @@ withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'select', variable: Variable): void;
+  (e: 'toggle', variable: VariableSelectItem): void;
   (e: 'update:activeIndex', index: number): void;
 }>();
+
+/**
+ * 获取变量项缩进样式。
+ * @param item - 变量选择菜单项
+ * @returns 变量项样式
+ */
+function getVariableItemStyle(item: VariableSelectItem): VariableItemStyle {
+  return {
+    '--variable-depth': String(item.depth ?? 0)
+  };
+}
 
 /**
  * 处理变量选择
@@ -56,6 +99,14 @@ const emit = defineEmits<{
  */
 function handleSelect(variable: Variable): void {
   emit('select', variable);
+}
+
+/**
+ * 处理变量树节点展开状态切换。
+ * @param variable - 被切换的变量节点
+ */
+function handleToggle(variable: VariableSelectItem): void {
+  emit('toggle', variable);
 }
 
 /**
@@ -74,10 +125,18 @@ function handleMouseEnter(index: number): void {
 }
 
 .variable-item {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  column-gap: 4px;
   width: 100%;
   min-width: 0;
+  padding-left: calc(var(--variable-depth, 0) * 14px);
+}
+
+.variable-item__toggle-placeholder {
+  grid-row: 1 / span 2;
+  width: 24px;
+  height: 24px;
 }
 
 .variable-item-main {
@@ -94,7 +153,6 @@ function handleMouseEnter(index: number): void {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 14px;
-  font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
 }
@@ -113,6 +171,7 @@ function handleMouseEnter(index: number): void {
 }
 
 .variable-item-desc {
+  grid-column: 2;
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-tertiary);

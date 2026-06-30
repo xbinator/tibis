@@ -32,6 +32,17 @@ export interface VariableChipOption {
   label: string;
   /** 变量值，必须与 {{...}} 内部文本一致 */
   value: string;
+  /** 子级变量选项 */
+  children?: VariableChipOption[];
+}
+
+/**
+ * 扁平化默认变量 Chip 选项。
+ * @param variables - 变量树节点列表
+ * @returns 扁平变量节点列表
+ */
+function flattenVariableChipOptions(variables: readonly VariableChipOption[]): VariableChipOption[] {
+  return variables.flatMap((variable: VariableChipOption): VariableChipOption[] => [variable, ...flattenVariableChipOptions(variable.children ?? [])]);
 }
 
 /**
@@ -85,7 +96,9 @@ class VariableValueChipWidget extends WidgetType {
  * @returns 合并后的 Chip 解析器
  */
 export function createVariableValueChipResolver(variables: readonly VariableChipOption[], customResolver?: ChipResolver): ChipResolver {
-  const variableMap = new Map<string, VariableChipOption>(variables.map((variable) => [variable.value, variable]));
+  const variableMap = new Map<string, VariableChipOption>(
+    flattenVariableChipOptions(variables).map((variable: VariableChipOption): [string, VariableChipOption] => [variable.value, variable])
+  );
 
   return (body: string): ChipResult | null => {
     const customResult = customResolver?.(body);

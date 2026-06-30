@@ -25,6 +25,7 @@
           :position="triggerPosition"
           :active-index="triggerActiveIndex"
           @select="handleVariableSelect"
+          @toggle="handleVariableToggle"
           @update:active-index="handleActiveIndexChange"
         />
       </div>
@@ -38,6 +39,7 @@
  * @description Prompt 编辑器主组件，基于 CodeMirror 6 实现
  */
 import type { SlashCommandOption, Variable, FileMentionOption, BPromptEditorProps as Props } from './types';
+import type { FlatVariable, VisibleVariable } from './utils/variables';
 import type { Extension } from '@codemirror/state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { history } from '@codemirror/commands';
@@ -55,6 +57,7 @@ import { variableChipField, chipResolverEffect, getChipAtPos, createVariableValu
 import { useEditorKeymap } from './hooks/useEditorKeymap';
 import { useFileMention } from './hooks/useFileMention';
 import { useSlashCommand } from './hooks/useSlashCommand';
+import { flattenVariables, getVisibleVariables } from './utils/variables';
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '请输入内容...',
@@ -93,21 +96,23 @@ const triggerQuery = ref('');
 // 编辑器状态
 const lastSelection = ref<{ main: { head: number } } | null>(null);
 
-// 从 options 计算得到的变量列表
-const allVariables = computed<Variable[]>(() => props.options.flatMap((group) => group.options));
+// 从 options 读取变量树，供菜单展示和 Chip 解析共用
+const variableTrees = computed<Variable[]>(() => props.options.flatMap((group) => group.options));
 
-// 根据触发查询过滤后的变量
-const filteredVariables = computed<Variable[]>(() => {
-  const query = triggerQuery.value.toLowerCase();
-  if (!query) return allVariables.value;
-  return allVariables.value.filter((v) => v.label.toLowerCase().includes(query) || v.value.toLowerCase().includes(query));
-});
+// 从 options 计算得到的扁平变量列表，保留树深度用于下拉菜单缩进
+const allVariables = computed<FlatVariable[]>(() => flattenVariables(variableTrees.value));
+
+// 用户手动折叠的变量节点值集合
+const collapsedVariableValues = ref<Set<string>>(new Set());
+
+// 根据触发查询和折叠状态计算当前可见变量
+const filteredVariables = computed<VisibleVariable[]>(() => getVisibleVariables(variableTrees.value, collapsedVariableValues.value, triggerQuery.value));
 
 // 是否有可用于触发的变量
 const hasVariables = computed<boolean>(() => allVariables.value.length > 0);
 
 // 默认变量 Chip 解析器，自定义解析器优先，普通变量按 value 渲染
-const resolvedChipResolver = computed(() => createVariableValueChipResolver(allVariables.value, props.chipResolver));
+const resolvedChipResolver = computed(() => createVariableValueChipResolver(variableTrees.value, props.chipResolver));
 
 // 解析后的最大高度
 const resolvedMaxHeight = computed<string | undefined>(() => {
@@ -170,6 +175,28 @@ function handleActiveIndexChange(index: number): void {
   });
 }
 
+/**
+ * 切换变量树节点的展开状态。
+ * @param variable - 被切换的变量节点
+ */
+function handleVariableToggle(variable: Variable): void {
+  const nextValues = new Set(collapsedVariableValues.value);
+
+  if (nextValues.has(variable.value)) {
+    nextValues.delete(variable.value);
+  } else {
+    nextValues.add(variable.value);
+  }
+
+  collapsedVariableValues.value = nextValues;
+}
+
+watch(filteredVariables, (variables: VisibleVariable[]): void => {
+  if (triggerActiveIndex.value < variables.length) return;
+
+  triggerActiveIndex.value = Math.max(0, variables.length - 1);
+});
+
 // 键盘快捷键扩展
 const keymapExtension = useEditorKeymap({
   view: instance,
@@ -210,10 +237,10 @@ function createThemeExtension(height: string | undefined, isEmpty: boolean): Ext
       fontStyle: 'normal'
     },
     '.cm-selectionBackground': {
-      backgroundColor: 'rgb(var(--color-primary-value, 64, 128, 255), 0.15) !important'
+      backgroundColor: 'color-mix(in srgb, var(--color-primary, #4080ff) 15%, transparent) !important'
     },
     '&.cm-focused .cm-selectionBackground': {
-      backgroundColor: 'rgb(var(--color-primary-value, 64, 128, 255), 0.2) !important'
+      backgroundColor: 'color-mix(in srgb, var(--color-primary, #4080ff) 20%, transparent) !important'
     },
     '.cm-cursor': {
       borderLeft: '1.2px solid var(--color-primary, #4080ff)',
@@ -574,7 +601,7 @@ defineExpose({
   color: var(--color-primary);
   white-space: nowrap;
   background: var(--color-primary-bg);
-  border: 1px solid rgb(var(--color-primary-value, 64, 128, 255), 0.18);
+  border: 1px solid var(--color-primary-border);
   border-radius: 4px;
 }
 
