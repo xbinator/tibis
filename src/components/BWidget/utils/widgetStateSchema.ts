@@ -22,6 +22,18 @@ type InputAliasScope = Map<string, InputAliasValue>;
 type InputAliasReader = (name: string) => string[] | undefined;
 
 /**
+ * 可能携带函数体的函数类声明。
+ */
+type FunctionLikeNodeWithBody =
+  | ts.ArrowFunction
+  | ts.ConstructorDeclaration
+  | ts.FunctionDeclaration
+  | ts.FunctionExpression
+  | ts.GetAccessorDeclaration
+  | ts.MethodDeclaration
+  | ts.SetAccessorDeclaration;
+
+/**
  * 创建空对象字段。
  * @returns 对象字段
  */
@@ -73,6 +85,27 @@ function readSchemaPropertyAtPath(schema: WidgetSchemaObject | undefined, segmen
   }
 
   return currentProperty;
+}
+
+/**
+ * 读取函数类节点的函数体。
+ * @param node - 函数类节点
+ * @returns 函数体节点，不存在时返回 undefined
+ */
+function readFunctionLikeBody(node: ts.SignatureDeclaration): ts.ConciseBody | undefined {
+  if (
+    ts.isArrowFunction(node) ||
+    ts.isConstructorDeclaration(node) ||
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node)
+  ) {
+    return (node as FunctionLikeNodeWithBody).body;
+  }
+
+  return undefined;
 }
 
 /**
@@ -450,9 +483,10 @@ export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaO
     if (ts.isFunctionLike(node)) {
       withInputAliasScope(inputAliasScopes, (): void => {
         node.parameters.forEach((parameter: ts.ParameterDeclaration): void => registerBindingShadow(inputAliasScopes, parameter.name));
+        const functionBody = readFunctionLikeBody(node);
 
-        if (node.body) {
-          visit(node.body);
+        if (functionBody) {
+          visit(functionBody);
         }
       });
       return;

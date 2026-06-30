@@ -27,6 +27,11 @@ interface WidgetBindingEvaluationResult {
   value: unknown;
 }
 
+/**
+ * JSON 序列化替换函数。
+ */
+type WidgetDisplayJsonReplacer = (this: unknown, key: string, value: unknown) => unknown;
+
 /** 绑定插值匹配表达式。 */
 const WIDGET_BINDING_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g;
 /** 整个字段都是单个绑定插值时的匹配表达式。 */
@@ -261,6 +266,51 @@ function readBindingPathValue(scope: Record<WidgetBindingContextRoot, unknown>, 
 }
 
 /**
+ * 创建展示值 JSON 序列化替换函数。
+ * @returns JSON 序列化替换函数
+ */
+function createWidgetDisplayJsonReplacer(): WidgetDisplayJsonReplacer {
+  const seenObjects = new WeakSet<object>();
+
+  return (_key: string, value: unknown): unknown => {
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+
+    if (value !== null && typeof value === 'object') {
+      if (seenObjects.has(value)) {
+        return '[Circular]';
+      }
+
+      seenObjects.add(value);
+    }
+
+    return value;
+  };
+}
+
+/**
+ * 将绑定值格式化为展示文本。
+ * @param value - 绑定解析值
+ * @returns 展示文本
+ */
+function formatWidgetDisplayTextValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value !== 'object') {
+    return String(value);
+  }
+
+  return JSON.stringify(value, createWidgetDisplayJsonReplacer(), 2) ?? '';
+}
+
+/**
  * 格式化单个绑定路径片段。
  * @param segment - 路径片段
  * @returns 路径片段文本
@@ -338,7 +388,7 @@ export function resolveWidgetBindingTemplate(template: string, context: WidgetRe
       return '';
     }
 
-    return result.value === null ? '' : String(result.value);
+    return formatWidgetDisplayTextValue(result.value);
   });
 
   if (!hasBinding) {
@@ -375,5 +425,5 @@ export function resolveWidgetTemplateFieldText(metadata: WidgetMetadata, fieldNa
   const template = typeof fieldValue === 'string' ? fieldValue : '';
   const resolvedValue = resolveWidgetTemplateValue(template, context);
 
-  return resolvedValue === null ? '' : String(resolvedValue);
+  return formatWidgetDisplayTextValue(resolvedValue);
 }

@@ -64,10 +64,14 @@
         </template>
         <div class="method-summary">
           <pre class="method-summary__code" aria-label="执行方法预览"><code class="method-summary__code-content"><span
-            v-for="(token, tokenIndex) in highlightedMethodPreviewTokens"
+            v-for="line in highlightedMethodPreviewLines"
+            :key="line.index"
+            class="method-summary__line"
+          ><span
+            v-for="(token, tokenIndex) in line.tokens"
             :key="tokenIndex"
             :class="token.className"
-          >{{ token.text }}</span></code></pre>
+          >{{ token.text }}</span></span></code></pre>
         </div>
       </BSectionBlock>
     </ATabPane>
@@ -450,6 +454,16 @@ interface MethodSummaryToken {
 }
 
 /**
+ * 执行方法代码摘要行。
+ */
+interface MethodSummaryLine {
+  /** 行索引 */
+  index: number;
+  /** 行内 token */
+  tokens: MethodSummaryToken[];
+}
+
+/**
  * 将纯文本转为摘要 token。
  * @param text - 代码文本
  * @returns 摘要 token
@@ -512,8 +526,33 @@ function highlightMethodCode(code: string): MethodSummaryToken[] {
   }
 }
 
-/** 高亮后的执行方法摘要 token。 */
-const highlightedMethodPreviewTokens = computed<MethodSummaryToken[]>(() => highlightMethodCode(mainMethodCode.value));
+/**
+ * 将高亮 token 按真实换行拆成预览行。
+ * @param tokens - 高亮 token
+ * @returns 预览行列表
+ */
+function splitMethodSummaryTokensIntoLines(tokens: MethodSummaryToken[]): MethodSummaryLine[] {
+  const lines: MethodSummaryLine[] = [{ index: 0, tokens: [] }];
+
+  tokens.forEach((token: MethodSummaryToken): void => {
+    const parts = token.text.split('\n');
+
+    parts.forEach((part: string, partIndex: number): void => {
+      if (part) {
+        lines[lines.length - 1].tokens.push({ ...token, text: part });
+      }
+
+      if (partIndex < parts.length - 1) {
+        lines.push({ index: lines.length, tokens: [] });
+      }
+    });
+  });
+
+  return lines;
+}
+
+/** 高亮后的执行方法摘要代码行。 */
+const highlightedMethodPreviewLines = computed<MethodSummaryLine[]>(() => splitMethodSummaryTokensIntoLines(highlightMethodCode(mainMethodCode.value)));
 
 /**
  * 打开 Schema JSON 编辑弹窗。
@@ -595,6 +634,20 @@ const activeSchema = computed<WidgetSchemaObject>(() => readWidgetSchema(activeS
 }
 
 .method-summary__code {
+  --code-text: #24292f;
+  --code-keyword: #cf222e;
+  --code-string: #0a3069;
+  --code-number: #0550ae;
+  --code-comment: #6e7781;
+  --code-function: #8250df;
+  --code-variable: #953800;
+  --code-tag: #116329;
+  --code-attr-name: #953800;
+  --code-attr-value: #0a3069;
+  --code-builtin: #0550ae;
+  --code-class: #953800;
+  --code-constant: #0550ae;
+
   max-height: 220px;
   padding: 8px 10px;
   margin: 0;
@@ -602,11 +655,17 @@ const activeSchema = computed<WidgetSchemaObject>(() => readWidgetSchema(activeS
   font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace);
   font-size: 12px;
   line-height: 1.7;
-  color: var(--text-primary);
+  color: var(--code-text);
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
   background: var(--bg-primary);
   border: 1px solid var(--border-secondary);
   border-radius: 4px;
   .code-highlight();
+}
+
+.method-summary__line {
+  display: block;
+  min-height: 1.7em;
 }
 </style>

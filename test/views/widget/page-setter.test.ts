@@ -927,6 +927,7 @@ describe('PageSetter', (): void => {
     expect(sectionTitles).not.toContain('动态预览');
     expect(methodSection.find('.method-summary__text').exists()).toBe(false);
     expect(methodSection.find('.method-summary__code').text()).toContain('export async function execute(ctx: WidgetSkillContext)');
+    expect(methodSection.findAll('.method-summary__line').length).toBeGreaterThan(4);
     expect(methodSection.find('.hljs-keyword').exists()).toBe(true);
     expect(methodSection.find('.hljs-comment').exists()).toBe(true);
     expect(methodSection.find('.method-summary__token--keyword').exists()).toBe(false);
@@ -935,7 +936,14 @@ describe('PageSetter', (): void => {
     expect(methodSection.text()).not.toContain('收起');
     expect(methodSection.find('.method-summary__actions').exists()).toBe(false);
     expect(methodSection.find('.method-summary__code').text()).not.toContain('stateSnapshot: state');
-    expect(readStyleBlock(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8'), '.method-summary__code')).toContain('overflow: auto;');
+    const methodSummaryCodeStyle = readStyleBlock(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8'), '.method-summary__code');
+    expect(methodSummaryCodeStyle).toContain('overflow: auto;');
+    expect(methodSummaryCodeStyle).toContain('white-space: pre-wrap;');
+    expect(methodSummaryCodeStyle).toContain('overflow-wrap: anywhere;');
+    expect(methodSummaryCodeStyle).toContain('--code-keyword:');
+    expect(methodSummaryCodeStyle).toContain('--code-string:');
+    expect(methodSummaryCodeStyle).toContain('--code-comment:');
+    expect(readStyleBlock(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8'), '.method-summary__line')).toContain('display: block;');
     expect(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8')).toContain('.code-highlight();');
     expect(
       wrapper.findAllComponents({ name: 'ATabPaneStub' }).map((pane: VueWrapper): string | undefined => (pane.props() as { tab?: string }).tab)
