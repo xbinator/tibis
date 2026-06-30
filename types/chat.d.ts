@@ -4,6 +4,7 @@
  */
 import type { AIToolExecutionResult, AIUsage } from './ai';
 import type { ChatMessageCompactionPart, ChatMessageRuntimeMeta } from './chat-runtime';
+import type { WidgetData, WidgetRenderContext } from '@/components/BWidget/types';
 
 /**
  * 聊天会话类型
@@ -210,6 +211,27 @@ export interface ChatMessageToolPart {
 }
 
 /**
+ * 聊天消息小组件片段状态。
+ */
+export type ChatMessageWidgetStatus = 'idle' | 'running' | 'success' | 'failure' | 'cancelled' | 'awaiting_user_input';
+
+/**
+ * 聊天消息小组件快照片段。
+ */
+export interface ChatMessageWidgetPart {
+  /** 片段类型 */
+  type: 'widget';
+  /** 小组件会话 ID，用于后续执行闭环关联 */
+  sessionId: string;
+  /** 小组件执行或展示状态 */
+  status: ChatMessageWidgetStatus;
+  /** 小组件快照数据 */
+  dataItem: WidgetData;
+  /** 运行态渲染上下文 */
+  renderContext: WidgetRenderContext;
+}
+
+/**
  * 用户选择题单题答案。
  */
 export interface AIUserChoiceQuestionAnswer {
@@ -334,6 +356,7 @@ export type ChatMessagePart =
   | ChatMessageErrorPart
   | ChatMessageThinkingPart
   | ChatMessageToolPart
+  | ChatMessageWidgetPart
   | ChatMessageConfirmationPart
   | ChatMessageCompactionPart;
 

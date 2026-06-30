@@ -820,6 +820,11 @@ function toAssistantModelMessages(parts: ChatMessagePart[]): ModelMessage[] {
         });
       }
     }
+
+    if (part.type === 'widget') {
+      // 小组件片段仅用于当前 UI 展示；执行协议确定前不写入模型上下文。
+      continue;
+    }
   }
 
   flushAssistant();

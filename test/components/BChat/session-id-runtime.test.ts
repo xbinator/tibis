@@ -659,6 +659,29 @@ describe('BChat sessionId runtime', (): void => {
     expect(chatStoreMock.addSessionMessage).not.toHaveBeenCalledWith('session-created', expect.objectContaining({ role: 'user', content: 'hello' }));
   });
 
+  it('sends widget-like input through ChatRuntime when no widget data source is configured', async (): Promise<void> => {
+    const createdSession = createSession('session-created', '查天气 上海');
+    chatStoreMock.createSession.mockResolvedValue(createdSession);
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    wrapper.findComponent(BPromptEditorStub).vm.$emit('update:value', '查天气 上海');
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
+
+    expect(chatStoreMock.createSession).toHaveBeenCalledWith('assistant', { title: '查天气 上海' });
+    expect(visibleMessages).toEqual([]);
+    expect(chatStoreMock.setSessionMessages).not.toHaveBeenCalledWith(
+      'session-created',
+      expect.arrayContaining([expect.objectContaining({ role: 'assistant', parts: [expect.objectContaining({ type: 'widget' })] })])
+    );
+    expect(getAvailableServiceConfigMock).toHaveBeenCalled();
+    expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-created', content: '查天气 上海' }));
+  });
+
   it('sends parsed file input parts to ChatRuntime', async (): Promise<void> => {
     const createdSession = createSession('session-created', 'fix {{@src/foo.ts}}');
     chatStoreMock.createSession.mockResolvedValue(createdSession);

@@ -3,12 +3,16 @@
  * @description BChat MessageBubble 工具栏交互测试。
  * @vitest-environment jsdom
  */
+/* eslint-disable vue/one-component-per-file */
+import type { ChatMessageWidgetPart } from 'types/chat';
 import { defineComponent } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MessageBubble from '@/components/BChat/components/MessageBubble.vue';
 import { create } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
+import type { WidgetData, WidgetRenderContext } from '@/components/BWidget/types';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 vi.mock('@/hooks/useClipboard', () => ({
   useClipboard: vi.fn(() => ({
@@ -28,6 +32,50 @@ vi.mock('@/hooks/useNavigate', () => ({
     openWebview: vi.fn()
   }))
 }));
+
+/** ResizeObserver 回调。 */
+type ResizeObserverCallbackLike = (entries: ResizeObserverEntry[]) => void;
+
+/**
+ * BWidgetRuntime 测试用 ResizeObserver。
+ */
+class ResizeObserverMock {
+  /** ResizeObserver 回调。 */
+  private readonly callback: ResizeObserverCallbackLike;
+
+  /**
+   * 创建 ResizeObserver 测试替身。
+   * @param callback - ResizeObserver 回调
+   */
+  public constructor(callback: ResizeObserverCallbackLike) {
+    this.callback = callback;
+  }
+
+  /**
+   * 监听目标元素尺寸。
+   * @param target - 监听目标
+   */
+  public observe = (target: Element): void => {
+    this.callback([
+      {
+        target,
+        contentRect: DOMRect.fromRect({ width: 480, height: 240 }),
+        contentBoxSize: [
+          {
+            inlineSize: 480,
+            blockSize: 240
+          }
+        ]
+      } as unknown as ResizeObserverEntry
+    ]);
+  };
+
+  /** 停止监听目标元素。 */
+  public unobserve = vi.fn();
+
+  /** 断开全部尺寸监听。 */
+  public disconnect = vi.fn();
+}
 
 /** BBubble 测试替身，保留默认插槽用于渲染消息内容。 */
 const BBubbleStub = defineComponent({
@@ -79,6 +127,53 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
 }
 
 /**
+ * 创建消息内小组件快照数据。
+ * @returns 小组件快照数据
+ */
+function createWeatherWidgetData(): WidgetData {
+  return {
+    ...createDefaultWidgetData(),
+    elements: [
+      {
+        id: 'weather-text',
+        name: 'text',
+        label: '文本',
+        icon: 'lucide:type',
+        title: '天气文本',
+        position: { x: 0, y: 0 },
+        size: { width: 180, height: 48 },
+        rotation: 0,
+        style: {},
+        metadata: {
+          content: '{{ input.city }} 当前 {{ state.weather.temperature }}°C'
+        }
+      }
+    ],
+    viewport: {
+      center: { x: 0, y: 0 },
+      zoom: 1
+    }
+  };
+}
+
+/**
+ * 创建消息内小组件渲染上下文。
+ * @returns 小组件渲染上下文
+ */
+function createWeatherRenderContext(): WidgetRenderContext {
+  return {
+    input: {
+      city: '上海'
+    },
+    state: {
+      weather: {
+        temperature: 28
+      }
+    }
+  };
+}
+
+/**
  * 挂载消息气泡。
  * @param message - 待渲染消息
  * @returns 组件包装器
@@ -98,6 +193,19 @@ function mountMessageBubble(message: Message): VueWrapper {
 }
 
 describe('MessageBubble', (): void => {
+  beforeEach((): void => {
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  });
+
+  afterEach((): void => {
+    vi.unstubAllGlobals();
+  });
+
   it('shows regenerate for finished assistant text messages', (): void => {
     const wrapper = mountMessageBubble(createAssistantMessage());
 
@@ -169,5 +277,24 @@ describe('MessageBubble', (): void => {
 
     expect(wrapper.text()).toContain('上下文已压缩');
     expect(wrapper.text()).not.toContain('压缩失败');
+  });
+
+  it('renders widget parts with runtime template variables inside assistant bubbles', (): void => {
+    const widgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-session-1',
+      status: 'success',
+      dataItem: createWeatherWidgetData(),
+      renderContext: createWeatherRenderContext()
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+
+    expect(wrapper.text()).toContain('上海');
+    expect(wrapper.text()).toContain('28°C');
   });
 });

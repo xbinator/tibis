@@ -141,6 +141,7 @@ import { buildUserInputParts } from './utils/filePartParser';
 import { create, userChoice } from './utils/messageHelper';
 import { handleBChatRuntimeBridgeRequest } from './utils/runtimeBridge';
 import { appendRuntimeErrorMessage } from './utils/runtimeError';
+import { createWidgetSkillDraftAssistantMessage, resolveWidgetSkillDraft } from './utils/widgetSkillDraft';
 
 const [, bem] = createNamespace('chat');
 
@@ -359,6 +360,19 @@ async function ensureActiveSession(title: string): Promise<string> {
   currentSessionForAutoName.value = session;
   emit('session-created', session);
   return session.id;
+}
+
+/**
+ * 将本地小组件草稿消息写入当前会话并刷新可见消息。
+ * @param sessionId - 当前会话 ID
+ * @param visibleMessages - 写入后的可见消息列表
+ */
+async function persistLocalWidgetSkillDraftMessages(sessionId: string, visibleMessages: Message[]): Promise<void> {
+  const historyMessages = await fetchAllPriorHistory(sessionId);
+  await chatStore.setSessionMessages(sessionId, [...historyMessages, ...visibleMessages]);
+  setLoadedMessages(visibleMessages);
+  await nextTick();
+  conversationRef.value?.scrollToBottom({ behavior: 'auto' });
 }
 
 /** Chat 服务配置解析 hook。 */
@@ -825,6 +839,25 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
   let pendingUserMessage: Message | null = null;
 
   try {
+    const userMessage = create.userMessage(trimmedContent);
+    if (images.length && supportsVision.value) {
+      userMessage.files = [...images];
+    }
+
+    const widgetDraft = images.length ? null : resolveWidgetSkillDraft(trimmedContent);
+    if (widgetDraft) {
+      const sessionId = await ensureActiveSession(userMessage.content);
+      pendingSessionId = sessionId;
+      pendingUserMessage = userMessage;
+      confirmationController.expirePendingConfirmation();
+      focusInput();
+      clearDraft && inputEvents.clear();
+
+      await persistLocalWidgetSkillDraftMessages(sessionId, [...messages.value, userMessage, createWidgetSkillDraftAssistantMessage(widgetDraft)]);
+      taskRuntime.finishTask('chat');
+      return;
+    }
+
     const config = await chatServiceConfig.resolveServiceConfig();
     if (!config) {
       showNoModelConfigToast();
@@ -833,11 +866,6 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
     }
 
     const userParts = buildUserInputParts(trimmedContent, workspaceRoot.value || undefined);
-    const userMessage = create.userMessage(trimmedContent);
-    if (images.length && supportsVision.value) {
-      userMessage.files = [...images];
-    }
-
     const sessionId = await ensureActiveSession(userMessage.content);
     pendingSessionId = sessionId;
     pendingUserMessage = userMessage;

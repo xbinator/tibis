@@ -43,6 +43,8 @@
             />
 
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
+
+            <BubblePartWidget v-else-if="item.kind === 'widget'" :part="item.part" />
           </template>
         </template>
       </div>
@@ -76,7 +78,8 @@ import type {
   ChatMessagePart,
   ChatMessageTextPart,
   ChatMessageThinkingPart,
-  ChatMessageToolPart
+  ChatMessageToolPart,
+  ChatMessageWidgetPart
 } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import { computed } from 'vue';
@@ -92,6 +95,7 @@ import BubblePartText from './MessageBubble/BubblePartText.vue';
 import BubblePartThinking from './MessageBubble/BubblePartThinking.vue';
 import BubblePartTool from './MessageBubble/BubblePartTool.vue';
 import BubblePartUserInput from './MessageBubble/BubblePartUserInput.vue';
+import BubblePartWidget from './MessageBubble/BubblePartWidget.vue';
 import QuestionCard from './QuestionCard.vue';
 
 defineOptions({ name: 'MessageBubble' });
@@ -122,7 +126,8 @@ type MessageBubbleRenderItem =
   | { key: string; kind: 'thinking'; part: ChatMessageThinkingPart }
   | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart }
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
-  | { key: string; kind: 'tool'; part: ChatMessageToolPart };
+  | { key: string; kind: 'tool'; part: ChatMessageToolPart }
+  | { key: string; kind: 'widget'; part: ChatMessageWidgetPart };
 
 /**
  * 判断消息片段是否为文本或错误片段。
@@ -184,6 +189,7 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
+    if (part.type === 'widget') return [{ key, kind: 'widget', part }];
     return [];
   })
 );
