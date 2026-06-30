@@ -1,0 +1,242 @@
+/**
+ * @file settings-button.test.ts
+ * @description 默认布局设置按钮路由行为测试。
+ * @vitest-environment jsdom
+ */
+/* eslint-disable vue/one-component-per-file */
+import { defineComponent, nextTick } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { shallowMount, type VueWrapper } from '@vue/test-utils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import DefaultLayout from '@/layouts/default/index.vue';
+import type { Tab } from '@/stores/workspace/tabs';
+import { useTabsStore } from '@/stores/workspace/tabs';
+
+/** 当前路由 mock。 */
+const routeMock = vi.hoisted(() => ({
+  fullPath: '/welcome'
+}));
+
+/** router.push mock。 */
+const routerPushMock = vi.hoisted(() => vi.fn<(path: string) => Promise<void>>().mockResolvedValue(undefined));
+
+vi.mock('vue-router', async () => {
+  const actual = await vi.importActual<typeof import('vue-router')>('vue-router');
+
+  return {
+    ...actual,
+    useRoute: () => routeMock,
+    useRouter: () => ({
+      push: routerPushMock
+    })
+  };
+});
+
+vi.mock('@iconify/vue', () => ({
+  Icon: {
+    name: 'Icon',
+    props: ['icon', 'width', 'height'],
+    template: '<span class="icon-stub" :data-icon="icon"></span>'
+  }
+}));
+
+vi.mock('@/components/BButton/index.vue', () => ({
+  default: {
+    name: 'BButton',
+    props: {
+      type: { type: String, default: '' },
+      size: { type: String, default: '' },
+      square: { type: Boolean, default: false }
+    },
+    emits: ['click'],
+    template: '<button class="b-button-module-stub" type="button" @click="$emit(\'click\')"><slot /></button>'
+  }
+}));
+
+vi.mock('@/components/BCommandPanel/index.vue', () => ({
+  default: {
+    name: 'BCommandPanel',
+    template: '<div />'
+  }
+}));
+
+vi.mock('@/layouts/default/components/ChatSider.vue', () => ({
+  default: {
+    name: 'ChatSider',
+    template: '<aside />'
+  }
+}));
+
+vi.mock('@/layouts/default/components/HeaderEditorActions.vue', () => ({
+  default: {
+    name: 'HeaderEditorActions',
+    template: '<div />'
+  }
+}));
+
+vi.mock('@/layouts/default/components/HeaderTabs.vue', () => ({
+  default: {
+    name: 'HeaderTabs',
+    template: '<div />'
+  }
+}));
+
+vi.mock('@/layouts/default/components/HeaderUpdateNotice.vue', () => ({
+  default: {
+    name: 'HeaderUpdateNotice',
+    template: '<div />'
+  }
+}));
+
+vi.mock('@/layouts/default/components/MainDropZone.vue', () => ({
+  default: {
+    name: 'MainDropZone',
+    template: '<main><slot /></main>'
+  }
+}));
+
+vi.mock('@/layouts/default/components/ShortcutsHelp.vue', () => ({
+  default: {
+    name: 'ShortcutsHelp',
+    template: '<div />'
+  }
+}));
+
+vi.mock('@/shared/platform/env', () => ({
+  isMac: () => false
+}));
+
+vi.mock('@/shared/platform/electron-api', () => ({
+  getElectronAPI: () => ({
+    windowIsMaximized: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
+    windowIsFullScreen: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
+    windowMinimize: vi.fn<() => void>(),
+    windowMaximize: vi.fn<() => void>(),
+    windowClose: vi.fn<() => void>()
+  })
+}));
+
+vi.mock('@/layouts/default/hooks/useFileActive', () => ({
+  useFileActive: () => ({ toolbarFileOptions: [] })
+}));
+
+vi.mock('@/layouts/default/hooks/useEditActive', () => ({
+  useEditActive: () => ({ toolbarEditOptions: [] })
+}));
+
+vi.mock('@/layouts/default/hooks/useViewActive', () => ({
+  useViewActive: () => ({ toolbarViewOptions: [] })
+}));
+
+vi.mock('@/layouts/default/hooks/useHelpActive', () => ({
+  useHelpActive: () => ({ toolbarHelpOptions: [] })
+}));
+
+/**
+ * BButton 测试替身，用原生按钮承接点击事件。
+ */
+const BButtonStub = defineComponent({
+  name: 'BButton',
+  props: {
+    type: { type: String, default: '' },
+    size: { type: String, default: '' },
+    square: { type: Boolean, default: false }
+  },
+  emits: ['click'],
+  template: '<button class="b-button-stub" type="button" @click="$emit(\'click\')"><slot /></button>'
+});
+
+/**
+ * 创建标签页测试数据。
+ * @param id - 标签 ID
+ * @param path - 标签路径
+ * @param title - 标签标题
+ * @returns 标签页数据
+ */
+function createTab(id: string, path: string, title: string): Tab {
+  return {
+    id,
+    path,
+    title,
+    cacheKey: id
+  };
+}
+
+/**
+ * 挂载默认布局。
+ * @returns 组件 wrapper
+ */
+function mountDefaultLayout(): VueWrapper {
+  return shallowMount(DefaultLayout, {
+    global: {
+      stubs: {
+        BButton: BButtonStub,
+        BCommandPanel: true,
+        BToolbar: true,
+        ChatSider: true,
+        HeaderEditorActions: true,
+        HeaderTabs: true,
+        HeaderUpdateNotice: true,
+        MainDropZone: true,
+        RouterView: true,
+        ShortcutsHelp: true
+      }
+    }
+  });
+}
+
+/**
+ * 触发设置按钮点击。
+ * @param wrapper - 默认布局 wrapper
+ */
+async function clickSettingsButton(wrapper: VueWrapper): Promise<void> {
+  // 右侧区域依次为搜索、侧边栏、设置按钮；只验证设置按钮的点击行为。
+  const settingsButton = wrapper.findAll('.b-button-stub').at(2);
+
+  if (!settingsButton) {
+    throw new Error('Settings button should exist');
+  }
+
+  await settingsButton.trigger('click');
+  await nextTick();
+}
+
+describe('Default layout settings button', (): void => {
+  beforeEach((): void => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+    routeMock.fullPath = '/welcome';
+    routerPushMock.mockClear();
+  });
+
+  it('does not navigate again when the current route is already inside settings', async (): Promise<void> => {
+    routeMock.fullPath = '/settings/provider';
+
+    const wrapper = mountDefaultLayout();
+    await clickSettingsButton(wrapper);
+
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  it('activates the existing settings tab path instead of reopening the settings root', async (): Promise<void> => {
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('settings', '/settings/tools/mcp', '设置'), createTab('welcome', '/welcome', '欢迎')];
+
+    const wrapper = mountDefaultLayout();
+    await clickSettingsButton(wrapper);
+
+    expect(routerPushMock).toHaveBeenCalledTimes(1);
+    expect(routerPushMock).toHaveBeenCalledWith('/settings/tools/mcp');
+  });
+
+  it('opens the settings root when no settings tab exists', async (): Promise<void> => {
+    const tabsStore = useTabsStore();
+    tabsStore.tabs = [createTab('welcome', '/welcome', '欢迎')];
+
+    const wrapper = mountDefaultLayout();
+    await clickSettingsButton(wrapper);
+
+    expect(routerPushMock).toHaveBeenCalledTimes(1);
+    expect(routerPushMock).toHaveBeenCalledWith('/settings');
+  });
+});

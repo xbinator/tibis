@@ -1,3 +1,7 @@
+<!--
+  @file index.vue
+  @description 默认应用布局，承载标题栏、标签页、主内容区和辅助侧边栏。
+-->
 <template>
   <div class="b-layout">
     <div class="b-layout-header">
@@ -78,7 +82,7 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useEventListener } from '@vueuse/core';
 import BButton from '@/components/BButton/index.vue';
@@ -99,6 +103,7 @@ import { useHelpActive } from './hooks/useHelpActive';
 import { useKeepAlive } from './hooks/useKeepAlive';
 import { useViewActive } from './hooks/useViewActive';
 
+const currentRoute = useRoute();
 const router = useRouter();
 
 const visible = reactive({ shortcutsHelp: false });
@@ -116,6 +121,11 @@ const { toolbarEditOptions } = useEditActive();
 const { toolbarViewOptions } = useViewActive();
 const { toolbarHelpOptions } = useHelpActive(visible);
 
+/** 设置页标签固定 ID。 */
+const SETTINGS_TAB_ID = 'settings';
+/** 设置页根路由。 */
+const SETTINGS_ROUTE_ROOT = '/settings';
+
 onMounted(() => {
   tabsStore.subscribeToFileWatchEvents();
 });
@@ -125,10 +135,27 @@ onUnmounted(() => {
 });
 
 /**
+ * 判断路径是否位于设置页内。
+ * @param path - 待判断的完整路由路径
+ * @returns 是否是设置页或设置页子路由
+ */
+function isSettingsRoutePath(path: string): boolean {
+  const routePath = path.split(/[?#]/u)[0] ?? path;
+
+  return routePath === SETTINGS_ROUTE_ROOT || routePath.startsWith(`${SETTINGS_ROUTE_ROOT}/`);
+}
+
+/**
  * 打开设置页。
  */
 function handleOpenSettings(): void {
-  router.push('/settings');
+  if (isSettingsRoutePath(currentRoute.fullPath)) {
+    return;
+  }
+
+  const settingsTab = tabsStore.tabs.find((tab) => tab.id === SETTINGS_TAB_ID);
+
+  router.push(settingsTab?.path ?? SETTINGS_ROUTE_ROOT);
 }
 
 /**
