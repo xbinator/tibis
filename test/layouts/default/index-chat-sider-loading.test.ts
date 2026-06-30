@@ -26,9 +26,9 @@ describe('Default layout chat sidebar mounting', (): void => {
     expect(defaultLayoutSource).not.toContain("defineAsyncComponent(() => import('@/components/BCommandPanel/index.vue'))");
   });
 
-  it('loads optional help dialog lazily only after it becomes visible', (): void => {
+  it('keeps the optional help dialog as an async component', (): void => {
     expect(defaultLayoutSource).toContain("defineAsyncComponent(() => import('./components/ShortcutsHelp.vue'))");
-    expect(defaultLayoutSource).toContain('<ShortcutsHelp v-if="visible.shortcutsHelp" v-model:visible="visible.shortcutsHelp" />');
+    expect(defaultLayoutSource).toContain('<ShortcutsHelp v-model:visible="visible.shortcutsHelp" />');
     expect(defaultLayoutSource).not.toContain("defineAsyncComponent(() => import('@/components/BRecent/index.vue'))");
     expect(defaultLayoutSource).not.toContain("import ShortcutsHelp from './components/ShortcutsHelp.vue'");
   });

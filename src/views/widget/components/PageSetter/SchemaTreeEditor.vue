@@ -187,9 +187,7 @@ function isFoldableSchemaProperty(property: WidgetSchemaProperty): boolean {
  * @param value - 待判断值
  * @returns 是否为字段容器
  */
-function isSchemaFieldContainer(
-  value: WidgetSchemaObject | WidgetSchemaProperty
-): value is WidgetSchemaObject | (WidgetSchemaProperty & SchemaFieldContainer) {
+function isSchemaFieldContainer(value: WidgetSchemaObject | WidgetSchemaProperty): value is WidgetSchemaObject | (WidgetSchemaProperty & SchemaFieldContainer) {
   return value.type === 'object' && typeof value.properties === 'object' && value.properties !== null;
 }
 

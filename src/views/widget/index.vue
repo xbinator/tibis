@@ -577,11 +577,7 @@ function createNextMultiSelectionBounds(bounds: MultiSelectionBounds, layout: Wi
  * @param nextBounds - 目标外接框
  * @returns 转换后的元素
  */
-function transformElementByMultiSelectionBounds(
-  element: WidgetElement,
-  currentBounds: MultiSelectionBounds,
-  nextBounds: MultiSelectionBounds
-): WidgetElement {
+function transformElementByMultiSelectionBounds(element: WidgetElement, currentBounds: MultiSelectionBounds, nextBounds: MultiSelectionBounds): WidgetElement {
   const scaleX = currentBounds.width === 0 ? 1 : nextBounds.width / currentBounds.width;
   const scaleY = currentBounds.height === 0 ? 1 : nextBounds.height / currentBounds.height;
 

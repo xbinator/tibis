@@ -7,6 +7,7 @@
     class="header-tabs"
     :list="visibleTabs"
     direction="horizontal"
+    item-key="id"
     item-class="header-tabs__item"
     @wheel="handleWheel"
     @move="handleDraggableMove"

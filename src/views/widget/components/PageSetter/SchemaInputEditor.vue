@@ -29,10 +29,10 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import type { WidgetSchemaObject } from '@/components/BWidget/types';
-import { createDefaultWidgetSchemaObject, normalizeWidgetSchemaObject, type WidgetSchemaKind } from '@/components/BWidget/utils/widgetData';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
+import type { WidgetSchemaObject } from '@/components/BWidget/types';
+import { createDefaultWidgetSchemaObject, normalizeWidgetSchemaObject, type WidgetSchemaKind } from '@/components/BWidget/utils/widgetData';
 
 /**
  * Schema 编辑弹窗入参。

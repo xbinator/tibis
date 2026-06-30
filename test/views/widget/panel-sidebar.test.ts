@@ -85,7 +85,7 @@ describe('PanelSidebar', (): void => {
     const wrapper = mountPanelSidebar();
 
     expect(wrapper.find('.sidebar-tools-stub').exists()).toBe(true);
-    expect(wrapper.find('.panel-splitter-stub').attributes('data-size')).toBe('320');
+    expect(wrapper.find('.panel-splitter-stub').attributes('data-size')).toBe('240');
     expect(wrapper.find('[data-icon="lucide:box"]').attributes('data-type')).toBe('secondary');
 
     wrapper.unmount();
@@ -107,7 +107,7 @@ describe('PanelSidebar', (): void => {
 
     expect(wrapper.find('.sidebar-layer-stub').exists()).toBe(true);
     expect(wrapper.find('[data-icon="lucide:layers"]').attributes('data-type')).toBe('secondary');
-    expect(wrapper.find('.panel-splitter-stub').attributes('data-size')).toBe('320');
+    expect(wrapper.find('.panel-splitter-stub').attributes('data-size')).toBe('240');
 
     wrapper.unmount();
   });
