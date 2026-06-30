@@ -41,6 +41,28 @@ function findTextNode(node: JSONContent, text: string): JSONContent | null {
 }
 
 /**
+ * 查找包含指定文本的文本节点。
+ * @param node - 当前 JSON 节点
+ * @param text - 待查找文本片段
+ * @returns 命中时返回文本节点，否则返回 null
+ */
+function findTextNodeContaining(node: JSONContent, text: string): JSONContent | null {
+  if (node.type === 'text' && typeof node.text === 'string' && node.text.includes(text)) {
+    return node;
+  }
+
+  const children = Array.isArray(node.content) ? node.content : [];
+  for (const child of children) {
+    const found = findTextNodeContaining(child, text);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+/**
  * 查找指定类型的第一个 JSON 节点。
  * @param node - 当前 JSON 节点
  * @param type - 节点类型
@@ -165,5 +187,36 @@ describe('BEditor rich Markdown parser', (): void => {
     const blockMath = findNodeByType(json, 'blockMath');
 
     expect(blockMath?.attrs).toEqual({ latex: 'a^2+b^2=c^2' });
+  });
+
+  it('parses Markdown syntax inside inline comments when loading Markdown', async (): Promise<void> => {
+    const markdown = '[**重要约束**：v1 内联补全使用 AI 一次性 `invoke`（非流式）]{comment="跟你说" id="comment-a"}';
+
+    const { json } = await parseMarkdownForRichLoad(markdown, 'inline-comment-inner-markdown-test', '1');
+    const textContent = getTextContent(json);
+    const boldNode = findTextNode(json, '重要约束');
+    const codeNode = findTextNode(json, 'invoke');
+
+    expect(textContent).toContain('重要约束：v1 内联补全使用 AI 一次性 invoke（非流式）');
+    expect(textContent).not.toContain('**重要约束**');
+    expect(textContent).not.toContain('`invoke`');
+    expect(hasMark(boldNode, 'inlineComment')).toBe(true);
+    expect(hasMark(boldNode, 'bold')).toBe(true);
+    expect(getMark(boldNode, 'inlineComment')?.attrs).toEqual({ comment: '跟你说', id: 'comment-a' });
+    expect(hasMark(codeNode, 'inlineComment')).toBe(true);
+    expect(hasMark(codeNode, 'code')).toBe(true);
+  });
+
+  it('keeps ordinary opening brackets outside a following inline comment', async (): Promise<void> => {
+    const markdown = '说明 [临时文本 [目标]{comment="跟你说" id="comment-a"} 结束';
+
+    const { json } = await parseMarkdownForRichLoad(markdown, 'inline-comment-nearest-opening-test', '1');
+    const textContent = getTextContent(json);
+    const plainBracketNode = findTextNodeContaining(json, '[临时文本');
+    const targetNode = findTextNode(json, '目标');
+
+    expect(textContent).toContain('说明 [临时文本 目标 结束');
+    expect(hasMark(plainBracketNode, 'inlineComment')).toBe(false);
+    expect(getMark(targetNode, 'inlineComment')?.attrs).toEqual({ comment: '跟你说', id: 'comment-a' });
   });
 });

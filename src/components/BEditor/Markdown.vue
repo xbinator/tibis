@@ -277,7 +277,8 @@ const commentActions = useCommentActions({
     const adapter = currentSelectionAdapter.value;
     if (!adapter) return null;
     return adapter.getPanelPosition({ from, to, text: '', docVersion: undefined });
-  }
+  },
+  getOverlayRoot: () => currentRichSelectionHost.value?.overlayRoot ?? null
 });
 
 /**
@@ -702,14 +703,12 @@ defineExpose({
   gap: 6px;
   height: 100%;
 
-  // --selection-color: var(--color-primary);
   --selection-bg: var(--color-primary-border);
   --native-selection-color: var(--selection-color);
   --native-selection-bg: var(--selection-bg);
+  --comment-highlight-line: rgb(255 152 0 / 70%);
 
   ::selection {
-    // color: var(--native-selection-color);
-    // background: var(--native-selection-bg);
     background: transparent;
   }
 }
@@ -760,8 +759,13 @@ defineExpose({
   padding: 0.25em 0;
   cursor: pointer;
   background-color: rgb(255 213 79 / 30%);
-  border-bottom: 2px solid rgb(255 152 0 / 60%);
+  background-image: linear-gradient(var(--comment-highlight-line), var(--comment-highlight-line));
+  background-repeat: no-repeat;
+  background-position: 0 calc(100% - 1px);
+  background-size: 100% 2px;
   border-radius: 2px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
   transition: background-color 0.2s ease;
 
   &:hover {

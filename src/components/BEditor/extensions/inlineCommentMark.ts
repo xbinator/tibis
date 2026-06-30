@@ -2,7 +2,7 @@
  * @file inlineCommentMark.ts
  * @description 行内批注 TipTap Mark 扩展，支持 [text]{comment="..."} 语法的解析与渲染。
  */
-import type { JSONContent, MarkdownParseHelpers, MarkdownParseResult, MarkdownToken, MarkdownTokenizer } from '@tiptap/core';
+import type { JSONContent, MarkdownParseHelpers, MarkdownParseResult, MarkdownRendererHelpers, MarkdownToken, MarkdownTokenizer } from '@tiptap/core';
 import { Mark } from '@tiptap/core';
 
 /**
@@ -82,12 +82,10 @@ export const InlineCommentMark = Mark.create({
     name: 'inlineComment',
     level: 'inline' as const,
     start(src: string) {
-      const index = src.indexOf(']{comment=');
-      if (index === -1) return -1;
-      return src.lastIndexOf('[', index);
+      return src.indexOf('[');
     },
-    tokenize(src: string) {
-      const match = src.match(/^\[([^\]]*?)\]\{comment="([^"]*?)"(?:\s+id="([^"]*?)")?\}/);
+    tokenize(src: string, _tokens: MarkdownToken[], lexer) {
+      const match = src.match(/^\[([^[\]]*?)\]\{comment="([^"]*?)"(?:\s+id="([^"]*?)")?\}/);
       if (!match) return undefined;
 
       const [, text, comment, id] = match;
@@ -95,6 +93,7 @@ export const InlineCommentMark = Mark.create({
         type: 'inlineComment',
         raw: match[0],
         text,
+        tokens: lexer.inlineTokens(text),
         comment,
         id: id || undefined
       };
@@ -112,13 +111,21 @@ export const InlineCommentMark = Mark.create({
     const comment = typeof token.comment === 'string' ? token.comment : '';
     const id = typeof token.id === 'string' && token.id ? token.id : generateCommentId();
 
-    const content = text ? [helpers.createTextNode(text)] : [];
+    let inlineTokens: MarkdownToken[] = [];
+    if (Array.isArray(token.tokens) && token.tokens.length > 0) {
+      inlineTokens = token.tokens;
+    } else if (helpers.tokenizeInline) {
+      inlineTokens = helpers.tokenizeInline(text);
+    }
 
-    return {
-      mark: 'inlineComment',
-      content,
-      attrs: { comment, id }
-    };
+    let content: JSONContent[] = [];
+    if (inlineTokens.length > 0) {
+      content = helpers.parseInline(inlineTokens);
+    } else if (text) {
+      content = [helpers.createTextNode(text)];
+    }
+
+    return helpers.applyMark('inlineComment', content, { comment, id });
   },
 
   /**
@@ -126,17 +133,11 @@ export const InlineCommentMark = Mark.create({
    * @param node - 带 inlineComment mark 的 JSONContent 节点
    * @returns 序列化后的 Markdown 文本
    */
-  renderMarkdown: (node: JSONContent): string => {
+  renderMarkdown: (node: JSONContent, helpers: MarkdownRendererHelpers): string => {
     const attrs = node.attrs ?? {};
     const comment = typeof attrs.comment === 'string' ? attrs.comment : '';
     const id = typeof attrs.id === 'string' ? attrs.id : '';
-
-    const text = Array.isArray(node.content)
-      ? node.content
-          .filter((child: JSONContent) => child.type === 'text' && typeof child.text === 'string')
-          .map((child: JSONContent) => child.text as string)
-          .join('')
-      : '';
+    const text = helpers.renderChildren(node.content ?? []);
 
     const idPart = id ? ` id="${id}"` : '';
     return `[${text}]{comment="${comment}"${idPart}}`;

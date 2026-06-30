@@ -832,6 +832,10 @@ defineExpose({
     border-radius: 3px;
   }
 
+  .editor-comment-highlight code {
+    background-color: color-mix(in srgb, var(--bg-disabled) 72%, transparent);
+  }
+
   pre {
     margin: 0.75em 0;
     background-color: transparent;

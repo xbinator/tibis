@@ -561,6 +561,192 @@ function findInlineHtmlClosingIndex(tokens: MarkdownToken[], startIndex: number,
   return -1;
 }
 
+/**
+ * 行内批注 token 组解析结果。
+ */
+interface InlineCommentTokenGroup {
+  /** 解析后的 JSON 行内节点 */
+  content: JSONContent[];
+  /** 已消费到的 token 下标 */
+  endIndex: number;
+}
+
+/**
+ * 行内批注结束片段解析结果。
+ */
+interface InlineCommentClosingMatch {
+  /** 结束片段前仍属于批注正文的文本 */
+  before: string;
+  /** 批注正文 */
+  comment: string;
+  /** 批注 ID */
+  id: string;
+  /** 结束片段后剩余的普通文本 */
+  after: string;
+}
+
+/**
+ * 行内批注包装边界。
+ */
+interface InlineCommentBoundary {
+  /** 批注起始 token 下标 */
+  openingTokenIndex: number;
+  /** 批注起始 token 内的 `[` 偏移量 */
+  openingOffset: number;
+  /** 批注结束 token 下标 */
+  closingTokenIndex: number;
+  /** 批注结束片段解析结果 */
+  closing: InlineCommentClosingMatch;
+}
+
+/**
+ * 生成行内批注 ID。
+ * @returns 批注唯一标识
+ */
+function generateInlineCommentId(): string {
+  return `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * 读取 marked token 的文本载荷。
+ * @param token - marked token
+ * @returns token 文本
+ */
+function getInlineTokenText(token: MarkdownToken): string {
+  if (typeof token.text === 'string') {
+    return token.text;
+  }
+
+  return typeof token.raw === 'string' ? token.raw : '';
+}
+
+/**
+ * 克隆一个文本 token，用于拆分批注边界前后的普通文本。
+ * @param token - 原始 token
+ * @param text - 新文本内容
+ * @returns 拆分后的文本 token
+ */
+function cloneInlineTextToken(token: MarkdownToken, text: string): MarkdownToken {
+  return {
+    ...token,
+    type: 'text',
+    raw: text,
+    text
+  };
+}
+
+/**
+ * 解析行内批注结束片段。
+ * @param text - 待解析文本
+ * @returns 命中时返回批注属性与边界文本
+ */
+function parseInlineCommentClosing(text: string): InlineCommentClosingMatch | null {
+  const match = /^([\s\S]*?)\]\{comment="([^"]*?)"(?:\s+id="([^"]*?)")?\}([\s\S]*)$/.exec(text);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    before: match[1] ?? '',
+    comment: match[2] ?? '',
+    id: match[3] || generateInlineCommentId(),
+    after: match[4] ?? ''
+  };
+}
+
+/**
+ * 查找批注结束片段前最近的 `[`，作为当前批注的真实起点。
+ * 普通文本中可能先出现 `[`，不能让它吞并后面真正的 `[text]{comment}`。
+ * @param tokens - 当前行内 token 列表
+ * @param startIndex - 起始 token 下标
+ * @returns 批注边界；未找到完整边界时返回 null
+ */
+function findInlineCommentBoundary(tokens: MarkdownToken[], startIndex: number): InlineCommentBoundary | null {
+  for (let closingTokenIndex = startIndex; closingTokenIndex < tokens.length; closingTokenIndex += 1) {
+    const closingToken = tokens[closingTokenIndex] as MarkdownToken;
+    const closing = parseInlineCommentClosing(getInlineTokenText(closingToken));
+    if (!closing) {
+      continue;
+    }
+
+    for (let openingTokenIndex = closingTokenIndex; openingTokenIndex >= startIndex; openingTokenIndex -= 1) {
+      const openingToken = tokens[openingTokenIndex] as MarkdownToken;
+      const openingSearchText = openingTokenIndex === closingTokenIndex ? closing.before : getInlineTokenText(openingToken);
+      const openingOffset = openingSearchText.lastIndexOf('[');
+      if (openingOffset < 0) {
+        continue;
+      }
+
+      return {
+        openingTokenIndex,
+        openingOffset,
+        closingTokenIndex,
+        closing
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 尝试从 marked 已拆分的 token 序列中恢复 `[text]{comment="..."}` 批注包装。
+ * marked 会先解析批注内部的 bold/code 等语法，导致自定义 tokenizer 无法独占整段文本；
+ * 因此这里在项目统一的 inline token 入口按边界重新组合，并保留内部 Markdown marks。
+ * @param tokens - 当前行内 token 列表
+ * @param startIndex - 起始 token 下标
+ * @param activeMarks - 外层 HTML 标签累积的 mark
+ * @param parseTokens - 当前 inline 解析入口，用于递归解析普通片段和批注正文
+ * @returns 命中时返回批注节点与消费位置
+ */
+function consumeInlineCommentTokenGroup(
+  tokens: MarkdownToken[],
+  startIndex: number,
+  activeMarks: InlineMarkdownMark[],
+  parseTokens: (nextTokens: MarkdownToken[], nextActiveMarks: InlineMarkdownMark[]) => JSONContent[]
+): InlineCommentTokenGroup | null {
+  const boundary = findInlineCommentBoundary(tokens, startIndex);
+  if (!boundary) {
+    return null;
+  }
+
+  const openingToken = tokens[boundary.openingTokenIndex] as MarkdownToken;
+  const closingToken = tokens[boundary.closingTokenIndex] as MarkdownToken;
+  const openingText = getInlineTokenText(openingToken);
+  const prefixTokens: MarkdownToken[] = tokens.slice(startIndex, boundary.openingTokenIndex);
+  const openingPrefixText = openingText.slice(0, boundary.openingOffset);
+
+  if (openingPrefixText) {
+    prefixTokens.push(cloneInlineTextToken(openingToken, openingPrefixText));
+  }
+
+  const firstInnerText =
+    boundary.openingTokenIndex === boundary.closingTokenIndex
+      ? boundary.closing.before.slice(boundary.openingOffset + 1)
+      : openingText.slice(boundary.openingOffset + 1);
+  const innerTokens: MarkdownToken[] = firstInnerText ? [cloneInlineTextToken(openingToken, firstInnerText)] : [];
+
+  if (boundary.openingTokenIndex < boundary.closingTokenIndex) {
+    innerTokens.push(...tokens.slice(boundary.openingTokenIndex + 1, boundary.closingTokenIndex));
+    if (boundary.closing.before) {
+      innerTokens.push(cloneInlineTextToken(closingToken, boundary.closing.before));
+    }
+  }
+
+  const suffixTokens = boundary.closing.after ? [cloneInlineTextToken(closingToken, boundary.closing.after)] : [];
+  const prefixContent = prefixTokens.length > 0 ? parseTokens(prefixTokens, activeMarks) : [];
+  const innerContent = parseTokens(innerTokens, activeMarks);
+  const commentContent = applyInlineMarkdownMarks(innerContent, [
+    { type: 'inlineComment', attrs: { comment: boundary.closing.comment, id: boundary.closing.id } }
+  ]);
+  const suffixContent = suffixTokens.length > 0 ? parseTokens(suffixTokens, activeMarks) : [];
+
+  return {
+    content: [...prefixContent, ...commentContent, ...suffixContent],
+    endIndex: boundary.closingTokenIndex
+  };
+}
+
 function getReferenceStyleLinkRaw(token: MarkdownToken): string | null {
   if (token.type !== 'link' || typeof token.raw !== 'string') {
     return null;
@@ -592,6 +778,15 @@ function parseInlineTokensWithHtmlMarks(tokens: MarkdownToken[], helpers: Markdo
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index] as MarkdownToken;
+    const commentGroup = consumeInlineCommentTokenGroup(tokens, index, activeMarks, (nextTokens, nextActiveMarks) =>
+      parseInlineTokensWithHtmlMarks(nextTokens, helpers, nextActiveMarks)
+    );
+    if (commentGroup) {
+      content.push(...commentGroup.content);
+      index = commentGroup.endIndex;
+      continue;
+    }
+
     const htmlTag = parseInlineHtmlToken(token);
 
     if (htmlTag?.kind === 'selfClosing' && htmlTag.tag === 'br') {
