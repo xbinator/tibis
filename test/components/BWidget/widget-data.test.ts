@@ -6,68 +6,28 @@ import { describe, expect, it } from 'vitest';
 import type { WidgetSchemaObject } from '@/components/BWidget/types';
 import { createDefaultWidgetData, normalizeWidgetDataContract } from '@/components/BWidget/utils/widgetData';
 
-/** 查天气入参默认 schema。 */
-const weatherInputSchema: WidgetSchemaObject = {
-  type: 'object',
-  properties: {
-    city: {
-      type: 'string',
-      description: '城市名称，例如上海'
-    },
-    date: {
-      type: 'string',
-      description: '查询日期，例如今天或明天'
-    },
-    unit: {
-      type: 'string',
-      description: '温度单位，celsius 或 fahrenheit'
-    }
-  },
-  required: ['city']
-};
-
-/** 查天气出参默认 schema。 */
-const weatherOutputSchema: WidgetSchemaObject = {
-  type: 'object',
-  properties: {
-    condition: {
-      type: 'string',
-      description: '天气概况'
-    },
-    temperatureCelsius: {
-      type: 'number',
-      description: '摄氏温度'
-    },
-    suggestion: {
-      type: 'string',
-      description: '出行建议'
-    }
-  },
-  required: ['condition', 'temperatureCelsius']
-};
-
-/** 默认状态 schema。 */
-const emptyStateSchema: WidgetSchemaObject = {
+/** 默认空对象 schema。 */
+const emptyObjectSchema: WidgetSchemaObject = {
   type: 'object',
   properties: {},
   required: []
 };
 
 describe('dataItem', (): void => {
-  it('creates weather query schemas for new widget data', (): void => {
+  it('creates empty schemas for new widget data', (): void => {
     const dataItem = createDefaultWidgetData();
 
-    expect(dataItem.inputSchema).toEqual(weatherInputSchema);
-    expect(dataItem.stateSchema).toEqual(emptyStateSchema);
-    expect(dataItem.outputSchema).toEqual(weatherOutputSchema);
+    expect(dataItem.inputSchema).toEqual(emptyObjectSchema);
+    expect(dataItem.stateSchema).toEqual(emptyObjectSchema);
+    expect(dataItem.outputSchema).toEqual(emptyObjectSchema);
   });
 
-  it('normalizes missing contract schemas to weather query schemas', (): void => {
+  it('normalizes missing contract schemas to empty schemas', (): void => {
     const contract = normalizeWidgetDataContract({});
 
-    expect(contract.inputSchema).toEqual(weatherInputSchema);
-    expect(contract.stateSchema).toEqual(emptyStateSchema);
-    expect(contract.outputSchema).toEqual(weatherOutputSchema);
+    expect(contract.inputSchema).toEqual(emptyObjectSchema);
+    expect(contract.stateSchema).toEqual(emptyObjectSchema);
+    expect(contract.outputSchema).toEqual(emptyObjectSchema);
   });
 
   it('keeps the top-level execute method when normalizing widget data contract fields', (): void => {

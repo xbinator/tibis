@@ -9,7 +9,7 @@ import { defineComponent, nextTick, ref } from 'vue';
 import type { ComponentPublicInstance, Ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
+import type { WidgetData, WidgetElement, WidgetSchemaObject } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import PageSetter from '@/views/widget/components/PageSetter.vue';
 
@@ -390,6 +390,56 @@ interface BMonacoStubProps {
 const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
 
 /**
+ * 创建测试用天气入参 schema。
+ * @returns 天气入参 schema
+ */
+function createWeatherInputSchema(): WidgetSchemaObject {
+  return {
+    type: 'object',
+    properties: {
+      city: {
+        type: 'string',
+        description: '城市名称，例如上海'
+      },
+      date: {
+        type: 'string',
+        description: '查询日期，例如今天或明天'
+      },
+      unit: {
+        type: 'string',
+        description: '温度单位，celsius 或 fahrenheit'
+      }
+    },
+    required: ['city']
+  };
+}
+
+/**
+ * 创建测试用天气出参 schema。
+ * @returns 天气出参 schema
+ */
+function createWeatherOutputSchema(): WidgetSchemaObject {
+  return {
+    type: 'object',
+    properties: {
+      condition: {
+        type: 'string',
+        description: '天气概况'
+      },
+      temperatureCelsius: {
+        type: 'number',
+        description: '摄氏温度'
+      },
+      suggestion: {
+        type: 'string',
+        description: '出行建议'
+      }
+    },
+    required: ['condition', 'temperatureCelsius']
+  };
+}
+
+/**
  * 设置面板区块标题快照。
  */
 interface SectionBlockTitleSnapshot {
@@ -453,6 +503,18 @@ function createWidgetData(): WidgetData {
       center: { x: 12.4, y: 56.6 },
       zoom: 0.75
     }
+  };
+}
+
+/**
+ * 创建带天气 schema 的测试Widget 数据。
+ * @returns 测试Widget 数据
+ */
+function createWeatherWidgetData(): WidgetData {
+  return {
+    ...createWidgetData(),
+    inputSchema: createWeatherInputSchema(),
+    outputSchema: createWeatherOutputSchema()
   };
 }
 
@@ -753,18 +815,8 @@ describe('PageSetter', (): void => {
     expect(inputSection.find('.schema-editor').exists()).toBe(true);
     expect(outputSection.find('.schema-editor').exists()).toBe(true);
     expect(inputSection.find('.schema-editor').html()).not.toContain('data-schema');
-    expect(inputSection.findAll('.schema-editor__row')).toHaveLength(3);
-    expect(outputSection.findAll('.schema-editor__row')).toHaveLength(3);
-    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__name-input input').element).toHaveProperty('value', 'city');
-    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__name-input').classes()).not.toContain('is-fill');
-    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__type-select select').attributes('data-options')).toBe(
-      'String|Number|Boolean|Object|Array'
-    );
-    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__toggle-placeholder').exists()).toBe(false);
-    expect(findSchemaRow(inputSection, 'city').find('[data-tooltip="添加子字段"]').exists()).toBe(false);
-    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__action-spacer').exists()).toBe(false);
-    expect(findSchemaRow(inputSection, 'city').find('.schema-editor__controls').exists()).toBe(true);
-    expect(findSchemaRow(inputSection, 'city').findAll('.schema-editor__control-cell')).toHaveLength(3);
+    expect(inputSection.findAll('.schema-editor__row')).toHaveLength(0);
+    expect(outputSection.findAll('.schema-editor__row')).toHaveLength(0);
     expect(inputSection.find('.schema-editor__footer').exists()).toBe(false);
     expect(wrapper.text()).toContain('入参');
     expect(wrapper.text()).toContain('出参');
@@ -783,6 +835,22 @@ describe('PageSetter', (): void => {
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).toContain('编辑');
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).not.toContain('JSON导入');
     expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').findComponent({ name: 'BIconStub' }).exists()).toBe(false);
+
+    await addButton.trigger('click');
+    expect(wrapper.vm.dataItem.inputSchema.properties.field).toEqual({
+      type: 'string'
+    });
+    expect(findSchemaRow(inputSection, 'field').find('.schema-editor__name-input input').element).toHaveProperty('value', 'field');
+    expect(findSchemaRow(inputSection, 'field').find('.schema-editor__name-input').classes()).not.toContain('is-fill');
+    expect(findSchemaRow(inputSection, 'field').find('.schema-editor__type-select select').attributes('data-options')).toBe(
+      'String|Number|Boolean|Object|Array'
+    );
+    expect(findSchemaRow(inputSection, 'field').find('.schema-editor__toggle-placeholder').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'field').find('[data-tooltip="添加子字段"]').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'field').find('.schema-editor__action-spacer').exists()).toBe(false);
+    expect(findSchemaRow(inputSection, 'field').find('.schema-editor__controls').exists()).toBe(true);
+    expect(findSchemaRow(inputSection, 'field').findAll('.schema-editor__control-cell')).toHaveLength(3);
+
     await editButton.trigger('click');
     expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑入参');
 
@@ -814,7 +882,7 @@ describe('PageSetter', (): void => {
   });
 
   it('edits schema fields inline from the page setter tree editor', async (): Promise<void> => {
-    const dataItem = createWidgetData();
+    const dataItem = createWeatherWidgetData();
     const wrapper = mountPageSetterHost(dataItem);
     const inputSection = findSectionBlock(wrapper, '入参');
 
@@ -879,7 +947,7 @@ describe('PageSetter', (): void => {
   });
 
   it('expands schema rows to edit field descriptions inline', async (): Promise<void> => {
-    const dataItem = createWidgetData();
+    const dataItem = createWeatherWidgetData();
     const wrapper = mountPageSetterHost(dataItem);
     const inputSection = findSectionBlock(wrapper, '入参');
     const collapsedDescriptionButton = findSchemaRow(inputSection, 'city').find('[data-icon="lucide:maximize-2"]');
@@ -937,7 +1005,7 @@ describe('PageSetter', (): void => {
   });
 
   it('opens an execution script dialog below output schema and saves execute method code', async (): Promise<void> => {
-    const dataItem = createWidgetData();
+    const dataItem = createWeatherWidgetData();
     dataItem.inputSchema = { ...dataItem.inputSchema, description: '查询天气入参' };
     dataItem.outputSchema = { ...dataItem.outputSchema, description: '查询天气出参' };
     const wrapper = mountPageSetterHost(dataItem);
@@ -986,18 +1054,17 @@ describe('PageSetter', (): void => {
     expect(editorProps.language).toBe('typescript');
     expect(editorProps.options?.wordWrap).toBe(true);
     expect(editorProps.options?.typescriptCompilerOptions?.lib).toEqual(['es2020']);
-    expect(editorProps.value?.startsWith('// 在这里，您可以通过 ctx.input 获取小组件输入变量')).toBe(true);
-    expect(editorProps.value).toContain('您可以通过 ctx.input 获取小组件输入变量');
+    expect(editorProps.value?.startsWith('// ctx 已经被正确注入到执行环境中')).toBe(true);
+    expect(editorProps.value).toContain('读取 ctx.input');
+    expect(editorProps.value).toContain('使用 ctx.setState 写入状态');
     expect(editorProps.value).toContain('并通过 ctx.result 输出执行结果');
     expect(editorProps.value).toContain('ctx 已经被正确注入到执行环境中');
-    expect(editorProps.value).toContain(
-      "return ctx.result.success({ condition: '晴', temperatureCelsius: 26, suggestion: '已查询 ' + ctx.input.city + ' 天气' })"
-    );
+    expect(editorProps.value).toContain('如果需要输出数据，请先在出参中声明字段');
     expect(editorProps.value).not.toContain("name: '小明'");
     expect(editorProps.value).not.toContain('hobbies');
-    expect(editorProps.value).toContain('const city = input.city');
-    expect(editorProps.value).not.toContain("message: '执行完成'");
-    expect(editorProps.value).toContain("return result.success({ condition: '晴', temperatureCelsius: 26, suggestion: '已查询 ' + city + ' 天气' })");
+    expect(editorProps.value).not.toContain('const city = input.city');
+    expect(editorProps.value).not.toContain('temperatureCelsius');
+    expect(editorProps.value).toContain('return result.success()');
     expect(readComponentVNodeKey(methodEditor)).toContain('temperatureCelsius');
     expect(editorProps.value).toContain('export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult>');
     expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillContext');
@@ -1128,7 +1195,7 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('restores the weather output schema when saving an empty output schema dialog', async (): Promise<void> => {
+  it('restores an empty output schema when saving an empty output schema dialog', async (): Promise<void> => {
     const dataItem = createWidgetData();
     const wrapper = mountPageSetterHost(dataItem);
 
@@ -1140,15 +1207,8 @@ describe('PageSetter', (): void => {
       .find((button: VueWrapper): boolean => button.text() === '保存')
       ?.trigger('click');
 
-    expect(wrapper.vm.dataItem.outputSchema.properties.condition).toEqual({
-      type: 'string',
-      description: '天气概况'
-    });
-    expect(wrapper.vm.dataItem.outputSchema.properties.temperatureCelsius).toEqual({
-      type: 'number',
-      description: '摄氏温度'
-    });
-    expect(wrapper.vm.dataItem.outputSchema.required).toEqual(['condition', 'temperatureCelsius']);
+    expect(wrapper.vm.dataItem.outputSchema.properties).toEqual({});
+    expect(wrapper.vm.dataItem.outputSchema.required).toEqual([]);
     wrapper.unmount();
   });
 

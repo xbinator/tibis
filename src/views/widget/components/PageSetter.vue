@@ -113,22 +113,15 @@ const METHOD_SUMMARY_HIGHLIGHT_LANGUAGE = 'typescript';
 const methodSummaryLowlight = createLowlight(common);
 /** Widget 执行方法默认代码。 */
 const WIDGET_EXECUTE_DEFAULT_METHOD_CODE = [
-  '// 在这里，您可以通过 ctx.input 获取小组件输入变量，并通过 ctx.result 输出执行结果。',
   '// ctx 已经被正确注入到执行环境中，无需自行创建。',
-  '// 下面是一个示例，获取小组件输入中字段名为 city 的值：',
-  '// const city = ctx.input.city',
-  '// 下面是一个示例，输出符合出参 schema 的结果：',
-  "// return ctx.result.success({ condition: '晴', temperatureCelsius: 26, suggestion: '已查询 ' + ctx.input.city + ' 天气' })",
+  '// 在这里可以读取 ctx.input，使用 ctx.setState 写入状态，并通过 ctx.result 输出执行结果。',
+  '// 如果需要输出数据，请先在出参中声明字段，再返回对应数据。',
+  '// 当前小组件不需要执行逻辑时，可以直接返回执行完成。',
   '',
   'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
-  '  const { input, setState, result } = ctx',
-  '  const city = input.city',
+  '  const { result } = ctx',
   '',
-  "  setState('lastQuery', {",
-  '    city',
-  '  })',
-  '',
-  "  return result.success({ condition: '晴', temperatureCelsius: 26, suggestion: '已查询 ' + city + ' 天气' })",
+  '  return result.success()',
   '}',
   ''
 ].join('\n');
