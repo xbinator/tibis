@@ -27,7 +27,7 @@ function createScannerAPI(): WidgetScannerAPIMock {
 }
 
 describe('scanWidgets', (): void => {
-  it('scans widget directories from .tibis/widget and uses directory name as id', async (): Promise<void> => {
+  it('scans widget directories from .tibis/widgets and uses directory name as id', async (): Promise<void> => {
     const api = createScannerAPI();
     api.readWorkspaceDirectory.mockResolvedValue({
       entries: [
@@ -45,14 +45,14 @@ describe('scanWidgets', (): void => {
 
     const widgets = await scanWidgets({ homeDir: '/Users/test' }, api);
 
-    expect(api.readWorkspaceDirectory).toHaveBeenCalledWith({ directoryPath: '/Users/test/.tibis/widget' });
-    expect(api.readFile).toHaveBeenCalledWith('/Users/test/.tibis/widget/weather/widget.json');
+    expect(api.readWorkspaceDirectory).toHaveBeenCalledWith({ directoryPath: '/Users/test/.tibis/widgets' });
+    expect(api.readFile).toHaveBeenCalledWith('/Users/test/.tibis/widgets/weather/widget.json');
     expect(widgets).toHaveLength(1);
     expect(widgets[0]).toMatchObject({
       id: 'weather',
       name: '天气',
       description: '查询指定城市天气',
-      filePath: '/Users/test/.tibis/widget/weather/widget.json',
+      filePath: '/Users/test/.tibis/widgets/weather/widget.json',
       enabled: true
     });
     expect(widgets[0]?.data.elements).toEqual([]);

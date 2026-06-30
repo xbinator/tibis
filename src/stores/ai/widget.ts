@@ -1,6 +1,6 @@
 /**
  * @file widget.ts
- * @description 小组件 Pinia Store，管理 .tibis/widget/<name>/widget.json 发现结果和启用状态。
+ * @description 小组件 Pinia Store，管理 .tibis/widgets/<name>/widget.json 发现结果和启用状态。
  */
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
@@ -81,6 +81,22 @@ export const useWidgetStore = defineStore('widget', () => {
   }
 
   /**
+   * 添加或更新小组件定义。
+   * @param widget - 小组件定义
+   */
+  function upsertWidget(widget: WidgetDefinition): void {
+    const index = widgets.value.findIndex((item: WidgetDefinition): boolean => item.id === widget.id);
+
+    if (index >= 0) {
+      widgets.value.splice(index, 1, widget);
+    } else {
+      widgets.value.push(widget);
+    }
+
+    persistDisabledIds();
+  }
+
+  /**
    * 初始化小组件列表。
    * @param homeDir - 用户主目录路径
    * @param api - 扫描依赖 API
@@ -151,6 +167,7 @@ export const useWidgetStore = defineStore('widget', () => {
     getWidgetById,
     getEnabledWidgets,
     toggleWidget,
+    upsertWidget,
     init,
     rescan,
     waitForInit

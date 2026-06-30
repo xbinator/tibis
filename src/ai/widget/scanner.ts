@@ -34,7 +34,7 @@ function isWidgetDirectoryEntry(entry: { name: string; type: 'file' | 'directory
  * @returns 小组件定义列表
  */
 export async function scanWidgets(config: WidgetScanConfig, api: WidgetScannerAPI): Promise<WidgetDefinition[]> {
-  const widgetDir = joinPath(config.homeDir, '.tibis', 'widget');
+  const widgetDir = joinPath(config.homeDir, '.tibis', 'widgets');
 
   try {
     const { entries } = await api.readWorkspaceDirectory({ directoryPath: widgetDir });

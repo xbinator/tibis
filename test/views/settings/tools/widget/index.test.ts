@@ -7,6 +7,7 @@
 import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
+import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import WidgetSettingsPage from '@/views/settings/tools/widget/index.vue';
 
@@ -15,6 +16,7 @@ const nativeMock = vi.hoisted(() => ({
   getHomeDir: vi.fn<() => Promise<string>>(),
   readFile: vi.fn<(path: string) => Promise<{ content: string; name: string; ext: string }>>(),
   readWorkspaceDirectory: vi.fn<(options: { directoryPath: string }) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>>(),
+  saveBinaryFile: vi.fn<(content: ArrayBuffer, path?: string) => Promise<string | null>>(),
   writeFile: vi.fn<(path: string, content: string) => Promise<void>>()
 }));
 
@@ -97,6 +99,45 @@ const BButtonStub = defineComponent({
 });
 
 /**
+ * 上传组件测试替身。
+ */
+const BUploadStub = defineComponent({
+  name: 'BUpload',
+  props: {
+    accept: { type: String, default: '' },
+    draggable: { type: Boolean, default: false },
+    dragOver: { type: Boolean, default: false }
+  },
+  emits: ['change', 'update:dragOver'],
+  setup(_props, { emit }) {
+    /**
+     * 转发原生文件选择事件。
+     * @param event - 原生变更事件
+     */
+    function handleChange(event: Event): void {
+      if (event.target instanceof HTMLInputElement && event.target.files) {
+        emit('change', event.target.files);
+      }
+    }
+
+    return { handleChange };
+  },
+  template: '<div><slot></slot><input type="file" @change="handleChange" /></div>'
+});
+
+/**
+ * 图标测试替身。
+ */
+const BIconStub = defineComponent({
+  name: 'BIcon',
+  props: {
+    icon: { type: String, default: '' },
+    size: { type: Number, default: 16 }
+  },
+  template: '<i class="b-icon-stub" :data-icon="icon" :data-size="size"></i>'
+});
+
+/**
  * 表单测试替身。
  */
 const AFormStub = defineComponent({
@@ -162,6 +203,9 @@ const ATextareaStub = defineComponent({
 function mountWidgetSettingsPage(): VueWrapper {
   return mount(WidgetSettingsPage, {
     global: {
+      components: {
+        BUpload: BUploadStub
+      },
       stubs: {
         SettingsPage: SettingsPageStub,
         SettingsSection: SettingsSectionStub,
@@ -171,12 +215,68 @@ function mountWidgetSettingsPage(): VueWrapper {
         AFormItem: AFormItemStub,
         AInput: AInputStub,
         ATextarea: ATextareaStub,
+        BIcon: BIconStub,
         APagination: true,
         BPagination: true,
         ASwitch: true
       }
     }
   });
+}
+
+/**
+ * 创建测试 zip 文件。
+ * @param widgetJson - widget.json 内容
+ * @returns zip 文件
+ */
+async function createWidgetZipFile(widgetJson: Record<string, unknown>, resources: Array<{ path: string; content: Uint8Array }> = []): Promise<File> {
+  const zip = new JSZip();
+  zip.file('widget.json', JSON.stringify(widgetJson));
+  resources.forEach((resource: { path: string; content: Uint8Array }): void => {
+    zip.file(resource.path, resource.content);
+  });
+  const buffer = await zip.generateAsync({ type: 'arraybuffer' });
+
+  return new File([buffer], 'coffee.zip', { type: 'application/zip' });
+}
+
+/**
+ * 通过真实上传输入框选择 zip 文件。
+ * @param wrapper - 组件包装器
+ * @param file - zip 文件
+ */
+async function selectZipFile(wrapper: VueWrapper, file: File): Promise<void> {
+  const input = wrapper.find<HTMLInputElement>('.widget-creator__dropzone input[type="file"]');
+
+  if (!input.exists()) {
+    throw new Error('未找到 zip 上传输入框');
+  }
+
+  Object.defineProperty(input.element, 'files', {
+    value: [file],
+    configurable: true
+  });
+  await input.trigger('change');
+}
+
+/**
+ * 等待 zip 导入完成并回填创建表单。
+ * @param wrapper - 组件包装器
+ */
+async function waitForZipImport(wrapper: VueWrapper, remainAttempts = 16): Promise<void> {
+  await flushPromises();
+
+  const idInput = wrapper.find<HTMLInputElement>('.widget-creator__id input');
+
+  if (idInput.exists() && idInput.element.value) {
+    return;
+  }
+
+  if (remainAttempts <= 1) {
+    throw new Error('等待 zip 导入回填表单超时');
+  }
+
+  await waitForZipImport(wrapper, remainAttempts - 1);
 }
 
 describe('WidgetSettingsPage', (): void => {
@@ -186,6 +286,7 @@ describe('WidgetSettingsPage', (): void => {
     nativeMock.getHomeDir.mockReset();
     nativeMock.readFile.mockReset();
     nativeMock.readWorkspaceDirectory.mockReset();
+    nativeMock.saveBinaryFile.mockReset();
     nativeMock.writeFile.mockReset();
     electronAPIMock.ensureDir.mockReset();
     routerPushMock.mockReset();
@@ -193,6 +294,7 @@ describe('WidgetSettingsPage', (): void => {
     createAndOpenMock.mockReset();
     nativeMock.getHomeDir.mockResolvedValue('/Users/test');
     nativeMock.readWorkspaceDirectory.mockResolvedValue({ entries: [] });
+    nativeMock.saveBinaryFile.mockResolvedValue(null);
     nativeMock.writeFile.mockResolvedValue(undefined);
     electronAPIMock.ensureDir.mockResolvedValue(undefined);
     createAndOpenMock.mockImplementation(async (file: { id: string }): Promise<{ id: string }> => ({ id: file.id }));
@@ -218,8 +320,8 @@ describe('WidgetSettingsPage', (): void => {
     const writeFileCall = nativeMock.writeFile.mock.calls[0];
     const savedContent = JSON.parse(writeFileCall?.[1] ?? '{}') as Record<string, unknown>;
 
-    expect(electronAPIMock.ensureDir).toHaveBeenCalledWith('/Users/test/.tibis/widget/weather');
-    expect(writeFileCall?.[0]).toBe('/Users/test/.tibis/widget/weather/widget.json');
+    expect(electronAPIMock.ensureDir).toHaveBeenCalledWith('/Users/test/.tibis/widgets/weather');
+    expect(writeFileCall?.[0]).toBe('/Users/test/.tibis/widgets/weather/widget.json');
     expect(savedContent.name).toBe('天气');
     expect(savedContent.description).toBe('查询指定城市天气');
     expect(savedContent).not.toHaveProperty('type');
@@ -231,6 +333,110 @@ describe('WidgetSettingsPage', (): void => {
       ext: 'tibis'
     });
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
+  });
+
+  it('shows the newly created widget even when rescan does not see it immediately', async (): Promise<void> => {
+    const wrapper = mountWidgetSettingsPage();
+
+    await flushPromises();
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '创建小组件')
+      ?.trigger('click');
+    await wrapper.find('.widget-creator__id input').setValue('weather');
+    await wrapper.find('.widget-creator__name input').setValue('天气');
+    await wrapper.find('.widget-creator__description textarea').setValue('查询指定城市天气');
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '保存')
+      ?.trigger('click');
+    await flushPromises();
+
+    expect(nativeMock.readWorkspaceDirectory).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('.widget-settings__item-row').text()).toContain('天气');
+  });
+
+  it('creates a widget from imported zip data without losing its canvas data', async (): Promise<void> => {
+    const wrapper = mountWidgetSettingsPage();
+    const file = await createWidgetZipFile({
+      name: '咖啡菜单',
+      description: '展示咖啡列表',
+      elements: [
+        {
+          id: 'text-1',
+          name: 'text',
+          label: '文本',
+          icon: 'lucide:type',
+          title: '文本节点',
+          position: { x: 12, y: 24 },
+          size: { width: 120, height: 48 },
+          rotation: 0,
+          style: {},
+          metadata: {}
+        }
+      ]
+    });
+
+    await flushPromises();
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '创建小组件')
+      ?.trigger('click');
+    await selectZipFile(wrapper, file);
+    await waitForZipImport(wrapper);
+    await wrapper.find('.widget-creator__name input').setValue('咖啡推荐');
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '保存')
+      ?.trigger('click');
+    await flushPromises();
+
+    const writeFileCall = nativeMock.writeFile.mock.calls[0];
+    const savedContent = JSON.parse(writeFileCall?.[1] ?? '{}') as Record<string, unknown>;
+    const savedElements = savedContent.elements as unknown[];
+
+    expect(electronAPIMock.ensureDir).toHaveBeenCalledWith('/Users/test/.tibis/widgets/coffee');
+    expect(savedContent.name).toBe('咖啡推荐');
+    expect(savedContent.description).toBe('展示咖啡列表');
+    expect(savedElements).toHaveLength(1);
+  });
+
+  it('writes imported zip resources beside widget.json', async (): Promise<void> => {
+    const wrapper = mountWidgetSettingsPage();
+    const file = await createWidgetZipFile(
+      {
+        name: '咖啡菜单',
+        description: '展示咖啡列表'
+      },
+      [
+        {
+          path: 'assets/icon.png',
+          content: new Uint8Array([9, 8, 7])
+        }
+      ]
+    );
+
+    await flushPromises();
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '创建小组件')
+      ?.trigger('click');
+    await selectZipFile(wrapper, file);
+    await waitForZipImport(wrapper);
+    await wrapper.find('.widget-creator__id input').setValue('coffee');
+    await wrapper.find('.widget-creator__name input').setValue('咖啡菜单');
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '保存')
+      ?.trigger('click');
+    await flushPromises();
+
+    const saveBinaryFileCall = nativeMock.saveBinaryFile.mock.calls[0];
+    const savedContent = saveBinaryFileCall?.[0] ?? new ArrayBuffer(0);
+
+    expect(electronAPIMock.ensureDir).toHaveBeenCalledWith('/Users/test/.tibis/widgets/coffee/assets');
+    expect(saveBinaryFileCall?.[1]).toBe('/Users/test/.tibis/widgets/coffee/assets/icon.png');
+    expect(Array.from(new Uint8Array(savedContent))).toEqual([9, 8, 7]);
   });
 
   it('opens a discovered widget in the widget editor route', async (): Promise<void> => {

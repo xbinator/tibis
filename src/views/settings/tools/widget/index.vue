@@ -1,6 +1,6 @@
 <!--
   @file index.vue
-  @description 小组件设置页，扫描 .tibis/widget/<name>/widget.json 并管理启用状态。
+  @description 小组件设置页，扫描 .tibis/widgets/<name>/widget.json 并管理启用状态。
 -->
 <template>
   <SettingsPage class="widget-settings" :title="MENU_ITEMS.widget.label">
@@ -9,7 +9,7 @@
     </template>
 
     <SettingsSection title="搜索路径" content-class="widget-settings__content">
-      <div class="widget-settings__hint">小组件 JSON 文件放置在 <code>.tibis/widget/&lt;name&gt;/widget.json</code> 即可自动发现</div>
+      <div class="widget-settings__hint">小组件 JSON 文件放置在 <code>.tibis/widgets/&lt;name&gt;/widget.json</code> 即可自动发现</div>
     </SettingsSection>
 
     <SettingsSection title="已安装">
@@ -31,7 +31,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { WidgetDefinition } from '@/ai/widget';
+import type { WidgetDefinition, WidgetImportResource } from '@/ai/widget';
 import { createWidgetTibisDocumentContent, joinPath } from '@/ai/widget';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { native } from '@/shared/platform';
@@ -39,6 +39,7 @@ import { getElectronAPI } from '@/shared/platform/electron-api';
 import type { ReadWorkspaceDirectoryOptions } from '@/shared/platform/native/types';
 import { useWidgetStore } from '@/stores/ai/widget';
 import { useFilesStore } from '@/stores/workspace/files';
+import { normalizeZipEntryPath } from '@/utils/zip/package';
 import SettingsPage from '@/views/settings/_components/SettingsPage.vue';
 import SettingsPagination from '@/views/settings/_components/SettingsPagination.vue';
 import SettingsSection from '@/views/settings/_components/SettingsSection.vue';
@@ -133,6 +134,46 @@ function openCreateModal(): void {
 }
 
 /**
+ * 读取资源相对路径的父目录。
+ * @param relativePath - 资源相对路径
+ * @returns 父目录相对路径
+ */
+function readWidgetResourceParentPath(relativePath: string): string {
+  const normalized = normalizeZipEntryPath(relativePath);
+  const index = normalized.lastIndexOf('/');
+
+  return index > -1 ? normalized.slice(0, index) : '';
+}
+
+/**
+ * 写入单个 zip 导入的小组件资源文件。
+ * @param widgetDir - 小组件目标目录
+ * @param resource - 待写入资源
+ * @returns 写入完成信号
+ */
+async function writeWidgetImportResource(widgetDir: string, resource: WidgetImportResource): Promise<void> {
+  const relativePath = normalizeZipEntryPath(resource.relativePath);
+  const parentPath = readWidgetResourceParentPath(relativePath);
+  const filePath = joinPath(widgetDir, relativePath);
+
+  if (parentPath) {
+    await getElectronAPI().ensureDir(joinPath(widgetDir, parentPath));
+  }
+
+  await native.saveBinaryFile(resource.content, filePath);
+}
+
+/**
+ * 写入 zip 导入的小组件资源文件。
+ * @param widgetDir - 小组件目标目录
+ * @param resources - 待写入资源
+ * @returns 写入完成信号
+ */
+async function writeWidgetImportResources(widgetDir: string, resources: WidgetImportResource[]): Promise<void> {
+  await Promise.all(resources.map((resource: WidgetImportResource): Promise<void> => writeWidgetImportResource(widgetDir, resource)));
+}
+
+/**
  * 确认创建小组件。
  * @param payload - 创建表单提交数据
  * @returns 创建完成信号
@@ -142,21 +183,14 @@ async function handleCreateConfirm(payload: WidgetCreatePayload): Promise<void> 
   const widgetName = payload.name;
   const widgetDescription = payload.description;
   const homeDir = await native.getHomeDir();
-  const widgetDir = joinPath(homeDir, '.tibis', 'widget', widgetId);
+  const widgetDir = joinPath(homeDir, '.tibis', 'widgets', widgetId);
   const widgetData = {
-    ...createDefaultWidgetData(),
+    ...(payload.data ?? createDefaultWidgetData()),
     name: widgetName,
     description: widgetDescription
   };
   const filePath = joinPath(widgetDir, 'widget.json');
-
-  await getElectronAPI().ensureDir(widgetDir);
-  await native.writeFile(filePath, JSON.stringify(widgetData, null, 2));
-  await store.rescan();
-
-  createModalOpen.value = false;
-
-  await openWidgetEditor({
+  const createdWidget: WidgetDefinition = {
     id: widgetId,
     name: widgetData.name,
     description: widgetData.description,
@@ -164,7 +198,17 @@ async function handleCreateConfirm(payload: WidgetCreatePayload): Promise<void> 
     filePath,
     enabled: true,
     parsedAt: Date.now()
-  });
+  };
+
+  await getElectronAPI().ensureDir(widgetDir);
+  await writeWidgetImportResources(widgetDir, payload.resources ?? []);
+  await native.writeFile(filePath, JSON.stringify(widgetData, null, 2));
+  await store.rescan();
+  store.upsertWidget(createdWidget);
+
+  createModalOpen.value = false;
+
+  await openWidgetEditor(createdWidget);
 }
 
 /**
