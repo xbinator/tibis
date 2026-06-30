@@ -398,6 +398,29 @@ interface SectionBlockTitleSnapshot {
 }
 
 /**
+ * 带 vnode key 的组件实例。
+ */
+interface ComponentWithVNodeKey extends ComponentPublicInstance {
+  /** Vue 内部组件实例 */
+  $: ComponentPublicInstance['$'] & {
+    /** 当前 vnode */
+    vnode: {
+      /** vnode key */
+      key: unknown;
+    };
+  };
+}
+
+/**
+ * 读取组件 vnode key。
+ * @param wrapper - 组件包装器
+ * @returns vnode key 文本
+ */
+function readComponentVNodeKey(wrapper: VueWrapper): string {
+  return String((wrapper.vm as ComponentWithVNodeKey).$.vnode.key ?? '');
+}
+
+/**
  * 创建测试Widget 元素。
  * @param id - 元素 ID
  * @param name - 元素注册名称
@@ -915,6 +938,8 @@ describe('PageSetter', (): void => {
 
   it('opens an execution script dialog below output schema and saves execute method code', async (): Promise<void> => {
     const dataItem = createWidgetData();
+    dataItem.inputSchema = { ...dataItem.inputSchema, description: '查询天气入参' };
+    dataItem.outputSchema = { ...dataItem.outputSchema, description: '查询天气出参' };
     const wrapper = mountPageSetterHost(dataItem);
     const sectionTitles = readSectionBlockTitles(wrapper);
     const methodSection = findSectionBlock(wrapper, '执行方法');
@@ -965,13 +990,32 @@ describe('PageSetter', (): void => {
     expect(editorProps.value).toContain('您可以通过 ctx.input 获取小组件输入变量');
     expect(editorProps.value).toContain('并通过 ctx.result 输出执行结果');
     expect(editorProps.value).toContain('ctx 已经被正确注入到执行环境中');
-    expect(editorProps.value).toContain("return ctx.result.success({ city: ctx.input.city, message: '执行完成' })");
+    expect(editorProps.value).toContain(
+      "return ctx.result.success({ condition: '晴', temperatureCelsius: 26, suggestion: '已查询 ' + ctx.input.city + ' 天气' })"
+    );
     expect(editorProps.value).not.toContain("name: '小明'");
     expect(editorProps.value).not.toContain('hobbies');
     expect(editorProps.value).toContain('const city = input.city');
-    expect(editorProps.value).toContain('return result.success({');
+    expect(editorProps.value).not.toContain("message: '执行完成'");
+    expect(editorProps.value).toContain("return result.success({ condition: '晴', temperatureCelsius: 26, suggestion: '已查询 ' + city + ' 天气' })");
+    expect(readComponentVNodeKey(methodEditor)).toContain('temperatureCelsius');
     expect(editorProps.value).toContain('export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult>');
     expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillContext');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 查询天气入参 */\ndeclare interface WidgetSkillInput');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillInput');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 城市名称，例如上海 */\n  city: string');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('city: string');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('date?: string');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('unit?: string');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 查询天气出参 */\ndeclare interface WidgetSkillOutput');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillOutput');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 天气概况 */\n  condition: string');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('condition: string');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('temperatureCelsius: number');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('suggestion?: string');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('input: WidgetSkillInput');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('output?: WidgetSkillOutput');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('success(data?: WidgetSkillOutput): ExecutionResult');
     expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillResultFactory');
     expect(editorProps.extraLibs?.[0]?.content).toContain('调用小组件时 AI 提取到的入参');
     expect(editorProps.extraLibs?.[0]?.content).toContain('setState(path: string, value: unknown): void');
@@ -986,24 +1030,61 @@ describe('PageSetter', (): void => {
 
     await methodEditor.find('textarea').setValue(nextCode);
     await nextTick();
-    expect(wrapper.vm.dataItem.metadata.skill).toBeUndefined();
+    expect(wrapper.vm.dataItem.execute).toBeUndefined();
     await wrapper
       .findAllComponents({ name: 'BButtonStub' })
       .find((button: VueWrapper): boolean => button.text() === '保存')
       ?.trigger('click');
 
-    expect(wrapper.vm.dataItem.metadata.skill).toEqual({
-      methods: {
-        execute: {
-          enabled: true,
-          description: '',
-          timeout: 10000,
-          code: nextCode
-        }
-      }
+    expect(wrapper.vm.dataItem.execute).toEqual({
+      enabled: true,
+      description: '',
+      timeout: 10000,
+      code: nextCode
     });
+    expect(wrapper.vm.dataItem.metadata.skill).toBeUndefined();
     expect(findSectionBlock(wrapper, '执行方法').find('.method-summary__code').text()).toContain('return ctx.result.success(ctx.input)');
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('creates method editor type hints for nested, array and non-identifier schema fields', async (): Promise<void> => {
+    const dataItem = createWidgetData();
+    dataItem.inputSchema = {
+      type: 'object',
+      properties: {
+        weather: {
+          type: 'object',
+          description: '天气对象',
+          properties: {
+            alerts: {
+              type: 'array',
+              description: '天气预警',
+              items: {
+                type: 'string'
+              }
+            }
+          },
+          required: ['alerts']
+        },
+        'temperature.celsius': {
+          type: 'number',
+          description: '摄氏温度'
+        }
+      },
+      required: ['weather', 'temperature.celsius']
+    };
+    const wrapper = mountPageSetterHost(dataItem);
+
+    await findSectionEditButton(wrapper, '执行方法').trigger('click');
+
+    const methodEditor = wrapper.findComponent({ name: 'BMonacoStub' });
+    const editorProps = methodEditor.props() as BMonacoStubProps;
+
+    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 天气对象 */\n  weather: {');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 天气预警 */\n    alerts: Array<string>');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 摄氏温度 */\n  "temperature.celsius": number');
+    expect(readComponentVNodeKey(methodEditor)).toContain('"temperature.celsius"');
     wrapper.unmount();
   });
 

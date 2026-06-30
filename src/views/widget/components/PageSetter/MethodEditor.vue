@@ -7,6 +7,7 @@
     <div class="method-editor">
       <div class="method-editor__host">
         <BMonaco
+          :key="methodEditorTypeHintKey"
           ref="methodEditorRef"
           v-model:value="methodCodeDraft"
           language="typescript"
@@ -30,6 +31,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco/utils/createMonaco';
+import type { WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
 
 /**
  * 执行方法编辑弹窗入参。
@@ -37,17 +39,191 @@ import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco
 interface Props {
   /** 当前 execute 方法代码 */
   code: string;
+  /** 当前小组件入参 schema */
+  inputSchema: WidgetSchemaObject;
+  /** 当前小组件出参 schema */
+  outputSchema: WidgetSchemaObject;
 }
 
-/** Widget Skill 方法编辑器类型提示。 */
-const WIDGET_SKILL_METHOD_EXTRA_LIB_CONTENT = `
+/** TypeScript 标识符匹配表达式。 */
+const TYPESCRIPT_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
+/** TypeScript 声明缩进文本。 */
+const TYPESCRIPT_DECLARATION_INDENT = '  ';
+
+const props = defineProps<Props>();
+
+/**
+ * Widget schema 字段类型表达式读取函数。
+ */
+type WidgetSchemaPropertyTypeExpressionReader = (property: WidgetSchemaProperty, indentLevel: number) => string;
+
+/**
+ * 生成指定层级的 TypeScript 缩进。
+ * @param level - 缩进层级
+ * @returns 缩进文本
+ */
+function createTypeScriptIndent(level: number): string {
+  return TYPESCRIPT_DECLARATION_INDENT.repeat(level);
+}
+
+/**
+ * 生成可用于 TypeScript 属性声明的字段名。
+ * @param key - schema 字段名
+ * @returns TypeScript 属性名
+ */
+function formatTypeScriptPropertyName(key: string): string {
+  return TYPESCRIPT_IDENTIFIER_PATTERN.test(key) ? key : JSON.stringify(key);
+}
+
+/**
+ * 清理可写入 JSDoc 的说明文本。
+ * @param text - 原始说明
+ * @returns 安全说明文本
+ */
+function sanitizeTypeScriptDocText(text: string): string {
+  return text.replaceAll('*/', '*\\/').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * 生成 schema 字段的 JSDoc 行。
+ * @param property - schema 字段
+ * @param indentLevel - 缩进层级
+ * @returns JSDoc 行
+ */
+function createWidgetSchemaPropertyDocLines(property: WidgetSchemaProperty, indentLevel: number): string[] {
+  if (!property.description) {
+    return [];
+  }
+
+  return [`${createTypeScriptIndent(indentLevel)}/** ${sanitizeTypeScriptDocText(property.description)} */`];
+}
+
+/**
+ * 生成 schema 接口的 JSDoc 行。
+ * @param schema - Widget schema
+ * @returns JSDoc 行
+ */
+function createWidgetSchemaInterfaceDocLines(schema: WidgetSchemaObject): string[] {
+  if (!schema.description) {
+    return [];
+  }
+
+  return [`/** ${sanitizeTypeScriptDocText(schema.description)} */`];
+}
+
+/**
+ * 将 Widget schema properties 转换为 TypeScript 属性声明。
+ * @param properties - schema 字段集合
+ * @param requiredFields - 必填字段列表
+ * @param indentLevel - 缩进层级
+ * @param readTypeExpression - 字段类型表达式读取函数
+ * @returns TypeScript 属性声明行
+ */
+function createWidgetSchemaPropertyLines(
+  properties: Record<string, WidgetSchemaProperty>,
+  requiredFields: string[],
+  indentLevel: number,
+  readTypeExpression: WidgetSchemaPropertyTypeExpressionReader
+): string[] {
+  return Object.entries(properties).flatMap(([key, property]: [string, WidgetSchemaProperty]): string[] => {
+    const optionalFlag = requiredFields.includes(key) ? '' : '?';
+    const propertyName = formatTypeScriptPropertyName(key);
+    const typeExpression = readTypeExpression(property, indentLevel);
+
+    return [
+      ...createWidgetSchemaPropertyDocLines(property, indentLevel),
+      `${createTypeScriptIndent(indentLevel)}${propertyName}${optionalFlag}: ${typeExpression}`
+    ];
+  });
+}
+
+/**
+ * 将 Widget 对象 schema 字段转换为 TypeScript 对象类型表达式。
+ * @param properties - schema 字段集合
+ * @param requiredFields - 必填字段列表
+ * @param indentLevel - 当前缩进层级
+ * @param readTypeExpression - 字段类型表达式读取函数
+ * @returns TypeScript 对象类型表达式
+ */
+function createWidgetSchemaObjectTypeExpression(
+  properties: Record<string, WidgetSchemaProperty>,
+  requiredFields: string[],
+  indentLevel: number,
+  readTypeExpression: WidgetSchemaPropertyTypeExpressionReader
+): string {
+  return [
+    '{',
+    ...createWidgetSchemaPropertyLines(properties, requiredFields, indentLevel + 1, readTypeExpression),
+    `${createTypeScriptIndent(indentLevel)}}`
+  ].join('\n');
+}
+
+/**
+ * 将 Widget schema 字段转换为 TypeScript 类型表达式。
+ * @param property - schema 字段
+ * @param indentLevel - 当前缩进层级
+ * @returns TypeScript 类型表达式
+ */
+function createWidgetSchemaPropertyTypeExpression(property: WidgetSchemaProperty, indentLevel: number): string {
+  if (property.type === 'string') {
+    return 'string';
+  }
+
+  if (property.type === 'number') {
+    return 'number';
+  }
+
+  if (property.type === 'boolean') {
+    return 'boolean';
+  }
+
+  if (property.type === 'array') {
+    return `Array<${property.items ? createWidgetSchemaPropertyTypeExpression(property.items, indentLevel) : 'unknown'}>`;
+  }
+
+  if (!property.properties || Object.keys(property.properties).length === 0) {
+    return 'Record<string, unknown>';
+  }
+
+  return createWidgetSchemaObjectTypeExpression(property.properties, property.required ?? [], indentLevel, createWidgetSchemaPropertyTypeExpression);
+}
+
+/**
+ * 根据 Widget schema 生成 TypeScript 接口声明。
+ * @param interfaceName - 接口名称
+ * @param schema - Widget schema
+ * @returns TypeScript 接口声明
+ */
+function createWidgetSchemaInterfaceDeclaration(interfaceName: string, schema: WidgetSchemaObject): string {
+  const propertyLines = createWidgetSchemaPropertyLines(schema.properties, schema.required ?? [], 1, createWidgetSchemaPropertyTypeExpression);
+
+  return [
+    ...createWidgetSchemaInterfaceDocLines(schema),
+    `declare interface ${interfaceName} {`,
+    ...(propertyLines.length > 0 ? propertyLines : ['  [key: string]: unknown']),
+    '}'
+  ].join('\n');
+}
+
+/**
+ * 创建 Widget 执行方法编辑器类型提示内容。
+ * @param inputSchema - 入参 schema
+ * @param outputSchema - 出参 schema
+ * @returns Monaco extra lib 内容
+ */
+function createWidgetSkillMethodExtraLibContent(inputSchema: WidgetSchemaObject, outputSchema: WidgetSchemaObject): string {
+  return `
+${createWidgetSchemaInterfaceDeclaration('WidgetSkillInput', inputSchema)}
+
+${createWidgetSchemaInterfaceDeclaration('WidgetSkillOutput', outputSchema)}
+
 declare interface WidgetSkillContext {
   /** 调用小组件时 AI 提取到的入参。 */
-  input: Record<string, unknown>
+  input: WidgetSkillInput
   /** 当前小组件运行态数据，可通过 setState 更新。 */
   state: Record<string, unknown>
   /** 最近一次方法返回的结构化出参。 */
-  output?: unknown
+  output?: WidgetSkillOutput
   /** 触发当前执行的事件信息。 */
   event?: unknown
   /** 写入小组件运行态数据，path 支持点路径，例如 weather.temperature。 */
@@ -69,7 +245,7 @@ declare interface WidgetSkillResultFactory {
    * @param data - 成功结果中携带的数据。
    * @returns 标准成功执行结果。
    */
-  success(data?: unknown): ExecutionResult
+  success(data?: WidgetSkillOutput): ExecutionResult
   /**
    * 标记方法执行失败，并返回错误码与错误信息。
    * @param code - 机器可读错误码。
@@ -106,19 +282,24 @@ declare interface ExecutionResult {
   }
 }
 `;
+}
+
+/** Widget Skill 方法编辑器类型提示内容。 */
+const widgetSkillMethodExtraLibContent = computed<string>((): string => createWidgetSkillMethodExtraLibContent(props.inputSchema, props.outputSchema));
+/** Widget Skill 方法编辑器重建标识，确保 schema 变化后刷新 Monaco 类型声明。 */
+const methodEditorTypeHintKey = computed<string>((): string => widgetSkillMethodExtraLibContent.value);
 /** Widget Skill 方法编辑器类型提示声明。 */
-const widgetSkillMethodExtraLibs: MonacoExtraLib[] = [
+const widgetSkillMethodExtraLibs = computed<MonacoExtraLib[]>((): MonacoExtraLib[] => [
   {
-    content: WIDGET_SKILL_METHOD_EXTRA_LIB_CONTENT,
+    content: widgetSkillMethodExtraLibContent.value,
     filePath: 'tibis-widget-skill-method.d.ts'
   }
-];
+]);
 /** Widget Skill 方法编辑器只加载 ECMAScript 基础类型，不引入浏览器 DOM 全局变量。 */
 const widgetSkillMethodCompilerOptions: MonacoCompilerOptions = {
   lib: ['es2020']
 };
 
-const props = defineProps<Props>();
 const emit = defineEmits<{
   /** 保存 execute 方法代码 */
   confirm: [code: string];
