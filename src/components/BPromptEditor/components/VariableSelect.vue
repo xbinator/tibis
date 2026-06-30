@@ -1,6 +1,6 @@
 <template>
   <SelectDropdown
-    :visible="visible"
+    :visible="dropdownVisible"
     :items="variables"
     :active-index="activeIndex"
     teleport
@@ -22,8 +22,8 @@
         />
         <span v-else-if="item.showTogglePlaceholder" class="variable-item__toggle-placeholder"></span>
         <div class="variable-item-main">
-          <span class="variable-item-label">{{ item.label }}</span>
-          <span class="variable-item-value">{{ item.value }}</span>
+          <span class="variable-item-label">{{ getVariableDisplayValue(item) }}</span>
+          <span v-if="item.label" class="variable-item-value">{{ item.label }}</span>
         </div>
         <div v-if="item.description" class="variable-item-desc">
           {{ item.description }}
@@ -36,6 +36,7 @@
 <script setup lang="ts">
 import type { Variable } from '../types';
 import type { CSSProperties } from 'vue';
+import { computed } from 'vue';
 import SelectDropdown from './_SelectDropdown.vue';
 
 /**
@@ -74,7 +75,7 @@ interface Props {
   activeIndex?: number;
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   activeIndex: 0
 });
 
@@ -83,6 +84,56 @@ const emit = defineEmits<{
   (e: 'toggle', variable: VariableSelectItem): void;
   (e: 'update:activeIndex', index: number): void;
 }>();
+
+/** 变量值末尾的括号路径片段。 */
+const BRACKET_PATH_SEGMENT_PATTERN = /\[(\d+|"(?:\\.|[^"\\])*")\]$/u;
+
+/** 仅当存在可选变量时展示下拉菜单，避免无匹配项时出现空白浮层。 */
+const dropdownVisible = computed<boolean>(() => props.visible && props.variables.length > 0);
+
+/**
+ * 解码 JSON 字符串路径片段。
+ * @param segment - 带双引号的路径片段
+ * @returns 解码后的路径片段，失败时返回去掉引号的原始文本
+ */
+function parseQuotedPathSegment(segment: string): string {
+  try {
+    return JSON.parse(segment) as string;
+  } catch {
+    return segment.slice(1, -1);
+  }
+}
+
+/**
+ * 读取变量值最后一段路径。
+ * @param value - 完整变量值
+ * @returns 最后一段路径
+ */
+function readLastPathSegment(value: string): string {
+  const bracketMatch = value.match(BRACKET_PATH_SEGMENT_PATTERN);
+  if (bracketMatch) {
+    const segment = bracketMatch[1];
+
+    return segment.startsWith('"') ? parseQuotedPathSegment(segment) : segment;
+  }
+
+  const lastDotIndex = value.lastIndexOf('.');
+
+  return lastDotIndex >= 0 ? value.slice(lastDotIndex + 1) : value;
+}
+
+/**
+ * 读取变量菜单展示值。
+ * @param item - 变量选择菜单项
+ * @returns 展示给用户的变量值
+ */
+function getVariableDisplayValue(item: VariableSelectItem): string {
+  if ((item.depth ?? 0) <= 0) {
+    return item.value;
+  }
+
+  return readLastPathSegment(item.value);
+}
 
 /**
  * 获取变量项缩进样式。

@@ -1,14 +1,12 @@
 /**
  * @file default-variable-chip.test.ts
- * @description 验证 BPromptEditor 默认将变量 token 渲染为 value chip。
+ * @description 验证 BPromptEditor 默认保留变量 token 文本，不渲染为变量 chip。
  * @vitest-environment jsdom
  */
 import { readFileSync } from 'node:fs';
 import { nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
-import type { EditorView } from '@codemirror/view';
 import { describe, expect, it } from 'vitest';
-import { createVariableValueChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
 import BPromptEditor from '@/components/BPromptEditor/index.vue';
 import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
 
@@ -65,19 +63,29 @@ async function mountPromptEditor(): Promise<VueWrapper> {
   return wrapper;
 }
 
-describe('BPromptEditor default variable chip', (): void => {
-  it('renders matched variable token with its value by default', async (): Promise<void> => {
+/**
+ * 读取默认变量 token 的主题配置片段。
+ * @returns 变量 token 主题配置源码
+ */
+function readVariableTokenThemeSource(): string {
+  const start = promptEditorSource.indexOf("'.b-prompt-variable-token': {");
+  const end = promptEditorSource.indexOf('\n    }', start);
+
+  return promptEditorSource.slice(start, end);
+}
+
+describe('BPromptEditor default variable token', (): void => {
+  it('keeps matched variable token editable by default', async (): Promise<void> => {
     const wrapper = await mountPromptEditor();
 
-    const chip = wrapper.find('.b-prompt-variable-chip');
-    expect(chip.exists()).toBe(true);
-    expect(chip.text()).toBe('input.city');
-    expect(wrapper.find('.cm-line').text()).not.toContain('{{input.city}}');
+    expect(wrapper.find('.b-prompt-variable-chip').exists()).toBe(false);
+    expect(wrapper.find('.b-prompt-variable-token').exists()).toBe(true);
+    expect(wrapper.find('.cm-line').text()).toContain('{{input.city}}');
 
     wrapper.unmount();
   });
 
-  it('keeps the default variable chip value when only the label changes', async (): Promise<void> => {
+  it('keeps variable token text when variable labels change', async (): Promise<void> => {
     const wrapper = await mountPromptEditor();
 
     await wrapper.setProps({
@@ -96,27 +104,38 @@ describe('BPromptEditor default variable chip', (): void => {
     });
     await nextTick();
 
-    expect(wrapper.find('.b-prompt-variable-chip').text()).toBe('input.city');
+    expect(wrapper.find('.b-prompt-variable-chip').exists()).toBe(false);
+    expect(wrapper.find('.b-prompt-variable-token').exists()).toBe(true);
+    expect(wrapper.find('.cm-line').text()).toContain('{{input.city}}');
 
     wrapper.unmount();
   });
 
-  it('matches nested variable options in the default chip resolver', (): void => {
-    const resolver = createVariableValueChipResolver(createVariableOptions()[0].options);
-    const result = resolver('input.city');
+  it('uses primary text color without background for default variable token', (): void => {
+    const variableTokenThemeSource = readVariableTokenThemeSource();
 
-    expect(result).not.toBeNull();
-    expect(result && 'widget' in result ? result.widget.toDOM({} as EditorView).textContent : '').toBe('input.city');
+    expect(variableTokenThemeSource).toContain("color: 'var(--color-primary, #4080ff)'");
+    expect(variableTokenThemeSource).not.toContain('padding');
+    expect(variableTokenThemeSource).not.toContain('fontWeight');
+    expect(variableTokenThemeSource).not.toContain('backgroundColor');
+    expect(variableTokenThemeSource).not.toContain('borderRadius');
   });
 
-  it('keeps custom chip resolver results before default variable chips', (): void => {
-    const resolver = createVariableValueChipResolver(createVariableOptions()[0].options, () => ({ className: 'custom-chip' }));
+  it('still supports explicit custom chip resolver decoration', async (): Promise<void> => {
+    const wrapper = mount(BPromptEditor, {
+      props: {
+        value: '{{input.city}} ',
+        options: createVariableOptions(),
+        chipResolver: () => ({ className: 'custom-chip' })
+      },
+      attachTo: document.body
+    });
 
-    expect(resolver('input.city')).toEqual({ className: 'custom-chip' });
-  });
+    await nextTick();
 
-  it('uses defined theme tokens for variable chip and selection colors', (): void => {
-    expect(promptEditorSource).not.toContain('--color-primary-value');
-    expect(promptEditorSource).toContain('var(--color-primary-border)');
+    expect(wrapper.find('.custom-chip').exists()).toBe(true);
+    expect(wrapper.find('.cm-line').text()).toContain('{{input.city}}');
+
+    wrapper.unmount();
   });
 });

@@ -24,99 +24,6 @@ export type ChipResult = { widget: WidgetType } | { className: string };
  */
 export type ChipResolver = (body: string) => ChipResult | null;
 
-/**
- * 默认变量 Chip 选项。
- */
-export interface VariableChipOption {
-  /** 变量显示名称 */
-  label: string;
-  /** 变量值，必须与 {{...}} 内部文本一致 */
-  value: string;
-  /** 子级变量选项 */
-  children?: VariableChipOption[];
-}
-
-/**
- * 扁平化默认变量 Chip 选项。
- * @param variables - 变量树节点列表
- * @returns 扁平变量节点列表
- */
-function flattenVariableChipOptions(variables: readonly VariableChipOption[]): VariableChipOption[] {
-  return variables.flatMap((variable: VariableChipOption): VariableChipOption[] => [variable, ...flattenVariableChipOptions(variable.children ?? [])]);
-}
-
-/**
- * 默认变量 value Chip Widget。
- */
-class VariableValueChipWidget extends WidgetType {
-  /**
-   * 创建变量 value Chip Widget。
-   * @param label - 变量显示名称
-   * @param value - 变量原始值
-   */
-  constructor(private readonly label: string, private readonly value: string) {
-    super();
-  }
-
-  /**
-   * 判断两个 Widget 是否等价，避免 CodeMirror 不必要地重建 DOM。
-   * @param other - 另一个 Widget
-   * @returns 是否等价
-   */
-  eq(other: VariableValueChipWidget): boolean {
-    return this.label === other.label && this.value === other.value;
-  }
-
-  /**
-   * 创建变量 Chip DOM。
-   * @returns Chip DOM 元素
-   */
-  toDOM(): HTMLElement {
-    const chip = document.createElement('span');
-    chip.className = 'b-prompt-variable-chip';
-    chip.textContent = this.value;
-    chip.title = this.label;
-    chip.setAttribute('aria-label', `${this.value}: ${this.label}`);
-    return chip;
-  }
-
-  /**
-   * 允许编辑器继续处理鼠标和键盘事件。
-   * @returns 是否忽略事件
-   */
-  ignoreEvent(): boolean {
-    return false;
-  }
-}
-
-/**
- * 创建默认变量 value Chip 解析器。
- * @param variables - 可识别的变量列表
- * @param customResolver - 消费者自定义 Chip 解析器
- * @returns 合并后的 Chip 解析器
- */
-export function createVariableValueChipResolver(variables: readonly VariableChipOption[], customResolver?: ChipResolver): ChipResolver {
-  const variableMap = new Map<string, VariableChipOption>(
-    flattenVariableChipOptions(variables).map((variable: VariableChipOption): [string, VariableChipOption] => [variable.value, variable])
-  );
-
-  return (body: string): ChipResult | null => {
-    const customResult = customResolver?.(body);
-    if (customResult) {
-      return customResult;
-    }
-
-    const variable = variableMap.get(body);
-    if (!variable) {
-      return null;
-    }
-
-    return {
-      widget: new VariableValueChipWidget(variable.label, variable.value)
-    };
-  };
-}
-
 // ─── StateEffect ─────────────────────────────────────────────────────────────
 
 /**
@@ -134,8 +41,20 @@ export const chipResolverEffect = StateEffect.define<ChipResolver>();
 interface ChipFieldState {
   /** 当前 resolver */
   resolver: ChipResolver;
-  /** 解析后的装饰集 */
+  /** 解析后的可视装饰集 */
   decorations: DecorationSet;
+  /** 需要作为整体处理的替换型装饰集 */
+  atomicDecorations: DecorationSet;
+}
+
+/**
+ * 构建后的装饰集合。
+ */
+interface BuiltChipDecorations {
+  /** 可视装饰集 */
+  decorations: DecorationSet;
+  /** 需要作为整体处理的替换型装饰集 */
+  atomicDecorations: DecorationSet;
 }
 
 // ─── 装饰构建（纯函数） ──────────────────────────────────────────────────────
@@ -147,8 +66,9 @@ interface ChipFieldState {
  * @param resolver - chip 解析器
  * @returns 装饰集
  */
-function buildDecorations(text: string, resolver: ChipResolver): DecorationSet {
+function buildDecorations(text: string, resolver: ChipResolver): BuiltChipDecorations {
   const decorations: Range<Decoration>[] = [];
+  const atomicDecorations: Range<Decoration>[] = [];
 
   for (const match of text.matchAll(VARIABLE_PATTERN)) {
     const body = match[1];
@@ -156,13 +76,19 @@ function buildDecorations(text: string, resolver: ChipResolver): DecorationSet {
     if (!result) continue;
 
     if ('widget' in result) {
-      decorations.push(Decoration.replace({ widget: result.widget }).range(match.index, match.index + match[0].length));
+      const decoration = Decoration.replace({ widget: result.widget }).range(match.index, match.index + match[0].length);
+
+      decorations.push(decoration);
+      atomicDecorations.push(decoration);
     } else {
       decorations.push(Decoration.mark({ class: result.className }).range(match.index, match.index + match[0].length));
     }
   }
 
-  return Decoration.set(decorations, true);
+  return {
+    decorations: Decoration.set(decorations, true),
+    atomicDecorations: Decoration.set(atomicDecorations, true)
+  };
 }
 
 // ─── StateField ──────────────────────────────────────────────────────────────
@@ -175,20 +101,24 @@ function buildDecorations(text: string, resolver: ChipResolver): DecorationSet {
 export const variableChipField: StateField<ChipFieldState> = StateField.define<ChipFieldState>({
   create(state: EditorState) {
     const resolver: ChipResolver = () => null;
-    return { resolver, decorations: buildDecorations(state.doc.toString(), resolver) };
+    return { resolver, ...buildDecorations(state.doc.toString(), resolver) };
   },
 
-  update({ resolver, decorations }, tr) {
+  update({ resolver, decorations, atomicDecorations }, tr) {
     const nextResolver = tr.effects.find((e) => e.is(chipResolverEffect))?.value ?? resolver;
     const resolverChanged = nextResolver !== resolver;
 
     if (tr.docChanged || resolverChanged) {
       return {
         resolver: nextResolver,
-        decorations: buildDecorations(tr.newDoc.toString(), nextResolver)
+        ...buildDecorations(tr.newDoc.toString(), nextResolver)
       };
     }
-    return { resolver, decorations: decorations.map(tr.changes) };
+    return {
+      resolver,
+      decorations: decorations.map(tr.changes),
+      atomicDecorations: atomicDecorations.map(tr.changes)
+    };
   },
 
   provide: (field) => EditorView.decorations.from(field, (s) => s.decorations)
@@ -206,8 +136,7 @@ export function getChipAtPos(state: EditorState, pos: number): { from: number; t
   const chipState = state.field(variableChipField, false);
   if (!chipState) return null;
 
-  const { decorations } = chipState;
-  const iter = decorations.iter();
+  const iter = chipState.atomicDecorations.iter();
   while (iter.value !== null) {
     if (pos >= iter.from && pos < iter.to) {
       return { from: iter.from, to: iter.to };
@@ -215,4 +144,13 @@ export function getChipAtPos(state: EditorState, pos: number): { from: number; t
     iter.next();
   }
   return null;
+}
+
+/**
+ * 读取需要作为整体处理的 Chip 装饰集。
+ * @param state - 编辑器状态
+ * @returns 替换型 Chip 装饰集
+ */
+export function getChipAtomicDecorations(state: EditorState): DecorationSet {
+  return state.field(variableChipField, false)?.atomicDecorations ?? Decoration.none;
 }

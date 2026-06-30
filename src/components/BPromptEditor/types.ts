@@ -48,7 +48,7 @@ export interface SlashCommandOption {
  * 变量定义
  */
 export interface Variable {
-  /** 变量显示名称 */
+  /** 变量说明标签，无说明时为空字符串 */
   label: string;
   /** 变量值（插入到 {{ }} 中间） */
   value: string;

@@ -38,13 +38,14 @@
  * @file BPromptEditor/index.vue
  * @description Prompt 编辑器主组件，基于 CodeMirror 6 实现
  */
+import type { ChipResolver } from './extensions/variableChip';
 import type { SlashCommandOption, Variable, FileMentionOption, BPromptEditorProps as Props } from './types';
 import type { FlatVariable, VisibleVariable } from './utils/variables';
 import type { Extension } from '@codemirror/state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { history } from '@codemirror/commands';
 import { Annotation, EditorState } from '@codemirror/state';
-import { Decoration, EditorView } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import FileMentionSelect from './components/FileMentionSelect.vue';
 import SlashCommandSelect from './components/SlashCommandSelect.vue';
 import VariableSelect from './components/VariableSelect.vue';
@@ -53,7 +54,7 @@ import { createPasteHandlerExtension } from './extensions/pasteHandler';
 import { createPlaceholderExtension } from './extensions/placeholder';
 import { createTriggerPlugin } from './extensions/triggerPlugin';
 import { closeTrigger, setTriggerActiveIndex, triggerStateField } from './extensions/triggerState';
-import { variableChipField, chipResolverEffect, getChipAtPos, createVariableValueChipResolver } from './extensions/variableChip';
+import { variableChipField, chipResolverEffect, getChipAtPos, getChipAtomicDecorations } from './extensions/variableChip';
 import { useEditorKeymap } from './hooks/useEditorKeymap';
 import { useFileMention } from './hooks/useFileMention';
 import { useSlashCommand } from './hooks/useSlashCommand';
@@ -111,8 +112,14 @@ const filteredVariables = computed<VisibleVariable[]>(() => getVisibleVariables(
 // 是否有可用于触发的变量
 const hasVariables = computed<boolean>(() => allVariables.value.length > 0);
 
-// 默认变量 Chip 解析器，自定义解析器优先，普通变量按 value 渲染
-const resolvedChipResolver = computed(() => createVariableValueChipResolver(variableTrees.value, props.chipResolver));
+/**
+ * 默认仅给变量 token 添加可编辑高亮，不替换成 Chip。
+ * @returns 默认变量高亮装饰
+ */
+const defaultVariableTokenResolver: ChipResolver = () => ({ className: 'b-prompt-variable-token' });
+
+// 调用方可显式传入 chipResolver 覆盖默认变量高亮。
+const resolvedChipResolver = computed<ChipResolver>(() => props.chipResolver ?? defaultVariableTokenResolver);
 
 // 解析后的最大高度
 const resolvedMaxHeight = computed<string | undefined>(() => {
@@ -252,6 +259,9 @@ function createThemeExtension(height: string | undefined, isEmpty: boolean): Ext
     '.cm-widgetBuffer': {
       display: 'inline-block',
       width: isEmpty ? '1px' : '0'
+    },
+    '.b-prompt-variable-token': {
+      color: 'var(--color-primary, #4080ff)'
     }
   });
 }
@@ -326,10 +336,7 @@ function createExtensions(): Extension[] {
         return true;
       }
     }),
-    EditorView.atomicRanges.of((editorView) => {
-      const chipState = editorView.state.field(variableChipField, false);
-      return chipState?.decorations ?? Decoration.none;
-    }),
+    EditorView.atomicRanges.of((editorView) => getChipAtomicDecorations(editorView.state)),
     editableCompartment.of(EditorView.editable.of(!props.disabled)),
     readOnlyCompartment.of(EditorState.readOnly.of(props.disabled)),
     themeCompartment.of(createThemeExtension(resolvedMaxHeight.value, editorIsEmpty.value)),
@@ -585,24 +592,6 @@ defineExpose({
   position: relative;
   width: 100%;
   height: 100%;
-}
-
-.b-prompt-variable-chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 180px;
-  height: 20px;
-  padding: 0 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 12px;
-  line-height: 20px;
-  vertical-align: middle;
-  color: var(--color-primary);
-  white-space: nowrap;
-  background: var(--color-primary-bg);
-  border: 1px solid var(--color-primary-border);
-  border-radius: 4px;
 }
 
 .b-prompt-editor__codemirror {

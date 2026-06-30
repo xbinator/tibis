@@ -66,6 +66,28 @@ const BButtonStub = defineComponent({
 });
 
 describe('VariableSelect layout', (): void => {
+  it('does not render an empty dropdown when no variables are available', (): void => {
+    const wrapper = mount(VariableSelect, {
+      props: {
+        visible: true,
+        variables: [],
+        position: {
+          top: 0,
+          left: 0,
+          bottom: 0
+        }
+      },
+      global: {
+        components: {
+          BButton: BButtonStub
+        }
+      }
+    });
+
+    expect(document.body.querySelector('.select-dropdown')).toBeNull();
+    wrapper.unmount();
+  });
+
   it('wraps variable item content in a vertical layout container', (): void => {
     const wrapper = mount(VariableSelect, {
       props: {
@@ -92,7 +114,82 @@ describe('VariableSelect layout', (): void => {
 
     expect(document.body.querySelector('.variable-item')).not.toBeNull();
     expect(document.body.querySelector('.variable-item-main')).not.toBeNull();
+    expect(document.body.querySelector('.variable-item-label')?.textContent).toBe('state.weather.temperature');
+    expect(document.body.querySelector('.variable-item-value')?.textContent).toBe('摄氏温度');
     expect(document.body.querySelector('.variable-item-desc')).not.toBeNull();
+    wrapper.unmount();
+  });
+
+  it('hides the secondary variable label when no label is provided', (): void => {
+    const wrapper = mount(VariableSelect, {
+      props: {
+        visible: true,
+        variables: [
+          {
+            label: '',
+            value: 'state.lastQuery.city'
+          }
+        ],
+        position: {
+          top: 0,
+          left: 0,
+          bottom: 0
+        }
+      },
+      global: {
+        components: {
+          BButton: BButtonStub
+        }
+      }
+    });
+
+    expect(document.body.querySelector('.variable-item-label')?.textContent).toBe('state.lastQuery.city');
+    expect(document.body.querySelector('.variable-item-value')).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('shows only the local path segment for nested tree variables', (): void => {
+    const wrapper = mount(VariableSelect, {
+      props: {
+        visible: true,
+        variables: [
+          {
+            label: '',
+            value: 'state',
+            depth: 0
+          },
+          {
+            label: '',
+            value: 'state.lastQuery',
+            depth: 1
+          },
+          {
+            label: '',
+            value: 'state.lastQuery.city',
+            depth: 2
+          },
+          {
+            label: '',
+            value: 'state["weather-data"]["feels.like"]',
+            depth: 2
+          }
+        ] as VariableSelectTestItem[],
+        position: {
+          top: 0,
+          left: 0,
+          bottom: 0
+        }
+      },
+      global: {
+        components: {
+          BButton: BButtonStub
+        }
+      }
+    });
+    const labels = Array.from(document.body.querySelectorAll('.variable-item-label')).map((item: Element): string => item.textContent ?? '');
+
+    expect(labels).toEqual(['state', 'lastQuery', 'city', 'feels.like']);
+    expect(document.body.textContent).not.toContain('state.lastQuery.city');
     wrapper.unmount();
   });
 

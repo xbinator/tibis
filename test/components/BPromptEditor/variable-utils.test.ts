@@ -3,8 +3,8 @@
  * @description 验证 BPromptEditor 变量树工具的可见节点计算。
  */
 import { describe, expect, it } from 'vitest';
-import { getVisibleVariables } from '@/components/BPromptEditor/utils/variables';
 import type { Variable } from '@/components/BPromptEditor/types';
+import { getVisibleVariables } from '@/components/BPromptEditor/utils/variables';
 
 /**
  * 创建测试变量树。
@@ -46,8 +46,8 @@ function createVariableTree(): Variable[] {
       ]
     },
     {
-      label: 'lastResult',
-      value: 'lastResult'
+      label: 'output',
+      value: 'output'
     }
   ];
 }
@@ -56,7 +56,7 @@ describe('BPromptEditor variable utilities', (): void => {
   it('hides descendants for collapsed tree nodes', (): void => {
     const variables = getVisibleVariables(createVariableTree(), new Set(['input']), '');
 
-    expect(variables.map((variable): string => variable.value)).toEqual(['input', 'state', 'state.weather', 'state.weather.temperature', 'lastResult']);
+    expect(variables.map((variable): string => variable.value)).toEqual(['input', 'state', 'state.weather', 'state.weather.temperature', 'output']);
     expect(variables[0]).toMatchObject({
       value: 'input',
       depth: 0,
@@ -103,8 +103,8 @@ describe('BPromptEditor variable utilities', (): void => {
           ]
         },
         {
-          label: 'lastResult',
-          value: 'lastResult'
+          label: 'output',
+          value: 'output'
         }
       ],
       new Set(),
@@ -113,6 +113,6 @@ describe('BPromptEditor variable utilities', (): void => {
 
     expect(variables.find((variable) => variable.value === 'root.plain')?.showTogglePlaceholder).toBe(true);
     expect(variables.find((variable) => variable.value === 'root.group.leaf')?.showTogglePlaceholder).toBe(false);
-    expect(variables.find((variable) => variable.value === 'lastResult')?.showTogglePlaceholder).toBe(true);
+    expect(variables.find((variable) => variable.value === 'output')?.showTogglePlaceholder).toBe(true);
   });
 });
