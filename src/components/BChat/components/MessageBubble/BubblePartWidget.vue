@@ -34,13 +34,7 @@ import {
   type BChatAdaptedUserMessageSubmitInput,
   type BChatSubmitAction
 } from '../../utils/submitAction';
-import {
-  createWidgetHttpClient,
-  createWidgetRuntimeInstance,
-  finishWidgetRuntime,
-  initWidgetMountState,
-  type WidgetRuntimeFinishResult
-} from '../../utils/widgetRuntime';
+import { createWidgetHttpClient, createWidgetRuntimeInstance, finishWidgetRuntime, initWidgetMountState } from '../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 
@@ -253,11 +247,11 @@ function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChat
 }
 
 /**
- * 创建小组件方法执行提交动作。
- * @param methodName - 方法名
+ * 创建小组件交互表达式提交动作。
+ * @param interactionCode - 元素交互表达式
  * @returns 统一提交动作
  */
-function createWidgetMethodSubmitAction(methodName: string): BChatSubmitAction {
+function createWidgetInteractionSubmitAction(interactionCode: string): BChatSubmitAction {
   const { messageId } = props;
 
   return {
@@ -271,43 +265,43 @@ function createWidgetMethodSubmitAction(methodName: string): BChatSubmitAction {
       const currentPart = hostPart ? resolveWidgetPartFromMessagePart(hostPart) : null;
       if (!currentPart) return;
 
-      const methodResult = await createWidgetRuntimeInstance(currentPart, { http: widgetHttpClient }).callMethod(methodName);
-      const nextMessage = createWidgetPartUpdatedMessage(currentMessage, props.part.id, currentPart, methodResult.part);
+      const interactionResult = await createWidgetRuntimeInstance(currentPart, { http: widgetHttpClient }).runInteraction(interactionCode);
+      const nextMessage = createWidgetPartUpdatedMessage(currentMessage, props.part.id, currentPart, interactionResult.part);
       await context.updateMessage(messageId, (): Message => nextMessage);
 
-      if (methodResult.sendMessage) {
-        await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(methodResult.sendMessage));
+      if (interactionResult.sendMessage) {
+        await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(interactionResult.sendMessage));
       }
     }
   };
 }
 
 /**
- * 在无宿主消息时直接调用小组件实例方法。
- * @param methodName - 方法名
+ * 在无宿主消息时直接运行小组件交互表达式。
+ * @param interactionCode - 元素交互表达式
  */
-async function callStandaloneWidgetMethod(methodName: string): Promise<void> {
-  const methodResult: WidgetRuntimeFinishResult = await createWidgetRuntimeInstance(props.part, { http: widgetHttpClient }).callMethod(methodName);
-  if (methodResult.part !== props.part) {
-    emit('change', methodResult.part);
+async function runStandaloneWidgetInteraction(interactionCode: string): Promise<void> {
+  const interactionResult = await createWidgetRuntimeInstance(props.part, { http: widgetHttpClient }).runInteraction(interactionCode);
+  if (interactionResult.part !== props.part) {
+    emit('change', interactionResult.part);
   }
 }
 
 /**
- * 供小组件元素调用交互脚本 methods 的运行态控制器。
+ * 供小组件元素运行自身交互表达式的运行态控制器。
  */
 const widgetRuntimeController = computed<WidgetRuntimeController | undefined>(() => {
   if (!props.runtimeEnabled) return undefined;
 
   return {
-    callMethod(methodName: string): void {
+    runInteraction(interactionCode: string): void {
       const { messageId } = props;
       if (!messageId) {
-        callStandaloneWidgetMethod(methodName).catch((): undefined => undefined);
+        runStandaloneWidgetInteraction(interactionCode).catch((): undefined => undefined);
         return;
       }
 
-      emit('submit', createWidgetMethodSubmitAction(methodName));
+      emit('submit', createWidgetInteractionSubmitAction(interactionCode));
     }
   };
 });

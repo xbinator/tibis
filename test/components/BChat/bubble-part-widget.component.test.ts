@@ -373,16 +373,14 @@ describe('BubblePartWidget', (): void => {
     });
   });
 
-  it('exposes method calls as fire-and-forget runtime actions in chat messages', (): void => {
-    const widgetPart = createWidgetPart(
-      ['defineConfig({', '  methods: {', '    confirmOrder() {', "      this.$sendMessage('确认下单')", '    }', '  }', '})'].join('\n')
-    );
+  it('exposes interaction expressions as fire-and-forget runtime actions in chat messages', (): void => {
+    const widgetPart = createWidgetPart('defineConfig({})');
     const wrapper = mountBubblePartWidgetWithMethodProbe(widgetPart, {
       messageId: 'assistant-widget-message'
     });
     const runtime = wrapper.findComponent({ name: 'BWidgetRuntime' }).props('runtime') as WidgetRuntimeController | undefined;
 
-    const result = runtime?.callMethod('confirmOrder');
+    const result = runtime?.runInteraction("this.$sendMessage('确认下单')");
 
     expect(result).toBeUndefined();
     expect(wrapper.emitted('submit')?.[0]?.[0]).toEqual(expect.objectContaining({ run: expect.any(Function) }));

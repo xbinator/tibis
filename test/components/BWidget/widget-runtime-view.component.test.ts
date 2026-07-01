@@ -165,10 +165,16 @@ const RuntimeControllerProbe = defineComponent({
   name: 'RuntimeControllerProbe',
   setup() {
     const runtime = useWidgetRuntime();
+    /**
+     * 模拟元素运行自己声明的交互表达式。
+     */
+    function runProbe(): void {
+      runtime.value?.runInteraction("this.$sendMessage('确认下单')");
+    }
 
-    return { runtime };
+    return { runProbe };
   },
-  template: '<button class="runtime-method-probe" type="button" @click="runtime?.callMethod(\'confirmOrder\')">调用方法</button>'
+  template: '<button class="runtime-interaction-probe" type="button" @click="runProbe">运行交互</button>'
 });
 
 /** WidgetNode 测试替身，用于验证运行态控制器能被元素层注入。 */
@@ -282,13 +288,13 @@ describe('BWidgetRuntime', (): void => {
   });
 
   it('provides the runtime controller to rendered elements', async (): Promise<void> => {
-    const callMethod = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const runInteraction = vi.fn<(code: string) => void>();
     const wrapper = mount(BWidgetRuntime, {
       props: {
         value: createRuntimeWidgetData(),
         renderContext: createRenderContext('上海', 28),
         runtime: {
-          callMethod
+          runInteraction
         }
       },
       global: {
@@ -300,9 +306,9 @@ describe('BWidgetRuntime', (): void => {
     });
 
     await nextTick();
-    await wrapper.get('.runtime-method-probe').trigger('click');
+    await wrapper.get('.runtime-interaction-probe').trigger('click');
 
-    expect(callMethod).toHaveBeenCalledWith('confirmOrder');
+    expect(runInteraction).toHaveBeenCalledWith("this.$sendMessage('确认下单')");
     wrapper.unmount();
   });
 });

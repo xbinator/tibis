@@ -251,27 +251,18 @@ describe('widgetRuntime', (): void => {
     expect(nextPart.renderContext.state).toEqual({});
   });
 
-  it('runs a named method and finishes when the method sends a message', async (): Promise<void> => {
+  it('runs interaction code and finishes when the code sends a message', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
-      ...createWidgetPart(
-        [
-          'defineConfig({',
-          '  methods: {',
-          '    confirm() {',
-          "      this.$setState('confirmed', true)",
-          "      this.$sendMessage('确认下单')",
-          '    }',
-          '  }',
-          '})'
-        ].join('\n')
-      ),
+      ...createWidgetPart('defineConfig({})'),
       status: 'mounted',
       lifecycle: {
         mountedAt: '2026-07-01T00:00:00.000Z'
       }
     };
 
-    const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).callMethod('confirm');
+    const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).runInteraction(
+      ["this.$setState('confirmed', true)", "this.$sendMessage('确认下单')"].join('\n')
+    );
 
     expect(result.part.status).toBe('finished');
     expect(result.part.lifecycle.unmountedAt).toBe('2026-07-01T00:02:00.000Z');
@@ -279,23 +270,10 @@ describe('widgetRuntime', (): void => {
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
-  it('runs unmounted cleanup when a named method finishes with a message', async (): Promise<void> => {
+  it('runs unmounted cleanup when an interaction finishes with a message', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
-        [
-          'defineConfig({',
-          '  unmounted() {',
-          "    this.$setState('cleanedUp', true)",
-          "    this.$sendMessage('清理消息')",
-          '  },',
-          '  methods: {',
-          '    confirm() {',
-          "      this.$setState('confirmed', true)",
-          "      this.$sendMessage('确认下单')",
-          '    }',
-          '  }',
-          '})'
-        ].join('\n')
+        ['defineConfig({', '  unmounted() {', "    this.$setState('cleanedUp', true)", "    this.$sendMessage('清理消息')", '  }', '})'].join('\n')
       ),
       status: 'mounted',
       lifecycle: {
@@ -303,7 +281,9 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).callMethod('confirm');
+    const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).runInteraction(
+      ["this.$setState('confirmed', true)", "this.$sendMessage('确认下单')"].join('\n')
+    );
 
     expect(result.part.status).toBe('finished');
     expect(result.part.renderContext.state).toEqual({
@@ -313,25 +293,19 @@ describe('widgetRuntime', (): void => {
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
-  it('keeps the widget part unchanged when the named method does not exist', async (): Promise<void> => {
-    const part: ChatMessageWidgetPart = {
-      ...createWidgetPart(['defineConfig({', '  methods: {', '    confirm() {', "      this.$setState('confirmed', true)", '    }', '  }', '})'].join('\n')),
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-01T00:00:00.000Z'
-      }
-    };
-
-    const result = await createWidgetRuntimeInstance(part).callMethod('missing');
-
-    expect(result).toEqual({ part });
-    expect(result.part).toBe(part);
-  });
-
-  it('keeps the widget mounted when a named method updates state without sending a message', async (): Promise<void> => {
+  it('runs user helper calls from interaction code without exposing them as runtime API', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
-        ['defineConfig({', '  methods: {', '    selectCoffee() {', "      this.$setState('selectedCoffee', 'latte')", '    }', '  }', '})'].join('\n')
+        [
+          'defineConfig({',
+          '  methods: {',
+          '    submitOrder() {',
+          "      this.$setState('confirmed', true)",
+          "      this.$sendMessage('确认下单')",
+          '    }',
+          '  }',
+          '})'
+        ].join('\n')
       ),
       status: 'mounted',
       lifecycle: {
@@ -339,7 +313,60 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const result = await createWidgetRuntimeInstance(part).callMethod('selectCoffee');
+    const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).runInteraction('submitOrder()');
+
+    expect(result.part.status).toBe('finished');
+    expect(result.part.renderContext.state).toEqual({ confirmed: true });
+    expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
+  });
+
+  it('passes evaluated interaction arguments into user helper parameters', async (): Promise<void> => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(
+        ['defineConfig({', '  methods: {', '    selectCoffee(id, city) {', "      this.$setState('selection', { id, city })", '    }', '  }', '})'].join('\n')
+      ),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      }
+    };
+
+    const result = await createWidgetRuntimeInstance(part).runInteraction("selectCoffee('latte', this.$input.city)");
+
+    expect(result.part.status).toBe('mounted');
+    expect(result.part.renderContext.state).toEqual({
+      selection: {
+        id: 'latte',
+        city: '上海'
+      }
+    });
+  });
+
+  it('keeps the widget part unchanged when interaction code has no supported signal', async (): Promise<void> => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart('defineConfig({})'),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      }
+    };
+
+    const result = await createWidgetRuntimeInstance(part).runInteraction('unknownAction()');
+
+    expect(result).toEqual({ part });
+    expect(result.part).toBe(part);
+  });
+
+  it('keeps the widget mounted when interaction code updates state without sending a message', async (): Promise<void> => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart('defineConfig({})'),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      }
+    };
+
+    const result = await createWidgetRuntimeInstance(part).runInteraction("this.$setState('selectedCoffee', 'latte')");
 
     expect(result.part.status).toBe('mounted');
     expect(result.part.renderContext.state).toEqual({

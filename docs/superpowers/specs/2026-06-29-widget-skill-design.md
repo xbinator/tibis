@@ -2,7 +2,7 @@
 
 ## 概要
 
-这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以由聊天运行时通过 `widget` / `open_widget` 工具按需打开，并以交互式 Widget 卡片的形式展示给用户。Widget 本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段，也不再使用 `metadata.skill`。工具暴露只使用必要的 Widget 契约信息；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互脚本使用 `defineConfig({ mounted, unmounted, methods })` 声明生命周期和方法。
+这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以由聊天运行时通过 `widget` / `open_widget` 工具按需打开，并以交互式 Widget 卡片的形式展示给用户。Widget 本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段，也不再使用 `metadata.skill`。工具暴露只使用必要的 Widget 契约信息；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互脚本使用 `defineConfig({ mounted, unmounted, methods })` 声明生命周期和可选用户辅助函数。
 
 第一条纵向闭环应支持通过工具打开天气或咖啡Widget：
 
@@ -22,10 +22,10 @@
 - 保持现有 Widget 编辑器架构不被破坏。
 - 避免引入一个庞大的顶层 `runtime` 对象。
 - 让每个Widget元素自己拥有动态字段和交互能力。
-- 允许Widget作者用受控脚本声明生命周期和命名方法，并逐步让元素事件关联这些方法。
+- 允许Widget作者用受控脚本声明生命周期和可选用户辅助函数，元素事件只保存自己的交互表达式。
 - Widget 提交结果向现有工具结果结构靠近，但不伪装成 `role: tool` 消息。
 - 通过现有 AI tool registry 暴露工作区 Widget，并由 `open_widget` 创建聊天内 Widget 消息。
-- 先交付一个最小可体验的运行态Widget容器，再逐步丰富元素事件和方法执行。
+- 先交付一个最小可体验的运行态Widget容器，再逐步丰富元素级交互执行能力。
 
 ## 非目标
 
@@ -50,7 +50,7 @@
 - `src/components/BWidget/elements/Rect/index.vue` 渲染矩形元素。
 - `src/components/BWidget/elements/Rect/Setter.vue` 编辑矩形元素专属属性。
 
-这个结构很适合承载动态元素能力。文本元素可以声明自己支持 `content` 模板字段；未来按钮元素可以声明自己支持 `click` 事件关联方法；未来列表元素可以声明自己支持 `items` 模板字段和列表项选择事件关联方法。
+这个结构很适合承载动态元素能力。文本元素可以声明自己支持 `content` 模板字段；未来按钮元素可以声明自己支持 `click` 交互表达式；未来列表元素可以声明自己支持 `items` 模板字段和列表项选择交互表达式。
 
 ## 数据模型
 
@@ -111,13 +111,14 @@ interface WidgetExecuteMethod {
 
 `name`、`description` 用于工具列表和契约说明，也是模型判断是否需要打开 Widget 的主要文本依据。`execute.code` 是 Widget 的交互脚本，脚本通过 `this.$input` 读取入参，通过 `this.$setState` 写入当前聊天消息内的 Widget 运行态 state，通过 `this.$http` 调用托管 request，通过 `this.$sendMessage` 上行聊天消息。
 
-方法执行控制规则：
+脚本执行控制规则：
 
-- `enabled` 缺省视为 `true`；禁用后不执行 `mounted`、`unmounted` 或命名方法。
+- `enabled` 缺省视为 `true`；禁用后不执行 `mounted`、`unmounted` 或元素交互表达式。
 - `description` 用于编辑器提示和调试记录，不参与执行逻辑。
 - 交互脚本本身不维护 timeout 配置；网络请求超时、队列和响应大小限制统一由底层 `request` 能力处理。
-- `methods` 内的方法只作为元素事件入口或后续显式运行入口，第一版不提供方法间互调，因此不存在方法递归调用问题。后续如引入互调，需要重新定义调用深度和循环检测。
-- 调用不存在的命名方法时保持原 Widget part 不变。
+- `methods` 只作为 Widget 作者可选的用户辅助函数集合，不是系统运行态协议；元素保存并运行自己的交互表达式。
+- 第一版只允许元素交互表达式顶层调用一个用户辅助函数，辅助函数调用参数会按受控表达式求值后绑定到形参，辅助函数内部不继续递归调用其它辅助函数，避免循环和重入风险。
+- 交互表达式没有触发 `this.$setState(...)` 或 `this.$sendMessage(...)` 时保持原 Widget part 不变。
 
 ### 元素级动态元信息
 
@@ -131,9 +132,9 @@ metadata: {
 
 这条规则是为了减少组件开发者和Widget作者的心智负担：一个字段只有一个来源，不再拆成两个字段来源。如果未来列表、表单、按钮等元素需要模板能力，也应沿用同样模式，例如 `metadata.items`、`metadata.label`、`metadata.defaultValue`，而不是增加第二套模板存储。
 
-事件到方法的关联后续也应由元素自己声明和编辑，不新增一个全局复杂事件配置器。当前已落地的运行态只把节点 `submit` 事件向上透传，由 `BubblePartWidget` 统一转换为 `widget_result` 或执行 `unmounted` 后的 `$sendMessage`。未来 Button、List、Form 等元素可以在自己的 `metadata` 中保存事件到 `methods` 的映射，例如 `metadata.submitMethod = "confirmOrder"`，再通过 `useWidgetRuntime().value?.callMethod(methodName)` 调用当前 Widget 实例方法。
+元素交互后续也应由元素自己声明和编辑，不新增一个全局复杂事件配置器。当前已落地的运行态只把节点 `submit` 事件向上透传，由 `BubblePartWidget` 统一转换为 `widget_result` 或执行 `unmounted` 后的 `$sendMessage`。未来 Button、List、Form 等元素可以在自己的 `metadata` 中保存事件交互表达式，例如 `metadata.onClick = "this.$sendMessage('确认下单')"` 或 `metadata.onClick = "submitOrder()"`，再通过 `useWidgetRuntime().value?.runInteraction(metadata.onClick)` 触发当前 Widget 实例交互。平台不关心业务函数名，也不读取函数返回值；唯一会结束 Widget 的信号是脚本调用 `this.$sendMessage(...)`。
 
-模板展示保持声明式，因为它只是简单展示逻辑。事件不配置一段复杂流程；复杂分支、API 调用、状态写入和上行消息都放在 `execute.code` 的生命周期或命名方法中完成。
+模板展示保持声明式，因为它只是简单展示逻辑。事件不配置一段复杂流程；复杂分支、API 调用、状态写入和上行消息都放在 `execute.code` 的生命周期、交互表达式或用户辅助函数中完成。
 
 ### 模板表达式语法
 
@@ -143,7 +144,7 @@ metadata: {
 
 - `input`：Widget启动入参，例如 `{{ input.city }}`。
 - `state`：Widget会话运行状态，例如 `{{ state.weather.temperature }}`。
-- `event`：仅在未来事件方法执行期间可用；当前渲染模板实现不支持 `event`，普通渲染模板中也不可用。
+- `event`：仅在未来元素交互执行期间可用；当前渲染模板实现不支持 `event`，普通渲染模板中也不可用。
 
 支持的路径格式：
 
@@ -177,18 +178,18 @@ type WidgetSubmitResult =
 Widget特有上下文记录在结果外层：
 
 ```ts
-interface WidgetMethodExecutionRecord {
+interface WidgetInteractionExecutionRecord {
   sessionId: string
   widgetId: string
-  methodName: string
   elementId?: string
+  eventName?: string
   result: WidgetSubmitResult
   startedAt: number
   finishedAt?: number
 }
 ```
 
-这样 AI 工具、Widget方法、HTTP 调用、元素事件触发结果、取消、失败和等待用户输入都使用同一个状态模型。
+这样 AI 工具、Widget交互、HTTP 调用、元素事件触发结果、取消、失败和等待用户输入都使用同一个状态模型。
 
 ## 工具打开流程
 
@@ -240,8 +241,8 @@ mounted
 并发和重入规则：
 
 - `mounted` 表示小组件正在展示，也表示仍可继续等待用户操作。
-- 命名方法执行时不额外写入持久化的 `running` 状态；UI 层需要防重复点击时使用组件内部临时状态处理。
-- 命名方法调用 `this.$sendMessage` 后进入 `finished`；未调用时保持 `mounted`，并保留本次 `this.$setState` 写入的状态。
+- 元素交互执行时不额外写入持久化的 `running` 状态；UI 层需要防重复点击时使用组件内部临时状态处理。
+- 元素交互触发 `this.$sendMessage` 后进入 `finished`；未触发时保持 `mounted`，并保留本次 `this.$setState` 写入的状态。
 - 用户中止当前聊天生成或取消小组件时，未完成的小组件进入 `cancelled`。
 
 ## 元素渲染与运行态容器
@@ -261,9 +262,9 @@ interface WidgetRenderContext {
 
 - `Text/index.vue`：支持在 `metadata.content` 中直接写 `{{ ... }}` 模板。
 - `Rect/index.vue`：后续可支持可见性或样式模板字段。
-- 未来 `Button/index.vue`：支持 label 模板字段和 click 事件关联方法。
-- 未来 `List/index.vue`：支持 items 模板字段和 item 事件关联方法。
-- 未来 `Form/index.vue`：支持输入模板字段和 submit 事件关联方法。
+- 未来 `Button/index.vue`：支持 label 模板字段和 click 交互表达式。
+- 未来 `List/index.vue`：支持 items 模板字段和 item 交互表达式。
+- 未来 `Form/index.vue`：支持输入模板字段和 submit 交互表达式。
 
 公共 helper 避免每个元素重复实现解析逻辑：
 
@@ -332,15 +333,15 @@ interface WidgetRuntimeLayout {
 
 未来交互元素可以各自扩展：
 
-- Button setter：按钮文案、文案模板、点击事件关联的方法。
-- List setter：items 模板字段、展示字段映射、列表项点击关联的方法。
-- Form setter：字段配置、默认值、提交事件关联的方法。
+- Button setter：按钮文案、文案模板、点击交互表达式。
+- List setter：items 模板字段、展示字段映射、列表项点击交互表达式。
+- Form setter：字段配置、默认值、提交交互表达式。
 
 这样配置入口保持在元素类型内部，不需要新增一个通用但复杂的事件配置器。
 
 ## 脚本执行
 
-脚本使用 `defineConfig` 声明生命周期和事件方法：
+脚本使用 `defineConfig` 声明生命周期和可选用户辅助函数：
 
 ```ts
 defineConfig({
@@ -353,7 +354,7 @@ defineConfig({
   },
 
   methods: {
-    async confirmOrder() {
+    async submitOrder() {
       await this.$sendMessage({
         content: [{ type: 'text', text: '确认下单' }]
       })
@@ -381,7 +382,7 @@ type WidgetSendMessageInput =
 
 脚本不能直接访问 `window`、Electron API、Node 文件系统 API、`process` 或不受限制的 import。
 
-当前脚本运行态是受控解释器，不执行任意 JavaScript。第一版只解析有限语句：局部常量声明、`this.$setState(...)`、`this.$sendMessage(...)`、`await this.$http.get/post/put/patch/delete(...)`，以及字面量、对象字面量、数组字面量、`this.$input.*`、`this.$state.*`、局部变量属性读取。复杂表达式、循环、任意函数调用和全局 API 都不会执行。
+当前脚本运行态是受控解释器，不执行任意 JavaScript。第一版只解析有限语句：局部常量声明、`this.$setState(...)`、`this.$sendMessage(...)`、`await this.$http.get/post/put/patch/delete(...)`，以及字面量、对象字面量、数组字面量、`this.$input.*`、`this.$state.*`、局部变量属性读取。元素交互表达式可以顶层调用一个 `defineConfig.methods` 中的用户辅助函数，例如 `submitOrder()` 或 `selectCoffee('latte', this.$input.city)`；调用参数会按同一套受控表达式求值并绑定到辅助函数形参。辅助函数内部继续调用其它辅助函数、复杂表达式、循环、任意全局 API 都不会执行。
 
 调用 `this.$sendMessage(...)` 表示当前小组件交互结束，并向聊天上行一条文本消息。未调用 `$sendMessage` 时，小组件保持等待用户交互状态。
 
@@ -426,17 +427,17 @@ const weather = await this.$http.get('https://api.example.com/weather', {
 1. 用户输入“喝咖啡”。
 2. 模型读取可用 Widget 契约，决定调用咖啡 Widget。
 3. 模型调用 `open_widget`，传入位置、偏好等可选 input。
-4. Widget `mounted` 或后续命名方法搜索咖啡选项。
+4. Widget `mounted` 或后续元素交互搜索咖啡选项。
 5. List 元素通过模板字段读取 `state.coffeeList`。
 6. 用户选择某个列表项。
-7. item 事件后续可触发关联方法，方法写入 `state.selectedCoffee`，并保持 `mounted` 继续选择杯型和定制项；调用 `this.$sendMessage` 后结束。
+7. item 事件后续可触发元素自己的交互表达式，交互写入 `state.selectedCoffee`，并保持 `mounted` 继续选择杯型和定制项；调用 `this.$sendMessage` 后结束。
 
 ## 错误处理
 
 - 缺少必填入参：模型继续追问，或渲染Widget表单。
 - 模板路径不存在：渲染 fallback，并可在编辑器模式显示非阻塞提示。
 - 脚本语法错误：允许保存；运行时返回 `failure`。
-- 调用不存在的命名方法：保持当前 Widget part 不变。
+- 交互表达式没有匹配到受支持语句：保持当前 Widget part 不变。
 - 用户取消当前Widget动作或等待输入：返回 code 为 `USER_CANCELLED` 的 `cancelled`。
 - 小组件已 `finished`、`failure` 或 `cancelled` 后触发事件：返回 code 为 `ACTION_NOT_SUPPORTED` 的 `failure`，或在 UI 层禁用该事件入口。
 - HTTP URL 非法、超时、响应过大或解析失败：返回带标准化消息的 `failure`。
@@ -462,18 +463,48 @@ const weather = await this.$http.get('https://api.example.com/weather', {
 - `open_widget` 工具入参只包含 `id` 和可选 `input`，不接收 state 或 output。
 - `open_widget` 工具结果可派生聊天内 Widget part，并在 `MessageBubble` 中渲染 `BWidgetRuntime`。
 - `WidgetExecuteMethod.enabled`、`description`、`defineConfig` 类型提示和状态 schema 推导。
-- `mounted`、`unmounted`、命名方法、缺失方法、`this.$setState`、`this.$sendMessage` 和 `$http` 受控执行。
+- `mounted`、`unmounted`、元素交互表达式、用户辅助函数、缺失交互、`this.$setState`、`this.$sendMessage` 和 `$http` 受控执行。
 - 托管 request 的协议校验、query 拼接、GET body 忽略、特殊 body 直传、超时、并发队列和响应大小流式中止。
 - `WidgetSubmitResult` 与现有聊天工具结果结构保持相近，但不伪装成 tool result 消息。
+
+## 剩余事项
+
+当前主链路已经可以通过 `widget` / `open_widget` 在聊天里展示 Widget，并让消息内运行态保存 `input`、`state`、生命周期和 `$sendMessage` 结果。后续剩余工作主要集中在元素交互和体验闭环。
+
+1. 元素级交互还没有产品化。
+
+   底层已经存在 `useWidgetRuntime().value?.runInteraction(...)` 通道，但还没有实际元素把自己的交互配置接进去。下一步应先做最小 `Button` 元素：按钮文案使用 `metadata.label`，点击交互表达式使用 `metadata.onClick`，元素自己在点击时调用运行态交互。平台不关心业务函数名，也不提供 `callMethod('xxx')` 这类系统协议；业务方想写 `submitOrder()`、`selectCoffee()` 或直接写 `this.$sendMessage(...)` 都是元素交互表达式自己的内容。
+
+2. 交互 `event` 上下文还没有接入。
+
+   文档里已经预留 `event`，但当前受控脚本执行上下文主要是 `this.$input`、`this.$state`、局部变量、`this.$http`。未来 List/Form 这类元素需要把“点击了哪一项”“表单提交了哪些字段”等数据作为交互事件上下文注入，否则元素无法把用户操作带给脚本。第一版可以先只支持元素传入的普通对象事件，例如 `event.value`、`event.item`、`event.form`。
+
+3. Button/List/Form 等交互元素还没有完成。
+
+   Text 元素已经完成模板展示闭环；咖啡、表单选择、确认下单等场景还需要交互元素承载。建议顺序是先做 Button 验证点击与 `$sendMessage` 闭环，再做 List 验证列表项选择与 `state` 更新，最后做 Form 验证缺少 input 时由 Widget 内部收集字段。
+
+4. Widget 运行态交互状态还需要 UI 收口。
+
+   当前数据模型已经有 `created`、`mounted`、`finished`、`failure`、`cancelled`，但具体元素还需要根据状态处理禁用、加载、失败提示和防重复点击。已经 `finished`、`failure` 或 `cancelled` 的 Widget 不应继续触发交互。
+
+5. 脚本解释器只覆盖了第一版最小语句。
+
+   当前受控执行器适合简单的 `this.$setState(...)`、`this.$sendMessage(...)`、`this.$http.*(...)` 和局部常量读取。后续如果真实 Widget 需要更多表达式能力，可以按场景小步增加，但仍不应该开放任意 JavaScript、全局对象、import、DOM、Node 或 Electron API。
+
+6. 缺少 input 时的 Widget 内收集体验还没有完成。
+
+   现在模型可以选择继续追问，也可以用已有 input 打开 Widget。后续如果 Widget 自带表单，应允许 `open_widget` 只传 `id` 或部分 `input`，再由 Form 元素收集缺失字段，并通过 `$setState` 或 `$sendMessage` 完成闭环。
 
 ## 建议实现顺序
 
 推荐下一步实现顺序：
 
-1. 继续完善元素级交互：Button/List/Form 自己声明 submit/click/select 到 `methods` 的映射，不新增全局复杂事件配置器。
-2. 将 `useWidgetRuntime` 接入具体元素事件，补充同一 Widget part 的并发/重入策略。
-3. 完善表单类 Widget 的提交体验，让提交结果统一走 `WidgetSubmitResult` 或 `$sendMessage`。
-4. 扩展受控脚本解释器的表达式能力，但仍避免任意 JavaScript 和全局 API。
-5. 如需要高风险网络、凭据或第三方账号能力，再设计产品级集成和全局平台策略，不放进 Widget 作者配置面板。
+1. 新增最小 `Button` 元素，让 `metadata.label` 支持模板，`metadata.onClick` 支持交互表达式，点击后调用 `useWidgetRuntime().value?.runInteraction(metadata.onClick)`。
+2. 为元素交互补充 `event` 上下文，让后续 List/Form 可以把用户操作数据传给脚本。
+3. 新增 `List` 元素，支持从模板字段读取列表数据，并在 item 点击时触发自己的交互表达式。
+4. 新增 `Form` 元素，支持 Widget 内部收集缺失 input，并把提交结果交给交互表达式处理。
+5. 补齐运行态交互 UI 状态：防重复点击、结束后禁用、失败状态提示和必要测试。
+6. 按真实用例扩展受控脚本解释器的表达式能力，但仍避免任意 JavaScript 和全局 API。
+7. 如需要高风险网络、凭据或第三方账号能力，再设计产品级集成和全局平台策略，不放进 Widget 作者配置面板。
 
 这个顺序可以在已经可用的工具调用纵向闭环上继续增加交互能力，同时保持与更丰富元素类型兼容。

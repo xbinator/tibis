@@ -10,10 +10,10 @@ import type { InjectionKey, Ref } from 'vue';
  */
 export interface WidgetRuntimeController {
   /**
-   * 调用交互脚本 defineConfig.methods 中声明的方法。
-   * @param methodName - 方法名
+   * 运行元素自己声明的交互表达式。
+   * @param interactionCode - 元素交互表达式
    */
-  callMethod: (methodName: string) => void;
+  runInteraction: (interactionCode: string) => void;
 }
 
 /** 小组件运行态控制器注入键。 */

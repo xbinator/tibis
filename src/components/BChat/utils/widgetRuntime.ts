@@ -18,6 +18,18 @@ interface WidgetLifecycleRunOptions {
   now?: () => Date;
   /** 小组件托管 HTTP 客户端。 */
   http?: WidgetHttpClient;
+  /** 是否允许当前语句列表触发用户辅助函数调用。 */
+  allowUserMethodCalls?: boolean;
+  /** 当前 Widget 交互脚本，用于从 defineConfig.methods 中读取用户辅助函数。 */
+  widgetScriptCode?: string;
+}
+
+/**
+ * 小组件语句执行选项。
+ */
+interface WidgetStatementRunOptions extends WidgetLifecycleRunOptions {
+  /** 语句执行前注入的局部变量。 */
+  initialVariables?: Map<string, unknown>;
 }
 
 /**
@@ -43,11 +55,11 @@ export interface WidgetRuntimeFinishResult {
  */
 export interface WidgetRuntimeInstance {
   /**
-   * 调用 defineConfig.methods 中声明的命名方法。
-   * @param methodName - 方法名
-   * @returns 方法执行后的运行态结果
+   * 运行元素声明的交互表达式。
+   * @param interactionCode - 元素交互表达式
+   * @returns 交互执行后的运行态结果
    */
-  callMethod: (methodName: string) => Promise<WidgetRuntimeFinishResult>;
+  runInteraction: (interactionCode: string) => Promise<WidgetRuntimeFinishResult>;
 }
 
 /** 带函数体的小组件配置函数节点。 */
@@ -76,6 +88,8 @@ interface WidgetExpressionEvalContext {
 interface WidgetLifecycleExecutionResult {
   /** 生命周期函数中最后一次 this.$sendMessage 的载荷。 */
   sendMessage?: WidgetRuntimeSendMessage;
+  /** 本次执行是否写入过状态。 */
+  stateChanged?: boolean;
 }
 
 /** 小组件 HTTP 方法名。 */
@@ -175,17 +189,17 @@ function findWidgetLifecycleFunction(code: string, lifecycleName: WidgetLifecycl
 }
 
 /**
- * 从 defineConfig methods 中读取指定方法。
- * @param code - 小组件交互脚本。
- * @param methodName - 方法名称。
- * @returns 方法函数节点，不存在时返回 undefined。
+ * 从 defineConfig methods 中读取指定用户辅助函数。
+ * @param code - 小组件交互脚本
+ * @param methodName - 用户辅助函数名
+ * @returns 用户辅助函数节点，不存在时返回 undefined
  */
 function findWidgetMethodFunction(code: string, methodName: string): WidgetFunctionNodeWithBody | undefined {
   const sourceFile = ts.createSourceFile('widget-runtime.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   let methodFunction: WidgetFunctionNodeWithBody | undefined;
 
   /**
-   * 访问脚本节点并提取 defineConfig methods 中的指定方法。
+   * 访问脚本节点并提取 defineConfig methods 中的指定用户辅助函数。
    * @param node - 当前节点
    */
   function visit(node: ts.Node): void {
@@ -308,6 +322,15 @@ function unwrapAwaitExpression(expression: ts.Expression): ts.Expression {
 }
 
 /**
+ * 读取交互代码中的用户辅助函数调用表达式。
+ * @param expression - 表达式
+ * @returns 用户辅助函数调用表达式，不匹配时返回 null
+ */
+function readUserHelperCallExpression(expression: ts.Expression): ts.CallExpression | null {
+  return ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) ? expression : null;
+}
+
+/**
  * 判断表达式是否为 this.$http.method(...) 调用。
  * @param expression - 待检查表达式
  * @returns 是否为 HTTP 调用
@@ -403,6 +426,46 @@ async function evaluateExpression(expression: ts.Expression, context: WidgetExpr
 }
 
 /**
+ * 根据用户辅助函数形参创建局部变量。
+ * @param helperFunction - 用户辅助函数节点
+ * @param callExpression - 交互表达式中的调用节点
+ * @param context - 当前求值上下文
+ * @returns 注入到用户辅助函数作用域的局部变量
+ */
+async function createUserHelperInitialVariables(
+  helperFunction: WidgetFunctionNodeWithBody,
+  callExpression: ts.CallExpression,
+  context: WidgetExpressionEvalContext
+): Promise<Map<string, unknown>> {
+  const variables = new Map<string, unknown>();
+
+  for (let index = 0; index < helperFunction.parameters.length; index += 1) {
+    const parameter = helperFunction.parameters[index];
+    if (!ts.isIdentifier(parameter.name)) continue;
+
+    if (parameter.dotDotDotToken) {
+      const restValues: unknown[] = [];
+      for (const argument of callExpression.arguments.slice(index)) {
+        // 参数按源码顺序求值，避免依赖前序副作用时顺序错乱。
+        // eslint-disable-next-line no-await-in-loop
+        restValues.push(await evaluateExpression(argument, context));
+      }
+      variables.set(parameter.name.text, restValues);
+      break;
+    }
+
+    const argument = callExpression.arguments[index];
+    if (!argument) continue;
+
+    // 参数按源码顺序求值，避免依赖前序副作用时顺序错乱。
+    // eslint-disable-next-line no-await-in-loop
+    variables.set(parameter.name.text, await evaluateExpression(argument, context));
+  }
+
+  return variables;
+}
+
+/**
  * 判断表达式是否为 this.$setState(...) 调用。
  * @param expression - 待检查表达式
  * @returns 是否为 setState 调用
@@ -431,27 +494,26 @@ function isSendMessageCall(expression: ts.Expression): expression is ts.CallExpr
 }
 
 /**
- * 执行受支持的生命周期语句。
- * @param lifecycleFunction - 生命周期函数节点
+ * 执行受支持的小组件脚本语句。
+ * @param statements - 待执行语句列表
  * @param part - 小组件消息片段
- * @returns 生命周期函数执行结果
+ * @param options - 生命周期执行选项
+ * @returns 脚本语句执行结果
  */
-async function runLifecycleStatements(
-  lifecycleFunction: WidgetFunctionNodeWithBody | undefined,
+async function runWidgetStatements(
+  statements: readonly ts.Statement[],
   part: ChatMessageWidgetPart,
-  options: WidgetLifecycleRunOptions = {}
+  options: WidgetStatementRunOptions = {}
 ): Promise<WidgetLifecycleExecutionResult> {
   const result: WidgetLifecycleExecutionResult = {};
-  if (!lifecycleFunction) return result;
-
   const context: WidgetExpressionEvalContext = {
     input: part.renderContext.input,
     state: part.renderContext.state,
-    variables: new Map<string, unknown>(),
+    variables: new Map<string, unknown>(options.initialVariables),
     http: options.http
   };
 
-  for (const statement of lifecycleFunction.body.statements) {
+  for (const statement of statements) {
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
@@ -474,6 +536,27 @@ async function runLifecycleStatements(
       continue;
     }
 
+    const userHelperCall = options.allowUserMethodCalls ? readUserHelperCallExpression(expression) : null;
+    if (userHelperCall && ts.isIdentifier(userHelperCall.expression)) {
+      const userMethodName = userHelperCall.expression.text;
+      const methodFunction = findWidgetMethodFunction(options.widgetScriptCode ?? 'defineConfig({})', userMethodName);
+      if (!methodFunction) continue;
+
+      // 参数绑定必须先于辅助函数执行，且保持源码顺序。
+      // eslint-disable-next-line no-await-in-loop
+      const initialVariables = await createUserHelperInitialVariables(methodFunction, userHelperCall, context);
+      // 用户辅助函数只允许由元素交互代码触发，不允许辅助函数内部继续递归调用。
+      // eslint-disable-next-line no-await-in-loop
+      const helperResult = await runWidgetStatements(methodFunction.body.statements, part, { ...options, allowUserMethodCalls: false, initialVariables });
+      if (helperResult.stateChanged) {
+        result.stateChanged = true;
+      }
+      if (helperResult.sendMessage) {
+        result.sendMessage = helperResult.sendMessage;
+      }
+      continue;
+    }
+
     if (isSetStateCall(expression)) {
       const [pathExpression, valueExpression] = expression.arguments;
       if (!pathExpression || !valueExpression || !ts.isStringLiteral(pathExpression)) continue;
@@ -482,6 +565,7 @@ async function runLifecycleStatements(
       // eslint-disable-next-line no-await-in-loop
       const value = await evaluateExpression(valueExpression, context);
       set(part.renderContext.state, pathExpression.text, value);
+      result.stateChanged = true;
       continue;
     }
 
@@ -500,6 +584,23 @@ async function runLifecycleStatements(
   }
 
   return result;
+}
+
+/**
+ * 执行受支持的生命周期语句。
+ * @param lifecycleFunction - 生命周期函数节点
+ * @param part - 小组件消息片段
+ * @param options - 生命周期执行选项
+ * @returns 生命周期函数执行结果
+ */
+async function runLifecycleStatements(
+  lifecycleFunction: WidgetFunctionNodeWithBody | undefined,
+  part: ChatMessageWidgetPart,
+  options: WidgetLifecycleRunOptions = {}
+): Promise<WidgetLifecycleExecutionResult> {
+  if (!lifecycleFunction) return {};
+
+  return runWidgetStatements(lifecycleFunction.body.statements, part, options);
 }
 
 /**
@@ -599,34 +700,40 @@ export async function finishWidgetRuntime(part: ChatMessageWidgetPart, options: 
 }
 
 /**
- * 调用小组件实例上的命名方法。
+ * 运行元素声明的交互表达式。
  * @param part - 小组件消息片段
- * @param methodName - 方法名
+ * @param interactionCode - 元素交互表达式
  * @param options - 生命周期执行选项
- * @returns 方法执行结果
+ * @returns 交互执行结果
  */
-async function callWidgetInstanceMethod(
+async function runWidgetInteraction(
   part: ChatMessageWidgetPart,
-  methodName: string,
+  interactionCode: string,
   options: WidgetLifecycleRunOptions = {}
 ): Promise<WidgetRuntimeFinishResult> {
   if (part.status !== 'mounted' || !isWidgetScriptEnabled(part)) return { part };
 
-  const methodFunction = findWidgetMethodFunction(part.value.execute?.code ?? 'defineConfig({})', methodName);
-  if (!methodFunction) return { part };
+  const sourceFile = ts.createSourceFile('widget-interaction.ts', interactionCode, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  if (!sourceFile.statements.length) return { part };
 
   try {
     const nextPart = cloneDeep(part);
-    const methodResult = await runLifecycleStatements(methodFunction, nextPart, options);
+    const interactionResult = await runWidgetStatements(sourceFile.statements, nextPart, {
+      ...options,
+      allowUserMethodCalls: true,
+      widgetScriptCode: nextPart.value.execute?.code ?? 'defineConfig({})'
+    });
 
-    if (methodResult.sendMessage) {
+    if (interactionResult.sendMessage) {
       const finishResult = await finishWidgetRuntime(nextPart, options);
 
       return {
         part: finishResult.part,
-        sendMessage: methodResult.sendMessage
+        sendMessage: interactionResult.sendMessage
       };
     }
+
+    if (!interactionResult.stateChanged) return { part };
 
     return { part: { ...nextPart, status: 'mounted' } };
   } catch {
@@ -642,7 +749,7 @@ async function callWidgetInstanceMethod(
  */
 export function createWidgetRuntimeInstance(part: ChatMessageWidgetPart, options: WidgetLifecycleRunOptions = {}): WidgetRuntimeInstance {
   return {
-    callMethod: (methodName: string): Promise<WidgetRuntimeFinishResult> => callWidgetInstanceMethod(part, methodName, options)
+    runInteraction: (interactionCode: string): Promise<WidgetRuntimeFinishResult> => runWidgetInteraction(part, interactionCode, options)
   };
 }
 
