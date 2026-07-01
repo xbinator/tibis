@@ -3,12 +3,13 @@
  * @description BChat BubblePartWidget 小组件运行态提交测试。
  * @vitest-environment jsdom
  */
-import type { ChatMessageWidgetPart } from 'types/chat';
+import type { ChatMessageToolPart, ChatMessageWidgetPart } from 'types/chat';
 import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent, nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import BubblePartWidget from '@/components/BChat/components/MessageBubble/BubblePartWidget.vue';
+import { resolveWidgetPartFromToolResult } from '@/components/BChat/utils/messageHelper';
 import type { BChatSubmitAction, BChatSubmitContext } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
@@ -145,6 +146,59 @@ async function flushWidgetRuntime(): Promise<void> {
 }
 
 describe('BubblePartWidget', (): void => {
+  it('initializes preview widget runtime state on open_widget tool parts', async (): Promise<void> => {
+    const toolPart: ChatMessageToolPart = {
+      id: 'tool-open-widget',
+      type: 'tool',
+      toolCallId: 'tool-call-widget',
+      toolName: 'open_widget',
+      status: 'done',
+      input: {
+        id: 'coffee'
+      },
+      result: {
+        toolName: 'open_widget',
+        status: 'success',
+        data: {
+          kind: 'widget_display',
+          sessionId: 'widget-coffee-session',
+          widgetId: 'coffee',
+          value: createWidgetData('defineConfig({})'),
+          renderContext: createWidgetRenderContext()
+        }
+      }
+    };
+    const widgetPart = resolveWidgetPartFromToolResult(toolPart);
+    if (!widgetPart) {
+      throw new Error('open_widget 工具结果未生成小组件片段');
+    }
+
+    const wrapper = mountBubblePartWidget(widgetPart, {
+      messageId: 'assistant-widget-message',
+      runtimeEnabled: false
+    });
+    await flushWidgetRuntime();
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const context = createSubmitContextMock();
+    await action.run(context);
+
+    expect(context.updateMessage).toHaveBeenCalledWith('assistant-widget-message', expect.any(Function));
+    const [, updater] = vi.mocked(context.updateMessage).mock.calls[0];
+    const nextMessage = updater(createAssistantMessage({ parts: [toolPart] }));
+
+    expect(nextMessage.parts).toEqual([
+      expect.objectContaining({
+        ...toolPart,
+        widget: expect.objectContaining({
+          sessionId: 'widget-coffee-session',
+          widgetId: 'coffee',
+          status: 'created'
+        })
+      })
+    ]);
+  });
+
   it('initializes mounted state with the managed request client', async (): Promise<void> => {
     requestMock.mockResolvedValue({
       status: 200,

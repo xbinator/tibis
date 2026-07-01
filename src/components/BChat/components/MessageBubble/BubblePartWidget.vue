@@ -10,17 +10,29 @@
 
 <script setup lang="ts">
 import type { Message } from '../../utils/types';
-import type { ChatMessageTextPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart } from 'types/chat';
+import type {
+  ChatMessagePart,
+  ChatMessageTextPart,
+  ChatMessageToolPart,
+  ChatMessageWidgetPart,
+  ChatMessageWidgetResultPart,
+  ChatMessageWidgetRuntime
+} from 'types/chat';
 import type { WidgetRuntimeSendMessage } from 'types/widget';
-import { onMounted } from 'vue';
+import { onMounted, watch } from 'vue';
 import { isString } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { createWidgetSubmitSuccessResult } from '@/shared/widget/protocol';
 import { stringifyJsonValue } from '@/utils/json';
 import { createNamespace } from '@/utils/namespace';
-import { create } from '../../utils/messageHelper';
-import { createRuntimeUserMessageSubmitAction, type BChatAdaptedUserMessageSubmitInput, type BChatSubmitAction } from '../../utils/submitAction';
+import { create, initializeWidgetToolRuntimeParts, resolveWidgetPartFromToolResult } from '../../utils/messageHelper';
+import {
+  createMessageUpdateSubmitAction,
+  createRuntimeUserMessageSubmitAction,
+  type BChatAdaptedUserMessageSubmitInput,
+  type BChatSubmitAction
+} from '../../utils/submitAction';
 import { createWidgetHttpClient, finishWidgetRuntime, initWidgetMountState } from '../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
@@ -61,9 +73,58 @@ interface WidgetPartFinishMessageResult {
 }
 
 /**
+ * 将可渲染的小组件片段转换成工具片段内的运行态。
+ * @param part - 小组件片段
+ * @returns 工具片段内的小组件运行态
+ */
+function toWidgetRuntime(part: ChatMessageWidgetPart): ChatMessageWidgetRuntime {
+  return {
+    sessionId: part.sessionId,
+    widgetId: part.widgetId,
+    status: part.status,
+    lifecycle: part.lifecycle,
+    value: part.value,
+    renderContext: part.renderContext
+  };
+}
+
+/**
+ * 从消息片段中读取小组件运行态。
+ * @param part - 消息片段
+ * @returns 可执行的小组件片段；不存在时返回 null
+ */
+function resolveWidgetPartFromMessagePart(part: ChatMessagePart): ChatMessageWidgetPart | null {
+  if (part.type === 'widget') return part;
+
+  if (part.type !== 'tool') return null;
+
+  if (part.widget) {
+    return { id: part.id, type: 'widget', ...part.widget };
+  }
+
+  return resolveWidgetPartFromToolResult(part);
+}
+
+/**
+ * 使用下一版小组件运行态更新宿主消息片段。
+ * @param sourcePart - 当前宿主消息片段
+ * @param nextPart - 下一版小组件运行态片段
+ * @returns 更新后的宿主消息片段
+ */
+function updateHostMessagePart(sourcePart: ChatMessagePart, nextPart: ChatMessageWidgetPart): ChatMessagePart {
+  if (sourcePart.type === 'widget') return nextPart;
+  if (sourcePart.type !== 'tool') return sourcePart;
+
+  return {
+    ...sourcePart,
+    widget: toWidgetRuntime(nextPart)
+  } satisfies ChatMessageToolPart;
+}
+
+/**
  * 创建替换指定小组件片段后的消息，片段未变化时返回原消息。
  * @param currentMessage - 当前消息
- * @param partId - 小组件片段 ID
+ * @param partId - 小组件运行态所在的消息片段 ID
  * @param currentPart - 当前小组件片段
  * @param nextPart - 下一版小组件片段
  * @returns 替换指定片段后的消息，片段未变化时返回原消息
@@ -73,19 +134,20 @@ function createWidgetPartUpdatedMessage(currentMessage: Message, partId: string,
 
   return {
     ...currentMessage,
-    parts: currentMessage.parts.map((sourcePart) => (sourcePart.id === partId ? nextPart : sourcePart))
+    parts: currentMessage.parts.map((sourcePart) => (sourcePart.id === partId ? updateHostMessagePart(sourcePart, nextPart) : sourcePart))
   };
 }
 
 /**
  * 创建完成指定小组件片段后的消息。
  * @param currentMessage - 当前消息
- * @param partId - 小组件片段 ID
+ * @param partId - 小组件运行态所在的消息片段 ID
  * @returns 执行收尾后的消息；无法收尾时返回原消息
  */
 async function createWidgetPartFinishedMessage(currentMessage: Message, partId: string): Promise<WidgetPartFinishMessageResult> {
-  const currentPart = currentMessage.parts.find((part): part is ChatMessageWidgetPart => part.type === 'widget' && part.id === partId);
-  if (currentPart?.type !== 'widget') return { message: currentMessage };
+  const hostPart = currentMessage.parts.find((part): boolean => part.id === partId);
+  const currentPart = hostPart ? resolveWidgetPartFromMessagePart(hostPart) : null;
+  if (!currentPart) return { message: currentMessage };
 
   const finishResult = await finishWidgetRuntime(currentPart, { http: widgetHttpClient });
   const message = createWidgetPartUpdatedMessage(currentMessage, partId, currentPart, finishResult.part);
@@ -160,7 +222,6 @@ function createWidgetResultSubmitAction(output: unknown): BChatSubmitAction {
  */
 function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChatSubmitAction {
   const { messageId } = props;
-  const partId = props.part.id;
   if (!messageId) return action;
 
   return {
@@ -171,7 +232,7 @@ function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChat
         return;
       }
 
-      const finishResult = await createWidgetPartFinishedMessage(currentMessage, partId);
+      const finishResult = await createWidgetPartFinishedMessage(currentMessage, props.part.id);
       await context.updateMessage(messageId, (): Message => finishResult.message);
 
       if (finishResult.sendMessage) {
@@ -193,20 +254,51 @@ function handleSubmit(output: unknown): void {
 }
 
 /**
+ * 请求宿主消息初始化 open_widget 工具片段内的小组件运行态。
+ */
+function requestWidgetRuntimeInitialization(): void {
+  if (props.runtimeEnabled || !props.messageId) return;
+
+  emit('submit', createMessageUpdateSubmitAction(props.messageId, initializeWidgetToolRuntimeParts));
+}
+
+/**
  * 初始化小组件消息运行态，并把状态变化交给消息宿主写回。
  */
 async function initWidgetRuntime(): Promise<void> {
   if (!props.runtimeEnabled) return;
 
   const nextPart = await initWidgetMountState(props.part, { http: widgetHttpClient });
-  if (nextPart !== props.part) {
+  if (nextPart === props.part) return;
+
+  const { messageId } = props;
+  if (!messageId) {
     emit('change', nextPart);
+    return;
   }
+
+  emit(
+    'submit',
+    createMessageUpdateSubmitAction(
+      messageId,
+      (currentMessage: Message): Message => createWidgetPartUpdatedMessage(currentMessage, props.part.id, props.part, nextPart)
+    )
+  );
 }
 
 onMounted((): void => {
+  requestWidgetRuntimeInitialization();
   initWidgetRuntime().catch((): undefined => undefined);
 });
+
+watch(
+  () => props.runtimeEnabled,
+  (runtimeEnabled): void => {
+    if (!runtimeEnabled) return;
+
+    initWidgetRuntime().catch((): undefined => undefined);
+  }
+);
 </script>
 
 <style scoped lang="less">

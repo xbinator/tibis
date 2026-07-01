@@ -296,6 +296,26 @@ describe('widgetRuntime', (): void => {
     expect(result.part).toBe(part);
   });
 
+  it('keeps the widget mounted when a named method updates state without sending a message', async (): Promise<void> => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(
+        ['defineConfig({', '  methods: {', '    selectCoffee() {', "      this.$setState('selectedCoffee', 'latte')", '    }', '  }', '})'].join('\n')
+      ),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      }
+    };
+
+    const result = await runWidgetMethod(part, 'selectCoffee');
+
+    expect(result.part.status).toBe('mounted');
+    expect(result.part.renderContext.state).toEqual({
+      selectedCoffee: 'latte'
+    });
+    expect(result.sendMessage).toBeUndefined();
+  });
+
   it('supports managed http calls and stores response data', async (): Promise<void> => {
     const part = createWidgetPart(
       [

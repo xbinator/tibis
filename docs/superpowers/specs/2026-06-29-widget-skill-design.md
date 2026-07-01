@@ -117,7 +117,7 @@ interface WidgetExecuteMethod {
 - `description` 用于编辑器提示和调试记录，不参与执行逻辑。
 - 交互脚本本身不维护 timeout 配置；网络请求超时、队列和响应大小限制统一由底层 `request` 能力处理。
 - `methods` 内的方法只作为元素事件入口或后续显式运行入口，第一版不提供方法间互调，因此不存在方法递归调用问题。后续如引入互调，需要重新定义调用深度和循环检测。
-- 调用不存在的命名方法时保持原 Widget part 不变，不进入 `awaiting_user_input`。
+- 调用不存在的命名方法时保持原 Widget part 不变。
 
 ### 元素级动态元信息
 
@@ -211,7 +211,7 @@ interface ChatMessageWidgetPart {
   type: 'widget'
   sessionId: string
   widgetId: string
-  status: 'created' | 'mounted' | 'running' | 'awaiting_user_input' | 'finished' | 'failure' | 'cancelled'
+  status: 'created' | 'mounted' | 'finished' | 'failure' | 'cancelled'
   value: WidgetData
   renderContext: {
     input: Record<string, unknown>
@@ -232,24 +232,17 @@ interface ChatMessageWidgetPart {
 created
   -> mounted
 mounted
-  -> awaiting_user_input
   -> finished
-  -> failure
-awaiting_user_input
-  -> running
-running
-  -> awaiting_user_input
-  -> finished（this.$sendMessage 成功后执行 unmounted）
   -> failure
   -> cancelled
 ```
 
 并发和重入规则：
 
-- 同一个 Widget part 同一时间只允许一个方法执行。
-- `running` 状态下触发的新事件默认排队；如果事件来自同一个元素同一种事件，可以合并或忽略，具体由元素类型决定。
-- `awaiting_user_input` 状态下只允许处理当前等待问题对应的回答、取消或确认事件；其他元素事件应被禁用或返回 `ACTION_NOT_SUPPORTED`。
-- 用户取消等待输入时返回 `status: 'cancelled'`、code 为 `USER_CANCELLED`，Widget part 进入 `cancelled`。
+- `mounted` 表示小组件正在展示，也表示仍可继续等待用户操作。
+- 命名方法执行时不额外写入持久化的 `running` 状态；UI 层需要防重复点击时使用组件内部临时状态处理。
+- 命名方法调用 `this.$sendMessage` 后进入 `finished`；未调用时保持 `mounted`，并保留本次 `this.$setState` 写入的状态。
+- 用户中止当前聊天生成或取消小组件时，未完成的小组件进入 `cancelled`。
 
 ## 元素渲染与运行态容器
 
@@ -436,7 +429,7 @@ const weather = await this.$http.get('https://api.example.com/weather', {
 4. Widget `mounted` 或后续命名方法搜索咖啡选项。
 5. List 元素通过模板字段读取 `state.coffeeList`。
 6. 用户选择某个列表项。
-7. item 事件后续可触发关联方法，方法写入 `state.selectedCoffee`，或保持 `awaiting_user_input` 继续选择杯型和定制项。
+7. item 事件后续可触发关联方法，方法写入 `state.selectedCoffee`，并保持 `mounted` 继续选择杯型和定制项；调用 `this.$sendMessage` 后结束。
 
 ## 错误处理
 
@@ -445,9 +438,9 @@ const weather = await this.$http.get('https://api.example.com/weather', {
 - 脚本语法错误：允许保存；运行时返回 `failure`。
 - 调用不存在的命名方法：保持当前 Widget part 不变。
 - 用户取消当前Widget动作或等待输入：返回 code 为 `USER_CANCELLED` 的 `cancelled`。
-- `awaiting_user_input` 期间触发无关事件：返回 code 为 `ACTION_NOT_SUPPORTED` 的 `failure`，或在 UI 层禁用该事件入口。
+- 小组件已 `finished`、`failure` 或 `cancelled` 后触发事件：返回 code 为 `ACTION_NOT_SUPPORTED` 的 `failure`，或在 UI 层禁用该事件入口。
 - HTTP URL 非法、超时、响应过大或解析失败：返回带标准化消息的 `failure`。
-- 等待用户输入：当前消息的 Widget part 状态变为 `awaiting_user_input`，聊天等待用户回答或元素交互。
+- 等待用户输入：当前消息的 Widget part 保持 `mounted`，聊天等待用户继续操作小组件。
 
 ## 测试
 

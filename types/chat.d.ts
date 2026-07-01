@@ -194,6 +194,39 @@ export interface ChatMessageShellOutputChunk {
 }
 
 /**
+ * 聊天消息小组件片段状态。
+ */
+export type ChatMessageWidgetStatus = 'created' | 'mounted' | 'finished' | 'failure' | 'cancelled';
+
+/**
+ * 聊天消息小组件运行态生命周期记录。
+ */
+export interface ChatMessageWidgetLifecycle {
+  /** mounted 执行完成时间 */
+  mountedAt?: string;
+  /** unmounted 执行完成时间 */
+  unmountedAt?: string;
+}
+
+/**
+ * 聊天消息小组件运行态。
+ */
+export interface ChatMessageWidgetRuntime {
+  /** 小组件会话 ID，用于后续执行闭环关联；独立运行态使用所在消息 ID 表示 */
+  sessionId: string;
+  /** 小组件稳定 ID */
+  widgetId: string;
+  /** 小组件执行或展示状态 */
+  status: ChatMessageWidgetStatus;
+  /** 小组件运行态生命周期记录 */
+  lifecycle: ChatMessageWidgetLifecycle;
+  /** 小组件快照值 */
+  value: WidgetData;
+  /** 运行态渲染上下文 */
+  renderContext: WidgetRenderContext;
+}
+
+/**
  * 聊天消息统一工具片段。
  * 合并原 tool-input / tool-call / tool-result 为同一片段，通过 status 追踪工具执行生命周期。
  */
@@ -214,41 +247,16 @@ export interface ChatMessageToolPart extends ChatMessagePartBase {
   result?: AIToolExecutionResult;
   /** Shell 命令实时输出缓冲，仅 run_shell_command 使用 */
   shellOutput?: ChatMessageShellOutputChunk[];
-}
-
-/**
- * 聊天消息小组件片段状态。
- */
-export type ChatMessageWidgetStatus = 'created' | 'mounted' | 'running' | 'awaiting_user_input' | 'finished' | 'failure' | 'cancelled';
-
-/**
- * 聊天消息小组件运行态生命周期记录。
- */
-export interface ChatMessageWidgetLifecycle {
-  /** mounted 执行完成时间 */
-  mountedAt?: string;
-  /** unmounted 执行完成时间 */
-  unmountedAt?: string;
+  /** open_widget 工具对应的小组件运行态，仅 UI 运行态使用，不进入模型 tool result */
+  widget?: ChatMessageWidgetRuntime;
 }
 
 /**
  * 聊天消息小组件快照片段。
  */
-export interface ChatMessageWidgetPart extends ChatMessagePartBase {
+export interface ChatMessageWidgetPart extends ChatMessagePartBase, ChatMessageWidgetRuntime {
   /** 片段类型 */
   type: 'widget';
-  /** 小组件会话 ID，用于后续执行闭环关联；独立运行态使用所在消息 ID 表示 */
-  sessionId: string;
-  /** 小组件稳定 ID */
-  widgetId: string;
-  /** 小组件执行或展示状态 */
-  status: ChatMessageWidgetStatus;
-  /** 小组件运行态生命周期记录 */
-  lifecycle: ChatMessageWidgetLifecycle;
-  /** 小组件快照值 */
-  value: WidgetData;
-  /** 运行态渲染上下文 */
-  renderContext: WidgetRenderContext;
 }
 
 /**

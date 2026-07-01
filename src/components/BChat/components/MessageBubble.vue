@@ -45,7 +45,6 @@
               :part="item.part"
               :runtime-enabled="item.runtimeEnabled"
               @submit="$emit('submit', $event)"
-              @change="handleWidgetPartChange(item, $event)"
             />
           </template>
         </template>
@@ -72,6 +71,7 @@
  * @file MessageBubble.vue
  * @description 聊天气泡组件，按结构化消息片段渲染文本、思考、工具调用和工具结果。
  */
+import type { BChatSubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
 import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type {
@@ -90,7 +90,6 @@ import type { ImagePreviewItem } from '@/hooks/useImagePreview';
 import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult, resolveWidgetPartFromToolResult } from '../utils/messageHelper';
-import { createMessageUpdateSubmitAction, type BChatSubmitAction } from '../utils/submitAction';
 import { formatMessageTime } from '../utils/timeFormat';
 import BubblePartStatus from './MessageBubble/BubblePartStatus.vue';
 import BubblePartText from './MessageBubble/BubblePartText.vue';
@@ -115,7 +114,7 @@ const props = defineProps<{
   canRollback?: (message: Message) => boolean;
 }>();
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'submit', action: BChatSubmitAction): void;
@@ -192,14 +191,22 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
     if (part.type === 'tool') {
       const widgetPart = resolveWidgetPartFromToolResult(part);
-      if (widgetPart) return [{ key: widgetPart.id ?? `${key}-widget`, kind: 'widget', part: widgetPart, runtimeEnabled: false }];
+      if (widgetPart) {
+        return [
+          {
+            key,
+            kind: 'widget',
+            part: widgetPart,
+            runtimeEnabled: Boolean(part.widget)
+          }
+        ];
+      }
     }
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
     if (part.type === 'widget') return [{ key, kind: 'widget', part, runtimeEnabled: true }];
     return [];
   })
 );
-
 /**
  * 打开图片预览。
  * @param index - 图片索引
@@ -218,40 +225,6 @@ async function handleImageClick(index: number): Promise<void> {
 function handleCopy(message: Message): void {
   const content = extractLastTextPart(message);
   clipboard(content, { successMessage: '已复制到剪贴板' });
-}
-
-/**
- * 创建替换指定小组件片段后的消息。
- * @param currentMessage - 当前消息
- * @param item - 小组件渲染条目
- * @param part - 下一版小组件片段
- * @returns 替换指定片段后的消息
- */
-function createWidgetPartUpdatedMessage(
-  currentMessage: Message,
-  item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>,
-  part: ChatMessageWidgetPart
-): Message {
-  const partId = item.part.id;
-  if (!partId) return currentMessage;
-
-  return {
-    ...currentMessage,
-    parts: currentMessage.parts.map((sourcePart) => (sourcePart.id === partId ? part : sourcePart))
-  };
-}
-
-/**
- * 将小组件运行态更新补齐消息定位信息后向上透传。
- * @param item - 小组件渲染条目
- * @param part - 新的小组件片段
- */
-function handleWidgetPartChange(item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>, part: ChatMessageWidgetPart): void {
-  if (!item.part.id) return;
-
-  const updater = (currentMessage: Message): Message => createWidgetPartUpdatedMessage(currentMessage, item, part);
-
-  emit('submit', createMessageUpdateSubmitAction(props.message.id, updater));
 }
 </script>
 

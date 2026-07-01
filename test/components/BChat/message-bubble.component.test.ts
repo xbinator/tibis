@@ -960,6 +960,82 @@ describe('MessageBubble', (): void => {
     expect(wrapper.text()).toContain('28°C');
   });
 
+  it('emits message update actions to keep open_widget runtime on the tool part', async (): Promise<void> => {
+    const toolPart: ChatMessageToolPart = {
+      id: 'part0014',
+      type: 'tool',
+      toolCallId: 'tool-call-widget',
+      toolName: 'open_widget',
+      status: 'done',
+      input: {
+        id: 'weather',
+        input: {
+          city: '上海'
+        }
+      },
+      result: {
+        toolName: 'open_widget',
+        status: 'success',
+        data: {
+          kind: 'widget_display',
+          sessionId: 'widget-weather-tool-call-widget',
+          widgetId: 'weather',
+          value: createWeatherWidgetData(),
+          renderContext: createWeatherRenderContext()
+        }
+      }
+    };
+    const message = createAssistantMessage({
+      id: 'assistant-open-widget',
+      content: '',
+      parts: [toolPart]
+    });
+    const wrapper = mountMessageBubble(message);
+
+    await flushPromises();
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    await action.run(submitContext);
+
+    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-open-widget', expect.any(Function));
+    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
+    const nextMessage = updater(message);
+
+    expect(nextMessage.parts).toEqual([
+      expect.objectContaining({
+        ...toolPart,
+        widget: expect.objectContaining({
+          sessionId: 'widget-weather-tool-call-widget',
+          widgetId: 'weather',
+          status: 'created'
+        })
+      })
+    ]);
+
+    await wrapper.setProps({ message: nextMessage });
+    await flushPromises();
+
+    const mountedAction = wrapper.emitted('submit')?.[1]?.[0] as BChatSubmitAction;
+    const mountedSubmitContext = createSubmitContextMock();
+    await mountedAction.run(mountedSubmitContext);
+
+    expect(mountedSubmitContext.updateMessage).toHaveBeenCalledWith('assistant-open-widget', expect.any(Function));
+    const [, mountedUpdater] = vi.mocked(mountedSubmitContext.updateMessage).mock.calls[0];
+
+    expect(mountedUpdater(nextMessage).parts[0]).toEqual(
+      expect.objectContaining({
+        type: 'tool',
+        widget: expect.objectContaining({
+          status: 'mounted',
+          lifecycle: expect.objectContaining({
+            mountedAt: expect.any(String)
+          })
+        })
+      })
+    );
+  });
+
   it('copies user widget result messages from message content when no text part exists', async (): Promise<void> => {
     const widgetResultPart: ChatMessageWidgetResultPart = {
       id: 'part0015',

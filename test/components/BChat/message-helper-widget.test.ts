@@ -4,7 +4,7 @@
  */
 import type { ChatMessageToolPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { convert, resolveWidgetPartFromToolResult } from '@/components/BChat/utils/messageHelper';
+import { convert, initializeWidgetToolRuntimeParts, resolveWidgetPartFromToolResult } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -70,6 +70,33 @@ describe('messageHelper widget result', (): void => {
     expect(resolveWidgetPartFromToolResult(toolPart)).toBeNull();
   });
 
+  it('initializes open_widget tool parts with durable widget runtime state', (): void => {
+    const toolPart = createOpenWidgetToolPart();
+    const message: Message = {
+      id: 'assistant-widget',
+      role: 'assistant',
+      content: '',
+      parts: [toolPart],
+      createdAt: '2026-06-30T00:00:00.000Z',
+      finished: true
+    };
+
+    const nextMessage = initializeWidgetToolRuntimeParts(message);
+
+    expect(nextMessage).not.toBe(message);
+    expect(nextMessage.parts).toEqual([
+      expect.objectContaining({
+        ...toolPart,
+        widget: expect.objectContaining({
+          sessionId: 'widget-weather-tool-call-widget',
+          widgetId: 'weather',
+          status: 'created'
+        })
+      })
+    ]);
+    expect(initializeWidgetToolRuntimeParts(nextMessage)).toBe(nextMessage);
+  });
+
   it('keeps widget snapshots out of model-visible tool results', (): void => {
     const assistantMessage: Message = {
       id: 'assistant-widget',
@@ -116,7 +143,8 @@ describe('messageHelper widget result', (): void => {
       role: 'user',
       content: '',
       parts: [
-        { id: 'part0028',
+        {
+          id: 'part0028',
           type: 'widget_result',
           sessionId: 'widget-coffee-tool-call-widget',
           widgetId: 'coffee',

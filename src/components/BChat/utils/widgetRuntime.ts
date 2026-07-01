@@ -611,7 +611,7 @@ export async function runWidgetMethod(
       return createWidgetFinishedResult(nextPart, methodResult.sendMessage, options);
     }
 
-    return { part: { ...nextPart, status: 'awaiting_user_input' } };
+    return { part: { ...nextPart, status: 'mounted' } };
   } catch {
     return { part: createFailedWidgetPart(part) };
   }

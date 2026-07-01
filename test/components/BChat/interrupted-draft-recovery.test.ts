@@ -2,7 +2,7 @@
  * @file interrupted-draft-recovery.test.ts
  * @description BChat 硬中断 assistant 草稿恢复测试。
  */
-import type { ChatMessageWidgetPart } from 'types/chat';
+import type { ChatMessageToolPart, ChatMessageWidgetPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
 import { recoverInterruptedAssistantDrafts, HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChat/utils/interruptedDraftRecovery';
 import type { Message } from '@/components/BChat/utils/types';
@@ -32,7 +32,8 @@ function createInterruptedAssistantDraft(): Message {
  * @returns 带小组件的未完成助手消息。
  */
 function createInterruptedWidgetAssistantDraft(): Message {
-  const widgetPart: ChatMessageWidgetPart = { id: 'part0006',
+  const widgetPart: ChatMessageWidgetPart = {
+    id: 'part0006',
     type: 'widget',
     sessionId: 'widget-session-1',
     widgetId: 'weather',
@@ -57,6 +58,53 @@ function createInterruptedWidgetAssistantDraft(): Message {
 }
 
 /**
+ * 创建一条带 tool.widget 运行态的未完成助手草稿消息。
+ * @returns 带 open_widget 工具运行态的未完成助手消息。
+ */
+function createInterruptedToolWidgetAssistantDraft(): Message {
+  const toolPart: ChatMessageToolPart = {
+    id: 'part0008',
+    type: 'tool',
+    toolCallId: 'open-widget-tool-1',
+    toolName: 'open_widget',
+    status: 'done',
+    input: { id: 'weather' },
+    result: {
+      toolName: 'open_widget',
+      status: 'success',
+      data: {
+        kind: 'widget_display',
+        sessionId: 'widget-session-2',
+        widgetId: 'weather'
+      }
+    },
+    widget: {
+      sessionId: 'widget-session-2',
+      widgetId: 'weather',
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      },
+      value: createDefaultWidgetData(),
+      renderContext: {
+        input: {},
+        state: {}
+      }
+    }
+  };
+
+  return {
+    id: 'assistant-tool-widget-draft-1',
+    role: 'assistant',
+    content: '',
+    parts: [toolPart],
+    createdAt: '2026-07-01T00:00:00.000Z',
+    loading: true,
+    finished: false
+  };
+}
+
+/**
  * 创建一条等待用户选择的助手消息。
  * @returns 等待用户选择的助手消息。
  */
@@ -66,7 +114,8 @@ function createAwaitingUserChoiceAssistantMessage(): Message {
     role: 'assistant',
     content: '',
     parts: [
-      { id: 'part0007',
+      {
+        id: 'part0007',
         type: 'tool',
         toolCallId: 'question-tool-1',
         toolName: 'ask_user_question',
@@ -140,6 +189,17 @@ describe('interrupted assistant draft recovery', () => {
     expect(result.recovered).toBe(true);
     expect(widgetPart).toMatchObject({
       type: 'widget',
+      status: 'cancelled'
+    });
+  });
+
+  it('marks unfinished tool widget runtime as cancelled when recovering interrupted drafts', (): void => {
+    const result = recoverInterruptedAssistantDrafts([createInterruptedToolWidgetAssistantDraft()]);
+    const recoveredMessage = result.messages[0];
+    const toolPart = recoveredMessage.parts.find((part): part is ChatMessageToolPart => part.type === 'tool');
+
+    expect(result.recovered).toBe(true);
+    expect(toolPart?.widget).toMatchObject({
       status: 'cancelled'
     });
   });

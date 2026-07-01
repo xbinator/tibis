@@ -546,7 +546,7 @@ export async function runWidgetMethod(part: ChatMessageWidgetPart, methodName: s
   return {
     part: {
       ...nextPart,
-      status: 'awaiting_user_input'
+      status: 'mounted'
     }
   };
 }
