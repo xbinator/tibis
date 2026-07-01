@@ -17,6 +17,9 @@ interface WidgetLifecycleRunOptions {
 /** 带函数体的小组件配置函数节点。 */
 type WidgetFunctionNodeWithBody = (ts.MethodDeclaration | ts.FunctionExpression | ts.ArrowFunction) & { body: ts.Block };
 
+/** 小组件脚本生命周期名称。 */
+type WidgetLifecycleName = 'mounted' | 'unmounted';
+
 /**
  * 受限表达式求值上下文。
  */
@@ -25,7 +28,7 @@ interface WidgetExpressionEvalContext {
   input: Record<string, unknown>;
   /** Widget 会话状态。 */
   state: Record<string, unknown>;
-  /** mounted 函数体内已经解析出的局部常量。 */
+  /** 生命周期函数体内已经解析出的局部常量。 */
   variables: Map<string, unknown>;
 }
 
@@ -59,29 +62,30 @@ function hasBlockBody(node: ts.MethodDeclaration | ts.FunctionExpression | ts.Ar
 }
 
 /**
- * 从 defineConfig 配置对象读取 mounted 函数体。
+ * 从 defineConfig 配置对象读取指定生命周期函数体。
  * @param code - 小组件交互脚本。
- * @returns mounted 函数节点，不存在时返回 undefined。
+ * @param lifecycleName - 生命周期名称。
+ * @returns 生命周期函数节点，不存在时返回 undefined。
  */
-function findMountedFunction(code: string): WidgetFunctionNodeWithBody | undefined {
+function findWidgetLifecycleFunction(code: string, lifecycleName: WidgetLifecycleName): WidgetFunctionNodeWithBody | undefined {
   const sourceFile = ts.createSourceFile('widget-runtime.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  let mountedFunction: WidgetFunctionNodeWithBody | undefined;
+  let lifecycleFunction: WidgetFunctionNodeWithBody | undefined;
 
   /**
-   * 访问脚本节点并提取 defineConfig.mounted。
+   * 访问脚本节点并提取 defineConfig 中的生命周期函数。
    * @param node - 当前节点
    */
   function visit(node: ts.Node): void {
-    if (mountedFunction) return;
+    if (lifecycleFunction) return;
 
     if (isDefineConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
       const configObject = node.arguments[0];
       for (const property of configObject.properties) {
         const propertyName = readPropertyName(property.name);
-        if (propertyName !== 'mounted') continue;
+        if (propertyName !== lifecycleName) continue;
 
         if (ts.isMethodDeclaration(property) && hasBlockBody(property)) {
-          mountedFunction = property;
+          lifecycleFunction = property;
           return;
         }
 
@@ -90,7 +94,7 @@ function findMountedFunction(code: string): WidgetFunctionNodeWithBody | undefin
           (ts.isFunctionExpression(property.initializer) || ts.isArrowFunction(property.initializer)) &&
           hasBlockBody(property.initializer)
         ) {
-          mountedFunction = property.initializer;
+          lifecycleFunction = property.initializer;
           return;
         }
       }
@@ -101,7 +105,7 @@ function findMountedFunction(code: string): WidgetFunctionNodeWithBody | undefin
 
   visit(sourceFile);
 
-  return mountedFunction;
+  return lifecycleFunction;
 }
 
 /**
@@ -199,12 +203,12 @@ function isSetStateCall(expression: ts.Expression): expression is ts.CallExpress
 }
 
 /**
- * 执行受支持的 mounted 语句。
- * @param mountedFunction - mounted 函数节点
+ * 执行受支持的生命周期语句。
+ * @param lifecycleFunction - 生命周期函数节点
  * @param part - 小组件消息片段
  */
-function applyMountedSetStateCalls(mountedFunction: WidgetFunctionNodeWithBody | undefined, part: ChatMessageWidgetPart): void {
-  if (!mountedFunction) return;
+function applyLifecycleSetStateCalls(lifecycleFunction: WidgetFunctionNodeWithBody | undefined, part: ChatMessageWidgetPart): void {
+  if (!lifecycleFunction) return;
 
   const context: WidgetExpressionEvalContext = {
     input: part.renderContext.input,
@@ -212,7 +216,7 @@ function applyMountedSetStateCalls(mountedFunction: WidgetFunctionNodeWithBody |
     variables: new Map<string, unknown>()
   };
 
-  for (const statement of mountedFunction.body.statements) {
+  for (const statement of lifecycleFunction.body.statements) {
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
@@ -258,8 +262,8 @@ export async function initWidgetMountState(part: ChatMessageWidgetPart, options:
   const mountedAt = (options.now ?? (() => new Date()))().toISOString();
 
   try {
-    const mountedFunction = findMountedFunction(nextPart.value.execute?.code ?? 'defineConfig({})');
-    applyMountedSetStateCalls(mountedFunction, nextPart);
+    const mountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'defineConfig({})', 'mounted');
+    applyLifecycleSetStateCalls(mountedFunction, nextPart);
 
     return {
       ...nextPart,
@@ -267,6 +271,37 @@ export async function initWidgetMountState(part: ChatMessageWidgetPart, options:
       lifecycle: {
         ...nextPart.lifecycle,
         mountedAt
+      }
+    };
+  } catch {
+    return createFailedWidgetPart(part);
+  }
+}
+
+/**
+ * 初始化 mounted 小组件的 unmounted 收尾状态，并返回可写回消息的下一版 part。
+ * @param part - 小组件消息片段。
+ * @param options - 生命周期执行选项。
+ * @returns 收尾后的消息片段；已收尾或不可收尾状态原样返回。
+ */
+export function finishWidgetUnmountState(part: ChatMessageWidgetPart, options: WidgetLifecycleRunOptions = {}): ChatMessageWidgetPart {
+  if (part.status !== 'mounted' || part.lifecycle.unmountedAt) {
+    return part;
+  }
+
+  const nextPart = cloneDeep(part);
+  const unmountedAt = (options.now ?? (() => new Date()))().toISOString();
+
+  try {
+    const unmountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'defineConfig({})', 'unmounted');
+    applyLifecycleSetStateCalls(unmountedFunction, nextPart);
+
+    return {
+      ...nextPart,
+      status: 'finished',
+      lifecycle: {
+        ...nextPart.lifecycle,
+        unmountedAt
       }
     };
   } catch {

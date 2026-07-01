@@ -2,9 +2,11 @@
  * @file interrupted-draft-recovery.test.ts
  * @description BChat 硬中断 assistant 草稿恢复测试。
  */
+import type { ChatMessageWidgetPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
 import { recoverInterruptedAssistantDrafts, HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChat/utils/interruptedDraftRecovery';
 import type { Message } from '@/components/BChat/utils/types';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**
  * 创建一条未完成的助手草稿消息。
@@ -19,6 +21,35 @@ function createInterruptedAssistantDraft(): Message {
       { type: 'text', text: '已经生成的半截内容' },
       { type: 'tool', toolCallId: 'tool-1', toolName: 'read_file', status: 'executing', input: { path: 'README.md' } }
     ],
+    createdAt: '2026-06-13T00:00:00.000Z',
+    loading: true,
+    finished: false
+  };
+}
+
+/**
+ * 创建一条带小组件的未完成助手草稿消息。
+ * @returns 带小组件的未完成助手消息。
+ */
+function createInterruptedWidgetAssistantDraft(): Message {
+  const widgetPart: ChatMessageWidgetPart = {
+    type: 'widget',
+    sessionId: 'widget-session-1',
+    widgetId: 'weather',
+    status: 'created',
+    lifecycle: {},
+    value: createDefaultWidgetData(),
+    renderContext: {
+      input: {},
+      state: {}
+    }
+  };
+
+  return {
+    id: 'assistant-widget-draft-1',
+    role: 'assistant',
+    content: '',
+    parts: [widgetPart],
     createdAt: '2026-06-13T00:00:00.000Z',
     loading: true,
     finished: false
@@ -99,6 +130,18 @@ describe('interrupted assistant draft recovery', () => {
 
     expect(result.recovered).toBe(false);
     expect(result.messages[0]).toEqual(awaitingMessage);
+  });
+
+  it('marks unfinished widget parts as cancelled when recovering interrupted drafts', (): void => {
+    const result = recoverInterruptedAssistantDrafts([createInterruptedWidgetAssistantDraft()]);
+    const recoveredMessage = result.messages[0];
+    const widgetPart = recoveredMessage.parts.find((part) => part.type === 'widget');
+
+    expect(result.recovered).toBe(true);
+    expect(widgetPart).toMatchObject({
+      type: 'widget',
+      status: 'cancelled'
+    });
   });
 
   it('does not create duplicate interrupt messages for an already recovered draft', (): void => {

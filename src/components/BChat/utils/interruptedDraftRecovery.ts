@@ -4,7 +4,7 @@
  */
 import type { Message } from './types';
 import { cloneDeep } from 'lodash-es';
-import { finalizeToolPartsAsCancelled } from './messageHelper';
+import { finalizeInterruptedPartsAsCancelled } from './messageHelper';
 
 /** 硬中断恢复时展示给用户的提示。 */
 export const HARD_INTERRUPTED_ASSISTANT_MESSAGE = '上次生成意外中断，已保留已生成内容。';
@@ -69,7 +69,7 @@ function createRecoveredInterruptMessage(sourceMessage: Message): Message {
 function recoverInterruptedAssistantDraft(sourceMessage: Message): Message {
   const nextMessage = cloneDeep(sourceMessage);
 
-  finalizeToolPartsAsCancelled(nextMessage);
+  finalizeInterruptedPartsAsCancelled(nextMessage);
   nextMessage.loading = false;
   nextMessage.finished = true;
 

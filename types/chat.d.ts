@@ -213,7 +213,7 @@ export interface ChatMessageToolPart {
 /**
  * 聊天消息小组件片段状态。
  */
-export type ChatMessageWidgetStatus = 'created' | 'mounted' | 'running' | 'awaiting_user_input' | 'completed' | 'failure' | 'cancelled';
+export type ChatMessageWidgetStatus = 'created' | 'mounted' | 'running' | 'awaiting_user_input' | 'finished' | 'failure' | 'cancelled';
 
 /**
  * 聊天消息小组件运行态生命周期记录。

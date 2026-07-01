@@ -554,6 +554,145 @@ describe('MessageBubble', (): void => {
     });
   });
 
+  it('finishes widget runtime state before sending widget submit result', async (): Promise<void> => {
+    const output: Record<string, unknown> = {
+      coffeeId: 'latte'
+    };
+    const widgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-coffee-session-2',
+      widgetId: 'coffee',
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      },
+      value: {
+        ...createWeatherWidgetData(),
+        execute: {
+          code: [
+            'defineConfig({',
+            '  unmounted() {',
+            "    this.$setState('submitted', { city: this.$input.city, temperature: this.$state.weather.temperature })",
+            '  }',
+            '})'
+          ].join('\n')
+        }
+      },
+      renderContext: createWeatherRenderContext()
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        id: 'assistant-widget-submit',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', output);
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    await action.run(submitContext);
+
+    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget-submit', expect.any(Function));
+    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
+    const nextMessage = updater(
+      createAssistantMessage({
+        id: 'assistant-widget-submit',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+
+    expect(nextMessage.parts[0]).toMatchObject({
+      status: 'finished',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z',
+        unmountedAt: expect.any(String)
+      },
+      renderContext: {
+        state: {
+          weather: {
+            temperature: 28
+          },
+          submitted: {
+            city: '上海',
+            temperature: 28
+          }
+        }
+      }
+    });
+    expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('finishes widget runtime state from the latest message part', async (): Promise<void> => {
+    const staleWidgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-coffee-session-3',
+      widgetId: 'coffee',
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      },
+      value: {
+        ...createWeatherWidgetData(),
+        execute: {
+          code: ['defineConfig({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+        }
+      },
+      renderContext: createWeatherRenderContext()
+    };
+    const latestWidgetPart: ChatMessageWidgetPart = {
+      ...staleWidgetPart,
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        state: {
+          weather: {
+            temperature: 35
+          }
+        }
+      }
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        id: 'assistant-widget-latest-submit',
+        content: '',
+        parts: [staleWidgetPart]
+      })
+    );
+
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', { coffeeId: 'latte' });
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    await action.run(submitContext);
+
+    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
+    const nextMessage = updater(
+      createAssistantMessage({
+        id: 'assistant-widget-latest-submit',
+        content: '',
+        parts: [latestWidgetPart]
+      })
+    );
+
+    expect(nextMessage.parts[0]).toMatchObject({
+      status: 'finished',
+      renderContext: {
+        state: {
+          weather: {
+            temperature: 35
+          },
+          submitted: {
+            temperature: 35
+          }
+        }
+      }
+    });
+  });
+
   it('emits unified submit actions from question answers', async (): Promise<void> => {
     const wrapper = mountMessageBubble(
       createAssistantMessage({

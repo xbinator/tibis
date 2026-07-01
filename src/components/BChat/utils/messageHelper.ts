@@ -195,11 +195,11 @@ export async function buildMessageReferences(content: string) {
 // ─── finalize —— 消息终态处理 ──────────────────────────────────────────────
 
 /**
- * 将消息中所有未完成的 tool part 标记为已取消。
- * 用于中止流式传输等非正常完成场景，避免 tool part 永远停留在 inputting/executing 状态。
+ * 将消息中所有未完成的运行态 part 标记为已取消。
+ * 用于中止流式传输等非正常完成场景，避免 part 永远停留在运行中状态。
  * @param message - 待处理的助手消息
  */
-export function finalizeToolPartsAsCancelled(message: Message): void {
+export function finalizeInterruptedPartsAsCancelled(message: Message): void {
   for (const part of message.parts) {
     if (part.type === 'tool' && part.status !== 'done') {
       part.status = 'done';
@@ -209,6 +209,10 @@ export function finalizeToolPartsAsCancelled(message: Message): void {
         error: { code: 'USER_CANCELLED', message: '用户中止了操作' }
       } satisfies AIToolExecutionCancelledResult;
       delete part.inputText;
+    }
+
+    if (part.type === 'widget' && part.status !== 'finished' && part.status !== 'failure' && part.status !== 'cancelled') {
+      part.status = 'cancelled';
     }
   }
 }

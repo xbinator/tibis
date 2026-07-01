@@ -43,7 +43,7 @@
               v-else-if="item.kind === 'widget'"
               :part="item.part"
               :runtime-enabled="item.runtimeEnabled"
-              @submit="$emit('submit', $event)"
+              @submit="handleWidgetSubmit(item, $event)"
               @change="handleWidgetPartChange(item, $event)"
             />
           </template>
@@ -91,6 +91,7 @@ import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult, resolveWidgetPartFromToolResult } from '../utils/messageHelper';
 import { createMessageUpdateSubmitAction, type BChatSubmitAction } from '../utils/submitAction';
 import { formatMessageTime } from '../utils/timeFormat';
+import { finishWidgetUnmountState } from '../utils/widgetRuntime';
 import BubblePartStatus from './MessageBubble/BubblePartStatus.vue';
 import BubblePartText from './MessageBubble/BubblePartText.vue';
 import BubblePartThinking from './MessageBubble/BubblePartThinking.vue';
@@ -220,6 +221,41 @@ function handleCopy(message: Message): void {
 }
 
 /**
+ * 创建替换指定小组件片段后的消息。
+ * @param currentMessage - 当前消息
+ * @param item - 小组件渲染条目
+ * @param part - 下一版小组件片段
+ * @returns 替换指定片段后的消息
+ */
+function createWidgetPartUpdatedMessage(
+  currentMessage: Message,
+  item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>,
+  part: ChatMessageWidgetPart
+): Message {
+  return {
+    ...currentMessage,
+    parts: currentMessage.parts.map((sourcePart, index) => (index === item.partIndex ? part : sourcePart))
+  };
+}
+
+/**
+ * 创建完成指定小组件片段后的消息。
+ * @param currentMessage - 当前消息
+ * @param item - 小组件渲染条目
+ * @returns 执行收尾后的消息；无法收尾时返回原消息
+ */
+function createWidgetPartFinishedMessage(currentMessage: Message, item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>): Message {
+  if (item.partIndex === null) return currentMessage;
+
+  const currentPart = currentMessage.parts[item.partIndex];
+  if (currentPart?.type !== 'widget') return currentMessage;
+
+  const nextPart = finishWidgetUnmountState(currentPart);
+
+  return nextPart === currentPart ? currentMessage : createWidgetPartUpdatedMessage(currentMessage, item, nextPart);
+}
+
+/**
  * 将小组件运行态更新补齐消息定位信息后向上透传。
  * @param item - 小组件渲染条目
  * @param part - 新的小组件片段
@@ -227,16 +263,28 @@ function handleCopy(message: Message): void {
 function handleWidgetPartChange(item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>, part: ChatMessageWidgetPart): void {
   if (item.partIndex === null) return;
 
-  emit(
-    'submit',
-    createMessageUpdateSubmitAction(
-      props.message.id,
-      (currentMessage: Message): Message => ({
-        ...currentMessage,
-        parts: currentMessage.parts.map((sourcePart, index) => (index === item.partIndex ? part : sourcePart))
-      })
-    )
-  );
+  const updater = (currentMessage: Message): Message => createWidgetPartUpdatedMessage(currentMessage, item, part);
+
+  emit('submit', createMessageUpdateSubmitAction(props.message.id, updater));
+}
+
+/**
+ * 处理小组件运行态提交，先收尾当前消息中的小组件状态，再发送提交结果。
+ * @param item - 小组件渲染条目
+ * @param action - 小组件已适配好的提交动作
+ */
+function handleWidgetSubmit(item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>, action: BChatSubmitAction): void {
+  if (item.partIndex === null) {
+    emit('submit', action);
+    return;
+  }
+
+  emit('submit', {
+    async run(context): Promise<void> {
+      await context.updateMessage(props.message.id, (currentMessage: Message): Message => createWidgetPartFinishedMessage(currentMessage, item));
+      await action.run(context);
+    }
+  });
 }
 </script>
 

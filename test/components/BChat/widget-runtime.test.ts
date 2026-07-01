@@ -4,7 +4,7 @@
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { initWidgetMountState } from '@/components/BChat/utils/widgetRuntime';
+import { finishWidgetUnmountState, initWidgetMountState } from '@/components/BChat/utils/widgetRuntime';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -143,5 +143,71 @@ describe('widgetRuntime', (): void => {
         tags: ['weather']
       }
     });
+  });
+
+  it('runs unmounted once and writes final state into the returned widget part', async (): Promise<void> => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(
+        [
+          'defineConfig({',
+          '  unmounted() {',
+          "    this.$setState('submitted', { city: this.$input.city, temperature: this.$state.weather.temperature })",
+          '  }',
+          '})'
+        ].join('\n')
+      ),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      },
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        state: {
+          weather: {
+            temperature: 28
+          }
+        }
+      }
+    };
+
+    const nextPart = await finishWidgetUnmountState(part, {
+      now: () => new Date('2026-07-01T00:01:00.000Z')
+    });
+
+    expect(part.renderContext.state).toEqual({
+      weather: {
+        temperature: 28
+      }
+    });
+    expect(nextPart).toMatchObject({
+      status: 'finished',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z',
+        unmountedAt: '2026-07-01T00:01:00.000Z'
+      },
+      renderContext: {
+        state: {
+          weather: {
+            temperature: 28
+          },
+          submitted: {
+            city: '上海',
+            temperature: 28
+          }
+        }
+      }
+    });
+  });
+
+  it('keeps widget parts unchanged before mounted state is reached', async (): Promise<void> => {
+    const part = createWidgetPart(['defineConfig({', '  unmounted() {', "    this.$setState('submitted', true)", '  }', '})'].join('\n'));
+
+    const nextPart = await finishWidgetUnmountState(part);
+
+    expect(nextPart).toBe(part);
+    expect(nextPart.status).toBe('created');
+    expect(nextPart.renderContext.state).toEqual({});
   });
 });
