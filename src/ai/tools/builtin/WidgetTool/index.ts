@@ -4,7 +4,7 @@
  */
 import type { AIToolContext, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
 import type { ChatMessageWidgetPart } from 'types/chat';
-import { cloneDeep } from 'lodash-es';
+import { cloneDeep, isPlainObject } from 'lodash-es';
 import type { WidgetDefinition } from '@/ai/widget/types';
 import type { WidgetSchemaObject } from '@/components/BWidget/types';
 import { createToolFailureResult, createToolSuccessResult } from '../../results';
@@ -36,8 +36,6 @@ const OPEN_WIDGET_DESCRIPTION_FOOTER =
 export interface WidgetStoreLike {
   /** 获取已启用的小组件列表 */
   getEnabledWidgets: () => WidgetDefinition[];
-  /** 按 ID 查找小组件 */
-  getWidgetById: (id: string) => WidgetDefinition | undefined;
   /** 是否已完成初始化 */
   initialized: boolean;
 }
@@ -78,15 +76,6 @@ export interface WidgetContractToolResult {
 
 /** 打开 Widget 工具执行结果。 */
 export type OpenWidgetToolResult = Pick<ChatMessageWidgetPart, 'sessionId' | 'widgetId' | 'value' | 'renderContext'> & { kind: 'widget_display' };
-
-/**
- * 判断值是否为普通记录。
- * @param value - 待判断值
- * @returns 是否为普通记录
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /**
  * 创建可用于会话 ID 的小组件 ID。
@@ -167,15 +156,34 @@ function createWidgetContractToolResult(widget: WidgetDefinition): WidgetContrac
 }
 
 /**
+ * 判断值是否为可绑定到 Widget input 的普通记录。
+ * @param value - 待判断值
+ * @returns 是否为普通记录
+ */
+function isWidgetInputRecord(value: unknown): value is Record<string, unknown> {
+  return isPlainObject(value);
+}
+
+/**
  * 创建打开小组件时的初始渲染上下文。
  * @param input - 打开 Widget 工具输入
  * @returns 小组件渲染上下文
  */
 function createOpenWidgetRenderContext(input: OpenWidgetToolInput): ChatMessageWidgetPart['renderContext'] {
   return {
-    input: isRecord(input.input) ? cloneDeep(input.input) : {},
+    input: isWidgetInputRecord(input.input) ? cloneDeep(input.input) : {},
     state: {}
   };
+}
+
+/**
+ * 从已启用小组件列表中按 ID 查找小组件。
+ * @param store - Widget store 实例
+ * @param id - 小组件 ID
+ * @returns 匹配的小组件或 undefined
+ */
+function findEnabledWidgetById(store: WidgetStoreLike, id: string): WidgetDefinition | undefined {
+  return store.getEnabledWidgets().find((widget: WidgetDefinition): boolean => widget.id === id && !widget.parseError);
 }
 
 /**
@@ -239,9 +247,9 @@ export function createWidgetTool(store: WidgetStoreLike): AIToolExecutor<WidgetT
       }
     },
     async execute(input: WidgetToolInput): Promise<AIToolExecutionResult<WidgetContractToolResult>> {
-      const widget = store.getWidgetById(input.id);
+      const widget = findEnabledWidgetById(store, input.id);
 
-      if (!widget || widget.parseError) {
+      if (!widget) {
         return createWidgetNotFoundResult(store, input.id, WIDGET_TOOL_NAME);
       }
 
@@ -281,9 +289,9 @@ export function createOpenWidgetTool(store: WidgetStoreLike): AIToolExecutor<Ope
       }
     },
     async execute(input: OpenWidgetToolInput, context?: AIToolContext): Promise<AIToolExecutionResult<OpenWidgetToolResult>> {
-      const widget = store.getWidgetById(input.id);
+      const widget = findEnabledWidgetById(store, input.id);
 
-      if (!widget || widget.parseError) {
+      if (!widget) {
         return createWidgetNotFoundResult(store, input.id, OPEN_WIDGET_TOOL_NAME);
       }
 

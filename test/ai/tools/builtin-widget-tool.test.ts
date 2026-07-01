@@ -54,8 +54,7 @@ function createWeatherWidget(): WidgetDefinition {
 function createWidgetStore(widgets: WidgetDefinition[]): WidgetStoreLike {
   return {
     initialized: true,
-    getEnabledWidgets: (): WidgetDefinition[] => widgets,
-    getWidgetById: (id: string): WidgetDefinition | undefined => widgets.find((widget: WidgetDefinition): boolean => widget.id === id)
+    getEnabledWidgets: (): WidgetDefinition[] => widgets.filter((widget: WidgetDefinition): boolean => widget.enabled && !widget.parseError)
   };
 }
 
@@ -115,6 +114,19 @@ describe('WidgetTool', (): void => {
     });
   });
 
+  it('does not inspect disabled widgets', async (): Promise<void> => {
+    const tool = createWidgetTool(createWidgetStore([{ ...createWeatherWidget(), enabled: false }]));
+    const result = await tool.execute({ id: 'weather' });
+
+    expect(result).toMatchObject({
+      toolName: WIDGET_TOOL_NAME,
+      status: 'failure',
+      error: {
+        code: 'TOOL_NOT_FOUND'
+      }
+    });
+  });
+
   it('creates a renderable widget snapshot through open widget tool', async (): Promise<void> => {
     const tool = createOpenWidgetTool(createWidgetStore([createWeatherWidget()]));
     const result = await tool.execute(
@@ -163,6 +175,19 @@ describe('WidgetTool', (): void => {
           input: {},
           state: {}
         }
+      }
+    });
+  });
+
+  it('does not open disabled widgets', async (): Promise<void> => {
+    const tool = createOpenWidgetTool(createWidgetStore([{ ...createWeatherWidget(), enabled: false }]));
+    const result = await tool.execute({ id: 'weather' }, { toolCallId: 'tool-call-widget' } as AIToolContext);
+
+    expect(result).toMatchObject({
+      toolName: OPEN_WIDGET_TOOL_NAME,
+      status: 'failure',
+      error: {
+        code: 'TOOL_NOT_FOUND'
       }
     });
   });
