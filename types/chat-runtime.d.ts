@@ -19,7 +19,8 @@ import type {
   ChatMessageFilePartInput,
   ChatMessagePart,
   ChatMessageRecord,
-  ChatMessageTextPart
+  ChatMessageTextPart,
+  ChatMessageWidgetResultPart
 } from './chat';
 
 /** Runtime event channel names emitted from main process to renderer. */
@@ -79,7 +80,7 @@ export type ChatRuntimeMessageSnapshot = Omit<ChatMessageRecord, 'sessionId'> & 
 };
 
 /** Renderer-created user input parts accepted by runtime send commands. */
-export type ChatRuntimeUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput;
+export type ChatRuntimeUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput | ChatMessageWidgetResultPart;
 
 /** Send command input. */
 export interface ChatRuntimeSendInput {

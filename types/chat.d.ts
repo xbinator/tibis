@@ -223,12 +223,70 @@ export interface ChatMessageWidgetPart {
   type: 'widget';
   /** 小组件会话 ID，用于后续执行闭环关联 */
   sessionId: string;
+  /** 小组件稳定 ID */
+  widgetId: string;
   /** 小组件执行或展示状态 */
   status: ChatMessageWidgetStatus;
-  /** 小组件快照数据 */
-  dataItem: WidgetData;
+  /** 小组件快照值 */
+  value: WidgetData;
   /** 运行态渲染上下文 */
   renderContext: WidgetRenderContext;
+}
+
+/**
+ * 小组件运行态成功提交结果。
+ */
+export interface ChatMessageWidgetSubmitSuccessResult {
+  /** 提交状态 */
+  status: 'success';
+  /** 成功提交的数据，字段值统一使用字符串 */
+  data: Record<string, string>;
+  /** 成功结果不携带错误 */
+  error?: never;
+}
+
+/**
+ * 小组件运行态失败提交结果。
+ */
+export interface ChatMessageWidgetSubmitFailureResult {
+  /** 提交状态 */
+  status: 'failure';
+  /** 失败详情 */
+  error: {
+    /** 机器可读错误码 */
+    code: string;
+    /** 给用户或模型展示的错误说明 */
+    message: string;
+  };
+  /** 失败结果不携带数据 */
+  data?: never;
+}
+
+/**
+ * 小组件运行态提交结果。
+ */
+export type ChatMessageWidgetSubmitResult = ChatMessageWidgetSubmitSuccessResult | ChatMessageWidgetSubmitFailureResult;
+
+/**
+ * Widget 运行态提交结果载荷。
+ */
+export interface ChatMessageWidgetSubmitPayload {
+  /** 小组件会话 ID */
+  sessionId: string;
+  /** 小组件稳定 ID */
+  widgetId: string;
+  /** 用户在 Widget 中提交的结果 */
+  result: ChatMessageWidgetSubmitResult;
+}
+
+/**
+ * 聊天消息 Widget 提交结果片段。
+ */
+export interface ChatMessageWidgetResultPart extends ChatMessageWidgetSubmitPayload {
+  /** 片段类型 */
+  type: 'widget_result';
+  /** 提交时间 */
+  submittedAt: string;
 }
 
 /**
@@ -256,6 +314,29 @@ export interface AIUserChoiceAnswerData {
   /** 其他手动输入文本 */
   otherText?: string;
 }
+
+/**
+ * 用户选择卡片提交到聊天运行态的输入。
+ */
+export interface ChatMessageUserChoiceRuntimeInput {
+  /** 运行态输入类型 */
+  kind: 'user_choice';
+  /** 用户选择答案 */
+  answer: AIUserChoiceAnswerData;
+}
+
+/**
+ * 小组件运行态提交到聊天运行态的输入。
+ */
+export interface ChatMessageWidgetResultRuntimeInput extends ChatMessageWidgetSubmitPayload {
+  /** 运行态输入类型 */
+  kind: 'widget_result';
+}
+
+/**
+ * 消息气泡内交互统一提交给聊天运行态的输入。
+ */
+export type ChatMessageRuntimeInput = ChatMessageUserChoiceRuntimeInput | ChatMessageWidgetResultRuntimeInput;
 
 /**
  * 确认卡片状态
@@ -357,6 +438,7 @@ export type ChatMessagePart =
   | ChatMessageThinkingPart
   | ChatMessageToolPart
   | ChatMessageWidgetPart
+  | ChatMessageWidgetResultPart
   | ChatMessageConfirmationPart
   | ChatMessageCompactionPart;
 
