@@ -318,7 +318,8 @@ describe('MessageBubble', (): void => {
       type: 'widget',
       sessionId: 'widget-session-1',
       widgetId: 'weather',
-      status: 'success',
+      status: 'mounted',
+      lifecycle: {},
       value: createWeatherWidgetData(),
       renderContext: createWeatherRenderContext()
     } as ChatMessageWidgetPart;
@@ -346,7 +347,8 @@ describe('MessageBubble', (): void => {
       type: 'widget',
       sessionId: 'widget-coffee-session-1',
       widgetId: 'coffee',
-      status: 'success',
+      status: 'mounted',
+      lifecycle: {},
       value: createWeatherWidgetData(),
       renderContext: createWeatherRenderContext()
     } as ChatMessageWidgetPart;

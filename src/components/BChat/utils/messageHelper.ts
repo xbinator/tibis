@@ -430,7 +430,8 @@ export function resolveWidgetPartFromToolResult(part: ChatMessagePart): ChatMess
     type: 'widget',
     sessionId: part.result.data.sessionId,
     widgetId: part.result.data.widgetId,
-    status: 'success',
+    status: 'created',
+    lifecycle: {},
     value: part.result.data.value,
     renderContext: part.result.data.renderContext
   };

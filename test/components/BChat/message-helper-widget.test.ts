@@ -47,7 +47,8 @@ describe('messageHelper widget result', (): void => {
     expect(widgetPart).toMatchObject({
       type: 'widget',
       sessionId: 'widget-weather-tool-call-widget',
-      status: 'success',
+      status: 'created',
+      lifecycle: {},
       value: {
         name: ''
       },
@@ -58,6 +59,7 @@ describe('messageHelper widget result', (): void => {
         state: {}
       }
     });
+    expect(widgetPart).not.toHaveProperty('runtimeId');
   });
 
   it('ignores non widget tool results', (): void => {

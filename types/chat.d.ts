@@ -213,7 +213,17 @@ export interface ChatMessageToolPart {
 /**
  * 聊天消息小组件片段状态。
  */
-export type ChatMessageWidgetStatus = 'idle' | 'running' | 'success' | 'failure' | 'cancelled' | 'awaiting_user_input';
+export type ChatMessageWidgetStatus = 'created' | 'mounted' | 'running' | 'awaiting_user_input' | 'completed' | 'failure' | 'cancelled';
+
+/**
+ * 聊天消息小组件运行态生命周期记录。
+ */
+export interface ChatMessageWidgetLifecycle {
+  /** mounted 执行完成时间 */
+  mountedAt?: string;
+  /** unmounted 执行完成时间 */
+  unmountedAt?: string;
+}
 
 /**
  * 聊天消息小组件快照片段。
@@ -221,12 +231,14 @@ export type ChatMessageWidgetStatus = 'idle' | 'running' | 'success' | 'failure'
 export interface ChatMessageWidgetPart {
   /** 片段类型 */
   type: 'widget';
-  /** 小组件会话 ID，用于后续执行闭环关联 */
+  /** 小组件会话 ID，用于后续执行闭环关联；独立运行态使用所在消息 ID 表示 */
   sessionId: string;
   /** 小组件稳定 ID */
   widgetId: string;
   /** 小组件执行或展示状态 */
   status: ChatMessageWidgetStatus;
+  /** 小组件运行态生命周期记录 */
+  lifecycle: ChatMessageWidgetLifecycle;
   /** 小组件快照值 */
   value: WidgetData;
   /** 运行态渲染上下文 */
