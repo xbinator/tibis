@@ -17,7 +17,7 @@
             :can-rollback="canRollback"
             @edit="$emit('edit', item)"
             @regenerate="$emit('regenerate', item)"
-            @user-choice-submit="$emit('user-choice-submit', $event)"
+            @runtime-input="$emit('runtime-input', $event)"
             @rollback="$emit('rollback', item)"
           />
 
@@ -52,8 +52,10 @@
 
 <script setup lang="ts">
 import type { Message } from '../utils/types';
-import type { AIUserChoiceAnswerData } from 'types/chat';
+import type { ChatMessageRuntimeInput } from 'types/chat';
 import { toRef } from 'vue';
+import { OPEN_WIDGET_TOOL_NAME } from '@/ai/tools/builtin';
+import { stringifyJsonValue } from '@/utils/json';
 import { useChatScroll } from '../hooks/useChatScroll';
 import MessageBubble from './MessageBubble.vue';
 
@@ -115,7 +117,8 @@ function getToolPartsMemoKey(parts: Message['parts']): string {
   parts.forEach((part, index): void => {
     if (part.type !== 'tool') return;
 
-    toolPartKeys.push([index, part.toolCallId, part.toolName, part.status, part.result?.status ?? '', part.inputText?.length ?? 0].join(':'));
+    const toolResultKey = part.toolName === OPEN_WIDGET_TOOL_NAME && part.result?.status === 'success' ? stringifyJsonValue(part.result.data) : '';
+    toolPartKeys.push([index, part.toolCallId, part.toolName, part.status, part.result?.status ?? '', part.inputText?.length ?? 0, toolResultKey].join(':'));
   });
 
   return toolPartKeys.join('|');
@@ -146,7 +149,7 @@ defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'load-history'): void;
-  (e: 'user-choice-submit', answer: AIUserChoiceAnswerData): void;
+  (e: 'runtime-input', input: ChatMessageRuntimeInput): void;
   (e: 'rollback', message: Message): void;
 }>();
 

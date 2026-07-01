@@ -61,6 +61,10 @@ const storeMockState = vi.hoisted(() => ({
     initialized: false,
     getEnabledSkills: vi.fn(() => [])
   },
+  widgetStore: {
+    initialized: false,
+    getEnabledWidgets: vi.fn<() => unknown[]>(() => [])
+  },
   toolSettingsStore: {
     hasEnabledMcpServers: false
   },
@@ -78,17 +82,42 @@ const workspaceMockState = vi.hoisted(() => ({
 vi.mock('@/ai/tools/builtin', () => ({
   createBuiltinTools: builtinMockState.createBuiltinTools,
   isBuiltinToolName: vi.fn((toolName: string): boolean =>
-    ['read_current_webpage', 'operate_webpage', 'open_resource', 'read_directory', 'skill'].includes(toolName)
+    ['read_current_webpage', 'operate_webpage', 'open_resource', 'read_directory', 'skill', 'widget', 'open_widget'].includes(toolName)
   ),
   OPERATE_WEBPAGE_TOOL_NAME: 'operate_webpage',
   OPEN_RESOURCE_TOOL_NAME: 'open_resource',
   READ_CURRENT_WEBPAGE_TOOL_NAME: 'read_current_webpage',
   READ_DIRECTORY_TOOL_NAME: 'read_directory',
-  SKILL_TOOL_NAME: 'skill'
+  OPEN_WIDGET_TOOL_NAME: 'open_widget',
+  SKILL_TOOL_NAME: 'skill',
+  WIDGET_TOOL_NAME: 'widget'
 }));
 
 vi.mock('@/ai/tools/builtin/SkillTool', () => ({
   createSkillTool: vi.fn()
+}));
+
+vi.mock('@/ai/tools/builtin/WidgetTool', () => ({
+  createOpenWidgetTool: vi.fn(() => ({
+    definition: {
+      name: 'open_widget',
+      description: 'open_widget',
+      source: 'builtin',
+      riskLevel: 'read',
+      parameters: { type: 'object', properties: {} }
+    },
+    execute: async (): Promise<{ toolName: string; status: 'success'; data: null }> => ({ toolName: 'open_widget', status: 'success', data: null })
+  })),
+  createWidgetTool: vi.fn(() => ({
+    definition: {
+      name: 'widget',
+      description: 'widget',
+      source: 'builtin',
+      riskLevel: 'read',
+      parameters: { type: 'object', properties: {} }
+    },
+    execute: async (): Promise<{ toolName: string; status: 'success'; data: null }> => ({ toolName: 'widget', status: 'success', data: null })
+  }))
 }));
 
 vi.mock('@/ai/tools/context/editor', () => ({
@@ -125,6 +154,10 @@ vi.mock('@/stores/ai/skill', () => ({
   useSkillStore: vi.fn(() => storeMockState.skillStore)
 }));
 
+vi.mock('@/stores/ai/widget', () => ({
+  useWidgetStore: vi.fn(() => storeMockState.widgetStore)
+}));
+
 vi.mock('@/stores/ai/toolSettings', () => ({
   useToolSettingsStore: vi.fn(() => storeMockState.toolSettingsStore)
 }));
@@ -159,6 +192,10 @@ describe('useRuntimeTools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     registryMockState.webviewToolContextRegistry.getCurrentContext.mockReturnValue(undefined);
+    storeMockState.skillStore.initialized = false;
+    storeMockState.skillStore.getEnabledSkills.mockReturnValue([]);
+    storeMockState.widgetStore.initialized = false;
+    storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([]);
   });
 
   it('only exposes WebView tools while a WebView context is active', (): void => {
@@ -176,5 +213,21 @@ describe('useRuntimeTools', () => {
     const activeToolNames = readActiveToolNames(runtimeTools.getActiveTools);
     expect(activeToolNames).toEqual(expect.arrayContaining(['read_current_webpage', 'operate_webpage']));
     expect(activeToolNames).not.toContain('open_resource');
+  });
+
+  it('dynamically exposes widget tools after widget store is initialized', (): void => {
+    storeMockState.widgetStore.initialized = true;
+    storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([
+      {
+        id: 'weather',
+        enabled: true,
+        parseError: undefined
+      }
+    ]);
+
+    const runtimeTools = createRuntimeTools();
+
+    expect(readActiveToolNames(runtimeTools.getActiveTools)).toContain('widget');
+    expect(readActiveToolNames(runtimeTools.getActiveTools)).toContain('open_widget');
   });
 });

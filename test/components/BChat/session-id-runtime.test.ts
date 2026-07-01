@@ -339,7 +339,7 @@ const ConversationViewStub = defineComponent({
       default: () => []
     }
   },
-  emits: ['regenerate', 'rollback', 'user-choice-submit'],
+  emits: ['regenerate', 'rollback', 'runtime-input'],
   setup(_props, { expose, slots }) {
     expose({
       scrollToBottom: conversationViewMockState.scrollToBottom
@@ -905,7 +905,10 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit('user-choice-submit', answer);
+    wrapper.findComponent(ConversationViewStub).vm.$emit('runtime-input', {
+      kind: 'user_choice',
+      answer
+    });
     await flushPromises();
 
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(
@@ -936,7 +939,10 @@ describe('BChat sessionId runtime', (): void => {
       otherText: ''
     };
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit('user-choice-submit', answer);
+    wrapper.findComponent(ConversationViewStub).vm.$emit('runtime-input', {
+      kind: 'user_choice',
+      answer
+    });
     await flushPromises();
 
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(

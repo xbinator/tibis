@@ -8,13 +8,16 @@ import type { Ref } from 'vue';
 import {
   createBuiltinTools,
   isBuiltinToolName,
+  OPEN_WIDGET_TOOL_NAME,
   OPERATE_WEBPAGE_TOOL_NAME,
   OPEN_RESOURCE_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
-  SKILL_TOOL_NAME
+  SKILL_TOOL_NAME,
+  WIDGET_TOOL_NAME
 } from '@/ai/tools/builtin';
 import { createSkillTool } from '@/ai/tools/builtin/SkillTool';
+import { createOpenWidgetTool, createWidgetTool } from '@/ai/tools/builtin/WidgetTool';
 import type { AIToolConfirmationAdapter } from '@/ai/tools/confirmation';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
@@ -24,6 +27,7 @@ import { useWorkspaceRoot } from '@/hooks/useWorkspaceRoot';
 import { native } from '@/shared/platform';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
+import { useWidgetStore } from '@/stores/ai/widget';
 import { useFilesStore } from '@/stores/workspace/files';
 import { userChoice } from '../utils/messageHelper';
 
@@ -64,6 +68,7 @@ interface UseRuntimeToolsReturn {
  */
 export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeToolsReturn {
   const skillStore = useSkillStore();
+  const widgetStore = useWidgetStore();
   const toolSettingsStore = useToolSettingsStore();
   const filesStore = useFilesStore();
   const { openDraft } = useOpenDraft();
@@ -73,6 +78,7 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
   const allBuiltinTools = createBuiltinTools({
     confirm: options.confirm,
     skillStore,
+    widgetStore,
     mcpStore: toolSettingsStore,
     getWorkspaceRoot,
     isFileInRecent: (filePath: string) => {
@@ -128,7 +134,7 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
 
   /**
    * 动态获取当前可用的工具列表。
-   * 每次调用时根据运行时状态（编辑器、MCP、Skill）过滤条件工具。
+   * 每次调用时根据运行时状态（编辑器、MCP、Skill、Widget）过滤条件工具。
    * @returns 当前可用工具列表
    */
   function getActiveTools(): AIToolExecutor[] {
@@ -143,6 +149,16 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
       const hasSkillTool = allBuiltinTools.some((tool) => tool.definition.name === SKILL_TOOL_NAME);
       if (!hasSkillTool) {
         dynamicTools.push(createSkillTool(skillStore));
+      }
+    }
+    if (widgetStore.initialized && widgetStore.getEnabledWidgets().length > 0) {
+      const hasWidgetTool = allBuiltinTools.some((tool) => tool.definition.name === WIDGET_TOOL_NAME);
+      if (!hasWidgetTool) {
+        dynamicTools.push(createWidgetTool(widgetStore));
+      }
+      const hasOpenWidgetTool = allBuiltinTools.some((tool) => tool.definition.name === OPEN_WIDGET_TOOL_NAME);
+      if (!hasOpenWidgetTool) {
+        dynamicTools.push(createOpenWidgetTool(widgetStore));
       }
     }
 

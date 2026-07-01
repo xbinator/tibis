@@ -35,16 +35,11 @@
 
             <BubblePartStatus v-else-if="item.kind === 'compaction'" :message="message" :compaction-part="item.part" />
 
-            <QuestionCard
-              v-else-if="item.kind === 'question'"
-              :question="item.question"
-              :disabled="disabled"
-              @submit-choice="$emit('user-choice-submit', $event)"
-            />
+            <QuestionCard v-else-if="item.kind === 'question'" :question="item.question" :disabled="disabled" @runtime-input="$emit('runtime-input', $event)" />
 
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
 
-            <BubblePartWidget v-else-if="item.kind === 'widget'" :part="item.part" />
+            <BubblePartWidget v-else-if="item.kind === 'widget'" :part="item.part" @runtime-input="$emit('runtime-input', $event)" />
           </template>
         </template>
       </div>
@@ -73,9 +68,9 @@
 import type { Message } from '../utils/types';
 import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type {
-  AIUserChoiceAnswerData,
   ChatMessageErrorPart,
   ChatMessagePart,
+  ChatMessageRuntimeInput,
   ChatMessageTextPart,
   ChatMessageThinkingPart,
   ChatMessageToolPart,
@@ -88,7 +83,7 @@ import { useClipboard } from '@/hooks/useClipboard';
 import type { ImagePreviewItem } from '@/hooks/useImagePreview';
 import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
-import { extractLastTextPart, isAwaitingUserChoiceResult } from '../utils/messageHelper';
+import { extractLastTextPart, isAwaitingUserChoiceResult, resolveWidgetPartFromToolResult } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
 import BubblePartStatus from './MessageBubble/BubblePartStatus.vue';
 import BubblePartText from './MessageBubble/BubblePartText.vue';
@@ -116,7 +111,7 @@ const props = defineProps<{
 defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
-  (e: 'user-choice-submit', answer: AIUserChoiceAnswerData): void;
+  (e: 'runtime-input', input: ChatMessageRuntimeInput): void;
   (e: 'rollback', message: Message): void;
 }>();
 
@@ -188,6 +183,10 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
     if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
+    if (part.type === 'tool') {
+      const widgetPart = resolveWidgetPartFromToolResult(part);
+      if (widgetPart) return [{ key: `${key}-widget`, kind: 'widget', part: widgetPart }];
+    }
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
     if (part.type === 'widget') return [{ key, kind: 'widget', part }];
     return [];

@@ -12,11 +12,15 @@ import type {
   ChatMessagePart,
   ChatMessageRole,
   ChatMessageShellOutputChunk,
-  ChatMessageToolPart
+  ChatMessageToolPart,
+  ChatMessageWidgetPart,
+  ChatMessageWidgetResultPart
 } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import dayjs from 'dayjs';
+import { isPlainObject } from 'lodash-es';
 import { nanoid } from 'nanoid';
+import { OPEN_WIDGET_TOOL_NAME, type OpenWidgetToolResult } from '@/ai/tools/builtin/WidgetTool';
 import { asyncTo } from '@/utils/asyncTo';
 import { extractFileReferenceLines, findFileReferenceTokens } from '@/utils/file/reference';
 
@@ -62,6 +66,20 @@ type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'i
 
 /** 创建中断消息时可继承的 runtime 关联字段。 */
 type InterruptSourceMessage = Pick<Message, 'agentId' | 'runtimeId' | 'parentRuntimeId'>;
+
+/** 小组件展示载荷候选结构。 */
+interface WidgetDisplayPayloadCandidate {
+  /** 载荷类型 */
+  kind?: unknown;
+  /** 小组件会话 ID */
+  sessionId?: unknown;
+  /** 小组件稳定 ID */
+  widgetId?: unknown;
+  /** 小组件快照值 */
+  value?: unknown;
+  /** 渲染上下文 */
+  renderContext?: unknown;
+}
 
 /** 工具结果类型 */
 export type ToolResult = NonNullable<ChatMessageToolPart['result']>;
@@ -112,6 +130,47 @@ type CompactionProgressMode = 'continue' | 'context';
  */
 function toJsonValue(value: unknown): JSONValue {
   return JSON.parse(JSON.stringify(value)) as JSONValue;
+}
+
+/**
+ * 判断工具结果是否为小组件展示载荷。
+ * @param value - 工具结果数据
+ * @returns 是否为小组件展示载荷
+ */
+function isWidgetDisplayPayload(value: unknown): value is OpenWidgetToolResult {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  const payload = value as WidgetDisplayPayloadCandidate;
+
+  return (
+    payload.kind === 'widget_display' &&
+    typeof payload.sessionId === 'string' &&
+    typeof payload.widgetId === 'string' &&
+    isPlainObject(payload.value) &&
+    isPlainObject(payload.renderContext)
+  );
+}
+
+/**
+ * 创建模型可见的工具结果，避免把 UI 专用快照长期塞回模型上下文。
+ * @param part - 工具消息片段
+ * @returns 模型可见工具结果
+ */
+function createModelVisibleToolResult(part: ChatMessageToolPart & { result: ToolResult }): ToolResult {
+  if (part.toolName !== OPEN_WIDGET_TOOL_NAME || part.result.status !== 'success' || !isWidgetDisplayPayload(part.result.data)) {
+    return part.result;
+  }
+
+  return {
+    ...part.result,
+    data: {
+      kind: part.result.data.kind,
+      sessionId: part.result.data.sessionId,
+      widgetId: part.result.data.widgetId
+    }
+  };
 }
 
 /**
@@ -355,6 +414,26 @@ export const create = {
 
 export function isAwaitingUserChoiceResult(part: ChatMessagePart): part is ChatMessageToolPart & { result: AIToolExecutionAwaitingUserInputResult } {
   return part.type === 'tool' && ASK_USER_QUESTION_TOOL_NAMES.has(part.toolName) && part.result?.status === 'awaiting_user_input';
+}
+
+/**
+ * 从 open_widget 工具结果派生小组件渲染片段。
+ * @param part - 消息片段
+ * @returns 可渲染的小组件片段，不匹配时返回 null
+ */
+export function resolveWidgetPartFromToolResult(part: ChatMessagePart): ChatMessageWidgetPart | null {
+  if (part.type !== 'tool' || part.toolName !== OPEN_WIDGET_TOOL_NAME || part.result?.status !== 'success' || !isWidgetDisplayPayload(part.result.data)) {
+    return null;
+  }
+
+  return {
+    type: 'widget',
+    sessionId: part.result.data.sessionId,
+    widgetId: part.result.data.widgetId,
+    status: 'success',
+    value: part.result.data.value,
+    renderContext: part.result.data.renderContext
+  };
 }
 
 export const userChoice = {
@@ -629,7 +708,7 @@ function createPostCompactionPartLines(part: ChatMessagePart, index: number): st
         lines.push(`   input_text: ${truncatePostCompactionText(part.inputText)}`);
       }
       if (part.result) {
-        lines.push(`   result: ${stringifyPostCompactionValue(part.result)}`);
+        lines.push(`   result: ${stringifyPostCompactionValue(createModelVisibleToolResult({ ...part, result: part.result }))}`);
       }
       return lines;
     }
@@ -804,7 +883,7 @@ function toAssistantModelMessages(parts: ChatMessagePart[]): ModelMessage[] {
           type: 'tool-result',
           toolCallId: part.toolCallId,
           toolName: part.toolName,
-          output: { type: 'json', value: toJsonValue(part.result) }
+          output: { type: 'json', value: toJsonValue(createModelVisibleToolResult({ ...part, result: part.result })) }
         });
         continue;
       }
@@ -864,6 +943,37 @@ function isFilePart(part: ChatMessagePart): part is ChatMessageFilePart {
 }
 
 /**
+ * 判断消息片段是否为 Widget 提交结果。
+ * @param part - 消息片段
+ * @returns 是否为 Widget 提交结果
+ */
+function isWidgetResultPart(part: ChatMessagePart): part is ChatMessageWidgetResultPart {
+  return part.type === 'widget_result';
+}
+
+/**
+ * 判断用户消息是否包含需要以 content part 传递的结构化文本片段。
+ * @param message - 用户消息
+ * @returns 是否包含结构化文本片段
+ */
+function hasStructuredUserTextPart(message: ModelCompatibleMessage): boolean {
+  return message.parts.some(isWidgetResultPart);
+}
+
+/**
+ * 将结构化用户片段转为模型可读文本。
+ * @param value - 结构化片段
+ * @returns JSON 文本
+ */
+function stringifyUserModelTextValue(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
  * 转义 XML 属性值。
  * @param value - 原始属性值
  * @returns 转义后的属性值
@@ -895,6 +1005,8 @@ function createUserModelText(message: ModelCompatibleMessage): string {
         text += part.text;
       } else if (isFilePart(part)) {
         text += toUserFileXmlText(part);
+      } else if (isWidgetResultPart(part)) {
+        text += `${text ? '\n' : ''}${stringifyUserModelTextValue(part)}`;
       }
     }
     return text;
@@ -935,7 +1047,7 @@ function toModelMessagesForMessage(message: Message): ModelMessage[] {
   if (!is.modelMessage(message)) return [];
   if (message.role === 'user') {
     const imageFiles = message.files?.filter((file) => file.type === 'image' && file.url) ?? [];
-    if (!imageFiles.length) {
+    if (!imageFiles.length && !hasStructuredUserTextPart(message)) {
       const userText = createUserModelText(message);
       return userText ? [{ role: 'user', content: userText }] : [];
     }
@@ -995,7 +1107,7 @@ export const convert = {
 /**
  * 提取消息中最后一个文本片段的内容
  * @param message - 聊天消息
- * @returns 最后一个文本片段的内容，不存在时返回空字符串
+ * @returns 最后一个文本片段的内容，不存在时返回消息聚合内容
  */
 export function extractLastTextPart(message: Message): string {
   for (let i = message.parts.length - 1; i >= 0; i -= 1) {
@@ -1004,5 +1116,5 @@ export function extractLastTextPart(message: Message): string {
       return part.text;
     }
   }
-  return '';
+  return message.content;
 }

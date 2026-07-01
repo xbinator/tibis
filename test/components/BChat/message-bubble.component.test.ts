@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import type { ChatMessageWidgetPart } from 'types/chat';
+import type { ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart } from 'types/chat';
 import { defineComponent } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,9 +14,12 @@ import type { Message } from '@/components/BChat/utils/types';
 import type { WidgetData, WidgetRenderContext } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
+/** 剪贴板写入测试替身。 */
+const clipboardMock = vi.fn();
+
 vi.mock('@/hooks/useClipboard', () => ({
   useClipboard: vi.fn(() => ({
-    clipboard: vi.fn()
+    clipboard: clipboardMock
   }))
 }));
 
@@ -90,10 +93,14 @@ const BButtonStub = defineComponent({
     icon: {
       type: String,
       default: ''
+    },
+    disabled: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['click'],
-  template: '<button class="b-button-stub" :data-icon="icon" @click="$emit(\'click\', $event)"><slot /></button>'
+  template: '<button class="b-button-stub" :data-icon="icon" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>'
 });
 
 /** Markdown 消息测试替身，直接渲染文本内容。 */
@@ -174,6 +181,31 @@ function createWeatherRenderContext(): WidgetRenderContext {
 }
 
 /**
+ * 创建等待用户选择的工具片段。
+ * @returns 等待用户选择工具片段
+ */
+function createQuestionToolPart(): ChatMessageToolPart {
+  return {
+    type: 'tool',
+    toolCallId: 'tool-call-question',
+    toolName: 'question',
+    status: 'done',
+    input: {},
+    result: {
+      toolName: 'question',
+      status: 'awaiting_user_input',
+      data: {
+        questionId: 'question-1',
+        toolCallId: 'tool-call-question',
+        question: '是否继续？',
+        mode: 'single',
+        options: [{ label: '继续', value: 'continue' }]
+      }
+    }
+  };
+}
+
+/**
  * 挂载消息气泡。
  * @param message - 待渲染消息
  * @returns 组件包装器
@@ -186,6 +218,7 @@ function mountMessageBubble(message: Message): VueWrapper {
         BBubble: BBubbleStub,
         BButton: BButtonStub,
         BIcon: true,
+        BRecentIcon: true,
         BMessage: BMessageStub
       }
     }
@@ -194,6 +227,7 @@ function mountMessageBubble(message: Message): VueWrapper {
 
 describe('MessageBubble', (): void => {
   beforeEach((): void => {
+    clipboardMock.mockClear();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
       callback(0);
@@ -283,10 +317,11 @@ describe('MessageBubble', (): void => {
     const widgetPart: ChatMessageWidgetPart = {
       type: 'widget',
       sessionId: 'widget-session-1',
+      widgetId: 'weather',
       status: 'success',
-      dataItem: createWeatherWidgetData(),
+      value: createWeatherWidgetData(),
       renderContext: createWeatherRenderContext()
-    };
+    } as ChatMessageWidgetPart;
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         content: '',
@@ -296,5 +331,145 @@ describe('MessageBubble', (): void => {
 
     expect(wrapper.text()).toContain('上海');
     expect(wrapper.text()).toContain('28°C');
+  });
+
+  it('emits runtime input payloads from widget runtime items', async (): Promise<void> => {
+    const output: Record<string, unknown> = {
+      coffeeId: 'latte',
+      size: 'large',
+      quantity: 2,
+      options: {
+        temperature: 'hot'
+      }
+    };
+    const widgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-coffee-session-1',
+      widgetId: 'coffee',
+      status: 'success',
+      value: createWeatherWidgetData(),
+      renderContext: createWeatherRenderContext()
+    } as ChatMessageWidgetPart;
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', output);
+
+    expect(wrapper.emitted('runtime-input')?.[0]).toEqual([
+      {
+        kind: 'widget_result',
+        sessionId: 'widget-coffee-session-1',
+        widgetId: 'coffee',
+        result: {
+          status: 'success',
+          data: {
+            coffeeId: 'latte',
+            size: 'large',
+            quantity: '2',
+            options: '{"temperature":"hot"}'
+          }
+        }
+      }
+    ]);
+  });
+
+  it('emits runtime input payloads from question answers', async (): Promise<void> => {
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [createQuestionToolPart()]
+      })
+    );
+
+    await wrapper.get('.choice-card__option-btn').trigger('click');
+    await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
+    await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
+
+    expect(wrapper.emitted('runtime-input')?.[0]).toEqual([
+      {
+        kind: 'user_choice',
+        answer: {
+          questionId: 'question-1',
+          toolCallId: 'tool-call-question',
+          answers: ['continue'],
+          questionAnswers: [
+            {
+              question: '是否继续？',
+              answers: ['continue']
+            }
+          ],
+          otherText: ''
+        }
+      }
+    ]);
+  });
+
+  it('renders open_widget tool results as widget runtime items', (): void => {
+    const toolPart: ChatMessageToolPart = {
+      type: 'tool',
+      toolCallId: 'tool-call-widget',
+      toolName: 'open_widget',
+      status: 'done',
+      input: {
+        id: 'weather',
+        input: {
+          city: '上海'
+        }
+      },
+      result: {
+        toolName: 'open_widget',
+        status: 'success',
+        data: {
+          kind: 'widget_display',
+          sessionId: 'widget-weather-tool-call-widget',
+          widgetId: 'weather',
+          value: createWeatherWidgetData(),
+          renderContext: createWeatherRenderContext()
+        }
+      }
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [toolPart]
+      })
+    );
+
+    expect(wrapper.text()).toContain('上海');
+    expect(wrapper.text()).toContain('28°C');
+  });
+
+  it('copies user widget result messages from message content when no text part exists', async (): Promise<void> => {
+    const widgetResultPart: ChatMessageWidgetResultPart = {
+      type: 'widget_result',
+      sessionId: 'widget-session-1',
+      widgetId: 'weather',
+      submittedAt: '2026-06-30T00:00:00.000Z',
+      result: {
+        status: 'success',
+        data: {
+          city: '上海',
+          action: 'confirm'
+        }
+      }
+    };
+    const content = '小组件已提交：{"city":"上海","action":"confirm"}';
+    const wrapper = mountMessageBubble({
+      id: 'user-widget-result-1',
+      role: 'user',
+      content,
+      parts: [widgetResultPart],
+      createdAt: '2026-06-30T00:00:00.000Z',
+      loading: false,
+      finished: true
+    });
+
+    await wrapper.get('[data-icon="lucide:copy"]').trigger('click');
+
+    expect(clipboardMock).toHaveBeenCalledWith(content, { successMessage: '已复制到剪贴板' });
   });
 });

@@ -34,6 +34,7 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
       '{{ message.parts[0]?.result?.status ?? "" }}:',
       '{{ disabled ? "disabled" : "enabled" }}:',
       '{{ canRollback && canRollback(message) ? "rollback" : "no-rollback" }}',
+      '{{ message.parts[0]?.result?.data?.renderContext?.input?.city ?? "" }}',
       '</div>'
     ].join('')
   }
@@ -88,6 +89,39 @@ function createQuestionToolPart(status: ChatMessageToolPart['status'], resultSta
   }
 
   return part;
+}
+
+/**
+ * 创建打开小组件工具片段。
+ * @param city - 渲染上下文城市
+ * @returns 工具片段
+ */
+function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
+  return {
+    type: 'tool',
+    toolCallId: 'tool-call-widget',
+    toolName: 'open_widget',
+    status: 'done',
+    input: {
+      id: 'weather'
+    },
+    result: {
+      toolName: 'open_widget',
+      status: 'success',
+      data: {
+        kind: 'widget_display',
+        sessionId: 'widget-weather-tool-call-widget',
+        widgetId: 'weather',
+        value: {},
+        renderContext: {
+          input: {
+            city
+          },
+          state: {}
+        }
+      }
+    }
+  };
 }
 
 /**
@@ -193,6 +227,32 @@ describe('ConversationView', (): void => {
     await nextTick();
 
     expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input:disabled:no-rollback');
+  });
+
+  it('updates open_widget display when result data changes without status changes', async (): Promise<void> => {
+    const wrapper = mount(ConversationViewForTest, {
+      props: {
+        messages: [createAssistantMessage(createOpenWidgetToolPart('上海'))],
+        loading: true,
+        disabled: false
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:success:enabled:no-rollback上海');
+
+    await wrapper.setProps({
+      messages: [createAssistantMessage(createOpenWidgetToolPart('杭州'))],
+      loading: true,
+      disabled: false
+    });
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:success:enabled:no-rollback杭州');
   });
 
   it('updates rollback visibility when following messages change', async (): Promise<void> => {

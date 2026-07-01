@@ -14,7 +14,7 @@
         :can-rollback="rollbackController.canRollback"
         @edit="handleChatEdit"
         @regenerate="handleChatRegenerate"
-        @user-choice-submit="handleChatUserChoiceSubmit"
+        @runtime-input="handleChatRuntimeInput"
         @rollback="handleRollback"
       >
         <template #footer>
@@ -85,8 +85,15 @@
 
 <script setup lang="ts">
 import type { BChatProps, Message } from './utils/types';
-import type { AIUserChoiceAnswerData, ChatMessageConfirmationAction, ChatSession } from 'types/chat';
-import type { ChatRuntimeContextUsageSnapshot } from 'types/chat-runtime';
+import type {
+  AIUserChoiceAnswerData,
+  ChatMessageConfirmationAction,
+  ChatMessageRuntimeInput,
+  ChatMessageWidgetResultPart,
+  ChatMessageWidgetResultRuntimeInput,
+  ChatSession
+} from 'types/chat';
+import type { ChatRuntimeContextUsageSnapshot, ChatRuntimeSendInput, ChatRuntimeUserInputPart } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
@@ -105,6 +112,7 @@ import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
+import { stringifyJsonValue } from '@/utils/json';
 import { Modal } from '@/utils/modal';
 import { createNamespace } from '@/utils/namespace';
 import ConfirmationSheet from './components/ConfirmationSheet.vue';
@@ -135,19 +143,36 @@ import { useSlashCommands, chatSlashCommands } from './hooks/useSlashCommands';
 import { useTodoPanel } from './hooks/useTodoPanel';
 import { useUsagePanel } from './hooks/useUsagePanel';
 import { useVoiceInput } from './hooks/useVoiceInput';
+import { useWidgetInit } from './hooks/useWidgetInit';
 import { createFileRefChipResolver } from './utils/chipResolver';
 import { createChatConfirmationController } from './utils/confirmationController';
 import { buildUserInputParts } from './utils/filePartParser';
 import { create, userChoice } from './utils/messageHelper';
 import { handleBChatRuntimeBridgeRequest } from './utils/runtimeBridge';
 import { appendRuntimeErrorMessage } from './utils/runtimeError';
-import { createWidgetSkillDraftAssistantMessage, resolveWidgetSkillDraft } from './utils/widgetSkillDraft';
 
 const [, bem] = createNamespace('chat');
 
 const props = withDefaults(defineProps<BChatProps>(), {
   sessionId: null
 });
+
+/** ChatRuntime 通用请求配置。 */
+type ChatRuntimeRequestConfig = Pick<ChatRuntimeSendInput, 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp'>;
+
+/**
+ * 发送到 ChatRuntime 的用户消息输入。
+ */
+interface RuntimeUserMessageSendInput {
+  /** 已创建的用户消息 */
+  userMessage: Message;
+  /** 发送给运行态的结构化输入片段 */
+  parts: ChatRuntimeUserInputPart[];
+  /** 发送失败时的默认错误提示 */
+  errorMessage: string;
+  /** 是否清空当前输入草稿 */
+  clearDraft?: boolean;
+}
 
 const emit = defineEmits<{
   (e: 'session-created', session: ChatSession): void;
@@ -362,19 +387,6 @@ async function ensureActiveSession(title: string): Promise<string> {
   return session.id;
 }
 
-/**
- * 将本地小组件草稿消息写入当前会话并刷新可见消息。
- * @param sessionId - 当前会话 ID
- * @param visibleMessages - 写入后的可见消息列表
- */
-async function persistLocalWidgetSkillDraftMessages(sessionId: string, visibleMessages: Message[]): Promise<void> {
-  const historyMessages = await fetchAllPriorHistory(sessionId);
-  await chatStore.setSessionMessages(sessionId, [...historyMessages, ...visibleMessages]);
-  setLoadedMessages(visibleMessages);
-  await nextTick();
-  conversationRef.value?.scrollToBottom({ behavior: 'auto' });
-}
-
 /** Chat 服务配置解析 hook。 */
 const chatServiceConfig = useChatServiceConfig();
 /** Runtime 请求配置解析 hook。 */
@@ -571,6 +583,27 @@ function showNoModelConfigToast(): void {
   });
 }
 
+/**
+ * 解析 ChatRuntime 通用请求配置。
+ * @returns Runtime 请求配置，未配置模型时返回 null
+ */
+async function resolveChatRuntimeRequestConfig(): Promise<ChatRuntimeRequestConfig | null> {
+  const serviceConfig = await chatServiceConfig.resolveServiceConfig();
+  if (!serviceConfig) {
+    showNoModelConfigToast();
+    return null;
+  }
+
+  return {
+    contextWindow: contextWindow.value,
+    system: await resolveRuntimeSystemPrompt(),
+    workspaceRoot: workspaceRoot.value || undefined,
+    tools: serviceConfig.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
+    tavily: resolveRuntimeTavilyConfig(),
+    mcp: resolveRuntimeMcpRequestConfig()
+  };
+}
+
 /** 已被回退删除的 runtime ID 集合，用于丢弃迟到的主进程事件。 */
 const rollbackIgnoredRuntimeIds = new Set<string>();
 
@@ -715,10 +748,9 @@ async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> 
   const removedMessages = messages.value.slice(startIndex + 1);
   messages.value.splice(0, messages.value.length, ...sourceMessages);
 
-  const config = await chatServiceConfig.resolveServiceConfig();
-  if (!config) {
+  const runtimeConfig = await resolveChatRuntimeRequestConfig();
+  if (!runtimeConfig) {
     messages.value.splice(0, messages.value.length, ...sourceMessages, ...removedMessages);
-    showNoModelConfigToast();
     return false;
   }
 
@@ -726,12 +758,7 @@ async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> 
   await chatRuntime.continueTurn({
     sessionId,
     messages: sourceMessages,
-    contextWindow: contextWindow.value,
-    system: await resolveRuntimeSystemPrompt(),
-    workspaceRoot: workspaceRoot.value || undefined,
-    tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
-    tavily: resolveRuntimeTavilyConfig(),
-    mcp: resolveRuntimeMcpRequestConfig()
+    ...runtimeConfig
   });
 
   return true;
@@ -778,22 +805,16 @@ async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promi
       return;
     }
 
-    const config = await chatServiceConfig.resolveServiceConfig();
-    if (!config) {
-      showNoModelConfigToast();
+    const runtimeConfig = await resolveChatRuntimeRequestConfig();
+    if (!runtimeConfig) {
       taskRuntime.finishTask('chat');
       return;
     }
 
     const result = await chatRuntime.submitUserChoice({
       sessionId,
-      contextWindow: contextWindow.value,
-      system: await resolveRuntimeSystemPrompt(),
-      workspaceRoot: workspaceRoot.value || undefined,
       answer,
-      tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
-      tavily: resolveRuntimeTavilyConfig(),
-      mcp: resolveRuntimeMcpRequestConfig()
+      ...runtimeConfig
     });
     if (result.completed === true) {
       taskRuntime.finishTask('chat');
@@ -802,6 +823,103 @@ async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promi
     taskRuntime.finishTask('chat');
     throw error;
   }
+}
+
+/**
+ * 发送一条已经构造好的用户消息到 ChatRuntime。
+ * @param input - 运行态发送输入
+ */
+async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promise<void> {
+  let pendingSessionId: string | null = null;
+  let pendingUserMessage: Message | null = null;
+
+  try {
+    const runtimeConfig = await resolveChatRuntimeRequestConfig();
+    if (!runtimeConfig) {
+      taskRuntime.finishTask('chat');
+      return;
+    }
+
+    const sessionId = await ensureActiveSession(input.userMessage.content);
+    pendingSessionId = sessionId;
+    pendingUserMessage = input.userMessage;
+    confirmationController.expirePendingConfirmation();
+    focusInput();
+    if (input.clearDraft === true) {
+      inputEvents.clear();
+    }
+
+    conversationRef.value?.scrollToBottom({ behavior: 'auto' });
+
+    await chatRuntime.send({
+      sessionId,
+      content: input.userMessage.content,
+      parts: input.parts,
+      files: input.userMessage.files,
+      userMessageId: input.userMessage.id,
+      userMessageCreatedAt: input.userMessage.createdAt,
+      ...runtimeConfig
+    });
+  } catch (error) {
+    taskRuntime.finishTask('chat');
+    const message = error instanceof Error ? error.message : input.errorMessage;
+    if (pendingSessionId && pendingUserMessage) {
+      await appendRuntimeErrorMessage({
+        sessionId: pendingSessionId,
+        content: message,
+        visibleMessages: messages.value,
+        precedingMessage: pendingUserMessage,
+        fetchAllPriorHistory,
+        persistMessages: (targetSessionId, nextMessages) => chatStore.setSessionMessages(targetSessionId, nextMessages),
+        setLoadedMessages,
+        afterMessagesUpdated: async () => {
+          await nextTick();
+          conversationRef.value?.scrollToBottom({ behavior: 'auto' });
+        }
+      });
+      return;
+    }
+
+    interactionAPI.showToast({ type: 'error', content: message });
+  }
+}
+
+/**
+ * 处理小组件运行态提交结果。
+ * @param input - 小组件提交输入
+ */
+async function handleChatWidgetSubmit(input: ChatMessageWidgetResultRuntimeInput): Promise<void> {
+  const startResult = taskRuntime.beginTask('chat');
+  if (!startResult.ok) return;
+
+  const resultPart: ChatMessageWidgetResultPart = {
+    type: 'widget_result',
+    sessionId: input.sessionId,
+    widgetId: input.widgetId,
+    result: input.result,
+    submittedAt: new Date().toISOString()
+  };
+  const userMessage = create.userMessage(stringifyJsonValue(resultPart, { space: 2 }));
+  userMessage.parts = [resultPart];
+
+  await sendRuntimeUserMessage({
+    userMessage,
+    parts: [resultPart],
+    errorMessage: '提交小组件结果失败'
+  });
+}
+
+/**
+ * 处理消息气泡内提交到聊天运行态的输入。
+ * @param input - 消息气泡交互输入
+ */
+async function handleChatRuntimeInput(input: ChatMessageRuntimeInput): Promise<void> {
+  if (input.kind === 'user_choice') {
+    await handleChatUserChoiceSubmit(input.answer);
+    return;
+  }
+
+  await handleChatWidgetSubmit(input);
 }
 
 /** 用户消息回退 hook。 */
@@ -835,82 +953,18 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
   const startResult = taskRuntime.beginTask('chat');
   if (!startResult.ok) return;
 
-  let pendingSessionId: string | null = null;
-  let pendingUserMessage: Message | null = null;
-
-  try {
-    const userMessage = create.userMessage(trimmedContent);
-    if (images.length && supportsVision.value) {
-      userMessage.files = [...images];
-    }
-
-    const widgetDraft = images.length ? null : resolveWidgetSkillDraft(trimmedContent);
-    if (widgetDraft) {
-      const sessionId = await ensureActiveSession(userMessage.content);
-      pendingSessionId = sessionId;
-      pendingUserMessage = userMessage;
-      confirmationController.expirePendingConfirmation();
-      focusInput();
-      clearDraft && inputEvents.clear();
-
-      await persistLocalWidgetSkillDraftMessages(sessionId, [...messages.value, userMessage, createWidgetSkillDraftAssistantMessage(widgetDraft)]);
-      taskRuntime.finishTask('chat');
-      return;
-    }
-
-    const config = await chatServiceConfig.resolveServiceConfig();
-    if (!config) {
-      showNoModelConfigToast();
-      taskRuntime.finishTask('chat');
-      return;
-    }
-
-    const userParts = buildUserInputParts(trimmedContent, workspaceRoot.value || undefined);
-    const sessionId = await ensureActiveSession(userMessage.content);
-    pendingSessionId = sessionId;
-    pendingUserMessage = userMessage;
-    confirmationController.expirePendingConfirmation();
-    focusInput();
-    clearDraft && inputEvents.clear();
-
-    conversationRef.value?.scrollToBottom({ behavior: 'auto' });
-
-    await chatRuntime.send({
-      sessionId,
-      content: userMessage.content,
-      contextWindow: contextWindow.value,
-      system: await resolveRuntimeSystemPrompt(),
-      workspaceRoot: workspaceRoot.value || undefined,
-      parts: userParts,
-      tools: config.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
-      tavily: resolveRuntimeTavilyConfig(),
-      mcp: resolveRuntimeMcpRequestConfig(),
-      files: userMessage.files,
-      userMessageId: userMessage.id,
-      userMessageCreatedAt: userMessage.createdAt
-    });
-  } catch (error) {
-    taskRuntime.finishTask('chat');
-    const message = error instanceof Error ? error.message : '发送消息失败';
-    if (pendingSessionId && pendingUserMessage) {
-      await appendRuntimeErrorMessage({
-        sessionId: pendingSessionId,
-        content: message,
-        visibleMessages: messages.value,
-        precedingMessage: pendingUserMessage,
-        fetchAllPriorHistory,
-        persistMessages: (targetSessionId, nextMessages) => chatStore.setSessionMessages(targetSessionId, nextMessages),
-        setLoadedMessages,
-        afterMessagesUpdated: async () => {
-          await nextTick();
-          conversationRef.value?.scrollToBottom({ behavior: 'auto' });
-        }
-      });
-      return;
-    }
-
-    interactionAPI.showToast({ type: 'error', content: message });
+  const userMessage = create.userMessage(trimmedContent);
+  if (images.length && supportsVision.value) {
+    userMessage.files = [...images];
   }
+  const userParts = buildUserInputParts(trimmedContent, workspaceRoot.value || undefined);
+
+  await sendRuntimeUserMessage({
+    userMessage,
+    parts: userParts,
+    clearDraft,
+    errorMessage: '发送消息失败'
+  });
 }
 
 /**
@@ -1043,6 +1097,8 @@ function handleFileMentionSelect(file: FileMentionOption): void {
 
 /** Skill 初始化 hook */
 useSkillInit();
+/** Widget 初始化 hook */
+useWidgetInit();
 
 /** 组件挂载时初始化 */
 onMounted(async () => {
