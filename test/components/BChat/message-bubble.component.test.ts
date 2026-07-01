@@ -139,7 +139,7 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
     id: 'assistant-1',
     role: 'assistant',
     content: 'assistant content',
-    parts: [{ type: 'text', text: 'assistant content' }],
+    parts: [{ id: 'part0008', type: 'text', text: 'assistant content' }],
     createdAt: '2026-06-23T00:00:00.000Z',
     loading: false,
     finished: true,
@@ -200,6 +200,7 @@ function createWeatherRenderContext(): WidgetRenderContext {
  */
 function createQuestionToolPart(): ChatMessageToolPart {
   return {
+    id: 'tool-part-question',
     type: 'tool',
     toolCallId: 'tool-call-question',
     toolName: 'question',
@@ -271,7 +272,7 @@ describe('MessageBubble', (): void => {
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         content: '模型调用失败',
-        parts: [{ type: 'error', text: '模型调用失败' }]
+        parts: [{ id: 'part0009', type: 'error', text: '模型调用失败' }]
       })
     );
 
@@ -289,7 +290,7 @@ describe('MessageBubble', (): void => {
       id: 'compression-skipped-1',
       role: 'compression',
       content: '内容较少，无需压缩',
-      parts: [{ type: 'text', text: '内容较少，无需压缩' }],
+      parts: [{ id: 'part0010', type: 'text', text: '内容较少，无需压缩' }],
       createdAt: '2026-06-23T00:00:00.000Z',
       loading: false,
       finished: true,
@@ -310,7 +311,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         content: '',
         parts: [
-          {
+          { id: 'part0011',
             type: 'compaction',
             auto: true,
             reason: 'auto',
@@ -329,6 +330,7 @@ describe('MessageBubble', (): void => {
 
   it('renders widget parts with runtime template variables inside assistant bubbles', (): void => {
     const widgetPart: ChatMessageWidgetPart = {
+      id: 'widget-render-part',
       type: 'widget',
       sessionId: 'widget-session-1',
       widgetId: 'weather',
@@ -350,6 +352,7 @@ describe('MessageBubble', (): void => {
 
   it('emits unified submit actions after the created widget runs mounted', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
+      id: 'widget-created-part',
       type: 'widget',
       sessionId: 'widget-session-1',
       widgetId: 'weather',
@@ -423,6 +426,7 @@ describe('MessageBubble', (): void => {
 
   it('emits complete message update actions for widget parts outside the first index', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
+      id: 'widget-second-part',
       type: 'widget',
       sessionId: 'widget-session-2',
       widgetId: 'weather',
@@ -445,7 +449,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-second',
         content: '',
-        parts: [{ type: 'text', text: '天气卡片' }, widgetPart]
+        parts: [{ id: 'part0012', type: 'text', text: '天气卡片' }, widgetPart]
       })
     );
 
@@ -461,7 +465,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-second',
         content: '',
-        parts: [{ type: 'text', text: '天气卡片' }, widgetPart]
+        parts: [{ id: 'part0013', type: 'text', text: '天气卡片' }, widgetPart]
       })
     );
 
@@ -469,7 +473,7 @@ describe('MessageBubble', (): void => {
       expect.objectContaining({
         id: 'assistant-widget-second',
         parts: [
-          { type: 'text', text: '天气卡片' },
+          expect.objectContaining({ type: 'text', text: '天气卡片' }),
           expect.objectContaining({
             status: 'mounted',
             renderContext: {
@@ -498,6 +502,7 @@ describe('MessageBubble', (): void => {
       }
     };
     const widgetPart: ChatMessageWidgetPart = {
+      id: 'widget-result-part',
       type: 'widget',
       sessionId: 'widget-coffee-session-1',
       widgetId: 'coffee',
@@ -531,7 +536,7 @@ describe('MessageBubble', (): void => {
         role: 'user',
         content: expect.stringContaining('"type": "widget_result"'),
         parts: [
-          {
+          expect.objectContaining({
             type: 'widget_result',
             sessionId: 'widget-coffee-session-1',
             widgetId: 'coffee',
@@ -545,11 +550,11 @@ describe('MessageBubble', (): void => {
                 options: '{"temperature":"hot"}'
               }
             }
-          }
+          })
         ]
       }),
       parts: [
-        {
+        expect.objectContaining({
           type: 'widget_result',
           sessionId: 'widget-coffee-session-1',
           widgetId: 'coffee',
@@ -563,7 +568,7 @@ describe('MessageBubble', (): void => {
               options: '{"temperature":"hot"}'
             }
           }
-        }
+        })
       ],
       errorMessage: '提交小组件结果失败'
     });
@@ -574,6 +579,7 @@ describe('MessageBubble', (): void => {
       coffeeId: 'latte'
     };
     const widgetPart: ChatMessageWidgetPart = {
+      id: 'widget-submit-part',
       type: 'widget',
       sessionId: 'widget-coffee-session-2',
       widgetId: 'coffee',
@@ -649,6 +655,7 @@ describe('MessageBubble', (): void => {
 
   it('finishes widget runtime state from the latest message part', async (): Promise<void> => {
     const staleWidgetPart: ChatMessageWidgetPart = {
+      id: 'widget-latest-submit-part',
       type: 'widget',
       sessionId: 'widget-coffee-session-3',
       widgetId: 'coffee',
@@ -722,8 +729,9 @@ describe('MessageBubble', (): void => {
     });
   });
 
-  it('sends widget script message instead of widget_result when unmounted calls sendMessage', async (): Promise<void> => {
+  it('adds ids to widget script message parts and sends them instead of widget_result', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
+      id: 'widget-send-message-part',
       type: 'widget',
       sessionId: 'widget-coffee-session-4',
       widgetId: 'coffee',
@@ -734,7 +742,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['defineConfig({', '  unmounted() {', "    this.$sendMessage('确认下单')", '  }', '})'].join('\n')
+          code: ['defineConfig({', '  unmounted() {', "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })", '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()
@@ -773,9 +781,9 @@ describe('MessageBubble', (): void => {
       userMessage: expect.objectContaining({
         role: 'user',
         content: '确认下单',
-        parts: [{ type: 'text', text: '确认下单' }]
+        parts: [expect.objectContaining({ id: expect.any(String), type: 'text', text: '确认下单' })]
       }),
-      parts: [{ type: 'text', text: '确认下单' }],
+      parts: [expect.objectContaining({ id: expect.any(String), type: 'text', text: '确认下单' })],
       errorMessage: '发送小组件消息失败'
     });
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledTimes(1);
@@ -783,6 +791,7 @@ describe('MessageBubble', (): void => {
 
   it('marks widget script error messages in the text sent to chat runtime', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
+      id: 'widget-error-message-part',
       type: 'widget',
       sessionId: 'widget-coffee-session-error',
       widgetId: 'coffee',
@@ -816,15 +825,16 @@ describe('MessageBubble', (): void => {
       userMessage: expect.objectContaining({
         role: 'user',
         content: '小组件错误：库存不足',
-        parts: [{ type: 'text', text: '小组件错误：库存不足' }]
+        parts: [expect.objectContaining({ type: 'text', text: '小组件错误：库存不足' })]
       }),
-      parts: [{ type: 'text', text: '小组件错误：库存不足' }],
+      parts: [expect.objectContaining({ type: 'text', text: '小组件错误：库存不足' })],
       errorMessage: '发送小组件消息失败'
     });
   });
 
   it('sends widget script message from latest message without relying on update updater side effects', async (): Promise<void> => {
     const staleWidgetPart: ChatMessageWidgetPart = {
+      id: 'widget-latest-message-part',
       type: 'widget',
       sessionId: 'widget-coffee-session-latest-message',
       widgetId: 'coffee',
@@ -876,9 +886,9 @@ describe('MessageBubble', (): void => {
       userMessage: expect.objectContaining({
         role: 'user',
         content: '确认最新订单',
-        parts: [{ type: 'text', text: '确认最新订单' }]
+        parts: [expect.objectContaining({ type: 'text', text: '确认最新订单' })]
       }),
-      parts: [{ type: 'text', text: '确认最新订单' }],
+      parts: [expect.objectContaining({ type: 'text', text: '确认最新订单' })],
       errorMessage: '发送小组件消息失败'
     });
   });
@@ -914,7 +924,7 @@ describe('MessageBubble', (): void => {
   });
 
   it('renders open_widget tool results as widget runtime items', (): void => {
-    const toolPart: ChatMessageToolPart = {
+    const toolPart: ChatMessageToolPart = { id: 'part0014',
       type: 'tool',
       toolCallId: 'tool-call-widget',
       toolName: 'open_widget',
@@ -949,7 +959,7 @@ describe('MessageBubble', (): void => {
   });
 
   it('copies user widget result messages from message content when no text part exists', async (): Promise<void> => {
-    const widgetResultPart: ChatMessageWidgetResultPart = {
+    const widgetResultPart: ChatMessageWidgetResultPart = { id: 'part0015',
       type: 'widget_result',
       sessionId: 'widget-session-1',
       widgetId: 'weather',

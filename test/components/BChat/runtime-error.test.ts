@@ -16,7 +16,7 @@ function createMessage(overrides: Partial<Message>): Message {
     id: 'message-1',
     role: 'user',
     content: 'hello',
-    parts: [{ type: 'text', text: 'hello' }],
+    parts: [{ id: 'part0033', type: 'text', text: 'hello' }],
     createdAt: '2026-06-23T00:00:00.000Z',
     ...overrides
   };
@@ -48,7 +48,7 @@ describe('runtimeError', (): void => {
   });
 
   it('appends runtime errors to visible and persisted messages', async (): Promise<void> => {
-    const userMessage = createMessage({ id: 'user-1', content: 'read file', parts: [{ type: 'text', text: 'read file' }] });
+    const userMessage = createMessage({ id: 'user-1', content: 'read file', parts: [{ id: 'part0034', type: 'text', text: 'read file' }] });
     const visibleMessages: Message[] = [];
     let loadedMessages: Message[] = [];
     let persistedMessages: Message[] = [];
@@ -72,7 +72,7 @@ describe('runtimeError', (): void => {
       expect.objectContaining({
         role: 'error',
         content: '文件不存在或已被移动：/tmp/missing.md',
-        parts: [{ type: 'error', text: '文件不存在或已被移动：/tmp/missing.md' }],
+        parts: [expect.objectContaining({ type: 'error', text: '文件不存在或已被移动：/tmp/missing.md' })],
         loading: false,
         finished: true
       })

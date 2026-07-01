@@ -11,7 +11,7 @@ describe('buildUserInputParts', (): void => {
     const token = '{{@src/foo.ts#L10-20}}';
     const parts = buildUserInputParts(`fix ${token} please`, '/workspace');
 
-    expect(parts[0]).toEqual({ type: 'text', text: 'fix ' });
+    expect(parts[0]).toMatchObject({ type: 'text', text: 'fix ' });
     expect(parts[1]).toMatchObject({
       type: 'file',
       filename: 'foo.ts',
@@ -20,7 +20,7 @@ describe('buildUserInputParts', (): void => {
       url: 'file:///workspace/src/foo.ts?start=10&end=20',
       sourceText: { start: 4, value: token }
     });
-    expect(parts[2]).toEqual({ type: 'text', text: ' please' });
+    expect(parts[2]).toMatchObject({ type: 'text', text: ' please' });
   });
 
   it('keeps unsaved paths as unsaved URL inputs', (): void => {

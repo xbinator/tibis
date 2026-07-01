@@ -20,7 +20,7 @@ function createMessage(id: string, role: ChatMessageRecord['role'], content: str
     sessionId: 'session-1',
     role,
     content,
-    parts: [{ type: 'text', text: content }],
+    parts: [{ id: 'part0058', type: 'text', text: content }],
     createdAt: '2026-06-18T00:00:00.000Z',
     finished: true
   };

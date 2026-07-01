@@ -4,6 +4,7 @@
  */
 import type { AIToolExecutionCancelledResult, AIServiceError } from 'types/ai';
 import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
+import { nanoid } from 'nanoid';
 
 /**
  * 补齐续跑 assistant 的创建时间。
@@ -23,7 +24,7 @@ export function ensureRuntimeMessageCreatedAt(message: ChatMessageRecord, fallba
  */
 export function markAssistantMessageFailed(message: ChatMessageRecord, error: AIServiceError): void {
   message.content = message.content ? `${message.content}\n${error.message}` : error.message;
-  message.parts.push({ type: 'error', text: error.message });
+  message.parts.push({ id: nanoid(), type: 'error', text: error.message });
   message.loading = false;
   message.finished = true;
 }

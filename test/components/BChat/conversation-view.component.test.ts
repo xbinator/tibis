@@ -63,7 +63,7 @@ const ConversationViewForTest = ConversationView as DefineComponent<Conversation
  * @returns 工具片段
  */
 function createQuestionToolPart(status: ChatMessageToolPart['status'], resultStatus?: 'awaiting_user_input'): ChatMessageToolPart {
-  const part: ChatMessageToolPart = {
+  const part: ChatMessageToolPart = { id: 'part0002',
     type: 'tool',
     toolCallId: 'tool-call-question',
     toolName: 'question',
@@ -99,6 +99,7 @@ function createQuestionToolPart(status: ChatMessageToolPart['status'], resultSta
  */
 function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
   return {
+    id: 'tool-part-open-widget',
     type: 'tool',
     toolCallId: 'tool-call-widget',
     toolName: 'open_widget',
@@ -132,6 +133,7 @@ function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
  */
 function createWidgetPart(temperature: number): ChatMessageWidgetPart {
   return {
+    id: 'widget-part-weather',
     type: 'widget',
     sessionId: 'widget-session-1',
     widgetId: 'weather',
@@ -206,7 +208,7 @@ function createUserMessage(id: string): Message {
     id,
     role: 'user',
     content: '你好',
-    parts: [{ type: 'text', text: '你好' }],
+    parts: [{ id: 'part0003', type: 'text', text: '你好' }],
     createdAt: '2026-06-22T00:00:00.000Z',
     loading: false,
     finished: true

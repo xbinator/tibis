@@ -95,14 +95,20 @@ export interface ChatMessageFile {
 }
 
 /**
+ * 聊天消息结构化片段基础字段。
+ */
+export interface ChatMessagePartBase {
+  /** 片段唯一标识，创建后保持稳定。 */
+  id: string;
+}
+
+/**
  * 聊天消息文件输入片段。
  * Renderer 发送前使用该形态，不包含 snapshot。
  */
-export interface ChatMessageFilePartInput {
+export interface ChatMessageFilePartInput extends ChatMessagePartBase {
   /** 片段类型 */
   type: 'file';
-  /** 文件 part 唯一标识 */
-  id: string;
   /** 展示文件名 */
   filename: string;
   /** MIME 类型 */
@@ -154,7 +160,7 @@ export interface ChatMessageFilePart extends ChatMessageFilePartInput {
 /**
  * 聊天消息文本片段
  */
-export interface ChatMessageTextPart {
+export interface ChatMessageTextPart extends ChatMessagePartBase {
   /** 片段类型 */
   type: 'text';
   /** 文本内容 */
@@ -164,7 +170,7 @@ export interface ChatMessageTextPart {
 /**
  * 聊天消息思考片段
  */
-export interface ChatMessageThinkingPart {
+export interface ChatMessageThinkingPart extends ChatMessagePartBase {
   /** 片段类型 */
   type: 'thinking';
   /** 思考内容 */
@@ -191,7 +197,7 @@ export interface ChatMessageShellOutputChunk {
  * 聊天消息统一工具片段。
  * 合并原 tool-input / tool-call / tool-result 为同一片段，通过 status 追踪工具执行生命周期。
  */
-export interface ChatMessageToolPart {
+export interface ChatMessageToolPart extends ChatMessagePartBase {
   /** 片段类型 */
   type: 'tool';
   /** 工具调用 ID */
@@ -228,7 +234,7 @@ export interface ChatMessageWidgetLifecycle {
 /**
  * 聊天消息小组件快照片段。
  */
-export interface ChatMessageWidgetPart {
+export interface ChatMessageWidgetPart extends ChatMessagePartBase {
   /** 片段类型 */
   type: 'widget';
   /** 小组件会话 ID，用于后续执行闭环关联；独立运行态使用所在消息 ID 表示 */
@@ -294,7 +300,7 @@ export interface ChatMessageWidgetSubmitPayload {
 /**
  * 聊天消息 Widget 提交结果片段。
  */
-export interface ChatMessageWidgetResultPart extends ChatMessageWidgetSubmitPayload {
+export interface ChatMessageWidgetResultPart extends ChatMessagePartBase, ChatMessageWidgetSubmitPayload {
   /** 片段类型 */
   type: 'widget_result';
   /** 提交时间 */
@@ -377,7 +383,7 @@ export interface ChatMessageConfirmationCustomInputConfig {
 /**
  * 聊天消息确认卡片片段
  */
-export interface ChatMessageConfirmationPart {
+export interface ChatMessageConfirmationPart extends ChatMessagePartBase {
   /** 片段类型 */
   type: 'confirmation';
   /** 关联的工具调用 ID，用于在展示确认卡时抑制对应 tool-call 的展示（可选） */
@@ -410,7 +416,7 @@ export interface ChatMessageConfirmationPart {
   executionError?: string;
 }
 
-export interface ChatMessageErrorPart {
+export interface ChatMessageErrorPart extends ChatMessagePartBase {
   /** 片段类型 */
   type: 'error';
   /** 错误内容 */

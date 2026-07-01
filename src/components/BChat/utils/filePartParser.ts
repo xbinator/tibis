@@ -19,7 +19,7 @@ export type BChatUserInputPart = ChatMessageTextPart | ChatMessageFilePartInput;
 function appendTextPart(parts: BChatUserInputPart[], text: string): void {
   if (!text) return;
 
-  parts.push({ type: 'text', text });
+  parts.push({ id: nanoid(), type: 'text', text });
 }
 
 /**
@@ -86,7 +86,7 @@ function createRuntimeFileUrl(rawPath: string, workspaceRoot: string | undefined
  */
 export function buildUserInputParts(content: string, workspaceRoot?: string): BChatUserInputPart[] {
   const matches = findFileReferenceTokens(content);
-  if (!matches.length) return content ? [{ type: 'text', text: content }] : [];
+  if (!matches.length) return content ? [{ id: nanoid(), type: 'text', text: content }] : [];
 
   const parts: BChatUserInputPart[] = [];
   let cursor = 0;

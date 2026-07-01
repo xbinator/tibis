@@ -5,6 +5,7 @@
 import type { ActiveChatRuntime } from '../types.mjs';
 import type { ChatMessagePart, ChatMessageRecord } from 'types/chat';
 import type { ChatRuntimeSendInput } from 'types/chat-runtime';
+import { nanoid } from 'nanoid';
 
 /** 已可持久化的 runtime user message 输入。 */
 type RuntimeUserMessageInput = Omit<ChatRuntimeSendInput, 'parts'> & {
@@ -19,7 +20,7 @@ type RuntimeUserMessageInput = Omit<ChatRuntimeSendInput, 'parts'> & {
  */
 function createRuntimeUserMessageParts(input: RuntimeUserMessageInput): ChatMessagePart[] {
   if (input.parts?.length) return input.parts;
-  return input.content ? [{ type: 'text', text: input.content }] : [];
+  return input.content ? [{ id: nanoid(), type: 'text', text: input.content }] : [];
 }
 
 /**

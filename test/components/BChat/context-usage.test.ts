@@ -34,7 +34,7 @@ function createMessage(id: string, role: 'user' | 'assistant', content: string):
     id,
     role,
     content,
-    parts: [{ type: 'text', text: content }],
+    parts: [{ id: 'part0001', type: 'text', text: content }],
     createdAt: '2026-06-05T00:00:00.000Z',
     finished: true
   };

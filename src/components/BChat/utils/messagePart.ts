@@ -2,6 +2,7 @@
  * @file messagePart.ts
  * @description 聊天消息片段展示辅助函数。
  */
+import { isArray, isEmpty, isNil } from 'lodash-es';
 
 /**
  * 判断结构化值是否有可展示内容。
@@ -9,7 +10,7 @@
  * @returns 是否存在可展示内容
  */
 export function hasStructuredValueContent(value: unknown): boolean {
-  if (value === null || value === undefined) {
+  if (isNil(value)) {
     return false;
   }
 
@@ -17,12 +18,12 @@ export function hasStructuredValueContent(value: unknown): boolean {
     return value.trim().length > 0;
   }
 
-  if (Array.isArray(value)) {
+  if (isArray(value)) {
     return value.length > 0;
   }
 
   if (typeof value === 'object') {
-    return Object.keys(value as Record<string, unknown>).length > 0;
+    return !isEmpty(value);
   }
 
   return true;

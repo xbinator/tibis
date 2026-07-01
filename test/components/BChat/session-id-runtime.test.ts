@@ -3,6 +3,7 @@
  * @description BChat 基于 sessionId 的会话运行时测试。
  * @vitest-environment jsdom
  */
+/* eslint-disable vue/one-component-per-file */
 import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart, ChatSession } from 'types/chat';
 import type { ChatRuntimeContinueInput } from 'types/chat-runtime';
 import { defineComponent, h, type PropType } from 'vue';
@@ -389,7 +390,7 @@ function createMessage(id: string, content: string): Message {
     id,
     role: 'user',
     content,
-    parts: [{ type: 'text', text: content }],
+    parts: [{ id: 'part0035', type: 'text', text: content }],
     createdAt: '2026-06-15T00:00:00.000Z'
   };
 }
@@ -404,7 +405,7 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
     id: 'assistant-1',
     role: 'assistant',
     content: 'assistant content',
-    parts: [{ type: 'text', text: 'assistant content' }],
+    parts: [{ id: 'part0036', type: 'text', text: 'assistant content' }],
     createdAt: '2026-06-15T00:00:01.000Z',
     loading: false,
     finished: true,
@@ -420,6 +421,7 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
  */
 function createWidgetPart(status: ChatMessageWidgetPart['status'], temperature?: number): ChatMessageWidgetPart {
   return {
+    id: 'widget-part-weather',
     type: 'widget',
     sessionId: 'widget-session-1',
     widgetId: 'weather',
@@ -737,7 +739,7 @@ describe('BChat sessionId runtime', (): void => {
       expect.objectContaining({
         sessionId: 'session-created',
         content: 'fix {{@src/foo.ts}}',
-        parts: [{ type: 'text', text: 'fix ' }, expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
+        parts: [expect.objectContaining({ type: 'text', text: 'fix ' }), expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
       })
     );
   });
@@ -820,7 +822,7 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('marks a pending question as cancelled and appends interrupt when aborting after runtime waits for user input', async (): Promise<void> => {
-    const pendingToolPart: ChatMessageToolPart = {
+    const pendingToolPart: ChatMessageToolPart = { id: 'part0037',
       type: 'tool',
       toolCallId: 'tool-call-1',
       toolName: 'ask_user_choice',
@@ -896,7 +898,7 @@ describe('BChat sessionId runtime', (): void => {
         ...createAssistantMessage({
           id: 'assistant-streaming',
           content: 'streaming',
-          parts: [{ type: 'text', text: 'streaming' }],
+          parts: [{ id: 'part0038', type: 'text', text: 'streaming' }],
           loading: true,
           finished: false,
           runtimeId: 'runtime-1'
@@ -911,7 +913,7 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('continues user choice answers through main process ChatRuntime', async (): Promise<void> => {
-    const pendingToolPart: ChatMessageToolPart = {
+    const pendingToolPart: ChatMessageToolPart = { id: 'part0039',
       type: 'tool',
       toolCallId: 'tool-call-1',
       toolName: 'ask_user_choice',
@@ -962,7 +964,7 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('sends runtime user message submit actions through main process ChatRuntime', async (): Promise<void> => {
-    const resultPart: ChatMessageWidgetResultPart = {
+    const resultPart: ChatMessageWidgetResultPart = { id: 'part0040',
       type: 'widget_result',
       sessionId: 'widget-session-1',
       widgetId: 'weather',
@@ -1085,7 +1087,7 @@ describe('BChat sessionId runtime', (): void => {
     const assistantMessage = createAssistantMessage({
       id: 'assistant-old',
       content: '旧回答',
-      parts: [{ type: 'text', text: '旧回答' }]
+      parts: [{ id: 'part0041', type: 'text', text: '旧回答' }]
     });
     chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
     const wrapper = mountBChat('session-active');

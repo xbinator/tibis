@@ -12,7 +12,8 @@
 import type { Message } from '../../utils/types';
 import type { ChatMessageTextPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart, ChatMessageWidgetSubmitResult } from 'types/chat';
 import { onMounted } from 'vue';
-import { mapValues } from 'lodash-es';
+import { isString, mapValues } from 'lodash-es';
+import { nanoid } from 'nanoid';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { isPlainRecord, stringifyJsonValue, stringifyRuntimeTextValue } from '@/utils/json';
 import { createNamespace } from '@/utils/namespace';
@@ -27,15 +28,12 @@ interface Props {
   messageId?: string;
   /** 小组件消息片段 */
   part: ChatMessageWidgetPart;
-  /** 小组件片段在消息 parts 中的位置；由工具结果派生展示时为 null。 */
-  partIndex?: number | null;
   /** 是否启用消息内独立运行态 */
   runtimeEnabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   messageId: undefined,
-  partIndex: null,
   runtimeEnabled: false
 });
 
@@ -77,31 +75,34 @@ function createWidgetSubmitSuccessResult(output: unknown): ChatMessageWidgetSubm
 }
 
 /**
- * 创建替换指定小组件片段后的消息。
+ * 创建替换指定小组件片段后的消息，片段未变化时返回原消息。
  * @param currentMessage - 当前消息
- * @param partIndex - 小组件片段在消息 parts 中的位置
- * @param part - 下一版小组件片段
- * @returns 替换指定片段后的消息
+ * @param partId - 小组件片段 ID
+ * @param currentPart - 当前小组件片段
+ * @param nextPart - 下一版小组件片段
+ * @returns 替换指定片段后的消息，片段未变化时返回原消息
  */
-function createWidgetPartUpdatedMessage(currentMessage: Message, partIndex: number, part: ChatMessageWidgetPart): Message {
+function createWidgetPartUpdatedMessage(currentMessage: Message, partId: string, currentPart: ChatMessageWidgetPart, nextPart: ChatMessageWidgetPart): Message {
+  if (nextPart === currentPart) return currentMessage;
+
   return {
     ...currentMessage,
-    parts: currentMessage.parts.map((sourcePart, index) => (index === partIndex ? part : sourcePart))
+    parts: currentMessage.parts.map((sourcePart) => (sourcePart.id === partId ? nextPart : sourcePart))
   };
 }
 
 /**
  * 创建完成指定小组件片段后的消息。
  * @param currentMessage - 当前消息
- * @param partIndex - 小组件片段在消息 parts 中的位置
+ * @param partId - 小组件片段 ID
  * @returns 执行收尾后的消息；无法收尾时返回原消息
  */
-function createWidgetPartFinishedMessage(currentMessage: Message, partIndex: number): WidgetPartFinishMessageResult {
-  const currentPart = currentMessage.parts[partIndex];
+function createWidgetPartFinishedMessage(currentMessage: Message, partId: string): WidgetPartFinishMessageResult {
+  const currentPart = currentMessage.parts.find((part): part is ChatMessageWidgetPart => part.type === 'widget' && part.id === partId);
   if (currentPart?.type !== 'widget') return { message: currentMessage };
 
   const finishResult = finishWidgetRuntime(currentPart);
-  const message = finishResult.part === currentPart ? currentMessage : createWidgetPartUpdatedMessage(currentMessage, partIndex, finishResult.part);
+  const message = createWidgetPartUpdatedMessage(currentMessage, partId, currentPart, finishResult.part);
 
   return {
     message,
@@ -110,15 +111,28 @@ function createWidgetPartFinishedMessage(currentMessage: Message, partIndex: num
 }
 
 /**
+ * 将小组件上行消息内容归一化为聊天文本 part。
+ * @param content - 小组件上行消息内容
+ * @returns 带稳定 ID 的文本消息片段
+ */
+function normalizeWidgetSendMessageTextParts(content: WidgetRuntimeSendMessage['content']): ChatMessageTextPart[] {
+  if (isString(content)) {
+    return [{ id: nanoid(), type: 'text', text: content }];
+  }
+
+  return content.map((part) => ({ id: part.id ?? nanoid(), type: 'text', text: part.text }));
+}
+
+/**
  * 将小组件脚本上行消息转成 BChat 统一用户消息提交输入。
  * @param sendMessage - 小组件脚本上行消息
  * @returns 统一用户消息提交输入
  */
 function createWidgetSendMessageSubmitInput(sendMessage: WidgetRuntimeSendMessage): BChatAdaptedUserMessageSubmitInput {
-  const rawParts: ChatMessageTextPart[] = typeof sendMessage.content === 'string' ? [{ type: 'text', text: sendMessage.content }] : sendMessage.content;
+  const rawParts = normalizeWidgetSendMessageTextParts(sendMessage.content);
   const rawContent = rawParts.map((part): string => part.text).join('\n');
   const content = sendMessage.isError ? `小组件错误：${rawContent}` : rawContent;
-  const parts: ChatMessageTextPart[] = sendMessage.isError ? [{ type: 'text', text: content }] : rawParts;
+  const parts: ChatMessageTextPart[] = sendMessage.isError ? [{ id: nanoid(), type: 'text', text: content }] : rawParts;
   const userMessage = create.userMessage(content);
   userMessage.parts = parts;
 
@@ -136,6 +150,7 @@ function createWidgetSendMessageSubmitInput(sendMessage: WidgetRuntimeSendMessag
  */
 function createWidgetResultSubmitAction(output: unknown): BChatSubmitAction {
   const resultPart: ChatMessageWidgetResultPart = {
+    id: nanoid(),
     type: 'widget_result',
     sessionId: props.part.sessionId,
     widgetId: props.part.widgetId,
@@ -158,8 +173,9 @@ function createWidgetResultSubmitAction(output: unknown): BChatSubmitAction {
  * @returns 统一提交动作
  */
 function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChatSubmitAction {
-  const { messageId, partIndex } = props;
-  if (!messageId || partIndex === null) return action;
+  const { messageId } = props;
+  const partId = props.part.id;
+  if (!messageId) return action;
 
   return {
     async run(context): Promise<void> {
@@ -169,7 +185,7 @@ function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChat
         return;
       }
 
-      const finishResult = createWidgetPartFinishedMessage(currentMessage, partIndex);
+      const finishResult = createWidgetPartFinishedMessage(currentMessage, partId);
       await context.updateMessage(messageId, (): Message => finishResult.message);
 
       if (finishResult.sendMessage) {

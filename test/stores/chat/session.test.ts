@@ -32,7 +32,7 @@ function createInterruptedAssistantRecord(): ChatMessageRecord {
     sessionId: 'session-1',
     role: 'assistant',
     content: '半截内容',
-    parts: [{ type: 'text', text: '半截内容' }],
+    parts: [{ id: 'part0131', type: 'text', text: '半截内容' }],
     createdAt: '2026-06-13T00:00:00.000Z',
     loading: true,
     finished: false

@@ -607,7 +607,7 @@ function createCompressionMessage(input: {
     sessionId: input.sessionId,
     role: 'compression',
     content: input.content,
-    parts: input.content ? [{ type: 'text', text: input.content }] : [],
+    parts: input.content ? [{ id: nanoid(), type: 'text', text: input.content }] : [],
     createdAt: input.createdAt,
     loading: input.status === 'pending',
     finished: input.status !== 'pending',
@@ -648,6 +648,7 @@ function createCompactionPart(input: {
   errorMessage?: string;
 }): ChatMessageCompactionPart {
   return {
+    id: nanoid(),
     type: 'compaction',
     auto: input.reason === 'auto',
     reason: input.reason,
@@ -751,7 +752,7 @@ function emitCompressionMessageEvent(
  * @returns runtime compaction 服务
  */
 export function createRuntimeCompactionService(dependencies: RuntimeCompactionServiceDependencies): RuntimeCompactionService {
-  const createMessageId = dependencies.createMessageId ?? (() => `compression-${nanoid()}`);
+  const resolveMessageId = dependencies.createMessageId ?? (() => `compression-${nanoid()}`);
   const now = dependencies.now ?? (() => new Date().toISOString());
   const renderBoundary = dependencies.renderBoundary ?? renderRuntimeCompressionBoundary;
 
@@ -769,7 +770,7 @@ export function createRuntimeCompactionService(dependencies: RuntimeCompactionSe
       const target: CompressionStatusTarget =
         input.reason === 'auto' && input.targetMessage
           ? { kind: 'part', message: input.targetMessage }
-          : { kind: 'message', messageId: createMessageId(), createdAt: now() };
+          : { kind: 'message', messageId: resolveMessageId(), createdAt: now() };
 
       if (target.kind === 'message') {
         const pendingMessage = createCompressionMessage({

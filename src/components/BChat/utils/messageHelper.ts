@@ -268,7 +268,7 @@ export const append = {
     if (lastPart?.type === 'text') {
       lastPart.text += text;
     } else {
-      message.parts.push({ type: 'text', text });
+      message.parts.push({ id: nanoid(), type: 'text', text });
     }
     message.content = `${message.content ?? ''}${text}`;
   },
@@ -281,7 +281,7 @@ export const append = {
     if (lastPart?.type === 'thinking') {
       lastPart.thinking += thinking;
     } else {
-      message.parts.push({ type: 'thinking', thinking });
+      message.parts.push({ id: nanoid(), type: 'thinking', thinking });
     }
     message.thinking = (message.thinking ?? '') + thinking;
   },
@@ -300,7 +300,7 @@ export const append = {
       return;
     }
 
-    message.parts.push({ type: 'tool', toolCallId, toolName, status: 'executing', input });
+    message.parts.push({ id: nanoid(), type: 'tool', toolCallId, toolName, status: 'executing', input });
   },
 
   /**
@@ -327,7 +327,7 @@ export const append = {
       return;
     }
 
-    message.parts.push({ type: 'tool', toolCallId, toolName, status: 'inputting', input: null, inputText: '' });
+    message.parts.push({ id: nanoid(), type: 'tool', toolCallId, toolName, status: 'inputting', input: null, inputText: '' });
   },
 
   /**
@@ -359,13 +359,14 @@ export const append = {
       return;
     }
 
-    message.parts.push({ type: 'tool', toolCallId, toolName, status: 'done', input: null, result });
+    message.parts.push({ id: nanoid(), type: 'tool', toolCallId, toolName, status: 'done', input: null, result });
   }
 } as const;
 
 // ── 对外 ─────────────────────────────────────────────
 export function createBase(overrides: Partial<Message>): Message {
-  return { id: nanoid(), parts: [], loading: false, createdAt: dayjs().toISOString(), ...overrides } as Message;
+  const message = { id: nanoid(), parts: [], loading: false, createdAt: dayjs().toISOString(), ...overrides } as Message;
+  return message;
 }
 
 export const create = {
@@ -382,7 +383,7 @@ export const create = {
    * @returns 错误消息
    */
   errorMessage(content: string): Message {
-    return createBase({ role: 'error', content, parts: [{ type: 'error', text: content }], finished: true });
+    return createBase({ role: 'error', content, parts: [{ id: nanoid(), type: 'error', text: content }], finished: true });
   },
   /**
    * 创建中断消息。
@@ -408,7 +409,7 @@ export const create = {
    * @returns 用户消息
    */
   userMessage(content: string, references?: FileReference[]): Message {
-    const parts: ChatMessagePart[] = content ? [{ type: 'text', text: content }] : [];
+    const parts: ChatMessagePart[] = content ? [{ id: nanoid(), type: 'text', text: content }] : [];
 
     return createBase({ role: 'user', content, parts, references, finished: true });
   }
@@ -431,6 +432,7 @@ export function resolveWidgetPartFromToolResult(part: ChatMessagePart): ChatMess
   }
 
   return {
+    id: `${part.id}:widget`,
     type: 'widget',
     sessionId: part.result.data.sessionId,
     widgetId: part.result.data.widgetId,
@@ -633,7 +635,7 @@ function createCompactionBoundaryMessage(part: ChatMessageCompactionPart, hostMe
     id: `${hostMessage.id}:compaction-boundary`,
     role: 'compression',
     content: recordText,
-    parts: recordText ? [{ type: 'text', text: recordText }] : [],
+    parts: recordText ? [{ id: nanoid(), type: 'text', text: recordText }] : [],
     createdAt: hostMessage.createdAt,
     loading: false,
     finished: true,
@@ -774,7 +776,7 @@ function createCompactionProgressMessage(
     id: `${hostMessage.id}:compaction-${mode}`,
     role: 'user',
     content,
-    parts: [{ type: 'text', text: content }],
+    parts: [{ id: nanoid(), type: 'text', text: content }],
     createdAt: hostMessage.createdAt,
     loading: false,
     finished: true,

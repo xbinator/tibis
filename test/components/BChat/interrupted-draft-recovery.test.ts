@@ -18,8 +18,8 @@ function createInterruptedAssistantDraft(): Message {
     role: 'assistant',
     content: '已经生成的半截内容',
     parts: [
-      { type: 'text', text: '已经生成的半截内容' },
-      { type: 'tool', toolCallId: 'tool-1', toolName: 'read_file', status: 'executing', input: { path: 'README.md' } }
+      { id: 'part0004', type: 'text', text: '已经生成的半截内容' },
+      { id: 'part0005', type: 'tool', toolCallId: 'tool-1', toolName: 'read_file', status: 'executing', input: { path: 'README.md' } }
     ],
     createdAt: '2026-06-13T00:00:00.000Z',
     loading: true,
@@ -32,7 +32,7 @@ function createInterruptedAssistantDraft(): Message {
  * @returns 带小组件的未完成助手消息。
  */
 function createInterruptedWidgetAssistantDraft(): Message {
-  const widgetPart: ChatMessageWidgetPart = {
+  const widgetPart: ChatMessageWidgetPart = { id: 'part0006',
     type: 'widget',
     sessionId: 'widget-session-1',
     widgetId: 'weather',
@@ -66,7 +66,7 @@ function createAwaitingUserChoiceAssistantMessage(): Message {
     role: 'assistant',
     content: '',
     parts: [
-      {
+      { id: 'part0007',
         type: 'tool',
         toolCallId: 'question-tool-1',
         toolName: 'ask_user_question',

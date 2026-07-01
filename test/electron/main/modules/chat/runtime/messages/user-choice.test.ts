@@ -17,7 +17,7 @@ function createAwaitingChoiceMessage(): ChatMessageRecord {
     role: 'assistant',
     content: '',
     parts: [
-      {
+      { id: 'part0061',
         type: 'tool',
         toolCallId: 'tool-call-1',
         toolName: 'ask_user_choice',

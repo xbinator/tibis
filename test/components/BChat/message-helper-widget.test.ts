@@ -14,6 +14,7 @@ import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
  */
 function createOpenWidgetToolPart(): ChatMessageToolPart {
   return {
+    id: 'tool-part-open-widget',
     type: 'tool',
     toolCallId: 'tool-call-widget',
     toolName: 'open_widget',
@@ -115,7 +116,7 @@ describe('messageHelper widget result', (): void => {
       role: 'user',
       content: '',
       parts: [
-        {
+        { id: 'part0028',
           type: 'widget_result',
           sessionId: 'widget-coffee-tool-call-widget',
           widgetId: 'coffee',

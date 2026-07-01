@@ -172,7 +172,7 @@ describe('useChatRuntime', (): void => {
         sessionId: 'session-1',
         clientId: 'bchat',
         agentId: 'default',
-        message: createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ type: 'text', text: 'hello' }], runtimeId: 'runtime-1' })
+        message: createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ id: 'part0042', type: 'text', text: 'hello' }], runtimeId: 'runtime-1' })
       });
       emitRuntimeEvent(listeners, 'messageCreated', {
         runtimeId: 'runtime-1',
@@ -190,7 +190,7 @@ describe('useChatRuntime', (): void => {
           id: 'assistant-1',
           runtimeId: 'runtime-1',
           content: 'answer',
-          parts: [{ type: 'text', text: 'answer' }],
+          parts: [{ id: 'part0043', type: 'text', text: 'answer' }],
           loading: false,
           finished: true
         })
@@ -278,7 +278,7 @@ describe('useChatRuntime', (): void => {
         sessionId: 'session-1',
         content: 'fix {{@src/foo.ts}}',
         parts: [
-          { type: 'text', text: 'fix ' },
+          { id: 'part0044', type: 'text', text: 'fix ' },
           {
             type: 'file',
             id: 'file-part-1',
@@ -294,7 +294,7 @@ describe('useChatRuntime', (): void => {
       expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
         expect.objectContaining({
           content: 'fix {{@src/foo.ts}}',
-          parts: [{ type: 'text', text: 'fix ' }, expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
+          parts: [expect.objectContaining({ type: 'text', text: 'fix ' }), expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
         })
       );
     });
@@ -385,7 +385,7 @@ describe('useChatRuntime', (): void => {
         sessionId: 'session-1',
         clientId: 'bchat',
         agentId: 'default',
-        message: createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ type: 'text', text: 'hello' }], runtimeId: 'runtime-1' })
+        message: createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ id: 'part0045', type: 'text', text: 'hello' }], runtimeId: 'runtime-1' })
       });
 
       expect(messages.value.map((message) => message.id)).toEqual(['user-1', 'assistant-1']);
@@ -396,7 +396,7 @@ describe('useChatRuntime', (): void => {
 
   it('removes a local runtime message when the main process deletes it', (): void => {
     const messages = ref<Message[]>([
-      createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ type: 'text', text: 'hello' }] }) as Message,
+      createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ id: 'part0046', type: 'text', text: 'hello' }] }) as Message,
       createMessage({ id: 'assistant-1', role: 'assistant', content: '', parts: [], runtimeId: 'runtime-1' }) as Message
     ]);
     const scope = effectScope();
@@ -423,7 +423,7 @@ describe('useChatRuntime', (): void => {
 
   it('continues a paused assistant turn through main process runtime', async (): Promise<void> => {
     const messages = ref<Message[]>([
-      createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ type: 'text', text: 'choose' }] }) as Message,
+      createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ id: 'part0047', type: 'text', text: 'choose' }] }) as Message,
       createMessage({ id: 'assistant-1', role: 'assistant', content: '', parts: [] }) as Message
     ]);
     const scope = effectScope();
@@ -444,7 +444,12 @@ describe('useChatRuntime', (): void => {
       expect(result).toEqual({ runtimeId: 'runtime-continued', sessionId: 'session-1' });
       expect(electronAPIMock.chatRuntimeContinue).toHaveBeenCalledWith({
         sessionId: 'session-1',
-        messages: messages.value,
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'user-1',
+            parts: [expect.objectContaining({ type: 'text', text: 'choose' })]
+          })
+        ]),
         contextWindow: 200000,
         system: 'memory',
         clientId: 'bchat',
@@ -457,7 +462,7 @@ describe('useChatRuntime', (): void => {
   });
 
   it('passes structured-cloneable message snapshots when continuing a turn', async (): Promise<void> => {
-    const userMessage = createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ type: 'text', text: 'choose' }] }) as Message;
+    const userMessage = createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ id: 'part0048', type: 'text', text: 'choose' }] }) as Message;
     userMessage.references = [
       {
         token: '{{file-ref:ref-1}}',
@@ -491,7 +496,7 @@ describe('useChatRuntime', (): void => {
           sessionId: 'session-1',
           role: 'user',
           content: 'choose',
-          parts: [{ type: 'text', text: 'choose' }]
+          parts: [expect.objectContaining({ type: 'text', text: 'choose' })]
         })
       );
       expect('references' in continueInput.messages[0]).toBe(false);
@@ -501,7 +506,7 @@ describe('useChatRuntime', (): void => {
   });
 
   it('converts continue input into cloneable data before crossing IPC', async (): Promise<void> => {
-    const messages = ref<Message[]>([createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ type: 'text', text: 'choose' }] }) as Message]);
+    const messages = ref<Message[]>([createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ id: 'part0049', type: 'text', text: 'choose' }] }) as Message]);
     const scope = effectScope();
 
     electronAPIMock.chatRuntimeContinue.mockImplementation(async (input: unknown) => {
@@ -973,7 +978,7 @@ describe('useChatRuntime', (): void => {
         id: 'user-1',
         role: 'user',
         content: '执行长任务',
-        parts: [{ type: 'text', text: '执行长任务' }],
+        parts: [{ id: 'part0050', type: 'text', text: '执行长任务' }],
         runtimeId: 'runtime-rollback'
       }) as Message,
       createMessage({
@@ -1014,7 +1019,7 @@ describe('useChatRuntime', (): void => {
         id: 'assistant-1',
         role: 'assistant',
         content: '迟到回答',
-        parts: [{ type: 'text', text: '迟到回答' }],
+        parts: [{ id: 'part0051', type: 'text', text: '迟到回答' }],
         runtimeId: 'runtime-rollback',
         loading: false,
         finished: true

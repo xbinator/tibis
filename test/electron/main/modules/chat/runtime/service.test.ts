@@ -69,7 +69,7 @@ function createMessageRecord(id: string, role: ChatMessageRecord['role'], conten
     sessionId: 'session-1',
     role,
     content,
-    parts: content ? [{ type: 'text', text: content }] : [],
+    parts: content ? [{ id: 'part0076', type: 'text', text: content }] : [],
     createdAt,
     finished: true
   };
@@ -352,7 +352,7 @@ describe('chat runtime service shell', (): void => {
   it('materializes file input parts before persisting user messages', async (): Promise<void> => {
     const persistedMessages: ChatMessageRecord[] = [];
     const materializedParts: ChatMessagePart[] = [
-      { type: 'text', text: 'fix ' },
+      { id: 'part0077', type: 'text', text: 'fix ' },
       {
         type: 'file',
         id: 'file-part-1',
@@ -392,7 +392,7 @@ describe('chat runtime service shell', (): void => {
         content: 'fix {{@src/foo.ts}}',
         workspaceRoot: '/workspace',
         parts: [
-          { type: 'text', text: 'fix ' },
+          { id: 'part0078', type: 'text', text: 'fix ' },
           {
             type: 'file',
             id: 'file-part-1',
@@ -470,7 +470,7 @@ describe('chat runtime service shell', (): void => {
       },
       streamExecutor: async ({ assistantMessage }, updateAssistant) => {
         assistantMessage.content = 'hello from model';
-        assistantMessage.parts = [{ type: 'text', text: 'hello from model' }];
+        assistantMessage.parts = [{ id: 'part0079', type: 'text', text: 'hello from model' }];
         assistantMessage.loading = false;
         assistantMessage.finished = true;
         assistantMessage.usage = { inputTokens: 3, outputTokens: 4, totalTokens: 7 };
@@ -522,7 +522,7 @@ describe('chat runtime service shell', (): void => {
       compactionService: { compact },
       streamExecutor: async ({ assistantMessage }, updateAssistant) => {
         assistantMessage.content = 'large answer';
-        assistantMessage.parts = [{ type: 'text', text: 'large answer' }];
+        assistantMessage.parts = [{ id: 'part0080', type: 'text', text: 'large answer' }];
         assistantMessage.loading = false;
         assistantMessage.finished = true;
         assistantMessage.usage = { inputTokens: 6_000, outputTokens: 2_000, totalTokens: 8_000 };
@@ -608,7 +608,7 @@ describe('chat runtime service shell', (): void => {
             sessionId: 'session-1',
             role: 'user',
             content: 'prior question',
-            parts: [{ type: 'text', text: 'prior question' }],
+            parts: [{ id: 'part0081', type: 'text', text: 'prior question' }],
             createdAt: '2026-06-19T00:00:00.000Z'
           }
         ]
@@ -640,7 +640,7 @@ describe('chat runtime service shell', (): void => {
             sessionId: 'session-1',
             role: 'user',
             content: 'prior question',
-            parts: [{ type: 'text', text: 'prior question' }],
+            parts: [{ id: 'part0082', type: 'text', text: 'prior question' }],
             createdAt: '2026-06-19T00:00:00.000Z'
           }
         ]
@@ -676,7 +676,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: '大量历史上下文'.repeat(40_000),
-      parts: [{ type: 'text', text: '大量历史上下文'.repeat(40_000) }],
+      parts: [{ id: 'part0083', type: 'text', text: '大量历史上下文'.repeat(40_000) }],
       createdAt: '2026-06-19T00:00:00.000Z'
     };
     const compactedBoundary: ChatMessageRecord = {
@@ -684,7 +684,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'compression',
       content: 'COMPRESSED_CONTEXT',
-      parts: [{ type: 'text', text: 'COMPRESSED_CONTEXT' }],
+      parts: [{ id: 'part0084', type: 'text', text: 'COMPRESSED_CONTEXT' }],
       createdAt: '2026-06-19T00:01:00.000Z',
       compression: {
         status: 'success',
@@ -734,7 +734,7 @@ describe('chat runtime service shell', (): void => {
     const collector = createEventCollector();
     const priorMessage = createMessageRecord('prior-user', 'user', '大量历史上下文'.repeat(40_000), '2026-06-19T00:00:00.000Z');
     const compact = vi.fn(async (input: ChatRuntimeCompactInput) => {
-      input.targetMessage?.parts.push({
+      input.targetMessage?.parts.push({ id: 'part0085',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -770,7 +770,7 @@ describe('chat runtime service shell', (): void => {
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       if (streamExecutor.mock.calls.length === 1) {
         assistantMessage.parts = [
-          {
+          { id: 'part0086',
             type: 'tool',
             toolCallId: 'tool-call-1',
             toolName: 'read_file',
@@ -784,7 +784,7 @@ describe('chat runtime service shell', (): void => {
       }
 
       assistantMessage.content = 'final answer';
-      assistantMessage.parts = [...assistantMessage.parts, { type: 'text', text: 'final answer' }];
+      assistantMessage.parts = [...assistantMessage.parts, { id: 'part0087', type: 'text', text: 'final answer' }];
       assistantMessage.loading = false;
       assistantMessage.finished = true;
       await updateAssistant(assistantMessage);
@@ -820,7 +820,7 @@ describe('chat runtime service shell', (): void => {
       operations.push('compact');
       compactTargetFinishedStates.push(input.targetMessage?.finished);
       if (input.targetMessage) {
-        input.targetMessage.parts.push({
+        input.targetMessage.parts.push({ id: 'part0088',
           type: 'compaction',
           auto: true,
           reason: 'auto',
@@ -837,7 +837,7 @@ describe('chat runtime service shell', (): void => {
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       if (streamExecutor.mock.calls.length === 1) {
         operations.push('stream-1');
-        assistantMessage.parts.push({
+        assistantMessage.parts.push({ id: 'part0089',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'operate_webpage',
@@ -851,7 +851,7 @@ describe('chat runtime service shell', (): void => {
 
       operations.push('stream-2');
       assistantMessage.content = '继续检查页面';
-      assistantMessage.parts.push({ type: 'text', text: '继续检查页面' });
+      assistantMessage.parts.push({ id: 'part0090', type: 'text', text: '继续检查页面' });
       await updateAssistant(assistantMessage);
       return { usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } };
     });
@@ -885,7 +885,7 @@ describe('chat runtime service shell', (): void => {
     const updatedMessages: ChatMessageRecord[] = [];
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       assistantMessage.parts = [
-        {
+        { id: 'part0091',
           type: 'tool',
           toolCallId: 'tool-call-question',
           toolName: 'question',
@@ -965,7 +965,7 @@ describe('chat runtime service shell', (): void => {
     const updatedMessages: ChatMessageRecord[] = [];
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       assistantMessage.parts = [
-        {
+        { id: 'part0092',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'read_file',
@@ -1197,7 +1197,7 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        {
+        { id: 'part0093',
           type: 'tool',
           toolCallId: 'tool-call-old',
           toolName: 'read_file',
@@ -1219,7 +1219,7 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        {
+        { id: 'part0094',
           type: 'tool',
           toolCallId: 'tool-call-recent',
           toolName: 'read_file',
@@ -1256,7 +1256,7 @@ describe('chat runtime service shell', (): void => {
       },
       streamExecutor: async ({ assistantMessage }, updateAssistant) => {
         assistantMessage.content = 'done';
-        assistantMessage.parts = [{ type: 'text', text: 'done' }];
+        assistantMessage.parts = [{ id: 'part0095', type: 'text', text: 'done' }];
         assistantMessage.loading = false;
         assistantMessage.finished = true;
         await updateAssistant(assistantMessage);
@@ -1306,7 +1306,7 @@ describe('chat runtime service shell', (): void => {
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       if (streamExecutor.mock.calls.length === 1) {
         assistantMessage.parts = [
-          {
+          { id: 'part0096',
             type: 'tool',
             toolCallId: 'tool-call-1',
             toolName: 'read_file',
@@ -1321,7 +1321,7 @@ describe('chat runtime service shell', (): void => {
       }
 
       assistantMessage.content = 'final answer';
-      assistantMessage.parts = [...assistantMessage.parts, { type: 'text', text: 'final answer' }];
+      assistantMessage.parts = [...assistantMessage.parts, { id: 'part0097', type: 'text', text: 'final answer' }];
       assistantMessage.loading = false;
       assistantMessage.finished = true;
       assistantMessage.usage = secondUsage;
@@ -1363,7 +1363,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: 'choose',
-      parts: [{ type: 'text', text: 'choose' }],
+      parts: [{ id: 'part0098', type: 'text', text: 'choose' }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true
     };
@@ -1373,7 +1373,7 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        {
+        { id: 'part0099',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'ask_user_choice',
@@ -1392,7 +1392,7 @@ describe('chat runtime service shell', (): void => {
     };
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage: draft }, updateAssistant) => {
       draft.content = 'continued answer';
-      draft.parts = [...draft.parts, { type: 'text', text: 'continued answer' }];
+      draft.parts = [...draft.parts, { id: 'part0100', type: 'text', text: 'continued answer' }];
       draft.loading = false;
       draft.finished = true;
       await updateAssistant(draft);
@@ -1448,13 +1448,13 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: '重新回答',
-      parts: [{ type: 'text', text: '重新回答' }],
+      parts: [{ id: 'part0101', type: 'text', text: '重新回答' }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true
     };
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage: draft }, updateAssistant) => {
       draft.content = '新回答';
-      draft.parts = [{ type: 'text', text: '新回答' }];
+      draft.parts = [{ id: 'part0102', type: 'text', text: '新回答' }];
       draft.loading = false;
       draft.finished = true;
       await updateAssistant(draft);
@@ -1524,7 +1524,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: '上一轮问题',
-      parts: [{ type: 'text', text: '上一轮问题' }],
+      parts: [{ id: 'part0103', type: 'text', text: '上一轮问题' }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true
     };
@@ -1533,7 +1533,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'assistant',
       content: '上一轮回答',
-      parts: [{ type: 'text', text: '上一轮回答' }],
+      parts: [{ id: 'part0104', type: 'text', text: '上一轮回答' }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true,
       loading: false
@@ -1543,13 +1543,13 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: '重新生成当前回答',
-      parts: [{ type: 'text', text: '重新生成当前回答' }],
+      parts: [{ id: 'part0105', type: 'text', text: '重新生成当前回答' }],
       createdAt: '2026-06-19T00:00:01.000Z',
       finished: true
     };
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage: draft }, updateAssistant) => {
       draft.content = '当前新回答';
-      draft.parts = [{ type: 'text', text: '当前新回答' }];
+      draft.parts = [{ id: 'part0106', type: 'text', text: '当前新回答' }];
       draft.loading = false;
       draft.finished = true;
       await updateAssistant(draft);
@@ -1610,7 +1610,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: 'choose',
-      parts: [{ type: 'text', text: 'choose' }],
+      parts: [{ id: 'part0107', type: 'text', text: 'choose' }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true
     };
@@ -1620,7 +1620,7 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        {
+        { id: 'part0108',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'ask_user_choice',
@@ -1656,7 +1656,7 @@ describe('chat runtime service shell', (): void => {
         }
       });
       draft.content = 'continued answer';
-      draft.parts = [...draft.parts, { type: 'text', text: 'continued answer' }];
+      draft.parts = [...draft.parts, { id: 'part0109', type: 'text', text: 'continued answer' }];
       draft.loading = false;
       draft.finished = true;
       await updateAssistant(draft);
@@ -1728,7 +1728,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: 'choose',
-      parts: [{ type: 'text', text: 'choose' }],
+      parts: [{ id: 'part0110', type: 'text', text: 'choose' }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true
     };
@@ -1738,7 +1738,7 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        {
+        { id: 'part0111',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'ask_user_choice',
@@ -1770,7 +1770,7 @@ describe('chat runtime service shell', (): void => {
         }
       });
       draft.content = 'cancel acknowledged';
-      draft.parts = [...draft.parts, { type: 'text', text: 'cancel acknowledged' }];
+      draft.parts = [...draft.parts, { id: 'part0112', type: 'text', text: 'cancel acknowledged' }];
       draft.loading = false;
       draft.finished = true;
       await updateAssistant(draft);
@@ -1879,7 +1879,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: priorMessage.content,
-      parts: [{ type: 'text', text: priorMessage.content }],
+      parts: [{ id: 'part0113', type: 'text', text: priorMessage.content }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true
     };
@@ -1888,7 +1888,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'compression',
       content: 'COMPRESSED_CONTEXT',
-      parts: [{ type: 'text', text: 'COMPRESSED_CONTEXT' }],
+      parts: [{ id: 'part0114', type: 'text', text: 'COMPRESSED_CONTEXT' }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true,
       compression: {
@@ -1906,7 +1906,7 @@ describe('chat runtime service shell', (): void => {
       }
 
       assistantMessage.content = 'replayed answer';
-      assistantMessage.parts = [{ type: 'text', text: 'replayed answer' }];
+      assistantMessage.parts = [{ id: 'part0115', type: 'text', text: 'replayed answer' }];
       assistantMessage.loading = false;
       assistantMessage.finished = true;
       await updateAssistant(assistantMessage);
@@ -1974,7 +1974,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'compression',
       content: 'COMPRESSED_CONTEXT',
-      parts: [{ type: 'text', text: 'COMPRESSED_CONTEXT' }],
+      parts: [{ id: 'part0116', type: 'text', text: 'COMPRESSED_CONTEXT' }],
       createdAt: '2026-06-19T00:00:00.000Z',
       finished: true,
       compression: {
@@ -2168,7 +2168,7 @@ describe('chat runtime service shell', (): void => {
       },
       streamExecutor: async ({ assistantMessage }) => {
         assistantMessage.content = 'partial answer';
-        assistantMessage.parts.push({ type: 'text', text: 'partial answer' });
+        assistantMessage.parts.push({ id: 'part0117', type: 'text', text: 'partial answer' });
         await streamDeferred.promise;
         return {};
       }
@@ -2241,7 +2241,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'compression',
       content: 'COMPRESSED_CONTEXT',
-      parts: [{ type: 'text', text: 'COMPRESSED_CONTEXT' }],
+      parts: [{ id: 'part0118', type: 'text', text: 'COMPRESSED_CONTEXT' }],
       createdAt: '2026-06-19T00:01:00.000Z',
       compression: {
         status: 'success',
@@ -2288,7 +2288,7 @@ describe('chat runtime service shell', (): void => {
       compactionService: {
         compact: async (input) => {
           compactSignal = input.signal;
-          input.targetMessage?.parts.push({ type: 'compaction', auto: true, reason: 'auto', status: 'pending' });
+          input.targetMessage?.parts.push({ id: 'part0119', type: 'compaction', auto: true, reason: 'auto', status: 'pending' });
           await compactDeferred.promise;
           return { status: 'cancelled', messageId: 'compression-1' };
         }
@@ -2324,7 +2324,7 @@ describe('chat runtime service shell', (): void => {
       sessionId: 'session-1',
       role: 'user',
       content: '大量历史上下文'.repeat(40_000),
-      parts: [{ type: 'text', text: '大量历史上下文'.repeat(40_000) }],
+      parts: [{ id: 'part0120', type: 'text', text: '大量历史上下文'.repeat(40_000) }],
       createdAt: '2026-06-19T00:00:00.000Z'
     };
     const service = createChatRuntimeService({

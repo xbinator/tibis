@@ -20,7 +20,7 @@ function createMessage(id: string, role: ChatMessageRecord['role'], content: str
     sessionId: 'session-1',
     role,
     content,
-    parts: content ? [{ type: 'text', text: content }] : [],
+    parts: content ? [{ id: 'part0062', type: 'text', text: content }] : [],
     createdAt: `2026-06-19T00:00:0${id.length}.000Z`
   };
 }
@@ -75,7 +75,7 @@ describe('runtime model message context', (): void => {
     const covered = createMessage('a1', 'assistant', 'old answer');
     const compactedAssistant = createMessage('a2', 'assistant', '');
     compactedAssistant.parts = [
-      {
+      { id: 'part0063',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -98,7 +98,7 @@ describe('runtime model message context', (): void => {
     const currentUser = createMessage('u1', 'user', 'finish the task');
     const activeAssistant = createMessage('a1', 'assistant', '');
     activeAssistant.parts = [
-      {
+      { id: 'part0064',
         type: 'tool',
         toolCallId: 'tool-call-1',
         toolName: 'operate_webpage',
@@ -106,7 +106,7 @@ describe('runtime model message context', (): void => {
         input: { index: 9 },
         result: { toolName: 'operate_webpage', status: 'success', data: { clicked: true } }
       },
-      {
+      { id: 'part0065',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -134,7 +134,7 @@ describe('runtime model message context', (): void => {
     const covered = createMessage('a1', 'assistant', 'old answer');
     const compactedAssistant = createMessage('a2', 'assistant', '');
     compactedAssistant.parts = [
-      {
+      { id: 'part0066',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -144,7 +144,7 @@ describe('runtime model message context', (): void => {
         coveredUntilMessageId: covered.id,
         sourceMessageIds: [oldUser.id, covered.id]
       },
-      { type: 'text', text: 'continued answer' }
+      { id: 'part0067', type: 'text', text: 'continued answer' }
     ];
     const nextUser = createMessage('u2', 'user', 'new question');
 
@@ -163,7 +163,7 @@ describe('runtime model message context', (): void => {
     const covered = createMessage('a1', 'assistant', 'clicked menu');
     const compactedAssistant = createMessage('a2', 'assistant', '');
     compactedAssistant.parts = [
-      {
+      { id: 'part0068',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -173,8 +173,8 @@ describe('runtime model message context', (): void => {
         coveredUntilMessageId: covered.id,
         sourceMessageIds: [oldUser.id, covered.id]
       },
-      { type: 'thinking', thinking: 'Let me continue the task.' },
-      {
+      { id: 'part0069', type: 'thinking', thinking: 'Let me continue the task.' },
+      { id: 'part0070',
         type: 'tool',
         toolCallId: 'tool-call-read-page',
         toolName: 'read_current_webpage',
@@ -206,7 +206,7 @@ describe('runtime model message context', (): void => {
         role: 'user',
         content: 'fix {{@src/foo.ts#L10-20}}',
         parts: [
-          { type: 'text', text: 'fix ' },
+          { id: 'part0071', type: 'text', text: 'fix ' },
           {
             type: 'file',
             id: 'file-part-1',
@@ -241,8 +241,8 @@ describe('runtime model message context', (): void => {
   it('converts completed tool parts into assistant tool calls and tool results', (): void => {
     const assistant = createMessage('a-tool', 'assistant', '');
     assistant.parts = [
-      { type: 'text', text: 'I will inspect the file.' },
-      {
+      { id: 'part0072', type: 'text', text: 'I will inspect the file.' },
+      { id: 'part0073',
         type: 'tool',
         toolCallId: 'tool-call-1',
         toolName: 'read_file',
@@ -250,7 +250,7 @@ describe('runtime model message context', (): void => {
         input: { path: 'src/index.ts' },
         result: { toolName: 'read_file', status: 'success', data: { content: 'export const ok = true;' } }
       },
-      { type: 'text', text: 'The file exports ok.' }
+      { id: 'part0074', type: 'text', text: 'The file exports ok.' }
     ];
 
     expect(toRuntimeModelMessages([assistant])).toEqual([
@@ -279,7 +279,7 @@ describe('runtime model message context', (): void => {
   it('keeps open_widget snapshots out of runtime model tool results', (): void => {
     const assistant = createMessage('a-widget', 'assistant', '');
     assistant.parts = [
-      {
+      { id: 'part0075',
         type: 'tool',
         toolCallId: 'tool-call-widget',
         toolName: 'open_widget',

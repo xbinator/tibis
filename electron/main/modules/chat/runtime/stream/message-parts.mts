@@ -11,6 +11,7 @@ import type {
 } from './types.mjs';
 import type { AIUsage } from 'types/ai';
 import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
+import { nanoid } from 'nanoid';
 
 /**
  * 将文本增量写入 assistant 消息。
@@ -22,7 +23,7 @@ export function appendTextDelta(message: ChatMessageRecord, text: string): void 
   if (lastPart?.type === 'text') {
     lastPart.text += text;
   } else {
-    message.parts.push({ type: 'text', text });
+    message.parts.push({ id: nanoid(), type: 'text', text });
   }
 
   message.content = `${message.content}${text}`;
@@ -40,7 +41,7 @@ export function appendReasoningDelta(message: ChatMessageRecord, thinking: strin
   if (lastPart?.type === 'thinking') {
     lastPart.thinking += thinking;
   } else {
-    message.parts.push({ type: 'thinking', thinking });
+    message.parts.push({ id: nanoid(), type: 'thinking', thinking });
   }
 
   message.thinking = `${message.thinking ?? ''}${thinking}`;
@@ -63,6 +64,7 @@ function ensureToolPart(message: ChatMessageRecord, toolCallId: string, toolName
   }
 
   const toolPart: ChatMessageToolPart = {
+    id: nanoid(),
     type: 'tool',
     toolCallId,
     toolName,

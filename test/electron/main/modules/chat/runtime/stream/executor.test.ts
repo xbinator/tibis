@@ -26,7 +26,7 @@ const userMessage: ChatMessageRecord = {
   sessionId: 'session-1',
   role: 'user',
   content: 'hello',
-  parts: [{ type: 'text', text: 'hello' }],
+  parts: [{ id: 'part0123', type: 'text', text: 'hello' }],
   createdAt: '2026-06-19T00:00:00.000Z',
   finished: true
 };
@@ -382,13 +382,13 @@ describe('runtime stream executor', (): void => {
             ...userMessage,
             id: 'prior-user',
             content: 'prior question',
-            parts: [{ type: 'text', text: 'prior question' }]
+            parts: [{ id: 'part0124', type: 'text', text: 'prior question' }]
           },
           {
             ...assistantMessage,
             id: 'prior-assistant',
             content: 'prior answer',
-            parts: [{ type: 'text', text: 'prior answer' }],
+            parts: [{ id: 'part0125', type: 'text', text: 'prior answer' }],
             loading: false,
             finished: true
           },
@@ -2376,7 +2376,7 @@ describe('runtime stream executor', (): void => {
     const imageUserMessage: ChatMessageRecord = {
       ...userMessage,
       content: 'describe this image',
-      parts: [{ type: 'text', text: 'describe this image' }],
+      parts: [{ id: 'part0126', type: 'text', text: 'describe this image' }],
       files: [
         {
           id: 'file-1',

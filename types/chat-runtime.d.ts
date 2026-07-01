@@ -15,6 +15,7 @@ import type {
 } from './ai';
 import type {
   AIUserChoiceAnswerData,
+  ChatMessagePartBase,
   ChatMessageConfirmationCustomInputConfig,
   ChatMessageFilePartInput,
   ChatMessagePart,
@@ -474,7 +475,7 @@ export interface ChatRuntimeEventMap {
 }
 
 /** Compaction part inserted into assistant messages by runtime phases. */
-export interface ChatMessageCompactionPart {
+export interface ChatMessageCompactionPart extends ChatMessagePartBase {
   /** Part discriminator. */
   type: 'compaction';
   /** Whether runtime created this automatically. */

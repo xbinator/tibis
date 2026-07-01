@@ -43,7 +43,6 @@
               v-else-if="item.kind === 'widget'"
               :message-id="message.id"
               :part="item.part"
-              :part-index="item.partIndex"
               :runtime-enabled="item.runtimeEnabled"
               @submit="$emit('submit', $event)"
               @change="handleWidgetPartChange(item, $event)"
@@ -130,7 +129,7 @@ type MessageBubbleRenderItem =
   | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart }
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
   | { key: string; kind: 'tool'; part: ChatMessageToolPart }
-  | { key: string; kind: 'widget'; part: ChatMessageWidgetPart; partIndex: number | null; runtimeEnabled: boolean };
+  | { key: string; kind: 'widget'; part: ChatMessageWidgetPart; runtimeEnabled: boolean };
 
 /**
  * 判断消息片段是否为文本或错误片段。
@@ -171,7 +170,7 @@ const showAssistantToolbar = computed(() => props.message.finished === true && i
 /** 是否显示回退按钮（仅在后面还有消息时显示） */
 const showRollback = computed(() => isUserMessage.value && props.message.finished === true && props.canRollback?.(props.message));
 /** 用户输入按原始 content 展示，file parts 仅用于历史快照与模型上下文。 */
-const userInputPart = computed<ChatMessageTextPart>(() => ({ type: 'text', text: props.message.content }));
+const userInputPart = computed<ChatMessageTextPart>(() => ({ id: `${props.message.id}:user-input`, type: 'text', text: props.message.content }));
 
 /** 图片预览条目列表 */
 const imagePreviewItems = computed<ImagePreviewItem[]>(() =>
@@ -185,7 +184,7 @@ const imagePreviewItems = computed<ImagePreviewItem[]>(() =>
 /** 正文渲染条目。 */
 const renderItems = computed<MessageBubbleRenderItem[]>(() =>
   props.message.parts.flatMap((part, index): MessageBubbleRenderItem[] => {
-    const key = `${part.type}-${index}`;
+    const key = part.id ?? `${part.type}-${index}`;
     if (part.type === 'confirmation') return [];
     if (isTextLikePart(part)) return [{ key, kind: 'text', part }];
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
@@ -193,10 +192,10 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
     if (part.type === 'tool') {
       const widgetPart = resolveWidgetPartFromToolResult(part);
-      if (widgetPart) return [{ key: `${key}-widget`, kind: 'widget', part: widgetPart, partIndex: null, runtimeEnabled: false }];
+      if (widgetPart) return [{ key: widgetPart.id ?? `${key}-widget`, kind: 'widget', part: widgetPart, runtimeEnabled: false }];
     }
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
-    if (part.type === 'widget') return [{ key, kind: 'widget', part, partIndex: index, runtimeEnabled: true }];
+    if (part.type === 'widget') return [{ key, kind: 'widget', part, runtimeEnabled: true }];
     return [];
   })
 );
@@ -233,9 +232,12 @@ function createWidgetPartUpdatedMessage(
   item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>,
   part: ChatMessageWidgetPart
 ): Message {
+  const partId = item.part.id;
+  if (!partId) return currentMessage;
+
   return {
     ...currentMessage,
-    parts: currentMessage.parts.map((sourcePart, index) => (index === item.partIndex ? part : sourcePart))
+    parts: currentMessage.parts.map((sourcePart) => (sourcePart.id === partId ? part : sourcePart))
   };
 }
 
@@ -245,7 +247,7 @@ function createWidgetPartUpdatedMessage(
  * @param part - 新的小组件片段
  */
 function handleWidgetPartChange(item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>, part: ChatMessageWidgetPart): void {
-  if (item.partIndex === null) return;
+  if (!item.part.id) return;
 
   const updater = (currentMessage: Message): Message => createWidgetPartUpdatedMessage(currentMessage, item, part);
 

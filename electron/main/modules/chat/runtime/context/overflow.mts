@@ -4,6 +4,7 @@
  */
 import type { AIServiceError } from 'types/ai';
 import type { ChatMessageFile, ChatMessageRecord } from 'types/chat';
+import { nanoid } from 'nanoid';
 
 /** Provider 上下文超限错误文案模式。 */
 const CONTEXT_OVERFLOW_MESSAGE_PATTERNS = [
@@ -59,7 +60,7 @@ export function downgradeUserMessageForOverflowReplay(message: ChatMessageRecord
   return {
     ...message,
     content,
-    parts: content ? [{ type: 'text', text: content }] : [],
+    parts: content ? [{ id: nanoid(), type: 'text', text: content }] : [],
     files: message.files.map(removeModelMediaUrl)
   };
 }

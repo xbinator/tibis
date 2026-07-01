@@ -19,7 +19,7 @@ function createMessage(id: string, role: Message['role']): Message {
     id,
     role,
     content: id,
-    parts: role === 'interrupt' ? [] : [{ type: 'text', text: id }],
+    parts: role === 'interrupt' ? [] : [{ id: 'part0052', type: 'text', text: id }],
     createdAt: '2026-06-22T00:00:00.000Z',
     loading: false,
     finished: true
@@ -69,7 +69,7 @@ describe('useRollback', (): void => {
     const userMessage = createMessage('user-1', 'user');
     const assistantMessage = createMessage('assistant-1', 'assistant');
     assistantMessage.parts = [
-      {
+      { id: 'part0053',
         type: 'compaction',
         auto: true,
         reason: 'auto',

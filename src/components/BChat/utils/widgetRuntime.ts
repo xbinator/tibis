@@ -2,7 +2,7 @@
  * @file widgetRuntime.ts
  * @description BChat 小组件消息片段的轻量脚本运行工具。
  */
-import type { ChatMessageTextPart, ChatMessageWidgetPart } from 'types/chat';
+import type { ChatMessageWidgetPart } from 'types/chat';
 import { cloneDeep, get, isPlainObject, set } from 'lodash-es';
 import ts from 'typescript';
 
@@ -15,11 +15,23 @@ interface WidgetLifecycleRunOptions {
 }
 
 /**
+ * 小组件运行态上行文本片段。
+ */
+export interface WidgetRuntimeSendMessageTextPart {
+  /** 可选消息片段 ID；缺省时由聊天适配层生成。 */
+  id?: string;
+  /** 片段类型。 */
+  type: 'text';
+  /** 文本内容。 */
+  text: string;
+}
+
+/**
  * 小组件运行态上行消息。
  */
 export interface WidgetRuntimeSendMessage {
   /** 上行消息内容，支持纯文本或文本片段数组。 */
-  content: string | ChatMessageTextPart[];
+  content: string | WidgetRuntimeSendMessageTextPart[];
   /** 是否为错误消息。 */
   isError: boolean;
 }
@@ -230,10 +242,10 @@ function evaluateExpression(expression: ts.Expression, context: WidgetExpression
  * @param value - 原始 content 值
  * @returns 文本片段数组；不匹配时返回 null
  */
-function normalizeSendMessageTextParts(value: unknown): ChatMessageTextPart[] | null {
+function normalizeSendMessageTextParts(value: unknown): WidgetRuntimeSendMessageTextPart[] | null {
   if (!Array.isArray(value)) return null;
 
-  const textParts: ChatMessageTextPart[] = [];
+  const textParts: WidgetRuntimeSendMessageTextPart[] = [];
   for (const item of value) {
     if (!isPlainRecord(item) || item.type !== 'text' || typeof item.text !== 'string') return null;
     textParts.push({ type: 'text', text: item.text });

@@ -46,7 +46,7 @@ function createMessage(id: string, role: Message['role'], content: string): Mess
     id,
     role,
     content,
-    parts: [{ type: 'text', text: content }],
+    parts: [{ id: 'part0029', type: 'text', text: content }],
     createdAt: '2026-06-18T00:00:00.000Z',
     finished: true
   };
@@ -69,7 +69,7 @@ describe('useRuntimeCompactContext', (): void => {
           sessionId: 'session-1',
           role: 'compression',
           content: '正在压缩上下文…',
-          parts: [{ type: 'text', text: '正在压缩上下文…' }],
+          parts: [{ id: 'part0030', type: 'text', text: '正在压缩上下文…' }],
           createdAt: '2026-06-18T00:00:00.000Z',
           loading: true,
           finished: false
@@ -85,7 +85,7 @@ describe('useRuntimeCompactContext', (): void => {
           sessionId: 'session-1',
           role: 'compression',
           content: 'COMPRESSED_CONTEXT',
-          parts: [{ type: 'text', text: 'COMPRESSED_CONTEXT' }],
+          parts: [{ id: 'part0031', type: 'text', text: 'COMPRESSED_CONTEXT' }],
           createdAt: '2026-06-18T00:00:00.000Z',
           loading: false,
           finished: true,
@@ -157,7 +157,7 @@ describe('useRuntimeCompactContext', (): void => {
         sessionId: 'session-1',
         role: 'compression',
         content: 'OTHER_CONTEXT',
-        parts: [{ type: 'text', text: 'OTHER_CONTEXT' }],
+        parts: [{ id: 'part0032', type: 'text', text: 'OTHER_CONTEXT' }],
         createdAt: '2026-06-18T00:00:00.000Z',
         loading: false,
         finished: true

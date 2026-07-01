@@ -5,6 +5,8 @@
 import type { JSONValue, ModelMessage } from 'ai';
 import type { ChatMessageFilePart, ChatMessagePart, ChatMessageRecord, ChatMessageToolPart, ChatMessageWidgetResultPart } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
+import { isPlainObject } from 'lodash-es';
+import { nanoid } from 'nanoid';
 
 /** 可发送给模型的聊天消息。 */
 type RuntimeModelMessageRecord = Extract<ChatMessageRecord, { role: 'user' | 'assistant' }> | (ChatMessageRecord & { role: 'user' | 'assistant' });
@@ -71,7 +73,7 @@ type CompactionProgressMode = 'continue' | 'context';
  * @returns 是否为普通对象
  */
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return isPlainObject(value);
 }
 
 /**
@@ -172,7 +174,7 @@ function createCompactionBoundaryMessage(part: ChatMessageCompactionPart, hostMe
     sessionId: hostMessage.sessionId,
     role: 'compression',
     content: recordText,
-    parts: recordText ? [{ type: 'text', text: recordText }] : [],
+    parts: recordText ? [{ id: nanoid(), type: 'text', text: recordText }] : [],
     createdAt: hostMessage.createdAt,
     finished: true,
     summary: true,
@@ -312,7 +314,7 @@ function createCompactionProgressMessage(
     sessionId: hostMessage.sessionId,
     role: 'user',
     content,
-    parts: [{ type: 'text', text: content }],
+    parts: [{ id: nanoid(), type: 'text', text: content }],
     createdAt: hostMessage.createdAt,
     finished: true,
     runtimeId: hostMessage.runtimeId,

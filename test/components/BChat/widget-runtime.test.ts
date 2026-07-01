@@ -29,6 +29,7 @@ function createWidgetData(code: string): WidgetData {
  */
 function createWidgetPart(code: string): ChatMessageWidgetPart {
   return {
+    id: 'widget-part-weather',
     type: 'widget',
     sessionId: 'widget-session-1',
     widgetId: 'weather',
@@ -216,7 +217,7 @@ describe('widgetRuntime', (): void => {
 
     expect(result.part.status).toBe('finished');
     expect(result.sendMessage).toEqual({
-      content: [{ type: 'text', text: '确认下单' }],
+      content: [expect.objectContaining({ type: 'text', text: '确认下单' })],
       isError: false
     });
   });

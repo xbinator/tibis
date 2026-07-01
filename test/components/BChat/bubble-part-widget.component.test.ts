@@ -83,6 +83,7 @@ function createWidgetRenderContext(): WidgetRenderContext {
  */
 function createWidgetPart(code: string): ChatMessageWidgetPart {
   return {
+    id: `widget-part-${code.length}`,
     type: 'widget',
     sessionId: 'widget-coffee-session',
     widgetId: 'coffee',
@@ -124,13 +125,67 @@ function mountBubblePartWidget(part: ChatMessageWidgetPart, props: Record<string
 }
 
 describe('BubblePartWidget', (): void => {
+  it('finishes the message widget part by part id without a separate partIndex prop', async (): Promise<void> => {
+    const staleWidgetPart = {
+      ...createWidgetPart(
+        ['defineConfig({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+      ),
+      id: 'widget-part-stale'
+    };
+    const targetWidgetPart = {
+      ...createWidgetPart(
+        ['defineConfig({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+      ),
+      id: 'widget-part-target',
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        state: {
+          weather: {
+            temperature: 35
+          }
+        }
+      }
+    };
+    const wrapper = mountBubblePartWidget(targetWidgetPart, {
+      messageId: 'assistant-widget-message'
+    });
+
+    await wrapper.get('.widget-submit').trigger('click');
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const context = createSubmitContextMock();
+    vi.mocked(context.getMessage).mockReturnValue(createAssistantMessage({ parts: [staleWidgetPart, targetWidgetPart] }));
+    await action.run(context);
+
+    expect(context.updateMessage).toHaveBeenCalledWith('assistant-widget-message', expect.any(Function));
+    const [, updater] = vi.mocked(context.updateMessage).mock.calls[0];
+    const nextMessage = updater(createAssistantMessage({ parts: [staleWidgetPart, targetWidgetPart] }));
+
+    expect(nextMessage.parts[0]).toMatchObject({
+      id: 'widget-part-stale',
+      status: 'mounted'
+    });
+    expect(nextMessage.parts[1]).toMatchObject({
+      id: 'widget-part-target',
+      status: 'finished',
+      renderContext: {
+        state: {
+          submitted: {
+            temperature: 35
+          }
+        }
+      }
+    });
+  });
+
   it('finishes the message widget part before sending submit result', async (): Promise<void> => {
     const widgetPart = createWidgetPart(
       ['defineConfig({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
     );
     const wrapper = mountBubblePartWidget(widgetPart, {
-      messageId: 'assistant-widget-message',
-      partIndex: 0
+      messageId: 'assistant-widget-message'
     });
 
     await wrapper.get('.widget-submit').trigger('click');

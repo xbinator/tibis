@@ -25,6 +25,7 @@ vi.mock('@/hooks/useNavigate', () => ({
  */
 function createToolPart(toolName: string, data: Record<string, unknown>): ChatMessageToolPart {
   return {
+    id: 'tool-part-open-file',
     type: 'tool',
     toolCallId: 'tool-call-1',
     toolName,

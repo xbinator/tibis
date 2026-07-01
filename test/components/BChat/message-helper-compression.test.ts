@@ -19,7 +19,7 @@ function createModelMessage(id: string, role: 'user' | 'assistant', content: str
     id,
     role,
     content,
-    parts: [{ type: 'text', text: content }],
+    parts: [{ id: 'part0016', type: 'text', text: content }],
     createdAt: '2026-06-05T00:00:00.000Z',
     finished: true
   };
@@ -37,7 +37,7 @@ function createCompressionMessage(coveredUntilMessageId: string): Message {
     id: 'compression-1',
     role: 'compression',
     content,
-    parts: [{ type: 'text', text: content }],
+    parts: [{ id: 'part0017', type: 'text', text: content }],
     compression: {
       status: 'success',
       recordText: content,
@@ -76,7 +76,7 @@ describe('messageHelper compression boundary assembly', () => {
   it('uses an assistant compaction part as the latest compression boundary', (): void => {
     const compactedAssistant = createModelMessage('assistant-active', 'assistant', '');
     compactedAssistant.parts = [
-      {
+      { id: 'part0018',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -107,7 +107,7 @@ describe('messageHelper compression boundary assembly', () => {
   it('adds a user continuation prompt when compaction covers the active assistant message', (): void => {
     const activeAssistant = createModelMessage('assistant-active', 'assistant', '');
     activeAssistant.parts = [
-      {
+      { id: 'part0019',
         type: 'tool',
         toolCallId: 'tool-call-1',
         toolName: 'operate_webpage',
@@ -115,7 +115,7 @@ describe('messageHelper compression boundary assembly', () => {
         input: { index: 9 },
         result: { toolName: 'operate_webpage', status: 'success', data: { clicked: true } }
       },
-      {
+      { id: 'part0020',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -142,7 +142,7 @@ describe('messageHelper compression boundary assembly', () => {
   it('serializes assistant content appended after a compaction part as neutral context before a later user turn', (): void => {
     const compactedAssistant = createModelMessage('assistant-active', 'assistant', '');
     compactedAssistant.parts = [
-      {
+      { id: 'part0021',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -152,7 +152,7 @@ describe('messageHelper compression boundary assembly', () => {
         coveredUntilMessageId: 'a1',
         sourceMessageIds: ['u1', 'a1']
       },
-      { type: 'text', text: '继续后的回答' }
+      { id: 'part0022', type: 'text', text: '继续后的回答' }
     ];
     const messages: Message[] = [
       createModelMessage('u1', 'user', '旧用户消息'),
@@ -174,7 +174,7 @@ describe('messageHelper compression boundary assembly', () => {
   it('serializes post-compaction tool progress as user continuation context', (): void => {
     const compactedAssistant = createModelMessage('assistant-active', 'assistant', '');
     compactedAssistant.parts = [
-      {
+      { id: 'part0023',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -184,8 +184,8 @@ describe('messageHelper compression boundary assembly', () => {
         coveredUntilMessageId: 'a1',
         sourceMessageIds: ['u1', 'a1']
       },
-      { type: 'thinking', thinking: 'Let me continue the task.' },
-      {
+      { id: 'part0024', type: 'thinking', thinking: 'Let me continue the task.' },
+      { id: 'part0025',
         type: 'tool',
         toolCallId: 'tool-call-read-page',
         toolName: 'read_current_webpage',
@@ -234,7 +234,7 @@ describe('messageHelper compression boundary assembly', () => {
       role: 'user',
       content: 'fix {{@src/foo.ts}}',
       parts: [
-        { type: 'text', text: 'fix ' },
+        { id: 'part0026', type: 'text', text: 'fix ' },
         {
           type: 'file',
           id: 'file-part-1',
@@ -272,7 +272,7 @@ describe('messageHelper compression boundary assembly', () => {
       role: 'user',
       content: 'fix {{@src/foo.ts}}',
       parts: [
-        { type: 'text', text: 'fix ' },
+        { id: 'part0027', type: 'text', text: 'fix ' },
         {
           type: 'file',
           id: 'file-part-1',

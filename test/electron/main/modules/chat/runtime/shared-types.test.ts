@@ -31,7 +31,7 @@ describe('chat runtime shared types', (): void => {
       sessionId: 'session-1',
       role: 'assistant',
       content: 'summary',
-      parts: [{ type: 'compaction', auto: false, reason: 'manual', status: 'success', tailStartMessageId: 'message-tail' }],
+      parts: [{ id: 'part0121', type: 'compaction', auto: false, reason: 'manual', status: 'success', tailStartMessageId: 'message-tail' }],
       createdAt: '2026-06-18T00:00:00.000Z',
       summary: true,
       agentId: input.agentId,
@@ -70,7 +70,7 @@ describe('chat runtime shared types', (): void => {
     };
 
     const messagePart: ChatMessagePart = persistedPart;
-    const sendInput: Pick<ChatRuntimeSendInput, 'parts'> = { parts: [{ type: 'text', text: 'fix ' }, inputPart] };
+    const sendInput: Pick<ChatRuntimeSendInput, 'parts'> = { parts: [{ id: 'part0122', type: 'text', text: 'fix ' }, inputPart] };
 
     expect(messagePart.type).toBe('file');
     expect(sendInput.parts?.[1]?.type).toBe('file');

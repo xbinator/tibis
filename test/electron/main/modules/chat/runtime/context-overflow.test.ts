@@ -21,7 +21,7 @@ function createUserMessageWithImage(): ChatMessageRecord {
     sessionId: 'session-1',
     role: 'user',
     content: '请看图',
-    parts: [{ type: 'text', text: '请看图' }],
+    parts: [{ id: 'part0059', type: 'text', text: '请看图' }],
     files: [{ id: 'file-1', name: 'chart.png', type: 'image', mimeType: 'image/png', url: 'https://example.com/chart.png' }],
     createdAt: '2026-06-19T00:00:00.000Z',
     finished: true
@@ -41,7 +41,7 @@ describe('chat runtime context overflow helpers', () => {
     const downgradedMessage = downgradeUserMessageForOverflowReplay(userMessage);
 
     expect(downgradedMessage.content).toContain('[Attached image/png: chart.png]');
-    expect(downgradedMessage.parts).toEqual([{ type: 'text', text: downgradedMessage.content }]);
+    expect(downgradedMessage.parts).toEqual([expect.objectContaining({ type: 'text', text: downgradedMessage.content })]);
     expect(downgradedMessage.files?.[0]).not.toHaveProperty('url');
   });
 
@@ -52,7 +52,7 @@ describe('chat runtime context overflow helpers', () => {
       sessionId: 'session-1',
       role: 'assistant',
       content: 'ok',
-      parts: [{ type: 'text', text: 'ok' }],
+      parts: [{ id: 'part0060', type: 'text', text: 'ok' }],
       createdAt: '2026-06-19T00:00:01.000Z',
       finished: true
     };

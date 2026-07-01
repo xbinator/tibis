@@ -29,7 +29,7 @@ function createMessage(id: string, role: ChatMessageRecord['role'], content: str
     sessionId: 'session-1',
     role,
     content,
-    parts: content ? [{ type: 'text', text: content }] : [],
+    parts: content ? [{ id: 'part0054', type: 'text', text: content }] : [],
     createdAt: '2026-06-18T00:00:00.000Z',
     finished: true
   };
@@ -235,7 +235,7 @@ describe('runtime compaction service', (): void => {
   it('does not treat post-compaction assistant progress as already compact', async (): Promise<void> => {
     const targetMessage = createMessage('assistant-active', 'assistant', '');
     targetMessage.parts = [
-      {
+      { id: 'part0055',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -245,7 +245,7 @@ describe('runtime compaction service', (): void => {
         coveredUntilMessageId: 'a1',
         sourceMessageIds: ['u1', 'a1']
       },
-      { type: 'text', text: '压缩之后继续执行的新进展'.repeat(200) }
+      { id: 'part0056', type: 'text', text: '压缩之后继续执行的新进展'.repeat(200) }
     ];
     const collector = createEventCollector();
     const compressSessionManually = vi.fn().mockResolvedValue(createRecord());
@@ -275,7 +275,7 @@ describe('runtime compaction service', (): void => {
   it('keeps the previous successful compaction boundary while a later auto compaction is pending', async (): Promise<void> => {
     const targetMessage = createMessage('assistant-active', 'assistant', '');
     targetMessage.parts = [
-      {
+      { id: 'part0057',
         type: 'compaction',
         auto: true,
         reason: 'auto',
