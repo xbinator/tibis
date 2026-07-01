@@ -10,7 +10,7 @@ import {
   DEFAULT_BUILTIN_READONLY_TOOL_NAMES,
   DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES,
   OPERATE_WEBPAGE_TOOL_NAME,
-  READ_CURRENT_WEBPAGE_TOOL_NAME,
+  READ_CURRENT_WEBPAGE_TOOL_NAME
 } from '@/ai/tools/builtin';
 import { getToolNamesByExposure } from '../../../shared/ai/tools/index.js';
 

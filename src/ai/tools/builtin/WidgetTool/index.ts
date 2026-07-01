@@ -74,12 +74,10 @@ export interface WidgetContractToolResult {
   inputSchema: WidgetSchemaObject;
   /** 小组件状态 schema */
   stateSchema: WidgetSchemaObject;
-  /** 小组件出参 schema */
-  outputSchema: WidgetSchemaObject;
 }
 
 /** 打开 Widget 工具执行结果。 */
-export type OpenWidgetToolResult = Pick<ChatMessageWidgetPart, 'sessionId' | 'value' | 'renderContext'> & { kind: 'widget_display' };
+export type OpenWidgetToolResult = Pick<ChatMessageWidgetPart, 'sessionId' | 'widgetId' | 'value' | 'renderContext'> & { kind: 'widget_display' };
 
 /**
  * 判断值是否为普通记录。
@@ -164,8 +162,7 @@ function createWidgetContractToolResult(widget: WidgetDefinition): WidgetContrac
     name: widget.name,
     description: widget.description,
     inputSchema: cloneDeep(widget.data.inputSchema),
-    stateSchema: cloneDeep(widget.data.stateSchema),
-    outputSchema: cloneDeep(widget.data.outputSchema)
+    stateSchema: cloneDeep(widget.data.stateSchema)
   };
 }
 
@@ -192,6 +189,7 @@ function createOpenWidgetToolResult(widget: WidgetDefinition, input: OpenWidgetT
   return {
     kind: 'widget_display',
     sessionId: `widget-${createSafeWidgetId(widget.id)}-${createSafeWidgetId(context?.toolCallId ?? 'manual')}`,
+    widgetId: widget.id,
     value: cloneDeep(widget.data),
     renderContext: createOpenWidgetRenderContext(input)
   };

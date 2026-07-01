@@ -32,6 +32,7 @@ import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } 
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
 import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteTool';
+import { createOpenWidgetTool, createWidgetTool, OPEN_WIDGET_TOOL_NAME, WIDGET_TOOL_NAME, type WidgetStoreLike } from './WidgetTool';
 
 // 重新导出工具名称
 export {
@@ -58,6 +59,8 @@ export { RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 export { SKILL_TOOL_NAME } from './SkillTool';
 export { TODO_WRITE_TOOL_NAME } from './TodoWriteTool';
 export { EDIT_MEMORY_TOOL_NAME } from './MemoryTool';
+export { WIDGET_TOOL_NAME } from './WidgetTool';
+export { OPEN_WIDGET_TOOL_NAME } from './WidgetTool';
 
 /** MCP 工具 store 接口，仅声明条件注册所需字段。 */
 export interface MCPStoreLike {
@@ -105,7 +108,12 @@ export const DEFAULT_BUILTIN_WRITABLE_TOOL_NAMES = [
 /**
  * 条件注册的只读工具名称列表（MCP/Skill 等，有内容时才注册）。
  */
-export const CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES = [...getToolNamesByExposure('conditional-readonly'), SKILL_TOOL_NAME] as readonly string[];
+export const CONDITIONAL_BUILTIN_READONLY_TOOL_NAMES = [
+  ...getToolNamesByExposure('conditional-readonly'),
+  SKILL_TOOL_NAME,
+  WIDGET_TOOL_NAME,
+  OPEN_WIDGET_TOOL_NAME
+] as readonly string[];
 
 /**
  * 条件注册的写工具名称列表（MCP 写操作等，有内容时才注册）。
@@ -170,6 +178,8 @@ interface CreateBuiltinToolsOptions extends BuiltinToolBaseOptions {
   mcpStore?: MCPStoreLike;
   /** Skill store 实例，有可用 skill 时注册 skill 工具 */
   skillStore?: SkillStoreLike;
+  /** Widget store 实例，有可用小组件时注册 widget 工具 */
+  widgetStore?: WidgetStoreLike;
   /** 获取当前活跃会话 ID，用于 todowrite 工具 */
   getSessionId?: () => string | undefined;
   /** 获取当前 WebView 上下文，保留给调用方传参兼容。 */
@@ -260,6 +270,10 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
 
   // Skill 工具：仅当有可用 skill 时注册
   const skillTool = options.skillStore?.initialized && enabledSkills.length > 0 ? createSkillTool(options.skillStore) : null;
+  // Widget 工具：仅当有可用小组件时注册
+  const enabledWidgets = options.widgetStore?.getEnabledWidgets() ?? [];
+  const widgetTool = options.widgetStore?.initialized && enabledWidgets.length > 0 ? createWidgetTool(options.widgetStore) : null;
+  const openWidgetTool = options.widgetStore?.initialized && enabledWidgets.length > 0 ? createOpenWidgetTool(options.widgetStore) : null;
 
   // todowrite 工具：无条件注册
   const todoWriteTool = createBuiltinTodoWriteTool({
@@ -275,6 +289,8 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     ...mcpWriteTools,
     operateWebpageTool,
     ...(skillTool ? [skillTool] : []),
+    ...(widgetTool ? [widgetTool] : []),
+    ...(openWidgetTool ? [openWidgetTool] : []),
     todoWriteTool
   ];
 }
