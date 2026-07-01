@@ -189,6 +189,48 @@ describe('BEditor rich Markdown parser', (): void => {
     expect(blockMath?.attrs).toEqual({ latex: 'a^2+b^2=c^2' });
   });
 
+  it('splits loose Mermaid closing fences before following Markdown headings', async (): Promise<void> => {
+    const markdown = '```mermaid\ngraph TD\n  A8 --> S8``` ### 5\\.2 页面接口清单页面入口';
+
+    const { json } = await parseMarkdownForRichLoad(markdown, 'loose-mermaid-fence-test', '1');
+    const [codeBlock, heading] = json.content ?? [];
+
+    expect(codeBlock?.type).toBe('codeBlock');
+    expect(codeBlock?.attrs?.language).toBe('mermaid');
+    expect(getTextContent(codeBlock as JSONContent)).toBe('graph TD\n  A8 --> S8');
+    expect(heading?.type).toBe('heading');
+    expect(heading?.attrs?.level).toBe(3);
+    expect(getTextContent(heading as JSONContent)).toBe('5.2 页面接口清单页面入口');
+  });
+
+  it('splits escaped loose Mermaid closing fences before following Markdown headings', async (): Promise<void> => {
+    const markdown = '```mermaid\ngraph TD\n  A8 --> S8\\`\\`\\`### 5\\.2 页面接口清单页面入口';
+
+    const { json } = await parseMarkdownForRichLoad(markdown, 'escaped-loose-mermaid-fence-test', '1');
+    const [codeBlock, heading] = json.content ?? [];
+
+    expect(codeBlock?.type).toBe('codeBlock');
+    expect(codeBlock?.attrs?.language).toBe('mermaid');
+    expect(getTextContent(codeBlock as JSONContent)).toBe('graph TD\n  A8 --> S8');
+    expect(heading?.type).toBe('heading');
+    expect(heading?.attrs?.level).toBe(3);
+    expect(getTextContent(heading as JSONContent)).toBe('5.2 页面接口清单页面入口');
+  });
+
+  it('splits loose Mermaid closing fences at line end before later Markdown headings', async (): Promise<void> => {
+    const markdown = '```mermaid\ngraph TD\n  A8 --> S8```\n\n\n### 5\\.2 页面接口清单';
+
+    const { json } = await parseMarkdownForRichLoad(markdown, 'line-end-loose-mermaid-fence-test', '1');
+    const [codeBlock, heading] = json.content ?? [];
+
+    expect(codeBlock?.type).toBe('codeBlock');
+    expect(codeBlock?.attrs?.language).toBe('mermaid');
+    expect(getTextContent(codeBlock as JSONContent)).toBe('graph TD\n  A8 --> S8');
+    expect(heading?.type).toBe('heading');
+    expect(heading?.attrs?.level).toBe(3);
+    expect(getTextContent(heading as JSONContent)).toBe('5.2 页面接口清单');
+  });
+
   it('parses Markdown syntax inside inline comments when loading Markdown', async (): Promise<void> => {
     const markdown = '[**重要约束**：v1 内联补全使用 AI 一次性 `invoke`（非流式）]{comment="跟你说" id="comment-a"}';
 

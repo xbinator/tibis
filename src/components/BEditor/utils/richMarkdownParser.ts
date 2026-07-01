@@ -11,6 +11,7 @@ import type { JSONContent } from '@tiptap/core';
 import { MarkdownManager } from '@tiptap/markdown';
 import { createSourceLineTracker, resetSourceLineTracker } from '../adapters/sourceLineMapping';
 import { createRichMarkdownSchemaExtensions } from '../hooks/useExtensions';
+import { normalizeLooseMermaidClosingFences } from './mermaidMarkdown';
 
 /**
  * 解析接口返回结果
@@ -153,12 +154,13 @@ function countNodes(json: JSONContent): number {
  */
 function parseMarkdownOnMainThread(markdown: string, editorInstanceId: string): { json: JSONContent; headingCount: number } {
   const engine = getOrCreateParseEngine(editorInstanceId);
+  const normalizedMarkdown = normalizeLooseMermaidClosingFences(markdown);
 
   // 每次解析前重置扩展内部状态（headingIndex、sourceLineTracker）
   engine.schemaExtensions.resetHeadingIndex();
   resetSourceLineTracker(engine.sourceLineTracker);
 
-  const json = engine.markdownManager.parse(markdown);
+  const json = engine.markdownManager.parse(normalizedMarkdown);
   const headingCount = engine.schemaExtensions.getHeadingIndex();
 
   return { json, headingCount };

@@ -31,6 +31,7 @@ import type { CodeBlockNode as MessageCodeBlockNode } from '../types';
 import type { PropType, VNodeChild } from 'vue';
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { common, createLowlight } from 'lowlight';
+import { getRenderableMermaidSource } from '@/components/BEditor/utils/mermaidMarkdown';
 import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
 import { createMessageMermaidRenderId } from '../utils';
@@ -225,7 +226,7 @@ async function renderMermaid(): Promise<void> {
   if (!isMermaidPreviewVisible.value) return;
 
   const renderIndex = ++mermaidRenderIndex;
-  const code = props.node.text.trim();
+  const code = getRenderableMermaidSource(props.node.text);
 
   mermaidError.value = null;
   await nextTick();

@@ -60,6 +60,7 @@ import { message } from 'ant-design-vue';
 import BSelect from '@/components/BSelect/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import { createNamespace } from '@/utils/namespace';
+import { extractLooseMermaidHeadingRepair, getRenderableMermaidSource } from '../utils/mermaidMarkdown';
 import { createMermaidRenderId } from '../utils/mermaidRenderId';
 
 const [name, bem] = createNamespace('markdown-codeblock');
@@ -68,6 +69,16 @@ const [name, bem] = createNamespace('markdown-codeblock');
 
 type CopyState = '复制' | '已复制' | '复制失败';
 type PreviewType = 'mermaid' | 'json';
+
+/**
+ * Mermaid 误吞内容修复目标。
+ */
+interface MermaidRepairTarget {
+  /** 修复后的 Mermaid 源码与后续 Markdown */
+  repair: NonNullable<ReturnType<typeof extractLooseMermaidHeadingRepair>>;
+  /** 当前代码块在 ProseMirror 文档中的位置 */
+  position: number;
+}
 
 // ─── 常量 ────────────────────────────────────────────────────────────────────
 
@@ -183,6 +194,10 @@ let mermaidRenderIndex = 0;
 // 复制重置定时器
 let resetTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Mermaid 误吞内容修复调度状态，避免在 NodeView 初始化期间同步触发编辑器事务
+let isComponentMounted = false;
+let mermaidRepairScheduled = false;
+
 // ─── Computed ────────────────────────────────────────────────────────────────
 
 const languageOptions = computed(() => LANGUAGE_OPTIONS);
@@ -209,6 +224,89 @@ const isPreviewVisible = computed(() => hasCode.value && activePreview.value ===
 const copyIconName = computed(() => COPY_ICON_MAP[copyState.value]);
 // 保持模板兼容（原来用 copyLabel 绑定 title/aria-label）
 const copyLabel = computed(() => copyState.value);
+
+// ─── Mermaid 文档修复 ────────────────────────────────────────────────────────
+
+/**
+ * 创建用于替换误吞内容的 Markdown 片段。
+ * @param source - Mermaid 图源码
+ * @param markdown - 被误吞的后续 Markdown 内容
+ * @returns 可插入编辑器的 Markdown 片段
+ */
+function createMermaidRepairMarkdown(source: string, markdown: string): string {
+  return ['```mermaid', source, '```', '', markdown].join('\n');
+}
+
+/**
+ * 获取 Mermaid 误吞内容修复目标。
+ * @returns 可修复目标；不满足修复条件时返回 null
+ */
+function getMermaidRepairTarget(): MermaidRepairTarget | null {
+  if (!isMermaidLanguage.value) {
+    return null;
+  }
+
+  const repair = extractLooseMermaidHeadingRepair(codeContent.value);
+  if (!repair) {
+    return null;
+  }
+
+  const getPosition = props.getPos;
+  if (typeof getPosition !== 'function') {
+    return null;
+  }
+
+  const position = getPosition();
+  if (typeof position !== 'number') {
+    return null;
+  }
+
+  return { repair, position };
+}
+
+/**
+ * 修复被 Mermaid 代码块误吞的后续 Markdown 标题。
+ * @returns 是否已发起文档修复命令
+ */
+function repairLooseMermaidHeading(): boolean {
+  const target = getMermaidRepairTarget();
+  if (!target) {
+    return false;
+  }
+
+  return props.editor.commands.insertContentAt(
+    { from: target.position, to: target.position + props.node.nodeSize },
+    createMermaidRepairMarkdown(target.repair.source, target.repair.markdown),
+    { contentType: 'markdown' }
+  );
+}
+
+/**
+ * 延迟修复被 Mermaid 代码块误吞的后续 Markdown。
+ * @returns 是否已发现并调度修复任务
+ */
+function scheduleLooseMermaidHeadingRepair(): boolean {
+  if (!getMermaidRepairTarget()) {
+    return false;
+  }
+
+  if (mermaidRepairScheduled) {
+    return true;
+  }
+
+  mermaidRepairScheduled = true;
+
+  nextTick().then(() => {
+    mermaidRepairScheduled = false;
+    if (!isComponentMounted) {
+      return;
+    }
+
+    repairLooseMermaidHeading();
+  });
+
+  return true;
+}
 
 // ─── Mermaid 渲染 ────────────────────────────────────────────────────────────
 
@@ -240,7 +338,7 @@ async function renderMermaid(): Promise<void> {
   // 提前退出：预览不可见时无需渲染
   if (!isPreviewVisible.value) return;
 
-  const code = codeContent.value.trim();
+  const code = getRenderableMermaidSource(codeContent.value);
 
   // 提前退出：无内容时清空画布
   if (!code) {
@@ -379,6 +477,8 @@ function togglePreview(): void {
 
 // 代码变化时防抖渲染（避免每次击键都触发）
 watch(codeContent, () => {
+  if (scheduleLooseMermaidHeadingRepair()) return;
+
   if (isPreviewVisible.value && isMermaidLanguage.value) debouncedRenderMermaid();
 });
 
@@ -390,11 +490,13 @@ watch(isPreviewVisible, (visible: boolean) => {
 // ─── 生命周期 ────────────────────────────────────────────────────────────────
 
 onMounted(() => {
-  if (isPreviewVisible.value) renderMermaid();
+  isComponentMounted = true;
+  if (!scheduleLooseMermaidHeadingRepair() && isPreviewVisible.value) renderMermaid();
   themeChangeCallbacks.add(renderMermaid);
 });
 
 onUnmounted(() => {
+  isComponentMounted = false;
   // 使所有进行中的异步渲染失效
   mermaidRenderIndex++;
   themeChangeCallbacks.delete(renderMermaid);

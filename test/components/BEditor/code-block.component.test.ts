@@ -52,6 +52,34 @@ interface TestCodeBlockNode {
   };
   /** 代码文本内容 */
   textContent: string;
+  /** ProseMirror 节点尺寸 */
+  nodeSize: number;
+}
+
+/**
+ * 测试用编辑器命令集合。
+ */
+interface TestCodeBlockEditorCommands {
+  /** 按范围替换编辑器内容 */
+  insertContentAt: ReturnType<typeof vi.fn>;
+}
+
+/**
+ * 测试用编辑器实例。
+ */
+interface TestCodeBlockEditor {
+  /** 编辑器命令集合 */
+  commands: TestCodeBlockEditorCommands;
+}
+
+/**
+ * 代码块挂载选项。
+ */
+interface CodeBlockMountOptions {
+  /** 测试用编辑器实例 */
+  editor?: TestCodeBlockEditor;
+  /** 获取节点位置的函数 */
+  getPos?: () => number | undefined;
 }
 
 /**
@@ -98,26 +126,41 @@ async function waitForMermaidSvg(wrapper: VueWrapper, remainingChecks = 6): Prom
 function createCodeBlockNode(language: string, textContent: string): TestCodeBlockNode {
   return {
     attrs: { language },
-    textContent
+    textContent,
+    nodeSize: textContent.length + 2
+  };
+}
+
+/**
+ * 创建测试用编辑器实例。
+ * @param insertContentAt - 替换内容命令
+ * @returns 测试编辑器实例
+ */
+function createCodeBlockEditor(insertContentAt: ReturnType<typeof vi.fn> = vi.fn().mockReturnValue(true)): TestCodeBlockEditor {
+  return {
+    commands: {
+      insertContentAt
+    }
   };
 }
 
 /**
  * 挂载代码块 NodeView。
  * @param node - 测试代码块节点
+ * @param options - 挂载选项
  * @returns 挂载结果
  */
-function mountCodeBlock(node: TestCodeBlockNode): CodeBlockMountResult {
+function mountCodeBlock(node: TestCodeBlockNode, options: CodeBlockMountOptions = {}): CodeBlockMountResult {
   const updateAttributes = vi.fn();
   const wrapper = mount(CodeBlock, {
     props: {
       node,
       updateAttributes,
-      editor: {},
+      editor: options.editor ?? createCodeBlockEditor(),
       decorations: [],
       selected: false,
       extension: {},
-      getPos: () => 0,
+      getPos: options.getPos ?? (() => undefined),
       deleteNode: vi.fn(),
       view: {},
       innerDecorations: {},
@@ -189,6 +232,97 @@ describe('CodeBlock', (): void => {
       errorMessage: '复制图片失败'
     });
     expect(copyTextMock).not.toHaveBeenCalled();
+  });
+
+  it('renders Mermaid preview from source before a loose closing fence and heading', async (): Promise<void> => {
+    const { wrapper } = mountCodeBlock(createCodeBlockNode('mermaid', 'graph TD\n  A8 --> S8``` ### 5\\.2 页面接口清单页面入口'));
+
+    await waitForMermaidSvg(wrapper);
+
+    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), 'graph TD\n  A8 --> S8');
+  });
+
+  it('renders Mermaid preview before an escaped loose closing fence', async (): Promise<void> => {
+    const { wrapper } = mountCodeBlock(createCodeBlockNode('mermaid', 'graph TD\n  A8 --> S8\\`\\`\\`### 5\\.2 页面接口清单页面入口'));
+
+    await waitForMermaidSvg(wrapper);
+
+    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), 'graph TD\n  A8 --> S8');
+  });
+
+  it('repairs a Mermaid code block that swallowed the following Markdown heading', async (): Promise<void> => {
+    const node = createCodeBlockNode('mermaid', 'graph TD\n  A8 --> S8\\`\\`\\`### 5\\.2 页面接口清单页面入口');
+    const insertContentAt = vi.fn().mockReturnValue(true);
+
+    mountCodeBlock(node, {
+      editor: createCodeBlockEditor(insertContentAt),
+      getPos: () => 12
+    });
+
+    await nextTick();
+
+    expect(insertContentAt).toHaveBeenCalledWith(
+      { from: 12, to: 12 + node.nodeSize },
+      '```mermaid\ngraph TD\n  A8 --> S8\n```\n\n### 5\\.2 页面接口清单页面入口',
+      { contentType: 'markdown' }
+    );
+  });
+
+  it('defers Mermaid repair until the Vue node view renderer is ready', async (): Promise<void> => {
+    const node = createCodeBlockNode('mermaid', 'graph TD\n  A8 --> S8\\`\\`\\`### 5\\.2 页面接口清单页面入口');
+    const insertContentAt = vi.fn().mockReturnValue(true);
+
+    mountCodeBlock(node, {
+      editor: createCodeBlockEditor(insertContentAt),
+      getPos: () => 16
+    });
+
+    expect(insertContentAt).not.toHaveBeenCalled();
+
+    await nextTick();
+
+    expect(insertContentAt).toHaveBeenCalledWith(
+      { from: 16, to: 16 + node.nodeSize },
+      '```mermaid\ngraph TD\n  A8 --> S8\n```\n\n### 5\\.2 页面接口清单页面入口',
+      { contentType: 'markdown' }
+    );
+  });
+
+  it('repairs a Mermaid code block with a line-end closing fence that swallowed later Markdown', async (): Promise<void> => {
+    const swallowedMarkdown = '### 5\\.2 页面接口清单\n\n|页面/入口|调用接口|\n|---|---|';
+    const node = createCodeBlockNode('mermaid', `graph TD\n  A8 --> S8\`\`\`\n\n\n${swallowedMarkdown}`);
+    const insertContentAt = vi.fn().mockReturnValue(true);
+
+    mountCodeBlock(node, {
+      editor: createCodeBlockEditor(insertContentAt),
+      getPos: () => 18
+    });
+
+    await nextTick();
+
+    expect(insertContentAt).toHaveBeenCalledWith({ from: 18, to: 18 + node.nodeSize }, `\`\`\`mermaid\ngraph TD\n  A8 --> S8\n\`\`\`\n\n${swallowedMarkdown}`, {
+      contentType: 'markdown'
+    });
+  });
+
+  it('renders Mermaid preview before a multi-escaped loose closing fence', async (): Promise<void> => {
+    const { wrapper } = mountCodeBlock(createCodeBlockNode('mermaid', 'graph TD\n  A8 --> S8\\\\`\\\\`\\\\`### 5\\.2 页面接口清单页面入口'));
+
+    await waitForMermaidSvg(wrapper);
+
+    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), 'graph TD\n  A8 --> S8');
+  });
+
+  it('renders Mermaid preview before any dangling Markdown fence text', async (): Promise<void> => {
+    const { wrapper } = mountCodeBlock(createCodeBlockNode('mermaid', 'graph TD\n  A8 --> S8```后续内容'));
+
+    await waitForMermaidSvg(wrapper);
+
+    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), 'graph TD\n  A8 --> S8');
   });
 
   it('keeps copying source text when no rendered preview image is visible', async (): Promise<void> => {

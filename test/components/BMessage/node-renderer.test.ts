@@ -290,6 +290,25 @@ describe('BMessage node renderer', () => {
     });
   });
 
+  it('renders Mermaid message previews before a loose closing fence and heading', async (): Promise<void> => {
+    mermaidMock.render.mockClear();
+    mermaidMock.render.mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' });
+
+    const wrapper = mount(BMessage, {
+      props: {
+        type: 'markdown',
+        content: '```mermaid\ngraph TD\n  A8 --> S8``` ### 5\\.2 页面接口清单页面入口\n```'
+      }
+    });
+
+    await nextTick();
+    await flushPromises();
+
+    expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^b-message-mermaid-/), 'graph TD\n  A8 --> S8');
+  });
+
   it('renders streaming mermaid source as code until the closing fence arrives', async (): Promise<void> => {
     mermaidMock.render.mockClear();
     mermaidMock.render.mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' });
