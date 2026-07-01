@@ -3,13 +3,14 @@
  * @description Skill 目录扫描器，发现并解析 SKILL.md 文件。
  */
 import type { SkillDefinition, SkillScanConfig } from './types';
+import { canReadDirectory, type PathStatusReader } from '@/utils/file/status';
 import { parseSkillMarkdown, joinPath } from './parser';
 
 /**
  * 扫描器依赖的平台 API 接口。
  * 仅声明扫描所需的方法，便于测试注入。
  */
-export interface SkillScannerAPI {
+export interface SkillScannerAPI extends PathStatusReader {
   /** 读取文件内容 */
   readFile: (filePath: string) => Promise<{ content: string }>;
   /** 读取工作区目录 */
@@ -17,8 +18,6 @@ export interface SkillScannerAPI {
     directoryPath: string;
     workspaceRoot?: string;
   }) => Promise<{ entries: Array<{ name: string; type: 'file' | 'directory' }> }>;
-  /** 获取路径状态 */
-  getPathStatus?: (targetPath: string) => Promise<{ exists: boolean; isFile: boolean; isDirectory: boolean }>;
   /** 移动文件/目录到系统回收站 */
   trashFile?: (filePath: string) => Promise<void>;
 }
@@ -35,6 +34,10 @@ async function scanDirectory(dirPath: string, source: SkillDefinition['source'],
   const skills: SkillDefinition[] = [];
 
   try {
+    if (!(await canReadDirectory(dirPath, api))) {
+      return [];
+    }
+
     const { entries } = await api.readWorkspaceDirectory({ directoryPath: dirPath });
     // 排除 .tmp-*, .bak-* 等临时目录
     const dirEntries = entries.filter((e) => e.type === 'directory').filter((e) => !e.name.startsWith('.'));
@@ -78,6 +81,11 @@ export async function scanSkills(config: SkillScanConfig, api: SkillScannerAPI):
 
   // 扫描用户级全局 skill 目录。
   const globalSkillsDir = joinPath(config.homeDir, '.agents', 'skills');
+  const hasGlobalSkillsDir = await canReadDirectory(globalSkillsDir, api);
+
+  if (!hasGlobalSkillsDir) {
+    return [];
+  }
 
   // 清理孤儿临时/备份目录（上次安装中断遗留）
   if (api.trashFile) {

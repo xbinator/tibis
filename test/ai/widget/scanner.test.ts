@@ -13,6 +13,8 @@ interface WidgetScannerAPIMock extends WidgetScannerAPI {
   readFile: Mock<WidgetScannerAPI['readFile']>;
   /** 读取目录 mock */
   readWorkspaceDirectory: Mock<WidgetScannerAPI['readWorkspaceDirectory']>;
+  /** 路径状态 mock */
+  getPathStatus: Mock<NonNullable<WidgetScannerAPI['getPathStatus']>>;
 }
 
 /**
@@ -22,7 +24,8 @@ interface WidgetScannerAPIMock extends WidgetScannerAPI {
 function createScannerAPI(): WidgetScannerAPIMock {
   return {
     readFile: vi.fn<WidgetScannerAPI['readFile']>(),
-    readWorkspaceDirectory: vi.fn<WidgetScannerAPI['readWorkspaceDirectory']>()
+    readWorkspaceDirectory: vi.fn<WidgetScannerAPI['readWorkspaceDirectory']>(),
+    getPathStatus: vi.fn<NonNullable<WidgetScannerAPI['getPathStatus']>>().mockResolvedValue({ exists: true, isFile: false, isDirectory: true })
   };
 }
 
@@ -56,5 +59,16 @@ describe('scanWidgets', (): void => {
       enabled: true
     });
     expect(widgets[0]?.data.elements).toEqual([]);
+  });
+
+  it('skips directory reads when the widget directory does not exist', async (): Promise<void> => {
+    const api = createScannerAPI();
+    api.getPathStatus.mockResolvedValue({ exists: false, isFile: false, isDirectory: false });
+
+    const widgets = await scanWidgets({ homeDir: '/Users/test' }, api);
+
+    expect(api.getPathStatus).toHaveBeenCalledWith('/Users/test/.tibis/widgets');
+    expect(api.readWorkspaceDirectory).not.toHaveBeenCalled();
+    expect(widgets).toEqual([]);
   });
 });

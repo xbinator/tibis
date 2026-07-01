@@ -3,12 +3,13 @@
  * @description 小组件目录扫描器。
  */
 import type { WidgetDefinition, WidgetScanConfig } from './types';
+import { canReadDirectory, type PathStatusReader } from '@/utils/file/status';
 import { joinPath, parseWidgetJson } from './parser';
 
 /**
  * 小组件扫描器依赖的平台 API 接口。
  */
-export interface WidgetScannerAPI {
+export interface WidgetScannerAPI extends PathStatusReader {
   /** 读取文件内容 */
   readFile: (filePath: string) => Promise<{ content: string }>;
   /** 读取工作区目录 */
@@ -37,6 +38,10 @@ export async function scanWidgets(config: WidgetScanConfig, api: WidgetScannerAP
   const widgetDir = joinPath(config.homeDir, '.tibis', 'widgets');
 
   try {
+    if (!(await canReadDirectory(widgetDir, api))) {
+      return [];
+    }
+
     const { entries } = await api.readWorkspaceDirectory({ directoryPath: widgetDir });
     const widgetEntries = entries.filter(isWidgetDirectoryEntry);
     const results = await Promise.allSettled(

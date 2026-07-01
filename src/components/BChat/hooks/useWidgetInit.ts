@@ -34,7 +34,8 @@ export function useWidgetInit(): void {
       const homeDir = await native.getHomeDir();
       await widgetStore.init(homeDir, {
         readFile: (filePath: string) => native.readFile(filePath).then((result) => ({ content: result.content })),
-        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options)
+        readWorkspaceDirectory: (options: ReadWorkspaceDirectoryOptions) => native.readWorkspaceDirectory(options),
+        getPathStatus: (targetPath: string) => native.getPathStatus(targetPath)
       });
 
       const widgetDir = joinPath(homeDir, '.tibis', 'widgets');
