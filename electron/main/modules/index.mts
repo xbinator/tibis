@@ -12,6 +12,7 @@ import { registerFileHandlers } from './file/ipc.mjs';
 import { registerImageHandlers } from './image/ipc.mjs';
 import { registerLoggerHandlers, registerLogFileHandlers } from './logger/ipc.mjs';
 import { registerMcpHandlers } from './mcp/ipc.mjs';
+import { registerRequestHandlers } from './request/ipc.mjs';
 import { registerShellCommandHandlers } from './shell/ipc.mjs';
 import { registerSpeechHandlers } from './speech/ipc.mjs';
 import { registerStoreHandlers } from './store/ipc.mjs';
@@ -29,6 +30,7 @@ export function registerAllIpcHandlers() {
   registerChatHandlers();
   registerChatRuntimeHandlers();
   registerStoreHandlers();
+  registerRequestHandlers();
   registerShellCommandHandlers();
   registerAIHandlers();
   registerMcpHandlers();
@@ -50,6 +52,7 @@ export {
   registerChatHandlers,
   registerChatRuntimeHandlers,
   registerStoreHandlers,
+  registerRequestHandlers,
   registerShellCommandHandlers,
   registerAIHandlers,
   registerMcpHandlers,

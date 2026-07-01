@@ -44,7 +44,6 @@ describe('dataItem', (): void => {
       execute: {
         enabled: true,
         description: '查询天气',
-        timeout: 10000,
         code: "defineConfig({ methods: { confirm() { this.$sendMessage('确认') } } })"
       }
     });
@@ -52,7 +51,6 @@ describe('dataItem', (): void => {
     expect(contract.execute).toEqual({
       enabled: true,
       description: '查询天气',
-      timeout: 10000,
       code: "defineConfig({ methods: { confirm() { this.$sendMessage('确认') } } })"
     });
   });

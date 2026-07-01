@@ -3,9 +3,9 @@
  * @description BChat 小组件消息运行态脚本测试。
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
-import type { WidgetData } from 'types/widget';
+import type { WidgetData, WidgetHttpClient } from 'types/widget';
 import { describe, expect, it } from 'vitest';
-import { finishWidgetRuntime, finishWidgetUnmountState, initWidgetMountState } from '@/components/BChat/utils/widgetRuntime';
+import { finishWidgetRuntime, finishWidgetUnmountState, initWidgetMountState, runWidgetMethod } from '@/components/BChat/utils/widgetRuntime';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**
@@ -202,7 +202,7 @@ describe('widgetRuntime', (): void => {
     });
   });
 
-  it('captures sendMessage calls with script text parts while finishing unmounted state', (): void => {
+  it('captures sendMessage calls with script text parts while finishing unmounted state', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
         ['defineConfig({', '  unmounted() {', "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })", '  }', '})'].join('\n')
@@ -213,7 +213,7 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const result = finishWidgetRuntime(part);
+    const result = await finishWidgetRuntime(part);
 
     expect(result.part.status).toBe('finished');
     expect(result.sendMessage).toEqual({
@@ -230,5 +230,138 @@ describe('widgetRuntime', (): void => {
     expect(nextPart).toBe(part);
     expect(nextPart.status).toBe('created');
     expect(nextPart.renderContext.state).toEqual({});
+  });
+
+  it('does not run disabled execute scripts', async (): Promise<void> => {
+    const code = "defineConfig({ mounted() { this.$setState('weather.temperature', 28) } })";
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(code),
+      value: {
+        ...createWidgetData(code),
+        execute: {
+          enabled: false,
+          code
+        }
+      }
+    };
+
+    const nextPart = await initWidgetMountState(part);
+
+    expect(nextPart).toBe(part);
+    expect(nextPart.renderContext.state).toEqual({});
+  });
+
+  it('runs a named method and finishes when the method sends a message', async (): Promise<void> => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(
+        [
+          'defineConfig({',
+          '  methods: {',
+          '    confirm() {',
+          "      this.$setState('confirmed', true)",
+          "      this.$sendMessage('确认下单')",
+          '    }',
+          '  }',
+          '})'
+        ].join('\n')
+      ),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      }
+    };
+
+    const result = await runWidgetMethod(part, 'confirm', {
+      now: () => new Date('2026-07-01T00:02:00.000Z')
+    });
+
+    expect(result.part.status).toBe('finished');
+    expect(result.part.lifecycle.unmountedAt).toBe('2026-07-01T00:02:00.000Z');
+    expect(result.part.renderContext.state).toEqual({ confirmed: true });
+    expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
+  });
+
+  it('keeps the widget part unchanged when the named method does not exist', async (): Promise<void> => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(['defineConfig({', '  methods: {', '    confirm() {', "      this.$setState('confirmed', true)", '    }', '  }', '})'].join('\n')),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      }
+    };
+
+    const result = await runWidgetMethod(part, 'missing');
+
+    expect(result).toEqual({ part });
+    expect(result.part).toBe(part);
+  });
+
+  it('supports managed http calls and stores response data', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'defineConfig({',
+        '  async mounted() {',
+        "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
+        "    this.$setState('weather.temperature', weather.data.temperature)",
+        '  }',
+        '})'
+      ].join('\n')
+    );
+    const http: WidgetHttpClient = {
+      get: async () => ({ status: 200, ok: true, url: 'https://api.example.com/weather', headers: {}, data: { temperature: 28 } }),
+      post: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      put: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      patch: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      delete: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' })
+    };
+
+    const nextPart = await initWidgetMountState(part, { http });
+
+    expect(nextPart.renderContext.state).toEqual({
+      weather: {
+        temperature: 28
+      }
+    });
+  });
+
+  it('waits for managed http calls without adding a script-level timeout', async (): Promise<void> => {
+    const code = [
+      'defineConfig({',
+      '  async mounted() {',
+      "    await this.$http.get('https://api.example.com/slow')",
+      "    this.$setState('weather.temperature', 28)",
+      '  }',
+      '})'
+    ].join('\n');
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(code),
+      value: {
+        ...createWidgetData(code),
+        execute: {
+          code
+        }
+      }
+    };
+    const http: WidgetHttpClient = {
+      get: async (): Promise<{ status: number; ok: true; url: string; headers: Record<string, string>; data: { temperature: number } }> =>
+        new Promise((resolve): void => {
+          setTimeout((): void => {
+            resolve({ status: 200, ok: true, url: 'https://api.example.com/slow', headers: {}, data: { temperature: 28 } });
+          }, 20);
+        }),
+      post: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      put: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      patch: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      delete: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' })
+    };
+
+    const nextPart = await initWidgetMountState(part, { http });
+
+    expect(nextPart.status).toBe('mounted');
+    expect(nextPart.renderContext.state).toEqual({
+      weather: {
+        temperature: 28
+      }
+    });
   });
 });

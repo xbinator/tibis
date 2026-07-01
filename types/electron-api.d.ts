@@ -39,6 +39,7 @@ import type {
   ChatRuntimeToolRequestEvent
 } from './chat-runtime';
 import type { CompressionRecord, CompressionRecordStatus } from './compression';
+import type { RequestInput, RequestResponse } from './request';
 import type { WebViewProtocolScreenshotRequest } from './webview';
 
 /** Chat IPC handler 统一返回类型 */
@@ -563,6 +564,8 @@ export interface ElectronAPI {
   checkForUpdate: () => Promise<ElectronUpdateCheckResult>;
   /** 获取 Tibis 工作区根目录，不可用时返回 null。 */
   getTibisWorkspaceRoot: () => Promise<ElectronTibisWorkspaceRoot | null>;
+  /** 执行平台托管 request。 */
+  request: (request: RequestInput) => Promise<RequestResponse>;
   analyzeShellCommand: (request: ElectronShellCommandSafetyRequest) => Promise<ElectronShellCommandSafetyReport>;
   runShellCommand: (request: ElectronShellCommandRunRequest) => Promise<ElectronShellCommandRunResult>;
   cancelShellCommand: (commandId: string) => Promise<boolean>;

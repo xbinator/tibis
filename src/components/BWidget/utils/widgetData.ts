@@ -100,7 +100,6 @@ function normalizeWidgetExecuteMethod(value: unknown): WidgetExecuteMethod | und
   return {
     ...(typeof value.enabled === 'boolean' ? { enabled: value.enabled } : {}),
     ...(typeof value.description === 'string' ? { description: value.description } : {}),
-    ...(typeof value.timeout === 'number' && Number.isFinite(value.timeout) ? { timeout: value.timeout } : {}),
     code: value.code
   };
 }

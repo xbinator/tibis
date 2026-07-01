@@ -1073,7 +1073,7 @@ describe('PageSetter', (): void => {
     expect((editButton.props() as { icon?: string }).icon).toBe('lucide:code-xml');
     expect((editButton.props() as { size?: string }).size).toBe('mini');
     await editButton.trigger('click');
-    expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑交互脚本');
+    expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑');
     expect(wrapper.find('.method-editor__summary').exists()).toBe(false);
 
     const methodEditor = wrapper.findComponent({ name: 'BMonacoStub' });
@@ -1085,6 +1085,7 @@ describe('PageSetter', (): void => {
     expect(editorProps.value?.startsWith('// defineConfig 会为生命周期和 methods 注入 this 上下文')).toBe(true);
     expect(editorProps.value).toContain('读取 this.$input');
     expect(editorProps.value).toContain('使用 this.$setState 写入状态');
+    expect(editorProps.value).toContain('使用 this.$http');
     expect(editorProps.value).toContain('通过 this.$sendMessage 上行一条聊天消息');
     expect(editorProps.value).not.toContain("name: '小明'");
     expect(editorProps.value).not.toContain('hobbies');
@@ -1119,6 +1120,9 @@ describe('PageSetter', (): void => {
     expect(editorProps.extraLibs?.[0]?.content).toContain("@example this.$sendMessage('确认下单')");
     expect(editorProps.extraLibs?.[0]?.content).toContain('content: string | WidgetSendMessageContentPart[]');
     expect(editorProps.extraLibs?.[0]?.content).toContain('isError?: boolean');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('$http: WidgetHttpClient');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('get(url: string');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('request 超时和队列由系统统一控制');
     expect(editorProps.extraLibs?.[0]?.content).not.toContain('ExecutionResult');
     expect(editorProps.extraLibs?.[0]?.content).not.toContain('WidgetSkillResultFactory');
     expect(editorProps.extraLibs?.[0]?.content).not.toContain(REMOVED_LEGACY_ROOT);
@@ -1134,7 +1138,6 @@ describe('PageSetter', (): void => {
     expect(wrapper.vm.dataItem.execute).toEqual({
       enabled: true,
       description: '',
-      timeout: 10000,
       code: nextCode
     });
     expect(wrapper.vm.dataItem.metadata.skill).toBeUndefined();

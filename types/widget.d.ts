@@ -2,6 +2,7 @@
  * @file widget.d.ts
  * @description 小组件跨层协议类型定义。
  */
+import type { RequestInput, RequestResponse } from './request';
 import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types';
 
 export type { WidgetData, WidgetSchemaObject };
@@ -66,6 +67,22 @@ export interface WidgetRuntimeSendMessage {
   content: string | WidgetSendMessageTextPart[];
   /** 是否为错误消息 */
   isError: boolean;
+}
+
+/**
+ * 小组件托管 HTTP 客户端。
+ */
+export interface WidgetHttpClient {
+  /** 发送 GET 请求 */
+  get(url: string, request?: Omit<RequestInput, 'method' | 'url' | 'body'>): Promise<RequestResponse>;
+  /** 发送 POST 请求 */
+  post(url: string, request?: Omit<RequestInput, 'method' | 'url'>): Promise<RequestResponse>;
+  /** 发送 PUT 请求 */
+  put(url: string, request?: Omit<RequestInput, 'method' | 'url'>): Promise<RequestResponse>;
+  /** 发送 PATCH 请求 */
+  patch(url: string, request?: Omit<RequestInput, 'method' | 'url'>): Promise<RequestResponse>;
+  /** 发送 DELETE 请求 */
+  delete(url: string, request?: Omit<RequestInput, 'method' | 'url'>): Promise<RequestResponse>;
 }
 
 /**

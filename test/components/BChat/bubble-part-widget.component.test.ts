@@ -5,13 +5,21 @@
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
 import type { WidgetData, WidgetRenderContext } from 'types/widget';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import BubblePartWidget from '@/components/BChat/components/MessageBubble/BubblePartWidget.vue';
 import type { BChatSubmitAction, BChatSubmitContext } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+
+const requestMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/shared/platform/electron-api', () => ({
+  getElectronAPI: () => ({
+    request: requestMock
+  })
+}));
 
 /**
  * 创建统一提交上下文测试替身。
@@ -53,8 +61,7 @@ function createWidgetData(code: string): WidgetData {
   return {
     ...createDefaultWidgetData(),
     execute: {
-      code,
-      timeout: 10000
+      code
     }
   };
 }
@@ -124,7 +131,73 @@ function mountBubblePartWidget(part: ChatMessageWidgetPart, props: Record<string
   });
 }
 
+/**
+ * 等待小组件运行态初始化完成。
+ * @returns 异步完成信号
+ */
+async function flushWidgetRuntime(): Promise<void> {
+  await nextTick();
+  await Promise.resolve();
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+  await nextTick();
+}
+
 describe('BubblePartWidget', (): void => {
+  it('initializes mounted state with the managed request client', async (): Promise<void> => {
+    requestMock.mockResolvedValue({
+      status: 200,
+      ok: true,
+      url: 'https://api.example.com/weather?city=%E4%B8%8A%E6%B5%B7',
+      headers: {},
+      data: { temperature: 28 }
+    });
+    const widgetPart: ChatMessageWidgetPart = {
+      ...createWidgetPart(
+        [
+          'defineConfig({',
+          '  async mounted() {',
+          "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
+          "    this.$setState('weather.temperature', weather.data.temperature)",
+          '  }',
+          '})'
+        ].join('\n')
+      ),
+      status: 'created',
+      lifecycle: {},
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        state: {}
+      }
+    };
+
+    const wrapper = mountBubblePartWidget(widgetPart);
+    await flushWidgetRuntime();
+
+    const changedPart = wrapper.emitted('change')?.[0]?.[0] as ChatMessageWidgetPart;
+
+    expect(requestMock).toHaveBeenCalledWith({
+      method: 'GET',
+      url: 'https://api.example.com/weather',
+      query: {
+        city: '上海'
+      }
+    });
+    expect(changedPart).toMatchObject({
+      status: 'mounted',
+      renderContext: {
+        state: {
+          weather: {
+            temperature: 28
+          }
+        }
+      }
+    });
+  });
+
   it('finishes the message widget part by part id without a separate partIndex prop', async (): Promise<void> => {
     const staleWidgetPart = {
       ...createWidgetPart(

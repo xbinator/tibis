@@ -68,13 +68,12 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { castArray, cloneDeep, flatten, has, isBoolean, isFinite, isPlainObject, isString, split } from 'lodash-es';
+import { castArray, cloneDeep, flatten, has, isBoolean, isPlainObject, isString, split } from 'lodash-es';
 import { common, createLowlight } from 'lowlight';
 import type { WidgetData, WidgetExecuteMethod, WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
 import type { WidgetSchemaKind } from '@/components/BWidget/utils/widgetData';
 import {
   WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE,
-  WIDGET_INTERACTION_SCRIPT_DEFAULT_TIMEOUT,
   WIDGET_INTERACTION_SCRIPT_HIGHLIGHT_LANGUAGE,
   WIDGET_SCHEMA_DEFAULT_FIELD_NAME
 } from '../constants/pageSetter';
@@ -123,7 +122,6 @@ function createDefaultWidgetExecuteMethod(): WidgetExecuteMethod {
   return {
     enabled: true,
     description: '',
-    timeout: WIDGET_INTERACTION_SCRIPT_DEFAULT_TIMEOUT,
     code: WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE
   };
 }
@@ -141,7 +139,6 @@ function readWidgetExecuteMethod(value: unknown): WidgetExecuteMethod {
   return {
     enabled: isBoolean(value.enabled) ? value.enabled : true,
     description: isString(value.description) ? value.description : '',
-    timeout: isFinite(value.timeout) ? (value.timeout as number) : WIDGET_INTERACTION_SCRIPT_DEFAULT_TIMEOUT,
     code: isString(value.code) && value.code.trim().length > 0 ? value.code : WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE
   };
 }

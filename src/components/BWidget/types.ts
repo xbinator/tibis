@@ -129,8 +129,6 @@ export interface WidgetExecuteMethod {
   enabled?: boolean;
   /** 方法说明，用于编辑器提示和后续权限确认 */
   description?: string;
-  /** 方法执行超时时间，单位毫秒 */
-  timeout?: number;
   /** 交互脚本代码，要求调用 defineConfig({...}) 声明生命周期与 methods */
   code: string;
 }

@@ -230,6 +230,48 @@ declare interface WidgetSendMessagePayload {
 
 declare type WidgetSendMessageInput = string | WidgetSendMessageContentPart[] | WidgetSendMessagePayload
 
+declare type WidgetHttpQueryValue = string | number | boolean | null | undefined
+declare type WidgetHttpJsonValue = string | number | boolean | null | WidgetHttpJsonValue[] | { [key: string]: WidgetHttpJsonValue }
+declare type WidgetHttpBody = WidgetHttpJsonValue | Blob | FormData | ReadableStream | URLSearchParams | ArrayBuffer
+
+declare interface WidgetHttpGetOptions {
+  /** 查询参数。 */
+  query?: Record<string, WidgetHttpQueryValue>
+}
+
+declare interface WidgetHttpRequestOptions {
+  /** 查询参数。 */
+  query?: Record<string, WidgetHttpQueryValue>
+  /** 请求体，普通对象会作为 JSON 发送，字符串和特殊请求体会直接发送。 */
+  body?: WidgetHttpBody
+}
+
+declare interface RequestResponse {
+  /** 最终响应 URL。 */
+  url: string
+  /** HTTP 状态码。 */
+  status: number
+  /** 是否为 2xx 响应。 */
+  ok: boolean
+  /** 响应头。 */
+  headers: Record<string, string>
+  /** 响应数据。 */
+  data: unknown
+}
+
+declare interface WidgetHttpClient {
+  /** 发送 GET 请求。 */
+  get(url: string, request?: WidgetHttpGetOptions): Promise<RequestResponse>
+  /** 发送 POST 请求。 */
+  post(url: string, request?: WidgetHttpRequestOptions): Promise<RequestResponse>
+  /** 发送 PUT 请求。 */
+  put(url: string, request?: WidgetHttpRequestOptions): Promise<RequestResponse>
+  /** 发送 PATCH 请求。 */
+  patch(url: string, request?: WidgetHttpRequestOptions): Promise<RequestResponse>
+  /** 发送 DELETE 请求。 */
+  delete(url: string, request?: WidgetHttpRequestOptions): Promise<RequestResponse>
+}
+
 declare interface WidgetThisContext {
   /**
    * 调用小组件时 AI 提取到的入参。
@@ -242,10 +284,10 @@ declare interface WidgetThisContext {
    */
   $state: WidgetState
   /**
-   * 触发当前执行的事件信息。
-   * @example const event = this.$event
+   * 托管 HTTP 客户端，request 超时和队列由系统统一控制。
+   * @example const response = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })
    */
-  $event?: unknown
+  $http: WidgetHttpClient
   /**
    * 写入小组件运行态数据，path 支持点路径，例如 weather.temperature。
    * @example this.$setState('weather.temperature', 28)

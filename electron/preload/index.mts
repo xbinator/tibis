@@ -337,6 +337,13 @@ const electronAPI: ElectronAPI = {
   getTibisWorkspaceRoot: () => ipcRenderer.invoke('workspace:get-root'),
 
   /**
+   * 执行平台托管 request。
+   * @param request - 请求输入
+   * @returns 请求响应
+   */
+  request: (request) => ipcRenderer.invoke('request:send', request),
+
+  /**
    * 分析 Shell 命令安全性。
    * @param request - 安全分析请求
    * @returns 安全分析报告

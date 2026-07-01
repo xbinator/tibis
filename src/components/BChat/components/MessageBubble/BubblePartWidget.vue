@@ -21,7 +21,7 @@ import { stringifyJsonValue } from '@/utils/json';
 import { createNamespace } from '@/utils/namespace';
 import { create } from '../../utils/messageHelper';
 import { createRuntimeUserMessageSubmitAction, type BChatAdaptedUserMessageSubmitInput, type BChatSubmitAction } from '../../utils/submitAction';
-import { finishWidgetRuntime, initWidgetMountState } from '../../utils/widgetRuntime';
+import { createWidgetHttpClient, finishWidgetRuntime, initWidgetMountState } from '../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 
@@ -47,6 +47,8 @@ const emit = defineEmits<{
 }>();
 
 const [name] = createNamespace('', 'message-bubble-widget');
+/** 小组件脚本托管 HTTP 客户端。 */
+const widgetHttpClient = createWidgetHttpClient();
 
 /**
  * 小组件片段收尾后的消息更新结果。
@@ -81,11 +83,11 @@ function createWidgetPartUpdatedMessage(currentMessage: Message, partId: string,
  * @param partId - 小组件片段 ID
  * @returns 执行收尾后的消息；无法收尾时返回原消息
  */
-function createWidgetPartFinishedMessage(currentMessage: Message, partId: string): WidgetPartFinishMessageResult {
+async function createWidgetPartFinishedMessage(currentMessage: Message, partId: string): Promise<WidgetPartFinishMessageResult> {
   const currentPart = currentMessage.parts.find((part): part is ChatMessageWidgetPart => part.type === 'widget' && part.id === partId);
   if (currentPart?.type !== 'widget') return { message: currentMessage };
 
-  const finishResult = finishWidgetRuntime(currentPart);
+  const finishResult = await finishWidgetRuntime(currentPart, { http: widgetHttpClient });
   const message = createWidgetPartUpdatedMessage(currentMessage, partId, currentPart, finishResult.part);
 
   return {
@@ -169,7 +171,7 @@ function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChat
         return;
       }
 
-      const finishResult = createWidgetPartFinishedMessage(currentMessage, partId);
+      const finishResult = await createWidgetPartFinishedMessage(currentMessage, partId);
       await context.updateMessage(messageId, (): Message => finishResult.message);
 
       if (finishResult.sendMessage) {
@@ -196,7 +198,7 @@ function handleSubmit(output: unknown): void {
 async function initWidgetRuntime(): Promise<void> {
   if (!props.runtimeEnabled) return;
 
-  const nextPart = await initWidgetMountState(props.part);
+  const nextPart = await initWidgetMountState(props.part, { http: widgetHttpClient });
   if (nextPart !== props.part) {
     emit('change', nextPart);
   }
