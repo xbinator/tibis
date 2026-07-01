@@ -73,6 +73,7 @@ const monacoMock = vi.hoisted(() => {
       getModel: vi.fn(() => model),
       getValue: vi.fn(() => ['first', 'second line', 'third'].join('\n')),
       setValue: vi.fn(),
+      updateExtraLibs: vi.fn(),
       updateOptions: vi.fn()
     };
   }

@@ -1,6 +1,6 @@
 /**
- * @file scroll-position.test.ts
- * @description BMonaco 滚动位置快照测试。
+ * @file extra-libs.test.ts
+ * @description BMonaco 额外类型声明响应式更新测试。
  * @vitest-environment jsdom
  */
 import { nextTick } from 'vue';
@@ -10,23 +10,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 
-let scrollChangeHandler: (() => void) | null = null;
-const setScrollPosition = vi.hoisted(() => vi.fn());
-
-/**
- * BMonaco 测试中访问的滚动控制能力。
- */
-interface BMonacoScrollController {
-  /** 恢复最近一次滚动位置 */
-  restoreScrollPosition: () => void;
-}
-
-vi.mock('@/components/BMonaco/utils/createMonaco', () => ({
-  createMonacoEditor: vi.fn(async () => ({
+const updateExtraLibs = vi.hoisted(() => vi.fn());
+const createMonacoEditor = vi.hoisted(() =>
+  vi.fn(async () => ({
     getValue: vi.fn(() => ''),
     setValue: vi.fn(),
-    updateExtraLibs: vi.fn(),
     updateOptions: vi.fn(),
+    updateExtraLibs,
     focus: vi.fn(),
     getEditor: vi.fn(() => ({
       createDecorationsCollection: vi.fn(() => ({
@@ -34,13 +24,10 @@ vi.mock('@/components/BMonaco/utils/createMonaco', () => ({
         clear: vi.fn()
       })),
       getSelection: vi.fn(() => null),
-      getScrollTop: vi.fn(() => 320),
-      getScrollLeft: vi.fn(() => 24),
-      onDidScrollChange: vi.fn((handler: () => void) => {
-        scrollChangeHandler = handler;
-        return { dispose: vi.fn() };
-      }),
-      setScrollPosition,
+      getScrollTop: vi.fn(() => 0),
+      getScrollLeft: vi.fn(() => 0),
+      onDidScrollChange: vi.fn(() => ({ dispose: vi.fn() })),
+      setScrollPosition: vi.fn(),
       updateOptions: vi.fn(),
       dispose: vi.fn()
     })),
@@ -54,7 +41,11 @@ vi.mock('@/components/BMonaco/utils/createMonaco', () => ({
       dispose: vi.fn()
     })),
     dispose: vi.fn()
-  })),
+  }))
+);
+
+vi.mock('@/components/BMonaco/utils/createMonaco', () => ({
+  createMonacoEditor,
   ensureTheme: vi.fn(() => 'theme'),
   getMonacoThemeName: vi.fn(() => 'theme')
 }));
@@ -65,11 +56,11 @@ vi.mock('@/components/BMonaco/utils/createMonaco', () => ({
  */
 function createEditorState(): EditorState {
   return {
-    id: 'monaco-scroll-file',
-    name: 'scroll.json',
-    path: '/workspace/scroll.json',
-    ext: 'json',
-    content: '{}'
+    id: 'monaco-extra-libs-file',
+    name: 'extra-libs.ts',
+    path: '/workspace/extra-libs.ts',
+    ext: 'ts',
+    content: ''
   };
 }
 
@@ -82,35 +73,32 @@ async function flushAsyncSetup(): Promise<void> {
   await nextTick();
 }
 
-describe('BMonaco scroll position', () => {
+describe('BMonaco extra libs', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
-    scrollChangeHandler = null;
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => ({ matches: false }))
     );
   });
 
-  it('restores the last Monaco scroll snapshot', async (): Promise<void> => {
+  it('updates TypeScript extra libs without recreating the editor', async (): Promise<void> => {
     const wrapper = mount(BMonaco, {
-      attachTo: document.body,
       props: {
-        value: '{}',
-        language: 'json',
-        editorState: createEditorState()
+        value: '',
+        language: 'typescript',
+        editorState: createEditorState(),
+        extraLibs: [{ content: 'declare const oldValue: string', filePath: 'widget.d.ts' }]
       }
     });
 
     await flushAsyncSetup();
+    await wrapper.setProps({
+      extraLibs: [{ content: 'declare const nextValue: string', filePath: 'widget.d.ts' }]
+    } as Record<string, unknown>);
 
-    scrollChangeHandler?.();
-    (wrapper.vm as unknown as BMonacoScrollController).restoreScrollPosition();
-
-    expect(setScrollPosition).toHaveBeenCalledWith({
-      scrollTop: 320,
-      scrollLeft: 24
-    });
+    expect(createMonacoEditor).toHaveBeenCalledTimes(1);
+    expect(updateExtraLibs).toHaveBeenCalledWith([{ content: 'declare const nextValue: string', filePath: 'widget.d.ts' }]);
   });
 });

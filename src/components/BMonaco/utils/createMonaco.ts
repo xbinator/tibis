@@ -76,6 +76,8 @@ export interface MonacoEditorHandle {
     find?: Monaco.editor.IEditorFindOptions;
     stickyScroll?: { enabled: boolean };
   }) => void;
+  /** 更新 TypeScript/JavaScript 额外类型声明。 */
+  updateExtraLibs: (extraLibs?: MonacoExtraLib[]) => void;
   /** 聚焦编辑器。 */
   focus: () => void;
   /** 读取底层编辑器实例。 */
@@ -320,7 +322,7 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
 
   const compilerOptionsDisposable = registerTypeScriptCompilerOptions(monaco, options.language, options.typescriptCompilerOptions);
   const model = monaco.editor.createModel(options.value, options.language);
-  const extraLibDisposables = registerExtraLibs(monaco, options.language, options.extraLibs);
+  let extraLibDisposables = registerExtraLibs(monaco, options.language, options.extraLibs);
 
   const hasSearch = options.search !== false;
 
@@ -380,6 +382,10 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
     getValue: () => model.getValue(),
     setValue: (value: string) => model.setValue(value),
     updateOptions: (nextOptions) => editor.updateOptions(nextOptions),
+    updateExtraLibs: (nextExtraLibs?: MonacoExtraLib[]): void => {
+      extraLibDisposables.forEach((disposable: Monaco.IDisposable): void => disposable.dispose());
+      extraLibDisposables = registerExtraLibs(monaco, options.language, nextExtraLibs);
+    },
     focus: () => editor.focus(),
     getEditor: () => editor,
     getModel: () => model,

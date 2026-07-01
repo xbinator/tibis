@@ -589,6 +589,17 @@ watch(
 );
 
 /**
+ * 动态响应额外类型声明变化，避免调用方通过 key 重建编辑器。
+ */
+watch(
+  () => props.extraLibs,
+  (extraLibs: MonacoExtraLib[]): void => {
+    editorHandle.value?.updateExtraLibs(extraLibs);
+  },
+  { deep: true }
+);
+
+/**
  * 动态响应 options 变化，实时更新编辑器配置。
  */
 watch(
