@@ -2,7 +2,7 @@
 
 ## 概要
 
-这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以被聊天发现、被 AI 路由选中，并以交互式Widget卡片的形式展示给用户。Widget本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段。Skill 发现相关信息放在 `WidgetData.metadata.skill` 下；执行入口使用 `WidgetData.execute`，不放入 `metadata.skill.methods`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互逻辑放在元素自己的 `metadata.handlers` 中，并由 `src/components/BWidget/elements/**/Setter.vue` 和 `src/components/BWidget/elements/**/index.vue` 分别负责编辑和渲染。
+这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以被聊天发现、被 AI 路由选中，并以交互式Widget卡片的形式展示给用户。Widget本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段。AI 发现只使用 `WidgetData.name` 和 `WidgetData.description`；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互逻辑放在元素自己的 `metadata.handlers` 中，并由 `src/components/BWidget/elements/**/Setter.vue` 和 `src/components/BWidget/elements/**/index.vue` 分别负责编辑和渲染。
 
 第一条纵向闭环应支持天气或咖啡Widget：
 
@@ -10,7 +10,7 @@
 - 聊天从工作区Widget和全局Widget能力库中找到匹配的 Widget Skill。
 - 高置信度匹配自动启动；候选模糊时让用户选择。
 - Widget在聊天中作为一次会话展示，而不是打开编辑器页面。
-- 元素根据会话的 `input`、`state`、`output` 解析模板字段。
+- 元素根据会话的 `input`、`state` 解析模板字段。
 - 元素事件关联Widget方法，Widget方法是受控环境中执行的完整函数。
 - HTTP、AI、权限确认、取消、失败和等待用户输入统一返回同一种执行结果模型。
 
@@ -62,7 +62,6 @@ interface WidgetData {
   description: string
   inputSchema: ObjectJsonSchema
   stateSchema: ObjectJsonSchema
-  outputSchema: ObjectJsonSchema
   execute?: WidgetExecuteMethod
   metadata: WidgetMetadata
   elements: WidgetElement[]
@@ -70,40 +69,32 @@ interface WidgetData {
 }
 ```
 
-`inputSchema` 和 `outputSchema` 后续应与 AI 结构化输出使用同一种对象 JSON Schema 类型。Widget 页面仍然可以提供受限的编辑体验，但持久化时不应丢弃合法 JSON Schema 字段，例如 `enum`、`default`、`additionalProperties`、`items`、`minimum`、`maxLength` 等。
+`inputSchema` 后续应与 AI 结构化输入使用同一种对象 JSON Schema 类型。Widget 页面仍然可以提供受限的编辑体验，但持久化时不应丢弃合法 JSON Schema 字段，例如 `enum`、`default`、`additionalProperties`、`items`、`minimum`、`maxLength` 等。
 
 `state` 不作为用户需要手写维护的 schema 配置。编辑器通过 `buildWidgetStateSchema` 静态分析 Widget 方法代码中的 `setState(path, value)` / `ctx.setState(path, value)` 调用，生成可绑定的 `state.*` 变量候选。第一版只推导静态字符串路径、对象字面量、基础字面量，以及可对应到 `inputSchema` 的 `input.x` / `ctx.input.x` 类型；动态路径或复杂表达式不强行猜测。
 
-### Widget Skill 发现与执行入口
+### Widget 发现与执行入口
 
-Skill 发现信息放在 `WidgetData.metadata.skill` 下；执行入口放在 `WidgetData.execute` 下。第一版只支持一个入口函数，不兼容旧的 `metadata.skill.methods.execute`，也不做旧数据迁移：
+Widget 发现只使用 `WidgetData.name` 与 `WidgetData.description`；执行入口放在 `WidgetData.execute` 下。第一版只支持一个入口函数，不兼容更早的多方法草稿，也不做旧数据迁移：
 
 ```ts
-interface WidgetSkillMetadata {
-  enabled: boolean
-  aliases?: string[]
-  triggers?: string[]
-  permissions?: WidgetSkillPermissions
-}
-
-interface WidgetSkillPermissions {
-  http?: WidgetSkillHttpPermission[]
-  defaultHttpPolicy?: 'confirm' | 'deny'
-}
-
-type WidgetHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-
-interface WidgetSkillHttpPermission {
-  /** 允许访问的 origin，支持精确 origin 或受限子域通配符，例如 https://api.example.com、https://*.example.com */
-  origin: string
-  /** 可选路径前缀或路径模式；不配置时表示该 origin 下所有路径 */
-  paths?: string[]
-  /** 允许的 HTTP method；不配置时默认只允许 GET */
-  httpMethods?: WidgetHttpMethod[]
-  /** 允许脚本显式携带的敏感 header 名称；未列出的敏感 header 需要确认或拒绝 */
-  sensitiveHeaders?: string[]
-  /** 命中该规则时是否仍需要用户确认 */
-  requireConfirmation?: boolean
+interface WidgetData {
+  /** Widget 名称，用于列表展示和 AI 命中 */
+  name: string
+  /** Widget 用途说明，用于列表展示和 AI 命中 */
+  description: string
+  /** AI 调用 Widget 时需要填写的输入结构 */
+  inputSchema: ObjectJsonSchema
+  /** 由 execute 代码推导的运行态状态结构 */
+  stateSchema: ObjectJsonSchema
+  /** Widget 唯一执行入口 */
+  execute?: WidgetExecuteMethod
+  /** 元素私有扩展信息 */
+  metadata: WidgetMetadata
+  /** Widget 元素列表 */
+  elements: WidgetElement[]
+  /** 编辑器视口 */
+  viewport: WidgetViewport
 }
 
 interface WidgetExecuteMethod {
@@ -113,14 +104,12 @@ interface WidgetExecuteMethod {
   description?: string
   /** 方法执行超时时间，单位毫秒；不配置时使用系统默认值 */
   timeout?: number
-  inputSchema?: ObjectJsonSchema
-  outputSchema?: ObjectJsonSchema
   /** 完整函数代码，函数内部完成读取上下文、调用能力、写入状态和返回结果 */
   code: string
 }
 ```
 
-`name`、`description`、`aliases`、`triggers` 用于 Skill 路由。`execute` 是 Widget 唯一执行入口，方法代码应是一个完整函数，函数内部完成闭环：读取上下文、调用 HTTP/AI、写入 session state，并返回统一 `ExecutionResult`。
+`name`、`description` 用于 AI 命中。`execute` 是 Widget 唯一执行入口，方法代码应是一个完整函数，函数内部完成闭环：读取上下文、调用 HTTP/AI、写入 session state，并返回统一 `WidgetSubmitResult`。
 
 方法执行控制规则：
 
@@ -172,7 +161,6 @@ metadata: {
 
 - `input`：Widget启动入参，例如 `{{ input.city }}`。
 - `state`：Widget会话运行状态，例如 `{{ state.weather.temperature }}`。
-- `output`：Widget最终输出，例如 `{{ output.summary }}`。
 - `event`：仅在未来事件方法执行期间可用；当前渲染模板实现不支持 `event`，普通渲染模板中也不可用。
 
 支持的路径格式：
@@ -194,21 +182,15 @@ metadata: {
 
 ## 执行结果
 
-Widget Skill 应复用并泛化 `types/ai.d.ts` 中现有的 AI 工具执行结果模型。
+Widget Skill 的结果结构向 `types/ai.d.ts` 中现有的 AI 工具执行结果靠近，但不作为真正的 tool result 消息发送给模型。
 
 ```ts
-type ExecutionResult<TResult = unknown> =
-  | { toolName: string; status: 'success'; data: TResult }
-  | { toolName: string; status: 'failure'; error: ExecutionError }
-  | { toolName: string; status: 'cancelled'; error: ExecutionError }
-  | { toolName: string; status: 'awaiting_user_input'; data: AwaitingUserChoiceQuestion }
+type WidgetSubmitResult =
+  | { status: 'success'; data: Record<string, string> }
+  | { status: 'failure'; error: { code: string; message: string } }
 ```
 
-实现初期可以直接别名现有类型：
-
-```ts
-type ExecutionResult<TResult = unknown> = AIToolExecutionResult<TResult>
-```
+小组件提交结果作为 `widget_result` 用户消息片段进入聊天上下文，模型侧看到的是普通 user text content part，而不是 `role: tool` 消息。
 
 Widget特有上下文记录在结果外层：
 
@@ -218,7 +200,7 @@ interface WidgetMethodExecutionRecord {
   widgetId: string
   methodName: string
   elementId?: string
-  result: ExecutionResult
+  result: WidgetSubmitResult
   startedAt: number
   finishedAt?: number
 }
@@ -244,7 +226,6 @@ interface WidgetSkillIndexEntry {
   aliases: string[]
   triggers: string[]
   inputSchema: ObjectJsonSchema
-  outputSchema: ObjectJsonSchema
 }
 ```
 
@@ -283,7 +264,6 @@ interface WidgetSkillSession {
   source: 'workspace' | 'library'
   input: Record<string, unknown>
   state: Record<string, unknown>
-  output?: unknown
   status: 'idle' | 'running' | 'awaiting_user_input' | 'success' | 'failure' | 'cancelled'
 }
 ```
@@ -324,7 +304,6 @@ success | failure | cancelled
 interface WidgetRenderContext {
   input: Record<string, unknown>
   state: Record<string, unknown>
-  output?: unknown
 }
 ```
 
@@ -399,7 +378,7 @@ interface WidgetRuntimeLayout {
 
 - 普通文本直接作为静态内容。
 - 输入 `{{` 时展示变量候选，例如 `input.city`、`state.weather.temperature`。
-- 变量候选来自Widget input/output schema 和设计期预览 state。
+- 变量候选来自Widget input schema 和 execute 代码推导出的 state schema。
 - Setter 只读写自己声明的模板字段，不读取其它来源字段。
 
 未来交互元素可以各自扩展：
@@ -420,14 +399,17 @@ interface WidgetRuntimeLayout {
 方法代码运行在受控上下文中。推荐写成一个完整函数，一次完成闭环：
 
 ```ts
-export async function execute(ctx: WidgetScriptContext): Promise<ExecutionResult> {
+export async function execute(ctx: WidgetScriptContext): Promise<WidgetSubmitResult> {
   const { input, http, setState, result } = ctx
   const response = await http.get('https://api.example.com/weather', {
     query: { city: input.city }
   })
 
   setState('weather', response.data)
-  return result.success(response.data)
+  return result.success({
+    condition: String(response.data.condition ?? ''),
+    temperature: String(response.data.temperature ?? '')
+  })
 }
 ```
 
@@ -437,7 +419,6 @@ export async function execute(ctx: WidgetScriptContext): Promise<ExecutionResult
 interface WidgetScriptContext {
   input: Record<string, unknown>
   state: Record<string, unknown>
-  output?: unknown
   event?: unknown
   http: WidgetHttpClient
   ai: WidgetAIClient
@@ -451,7 +432,7 @@ interface WidgetScriptContext {
 
 轻量纯表达式求值可以在渲染进程执行。调用 `http`、`ai` 或长耗时工作的代码，应在主进程 worker 或等价隔离边界中执行。所有脚本执行都需要超时、取消、异常捕获和结果归一化。
 
-如果方法函数返回普通值，执行器自动包装为 `result.success(value)`。如果方法内部写入了 state，但没有显式返回结果，执行器可以返回 `result.success(null)` 并记录 state diff。
+如果方法函数返回普通值，执行器自动包装为 `result.success({ value: String(value) })`。如果方法内部写入了 state，但没有显式返回结果，执行器可以返回 `result.success({})` 并记录 state diff。
 
 ## HTTP 与权限
 
@@ -572,7 +553,7 @@ metadata: {
 - HTTP 权限按 origin、路径、HTTP method、敏感 header 匹配。
 - HTTP 通配符、redirect 复核、主进程代理、确认、关闭确认、拒绝和失败路径。
 - Session 状态转换，以及 `running`、`awaiting_user_input` 下的并发和重入行为。
-- `ExecutionResult` 与现有聊天工具结果处理兼容。
+- `WidgetSubmitResult` 与现有聊天工具结果结构保持相近，但不伪装成 tool result 消息。
 
 ## 建议实现顺序
 
