@@ -87,13 +87,7 @@ function createWidgetData(): WidgetData {
       properties: {}
     },
     execute: {
-      code: [
-        'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
-        '  const { input, setState, result } = ctx',
-        '  setState("weather", { temperature: input.weather.temperature })',
-        '  return result.success()',
-        '}'
-      ].join('\n')
+      code: ['defineConfig({', '  async mounted() {', '    this.$setState("weather", { temperature: this.$input.weather.temperature })', '  }', '})'].join('\n')
     },
     metadata: {
       previewContext: {

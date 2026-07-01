@@ -40,12 +40,12 @@
         </div>
       </BSectionBlock>
 
-      <BSectionBlock title="执行方法">
+      <BSectionBlock :title="WIDGET_INTERACTION_SCRIPT_SECTION_TITLE">
         <template #extra>
           <BButton icon="lucide:code-xml" size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
         </template>
         <div class="method-summary">
-          <pre class="method-summary__code" aria-label="执行方法预览"><code class="method-summary__code-content"><span
+          <pre class="method-summary__code" :aria-label="WIDGET_INTERACTION_SCRIPT_PREVIEW_LABEL"><code class="method-summary__code-content"><span
             v-for="line in highlightedMethodPreviewLines"
             :key="line.index"
             class="method-summary__line"
@@ -60,7 +60,7 @@
   </ATabs>
 
   <SchemaInputEditor v-model:open="schemaInputEditorOpen" :kind="activeSchemaKind" :schema="activeSchema" @confirm="handleSchemaInputEditorConfirm" />
-  <MethodEditor v-model:open="methodEditorOpen" :code="mainMethodCode" :input-schema="inputSchema" @confirm="handleMethodEditorConfirm" />
+  <MethodEditor v-model:open="methodEditorOpen" :code="methodScriptCode" :input-schema="inputSchema" @confirm="handleMethodEditorConfirm" />
   <SchemaHelp v-model:open="schemaHelpDrawerOpen" :kind="activeSchemaHelpKind" />
 </template>
 
@@ -70,39 +70,27 @@ import { castArray, cloneDeep, flatten, has, isBoolean, isFinite, isPlainObject,
 import { common, createLowlight } from 'lowlight';
 import type { WidgetData, WidgetExecuteMethod, WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
 import type { WidgetSchemaKind } from '@/components/BWidget/utils/widgetData';
+import {
+  WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE,
+  WIDGET_INTERACTION_SCRIPT_DEFAULT_TIMEOUT,
+  WIDGET_INTERACTION_SCRIPT_HIGHLIGHT_LANGUAGE,
+  WIDGET_INTERACTION_SCRIPT_PREVIEW_LABEL,
+  WIDGET_INTERACTION_SCRIPT_SECTION_TITLE,
+  WIDGET_SCHEMA_DEFAULT_FIELD_NAME
+} from '../constants/pageSetter';
 import MethodEditor from './PageSetter/MethodEditor.vue';
 import SchemaHelp from './PageSetter/SchemaHelp.vue';
 import SchemaInputEditor from './PageSetter/SchemaInputEditor.vue';
 import SchemaTreeEditor from './PageSetter/SchemaTreeEditor.vue';
 
-/** Widget 执行方法默认超时时间。 */
-const WIDGET_EXECUTE_DEFAULT_METHOD_TIMEOUT = 10000;
-/** Schema 默认新增字段名。 */
-const DEFAULT_SCHEMA_FIELD_NAME = 'field';
-/** 执行方法摘要高亮语言。 */
-const METHOD_SUMMARY_HIGHLIGHT_LANGUAGE = 'typescript';
-/** 执行方法摘要 Lowlight 实例。 */
+/** 交互脚本摘要 Lowlight 实例。 */
 const methodSummaryLowlight = createLowlight(common);
-/** Widget 执行方法默认代码。 */
-const WIDGET_EXECUTE_DEFAULT_METHOD_CODE = [
-  '// ctx 已经被正确注入到执行环境中，无需自行创建。',
-  '// 在这里可以读取 ctx.input，使用 ctx.setState 写入状态，并通过 ctx.result 输出执行结果。',
-  '// 如果需要输出数据，请返回 Record<string, string>，状态由 ctx.result.success/failure 表达。',
-  '// 当前小组件不需要执行逻辑时，可以直接返回执行完成。',
-  '',
-  'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
-  '  const { result } = ctx',
-  '',
-  '  return result.success()',
-  '}',
-  ''
-].join('\n');
 
 const dataItem = defineModel<WidgetData>('value', { required: true });
 
 /** Schema JSON 编辑弹窗开关状态。 */
 const schemaInputEditorOpen = ref(false);
-/** 执行方法编辑弹窗开关。 */
+/** 交互脚本编辑弹窗开关。 */
 const methodEditorOpen = ref(false);
 /** 当前编辑的 schema 类型。 */
 const activeSchemaKind = ref<WidgetSchemaKind>('input');
@@ -128,22 +116,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 创建默认 Widget 执行方法。
- * @returns 默认方法定义
+ * 创建默认 Widget 交互脚本配置。
+ * @returns 默认交互脚本配置
  */
 function createDefaultWidgetExecuteMethod(): WidgetExecuteMethod {
   return {
     enabled: true,
     description: '',
-    timeout: WIDGET_EXECUTE_DEFAULT_METHOD_TIMEOUT,
-    code: WIDGET_EXECUTE_DEFAULT_METHOD_CODE
+    timeout: WIDGET_INTERACTION_SCRIPT_DEFAULT_TIMEOUT,
+    code: WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE
   };
 }
 
 /**
- * 从未知值读取 Widget 执行方法。
- * @param value - 原始方法值
- * @returns 标准方法定义
+ * 从未知值读取 Widget 交互脚本配置。
+ * @param value - 原始配置值
+ * @returns 标准交互脚本配置
  */
 function readWidgetExecuteMethod(value: unknown): WidgetExecuteMethod {
   if (!isRecord(value)) {
@@ -153,8 +141,8 @@ function readWidgetExecuteMethod(value: unknown): WidgetExecuteMethod {
   return {
     enabled: isBoolean(value.enabled) ? value.enabled : true,
     description: isString(value.description) ? value.description : '',
-    timeout: isFinite(value.timeout) ? (value.timeout as number) : WIDGET_EXECUTE_DEFAULT_METHOD_TIMEOUT,
-    code: isString(value.code) && value.code.trim().length > 0 ? value.code : WIDGET_EXECUTE_DEFAULT_METHOD_CODE
+    timeout: isFinite(value.timeout) ? (value.timeout as number) : WIDGET_INTERACTION_SCRIPT_DEFAULT_TIMEOUT,
+    code: isString(value.code) && value.code.trim().length > 0 ? value.code : WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE
   };
 }
 
@@ -172,16 +160,16 @@ function createDefaultSchemaField(): WidgetSchemaProperty {
  * @returns 唯一字段名
  */
 function createUniqueRootSchemaFieldName(schema: WidgetSchemaObject): string {
-  if (!has(schema.properties, DEFAULT_SCHEMA_FIELD_NAME)) {
-    return DEFAULT_SCHEMA_FIELD_NAME;
+  if (!has(schema.properties, WIDGET_SCHEMA_DEFAULT_FIELD_NAME)) {
+    return WIDGET_SCHEMA_DEFAULT_FIELD_NAME;
   }
 
   let index = 1;
-  while (has(schema.properties, `${DEFAULT_SCHEMA_FIELD_NAME}${index}`)) {
+  while (has(schema.properties, `${WIDGET_SCHEMA_DEFAULT_FIELD_NAME}${index}`)) {
     index += 1;
   }
 
-  return `${DEFAULT_SCHEMA_FIELD_NAME}${index}`;
+  return `${WIDGET_SCHEMA_DEFAULT_FIELD_NAME}${index}`;
 }
 
 /**
@@ -234,18 +222,18 @@ function addRootSchemaField(kind: WidgetSchemaKind): void {
 }
 
 /**
- * 读取当前 execute 方法。
- * @returns execute 方法定义
+ * 读取当前交互脚本配置。
+ * @returns 交互脚本配置
  */
-function readMainMethod(): WidgetExecuteMethod {
+function readMethodScript(): WidgetExecuteMethod {
   return readWidgetExecuteMethod(dataItem.value.execute);
 }
 
 /**
- * 写入当前 execute 方法。
- * @param method - execute 方法定义
+ * 写入当前交互脚本配置。
+ * @param method - 交互脚本配置
  */
-function writeMainMethod(method: WidgetExecuteMethod): void {
+function writeMethodScript(method: WidgetExecuteMethod): void {
   dataItem.value = {
     ...dataItem.value,
     execute: method
@@ -300,36 +288,36 @@ const inputSchema = computed<WidgetSchemaObject>({
   }
 });
 
-/** 当前 execute 方法。 */
-const mainMethod = computed<WidgetExecuteMethod>({
+/** 当前交互脚本配置。 */
+const methodScript = computed<WidgetExecuteMethod>({
   /**
-   * 读取 execute 方法。
-   * @returns execute 方法定义
+   * 读取交互脚本配置。
+   * @returns 交互脚本配置
    */
-  get: (): WidgetExecuteMethod => readMainMethod(),
+  get: (): WidgetExecuteMethod => readMethodScript(),
   /**
-   * 写入 execute 方法。
-   * @param value - execute 方法定义
+   * 写入交互脚本配置。
+   * @param value - 交互脚本配置
    */
   set: (value: WidgetExecuteMethod): void => {
-    writeMainMethod(value);
+    writeMethodScript(value);
   }
 });
 
-/** 当前 execute 方法代码。 */
-const mainMethodCode = computed<string>({
+/** 当前交互脚本代码。 */
+const methodScriptCode = computed<string>({
   /**
-   * 读取 execute 方法代码。
-   * @returns execute 方法代码
+   * 读取交互脚本代码。
+   * @returns 交互脚本代码
    */
-  get: (): string => mainMethod.value.code,
+  get: (): string => methodScript.value.code,
   /**
-   * 写入 execute 方法代码。
-   * @param value - execute 方法代码
+   * 写入交互脚本代码。
+   * @param value - 交互脚本代码
    */
   set: (value: string): void => {
-    mainMethod.value = {
-      ...mainMethod.value,
+    methodScript.value = {
+      ...methodScript.value,
       code: value
     };
   }
@@ -366,7 +354,7 @@ interface LowlightElementNode {
 type LowlightNode = LowlightElementNode | LowlightTextNode;
 
 /**
- * 执行方法代码摘要 token。
+ * 交互脚本代码摘要 token。
  */
 interface MethodSummaryToken {
   /** token 文本 */
@@ -376,7 +364,7 @@ interface MethodSummaryToken {
 }
 
 /**
- * 执行方法代码摘要行。
+ * 交互脚本代码摘要行。
  */
 interface MethodSummaryLine {
   /** 行索引 */
@@ -430,17 +418,17 @@ function lowlightNodeToMethodSummaryTokens(node: LowlightNode, activeClassNames:
 }
 
 /**
- * 高亮执行方法代码。
- * @param code - 执行方法代码
+ * 高亮交互脚本代码。
+ * @param code - 交互脚本代码
  * @returns 高亮 token
  */
 function highlightMethodCode(code: string): MethodSummaryToken[] {
-  if (!methodSummaryLowlight.registered(METHOD_SUMMARY_HIGHLIGHT_LANGUAGE)) {
+  if (!methodSummaryLowlight.registered(WIDGET_INTERACTION_SCRIPT_HIGHLIGHT_LANGUAGE)) {
     return textToMethodSummaryTokens(code);
   }
 
   try {
-    const tree = methodSummaryLowlight.highlight(METHOD_SUMMARY_HIGHLIGHT_LANGUAGE, code) as LowlightNode;
+    const tree = methodSummaryLowlight.highlight(WIDGET_INTERACTION_SCRIPT_HIGHLIGHT_LANGUAGE, code) as LowlightNode;
 
     return lowlightNodeToMethodSummaryTokens(tree);
   } catch {
@@ -473,8 +461,8 @@ function splitMethodSummaryTokensIntoLines(tokens: MethodSummaryToken[]): Method
   return lines;
 }
 
-/** 高亮后的执行方法摘要代码行。 */
-const highlightedMethodPreviewLines = computed<MethodSummaryLine[]>(() => splitMethodSummaryTokensIntoLines(highlightMethodCode(mainMethodCode.value)));
+/** 高亮后的交互脚本摘要代码行。 */
+const highlightedMethodPreviewLines = computed<MethodSummaryLine[]>(() => splitMethodSummaryTokensIntoLines(highlightMethodCode(methodScriptCode.value)));
 
 /**
  * 打开 Schema JSON 编辑弹窗。
@@ -486,7 +474,7 @@ function openSchemaInputEditor(kind: WidgetSchemaKind): void {
 }
 
 /**
- * 打开执行方法编辑弹窗。
+ * 打开交互脚本编辑弹窗。
  */
 function openMethodEditor(): void {
   methodEditorOpen.value = true;
@@ -510,11 +498,11 @@ function handleSchemaInputEditorConfirm(schema: WidgetSchemaObject): void {
 }
 
 /**
- * 保存执行方法代码。
- * @param code - execute 方法代码
+ * 保存交互脚本代码。
+ * @param code - 交互脚本代码
  */
 function handleMethodEditorConfirm(code: string): void {
-  mainMethodCode.value = code;
+  methodScriptCode.value = code;
 }
 
 /** 当前正在编辑的 Schema。 */

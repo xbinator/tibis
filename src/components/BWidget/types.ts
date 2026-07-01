@@ -122,7 +122,7 @@ export interface WidgetMetadata {
 }
 
 /**
- * Widget执行方法定义。
+ * Widget交互脚本配置。
  */
 export interface WidgetExecuteMethod {
   /** 方法是否启用 */
@@ -131,7 +131,7 @@ export interface WidgetExecuteMethod {
   description?: string;
   /** 方法执行超时时间，单位毫秒 */
   timeout?: number;
-  /** 方法代码，要求导出 async function execute(ctx) 入口 */
+  /** 交互脚本代码，要求调用 defineConfig({...}) 声明生命周期与 methods */
   code: string;
 }
 
@@ -273,7 +273,7 @@ export interface WidgetData {
   inputSchema: WidgetSchemaObject;
   /** Widget运行状态 schema */
   stateSchema: WidgetSchemaObject;
-  /** Widget执行入口方法 */
+  /** Widget交互脚本配置 */
   execute?: WidgetExecuteMethod;
   /** Widget元信息 */
   metadata: WidgetMetadata;

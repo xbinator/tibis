@@ -1,6 +1,6 @@
 /**
  * @file widgetStateSchema.ts
- * @description 从 Widget 执行方法代码中构建运行状态 schema。
+ * @description 从 Widget 交互脚本代码中构建运行状态 schema。
  */
 import type { WidgetSchemaObject, WidgetSchemaProperty } from '../types';
 import ts from 'typescript';
@@ -20,6 +20,8 @@ type InputAliasScope = Map<string, InputAliasValue>;
 
 /** input 路径别名读取函数。 */
 type InputAliasReader = (name: string) => string[] | undefined;
+/** Widget this 上下文中的节点访问函数。 */
+type WidgetStateSchemaVisitor = (node: ts.Node, hasWidgetThisContext: boolean) => void;
 
 /**
  * 可能携带函数体的函数类声明。
@@ -135,11 +137,24 @@ function readPropertyName(name: ts.PropertyName): string | null {
 }
 
 /**
+ * 判断节点是否为 this 表达式。
+ * @param node - TypeScript 节点
+ * @returns 是否为 this 表达式
+ */
+function isThisExpression(node: ts.Node): boolean {
+  return node.kind === ts.SyntaxKind.ThisKeyword;
+}
+
+/**
  * 读取表达式表示的静态访问路径。
  * @param expression - 表达式节点
  * @returns 静态访问路径片段
  */
 function readExpressionPathSegments(expression: ts.Expression): string[] | null {
+  if (isThisExpression(expression)) {
+    return ['this'];
+  }
+
   if (ts.isIdentifier(expression)) {
     return [expression.text];
   }
@@ -176,11 +191,7 @@ function readInputSchemaPathSegments(expression: ts.Expression, readInputAlias: 
     return null;
   }
 
-  if (segments[0] === 'input') {
-    return segments.slice(1);
-  }
-
-  if (segments[0] === 'ctx' && segments[1] === 'input') {
+  if (segments[0] === 'this' && segments[1] === '$input') {
     return segments.slice(2);
   }
 
@@ -322,16 +333,20 @@ function writeStateSchemaProperty(properties: Record<string, WidgetSchemaPropert
  * @returns 是否为 setState 调用
  */
 function isSetStateCallExpression(expression: ts.Expression): boolean {
-  if (ts.isIdentifier(expression)) {
-    return expression.text === 'setState';
+  if (!ts.isPropertyAccessExpression(expression)) {
+    return false;
   }
 
-  return (
-    ts.isPropertyAccessExpression(expression) &&
-    ts.isIdentifier(expression.expression) &&
-    expression.expression.text === 'ctx' &&
-    expression.name.text === 'setState'
-  );
+  return isThisExpression(expression.expression) && expression.name.text === '$setState';
+}
+
+/**
+ * 判断调用表达式是否为 defineConfig 调用。
+ * @param expression - 调用目标表达式
+ * @returns 是否为 defineConfig 调用
+ */
+function isDefineConfigCallExpression(expression: ts.Expression): boolean {
+  return ts.isIdentifier(expression) && expression.text === 'defineConfig';
 }
 
 /**
@@ -428,6 +443,78 @@ function withInputAliasScope(scopes: InputAliasScope[], callback: () => void): v
 }
 
 /**
+ * 读取属性中承载的函数节点。
+ * @param property - 对象字面量属性
+ * @returns 函数节点，不存在时返回 undefined
+ */
+function readObjectPropertyFunction(property: ts.ObjectLiteralElementLike): FunctionLikeNodeWithBody | undefined {
+  if (ts.isMethodDeclaration(property)) {
+    return property;
+  }
+
+  if (ts.isPropertyAssignment(property) && (ts.isArrowFunction(property.initializer) || ts.isFunctionExpression(property.initializer))) {
+    return property.initializer;
+  }
+
+  return undefined;
+}
+
+/**
+ * 使用 Widget this 上下文访问函数体。
+ * @param node - 函数类节点
+ * @param scopes - input 别名作用域栈
+ * @param visit - AST 访问函数
+ */
+function visitWidgetFunctionBody(node: FunctionLikeNodeWithBody, scopes: InputAliasScope[], visit: WidgetStateSchemaVisitor): void {
+  withInputAliasScope(scopes, (): void => {
+    node.parameters.forEach((parameter: ts.ParameterDeclaration): void => registerBindingShadow(scopes, parameter.name));
+    const functionBody = readFunctionLikeBody(node);
+
+    if (functionBody) {
+      visit(functionBody, true);
+    }
+  });
+}
+
+/**
+ * 访问 defineConfig methods 对象。
+ * @param methodsObject - methods 对象字面量
+ * @param scopes - input 别名作用域栈
+ * @param visit - AST 访问函数
+ */
+function visitWidgetMethodsObject(methodsObject: ts.ObjectLiteralExpression, scopes: InputAliasScope[], visit: WidgetStateSchemaVisitor): void {
+  methodsObject.properties.forEach((property: ts.ObjectLiteralElementLike): void => {
+    const methodNode = readObjectPropertyFunction(property);
+
+    if (methodNode) {
+      visitWidgetFunctionBody(methodNode, scopes, visit);
+    }
+  });
+}
+
+/**
+ * 访问 defineConfig 配置对象中的 Widget 生命周期和事件方法。
+ * @param configObject - defineConfig 配置对象
+ * @param scopes - input 别名作用域栈
+ * @param visit - AST 访问函数
+ */
+function visitWidgetConfigObject(configObject: ts.ObjectLiteralExpression, scopes: InputAliasScope[], visit: WidgetStateSchemaVisitor): void {
+  configObject.properties.forEach((property: ts.ObjectLiteralElementLike): void => {
+    const propertyName = ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property) ? readPropertyName(property.name) : null;
+    const functionNode = readObjectPropertyFunction(property);
+
+    if ((propertyName === 'mounted' || propertyName === 'unmounted') && functionNode) {
+      visitWidgetFunctionBody(functionNode, scopes, visit);
+      return;
+    }
+
+    if (propertyName === 'methods' && ts.isPropertyAssignment(property) && ts.isObjectLiteralExpression(property.initializer)) {
+      visitWidgetMethodsObject(property.initializer, scopes, visit);
+    }
+  });
+}
+
+/**
  * 深拷贝状态 schema。
  * @param schema - 状态 schema
  * @returns 状态 schema 副本
@@ -446,10 +533,10 @@ function cloneDeepStateSchema(schema: WidgetSchemaObject): WidgetSchemaObject {
 }
 
 /**
- * 从执行方法代码构建 Widget 状态 schema。
- * @param code - execute 方法源码
- * @param inputSchema - input schema，用于复用 input 字段类型
- * @returns 从 setState 调用推导出的状态 schema
+ * 从交互脚本代码构建 Widget 状态 schema。
+ * @param code - 交互脚本源码
+ * @param inputSchema - input schema，用于复用 this.$input 字段类型
+ * @returns 从 this.$setState 调用推导出的状态 schema
  */
 export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaObject): WidgetSchemaObject {
   if (code.trim().length === 0) {
@@ -465,18 +552,28 @@ export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaO
    * 访问 AST 节点并收集 setState 调用。
    * @param node - AST 节点
    */
-  function visit(node: ts.Node): void {
+  function visit(node: ts.Node, hasWidgetThisContext = false): void {
     if (ts.isSourceFile(node)) {
       withInputAliasScope(inputAliasScopes, (): void => {
-        node.statements.forEach((statement: ts.Statement): void => visit(statement));
+        node.statements.forEach((statement: ts.Statement): void => visit(statement, hasWidgetThisContext));
       });
       return;
     }
 
     if (ts.isBlock(node) || ts.isModuleBlock(node)) {
       withInputAliasScope(inputAliasScopes, (): void => {
-        node.statements.forEach((statement: ts.Statement): void => visit(statement));
+        node.statements.forEach((statement: ts.Statement): void => visit(statement, hasWidgetThisContext));
       });
+      return;
+    }
+
+    if (ts.isCallExpression(node) && isDefineConfigCallExpression(node.expression)) {
+      const [configExpression] = node.arguments;
+
+      if (configExpression && ts.isObjectLiteralExpression(configExpression)) {
+        visitWidgetConfigObject(configExpression, inputAliasScopes, visit);
+      }
+
       return;
     }
 
@@ -484,19 +581,20 @@ export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaO
       withInputAliasScope(inputAliasScopes, (): void => {
         node.parameters.forEach((parameter: ts.ParameterDeclaration): void => registerBindingShadow(inputAliasScopes, parameter.name));
         const functionBody = readFunctionLikeBody(node);
+        const nextWidgetThisContext = ts.isArrowFunction(node) ? hasWidgetThisContext : false;
 
         if (functionBody) {
-          visit(functionBody);
+          visit(functionBody, nextWidgetThisContext);
         }
       });
       return;
     }
 
-    if (ts.isVariableDeclaration(node)) {
+    if (hasWidgetThisContext && ts.isVariableDeclaration(node)) {
       registerVariableInputAlias(node, inputSchema, inputAliasScopes);
     }
 
-    if (ts.isCallExpression(node) && isSetStateCallExpression(node.expression)) {
+    if (hasWidgetThisContext && ts.isCallExpression(node) && isSetStateCallExpression(node.expression)) {
       const [pathExpression, valueExpression] = node.arguments;
       const statePath = pathExpression ? readStaticStringExpression(pathExpression) : null;
 
@@ -509,10 +607,10 @@ export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaO
       }
     }
 
-    ts.forEachChild(node, visit);
+    ts.forEachChild(node, (child: ts.Node): void => visit(child, hasWidgetThisContext));
   }
 
-  visit(sourceFile);
+  visit(sourceFile, false);
 
   return {
     type: 'object',

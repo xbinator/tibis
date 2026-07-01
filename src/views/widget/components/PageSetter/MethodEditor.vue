@@ -1,20 +1,19 @@
 <!--
   @file MethodEditor.vue
-  @description Widget页面执行方法代码编辑弹窗。
+  @description Widget页面交互脚本代码编辑弹窗。
 -->
 <template>
-  <BModal v-model:open="open" title="编辑执行方法" :width="860" @close="handleEditorCancel">
+  <BModal v-model:open="open" :title="WIDGET_INTERACTION_SCRIPT_EDITOR_TITLE" :width="860" @close="handleEditorCancel">
     <div class="method-editor">
       <div class="method-editor__host">
         <BMonaco
-          :key="methodEditorTypeHintKey"
           ref="methodEditorRef"
           v-model:value="methodCodeDraft"
           language="typescript"
           :editable="true"
           :editor-state="methodEditorState"
-          :extra-libs="widgetSkillMethodExtraLibs"
-          :options="{ wordWrap: true, search: true, stickyScroll: true, typescriptCompilerOptions: widgetSkillMethodCompilerOptions }"
+          :extra-libs="widgetMethodScriptExtraLibs"
+          :options="{ wordWrap: true, search: true, stickyScroll: true, typescriptCompilerOptions: widgetMethodScriptCompilerOptions }"
         />
       </div>
     </div>
@@ -32,12 +31,14 @@ import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco/utils/createMonaco';
 import type { WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
+import { buildWidgetStateSchema } from '@/components/BWidget/utils/widgetStateSchema';
+import { WIDGET_INTERACTION_SCRIPT_EDITOR_TITLE } from '../../constants/pageSetter';
 
 /**
- * 执行方法编辑弹窗入参。
+ * 交互脚本编辑弹窗入参。
  */
 interface Props {
-  /** 当前 execute 方法代码 */
+  /** 当前交互脚本代码 */
   code: string;
   /** 当前小组件入参 schema */
   inputSchema: WidgetSchemaObject;
@@ -204,108 +205,113 @@ function createWidgetSchemaInterfaceDeclaration(interfaceName: string, schema: W
 }
 
 /**
- * 创建 Widget 执行方法编辑器类型提示内容。
+ * 创建 Widget 交互脚本编辑器类型提示内容。
  * @param inputSchema - 入参 schema
+ * @param stateSchema - 状态 schema
  * @returns Monaco extra lib 内容
  */
-function createWidgetSkillMethodExtraLibContent(inputSchema: WidgetSchemaObject): string {
+function createWidgetMethodScriptExtraLibContent(inputSchema: WidgetSchemaObject, stateSchema: WidgetSchemaObject): string {
   return `
-${createWidgetSchemaInterfaceDeclaration('WidgetSkillInput', inputSchema)}
+${createWidgetSchemaInterfaceDeclaration('WidgetInput', inputSchema)}
+${createWidgetSchemaInterfaceDeclaration('WidgetState', stateSchema)}
 
-declare interface WidgetSkillContext {
-  /** 调用小组件时 AI 提取到的入参。 */
-  input: WidgetSkillInput
-  /** 当前小组件运行态数据，可通过 setState 更新。 */
-  state: Record<string, unknown>
-  /** 触发当前执行的事件信息。 */
-  event?: unknown
-  /** 写入小组件运行态数据，path 支持点路径，例如 weather.temperature。 */
-  setState(path: string, value: unknown): void
-  /**
-   * 构造标准执行结果。
-   *
-   * - success：方法正常完成，返回字符串记录数据。
-   * - failure：方法执行失败，返回错误码与错误信息。
-   * - cancelled：方法被取消，用于用户主动取消或流程中止。
-   * - awaitingUserInput：暂停执行，等待用户继续输入或选择。
-   */
-  result: WidgetSkillResultFactory
+declare interface WidgetSendMessageContentPart {
+  /** 消息片段类型。 */
+  type: 'text'
+  /** 文本内容。 */
+  text: string
 }
 
-declare interface WidgetSkillResultFactory {
-  /**
-   * 标记方法执行成功，并把 data 作为执行结果返回。
-   * @param data - 成功结果中携带的字符串记录。
-   * @returns 标准成功执行结果。
-   */
-  success(data?: Record<string, string>): ExecutionResult
-  /**
-   * 标记方法执行失败，并返回错误码与错误信息。
-   * @param code - 机器可读错误码。
-   * @param message - 给用户或日志展示的错误说明。
-   * @returns 标准失败执行结果。
-   */
-  failure(code: string, message: string): ExecutionResult
-  /**
-   * 标记执行已取消，用于用户主动取消或流程被中止。
-   * @param code - 机器可读取消码。
-   * @param message - 给用户或日志展示的取消说明。
-   * @returns 标准取消执行结果。
-   */
-  cancelled(code: string, message: string): ExecutionResult
-  /**
-   * 暂停执行并等待用户继续输入或选择。
-   * @param data - 等待用户输入时携带的提示、选项或上下文数据。
-   * @returns 标准等待用户输入执行结果。
-   */
-  awaitingUserInput(data?: unknown): ExecutionResult
+declare interface WidgetSendMessagePayload {
+  /** 上行消息内容，支持纯文本或文本片段数组。 */
+  content: string | WidgetSendMessageContentPart[]
+  /** 是否为错误消息，默认 false。 */
+  isError?: boolean
 }
 
-declare interface ExecutionResult {
-  /** 执行状态。 */
-  status: 'success' | 'failure' | 'cancelled' | 'awaiting_user_input'
-  /** 成功或等待输入时携带的数据。 */
-  data?: unknown
-  /** 失败或取消时携带的错误信息。 */
-  error?: {
-    /** 机器可读错误码。 */
-    code: string
-    /** 给用户或日志展示的错误说明。 */
-    message: string
-  }
+declare type WidgetSendMessageInput = string | WidgetSendMessageContentPart[] | WidgetSendMessagePayload
+
+declare interface WidgetThisContext {
+  /**
+   * 调用小组件时 AI 提取到的入参。
+   * @example const city = this.$input.city
+   */
+  $input: WidgetInput
+  /**
+   * 当前小组件运行态数据，可通过 $setState 更新。
+   * @example const weather = this.$state.weather
+   */
+  $state: WidgetState
+  /**
+   * 触发当前执行的事件信息。
+   * @example const event = this.$event
+   */
+  $event?: unknown
+  /**
+   * 写入小组件运行态数据，path 支持点路径，例如 weather.temperature。
+   * @example this.$setState('weather.temperature', 28)
+   */
+  $setState(path: string, value: unknown): void
+  /**
+   * 向聊天上行一条消息。调用后表示当前小组件交互结束；未调用时继续等待用户操作。
+   * @param message - 上行消息，支持字符串、文本片段数组或带 isError 的对象。
+   * @example this.$sendMessage('确认下单')
+   * @example this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })
+   */
+  $sendMessage(message: WidgetSendMessageInput): Promise<void>
 }
+
+declare type WidgetLifecycleHook = (this: WidgetThisContext) => void | Promise<void>
+declare type WidgetMethod = (this: WidgetThisContext, ...args: unknown[]) => void | Promise<void>
+declare type WidgetMethodMap = Record<string, WidgetMethod>
+
+declare interface WidgetConfig {
+  /** 小组件创建或展示时执行。 */
+  mounted?: WidgetLifecycleHook
+  /** 小组件运行完成后执行一次。 */
+  unmounted?: WidgetLifecycleHook
+  /** 由元素事件触发的方法集合。 */
+  methods?: WidgetMethodMap & ThisType<WidgetThisContext>
+}
+
+declare function defineConfig(config: WidgetConfig & ThisType<WidgetThisContext>): WidgetConfig
 `;
 }
 
-/** Widget Skill 方法编辑器类型提示内容。 */
-const widgetSkillMethodExtraLibContent = computed<string>((): string => createWidgetSkillMethodExtraLibContent(props.inputSchema));
-/** Widget Skill 方法编辑器重建标识，确保 schema 变化后刷新 Monaco 类型声明。 */
-const methodEditorTypeHintKey = computed<string>((): string => widgetSkillMethodExtraLibContent.value);
-/** Widget Skill 方法编辑器类型提示声明。 */
-const widgetSkillMethodExtraLibs = computed<MonacoExtraLib[]>((): MonacoExtraLib[] => [
-  {
-    content: widgetSkillMethodExtraLibContent.value,
-    filePath: 'tibis-widget-skill-method.d.ts'
-  }
-]);
-/** Widget Skill 方法编辑器只加载 ECMAScript 基础类型，不引入浏览器 DOM 全局变量。 */
-const widgetSkillMethodCompilerOptions: MonacoCompilerOptions = {
-  lib: ['es2020']
-};
-
 const emit = defineEmits<{
-  /** 保存 execute 方法代码 */
+  /** 保存交互脚本代码 */
   confirm: [code: string];
 }>();
 const open = defineModel<boolean>('open', { required: true });
 
-/** 执行方法代码草稿。 */
+/** 交互脚本代码草稿。 */
 const methodCodeDraft = ref('');
 /** Monaco 编辑器实例。 */
 const methodEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
 
+/** 当前用于类型推导的交互脚本代码，弹窗打开时优先使用编辑草稿。 */
+const methodCodeForTypeHints = computed<string>((): string => (open.value ? methodCodeDraft.value : props.code));
+/** 当前交互脚本草稿推导出的状态 schema。 */
+const methodDraftStateSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => buildWidgetStateSchema(methodCodeForTypeHints.value, props.inputSchema));
+/** Widget 交互脚本编辑器类型提示内容。 */
+const widgetMethodScriptExtraLibContent = computed<string>((): string =>
+  createWidgetMethodScriptExtraLibContent(props.inputSchema, methodDraftStateSchema.value)
+);
+/** Widget 交互脚本编辑器类型提示声明。 */
+const widgetMethodScriptExtraLibs = computed<MonacoExtraLib[]>((): MonacoExtraLib[] => [
+  {
+    content: widgetMethodScriptExtraLibContent.value,
+    filePath: 'tibis-widget-method-script.d.ts'
+  }
+]);
+/** Widget 交互脚本编辑器只加载 ECMAScript 基础类型，不引入浏览器 DOM 全局变量。 */
+const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
+  lib: ['es2020'],
+  noImplicitThis: true
+};
+
 /**
- * 聚焦执行方法编辑器。
+ * 聚焦交互脚本编辑器。
  */
 function focusMethodEditor(): void {
   if (!methodEditorRef.value || typeof methodEditorRef.value.focusEditor !== 'function') {
@@ -316,7 +322,7 @@ function focusMethodEditor(): void {
 }
 
 /**
- * 使用当前方法代码重置编辑草稿。
+ * 使用当前交互脚本代码重置编辑草稿。
  * @returns 异步完成信号
  */
 async function resetMethodDraft(): Promise<void> {
@@ -327,14 +333,14 @@ async function resetMethodDraft(): Promise<void> {
 }
 
 /**
- * 关闭执行方法编辑弹窗。
+ * 关闭交互脚本编辑弹窗。
  */
 function handleEditorCancel(): void {
   open.value = false;
 }
 
 /**
- * 保存执行方法代码。
+ * 保存交互脚本代码。
  */
 function handleEditorConfirm(): void {
   emit('confirm', methodCodeDraft.value);
@@ -360,10 +366,10 @@ watch(
   }
 );
 
-/** 执行方法编辑器状态。 */
+/** 交互脚本编辑器状态。 */
 const methodEditorState = computed<EditorState>(() => ({
-  id: 'widget-skill-execute-method',
-  name: 'execute.ts',
+  id: 'widget-method-script',
+  name: 'widget-method.ts',
   path: null,
   ext: 'ts',
   content: methodCodeDraft.value

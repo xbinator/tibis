@@ -107,11 +107,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 读取 Widget execute 方法代码。
+ * 读取 Widget 交互脚本代码。
  * @param dataItem - Widget 数据
- * @returns execute 方法代码
+ * @returns 交互脚本代码
  */
-function readWidgetExecuteCode(dataItem: WidgetData | undefined): string {
+function readWidgetMethodScriptCode(dataItem: WidgetData | undefined): string {
   const executeMethod = dataItem?.execute;
   if (!isRecord(executeMethod)) {
     return '';
@@ -128,7 +128,7 @@ function readWidgetExecuteCode(dataItem: WidgetData | undefined): string {
 export function useElementVariables(readDataItem: ElementDataItemReader): UseElementVariablesReturn {
   const variableOptions = computed<VariableOptionGroup[]>((): VariableOptionGroup[] => {
     const dataItem = readDataItem();
-    const stateSchema = buildWidgetStateSchema(readWidgetExecuteCode(dataItem), dataItem?.inputSchema);
+    const stateSchema = buildWidgetStateSchema(readWidgetMethodScriptCode(dataItem), dataItem?.inputSchema);
     const inputVariable = createSchemaRootVariable('input', dataItem?.inputSchema.properties);
     const stateVariable = createSchemaRootVariable('state', stateSchema.properties);
 

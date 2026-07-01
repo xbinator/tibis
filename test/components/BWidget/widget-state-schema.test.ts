@@ -1,6 +1,6 @@
 /**
  * @file widget-state-schema.test.ts
- * @description 验证 Widget 状态 schema 可从执行方法代码中的 setState 调用构建。
+ * @description 验证 Widget 状态 schema 可从交互脚本中的 this.$setState 调用构建。
  */
 import { describe, expect, it } from 'vitest';
 import type { WidgetSchemaObject } from '@/components/BWidget/types';
@@ -31,15 +31,15 @@ const inputSchema: WidgetSchemaObject = {
 describe('buildWidgetStateSchema', (): void => {
   it('builds nested state schema from setState object literals', (): void => {
     const code = `
-      export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {
-        const { setState } = ctx
-        setState('weather', {
-          temperature: 28,
-          condition: '晴',
-          active: true
-        })
-        return ctx.result.success()
-      }
+      defineConfig({
+        async mounted() {
+          this.$setState('weather', {
+            temperature: 28,
+            condition: '晴',
+            active: true
+          })
+        }
+      })
     `;
 
     expect(buildWidgetStateSchema(code, inputSchema)).toEqual({
@@ -65,13 +65,14 @@ describe('buildWidgetStateSchema', (): void => {
     });
   });
 
-  it('supports ctx.setState dot paths and input schema type reuse', (): void => {
+  it('supports this.$setState dot paths and input schema type reuse', (): void => {
     const code = `
-      export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {
-        ctx.setState('lastQuery.city', ctx.input.city)
-        ctx.setState('weather.temperature', ctx.input.weather.temperature)
-        return ctx.result.success()
-      }
+      defineConfig({
+        async mounted() {
+          this.$setState('lastQuery.city', this.$input.city)
+          this.$setState('weather.temperature', this.$input.weather.temperature)
+        }
+      })
     `;
 
     expect(buildWidgetStateSchema(code, inputSchema)).toEqual({
@@ -100,18 +101,96 @@ describe('buildWidgetStateSchema', (): void => {
     });
   });
 
-  it('ignores setState methods that are not owned by the widget context', (): void => {
+  it('supports defineConfig this context setState calls and input schema type reuse', (): void => {
     const code = `
-      export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {
-        const store = {
-          setState(path: string, value: unknown) {
-            return { path, value }
+      defineConfig({
+        async mounted() {
+          this.$setState('lastQuery.city', this.$input.city)
+          this.$setState('weather.temperature', this.$input.weather.temperature)
+        },
+        methods: {
+          async refresh() {
+            this.$setState('weather.condition', '晴')
+            this.$sendMessage('刷新天气')
           }
         }
-        store.setState('debug.enabled', true)
-        ctx.setState('weather.temperature', 28)
-        return ctx.result.success()
-      }
+      })
+    `;
+
+    expect(buildWidgetStateSchema(code, inputSchema)).toEqual({
+      type: 'object',
+      properties: {
+        lastQuery: {
+          type: 'object',
+          properties: {
+            city: {
+              type: 'string'
+            }
+          },
+          required: []
+        },
+        weather: {
+          type: 'object',
+          properties: {
+            temperature: {
+              type: 'number'
+            },
+            condition: {
+              type: 'string'
+            }
+          },
+          required: []
+        }
+      },
+      required: []
+    });
+  });
+
+  it('ignores setState methods that are not owned by the widget context', (): void => {
+    const code = `
+      defineConfig({
+        async mounted() {
+          const store = {
+            $setState(path: string, value: unknown) {
+              return { path, value }
+            }
+          }
+          store.$setState('debug.enabled', true)
+          this.$setState('weather.temperature', 28)
+        }
+      })
+    `;
+
+    expect(buildWidgetStateSchema(code, inputSchema)).toEqual({
+      type: 'object',
+      properties: {
+        weather: {
+          type: 'object',
+          properties: {
+            temperature: {
+              type: 'number'
+            }
+          },
+          required: []
+        }
+      },
+      required: []
+    });
+  });
+
+  it('ignores nested object methods that use their own this context', (): void => {
+    const code = `
+      defineConfig({
+        async mounted() {
+          const store = {
+            save() {
+              this.$setState('debug.enabled', true)
+            }
+          }
+          store.save()
+          this.$setState('weather.temperature', 28)
+        }
+      })
     `;
 
     expect(buildWidgetStateSchema(code, inputSchema)).toEqual({
@@ -133,15 +212,16 @@ describe('buildWidgetStateSchema', (): void => {
 
   it('keeps input aliases scoped when a block declares the same variable name', (): void => {
     const code = `
-      export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {
-        const city = ctx.input.city
-        {
-          const city = ctx.input.weather.temperature
-          setState('shadowed', { city })
+      defineConfig({
+        async mounted() {
+          const city = this.$input.city
+          {
+            const city = this.$input.weather.temperature
+            this.$setState('shadowed', { city })
+          }
+          this.$setState('lastQuery', { city })
         }
-        setState('lastQuery', { city })
-        return ctx.result.success()
-      }
+      })
     `;
 
     expect(buildWidgetStateSchema(code, inputSchema)).toEqual({
@@ -172,11 +252,12 @@ describe('buildWidgetStateSchema', (): void => {
 
   it('returns an empty state schema when code has no static setState path', (): void => {
     const code = `
-      export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {
-        const path = 'weather.temperature'
-        ctx.setState(path, 28)
-        return ctx.result.success()
-      }
+      defineConfig({
+        async mounted() {
+          const path = 'weather.temperature'
+          this.$setState(path, 28)
+        }
+      })
     `;
 
     expect(buildWidgetStateSchema(code, inputSchema)).toEqual({

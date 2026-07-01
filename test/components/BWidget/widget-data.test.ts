@@ -39,13 +39,13 @@ describe('dataItem', (): void => {
     expect(contract).not.toHaveProperty('outputSchema');
   });
 
-  it('keeps the top-level execute method when normalizing widget data contract fields', (): void => {
+  it('keeps the top-level method script when normalizing widget data contract fields', (): void => {
     const contract = normalizeWidgetDataContract({
       execute: {
         enabled: true,
         description: '查询天气',
         timeout: 10000,
-        code: 'export async function execute(ctx) { return ctx.result.success(ctx.input) }'
+        code: "defineConfig({ methods: { confirm() { this.$sendMessage('确认') } } })"
       }
     });
 
@@ -53,7 +53,7 @@ describe('dataItem', (): void => {
       enabled: true,
       description: '查询天气',
       timeout: 10000,
-      code: 'export async function execute(ctx) { return ctx.result.success(ctx.input) }'
+      code: "defineConfig({ methods: { confirm() { this.$sendMessage('确认') } } })"
     });
   });
 });

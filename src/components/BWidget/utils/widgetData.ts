@@ -22,7 +22,7 @@ export interface WidgetDataContractCandidate {
   inputSchema?: unknown;
   /** 运行状态 schema */
   stateSchema?: unknown;
-  /** 执行入口方法 */
+  /** 交互脚本配置 */
   execute?: unknown;
   /** Widget元信息 */
   metadata?: WidgetMetadata;
@@ -88,9 +88,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 归一化 Widget 执行入口方法。
- * @param value - 原始执行方法
- * @returns 可保存执行方法，缺失时返回 undefined
+ * 归一化 Widget 交互脚本配置。
+ * @param value - 原始脚本配置
+ * @returns 可保存脚本配置，缺失时返回 undefined
  */
 function normalizeWidgetExecuteMethod(value: unknown): WidgetExecuteMethod | undefined {
   if (!isRecord(value) || typeof value.code !== 'string') {
