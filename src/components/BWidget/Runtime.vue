@@ -14,6 +14,7 @@
           @context-menu="ignoreContextMenu"
           @release="ignoreNodeEvent"
           @select="ignoreNodeEvent"
+          @submit="handleNodeSubmit"
         />
       </div>
     </div>
@@ -36,8 +37,8 @@ defineOptions({ name: 'BWidgetRuntime' });
  * 运行态Widget视图入参。
  */
 interface Props {
-  /** Widget模板数据 */
-  dataItem: WidgetData;
+  /** Widget模板值 */
+  value: WidgetData;
   /** 运行态渲染上下文 */
   renderContext: WidgetRenderContext;
   /** 内容留白 */
@@ -58,6 +59,11 @@ const props = withDefaults(defineProps<Props>(), {
   padding: 16
 });
 
+const emit = defineEmits<{
+  /** 提交运行态输出 */
+  submit: [output: unknown];
+}>();
+
 const [name, bem] = createNamespace('widget-runtime');
 const { rootRef, viewportSize } = useViewportSize();
 
@@ -67,7 +73,7 @@ const providedRenderContext = computed<WidgetRenderContext | undefined>(() => pr
 provideRenderContext(providedRenderContext);
 
 /** 当前运行态内容布局。 */
-const runtimeLayout = computed(() => createWidgetRuntimeLayout(props.dataItem.elements, props.renderContext, props.padding));
+const runtimeLayout = computed(() => createWidgetRuntimeLayout(props.value.elements, props.renderContext, props.padding));
 /** 当前运行态内容缩放比例。 */
 const runtimeScale = computed<number>(() => {
   if (!runtimeLayout.value.elements.length) {
@@ -121,6 +127,14 @@ function ignoreNodeEvent(): void {
  */
 function ignoreContextMenu(): void {
   return undefined;
+}
+
+/**
+ * 向使用方透传运行态节点提交结果。
+ * @param output - 节点提交输出
+ */
+function handleNodeSubmit(output: unknown): void {
+  emit('submit', output);
 }
 </script>
 

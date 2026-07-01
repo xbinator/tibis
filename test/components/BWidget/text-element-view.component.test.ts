@@ -88,7 +88,7 @@ describe('TextElementView', (): void => {
 
   it('renders bracket binding paths produced for non-identifier field names', (): void => {
     const element = createTextElement();
-    element.metadata.content = '{{ input["wind-speed"] }} / {{ state["weather-data"]["feels.like"] }} / {{ output["temperature.celsius"] }}';
+    element.metadata.content = '{{ input["wind-speed"] }} / {{ state["weather-data"]["feels.like"] }}';
     const wrapper = mountTextElementView(element, {
       input: {
         'wind-speed': 12
@@ -97,13 +97,10 @@ describe('TextElementView', (): void => {
         'weather-data': {
           'feels.like': 31
         }
-      },
-      output: {
-        'temperature.celsius': 28
       }
     });
 
-    expect(wrapper.text()).toBe('12 / 31 / 28');
+    expect(wrapper.text()).toBe('12 / 31');
     wrapper.unmount();
   });
 

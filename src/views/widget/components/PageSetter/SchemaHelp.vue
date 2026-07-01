@@ -178,49 +178,6 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
 })
 
 setState('lastQuery.city', input.city)`
-  },
-  output: {
-    title: '出参填写说明',
-    lead: '出参描述组件执行后会返回的数据。以查天气为例，大模型可以继续使用天气概况、温度和建议等结果。',
-    fields: [
-      {
-        name: 'condition',
-        type: 'string',
-        required: true,
-        description: '天气概况，例如晴、多云、小雨。'
-      },
-      {
-        name: 'temperatureCelsius',
-        type: 'number',
-        required: true,
-        description: '摄氏温度，便于后续判断冷热。'
-      },
-      {
-        name: 'suggestion',
-        type: 'string',
-        required: false,
-        description: '出行建议，例如是否需要带伞或添加外套。'
-      }
-    ],
-    exampleTitle: '查天气出参',
-    example: `{
-  "type": "object",
-  "properties": {
-    "condition": {
-      "type": "string",
-      "description": "天气概况"
-    },
-    "temperatureCelsius": {
-      "type": "number",
-      "description": "摄氏温度"
-    },
-    "suggestion": {
-      "type": "string",
-      "description": "出行建议"
-    }
-  },
-  "required": ["condition", "temperatureCelsius"]
-}`
   }
 };
 

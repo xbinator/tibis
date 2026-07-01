@@ -65,19 +65,6 @@ function createWidgetData(): WidgetData {
         }
       }
     },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        condition: {
-          type: 'string',
-          description: '天气概况'
-        },
-        'temperature.celsius': {
-          type: 'number',
-          description: '摄氏温度'
-        }
-      }
-    },
     stateSchema: {
       type: 'object',
       properties: {}
@@ -171,7 +158,7 @@ function findVariable(groups: VariableOptionGroup[], value: string): VariableTre
 }
 
 describe('useElementVariables', (): void => {
-  it('provides variables from input schema, execute state updates and output schema', (): void => {
+  it('provides variables from input schema and execute state updates', (): void => {
     const dataItem = ref<WidgetData | undefined>(createWidgetData());
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
     const values = readVariableValues(variableOptions.value);
@@ -186,15 +173,13 @@ describe('useElementVariables', (): void => {
     expect(values).toContain('state.weather');
     expect(values).toContain('state.weather.temperature');
     expect(values).toContain('state["weather-data"]["feels.like"]');
-    expect(values).toContain('output.condition');
-    expect(values).toContain('output["temperature.celsius"]');
+    expect(values).not.toContain('output');
     expect(values).not.toContain(REMOVED_LEGACY_ROOT);
     expect(labels).toContain('城市名称');
     expect(labels).toContain('温度单位');
     expect(labels).toContain('用户');
     expect(labels).toContain('用户名');
     expect(labels).toContain('温度');
-    expect(labels).toContain('天气概况');
   });
 
   it('nests object children under selectable parent variables', (): void => {
@@ -206,7 +191,7 @@ describe('useElementVariables', (): void => {
     const stateVariable = findVariable(variableOptions.value, 'state');
     const weatherVariable = findVariable(variableOptions.value, 'state.weather');
 
-    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'state', 'output']);
+    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'state']);
     expect(inputVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual([
       'input.city',
       'input.unit',
@@ -279,6 +264,6 @@ describe('useElementVariables', (): void => {
     const dataItem = ref<WidgetData | undefined>();
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
 
-    expect(readVariableValues(variableOptions.value)).toEqual(['input', 'state', 'output']);
+    expect(readVariableValues(variableOptions.value)).toEqual(['input', 'state']);
   });
 });

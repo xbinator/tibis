@@ -131,9 +131,8 @@ export function useElementVariables(readDataItem: ElementDataItemReader): UseEle
     const stateSchema = buildWidgetStateSchema(readWidgetExecuteCode(dataItem), dataItem?.inputSchema);
     const inputVariable = createSchemaRootVariable('input', dataItem?.inputSchema.properties);
     const stateVariable = createSchemaRootVariable('state', stateSchema.properties);
-    const outputVariable = createSchemaRootVariable('output', dataItem?.outputSchema.properties);
 
-    return [createVariableGroup([inputVariable, stateVariable, outputVariable])];
+    return [createVariableGroup([inputVariable, stateVariable])];
   });
 
   return {

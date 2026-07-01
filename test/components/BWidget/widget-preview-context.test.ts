@@ -10,7 +10,7 @@ import { readWidgetPreviewRenderContext } from '@/components/BWidget/utils/widge
 const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
 
 describe('widgetPreviewContext', (): void => {
-  it('drops removed legacy root from preview metadata when reading render context', (): void => {
+  it('drops removed roots from preview metadata when reading render context', (): void => {
     const metadata: WidgetMetadata = {
       previewContext: {
         input: {
@@ -30,10 +30,7 @@ describe('widgetPreviewContext', (): void => {
       input: {
         city: '上海'
       },
-      state: {},
-      output: {
-        condition: '晴'
-      }
+      state: {}
     });
   });
 });

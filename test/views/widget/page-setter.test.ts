@@ -415,31 +415,6 @@ function createWeatherInputSchema(): WidgetSchemaObject {
 }
 
 /**
- * 创建测试用天气出参 schema。
- * @returns 天气出参 schema
- */
-function createWeatherOutputSchema(): WidgetSchemaObject {
-  return {
-    type: 'object',
-    properties: {
-      condition: {
-        type: 'string',
-        description: '天气概况'
-      },
-      temperatureCelsius: {
-        type: 'number',
-        description: '摄氏温度'
-      },
-      suggestion: {
-        type: 'string',
-        description: '出行建议'
-      }
-    },
-    required: ['condition', 'temperatureCelsius']
-  };
-}
-
-/**
  * 设置面板区块标题快照。
  */
 interface SectionBlockTitleSnapshot {
@@ -513,8 +488,7 @@ function createWidgetData(): WidgetData {
 function createWeatherWidgetData(): WidgetData {
   return {
     ...createWidgetData(),
-    inputSchema: createWeatherInputSchema(),
-    outputSchema: createWeatherOutputSchema()
+    inputSchema: createWeatherInputSchema()
   };
 }
 
@@ -805,21 +779,18 @@ describe('PageSetter', (): void => {
     const dataItem = createWidgetData();
     const wrapper = mountPageSetterHost(dataItem);
     const inputSection = findSectionBlock(wrapper, '入参');
-    const outputSection = findSectionBlock(wrapper, '出参');
     const sectionTitles = readSectionBlockTitles(wrapper);
 
     expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(1);
     expect(sectionTitles).not.toContain('状态');
+    expect(sectionTitles).not.toContain('出参');
     expect(sectionTitles).not.toContain('动态预览');
     expect(wrapper.find('.schema-preview').exists()).toBe(false);
     expect(inputSection.find('.schema-editor').exists()).toBe(true);
-    expect(outputSection.find('.schema-editor').exists()).toBe(true);
     expect(inputSection.find('.schema-editor').html()).not.toContain('data-schema');
     expect(inputSection.findAll('.schema-editor__row')).toHaveLength(0);
-    expect(outputSection.findAll('.schema-editor__row')).toHaveLength(0);
     expect(inputSection.find('.schema-editor__footer').exists()).toBe(false);
     expect(wrapper.text()).toContain('入参');
-    expect(wrapper.text()).toContain('出参');
     expect(wrapper.text()).not.toContain('inputSchema');
     expect(wrapper.text()).not.toContain('stateSchema');
     expect(wrapper.text()).not.toContain('outputSchema');
@@ -852,7 +823,7 @@ describe('PageSetter', (): void => {
     expect(findSchemaRow(inputSection, 'field').findAll('.schema-editor__control-cell')).toHaveLength(3);
 
     await editButton.trigger('click');
-    expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑入参');
+    expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑');
 
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
       JSON.stringify({
@@ -1004,10 +975,9 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('opens an execution script dialog below output schema and saves execute method code', async (): Promise<void> => {
+  it('opens an execution script dialog below input schema and saves execute method code', async (): Promise<void> => {
     const dataItem = createWeatherWidgetData();
     dataItem.inputSchema = { ...dataItem.inputSchema, description: '查询天气入参' };
-    dataItem.outputSchema = { ...dataItem.outputSchema, description: '查询天气出参' };
     const wrapper = mountPageSetterHost(dataItem);
     const sectionTitles = readSectionBlockTitles(wrapper);
     const methodSection = findSectionBlock(wrapper, '执行方法');
@@ -1016,7 +986,7 @@ describe('PageSetter', (): void => {
     );
 
     expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('入参'));
-    expect(sectionTitles.indexOf('执行方法')).toBeGreaterThan(sectionTitles.indexOf('出参'));
+    expect(sectionTitles).not.toContain('出参');
     expect(sectionTitles).not.toContain('动态预览');
     expect(methodSection.find('.method-summary__text').exists()).toBe(false);
     expect(methodSection.find('.method-summary__code').text()).toContain('export async function execute(ctx: WidgetSkillContext)');
@@ -1059,13 +1029,13 @@ describe('PageSetter', (): void => {
     expect(editorProps.value).toContain('使用 ctx.setState 写入状态');
     expect(editorProps.value).toContain('并通过 ctx.result 输出执行结果');
     expect(editorProps.value).toContain('ctx 已经被正确注入到执行环境中');
-    expect(editorProps.value).toContain('如果需要输出数据，请先在出参中声明字段');
+    expect(editorProps.value).toContain('如果需要输出数据，请返回 Record<string, string>');
     expect(editorProps.value).not.toContain("name: '小明'");
     expect(editorProps.value).not.toContain('hobbies');
     expect(editorProps.value).not.toContain('const city = input.city');
     expect(editorProps.value).not.toContain('temperatureCelsius');
     expect(editorProps.value).toContain('return result.success()');
-    expect(readComponentVNodeKey(methodEditor)).toContain('temperatureCelsius');
+    expect(readComponentVNodeKey(methodEditor)).toContain('city');
     expect(editorProps.value).toContain('export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult>');
     expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillContext');
     expect(editorProps.extraLibs?.[0]?.content).toContain('/** 查询天气入参 */\ndeclare interface WidgetSkillInput');
@@ -1074,25 +1044,20 @@ describe('PageSetter', (): void => {
     expect(editorProps.extraLibs?.[0]?.content).toContain('city: string');
     expect(editorProps.extraLibs?.[0]?.content).toContain('date?: string');
     expect(editorProps.extraLibs?.[0]?.content).toContain('unit?: string');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 查询天气出参 */\ndeclare interface WidgetSkillOutput');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillOutput');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 天气概况 */\n  condition: string');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('condition: string');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('temperatureCelsius: number');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('suggestion?: string');
+    expect(editorProps.extraLibs?.[0]?.content).not.toContain('WidgetSkillOutput');
     expect(editorProps.extraLibs?.[0]?.content).toContain('input: WidgetSkillInput');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('output?: WidgetSkillOutput');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('success(data?: WidgetSkillOutput): ExecutionResult');
+    expect(editorProps.extraLibs?.[0]?.content).not.toContain('output?:');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('success(data?: Record<string, string>): ExecutionResult');
     expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetSkillResultFactory');
     expect(editorProps.extraLibs?.[0]?.content).toContain('调用小组件时 AI 提取到的入参');
     expect(editorProps.extraLibs?.[0]?.content).toContain('setState(path: string, value: unknown): void');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('- success：方法正常完成，返回可绑定到 output 的数据。');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('- success：方法正常完成，返回字符串记录数据。');
     expect(editorProps.extraLibs?.[0]?.content).toContain('- failure：方法执行失败，返回错误码与错误信息。');
     expect(editorProps.extraLibs?.[0]?.content).toContain('- cancelled：方法被取消，用于用户主动取消或流程中止。');
     expect(editorProps.extraLibs?.[0]?.content).toContain('- awaitingUserInput：暂停执行，等待用户继续输入或选择。');
     expect(editorProps.extraLibs?.[0]?.content).toContain('result: WidgetSkillResultFactory');
     expect(editorProps.extraLibs?.[0]?.content).toContain('标记方法执行成功，并把 data 作为执行结果返回');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('@param data - 成功结果中携带的数据。');
+    expect(editorProps.extraLibs?.[0]?.content).toContain('@param data - 成功结果中携带的字符串记录。');
     expect(editorProps.extraLibs?.[0]?.content).not.toContain(REMOVED_LEGACY_ROOT);
 
     await methodEditor.find('textarea').setValue(nextCode);
@@ -1155,63 +1120,6 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('opens an output schema dialog for editing', async (): Promise<void> => {
-    const dataItem = createWidgetData();
-    const wrapper = mountPageSetterHost(dataItem);
-
-    const editButton = findSectionSchemaEditButton(wrapper, '出参');
-    expect((editButton.props() as { size?: string }).size).toBe('mini');
-    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__help').findComponent({ name: 'BIconStub' }).exists()).toBe(true);
-    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').text()).not.toContain('JSON导入');
-    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').text()).toContain('编辑');
-    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').find('[data-tooltip="添加字段"]').exists()).toBe(true);
-    expect(findSectionBlock(wrapper, '出参').find('.section-block-stub__extra').findComponent({ name: 'BIconStub' }).exists()).toBe(false);
-    await editButton.trigger('click');
-    expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑出参');
-
-    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
-      JSON.stringify({
-        type: 'object',
-        properties: {
-          cardId: {
-            type: 'string',
-            description: '生成的卡片 ID'
-          }
-        },
-        required: ['cardId']
-      })
-    );
-    await nextTick();
-    await wrapper
-      .findAllComponents({ name: 'BButtonStub' })
-      .find((button: VueWrapper): boolean => button.text() === '保存')
-      ?.trigger('click');
-
-    expect(wrapper.vm.dataItem.outputSchema.properties.cardId).toEqual({
-      type: 'string',
-      description: '生成的卡片 ID'
-    });
-    expect(wrapper.vm.dataItem.outputSchema.required).toEqual(['cardId']);
-    wrapper.unmount();
-  });
-
-  it('restores an empty output schema when saving an empty output schema dialog', async (): Promise<void> => {
-    const dataItem = createWidgetData();
-    const wrapper = mountPageSetterHost(dataItem);
-
-    await findSectionSchemaEditButton(wrapper, '出参').trigger('click');
-    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue('   ');
-    await nextTick();
-    await wrapper
-      .findAllComponents({ name: 'BButtonStub' })
-      .find((button: VueWrapper): boolean => button.text() === '保存')
-      ?.trigger('click');
-
-    expect(wrapper.vm.dataItem.outputSchema.properties).toEqual({});
-    expect(wrapper.vm.dataItem.outputSchema.required).toEqual([]);
-    wrapper.unmount();
-  });
-
   it('keeps previous schema and shows dialog validation feedback for invalid schema JSON', async (): Promise<void> => {
     const dataItem = createWidgetData();
     dataItem.inputSchema = {
@@ -1240,7 +1148,7 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('opens schema guidance drawers from the input and output help icons', async (): Promise<void> => {
+  it('opens schema guidance drawer from the input help icon', async (): Promise<void> => {
     const wrapper = mountPageSetterHost(createWidgetData());
     const inputHelpIcon = findSectionHelpIcon(wrapper, '入参');
 
@@ -1267,11 +1175,6 @@ describe('PageSetter', (): void => {
     expect(wrapper.find('.schema-help-drawer-stub').text()).toContain('城市名称');
     expect(wrapper.find('.schema-help-drawer-stub').text()).toContain('查天气');
 
-    await findSectionHelpIcon(wrapper, '出参').trigger('click');
-    expect(wrapper.find('.schema-help-drawer-stub').attributes('data-title')).toBe('出参填写说明');
-    expect(wrapper.find('.schema-help-drawer-stub').text()).toContain('组件执行后会返回的数据');
-    expect(wrapper.find('.schema-help-drawer-stub').text()).toContain('temperatureCelsius');
-    expect(wrapper.find('.schema-help-drawer-stub').text()).toContain('摄氏温度');
     wrapper.unmount();
   });
 

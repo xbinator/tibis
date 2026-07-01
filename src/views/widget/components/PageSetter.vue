@@ -40,28 +40,6 @@
         </div>
       </BSectionBlock>
 
-      <BSectionBlock title="出参">
-        <template #help>
-          <BIcon
-            class="schema-help-icon"
-            icon="lucide:circle-alert"
-            role="button"
-            :size="14"
-            tabindex="0"
-            @click="openSchemaHelp('output')"
-            @keydown.enter="openSchemaHelp('output')"
-            @keydown.space.prevent="openSchemaHelp('output')"
-          />
-        </template>
-        <template #extra>
-          <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField('output')" />
-          <BButton size="mini" type="secondary" @click="openSchemaInputEditor('output')">编辑</BButton>
-        </template>
-        <div class="schema-body">
-          <SchemaTreeEditor v-model:schema="outputSchema" />
-        </div>
-      </BSectionBlock>
-
       <BSectionBlock title="执行方法">
         <template #extra>
           <BButton icon="lucide:code-xml" size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
@@ -82,13 +60,7 @@
   </ATabs>
 
   <SchemaInputEditor v-model:open="schemaInputEditorOpen" :kind="activeSchemaKind" :schema="activeSchema" @confirm="handleSchemaInputEditorConfirm" />
-  <MethodEditor
-    v-model:open="methodEditorOpen"
-    :code="mainMethodCode"
-    :input-schema="inputSchema"
-    :output-schema="outputSchema"
-    @confirm="handleMethodEditorConfirm"
-  />
+  <MethodEditor v-model:open="methodEditorOpen" :code="mainMethodCode" :input-schema="inputSchema" @confirm="handleMethodEditorConfirm" />
   <SchemaHelp v-model:open="schemaHelpDrawerOpen" :kind="activeSchemaHelpKind" />
 </template>
 
@@ -115,7 +87,7 @@ const methodSummaryLowlight = createLowlight(common);
 const WIDGET_EXECUTE_DEFAULT_METHOD_CODE = [
   '// ctx 已经被正确注入到执行环境中，无需自行创建。',
   '// 在这里可以读取 ctx.input，使用 ctx.setState 写入状态，并通过 ctx.result 输出执行结果。',
-  '// 如果需要输出数据，请先在出参中声明字段，再返回对应数据。',
+  '// 如果需要输出数据，请返回 Record<string, string>，状态由 ctx.result.success/failure 表达。',
   '// 当前小组件不需要执行逻辑时，可以直接返回执行完成。',
   '',
   'export async function execute(ctx: WidgetSkillContext): Promise<ExecutionResult> {',
@@ -142,7 +114,7 @@ const activeSchemaHelpKind = ref<WidgetSchemaKind>('input');
  * 向当前 Widget 数据写入配置变更。
  * @param patch - Widget 配置增量
  */
-function updateWidgetDataConfig(patch: Partial<Pick<WidgetData, 'description' | 'inputSchema' | 'stateSchema' | 'name' | 'outputSchema'>>): void {
+function updateWidgetDataConfig(patch: Partial<Pick<WidgetData, 'description' | 'inputSchema' | 'stateSchema' | 'name'>>): void {
   dataItem.value = { ...dataItem.value, ...patch };
 }
 
@@ -226,7 +198,7 @@ function readWidgetSchema(kind: WidgetSchemaKind): WidgetSchemaObject {
     return dataItem.value.stateSchema;
   }
 
-  return dataItem.value.outputSchema;
+  return dataItem.value.stateSchema;
 }
 
 /**
@@ -245,7 +217,7 @@ function updateWidgetSchema(kind: WidgetSchemaKind, schema: WidgetSchemaObject):
     return;
   }
 
-  updateWidgetDataConfig({ outputSchema: schema });
+  updateWidgetDataConfig({ stateSchema: schema });
 }
 
 /**
@@ -325,22 +297,6 @@ const inputSchema = computed<WidgetSchemaObject>({
    */
   set: (value: WidgetSchemaObject): void => {
     updateWidgetDataConfig({ inputSchema: value });
-  }
-});
-
-/** 出参 schema。 */
-const outputSchema = computed<WidgetSchemaObject>({
-  /**
-   * 读取出参 schema。
-   * @returns 出参 schema
-   */
-  get: (): WidgetSchemaObject => dataItem.value.outputSchema,
-  /**
-   * 写入出参 schema。
-   * @param value - 新出参 schema
-   */
-  set: (value: WidgetSchemaObject): void => {
-    updateWidgetDataConfig({ outputSchema: value });
   }
 });
 

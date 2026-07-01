@@ -14,20 +14,29 @@ const emptyObjectSchema: WidgetSchemaObject = {
 };
 
 describe('dataItem', (): void => {
-  it('creates empty schemas for new widget data', (): void => {
+  it('creates input and state schemas for new widget data without output schema', (): void => {
     const dataItem = createDefaultWidgetData();
 
     expect(dataItem.inputSchema).toEqual(emptyObjectSchema);
     expect(dataItem.stateSchema).toEqual(emptyObjectSchema);
-    expect(dataItem.outputSchema).toEqual(emptyObjectSchema);
+    expect(dataItem).not.toHaveProperty('outputSchema');
   });
 
-  it('normalizes missing contract schemas to empty schemas', (): void => {
-    const contract = normalizeWidgetDataContract({});
+  it('normalizes contract schemas without output schema', (): void => {
+    const legacyContract = {
+      outputSchema: {
+        type: 'object',
+        properties: {
+          ignored: { type: 'string' }
+        },
+        required: ['ignored']
+      }
+    } as unknown as Parameters<typeof normalizeWidgetDataContract>[0];
+    const contract = normalizeWidgetDataContract(legacyContract);
 
     expect(contract.inputSchema).toEqual(emptyObjectSchema);
     expect(contract.stateSchema).toEqual(emptyObjectSchema);
-    expect(contract.outputSchema).toEqual(emptyObjectSchema);
+    expect(contract).not.toHaveProperty('outputSchema');
   });
 
   it('keeps the top-level execute method when normalizing widget data contract fields', (): void => {

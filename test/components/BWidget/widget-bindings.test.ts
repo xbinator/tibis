@@ -22,9 +22,6 @@ function createRenderContext(): WidgetRenderContext {
       weather: {
         temperature: 28
       }
-    },
-    output: {
-      condition: '晴'
     }
   };
 }
@@ -38,6 +35,23 @@ describe('widgetBindings', (): void => {
       }
     } as unknown as WidgetRenderContext;
     const expression = `${REMOVED_LEGACY_ROOT}.status`;
+    const template = `{{ ${expression} }}`;
+
+    expect(evaluateWidgetBindingExpression(expression, context)).toEqual({
+      resolved: false,
+      value: undefined
+    });
+    expect(resolveWidgetTemplateValue(template, context)).toBe(template);
+  });
+
+  it('does not resolve removed output binding root', (): void => {
+    const context = {
+      ...createRenderContext(),
+      output: {
+        condition: '晴'
+      }
+    } as unknown as WidgetRenderContext;
+    const expression = 'output.condition';
     const template = `{{ ${expression} }}`;
 
     expect(evaluateWidgetBindingExpression(expression, context)).toEqual({

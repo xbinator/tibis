@@ -97,16 +97,7 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(modelValue.value?.elements).toHaveLength(2);
-    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual([
-      'description',
-      'elements',
-      'inputSchema',
-      'metadata',
-      'name',
-      'outputSchema',
-      'stateSchema',
-      'viewport'
-    ]);
+    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['description', 'elements', 'inputSchema', 'metadata', 'name', 'stateSchema', 'viewport']);
     expect('kind' in (modelValue.value?.elements[0] ?? {})).toBe(false);
     expect(modelValue.value?.elements[0]?.name).toBe('rect');
     expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(false);
@@ -184,15 +175,9 @@ describe('useModelSync', (): void => {
         },
         required: ['userName']
       },
-      outputSchema: {
+      stateSchema: {
         type: 'object',
-        properties: {
-          widgetId: {
-            type: 'string',
-            description: 'Widget ID'
-          }
-        },
-        required: ['widgetId']
+        properties: {}
       }
     });
 
@@ -214,7 +199,7 @@ describe('useModelSync', (): void => {
     expect(modelValue.value?.name).toBe('profile_card');
     expect(modelValue.value?.description).toBe('生成个人资料卡片');
     expect(modelValue.value?.inputSchema.required).toEqual(['userName']);
-    expect(modelValue.value?.outputSchema.required).toEqual(['widgetId']);
+    expect(modelValue.value).not.toHaveProperty('outputSchema');
     expect(hasInternalStateFields(modelValue.value as WidgetData)).toBe(false);
   });
 

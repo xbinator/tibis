@@ -3,7 +3,7 @@
   @description Widget页面 Schema JSON 编辑弹窗。
 -->
 <template>
-  <BModal v-model:open="open" :title="modalTitle" :width="640" @cancel="handleEditorCancel">
+  <BModal v-model:open="open" title="编辑" :width="640" @cancel="handleEditorCancel">
     <div class="schema-editor">
       <div class="schema-editor__host">
         <BMonaco
@@ -65,23 +65,6 @@ const schemaDraftText = ref('');
 const schemaInputEditorError = ref('');
 /** Schema 输入 Monaco 编辑器实例。 */
 const schemaInputEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
-
-/**
- * 读取 schema 中文标题。
- * @param kind - schema 类型
- * @returns schema 标题
- */
-function getSchemaTitle(kind: WidgetSchemaKind): string {
-  if (kind === 'input') {
-    return '入参';
-  }
-
-  if (kind === 'state') {
-    return '状态';
-  }
-
-  return '出参';
-}
 
 /**
  * 判断值是否为普通 JSON 对象。
@@ -186,8 +169,6 @@ watch(
   }
 );
 
-/** Schema 编辑弹窗标题。 */
-const modalTitle = computed<string>(() => `编辑${getSchemaTitle(props.kind)}`);
 /** Schema 编辑器状态。 */
 const schemaEditorState = computed<EditorState>(() => ({
   id: `widget-data-${props.kind}-schema`,

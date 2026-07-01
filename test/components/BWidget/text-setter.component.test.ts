@@ -82,15 +82,6 @@ function createWidgetData(): WidgetData {
         }
       }
     },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        condition: {
-          type: 'string',
-          description: '天气概况'
-        }
-      }
-    },
     stateSchema: {
       type: 'object',
       properties: {}
@@ -243,18 +234,17 @@ describe('Text Setter', (): void => {
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
     const labels = readVariables(options).map((item: VariableTreeNode): string => item.label);
 
-    expect(rootVariables).toEqual(['input', 'state', 'output']);
+    expect(rootVariables).toEqual(['input', 'state']);
     expect(variables).toContain('input.city');
     expect(variables).toContain('input.user');
     expect(variables).toContain('input.user.name');
     expect(variables).toContain('state.weather.temperature');
-    expect(variables).toContain('output.condition');
+    expect(variables).not.toContain('output.condition');
     expect(variables).not.toContain(REMOVED_LEGACY_ROOT);
     expect(labels).toContain('城市名称');
     expect(labels).toContain('用户');
     expect(labels).toContain('用户名');
     expect(labels).toContain('温度');
-    expect(labels).toContain('天气概况');
     wrapper.unmount();
   });
 });

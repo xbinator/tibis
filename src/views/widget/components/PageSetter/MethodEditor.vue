@@ -41,8 +41,6 @@ interface Props {
   code: string;
   /** 当前小组件入参 schema */
   inputSchema: WidgetSchemaObject;
-  /** 当前小组件出参 schema */
-  outputSchema: WidgetSchemaObject;
 }
 
 /** TypeScript 标识符匹配表达式。 */
@@ -208,22 +206,17 @@ function createWidgetSchemaInterfaceDeclaration(interfaceName: string, schema: W
 /**
  * 创建 Widget 执行方法编辑器类型提示内容。
  * @param inputSchema - 入参 schema
- * @param outputSchema - 出参 schema
  * @returns Monaco extra lib 内容
  */
-function createWidgetSkillMethodExtraLibContent(inputSchema: WidgetSchemaObject, outputSchema: WidgetSchemaObject): string {
+function createWidgetSkillMethodExtraLibContent(inputSchema: WidgetSchemaObject): string {
   return `
 ${createWidgetSchemaInterfaceDeclaration('WidgetSkillInput', inputSchema)}
-
-${createWidgetSchemaInterfaceDeclaration('WidgetSkillOutput', outputSchema)}
 
 declare interface WidgetSkillContext {
   /** 调用小组件时 AI 提取到的入参。 */
   input: WidgetSkillInput
   /** 当前小组件运行态数据，可通过 setState 更新。 */
   state: Record<string, unknown>
-  /** 最近一次方法返回的结构化出参。 */
-  output?: WidgetSkillOutput
   /** 触发当前执行的事件信息。 */
   event?: unknown
   /** 写入小组件运行态数据，path 支持点路径，例如 weather.temperature。 */
@@ -231,7 +224,7 @@ declare interface WidgetSkillContext {
   /**
    * 构造标准执行结果。
    *
-   * - success：方法正常完成，返回可绑定到 output 的数据。
+   * - success：方法正常完成，返回字符串记录数据。
    * - failure：方法执行失败，返回错误码与错误信息。
    * - cancelled：方法被取消，用于用户主动取消或流程中止。
    * - awaitingUserInput：暂停执行，等待用户继续输入或选择。
@@ -242,10 +235,10 @@ declare interface WidgetSkillContext {
 declare interface WidgetSkillResultFactory {
   /**
    * 标记方法执行成功，并把 data 作为执行结果返回。
-   * @param data - 成功结果中携带的数据。
+   * @param data - 成功结果中携带的字符串记录。
    * @returns 标准成功执行结果。
    */
-  success(data?: WidgetSkillOutput): ExecutionResult
+  success(data?: Record<string, string>): ExecutionResult
   /**
    * 标记方法执行失败，并返回错误码与错误信息。
    * @param code - 机器可读错误码。
@@ -285,7 +278,7 @@ declare interface ExecutionResult {
 }
 
 /** Widget Skill 方法编辑器类型提示内容。 */
-const widgetSkillMethodExtraLibContent = computed<string>((): string => createWidgetSkillMethodExtraLibContent(props.inputSchema, props.outputSchema));
+const widgetSkillMethodExtraLibContent = computed<string>((): string => createWidgetSkillMethodExtraLibContent(props.inputSchema));
 /** Widget Skill 方法编辑器重建标识，确保 schema 变化后刷新 Monaco 类型声明。 */
 const methodEditorTypeHintKey = computed<string>((): string => widgetSkillMethodExtraLibContent.value);
 /** Widget Skill 方法编辑器类型提示声明。 */

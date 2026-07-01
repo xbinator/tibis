@@ -137,7 +137,7 @@ function createRenderContext(city: string, temperature: number): WidgetRenderCon
 async function mountRuntime(dataItem: WidgetData, renderContext: WidgetRenderContext): Promise<VueWrapper> {
   const wrapper = mount(BWidgetRuntime, {
     props: {
-      dataItem: dataItem,
+      value: dataItem,
       renderContext
     },
     attachTo: document.body
@@ -244,6 +244,19 @@ describe('BWidgetRuntime', (): void => {
     await nextTick();
 
     expect(findNodeById(wrapper, 'text-1').text()).toBe('杭州 当前 31°C');
+    wrapper.unmount();
+  });
+
+  it('emits submit payloads from runtime nodes', async (): Promise<void> => {
+    const output = {
+      coffeeId: 'latte',
+      size: 'large'
+    };
+    const wrapper = await mountRuntime(createRuntimeWidgetData(), createRenderContext('上海', 28));
+
+    wrapper.findComponent({ name: 'WidgetNode' }).vm.$emit('submit', output);
+
+    expect(wrapper.emitted('submit')?.[0]).toEqual([output]);
     wrapper.unmount();
   });
 });

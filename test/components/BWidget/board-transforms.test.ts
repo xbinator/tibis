@@ -192,40 +192,10 @@ describe('boardTransforms', (): void => {
     expect(snapshot.description).toBe('');
     expect(snapshot.inputSchema).toEqual({
       type: 'object',
-      properties: {
-        city: {
-          type: 'string',
-          description: '城市名称，例如上海'
-        },
-        date: {
-          type: 'string',
-          description: '查询日期，例如今天或明天'
-        },
-        unit: {
-          type: 'string',
-          description: '温度单位，celsius 或 fahrenheit'
-        }
-      },
-      required: ['city']
+      properties: {},
+      required: []
     });
-    expect(snapshot.outputSchema).toEqual({
-      type: 'object',
-      properties: {
-        condition: {
-          type: 'string',
-          description: '天气概况'
-        },
-        temperatureCelsius: {
-          type: 'number',
-          description: '摄氏温度'
-        },
-        suggestion: {
-          type: 'string',
-          description: '出行建议'
-        }
-      },
-      required: ['condition', 'temperatureCelsius']
-    });
+    expect(snapshot).not.toHaveProperty('outputSchema');
     expect(snapshot.stateSchema).toEqual({
       type: 'object',
       properties: {},

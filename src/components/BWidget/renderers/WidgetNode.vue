@@ -14,7 +14,7 @@
     @pointerdown.stop="emit('select', node.id, $event)"
     @pointerup="emit('release', node.id, $event)"
   >
-    <component :is="nodeView" v-if="nodeView" :element="node" />
+    <component :is="nodeView" v-if="nodeView" :element="node" @submit="handleSubmit" />
     <div v-else class="b-widget-node__fallback">{{ node.title }}</div>
   </div>
 </template>
@@ -55,6 +55,8 @@ const emit = defineEmits<{
   release: [id: string, event: PointerEvent];
   /** 打开节点右键菜单 */
   'context-menu': [id: string, event: MouseEvent];
+  /** 提交运行态结果 */
+  submit: [output: unknown];
 }>();
 
 /** 当前Widget渲染上下文。 */
@@ -84,6 +86,14 @@ const nodeStyle = computed<CSSProperties>(() => ({
   opacity: props.node.style.opacity,
   transform: createWidgetElementCssTransform(renderPosition.value, props.node.rotation)
 }));
+
+/**
+ * 向运行态上层透传元素提交结果。
+ * @param output - 元素提交输出
+ */
+function handleSubmit(output: unknown): void {
+  emit('submit', output);
+}
 </script>
 
 <style lang="less" scoped>

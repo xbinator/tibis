@@ -136,26 +136,12 @@ export interface WidgetExecuteMethod {
 }
 
 /**
- * Widget Skill 元信息。
- */
-export interface WidgetSkillMetadata {
-  /** Skill 名称 */
-  name?: string;
-  /** Skill 描述 */
-  description?: string;
-  /** Skill 别名 */
-  aliases?: string[];
-  /** Skill 触发词 */
-  triggers?: string[];
-}
-
-/**
  * WidgetData 支持的 schema 字段类型。
  */
 export type WidgetSchemaPropertyType = 'string' | 'number' | 'boolean' | 'object' | 'array';
 
 /**
- * WidgetData 入参与出参 schema 属性。
+ * WidgetData 输入与状态 schema 属性。
  */
 export interface WidgetSchemaProperty {
   /** 字段类型 */
@@ -171,7 +157,7 @@ export interface WidgetSchemaProperty {
 }
 
 /**
- * WidgetData 入参与出参对象 schema。
+ * WidgetData 输入与状态对象 schema。
  */
 export interface WidgetSchemaObject {
   /** 顶层 schema 固定为对象 */
@@ -287,8 +273,6 @@ export interface WidgetData {
   inputSchema: WidgetSchemaObject;
   /** Widget运行状态 schema */
   stateSchema: WidgetSchemaObject;
-  /** Widget能力出参 schema */
-  outputSchema: WidgetSchemaObject;
   /** Widget执行入口方法 */
   execute?: WidgetExecuteMethod;
   /** Widget元信息 */
@@ -307,8 +291,6 @@ export interface WidgetRenderContext {
   input: Record<string, unknown>;
   /** Widget会话状态 */
   state: Record<string, unknown>;
-  /** Widget输出 */
-  output?: unknown;
 }
 
 /**
