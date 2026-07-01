@@ -131,7 +131,7 @@ metadata: {
 
 这条规则是为了减少组件开发者和Widget作者的心智负担：一个字段只有一个来源，不再拆成两个字段来源。如果未来列表、表单、按钮等元素需要模板能力，也应沿用同样模式，例如 `metadata.items`、`metadata.label`、`metadata.defaultValue`，而不是增加第二套模板存储。
 
-事件到方法的关联后续也应由元素自己声明和编辑，不新增一个全局复杂事件配置器。当前已落地的运行态只把节点 `submit` 事件向上透传，由 `BubblePartWidget` 统一转换为 `widget_result` 或执行 `unmounted` 后的 `$sendMessage`。未来 Button、List、Form 等元素可以在自己的 `metadata` 中保存事件到 `methods` 的映射，例如 `metadata.submitMethod = "confirmOrder"`，再由运行态调用 `runWidgetMethod(part, methodName)`。
+事件到方法的关联后续也应由元素自己声明和编辑，不新增一个全局复杂事件配置器。当前已落地的运行态只把节点 `submit` 事件向上透传，由 `BubblePartWidget` 统一转换为 `widget_result` 或执行 `unmounted` 后的 `$sendMessage`。未来 Button、List、Form 等元素可以在自己的 `metadata` 中保存事件到 `methods` 的映射，例如 `metadata.submitMethod = "confirmOrder"`，再通过 `useWidgetRuntime().value?.callMethod(methodName)` 调用当前 Widget 实例方法。
 
 模板展示保持声明式，因为它只是简单展示逻辑。事件不配置一段复杂流程；复杂分支、API 调用、状态写入和上行消息都放在 `execute.code` 的生命周期或命名方法中完成。
 
@@ -471,7 +471,7 @@ const weather = await this.$http.get('https://api.example.com/weather', {
 推荐下一步实现顺序：
 
 1. 继续完善元素级交互：Button/List/Form 自己声明 submit/click/select 到 `methods` 的映射，不新增全局复杂事件配置器。
-2. 将 `runWidgetMethod` 接入具体元素事件，补充同一 Widget part 的并发/重入策略。
+2. 将 `useWidgetRuntime` 接入具体元素事件，补充同一 Widget part 的并发/重入策略。
 3. 完善表单类 Widget 的提交体验，让提交结果统一走 `WidgetSubmitResult` 或 `$sendMessage`。
 4. 扩展受控脚本解释器的表达式能力，但仍避免任意 JavaScript 和全局 API。
 5. 如需要高风险网络、凭据或第三方账号能力，再设计产品级集成和全局平台策略，不放进 Widget 作者配置面板。

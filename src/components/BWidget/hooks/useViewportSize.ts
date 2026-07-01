@@ -3,7 +3,7 @@
  * @description BWidget 根视口尺寸同步与首屏稳定状态管理。
  */
 import type { WidgetSize } from '../types';
-import { nextTick, onActivated, onBeforeUnmount, onMounted, ref } from 'vue';
+import { nextTick, onActivated, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
 import type { Ref } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 
@@ -41,10 +41,11 @@ function readResizeEntrySize(entry: ResizeObserverEntry): WidgetSize | null {
 
 /**
  * 创建视口尺寸同步 hook。
+ * @param key - 模板中静态 ref 名称，不传时返回可手动绑定的 rootRef
  * @returns 视口尺寸状态和同步命令
  */
-export function useViewportSize(): UseViewportSizeReturn {
-  const rootRef = ref<HTMLElement | null>(null);
+export function useViewportSize(key?: string): UseViewportSizeReturn {
+  const rootRef = key ? useTemplateRef<HTMLElement>(key) : ref<HTMLElement | null>(null);
   const viewportSize = ref<WidgetSize>({ width: 0, height: 0 });
   const isViewportReady = ref<boolean>(false);
   let viewportReadyFrame: ReturnType<typeof requestAnimationFrame> | null = null;

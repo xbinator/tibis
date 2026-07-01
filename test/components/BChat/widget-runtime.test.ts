@@ -5,7 +5,7 @@
 import type { ChatMessageWidgetPart } from 'types/chat';
 import type { WidgetData, WidgetHttpClient } from 'types/widget';
 import { describe, expect, it } from 'vitest';
-import { finishWidgetRuntime, finishWidgetUnmountState, initWidgetMountState, runWidgetMethod } from '@/components/BChat/utils/widgetRuntime';
+import { createWidgetRuntimeInstance, finishWidgetRuntime, finishWidgetUnmountState, initWidgetMountState } from '@/components/BChat/utils/widgetRuntime';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**
@@ -271,13 +271,45 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const result = await runWidgetMethod(part, 'confirm', {
-      now: () => new Date('2026-07-01T00:02:00.000Z')
-    });
+    const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).callMethod('confirm');
 
     expect(result.part.status).toBe('finished');
     expect(result.part.lifecycle.unmountedAt).toBe('2026-07-01T00:02:00.000Z');
     expect(result.part.renderContext.state).toEqual({ confirmed: true });
+    expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
+  });
+
+  it('runs unmounted cleanup when a named method finishes with a message', async (): Promise<void> => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(
+        [
+          'defineConfig({',
+          '  unmounted() {',
+          "    this.$setState('cleanedUp', true)",
+          "    this.$sendMessage('清理消息')",
+          '  },',
+          '  methods: {',
+          '    confirm() {',
+          "      this.$setState('confirmed', true)",
+          "      this.$sendMessage('确认下单')",
+          '    }',
+          '  }',
+          '})'
+        ].join('\n')
+      ),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      }
+    };
+
+    const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).callMethod('confirm');
+
+    expect(result.part.status).toBe('finished');
+    expect(result.part.renderContext.state).toEqual({
+      confirmed: true,
+      cleanedUp: true
+    });
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
@@ -290,7 +322,7 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const result = await runWidgetMethod(part, 'missing');
+    const result = await createWidgetRuntimeInstance(part).callMethod('missing');
 
     expect(result).toEqual({ part });
     expect(result.part).toBe(part);
@@ -307,7 +339,7 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const result = await runWidgetMethod(part, 'selectCoffee');
+    const result = await createWidgetRuntimeInstance(part).callMethod('selectCoffee');
 
     expect(result.part.status).toBe('mounted');
     expect(result.part.renderContext.state).toEqual({

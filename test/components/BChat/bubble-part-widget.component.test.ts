@@ -6,12 +6,14 @@
 import type { ChatMessageToolPart, ChatMessageWidgetPart } from 'types/chat';
 import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent, nextTick } from 'vue';
+import type { PropType } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import BubblePartWidget from '@/components/BChat/components/MessageBubble/BubblePartWidget.vue';
 import { resolveWidgetPartFromToolResult } from '@/components/BChat/utils/messageHelper';
 import type { BChatSubmitAction, BChatSubmitContext } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
+import type { WidgetRuntimeController } from '@/components/BWidget/hooks/useWidgetRuntime';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 const requestMock = vi.hoisted(() => vi.fn());
@@ -111,6 +113,18 @@ const BWidgetRuntimeStub = defineComponent({
   template: '<button class="widget-submit" type="button" @click="$emit(\'submit\', { coffeeId: \'latte\' })">提交</button>'
 });
 
+/** 暴露运行态控制器 prop 的 BWidgetRuntime 测试替身。 */
+const BWidgetRuntimeMethodProbeStub = defineComponent({
+  name: 'BWidgetRuntime',
+  props: {
+    runtime: {
+      type: Object as PropType<WidgetRuntimeController>,
+      default: undefined
+    }
+  },
+  template: '<div class="widget-method-probe"></div>'
+});
+
 /**
  * 挂载小组件消息片段。
  * @param part - 小组件消息片段
@@ -127,6 +141,27 @@ function mountBubblePartWidget(part: ChatMessageWidgetPart, props: Record<string
     global: {
       stubs: {
         BWidgetRuntime: BWidgetRuntimeStub
+      }
+    }
+  });
+}
+
+/**
+ * 使用运行态控制器探针挂载小组件消息片段。
+ * @param part - 小组件消息片段
+ * @param props - 额外组件入参
+ * @returns 组件包装器
+ */
+function mountBubblePartWidgetWithMethodProbe(part: ChatMessageWidgetPart, props: Record<string, unknown> = {}): VueWrapper {
+  return mount(BubblePartWidget, {
+    props: {
+      part,
+      runtimeEnabled: true,
+      ...props
+    },
+    global: {
+      stubs: {
+        BWidgetRuntime: BWidgetRuntimeMethodProbeStub
       }
     }
   });
@@ -336,5 +371,20 @@ describe('BubblePartWidget', (): void => {
         }
       }
     });
+  });
+
+  it('exposes method calls as fire-and-forget runtime actions in chat messages', (): void => {
+    const widgetPart = createWidgetPart(
+      ['defineConfig({', '  methods: {', '    confirmOrder() {', "      this.$sendMessage('确认下单')", '    }', '  }', '})'].join('\n')
+    );
+    const wrapper = mountBubblePartWidgetWithMethodProbe(widgetPart, {
+      messageId: 'assistant-widget-message'
+    });
+    const runtime = wrapper.findComponent({ name: 'BWidgetRuntime' }).props('runtime') as WidgetRuntimeController | undefined;
+
+    const result = runtime?.callMethod('confirmOrder');
+
+    expect(result).toBeUndefined();
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toEqual(expect.objectContaining({ run: expect.any(Function) }));
   });
 });

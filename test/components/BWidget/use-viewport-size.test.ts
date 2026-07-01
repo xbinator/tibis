@@ -4,6 +4,7 @@
  * @vitest-environment jsdom
  */
 import { defineComponent, nextTick } from 'vue';
+import type { Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useViewportSize } from '@/components/BWidget/hooks/useViewportSize';
@@ -17,6 +18,25 @@ interface ViewportSizeHostVm {
   viewportSize: WidgetSize;
   /** 视口是否完成首轮稳定 */
   isViewportReady: boolean;
+  /** 从根元素同步尺寸 */
+  syncViewportSizeFromRoot: () => void;
+  /** KeepAlive 激活后的尺寸同步 */
+  scheduleViewportSizeSyncFromRoot: () => void;
+}
+
+/**
+ * 命名模板引用模式下暴露给测试断言的宿主组件实例。
+ */
+type NamedViewportSizeHostVm = ViewportSizeHostVm;
+
+/**
+ * 命名模板引用模式下 setup 暴露的响应式状态。
+ */
+interface NamedViewportSizeHostSetup {
+  /** 视口尺寸 */
+  viewportSize: Ref<WidgetSize>;
+  /** 视口是否完成首轮稳定 */
+  isViewportReady: Ref<boolean>;
   /** 从根元素同步尺寸 */
   syncViewportSizeFromRoot: () => void;
   /** KeepAlive 激活后的尺寸同步 */
@@ -53,6 +73,26 @@ function createViewportSizeHost(): ReturnType<typeof defineComponent> {
   return defineComponent({
     setup(): ReturnType<typeof useViewportSize> {
       return useViewportSize();
+    },
+    template: '<div ref="rootRef"></div>'
+  });
+}
+
+/**
+ * 创建命名模板引用模式的视口尺寸 hook 测试宿主。
+ * @returns Vue 测试宿主组件
+ */
+function createNamedViewportSizeHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    setup(): NamedViewportSizeHostSetup {
+      const { viewportSize, isViewportReady, syncViewportSizeFromRoot, scheduleViewportSizeSyncFromRoot } = useViewportSize('rootRef');
+
+      return {
+        viewportSize,
+        isViewportReady,
+        syncViewportSizeFromRoot,
+        scheduleViewportSizeSyncFromRoot
+      };
     },
     template: '<div ref="rootRef"></div>'
   });
@@ -104,5 +144,15 @@ describe('useViewportSize', (): void => {
     await vi.advanceTimersByTimeAsync(16);
 
     expect(vm.viewportSize).toEqual({ width: 720, height: 400 });
+  });
+
+  it('syncs viewport size when the root element is bound by template ref name', (): void => {
+    const wrapper = mount(createNamedViewportSizeHost());
+    const vm = wrapper.vm as unknown as NamedViewportSizeHostVm;
+
+    setElementRect(wrapper.element, { width: 320, height: 180 });
+    vm.syncViewportSizeFromRoot();
+
+    expect(vm.viewportSize).toEqual({ width: 320, height: 180 });
   });
 });

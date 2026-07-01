@@ -4,10 +4,11 @@
  * @vitest-environment jsdom
  */
 import type { WidgetData, WidgetRenderContext } from 'types/widget';
-import { nextTick } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { cloneDeep } from 'lodash-es';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useWidgetRuntime } from '@/components/BWidget/hooks/useWidgetRuntime';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -159,6 +160,26 @@ function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
   return wrapper.find<Element>(`[data-widget-element-id="${id}"]`);
 }
 
+/** 运行态控制器注入探针。 */
+const RuntimeControllerProbe = defineComponent({
+  name: 'RuntimeControllerProbe',
+  setup() {
+    const runtime = useWidgetRuntime();
+
+    return { runtime };
+  },
+  template: '<button class="runtime-method-probe" type="button" @click="runtime?.callMethod(\'confirmOrder\')">调用方法</button>'
+});
+
+/** WidgetNode 测试替身，用于验证运行态控制器能被元素层注入。 */
+const WidgetNodeRuntimeProbeStub = defineComponent({
+  name: 'WidgetNode',
+  components: {
+    RuntimeControllerProbe
+  },
+  template: '<RuntimeControllerProbe />'
+});
+
 describe('BWidgetRuntime', (): void => {
   beforeEach((): void => {
     observedResizeTargets = [];
@@ -257,6 +278,31 @@ describe('BWidgetRuntime', (): void => {
     wrapper.findComponent({ name: 'WidgetNode' }).vm.$emit('submit', output);
 
     expect(wrapper.emitted('submit')?.[0]).toEqual([output]);
+    wrapper.unmount();
+  });
+
+  it('provides the runtime controller to rendered elements', async (): Promise<void> => {
+    const callMethod = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: createRuntimeWidgetData(),
+        renderContext: createRenderContext('上海', 28),
+        runtime: {
+          callMethod
+        }
+      },
+      global: {
+        stubs: {
+          WidgetNode: WidgetNodeRuntimeProbeStub
+        }
+      },
+      attachTo: document.body
+    });
+
+    await nextTick();
+    await wrapper.get('.runtime-method-probe').trigger('click');
+
+    expect(callMethod).toHaveBeenCalledWith('confirmOrder');
     wrapper.unmount();
   });
 });

@@ -38,6 +38,18 @@ export interface WidgetRuntimeFinishResult {
   sendMessage?: WidgetRuntimeSendMessage;
 }
 
+/**
+ * 小组件运行态实例。
+ */
+export interface WidgetRuntimeInstance {
+  /**
+   * 调用 defineConfig.methods 中声明的命名方法。
+   * @param methodName - 方法名
+   * @returns 方法执行后的运行态结果
+   */
+  callMethod: (methodName: string) => Promise<WidgetRuntimeFinishResult>;
+}
+
 /** 带函数体的小组件配置函数节点。 */
 type WidgetFunctionNodeWithBody = (ts.MethodDeclaration | ts.FunctionExpression | ts.ArrowFunction) & { body: ts.Block };
 
@@ -587,13 +599,13 @@ export async function finishWidgetRuntime(part: ChatMessageWidgetPart, options: 
 }
 
 /**
- * 运行小组件命名方法。
+ * 调用小组件实例上的命名方法。
  * @param part - 小组件消息片段
  * @param methodName - 方法名
  * @param options - 生命周期执行选项
  * @returns 方法执行结果
  */
-export async function runWidgetMethod(
+async function callWidgetInstanceMethod(
   part: ChatMessageWidgetPart,
   methodName: string,
   options: WidgetLifecycleRunOptions = {}
@@ -608,13 +620,30 @@ export async function runWidgetMethod(
     const methodResult = await runLifecycleStatements(methodFunction, nextPart, options);
 
     if (methodResult.sendMessage) {
-      return createWidgetFinishedResult(nextPart, methodResult.sendMessage, options);
+      const finishResult = await finishWidgetRuntime(nextPart, options);
+
+      return {
+        part: finishResult.part,
+        sendMessage: methodResult.sendMessage
+      };
     }
 
     return { part: { ...nextPart, status: 'mounted' } };
   } catch {
     return { part: createFailedWidgetPart(part) };
   }
+}
+
+/**
+ * 创建小组件运行态实例。
+ * @param part - 小组件消息片段
+ * @param options - 生命周期执行选项
+ * @returns 小组件运行态实例
+ */
+export function createWidgetRuntimeInstance(part: ChatMessageWidgetPart, options: WidgetLifecycleRunOptions = {}): WidgetRuntimeInstance {
+  return {
+    callMethod: (methodName: string): Promise<WidgetRuntimeFinishResult> => callWidgetInstanceMethod(part, methodName, options)
+  };
 }
 
 /**

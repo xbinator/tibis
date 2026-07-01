@@ -4,7 +4,7 @@
 -->
 <template>
   <div :class="name">
-    <BWidgetRuntime :render-context="part.renderContext" :value="part.value" @submit="handleSubmit" />
+    <BWidgetRuntime :render-context="part.renderContext" :runtime="widgetRuntimeController" :value="part.value" @submit="handleSubmit" />
   </div>
 </template>
 
@@ -19,9 +19,10 @@ import type {
   ChatMessageWidgetRuntime
 } from 'types/chat';
 import type { WidgetRuntimeSendMessage } from 'types/widget';
-import { onMounted, watch } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { isString } from 'lodash-es';
 import { nanoid } from 'nanoid';
+import type { WidgetRuntimeController } from '@/components/BWidget/hooks/useWidgetRuntime';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { createWidgetSubmitSuccessResult } from '@/shared/widget/protocol';
 import { stringifyJsonValue } from '@/utils/json';
@@ -33,7 +34,13 @@ import {
   type BChatAdaptedUserMessageSubmitInput,
   type BChatSubmitAction
 } from '../../utils/submitAction';
-import { createWidgetHttpClient, finishWidgetRuntime, initWidgetMountState } from '../../utils/widgetRuntime';
+import {
+  createWidgetHttpClient,
+  createWidgetRuntimeInstance,
+  finishWidgetRuntime,
+  initWidgetMountState,
+  type WidgetRuntimeFinishResult
+} from '../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 
@@ -244,6 +251,66 @@ function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChat
     }
   };
 }
+
+/**
+ * 创建小组件方法执行提交动作。
+ * @param methodName - 方法名
+ * @returns 统一提交动作
+ */
+function createWidgetMethodSubmitAction(methodName: string): BChatSubmitAction {
+  const { messageId } = props;
+
+  return {
+    async run(context): Promise<void> {
+      if (!messageId) return;
+
+      const currentMessage = context.getMessage(messageId);
+      if (!currentMessage) return;
+
+      const hostPart = currentMessage.parts.find((part): boolean => part.id === props.part.id);
+      const currentPart = hostPart ? resolveWidgetPartFromMessagePart(hostPart) : null;
+      if (!currentPart) return;
+
+      const methodResult = await createWidgetRuntimeInstance(currentPart, { http: widgetHttpClient }).callMethod(methodName);
+      const nextMessage = createWidgetPartUpdatedMessage(currentMessage, props.part.id, currentPart, methodResult.part);
+      await context.updateMessage(messageId, (): Message => nextMessage);
+
+      if (methodResult.sendMessage) {
+        await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(methodResult.sendMessage));
+      }
+    }
+  };
+}
+
+/**
+ * 在无宿主消息时直接调用小组件实例方法。
+ * @param methodName - 方法名
+ */
+async function callStandaloneWidgetMethod(methodName: string): Promise<void> {
+  const methodResult: WidgetRuntimeFinishResult = await createWidgetRuntimeInstance(props.part, { http: widgetHttpClient }).callMethod(methodName);
+  if (methodResult.part !== props.part) {
+    emit('change', methodResult.part);
+  }
+}
+
+/**
+ * 供小组件元素调用交互脚本 methods 的运行态控制器。
+ */
+const widgetRuntimeController = computed<WidgetRuntimeController | undefined>(() => {
+  if (!props.runtimeEnabled) return undefined;
+
+  return {
+    callMethod(methodName: string): void {
+      const { messageId } = props;
+      if (!messageId) {
+        callStandaloneWidgetMethod(methodName).catch((): undefined => undefined);
+        return;
+      }
+
+      emit('submit', createWidgetMethodSubmitAction(methodName));
+    }
+  };
+});
 
 /**
  * 透传小组件提交结果并补充会话信息。

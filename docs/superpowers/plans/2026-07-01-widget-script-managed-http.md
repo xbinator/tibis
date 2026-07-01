@@ -401,7 +401,7 @@ it('runs a named method without allowing method recursion', async (): Promise<vo
     }
   };
 
-  const result = await runWidgetMethod(part, 'confirm');
+  const result = await createWidgetRuntimeInstance(part).callMethod('confirm');
 
   expect(result.part.status).toBe('finished');
   expect(result.part.renderContext.state).toEqual({ confirmed: true });
@@ -417,7 +417,7 @@ Run:
 pnpm test test/components/BChat/widget-runtime.test.ts
 ```
 
-Expected: FAIL because `runWidgetMethod` is not exported and `enabled: false` is not honored.
+Expected: FAIL because `createWidgetRuntimeInstance` is not exported and `enabled: false` is not honored.
 
 - [x] **Step 3: Implement runtime control metadata**
 
@@ -526,13 +526,13 @@ Export:
 
 ```ts
 /**
- * 运行小组件命名方法。
+ * 调用小组件实例上的命名方法。
  * @param part - 小组件消息片段
  * @param methodName - 方法名
  * @param options - 生命周期执行选项
  * @returns 方法执行结果
  */
-export async function runWidgetMethod(part: ChatMessageWidgetPart, methodName: string, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeFinishResult> {
+async function callWidgetInstanceMethod(part: ChatMessageWidgetPart, methodName: string, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeFinishResult> {
   if (part.status !== 'mounted' || !isWidgetScriptEnabled(part)) return { part };
 
   const nextPart = cloneDeep(part);

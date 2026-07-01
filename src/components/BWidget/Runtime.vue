@@ -29,6 +29,7 @@ import { computed } from 'vue';
 import { createNamespace } from '@/utils/namespace';
 import { provideRenderContext } from './hooks/useRenderContext';
 import { useViewportSize } from './hooks/useViewportSize';
+import { provideWidgetRuntime, type WidgetRuntimeController } from './hooks/useWidgetRuntime';
 import WidgetNode from './renderers/WidgetNode.vue';
 import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from './utils/widgetRuntimeLayout';
 
@@ -42,6 +43,8 @@ interface Props {
   value: WidgetData;
   /** 运行态渲染上下文 */
   renderContext: WidgetRenderContext;
+  /** 运行态控制器，供元素自行调用交互脚本 methods */
+  runtime?: WidgetRuntimeController;
   /** 内容留白 */
   padding?: number;
 }
@@ -57,7 +60,8 @@ interface WidgetRuntimeRenderableElement {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  padding: 16
+  padding: 16,
+  runtime: undefined
 });
 
 const emit = defineEmits<{
@@ -66,12 +70,15 @@ const emit = defineEmits<{
 }>();
 
 const [name, bem] = createNamespace('widget-runtime');
-const { rootRef, viewportSize } = useViewportSize();
+const { viewportSize } = useViewportSize('rootRef');
 
 /** 运行态渲染上下文响应式包装。 */
 const providedRenderContext = computed<WidgetRenderContext | undefined>(() => props.renderContext);
+/** 运行态控制器响应式包装。 */
+const providedRuntime = computed<WidgetRuntimeController | undefined>(() => props.runtime);
 
 provideRenderContext(providedRenderContext);
+provideWidgetRuntime(providedRuntime);
 
 /** 当前运行态内容布局。 */
 const runtimeLayout = computed(() => createWidgetRuntimeLayout(props.value.elements, props.renderContext, props.padding));
