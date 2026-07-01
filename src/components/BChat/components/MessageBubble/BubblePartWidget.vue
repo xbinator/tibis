@@ -120,7 +120,7 @@ function normalizeWidgetSendMessageTextParts(content: WidgetRuntimeSendMessage['
     return [{ id: nanoid(), type: 'text', text: content }];
   }
 
-  return content.map((part) => ({ id: part.id ?? nanoid(), type: 'text', text: part.text }));
+  return content.map((part) => ({ id: nanoid(), type: 'text', text: part.text }));
 }
 
 /**

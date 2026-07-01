@@ -2,7 +2,7 @@
  * @file widgetRuntime.ts
  * @description BChat 小组件消息片段的轻量脚本运行工具。
  */
-import type { ChatMessageWidgetPart } from 'types/chat';
+import type { ChatMessageTextPart, ChatMessageWidgetPart } from 'types/chat';
 import { cloneDeep, get, isPlainObject, set } from 'lodash-es';
 import ts from 'typescript';
 
@@ -15,16 +15,9 @@ interface WidgetLifecycleRunOptions {
 }
 
 /**
- * 小组件运行态上行文本片段。
+ * 小组件脚本上行文本片段。
  */
-export interface WidgetRuntimeSendMessageTextPart {
-  /** 可选消息片段 ID；缺省时由聊天适配层生成。 */
-  id?: string;
-  /** 片段类型。 */
-  type: 'text';
-  /** 文本内容。 */
-  text: string;
-}
+export type WidgetRuntimeSendMessageTextPart = Omit<ChatMessageTextPart, 'id'>;
 
 /**
  * 小组件运行态上行消息。
@@ -57,9 +50,9 @@ type WidgetLifecycleName = 'mounted' | 'unmounted';
  */
 interface WidgetExpressionEvalContext {
   /** Widget 启动入参。 */
-  input: Record<string, unknown>;
+  input: ChatMessageWidgetPart['renderContext']['input'];
   /** Widget 会话状态。 */
-  state: Record<string, unknown>;
+  state: ChatMessageWidgetPart['renderContext']['state'];
   /** 生命周期函数体内已经解析出的局部常量。 */
   variables: Map<string, unknown>;
 }

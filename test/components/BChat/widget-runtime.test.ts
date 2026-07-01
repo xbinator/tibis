@@ -202,7 +202,7 @@ describe('widgetRuntime', (): void => {
     });
   });
 
-  it('captures sendMessage calls while finishing unmounted state', (): void => {
+  it('captures sendMessage calls with script text parts while finishing unmounted state', (): void => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
         ['defineConfig({', '  unmounted() {', "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })", '  }', '})'].join('\n')
