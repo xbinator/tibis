@@ -244,12 +244,12 @@ function createFailedWidgetPart(part: ChatMessageWidgetPart): ChatMessageWidgetP
 }
 
 /**
- * 运行 created 小组件的 mounted 生命周期，并返回可写回消息的下一版 part。
+ * 初始化 created 小组件的 mounted 状态，并返回可写回消息的下一版 part。
  * @param part - 小组件消息片段。
  * @param options - 生命周期执行选项。
  * @returns 运行后的消息片段；非 created 状态原样返回。
  */
-export async function runWidgetMountedLifecycle(part: ChatMessageWidgetPart, options: WidgetLifecycleRunOptions = {}): Promise<ChatMessageWidgetPart> {
+export async function initWidgetMountState(part: ChatMessageWidgetPart, options: WidgetLifecycleRunOptions = {}): Promise<ChatMessageWidgetPart> {
   if (part.status !== 'created' || part.lifecycle.mountedAt) {
     return part;
   }

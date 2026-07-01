@@ -17,7 +17,7 @@ import { isPlainRecord, stringifyJsonValue, stringifyRuntimeTextValue } from '@/
 import { createNamespace } from '@/utils/namespace';
 import { create } from '../../utils/messageHelper';
 import { createRuntimeUserMessageSubmitAction, type BChatSubmitAction } from '../../utils/submitAction';
-import { runWidgetMountedLifecycle } from '../../utils/widgetRuntime';
+import { initWidgetMountState } from '../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 
@@ -85,19 +85,19 @@ function handleSubmit(output: unknown): void {
 }
 
 /**
- * 运行小组件 mounted 生命周期，并把状态变化交给消息宿主写回。
+ * 初始化小组件消息运行态，并把状态变化交给消息宿主写回。
  */
-async function runMountedLifecycle(): Promise<void> {
+async function initWidgetRuntime(): Promise<void> {
   if (!props.runtimeEnabled) return;
 
-  const nextPart = await runWidgetMountedLifecycle(props.part);
+  const nextPart = await initWidgetMountState(props.part);
   if (nextPart !== props.part) {
     emit('change', nextPart);
   }
 }
 
 onMounted((): void => {
-  runMountedLifecycle().catch((): undefined => undefined);
+  initWidgetRuntime().catch((): undefined => undefined);
 });
 </script>
 

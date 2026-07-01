@@ -4,7 +4,7 @@
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { runWidgetMountedLifecycle } from '@/components/BChat/utils/widgetRuntime';
+import { initWidgetMountState } from '@/components/BChat/utils/widgetRuntime';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -54,7 +54,7 @@ describe('widgetRuntime', (): void => {
       )
     );
 
-    const nextPart = await runWidgetMountedLifecycle(part);
+    const nextPart = await initWidgetMountState(part);
 
     expect(runtimeGlobal.__widgetRuntimeUnsafe).toBeUndefined();
     expect(nextPart.renderContext.state).toEqual({
@@ -76,7 +76,7 @@ describe('widgetRuntime', (): void => {
       ].join('\n')
     );
 
-    const nextPart = await runWidgetMountedLifecycle(part, {
+    const nextPart = await initWidgetMountState(part, {
       now: () => new Date('2026-07-01T00:00:00.000Z')
     });
 
@@ -117,7 +117,7 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const nextPart = await runWidgetMountedLifecycle(part);
+    const nextPart = await initWidgetMountState(part);
 
     expect(nextPart).toEqual(part);
   });
@@ -134,7 +134,7 @@ describe('widgetRuntime', (): void => {
       ].join('\n')
     );
 
-    const nextPart = await runWidgetMountedLifecycle(part);
+    const nextPart = await initWidgetMountState(part);
 
     expect(nextPart.renderContext.state).toEqual({
       lastQuery: {
