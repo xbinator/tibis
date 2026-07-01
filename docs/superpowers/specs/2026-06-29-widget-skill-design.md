@@ -2,18 +2,19 @@
 
 ## 概要
 
-这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以由聊天运行时通过 `widget` / `open_widget` 工具按需打开，并以交互式Widget卡片的形式展示给用户。Widget本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段。工具暴露只使用必要的 Widget 契约信息；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互逻辑放在元素自己的 `metadata.handlers` 中，并由 `src/components/BWidget/elements/**/Setter.vue` 和 `src/components/BWidget/elements/**/index.vue` 分别负责编辑和渲染。
+这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以由聊天运行时通过 `widget` / `open_widget` 工具按需打开，并以交互式 Widget 卡片的形式展示给用户。Widget 本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段，也不再使用 `metadata.skill`。工具暴露只使用必要的 Widget 契约信息；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互脚本使用 `defineConfig({ mounted, unmounted, methods })` 声明生命周期和方法。
 
 第一条纵向闭环应支持通过工具打开天气或咖啡Widget：
 
 - 模型根据对话需要调用 `widget` 读取可用 Widget 契约。
 - 模型调用 `open_widget` 打开指定 Widget，并传入可选 `input`。
-- Widget在聊天中作为一次会话展示，而不是打开编辑器页面。
+- Widget 在聊天中作为一次会话展示，而不是打开编辑器页面。
 - 元素根据会话的 `input`、`state` 解析模板字段。
-- 元素事件关联Widget方法，Widget方法是受控环境中执行的完整函数。
-- HTTP、AI、权限确认、取消、失败和等待用户输入统一返回同一种执行结果模型。
+- Widget 消息创建后进入独立运行态，`mounted` 可以读取 input、调用托管 request、写入 state。
+- Widget 运行态提交时执行 `unmounted`；如果脚本调用 `this.$sendMessage`，则向聊天上行文本消息并结束当前 Widget 交互。
+- HTTP 请求统一走底层 `request` 能力，Widget 作者不配置 origin 白名单或权限弹窗。
 
-当前已经完成第一段基础能力：文本元素可以通过 `{{ input.x }}`、`{{ state.y }}` 等模板读取Widget渲染上下文；模板读写、变量候选和渲染上下文已抽离为 hooks。编辑期的 `state.*` 变量候选不再依赖手写状态声明，而是从交互脚本里的 `this.$setState` 调用推导。下一步只做运行态只读Widget渲染，让聊天可以先展示一张带 session 上下文的Widget。
+当前已经完成第一段可用闭环：文本元素可以通过 `{{ input.x }}`、`{{ state.y }}` 等模板读取 Widget 渲染上下文；模板读写、变量候选和渲染上下文已抽离为 hooks；编辑期的 `state.*` 变量候选从交互脚本里的 `this.$setState` 调用推导；聊天消息可以从 `open_widget` 工具结果派生 Widget part，并用 `BWidgetRuntime` 在消息气泡中展示和持久化消息内 state。
 
 ## 目标
 
@@ -21,10 +22,10 @@
 - 保持现有 Widget 编辑器架构不被破坏。
 - 避免引入一个庞大的顶层 `runtime` 对象。
 - 让每个Widget元素自己拥有动态字段和交互能力。
-- 允许Widget作者为Widget方法编写完整函数，并在元素事件中关联这些方法。
-- 复用现有 AI 工具执行结果结构，作为Widget方法和事件处理结果。
+- 允许Widget作者用受控脚本声明生命周期和命名方法，并逐步让元素事件关联这些方法。
+- Widget 提交结果向现有工具结果结构靠近，但不伪装成 `role: tool` 消息。
 - 通过现有 AI tool registry 暴露工作区 Widget，并由 `open_widget` 创建聊天内 Widget 消息。
-- 先交付一个最小可体验的运行态Widget容器，再逐步接入方法执行和 HTTP 权限。
+- 先交付一个最小可体验的运行态Widget容器，再逐步丰富元素事件和方法执行。
 
 ## 非目标
 
@@ -32,7 +33,7 @@
 - 不实现自然语言 Widget Skill 路由器、置信度排序、自动启动或候选选择。
 - 第一版不实现全局Widget能力库。
 - 第一版不要求所有Widget元素都动态化。
-- 下一步不实现脚本执行器、HTTP 代理或权限弹窗。
+- 第一版不实现用户可配置的 HTTP 权限白名单、origin/path/method/header 配置或确认弹窗。
 - 不允许Widget脚本访问不受限制的浏览器、Electron、Node 或文件系统 API。
 - 不把运行时状态写回原始 `.tibis` 文件，除非用户明确编辑或保存模板。
 - 不替换现有 AI tools、MCP tools 或 chat runtime；Widget Skill 在需要时与它们集成。
@@ -101,23 +102,22 @@ interface WidgetData {
 interface WidgetExecuteMethod {
   /** 方法是否启用，默认 true */
   enabled?: boolean
-  /** 方法说明，用于编辑器提示、调试记录和权限确认文案 */
+  /** 方法说明，用于编辑器提示和调试记录 */
   description?: string
-  /** 方法执行超时时间，单位毫秒；不配置时使用系统默认值 */
-  timeout?: number
   /** defineConfig 脚本代码，声明生命周期与 methods */
   code: string
 }
 ```
 
-`name`、`description` 用于工具列表和契约说明。`execute.code` 是 Widget 的交互脚本，脚本通过 `this.$input` 读取入参，通过 `this.$setState` 写入当前聊天消息内的 Widget 运行态 state，通过 `this.$sendMessage` 上行聊天消息。
+`name`、`description` 用于工具列表和契约说明，也是模型判断是否需要打开 Widget 的主要文本依据。`execute.code` 是 Widget 的交互脚本，脚本通过 `this.$input` 读取入参，通过 `this.$setState` 写入当前聊天消息内的 Widget 运行态 state，通过 `this.$http` 调用托管 request，通过 `this.$sendMessage` 上行聊天消息。
 
 方法执行控制规则：
 
-- `enabled` 缺省视为 `true`；禁用后不会出现在工具可用列表中，也不会被元素事件触发。
-- `description` 用于编辑器提示、权限确认和调试记录，不参与执行逻辑。
-- `timeout` 只允许缩短系统默认超时；超过系统上限时按系统上限处理。
-- `methods` 内的方法只作为元素事件入口，第一版不提供方法间互调，因此不存在方法递归调用问题。后续如引入互调，需要重新定义调用深度和循环检测。
+- `enabled` 缺省视为 `true`；禁用后不执行 `mounted`、`unmounted` 或命名方法。
+- `description` 用于编辑器提示和调试记录，不参与执行逻辑。
+- 交互脚本本身不维护 timeout 配置；网络请求超时、队列和响应大小限制统一由底层 `request` 能力处理。
+- `methods` 内的方法只作为元素事件入口或后续显式运行入口，第一版不提供方法间互调，因此不存在方法递归调用问题。后续如引入互调，需要重新定义调用深度和循环检测。
+- 调用不存在的命名方法时保持原 Widget part 不变，不进入 `awaiting_user_input`。
 
 ### 元素级动态元信息
 
@@ -131,28 +131,9 @@ metadata: {
 
 这条规则是为了减少组件开发者和Widget作者的心智负担：一个字段只有一个来源，不再拆成两个字段来源。如果未来列表、表单、按钮等元素需要模板能力，也应沿用同样模式，例如 `metadata.items`、`metadata.label`、`metadata.defaultValue`，而不是增加第二套模板存储。
 
-事件到方法的关联关系存放在 `element.metadata.handlers` 中：
+事件到方法的关联后续也应由元素自己声明和编辑，不新增一个全局复杂事件配置器。当前已落地的运行态只把节点 `submit` 事件向上透传，由 `BubblePartWidget` 统一转换为 `widget_result` 或执行 `unmounted` 后的 `$sendMessage`。未来 Button、List、Form 等元素可以在自己的 `metadata` 中保存事件到 `methods` 的映射，例如 `metadata.submitMethod = "confirmOrder"`，再由运行态调用 `runWidgetMethod(part, methodName)`。
 
-```ts
-interface WidgetElementHandler {
-  /** 事件触发时执行 Widget 顶层 execute */
-  action: 'execute'
-}
-```
-
-`handlers` 默认只负责把元素事件连接到顶层 `execute`：
-
-```ts
-metadata: {
-  handlers: {
-    click: {
-      action: 'execute'
-    }
-  }
-}
-```
-
-模板展示保持声明式，因为它只是简单展示逻辑。事件不再配置一段复杂流程，而是触发顶层 `execute`。复杂分支、API 调用、状态写入和结果返回都放在 `execute` 函数中完成。
+模板展示保持声明式，因为它只是简单展示逻辑。事件不配置一段复杂流程；复杂分支、API 调用、状态写入和上行消息都放在 `execute.code` 的生命周期或命名方法中完成。
 
 ### 模板表达式语法
 
@@ -226,10 +207,11 @@ interface WidgetMethodExecutionRecord {
 
 ```ts
 interface ChatMessageWidgetPart {
+  id: string
   type: 'widget'
   sessionId: string
   widgetId: string
-  status: 'created' | 'mounted' | 'running' | 'awaiting_user_input' | 'completed' | 'failure' | 'cancelled'
+  status: 'created' | 'mounted' | 'running' | 'awaiting_user_input' | 'finished' | 'failure' | 'cancelled'
   value: WidgetData
   renderContext: {
     input: Record<string, unknown>
@@ -251,11 +233,13 @@ created
   -> mounted
 mounted
   -> awaiting_user_input
+  -> finished
+  -> failure
 awaiting_user_input
   -> running
 running
   -> awaiting_user_input
-  -> completed（this.$sendMessage 成功后执行 unmounted）
+  -> finished（this.$sendMessage 成功后执行 unmounted）
   -> failure
   -> cancelled
 ```
@@ -266,10 +250,8 @@ running
 - `running` 状态下触发的新事件默认排队；如果事件来自同一个元素同一种事件，可以合并或忽略，具体由元素类型决定。
 - `awaiting_user_input` 状态下只允许处理当前等待问题对应的回答、取消或确认事件；其他元素事件应被禁用或返回 `ACTION_NOT_SUPPORTED`。
 - 用户取消等待输入时返回 `status: 'cancelled'`、code 为 `USER_CANCELLED`，Widget part 进入 `cancelled`。
-- 权限确认弹窗被关闭但用户没有明确选择时返回 `status: 'failure'`、code 为 `CONFIRMATION_DISMISSED`。
-- 用户明确拒绝权限时返回 `status: 'failure'`、code 为 `PERMISSION_DENIED`。
 
-## 元素渲染
+## 元素渲染与运行态容器
 
 元素渲染统一从 `useRenderContext` 读取上下文：
 
@@ -280,7 +262,7 @@ interface WidgetRenderContext {
 }
 ```
 
-编辑器场景由 `BWidget` 从 `WidgetData.metadata.previewContext` 读取设计期预览上下文并 provide；运行态场景由后续 `BWidgetRuntime` 接收 `WidgetData` 和当前消息 Widget part 的上下文并 provide。中间层组件不逐级透传 `renderContext` prop。
+编辑器场景由 `BWidget` 从 `WidgetData.metadata.previewContext` 读取设计期预览上下文并 provide；运行态场景由 `BWidgetRuntime` 接收 `WidgetData` 和当前消息 Widget part 的上下文并 provide。中间层组件不逐级透传 `renderContext` prop。
 
 元素视图组件只解析自己支持的字段：
 
@@ -298,15 +280,15 @@ useElementDisplayContent(element, 'content')
 resolveWidgetTemplateFieldText(metadata, 'content', context)
 ```
 
-事件执行 helper 后续再补，第一段运行态只负责渲染，不处理点击事件。
+事件执行 helper 后续再补，当前运行态已支持把节点提交事件交给聊天气泡统一处理。
 
-### 下一步：运行态只读容器
+### 运行态容器
 
-下一步新增一个最小 `BWidgetRuntime`，只解决“聊天里展示Widget”的问题。运行态不使用无限Widget，不读取编辑态 `viewport.center` / `viewport.zoom` 作为展示视口，而是把所有节点的渲染后边界当成内容容器边界：
+`BWidgetRuntime` 解决“聊天里展示 Widget”的问题。运行态不使用无限 Widget，不读取编辑态 `viewport.center` / `viewport.zoom` 作为展示视口，而是把所有节点的渲染后边界当成内容容器边界：
 
 ```ts
 interface BWidgetRuntimeProps {
-  dataItem: WidgetData
+  value: WidgetData
   renderContext: WidgetRenderContext
 }
 ```
@@ -321,8 +303,9 @@ interface BWidgetRuntimeProps {
 - 容器高度根据缩放比例自动计算。
 - 通过 `provideRenderContext` 把 `renderContext` 提供给元素。
 - 复用现有元素视图和几何计算，验证 Text 模板可以在聊天消息里按当前消息 Widget part 的 state 更新。
-- 不修改传入的 `dataItem`，运行态 state 更新写回当前聊天消息的 Widget part。
-- 第一版不处理元素事件、方法执行、权限确认或 HTTP。
+- 不修改传入的 `value`，运行态 state 更新写回当前聊天消息的 Widget part。
+- 透传节点 `submit` 事件，由 `BubblePartWidget` 在聊天消息层补充 session 信息、执行 `unmounted`、写回 Widget part 或发送 `widget_result`。
+- 不提供 Widget 级权限确认；HTTP 只通过脚本运行态注入的 `$http` 进入底层 request。
 
 运行态布局计算可以抽成纯工具函数，供组件和测试共同验证：
 
@@ -392,9 +375,9 @@ defineConfig({
 interface WidgetThisContext {
   $input: Record<string, unknown>
   $state: Record<string, unknown>
-  $event?: unknown
   $setState: (path: string, value: unknown) => void
   $sendMessage: (message: WidgetSendMessageInput) => Promise<void>
+  $http: WidgetHttpClient
 }
 
 type WidgetSendMessageInput =
@@ -405,63 +388,33 @@ type WidgetSendMessageInput =
 
 脚本不能直接访问 `window`、Electron API、Node 文件系统 API、`process` 或不受限制的 import。
 
-轻量纯表达式求值可以在渲染进程执行。调用 `http`、`ai` 或长耗时工作的代码，应在主进程 worker 或等价隔离边界中执行。所有脚本执行都需要超时、取消、异常捕获和结果归一化。
+当前脚本运行态是受控解释器，不执行任意 JavaScript。第一版只解析有限语句：局部常量声明、`this.$setState(...)`、`this.$sendMessage(...)`、`await this.$http.get/post/put/patch/delete(...)`，以及字面量、对象字面量、数组字面量、`this.$input.*`、`this.$state.*`、局部变量属性读取。复杂表达式、循环、任意函数调用和全局 API 都不会执行。
 
 调用 `this.$sendMessage(...)` 表示当前小组件交互结束，并向聊天上行一条文本消息。未调用 `$sendMessage` 时，小组件保持等待用户交互状态。
 
 ## HTTP 与权限
 
-脚本只能通过注入的 `http` 客户端发起请求。第一版不允许Widget方法直接使用 `fetch`、`XMLHttpRequest` 或第三方 HTTP 客户端绕过权限层。
+脚本只能通过注入的 `$http` 客户端发起请求。第一版不允许 Widget 方法直接使用 `fetch`、`XMLHttpRequest` 或第三方 HTTP 客户端，也不提供用户可配置的 HTTP 权限白名单。
 
 ```ts
-metadata: {
-  skill: {
-    permissions: {
-      defaultHttpPolicy: 'confirm',
-      http: [
-        {
-          origin: 'https://api.example.com',
-          paths: ['/weather'],
-          httpMethods: ['GET'],
-          sensitiveHeaders: [],
-          requireConfirmation: false
-        }
-      ]
-    }
-  }
-}
+const weather = await this.$http.get('https://api.example.com/weather', {
+  query: { city: this.$input.city }
+})
 ```
 
-权限粒度：
+`$http` 方法最终调用通用 `ElectronAPI.request(input)`，主进程 request 层统一处理：
 
-- `origin`：请求 URL 的协议、主机和端口。执行器使用标准 `URL` 解析后比较，禁止用字符串前缀匹配完整 URL。
-- `paths`：可选路径前缀或路径模式；不配置时表示该 origin 下所有路径。权限匹配不依赖 query，query 只参与请求参数和审计记录。
-- `httpMethods`：这条权限规则允许哪些 HTTP method；不配置时默认只允许 `GET`。
-- `sensitiveHeaders`：允许脚本显式携带的敏感 header 名称，例如 `authorization`、`cookie`、`x-api-key`。未声明的敏感 header 应按 `defaultHttpPolicy` 确认或拒绝。
-- `requireConfirmation`：即使命中规则也要求用户确认，适合付款、下单、发消息等有副作用操作。
+- 只允许 `http:` / `https:` URL。
+- 支持 `GET`、`POST`、`PUT`、`PATCH`、`DELETE`。
+- `GET` 不发送 body。
+- 字符串、`Blob`、`FormData`、`ReadableStream`、`URLSearchParams`、`ArrayBuffer` 作为特殊 body 原样传给 fetch。
+- 普通 JSON 值自动 `JSON.stringify` 并设置 `content-type: application/json`。
+- 请求默认超时由底层 `request` 常量控制。
+- 主进程队列只限制并发，不限制等待队列长度。
+- 响应体按流式读取累计大小，超过上限立即取消读取。
+- JSON 响应返回解析后的数据，其他响应返回文本。
 
-通配符规则：
-
-- 不支持全局 `*`，持久化Widget不能声明“允许任意网络访问”。
-- 支持受限子域通配符，例如 `https://*.example.com`。
-- 子域通配符只匹配子域，不匹配顶级域本身；如果要允许 `https://example.com`，必须单独声明。
-- 通配符只允许出现在 hostname 的最左侧一段，不支持 `https://api.*.com`、`https://*` 或路径中的通配任意跨域能力。
-
-代理策略：
-
-- 所有Widget HTTP 请求统一走主进程代理或等价隔离服务。
-- 渲染进程只发送结构化请求意图，主进程负责权限匹配、确认弹窗、header 过滤、redirect 复核、超时和审计。
-- redirect 后的新 URL 必须重新校验 origin、path、HTTP method 和敏感 header；不允许通过重定向绕过白名单。
-- 主进程应剥离未允许的敏感 header，并在需要确认时展示 origin、路径、HTTP method、Widget方法名和敏感 header 摘要。
-
-权限结果：
-
-- 命中允许规则且不需要确认时，请求直接执行。
-- 未命中规则时，根据 `defaultHttpPolicy` 决定弹确认框或直接拒绝；不配置时建议默认 `confirm`，但全局设置可以改为更严格的 `deny`。
-- 用户明确点击“拒绝”时返回 `status: 'failure'`，code 为 `PERMISSION_DENIED`。
-- 用户关闭确认框或点击“不再处理/取消”这类没有授予或拒绝含义的操作时返回 `status: 'failure'`，code 为 `CONFIRMATION_DISMISSED`。
-- 用户取消当前正在执行的Widget动作或等待输入时返回 `status: 'cancelled'`，code 为 `USER_CANCELLED`。
-- 网络错误、HTTP 解析错误或代理异常返回 `status: 'failure'`，code 为 `EXECUTION_FAILED`，并附带标准化错误信息。
+第一版不支持脚本自定义 header，也不做 per-widget origin/path/method/sensitive-header 权限配置。后续如果要接入高风险网络能力，应作为产品级集成或全局平台策略设计，而不是放进 Widget 作者配置面板。
 
 ## 数据流示例
 
@@ -470,8 +423,8 @@ metadata: {
 1. 用户输入“查上海天气”。
 2. 模型读取可用 Widget 契约，决定调用天气 Widget。
 3. 模型调用 `open_widget`，传入 `{ city: '上海' }`。
-4. Widget part 创建后进入运行态，并在 `mounted` 或后续方法中调用 `loadWeather`。
-5. `loadWeather` 调用已允许的天气 API。
+4. Widget part 创建后进入运行态，并在 `mounted` 中调用 `this.$http.get(...)`。
+5. 底层 `request` 执行天气 API 请求。
 6. 成功结果写入 `state.weather`。
 7. Text 元素渲染 `{{ state.weather.temperature }}` 和 `{{ state.weather.condition }}`。
 
@@ -480,22 +433,20 @@ metadata: {
 1. 用户输入“喝咖啡”。
 2. 模型读取可用 Widget 契约，决定调用咖啡 Widget。
 3. 模型调用 `open_widget`，传入位置、偏好等可选 input。
-4. Widget方法搜索咖啡选项。
+4. Widget `mounted` 或后续命名方法搜索咖啡选项。
 5. List 元素通过模板字段读取 `state.coffeeList`。
 6. 用户选择某个列表项。
-7. item 事件触发关联方法，方法写入 `state.selectedCoffee`，或返回 `awaiting_user_input` 继续选择杯型和定制项。
+7. item 事件后续可触发关联方法，方法写入 `state.selectedCoffee`，或保持 `awaiting_user_input` 继续选择杯型和定制项。
 
 ## 错误处理
 
 - 缺少必填入参：模型继续追问，或渲染Widget表单。
 - 模板路径不存在：渲染 fallback，并可在编辑器模式显示非阻塞提示。
 - 脚本语法错误：允许保存；运行时返回 `failure`。
-- 脚本超时：返回 code 为 `TOOL_TIMEOUT` 的 `failure`。
-- 权限明确拒绝：返回 code 为 `PERMISSION_DENIED` 的 `failure`。
-- 权限确认被关闭或取消：返回 code 为 `CONFIRMATION_DISMISSED` 的 `failure`。
+- 调用不存在的命名方法：保持当前 Widget part 不变。
 - 用户取消当前Widget动作或等待输入：返回 code 为 `USER_CANCELLED` 的 `cancelled`。
 - `awaiting_user_input` 期间触发无关事件：返回 code 为 `ACTION_NOT_SUPPORTED` 的 `failure`，或在 UI 层禁用该事件入口。
-- HTTP 错误：返回带标准化消息的 `failure`。
+- HTTP URL 非法、超时、响应过大或解析失败：返回带标准化消息的 `failure`。
 - 等待用户输入：当前消息的 Widget part 状态变为 `awaiting_user_input`，聊天等待用户回答或元素交互。
 
 ## 测试
@@ -508,40 +459,28 @@ metadata: {
 - `Text/Setter.vue` 通过一个 `BPromptEditor` 编辑静态内容和动态模板。
 - `useElementTemplate`、`useElementDisplayContent`、`useElementVariables`、`useRenderContext` hooks。
 - 编辑期 `metadata.previewContext` 的读写和错误提示回填。
-
-下一步运行态只读容器应包含以下测试：
-
 - `BWidgetRuntime` 根据传入 `renderContext` 渲染模板字段。
 - `BWidgetRuntime` 使用节点渲染后边界作为内容容器边界，不使用无限Widget。
 - `BWidgetRuntime` 等比缩放内容舞台到容器宽度，并按缩放比例计算容器高度。
 - `BWidgetRuntime` 不展示编辑器工具栏、Setter、元素库、无限Widget、选中态编辑入口。
 - `BWidgetRuntime` 不修改来源 `WidgetData`。
 - `renderContext` 更新后，Text 元素展示内容同步更新。
-
-后续 Skill 执行阶段再补以下测试：
-
-- Widget skill metadata 归一化。
-- `WidgetExecuteMethod.enabled`、`description`、`timeout` 的默认值、展示和执行控制。
-- 创建 session 时不修改源 `WidgetData`。
-- 脚本执行结果归一化。
-- 第一版不提供 `ctx.methods`，不做多方法递归兼容。
-- HTTP 权限按 origin、路径、HTTP method、敏感 header 匹配。
-- HTTP 通配符、redirect 复核、主进程代理、确认、关闭确认、拒绝和失败路径。
-- Session 状态转换，以及 `running`、`awaiting_user_input` 下的并发和重入行为。
+- `widget` / `open_widget` 工具只从已启用且解析成功的小组件列表中命中。
+- `open_widget` 工具入参只包含 `id` 和可选 `input`，不接收 state 或 output。
+- `open_widget` 工具结果可派生聊天内 Widget part，并在 `MessageBubble` 中渲染 `BWidgetRuntime`。
+- `WidgetExecuteMethod.enabled`、`description`、`defineConfig` 类型提示和状态 schema 推导。
+- `mounted`、`unmounted`、命名方法、缺失方法、`this.$setState`、`this.$sendMessage` 和 `$http` 受控执行。
+- 托管 request 的协议校验、query 拼接、GET body 忽略、特殊 body 直传、超时、并发队列和响应大小流式中止。
 - `WidgetSubmitResult` 与现有聊天工具结果结构保持相近，但不伪装成 tool result 消息。
 
 ## 建议实现顺序
 
-推荐实现顺序：
+推荐下一步实现顺序：
 
-1. 收口设计文档，确保协议只保留模板字段单来源。
-2. 新增 `BWidgetRuntime`，支持传入 `WidgetData` 和 `WidgetRenderContext`，按节点内容边界缩放为只读卡片。
-3. 在聊天消息里接入一个 mock Widget session，先手动展示天气或咖啡Widget。
-4. 建立 Widget skill session 模型和状态字段，但暂不执行脚本。
-5. 使用现有 `widget` / `open_widget` 工具打开天气或咖啡Widget，完成工具调用纵向闭环。
-6. 共享 schema 与执行结果别名。
-7. Widget skill metadata 类型、顶层 `execute` 执行控制字段和归一化。
-8. 带结果归一化和超时控制的脚本执行器。
-9. HTTP 主进程代理和细粒度权限检查。
+1. 继续完善元素级交互：Button/List/Form 自己声明 submit/click/select 到 `methods` 的映射，不新增全局复杂事件配置器。
+2. 将 `runWidgetMethod` 接入具体元素事件，补充同一 Widget part 的并发/重入策略。
+3. 完善表单类 Widget 的提交体验，让提交结果统一走 `WidgetSubmitResult` 或 `$sendMessage`。
+4. 扩展受控脚本解释器的表达式能力，但仍避免任意 JavaScript 和全局 API。
+5. 如需要高风险网络、凭据或第三方账号能力，再设计产品级集成和全局平台策略，不放进 Widget 作者配置面板。
 
-这个顺序可以先交付可用的工具调用纵向闭环，同时保持与更丰富元素类型兼容。
+这个顺序可以在已经可用的工具调用纵向闭环上继续增加交互能力，同时保持与更丰富元素类型兼容。
