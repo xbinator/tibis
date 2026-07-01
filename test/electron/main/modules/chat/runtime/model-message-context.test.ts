@@ -4,6 +4,7 @@
  */
 import type { ChatMessageRecord } from 'types/chat';
 import { describe, expect, it } from 'vitest';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { toRuntimeModelMessages } from '../../../../../../electron/main/modules/chat/runtime/context/model-message.mjs';
 
 /**
@@ -273,5 +274,92 @@ describe('runtime model message context', (): void => {
       },
       { role: 'assistant', content: [{ type: 'text', text: 'The file exports ok.' }] }
     ]);
+  });
+
+  it('keeps open_widget snapshots out of runtime model tool results', (): void => {
+    const assistant = createMessage('a-widget', 'assistant', '');
+    assistant.parts = [
+      {
+        type: 'tool',
+        toolCallId: 'tool-call-widget',
+        toolName: 'open_widget',
+        status: 'done',
+        input: { id: 'weather' },
+        result: {
+          toolName: 'open_widget',
+          status: 'success',
+          data: {
+            kind: 'widget_display',
+            sessionId: 'widget-weather-tool-call-widget',
+            widgetId: 'weather',
+            value: createDefaultWidgetData(),
+            renderContext: {
+              input: { city: '上海' },
+              state: {}
+            }
+          }
+        }
+      }
+    ];
+
+    expect(toRuntimeModelMessages([assistant])).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'tool-call-widget', toolName: 'open_widget', input: { id: 'weather' } }]
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'tool-call-widget',
+            toolName: 'open_widget',
+            output: {
+              type: 'json',
+              value: {
+                toolName: 'open_widget',
+                status: 'success',
+                data: {
+                  kind: 'widget_display',
+                  sessionId: 'widget-weather-tool-call-widget',
+                  widgetId: 'weather'
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]);
+  });
+
+  it('converts widget result parts into a runtime model user text part', (): void => {
+    const userMessage = createMessage('u-widget-result', 'user', '');
+    const widgetResultPart: ChatMessageRecord['parts'][number] = {
+      type: 'widget_result',
+      sessionId: 'widget-coffee-tool-call-widget',
+      widgetId: 'coffee',
+      result: {
+        status: 'success',
+        data: {
+          coffeeId: 'latte',
+          size: 'large'
+        }
+      },
+      submittedAt: '2026-06-30T12:00:00.000Z'
+    } as unknown as ChatMessageRecord['parts'][number];
+    userMessage.parts = [widgetResultPart];
+
+    const modelMessages = toRuntimeModelMessages([userMessage]);
+
+    expect(modelMessages).toHaveLength(1);
+    expect(modelMessages[0]).toEqual({
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(widgetResultPart, null, 2)
+        }
+      ]
+    });
   });
 });

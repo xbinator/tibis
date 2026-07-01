@@ -3,7 +3,7 @@
  * @description ChatRuntime 主进程模型上下文转换。
  */
 import type { JSONValue, ModelMessage } from 'ai';
-import type { ChatMessageFilePart, ChatMessagePart, ChatMessageRecord } from 'types/chat';
+import type { ChatMessageFilePart, ChatMessagePart, ChatMessageRecord, ChatMessageToolPart, ChatMessageWidgetResultPart } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 
 /** 可发送给模型的聊天消息。 */
@@ -50,15 +50,58 @@ type ToolModelMessageContent = Array<{
 /** User 模型消息内容片段。 */
 type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'image'; image: string; mediaType?: string }>;
 
+/** Runtime 工具结果类型。 */
+type RuntimeToolResult = NonNullable<ChatMessageToolPart['result']>;
+
 /** 自动压缩后继续当前任务的用户态指令。 */
 const COMPACTION_CONTINUATION_PROMPT = '继续完成当前用户任务。以上 COMPRESSED_CONTEXT 是当前任务的压缩上下文，请基于它继续执行，不要复述压缩内容。';
 /** 后续已有真实消息时，压缩后进展使用的中性上下文说明。 */
 const COMPACTION_PROGRESS_CONTEXT_PROMPT = '以下是本次压缩之后、后续用户消息之前已经发生的当前轮进展。请把它们视为已完成的历史事实，不要复述。';
 /** 压缩后续跑上下文中单个结构化值的最大字符数。 */
 const MAX_POST_COMPACTION_VALUE_LENGTH = 12000;
+/** 打开小组件工具名称。 */
+const OPEN_WIDGET_TOOL_NAME = 'open_widget';
 
 /** 压缩后进展写入模型上下文的模式。 */
 type CompactionProgressMode = 'continue' | 'context';
+
+/**
+ * 判断值是否为普通对象。
+ * @param value - 待判断值
+ * @returns 是否为普通对象
+ */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 判断工具结果数据是否为小组件展示载荷。
+ * @param value - 工具结果数据
+ * @returns 是否为小组件展示载荷
+ */
+function isOpenWidgetDisplayPayload(value: unknown): value is { kind: 'widget_display'; sessionId: string; widgetId: string } {
+  return isPlainRecord(value) && value.kind === 'widget_display' && typeof value.sessionId === 'string' && typeof value.widgetId === 'string';
+}
+
+/**
+ * 创建模型可见工具结果，去掉只供 UI 渲染使用的小组件快照。
+ * @param part - 工具消息片段
+ * @returns 模型可见工具结果
+ */
+function createModelVisibleToolResult(part: ChatMessageToolPart & { result: RuntimeToolResult }): RuntimeToolResult {
+  if (part.toolName !== OPEN_WIDGET_TOOL_NAME || part.result.status !== 'success' || !isOpenWidgetDisplayPayload(part.result.data)) {
+    return part.result;
+  }
+
+  return {
+    ...part.result,
+    data: {
+      kind: part.result.data.kind,
+      sessionId: part.result.data.sessionId,
+      widgetId: part.result.data.widgetId
+    }
+  };
+}
 
 /**
  * 判断消息是否为成功压缩边界。
@@ -209,7 +252,7 @@ function createPostCompactionPartLines(part: ChatMessagePart, index: number): st
         lines.push(`   input_text: ${truncatePostCompactionText(part.inputText)}`);
       }
       if (part.result) {
-        lines.push(`   result: ${stringifyPostCompactionValue(part.result)}`);
+        lines.push(`   result: ${stringifyPostCompactionValue(createModelVisibleToolResult({ ...part, result: part.result }))}`);
       }
       return lines;
     }
@@ -363,6 +406,37 @@ function isFilePart(part: ChatMessagePart): part is ChatMessageFilePart {
 }
 
 /**
+ * 判断消息片段是否为 Widget 提交结果。
+ * @param part - 消息片段
+ * @returns 是否为 Widget 提交结果
+ */
+function isWidgetResultPart(part: ChatMessagePart): part is ChatMessageWidgetResultPart {
+  return part.type === 'widget_result';
+}
+
+/**
+ * 判断用户消息是否包含需要以 content part 传递的结构化文本片段。
+ * @param message - 用户消息
+ * @returns 是否包含结构化文本片段
+ */
+function hasStructuredUserTextPart(message: RuntimeUserMessageRecord): boolean {
+  return message.parts.some(isWidgetResultPart);
+}
+
+/**
+ * 将结构化用户片段转为模型可读文本。
+ * @param value - 结构化片段
+ * @returns JSON 文本
+ */
+function stringifyUserModelTextValue(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
  * 转义 XML 属性值。
  * @param value - 原始属性值
  * @returns 转义后的属性值
@@ -394,6 +468,8 @@ function createUserModelText(message: RuntimeUserMessageRecord): string {
         text += part.text;
       } else if (isFilePart(part)) {
         text += toUserFileXmlText(part);
+      } else if (isWidgetResultPart(part)) {
+        text += `${text ? '\n' : ''}${stringifyUserModelTextValue(part)}`;
       }
     }
     return text;
@@ -410,7 +486,7 @@ function createUserModelText(message: RuntimeUserMessageRecord): string {
 function toUserModelMessage(message: RuntimeUserMessageRecord): ModelMessage | undefined {
   const userText = createUserModelText(message);
   const imageFiles = message.files?.filter((file) => file.type === 'image' && file.url) ?? [];
-  if (!imageFiles.length) return userText ? { role: 'user', content: userText } : undefined;
+  if (!imageFiles.length && !hasStructuredUserTextPart(message)) return userText ? { role: 'user', content: userText } : undefined;
 
   const contentParts: UserModelMessageContent = [];
   if (userText) contentParts.push({ type: 'text', text: userText });
@@ -482,7 +558,7 @@ function toAssistantModelMessages(message: RuntimeAssistantMessageRecord): Model
         type: 'tool-result',
         toolCallId: part.toolCallId,
         toolName: part.toolName,
-        output: { type: 'json', value: toJsonValue(part.result) }
+        output: { type: 'json', value: toJsonValue(createModelVisibleToolResult({ ...part, result: part.result })) }
       });
       continue;
     }
