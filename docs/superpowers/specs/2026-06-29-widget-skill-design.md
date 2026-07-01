@@ -2,13 +2,12 @@
 
 ## 概要
 
-这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以被聊天发现、被 AI 路由选中，并以交互式Widget卡片的形式展示给用户。Widget本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段。AI 发现只使用 `WidgetData.name` 和 `WidgetData.description`；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互逻辑放在元素自己的 `metadata.handlers` 中，并由 `src/components/BWidget/elements/**/Setter.vue` 和 `src/components/BWidget/elements/**/index.vue` 分别负责编辑和渲染。
+这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以由聊天运行时通过 `widget` / `open_widget` 工具按需打开，并以交互式Widget卡片的形式展示给用户。Widget本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段。工具暴露只使用必要的 Widget 契约信息；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互逻辑放在元素自己的 `metadata.handlers` 中，并由 `src/components/BWidget/elements/**/Setter.vue` 和 `src/components/BWidget/elements/**/index.vue` 分别负责编辑和渲染。
 
-第一条纵向闭环应支持天气或咖啡Widget：
+第一条纵向闭环应支持通过工具打开天气或咖啡Widget：
 
-- 用户输入“查天气”或“喝咖啡”。
-- 聊天从工作区Widget和全局Widget能力库中找到匹配的 Widget Skill。
-- 高置信度匹配自动启动；候选模糊时让用户选择。
+- 模型根据对话需要调用 `widget` 读取可用 Widget 契约。
+- 模型调用 `open_widget` 打开指定 Widget，并传入可选 `input`。
 - Widget在聊天中作为一次会话展示，而不是打开编辑器页面。
 - 元素根据会话的 `input`、`state` 解析模板字段。
 - 元素事件关联Widget方法，Widget方法是受控环境中执行的完整函数。
@@ -24,14 +23,16 @@
 - 让每个Widget元素自己拥有动态字段和交互能力。
 - 允许Widget作者为Widget方法编写完整函数，并在元素事件中关联这些方法。
 - 复用现有 AI 工具执行结果结构，作为Widget方法和事件处理结果。
-- 同时支持工作区Widget发现，以及未来的全局Widget能力库。
-- 先交付一个最小可体验的运行态Widget容器，再逐步接入路由、方法执行和 HTTP 权限。
+- 通过现有 AI tool registry 暴露工作区 Widget，并由 `open_widget` 创建聊天内 Widget 消息。
+- 先交付一个最小可体验的运行态Widget容器，再逐步接入方法执行和 HTTP 权限。
 
 ## 非目标
 
 - 第一版不实现完整市场或能力商店。
+- 不实现自然语言 Widget Skill 路由器、置信度排序、自动启动或候选选择。
+- 第一版不实现全局Widget能力库。
 - 第一版不要求所有Widget元素都动态化。
-- 下一步不实现 AI 路由、脚本执行器、HTTP 代理或权限弹窗。
+- 下一步不实现脚本执行器、HTTP 代理或权限弹窗。
 - 不允许Widget脚本访问不受限制的浏览器、Electron、Node 或文件系统 API。
 - 不把运行时状态写回原始 `.tibis` 文件，除非用户明确编辑或保存模板。
 - 不替换现有 AI tools、MCP tools 或 chat runtime；Widget Skill 在需要时与它们集成。
@@ -73,15 +74,15 @@ interface WidgetData {
 
 `state` 不作为用户需要手写维护的 schema 配置。编辑器通过 `buildWidgetStateSchema` 静态分析 Widget 方法脚本中的 `this.$setState(path, value)` 调用，生成可绑定的 `state.*` 变量候选。第一版只推导静态字符串路径、对象字面量、基础字面量，以及可对应到 `inputSchema` 的 `this.$input.x` 类型；动态路径或复杂表达式不强行猜测。
 
-### Widget 发现与执行入口
+### Widget 工具契约与执行入口
 
-Widget 发现只使用 `WidgetData.name` 与 `WidgetData.description`；交互脚本配置放在 `WidgetData.execute` 下。第一版脚本使用 `defineConfig({ mounted, unmounted, methods })`，不兼容更早的 `execute(ctx)` 草稿，也不做旧数据迁移：
+聊天运行时通过 `widget` 工具读取 Widget 契约，并通过 `open_widget` 工具打开指定 Widget。工具描述与工具结果只暴露必要的契约信息，不引入独立的自然语言路由索引。交互脚本配置放在 `WidgetData.execute` 下。第一版脚本使用 `defineConfig({ mounted, unmounted, methods })`，不兼容更早的 `execute(ctx)` 草稿，也不做旧数据迁移：
 
 ```ts
 interface WidgetData {
-  /** Widget 名称，用于列表展示和 AI 命中 */
+  /** Widget 名称，用于列表展示和工具描述 */
   name: string
-  /** Widget 用途说明，用于列表展示和 AI 命中 */
+  /** Widget 用途说明，用于列表展示和工具描述 */
   description: string
   /** AI 调用 Widget 时需要填写的输入结构 */
   inputSchema: ObjectJsonSchema
@@ -100,7 +101,7 @@ interface WidgetData {
 interface WidgetExecuteMethod {
   /** 方法是否启用，默认 true */
   enabled?: boolean
-  /** 方法说明，用于编辑器提示、AI 路由解释和权限确认文案 */
+  /** 方法说明，用于编辑器提示、调试记录和权限确认文案 */
   description?: string
   /** 方法执行超时时间，单位毫秒；不配置时使用系统默认值 */
   timeout?: number
@@ -109,11 +110,11 @@ interface WidgetExecuteMethod {
 }
 ```
 
-`name`、`description` 用于 AI 命中。`execute.code` 是 Widget 的交互脚本，脚本通过 `this.$input` 读取入参，通过 `this.$setState` 写入当前聊天消息内的 Widget 运行态 state，通过 `this.$sendMessage` 上行聊天消息。
+`name`、`description` 用于工具列表和契约说明。`execute.code` 是 Widget 的交互脚本，脚本通过 `this.$input` 读取入参，通过 `this.$setState` 写入当前聊天消息内的 Widget 运行态 state，通过 `this.$sendMessage` 上行聊天消息。
 
 方法执行控制规则：
 
-- `enabled` 缺省视为 `true`；禁用后不会被路由或元素事件触发。
+- `enabled` 缺省视为 `true`；禁用后不会出现在工具可用列表中，也不会被元素事件触发。
 - `description` 用于编辑器提示、权限确认和调试记录，不参与执行逻辑。
 - `timeout` 只允许缩短系统默认超时；超过系统上限时按系统上限处理。
 - `methods` 内的方法只作为元素事件入口，第一版不提供方法间互调，因此不存在方法递归调用问题。后续如引入互调，需要重新定义调用深度和循环检测。
@@ -208,54 +209,20 @@ interface WidgetMethodExecutionRecord {
 
 这样 AI 工具、Widget方法、HTTP 调用、元素事件触发结果、取消、失败和等待用户输入都使用同一个状态模型。
 
-## Skill 发现
+## 工具打开流程
 
-Skill 路由器从两个来源构建轻量索引：
+聊天不在用户消息发送前运行独立的 Widget Skill 路由器，也不维护 `aliases`、`triggers`、置信度候选或自动启动规则。Widget 的打开由现有 AI 工具链完成：
 
-- 工作区内的 `.tibis` Widget文件。
-- 未来的全局Widget能力库。
+1. `widget` 工具在 description 中列出已启用的工作区 Widget，并允许模型按 ID 读取契约。
+2. `open_widget` 工具接收 Widget ID 和可选 `input`，返回一份用于 UI 渲染的 Widget 快照。
+3. 聊天消息渲染层把 `open_widget` 工具结果派生成 Widget part，并交给 `BWidgetRuntime` 展示。
+4. 后续元素交互和脚本生命周期只作用于当前消息内的 Widget part，不修改来源 Widget 模板。
 
-工作区Widget优先于全局能力库。索引条目只包含路由所需元信息：
-
-```ts
-interface WidgetSkillIndexEntry {
-  widgetId: string
-  source: 'workspace' | 'library'
-  name: string
-  description: string
-  aliases: string[]
-  triggers: string[]
-  inputSchema: ObjectJsonSchema
-}
-```
-
-完整Widget文件只在候选被选中后加载。
-
-## 聊天路由
-
-用户发送聊天消息时，聊天流程先运行 Widget Skill 路由器，再决定是否回落到普通回答。
-
-路由器结合 aliases、triggers、description、当前聊天上下文，以及可选的 AI 结构化分类，生成候选结果：
-
-```ts
-interface WidgetSkillRouteCandidate {
-  widgetId: string
-  source: 'workspace' | 'library'
-  confidence: number
-  extractedInput: Record<string, unknown>
-  missingFields: string[]
-}
-```
-
-启动规则：
-
-- 最高候选超过置信度阈值且没有明显冲突时，自动启动。
-- 置信度低或多个候选接近时，在聊天中展示候选列表让用户选择。
-- 必填入参缺失时，可以通过聊天追问，也可以渲染Widget里的表单元素。
+缺少必填入参时，由模型继续追问或调用 `open_widget` 时只传入已知 input；Widget 内表单元素后续也可以收集缺失字段。
 
 ## Widget 消息运行态
 
-启动 Widget Skill 会在聊天中创建一条包含 Widget part 的消息，不会修改来源Widget模板。每条 Widget 消息都是一个独立运行时：同一个 Widget 模板可以在多条消息里同时存在，每条消息拥有自己的 `input`、`state` 和生命周期记录。运行态 ID 直接使用所在聊天消息的 `Message.id`，不额外引入 `runtimeId`。
+`open_widget` 结果会在聊天渲染层派生 Widget part 展示项，不会修改来源Widget模板。每条 Widget 消息都是一个独立运行时：同一个 Widget 模板可以在多条消息里同时存在，每条消息拥有自己的 `input`、`state` 和生命周期记录。运行态 ID 直接使用所在聊天消息的 `Message.id`，不额外引入 `runtimeId`。
 
 ```ts
 interface ChatMessageWidgetPart {
@@ -501,9 +468,9 @@ metadata: {
 天气：
 
 1. 用户输入“查上海天气”。
-2. 路由器选中天气Widget。
-3. 抽取入参 `{ city: '上海' }`。
-4. 会话启动并调用 `loadWeather`。
+2. 模型读取可用 Widget 契约，决定调用天气 Widget。
+3. 模型调用 `open_widget`，传入 `{ city: '上海' }`。
+4. Widget part 创建后进入运行态，并在 `mounted` 或后续方法中调用 `loadWeather`。
 5. `loadWeather` 调用已允许的天气 API。
 6. 成功结果写入 `state.weather`。
 7. Text 元素渲染 `{{ state.weather.temperature }}` 和 `{{ state.weather.condition }}`。
@@ -511,8 +478,8 @@ metadata: {
 咖啡：
 
 1. 用户输入“喝咖啡”。
-2. 路由器选中咖啡Widget。
-3. 会话以位置、偏好等可选 input 启动。
+2. 模型读取可用 Widget 契约，决定调用咖啡 Widget。
+3. 模型调用 `open_widget`，传入位置、偏好等可选 input。
 4. Widget方法搜索咖啡选项。
 5. List 元素通过模板字段读取 `state.coffeeList`。
 6. 用户选择某个列表项。
@@ -520,7 +487,7 @@ metadata: {
 
 ## 错误处理
 
-- 缺少必填入参：路由创建用户问题，或渲染Widget表单。
+- 缺少必填入参：模型继续追问，或渲染Widget表单。
 - 模板路径不存在：渲染 fallback，并可在编辑器模式显示非阻塞提示。
 - 脚本语法错误：允许保存；运行时返回 `failure`。
 - 脚本超时：返回 code 为 `TOOL_TIMEOUT` 的 `failure`。
@@ -571,11 +538,10 @@ metadata: {
 2. 新增 `BWidgetRuntime`，支持传入 `WidgetData` 和 `WidgetRenderContext`，按节点内容边界缩放为只读卡片。
 3. 在聊天消息里接入一个 mock Widget session，先手动展示天气或咖啡Widget。
 4. 建立 Widget skill session 模型和状态字段，但暂不执行脚本。
-5. 从已加载或已索引Widget中做简单 Skill 发现。
-6. 天气或咖啡路由纵向闭环。
-7. 共享 schema 与执行结果别名。
-8. Widget skill metadata 类型、顶层 `execute` 执行控制字段和归一化。
-9. 带结果归一化和超时控制的脚本执行器。
-10. HTTP 主进程代理和细粒度权限检查。
+5. 使用现有 `widget` / `open_widget` 工具打开天气或咖啡Widget，完成工具调用纵向闭环。
+6. 共享 schema 与执行结果别名。
+7. Widget skill metadata 类型、顶层 `execute` 执行控制字段和归一化。
+8. 带结果归一化和超时控制的脚本执行器。
+9. HTTP 主进程代理和细粒度权限检查。
 
-这个顺序可以先交付可用的纵向闭环，同时保持与更丰富元素类型和全局Widget能力库兼容。
+这个顺序可以先交付可用的工具调用纵向闭环，同时保持与更丰富元素类型兼容。
