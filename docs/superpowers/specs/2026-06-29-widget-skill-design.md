@@ -14,7 +14,7 @@
 - 元素事件关联Widget方法，Widget方法是受控环境中执行的完整函数。
 - HTTP、AI、权限确认、取消、失败和等待用户输入统一返回同一种执行结果模型。
 
-当前已经完成第一段基础能力：文本元素可以通过 `{{ input.x }}`、`{{ state.y }}` 等模板读取Widget渲染上下文；模板读写、变量候选和渲染上下文已抽离为 hooks。编辑期的 `state.*` 变量候选不再依赖手写状态声明，而是从 execute 方法代码里的 `setState` 调用推导。下一步只做运行态只读Widget渲染，让聊天可以先展示一张带 session 上下文的Widget。
+当前已经完成第一段基础能力：文本元素可以通过 `{{ input.x }}`、`{{ state.y }}` 等模板读取Widget渲染上下文；模板读写、变量候选和渲染上下文已抽离为 hooks。编辑期的 `state.*` 变量候选不再依赖手写状态声明，而是从交互脚本里的 `this.$setState` 调用推导。下一步只做运行态只读Widget渲染，让聊天可以先展示一张带 session 上下文的Widget。
 
 ## 目标
 
@@ -71,11 +71,11 @@ interface WidgetData {
 
 `inputSchema` 后续应与 AI 结构化输入使用同一种对象 JSON Schema 类型。Widget 页面仍然可以提供受限的编辑体验，但持久化时不应丢弃合法 JSON Schema 字段，例如 `enum`、`default`、`additionalProperties`、`items`、`minimum`、`maxLength` 等。
 
-`state` 不作为用户需要手写维护的 schema 配置。编辑器通过 `buildWidgetStateSchema` 静态分析 Widget 方法代码中的 `setState(path, value)` / `ctx.setState(path, value)` 调用，生成可绑定的 `state.*` 变量候选。第一版只推导静态字符串路径、对象字面量、基础字面量，以及可对应到 `inputSchema` 的 `input.x` / `ctx.input.x` 类型；动态路径或复杂表达式不强行猜测。
+`state` 不作为用户需要手写维护的 schema 配置。编辑器通过 `buildWidgetStateSchema` 静态分析 Widget 方法脚本中的 `this.$setState(path, value)` 调用，生成可绑定的 `state.*` 变量候选。第一版只推导静态字符串路径、对象字面量、基础字面量，以及可对应到 `inputSchema` 的 `this.$input.x` 类型；动态路径或复杂表达式不强行猜测。
 
 ### Widget 发现与执行入口
 
-Widget 发现只使用 `WidgetData.name` 与 `WidgetData.description`；执行入口放在 `WidgetData.execute` 下。第一版只支持一个入口函数，不兼容更早的多方法草稿，也不做旧数据迁移：
+Widget 发现只使用 `WidgetData.name` 与 `WidgetData.description`；交互脚本配置放在 `WidgetData.execute` 下。第一版脚本使用 `defineConfig({ mounted, unmounted, methods })`，不兼容更早的 `execute(ctx)` 草稿，也不做旧数据迁移：
 
 ```ts
 interface WidgetData {
@@ -85,9 +85,9 @@ interface WidgetData {
   description: string
   /** AI 调用 Widget 时需要填写的输入结构 */
   inputSchema: ObjectJsonSchema
-  /** 由 execute 代码推导的运行态状态结构 */
+  /** 由交互脚本代码推导的运行态状态结构 */
   stateSchema: ObjectJsonSchema
-  /** Widget 唯一执行入口 */
+  /** Widget 交互脚本配置 */
   execute?: WidgetExecuteMethod
   /** 元素私有扩展信息 */
   metadata: WidgetMetadata
@@ -104,19 +104,19 @@ interface WidgetExecuteMethod {
   description?: string
   /** 方法执行超时时间，单位毫秒；不配置时使用系统默认值 */
   timeout?: number
-  /** 完整函数代码，函数内部完成读取上下文、调用能力、写入状态和返回结果 */
+  /** defineConfig 脚本代码，声明生命周期与 methods */
   code: string
 }
 ```
 
-`name`、`description` 用于 AI 命中。`execute` 是 Widget 唯一执行入口，方法代码应是一个完整函数，函数内部完成闭环：读取上下文、调用 HTTP/AI、写入 session state，并返回统一 `WidgetSubmitResult`。
+`name`、`description` 用于 AI 命中。`execute.code` 是 Widget 的交互脚本，脚本通过 `this.$input` 读取入参，通过 `this.$setState` 写入当前聊天消息内的 Widget 运行态 state，通过 `this.$sendMessage` 上行聊天消息。
 
 方法执行控制规则：
 
 - `enabled` 缺省视为 `true`；禁用后不会被路由或元素事件触发。
 - `description` 用于编辑器提示、权限确认和调试记录，不参与执行逻辑。
 - `timeout` 只允许缩短系统默认超时；超过系统上限时按系统上限处理。
-- 第一版不提供 `ctx.methods`，因此不存在方法间递归调用问题。后续如引入多方法，需要重新定义调用深度和循环检测。
+- `methods` 内的方法只作为元素事件入口，第一版不提供方法间互调，因此不存在方法递归调用问题。后续如引入互调，需要重新定义调用深度和循环检测。
 
 ### 元素级动态元信息
 
@@ -253,46 +253,52 @@ interface WidgetSkillRouteCandidate {
 - 置信度低或多个候选接近时，在聊天中展示候选列表让用户选择。
 - 必填入参缺失时，可以通过聊天追问，也可以渲染Widget里的表单元素。
 
-## Widget Skill 会话
+## Widget 消息运行态
 
-启动Widget Skill 会在聊天中创建一次会话，不会修改来源Widget模板。
+启动 Widget Skill 会在聊天中创建一条包含 Widget part 的消息，不会修改来源Widget模板。每条 Widget 消息都是一个独立运行时：同一个 Widget 模板可以在多条消息里同时存在，每条消息拥有自己的 `input`、`state` 和生命周期记录。运行态 ID 直接使用所在聊天消息的 `Message.id`，不额外引入 `runtimeId`。
 
 ```ts
-interface WidgetSkillSession {
+interface ChatMessageWidgetPart {
+  type: 'widget'
   sessionId: string
   widgetId: string
-  source: 'workspace' | 'library'
-  input: Record<string, unknown>
-  state: Record<string, unknown>
-  status: 'idle' | 'running' | 'awaiting_user_input' | 'success' | 'failure' | 'cancelled'
+  status: 'created' | 'mounted' | 'running' | 'awaiting_user_input' | 'completed' | 'failure' | 'cancelled'
+  value: WidgetData
+  renderContext: {
+    input: Record<string, unknown>
+    state: Record<string, unknown>
+  }
+  lifecycle: {
+    mountedAt?: string
+    unmountedAt?: string
+  }
 }
 ```
 
-这个 session 是运行时数据载体。来源 `WidgetData` 是模板，不应被 session 状态直接修改。运行态容器从 session 派生 `WidgetRenderContext`，再通过 `useRenderContext` 注入给元素渲染层。
+这个 Widget part 是运行时数据载体。来源 `WidgetData` 是模板，不应被运行态状态直接修改。运行态容器从 Widget part 的 `renderContext` 派生 `WidgetRenderContext`，再通过 `useRenderContext` 注入给元素渲染层。`this.$setState(...)` 的最终结果写回当前消息的 Widget part，并随聊天消息一起持久化；历史消息重新加载时直接使用消息里的 state 快照渲染。
 
 状态转换：
 
 ```text
-idle
-  -> running
-running
-  -> success
-  -> failure
-  -> cancelled
+created
+  -> mounted
+mounted
   -> awaiting_user_input
 awaiting_user_input
   -> running
+running
+  -> awaiting_user_input
+  -> completed（this.$sendMessage 成功后执行 unmounted）
+  -> failure
   -> cancelled
-success | failure | cancelled
-  -> idle（重新启动同一Widget会话或创建新会话时）
 ```
 
 并发和重入规则：
 
-- 同一个 session 同一时间只允许一个方法执行。
+- 同一个 Widget part 同一时间只允许一个方法执行。
 - `running` 状态下触发的新事件默认排队；如果事件来自同一个元素同一种事件，可以合并或忽略，具体由元素类型决定。
 - `awaiting_user_input` 状态下只允许处理当前等待问题对应的回答、取消或确认事件；其他元素事件应被禁用或返回 `ACTION_NOT_SUPPORTED`。
-- 用户取消等待输入时返回 `status: 'cancelled'`、code 为 `USER_CANCELLED`，session 进入 `cancelled`。
+- 用户取消等待输入时返回 `status: 'cancelled'`、code 为 `USER_CANCELLED`，Widget part 进入 `cancelled`。
 - 权限确认弹窗被关闭但用户没有明确选择时返回 `status: 'failure'`、code 为 `CONFIRMATION_DISMISSED`。
 - 用户明确拒绝权限时返回 `status: 'failure'`、code 为 `PERMISSION_DENIED`。
 
@@ -307,7 +313,7 @@ interface WidgetRenderContext {
 }
 ```
 
-编辑器场景由 `BWidget` 从 `WidgetData.metadata.previewContext` 读取设计期预览上下文并 provide；运行态场景由后续 `BWidgetRuntime` 接收 `WidgetData` 和 session 上下文并 provide。中间层组件不逐级透传 `renderContext` prop。
+编辑器场景由 `BWidget` 从 `WidgetData.metadata.previewContext` 读取设计期预览上下文并 provide；运行态场景由后续 `BWidgetRuntime` 接收 `WidgetData` 和当前消息 Widget part 的上下文并 provide。中间层组件不逐级透传 `renderContext` prop。
 
 元素视图组件只解析自己支持的字段：
 
@@ -347,8 +353,8 @@ interface BWidgetRuntimeProps {
 - 运行态舞台等比缩放到 chat 消息可用宽度，保证整张Widget完整展示，不出现横向滚动。
 - 容器高度根据缩放比例自动计算。
 - 通过 `provideRenderContext` 把 `renderContext` 提供给元素。
-- 复用现有元素视图和几何计算，验证 Text 模板可以在聊天消息里按 session 数据更新。
-- 不修改传入的 `dataItem`，session state 更新由外层聊天/Skill 会话管理。
+- 复用现有元素视图和几何计算，验证 Text 模板可以在聊天消息里按当前消息 Widget part 的 state 更新。
+- 不修改传入的 `dataItem`，运行态 state 更新写回当前聊天消息的 Widget part。
 - 第一版不处理元素事件、方法执行、权限确认或 HTTP。
 
 运行态布局计算可以抽成纯工具函数，供组件和测试共同验证：
@@ -391,48 +397,50 @@ interface WidgetRuntimeLayout {
 
 ## 脚本执行
 
-脚本以 Widget 顶层 `execute` 为唯一入口：
-
-- Widget 执行入口：来自 `WidgetData.execute`，方法代码是完整函数。
-- 元素级事件处理器：来自 `element.metadata.handlers`，默认只触发顶层 `execute`。
-
-方法代码运行在受控上下文中。推荐写成一个完整函数，一次完成闭环：
+脚本使用 `defineConfig` 声明生命周期和事件方法：
 
 ```ts
-export async function execute(ctx: WidgetScriptContext): Promise<WidgetSubmitResult> {
-  const { input, http, setState, result } = ctx
-  const response = await http.get('https://api.example.com/weather', {
-    query: { city: input.city }
-  })
+defineConfig({
+  async mounted() {
+    this.$setState('loaded', true)
+  },
 
-  setState('weather', response.data)
-  return result.success({
-    condition: String(response.data.condition ?? ''),
-    temperature: String(response.data.temperature ?? '')
-  })
-}
+  async unmounted() {
+    // 小组件运行完成后执行一次。
+  },
+
+  methods: {
+    async confirmOrder() {
+      await this.$sendMessage({
+        content: [{ type: 'text', text: '确认下单' }]
+      })
+    }
+  }
+})
 ```
 
-运行时会向函数传入受控上下文：
+运行时会把受控上下文注入到 `this`：
 
 ```ts
-interface WidgetScriptContext {
-  input: Record<string, unknown>
-  state: Record<string, unknown>
-  event?: unknown
-  http: WidgetHttpClient
-  ai: WidgetAIClient
-  setState: (path: string, value: unknown) => void
-  emit: (eventName: string, payload?: unknown) => void
-  result: ExecutionResultFactory
+interface WidgetThisContext {
+  $input: Record<string, unknown>
+  $state: Record<string, unknown>
+  $event?: unknown
+  $setState: (path: string, value: unknown) => void
+  $sendMessage: (message: WidgetSendMessageInput) => Promise<void>
 }
+
+type WidgetSendMessageInput =
+  | string
+  | Array<{ type: 'text'; text: string }>
+  | { content: string | Array<{ type: 'text'; text: string }>; isError?: boolean }
 ```
 
 脚本不能直接访问 `window`、Electron API、Node 文件系统 API、`process` 或不受限制的 import。
 
 轻量纯表达式求值可以在渲染进程执行。调用 `http`、`ai` 或长耗时工作的代码，应在主进程 worker 或等价隔离边界中执行。所有脚本执行都需要超时、取消、异常捕获和结果归一化。
 
-如果方法函数返回普通值，执行器自动包装为 `result.success({ value: String(value) })`。如果方法内部写入了 state，但没有显式返回结果，执行器可以返回 `result.success({})` 并记录 state diff。
+调用 `this.$sendMessage(...)` 表示当前小组件交互结束，并向聊天上行一条文本消息。未调用 `$sendMessage` 时，小组件保持等待用户交互状态。
 
 ## HTTP 与权限
 
@@ -521,7 +529,7 @@ metadata: {
 - 用户取消当前Widget动作或等待输入：返回 code 为 `USER_CANCELLED` 的 `cancelled`。
 - `awaiting_user_input` 期间触发无关事件：返回 code 为 `ACTION_NOT_SUPPORTED` 的 `failure`，或在 UI 层禁用该事件入口。
 - HTTP 错误：返回带标准化消息的 `failure`。
-- 等待用户输入：session 状态变为 `awaiting_user_input`，聊天等待用户回答或元素交互。
+- 等待用户输入：当前消息的 Widget part 状态变为 `awaiting_user_input`，聊天等待用户回答或元素交互。
 
 ## 测试
 
