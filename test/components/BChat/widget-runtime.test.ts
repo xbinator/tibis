@@ -3,9 +3,9 @@
  * @description BChat 小组件消息运行态脚本测试。
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
+import type { WidgetData } from 'types/widget';
 import { describe, expect, it } from 'vitest';
 import { finishWidgetRuntime, finishWidgetUnmountState, initWidgetMountState } from '@/components/BChat/utils/widgetRuntime';
-import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**

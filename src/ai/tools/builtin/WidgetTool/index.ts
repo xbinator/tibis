@@ -3,10 +3,9 @@
  * @description Widget 工具实现，LLM 通过 widget 读取说明，通过 open_widget 打开聊天小组件。
  */
 import type { AIToolContext, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
-import type { ChatMessageWidgetPart } from 'types/chat';
+import type { WidgetContract, WidgetDisplayPayload, WidgetRenderContext } from 'types/widget';
 import { cloneDeep, isPlainObject } from 'lodash-es';
 import type { WidgetDefinition } from '@/ai/widget/types';
-import type { WidgetSchemaObject } from '@/components/BWidget/types';
 import { createToolFailureResult, createToolSuccessResult } from '../../results';
 
 /** Widget 工具名称。 */
@@ -57,25 +56,6 @@ export interface OpenWidgetToolInput {
   /** 绑定到 Widget input 的数据 */
   input?: Record<string, unknown>;
 }
-
-/**
- * Widget 工具返回给模型的小组件契约。
- */
-export interface WidgetContractToolResult {
-  /** 小组件稳定 ID */
-  id: string;
-  /** 小组件名称 */
-  name: string;
-  /** 小组件用途说明 */
-  description: string;
-  /** 小组件入参 schema */
-  inputSchema: WidgetSchemaObject;
-  /** 小组件状态 schema */
-  stateSchema: WidgetSchemaObject;
-}
-
-/** 打开 Widget 工具执行结果。 */
-export type OpenWidgetToolResult = Pick<ChatMessageWidgetPart, 'sessionId' | 'widgetId' | 'value' | 'renderContext'> & { kind: 'widget_display' };
 
 /**
  * 创建可用于会话 ID 的小组件 ID。
@@ -145,7 +125,7 @@ function buildOpenWidgetDescription(store: WidgetStoreLike): string {
  * @param widget - 小组件定义
  * @returns 小组件契约
  */
-function createWidgetContractToolResult(widget: WidgetDefinition): WidgetContractToolResult {
+function createWidgetContract(widget: WidgetDefinition): WidgetContract {
   return {
     id: widget.id,
     name: widget.name,
@@ -169,7 +149,7 @@ function isWidgetInputRecord(value: unknown): value is Record<string, unknown> {
  * @param input - 打开 Widget 工具输入
  * @returns 小组件渲染上下文
  */
-function createOpenWidgetRenderContext(input: OpenWidgetToolInput): ChatMessageWidgetPart['renderContext'] {
+function createOpenWidgetRenderContext(input: OpenWidgetToolInput): WidgetRenderContext {
   return {
     input: isWidgetInputRecord(input.input) ? cloneDeep(input.input) : {},
     state: {}
@@ -193,7 +173,7 @@ function findEnabledWidgetById(store: WidgetStoreLike, id: string): WidgetDefini
  * @param context - 工具执行上下文
  * @returns 小组件展示快照
  */
-function createOpenWidgetToolResult(widget: WidgetDefinition, input: OpenWidgetToolInput, context?: AIToolContext): OpenWidgetToolResult {
+function createWidgetDisplayPayload(widget: WidgetDefinition, input: OpenWidgetToolInput, context?: AIToolContext): WidgetDisplayPayload {
   return {
     kind: 'widget_display',
     sessionId: `widget-${createSafeWidgetId(widget.id)}-${createSafeWidgetId(context?.toolCallId ?? 'manual')}`,
@@ -225,7 +205,7 @@ function createWidgetNotFoundResult(store: WidgetStoreLike, id: string, toolName
  * @param store - Widget store 实例
  * @returns 工具执行器
  */
-export function createWidgetTool(store: WidgetStoreLike): AIToolExecutor<WidgetToolInput, WidgetContractToolResult> {
+export function createWidgetTool(store: WidgetStoreLike): AIToolExecutor<WidgetToolInput, WidgetContract> {
   return {
     definition: {
       name: WIDGET_TOOL_NAME,
@@ -246,14 +226,14 @@ export function createWidgetTool(store: WidgetStoreLike): AIToolExecutor<WidgetT
         additionalProperties: false
       }
     },
-    async execute(input: WidgetToolInput): Promise<AIToolExecutionResult<WidgetContractToolResult>> {
+    async execute(input: WidgetToolInput): Promise<AIToolExecutionResult<WidgetContract>> {
       const widget = findEnabledWidgetById(store, input.id);
 
       if (!widget) {
         return createWidgetNotFoundResult(store, input.id, WIDGET_TOOL_NAME);
       }
 
-      return createToolSuccessResult(WIDGET_TOOL_NAME, createWidgetContractToolResult(widget));
+      return createToolSuccessResult(WIDGET_TOOL_NAME, createWidgetContract(widget));
     }
   };
 }
@@ -263,7 +243,7 @@ export function createWidgetTool(store: WidgetStoreLike): AIToolExecutor<WidgetT
  * @param store - Widget store 实例
  * @returns 工具执行器
  */
-export function createOpenWidgetTool(store: WidgetStoreLike): AIToolExecutor<OpenWidgetToolInput, OpenWidgetToolResult> {
+export function createOpenWidgetTool(store: WidgetStoreLike): AIToolExecutor<OpenWidgetToolInput, WidgetDisplayPayload> {
   return {
     definition: {
       name: OPEN_WIDGET_TOOL_NAME,
@@ -288,14 +268,14 @@ export function createOpenWidgetTool(store: WidgetStoreLike): AIToolExecutor<Ope
         additionalProperties: false
       }
     },
-    async execute(input: OpenWidgetToolInput, context?: AIToolContext): Promise<AIToolExecutionResult<OpenWidgetToolResult>> {
+    async execute(input: OpenWidgetToolInput, context?: AIToolContext): Promise<AIToolExecutionResult<WidgetDisplayPayload>> {
       const widget = findEnabledWidgetById(store, input.id);
 
       if (!widget) {
         return createWidgetNotFoundResult(store, input.id, OPEN_WIDGET_TOOL_NAME);
       }
 
-      return createToolSuccessResult(OPEN_WIDGET_TOOL_NAME, createOpenWidgetToolResult(widget, input, context));
+      return createToolSuccessResult(OPEN_WIDGET_TOOL_NAME, createWidgetDisplayPayload(widget, input, context));
     }
   };
 }

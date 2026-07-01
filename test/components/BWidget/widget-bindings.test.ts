@@ -2,8 +2,8 @@
  * @file widget-bindings.test.ts
  * @description 验证 BWidget 模板绑定根作用域解析。
  */
+import type { WidgetRenderContext } from 'types/widget';
 import { describe, expect, it } from 'vitest';
-import type { WidgetRenderContext } from '@/components/BWidget/types';
 import { evaluateWidgetBindingExpression, resolveWidgetTemplateValue } from '@/components/BWidget/utils/widgetBindings';
 
 /** 已移除的旧根变量名。 */

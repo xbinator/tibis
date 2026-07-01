@@ -10,16 +10,18 @@
 
 <script setup lang="ts">
 import type { Message } from '../../utils/types';
-import type { ChatMessageTextPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart, ChatMessageWidgetSubmitResult } from 'types/chat';
+import type { ChatMessageTextPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart } from 'types/chat';
+import type { WidgetRuntimeSendMessage } from 'types/widget';
 import { onMounted } from 'vue';
-import { isString, mapValues } from 'lodash-es';
+import { isString } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
-import { isPlainRecord, stringifyJsonValue, stringifyRuntimeTextValue } from '@/utils/json';
+import { createWidgetSubmitSuccessResult } from '@/shared/widget/protocol';
+import { stringifyJsonValue } from '@/utils/json';
 import { createNamespace } from '@/utils/namespace';
 import { create } from '../../utils/messageHelper';
 import { createRuntimeUserMessageSubmitAction, type BChatAdaptedUserMessageSubmitInput, type BChatSubmitAction } from '../../utils/submitAction';
-import { finishWidgetRuntime, initWidgetMountState, type WidgetRuntimeSendMessage } from '../../utils/widgetRuntime';
+import { finishWidgetRuntime, initWidgetMountState } from '../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 
@@ -54,24 +56,6 @@ interface WidgetPartFinishMessageResult {
   message: Message;
   /** 脚本声明的上行消息。 */
   sendMessage?: WidgetRuntimeSendMessage;
-}
-
-/**
- * 将小组件原始提交值转为成功结果。
- * @param output - 小组件原始提交值
- * @returns 小组件提交结果
- */
-function createWidgetSubmitSuccessResult(output: unknown): ChatMessageWidgetSubmitResult {
-  if (!isPlainRecord(output)) {
-    return {
-      status: 'success',
-      data: { value: stringifyRuntimeTextValue(output) }
-    };
-  }
-
-  const data = mapValues(output, stringifyRuntimeTextValue);
-
-  return { status: 'success', data };
 }
 
 /**

@@ -18,9 +18,9 @@ import type {
 } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import dayjs from 'dayjs';
-import { isPlainObject } from 'lodash-es';
 import { nanoid } from 'nanoid';
-import { OPEN_WIDGET_TOOL_NAME, type OpenWidgetToolResult } from '@/ai/tools/builtin/WidgetTool';
+import { OPEN_WIDGET_TOOL_NAME } from '@/ai/tools/builtin/WidgetTool';
+import { isWidgetDisplayPayload } from '@/shared/widget/protocol';
 import { asyncTo } from '@/utils/asyncTo';
 import { extractFileReferenceLines, findFileReferenceTokens } from '@/utils/file/reference';
 
@@ -66,20 +66,6 @@ type UserModelMessageContent = Array<{ type: 'text'; text: string } | { type: 'i
 
 /** 创建中断消息时可继承的 runtime 关联字段。 */
 type InterruptSourceMessage = Pick<Message, 'agentId' | 'runtimeId' | 'parentRuntimeId'>;
-
-/** 小组件展示载荷候选结构。 */
-interface WidgetDisplayPayloadCandidate {
-  /** 载荷类型 */
-  kind?: unknown;
-  /** 小组件会话 ID */
-  sessionId?: unknown;
-  /** 小组件稳定 ID */
-  widgetId?: unknown;
-  /** 小组件快照值 */
-  value?: unknown;
-  /** 渲染上下文 */
-  renderContext?: unknown;
-}
 
 /** 工具结果类型 */
 export type ToolResult = NonNullable<ChatMessageToolPart['result']>;
@@ -130,27 +116,6 @@ type CompactionProgressMode = 'continue' | 'context';
  */
 function toJsonValue(value: unknown): JSONValue {
   return JSON.parse(JSON.stringify(value)) as JSONValue;
-}
-
-/**
- * 判断工具结果是否为小组件展示载荷。
- * @param value - 工具结果数据
- * @returns 是否为小组件展示载荷
- */
-function isWidgetDisplayPayload(value: unknown): value is OpenWidgetToolResult {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-
-  const payload = value as WidgetDisplayPayloadCandidate;
-
-  return (
-    payload.kind === 'widget_display' &&
-    typeof payload.sessionId === 'string' &&
-    typeof payload.widgetId === 'string' &&
-    isPlainObject(payload.value) &&
-    isPlainObject(payload.renderContext)
-  );
 }
 
 /**

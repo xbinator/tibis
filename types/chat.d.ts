@@ -4,7 +4,7 @@
  */
 import type { AIToolExecutionResult, AIUsage } from './ai';
 import type { ChatMessageCompactionPart, ChatMessageRuntimeMeta } from './chat-runtime';
-import type { WidgetData, WidgetRenderContext } from '@/components/BWidget/types';
+import type { WidgetData, WidgetRenderContext, WidgetSubmitPayload } from './widget';
 
 /**
  * 聊天会话类型
@@ -252,55 +252,9 @@ export interface ChatMessageWidgetPart extends ChatMessagePartBase {
 }
 
 /**
- * 小组件运行态成功提交结果。
- */
-export interface ChatMessageWidgetSubmitSuccessResult {
-  /** 提交状态 */
-  status: 'success';
-  /** 成功提交的数据，字段值统一使用字符串 */
-  data: Record<string, string>;
-  /** 成功结果不携带错误 */
-  error?: never;
-}
-
-/**
- * 小组件运行态失败提交结果。
- */
-export interface ChatMessageWidgetSubmitFailureResult {
-  /** 提交状态 */
-  status: 'failure';
-  /** 失败详情 */
-  error: {
-    /** 机器可读错误码 */
-    code: string;
-    /** 给用户或模型展示的错误说明 */
-    message: string;
-  };
-  /** 失败结果不携带数据 */
-  data?: never;
-}
-
-/**
- * 小组件运行态提交结果。
- */
-export type ChatMessageWidgetSubmitResult = ChatMessageWidgetSubmitSuccessResult | ChatMessageWidgetSubmitFailureResult;
-
-/**
- * Widget 运行态提交结果载荷。
- */
-export interface ChatMessageWidgetSubmitPayload {
-  /** 小组件会话 ID */
-  sessionId: string;
-  /** 小组件稳定 ID */
-  widgetId: string;
-  /** 用户在 Widget 中提交的结果 */
-  result: ChatMessageWidgetSubmitResult;
-}
-
-/**
  * 聊天消息 Widget 提交结果片段。
  */
-export interface ChatMessageWidgetResultPart extends ChatMessagePartBase, ChatMessageWidgetSubmitPayload {
+export interface ChatMessageWidgetResultPart extends ChatMessagePartBase, WidgetSubmitPayload {
   /** 片段类型 */
   type: 'widget_result';
   /** 提交时间 */

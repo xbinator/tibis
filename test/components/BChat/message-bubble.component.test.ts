@@ -5,6 +5,7 @@
  */
 /* eslint-disable vue/one-component-per-file */
 import type { ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart } from 'types/chat';
+import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,7 +13,6 @@ import MessageBubble from '@/components/BChat/components/MessageBubble.vue';
 import { create } from '@/components/BChat/utils/messageHelper';
 import type { BChatSubmitContext, BChatSubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
-import type { WidgetData, WidgetRenderContext } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /** 剪贴板写入测试替身。 */
@@ -311,7 +311,8 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         content: '',
         parts: [
-          { id: 'part0011',
+          {
+            id: 'part0011',
             type: 'compaction',
             auto: true,
             reason: 'auto',
@@ -924,7 +925,8 @@ describe('MessageBubble', (): void => {
   });
 
   it('renders open_widget tool results as widget runtime items', (): void => {
-    const toolPart: ChatMessageToolPart = { id: 'part0014',
+    const toolPart: ChatMessageToolPart = {
+      id: 'part0014',
       type: 'tool',
       toolCallId: 'tool-call-widget',
       toolName: 'open_widget',
@@ -959,7 +961,8 @@ describe('MessageBubble', (): void => {
   });
 
   it('copies user widget result messages from message content when no text part exists', async (): Promise<void> => {
-    const widgetResultPart: ChatMessageWidgetResultPart = { id: 'part0015',
+    const widgetResultPart: ChatMessageWidgetResultPart = {
+      id: 'part0015',
       type: 'widget_result',
       sessionId: 'widget-session-1',
       widgetId: 'weather',

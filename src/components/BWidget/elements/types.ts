@@ -3,7 +3,8 @@
  * @description BWidget 元素注册配置类型。
  * BWidget 元素注册配置，仅描述侧边栏展示元信息。
  */
-import type { WidgetElementCreateAnchor, WidgetElementStyle, WidgetMetadata, WidgetRenderContext, WidgetShapeElement, WidgetSize } from '../types';
+import type { WidgetElementCreateAnchor, WidgetElementStyle, WidgetMetadata, WidgetShapeElement, WidgetSize } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
 
 /**
  * 元素渲染尺寸来源。

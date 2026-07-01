@@ -2,7 +2,8 @@
  * @file widgetRuntimeLayout.ts
  * @description BWidget 运行态内容边界布局工具。
  */
-import type { WidgetElement, WidgetPoint, WidgetRenderContext, WidgetShapeElement, WidgetSize } from '../types';
+import type { WidgetElement, WidgetPoint, WidgetShapeElement, WidgetSize } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
 import { getWidgetShapeRenderSize } from './widgetGeometry';
 
 /**

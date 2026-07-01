@@ -2,7 +2,7 @@
  * @file useRenderContext.ts
  * @description BWidget Widget渲染上下文 provide/inject hook。
  */
-import type { WidgetRenderContext } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
 import { inject, provide, ref } from 'vue';
 import type { InjectionKey, Ref } from 'vue';
 

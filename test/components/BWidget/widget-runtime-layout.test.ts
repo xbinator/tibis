@@ -2,8 +2,9 @@
  * @file widget-runtime-layout.test.ts
  * @description 验证 BWidget 运行态内容边界布局计算。
  */
+import type { WidgetRenderContext } from 'types/widget';
 import { describe, expect, it } from 'vitest';
-import type { WidgetElement, WidgetPoint, WidgetRenderContext, WidgetSize } from '@/components/BWidget/types';
+import type { WidgetElement, WidgetPoint, WidgetSize } from '@/components/BWidget/types';
 import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from '@/components/BWidget/utils/widgetRuntimeLayout';
 
 /**

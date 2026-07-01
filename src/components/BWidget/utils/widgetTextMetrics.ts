@@ -3,7 +3,8 @@
  * @description BWidget 文本元素尺寸测量工具。
  */
 import type { WidgetElementRenderSizeConfig } from '../elements/types';
-import type { WidgetElementStyle, WidgetRenderContext, WidgetShapeElement, WidgetSize } from '../types';
+import type { WidgetElementStyle, WidgetShapeElement, WidgetSize } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
 import {
   WIDGET_TEXT_DEFAULT_FONT_SIZE,
   WIDGET_TEXT_DEFAULT_FONT_WEIGHT,

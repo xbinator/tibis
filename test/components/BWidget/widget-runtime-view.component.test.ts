@@ -3,12 +3,12 @@
  * @description 验证 BWidget 运行态只读视图按内容边界缩放渲染 Widget。
  * @vitest-environment jsdom
  */
+import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { nextTick } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { cloneDeep } from 'lodash-es';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
-import type { WidgetData, WidgetRenderContext } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /** ResizeObserver 回调。 */

@@ -4,6 +4,7 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
+import type { WidgetRenderContext } from 'types/widget';
 import { computed, defineComponent, nextTick } from 'vue';
 import type { PropType } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
@@ -11,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import MoveableLayer from '@/components/BWidget/components/MoveableLayer.vue';
 import { WIDGET_ELEMENT_ID_ATTRIBUTE } from '@/components/BWidget/constants/dom';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
-import type { WidgetElement, WidgetGeometryChange, WidgetRenderContext, WidgetSize, WidgetViewport } from '@/components/BWidget/types';
+import type { WidgetElement, WidgetGeometryChange, WidgetSize, WidgetViewport } from '@/components/BWidget/types';
 
 /**
  * Moveable padding 配置。

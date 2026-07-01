@@ -4,13 +4,13 @@
  * @vitest-environment jsdom
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
+import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import BubblePartWidget from '@/components/BChat/components/MessageBubble/BubblePartWidget.vue';
 import type { BChatSubmitAction, BChatSubmitContext } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
-import type { WidgetData, WidgetRenderContext } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**

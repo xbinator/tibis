@@ -2,7 +2,8 @@
  * @file widgetBindings.ts
  * @description BWidget 动态绑定表达式解析工具。
  */
-import type { WidgetMetadata, WidgetRenderContext } from '../types';
+import type { WidgetMetadata } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
 
 /** 支持的绑定上下文根名称。 */
 export type WidgetBindingContextRoot = 'input' | 'state';

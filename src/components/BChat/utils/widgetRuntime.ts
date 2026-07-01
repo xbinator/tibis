@@ -2,9 +2,11 @@
  * @file widgetRuntime.ts
  * @description BChat 小组件消息片段的轻量脚本运行工具。
  */
-import type { ChatMessageTextPart, ChatMessageWidgetPart } from 'types/chat';
-import { cloneDeep, get, isPlainObject, set } from 'lodash-es';
+import type { ChatMessageWidgetPart } from 'types/chat';
+import type { WidgetRuntimeSendMessage } from 'types/widget';
+import { cloneDeep, get, set } from 'lodash-es';
 import ts from 'typescript';
+import { normalizeWidgetSendMessage } from '@/shared/widget/protocol';
 
 /**
  * 小组件脚本生命周期执行选项。
@@ -12,21 +14,6 @@ import ts from 'typescript';
 interface WidgetLifecycleRunOptions {
   /** 当前时间来源，测试中可注入固定时间。 */
   now?: () => Date;
-}
-
-/**
- * 小组件脚本上行文本片段。
- */
-export type WidgetRuntimeSendMessageTextPart = Omit<ChatMessageTextPart, 'id'>;
-
-/**
- * 小组件运行态上行消息。
- */
-export interface WidgetRuntimeSendMessage {
-  /** 上行消息内容，支持纯文本或文本片段数组。 */
-  content: string | WidgetRuntimeSendMessageTextPart[];
-  /** 是否为错误消息。 */
-  isError: boolean;
 }
 
 /**
@@ -83,15 +70,6 @@ function readPropertyName(name: ts.PropertyName | undefined): string | undefined
   if (!name) return undefined;
   if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
   return undefined;
-}
-
-/**
- * 判断值是否为普通对象记录。
- * @param value - 待检查值
- * @returns 是否为普通对象记录
- */
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value);
 }
 
 /**
@@ -231,45 +209,6 @@ function evaluateExpression(expression: ts.Expression, context: WidgetExpression
 }
 
 /**
- * 归一化小组件脚本上行文本片段数组。
- * @param value - 原始 content 值
- * @returns 文本片段数组；不匹配时返回 null
- */
-function normalizeSendMessageTextParts(value: unknown): WidgetRuntimeSendMessageTextPart[] | null {
-  if (!Array.isArray(value)) return null;
-
-  const textParts: WidgetRuntimeSendMessageTextPart[] = [];
-  for (const item of value) {
-    if (!isPlainRecord(item) || item.type !== 'text' || typeof item.text !== 'string') return null;
-    textParts.push({ type: 'text', text: item.text });
-  }
-
-  return textParts;
-}
-
-/**
- * 归一化 this.$sendMessage 的调用参数。
- * @param value - 原始调用参数
- * @returns 上行消息；不匹配时返回 null
- */
-function normalizeSendMessage(value: unknown): WidgetRuntimeSendMessage | null {
-  if (typeof value === 'string') {
-    return { content: value, isError: false };
-  }
-
-  if (!isPlainRecord(value)) return null;
-
-  const rawContent = value.content;
-  const content = typeof rawContent === 'string' ? rawContent : normalizeSendMessageTextParts(rawContent);
-  if (content === null) return null;
-
-  return {
-    content,
-    isError: typeof value.isError === 'boolean' ? value.isError : false
-  };
-}
-
-/**
  * 判断表达式是否为 this.$setState(...) 调用。
  * @param expression - 待检查表达式
  * @returns 是否为 setState 调用
@@ -338,7 +277,7 @@ function runLifecycleStatements(lifecycleFunction: WidgetFunctionNodeWithBody | 
     const [payloadExpression] = statement.expression.arguments;
     if (!payloadExpression) continue;
 
-    const sendMessage = normalizeSendMessage(evaluateExpression(payloadExpression, context));
+    const sendMessage = normalizeWidgetSendMessage(evaluateExpression(payloadExpression, context));
     if (sendMessage) {
       result.sendMessage = sendMessage;
     }

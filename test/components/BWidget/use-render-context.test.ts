@@ -4,11 +4,11 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
+import type { WidgetRenderContext } from 'types/widget';
 import { defineComponent, h, nextTick, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { provideRenderContext, useRenderContext } from '@/components/BWidget/hooks/useRenderContext';
-import type { WidgetRenderContext } from '@/components/BWidget/types';
 
 /**
  * 创建测试渲染上下文。

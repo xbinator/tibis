@@ -4,13 +4,14 @@
  * @vitest-environment jsdom
  */
 import type { VueWrapper } from '@vue/test-utils';
+import type { WidgetRenderContext } from 'types/widget';
 import type { VNode } from 'vue';
 import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import TextElementView from '@/components/BWidget/elements/Text/index.vue';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
-import type { WidgetRenderContext, WidgetShapeElement } from '@/components/BWidget/types';
+import type { WidgetShapeElement } from '@/components/BWidget/types';
 
 /**
  * 创建文本视图测试元素。

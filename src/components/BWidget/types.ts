@@ -284,16 +284,6 @@ export interface WidgetData {
 }
 
 /**
- * Widget Skill 渲染上下文。
- */
-export interface WidgetRenderContext {
-  /** Widget启动入参 */
-  input: Record<string, unknown>;
-  /** Widget会话状态 */
-  state: Record<string, unknown>;
-}
-
-/**
  * 当前设置面板可编辑目标。
  */
 export type WidgetSelectTarget = WidgetElement | WidgetMetadata | null;

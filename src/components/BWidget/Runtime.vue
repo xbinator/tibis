@@ -22,7 +22,8 @@
 </template>
 
 <script setup lang="ts">
-import type { WidgetData, WidgetRenderContext, WidgetShapeElement, WidgetSize } from './types';
+import type { WidgetData, WidgetShapeElement, WidgetSize } from './types';
+import type { WidgetRenderContext } from 'types/widget';
 import type { CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { createNamespace } from '@/utils/namespace';

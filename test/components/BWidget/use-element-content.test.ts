@@ -5,13 +5,14 @@
  */
 /* eslint-disable vue/one-component-per-file */
 import type { VueWrapper } from '@vue/test-utils';
+import type { WidgetRenderContext } from 'types/widget';
 import type { Component, VNode } from 'vue';
 import { defineComponent, h, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { useElementContent } from '@/components/BWidget/hooks/useElementContent';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
-import type { WidgetRenderContext, WidgetShapeElement } from '@/components/BWidget/types';
+import type { WidgetShapeElement } from '@/components/BWidget/types';
 
 /**
  * 创建文本展示测试元素。

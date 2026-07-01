@@ -2,7 +2,8 @@
  * @file widgetGeometry.ts
  * @description BWidget Widget坐标、几何和 DOM 查询工具。
  */
-import type { WidgetElement, WidgetPoint, WidgetRenderContext, WidgetShapeElement, WidgetSize, WidgetViewport } from '../types';
+import type { WidgetElement, WidgetPoint, WidgetShapeElement, WidgetSize, WidgetViewport } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
 import { WIDGET_ELEMENT_ID_ATTRIBUTE } from '../constants/dom';
 import { WIDGET_MIN_ZOOM, WIDGET_VIEWBOX_SIZE } from '../constants/viewport';
 import { getWidgetElementSchema } from '../elements';

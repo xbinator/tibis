@@ -2,7 +2,8 @@
  * @file widgetPreviewContext.ts
  * @description BWidget 设计期预览上下文读写工具。
  */
-import type { WidgetMetadata, WidgetRenderContext } from '../types';
+import type { WidgetMetadata } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
 import { isPlainObject } from 'lodash-es';
 
 /** 设计期预览上下文存放在Widget metadata 中的字段名。 */
