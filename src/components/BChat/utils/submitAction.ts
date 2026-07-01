@@ -30,6 +30,12 @@ export interface BChatAdaptedUserMessageSubmitInput {
  */
 export interface BChatSubmitContext {
   /**
+   * 读取一条当前可见消息。
+   * @param messageId - 待读取消息 ID
+   * @returns 当前消息；不存在时返回 null
+   */
+  getMessage: (messageId: string) => Message | null;
+  /**
    * 续跑等待中的助手任务。
    * @param answer - 用户选择答案
    */

@@ -9,26 +9,33 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatMessageWidgetPart, ChatMessageWidgetResultPart, ChatMessageWidgetSubmitResult } from 'types/chat';
+import type { Message } from '../../utils/types';
+import type { ChatMessageTextPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart, ChatMessageWidgetSubmitResult } from 'types/chat';
 import { onMounted } from 'vue';
 import { mapValues } from 'lodash-es';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { isPlainRecord, stringifyJsonValue, stringifyRuntimeTextValue } from '@/utils/json';
 import { createNamespace } from '@/utils/namespace';
 import { create } from '../../utils/messageHelper';
-import { createRuntimeUserMessageSubmitAction, type BChatSubmitAction } from '../../utils/submitAction';
-import { initWidgetMountState } from '../../utils/widgetRuntime';
+import { createRuntimeUserMessageSubmitAction, type BChatAdaptedUserMessageSubmitInput, type BChatSubmitAction } from '../../utils/submitAction';
+import { finishWidgetRuntime, initWidgetMountState, type WidgetRuntimeSendMessage } from '../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 
 interface Props {
+  /** 所属聊天消息 ID，消息内运行态需要用它写回状态。 */
+  messageId?: string;
   /** 小组件消息片段 */
   part: ChatMessageWidgetPart;
+  /** 小组件片段在消息 parts 中的位置；由工具结果派生展示时为 null。 */
+  partIndex?: number | null;
   /** 是否启用消息内独立运行态 */
   runtimeEnabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  messageId: undefined,
+  partIndex: null,
   runtimeEnabled: false
 });
 
@@ -40,6 +47,16 @@ const emit = defineEmits<{
 }>();
 
 const [name] = createNamespace('', 'message-bubble-widget');
+
+/**
+ * 小组件片段收尾后的消息更新结果。
+ */
+interface WidgetPartFinishMessageResult {
+  /** 更新后的消息。 */
+  message: Message;
+  /** 脚本声明的上行消息。 */
+  sendMessage?: WidgetRuntimeSendMessage;
+}
 
 /**
  * 将小组件原始提交值转为成功结果。
@@ -60,10 +77,64 @@ function createWidgetSubmitSuccessResult(output: unknown): ChatMessageWidgetSubm
 }
 
 /**
- * 透传小组件提交结果并补充会话信息。
- * @param output - 小组件输出
+ * 创建替换指定小组件片段后的消息。
+ * @param currentMessage - 当前消息
+ * @param partIndex - 小组件片段在消息 parts 中的位置
+ * @param part - 下一版小组件片段
+ * @returns 替换指定片段后的消息
  */
-function handleSubmit(output: unknown): void {
+function createWidgetPartUpdatedMessage(currentMessage: Message, partIndex: number, part: ChatMessageWidgetPart): Message {
+  return {
+    ...currentMessage,
+    parts: currentMessage.parts.map((sourcePart, index) => (index === partIndex ? part : sourcePart))
+  };
+}
+
+/**
+ * 创建完成指定小组件片段后的消息。
+ * @param currentMessage - 当前消息
+ * @param partIndex - 小组件片段在消息 parts 中的位置
+ * @returns 执行收尾后的消息；无法收尾时返回原消息
+ */
+function createWidgetPartFinishedMessage(currentMessage: Message, partIndex: number): WidgetPartFinishMessageResult {
+  const currentPart = currentMessage.parts[partIndex];
+  if (currentPart?.type !== 'widget') return { message: currentMessage };
+
+  const finishResult = finishWidgetRuntime(currentPart);
+  const message = finishResult.part === currentPart ? currentMessage : createWidgetPartUpdatedMessage(currentMessage, partIndex, finishResult.part);
+
+  return {
+    message,
+    ...(finishResult.sendMessage ? { sendMessage: finishResult.sendMessage } : {})
+  };
+}
+
+/**
+ * 将小组件脚本上行消息转成 BChat 统一用户消息提交输入。
+ * @param sendMessage - 小组件脚本上行消息
+ * @returns 统一用户消息提交输入
+ */
+function createWidgetSendMessageSubmitInput(sendMessage: WidgetRuntimeSendMessage): BChatAdaptedUserMessageSubmitInput {
+  const rawParts: ChatMessageTextPart[] = typeof sendMessage.content === 'string' ? [{ type: 'text', text: sendMessage.content }] : sendMessage.content;
+  const rawContent = rawParts.map((part): string => part.text).join('\n');
+  const content = sendMessage.isError ? `小组件错误：${rawContent}` : rawContent;
+  const parts: ChatMessageTextPart[] = sendMessage.isError ? [{ type: 'text', text: content }] : rawParts;
+  const userMessage = create.userMessage(content);
+  userMessage.parts = parts;
+
+  return {
+    userMessage,
+    parts,
+    errorMessage: '发送小组件消息失败'
+  };
+}
+
+/**
+ * 创建小组件默认提交结果动作。
+ * @param output - 小组件输出
+ * @returns 统一提交动作
+ */
+function createWidgetResultSubmitAction(output: unknown): BChatSubmitAction {
   const resultPart: ChatMessageWidgetResultPart = {
     type: 'widget_result',
     sessionId: props.part.sessionId,
@@ -74,14 +145,49 @@ function handleSubmit(output: unknown): void {
   const userMessage = create.userMessage(stringifyJsonValue(resultPart, { space: 2 }));
   userMessage.parts = [resultPart];
 
-  emit(
-    'submit',
-    createRuntimeUserMessageSubmitAction({
-      userMessage,
-      parts: [resultPart],
-      errorMessage: '提交小组件结果失败'
-    })
-  );
+  return createRuntimeUserMessageSubmitAction({
+    userMessage,
+    parts: [resultPart],
+    errorMessage: '提交小组件结果失败'
+  });
+}
+
+/**
+ * 创建带运行态收尾的小组件提交动作。
+ * @param action - 小组件默认提交动作
+ * @returns 统一提交动作
+ */
+function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChatSubmitAction {
+  const { messageId, partIndex } = props;
+  if (!messageId || partIndex === null) return action;
+
+  return {
+    async run(context): Promise<void> {
+      const currentMessage = context.getMessage(messageId);
+      if (!currentMessage) {
+        await action.run(context);
+        return;
+      }
+
+      const finishResult = createWidgetPartFinishedMessage(currentMessage, partIndex);
+      await context.updateMessage(messageId, (): Message => finishResult.message);
+
+      if (finishResult.sendMessage) {
+        await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(finishResult.sendMessage));
+        return;
+      }
+
+      await action.run(context);
+    }
+  };
+}
+
+/**
+ * 透传小组件提交结果并补充会话信息。
+ * @param output - 小组件输出
+ */
+function handleSubmit(output: unknown): void {
+  emit('submit', createWidgetRuntimeFinishSubmitAction(createWidgetResultSubmitAction(output)));
 }
 
 /**

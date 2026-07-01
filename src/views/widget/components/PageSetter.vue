@@ -40,12 +40,12 @@
         </div>
       </BSectionBlock>
 
-      <BSectionBlock :title="WIDGET_INTERACTION_SCRIPT_SECTION_TITLE">
+      <BSectionBlock title="交互脚本">
         <template #extra>
           <BButton icon="lucide:code-xml" size="mini" type="secondary" @click="openMethodEditor">编辑</BButton>
         </template>
         <div class="method-summary">
-          <pre class="method-summary__code" :aria-label="WIDGET_INTERACTION_SCRIPT_PREVIEW_LABEL"><code class="method-summary__code-content"><span
+          <pre class="method-summary__code"><code class="method-summary__code-content"><span
             v-for="line in highlightedMethodPreviewLines"
             :key="line.index"
             class="method-summary__line"
@@ -58,9 +58,11 @@
       </BSectionBlock>
     </ATabPane>
   </ATabs>
-
+  <!-- Schema JSON 编辑弹窗 -->
   <SchemaInputEditor v-model:open="schemaInputEditorOpen" :kind="activeSchemaKind" :schema="activeSchema" @confirm="handleSchemaInputEditorConfirm" />
-  <MethodEditor v-model:open="methodEditorOpen" :code="methodScriptCode" :input-schema="inputSchema" @confirm="handleMethodEditorConfirm" />
+  <!-- 交互脚本编辑弹窗 -->
+  <MethodEditor v-model:open="methodEditorOpen" :code="interactionScriptCode" :input-schema="inputSchema" @confirm="handleMethodEditorConfirm" />
+  <!-- Schema 填写说明抽屉 -->
   <SchemaHelp v-model:open="schemaHelpDrawerOpen" :kind="activeSchemaHelpKind" />
 </template>
 
@@ -74,8 +76,6 @@ import {
   WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE,
   WIDGET_INTERACTION_SCRIPT_DEFAULT_TIMEOUT,
   WIDGET_INTERACTION_SCRIPT_HIGHLIGHT_LANGUAGE,
-  WIDGET_INTERACTION_SCRIPT_PREVIEW_LABEL,
-  WIDGET_INTERACTION_SCRIPT_SECTION_TITLE,
   WIDGET_SCHEMA_DEFAULT_FIELD_NAME
 } from '../constants/pageSetter';
 import MethodEditor from './PageSetter/MethodEditor.vue';
@@ -289,7 +289,7 @@ const inputSchema = computed<WidgetSchemaObject>({
 });
 
 /** 当前交互脚本配置。 */
-const methodScript = computed<WidgetExecuteMethod>({
+const interactionScript = computed<WidgetExecuteMethod>({
   /**
    * 读取交互脚本配置。
    * @returns 交互脚本配置
@@ -305,19 +305,19 @@ const methodScript = computed<WidgetExecuteMethod>({
 });
 
 /** 当前交互脚本代码。 */
-const methodScriptCode = computed<string>({
+const interactionScriptCode = computed<string>({
   /**
    * 读取交互脚本代码。
    * @returns 交互脚本代码
    */
-  get: (): string => methodScript.value.code,
+  get: (): string => interactionScript.value.code,
   /**
    * 写入交互脚本代码。
    * @param value - 交互脚本代码
    */
   set: (value: string): void => {
-    methodScript.value = {
-      ...methodScript.value,
+    interactionScript.value = {
+      ...interactionScript.value,
       code: value
     };
   }
@@ -462,7 +462,7 @@ function splitMethodSummaryTokensIntoLines(tokens: MethodSummaryToken[]): Method
 }
 
 /** 高亮后的交互脚本摘要代码行。 */
-const highlightedMethodPreviewLines = computed<MethodSummaryLine[]>(() => splitMethodSummaryTokensIntoLines(highlightMethodCode(methodScriptCode.value)));
+const highlightedMethodPreviewLines = computed<MethodSummaryLine[]>(() => splitMethodSummaryTokensIntoLines(highlightMethodCode(interactionScriptCode.value)));
 
 /**
  * 打开 Schema JSON 编辑弹窗。
@@ -502,7 +502,7 @@ function handleSchemaInputEditorConfirm(schema: WidgetSchemaObject): void {
  * @param code - 交互脚本代码
  */
 function handleMethodEditorConfirm(code: string): void {
-  methodScriptCode.value = code;
+  interactionScriptCode.value = code;
 }
 
 /** 当前正在编辑的 Schema。 */

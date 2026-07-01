@@ -4,7 +4,7 @@
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { finishWidgetUnmountState, initWidgetMountState } from '@/components/BChat/utils/widgetRuntime';
+import { finishWidgetRuntime, finishWidgetUnmountState, initWidgetMountState } from '@/components/BChat/utils/widgetRuntime';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -198,6 +198,26 @@ describe('widgetRuntime', (): void => {
           }
         }
       }
+    });
+  });
+
+  it('captures sendMessage calls while finishing unmounted state', (): void => {
+    const part: ChatMessageWidgetPart = {
+      ...createWidgetPart(
+        ['defineConfig({', '  unmounted() {', "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })", '  }', '})'].join('\n')
+      ),
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      }
+    };
+
+    const result = finishWidgetRuntime(part);
+
+    expect(result.part.status).toBe('finished');
+    expect(result.sendMessage).toEqual({
+      content: [{ type: 'text', text: '确认下单' }],
+      isError: false
     });
   });
 

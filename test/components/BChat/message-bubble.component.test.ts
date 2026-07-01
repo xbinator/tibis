@@ -25,6 +25,7 @@ const clipboardMock = vi.fn();
 function createSubmitContextMock(): BChatSubmitContext {
   return {
     continueAssistantTurn: vi.fn(),
+    getMessage: vi.fn(),
     sendAdaptedUserMessage: vi.fn(),
     updateMessage: vi.fn()
   };
@@ -379,6 +380,13 @@ describe('MessageBubble', (): void => {
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(
+      createAssistantMessage({
+        id: 'assistant-widget',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
     await action.run(submitContext);
 
     expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget', expect.any(Function));
@@ -509,6 +517,13 @@ describe('MessageBubble', (): void => {
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(
+      createAssistantMessage({
+        id: 'assistant-widget-submit',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
     await action.run(submitContext);
 
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
@@ -592,6 +607,13 @@ describe('MessageBubble', (): void => {
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(
+      createAssistantMessage({
+        id: 'assistant-widget-submit',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
     await action.run(submitContext);
 
     expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget-submit', expect.any(Function));
@@ -667,6 +689,13 @@ describe('MessageBubble', (): void => {
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(
+      createAssistantMessage({
+        id: 'assistant-widget-latest-submit',
+        content: '',
+        parts: [latestWidgetPart]
+      })
+    );
     await action.run(submitContext);
 
     const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
@@ -690,6 +719,167 @@ describe('MessageBubble', (): void => {
           }
         }
       }
+    });
+  });
+
+  it('sends widget script message instead of widget_result when unmounted calls sendMessage', async (): Promise<void> => {
+    const widgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-coffee-session-4',
+      widgetId: 'coffee',
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      },
+      value: {
+        ...createWeatherWidgetData(),
+        execute: {
+          code: ['defineConfig({', '  unmounted() {', "    this.$sendMessage('确认下单')", '  }', '})'].join('\n')
+        }
+      },
+      renderContext: createWeatherRenderContext()
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        id: 'assistant-widget-send-message',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', { coffeeId: 'latte' });
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(
+      createAssistantMessage({
+        id: 'assistant-widget-send-message',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+    vi.mocked(submitContext.updateMessage).mockImplementation(async (_messageId, updater): Promise<void> => {
+      updater(
+        createAssistantMessage({
+          id: 'assistant-widget-send-message',
+          content: '',
+          parts: [widgetPart]
+        })
+      );
+    });
+    await action.run(submitContext);
+
+    expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
+      userMessage: expect.objectContaining({
+        role: 'user',
+        content: '确认下单',
+        parts: [{ type: 'text', text: '确认下单' }]
+      }),
+      parts: [{ type: 'text', text: '确认下单' }],
+      errorMessage: '发送小组件消息失败'
+    });
+    expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks widget script error messages in the text sent to chat runtime', async (): Promise<void> => {
+    const widgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-coffee-session-error',
+      widgetId: 'coffee',
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      },
+      value: {
+        ...createWeatherWidgetData(),
+        execute: {
+          code: ['defineConfig({', '  unmounted() {', "    this.$sendMessage({ content: '库存不足', isError: true })", '  }', '})'].join('\n')
+        }
+      },
+      renderContext: createWeatherRenderContext()
+    };
+    const message = createAssistantMessage({
+      id: 'assistant-widget-error-message',
+      content: '',
+      parts: [widgetPart]
+    });
+    const wrapper = mountMessageBubble(message);
+
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', { coffeeId: 'latte' });
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(message);
+    await action.run(submitContext);
+
+    expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
+      userMessage: expect.objectContaining({
+        role: 'user',
+        content: '小组件错误：库存不足',
+        parts: [{ type: 'text', text: '小组件错误：库存不足' }]
+      }),
+      parts: [{ type: 'text', text: '小组件错误：库存不足' }],
+      errorMessage: '发送小组件消息失败'
+    });
+  });
+
+  it('sends widget script message from latest message without relying on update updater side effects', async (): Promise<void> => {
+    const staleWidgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-coffee-session-latest-message',
+      widgetId: 'coffee',
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-01T00:00:00.000Z'
+      },
+      value: {
+        ...createWeatherWidgetData(),
+        execute: {
+          code: ['defineConfig({', '  unmounted() {', '    this.$sendMessage({ content: this.$state.order.message })', '  }', '})'].join('\n')
+        }
+      },
+      renderContext: createWeatherRenderContext()
+    };
+    const latestWidgetPart: ChatMessageWidgetPart = {
+      ...staleWidgetPart,
+      renderContext: {
+        input: {},
+        state: {
+          order: {
+            message: '确认最新订单'
+          }
+        }
+      }
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        id: 'assistant-widget-latest-message',
+        content: '',
+        parts: [staleWidgetPart]
+      })
+    );
+
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', { coffeeId: 'latte' });
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(
+      createAssistantMessage({
+        id: 'assistant-widget-latest-message',
+        content: '',
+        parts: [latestWidgetPart]
+      })
+    );
+    await action.run(submitContext);
+
+    expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
+      userMessage: expect.objectContaining({
+        role: 'user',
+        content: '确认最新订单',
+        parts: [{ type: 'text', text: '确认最新订单' }]
+      }),
+      parts: [{ type: 'text', text: '确认最新订单' }],
+      errorMessage: '发送小组件消息失败'
     });
   });
 

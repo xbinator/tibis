@@ -2,8 +2,8 @@
  * @file widgetRuntime.ts
  * @description BChat 小组件消息片段的轻量脚本运行工具。
  */
-import type { ChatMessageWidgetPart } from 'types/chat';
-import { cloneDeep, get, set } from 'lodash-es';
+import type { ChatMessageTextPart, ChatMessageWidgetPart } from 'types/chat';
+import { cloneDeep, get, isPlainObject, set } from 'lodash-es';
 import ts from 'typescript';
 
 /**
@@ -12,6 +12,26 @@ import ts from 'typescript';
 interface WidgetLifecycleRunOptions {
   /** 当前时间来源，测试中可注入固定时间。 */
   now?: () => Date;
+}
+
+/**
+ * 小组件运行态上行消息。
+ */
+export interface WidgetRuntimeSendMessage {
+  /** 上行消息内容，支持纯文本或文本片段数组。 */
+  content: string | ChatMessageTextPart[];
+  /** 是否为错误消息。 */
+  isError: boolean;
+}
+
+/**
+ * 小组件运行态收尾结果。
+ */
+export interface WidgetRuntimeFinishResult {
+  /** 收尾后的消息片段。 */
+  part: ChatMessageWidgetPart;
+  /** 脚本通过 this.$sendMessage 声明的上行消息。 */
+  sendMessage?: WidgetRuntimeSendMessage;
 }
 
 /** 带函数体的小组件配置函数节点。 */
@@ -33,6 +53,14 @@ interface WidgetExpressionEvalContext {
 }
 
 /**
+ * 生命周期函数受限执行结果。
+ */
+interface WidgetLifecycleExecutionResult {
+  /** 生命周期函数中最后一次 this.$sendMessage 的载荷。 */
+  sendMessage?: WidgetRuntimeSendMessage;
+}
+
+/**
  * 判断节点是否为 defineConfig 调用。
  * @param node - 待检查节点
  * @returns 是否为 defineConfig 调用
@@ -50,6 +78,15 @@ function readPropertyName(name: ts.PropertyName | undefined): string | undefined
   if (!name) return undefined;
   if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
   return undefined;
+}
+
+/**
+ * 判断值是否为普通对象记录。
+ * @param value - 待检查值
+ * @returns 是否为普通对象记录
+ */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return isPlainObject(value);
 }
 
 /**
@@ -189,6 +226,45 @@ function evaluateExpression(expression: ts.Expression, context: WidgetExpression
 }
 
 /**
+ * 归一化小组件脚本上行文本片段数组。
+ * @param value - 原始 content 值
+ * @returns 文本片段数组；不匹配时返回 null
+ */
+function normalizeSendMessageTextParts(value: unknown): ChatMessageTextPart[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const textParts: ChatMessageTextPart[] = [];
+  for (const item of value) {
+    if (!isPlainRecord(item) || item.type !== 'text' || typeof item.text !== 'string') return null;
+    textParts.push({ type: 'text', text: item.text });
+  }
+
+  return textParts;
+}
+
+/**
+ * 归一化 this.$sendMessage 的调用参数。
+ * @param value - 原始调用参数
+ * @returns 上行消息；不匹配时返回 null
+ */
+function normalizeSendMessage(value: unknown): WidgetRuntimeSendMessage | null {
+  if (typeof value === 'string') {
+    return { content: value, isError: false };
+  }
+
+  if (!isPlainRecord(value)) return null;
+
+  const rawContent = value.content;
+  const content = typeof rawContent === 'string' ? rawContent : normalizeSendMessageTextParts(rawContent);
+  if (content === null) return null;
+
+  return {
+    content,
+    isError: typeof value.isError === 'boolean' ? value.isError : false
+  };
+}
+
+/**
  * 判断表达式是否为 this.$setState(...) 调用。
  * @param expression - 待检查表达式
  * @returns 是否为 setState 调用
@@ -203,12 +279,28 @@ function isSetStateCall(expression: ts.Expression): expression is ts.CallExpress
 }
 
 /**
+ * 判断表达式是否为 this.$sendMessage(...) 调用。
+ * @param expression - 待检查表达式
+ * @returns 是否为 sendMessage 调用
+ */
+function isSendMessageCall(expression: ts.Expression): expression is ts.CallExpression {
+  return (
+    ts.isCallExpression(expression) &&
+    ts.isPropertyAccessExpression(expression.expression) &&
+    expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+    expression.expression.name.text === '$sendMessage'
+  );
+}
+
+/**
  * 执行受支持的生命周期语句。
  * @param lifecycleFunction - 生命周期函数节点
  * @param part - 小组件消息片段
+ * @returns 生命周期函数执行结果
  */
-function applyLifecycleSetStateCalls(lifecycleFunction: WidgetFunctionNodeWithBody | undefined, part: ChatMessageWidgetPart): void {
-  if (!lifecycleFunction) return;
+function runLifecycleStatements(lifecycleFunction: WidgetFunctionNodeWithBody | undefined, part: ChatMessageWidgetPart): WidgetLifecycleExecutionResult {
+  const result: WidgetLifecycleExecutionResult = {};
+  if (!lifecycleFunction) return result;
 
   const context: WidgetExpressionEvalContext = {
     input: part.renderContext.input,
@@ -225,14 +317,29 @@ function applyLifecycleSetStateCalls(lifecycleFunction: WidgetFunctionNodeWithBo
       continue;
     }
 
-    if (!ts.isExpressionStatement(statement) || !isSetStateCall(statement.expression)) continue;
+    if (!ts.isExpressionStatement(statement)) continue;
 
-    const [pathExpression, valueExpression] = statement.expression.arguments;
-    if (!pathExpression || !valueExpression || !ts.isStringLiteral(pathExpression)) continue;
+    if (isSetStateCall(statement.expression)) {
+      const [pathExpression, valueExpression] = statement.expression.arguments;
+      if (!pathExpression || !valueExpression || !ts.isStringLiteral(pathExpression)) continue;
 
-    const value = evaluateExpression(valueExpression, context);
-    set(part.renderContext.state, pathExpression.text, value);
+      const value = evaluateExpression(valueExpression, context);
+      set(part.renderContext.state, pathExpression.text, value);
+      continue;
+    }
+
+    if (!isSendMessageCall(statement.expression)) continue;
+
+    const [payloadExpression] = statement.expression.arguments;
+    if (!payloadExpression) continue;
+
+    const sendMessage = normalizeSendMessage(evaluateExpression(payloadExpression, context));
+    if (sendMessage) {
+      result.sendMessage = sendMessage;
+    }
   }
+
+  return result;
 }
 
 /**
@@ -254,27 +361,54 @@ function createFailedWidgetPart(part: ChatMessageWidgetPart): ChatMessageWidgetP
  * @returns 运行后的消息片段；非 created 状态原样返回。
  */
 export async function initWidgetMountState(part: ChatMessageWidgetPart, options: WidgetLifecycleRunOptions = {}): Promise<ChatMessageWidgetPart> {
-  if (part.status !== 'created' || part.lifecycle.mountedAt) {
-    return part;
-  }
+  if (part.status !== 'created' || part.lifecycle.mountedAt) return part;
 
   const nextPart = cloneDeep(part);
   const mountedAt = (options.now ?? (() => new Date()))().toISOString();
 
   try {
+    // 执行 mounted 生命周期
     const mountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'defineConfig({})', 'mounted');
-    applyLifecycleSetStateCalls(mountedFunction, nextPart);
 
-    return {
-      ...nextPart,
-      status: 'mounted',
-      lifecycle: {
-        ...nextPart.lifecycle,
-        mountedAt
-      }
-    };
+    runLifecycleStatements(mountedFunction, nextPart);
+
+    return { ...nextPart, status: 'mounted', lifecycle: { ...nextPart.lifecycle, mountedAt } };
   } catch {
     return createFailedWidgetPart(part);
+  }
+}
+
+/**
+ * 完成 mounted 小组件运行态，并收集 unmounted 中的上行消息。
+ * @param part - 小组件消息片段。
+ * @param options - 生命周期执行选项。
+ * @returns 小组件运行态收尾结果。
+ */
+export function finishWidgetRuntime(part: ChatMessageWidgetPart, options: WidgetLifecycleRunOptions = {}): WidgetRuntimeFinishResult {
+  if (part.status !== 'mounted' || part.lifecycle.unmountedAt) {
+    return { part };
+  }
+
+  const nextPart = cloneDeep(part);
+  const unmountedAt = (options.now ?? (() => new Date()))().toISOString();
+
+  try {
+    const unmountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'defineConfig({})', 'unmounted');
+    const lifecycleResult = runLifecycleStatements(unmountedFunction, nextPart);
+
+    return {
+      part: {
+        ...nextPart,
+        status: 'finished',
+        lifecycle: {
+          ...nextPart.lifecycle,
+          unmountedAt
+        }
+      },
+      ...(lifecycleResult.sendMessage ? { sendMessage: lifecycleResult.sendMessage } : {})
+    };
+  } catch {
+    return { part: createFailedWidgetPart(part) };
   }
 }
 
@@ -285,26 +419,5 @@ export async function initWidgetMountState(part: ChatMessageWidgetPart, options:
  * @returns 收尾后的消息片段；已收尾或不可收尾状态原样返回。
  */
 export function finishWidgetUnmountState(part: ChatMessageWidgetPart, options: WidgetLifecycleRunOptions = {}): ChatMessageWidgetPart {
-  if (part.status !== 'mounted' || part.lifecycle.unmountedAt) {
-    return part;
-  }
-
-  const nextPart = cloneDeep(part);
-  const unmountedAt = (options.now ?? (() => new Date()))().toISOString();
-
-  try {
-    const unmountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'defineConfig({})', 'unmounted');
-    applyLifecycleSetStateCalls(unmountedFunction, nextPart);
-
-    return {
-      ...nextPart,
-      status: 'finished',
-      lifecycle: {
-        ...nextPart.lifecycle,
-        unmountedAt
-      }
-    };
-  } catch {
-    return createFailedWidgetPart(part);
-  }
+  return finishWidgetRuntime(part, options).part;
 }

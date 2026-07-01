@@ -3,7 +3,7 @@
   @description Widget页面交互脚本代码编辑弹窗。
 -->
 <template>
-  <BModal v-model:open="open" :title="WIDGET_INTERACTION_SCRIPT_EDITOR_TITLE" :width="860" @close="handleEditorCancel">
+  <BModal v-model:open="open" title="编辑" :width="860" @close="handleEditorCancel">
     <div class="method-editor">
       <div class="method-editor__host">
         <BMonaco
@@ -32,7 +32,6 @@ import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco/utils/createMonaco';
 import type { WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
 import { buildWidgetStateSchema } from '@/components/BWidget/utils/widgetStateSchema';
-import { WIDGET_INTERACTION_SCRIPT_EDITOR_TITLE } from '../../constants/pageSetter';
 
 /**
  * 交互脚本编辑弹窗入参。

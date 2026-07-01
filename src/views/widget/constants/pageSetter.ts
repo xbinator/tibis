@@ -3,15 +3,6 @@
  * @description 小组件页面设置面板常量。
  */
 
-/** 交互脚本设置区标题。 */
-export const WIDGET_INTERACTION_SCRIPT_SECTION_TITLE = '交互脚本';
-
-/** 交互脚本编辑弹窗标题。 */
-export const WIDGET_INTERACTION_SCRIPT_EDITOR_TITLE = '编辑交互脚本';
-
-/** 交互脚本预览无障碍标签。 */
-export const WIDGET_INTERACTION_SCRIPT_PREVIEW_LABEL = '交互脚本预览';
-
 /** Widget 交互脚本默认超时时间。 */
 export const WIDGET_INTERACTION_SCRIPT_DEFAULT_TIMEOUT = 10000;
 
