@@ -66,6 +66,15 @@ export const useWidgetStore = defineStore('widget', () => {
   }
 
   /**
+   * 判断小组件是否被用户持久化禁用。
+   * @param id - 小组件 ID
+   * @returns 是否禁用
+   */
+  function isPersistedDisabledWidget(id: string): boolean {
+    return loadFromStorage<string[]>(STORAGE_KEY_DISABLED_IDS, []).includes(id);
+  }
+
+  /**
    * 切换小组件启用状态。
    * @param id - 小组件 ID
    */
@@ -91,6 +100,46 @@ export const useWidgetStore = defineStore('widget', () => {
       widgets.value.splice(index, 1, widget);
     } else {
       widgets.value.push(widget);
+    }
+
+    persistDisabledIds();
+  }
+
+  /**
+   * 合并目录监听结果，并保留用户已设置的启用状态。
+   * @param updatedWidget - 文件系统最新解析结果
+   * @param existingWidget - 当前列表中的小组件
+   * @returns 合并后的小组件定义
+   */
+  function resolveWatchedWidget(updatedWidget: WidgetDefinition, existingWidget?: WidgetDefinition): WidgetDefinition {
+    return {
+      ...updatedWidget,
+      enabled: existingWidget?.enabled ?? !isPersistedDisabledWidget(updatedWidget.id)
+    };
+  }
+
+  /**
+   * 处理小组件目录变更事件。
+   * @param type - 事件类型
+   * @param updatedWidget - 解析后的小组件定义
+   */
+  function handleWidgetChange(type: 'change' | 'add' | 'unlink', updatedWidget: WidgetDefinition): void {
+    const index = widgets.value.findIndex((widget: WidgetDefinition): boolean => widget.filePath === updatedWidget.filePath || widget.id === updatedWidget.id);
+    const existingWidget = index !== -1 ? widgets.value[index] : undefined;
+
+    if (type === 'unlink') {
+      if (index !== -1) {
+        widgets.value.splice(index, 1);
+      }
+      return;
+    }
+
+    const nextWidget = resolveWatchedWidget(updatedWidget, existingWidget);
+
+    if (index !== -1) {
+      widgets.value[index] = nextWidget;
+    } else {
+      widgets.value.push(nextWidget);
     }
 
     persistDisabledIds();
@@ -168,6 +217,7 @@ export const useWidgetStore = defineStore('widget', () => {
     getEnabledWidgets,
     toggleWidget,
     upsertWidget,
+    handleWidgetChange,
     init,
     rescan,
     waitForInit

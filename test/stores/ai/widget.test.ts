@@ -5,7 +5,7 @@
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import type { WidgetScannerAPI } from '@/ai/widget';
+import { joinPath, parseWidgetJson, type WidgetScannerAPI } from '@/ai/widget';
 import { useWidgetStore } from '@/stores/ai/widget';
 
 /**
@@ -62,5 +62,84 @@ describe('widget store', (): void => {
     await nextStore.init('/Users/test', api);
 
     expect(nextStore.getWidgetById('weather')?.enabled).toBe(false);
+  });
+
+  it('updates widgets from watched widget.json changes', (): void => {
+    const store = useWidgetStore();
+    const filePath = joinPath('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
+    const widget = parseWidgetJson(
+      JSON.stringify({
+        name: '天气',
+        description: '查询指定城市天气'
+      }),
+      filePath
+    );
+
+    store.handleWidgetChange('add', widget);
+    expect(store.getWidgetById('weather')?.description).toBe('查询指定城市天气');
+
+    store.handleWidgetChange(
+      'change',
+      parseWidgetJson(
+        JSON.stringify({
+          name: '天气',
+          description: '展示天气和出行建议'
+        }),
+        filePath
+      )
+    );
+    expect(store.getWidgetById('weather')?.description).toBe('展示天气和出行建议');
+
+    store.handleWidgetChange('unlink', { ...widget, filePath });
+    expect(store.getWidgetById('weather')).toBeUndefined();
+  });
+
+  it('preserves disabled state when watched widget.json changes', (): void => {
+    const store = useWidgetStore();
+    const filePath = joinPath('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
+    const widget = parseWidgetJson(
+      JSON.stringify({
+        name: '天气',
+        description: '查询指定城市天气'
+      }),
+      filePath
+    );
+
+    store.handleWidgetChange('add', widget);
+    store.toggleWidget('weather');
+    expect(store.getWidgetById('weather')?.enabled).toBe(false);
+
+    store.handleWidgetChange(
+      'change',
+      parseWidgetJson(
+        JSON.stringify({
+          name: '天气',
+          description: '展示天气和出行建议'
+        }),
+        filePath
+      )
+    );
+
+    expect(store.getWidgetById('weather')?.description).toBe('展示天气和出行建议');
+    expect(store.getWidgetById('weather')?.enabled).toBe(false);
+  });
+
+  it('keeps widgets visible when watched widget.json becomes invalid', (): void => {
+    const store = useWidgetStore();
+    const filePath = joinPath('/Users/test', '.tibis', 'widgets', 'weather', 'widget.json');
+    const widget = parseWidgetJson(
+      JSON.stringify({
+        name: '天气',
+        description: '查询指定城市天气'
+      }),
+      filePath
+    );
+
+    store.handleWidgetChange('add', widget);
+    store.toggleWidget('weather');
+    store.handleWidgetChange('change', parseWidgetJson('{broken', filePath));
+
+    expect(store.getWidgetById('weather')?.parseError).toBeTruthy();
+    expect(store.getWidgetById('weather')?.enabled).toBe(false);
   });
 });
