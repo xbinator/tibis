@@ -17,7 +17,7 @@
             :can-rollback="canRollback"
             @edit="$emit('edit', item)"
             @regenerate="$emit('regenerate', item)"
-            @runtime-input="$emit('runtime-input', $event)"
+            @submit="$emit('submit', $event)"
             @rollback="$emit('rollback', item)"
           />
 
@@ -51,8 +51,8 @@
 </template>
 
 <script setup lang="ts">
+import type { BChatSubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
-import type { ChatMessageRuntimeInput } from 'types/chat';
 import { toRef } from 'vue';
 import { OPEN_WIDGET_TOOL_NAME } from '@/ai/tools/builtin';
 import { stringifyJsonValue } from '@/utils/json';
@@ -86,6 +86,7 @@ type MessageMemoDeps = readonly [
   partsLength: number,
   filesKey: string,
   toolPartsKey: string,
+  widgetPartsKey: string,
   disabled: boolean,
   rollbackVisible: boolean
 ];
@@ -96,6 +97,25 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   canRollback: undefined
 });
+
+/** v-memo 中用于对象引用的轻量稳定 ID。 */
+const memoObjectIds = new WeakMap<object, number>();
+/** v-memo 对象引用 ID 递增值。 */
+let memoObjectIdSeed = 0;
+
+/**
+ * 获取对象引用的轻量 memo ID。
+ * @param value - 对象引用
+ * @returns 当前对象引用对应的 ID
+ */
+function getMemoObjectId(value: object): number {
+  const cachedId = memoObjectIds.get(value);
+  if (cachedId !== undefined) return cachedId;
+
+  memoObjectIdSeed += 1;
+  memoObjectIds.set(value, memoObjectIdSeed);
+  return memoObjectIdSeed;
+}
 
 /**
  * 生成附件展示相关的渲染记忆签名。
@@ -125,6 +145,32 @@ function getToolPartsMemoKey(parts: Message['parts']): string {
 }
 
 /**
+ * 生成小组件片段的渲染记忆签名。
+ * @param parts - 聊天消息片段列表
+ * @returns 小组件片段状态签名
+ */
+function getWidgetPartsMemoKey(parts: Message['parts']): string {
+  const widgetPartKeys: string[] = [];
+
+  parts.forEach((part, index): void => {
+    if (part.type !== 'widget') return;
+
+    widgetPartKeys.push(
+      [
+        index,
+        part.status,
+        part.lifecycle.mountedAt ?? '',
+        part.lifecycle.unmountedAt ?? '',
+        getMemoObjectId(part.value),
+        getMemoObjectId(part.renderContext)
+      ].join(':')
+    );
+  });
+
+  return widgetPartKeys.join('|');
+}
+
+/**
  * 生成消息气泡的渲染记忆依赖。
  * @param message - 聊天消息
  * @returns 用于 v-memo 比较的依赖元组
@@ -140,6 +186,7 @@ function getMessageMemoDeps(message: Message): MessageMemoDeps {
     message.parts.length,
     getFilesMemoKey(message),
     getToolPartsMemoKey(message.parts),
+    getWidgetPartsMemoKey(message.parts),
     props.disabled,
     props.canRollback?.(message) === true
   ];
@@ -149,7 +196,7 @@ defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'load-history'): void;
-  (e: 'runtime-input', input: ChatMessageRuntimeInput): void;
+  (e: 'submit', action: BChatSubmitAction): void;
   (e: 'rollback', message: Message): void;
 }>();
 

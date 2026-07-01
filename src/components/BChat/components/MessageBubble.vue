@@ -35,11 +35,17 @@
 
             <BubblePartStatus v-else-if="item.kind === 'compaction'" :message="message" :compaction-part="item.part" />
 
-            <QuestionCard v-else-if="item.kind === 'question'" :question="item.question" :disabled="disabled" @runtime-input="$emit('runtime-input', $event)" />
+            <QuestionCard v-else-if="item.kind === 'question'" :question="item.question" :disabled="disabled" @submit="$emit('submit', $event)" />
 
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
 
-            <BubblePartWidget v-else-if="item.kind === 'widget'" :part="item.part" @runtime-input="$emit('runtime-input', $event)" />
+            <BubblePartWidget
+              v-else-if="item.kind === 'widget'"
+              :part="item.part"
+              :runtime-enabled="item.runtimeEnabled"
+              @submit="$emit('submit', $event)"
+              @change="handleWidgetPartChange(item, $event)"
+            />
           </template>
         </template>
       </div>
@@ -70,7 +76,6 @@ import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type {
   ChatMessageErrorPart,
   ChatMessagePart,
-  ChatMessageRuntimeInput,
   ChatMessageTextPart,
   ChatMessageThinkingPart,
   ChatMessageToolPart,
@@ -84,6 +89,7 @@ import type { ImagePreviewItem } from '@/hooks/useImagePreview';
 import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult, resolveWidgetPartFromToolResult } from '../utils/messageHelper';
+import { createMessageUpdateSubmitAction, type BChatSubmitAction } from '../utils/submitAction';
 import { formatMessageTime } from '../utils/timeFormat';
 import BubblePartStatus from './MessageBubble/BubblePartStatus.vue';
 import BubblePartText from './MessageBubble/BubblePartText.vue';
@@ -108,10 +114,10 @@ const props = defineProps<{
   canRollback?: (message: Message) => boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
-  (e: 'runtime-input', input: ChatMessageRuntimeInput): void;
+  (e: 'submit', action: BChatSubmitAction): void;
   (e: 'rollback', message: Message): void;
 }>();
 
@@ -122,7 +128,7 @@ type MessageBubbleRenderItem =
   | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart }
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
   | { key: string; kind: 'tool'; part: ChatMessageToolPart }
-  | { key: string; kind: 'widget'; part: ChatMessageWidgetPart };
+  | { key: string; kind: 'widget'; part: ChatMessageWidgetPart; partIndex: number | null; runtimeEnabled: boolean };
 
 /**
  * 判断消息片段是否为文本或错误片段。
@@ -185,10 +191,10 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
     if (part.type === 'tool') {
       const widgetPart = resolveWidgetPartFromToolResult(part);
-      if (widgetPart) return [{ key: `${key}-widget`, kind: 'widget', part: widgetPart }];
+      if (widgetPart) return [{ key: `${key}-widget`, kind: 'widget', part: widgetPart, partIndex: null, runtimeEnabled: false }];
     }
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
-    if (part.type === 'widget') return [{ key, kind: 'widget', part }];
+    if (part.type === 'widget') return [{ key, kind: 'widget', part, partIndex: index, runtimeEnabled: true }];
     return [];
   })
 );
@@ -211,6 +217,26 @@ async function handleImageClick(index: number): Promise<void> {
 function handleCopy(message: Message): void {
   const content = extractLastTextPart(message);
   clipboard(content, { successMessage: '已复制到剪贴板' });
+}
+
+/**
+ * 将小组件运行态更新补齐消息定位信息后向上透传。
+ * @param item - 小组件渲染条目
+ * @param part - 新的小组件片段
+ */
+function handleWidgetPartChange(item: Extract<MessageBubbleRenderItem, { kind: 'widget' }>, part: ChatMessageWidgetPart): void {
+  if (item.partIndex === null) return;
+
+  emit(
+    'submit',
+    createMessageUpdateSubmitAction(
+      props.message.id,
+      (currentMessage: Message): Message => ({
+        ...currentMessage,
+        parts: currentMessage.parts.map((sourcePart, index) => (index === item.partIndex ? part : sourcePart))
+      })
+    )
+  );
 }
 </script>
 

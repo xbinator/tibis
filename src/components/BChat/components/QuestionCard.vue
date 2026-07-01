@@ -52,8 +52,8 @@
  * 多个问题时逐个展示，用户点击"下一步"逐步完成，最后一步为补充信息。
  */
 import type { AIAwaitingUserChoiceItem, AIAwaitingUserChoiceQuestion } from 'types/ai';
-import type { ChatMessageRuntimeInput } from 'types/chat';
 import { computed, ref, watch } from 'vue';
+import { createUserChoiceSubmitAction, type BChatSubmitAction } from '../utils/submitAction';
 
 const props = withDefaults(
   defineProps<{
@@ -66,8 +66,8 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  /** 用户交互提交到聊天运行态 */
-  (e: 'runtime-input', input: ChatMessageRuntimeInput): void;
+  /** 用户交互提交到统一聊天提交器 */
+  (e: 'submit', action: BChatSubmitAction): void;
 }>();
 
 /** 每个问题的选中值列表，索引与 questionItems 一一对应 */
@@ -184,16 +184,16 @@ function handlePrev(): void {
  * 取消操作：提交空答案。
  */
 function handleCancel(): void {
-  emit('runtime-input', {
-    kind: 'user_choice',
-    answer: {
+  emit(
+    'submit',
+    createUserChoiceSubmitAction({
       questionId: props.question.questionId,
       toolCallId: props.question.toolCallId,
       answers: [],
       questionAnswers: [],
       otherText: ''
-    }
-  });
+    })
+  );
 }
 
 /**
@@ -205,16 +205,16 @@ function handleSubmit(): void {
     answers: [...getSelectedValues(index)]
   }));
 
-  emit('runtime-input', {
-    kind: 'user_choice',
-    answer: {
+  emit(
+    'submit',
+    createUserChoiceSubmitAction({
       questionId: props.question.questionId,
       toolCallId: props.question.toolCallId,
       answers: questionAnswers[0]?.answers ?? [],
       questionAnswers,
       otherText: otherText.value.trim()
-    }
-  });
+    })
+  );
 }
 </script>
 

@@ -3,7 +3,7 @@
  * @description BChat ConversationView 渲染记忆更新测试。
  * @vitest-environment jsdom
  */
-import type { ChatMessageToolPart } from 'types/chat';
+import type { ChatMessageToolPart, ChatMessageWidgetPart } from 'types/chat';
 import type { DefineComponent } from 'vue';
 import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
@@ -35,6 +35,7 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
       '{{ disabled ? "disabled" : "enabled" }}:',
       '{{ canRollback && canRollback(message) ? "rollback" : "no-rollback" }}',
       '{{ message.parts[0]?.result?.data?.renderContext?.input?.city ?? "" }}',
+      '{{ message.parts[0]?.renderContext?.state?.weather?.temperature ?? "" }}',
       '</div>'
     ].join('')
   }
@@ -125,6 +126,43 @@ function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
 }
 
 /**
+ * 创建小组件消息片段。
+ * @param temperature - 状态中的温度值
+ * @returns 小组件消息片段
+ */
+function createWidgetPart(temperature: number): ChatMessageWidgetPart {
+  return {
+    type: 'widget',
+    sessionId: 'widget-session-1',
+    widgetId: 'weather',
+    status: 'mounted',
+    lifecycle: {
+      mountedAt: '2026-07-01T00:00:00.000Z'
+    },
+    value: {
+      name: 'weather',
+      description: '天气小组件',
+      inputSchema: { type: 'object', properties: {} },
+      stateSchema: { type: 'object', properties: {} },
+      metadata: {},
+      elements: [],
+      viewport: {
+        center: { x: 0, y: 0 },
+        zoom: 1
+      }
+    },
+    renderContext: {
+      input: {},
+      state: {
+        weather: {
+          temperature
+        }
+      }
+    }
+  };
+}
+
+/**
  * 创建 assistant 消息。
  * @param part - 工具片段
  * @returns assistant 消息
@@ -138,6 +176,23 @@ function createAssistantMessage(part: ChatMessageToolPart): Message {
     createdAt: '2026-06-22T00:00:00.000Z',
     loading: false,
     finished: false
+  };
+}
+
+/**
+ * 创建带小组件片段的 assistant 消息。
+ * @param part - 小组件片段
+ * @returns assistant 消息
+ */
+function createWidgetMessage(part: ChatMessageWidgetPart): Message {
+  return {
+    id: 'assistant-widget',
+    role: 'assistant',
+    content: '',
+    parts: [part],
+    createdAt: '2026-07-01T00:00:00.000Z',
+    loading: false,
+    finished: true
   };
 }
 
@@ -253,6 +308,54 @@ describe('ConversationView', (): void => {
     await nextTick();
 
     expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:success:enabled:no-rollback杭州');
+  });
+
+  it('updates widget display when render context state changes without status changes', async (): Promise<void> => {
+    const wrapper = mount(ConversationViewForTest, {
+      props: {
+        messages: [createWidgetMessage(createWidgetPart(28))],
+        loading: false,
+        disabled: false
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('mounted::enabled:no-rollback28');
+
+    await wrapper.setProps({
+      messages: [createWidgetMessage(createWidgetPart(31))],
+      loading: false,
+      disabled: false
+    });
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('mounted::enabled:no-rollback31');
+  });
+
+  it('forwards message bubble submit actions without inspecting them', async (): Promise<void> => {
+    const submitAction = {
+      run: vi.fn()
+    };
+    const wrapper = mount(ConversationViewForTest, {
+      props: {
+        messages: [createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))],
+        loading: false,
+        disabled: false
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    wrapper.findComponent({ name: 'MessageBubble' }).vm.$emit('submit', submitAction);
+
+    expect(wrapper.emitted('submit')?.[0]).toEqual([submitAction]);
   });
 
   it('updates rollback visibility when following messages change', async (): Promise<void> => {

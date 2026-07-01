@@ -14,7 +14,7 @@
         :can-rollback="rollbackController.canRollback"
         @edit="handleChatEdit"
         @regenerate="handleChatRegenerate"
-        @runtime-input="handleChatRuntimeInput"
+        @submit="chatSubmitter.submit"
         @rollback="handleRollback"
       >
         <template #footer>
@@ -85,14 +85,7 @@
 
 <script setup lang="ts">
 import type { BChatProps, Message } from './utils/types';
-import type {
-  AIUserChoiceAnswerData,
-  ChatMessageConfirmationAction,
-  ChatMessageRuntimeInput,
-  ChatMessageWidgetResultPart,
-  ChatMessageWidgetResultRuntimeInput,
-  ChatSession
-} from 'types/chat';
+import type { ChatMessageConfirmationAction, ChatSession } from 'types/chat';
 import type { ChatRuntimeContextUsageSnapshot, ChatRuntimeSendInput, ChatRuntimeUserInputPart } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -112,7 +105,6 @@ import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
-import { stringifyJsonValue } from '@/utils/json';
 import { Modal } from '@/utils/modal';
 import { createNamespace } from '@/utils/namespace';
 import ConfirmationSheet from './components/ConfirmationSheet.vue';
@@ -127,6 +119,7 @@ import { useChatHistory } from './hooks/useChatHistory';
 import { useChatInput } from './hooks/useChatInput';
 import { useChatRuntime } from './hooks/useChatRuntime';
 import { useChatServiceConfig } from './hooks/useChatServiceConfig';
+import { useChatSubmitter } from './hooks/useChatSubmitter';
 import { useChatTaskRuntime } from './hooks/useChatTaskRuntime';
 import { useContextUsage } from './hooks/useContextUsage';
 import { useFileReference } from './hooks/useFileReference';
@@ -786,46 +779,6 @@ async function handleChatRegenerate(nextMessage: Message): Promise<void> {
 }
 
 /**
- * 处理用户选择提交。
- * @param answer - 用户选择的答案数据
- */
-async function handleChatUserChoiceSubmit(answer: AIUserChoiceAnswerData): Promise<void> {
-  const isActiveChatTask = taskRuntime.activeTask.value === 'chat';
-  if (!isActiveChatTask) {
-    const startResult = taskRuntime.beginTask('chat');
-    if (!startResult.ok) {
-      return;
-    }
-  }
-
-  try {
-    const sessionId = activeSessionId.value;
-    if (!sessionId) {
-      taskRuntime.finishTask('chat');
-      return;
-    }
-
-    const runtimeConfig = await resolveChatRuntimeRequestConfig();
-    if (!runtimeConfig) {
-      taskRuntime.finishTask('chat');
-      return;
-    }
-
-    const result = await chatRuntime.submitUserChoice({
-      sessionId,
-      answer,
-      ...runtimeConfig
-    });
-    if (result.completed === true) {
-      taskRuntime.finishTask('chat');
-    }
-  } catch (error) {
-    taskRuntime.finishTask('chat');
-    throw error;
-  }
-}
-
-/**
  * 发送一条已经构造好的用户消息到 ChatRuntime。
  * @param input - 运行态发送输入
  */
@@ -885,42 +838,28 @@ async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promi
 }
 
 /**
- * 处理小组件运行态提交结果。
- * @param input - 小组件提交输入
+ * 更新一条可见消息并持久化。
+ * @param messageId - 待更新消息 ID
+ * @param updater - 基于当前消息生成下一版消息的函数
  */
-async function handleChatWidgetSubmit(input: ChatMessageWidgetResultRuntimeInput): Promise<void> {
-  const startResult = taskRuntime.beginTask('chat');
-  if (!startResult.ok) return;
+async function updateVisibleMessage(messageId: string, updater: (message: Message) => Message): Promise<void> {
+  const messageIndex = messages.value.findIndex((message) => message.id === messageId);
+  if (messageIndex < 0) return;
 
-  const resultPart: ChatMessageWidgetResultPart = {
-    type: 'widget_result',
-    sessionId: input.sessionId,
-    widgetId: input.widgetId,
-    result: input.result,
-    submittedAt: new Date().toISOString()
-  };
-  const userMessage = create.userMessage(stringifyJsonValue(resultPart, { space: 2 }));
-  userMessage.parts = [resultPart];
-
-  await sendRuntimeUserMessage({
-    userMessage,
-    parts: [resultPart],
-    errorMessage: '提交小组件结果失败'
-  });
+  const nextMessage = updater(messages.value[messageIndex]);
+  messages.value.splice(messageIndex, 1, nextMessage);
+  await chatStore.updateSessionMessage(activeSessionId.value, nextMessage);
 }
 
-/**
- * 处理消息气泡内提交到聊天运行态的输入。
- * @param input - 消息气泡交互输入
- */
-async function handleChatRuntimeInput(input: ChatMessageRuntimeInput): Promise<void> {
-  if (input.kind === 'user_choice') {
-    await handleChatUserChoiceSubmit(input.answer);
-    return;
-  }
-
-  await handleChatWidgetSubmit(input);
-}
+/** 消息级交互统一提交器。 */
+const chatSubmitter = useChatSubmitter({
+  taskRuntime,
+  getSessionId: () => activeSessionId.value ?? undefined,
+  resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig,
+  submitUserChoice: chatRuntime.submitUserChoice,
+  sendRuntimeUserMessage,
+  updateMessage: updateVisibleMessage
+});
 
 /** 用户消息回退 hook。 */
 const rollbackController = useRollback({

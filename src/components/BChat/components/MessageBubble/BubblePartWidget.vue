@@ -9,24 +9,34 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatMessageWidgetPart, ChatMessageWidgetResultRuntimeInput, ChatMessageWidgetSubmitResult } from 'types/chat';
+import type { ChatMessageWidgetPart, ChatMessageWidgetResultPart, ChatMessageWidgetSubmitResult } from 'types/chat';
+import { onMounted } from 'vue';
 import { mapValues } from 'lodash-es';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
-import { isPlainRecord, stringifyRuntimeTextValue } from '@/utils/json';
+import { isPlainRecord, stringifyJsonValue, stringifyRuntimeTextValue } from '@/utils/json';
 import { createNamespace } from '@/utils/namespace';
+import { create } from '../../utils/messageHelper';
+import { createRuntimeUserMessageSubmitAction, type BChatSubmitAction } from '../../utils/submitAction';
+import { runWidgetMountedLifecycle } from '../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 
 interface Props {
   /** 小组件消息片段 */
   part: ChatMessageWidgetPart;
+  /** 是否启用消息内独立运行态 */
+  runtimeEnabled?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  runtimeEnabled: false
+});
 
 const emit = defineEmits<{
-  /** 小组件交互提交到聊天运行态 */
-  'runtime-input': [input: ChatMessageWidgetResultRuntimeInput];
+  /** 小组件交互提交到统一聊天提交器 */
+  submit: [action: BChatSubmitAction];
+  /** 小组件消息片段发生运行态变化 */
+  change: [part: ChatMessageWidgetPart];
 }>();
 
 const [name] = createNamespace('', 'message-bubble-widget');
@@ -54,13 +64,41 @@ function createWidgetSubmitSuccessResult(output: unknown): ChatMessageWidgetSubm
  * @param output - 小组件输出
  */
 function handleSubmit(output: unknown): void {
-  emit('runtime-input', {
-    kind: 'widget_result',
+  const resultPart: ChatMessageWidgetResultPart = {
+    type: 'widget_result',
     sessionId: props.part.sessionId,
     widgetId: props.part.widgetId,
-    result: createWidgetSubmitSuccessResult(output)
-  });
+    result: createWidgetSubmitSuccessResult(output),
+    submittedAt: new Date().toISOString()
+  };
+  const userMessage = create.userMessage(stringifyJsonValue(resultPart, { space: 2 }));
+  userMessage.parts = [resultPart];
+
+  emit(
+    'submit',
+    createRuntimeUserMessageSubmitAction({
+      userMessage,
+      parts: [resultPart],
+      errorMessage: '提交小组件结果失败'
+    })
+  );
 }
+
+/**
+ * 运行小组件 mounted 生命周期，并把状态变化交给消息宿主写回。
+ */
+async function runMountedLifecycle(): Promise<void> {
+  if (!props.runtimeEnabled) return;
+
+  const nextPart = await runWidgetMountedLifecycle(props.part);
+  if (nextPart !== props.part) {
+    emit('change', nextPart);
+  }
+}
+
+onMounted((): void => {
+  runMountedLifecycle().catch((): undefined => undefined);
+});
 </script>
 
 <style scoped lang="less">

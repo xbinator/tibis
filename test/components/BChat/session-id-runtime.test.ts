@@ -3,13 +3,14 @@
  * @description BChat 基于 sessionId 的会话运行时测试。
  * @vitest-environment jsdom
  */
-import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatSession } from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart, ChatSession } from 'types/chat';
 import type { ChatRuntimeContinueInput } from 'types/chat-runtime';
 import { defineComponent, h, type PropType } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BChat from '@/components/BChat/index.vue';
+import { createMessageUpdateSubmitAction, createRuntimeUserMessageSubmitAction, createUserChoiceSubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import type { FileMentionOption } from '@/components/BPromptEditor/types';
 import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
@@ -339,7 +340,7 @@ const ConversationViewStub = defineComponent({
       default: () => []
     }
   },
-  emits: ['regenerate', 'rollback', 'runtime-input'],
+  emits: ['regenerate', 'rollback', 'submit'],
   setup(_props, { expose, slots }) {
     expose({
       scrollToBottom: conversationViewMockState.scrollToBottom
@@ -408,6 +409,45 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
     loading: false,
     finished: true,
     ...overrides
+  };
+}
+
+/**
+ * 创建测试用 Widget 消息片段。
+ * @param status - 小组件状态
+ * @param temperature - 状态温度值
+ * @returns 小组件消息片段
+ */
+function createWidgetPart(status: ChatMessageWidgetPart['status'], temperature?: number): ChatMessageWidgetPart {
+  return {
+    type: 'widget',
+    sessionId: 'widget-session-1',
+    widgetId: 'weather',
+    status,
+    lifecycle: status === 'mounted' ? { mountedAt: '2026-07-01T00:00:00.000Z' } : {},
+    value: {
+      name: 'weather',
+      description: '天气小组件',
+      inputSchema: { type: 'object', properties: {} },
+      stateSchema: { type: 'object', properties: {} },
+      metadata: {},
+      elements: [],
+      viewport: {
+        center: { x: 0, y: 0 },
+        zoom: 1
+      }
+    },
+    renderContext: {
+      input: {},
+      state:
+        temperature === undefined
+          ? {}
+          : {
+              weather: {
+                temperature
+              }
+            }
+    }
   };
 }
 
@@ -905,10 +945,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit('runtime-input', {
-      kind: 'user_choice',
-      answer
-    });
+    wrapper.findComponent(ConversationViewStub).vm.$emit('submit', createUserChoiceSubmitAction(answer));
     await flushPromises();
 
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(
@@ -922,6 +959,99 @@ describe('BChat sessionId runtime', (): void => {
     );
     expect(electronAPIMock.chatRuntimeSubmitUserChoice.mock.calls[0]?.[0]).not.toHaveProperty('messages');
     expect(electronAPIMock.chatRuntimeContinue).not.toHaveBeenCalled();
+  });
+
+  it('sends runtime user message submit actions through main process ChatRuntime', async (): Promise<void> => {
+    const resultPart: ChatMessageWidgetResultPart = {
+      type: 'widget_result',
+      sessionId: 'widget-session-1',
+      widgetId: 'weather',
+      submittedAt: '2026-07-01T00:00:00.000Z',
+      result: {
+        status: 'success',
+        data: {
+          city: '上海'
+        }
+      }
+    };
+    const userMessage: Message = {
+      id: 'user-widget-result',
+      role: 'user',
+      content: '小组件提交结果',
+      parts: [resultPart],
+      createdAt: '2026-07-01T00:00:00.000Z',
+      loading: false,
+      finished: true
+    };
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit(
+      'submit',
+      createRuntimeUserMessageSubmitAction({
+        userMessage,
+        parts: [resultPart],
+        errorMessage: '提交小组件结果失败'
+      })
+    );
+    await flushPromises();
+
+    expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-active',
+        content: '小组件提交结果',
+        userMessageId: 'user-widget-result',
+        userMessageCreatedAt: '2026-07-01T00:00:00.000Z',
+        parts: [resultPart]
+      })
+    );
+  });
+
+  it('persists message update submit actions against the latest visible message', async (): Promise<void> => {
+    const firstWidgetPart = createWidgetPart('created');
+    const secondWidgetPart: ChatMessageWidgetPart = {
+      ...createWidgetPart('created'),
+      sessionId: 'widget-session-2',
+      widgetId: 'forecast'
+    };
+    const assistantMessage = createAssistantMessage({
+      id: 'assistant-widget',
+      content: '',
+      parts: [firstWidgetPart, secondWidgetPart]
+    });
+    const firstMountedWidgetPart = createWidgetPart('mounted', 31);
+    const secondMountedWidgetPart: ChatMessageWidgetPart = {
+      ...createWidgetPart('mounted', 32),
+      sessionId: 'widget-session-2',
+      widgetId: 'forecast'
+    };
+    chatStoreMock.getSessionMessages.mockResolvedValueOnce([assistantMessage]).mockResolvedValueOnce([]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit(
+      'submit',
+      createMessageUpdateSubmitAction('assistant-widget', (currentMessage) => ({
+        ...currentMessage,
+        parts: currentMessage.parts.map((part, index) => (index === 0 ? firstMountedWidgetPart : part))
+      }))
+    );
+    wrapper.findComponent(ConversationViewStub).vm.$emit(
+      'submit',
+      createMessageUpdateSubmitAction('assistant-widget', (currentMessage) => ({
+        ...currentMessage,
+        parts: currentMessage.parts.map((part, index) => (index === 1 ? secondMountedWidgetPart : part))
+      }))
+    );
+    await flushPromises();
+
+    const nextAssistantMessage: Message = {
+      ...assistantMessage,
+      parts: [firstMountedWidgetPart, secondMountedWidgetPart]
+    };
+    const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
+    expect(visibleMessages[0]).toEqual(nextAssistantMessage);
+    expect(chatStoreMock.updateSessionMessage).toHaveBeenCalledWith('session-active', nextAssistantMessage);
   });
 
   it('submits cancelled user choices while the chat task is waiting for the answer', async (): Promise<void> => {
@@ -939,10 +1069,7 @@ describe('BChat sessionId runtime', (): void => {
       otherText: ''
     };
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit('runtime-input', {
-      kind: 'user_choice',
-      answer
-    });
+    wrapper.findComponent(ConversationViewStub).vm.$emit('submit', createUserChoiceSubmitAction(answer));
     await flushPromises();
 
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(

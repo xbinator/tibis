@@ -6,16 +6,29 @@
 /* eslint-disable vue/one-component-per-file */
 import type { ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart } from 'types/chat';
 import { defineComponent } from 'vue';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MessageBubble from '@/components/BChat/components/MessageBubble.vue';
 import { create } from '@/components/BChat/utils/messageHelper';
+import type { BChatSubmitContext, BChatSubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import type { WidgetData, WidgetRenderContext } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /** 剪贴板写入测试替身。 */
 const clipboardMock = vi.fn();
+
+/**
+ * 创建统一提交上下文测试替身。
+ * @returns 提交上下文测试替身
+ */
+function createSubmitContextMock(): BChatSubmitContext {
+  return {
+    continueAssistantTurn: vi.fn(),
+    sendAdaptedUserMessage: vi.fn(),
+    updateMessage: vi.fn()
+  };
+}
 
 vi.mock('@/hooks/useClipboard', () => ({
   useClipboard: vi.fn(() => ({
@@ -334,7 +347,140 @@ describe('MessageBubble', (): void => {
     expect(wrapper.text()).toContain('28°C');
   });
 
-  it('emits runtime input payloads from widget runtime items', async (): Promise<void> => {
+  it('emits unified submit actions after the created widget runs mounted', async (): Promise<void> => {
+    const widgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-session-1',
+      widgetId: 'weather',
+      status: 'created',
+      lifecycle: {},
+      value: {
+        ...createWeatherWidgetData(),
+        execute: {
+          code: ['defineConfig({', '  mounted() {', "    this.$setState('weather.temperature', 31)", '  }', '})'].join('\n')
+        }
+      },
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        state: {}
+      }
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        id: 'assistant-widget',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+
+    await flushPromises();
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    await action.run(submitContext);
+
+    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget', expect.any(Function));
+    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
+    const nextMessage = updater(
+      createAssistantMessage({
+        id: 'assistant-widget',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+
+    expect(nextMessage).toEqual(
+      expect.objectContaining({
+        id: 'assistant-widget',
+        parts: [
+          expect.objectContaining({
+            status: 'mounted',
+            renderContext: {
+              input: {
+                city: '上海'
+              },
+              state: {
+                weather: {
+                  temperature: 31
+                }
+              }
+            }
+          })
+        ]
+      })
+    );
+  });
+
+  it('emits complete message update actions for widget parts outside the first index', async (): Promise<void> => {
+    const widgetPart: ChatMessageWidgetPart = {
+      type: 'widget',
+      sessionId: 'widget-session-2',
+      widgetId: 'weather',
+      status: 'created',
+      lifecycle: {},
+      value: {
+        ...createWeatherWidgetData(),
+        execute: {
+          code: ['defineConfig({', '  mounted() {', "    this.$setState('weather.temperature', 32)", '  }', '})'].join('\n')
+        }
+      },
+      renderContext: {
+        input: {
+          city: '杭州'
+        },
+        state: {}
+      }
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        id: 'assistant-widget-second',
+        content: '',
+        parts: [{ type: 'text', text: '天气卡片' }, widgetPart]
+      })
+    );
+
+    await flushPromises();
+
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    await action.run(submitContext);
+
+    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget-second', expect.any(Function));
+    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
+    const nextMessage = updater(
+      createAssistantMessage({
+        id: 'assistant-widget-second',
+        content: '',
+        parts: [{ type: 'text', text: '天气卡片' }, widgetPart]
+      })
+    );
+
+    expect(nextMessage).toEqual(
+      expect.objectContaining({
+        id: 'assistant-widget-second',
+        parts: [
+          { type: 'text', text: '天气卡片' },
+          expect.objectContaining({
+            status: 'mounted',
+            renderContext: {
+              input: {
+                city: '杭州'
+              },
+              state: {
+                weather: {
+                  temperature: 32
+                }
+              }
+            }
+          })
+        ]
+      })
+    );
+  });
+
+  it('emits unified submit actions from widget runtime items', async (): Promise<void> => {
     const output: Record<string, unknown> = {
       coffeeId: 'latte',
       size: 'large',
@@ -361,25 +507,54 @@ describe('MessageBubble', (): void => {
 
     wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', output);
 
-    expect(wrapper.emitted('runtime-input')?.[0]).toEqual([
-      {
-        kind: 'widget_result',
-        sessionId: 'widget-coffee-session-1',
-        widgetId: 'coffee',
-        result: {
-          status: 'success',
-          data: {
-            coffeeId: 'latte',
-            size: 'large',
-            quantity: '2',
-            options: '{"temperature":"hot"}'
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    await action.run(submitContext);
+
+    expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
+      userMessage: expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('"type": "widget_result"'),
+        parts: [
+          {
+            type: 'widget_result',
+            sessionId: 'widget-coffee-session-1',
+            widgetId: 'coffee',
+            submittedAt: expect.any(String),
+            result: {
+              status: 'success',
+              data: {
+                coffeeId: 'latte',
+                size: 'large',
+                quantity: '2',
+                options: '{"temperature":"hot"}'
+              }
+            }
+          }
+        ]
+      }),
+      parts: [
+        {
+          type: 'widget_result',
+          sessionId: 'widget-coffee-session-1',
+          widgetId: 'coffee',
+          submittedAt: expect.any(String),
+          result: {
+            status: 'success',
+            data: {
+              coffeeId: 'latte',
+              size: 'large',
+              quantity: '2',
+              options: '{"temperature":"hot"}'
+            }
           }
         }
-      }
-    ]);
+      ],
+      errorMessage: '提交小组件结果失败'
+    });
   });
 
-  it('emits runtime input payloads from question answers', async (): Promise<void> => {
+  it('emits unified submit actions from question answers', async (): Promise<void> => {
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         content: '',
@@ -391,23 +566,22 @@ describe('MessageBubble', (): void => {
     await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
     await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
 
-    expect(wrapper.emitted('runtime-input')?.[0]).toEqual([
-      {
-        kind: 'user_choice',
-        answer: {
-          questionId: 'question-1',
-          toolCallId: 'tool-call-question',
-          answers: ['continue'],
-          questionAnswers: [
-            {
-              question: '是否继续？',
-              answers: ['continue']
-            }
-          ],
-          otherText: ''
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    await action.run(submitContext);
+
+    expect(submitContext.continueAssistantTurn).toHaveBeenCalledWith({
+      questionId: 'question-1',
+      toolCallId: 'tool-call-question',
+      answers: ['continue'],
+      questionAnswers: [
+        {
+          question: '是否继续？',
+          answers: ['continue']
         }
-      }
-    ]);
+      ],
+      otherText: ''
+    });
   });
 
   it('renders open_widget tool results as widget runtime items', (): void => {

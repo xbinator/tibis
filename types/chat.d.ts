@@ -328,29 +328,6 @@ export interface AIUserChoiceAnswerData {
 }
 
 /**
- * 用户选择卡片提交到聊天运行态的输入。
- */
-export interface ChatMessageUserChoiceRuntimeInput {
-  /** 运行态输入类型 */
-  kind: 'user_choice';
-  /** 用户选择答案 */
-  answer: AIUserChoiceAnswerData;
-}
-
-/**
- * 小组件运行态提交到聊天运行态的输入。
- */
-export interface ChatMessageWidgetResultRuntimeInput extends ChatMessageWidgetSubmitPayload {
-  /** 运行态输入类型 */
-  kind: 'widget_result';
-}
-
-/**
- * 消息气泡内交互统一提交给聊天运行态的输入。
- */
-export type ChatMessageRuntimeInput = ChatMessageUserChoiceRuntimeInput | ChatMessageWidgetResultRuntimeInput;
-
-/**
  * 确认卡片状态
  */
 export type ChatMessageConfirmationStatus = 'pending' | 'approved' | 'cancelled' | 'expired';
