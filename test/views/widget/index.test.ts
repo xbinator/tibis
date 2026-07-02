@@ -156,6 +156,28 @@ function createBWidgetStub(): ReturnType<typeof defineComponent> {
 }
 
 /**
+ * 创建 CodeEditor 测试替身。
+ * @returns CodeEditor 测试组件
+ */
+function createCodeEditorStub(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'CodeEditor',
+    props: {
+      active: {
+        type: Boolean,
+        default: false
+      },
+      value: {
+        type: Object as PropType<WidgetData>,
+        required: true
+      }
+    },
+    emits: ['update:value', 'close'],
+    template: '<section class="code-editor-stub"></section>'
+  });
+}
+
+/**
  * BWidget 测试替身暴露能力。
  */
 interface BWidgetStubExpose {
@@ -263,6 +285,109 @@ describe('WidgetPage', (): void => {
     await nextTick();
 
     expect(widgetDataMock.value).toEqual(nextWidgetData);
+    wrapper.unmount();
+  });
+
+  it('opens the code editor overlay and syncs data through the value model', async (): Promise<void> => {
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      execute: {
+        enabled: false,
+        description: '已有脚本说明',
+        code: 'Widget({})'
+      }
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: true,
+          Icon: true,
+          CodeEditor: createCodeEditorStub()
+        }
+      }
+    });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const codeOverlay = wrapper.find('.widget-page__code-overlay');
+    const nextWidgetData: WidgetData = {
+      ...widgetDataMock.value,
+      execute: {
+        enabled: false,
+        description: '已有脚本说明',
+        code: 'Widget({ methods: { confirm() {} } })'
+      }
+    };
+    const initialCodeEditor = wrapper.findComponent({ name: 'CodeEditor' });
+
+    expect(panelSettings.exists()).toBe(true);
+    expect(panelSidebar.exists()).toBe(true);
+    expect(codeOverlay.exists()).toBe(true);
+    expect(codeOverlay.classes()).not.toContain('is-open');
+    expect(codeOverlay.attributes('aria-hidden')).toBeUndefined();
+    expect(initialCodeEditor.exists()).toBe(true);
+    expect(initialCodeEditor.props('active')).toBe(false);
+
+    panelSettings.vm.$emit('edit-code');
+    await nextTick();
+
+    const codeEditor = wrapper.findComponent({ name: 'CodeEditor' });
+
+    expect(codeEditor.exists()).toBe(true);
+    expect(codeEditor.props('value')).toBe(widgetDataMock.value);
+    expect(codeEditor.props('active')).toBe(true);
+    expect(panelSettings.exists()).toBe(true);
+    expect(panelSidebar.exists()).toBe(true);
+    expect(wrapper.find('.widget-page__code-overlay').classes()).toContain('is-open');
+    expect(wrapper.find('.widget-page__code-overlay').attributes('aria-hidden')).toBeUndefined();
+
+    codeEditor.vm.$emit('update:value', nextWidgetData);
+    await nextTick();
+
+    expect(widgetDataMock.value).toEqual(nextWidgetData);
+
+    codeEditor.vm.$emit('close');
+    await nextTick();
+
+    expect(wrapper.findComponent({ name: 'CodeEditor' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'CodeEditor' }).props('active')).toBe(false);
+    expect(wrapper.find('.widget-page__code-overlay').classes()).not.toContain('is-open');
+    wrapper.unmount();
+  });
+
+  it('closes the code editor overlay without removing the editor instance', async (): Promise<void> => {
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      execute: {
+        code: 'Widget({})'
+      }
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: true,
+          Icon: true,
+          CodeEditor: createCodeEditorStub()
+        }
+      }
+    });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+    const codeOverlay = wrapper.find('.widget-page__code-overlay');
+
+    expect(codeOverlay.exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'CodeEditor' }).props('active')).toBe(false);
+
+    panelSettings.vm.$emit('edit-code');
+    await nextTick();
+    expect(wrapper.find('.widget-page__code-overlay').classes()).toContain('is-open');
+    expect(wrapper.findComponent({ name: 'CodeEditor' }).props('active')).toBe(true);
+
+    wrapper.findComponent({ name: 'CodeEditor' }).vm.$emit('close');
+    await nextTick();
+
+    expect(widgetDataMock.value.execute?.code).toBe('Widget({})');
+    expect(wrapper.findComponent({ name: 'CodeEditor' }).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'CodeEditor' }).props('active')).toBe(false);
+    expect(wrapper.find('.widget-page__code-overlay').classes()).not.toContain('is-open');
     wrapper.unmount();
   });
 

@@ -8,31 +8,10 @@ import { readFileSync } from 'node:fs';
 import { defineComponent, nextTick, ref } from 'vue';
 import type { ComponentPublicInstance, Ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
-import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import type { WidgetData, WidgetElement, WidgetSchemaObject } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import PageSetter from '@/views/widget/components/PageSetter.vue';
-
-/** TypeScript 类型推导测试用最小基础类型声明。 */
-const TYPESCRIPT_TEST_BASE_LIB = `
-interface Boolean {}
-interface Function {}
-interface IArguments {}
-interface Number {}
-interface Object {}
-interface RegExp {}
-interface String {}
-interface ThisType<T> {}
-interface Array<T> {
-  length: number
-  [index: number]: T
-}
-interface Promise<T> {}
-type Record<K extends string | number | symbol, T> = {
-  [P in K]: T
-}
-`;
 
 const globalStubs = {
   ATabs: defineComponent({
@@ -386,80 +365,6 @@ const globalStubs = {
 interface PageSetterHostVm extends ComponentPublicInstance {
   /** 当前Widget 数据 */
   dataItem: WidgetData;
-}
-
-/**
- * Monaco 测试替身属性。
- */
-interface BMonacoStubProps {
-  /** 编辑器语言 */
-  language?: string;
-  /** 类型提示声明 */
-  extraLibs?: Array<{ content: string; filePath?: string }>;
-  /** 编辑器配置 */
-  options?: {
-    wordWrap?: boolean;
-    typescriptCompilerOptions?: {
-      lib?: string[];
-      noImplicitThis?: boolean;
-    };
-  };
-  /** 当前代码文本 */
-  value?: string;
-}
-
-/** 已移除的旧根变量名。 */
-const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
-
-/**
- * 判断对象自身是否存在指定 key。
- * @param value - 对象值
- * @param key - 字段名
- * @returns 是否存在自有字段
- */
-function hasOwnKey<T extends object>(value: T, key: PropertyKey): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
-}
-
-/**
- * 使用 TypeScript 编译器检查内存中的源码。
- * @param files - 文件名到源码的映射
- * @returns 诊断信息
- */
-function getTypeScriptDiagnostics(files: Record<string, string>): readonly ts.Diagnostic[] {
-  const compilerOptions: ts.CompilerOptions = {
-    noEmit: true,
-    noImplicitThis: true,
-    noLib: true,
-    skipLibCheck: true,
-    target: ts.ScriptTarget.ES2020,
-    typeRoots: [],
-    types: []
-  };
-  const compilerHost = ts.createCompilerHost(compilerOptions);
-
-  compilerHost.getSourceFile = (fileName: string, languageVersion: ts.ScriptTarget): ts.SourceFile | undefined => {
-    if (!hasOwnKey(files, fileName)) {
-      return undefined;
-    }
-
-    return ts.createSourceFile(fileName, files[fileName], languageVersion, true, ts.ScriptKind.TS);
-  };
-  compilerHost.fileExists = (fileName: string): boolean => hasOwnKey(files, fileName);
-  compilerHost.readFile = (fileName: string): string | undefined => files[fileName];
-  compilerHost.writeFile = (): void => undefined;
-  compilerHost.getDefaultLibFileName = (): string => 'lib.d.ts';
-
-  return ts.getPreEmitDiagnostics(ts.createProgram(Object.keys(files), compilerOptions, compilerHost));
-}
-
-/**
- * 将 TypeScript 诊断格式化为便于断言的文本。
- * @param diagnostics - 诊断信息
- * @returns 诊断文本
- */
-function formatTypeScriptDiagnostics(diagnostics: readonly ts.Diagnostic[]): string[] {
-  return diagnostics.map((diagnostic: ts.Diagnostic): string => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
 }
 
 /**
@@ -1025,28 +930,19 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('opens an interaction script dialog below input schema and saves script code', async (): Promise<void> => {
+  it('emits interaction script edit request below input schema without opening a dialog', async (): Promise<void> => {
     const dataItem = createWeatherWidgetData();
     dataItem.inputSchema = { ...dataItem.inputSchema, description: '查询天气入参' };
     const wrapper = mountPageSetterHost(dataItem);
     const sectionTitles = readSectionBlockTitles(wrapper);
-    const methodSection = findSectionBlock(wrapper, '交互脚本');
-    const nextCode = [
-      'defineConfig({',
-      '  methods: {',
-      '    async confirm() {',
-      "      this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })",
-      '    }',
-      '  }',
-      '})'
-    ].join('\n');
+    const methodSection = findSectionBlock(wrapper, '运行代码');
 
-    expect(sectionTitles.indexOf('交互脚本')).toBeGreaterThan(sectionTitles.indexOf('入参'));
+    expect(sectionTitles.indexOf('运行代码')).toBeGreaterThan(sectionTitles.indexOf('入参'));
     expect(sectionTitles).not.toContain('执行方法');
     expect(sectionTitles).not.toContain('出参');
     expect(sectionTitles).not.toContain('动态预览');
     expect(methodSection.find('.method-summary__text').exists()).toBe(false);
-    expect(methodSection.find('.method-summary__code').text()).toContain('defineConfig({');
+    expect(methodSection.find('.method-summary__code').text()).toContain('Widget({');
     expect(methodSection.findAll('.method-summary__line').length).toBeGreaterThan(4);
     expect(methodSection.find('.hljs-keyword').exists()).toBe(true);
     expect(methodSection.find('.hljs-comment').exists()).toBe(true);
@@ -1069,194 +965,15 @@ describe('PageSetter', (): void => {
       wrapper.findAllComponents({ name: 'ATabPaneStub' }).map((pane: VueWrapper): string | undefined => (pane.props() as { tab?: string }).tab)
     ).not.toContain('方法');
 
-    const editButton = findSectionEditButton(wrapper, '交互脚本');
+    const editButton = findSectionEditButton(wrapper, '运行代码');
     expect((editButton.props() as { icon?: string }).icon).toBe('lucide:code-xml');
     expect((editButton.props() as { size?: string }).size).toBe('mini');
     await editButton.trigger('click');
-    expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑');
-    expect(wrapper.find('.method-editor__summary').exists()).toBe(false);
 
-    const methodEditor = wrapper.findComponent({ name: 'BMonacoStub' });
-    const editorProps = methodEditor.props() as BMonacoStubProps;
-    expect(editorProps.language).toBe('typescript');
-    expect(editorProps.options?.wordWrap).toBe(true);
-    expect(editorProps.options?.typescriptCompilerOptions?.lib).toEqual(['es2020']);
-    expect(editorProps.options?.typescriptCompilerOptions?.noImplicitThis).toBe(true);
-    expect(editorProps.value?.startsWith('// defineConfig 会为生命周期和 methods 注入 this 上下文')).toBe(true);
-    expect(editorProps.value).toContain('读取 this.$input');
-    expect(editorProps.value).toContain('使用 this.$setState 写入状态');
-    expect(editorProps.value).toContain('使用 this.$http');
-    expect(editorProps.value).toContain('通过 this.$sendMessage 上行一条聊天消息');
-    expect(editorProps.value).not.toContain("name: '小明'");
-    expect(editorProps.value).not.toContain('hobbies');
-    expect(editorProps.value).not.toContain('const city = input.city');
-    expect(editorProps.value).not.toContain('temperatureCelsius');
-    expect(editorProps.value).not.toContain('result.success');
-    expect(editorProps.value).toContain('defineConfig({');
-    expect(editorProps.value).toContain('async mounted()');
-    expect(editorProps.value).toContain('async unmounted()');
-    expect(editorProps.value).toContain('methods:');
-    expect(editorProps.value).toContain('this.$sendMessage');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('declare function defineConfig');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('defineConfig(config: WidgetConfig & ThisType<WidgetThisContext>): WidgetConfig');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('unmounted?: WidgetLifecycleHook');
-    expect(editorProps.extraLibs?.[0]?.content).not.toContain('beforeDestroy');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('methods?: WidgetMethodMap & ThisType<WidgetThisContext>');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetThisContext');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 查询天气入参 */\ndeclare interface WidgetInput');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('interface WidgetInput');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 城市名称，例如上海 */\n  city: string');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('city: string');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('date?: string');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('unit?: string');
-    expect(editorProps.extraLibs?.[0]?.content).not.toContain('WidgetSkillOutput');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('$input: WidgetInput');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('@example const city = this.$input.city');
-    expect(editorProps.extraLibs?.[0]?.content).not.toContain('output?:');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('调用小组件时 AI 提取到的入参');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('$setState(path: string, value: unknown): void');
-    expect(editorProps.extraLibs?.[0]?.content).toContain("@example this.$setState('weather.temperature', 28)");
-    expect(editorProps.extraLibs?.[0]?.content).toContain('$sendMessage(message: WidgetSendMessageInput): Promise<void>');
-    expect(editorProps.extraLibs?.[0]?.content).toContain("@example this.$sendMessage('确认下单')");
-    expect(editorProps.extraLibs?.[0]?.content).toContain('content: string | WidgetSendMessageContentPart[]');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('isError?: boolean');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('$http: WidgetHttpClient');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('get(url: string');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('request 超时和队列由系统统一控制');
-    expect(editorProps.extraLibs?.[0]?.content).not.toContain('ExecutionResult');
-    expect(editorProps.extraLibs?.[0]?.content).not.toContain('WidgetSkillResultFactory');
-    expect(editorProps.extraLibs?.[0]?.content).not.toContain(REMOVED_LEGACY_ROOT);
-
-    await methodEditor.find('textarea').setValue(nextCode);
-    await nextTick();
+    expect(wrapper.findComponent(PageSetter).emitted('edit-code')).toEqual([[]]);
     expect(wrapper.vm.dataItem.execute).toBeUndefined();
-    await wrapper
-      .findAllComponents({ name: 'BButtonStub' })
-      .find((button: VueWrapper): boolean => button.text() === '保存')
-      ?.trigger('click');
-
-    expect(wrapper.vm.dataItem.execute).toEqual({
-      enabled: true,
-      description: '',
-      code: nextCode
-    });
     expect(wrapper.vm.dataItem.metadata.skill).toBeUndefined();
-    expect(findSectionBlock(wrapper, '交互脚本').find('.method-summary__code').text()).toContain('this.$sendMessage');
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('creates method editor type hints for nested, array and non-identifier schema fields', async (): Promise<void> => {
-    const dataItem = createWidgetData();
-    dataItem.inputSchema = {
-      type: 'object',
-      properties: {
-        weather: {
-          type: 'object',
-          description: '天气对象',
-          properties: {
-            alerts: {
-              type: 'array',
-              description: '天气预警',
-              items: {
-                type: 'string'
-              }
-            }
-          },
-          required: ['alerts']
-        },
-        'temperature.celsius': {
-          type: 'number',
-          description: '摄氏温度'
-        }
-      },
-      required: ['weather', 'temperature.celsius']
-    };
-    const wrapper = mountPageSetterHost(dataItem);
-
-    await findSectionEditButton(wrapper, '交互脚本').trigger('click');
-
-    const methodEditor = wrapper.findComponent({ name: 'BMonacoStub' });
-    const editorProps = methodEditor.props() as BMonacoStubProps;
-
-    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 天气对象 */\n  weather: {');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 天气预警 */\n    alerts: Array<string>');
-    expect(editorProps.extraLibs?.[0]?.content).toContain('/** 摄氏温度 */\n  "temperature.celsius": number');
-    wrapper.unmount();
-  });
-
-  it('creates state type hints from interaction script setState calls', async (): Promise<void> => {
-    const dataItem = createWeatherWidgetData();
-    dataItem.execute = {
-      code: ['defineConfig({', '  async mounted() {', '    // 初始化天气状态。', "    this.$setState('weather.temperature', 28)", '  }', '})'].join('\n')
-    };
-    const wrapper = mountPageSetterHost(dataItem);
-
-    await findSectionEditButton(wrapper, '交互脚本').trigger('click');
-
-    const methodEditor = wrapper.findComponent({ name: 'BMonacoStub' });
-    const editorProps = methodEditor.props() as BMonacoStubProps;
-    const extraLibContent = editorProps.extraLibs?.[0]?.content ?? '';
-
-    expect(extraLibContent).toContain('declare interface WidgetState');
-    expect(extraLibContent).toContain('weather?: {');
-    expect(extraLibContent).toContain('temperature?: number');
-    expect(extraLibContent).toContain('$state: WidgetState');
-    expect(
-      formatTypeScriptDiagnostics(
-        getTypeScriptDiagnostics({
-          'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
-          'widget-env.d.ts': extraLibContent,
-          'widget-test.ts': [
-            'defineConfig({',
-            '  mounted() {',
-            '    const city: string = this.$input.city',
-            '    const temperature: number | undefined = this.$state.weather?.temperature',
-            '    this.$setState("last.temperature", temperature)',
-            '  },',
-            '  methods: {',
-            '    confirm() {',
-            "      this.$sendMessage({ content: [{ type: 'text', text: this.$input.city }] })",
-            '    }',
-            '  }',
-            '})'
-          ].join('\n')
-        })
-      )
-    ).toEqual([]);
-    wrapper.unmount();
-  });
-
-  it('updates state type hints from the interaction script draft before saving', async (): Promise<void> => {
-    const dataItem = createWeatherWidgetData();
-    dataItem.execute = {
-      code: ['defineConfig({', '  async mounted() {', '    // 暂无状态写入。', '  }', '})'].join('\n')
-    };
-    const wrapper = mountPageSetterHost(dataItem);
-
-    await findSectionEditButton(wrapper, '交互脚本').trigger('click');
-
-    const methodEditor = wrapper.findComponent({ name: 'BMonacoStub' });
-    expect((methodEditor.props() as BMonacoStubProps).extraLibs?.[0]?.content).not.toContain('draft?: {');
-
-    await methodEditor
-      .find('textarea')
-      .setValue(['defineConfig({', '  async mounted() {', "    this.$setState('draft.city', this.$input.city)", '  }', '})'].join('\n'));
-    await nextTick();
-
-    const updatedEditorProps = wrapper.findComponent({ name: 'BMonacoStub' }).props() as BMonacoStubProps;
-    const extraLibContent = updatedEditorProps.extraLibs?.[0]?.content ?? '';
-    expect(extraLibContent).toContain('draft?: {');
-    expect(extraLibContent).toContain('city?: string');
-    expect(
-      formatTypeScriptDiagnostics(
-        getTypeScriptDiagnostics({
-          'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
-          'widget-env.d.ts': extraLibContent,
-          'widget-test.ts': 'defineConfig({ mounted() { const city: string | undefined = this.$state.draft?.city } })'
-        })
-      )
-    ).toEqual([]);
     wrapper.unmount();
   });
 

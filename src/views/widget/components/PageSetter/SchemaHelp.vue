@@ -156,7 +156,7 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
   },
   state: {
     title: '状态变量说明',
-    lead: '状态变量不需要单独填写 schema。编辑器会从交互脚本中的 this.$setState 调用推导 state 路径，供小组件元素动态绑定。',
+    lead: '状态变量不需要单独填写 schema。编辑器会从JS 脚本中的 this.$setState 调用推导 state 路径，供小组件元素动态绑定。',
     fields: [
       {
         name: "setState('weather', {...})",

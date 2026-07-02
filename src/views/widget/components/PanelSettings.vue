@@ -4,7 +4,7 @@
 -->
 <template>
   <aside class="setter-panel">
-    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="dataItem" />
+    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="dataItem" @edit-code="emit('edit-code')" />
     <BatchSetter
       v-else-if="select === null && selectedElementIds.length > 1"
       :data-item="dataItem"
@@ -52,6 +52,8 @@ withDefaults(defineProps<Props>(), {
   selectedElementIds: (): string[] => []
 });
 const emit = defineEmits<{
+  /** 打开运行代码编辑器 */
+  'edit-code': [];
   /** 触发多选快捷操作 */
   'multi-command': [command: 'copy' | 'group' | 'ungroup' | 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack' | 'delete'];
   /** 批量更新多选元素布局 */

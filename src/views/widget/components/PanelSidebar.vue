@@ -10,7 +10,7 @@
       </template>
     </div>
 
-    <BPanelSplitter v-model:size="size" position="right" :min-width="200" :max-width="300">
+    <BPanelSplitter v-model:size="size" position="right" :min-width="200" :max-width="300" @close="handleSplitterClose">
       <div class="sidebar-panel__content">
         <header class="sidebar-panel__panel-header">
           <h2 class="sidebar-panel__panel-title">{{ activePanelTitle }}</h2>
@@ -141,6 +141,13 @@ function handleTabClick(key: WidgetSidebarTabKey): void {
   }
 
   activeSidebarTab.value = key;
+}
+
+/**
+ * 清空侧边栏页签选中态，保持 splitter 关闭后内容区为空。
+ */
+function handleSplitterClose(): void {
+  activeSidebarTab.value = null;
 }
 
 /**

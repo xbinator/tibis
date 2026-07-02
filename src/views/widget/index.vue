@@ -27,11 +27,16 @@
         v-model:value="session.data.value"
         v-model:select="selectedTarget"
         :selected-element-ids="selectedElementIds"
+        @edit-code="handleCodeEdit"
         @multi-command="handleSettingsMultiCommand"
         @multi-layout-change="handleSettingsMultiLayoutChange"
         @multi-style-change="handleSettingsMultiStyleChange"
       />
     </BPanelSplitter>
+
+    <div class="widget-page__code-overlay" :class="{ 'is-open': isCodeEditorOpen }">
+      <CodeEditor v-model:value="session.data.value" :active="isCodeEditorOpen" @close="handleCodeClose" />
+    </div>
   </main>
 </template>
 
@@ -47,6 +52,7 @@ import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { WIDGET_GROUP_METADATA_KEY, getWidgetElementGroupId } from '@/components/BWidget/utils/widgetGroups';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
+import CodeEditor from './components/CodeEditor.vue';
 import PanelSettings from './components/PanelSettings.vue';
 import PanelSidebar from './components/PanelSidebar.vue';
 import { useBindings } from './hooks/useBindings';
@@ -61,6 +67,7 @@ const route = useRoute();
 const tabsStore = useTabsStore();
 const fileId = ref(String(route.params.id || ''));
 const isActive = ref(true);
+const isCodeEditorOpen = ref(false);
 const widgetRef = ref<InstanceType<typeof BWidgetComponent>>();
 const canvasRef = ref<HTMLElement | null>(null);
 const routePath = computed<string>(() => route.fullPath || `/widget/${fileId.value}`);
@@ -383,6 +390,20 @@ function syncSidebarSelectedElementIds(target: WidgetSelectTarget): void {
  */
 function handleWidgetSelectionChange(selection: string[]): void {
   selectedElementIds.value = [...selection];
+}
+
+/**
+ * 打开当前 Widget 的运行代码当前页编辑器。
+ */
+function handleCodeEdit(): void {
+  isCodeEditorOpen.value = true;
+}
+
+/**
+ * 关闭运行代码当前页编辑器。
+ */
+function handleCodeClose(): void {
+  isCodeEditorOpen.value = false;
 }
 
 /**
@@ -779,6 +800,7 @@ onDeactivated((): void => {
 
 <style lang="less" scoped>
 .widget-page {
+  position: relative;
   display: flex;
   width: 100%;
   height: 100%;
@@ -795,5 +817,21 @@ onDeactivated((): void => {
   min-width: 0;
   min-height: 0;
   padding: 8px 0;
+}
+
+.widget-page__code-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  visibility: hidden;
+  pointer-events: none;
+  background: var(--bg-primary);
+  opacity: 0;
+}
+
+.widget-page__code-overlay.is-open {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
 }
 </style>
