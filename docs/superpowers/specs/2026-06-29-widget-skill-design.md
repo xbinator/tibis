@@ -2,7 +2,7 @@
 
 ## 概要
 
-这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以由聊天运行时通过 `widget` / `open_widget` 工具按需打开，并以交互式 Widget 卡片的形式展示给用户。Widget 本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段，也不再使用 `metadata.skill`。工具暴露只使用必要的 Widget 契约信息；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；交互脚本使用 `defineConfig({ mounted, unmounted, methods })` 声明生命周期和可选用户辅助函数。
+这个设计把 Widget 文档扩展成一种类似 Skill 的可视化能力：它可以由聊天运行时通过 `widget` / `open_widget` 工具按需打开，并以交互式 Widget 卡片的形式展示给用户。Widget 本身仍然是 `WidgetData` 文档，不新增顶层 `runtime` 字段，也不再使用 `metadata.skill`。工具暴露只使用必要的 Widget 契约信息；执行入口使用 `WidgetData.execute`；动态展示使用元素自己的模板字段，例如 `metadata.content = "天气：{{ state.weather.temperature }}"`；JS 脚本使用 `Widget({ mounted, unmounted, methods })` 声明生命周期和可选用户辅助函数。
 
 第一条纵向闭环应支持通过工具打开天气或咖啡Widget：
 
@@ -14,7 +14,7 @@
 - Widget 运行态提交时执行 `unmounted`；如果脚本调用 `this.$sendMessage`，则向聊天上行文本消息并结束当前 Widget 交互。
 - HTTP 请求统一走底层 `request` 能力，Widget 作者不配置 origin 白名单或权限弹窗。
 
-当前已经完成第一段可用闭环：文本元素可以通过 `{{ input.x }}`、`{{ state.y }}` 等模板读取 Widget 渲染上下文；模板读写、变量候选和渲染上下文已抽离为 hooks；编辑期的 `state.*` 变量候选从交互脚本里的 `this.$setState` 调用推导；聊天消息可以从 `open_widget` 工具结果派生 Widget part，并用 `BWidgetRuntime` 在消息气泡中展示和持久化消息内 state。
+当前已经完成第一段可用闭环：文本元素可以通过 `{{ input.x }}`、`{{ state.y }}` 等模板读取 Widget 渲染上下文；模板读写、变量候选和渲染上下文已抽离为 hooks；编辑期的 `state.*` 变量候选从JS 脚本里的 `this.$setState` 调用推导；聊天消息可以从 `open_widget` 工具结果派生 Widget part，并用 `BWidgetRuntime` 在消息气泡中展示和持久化消息内 state。
 
 ## 目标
 
@@ -22,7 +22,7 @@
 - 保持现有 Widget 编辑器架构不被破坏。
 - 避免引入一个庞大的顶层 `runtime` 对象。
 - 让每个Widget元素自己拥有动态字段和交互能力。
-- 允许Widget作者用受控脚本声明生命周期和可选用户辅助函数，元素事件只保存自己的交互表达式。
+- 允许Widget作者用沙箱 JS 声明生命周期和可选用户辅助函数，元素事件只保存自己的交互表达式。
 - Widget 提交结果向现有工具结果结构靠近，但不伪装成 `role: tool` 消息。
 - 通过现有 AI tool registry 暴露工作区 Widget，并由 `open_widget` 创建聊天内 Widget 消息。
 - 先交付一个最小可体验的运行态Widget容器，再逐步丰富元素级交互执行能力。
@@ -73,11 +73,11 @@ interface WidgetData {
 
 `inputSchema` 后续应与 AI 结构化输入使用同一种对象 JSON Schema 类型。Widget 页面仍然可以提供受限的编辑体验，但持久化时不应丢弃合法 JSON Schema 字段，例如 `enum`、`default`、`additionalProperties`、`items`、`minimum`、`maxLength` 等。
 
-`state` 不作为用户需要手写维护的 schema 配置。编辑器通过 `buildWidgetStateSchema` 静态分析 Widget 方法脚本中的 `this.$setState(path, value)` 调用，生成可绑定的 `state.*` 变量候选。第一版只推导静态字符串路径、对象字面量、基础字面量，以及可对应到 `inputSchema` 的 `this.$input.x` 类型；动态路径或复杂表达式不强行猜测。
+`state` 不作为用户需要手写维护的 schema 配置。编辑器通过 `buildWidgetStateSchema` 静态分析 Widget 方法脚本中的 `this.$setState(path, value)` 调用，生成可绑定的 `state.*` 变量候选。第一版只推导静态字符串路径、对象字面量、基础字面量，以及可对应到 `inputSchema` 的 `this.$input.x` 类型；动态路径或复杂表达式不强行猜测。这个推导只用于编辑期变量候选，不限制运行时 JS 的表达能力。
 
 ### Widget 工具契约与执行入口
 
-聊天运行时通过 `widget` 工具读取 Widget 契约，并通过 `open_widget` 工具打开指定 Widget。工具描述与工具结果只暴露必要的契约信息，不引入独立的自然语言路由索引。交互脚本配置放在 `WidgetData.execute` 下。第一版脚本使用 `defineConfig({ mounted, unmounted, methods })`，不兼容更早的 `execute(ctx)` 草稿，也不做旧数据迁移：
+聊天运行时通过 `widget` 工具读取 Widget 契约，并通过 `open_widget` 工具打开指定 Widget。工具描述与工具结果只暴露必要的契约信息，不引入独立的自然语言路由索引。JS 脚本配置放在 `WidgetData.execute` 下。第一版脚本使用 `Widget({ mounted, unmounted, methods })`，不兼容更早的 `execute(ctx)` 草稿，也不做旧数据迁移：
 
 ```ts
 interface WidgetData {
@@ -87,9 +87,9 @@ interface WidgetData {
   description: string
   /** AI 调用 Widget 时需要填写的输入结构 */
   inputSchema: ObjectJsonSchema
-  /** 由交互脚本代码推导的运行态状态结构 */
+  /** 由JS 脚本代码推导的运行态状态结构 */
   stateSchema: ObjectJsonSchema
-  /** Widget 交互脚本配置 */
+  /** Widget JS 脚本配置 */
   execute?: WidgetExecuteMethod
   /** 元素私有扩展信息 */
   metadata: WidgetMetadata
@@ -104,20 +104,21 @@ interface WidgetExecuteMethod {
   enabled?: boolean
   /** 方法说明，用于编辑器提示和调试记录 */
   description?: string
-  /** defineConfig 脚本代码，声明生命周期与 methods */
+  /** Widget 脚本代码，声明生命周期与 methods */
   code: string
 }
 ```
 
-`name`、`description` 用于工具列表和契约说明，也是模型判断是否需要打开 Widget 的主要文本依据。`execute.code` 是 Widget 的交互脚本，脚本通过 `this.$input` 读取入参，通过 `this.$setState` 写入当前聊天消息内的 Widget 运行态 state，通过 `this.$http` 调用托管 request，通过 `this.$sendMessage` 上行聊天消息。
+`name`、`description` 用于工具列表和契约说明，也是模型判断是否需要打开 Widget 的主要文本依据。`execute.code` 是 Widget 的JS 脚本，脚本通过 `this.$input` 读取入参，通过 `this.$setState` 写入当前聊天消息内的 Widget 运行态 state，通过 `this.$http` 调用托管 request，通过 `this.$sendMessage` 上行聊天消息。
 
 脚本执行控制规则：
 
+- `execute.code` 使用沙箱 JS 运行时执行真实 JavaScript，而不是长期维护一套只支持部分语法的伪 JS 解释器。
 - `enabled` 缺省视为 `true`；禁用后不执行 `mounted`、`unmounted` 或元素交互表达式。
 - `description` 用于编辑器提示和调试记录，不参与执行逻辑。
-- 交互脚本本身不维护 timeout 配置；网络请求超时、队列和响应大小限制统一由底层 `request` 能力处理。
+- JS 脚本本身不维护 timeout 配置；网络请求超时、队列和响应大小限制统一由底层 `request` 能力处理。
 - `methods` 只作为 Widget 作者可选的用户辅助函数集合，不是系统运行态协议；元素保存并运行自己的交互表达式。
-- 第一版只允许元素交互表达式顶层调用一个用户辅助函数，辅助函数调用参数会按受控表达式求值后绑定到形参，辅助函数内部不继续递归调用其它辅助函数，避免循环和重入风险。
+- 业务函数之间是否互调由沙箱 JS 运行时自然执行；循环、递归和长任务风险通过运行时 timeout、错误边界和任务取消处理，而不是通过平台约定业务函数名。
 - 交互表达式没有触发 `this.$setState(...)` 或 `this.$sendMessage(...)` 时保持原 Widget part 不变。
 
 ### 元素级动态元信息
@@ -341,10 +342,10 @@ interface WidgetRuntimeLayout {
 
 ## 脚本执行
 
-脚本使用 `defineConfig` 声明生命周期和可选用户辅助函数：
+脚本使用 `Widget` 声明生命周期和可选用户辅助函数：
 
 ```ts
-defineConfig({
+Widget({
   async mounted() {
     this.$setState('loaded', true)
   },
@@ -363,7 +364,7 @@ defineConfig({
 })
 ```
 
-运行时会把受控上下文注入到 `this`：
+运行时会把沙箱上下文注入到 `this`：
 
 ```ts
 interface WidgetThisContext {
@@ -382,7 +383,9 @@ type WidgetSendMessageInput =
 
 脚本不能直接访问 `window`、Electron API、Node 文件系统 API、`process` 或不受限制的 import。
 
-当前脚本运行态是受控解释器，不执行任意 JavaScript。第一版只解析有限语句：局部常量声明、`this.$setState(...)`、`this.$sendMessage(...)`、`await this.$http.get/post/put/patch/delete(...)`，以及字面量、对象字面量、数组字面量、`this.$input.*`、`this.$state.*`、局部变量属性读取。元素交互表达式可以顶层调用一个 `defineConfig.methods` 中的用户辅助函数，例如 `submitOrder()` 或 `selectCoffee('latte', this.$input.city)`；调用参数会按同一套受控表达式求值并绑定到辅助函数形参。辅助函数内部继续调用其它辅助函数、复杂表达式、循环、任意全局 API 都不会执行。
+目标脚本运行态是沙箱 JS 运行时：用户写的是真实 JavaScript，可以使用正常的变量、函数、条件、循环、`async/await`、模板字符串、数组方法和业务辅助函数。沙箱只注入平台允许的能力，例如 `this.$input`、`this.$state`、`this.$setState`、`this.$sendMessage` 和 `this.$http`；不暴露 `window`、`document`、`localStorage`、`fetch`、`XMLHttpRequest`、`process`、`require`、`import`、Node、Electron 或文件系统 API。
+
+当前代码中的有限解释器只作为过渡实现。后续不继续沿着“补 JS 语法”的方向扩展解释器，而是迁移到沙箱 JS 运行时，并把安全边界收口在全局对象隔离、白名单 API 注入、timeout、错误处理和状态写回上。
 
 调用 `this.$sendMessage(...)` 表示当前小组件交互结束，并向聊天上行一条文本消息。未调用 `$sendMessage` 时，小组件保持等待用户交互状态。
 
@@ -462,34 +465,34 @@ const weather = await this.$http.get('https://api.example.com/weather', {
 - `widget` / `open_widget` 工具只从已启用且解析成功的小组件列表中命中。
 - `open_widget` 工具入参只包含 `id` 和可选 `input`，不接收 state 或 output。
 - `open_widget` 工具结果可派生聊天内 Widget part，并在 `MessageBubble` 中渲染 `BWidgetRuntime`。
-- `WidgetExecuteMethod.enabled`、`description`、`defineConfig` 类型提示和状态 schema 推导。
-- `mounted`、`unmounted`、元素交互表达式、用户辅助函数、缺失交互、`this.$setState`、`this.$sendMessage` 和 `$http` 受控执行。
+- `WidgetExecuteMethod.enabled`、`description`、`Widget` 类型提示和状态 schema 推导。
+- `mounted`、`unmounted`、元素交互表达式、用户辅助函数、缺失交互、`this.$setState`、`this.$sendMessage` 和 `$http` 当前过渡执行器覆盖。
 - 托管 request 的协议校验、query 拼接、GET body 忽略、特殊 body 直传、超时、并发队列和响应大小流式中止。
 - `WidgetSubmitResult` 与现有聊天工具结果结构保持相近，但不伪装成 tool result 消息。
 
 ## 剩余事项
 
-当前主链路已经可以通过 `widget` / `open_widget` 在聊天里展示 Widget，并让消息内运行态保存 `input`、`state`、生命周期和 `$sendMessage` 结果。后续剩余工作主要集中在元素交互和体验闭环。
+当前主链路已经可以通过 `widget` / `open_widget` 在聊天里展示 Widget，并让消息内运行态保存 `input`、`state`、生命周期和 `$sendMessage` 结果。后续剩余工作主要集中在脚本运行时迁移、元素交互和体验闭环。
 
 1. 元素级交互还没有产品化。
 
-   底层已经存在 `useWidgetRuntime().value?.runInteraction(...)` 通道，但还没有实际元素把自己的交互配置接进去。下一步应先做最小 `Button` 元素：按钮文案使用 `metadata.label`，点击交互表达式使用 `metadata.onClick`，元素自己在点击时调用运行态交互。平台不关心业务函数名，也不提供 `callMethod('xxx')` 这类系统协议；业务方想写 `submitOrder()`、`selectCoffee()` 或直接写 `this.$sendMessage(...)` 都是元素交互表达式自己的内容。
+   底层已经存在 `useWidgetRuntime().value?.runInteraction(...)` 通道，但还没有实际元素把自己的交互配置接进去。沙箱运行时落地后，元素侧可以先做最小 `Button` 元素：按钮文案使用 `metadata.label`，点击交互表达式使用 `metadata.onClick`，元素自己在点击时调用运行态交互。平台不关心业务函数名，也不提供 `callMethod('xxx')` 这类系统协议；业务方想写 `submitOrder()`、`selectCoffee()` 或直接写 `this.$sendMessage(...)` 都是元素交互表达式自己的内容。
 
 2. 交互 `event` 上下文还没有接入。
 
-   文档里已经预留 `event`，但当前受控脚本执行上下文主要是 `this.$input`、`this.$state`、局部变量、`this.$http`。未来 List/Form 这类元素需要把“点击了哪一项”“表单提交了哪些字段”等数据作为交互事件上下文注入，否则元素无法把用户操作带给脚本。第一版可以先只支持元素传入的普通对象事件，例如 `event.value`、`event.item`、`event.form`。
+   文档里已经预留 `event`，但当前脚本上下文主要是 `this.$input`、`this.$state`、局部变量、`this.$http`。未来 List/Form 这类元素需要把“点击了哪一项”“表单提交了哪些字段”等数据作为交互事件上下文注入，否则元素无法把用户操作带给脚本。第一版可以先只支持元素传入的普通对象事件，例如 `event.value`、`event.item`、`event.form`。
 
 3. Button/List/Form 等交互元素还没有完成。
 
-   Text 元素已经完成模板展示闭环；咖啡、表单选择、确认下单等场景还需要交互元素承载。建议顺序是先做 Button 验证点击与 `$sendMessage` 闭环，再做 List 验证列表项选择与 `state` 更新，最后做 Form 验证缺少 input 时由 Widget 内部收集字段。
+   Text 元素已经完成模板展示闭环；咖啡、表单选择、确认下单等场景还需要交互元素承载。在沙箱运行时和 `event` 上下文之后，元素侧建议顺序是先做 Button 验证点击与 `$sendMessage` 闭环，再做 List 验证列表项选择与 `state` 更新，最后做 Form 验证缺少 input 时由 Widget 内部收集字段。
 
 4. Widget 运行态交互状态还需要 UI 收口。
 
    当前数据模型已经有 `created`、`mounted`、`finished`、`failure`、`cancelled`，但具体元素还需要根据状态处理禁用、加载、失败提示和防重复点击。已经 `finished`、`failure` 或 `cancelled` 的 Widget 不应继续触发交互。
 
-5. 脚本解释器只覆盖了第一版最小语句。
+5. 脚本运行时需要从有限解释器迁移到沙箱 JS。
 
-   当前受控执行器适合简单的 `this.$setState(...)`、`this.$sendMessage(...)`、`this.$http.*(...)` 和局部常量读取。后续如果真实 Widget 需要更多表达式能力，可以按场景小步增加，但仍不应该开放任意 JavaScript、全局对象、import、DOM、Node 或 Electron API。
+   当前有限解释器适合简单的 `this.$setState(...)`、`this.$sendMessage(...)`、`this.$http.*(...)` 和局部常量读取，但长期会让用户以为自己在写 JS，实际又经常遇到普通 JS 不能运行的问题。后续应设计沙箱 JS 运行时，让用户写真实 JS，同时明确禁用全局对象、DOM、Node、Electron、文件系统、任意 import 和未授权网络能力。
 
 6. 缺少 input 时的 Widget 内收集体验还没有完成。
 
@@ -499,12 +502,12 @@ const weather = await this.$http.get('https://api.example.com/weather', {
 
 推荐下一步实现顺序：
 
-1. 新增最小 `Button` 元素，让 `metadata.label` 支持模板，`metadata.onClick` 支持交互表达式，点击后调用 `useWidgetRuntime().value?.runInteraction(metadata.onClick)`。
-2. 为元素交互补充 `event` 上下文，让后续 List/Form 可以把用户操作数据传给脚本。
-3. 新增 `List` 元素，支持从模板字段读取列表数据，并在 item 点击时触发自己的交互表达式。
-4. 新增 `Form` 元素，支持 Widget 内部收集缺失 input，并把提交结果交给交互表达式处理。
-5. 补齐运行态交互 UI 状态：防重复点击、结束后禁用、失败状态提示和必要测试。
-6. 按真实用例扩展受控脚本解释器的表达式能力，但仍避免任意 JavaScript 和全局 API。
+1. 设计并落地最小沙箱 JS 运行时，替换当前过渡解释器，先覆盖 `mounted`、`unmounted`、`runInteraction`、`this.$setState`、`this.$sendMessage` 和 `this.$http`。
+2. 为元素交互补充 `event` 上下文，让后续 Button/List/Form 可以把用户操作数据传给脚本。
+3. 新增最小 `Button` 元素，让 `metadata.label` 支持模板，`metadata.onClick` 支持交互表达式，点击后调用 `useWidgetRuntime().value?.runInteraction(metadata.onClick)`。
+4. 新增 `List` 元素，支持从模板字段读取列表数据，并在 item 点击时触发自己的交互表达式。
+5. 新增 `Form` 元素，支持 Widget 内部收集缺失 input，并把提交结果交给交互表达式处理。
+6. 补齐运行态交互 UI 状态：防重复点击、结束后禁用、失败状态提示和必要测试。
 7. 如需要高风险网络、凭据或第三方账号能力，再设计产品级集成和全局平台策略，不放进 Widget 作者配置面板。
 
 这个顺序可以在已经可用的工具调用纵向闭环上继续增加交互能力，同时保持与更丰富元素类型兼容。

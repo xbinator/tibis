@@ -4,7 +4,7 @@
 
 **Goal:** Complete the first usable Widget interaction script runtime and managed HTTP path without adding user-facing HTTP permission configuration.
 
-**Architecture:** Keep Widget scripts on the current controlled interpreter path instead of evaluating arbitrary JavaScript. Scripts can use `defineConfig({ mounted, unmounted, methods })`, `this.$setState`, `this.$sendMessage`, and a managed `this.$http` client; all HTTP timeout, queueing, response limits, redirects, and protocol checks are handled by the platform layer. No per-widget HTTP permission schema, no `metadata.skill.permissions`, no `execute.http`, and no variable UI for HTTP security settings.
+**Architecture:** Keep Widget scripts on the current controlled interpreter path instead of evaluating arbitrary JavaScript. Scripts can use `Widget({ mounted, unmounted, methods })`, `this.$setState`, `this.$sendMessage`, and a managed `this.$http` client; all HTTP timeout, queueing, response limits, redirects, and protocol checks are handled by the platform layer. No per-widget HTTP permission schema, no `metadata.skill.permissions`, no `execute.http`, and no variable UI for HTTP security settings.
 
 **Tech Stack:** TypeScript strict mode, Vue 3, Vitest, Electron IPC, lodash-es, existing Widget protocol helpers under `types/widget.d.ts` and `src/shared/widget/protocol.ts`.
 
@@ -365,12 +365,12 @@ Append these tests to `test/components/BChat/widget-runtime.test.ts`:
 ```ts
 it('does not run disabled execute scripts', async (): Promise<void> => {
   const part = {
-    ...createWidgetPart("defineConfig({ mounted() { this.$setState('weather.temperature', 28) } })"),
+    ...createWidgetPart("Widget({ mounted() { this.$setState('weather.temperature', 28) } })"),
     value: {
-      ...createWidgetData("defineConfig({ mounted() { this.$setState('weather.temperature', 28) } })"),
+      ...createWidgetData("Widget({ mounted() { this.$setState('weather.temperature', 28) } })"),
       execute: {
         enabled: false,
-        code: "defineConfig({ mounted() { this.$setState('weather.temperature', 28) } })"
+        code: "Widget({ mounted() { this.$setState('weather.temperature', 28) } })"
       }
     }
   };
@@ -385,7 +385,7 @@ it('runs a named method without allowing method recursion', async (): Promise<vo
   const part = {
     ...createWidgetPart(
       [
-        'defineConfig({',
+        'Widget({',
         '  methods: {',
         '    confirm() {',
         "      this.$setState('confirmed', true)",
@@ -448,8 +448,8 @@ Add method lookup beside lifecycle lookup in `src/components/BChat/utils/widgetR
 
 ```ts
 /**
- * 从 defineConfig.methods 读取指定方法。
- * @param code - 交互脚本代码
+ * 从 Widget.methods 读取指定方法。
+ * @param code - JS 脚本代码
  * @param methodName - 方法名
  * @returns 方法函数节点
  */
@@ -460,7 +460,7 @@ function findWidgetMethodFunction(code: string, methodName: string): WidgetFunct
   function visit(node: ts.Node): void {
     if (methodFunction) return;
 
-    if (isDefineConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
+    if (isWidgetConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
       const methodsProperty = node.arguments[0].properties.find((property) => readPropertyName(property.name) === 'methods');
       if (!methodsProperty || !ts.isPropertyAssignment(methodsProperty) || !ts.isObjectLiteralExpression(methodsProperty.initializer)) return;
 
@@ -536,7 +536,7 @@ async function callWidgetInstanceMethod(part: ChatMessageWidgetPart, methodName:
   if (part.status !== 'mounted' || !isWidgetScriptEnabled(part)) return { part };
 
   const nextPart = cloneDeep(part);
-  const methodFunction = findWidgetMethodFunction(nextPart.value.execute?.code ?? 'defineConfig({})', methodName);
+  const methodFunction = findWidgetMethodFunction(nextPart.value.execute?.code ?? 'Widget({})', methodName);
   const methodResult = await runLifecycleStatements(methodFunction, nextPart, options);
 
   if (methodResult.sendMessage) {
@@ -580,7 +580,7 @@ Append this test to `test/components/BChat/widget-runtime.test.ts`:
 it('supports managed http calls and stores response data', async (): Promise<void> => {
   const part = createWidgetPart(
     [
-      'defineConfig({',
+      'Widget({',
       '  async mounted() {',
       "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
       "    this.$setState('weather', weather.data)",
@@ -883,7 +883,7 @@ it('initializes mounted state with the managed http client', async (): Promise<v
   const widgetPart: ChatMessageWidgetPart = {
     ...createWidgetPart(
       [
-        'defineConfig({',
+        'Widget({',
         '  async mounted() {',
         "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
         "    this.$setState('weather.temperature', weather.data.temperature)",
@@ -987,7 +987,7 @@ it('provides managed http type hints for interaction scripts', async (): Promise
   const dataItem = createWeatherWidgetData();
   const wrapper = mountPageSetterHost(dataItem);
 
-  await findSectionEditButton(wrapper, '交互脚本').trigger('click');
+  await findSectionEditButton(wrapper, 'JS 脚本').trigger('click');
 
   const editorProps = wrapper.findComponent({ name: 'BMonaco' }).props();
 
@@ -1092,7 +1092,7 @@ Expected: PASS.
 Add under `## Changed` or create the section if missing:
 
 ```md
-- 小组件交互脚本补充受控 methods 与托管 HTTP 客户端，HTTP 超时和队列由底层统一管理，不暴露权限配置。
+- 小组件JS 脚本补充受控 methods 与托管 HTTP 客户端，HTTP 超时和队列由底层统一管理，不暴露权限配置。
 ```
 
 - [x] **Step 2: Run focused tests**
