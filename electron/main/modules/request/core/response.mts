@@ -24,9 +24,7 @@ async function cancelResponseBodyReader(reader: ReadableStreamDefaultReader<Uint
 async function readLimitedResponseText(response: Response): Promise<string> {
   if (!response.body) {
     const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > REQUEST_MAX_RESPONSE_BYTES) {
-      throw new Error('托管 request 响应过大');
-    }
+
     return text;
   }
 
@@ -42,7 +40,7 @@ async function readLimitedResponseText(response: Response): Promise<string> {
       totalBytes += readResult.value.byteLength;
       if (totalBytes > REQUEST_MAX_RESPONSE_BYTES) {
         shouldCancel = true;
-        throw new Error('托管 request 响应过大');
+        break;
       }
 
       text += decoder.decode(readResult.value, { stream: true });
@@ -73,5 +71,11 @@ export async function readRequestResponseData(response: Response): Promise<unkno
     return text;
   }
 
-  return text ? JSON.parse(text) : null;
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
 }

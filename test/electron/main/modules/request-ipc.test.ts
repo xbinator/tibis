@@ -77,6 +77,29 @@ describe('runRequest', (): void => {
     });
   });
 
+  it('returns invalid JSON response text for business-level handling', async (): Promise<void> => {
+    const fetchMock = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response('upstream error is not json', {
+        status: 502,
+        headers: {
+          'content-type': 'application/json'
+        }
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runRequest({
+      method: 'GET',
+      url: 'https://api.example.com/error'
+    });
+
+    expect(response).toMatchObject({
+      status: 502,
+      ok: false,
+      data: 'upstream error is not json'
+    });
+  });
+
   it('omits request bodies for GET requests', async (): Promise<void> => {
     const fetchMock = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('ok', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -142,7 +165,7 @@ describe('runRequest', (): void => {
     await requestExpectation;
   });
 
-  it('stops reading response streams after the response size limit is exceeded', async (): Promise<void> => {
+  it('returns truncated response text after the response size limit is exceeded', async (): Promise<void> => {
     const chunk = new Uint8Array(256_000).fill(65);
     let pullCount = 0;
     let cancelled = false;
@@ -168,10 +191,16 @@ describe('runRequest', (): void => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(runRequest({ method: 'GET', url: 'https://api.example.com/large' })).rejects.toThrow('托管 request 响应过大');
+    const response = await runRequest({ method: 'GET', url: 'https://api.example.com/large' });
 
     expect(pullCount).toBeLessThan(Math.ceil(REQUEST_MAX_RESPONSE_BYTES / chunk.byteLength) + 2);
     expect(cancelled).toBe(true);
+    expect(response).toMatchObject({
+      status: 200,
+      ok: true
+    });
+    expect(typeof response.data).toBe('string');
+    expect((response.data as string).length).toBeLessThanOrEqual(REQUEST_MAX_RESPONSE_BYTES);
   });
 
   it('limits concurrent fetches in the main-process request queue', async (): Promise<void> => {

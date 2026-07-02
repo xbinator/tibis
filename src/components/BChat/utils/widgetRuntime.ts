@@ -1,14 +1,13 @@
 /**
  * @file widgetRuntime.ts
- * @description BChat 小组件消息片段的轻量脚本运行工具。
+ * @description BChat 小组件消息片段运行态工具。
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
-import type { RequestInput, RequestResponse } from 'types/request';
-import type { WidgetHttpClient, WidgetRuntimeSendMessage } from 'types/widget';
-import { cloneDeep, get, isPlainObject, set } from 'lodash-es';
-import ts from 'typescript';
+import type { RequestInput, RequestMethod, RequestResponse } from 'types/request';
+import type { WidgetHttpClient, WidgetRuntimeSendMessage, WidgetSendMessageTextPart } from 'types/widget';
+import { cloneDeep, isPlainObject } from 'lodash-es';
 import { getElectronAPI } from '@/shared/platform/electron-api';
-import { normalizeWidgetSendMessage } from '@/shared/widget/protocol';
+import { compileSandboxSource, createSandboxHttpHost, runSandboxCode, SANDBOX_HTTP_HOST_FUNCTION_NAME } from '@/utils/sandbox';
 
 /**
  * 小组件脚本生命周期执行选项。
@@ -18,18 +17,56 @@ interface WidgetLifecycleRunOptions {
   now?: () => Date;
   /** 小组件托管 HTTP 客户端。 */
   http?: WidgetHttpClient;
-  /** 是否允许当前语句列表触发用户辅助函数调用。 */
-  allowUserMethodCalls?: boolean;
-  /** 当前 Widget JS 脚本，用于从 Widget.methods 中读取用户辅助函数。 */
-  widgetScriptCode?: string;
+  /** 是否使用 Worker 执行脚本。 */
+  useWorker?: boolean;
+  /** Worker 执行超时。 */
+  timeoutMs?: number;
+}
+
+/** 小组件脚本生命周期名称。 */
+type WidgetScriptLifecycleName = 'mounted' | 'unmounted';
+
+/**
+ * 小组件脚本运行载荷。
+ */
+interface WidgetScriptRunPayload {
+  /** 用户编写的 Widget({ ... }) 脚本。 */
+  scriptCode: string;
+  /** 元素声明的交互脚本。 */
+  interactionCode?: string;
+  /** 需要执行的生命周期。 */
+  lifecycleName?: WidgetScriptLifecycleName;
+  /** 小组件启动入参。 */
+  input: Record<string, unknown>;
+  /** 小组件当前运行态状态。 */
+  state: Record<string, unknown>;
 }
 
 /**
- * 小组件语句执行选项。
+ * 小组件脚本运行结果。
  */
-interface WidgetStatementRunOptions extends WidgetLifecycleRunOptions {
-  /** 语句执行前注入的局部变量。 */
-  initialVariables?: Map<string, unknown>;
+interface WidgetScriptRunResult {
+  /** 运行后的状态快照。 */
+  state: Record<string, unknown>;
+  /** 是否写入过状态。 */
+  stateChanged: boolean;
+  /** 脚本声明的上行消息。 */
+  sendMessage?: WidgetRuntimeSendMessage;
+}
+
+/**
+ * 小组件脚本运行选项。
+ */
+type WidgetScriptRunOptions = Pick<WidgetLifecycleRunOptions, 'http' | 'useWorker' | 'timeoutMs'>;
+
+/**
+ * 小组件 part 沙箱执行选项。
+ */
+interface WidgetPartSandboxOptions extends WidgetLifecycleRunOptions {
+  /** 需要运行的生命周期。 */
+  lifecycleName?: WidgetScriptLifecycleName;
+  /** 元素交互脚本。 */
+  interactionCode?: string;
 }
 
 /**
@@ -62,39 +99,6 @@ export interface WidgetRuntimeInstance {
   runInteraction: (interactionCode: string) => Promise<WidgetRuntimeFinishResult>;
 }
 
-/** 带函数体的小组件配置函数节点。 */
-type WidgetFunctionNodeWithBody = (ts.MethodDeclaration | ts.FunctionExpression | ts.ArrowFunction) & { body: ts.Block };
-
-/** 小组件脚本生命周期名称。 */
-type WidgetLifecycleName = 'mounted' | 'unmounted';
-
-/**
- * 受限表达式求值上下文。
- */
-interface WidgetExpressionEvalContext {
-  /** Widget 启动入参。 */
-  input: ChatMessageWidgetPart['renderContext']['input'];
-  /** Widget 会话状态。 */
-  state: ChatMessageWidgetPart['renderContext']['state'];
-  /** 生命周期函数体内已经解析出的局部常量。 */
-  variables: Map<string, unknown>;
-  /** 托管 HTTP 客户端。 */
-  http?: WidgetHttpClient;
-}
-
-/**
- * 生命周期函数受限执行结果。
- */
-interface WidgetLifecycleExecutionResult {
-  /** 生命周期函数中最后一次 this.$sendMessage 的载荷。 */
-  sendMessage?: WidgetRuntimeSendMessage;
-  /** 本次执行是否写入过状态。 */
-  stateChanged?: boolean;
-}
-
-/** 小组件 HTTP 方法名。 */
-type WidgetHttpMethodName = keyof WidgetHttpClient;
-
 /**
  * 创建小组件托管 HTTP 客户端。
  * @param dependencies - 可注入依赖
@@ -113,197 +117,6 @@ export function createWidgetHttpClient(dependencies: WidgetHttpClientDependencie
 }
 
 /**
- * 判断节点是否为 Widget 配置调用。
- * @param node - 待检查节点
- * @returns 是否为 Widget 配置调用
- */
-function isWidgetConfigCall(node: ts.Node): node is ts.CallExpression {
-  return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Widget';
-}
-
-/**
- * 读取对象属性名称。
- * @param name - 属性名称节点
- * @returns 属性名称文本，无法静态读取时返回 undefined
- */
-function readPropertyName(name: ts.PropertyName | undefined): string | undefined {
-  if (!name) return undefined;
-  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
-  return undefined;
-}
-
-/**
- * 判断函数节点是否带普通 block 函数体。
- * @param node - 待检查节点
- * @returns 是否带 block 函数体
- */
-function hasBlockBody(node: ts.MethodDeclaration | ts.FunctionExpression | ts.ArrowFunction): node is WidgetFunctionNodeWithBody {
-  return node.body !== undefined && ts.isBlock(node.body);
-}
-
-/**
- * 从 Widget 配置对象读取指定生命周期函数体。
- * @param code - 小组件JS 脚本。
- * @param lifecycleName - 生命周期名称。
- * @returns 生命周期函数节点，不存在时返回 undefined。
- */
-function findWidgetLifecycleFunction(code: string, lifecycleName: WidgetLifecycleName): WidgetFunctionNodeWithBody | undefined {
-  const sourceFile = ts.createSourceFile('widget-runtime.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  let lifecycleFunction: WidgetFunctionNodeWithBody | undefined;
-
-  /**
-   * 访问脚本节点并提取 Widget 配置中的生命周期函数。
-   * @param node - 当前节点
-   */
-  function visit(node: ts.Node): void {
-    if (lifecycleFunction) return;
-
-    if (isWidgetConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
-      const configObject = node.arguments[0];
-      for (const property of configObject.properties) {
-        const propertyName = readPropertyName(property.name);
-        if (propertyName !== lifecycleName) continue;
-
-        if (ts.isMethodDeclaration(property) && hasBlockBody(property)) {
-          lifecycleFunction = property;
-          return;
-        }
-
-        if (
-          ts.isPropertyAssignment(property) &&
-          (ts.isFunctionExpression(property.initializer) || ts.isArrowFunction(property.initializer)) &&
-          hasBlockBody(property.initializer)
-        ) {
-          lifecycleFunction = property.initializer;
-          return;
-        }
-      }
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-
-  return lifecycleFunction;
-}
-
-/**
- * 从 Widget methods 中读取指定用户辅助函数。
- * @param code - 小组件JS 脚本
- * @param methodName - 用户辅助函数名
- * @returns 用户辅助函数节点，不存在时返回 undefined
- */
-function findWidgetMethodFunction(code: string, methodName: string): WidgetFunctionNodeWithBody | undefined {
-  const sourceFile = ts.createSourceFile('widget-runtime.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  let methodFunction: WidgetFunctionNodeWithBody | undefined;
-
-  /**
-   * 访问脚本节点并提取 Widget methods 中的指定用户辅助函数。
-   * @param node - 当前节点
-   */
-  function visit(node: ts.Node): void {
-    if (methodFunction) return;
-
-    if (isWidgetConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
-      const methodsProperty = node.arguments[0].properties.find((property) => readPropertyName(property.name) === 'methods');
-      if (!methodsProperty || !ts.isPropertyAssignment(methodsProperty) || !ts.isObjectLiteralExpression(methodsProperty.initializer)) return;
-
-      for (const property of methodsProperty.initializer.properties) {
-        if (readPropertyName(property.name) !== methodName) continue;
-
-        if (ts.isMethodDeclaration(property) && hasBlockBody(property)) {
-          methodFunction = property;
-          return;
-        }
-
-        if (
-          ts.isPropertyAssignment(property) &&
-          (ts.isFunctionExpression(property.initializer) || ts.isArrowFunction(property.initializer)) &&
-          hasBlockBody(property.initializer)
-        ) {
-          methodFunction = property.initializer;
-          return;
-        }
-      }
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-
-  return methodFunction;
-}
-
-/**
- * 读取属性访问链上的静态属性名。
- * @param expression - 属性访问表达式
- * @returns 根对象与路径，不匹配 this.$input/this.$state 时返回 null
- */
-function readThisContextPath(expression: ts.Expression): { root: 'input' | 'state'; path: string[] } | null {
-  if (ts.isPropertyAccessExpression(expression)) {
-    const parentPath = readThisContextPath(expression.expression);
-    if (parentPath) {
-      return {
-        root: parentPath.root,
-        path: [...parentPath.path, expression.name.text]
-      };
-    }
-
-    if (expression.expression.kind !== ts.SyntaxKind.ThisKeyword) return null;
-    if (expression.name.text === '$input') return { root: 'input', path: [] };
-    if (expression.name.text === '$state') return { root: 'state', path: [] };
-    return null;
-  }
-
-  if (ts.isElementAccessExpression(expression) && ts.isStringLiteral(expression.argumentExpression)) {
-    const parentPath = readThisContextPath(expression.expression);
-    if (!parentPath) return null;
-
-    return {
-      root: parentPath.root,
-      path: [...parentPath.path, expression.argumentExpression.text]
-    };
-  }
-
-  return null;
-}
-
-/**
- * 读取局部变量属性访问路径。
- * @param expression - 属性访问表达式
- * @returns 变量名与属性路径
- */
-function readVariablePath(expression: ts.Expression): { name: string; path: string[] } | null {
-  if (ts.isIdentifier(expression)) {
-    return { name: expression.text, path: [] };
-  }
-
-  if (ts.isPropertyAccessExpression(expression)) {
-    const parentPath = readVariablePath(expression.expression);
-    if (!parentPath) return null;
-
-    return {
-      name: parentPath.name,
-      path: [...parentPath.path, expression.name.text]
-    };
-  }
-
-  if (ts.isElementAccessExpression(expression) && ts.isStringLiteral(expression.argumentExpression)) {
-    const parentPath = readVariablePath(expression.expression);
-    if (!parentPath) return null;
-
-    return {
-      name: parentPath.name,
-      path: [...parentPath.path, expression.argumentExpression.text]
-    };
-  }
-
-  return null;
-}
-
-/**
  * 判断值是否为普通对象记录。
  * @param value - 待判断值
  * @returns 是否为普通对象记录
@@ -313,294 +126,290 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 去除 await 包裹。
- * @param expression - 表达式
- * @returns 去除 await 后的表达式
+ * 判断值是否为小组件上行文本片段。
+ * @param value - 待判断值
+ * @returns 是否为小组件上行文本片段
  */
-function unwrapAwaitExpression(expression: ts.Expression): ts.Expression {
-  return ts.isAwaitExpression(expression) ? expression.expression : expression;
+function isWidgetSendMessageTextPart(value: unknown): value is WidgetSendMessageTextPart {
+  return isPlainRecord(value) && value.type === 'text' && typeof value.text === 'string';
 }
 
 /**
- * 读取交互代码中的用户辅助函数调用表达式。
- * @param expression - 表达式
- * @returns 用户辅助函数调用表达式，不匹配时返回 null
+ * 判断值是否为小组件上行消息。
+ * @param value - 待判断值
+ * @returns 是否为小组件上行消息
  */
-function readUserHelperCallExpression(expression: ts.Expression): ts.CallExpression | null {
-  return ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) ? expression : null;
+function isWidgetRuntimeSendMessage(value: unknown): value is WidgetRuntimeSendMessage {
+  if (!isPlainRecord(value) || typeof value.isError !== 'boolean') return false;
+  if (typeof value.content === 'string') return true;
+  return Array.isArray(value.content) && value.content.every(isWidgetSendMessageTextPart);
 }
 
 /**
- * 判断表达式是否为 this.$http.method(...) 调用。
- * @param expression - 待检查表达式
- * @returns 是否为 HTTP 调用
+ * 判断值是否为小组件脚本运行结果。
+ * @param value - 待判断值
+ * @returns 是否为小组件脚本运行结果
  */
-function isHttpCall(expression: ts.Expression): expression is ts.CallExpression {
-  if (!ts.isCallExpression(expression) || !ts.isPropertyAccessExpression(expression.expression)) return false;
-  const methodName = expression.expression.name.text;
-  if (!['get', 'post', 'put', 'patch', 'delete'].includes(methodName)) return false;
-
-  const target = expression.expression.expression;
-  return ts.isPropertyAccessExpression(target) && target.expression.kind === ts.SyntaxKind.ThisKeyword && target.name.text === '$http';
+function isWidgetScriptRunResult(value: unknown): value is WidgetScriptRunResult {
+  if (!isPlainRecord(value) || !isPlainRecord(value.state) || typeof value.stateChanged !== 'boolean') return false;
+  return value.sendMessage === undefined || isWidgetRuntimeSendMessage(value.sendMessage);
 }
 
 /**
- * 求值受支持的表达式。
- * @param expression - 待求值表达式
- * @param context - 求值上下文
- * @returns 表达式值，不支持时返回 undefined
+ * 通过 WidgetHttpClient 执行 request。
+ * @param http - HTTP 客户端
+ * @param request - request 输入
+ * @returns request 响应
  */
-async function evaluateExpression(expression: ts.Expression, context: WidgetExpressionEvalContext): Promise<unknown> {
-  const unwrappedExpression = unwrapAwaitExpression(expression);
-  if (unwrappedExpression !== expression) {
-    return evaluateExpression(unwrappedExpression, context);
+function runWidgetHttpRequest(http: WidgetHttpClient | undefined, request: RequestInput): Promise<RequestResponse> {
+  if (!http) {
+    return Promise.reject(new Error('当前环境未启用小组件 HTTP 客户端'));
   }
 
-  if (isHttpCall(expression)) {
-    if (!context.http || !ts.isPropertyAccessExpression(expression.expression)) {
-      throw new Error('当前环境未启用小组件 HTTP 客户端');
-    }
-
-    const methodName = expression.expression.name.text as WidgetHttpMethodName;
-    const [urlExpression, optionsExpression] = expression.arguments;
-    const url = urlExpression ? await evaluateExpression(urlExpression, context) : undefined;
-    if (typeof url !== 'string') {
-      throw new Error('小组件 HTTP URL 必须是字符串');
-    }
-
-    const options = optionsExpression ? await evaluateExpression(optionsExpression, context) : undefined;
-    const method = context.http[methodName] as (url: string, request?: Record<string, unknown>) => Promise<unknown>;
-    return method(url, isPlainRecord(options) ? options : undefined);
+  switch (request.method.toLowerCase() as Lowercase<RequestMethod>) {
+    case 'get':
+      return http.get(request.url, { query: request.query });
+    case 'post':
+      return http.post(request.url, {
+        query: request.query,
+        body: request.body
+      });
+    case 'put':
+      return http.put(request.url, {
+        query: request.query,
+        body: request.body
+      });
+    case 'patch':
+      return http.patch(request.url, {
+        query: request.query,
+        body: request.body
+      });
+    case 'delete':
+      return http.delete(request.url, {
+        query: request.query,
+        body: request.body
+      });
+    default:
+      return Promise.reject(new Error('小组件 HTTP 方法无效'));
   }
+}
 
-  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return expression.text;
-  if (ts.isNumericLiteral(expression)) return Number(expression.text);
-  if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
-  if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
-  if (expression.kind === ts.SyntaxKind.NullKeyword) return null;
+/**
+ * 判断当前是否运行在测试环境。
+ * @returns 是否为测试环境
+ */
+function isTestEnvironment(): boolean {
+  const maybeProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
 
-  const contextPath = readThisContextPath(expression);
-  if (contextPath) {
-    const source = contextPath.root === 'input' ? context.input : context.state;
-    return contextPath.path.length ? get(source, contextPath.path) : source;
-  }
+  return maybeProcess?.env?.NODE_ENV === 'test';
+}
 
-  const variablePath = readVariablePath(expression);
-  if (variablePath) {
-    const source = context.variables.get(variablePath.name);
-    return variablePath.path.length ? get(source, variablePath.path) : source;
-  }
+/**
+ * 生成小组件协议适配脚本。
+ * @param payload - 小组件运行载荷
+ * @returns 可交给通用沙箱执行的脚本
+ */
+function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
+  const lifecycleName = payload.lifecycleName ? JSON.stringify(payload.lifecycleName) : 'undefined';
+  const interactionCode =
+    payload.interactionCode !== undefined ? JSON.stringify(compileSandboxSource(payload.interactionCode, 'widget-interaction.ts')) : 'undefined';
 
-  if (ts.isArrayLiteralExpression(expression)) {
-    return Promise.all(expression.elements.map((item: ts.Expression): Promise<unknown> => evaluateExpression(item, context)));
-  }
+  return [
+    'const __widgetInput = __initialWidgetInput',
+    'const __widgetState = __initialWidgetState',
+    'let __widgetConfig',
+    'const __widgetReservedBindingNames = new Set([',
+    "  'arguments', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default',",
+    "  'delete', 'do', 'else', 'enum', 'eval', 'export', 'extends', 'false', 'finally', 'for', 'function',",
+    "  'if', 'implements', 'import', 'in', 'instanceof', 'interface', 'let', 'new', 'null', 'package',",
+    "  'private', 'protected', 'public', 'return', 'static', 'super', 'switch', 'this', 'throw', 'true',",
+    "  'try', 'typeof', 'undefined', 'var', 'void', 'while', 'with', 'yield'",
+    '])',
+    '',
+    'function __clone(value) {',
+    '  if (value === undefined) return value',
+    '  return JSON.parse(JSON.stringify(value))',
+    '}',
+    '',
+    'function __isPlainRecord(value) {',
+    "  if (Object.prototype.toString.call(value) !== '[object Object]') return false",
+    '  const prototype = Object.getPrototypeOf(value)',
+    '  return prototype === Object.prototype || prototype === null',
+    '}',
+    '',
+    'function __setValueAtPath(target, path, value) {',
+    "  const keys = path.split('.').filter(Boolean)",
+    '  if (keys.length === 0) return',
+    '  let cursor = target',
+    '  for (const key of keys.slice(0, -1)) {',
+    '    const nextValue = cursor[key]',
+    '    if (!__isPlainRecord(nextValue)) {',
+    '      const nextObject = {}',
+    '      cursor[key] = nextObject',
+    '      cursor = nextObject',
+    '      continue',
+    '    }',
+    '    cursor = nextValue',
+    '  }',
+    '  cursor[keys[keys.length - 1]] = __clone(value)',
+    '}',
+    '',
+    'function __normalizeSendMessageTextParts(value) {',
+    '  if (!Array.isArray(value)) return null',
+    '  const textParts = []',
+    '  for (const item of value) {',
+    "    if (!__isPlainRecord(item) || item.type !== 'text' || typeof item.text !== 'string') return null",
+    "    textParts.push({ type: 'text', text: item.text })",
+    '  }',
+    '  return textParts',
+    '}',
+    '',
+    'function __normalizeSendMessage(value) {',
+    "  if (typeof value === 'string') return { content: value, isError: false }",
+    '  if (!__isPlainRecord(value)) return null',
+    '  const rawContent = value.content',
+    "  const content = typeof rawContent === 'string' ? rawContent : __normalizeSendMessageTextParts(rawContent)",
+    '  if (content === null) return null',
+    '  return { content, isError: typeof value.isError === "boolean" ? value.isError : false }',
+    '}',
+    '',
+    'function __createWidgetHttpClient() {',
+    `  const request = (method, url, input = {}) => ${SANDBOX_HTTP_HOST_FUNCTION_NAME}({ ...__clone(input), method, url })`,
+    '  return {',
+    "    get: (url, input = {}) => request('GET', url, input),",
+    "    post: (url, input = {}) => request('POST', url, input),",
+    "    put: (url, input = {}) => request('PUT', url, input),",
+    "    patch: (url, input = {}) => request('PATCH', url, input),",
+    "    delete: (url, input = {}) => request('DELETE', url, input)",
+    '  }',
+    '}',
+    '',
+    'function __createExecutionState() {',
+    '  return { stateChanged: false, sendMessage: undefined, pendingMethodCalls: [] }',
+    '}',
+    '',
+    'function __createWidgetThisContext(executionState) {',
+    '  return {',
+    '    get $input() { return __clone(__widgetInput) },',
+    '    get $state() { return __clone(__widgetState) },',
+    '    $http: __createWidgetHttpClient(),',
+    '    $setState(path, value) {',
+    "      if (typeof path !== 'string' || !path) return",
+    '      __setValueAtPath(__widgetState, path, value)',
+    '      executionState.stateChanged = true',
+    '    },',
+    '    async $sendMessage(message) {',
+    '      const sendMessage = __normalizeSendMessage(message)',
+    '      if (sendMessage) executionState.sendMessage = sendMessage',
+    '    }',
+    '  }',
+    '}',
+    '',
+    'function __canUseAsBindingName(name) {',
+    '  return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(name) && !__widgetReservedBindingNames.has(name)',
+    '}',
+    '',
+    'function __createMethodBindings(widgetThis, executionState) {',
+    '  const methods = __widgetConfig && __widgetConfig.methods',
+    '  if (!__isPlainRecord(methods)) return {}',
+    '  const bindings = {}',
+    '  for (const [methodName, method] of Object.entries(methods)) {',
+    "    if (typeof method !== 'function') continue",
+    '    const boundMethod = (...args) => {',
+    '      try {',
+    '        const result = Reflect.apply(method, widgetThis, args)',
+    '        const pendingCall = Promise.resolve(result).catch(() => undefined)',
+    '        executionState.pendingMethodCalls.push(pendingCall)',
+    '        return result',
+    '      } catch (error) {',
+    '        throw error',
+    '      }',
+    '    }',
+    '    Object.defineProperty(widgetThis, methodName, { value: boundMethod, configurable: true, enumerable: false })',
+    '    if (__canUseAsBindingName(methodName)) bindings[methodName] = boundMethod',
+    '  }',
+    '  return bindings',
+    '}',
+    '',
+    'async function __flushPendingMethodCalls(executionState) {',
+    '  while (executionState.pendingMethodCalls.length > 0) {',
+    '    const pendingMethodCalls = executionState.pendingMethodCalls.splice(0)',
+    '    await Promise.all(pendingMethodCalls)',
+    '  }',
+    '}',
+    '',
+    'async function __runInteractionCode(interactionCode, widgetThis, executionState) {',
+    '  const methodBindings = __createMethodBindings(widgetThis, executionState)',
+    '  const bindingNames = Object.keys(methodBindings)',
+    "  const interactionBody = '\"use strict\";\\nreturn (async function() {\\n' + interactionCode + '\\n}).call(widgetThis);'",
+    "  const fn = __sandbox.createFunction(['widgetThis', ...bindingNames], interactionBody)",
+    '  await fn(widgetThis, ...bindingNames.map((name) => methodBindings[name]))',
+    '}',
+    '',
+    'async function __runWidgetRuntime(lifecycleName, interactionCode) {',
+    '  const executionState = __createExecutionState()',
+    '  const widgetThis = __createWidgetThisContext(executionState)',
+    '  __createMethodBindings(widgetThis, executionState)',
+    '  if (lifecycleName) {',
+    '    const lifecycle = __widgetConfig && __widgetConfig[lifecycleName]',
+    "    if (typeof lifecycle === 'function') await Reflect.apply(lifecycle, widgetThis, [])",
+    '  } else if (typeof interactionCode === "string" && interactionCode.trim()) {',
+    '    await __runInteractionCode(interactionCode, widgetThis, executionState)',
+    '  }',
+    '  await __flushPendingMethodCalls(executionState)',
+    '  return {',
+    '    state: __clone(__widgetState),',
+    '    stateChanged: executionState.stateChanged,',
+    '    ...(executionState.sendMessage ? { sendMessage: __clone(executionState.sendMessage) } : {})',
+    '  }',
+    '}',
+    '',
+    'const Widget = (value) => {',
+    '  if (__isPlainRecord(value)) __widgetConfig = value',
+    '  return value',
+    '}',
+    'const defineConfig = () => undefined',
+    '',
+    "const __runWidgetScript = __sandbox.createFunction(['Widget', 'defineConfig'], __widgetScriptCode)",
+    '__runWidgetScript(Widget, defineConfig)',
+    '',
+    `return await __runWidgetRuntime(${lifecycleName}, ${interactionCode})`
+  ].join('\n');
+}
 
-  if (ts.isObjectLiteralExpression(expression)) {
-    const value: Record<string, unknown> = {};
-    const propertyEntries = await Promise.all(
-      expression.properties.map(async (property): Promise<[string, unknown] | null> => {
-        if (ts.isPropertyAssignment(property)) {
-          const propertyName = readPropertyName(property.name);
-          if (!propertyName) return null;
-          return [propertyName, await evaluateExpression(property.initializer, context)];
-        }
-
-        if (ts.isShorthandPropertyAssignment(property)) {
-          return [property.name.text, context.variables.get(property.name.text)];
-        }
-
-        return null;
+/**
+ * 运行小组件脚本。
+ * @param payload - 小组件运行载荷
+ * @param options - 运行选项
+ * @returns 小组件脚本运行结果
+ */
+async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: WidgetScriptRunOptions = {}): Promise<WidgetScriptRunResult> {
+  const result = await runSandboxCode(
+    {
+      code: createWidgetAdapterCode(payload),
+      arguments: {
+        __initialWidgetInput: payload.input,
+        __initialWidgetState: payload.state,
+        __widgetScriptCode: compileSandboxSource(payload.scriptCode, 'widget-script.ts')
+      }
+    },
+    {
+      useWorker: options.useWorker ?? !isTestEnvironment(),
+      timeoutMs: options.timeoutMs,
+      hostFunctions: createSandboxHttpHost({
+        request: (request: RequestInput): Promise<RequestResponse> => runWidgetHttpRequest(options.http, request),
+        functionName: SANDBOX_HTTP_HOST_FUNCTION_NAME,
+        disabledMessage: '当前环境未启用小组件 HTTP 客户端',
+        invalidRequestMessage: '小组件 HTTP 请求参数无效'
       })
-    );
-
-    for (const entry of propertyEntries) {
-      if (!entry) continue;
-      const [propertyName, propertyValue] = entry;
-      value[propertyName] = propertyValue;
     }
-
-    return value;
-  }
-
-  return undefined;
-}
-
-/**
- * 根据用户辅助函数形参创建局部变量。
- * @param helperFunction - 用户辅助函数节点
- * @param callExpression - 交互表达式中的调用节点
- * @param context - 当前求值上下文
- * @returns 注入到用户辅助函数作用域的局部变量
- */
-async function createUserHelperInitialVariables(
-  helperFunction: WidgetFunctionNodeWithBody,
-  callExpression: ts.CallExpression,
-  context: WidgetExpressionEvalContext
-): Promise<Map<string, unknown>> {
-  const variables = new Map<string, unknown>();
-
-  for (let index = 0; index < helperFunction.parameters.length; index += 1) {
-    const parameter = helperFunction.parameters[index];
-    if (!ts.isIdentifier(parameter.name)) continue;
-
-    if (parameter.dotDotDotToken) {
-      const restValues: unknown[] = [];
-      for (const argument of callExpression.arguments.slice(index)) {
-        // 参数按源码顺序求值，避免依赖前序副作用时顺序错乱。
-        // eslint-disable-next-line no-await-in-loop
-        restValues.push(await evaluateExpression(argument, context));
-      }
-      variables.set(parameter.name.text, restValues);
-      break;
-    }
-
-    const argument = callExpression.arguments[index];
-    if (!argument) continue;
-
-    // 参数按源码顺序求值，避免依赖前序副作用时顺序错乱。
-    // eslint-disable-next-line no-await-in-loop
-    variables.set(parameter.name.text, await evaluateExpression(argument, context));
-  }
-
-  return variables;
-}
-
-/**
- * 判断表达式是否为 this.$setState(...) 调用。
- * @param expression - 待检查表达式
- * @returns 是否为 setState 调用
- */
-function isSetStateCall(expression: ts.Expression): expression is ts.CallExpression {
-  return (
-    ts.isCallExpression(expression) &&
-    ts.isPropertyAccessExpression(expression.expression) &&
-    expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
-    expression.expression.name.text === '$setState'
   );
-}
 
-/**
- * 判断表达式是否为 this.$sendMessage(...) 调用。
- * @param expression - 待检查表达式
- * @returns 是否为 sendMessage 调用
- */
-function isSendMessageCall(expression: ts.Expression): expression is ts.CallExpression {
-  return (
-    ts.isCallExpression(expression) &&
-    ts.isPropertyAccessExpression(expression.expression) &&
-    expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
-    expression.expression.name.text === '$sendMessage'
-  );
-}
-
-/**
- * 执行受支持的小组件脚本语句。
- * @param statements - 待执行语句列表
- * @param part - 小组件消息片段
- * @param options - 生命周期执行选项
- * @returns 脚本语句执行结果
- */
-async function runWidgetStatements(
-  statements: readonly ts.Statement[],
-  part: ChatMessageWidgetPart,
-  options: WidgetStatementRunOptions = {}
-): Promise<WidgetLifecycleExecutionResult> {
-  const result: WidgetLifecycleExecutionResult = {};
-  const context: WidgetExpressionEvalContext = {
-    input: part.renderContext.input,
-    state: part.renderContext.state,
-    variables: new Map<string, unknown>(options.initialVariables),
-    http: options.http
-  };
-
-  for (const statement of statements) {
-    if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
-
-        // 局部变量按源码顺序解析，后续变量可以依赖前面声明的变量。
-        // eslint-disable-next-line no-await-in-loop
-        const value = await evaluateExpression(declaration.initializer, context);
-        context.variables.set(declaration.name.text, value);
-      }
-      continue;
-    }
-
-    if (!ts.isExpressionStatement(statement)) continue;
-    const expression = unwrapAwaitExpression(statement.expression);
-
-    if (isHttpCall(expression)) {
-      // 独立 HTTP 调用也需要按源码顺序等待，避免后续状态过早写入。
-      // eslint-disable-next-line no-await-in-loop
-      await evaluateExpression(expression, context);
-      continue;
-    }
-
-    const userHelperCall = options.allowUserMethodCalls ? readUserHelperCallExpression(expression) : null;
-    if (userHelperCall && ts.isIdentifier(userHelperCall.expression)) {
-      const userMethodName = userHelperCall.expression.text;
-      const methodFunction = findWidgetMethodFunction(options.widgetScriptCode ?? 'Widget({})', userMethodName);
-      if (!methodFunction) continue;
-
-      // 参数绑定必须先于辅助函数执行，且保持源码顺序。
-      // eslint-disable-next-line no-await-in-loop
-      const initialVariables = await createUserHelperInitialVariables(methodFunction, userHelperCall, context);
-      // 用户辅助函数只允许由元素交互代码触发，不允许辅助函数内部继续递归调用。
-      // eslint-disable-next-line no-await-in-loop
-      const helperResult = await runWidgetStatements(methodFunction.body.statements, part, { ...options, allowUserMethodCalls: false, initialVariables });
-      if (helperResult.stateChanged) {
-        result.stateChanged = true;
-      }
-      if (helperResult.sendMessage) {
-        result.sendMessage = helperResult.sendMessage;
-      }
-      continue;
-    }
-
-    if (isSetStateCall(expression)) {
-      const [pathExpression, valueExpression] = expression.arguments;
-      if (!pathExpression || !valueExpression || !ts.isStringLiteral(pathExpression)) continue;
-
-      // 状态写入必须按源码顺序执行，避免后续语句读到旧状态。
-      // eslint-disable-next-line no-await-in-loop
-      const value = await evaluateExpression(valueExpression, context);
-      set(part.renderContext.state, pathExpression.text, value);
-      result.stateChanged = true;
-      continue;
-    }
-
-    if (!isSendMessageCall(expression)) continue;
-
-    const [payloadExpression] = expression.arguments;
-    if (!payloadExpression) continue;
-
-    // 上行消息保留源码顺序，最后一次 sendMessage 作为最终提交内容。
-    // eslint-disable-next-line no-await-in-loop
-    const payload = await evaluateExpression(payloadExpression, context);
-    const sendMessage = normalizeWidgetSendMessage(payload);
-    if (sendMessage) {
-      result.sendMessage = sendMessage;
-    }
+  if (!isWidgetScriptRunResult(result.value)) {
+    throw new Error('小组件脚本返回结果无效');
   }
 
-  return result;
-}
-
-/**
- * 执行受支持的生命周期语句。
- * @param lifecycleFunction - 生命周期函数节点
- * @param part - 小组件消息片段
- * @param options - 生命周期执行选项
- * @returns 生命周期函数执行结果
- */
-async function runLifecycleStatements(
-  lifecycleFunction: WidgetFunctionNodeWithBody | undefined,
-  part: ChatMessageWidgetPart,
-  options: WidgetLifecycleRunOptions = {}
-): Promise<WidgetLifecycleExecutionResult> {
-  if (!lifecycleFunction) return {};
-
-  return runWidgetStatements(lifecycleFunction.body.statements, part, options);
+  return result.value;
 }
 
 /**
@@ -625,17 +434,63 @@ function isWidgetScriptEnabled(part: ChatMessageWidgetPart): boolean {
 }
 
 /**
+ * 把沙箱运行结果写回 Widget part。
+ * @param part - 原始小组件消息片段
+ * @param result - 沙箱运行结果
+ * @returns 写回状态后的消息片段
+ */
+function applyWidgetSandboxResult(part: ChatMessageWidgetPart, result: WidgetScriptRunResult): ChatMessageWidgetPart {
+  if (!result.stateChanged) return part;
+
+  return {
+    ...part,
+    renderContext: {
+      ...part.renderContext,
+      state: result.state
+    }
+  };
+}
+
+/**
+ * 运行 Widget 沙箱脚本。
+ * @param part - 小组件消息片段
+ * @param options - 沙箱执行选项
+ * @returns 沙箱运行结果
+ */
+function runPartSandbox(part: ChatMessageWidgetPart, options: WidgetPartSandboxOptions = {}): Promise<WidgetScriptRunResult> {
+  return runWidgetScriptSandbox(
+    {
+      scriptCode: part.value.execute?.code ?? 'Widget({})',
+      ...(options.interactionCode !== undefined ? { interactionCode: options.interactionCode } : {}),
+      ...(options.lifecycleName ? { lifecycleName: options.lifecycleName } : {}),
+      input: part.renderContext.input,
+      state: part.renderContext.state
+    },
+    {
+      http: options.http,
+      useWorker: options.useWorker,
+      timeoutMs: options.timeoutMs
+    }
+  );
+}
+
+/**
+ * 小组件完成态创建选项。
+ */
+interface WidgetFinishedResultOptions {
+  /** 脚本通过 this.$sendMessage 声明的上行消息。 */
+  sendMessage?: WidgetRuntimeSendMessage;
+  /** 当前时间来源，测试中可注入固定时间。 */
+  now?: () => Date;
+}
+
+/**
  * 创建小组件完成态结果。
  * @param part - 小组件消息片段
- * @param sendMessage - 可选上行消息
- * @param options - 生命周期执行选项
+ * @param options - 完成态创建选项
  * @returns 小组件运行态收尾结果
  */
-function createWidgetFinishedResult(
-  part: ChatMessageWidgetPart,
-  sendMessage?: WidgetRuntimeSendMessage,
-  options: WidgetLifecycleRunOptions = {}
-): WidgetRuntimeFinishResult {
+function createWidgetFinishedResult(part: ChatMessageWidgetPart, options: WidgetFinishedResultOptions = {}): WidgetRuntimeFinishResult {
   const unmountedAt = (options.now ?? (() => new Date()))().toISOString();
 
   return {
@@ -647,7 +502,7 @@ function createWidgetFinishedResult(
         unmountedAt
       }
     },
-    ...(sendMessage ? { sendMessage } : {})
+    ...(options.sendMessage ? { sendMessage: options.sendMessage } : {})
   };
 }
 
@@ -665,11 +520,10 @@ export async function initWidgetMountState(part: ChatMessageWidgetPart, options:
   const mountedAt = (options.now ?? (() => new Date()))().toISOString();
 
   try {
-    // 执行 mounted 生命周期
-    const mountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'Widget({})', 'mounted');
-    await runLifecycleStatements(mountedFunction, nextPart, options);
+    const sandboxResult = await runPartSandbox(nextPart, { ...options, lifecycleName: 'mounted' });
+    const mountedPart = applyWidgetSandboxResult(nextPart, sandboxResult);
 
-    return { ...nextPart, status: 'mounted', lifecycle: { ...nextPart.lifecycle, mountedAt } };
+    return { ...mountedPart, status: 'mounted', lifecycle: { ...mountedPart.lifecycle, mountedAt } };
   } catch {
     return createFailedWidgetPart(part);
   }
@@ -690,10 +544,13 @@ export async function finishWidgetRuntime(part: ChatMessageWidgetPart, options: 
   const nextPart = cloneDeep(part);
 
   try {
-    const unmountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'Widget({})', 'unmounted');
-    const lifecycleResult = await runLifecycleStatements(unmountedFunction, nextPart, options);
+    const sandboxResult = await runPartSandbox(nextPart, { ...options, lifecycleName: 'unmounted' });
+    const finishedPart = applyWidgetSandboxResult(nextPart, sandboxResult);
 
-    return createWidgetFinishedResult(nextPart, lifecycleResult.sendMessage, options);
+    return createWidgetFinishedResult(finishedPart, {
+      sendMessage: sandboxResult.sendMessage,
+      now: options.now
+    });
   } catch {
     return { part: createFailedWidgetPart(part) };
   }
@@ -712,30 +569,25 @@ async function runWidgetInteraction(
   options: WidgetLifecycleRunOptions = {}
 ): Promise<WidgetRuntimeFinishResult> {
   if (part.status !== 'mounted' || !isWidgetScriptEnabled(part)) return { part };
-
-  const sourceFile = ts.createSourceFile('widget-interaction.ts', interactionCode, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  if (!sourceFile.statements.length) return { part };
+  if (!interactionCode.trim()) return { part };
 
   try {
     const nextPart = cloneDeep(part);
-    const interactionResult = await runWidgetStatements(sourceFile.statements, nextPart, {
-      ...options,
-      allowUserMethodCalls: true,
-      widgetScriptCode: nextPart.value.execute?.code ?? 'Widget({})'
-    });
+    const sandboxResult = await runPartSandbox(nextPart, { ...options, interactionCode });
+    const interactedPart = applyWidgetSandboxResult(nextPart, sandboxResult);
 
-    if (interactionResult.sendMessage) {
-      const finishResult = await finishWidgetRuntime(nextPart, options);
+    if (sandboxResult.sendMessage) {
+      const finishResult = await finishWidgetRuntime(interactedPart, options);
 
       return {
         part: finishResult.part,
-        sendMessage: interactionResult.sendMessage
+        sendMessage: sandboxResult.sendMessage
       };
     }
 
-    if (!interactionResult.stateChanged) return { part };
+    if (!sandboxResult.stateChanged) return { part };
 
-    return { part: { ...nextPart, status: 'mounted' } };
+    return { part: { ...interactedPart, status: 'mounted' } };
   } catch {
     return { part: createFailedWidgetPart(part) };
   }
