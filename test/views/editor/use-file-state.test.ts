@@ -93,4 +93,33 @@ describe('useFileState', (): void => {
     expect(clearDirtyMock).toHaveBeenCalledWith('file-1');
     expect(setDirtyMock).not.toHaveBeenCalled();
   });
+
+  it('marks an unsaved draft dirty when it has content beyond the saved baseline', async (): Promise<void> => {
+    const fileId = ref('draft-1');
+    const fileState = ref<EditorFile>({ id: '', name: '', content: '', ext: 'md', path: null });
+    const unsavedDraft: StoredFile = {
+      type: 'file',
+      id: 'draft-1',
+      path: null,
+      content: '# Draft',
+      savedContent: '',
+      name: 'Draft',
+      ext: 'md'
+    };
+    const actions = useFileState({
+      fileId,
+      fileState,
+      switchWatchedFile: vi.fn(),
+      autoSave: createAutoSaveController(),
+      finishReload: vi.fn()
+    });
+
+    actions.pauseDirtyTracking();
+    await actions.initializeFileState(unsavedDraft, 'draft-1');
+    actions.resumeDirtyTracking();
+
+    expect(actions.hasUnsavedDraft.value).toBe(true);
+    expect(setDirtyMock).toHaveBeenCalledWith('draft-1');
+    expect(clearDirtyMock).not.toHaveBeenCalledWith('draft-1');
+  });
 });

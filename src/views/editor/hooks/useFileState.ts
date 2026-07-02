@@ -194,7 +194,7 @@ export function useFileState(options: SessionPersistenceOptions): SessionPersist
 
     hasSavedContentBaseline.value = stored?.savedContent !== undefined || !fileState.value.path;
     savedContent.value = stored?.savedContent ?? fileState.value.content;
-    hasUnsavedDraft.value = wasDirtyDraft && hasSavedContentBaseline.value && fileState.value.content !== savedContent.value;
+    hasUnsavedDraft.value = hasSavedContentBaseline.value && fileState.value.content !== savedContent.value && (wasDirtyDraft || !fileState.value.path);
 
     if (hasUnsavedDraft.value) {
       syncDirtyState();
