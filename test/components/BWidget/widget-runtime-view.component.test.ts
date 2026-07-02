@@ -87,7 +87,7 @@ function createRuntimeWidgetData(): WidgetData {
         rotation: 0,
         style: {},
         metadata: {
-          content: '{{ input.city }} 当前 {{ data.weather.temperature }}°C'
+          content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
         }
       },
       {

@@ -8,6 +8,7 @@ import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
 import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, type WidgetBindingContextRoot } from '../utils/widgetBindings';
 import { buildWidgetDataSchema } from '../utils/widgetDataSchema';
+import { readWidgetExecuteMethod } from '../utils/widgetExecuteMethod';
 
 /**
  * Widget 数据读取函数。
@@ -76,16 +77,6 @@ function collectSchemaVariableChildren(
 }
 
 /**
- * 创建 schema 根变量。
- * @param root - 上下文根名称
- * @param properties - schema 属性集合
- * @returns schema 根变量
- */
-function createSchemaRootVariable(root: WidgetBindingContextRoot, properties: Record<string, WidgetSchemaProperty> | undefined): Variable {
-  return createVariable(root, '', undefined, collectSchemaVariableChildren(root, properties));
-}
-
-/**
  * 创建变量分组。
  * @param options - 变量选项
  * @returns 变量分组
@@ -98,26 +89,16 @@ function createVariableGroup(options: Variable[]): VariableOptionGroup {
 }
 
 /**
- * 判断值是否为普通记录。
- * @param value - 待判断值
- * @returns 是否为普通记录
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-/**
  * 读取 Widget JS 脚本代码。
  * @param dataItem - Widget 数据
  * @returns JS 脚本代码
  */
 function readWidgetMethodScriptCode(dataItem: WidgetData | undefined): string {
-  const executeMethod = dataItem?.execute;
-  if (!isRecord(executeMethod)) {
+  if (!dataItem) {
     return '';
   }
 
-  return typeof executeMethod.code === 'string' ? executeMethod.code : '';
+  return readWidgetExecuteMethod(dataItem.execute).code;
 }
 
 /**
@@ -129,10 +110,10 @@ export function useElementVariables(readDataItem: ElementDataItemReader): UseEle
   const variableOptions = computed<VariableOptionGroup[]>((): VariableOptionGroup[] => {
     const dataItem = readDataItem();
     const dataSchema = buildWidgetDataSchema(readWidgetMethodScriptCode(dataItem), dataItem?.inputSchema);
-    const inputVariable = createSchemaRootVariable('input', dataItem?.inputSchema.properties);
-    const dataVariable = createSchemaRootVariable('data', dataSchema.properties);
+    const inputVariable = createVariable('input', '', undefined, collectSchemaVariableChildren('input', dataItem?.inputSchema.properties));
+    const dataVariables = collectSchemaVariableChildren('data', dataSchema.properties);
 
-    return [createVariableGroup([inputVariable, dataVariable])];
+    return [createVariableGroup([inputVariable, ...dataVariables])];
   });
 
   return {

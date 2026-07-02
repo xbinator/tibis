@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the Widget runtime public model from state to Vue-style data, including `Widget({ data })`, direct `this.message` reads/writes, bound `this.sendText()` methods, `{{ data.xxx }}`, `renderContext.data`, and `dataSchema`.
+**Goal:** Replace the Widget runtime public model from state to Vue-style data, including `Widget({ data })`, direct `this.message` reads/writes, bound `this.sendText()` methods, direct template bindings such as `{{ message }}`, `renderContext.data`, and `dataSchema`.
 
 **Architecture:** Keep the current runtime/editor split. Update protocol types first through tests, then migrate the sandbox adapter and schema inference utility, and finally align bindings, examples, fixtures, and docs. No old `state` aliases or migration fallback are kept.
 
@@ -104,7 +104,7 @@ Expected: PASS.
 
 - [ ] **Step 1: Update failing binding/variable tests**
 
-Change expected roots and sample content from `state` to `data`, including `{{ data.weather.temperature }}`.
+Change expected roots and sample content from `state` to direct data fields, including `{{ weather.temperature }}`.
 
 - [ ] **Step 2: Verify binding/variable tests fail**
 
@@ -113,7 +113,7 @@ Expected: FAIL until binding roots and defaults are renamed.
 
 - [ ] **Step 3: Implement binding and default updates**
 
-Change binding roots to `input | data`, default Widget data schema to `dataSchema`, and default code/docs examples to use `Widget({ data })`, direct `this` data fields, and bound `methods`.
+Keep `input` as an explicit binding root, expose data fields directly in template bindings, change the default Widget data schema to `dataSchema`, and update default code/docs examples to use `Widget({ data })`, direct `this` data fields, and bound `methods`.
 
 - [ ] **Step 4: Verify binding/variable tests pass**
 

@@ -177,9 +177,11 @@ describe('useElementVariables', (): void => {
     expect(values).toContain('input.user.name');
     expect(values).toContain('input["wind-speed"]');
     expect(values).toContain('input.weather.temperature');
-    expect(values).toContain('data.weather');
-    expect(values).toContain('data.weather.temperature');
-    expect(values).toContain('data["weather-data"]["feels.like"]');
+    expect(values).toContain('weather');
+    expect(values).toContain('weather.temperature');
+    expect(values).toContain('["weather-data"]["feels.like"]');
+    expect(values).not.toContain('data');
+    expect(values).not.toContain('data.weather.temperature');
     expect(values).not.toContain('output');
     expect(values).not.toContain(REMOVED_LEGACY_ROOT);
     expect(labels).toContain('城市名称');
@@ -195,10 +197,9 @@ describe('useElementVariables', (): void => {
     const roots = readVariableTrees(variableOptions.value);
     const inputVariable = findVariable(variableOptions.value, 'input');
     const userVariable = findVariable(variableOptions.value, 'input.user');
-    const dataVariable = findVariable(variableOptions.value, 'data');
-    const weatherVariable = findVariable(variableOptions.value, 'data.weather');
+    const weatherVariable = findVariable(variableOptions.value, 'weather');
 
-    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'data']);
+    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'weather', '["weather-data"]']);
     expect(inputVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual([
       'input.city',
       'input.unit',
@@ -216,14 +217,13 @@ describe('useElementVariables', (): void => {
         }
       ]
     });
-    expect(dataVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual(['data.weather', 'data["weather-data"]']);
     expect(weatherVariable).toMatchObject({
       label: '',
-      value: 'data.weather',
+      value: 'weather',
       children: [
         {
           label: '',
-          value: 'data.weather.temperature'
+          value: 'weather.temperature'
         }
       ]
     });
@@ -234,7 +234,7 @@ describe('useElementVariables', (): void => {
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
     const variables = readVariables(variableOptions.value);
     const cityVariable = variables.find((item: Variable): boolean => item.value === 'input.city');
-    const temperatureVariable = variables.find((item: Variable): boolean => item.value === 'data.weather.temperature');
+    const temperatureVariable = variables.find((item: Variable): boolean => item.value === 'weather.temperature');
 
     expect(cityVariable).toEqual({
       label: '城市名称',
@@ -242,7 +242,7 @@ describe('useElementVariables', (): void => {
     });
     expect(temperatureVariable).toEqual({
       label: '',
-      value: 'data.weather.temperature'
+      value: 'weather.temperature'
     });
     expect(variables.filter((item: Variable): boolean => item.description === item.value)).toEqual([]);
   });
@@ -263,14 +263,26 @@ describe('useElementVariables', (): void => {
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
     const values = readVariableValues(variableOptions.value);
 
-    expect(values).toContain('data.weather.temperature');
-    expect(values).not.toContain('data.stale');
+    expect(values).toContain('weather.temperature');
+    expect(values).not.toContain('stale');
+  });
+
+  it('uses default execute code to provide default data variables when execute config is missing', (): void => {
+    const widgetData = createWidgetData();
+    delete widgetData.execute;
+    const dataItem = ref<WidgetData | undefined>(widgetData);
+    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const values = readVariableValues(variableOptions.value);
+
+    expect(values).toContain('input');
+    expect(values).toContain('message');
+    expect(values).not.toContain('data');
   });
 
   it('falls back to root variables when widget data is not ready', (): void => {
     const dataItem = ref<WidgetData | undefined>();
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
 
-    expect(readVariableValues(variableOptions.value)).toEqual(['input', 'data']);
+    expect(readVariableValues(variableOptions.value)).toEqual(['input']);
   });
 });

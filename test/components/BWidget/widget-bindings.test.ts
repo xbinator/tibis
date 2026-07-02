@@ -27,6 +27,45 @@ function createRenderContext(): WidgetRenderContext {
 }
 
 describe('widgetBindings', (): void => {
+  it('resolves data fields directly without the data root', (): void => {
+    const context = createRenderContext();
+
+    expect(evaluateWidgetBindingExpression('weather.temperature', context)).toEqual({
+      resolved: true,
+      value: 28
+    });
+    expect(resolveWidgetTemplateValue('{{ input.city }} 当前 {{ weather.temperature }}°C', context)).toBe('上海 当前 28°C');
+  });
+
+  it('resolves direct data fields whose names start with input', (): void => {
+    const context: WidgetRenderContext = {
+      ...createRenderContext(),
+      data: {
+        inputText: '继续',
+        inputValue: {
+          label: '确认'
+        }
+      }
+    };
+
+    expect(evaluateWidgetBindingExpression('inputText', context)).toEqual({
+      resolved: true,
+      value: '继续'
+    });
+    expect(resolveWidgetTemplateValue('{{ inputValue.label }}', context)).toBe('确认');
+  });
+
+  it('does not treat data as a binding root', (): void => {
+    const context = createRenderContext();
+    const template = '{{ data.weather.temperature }}';
+
+    expect(evaluateWidgetBindingExpression('data.weather.temperature', context)).toEqual({
+      resolved: false,
+      value: undefined
+    });
+    expect(resolveWidgetTemplateValue(template, context)).toBe(template);
+  });
+
   it('does not resolve removed legacy binding root', (): void => {
     const context = {
       ...createRenderContext(),

@@ -80,7 +80,7 @@ describe('useElementContent', (): void => {
   });
 
   it('formats complex binding values as readable JSON text', (): void => {
-    const wrapper = mountDisplayContent(createDisplayElement('{{ data.weather }}'), {
+    const wrapper = mountDisplayContent(createDisplayElement('{{ weather }}'), {
       input: {},
       data: {
         weather: {

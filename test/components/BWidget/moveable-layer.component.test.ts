@@ -467,7 +467,7 @@ describe('MoveableLayer', (): void => {
     const textElement: WidgetElement = {
       ...createWidgetElement('text-1', 'text'),
       size: { width: 30, height: 12 },
-      metadata: { content: '{{ data.shortText }}' }
+      metadata: { content: '{{ shortText }}' }
     };
     const renderContext: WidgetRenderContext = {
       input: {},
@@ -496,7 +496,7 @@ describe('MoveableLayer', (): void => {
     const textElement: WidgetElement = {
       ...createWidgetElement('text-1', 'text'),
       size: { width: 30, height: 12 },
-      metadata: { content: '{{ data.shortText }}' }
+      metadata: { content: '{{ shortText }}' }
     };
     const renderContext: WidgetRenderContext = {
       input: {},

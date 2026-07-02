@@ -43,7 +43,7 @@ describe('useElementTemplate', (): void => {
 
   it('does not read unrelated metadata as the field value', (): void => {
     const element = createTextElement();
-    element.metadata.helperText = '{{ data.weather.temperature }}°C';
+    element.metadata.helperText = '{{ weather.temperature }}°C';
     const field = useElementTemplate(ref(element), 'content');
 
     expect(field.value).toBe('静态内容');

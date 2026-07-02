@@ -37,8 +37,6 @@ type WidgetDisplayJsonReplacer = (this: unknown, key: string, value: unknown) =>
 const WIDGET_BINDING_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g;
 /** 整个字段都是单个绑定插值时的匹配表达式。 */
 const WIDGET_WHOLE_BINDING_PATTERN = /^\s*\{\{\s*([^{}]+?)\s*\}\}\s*$/;
-/** 绑定路径根名称匹配表达式。 */
-const WIDGET_BINDING_ROOT_PATTERN = /^(input|data)/;
 /** 点路径标识符匹配表达式。 */
 const WIDGET_BINDING_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 /** 点路径标识符前缀匹配表达式。 */
@@ -192,20 +190,57 @@ function parseBracketPathSegment(expression: string, startIndex: number): { next
 }
 
 /**
+ * 解析绑定路径片段。
+ * @param expression - 完整表达式
+ * @param startIndex - 当前下标
+ * @returns 路径片段和下一个下标，解析失败时返回 null
+ */
+function parsePathSegment(expression: string, startIndex: number): { nextIndex: number; value: string } | null {
+  if (expression[startIndex] === '[') {
+    return parseBracketPathSegment(expression, startIndex);
+  }
+
+  const identifierMatch = expression.slice(startIndex).match(WIDGET_BINDING_IDENTIFIER_PREFIX_PATTERN);
+
+  if (!identifierMatch) {
+    return null;
+  }
+
+  return {
+    value: identifierMatch[0],
+    nextIndex: startIndex + identifierMatch[0].length
+  };
+}
+
+/**
+ * 判断表达式是否显式访问 input 根。
+ * @param expression - 绑定表达式
+ * @returns 是否为 input 根表达式
+ */
+function isInputBindingRootExpression(expression: string): boolean {
+  return expression === 'input' || expression.startsWith('input.') || expression.startsWith('input[');
+}
+
+/**
  * 解析绑定表达式路径。
  * @param expression - 绑定表达式
  * @returns 绑定路径，非法时返回 null
  */
 function parseWidgetBindingPath(expression: string): WidgetBindingPath | null {
-  const rootMatch = expression.match(WIDGET_BINDING_ROOT_PATTERN);
-
-  if (!rootMatch) {
-    return null;
-  }
-
-  const root = rootMatch[1] as WidgetBindingContextRoot;
+  const root = isInputBindingRootExpression(expression) ? 'input' : 'data';
   const segments: string[] = [];
-  let index = root.length;
+  let index = root === 'input' ? 'input'.length : 0;
+
+  if (root === 'data') {
+    const firstSegment = parsePathSegment(expression, index);
+
+    if (!firstSegment) {
+      return null;
+    }
+
+    segments.push(firstSegment.value);
+    index = firstSegment.nextIndex;
+  }
 
   while (index < expression.length) {
     const character = expression[index];
@@ -235,6 +270,10 @@ function parseWidgetBindingPath(expression: string): WidgetBindingPath | null {
     return null;
   }
 
+  if (root === 'data' && segments.length === 0) {
+    return null;
+  }
+
   if (segments.some((segment: string): boolean => !isWidgetBindingPathSegmentAllowed(segment))) {
     return null;
   }
@@ -243,6 +282,23 @@ function parseWidgetBindingPath(expression: string): WidgetBindingPath | null {
     root,
     segments
   };
+}
+
+/**
+ * 格式化绑定路径首个片段。
+ * @param segment - 路径片段
+ * @returns 首个路径片段文本
+ */
+function formatFirstBindingPathSegment(segment: string): string {
+  if (WIDGET_BINDING_IDENTIFIER_PATTERN.test(segment)) {
+    return segment;
+  }
+
+  if (/^\d+$/.test(segment)) {
+    return `[${segment}]`;
+  }
+
+  return `[${JSON.stringify(segment)}]`;
 }
 
 /**
@@ -334,6 +390,19 @@ function formatBindingPathSegment(segment: string): string {
  * @returns 可插入模板的绑定路径
  */
 export function formatWidgetBindingPath(root: WidgetBindingContextRoot, segments: string[] = []): string {
+  if (root === 'data') {
+    const [firstSegment, ...restSegments] = segments;
+
+    if (!firstSegment) {
+      return '';
+    }
+
+    return restSegments.reduce(
+      (path: string, segment: string): string => `${path}${formatBindingPathSegment(segment)}`,
+      formatFirstBindingPathSegment(firstSegment)
+    );
+  }
+
   return segments.reduce((path: string, segment: string): string => `${path}${formatBindingPathSegment(segment)}`, root);
 }
 

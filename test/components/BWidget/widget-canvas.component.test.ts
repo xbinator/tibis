@@ -273,7 +273,7 @@ describe('BWidget canvas component', (): void => {
         rotation: 0,
         style: {},
         metadata: {
-          content: '{{ input.city }} 当前 {{ data.weather.temperature }}°C'
+          content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
         }
       }
     ];
@@ -310,7 +310,7 @@ describe('BWidget canvas component', (): void => {
         rotation: 0,
         style: {},
         metadata: {
-          content: '{{ data.longText }}'
+          content: '{{ longText }}'
         }
       }
     ];
@@ -348,7 +348,7 @@ describe('BWidget canvas component', (): void => {
         rotation: 0,
         style: { fontSize: 10 },
         metadata: {
-          content: '{{ data.shortText }}'
+          content: '{{ shortText }}'
         }
       }
     ];

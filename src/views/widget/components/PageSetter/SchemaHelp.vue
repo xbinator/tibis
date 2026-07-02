@@ -162,7 +162,7 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
         name: 'data: { weather: {...} }',
         type: 'object',
         required: false,
-        description: '对象字面量会递归生成 data.weather.* 子路径。'
+        description: '对象字面量会递归生成 weather.* 这类可直接绑定的路径。'
       },
       {
         name: 'this.lastQuery.city = this.$input.city',

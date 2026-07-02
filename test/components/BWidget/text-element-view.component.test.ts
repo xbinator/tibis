@@ -73,7 +73,7 @@ describe('TextElementView', (): void => {
 
   it('renders content binding from widget render context', (): void => {
     const element = createTextElement();
-    element.metadata.content = '{{ input.city }} 当前 {{ data.weather.temperature }}°C';
+    element.metadata.content = '{{ input.city }} 当前 {{ weather.temperature }}°C';
     const wrapper = mountTextElementView(element, {
       input: { city: '上海' },
       data: {
@@ -89,7 +89,7 @@ describe('TextElementView', (): void => {
 
   it('renders bracket binding paths produced for non-identifier field names', (): void => {
     const element = createTextElement();
-    element.metadata.content = '{{ input["wind-speed"] }} / {{ data["weather-data"]["feels.like"] }}';
+    element.metadata.content = '{{ input["wind-speed"] }} / {{ ["weather-data"]["feels.like"] }}';
     const wrapper = mountTextElementView(element, {
       input: {
         'wind-speed': 12
@@ -107,19 +107,19 @@ describe('TextElementView', (): void => {
 
   it('falls back to static content when binding path cannot be resolved', (): void => {
     const element = createTextElement();
-    element.metadata.content = '{{ data.weather.temperature }}°C';
+    element.metadata.content = '{{ weather.temperature }}°C';
     const wrapper = mountTextElementView(element, {
       input: {},
       data: {}
     });
 
-    expect(wrapper.text()).toBe('{{ data.weather.temperature }}°C');
+    expect(wrapper.text()).toBe('{{ weather.temperature }}°C');
     wrapper.unmount();
   });
 
   it('does not execute filter-like binding expressions', (): void => {
     const element = createTextElement();
-    element.metadata.content = '{{ data.weather.temperature | default("未知") }}';
+    element.metadata.content = '{{ weather.temperature | default("未知") }}';
     const wrapper = mountTextElementView(element, {
       input: {},
       data: {
@@ -129,7 +129,7 @@ describe('TextElementView', (): void => {
       }
     });
 
-    expect(wrapper.text()).toBe('{{ data.weather.temperature | default("未知") }}');
+    expect(wrapper.text()).toBe('{{ weather.temperature | default("未知") }}');
     wrapper.unmount();
   });
 });

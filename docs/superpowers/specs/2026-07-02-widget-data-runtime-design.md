@@ -8,7 +8,7 @@ Widget scripts currently expose runtime state through `WidgetState`, `this.$stat
 
 - Support `Widget({ data: {} })` as the initial runtime data declaration.
 - Replace script reads and writes with direct Vue-style `this` fields such as `this.message` and `this.weather.temperature`.
-- Replace element bindings with `{{ data.xxx }}`.
+- Replace element bindings with direct data field paths such as `{{ message }}` and `{{ weather.temperature }}`.
 - Replace editor declarations and inferred schema names from state to data.
 - Replace protocol and persisted Widget fields from `renderContext.state` / `stateSchema` to `renderContext.data` / `dataSchema`.
 - Update tests, examples, default code, and documentation references in the touched Widget areas.
@@ -31,7 +31,7 @@ The runtime only accepts plain object data declarations. Invalid or missing `dat
 - `src/components/BChat/utils/widgetRuntime.ts`: rename payload/result fields, adapter internals, runtime context getters, and mutation function to data terminology.
 - `src/views/widget/constants/methodScriptExtraLib.ts`: expose `WidgetData`, direct `this` data fields, bound `methods`, and `WidgetConfig.data`.
 - `src/components/BWidget/utils/widgetStateSchema.ts`: convert the schema inference utility to infer Widget data schema from `Widget({ data })` and direct `this.xxx = ...` assignments.
-- `src/components/BWidget/utils/widgetBindings.ts` and `src/components/BWidget/hooks/useElementVariables.ts`: use `data` as the binding root.
+- `src/components/BWidget/utils/widgetBindings.ts` and `src/components/BWidget/hooks/useElementVariables.ts`: keep `input` as an explicit binding root and expose data schema fields directly.
 - Widget editor/view files and tests: update examples, assertions, helper names, and fixture payloads.
 
 ## Testing
@@ -42,5 +42,5 @@ Add or update focused tests for:
 - Direct `this` field writes update mounted, interaction, and unmounted data.
 - Direct `this` field reads access the latest runtime data.
 - Schema inference includes both initial `data` literals and direct `this` assignments.
-- Element variables and binding evaluation use `data` rather than `state`.
+- Element variables and binding evaluation expose data fields directly rather than through `state` or `data` roots.
 - Removed state API names are not part of the editor type declarations.

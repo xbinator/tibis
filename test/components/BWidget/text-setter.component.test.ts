@@ -199,10 +199,10 @@ describe('Text Setter', (): void => {
     expect(wrapper.findAllComponents({ name: 'BPromptEditorStub' })).toHaveLength(1);
     expect(editor.props('value')).toBe('原始内容');
 
-    await wrapper.find('[data-testid="text-setter-prompt-editor"]').setValue('{{ input.city }} 当前 {{ data.weather.temperature }}°C');
+    await wrapper.find('[data-testid="text-setter-prompt-editor"]').setValue('{{ input.city }} 当前 {{ weather.temperature }}°C');
 
     expect(element.title).toBe('文本名称');
-    expect(element.metadata.content).toBe('{{ input.city }} 当前 {{ data.weather.temperature }}°C');
+    expect(element.metadata.content).toBe('{{ input.city }} 当前 {{ weather.temperature }}°C');
     wrapper.unmount();
   });
 
@@ -214,9 +214,9 @@ describe('Text Setter', (): void => {
 
     expect(editor.props('value')).toBe('原始内容');
 
-    await wrapper.find('[data-testid="text-setter-prompt-editor"]').setValue('温度：{{ data.weather.temperature }}°C');
+    await wrapper.find('[data-testid="text-setter-prompt-editor"]').setValue('温度：{{ weather.temperature }}°C');
 
-    expect(element.metadata.content).toBe('温度：{{ data.weather.temperature }}°C');
+    expect(element.metadata.content).toBe('温度：{{ weather.temperature }}°C');
     expect(element.metadata.helperText).toBe('温度辅助信息');
     wrapper.unmount();
   });
@@ -239,11 +239,13 @@ describe('Text Setter', (): void => {
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
     const labels = readVariables(options).map((item: VariableTreeNode): string => item.label);
 
-    expect(rootVariables).toEqual(['input', 'data']);
+    expect(rootVariables).toEqual(['input', 'weather']);
     expect(variables).toContain('input.city');
     expect(variables).toContain('input.user');
     expect(variables).toContain('input.user.name');
-    expect(variables).toContain('data.weather.temperature');
+    expect(variables).toContain('weather.temperature');
+    expect(variables).not.toContain('data');
+    expect(variables).not.toContain('data.weather.temperature');
     expect(variables).not.toContain('output.condition');
     expect(variables).not.toContain(REMOVED_LEGACY_ROOT);
     expect(labels).toContain('城市名称');
