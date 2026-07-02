@@ -119,8 +119,8 @@ async function openWidgetEditor(widget: WidgetDefinition): Promise<void> {
   const openedFile = await filesStore.createAndOpen({
     type: 'file',
     id: `widget-${widget.id}`,
-    path: null,
-    name: widget.name || widget.id,
+    path: widget.filePath,
+    name: widget.id,
     ext: 'tibis',
     content,
     savedContent: content

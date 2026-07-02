@@ -328,8 +328,8 @@ describe('WidgetSettingsPage', (): void => {
     expect(savedContent).not.toHaveProperty('version');
     expect(createAndOpenMock.mock.calls[0]?.[0]).toMatchObject({
       id: 'widget-weather',
-      path: null,
-      name: '天气',
+      path: '/Users/test/.tibis/widgets/weather/widget.json',
+      name: 'weather',
       ext: 'tibis'
     });
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
@@ -462,8 +462,8 @@ describe('WidgetSettingsPage', (): void => {
 
     expect(createdFile).toMatchObject({
       id: 'widget-weather',
-      path: null,
-      name: '天气',
+      path: '/Users/test/.tibis/widgets/weather/widget.json',
+      name: 'weather',
       ext: 'tibis'
     });
     expect(createdContent).toMatchObject({
