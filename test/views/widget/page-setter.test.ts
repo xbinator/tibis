@@ -943,6 +943,8 @@ describe('PageSetter', (): void => {
     expect(sectionTitles).not.toContain('动态预览');
     expect(methodSection.find('.method-summary__text').exists()).toBe(false);
     expect(methodSection.find('.method-summary__code').text()).toContain('Widget({');
+    expect(methodSection.find('.method-summary__code').text()).toContain('data: {');
+    expect(methodSection.find('.method-summary__code').text()).toContain('message:');
     expect(methodSection.findAll('.method-summary__line').length).toBeGreaterThan(4);
     expect(methodSection.find('.hljs-keyword').exists()).toBe(true);
     expect(methodSection.find('.hljs-comment').exists()).toBe(true);

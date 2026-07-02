@@ -39,7 +39,7 @@
 
     <template #footer>
       <BButton type="secondary" @click="handleCancel">取消</BButton>
-      <BButton type="primary" @click="handleConfirm">保存</BButton>
+      <BButton type="primary" @click="handleConfirm">确定</BButton>
     </template>
   </BModal>
 </template>
@@ -69,8 +69,20 @@ export interface WidgetCreatePayload {
   resources?: WidgetImportResource[];
 }
 
+/**
+ * 小组件创建弹窗属性。
+ */
+interface Props {
+  /** 已存在的小组件标识列表，用于创建前去重校验。 */
+  existingIds?: string[];
+}
+
 /** 小组件标识符，仅允许英文、数字、下划线和短横线。 */
 const WIDGET_ID_PATTERN = /^[A-Za-z0-9_-]+$/u;
+
+const props = withDefaults(defineProps<Props>(), {
+  existingIds: () => []
+});
 
 const emit = defineEmits<{
   confirm: [payload: WidgetCreatePayload];
@@ -94,6 +106,31 @@ const importedWidgetResources = shallowRef<WidgetImportResource[]>([]);
 /** 已导入来源文件名。 */
 const importedSourceName = ref('');
 
+/**
+ * 判断小组件标识是否已经存在。
+ * @param id - 待检查的小组件标识
+ * @returns 是否已存在
+ */
+function isExistingWidgetId(id: string): boolean {
+  const normalizedId = id.trim().toLowerCase();
+
+  return props.existingIds.some((existingId: string): boolean => existingId.toLowerCase() === normalizedId);
+}
+
+/**
+ * 校验小组件标识不能与已安装小组件重复。
+ * @param _rule - Ant Design Vue 表单规则对象
+ * @param value - 待校验的小组件标识
+ * @returns 校验完成信号
+ */
+function validateWidgetIdUnique(_rule: Rule, value: string): Promise<void> {
+  if (value && isExistingWidgetId(value)) {
+    return Promise.reject(new Error('小组件标识已存在，请更换'));
+  }
+
+  return Promise.resolve();
+}
+
 /** 表单校验规则。 */
 const rules = reactive<Record<string, Rule[]>>({
   id: [
@@ -101,6 +138,9 @@ const rules = reactive<Record<string, Rule[]>>({
     {
       pattern: WIDGET_ID_PATTERN,
       message: '标识只能包含英文、数字、下划线和短横线'
+    },
+    {
+      validator: validateWidgetIdUnique
     }
   ],
   name: [{ required: true, message: '请输入小组件名称' }],

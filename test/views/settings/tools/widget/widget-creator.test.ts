@@ -143,10 +143,11 @@ const BIconStub = defineComponent({
  * 挂载小组件创建弹窗。
  * @returns 组件包装器
  */
-function mountWidgetCreator(): VueWrapper {
+function mountWidgetCreator(existingIds: string[] = []): VueWrapper {
   return mount(WidgetCreator, {
     props: {
-      open: true
+      open: true,
+      existingIds
     },
     global: {
       components: {
@@ -258,7 +259,7 @@ describe('WidgetCreator', (): void => {
     await wrapper.find('.widget-creator__id input').setValue(' Weather_01 ');
     await wrapper.find('.widget-creator__name input').setValue(' 天气 ');
     await wrapper.find('.widget-creator__description textarea').setValue(' 查询指定城市天气 ');
-    await findButtonByText(wrapper, '保存').trigger('click');
+    await findButtonByText(wrapper, '确定').trigger('click');
     await flushPromises();
 
     expect(wrapper.emitted('confirm')?.[0]).toEqual([
@@ -275,7 +276,7 @@ describe('WidgetCreator', (): void => {
 
     await wrapper.find('.widget-creator__id input').setValue('weather/cn');
     await wrapper.find('.widget-creator__name input').setValue('天气');
-    await findButtonByText(wrapper, '保存').trigger('click');
+    await findButtonByText(wrapper, '确定').trigger('click');
     await flushPromises();
 
     expect(wrapper.emitted('confirm')).toBeUndefined();
@@ -309,7 +310,7 @@ describe('WidgetCreator', (): void => {
     expect((wrapper.find('.widget-creator__name input').element as HTMLInputElement).value).toBe('咖啡菜单');
     expect((wrapper.find('.widget-creator__description textarea').element as HTMLTextAreaElement).value).toBe('展示咖啡列表');
 
-    await findButtonByText(wrapper, '保存').trigger('click');
+    await findButtonByText(wrapper, '确定').trigger('click');
     await flushPromises();
 
     const payload = readConfirmPayload(wrapper);
@@ -337,7 +338,7 @@ describe('WidgetCreator', (): void => {
 
     await selectZipFile(wrapper, file);
     await waitForZipImport(wrapper);
-    await findButtonByText(wrapper, '保存').trigger('click');
+    await findButtonByText(wrapper, '确定').trigger('click');
     await flushPromises();
 
     const payload = readConfirmPayload(wrapper);
@@ -371,7 +372,7 @@ describe('WidgetCreator', (): void => {
     await selectZipFile(wrapper, invalidFile);
     await flushPromises();
     await flushPromises();
-    await findButtonByText(wrapper, '保存').trigger('click');
+    await findButtonByText(wrapper, '确定').trigger('click');
     await flushPromises();
 
     const payload = readConfirmPayload(wrapper);
@@ -386,5 +387,16 @@ describe('WidgetCreator', (): void => {
     await findButtonByText(wrapper, '取消').trigger('click');
 
     expect(wrapper.emitted('update:open')?.[0]).toEqual([false]);
+  });
+
+  it('does not emit confirm when identifier already exists', async (): Promise<void> => {
+    const wrapper = mountWidgetCreator(['weather']);
+
+    await wrapper.find('.widget-creator__id input').setValue(' Weather ');
+    await wrapper.find('.widget-creator__name input').setValue('天气');
+    await findButtonByText(wrapper, '确定').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('confirm')).toBeUndefined();
   });
 });

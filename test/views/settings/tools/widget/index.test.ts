@@ -1,6 +1,6 @@
 /**
  * @file index.test.ts
- * @description 小组件设置页创建小组件测试。
+ * @description 小组件设置页创建、打开小组件测试。
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
@@ -313,7 +313,7 @@ describe('WidgetSettingsPage', (): void => {
     await wrapper.find('.widget-creator__description textarea').setValue('查询指定城市天气');
     await wrapper
       .findAll('button')
-      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '保存')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '确定')
       ?.trigger('click');
     await flushPromises();
 
@@ -348,7 +348,7 @@ describe('WidgetSettingsPage', (): void => {
     await wrapper.find('.widget-creator__description textarea').setValue('查询指定城市天气');
     await wrapper
       .findAll('button')
-      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '保存')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '确定')
       ?.trigger('click');
     await flushPromises();
 
@@ -387,7 +387,7 @@ describe('WidgetSettingsPage', (): void => {
     await wrapper.find('.widget-creator__name input').setValue('咖啡推荐');
     await wrapper
       .findAll('button')
-      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '保存')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '确定')
       ?.trigger('click');
     await flushPromises();
 
@@ -427,7 +427,7 @@ describe('WidgetSettingsPage', (): void => {
     await wrapper.find('.widget-creator__name input').setValue('咖啡菜单');
     await wrapper
       .findAll('button')
-      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '保存')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '确定')
       ?.trigger('click');
     await flushPromises();
 
@@ -473,5 +473,56 @@ describe('WidgetSettingsPage', (): void => {
       description: '查询指定城市天气'
     });
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
+  });
+
+  it('does not create a widget when identifier duplicates an installed widget', async (): Promise<void> => {
+    nativeMock.readWorkspaceDirectory.mockResolvedValue({
+      entries: [{ name: 'weather', type: 'directory' }]
+    });
+    nativeMock.readFile.mockResolvedValue({
+      content: JSON.stringify({
+        name: '天气',
+        description: '查询指定城市天气'
+      }),
+      name: 'weather',
+      ext: 'json'
+    });
+    const wrapper = mountWidgetSettingsPage();
+
+    await flushPromises();
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '创建小组件')
+      ?.trigger('click');
+    await wrapper.find('.widget-creator__id input').setValue(' Weather ');
+    await wrapper.find('.widget-creator__name input').setValue('天气副本');
+    await wrapper
+      .findAll('button')
+      .find((button: DOMWrapper<HTMLButtonElement>): boolean => button.text() === '确定')
+      ?.trigger('click');
+    await flushPromises();
+
+    expect(nativeMock.writeFile).not.toHaveBeenCalled();
+    expect(electronAPIMock.ensureDir).not.toHaveBeenCalled();
+    expect(createAndOpenMock).not.toHaveBeenCalled();
+  });
+
+  it('does not render a widget delete action for now', async (): Promise<void> => {
+    nativeMock.readWorkspaceDirectory.mockResolvedValue({
+      entries: [{ name: 'weather', type: 'directory' }]
+    });
+    nativeMock.readFile.mockResolvedValue({
+      content: JSON.stringify({
+        name: '天气',
+        description: '查询指定城市天气'
+      }),
+      name: 'weather',
+      ext: 'json'
+    });
+    const wrapper = mountWidgetSettingsPage();
+
+    await flushPromises();
+
+    expect(wrapper.find('.widget-settings__item-delete').exists()).toBe(false);
   });
 });

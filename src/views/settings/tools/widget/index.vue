@@ -1,6 +1,6 @@
 <!--
   @file index.vue
-  @description 小组件设置页，扫描 .tibis/widgets/<name>/widget.json 并管理启用状态。
+  @description 小组件设置页，扫描 .tibis/widgets/<name>/widget.json 并管理创建与启用状态。
 -->
 <template>
   <SettingsPage class="widget-settings" :title="MENU_ITEMS.widget.label">
@@ -25,7 +25,7 @@
     </SettingsSection>
   </SettingsPage>
 
-  <WidgetCreator v-model:open="createModalOpen" @confirm="handleCreateConfirm" />
+  <WidgetCreator v-model:open="createModalOpen" :existing-ids="existingWidgetIds" @confirm="handleCreateConfirm" />
 </template>
 
 <script setup lang="ts">
@@ -83,6 +83,9 @@ const pagedWidgets = computed<WidgetDefinition[]>((): WidgetDefinition[] => {
 
   return store.widgets.slice(start, start + PAGE_SIZE);
 });
+
+/** 已存在的小组件 ID 列表，用于创建时去重校验。 */
+const existingWidgetIds = computed<string[]>((): string[] => store.widgets.map((widget: WidgetDefinition): string => widget.id));
 /**
  * 初始化小组件扫描。
  * @returns 初始化完成信号
