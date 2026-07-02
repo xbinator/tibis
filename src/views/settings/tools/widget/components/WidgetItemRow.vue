@@ -3,7 +3,7 @@
   @description 小组件列表项行组件，展示单个小组件的名称、描述及启用开关。
 -->
 <template>
-  <div class="widget-settings__item-row" role="button" tabindex="0" @click="handleOpen" @keydown.enter.prevent="handleOpen" @keydown.space.prevent="handleOpen">
+  <div class="widget-settings__item-row" role="button" tabindex="0" @click="handleOpen">
     <div class="widget-settings__item-icon">{{ initial }}</div>
     <div class="widget-settings__item-info">
       <div class="widget-settings__item-name">
