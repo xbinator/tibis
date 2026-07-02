@@ -1,6 +1,6 @@
 /**
  * @file widget-data-schema.test.ts
- * @description 验证 Widget 数据 schema 可从JS 脚本中的 this.$setData 调用构建。
+ * @description 验证 Widget 数据 schema 可从JS 脚本中的 data 声明和 this 赋值构建。
  */
 import { describe, expect, it } from 'vitest';
 import type { WidgetSchemaObject } from '@/components/BWidget/types';
@@ -29,15 +29,15 @@ const inputSchema: WidgetSchemaObject = {
 };
 
 describe('buildWidgetDataSchema', (): void => {
-  it('builds nested data schema from setData object literals', (): void => {
+  it('builds nested data schema from direct this object assignments', (): void => {
     const code = `
       Widget({
         async mounted() {
-          this.$setData('weather', {
+          this.weather = {
             temperature: 28,
             condition: '晴',
             active: true
-          })
+          }
         }
       })
     `;
@@ -56,6 +56,49 @@ describe('buildWidgetDataSchema', (): void => {
             },
             active: {
               type: 'boolean'
+            }
+          },
+          required: []
+        }
+      },
+      required: []
+    });
+  });
+
+  it('ignores nested this data writes when the root field is not initialized', (): void => {
+    const code = `
+      Widget({
+        async mounted() {
+          this.weather.temperature = 28
+        }
+      })
+    `;
+
+    expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
+      type: 'object',
+      properties: {},
+      required: []
+    });
+  });
+
+  it('builds nested data schema after a root this assignment initializes the field', (): void => {
+    const code = `
+      Widget({
+        async mounted() {
+          this.weather = {}
+          this.weather.temperature = this.$input.weather.temperature
+        }
+      })
+    `;
+
+    expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
+      type: 'object',
+      properties: {
+        weather: {
+          type: 'object',
+          properties: {
+            temperature: {
+              type: 'number'
             }
           },
           required: []
@@ -105,7 +148,7 @@ describe('buildWidgetDataSchema', (): void => {
     const code = `
       defineConfig({
         async mounted() {
-          this.$setData('weather.temperature', 28)
+          this.weather = { temperature: 28 }
         }
       })
     `;
@@ -117,12 +160,20 @@ describe('buildWidgetDataSchema', (): void => {
     });
   });
 
-  it('supports this.$setData dot paths and input schema type reuse', (): void => {
+  it('supports direct this dot paths and input schema type reuse', (): void => {
     const code = `
       Widget({
+        data: {
+          lastQuery: {
+            city: ''
+          },
+          weather: {
+            temperature: 0
+          }
+        },
         async mounted() {
-          this.$setData('lastQuery.city', this.$input.city)
-          this.$setData('weather.temperature', this.$input.weather.temperature)
+          this.lastQuery.city = this.$input.city
+          this.weather.temperature = this.$input.weather.temperature
         }
       })
     `;
@@ -153,16 +204,25 @@ describe('buildWidgetDataSchema', (): void => {
     });
   });
 
-  it('supports Widget this context setData calls and input schema type reuse', (): void => {
+  it('supports Widget this context assignments and input schema type reuse', (): void => {
     const code = `
       Widget({
+        data: {
+          lastQuery: {
+            city: ''
+          },
+          weather: {
+            temperature: 0,
+            condition: ''
+          }
+        },
         async mounted() {
-          this.$setData('lastQuery.city', this.$input.city)
-          this.$setData('weather.temperature', this.$input.weather.temperature)
+          this.lastQuery.city = this.$input.city
+          this.weather.temperature = this.$input.weather.temperature
         },
         methods: {
           async refresh() {
-            this.$setData('weather.condition', '晴')
+            this.weather.condition = '晴'
             this.$sendMessage('刷新天气')
           }
         }
@@ -198,17 +258,17 @@ describe('buildWidgetDataSchema', (): void => {
     });
   });
 
-  it('ignores setData methods that are not owned by the widget context', (): void => {
+  it('ignores assignments that are not owned by the widget context', (): void => {
     const code = `
       Widget({
         async mounted() {
           const store = {
-            $setData(path: string, value: unknown) {
-              return { path, value }
+            save() {
+              this.debug = { enabled: true }
             }
           }
-          store.$setData('debug.enabled', true)
-          this.$setData('weather.temperature', 28)
+          store.save()
+          this.weather = { temperature: 28 }
         }
       })
     `;
@@ -236,11 +296,11 @@ describe('buildWidgetDataSchema', (): void => {
         async mounted() {
           const store = {
             save() {
-              this.$setData('debug.enabled', true)
+              this.debug = { enabled: true }
             }
           }
           store.save()
-          this.$setData('weather.temperature', 28)
+          this.weather = { temperature: 28 }
         }
       })
     `;
@@ -269,9 +329,9 @@ describe('buildWidgetDataSchema', (): void => {
           const city = this.$input.city
           {
             const city = this.$input.weather.temperature
-            this.$setData('shadowed', { city })
+            this.shadowed = { city }
           }
-          this.$setData('lastQuery', { city })
+          this.lastQuery = { city }
         }
       })
     `;
@@ -302,12 +362,12 @@ describe('buildWidgetDataSchema', (): void => {
     });
   });
 
-  it('returns an empty data schema when code has no static setData path', (): void => {
+  it('returns an empty data schema when code has no static this data path', (): void => {
     const code = `
       Widget({
         async mounted() {
           const path = 'weather.temperature'
-          this.$setData(path, 28)
+          this[path] = 28
         }
       })
     `;

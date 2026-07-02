@@ -328,25 +328,60 @@ function writeDataSchemaProperty(properties: Record<string, WidgetSchemaProperty
 }
 
 /**
- * 判断调用表达式是否为 setData 调用。
- * @param expression - 调用目标表达式
- * @returns 是否为 setData 调用
- */
-function isSetDataCallExpression(expression: ts.Expression): boolean {
-  if (!ts.isPropertyAccessExpression(expression)) {
-    return false;
-  }
-
-  return isThisExpression(expression.expression) && expression.name.text === '$setData';
-}
-
-/**
  * 判断调用表达式是否为 Widget 配置调用。
  * @param expression - 调用目标表达式
  * @returns 是否为 Widget 配置调用
  */
 function isWidgetConfigCallExpression(expression: ts.Expression): boolean {
   return ts.isIdentifier(expression) && expression.text === 'Widget';
+}
+
+/**
+ * 读取 Widget this 上的数据写入路径。
+ * @param expression - 赋值左侧表达式
+ * @returns data 字段路径；非 data 写入时返回 null
+ */
+function readWidgetThisDataPathSegments(expression: ts.Expression): string[] | null {
+  const segments = readExpressionPathSegments(expression);
+
+  if (!segments || segments[0] !== 'this') {
+    return null;
+  }
+
+  const dataSegments = segments.slice(1);
+  const [rootSegment] = dataSegments;
+
+  if (!rootSegment || rootSegment.startsWith('$')) {
+    return null;
+  }
+
+  return dataSegments;
+}
+
+/**
+ * 判断 Widget data 路径是否可在运行时直接写入。
+ * @param properties - 已初始化的数据 schema 根属性
+ * @param segments - data 字段路径
+ * @returns 当前路径是否具备可写入的中间对象
+ */
+function canWriteWidgetDataPath(properties: Record<string, WidgetSchemaProperty>, segments: string[]): boolean {
+  if (segments.length <= 1) {
+    return true;
+  }
+
+  let currentProperties = properties;
+
+  for (const segment of segments.slice(0, -1)) {
+    const currentProperty = currentProperties[segment];
+
+    if (currentProperty?.type !== 'object') {
+      return false;
+    }
+
+    currentProperties = currentProperty.properties ?? {};
+  }
+
+  return true;
 }
 
 /**
@@ -581,7 +616,7 @@ function cloneDeepDataSchema(schema: WidgetSchemaObject): WidgetSchemaObject {
  * 从JS 脚本代码构建 Widget 数据 schema。
  * @param code - JS 脚本源码
  * @param inputSchema - input schema，用于复用 this.$input 字段类型
- * @returns 从 this.$setData 调用推导出的数据 schema
+ * @returns 从 Widget({ data }) 和 this 数据赋值推导出的数据 schema
  */
 export function buildWidgetDataSchema(code: string, inputSchema?: WidgetSchemaObject): WidgetSchemaObject {
   if (code.trim().length === 0) {
@@ -594,7 +629,7 @@ export function buildWidgetDataSchema(code: string, inputSchema?: WidgetSchemaOb
   const readCurrentInputAlias = (name: string): string[] | undefined => readScopedInputAlias(inputAliasScopes, name);
 
   /**
-   * 访问 AST 节点并收集 setData 调用。
+   * 访问 AST 节点并收集 Widget data 声明和 this 数据赋值。
    * @param node - AST 节点
    */
   function visit(node: ts.Node, hasWidgetThisContext = false): void {
@@ -640,16 +675,11 @@ export function buildWidgetDataSchema(code: string, inputSchema?: WidgetSchemaOb
       registerVariableInputAlias(node, inputSchema, inputAliasScopes);
     }
 
-    if (hasWidgetThisContext && ts.isCallExpression(node) && isSetDataCallExpression(node.expression)) {
-      const [pathExpression, valueExpression] = node.arguments;
-      const dataPath = pathExpression ? readStaticStringExpression(pathExpression) : null;
+    if (hasWidgetThisContext && ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const dataPath = readWidgetThisDataPathSegments(node.left);
 
-      if (dataPath && valueExpression) {
-        writeDataSchemaProperty(
-          properties,
-          dataPath.split('.').filter((segment: string): boolean => segment.length > 0),
-          inferSchemaPropertyFromExpression(valueExpression, inputSchema, readCurrentInputAlias)
-        );
+      if (dataPath && canWriteWidgetDataPath(properties, dataPath)) {
+        writeDataSchemaProperty(properties, dataPath, inferSchemaPropertyFromExpression(node.right, inputSchema, readCurrentInputAlias));
       }
     }
 

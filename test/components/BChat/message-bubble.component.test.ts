@@ -362,7 +362,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['Widget({', '  mounted() {', "    this.$setData('weather.temperature', 31)", '  }', '})'].join('\n')
+          code: ['Widget({', '  mounted() {', '    this.weather = { temperature: 31 }', '  }', '})'].join('\n')
         }
       },
       renderContext: {
@@ -436,7 +436,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['Widget({', '  mounted() {', "    this.$setData('weather.temperature', 32)", '  }', '})'].join('\n')
+          code: ['Widget({', '  mounted() {', '    this.weather = { temperature: 32 }', '  }', '})'].join('\n')
         }
       },
       renderContext: {
@@ -594,7 +594,7 @@ describe('MessageBubble', (): void => {
           code: [
             'Widget({',
             '  unmounted() {',
-            "    this.$setData('submitted', { city: this.$input.city, temperature: this.$data.weather.temperature })",
+            '    this.submitted = { city: this.$input.city, temperature: this.weather.temperature }',
             '  }',
             '})'
           ].join('\n')
@@ -667,7 +667,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['Widget({', '  unmounted() {', "    this.$setData('submitted.temperature', this.$data.weather.temperature)", '  }', '})'].join('\n')
+          code: ['Widget({', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()
@@ -846,7 +846,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['Widget({', '  unmounted() {', '    this.$sendMessage({ content: this.$data.order.message })', '  }', '})'].join('\n')
+          code: ['Widget({', '  unmounted() {', '    this.$sendMessage({ content: this.order.message })', '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()

@@ -156,7 +156,7 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
   },
   data: {
     title: '数据变量说明',
-    lead: '数据变量不需要单独填写 schema。编辑器会从JS 脚本中的 Widget({ data }) 和 this.$setData 调用推导 data 路径，供小组件元素动态绑定。',
+    lead: '数据变量不需要单独填写 schema。编辑器会从JS 脚本中的 Widget({ data })、根级 this.dataField 赋值和已初始化对象的嵌套赋值推导 data 路径，供小组件元素动态绑定。',
     fields: [
       {
         name: 'data: { weather: {...} }',
@@ -165,10 +165,10 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
         description: '对象字面量会递归生成 data.weather.* 子路径。'
       },
       {
-        name: "setData('lastQuery.city', input.city)",
+        name: 'this.lastQuery.city = this.$input.city',
         type: 'string',
         required: false,
-        description: '静态点路径会生成对应的嵌套 data 路径，并尽量复用 input 字段类型。'
+        description: 'lastQuery 需要先在 data 中声明，或先通过 this.lastQuery = {} 初始化，再写入 city 子路径。'
       }
     ],
     exampleTitle: '查天气数据写入',
@@ -177,10 +177,13 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
     weather: {
       temperature: 28,
       condition: '晴'
+    },
+    lastQuery: {
+      city: ''
     }
   },
   mounted() {
-    this.$setData('lastQuery.city', this.$input.city)
+    this.lastQuery.city = this.$input.city
   }
 })`
   }

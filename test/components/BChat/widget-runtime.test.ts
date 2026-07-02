@@ -113,11 +113,23 @@ describe('widgetRuntime', (): void => {
     await expect(runSandboxCode({ code: 'return 1' })).rejects.toThrow('当前环境不支持 Worker');
   });
 
-  it('does not execute arbitrary mounted code while applying supported setData calls', async (): Promise<void> => {
+  it('does not execute arbitrary mounted code while applying direct data writes', async (): Promise<void> => {
     const runtimeGlobal = globalThis as typeof globalThis & { __widgetRuntimeUnsafe?: boolean };
     delete runtimeGlobal.__widgetRuntimeUnsafe;
     const part = createWidgetPart(
-      ['Widget({', '  mounted() {', '    globalThis.__widgetRuntimeUnsafe = true', "    this.$setData('weather.temperature', 28)", '  }', '})'].join('\n')
+      [
+        'Widget({',
+        '  data: {',
+        '    weather: {',
+        '      temperature: 0',
+        '    }',
+        '  },',
+        '  mounted() {',
+        '    globalThis.__widgetRuntimeUnsafe = true',
+        '    this.weather.temperature = 28',
+        '  }',
+        '})'
+      ].join('\n')
     );
 
     const nextPart = await initWidgetMountState(part);
@@ -131,7 +143,7 @@ describe('widgetRuntime', (): void => {
   });
 
   it('ignores legacy defineConfig entry scripts after switching to Widget', async (): Promise<void> => {
-    const part = createWidgetPart("defineConfig({ mounted() { this.$setData('weather.temperature', 28) } })");
+    const part = createWidgetPart('defineConfig({ mounted() { this.weather = { temperature: 28 } } })');
 
     const nextPart = await initWidgetMountState(part);
 
@@ -139,7 +151,7 @@ describe('widgetRuntime', (): void => {
   });
 
   it('blocks disallowed syntax inside widget scripts before execution', async (): Promise<void> => {
-    const part = createWidgetPart('Widget({ mounted() { eval(\'this.$setData("unsafe", true)\') } })');
+    const part = createWidgetPart('Widget({ mounted() { eval(\'this.unsafe = true\') } })');
 
     const nextPart = await initWidgetMountState(part);
 
@@ -151,9 +163,15 @@ describe('widgetRuntime', (): void => {
     const part = createWidgetPart(
       [
         'Widget({',
+        '  data: {',
+        '    weather: {',
+        "      city: '',",
+        '      temperature: 0',
+        '    }',
+        '  },',
         '  async mounted() {',
-        "    this.$setData('weather.city', this.$input.city)",
-        "    this.$setData('weather.temperature', 28)",
+        '    this.weather.city = this.$input.city',
+        '    this.weather.temperature = 28',
         '  }',
         '})'
       ].join('\n')
@@ -191,9 +209,9 @@ describe('widgetRuntime', (): void => {
         '    try {',
         '      __widgetData.leaked = true',
         '    } catch (error) {',
-        "      this.$setData('internalAccessBlocked', true)",
+        '      this.internalAccessBlocked = true',
         '    }',
-        "    this.$setData('weather.temperature', 28)",
+        '    this.weather = { temperature: 28 }',
         '  }',
         '})'
       ].join('\n')
@@ -211,7 +229,7 @@ describe('widgetRuntime', (): void => {
 
   it('keeps completed mounted parts unchanged', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
-      ...createWidgetPart('Widget({ mounted() { this.$setData("weather.temperature", 28) } })'),
+      ...createWidgetPart('Widget({ mounted() { this.weather = { temperature: 28 } } })'),
       status: 'mounted',
       lifecycle: {
         mountedAt: '2026-07-01T00:00:00.000Z'
@@ -231,13 +249,13 @@ describe('widgetRuntime', (): void => {
     expect(nextPart).toEqual(part);
   });
 
-  it('supports constants and object literals in supported setData calls', async (): Promise<void> => {
+  it('supports constants and object literals in direct data writes', async (): Promise<void> => {
     const part = createWidgetPart(
       [
         'Widget({',
         '  mounted() {',
         '    const city = this.$input.city',
-        "    this.$setData('lastQuery', { city, unit: 'celsius', tags: ['weather'] })",
+        "    this.lastQuery = { city, unit: 'celsius', tags: ['weather'] }",
         '  }',
         '})'
       ].join('\n')
@@ -264,7 +282,7 @@ describe('widgetRuntime', (): void => {
         '    }',
         '  },',
         '  mounted() {',
-        "    this.$setData('weather.label', `${this.$input.city} ${this.$data.weather.temperature}°C`)",
+        "    this.weather.label = `${this.$input.city} ${this.weather.temperature}°C`",
         '  }',
         '})'
       ].join('\n')
@@ -280,6 +298,49 @@ describe('widgetRuntime', (): void => {
     });
   });
 
+  it('does not expose removed data helper APIs on the Widget this context', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'Widget({',
+        '  data: {',
+        "    message: ''",
+        '  },',
+        '  mounted() {',
+        "    this.message = `${typeof this.$data}:${typeof this.$setData}`",
+        '  }',
+        '})'
+      ].join('\n')
+    );
+
+    const nextPart = await initWidgetMountState(part);
+
+    expect(nextPart.renderContext.data).toEqual({
+      message: 'undefined:undefined'
+    });
+  });
+
+  it('deletes declared data fields through direct this properties', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'Widget({',
+        '  data: {',
+        "    keep: '保留',",
+        "    message: '等待用户操作'",
+        '  },',
+        '  mounted() {',
+        '    delete this.message',
+        '  }',
+        '})'
+      ].join('\n')
+    );
+
+    const nextPart = await initWidgetMountState(part);
+
+    expect(nextPart.renderContext.data).toEqual({
+      keep: '保留'
+    });
+  });
+
   it('runs normal JavaScript control flow inside mounted hooks', async (): Promise<void> => {
     const part = createWidgetPart(
       [
@@ -289,7 +350,7 @@ describe('widgetRuntime', (): void => {
         '    const temperatures = [26, 28, 30]',
         '    const temperature = temperatures.find((item) => item > 27)',
         '    if (temperature) {',
-        "      this.$setData('weather', { city, label: city + ' ' + temperature + '°C', temperature })",
+        "      this.weather = { city, label: city + ' ' + temperature + '°C', temperature }",
         '    }',
         '  }',
         '})'
@@ -313,7 +374,7 @@ describe('widgetRuntime', (): void => {
         [
           'Widget({',
           '  unmounted() {',
-          "    this.$setData('submitted', { city: this.$input.city, temperature: this.$data.weather.temperature })",
+          '    this.submitted = { city: this.$input.city, temperature: this.weather.temperature }',
           '  }',
           '})'
         ].join('\n')
@@ -382,7 +443,7 @@ describe('widgetRuntime', (): void => {
   });
 
   it('keeps widget parts unchanged before mounted status is reached', async (): Promise<void> => {
-    const part = createWidgetPart(['Widget({', '  unmounted() {', "    this.$setData('submitted', true)", '  }', '})'].join('\n'));
+    const part = createWidgetPart(['Widget({', '  unmounted() {', '    this.submitted = true', '  }', '})'].join('\n'));
 
     const nextPart = await finishWidgetUnmountState(part);
 
@@ -392,7 +453,7 @@ describe('widgetRuntime', (): void => {
   });
 
   it('does not run disabled execute scripts', async (): Promise<void> => {
-    const code = "Widget({ mounted() { this.$setData('weather.temperature', 28) } })";
+    const code = 'Widget({ mounted() { this.weather = { temperature: 28 } } })';
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(code),
       value: {
@@ -420,7 +481,7 @@ describe('widgetRuntime', (): void => {
     };
 
     const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).runInteraction(
-      ["this.$setData('confirmed', true)", "this.$sendMessage('确认下单')"].join('\n')
+      ['this.confirmed = true', "this.$sendMessage('确认下单')"].join('\n')
     );
 
     expect(result.part.status).toBe('finished');
@@ -432,7 +493,7 @@ describe('widgetRuntime', (): void => {
   it('runs unmounted cleanup when an interaction finishes with a message', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
-        ['Widget({', '  unmounted() {', "    this.$setData('cleanedUp', true)", "    this.$sendMessage('清理消息')", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', '    this.cleanedUp = true', "    this.$sendMessage('清理消息')", '  }', '})'].join('\n')
       ),
       status: 'mounted',
       lifecycle: {
@@ -441,7 +502,7 @@ describe('widgetRuntime', (): void => {
     };
 
     const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).runInteraction(
-      ["this.$setData('confirmed', true)", "this.$sendMessage('确认下单')"].join('\n')
+      ['this.confirmed = true', "this.$sendMessage('确认下单')"].join('\n')
     );
 
     expect(result.part.status).toBe('finished');
@@ -459,7 +520,7 @@ describe('widgetRuntime', (): void => {
           'Widget({',
           '  methods: {',
           '    submitOrder() {',
-          "      this.$setData('confirmed', true)",
+          '      this.confirmed = true',
           "      this.$sendMessage('确认下单')",
           '    }',
           '  }',
@@ -489,7 +550,7 @@ describe('widgetRuntime', (): void => {
     };
 
     const result = await createWidgetRuntimeInstance(part).runInteraction(
-      ['try {', '  explode()', '} catch (error) {', "  this.$setData('methodErrorHandled', true)", '}'].join('\n')
+      ['try {', '  explode()', '} catch (error) {', '  this.methodErrorHandled = true', '}'].join('\n')
     );
 
     expect(result.part.status).toBe('mounted');
@@ -501,7 +562,7 @@ describe('widgetRuntime', (): void => {
   it('passes evaluated interaction arguments into user helper parameters', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
-        ['Widget({', '  methods: {', '    selectCoffee(id, city) {', "      this.$setData('selection', { id, city })", '    }', '  }', '})'].join('\n')
+        ['Widget({', '  methods: {', '    selectCoffee(id, city) {', '      this.selection = { id, city }', '    }', '  }', '})'].join('\n')
       ),
       status: 'mounted',
       lifecycle: {
@@ -544,7 +605,7 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const result = await createWidgetRuntimeInstance(part).runInteraction("this.$setData('selectedCoffee', 'latte')");
+    const result = await createWidgetRuntimeInstance(part).runInteraction("this.selectedCoffee = 'latte'");
 
     expect(result.part.status).toBe('mounted');
     expect(result.part.renderContext.data).toEqual({
@@ -559,7 +620,7 @@ describe('widgetRuntime', (): void => {
         'Widget({',
         '  async mounted() {',
         "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
-        "    this.$setData('weather.temperature', weather.data.temperature)",
+        '    this.weather = { temperature: weather.data.temperature }',
         '  }',
         '})'
       ].join('\n')
@@ -587,7 +648,7 @@ describe('widgetRuntime', (): void => {
         'Widget({',
         '  async mounted() {',
         "    await this.$http.post('https://api.example.com/orders')",
-        "    this.$setData('submitted', true)",
+        '    this.submitted = true',
         '  }',
         '})'
       ].join('\n')
@@ -616,7 +677,7 @@ describe('widgetRuntime', (): void => {
       'Widget({',
       '  async mounted() {',
       "    await this.$http.get('https://api.example.com/slow')",
-      "    this.$setData('weather.temperature', 28)",
+      '    this.weather = { temperature: 28 }',
       '  }',
       '})'
     ].join('\n');

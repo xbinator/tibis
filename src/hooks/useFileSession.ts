@@ -347,6 +347,20 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
   }
 
   /**
+   * 根据加载出的内容和保存基线恢复标签页脏状态。
+   */
+  function syncLoadedDirtyState(): void {
+    const hasDraftContent = fileState.value.content !== savedContent.value;
+
+    if (hasDraftContent) {
+      tabsStore.setDirty(options.fileId.value);
+      return;
+    }
+
+    tabsStore.clearDirty(options.fileId.value);
+  }
+
+  /**
    * 从最近文件存储加载文件会话。
    */
   async function load(): Promise<void> {
@@ -366,7 +380,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
       await filesStore.addFile({ ...fileState.value, type: 'file', savedContent: savedContent.value });
     }
 
-    tabsStore.clearDirty(options.fileId.value);
+    syncLoadedDirtyState();
     autoSave.resume();
   }
 

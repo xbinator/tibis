@@ -26,6 +26,9 @@ interface Array<T> {
   [index: number]: T
 }
 interface Promise<T> {}
+type Partial<T> = {
+  [P in keyof T]?: T[P]
+}
 type Record<K extends string | number | symbol, T> = {
   [P in K]: T
 }
@@ -81,7 +84,6 @@ function getTypeScriptDiagnostics(files: Record<string, string>): readonly ts.Di
   const compilerOptions: ts.CompilerOptions = {
     noEmit: true,
     noImplicitThis: true,
-    noLib: true,
     skipLibCheck: true,
     target: ts.ScriptTarget.ES2020,
     typeRoots: [],
@@ -111,6 +113,58 @@ function getTypeScriptDiagnostics(files: Record<string, string>): readonly ts.Di
  */
 function formatTypeScriptDiagnostics(diagnostics: readonly ts.Diagnostic[]): string[] {
   return diagnostics.map((diagnostic: ts.Diagnostic): string => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
+}
+
+/**
+ * 使用 TypeScript LanguageService 读取指定光标处的补全名称。
+ * @param files - 文件名到源码的映射
+ * @param targetFileName - 读取补全的目标文件名
+ * @param cursorMarker - 源码中的光标占位标记
+ * @returns 补全项名称列表
+ */
+function getTypeScriptCompletionNames(files: Record<string, string>, targetFileName: string, cursorMarker: string): string[] {
+  const targetSource = files[targetFileName];
+
+  if (targetSource === undefined) {
+    throw new Error(`缺少 TypeScript 补全目标文件：${targetFileName}`);
+  }
+
+  const cursorPosition = targetSource.indexOf(cursorMarker);
+
+  if (cursorPosition < 0) {
+    throw new Error(`缺少 TypeScript 补全光标标记：${cursorMarker}`);
+  }
+
+  const serviceFiles: Record<string, string> = {
+    ...files,
+    [targetFileName]: targetSource.replace(cursorMarker, '')
+  };
+  const compilerOptions: ts.CompilerOptions = {
+    noEmit: true,
+    noImplicitThis: true,
+    skipLibCheck: true,
+    target: ts.ScriptTarget.ES2020,
+    typeRoots: [],
+    types: []
+  };
+  const scriptVersions = Object.fromEntries(Object.keys(serviceFiles).map((fileName: string): [string, string] => [fileName, '0']));
+  const languageServiceHost: ts.LanguageServiceHost = {
+    fileExists: (fileName: string): boolean => hasOwnKey(serviceFiles, fileName),
+    getCompilationSettings: (): ts.CompilerOptions => compilerOptions,
+    getCurrentDirectory: (): string => '',
+    getDefaultLibFileName: (): string => 'lib.d.ts',
+    getScriptFileNames: (): string[] => Object.keys(serviceFiles),
+    getScriptSnapshot: (fileName: string): ts.IScriptSnapshot | undefined => {
+      const fileContent = serviceFiles[fileName];
+
+      return fileContent === undefined ? undefined : ts.ScriptSnapshot.fromString(fileContent);
+    },
+    getScriptVersion: (fileName: string): string => scriptVersions[fileName] ?? '0',
+    readFile: (fileName: string): string | undefined => serviceFiles[fileName]
+  };
+  const completions = ts.createLanguageService(languageServiceHost).getCompletionsAtPosition(targetFileName, cursorPosition, {});
+
+  return completions?.entries.map((entry: ts.CompletionEntry): string => entry.name) ?? [];
 }
 
 /**
@@ -289,7 +343,16 @@ function findCloseButton(wrapper: VueWrapper): VueWrapper {
 
 describe('CodeEditor', (): void => {
   it('loads current script and updates widget data through value model', async (): Promise<void> => {
-    const initialCode = ['Widget({', '  async mounted() {', "    this.$setData('ready', true)", '  }', '})'].join('\n');
+    const initialCode = [
+      'Widget({',
+      '  data: {',
+      '    ready: false',
+      '  },',
+      '  async mounted() {',
+      '    this.ready = true',
+      '  }',
+      '})'
+    ].join('\n');
     const nextCode = [
       'Widget({',
       '  methods: {',
@@ -436,11 +499,25 @@ describe('CodeEditor', (): void => {
     wrapper.unmount();
   });
 
-  it('creates data type hints from interaction script setData calls', (): void => {
+  it('creates Vue-like this data and method type hints from the interaction script', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
-        code: ['Widget({', '  async mounted() {', '    // 初始化天气数据。', "    this.$setData('weather.temperature', 28)", '  }', '})'].join('\n')
+        code: [
+          'Widget({',
+          '  data: {',
+          '    weather: {',
+          '      temperature: 28',
+          '    },',
+          "    message: '等待用户操作'",
+          '  },',
+          '  methods: {',
+          '    sendText() {',
+          '      this.message = this.$input.city',
+          '    }',
+          '  }',
+          '})'
+        ].join('\n')
       }
     });
     const extraLibContent = readMonacoProps(wrapper).extraLibs?.[0]?.content ?? '';
@@ -448,7 +525,8 @@ describe('CodeEditor', (): void => {
     expect(extraLibContent).toContain('declare interface WidgetData');
     expect(extraLibContent).toContain('weather?: {');
     expect(extraLibContent).toContain('temperature?: number');
-    expect(extraLibContent).toContain('$data: WidgetData');
+    expect(extraLibContent).not.toContain('$data');
+    expect(extraLibContent).not.toContain('$setData');
     expect(
       formatTypeScriptDiagnostics(
         getTypeScriptDiagnostics({
@@ -456,14 +534,22 @@ describe('CodeEditor', (): void => {
           'widget-env.d.ts': extraLibContent,
           'widget-test.ts': [
             'Widget({',
+            '  data: {',
+            '    weather: {',
+            '      temperature: 28',
+            '    },',
+            "    message: '等待用户操作'",
+            '  },',
             '  mounted() {',
             '    const city: string = this.$input.city',
-            '    const temperature: number | undefined = this.$data.weather?.temperature',
-            '    this.$setData("last.temperature", temperature)',
+            '    const temperature: number = this.weather.temperature',
+            '    this.message = `${city} ${temperature}`',
+            '    this.sendText()',
             '  },',
             '  methods: {',
-            '    confirm() {',
-            "      this.$sendMessage({ content: [{ type: 'text', text: this.$input.city }] })",
+            '    sendText() {',
+            '      const text: string = this.message',
+            "      this.$sendMessage({ content: [{ type: 'text', text }] })",
             '    }',
             '  }',
             '})'
@@ -471,6 +557,31 @@ describe('CodeEditor', (): void => {
         })
       )
     ).toEqual([]);
+    const completionNames = getTypeScriptCompletionNames(
+      {
+        'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
+        'widget-env.d.ts': extraLibContent,
+        'widget-completion.ts': [
+          'Widget({',
+          '  data: {',
+          "    message: '等待用户操作'",
+          '  },',
+          '  mounted() {',
+          '    this./*cursor*/',
+          '  },',
+          '  methods: {',
+          '    sendText() {',
+          '      this.message = this.$input.city',
+          '    }',
+          '  }',
+          '})'
+        ].join('\n')
+      },
+      'widget-completion.ts',
+      '/*cursor*/'
+    );
+
+    expect(completionNames).toEqual(expect.arrayContaining(['message', 'sendText']));
     expect(extraLibContent).not.toContain(REMOVED_LEGACY_ROOT);
     wrapper.unmount();
   });
@@ -487,7 +598,18 @@ describe('CodeEditor', (): void => {
 
     await wrapper
       .find('.widget-code-monaco-stub')
-      .setValue(['Widget({', '  async mounted() {', "    this.$setData('draft.city', this.$input.city)", '  }', '})'].join('\n'));
+      .setValue([
+        'Widget({',
+        '  data: {',
+        '    draft: {',
+        "      city: ''",
+        '    }',
+        '  },',
+        '  async mounted() {',
+        '    this.draft.city = this.$input.city',
+        '  }',
+        '})'
+      ].join('\n'));
     await nextTick();
 
     const extraLibContent = readMonacoProps(wrapper).extraLibs?.[0]?.content ?? '';
@@ -499,7 +621,7 @@ describe('CodeEditor', (): void => {
         getTypeScriptDiagnostics({
           'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
           'widget-env.d.ts': extraLibContent,
-          'widget-test.ts': 'Widget({ mounted() { const city: string | undefined = this.$data.draft?.city } })'
+          'widget-test.ts': "Widget({ data: { draft: { city: '' } }, mounted() { const city: string = this.draft.city } })"
         })
       )
     ).toEqual([]);

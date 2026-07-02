@@ -248,7 +248,7 @@ describe('BubblePartWidget', (): void => {
           'Widget({',
           '  async mounted() {',
           "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
-          "    this.$setData('weather.temperature', weather.data.temperature)",
+          '    this.weather = { temperature: weather.data.temperature }',
           '  }',
           '})'
         ].join('\n')
@@ -290,13 +290,13 @@ describe('BubblePartWidget', (): void => {
   it('finishes the message widget part by part id without a separate partIndex prop', async (): Promise<void> => {
     const staleWidgetPart = {
       ...createWidgetPart(
-        ['Widget({', '  unmounted() {', "    this.$setData('submitted.temperature', this.$data.weather.temperature)", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '})'].join('\n')
       ),
       id: 'widget-part-stale'
     };
     const targetWidgetPart = {
       ...createWidgetPart(
-        ['Widget({', '  unmounted() {', "    this.$setData('submitted.temperature', this.$data.weather.temperature)", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '})'].join('\n')
       ),
       id: 'widget-part-target',
       renderContext: {
@@ -344,7 +344,7 @@ describe('BubblePartWidget', (): void => {
 
   it('finishes the message widget part before sending submit result', async (): Promise<void> => {
     const widgetPart = createWidgetPart(
-      ['Widget({', '  unmounted() {', "    this.$setData('submitted.temperature', this.$data.weather.temperature)", '  }', '})'].join('\n')
+      ['Widget({', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '})'].join('\n')
     );
     const wrapper = mountBubblePartWidget(widgetPart, {
       messageId: 'assistant-widget-message'

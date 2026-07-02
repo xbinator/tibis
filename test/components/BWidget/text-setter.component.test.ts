@@ -87,7 +87,18 @@ function createWidgetData(): WidgetData {
       properties: {}
     },
     execute: {
-      code: ['Widget({', '  async mounted() {', '    this.$setData("weather", { temperature: this.$input.weather.temperature })', '  }', '})'].join('\n')
+      code: [
+        'Widget({',
+        '  data: {',
+        '    weather: {',
+        '      temperature: 0',
+        '    }',
+        '  },',
+        '  async mounted() {',
+        '    this.weather.temperature = this.$input.weather.temperature',
+        '  }',
+        '})'
+      ].join('\n')
     },
     metadata: {
       previewContext: {

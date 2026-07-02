@@ -14,6 +14,7 @@ const addFileMock = vi.hoisted(() => vi.fn());
 const updateFileMock = vi.hoisted(() => vi.fn());
 const clearDirtyMock = vi.hoisted(() => vi.fn());
 const setDirtyMock = vi.hoisted(() => vi.fn());
+const isDirtyMock = vi.hoisted(() => vi.fn());
 const writeFileMock = vi.hoisted(() => vi.fn());
 const saveFileMock = vi.hoisted(() => vi.fn());
 const readFileMock = vi.hoisted(() => vi.fn());
@@ -42,7 +43,7 @@ vi.mock('@/stores/workspace/tabs', () => ({
   useTabsStore: () => ({
     clearDirty: clearDirtyMock,
     setDirty: setDirtyMock,
-    isDirty: () => false,
+    isDirty: isDirtyMock,
     clearMissing: vi.fn(),
     isMissing: () => false
   })
@@ -181,6 +182,8 @@ describe('useFileSession', (): void => {
     updateFileMock.mockReset();
     clearDirtyMock.mockReset();
     setDirtyMock.mockReset();
+    isDirtyMock.mockReset();
+    isDirtyMock.mockReturnValue(false);
     writeFileMock.mockReset();
     saveFileMock.mockReset();
     readFileMock.mockReset();
@@ -292,6 +295,77 @@ describe('useFileSession', (): void => {
 
     expect(setDirtyMock).not.toHaveBeenCalled();
     expect(writeFileMock).not.toHaveBeenCalled();
+  });
+
+  it('marks unsaved tibis drafts dirty when stored content differs from the saved baseline', async (): Promise<void> => {
+    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
+    getFileByIdMock.mockResolvedValue({
+      type: 'file',
+      id: 'widget-1',
+      path: null,
+      name: 'board',
+      ext: 'tibis',
+      content,
+      savedContent: ''
+    });
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
+        kind: 'tibis',
+        defaultName: 'Untitled',
+        defaultExt: 'tibis',
+        defaultData: createWidgetData(),
+        type: 'widget',
+        version: 1,
+        routeName: 'widget',
+        fallbackRouteName: 'editor'
+      });
+
+      await flushPromises();
+      await flushPromises();
+    });
+    scope.stop();
+
+    expect(setDirtyMock).toHaveBeenCalledWith('widget-1');
+    expect(clearDirtyMock).not.toHaveBeenCalledWith('widget-1');
+  });
+
+  it('marks disk-backed tibis drafts dirty when stored content differs from the saved baseline', async (): Promise<void> => {
+    const savedContent = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
+    const draftContent = savedContent.replace('"elements": []', '"elements": [{"id":"node-1"}]');
+    getFileByIdMock.mockResolvedValue({
+      type: 'file',
+      id: 'widget-1',
+      path: '/tmp/board.tibis',
+      name: 'board',
+      ext: 'tibis',
+      content: draftContent,
+      savedContent
+    });
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      useFileSession<WidgetData>({
+        fileId: ref('widget-1'),
+        kind: 'tibis',
+        defaultName: 'Untitled',
+        defaultExt: 'tibis',
+        defaultData: createWidgetData(),
+        type: 'widget',
+        version: 1,
+        routeName: 'widget',
+        fallbackRouteName: 'editor'
+      });
+
+      await flushPromises();
+      await flushPromises();
+    });
+    scope.stop();
+
+    expect(setDirtyMock).toHaveBeenCalledWith('widget-1');
+    expect(clearDirtyMock).not.toHaveBeenCalledWith('widget-1');
   });
 
   it('uses tibis save filter when saving with dialog', async (): Promise<void> => {
