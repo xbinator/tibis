@@ -10,7 +10,7 @@ import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**
  * 创建测试用 Widget 数据。
- * @param code - 交互脚本代码
+ * @param code - JS 脚本代码
  * @returns Widget 数据
  */
 function createWidgetData(code: string): WidgetData {
@@ -24,7 +24,7 @@ function createWidgetData(code: string): WidgetData {
 
 /**
  * 创建测试用小组件消息片段。
- * @param code - 交互脚本代码
+ * @param code - JS 脚本代码
  * @returns 小组件消息片段
  */
 function createWidgetPart(code: string): ChatMessageWidgetPart {
@@ -50,7 +50,7 @@ describe('widgetRuntime', (): void => {
     const runtimeGlobal = globalThis as typeof globalThis & { __widgetRuntimeUnsafe?: boolean };
     delete runtimeGlobal.__widgetRuntimeUnsafe;
     const part = createWidgetPart(
-      ['defineConfig({', '  mounted() {', '    globalThis.__widgetRuntimeUnsafe = true', "    this.$setState('weather.temperature', 28)", '  }', '})'].join(
+      ['Widget({', '  mounted() {', '    globalThis.__widgetRuntimeUnsafe = true', "    this.$setState('weather.temperature', 28)", '  }', '})'].join(
         '\n'
       )
     );
@@ -65,10 +65,18 @@ describe('widgetRuntime', (): void => {
     });
   });
 
+  it('ignores legacy defineConfig entry scripts after switching to Widget', async (): Promise<void> => {
+    const part = createWidgetPart("defineConfig({ mounted() { this.$setState('weather.temperature', 28) } })");
+
+    const nextPart = await initWidgetMountState(part);
+
+    expect(nextPart.renderContext.state).toEqual({});
+  });
+
   it('runs mounted once and writes state into the returned widget part', async (): Promise<void> => {
     const part = createWidgetPart(
       [
-        'defineConfig({',
+        'Widget({',
         '  async mounted() {',
         "    this.$setState('weather.city', this.$input.city)",
         "    this.$setState('weather.temperature', 28)",
@@ -103,7 +111,7 @@ describe('widgetRuntime', (): void => {
 
   it('keeps completed mounted parts unchanged', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
-      ...createWidgetPart('defineConfig({ mounted() { this.$setState("weather.temperature", 28) } })'),
+      ...createWidgetPart('Widget({ mounted() { this.$setState("weather.temperature", 28) } })'),
       status: 'mounted',
       lifecycle: {
         mountedAt: '2026-07-01T00:00:00.000Z'
@@ -126,7 +134,7 @@ describe('widgetRuntime', (): void => {
   it('supports constants and object literals in supported setState calls', async (): Promise<void> => {
     const part = createWidgetPart(
       [
-        'defineConfig({',
+        'Widget({',
         '  mounted() {',
         '    const city = this.$input.city',
         "    this.$setState('lastQuery', { city, unit: 'celsius', tags: ['weather'] })",
@@ -150,7 +158,7 @@ describe('widgetRuntime', (): void => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
         [
-          'defineConfig({',
+          'Widget({',
           '  unmounted() {',
           "    this.$setState('submitted', { city: this.$input.city, temperature: this.$state.weather.temperature })",
           '  }',
@@ -205,7 +213,7 @@ describe('widgetRuntime', (): void => {
   it('captures sendMessage calls with script text parts while finishing unmounted state', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
-        ['defineConfig({', '  unmounted() {', "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })", '  }', '})'].join('\n')
       ),
       status: 'mounted',
       lifecycle: {
@@ -223,7 +231,7 @@ describe('widgetRuntime', (): void => {
   });
 
   it('keeps widget parts unchanged before mounted state is reached', async (): Promise<void> => {
-    const part = createWidgetPart(['defineConfig({', '  unmounted() {', "    this.$setState('submitted', true)", '  }', '})'].join('\n'));
+    const part = createWidgetPart(['Widget({', '  unmounted() {', "    this.$setState('submitted', true)", '  }', '})'].join('\n'));
 
     const nextPart = await finishWidgetUnmountState(part);
 
@@ -233,7 +241,7 @@ describe('widgetRuntime', (): void => {
   });
 
   it('does not run disabled execute scripts', async (): Promise<void> => {
-    const code = "defineConfig({ mounted() { this.$setState('weather.temperature', 28) } })";
+    const code = "Widget({ mounted() { this.$setState('weather.temperature', 28) } })";
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(code),
       value: {
@@ -253,7 +261,7 @@ describe('widgetRuntime', (): void => {
 
   it('runs interaction code and finishes when the code sends a message', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
-      ...createWidgetPart('defineConfig({})'),
+      ...createWidgetPart('Widget({})'),
       status: 'mounted',
       lifecycle: {
         mountedAt: '2026-07-01T00:00:00.000Z'
@@ -273,7 +281,7 @@ describe('widgetRuntime', (): void => {
   it('runs unmounted cleanup when an interaction finishes with a message', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
-        ['defineConfig({', '  unmounted() {', "    this.$setState('cleanedUp', true)", "    this.$sendMessage('清理消息')", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', "    this.$setState('cleanedUp', true)", "    this.$sendMessage('清理消息')", '  }', '})'].join('\n')
       ),
       status: 'mounted',
       lifecycle: {
@@ -297,7 +305,7 @@ describe('widgetRuntime', (): void => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
         [
-          'defineConfig({',
+          'Widget({',
           '  methods: {',
           '    submitOrder() {',
           "      this.$setState('confirmed', true)",
@@ -323,7 +331,7 @@ describe('widgetRuntime', (): void => {
   it('passes evaluated interaction arguments into user helper parameters', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
-        ['defineConfig({', '  methods: {', '    selectCoffee(id, city) {', "      this.$setState('selection', { id, city })", '    }', '  }', '})'].join('\n')
+        ['Widget({', '  methods: {', '    selectCoffee(id, city) {', "      this.$setState('selection', { id, city })", '    }', '  }', '})'].join('\n')
       ),
       status: 'mounted',
       lifecycle: {
@@ -344,7 +352,7 @@ describe('widgetRuntime', (): void => {
 
   it('keeps the widget part unchanged when interaction code has no supported signal', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
-      ...createWidgetPart('defineConfig({})'),
+      ...createWidgetPart('Widget({})'),
       status: 'mounted',
       lifecycle: {
         mountedAt: '2026-07-01T00:00:00.000Z'
@@ -359,7 +367,7 @@ describe('widgetRuntime', (): void => {
 
   it('keeps the widget mounted when interaction code updates state without sending a message', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
-      ...createWidgetPart('defineConfig({})'),
+      ...createWidgetPart('Widget({})'),
       status: 'mounted',
       lifecycle: {
         mountedAt: '2026-07-01T00:00:00.000Z'
@@ -378,7 +386,7 @@ describe('widgetRuntime', (): void => {
   it('supports managed http calls and stores response data', async (): Promise<void> => {
     const part = createWidgetPart(
       [
-        'defineConfig({',
+        'Widget({',
         '  async mounted() {',
         "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
         "    this.$setState('weather.temperature', weather.data.temperature)",
@@ -405,7 +413,7 @@ describe('widgetRuntime', (): void => {
 
   it('waits for managed http calls without adding a script-level timeout', async (): Promise<void> => {
     const code = [
-      'defineConfig({',
+      'Widget({',
       '  async mounted() {',
       "    await this.$http.get('https://api.example.com/slow')",
       "    this.$setState('weather.temperature', 28)",

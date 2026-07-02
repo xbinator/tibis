@@ -87,7 +87,7 @@ function createWidgetData(): WidgetData {
       properties: {}
     },
     execute: {
-      code: ['defineConfig({', '  async mounted() {', '    this.$setState("weather", { temperature: this.$input.weather.temperature })', '  }', '})'].join('\n')
+      code: ['Widget({', '  async mounted() {', '    this.$setState("weather", { temperature: this.$input.weather.temperature })', '  }', '})'].join('\n')
     },
     metadata: {
       previewContext: {

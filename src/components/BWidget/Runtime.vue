@@ -43,7 +43,7 @@ interface Props {
   value: WidgetData;
   /** 运行态渲染上下文 */
   renderContext: WidgetRenderContext;
-  /** 运行态控制器，供元素自行调用交互脚本 methods */
+  /** 运行态控制器，供元素自行调用JS 脚本 methods */
   runtime?: WidgetRuntimeController;
   /** 内容留白 */
   padding?: number;

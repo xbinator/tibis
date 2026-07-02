@@ -122,14 +122,14 @@ export interface WidgetMetadata {
 }
 
 /**
- * Widget交互脚本配置。
+ * WidgetJS 脚本配置。
  */
 export interface WidgetExecuteMethod {
   /** 方法是否启用 */
   enabled?: boolean;
   /** 方法说明，用于编辑器提示和后续权限确认 */
   description?: string;
-  /** 交互脚本代码，要求调用 defineConfig({...}) 声明生命周期与 methods */
+  /** JS 脚本代码，要求调用 Widget({...}) 声明生命周期与 methods */
   code: string;
 }
 
@@ -271,7 +271,7 @@ export interface WidgetData {
   inputSchema: WidgetSchemaObject;
   /** Widget运行状态 schema */
   stateSchema: WidgetSchemaObject;
-  /** Widget交互脚本配置 */
+  /** WidgetJS 脚本配置 */
   execute?: WidgetExecuteMethod;
   /** Widget元信息 */
   metadata: WidgetMetadata;

@@ -107,9 +107,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 读取 Widget 交互脚本代码。
+ * 读取 Widget JS 脚本代码。
  * @param dataItem - Widget 数据
- * @returns 交互脚本代码
+ * @returns JS 脚本代码
  */
 function readWidgetMethodScriptCode(dataItem: WidgetData | undefined): string {
   const executeMethod = dataItem?.execute;

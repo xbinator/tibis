@@ -1,6 +1,6 @@
 /**
  * @file methodScriptExtraLib.ts
- * @description 小组件交互脚本 Monaco extra lib 内容生成工具。
+ * @description 小组件JS 脚本 Monaco extra lib 内容生成工具。
  */
 
 import type { WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
@@ -164,7 +164,7 @@ export function createWidgetSchemaInterfaceDeclaration(interfaceName: string, sc
 }
 
 /**
- * 创建 Widget 交互脚本编辑器类型提示内容。
+ * 创建 Widget JS 脚本编辑器类型提示内容。
  * @param inputSchema - 入参 schema
  * @param stateSchema - 状态 schema
  * @returns Monaco extra lib 内容
@@ -275,6 +275,6 @@ declare interface WidgetConfig {
   methods?: WidgetMethodMap & ThisType<WidgetThisContext>
 }
 
-declare function defineConfig(config: WidgetConfig & ThisType<WidgetThisContext>): WidgetConfig
+declare function Widget(config: WidgetConfig & ThisType<WidgetThisContext>): WidgetConfig
 `;
 }

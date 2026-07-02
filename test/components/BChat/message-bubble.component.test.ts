@@ -362,7 +362,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['defineConfig({', '  mounted() {', "    this.$setState('weather.temperature', 31)", '  }', '})'].join('\n')
+          code: ['Widget({', '  mounted() {', "    this.$setState('weather.temperature', 31)", '  }', '})'].join('\n')
         }
       },
       renderContext: {
@@ -436,7 +436,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['defineConfig({', '  mounted() {', "    this.$setState('weather.temperature', 32)", '  }', '})'].join('\n')
+          code: ['Widget({', '  mounted() {', "    this.$setState('weather.temperature', 32)", '  }', '})'].join('\n')
         }
       },
       renderContext: {
@@ -592,7 +592,7 @@ describe('MessageBubble', (): void => {
         ...createWeatherWidgetData(),
         execute: {
           code: [
-            'defineConfig({',
+            'Widget({',
             '  unmounted() {',
             "    this.$setState('submitted', { city: this.$input.city, temperature: this.$state.weather.temperature })",
             '  }',
@@ -667,7 +667,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['defineConfig({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+          code: ['Widget({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()
@@ -743,7 +743,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['defineConfig({', '  unmounted() {', "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })", '  }', '})'].join('\n')
+          code: ['Widget({', '  unmounted() {', "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })", '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()
@@ -803,7 +803,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['defineConfig({', '  unmounted() {', "    this.$sendMessage({ content: '库存不足', isError: true })", '  }', '})'].join('\n')
+          code: ['Widget({', '  unmounted() {', "    this.$sendMessage({ content: '库存不足', isError: true })", '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()
@@ -846,7 +846,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['defineConfig({', '  unmounted() {', '    this.$sendMessage({ content: this.$state.order.message })', '  }', '})'].join('\n')
+          code: ['Widget({', '  unmounted() {', '    this.$sendMessage({ content: this.$state.order.message })', '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()

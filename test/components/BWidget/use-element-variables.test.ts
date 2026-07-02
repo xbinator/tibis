@@ -1,6 +1,6 @@
 /**
  * @file use-element-variables.test.ts
- * @description 验证 BWidget 元素变量 hook 从Widget schema 与交互脚本生成变量候选。
+ * @description 验证 BWidget 元素变量 hook 从Widget schema 与JS 脚本生成变量候选。
  */
 import { ref } from 'vue';
 import { describe, expect, it } from 'vitest';
@@ -71,7 +71,7 @@ function createWidgetData(): WidgetData {
     },
     execute: {
       code: [
-        'defineConfig({',
+        'Widget({',
         '  async mounted() {',
         '    this.$setState("weather", { temperature: this.$input.weather.temperature })',
         '    this.$setState("weather-data", { "feels.like": 31 })',

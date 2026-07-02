@@ -57,7 +57,7 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
 
 /**
  * 创建消息内小组件快照数据。
- * @param code - 小组件交互脚本
+ * @param code - 小组件JS 脚本
  * @returns 小组件快照数据
  */
 function createWidgetData(code: string): WidgetData {
@@ -88,7 +88,7 @@ function createWidgetRenderContext(): WidgetRenderContext {
 
 /**
  * 创建小组件消息片段。
- * @param code - 小组件交互脚本
+ * @param code - 小组件JS 脚本
  * @returns 小组件消息片段
  */
 function createWidgetPart(code: string): ChatMessageWidgetPart {
@@ -198,7 +198,7 @@ describe('BubblePartWidget', (): void => {
           kind: 'widget_display',
           sessionId: 'widget-coffee-session',
           widgetId: 'coffee',
-          value: createWidgetData('defineConfig({})'),
+          value: createWidgetData('Widget({})'),
           renderContext: createWidgetRenderContext()
         }
       }
@@ -245,7 +245,7 @@ describe('BubblePartWidget', (): void => {
     const widgetPart: ChatMessageWidgetPart = {
       ...createWidgetPart(
         [
-          'defineConfig({',
+          'Widget({',
           '  async mounted() {',
           "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
           "    this.$setState('weather.temperature', weather.data.temperature)",
@@ -290,13 +290,13 @@ describe('BubblePartWidget', (): void => {
   it('finishes the message widget part by part id without a separate partIndex prop', async (): Promise<void> => {
     const staleWidgetPart = {
       ...createWidgetPart(
-        ['defineConfig({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
       ),
       id: 'widget-part-stale'
     };
     const targetWidgetPart = {
       ...createWidgetPart(
-        ['defineConfig({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
       ),
       id: 'widget-part-target',
       renderContext: {
@@ -344,7 +344,7 @@ describe('BubblePartWidget', (): void => {
 
   it('finishes the message widget part before sending submit result', async (): Promise<void> => {
     const widgetPart = createWidgetPart(
-      ['defineConfig({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+      ['Widget({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
     );
     const wrapper = mountBubblePartWidget(widgetPart, {
       messageId: 'assistant-widget-message'
@@ -374,7 +374,7 @@ describe('BubblePartWidget', (): void => {
   });
 
   it('exposes interaction expressions as fire-and-forget runtime actions in chat messages', (): void => {
-    const widgetPart = createWidgetPart('defineConfig({})');
+    const widgetPart = createWidgetPart('Widget({})');
     const wrapper = mountBubblePartWidgetWithMethodProbe(widgetPart, {
       messageId: 'assistant-widget-message'
     });

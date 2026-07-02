@@ -20,7 +20,7 @@ interface WidgetLifecycleRunOptions {
   http?: WidgetHttpClient;
   /** 是否允许当前语句列表触发用户辅助函数调用。 */
   allowUserMethodCalls?: boolean;
-  /** 当前 Widget 交互脚本，用于从 defineConfig.methods 中读取用户辅助函数。 */
+  /** 当前 Widget JS 脚本，用于从 Widget.methods 中读取用户辅助函数。 */
   widgetScriptCode?: string;
 }
 
@@ -113,12 +113,12 @@ export function createWidgetHttpClient(dependencies: WidgetHttpClientDependencie
 }
 
 /**
- * 判断节点是否为 defineConfig 调用。
+ * 判断节点是否为 Widget 配置调用。
  * @param node - 待检查节点
- * @returns 是否为 defineConfig 调用
+ * @returns 是否为 Widget 配置调用
  */
-function isDefineConfigCall(node: ts.Node): node is ts.CallExpression {
-  return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'defineConfig';
+function isWidgetConfigCall(node: ts.Node): node is ts.CallExpression {
+  return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Widget';
 }
 
 /**
@@ -142,8 +142,8 @@ function hasBlockBody(node: ts.MethodDeclaration | ts.FunctionExpression | ts.Ar
 }
 
 /**
- * 从 defineConfig 配置对象读取指定生命周期函数体。
- * @param code - 小组件交互脚本。
+ * 从 Widget 配置对象读取指定生命周期函数体。
+ * @param code - 小组件JS 脚本。
  * @param lifecycleName - 生命周期名称。
  * @returns 生命周期函数节点，不存在时返回 undefined。
  */
@@ -152,13 +152,13 @@ function findWidgetLifecycleFunction(code: string, lifecycleName: WidgetLifecycl
   let lifecycleFunction: WidgetFunctionNodeWithBody | undefined;
 
   /**
-   * 访问脚本节点并提取 defineConfig 中的生命周期函数。
+   * 访问脚本节点并提取 Widget 配置中的生命周期函数。
    * @param node - 当前节点
    */
   function visit(node: ts.Node): void {
     if (lifecycleFunction) return;
 
-    if (isDefineConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
+    if (isWidgetConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
       const configObject = node.arguments[0];
       for (const property of configObject.properties) {
         const propertyName = readPropertyName(property.name);
@@ -189,8 +189,8 @@ function findWidgetLifecycleFunction(code: string, lifecycleName: WidgetLifecycl
 }
 
 /**
- * 从 defineConfig methods 中读取指定用户辅助函数。
- * @param code - 小组件交互脚本
+ * 从 Widget methods 中读取指定用户辅助函数。
+ * @param code - 小组件JS 脚本
  * @param methodName - 用户辅助函数名
  * @returns 用户辅助函数节点，不存在时返回 undefined
  */
@@ -199,13 +199,13 @@ function findWidgetMethodFunction(code: string, methodName: string): WidgetFunct
   let methodFunction: WidgetFunctionNodeWithBody | undefined;
 
   /**
-   * 访问脚本节点并提取 defineConfig methods 中的指定用户辅助函数。
+   * 访问脚本节点并提取 Widget methods 中的指定用户辅助函数。
    * @param node - 当前节点
    */
   function visit(node: ts.Node): void {
     if (methodFunction) return;
 
-    if (isDefineConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
+    if (isWidgetConfigCall(node) && ts.isObjectLiteralExpression(node.arguments[0])) {
       const methodsProperty = node.arguments[0].properties.find((property) => readPropertyName(property.name) === 'methods');
       if (!methodsProperty || !ts.isPropertyAssignment(methodsProperty) || !ts.isObjectLiteralExpression(methodsProperty.initializer)) return;
 
@@ -539,7 +539,7 @@ async function runWidgetStatements(
     const userHelperCall = options.allowUserMethodCalls ? readUserHelperCallExpression(expression) : null;
     if (userHelperCall && ts.isIdentifier(userHelperCall.expression)) {
       const userMethodName = userHelperCall.expression.text;
-      const methodFunction = findWidgetMethodFunction(options.widgetScriptCode ?? 'defineConfig({})', userMethodName);
+      const methodFunction = findWidgetMethodFunction(options.widgetScriptCode ?? 'Widget({})', userMethodName);
       if (!methodFunction) continue;
 
       // 参数绑定必须先于辅助函数执行，且保持源码顺序。
@@ -666,7 +666,7 @@ export async function initWidgetMountState(part: ChatMessageWidgetPart, options:
 
   try {
     // 执行 mounted 生命周期
-    const mountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'defineConfig({})', 'mounted');
+    const mountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'Widget({})', 'mounted');
     await runLifecycleStatements(mountedFunction, nextPart, options);
 
     return { ...nextPart, status: 'mounted', lifecycle: { ...nextPart.lifecycle, mountedAt } };
@@ -690,7 +690,7 @@ export async function finishWidgetRuntime(part: ChatMessageWidgetPart, options: 
   const nextPart = cloneDeep(part);
 
   try {
-    const unmountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'defineConfig({})', 'unmounted');
+    const unmountedFunction = findWidgetLifecycleFunction(nextPart.value.execute?.code ?? 'Widget({})', 'unmounted');
     const lifecycleResult = await runLifecycleStatements(unmountedFunction, nextPart, options);
 
     return createWidgetFinishedResult(nextPart, lifecycleResult.sendMessage, options);
@@ -721,7 +721,7 @@ async function runWidgetInteraction(
     const interactionResult = await runWidgetStatements(sourceFile.statements, nextPart, {
       ...options,
       allowUserMethodCalls: true,
-      widgetScriptCode: nextPart.value.execute?.code ?? 'defineConfig({})'
+      widgetScriptCode: nextPart.value.execute?.code ?? 'Widget({})'
     });
 
     if (interactionResult.sendMessage) {

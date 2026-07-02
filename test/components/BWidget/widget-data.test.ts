@@ -44,14 +44,14 @@ describe('dataItem', (): void => {
       execute: {
         enabled: true,
         description: '查询天气',
-        code: "defineConfig({ methods: { confirm() { this.$sendMessage('确认') } } })"
+        code: "Widget({ methods: { confirm() { this.$sendMessage('确认') } } })"
       }
     });
 
     expect(contract.execute).toEqual({
       enabled: true,
       description: '查询天气',
-      code: "defineConfig({ methods: { confirm() { this.$sendMessage('确认') } } })"
+      code: "Widget({ methods: { confirm() { this.$sendMessage('确认') } } })"
     });
   });
 });

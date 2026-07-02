@@ -1,6 +1,6 @@
 /**
  * @file widget-state-schema.test.ts
- * @description 验证 Widget 状态 schema 可从交互脚本中的 this.$setState 调用构建。
+ * @description 验证 Widget 状态 schema 可从JS 脚本中的 this.$setState 调用构建。
  */
 import { describe, expect, it } from 'vitest';
 import type { WidgetSchemaObject } from '@/components/BWidget/types';
@@ -31,7 +31,7 @@ const inputSchema: WidgetSchemaObject = {
 describe('buildWidgetStateSchema', (): void => {
   it('builds nested state schema from setState object literals', (): void => {
     const code = `
-      defineConfig({
+      Widget({
         async mounted() {
           this.$setState('weather', {
             temperature: 28,
@@ -65,9 +65,25 @@ describe('buildWidgetStateSchema', (): void => {
     });
   });
 
-  it('supports this.$setState dot paths and input schema type reuse', (): void => {
+  it('returns an empty state schema for legacy defineConfig scripts', (): void => {
     const code = `
       defineConfig({
+        async mounted() {
+          this.$setState('weather.temperature', 28)
+        }
+      })
+    `;
+
+    expect(buildWidgetStateSchema(code, inputSchema)).toEqual({
+      type: 'object',
+      properties: {},
+      required: []
+    });
+  });
+
+  it('supports this.$setState dot paths and input schema type reuse', (): void => {
+    const code = `
+      Widget({
         async mounted() {
           this.$setState('lastQuery.city', this.$input.city)
           this.$setState('weather.temperature', this.$input.weather.temperature)
@@ -101,9 +117,9 @@ describe('buildWidgetStateSchema', (): void => {
     });
   });
 
-  it('supports defineConfig this context setState calls and input schema type reuse', (): void => {
+  it('supports Widget this context setState calls and input schema type reuse', (): void => {
     const code = `
-      defineConfig({
+      Widget({
         async mounted() {
           this.$setState('lastQuery.city', this.$input.city)
           this.$setState('weather.temperature', this.$input.weather.temperature)
@@ -148,7 +164,7 @@ describe('buildWidgetStateSchema', (): void => {
 
   it('ignores setState methods that are not owned by the widget context', (): void => {
     const code = `
-      defineConfig({
+      Widget({
         async mounted() {
           const store = {
             $setState(path: string, value: unknown) {
@@ -180,7 +196,7 @@ describe('buildWidgetStateSchema', (): void => {
 
   it('ignores nested object methods that use their own this context', (): void => {
     const code = `
-      defineConfig({
+      Widget({
         async mounted() {
           const store = {
             save() {
@@ -212,7 +228,7 @@ describe('buildWidgetStateSchema', (): void => {
 
   it('keeps input aliases scoped when a block declares the same variable name', (): void => {
     const code = `
-      defineConfig({
+      Widget({
         async mounted() {
           const city = this.$input.city
           {
@@ -252,7 +268,7 @@ describe('buildWidgetStateSchema', (): void => {
 
   it('returns an empty state schema when code has no static setState path', (): void => {
     const code = `
-      defineConfig({
+      Widget({
         async mounted() {
           const path = 'weather.temperature'
           this.$setState(path, 28)

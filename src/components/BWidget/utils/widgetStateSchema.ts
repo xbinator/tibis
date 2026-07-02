@@ -1,6 +1,6 @@
 /**
  * @file widgetStateSchema.ts
- * @description 从 Widget 交互脚本代码中构建运行状态 schema。
+ * @description 从 Widget JS 脚本代码中构建运行状态 schema。
  */
 import type { WidgetSchemaObject, WidgetSchemaProperty } from '../types';
 import ts from 'typescript';
@@ -341,12 +341,12 @@ function isSetStateCallExpression(expression: ts.Expression): boolean {
 }
 
 /**
- * 判断调用表达式是否为 defineConfig 调用。
+ * 判断调用表达式是否为 Widget 配置调用。
  * @param expression - 调用目标表达式
- * @returns 是否为 defineConfig 调用
+ * @returns 是否为 Widget 配置调用
  */
-function isDefineConfigCallExpression(expression: ts.Expression): boolean {
-  return ts.isIdentifier(expression) && expression.text === 'defineConfig';
+function isWidgetConfigCallExpression(expression: ts.Expression): boolean {
+  return ts.isIdentifier(expression) && expression.text === 'Widget';
 }
 
 /**
@@ -477,7 +477,7 @@ function visitWidgetFunctionBody(node: FunctionLikeNodeWithBody, scopes: InputAl
 }
 
 /**
- * 访问 defineConfig methods 对象。
+ * 访问 Widget methods 对象。
  * @param methodsObject - methods 对象字面量
  * @param scopes - input 别名作用域栈
  * @param visit - AST 访问函数
@@ -493,8 +493,8 @@ function visitWidgetMethodsObject(methodsObject: ts.ObjectLiteralExpression, sco
 }
 
 /**
- * 访问 defineConfig 配置对象中的 Widget 生命周期和事件方法。
- * @param configObject - defineConfig 配置对象
+ * 访问 Widget 配置对象中的生命周期和事件方法。
+ * @param configObject - Widget 配置对象
  * @param scopes - input 别名作用域栈
  * @param visit - AST 访问函数
  */
@@ -533,8 +533,8 @@ function cloneDeepStateSchema(schema: WidgetSchemaObject): WidgetSchemaObject {
 }
 
 /**
- * 从交互脚本代码构建 Widget 状态 schema。
- * @param code - 交互脚本源码
+ * 从JS 脚本代码构建 Widget 状态 schema。
+ * @param code - JS 脚本源码
  * @param inputSchema - input schema，用于复用 this.$input 字段类型
  * @returns 从 this.$setState 调用推导出的状态 schema
  */
@@ -567,7 +567,7 @@ export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaO
       return;
     }
 
-    if (ts.isCallExpression(node) && isDefineConfigCallExpression(node.expression)) {
+    if (ts.isCallExpression(node) && isWidgetConfigCallExpression(node.expression)) {
       const [configExpression] = node.arguments;
 
       if (configExpression && ts.isObjectLiteralExpression(configExpression)) {
