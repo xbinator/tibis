@@ -79,7 +79,7 @@ describe('BPromptEditor variable utilities', (): void => {
     expect(variables.every((variable): boolean => variable.expanded)).toBe(true);
   });
 
-  it('marks placeholders only for leaf nodes with foldable siblings in the same level', (): void => {
+  it('does not mark toggle placeholders for leaf nodes', (): void => {
     const variables = getVisibleVariables(
       [
         {
@@ -111,8 +111,8 @@ describe('BPromptEditor variable utilities', (): void => {
       ''
     );
 
-    expect(variables.find((variable) => variable.value === 'root.plain')?.showTogglePlaceholder).toBe(true);
+    expect(variables.find((variable) => variable.value === 'root.plain')?.showTogglePlaceholder).toBe(false);
     expect(variables.find((variable) => variable.value === 'root.group.leaf')?.showTogglePlaceholder).toBe(false);
-    expect(variables.find((variable) => variable.value === 'output')?.showTogglePlaceholder).toBe(true);
+    expect(variables.find((variable) => variable.value === 'output')?.showTogglePlaceholder).toBe(false);
   });
 });

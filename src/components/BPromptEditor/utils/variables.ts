@@ -20,7 +20,7 @@ export interface VisibleVariable extends FlatVariable {
   hasChildren: boolean;
   /** 子级变量是否展开 */
   expanded: boolean;
-  /** 同层存在可折叠节点时，叶子节点是否需要展示折叠按钮占位 */
+  /** 是否需要展示折叠按钮占位；当前叶子节点不再占用折叠列 */
   showTogglePlaceholder: boolean;
 }
 
@@ -85,8 +85,6 @@ function filterVariableTree(variables: readonly Variable[], query: string): Vari
  * @returns 可见变量列表
  */
 function flattenVisibleVariables(variables: readonly Variable[], collapsedValues: ReadonlySet<string>, forceExpanded: boolean, depth = 0): VisibleVariable[] {
-  const hasFoldableSibling = variables.some((variable: Variable): boolean => Boolean(variable.children?.length));
-
   return variables.flatMap((variable: Variable): VisibleVariable[] => {
     const children = variable.children ?? [];
     const hasChildren = children.length > 0;
@@ -96,7 +94,7 @@ function flattenVisibleVariables(variables: readonly Variable[], collapsedValues
       depth,
       hasChildren,
       expanded,
-      showTogglePlaceholder: !hasChildren && hasFoldableSibling
+      showTogglePlaceholder: false
     };
 
     if (!hasChildren || !expanded) {

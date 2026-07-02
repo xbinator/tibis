@@ -10,7 +10,7 @@
     @update:active-index="handleMouseEnter"
   >
     <template #item="{ item }">
-      <div class="variable-item" :class="{ 'is-without-toggle': !hasToggleSlot(item) }" :style="getVariableItemStyle(item)">
+      <div class="variable-item" :class="{ 'is-without-toggle': !hasToggleButton(item) }" :style="getVariableItemStyle(item)">
         <BButton
           v-if="item.hasChildren"
           type="ghost"
@@ -20,7 +20,6 @@
           @click.stop="handleToggle(item)"
           @mousedown.stop.prevent
         />
-        <span v-else-if="item.showTogglePlaceholder" class="variable-item__toggle-placeholder"></span>
         <div class="variable-item-main">
           <span class="variable-item-label">{{ getVariableDisplayValue(item) }}</span>
           <span v-if="item.label" class="variable-item-value">{{ item.label }}</span>
@@ -59,6 +58,8 @@ interface VariableSelectItem extends Variable {
 type VariableItemStyle = CSSProperties & {
   /** 变量树深度 */
   '--variable-depth': string;
+  /** 无折叠按钮叶子项的额外缩进 */
+  '--variable-leaf-offset': string;
 };
 
 /**
@@ -141,18 +142,21 @@ function getVariableDisplayValue(item: VariableSelectItem): string {
  * @returns 变量项样式
  */
 function getVariableItemStyle(item: VariableSelectItem): VariableItemStyle {
+  const depth = item.depth ?? 0;
+
   return {
-    '--variable-depth': String(item.depth ?? 0)
+    '--variable-depth': String(depth),
+    '--variable-leaf-offset': depth > 0 && !item.hasChildren ? '28px' : '0px'
   };
 }
 
 /**
- * 判断变量项是否需要预留折叠控制列。
+ * 判断变量项是否需要展示折叠控制按钮。
  * @param item - 变量选择菜单项
- * @returns 存在折叠按钮或同层占位时返回 true
+ * @returns 存在子级变量时返回 true
  */
-function hasToggleSlot(item: VariableSelectItem): boolean {
-  return Boolean(item.hasChildren || item.showTogglePlaceholder);
+function hasToggleButton(item: VariableSelectItem): boolean {
+  return Boolean(item.hasChildren);
 }
 
 /**
@@ -197,18 +201,12 @@ function handleMouseEnter(index: number): void {
 
 .variable-item.is-without-toggle {
   grid-template-columns: minmax(0, 1fr);
-  padding-left: calc(var(--variable-depth, 0) * 24px + 28px);
+  padding-left: calc(var(--variable-depth, 0) * 24px + var(--variable-leaf-offset, 0px));
 }
 
 .variable-item.is-without-toggle .variable-item-main,
 .variable-item.is-without-toggle .variable-item-desc {
   grid-column: 1;
-}
-
-.variable-item__toggle-placeholder {
-  grid-row: 1 / span 2;
-  width: 24px;
-  height: 24px;
 }
 
 .variable-item-main {

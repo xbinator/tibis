@@ -278,7 +278,7 @@ describe('VariableSelect layout', (): void => {
     wrapper.unmount();
   });
 
-  it('renders toggle placeholders only when the visible item requests one', (): void => {
+  it('does not render toggle placeholders for leaf items', (): void => {
     const wrapper = mount(VariableSelect, {
       props: {
         visible: true,
@@ -309,7 +309,8 @@ describe('VariableSelect layout', (): void => {
       }
     });
 
-    expect(document.body.querySelectorAll('.variable-item__toggle-placeholder')).toHaveLength(1);
+    expect(document.body.querySelectorAll('.variable-item__toggle-placeholder')).toHaveLength(0);
+    expect(document.body.querySelectorAll('.variable-item.is-without-toggle')).toHaveLength(2);
     wrapper.unmount();
   });
 
@@ -347,8 +348,39 @@ describe('VariableSelect layout', (): void => {
     wrapper.unmount();
   });
 
+  it('does not add toggle column offset to root leaf items', (): void => {
+    const wrapper = mount(VariableSelect, {
+      props: {
+        visible: true,
+        variables: [
+          {
+            label: '消息',
+            value: 'message',
+            depth: 0,
+            showTogglePlaceholder: false
+          }
+        ] as VariableSelectTestItem[],
+        position: {
+          top: 0,
+          left: 0,
+          bottom: 0
+        }
+      },
+      global: {
+        components: {
+          BButton: BButtonStub
+        }
+      }
+    });
+    const item = document.body.querySelector<HTMLElement>('.variable-item');
+
+    expect(item?.style.getPropertyValue('--variable-leaf-offset')).toBe('0px');
+    expect(item?.classList.contains('is-without-toggle')).toBe(true);
+    wrapper.unmount();
+  });
+
   it('keeps leaf items without toggle slots visually nested under their parent', (): void => {
     expect(variableSelectSource).toContain('padding-left: calc(var(--variable-depth, 0) * 24px);');
-    expect(variableSelectSource).toContain('padding-left: calc(var(--variable-depth, 0) * 24px + 28px);');
+    expect(variableSelectSource).toContain('padding-left: calc(var(--variable-depth, 0) * 24px + var(--variable-leaf-offset, 0px));');
   });
 });
