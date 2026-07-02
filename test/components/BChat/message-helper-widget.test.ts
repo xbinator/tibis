@@ -34,7 +34,7 @@ function createOpenWidgetToolPart(): ChatMessageToolPart {
           input: {
             city: '上海'
           },
-          state: {}
+          data: {}
         }
       }
     }
@@ -57,7 +57,7 @@ describe('messageHelper widget result', (): void => {
         input: {
           city: '上海'
         },
-        state: {}
+        data: {}
       }
     });
     expect(widgetPart).not.toHaveProperty('runtimeId');
@@ -70,7 +70,7 @@ describe('messageHelper widget result', (): void => {
     expect(resolveWidgetPartFromToolResult(toolPart)).toBeNull();
   });
 
-  it('initializes open_widget tool parts with durable widget runtime state', (): void => {
+  it('initializes open_widget tool parts with durable widget runtime data', (): void => {
     const toolPart = createOpenWidgetToolPart();
     const message: Message = {
       id: 'assistant-widget',

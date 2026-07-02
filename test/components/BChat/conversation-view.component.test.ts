@@ -35,7 +35,7 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
       '{{ disabled ? "disabled" : "enabled" }}:',
       '{{ canRollback && canRollback(message) ? "rollback" : "no-rollback" }}',
       '{{ message.parts[0]?.result?.data?.renderContext?.input?.city ?? "" }}',
-      '{{ message.parts[0]?.renderContext?.state?.weather?.temperature ?? "" }}',
+      '{{ message.parts[0]?.renderContext?.data?.weather?.temperature ?? "" }}',
       '</div>'
     ].join('')
   }
@@ -119,7 +119,7 @@ function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
           input: {
             city
           },
-          state: {}
+          data: {}
         }
       }
     }
@@ -145,7 +145,7 @@ function createWidgetPart(temperature: number): ChatMessageWidgetPart {
       name: 'weather',
       description: '天气小组件',
       inputSchema: { type: 'object', properties: {} },
-      stateSchema: { type: 'object', properties: {} },
+      dataSchema: { type: 'object', properties: {} },
       metadata: {},
       elements: [],
       viewport: {
@@ -155,7 +155,7 @@ function createWidgetPart(temperature: number): ChatMessageWidgetPart {
     },
     renderContext: {
       input: {},
-      state: {
+      data: {
         weather: {
           temperature
         }
@@ -259,7 +259,7 @@ describe('ConversationView', (): void => {
     expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input:enabled:no-rollback');
   });
 
-  it('updates disabled state without message content changing', async (): Promise<void> => {
+  it('updates disabled data without message content changing', async (): Promise<void> => {
     const messages = [createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))];
     const wrapper = mount(ConversationViewForTest, {
       props: {
@@ -312,7 +312,7 @@ describe('ConversationView', (): void => {
     expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:success:enabled:no-rollback杭州');
   });
 
-  it('updates widget display when render context state changes without status changes', async (): Promise<void> => {
+  it('updates widget display when render context data changes without status changes', async (): Promise<void> => {
     const wrapper = mount(ConversationViewForTest, {
       props: {
         messages: [createWidgetMessage(createWidgetPart(28))],

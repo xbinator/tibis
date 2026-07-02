@@ -467,11 +467,11 @@ describe('MoveableLayer', (): void => {
     const textElement: WidgetElement = {
       ...createWidgetElement('text-1', 'text'),
       size: { width: 30, height: 12 },
-      metadata: { content: '{{ state.shortText }}' }
+      metadata: { content: '{{ data.shortText }}' }
     };
     const renderContext: WidgetRenderContext = {
       input: {},
-      state: { shortText: 'abcdef' }
+      data: { shortText: 'abcdef' }
     };
     const setStartSize = vi.fn<(size: [number, number]) => void>();
     const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext);
@@ -496,11 +496,11 @@ describe('MoveableLayer', (): void => {
     const textElement: WidgetElement = {
       ...createWidgetElement('text-1', 'text'),
       size: { width: 30, height: 12 },
-      metadata: { content: '{{ state.shortText }}' }
+      metadata: { content: '{{ data.shortText }}' }
     };
     const renderContext: WidgetRenderContext = {
       input: {},
-      state: { shortText: 'abcdef' }
+      data: { shortText: 'abcdef' }
     };
     const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext);
 

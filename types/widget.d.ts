@@ -13,8 +13,8 @@ export type { WidgetData, WidgetSchemaObject };
 export interface WidgetRenderContext {
   /** Widget启动入参 */
   input: Record<string, unknown>;
-  /** Widget会话状态 */
-  state: Record<string, unknown>;
+  /** Widget会话数据 */
+  data: Record<string, unknown>;
 }
 
 /**
@@ -29,8 +29,8 @@ export interface WidgetContract {
   description: string;
   /** 小组件入参 schema */
   inputSchema: WidgetSchemaObject;
-  /** 小组件状态 schema */
-  stateSchema: WidgetSchemaObject;
+  /** 小组件数据 schema */
+  dataSchema: WidgetSchemaObject;
 }
 
 /**

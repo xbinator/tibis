@@ -431,7 +431,7 @@ function createWidgetPart(status: ChatMessageWidgetPart['status'], temperature?:
       name: 'weather',
       description: '天气小组件',
       inputSchema: { type: 'object', properties: {} },
-      stateSchema: { type: 'object', properties: {} },
+      dataSchema: { type: 'object', properties: {} },
       metadata: {},
       elements: [],
       viewport: {
@@ -441,7 +441,7 @@ function createWidgetPart(status: ChatMessageWidgetPart['status'], temperature?:
     },
     renderContext: {
       input: {},
-      state:
+      data:
         temperature === undefined
           ? {}
           : {

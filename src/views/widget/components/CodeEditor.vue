@@ -31,7 +31,7 @@ import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco/utils/createMonaco';
 import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types';
-import { buildWidgetStateSchema } from '@/components/BWidget/utils/widgetStateSchema';
+import { buildWidgetDataSchema } from '@/components/BWidget/utils/widgetDataSchema';
 import { createWidgetMethodScriptExtraLibContent } from '../constants/methodScriptExtraLib';
 import { createWidgetExecuteMethodWithCode, readWidgetExecuteMethod } from '../utils/widgetExecuteMethod';
 
@@ -66,11 +66,11 @@ const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
 
 /** 当前 Widget 入参 schema。 */
 const inputSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => dataItem.value.inputSchema);
-/** 当前运行代码草稿推导出的状态 schema。 */
-const methodDraftStateSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => buildWidgetStateSchema(scriptCodeDraft.value, inputSchema.value));
+/** 当前运行代码草稿推导出的数据 schema。 */
+const methodDraftDataSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => buildWidgetDataSchema(scriptCodeDraft.value, inputSchema.value));
 /** Widget 运行代码编辑器类型提示内容。 */
 const widgetMethodScriptExtraLibContent = computed<string>((): string =>
-  createWidgetMethodScriptExtraLibContent(inputSchema.value, methodDraftStateSchema.value)
+  createWidgetMethodScriptExtraLibContent(inputSchema.value, methodDraftDataSchema.value)
 );
 /** Widget 运行代码编辑器类型提示声明。 */
 const widgetMethodScriptExtraLibs = computed<MonacoExtraLib[]>((): MonacoExtraLib[] => [
@@ -79,7 +79,7 @@ const widgetMethodScriptExtraLibs = computed<MonacoExtraLib[]>((): MonacoExtraLi
     filePath: 'tibis-widget-method-script.d.ts'
   }
 ]);
-/** 运行代码编辑器状态。 */
+/** 运行代码编辑器数据。 */
 const codeEditorState = computed<EditorState>(() => ({
   id: 'widget-method-script',
   name: 'widget-method.ts',

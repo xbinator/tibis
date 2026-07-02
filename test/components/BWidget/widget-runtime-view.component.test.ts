@@ -87,7 +87,7 @@ function createRuntimeWidgetData(): WidgetData {
         rotation: 0,
         style: {},
         metadata: {
-          content: '{{ input.city }} 当前 {{ state.weather.temperature }}°C'
+          content: '{{ input.city }} 当前 {{ data.weather.temperature }}°C'
         }
       },
       {
@@ -121,7 +121,7 @@ function createRenderContext(city: string, temperature: number): WidgetRenderCon
     input: {
       city
     },
-    state: {
+    data: {
       weather: {
         temperature
       }

@@ -6,7 +6,7 @@ import type { WidgetMetadata } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
 
 /** 支持的绑定上下文根名称。 */
-export type WidgetBindingContextRoot = 'input' | 'state';
+export type WidgetBindingContextRoot = 'input' | 'data';
 
 /**
  * 绑定表达式路径。
@@ -38,7 +38,7 @@ const WIDGET_BINDING_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g;
 /** 整个字段都是单个绑定插值时的匹配表达式。 */
 const WIDGET_WHOLE_BINDING_PATTERN = /^\s*\{\{\s*([^{}]+?)\s*\}\}\s*$/;
 /** 绑定路径根名称匹配表达式。 */
-const WIDGET_BINDING_ROOT_PATTERN = /^(input|state)/;
+const WIDGET_BINDING_ROOT_PATTERN = /^(input|data)/;
 /** 点路径标识符匹配表达式。 */
 const WIDGET_BINDING_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 /** 点路径标识符前缀匹配表达式。 */
@@ -65,7 +65,7 @@ function isPathReadable(value: unknown): value is Record<string, unknown> {
 function createBindingScope(context: WidgetRenderContext): Record<WidgetBindingContextRoot, unknown> {
   return {
     input: context.input,
-    state: context.state
+    data: context.data
   };
 }
 

@@ -65,7 +65,7 @@ function createWidgetData(): WidgetData {
         }
       }
     },
-    stateSchema: {
+    dataSchema: {
       type: 'object',
       properties: {}
     },
@@ -73,8 +73,8 @@ function createWidgetData(): WidgetData {
       code: [
         'Widget({',
         '  async mounted() {',
-        '    this.$setState("weather", { temperature: this.$input.weather.temperature })',
-        '    this.$setState("weather-data", { "feels.like": 31 })',
+        '    this.$setData("weather", { temperature: this.$input.weather.temperature })',
+        '    this.$setData("weather-data", { "feels.like": 31 })',
         '  }',
         '})'
       ].join('\n')
@@ -84,7 +84,7 @@ function createWidgetData(): WidgetData {
         input: {
           city: '上海'
         },
-        state: {
+        data: {
           weather: {
             temperature: 28
           },
@@ -158,7 +158,7 @@ function findVariable(groups: VariableOptionGroup[], value: string): VariableTre
 }
 
 describe('useElementVariables', (): void => {
-  it('provides variables from input schema and execute state updates', (): void => {
+  it('provides variables from input schema and execute data updates', (): void => {
     const dataItem = ref<WidgetData | undefined>(createWidgetData());
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
     const values = readVariableValues(variableOptions.value);
@@ -170,9 +170,9 @@ describe('useElementVariables', (): void => {
     expect(values).toContain('input.user.name');
     expect(values).toContain('input["wind-speed"]');
     expect(values).toContain('input.weather.temperature');
-    expect(values).toContain('state.weather');
-    expect(values).toContain('state.weather.temperature');
-    expect(values).toContain('state["weather-data"]["feels.like"]');
+    expect(values).toContain('data.weather');
+    expect(values).toContain('data.weather.temperature');
+    expect(values).toContain('data["weather-data"]["feels.like"]');
     expect(values).not.toContain('output');
     expect(values).not.toContain(REMOVED_LEGACY_ROOT);
     expect(labels).toContain('城市名称');
@@ -188,10 +188,10 @@ describe('useElementVariables', (): void => {
     const roots = readVariableTrees(variableOptions.value);
     const inputVariable = findVariable(variableOptions.value, 'input');
     const userVariable = findVariable(variableOptions.value, 'input.user');
-    const stateVariable = findVariable(variableOptions.value, 'state');
-    const weatherVariable = findVariable(variableOptions.value, 'state.weather');
+    const dataVariable = findVariable(variableOptions.value, 'data');
+    const weatherVariable = findVariable(variableOptions.value, 'data.weather');
 
-    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'state']);
+    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'data']);
     expect(inputVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual([
       'input.city',
       'input.unit',
@@ -209,14 +209,14 @@ describe('useElementVariables', (): void => {
         }
       ]
     });
-    expect(stateVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual(['state.weather', 'state["weather-data"]']);
+    expect(dataVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual(['data.weather', 'data["weather-data"]']);
     expect(weatherVariable).toMatchObject({
       label: '',
-      value: 'state.weather',
+      value: 'data.weather',
       children: [
         {
           label: '',
-          value: 'state.weather.temperature'
+          value: 'data.weather.temperature'
         }
       ]
     });
@@ -227,7 +227,7 @@ describe('useElementVariables', (): void => {
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
     const variables = readVariables(variableOptions.value);
     const cityVariable = variables.find((item: Variable): boolean => item.value === 'input.city');
-    const temperatureVariable = variables.find((item: Variable): boolean => item.value === 'state.weather.temperature');
+    const temperatureVariable = variables.find((item: Variable): boolean => item.value === 'data.weather.temperature');
 
     expect(cityVariable).toEqual({
       label: '城市名称',
@@ -235,20 +235,20 @@ describe('useElementVariables', (): void => {
     });
     expect(temperatureVariable).toEqual({
       label: '',
-      value: 'state.weather.temperature'
+      value: 'data.weather.temperature'
     });
     expect(variables.filter((item: Variable): boolean => item.description === item.value)).toEqual([]);
   });
 
-  it('ignores manually declared state schema when execute code defines state', (): void => {
+  it('ignores manually declared data schema when execute code defines data', (): void => {
     const dataItem = ref<WidgetData | undefined>({
       ...createWidgetData(),
-      stateSchema: {
+      dataSchema: {
         type: 'object',
         properties: {
           stale: {
             type: 'string',
-            description: '旧状态'
+            description: '旧数据'
           }
         }
       }
@@ -256,14 +256,14 @@ describe('useElementVariables', (): void => {
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
     const values = readVariableValues(variableOptions.value);
 
-    expect(values).toContain('state.weather.temperature');
-    expect(values).not.toContain('state.stale');
+    expect(values).toContain('data.weather.temperature');
+    expect(values).not.toContain('data.stale');
   });
 
   it('falls back to root variables when widget data is not ready', (): void => {
     const dataItem = ref<WidgetData | undefined>();
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
 
-    expect(readVariableValues(variableOptions.value)).toEqual(['input', 'state']);
+    expect(readVariableValues(variableOptions.value)).toEqual(['input', 'data']);
   });
 });

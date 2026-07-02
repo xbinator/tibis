@@ -33,7 +33,7 @@ const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
       properties: {},
       required: []
     },
-    stateSchema: {
+    dataSchema: {
       type: 'object',
       properties: {},
       required: []
@@ -399,7 +399,7 @@ describe('WidgetPage', (): void => {
           input: {
             city: '上海'
           },
-          state: {
+          data: {
             weather: {
               temperature: 28
             }

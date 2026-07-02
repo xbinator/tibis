@@ -78,7 +78,7 @@ function createWidgetRenderContext(): WidgetRenderContext {
     input: {
       city: '上海'
     },
-    state: {
+    data: {
       weather: {
         temperature: 28
       }
@@ -181,7 +181,7 @@ async function flushWidgetRuntime(): Promise<void> {
 }
 
 describe('BubblePartWidget', (): void => {
-  it('initializes preview widget runtime state on open_widget tool parts', async (): Promise<void> => {
+  it('initializes preview widget runtime data on open_widget tool parts', async (): Promise<void> => {
     const toolPart: ChatMessageToolPart = {
       id: 'tool-open-widget',
       type: 'tool',
@@ -234,7 +234,7 @@ describe('BubblePartWidget', (): void => {
     ]);
   });
 
-  it('initializes mounted state with the managed request client', async (): Promise<void> => {
+  it('initializes mounted data with the managed request client', async (): Promise<void> => {
     requestMock.mockResolvedValue({
       status: 200,
       ok: true,
@@ -248,7 +248,7 @@ describe('BubblePartWidget', (): void => {
           'Widget({',
           '  async mounted() {',
           "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
-          "    this.$setState('weather.temperature', weather.data.temperature)",
+          "    this.$setData('weather.temperature', weather.data.temperature)",
           '  }',
           '})'
         ].join('\n')
@@ -259,7 +259,7 @@ describe('BubblePartWidget', (): void => {
         input: {
           city: '上海'
         },
-        state: {}
+        data: {}
       }
     };
 
@@ -278,7 +278,7 @@ describe('BubblePartWidget', (): void => {
     expect(changedPart).toMatchObject({
       status: 'mounted',
       renderContext: {
-        state: {
+        data: {
           weather: {
             temperature: 28
           }
@@ -290,20 +290,20 @@ describe('BubblePartWidget', (): void => {
   it('finishes the message widget part by part id without a separate partIndex prop', async (): Promise<void> => {
     const staleWidgetPart = {
       ...createWidgetPart(
-        ['Widget({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', "    this.$setData('submitted.temperature', this.$data.weather.temperature)", '  }', '})'].join('\n')
       ),
       id: 'widget-part-stale'
     };
     const targetWidgetPart = {
       ...createWidgetPart(
-        ['Widget({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+        ['Widget({', '  unmounted() {', "    this.$setData('submitted.temperature', this.$data.weather.temperature)", '  }', '})'].join('\n')
       ),
       id: 'widget-part-target',
       renderContext: {
         input: {
           city: '上海'
         },
-        state: {
+        data: {
           weather: {
             temperature: 35
           }
@@ -333,7 +333,7 @@ describe('BubblePartWidget', (): void => {
       id: 'widget-part-target',
       status: 'finished',
       renderContext: {
-        state: {
+        data: {
           submitted: {
             temperature: 35
           }
@@ -344,7 +344,7 @@ describe('BubblePartWidget', (): void => {
 
   it('finishes the message widget part before sending submit result', async (): Promise<void> => {
     const widgetPart = createWidgetPart(
-      ['Widget({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+      ['Widget({', '  unmounted() {', "    this.$setData('submitted.temperature', this.$data.weather.temperature)", '  }', '})'].join('\n')
     );
     const wrapper = mountBubblePartWidget(widgetPart, {
       messageId: 'assistant-widget-message'
@@ -364,7 +364,7 @@ describe('BubblePartWidget', (): void => {
     expect(nextMessage.parts[0]).toMatchObject({
       status: 'finished',
       renderContext: {
-        state: {
+        data: {
           submitted: {
             temperature: 28
           }

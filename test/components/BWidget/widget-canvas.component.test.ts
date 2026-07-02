@@ -254,7 +254,7 @@ describe('BWidget canvas component', (): void => {
         input: {
           city: '上海'
         },
-        state: {
+        data: {
           weather: {
             temperature: 28
           }
@@ -273,7 +273,7 @@ describe('BWidget canvas component', (): void => {
         rotation: 0,
         style: {},
         metadata: {
-          content: '{{ input.city }} 当前 {{ state.weather.temperature }}°C'
+          content: '{{ input.city }} 当前 {{ data.weather.temperature }}°C'
         }
       }
     ];
@@ -293,7 +293,7 @@ describe('BWidget canvas component', (): void => {
     data.metadata = {
       previewContext: {
         input: {},
-        state: {
+        data: {
           longText: ['第一行', '第二行', '第三行', '第四行', '第五行', '第六行'].join('\n')
         }
       }
@@ -310,7 +310,7 @@ describe('BWidget canvas component', (): void => {
         rotation: 0,
         style: {},
         metadata: {
-          content: '{{ state.longText }}'
+          content: '{{ data.longText }}'
         }
       }
     ];
@@ -331,7 +331,7 @@ describe('BWidget canvas component', (): void => {
     data.metadata = {
       previewContext: {
         input: {},
-        state: {
+        data: {
           shortText: 'abcdef'
         }
       }
@@ -348,7 +348,7 @@ describe('BWidget canvas component', (): void => {
         rotation: 0,
         style: { fontSize: 10 },
         metadata: {
-          content: '{{ state.shortText }}'
+          content: '{{ data.shortText }}'
         }
       }
     ];

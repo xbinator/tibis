@@ -7,7 +7,7 @@ import type { WidgetData, WidgetSchemaProperty } from '../types';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
 import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, type WidgetBindingContextRoot } from '../utils/widgetBindings';
-import { buildWidgetStateSchema } from '../utils/widgetStateSchema';
+import { buildWidgetDataSchema } from '../utils/widgetDataSchema';
 
 /**
  * Widget 数据读取函数。
@@ -128,11 +128,11 @@ function readWidgetMethodScriptCode(dataItem: WidgetData | undefined): string {
 export function useElementVariables(readDataItem: ElementDataItemReader): UseElementVariablesReturn {
   const variableOptions = computed<VariableOptionGroup[]>((): VariableOptionGroup[] => {
     const dataItem = readDataItem();
-    const stateSchema = buildWidgetStateSchema(readWidgetMethodScriptCode(dataItem), dataItem?.inputSchema);
+    const dataSchema = buildWidgetDataSchema(readWidgetMethodScriptCode(dataItem), dataItem?.inputSchema);
     const inputVariable = createSchemaRootVariable('input', dataItem?.inputSchema.properties);
-    const stateVariable = createSchemaRootVariable('state', stateSchema.properties);
+    const dataVariable = createSchemaRootVariable('data', dataSchema.properties);
 
-    return [createVariableGroup([inputVariable, stateVariable])];
+    return [createVariableGroup([inputVariable, dataVariable])];
   });
 
   return {

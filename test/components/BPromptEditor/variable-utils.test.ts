@@ -30,16 +30,16 @@ function createVariableTree(): Variable[] {
       ]
     },
     {
-      label: 'state',
-      value: 'state',
+      label: 'data',
+      value: 'data',
       children: [
         {
           label: 'weather',
-          value: 'state.weather',
+          value: 'data.weather',
           children: [
             {
               label: 'temperature',
-              value: 'state.weather.temperature'
+              value: 'data.weather.temperature'
             }
           ]
         }
@@ -56,7 +56,7 @@ describe('BPromptEditor variable utilities', (): void => {
   it('hides descendants for collapsed tree nodes', (): void => {
     const variables = getVisibleVariables(createVariableTree(), new Set(['input']), '');
 
-    expect(variables.map((variable): string => variable.value)).toEqual(['input', 'state', 'state.weather', 'state.weather.temperature', 'output']);
+    expect(variables.map((variable): string => variable.value)).toEqual(['input', 'data', 'data.weather', 'data.weather.temperature', 'output']);
     expect(variables[0]).toMatchObject({
       value: 'input',
       depth: 0,
@@ -64,7 +64,7 @@ describe('BPromptEditor variable utilities', (): void => {
       expanded: false
     });
     expect(variables[1]).toMatchObject({
-      value: 'state',
+      value: 'data',
       depth: 0,
       hasChildren: true,
       expanded: true

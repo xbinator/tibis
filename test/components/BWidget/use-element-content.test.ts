@@ -72,7 +72,7 @@ describe('useElementContent', (): void => {
       input: {
         city: '上海'
       },
-      state: {}
+      data: {}
     });
 
     expect(wrapper.text()).toBe('上海 天气');
@@ -80,9 +80,9 @@ describe('useElementContent', (): void => {
   });
 
   it('formats complex binding values as readable JSON text', (): void => {
-    const wrapper = mountDisplayContent(createDisplayElement('{{ state.weather }}'), {
+    const wrapper = mountDisplayContent(createDisplayElement('{{ data.weather }}'), {
       input: {},
-      state: {
+      data: {
         weather: {
           condition: '晴',
           temperature: 28
@@ -108,7 +108,7 @@ describe('useElementContent', (): void => {
       input: {
         city: '上海'
       },
-      state: {}
+      data: {}
     });
     const Consumer: Component = {
       name: 'ExplicitElementContentConsumer',

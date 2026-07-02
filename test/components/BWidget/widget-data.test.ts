@@ -14,11 +14,11 @@ const emptyObjectSchema: WidgetSchemaObject = {
 };
 
 describe('dataItem', (): void => {
-  it('creates input and state schemas for new widget data without output schema', (): void => {
+  it('creates input and data schemas for new widget data without output schema', (): void => {
     const dataItem = createDefaultWidgetData();
 
     expect(dataItem.inputSchema).toEqual(emptyObjectSchema);
-    expect(dataItem.stateSchema).toEqual(emptyObjectSchema);
+    expect(dataItem.dataSchema).toEqual(emptyObjectSchema);
     expect(dataItem).not.toHaveProperty('outputSchema');
   });
 
@@ -35,7 +35,7 @@ describe('dataItem', (): void => {
     const contract = normalizeWidgetDataContract(legacyContract);
 
     expect(contract.inputSchema).toEqual(emptyObjectSchema);
-    expect(contract.stateSchema).toEqual(emptyObjectSchema);
+    expect(contract.dataSchema).toEqual(emptyObjectSchema);
     expect(contract).not.toHaveProperty('outputSchema');
   });
 

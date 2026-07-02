@@ -16,7 +16,7 @@ describe('widgetPreviewContext', (): void => {
         input: {
           city: '上海'
         },
-        state: {},
+        data: {},
         output: {
           condition: '晴'
         },
@@ -30,7 +30,7 @@ describe('widgetPreviewContext', (): void => {
       input: {
         city: '上海'
       },
-      state: {}
+      data: {}
     });
   });
 });

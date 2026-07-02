@@ -131,7 +131,7 @@ function createWidgetContract(widget: WidgetDefinition): WidgetContract {
     name: widget.name,
     description: widget.description,
     inputSchema: cloneDeep(widget.data.inputSchema),
-    stateSchema: cloneDeep(widget.data.stateSchema)
+    dataSchema: cloneDeep(widget.data.dataSchema)
   };
 }
 
@@ -152,7 +152,7 @@ function isWidgetInputRecord(value: unknown): value is Record<string, unknown> {
 function createOpenWidgetRenderContext(input: OpenWidgetToolInput): WidgetRenderContext {
   return {
     input: isWidgetInputRecord(input.input) ? cloneDeep(input.input) : {},
-    state: {}
+    data: {}
   };
 }
 

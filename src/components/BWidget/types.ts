@@ -139,7 +139,7 @@ export interface WidgetExecuteMethod {
 export type WidgetSchemaPropertyType = 'string' | 'number' | 'boolean' | 'object' | 'array';
 
 /**
- * WidgetData 输入与状态 schema 属性。
+ * WidgetData 输入与数据 schema 属性。
  */
 export interface WidgetSchemaProperty {
   /** 字段类型 */
@@ -269,8 +269,8 @@ export interface WidgetData {
   description: string;
   /** Widget能力入参 schema */
   inputSchema: WidgetSchemaObject;
-  /** Widget运行状态 schema */
-  stateSchema: WidgetSchemaObject;
+  /** Widget运行数据 schema */
+  dataSchema: WidgetSchemaObject;
   /** WidgetJS 脚本配置 */
   execute?: WidgetExecuteMethod;
   /** Widget元信息 */

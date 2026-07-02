@@ -1,12 +1,12 @@
 /**
- * @file widgetStateSchema.ts
- * @description 从 Widget JS 脚本代码中构建运行状态 schema。
+ * @file widgetDataSchema.ts
+ * @description 从 Widget JS 脚本代码中构建运行数据 schema。
  */
 import type { WidgetSchemaObject, WidgetSchemaProperty } from '../types';
 import ts from 'typescript';
 
-/** 空状态 schema。 */
-const EMPTY_WIDGET_STATE_SCHEMA: WidgetSchemaObject = {
+/** 空数据 schema。 */
+const EMPTY_WIDGET_DATA_SCHEMA: WidgetSchemaObject = {
   type: 'object',
   properties: {},
   required: []
@@ -21,7 +21,7 @@ type InputAliasScope = Map<string, InputAliasValue>;
 /** input 路径别名读取函数。 */
 type InputAliasReader = (name: string) => string[] | undefined;
 /** Widget this 上下文中的节点访问函数。 */
-type WidgetStateSchemaVisitor = (node: ts.Node, hasWidgetThisContext: boolean) => void;
+type WidgetDataSchemaVisitor = (node: ts.Node, hasWidgetThisContext: boolean) => void;
 
 /**
  * 可能携带函数体的函数类声明。
@@ -49,7 +49,7 @@ function createObjectSchemaProperty(): WidgetSchemaProperty {
 
 /**
  * 深拷贝 schema 属性，避免推导结果反向修改输入 schema。
- * 状态字段只复用类型结构，不继承 input 字段说明，避免把推导值误展示成显式 label。
+ * 数据字段只复用类型结构，不继承 input 字段说明，避免把推导值误展示成显式 label。
  * @param property - schema 属性
  * @returns schema 属性副本
  */
@@ -304,10 +304,10 @@ function mergeSchemaProperty(current: WidgetSchemaProperty | undefined, next: Wi
 /**
  * 将字段定义写入对象 schema 的指定路径。
  * @param properties - 根属性集合
- * @param segments - 状态路径片段
+ * @param segments - 数据路径片段
  * @param property - 字段定义
  */
-function writeStateSchemaProperty(properties: Record<string, WidgetSchemaProperty>, segments: string[], property: WidgetSchemaProperty): void {
+function writeDataSchemaProperty(properties: Record<string, WidgetSchemaProperty>, segments: string[], property: WidgetSchemaProperty): void {
   if (segments.length === 0) {
     return;
   }
@@ -323,21 +323,21 @@ function writeStateSchemaProperty(properties: Record<string, WidgetSchemaPropert
   const objectProperty = currentProperty?.type === 'object' ? cloneWidgetSchemaProperty(currentProperty) : createObjectSchemaProperty();
 
   objectProperty.properties = objectProperty.properties ?? {};
-  writeStateSchemaProperty(objectProperty.properties, restSegments, property);
+  writeDataSchemaProperty(objectProperty.properties, restSegments, property);
   properties[segment] = objectProperty;
 }
 
 /**
- * 判断调用表达式是否为 setState 调用。
+ * 判断调用表达式是否为 setData 调用。
  * @param expression - 调用目标表达式
- * @returns 是否为 setState 调用
+ * @returns 是否为 setData 调用
  */
-function isSetStateCallExpression(expression: ts.Expression): boolean {
+function isSetDataCallExpression(expression: ts.Expression): boolean {
   if (!ts.isPropertyAccessExpression(expression)) {
     return false;
   }
 
-  return isThisExpression(expression.expression) && expression.name.text === '$setState';
+  return isThisExpression(expression.expression) && expression.name.text === '$setData';
 }
 
 /**
@@ -347,6 +347,51 @@ function isSetStateCallExpression(expression: ts.Expression): boolean {
  */
 function isWidgetConfigCallExpression(expression: ts.Expression): boolean {
   return ts.isIdentifier(expression) && expression.text === 'Widget';
+}
+
+/**
+ * 将 Widget({ data }) 对象字面量写入根数据 schema。
+ * @param properties - 根属性集合
+ * @param dataExpression - data 属性表达式
+ * @param inputSchema - input schema，用于复用 input 字段类型
+ * @param readInputAlias - input 路径别名读取函数
+ */
+function writeWidgetConfigDataProperties(
+  properties: Record<string, WidgetSchemaProperty>,
+  dataExpression: ts.Expression,
+  inputSchema: WidgetSchemaObject | undefined,
+  readInputAlias: InputAliasReader
+): void {
+  const dataProperty = inferSchemaPropertyFromExpression(dataExpression, inputSchema, readInputAlias);
+  if (dataProperty.type !== 'object' || !dataProperty.properties) {
+    return;
+  }
+
+  Object.entries(dataProperty.properties).forEach(([key, property]: [string, WidgetSchemaProperty]): void => {
+    properties[key] = mergeSchemaProperty(properties[key], property);
+  });
+}
+
+/**
+ * 从 Widget 配置对象中收集 data 字段声明。
+ * @param configObject - Widget 配置对象
+ * @param properties - 根属性集合
+ * @param inputSchema - input schema，用于复用 input 字段类型
+ * @param readInputAlias - input 路径别名读取函数
+ */
+function collectWidgetConfigDataProperties(
+  configObject: ts.ObjectLiteralExpression,
+  properties: Record<string, WidgetSchemaProperty>,
+  inputSchema: WidgetSchemaObject | undefined,
+  readInputAlias: InputAliasReader
+): void {
+  configObject.properties.forEach((property: ts.ObjectLiteralElementLike): void => {
+    const propertyName = ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property) ? readPropertyName(property.name) : null;
+
+    if (propertyName === 'data' && ts.isPropertyAssignment(property)) {
+      writeWidgetConfigDataProperties(properties, property.initializer, inputSchema, readInputAlias);
+    }
+  });
 }
 
 /**
@@ -465,7 +510,7 @@ function readObjectPropertyFunction(property: ts.ObjectLiteralElementLike): Func
  * @param scopes - input 别名作用域栈
  * @param visit - AST 访问函数
  */
-function visitWidgetFunctionBody(node: FunctionLikeNodeWithBody, scopes: InputAliasScope[], visit: WidgetStateSchemaVisitor): void {
+function visitWidgetFunctionBody(node: FunctionLikeNodeWithBody, scopes: InputAliasScope[], visit: WidgetDataSchemaVisitor): void {
   withInputAliasScope(scopes, (): void => {
     node.parameters.forEach((parameter: ts.ParameterDeclaration): void => registerBindingShadow(scopes, parameter.name));
     const functionBody = readFunctionLikeBody(node);
@@ -482,7 +527,7 @@ function visitWidgetFunctionBody(node: FunctionLikeNodeWithBody, scopes: InputAl
  * @param scopes - input 别名作用域栈
  * @param visit - AST 访问函数
  */
-function visitWidgetMethodsObject(methodsObject: ts.ObjectLiteralExpression, scopes: InputAliasScope[], visit: WidgetStateSchemaVisitor): void {
+function visitWidgetMethodsObject(methodsObject: ts.ObjectLiteralExpression, scopes: InputAliasScope[], visit: WidgetDataSchemaVisitor): void {
   methodsObject.properties.forEach((property: ts.ObjectLiteralElementLike): void => {
     const methodNode = readObjectPropertyFunction(property);
 
@@ -498,7 +543,7 @@ function visitWidgetMethodsObject(methodsObject: ts.ObjectLiteralExpression, sco
  * @param scopes - input 别名作用域栈
  * @param visit - AST 访问函数
  */
-function visitWidgetConfigObject(configObject: ts.ObjectLiteralExpression, scopes: InputAliasScope[], visit: WidgetStateSchemaVisitor): void {
+function visitWidgetConfigObject(configObject: ts.ObjectLiteralExpression, scopes: InputAliasScope[], visit: WidgetDataSchemaVisitor): void {
   configObject.properties.forEach((property: ts.ObjectLiteralElementLike): void => {
     const propertyName = ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property) ? readPropertyName(property.name) : null;
     const functionNode = readObjectPropertyFunction(property);
@@ -515,11 +560,11 @@ function visitWidgetConfigObject(configObject: ts.ObjectLiteralExpression, scope
 }
 
 /**
- * 深拷贝状态 schema。
- * @param schema - 状态 schema
- * @returns 状态 schema 副本
+ * 深拷贝数据 schema。
+ * @param schema - 数据 schema
+ * @returns 数据 schema 副本
  */
-function cloneDeepStateSchema(schema: WidgetSchemaObject): WidgetSchemaObject {
+function cloneDeepDataSchema(schema: WidgetSchemaObject): WidgetSchemaObject {
   return {
     type: 'object',
     properties: Object.fromEntries(
@@ -533,14 +578,14 @@ function cloneDeepStateSchema(schema: WidgetSchemaObject): WidgetSchemaObject {
 }
 
 /**
- * 从JS 脚本代码构建 Widget 状态 schema。
+ * 从JS 脚本代码构建 Widget 数据 schema。
  * @param code - JS 脚本源码
  * @param inputSchema - input schema，用于复用 this.$input 字段类型
- * @returns 从 this.$setState 调用推导出的状态 schema
+ * @returns 从 this.$setData 调用推导出的数据 schema
  */
-export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaObject): WidgetSchemaObject {
+export function buildWidgetDataSchema(code: string, inputSchema?: WidgetSchemaObject): WidgetSchemaObject {
   if (code.trim().length === 0) {
-    return cloneDeepStateSchema(EMPTY_WIDGET_STATE_SCHEMA);
+    return cloneDeepDataSchema(EMPTY_WIDGET_DATA_SCHEMA);
   }
 
   const sourceFile = ts.createSourceFile('widget-execute.ts', code, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
@@ -549,7 +594,7 @@ export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaO
   const readCurrentInputAlias = (name: string): string[] | undefined => readScopedInputAlias(inputAliasScopes, name);
 
   /**
-   * 访问 AST 节点并收集 setState 调用。
+   * 访问 AST 节点并收集 setData 调用。
    * @param node - AST 节点
    */
   function visit(node: ts.Node, hasWidgetThisContext = false): void {
@@ -571,6 +616,7 @@ export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaO
       const [configExpression] = node.arguments;
 
       if (configExpression && ts.isObjectLiteralExpression(configExpression)) {
+        collectWidgetConfigDataProperties(configExpression, properties, inputSchema, readCurrentInputAlias);
         visitWidgetConfigObject(configExpression, inputAliasScopes, visit);
       }
 
@@ -594,14 +640,14 @@ export function buildWidgetStateSchema(code: string, inputSchema?: WidgetSchemaO
       registerVariableInputAlias(node, inputSchema, inputAliasScopes);
     }
 
-    if (hasWidgetThisContext && ts.isCallExpression(node) && isSetStateCallExpression(node.expression)) {
+    if (hasWidgetThisContext && ts.isCallExpression(node) && isSetDataCallExpression(node.expression)) {
       const [pathExpression, valueExpression] = node.arguments;
-      const statePath = pathExpression ? readStaticStringExpression(pathExpression) : null;
+      const dataPath = pathExpression ? readStaticStringExpression(pathExpression) : null;
 
-      if (statePath && valueExpression) {
-        writeStateSchemaProperty(
+      if (dataPath && valueExpression) {
+        writeDataSchemaProperty(
           properties,
-          statePath.split('.').filter((segment: string): boolean => segment.length > 0),
+          dataPath.split('.').filter((segment: string): boolean => segment.length > 0),
           inferSchemaPropertyFromExpression(valueExpression, inputSchema, readCurrentInputAlias)
         );
       }

@@ -18,7 +18,7 @@ function createRenderContext(): WidgetRenderContext {
     input: {
       city: '上海'
     },
-    state: {
+    data: {
       weather: {
         temperature: 28
       }

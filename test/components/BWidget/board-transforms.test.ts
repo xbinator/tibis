@@ -196,7 +196,7 @@ describe('boardTransforms', (): void => {
       required: []
     });
     expect(snapshot).not.toHaveProperty('outputSchema');
-    expect(snapshot.stateSchema).toEqual({
+    expect(snapshot.dataSchema).toEqual({
       type: 'object',
       properties: {},
       required: []

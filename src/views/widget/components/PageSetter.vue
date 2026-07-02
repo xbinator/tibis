@@ -97,7 +97,7 @@ const activeSchemaHelpKind = ref<WidgetSchemaKind>('input');
  * 向当前 Widget 数据写入配置变更。
  * @param patch - Widget 配置增量
  */
-function updateWidgetDataConfig(patch: Partial<Pick<WidgetData, 'description' | 'inputSchema' | 'stateSchema' | 'name'>>): void {
+function updateWidgetDataConfig(patch: Partial<Pick<WidgetData, 'description' | 'inputSchema' | 'dataSchema' | 'name'>>): void {
   dataItem.value = { ...dataItem.value, ...patch };
 }
 
@@ -137,11 +137,11 @@ function readWidgetSchema(kind: WidgetSchemaKind): WidgetSchemaObject {
     return dataItem.value.inputSchema;
   }
 
-  if (kind === 'state') {
-    return dataItem.value.stateSchema;
+  if (kind === 'data') {
+    return dataItem.value.dataSchema;
   }
 
-  return dataItem.value.stateSchema;
+  return dataItem.value.dataSchema;
 }
 
 /**
@@ -155,12 +155,12 @@ function updateWidgetSchema(kind: WidgetSchemaKind, schema: WidgetSchemaObject):
     return;
   }
 
-  if (kind === 'state') {
-    updateWidgetDataConfig({ stateSchema: schema });
+  if (kind === 'data') {
+    updateWidgetDataConfig({ dataSchema: schema });
     return;
   }
 
-  updateWidgetDataConfig({ stateSchema: schema });
+  updateWidgetDataConfig({ dataSchema: schema });
 }
 
 /**

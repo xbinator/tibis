@@ -166,7 +166,7 @@ function createWeatherWidgetData(): WidgetData {
         rotation: 0,
         style: {},
         metadata: {
-          content: '{{ input.city }} 当前 {{ state.weather.temperature }}°C'
+          content: '{{ input.city }} 当前 {{ data.weather.temperature }}°C'
         }
       }
     ],
@@ -186,7 +186,7 @@ function createWeatherRenderContext(): WidgetRenderContext {
     input: {
       city: '上海'
     },
-    state: {
+    data: {
       weather: {
         temperature: 28
       }
@@ -362,14 +362,14 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['Widget({', '  mounted() {', "    this.$setState('weather.temperature', 31)", '  }', '})'].join('\n')
+          code: ['Widget({', '  mounted() {', "    this.$setData('weather.temperature', 31)", '  }', '})'].join('\n')
         }
       },
       renderContext: {
         input: {
           city: '上海'
         },
-        state: {}
+        data: {}
       }
     };
     const wrapper = mountMessageBubble(
@@ -413,7 +413,7 @@ describe('MessageBubble', (): void => {
               input: {
                 city: '上海'
               },
-              state: {
+              data: {
                 weather: {
                   temperature: 31
                 }
@@ -436,14 +436,14 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['Widget({', '  mounted() {', "    this.$setState('weather.temperature', 32)", '  }', '})'].join('\n')
+          code: ['Widget({', '  mounted() {', "    this.$setData('weather.temperature', 32)", '  }', '})'].join('\n')
         }
       },
       renderContext: {
         input: {
           city: '杭州'
         },
-        state: {}
+        data: {}
       }
     };
     const wrapper = mountMessageBubble(
@@ -481,7 +481,7 @@ describe('MessageBubble', (): void => {
               input: {
                 city: '杭州'
               },
-              state: {
+              data: {
                 weather: {
                   temperature: 32
                 }
@@ -575,7 +575,7 @@ describe('MessageBubble', (): void => {
     });
   });
 
-  it('finishes widget runtime state before sending widget submit result', async (): Promise<void> => {
+  it('finishes widget runtime data before sending widget submit result', async (): Promise<void> => {
     const output: Record<string, unknown> = {
       coffeeId: 'latte'
     };
@@ -594,7 +594,7 @@ describe('MessageBubble', (): void => {
           code: [
             'Widget({',
             '  unmounted() {',
-            "    this.$setState('submitted', { city: this.$input.city, temperature: this.$state.weather.temperature })",
+            "    this.$setData('submitted', { city: this.$input.city, temperature: this.$data.weather.temperature })",
             '  }',
             '})'
           ].join('\n')
@@ -640,7 +640,7 @@ describe('MessageBubble', (): void => {
         unmountedAt: expect.any(String)
       },
       renderContext: {
-        state: {
+        data: {
           weather: {
             temperature: 28
           },
@@ -654,7 +654,7 @@ describe('MessageBubble', (): void => {
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('finishes widget runtime state from the latest message part', async (): Promise<void> => {
+  it('finishes widget runtime data from the latest message part', async (): Promise<void> => {
     const staleWidgetPart: ChatMessageWidgetPart = {
       id: 'widget-latest-submit-part',
       type: 'widget',
@@ -667,7 +667,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['Widget({', '  unmounted() {', "    this.$setState('submitted.temperature', this.$state.weather.temperature)", '  }', '})'].join('\n')
+          code: ['Widget({', '  unmounted() {', "    this.$setData('submitted.temperature', this.$data.weather.temperature)", '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()
@@ -678,7 +678,7 @@ describe('MessageBubble', (): void => {
         input: {
           city: '上海'
         },
-        state: {
+        data: {
           weather: {
             temperature: 35
           }
@@ -718,7 +718,7 @@ describe('MessageBubble', (): void => {
     expect(nextMessage.parts[0]).toMatchObject({
       status: 'finished',
       renderContext: {
-        state: {
+        data: {
           weather: {
             temperature: 35
           },
@@ -846,7 +846,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['Widget({', '  unmounted() {', '    this.$sendMessage({ content: this.$state.order.message })', '  }', '})'].join('\n')
+          code: ['Widget({', '  unmounted() {', '    this.$sendMessage({ content: this.$data.order.message })', '  }', '})'].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()
@@ -855,7 +855,7 @@ describe('MessageBubble', (): void => {
       ...staleWidgetPart,
       renderContext: {
         input: {},
-        state: {
+        data: {
           order: {
             message: '确认最新订单'
           }

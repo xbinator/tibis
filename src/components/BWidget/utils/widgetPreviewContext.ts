@@ -41,7 +41,7 @@ export function readWidgetPreviewRenderContext(metadata: WidgetMetadata): Widget
 
   return {
     input: readPreviewContextRecord(previewContext.input),
-    state: readPreviewContextRecord(previewContext.state)
+    data: readPreviewContextRecord(previewContext.data)
   };
 }
 

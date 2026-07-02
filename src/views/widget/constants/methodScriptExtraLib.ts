@@ -166,13 +166,13 @@ export function createWidgetSchemaInterfaceDeclaration(interfaceName: string, sc
 /**
  * 创建 Widget JS 脚本编辑器类型提示内容。
  * @param inputSchema - 入参 schema
- * @param stateSchema - 状态 schema
+ * @param dataSchema - 数据 schema
  * @returns Monaco extra lib 内容
  */
-export function createWidgetMethodScriptExtraLibContent(inputSchema: WidgetSchemaObject, stateSchema: WidgetSchemaObject): string {
+export function createWidgetMethodScriptExtraLibContent(inputSchema: WidgetSchemaObject, dataSchema: WidgetSchemaObject): string {
   return `
 ${createWidgetSchemaInterfaceDeclaration('WidgetInput', inputSchema)}
-${createWidgetSchemaInterfaceDeclaration('WidgetState', stateSchema)}
+${createWidgetSchemaInterfaceDeclaration('WidgetData', dataSchema)}
 
 declare interface WidgetSendMessageContentPart {
   /** 消息片段类型。 */
@@ -239,10 +239,10 @@ declare interface WidgetThisContext {
    */
   $input: WidgetInput
   /**
-   * 当前小组件运行态数据，可通过 $setState 更新。
-   * @example const weather = this.$state.weather
+   * 当前小组件运行态数据，可通过 $setData 更新。
+   * @example const weather = this.$data.weather
    */
-  $state: WidgetState
+  $data: WidgetData
   /**
    * 托管 HTTP 客户端，request 超时和队列由系统统一控制。
    * @example const response = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })
@@ -250,9 +250,9 @@ declare interface WidgetThisContext {
   $http: WidgetHttpClient
   /**
    * 写入小组件运行态数据，path 支持点路径，例如 weather.temperature。
-   * @example this.$setState('weather.temperature', 28)
+   * @example this.$setData('weather.temperature', 28)
    */
-  $setState(path: string, value: unknown): void
+  $setData(path: string, value: unknown): void
   /**
    * 向聊天上行一条消息。调用后表示当前小组件交互结束；未调用时继续等待用户操作。
    * @param message - 上行消息，支持字符串、文本片段数组或带 isError 的对象。
@@ -267,6 +267,8 @@ declare type WidgetMethod = (this: WidgetThisContext, ...args: unknown[]) => voi
 declare type WidgetMethodMap = Record<string, WidgetMethod>
 
 declare interface WidgetConfig {
+  /** 小组件运行态初始数据。 */
+  data?: Partial<WidgetData>
   /** 小组件创建或展示时执行。 */
   mounted?: WidgetLifecycleHook
   /** 小组件运行完成后执行一次。 */

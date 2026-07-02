@@ -173,7 +173,7 @@ describe('WidgetTool', (): void => {
         kind: 'widget_display',
         renderContext: {
           input: {},
-          state: {}
+          data: {}
         }
       }
     });

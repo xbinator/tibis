@@ -289,7 +289,7 @@ function findCloseButton(wrapper: VueWrapper): VueWrapper {
 
 describe('CodeEditor', (): void => {
   it('loads current script and updates widget data through value model', async (): Promise<void> => {
-    const initialCode = ['Widget({', '  async mounted() {', "    this.$setState('ready', true)", '  }', '})'].join('\n');
+    const initialCode = ['Widget({', '  async mounted() {', "    this.$setData('ready', true)", '  }', '})'].join('\n');
     const nextCode = [
       'Widget({',
       '  methods: {',
@@ -436,19 +436,19 @@ describe('CodeEditor', (): void => {
     wrapper.unmount();
   });
 
-  it('creates state type hints from interaction script setState calls', (): void => {
+  it('creates data type hints from interaction script setData calls', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
-        code: ['Widget({', '  async mounted() {', '    // 初始化天气状态。', "    this.$setState('weather.temperature', 28)", '  }', '})'].join('\n')
+        code: ['Widget({', '  async mounted() {', '    // 初始化天气数据。', "    this.$setData('weather.temperature', 28)", '  }', '})'].join('\n')
       }
     });
     const extraLibContent = readMonacoProps(wrapper).extraLibs?.[0]?.content ?? '';
 
-    expect(extraLibContent).toContain('declare interface WidgetState');
+    expect(extraLibContent).toContain('declare interface WidgetData');
     expect(extraLibContent).toContain('weather?: {');
     expect(extraLibContent).toContain('temperature?: number');
-    expect(extraLibContent).toContain('$state: WidgetState');
+    expect(extraLibContent).toContain('$data: WidgetData');
     expect(
       formatTypeScriptDiagnostics(
         getTypeScriptDiagnostics({
@@ -458,8 +458,8 @@ describe('CodeEditor', (): void => {
             'Widget({',
             '  mounted() {',
             '    const city: string = this.$input.city',
-            '    const temperature: number | undefined = this.$state.weather?.temperature',
-            '    this.$setState("last.temperature", temperature)',
+            '    const temperature: number | undefined = this.$data.weather?.temperature',
+            '    this.$setData("last.temperature", temperature)',
             '  },',
             '  methods: {',
             '    confirm() {',
@@ -475,11 +475,11 @@ describe('CodeEditor', (): void => {
     wrapper.unmount();
   });
 
-  it('updates state type hints from the interaction script draft before confirming', async (): Promise<void> => {
+  it('updates data type hints from the interaction script draft before confirming', async (): Promise<void> => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
-        code: ['Widget({', '  async mounted() {', '    // 暂无状态写入。', '  }', '})'].join('\n')
+        code: ['Widget({', '  async mounted() {', '    // 暂无数据写入。', '  }', '})'].join('\n')
       }
     });
 
@@ -487,7 +487,7 @@ describe('CodeEditor', (): void => {
 
     await wrapper
       .find('.widget-code-monaco-stub')
-      .setValue(['Widget({', '  async mounted() {', "    this.$setState('draft.city', this.$input.city)", '  }', '})'].join('\n'));
+      .setValue(['Widget({', '  async mounted() {', "    this.$setData('draft.city', this.$input.city)", '  }', '})'].join('\n'));
     await nextTick();
 
     const extraLibContent = readMonacoProps(wrapper).extraLibs?.[0]?.content ?? '';
@@ -499,7 +499,7 @@ describe('CodeEditor', (): void => {
         getTypeScriptDiagnostics({
           'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
           'widget-env.d.ts': extraLibContent,
-          'widget-test.ts': 'Widget({ mounted() { const city: string | undefined = this.$state.draft?.city } })'
+          'widget-test.ts': 'Widget({ mounted() { const city: string | undefined = this.$data.draft?.city } })'
         })
       )
     ).toEqual([]);

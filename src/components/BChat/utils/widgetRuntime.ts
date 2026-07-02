@@ -38,18 +38,18 @@ interface WidgetScriptRunPayload {
   lifecycleName?: WidgetScriptLifecycleName;
   /** 小组件启动入参。 */
   input: Record<string, unknown>;
-  /** 小组件当前运行态状态。 */
-  state: Record<string, unknown>;
+  /** 小组件当前运行态数据。 */
+  data: Record<string, unknown>;
 }
 
 /**
  * 小组件脚本运行结果。
  */
 interface WidgetScriptRunResult {
-  /** 运行后的状态快照。 */
-  state: Record<string, unknown>;
-  /** 是否写入过状态。 */
-  stateChanged: boolean;
+  /** 运行后的数据快照。 */
+  data: Record<string, unknown>;
+  /** 是否写入过数据。 */
+  dataChanged: boolean;
   /** 脚本声明的上行消息。 */
   sendMessage?: WidgetRuntimeSendMessage;
 }
@@ -151,7 +151,7 @@ function isWidgetRuntimeSendMessage(value: unknown): value is WidgetRuntimeSendM
  * @returns 是否为小组件脚本运行结果
  */
 function isWidgetScriptRunResult(value: unknown): value is WidgetScriptRunResult {
-  if (!isPlainRecord(value) || !isPlainRecord(value.state) || typeof value.stateChanged !== 'boolean') return false;
+  if (!isPlainRecord(value) || !isPlainRecord(value.data) || typeof value.dataChanged !== 'boolean') return false;
   return value.sendMessage === undefined || isWidgetRuntimeSendMessage(value.sendMessage);
 }
 
@@ -216,7 +216,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
 
   return [
     'const __widgetInput = __initialWidgetInput',
-    'const __widgetState = __initialWidgetState',
+    'let __widgetData = __clone(__initialWidgetData)',
     'let __widgetConfig',
     'const __widgetReservedBindingNames = new Set([',
     "  'arguments', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default',",
@@ -254,6 +254,27 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  cursor[keys[keys.length - 1]] = __clone(value)',
     '}',
     '',
+    'function __mergePlainData(defaultData, currentData) {',
+    '  const result = __isPlainRecord(defaultData) ? __clone(defaultData) : {}',
+    '  if (!__isPlainRecord(currentData)) return result',
+    '  for (const [key, value] of Object.entries(currentData)) {',
+    '    const currentValue = result[key]',
+    '    result[key] = __isPlainRecord(currentValue) && __isPlainRecord(value) ? __mergePlainData(currentValue, value) : __clone(value)',
+    '  }',
+    '  return result',
+    '}',
+    '',
+    'function __serializeData(value) {',
+    '  return JSON.stringify(value)',
+    '}',
+    '',
+    'function __initializeWidgetData(executionState) {',
+    '  const previousData = __serializeData(__widgetData)',
+    '  const declaredData = __widgetConfig && __widgetConfig.data',
+    '  __widgetData = __mergePlainData(declaredData, __initialWidgetData)',
+    '  if (__serializeData(__widgetData) !== previousData) executionState.dataChanged = true',
+    '}',
+    '',
     'function __normalizeSendMessageTextParts(value) {',
     '  if (!Array.isArray(value)) return null',
     '  const textParts = []',
@@ -285,18 +306,18 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '}',
     '',
     'function __createExecutionState() {',
-    '  return { stateChanged: false, sendMessage: undefined, pendingMethodCalls: [] }',
+    '  return { dataChanged: false, sendMessage: undefined, pendingMethodCalls: [] }',
     '}',
     '',
     'function __createWidgetThisContext(executionState) {',
     '  return {',
     '    get $input() { return __clone(__widgetInput) },',
-    '    get $state() { return __clone(__widgetState) },',
+    '    get $data() { return __clone(__widgetData) },',
     '    $http: __createWidgetHttpClient(),',
-    '    $setState(path, value) {',
+    '    $setData(path, value) {',
     "      if (typeof path !== 'string' || !path) return",
-    '      __setValueAtPath(__widgetState, path, value)',
-    '      executionState.stateChanged = true',
+    '      __setValueAtPath(__widgetData, path, value)',
+    '      executionState.dataChanged = true',
     '    },',
     '    async $sendMessage(message) {',
     '      const sendMessage = __normalizeSendMessage(message)',
@@ -348,6 +369,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '',
     'async function __runWidgetRuntime(lifecycleName, interactionCode) {',
     '  const executionState = __createExecutionState()',
+    '  __initializeWidgetData(executionState)',
     '  const widgetThis = __createWidgetThisContext(executionState)',
     '  __createMethodBindings(widgetThis, executionState)',
     '  if (lifecycleName) {',
@@ -358,8 +380,8 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  }',
     '  await __flushPendingMethodCalls(executionState)',
     '  return {',
-    '    state: __clone(__widgetState),',
-    '    stateChanged: executionState.stateChanged,',
+    '    data: __clone(__widgetData),',
+    '    dataChanged: executionState.dataChanged,',
     '    ...(executionState.sendMessage ? { sendMessage: __clone(executionState.sendMessage) } : {})',
     '  }',
     '}',
@@ -389,7 +411,7 @@ async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: 
       code: createWidgetAdapterCode(payload),
       arguments: {
         __initialWidgetInput: payload.input,
-        __initialWidgetState: payload.state,
+        __initialWidgetData: payload.data,
         __widgetScriptCode: compileSandboxSource(payload.scriptCode, 'widget-script.ts')
       }
     },
@@ -437,16 +459,16 @@ function isWidgetScriptEnabled(part: ChatMessageWidgetPart): boolean {
  * 把沙箱运行结果写回 Widget part。
  * @param part - 原始小组件消息片段
  * @param result - 沙箱运行结果
- * @returns 写回状态后的消息片段
+ * @returns 写回数据后的消息片段
  */
 function applyWidgetSandboxResult(part: ChatMessageWidgetPart, result: WidgetScriptRunResult): ChatMessageWidgetPart {
-  if (!result.stateChanged) return part;
+  if (!result.dataChanged) return part;
 
   return {
     ...part,
     renderContext: {
       ...part.renderContext,
-      state: result.state
+      data: result.data
     }
   };
 }
@@ -464,7 +486,7 @@ function runPartSandbox(part: ChatMessageWidgetPart, options: WidgetPartSandboxO
       ...(options.interactionCode !== undefined ? { interactionCode: options.interactionCode } : {}),
       ...(options.lifecycleName ? { lifecycleName: options.lifecycleName } : {}),
       input: part.renderContext.input,
-      state: part.renderContext.state
+      data: part.renderContext.data
     },
     {
       http: options.http,
@@ -585,7 +607,7 @@ async function runWidgetInteraction(
       };
     }
 
-    if (!sandboxResult.stateChanged) return { part };
+    if (!sandboxResult.dataChanged) return { part };
 
     return { part: { ...interactedPart, status: 'mounted' } };
   } catch {

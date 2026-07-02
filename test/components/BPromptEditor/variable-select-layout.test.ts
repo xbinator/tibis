@@ -95,7 +95,7 @@ describe('VariableSelect layout', (): void => {
         variables: [
           {
             label: '摄氏温度',
-            value: 'state.weather.temperature',
+            value: 'data.weather.temperature',
             description: '当前城市的实时温度'
           }
         ],
@@ -114,7 +114,7 @@ describe('VariableSelect layout', (): void => {
 
     expect(document.body.querySelector('.variable-item')).not.toBeNull();
     expect(document.body.querySelector('.variable-item-main')).not.toBeNull();
-    expect(document.body.querySelector('.variable-item-label')?.textContent).toBe('state.weather.temperature');
+    expect(document.body.querySelector('.variable-item-label')?.textContent).toBe('data.weather.temperature');
     expect(document.body.querySelector('.variable-item-value')?.textContent).toBe('摄氏温度');
     expect(document.body.querySelector('.variable-item-desc')).not.toBeNull();
     wrapper.unmount();
@@ -127,7 +127,7 @@ describe('VariableSelect layout', (): void => {
         variables: [
           {
             label: '',
-            value: 'state.lastQuery.city'
+            value: 'data.lastQuery.city'
           }
         ],
         position: {
@@ -143,7 +143,7 @@ describe('VariableSelect layout', (): void => {
       }
     });
 
-    expect(document.body.querySelector('.variable-item-label')?.textContent).toBe('state.lastQuery.city');
+    expect(document.body.querySelector('.variable-item-label')?.textContent).toBe('data.lastQuery.city');
     expect(document.body.querySelector('.variable-item-value')).toBeNull();
     wrapper.unmount();
   });
@@ -155,22 +155,22 @@ describe('VariableSelect layout', (): void => {
         variables: [
           {
             label: '',
-            value: 'state',
+            value: 'data',
             depth: 0
           },
           {
             label: '',
-            value: 'state.lastQuery',
+            value: 'data.lastQuery',
             depth: 1
           },
           {
             label: '',
-            value: 'state.lastQuery.city',
+            value: 'data.lastQuery.city',
             depth: 2
           },
           {
             label: '',
-            value: 'state["weather-data"]["feels.like"]',
+            value: 'data["weather-data"]["feels.like"]',
             depth: 2
           }
         ] as VariableSelectTestItem[],
@@ -188,8 +188,8 @@ describe('VariableSelect layout', (): void => {
     });
     const labels = Array.from(document.body.querySelectorAll('.variable-item-label')).map((item: Element): string => item.textContent ?? '');
 
-    expect(labels).toEqual(['state', 'lastQuery', 'city', 'feels.like']);
-    expect(document.body.textContent).not.toContain('state.lastQuery.city');
+    expect(labels).toEqual(['data', 'lastQuery', 'city', 'feels.like']);
+    expect(document.body.textContent).not.toContain('data.lastQuery.city');
     wrapper.unmount();
   });
 

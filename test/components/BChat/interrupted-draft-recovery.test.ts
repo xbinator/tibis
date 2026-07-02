@@ -42,7 +42,7 @@ function createInterruptedWidgetAssistantDraft(): Message {
     value: createDefaultWidgetData(),
     renderContext: {
       input: {},
-      state: {}
+      data: {}
     }
   };
 
@@ -88,7 +88,7 @@ function createInterruptedToolWidgetAssistantDraft(): Message {
       value: createDefaultWidgetData(),
       renderContext: {
         input: {},
-        state: {}
+        data: {}
       }
     }
   };

@@ -8,7 +8,7 @@ import { cloneDeep } from 'lodash-es';
 /**
  * Widget能力 Schema 类型。
  */
-export type WidgetSchemaKind = 'input' | 'state';
+export type WidgetSchemaKind = 'input' | 'data';
 
 /**
  * 可归一化为 WidgetData 契约字段的数据。
@@ -20,8 +20,8 @@ export interface WidgetDataContractCandidate {
   description?: unknown;
   /** 入参 schema */
   inputSchema?: unknown;
-  /** 运行状态 schema */
-  stateSchema?: unknown;
+  /** 运行数据 schema */
+  dataSchema?: unknown;
   /** JS 脚本配置 */
   execute?: unknown;
   /** Widget元信息 */
@@ -38,7 +38,7 @@ const DEFAULT_WIDGET_EMPTY_SCHEMA: WidgetSchemaObject = {
 /** 各类 schema 的默认模板。 */
 const DEFAULT_WIDGET_SCHEMA_TEMPLATES: Record<WidgetSchemaKind, WidgetSchemaObject> = {
   input: DEFAULT_WIDGET_EMPTY_SCHEMA,
-  state: DEFAULT_WIDGET_EMPTY_SCHEMA
+  data: DEFAULT_WIDGET_EMPTY_SCHEMA
 };
 
 /**
@@ -111,14 +111,14 @@ function normalizeWidgetExecuteMethod(value: unknown): WidgetExecuteMethod | und
  */
 export function normalizeWidgetDataContract(
   candidate: WidgetDataContractCandidate
-): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'stateSchema' | 'execute' | 'metadata'> {
+): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'dataSchema' | 'execute' | 'metadata'> {
   const execute = normalizeWidgetExecuteMethod(candidate.execute);
 
   return {
     name: typeof candidate.name === 'string' ? candidate.name : '',
     description: typeof candidate.description === 'string' ? candidate.description : '',
     inputSchema: normalizeWidgetSchemaObject(candidate.inputSchema, 'input'),
-    stateSchema: normalizeWidgetSchemaObject(candidate.stateSchema, 'state'),
+    dataSchema: normalizeWidgetSchemaObject(candidate.dataSchema, 'data'),
     ...(execute ? { execute } : {}),
     metadata: cloneDeep(candidate.metadata ?? {})
   };

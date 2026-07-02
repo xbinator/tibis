@@ -747,7 +747,7 @@ describe('PageSetter', (): void => {
     expect(inputSection.find('.schema-editor__footer').exists()).toBe(false);
     expect(wrapper.text()).toContain('入参');
     expect(wrapper.text()).not.toContain('inputSchema');
-    expect(wrapper.text()).not.toContain('stateSchema');
+    expect(wrapper.text()).not.toContain('dataSchema');
     expect(wrapper.text()).not.toContain('outputSchema');
 
     const addButton = findSectionAddFieldButton(wrapper, '入参');

@@ -97,7 +97,7 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(modelValue.value?.elements).toHaveLength(2);
-    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['description', 'elements', 'inputSchema', 'metadata', 'name', 'stateSchema', 'viewport']);
+    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['dataSchema', 'description', 'elements', 'inputSchema', 'metadata', 'name', 'viewport']);
     expect('kind' in (modelValue.value?.elements[0] ?? {})).toBe(false);
     expect(modelValue.value?.elements[0]?.name).toBe('rect');
     expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(false);
@@ -175,7 +175,7 @@ describe('useModelSync', (): void => {
         },
         required: ['userName']
       },
-      stateSchema: {
+      dataSchema: {
         type: 'object',
         properties: {}
       }

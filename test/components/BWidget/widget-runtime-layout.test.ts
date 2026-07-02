@@ -125,13 +125,13 @@ describe('createWidgetRuntimeLayout', (): void => {
       input: {
         city: '沪'
       },
-      state: {}
+      data: {}
     };
     const expandedContext: WidgetRenderContext = {
       input: {
         city: '上海浦东新区'
       },
-      state: {}
+      data: {}
     };
     const compactLayout = createWidgetRuntimeLayout([createTextElement('{{ input.city }}')], compactContext);
     const expandedLayout = createWidgetRuntimeLayout([createTextElement('{{ input.city }}')], expandedContext);
