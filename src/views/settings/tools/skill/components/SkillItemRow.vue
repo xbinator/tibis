@@ -3,7 +3,7 @@
   @description Skill 列表项行组件，展示单个 Skill 的图标、名称、描述及启用开关。
 -->
 <template>
-  <div class="skill-settings__item-row" role="button" tabindex="0" @click="handleOpen" @keydown.enter.prevent="handleOpen" @keydown.space.prevent="handleOpen">
+  <div class="skill-settings__item-row" role="button" tabindex="0" @click="handleOpen">
     <div class="skill-settings__item-icon">{{ initial }}</div>
     <div class="skill-settings__item-info">
       <div class="skill-settings__item-name">
