@@ -102,7 +102,7 @@ const elementSetter = computed<Component | null>(() => (isElementTarget(select.v
   }
 
   .ant-tabs-tab {
-    height: 38px;
+    height: 40px;
     padding: 0;
   }
 

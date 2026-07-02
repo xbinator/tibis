@@ -935,9 +935,9 @@ describe('PageSetter', (): void => {
     dataItem.inputSchema = { ...dataItem.inputSchema, description: '查询天气入参' };
     const wrapper = mountPageSetterHost(dataItem);
     const sectionTitles = readSectionBlockTitles(wrapper);
-    const methodSection = findSectionBlock(wrapper, '运行代码');
+    const methodSection = findSectionBlock(wrapper, '运行脚本');
 
-    expect(sectionTitles.indexOf('运行代码')).toBeGreaterThan(sectionTitles.indexOf('入参'));
+    expect(sectionTitles.indexOf('运行脚本')).toBeGreaterThan(sectionTitles.indexOf('入参'));
     expect(sectionTitles).not.toContain('执行方法');
     expect(sectionTitles).not.toContain('出参');
     expect(sectionTitles).not.toContain('动态预览');
@@ -967,7 +967,7 @@ describe('PageSetter', (): void => {
       wrapper.findAllComponents({ name: 'ATabPaneStub' }).map((pane: VueWrapper): string | undefined => (pane.props() as { tab?: string }).tab)
     ).not.toContain('方法');
 
-    const editButton = findSectionEditButton(wrapper, '运行代码');
+    const editButton = findSectionEditButton(wrapper, '运行脚本');
     expect((editButton.props() as { icon?: string }).icon).toBe('lucide:code-xml');
     expect((editButton.props() as { size?: string }).size).toBe('mini');
     await editButton.trigger('click');

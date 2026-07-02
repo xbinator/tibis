@@ -1,11 +1,11 @@
 <!--
   @file CodeEditor.vue
-  @description Widget 运行代码当前页代码编辑器。
+  @description Widget 组件脚本当前页代码编辑器。
 -->
 <template>
   <main class="widget-code-page">
     <header class="widget-code-page__toolbar">
-      <h1 class="widget-code-page__title">运行代码</h1>
+      <h1 class="widget-code-page__title">编辑运行脚本</h1>
       <div class="widget-code-page__actions">
         <BButton icon="lucide:x" size="small" square type="ghost" @click="handleClose" />
       </div>
@@ -50,7 +50,7 @@ const props = withDefaults(defineProps<Props>(), {
   active: false
 });
 const emit = defineEmits<{
-  /** 关闭 运行代码编辑器 */
+  /** 关闭 组件脚本编辑器 */
   close: [];
 }>();
 
@@ -59,7 +59,7 @@ const codeEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
 const scriptCodeDraft = ref(readWidgetExecuteMethod(dataItem.value.execute).code);
 const syncingModelToDraft = ref(false);
 
-/** Widget 运行代码编辑器只加载 ECMAScript 基础类型，不引入浏览器 DOM 全局变量。 */
+/** Widget 组件脚本编辑器只加载 ECMAScript 基础类型，不引入浏览器 DOM 全局变量。 */
 const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
   lib: ['es2020'],
   noImplicitThis: true
@@ -67,22 +67,22 @@ const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
 
 /** 当前 Widget 入参 schema。 */
 const inputSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => dataItem.value.inputSchema);
-/** 当前运行代码草稿推导出的数据 schema。 */
+/** 当前组件脚本草稿推导出的数据 schema。 */
 const methodDraftDataSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => buildWidgetDataSchema(scriptCodeDraft.value, inputSchema.value));
-/** 当前运行代码草稿声明的 methods 方法名。 */
+/** 当前组件脚本草稿声明的 methods 方法名。 */
 const methodDraftMethodNames = computed<string[]>((): string[] => readWidgetMethodNames(scriptCodeDraft.value));
-/** Widget 运行代码编辑器类型提示内容。 */
+/** Widget 组件脚本编辑器类型提示内容。 */
 const widgetMethodScriptExtraLibContent = computed<string>((): string =>
   createWidgetMethodScriptExtraLibContent(inputSchema.value, methodDraftDataSchema.value, methodDraftMethodNames.value)
 );
-/** Widget 运行代码编辑器类型提示声明。 */
+/** Widget 组件脚本编辑器类型提示声明。 */
 const widgetMethodScriptExtraLibs = computed<MonacoExtraLib[]>((): MonacoExtraLib[] => [
   {
     content: widgetMethodScriptExtraLibContent.value,
     filePath: 'tibis-widget-method-script.d.ts'
   }
 ]);
-/** 运行代码编辑器数据。 */
+/** 组件脚本编辑器数据。 */
 const codeEditorState = computed<EditorState>(() => ({
   id: 'widget-method-script',
   name: 'widget-method.ts',
@@ -92,15 +92,15 @@ const codeEditorState = computed<EditorState>(() => ({
 }));
 
 /**
- * 读取当前 Widget 运行代码源码。
- * @returns 运行代码源码
+ * 读取当前 Widget 组件脚本源码。
+ * @returns 组件脚本源码
  */
 function readCurrentMethodCode(): string {
   return readWidgetExecuteMethod(dataItem.value.execute).code;
 }
 
 /**
- * 聚焦运行代码编辑器。
+ * 聚焦组件脚本编辑器。
  */
 function focusCodeEditor(): void {
   if (!codeEditorRef.value || typeof codeEditorRef.value.focusEditor !== 'function') {
@@ -112,7 +112,7 @@ function focusCodeEditor(): void {
 
 /**
  * 从当前模型同步编辑草稿。
- * @param code - 当前运行代码源码
+ * @param code - 当前组件脚本源码
  * @param shouldFocus - 同步后是否聚焦编辑器
  * @returns 异步完成信号
  */
@@ -129,7 +129,7 @@ async function syncScriptCodeDraftFromModel(code: string, shouldFocus: boolean):
 
 /**
  * 将编辑草稿写回 Widget 数据模型。
- * @param code - 最新运行代码源码
+ * @param code - 最新组件脚本源码
  */
 function syncScriptCodeToModel(code: string): void {
   if (readCurrentMethodCode() === code) {
@@ -199,13 +199,15 @@ watch(
 }
 
 .widget-code-page__toolbar {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  height: 44px;
+  height: 40px;
   padding: 0 12px;
-  border-bottom: 1px solid var(--border-primary);
+  box-shadow: 0 1px 0 0 var(--border-primary);
 }
 
 .widget-code-page__title {

@@ -333,7 +333,9 @@ function readMonacoProps(wrapper: VueWrapper): BMonacoStubProps {
  * @returns 按钮包装器
  */
 function findCloseButton(wrapper: VueWrapper): VueWrapper {
-  const button = wrapper.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => (item.props() as { icon?: string }).icon === 'lucide:x');
+  const button = wrapper
+    .findAllComponents({ name: 'BButtonStub' })
+    .find((item: VueWrapper): boolean => (item.props() as { icon?: string }).icon === 'lucide:x');
   if (!button) {
     throw new Error('未找到关闭按钮');
   }
@@ -343,16 +345,7 @@ function findCloseButton(wrapper: VueWrapper): VueWrapper {
 
 describe('CodeEditor', (): void => {
   it('loads current script and updates widget data through value model', async (): Promise<void> => {
-    const initialCode = [
-      'Widget({',
-      '  data: {',
-      '    ready: false',
-      '  },',
-      '  async mounted() {',
-      '    this.ready = true',
-      '  }',
-      '})'
-    ].join('\n');
+    const initialCode = ['Widget({', '  data: {', '    ready: false', '  },', '  async mounted() {', '    this.ready = true', '  }', '})'].join('\n');
     const nextCode = [
       'Widget({',
       '  methods: {',
@@ -373,7 +366,7 @@ describe('CodeEditor', (): void => {
     const wrapper = mountCodeEditor(widgetData);
 
     expect(wrapper.find('.widget-code-page__toolbar').exists()).toBe(true);
-    expect(wrapper.find('.widget-code-page__title').text()).toBe('运行代码');
+    expect(wrapper.find('.widget-code-page__title').text()).toBe('编辑运行脚本');
     expect(wrapper.findAllComponents({ name: 'BButtonStub' })).toHaveLength(1);
     expect((findCloseButton(wrapper).props() as { icon?: string }).icon).toBe('lucide:x');
     expect(readMonacoProps(wrapper).language).toBe('typescript');
@@ -598,18 +591,20 @@ describe('CodeEditor', (): void => {
 
     await wrapper
       .find('.widget-code-monaco-stub')
-      .setValue([
-        'Widget({',
-        '  data: {',
-        '    draft: {',
-        "      city: ''",
-        '    }',
-        '  },',
-        '  async mounted() {',
-        '    this.draft.city = this.$input.city',
-        '  }',
-        '})'
-      ].join('\n'));
+      .setValue(
+        [
+          'Widget({',
+          '  data: {',
+          '    draft: {',
+          "      city: ''",
+          '    }',
+          '  },',
+          '  async mounted() {',
+          '    this.draft.city = this.$input.city',
+          '  }',
+          '})'
+        ].join('\n')
+      );
     await nextTick();
 
     const extraLibContent = readMonacoProps(wrapper).extraLibs?.[0]?.content ?? '';

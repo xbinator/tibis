@@ -34,7 +34,7 @@
       />
     </BPanelSplitter>
 
-    <div class="widget-page__code-overlay" :class="{ 'is-open': isCodeEditorOpen }">
+    <div class="widget-page__code-overlay" :class="{ 'is-open': isCodeEditorOpen }" :style="{ right: `${settingsWidth}px` }">
       <CodeEditor v-model:value="session.data.value" :active="isCodeEditorOpen" @close="handleCodeClose" />
     </div>
   </main>
@@ -393,14 +393,14 @@ function handleWidgetSelectionChange(selection: string[]): void {
 }
 
 /**
- * 打开当前 Widget 的运行代码当前页编辑器。
+ * 打开当前 Widget 的组件脚本当前页编辑器。
  */
 function handleCodeEdit(): void {
   isCodeEditorOpen.value = true;
 }
 
 /**
- * 关闭运行代码当前页编辑器。
+ * 关闭组件脚本当前页编辑器。
  */
 function handleCodeClose(): void {
   isCodeEditorOpen.value = false;
@@ -822,7 +822,7 @@ onDeactivated((): void => {
 .widget-page__code-overlay {
   position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: 1;
   visibility: hidden;
   pointer-events: none;
   background: var(--bg-primary);

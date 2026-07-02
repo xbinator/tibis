@@ -7,9 +7,9 @@
     <ATabPane key="basic" tab="设计">
       <BSectionBlock title="基础">
         <BSectionItem label="名称">
-          <AInput v-model:value="widgetName" placeholder="小组件名称" />
+          <AInput v-model:value="widgetName" placeholder="组件名称" />
         </BSectionItem>
-        <BSectionItem label="AI 使用说明" direction="vertical">
+        <BSectionItem label="使用说明" direction="vertical">
           <ATextarea
             v-model:value="widgetDescription"
             :auto-size="{ minRows: 3, maxRows: 6 }"
@@ -40,7 +40,7 @@
         </div>
       </BSectionBlock>
 
-      <BSectionBlock title="运行代码">
+      <BSectionBlock title="运行脚本">
         <template #extra>
           <BButton icon="lucide:code-xml" size="mini" type="secondary" @click="emitEditCode">编辑</BButton>
         </template>
