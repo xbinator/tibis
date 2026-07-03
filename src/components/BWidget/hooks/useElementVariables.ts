@@ -196,6 +196,15 @@ function readLoopItemSchema(widgetData: WidgetData, dataSchema: WidgetSchemaObje
 }
 
 /**
+ * 查找离当前元素最近的循环上下文元素。
+ * @param pathElements - 从顶层到当前元素的路径元素列表
+ * @returns 最近的循环上下文元素
+ */
+function findNearestLoopContextElement(pathElements: WidgetElement[]): WidgetElement | null {
+  return [...pathElements].reverse().find((item: WidgetElement): boolean => readWidgetElementLoopConfig(item.metadata).enabled) ?? null;
+}
+
+/**
  * 读取当前元素可用的循环配置。
  * @param widgetData - Widget 数据
  * @param element - 当前元素
@@ -212,9 +221,9 @@ function readElementLoopConfig(widgetData: WidgetData | undefined, element: Widg
         .map((elementId: string): WidgetElement | undefined => findWidgetElementTreeNode(widgetData.elements, elementId)?.element)
         .filter((item: WidgetElement | undefined): item is WidgetElement => item !== undefined)
     : [element];
-  const loopOwner = pathElements.find((item: WidgetElement): boolean => readWidgetElementLoopConfig(item.metadata).enabled);
+  const loopContextElement = findNearestLoopContextElement(pathElements);
 
-  return loopOwner ? readWidgetElementLoopConfig(loopOwner.metadata) : null;
+  return loopContextElement ? readWidgetElementLoopConfig(loopContextElement.metadata) : null;
 }
 
 /**

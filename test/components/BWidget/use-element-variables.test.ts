@@ -456,21 +456,56 @@ describe('useElementVariables', (): void => {
     wrapper.unmount();
   });
 
-  it('provides group loop variables to elements covered by the same group owner', (): void => {
+  it('provides group loop variables to elements covered by the same group context', (): void => {
     const groupChild = createWidgetElement('text-1');
-    const loopOwner = createGroupElement(
+    const loopContextGroup = createGroupElement(
       'group-1',
       {
         [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
       },
       [groupChild]
     );
-    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopOwner]));
+    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopContextGroup]));
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => groupChild);
     const values = readVariableValues(variableOptions.value);
 
     expect(values).toContain('item.name');
     expect(values).toContain('index');
+    wrapper.unmount();
+  });
+
+  it('uses nearest enabled loop context for nested group elements', (): void => {
+    const leafElement = createWidgetElement('text-1');
+    const innerLoopGroup = createGroupElement(
+      'group-inner',
+      {
+        [WIDGET_LOOP_METADATA_KEY]: {
+          ...createLoopConfig(),
+          itemName: 'innerItem',
+          indexName: 'innerIndex'
+        }
+      },
+      [leafElement]
+    );
+    const outerLoopGroup = createGroupElement(
+      'group-outer',
+      {
+        [WIDGET_LOOP_METADATA_KEY]: {
+          ...createLoopConfig(),
+          itemName: 'outerItem',
+          indexName: 'outerIndex'
+        }
+      },
+      [innerLoopGroup]
+    );
+    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([outerLoopGroup]));
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => leafElement);
+    const values = readVariableValues(variableOptions.value);
+
+    expect(values).toContain('innerItem.name');
+    expect(values).toContain('innerIndex');
+    expect(values).not.toContain('outerItem.name');
+    expect(values).not.toContain('outerIndex');
     wrapper.unmount();
   });
 
