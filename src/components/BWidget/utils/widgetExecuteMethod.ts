@@ -15,21 +15,19 @@ export const WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE = [
   '',
   'Widget({',
   '  data: {',
-  "    message: '等待用户操作'",
+  '    // 可以在 data 中定义自定义字段，用于存储状态',
   '  },',
   '',
   '  async mounted() {',
-  '    // 小组件创建或展示时执行，可以直接读写 this.message。',
+  '    // 小组件创建或展示时执行，可以直接读写 data 和 methods 中的字段',
   '  },',
   '',
   '  async unmounted() {',
-  '    // 小组件运行完成后执行一次。',
+  '    // 小组件运行完成后执行一次',
   '  },',
   '',
   '  methods: {',
-  '    async sendText() {',
-  "      await this.$sendMessage({ content: [{ type: 'text', text: this.message }] })",
-  '    }',
+  '    // 可以在 methods 中定义自定义方法，用于处理用户操作',
   '  }',
   '})',
   ''
@@ -70,18 +68,5 @@ export function readWidgetExecuteMethod(value: unknown): WidgetExecuteMethod {
     enabled: isBoolean(value.enabled) ? value.enabled : true,
     description: isString(value.description) ? value.description : '',
     code: isString(value.code) ? value.code : WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE
-  };
-}
-
-/**
- * 基于原始配置创建写入指定代码后的 JS 脚本配置。
- * @param value - 原始配置值
- * @param code - 最新脚本代码
- * @returns 写入代码后的标准 JS 脚本配置
- */
-export function createWidgetExecuteMethodWithCode(value: unknown, code: string): WidgetExecuteMethod {
-  return {
-    ...readWidgetExecuteMethod(value),
-    code
   };
 }

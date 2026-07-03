@@ -33,9 +33,9 @@ import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco/utils/createMonaco';
 import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types';
 import { buildWidgetDataSchema } from '@/components/BWidget/utils/widgetDataSchema';
+import { readWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import { readWidgetMethodNames } from '@/components/BWidget/utils/widgetMethodNames';
 import { createWidgetMethodScriptExtraLibContent } from '../constants/methodScriptExtraLib';
-import { createWidgetExecuteMethodWithCode, readWidgetExecuteMethod } from '../utils/widgetExecuteMethod';
 
 defineOptions({ name: 'CodeEditor' });
 
@@ -141,7 +141,10 @@ function syncScriptCodeToModel(code: string): void {
 
   dataItem.value = {
     ...dataItem.value,
-    execute: createWidgetExecuteMethodWithCode(dataItem.value.execute, code)
+    execute: {
+      ...readWidgetExecuteMethod(dataItem.value.execute),
+      code
+    }
   };
 }
 

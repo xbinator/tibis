@@ -68,10 +68,10 @@
 import { computed, ref } from 'vue';
 import { castArray, cloneDeep, flatten, has, isString, split } from 'lodash-es';
 import { common, createLowlight } from 'lowlight';
-import type { WidgetData, WidgetExecuteMethod, WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
+import type { WidgetData, WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
 import type { WidgetSchemaKind } from '@/components/BWidget/utils/widgetData';
+import { readWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import { WIDGET_INTERACTION_SCRIPT_HIGHLIGHT_LANGUAGE, WIDGET_SCHEMA_DEFAULT_FIELD_NAME } from '../constants/pageSetter';
-import { readWidgetExecuteMethod } from '../utils/widgetExecuteMethod';
 import SchemaHelp from './PageSetter/SchemaHelp.vue';
 import SchemaInputEditor from './PageSetter/SchemaInputEditor.vue';
 import SchemaTreeEditor from './PageSetter/SchemaTreeEditor.vue';
@@ -176,14 +176,6 @@ function addRootSchemaField(kind: WidgetSchemaKind): void {
   updateWidgetSchema(kind, nextSchema);
 }
 
-/**
- * 读取当前JS 脚本配置。
- * @returns JS 脚本配置
- */
-function readMethodScript(): WidgetExecuteMethod {
-  return readWidgetExecuteMethod(dataItem.value.execute);
-}
-
 /** 当前 Widget 能力名称。 */
 const widgetName = computed<string>({
   /**
@@ -232,11 +224,8 @@ const inputSchema = computed<WidgetSchemaObject>({
   }
 });
 
-/** 当前JS 脚本配置。 */
-const interactionScript = computed<WidgetExecuteMethod>((): WidgetExecuteMethod => readMethodScript());
-
 /** 当前JS 脚本代码。 */
-const interactionScriptCode = computed<string>((): string => interactionScript.value.code);
+const interactionScriptCode = computed<string>((): string => readWidgetExecuteMethod(dataItem.value.execute).code);
 
 /**
  * Lowlight 文本节点。
