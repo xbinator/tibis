@@ -190,8 +190,9 @@ export interface WidgetSchemaObject {
 
 /**
  * Widget元素。
+ * @template TMetadata - 元素自定义元数据类型，必须扩展 WidgetMetadata
  */
-export interface WidgetShapeElement {
+export interface WidgetShapeElement<TMetadata extends WidgetMetadata = WidgetMetadata> {
   /** 真实元素 ID */
   id: string;
   /** 元素注册名称，组合容器固定为 group */
@@ -211,20 +212,22 @@ export interface WidgetShapeElement {
   /** 元素样式 */
   style: WidgetElementStyle;
   /** 组件自定义元数据 */
-  metadata: WidgetMetadata;
+  metadata: TMetadata;
   /** 子元素，仅 name 为 group 的组合容器使用 */
   children?: WidgetShapeElement[];
 }
 
 /**
  * Widget元素。
+ * @template TMetadata - 元素自定义元数据类型，必须扩展 WidgetMetadata
  */
-export type WidgetElement = WidgetShapeElement;
+export type WidgetElement<TMetadata extends WidgetMetadata = WidgetMetadata> = WidgetShapeElement<TMetadata>;
 
 /**
  * 新增形状参数。
+ * @template TMetadata - 元素自定义元数据类型，必须扩展 WidgetMetadata
  */
-export interface WidgetAddShapeOptions {
+export interface WidgetAddShapeOptions<TMetadata extends WidgetMetadata = WidgetMetadata> {
   /** 元素 ID */
   id: string;
   /** 元素注册名称 */
@@ -244,7 +247,7 @@ export interface WidgetAddShapeOptions {
   /** 元素初始样式 */
   style?: WidgetElementStyle;
   /** 元素默认自定义元数据 */
-  metadata?: WidgetMetadata;
+  metadata?: TMetadata;
 }
 
 /**

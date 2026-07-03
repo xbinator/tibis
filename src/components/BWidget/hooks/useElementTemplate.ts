@@ -13,7 +13,7 @@ import { computed } from 'vue';
  * @param value - 字段新值
  * @returns 写入后的元素元数据
  */
-function writeTemplateFieldMetadata(metadata: WidgetMetadata, fieldName: string, value: string): WidgetMetadata {
+function writeTemplateFieldMetadata<TMetadata extends WidgetMetadata>(metadata: TMetadata, fieldName: string, value: string): TMetadata {
   return {
     ...metadata,
     [fieldName]: value
@@ -38,7 +38,7 @@ function readTemplateFieldMetadata(metadata: WidgetMetadata, fieldName: string):
  * @param fieldName - 元数据字段名称
  * @returns 可直接绑定到输入组件的字段值
  */
-export function useElementTemplate(element: Ref<WidgetElement>, fieldName: string): WritableComputedRef<string> {
+export function useElementTemplate<TMetadata extends WidgetMetadata>(element: Ref<WidgetElement<TMetadata>>, fieldName: string): WritableComputedRef<string> {
   return computed<string>({
     /**
      * 读取模板字段内容。

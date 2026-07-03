@@ -33,16 +33,6 @@ interface WidgetTextMeasureOptions {
 }
 
 /**
- * 读取文本元素最大行数配置，归一化为正整数或 undefined。
- * @param metadata - 元素元数据
- * @returns 最大行数，未设置或非法时返回 undefined
- */
-export function readTextElementMaxLines(metadata: WidgetMetadata): number | undefined {
-  const value = metadata.maxLines;
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
-}
-
-/**
  * 归一化文本尺寸数值，减少浮点噪声。
  * @param value - 原始数值
  * @returns 归一化数值
@@ -250,15 +240,16 @@ export function measureWidgetTextElementSize(text: string, style?: WidgetElement
  * 创建按模板字段内容自适应高度的文本元素渲染尺寸配置。
  * @param fieldName - 元数据字段名称
  * @returns 文本元素渲染尺寸配置
+ * @template TMetadata - 文本元素自定义元数据类型，必须扩展 WidgetMetadata
  */
-export function createWidgetTextRenderSize(fieldName: string): WidgetElementRenderSizeConfig {
+export function createWidgetTextRenderSize<TMetadata extends WidgetMetadata = WidgetMetadata>(fieldName: string): WidgetElementRenderSizeConfig<TMetadata> {
   return {
     width: 'model',
     height: 'model-min-content',
-    measureContent: (element: WidgetShapeElement, renderContext?: WidgetRenderContext): WidgetSize =>
+    measureContent: (element: WidgetShapeElement<TMetadata>, renderContext?: WidgetRenderContext): WidgetSize =>
       measureWidgetTextElementSize(resolveWidgetTemplateFieldText(element.metadata, fieldName, renderContext), element.style, {
         maxWidth: element.size.width,
-        maxLines: readTextElementMaxLines(element.metadata)
+        maxLines: element.metadata.maxLines as number
       })
   };
 }

@@ -1,7 +1,6 @@
 /**
  * @file types.ts
- * @description BWidget 元素注册配置类型。
- * BWidget 元素注册配置，仅描述侧边栏展示元信息。
+ * @description BWidget 元素注册、创建与渲染配置类型。
  */
 import type { WidgetElementCreateAnchor, WidgetElementStyle, WidgetMetadata, WidgetShapeElement, WidgetSize } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
@@ -13,8 +12,9 @@ export type WidgetElementRenderSizeSource = 'model' | 'content' | 'model-min-con
 
 /**
  * 元素渲染尺寸配置。
+ * @template TMetadata - 元素自定义元数据类型，必须扩展 WidgetMetadata
  */
-export interface WidgetElementRenderSizeConfig {
+export interface WidgetElementRenderSizeConfig<TMetadata extends WidgetMetadata = WidgetMetadata> {
   /** 宽度来源 */
   width: WidgetElementRenderSizeSource;
   /** 高度来源 */
@@ -25,7 +25,7 @@ export interface WidgetElementRenderSizeConfig {
    * @param renderContext - Widget渲染上下文
    * @returns 内容尺寸
    */
-  measureContent: (element: WidgetShapeElement, renderContext?: WidgetRenderContext) => WidgetSize;
+  measureContent(element: WidgetShapeElement<TMetadata>, renderContext?: WidgetRenderContext): WidgetSize;
 }
 
 /**
@@ -50,7 +50,7 @@ export interface WidgetElementSchema<TMetadata extends WidgetMetadata = WidgetMe
   /** 侧边栏显示图标 */
   icon: string;
   /** 元素渲染尺寸配置 */
-  renderSize?: WidgetElementRenderSizeConfig;
+  renderSize?: WidgetElementRenderSizeConfig<TMetadata>;
   /** 点击创建时的锚点，默认以中心点创建 */
   createAnchor?: WidgetElementCreateAnchor;
   /** 创建工具激活时的Widget光标，默认使用 crosshair */

@@ -38,24 +38,6 @@ export const WIDGET_IMAGE_FIT_OPTIONS: { label: string; value: WidgetImageFit }[
 ];
 
 /**
- * 判断值是否为有效的图片填充模式。
- * @param value - 待判断的值
- * @returns 是否为 WidgetImageFit
- */
-export function isWidgetImageFit(value: unknown): value is WidgetImageFit {
-  return value === 'cover' || value === 'contain' || value === 'fill' || value === 'none' || value === 'scale-down';
-}
-
-/**
- * 读取图片元素填充模式，归一化为合法值；非法或未设置时返回默认值。
- * @param metadata - 元素元数据
- * @returns 填充模式
- */
-export function readWidgetImageFit(metadata: WidgetMetadata): WidgetImageFit {
-  return isWidgetImageFit(metadata.fit) ? metadata.fit : WIDGET_IMAGE_DEFAULT_FIT;
-}
-
-/**
  * 图片元素注册配置。
  * 通过泛型参数声明专属元数据类型，metadata 字段在写入时即获得 WidgetImageElementMetadata 校验。
  */

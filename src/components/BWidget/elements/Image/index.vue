@@ -3,29 +3,29 @@
   @description BWidget 图片元素中间Widget视图。
 -->
 <template>
-  <div class="widget-image-element-view">
-    <img v-if="imageSrc && !hasError" class="widget-image-element-view__img" :src="imageSrc" :alt="altText" :style="imageStyle" @error="handleError" />
-    <div v-else class="widget-image-element-view__placeholder">
-      <BIcon class="widget-image-element-view__placeholder-icon" :icon="placeholderIcon" :size="28" />
-      <span class="widget-image-element-view__placeholder-text">{{ placeholderText }}</span>
+  <div class="widget-image-view">
+    <img v-if="imageSrc && !hasError" class="widget-image-view__img" :src="imageSrc" :alt="altText" :style="imageStyle" @error="handleError" />
+    <div v-else class="widget-image-view__placeholder">
+      <BIcon class="widget-image-view__placeholder-icon" :icon="placeholderIcon" :size="28" />
+      <span class="widget-image-view__placeholder-text">{{ placeholderText }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { WidgetImageFit } from './schema';
+import type { WidgetImageElementMetadata, WidgetImageFit } from './schema';
 import type { WidgetShapeElement } from '../../types';
 import type { CSSProperties } from 'vue';
 import { computed, ref, toRef, watch } from 'vue';
 import { useElementContent } from '../../hooks/useElementContent';
-import { WIDGET_IMAGE_DEFAULT_FIT, readWidgetImageFit } from './schema';
+import { WIDGET_IMAGE_DEFAULT_FIT } from './schema';
 
 /**
  * 图片元素中间Widget视图入参。
  */
 interface Props {
   /** 当前图片元素 */
-  element?: WidgetShapeElement;
+  element?: WidgetShapeElement<WidgetImageElementMetadata>;
 }
 
 const props = defineProps<Props>();
@@ -42,7 +42,7 @@ watch(imageSrc, (): void => {
 });
 
 /** 图片填充模式，归一化为合法值。 */
-const fit = computed<WidgetImageFit>((): WidgetImageFit => (props.element ? readWidgetImageFit(props.element.metadata) : WIDGET_IMAGE_DEFAULT_FIT));
+const fit = computed<WidgetImageFit>((): WidgetImageFit => props.element?.metadata.fit || WIDGET_IMAGE_DEFAULT_FIT);
 
 /** 图片内联样式：object-fit 控制填充，宽高撑满元素 box。 */
 const imageStyle = computed<CSSProperties>((): CSSProperties => ({ objectFit: fit.value, width: '100%', height: '100%' }));
@@ -72,7 +72,7 @@ function handleError(): void {
 </script>
 
 <style lang="less" scoped>
-.widget-image-element-view {
+.widget-image-view {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -83,13 +83,13 @@ function handleError(): void {
   border-color: transparent;
 }
 
-.widget-image-element-view__img {
+.widget-image-view__img {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.widget-image-element-view__placeholder {
+.widget-image-view__placeholder {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -101,11 +101,11 @@ function handleError(): void {
   background: var(--bg-secondary);
 }
 
-.widget-image-element-view__placeholder-icon {
+.widget-image-view__placeholder-icon {
   opacity: 0.5;
 }
 
-.widget-image-element-view__placeholder-text {
+.widget-image-view__placeholder-text {
   font-size: 11px;
   line-height: 1.4;
   text-align: center;

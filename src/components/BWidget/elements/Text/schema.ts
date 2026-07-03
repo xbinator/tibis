@@ -32,7 +32,7 @@ export const textElementSchema: WidgetElementSchema<WidgetTextElementMetadata> =
     content: WIDGET_TEXT_DEFAULT_CONTENT
   },
   style: WIDGET_DEFAULT_ELEMENT_STYLE,
-  renderSize: createWidgetTextRenderSize('content'),
+  renderSize: createWidgetTextRenderSize<WidgetTextElementMetadata>('content'),
   resize: {
     enabled: true
   },

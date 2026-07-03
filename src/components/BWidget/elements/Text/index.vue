@@ -9,18 +9,18 @@
 </template>
 
 <script setup lang="ts">
+import type { WidgetTextElementMetadata } from './schema';
 import type { WidgetShapeElement } from '../../types';
 import type { StyleValue } from 'vue';
 import { computed, toRef } from 'vue';
 import { useElementContent } from '../../hooks/useElementContent';
-import { readTextElementMaxLines } from '../../utils/widgetTextMetrics';
 
 /**
  * 文本元素中间Widget视图入参。
  */
 interface Props {
   /** 当前文本元素 */
-  element?: WidgetShapeElement;
+  element?: WidgetShapeElement<WidgetTextElementMetadata>;
 }
 
 const props = defineProps<Props>();
@@ -34,10 +34,8 @@ const textContent = useElementContent(toRef(props, 'element'), 'content');
  * @returns Vue 内联样式对象
  */
 const viewStyle = computed<StyleValue>((): StyleValue => {
-  const maxLines = props.element ? readTextElementMaxLines(props.element.metadata) : undefined;
-  if (maxLines === undefined) {
-    return {};
-  }
+  const maxLines = props.element?.metadata.maxLines;
+  if (maxLines === undefined) return {};
 
   return {
     display: '-webkit-box',
