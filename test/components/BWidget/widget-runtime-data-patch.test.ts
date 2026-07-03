@@ -5,7 +5,7 @@
 import type { WidgetRuntimeState } from 'types/widget';
 import { describe, expect, it } from 'vitest';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { applyWidgetRuntimeDataPatchesToState } from '@/components/BWidget/utils/widgetRuntimeDataPatch';
+import { applyWidgetRuntimeDataPatchesToState } from '@/components/BWidget/utils/widgetRuntime/dataPatch';
 
 /**
  * 创建用于 patch 应用测试的运行态状态。
@@ -39,7 +39,7 @@ function createRuntimeState(): WidgetRuntimeState {
   };
 }
 
-describe('widgetRuntimeDataPatch', (): void => {
+describe('widgetRuntime/dataPatch', (): void => {
   it('applies nested set patches with structural sharing', (): void => {
     const state = createRuntimeState();
     const nextState = applyWidgetRuntimeDataPatchesToState(state, [{ op: 'set', path: ['weather', 'temperature'], value: 28 }]);

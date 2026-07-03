@@ -46,8 +46,8 @@ import {
   initWidgetMountState,
   type WidgetRuntimeFinishResult
 } from './utils/widgetRuntime';
-import { applyWidgetRuntimeDataPatchesToState } from './utils/widgetRuntimeDataPatch';
-import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from './utils/widgetRuntimeLayout';
+import { applyWidgetRuntimeDataPatchesToState } from './utils/widgetRuntime/dataPatch';
+import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from './utils/widgetRuntime/layout';
 
 defineOptions({ name: 'BWidgetRuntime' });
 

@@ -103,7 +103,7 @@ Patch 不能携带 `undefined` 作为 `set.value`。对象字段的 `undefined` 
 
 ## 沙箱侧设计
 
-`src/components/BWidget/utils/widgetRuntime.ts` 的 Proxy 需要从“只标记变化”升级为“标记变化并记录 path”。
+`src/components/BWidget/utils/widgetRuntime/index.ts` 的 Proxy 需要从“只标记变化”升级为“标记变化并记录 path”。
 
 ### 执行选项
 
@@ -341,7 +341,7 @@ function clearPatchPreview(executionId: string): void {
 
 建议新增纯函数文件：
 
-`src/components/BWidget/utils/widgetRuntimeDataPatch.ts`
+`src/components/BWidget/utils/widgetRuntime/dataPatch.ts`
 
 职责：
 

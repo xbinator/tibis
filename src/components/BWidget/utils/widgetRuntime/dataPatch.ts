@@ -1,5 +1,5 @@
 /**
- * @file widgetRuntimeDataPatch.ts
+ * @file widgetRuntime/dataPatch.ts
  * @description BWidget 运行态 data patch 应用工具。
  */
 import type { WidgetRuntimeDataPatch, WidgetRuntimeDataPathSegment, WidgetRuntimeState } from 'types/widget';

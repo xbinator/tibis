@@ -5,7 +5,7 @@
 import type { WidgetRenderContext } from 'types/widget';
 import { describe, expect, it } from 'vitest';
 import type { WidgetElement, WidgetPoint, WidgetSize } from '@/components/BWidget/types';
-import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from '@/components/BWidget/utils/widgetRuntimeLayout';
+import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from '@/components/BWidget/utils/widgetRuntime/layout';
 
 /**
  * 创建矩形测试元素。

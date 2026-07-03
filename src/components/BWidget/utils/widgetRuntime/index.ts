@@ -1,5 +1,5 @@
 /**
- * @file widgetRuntime.ts
+ * @file widgetRuntime/index.ts
  * @description BWidget 运行态脚本沙箱执行工具。
  */
 import type { RequestInput, RequestMethod, RequestResponse } from 'types/request';
@@ -7,7 +7,7 @@ import type { WidgetHttpClient, WidgetRuntimeDataPatch, WidgetRuntimeSendMessage
 import { cloneDeep, isPlainObject } from 'lodash-es';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { compileSandboxSource, createSandboxHttpHost, runSandboxCode, SANDBOX_HTTP_HOST_FUNCTION_NAME } from '@/utils/sandbox';
-import { isWidgetRuntimeDataPatchArray } from './widgetRuntimeDataPatch';
+import { isWidgetRuntimeDataPatchArray } from './dataPatch';
 
 /** 沙箱中用于上报 Widget data patch 的宿主函数名。 */
 const SANDBOX_WIDGET_DATA_PATCH_HOST_FUNCTION_NAME = '__sandboxWidgetDataPatch';
