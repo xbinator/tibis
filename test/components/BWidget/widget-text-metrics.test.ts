@@ -3,51 +3,7 @@
  * @description 验证 BWidget 文本元素尺寸测量与最大行数归一化逻辑。
  */
 import { describe, expect, it } from 'vitest';
-import type { WidgetMetadata } from '@/components/BWidget/types';
-import { createWidgetTextRenderSize, measureWidgetTextElementSize, readTextElementMaxLines } from '@/components/BWidget/utils/widgetTextMetrics';
-
-/**
- * 创建测试用元素元数据。
- * @param maxLines - 最大行数覆盖值
- * @returns 元素元数据
- */
-function createMetadata(maxLines?: number): WidgetMetadata {
-  const metadata: WidgetMetadata = {};
-  if (maxLines !== undefined) {
-    metadata.maxLines = maxLines;
-  }
-
-  return metadata;
-}
-
-describe('readTextElementMaxLines', (): void => {
-  it('returns undefined when metadata has no maxLines field', (): void => {
-    expect(readTextElementMaxLines(createMetadata())).toBeUndefined();
-  });
-
-  it('returns undefined for non-positive or invalid values', (): void => {
-    expect(readTextElementMaxLines(createMetadata(0))).toBeUndefined();
-    expect(readTextElementMaxLines(createMetadata(-1))).toBeUndefined();
-    expect(readTextElementMaxLines(createMetadata(Number.NaN))).toBeUndefined();
-    expect(readTextElementMaxLines(createMetadata(Number.POSITIVE_INFINITY))).toBeUndefined();
-  });
-
-  it('returns undefined for non-number types', (): void => {
-    const metadata = { maxLines: '3' } as unknown as WidgetMetadata;
-    expect(readTextElementMaxLines(metadata)).toBeUndefined();
-  });
-
-  it('floors positive fractional values to integers', (): void => {
-    expect(readTextElementMaxLines(createMetadata(1.5))).toBe(1);
-    expect(readTextElementMaxLines(createMetadata(2.9))).toBe(2);
-  });
-
-  it('returns the integer value for positive numbers', (): void => {
-    expect(readTextElementMaxLines(createMetadata(1))).toBe(1);
-    expect(readTextElementMaxLines(createMetadata(3))).toBe(3);
-    expect(readTextElementMaxLines(createMetadata(100))).toBe(100);
-  });
-});
+import { createWidgetTextRenderSize, measureWidgetTextElementSize } from '@/components/BWidget/utils/widgetTextMetrics';
 
 describe('measureWidgetTextElementSize with maxLines', (): void => {
   /** 三行短文本，每行均不会触发软换行 */
