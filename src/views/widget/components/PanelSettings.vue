@@ -4,12 +4,10 @@
 -->
 <template>
   <aside class="setter-panel">
-    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="dataItem" @edit-code="emit('edit-code')" />
+    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="widgetData" @edit-code="emit('edit-code')" />
     <ATabs v-else-if="select === null && selectedElementIds.length > 1">
       <ATabPane key="design" tab="设计">
         <BatchSetter
-          :data-item="dataItem"
-          :selected-element-ids="selectedElementIds"
           @command="emit('multi-command', $event)"
           @layout-change="emit('multi-layout-change', $event)"
           @style-change="emit('multi-style-change', $event)"
@@ -17,7 +15,7 @@
       </ATabPane>
 
       <ATabPane v-if="sameGroupSelectedElements.length > 1" key="advanced" tab="高级">
-        <AdvancedSetter v-model:elements="sameGroupSelectedElements" :data-item="dataItem" />
+        <AdvancedSetter v-model:elements="sameGroupSelectedElements" />
       </ATabPane>
     </ATabs>
     <div v-else-if="select === null" class="setter-panel__empty">已选择多个元素</div>
@@ -28,12 +26,12 @@
         </ATabPane>
 
         <ATabPane key="style" tab="属性">
-          <component :is="elementSetter" v-if="elementSetter" v-model:element="select" :data-item="dataItem" />
+          <component :is="elementSetter" v-if="elementSetter" v-model:element="select" />
           <div v-else class="setter-panel__empty">暂无专属属性</div>
         </ATabPane>
 
         <ATabPane key="advanced" tab="高级">
-          <AdvancedSetter v-model:elements="selectedTargetElements" :data-item="dataItem" />
+          <AdvancedSetter v-model:elements="selectedTargetElements" />
         </ATabPane>
       </ATabs>
     </template>
@@ -46,6 +44,7 @@ import type { Component } from 'vue';
 import { computed } from 'vue';
 import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
 import { getWidgetElementSetter } from '@/components/BWidget/elements';
+import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetSelectTarget } from '@/components/BWidget/types';
 import {
   findWidgetElementTreeNode,
@@ -81,8 +80,17 @@ const emit = defineEmits<{
   'multi-style-change': [style: WidgetElementStyleChange];
 }>();
 
-const dataItem = defineModel<WidgetData>('value', { required: true });
+const widgetData = defineModel<WidgetData>('value', { required: true });
 const select = defineModel<WidgetSelectTarget>('select', { default: null });
+/** 向下提供的当前 Widget 数据。 */
+const providedWidgetData = computed<WidgetData | undefined>((): WidgetData | undefined => widgetData.value);
+/** 向下提供的当前选区 ID。 */
+const providedSelectedElementIds = computed<string[]>((): string[] => props.selectedElementIds);
+
+provideWidgetContext({
+  widgetData: providedWidgetData,
+  selectedElementIds: providedSelectedElementIds
+});
 
 /**
  * 判断当前设置目标是否为Widget元素。
@@ -100,7 +108,7 @@ const elementSetter = computed<Component | null>(() => (isElementTarget(select.v
 const selectedElements = computed<WidgetElement[]>(() => {
   const selectedIds = new Set(props.selectedElementIds);
 
-  return flattenWidgetElementTree(dataItem.value.elements)
+  return flattenWidgetElementTree(widgetData.value.elements)
     .filter((item: WidgetRenderTreeNode): boolean => selectedIds.has(item.element.id))
     .map((item: WidgetRenderTreeNode): WidgetElement => item.element);
 });
@@ -128,9 +136,9 @@ function updateAdvancedElements(updatedElements: WidgetElement[]): void {
     return;
   }
 
-  const nextElements = mergeElementsById(dataItem.value.elements, updatedElements);
+  const nextElements = mergeElementsById(widgetData.value.elements, updatedElements);
 
-  dataItem.value = { ...dataItem.value, elements: nextElements };
+  widgetData.value = { ...widgetData.value, elements: nextElements };
 
   if (isElementTarget(select.value)) {
     const selectedElementId = select.value.id;
@@ -145,7 +153,7 @@ const selectedTargetElements = computed<WidgetElement[]>({
       return [];
     }
 
-    return [findWidgetElementTreeNode(dataItem.value.elements, select.value.id)?.element ?? select.value];
+    return [findWidgetElementTreeNode(widgetData.value.elements, select.value.id)?.element ?? select.value];
   },
   set: (updatedElements: WidgetElement[]): void => {
     updateAdvancedElements(updatedElements);
@@ -159,8 +167,8 @@ const sameGroupSelectedElements = computed<WidgetElement[]>({
       return [];
     }
 
-    const firstNode = findWidgetElementTreeNode(dataItem.value.elements, props.selectedElementIds[0] ?? '');
-    if (!firstNode?.parentId || !isSameWidgetElementParent(dataItem.value.elements, props.selectedElementIds)) {
+    const firstNode = findWidgetElementTreeNode(widgetData.value.elements, props.selectedElementIds[0] ?? '');
+    if (!firstNode?.parentId || !isSameWidgetElementParent(widgetData.value.elements, props.selectedElementIds)) {
       return [];
     }
 

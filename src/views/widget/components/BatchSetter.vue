@@ -61,7 +61,8 @@ import type { WidgetMultiSelectLayoutChange } from '../types';
 import { computed } from 'vue';
 import { InputNumber as AInputNumber } from 'ant-design-vue';
 import { isEqual } from 'lodash-es';
-import type { WidgetBorderStyle, WidgetData, WidgetElement, WidgetElementStyle, WidgetElementStyleChange } from '@/components/BWidget/types';
+import { useWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
+import type { WidgetBorderStyle, WidgetElement, WidgetElementStyle, WidgetElementStyleChange } from '@/components/BWidget/types';
 import { flattenWidgetElementTree, isSameWidgetElementParent, isWidgetGroupElement, type WidgetRenderTreeNode } from '@/components/BWidget/utils/widgetTree';
 import ControlPanel from './DesignSetter/ControlPanel.vue';
 
@@ -89,17 +90,6 @@ interface SelectionBounds {
   height: number;
 }
 
-/**
- * 多选设置面板入参。
- */
-interface Props {
-  /** 当前Widget数据 */
-  dataItem: WidgetData;
-  /** 当前选中的元素 ID 列表 */
-  selectedElementIds: string[];
-}
-
-const props = defineProps<Props>();
 const emit = defineEmits<{
   /** 触发多选快捷操作 */
   command: [command: MultiSelectCommand];
@@ -108,6 +98,8 @@ const emit = defineEmits<{
   /** 批量更新选中元素样式 */
   'style-change': [style: WidgetElementStyleChange];
 }>();
+/** 当前 Widget 通用上下文。 */
+const widgetContext = useWidgetContext();
 
 /** 边框线形选项。 */
 const borderStyleOptions: Array<{ value: WidgetBorderStyle; label: string }> = [
@@ -137,9 +129,13 @@ function createSelectionBounds(elements: WidgetElement[]): SelectionBounds | nul
 
 /** 当前多选命中的元素，保持Widget图层顺序。 */
 const selectedElements = computed<WidgetElement[]>(() => {
-  const selectedIds = new Set(props.selectedElementIds);
+  if (!widgetContext.widgetData.value) {
+    return [];
+  }
 
-  return flattenWidgetElementTree(props.dataItem.elements)
+  const selectedIds = new Set(widgetContext.selectedElementIds.value);
+
+  return flattenWidgetElementTree(widgetContext.widgetData.value.elements)
     .filter((item: WidgetRenderTreeNode): boolean => selectedIds.has(item.element.id))
     .map((item: WidgetRenderTreeNode): WidgetElement => item.element);
 });
@@ -147,9 +143,10 @@ const selectedElements = computed<WidgetElement[]>(() => {
 /** 当前多选是否可以执行批量编辑。 */
 const canEditSelection = computed<boolean>(
   (): boolean =>
+    widgetContext.widgetData.value !== undefined &&
     selectedElements.value.length > 1 &&
-    selectedElements.value.length === props.selectedElementIds.length &&
-    isSameWidgetElementParent(props.dataItem.elements, props.selectedElementIds)
+    selectedElements.value.length === widgetContext.selectedElementIds.value.length &&
+    isSameWidgetElementParent(widgetContext.widgetData.value.elements, widgetContext.selectedElementIds.value)
 );
 
 /** 当前多选是否命中了组合元素。 */

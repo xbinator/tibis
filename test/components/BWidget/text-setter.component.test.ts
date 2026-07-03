@@ -4,12 +4,13 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import { defineComponent } from 'vue';
-import type { PropType } from 'vue';
+import { defineComponent, ref } from 'vue';
+import type { PropType, Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
 import TextSetter from '@/components/BWidget/elements/Text/Setter.vue';
+import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
 
 /** 已移除的旧根变量名。 */
@@ -123,15 +124,31 @@ function createWidgetData(): WidgetData {
 /**
  * 挂载文本 Setter。
  * @param element - 文本元素
- * @param dataItem - Widget 数据
+ * @param widgetData - Widget 数据
  * @returns 组件包装器
  */
-function mountTextSetter(element: WidgetElement, dataItem: WidgetData = createWidgetData()): VueWrapper {
-  return mount(TextSetter, {
-    props: {
-      element,
-      dataItem
+function mountTextSetter(element: WidgetElement, widgetData: WidgetData = createWidgetData()): VueWrapper {
+  const Host = defineComponent({
+    name: 'TextSetterHost',
+    components: {
+      TextSetter
     },
+    setup(): { elementModel: Ref<WidgetElement> } {
+      const elementModel = ref<WidgetElement>(element);
+      const widgetDataRef = ref<WidgetData | undefined>(widgetData);
+      const selectedElementIds = ref<string[]>([element.id]);
+
+      provideWidgetContext({
+        widgetData: widgetDataRef,
+        selectedElementIds
+      });
+
+      return { elementModel };
+    },
+    template: '<TextSetter v-model:element="elementModel" />'
+  });
+
+  return mount(Host, {
     global: {
       components: {
         BSectionBlock: defineComponent({

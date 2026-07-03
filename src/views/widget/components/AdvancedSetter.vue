@@ -42,7 +42,7 @@ import { computed } from 'vue';
 import { Checkbox as ACheckbox, Input as AInput, InputNumber as AInputNumber } from 'ant-design-vue';
 import type { SelectOption } from '@/components/BSelect/types';
 import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
-import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
+import type { WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import {
   createDefaultWidgetElementLoopConfig,
   readWidgetElementLoopConfig,
@@ -53,18 +53,9 @@ import {
 
 defineOptions({ name: 'AdvancedSetter' });
 
-/**
- * 高级配置面板入参。
- */
-interface Props {
-  /** 当前Widget数据 */
-  dataItem: WidgetData;
-}
-
-const props = defineProps<Props>();
 const elements = defineModel<WidgetElement[]>('elements', { required: true });
 
-const { loopSourceOptions } = useElementVariables((): WidgetData => props.dataItem);
+const { loopSourceOptions } = useElementVariables();
 
 /** 循环数据源下拉选项，复用元素变量 hook 中的 schema 推导结果。 */
 const sourceOptions = computed<SelectOption[]>((): SelectOption[] =>

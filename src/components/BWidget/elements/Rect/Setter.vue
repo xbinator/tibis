@@ -9,17 +9,8 @@
 </template>
 
 <script setup lang="ts">
-import type { WidgetData, WidgetElement } from '../../types';
+import type { WidgetElement } from '../../types';
 
-/**
- * 矩形元素 Setter 入参。
- */
-interface Props {
-  /** 当前 Widget 数据，保留给统一 Setter 调度透传 */
-  dataItem?: WidgetData;
-}
-
-defineProps<Props>();
 /** 当前编辑的矩形元素。 */
 defineModel<WidgetElement>('element', { required: true });
 </script>

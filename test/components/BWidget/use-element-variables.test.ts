@@ -1,11 +1,17 @@
 /**
  * @file use-element-variables.test.ts
  * @description 验证 BWidget 元素变量 hook 从Widget schema 与JS 脚本生成变量候选。
+ * @vitest-environment jsdom
  */
-import { ref } from 'vue';
+/* eslint-disable vue/one-component-per-file */
+import type { VueWrapper } from '@vue/test-utils';
+import type { Ref } from 'vue';
+import { defineComponent, h, ref } from 'vue';
+import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
-import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
+import { useElementVariables, type ElementTargetReader, type UseElementVariablesReturn } from '@/components/BWidget/hooks/useElementVariables';
+import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
 
@@ -176,8 +182,8 @@ function createLoopConfig(): WidgetElementLoopConfig {
  * @returns Widget 数据
  */
 function createLoopWidgetData(elements: WidgetElement[]): WidgetData {
-  const dataItem = createWidgetData();
-  dataItem.inputSchema.properties.products = {
+  const widgetData = createWidgetData();
+  widgetData.inputSchema.properties.products = {
     type: 'array',
     description: '商品列表',
     items: {
@@ -194,9 +200,9 @@ function createLoopWidgetData(elements: WidgetElement[]): WidgetData {
       }
     }
   };
-  dataItem.elements = elements;
+  widgetData.elements = elements;
 
-  return dataItem;
+  return widgetData;
 }
 
 /**
@@ -254,10 +260,69 @@ function findVariable(groups: VariableOptionGroup[], value: string): VariableTre
   return readVariables(groups).find((item: VariableTreeNode): boolean => item.value === value);
 }
 
+/**
+ * 挂载使用 Widget 上下文的变量 hook。
+ */
+interface MountedElementVariables extends UseElementVariablesReturn {
+  /** 测试组件包装器 */
+  wrapper: VueWrapper;
+}
+
+/**
+ * 挂载元素变量 hook 消费组件。
+ * @param widgetData - Widget 数据引用
+ * @param readElement - Widget 元素读取函数
+ * @returns hook 返回值和包装器
+ */
+function mountElementVariables(widgetData: Ref<WidgetData | undefined>, readElement?: ElementTargetReader): MountedElementVariables {
+  const variablesResultRef: { value?: UseElementVariablesReturn } = {};
+  const selectedElementIds = ref<string[]>([]);
+  const Consumer = defineComponent({
+    name: 'ElementVariablesConsumer',
+    setup(): () => ReturnType<typeof h> {
+      variablesResultRef.value = useElementVariables(readElement);
+
+      return (): ReturnType<typeof h> => h('span');
+    }
+  });
+  const Provider = defineComponent({
+    name: 'ElementVariablesProvider',
+    setup(): () => ReturnType<typeof h> {
+      provideWidgetContext({
+        widgetData,
+        selectedElementIds
+      });
+
+      return (): ReturnType<typeof h> => h(Consumer);
+    }
+  });
+  const wrapper = mount(Provider);
+  const initializedResult = variablesResultRef.value;
+  if (!initializedResult) {
+    throw new Error('Element variables hook was not initialized');
+  }
+
+  return {
+    loopSourceOptions: initializedResult.loopSourceOptions,
+    variableOptions: initializedResult.variableOptions,
+    wrapper
+  };
+}
+
 describe('useElementVariables', (): void => {
+  it('reads widget data from injected widget context without explicit source', (): void => {
+    const widgetData = ref<WidgetData | undefined>(createWidgetData());
+    const { variableOptions, wrapper } = mountElementVariables(widgetData);
+    const values = readVariableValues(variableOptions.value);
+
+    expect(values).toContain('input.city');
+    expect(values).toContain('weather.temperature');
+    wrapper.unmount();
+  });
+
   it('provides variables from input schema and execute data updates', (): void => {
-    const dataItem = ref<WidgetData | undefined>(createWidgetData());
-    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const widgetDataRef = ref<WidgetData | undefined>(createWidgetData());
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const values = readVariableValues(variableOptions.value);
     const labels = readVariableLabels(variableOptions.value);
 
@@ -279,11 +344,12 @@ describe('useElementVariables', (): void => {
     expect(labels).toContain('用户');
     expect(labels).toContain('用户名');
     expect(labels).toContain('温度');
+    wrapper.unmount();
   });
 
   it('nests object children under selectable parent variables', (): void => {
-    const dataItem = ref<WidgetData | undefined>(createWidgetData());
-    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const widgetDataRef = ref<WidgetData | undefined>(createWidgetData());
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const roots = readVariableTrees(variableOptions.value);
     const inputVariable = findVariable(variableOptions.value, 'input');
     const userVariable = findVariable(variableOptions.value, 'input.user');
@@ -317,11 +383,12 @@ describe('useElementVariables', (): void => {
         }
       ]
     });
+    wrapper.unmount();
   });
 
   it('does not duplicate variable paths in the description field', (): void => {
-    const dataItem = ref<WidgetData | undefined>(createWidgetData());
-    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const widgetDataRef = ref<WidgetData | undefined>(createWidgetData());
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const variables = readVariables(variableOptions.value);
     const cityVariable = variables.find((item: Variable): boolean => item.value === 'input.city');
     const temperatureVariable = variables.find((item: Variable): boolean => item.value === 'weather.temperature');
@@ -335,10 +402,11 @@ describe('useElementVariables', (): void => {
       value: 'weather.temperature'
     });
     expect(variables.filter((item: Variable): boolean => item.description === item.value)).toEqual([]);
+    wrapper.unmount();
   });
 
   it('ignores manually declared data schema when execute code defines data', (): void => {
-    const dataItem = ref<WidgetData | undefined>({
+    const widgetDataRef = ref<WidgetData | undefined>({
       ...createWidgetData(),
       dataSchema: {
         type: 'object',
@@ -350,31 +418,33 @@ describe('useElementVariables', (): void => {
         }
       }
     });
-    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const values = readVariableValues(variableOptions.value);
 
     expect(values).toContain('weather.temperature');
     expect(values).not.toContain('stale');
+    wrapper.unmount();
   });
 
   it('uses default execute code to provide default data variables when execute config is missing', (): void => {
     const widgetData = createWidgetData();
     delete widgetData.execute;
-    const dataItem = ref<WidgetData | undefined>(widgetData);
-    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const widgetDataRef = ref<WidgetData | undefined>(widgetData);
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const values = readVariableValues(variableOptions.value);
 
     expect(values).toContain('input');
     expect(values).toContain('message');
     expect(values).not.toContain('data');
+    wrapper.unmount();
   });
 
   it('provides item and index variables for a loop-enabled element', (): void => {
     const loopElement = createWidgetElement('text-1', {
       [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
     });
-    const dataItem = ref<WidgetData | undefined>(createLoopWidgetData([loopElement]));
-    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value, (): WidgetElement => loopElement);
+    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopElement]));
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => loopElement);
     const values = readVariableValues(variableOptions.value);
     const itemVariable = findVariable(variableOptions.value, 'item');
 
@@ -383,24 +453,30 @@ describe('useElementVariables', (): void => {
     expect(values).toContain('item.price');
     expect(values).toContain('index');
     expect(itemVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual(['item.name', 'item.price']);
+    wrapper.unmount();
   });
 
   it('provides group loop variables to elements covered by the same group owner', (): void => {
     const groupChild = createWidgetElement('text-1');
-    const loopOwner = createGroupElement('group-1', {
-      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
-    }, [groupChild]);
-    const dataItem = ref<WidgetData | undefined>(createLoopWidgetData([loopOwner]));
-    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value, (): WidgetElement => groupChild);
+    const loopOwner = createGroupElement(
+      'group-1',
+      {
+        [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
+      },
+      [groupChild]
+    );
+    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopOwner]));
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => groupChild);
     const values = readVariableValues(variableOptions.value);
 
     expect(values).toContain('item.name');
     expect(values).toContain('index');
+    wrapper.unmount();
   });
 
   it('provides loop source options from input and inferred data schema', (): void => {
-    const dataItem = ref<WidgetData | undefined>(createLoopWidgetData([]));
-    const { loopSourceOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([]));
+    const { loopSourceOptions, wrapper } = mountElementVariables(widgetDataRef);
 
     expect(loopSourceOptions.value).toEqual([
       {
@@ -408,13 +484,15 @@ describe('useElementVariables', (): void => {
         value: 'input.products'
       }
     ]);
+    wrapper.unmount();
   });
 
   it('falls back to root variables when widget data is not ready', (): void => {
-    const dataItem = ref<WidgetData | undefined>();
-    const { loopSourceOptions, variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const widgetDataRef = ref<WidgetData | undefined>();
+    const { loopSourceOptions, variableOptions, wrapper } = mountElementVariables(widgetDataRef);
 
     expect(readVariableValues(variableOptions.value)).toEqual(['input']);
     expect(loopSourceOptions.value).toEqual([]);
+    wrapper.unmount();
   });
 });

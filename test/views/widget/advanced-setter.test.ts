@@ -4,11 +4,12 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import { defineComponent, nextTick } from 'vue';
-import type { PropType } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
+import type { PropType, Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { SelectOption } from '@/components/BSelect/types';
+import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
@@ -177,11 +178,47 @@ describe('AdvancedSetter', (): void => {
    * @returns 组件包装器
    */
   function mountAdvancedSetter(element: WidgetElement): VueWrapper {
-    return mount(AdvancedSetter, {
-      props: {
-        dataItem: createWidgetData(element),
-        elements: [element]
+    const Host = defineComponent({
+      name: 'AdvancedSetterHost',
+      components: {
+        AdvancedSetter
       },
+      emits: {
+        /**
+         * 透传高级设置面板元素更新。
+         * @param elements - 更新后的元素列表
+         * @returns 是否允许触发事件
+         */
+        'update:elements': (elements: WidgetElement[]): boolean => Array.isArray(elements)
+      },
+      setup(_props, { emit }): { elementsModel: Ref<WidgetElement[]>; handleElementsUpdate: (elements: WidgetElement[]) => void } {
+        const widgetData = ref<WidgetData | undefined>(createWidgetData(element));
+        const selectedElementIds = ref<string[]>([element.id]);
+        const elementsModel = ref<WidgetElement[]>([element]);
+
+        provideWidgetContext({
+          widgetData,
+          selectedElementIds
+        });
+
+        /**
+         * 同步高级设置面板元素更新。
+         * @param elements - 更新后的元素列表
+         */
+        function handleElementsUpdate(elements: WidgetElement[]): void {
+          elementsModel.value = elements;
+          emit('update:elements', elements);
+        }
+
+        return {
+          elementsModel,
+          handleElementsUpdate
+        };
+      },
+      template: '<AdvancedSetter :elements="elementsModel" @update:elements="handleElementsUpdate" />'
+    });
+
+    return mount(Host, {
       global: {
         stubs: {
           BSectionBlock: {
@@ -222,7 +259,11 @@ describe('AdvancedSetter', (): void => {
 
               return { handleChange };
             },
-            template: '<select :value="value" @change="handleChange"><option v-for="option in options" :key="String(option.value)" :value="option.value">{{ option.label }}</option></select>'
+            template: `
+              <select :value="value" @change="handleChange">
+                <option v-for="option in options" :key="String(option.value)" :value="option.value">{{ option.label }}</option>
+              </select>
+            `
           })
         }
       }
@@ -244,7 +285,6 @@ describe('AdvancedSetter', (): void => {
     wrapper.findComponent({ name: 'ACheckboxStub' }).vm.$emit('update:checked', false);
     await nextTick();
     const disabledElements = readLastElementsUpdate(wrapper);
-    await wrapper.setProps({ elements: disabledElements });
 
     expect(disabledElements[0].metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
       enabled: false,
