@@ -160,17 +160,6 @@ function createWidgetData(element: WidgetElement): WidgetData {
 
 describe('AdvancedSetter', (): void => {
   /**
-   * 读取最近一次元素更新。
-   * @param wrapper - 组件包装器
-   * @returns 最近一次更新后的元素
-   */
-  function readLastElementUpdate(wrapper: VueWrapper): WidgetElement {
-    const updates = wrapper.emitted('update:element');
-
-    return updates?.[updates.length - 1]?.[0] as WidgetElement;
-  }
-
-  /**
    * 创建高级设置面板测试包装器。
    * @param element - 当前元素
    * @returns 组件包装器
@@ -276,15 +265,14 @@ describe('AdvancedSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('updates loop config through element model', async (): Promise<void> => {
+  it('updates loop config directly through element model', async (): Promise<void> => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
 
     wrapper.findComponent({ name: 'ACheckboxStub' }).vm.$emit('update:checked', false);
     await nextTick();
-    const disabledElement = readLastElementUpdate(wrapper);
 
-    expect(disabledElement.loop).toMatchObject({
+    expect(element.loop).toMatchObject({
       enabled: false,
       itemName: 'item',
       indexName: 'index'
@@ -292,21 +280,21 @@ describe('AdvancedSetter', (): void => {
 
     wrapper.findComponent({ name: 'BSelectStub' }).vm.$emit('update:value', 'input.items');
     await nextTick();
-    const sourceElement = readLastElementUpdate(wrapper);
 
-    expect(sourceElement.loop).toMatchObject({
+    expect(element.loop).toMatchObject({
       source: 'input.items'
     });
+    expect(wrapper.emitted('update:element')).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('prevents saving duplicate effective item and index variable names', async (): Promise<void> => {
+  it('updates loop variable names directly through element model', async (): Promise<void> => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
 
     await wrapper.find('input[placeholder="默认为：index"]').setValue('item');
 
-    expect(wrapper.emitted('update:element')).toBeUndefined();
+    expect(element.loop.indexName).toBe('item');
     wrapper.unmount();
   });
 });

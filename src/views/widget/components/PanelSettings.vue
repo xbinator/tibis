@@ -27,7 +27,7 @@
         </ATabPane>
 
         <ATabPane key="advanced" tab="高级">
-          <AdvancedSetter v-model:element="selectedTargetElement" />
+          <AdvancedSetter v-model:element="select" />
         </ATabPane>
       </ATabs>
     </template>
@@ -42,7 +42,6 @@ import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
 import { getWidgetElementSetter } from '@/components/BWidget/elements';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetSelectTarget } from '@/components/BWidget/types';
-import { findWidgetElementTreeNode, updateWidgetElementInTree } from '@/components/BWidget/utils/widgetTree';
 import AdvancedSetter from './AdvancedSetter.vue';
 import BatchSetter from './BatchSetter.vue';
 import DesignSetter from './DesignSetter.vue';
@@ -93,34 +92,6 @@ function isElementTarget(target: WidgetSelectTarget): target is WidgetElement {
 
 /** 当前选中元素对应的专属属性设置面板。 */
 const elementSetter = computed<Component | null>(() => (isElementTarget(select.value) ? getWidgetElementSetter(select.value.name) : null));
-
-/**
- * 写回高级设置面板更新后的元素。
- * @param updatedElement - 更新后的元素
- */
-function updateAdvancedElement(updatedElement: WidgetElement): void {
-  const nextElements = updateWidgetElementInTree(widgetData.value.elements, updatedElement.id, (): WidgetElement => updatedElement);
-
-  widgetData.value = { ...widgetData.value, elements: nextElements };
-
-  if (isElementTarget(select.value) && select.value.id === updatedElement.id) {
-    select.value = findWidgetElementTreeNode(nextElements, updatedElement.id)?.element ?? updatedElement;
-  }
-}
-
-/** 当前单选元素高级设置模型。 */
-const selectedTargetElement = computed<WidgetElement>({
-  get: (): WidgetElement => {
-    if (!isElementTarget(select.value)) {
-      throw new Error('Advanced setter requires a selected widget element.');
-    }
-
-    return findWidgetElementTreeNode(widgetData.value.elements, select.value.id)?.element ?? select.value;
-  },
-  set: (updatedElement: WidgetElement): void => {
-    updateAdvancedElement(updatedElement);
-  }
-});
 </script>
 
 <style lang="less" scoped>

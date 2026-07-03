@@ -277,10 +277,11 @@ describe('PanelSettings', (): void => {
     wrapper.unmount();
   });
 
-  it('renders advanced tab for a selected element and merges element model updates', async (): Promise<void> => {
+  it('renders advanced tab for a selected element and edits the selected element directly', async (): Promise<void> => {
     const element = createWidgetElement('text-1', 'text');
     const dataItem = createWidgetData(element);
     const loopConfig = createLoopConfig();
+    element.loop = loopConfig;
     dataItem.inputSchema.properties.items = {
       type: 'array',
       items: {
@@ -299,32 +300,11 @@ describe('PanelSettings', (): void => {
 
     expect(wrapper.find('[data-tab="高级"]').exists()).toBe(true);
 
-    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('update:element', {
-      ...element,
-      loop: loopConfig
-    });
+    wrapper.findComponent({ name: 'ACheckboxStub' }).vm.$emit('update:checked', false);
 
-    expect(wrapper.emitted('update:value')).toEqual([
-      [
-        {
-          ...dataItem,
-          elements: [
-            {
-              ...element,
-              loop: loopConfig
-            }
-          ]
-        }
-      ]
-    ]);
-    expect(wrapper.emitted('update:select')).toEqual([
-      [
-        {
-          ...element,
-          loop: loopConfig
-        }
-      ]
-    ]);
+    expect(dataItem.elements[0]?.loop.enabled).toBe(false);
+    expect(wrapper.emitted('update:value')).toBeUndefined();
+    expect(wrapper.emitted('update:select')).toBeUndefined();
     wrapper.unmount();
   });
 
