@@ -23,7 +23,14 @@
 
 <script setup lang="ts">
 import type { WidgetData, WidgetShapeElement, WidgetSize } from './types';
-import type { WidgetRenderContext, WidgetRuntimeChange, WidgetRuntimeLifecycle, WidgetRuntimeState, WidgetRuntimeStatus } from 'types/widget';
+import type {
+  WidgetRenderContext,
+  WidgetRuntimeChange,
+  WidgetRuntimeDataPatch,
+  WidgetRuntimeLifecycle,
+  WidgetRuntimeState,
+  WidgetRuntimeStatus
+} from 'types/widget';
 import type { CSSProperties } from 'vue';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { isEqual } from 'lodash-es';
@@ -39,6 +46,7 @@ import {
   initWidgetMountState,
   type WidgetRuntimeFinishResult
 } from './utils/widgetRuntime';
+import { applyWidgetRuntimeDataPatchesToState } from './utils/widgetRuntimeDataPatch';
 import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from './utils/widgetRuntimeLayout';
 
 defineOptions({ name: 'BWidgetRuntime' });
@@ -94,12 +102,18 @@ const { viewportSize } = useViewportSize('rootRef');
 const MAX_PENDING_RUNTIME_STATE_COUNT = 20;
 /** 小组件脚本托管 HTTP 客户端。 */
 const widgetHttpClient = createWidgetHttpClient();
+/** 脚本执行中的实时 patch 预览状态，不进入宿主持久化确认队列。 */
+const patchPreviewRuntimeState = shallowRef<WidgetRuntimeState | null>(null);
 /** 运行态本地快照，用于衔接宿主 props 回写前的连续交互。 */
 const localRuntimeState = shallowRef<WidgetRuntimeState | null>(null);
 /** 已发出但宿主 props 可能尚未回写的运行态快照。 */
 const pendingRuntimeStates = shallowRef<WidgetRuntimeState[]>([]);
 /** 串行运行态脚本任务，避免并发交互读取同一个旧快照。 */
 let runtimeTaskQueue: Promise<void> = Promise.resolve();
+/** 实时 patch 执行序号。 */
+let runtimePatchExecutionSeq = 0;
+/** 当前允许接收 patch 的执行 ID。 */
+let activePatchExecutionId: string | null = null;
 
 /** 来自宿主 props 的运行态状态快照。 */
 const propsRuntimeState = computed<WidgetRuntimeState>(() => ({
@@ -109,7 +123,7 @@ const propsRuntimeState = computed<WidgetRuntimeState>(() => ({
   renderContext: props.renderContext
 }));
 /** 当前有效运行态状态快照。 */
-const runtimeState = computed<WidgetRuntimeState>(() => localRuntimeState.value ?? propsRuntimeState.value);
+const runtimeState = computed<WidgetRuntimeState>(() => patchPreviewRuntimeState.value ?? localRuntimeState.value ?? propsRuntimeState.value);
 /** 运行态渲染上下文响应式包装。 */
 const providedRenderContext = computed<WidgetRenderContext | undefined>(() => runtimeState.value.renderContext);
 
@@ -200,6 +214,55 @@ function commitLocalRuntimeState(state: WidgetRuntimeState): void {
 }
 
 /**
+ * 创建一次脚本执行的实时 patch ID。
+ * @returns patch 执行 ID
+ */
+function createPatchExecutionId(): string {
+  runtimePatchExecutionSeq += 1;
+  return `widget-runtime-patch-${runtimePatchExecutionSeq}`;
+}
+
+/**
+ * 开始接收一次脚本执行的实时 patch。
+ * @returns patch 执行 ID
+ */
+function beginPatchExecution(): string {
+  const executionId = createPatchExecutionId();
+
+  activePatchExecutionId = executionId;
+  patchPreviewRuntimeState.value = null;
+
+  return executionId;
+}
+
+/**
+ * 清理指定脚本执行的实时 patch 预览。
+ * @param executionId - patch 执行 ID
+ */
+function clearPatchPreview(executionId: string): void {
+  if (executionId !== activePatchExecutionId) return;
+
+  patchPreviewRuntimeState.value = null;
+  activePatchExecutionId = null;
+}
+
+/**
+ * 提交脚本执行中的实时 data patch。
+ * @param executionId - patch 执行 ID
+ * @param patches - data patch 列表
+ */
+function commitRuntimeDataPatches(executionId: string, patches: WidgetRuntimeDataPatch[]): void {
+  if (executionId !== activePatchExecutionId) return;
+  if (!patches.length) return;
+
+  // 第一个 preview 从当前可见状态开始；后续 preview 在上一版 preview 上继续叠加。
+  // runtimeState.value 在没有 preview 时只会回落到 localRuntimeState 或 propsRuntimeState。
+  const baseState = patchPreviewRuntimeState.value ?? runtimeState.value;
+
+  patchPreviewRuntimeState.value = applyWidgetRuntimeDataPatchesToState(baseState, patches);
+}
+
+/**
  * 从脚本执行结果中提取运行态快照。
  * @param result - 脚本执行结果
  * @returns 可写回宿主的运行态快照
@@ -243,6 +306,8 @@ function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: Widg
 function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult, output?: unknown): void {
   const change = createRuntimeChange(reason, result, output);
 
+  patchPreviewRuntimeState.value = null;
+  activePatchExecutionId = null;
   commitLocalRuntimeState(createStateFromRuntimeResult(result));
   emit('change', change);
 }
@@ -264,8 +329,15 @@ async function initWidgetRuntime(): Promise<void> {
   if (!props.runtimeEnabled) return;
 
   const currentState = runtimeState.value;
-  const nextState = await initWidgetMountState(currentState, { http: widgetHttpClient });
-  if (nextState === currentState) return;
+  const executionId = beginPatchExecution();
+  const nextState = await initWidgetMountState(currentState, {
+    http: widgetHttpClient,
+    onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches)
+  });
+  if (nextState === currentState) {
+    clearPatchPreview(executionId);
+    return;
+  }
 
   emitRuntimeChange('mount', { state: nextState });
 }
@@ -278,8 +350,15 @@ async function runRuntimeInteraction(interactionCode: string): Promise<void> {
   if (!props.runtimeEnabled) return;
 
   const currentState = runtimeState.value;
-  const result = await createWidgetRuntimeInstance(currentState, { http: widgetHttpClient }).runInteraction(interactionCode);
-  if (result.state === currentState && !result.sendMessage) return;
+  const executionId = beginPatchExecution();
+  const result = await createWidgetRuntimeInstance(currentState, {
+    http: widgetHttpClient,
+    onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches)
+  }).runInteraction(interactionCode);
+  if (result.state === currentState && !result.sendMessage) {
+    clearPatchPreview(executionId);
+    return;
+  }
 
   emitRuntimeChange('interaction', result);
 }
@@ -302,7 +381,12 @@ provideWidgetRuntime(providedRuntime);
 function handleNodeSubmit(output: unknown): void {
   if (props.runtimeEnabled) {
     enqueueRuntimeTask(async (): Promise<void> => {
-      const result = await finishWidgetRuntime(runtimeState.value, { http: widgetHttpClient });
+      const currentState = runtimeState.value;
+      const executionId = beginPatchExecution();
+      const result = await finishWidgetRuntime(currentState, {
+        http: widgetHttpClient,
+        onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches)
+      });
 
       emitRuntimeChange('submit', result, output);
     });
@@ -318,6 +402,8 @@ function handleNodeSubmit(output: unknown): void {
  */
 function syncLocalRuntimeStateFromProps(nextState: WidgetRuntimeState): void {
   if (!props.runtimeEnabled) {
+    patchPreviewRuntimeState.value = null;
+    activePatchExecutionId = null;
     localRuntimeState.value = null;
     pendingRuntimeStates.value = [];
     return;

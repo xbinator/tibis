@@ -3,10 +3,14 @@
  * @description BWidget 运行态脚本沙箱执行工具。
  */
 import type { RequestInput, RequestMethod, RequestResponse } from 'types/request';
-import type { WidgetHttpClient, WidgetRuntimeSendMessage, WidgetRuntimeState, WidgetSendMessageTextPart } from 'types/widget';
+import type { WidgetHttpClient, WidgetRuntimeDataPatch, WidgetRuntimeSendMessage, WidgetRuntimeState, WidgetSendMessageTextPart } from 'types/widget';
 import { cloneDeep, isPlainObject } from 'lodash-es';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { compileSandboxSource, createSandboxHttpHost, runSandboxCode, SANDBOX_HTTP_HOST_FUNCTION_NAME } from '@/utils/sandbox';
+import { isWidgetRuntimeDataPatchArray } from './widgetRuntimeDataPatch';
+
+/** 沙箱中用于上报 Widget data patch 的宿主函数名。 */
+const SANDBOX_WIDGET_DATA_PATCH_HOST_FUNCTION_NAME = '__sandboxWidgetDataPatch';
 
 /**
  * 小组件脚本生命周期执行选项。
@@ -20,6 +24,8 @@ interface WidgetLifecycleRunOptions {
   useWorker?: boolean;
   /** Worker 执行超时。 */
   timeoutMs?: number;
+  /** 脚本执行中的运行态 data patch 回调。 */
+  onDataPatch?: (patches: WidgetRuntimeDataPatch[]) => void | Promise<void>;
 }
 
 /** 小组件脚本生命周期名称。 */
@@ -56,7 +62,7 @@ interface WidgetScriptRunResult {
 /**
  * 小组件脚本运行选项。
  */
-type WidgetScriptRunOptions = Pick<WidgetLifecycleRunOptions, 'http' | 'useWorker' | 'timeoutMs'>;
+type WidgetScriptRunOptions = Pick<WidgetLifecycleRunOptions, 'http' | 'useWorker' | 'timeoutMs' | 'onDataPatch'>;
 
 /**
  * 小组件 part 沙箱执行选项。
@@ -276,8 +282,11 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return { content, isError: typeof value.isError === "boolean" ? value.isError : false }',
     '}',
     '',
-    'function __createWidgetHttpClient() {',
-    `  const request = (method, url, input = {}) => ${SANDBOX_HTTP_HOST_FUNCTION_NAME}({ ...__clone(input), method, url })`,
+    'function __createWidgetHttpClient(executionState) {',
+    `  const request = async (method, url, input = {}) => {`,
+    '    await __flushDataPatches(executionState)',
+    `    return ${SANDBOX_HTTP_HOST_FUNCTION_NAME}({ ...__clone(input), method, url })`,
+    '  }',
     '  return {',
     "    get: (url, input = {}) => request('GET', url, input),",
     "    post: (url, input = {}) => request('POST', url, input),",
@@ -288,32 +297,103 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '}',
     '',
     'function __createExecutionState() {',
-    '  return { dataChanged: false, sendMessage: undefined, pendingMethodCalls: [] }',
+    '  return {',
+    '    dataChanged: false,',
+    '    sendMessage: undefined,',
+    '    pendingMethodCalls: [],',
+    '    pendingDataPatches: [],',
+    '    pendingDataPatchFlushes: [],',
+    '    pendingDataPatchFlushScheduled: false',
+    '  }',
+    '}',
+    '',
+    'function __isPatchPathSegment(value) {',
+    "  return typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)",
+    '}',
+    '',
+    'function __isPatchablePath(path) {',
+    "  return Array.isArray(path) && path.length > 0 && typeof path[0] === 'string' && path.every(__isPatchPathSegment)",
+    '}',
+    '',
+    'function __normalizePatchPathSegment(target, property) {',
+    "  if (typeof property === 'symbol') return undefined",
+    "  if (Array.isArray(target) && typeof property === 'string' && /^(0|[1-9]\\d*)$/.test(property)) return Number(property)",
+    "  return typeof property === 'number' ? property : String(property)",
+    '}',
+    '',
+    'function __appendPatchPath(path, target, property) {',
+    '  const segment = __normalizePatchPathSegment(target, property)',
+    '  return segment === undefined ? undefined : [...path, segment]',
+    '}',
+    '',
+    'function __createSetDataPatch(target, path, value) {',
+    '  if (!path) return undefined',
+    '  if (value !== undefined) return { op: "set", path, value }',
+    '  return Array.isArray(target) && typeof path[path.length - 1] === "number" ? { op: "set", path, value: null } : { op: "delete", path }',
+    '}',
+    '',
+    'async function __flushDataPatches(executionState) {',
+    '  executionState.pendingDataPatchFlushScheduled = false',
+    '  const patches = executionState.pendingDataPatches.splice(0)',
+    '  if (!patches.length) return',
+    `  await ${SANDBOX_WIDGET_DATA_PATCH_HOST_FUNCTION_NAME}(patches)`,
+    '}',
+    '',
+    'function __scheduleDataPatchFlush(executionState) {',
+    '  if (executionState.pendingDataPatchFlushScheduled) return',
+    '  executionState.pendingDataPatchFlushScheduled = true',
+    '  const flushPromise = Promise.resolve().then(() => __flushDataPatches(executionState))',
+    '  executionState.pendingDataPatchFlushes.push(flushPromise)',
+    '}',
+    '',
+    'function __recordDataPatch(executionState, patch) {',
+    '  if (!__isPatchablePath(patch.path)) return',
+    '  executionState.pendingDataPatches.push(__clone(patch))',
+    '  __scheduleDataPatchFlush(executionState)',
+    '}',
+    '',
+    'async function __flushScheduledDataPatchFlushes(executionState) {',
+    '  while (executionState.pendingDataPatchFlushes.length > 0) {',
+    '    const pendingFlushes = executionState.pendingDataPatchFlushes.splice(0)',
+    '    await Promise.all(pendingFlushes)',
+    '  }',
+    '  await __flushDataPatches(executionState)',
     '}',
     '',
     'function __isObjectLike(value) {',
     "  return value !== null && typeof value === 'object'",
     '}',
     '',
-    'function __createWidgetDataProxy(value, executionState, proxyCache) {',
+    'function __createWidgetDataProxy(value, executionState, proxyCache, path) {',
     '  if (!__isObjectLike(value)) return value',
     '  const cachedProxy = proxyCache.get(value)',
     '  if (cachedProxy) return cachedProxy',
     '  const proxy = new Proxy(value, {',
     '    get(target, property, receiver) {',
     '      const childValue = Reflect.get(target, property, receiver)',
-    '      return __createWidgetDataProxy(childValue, executionState, proxyCache)',
+    '      const childPath = __appendPatchPath(path, target, property)',
+    '      return childPath ? __createWidgetDataProxy(childValue, executionState, proxyCache, childPath) : childValue',
     '    },',
     '    set(target, property, nextValue, receiver) {',
     '      const previousValue = Reflect.get(target, property, receiver)',
-    '      const didSet = Reflect.set(target, property, __clone(nextValue), receiver)',
-    '      if (didSet && !Object.is(previousValue, nextValue)) executionState.dataChanged = true',
+    '      const clonedValue = __clone(nextValue)',
+    '      const didSet = Reflect.set(target, property, clonedValue, receiver)',
+    '      if (didSet && !Object.is(previousValue, nextValue)) {',
+    '        executionState.dataChanged = true',
+    '        const patchPath = __appendPatchPath(path, target, property)',
+    '        const patch = __createSetDataPatch(target, patchPath, clonedValue)',
+    '        if (patch) __recordDataPatch(executionState, patch)',
+    '      }',
     '      return didSet',
     '    },',
     '    deleteProperty(target, property) {',
     '      const hadProperty = Object.prototype.hasOwnProperty.call(target, property)',
     '      const didDelete = Reflect.deleteProperty(target, property)',
-    '      if (didDelete && hadProperty) executionState.dataChanged = true',
+    '      if (didDelete && hadProperty) {',
+    '        executionState.dataChanged = true',
+    '        const patchPath = __appendPatchPath(path, target, property)',
+    '        if (patchPath) __recordDataPatch(executionState, { op: "delete", path: patchPath })',
+    '      }',
     '      return didDelete',
     '    }',
     '  })',
@@ -326,11 +406,16 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    configurable: true,',
     '    enumerable: true,',
     '    get() {',
-    '      return __createWidgetDataProxy(__widgetData[key], executionState, proxyCache)',
+    '      return __createWidgetDataProxy(__widgetData[key], executionState, proxyCache, [key])',
     '    },',
     '    set(value) {',
-    '      __widgetData[key] = __clone(value)',
-    '      executionState.dataChanged = true',
+    '      const previousValue = __widgetData[key]',
+    '      const clonedValue = __clone(value)',
+    '      __widgetData[key] = clonedValue',
+    '      if (!Object.is(previousValue, value)) {',
+    '        executionState.dataChanged = true',
+    '        __recordDataPatch(executionState, __createSetDataPatch(__widgetData, [key], clonedValue))',
+    '      }',
     '    }',
     '  })',
     '}',
@@ -340,16 +425,21 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    get(targetObject, property, receiver) {',
     '      if (Reflect.has(targetObject, property)) return Reflect.get(targetObject, property, receiver)',
     "      if (typeof property === 'string' && Object.prototype.hasOwnProperty.call(__widgetData, property)) {",
-    '        return __createWidgetDataProxy(__widgetData[property], executionState, proxyCache)',
+    '        return __createWidgetDataProxy(__widgetData[property], executionState, proxyCache, [property])',
     '      }',
     '      return undefined',
     '    },',
     '    set(targetObject, property, value, receiver) {',
     '      if (Reflect.has(targetObject, property)) return Reflect.set(targetObject, property, value, receiver)',
     "      if (typeof property !== 'string') return Reflect.set(targetObject, property, value, receiver)",
-    '      __widgetData[property] = __clone(value)',
+    '      const previousValue = __widgetData[property]',
+    '      const clonedValue = __clone(value)',
+    '      __widgetData[property] = clonedValue',
     '      __defineWidgetDataAccessor(targetObject, property, executionState, proxyCache)',
-    '      executionState.dataChanged = true',
+    '      if (!Object.is(previousValue, value)) {',
+    '        executionState.dataChanged = true',
+    '        __recordDataPatch(executionState, __createSetDataPatch(__widgetData, [property], clonedValue))',
+    '      }',
     '      return true',
     '    },',
     '    has(targetObject, property) {',
@@ -360,7 +450,10 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "      if (typeof property === 'string' && Object.prototype.hasOwnProperty.call(__widgetData, property)) {",
     '        const didDeleteData = delete __widgetData[property]',
     '        if (Reflect.has(targetObject, property)) Reflect.deleteProperty(targetObject, property)',
-    '        if (didDeleteData) executionState.dataChanged = true',
+    '        if (didDeleteData) {',
+    '          executionState.dataChanged = true',
+    '          __recordDataPatch(executionState, { op: "delete", path: [property] })',
+    '        }',
     '        return didDeleteData',
     '      }',
     '      if (Reflect.has(targetObject, property)) return Reflect.deleteProperty(targetObject, property)',
@@ -373,10 +466,11 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  const proxyCache = new WeakMap()',
     '  const context = {',
     '    get $input() { return __clone(__widgetInput) },',
-    '    $http: __createWidgetHttpClient(),',
+    '    $http: __createWidgetHttpClient(executionState),',
     '    async $sendMessage(message) {',
     '      const sendMessage = __normalizeSendMessage(message)',
     '      if (sendMessage) executionState.sendMessage = sendMessage',
+    '      await __flushDataPatches(executionState)',
     '    }',
     '  }',
     '  for (const key of Object.keys(__widgetData)) {',
@@ -439,6 +533,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    await __runInteractionCode(interactionCode, widgetThis, executionState)',
     '  }',
     '  await __flushPendingMethodCalls(executionState)',
+    '  await __flushScheduledDataPatchFlushes(executionState)',
     '  return {',
     '    data: __clone(__widgetData),',
     '    dataChanged: executionState.dataChanged,',
@@ -478,12 +573,21 @@ async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: 
     {
       useWorker: options.useWorker ?? !isTestEnvironment(),
       timeoutMs: options.timeoutMs,
-      hostFunctions: createSandboxHttpHost({
-        request: (request: RequestInput): Promise<RequestResponse> => runWidgetHttpRequest(options.http, request),
-        functionName: SANDBOX_HTTP_HOST_FUNCTION_NAME,
-        disabledMessage: '当前环境未启用小组件 HTTP 客户端',
-        invalidRequestMessage: '小组件 HTTP 请求参数无效'
-      })
+      hostFunctions: {
+        ...createSandboxHttpHost({
+          request: (request: RequestInput): Promise<RequestResponse> => runWidgetHttpRequest(options.http, request),
+          functionName: SANDBOX_HTTP_HOST_FUNCTION_NAME,
+          disabledMessage: '当前环境未启用小组件 HTTP 客户端',
+          invalidRequestMessage: '小组件 HTTP 请求参数无效'
+        }),
+        [SANDBOX_WIDGET_DATA_PATCH_HOST_FUNCTION_NAME]: async (patches: unknown): Promise<void> => {
+          if (!isWidgetRuntimeDataPatchArray(patches)) {
+            throw new Error('小组件运行态 patch 参数无效');
+          }
+
+          await options.onDataPatch?.(patches);
+        }
+      }
     }
   );
 
@@ -551,7 +655,8 @@ function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOpt
     {
       http: options.http,
       useWorker: options.useWorker,
-      timeoutMs: options.timeoutMs
+      timeoutMs: options.timeoutMs,
+      onDataPatch: options.onDataPatch
     }
   );
 }

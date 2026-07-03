@@ -3,15 +3,15 @@
  * @description BChat 小组件消息运行态脚本测试。
  */
 import type { ChatMessageWidgetPart } from 'types/chat';
-import type { WidgetData, WidgetHttpClient } from 'types/widget';
+import type { WidgetData, WidgetHttpClient, WidgetRuntimeDataPatch } from 'types/widget';
 import { describe, expect, it } from 'vitest';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import {
   createWidgetRuntimeInstance as createWidgetRuntimeInstanceBase,
   finishWidgetRuntime as finishWidgetRuntimeBase,
   finishWidgetUnmountState as finishWidgetUnmountStateBase,
   initWidgetMountState as initWidgetMountStateBase
 } from '@/components/BWidget/utils/widgetRuntime';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { runSandboxCode } from '@/utils/sandbox';
 
 /** 测试环境没有浏览器 Worker，显式允许走本地 fallback。 */
@@ -282,7 +282,7 @@ describe('widgetRuntime', (): void => {
         '    }',
         '  },',
         '  mounted() {',
-        "    this.weather.label = `${this.$input.city} ${this.weather.temperature}°C`",
+        "    this.weather.label = this.$input.city + ' ' + this.weather.temperature + '°C'",
         '  }',
         '})'
       ].join('\n')
@@ -306,7 +306,7 @@ describe('widgetRuntime', (): void => {
         "    message: ''",
         '  },',
         '  mounted() {',
-        "    this.message = `${typeof this.$data}:${typeof this.$setData}`",
+        "    this.message = typeof this.$data + ':' + typeof this.$setData",
         '  }',
         '})'
       ].join('\n')
@@ -339,6 +339,72 @@ describe('widgetRuntime', (): void => {
     expect(nextPart.renderContext.data).toEqual({
       keep: '保留'
     });
+  });
+
+  it('reports data patches while mounted scripts write direct data fields', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'Widget({',
+        '  data: {',
+        '    weather: {',
+        '      temperature: 0',
+        '    }',
+        '  },',
+        '  mounted() {',
+        "    this.message = '正在加载'",
+        '    this.weather.temperature = 28',
+        "    this.items = [{ name: '拿铁' }]",
+        '    delete this.message',
+        '  }',
+        '})'
+      ].join('\n')
+    );
+    const patchBatches: WidgetRuntimeDataPatch[][] = [];
+
+    const nextPart = await initWidgetMountState(part, {
+      onDataPatch: (patches): void => {
+        patchBatches.push(patches);
+      }
+    });
+
+    expect(patchBatches.flat()).toEqual([
+      { op: 'set', path: ['message'], value: '正在加载' },
+      { op: 'set', path: ['weather', 'temperature'], value: 28 },
+      { op: 'set', path: ['items'], value: [{ name: '拿铁' }] },
+      { op: 'delete', path: ['message'] }
+    ]);
+    expect(nextPart.renderContext.data).toEqual({
+      weather: {
+        temperature: 28
+      },
+      items: [{ name: '拿铁' }]
+    });
+  });
+
+  it('reports undefined object field writes as delete patches without failing scripts', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'Widget({',
+        '  data: {',
+        "    message: '等待用户操作'",
+        '  },',
+        '  mounted() {',
+        '    this.message = undefined',
+        '  }',
+        '})'
+      ].join('\n')
+    );
+    const patchBatches: WidgetRuntimeDataPatch[][] = [];
+
+    const nextPart = await initWidgetMountState(part, {
+      onDataPatch: (patches): void => {
+        patchBatches.push(patches);
+      }
+    });
+
+    expect(nextPart.status).toBe('mounted');
+    expect(patchBatches.flat()).toEqual([{ op: 'delete', path: ['message'] }]);
+    expect(nextPart.renderContext.data).toEqual({});
   });
 
   it('runs normal JavaScript control flow inside mounted hooks', async (): Promise<void> => {
@@ -639,6 +705,47 @@ describe('widgetRuntime', (): void => {
       weather: {
         temperature: 28
       }
+    });
+  });
+
+  it('flushes pending data patches before hosted http requests', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'Widget({',
+        '  async mounted() {',
+        "    this.message = '正在加载'",
+        "    await this.$http.get('https://api.example.com/weather')",
+        "    this.message = '加载完成'",
+        '  }',
+        '})'
+      ].join('\n')
+    );
+    const events: string[] = [];
+    const http: WidgetHttpClient = {
+      get: async () => {
+        events.push('http');
+        return { status: 200, ok: true, url: 'https://api.example.com/weather', headers: {}, data: {} };
+      },
+      post: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      put: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      patch: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' }),
+      delete: async () => ({ status: 405, ok: false, url: '', headers: {}, data: '' })
+    };
+
+    const nextPart = await initWidgetMountState(part, {
+      http,
+      onDataPatch: (patches): void => {
+        for (const patch of patches) {
+          if (patch.op === 'set' && patch.path[0] === 'message') {
+            events.push(`patch:${String(patch.value)}`);
+          }
+        }
+      }
+    });
+
+    expect(events).toEqual(['patch:正在加载', 'http', 'patch:加载完成']);
+    expect(nextPart.renderContext.data).toEqual({
+      message: '加载完成'
     });
   });
 

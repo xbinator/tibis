@@ -47,6 +47,30 @@ export interface WidgetRuntimeState {
 }
 
 /**
+ * Widget 运行态 data patch 路径片段。
+ */
+export type WidgetRuntimeDataPathSegment = string | number;
+
+/**
+ * Widget 运行态 data patch。
+ */
+export type WidgetRuntimeDataPatch =
+  | {
+      /** 设置字段值 */
+      op: 'set';
+      /** 从 renderContext.data 根开始的路径 */
+      path: WidgetRuntimeDataPathSegment[];
+      /** 写入值 */
+      value: unknown;
+    }
+  | {
+      /** 删除字段 */
+      op: 'delete';
+      /** 从 renderContext.data 根开始的路径 */
+      path: WidgetRuntimeDataPathSegment[];
+    };
+
+/**
  * Widget 运行态变化来源。
  */
 export type WidgetRuntimeChangeReason = 'mount' | 'interaction' | 'submit';

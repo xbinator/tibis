@@ -3,6 +3,7 @@
  * @description 验证 BWidget 运行态只读视图按内容边界缩放渲染 Widget。
  * @vitest-environment jsdom
  */
+import type { RequestInput, RequestResponse } from 'types/request';
 import type { WidgetData, WidgetRenderContext, WidgetRuntimeChange } from 'types/widget';
 import { defineComponent, nextTick } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
@@ -111,6 +112,33 @@ function createRuntimeWidgetData(): WidgetData {
 }
 
 /**
+ * 创建展示 message 字段的运行态测试Widget 数据。
+ * @param code - 运行脚本
+ * @returns 测试Widget 数据
+ */
+function createRuntimeMessageWidgetData(code: string): WidgetData {
+  const dataItem = createRuntimeWidgetData();
+
+  return {
+    ...dataItem,
+    execute: {
+      code
+    },
+    elements: dataItem.elements.map((element) =>
+      element.id === 'text-1'
+        ? {
+            ...element,
+            metadata: {
+              ...element.metadata,
+              content: '{{ message }}'
+            }
+          }
+        : element
+    )
+  };
+}
+
+/**
  * 创建运行态渲染上下文。
  * @param city - 城市名称
  * @param temperature - 温度
@@ -161,6 +189,35 @@ async function flushWidgetRuntime(): Promise<void> {
     setTimeout(resolve, 0);
   });
   await nextTick();
+}
+
+/**
+ * 创建可手动 resolve 的 Promise。
+ * @returns deferred 对象
+ */
+function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolveDeferred: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((resolve): void => {
+    resolveDeferred = resolve;
+  });
+
+  return {
+    promise,
+    resolve: resolveDeferred
+  };
+}
+
+/**
+ * 模拟 Electron request 能力。
+ * @param request - request 实现
+ */
+function stubElectronRequest(request: (input: RequestInput) => Promise<RequestResponse>): void {
+  Object.defineProperty(window, 'electronAPI', {
+    configurable: true,
+    value: {
+      request
+    }
+  });
 }
 
 /**
@@ -237,6 +294,7 @@ describe('BWidgetRuntime', (): void => {
   });
 
   afterEach((): void => {
+    Reflect.deleteProperty(window, 'electronAPI');
     vi.unstubAllGlobals();
   });
 
@@ -359,6 +417,58 @@ describe('BWidgetRuntime', (): void => {
           weather: {
             temperature: 29
           }
+        }
+      }
+    });
+    wrapper.unmount();
+  });
+
+  it('renders patch preview before mounted scripts finish', async (): Promise<void> => {
+    const requestDeferred = createDeferred<RequestResponse>();
+    const request = vi.fn<(input: RequestInput) => Promise<RequestResponse>>(() => requestDeferred.promise);
+    stubElectronRequest(request);
+
+    const dataItem = createRuntimeMessageWidgetData(
+      [
+        'Widget({',
+        '  async mounted() {',
+        "    this.message = '正在加载'",
+        "    await this.$http.get('https://api.example.com/weather')",
+        "    this.message = '加载完成'",
+        '  }',
+        '})'
+      ].join('\n')
+    );
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {},
+          data: {}
+        },
+        runtimeEnabled: true,
+        status: 'created',
+        lifecycle: {}
+      },
+      attachTo: document.body
+    });
+
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(findNodeById(wrapper, 'text-1').text()).toBe('正在加载');
+    expect(wrapper.emitted('change')).toBeUndefined();
+
+    requestDeferred.resolve({ status: 200, ok: true, url: 'https://api.example.com/weather', headers: {}, data: {} });
+    await flushWidgetRuntime();
+
+    expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
+      reason: 'mount',
+      status: 'mounted',
+      renderContext: {
+        data: {
+          message: '加载完成'
         }
       }
     });
