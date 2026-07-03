@@ -3,8 +3,10 @@
  * @description 验证 BSectionItem 前缀区域的布局配置。
  * @vitest-environment jsdom
  */
+import { h } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import BSectionBlock from '@/components/BSection/Block.vue';
 import BSectionItem from '@/components/BSection/Item.vue';
 
 describe('BSectionItem', (): void => {
@@ -65,6 +67,46 @@ describe('BSectionItem', (): void => {
     });
 
     expect(wrapper.find('.b-section-item__prefix').attributes('style') ?? '').toContain('min-width: 48px;');
+    wrapper.unmount();
+  });
+
+  it('uses prefix min width provided by parent block', (): void => {
+    const wrapper = mount(BSectionBlock, {
+      props: {
+        title: '属性',
+        prefixMinWidth: 52
+      },
+      slots: {
+        default: () => h(BSectionItem, { label: '名称' }, () => h('input', { class: 'field-input' }))
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.find('.b-section-item__prefix').attributes('style') ?? '').toContain('min-width: 52px;');
+    wrapper.unmount();
+  });
+
+  it('prefers item prefix min width over parent block value', (): void => {
+    const wrapper = mount(BSectionBlock, {
+      props: {
+        title: '属性',
+        prefixMinWidth: 52
+      },
+      slots: {
+        default: () => h(BSectionItem, { label: '名称', prefixMinWidth: 40 }, () => h('input', { class: 'field-input' }))
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.find('.b-section-item__prefix').attributes('style') ?? '').toContain('min-width: 40px;');
     wrapper.unmount();
   });
 });

@@ -5,8 +5,8 @@
 <template>
   <div :class="bem({ vertical: direction === 'vertical' })">
     <!-- 文字前缀 -->
-    <div :class="bem('prefix')" :style="prefixStyle">
-      <span v-if="label && !icon" :class="bem('label')">{{ label }}</span>
+    <div :class="bem('label')" :style="labelStyle">
+      <template v-if="label && !icon">{{ label }}</template>
       <!-- 图标前缀 -->
       <BIcon v-if="icon" :icon="icon" :size="iconSize" :class="bem('icon')" />
     </div>
@@ -20,6 +20,7 @@ import type { BSectionItemProps as Props } from './types';
 import { computed, type CSSProperties } from 'vue';
 import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
+import { useSectionContext } from './context';
 
 defineOptions({ name: 'BSectionItem' });
 
@@ -29,13 +30,16 @@ const props = withDefaults(defineProps<Props>(), {
   label: undefined,
   icon: undefined,
   iconSize: 16,
-  prefixMinWidth: undefined,
+  labelMinWidth: undefined,
   direction: 'horizontal'
 });
 
-/** 前缀区域的内联样式。 */
-const prefixStyle = computed<CSSProperties>(() => {
-  const minWidth = addCssUnit(props.prefixMinWidth);
+/** 最近 BSectionBlock 提供的共享上下文。 */
+const sectionContext = useSectionContext();
+
+/** 标签区域的内联样式。 */
+const labelStyle = computed<CSSProperties>(() => {
+  const minWidth = addCssUnit(props.labelMinWidth ?? sectionContext.labelMinWidth.value);
 
   if (minWidth === undefined) return {};
 
@@ -58,22 +62,12 @@ const prefixStyle = computed<CSSProperties>(() => {
   }
 }
 
-.b-section-item__prefix {
+.b-section-item__label {
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  justify-content: center;
   min-width: 18px;
   font-size: 12px;
-}
-
-.b-section-item__label {
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-
-.b-section-item__icon {
-  flex-shrink: 0;
   color: var(--text-secondary);
 }
 
@@ -82,7 +76,7 @@ const prefixStyle = computed<CSSProperties>(() => {
   flex-direction: column;
   align-items: stretch;
 
-  .b-section-item__prefix {
+  .b-section-item__label {
     justify-content: flex-start;
     min-width: 0;
   }

@@ -4,37 +4,35 @@
 -->
 <template>
   <div class="widget-advanced-setter">
-    <BSectionBlock title="循环数据">
+    <BSectionBlock title="循环数据" :prefix-min-width="50">
       <BSectionItem label="启用">
         <ACheckbox v-model:checked="loopEnabled" />
       </BSectionItem>
 
-      <template v-if="loopConfig.enabled">
-        <BSectionItem label="数据源">
-          <BSelect v-model:value="loopSource" placeholder="选择数组数据" :options="sourceOptions" :disabled="sourceOptions.length === 0" />
-        </BSectionItem>
+      <BSectionItem label="数据源">
+        <BSelect v-model:value="loopSource" placeholder="选择数组数据" :options="sourceOptions" />
+      </BSectionItem>
 
-        <div class="widget-advanced-setter__grid">
-          <BSectionItem label="列数">
-            <AInputNumber v-model:value="loopColumns" placeholder="列数" :controls="false" />
-          </BSectionItem>
-          <BSectionItem label="列距">
-            <AInputNumber v-model:value="loopColumnGap" placeholder="列距" :controls="false" />
-          </BSectionItem>
-          <BSectionItem label="行距">
-            <AInputNumber v-model:value="loopRowGap" placeholder="行距" :controls="false" />
-          </BSectionItem>
-        </div>
+      <BSectionItem label="迭代变量">
+        <AInput v-model:value="loopItemName" placeholder="item" />
+      </BSectionItem>
+      <BSectionItem label="索引变量">
+        <AInput v-model:value="loopIndexName" placeholder="index" />
+      </BSectionItem>
 
-        <BSectionItem label="迭代变量">
-          <AInput v-model:value="loopItemName" placeholder="item" />
+      <div class="widget-advanced-setter__grid">
+        <BSectionItem label="列数" prefix-min-width="">
+          <AInputNumber v-model:value="loopColumns" placeholder="列数" :controls="false" />
         </BSectionItem>
-        <BSectionItem label="索引变量">
-          <AInput v-model:value="loopIndexName" placeholder="index" />
+        <BSectionItem label="列距" prefix-min-width="">
+          <AInputNumber v-model:value="loopColumnGap" placeholder="列距" :controls="false" />
         </BSectionItem>
+        <BSectionItem label="行距" prefix-min-width="">
+          <AInputNumber v-model:value="loopRowGap" placeholder="行距" :controls="false" />
+        </BSectionItem>
+      </div>
 
-        <p v-if="sourceOptions.length === 0" class="widget-advanced-setter__empty">暂无可循环数组字段</p>
-      </template>
+      <p v-if="sourceOptions.length === 0" class="widget-advanced-setter__empty">暂无可循环数组字段</p>
     </BSectionBlock>
   </div>
 </template>

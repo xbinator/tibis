@@ -25,8 +25,9 @@
 
 <script setup lang="ts">
 import type { BSectionBlockProps as Props } from './types';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { createNamespace } from '@/utils/namespace';
+import { provideSectionContext } from './context';
 
 defineOptions({ name: 'BSectionBlock' });
 
@@ -34,11 +35,19 @@ const [, bem] = createNamespace('section-block');
 
 const props = withDefaults(defineProps<Props>(), {
   collapsible: false,
-  defaultCollapsed: false
+  defaultCollapsed: false,
+  labelMinWidth: undefined
 });
 
 /** 当前折叠状态。 */
 const isCollapsed = ref(props.defaultCollapsed);
+
+/** 向字段行下发的标签最小宽度配置。 */
+const providedLabelMinWidth = computed(() => props.labelMinWidth);
+
+provideSectionContext({
+  labelMinWidth: providedLabelMinWidth
+});
 
 /**
  * 点击 header 切换折叠状态。
