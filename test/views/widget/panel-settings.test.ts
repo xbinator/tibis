@@ -10,6 +10,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
 import PanelSettings from '@/views/widget/components/PanelSettings.vue';
 
 vi.mock('ant-design-vue', () => ({
@@ -235,9 +236,10 @@ describe('PanelSettings', (): void => {
     wrapper.unmount();
   });
 
-  it('renders advanced tab for a selected element and forwards loop changes', async (): Promise<void> => {
+  it('renders advanced tab for a selected element and merges element model updates', async (): Promise<void> => {
     const element = createWidgetElement('text-1', 'text');
     const dataItem = createWidgetData(element);
+    const loopConfig = createLoopConfig();
     dataItem.inputSchema.properties.items = {
       type: 'array',
       items: {
@@ -256,16 +258,86 @@ describe('PanelSettings', (): void => {
 
     expect(wrapper.find('[data-tab="高级"]').exists()).toBe(true);
 
-    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('loop-change', {
-      elementIds: ['text-1'],
-      config: createLoopConfig()
-    });
+    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('update:elements', [{
+      ...element,
+      metadata: {
+        [WIDGET_LOOP_METADATA_KEY]: loopConfig
+      }
+    }]);
 
-    expect(wrapper.emitted('loop-change')).toEqual([
+    expect(wrapper.emitted('update:value')).toEqual([
       [
         {
-          elementIds: ['text-1'],
-          config: createLoopConfig()
+          ...dataItem,
+          elements: [
+            {
+              ...element,
+              metadata: {
+                [WIDGET_LOOP_METADATA_KEY]: loopConfig
+              }
+            }
+          ]
+        }
+      ]
+    ]);
+    expect(wrapper.emitted('update:select')).toEqual([
+      [{
+        ...element,
+        metadata: {
+          [WIDGET_LOOP_METADATA_KEY]: loopConfig
+        }
+      }]
+    ]);
+    wrapper.unmount();
+  });
+
+  it('renders advanced tab for same-group multi-selection and merges group element updates', (): void => {
+    const firstRect = createWidgetElement('rect-1', 'rect');
+    const secondRect = createWidgetElement('rect-2', 'rect');
+    const loopConfig = createLoopConfig('items');
+    firstRect.metadata = { groupId: 'widget-group-1' };
+    secondRect.metadata = { groupId: 'widget-group-1' };
+    const dataItem = createWidgetData([firstRect, secondRect]);
+    const wrapper = mount(PanelSettings, {
+      props: {
+        value: dataItem,
+        select: null,
+        selectedElementIds: ['rect-1', 'rect-2']
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.find('[data-tab="高级"]').exists()).toBe(true);
+
+    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('update:elements', [
+      {
+        ...firstRect,
+        metadata: {
+          ...firstRect.metadata,
+          [WIDGET_LOOP_METADATA_KEY]: loopConfig
+        }
+      },
+      secondRect
+    ]);
+
+    expect(wrapper.emitted('update:value')).toEqual([
+      [
+        {
+          ...dataItem,
+          elements: [
+            {
+              ...firstRect,
+              metadata: {
+                ...firstRect.metadata,
+                [WIDGET_LOOP_METADATA_KEY]: loopConfig
+              }
+            },
+            secondRect
+          ]
         }
       ]
     ]);
@@ -331,42 +403,6 @@ describe('PanelSettings', (): void => {
           borderColor: '#f97316',
           borderRadius: 6,
           borderWidth: 2
-        }
-      ]
-    ]);
-    wrapper.unmount();
-  });
-
-  it('renders advanced tab for same-group multi-selection and forwards loop changes', (): void => {
-    const firstRect = createWidgetElement('rect-1', 'rect');
-    const secondRect = createWidgetElement('rect-2', 'rect');
-    firstRect.metadata = { groupId: 'widget-group-1' };
-    secondRect.metadata = { groupId: 'widget-group-1' };
-    const wrapper = mount(PanelSettings, {
-      props: {
-        value: createWidgetData([firstRect, secondRect]),
-        select: null,
-        selectedElementIds: ['rect-1', 'rect-2']
-      },
-      global: {
-        stubs: {
-          BIcon: true
-        }
-      }
-    });
-
-    expect(wrapper.find('[data-tab="高级"]').exists()).toBe(true);
-
-    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('loop-change', {
-      elementIds: ['rect-1'],
-      config: createLoopConfig('items')
-    });
-
-    expect(wrapper.emitted('loop-change')).toEqual([
-      [
-        {
-          elementIds: ['rect-1'],
-          config: createLoopConfig('items')
         }
       ]
     ]);

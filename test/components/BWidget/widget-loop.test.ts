@@ -9,6 +9,7 @@ import { getWidgetShapeRenderSize } from '@/components/BWidget/utils/widgetGeome
 import { WIDGET_GROUP_METADATA_KEY } from '@/components/BWidget/utils/widgetGroups';
 import {
   collectWidgetLoopDataSourceOptions,
+  createDefaultWidgetElementLoopConfig,
   createWidgetLoopRenderElements,
   type WidgetLoopRenderContext,
   WIDGET_LOOP_METADATA_KEY
@@ -161,6 +162,13 @@ function createDataSchema(): WidgetSchemaObject {
 }
 
 describe('widgetLoop', (): void => {
+  it('creates empty editable loop variable names in default config', (): void => {
+    const config = createDefaultWidgetElementLoopConfig();
+
+    expect(config.itemName).toBe('');
+    expect(config.indexName).toBe('');
+  });
+
   it('collects array paths from input and data schemas', (): void => {
     expect(collectWidgetLoopDataSourceOptions(createInputSchema(), createDataSchema()).map((item) => item.value)).toEqual([
       'input.items',
@@ -179,6 +187,19 @@ describe('widgetLoop', (): void => {
       { x: 122, y: 20 },
       { x: 10, y: 82 }
     ]);
+    expect(result[0].renderContext.locals).toEqual({ item: { name: 'A' }, index: 0 });
+  });
+
+  it('uses item and index as runtime variable names when config names are empty', (): void => {
+    const loopConfig = {
+      ...createDefaultWidgetElementLoopConfig(),
+      enabled: true,
+      source: 'products',
+      columns: 2
+    };
+    const loopElement = createElement('text-1', { x: 10, y: 20 }, { width: 100, height: 52 }, { [WIDGET_LOOP_METADATA_KEY]: loopConfig });
+    const result = createWidgetLoopRenderElements([loopElement], createRenderContext());
+
     expect(result[0].renderContext.locals).toEqual({ item: { name: 'A' }, index: 0 });
   });
 

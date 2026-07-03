@@ -744,7 +744,7 @@ describe('WidgetPage', (): void => {
     wrapper.unmount();
   });
 
-  it('writes settings loop changes into the target element metadata', async (): Promise<void> => {
+  it('accepts settings element updates through PanelSettings v-model', async (): Promise<void> => {
     const selectedElement = createWidgetElement('node-1', '节点 1');
     const loopConfig = createLoopConfig();
     widgetDataMock.value = {
@@ -765,10 +765,17 @@ describe('WidgetPage', (): void => {
     panelSidebar.vm.$emit('select-element', selectedElement);
     await nextTick();
 
-    panelSettings.vm.$emit('loop-change', {
-      elementIds: ['node-1'],
-      config: loopConfig
+    const updatedElement = {
+      ...selectedElement,
+      metadata: {
+        [WIDGET_LOOP_METADATA_KEY]: loopConfig
+      }
+    };
+    panelSettings.vm.$emit('update:value', {
+      ...widgetDataMock.value,
+      elements: [updatedElement, widgetDataMock.value.elements[1]]
     });
+    panelSettings.vm.$emit('update:select', updatedElement);
     await nextTick();
 
     expect(widgetDataMock.value.elements[0]?.metadata[WIDGET_LOOP_METADATA_KEY]).toEqual(loopConfig);

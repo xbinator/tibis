@@ -17,7 +17,7 @@
       </ATabPane>
 
       <ATabPane v-if="sameGroupSelectedElements.length > 1" key="advanced" tab="高级">
-        <AdvancedSetter :data-item="dataItem" :target-elements="sameGroupSelectedElements" @loop-change="emitLoopChange" />
+        <AdvancedSetter v-model:elements="sameGroupSelectedElements" :data-item="dataItem" />
       </ATabPane>
     </ATabs>
     <div v-else-if="select === null" class="setter-panel__empty">已选择多个元素</div>
@@ -33,7 +33,7 @@
         </ATabPane>
 
         <ATabPane key="advanced" tab="高级">
-          <AdvancedSetter :data-item="dataItem" :target-elements="[select]" @loop-change="emitLoopChange" />
+          <AdvancedSetter v-model:elements="selectedTargetElements" :data-item="dataItem" />
         </ATabPane>
       </ATabs>
     </template>
@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import type { WidgetLoopChangePayload, WidgetMultiSelectLayoutChange } from '../types';
+import type { WidgetMultiSelectLayoutChange } from '../types';
 import type { Component } from 'vue';
 import { computed } from 'vue';
 import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
@@ -73,8 +73,6 @@ const emit = defineEmits<{
   'multi-layout-change': [layout: WidgetMultiSelectLayoutChange];
   /** 批量更新多选元素样式 */
   'multi-style-change': [style: WidgetElementStyleChange];
-  /** 更新元素循环配置 */
-  'loop-change': [payload: WidgetLoopChangePayload];
 }>();
 
 const dataItem = defineModel<WidgetData>('value', { required: true });
@@ -89,14 +87,6 @@ function isElementTarget(target: WidgetSelectTarget): target is WidgetElement {
   return typeof target === 'object' && target !== null && 'id' in target && typeof target.id === 'string';
 }
 
-/**
- * 透传循环配置变更。
- * @param payload - 循环配置变更
- */
-function emitLoopChange(payload: WidgetLoopChangePayload): void {
-  emit('loop-change', payload);
-}
-
 /** 当前选中元素对应的专属属性设置面板。 */
 const elementSetter = computed<Component | null>(() => (isElementTarget(select.value) ? getWidgetElementSetter(select.value.name) : null));
 
@@ -107,18 +97,68 @@ const selectedElements = computed<WidgetElement[]>(() => {
   return dataItem.value.elements.filter((element: WidgetElement): boolean => selectedIds.has(element.id));
 });
 
+/**
+ * 将局部编辑元素按 ID 合并回完整元素列表。
+ * @param currentElements - 当前完整元素列表
+ * @param updatedElements - 局部更新元素列表
+ * @returns 合并后的完整元素列表
+ */
+function mergeElementsById(currentElements: WidgetElement[], updatedElements: WidgetElement[]): WidgetElement[] {
+  const updatedElementById = new Map(updatedElements.map((element: WidgetElement): [string, WidgetElement] => [element.id, element]));
+
+  return currentElements.map((element: WidgetElement): WidgetElement => updatedElementById.get(element.id) ?? element);
+}
+
+/**
+ * 写回高级设置面板更新后的元素列表。
+ * @param updatedElements - 局部更新元素列表
+ */
+function updateAdvancedElements(updatedElements: WidgetElement[]): void {
+  if (updatedElements.length === 0) {
+    return;
+  }
+
+  const nextElements = mergeElementsById(dataItem.value.elements, updatedElements);
+
+  dataItem.value = { ...dataItem.value, elements: nextElements };
+
+  if (isElementTarget(select.value)) {
+    const selectedElementId = select.value.id;
+    select.value = nextElements.find((element: WidgetElement): boolean => element.id === selectedElementId) ?? select.value;
+  }
+}
+
+/** 当前单选元素高级设置模型。 */
+const selectedTargetElements = computed<WidgetElement[]>({
+  get: (): WidgetElement[] => {
+    if (!isElementTarget(select.value)) {
+      return [];
+    }
+
+    return [dataItem.value.elements.find((element: WidgetElement): boolean => element.id === select.value?.id) ?? select.value];
+  },
+  set: (updatedElements: WidgetElement[]): void => {
+    updateAdvancedElements(updatedElements);
+  }
+});
+
 /** 同一个组合内的多选元素，用于开启组合循环。 */
-const sameGroupSelectedElements = computed<WidgetElement[]>(() => {
-  if (selectedElements.value.length <= 1 || selectedElements.value.length !== props.selectedElementIds.length) {
-    return [];
-  }
+const sameGroupSelectedElements = computed<WidgetElement[]>({
+  get: (): WidgetElement[] => {
+    if (selectedElements.value.length <= 1 || selectedElements.value.length !== props.selectedElementIds.length) {
+      return [];
+    }
 
-  const firstGroupId = getWidgetElementGroupId(selectedElements.value[0]);
-  if (!firstGroupId) {
-    return [];
-  }
+    const firstGroupId = getWidgetElementGroupId(selectedElements.value[0]);
+    if (!firstGroupId) {
+      return [];
+    }
 
-  return selectedElements.value.every((element: WidgetElement): boolean => getWidgetElementGroupId(element) === firstGroupId) ? selectedElements.value : [];
+    return selectedElements.value.every((element: WidgetElement): boolean => getWidgetElementGroupId(element) === firstGroupId) ? selectedElements.value : [];
+  },
+  set: (updatedElements: WidgetElement[]): void => {
+    updateAdvancedElements(updatedElements);
+  }
 });
 </script>
 

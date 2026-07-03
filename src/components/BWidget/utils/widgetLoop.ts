@@ -51,6 +51,16 @@ export interface WidgetLoopRenderElement {
 }
 
 /**
+ * Widget循环运行态变量名。
+ */
+export interface WidgetElementLoopVariableNames {
+  /** 有效迭代项变量名 */
+  itemName: string;
+  /** 有效索引变量名 */
+  indexName: string;
+}
+
+/**
  * 循环模板边界。
  */
 interface WidgetLoopTemplateBounds {
@@ -99,8 +109,8 @@ export function createDefaultWidgetElementLoopConfig(): WidgetElementLoopConfig 
     columns: DEFAULT_WIDGET_LOOP_COLUMNS,
     columnGap: DEFAULT_WIDGET_LOOP_COLUMN_GAP,
     rowGap: DEFAULT_WIDGET_LOOP_ROW_GAP,
-    itemName: DEFAULT_WIDGET_LOOP_ITEM_NAME,
-    indexName: DEFAULT_WIDGET_LOOP_INDEX_NAME
+    itemName: '',
+    indexName: ''
   };
 }
 
@@ -141,6 +151,18 @@ function normalizePositiveInteger(value: unknown, fallback: number): number {
  */
 function normalizeLoopVariableName(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+/**
+ * 读取循环配置实际参与绑定解析的变量名。
+ * @param config - 循环配置
+ * @returns 有效变量名
+ */
+export function resolveWidgetElementLoopVariableNames(config: WidgetElementLoopConfig): WidgetElementLoopVariableNames {
+  return {
+    itemName: normalizeLoopVariableName(config.itemName, DEFAULT_WIDGET_LOOP_ITEM_NAME),
+    indexName: normalizeLoopVariableName(config.indexName, DEFAULT_WIDGET_LOOP_INDEX_NAME)
+  };
 }
 
 /**
@@ -336,9 +358,11 @@ function readLoopRenderContextLocals(renderContext: WidgetRenderContext): Record
  * @returns 局部上下文
  */
 function createLoopLocals(config: WidgetElementLoopConfig, item: unknown, index: number): Record<string, unknown> {
+  const variableNames = resolveWidgetElementLoopVariableNames(config);
+
   return {
-    [config.itemName]: item,
-    [config.indexName]: index
+    [variableNames.itemName]: item,
+    [variableNames.indexName]: index
   };
 }
 

@@ -4,9 +4,9 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import type { PropType } from 'vue';
-import { mount } from '@vue/test-utils';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { SelectOption } from '@/components/BSelect/types';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
@@ -160,12 +160,27 @@ function createWidgetData(element: WidgetElement): WidgetData {
 }
 
 describe('AdvancedSetter', (): void => {
-  it('prevents saving duplicate item and index variable names', async (): Promise<void> => {
-    const element = createWidgetElement();
-    const wrapper = mount(AdvancedSetter, {
+  /**
+   * 读取最近一次元素列表更新。
+   * @param wrapper - 组件包装器
+   * @returns 最近一次更新后的元素列表
+   */
+  function readLastElementsUpdate(wrapper: VueWrapper): WidgetElement[] {
+    const updates = wrapper.emitted('update:elements');
+
+    return updates?.[updates.length - 1]?.[0] as WidgetElement[];
+  }
+
+  /**
+   * 创建高级设置面板测试包装器。
+   * @param element - 当前元素
+   * @returns 组件包装器
+   */
+  function mountAdvancedSetter(element: WidgetElement): VueWrapper {
+    return mount(AdvancedSetter, {
       props: {
         dataItem: createWidgetData(element),
-        targetElements: [element]
+        elements: [element]
       },
       global: {
         stubs: {
@@ -194,16 +209,66 @@ describe('AdvancedSetter', (): void => {
               }
             },
             emits: ['update:value'],
-            template: '<select :value="value"></select>'
+            setup(_props, { emit }) {
+              /**
+               * 将原生 select 事件转换为 BSelect 的 value 更新事件。
+               * @param event - 原生选择事件
+               */
+              function handleChange(event: Event): void {
+                if (event.target instanceof HTMLSelectElement) {
+                  emit('update:value', event.target.value);
+                }
+              }
+
+              return { handleChange };
+            },
+            template: '<select :value="value" @change="handleChange"><option v-for="option in options" :key="String(option.value)" :value="option.value">{{ option.label }}</option></select>'
           })
         }
       }
     });
+  }
 
-    await wrapper.find('input[placeholder="index"]').setValue('item');
-    await wrapper.find('input[placeholder="item"]').setValue('index');
+  it('renders loop source options from element variables', (): void => {
+    const element = createWidgetElement();
+    const wrapper = mountAdvancedSetter(element);
 
-    expect(wrapper.emitted('loop-change')).toBeUndefined();
+    expect(wrapper.find('select').text()).toContain('input.items');
+    wrapper.unmount();
+  });
+
+  it('updates loop config through elements model', async (): Promise<void> => {
+    const element = createWidgetElement();
+    const wrapper = mountAdvancedSetter(element);
+
+    wrapper.findComponent({ name: 'ACheckboxStub' }).vm.$emit('update:checked', true);
+    await nextTick();
+    const enabledElements = readLastElementsUpdate(wrapper);
+    await wrapper.setProps({ elements: enabledElements });
+
+    expect(enabledElements[0].metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
+      enabled: true,
+      itemName: 'item',
+      indexName: 'index'
+    });
+
+    wrapper.findComponent({ name: 'BSelectStub' }).vm.$emit('update:value', 'input.items');
+    await nextTick();
+    const sourceElements = readLastElementsUpdate(wrapper);
+
+    expect(sourceElements[0].metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
+      source: 'input.items'
+    });
+    wrapper.unmount();
+  });
+
+  it('prevents saving duplicate effective item and index variable names', async (): Promise<void> => {
+    const element = createWidgetElement();
+    const wrapper = mountAdvancedSetter(element);
+
+    await wrapper.find('[data-testid="widget-loop-index-name"]').setValue('item');
+
+    expect(wrapper.emitted('update:elements')).toBeUndefined();
     wrapper.unmount();
   });
 });

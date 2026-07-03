@@ -380,10 +380,23 @@ describe('useElementVariables', (): void => {
     expect(values).toContain('index');
   });
 
+  it('provides loop source options from input and inferred data schema', (): void => {
+    const dataItem = ref<WidgetData | undefined>(createLoopWidgetData([]));
+    const { loopSourceOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+
+    expect(loopSourceOptions.value).toEqual([
+      {
+        label: '商品列表',
+        value: 'input.products'
+      }
+    ]);
+  });
+
   it('falls back to root variables when widget data is not ready', (): void => {
     const dataItem = ref<WidgetData | undefined>();
-    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
+    const { loopSourceOptions, variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value);
 
     expect(readVariableValues(variableOptions.value)).toEqual(['input']);
+    expect(loopSourceOptions.value).toEqual([]);
   });
 });

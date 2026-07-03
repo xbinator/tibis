@@ -10,7 +10,12 @@ import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, parseWidget
 import { buildWidgetDataSchema } from '../utils/widgetDataSchema';
 import { readWidgetExecuteMethod } from '../utils/widgetExecuteMethod';
 import { getWidgetElementGroupId } from '../utils/widgetGroups';
-import { readWidgetElementLoopConfig } from '../utils/widgetLoop';
+import {
+  collectWidgetLoopDataSourceOptions,
+  readWidgetElementLoopConfig,
+  resolveWidgetElementLoopVariableNames,
+  type WidgetLoopDataSourceOption
+} from '../utils/widgetLoop';
 
 /** 变量路径标识符匹配表达式。 */
 const WIDGET_VARIABLE_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
@@ -31,6 +36,8 @@ export type ElementTargetReader = () => WidgetElement | undefined;
 export interface UseElementVariablesReturn {
   /** 当前可插入变量候选 */
   variableOptions: ComputedRef<VariableOptionGroup[]>;
+  /** 当前可作为循环数据源的数组变量候选 */
+  loopSourceOptions: ComputedRef<WidgetLoopDataSourceOption[]>;
 }
 
 /**
@@ -224,12 +231,13 @@ function createLoopVariables(dataItem: WidgetData | undefined, dataSchema: Widge
     return [];
   }
 
+  const variableNames = resolveWidgetElementLoopVariableNames(config);
   const itemSchema = readLoopItemSchema(dataItem, dataSchema, config);
-  const itemChildren = itemSchema?.type === 'object' ? collectLoopItemVariableChildren(config.itemName, itemSchema.properties) : [];
-  const variables = [createVariable(formatLocalVariableRoot(config.itemName), '循环项', undefined, itemChildren)];
+  const itemChildren = itemSchema?.type === 'object' ? collectLoopItemVariableChildren(variableNames.itemName, itemSchema.properties) : [];
+  const variables = [createVariable(formatLocalVariableRoot(variableNames.itemName), '循环项', undefined, itemChildren)];
 
-  if (config.indexName !== config.itemName) {
-    variables.push(createVariable(formatLocalVariableRoot(config.indexName), '循环索引'));
+  if (variableNames.indexName !== variableNames.itemName) {
+    variables.push(createVariable(formatLocalVariableRoot(variableNames.indexName), '循环索引'));
   }
 
   return variables;
@@ -266,17 +274,28 @@ function readWidgetMethodScriptCode(dataItem: WidgetData | undefined): string {
  * @returns 变量候选响应式对象
  */
 export function useElementVariables(readDataItem: ElementDataItemReader, readElement?: ElementTargetReader): UseElementVariablesReturn {
+  const currentDataItem = computed<WidgetData | undefined>((): WidgetData | undefined => readDataItem());
+  const currentDataSchema = computed<WidgetSchemaObject>(
+    (): WidgetSchemaObject => buildWidgetDataSchema(readWidgetMethodScriptCode(currentDataItem.value), currentDataItem.value?.inputSchema)
+  );
   const variableOptions = computed<VariableOptionGroup[]>((): VariableOptionGroup[] => {
-    const dataItem = readDataItem();
-    const dataSchema = buildWidgetDataSchema(readWidgetMethodScriptCode(dataItem), dataItem?.inputSchema);
-    const loopVariables = createLoopVariables(dataItem, dataSchema, readElement?.());
+    const dataItem = currentDataItem.value;
+    const loopVariables = createLoopVariables(dataItem, currentDataSchema.value, readElement?.());
     const inputVariable = createVariable('input', '', undefined, collectSchemaVariableChildren('input', dataItem?.inputSchema.properties));
-    const dataVariables = collectSchemaVariableChildren('data', dataSchema.properties);
+    const dataVariables = collectSchemaVariableChildren('data', currentDataSchema.value.properties);
 
     return [createVariableGroup([...loopVariables, inputVariable, ...dataVariables])];
   });
+  const loopSourceOptions = computed<WidgetLoopDataSourceOption[]>((): WidgetLoopDataSourceOption[] => {
+    if (!currentDataItem.value) {
+      return [];
+    }
+
+    return collectWidgetLoopDataSourceOptions(currentDataItem.value.inputSchema, currentDataSchema.value);
+  });
 
   return {
+    loopSourceOptions,
     variableOptions
   };
 }
