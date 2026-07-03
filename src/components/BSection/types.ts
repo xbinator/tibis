@@ -25,6 +25,8 @@ export interface BSectionItemProps {
   icon?: string;
   /** 图标大小，默认 16。 */
   iconSize?: number;
+  /** 前缀最小宽度，数字按 px 处理。 */
+  prefixMinWidth?: number | string;
   /** 布局方向，默认水平。 */
   direction?: 'horizontal' | 'vertical';
 }

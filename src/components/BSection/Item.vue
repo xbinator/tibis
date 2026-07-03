@@ -5,7 +5,7 @@
 <template>
   <div :class="bem({ vertical: direction === 'vertical' })">
     <!-- 文字前缀 -->
-    <div :class="bem('prefix')">
+    <div :class="bem('prefix')" :style="prefixStyle">
       <span v-if="label && !icon" :class="bem('label')">{{ label }}</span>
       <!-- 图标前缀 -->
       <BIcon v-if="icon" :icon="icon" :size="iconSize" :class="bem('icon')" />
@@ -17,17 +17,29 @@
 
 <script setup lang="ts">
 import type { BSectionItemProps as Props } from './types';
+import { computed, type CSSProperties } from 'vue';
+import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
 
 defineOptions({ name: 'BSectionItem' });
 
 const [, bem] = createNamespace('section-item');
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   label: undefined,
   icon: undefined,
   iconSize: 16,
+  prefixMinWidth: undefined,
   direction: 'horizontal'
+});
+
+/** 前缀区域的内联样式。 */
+const prefixStyle = computed<CSSProperties>(() => {
+  const minWidth = addCssUnit(props.prefixMinWidth);
+
+  if (minWidth === undefined) return {};
+
+  return { minWidth };
 });
 </script>
 
