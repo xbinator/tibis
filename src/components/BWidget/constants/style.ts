@@ -19,13 +19,3 @@ export const WIDGET_DEFAULT_ELEMENT_STYLE: WidgetElementStyle = {
   textAlign: 'center',
   textVerticalAlign: 'middle'
 };
-
-/**
- * 默认快捷预设颜色。
- */
-export const WIDGET_DEFAULT_PRESET_COLORS = ['#1e293b', '#dc2626', '#f97316', '#16a34a', '#2563eb'] as const;
-
-/**
- * 颜色选择器默认弹层位置。
- */
-export const WIDGET_COLOR_PICKER_DEFAULT_PLACEMENT = 'rightTop';
