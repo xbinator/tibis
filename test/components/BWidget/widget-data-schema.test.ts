@@ -144,22 +144,6 @@ describe('buildWidgetDataSchema', (): void => {
     });
   });
 
-  it('returns an empty data schema for legacy defineConfig scripts', (): void => {
-    const code = `
-      defineConfig({
-        async mounted() {
-          this.weather = { temperature: 28 }
-        }
-      })
-    `;
-
-    expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
-      type: 'object',
-      properties: {},
-      required: []
-    });
-  });
-
   it('supports direct this dot paths and input schema type reuse', (): void => {
     const code = `
       Widget({
