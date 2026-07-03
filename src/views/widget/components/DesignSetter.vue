@@ -28,11 +28,13 @@
         </BColorPicker>
       </BSectionItem>
       <!-- 文字对齐 -->
-      <BSegmented v-model:value="dataItem.style.textAlign" block :options="textAlignOptions">
-        <template #label="{ record }">
-          <BIcon :icon="textAlignIconMap[record.value as keyof typeof textAlignIconMap]" :size="16" />
-        </template>
-      </BSegmented>
+      <BSectionItem icon="lucide:chart-no-axes-gantt">
+        <BSegmented v-model:value="dataItem.style.textAlign" block :options="textAlignOptions">
+          <template #label="{ record }">
+            <BIcon :icon="textAlignIconMap[record.value as keyof typeof textAlignIconMap]" :size="16" />
+          </template>
+        </BSegmented>
+      </BSectionItem>
     </BSectionBlock>
 
     <!-- 布局 -->
