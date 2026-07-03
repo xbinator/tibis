@@ -16,18 +16,21 @@ export const WIDGET_TEXT_DEFAULT_CONTENT = '文本';
 export interface WidgetTextElementMetadata extends WidgetMetadata {
   /** 文本正文内容 */
   content: string;
+  /** 最大显示行数，未设置或非正数时不限制；手动换行（\n）也计入行数配额 */
+  maxLines?: number;
 }
 
 /**
  * 文本元素注册配置。
+ * 通过泛型参数声明专属元数据类型，metadata 字段在写入时即获得 WidgetTextElementMetadata 校验。
  */
-export const textElementSchema: WidgetElementSchema = {
+export const textElementSchema: WidgetElementSchema<WidgetTextElementMetadata> = {
   name: 'text',
   label: '文本',
   icon: 'lucide:type',
   metadata: {
     content: WIDGET_TEXT_DEFAULT_CONTENT
-  } satisfies WidgetTextElementMetadata,
+  },
   style: WIDGET_DEFAULT_ELEMENT_STYLE,
   renderSize: createWidgetTextRenderSize('content'),
   resize: {

@@ -3,7 +3,7 @@
  * @description BWidget 文本元素尺寸测量工具。
  */
 import type { WidgetElementRenderSizeConfig } from '../elements/types';
-import type { WidgetElementStyle, WidgetShapeElement, WidgetSize } from '../types';
+import type { WidgetMetadata, WidgetElementStyle, WidgetShapeElement, WidgetSize } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
 import {
   WIDGET_TEXT_DEFAULT_FONT_SIZE,
@@ -28,6 +28,18 @@ let widgetTextMeasureCanvas: HTMLCanvasElement | null = null;
 interface WidgetTextMeasureOptions {
   /** 文本元素最大渲染宽度，用于自动换行 */
   maxWidth?: number;
+  /** 最大显示行数，超出部分不参与尺寸计算；非正数视为不限制 */
+  maxLines?: number;
+}
+
+/**
+ * 读取文本元素最大行数配置，归一化为正整数或 undefined。
+ * @param metadata - 元素元数据
+ * @returns 最大行数，未设置或非法时返回 undefined
+ */
+export function readTextElementMaxLines(metadata: WidgetMetadata): number | undefined {
+  const value = metadata.maxLines;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
 /**
@@ -221,7 +233,9 @@ export function measureWidgetTextElementSize(text: string, style?: WidgetElement
   const lineHeight = fontSize * WIDGET_TEXT_LINE_HEIGHT_RATIO;
   const padding = getWidgetTextPaddingMetrics(style);
   const maxContentWidth = getTextWrappingContentWidth(options.maxWidth, padding);
-  const lines = text.split('\n').flatMap((line: string): string[] => wrapWidgetTextLine(line, maxContentWidth, fontSize, fontWeight));
+  const allLines = text.split('\n').flatMap((line: string): string[] => wrapWidgetTextLine(line, maxContentWidth, fontSize, fontWeight));
+  // 应用最大行数限制：超出部分不参与尺寸计算，手动换行（\n）也计入配额
+  const lines = options.maxLines !== undefined && options.maxLines > 0 ? allLines.slice(0, options.maxLines) : allLines;
   const maxLineWidth = Math.max(1, ...lines.map((line: string): number => getWidgetTextLineWidth(line, fontSize, fontWeight)));
 
   return {
@@ -243,7 +257,8 @@ export function createWidgetTextRenderSize(fieldName: string): WidgetElementRend
     height: 'model-min-content',
     measureContent: (element: WidgetShapeElement, renderContext?: WidgetRenderContext): WidgetSize =>
       measureWidgetTextElementSize(resolveWidgetTemplateFieldText(element.metadata, fieldName, renderContext), element.style, {
-        maxWidth: element.size.width
+        maxWidth: element.size.width,
+        maxLines: readTextElementMaxLines(element.metadata)
       })
   };
 }

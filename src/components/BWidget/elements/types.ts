@@ -38,8 +38,11 @@ export interface WidgetElementResizeConfig {
 
 /**
  * BWidget 元素注册配置。
+ * 泛型参数 TMetadata 用于约束元素专属元数据类型；读取处使用默认泛型 WidgetMetadata 即可，
+ * 写入处（各元素 schema 定义）可指定具体类型获得编译期校验。
+ * @template TMetadata - 元素自定义元数据类型，必须扩展 WidgetMetadata
  */
-export interface WidgetElementSchema {
+export interface WidgetElementSchema<TMetadata extends WidgetMetadata = WidgetMetadata> {
   /** 元素名称 */
   name: string;
   /** 元素显示名称 */
@@ -55,7 +58,7 @@ export interface WidgetElementSchema {
   /** 元素缩放能力配置 */
   resize?: WidgetElementResizeConfig;
   /** 创建元素时写入元素的默认自定义元数据 */
-  metadata?: WidgetMetadata;
+  metadata?: TMetadata;
   /** 创建元素时写入元素的默认样式 */
   style?: WidgetElementStyle;
 }

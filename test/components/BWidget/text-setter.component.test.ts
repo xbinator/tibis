@@ -144,6 +144,61 @@ function mountTextSetter(element: WidgetElement, dataItem: WidgetData = createWi
           },
           template: '<section class="widget-text-setter-stub" :data-title="title"><slot></slot></section>'
         }),
+        BSectionItem: defineComponent({
+          name: 'BSectionItemStub',
+          props: {
+            label: {
+              type: String,
+              default: undefined
+            }
+          },
+          template: '<div class="widget-text-setter-stub-item" :data-label="label"><slot></slot></div>'
+        }),
+        AInputNumber: defineComponent({
+          name: 'AInputNumberStub',
+          props: {
+            value: {
+              type: Number,
+              default: undefined
+            },
+            min: {
+              type: Number,
+              default: undefined
+            },
+            max: {
+              type: Number,
+              default: undefined
+            },
+            precision: {
+              type: Number,
+              default: undefined
+            },
+            allowClear: {
+              type: Boolean,
+              default: false
+            },
+            placeholder: {
+              type: String,
+              default: undefined
+            }
+          },
+          emits: {
+            /**
+             * 更新数字值；清空时传入 null 与 AInputNumber allow-clear 行为一致。
+             * @param value - 新值
+             * @returns 是否允许触发事件
+             */
+            'update:value': (value: number | null): boolean => value === null || typeof value === 'number'
+          },
+          template: `
+            <input
+              class="widget-text-setter-stub-max-lines"
+              type="number"
+              :value="value === undefined ? '' : value"
+              @input="$emit('update:value', $event.target.value === '' ? null : Number($event.target.value))"
+            />
+          `
+        }),
         BPromptEditor: defineComponent({
           name: 'BPromptEditorStub',
           props: {
@@ -252,6 +307,63 @@ describe('Text Setter', (): void => {
     expect(labels).toContain('用户');
     expect(labels).toContain('用户名');
     expect(labels).toContain('温度');
+    wrapper.unmount();
+  });
+
+  it('writes maxLines to metadata when the number input changes', async (): Promise<void> => {
+    const element = createTextElement();
+    const wrapper = mountTextSetter(element);
+    const maxLinesItem = wrapper.find('.widget-text-setter-stub-item[data-label="最大行数"]');
+    const input = maxLinesItem.find('.widget-text-setter-stub-max-lines');
+
+    await input.setValue(3);
+
+    expect(element.metadata.maxLines).toBe(3);
+    wrapper.unmount();
+  });
+
+  it('removes maxLines from metadata when the number input is cleared', async (): Promise<void> => {
+    const element = createTextElement();
+    element.metadata.maxLines = 5;
+    const wrapper = mountTextSetter(element);
+    const input = wrapper.find('.widget-text-setter-stub-max-lines');
+
+    await input.setValue('');
+
+    expect(element.metadata.maxLines).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('initializes the number input with the existing metadata maxLines', async (): Promise<void> => {
+    const element = createTextElement();
+    element.metadata.maxLines = 7;
+    const wrapper = mountTextSetter(element);
+    const input = wrapper.find('.widget-text-setter-stub-max-lines');
+
+    expect((input.element as HTMLInputElement).value).toBe('7');
+    wrapper.unmount();
+  });
+
+  it('leaves the number input empty when metadata has no maxLines', (): void => {
+    const element = createTextElement();
+    const wrapper = mountTextSetter(element);
+    const input = wrapper.find('.widget-text-setter-stub-max-lines');
+
+    expect((input.element as HTMLInputElement).value).toBe('');
+    wrapper.unmount();
+  });
+
+  it('preserves unrelated metadata when updating maxLines', async (): Promise<void> => {
+    const element = createTextElement();
+    element.metadata.helperText = '温度辅助信息';
+    const wrapper = mountTextSetter(element);
+    const input = wrapper.find('.widget-text-setter-stub-max-lines');
+
+    await input.setValue(2);
+
+    expect(element.metadata.maxLines).toBe(2);
+    expect(element.metadata.content).toBe('原始内容');
+    expect(element.metadata.helperText).toBe('温度辅助信息');
     wrapper.unmount();
   });
 });
