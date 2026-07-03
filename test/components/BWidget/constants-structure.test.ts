@@ -18,6 +18,6 @@ function readConstantFileNames(): string[] {
 
 describe('BWidget constants structure', (): void => {
   it('groups constants by business domain instead of a generic defaults file', (): void => {
-    expect(readConstantFileNames()).toEqual(['board.ts', 'dom.ts', 'interaction.ts', 'minimap.ts', 'style.ts', 'text.ts', 'viewport.ts']);
+    expect(readConstantFileNames()).toEqual(['board.ts', 'interaction.ts', 'minimap.ts', 'style.ts', 'text.ts', 'viewport.ts']);
   });
 });

@@ -4,7 +4,6 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it } from 'vitest';
-import { WIDGET_ELEMENT_ID_ATTRIBUTE } from '@/components/BWidget/constants/dom';
 import type { WidgetElement, WidgetShapeElement, WidgetViewport } from '@/components/BWidget/types';
 import {
   clientDeltaToWidgetDelta,
@@ -14,7 +13,8 @@ import {
   getWidgetResponsiveViewBoxSize,
   getWidgetShapeRenderSize,
   projectClientPointToWidgetBoard,
-  queryWidgetElementTarget
+  queryWidgetElementTarget,
+  registerWidgetElementTarget
 } from '@/components/BWidget/utils/widgetGeometry';
 
 /**
@@ -189,7 +189,8 @@ describe('widgetGeometry', (): void => {
   it('queries DOM targets by widget element id', (): void => {
     const root = document.createElement('div');
     const node = document.createElement('div');
-    node.setAttribute(WIDGET_ELEMENT_ID_ATTRIBUTE, 'node-1');
+    node.className = 'b-widget-node';
+    registerWidgetElementTarget(node, 'node-1');
     root.appendChild(node);
 
     expect(queryWidgetElementTarget(root, 'node-1')).toBe(node);

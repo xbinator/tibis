@@ -96,7 +96,6 @@ const BDraggableStub = defineComponent({
   template: `
     <div
       class="b-draggable-stub"
-      data-testid="tabs-draggable"
       :data-direction="direction"
       :data-item-key="itemKey"
     >
@@ -171,7 +170,7 @@ describe('HeaderTabs icon rendering', (): void => {
     tabsStore.tabs = [createTab('settings', '/settings/provider', '设置'), createTab('files', '/files', '文件')];
 
     const wrapper = mountHeaderTabs();
-    const draggable = wrapper.find('[data-testid="tabs-draggable"]');
+    const draggable = wrapper.find('.b-draggable-stub');
 
     expect(draggable.attributes('data-direction')).toBe('horizontal');
     expect(draggable.attributes('data-item-key')).toBe('id');

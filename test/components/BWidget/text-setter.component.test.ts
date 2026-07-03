@@ -142,7 +142,7 @@ function mountTextSetter(element: WidgetElement, dataItem: WidgetData = createWi
               required: true
             }
           },
-          template: '<section data-testid="widget-text-setter" :data-title="title"><slot></slot></section>'
+          template: '<section class="widget-text-setter-stub" :data-title="title"><slot></slot></section>'
         }),
         BPromptEditor: defineComponent({
           name: 'BPromptEditorStub',
@@ -164,7 +164,7 @@ function mountTextSetter(element: WidgetElement, dataItem: WidgetData = createWi
              */
             'update:value': (value: string): boolean => typeof value === 'string'
           },
-          template: '<textarea data-testid="text-setter-prompt-editor" :value="value" @input="$emit(\'update:value\', $event.target.value)"></textarea>'
+          template: '<textarea class="text-setter-prompt-editor" :value="value" @input="$emit(\'update:value\', $event.target.value)"></textarea>'
         })
       }
     }
@@ -195,11 +195,11 @@ describe('Text Setter', (): void => {
     const wrapper = mountTextSetter(element);
     const editor = wrapper.findComponent({ name: 'BPromptEditorStub' });
 
-    expect(wrapper.find('[data-testid="widget-text-setter"]').attributes('data-title')).toBe('内容');
+    expect(wrapper.find('.widget-text-setter-stub').attributes('data-title')).toBe('内容');
     expect(wrapper.findAllComponents({ name: 'BPromptEditorStub' })).toHaveLength(1);
     expect(editor.props('value')).toBe('原始内容');
 
-    await wrapper.find('[data-testid="text-setter-prompt-editor"]').setValue('{{ input.city }} 当前 {{ weather.temperature }}°C');
+    await wrapper.find('.text-setter-prompt-editor').setValue('{{ input.city }} 当前 {{ weather.temperature }}°C');
 
     expect(element.title).toBe('文本名称');
     expect(element.metadata.content).toBe('{{ input.city }} 当前 {{ weather.temperature }}°C');
@@ -214,7 +214,7 @@ describe('Text Setter', (): void => {
 
     expect(editor.props('value')).toBe('原始内容');
 
-    await wrapper.find('[data-testid="text-setter-prompt-editor"]').setValue('温度：{{ weather.temperature }}°C');
+    await wrapper.find('.text-setter-prompt-editor').setValue('温度：{{ weather.temperature }}°C');
 
     expect(element.metadata.content).toBe('温度：{{ weather.temperature }}°C');
     expect(element.metadata.helperText).toBe('温度辅助信息');

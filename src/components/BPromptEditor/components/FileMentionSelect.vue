@@ -4,7 +4,6 @@
     :items="files"
     :active-index="activeIndex"
     :scroll-active-into-view="scrollActiveIntoView"
-    data-testid="file-mention-menu"
     @select="handleSelect"
     @update:active-index="handleMouseEnter"
   >

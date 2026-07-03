@@ -7,6 +7,7 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import WidgetCanvas from '@/components/BWidget/renderers/WidgetCanvas.vue';
 import type { WidgetContextMenuPayload, WidgetData, WidgetShapeElement } from '@/components/BWidget/types';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**
@@ -109,7 +110,11 @@ describe('WidgetCanvas context menu', (): void => {
     const wrapper = mountWidgetCanvas();
     setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
 
-    await wrapper.find('[data-widget-element-id="node-1"]').trigger('contextmenu', {
+    const target = queryWidgetElementTarget(wrapper.element, 'node-1');
+    const node = wrapper.findAll<Element>('.b-widget-node').find((item): boolean => item.element === target);
+
+    expect(node).toBeDefined();
+    await node?.trigger('contextmenu', {
       clientX: 440,
       clientY: 330
     });

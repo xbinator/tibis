@@ -10,6 +10,7 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**
@@ -165,7 +166,9 @@ async function flushWidgetUpdates(): Promise<void> {
  * @returns 节点包装器
  */
 function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
-  return wrapper.find<Element>(`[data-widget-element-id="${id}"]`);
+  const target = queryWidgetElementTarget(wrapper.element, id);
+
+  return wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ?? wrapper.find<Element>('.missing-widget-node');
 }
 
 /**
@@ -238,11 +241,11 @@ describe('BWidget context menu actions', (): void => {
       attachTo: document.body
     });
     setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
-    setElementRect(wrapper.find('[data-testid="widget-canvas"]').element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
 
     await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
     await clickContextMenuItem(wrapper, '复制');
-    await wrapper.find('[data-testid="widget-canvas"]').trigger('contextmenu', { clientX: 500, clientY: 360 });
+    await wrapper.find('.b-widget-canvas').trigger('contextmenu', { clientX: 500, clientY: 360 });
     await clickContextMenuItem(wrapper, '粘贴');
 
     const latestData = getLatestWidgetData(wrapper);
@@ -267,7 +270,7 @@ describe('BWidget context menu actions', (): void => {
       attachTo: document.body
     });
     setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
-    setElementRect(wrapper.find('[data-testid="widget-canvas"]').element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
 
     await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
     expect(readContextMenuLabels(wrapper)).toContain('取消合并');
@@ -296,7 +299,7 @@ describe('BWidget context menu actions', (): void => {
       attachTo: document.body
     });
     setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
-    setElementRect(wrapper.find('[data-testid="widget-canvas"]').element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
 
     getWidgetExpose(wrapper).selectElementById('node-2', { activateElement: true });
     await flushWidgetUpdates();
@@ -320,7 +323,7 @@ describe('BWidget context menu actions', (): void => {
       attachTo: document.body
     });
     setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
-    setElementRect(wrapper.find('[data-testid="widget-canvas"]').element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
 
     await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
     const mergeItem = wrapper
@@ -331,7 +334,7 @@ describe('BWidget context menu actions', (): void => {
     expect(readContextMenuLabels(wrapper)).not.toContain('取消合并');
 
     await clickContextMenuItem(wrapper, '复制');
-    await wrapper.find('[data-testid="widget-canvas"]').trigger('contextmenu', { clientX: 500, clientY: 360 });
+    await wrapper.find('.b-widget-canvas').trigger('contextmenu', { clientX: 500, clientY: 360 });
     const pasteItem = wrapper
       .findAll<HTMLButtonElement>('.b-widget-context-menu__item')
       .find((item: DOMWrapper<HTMLButtonElement>): boolean => item.text().includes('粘贴'));

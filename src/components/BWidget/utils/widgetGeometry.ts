@@ -4,9 +4,13 @@
  */
 import type { WidgetElement, WidgetPoint, WidgetShapeElement, WidgetSize, WidgetViewport } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
-import { WIDGET_ELEMENT_ID_ATTRIBUTE } from '../constants/dom';
 import { WIDGET_MIN_ZOOM, WIDGET_VIEWBOX_SIZE } from '../constants/viewport';
 import { getWidgetElementSchema } from '../elements';
+
+/** Widget节点 DOM 查询选择器。 */
+const WIDGET_ELEMENT_TARGET_SELECTOR = '.b-widget-node';
+/** Widget节点 DOM 与元素 ID 的内部映射。 */
+const widgetElementIdByTarget = new WeakMap<Element, string>();
 
 /**
  * 浏览器矩形信息。
@@ -250,7 +254,24 @@ export function projectClientPointToWidgetBoard(
  * @returns 元素 ID
  */
 export function getWidgetElementId(target?: Element | null): string | null {
-  return target?.getAttribute(WIDGET_ELEMENT_ID_ATTRIBUTE) ?? null;
+  return target ? widgetElementIdByTarget.get(target) ?? null : null;
+}
+
+/**
+ * 注册 Widget 节点 DOM 与元素 ID 的映射。
+ * @param target - Widget节点 DOM
+ * @param id - Widget元素 ID
+ */
+export function registerWidgetElementTarget(target: Element, id: string): void {
+  widgetElementIdByTarget.set(target, id);
+}
+
+/**
+ * 移除 Widget 节点 DOM 与元素 ID 的映射。
+ * @param target - Widget节点 DOM
+ */
+export function unregisterWidgetElementTarget(target: Element): void {
+  widgetElementIdByTarget.delete(target);
 }
 
 /**
@@ -260,7 +281,10 @@ export function getWidgetElementId(target?: Element | null): string | null {
  * @returns DOM target
  */
 export function queryWidgetElementTarget(root: ParentNode | null | undefined, id: string): Element | null {
-  return root?.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="${id}"]`) ?? null;
+  return (
+    Array.from(root?.querySelectorAll(WIDGET_ELEMENT_TARGET_SELECTOR) ?? []).find((target: Element): boolean => widgetElementIdByTarget.get(target) === id) ??
+    null
+  );
 }
 
 /**

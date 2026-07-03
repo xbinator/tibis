@@ -22,7 +22,7 @@ const previewImageMock = vi.hoisted(() => vi.fn());
 const clipboardMock = vi.hoisted(() => vi.fn());
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn(),
-  render: vi.fn().mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' })
+  render: vi.fn().mockResolvedValue({ svg: '<svg class="mermaid-svg"></svg>' })
 }));
 
 vi.mock('@/hooks/useNavigate', () => ({
@@ -266,7 +266,7 @@ describe('BMessage node renderer', () => {
 
   it('renders mermaid fenced code blocks as diagrams while keeping source copy', async (): Promise<void> => {
     clipboardMock.mockResolvedValue(true);
-    mermaidMock.render.mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' });
+    mermaidMock.render.mockResolvedValue({ svg: '<svg class="mermaid-svg"></svg>' });
 
     const wrapper = mount(BMessage, {
       props: {
@@ -279,7 +279,7 @@ describe('BMessage node renderer', () => {
     await flushPromises();
 
     expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(wrapper.find('.mermaid-svg').exists()).toBe(true);
     expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^b-message-mermaid-/), 'graph TD\n  A --> B');
 
     await wrapper.find('button[aria-label="复制代码"]').trigger('click');
@@ -292,7 +292,7 @@ describe('BMessage node renderer', () => {
 
   it('renders Mermaid message previews before a loose closing fence and heading', async (): Promise<void> => {
     mermaidMock.render.mockClear();
-    mermaidMock.render.mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' });
+    mermaidMock.render.mockResolvedValue({ svg: '<svg class="mermaid-svg"></svg>' });
 
     const wrapper = mount(BMessage, {
       props: {
@@ -305,13 +305,13 @@ describe('BMessage node renderer', () => {
     await flushPromises();
 
     expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(wrapper.find('.mermaid-svg').exists()).toBe(true);
     expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^b-message-mermaid-/), 'graph TD\n  A8 --> S8');
   });
 
   it('renders streaming mermaid source as code until the closing fence arrives', async (): Promise<void> => {
     mermaidMock.render.mockClear();
-    mermaidMock.render.mockResolvedValue({ svg: '<svg data-testid="mermaid-svg"></svg>' });
+    mermaidMock.render.mockResolvedValue({ svg: '<svg class="mermaid-svg"></svg>' });
 
     const wrapper = mount(BMessage, {
       props: {
@@ -336,7 +336,7 @@ describe('BMessage node renderer', () => {
     await flushPromises();
 
     expect(wrapper.find('.b-message__mermaid-preview').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(wrapper.find('.mermaid-svg').exists()).toBe(true);
     expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^b-message-mermaid-/), 'graph TD\n  A --> B');
   });
 

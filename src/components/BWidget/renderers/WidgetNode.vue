@@ -4,11 +4,9 @@
 -->
 <template>
   <div
+    ref="nodeRef"
     class="b-widget-node b-widget-element"
     :class="{ 'is-selected': selected, 'is-text': isTextShape }"
-    data-testid="widget-node"
-    :data-widget-element-id="node.id"
-    :data-widget-name="node.name"
     :style="nodeStyle"
     @contextmenu.stop.prevent="emit('context-menu', node.id, $event)"
     @pointerdown.stop="emit('select', node.id, $event)"
@@ -23,10 +21,10 @@
 import type { WidgetPoint, WidgetShapeElement, WidgetSize } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
 import type { Component, CSSProperties } from 'vue';
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { getWidgetElementView } from '../elements';
 import { provideRenderContext, useRenderContext } from '../hooks/useRenderContext';
-import { createWidgetElementCssTransform, getWidgetShapeRenderSize } from '../utils/widgetGeometry';
+import { createWidgetElementCssTransform, getWidgetShapeRenderSize, registerWidgetElementTarget, unregisterWidgetElementTarget } from '../utils/widgetGeometry';
 import { createWidgetElementContentStyleProperties, createWidgetElementStyleProperties } from '../utils/widgetStyle';
 
 /**
@@ -65,6 +63,8 @@ const emit = defineEmits<{
 
 /** 上层Widget渲染上下文。 */
 const parentRenderContext = useRenderContext();
+/** 当前节点根元素引用，用于注册内部 DOM 到元素 ID 的映射。 */
+const nodeRef = ref<HTMLElement | null>(null);
 /** 当前节点有效渲染上下文。 */
 const nodeRenderContext = computed<WidgetRenderContext | undefined>(() => props.nodeRenderContext ?? parentRenderContext.value);
 
@@ -103,6 +103,32 @@ const nodeStyle = computed<CSSProperties>(() => ({
 function handleSubmit(output: unknown): void {
   emit('submit', output);
 }
+
+/**
+ * 注册当前 DOM 节点与 Widget 元素 ID 的映射。
+ */
+function registerCurrentNode(): void {
+  if (!nodeRef.value) {
+    return;
+  }
+
+  registerWidgetElementTarget(nodeRef.value, props.node.id);
+}
+
+onMounted(registerCurrentNode);
+
+watch(
+  () => props.node.id,
+  () => {
+    registerCurrentNode();
+  }
+);
+
+onBeforeUnmount(() => {
+  if (nodeRef.value) {
+    unregisterWidgetElementTarget(nodeRef.value);
+  }
+});
 </script>
 
 <style lang="less" scoped>

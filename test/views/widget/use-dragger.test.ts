@@ -141,7 +141,7 @@ function mountDragHost(): VueWrapper<ComponentPublicInstance & DragHostExpose> {
         drops
       };
     },
-    template: '<div><section ref="canvasRef" data-testid="canvas"></section></div>'
+    template: '<div><section ref="canvasRef" class="canvas-stub"></section></div>'
   });
 
   return mount(Host, { attachTo: document.body }) as VueWrapper<ComponentPublicInstance & DragHostExpose>;
@@ -155,7 +155,7 @@ describe('useDragger', (): void => {
 
   it('shows a themed text-only preview and drops schema inside the canvas', (): void => {
     const wrapper = mountDragHost();
-    const canvas = wrapper.find('[data-testid="canvas"]').element;
+    const canvas = wrapper.find('.canvas-stub').element;
     setElementRect(canvas, { height: 260, left: 100, top: 80, width: 360 });
 
     wrapper.vm.drag.startDrag(layoutSchema);

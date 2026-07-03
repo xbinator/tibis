@@ -10,17 +10,17 @@
     </div>
 
     <div class="usage-panel__body">
-      <div v-if="loading" data-testid="usage-panel-loading" class="usage-panel__state usage-panel__state--loading">
+      <div v-if="loading" class="usage-panel__state usage-panel__state--loading">
         <div class="usage-panel__spinner" aria-hidden="true"></div>
         <div class="usage-panel__state-text">加载用量中...</div>
       </div>
 
-      <div v-else-if="error" data-testid="usage-panel-error" class="usage-panel__state usage-panel__state--error">
+      <div v-else-if="error" class="usage-panel__state usage-panel__state--error">
         <div class="usage-panel__state-text">加载用量失败</div>
         <div class="usage-panel__detail">{{ error }}</div>
       </div>
 
-      <div v-else-if="usage" data-testid="usage-panel-data" class="usage-panel__content">
+      <div v-else-if="usage" class="usage-panel__content">
         <div class="usage-panel__summary">
           <div class="usage-panel__total">
             <div class="usage-panel__total-value">{{ formatTokens(usage.totalTokens) }}</div>
@@ -47,7 +47,7 @@
         </div>
       </div>
 
-      <div v-else data-testid="usage-panel-empty" class="usage-panel__state usage-panel__state--empty">
+      <div v-else class="usage-panel__state usage-panel__state--empty">
         <div class="usage-panel__state-text">暂无持久化用量</div>
         <div class="usage-panel__detail">请先发送消息，然后再次打开 /usage。</div>
       </div>

@@ -16,7 +16,7 @@
     <div :class="bem('content')">
       <div :class="bem('header')">
         <div :class="[bem('title'), 'truncate']">{{ currentTitle }}</div>
-        <BButton data-testid="chat-new-session-button" square size="small" type="text" :disabled="isSessionActionDisabled" @click="handleCreateDraftSession">
+        <BButton square size="small" type="text" :disabled="isSessionActionDisabled" @click="handleCreateDraftSession">
           <BIcon icon="lucide:message-circle-plus" :size="16" />
         </BButton>
 
@@ -28,12 +28,12 @@
           @switch-session="handleSwitchSession"
           @delete-session="handleDeletedSession"
         />
-        <BButton data-testid="chat-expand-button" square size="small" :type="isSidebarExpanded ? 'secondary' : 'text'" @click="toggleSidebarExpanded">
+        <BButton square size="small" :type="isSidebarExpanded ? 'secondary' : 'text'" @click="toggleSidebarExpanded">
           <BIcon icon="lucide:maximize" :size="16" />
         </BButton>
 
         <div :class="bem('divider')"></div>
-        <BButton data-testid="chat-close-button" square size="small" type="text" @click="handleClose">
+        <BButton square size="small" type="text" @click="handleClose">
           <BIcon icon="lucide:x" :size="16" />
         </BButton>
       </div>

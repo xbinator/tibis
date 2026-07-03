@@ -8,7 +8,6 @@
     class="b-widget-canvas"
     :class="[`is-tool-${activeTool}`, { 'is-create-tool': isCreateTool, 'is-panning': isPanning }]"
     :style="canvasStyle"
-    data-testid="widget-canvas"
     @contextmenu.prevent="handleCanvasContextMenu"
     @pointerdown="handlePointerDown"
     @pointermove="handlePointerMove"

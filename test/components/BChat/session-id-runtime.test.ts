@@ -307,7 +307,7 @@ const BPromptEditorStub = defineComponent({
       replaceTextRange: promptEditorMockState.replaceTextRange
     });
 
-    return () => h('div', { 'data-testid': 'prompt-editor' });
+    return () => h('div', { class: 'prompt-editor-stub' });
   }
 });
 
@@ -325,7 +325,7 @@ const InputToolbarStub = defineComponent({
       h(
         'button',
         {
-          'data-testid': 'input-submit',
+          class: 'input-submit-stub',
           onClick: () => emit('submit')
         },
         'submit'
@@ -347,7 +347,7 @@ const ConversationViewStub = defineComponent({
       scrollToBottom: conversationViewMockState.scrollToBottom
     });
 
-    return () => h('div', { 'data-testid': 'conversation-view' }, slots.footer?.());
+    return () => h('div', { class: 'conversation-view-stub' }, slots.footer?.());
   }
 });
 
@@ -358,7 +358,7 @@ const CommandPanelStub = defineComponent({
       open: vi.fn()
     });
 
-    return () => h('div', { 'data-testid': 'command-panel' });
+    return () => h('div', { class: 'command-panel-stub' });
   }
 });
 

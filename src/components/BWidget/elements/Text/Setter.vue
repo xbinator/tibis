@@ -3,7 +3,7 @@
   @description BWidget 文本元素专属属性设置面板。
 -->
 <template>
-  <BSectionBlock data-testid="widget-text-setter" title="内容">
+  <BSectionBlock title="内容">
     <BPromptEditor v-model:value="textContent" :options="variableOptions" :max-height="180" />
   </BSectionBlock>
 </template>

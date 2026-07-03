@@ -11,6 +11,7 @@ import { cloneDeep } from 'lodash-es';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWidgetRuntime } from '@/components/BWidget/hooks/useWidgetRuntime';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { WIDGET_GROUP_METADATA_KEY } from '@/components/BWidget/utils/widgetGroups';
 import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
@@ -315,7 +316,9 @@ function stubElectronRequest(request: (input: RequestInput) => Promise<RequestRe
  * @returns 节点包装器
  */
 function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
-  return wrapper.find<Element>(`[data-widget-element-id="${id}"]`);
+  const target = queryWidgetElementTarget(wrapper.element, id);
+
+  return wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ?? wrapper.find<Element>('.missing-widget-node');
 }
 
 /** 运行态控制器注入探针。 */

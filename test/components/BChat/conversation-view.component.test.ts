@@ -29,7 +29,7 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
       }
     },
     template: [
-      '<div data-testid="message-bubble">',
+      '<div class="message-bubble">',
       '{{ message.parts[0]?.status ?? message.role }}:',
       '{{ message.parts[0]?.result?.status ?? "" }}:',
       '{{ disabled ? "disabled" : "enabled" }}:',
@@ -280,7 +280,7 @@ describe('ConversationView', (): void => {
       }
     });
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('inputting::enabled:no-rollback');
+    expect(wrapper.get('.message-bubble').text()).toBe('inputting::enabled:no-rollback');
 
     await wrapper.setProps({
       messages: [createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))],
@@ -289,7 +289,7 @@ describe('ConversationView', (): void => {
     });
     await nextTick();
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input:enabled:no-rollback');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:awaiting_user_input:enabled:no-rollback');
   });
 
   it('updates disabled data without message content changing', async (): Promise<void> => {
@@ -307,7 +307,7 @@ describe('ConversationView', (): void => {
       }
     });
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input:enabled:no-rollback');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:awaiting_user_input:enabled:no-rollback');
 
     await wrapper.setProps({
       messages,
@@ -316,7 +316,7 @@ describe('ConversationView', (): void => {
     });
     await nextTick();
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:awaiting_user_input:disabled:no-rollback');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:awaiting_user_input:disabled:no-rollback');
   });
 
   it('updates open_widget display when result data changes without status changes', async (): Promise<void> => {
@@ -333,7 +333,7 @@ describe('ConversationView', (): void => {
       }
     });
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:success:enabled:no-rollback上海');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海');
 
     await wrapper.setProps({
       messages: [createAssistantMessage(createOpenWidgetToolPart('杭州'))],
@@ -342,7 +342,7 @@ describe('ConversationView', (): void => {
     });
     await nextTick();
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:success:enabled:no-rollback杭州');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback杭州');
   });
 
   it('updates embedded open_widget runtime data when widget render context changes without tool status changes', async (): Promise<void> => {
@@ -359,7 +359,7 @@ describe('ConversationView', (): void => {
       }
     });
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:success:enabled:no-rollback上海等待用户操作');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海等待用户操作');
 
     await wrapper.setProps({
       messages: [createAssistantMessage(createOpenWidgetToolPartWithRuntimeMessage('已经完成'))],
@@ -368,7 +368,7 @@ describe('ConversationView', (): void => {
     });
     await nextTick();
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('done:success:enabled:no-rollback上海已经完成');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海已经完成');
   });
 
   it('updates widget display when render context data changes without status changes', async (): Promise<void> => {
@@ -385,7 +385,7 @@ describe('ConversationView', (): void => {
       }
     });
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('mounted::enabled:no-rollback28');
+    expect(wrapper.get('.message-bubble').text()).toBe('mounted::enabled:no-rollback28');
 
     await wrapper.setProps({
       messages: [createWidgetMessage(createWidgetPart(31))],
@@ -394,7 +394,7 @@ describe('ConversationView', (): void => {
     });
     await nextTick();
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('mounted::enabled:no-rollback31');
+    expect(wrapper.get('.message-bubble').text()).toBe('mounted::enabled:no-rollback31');
   });
 
   it('forwards message bubble submit actions without inspecting them', async (): Promise<void> => {
@@ -441,7 +441,7 @@ describe('ConversationView', (): void => {
       }
     });
 
-    expect(wrapper.get('[data-testid="message-bubble"]').text()).toBe('user::enabled:no-rollback');
+    expect(wrapper.get('.message-bubble').text()).toBe('user::enabled:no-rollback');
 
     messages = [userMessage, createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))];
     await wrapper.setProps({
@@ -452,6 +452,6 @@ describe('ConversationView', (): void => {
     });
     await nextTick();
 
-    expect(wrapper.findAll('[data-testid="message-bubble"]')[0].text()).toBe('user::enabled:rollback');
+    expect(wrapper.findAll('.message-bubble')[0].text()).toBe('user::enabled:rollback');
   });
 });

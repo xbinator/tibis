@@ -10,6 +10,7 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetPoint } from '@/components/BWidget/types';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 vi.mock('@/components/BWidget/components/Toolbar.vue', () => ({
@@ -95,7 +96,9 @@ function getWidgetExpose(wrapper: VueWrapper): ComponentPublicInstance & BWidget
  * @returns 节点包装器
  */
 function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
-  return wrapper.find<Element>(`[data-widget-element-id="${id}"]`);
+  const target = queryWidgetElementTarget(wrapper.element, id);
+
+  return wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ?? wrapper.find<Element>('.missing-widget-node');
 }
 
 /**
@@ -209,7 +212,7 @@ describe('BWidget canvas component', (): void => {
     const node = findNodeById(wrapper, createdId);
 
     expect(node.exists()).toBe(true);
-    expect(node.attributes('data-widget-name')).toBe('rect');
+    expect(node.classes()).not.toContain('is-text');
     expect(node.attributes('style')).toContain('translate(-90px, -36px)');
     expect(latestData?.elements).toHaveLength(1);
     expect(createdId).toMatch(/^[A-Za-z0-9_-]{8}$/);
@@ -237,13 +240,15 @@ describe('BWidget canvas component', (): void => {
     await getWidgetExpose(wrapper).createElementFromClientPoint('text', { x: 400, y: 300 });
     await flushWidgetUpdates();
 
-    const textNode = wrapper.find('[data-widget-name="text"]');
+    const emitted = wrapper.emitted('update:value') as Array<[WidgetData]> | undefined;
+    const textNodeId = emitted?.at(-1)?.[0].elements[0]?.id ?? '';
+    const textNode = findNodeById(wrapper, textNodeId);
     expect(textNode.exists()).toBe(true);
     expect(textNode.attributes('style')).toContain('width: 180px');
     expect(textNode.attributes('style')).toContain('height: 72px');
     expect(textNode.attributes('style')).toContain('translate(0px, 0px)');
     expect(textNode.text()).toContain('文本');
-    expect(wrapper.find('[data-testid="widget-text-editor"]').exists()).toBe(false);
+    expect(wrapper.find('textarea').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -386,7 +391,7 @@ describe('BWidget canvas component', (): void => {
     await getWidgetExpose(wrapper).createElementFromClientPoint('unknown-node', { x: 400, y: 300 });
     await flushWidgetUpdates();
 
-    expect(wrapper.findAll('[data-testid="widget-node"]')).toHaveLength(0);
+    expect(wrapper.findAll('.b-widget-node')).toHaveLength(0);
     wrapper.unmount();
   });
 

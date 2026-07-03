@@ -254,8 +254,6 @@ const __tibisWebviewEngine = (() => {
     element.tagName,
     element.id || '',
     readClassName(element),
-    element.getAttribute('data-testid') || '',
-    element.getAttribute('data-test') || '',
     element.getAttribute('data-cy') || '',
     element.getAttribute('data-id') || '',
     element.getAttribute('data-action') || '',
@@ -720,8 +718,6 @@ const __tibisWebviewEngine = (() => {
       'aria-owns',
       'contenteditable',
       'class',
-      'data-testid',
-      'data-test',
       'data-cy',
       'data-id',
       'data-action',
@@ -758,7 +754,7 @@ const __tibisWebviewEngine = (() => {
     return isNew;
   };
   const hasAutomationIdentity = (element) =>
-    ['data-testid', 'data-test', 'data-cy'].some((name) => element.hasAttribute(name));
+    ['data-cy'].some((name) => element.hasAttribute(name));
   const isElementDistinctInteraction = (element) => {
     const tagName = element.tagName.toLowerCase();
     if (hasParentAnchor(element)) return true;

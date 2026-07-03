@@ -44,7 +44,7 @@ vi.mock('@/components/BChat/index.vue', () => ({
       });
       return {};
     },
-    template: '<div data-testid="b-chat" :data-session-id="sessionId || \'\'"></div>'
+    template: '<div class="b-chat-stub" :data-session-id="sessionId || \'\'"></div>'
   }
 }));
 
@@ -59,7 +59,7 @@ vi.mock('@/components/BChat/components/SessionHistory.vue', () => ({
       });
       return {};
     },
-    template: '<button data-testid="session-history" :disabled="disabled"></button>'
+    template: '<button class="session-history-stub" :disabled="disabled"></button>'
   }
 }));
 
@@ -103,8 +103,7 @@ const BPanelSplitterStub = defineComponent({
       h(
         'div',
         {
-          class: ['b-panel-splitter', attrs.class],
-          'data-testid': 'panel-splitter'
+          class: ['b-panel-splitter', attrs.class]
         },
         slots.default?.()
       );
@@ -147,7 +146,7 @@ describe('ChatSider', (): void => {
     wrapper.findComponent({ name: 'SessionHistory' }).vm.$emit('update:currentSession', latestSession);
     await nextTick();
 
-    expect(wrapper.find('[data-testid="b-chat"]').attributes('data-session-id')).toBe('session-latest');
+    expect(wrapper.find('.b-chat-stub').attributes('data-session-id')).toBe('session-latest');
     expect(wrapper.text()).toContain('最近会话');
   });
 
@@ -159,10 +158,10 @@ describe('ChatSider', (): void => {
     await flushPromises();
     await nextTick();
 
-    await wrapper.find('[data-testid="chat-expand-button"]').trigger('click');
+    await wrapper.findAllComponents({ name: 'BButton' })[1].trigger('click');
 
     expect(settingStore.chatSidebarExpanded).toBe(true);
-    expect(wrapper.find('[data-testid="panel-splitter"]').classes()).toContain('chat-sider--expanded');
+    expect(wrapper.find('.b-panel-splitter').classes()).toContain('chat-sider--expanded');
   });
 
   it('closes sidebar and clears expanded state', async (): Promise<void> => {
@@ -174,7 +173,7 @@ describe('ChatSider', (): void => {
     await flushPromises();
     await nextTick();
 
-    await wrapper.find('[data-testid="chat-close-button"]').trigger('click');
+    await wrapper.findAllComponents({ name: 'BButton' })[2].trigger('click');
 
     expect(settingStore.sidebarVisible).toBe(false);
     expect(settingStore.chatSidebarExpanded).toBe(false);
@@ -243,7 +242,7 @@ describe('ChatSider', (): void => {
     wrapper.findComponent({ name: 'BChat' }).vm.$emit('loading-change', true);
     await nextTick();
 
-    expect(wrapper.find('[data-testid="chat-new-session-button"]').attributes('disabled')).toBeDefined();
-    expect(wrapper.find('[data-testid="session-history"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.findAllComponents({ name: 'BButton' })[0].attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.session-history-stub').attributes('disabled')).toBeDefined();
   });
 });

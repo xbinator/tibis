@@ -59,8 +59,6 @@ const __tibisWebviewEngineSerializer = (() => {
     'aria-owns',
     'contenteditable',
     'class',
-    'data-testid',
-    'data-test',
     'data-cy',
     'data-id',
     'data-action',
@@ -127,8 +125,6 @@ const __tibisWebviewEngineSerializer = (() => {
     const seenValues = new Set();
     const preserveDuplicateAttributeNames = new Set([
       'class',
-      'data-testid',
-      'data-test',
       'data-cy',
       'data-id',
       'data-action',

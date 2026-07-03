@@ -10,9 +10,9 @@ import type { PropType } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MoveableLayer from '@/components/BWidget/components/MoveableLayer.vue';
-import { WIDGET_ELEMENT_ID_ATTRIBUTE } from '@/components/BWidget/constants/dom';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetElement, WidgetGeometryChange, WidgetSize, WidgetViewport } from '@/components/BWidget/types';
+import { queryWidgetElementTarget, registerWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 
 /**
  * Moveable padding 配置。
@@ -112,7 +112,7 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
     template: `
       <div
         v-if="getTargetLength(target)"
-        data-testid="moveable-props"
+        class="moveable-props"
         :data-class-name="className"
         :data-draggable="String(draggable)"
         :data-guideline-count="String(elementGuidelines.length)"
@@ -234,7 +234,8 @@ function createRootElement(ids: string[]): HTMLElement {
 
   ids.forEach((id: string): void => {
     const target = document.createElement('div');
-    target.setAttribute(WIDGET_ELEMENT_ID_ATTRIBUTE, id);
+    target.className = 'b-widget-node';
+    registerWidgetElementTarget(target, id);
     root.appendChild(target);
   });
 
@@ -295,7 +296,7 @@ describe('MoveableLayer', (): void => {
 
     await flushMoveableLayerSync();
 
-    const moveableProps = wrapper.find('[data-testid="moveable-props"]');
+    const moveableProps = wrapper.find('.moveable-props');
 
     expect(moveableProps.attributes('data-resizable')).toBe('true');
     expect(moveableProps.attributes('data-render-directions')).toBe('nw,ne,sw,se');
@@ -314,7 +315,7 @@ describe('MoveableLayer', (): void => {
 
     await flushMoveableLayerSync();
 
-    const moveableProps = wrapper.find('[data-testid="moveable-props"]');
+    const moveableProps = wrapper.find('.moveable-props');
 
     expect(moveableProps.attributes('data-resizable')).toBe('true');
     expect(moveableProps.attributes('data-snappable')).toBe('true');
@@ -328,7 +329,7 @@ describe('MoveableLayer', (): void => {
 
     await flushMoveableLayerSync();
 
-    const moveableProps = wrapper.find('[data-testid="moveable-props"]');
+    const moveableProps = wrapper.find('.moveable-props');
 
     expect(moveableProps.attributes('data-hide-child-default-lines')).toBe('true');
     wrapper.unmount();
@@ -339,7 +340,7 @@ describe('MoveableLayer', (): void => {
 
     await flushMoveableLayerSync();
 
-    const moveableProps = wrapper.findAll('[data-testid="moveable-props"]');
+    const moveableProps = wrapper.findAll('.moveable-props');
     const activeMoveableProps = moveableProps.find((item): boolean => item.attributes('data-class-name') === 'b-widget-moveable-layer__active-child');
 
     expect(moveableProps).toHaveLength(2);
@@ -363,7 +364,7 @@ describe('MoveableLayer', (): void => {
     moveableUpdateRectMock.mockClear();
 
     const moveableComponents = wrapper.findAllComponents({ name: 'VueMoveableStub' });
-    const rectTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="rect-1"]`);
+    const rectTarget = queryWidgetElementTarget(root, 'rect-1');
 
     expect(rectTarget).not.toBeNull();
     moveableComponents[0].vm.$emit('drag-group', {
@@ -391,7 +392,7 @@ describe('MoveableLayer', (): void => {
     moveableUpdateRectMock.mockClear();
 
     const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
-    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+    const textTarget = queryWidgetElementTarget(root, 'text-1');
 
     expect(textTarget).not.toBeNull();
     (textTarget as HTMLElement).style.width = '30px';
@@ -413,7 +414,7 @@ describe('MoveableLayer', (): void => {
     await flushMoveableLayerSync();
 
     const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
-    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+    const textTarget = queryWidgetElementTarget(root, 'text-1');
 
     expect(textTarget).not.toBeNull();
     moveableComponent.vm.$emit('resize', {
@@ -450,7 +451,7 @@ describe('MoveableLayer', (): void => {
     await flushMoveableLayerSync();
 
     const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
-    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+    const textTarget = queryWidgetElementTarget(root, 'text-1');
 
     expect(textTarget).not.toBeNull();
     moveableComponent.vm.$emit('resize-start', {
@@ -479,7 +480,7 @@ describe('MoveableLayer', (): void => {
     await flushMoveableLayerSync();
 
     const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
-    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+    const textTarget = queryWidgetElementTarget(root, 'text-1');
 
     expect(textTarget).not.toBeNull();
     moveableComponent.vm.$emit('resize-start', {
@@ -507,7 +508,7 @@ describe('MoveableLayer', (): void => {
     await flushMoveableLayerSync();
 
     const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
-    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+    const textTarget = queryWidgetElementTarget(root, 'text-1');
 
     expect(textTarget).not.toBeNull();
     moveableComponent.vm.$emit('resize-end', {
@@ -534,7 +535,7 @@ describe('MoveableLayer', (): void => {
     moveableUpdateRectMock.mockClear();
 
     const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
-    const textTarget = root.querySelector(`[${WIDGET_ELEMENT_ID_ATTRIBUTE}="text-1"]`);
+    const textTarget = queryWidgetElementTarget(root, 'text-1');
 
     expect(textTarget).not.toBeNull();
     moveableComponent.vm.$emit('resize-start', {

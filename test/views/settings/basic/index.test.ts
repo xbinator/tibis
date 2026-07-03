@@ -6,7 +6,7 @@
 /* eslint-disable vue/one-component-per-file */
 import { defineComponent, type PropType } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SelectOption } from '@/components/BSelect/types';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
@@ -98,6 +98,42 @@ function mountBasicSettingsPage(): VueWrapper {
   });
 }
 
+/**
+ * 根据按钮文案查找按钮。
+ * @param wrapper - 组件包装器
+ * @param text - 按钮文案
+ * @returns 按钮包装器
+ */
+function findButtonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLButtonElement> {
+  const button = wrapper
+    .findAll<HTMLButtonElement>('button')
+    .find((item: DOMWrapper<HTMLButtonElement>): boolean => item.text().includes(text));
+
+  if (!button) {
+    throw new Error(`未找到按钮：${text}`);
+  }
+
+  return button;
+}
+
+/**
+ * 根据工具展示名查找权限行。
+ * @param wrapper - 组件包装器
+ * @param label - 工具展示名
+ * @returns 权限行包装器
+ */
+function findPermissionRow(wrapper: VueWrapper, label: string): DOMWrapper<Element> {
+  const row = wrapper
+    .findAll('.basic-settings__permission-row')
+    .find((item: DOMWrapper<Element>): boolean => item.text().includes(label));
+
+  if (!row) {
+    throw new Error(`未找到权限行：${label}`);
+  }
+
+  return row;
+}
+
 describe('BasicSettingsPage tool permissions', (): void => {
   beforeEach((): void => {
     localStorage.clear();
@@ -120,7 +156,6 @@ describe('BasicSettingsPage tool permissions', (): void => {
     const wrapper = mountBasicSettingsPage();
 
     expect(wrapper.text()).not.toContain('权限模式');
-    expect(wrapper.find('[data-testid="tool-permission-mode-select"]').exists()).toBe(false);
   });
 
   it('revokes one persisted tool permission grant', async (): Promise<void> => {
@@ -129,7 +164,7 @@ describe('BasicSettingsPage tool permissions', (): void => {
     store.grantToolPermission('update_settings', 'always');
     const wrapper = mountBasicSettingsPage();
 
-    await wrapper.find('[data-testid="revoke-tool-permission-operate_webpage"]').trigger('click');
+    await findPermissionRow(wrapper, '操作当前网页').find('button').trigger('click');
 
     expect(store.alwaysToolPermissionGrants.operate_webpage).toBeUndefined();
     expect(store.alwaysToolPermissionGrants.update_settings).toBe(true);
@@ -142,7 +177,7 @@ describe('BasicSettingsPage tool permissions', (): void => {
     store.grantToolPermission('update_settings', 'always');
     const wrapper = mountBasicSettingsPage();
 
-    await wrapper.find('[data-testid="clear-always-tool-permissions"]').trigger('click');
+    await findButtonByText(wrapper, '清除全部').trigger('click');
 
     expect(store.alwaysToolPermissionGrants).toEqual({});
     expect(wrapper.text()).toContain('暂无始终允许的工具');

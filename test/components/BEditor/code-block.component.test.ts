@@ -15,9 +15,11 @@ const messageErrorMock = vi.hoisted(() => vi.fn());
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn(),
   render: vi.fn().mockResolvedValue({
-    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" data-testid="mermaid-svg"><rect width="120" height="80" /></svg>'
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" class="mermaid-svg"><rect width="120" height="80" /></svg>'
   })
 }));
+
+const MERMAID_SVG_SELECTOR = '.mermaid-svg';
 
 vi.mock('@vueuse/core', () => ({
   useDebounceFn: (callback: () => Promise<void>) => callback
@@ -112,7 +114,7 @@ async function waitForMermaidSvg(wrapper: VueWrapper, remainingChecks = 6): Prom
   await flushPromises();
   await waitAnimationFrame();
 
-  if (wrapper.find('[data-testid="mermaid-svg"]').exists()) return;
+  if (wrapper.find(MERMAID_SVG_SELECTOR).exists()) return;
 
   await waitForMermaidSvg(wrapper, remainingChecks - 1);
 }
@@ -208,7 +210,7 @@ describe('CodeBlock', (): void => {
     copyTextMock.mockResolvedValue(true);
     copyImageMock.mockResolvedValue(true);
     mermaidMock.render.mockResolvedValue({
-      svg: '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" data-testid="mermaid-svg"><rect width="120" height="80" /></svg>'
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" class="mermaid-svg"><rect width="120" height="80" /></svg>'
     });
   });
 
@@ -221,13 +223,13 @@ describe('CodeBlock', (): void => {
 
     await waitForMermaidSvg(wrapper);
 
-    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(wrapper.find(MERMAID_SVG_SELECTOR).exists()).toBe(true);
 
     await wrapper.find('.b-markdown-codeblock__copy').trigger('click');
     await flushPromises();
 
     expect(messageErrorMock).not.toHaveBeenCalled();
-    expect(copyImageMock).toHaveBeenCalledWith(wrapper.find('[data-testid="mermaid-svg"]').element, {
+    expect(copyImageMock).toHaveBeenCalledWith(wrapper.find(MERMAID_SVG_SELECTOR).element, {
       successMessage: '复制成功',
       errorMessage: '复制图片失败'
     });
@@ -239,7 +241,7 @@ describe('CodeBlock', (): void => {
 
     await waitForMermaidSvg(wrapper);
 
-    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(wrapper.find(MERMAID_SVG_SELECTOR).exists()).toBe(true);
     expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), 'graph TD\n  A8 --> S8');
   });
 
@@ -248,7 +250,7 @@ describe('CodeBlock', (): void => {
 
     await waitForMermaidSvg(wrapper);
 
-    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(wrapper.find(MERMAID_SVG_SELECTOR).exists()).toBe(true);
     expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), 'graph TD\n  A8 --> S8');
   });
 
@@ -312,7 +314,7 @@ describe('CodeBlock', (): void => {
 
     await waitForMermaidSvg(wrapper);
 
-    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(wrapper.find(MERMAID_SVG_SELECTOR).exists()).toBe(true);
     expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), 'graph TD\n  A8 --> S8');
   });
 
@@ -321,7 +323,7 @@ describe('CodeBlock', (): void => {
 
     await waitForMermaidSvg(wrapper);
 
-    expect(wrapper.find('[data-testid="mermaid-svg"]').exists()).toBe(true);
+    expect(wrapper.find(MERMAID_SVG_SELECTOR).exists()).toBe(true);
     expect(mermaidMock.render).toHaveBeenCalledWith(expect.stringMatching(/^mermaid-/), 'graph TD\n  A8 --> S8');
   });
 

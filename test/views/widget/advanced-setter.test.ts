@@ -241,13 +241,13 @@ describe('AdvancedSetter', (): void => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
 
-    wrapper.findComponent({ name: 'ACheckboxStub' }).vm.$emit('update:checked', true);
+    wrapper.findComponent({ name: 'ACheckboxStub' }).vm.$emit('update:checked', false);
     await nextTick();
-    const enabledElements = readLastElementsUpdate(wrapper);
-    await wrapper.setProps({ elements: enabledElements });
+    const disabledElements = readLastElementsUpdate(wrapper);
+    await wrapper.setProps({ elements: disabledElements });
 
-    expect(enabledElements[0].metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
-      enabled: true,
+    expect(disabledElements[0].metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
+      enabled: false,
       itemName: 'item',
       indexName: 'index'
     });
@@ -266,7 +266,7 @@ describe('AdvancedSetter', (): void => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
 
-    await wrapper.find('[data-testid="widget-loop-index-name"]').setValue('item');
+    await wrapper.find('input[placeholder="默认为：index"]').setValue('item');
 
     expect(wrapper.emitted('update:elements')).toBeUndefined();
     wrapper.unmount();

@@ -10,6 +10,7 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetPoint, WidgetSelectTarget } from '@/components/BWidget/types';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**
@@ -126,13 +127,13 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
       }
     },
     template: `
-      <div v-if="target.length" data-testid="moveable-stub">
+      <div v-if="target.length" class="moveable-stub">
         <button
-          data-testid="moveable-absolute-drag-group"
+          class="moveable-absolute-drag-group"
           @click="$emit('drag-group', createAbsoluteDragGroupEvent(target))"
         ></button>
         <button
-          data-testid="moveable-absolute-drag-group-end"
+          class="moveable-absolute-drag-group-end"
           @click="$emit('drag-group-end', createAbsoluteDragGroupEndEvent(target))"
         ></button>
       </div>
@@ -281,7 +282,7 @@ interface BWidgetExpose {
  * @returns 节点包装器
  */
 function findNode(wrapper: VueWrapper): DOMWrapper<Element> {
-  return wrapper.find<Element>('[data-widget-element-id="node-1"]');
+  return findNodeById(wrapper, 'node-1');
 }
 
 /**
@@ -291,7 +292,9 @@ function findNode(wrapper: VueWrapper): DOMWrapper<Element> {
  * @returns 节点包装器
  */
 function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
-  return wrapper.find<Element>(`[data-widget-element-id="${id}"]`);
+  const target = queryWidgetElementTarget(wrapper.element, id);
+
+  return wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ?? wrapper.find<Element>('.missing-widget-node');
 }
 
 /**
@@ -354,8 +357,8 @@ function createWidgetRoundTripHost(): ReturnType<typeof defineComponent> {
     template: `
       <div>
         <BWidget v-model:value="dataItem" v-model:select="selectedTarget" />
-        <span data-testid="selected-id">{{ selectedId }}</span>
-        <span data-testid="selected-current">{{ isSelectedCurrentElement ? 'yes' : 'no' }}</span>
+        <span class="selected-id">{{ selectedId }}</span>
+        <span class="selected-current">{{ isSelectedCurrentElement ? 'yes' : 'no' }}</span>
       </div>
     `
   });
@@ -449,7 +452,7 @@ describe('BWidget node click selection', () => {
     expect(selectedNode.attributes('style')).toBe(initialTransform);
     expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-1');
     expect(toRaw(selectedPayload)).toBe(latestData.elements[0]);
-    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
+    expect(wrapper.find('.moveable-stub').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -465,15 +468,15 @@ describe('BWidget node click selection', () => {
     await getWidgetExpose(wrapper).createElementFromClientPoint('text', { x: 400, y: 300 });
     await nextTick();
 
-    const textNode = wrapper.find('[data-widget-name="text"]');
     const latestData = (wrapper.emitted('update:value') as Array<[WidgetData]> | undefined)?.at(-1)?.[0] ?? createDefaultWidgetData();
     const textElement = latestData.elements[0];
+    const textNode = findNodeById(wrapper, textElement?.id ?? '');
 
     expect(textNode.exists()).toBe(true);
     expect(textNode.text()).toContain('文本');
     expect(textElement?.title).toBe('文本1');
     expect(textElement?.metadata).toEqual({ content: '文本' });
-    expect(wrapper.find('[data-testid="widget-text-editor"]').exists()).toBe(false);
+    expect(wrapper.find('textarea').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -526,7 +529,7 @@ describe('BWidget node click selection', () => {
     const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as WidgetSelectTarget;
 
     expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-1');
-    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
+    expect(wrapper.find('.moveable-stub').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -550,7 +553,7 @@ describe('BWidget node click selection', () => {
     expect(findNodeById(wrapper, 'node-2').classes()).toContain('is-selected');
     expect(findNodeById(wrapper, 'node-1').classes()).not.toContain('is-active-child');
     expect(findNodeById(wrapper, 'node-2').classes()).not.toContain('is-active-child');
-    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
+    expect(wrapper.find('.moveable-stub').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -600,7 +603,7 @@ describe('BWidget node click selection', () => {
     const latestData = (wrapper.emitted('update:value') as Array<[WidgetData]> | undefined)?.at(-1)?.[0] ?? data;
 
     expect(findNodeById(wrapper, 'node-1').classes()).toContain('is-selected');
-    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
+    expect(wrapper.find('.moveable-stub').exists()).toBe(true);
     expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-1');
     expect(latestData.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2', 'node-1']);
     wrapper.unmount();
@@ -614,15 +617,15 @@ describe('BWidget node click selection', () => {
     await nextTick();
 
     await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 160, clientY: 120 });
-    expect(wrapper.find('[data-testid="selected-id"]').text()).toBe('node-1');
-    expect(wrapper.find('[data-testid="selected-current"]').text()).toBe('yes');
+    expect(wrapper.find('.selected-id').text()).toBe('node-1');
+    expect(wrapper.find('.selected-current').text()).toBe('yes');
 
     await clickContextMenuItem(wrapper, '上一层');
 
     expect(findNodeById(wrapper, 'node-1').classes()).toContain('is-selected');
-    expect(wrapper.find('[data-testid="moveable-stub"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="selected-id"]').text()).toBe('node-1');
-    expect(wrapper.find('[data-testid="selected-current"]').text()).toBe('yes');
+    expect(wrapper.find('.moveable-stub').exists()).toBe(true);
+    expect(wrapper.find('.selected-id').text()).toBe('node-1');
+    expect(wrapper.find('.selected-current').text()).toBe('yes');
     wrapper.unmount();
   });
 
@@ -639,7 +642,7 @@ describe('BWidget node click selection', () => {
     await nextTick();
 
     expect(findNode(wrapper).exists()).toBe(true);
-    expect(wrapper.find('[data-testid="widget-text-editor"]').exists()).toBe(false);
+    expect(wrapper.find('textarea').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -656,13 +659,13 @@ describe('BWidget node click selection', () => {
 
     expect(wrapper.emitted('update:select')?.at(-1)?.[0]).toBeNull();
 
-    await wrapper.find('[data-testid="moveable-absolute-drag-group"]').trigger('click');
+    await wrapper.find('.moveable-absolute-drag-group').trigger('click');
     await nextTick();
 
     expect(findNodeById(wrapper, 'node-1').attributes('style')).toContain('translate(120px, 80px)');
     expect(findNodeById(wrapper, 'node-2').attributes('style')).toContain('translate(300px, 140px)');
 
-    await wrapper.find('[data-testid="moveable-absolute-drag-group-end"]').trigger('click');
+    await wrapper.find('.moveable-absolute-drag-group-end').trigger('click');
     await nextTick();
 
     expect(findNodeById(wrapper, 'node-1').attributes('style')).toContain('translate(120px, 80px)');
@@ -682,7 +685,7 @@ describe('BWidget node click selection', () => {
     await nextTick();
     await nextTick();
 
-    await wrapper.find('[data-testid="moveable-stub"]').trigger('contextmenu', { clientX: 300, clientY: 200 });
+    await wrapper.find('.moveable-stub').trigger('contextmenu', { clientX: 300, clientY: 200 });
     await nextTick();
 
     const mergeItem = wrapper

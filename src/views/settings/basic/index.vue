@@ -59,15 +59,7 @@
             <div class="basic-settings__label">始终允许</div>
             <div class="basic-settings__hint">这些工具后续执行时会跳过确认</div>
           </div>
-          <BButton
-            v-if="alwaysToolPermissionGrants.length"
-            data-testid="clear-always-tool-permissions"
-            size="small"
-            type="secondary"
-            @click="handleClearAlwaysToolPermissions"
-          >
-            清除全部
-          </BButton>
+          <BButton v-if="alwaysToolPermissionGrants.length" size="small" type="secondary" @click="handleClearAlwaysToolPermissions"> 清除全部 </BButton>
         </div>
 
         <div v-if="alwaysToolPermissionGrants.length === 0" class="basic-settings__permission-empty">暂无始终允许的工具</div>
@@ -77,15 +69,7 @@
               <div class="basic-settings__permission-name">{{ grant.label }}</div>
               <div class="basic-settings__permission-code">{{ grant.toolName }}</div>
             </div>
-            <BButton
-              size="small"
-              type="text"
-              danger
-              :data-testid="`revoke-tool-permission-${grant.toolName}`"
-              @click="handleRevokeToolPermission(grant.toolName)"
-            >
-              撤销
-            </BButton>
+            <BButton size="small" type="text" danger @click="handleRevokeToolPermission(grant.toolName)"> 撤销 </BButton>
           </div>
         </div>
       </div>

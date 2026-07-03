@@ -16,7 +16,7 @@ import PanelSettings from '@/views/widget/components/PanelSettings.vue';
 vi.mock('ant-design-vue', () => ({
   Tabs: defineComponent({
     name: 'ATabsStub',
-    template: '<div data-testid="settings-tabs"><slot></slot></div>'
+    template: '<div class="settings-tabs-stub"><slot></slot></div>'
   }),
   TabPane: defineComponent({
     name: 'ATabPaneStub',
@@ -109,7 +109,7 @@ vi.mock('ant-design-vue', () => ({
 vi.mock('@/views/widget/components/DesignSetter.vue', () => ({
   default: defineComponent({
     name: 'DesignSetterStub',
-    template: '<div data-testid="design-setter"></div>'
+    template: '<div class="design-setter-stub"></div>'
   })
 }));
 
@@ -140,7 +140,7 @@ vi.mock('@/views/widget/components/PageSetter.vue', () => ({
 
       return { emitWidgetDataChange };
     },
-    template: '<button data-testid="page-setter-forward" @click="emitWidgetDataChange"></button>'
+    template: '<button class="page-setter-forward" @click="emitWidgetDataChange"></button>'
   })
 }));
 
@@ -208,7 +208,7 @@ describe('PanelSettings', (): void => {
       }
     });
 
-    await wrapper.find('[data-testid="page-setter-forward"]').trigger('click');
+    await wrapper.find('.page-setter-forward').trigger('click');
 
     expect(wrapper.emitted('update:value')).toEqual([
       [
@@ -227,11 +227,28 @@ describe('PanelSettings', (): void => {
       props: {
         value: createWidgetData(element),
         select: element
+      },
+      global: {
+        stubs: {
+          BPromptEditor: true,
+          BSectionBlock: defineComponent({
+            name: 'BSectionBlockStub',
+            props: {
+              title: {
+                type: String,
+                required: true
+              }
+            },
+            template: '<section class="b-section-block-stub" :data-title="title"><slot></slot></section>'
+          }),
+          BSectionItem: true,
+          BSelect: true
+        }
       }
     });
 
-    expect(wrapper.find('[data-testid="design-setter"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="widget-text-setter"]').exists()).toBe(true);
+    expect(wrapper.find('.design-setter-stub').exists()).toBe(true);
+    expect(wrapper.find('.b-section-block-stub[data-title="内容"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('暂无专属属性');
     wrapper.unmount();
   });
@@ -374,10 +391,10 @@ describe('PanelSettings', (): void => {
     expect(wrapper.find('[data-tab="样式"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('已选择 3 个元素');
     expect(wrapper.text()).not.toContain('左对齐');
-    expect(wrapper.find('[data-testid="multi-select-command-ungroup"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="multi-select-command-group"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="multi-select-command-copy"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="multi-select-command-delete"]').exists()).toBe(false);
+    expect(wrapper.find('.multi-select-command--ungroup').exists()).toBe(true);
+    expect(wrapper.find('.multi-select-command--group').exists()).toBe(false);
+    expect(wrapper.find('.multi-select-command--copy').exists()).toBe(false);
+    expect(wrapper.find('.multi-select-command--delete').exists()).toBe(false);
     const layoutInputs = wrapper.findAll('input[type="number"]').slice(0, 4);
     expect(layoutInputs.map((input) => (input.element as HTMLInputElement).value)).toEqual(['-20', '20', '140', '140']);
     expect(wrapper.findAllComponents({ name: 'ControlPanel' })).toHaveLength(2);
@@ -385,7 +402,7 @@ describe('PanelSettings', (): void => {
     await wrapper.findAll('input[type="number"]')[0].setValue('24');
     expect(wrapper.emitted('multi-layout-change')).toEqual([[{ x: 24 }]]);
 
-    await wrapper.find('[data-testid="multi-select-command-ungroup"]').trigger('click');
+    await wrapper.find('.multi-select-command--ungroup').trigger('click');
 
     expect(wrapper.emitted('multi-command')).toEqual([['ungroup']]);
 
@@ -473,8 +490,8 @@ describe('PanelSettings', (): void => {
       }
     });
 
-    expect(wrapper.find('[data-testid="multi-select-command-ungroup"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="multi-select-command-group"]').exists()).toBe(false);
+    expect(wrapper.find('.multi-select-command--ungroup').exists()).toBe(true);
+    expect(wrapper.find('.multi-select-command--group').exists()).toBe(false);
     expect(wrapper.text()).toContain('拆分组');
     wrapper.unmount();
 
@@ -500,11 +517,11 @@ describe('PanelSettings', (): void => {
       }
     });
 
-    expect(ungroupedWrapper.find('[data-testid="multi-select-command-ungroup"]').exists()).toBe(false);
-    expect(ungroupedWrapper.find('[data-testid="multi-select-command-group"]').exists()).toBe(true);
+    expect(ungroupedWrapper.find('.multi-select-command--ungroup').exists()).toBe(false);
+    expect(ungroupedWrapper.find('.multi-select-command--group').exists()).toBe(true);
     expect(ungroupedWrapper.text()).toContain('合并');
 
-    await ungroupedWrapper.find('[data-testid="multi-select-command-group"]').trigger('click');
+    await ungroupedWrapper.find('.multi-select-command--group').trigger('click');
 
     expect(ungroupedWrapper.emitted('multi-command')?.at(-1)).toEqual(['group']);
     ungroupedWrapper.unmount();

@@ -3,7 +3,7 @@
   @description 渲染语音录制过程中的基础波形占位视图。
 -->
 <template>
-  <div class="voice-waveform" data-testid="voice-waveform">
+  <div class="voice-waveform">
     <div class="voice-waveform__side voice-waveform__side--left">
       <span
         v-for="(sample, index) in leftSamples"

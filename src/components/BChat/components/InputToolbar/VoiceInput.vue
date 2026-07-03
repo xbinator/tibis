@@ -4,20 +4,11 @@
 -->
 <template>
   <div class="voice-input">
-    <BButton
-      v-if="isTranscribing"
-      tooltip="正在转写语音"
-      data-testid="voice-transcribing"
-      size="small"
-      type="outline"
-      square
-      :loading="true"
-      :disabled="true"
-    />
-    <BButton v-else-if="isIdle" tooltip="语言输入" data-testid="voice-start" size="small" type="text" square :disabled="disabled" @click="handleStart">
+    <BButton v-if="isTranscribing" tooltip="正在转写语音" size="small" type="outline" square :loading="true" :disabled="true" />
+    <BButton v-else-if="isIdle" tooltip="语言输入" size="small" type="text" square :disabled="disabled" @click="handleStart">
       <BIcon icon="lucide:mic" :size="16" />
     </BButton>
-    <BButton v-else tooltip="停止语言输入" data-testid="voice-stop" size="small" type="outline" square :disabled="disabled" @click="handleStop">
+    <BButton v-else tooltip="停止语言输入" size="small" type="outline" square :disabled="disabled" @click="handleStop">
       <div class="voice-stop-icon"></div>
     </BButton>
   </div>

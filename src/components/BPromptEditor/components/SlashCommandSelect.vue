@@ -4,7 +4,6 @@
     :items="commands"
     :active-index="activeIndex"
     :scroll-active-into-view="scrollActiveIntoView"
-    data-testid="slash-command-menu"
     @select="handleSelect"
     @update:active-index="handleMouseEnter"
   >

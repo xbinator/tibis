@@ -3,7 +3,7 @@
   @description BWidget 无限Widget视口适配层。
 -->
 <template>
-  <div class="b-widget-infinite-viewport" data-testid="widget-infinite-viewer">
+  <div class="b-widget-infinite-viewport">
     <div class="b-widget-infinite-viewport__content">
       <slot></slot>
     </div>

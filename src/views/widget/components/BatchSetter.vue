@@ -6,7 +6,7 @@
   <!-- 操作 -->
   <BSectionBlock title="操作">
     <div class="multi-select-actions">
-      <div :data-testid="primaryCommandTestId" @click="emitCommand(primaryCommand)">
+      <div :class="['multi-select-command', `multi-select-command--${primaryCommand}`]" @click="emitCommand(primaryCommand)">
         <BButton type="secondary" size="small" :icon="primaryCommandIcon">{{ primaryCommandLabel }}</BButton>
       </div>
     </div>
@@ -157,9 +157,6 @@ const primaryCommandIcon = computed<string>(() => (primaryCommand.value === 'ung
 
 /** 顶部主操作文案。 */
 const primaryCommandLabel = computed<string>(() => (primaryCommand.value === 'ungroup' ? '拆分组' : '合并'));
-
-/** 顶部主操作测试标识。 */
-const primaryCommandTestId = computed<string>(() => `multi-select-command-${primaryCommand.value}`);
 
 /**
  * 读取多个元素共享的字符串样式值。

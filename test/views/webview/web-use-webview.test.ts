@@ -937,7 +937,7 @@ describe('useWebView', () => {
   it('exposes non-semantic clickable webpage elements in snapshots', async (): Promise<void> => {
     document.body.innerHTML = `
       <section>
-        <div id="service-card" class="service-card" data-testid="service-card" style="cursor: pointer;">服务卡片</div>
+        <div id="service-card" class="service-card" data-cy="service-card" style="cursor: pointer;">服务卡片</div>
         <span id="plain-text">普通文本</span>
       </section>
     `;
@@ -958,7 +958,7 @@ describe('useWebView', () => {
     expect(snapshot.elements?.map((element) => ({ label: element.label, actions: element.actions }))).toEqual([{ label: '服务卡片', actions: ['click'] }]);
     expect(snapshot.content).toContain('[1]<div');
     expect(snapshot.content).toContain('class="service-card"');
-    expect(snapshot.content).toContain('data-testid="service-card"');
+    expect(snapshot.content).toContain('data-cy="service-card"');
     expect(snapshot.content).toContain('服务卡片 />');
   });
 

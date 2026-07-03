@@ -18,7 +18,6 @@
           'skill-file-tree__node--collapsed': node.type === 'directory' && collapsedPaths.has(node.path)
         }"
         :style="{ paddingLeft: `${12 + node.depth * 14}px` }"
-        :data-test="node.type === 'file' ? `skill-file-${node.path}` : undefined"
         @click="handleNodeClick(node)"
       >
         <Icon

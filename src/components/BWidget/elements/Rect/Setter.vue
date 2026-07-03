@@ -3,7 +3,7 @@
   @description BWidget 矩形元素专属属性设置面板。
 -->
 <template>
-  <BSectionBlock data-testid="widget-rect-setter" title="矩形属性">
+  <BSectionBlock title="矩形属性">
     <div class="widget-rect-setter__empty">暂无矩形专属属性</div>
   </BSectionBlock>
 </template>
