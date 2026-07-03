@@ -17,6 +17,7 @@
       :editable="editable"
       :options="monacoOptions"
       @editor-blur="emit('editor-blur', $event)"
+      @save="emit('save')"
     />
   </div>
 </template>
@@ -55,6 +56,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'editor-blur': [event: FocusEvent];
+  save: [];
 }>();
 
 const editorPreferencesStore = useEditorPreferencesStore();

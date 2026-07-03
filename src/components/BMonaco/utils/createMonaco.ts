@@ -53,6 +53,8 @@ export interface CreateMonacoEditorOptions {
   extraLibs?: MonacoExtraLib[];
   /** TypeScript/JavaScript 语言服务编译配置 */
   typescriptCompilerOptions?: MonacoCompilerOptions;
+  /** 保存快捷键回调，用于接入外层文件保存链路 */
+  onSaveShortcut?: () => void;
   /** 是否启用格式校验（如 JSON 语法校验），默认 true */
   validation?: boolean;
   /** 是否只显示滚动条，隐藏其他装饰（glyph margin、折叠等），默认 false */
@@ -375,8 +377,10 @@ export async function createMonacoEditor(options: CreateMonacoEditorOptions): Pr
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, noop);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, noop);
   }
-  // 阻止浏览器/Electron 默认 Save As 对话框。
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, noop);
+  // 接管保存快捷键，避免浏览器对话框并把动作交还给外层页面。
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, (): void => {
+    options.onSaveShortcut?.();
+  });
 
   return {
     getValue: () => model.getValue(),

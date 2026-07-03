@@ -144,7 +144,7 @@ const segments = computed<Segment[]>(() => parseTextSegments(props.part.text ?? 
 </script>
 
 <style scoped lang="less">
-@import url('../FileRefChip/index.less');
+@import url('../../FileRefChip/index.less');
 
 .message-bubble-user-input {
   word-break: normal;

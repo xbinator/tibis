@@ -10,9 +10,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 
+/**
+ * 测试中关注的 Monaco 创建参数。
+ */
+interface CreateMonacoEditorTestOptions {
+  /** 保存快捷键回调 */
+  onSaveShortcut?: () => void;
+}
+
 const updateExtraLibs = vi.hoisted(() => vi.fn());
 const createMonacoEditor = vi.hoisted(() =>
-  vi.fn(async () => ({
+  vi.fn(async (_options: CreateMonacoEditorTestOptions) => ({
     getValue: vi.fn(() => ''),
     setValue: vi.fn(),
     updateOptions: vi.fn(),
@@ -100,5 +108,24 @@ describe('BMonaco extra libs', (): void => {
 
     expect(createMonacoEditor).toHaveBeenCalledTimes(1);
     expect(updateExtraLibs).toHaveBeenCalledWith([{ content: 'declare const nextValue: string', filePath: 'widget.d.ts' }]);
+  });
+
+  it('emits save when the Monaco save shortcut callback runs', async (): Promise<void> => {
+    const wrapper = mount(BMonaco, {
+      props: {
+        value: '',
+        language: 'typescript',
+        editorState: createEditorState()
+      }
+    });
+
+    await flushAsyncSetup();
+
+    const createOptions = createMonacoEditor.mock.calls[0]?.[0] as { onSaveShortcut?: () => void } | undefined;
+
+    expect(createOptions?.onSaveShortcut).toEqual(expect.any(Function));
+    createOptions?.onSaveShortcut?.();
+
+    expect(wrapper.emitted('save')).toHaveLength(1);
   });
 });

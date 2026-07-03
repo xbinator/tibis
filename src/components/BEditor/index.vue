@@ -28,6 +28,7 @@
     :editable="editable"
     :active="active"
     @editor-blur="emit('editor-blur', $event)"
+    @save="emit('save')"
   />
 </template>
 

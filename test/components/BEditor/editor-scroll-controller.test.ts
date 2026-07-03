@@ -94,15 +94,15 @@ vi.mock('@/components/BEditor/Monaco.vue', async () => {
           default: ''
         }
       },
-      emits: ['update:content'],
-      setup(_, { expose }) {
+      emits: ['update:content', 'save'],
+      setup(_, { emit, expose }) {
         expose({
           editorController: createEditorControllerStub(),
           rememberScrollPosition: childMethods.monacoRemember,
           restoreScrollPosition: childMethods.monacoRestore
         });
 
-        return (): ReturnType<typeof h> => h('div', { class: 'monaco-stub' });
+        return (): ReturnType<typeof h> => h('button', { class: 'monaco-save-stub', onClick: (): void => emit('save') });
       }
     })
   };
@@ -159,5 +159,20 @@ describe('BEditor scroll controller', () => {
     expect(childMethods.monacoRestore).toHaveBeenCalledTimes(1);
     expect(childMethods.markdownRemember).not.toHaveBeenCalled();
     expect(childMethods.markdownRestore).not.toHaveBeenCalled();
+  });
+
+  it('forwards save events from the Monaco editor branch', async (): Promise<void> => {
+    const onSave = vi.fn();
+    const wrapper = mount(BEditor, {
+      props: {
+        value: createEditorState('json'),
+        onSave,
+        'onUpdate:value': vi.fn()
+      }
+    });
+
+    await wrapper.find('.monaco-save-stub').trigger('click');
+
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 });

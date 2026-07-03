@@ -11,7 +11,7 @@
 <script setup lang="ts">
 import type { ChatMessageThinkingPart } from 'types/chat';
 import { computed } from 'vue';
-import BubblePart from './BubblePart.vue';
+import BubblePart from '../BubblePart/index.vue';
 
 defineOptions({ name: 'BubblePartThinking' });
 

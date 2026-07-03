@@ -233,7 +233,7 @@ function createBMonacoStub(): ReturnType<typeof defineComponent> {
         default: ''
       }
     },
-    emits: ['update:value'],
+    emits: ['update:value', 'save'],
     setup(_props, { emit, expose }) {
       /**
        * 将 textarea 输入转换为 Monaco value 更新。
@@ -252,11 +252,18 @@ function createBMonacoStub(): ReturnType<typeof defineComponent> {
         return undefined;
       }
 
+      /**
+       * 模拟 Monaco 保存快捷键事件。
+       */
+      function handleSave(): void {
+        emit('save');
+      }
+
       expose({ focusEditor });
 
-      return { handleInput };
+      return { handleInput, handleSave };
     },
-    template: '<textarea class="widget-code-monaco-stub" :value="value" @input="handleInput"></textarea>'
+    template: '<div><textarea class="widget-code-monaco-stub" :value="value" @input="handleInput"></textarea><button class="widget-code-monaco-save-stub" @click="handleSave"></button></div>'
   });
 }
 
@@ -400,6 +407,20 @@ describe('CodeEditor', (): void => {
 
     expect(wrapper.emitted('close')).toHaveLength(1);
     expect(wrapper.emitted('update:value')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('emits save when Monaco requests save', async (): Promise<void> => {
+    const wrapper = mountCodeEditor({
+      ...createWidgetData(),
+      execute: {
+        code: 'Widget({})'
+      }
+    });
+
+    await wrapper.find('.widget-code-monaco-save-stub').trigger('click');
+
+    expect(wrapper.emitted('save')).toHaveLength(1);
     wrapper.unmount();
   });
 

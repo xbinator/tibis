@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Message } from '../../utils/types';
+import type { Message } from '../../../utils/types';
 import type {
   ChatMessagePart,
   ChatMessageTextPart,
@@ -27,14 +27,14 @@ import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { createWidgetSubmitSuccessResult } from '@/shared/widget/protocol';
 import { stringifyJsonValue } from '@/utils/json';
 import { createNamespace } from '@/utils/namespace';
-import { create, initializeWidgetToolRuntimeParts, resolveWidgetPartFromToolResult } from '../../utils/messageHelper';
+import { create, initializeWidgetToolRuntimeParts, resolveWidgetPartFromToolResult } from '../../../utils/messageHelper';
 import {
   createMessageUpdateSubmitAction,
   createRuntimeUserMessageSubmitAction,
   type BChatAdaptedUserMessageSubmitInput,
   type BChatSubmitAction
-} from '../../utils/submitAction';
-import { createWidgetHttpClient, createWidgetRuntimeInstance, finishWidgetRuntime, initWidgetMountState } from '../../utils/widgetRuntime';
+} from '../../../utils/submitAction';
+import { createWidgetHttpClient, createWidgetRuntimeInstance, finishWidgetRuntime, initWidgetMountState } from '../../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 

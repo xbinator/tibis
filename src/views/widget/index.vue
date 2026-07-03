@@ -35,7 +35,7 @@
     </BPanelSplitter>
 
     <div class="widget-page__code-overlay" :class="{ 'is-open': isCodeEditorOpen }" :style="{ right: `${settingsWidth}px` }">
-      <CodeEditor v-model:value="session.data.value" :active="isCodeEditorOpen" @close="handleCodeClose" />
+      <CodeEditor v-model:value="session.data.value" :active="isCodeEditorOpen" @close="handleCodeClose" @save="handleCodeSave" />
     </div>
   </main>
 </template>
@@ -404,6 +404,13 @@ function handleCodeEdit(): void {
  */
 function handleCodeClose(): void {
   isCodeEditorOpen.value = false;
+}
+
+/**
+ * 保存当前 Widget 文件。
+ */
+async function handleCodeSave(): Promise<void> {
+  await session.actions.onSave();
 }
 
 /**

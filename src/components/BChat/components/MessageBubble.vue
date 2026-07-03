@@ -91,12 +91,12 @@ import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
 import { extractLastTextPart, isAwaitingUserChoiceResult, resolveWidgetPartFromToolResult } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
-import BubblePartStatus from './MessageBubble/BubblePartStatus.vue';
-import BubblePartText from './MessageBubble/BubblePartText.vue';
-import BubblePartThinking from './MessageBubble/BubblePartThinking.vue';
-import BubblePartTool from './MessageBubble/BubblePartTool.vue';
-import BubblePartUserInput from './MessageBubble/BubblePartUserInput.vue';
-import BubblePartWidget from './MessageBubble/BubblePartWidget.vue';
+import BubblePartStatus from './MessageBubble/BubblePartStatus/index.vue';
+import BubblePartText from './MessageBubble/BubblePartText/index.vue';
+import BubblePartThinking from './MessageBubble/BubblePartThinking/index.vue';
+import BubblePartTool from './MessageBubble/BubblePartTool/index.vue';
+import BubblePartUserInput from './MessageBubble/BubblePartUserInput/index.vue';
+import BubblePartWidget from './MessageBubble/BubblePartWidget/index.vue';
 import QuestionCard from './QuestionCard.vue';
 
 defineOptions({ name: 'MessageBubble' });

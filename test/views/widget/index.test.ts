@@ -172,7 +172,7 @@ function createCodeEditorStub(): ReturnType<typeof defineComponent> {
         required: true
       }
     },
-    emits: ['update:value', 'close'],
+    emits: ['update:value', 'close', 'save'],
     template: '<section class="code-editor-stub"></section>'
   });
 }
@@ -344,6 +344,11 @@ describe('WidgetPage', (): void => {
     await nextTick();
 
     expect(widgetDataMock.value).toEqual(nextWidgetData);
+
+    codeEditor.vm.$emit('save');
+    await flushPromises();
+
+    expect(onSaveMock).toHaveBeenCalledTimes(1);
 
     codeEditor.vm.$emit('close');
     await nextTick();

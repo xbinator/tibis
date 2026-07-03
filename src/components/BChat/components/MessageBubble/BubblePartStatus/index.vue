@@ -18,7 +18,7 @@
  * @file BubblePartStatus.vue
  * @description 聊天气泡状态片段，展示上下文压缩或中断状态节点。
  */
-import type { Message } from '../../utils/types';
+import type { Message } from '../../../utils/types';
 import type { ChatCompressionStatus } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import { computed } from 'vue';

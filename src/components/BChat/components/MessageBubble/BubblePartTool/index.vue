@@ -62,17 +62,17 @@
 </template>
 
 <script setup lang="ts">
-import type { ToolSummaryTag } from '../../utils/toolResultSummary';
+import type { ToolSummaryTag } from '../../../utils/toolResultSummary';
 import type { AIUserChoiceAnswerData, AIUserChoiceQuestionAnswer, ChatMessageToolPart } from 'types/chat';
 import { computed, ref } from 'vue';
 import type { QuestionItemInput, QuestionToolInput } from '@/ai/tools/builtin/QuestionTool';
 import { useNavigate } from '@/hooks/useNavigate';
 import { createNamespace } from '@/utils/namespace';
-import { hasStructuredValueContent } from '../../utils/messagePart';
-import { getActionLabel } from '../../utils/toolLabels';
-import { getToolResultSummary } from '../../utils/toolResultSummary';
-import BubblePart from './BubblePart.vue';
-import BubblePartToolCode from './BubblePartToolCode.vue';
+import { hasStructuredValueContent } from '../../../utils/messagePart';
+import { getActionLabel } from '../../../utils/toolLabels';
+import { getToolResultSummary } from '../../../utils/toolResultSummary';
+import BubblePart from '../BubblePart/index.vue';
+import BubblePartToolCode from '../BubblePartToolCode/index.vue';
 
 defineOptions({ name: 'BubblePartTool' });
 

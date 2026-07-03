@@ -88,6 +88,11 @@ const emit = defineEmits<{
    * @param event - 失焦事件
    */
   (event: 'editor-blur', eventObject: FocusEvent): void;
+  /**
+   * 保存快捷键触发。
+   * @param event - 事件名
+   */
+  (event: 'save'): void;
 }>();
 
 const hostRef = ref<HTMLDivElement | null>(null);
@@ -311,6 +316,7 @@ async function initializeEditor(): Promise<MonacoEditorHandle | null> {
       search: effectiveSearch.value,
       extraLibs: props.extraLibs,
       typescriptCompilerOptions: props.options?.typescriptCompilerOptions,
+      onSaveShortcut: (): void => emit('save'),
       stickyScroll: effectiveStickyScroll.value
     });
     bindModelChange();

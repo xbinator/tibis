@@ -20,6 +20,7 @@
         :editor-state="codeEditorState"
         :extra-libs="widgetMethodScriptExtraLibs"
         :options="{ wordWrap: true, search: true, stickyScroll: true, typescriptCompilerOptions: widgetMethodScriptCompilerOptions }"
+        @save="handleSave"
       />
     </section>
   </main>
@@ -52,6 +53,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   /** 关闭 组件脚本编辑器 */
   close: [];
+  /** 请求保存当前 Widget 文件 */
+  save: [];
 }>();
 
 const dataItem = defineModel<WidgetData>('value', { required: true });
@@ -147,6 +150,13 @@ function syncScriptCodeToModel(code: string): void {
  */
 function handleClose(): void {
   emit('close');
+}
+
+/**
+ * 向外抛出保存请求，由 Widget 页面统一执行文件保存。
+ */
+function handleSave(): void {
+  emit('save');
 }
 
 watch(
