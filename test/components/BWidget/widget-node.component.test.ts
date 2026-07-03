@@ -8,6 +8,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import WidgetNode from '@/components/BWidget/renderers/WidgetNode.vue';
 import type { WidgetShapeElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /** WidgetNode 组件源码。 */
 const widgetNodeSource = readFileSync('src/components/BWidget/renderers/WidgetNode.vue', 'utf8');
@@ -38,6 +39,7 @@ function createStyledNode(): WidgetShapeElement {
       textAlign: 'right',
       textVerticalAlign: 'middle'
     },
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }

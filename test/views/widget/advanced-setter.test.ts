@@ -12,7 +12,6 @@ import type { SelectOption } from '@/components/BSelect/types';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
 import AdvancedSetter from '@/views/widget/components/AdvancedSetter.vue';
 
 vi.mock('ant-design-vue', () => ({
@@ -133,9 +132,8 @@ function createWidgetElement(): WidgetElement {
     size: { width: 120, height: 40 },
     rotation: 0,
     style: {},
-    metadata: {
-      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
-    }
+    loop: createLoopConfig(),
+    metadata: {}
   };
 }
 
@@ -286,7 +284,7 @@ describe('AdvancedSetter', (): void => {
     await nextTick();
     const disabledElement = readLastElementUpdate(wrapper);
 
-    expect(disabledElement.metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
+    expect(disabledElement.loop).toMatchObject({
       enabled: false,
       itemName: 'item',
       indexName: 'index'
@@ -296,7 +294,7 @@ describe('AdvancedSetter', (): void => {
     await nextTick();
     const sourceElement = readLastElementUpdate(wrapper);
 
-    expect(sourceElement.metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
+    expect(sourceElement.loop).toMatchObject({
       source: 'input.items'
     });
     wrapper.unmount();

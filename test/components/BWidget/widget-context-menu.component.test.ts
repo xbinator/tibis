@@ -9,6 +9,7 @@ import WidgetCanvas from '@/components/BWidget/renderers/WidgetCanvas.vue';
 import type { WidgetContextMenuPayload, WidgetData, WidgetShapeElement } from '@/components/BWidget/types';
 import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建右键菜单测试元素。
@@ -25,6 +26,7 @@ function createContextMenuElement(): WidgetShapeElement {
     size: { width: 180, height: 72 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }

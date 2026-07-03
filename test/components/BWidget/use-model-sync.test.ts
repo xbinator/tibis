@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { useModelSync } from '@/components/BWidget/hooks/useModelSync';
 import { useWidgetBoard } from '@/components/BWidget/hooks/useWidgetBoard';
 import type { WidgetData, WidgetElement, WidgetShapeElement } from '@/components/BWidget/types';
-import { createWidgetDataSnapshot } from '@/components/BWidget/utils/boardTransforms';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 带可选子元素字段的测试元素。
@@ -34,6 +34,7 @@ function createShapeElement(id: string): WidgetShapeElement {
     size: { width: 180, height: 72 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -72,6 +73,7 @@ function createTextElement(id: string, content: string): WidgetShapeElement {
     size: { width: 30, height: 17.5 },
     rotation: 0,
     style: { fontSize: 10 },
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: { content }
   };
 }
@@ -127,34 +129,6 @@ describe('useModelSync', (): void => {
     expect(modelValue.value?.elements[0]?.name).toBe('rect');
     expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(false);
     expect(hasInternalStateFields(modelValue.value as WidgetData)).toBe(false);
-  });
-
-  it('normalizes old widget data without metadata to an empty metadata object', async (): Promise<void> => {
-    const scope = effectScope();
-    const legacyData = {
-      elements: [createShapeElement('node-1')],
-      viewport: {
-        center: { x: 10, y: 20 },
-        zoom: 1
-      }
-    } as WidgetData;
-    const modelValue = ref<WidgetData | undefined>(legacyData);
-    let readBoardData: () => WidgetData = (): WidgetData => createWidgetData('fallback');
-
-    scope.run((): void => {
-      const board = useWidgetBoard(modelValue.value);
-      useModelSync({
-        board,
-        dataItem: modelValue
-      });
-
-      readBoardData = (): WidgetData => createWidgetDataSnapshot(board.state.value);
-    });
-
-    await nextTick();
-    scope.stop();
-
-    expect(readBoardData().metadata).toEqual({});
   });
 
   it('preserves model metadata when emitting board content changes', async (): Promise<void> => {
@@ -326,17 +300,12 @@ describe('useModelSync', (): void => {
     expect(modelValue.value?.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2']);
   });
 
-  it('does not echo normalized model data when the external model is replaced during file loading', async (): Promise<void> => {
+  it('does not echo model data when the external model is replaced during file loading', async (): Promise<void> => {
     const scope = effectScope();
     const initialData = createDefaultWidgetData();
-    const legacyElement = {
-      ...createShapeElement('legacy-node-1'),
-      name: undefined,
-      shape: 'rect'
-    } as unknown as WidgetElement;
     const loadedData: WidgetData = {
       ...createDefaultWidgetData(),
-      elements: [legacyElement],
+      elements: [createShapeElement('loaded-node-1')],
       viewport: {
         center: { x: 10, y: 20 },
         zoom: 1
@@ -361,7 +330,7 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(toRaw(modelValue.value)).toBe(loadedData);
-    expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(true);
+    expect(readBoardElements()[0]?.id).toBe('loaded-node-1');
     expect(readBoardElements()[0]?.name).toBe('rect');
   });
 

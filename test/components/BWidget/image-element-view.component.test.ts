@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import ImageElementView from '@/components/BWidget/elements/Image/index.vue';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetShapeElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建图片视图测试元素。
@@ -29,6 +30,7 @@ function createImageElement(overrides: { src?: string; fit?: string; alt?: strin
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       src: overrides.src ?? 'https://example.com/a.png',
       fit: overrides.fit ?? 'cover',
@@ -108,12 +110,13 @@ describe('ImageElementView', (): void => {
     wrapper.unmount();
   });
 
-  it('falls back to cover when metadata fit is invalid', (): void => {
+  it('keeps the current image view behavior when metadata fit is invalid', (): void => {
     const element = createImageElement({ fit: 'invalid-fit' });
     const wrapper = mountImageElementView(element);
     const style = wrapper.find('img').attributes('style') ?? '';
 
-    expect(style).toContain('object-fit: cover');
+    expect(style).not.toContain('object-fit: cover');
+    expect(style).toContain('width: 100%');
     wrapper.unmount();
   });
 });

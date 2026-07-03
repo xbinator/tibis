@@ -78,8 +78,6 @@ export interface WidgetElementStyle {
   borderStyle?: WidgetBorderStyle;
   /** 描边宽度，支持统一或四边独立设置 */
   borderWidth?: WidgetBoxSideValue;
-  /** 描边宽度旧字段，仅用于兼容历史数据 */
-  borderColorWidth?: number;
   /** 圆角，支持统一或四角独立设置 */
   borderRadius?: WidgetCornerRadiusValue;
   /** 内边距，支持统一或四边独立设置 */
@@ -211,6 +209,8 @@ export interface WidgetShapeElement<TMetadata extends WidgetMetadata = WidgetMet
   rotation: number;
   /** 元素样式 */
   style: WidgetElementStyle;
+  /** 循环渲染配置 */
+  loop: WidgetElementLoopConfig;
   /** 组件自定义元数据 */
   metadata: TMetadata;
   /** 子元素，仅 name 为 group 的组合容器使用 */
@@ -246,6 +246,8 @@ export interface WidgetAddShapeOptions<TMetadata extends WidgetMetadata = Widget
   createAnchor?: WidgetElementCreateAnchor;
   /** 元素初始样式 */
   style?: WidgetElementStyle;
+  /** 元素默认循环渲染配置 */
+  loop?: WidgetElementLoopConfig;
   /** 元素默认自定义元数据 */
   metadata?: TMetadata;
 }

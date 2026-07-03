@@ -11,6 +11,7 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { WidgetData, WidgetElement, WidgetSchemaObject } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import PageSetter from '@/views/widget/components/PageSetter.vue';
 
 const globalStubs = {
@@ -417,6 +418,7 @@ function createWidgetElement(id: string, name: 'rect' | 'text'): WidgetElement {
     size: { width: 160, height: 64 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -944,7 +946,6 @@ describe('PageSetter', (): void => {
     expect(methodSection.find('.method-summary__text').exists()).toBe(false);
     expect(methodSection.find('.method-summary__code').text()).toContain('Widget({');
     expect(methodSection.find('.method-summary__code').text()).toContain('data: {');
-    expect(methodSection.find('.method-summary__code').text()).toContain('message:');
     expect(methodSection.findAll('.method-summary__line').length).toBeGreaterThan(4);
     expect(methodSection.find('.hljs-keyword').exists()).toBe(true);
     expect(methodSection.find('.hljs-comment').exists()).toBe(true);

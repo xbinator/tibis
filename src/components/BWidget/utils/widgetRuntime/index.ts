@@ -545,10 +545,9 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  if (__isPlainRecord(value)) __widgetConfig = value',
     '  return value',
     '}',
-    'const defineConfig = () => undefined',
     '',
-    "const __runWidgetScript = __sandbox.createFunction(['Widget', 'defineConfig'], __widgetScriptCode)",
-    '__runWidgetScript(Widget, defineConfig)',
+    "const __runWidgetScript = __sandbox.createFunction(['Widget'], __widgetScriptCode)",
+    '__runWidgetScript(Widget)',
     '',
     `return await __runWidgetRuntime(${lifecycleName}, ${interactionCode})`
   ].join('\n');

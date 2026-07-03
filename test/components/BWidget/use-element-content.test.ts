@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { useElementContent } from '@/components/BWidget/hooks/useElementContent';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetShapeElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建文本展示测试元素。
@@ -30,6 +31,7 @@ function createDisplayElement(content?: string): WidgetShapeElement {
     size: { width: 120, height: 32 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       content,
       subtitle: '副标题：{{ input.city }}'

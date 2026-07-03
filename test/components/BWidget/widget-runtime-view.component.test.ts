@@ -13,7 +13,7 @@ import { useWidgetRuntime } from '@/components/BWidget/hooks/useWidgetRuntime';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /** ResizeObserver 回调。 */
 type ResizeObserverCallbackLike = (entries: ResizeObserverEntry[]) => void;
@@ -89,6 +89,7 @@ function createRuntimeWidgetData(): WidgetData {
         size: { width: 180, height: 48 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
           content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
         }
@@ -103,6 +104,7 @@ function createRuntimeWidgetData(): WidgetData {
         size: { width: 220, height: 96 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {}
       }
     ],
@@ -128,16 +130,16 @@ function createRuntimeLoopTextWidgetData(): WidgetData {
             ...element,
             metadata: {
               ...element.metadata,
-              content: '{{ item.name }} {{ index }}',
-              [WIDGET_LOOP_METADATA_KEY]: {
-                enabled: true,
-                source: 'products',
-                columns: 2,
-                columnGap: 12,
-                rowGap: 10,
-                itemName: 'item',
-                indexName: 'index'
-              }
+              content: '{{ item.name }} {{ index }}'
+            },
+            loop: {
+              enabled: true,
+              source: 'products',
+              columns: 2,
+              columnGap: 12,
+              rowGap: 10,
+              itemName: 'item',
+              indexName: 'index'
             }
           }
         : element
@@ -163,17 +165,16 @@ function createRuntimeLoopGroupWidgetData(): WidgetData {
         size: { width: 120, height: 60 },
         rotation: 0,
         style: {},
-        metadata: {
-          [WIDGET_LOOP_METADATA_KEY]: {
-            enabled: true,
-            source: 'products',
-            columns: 2,
-            columnGap: 12,
-            rowGap: 10,
-            itemName: 'item',
-            indexName: 'index'
-          }
+        loop: {
+          enabled: true,
+          source: 'products',
+          columns: 2,
+          columnGap: 12,
+          rowGap: 10,
+          itemName: 'item',
+          indexName: 'index'
         },
+        metadata: {},
         children: [
           {
             id: 'card-bg',
@@ -185,6 +186,7 @@ function createRuntimeLoopGroupWidgetData(): WidgetData {
             size: { width: 120, height: 60 },
             rotation: 0,
             style: {},
+            loop: createDefaultWidgetElementLoopConfig(),
             metadata: {}
           },
           {
@@ -197,6 +199,7 @@ function createRuntimeLoopGroupWidgetData(): WidgetData {
             size: { width: 80, height: 24 },
             rotation: 0,
             style: {},
+            loop: createDefaultWidgetElementLoopConfig(),
             metadata: {
               content: '{{ item.name }}'
             }
@@ -229,6 +232,7 @@ function createRuntimeNestedGroupWidgetData(): WidgetData {
         size: { width: 120, height: 60 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {},
         children: [
           {
@@ -241,6 +245,7 @@ function createRuntimeNestedGroupWidgetData(): WidgetData {
             size: { width: 80, height: 24 },
             rotation: 0,
             style: {},
+            loop: createDefaultWidgetElementLoopConfig(),
             metadata: {
               content: '{{ input.city }}'
             }

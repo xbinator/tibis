@@ -12,6 +12,7 @@ import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
 import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 带内部选区的测试Widget 数据。
@@ -82,6 +83,7 @@ function createElement(id: string, x: number, y: number): WidgetElement {
     size: { width: 100, height: 60 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -101,6 +103,7 @@ function createGroupElement(): WidgetElement {
     size: { width: 240, height: 100 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {},
     children: [createElement('node-1', 0, 0), createElement('node-2', 140, 40)]
   };

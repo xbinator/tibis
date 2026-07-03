@@ -13,7 +13,7 @@ import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/t
 import { useElementVariables, type ElementTargetReader, type UseElementVariablesReturn } from '@/components/BWidget/hooks/useElementVariables';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
-import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /** 已移除的旧根变量名。 */
 const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
@@ -122,7 +122,11 @@ function createWidgetData(): WidgetData {
  * @param metadata - 元素元数据
  * @returns 测试元素
  */
-function createWidgetElement(id: string, metadata: WidgetElement['metadata'] = {}): WidgetElement {
+function createWidgetElement(
+  id: string,
+  metadata: WidgetElement['metadata'] = {},
+  loop: WidgetElementLoopConfig = createDefaultWidgetElementLoopConfig()
+): WidgetElement {
   return {
     id,
     name: 'text',
@@ -133,6 +137,7 @@ function createWidgetElement(id: string, metadata: WidgetElement['metadata'] = {
     size: { width: 120, height: 40 },
     rotation: 0,
     style: {},
+    loop,
     metadata
   };
 }
@@ -144,7 +149,12 @@ function createWidgetElement(id: string, metadata: WidgetElement['metadata'] = {
  * @param children - 子元素
  * @returns 测试组合元素
  */
-function createGroupElement(id: string, metadata: WidgetElement['metadata'], children: WidgetElement[]): WidgetElement {
+function createGroupElement(
+  id: string,
+  metadata: WidgetElement['metadata'],
+  children: WidgetElement[],
+  loop: WidgetElementLoopConfig = createDefaultWidgetElementLoopConfig()
+): WidgetElement {
   return {
     id,
     name: 'group',
@@ -155,6 +165,7 @@ function createGroupElement(id: string, metadata: WidgetElement['metadata'], chi
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
+    loop,
     metadata,
     children
   };
@@ -434,15 +445,12 @@ describe('useElementVariables', (): void => {
     const values = readVariableValues(variableOptions.value);
 
     expect(values).toContain('input');
-    expect(values).toContain('message');
     expect(values).not.toContain('data');
     wrapper.unmount();
   });
 
   it('provides item and index variables for a loop-enabled element', (): void => {
-    const loopElement = createWidgetElement('text-1', {
-      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
-    });
+    const loopElement = createWidgetElement('text-1', {}, createLoopConfig());
     const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopElement]));
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => loopElement);
     const values = readVariableValues(variableOptions.value);
@@ -458,13 +466,7 @@ describe('useElementVariables', (): void => {
 
   it('provides group loop variables to elements covered by the same group context', (): void => {
     const groupChild = createWidgetElement('text-1');
-    const loopContextGroup = createGroupElement(
-      'group-1',
-      {
-        [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
-      },
-      [groupChild]
-    );
+    const loopContextGroup = createGroupElement('group-1', {}, [groupChild], createLoopConfig());
     const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopContextGroup]));
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => groupChild);
     const values = readVariableValues(variableOptions.value);
@@ -476,28 +478,16 @@ describe('useElementVariables', (): void => {
 
   it('uses nearest enabled loop context for nested group elements', (): void => {
     const leafElement = createWidgetElement('text-1');
-    const innerLoopGroup = createGroupElement(
-      'group-inner',
-      {
-        [WIDGET_LOOP_METADATA_KEY]: {
-          ...createLoopConfig(),
-          itemName: 'innerItem',
-          indexName: 'innerIndex'
-        }
-      },
-      [leafElement]
-    );
-    const outerLoopGroup = createGroupElement(
-      'group-outer',
-      {
-        [WIDGET_LOOP_METADATA_KEY]: {
-          ...createLoopConfig(),
-          itemName: 'outerItem',
-          indexName: 'outerIndex'
-        }
-      },
-      [innerLoopGroup]
-    );
+    const innerLoopGroup = createGroupElement('group-inner', {}, [leafElement], {
+      ...createLoopConfig(),
+      itemName: 'innerItem',
+      indexName: 'innerIndex'
+    });
+    const outerLoopGroup = createGroupElement('group-outer', {}, [innerLoopGroup], {
+      ...createLoopConfig(),
+      itemName: 'outerItem',
+      indexName: 'outerIndex'
+    });
     const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([outerLoopGroup]));
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => leafElement);
     const values = readVariableValues(variableOptions.value);

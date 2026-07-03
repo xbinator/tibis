@@ -8,6 +8,7 @@ import type {
   WidgetBoardState,
   WidgetData,
   WidgetElementCreateAnchor,
+  WidgetElementLoopConfig,
   WidgetElementStyle,
   WidgetElementStyleChange,
   WidgetGeometryChange,
@@ -21,6 +22,7 @@ import { WIDGET_DEFAULT_NODE_SIZE, WIDGET_MIN_CREATE_SIZE, WIDGET_MIN_ELEMENT_SI
 import { getWidgetElementSchema } from '../elements';
 import { createDefaultWidgetViewport, normalizeWidgetDataContract, type WidgetDataContractCandidate } from './widgetData';
 import { getWidgetShapeRenderSize } from './widgetGeometry';
+import { normalizeWidgetElementLoopConfig } from './widgetLoop';
 import {
   findWidgetElementTreeNode,
   flattenWidgetElementTree,
@@ -54,19 +56,13 @@ function normalizeGeometryValue(value: number): number {
 }
 
 /**
- * 旧版Widget元素快照候选，兼容曾经写入的 kind 与 shape 字段。
+ * Widget元素快照候选。
  */
-type WidgetElementSnapshotCandidate = Partial<Omit<WidgetShapeElement, 'metadata' | 'style'>> & {
-  /** 旧版元素类别 */
-  kind?: unknown;
-  /** 旧版形状类型 */
-  shape?: unknown;
-  /** 旧版节点文本 */
-  text?: unknown;
-  /** 旧版节点说明 */
-  description?: unknown;
+type WidgetElementSnapshotCandidate = Partial<Omit<WidgetShapeElement, 'metadata' | 'style' | 'loop'>> & {
   /** 样式 */
   style?: Partial<WidgetElementStyle>;
+  /** 循环渲染配置 */
+  loop: WidgetShapeElement['loop'];
   /** 元信息 */
   metadata?: Record<string, unknown>;
   /** 子元素 */
@@ -138,20 +134,32 @@ function isWidgetSizeLike(size: WidgetSize | undefined): size is WidgetSize {
 }
 
 /**
- * 读取元素注册名称，优先使用新版 name，兼容旧版 shape。
- * @param element - 元素快照候选
- * @returns 元素注册名称，无法读取时返回 null
+ * 判断循环配置是否符合当前Widget元素模型。
+ * @param loop - 待检查循环配置
+ * @returns 是否为有效循环配置
  */
-function readWidgetElementName(element: WidgetElementSnapshotCandidate): string | null {
-  if (typeof element.name === 'string') {
-    return element.name;
+function isWidgetElementLoopConfig(loop: unknown): loop is WidgetElementLoopConfig {
+  if (typeof loop !== 'object' || loop === null) {
+    return false;
   }
 
-  if (typeof element.shape === 'string') {
-    return element.shape;
-  }
+  const candidate = loop as Partial<Record<keyof WidgetElementLoopConfig, unknown>>;
 
-  return null;
+  return (
+    typeof candidate.enabled === 'boolean' &&
+    typeof candidate.source === 'string' &&
+    typeof candidate.columns === 'number' &&
+    Number.isInteger(candidate.columns) &&
+    candidate.columns > 0 &&
+    typeof candidate.columnGap === 'number' &&
+    Number.isFinite(candidate.columnGap) &&
+    candidate.columnGap >= 0 &&
+    typeof candidate.rowGap === 'number' &&
+    Number.isFinite(candidate.rowGap) &&
+    candidate.rowGap >= 0 &&
+    typeof candidate.itemName === 'string' &&
+    typeof candidate.indexName === 'string'
+  );
 }
 
 /**
@@ -169,17 +177,12 @@ function getElementRegistryDisplay(name: string): { label: string; icon: string 
 }
 
 /**
- * 归一化组件自定义元数据，移除旧版通用系统字段。
+ * 归一化组件自定义元数据。
  * @param metadata - 原始元数据
  * @returns 自定义元数据
  */
 function normalizeElementMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
-  const nextMetadata = cloneDeep(metadata ?? {});
-  delete nextMetadata.source;
-  delete nextMetadata.createdAt;
-  delete nextMetadata.manualSize;
-
-  return nextMetadata;
+  return cloneDeep(metadata ?? {});
 }
 
 /**
@@ -331,6 +334,7 @@ function createWidgetGroupElement(
     size,
     rotation: 0,
     style: { borderStyle: 'none', borderWidth: 1 },
+    loop: normalizeWidgetElementLoopConfig(undefined),
     metadata: {},
     children
   };
@@ -507,24 +511,29 @@ function normalizeElementModelSize(element: WidgetShapeElement): WidgetShapeElem
 }
 
 /**
- * 创建不包含旧版冗余字段的元素快照。
+ * 创建当前元素模型快照。
  * @param element - 元素快照候选
  * @param options - 元素快照克隆选项
  * @returns 元素快照，无法识别时返回 null
  */
 function createSupportedElementSnapshot(element: WidgetElementSnapshotCandidate, options: WidgetElementSnapshotOptions = {}): WidgetShapeElement | null {
-  const name = readWidgetElementName(element);
-  if (!name || typeof element.id !== 'string' || !isWidgetPointLike(element.position) || !isWidgetSizeLike(element.size)) {
+  if (
+    typeof element.name !== 'string' ||
+    typeof element.id !== 'string' ||
+    !isWidgetPointLike(element.position) ||
+    !isWidgetSizeLike(element.size) ||
+    !isWidgetElementLoopConfig(element.loop)
+  ) {
     return null;
   }
 
-  const registryDisplay = getElementRegistryDisplay(name);
+  const registryDisplay = getElementRegistryDisplay(element.name);
   const label = typeof element.label === 'string' ? element.label : registryDisplay.label;
   const icon = typeof element.icon === 'string' ? element.icon : registryDisplay.icon;
 
   const supportedElement: WidgetShapeElement = {
     id: element.id,
-    name,
+    name: element.name,
     label,
     icon,
     title: typeof element.title === 'string' ? element.title : label,
@@ -532,6 +541,7 @@ function createSupportedElementSnapshot(element: WidgetElementSnapshotCandidate,
     size: cloneDeep(element.size),
     rotation: typeof element.rotation === 'number' ? element.rotation : 0,
     style: cloneDeep(element.style ?? {}),
+    loop: cloneDeep(element.loop),
     metadata: normalizeElementMetadata(element.metadata)
   };
   const children = isWidgetGroupElement(supportedElement)
@@ -760,6 +770,7 @@ export function addWidgetShape(state: WidgetBoardState, options: WidgetAddShapeO
     size: cloneDeep(geometry.size),
     rotation: 0,
     style,
+    loop: normalizeWidgetElementLoopConfig(options.loop),
     metadata: normalizeElementMetadata(options.metadata)
   });
 

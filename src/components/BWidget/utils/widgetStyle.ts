@@ -70,25 +70,22 @@ export function resolveWidgetBoxSideNumbers(value: WidgetBoxSideValue | undefine
 /**
  * 应用边框宽度 CSS 属性。
  * @param properties - CSS 属性对象
- * @param borderWidth - 新边框宽度
- * @param legacyBorderWidth - 旧边框宽度
+ * @param borderWidth - 边框宽度
  */
-function assignBorderWidthProperties(properties: CSSProperties, borderWidth: WidgetBoxSideValue | undefined, legacyBorderWidth: number | undefined): void {
-  const effectiveBorderWidth = borderWidth ?? legacyBorderWidth;
-
-  if (effectiveBorderWidth === undefined) {
+function assignBorderWidthProperties(properties: CSSProperties, borderWidth: WidgetBoxSideValue | undefined): void {
+  if (borderWidth === undefined) {
     return;
   }
 
-  if (isWidgetBoxSides(effectiveBorderWidth)) {
-    properties.borderTopWidth = toPixelValue(effectiveBorderWidth.top);
-    properties.borderRightWidth = toPixelValue(effectiveBorderWidth.right);
-    properties.borderBottomWidth = toPixelValue(effectiveBorderWidth.bottom);
-    properties.borderLeftWidth = toPixelValue(effectiveBorderWidth.left);
+  if (isWidgetBoxSides(borderWidth)) {
+    properties.borderTopWidth = toPixelValue(borderWidth.top);
+    properties.borderRightWidth = toPixelValue(borderWidth.right);
+    properties.borderBottomWidth = toPixelValue(borderWidth.bottom);
+    properties.borderLeftWidth = toPixelValue(borderWidth.left);
     return;
   }
 
-  properties.borderWidth = toPixelValue(effectiveBorderWidth);
+  properties.borderWidth = toPixelValue(borderWidth);
 }
 
 /**
@@ -145,7 +142,7 @@ export function createWidgetElementStyleProperties(style?: WidgetElementStyle): 
     borderStyle: style?.borderStyle
   };
 
-  assignBorderWidthProperties(properties, style?.borderWidth, style?.borderColorWidth);
+  assignBorderWidthProperties(properties, style?.borderWidth);
   assignBorderRadiusProperties(properties, style?.borderRadius);
   assignPaddingProperties(properties, style?.padding);
 

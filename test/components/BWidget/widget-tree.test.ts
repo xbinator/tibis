@@ -16,6 +16,7 @@ import {
   replaceWidgetElementSiblingList,
   updateWidgetElementInTree
 } from '@/components/BWidget/utils/widgetTree';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建测试用 Widget 元素。
@@ -36,6 +37,7 @@ function createElement(id: string, x: number, y: number, children?: WidgetElemen
     size: { width: 100, height: 80 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {},
     ...(children ? { children } : {})
   };

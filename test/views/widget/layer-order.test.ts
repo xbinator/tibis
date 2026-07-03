@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { WidgetElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import { reorderWidgetLayerElementGroupsByDisplayPosition, reorderWidgetLayerElementsByDisplayPosition } from '@/views/widget/utils/layerOrder';
 
 /**
@@ -22,6 +23,7 @@ function createElement(id: string, position: WidgetElement['position'] = { x: 0,
     size: { width: 100, height: 80 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }

@@ -11,6 +11,7 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import BDraggable from '@/components/BDraggable/index.vue';
 import type { WidgetElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import SidebarLayer from '@/views/widget/components/SidebarLayer.vue';
 
 /** 图层列表组件源码。 */
@@ -33,6 +34,7 @@ function createLayerElement(id: string, title: string): WidgetElement {
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }

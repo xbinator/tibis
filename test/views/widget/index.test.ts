@@ -10,7 +10,7 @@ import { shallowMount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig, WidgetSelectTarget } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import { emitter } from '@/utils/emitter';
 import WidgetPage from '@/views/widget/index.vue';
 
@@ -115,6 +115,7 @@ function createWidgetElement(id: string, title: string): WidgetElement {
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -137,6 +138,7 @@ function createGroupElement(id: string, title: string, children: WidgetElement[]
     size: { width: 240, height: 160 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {},
     children
   };
@@ -817,9 +819,7 @@ describe('WidgetPage', (): void => {
 
     const updatedElement = {
       ...selectedElement,
-      metadata: {
-        [WIDGET_LOOP_METADATA_KEY]: loopConfig
-      }
+      loop: loopConfig
     };
     panelSettings.vm.$emit('update:value', {
       ...widgetDataMock.value,
@@ -828,8 +828,8 @@ describe('WidgetPage', (): void => {
     panelSettings.vm.$emit('update:select', updatedElement);
     await nextTick();
 
-    expect(widgetDataMock.value.elements[0]?.metadata[WIDGET_LOOP_METADATA_KEY]).toEqual(loopConfig);
-    expect(widgetDataMock.value.elements[1]?.metadata[WIDGET_LOOP_METADATA_KEY]).toBeUndefined();
+    expect(widgetDataMock.value.elements[0]?.loop).toEqual(loopConfig);
+    expect(widgetDataMock.value.elements[1]?.loop).toEqual(createDefaultWidgetElementLoopConfig());
     expect(panelSettings.props('select')).toEqual(widgetDataMock.value.elements[0]);
     wrapper.unmount();
   });

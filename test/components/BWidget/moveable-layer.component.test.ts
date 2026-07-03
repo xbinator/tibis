@@ -13,6 +13,7 @@ import MoveableLayer from '@/components/BWidget/components/MoveableLayer.vue';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetElement, WidgetGeometryChange, WidgetSize, WidgetViewport } from '@/components/BWidget/types';
 import { queryWidgetElementTarget, registerWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * Moveable padding 配置。
@@ -220,6 +221,7 @@ function createWidgetElement(id: string, name: 'rect' | 'text'): WidgetElement {
     size: { width: 120, height: 48 },
     rotation: 0,
     style: textStyle,
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: textMetadata
   };
 }
@@ -241,6 +243,7 @@ function createGroupWidgetElement(id: string, children: WidgetElement[]): Widget
     size: { width: 240, height: 160 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {},
     children
   };

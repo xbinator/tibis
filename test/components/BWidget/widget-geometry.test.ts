@@ -16,6 +16,7 @@ import {
   queryWidgetElementTarget,
   registerWidgetElementTarget
 } from '@/components/BWidget/utils/widgetGeometry';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建测试形状元素。
@@ -34,6 +35,7 @@ function createShapeElement(id: string, position = { x: 40, y: 60 }): WidgetShap
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -62,6 +64,7 @@ function createTextElement(
     size: { width: 180, height: 72 },
     rotation: 0,
     style,
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       content
     }

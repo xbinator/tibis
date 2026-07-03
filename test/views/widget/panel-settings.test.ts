@@ -10,7 +10,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import PanelSettings from '@/views/widget/components/PanelSettings.vue';
 
 vi.mock('ant-design-vue', () => ({
@@ -161,6 +161,7 @@ function createWidgetElement(id: string, name: 'rect' | 'text'): WidgetElement {
     size: { width: 160, height: 64 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -182,6 +183,7 @@ function createGroupElement(id: string, children: WidgetElement[]): WidgetElemen
     size: { width: 240, height: 160 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {},
     children
   };
@@ -299,9 +301,7 @@ describe('PanelSettings', (): void => {
 
     wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('update:element', {
       ...element,
-      metadata: {
-        [WIDGET_LOOP_METADATA_KEY]: loopConfig
-      }
+      loop: loopConfig
     });
 
     expect(wrapper.emitted('update:value')).toEqual([
@@ -311,9 +311,7 @@ describe('PanelSettings', (): void => {
           elements: [
             {
               ...element,
-              metadata: {
-                [WIDGET_LOOP_METADATA_KEY]: loopConfig
-              }
+              loop: loopConfig
             }
           ]
         }
@@ -323,9 +321,7 @@ describe('PanelSettings', (): void => {
       [
         {
           ...element,
-          metadata: {
-            [WIDGET_LOOP_METADATA_KEY]: loopConfig
-          }
+          loop: loopConfig
         }
       ]
     ]);

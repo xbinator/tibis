@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWidgetBoard } from '@/components/BWidget/hooks/useWidgetBoard';
 import type { WidgetElement, WidgetShapeElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 带可选子元素字段的测试元素。
@@ -39,6 +40,7 @@ function createShapeElement(id: string, x: number, y: number): WidgetShapeElemen
     size: { width: 100, height: 60 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -156,7 +158,7 @@ describe('useWidgetBoard selection commands', (): void => {
 
   it('continues type titles from existing element titles', (): void => {
     nanoidMock.mockReturnValueOnce('rect0011');
-    const existingElement = createShapeElement('legacy-rect', 10, 20);
+    const existingElement = createShapeElement('existing-rect', 10, 20);
     existingElement.title = '矩形10';
     const board = useWidgetBoard({
       elements: [existingElement]

@@ -12,6 +12,7 @@ import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetPoint, WidgetSelectTarget } from '@/components/BWidget/types';
 import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 带内部选区的测试Widget 数据。
@@ -173,6 +174,7 @@ function createNodeClickWidgetData(): WidgetData {
         size: { width: 180, height: 72 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {}
       }
     ]
@@ -197,6 +199,7 @@ function createMultiSelectedWidgetData(): WidgetDataWithSelection {
         size: { width: 180, height: 72 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {}
       },
       {
@@ -209,6 +212,7 @@ function createMultiSelectedWidgetData(): WidgetDataWithSelection {
         size: { width: 180, height: 72 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {}
       }
     ],
@@ -265,6 +269,7 @@ function createGroupedWidgetData(): WidgetData {
         size: { width: 440, height: 220 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {},
         children: data.elements
       }

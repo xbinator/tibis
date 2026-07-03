@@ -9,12 +9,7 @@ import { computed } from 'vue';
 import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, parseWidgetBindingPath, type WidgetBindingContextRoot } from '../utils/widgetBindings';
 import { buildWidgetDataSchema } from '../utils/widgetDataSchema';
 import { readWidgetExecuteMethod } from '../utils/widgetExecuteMethod';
-import {
-  collectWidgetLoopDataSourceOptions,
-  readWidgetElementLoopConfig,
-  resolveWidgetElementLoopVariableNames,
-  type WidgetLoopDataSourceOption
-} from '../utils/widgetLoop';
+import { collectWidgetLoopDataSourceOptions, resolveWidgetElementLoopVariableNames, type WidgetLoopDataSourceOption } from '../utils/widgetLoop';
 import { findWidgetElementTreeNode } from '../utils/widgetTree';
 import { useWidgetContext } from './useWidgetContext';
 
@@ -201,7 +196,7 @@ function readLoopItemSchema(widgetData: WidgetData, dataSchema: WidgetSchemaObje
  * @returns 最近的循环上下文元素
  */
 function findNearestLoopContextElement(pathElements: WidgetElement[]): WidgetElement | null {
-  return [...pathElements].reverse().find((item: WidgetElement): boolean => readWidgetElementLoopConfig(item.metadata).enabled) ?? null;
+  return [...pathElements].reverse().find((item: WidgetElement): boolean => item.loop.enabled) ?? null;
 }
 
 /**
@@ -223,7 +218,7 @@ function readElementLoopConfig(widgetData: WidgetData | undefined, element: Widg
     : [element];
   const loopContextElement = findNearestLoopContextElement(pathElements);
 
-  return loopContextElement ? readWidgetElementLoopConfig(loopContextElement.metadata) : null;
+  return loopContextElement ? loopContextElement.loop : null;
 }
 
 /**

@@ -2,15 +2,13 @@
  * @file widgetLoop.ts
  * @description BWidget 循环数据配置与运行态展开工具。
  */
-import type { WidgetElement, WidgetElementLoopConfig, WidgetMetadata, WidgetPoint, WidgetSchemaObject, WidgetSchemaProperty, WidgetSize } from '../types';
+import type { WidgetElement, WidgetElementLoopConfig, WidgetPoint, WidgetSchemaObject, WidgetSchemaProperty, WidgetSize } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
 import { cloneDeep } from 'lodash-es';
 import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, parseWidgetBindingPath, type WidgetBindingPath } from './widgetBindings';
 import { createWidgetRuntimeLayoutFromRenderElements } from './widgetRuntime/layout';
 import { readWidgetElementChildren } from './widgetTree';
 
-/** 元素循环配置在 metadata 中使用的字段名。 */
-export const WIDGET_LOOP_METADATA_KEY = 'loop';
 /** 默认循环迭代项变量名。 */
 const DEFAULT_WIDGET_LOOP_ITEM_NAME = 'item';
 /** 默认循环索引变量名。 */
@@ -166,41 +164,25 @@ export function resolveWidgetElementLoopVariableNames(config: WidgetElementLoopC
 }
 
 /**
- * 读取Widget元素循环配置。
- * @param metadata - 元素元数据
+ * 归一化Widget元素循环配置。
+ * @param config - 原始循环配置
  * @returns 循环配置
  */
-export function readWidgetElementLoopConfig(metadata: WidgetMetadata): WidgetElementLoopConfig {
-  const rawConfig = metadata[WIDGET_LOOP_METADATA_KEY];
+export function normalizeWidgetElementLoopConfig(config: Partial<WidgetElementLoopConfig> | undefined): WidgetElementLoopConfig {
   const defaultConfig = createDefaultWidgetElementLoopConfig();
 
-  if (!isRecord(rawConfig)) {
+  if (!isRecord(config)) {
     return defaultConfig;
   }
 
   return {
-    enabled: rawConfig.enabled === true,
-    source: typeof rawConfig.source === 'string' ? rawConfig.source : defaultConfig.source,
-    columns: normalizePositiveInteger(rawConfig.columns, defaultConfig.columns),
-    columnGap: normalizeNonNegativeNumber(rawConfig.columnGap, defaultConfig.columnGap),
-    rowGap: normalizeNonNegativeNumber(rawConfig.rowGap, defaultConfig.rowGap),
-    itemName: normalizeLoopVariableName(rawConfig.itemName, defaultConfig.itemName),
-    indexName: normalizeLoopVariableName(rawConfig.indexName, defaultConfig.indexName)
-  };
-}
-
-/**
- * 写入Widget元素循环配置。
- * @param metadata - 原始元数据
- * @param config - 循环配置
- * @returns 写入后的元数据
- */
-export function writeWidgetElementLoopConfig(metadata: WidgetMetadata, config: WidgetElementLoopConfig): WidgetMetadata {
-  return {
-    ...metadata,
-    [WIDGET_LOOP_METADATA_KEY]: {
-      ...config
-    }
+    enabled: config.enabled === true,
+    source: typeof config.source === 'string' ? config.source : defaultConfig.source,
+    columns: normalizePositiveInteger(config.columns, defaultConfig.columns),
+    columnGap: normalizeNonNegativeNumber(config.columnGap, defaultConfig.columnGap),
+    rowGap: normalizeNonNegativeNumber(config.rowGap, defaultConfig.rowGap),
+    itemName: normalizeLoopVariableName(config.itemName, defaultConfig.itemName),
+    indexName: normalizeLoopVariableName(config.indexName, defaultConfig.indexName)
   };
 }
 
@@ -484,7 +466,7 @@ function createElementLoopRenderElements(
     x: parentAbsolutePosition.x + element.position.x,
     y: parentAbsolutePosition.y + element.position.y
   };
-  const config = readWidgetElementLoopConfig(element.metadata);
+  const config = element.loop;
 
   if (config.enabled) {
     return expandLoopTemplateTarget(

@@ -10,8 +10,9 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetPoint } from '@/components/BWidget/types';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 vi.mock('@/components/BWidget/components/Toolbar.vue', () => ({
   default: defineComponent({
@@ -74,6 +75,7 @@ function createWidgetDataFixture(): WidgetData {
         size: { width: 180, height: 72 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {}
       }
     ]
@@ -98,6 +100,7 @@ function createNestedWidgetDataFixture(): WidgetData {
         size: { width: 240, height: 160 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {},
         children: [
           {
@@ -110,6 +113,7 @@ function createNestedWidgetDataFixture(): WidgetData {
             size: { width: 120, height: 64 },
             rotation: 0,
             style: {},
+            loop: createDefaultWidgetElementLoopConfig(),
             metadata: {}
           }
         ]
@@ -136,6 +140,7 @@ function createDeepNestedWidgetDataFixture(): WidgetData {
         size: { width: 240, height: 160 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {},
         children: [
           {
@@ -148,6 +153,7 @@ function createDeepNestedWidgetDataFixture(): WidgetData {
             size: { width: 120, height: 64 },
             rotation: 0,
             style: {},
+            loop: createDefaultWidgetElementLoopConfig(),
             metadata: {},
             children: [
               {
@@ -160,6 +166,7 @@ function createDeepNestedWidgetDataFixture(): WidgetData {
                 size: { width: 40, height: 30 },
                 rotation: 0,
                 style: {},
+                loop: createDefaultWidgetElementLoopConfig(),
                 metadata: {}
               }
             ]
@@ -506,6 +513,7 @@ describe('BWidget canvas component', (): void => {
         size: { width: 180, height: 72 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
           content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
         }
@@ -543,6 +551,7 @@ describe('BWidget canvas component', (): void => {
         size: { width: 120, height: 24 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
           content: '{{ longText }}'
         }
@@ -581,6 +590,7 @@ describe('BWidget canvas component', (): void => {
         size: { width: 30, height: 12 },
         rotation: 0,
         style: { fontSize: 10 },
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
           content: '{{ shortText }}'
         }

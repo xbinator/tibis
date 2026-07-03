@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import TextElementView from '@/components/BWidget/elements/Text/index.vue';
 import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContext';
 import type { WidgetShapeElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建文本视图测试元素。
@@ -28,6 +29,7 @@ function createTextElement(): WidgetShapeElement {
     size: { width: 120, height: 32 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       content: '正文内容'
     }

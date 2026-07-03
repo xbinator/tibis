@@ -10,8 +10,7 @@ import {
   collectWidgetLoopDataSourceOptions,
   createDefaultWidgetElementLoopConfig,
   createWidgetLoopRenderElements,
-  type WidgetLoopRenderContext,
-  WIDGET_LOOP_METADATA_KEY
+  type WidgetLoopRenderContext
 } from '@/components/BWidget/utils/widgetLoop';
 
 /**
@@ -39,7 +38,13 @@ function createLoopConfig(source = 'products'): WidgetElementLoopConfig {
  * @param metadata - 元素元数据
  * @returns Widget 元素
  */
-function createElement(id: string, position: WidgetElement['position'], size: WidgetElement['size'], metadata: WidgetElement['metadata'] = {}): WidgetElement {
+function createElement(
+  id: string,
+  position: WidgetElement['position'],
+  size: WidgetElement['size'],
+  metadata: WidgetElement['metadata'] = {},
+  loop: WidgetElementLoopConfig = createDefaultWidgetElementLoopConfig()
+): WidgetElement {
   return {
     id,
     name: 'rect',
@@ -50,7 +55,8 @@ function createElement(id: string, position: WidgetElement['position'], size: Wi
     size,
     rotation: 0,
     style: {},
-    metadata
+    metadata,
+    loop
   };
 }
 
@@ -68,10 +74,11 @@ function createGroupElement(
   position: WidgetElement['position'],
   size: WidgetElement['size'],
   metadata: WidgetElement['metadata'],
-  children: WidgetElement[]
+  children: WidgetElement[],
+  loop: WidgetElementLoopConfig = createDefaultWidgetElementLoopConfig()
 ): WidgetElement {
   return {
-    ...createElement(id, position, size, metadata),
+    ...createElement(id, position, size, metadata, loop),
     name: 'group',
     label: '组合',
     icon: 'lucide:group',
@@ -197,7 +204,7 @@ describe('widgetLoop', (): void => {
   });
 
   it('expands a single element into grid render elements and removes the template', (): void => {
-    const loopElement = createElement('text-1', { x: 10, y: 20 }, { width: 100, height: 52 }, { [WIDGET_LOOP_METADATA_KEY]: createLoopConfig() });
+    const loopElement = createElement('text-1', { x: 10, y: 20 }, { width: 100, height: 52 }, {}, createLoopConfig());
     const result = createWidgetLoopRenderElements([loopElement], createRenderContext());
 
     expect(result.map((item) => item.element.id)).toEqual(['text-1__loop_0', 'text-1__loop_1', 'text-1__loop_2']);
@@ -216,14 +223,14 @@ describe('widgetLoop', (): void => {
       source: 'products',
       columns: 2
     };
-    const loopElement = createElement('text-1', { x: 10, y: 20 }, { width: 100, height: 52 }, { [WIDGET_LOOP_METADATA_KEY]: loopConfig });
+    const loopElement = createElement('text-1', { x: 10, y: 20 }, { width: 100, height: 52 }, {}, loopConfig);
     const result = createWidgetLoopRenderElements([loopElement], createRenderContext());
 
     expect(result[0].renderContext.locals).toEqual({ item: { name: 'A' }, index: 0 });
   });
 
   it('uses rotated visual bounds when calculating loop grid offsets', (): void => {
-    const loopElement = createElement('rect-1', { x: 0, y: 0 }, { width: 100, height: 50 }, { [WIDGET_LOOP_METADATA_KEY]: createLoopConfig() });
+    const loopElement = createElement('rect-1', { x: 0, y: 0 }, { width: 100, height: 50 }, {}, createLoopConfig());
     loopElement.rotation = 90;
     const result = createWidgetLoopRenderElements([loopElement], createRenderContext());
 
@@ -237,8 +244,9 @@ describe('widgetLoop', (): void => {
     const loopConfig = createLoopConfig();
     const longName = '这是一个需要多行换行的超级长文本';
     const loopElement = createTextElement('text-1', { x: 10, y: 20 }, { width: 30, height: 12 }, '{{ item.name }}', {
-      [WIDGET_LOOP_METADATA_KEY]: loopConfig
+      content: '{{ item.name }}'
     });
+    loopElement.loop = loopConfig;
     const renderContext: WidgetRenderContext = {
       input: {},
       data: {
@@ -266,10 +274,9 @@ describe('widgetLoop', (): void => {
       'card-group',
       { x: 20, y: 10 },
       { width: 120, height: 60 },
-      {
-        [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
-      },
-      [createElement('card-bg', { x: 0, y: 0 }, { width: 120, height: 60 }), createElement('card-title', { x: 4, y: 8 }, { width: 40, height: 20 })]
+      {},
+      [createElement('card-bg', { x: 0, y: 0 }, { width: 120, height: 60 }), createElement('card-title', { x: 4, y: 8 }, { width: 40, height: 20 })],
+      createLoopConfig()
     );
     const result = createWidgetLoopRenderElements([groupOwner], createRenderContext());
 
@@ -315,14 +322,14 @@ describe('widgetLoop', (): void => {
       'category-group',
       { x: 20, y: 10 },
       { width: 120, height: 60 },
-      {
-        [WIDGET_LOOP_METADATA_KEY]: outerLoopConfig
-      },
+      {},
       [
-        createTextElement('product-title', { x: 4, y: 8 }, { width: 40, height: 20 }, '{{ category.name }} {{ product.name }}', {
-          [WIDGET_LOOP_METADATA_KEY]: innerLoopConfig
-        })
-      ]
+        {
+          ...createTextElement('product-title', { x: 4, y: 8 }, { width: 40, height: 20 }, '{{ category.name }} {{ product.name }}'),
+          loop: innerLoopConfig
+        }
+      ],
+      outerLoopConfig
     );
     const result = createWidgetLoopRenderElements([groupOwner], {
       input: {
@@ -359,7 +366,7 @@ describe('widgetLoop', (): void => {
 
   it('keeps expanded loop nodes in the original layer order slot', (): void => {
     const belowElement = createElement('below', { x: 0, y: 0 }, { width: 20, height: 20 });
-    const loopElement = createElement('loop', { x: 10, y: 10 }, { width: 20, height: 20 }, { [WIDGET_LOOP_METADATA_KEY]: createLoopConfig() });
+    const loopElement = createElement('loop', { x: 10, y: 10 }, { width: 20, height: 20 }, {}, createLoopConfig());
     const aboveElement = createElement('above', { x: 20, y: 20 }, { width: 20, height: 20 });
     const result = createWidgetLoopRenderElements([belowElement, loopElement, aboveElement], createRenderContext());
 
@@ -371,9 +378,8 @@ describe('widgetLoop', (): void => {
       'text-1',
       { x: 10, y: 20 },
       { width: 100, height: 52 },
-      {
-        [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('missing.items')
-      }
+      {},
+      createLoopConfig('missing.items')
     );
 
     expect(createWidgetLoopRenderElements([loopElement], createRenderContext())).toEqual([]);

@@ -39,13 +39,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import type { WritableComputedRef } from 'vue';
 import { Checkbox as ACheckbox, Input as AInput, InputNumber as AInputNumber } from 'ant-design-vue';
+import { isNumber } from 'lodash-es';
 import type { SelectOption } from '@/components/BSelect/types';
 import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
 import type { WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
-import { readWidgetElementLoopConfig, resolveWidgetElementLoopVariableNames, writeWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
+import { resolveWidgetElementLoopVariableNames } from '@/components/BWidget/utils/widgetLoop';
 
 defineOptions({ name: 'AdvancedSetter' });
+
+/**
+ * 循环配置数值字段。
+ */
+type WidgetElementLoopNumberField = 'columns' | 'columnGap' | 'rowGap';
 
 const element = defineModel<WidgetElement>('element', { required: true });
 
@@ -55,9 +62,6 @@ const { loopSourceOptions } = useElementVariables();
 const sourceOptions = computed<SelectOption[]>((): SelectOption[] =>
   loopSourceOptions.value.map((option): SelectOption => ({ label: option.label, value: option.value }))
 );
-
-/** 当前循环配置。 */
-const loopConfig = computed<WidgetElementLoopConfig>(() => readWidgetElementLoopConfig(element.value.metadata));
 
 /**
  * 判断是否正在修改循环变量名字段。
@@ -85,7 +89,7 @@ function hasDuplicateLoopVariableNames(config: WidgetElementLoopConfig): boolean
  */
 function updateLoopConfig(change: Partial<WidgetElementLoopConfig>): void {
   const nextConfig: WidgetElementLoopConfig = {
-    ...readWidgetElementLoopConfig(element.value.metadata),
+    ...element.value.loop,
     ...change
   };
 
@@ -95,51 +99,57 @@ function updateLoopConfig(change: Partial<WidgetElementLoopConfig>): void {
 
   element.value = {
     ...element.value,
-    metadata: writeWidgetElementLoopConfig(element.value.metadata, nextConfig)
+    loop: nextConfig
   };
 }
 
+/**
+ * 更新循环配置单个字段。
+ * @param key - 循环配置字段
+ * @param value - 字段新值
+ */
+function updateLoopField<TKey extends keyof WidgetElementLoopConfig>(key: TKey, value: WidgetElementLoopConfig[TKey]): void {
+  updateLoopConfig({ [key]: value } as Partial<WidgetElementLoopConfig>);
+}
+
+/**
+ * 创建循环配置字段模型，保证控件写入时触发元素模型整体更新。
+ * @param key - 循环配置字段
+ * @returns 字段双向绑定模型
+ */
+function createLoopFieldModel<TKey extends keyof WidgetElementLoopConfig>(key: TKey): WritableComputedRef<WidgetElementLoopConfig[TKey]> {
+  return computed<WidgetElementLoopConfig[TKey]>({
+    get: (): WidgetElementLoopConfig[TKey] => element.value.loop[key],
+    set: (value: WidgetElementLoopConfig[TKey]): void => updateLoopField(key, value)
+  });
+}
+
+/**
+ * 创建循环配置数值字段模型，忽略输入框清空时产生的空值。
+ * @param key - 数值配置字段
+ * @returns 数值字段双向绑定模型
+ */
+function createLoopNumberFieldModel(key: WidgetElementLoopNumberField): WritableComputedRef<number> {
+  return computed<number>({
+    get: (): number => element.value.loop[key],
+    set: (value: number) => isNumber(value) && updateLoopField(key, value)
+  });
+}
+
 /** 循环启用状态模型。 */
-const loopEnabled = computed<boolean>({
-  get: (): boolean => loopConfig.value.enabled,
-  set: (enabled: boolean): void => updateLoopConfig({ enabled })
-});
-
+const loopEnabled = createLoopFieldModel('enabled');
 /** 循环数据源模型。 */
-const loopSource = computed<string>({
-  get: (): string => loopConfig.value.source,
-  set: (source: string): void => updateLoopConfig({ source })
-});
-
+const loopSource = createLoopFieldModel('source');
 /** 循环迭代项变量名模型。 */
-const loopItemName = computed<string>({
-  get: (): string => loopConfig.value.itemName,
-  set: (itemName: string): void => updateLoopConfig({ itemName })
-});
-
+const loopItemName = createLoopFieldModel('itemName');
 /** 循环索引变量名模型。 */
-const loopIndexName = computed<string>({
-  get: (): string => loopConfig.value.indexName,
-  set: (indexName: string): void => updateLoopConfig({ indexName })
-});
-
+const loopIndexName = createLoopFieldModel('indexName');
 /** 循环列数模型。 */
-const loopColumns = computed<number>({
-  get: (): number => loopConfig.value.columns,
-  set: (columns: number): void => updateLoopConfig({ columns })
-});
-
+const loopColumns = createLoopNumberFieldModel('columns');
 /** 循环列间距模型。 */
-const loopColumnGap = computed<number>({
-  get: (): number => loopConfig.value.columnGap,
-  set: (columnGap: number): void => updateLoopConfig({ columnGap })
-});
-
+const loopColumnGap = createLoopNumberFieldModel('columnGap');
 /** 循环行间距模型。 */
-const loopRowGap = computed<number>({
-  get: (): number => loopConfig.value.rowGap,
-  set: (rowGap: number): void => updateLoopConfig({ rowGap })
-});
+const loopRowGap = createLoopNumberFieldModel('rowGap');
 </script>
 
 <style lang="less" scoped>

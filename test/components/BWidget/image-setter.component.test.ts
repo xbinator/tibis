@@ -8,6 +8,7 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import ImageSetter from '@/components/BWidget/elements/Image/Setter.vue';
 import type { WidgetElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建测试图片元素。
@@ -24,6 +25,7 @@ function createImageElement(): WidgetElement {
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       src: 'https://example.com/a.png',
       fit: 'cover'
@@ -139,13 +141,13 @@ describe('Image Setter', (): void => {
     wrapper.unmount();
   });
 
-  it('falls back to default fit when metadata fit is invalid', async (): Promise<void> => {
+  it('leaves the select empty when metadata fit is invalid', async (): Promise<void> => {
     const element = createImageElement();
     element.metadata.fit = 'invalid-fit' as unknown as undefined;
     const wrapper = mountImageSetter(element);
     const select = wrapper.find('.widget-image-setter-stub-select');
 
-    expect((select.element as HTMLSelectElement).value).toBe('cover');
+    expect((select.element as HTMLSelectElement).value).toBe('');
     wrapper.unmount();
   });
 

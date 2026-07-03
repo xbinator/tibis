@@ -6,6 +6,7 @@ import { ref } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { useElementTemplate } from '@/components/BWidget/hooks/useElementTemplate';
 import type { WidgetElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建测试元素。
@@ -22,6 +23,7 @@ function createTextElement(): WidgetElement {
     size: { width: 100, height: 24 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       content: '静态内容',
       subtitle: '副标题'

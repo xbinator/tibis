@@ -49,12 +49,6 @@ describe('widgetStyle', (): void => {
     });
   });
 
-  it('uses the legacy borderColorWidth field when borderWidth is absent', (): void => {
-    expect(createWidgetElementStyleProperties({ borderColorWidth: 3 })).toMatchObject({
-      borderWidth: '3px'
-    });
-  });
-
   it('normalizes box side numbers for text metrics', (): void => {
     expect(resolveWidgetBoxSideNumbers({ top: -1, right: 2, bottom: 3, left: 4 }, 0)).toEqual({
       top: 0,

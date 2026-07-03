@@ -21,6 +21,7 @@ import {
   updateWidgetElementStyle,
   updateWidgetElementTitle
 } from '@/components/BWidget/utils/boardTransforms';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 带可选子元素字段的测试元素。
@@ -46,6 +47,7 @@ function createShapeElement(id: string): WidgetShapeElement {
     size: { width: 180, height: 72 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -84,60 +86,9 @@ function createTextElement(id: string, content = 'abcdef'): WidgetShapeElement {
     size: { width: 180, height: 72 },
     rotation: 0,
     style: { fontSize: 10 },
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: { content }
   };
-}
-
-/**
- * 旧版形状元素快照。
- */
-interface LegacyShapeElementSnapshot {
-  /** 元素 ID */
-  id: string;
-  /** 旧版元素类别 */
-  kind: 'shape';
-  /** 旧版形状类型 */
-  shape: string;
-  /** 旧版节点文本 */
-  text: string;
-  /** 旧版节点说明 */
-  description?: string;
-  /** 元素位置 */
-  position: { x: number; y: number };
-  /** 元素尺寸 */
-  size: { width: number; height: number };
-  /** 旋转角度 */
-  rotation: number;
-  /** 旧版元信息 */
-  metadata: {
-    /** 元素创建来源 */
-    source: 'user';
-    /** 创建时间戳 */
-    createdAt: number;
-    /** 旧版手动尺寸 */
-    manualSize?: { width: number; height: number };
-  };
-}
-
-/**
- * 创建带旧版 kind 字段的测试形状元素。
- * @param id - 元素 ID
- * @returns 旧版形状元素
- */
-function createLegacyShapeElement(id: string): WidgetShapeElement {
-  const legacyElement: LegacyShapeElementSnapshot = {
-    id,
-    kind: 'shape',
-    shape: 'rect',
-    text: '旧版节点',
-    description: '旧版说明',
-    position: { x: 100, y: 120 },
-    size: { width: 180, height: 72 },
-    rotation: 0,
-    metadata: { source: 'user', createdAt: 1, manualSize: { width: 160, height: 60 } }
-  };
-
-  return legacyElement as unknown as WidgetShapeElement;
 }
 
 /**
@@ -178,38 +129,6 @@ describe('boardTransforms', (): void => {
     expect(redone.history.future).toHaveLength(0);
   });
 
-  it('normalizes legacy shape kind out of board snapshots', (): void => {
-    const initial = createWidgetBoardState({
-      elements: [createLegacyShapeElement('node-1')]
-    });
-
-    expect('kind' in (initial.elements[0] ?? {})).toBe(false);
-    expect('shape' in (initial.elements[0] ?? {})).toBe(false);
-    expect(initial.elements[0]?.name).toBe('rect');
-  });
-
-  it('normalizes legacy snapshots into required shape element fields', (): void => {
-    const initial = createWidgetBoardState({
-      elements: [createLegacyShapeElement('node-1')]
-    });
-    const element = expectShapeElement(initial.elements[0]);
-
-    expect(element).toMatchObject({
-      id: 'node-1',
-      name: 'rect',
-      label: '矩形',
-      icon: 'lucide:square',
-      title: '矩形',
-      style: {},
-      metadata: {}
-    });
-    expect('text' in element).toBe(false);
-    expect('description' in element).toBe(false);
-    expect('source' in element.metadata).toBe(false);
-    expect('createdAt' in element.metadata).toBe(false);
-    expect('manualSize' in element.metadata).toBe(false);
-  });
-
   it('normalizes group children recursively', (): void => {
     const initial = createWidgetBoardState({
       elements: [createGroupElement('group-1', [createGroupElement('group-2', [createShapeElement('child-1')])])]
@@ -237,8 +156,18 @@ describe('boardTransforms', (): void => {
     expect(element?.children).toBeUndefined();
   });
 
+  it('drops snapshots that miss the current top-level loop model', (): void => {
+    const invalidElement: Partial<WidgetShapeElement> = { ...createShapeElement('node-1') };
+    delete invalidElement.loop;
+    const initial = createWidgetBoardState({
+      elements: [invalidElement as WidgetShapeElement]
+    });
+
+    expect(initial.elements).toHaveLength(0);
+  });
+
   it('normalizes widget data contract fields in lightweight snapshots', (): void => {
-    const legacySnapshot = {
+    const partialSnapshot = {
       metadata: {},
       elements: [createShapeElement('node-1')],
       viewport: {
@@ -247,7 +176,7 @@ describe('boardTransforms', (): void => {
       }
     };
 
-    const snapshot = createWidgetDataSnapshot(legacySnapshot);
+    const snapshot = createWidgetDataSnapshot(partialSnapshot);
 
     expect(snapshot.name).toBe('');
     expect(snapshot.description).toBe('');
@@ -289,12 +218,12 @@ describe('boardTransforms', (): void => {
     const initial = createWidgetBoardState({ elements: [createShapeElement('node-1')] });
     const updated = updateWidgetElementStyle(initial, 'node-1', {
       backgroundColor: '#f97316',
-      borderColorWidth: 3
+      borderWidth: 3
     });
 
     expect(expectShapeElement(updated.elements[0]).style).toEqual({
       backgroundColor: '#f97316',
-      borderColorWidth: 3
+      borderWidth: 3
     });
     expect(updated.history.past).toHaveLength(1);
   });
@@ -305,13 +234,13 @@ describe('boardTransforms', (): void => {
     });
     const updated = updateWidgetElementStyle(initial, 'child-1', {
       backgroundColor: '#f97316',
-      borderColorWidth: 3
+      borderWidth: 3
     });
     const group = updated.elements[0] as WidgetElementWithChildren | undefined;
 
     expect(group?.children?.[0]?.style).toEqual({
       backgroundColor: '#f97316',
-      borderColorWidth: 3
+      borderWidth: 3
     });
     expect(updated.history.past).toHaveLength(1);
   });

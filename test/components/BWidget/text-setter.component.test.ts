@@ -12,6 +12,7 @@ import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/t
 import TextSetter from '@/components/BWidget/elements/Text/Setter.vue';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /** 已移除的旧根变量名。 */
 const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
@@ -39,6 +40,7 @@ function createTextElement(): WidgetElement {
     size: { width: 100, height: 24 },
     rotation: 0,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       content: '原始内容'
     }
@@ -339,7 +341,7 @@ describe('Text Setter', (): void => {
     wrapper.unmount();
   });
 
-  it('removes maxLines from metadata when the number input is cleared', async (): Promise<void> => {
+  it('keeps the cleared maxLines value from the number input', async (): Promise<void> => {
     const element = createTextElement();
     element.metadata.maxLines = 5;
     const wrapper = mountTextSetter(element);
@@ -347,7 +349,7 @@ describe('Text Setter', (): void => {
 
     await input.setValue('');
 
-    expect(element.metadata.maxLines).toBeUndefined();
+    expect(element.metadata.maxLines).toBeNull();
     wrapper.unmount();
   });
 

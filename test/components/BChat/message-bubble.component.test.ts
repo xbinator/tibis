@@ -14,6 +14,7 @@ import { create } from '@/components/BChat/utils/messageHelper';
 import type { BChatSubmitContext, BChatSubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /** 剪贴板写入测试替身。 */
 const clipboardMock = vi.fn();
@@ -165,6 +166,7 @@ function createWeatherWidgetData(): WidgetData {
         size: { width: 180, height: 48 },
         rotation: 0,
         style: {},
+        loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
           content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
         }

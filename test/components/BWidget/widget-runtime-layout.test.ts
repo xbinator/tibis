@@ -10,6 +10,7 @@ import {
   createWidgetRuntimeLayoutFromRenderElements,
   type WidgetRuntimeElementLayout
 } from '@/components/BWidget/utils/widgetRuntime/layout';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建矩形测试元素。
@@ -30,6 +31,7 @@ function createRectElement(id: string, position: WidgetPoint, size: WidgetSize, 
     size,
     rotation,
     style: {},
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {}
   };
 }
@@ -52,6 +54,7 @@ function createTextElement(content: string): WidgetElement {
     style: {
       fontSize: 10
     },
+    loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       content
     }
