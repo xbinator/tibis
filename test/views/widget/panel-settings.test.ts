@@ -297,12 +297,12 @@ describe('PanelSettings', (): void => {
 
     expect(wrapper.find('[data-tab="高级"]').exists()).toBe(true);
 
-    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('update:elements', [{
+    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('update:element', {
       ...element,
       metadata: {
         [WIDGET_LOOP_METADATA_KEY]: loopConfig
       }
-    }]);
+    });
 
     expect(wrapper.emitted('update:value')).toEqual([
       [
@@ -320,21 +320,22 @@ describe('PanelSettings', (): void => {
       ]
     ]);
     expect(wrapper.emitted('update:select')).toEqual([
-      [{
-        ...element,
-        metadata: {
-          [WIDGET_LOOP_METADATA_KEY]: loopConfig
+      [
+        {
+          ...element,
+          metadata: {
+            [WIDGET_LOOP_METADATA_KEY]: loopConfig
+          }
         }
-      }]
+      ]
     ]);
     wrapper.unmount();
   });
 
-  it('renders advanced tab for same-group multi-selection and merges group element updates', (): void => {
+  it('does not render advanced loop settings for multi-selection', (): void => {
     const firstRect = createWidgetElement('rect-1', 'rect');
     const secondRect = createWidgetElement('rect-2', 'rect');
     const groupElement = createGroupElement('group-1', [firstRect, secondRect]);
-    const loopConfig = createLoopConfig('items');
     const dataItem = createWidgetData([groupElement]);
     const wrapper = mount(PanelSettings, {
       props: {
@@ -349,41 +350,9 @@ describe('PanelSettings', (): void => {
       }
     });
 
-    expect(wrapper.find('[data-tab="高级"]').exists()).toBe(true);
-
-    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('update:elements', [
-      {
-        ...firstRect,
-        metadata: {
-          ...firstRect.metadata,
-          [WIDGET_LOOP_METADATA_KEY]: loopConfig
-        }
-      },
-      secondRect
-    ]);
-
-    expect(wrapper.emitted('update:value')).toEqual([
-      [
-        {
-          ...dataItem,
-          elements: [
-            {
-              ...groupElement,
-              children: [
-                {
-                  ...firstRect,
-                  metadata: {
-                    ...firstRect.metadata,
-                    [WIDGET_LOOP_METADATA_KEY]: loopConfig
-                  }
-                },
-                secondRect
-              ]
-            }
-          ]
-        }
-      ]
-    ]);
+    expect(wrapper.find('[data-tab="高级"]').exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'AdvancedSetter' }).exists()).toBe(false);
+    expect(wrapper.emitted('update:value')).toBeUndefined();
     wrapper.unmount();
   });
 

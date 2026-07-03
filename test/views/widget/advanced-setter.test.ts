@@ -162,14 +162,14 @@ function createWidgetData(element: WidgetElement): WidgetData {
 
 describe('AdvancedSetter', (): void => {
   /**
-   * 读取最近一次元素列表更新。
+   * 读取最近一次元素更新。
    * @param wrapper - 组件包装器
-   * @returns 最近一次更新后的元素列表
+   * @returns 最近一次更新后的元素
    */
-  function readLastElementsUpdate(wrapper: VueWrapper): WidgetElement[] {
-    const updates = wrapper.emitted('update:elements');
+  function readLastElementUpdate(wrapper: VueWrapper): WidgetElement {
+    const updates = wrapper.emitted('update:element');
 
-    return updates?.[updates.length - 1]?.[0] as WidgetElement[];
+    return updates?.[updates.length - 1]?.[0] as WidgetElement;
   }
 
   /**
@@ -186,15 +186,15 @@ describe('AdvancedSetter', (): void => {
       emits: {
         /**
          * 透传高级设置面板元素更新。
-         * @param elements - 更新后的元素列表
+         * @param nextElement - 更新后的元素
          * @returns 是否允许触发事件
          */
-        'update:elements': (elements: WidgetElement[]): boolean => Array.isArray(elements)
+        'update:element': (nextElement: WidgetElement): boolean => typeof nextElement.id === 'string'
       },
-      setup(_props, { emit }): { elementsModel: Ref<WidgetElement[]>; handleElementsUpdate: (elements: WidgetElement[]) => void } {
+      setup(_props, { emit }): { elementModel: Ref<WidgetElement>; handleElementUpdate: (nextElement: WidgetElement) => void } {
         const widgetData = ref<WidgetData | undefined>(createWidgetData(element));
         const selectedElementIds = ref<string[]>([element.id]);
-        const elementsModel = ref<WidgetElement[]>([element]);
+        const elementModel = ref<WidgetElement>(element);
 
         provideWidgetContext({
           widgetData,
@@ -203,19 +203,19 @@ describe('AdvancedSetter', (): void => {
 
         /**
          * 同步高级设置面板元素更新。
-         * @param elements - 更新后的元素列表
+         * @param nextElement - 更新后的元素
          */
-        function handleElementsUpdate(elements: WidgetElement[]): void {
-          elementsModel.value = elements;
-          emit('update:elements', elements);
+        function handleElementUpdate(nextElement: WidgetElement): void {
+          elementModel.value = nextElement;
+          emit('update:element', nextElement);
         }
 
         return {
-          elementsModel,
-          handleElementsUpdate
+          elementModel,
+          handleElementUpdate
         };
       },
-      template: '<AdvancedSetter :elements="elementsModel" @update:elements="handleElementsUpdate" />'
+      template: '<AdvancedSetter :element="elementModel" @update:element="handleElementUpdate" />'
     });
 
     return mount(Host, {
@@ -278,15 +278,15 @@ describe('AdvancedSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('updates loop config through elements model', async (): Promise<void> => {
+  it('updates loop config through element model', async (): Promise<void> => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
 
     wrapper.findComponent({ name: 'ACheckboxStub' }).vm.$emit('update:checked', false);
     await nextTick();
-    const disabledElements = readLastElementsUpdate(wrapper);
+    const disabledElement = readLastElementUpdate(wrapper);
 
-    expect(disabledElements[0].metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
+    expect(disabledElement.metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
       enabled: false,
       itemName: 'item',
       indexName: 'index'
@@ -294,9 +294,9 @@ describe('AdvancedSetter', (): void => {
 
     wrapper.findComponent({ name: 'BSelectStub' }).vm.$emit('update:value', 'input.items');
     await nextTick();
-    const sourceElements = readLastElementsUpdate(wrapper);
+    const sourceElement = readLastElementUpdate(wrapper);
 
-    expect(sourceElements[0].metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
+    expect(sourceElement.metadata[WIDGET_LOOP_METADATA_KEY]).toMatchObject({
       source: 'input.items'
     });
     wrapper.unmount();
@@ -308,7 +308,7 @@ describe('AdvancedSetter', (): void => {
 
     await wrapper.find('input[placeholder="默认为：index"]').setValue('item');
 
-    expect(wrapper.emitted('update:elements')).toBeUndefined();
+    expect(wrapper.emitted('update:element')).toBeUndefined();
     wrapper.unmount();
   });
 });

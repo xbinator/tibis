@@ -13,10 +13,6 @@
           @style-change="emit('multi-style-change', $event)"
         />
       </ATabPane>
-
-      <ATabPane v-if="sameGroupSelectedElements.length > 1" key="advanced" tab="高级">
-        <AdvancedSetter v-model:elements="sameGroupSelectedElements" />
-      </ATabPane>
     </ATabs>
     <div v-else-if="select === null" class="setter-panel__empty">已选择多个元素</div>
     <template v-else>
@@ -31,7 +27,7 @@
         </ATabPane>
 
         <ATabPane key="advanced" tab="高级">
-          <AdvancedSetter v-model:elements="selectedTargetElements" />
+          <AdvancedSetter v-model:element="selectedTargetElement" />
         </ATabPane>
       </ATabs>
     </template>
@@ -46,13 +42,7 @@ import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
 import { getWidgetElementSetter } from '@/components/BWidget/elements';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetSelectTarget } from '@/components/BWidget/types';
-import {
-  findWidgetElementTreeNode,
-  flattenWidgetElementTree,
-  isSameWidgetElementParent,
-  updateWidgetElementInTree,
-  type WidgetRenderTreeNode
-} from '@/components/BWidget/utils/widgetTree';
+import { findWidgetElementTreeNode, updateWidgetElementInTree } from '@/components/BWidget/utils/widgetTree';
 import AdvancedSetter from './AdvancedSetter.vue';
 import BatchSetter from './BatchSetter.vue';
 import DesignSetter from './DesignSetter.vue';
@@ -104,78 +94,31 @@ function isElementTarget(target: WidgetSelectTarget): target is WidgetElement {
 /** 当前选中元素对应的专属属性设置面板。 */
 const elementSetter = computed<Component | null>(() => (isElementTarget(select.value) ? getWidgetElementSetter(select.value.name) : null));
 
-/** 当前多选命中的元素，保持Widget数组顺序。 */
-const selectedElements = computed<WidgetElement[]>(() => {
-  const selectedIds = new Set(props.selectedElementIds);
-
-  return flattenWidgetElementTree(widgetData.value.elements)
-    .filter((item: WidgetRenderTreeNode): boolean => selectedIds.has(item.element.id))
-    .map((item: WidgetRenderTreeNode): WidgetElement => item.element);
-});
-
 /**
- * 将局部编辑元素按 ID 合并回完整元素列表。
- * @param currentElements - 当前完整元素列表
- * @param updatedElements - 局部更新元素列表
- * @returns 合并后的完整元素列表
+ * 写回高级设置面板更新后的元素。
+ * @param updatedElement - 更新后的元素
  */
-function mergeElementsById(currentElements: WidgetElement[], updatedElements: WidgetElement[]): WidgetElement[] {
-  return updatedElements.reduce<WidgetElement[]>(
-    (nextElements: WidgetElement[], element: WidgetElement): WidgetElement[] =>
-      updateWidgetElementInTree(nextElements, element.id, (): WidgetElement => element),
-    currentElements
-  );
-}
-
-/**
- * 写回高级设置面板更新后的元素列表。
- * @param updatedElements - 局部更新元素列表
- */
-function updateAdvancedElements(updatedElements: WidgetElement[]): void {
-  if (updatedElements.length === 0) {
-    return;
-  }
-
-  const nextElements = mergeElementsById(widgetData.value.elements, updatedElements);
+function updateAdvancedElement(updatedElement: WidgetElement): void {
+  const nextElements = updateWidgetElementInTree(widgetData.value.elements, updatedElement.id, (): WidgetElement => updatedElement);
 
   widgetData.value = { ...widgetData.value, elements: nextElements };
 
-  if (isElementTarget(select.value)) {
-    const selectedElementId = select.value.id;
-    select.value = findWidgetElementTreeNode(nextElements, selectedElementId)?.element ?? select.value;
+  if (isElementTarget(select.value) && select.value.id === updatedElement.id) {
+    select.value = findWidgetElementTreeNode(nextElements, updatedElement.id)?.element ?? updatedElement;
   }
 }
 
 /** 当前单选元素高级设置模型。 */
-const selectedTargetElements = computed<WidgetElement[]>({
-  get: (): WidgetElement[] => {
+const selectedTargetElement = computed<WidgetElement>({
+  get: (): WidgetElement => {
     if (!isElementTarget(select.value)) {
-      return [];
+      throw new Error('Advanced setter requires a selected widget element.');
     }
 
-    return [findWidgetElementTreeNode(widgetData.value.elements, select.value.id)?.element ?? select.value];
+    return findWidgetElementTreeNode(widgetData.value.elements, select.value.id)?.element ?? select.value;
   },
-  set: (updatedElements: WidgetElement[]): void => {
-    updateAdvancedElements(updatedElements);
-  }
-});
-
-/** 同一个组合内的多选元素，用于开启组合循环。 */
-const sameGroupSelectedElements = computed<WidgetElement[]>({
-  get: (): WidgetElement[] => {
-    if (selectedElements.value.length <= 1 || selectedElements.value.length !== props.selectedElementIds.length) {
-      return [];
-    }
-
-    const firstNode = findWidgetElementTreeNode(widgetData.value.elements, props.selectedElementIds[0] ?? '');
-    if (!firstNode?.parentId || !isSameWidgetElementParent(widgetData.value.elements, props.selectedElementIds)) {
-      return [];
-    }
-
-    return selectedElements.value;
-  },
-  set: (updatedElements: WidgetElement[]): void => {
-    updateAdvancedElements(updatedElements);
+  set: (updatedElement: WidgetElement): void => {
+    updateAdvancedElement(updatedElement);
   }
 });
 </script>

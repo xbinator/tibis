@@ -43,17 +43,11 @@ import { Checkbox as ACheckbox, Input as AInput, InputNumber as AInputNumber } f
 import type { SelectOption } from '@/components/BSelect/types';
 import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
 import type { WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
-import {
-  createDefaultWidgetElementLoopConfig,
-  readWidgetElementLoopConfig,
-  resolveWidgetElementLoopVariableNames,
-  WIDGET_LOOP_METADATA_KEY,
-  writeWidgetElementLoopConfig
-} from '@/components/BWidget/utils/widgetLoop';
+import { readWidgetElementLoopConfig, resolveWidgetElementLoopVariableNames, writeWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 defineOptions({ name: 'AdvancedSetter' });
 
-const elements = defineModel<WidgetElement[]>('elements', { required: true });
+const element = defineModel<WidgetElement>('element', { required: true });
 
 const { loopSourceOptions } = useElementVariables();
 
@@ -62,18 +56,8 @@ const sourceOptions = computed<SelectOption[]>((): SelectOption[] =>
   loopSourceOptions.value.map((option): SelectOption => ({ label: option.label, value: option.value }))
 );
 
-/** 当前承担循环配置的主元素。 */
-const loopOwner = computed<WidgetElement | null>((): WidgetElement | null => {
-  const configuredElement = elements.value.find((element: WidgetElement): boolean => WIDGET_LOOP_METADATA_KEY in element.metadata);
-  const enabledElement = elements.value.find((element: WidgetElement): boolean => readWidgetElementLoopConfig(element.metadata).enabled);
-
-  return enabledElement ?? configuredElement ?? elements.value[0] ?? null;
-});
-
 /** 当前循环配置。 */
-const loopConfig = computed<WidgetElementLoopConfig>(() =>
-  loopOwner.value ? readWidgetElementLoopConfig(loopOwner.value.metadata) : createDefaultWidgetElementLoopConfig()
-);
+const loopConfig = computed<WidgetElementLoopConfig>(() => readWidgetElementLoopConfig(element.value.metadata));
 
 /**
  * 判断是否正在修改循环变量名字段。
@@ -100,14 +84,8 @@ function hasDuplicateLoopVariableNames(config: WidgetElementLoopConfig): boolean
  * @param change - 需要覆盖的循环配置字段
  */
 function updateLoopConfig(change: Partial<WidgetElementLoopConfig>): void {
-  const owner = loopOwner.value;
-
-  if (!owner) {
-    return;
-  }
-
   const nextConfig: WidgetElementLoopConfig = {
-    ...readWidgetElementLoopConfig(owner.metadata),
+    ...readWidgetElementLoopConfig(element.value.metadata),
     ...change
   };
 
@@ -115,12 +93,10 @@ function updateLoopConfig(change: Partial<WidgetElementLoopConfig>): void {
     return;
   }
 
-  const nextOwner: WidgetElement = {
-    ...owner,
-    metadata: writeWidgetElementLoopConfig(owner.metadata, nextConfig)
+  element.value = {
+    ...element.value,
+    metadata: writeWidgetElementLoopConfig(element.value.metadata, nextConfig)
   };
-
-  elements.value = elements.value.map((element: WidgetElement): WidgetElement => (element.id === owner.id ? nextOwner : element));
 }
 
 /** 循环启用状态模型。 */
