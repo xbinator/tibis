@@ -31,6 +31,7 @@
         @multi-command="handleSettingsMultiCommand"
         @multi-layout-change="handleSettingsMultiLayoutChange"
         @multi-style-change="handleSettingsMultiStyleChange"
+        @loop-change="handleSettingsLoopChange"
       />
     </BPanelSplitter>
 
@@ -41,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import type { WidgetMultiSelectLayoutChange } from './types';
+import type { WidgetLoopChangePayload, WidgetMultiSelectLayoutChange } from './types';
 import { computed, nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
@@ -50,6 +51,7 @@ import type BWidgetComponent from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetLayerAction, WidgetSelectTarget } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { WIDGET_GROUP_METADATA_KEY, getWidgetElementGroupId } from '@/components/BWidget/utils/widgetGroups';
+import { writeWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import CodeEditor from './components/CodeEditor.vue';
@@ -703,6 +705,49 @@ function handleSettingsMultiStyleChange(style: WidgetElementStyleChange): void {
     ...session.data.value,
     elements: mergeSelectedElementStyles(session.data.value.elements, selectedIds, style)
   };
+}
+
+/**
+ * 更新指定元素的循环配置。
+ * @param elements - 当前Widget元素列表
+ * @param targetIds - 需要更新的元素 ID 集合
+ * @param payload - 循环配置变更
+ * @returns 更新后的Widget元素列表
+ */
+function updateElementLoopConfigs(elements: WidgetElement[], targetIds: Set<string>, payload: WidgetLoopChangePayload): WidgetElement[] {
+  return elements.map((element: WidgetElement): WidgetElement => {
+    if (!targetIds.has(element.id)) {
+      return element;
+    }
+
+    return {
+      ...element,
+      metadata: writeWidgetElementLoopConfig(element.metadata, payload.config)
+    };
+  });
+}
+
+/**
+ * 处理右侧设置面板循环配置变更。
+ * @param payload - 循环配置变更
+ */
+function handleSettingsLoopChange(payload: WidgetLoopChangePayload): void {
+  const targetIds = new Set(payload.elementIds);
+  if (targetIds.size === 0) {
+    return;
+  }
+
+  const nextElements = updateElementLoopConfigs(session.data.value.elements, targetIds, payload);
+
+  session.data.value = {
+    ...session.data.value,
+    elements: nextElements
+  };
+
+  if (isWidgetElementTarget(selectedTarget.value) && targetIds.has(selectedTarget.value.id)) {
+    const selectedElementId = selectedTarget.value.id;
+    selectedTarget.value = nextElements.find((element: WidgetElement): boolean => element.id === selectedElementId) ?? selectedTarget.value;
+  }
 }
 
 /**

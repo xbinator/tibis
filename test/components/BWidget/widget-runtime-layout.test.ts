@@ -5,7 +5,11 @@
 import type { WidgetRenderContext } from 'types/widget';
 import { describe, expect, it } from 'vitest';
 import type { WidgetElement, WidgetPoint, WidgetSize } from '@/components/BWidget/types';
-import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from '@/components/BWidget/utils/widgetRuntime/layout';
+import {
+  createWidgetRuntimeLayout,
+  createWidgetRuntimeLayoutFromRenderElements,
+  type WidgetRuntimeElementLayout
+} from '@/components/BWidget/utils/widgetRuntime/layout';
 
 /**
  * 创建矩形测试元素。
@@ -137,6 +141,47 @@ describe('createWidgetRuntimeLayout', (): void => {
     const expandedLayout = createWidgetRuntimeLayout([createTextElement('{{ input.city }}')], expandedContext);
 
     expect(expandedLayout.bounds.height).toBeGreaterThan(compactLayout.bounds.height);
+  });
+
+  it('uses each render element context when measuring dynamic text nodes', (): void => {
+    const firstText = createTextElement('{{ item.name }}');
+    const secondText = {
+      ...createTextElement('{{ item.name }}'),
+      id: 'text-2',
+      position: { x: 40, y: 0 }
+    };
+    const layout = createWidgetRuntimeLayoutFromRenderElements(
+      [
+        {
+          element: firstText,
+          renderContext: {
+            input: {},
+            data: {},
+            locals: {
+              item: {
+                name: '短'
+              }
+            }
+          }
+        },
+        {
+          element: secondText,
+          renderContext: {
+            input: {},
+            data: {},
+            locals: {
+              item: {
+                name: '这是一个需要换行的长文本'
+              }
+            }
+          }
+        }
+      ],
+      16
+    );
+
+    expect(layout.elements[1].renderSize.height).toBeGreaterThan(layout.elements[0].renderSize.height);
+    expect(layout.bounds.height).toBe(layout.elements[1].renderSize.height);
   });
 
   it('returns a minimal empty layout when there are no visible nodes', (): void => {

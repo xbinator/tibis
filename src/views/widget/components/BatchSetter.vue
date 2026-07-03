@@ -3,64 +3,60 @@
   @description Widget页面多选元素设计和快捷操作面板。
 -->
 <template>
-  <ATabs>
-    <ATabPane key="design" tab="设计">
-      <!-- 操作 -->
-      <BSectionBlock title="操作">
-        <div class="multi-select-actions">
-          <div :data-testid="primaryCommandTestId" @click="emitCommand(primaryCommand)">
-            <BButton type="secondary" size="small" :icon="primaryCommandIcon">{{ primaryCommandLabel }}</BButton>
-          </div>
-        </div>
-      </BSectionBlock>
+  <!-- 操作 -->
+  <BSectionBlock title="操作">
+    <div class="multi-select-actions">
+      <div :data-testid="primaryCommandTestId" @click="emitCommand(primaryCommand)">
+        <BButton type="secondary" size="small" :icon="primaryCommandIcon">{{ primaryCommandLabel }}</BButton>
+      </div>
+    </div>
+  </BSectionBlock>
 
-      <!-- 布局 -->
-      <BSectionBlock title="布局">
-        <div class="multi-select-field-grid">
-          <BSectionItem label="X">
-            <AInputNumber v-model:value="layoutXValue" placeholder="X" :controls="false" />
-          </BSectionItem>
-          <BSectionItem label="Y">
-            <AInputNumber v-model:value="layoutYValue" placeholder="Y" :controls="false" />
-          </BSectionItem>
-          <BSectionItem label="宽">
-            <AInputNumber v-model:value="layoutWidthValue" placeholder="宽" :controls="false" />
-          </BSectionItem>
-          <BSectionItem label="高">
-            <AInputNumber v-model:value="layoutHeightValue" placeholder="高" :controls="false" />
-          </BSectionItem>
-        </div>
-      </BSectionBlock>
+  <!-- 布局 -->
+  <BSectionBlock title="布局">
+    <div class="multi-select-field-grid">
+      <BSectionItem label="X">
+        <AInputNumber v-model:value="layoutXValue" placeholder="X" :controls="false" />
+      </BSectionItem>
+      <BSectionItem label="Y">
+        <AInputNumber v-model:value="layoutYValue" placeholder="Y" :controls="false" />
+      </BSectionItem>
+      <BSectionItem label="宽">
+        <AInputNumber v-model:value="layoutWidthValue" placeholder="宽" :controls="false" />
+      </BSectionItem>
+      <BSectionItem label="高">
+        <AInputNumber v-model:value="layoutHeightValue" placeholder="高" :controls="false" />
+      </BSectionItem>
+    </div>
+  </BSectionBlock>
 
-      <!-- 填充 -->
-      <BSectionBlock title="填充">
-        <BSectionItem icon="lucide:paint-bucket">
-          <BColorPicker v-model:value="backgroundColorValue" />
-        </BSectionItem>
-      </BSectionBlock>
+  <!-- 填充 -->
+  <BSectionBlock title="填充">
+    <BSectionItem icon="lucide:paint-bucket">
+      <BColorPicker v-model:value="backgroundColorValue" />
+    </BSectionItem>
+  </BSectionBlock>
 
-      <!-- 描边 -->
-      <BSectionBlock title="描边">
-        <BSectionItem label="线形">
-          <BSelect v-model:value="borderStyleValue" placeholder="线形" :options="borderStyleOptions" />
-        </BSectionItem>
+  <!-- 描边 -->
+  <BSectionBlock title="描边">
+    <BSectionItem label="线形">
+      <BSelect v-model:value="borderStyleValue" placeholder="线形" :options="borderStyleOptions" />
+    </BSectionItem>
 
-        <ControlPanel v-model:value="borderWidthValue" label="宽度" mode="sides" />
+    <ControlPanel v-model:value="borderWidthValue" label="宽度" mode="sides" />
 
-        <BSectionItem label="颜色">
-          <BColorPicker v-model:value="borderColorValue" />
-        </BSectionItem>
+    <BSectionItem label="颜色">
+      <BColorPicker v-model:value="borderColorValue" />
+    </BSectionItem>
 
-        <ControlPanel v-model:value="borderRadiusValue" label="圆角" mode="corners" />
-      </BSectionBlock>
-    </ATabPane>
-  </ATabs>
+    <ControlPanel v-model:value="borderRadiusValue" label="圆角" mode="corners" />
+  </BSectionBlock>
 </template>
 
 <script setup lang="ts">
 import type { WidgetMultiSelectLayoutChange } from '../types';
 import { computed } from 'vue';
-import { InputNumber as AInputNumber, TabPane as ATabPane, Tabs as ATabs } from 'ant-design-vue';
+import { InputNumber as AInputNumber } from 'ant-design-vue';
 import { isEqual } from 'lodash-es';
 import type { WidgetBorderStyle, WidgetData, WidgetElement, WidgetElementStyle, WidgetElementStyleChange } from '@/components/BWidget/types';
 import { getWidgetElementGroupId } from '@/components/BWidget/utils/widgetGroups';

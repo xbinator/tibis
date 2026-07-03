@@ -28,5 +28,8 @@ const element = defineModel<WidgetElement>('element', { required: true });
 /** 当前文本正文内容，写回元素自定义元数据。 */
 const textContent = useElementTemplate(element, 'content');
 /** 当前可插入变量候选。 */
-const { variableOptions } = useElementVariables((): WidgetData | undefined => props.dataItem);
+const { variableOptions } = useElementVariables(
+  (): WidgetData | undefined => props.dataItem,
+  (): WidgetElement => element.value
+);
 </script>

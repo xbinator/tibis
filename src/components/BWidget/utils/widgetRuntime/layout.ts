@@ -51,6 +51,24 @@ export interface WidgetRuntimeLayout {
 }
 
 /**
+ * 运行态布局测量上下文。
+ */
+export interface WidgetRuntimeLayoutRenderContext extends WidgetRenderContext {
+  /** 循环展开等运行态局部变量 */
+  locals?: Record<string, unknown>;
+}
+
+/**
+ * 运行态布局测量元素。
+ */
+export interface WidgetRuntimeLayoutRenderElement {
+  /** 待测量元素 */
+  element: WidgetElement;
+  /** 当前元素使用的渲染上下文 */
+  renderContext?: WidgetRuntimeLayoutRenderContext;
+}
+
+/**
  * 运行态元素测量结果。
  */
 interface WidgetRuntimeMeasuredElement {
@@ -182,25 +200,27 @@ function createEmptyRuntimeLayout(): WidgetRuntimeLayout {
 }
 
 /**
- * 根据元素和渲染上下文创建运行态布局。
- * @param elements - Widget元素列表
- * @param renderContext - 运行态渲染上下文
+ * 创建单个运行态元素测量结果。
+ * @param item - 运行态布局测量元素
+ * @returns 元素测量结果
+ */
+function createRuntimeMeasuredElement(item: WidgetRuntimeLayoutRenderElement): WidgetRuntimeMeasuredElement {
+  const renderSize = getWidgetShapeRenderSize(item.element, item.renderContext);
+
+  return {
+    element: item.element,
+    renderSize,
+    bounds: createElementRuntimeBounds(item.element, renderSize)
+  };
+}
+
+/**
+ * 根据已测量元素创建运行态布局。
+ * @param elementLayouts - 已测量元素列表
  * @param padding - 内容留白
  * @returns 运行态布局
  */
-export function createWidgetRuntimeLayout(elements: WidgetElement[], renderContext?: WidgetRenderContext, padding = 16): WidgetRuntimeLayout {
-  const elementLayouts = elements
-    .map((element: WidgetElement): WidgetRuntimeMeasuredElement => {
-      const renderSize = getWidgetShapeRenderSize(element, renderContext);
-
-      return {
-        element,
-        renderSize,
-        bounds: createElementRuntimeBounds(element, renderSize)
-      };
-    })
-    .filter((item: WidgetRuntimeMeasuredElement): boolean => isVisibleRenderSize(item.renderSize));
-
+function createWidgetRuntimeLayoutFromMeasuredElements(elementLayouts: WidgetRuntimeMeasuredElement[], padding: number): WidgetRuntimeLayout {
   if (!elementLayouts.length) {
     return createEmptyRuntimeLayout();
   }
@@ -238,4 +258,37 @@ export function createWidgetRuntimeLayout(elements: WidgetElement[], renderConte
       })
     )
   };
+}
+
+/**
+ * 根据运行态元素和各自上下文创建运行态布局。
+ * @param renderElements - 运行态布局测量元素
+ * @param padding - 内容留白
+ * @returns 运行态布局
+ */
+export function createWidgetRuntimeLayoutFromRenderElements(renderElements: WidgetRuntimeLayoutRenderElement[], padding = 16): WidgetRuntimeLayout {
+  const elementLayouts = renderElements
+    .map((item: WidgetRuntimeLayoutRenderElement): WidgetRuntimeMeasuredElement => createRuntimeMeasuredElement(item))
+    .filter((item: WidgetRuntimeMeasuredElement): boolean => isVisibleRenderSize(item.renderSize));
+
+  return createWidgetRuntimeLayoutFromMeasuredElements(elementLayouts, padding);
+}
+
+/**
+ * 根据元素和渲染上下文创建运行态布局。
+ * @param elements - Widget元素列表
+ * @param renderContext - 运行态渲染上下文
+ * @param padding - 内容留白
+ * @returns 运行态布局
+ */
+export function createWidgetRuntimeLayout(elements: WidgetElement[], renderContext?: WidgetRenderContext, padding = 16): WidgetRuntimeLayout {
+  return createWidgetRuntimeLayoutFromRenderElements(
+    elements.map(
+      (element: WidgetElement): WidgetRuntimeLayoutRenderElement => ({
+        element,
+        renderContext
+      })
+    ),
+    padding
+  );
 }

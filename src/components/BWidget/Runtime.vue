@@ -10,6 +10,7 @@
           v-for="item in runtimeElements"
           :key="item.node.id"
           :node="item.node"
+          :node-render-context="item.renderContext"
           :preview-size="item.renderSize"
           @context-menu="ignoreContextMenu"
           @release="ignoreNodeEvent"
@@ -39,6 +40,7 @@ import { provideRenderContext } from './hooks/useRenderContext';
 import { useViewportSize } from './hooks/useViewportSize';
 import { provideWidgetRuntime, type WidgetRuntimeController } from './hooks/useWidgetRuntime';
 import WidgetNode from './renderers/WidgetNode.vue';
+import { createWidgetLoopRenderElements, type WidgetLoopRenderContext, type WidgetLoopRenderElement } from './utils/widgetLoop';
 import {
   createWidgetHttpClient,
   createWidgetRuntimeInstance,
@@ -47,7 +49,7 @@ import {
   type WidgetRuntimeFinishResult
 } from './utils/widgetRuntime';
 import { applyWidgetRuntimeDataPatchesToState } from './utils/widgetRuntime/dataPatch';
-import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from './utils/widgetRuntime/layout';
+import { createWidgetRuntimeLayoutFromRenderElements, type WidgetRuntimeElementLayout } from './utils/widgetRuntime/layout';
 
 defineOptions({ name: 'BWidgetRuntime' });
 
@@ -79,6 +81,8 @@ interface WidgetRuntimeRenderableElement {
   node: WidgetShapeElement;
   /** 布局测量时使用的渲染尺寸 */
   renderSize: WidgetSize;
+  /** 节点级渲染上下文 */
+  renderContext: WidgetLoopRenderContext;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -129,8 +133,16 @@ const providedRenderContext = computed<WidgetRenderContext | undefined>(() => ru
 
 provideRenderContext(providedRenderContext);
 
+/** 循环展开后的运行态渲染元素。 */
+const runtimeRenderElements = computed<WidgetLoopRenderElement[]>(() =>
+  createWidgetLoopRenderElements(runtimeState.value.value.elements, runtimeState.value.renderContext)
+);
+/** 运行态渲染元素上下文索引。 */
+const runtimeRenderContextByElementId = computed<Map<string, WidgetLoopRenderContext>>(
+  () => new Map(runtimeRenderElements.value.map((item: WidgetLoopRenderElement): [string, WidgetLoopRenderContext] => [item.element.id, item.renderContext]))
+);
 /** 当前运行态内容布局。 */
-const runtimeLayout = computed(() => createWidgetRuntimeLayout(runtimeState.value.value.elements, runtimeState.value.renderContext, props.padding));
+const runtimeLayout = computed(() => createWidgetRuntimeLayoutFromRenderElements(runtimeRenderElements.value, props.padding));
 /** 当前运行态内容缩放比例。 */
 const runtimeScale = computed<number>(() => {
   if (!runtimeLayout.value.elements.length) {
@@ -153,7 +165,8 @@ const runtimeElements = computed<WidgetRuntimeRenderableElement[]>(() =>
         ...item.element,
         position: item.position
       },
-      renderSize: item.renderSize
+      renderSize: item.renderSize,
+      renderContext: runtimeRenderContextByElementId.value.get(item.element.id) ?? runtimeState.value.renderContext
     })
   )
 );

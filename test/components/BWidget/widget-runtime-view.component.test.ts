@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWidgetRuntime } from '@/components/BWidget/hooks/useWidgetRuntime';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { WIDGET_GROUP_METADATA_KEY } from '@/components/BWidget/utils/widgetGroups';
+import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
 
 /** ResizeObserver 回调。 */
 type ResizeObserverCallbackLike = (entries: ResizeObserverEntry[]) => void;
@@ -107,6 +109,92 @@ function createRuntimeWidgetData(): WidgetData {
     viewport: {
       center: { x: 1000, y: 1000 },
       zoom: 0.1
+    }
+  };
+}
+
+/**
+ * 创建带单元素循环的运行态测试Widget 数据。
+ * @returns 测试Widget 数据
+ */
+function createRuntimeLoopTextWidgetData(): WidgetData {
+  const dataItem = createRuntimeWidgetData();
+
+  return {
+    ...dataItem,
+    elements: dataItem.elements.map((element) =>
+      element.id === 'text-1'
+        ? {
+            ...element,
+            metadata: {
+              ...element.metadata,
+              content: '{{ item.name }} {{ index }}',
+              [WIDGET_LOOP_METADATA_KEY]: {
+                enabled: true,
+                source: 'products',
+                columns: 2,
+                columnGap: 12,
+                rowGap: 10,
+                itemName: 'item',
+                indexName: 'index'
+              }
+            }
+          }
+        : element
+    )
+  };
+}
+
+/**
+ * 创建带组合循环的运行态测试Widget 数据。
+ * @returns 测试Widget 数据
+ */
+function createRuntimeLoopGroupWidgetData(): WidgetData {
+  return {
+    ...createDefaultWidgetData(),
+    elements: [
+      {
+        id: 'card-bg',
+        name: 'rect',
+        label: '矩形',
+        icon: 'lucide:square',
+        title: '背景',
+        position: { x: 20, y: 10 },
+        size: { width: 120, height: 60 },
+        rotation: 0,
+        style: {},
+        metadata: {
+          [WIDGET_GROUP_METADATA_KEY]: 'group-1',
+          [WIDGET_LOOP_METADATA_KEY]: {
+            enabled: true,
+            source: 'products',
+            columns: 2,
+            columnGap: 12,
+            rowGap: 10,
+            itemName: 'item',
+            indexName: 'index'
+          }
+        }
+      },
+      {
+        id: 'card-title',
+        name: 'text',
+        label: '文本',
+        icon: 'lucide:type',
+        title: '标题',
+        position: { x: 24, y: 18 },
+        size: { width: 80, height: 24 },
+        rotation: 0,
+        style: {},
+        metadata: {
+          [WIDGET_GROUP_METADATA_KEY]: 'group-1',
+          content: '{{ item.name }}'
+        }
+      }
+    ],
+    viewport: {
+      center: { x: 0, y: 0 },
+      zoom: 1
     }
   };
 }
@@ -304,6 +392,37 @@ describe('BWidgetRuntime', (): void => {
     expect(wrapper.find('.b-widget-runtime').exists()).toBe(true);
     expect(findNodeById(wrapper, 'text-1').text()).toBe('上海 当前 28°C');
     expect(findNodeById(wrapper, 'rect-1').find('.widget-rect-element-view').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('renders loop-expanded text nodes with item and index locals', async (): Promise<void> => {
+    const wrapper = await mountRuntime(createRuntimeLoopTextWidgetData(), {
+      input: {},
+      data: {
+        products: [{ name: '拿铁' }, { name: '美式' }]
+      }
+    });
+
+    expect(findNodeById(wrapper, 'text-1').exists()).toBe(false);
+    expect(findNodeById(wrapper, 'text-1__loop_0').text()).toBe('拿铁 0');
+    expect(findNodeById(wrapper, 'text-1__loop_1').text()).toBe('美式 1');
+    wrapper.unmount();
+  });
+
+  it('renders grouped loop nodes with the same item local per iteration', async (): Promise<void> => {
+    const wrapper = await mountRuntime(createRuntimeLoopGroupWidgetData(), {
+      input: {},
+      data: {
+        products: [{ name: '拿铁' }, { name: '美式' }]
+      }
+    });
+
+    expect(findNodeById(wrapper, 'card-bg').exists()).toBe(false);
+    expect(findNodeById(wrapper, 'card-title').exists()).toBe(false);
+    expect(findNodeById(wrapper, 'card-bg__loop_0').exists()).toBe(true);
+    expect(findNodeById(wrapper, 'card-title__loop_0').text()).toBe('拿铁');
+    expect(findNodeById(wrapper, 'card-bg__loop_1').exists()).toBe(true);
+    expect(findNodeById(wrapper, 'card-title__loop_1').text()).toBe('美式');
     wrapper.unmount();
   });
 

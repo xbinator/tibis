@@ -99,4 +99,47 @@ describe('widgetBindings', (): void => {
     });
     expect(resolveWidgetTemplateValue(template, context)).toBe(template);
   });
+
+  it('resolves loop local variables before data fields', (): void => {
+    const context: WidgetRenderContext = {
+      input: {
+        city: '上海'
+      },
+      data: {
+        item: {
+          name: 'data item'
+        },
+        weather: {
+          temperature: 28
+        }
+      }
+    };
+
+    expect(evaluateWidgetBindingExpression('item.name', context, { locals: { item: { name: '拿铁' }, index: 2 } })).toEqual({
+      resolved: true,
+      value: '拿铁'
+    });
+    expect(
+      resolveWidgetTemplateValue('{{ item.name }} #{{ index }} {{ weather.temperature }}', context, {
+        locals: { item: { name: '拿铁' }, index: 2 }
+      })
+    ).toBe('拿铁 #2 28');
+  });
+
+  it('resolves custom loop local variable names', (): void => {
+    const context = createRenderContext();
+
+    expect(
+      resolveWidgetTemplateValue('{{ record.name }} #{{ rowIndex }}', context, {
+        locals: { record: { name: '美式' }, rowIndex: 4 }
+      })
+    ).toBe('美式 #4');
+  });
+
+  it('keeps existing input and data binding behavior without locals', (): void => {
+    const context = createRenderContext();
+
+    expect(resolveWidgetTemplateValue('{{ input.city }} 当前 {{ weather.temperature }}°C', context)).toBe('上海 当前 28°C');
+    expect(resolveWidgetTemplateValue('{{ item.name }}', context)).toBe('{{ item.name }}');
+  });
 });

@@ -6,7 +6,9 @@ import { ref } from 'vue';
 import { describe, expect, it } from 'vitest';
 import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
 import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
-import type { WidgetData } from '@/components/BWidget/types';
+import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
+import { WIDGET_GROUP_METADATA_KEY } from '@/components/BWidget/utils/widgetGroups';
+import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
 
 /** 已移除的旧根变量名。 */
 const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
@@ -107,6 +109,72 @@ function createWidgetData(): WidgetData {
       zoom: 1
     }
   };
+}
+
+/**
+ * 创建测试Widget元素。
+ * @param id - 元素 ID
+ * @param metadata - 元素元数据
+ * @returns 测试元素
+ */
+function createWidgetElement(id: string, metadata: WidgetElement['metadata'] = {}): WidgetElement {
+  return {
+    id,
+    name: 'text',
+    label: '文本',
+    icon: 'lucide:type',
+    title: '文本',
+    position: { x: 0, y: 0 },
+    size: { width: 120, height: 40 },
+    rotation: 0,
+    style: {},
+    metadata
+  };
+}
+
+/**
+ * 创建测试循环配置。
+ * @returns 循环配置
+ */
+function createLoopConfig(): WidgetElementLoopConfig {
+  return {
+    enabled: true,
+    source: 'input.products',
+    columns: 2,
+    columnGap: 12,
+    rowGap: 12,
+    itemName: 'item',
+    indexName: 'index'
+  };
+}
+
+/**
+ * 创建带数组入参的测试Widget 数据。
+ * @param elements - Widget 元素
+ * @returns Widget 数据
+ */
+function createLoopWidgetData(elements: WidgetElement[]): WidgetData {
+  const dataItem = createWidgetData();
+  dataItem.inputSchema.properties.products = {
+    type: 'array',
+    description: '商品列表',
+    items: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: '商品名'
+        },
+        price: {
+          type: 'number',
+          description: '价格'
+        }
+      }
+    }
+  };
+  dataItem.elements = elements;
+
+  return dataItem;
 }
 
 /**
@@ -277,6 +345,39 @@ describe('useElementVariables', (): void => {
     expect(values).toContain('input');
     expect(values).toContain('message');
     expect(values).not.toContain('data');
+  });
+
+  it('provides item and index variables for a loop-enabled element', (): void => {
+    const loopElement = createWidgetElement('text-1', {
+      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
+    });
+    const dataItem = ref<WidgetData | undefined>(createLoopWidgetData([loopElement]));
+    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value, (): WidgetElement => loopElement);
+    const values = readVariableValues(variableOptions.value);
+    const itemVariable = findVariable(variableOptions.value, 'item');
+
+    expect(values).toContain('item');
+    expect(values).toContain('item.name');
+    expect(values).toContain('item.price');
+    expect(values).toContain('index');
+    expect(itemVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual(['item.name', 'item.price']);
+  });
+
+  it('provides group loop variables to elements covered by the same group owner', (): void => {
+    const groupId = 'widget-group-1';
+    const loopOwner = createWidgetElement('rect-1', {
+      [WIDGET_GROUP_METADATA_KEY]: groupId,
+      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
+    });
+    const groupChild = createWidgetElement('text-1', {
+      [WIDGET_GROUP_METADATA_KEY]: groupId
+    });
+    const dataItem = ref<WidgetData | undefined>(createLoopWidgetData([loopOwner, groupChild]));
+    const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value, (): WidgetElement => groupChild);
+    const values = readVariableValues(variableOptions.value);
+
+    expect(values).toContain('item.name');
+    expect(values).toContain('index');
   });
 
   it('falls back to root variables when widget data is not ready', (): void => {

@@ -104,6 +104,26 @@ export interface WidgetElementStyle {
 export type WidgetElementStyleChange = Partial<WidgetElementStyle>;
 
 /**
+ * Widget元素循环渲染配置。
+ */
+export interface WidgetElementLoopConfig {
+  /** 是否启用循环渲染 */
+  enabled: boolean;
+  /** 数组数据源路径 */
+  source: string;
+  /** 每行渲染数量 */
+  columns: number;
+  /** 横向间距 */
+  columnGap: number;
+  /** 纵向间距 */
+  rowGap: number;
+  /** 迭代项变量名 */
+  itemName: string;
+  /** 索引变量名 */
+  indexName: string;
+}
+
+/**
  * 元素层级操作类型。
  */
 export type WidgetLayerAction = 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack';

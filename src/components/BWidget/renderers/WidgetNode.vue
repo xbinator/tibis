@@ -21,10 +21,11 @@
 
 <script setup lang="ts">
 import type { WidgetPoint, WidgetShapeElement, WidgetSize } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
 import type { Component, CSSProperties } from 'vue';
 import { computed } from 'vue';
 import { getWidgetElementView } from '../elements';
-import { useRenderContext } from '../hooks/useRenderContext';
+import { provideRenderContext, useRenderContext } from '../hooks/useRenderContext';
 import { createWidgetElementCssTransform, getWidgetShapeRenderSize } from '../utils/widgetGeometry';
 import { createWidgetElementContentStyleProperties, createWidgetElementStyleProperties } from '../utils/widgetStyle';
 
@@ -40,9 +41,12 @@ interface Props {
   previewSize?: WidgetSize | null;
   /** 是否选中 */
   selected?: boolean;
+  /** 节点级渲染上下文 */
+  nodeRenderContext?: (WidgetRenderContext & { locals?: Record<string, unknown> }) | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  nodeRenderContext: null,
   previewPosition: null,
   previewSize: null,
   selected: false
@@ -59,8 +63,13 @@ const emit = defineEmits<{
   submit: [output: unknown];
 }>();
 
-/** 当前Widget渲染上下文。 */
-const renderContext = useRenderContext();
+/** 上层Widget渲染上下文。 */
+const parentRenderContext = useRenderContext();
+/** 当前节点有效渲染上下文。 */
+const nodeRenderContext = computed<WidgetRenderContext | undefined>(() => props.nodeRenderContext ?? parentRenderContext.value);
+
+provideRenderContext(nodeRenderContext);
+
 /** 是否为文本元素。 */
 const isTextShape = computed<boolean>(() => props.node.name === 'text');
 /** 节点渲染尺寸，预览尺寸作为临时模型尺寸后仍按元素 schema 重新测量。 */
@@ -70,7 +79,7 @@ const renderSize = computed<WidgetSize>(() =>
       ...props.node,
       size: props.previewSize ?? props.node.size
     },
-    renderContext.value
+    nodeRenderContext.value
   )
 );
 /** 节点渲染位置，Moveable 预览时优先使用临时位置。 */

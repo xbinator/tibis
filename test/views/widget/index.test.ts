@@ -7,8 +7,9 @@ import { defineComponent, nextTick } from 'vue';
 import type { ComponentPublicInstance, PropType } from 'vue';
 import { shallowMount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
+import type { WidgetData, WidgetElement, WidgetElementLoopConfig, WidgetSelectTarget } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
 import { emitter } from '@/utils/emitter';
 import WidgetPage from '@/views/widget/index.vue';
 
@@ -115,6 +116,22 @@ function createWidgetElement(id: string, title: string, groupId?: string): Widge
     rotation: 0,
     style: {},
     metadata: groupId ? { groupId } : {}
+  };
+}
+
+/**
+ * 创建页面循环配置测试数据。
+ * @returns 循环配置
+ */
+function createLoopConfig(): WidgetElementLoopConfig {
+  return {
+    enabled: true,
+    source: 'input.items',
+    columns: 3,
+    columnGap: 16,
+    rowGap: 12,
+    itemName: 'item',
+    indexName: 'index'
   };
 }
 
@@ -724,6 +741,39 @@ describe('WidgetPage', (): void => {
     });
     expect(widgetDataMock.value.elements[2]?.style).toEqual({});
     expect(wrapper.findComponent({ name: 'PanelSettings' }).props('selectedElementIds')).toEqual(['node-1', 'node-2']);
+    wrapper.unmount();
+  });
+
+  it('writes settings loop changes into the target element metadata', async (): Promise<void> => {
+    const selectedElement = createWidgetElement('node-1', '节点 1');
+    const loopConfig = createLoopConfig();
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [selectedElement, createWidgetElement('node-2', '节点 2')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+
+    panelSettings.vm.$emit('loop-change', {
+      elementIds: ['node-1'],
+      config: loopConfig
+    });
+    await nextTick();
+
+    expect(widgetDataMock.value.elements[0]?.metadata[WIDGET_LOOP_METADATA_KEY]).toEqual(loopConfig);
+    expect(widgetDataMock.value.elements[1]?.metadata[WIDGET_LOOP_METADATA_KEY]).toBeUndefined();
+    expect(panelSettings.props('select')).toEqual(widgetDataMock.value.elements[0]);
     wrapper.unmount();
   });
 

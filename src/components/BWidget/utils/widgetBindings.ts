@@ -11,12 +11,27 @@ export type WidgetBindingContextRoot = 'input' | 'data';
 /**
  * 绑定表达式路径。
  */
-interface WidgetBindingPath {
+export interface WidgetBindingPath {
   /** 上下文根名称 */
-  root: WidgetBindingContextRoot;
+  root: WidgetBindingContextRoot | 'local';
+  /** 局部变量根名称 */
+  localRoot?: string;
   /** 根之后的路径片段 */
   segments: string[];
 }
+
+/**
+ * Widget绑定局部变量上下文。
+ */
+export interface WidgetBindingLocalContext {
+  /** 局部变量根 */
+  locals?: Record<string, unknown>;
+}
+
+/**
+ * Widget绑定表达式解析选项。
+ */
+export type WidgetBindingEvaluationOptions = WidgetBindingLocalContext;
 
 /**
  * 单次绑定表达式解析结果。
@@ -56,14 +71,30 @@ function isPathReadable(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * 从渲染上下文中读取内部局部变量根。
+ * @param context - Widget渲染上下文
+ * @returns 局部变量根
+ */
+function readContextLocalRoots(context: WidgetRenderContext): Record<string, unknown> | undefined {
+  const contextWithLocals = context as WidgetRenderContext & WidgetBindingLocalContext;
+
+  return contextWithLocals.locals;
+}
+
+/**
  * 创建表达式求值使用的根作用域。
  * @param context - Widget渲染上下文
+ * @param options - 绑定解析选项
  * @returns 绑定表达式根作用域
  */
-function createBindingScope(context: WidgetRenderContext): Record<WidgetBindingContextRoot, unknown> {
+function createBindingScope(
+  context: WidgetRenderContext,
+  options: WidgetBindingEvaluationOptions = {}
+): Record<WidgetBindingContextRoot, unknown> & WidgetBindingLocalContext {
   return {
     input: context.input,
-    data: context.data
+    data: context.data,
+    locals: options.locals ?? readContextLocalRoots(context)
   };
 }
 
@@ -224,9 +255,11 @@ function isInputBindingRootExpression(expression: string): boolean {
 /**
  * 解析绑定表达式路径。
  * @param expression - 绑定表达式
+ * @param options - 绑定解析选项
  * @returns 绑定路径，非法时返回 null
  */
-function parseWidgetBindingPath(expression: string): WidgetBindingPath | null {
+export function parseWidgetBindingPath(expression: string, options: WidgetBindingEvaluationOptions = {}): WidgetBindingPath | null {
+  const { locals } = options;
   const root = isInputBindingRootExpression(expression) ? 'input' : 'data';
   const segments: string[] = [];
   let index = root === 'input' ? 'input'.length : 0;
@@ -236,6 +269,48 @@ function parseWidgetBindingPath(expression: string): WidgetBindingPath | null {
 
     if (!firstSegment) {
       return null;
+    }
+
+    if (locals && Object.prototype.hasOwnProperty.call(locals, firstSegment.value)) {
+      index = firstSegment.nextIndex;
+
+      while (index < expression.length) {
+        const character = expression[index];
+
+        if (character === '.') {
+          const identifierMatch = expression.slice(index + 1).match(WIDGET_BINDING_IDENTIFIER_PREFIX_PATTERN);
+          if (!identifierMatch) {
+            return null;
+          }
+
+          segments.push(identifierMatch[0]);
+          index += identifierMatch[0].length + 1;
+          continue;
+        }
+
+        if (character === '[') {
+          const bracketSegment = parseBracketPathSegment(expression, index);
+          if (!bracketSegment) {
+            return null;
+          }
+
+          segments.push(bracketSegment.value);
+          index = bracketSegment.nextIndex;
+          continue;
+        }
+
+        return null;
+      }
+
+      if (![firstSegment.value, ...segments].every((segment: string): boolean => isWidgetBindingPathSegmentAllowed(segment))) {
+        return null;
+      }
+
+      return {
+        root: 'local',
+        localRoot: firstSegment.value,
+        segments
+      };
     }
 
     segments.push(firstSegment.value);
@@ -307,8 +382,8 @@ function formatFirstBindingPathSegment(segment: string): string {
  * @param path - 绑定路径
  * @returns 路径值，无法读取时返回 undefined
  */
-function readBindingPathValue(scope: Record<WidgetBindingContextRoot, unknown>, path: WidgetBindingPath): unknown {
-  let currentValue = scope[path.root];
+function readBindingPathValue(scope: Record<WidgetBindingContextRoot, unknown> & WidgetBindingLocalContext, path: WidgetBindingPath): unknown {
+  let currentValue = path.root === 'local' ? scope.locals?.[path.localRoot ?? ''] : scope[path.root];
 
   for (const segment of path.segments) {
     if (!isPathReadable(currentValue)) {
@@ -410,10 +485,16 @@ export function formatWidgetBindingPath(root: WidgetBindingContextRoot, segments
  * 解析单个绑定表达式。
  * @param expression - 去掉双花括号后的表达式
  * @param context - Widget渲染上下文
+ * @param options - 绑定解析选项
  * @returns 表达式解析结果
  */
-export function evaluateWidgetBindingExpression(expression: string, context: WidgetRenderContext): WidgetBindingEvaluationResult {
-  const path = parseWidgetBindingPath(expression.trim());
+export function evaluateWidgetBindingExpression(
+  expression: string,
+  context: WidgetRenderContext,
+  options: WidgetBindingEvaluationOptions = {}
+): WidgetBindingEvaluationResult {
+  const scope = createBindingScope(context, options);
+  const path = parseWidgetBindingPath(expression.trim(), { ...options, locals: scope.locals });
 
   if (!path) {
     return {
@@ -422,7 +503,7 @@ export function evaluateWidgetBindingExpression(expression: string, context: Wid
     };
   }
 
-  const value = readBindingPathValue(createBindingScope(context), path);
+  const value = readBindingPathValue(scope, path);
 
   return {
     resolved: value !== undefined,
@@ -435,13 +516,19 @@ export function evaluateWidgetBindingExpression(expression: string, context: Wid
  * @param template - 绑定模板文本
  * @param context - Widget渲染上下文
  * @param fallback - 解析失败时使用的静态回退值
+ * @param options - 绑定解析选项
  * @returns 解析后的绑定值
  */
-export function resolveWidgetBindingTemplate(template: string, context: WidgetRenderContext, fallback: unknown): unknown {
+export function resolveWidgetBindingTemplate(
+  template: string,
+  context: WidgetRenderContext,
+  fallback: unknown,
+  options: WidgetBindingEvaluationOptions = {}
+): unknown {
   const wholeMatch = template.match(WIDGET_WHOLE_BINDING_PATTERN);
 
   if (wholeMatch) {
-    const result = evaluateWidgetBindingExpression(wholeMatch[1], context);
+    const result = evaluateWidgetBindingExpression(wholeMatch[1], context, options);
 
     return result.resolved ? result.value : fallback;
   }
@@ -450,7 +537,7 @@ export function resolveWidgetBindingTemplate(template: string, context: WidgetRe
   let hasUnresolvedBinding = false;
   const resolvedText = template.replace(WIDGET_BINDING_PATTERN, (_matchedText: string, expression: string): string => {
     hasBinding = true;
-    const result = evaluateWidgetBindingExpression(expression, context);
+    const result = evaluateWidgetBindingExpression(expression, context, options);
 
     if (!result.resolved) {
       hasUnresolvedBinding = true;
@@ -471,14 +558,15 @@ export function resolveWidgetBindingTemplate(template: string, context: WidgetRe
  * 解析字段模板值。
  * @param template - 字段模板文本
  * @param context - Widget渲染上下文
+ * @param options - 绑定解析选项
  * @returns 字段模板值
  */
-export function resolveWidgetTemplateValue(template: string, context: WidgetRenderContext | undefined): unknown {
+export function resolveWidgetTemplateValue(template: string, context: WidgetRenderContext | undefined, options: WidgetBindingEvaluationOptions = {}): unknown {
   if (!context) {
     return template;
   }
 
-  return resolveWidgetBindingTemplate(template, context, template);
+  return resolveWidgetBindingTemplate(template, context, template, options);
 }
 
 /**

@@ -8,7 +8,7 @@ import { defineComponent } from 'vue';
 import type { PropType } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
+import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import PanelSettings from '@/views/widget/components/PanelSettings.vue';
 
@@ -78,6 +78,30 @@ vi.mock('ant-design-vue', () => ({
       return { handleInput };
     },
     template: '<input type="number" :value="value" @input="handleInput" />'
+  }),
+  Checkbox: defineComponent({
+    name: 'ACheckboxStub',
+    props: {
+      checked: {
+        type: Boolean,
+        default: false
+      }
+    },
+    emits: ['update:checked'],
+    setup(_props, { emit }) {
+      /**
+       * 将原生 checkbox 事件转换为 ACheckbox 的 checked 更新事件。
+       * @param event - 原生输入事件
+       */
+      function handleChange(event: Event): void {
+        if (event.target instanceof HTMLInputElement) {
+          emit('update:checked', event.target.checked);
+        }
+      }
+
+      return { handleChange };
+    },
+    template: '<input type="checkbox" :checked="checked" @change="handleChange" />'
   })
 }));
 
@@ -156,6 +180,23 @@ function createWidgetData(elements: WidgetElement | WidgetElement[]): WidgetData
   };
 }
 
+/**
+ * 创建测试循环配置。
+ * @param source - 数据源路径
+ * @returns 循环配置
+ */
+function createLoopConfig(source = 'input.items'): WidgetElementLoopConfig {
+  return {
+    enabled: true,
+    source,
+    columns: 2,
+    columnGap: 12,
+    rowGap: 12,
+    itemName: 'item',
+    indexName: 'index'
+  };
+}
+
 describe('PanelSettings', (): void => {
   it('forwards page setting widget data changes', async (): Promise<void> => {
     const dataItem = createWidgetData([]);
@@ -191,6 +232,43 @@ describe('PanelSettings', (): void => {
     expect(wrapper.find('[data-testid="design-setter"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="widget-text-setter"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('暂无专属属性');
+    wrapper.unmount();
+  });
+
+  it('renders advanced tab for a selected element and forwards loop changes', async (): Promise<void> => {
+    const element = createWidgetElement('text-1', 'text');
+    const dataItem = createWidgetData(element);
+    dataItem.inputSchema.properties.items = {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' }
+        }
+      }
+    };
+    const wrapper = mount(PanelSettings, {
+      props: {
+        value: dataItem,
+        select: element
+      }
+    });
+
+    expect(wrapper.find('[data-tab="高级"]').exists()).toBe(true);
+
+    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('loop-change', {
+      elementIds: ['text-1'],
+      config: createLoopConfig()
+    });
+
+    expect(wrapper.emitted('loop-change')).toEqual([
+      [
+        {
+          elementIds: ['text-1'],
+          config: createLoopConfig()
+        }
+      ]
+    ]);
     wrapper.unmount();
   });
 
@@ -256,6 +334,64 @@ describe('PanelSettings', (): void => {
         }
       ]
     ]);
+    wrapper.unmount();
+  });
+
+  it('renders advanced tab for same-group multi-selection and forwards loop changes', (): void => {
+    const firstRect = createWidgetElement('rect-1', 'rect');
+    const secondRect = createWidgetElement('rect-2', 'rect');
+    firstRect.metadata = { groupId: 'widget-group-1' };
+    secondRect.metadata = { groupId: 'widget-group-1' };
+    const wrapper = mount(PanelSettings, {
+      props: {
+        value: createWidgetData([firstRect, secondRect]),
+        select: null,
+        selectedElementIds: ['rect-1', 'rect-2']
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.find('[data-tab="高级"]').exists()).toBe(true);
+
+    wrapper.findComponent({ name: 'AdvancedSetter' }).vm.$emit('loop-change', {
+      elementIds: ['rect-1'],
+      config: createLoopConfig('items')
+    });
+
+    expect(wrapper.emitted('loop-change')).toEqual([
+      [
+        {
+          elementIds: ['rect-1'],
+          config: createLoopConfig('items')
+        }
+      ]
+    ]);
+    wrapper.unmount();
+  });
+
+  it('does not render advanced tab for mixed multi-selection', (): void => {
+    const firstRect = createWidgetElement('rect-1', 'rect');
+    const secondRect = createWidgetElement('rect-2', 'rect');
+    firstRect.metadata = { groupId: 'widget-group-1' };
+    secondRect.metadata = { groupId: 'widget-group-2' };
+    const wrapper = mount(PanelSettings, {
+      props: {
+        value: createWidgetData([firstRect, secondRect]),
+        select: null,
+        selectedElementIds: ['rect-1', 'rect-2']
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.find('[data-tab="高级"]').exists()).toBe(false);
     wrapper.unmount();
   });
 

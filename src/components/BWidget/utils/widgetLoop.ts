@@ -1,0 +1,477 @@
+/**
+ * @file widgetLoop.ts
+ * @description BWidget 循环数据配置与运行态展开工具。
+ */
+import type { WidgetElement, WidgetElementLoopConfig, WidgetMetadata, WidgetPoint, WidgetSchemaObject, WidgetSchemaProperty, WidgetSize } from '../types';
+import type { WidgetRenderContext } from 'types/widget';
+import { cloneDeep } from 'lodash-es';
+import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, parseWidgetBindingPath, type WidgetBindingPath } from './widgetBindings';
+import { getWidgetElementGroupId } from './widgetGroups';
+import { createWidgetRuntimeLayout } from './widgetRuntime/layout';
+
+/** 元素循环配置在 metadata 中使用的字段名。 */
+export const WIDGET_LOOP_METADATA_KEY = 'loop';
+/** 默认循环迭代项变量名。 */
+const DEFAULT_WIDGET_LOOP_ITEM_NAME = 'item';
+/** 默认循环索引变量名。 */
+const DEFAULT_WIDGET_LOOP_INDEX_NAME = 'index';
+/** 默认循环列数。 */
+const DEFAULT_WIDGET_LOOP_COLUMNS = 1;
+/** 默认循环列间距。 */
+const DEFAULT_WIDGET_LOOP_COLUMN_GAP = 12;
+/** 默认循环行间距。 */
+const DEFAULT_WIDGET_LOOP_ROW_GAP = 12;
+
+/**
+ * 循环数据源选项。
+ */
+export interface WidgetLoopDataSourceOption {
+  /** 数据源显示标签 */
+  label: string;
+  /** 数据源绑定路径 */
+  value: string;
+}
+
+/**
+ * Widget局部循环渲染上下文。
+ */
+export interface WidgetLoopRenderContext extends WidgetRenderContext {
+  /** 当前临时元素局部变量根 */
+  locals?: Record<string, unknown>;
+}
+
+/**
+ * Widget循环展开后的运行态元素。
+ */
+export interface WidgetLoopRenderElement {
+  /** 运行态元素 */
+  element: WidgetElement;
+  /** 元素渲染上下文 */
+  renderContext: WidgetLoopRenderContext;
+}
+
+/**
+ * 循环模板边界。
+ */
+interface WidgetLoopTemplateBounds {
+  /** 左侧边界 */
+  minX: number;
+  /** 顶部边界 */
+  minY: number;
+  /** 边界宽度 */
+  width: number;
+  /** 边界高度 */
+  height: number;
+}
+
+/**
+ * 循环模板目标。
+ */
+interface WidgetLoopTemplateTarget {
+  /** 循环配置 */
+  config: WidgetElementLoopConfig;
+  /** 模板元素 */
+  elements: WidgetElement[];
+  /** 展开结果应插回的原始元素 ID */
+  insertElementId: string;
+}
+
+/**
+ * 循环单次迭代目标。
+ */
+interface WidgetLoopIterationTarget {
+  /** 当前索引 */
+  itemIndex: number;
+  /** 当前迭代使用的渲染上下文 */
+  renderContext: WidgetLoopRenderContext;
+  /** 当前迭代下模板元素视觉边界 */
+  bounds: WidgetLoopTemplateBounds;
+}
+
+/**
+ * 创建默认循环配置。
+ * @returns 默认循环配置
+ */
+export function createDefaultWidgetElementLoopConfig(): WidgetElementLoopConfig {
+  return {
+    enabled: false,
+    source: '',
+    columns: DEFAULT_WIDGET_LOOP_COLUMNS,
+    columnGap: DEFAULT_WIDGET_LOOP_COLUMN_GAP,
+    rowGap: DEFAULT_WIDGET_LOOP_ROW_GAP,
+    itemName: DEFAULT_WIDGET_LOOP_ITEM_NAME,
+    indexName: DEFAULT_WIDGET_LOOP_INDEX_NAME
+  };
+}
+
+/**
+ * 判断未知值是否为记录。
+ * @param value - 待判断值
+ * @returns 是否为记录
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * 规范化非负数值。
+ * @param value - 原始值
+ * @param fallback - 回退值
+ * @returns 非负数值
+ */
+function normalizeNonNegativeNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : fallback;
+}
+
+/**
+ * 规范化正整数。
+ * @param value - 原始值
+ * @param fallback - 回退值
+ * @returns 正整数
+ */
+function normalizePositiveInteger(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.floor(value)) : fallback;
+}
+
+/**
+ * 规范化循环变量名。
+ * @param value - 原始变量名
+ * @param fallback - 回退变量名
+ * @returns 可用变量名
+ */
+function normalizeLoopVariableName(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+/**
+ * 读取Widget元素循环配置。
+ * @param metadata - 元素元数据
+ * @returns 循环配置
+ */
+export function readWidgetElementLoopConfig(metadata: WidgetMetadata): WidgetElementLoopConfig {
+  const rawConfig = metadata[WIDGET_LOOP_METADATA_KEY];
+  const defaultConfig = createDefaultWidgetElementLoopConfig();
+
+  if (!isRecord(rawConfig)) {
+    return defaultConfig;
+  }
+
+  return {
+    enabled: rawConfig.enabled === true,
+    source: typeof rawConfig.source === 'string' ? rawConfig.source : defaultConfig.source,
+    columns: normalizePositiveInteger(rawConfig.columns, defaultConfig.columns),
+    columnGap: normalizeNonNegativeNumber(rawConfig.columnGap, defaultConfig.columnGap),
+    rowGap: normalizeNonNegativeNumber(rawConfig.rowGap, defaultConfig.rowGap),
+    itemName: normalizeLoopVariableName(rawConfig.itemName, defaultConfig.itemName),
+    indexName: normalizeLoopVariableName(rawConfig.indexName, defaultConfig.indexName)
+  };
+}
+
+/**
+ * 写入Widget元素循环配置。
+ * @param metadata - 原始元数据
+ * @param config - 循环配置
+ * @returns 写入后的元数据
+ */
+export function writeWidgetElementLoopConfig(metadata: WidgetMetadata, config: WidgetElementLoopConfig): WidgetMetadata {
+  return {
+    ...metadata,
+    [WIDGET_LOOP_METADATA_KEY]: {
+      ...config
+    }
+  };
+}
+
+/**
+ * 从 schema 属性中收集数组路径。
+ * @param root - 绑定根
+ * @param properties - schema 属性集合
+ * @param parentSegments - 父级路径
+ * @returns 数组路径选项
+ */
+function collectArraySchemaPaths(
+  root: 'input' | 'data',
+  properties: Record<string, WidgetSchemaProperty> | undefined,
+  parentSegments: string[] = []
+): WidgetLoopDataSourceOption[] {
+  if (!properties) {
+    return [];
+  }
+
+  return Object.entries(properties).flatMap(([key, property]: [string, WidgetSchemaProperty]): WidgetLoopDataSourceOption[] => {
+    if (!isWidgetBindingPathSegmentAllowed(key)) {
+      return [];
+    }
+
+    const segments = [...parentSegments, key];
+    const value = formatWidgetBindingPath(root, segments);
+    const currentOption = property.type === 'array' ? [{ label: property.description || value, value }] : [];
+    const childOptions = property.type === 'object' ? collectArraySchemaPaths(root, property.properties, segments) : [];
+
+    return [...currentOption, ...childOptions];
+  });
+}
+
+/**
+ * 收集Widget循环数据源选项。
+ * @param inputSchema - 入参 schema
+ * @param dataSchema - data schema
+ * @returns 数据源选项
+ */
+export function collectWidgetLoopDataSourceOptions(inputSchema: WidgetSchemaObject, dataSchema: WidgetSchemaObject): WidgetLoopDataSourceOption[] {
+  return [...collectArraySchemaPaths('input', inputSchema.properties), ...collectArraySchemaPaths('data', dataSchema.properties)];
+}
+
+/**
+ * 读取绑定路径对应的上下文值。
+ * @param renderContext - 渲染上下文
+ * @param path - 绑定路径
+ * @returns 上下文值
+ */
+function readBindingPathContextValue(renderContext: WidgetRenderContext, path: WidgetBindingPath): unknown {
+  let currentValue: unknown = path.root === 'input' ? renderContext.input : renderContext.data;
+  for (const segment of path.segments) {
+    if (!isRecord(currentValue)) {
+      return undefined;
+    }
+
+    currentValue = currentValue[segment];
+  }
+
+  return currentValue;
+}
+
+/**
+ * 按路径读取渲染上下文中的数组。
+ * @param renderContext - 渲染上下文
+ * @param source - 数据源路径
+ * @returns 数组数据
+ */
+function readLoopSourceItems(renderContext: WidgetRenderContext, source: string): unknown[] {
+  const path = parseWidgetBindingPath(source);
+  if (!path || path.root === 'local') {
+    return [];
+  }
+
+  const currentValue = readBindingPathContextValue(renderContext, path);
+
+  return Array.isArray(currentValue) ? currentValue : [];
+}
+
+/**
+ * 创建模板元素边界。
+ * @param elements - 模板元素
+ * @param renderContext - 渲染上下文
+ * @returns 模板边界
+ */
+function createLoopTemplateBounds(elements: WidgetElement[], renderContext: WidgetRenderContext): WidgetLoopTemplateBounds {
+  const layout = createWidgetRuntimeLayout(elements, renderContext, 0);
+
+  return {
+    minX: layout.bounds.minX,
+    minY: layout.bounds.minY,
+    width: layout.bounds.width,
+    height: layout.bounds.height
+  };
+}
+
+/**
+ * 创建循环模板目标列表。
+ * @param elements - Widget元素
+ * @returns 循环模板目标
+ */
+function createLoopTemplateTargets(elements: WidgetElement[]): { targets: WidgetLoopTemplateTarget[]; coveredElementIds: Set<string> } {
+  const targets: WidgetLoopTemplateTarget[] = [];
+  const coveredElementIds = new Set<string>();
+  const handledGroupIds = new Set<string>();
+
+  elements.forEach((element: WidgetElement): void => {
+    if (coveredElementIds.has(element.id)) {
+      return;
+    }
+
+    const config = readWidgetElementLoopConfig(element.metadata);
+    if (!config.enabled) {
+      return;
+    }
+
+    const groupId = getWidgetElementGroupId(element);
+    if (groupId) {
+      if (handledGroupIds.has(groupId)) {
+        return;
+      }
+
+      const groupElements = elements.filter((item: WidgetElement): boolean => getWidgetElementGroupId(item) === groupId);
+      groupElements.forEach((item: WidgetElement): void => {
+        coveredElementIds.add(item.id);
+      });
+      handledGroupIds.add(groupId);
+      targets.push({ config, elements: groupElements, insertElementId: groupElements[0]?.id ?? element.id });
+      return;
+    }
+
+    coveredElementIds.add(element.id);
+    targets.push({ config, elements: [element], insertElementId: element.id });
+  });
+
+  return { targets, coveredElementIds };
+}
+
+/**
+ * 读取上下文中已有的局部变量。
+ * @param renderContext - 渲染上下文
+ * @returns 局部变量根
+ */
+function readLoopRenderContextLocals(renderContext: WidgetRenderContext): Record<string, unknown> | undefined {
+  const contextWithLocals = renderContext as WidgetLoopRenderContext;
+
+  return contextWithLocals.locals;
+}
+
+/**
+ * 创建单次循环迭代局部上下文。
+ * @param config - 循环配置
+ * @param item - 当前迭代项
+ * @param index - 当前索引
+ * @returns 局部上下文
+ */
+function createLoopLocals(config: WidgetElementLoopConfig, item: unknown, index: number): Record<string, unknown> {
+  return {
+    [config.itemName]: item,
+    [config.indexName]: index
+  };
+}
+
+/**
+ * 创建单次循环迭代渲染上下文。
+ * @param config - 循环配置
+ * @param renderContext - 上级渲染上下文
+ * @param item - 当前迭代项
+ * @param index - 当前索引
+ * @returns 当前迭代渲染上下文
+ */
+function createLoopRenderContext(config: WidgetElementLoopConfig, renderContext: WidgetRenderContext, item: unknown, index: number): WidgetLoopRenderContext {
+  const loopLocals = createLoopLocals(config, item, index);
+  const parentLocals = readLoopRenderContextLocals(renderContext);
+
+  return {
+    ...renderContext,
+    locals: parentLocals ? { ...parentLocals, ...loopLocals } : loopLocals
+  };
+}
+
+/**
+ * 创建临时元素 ID。
+ * @param elementId - 原元素 ID
+ * @param index - 循环索引
+ * @returns 临时元素 ID
+ */
+function createLoopElementId(elementId: string, index: number): string {
+  return `${elementId}__loop_${index}`;
+}
+
+/**
+ * 创建循环迭代目标列表。
+ * @param target - 循环模板目标
+ * @param renderContext - 渲染上下文
+ * @param items - 循环数据
+ * @returns 循环迭代目标列表
+ */
+function createLoopIterationTargets(target: WidgetLoopTemplateTarget, renderContext: WidgetRenderContext, items: unknown[]): WidgetLoopIterationTarget[] {
+  return items.map((item: unknown, itemIndex: number): WidgetLoopIterationTarget => {
+    const itemRenderContext = createLoopRenderContext(target.config, renderContext, item, itemIndex);
+
+    return {
+      itemIndex,
+      renderContext: itemRenderContext,
+      bounds: createLoopTemplateBounds(target.elements, itemRenderContext)
+    };
+  });
+}
+
+/**
+ * 创建循环网格单元格尺寸。
+ * @param iterations - 循环迭代目标列表
+ * @returns 网格单元格尺寸
+ */
+function createLoopCellSize(iterations: WidgetLoopIterationTarget[]): WidgetSize {
+  return iterations.reduce<WidgetSize>(
+    (currentSize: WidgetSize, iteration: WidgetLoopIterationTarget): WidgetSize => ({
+      width: Math.max(currentSize.width, iteration.bounds.width),
+      height: Math.max(currentSize.height, iteration.bounds.height)
+    }),
+    { width: 0, height: 0 }
+  );
+}
+
+/**
+ * 展开单个循环模板目标。
+ * @param target - 循环模板目标
+ * @param renderContext - 渲染上下文
+ * @returns 运行态元素
+ */
+function expandLoopTemplateTarget(target: WidgetLoopTemplateTarget, renderContext: WidgetRenderContext): WidgetLoopRenderElement[] {
+  const items = readLoopSourceItems(renderContext, target.config.source);
+  if (items.length === 0) {
+    return [];
+  }
+
+  const iterations = createLoopIterationTargets(target, renderContext, items);
+  const cellSize = createLoopCellSize(iterations);
+  const columns = Math.max(1, target.config.columns);
+
+  return iterations.flatMap((iteration: WidgetLoopIterationTarget): WidgetLoopRenderElement[] => {
+    const { bounds, itemIndex, renderContext: itemRenderContext } = iteration;
+    const column = itemIndex % columns;
+    const row = Math.floor(itemIndex / columns);
+    const cellOrigin: WidgetPoint = {
+      x: bounds.minX + column * (cellSize.width + target.config.columnGap),
+      y: bounds.minY + row * (cellSize.height + target.config.rowGap)
+    };
+
+    return target.elements.map(
+      (element: WidgetElement): WidgetLoopRenderElement => ({
+        element: {
+          ...cloneDeep(element),
+          id: createLoopElementId(element.id, itemIndex),
+          position: {
+            x: element.position.x - bounds.minX + cellOrigin.x,
+            y: element.position.y - bounds.minY + cellOrigin.y
+          }
+        },
+        renderContext: itemRenderContext
+      })
+    );
+  });
+}
+
+/**
+ * 创建运行态循环展开元素。
+ * @param elements - Widget元素
+ * @param renderContext - 渲染上下文
+ * @returns 运行态元素
+ */
+export function createWidgetLoopRenderElements(elements: WidgetElement[], renderContext: WidgetRenderContext): WidgetLoopRenderElement[] {
+  const { targets, coveredElementIds } = createLoopTemplateTargets(elements);
+  const targetByInsertElementId = new Map<string, WidgetLoopTemplateTarget>(
+    targets.map((target: WidgetLoopTemplateTarget): [string, WidgetLoopTemplateTarget] => [target.insertElementId, target])
+  );
+
+  return elements.flatMap((element: WidgetElement): WidgetLoopRenderElement[] => {
+    const target = targetByInsertElementId.get(element.id);
+    if (target) {
+      return expandLoopTemplateTarget(target, renderContext);
+    }
+
+    if (coveredElementIds.has(element.id)) {
+      return [];
+    }
+
+    return [
+      {
+        element,
+        renderContext
+      }
+    ];
+  });
+}
