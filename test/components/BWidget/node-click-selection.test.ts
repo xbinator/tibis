@@ -254,14 +254,21 @@ function createGroupedWidgetData(): WidgetData {
   return {
     ...createDefaultWidgetData(),
     metadata: data.metadata,
-    elements: data.elements.map(
-      (element: WidgetElement): WidgetElement => ({
-        ...element,
-        metadata: {
-          groupId: 'widget-group-1'
-        }
-      })
-    ),
+    elements: [
+      {
+        id: 'group-1',
+        name: 'group',
+        label: '组合',
+        icon: 'lucide:group',
+        title: '组合',
+        position: { x: 0, y: 0 },
+        size: { width: 440, height: 220 },
+        rotation: 0,
+        style: {},
+        metadata: {},
+        children: data.elements
+      }
+    ],
     viewport: data.viewport
   };
 }

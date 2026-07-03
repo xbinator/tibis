@@ -204,6 +204,18 @@ describe('widgetGeometry', (): void => {
     expect(findWidgetShapeElement(elements, 'missing-node')).toBeNull();
   });
 
+  it('finds nested shape elements by id', (): void => {
+    const elements: WidgetElement[] = [
+      {
+        ...createShapeElement('group-1'),
+        name: 'group',
+        children: [createShapeElement('child-1')]
+      }
+    ];
+
+    expect(findWidgetShapeElement(elements, 'child-1')?.name).toBe('rect');
+  });
+
   it('creates reusable transform strings', (): void => {
     expect(createWidgetElementCssTransform({ x: 10, y: 20 }, 0)).toBe('translate(10px, 20px)');
     expect(createWidgetElementCssTransform({ x: 10, y: 20 }, 90)).toBe('translate(10px, 20px) rotate(90deg)');

@@ -181,6 +181,27 @@ function createMutableDraggableHost(): ReturnType<typeof defineComponent> {
 }
 
 /**
+ * 创建允许无视觉顺序变化也发出移动事件的 BDraggable 测试宿主组件。
+ * @returns 语义移动测试宿主组件
+ */
+function createSemanticMoveDraggableHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'SemanticMoveDraggableHost',
+    components: { BDraggable },
+    setup(): { items: TestItem[] } {
+      return { items: testItems };
+    },
+    template: `
+      <BDraggable :list="items" item-key="id" item-class="draggable-row" handle-class="draggable-row__handle" emit-unchanged-move>
+        <template #default="{ item }">
+          <button class="draggable-row__handle" type="button">{{ item.title }}</button>
+        </template>
+      </BDraggable>
+    `
+  });
+}
+
+/**
  * 创建不传 handle-class 的 BDraggable 测试宿主组件。
  * @returns 测试宿主组件
  */
@@ -256,6 +277,51 @@ function createDualDraggableHost(): ReturnType<typeof defineComponent> {
         </BDraggable>
       </div>
     `
+  });
+}
+
+/**
+ * 模拟拖拽列表项布局。
+ * @param element - 列表项元素
+ * @param top - 列表项顶部坐标
+ */
+function mockDraggableRowLayout(element: Element, top: number): void {
+  vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+    x: 0,
+    y: top,
+    top,
+    right: 120,
+    bottom: top + 32,
+    left: 0,
+    width: 120,
+    height: 32,
+    toJSON: (): Record<string, never> => ({})
+  });
+  Object.defineProperty(element, 'offsetWidth', {
+    configurable: true,
+    value: 120
+  });
+  Object.defineProperty(element, 'offsetHeight', {
+    configurable: true,
+    value: 32
+  });
+}
+
+/**
+ * 模拟拖拽容器布局。
+ * @param element - 拖拽容器元素
+ */
+function mockDraggableContainerLayout(element: Element): void {
+  vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+    x: 0,
+    y: 0,
+    top: 0,
+    right: 120,
+    bottom: 70,
+    left: 0,
+    width: 120,
+    height: 70,
+    toJSON: (): Record<string, never> => ({})
   });
 }
 
@@ -385,6 +451,45 @@ describe('BDraggable', (): void => {
     });
 
     expect(draggableWrapper.emitted('drag-end')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('emits unchanged visual moves when semantic move mode is enabled', (): void => {
+    const wrapper = mount(createSemanticMoveDraggableHost());
+    const draggableWrapper = wrapper.findComponent(BDraggable);
+    const container = wrapper.find('.b-draggable').element;
+    const rows = wrapper.findAll('.draggable-row');
+    const sourceData = capturedDraggableOptions[0]?.getInitialData?.() ?? {};
+
+    mockDraggableContainerLayout(container);
+    rows.forEach((row, index: number): void => {
+      mockDraggableRowLayout(row.element, index * 38);
+    });
+
+    const targetData =
+      capturedDropTargetOptions[1]?.getData?.({
+        input: createInput(10, 42),
+        element: rows[1]?.element ?? container
+      }) ?? {};
+
+    capturedMonitorOptions[0]?.onDrop?.({
+      source: { data: sourceData },
+      location: {
+        current: {
+          input: createInput(10, 42),
+          dropTargets: [{ data: targetData }]
+        }
+      }
+    });
+
+    expect(draggableWrapper.emitted('move')?.[0]?.[0]).toEqual(
+      expect.objectContaining({
+        sourceKey: 'node-1',
+        targetKey: 'node-2',
+        position: 'before',
+        nextList: testItems
+      })
+    );
     wrapper.unmount();
   });
 });

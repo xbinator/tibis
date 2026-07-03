@@ -475,6 +475,58 @@ describe('WidgetSettingsPage', (): void => {
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
   });
 
+  it('opens the latest widget json from disk when the settings store is stale', async (): Promise<void> => {
+    nativeMock.readWorkspaceDirectory.mockResolvedValue({
+      entries: [{ name: 'weather', type: 'directory' }]
+    });
+    nativeMock.readFile
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          name: '天气旧版',
+          description: '旧描述'
+        }),
+        name: 'weather',
+        ext: 'json'
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          name: '天气新版',
+          description: '新描述',
+          elements: [
+            {
+              id: 'text-1',
+              name: 'text',
+              label: '文本',
+              icon: 'lucide:type',
+              title: '文本节点',
+              position: { x: 12, y: 24 },
+              size: { width: 120, height: 48 },
+              rotation: 0,
+              style: {},
+              metadata: {}
+            }
+          ]
+        }),
+        name: 'weather',
+        ext: 'json'
+      });
+    const wrapper = mountWidgetSettingsPage();
+
+    await flushPromises();
+    await wrapper.find('.widget-settings__item-row').trigger('click');
+    await flushPromises();
+
+    const createdFile = createAndOpenMock.mock.calls[0]?.[0];
+    const createdContent = JSON.parse(createdFile?.content ?? '{}') as Record<string, unknown>;
+    const createdElements = createdContent.elements as unknown[];
+
+    expect(nativeMock.readFile).toHaveBeenLastCalledWith('/Users/test/.tibis/widgets/weather/widget.json');
+    expect(createdContent.name).toBe('天气新版');
+    expect(createdContent.description).toBe('新描述');
+    expect(createdElements).toHaveLength(1);
+    wrapper.unmount();
+  });
+
   it('does not create a widget when identifier duplicates an installed widget', async (): Promise<void> => {
     nativeMock.readWorkspaceDirectory.mockResolvedValue({
       entries: [{ name: 'weather', type: 'directory' }]

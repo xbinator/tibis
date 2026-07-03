@@ -35,7 +35,14 @@ import {
   updateWidgetElementStyle,
   updateWidgetElementTitle
 } from '../utils/boardTransforms';
-import { getWidgetElementGroupId } from '../utils/widgetGroups';
+import {
+  findWidgetElementTreeNode,
+  flattenWidgetElementTree,
+  isSameWidgetElementParent,
+  isWidgetGroupElement,
+  normalizeWidgetElementSelection,
+  type WidgetRenderTreeNode
+} from '../utils/widgetTree';
 
 /** BWidget 新元素 ID 长度。 */
 const WIDGET_ELEMENT_ID_SIZE = 8;
@@ -70,8 +77,8 @@ function getElementTitleIndex(element: WidgetElement, name: string, label: strin
  * @returns 最大标题序号
  */
 function getMaxExistingElementTitleIndex(elements: WidgetElement[], name: string, label: string): number {
-  return elements.reduce<number>((maxIndex: number, element: WidgetElement): number => {
-    const index = getElementTitleIndex(element, name, label);
+  return flattenWidgetElementTree(elements).reduce<number>((maxIndex: number, item: WidgetRenderTreeNode): number => {
+    const index = getElementTitleIndex(item.element, name, label);
 
     return index === null ? maxIndex : Math.max(maxIndex, index);
   }, 0);
@@ -90,44 +97,6 @@ function createUniqueWidgetElementId(existingIds: Set<string>): string {
   }
 
   return nextId;
-}
-
-/**
- * 读取自动生成 ID 中的序号。
- * @param id - 元素 ID
- * @param prefix - 自动生成 ID 前缀
- * @returns 序号，不匹配时返回 null
- */
-function getGeneratedElementIdIndex(id: string, prefix: string): number | null {
-  if (!id.startsWith(prefix)) {
-    return null;
-  }
-
-  const rawIndex = id.slice(prefix.length);
-  if (!/^\d+$/.test(rawIndex)) {
-    return null;
-  }
-
-  return Number(rawIndex);
-}
-
-/**
- * 读取已有组合中指定前缀的最大自动生成序号。
- * @param elements - 元素列表
- * @param prefix - 自动生成组合 ID 前缀
- * @returns 最大序号
- */
-function getMaxGeneratedGroupIdIndex(elements: WidgetElement[], prefix: string): number {
-  return elements.reduce<number>((maxIndex: number, element: WidgetElement): number => {
-    const groupId = getWidgetElementGroupId(element);
-    if (!groupId) {
-      return maxIndex;
-    }
-
-    const index = getGeneratedElementIdIndex(groupId, prefix);
-
-    return index === null ? maxIndex : Math.max(maxIndex, index);
-  }, 0);
 }
 
 /**
@@ -186,16 +155,9 @@ export interface UseWidgetBoardReturn {
 export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidgetBoardReturn {
   const state = ref<WidgetBoardState>(createWidgetBoardState(snapshot));
   const clipboard = ref<WidgetShapeElement[]>([]);
-  let groupIndex = getMaxGeneratedGroupIdIndex(state.value.elements, 'widget-group-');
+  const clipboardParentId = ref<string | null>(null);
   /** 当前是否存在可粘贴元素。 */
   const hasClipboard = computed<boolean>(() => clipboard.value.length > 0);
-
-  /**
-   * 按当前元素数量同步自动生成组合 ID 的起始序号。
-   */
-  function syncElementIndexes(): void {
-    groupIndex = getMaxGeneratedGroupIdIndex(state.value.elements, 'widget-group-');
-  }
 
   /**
    * 更新Widget状态。
@@ -220,7 +182,51 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
    * @returns 新元素 ID
    */
   function createWidgetElementId(): string {
-    return createUniqueWidgetElementId(new Set(state.value.elements.map((element: WidgetElement): string => element.id)));
+    return createUniqueWidgetElementId(new Set(flattenWidgetElementTree(state.value.elements).map((item: WidgetRenderTreeNode): string => item.element.id)));
+  }
+
+  /**
+   * 读取当前选区的直接父级。
+   * @param selection - 选区元素 ID 列表
+   * @returns 同父级选区的父级 ID，顶层为 null
+   */
+  function resolveSelectionParentId(selection: string[]): string | null {
+    if (selection.length === 0 || !isSameWidgetElementParent(state.value.elements, selection)) {
+      return null;
+    }
+
+    return findWidgetElementTreeNode(state.value.elements, selection[0])?.parentId ?? null;
+  }
+
+  /**
+   * 读取当前选区粘贴时应使用的目标父级。
+   * @param selection - 选区元素 ID 列表
+   * @returns 粘贴目标父级 ID，顶层为 null
+   */
+  function resolveSelectionPasteParentId(selection: string[]): string | null {
+    if (selection.length === 1) {
+      const selectedNode = findWidgetElementTreeNode(state.value.elements, selection[0]);
+      if (!selectedNode) {
+        return null;
+      }
+
+      return isWidgetGroupElement(selectedNode.element) ? selectedNode.element.id : selectedNode.parentId;
+    }
+
+    return resolveSelectionParentId(selection);
+  }
+
+  /**
+   * 读取本次粘贴的目标父级。
+   * @returns 目标父级 ID，顶层为 null
+   */
+  function resolvePasteParentId(): string | null {
+    const selectionParentId = state.value.selection.length > 0 ? resolveSelectionPasteParentId(state.value.selection) : clipboardParentId.value;
+    if (selectionParentId && !findWidgetElementTreeNode(state.value.elements, selectionParentId)) {
+      return null;
+    }
+
+    return selectionParentId;
   }
 
   /**
@@ -317,37 +323,38 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
     deleteSelection: (): void => setState(deleteWidgetSelection(state.value)),
     copySelection: (): void => {
       clipboard.value = copyWidgetSelection(state.value);
+      clipboardParentId.value = resolveSelectionParentId(state.value.selection);
     },
     pasteClipboard: (anchorPoint?: WidgetPoint): void => {
       if (!clipboard.value.length) {
         return;
       }
 
-      const usedElementIds = new Set(state.value.elements.map((element: WidgetElement): string => element.id));
+      const usedElementIds = new Set(flattenWidgetElementTree(state.value.elements).map((item: WidgetRenderTreeNode): string => item.element.id));
+      const parentId = resolvePasteParentId();
       setState(
         pasteWidgetElements(state.value, clipboard.value, {
           anchorPoint,
+          parentId,
           createElementId: (): string => {
             const id = createUniqueWidgetElementId(usedElementIds);
             usedElementIds.add(id);
 
             return id;
-          },
-          createGroupId: (): string => `widget-group-${++groupIndex}`
+          }
         })
       );
     },
-    groupSelection: (): void => setState(groupWidgetSelection(state.value, `widget-group-${++groupIndex}`)),
+    groupSelection: (): void => setState(groupWidgetSelection(state.value, createWidgetElementId())),
     ungroupSelection: (): void => setState(ungroupWidgetSelection(state.value)),
     updateElementTitle: (elementId: string, title: string): void => setState(updateWidgetElementTitle(state.value, elementId, title)),
     reorderElement: (elementId: string, action: WidgetLayerAction): void => setState(reorderWidgetElement(state.value, elementId, action)),
     reorderSelection: (action: WidgetLayerAction): void => setState(reorderWidgetSelection(state.value, action)),
     setSelection: (selection: string[]): void => {
-      state.value = { ...state.value, selection };
+      state.value = { ...state.value, selection: normalizeWidgetElementSelection(state.value.elements, selection) };
     },
     reset: (nextSnapshot?: Partial<WidgetBoardSnapshot>): void => {
       setState(createWidgetBoardState(nextSnapshot));
-      syncElementIndexes();
     }
   };
 }

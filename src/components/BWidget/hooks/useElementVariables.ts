@@ -9,13 +9,13 @@ import { computed } from 'vue';
 import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, parseWidgetBindingPath, type WidgetBindingContextRoot } from '../utils/widgetBindings';
 import { buildWidgetDataSchema } from '../utils/widgetDataSchema';
 import { readWidgetExecuteMethod } from '../utils/widgetExecuteMethod';
-import { getWidgetElementGroupId } from '../utils/widgetGroups';
 import {
   collectWidgetLoopDataSourceOptions,
   readWidgetElementLoopConfig,
   resolveWidgetElementLoopVariableNames,
   type WidgetLoopDataSourceOption
 } from '../utils/widgetLoop';
+import { findWidgetElementTreeNode } from '../utils/widgetTree';
 
 /** 变量路径标识符匹配表达式。 */
 const WIDGET_VARIABLE_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
@@ -210,10 +210,13 @@ function readElementLoopConfig(dataItem: WidgetData | undefined, element: Widget
     return null;
   }
 
-  const currentElement = dataItem.elements.find((item: WidgetElement): boolean => item.id === element.id) ?? element;
-  const groupId = getWidgetElementGroupId(currentElement);
-  const targetElements = groupId ? dataItem.elements.filter((item: WidgetElement): boolean => getWidgetElementGroupId(item) === groupId) : [currentElement];
-  const loopOwner = targetElements.find((item: WidgetElement): boolean => readWidgetElementLoopConfig(item.metadata).enabled);
+  const currentNode = findWidgetElementTreeNode(dataItem.elements, element.id);
+  const pathElements = currentNode
+    ? currentNode.path
+        .map((elementId: string): WidgetElement | undefined => findWidgetElementTreeNode(dataItem.elements, elementId)?.element)
+        .filter((item: WidgetElement | undefined): item is WidgetElement => item !== undefined)
+    : [element];
+  const loopOwner = pathElements.find((item: WidgetElement): boolean => readWidgetElementLoopConfig(item.metadata).enabled);
 
   return loopOwner ? readWidgetElementLoopConfig(loopOwner.metadata) : null;
 }

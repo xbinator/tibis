@@ -10,8 +10,8 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetPoint } from '@/components/BWidget/types';
-import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 
 vi.mock('@/components/BWidget/components/Toolbar.vue', () => ({
   default: defineComponent({
@@ -81,6 +81,96 @@ function createWidgetDataFixture(): WidgetData {
 }
 
 /**
+ * 创建带嵌套组合的测试Widget 数据。
+ * @returns 测试Widget 数据
+ */
+function createNestedWidgetDataFixture(): WidgetData {
+  return {
+    ...createDefaultWidgetData(),
+    elements: [
+      {
+        id: 'group-1',
+        name: 'group',
+        label: '组合',
+        icon: 'lucide:group',
+        title: '组合',
+        position: { x: 100, y: 120 },
+        size: { width: 240, height: 160 },
+        rotation: 0,
+        style: {},
+        metadata: {},
+        children: [
+          {
+            id: 'child-node-1',
+            name: 'rect',
+            label: '矩形',
+            icon: 'lucide:square',
+            title: '子节点',
+            position: { x: 24, y: 36 },
+            size: { width: 120, height: 64 },
+            rotation: 0,
+            style: {},
+            metadata: {}
+          }
+        ]
+      }
+    ]
+  };
+}
+
+/**
+ * 创建带双层嵌套组合的测试Widget 数据。
+ * @returns 测试Widget 数据
+ */
+function createDeepNestedWidgetDataFixture(): WidgetData {
+  return {
+    ...createDefaultWidgetData(),
+    elements: [
+      {
+        id: 'group-1',
+        name: 'group',
+        label: '组合',
+        icon: 'lucide:group',
+        title: '组合',
+        position: { x: 100, y: 120 },
+        size: { width: 240, height: 160 },
+        rotation: 0,
+        style: {},
+        metadata: {},
+        children: [
+          {
+            id: 'nested-group-1',
+            name: 'group',
+            label: '组合',
+            icon: 'lucide:group',
+            title: '内层组合',
+            position: { x: 24, y: 36 },
+            size: { width: 120, height: 64 },
+            rotation: 0,
+            style: {},
+            metadata: {},
+            children: [
+              {
+                id: 'deep-child-node-1',
+                name: 'rect',
+                label: '矩形',
+                icon: 'lucide:square',
+                title: '深层子节点',
+                position: { x: 10, y: 12 },
+                size: { width: 40, height: 30 },
+                rotation: 0,
+                style: {},
+                metadata: {}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+/**
  * 读取 BWidget 暴露命令。
  * @param wrapper - BWidget 测试包装器
  * @returns 暴露命令
@@ -98,7 +188,10 @@ function getWidgetExpose(wrapper: VueWrapper): ComponentPublicInstance & BWidget
 function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
   const target = queryWidgetElementTarget(wrapper.element, id);
 
-  return wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ?? wrapper.find<Element>('.missing-widget-node');
+  return (
+    wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ??
+    wrapper.find<Element>('.missing-widget-node')
+  );
 }
 
 /**
@@ -124,6 +217,24 @@ function setElementRect(element: Element, rect: { left: number; top: number; wid
  */
 async function flushWidgetUpdates(): Promise<void> {
   await nextTick();
+  await nextTick();
+}
+
+/**
+ * 派发带浏览器坐标的指针事件。
+ * @param target - 目标对象
+ * @param type - 事件类型
+ * @param point - 浏览器坐标
+ */
+async function dispatchPointerEvent(target: Element | Window, type: string, point: { clientX: number; clientY: number }): Promise<void> {
+  target.dispatchEvent(
+    new MouseEvent(type, {
+      bubbles: true,
+      button: 0,
+      clientX: point.clientX,
+      clientY: point.clientY
+    })
+  );
   await nextTick();
 }
 
@@ -158,6 +269,124 @@ describe('BWidget canvas component', (): void => {
     expect(node.find('.widget-rect-element-view').exists()).toBe(true);
     expect(node.find('.widget-rect-element-view').attributes('aria-hidden')).toBe('true');
     expect(wrapper.find('svg').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('renders nested group children with absolute canvas positions', (): void => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createNestedWidgetDataFixture()
+      },
+      attachTo: document.body
+    });
+    const group = findNodeById(wrapper, 'group-1');
+    const child = findNodeById(wrapper, 'child-node-1');
+
+    expect(group.exists()).toBe(true);
+    expect(child.exists()).toBe(true);
+    expect(group.attributes('style')).toContain('translate(100px, 120px)');
+    expect(child.attributes('style')).toContain('translate(124px, 156px)');
+    wrapper.unmount();
+  });
+
+  it('previews nested group children while directly dragging the group', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createNestedWidgetDataFixture()
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    const group = findNodeById(wrapper, 'group-1');
+    const child = findNodeById(wrapper, 'child-node-1');
+
+    await dispatchPointerEvent(group.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 130, clientY: 120 });
+
+    expect(group.attributes('style')).toContain('translate(130px, 140px)');
+    expect(child.attributes('style')).toContain('translate(154px, 176px)');
+    window.dispatchEvent(new MouseEvent('pointercancel', { bubbles: true }));
+    wrapper.unmount();
+  });
+
+  it('previews nested group children while moving the selected group through Moveable', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createNestedWidgetDataFixture()
+      },
+      attachTo: document.body
+    });
+    const moveableLayer = wrapper.findComponent({ name: 'MoveableLayerStub' });
+
+    moveableLayer.vm.$emit('resize-preview', [
+      {
+        id: 'group-1',
+        position: { x: 130, y: 140 }
+      }
+    ]);
+    await flushWidgetUpdates();
+
+    const group = findNodeById(wrapper, 'group-1');
+    const child = findNodeById(wrapper, 'child-node-1');
+    expect(group.attributes('style')).toContain('translate(130px, 140px)');
+    expect(child.attributes('style')).toContain('translate(154px, 176px)');
+    wrapper.unmount();
+  });
+
+  it('previews nested group children while resizing the group', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createNestedWidgetDataFixture()
+      },
+      attachTo: document.body
+    });
+    const moveableLayer = wrapper.findComponent({ name: 'MoveableLayerStub' });
+
+    moveableLayer.vm.$emit('resize-preview', [
+      {
+        id: 'group-1',
+        position: { x: 100, y: 120 },
+        size: { width: 480, height: 320 }
+      }
+    ]);
+    await flushWidgetUpdates();
+
+    const group = findNodeById(wrapper, 'group-1');
+    const child = findNodeById(wrapper, 'child-node-1');
+    expect(group.attributes('style')).toContain('width: 480px');
+    expect(group.attributes('style')).toContain('height: 320px');
+    expect(child.attributes('style')).toContain('width: 240px');
+    expect(child.attributes('style')).toContain('height: 128px');
+    expect(child.attributes('style')).toContain('translate(148px, 192px)');
+    wrapper.unmount();
+  });
+
+  it('previews deep nested group descendants while resizing the parent group', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createDeepNestedWidgetDataFixture()
+      },
+      attachTo: document.body
+    });
+    const moveableLayer = wrapper.findComponent({ name: 'MoveableLayerStub' });
+
+    moveableLayer.vm.$emit('resize-preview', [
+      {
+        id: 'group-1',
+        position: { x: 100, y: 120 },
+        size: { width: 480, height: 320 }
+      }
+    ]);
+    await flushWidgetUpdates();
+
+    const nestedGroup = findNodeById(wrapper, 'nested-group-1');
+    const deepChild = findNodeById(wrapper, 'deep-child-node-1');
+    expect(nestedGroup.attributes('style')).toContain('width: 240px');
+    expect(nestedGroup.attributes('style')).toContain('height: 128px');
+    expect(nestedGroup.attributes('style')).toContain('translate(148px, 192px)');
+    expect(deepChild.attributes('style')).toContain('width: 80px');
+    expect(deepChild.attributes('style')).toContain('height: 60px');
+    expect(deepChild.attributes('style')).toContain('translate(168px, 216px)');
     wrapper.unmount();
   });
 

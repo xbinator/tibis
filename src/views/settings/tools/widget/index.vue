@@ -32,7 +32,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { WidgetDefinition, WidgetImportResource } from '@/ai/widget';
-import { createWidgetTibisDocumentContent, joinPath } from '@/ai/widget';
+import { createWidgetTibisDocumentContent, joinPath, parseWidgetJson } from '@/ai/widget';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { native } from '@/shared/platform';
 import { getElectronAPI } from '@/shared/platform/electron-api';
@@ -106,6 +106,27 @@ async function initWidgetStore(): Promise<void> {
     console.error('Widget settings initialization failed:', error);
   } finally {
     initializing.value = false;
+  }
+}
+
+/**
+ * 从磁盘读取最新小组件定义，避免设置页使用过期的 store 缓存打开编辑器。
+ * @param widget - 当前列表中的小组件定义
+ * @returns 最新小组件定义，读取失败时返回原定义
+ */
+async function readLatestWidgetDefinition(widget: WidgetDefinition): Promise<WidgetDefinition> {
+  try {
+    const { content } = await native.readFile(widget.filePath);
+    const latestWidget = {
+      ...parseWidgetJson(content, widget.filePath),
+      enabled: widget.enabled
+    };
+
+    store.upsertWidget(latestWidget);
+    return latestWidget;
+  } catch (error: unknown) {
+    console.error('Read latest widget failed:', error);
+    return widget;
   }
 }
 
@@ -225,9 +246,11 @@ function handleOpenWidget(id: string): void {
     return;
   }
 
-  openWidgetEditor(widget).catch((error: unknown): void => {
-    console.error('Open widget editor failed:', error);
-  });
+  readLatestWidgetDefinition(widget)
+    .then((latestWidget: WidgetDefinition): Promise<void> => openWidgetEditor(latestWidget))
+    .catch((error: unknown): void => {
+      console.error('Open widget editor failed:', error);
+    });
 }
 
 watch(

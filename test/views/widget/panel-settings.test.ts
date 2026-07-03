@@ -166,6 +166,28 @@ function createWidgetElement(id: string, name: 'rect' | 'text'): WidgetElement {
 }
 
 /**
+ * 创建测试组合元素。
+ * @param id - 元素 ID
+ * @param children - 子元素
+ * @returns 测试组合元素
+ */
+function createGroupElement(id: string, children: WidgetElement[]): WidgetElement {
+  return {
+    id,
+    name: 'group',
+    label: '组合',
+    icon: 'lucide:group',
+    title: '组合节点',
+    position: { x: 0, y: 0 },
+    size: { width: 240, height: 160 },
+    rotation: 0,
+    style: {},
+    metadata: {},
+    children
+  };
+}
+
+/**
  * 创建测试Widget 数据。
  * @param elements - Widget 元素或元素列表
  * @returns 测试Widget 数据
@@ -311,10 +333,9 @@ describe('PanelSettings', (): void => {
   it('renders advanced tab for same-group multi-selection and merges group element updates', (): void => {
     const firstRect = createWidgetElement('rect-1', 'rect');
     const secondRect = createWidgetElement('rect-2', 'rect');
+    const groupElement = createGroupElement('group-1', [firstRect, secondRect]);
     const loopConfig = createLoopConfig('items');
-    firstRect.metadata = { groupId: 'widget-group-1' };
-    secondRect.metadata = { groupId: 'widget-group-1' };
-    const dataItem = createWidgetData([firstRect, secondRect]);
+    const dataItem = createWidgetData([groupElement]);
     const wrapper = mount(PanelSettings, {
       props: {
         value: dataItem,
@@ -347,13 +368,18 @@ describe('PanelSettings', (): void => {
           ...dataItem,
           elements: [
             {
-              ...firstRect,
-              metadata: {
-                ...firstRect.metadata,
-                [WIDGET_LOOP_METADATA_KEY]: loopConfig
-              }
-            },
-            secondRect
+              ...groupElement,
+              children: [
+                {
+                  ...firstRect,
+                  metadata: {
+                    ...firstRect.metadata,
+                    [WIDGET_LOOP_METADATA_KEY]: loopConfig
+                  }
+                },
+                secondRect
+              ]
+            }
           ]
         }
       ]
@@ -369,10 +395,8 @@ describe('PanelSettings', (): void => {
     firstRect.size = { width: 100, height: 50 };
     secondRect.position = { x: 40, y: 100 };
     secondRect.size = { width: 80, height: 60 };
-    secondRect.metadata = { groupId: 'widget-group-1' };
     textElement.position = { x: -20, y: 30 };
     textElement.size = { width: 60, height: 40 };
-    textElement.metadata = { groupId: 'widget-group-2' };
     const wrapper = mount(PanelSettings, {
       props: {
         value: createWidgetData([firstRect, secondRect, textElement]),
@@ -391,8 +415,8 @@ describe('PanelSettings', (): void => {
     expect(wrapper.find('[data-tab="样式"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('已选择 3 个元素');
     expect(wrapper.text()).not.toContain('左对齐');
-    expect(wrapper.find('.multi-select-command--ungroup').exists()).toBe(true);
-    expect(wrapper.find('.multi-select-command--group').exists()).toBe(false);
+    expect(wrapper.find('.multi-select-command--ungroup').exists()).toBe(false);
+    expect(wrapper.find('.multi-select-command--group').exists()).toBe(true);
     expect(wrapper.find('.multi-select-command--copy').exists()).toBe(false);
     expect(wrapper.find('.multi-select-command--delete').exists()).toBe(false);
     const layoutInputs = wrapper.findAll('input[type="number"]').slice(0, 4);
@@ -402,9 +426,9 @@ describe('PanelSettings', (): void => {
     await wrapper.findAll('input[type="number"]')[0].setValue('24');
     expect(wrapper.emitted('multi-layout-change')).toEqual([[{ x: 24 }]]);
 
-    await wrapper.find('.multi-select-command--ungroup').trigger('click');
+    await wrapper.find('.multi-select-command--group').trigger('click');
 
-    expect(wrapper.emitted('multi-command')).toEqual([['ungroup']]);
+    expect(wrapper.emitted('multi-command')).toEqual([['group']]);
 
     wrapper.findComponent({ name: 'BatchSetter' }).vm.$emit('style-change', {
       backgroundColor: '#fef3c7',
@@ -426,11 +450,37 @@ describe('PanelSettings', (): void => {
     wrapper.unmount();
   });
 
+  it('disables the multi-selection dashboard for elements from different parents', async (): Promise<void> => {
+    const childRect = createWidgetElement('child-1', 'rect');
+    const topRect = createWidgetElement('rect-1', 'rect');
+    const wrapper = mount(PanelSettings, {
+      props: {
+        value: createWidgetData([createGroupElement('group-1', [childRect]), topRect]),
+        select: null,
+        selectedElementIds: ['child-1', 'rect-1']
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      }
+    });
+
+    expect(wrapper.find('.multi-select-disabled').exists()).toBe(true);
+    expect(wrapper.find('.multi-select-command--group').exists()).toBe(false);
+    expect(wrapper.findAll('input[type="number"]')).toHaveLength(0);
+
+    await wrapper.find('.multi-select-disabled').trigger('click');
+
+    expect(wrapper.emitted('multi-command')).toBeUndefined();
+    expect(wrapper.emitted('multi-layout-change')).toBeUndefined();
+    expect(wrapper.emitted('multi-style-change')).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('does not render advanced tab for mixed multi-selection', (): void => {
     const firstRect = createWidgetElement('rect-1', 'rect');
     const secondRect = createWidgetElement('rect-2', 'rect');
-    firstRect.metadata = { groupId: 'widget-group-1' };
-    secondRect.metadata = { groupId: 'widget-group-2' };
     const wrapper = mount(PanelSettings, {
       props: {
         value: createWidgetData([firstRect, secondRect]),
@@ -475,13 +525,12 @@ describe('PanelSettings', (): void => {
   it('switches the operation button to group after selected elements are ungrouped', async (): Promise<void> => {
     const firstRect = createWidgetElement('rect-1', 'rect');
     const secondRect = createWidgetElement('rect-2', 'rect');
-    firstRect.metadata = { groupId: 'widget-group-1' };
-    secondRect.metadata = { groupId: 'widget-group-1' };
+    const groupElement = createGroupElement('group-1', [firstRect]);
     const wrapper = mount(PanelSettings, {
       props: {
-        value: createWidgetData([firstRect, secondRect]),
+        value: createWidgetData([groupElement, secondRect]),
         select: null,
-        selectedElementIds: ['rect-1', 'rect-2']
+        selectedElementIds: ['group-1', 'rect-2']
       },
       global: {
         stubs: {
@@ -497,16 +546,7 @@ describe('PanelSettings', (): void => {
 
     const ungroupedWrapper = mount(PanelSettings, {
       props: {
-        value: createWidgetData([
-          {
-            ...firstRect,
-            metadata: {}
-          },
-          {
-            ...secondRect,
-            metadata: {}
-          }
-        ]),
+        value: createWidgetData([firstRect, secondRect]),
         select: null,
         selectedElementIds: ['rect-1', 'rect-2']
       },

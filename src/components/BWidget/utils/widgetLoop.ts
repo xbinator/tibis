@@ -6,8 +6,8 @@ import type { WidgetElement, WidgetElementLoopConfig, WidgetMetadata, WidgetPoin
 import type { WidgetRenderContext } from 'types/widget';
 import { cloneDeep } from 'lodash-es';
 import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, parseWidgetBindingPath, type WidgetBindingPath } from './widgetBindings';
-import { getWidgetElementGroupId } from './widgetGroups';
-import { createWidgetRuntimeLayout } from './widgetRuntime/layout';
+import { createWidgetRuntimeLayoutFromRenderElements } from './widgetRuntime/layout';
+import { flattenWidgetElementTree, readWidgetElementChildren, type WidgetRenderTreeNode } from './widgetTree';
 
 /** 元素循环配置在 metadata 中使用的字段名。 */
 export const WIDGET_LOOP_METADATA_KEY = 'loop';
@@ -80,10 +80,10 @@ interface WidgetLoopTemplateBounds {
 interface WidgetLoopTemplateTarget {
   /** 循环配置 */
   config: WidgetElementLoopConfig;
-  /** 模板元素 */
-  elements: WidgetElement[];
-  /** 展开结果应插回的原始元素 ID */
-  insertElementId: string;
+  /** 模板元素树根 */
+  element: WidgetElement;
+  /** 模板元素树根在画布中的绝对坐标 */
+  absolutePosition: WidgetPoint;
 }
 
 /**
@@ -287,7 +287,10 @@ function readLoopSourceItems(renderContext: WidgetRenderContext, source: string)
  * @returns 模板边界
  */
 function createLoopTemplateBounds(elements: WidgetElement[], renderContext: WidgetRenderContext): WidgetLoopTemplateBounds {
-  const layout = createWidgetRuntimeLayout(elements, renderContext, 0);
+  const layout = createWidgetRuntimeLayoutFromRenderElements(
+    elements.map((element: WidgetElement): WidgetLoopRenderElement => ({ element, renderContext })),
+    0
+  );
 
   return {
     minX: layout.bounds.minX,
@@ -298,45 +301,34 @@ function createLoopTemplateBounds(elements: WidgetElement[], renderContext: Widg
 }
 
 /**
- * 创建循环模板目标列表。
- * @param elements - Widget元素
- * @returns 循环模板目标
+ * 创建不携带子树的运行态循环元素。
+ * @param element - 原始元素
+ * @param position - 运行态绝对坐标
+ * @returns 运行态循环元素
  */
-function createLoopTemplateTargets(elements: WidgetElement[]): { targets: WidgetLoopTemplateTarget[]; coveredElementIds: Set<string> } {
-  const targets: WidgetLoopTemplateTarget[] = [];
-  const coveredElementIds = new Set<string>();
-  const handledGroupIds = new Set<string>();
+function createFlatLoopRenderElement(element: WidgetElement, position: WidgetPoint): WidgetElement {
+  const nextElement = cloneDeep(element);
 
-  elements.forEach((element: WidgetElement): void => {
-    if (coveredElementIds.has(element.id)) {
-      return;
-    }
+  nextElement.position = position;
+  delete nextElement.children;
 
-    const config = readWidgetElementLoopConfig(element.metadata);
-    if (!config.enabled) {
-      return;
-    }
+  return nextElement;
+}
 
-    const groupId = getWidgetElementGroupId(element);
-    if (groupId) {
-      if (handledGroupIds.has(groupId)) {
-        return;
-      }
+/**
+ * 创建带绝对坐标的循环模板平铺元素。
+ * @param target - 循环模板目标
+ * @returns 模板平铺元素
+ */
+function createLoopTemplateElements(target: WidgetLoopTemplateTarget): WidgetElement[] {
+  const parentAbsolutePosition = {
+    x: target.absolutePosition.x - target.element.position.x,
+    y: target.absolutePosition.y - target.element.position.y
+  };
 
-      const groupElements = elements.filter((item: WidgetElement): boolean => getWidgetElementGroupId(item) === groupId);
-      groupElements.forEach((item: WidgetElement): void => {
-        coveredElementIds.add(item.id);
-      });
-      handledGroupIds.add(groupId);
-      targets.push({ config, elements: groupElements, insertElementId: groupElements[0]?.id ?? element.id });
-      return;
-    }
-
-    coveredElementIds.add(element.id);
-    targets.push({ config, elements: [element], insertElementId: element.id });
-  });
-
-  return { targets, coveredElementIds };
+  return flattenWidgetElementTree([target.element], null, parentAbsolutePosition).map(
+    (node: WidgetRenderTreeNode): WidgetElement => createFlatLoopRenderElement(node.element, node.absolutePosition)
+  );
 }
 
 /**
@@ -397,18 +389,24 @@ function createLoopElementId(elementId: string, index: number): string {
 /**
  * 创建循环迭代目标列表。
  * @param target - 循环模板目标
+ * @param templateElements - 模板平铺元素
  * @param renderContext - 渲染上下文
  * @param items - 循环数据
  * @returns 循环迭代目标列表
  */
-function createLoopIterationTargets(target: WidgetLoopTemplateTarget, renderContext: WidgetRenderContext, items: unknown[]): WidgetLoopIterationTarget[] {
+function createLoopIterationTargets(
+  target: WidgetLoopTemplateTarget,
+  templateElements: WidgetElement[],
+  renderContext: WidgetRenderContext,
+  items: unknown[]
+): WidgetLoopIterationTarget[] {
   return items.map((item: unknown, itemIndex: number): WidgetLoopIterationTarget => {
     const itemRenderContext = createLoopRenderContext(target.config, renderContext, item, itemIndex);
 
     return {
       itemIndex,
       renderContext: itemRenderContext,
-      bounds: createLoopTemplateBounds(target.elements, itemRenderContext)
+      bounds: createLoopTemplateBounds(templateElements, itemRenderContext)
     };
   });
 }
@@ -440,7 +438,8 @@ function expandLoopTemplateTarget(target: WidgetLoopTemplateTarget, renderContex
     return [];
   }
 
-  const iterations = createLoopIterationTargets(target, renderContext, items);
+  const templateElements = createLoopTemplateElements(target);
+  const iterations = createLoopIterationTargets(target, templateElements, renderContext, items);
   const cellSize = createLoopCellSize(iterations);
   const columns = Math.max(1, target.config.columns);
 
@@ -453,7 +452,7 @@ function expandLoopTemplateTarget(target: WidgetLoopTemplateTarget, renderContex
       y: bounds.minY + row * (cellSize.height + target.config.rowGap)
     };
 
-    return target.elements.map(
+    return templateElements.map(
       (element: WidgetElement): WidgetLoopRenderElement => ({
         element: {
           ...cloneDeep(element),
@@ -470,32 +469,51 @@ function expandLoopTemplateTarget(target: WidgetLoopTemplateTarget, renderContex
 }
 
 /**
+ * 创建单个元素节点的运行态循环展开元素。
+ * @param element - 当前元素
+ * @param renderContext - 渲染上下文
+ * @param parentAbsolutePosition - 父级绝对坐标
+ * @returns 运行态元素
+ */
+function createElementLoopRenderElements(
+  element: WidgetElement,
+  renderContext: WidgetRenderContext,
+  parentAbsolutePosition: WidgetPoint
+): WidgetLoopRenderElement[] {
+  const absolutePosition = {
+    x: parentAbsolutePosition.x + element.position.x,
+    y: parentAbsolutePosition.y + element.position.y
+  };
+  const config = readWidgetElementLoopConfig(element.metadata);
+
+  if (config.enabled) {
+    return expandLoopTemplateTarget(
+      {
+        config,
+        element,
+        absolutePosition
+      },
+      renderContext
+    );
+  }
+
+  return [
+    {
+      element: createFlatLoopRenderElement(element, absolutePosition),
+      renderContext
+    },
+    ...readWidgetElementChildren(element).flatMap((child: WidgetElement): WidgetLoopRenderElement[] =>
+      createElementLoopRenderElements(child, renderContext, absolutePosition)
+    )
+  ];
+}
+
+/**
  * 创建运行态循环展开元素。
  * @param elements - Widget元素
  * @param renderContext - 渲染上下文
  * @returns 运行态元素
  */
 export function createWidgetLoopRenderElements(elements: WidgetElement[], renderContext: WidgetRenderContext): WidgetLoopRenderElement[] {
-  const { targets, coveredElementIds } = createLoopTemplateTargets(elements);
-  const targetByInsertElementId = new Map<string, WidgetLoopTemplateTarget>(
-    targets.map((target: WidgetLoopTemplateTarget): [string, WidgetLoopTemplateTarget] => [target.insertElementId, target])
-  );
-
-  return elements.flatMap((element: WidgetElement): WidgetLoopRenderElement[] => {
-    const target = targetByInsertElementId.get(element.id);
-    if (target) {
-      return expandLoopTemplateTarget(target, renderContext);
-    }
-
-    if (coveredElementIds.has(element.id)) {
-      return [];
-    }
-
-    return [
-      {
-        element,
-        renderContext
-      }
-    ];
-  });
+  return elements.flatMap((element: WidgetElement): WidgetLoopRenderElement[] => createElementLoopRenderElements(element, renderContext, { x: 0, y: 0 }));
 }

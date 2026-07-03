@@ -225,6 +225,37 @@ function createWidgetElement(id: string, name: 'rect' | 'text'): WidgetElement {
 }
 
 /**
+ * 创建测试组合元素。
+ * @param id - 组合元素 ID
+ * @param children - 组合内子元素
+ * @returns 测试组合元素
+ */
+function createGroupWidgetElement(id: string, children: WidgetElement[]): WidgetElement {
+  return {
+    id,
+    name: 'group',
+    label: '组合',
+    icon: 'lucide:group',
+    title: '组合节点',
+    position: { x: 10, y: 20 },
+    size: { width: 240, height: 160 },
+    rotation: 0,
+    style: {},
+    metadata: {},
+    children
+  };
+}
+
+/**
+ * 收集元素树中所有节点 ID。
+ * @param elements - 元素树
+ * @returns 节点 ID 列表
+ */
+function collectWidgetElementIds(elements: WidgetElement[]): string[] {
+  return elements.flatMap((element: WidgetElement): string[] => [element.id, ...collectWidgetElementIds(element.children ?? [])]);
+}
+
+/**
  * 创建包含Widget 节点的测试根元素。
  * @param ids - 节点 ID 列表
  * @returns 测试根元素
@@ -265,7 +296,7 @@ function mountMoveableLayer(
   elements: WidgetElement[] = [createWidgetElement('text-1', 'text'), createWidgetElement('rect-1', 'rect')],
   renderContext: WidgetRenderContext | undefined = undefined
 ): { root: HTMLElement; wrapper: VueWrapper } {
-  const root = createRootElement(elements.map((element: WidgetElement): string => element.id));
+  const root = createRootElement(collectWidgetElementIds(elements));
   const viewport: WidgetViewport = { center: { x: 0, y: 0 }, zoom: 1 };
   const viewportSize: WidgetSize = { width: 800, height: 600 };
   const wrapper = mount(MoveableLayerHost, {
@@ -303,10 +334,10 @@ describe('MoveableLayer', (): void => {
     expect(moveableProps.attributes('data-snappable')).toBe('true');
     expect(moveableProps.attributes('data-snap-gap')).toBe('true');
     expect(moveableProps.attributes('data-guideline-count')).toBe('1');
-    expect(moveableProps.attributes('data-padding-top')).toBe('5');
-    expect(moveableProps.attributes('data-padding-right')).toBe('5');
-    expect(moveableProps.attributes('data-padding-bottom')).toBe('5');
-    expect(moveableProps.attributes('data-padding-left')).toBe('5');
+    expect(moveableProps.attributes('data-padding-top')).toBe('0');
+    expect(moveableProps.attributes('data-padding-right')).toBe('0');
+    expect(moveableProps.attributes('data-padding-bottom')).toBe('0');
+    expect(moveableProps.attributes('data-padding-left')).toBe('0');
     wrapper.unmount();
   });
 
@@ -320,6 +351,20 @@ describe('MoveableLayer', (): void => {
     expect(moveableProps.attributes('data-resizable')).toBe('true');
     expect(moveableProps.attributes('data-snappable')).toBe('true');
     expect(moveableProps.attributes('data-snap-gap')).toBe('true');
+    expect(moveableProps.attributes('data-guideline-count')).toBe('1');
+    wrapper.unmount();
+  });
+
+  it('excludes selected group descendants from snap guidelines while moving the group', async (): Promise<void> => {
+    const groupChild = createWidgetElement('group-child-1', 'rect');
+    const group = createGroupWidgetElement('group-1', [groupChild]);
+    const outsideElement = createWidgetElement('outside-1', 'rect');
+    const { wrapper } = mountMoveableLayer(['group-1'], null, [group, outsideElement]);
+
+    await flushMoveableLayerSync();
+
+    const moveableProps = wrapper.find('.moveable-props');
+
     expect(moveableProps.attributes('data-guideline-count')).toBe('1');
     wrapper.unmount();
   });
@@ -405,6 +450,29 @@ describe('MoveableLayer', (): void => {
     expect((textTarget as HTMLElement).style.width).toBe('30px');
     expect((textTarget as HTMLElement).style.height).toBe('31px');
     expect(moveableUpdateRectMock).toHaveBeenCalledWith('');
+    wrapper.unmount();
+  });
+
+  it('emits a geometry preview while a target is dragged', async (): Promise<void> => {
+    const { root, wrapper } = mountMoveableLayer(['rect-1']);
+
+    await flushMoveableLayerSync();
+
+    const moveableComponent = wrapper.findComponent({ name: 'VueMoveableStub' });
+    const rectTarget = queryWidgetElementTarget(root, 'rect-1');
+
+    expect(rectTarget).not.toBeNull();
+    moveableComponent.vm.$emit('drag', {
+      target: rectTarget as Element,
+      dist: [16, 8]
+    });
+    await nextTick();
+
+    const previewEvents = wrapper.emitted('resize-preview') as [WidgetGeometryChange[]][] | undefined;
+    expect(previewEvents?.[0]?.[0][0]).toMatchObject({
+      id: 'rect-1',
+      position: { x: 36, y: 38 }
+    });
     wrapper.unmount();
   });
 

@@ -87,6 +87,7 @@ import {
   projectClientPointToWidgetBoard,
   queryWidgetElementTarget
 } from '../utils/widgetGeometry';
+import { findWidgetElementTreeNode, flattenWidgetElementTree, type WidgetRenderTreeNode } from '../utils/widgetTree';
 
 /**
  * Moveable 结束事件中的 DOM target。
@@ -204,7 +205,7 @@ const emit = defineEmits<{
   'preview-end': [];
   /** 提交缩放变更 */
   resize: [changes: WidgetGeometryChange[]];
-  /** 提交缩放过程预览 */
+  /** 提交移动或缩放过程预览 */
   'resize-preview': [changes: WidgetGeometryChange[]];
 }>();
 /** 当前Widget渲染上下文，用于文本绑定内容的尺寸测量。 */
@@ -265,7 +266,16 @@ function getTargetId(target?: Element): string | null {
  * @returns 业务元素
  */
 function getElementById(id: string): WidgetElement | undefined {
-  return props.elements.find((element) => element.id === id);
+  return findWidgetElementTreeNode(props.elements, id)?.element;
+}
+
+/**
+ * 通过元素 ID 读取元素在画布中的绝对坐标。
+ * @param id - 元素 ID
+ * @returns 绝对坐标
+ */
+function getElementAbsolutePositionById(id: string): WidgetPoint | undefined {
+  return flattenWidgetElementTree(props.elements).find((item: WidgetRenderTreeNode): boolean => item.element.id === id)?.absolutePosition;
 }
 
 /**
@@ -273,7 +283,7 @@ function getElementById(id: string): WidgetElement | undefined {
  * @returns 当前选区中的首个有效元素 ID
  */
 function getContextMenuAnchorElementId(): string | null {
-  const elementIds = new Set(props.elements.map((element: WidgetElement): string => element.id));
+  const elementIds = new Set(flattenWidgetElementTree(props.elements).map((item: WidgetRenderTreeNode): string => item.element.id));
 
   return props.selection.find((id: string): boolean => elementIds.has(id)) ?? null;
 }
@@ -373,6 +383,30 @@ function getTargetById(id: string): Element | null {
 }
 
 /**
+ * 判断目标路径是否位于选中路径代表的子树内。
+ * @param path - 待判断节点路径
+ * @param selectedPath - 选中节点路径
+ * @returns 是否属于选中节点或其后代
+ */
+function isPathInSelectedSubtree(path: string[], selectedPath: string[]): boolean {
+  if (path.length < selectedPath.length) {
+    return false;
+  }
+
+  return selectedPath.every((pathId: string, index: number): boolean => path[index] === pathId);
+}
+
+/**
+ * 判断渲染树节点是否属于任一选中子树。
+ * @param node - 渲染树节点
+ * @param selectedPaths - 选中节点路径列表
+ * @returns 是否属于选中节点或其后代
+ */
+function isNodeInSelectedSubtree(node: WidgetRenderTreeNode, selectedPaths: string[][]): boolean {
+  return selectedPaths.some((selectedPath: string[]): boolean => isPathInSelectedSubtree(node.path, selectedPath));
+}
+
+/**
  * 立即刷新 Moveable 控制框位置。
  */
 function refreshMoveableRect(): void {
@@ -429,14 +463,17 @@ function moveableValueToWorld(value: number): number {
 /**
  * 创建 HTML 节点 transform 字符串。
  * @param element - Widget元素
+ * @param elementId - 元素 ID
  * @param distance - Moveable 拖拽总位移
  * @returns CSS transform
  */
-function createPreviewTransform(element: WidgetElement, distance: MoveableVector): string {
+function createPreviewTransform(element: WidgetElement, elementId: string, distance: MoveableVector): string {
+  const absolutePosition = getElementAbsolutePositionById(elementId) ?? element.position;
+
   return createWidgetElementCssTransform(
     {
-      x: element.position.x + moveableValueToWorld(distance[0]),
-      y: element.position.y + moveableValueToWorld(distance[1])
+      x: absolutePosition.x + moveableValueToWorld(distance[0]),
+      y: absolutePosition.y + moveableValueToWorld(distance[1])
     },
     element.rotation
   );
@@ -596,7 +633,7 @@ function previewDragEvent(event: MoveableDragEvent): WidgetGeometryChange | null
     y: element.position.y + moveableValueToWorld(distance[1])
   };
   if (event.target instanceof HTMLElement) {
-    event.target.style.transform = createPreviewTransform(element, distance);
+    event.target.style.transform = createPreviewTransform(element, id, distance);
   }
 
   return {
@@ -630,7 +667,7 @@ function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize =
   // 预览阶段保留 Moveable 原始尺寸，避免文本内容自适应高度反向影响拖拽帧。
   const size = requestedSize;
   if (event.target instanceof HTMLElement) {
-    event.target.style.transform = createPreviewTransform(element, translate);
+    event.target.style.transform = createPreviewTransform(element, id, translate);
   }
   updateNodePreviewSize(event.target, size);
 
@@ -652,19 +689,23 @@ async function syncTargets(): Promise<void> {
     return;
   }
 
-  const shapeIds = new Set<string>(props.elements.map((element) => element.id));
+  const treeNodes = flattenWidgetElementTree(props.elements);
+  const shapeIds = new Set<string>(treeNodes.map((item: WidgetRenderTreeNode): string => item.element.id));
   const selectedTargets = props.selection
     .filter((id: string): boolean => shapeIds.has(id))
     .map(getTargetById)
     .filter((target): target is Element => target !== null);
-  const selectedIds = new Set<string>(props.selection);
+  const selectedPaths = props.selection
+    .map((id: string): WidgetRenderTreeNode | undefined => treeNodes.find((item: WidgetRenderTreeNode): boolean => item.element.id === id))
+    .filter((item: WidgetRenderTreeNode | undefined): item is WidgetRenderTreeNode => item !== undefined)
+    .map((item: WidgetRenderTreeNode): string[] => item.path);
 
   targets.value = selectedTargets;
   guidelineTargets.value =
     selectedTargets.length === 1
-      ? props.elements
-          .filter((element: WidgetElement): boolean => !selectedIds.has(element.id))
-          .map((element: WidgetElement): Element | null => getTargetById(element.id))
+      ? treeNodes
+          .filter((item: WidgetRenderTreeNode): boolean => !isNodeInSelectedSubtree(item, selectedPaths))
+          .map((item: WidgetRenderTreeNode): Element | null => getTargetById(item.element.id))
           .filter((target): target is Element => target !== null)
       : [];
   await nextTick();
@@ -685,7 +726,12 @@ function handleDragStart(event: MoveableTargetEvent): void {
  * @param event - Moveable 拖动过程事件
  */
 function handleDrag(event: MoveableDragEvent): void {
-  previewDragEvent(event);
+  const change = previewDragEvent(event);
+  if (!change) {
+    return;
+  }
+
+  emit('resize-preview', [change]);
 }
 
 /**
@@ -718,10 +764,12 @@ function handleResize(event: MoveableResizeEvent, shouldConvertGroupSize = false
 function handleDragEnd(event: MoveableDragEndEvent): void {
   const change = createMoveChange(event);
   if (!change) {
+    emit('preview-end');
     return;
   }
 
   emit('move', [change]);
+  emit('preview-end');
 }
 
 /**
@@ -738,10 +786,13 @@ function handleDragGroupStart(event: MoveableGroupEvent<MoveableTargetEvent>): v
  * @param event - Moveable 多目标拖动过程事件
  */
 function handleDragGroup(event: MoveableGroupEvent<MoveableDragEvent>): void {
-  event.events?.forEach((dragEvent: MoveableDragEvent): void => {
-    previewDragEvent(dragEvent);
-  });
+  const changes = event.events?.map(previewDragEvent).filter((change): change is WidgetGeometryChange => change !== null) ?? [];
+  if (!changes.length) {
+    return;
+  }
+
   refreshActiveChildMoveableRect();
+  emit('resize-preview', changes);
 }
 
 /**
@@ -751,10 +802,12 @@ function handleDragGroup(event: MoveableGroupEvent<MoveableDragEvent>): void {
 function handleDragGroupEnd(event: MoveableGroupEvent<MoveableDragEndEvent>): void {
   const changes = event.events?.map(createMoveChange).filter((change): change is WidgetGeometryChange => change !== null) ?? [];
   if (!changes.length) {
+    emit('preview-end');
     return;
   }
 
   emit('move', changes);
+  emit('preview-end');
 }
 
 /**

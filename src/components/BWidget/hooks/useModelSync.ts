@@ -2,12 +2,13 @@
  * @file useModelSync.ts
  * @description BWidget 外部 v-model 与内部Widget状态同步。
  */
-import type { WidgetBoardSnapshot, WidgetData, WidgetElement } from '../types';
+import type { WidgetBoardSnapshot, WidgetData } from '../types';
 import type { UseWidgetBoardReturn } from './useWidgetBoard';
 import { nextTick, watch } from 'vue';
 import type { Ref } from 'vue';
 import { isEqual } from 'lodash-es';
 import { createWidgetDataSnapshot } from '../utils/boardTransforms';
+import { flattenWidgetElementTree } from '../utils/widgetTree';
 
 /**
  * 模型同步 hook 入参。
@@ -71,7 +72,7 @@ function createModelUpdateSnapshot(board: UseWidgetBoardReturn, dataItem: Widget
  * @returns Widget重置快照
  */
 function createModelResetSnapshot(dataItem: WidgetData, board: UseWidgetBoardReturn): Partial<WidgetBoardSnapshot> {
-  const modelElementIds = new Set(dataItem.elements.map((element: WidgetElement): string => element.id));
+  const modelElementIds = new Set(flattenWidgetElementTree(dataItem.elements).map((item): string => item.element.id));
 
   return {
     ...dataItem,
@@ -94,6 +95,16 @@ function syncNormalizedBoardToModel(dataItem: WidgetData, options: UseModelSyncO
 }
 
 /**
+ * 判断本次外部模型变化是否允许回写归一化结果。
+ * @param dataItem - 最新外部模型
+ * @param previousDataItem - 变化前外部模型
+ * @returns 是否允许回写归一化结果
+ */
+function shouldEchoNormalizedModel(dataItem: WidgetData, previousDataItem: WidgetData | undefined): boolean {
+  return dataItem === previousDataItem;
+}
+
+/**
  * 同步外部 v-model 与内部Widget状态。
  * @param options - 模型同步配置
  */
@@ -102,14 +113,16 @@ export function useModelSync(options: UseModelSyncOptions): void {
 
   watch(
     () => options.dataItem.value,
-    (dataItem: WidgetData | undefined): void => {
+    (dataItem: WidgetData | undefined, previousDataItem: WidgetData | undefined): void => {
       if (!dataItem || isModelContentEqualToBoard(dataItem, options.board)) {
         return;
       }
 
       syncingDataItemToBoard = true;
       options.board.reset(createModelResetSnapshot(dataItem, options.board));
-      syncNormalizedBoardToModel(dataItem, options);
+      if (shouldEchoNormalizedModel(dataItem, previousDataItem)) {
+        syncNormalizedBoardToModel(dataItem, options);
+      }
       nextTick()
         .then((): void => {
           syncingDataItemToBoard = false;

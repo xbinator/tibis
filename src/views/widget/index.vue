@@ -19,7 +19,14 @@
     />
 
     <section ref="canvasRef" class="widget-page__canvas">
-      <BWidget ref="widgetRef" v-model:value="session.data.value" v-model:select="selectedTarget" @selection-change="handleWidgetSelectionChange" />
+      <BWidget
+        ref="widgetRef"
+        :select="selectedTarget"
+        :value="session.data.value"
+        @selection-change="handleWidgetSelectionChange"
+        @update:select="handleWidgetSelectUpdate"
+        @update:value="handleWidgetDataUpdate"
+      />
     </section>
 
     <BPanelSplitter v-model:size="settingsWidth" position="left" :closable="false" :min-width="360" :max-width="400">
@@ -49,7 +56,17 @@ import { nanoid } from 'nanoid';
 import type BWidgetComponent from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetLayerAction, WidgetSelectTarget } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { WIDGET_GROUP_METADATA_KEY, getWidgetElementGroupId } from '@/components/BWidget/utils/widgetGroups';
+import {
+  findWidgetElementTreeNode,
+  flattenWidgetElementTree,
+  isSameWidgetElementParent,
+  readWidgetElementChildren,
+  removeEmptyWidgetGroups,
+  removeWidgetElementFromTree,
+  replaceWidgetElementSiblingList,
+  updateWidgetElementInTree,
+  type WidgetRenderTreeNode
+} from '@/components/BWidget/utils/widgetTree';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import CodeEditor from './components/CodeEditor.vue';
@@ -75,8 +92,6 @@ const routePath = computed<string>(() => route.fullPath || `/widget/${fileId.val
 const WIDGET_LAYER_COPY_OFFSET = 16;
 /** 侧栏复制图层时使用的新元素 ID 长度。 */
 const WIDGET_LAYER_COPY_ID_SIZE = 8;
-/** 侧栏复制组合时使用的组合 ID 前缀。 */
-const WIDGET_LAYER_COPY_GROUP_ID_PREFIX = 'widget-group-';
 
 const session = useFileSession<WidgetData>({
   fileId,
@@ -110,7 +125,7 @@ const activeSidebarElementId = computed<string | null>(() => {
     return null;
   }
 
-  return getWidgetElementGroupId(selectedTarget.value) ? selectedTarget.value.id : null;
+  return findWidgetElementTreeNode(session.data.value.elements, selectedTarget.value.id)?.parentId ? selectedTarget.value.id : null;
 });
 
 /**
@@ -135,40 +150,13 @@ interface MultiSelectionBounds {
 /**
  * 右侧设置面板拆分组合结果。
  */
-interface SettingsUngroupResult {
-  /** 拆分后的元素列表 */
-  elements: WidgetElement[];
-  /** 拆分后应保持选中的元素 ID 列表 */
-  selectedElementIds: string[];
-  /** 是否实际拆分了组合 */
-  changed: boolean;
-}
-
-/**
- * 读取自动生成组合 ID 中的序号。
- * @param groupId - 组合 ID
- * @returns 序号，不匹配时返回 null
- */
-function getGeneratedGroupIdIndex(groupId: string): number | null {
-  if (!groupId.startsWith(WIDGET_LAYER_COPY_GROUP_ID_PREFIX)) {
-    return null;
-  }
-
-  const rawIndex = groupId.slice(WIDGET_LAYER_COPY_GROUP_ID_PREFIX.length);
-  if (!/^\d+$/.test(rawIndex)) {
-    return null;
-  }
-
-  return Number(rawIndex);
-}
-
 /**
  * 创建侧栏复制元素 ID。
  * @param elements - 当前元素列表
  * @returns 新元素 ID
  */
 function createLayerCopyElementId(elements: WidgetElement[]): string {
-  const existingIds = new Set(elements.map((element: WidgetElement): string => element.id));
+  const existingIds = new Set(flattenWidgetElementTree(elements).map((item: WidgetRenderTreeNode): string => item.element.id));
   let nextId = nanoid(WIDGET_LAYER_COPY_ID_SIZE);
 
   while (existingIds.has(nextId)) {
@@ -179,109 +167,40 @@ function createLayerCopyElementId(elements: WidgetElement[]): string {
 }
 
 /**
- * 创建侧栏复制组合 ID。
- * @param elements - 当前元素列表
- * @returns 新组合 ID
- */
-function createLayerCopyGroupId(elements: WidgetElement[]): string {
-  const existingGroupIds = new Set(
-    elements.map((element: WidgetElement): string | null => getWidgetElementGroupId(element)).filter((groupId): groupId is string => groupId !== null)
-  );
-  let nextIndex = elements.reduce<number>((maxIndex: number, element: WidgetElement): number => {
-    const groupId = getWidgetElementGroupId(element);
-    const index = groupId ? getGeneratedGroupIdIndex(groupId) : null;
-
-    return index === null ? maxIndex : Math.max(maxIndex, index);
-  }, 0);
-  let nextGroupId = `${WIDGET_LAYER_COPY_GROUP_ID_PREFIX}${nextIndex + 1}`;
-
-  while (existingGroupIds.has(nextGroupId)) {
-    nextIndex += 1;
-    nextGroupId = `${WIDGET_LAYER_COPY_GROUP_ID_PREFIX}${nextIndex + 1}`;
-  }
-
-  return nextGroupId;
-}
-
-/**
- * 移除Widget元素元数据中的组合 ID。
- * @param metadata - 原始元素元数据
- * @returns 移除组合 ID 后的元素元数据
- */
-function removeWidgetElementGroupId(metadata: WidgetElement['metadata']): WidgetElement['metadata'] {
-  const nextMetadata = cloneDeep(metadata);
-  delete nextMetadata[WIDGET_GROUP_METADATA_KEY];
-
-  return nextMetadata;
-}
-
-/**
- * 按右侧设置面板当前多选 ID 拆分命中的组合。
- * @param elements - 当前Widget元素列表
- * @param selectedIds - 当前设置面板多选 ID 集合
- * @returns 拆分结果
- */
-function createSettingsUngroupResult(elements: WidgetElement[], selectedIds: Set<string>): SettingsUngroupResult {
-  const groupIds = new Set<string>();
-
-  elements.forEach((element: WidgetElement): void => {
-    if (!selectedIds.has(element.id)) {
-      return;
-    }
-
-    const groupId = getWidgetElementGroupId(element);
-    if (groupId) {
-      groupIds.add(groupId);
-    }
-  });
-
-  if (groupIds.size === 0) {
-    return {
-      elements,
-      selectedElementIds: [...selectedIds],
-      changed: false
-    };
-  }
-
-  const ungroupedElementIds: string[] = [];
-  const nextElements = elements.map((element: WidgetElement): WidgetElement => {
-    const groupId = getWidgetElementGroupId(element);
-    if (!groupId || !groupIds.has(groupId)) {
-      return element;
-    }
-
-    ungroupedElementIds.push(element.id);
-    return {
-      ...element,
-      metadata: removeWidgetElementGroupId(element.metadata)
-    };
-  });
-
-  return {
-    elements: nextElements,
-    selectedElementIds: ungroupedElementIds,
-    changed: true
-  };
-}
-
-/**
  * 创建侧栏复制出来的独立元素。
  * @param element - 原始元素
  * @param elements - 当前元素列表
  * @returns 新Widget元素
  */
 function createLayerCopyElement(element: WidgetElement, elements: WidgetElement[]): WidgetElement {
-  const nextElement = cloneDeep(element);
-  delete nextElement.metadata[WIDGET_GROUP_METADATA_KEY];
+  const usedElements = [...elements];
 
-  return {
-    ...nextElement,
-    id: createLayerCopyElementId(elements),
-    position: {
-      x: element.position.x + WIDGET_LAYER_COPY_OFFSET,
-      y: element.position.y + WIDGET_LAYER_COPY_OFFSET
+  /**
+   * 递归复制当前元素子树。
+   * @param sourceElement - 原始元素
+   * @param offsetRoot - 是否偏移当前复制根节点
+   * @returns 复制后的元素
+   */
+  function copyElementTree(sourceElement: WidgetElement, offsetRoot: boolean): WidgetElement {
+    const nextElement = cloneDeep(sourceElement);
+
+    nextElement.id = createLayerCopyElementId(usedElements);
+    usedElements.push(nextElement);
+    nextElement.position = offsetRoot
+      ? {
+          x: sourceElement.position.x + WIDGET_LAYER_COPY_OFFSET,
+          y: sourceElement.position.y + WIDGET_LAYER_COPY_OFFSET
+        }
+      : { ...sourceElement.position };
+    nextElement.children = readWidgetElementChildren(sourceElement).map((child: WidgetElement): WidgetElement => copyElementTree(child, false));
+    if (nextElement.children.length === 0) {
+      delete nextElement.children;
     }
-  };
+
+    return nextElement;
+  }
+
+  return copyElementTree(element, true);
 }
 
 /**
@@ -292,8 +211,12 @@ function createLayerCopyElement(element: WidgetElement, elements: WidgetElement[
  */
 function sortElementsByLayerOrder(elements: WidgetElement[], targetElements: WidgetElement[]): WidgetElement[] {
   const targetIds = new Set(targetElements.map((element: WidgetElement): string => element.id));
+  const firstNode = findWidgetElementTreeNode(elements, targetElements[0]?.id ?? '');
+  if (!firstNode || !isSameWidgetElementParent(elements, [...targetIds])) {
+    return [];
+  }
 
-  return elements.filter((element: WidgetElement): boolean => targetIds.has(element.id));
+  return firstNode.siblings.filter((element: WidgetElement): boolean => targetIds.has(element.id));
 }
 
 /**
@@ -304,20 +227,10 @@ function sortElementsByLayerOrder(elements: WidgetElement[], targetElements: Wid
  */
 function createLayerCopyElements(targetElements: WidgetElement[], elements: WidgetElement[]): WidgetElement[] {
   const orderedElements = sortElementsByLayerOrder(elements, targetElements);
-  const groupIds = new Set(
-    orderedElements.map((element: WidgetElement): string | null => getWidgetElementGroupId(element)).filter((groupId): groupId is string => groupId !== null)
-  );
-  const nextGroupId = orderedElements.length > 1 && groupIds.size === 1 ? createLayerCopyGroupId(elements) : null;
   const elementsWithCopies = [...elements];
 
   return orderedElements.map((element: WidgetElement): WidgetElement => {
     const copiedElement = createLayerCopyElement(element, elementsWithCopies);
-    if (nextGroupId) {
-      copiedElement.metadata = {
-        ...copiedElement.metadata,
-        [WIDGET_GROUP_METADATA_KEY]: nextGroupId
-      };
-    }
 
     elementsWithCopies.push(copiedElement);
     return copiedElement;
@@ -332,15 +245,15 @@ function createLayerCopyElements(targetElements: WidgetElement[], elements: Widg
  * @returns 插入后的元素列表
  */
 function insertLayerCopyAboveSource(elements: WidgetElement[], sourceElementId: string, copiedElement: WidgetElement): WidgetElement[] {
-  const sourceIndex = elements.findIndex((element: WidgetElement): boolean => element.id === sourceElementId);
-  if (sourceIndex === -1) {
+  const sourceNode = findWidgetElementTreeNode(elements, sourceElementId);
+  if (!sourceNode) {
     return [...elements, copiedElement];
   }
 
-  const nextElements = [...elements];
-  nextElements.splice(sourceIndex + 1, 0, copiedElement);
+  const nextSiblings = [...sourceNode.siblings];
+  nextSiblings.splice(sourceNode.index + 1, 0, copiedElement);
 
-  return nextElements;
+  return replaceWidgetElementSiblingList(elements, sourceNode.parentId, nextSiblings);
 }
 
 /**
@@ -351,18 +264,33 @@ function insertLayerCopyAboveSource(elements: WidgetElement[], sourceElementId: 
  * @returns 插入后的元素列表
  */
 function insertLayerCopiesAboveSources(elements: WidgetElement[], sourceElements: WidgetElement[], copiedElements: WidgetElement[]): WidgetElement[] {
+  const orderedSourceElements = sortElementsByLayerOrder(elements, sourceElements);
+  const firstNode = findWidgetElementTreeNode(elements, orderedSourceElements[0]?.id ?? '');
+  if (!firstNode) {
+    return [...elements, ...copiedElements];
+  }
+
   const sourceIds = new Set(sourceElements.map((element: WidgetElement): string => element.id));
-  const sourceIndexes = elements
+  const sourceIndexes = firstNode.siblings
     .map((element: WidgetElement, index: number): number => (sourceIds.has(element.id) ? index : -1))
     .filter((index: number): boolean => index >= 0);
   if (sourceIndexes.length === 0) {
     return [...elements, ...copiedElements];
   }
 
-  const nextElements = [...elements];
-  nextElements.splice(Math.max(...sourceIndexes) + 1, 0, ...copiedElements);
+  const nextSiblings = [...firstNode.siblings];
+  nextSiblings.splice(Math.max(...sourceIndexes) + 1, 0, ...copiedElements);
 
-  return nextElements;
+  return replaceWidgetElementSiblingList(elements, firstNode.parentId, nextSiblings);
+}
+
+/**
+ * 判断当前多选是否允许批量编辑。
+ * @param selectedIds - 当前多选元素 ID 集合
+ * @returns 是否属于同一个直接父级
+ */
+function canEditMultiSelection(selectedIds: Set<string>): boolean {
+  return selectedIds.size > 1 && isSameWidgetElementParent(session.data.value.elements, [...selectedIds]);
 }
 
 /**
@@ -371,10 +299,6 @@ function insertLayerCopiesAboveSources(elements: WidgetElement[], sourceElements
  */
 function syncSidebarSelectedElementIds(target: WidgetSelectTarget): void {
   if (isWidgetElementTarget(target)) {
-    if (getWidgetElementGroupId(target)) {
-      return;
-    }
-
     selectedElementIds.value = [target.id];
     return;
   }
@@ -382,6 +306,35 @@ function syncSidebarSelectedElementIds(target: WidgetSelectTarget): void {
   if (target !== null) {
     selectedElementIds.value = [];
   }
+}
+
+/**
+ * 根据最新元素树刷新当前设置面板选中目标。
+ */
+function syncSelectedTargetFromElementTree(): void {
+  if (!isWidgetElementTarget(selectedTarget.value)) {
+    return;
+  }
+
+  const nextElement = findWidgetElementTreeNode(session.data.value.elements, selectedTarget.value.id)?.element;
+  selectedTarget.value = nextElement ?? session.data.value.metadata;
+}
+
+/**
+ * 处理Widget内部数据更新。
+ * @param data - 最新Widget数据
+ */
+function handleWidgetDataUpdate(data: WidgetData): void {
+  session.data.value = data;
+  syncSelectedTargetFromElementTree();
+}
+
+/**
+ * 处理Widget内部设置目标更新。
+ * @param target - 最新设置目标
+ */
+function handleWidgetSelectUpdate(target: WidgetSelectTarget): void {
+  selectedTarget.value = target;
 }
 
 /**
@@ -444,11 +397,6 @@ provideDragger(elementDrag);
 function handleSidebarElementSelect(element: WidgetElement): void {
   selectedTarget.value = element;
   selectedElementIds.value = [element.id];
-  if (getWidgetElementGroupId(element)) {
-    widgetRef.value?.selectElementById(element.id, { activateElement: true });
-    return;
-  }
-
   widgetRef.value?.selectElementById(element.id);
 }
 
@@ -519,18 +467,6 @@ async function handleSettingsMultiCommand(command: SettingsMultiCommand): Promis
       break;
     }
     case 'ungroup': {
-      const result = createSettingsUngroupResult(session.data.value.elements, new Set(selectedElementIds.value));
-      if (result.changed) {
-        session.data.value = {
-          ...session.data.value,
-          elements: result.elements
-        };
-        selectedElementIds.value = result.selectedElementIds;
-        await nextTick();
-        widgetRef.value?.selectElementsByIds(result.selectedElementIds);
-        break;
-      }
-
       widgetRef.value?.ungroupSelection();
       break;
     }
@@ -623,6 +559,18 @@ function transformElementByMultiSelectionBounds(element: WidgetElement, currentB
 }
 
 /**
+ * 按 ID 从元素树读取选中元素。
+ * @param elements - 当前Widget元素树
+ * @param selectedIds - 当前选中元素 ID 集合
+ * @returns 选中元素列表
+ */
+function getSelectedElementsInTree(elements: WidgetElement[], selectedIds: Set<string>): WidgetElement[] {
+  return flattenWidgetElementTree(elements)
+    .filter((item: WidgetRenderTreeNode): boolean => selectedIds.has(item.element.id))
+    .map((item: WidgetRenderTreeNode): WidgetElement => item.element);
+}
+
+/**
  * 批量更新选中元素布局。
  * @param elements - 当前Widget元素列表
  * @param selectedIds - 当前多选元素 ID 集合
@@ -630,7 +578,7 @@ function transformElementByMultiSelectionBounds(element: WidgetElement, currentB
  * @returns 更新布局后的元素列表
  */
 function updateSelectedElementLayouts(elements: WidgetElement[], selectedIds: Set<string>, layout: WidgetMultiSelectLayoutChange): WidgetElement[] {
-  const selectedElements = elements.filter((element: WidgetElement): boolean => selectedIds.has(element.id));
+  const selectedElements = getSelectedElementsInTree(elements, selectedIds);
   const currentBounds = createMultiSelectionBounds(selectedElements);
   if (!currentBounds) {
     return elements;
@@ -641,13 +589,15 @@ function updateSelectedElementLayouts(elements: WidgetElement[], selectedIds: Se
     return elements;
   }
 
-  return elements.map((element: WidgetElement): WidgetElement => {
-    if (!selectedIds.has(element.id)) {
-      return element;
-    }
-
-    return transformElementByMultiSelectionBounds(element, currentBounds, nextBounds);
-  });
+  return selectedElements.reduce<WidgetElement[]>(
+    (nextElements: WidgetElement[], element: WidgetElement): WidgetElement[] =>
+      updateWidgetElementInTree(
+        nextElements,
+        element.id,
+        (currentElement: WidgetElement): WidgetElement => transformElementByMultiSelectionBounds(currentElement, currentBounds, nextBounds)
+      ),
+    elements
+  );
 }
 
 /**
@@ -656,7 +606,7 @@ function updateSelectedElementLayouts(elements: WidgetElement[], selectedIds: Se
  */
 function handleSettingsMultiLayoutChange(layout: WidgetMultiSelectLayoutChange): void {
   const selectedIds = new Set(selectedElementIds.value);
-  if (selectedIds.size === 0) {
+  if (!canEditMultiSelection(selectedIds)) {
     return;
   }
 
@@ -674,19 +624,21 @@ function handleSettingsMultiLayoutChange(layout: WidgetMultiSelectLayoutChange):
  * @returns 合并样式后的元素列表
  */
 function mergeSelectedElementStyles(elements: WidgetElement[], selectedIds: Set<string>, style: WidgetElementStyleChange): WidgetElement[] {
-  return elements.map((element: WidgetElement): WidgetElement => {
-    if (!selectedIds.has(element.id)) {
-      return element;
-    }
-
-    return {
-      ...element,
-      style: {
-        ...element.style,
-        ...style
-      }
-    };
-  });
+  return getSelectedElementsInTree(elements, selectedIds).reduce<WidgetElement[]>(
+    (nextElements: WidgetElement[], element: WidgetElement): WidgetElement[] =>
+      updateWidgetElementInTree(
+        nextElements,
+        element.id,
+        (currentElement: WidgetElement): WidgetElement => ({
+          ...currentElement,
+          style: {
+            ...currentElement.style,
+            ...style
+          }
+        })
+      ),
+    elements
+  );
 }
 
 /**
@@ -695,7 +647,7 @@ function mergeSelectedElementStyles(elements: WidgetElement[], selectedIds: Set<
  */
 function handleSettingsMultiStyleChange(style: WidgetElementStyleChange): void {
   const selectedIds = new Set(selectedElementIds.value);
-  if (selectedIds.size === 0) {
+  if (!canEditMultiSelection(selectedIds)) {
     return;
   }
 
@@ -706,24 +658,46 @@ function handleSettingsMultiStyleChange(style: WidgetElementStyleChange): void {
 }
 
 /**
+ * 计算元素树更新后被移除的节点 ID。
+ * @param previousElements - 更新前元素树
+ * @param nextElements - 更新后元素树
+ * @returns 被移除节点 ID 集合
+ */
+function collectRemovedElementIds(previousElements: WidgetElement[], nextElements: WidgetElement[]): Set<string> {
+  const nextIds = new Set(flattenWidgetElementTree(nextElements).map((item: WidgetRenderTreeNode): string => item.element.id));
+  const removedIds = new Set<string>();
+
+  flattenWidgetElementTree(previousElements).forEach((item: WidgetRenderTreeNode): void => {
+    if (!nextIds.has(item.element.id)) {
+      removedIds.add(item.element.id);
+    }
+  });
+
+  return removedIds;
+}
+
+/**
  * 处理侧栏图层删除。
  * @param element - 被删除的Widget元素
  */
 function handleSidebarElementDelete(element: WidgetElement): void {
-  const nextElements = session.data.value.elements.filter((item: WidgetElement): boolean => item.id !== element.id);
-  if (nextElements.length === session.data.value.elements.length) {
+  const previousElements = session.data.value.elements;
+  const result = removeWidgetElementFromTree(previousElements, element.id);
+  if (!result.removed) {
     return;
   }
+  const nextElements = removeEmptyWidgetGroups(result.elements);
+  const deletedIds = collectRemovedElementIds(previousElements, nextElements);
 
   session.data.value = {
     ...session.data.value,
     elements: nextElements
   };
 
-  if (isWidgetElementTarget(selectedTarget.value) && selectedTarget.value.id === element.id) {
+  if (isWidgetElementTarget(selectedTarget.value) && deletedIds.has(selectedTarget.value.id)) {
     selectedTarget.value = session.data.value.metadata;
   }
-  if (selectedElementIds.value.includes(element.id)) {
+  if (selectedElementIds.value.some((id: string): boolean => deletedIds.has(id))) {
     selectedElementIds.value = [];
   }
 }
@@ -733,21 +707,29 @@ function handleSidebarElementDelete(element: WidgetElement): void {
  * @param elements - 被删除的Widget元素
  */
 function handleSidebarElementsDelete(elements: WidgetElement[]): void {
+  const previousElements = session.data.value.elements;
   const deleteIds = new Set(elements.map((element: WidgetElement): string => element.id));
-  const nextElements = session.data.value.elements.filter((item: WidgetElement): boolean => !deleteIds.has(item.id));
-  if (nextElements.length === session.data.value.elements.length) {
+  const nextElements = [...deleteIds].reduce<WidgetElement[]>((currentElements: WidgetElement[], elementId: string): WidgetElement[] => {
+    const result = removeWidgetElementFromTree(currentElements, elementId);
+
+    return result.elements;
+  }, previousElements);
+  const compactedElements = removeEmptyWidgetGroups(nextElements);
+  const removedIds = collectRemovedElementIds(previousElements, compactedElements);
+
+  if (removedIds.size === 0) {
     return;
   }
 
   session.data.value = {
     ...session.data.value,
-    elements: nextElements
+    elements: compactedElements
   };
 
-  if (isWidgetElementTarget(selectedTarget.value) && deleteIds.has(selectedTarget.value.id)) {
+  if (isWidgetElementTarget(selectedTarget.value) && removedIds.has(selectedTarget.value.id)) {
     selectedTarget.value = session.data.value.metadata;
   }
-  if (selectedElementIds.value.some((id: string): boolean => deleteIds.has(id))) {
+  if (selectedElementIds.value.some((id: string): boolean => removedIds.has(id))) {
     selectedElementIds.value = [];
   }
 }
@@ -789,6 +771,7 @@ function handleSidebarElementsMove(sourceElementIds: string[], targetElementIds:
 }
 
 watch(selectedTarget, syncSidebarSelectedElementIds, { immediate: true });
+watch(() => session.data.value.elements, syncSelectedTargetFromElementTree, { deep: true });
 watch([fileId, session.currentTitle], syncWidgetTab, { immediate: true });
 
 useBindings({

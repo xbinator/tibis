@@ -6,6 +6,7 @@ import type { WidgetElement, WidgetPoint, WidgetShapeElement, WidgetSize, Widget
 import type { WidgetRenderContext } from 'types/widget';
 import { WIDGET_MIN_ZOOM, WIDGET_VIEWBOX_SIZE } from '../constants/viewport';
 import { getWidgetElementSchema } from '../elements';
+import { findWidgetElementTreeNode, flattenWidgetElementTree, type WidgetRenderTreeNode } from './widgetTree';
 
 /** Widget节点 DOM 查询选择器。 */
 const WIDGET_ELEMENT_TARGET_SELECTOR = '.b-widget-node';
@@ -136,11 +137,14 @@ export function getWidgetShapeRenderSize(element: WidgetShapeElement, renderCont
  * @returns 内容边界，无可见元素时返回 null
  */
 function getWidgetContentBounds(elements: WidgetElement[]): WidgetContentBounds | null {
-  const visibleElements = elements
+  const visibleElements = flattenWidgetElementTree(elements)
     .map(
-      (element: WidgetElement): WidgetVisibleElement => ({
-        element,
-        renderSize: getWidgetShapeRenderSize(element)
+      (item: WidgetRenderTreeNode): WidgetVisibleElement => ({
+        element: {
+          ...item.element,
+          position: item.absolutePosition
+        },
+        renderSize: getWidgetShapeRenderSize(item.element)
       })
     )
     .filter((item: WidgetVisibleElement): boolean => item.renderSize.width > 0 && item.renderSize.height > 0);
@@ -294,7 +298,7 @@ export function queryWidgetElementTarget(root: ParentNode | null | undefined, id
  * @returns 形状元素
  */
 export function findWidgetShapeElement(elements: WidgetElement[], id: string): WidgetShapeElement | null {
-  return elements.find((item) => item.id === id) ?? null;
+  return findWidgetElementTreeNode(elements, id)?.element ?? null;
 }
 
 /**

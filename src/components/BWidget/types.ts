@@ -189,12 +189,12 @@ export interface WidgetSchemaObject {
 }
 
 /**
- * 自由形状元素。
+ * Widget元素。
  */
 export interface WidgetShapeElement {
   /** 真实元素 ID */
   id: string;
-  /** 元素注册名称 */
+  /** 元素注册名称，组合容器固定为 group */
   name: string;
   /** 元素显示名称，来自注册配置，不支持编辑 */
   label: string;
@@ -212,6 +212,8 @@ export interface WidgetShapeElement {
   style: WidgetElementStyle;
   /** 组件自定义元数据 */
   metadata: WidgetMetadata;
+  /** 子元素，仅 name 为 group 的组合容器使用 */
+  children?: WidgetShapeElement[];
 }
 
 /**

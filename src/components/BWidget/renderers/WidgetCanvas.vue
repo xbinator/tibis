@@ -35,6 +35,7 @@ import type { WidgetContextMenuPayload, WidgetElement, WidgetGeometryChange, Wid
 import type { CSSProperties } from 'vue';
 import { computed, ref } from 'vue';
 import { projectClientPointToWidgetBoard } from '../utils/widgetGeometry';
+import { flattenWidgetElementTree, type WidgetRenderTreeNode } from '../utils/widgetTree';
 import WidgetNodeRenderer from './WidgetNode.vue';
 
 /**
@@ -105,7 +106,15 @@ const stageStyle = computed<CSSProperties>(() => {
   };
 });
 
-const shapeElements = computed<WidgetShapeElement[]>(() => props.elements);
+/** 按树结构展开后的可渲染元素，position 已转换为画布绝对坐标。 */
+const shapeElements = computed<WidgetShapeElement[]>(() =>
+  flattenWidgetElementTree(props.elements).map(
+    (item: WidgetRenderTreeNode): WidgetShapeElement => ({
+      ...item.element,
+      position: item.absolutePosition
+    })
+  )
+);
 
 /**
  * 读取元素预览位置。

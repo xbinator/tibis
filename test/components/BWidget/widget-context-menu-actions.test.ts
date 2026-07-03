@@ -69,10 +69,9 @@ class ResizeObserverMock {
  * @param id - 元素 ID
  * @param x - 横坐标
  * @param y - 纵坐标
- * @param groupId - 组合 ID
  * @returns 测试元素
  */
-function createElement(id: string, x: number, y: number, groupId?: string): WidgetElement {
+function createElement(id: string, x: number, y: number): WidgetElement {
   return {
     id,
     name: 'rect',
@@ -83,7 +82,27 @@ function createElement(id: string, x: number, y: number, groupId?: string): Widg
     size: { width: 100, height: 60 },
     rotation: 0,
     style: {},
-    metadata: groupId ? { groupId } : {}
+    metadata: {}
+  };
+}
+
+/**
+ * 创建测试组合元素。
+ * @returns 测试组合元素
+ */
+function createGroupElement(): WidgetElement {
+  return {
+    id: 'group-1',
+    name: 'group',
+    label: '组合',
+    icon: 'lucide:group',
+    title: '组合',
+    position: { x: 80, y: 60 },
+    size: { width: 240, height: 100 },
+    rotation: 0,
+    style: {},
+    metadata: {},
+    children: [createElement('node-1', 0, 0), createElement('node-2', 140, 40)]
   };
 }
 
@@ -109,7 +128,7 @@ function createWidgetData(): WidgetData {
 function createGroupedWidgetData(): WidgetData {
   return {
     ...createDefaultWidgetData(),
-    elements: [createElement('node-1', 80, 60, 'widget-group-1'), createElement('node-2', 220, 100, 'widget-group-1')],
+    elements: [createGroupElement()],
     viewport: {
       center: { x: 0, y: 0 },
       zoom: 1
@@ -257,7 +276,7 @@ describe('BWidget context menu actions', (): void => {
     wrapper.unmount();
   });
 
-  it('ungroups the selected group from a member context menu', async (): Promise<void> => {
+  it('ungroups the selected group from a group context menu', async (): Promise<void> => {
     const wrapper = mount(BWidget, {
       props: {
         value: createGroupedWidgetData()
@@ -272,7 +291,7 @@ describe('BWidget context menu actions', (): void => {
     setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
     setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
 
-    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+    await findNodeById(wrapper, 'group-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
     expect(readContextMenuLabels(wrapper)).toContain('取消合并');
     expect(readContextMenuLabels(wrapper)).not.toContain('合并');
     expect(wrapper.findAll('.b-widget-context-menu__divider')).toHaveLength(3);
@@ -280,8 +299,9 @@ describe('BWidget context menu actions', (): void => {
     await clickContextMenuItem(wrapper, '取消合并');
 
     const latestData = getLatestWidgetData(wrapper);
-    expect(latestData?.elements[0]?.metadata.groupId).toBeUndefined();
-    expect(latestData?.elements[1]?.metadata.groupId).toBeUndefined();
+    expect(latestData?.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1', 'node-2']);
+    expect(latestData?.elements[0]?.position).toEqual({ x: 80, y: 60 });
+    expect(latestData?.elements[1]?.position).toEqual({ x: 220, y: 100 });
     wrapper.unmount();
   });
 
@@ -307,7 +327,7 @@ describe('BWidget context menu actions', (): void => {
     const activeChildPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as WidgetSelectTarget;
     expect(activeChildPayload && 'id' in activeChildPayload ? activeChildPayload.id : '').toBe('node-2');
 
-    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+    await findNodeById(wrapper, 'group-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
     await clickContextMenuItem(wrapper, '取消合并');
 
     expect(wrapper.emitted('update:select')?.at(-1)?.[0]).toBeNull();

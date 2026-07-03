@@ -3,7 +3,7 @@
   @description BWidget 文本元素中间Widget视图。
 -->
 <template>
-  <span class="widget-text-element-view">{{ textContent }}</span>
+  <div class="widget-text-element-view">{{ textContent }}</div>
 </template>
 
 <script setup lang="ts">
@@ -26,8 +26,16 @@ const textContent = useElementContent(toRef(props, 'element'), 'content');
 
 <style lang="less" scoped>
 .widget-text-element-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
+  height: 100%;
+  font-size: 13px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  background: transparent;
+  border-color: transparent;
 }
 </style>

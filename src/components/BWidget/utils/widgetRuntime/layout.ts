@@ -5,6 +5,7 @@
 import type { WidgetElement, WidgetPoint, WidgetShapeElement, WidgetSize } from '../../types';
 import type { WidgetRenderContext } from 'types/widget';
 import { getWidgetShapeRenderSize } from '../widgetGeometry';
+import { flattenWidgetElementTree, type WidgetRenderTreeNode } from '../widgetTree';
 
 /**
  * 运行态内容边界。
@@ -200,6 +201,39 @@ function createEmptyRuntimeLayout(): WidgetRuntimeLayout {
 }
 
 /**
+ * 创建不携带子树的运行态测量元素，避免平铺后重复消费 children。
+ * @param element - 原始元素
+ * @param position - 运行态绝对坐标
+ * @returns 运行态测量元素
+ */
+function createFlatRuntimeLayoutElement(element: WidgetElement, position: WidgetPoint): WidgetElement {
+  const nextElement: WidgetElement = {
+    ...element,
+    position
+  };
+
+  delete nextElement.children;
+
+  return nextElement;
+}
+
+/**
+ * 将运行态测量输入统一平铺为绝对坐标元素。
+ * @param renderElements - 原始运行态测量元素
+ * @returns 平铺后的运行态测量元素
+ */
+function flattenRuntimeLayoutRenderElements(renderElements: WidgetRuntimeLayoutRenderElement[]): WidgetRuntimeLayoutRenderElement[] {
+  return renderElements.flatMap((item: WidgetRuntimeLayoutRenderElement): WidgetRuntimeLayoutRenderElement[] =>
+    flattenWidgetElementTree([item.element]).map(
+      (node: WidgetRenderTreeNode): WidgetRuntimeLayoutRenderElement => ({
+        element: createFlatRuntimeLayoutElement(node.element, node.absolutePosition),
+        renderContext: item.renderContext
+      })
+    )
+  );
+}
+
+/**
  * 创建单个运行态元素测量结果。
  * @param item - 运行态布局测量元素
  * @returns 元素测量结果
@@ -267,7 +301,7 @@ function createWidgetRuntimeLayoutFromMeasuredElements(elementLayouts: WidgetRun
  * @returns 运行态布局
  */
 export function createWidgetRuntimeLayoutFromRenderElements(renderElements: WidgetRuntimeLayoutRenderElement[], padding = 16): WidgetRuntimeLayout {
-  const elementLayouts = renderElements
+  const elementLayouts = flattenRuntimeLayoutRenderElements(renderElements)
     .map((item: WidgetRuntimeLayoutRenderElement): WidgetRuntimeMeasuredElement => createRuntimeMeasuredElement(item))
     .filter((item: WidgetRuntimeMeasuredElement): boolean => isVisibleRenderSize(item.renderSize));
 
@@ -283,12 +317,7 @@ export function createWidgetRuntimeLayoutFromRenderElements(renderElements: Widg
  */
 export function createWidgetRuntimeLayout(elements: WidgetElement[], renderContext?: WidgetRenderContext, padding = 16): WidgetRuntimeLayout {
   return createWidgetRuntimeLayoutFromRenderElements(
-    elements.map(
-      (element: WidgetElement): WidgetRuntimeLayoutRenderElement => ({
-        element,
-        renderContext
-      })
-    ),
+    elements.map((element: WidgetElement): WidgetRuntimeLayoutRenderElement => ({ element, renderContext })),
     padding
   );
 }

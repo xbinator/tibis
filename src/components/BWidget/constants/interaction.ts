@@ -8,10 +8,10 @@ import type { SnapDirections } from 'moveable';
  * Moveable 控制框与节点边界之间的视觉留白。
  */
 export const WIDGET_MOVEABLE_SELECTION_PADDING = {
-  bottom: 5,
-  left: 5,
-  right: 5,
-  top: 5
+  bottom: 0,
+  left: 0,
+  right: 0,
+  top: 0
 } as const;
 
 /**

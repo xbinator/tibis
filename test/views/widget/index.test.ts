@@ -3,6 +3,7 @@
  * @description 验证Widget 页面文件菜单事件绑定。
  * @vitest-environment jsdom
  */
+/* eslint-disable vue/one-component-per-file */
 import { defineComponent, nextTick } from 'vue';
 import type { ComponentPublicInstance, PropType } from 'vue';
 import { shallowMount, type VueWrapper } from '@vue/test-utils';
@@ -101,10 +102,9 @@ vi.mock('@/hooks/useFileSession', () => ({
  * 创建页面图层测试元素。
  * @param id - 元素 ID
  * @param title - 元素名称
- * @param groupId - 组合 ID
  * @returns 测试元素
  */
-function createWidgetElement(id: string, title: string, groupId?: string): WidgetElement {
+function createWidgetElement(id: string, title: string): WidgetElement {
   return {
     id,
     name: 'rect',
@@ -115,7 +115,30 @@ function createWidgetElement(id: string, title: string, groupId?: string): Widge
     size: { width: 120, height: 80 },
     rotation: 0,
     style: {},
-    metadata: groupId ? { groupId } : {}
+    metadata: {}
+  };
+}
+
+/**
+ * 创建页面组合测试元素。
+ * @param id - 组合元素 ID
+ * @param title - 组合名称
+ * @param children - 子元素
+ * @returns 组合元素
+ */
+function createGroupElement(id: string, title: string, children: WidgetElement[]): WidgetElement {
+  return {
+    id,
+    name: 'group',
+    label: '组合',
+    icon: 'lucide:group',
+    title,
+    position: { x: 0, y: 0 },
+    size: { width: 240, height: 160 },
+    rotation: 0,
+    style: {},
+    metadata: {},
+    children
   };
 }
 
@@ -471,10 +494,11 @@ describe('WidgetPage', (): void => {
   });
 
   it('selects a grouped child as the editable target when the sidebar layer emits child selection', async (): Promise<void> => {
-    const selectedElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+    const selectedElement = createWidgetElement('node-2', '节点 2');
+    const groupElement = createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), selectedElement]);
     widgetDataMock.value = {
       ...createDefaultWidgetData(),
-      elements: [createWidgetElement('node-1', '节点 1', 'widget-group-1'), selectedElement]
+      elements: [groupElement]
     };
     const wrapper = shallowMount(WidgetPage, {
       global: {
@@ -490,18 +514,17 @@ describe('WidgetPage', (): void => {
     panelSidebar.vm.$emit('select-element', selectedElement);
     await nextTick();
 
-    expect(selectElementByIdMock).toHaveBeenCalledWith('node-2', { activateElement: true });
+    expect(selectElementByIdMock).toHaveBeenCalledWith('node-2');
     expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2']);
     expect(panelSettings.props('select')).toEqual(selectedElement);
     wrapper.unmount();
   });
 
-  it('selects grouped widget elements when the sidebar layer emits group selection', async (): Promise<void> => {
-    const firstElement = createWidgetElement('node-1', '节点 1', 'widget-group-1');
-    const secondElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+  it('selects the group widget element when the sidebar layer emits group selection', async (): Promise<void> => {
+    const groupElement = createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), createWidgetElement('node-2', '节点 2')]);
     widgetDataMock.value = {
       ...createDefaultWidgetData(),
-      elements: [firstElement, secondElement, createWidgetElement('node-3', '节点 3')]
+      elements: [groupElement, createWidgetElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(WidgetPage, {
       global: {
@@ -513,11 +536,11 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('select-elements', [secondElement, firstElement]);
+    panelSidebar.vm.$emit('select-element', groupElement);
     await nextTick();
 
-    expect(selectElementsByIdsMock).toHaveBeenCalledWith(['node-2', 'node-1']);
-    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2', 'node-1']);
+    expect(selectElementByIdMock).toHaveBeenCalledWith('group-1');
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['group-1']);
     wrapper.unmount();
   });
 
@@ -548,12 +571,12 @@ describe('WidgetPage', (): void => {
     wrapper.unmount();
   });
 
-  it('keeps the selected group and active child highlighted from canvas selection changes', async (): Promise<void> => {
-    const firstElement = createWidgetElement('node-1', '节点 1', 'widget-group-1');
-    const secondElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+  it('keeps the selected nested child highlighted from canvas selection changes', async (): Promise<void> => {
+    const secondElement = createWidgetElement('node-2', '节点 2');
+    const groupElement = createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), secondElement]);
     widgetDataMock.value = {
       ...createDefaultWidgetData(),
-      elements: [firstElement, secondElement, createWidgetElement('node-3', '节点 3')]
+      elements: [groupElement, createWidgetElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(WidgetPage, {
       global: {
@@ -570,7 +593,7 @@ describe('WidgetPage', (): void => {
     widget.vm.$emit('selection-change', ['node-1', 'node-2']);
     await nextTick();
 
-    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-1', 'node-2']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['node-2']);
     expect(panelSidebar.props('activeElementId')).toBe('node-2');
     wrapper.unmount();
   });
@@ -609,12 +632,11 @@ describe('WidgetPage', (): void => {
   });
 
   it('copies grouped widget elements as a new group when the sidebar layer emits group copy', async (): Promise<void> => {
-    nanoidMock.mockReturnValueOnce('copy0001').mockReturnValueOnce('copy0002');
-    const firstElement = createWidgetElement('node-1', '节点 1', 'widget-group-1');
-    const secondElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+    nanoidMock.mockReturnValueOnce('copy0001').mockReturnValueOnce('copy0002').mockReturnValueOnce('copy0003');
+    const groupElement = createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), createWidgetElement('node-2', '节点 2')]);
     widgetDataMock.value = {
       ...createDefaultWidgetData(),
-      elements: [firstElement, secondElement, createWidgetElement('node-3', '节点 3')]
+      elements: [groupElement, createWidgetElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(WidgetPage, {
       global: {
@@ -626,14 +648,14 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('copy-elements', [secondElement, firstElement]);
+    panelSidebar.vm.$emit('copy-element', groupElement);
     await flushPromises();
+    const copiedGroup = widgetDataMock.value.elements[1];
 
-    expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1', 'node-2', 'copy0001', 'copy0002', 'node-3']);
-    expect(widgetDataMock.value.elements[2]?.metadata.groupId).toBe('widget-group-2');
-    expect(widgetDataMock.value.elements[3]?.metadata.groupId).toBe('widget-group-2');
-    expect(selectElementsByIdsMock).toHaveBeenCalledWith(['copy0001', 'copy0002']);
-    expect(panelSidebar.props('selectedElementIds')).toEqual(['copy0001', 'copy0002']);
+    expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['group-1', 'copy0001', 'node-3']);
+    expect(copiedGroup?.children?.map((element: WidgetElement): string => element.id)).toEqual(['copy0002', 'copy0003']);
+    expect(selectElementByIdMock).toHaveBeenCalledWith('copy0001');
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['copy0001']);
     wrapper.unmount();
   });
 
@@ -668,13 +690,10 @@ describe('WidgetPage', (): void => {
   });
 
   it('ungroups the current settings multi-selection by selected ids', async (): Promise<void> => {
+    const groupElement = createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), createWidgetElement('node-2', '节点 2')]);
     widgetDataMock.value = {
       ...createDefaultWidgetData(),
-      elements: [
-        createWidgetElement('node-1', '节点 1', 'widget-group-1'),
-        createWidgetElement('node-2', '节点 2', 'widget-group-1'),
-        createWidgetElement('node-3', '节点 3', 'widget-group-2')
-      ]
+      elements: [groupElement, createWidgetElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(WidgetPage, {
       global: {
@@ -687,14 +706,13 @@ describe('WidgetPage', (): void => {
     const widget = wrapper.findComponent({ name: 'BWidget' });
     const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
 
-    widget.vm.$emit('selection-change', ['node-1', 'node-2']);
+    widget.vm.$emit('selection-change', ['group-1']);
     await nextTick();
     panelSettings.vm.$emit('multi-command', 'ungroup');
     await nextTick();
 
-    expect(widgetDataMock.value.elements[0]?.metadata.groupId).toBeUndefined();
-    expect(widgetDataMock.value.elements[1]?.metadata.groupId).toBeUndefined();
-    expect(widgetDataMock.value.elements[2]?.metadata.groupId).toBe('widget-group-2');
+    expect(ungroupSelectionMock).toHaveBeenCalledTimes(1);
+    expect(widgetDataMock.value.elements).toEqual([groupElement, createWidgetElement('node-3', '节点 3')]);
     wrapper.unmount();
   });
 
@@ -744,6 +762,38 @@ describe('WidgetPage', (): void => {
     wrapper.unmount();
   });
 
+  it('ignores settings style changes for a multi-selection across different parents', async (): Promise<void> => {
+    const childElement = createWidgetElement('child-1', '子节点');
+    const groupElement = createGroupElement('group-1', '组合', [childElement]);
+    const topElement = createWidgetElement('node-1', '节点 1');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [groupElement, topElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [childElement, topElement]);
+    await nextTick();
+
+    wrapper.findComponent({ name: 'PanelSettings' }).vm.$emit('multi-style-change', {
+      backgroundColor: '#fef3c7'
+    });
+    await nextTick();
+
+    expect(widgetDataMock.value.elements[0]?.children?.[0]?.style).toEqual({});
+    expect(widgetDataMock.value.elements[1]?.style).toEqual({});
+    expect(wrapper.findComponent({ name: 'PanelSettings' }).props('selectedElementIds')).toEqual(['child-1', 'node-1']);
+    wrapper.unmount();
+  });
+
   it('accepts settings element updates through PanelSettings v-model', async (): Promise<void> => {
     const selectedElement = createWidgetElement('node-1', '节点 1');
     const loopConfig = createLoopConfig();
@@ -781,6 +831,40 @@ describe('WidgetPage', (): void => {
     expect(widgetDataMock.value.elements[0]?.metadata[WIDGET_LOOP_METADATA_KEY]).toEqual(loopConfig);
     expect(widgetDataMock.value.elements[1]?.metadata[WIDGET_LOOP_METADATA_KEY]).toBeUndefined();
     expect(panelSettings.props('select')).toEqual(widgetDataMock.value.elements[0]);
+    wrapper.unmount();
+  });
+
+  it('refreshes the selected settings target when the selected element model changes', async (): Promise<void> => {
+    const selectedElement = createWidgetElement('node-1', '节点 1');
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [selectedElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const widget = wrapper.findComponent({ name: 'BWidget' });
+    const updatedElement = {
+      ...selectedElement,
+      position: { x: 48, y: 56 },
+      size: { width: 180, height: 120 }
+    };
+
+    panelSidebar.vm.$emit('select-element', selectedElement);
+    await nextTick();
+    widget.vm.$emit('update:value', {
+      ...widgetDataMock.value,
+      elements: [updatedElement]
+    });
+    await nextTick();
+
+    expect(wrapper.findComponent({ name: 'PanelSettings' }).props('select')).toEqual(updatedElement);
     wrapper.unmount();
   });
 
@@ -826,6 +910,40 @@ describe('WidgetPage', (): void => {
     wrapper.unmount();
   });
 
+  it('ignores settings layout changes for a multi-selection across different parents', async (): Promise<void> => {
+    const childElement = createWidgetElement('child-1', '子节点');
+    const groupElement = createGroupElement('group-1', '组合', [childElement]);
+    const topElement = createWidgetElement('node-1', '节点 1');
+    childElement.position = { x: 10, y: 20 };
+    topElement.position = { x: 80, y: 90 };
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [groupElement, topElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [childElement, topElement]);
+    await nextTick();
+
+    wrapper.findComponent({ name: 'PanelSettings' }).vm.$emit('multi-layout-change', {
+      x: 24,
+      width: 180
+    });
+    await nextTick();
+
+    expect(widgetDataMock.value.elements[0]?.children?.[0]?.position).toEqual({ x: 10, y: 20 });
+    expect(widgetDataMock.value.elements[1]?.position).toEqual({ x: 80, y: 90 });
+    wrapper.unmount();
+  });
+
   it('deletes the widget element when the sidebar layer emits delete', async (): Promise<void> => {
     const selectedElement = createWidgetElement('node-2', '节点 2');
     widgetDataMock.value = {
@@ -852,11 +970,10 @@ describe('WidgetPage', (): void => {
   });
 
   it('deletes grouped widget elements when the sidebar layer emits group delete', async (): Promise<void> => {
-    const firstElement = createWidgetElement('node-1', '节点 1', 'widget-group-1');
-    const secondElement = createWidgetElement('node-2', '节点 2', 'widget-group-1');
+    const groupElement = createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), createWidgetElement('node-2', '节点 2')]);
     widgetDataMock.value = {
       ...createDefaultWidgetData(),
-      elements: [firstElement, secondElement, createWidgetElement('node-3', '节点 3')]
+      elements: [groupElement, createWidgetElement('node-3', '节点 3')]
     };
     const wrapper = shallowMount(WidgetPage, {
       global: {
@@ -868,11 +985,37 @@ describe('WidgetPage', (): void => {
     });
     const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
 
-    panelSidebar.vm.$emit('select-elements', [secondElement, firstElement]);
-    panelSidebar.vm.$emit('delete-elements', [secondElement, firstElement]);
+    panelSidebar.vm.$emit('select-element', groupElement);
+    panelSidebar.vm.$emit('delete-element', groupElement);
     await nextTick();
 
     expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-3']);
+    expect(panelSidebar.props('selectedElementIds')).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('removes the parent group when deleting its last child from the sidebar layer', async (): Promise<void> => {
+    const childElement = createWidgetElement('node-1', '节点 1');
+    const groupElement = createGroupElement('group-1', '组合', [childElement]);
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [groupElement, createWidgetElement('node-2', '节点 2')]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-element', childElement);
+    panelSidebar.vm.$emit('delete-element', childElement);
+    await nextTick();
+
+    expect(widgetDataMock.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2']);
     expect(panelSidebar.props('selectedElementIds')).toEqual([]);
     wrapper.unmount();
   });

@@ -15,6 +15,7 @@ export const WIDGET_INTERACTION_SCRIPT_DEFAULT_CODE = [
   '',
   'Widget({',
   '  data: {',
+  "    message: '',",
   '    // 可以在 data 中定义自定义字段，用于存储状态',
   '  },',
   '',

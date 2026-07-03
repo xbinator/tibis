@@ -6,7 +6,6 @@ import type { WidgetElement, WidgetElementLoopConfig, WidgetSchemaObject } from 
 import type { WidgetRenderContext } from 'types/widget';
 import { describe, expect, it } from 'vitest';
 import { getWidgetShapeRenderSize } from '@/components/BWidget/utils/widgetGeometry';
-import { WIDGET_GROUP_METADATA_KEY } from '@/components/BWidget/utils/widgetGroups';
 import {
   collectWidgetLoopDataSourceOptions,
   createDefaultWidgetElementLoopConfig,
@@ -57,6 +56,31 @@ function createElement(
     rotation: 0,
     style: {},
     metadata
+  };
+}
+
+/**
+ * 创建测试组合元素。
+ * @param id - 元素 ID
+ * @param position - 元素位置
+ * @param size - 元素尺寸
+ * @param metadata - 元素元数据
+ * @param children - 子元素
+ * @returns Widget 组合元素
+ */
+function createGroupElement(
+  id: string,
+  position: WidgetElement['position'],
+  size: WidgetElement['size'],
+  metadata: WidgetElement['metadata'],
+  children: WidgetElement[]
+): WidgetElement {
+  return {
+    ...createElement(id, position, size, metadata),
+    name: 'group',
+    label: '组合',
+    icon: 'lucide:group',
+    children
   };
 }
 
@@ -242,42 +266,64 @@ describe('widgetLoop', (): void => {
     expect(result[2].element.position.y).toBeCloseTo(loopElement.position.y + expectedCellHeight + loopConfig.rowGap);
   });
 
-  it('expands a grouped template from group bounds and shares iteration locals', (): void => {
-    const groupOwner = createElement('card-bg', { x: 20, y: 10 }, { width: 120, height: 60 }, {
-      [WIDGET_GROUP_METADATA_KEY]: 'group-1',
-      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
-    });
-    const groupChild = createElement('card-title', { x: 24, y: 18 }, { width: 40, height: 20 }, { [WIDGET_GROUP_METADATA_KEY]: 'group-1' });
-    const result = createWidgetLoopRenderElements([groupOwner, groupChild], createRenderContext());
+  it('expands a group subtree from group bounds and shares iteration locals', (): void => {
+    const groupOwner = createGroupElement(
+      'card-group',
+      { x: 20, y: 10 },
+      { width: 120, height: 60 },
+      {
+        [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
+      },
+      [
+        createElement('card-bg', { x: 0, y: 0 }, { width: 120, height: 60 }),
+        createElement('card-title', { x: 4, y: 8 }, { width: 40, height: 20 })
+      ]
+    );
+    const result = createWidgetLoopRenderElements([groupOwner], createRenderContext());
 
     expect(result.map((item) => item.element.id)).toEqual([
+      'card-group__loop_0',
       'card-bg__loop_0',
       'card-title__loop_0',
+      'card-group__loop_1',
       'card-bg__loop_1',
       'card-title__loop_1',
+      'card-group__loop_2',
       'card-bg__loop_2',
       'card-title__loop_2'
     ]);
-    expect(result[1].element.position).toEqual({ x: 24, y: 18 });
-    expect(result[3].element.position).toEqual({ x: 156, y: 18 });
+    expect(result[2].element.position).toEqual({ x: 24, y: 18 });
+    expect(result[5].element.position).toEqual({ x: 156, y: 18 });
     expect(result[0].renderContext.locals).toBe(result[1].renderContext.locals);
-    expect(result[2].renderContext.locals).not.toBe(result[0].renderContext.locals);
+    expect(result[1].renderContext.locals).toBe(result[2].renderContext.locals);
+    expect(result[3].renderContext.locals).not.toBe(result[0].renderContext.locals);
   });
 
-  it('uses the first enabled loop owner when a group has multiple loop configs', (): void => {
-    const groupOwner = createElement('card-bg', { x: 20, y: 10 }, { width: 120, height: 60 }, {
-      [WIDGET_GROUP_METADATA_KEY]: 'group-1',
-      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('input.items')
-    });
-    const groupChild = createElement('card-title', { x: 24, y: 18 }, { width: 40, height: 20 }, {
-      [WIDGET_GROUP_METADATA_KEY]: 'group-1',
-      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('products')
-    });
-    const result = createWidgetLoopRenderElements([groupOwner, groupChild], createRenderContext());
+  it('uses the parent group loop config when a child also declares loop', (): void => {
+    const groupOwner = createGroupElement(
+      'card-group',
+      { x: 20, y: 10 },
+      { width: 120, height: 60 },
+      {
+        [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('input.items')
+      },
+      [
+        createElement('card-bg', { x: 0, y: 0 }, { width: 120, height: 60 }),
+        createElement('card-title', { x: 4, y: 8 }, { width: 40, height: 20 }, { [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('products') })
+      ]
+    );
+    const result = createWidgetLoopRenderElements([groupOwner], createRenderContext());
 
-    expect(result.map((item) => item.element.id)).toEqual(['card-bg__loop_0', 'card-title__loop_0', 'card-bg__loop_1', 'card-title__loop_1']);
+    expect(result.map((item) => item.element.id)).toEqual([
+      'card-group__loop_0',
+      'card-bg__loop_0',
+      'card-title__loop_0',
+      'card-group__loop_1',
+      'card-bg__loop_1',
+      'card-title__loop_1'
+    ]);
     expect(result[0].renderContext.locals).toEqual({ item: { name: '入参 A' }, index: 0 });
-    expect(result[2].renderContext.locals).toEqual({ item: { name: '入参 B' }, index: 1 });
+    expect(result[3].renderContext.locals).toEqual({ item: { name: '入参 B' }, index: 1 });
   });
 
   it('keeps expanded loop nodes in the original layer order slot', (): void => {

@@ -13,7 +13,6 @@ import { useWidgetRuntime } from '@/components/BWidget/hooks/useWidgetRuntime';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { WIDGET_GROUP_METADATA_KEY } from '@/components/BWidget/utils/widgetGroups';
 import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
 
 /** ResizeObserver 回调。 */
@@ -155,17 +154,16 @@ function createRuntimeLoopGroupWidgetData(): WidgetData {
     ...createDefaultWidgetData(),
     elements: [
       {
-        id: 'card-bg',
-        name: 'rect',
-        label: '矩形',
-        icon: 'lucide:square',
-        title: '背景',
+        id: 'card-group',
+        name: 'group',
+        label: '组合',
+        icon: 'lucide:group',
+        title: '卡片组合',
         position: { x: 20, y: 10 },
         size: { width: 120, height: 60 },
         rotation: 0,
         style: {},
         metadata: {
-          [WIDGET_GROUP_METADATA_KEY]: 'group-1',
           [WIDGET_LOOP_METADATA_KEY]: {
             enabled: true,
             source: 'products',
@@ -175,22 +173,79 @@ function createRuntimeLoopGroupWidgetData(): WidgetData {
             itemName: 'item',
             indexName: 'index'
           }
-        }
-      },
+        },
+        children: [
+          {
+            id: 'card-bg',
+            name: 'rect',
+            label: '矩形',
+            icon: 'lucide:square',
+            title: '背景',
+            position: { x: 0, y: 0 },
+            size: { width: 120, height: 60 },
+            rotation: 0,
+            style: {},
+            metadata: {}
+          },
+          {
+            id: 'card-title',
+            name: 'text',
+            label: '文本',
+            icon: 'lucide:type',
+            title: '标题',
+            position: { x: 4, y: 8 },
+            size: { width: 80, height: 24 },
+            rotation: 0,
+            style: {},
+            metadata: {
+              content: '{{ item.name }}'
+            }
+          }
+        ]
+      }
+    ],
+    viewport: {
+      center: { x: 0, y: 0 },
+      zoom: 1
+    }
+  };
+}
+
+/**
+ * 创建嵌套组合运行态测试Widget 数据。
+ * @returns 测试Widget 数据
+ */
+function createRuntimeNestedGroupWidgetData(): WidgetData {
+  return {
+    ...createDefaultWidgetData(),
+    elements: [
       {
-        id: 'card-title',
-        name: 'text',
-        label: '文本',
-        icon: 'lucide:type',
-        title: '标题',
-        position: { x: 24, y: 18 },
-        size: { width: 80, height: 24 },
+        id: 'group-1',
+        name: 'group',
+        label: '组合',
+        icon: 'lucide:group',
+        title: '组合',
+        position: { x: 20, y: 10 },
+        size: { width: 120, height: 60 },
         rotation: 0,
         style: {},
-        metadata: {
-          [WIDGET_GROUP_METADATA_KEY]: 'group-1',
-          content: '{{ item.name }}'
-        }
+        metadata: {},
+        children: [
+          {
+            id: 'nested-title',
+            name: 'text',
+            label: '文本',
+            icon: 'lucide:type',
+            title: '标题',
+            position: { x: 4, y: 8 },
+            size: { width: 80, height: 24 },
+            rotation: 0,
+            style: {},
+            metadata: {
+              content: '{{ input.city }}'
+            }
+          }
+        ]
       }
     ],
     viewport: {
@@ -412,6 +467,14 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
+  it('renders nested group children with inherited runtime context', async (): Promise<void> => {
+    const wrapper = await mountRuntime(createRuntimeNestedGroupWidgetData(), createRenderContext('上海', 28));
+
+    expect(findNodeById(wrapper, 'group-1').exists()).toBe(true);
+    expect(findNodeById(wrapper, 'nested-title').text()).toBe('上海');
+    wrapper.unmount();
+  });
+
   it('renders grouped loop nodes with the same item local per iteration', async (): Promise<void> => {
     const wrapper = await mountRuntime(createRuntimeLoopGroupWidgetData(), {
       input: {},
@@ -420,10 +483,13 @@ describe('BWidgetRuntime', (): void => {
       }
     });
 
+    expect(findNodeById(wrapper, 'card-group').exists()).toBe(false);
     expect(findNodeById(wrapper, 'card-bg').exists()).toBe(false);
     expect(findNodeById(wrapper, 'card-title').exists()).toBe(false);
+    expect(findNodeById(wrapper, 'card-group__loop_0').exists()).toBe(true);
     expect(findNodeById(wrapper, 'card-bg__loop_0').exists()).toBe(true);
     expect(findNodeById(wrapper, 'card-title__loop_0').text()).toBe('拿铁');
+    expect(findNodeById(wrapper, 'card-group__loop_1').exists()).toBe(true);
     expect(findNodeById(wrapper, 'card-bg__loop_1').exists()).toBe(true);
     expect(findNodeById(wrapper, 'card-title__loop_1').text()).toBe('美式');
     wrapper.unmount();

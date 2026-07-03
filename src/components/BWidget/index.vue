@@ -38,7 +38,7 @@
       @move="board.moveElements"
       @preview-end="handleMoveablePreviewEnd"
       @resize="handleMoveableResize"
-      @resize-preview="handleMoveableResizePreview"
+      @resize-preview="handleMoveableGeometryPreview"
     />
     <SelectoLayer
       :root="rootRef"
@@ -106,16 +106,16 @@ import { useWidgetInteraction } from './hooks/useWidgetInteraction';
 import { useWidgetViewport } from './hooks/useWidgetViewport';
 import WidgetCanvas from './renderers/WidgetCanvas.vue';
 import { createDefaultWidgetData } from './utils/widgetData';
-import {
-  clientDeltaToWidgetDelta,
-  createWidgetElementCssTransform,
-  createWidgetViewportForElements,
-  findWidgetShapeElement,
-  projectClientPointToWidgetBoard,
-  queryWidgetElementTarget
-} from './utils/widgetGeometry';
-import { expandWidgetSelectionToGroups, hasWidgetGroupedSelection } from './utils/widgetGroups';
+import { clientDeltaToWidgetDelta, createWidgetViewportForElements, findWidgetShapeElement, projectClientPointToWidgetBoard } from './utils/widgetGeometry';
 import { readWidgetPreviewRenderContext } from './utils/widgetPreviewContext';
+import {
+  findWidgetElementTreeNode,
+  flattenWidgetElementTree,
+  isSameWidgetElementParent,
+  isWidgetGroupElement,
+  readWidgetElementChildren,
+  type WidgetRenderTreeNode
+} from './utils/widgetTree';
 
 /**
  * 右键菜单命令。
@@ -230,8 +230,12 @@ const activeCreateCursor = computed<string | undefined>(() => (activeCreateSchem
 /** 当前右键菜单项。 */
 const contextMenuItems = computed<WidgetContextMenuEntry[]>(() => {
   const hasSelection = board.state.value.selection.length > 0;
-  const canGroup = board.state.value.selection.length > 1;
-  const canUngroup = hasWidgetGroupedSelection(board.state.value.elements, board.state.value.selection);
+  const canGroup = board.state.value.selection.length > 1 && isSameWidgetElementParent(board.state.value.elements, board.state.value.selection);
+  const canUngroup = board.state.value.selection.some((elementId: string): boolean => {
+    const element = findWidgetElementTreeNode(board.state.value.elements, elementId)?.element;
+
+    return element ? isWidgetGroupElement(element) : false;
+  });
   const groupEntries: WidgetContextMenuEntry[] = [];
 
   if (canUngroup) {
@@ -262,7 +266,7 @@ function createSelectedTargetFromSelection(selection: string[]): WidgetSelectTar
   if (selection.length === 0) return dataItem.value.metadata;
 
   if (activeElementId.value && selection.includes(activeElementId.value)) {
-    const activeElement = dataItem.value.elements.find((item: WidgetElement): boolean => item.id === activeElementId.value);
+    const activeElement = findWidgetElementTreeNode(dataItem.value.elements, activeElementId.value)?.element;
 
     if (activeElement) {
       return activeElement;
@@ -272,7 +276,7 @@ function createSelectedTargetFromSelection(selection: string[]): WidgetSelectTar
   if (selection.length > 1) return null;
 
   const selectedId = selection[0];
-  const element = dataItem.value.elements.find((item: WidgetElement): boolean => item.id === selectedId);
+  const element = selectedId ? findWidgetElementTreeNode(dataItem.value.elements, selectedId)?.element : null;
 
   return element ?? dataItem.value.metadata;
 }
@@ -293,13 +297,7 @@ function isSameSelection(current: string[], next: string[]): boolean {
  * @returns 激活子元素是否有效
  */
 function isActiveElementSelection(selection: string[]): boolean {
-  if (!activeElementId.value || !selection.includes(activeElementId.value)) {
-    return false;
-  }
-
-  const activeGroupSelection = expandWidgetSelectionToGroups(dataItem.value.elements, [activeElementId.value]);
-
-  return activeGroupSelection.length > 1 && isSameSelection(selection, activeGroupSelection);
+  return Boolean(activeElementId.value && selection.includes(activeElementId.value));
 }
 
 /**
@@ -323,21 +321,21 @@ function handleSelectionChange(selection: string[]): void {
 }
 
 /**
- * 按组合关系扩展并设置选区。
+ * 设置Widget选区。
  * @param selection - 原始选区
  */
 function setBoardSelection(selection: string[]): void {
   activeElementId.value = null;
-  board.setSelection(expandWidgetSelectionToGroups(board.state.value.elements, selection));
+  board.setSelection(selection);
 }
 
 /**
  * 读取元素点击后应使用的选区。
  * @param id - 元素 ID
- * @returns 展开组合后的选区
+ * @returns 目标选区
  */
 function getSelectionForElement(id: string): string[] {
-  return expandWidgetSelectionToGroups(board.state.value.elements, [id]);
+  return [id];
 }
 
 /**
@@ -347,7 +345,7 @@ function getSelectionForElement(id: string): string[] {
  */
 function getContextMenuSelectionForElement(id: string): string[] {
   if (board.state.value.selection.includes(id)) {
-    return expandWidgetSelectionToGroups(board.state.value.elements, board.state.value.selection);
+    return [...board.state.value.selection];
   }
 
   return getSelectionForElement(id);
@@ -396,6 +394,16 @@ watch(
 watch(() => board.state.value.selection, handleSelectionChange, { immediate: true });
 
 /**
+ * 直接拖拽预览节点。
+ */
+interface DirectElementDragPreviewNode {
+  /** 预览元素 ID */
+  id: string;
+  /** 起始画布绝对坐标 */
+  startAbsolutePosition: WidgetPoint;
+}
+
+/**
  * 直接拖拽节点会话。
  */
 interface DirectElementDragSession {
@@ -409,8 +417,8 @@ interface DirectElementDragSession {
   startPosition: WidgetPoint;
   /** 最后一次预览位置 */
   currentPosition: WidgetPoint;
-  /** 起始旋转角度 */
-  rotation: number;
+  /** 跟随直接拖拽预览的节点列表 */
+  previewNodes: DirectElementDragPreviewNode[];
   /** 是否已经产生位移 */
   moved: boolean;
   /** 是否在拖拽结束后选中元素 */
@@ -450,11 +458,142 @@ function getActiveCreateName(): string | null {
 }
 
 /**
- * 处理 Moveable 缩放预览。
+ * 通过元素 ID 读取渲染树节点。
+ * @param treeNodes - 渲染树节点列表
+ * @param elementId - 元素 ID
+ * @returns 渲染树节点，不存在时返回 null
+ */
+function findRenderTreeNodeById(treeNodes: WidgetRenderTreeNode[], elementId: string): WidgetRenderTreeNode | null {
+  return treeNodes.find((item: WidgetRenderTreeNode): boolean => item.element.id === elementId) ?? null;
+}
+
+/**
+ * 读取渲染树节点的父级绝对坐标。
+ * @param treeNodes - 渲染树节点列表
+ * @param node - 当前节点
+ * @returns 父级绝对坐标，顶层返回原点
+ */
+function getRenderTreeNodeParentPosition(treeNodes: WidgetRenderTreeNode[], node: WidgetRenderTreeNode): WidgetPoint {
+  if (!node.parentId) {
+    return { x: 0, y: 0 };
+  }
+
+  return findRenderTreeNodeById(treeNodes, node.parentId)?.absolutePosition ?? { x: 0, y: 0 };
+}
+
+/**
+ * 将模型坐标预览变更转换为画布绝对坐标预览。
+ * @param change - 模型坐标预览变更
+ * @param node - 变更命中的渲染树节点
+ * @param treeNodes - 渲染树节点列表
+ * @returns 画布绝对坐标预览变更
+ */
+function createRenderPreviewChange(change: WidgetGeometryChange, node: WidgetRenderTreeNode, treeNodes: WidgetRenderTreeNode[]): WidgetGeometryChange {
+  if (!change.position) {
+    return { ...change };
+  }
+
+  const parentPosition = getRenderTreeNodeParentPosition(treeNodes, node);
+
+  return {
+    ...change,
+    position: {
+      x: parentPosition.x + change.position.x,
+      y: parentPosition.y + change.position.y
+    }
+  };
+}
+
+/**
+ * 递归创建组合内部仅跟随位置的预览变更。
+ * @param groupElement - 组合元素
+ * @param groupPreviewPosition - 组合预览绝对坐标
+ * @returns 子树位置预览变更
+ */
+function createGroupDescendantPositionPreviewChanges(groupElement: WidgetElement, groupPreviewPosition: WidgetPoint): WidgetGeometryChange[] {
+  return readWidgetElementChildren(groupElement).flatMap((child: WidgetElement): WidgetGeometryChange[] => {
+    const childPreviewPosition = {
+      x: groupPreviewPosition.x + child.position.x,
+      y: groupPreviewPosition.y + child.position.y
+    };
+    const childChange: WidgetGeometryChange = {
+      id: child.id,
+      position: childPreviewPosition
+    };
+
+    return isWidgetGroupElement(child) ? [childChange, ...createGroupDescendantPositionPreviewChanges(child, childPreviewPosition)] : [childChange];
+  });
+}
+
+/**
+ * 按组合缩放预览创建子树几何预览变更。
+ * @param groupElement - 被缩放的组合元素
+ * @param groupPreviewPosition - 组合预览绝对坐标
+ * @param scaleX - 横向缩放比例
+ * @param scaleY - 纵向缩放比例
+ * @returns 子树几何预览变更
+ */
+function createGroupResizeChildPreviewChanges(
+  groupElement: WidgetElement,
+  groupPreviewPosition: WidgetPoint,
+  scaleX: number,
+  scaleY: number
+): WidgetGeometryChange[] {
+  return readWidgetElementChildren(groupElement).flatMap((child: WidgetElement): WidgetGeometryChange[] => {
+    const childPreviewPosition = {
+      x: groupPreviewPosition.x + child.position.x * scaleX,
+      y: groupPreviewPosition.y + child.position.y * scaleY
+    };
+    const childChange: WidgetGeometryChange = {
+      id: child.id,
+      position: childPreviewPosition,
+      size: {
+        width: child.size.width * scaleX,
+        height: child.size.height * scaleY
+      }
+    };
+
+    return isWidgetGroupElement(child) ? [childChange, ...createGroupResizeChildPreviewChanges(child, childPreviewPosition, scaleX, scaleY)] : [childChange];
+  });
+}
+
+/**
+ * 将 Moveable 几何预览补齐为画布渲染所需的绝对坐标子树预览。
+ * @param changes - Moveable 模型坐标预览变更
+ * @returns 画布渲染预览变更
+ */
+function createMoveableRenderPreviewChanges(changes: WidgetGeometryChange[]): WidgetGeometryChange[] {
+  const treeNodes = flattenWidgetElementTree(board.state.value.elements);
+
+  return changes.flatMap((change: WidgetGeometryChange): WidgetGeometryChange[] => {
+    const node = findRenderTreeNodeById(treeNodes, change.id);
+    if (!node) {
+      return [change];
+    }
+
+    const renderChange = createRenderPreviewChange(change, node, treeNodes);
+    if (!isWidgetGroupElement(node.element)) {
+      return [renderChange];
+    }
+
+    const groupPreviewPosition = renderChange.position ?? node.absolutePosition;
+    if (!change.size) {
+      return [renderChange, ...createGroupDescendantPositionPreviewChanges(node.element, groupPreviewPosition)];
+    }
+
+    const scaleX = node.element.size.width === 0 ? 1 : change.size.width / node.element.size.width;
+    const scaleY = node.element.size.height === 0 ? 1 : change.size.height / node.element.size.height;
+
+    return [renderChange, ...createGroupResizeChildPreviewChanges(node.element, groupPreviewPosition, scaleX, scaleY)];
+  });
+}
+
+/**
+ * 处理 Moveable 几何预览。
  * @param changes - 预览几何变更
  */
-function handleMoveableResizePreview(changes: WidgetGeometryChange[]): void {
-  moveablePreviewChanges.value = changes;
+function handleMoveableGeometryPreview(changes: WidgetGeometryChange[]): void {
+  moveablePreviewChanges.value = createMoveableRenderPreviewChanges(changes);
 }
 
 /**
@@ -480,15 +619,6 @@ function handleMoveableResize(changes: WidgetGeometryChange[]): void {
  */
 function getShapeElementById(id: string): WidgetShapeElement | null {
   return findWidgetShapeElement(board.state.value.elements, id);
-}
-
-/**
- * 通过元素 ID 读取 HTML DOM 节点。
- * @param id - 元素 ID
- * @returns HTML DOM 节点
- */
-function getElementTargetById(id: string): Element | null {
-  return queryWidgetElementTarget(rootRef.value, id);
 }
 
 /**
@@ -546,16 +676,6 @@ function getBoardPointFromPointer(event: PointerEvent): WidgetPoint | null {
 }
 
 /**
- * 创建 HTML 节点 transform 字符串。
- * @param position - 元素位置
- * @param session - 拖拽会话
- * @returns CSS transform
- */
-function createDirectDragTransform(position: WidgetPoint, session: DirectElementDragSession): string {
-  return createWidgetElementCssTransform(position, session.rotation);
-}
-
-/**
  * 根据浏览器坐标计算直接拖拽位置。
  * @param event - 指针事件
  * @param session - 拖拽会话
@@ -577,11 +697,67 @@ function getDirectDragPosition(event: PointerEvent, session: DirectElementDragSe
 }
 
 /**
+ * 判断渲染树节点是否在目标路径对应的子树内。
+ * @param item - 渲染树节点
+ * @param targetPath - 目标元素路径
+ * @returns 是否属于目标元素子树
+ */
+function isNodeInTargetSubtree(item: WidgetRenderTreeNode, targetPath: string[]): boolean {
+  return targetPath.every((pathId: string, index: number): boolean => item.path[index] === pathId);
+}
+
+/**
+ * 读取直接拖拽期间需要一起预览移动的节点。
+ * @param elementId - 被拖拽元素 ID
+ * @returns 预览节点列表
+ */
+function getDirectDragPreviewNodes(elementId: string): DirectElementDragPreviewNode[] {
+  const treeNodes = flattenWidgetElementTree(board.state.value.elements);
+  const targetNode = treeNodes.find((item: WidgetRenderTreeNode): boolean => item.element.id === elementId);
+  if (!targetNode) {
+    return [];
+  }
+
+  return treeNodes
+    .filter((item: WidgetRenderTreeNode): boolean => isNodeInTargetSubtree(item, targetNode.path))
+    .map(
+      (item: WidgetRenderTreeNode): DirectElementDragPreviewNode => ({
+        id: item.element.id,
+        startAbsolutePosition: item.absolutePosition
+      })
+    );
+}
+
+/**
+ * 根据当前拖拽位置创建直接拖拽预览变更。
+ * @param position - 当前被拖拽元素局部位置
+ * @param session - 直接拖拽会话
+ * @returns 几何预览变更
+ */
+function createDirectDragPreviewChanges(position: WidgetPoint, session: DirectElementDragSession): WidgetGeometryChange[] {
+  const delta = {
+    x: position.x - session.startPosition.x,
+    y: position.y - session.startPosition.y
+  };
+
+  return session.previewNodes.map(
+    (node: DirectElementDragPreviewNode): WidgetGeometryChange => ({
+      id: node.id,
+      position: {
+        x: node.startAbsolutePosition.x + delta.x,
+        y: node.startAbsolutePosition.y + delta.y
+      }
+    })
+  );
+}
+
+/**
  * 取消直接拖拽。
  */
 function cancelDirectDrag(): void {
   directDragSession?.abortController.abort();
   directDragSession = null;
+  moveablePreviewChanges.value = [];
   hideMoveableDuringDirectDrag.value = false;
 }
 
@@ -767,10 +943,7 @@ function handleDirectDragMove(event: PointerEvent): void {
   }
 
   const position = getDirectDragPosition(event, directDragSession);
-  const target = getElementTargetById(directDragSession.id);
-  if (target instanceof HTMLElement) {
-    target.style.transform = createDirectDragTransform(position, directDragSession);
-  }
+  moveablePreviewChanges.value = createDirectDragPreviewChanges(position, directDragSession);
   directDragSession.currentPosition = position;
   directDragSession.moved = true;
 }
@@ -791,6 +964,7 @@ function handleDirectDragEnd(): void {
     if (session.selectOnEnd) {
       board.setSelection([session.id]);
     }
+    moveablePreviewChanges.value = [];
     hideMoveableDuringDirectDrag.value = false;
     return;
   }
@@ -804,6 +978,7 @@ function handleDirectDragEnd(): void {
   if (session.selectOnEnd) {
     board.setSelection([session.id]);
   }
+  moveablePreviewChanges.value = [];
   hideMoveableDuringDirectDrag.value = false;
 }
 
@@ -838,7 +1013,7 @@ function startDirectDrag(id: string, event: PointerEvent, selectOnEnd: boolean):
     startBoard: getBoardPointFromPointer(event),
     startPosition: { ...element.position },
     currentPosition: { ...element.position },
-    rotation: element.rotation,
+    previewNodes: getDirectDragPreviewNodes(id),
     moved: false,
     selectOnEnd,
     abortController
@@ -877,15 +1052,10 @@ function handleElementSelect(id: string, event: PointerEvent): void {
 
   const selection = getSelectionForElement(id);
   if (isSameSelection(board.state.value.selection, selection)) {
-    if (selection.length > 1 && activeElementId.value !== id) {
-      activeElementId.value = id;
-      selectedTarget.value = createSelectedTargetFromSelection(selection);
-    }
-
     return;
   }
 
-  activeElementId.value = selection.length > 1 ? id : null;
+  activeElementId.value = null;
   board.setSelection(selection);
   if (selection.length === 1) {
     startDirectDrag(id, event, true);
@@ -957,7 +1127,7 @@ async function createElementFromClientPoint(name: string, clientPoint: WidgetPoi
  * @param options - 选中配置
  */
 function selectElementById(id: string, options: SelectElementByIdOptions = {}): void {
-  const hasElement = board.state.value.elements.some((element: WidgetElement): boolean => element.id === id);
+  const hasElement = findWidgetElementTreeNode(board.state.value.elements, id) !== null;
   if (!hasElement) {
     return;
   }
@@ -965,7 +1135,7 @@ function selectElementById(id: string, options: SelectElementByIdOptions = {}): 
   cancelDirectDrag();
   setActiveTool('select');
   const selection = getSelectionForElement(id);
-  activeElementId.value = options.activateElement && selection.length > 1 ? id : null;
+  activeElementId.value = options.activateElement ? id : null;
   board.setSelection(selection);
 }
 
@@ -974,7 +1144,7 @@ function selectElementById(id: string, options: SelectElementByIdOptions = {}): 
  * @param ids - 元素 ID 列表
  */
 function selectElementsByIds(ids: string[]): void {
-  const elementIds = new Set(board.state.value.elements.map((element: WidgetElement): string => element.id));
+  const elementIds = new Set(flattenWidgetElementTree(board.state.value.elements).map((item: WidgetRenderTreeNode): string => item.element.id));
   const selection = ids.filter((id: string): boolean => elementIds.has(id));
   if (selection.length === 0) {
     return;
@@ -983,7 +1153,7 @@ function selectElementsByIds(ids: string[]): void {
   cancelDirectDrag();
   setActiveTool('select');
   activeElementId.value = null;
-  board.setSelection(expandWidgetSelectionToGroups(board.state.value.elements, selection));
+  board.setSelection(selection);
 }
 
 /**

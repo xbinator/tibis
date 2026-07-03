@@ -114,6 +114,8 @@ export interface BDraggableSlotProps<TItem = unknown> {
   handleClass: string;
   /** 当前项是否正在拖拽 */
   dragging: boolean;
+  /** 当前拖拽源项 key */
+  draggingKey: BDraggableKey | null;
   /** 当前项投放指示位置 */
   dropPosition: BDraggableMovePosition | null;
 }

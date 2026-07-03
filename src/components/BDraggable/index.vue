@@ -17,6 +17,7 @@
         :item-key="entry.key"
         :handle-class="resolvedHandleClass"
         :dragging="draggingKey === entry.key"
+        :dragging-key="draggingKey"
         :drop-position="getDropPosition(entry.key)"
       ></slot>
     </div>
@@ -77,6 +78,8 @@ interface Props {
   itemClass?: BDraggableItemClass<TItem>;
   /** 拖拽手柄 class；不传时使用当前列表项容器作为手柄 */
   handleClass?: string;
+  /** 是否在视觉顺序未变化时仍发出移动事件，适用于带有额外业务语义的拖拽 */
+  emitUnchangedMove?: boolean;
 }
 
 /**
@@ -104,7 +107,8 @@ const props = withDefaults(defineProps<Props>(), {
   direction: 'vertical',
   disabled: false,
   itemClass: '',
-  handleClass: ''
+  handleClass: '',
+  emitUnchangedMove: false
 });
 const emit = defineEmits<{
   /** 完成拖拽排序 */
@@ -638,7 +642,7 @@ function createMoveEvent(sourceKey: string, targetKey: string, position: BDragga
   }
 
   const nextList = reorderDraggableList(props.list, sourceKey, targetKey, position, getKey);
-  if (nextList === props.list) {
+  if (nextList === props.list && !props.emitUnchangedMove) {
     return null;
   }
 

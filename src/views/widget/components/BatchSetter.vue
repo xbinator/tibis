@@ -3,54 +3,57 @@
   @description Widget页面多选元素设计和快捷操作面板。
 -->
 <template>
-  <!-- 操作 -->
-  <BSectionBlock title="操作">
-    <div class="multi-select-actions">
-      <div :class="['multi-select-command', `multi-select-command--${primaryCommand}`]" @click="emitCommand(primaryCommand)">
-        <BButton type="secondary" size="small" :icon="primaryCommandIcon">{{ primaryCommandLabel }}</BButton>
+  <div v-if="!canEditSelection" class="multi-select-disabled">请选择同一父级下的元素</div>
+  <template v-else>
+    <!-- 操作 -->
+    <BSectionBlock title="操作">
+      <div class="multi-select-actions">
+        <div :class="['multi-select-command', `multi-select-command--${primaryCommand}`]" @click="emitCommand(primaryCommand)">
+          <BButton type="secondary" size="small" :icon="primaryCommandIcon">{{ primaryCommandLabel }}</BButton>
+        </div>
       </div>
-    </div>
-  </BSectionBlock>
+    </BSectionBlock>
 
-  <!-- 布局 -->
-  <BSectionBlock title="布局">
-    <div class="multi-select-field-grid">
-      <BSectionItem label="X">
-        <AInputNumber v-model:value="layoutXValue" placeholder="X" :controls="false" />
+    <!-- 布局 -->
+    <BSectionBlock title="布局">
+      <div class="multi-select-field-grid">
+        <BSectionItem label="X">
+          <AInputNumber v-model:value="layoutXValue" placeholder="X" :controls="false" />
+        </BSectionItem>
+        <BSectionItem label="Y">
+          <AInputNumber v-model:value="layoutYValue" placeholder="Y" :controls="false" />
+        </BSectionItem>
+        <BSectionItem label="宽">
+          <AInputNumber v-model:value="layoutWidthValue" placeholder="宽" :controls="false" />
+        </BSectionItem>
+        <BSectionItem label="高">
+          <AInputNumber v-model:value="layoutHeightValue" placeholder="高" :controls="false" />
+        </BSectionItem>
+      </div>
+    </BSectionBlock>
+
+    <!-- 填充 -->
+    <BSectionBlock title="填充">
+      <BSectionItem icon="lucide:paint-bucket">
+        <BColorPicker v-model:value="backgroundColorValue" />
       </BSectionItem>
-      <BSectionItem label="Y">
-        <AInputNumber v-model:value="layoutYValue" placeholder="Y" :controls="false" />
+    </BSectionBlock>
+
+    <!-- 描边 -->
+    <BSectionBlock title="描边">
+      <BSectionItem label="线形">
+        <BSelect v-model:value="borderStyleValue" placeholder="线形" :options="borderStyleOptions" />
       </BSectionItem>
-      <BSectionItem label="宽">
-        <AInputNumber v-model:value="layoutWidthValue" placeholder="宽" :controls="false" />
+
+      <ControlPanel v-model:value="borderWidthValue" label="宽度" mode="sides" />
+
+      <BSectionItem label="颜色">
+        <BColorPicker v-model:value="borderColorValue" />
       </BSectionItem>
-      <BSectionItem label="高">
-        <AInputNumber v-model:value="layoutHeightValue" placeholder="高" :controls="false" />
-      </BSectionItem>
-    </div>
-  </BSectionBlock>
 
-  <!-- 填充 -->
-  <BSectionBlock title="填充">
-    <BSectionItem icon="lucide:paint-bucket">
-      <BColorPicker v-model:value="backgroundColorValue" />
-    </BSectionItem>
-  </BSectionBlock>
-
-  <!-- 描边 -->
-  <BSectionBlock title="描边">
-    <BSectionItem label="线形">
-      <BSelect v-model:value="borderStyleValue" placeholder="线形" :options="borderStyleOptions" />
-    </BSectionItem>
-
-    <ControlPanel v-model:value="borderWidthValue" label="宽度" mode="sides" />
-
-    <BSectionItem label="颜色">
-      <BColorPicker v-model:value="borderColorValue" />
-    </BSectionItem>
-
-    <ControlPanel v-model:value="borderRadiusValue" label="圆角" mode="corners" />
-  </BSectionBlock>
+      <ControlPanel v-model:value="borderRadiusValue" label="圆角" mode="corners" />
+    </BSectionBlock>
+  </template>
 </template>
 
 <script setup lang="ts">
@@ -59,7 +62,7 @@ import { computed } from 'vue';
 import { InputNumber as AInputNumber } from 'ant-design-vue';
 import { isEqual } from 'lodash-es';
 import type { WidgetBorderStyle, WidgetData, WidgetElement, WidgetElementStyle, WidgetElementStyleChange } from '@/components/BWidget/types';
-import { getWidgetElementGroupId } from '@/components/BWidget/utils/widgetGroups';
+import { flattenWidgetElementTree, isSameWidgetElementParent, isWidgetGroupElement, type WidgetRenderTreeNode } from '@/components/BWidget/utils/widgetTree';
 import ControlPanel from './DesignSetter/ControlPanel.vue';
 
 /**
@@ -136,13 +139,21 @@ function createSelectionBounds(elements: WidgetElement[]): SelectionBounds | nul
 const selectedElements = computed<WidgetElement[]>(() => {
   const selectedIds = new Set(props.selectedElementIds);
 
-  return props.dataItem.elements.filter((element: WidgetElement): boolean => selectedIds.has(element.id));
+  return flattenWidgetElementTree(props.dataItem.elements)
+    .filter((item: WidgetRenderTreeNode): boolean => selectedIds.has(item.element.id))
+    .map((item: WidgetRenderTreeNode): WidgetElement => item.element);
 });
 
-/** 当前多选是否命中了组合元素。 */
-const hasGroupedSelection = computed<boolean>(() =>
-  selectedElements.value.some((element: WidgetElement): boolean => getWidgetElementGroupId(element) !== null)
+/** 当前多选是否可以执行批量编辑。 */
+const canEditSelection = computed<boolean>(
+  (): boolean =>
+    selectedElements.value.length > 1 &&
+    selectedElements.value.length === props.selectedElementIds.length &&
+    isSameWidgetElementParent(props.dataItem.elements, props.selectedElementIds)
 );
+
+/** 当前多选是否命中了组合元素。 */
+const hasGroupedSelection = computed<boolean>(() => selectedElements.value.some((element: WidgetElement): boolean => isWidgetGroupElement(element)));
 
 /** 顶部主操作命令。 */
 const primaryCommand = computed<MultiSelectPrimaryCommand>(() => (hasGroupedSelection.value ? 'ungroup' : 'group'));
@@ -187,9 +198,7 @@ function getSharedStyleValue<Key extends keyof WidgetElementStyle>(key: Key): Wi
  */
 function getSharedBorderStyleValue(): WidgetBorderStyle | undefined {
   const firstValue = selectedElements.value[0]?.style.borderStyle;
-  if (!firstValue || selectedElements.value.length === 0) {
-    return undefined;
-  }
+  if (!firstValue || selectedElements.value.length === 0) return undefined;
 
   return selectedElements.value.every((element: WidgetElement): boolean => element.style.borderStyle === firstValue) ? firstValue : undefined;
 }
@@ -219,6 +228,10 @@ function normalizeLayoutInputValue(value: number): number {
  * @param style - 样式变更
  */
 function emitStyleChange(style: WidgetElementStyleChange): void {
+  if (!canEditSelection.value) {
+    return;
+  }
+
   emit('style-change', style);
 }
 
@@ -228,6 +241,10 @@ function emitStyleChange(style: WidgetElementStyleChange): void {
  * @param value - 布局字段值
  */
 function emitLayoutChange(key: keyof WidgetMultiSelectLayoutChange, value: number | undefined): void {
+  if (!canEditSelection.value) {
+    return;
+  }
+
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return;
   }
@@ -242,7 +259,7 @@ function emitLayoutChange(key: keyof WidgetMultiSelectLayoutChange, value: numbe
 }
 
 /** 当前多选外接框。 */
-const selectionBounds = computed<SelectionBounds | null>(() => createSelectionBounds(selectedElements.value));
+const selectionBounds = computed<SelectionBounds | null>(() => (canEditSelection.value ? createSelectionBounds(selectedElements.value) : null));
 
 /** 多选外接框 X 坐标。 */
 const layoutXValue = computed<number | undefined>({
@@ -333,6 +350,10 @@ const borderStyleValue = computed<WidgetBorderStyle | undefined>({
  * @param command - 快捷操作命令
  */
 function emitCommand(command: MultiSelectCommand): void {
+  if (!canEditSelection.value) {
+    return;
+  }
+
   emit('command', command);
 }
 </script>
@@ -348,5 +369,15 @@ function emitCommand(command: MultiSelectCommand): void {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.multi-select-disabled {
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
 }
 </style>

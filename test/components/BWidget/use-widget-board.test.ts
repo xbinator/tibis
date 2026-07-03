@@ -4,7 +4,15 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWidgetBoard } from '@/components/BWidget/hooks/useWidgetBoard';
-import type { WidgetShapeElement } from '@/components/BWidget/types';
+import type { WidgetElement, WidgetShapeElement } from '@/components/BWidget/types';
+
+/**
+ * 带可选子元素字段的测试元素。
+ */
+type WidgetElementWithChildren = WidgetShapeElement & {
+  /** 子元素列表 */
+  children?: WidgetElement[];
+};
 
 /** nanoid 测试替身。 */
 const nanoidMock = vi.hoisted(() => vi.fn<() => string>());
@@ -58,6 +66,75 @@ describe('useWidgetBoard selection commands', (): void => {
     expect(board.state.value.selection).toEqual(['copy0001', 'copy0002']);
   });
 
+  it('pastes a copied nested selection back into its direct parent', (): void => {
+    nanoidMock.mockReturnValueOnce('copy0001');
+    const groupElement: WidgetElementWithChildren = {
+      ...createShapeElement('group-1', 100, 80),
+      name: 'group',
+      label: '组合',
+      icon: 'lucide:group',
+      title: '组合',
+      children: [createShapeElement('child-1', 10, 20)]
+    };
+    const board = useWidgetBoard({
+      elements: [groupElement],
+      selection: ['child-1']
+    });
+
+    board.copySelection();
+    board.pasteClipboard({ x: 140, y: 130 });
+
+    const group = board.state.value.elements[0] as WidgetElementWithChildren | undefined;
+    expect(group?.children?.map((element: WidgetElement): string => element.id)).toEqual(['child-1', 'copy0001']);
+    expect(group?.children?.[1]?.position).toEqual({ x: 40, y: 50 });
+    expect(board.state.value.elements).toHaveLength(1);
+    expect(board.state.value.selection).toEqual(['copy0001']);
+  });
+
+  it('pastes copied elements into the selected group container', (): void => {
+    nanoidMock.mockReturnValueOnce('copy0001');
+    const groupElement: WidgetElementWithChildren = {
+      ...createShapeElement('group-1', 100, 80),
+      name: 'group',
+      label: '组合',
+      icon: 'lucide:group',
+      title: '组合',
+      children: [createShapeElement('child-1', 10, 20)]
+    };
+    const board = useWidgetBoard({
+      elements: [groupElement, createShapeElement('source-1', 0, 0)],
+      selection: ['source-1']
+    });
+
+    board.copySelection();
+    board.setSelection(['group-1']);
+    board.pasteClipboard({ x: 150, y: 130 });
+
+    const group = board.state.value.elements[0] as WidgetElementWithChildren | undefined;
+    expect(board.state.value.elements.map((element: WidgetElement): string => element.id)).toEqual(['group-1', 'source-1']);
+    expect(group?.children?.map((element: WidgetElement): string => element.id)).toEqual(['child-1', 'copy0001']);
+    expect(group?.children?.[1]?.position).toEqual({ x: 50, y: 50 });
+    expect(board.state.value.selection).toEqual(['copy0001']);
+  });
+
+  it('keeps ancestor elements instead of descendants when normalizing selection', (): void => {
+    const groupElement: WidgetElementWithChildren = {
+      ...createShapeElement('group-1', 100, 80),
+      name: 'group',
+      label: '组合',
+      icon: 'lucide:group',
+      title: '组合',
+      children: [createShapeElement('child-1', 10, 20)]
+    };
+    const board = useWidgetBoard({
+      elements: [groupElement]
+    });
+
+    board.setSelection(['child-1', 'group-1']);
+
+    expect(board.state.value.selection).toEqual(['group-1']);
+  });
+
   it('creates nanoid element ids and type titles from current existing names', (): void => {
     nanoidMock.mockReturnValueOnce('rect0001').mockReturnValueOnce('rect0002').mockReturnValueOnce('rect0003').mockReturnValueOnce('text0001');
     const board = useWidgetBoard();
@@ -92,7 +169,31 @@ describe('useWidgetBoard selection commands', (): void => {
     expect(board.state.value.elements[1]?.title).toBe('矩形11');
   });
 
+  it('continues type titles from nested element titles', (): void => {
+    nanoidMock.mockReturnValueOnce('rect0009');
+    const nestedElement = createShapeElement('nested-rect', 10, 20);
+    nestedElement.title = '矩形8';
+    const groupElement: WidgetElementWithChildren = {
+      ...createShapeElement('group-1', 100, 80),
+      name: 'group',
+      label: '组合',
+      icon: 'lucide:group',
+      title: '组合',
+      children: [nestedElement]
+    };
+    const board = useWidgetBoard({
+      elements: [groupElement]
+    });
+
+    board.startCreateShapeDraft('rect', { x: 40, y: 50 });
+    board.commitCreateShapeDraft();
+
+    expect(board.state.value.elements[1]?.id).toBe('rect0009');
+    expect(board.state.value.elements[1]?.title).toBe('矩形9');
+  });
+
   it('groups, ungroups and reorders the current selection', (): void => {
+    nanoidMock.mockReturnValueOnce('widget-group-1');
     const board = useWidgetBoard({
       elements: [
         createShapeElement('node-1', 10, 20),
@@ -104,15 +205,16 @@ describe('useWidgetBoard selection commands', (): void => {
     });
 
     board.groupSelection();
-    expect(board.state.value.elements[1]?.metadata.groupId).toBe('widget-group-1');
-    expect(board.state.value.elements[2]?.metadata.groupId).toBe('widget-group-1');
+    const group = board.state.value.elements[1] as WidgetElementWithChildren | undefined;
+    expect(group?.id).toBe('widget-group-1');
+    expect(group?.name).toBe('group');
+    expect(group?.children?.map((element: WidgetElement): string => element.id)).toEqual(['node-2', 'node-3']);
 
     board.reorderSelection('bringToFront');
-    expect(board.state.value.elements.map((element: WidgetShapeElement): string => element.id)).toEqual(['node-1', 'node-4', 'node-2', 'node-3']);
+    expect(board.state.value.elements.map((element: WidgetShapeElement): string => element.id)).toEqual(['node-1', 'node-4', 'widget-group-1']);
 
-    board.setSelection(['node-2']);
+    board.setSelection(['widget-group-1']);
     board.ungroupSelection();
-    expect(board.state.value.elements[2]?.metadata.groupId).toBeUndefined();
-    expect(board.state.value.elements[3]?.metadata.groupId).toBeUndefined();
+    expect(board.state.value.elements.map((element: WidgetShapeElement): string => element.id)).toEqual(['node-1', 'node-4', 'node-2', 'node-3']);
   });
 });

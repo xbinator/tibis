@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
 import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
-import { WIDGET_GROUP_METADATA_KEY } from '@/components/BWidget/utils/widgetGroups';
 import { WIDGET_LOOP_METADATA_KEY } from '@/components/BWidget/utils/widgetLoop';
 
 /** 已移除的旧根变量名。 */
@@ -129,6 +128,29 @@ function createWidgetElement(id: string, metadata: WidgetElement['metadata'] = {
     rotation: 0,
     style: {},
     metadata
+  };
+}
+
+/**
+ * 创建测试组合元素。
+ * @param id - 元素 ID
+ * @param metadata - 元素元数据
+ * @param children - 子元素
+ * @returns 测试组合元素
+ */
+function createGroupElement(id: string, metadata: WidgetElement['metadata'], children: WidgetElement[]): WidgetElement {
+  return {
+    id,
+    name: 'group',
+    label: '组合',
+    icon: 'lucide:group',
+    title: '组合',
+    position: { x: 0, y: 0 },
+    size: { width: 120, height: 80 },
+    rotation: 0,
+    style: {},
+    metadata,
+    children
   };
 }
 
@@ -364,15 +386,11 @@ describe('useElementVariables', (): void => {
   });
 
   it('provides group loop variables to elements covered by the same group owner', (): void => {
-    const groupId = 'widget-group-1';
-    const loopOwner = createWidgetElement('rect-1', {
-      [WIDGET_GROUP_METADATA_KEY]: groupId,
+    const groupChild = createWidgetElement('text-1');
+    const loopOwner = createGroupElement('group-1', {
       [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
-    });
-    const groupChild = createWidgetElement('text-1', {
-      [WIDGET_GROUP_METADATA_KEY]: groupId
-    });
-    const dataItem = ref<WidgetData | undefined>(createLoopWidgetData([loopOwner, groupChild]));
+    }, [groupChild]);
+    const dataItem = ref<WidgetData | undefined>(createLoopWidgetData([loopOwner]));
     const { variableOptions } = useElementVariables((): WidgetData | undefined => dataItem.value, (): WidgetElement => groupChild);
     const values = readVariableValues(variableOptions.value);
 

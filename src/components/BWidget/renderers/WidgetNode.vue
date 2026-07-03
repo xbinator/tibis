@@ -6,14 +6,13 @@
   <div
     ref="nodeRef"
     class="b-widget-node b-widget-element"
-    :class="{ 'is-selected': selected, 'is-text': isTextShape }"
+    :class="{ 'is-selected': selected }"
     :style="nodeStyle"
     @contextmenu.stop.prevent="emit('context-menu', node.id, $event)"
     @pointerdown.stop="emit('select', node.id, $event)"
     @pointerup="emit('release', node.id, $event)"
   >
     <component :is="nodeView" v-if="nodeView" :element="node" @submit="handleSubmit" />
-    <div v-else class="b-widget-node__fallback">{{ node.title }}</div>
   </div>
 </template>
 
@@ -70,8 +69,6 @@ const nodeRenderContext = computed<WidgetRenderContext | undefined>(() => props.
 
 provideRenderContext(nodeRenderContext);
 
-/** 是否为文本元素。 */
-const isTextShape = computed<boolean>(() => props.node.name === 'text');
 /** 节点渲染尺寸，预览尺寸作为临时模型尺寸后仍按元素 schema 重新测量。 */
 const renderSize = computed<WidgetSize>(() =>
   getWidgetShapeRenderSize(
@@ -137,24 +134,7 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-primary);
   cursor: pointer;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
-  transform-origin: center center;
-}
-
-.b-widget-node.is-text {
-  font-size: 13px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  background: transparent;
-  border-color: transparent;
 }
 
 .b-widget-node__fallback {

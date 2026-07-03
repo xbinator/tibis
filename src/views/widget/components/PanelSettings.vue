@@ -47,7 +47,13 @@ import { computed } from 'vue';
 import { Tabs as ATabs, TabPane as ATabPane } from 'ant-design-vue';
 import { getWidgetElementSetter } from '@/components/BWidget/elements';
 import type { WidgetData, WidgetElement, WidgetElementStyleChange, WidgetSelectTarget } from '@/components/BWidget/types';
-import { getWidgetElementGroupId } from '@/components/BWidget/utils/widgetGroups';
+import {
+  findWidgetElementTreeNode,
+  flattenWidgetElementTree,
+  isSameWidgetElementParent,
+  updateWidgetElementInTree,
+  type WidgetRenderTreeNode
+} from '@/components/BWidget/utils/widgetTree';
 import AdvancedSetter from './AdvancedSetter.vue';
 import BatchSetter from './BatchSetter.vue';
 import DesignSetter from './DesignSetter.vue';
@@ -94,7 +100,9 @@ const elementSetter = computed<Component | null>(() => (isElementTarget(select.v
 const selectedElements = computed<WidgetElement[]>(() => {
   const selectedIds = new Set(props.selectedElementIds);
 
-  return dataItem.value.elements.filter((element: WidgetElement): boolean => selectedIds.has(element.id));
+  return flattenWidgetElementTree(dataItem.value.elements)
+    .filter((item: WidgetRenderTreeNode): boolean => selectedIds.has(item.element.id))
+    .map((item: WidgetRenderTreeNode): WidgetElement => item.element);
 });
 
 /**
@@ -104,9 +112,11 @@ const selectedElements = computed<WidgetElement[]>(() => {
  * @returns 合并后的完整元素列表
  */
 function mergeElementsById(currentElements: WidgetElement[], updatedElements: WidgetElement[]): WidgetElement[] {
-  const updatedElementById = new Map(updatedElements.map((element: WidgetElement): [string, WidgetElement] => [element.id, element]));
-
-  return currentElements.map((element: WidgetElement): WidgetElement => updatedElementById.get(element.id) ?? element);
+  return updatedElements.reduce<WidgetElement[]>(
+    (nextElements: WidgetElement[], element: WidgetElement): WidgetElement[] =>
+      updateWidgetElementInTree(nextElements, element.id, (): WidgetElement => element),
+    currentElements
+  );
 }
 
 /**
@@ -124,7 +134,7 @@ function updateAdvancedElements(updatedElements: WidgetElement[]): void {
 
   if (isElementTarget(select.value)) {
     const selectedElementId = select.value.id;
-    select.value = nextElements.find((element: WidgetElement): boolean => element.id === selectedElementId) ?? select.value;
+    select.value = findWidgetElementTreeNode(nextElements, selectedElementId)?.element ?? select.value;
   }
 }
 
@@ -135,7 +145,7 @@ const selectedTargetElements = computed<WidgetElement[]>({
       return [];
     }
 
-    return [dataItem.value.elements.find((element: WidgetElement): boolean => element.id === select.value?.id) ?? select.value];
+    return [findWidgetElementTreeNode(dataItem.value.elements, select.value.id)?.element ?? select.value];
   },
   set: (updatedElements: WidgetElement[]): void => {
     updateAdvancedElements(updatedElements);
@@ -149,12 +159,12 @@ const sameGroupSelectedElements = computed<WidgetElement[]>({
       return [];
     }
 
-    const firstGroupId = getWidgetElementGroupId(selectedElements.value[0]);
-    if (!firstGroupId) {
+    const firstNode = findWidgetElementTreeNode(dataItem.value.elements, props.selectedElementIds[0] ?? '');
+    if (!firstNode?.parentId || !isSameWidgetElementParent(dataItem.value.elements, props.selectedElementIds)) {
       return [];
     }
 
-    return selectedElements.value.every((element: WidgetElement): boolean => getWidgetElementGroupId(element) === firstGroupId) ? selectedElements.value : [];
+    return selectedElements.value;
   },
   set: (updatedElements: WidgetElement[]): void => {
     updateAdvancedElements(updatedElements);

@@ -2,13 +2,21 @@
  * @file use-model-sync.test.ts
  * @description 验证 BWidget 模型同步 hook 的双向绑定边界。
  */
-import { effectScope, nextTick, ref } from 'vue';
+import { effectScope, nextTick, ref, toRaw } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { useModelSync } from '@/components/BWidget/hooks/useModelSync';
 import { useWidgetBoard } from '@/components/BWidget/hooks/useWidgetBoard';
 import type { WidgetData, WidgetElement, WidgetShapeElement } from '@/components/BWidget/types';
 import { createWidgetDataSnapshot } from '@/components/BWidget/utils/boardTransforms';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+
+/**
+ * 带可选子元素字段的测试元素。
+ */
+type WidgetElementWithChildren = WidgetShapeElement & {
+  /** 子元素列表 */
+  children?: WidgetElement[];
+};
 
 /**
  * 创建测试形状元素。
@@ -27,6 +35,23 @@ function createShapeElement(id: string): WidgetShapeElement {
     rotation: 0,
     style: {},
     metadata: {}
+  };
+}
+
+/**
+ * 创建测试组合元素。
+ * @param id - 组合 ID
+ * @param children - 子元素列表
+ * @returns 测试组合元素
+ */
+function createGroupElement(id: string, children: WidgetElement[]): WidgetElementWithChildren {
+  return {
+    ...createShapeElement(id),
+    name: 'group',
+    label: '组合',
+    icon: 'lucide:group',
+    title: '组合',
+    children
   };
 }
 
@@ -301,6 +326,45 @@ describe('useModelSync', (): void => {
     expect(modelValue.value?.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-2']);
   });
 
+  it('does not echo normalized model data when the external model is replaced during file loading', async (): Promise<void> => {
+    const scope = effectScope();
+    const initialData = createDefaultWidgetData();
+    const legacyElement = {
+      ...createShapeElement('legacy-node-1'),
+      name: undefined,
+      shape: 'rect'
+    } as unknown as WidgetElement;
+    const loadedData: WidgetData = {
+      ...createDefaultWidgetData(),
+      elements: [legacyElement],
+      viewport: {
+        center: { x: 10, y: 20 },
+        zoom: 1
+      }
+    };
+    const modelValue = ref<WidgetData | undefined>(initialData);
+    let readBoardElements: () => WidgetElement[] = (): WidgetElement[] => [];
+
+    scope.run((): void => {
+      const board = useWidgetBoard(modelValue.value);
+      useModelSync({
+        board,
+        dataItem: modelValue
+      });
+
+      modelValue.value = loadedData;
+      readBoardElements = (): WidgetElement[] => board.state.value.elements;
+    });
+
+    await nextTick();
+    await nextTick();
+    scope.stop();
+
+    expect(toRaw(modelValue.value)).toBe(loadedData);
+    expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(true);
+    expect(readBoardElements()[0]?.name).toBe('rect');
+  });
+
   it('preserves selected ids that still exist when resetting from external model', async (): Promise<void> => {
     const scope = effectScope();
     const initialData = createWidgetData('node-1');
@@ -336,6 +400,43 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(readBoardSelection()).toEqual(['node-1']);
+  });
+
+  it('preserves nested selected ids that still exist when resetting from external model', async (): Promise<void> => {
+    const scope = effectScope();
+    const initialData: WidgetData = {
+      ...createDefaultWidgetData(),
+      elements: [createGroupElement('group-1', [createShapeElement('child-1')])],
+      viewport: {
+        center: { x: 10, y: 20 },
+        zoom: 1
+      }
+    };
+    const nextData: WidgetData = {
+      ...initialData,
+      elements: [createGroupElement('group-1', [{ ...createShapeElement('child-1'), title: '外部更新子节点' }])]
+    };
+    const modelValue = ref<WidgetData | undefined>(initialData);
+    let readBoardSelection: () => string[] = (): string[] => [];
+
+    scope.run((): void => {
+      const board = useWidgetBoard({
+        ...initialData,
+        selection: ['child-1']
+      });
+      useModelSync({
+        board,
+        dataItem: modelValue
+      });
+
+      modelValue.value = nextData;
+      readBoardSelection = (): string[] => board.state.value.selection;
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(readBoardSelection()).toEqual(['child-1']);
   });
 
   it('raises text model height after external content changes require more wrapped height', async (): Promise<void> => {
