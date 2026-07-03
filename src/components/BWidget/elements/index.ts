@@ -4,6 +4,9 @@
  */
 import type { WidgetElementSchema } from './types';
 import type { Component } from 'vue';
+import ImageView from './Image/index.vue';
+import { imageElementSchema } from './Image/schema';
+import ImageSetter from './Image/Setter.vue';
 import RectView from './Rect/index.vue';
 import { rectElementSchema } from './Rect/schema';
 import RectSetter from './Rect/Setter.vue';
@@ -14,7 +17,7 @@ import TextSetter from './Text/Setter.vue';
 /**
  * BWidget 侧边栏可创建元素注册表。
  */
-export const WIDGET_ELEMENT_SCHEMAS: WidgetElementSchema[] = [rectElementSchema, textElementSchema];
+export const WIDGET_ELEMENT_SCHEMAS: WidgetElementSchema[] = [rectElementSchema, textElementSchema, imageElementSchema];
 
 /** 元素配置索引。 */
 const widgetElementSchemaByName = new Map<string, WidgetElementSchema>(
@@ -24,13 +27,15 @@ const widgetElementSchemaByName = new Map<string, WidgetElementSchema>(
 /** 元素中间Widget视图索引。 */
 const widgetElementViewByName = new Map<string, Component>([
   [rectElementSchema.name, RectView],
-  [textElementSchema.name, TextView]
+  [textElementSchema.name, TextView],
+  [imageElementSchema.name, ImageView]
 ]);
 
 /** 元素专属属性设置面板索引。 */
 const widgetElementSetterByName = new Map<string, Component>([
   [rectElementSchema.name, RectSetter],
-  [textElementSchema.name, TextSetter]
+  [textElementSchema.name, TextSetter],
+  [imageElementSchema.name, ImageSetter]
 ]);
 
 /**
