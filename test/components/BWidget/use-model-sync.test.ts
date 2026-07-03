@@ -86,11 +86,7 @@ function createTextElement(id: string, content: string): WidgetShapeElement {
 function createWidgetData(id: string): WidgetData {
   return {
     ...createDefaultWidgetData(),
-    elements: [createShapeElement(id)],
-    viewport: {
-      center: { x: 10, y: 20 },
-      zoom: 1
-    }
+    elements: [createShapeElement(id)]
   };
 }
 
@@ -124,7 +120,7 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(modelValue.value?.elements).toHaveLength(2);
-    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['dataSchema', 'description', 'elements', 'inputSchema', 'metadata', 'name', 'viewport']);
+    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['dataSchema', 'description', 'elements', 'inputSchema', 'metadata', 'name']);
     expect('kind' in (modelValue.value?.elements[0] ?? {})).toBe(false);
     expect(modelValue.value?.elements[0]?.name).toBe('rect');
     expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(false);
@@ -202,10 +198,10 @@ describe('useModelSync', (): void => {
     expect(hasInternalStateFields(modelValue.value as WidgetData)).toBe(false);
   });
 
-  it('emits lightweight model data when only the viewport changes', async (): Promise<void> => {
+  it('does not emit model data when only the viewport changes', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<WidgetData | undefined>(createWidgetData('node-1'));
-    const initialElements = modelValue.value?.elements;
+    const initialModel = modelValue.value;
 
     scope.run((): void => {
       const board = useWidgetBoard(modelValue.value);
@@ -226,12 +222,10 @@ describe('useModelSync', (): void => {
     await nextTick();
     scope.stop();
 
-    expect(modelValue.value?.elements).toEqual(initialElements);
-    expect(modelValue.value?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
-    expect(hasInternalStateFields(modelValue.value as WidgetData)).toBe(false);
+    expect(modelValue.value).toBe(initialModel);
   });
 
-  it('uses the current board viewport when emitting content changes', async (): Promise<void> => {
+  it('omits the current board viewport when emitting content changes', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<WidgetData | undefined>(createWidgetData('node-1'));
 
@@ -258,7 +252,7 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(modelValue.value?.elements).toHaveLength(2);
-    expect(modelValue.value?.viewport).toEqual({ center: { x: 300, y: 240 }, zoom: 0.8 });
+    expect(modelValue.value).not.toHaveProperty('viewport');
   });
 
   it('continues generated shape titles from current existing titles', (): void => {
@@ -305,11 +299,7 @@ describe('useModelSync', (): void => {
     const initialData = createDefaultWidgetData();
     const loadedData: WidgetData = {
       ...createDefaultWidgetData(),
-      elements: [createShapeElement('loaded-node-1')],
-      viewport: {
-        center: { x: 10, y: 20 },
-        zoom: 1
-      }
+      elements: [createShapeElement('loaded-node-1')]
     };
     const modelValue = ref<WidgetData | undefined>(initialData);
     let readBoardElements: () => WidgetElement[] = (): WidgetElement[] => [];
@@ -375,11 +365,7 @@ describe('useModelSync', (): void => {
     const scope = effectScope();
     const initialData: WidgetData = {
       ...createDefaultWidgetData(),
-      elements: [createGroupElement('group-1', [createShapeElement('child-1')])],
-      viewport: {
-        center: { x: 10, y: 20 },
-        zoom: 1
-      }
+      elements: [createGroupElement('group-1', [createShapeElement('child-1')])]
     };
     const nextData: WidgetData = {
       ...initialData,
@@ -412,11 +398,7 @@ describe('useModelSync', (): void => {
     const scope = effectScope();
     const modelValue = ref<WidgetData | undefined>({
       ...createDefaultWidgetData(),
-      elements: [createTextElement('text-1', 'abc')],
-      viewport: {
-        center: { x: 10, y: 20 },
-        zoom: 1
-      }
+      elements: [createTextElement('text-1', 'abc')]
     });
 
     scope.run((): void => {

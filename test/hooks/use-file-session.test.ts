@@ -127,11 +127,7 @@ describe('tibis document helpers', (): void => {
         type: 'widget',
         version: 1,
         metadata: {},
-        elements: [],
-        viewport: {
-          center: { x: 1, y: 2 },
-          zoom: 1.5
-        }
+        elements: []
       })
     );
 
@@ -140,11 +136,7 @@ describe('tibis document helpers', (): void => {
     expect(parsed.version).toBe(1);
     expect(parsed.data).toEqual({
       metadata: {},
-      elements: [],
-      viewport: {
-        center: { x: 1, y: 2 },
-        zoom: 1.5
-      }
+      elements: []
     });
   });
 
@@ -165,7 +157,7 @@ describe('tibis document helpers', (): void => {
   });
 
   it('routes supported widget documents to widget and invalid content to editor', (): void => {
-    expect(resolveTibisDocumentRoute('{"type":"widget","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}')).toEqual({
+    expect(resolveTibisDocumentRoute('{"type":"widget","version":1,"elements":[]}')).toEqual({
       routeName: 'widget'
     });
 
@@ -263,7 +255,7 @@ describe('useFileSession', (): void => {
   });
 
   it('does not mark stored tibis content dirty while loading', async (): Promise<void> => {
-    const content = '{"type":"widget","version":1,"elements":[],"viewport":{"center":{"x":0,"y":0},"zoom":1}}';
+    const content = '{"type":"widget","version":1,"elements":[]}';
     getFileByIdMock.mockResolvedValue({
       type: 'file',
       id: 'widget-1',

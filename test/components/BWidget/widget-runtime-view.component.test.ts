@@ -11,8 +11,8 @@ import { cloneDeep } from 'lodash-es';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWidgetRuntime } from '@/components/BWidget/hooks/useWidgetRuntime';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
-import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /** ResizeObserver 回调。 */
@@ -107,11 +107,7 @@ function createRuntimeWidgetData(): WidgetData {
         loop: createDefaultWidgetElementLoopConfig(),
         metadata: {}
       }
-    ],
-    viewport: {
-      center: { x: 1000, y: 1000 },
-      zoom: 0.1
-    }
+    ]
   };
 }
 
@@ -206,11 +202,7 @@ function createRuntimeLoopGroupWidgetData(): WidgetData {
           }
         ]
       }
-    ],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    ]
   };
 }
 
@@ -252,11 +244,7 @@ function createRuntimeNestedGroupWidgetData(): WidgetData {
           }
         ]
       }
-    ],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    ]
   };
 }
 
@@ -378,7 +366,10 @@ function stubElectronRequest(request: (input: RequestInput) => Promise<RequestRe
 function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
   const target = queryWidgetElementTarget(wrapper.element, id);
 
-  return wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ?? wrapper.find<Element>('.missing-widget-node');
+  return (
+    wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ??
+    wrapper.find<Element>('.missing-widget-node')
+  );
 }
 
 /** 运行态控制器注入探针。 */

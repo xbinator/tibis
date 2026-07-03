@@ -20,6 +20,7 @@ describe('dataItem', (): void => {
     expect(dataItem.inputSchema).toEqual(emptyObjectSchema);
     expect(dataItem.dataSchema).toEqual(emptyObjectSchema);
     expect(dataItem).not.toHaveProperty('outputSchema');
+    expect(dataItem).not.toHaveProperty('viewport');
   });
 
   it('normalizes contract schemas without output schema', (): void => {

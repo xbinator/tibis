@@ -7,8 +7,8 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import WidgetCanvas from '@/components/BWidget/renderers/WidgetCanvas.vue';
 import type { WidgetContextMenuPayload, WidgetData, WidgetShapeElement } from '@/components/BWidget/types';
-import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
@@ -38,11 +38,7 @@ function createContextMenuElement(): WidgetShapeElement {
 function createWidgetData(): WidgetData {
   return {
     ...createDefaultWidgetData(),
-    elements: [createContextMenuElement()],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    elements: [createContextMenuElement()]
   };
 }
 
@@ -75,7 +71,10 @@ function mountWidgetCanvas(): VueWrapper {
     props: {
       elements: data.elements,
       selection: [],
-      viewport: data.viewport,
+      viewport: {
+        center: { x: 0, y: 0 },
+        zoom: 1
+      },
       viewportSize: { width: 800, height: 600 },
       viewportReady: true,
       activeTool: 'select'

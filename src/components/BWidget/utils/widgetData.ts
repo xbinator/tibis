@@ -142,7 +142,6 @@ export function createDefaultWidgetViewport(): WidgetViewport {
 export function createDefaultWidgetData(): WidgetData {
   return {
     ...normalizeWidgetDataContract({}),
-    elements: [],
-    viewport: createDefaultWidgetViewport()
+    elements: []
   };
 }

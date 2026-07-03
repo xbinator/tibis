@@ -171,11 +171,7 @@ function createWeatherWidgetData(): WidgetData {
           content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
         }
       }
-    ],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    ]
   };
 }
 

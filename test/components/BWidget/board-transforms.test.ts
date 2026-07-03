@@ -169,11 +169,7 @@ describe('boardTransforms', (): void => {
   it('normalizes widget data contract fields in lightweight snapshots', (): void => {
     const partialSnapshot = {
       metadata: {},
-      elements: [createShapeElement('node-1')],
-      viewport: {
-        center: { x: 10, y: 20 },
-        zoom: 1
-      }
+      elements: [createShapeElement('node-1')]
     };
 
     const snapshot = createWidgetDataSnapshot(partialSnapshot);
@@ -192,7 +188,7 @@ describe('boardTransforms', (): void => {
       required: []
     });
     expect(snapshot.elements).toHaveLength(1);
-    expect(snapshot.viewport).toEqual({ center: { x: 10, y: 20 }, zoom: 1 });
+    expect(snapshot).not.toHaveProperty('viewport');
   });
 
   it('updates element title through a manual board command', (): void => {

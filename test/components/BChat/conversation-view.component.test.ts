@@ -149,11 +149,7 @@ function createWidgetPart(temperature: number): ChatMessageWidgetPart {
       inputSchema: { type: 'object', properties: {} },
       dataSchema: { type: 'object', properties: {} },
       metadata: {},
-      elements: [],
-      viewport: {
-        center: { x: 0, y: 0 },
-        zoom: 1
-      }
+      elements: []
     },
     renderContext: {
       input: {},

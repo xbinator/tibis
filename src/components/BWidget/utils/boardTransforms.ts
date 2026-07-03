@@ -737,13 +737,12 @@ export function createWidgetBoardState(snapshot?: Partial<WidgetBoardSnapshot>):
  * @returns Widget绑定数据
  */
 export function createWidgetDataSnapshot(
-  snapshot: Pick<WidgetBoardSnapshot, 'elements' | 'viewport'> & WidgetDataContractCandidate,
+  snapshot: Pick<WidgetBoardSnapshot, 'elements'> & WidgetDataContractCandidate,
   options: WidgetDataSnapshotOptions = {}
 ): WidgetData {
   return {
     ...normalizeWidgetDataContract(snapshot),
-    elements: cloneSupportedElements(snapshot.elements, options),
-    viewport: cloneDeep(snapshot.viewport)
+    elements: cloneSupportedElements(snapshot.elements, options)
   };
 }
 

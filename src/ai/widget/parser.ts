@@ -4,8 +4,8 @@
  */
 import type { WidgetDefinition } from './types';
 import { cloneDeep } from 'lodash-es';
-import type { WidgetData, WidgetViewport } from '@/components/BWidget/types';
-import { createDefaultWidgetData, createDefaultWidgetViewport, normalizeWidgetDataContract } from '@/components/BWidget/utils/widgetData';
+import type { WidgetData } from '@/components/BWidget/types';
+import { createDefaultWidgetData, normalizeWidgetDataContract } from '@/components/BWidget/utils/widgetData';
 
 /**
  * 判断值是否为普通记录。
@@ -14,15 +14,6 @@ import { createDefaultWidgetData, createDefaultWidgetViewport, normalizeWidgetDa
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * 判断值是否为有限数字。
- * @param value - 待判断值
- * @returns 是否为有限数字
- */
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
 }
 
 /**
@@ -55,25 +46,6 @@ export function readWidgetIdFromFilePath(filePath: string): string {
 }
 
 /**
- * 归一化 Widget 视口。
- * @param value - 原始视口值
- * @returns 可用视口
- */
-function normalizeWidgetViewport(value: unknown): WidgetViewport {
-  if (!isRecord(value) || !isRecord(value.center) || !isFiniteNumber(value.center.x) || !isFiniteNumber(value.center.y) || !isFiniteNumber(value.zoom)) {
-    return createDefaultWidgetViewport();
-  }
-
-  return {
-    center: {
-      x: value.center.x,
-      y: value.center.y
-    },
-    zoom: value.zoom
-  };
-}
-
-/**
  * 从未知记录归一化 WidgetData。
  * @param id - 小组件文件 ID
  * @param value - 原始 JSON 数据
@@ -85,8 +57,7 @@ function normalizeWidgetData(id: string, value: Record<string, unknown>): Widget
   const data: WidgetData = {
     ...defaults,
     ...contract,
-    elements: Array.isArray(value.elements) ? (cloneDeep(value.elements) as WidgetData['elements']) : defaults.elements,
-    viewport: normalizeWidgetViewport(value.viewport)
+    elements: Array.isArray(value.elements) ? (cloneDeep(value.elements) as WidgetData['elements']) : defaults.elements
   };
 
   return {

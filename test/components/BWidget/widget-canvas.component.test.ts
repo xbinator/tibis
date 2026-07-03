@@ -4,8 +4,8 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import { defineComponent, nextTick, toRaw } from 'vue';
-import type { ComponentPublicInstance } from 'vue';
+import { defineComponent, nextTick, ref, toRaw } from 'vue';
+import type { ComponentPublicInstance, Ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
@@ -47,6 +47,14 @@ interface BWidgetExpose {
  * ResizeObserver 测试替身。
  */
 class ResizeObserverMock {
+  /** 最近创建的 ResizeObserver 回调。 */
+  public static latestCallback: ResizeObserverCallback | null = null;
+
+  /** 创建 ResizeObserver 测试替身。 */
+  public constructor(callback: ResizeObserverCallback) {
+    ResizeObserverMock.latestCallback = callback;
+  }
+
   /** 监听目标元素尺寸。 */
   public observe = vi.fn();
 
@@ -55,6 +63,25 @@ class ResizeObserverMock {
 
   /** 断开全部尺寸监听。 */
   public disconnect = vi.fn();
+
+  /**
+   * 触发测试尺寸变更。
+   * @param target - 尺寸变化目标
+   * @param size - 目标尺寸
+   */
+  public static trigger(target: Element, size: { width: number; height: number }): void {
+    ResizeObserverMock.latestCallback?.([
+      {
+        target,
+        contentRect: DOMRect.fromRect({
+          height: size.height,
+          width: size.width,
+          x: 0,
+          y: 0
+        })
+      } as ResizeObserverEntry
+    ], {} as ResizeObserver);
+  }
 }
 
 /**
@@ -247,6 +274,7 @@ async function dispatchPointerEvent(target: Element | Window, type: string, poin
 
 describe('BWidget canvas component', (): void => {
   beforeEach((): void => {
+    ResizeObserverMock.latestCallback = null;
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
       callback(0);
@@ -276,6 +304,70 @@ describe('BWidget canvas component', (): void => {
     expect(node.find('.widget-rect-element-view').exists()).toBe(true);
     expect(node.find('.widget-rect-element-view').attributes('aria-hidden')).toBe('true');
     expect(wrapper.find('svg').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('fits the viewport after widget data loads into an initially empty canvas', async (): Promise<void> => {
+    const dataItem = ref<WidgetData>(createDefaultWidgetData());
+    const Host = defineComponent({
+      name: 'BWidgetAsyncDataHost',
+      components: {
+        BWidget
+      },
+      setup(): { dataItem: Ref<WidgetData> } {
+        return { dataItem };
+      },
+      template: '<BWidget :value="dataItem" />'
+    });
+    const wrapper = mount(Host, {
+      attachTo: document.body
+    });
+    ResizeObserverMock.trigger(wrapper.element, { width: 800, height: 600 });
+    await flushWidgetUpdates();
+
+    dataItem.value = {
+      ...createDefaultWidgetData(),
+      elements: [
+        {
+          id: 'loaded-node-1',
+          name: 'rect',
+          label: '矩形',
+          icon: 'lucide:square',
+          title: '加载节点',
+          position: { x: 1000, y: 600 },
+          size: { width: 200, height: 100 },
+          rotation: 0,
+          style: {},
+          loop: createDefaultWidgetElementLoopConfig(),
+          metadata: {}
+        }
+      ]
+    };
+    await flushWidgetUpdates();
+
+    expect(wrapper.find('.b-widget-canvas__stage').attributes('style')).toContain('translate(-1100px, -650px)');
+    wrapper.unmount();
+  });
+
+  it('does not fit the viewport after creating the first element locally', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createDefaultWidgetData()
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    ResizeObserverMock.trigger(wrapper.element, { width: 800, height: 600 });
+    await flushWidgetUpdates();
+
+    await getWidgetExpose(wrapper).createElementFromClientPoint('rect', { x: 100, y: 100 });
+    await flushWidgetUpdates();
+
+    const emitted = wrapper.emitted('update:value') as Array<[WidgetData]> | undefined;
+    const createdId = emitted?.at(-1)?.[0].elements[0]?.id ?? '';
+
+    expect(wrapper.find('.b-widget-canvas__stage').attributes('style')).toContain('scale(1) translate(0px, 0px)');
+    expect(findNodeById(wrapper, createdId).attributes('style')).toContain('translate(-390px, -236px)');
     wrapper.unmount();
   });
 
@@ -460,7 +552,7 @@ describe('BWidget canvas component', (): void => {
       style: {},
       metadata: {}
     });
-    expect(latestData?.viewport).toEqual({ center: { x: 0, y: 0 }, zoom: 1 });
+    expect(latestData).not.toHaveProperty('viewport');
     wrapper.unmount();
   });
 

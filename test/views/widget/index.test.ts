@@ -41,11 +41,7 @@ const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
       required: []
     },
     metadata: {},
-    elements: [],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    elements: []
   }
 }));
 

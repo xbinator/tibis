@@ -116,11 +116,7 @@ function createGroupElement(): WidgetElement {
 function createWidgetData(): WidgetData {
   return {
     ...createDefaultWidgetData(),
-    elements: [createElement('node-1', 80, 60)],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    elements: [createElement('node-1', 80, 60)]
   };
 }
 
@@ -131,11 +127,7 @@ function createWidgetData(): WidgetData {
 function createGroupedWidgetData(): WidgetData {
   return {
     ...createDefaultWidgetData(),
-    elements: [createGroupElement()],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    elements: [createGroupElement()]
   };
 }
 
@@ -147,11 +139,7 @@ function createMultiSelectedWidgetData(): WidgetDataWithSelection {
   return {
     ...createDefaultWidgetData(),
     elements: [createElement('node-1', 80, 60), createElement('node-2', 220, 100)],
-    selection: ['node-1', 'node-2'],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    selection: ['node-1', 'node-2']
   };
 }
 

@@ -202,7 +202,6 @@ const activeElementId = ref<string | null>(null);
 /** 创建工具激活时应用到下一个形状的样式。 */
 const creationStyle = ref<WidgetElementStyle>({});
 const { rootRef, viewportSize, isViewportReady } = useViewportSize();
-useModelSync({ board, dataItem });
 const { registerShortcuts } = useShortcuts();
 /** 当前历史栈是否允许撤销。 */
 const canUndo = computed<boolean>(() => board.state.value.history.past.length > 0);
@@ -220,6 +219,21 @@ const contextMenuState = ref<WidgetContextMenuState>({
   elementId: null,
   clientPoint: { x: 0, y: 0 },
   boardPoint: { x: 0, y: 0 }
+});
+
+/**
+ * 处理外部模型重置，允许异步加载出的已有内容重新执行初始视口适配。
+ * @param nextDataItem - 最新外部Widget数据
+ */
+function handleExternalModelReset(nextDataItem: WidgetData): void {
+  if (nextDataItem.elements.length > 0) {
+    initialContentViewportFitted.value = false;
+  }
+}
+useModelSync({
+  board,
+  dataItem,
+  onExternalModelReset: handleExternalModelReset
 });
 /** 当前激活工具对应的可创建元素配置。 */
 const activeCreateSchema = computed<WidgetElementSchema | null>(() => getWidgetElementSchema(activeTool.value));

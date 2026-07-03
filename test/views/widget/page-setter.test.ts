@@ -430,11 +430,7 @@ function createWidgetElement(id: string, name: 'rect' | 'text'): WidgetElement {
 function createWidgetData(): WidgetData {
   return {
     ...createDefaultWidgetData(),
-    elements: [createWidgetElement('rect-1', 'rect'), createWidgetElement('text-1', 'text')],
-    viewport: {
-      center: { x: 12.4, y: 56.6 },
-      zoom: 0.75
-    }
+    elements: [createWidgetElement('rect-1', 'rect'), createWidgetElement('text-1', 'text')]
   };
 }
 

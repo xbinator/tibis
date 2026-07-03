@@ -243,8 +243,7 @@ function createTwoNodeWidgetData(): WidgetData {
   return {
     ...createDefaultWidgetData(),
     metadata: data.metadata,
-    elements: data.elements,
-    viewport: data.viewport
+    elements: data.elements
   };
 }
 
@@ -273,8 +272,7 @@ function createGroupedWidgetData(): WidgetData {
         metadata: {},
         children: data.elements
       }
-    ],
-    viewport: data.viewport
+    ]
   };
 }
 

@@ -18,6 +18,8 @@ export interface UseModelSyncOptions {
   dataItem: Ref<WidgetData | undefined>;
   /** 内部Widget状态与命令 */
   board: UseWidgetBoardReturn;
+  /** 外部模型重置内部Widget状态后的回调 */
+  onExternalModelReset?: (dataItem: WidgetData) => void;
 }
 
 /**
@@ -25,10 +27,9 @@ export interface UseModelSyncOptions {
  * @param snapshot - Widget快照或绑定数据
  * @returns 内容快照
  */
-function createWidgetModelSnapshot(snapshot: Pick<WidgetBoardSnapshot, 'elements' | 'viewport'>): Pick<WidgetBoardSnapshot, 'elements' | 'viewport'> {
+function createWidgetModelSnapshot(snapshot: Pick<WidgetBoardSnapshot, 'elements'>): Pick<WidgetBoardSnapshot, 'elements'> {
   return {
-    elements: snapshot.elements,
-    viewport: snapshot.viewport
+    elements: snapshot.elements
   };
 }
 
@@ -120,6 +121,7 @@ export function useModelSync(options: UseModelSyncOptions): void {
 
       syncingDataItemToBoard = true;
       options.board.reset(createModelResetSnapshot(dataItem, options.board));
+      options.onExternalModelReset?.(dataItem);
       if (shouldEchoNormalizedModel(dataItem, previousDataItem)) {
         syncNormalizedBoardToModel(dataItem, options);
       }
@@ -136,7 +138,7 @@ export function useModelSync(options: UseModelSyncOptions): void {
   );
 
   watch(
-    () => [options.board.state.value.elements, options.board.state.value.viewport],
+    () => options.board.state.value.elements,
     (): void => {
       if (options.dataItem.value === undefined || syncingDataItemToBoard) {
         return;

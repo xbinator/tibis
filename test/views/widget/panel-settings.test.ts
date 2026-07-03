@@ -197,11 +197,7 @@ function createGroupElement(id: string, children: WidgetElement[]): WidgetElemen
 function createWidgetData(elements: WidgetElement | WidgetElement[]): WidgetData {
   return {
     ...createDefaultWidgetData(),
-    elements: Array.isArray(elements) ? elements : [elements],
-    viewport: {
-      center: { x: 0, y: 0 },
-      zoom: 1
-    }
+    elements: Array.isArray(elements) ? elements : [elements]
   };
 }
 

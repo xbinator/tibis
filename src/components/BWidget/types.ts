@@ -304,8 +304,6 @@ export interface WidgetData {
   metadata: WidgetMetadata;
   /** 元素数据 */
   elements: WidgetElement[];
-  /** 视口数据 */
-  viewport: WidgetViewport;
 }
 
 /**
