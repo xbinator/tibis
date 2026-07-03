@@ -7,7 +7,7 @@ import type { WidgetRenderContext } from 'types/widget';
 import { cloneDeep } from 'lodash-es';
 import { formatWidgetBindingPath, isWidgetBindingPathSegmentAllowed, parseWidgetBindingPath, type WidgetBindingPath } from './widgetBindings';
 import { createWidgetRuntimeLayoutFromRenderElements } from './widgetRuntime/layout';
-import { flattenWidgetElementTree, readWidgetElementChildren, type WidgetRenderTreeNode } from './widgetTree';
+import { readWidgetElementChildren } from './widgetTree';
 
 /** 元素循环配置在 metadata 中使用的字段名。 */
 export const WIDGET_LOOP_METADATA_KEY = 'loop';
@@ -92,8 +92,8 @@ interface WidgetLoopTemplateTarget {
 interface WidgetLoopIterationTarget {
   /** 当前索引 */
   itemIndex: number;
-  /** 当前迭代使用的渲染上下文 */
-  renderContext: WidgetLoopRenderContext;
+  /** 当前迭代展开后的模板元素 */
+  renderElements: WidgetLoopRenderElement[];
   /** 当前迭代下模板元素视觉边界 */
   bounds: WidgetLoopTemplateBounds;
 }
@@ -245,13 +245,31 @@ export function collectWidgetLoopDataSourceOptions(inputSchema: WidgetSchemaObje
 }
 
 /**
+ * 读取上下文中已有的局部变量。
+ * @param renderContext - 渲染上下文
+ * @returns 局部变量根
+ */
+function readLoopRenderContextLocals(renderContext: WidgetRenderContext): Record<string, unknown> | undefined {
+  const contextWithLocals = renderContext as WidgetLoopRenderContext;
+
+  return contextWithLocals.locals;
+}
+
+/**
  * 读取绑定路径对应的上下文值。
  * @param renderContext - 渲染上下文
  * @param path - 绑定路径
  * @returns 上下文值
  */
 function readBindingPathContextValue(renderContext: WidgetRenderContext, path: WidgetBindingPath): unknown {
-  let currentValue: unknown = path.root === 'input' ? renderContext.input : renderContext.data;
+  let currentValue: unknown;
+
+  if (path.root === 'local') {
+    currentValue = readLoopRenderContextLocals(renderContext)?.[path.localRoot ?? ''];
+  } else {
+    currentValue = path.root === 'input' ? renderContext.input : renderContext.data;
+  }
+
   for (const segment of path.segments) {
     if (!isRecord(currentValue)) {
       return undefined;
@@ -270,8 +288,8 @@ function readBindingPathContextValue(renderContext: WidgetRenderContext, path: W
  * @returns 数组数据
  */
 function readLoopSourceItems(renderContext: WidgetRenderContext, source: string): unknown[] {
-  const path = parseWidgetBindingPath(source);
-  if (!path || path.root === 'local') {
+  const path = parseWidgetBindingPath(source, { locals: readLoopRenderContextLocals(renderContext) });
+  if (!path) {
     return [];
   }
 
@@ -282,15 +300,11 @@ function readLoopSourceItems(renderContext: WidgetRenderContext, source: string)
 
 /**
  * 创建模板元素边界。
- * @param elements - 模板元素
- * @param renderContext - 渲染上下文
+ * @param renderElements - 模板渲染元素
  * @returns 模板边界
  */
-function createLoopTemplateBounds(elements: WidgetElement[], renderContext: WidgetRenderContext): WidgetLoopTemplateBounds {
-  const layout = createWidgetRuntimeLayoutFromRenderElements(
-    elements.map((element: WidgetElement): WidgetLoopRenderElement => ({ element, renderContext })),
-    0
-  );
+function createLoopTemplateBounds(renderElements: WidgetLoopRenderElement[]): WidgetLoopTemplateBounds {
+  const layout = createWidgetRuntimeLayoutFromRenderElements(renderElements, 0);
 
   return {
     minX: layout.bounds.minX,
@@ -316,30 +330,22 @@ function createFlatLoopRenderElement(element: WidgetElement, position: WidgetPoi
 }
 
 /**
- * 创建带绝对坐标的循环模板平铺元素。
+ * 创建循环目标在单次迭代中的模板渲染元素。
  * @param target - 循环模板目标
- * @returns 模板平铺元素
+ * @param renderContext - 单次迭代渲染上下文
+ * @returns 模板渲染元素
  */
-function createLoopTemplateElements(target: WidgetLoopTemplateTarget): WidgetElement[] {
-  const parentAbsolutePosition = {
-    x: target.absolutePosition.x - target.element.position.x,
-    y: target.absolutePosition.y - target.element.position.y
-  };
-
-  return flattenWidgetElementTree([target.element], null, parentAbsolutePosition).map(
-    (node: WidgetRenderTreeNode): WidgetElement => createFlatLoopRenderElement(node.element, node.absolutePosition)
-  );
-}
-
-/**
- * 读取上下文中已有的局部变量。
- * @param renderContext - 渲染上下文
- * @returns 局部变量根
- */
-function readLoopRenderContextLocals(renderContext: WidgetRenderContext): Record<string, unknown> | undefined {
-  const contextWithLocals = renderContext as WidgetLoopRenderContext;
-
-  return contextWithLocals.locals;
+function createLoopTemplateRenderElements(target: WidgetLoopTemplateTarget, renderContext: WidgetLoopRenderContext): WidgetLoopRenderElement[] {
+  return [
+    {
+      element: createFlatLoopRenderElement(target.element, target.absolutePosition),
+      renderContext
+    },
+    ...readWidgetElementChildren(target.element).flatMap((child: WidgetElement): WidgetLoopRenderElement[] =>
+      // eslint-disable-next-line no-use-before-define -- 循环模板展开需要递归消费子树中的内层循环。
+      createElementLoopRenderElements(child, renderContext, target.absolutePosition)
+    )
+  ];
 }
 
 /**
@@ -389,24 +395,19 @@ function createLoopElementId(elementId: string, index: number): string {
 /**
  * 创建循环迭代目标列表。
  * @param target - 循环模板目标
- * @param templateElements - 模板平铺元素
  * @param renderContext - 渲染上下文
  * @param items - 循环数据
  * @returns 循环迭代目标列表
  */
-function createLoopIterationTargets(
-  target: WidgetLoopTemplateTarget,
-  templateElements: WidgetElement[],
-  renderContext: WidgetRenderContext,
-  items: unknown[]
-): WidgetLoopIterationTarget[] {
+function createLoopIterationTargets(target: WidgetLoopTemplateTarget, renderContext: WidgetRenderContext, items: unknown[]): WidgetLoopIterationTarget[] {
   return items.map((item: unknown, itemIndex: number): WidgetLoopIterationTarget => {
     const itemRenderContext = createLoopRenderContext(target.config, renderContext, item, itemIndex);
+    const renderElements = createLoopTemplateRenderElements(target, itemRenderContext);
 
     return {
       itemIndex,
-      renderContext: itemRenderContext,
-      bounds: createLoopTemplateBounds(templateElements, itemRenderContext)
+      renderElements,
+      bounds: createLoopTemplateBounds(renderElements)
     };
   });
 }
@@ -438,13 +439,12 @@ function expandLoopTemplateTarget(target: WidgetLoopTemplateTarget, renderContex
     return [];
   }
 
-  const templateElements = createLoopTemplateElements(target);
-  const iterations = createLoopIterationTargets(target, templateElements, renderContext, items);
+  const iterations = createLoopIterationTargets(target, renderContext, items);
   const cellSize = createLoopCellSize(iterations);
   const columns = Math.max(1, target.config.columns);
 
   return iterations.flatMap((iteration: WidgetLoopIterationTarget): WidgetLoopRenderElement[] => {
-    const { bounds, itemIndex, renderContext: itemRenderContext } = iteration;
+    const { bounds, itemIndex, renderElements } = iteration;
     const column = itemIndex % columns;
     const row = Math.floor(itemIndex / columns);
     const cellOrigin: WidgetPoint = {
@@ -452,17 +452,17 @@ function expandLoopTemplateTarget(target: WidgetLoopTemplateTarget, renderContex
       y: bounds.minY + row * (cellSize.height + target.config.rowGap)
     };
 
-    return templateElements.map(
-      (element: WidgetElement): WidgetLoopRenderElement => ({
+    return renderElements.map(
+      (renderElement: WidgetLoopRenderElement): WidgetLoopRenderElement => ({
         element: {
-          ...cloneDeep(element),
-          id: createLoopElementId(element.id, itemIndex),
+          ...cloneDeep(renderElement.element),
+          id: createLoopElementId(renderElement.element.id, itemIndex),
           position: {
-            x: element.position.x - bounds.minX + cellOrigin.x,
-            y: element.position.y - bounds.minY + cellOrigin.y
+            x: renderElement.element.position.x - bounds.minX + cellOrigin.x,
+            y: renderElement.element.position.y - bounds.minY + cellOrigin.y
           }
         },
-        renderContext: itemRenderContext
+        renderContext: renderElement.renderContext
       })
     );
   });

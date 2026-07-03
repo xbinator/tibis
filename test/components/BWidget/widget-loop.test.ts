@@ -2,9 +2,9 @@
  * @file widget-loop.test.ts
  * @description 验证 BWidget 循环数据配置读取、数组路径收集和运行态元素展开。
  */
-import type { WidgetElement, WidgetElementLoopConfig, WidgetSchemaObject } from '@/components/BWidget/types';
 import type { WidgetRenderContext } from 'types/widget';
 import { describe, expect, it } from 'vitest';
+import type { WidgetElement, WidgetElementLoopConfig, WidgetSchemaObject } from '@/components/BWidget/types';
 import { getWidgetShapeRenderSize } from '@/components/BWidget/utils/widgetGeometry';
 import {
   collectWidgetLoopDataSourceOptions,
@@ -39,12 +39,7 @@ function createLoopConfig(source = 'products'): WidgetElementLoopConfig {
  * @param metadata - 元素元数据
  * @returns Widget 元素
  */
-function createElement(
-  id: string,
-  position: WidgetElement['position'],
-  size: WidgetElement['size'],
-  metadata: WidgetElement['metadata'] = {}
-): WidgetElement {
+function createElement(id: string, position: WidgetElement['position'], size: WidgetElement['size'], metadata: WidgetElement['metadata'] = {}): WidgetElement {
   return {
     id,
     name: 'rect',
@@ -274,10 +269,7 @@ describe('widgetLoop', (): void => {
       {
         [WIDGET_LOOP_METADATA_KEY]: createLoopConfig()
       },
-      [
-        createElement('card-bg', { x: 0, y: 0 }, { width: 120, height: 60 }),
-        createElement('card-title', { x: 4, y: 8 }, { width: 40, height: 20 })
-      ]
+      [createElement('card-bg', { x: 0, y: 0 }, { width: 120, height: 60 }), createElement('card-title', { x: 4, y: 8 }, { width: 40, height: 20 })]
     );
     const result = createWidgetLoopRenderElements([groupOwner], createRenderContext());
 
@@ -299,31 +291,70 @@ describe('widgetLoop', (): void => {
     expect(result[3].renderContext.locals).not.toBe(result[0].renderContext.locals);
   });
 
-  it('uses the parent group loop config when a child also declares loop', (): void => {
+  it('expands child loops inside each parent group loop iteration', (): void => {
+    const firstCategory = {
+      name: '饮品',
+      products: [{ name: '拿铁' }, { name: '美式' }]
+    };
+    const secondCategory = {
+      name: '甜点',
+      products: [{ name: '蛋糕' }]
+    };
+    const outerLoopConfig: WidgetElementLoopConfig = {
+      ...createLoopConfig('input.items'),
+      itemName: 'category',
+      indexName: 'categoryIndex'
+    };
+    const innerLoopConfig: WidgetElementLoopConfig = {
+      ...createLoopConfig('category.products'),
+      columns: 1,
+      itemName: 'product',
+      indexName: 'productIndex'
+    };
     const groupOwner = createGroupElement(
-      'card-group',
+      'category-group',
       { x: 20, y: 10 },
       { width: 120, height: 60 },
       {
-        [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('input.items')
+        [WIDGET_LOOP_METADATA_KEY]: outerLoopConfig
       },
       [
-        createElement('card-bg', { x: 0, y: 0 }, { width: 120, height: 60 }),
-        createElement('card-title', { x: 4, y: 8 }, { width: 40, height: 20 }, { [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('products') })
+        createTextElement('product-title', { x: 4, y: 8 }, { width: 40, height: 20 }, '{{ category.name }} {{ product.name }}', {
+          [WIDGET_LOOP_METADATA_KEY]: innerLoopConfig
+        })
       ]
     );
-    const result = createWidgetLoopRenderElements([groupOwner], createRenderContext());
+    const result = createWidgetLoopRenderElements([groupOwner], {
+      input: {
+        items: [firstCategory, secondCategory]
+      },
+      data: {}
+    });
+    const productRenderElements = result.filter((item): boolean => item.element.id.startsWith('product-title__loop_'));
 
-    expect(result.map((item) => item.element.id)).toEqual([
-      'card-group__loop_0',
-      'card-bg__loop_0',
-      'card-title__loop_0',
-      'card-group__loop_1',
-      'card-bg__loop_1',
-      'card-title__loop_1'
+    expect(result.filter((item): boolean => item.element.id.startsWith('category-group__loop_'))).toHaveLength(2);
+    expect(productRenderElements).toHaveLength(3);
+    expect(new Set(result.map((item): string => item.element.id)).size).toBe(result.length);
+    expect(productRenderElements.map((item) => item.renderContext.locals)).toEqual([
+      {
+        category: firstCategory,
+        categoryIndex: 0,
+        product: firstCategory.products[0],
+        productIndex: 0
+      },
+      {
+        category: firstCategory,
+        categoryIndex: 0,
+        product: firstCategory.products[1],
+        productIndex: 1
+      },
+      {
+        category: secondCategory,
+        categoryIndex: 1,
+        product: secondCategory.products[0],
+        productIndex: 0
+      }
     ]);
-    expect(result[0].renderContext.locals).toEqual({ item: { name: '入参 A' }, index: 0 });
-    expect(result[3].renderContext.locals).toEqual({ item: { name: '入参 B' }, index: 1 });
   });
 
   it('keeps expanded loop nodes in the original layer order slot', (): void => {
@@ -336,9 +367,14 @@ describe('widgetLoop', (): void => {
   });
 
   it('does not render loop templates when the source is missing or not an array', (): void => {
-    const loopElement = createElement('text-1', { x: 10, y: 20 }, { width: 100, height: 52 }, {
-      [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('missing.items')
-    });
+    const loopElement = createElement(
+      'text-1',
+      { x: 10, y: 20 },
+      { width: 100, height: 52 },
+      {
+        [WIDGET_LOOP_METADATA_KEY]: createLoopConfig('missing.items')
+      }
+    );
 
     expect(createWidgetLoopRenderElements([loopElement], createRenderContext())).toEqual([]);
   });
