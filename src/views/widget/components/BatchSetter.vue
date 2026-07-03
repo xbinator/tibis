@@ -129,12 +129,7 @@ function createSelectionBounds(elements: WidgetElement[]): SelectionBounds | nul
   const right = Math.max(...elements.map((element: WidgetElement): number => element.position.x + element.size.width));
   const bottom = Math.max(...elements.map((element: WidgetElement): number => element.position.y + element.size.height));
 
-  return {
-    x: left,
-    y: top,
-    width: right - left,
-    height: bottom - top
-  };
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 /** 当前多选命中的元素，保持Widget图层顺序。 */
