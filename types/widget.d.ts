@@ -18,6 +18,52 @@ export interface WidgetRenderContext {
 }
 
 /**
+ * Widget 运行态状态。
+ */
+export type WidgetRuntimeStatus = 'created' | 'mounted' | 'finished' | 'failure' | 'cancelled';
+
+/**
+ * Widget 运行态生命周期记录。
+ */
+export interface WidgetRuntimeLifecycle {
+  /** mounted 执行完成时间 */
+  mountedAt?: string;
+  /** unmounted 执行完成时间 */
+  unmountedAt?: string;
+}
+
+/**
+ * Widget 运行态状态快照。
+ */
+export interface WidgetRuntimeState {
+  /** Widget快照值 */
+  value: WidgetData;
+  /** Widget执行或展示状态 */
+  status: WidgetRuntimeStatus;
+  /** Widget运行态生命周期记录 */
+  lifecycle: WidgetRuntimeLifecycle;
+  /** Widget运行态渲染上下文 */
+  renderContext: WidgetRenderContext;
+}
+
+/**
+ * Widget 运行态变化来源。
+ */
+export type WidgetRuntimeChangeReason = 'mount' | 'interaction' | 'submit';
+
+/**
+ * Widget 运行态变化事件。
+ */
+export interface WidgetRuntimeChange extends WidgetRuntimeState {
+  /** 运行态变化来源 */
+  reason: WidgetRuntimeChangeReason;
+  /** 脚本声明的上行消息 */
+  sendMessage?: WidgetRuntimeSendMessage;
+  /** 节点提交输出，仅 submit 来源存在 */
+  output?: unknown;
+}
+
+/**
  * 模型可读取的小组件契约。
  */
 export interface WidgetContract {

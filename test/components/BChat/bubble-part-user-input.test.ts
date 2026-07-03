@@ -6,7 +6,7 @@
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import BubblePartUserInput from '@/components/BChat/components/MessageBubble/BubblePartUserInput.vue';
+import BubblePartUserInput from '@/components/BChat/components/MessageBubble/BubblePartUserInput/index.vue';
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: vi.fn(() => ({

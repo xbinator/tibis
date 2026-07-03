@@ -7,7 +7,7 @@ import type { VueWrapper } from '@vue/test-utils';
 import type { ChatMessageToolPart } from 'types/chat';
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import BubblePartTool from '@/components/BChat/components/MessageBubble/BubblePartTool.vue';
+import BubblePartTool from '@/components/BChat/components/MessageBubble/BubblePartTool/index.vue';
 
 const openFileMock = vi.hoisted(() => vi.fn<(_options: { filePath?: string | null }) => Promise<void>>().mockResolvedValue(undefined));
 

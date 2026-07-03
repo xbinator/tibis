@@ -4,25 +4,15 @@
  * @vitest-environment jsdom
  */
 import type { ChatMessageToolPart, ChatMessageWidgetPart } from 'types/chat';
-import type { WidgetData, WidgetRenderContext } from 'types/widget';
+import type { WidgetData, WidgetRenderContext, WidgetRuntimeChange } from 'types/widget';
 import { defineComponent, nextTick } from 'vue';
-import type { PropType } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import BubblePartWidget from '@/components/BChat/components/MessageBubble/BubblePartWidget.vue';
+import BubblePartWidget from '@/components/BChat/components/MessageBubble/BubblePartWidget/index.vue';
 import { resolveWidgetPartFromToolResult } from '@/components/BChat/utils/messageHelper';
 import type { BChatSubmitAction, BChatSubmitContext } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
-import type { WidgetRuntimeController } from '@/components/BWidget/hooks/useWidgetRuntime';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-
-const requestMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@/shared/platform/electron-api', () => ({
-  getElectronAPI: () => ({
-    request: requestMock
-  })
-}));
 
 /**
  * 创建统一提交上下文测试替身。
@@ -106,23 +96,28 @@ function createWidgetPart(code: string): ChatMessageWidgetPart {
   };
 }
 
+/**
+ * 创建 BWidgetRuntime 运行态变化事件。
+ * @param part - 来源小组件片段
+ * @param change - 运行态变化覆盖字段
+ * @returns 运行态变化事件
+ */
+function createRuntimeChange(part: ChatMessageWidgetPart, change: Partial<WidgetRuntimeChange> = {}): WidgetRuntimeChange {
+  return {
+    reason: 'mount',
+    value: part.value,
+    status: part.status,
+    lifecycle: part.lifecycle,
+    renderContext: part.renderContext,
+    ...change
+  };
+}
+
 /** BWidgetRuntime 测试替身。 */
 const BWidgetRuntimeStub = defineComponent({
   name: 'BWidgetRuntime',
-  emits: ['submit'],
+  emits: ['change', 'submit'],
   template: '<button class="widget-submit" type="button" @click="$emit(\'submit\', { coffeeId: \'latte\' })">提交</button>'
-});
-
-/** 暴露运行态控制器 prop 的 BWidgetRuntime 测试替身。 */
-const BWidgetRuntimeMethodProbeStub = defineComponent({
-  name: 'BWidgetRuntime',
-  props: {
-    runtime: {
-      type: Object as PropType<WidgetRuntimeController>,
-      default: undefined
-    }
-  },
-  template: '<div class="widget-method-probe"></div>'
 });
 
 /**
@@ -141,27 +136,6 @@ function mountBubblePartWidget(part: ChatMessageWidgetPart, props: Record<string
     global: {
       stubs: {
         BWidgetRuntime: BWidgetRuntimeStub
-      }
-    }
-  });
-}
-
-/**
- * 使用运行态控制器探针挂载小组件消息片段。
- * @param part - 小组件消息片段
- * @param props - 额外组件入参
- * @returns 组件包装器
- */
-function mountBubblePartWidgetWithMethodProbe(part: ChatMessageWidgetPart, props: Record<string, unknown> = {}): VueWrapper {
-  return mount(BubblePartWidget, {
-    props: {
-      part,
-      runtimeEnabled: true,
-      ...props
-    },
-    global: {
-      stubs: {
-        BWidgetRuntime: BWidgetRuntimeMethodProbeStub
       }
     }
   });
@@ -234,25 +208,9 @@ describe('BubblePartWidget', (): void => {
     ]);
   });
 
-  it('initializes mounted data with the managed request client', async (): Promise<void> => {
-    requestMock.mockResolvedValue({
-      status: 200,
-      ok: true,
-      url: 'https://api.example.com/weather?city=%E4%B8%8A%E6%B5%B7',
-      headers: {},
-      data: { temperature: 28 }
-    });
+  it('emits changed widget parts when the runtime view reports mounted data', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
-      ...createWidgetPart(
-        [
-          'Widget({',
-          '  async mounted() {',
-          "    const weather = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })",
-          '    this.weather = { temperature: weather.data.temperature }',
-          '  }',
-          '})'
-        ].join('\n')
-      ),
+      ...createWidgetPart('Widget({})'),
       status: 'created',
       lifecycle: {},
       renderContext: {
@@ -264,17 +222,30 @@ describe('BubblePartWidget', (): void => {
     };
 
     const wrapper = mountBubblePartWidget(widgetPart);
-    await flushWidgetRuntime();
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
+      'change',
+      createRuntimeChange(widgetPart, {
+        reason: 'mount',
+        status: 'mounted',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z'
+        },
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            weather: {
+              temperature: 28
+            }
+          }
+        }
+      })
+    );
+    await nextTick();
 
     const changedPart = wrapper.emitted('change')?.[0]?.[0] as ChatMessageWidgetPart;
 
-    expect(requestMock).toHaveBeenCalledWith({
-      method: 'GET',
-      url: 'https://api.example.com/weather',
-      query: {
-        city: '上海'
-      }
-    });
     expect(changedPart).toMatchObject({
       status: 'mounted',
       renderContext: {
@@ -314,7 +285,31 @@ describe('BubblePartWidget', (): void => {
       messageId: 'assistant-widget-message'
     });
 
-    await wrapper.get('.widget-submit').trigger('click');
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
+      'change',
+      createRuntimeChange(targetWidgetPart, {
+        reason: 'submit',
+        output: {
+          coffeeId: 'latte'
+        },
+        status: 'finished',
+        lifecycle: {
+          ...targetWidgetPart.lifecycle,
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            submitted: {
+              temperature: 35
+            }
+          }
+        }
+      })
+    );
+    await nextTick();
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const context = createSubmitContextMock();
@@ -350,7 +345,31 @@ describe('BubblePartWidget', (): void => {
       messageId: 'assistant-widget-message'
     });
 
-    await wrapper.get('.widget-submit').trigger('click');
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
+      'change',
+      createRuntimeChange(widgetPart, {
+        reason: 'submit',
+        output: {
+          coffeeId: 'latte'
+        },
+        status: 'finished',
+        lifecycle: {
+          ...widgetPart.lifecycle,
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            submitted: {
+              temperature: 28
+            }
+          }
+        }
+      })
+    );
+    await nextTick();
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const context = createSubmitContextMock();
@@ -373,16 +392,40 @@ describe('BubblePartWidget', (): void => {
     });
   });
 
-  it('exposes interaction expressions as fire-and-forget runtime actions in chat messages', (): void => {
+  it('sends widget runtime messages reported by interaction changes', async (): Promise<void> => {
     const widgetPart = createWidgetPart('Widget({})');
-    const wrapper = mountBubblePartWidgetWithMethodProbe(widgetPart, {
+    const wrapper = mountBubblePartWidget(widgetPart, {
       messageId: 'assistant-widget-message'
     });
-    const runtime = wrapper.findComponent({ name: 'BWidgetRuntime' }).props('runtime') as WidgetRuntimeController | undefined;
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
+      'change',
+      createRuntimeChange(widgetPart, {
+        reason: 'interaction',
+        status: 'finished',
+        lifecycle: {
+          ...widgetPart.lifecycle,
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        sendMessage: {
+          content: '确认下单',
+          isError: false
+        }
+      })
+    );
+    await nextTick();
 
-    const result = runtime?.runInteraction("this.$sendMessage('确认下单')");
+    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const context = createSubmitContextMock();
+    vi.mocked(context.getMessage).mockReturnValue(createAssistantMessage({ parts: [widgetPart] }));
+    await action.run(context);
 
-    expect(result).toBeUndefined();
-    expect(wrapper.emitted('submit')?.[0]?.[0]).toEqual(expect.objectContaining({ run: expect.any(Function) }));
+    expect(context.updateMessage).toHaveBeenCalledWith('assistant-widget-message', expect.any(Function));
+    expect(context.sendAdaptedUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessage: expect.objectContaining({
+          content: '确认下单'
+        })
+      })
+    );
   });
 });

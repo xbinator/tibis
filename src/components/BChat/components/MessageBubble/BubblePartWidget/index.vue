@@ -4,7 +4,15 @@
 -->
 <template>
   <div :class="name">
-    <BWidgetRuntime :render-context="part.renderContext" :runtime="widgetRuntimeController" :value="part.value" @submit="handleSubmit" />
+    <BWidgetRuntime
+      :lifecycle="part.lifecycle"
+      :render-context="part.renderContext"
+      :runtime-enabled="runtimeEnabled"
+      :status="part.status"
+      :value="part.value"
+      @change="handleRuntimeChange"
+      @submit="handleSubmit"
+    />
   </div>
 </template>
 
@@ -18,11 +26,10 @@ import type {
   ChatMessageWidgetResultPart,
   ChatMessageWidgetRuntime
 } from 'types/chat';
-import type { WidgetRuntimeSendMessage } from 'types/widget';
-import { computed, onMounted, watch } from 'vue';
+import type { WidgetRuntimeChange, WidgetRuntimeSendMessage } from 'types/widget';
+import { onMounted } from 'vue';
 import { isString } from 'lodash-es';
 import { nanoid } from 'nanoid';
-import type { WidgetRuntimeController } from '@/components/BWidget/hooks/useWidgetRuntime';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { createWidgetSubmitSuccessResult } from '@/shared/widget/protocol';
 import { stringifyJsonValue } from '@/utils/json';
@@ -34,7 +41,6 @@ import {
   type BChatAdaptedUserMessageSubmitInput,
   type BChatSubmitAction
 } from '../../../utils/submitAction';
-import { createWidgetHttpClient, createWidgetRuntimeInstance, finishWidgetRuntime, initWidgetMountState } from '../../../utils/widgetRuntime';
 
 defineOptions({ name: 'BubblePartWidget' });
 
@@ -60,18 +66,6 @@ const emit = defineEmits<{
 }>();
 
 const [name] = createNamespace('', 'message-bubble-widget');
-/** 小组件脚本托管 HTTP 客户端。 */
-const widgetHttpClient = createWidgetHttpClient();
-
-/**
- * 小组件片段收尾后的消息更新结果。
- */
-interface WidgetPartFinishMessageResult {
-  /** 更新后的消息。 */
-  message: Message;
-  /** 脚本声明的上行消息。 */
-  sendMessage?: WidgetRuntimeSendMessage;
-}
 
 /**
  * 将可渲染的小组件片段转换成工具片段内的运行态。
@@ -140,26 +134,6 @@ function createWidgetPartUpdatedMessage(currentMessage: Message, partId: string,
 }
 
 /**
- * 创建完成指定小组件片段后的消息。
- * @param currentMessage - 当前消息
- * @param partId - 小组件运行态所在的消息片段 ID
- * @returns 执行收尾后的消息；无法收尾时返回原消息
- */
-async function createWidgetPartFinishedMessage(currentMessage: Message, partId: string): Promise<WidgetPartFinishMessageResult> {
-  const hostPart = currentMessage.parts.find((part): boolean => part.id === partId);
-  const currentPart = hostPart ? resolveWidgetPartFromMessagePart(hostPart) : null;
-  if (!currentPart) return { message: currentMessage };
-
-  const finishResult = await finishWidgetRuntime(currentPart, { http: widgetHttpClient });
-  const message = createWidgetPartUpdatedMessage(currentMessage, partId, currentPart, finishResult.part);
-
-  return {
-    message,
-    ...(finishResult.sendMessage ? { sendMessage: finishResult.sendMessage } : {})
-  };
-}
-
-/**
  * 将小组件上行消息内容归一化为聊天文本 part。
  * @param content - 小组件上行消息内容
  * @returns 带稳定 ID 的文本消息片段
@@ -217,101 +191,98 @@ function createWidgetResultSubmitAction(output: unknown): BChatSubmitAction {
 }
 
 /**
- * 创建带运行态收尾的小组件提交动作。
- * @param action - 小组件默认提交动作
+ * 使用运行态变化结果创建下一版小组件片段。
+ * @param currentPart - 当前小组件片段
+ * @param change - BWidget 运行态变化
+ * @returns 合并运行态变化后的小组件片段
+ */
+function createWidgetPartFromRuntimeChange(currentPart: ChatMessageWidgetPart, change: WidgetRuntimeChange): ChatMessageWidgetPart {
+  return {
+    ...currentPart,
+    value: change.value,
+    status: change.status,
+    lifecycle: change.lifecycle,
+    renderContext: change.renderContext
+  };
+}
+
+/**
+ * 使用运行态变化结果更新宿主消息。
+ * @param currentMessage - 当前消息
+ * @param partId - 小组件运行态所在的消息片段 ID
+ * @param change - BWidget 运行态变化
+ * @returns 更新后的消息；找不到小组件片段时返回原消息
+ */
+function createWidgetRuntimeChangedMessage(currentMessage: Message, partId: string, change: WidgetRuntimeChange): Message {
+  const hostPart = currentMessage.parts.find((part): boolean => part.id === partId);
+  const currentPart = hostPart ? resolveWidgetPartFromMessagePart(hostPart) : null;
+  if (!currentPart) return currentMessage;
+
+  const nextPart = createWidgetPartFromRuntimeChange(currentPart, change);
+
+  return createWidgetPartUpdatedMessage(currentMessage, partId, currentPart, nextPart);
+}
+
+/**
+ * 创建运行态变化提交动作。
+ * @param change - BWidget 运行态变化
  * @returns 统一提交动作
  */
-function createWidgetRuntimeFinishSubmitAction(action: BChatSubmitAction): BChatSubmitAction {
+function createWidgetRuntimeChangeSubmitAction(change: WidgetRuntimeChange): BChatSubmitAction {
   const { messageId } = props;
-  if (!messageId) return action;
+  const submitAction = change.reason === 'submit' ? createWidgetResultSubmitAction(change.output) : null;
 
   return {
     async run(context): Promise<void> {
-      const currentMessage = context.getMessage(messageId);
-      if (!currentMessage) {
-        await action.run(context);
+      if (messageId) {
+        const currentMessage = context.getMessage(messageId);
+        if (currentMessage) {
+          const nextMessage = createWidgetRuntimeChangedMessage(currentMessage, props.part.id, change);
+          await context.updateMessage(messageId, (): Message => nextMessage);
+        }
+      }
+
+      if (change.sendMessage) {
+        await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(change.sendMessage));
         return;
       }
 
-      const finishResult = await createWidgetPartFinishedMessage(currentMessage, props.part.id);
-      await context.updateMessage(messageId, (): Message => finishResult.message);
-
-      if (finishResult.sendMessage) {
-        await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(finishResult.sendMessage));
-        return;
+      if (submitAction) {
+        await submitAction.run(context);
       }
-
-      await action.run(context);
     }
   };
 }
 
 /**
- * 创建小组件交互表达式提交动作。
- * @param interactionCode - 元素交互表达式
- * @returns 统一提交动作
+ * 处理 BWidget 内部脚本执行完成后的运行态变化。
+ * @param change - BWidget 运行态变化
  */
-function createWidgetInteractionSubmitAction(interactionCode: string): BChatSubmitAction {
-  const { messageId } = props;
+function handleRuntimeChange(change: WidgetRuntimeChange): void {
+  if (!props.messageId) {
+    emit('change', createWidgetPartFromRuntimeChange(props.part, change));
 
-  return {
-    async run(context): Promise<void> {
-      if (!messageId) return;
-
-      const currentMessage = context.getMessage(messageId);
-      if (!currentMessage) return;
-
-      const hostPart = currentMessage.parts.find((part): boolean => part.id === props.part.id);
-      const currentPart = hostPart ? resolveWidgetPartFromMessagePart(hostPart) : null;
-      if (!currentPart) return;
-
-      const interactionResult = await createWidgetRuntimeInstance(currentPart, { http: widgetHttpClient }).runInteraction(interactionCode);
-      const nextMessage = createWidgetPartUpdatedMessage(currentMessage, props.part.id, currentPart, interactionResult.part);
-      await context.updateMessage(messageId, (): Message => nextMessage);
-
-      if (interactionResult.sendMessage) {
-        await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(interactionResult.sendMessage));
-      }
+    if (change.sendMessage) {
+      emit('submit', createRuntimeUserMessageSubmitAction(createWidgetSendMessageSubmitInput(change.sendMessage)));
+      return;
     }
-  };
-}
 
-/**
- * 在无宿主消息时直接运行小组件交互表达式。
- * @param interactionCode - 元素交互表达式
- */
-async function runStandaloneWidgetInteraction(interactionCode: string): Promise<void> {
-  const interactionResult = await createWidgetRuntimeInstance(props.part, { http: widgetHttpClient }).runInteraction(interactionCode);
-  if (interactionResult.part !== props.part) {
-    emit('change', interactionResult.part);
+    if (change.reason === 'submit') {
+      emit('submit', createWidgetResultSubmitAction(change.output));
+    }
+
+    return;
   }
+
+  emit('submit', createWidgetRuntimeChangeSubmitAction(change));
 }
-
-/**
- * 供小组件元素运行自身交互表达式的运行态控制器。
- */
-const widgetRuntimeController = computed<WidgetRuntimeController | undefined>(() => {
-  if (!props.runtimeEnabled) return undefined;
-
-  return {
-    runInteraction(interactionCode: string): void {
-      const { messageId } = props;
-      if (!messageId) {
-        runStandaloneWidgetInteraction(interactionCode).catch((): undefined => undefined);
-        return;
-      }
-
-      emit('submit', createWidgetInteractionSubmitAction(interactionCode));
-    }
-  };
-});
 
 /**
  * 透传小组件提交结果并补充会话信息。
  * @param output - 小组件输出
  */
 function handleSubmit(output: unknown): void {
-  emit('submit', createWidgetRuntimeFinishSubmitAction(createWidgetResultSubmitAction(output)));
+  emit('submit', createWidgetResultSubmitAction(output));
 }
 
 /**
@@ -323,43 +294,9 @@ function requestWidgetRuntimeInitialization(): void {
   emit('submit', createMessageUpdateSubmitAction(props.messageId, initializeWidgetToolRuntimeParts));
 }
 
-/**
- * 初始化小组件消息运行态，并把状态变化交给消息宿主写回。
- */
-async function initWidgetRuntime(): Promise<void> {
-  if (!props.runtimeEnabled) return;
-
-  const nextPart = await initWidgetMountState(props.part, { http: widgetHttpClient });
-  if (nextPart === props.part) return;
-
-  const { messageId } = props;
-  if (!messageId) {
-    emit('change', nextPart);
-    return;
-  }
-
-  emit(
-    'submit',
-    createMessageUpdateSubmitAction(
-      messageId,
-      (currentMessage: Message): Message => createWidgetPartUpdatedMessage(currentMessage, props.part.id, props.part, nextPart)
-    )
-  );
-}
-
 onMounted((): void => {
   requestWidgetRuntimeInitialization();
-  initWidgetRuntime().catch((): undefined => undefined);
 });
-
-watch(
-  () => props.runtimeEnabled,
-  (runtimeEnabled): void => {
-    if (!runtimeEnabled) return;
-
-    initWidgetRuntime().catch((): undefined => undefined);
-  }
-);
 </script>
 
 <style scoped lang="less">

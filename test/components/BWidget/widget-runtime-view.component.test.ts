@@ -3,7 +3,7 @@
  * @description 验证 BWidget 运行态只读视图按内容边界缩放渲染 Widget。
  * @vitest-environment jsdom
  */
-import type { WidgetData, WidgetRenderContext } from 'types/widget';
+import type { WidgetData, WidgetRenderContext, WidgetRuntimeChange } from 'types/widget';
 import { defineComponent, nextTick } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { cloneDeep } from 'lodash-es';
@@ -151,6 +151,19 @@ async function mountRuntime(dataItem: WidgetData, renderContext: WidgetRenderCon
 }
 
 /**
+ * 等待运行态异步脚本执行完成。
+ * @returns 异步完成信号
+ */
+async function flushWidgetRuntime(): Promise<void> {
+  await nextTick();
+  await Promise.resolve();
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+  await nextTick();
+}
+
+/**
  * 通过节点 ID 查找Widget 节点。
  * @param wrapper - 组件包装器
  * @param id - 节点 ID
@@ -184,6 +197,32 @@ const WidgetNodeRuntimeProbeStub = defineComponent({
     RuntimeControllerProbe
   },
   template: '<RuntimeControllerProbe />'
+});
+
+/** 运行态计数交互探针。 */
+const RuntimeCounterProbe = defineComponent({
+  name: 'RuntimeCounterProbe',
+  setup() {
+    const runtime = useWidgetRuntime();
+    /**
+     * 模拟元素连续更新运行态数据。
+     */
+    function increment(): void {
+      runtime.value?.runInteraction('this.count = (this.count || 0) + 1');
+    }
+
+    return { increment };
+  },
+  template: '<button class="runtime-counter-probe" type="button" @click="increment">递增</button>'
+});
+
+/** WidgetNode 测试替身，用于验证运行态交互使用本地最新状态串行执行。 */
+const WidgetNodeRuntimeCounterStub = defineComponent({
+  name: 'WidgetNode',
+  components: {
+    RuntimeCounterProbe
+  },
+  template: '<RuntimeCounterProbe />'
 });
 
 describe('BWidgetRuntime', (): void => {
@@ -284,6 +323,134 @@ describe('BWidgetRuntime', (): void => {
     wrapper.findComponent({ name: 'WidgetNode' }).vm.$emit('submit', output);
 
     expect(wrapper.emitted('submit')?.[0]).toEqual([output]);
+    wrapper.unmount();
+  });
+
+  it('executes mounted scripts and emits runtime changes from the view boundary', async (): Promise<void> => {
+    const dataItem = {
+      ...createRuntimeWidgetData(),
+      execute: {
+        code: ['Widget({', '  mounted() {', '    this.weather = { temperature: 29 }', '  }', '})'].join('\n')
+      }
+    };
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {}
+        },
+        runtimeEnabled: true,
+        status: 'created',
+        lifecycle: {}
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+
+    expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
+      reason: 'mount',
+      status: 'mounted',
+      renderContext: {
+        data: {
+          weather: {
+            temperature: 29
+          }
+        }
+      }
+    });
+    wrapper.unmount();
+  });
+
+  it('finishes runtime scripts before reporting node submit changes', async (): Promise<void> => {
+    const output = {
+      coffeeId: 'latte'
+    };
+    const dataItem = {
+      ...createRuntimeWidgetData(),
+      execute: {
+        code: ['Widget({', '  unmounted() {', '    this.submitted = { coffeeId: this.$input.coffeeId }', '  }', '})'].join('\n')
+      }
+    };
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {
+            coffeeId: 'latte'
+          },
+          data: {}
+        },
+        runtimeEnabled: true,
+        status: 'mounted',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z'
+        }
+      },
+      attachTo: document.body
+    });
+
+    wrapper.findComponent({ name: 'WidgetNode' }).vm.$emit('submit', output);
+    await flushWidgetRuntime();
+
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
+      reason: 'submit',
+      output,
+      status: 'finished',
+      renderContext: {
+        data: {
+          submitted: {
+            coffeeId: 'latte'
+          }
+        }
+      }
+    });
+    wrapper.unmount();
+  });
+
+  it('serializes runtime interactions against local state before parent props are written back', async (): Promise<void> => {
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: {
+          ...createRuntimeWidgetData(),
+          execute: {
+            code: 'Widget({})'
+          }
+        },
+        renderContext: {
+          input: {},
+          data: {
+            count: 0
+          }
+        },
+        runtimeEnabled: true,
+        status: 'mounted',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z'
+        }
+      },
+      global: {
+        stubs: {
+          WidgetNode: WidgetNodeRuntimeCounterStub
+        }
+      },
+      attachTo: document.body
+    });
+
+    await nextTick();
+    await wrapper.get('.runtime-counter-probe').trigger('click');
+    await wrapper.get('.runtime-counter-probe').trigger('click');
+    await flushWidgetRuntime();
+
+    const changes = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
+
+    expect(changes).toHaveLength(2);
+    expect(changes[0].renderContext.data.count).toBe(1);
+    expect(changes[1].renderContext.data.count).toBe(2);
     wrapper.unmount();
   });
 

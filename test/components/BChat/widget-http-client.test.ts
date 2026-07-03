@@ -4,7 +4,7 @@
  */
 import type { RequestInput, RequestResponse } from 'types/request';
 import { describe, expect, it } from 'vitest';
-import { createWidgetHttpClient } from '@/components/BChat/utils/widgetRuntime';
+import { createWidgetHttpClient } from '@/components/BWidget/utils/widgetRuntime';
 
 describe('request protocol', (): void => {
   it('uses a small request and response contract without permission config', (): void => {

@@ -23,14 +23,22 @@
 
 <script setup lang="ts">
 import type { WidgetData, WidgetShapeElement, WidgetSize } from './types';
-import type { WidgetRenderContext } from 'types/widget';
+import type { WidgetRenderContext, WidgetRuntimeChange, WidgetRuntimeLifecycle, WidgetRuntimeState, WidgetRuntimeStatus } from 'types/widget';
 import type { CSSProperties } from 'vue';
-import { computed } from 'vue';
+import { computed, onMounted, shallowRef, watch } from 'vue';
+import { isEqual } from 'lodash-es';
 import { createNamespace } from '@/utils/namespace';
 import { provideRenderContext } from './hooks/useRenderContext';
 import { useViewportSize } from './hooks/useViewportSize';
 import { provideWidgetRuntime, type WidgetRuntimeController } from './hooks/useWidgetRuntime';
 import WidgetNode from './renderers/WidgetNode.vue';
+import {
+  createWidgetHttpClient,
+  createWidgetRuntimeInstance,
+  finishWidgetRuntime,
+  initWidgetMountState,
+  type WidgetRuntimeFinishResult
+} from './utils/widgetRuntime';
 import { createWidgetRuntimeLayout, type WidgetRuntimeElementLayout } from './utils/widgetRuntimeLayout';
 
 defineOptions({ name: 'BWidgetRuntime' });
@@ -43,6 +51,12 @@ interface Props {
   value: WidgetData;
   /** 运行态渲染上下文 */
   renderContext: WidgetRenderContext;
+  /** 是否启用运行态脚本执行 */
+  runtimeEnabled?: boolean;
+  /** 当前运行态状态 */
+  status?: WidgetRuntimeStatus;
+  /** 当前运行态生命周期记录 */
+  lifecycle?: WidgetRuntimeLifecycle;
   /** 运行态控制器，供元素自行调用JS 脚本 methods */
   runtime?: WidgetRuntimeController;
   /** 内容留白 */
@@ -60,28 +74,49 @@ interface WidgetRuntimeRenderableElement {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  lifecycle: () => ({}),
   padding: 16,
-  runtime: undefined
+  runtime: undefined,
+  runtimeEnabled: false,
+  status: 'created'
 });
 
 const emit = defineEmits<{
+  /** 运行态脚本执行完成后的状态变化 */
+  change: [change: WidgetRuntimeChange];
   /** 提交运行态输出 */
   submit: [output: unknown];
 }>();
 
 const [name, bem] = createNamespace('widget-runtime');
 const { viewportSize } = useViewportSize('rootRef');
+/** 最多保留的待宿主回写运行态数量。 */
+const MAX_PENDING_RUNTIME_STATE_COUNT = 20;
+/** 小组件脚本托管 HTTP 客户端。 */
+const widgetHttpClient = createWidgetHttpClient();
+/** 运行态本地快照，用于衔接宿主 props 回写前的连续交互。 */
+const localRuntimeState = shallowRef<WidgetRuntimeState | null>(null);
+/** 已发出但宿主 props 可能尚未回写的运行态快照。 */
+const pendingRuntimeStates = shallowRef<WidgetRuntimeState[]>([]);
+/** 串行运行态脚本任务，避免并发交互读取同一个旧快照。 */
+let runtimeTaskQueue: Promise<void> = Promise.resolve();
 
+/** 来自宿主 props 的运行态状态快照。 */
+const propsRuntimeState = computed<WidgetRuntimeState>(() => ({
+  value: props.value,
+  status: props.status,
+  lifecycle: props.lifecycle,
+  renderContext: props.renderContext
+}));
+/** 当前有效运行态状态快照。 */
+const runtimeState = computed<WidgetRuntimeState>(() => localRuntimeState.value ?? propsRuntimeState.value);
 /** 运行态渲染上下文响应式包装。 */
-const providedRenderContext = computed<WidgetRenderContext | undefined>(() => props.renderContext);
-/** 运行态控制器响应式包装。 */
-const providedRuntime = computed<WidgetRuntimeController | undefined>(() => props.runtime);
+const providedRenderContext = computed<WidgetRenderContext | undefined>(() => runtimeState.value.renderContext);
 
 provideRenderContext(providedRenderContext);
-provideWidgetRuntime(providedRuntime);
 
 /** 当前运行态内容布局。 */
-const runtimeLayout = computed(() => createWidgetRuntimeLayout(props.value.elements, props.renderContext, props.padding));
+const runtimeLayout = computed(() => createWidgetRuntimeLayout(runtimeState.value.value.elements, runtimeState.value.renderContext, props.padding));
 /** 当前运行态内容缩放比例。 */
 const runtimeScale = computed<number>(() => {
   if (!runtimeLayout.value.elements.length) {
@@ -138,12 +173,190 @@ function ignoreContextMenu(): void {
 }
 
 /**
+ * 判断两个运行态快照是否表示同一版宿主状态。
+ * @param left - 左侧运行态快照
+ * @param right - 右侧运行态快照
+ * @returns 两个快照内容一致时返回 true
+ */
+function isSameRuntimeState(left: WidgetRuntimeState, right: WidgetRuntimeState): boolean {
+  return isEqual(left, right);
+}
+
+/**
+ * 记录已上报但宿主尚未确认的运行态快照。
+ * @param state - 已上报的运行态快照
+ */
+function rememberPendingRuntimeState(state: WidgetRuntimeState): void {
+  pendingRuntimeStates.value = [...pendingRuntimeStates.value, state].slice(-MAX_PENDING_RUNTIME_STATE_COUNT);
+}
+
+/**
+ * 将脚本执行结果先提交到本地运行态快照。
+ * @param state - 脚本执行后的运行态快照
+ */
+function commitLocalRuntimeState(state: WidgetRuntimeState): void {
+  localRuntimeState.value = state;
+  rememberPendingRuntimeState(state);
+}
+
+/**
+ * 从脚本执行结果中提取运行态快照。
+ * @param result - 脚本执行结果
+ * @returns 可写回宿主的运行态快照
+ */
+function createStateFromRuntimeResult(result: WidgetRuntimeFinishResult): WidgetRuntimeState {
+  return {
+    value: result.state.value,
+    status: result.state.status,
+    lifecycle: result.state.lifecycle,
+    renderContext: result.state.renderContext
+  };
+}
+
+/**
+ * 根据脚本执行结果创建运行态变化事件。
+ * @param reason - 运行态变化来源
+ * @param result - 脚本执行结果
+ * @param output - 节点提交输出
+ * @returns 运行态变化事件
+ */
+function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult, output?: unknown): WidgetRuntimeChange {
+  const state = createStateFromRuntimeResult(result);
+
+  return {
+    reason,
+    value: state.value,
+    status: state.status,
+    lifecycle: state.lifecycle,
+    renderContext: state.renderContext,
+    ...(result.sendMessage ? { sendMessage: result.sendMessage } : {}),
+    ...(reason === 'submit' ? { output } : {})
+  };
+}
+
+/**
+ * 提交运行态变化并通知宿主。
+ * @param reason - 运行态变化来源
+ * @param result - 脚本执行结果
+ * @param output - 节点提交输出
+ */
+function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult, output?: unknown): void {
+  const change = createRuntimeChange(reason, result, output);
+
+  commitLocalRuntimeState(createStateFromRuntimeResult(result));
+  emit('change', change);
+}
+
+/**
+ * 将运行态任务追加到串行队列。
+ * @param task - 待运行的异步任务
+ */
+function enqueueRuntimeTask(task: () => Promise<void>): void {
+  const queuedTask = runtimeTaskQueue.then(task, task);
+
+  runtimeTaskQueue = queuedTask.catch((): undefined => undefined);
+}
+
+/**
+ * 初始化运行态 mounted 生命周期。
+ */
+async function initWidgetRuntime(): Promise<void> {
+  if (!props.runtimeEnabled) return;
+
+  const currentState = runtimeState.value;
+  const nextState = await initWidgetMountState(currentState, { http: widgetHttpClient });
+  if (nextState === currentState) return;
+
+  emitRuntimeChange('mount', { state: nextState });
+}
+
+/**
+ * 运行元素声明的交互表达式并上报变化。
+ * @param interactionCode - 元素交互表达式
+ */
+async function runRuntimeInteraction(interactionCode: string): Promise<void> {
+  if (!props.runtimeEnabled) return;
+
+  const currentState = runtimeState.value;
+  const result = await createWidgetRuntimeInstance(currentState, { http: widgetHttpClient }).runInteraction(interactionCode);
+  if (result.state === currentState && !result.sendMessage) return;
+
+  emitRuntimeChange('interaction', result);
+}
+
+/** 运行态控制器，供元素运行自身交互表达式。 */
+const widgetRuntimeController: WidgetRuntimeController = {
+  runInteraction(interactionCode: string): void {
+    enqueueRuntimeTask((): Promise<void> => runRuntimeInteraction(interactionCode));
+  }
+};
+/** 运行态控制器响应式包装。 */
+const providedRuntime = computed<WidgetRuntimeController | undefined>(() => props.runtime ?? (props.runtimeEnabled ? widgetRuntimeController : undefined));
+
+provideWidgetRuntime(providedRuntime);
+
+/**
  * 向使用方透传运行态节点提交结果。
  * @param output - 节点提交输出
  */
 function handleNodeSubmit(output: unknown): void {
+  if (props.runtimeEnabled) {
+    enqueueRuntimeTask(async (): Promise<void> => {
+      const result = await finishWidgetRuntime(runtimeState.value, { http: widgetHttpClient });
+
+      emitRuntimeChange('submit', result, output);
+    });
+    return;
+  }
+
   emit('submit', output);
 }
+
+/**
+ * 使用宿主 props 回写状态清理本地运行态快照。
+ * @param nextState - 宿主 props 最新运行态快照
+ */
+function syncLocalRuntimeStateFromProps(nextState: WidgetRuntimeState): void {
+  if (!props.runtimeEnabled) {
+    localRuntimeState.value = null;
+    pendingRuntimeStates.value = [];
+    return;
+  }
+
+  if (!localRuntimeState.value) return;
+
+  const matchedIndex = pendingRuntimeStates.value.findIndex((state): boolean => isSameRuntimeState(state, nextState));
+  if (matchedIndex >= 0) {
+    pendingRuntimeStates.value = pendingRuntimeStates.value.slice(matchedIndex + 1);
+
+    if (pendingRuntimeStates.value.length === 0 && isSameRuntimeState(localRuntimeState.value, nextState)) {
+      localRuntimeState.value = null;
+    }
+
+    return;
+  }
+
+  if (!pendingRuntimeStates.value.length) {
+    localRuntimeState.value = null;
+  }
+}
+
+onMounted((): void => {
+  enqueueRuntimeTask(initWidgetRuntime);
+});
+
+watch(
+  () => [props.runtimeEnabled, props.status, props.lifecycle.mountedAt] as const,
+  ([runtimeEnabled]): void => {
+    if (!runtimeEnabled) return;
+
+    enqueueRuntimeTask(initWidgetRuntime);
+  }
+);
+
+watch(propsRuntimeState, (nextState): void => {
+  syncLocalRuntimeStateFromProps(nextState);
+});
 </script>
 
 <style lang="less" scoped>

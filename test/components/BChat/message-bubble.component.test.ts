@@ -5,7 +5,7 @@
  */
 /* eslint-disable vue/one-component-per-file */
 import type { ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart } from 'types/chat';
-import type { WidgetData, WidgetRenderContext } from 'types/widget';
+import type { WidgetData, WidgetRenderContext, WidgetRuntimeChange } from 'types/widget';
 import { defineComponent } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -195,6 +195,32 @@ function createWeatherRenderContext(): WidgetRenderContext {
 }
 
 /**
+ * 创建 BWidgetRuntime 运行态变化事件。
+ * @param part - 来源小组件片段
+ * @param change - 运行态变化覆盖字段
+ * @returns 运行态变化事件
+ */
+function createRuntimeChange(part: ChatMessageWidgetPart, change: Partial<WidgetRuntimeChange> = {}): WidgetRuntimeChange {
+  return {
+    reason: 'mount',
+    value: part.value,
+    status: part.status,
+    lifecycle: part.lifecycle,
+    renderContext: part.renderContext,
+    ...change
+  };
+}
+
+/**
+ * 从消息气泡中的 BWidgetRuntime 发出运行态变化。
+ * @param wrapper - 消息气泡包装器
+ * @param change - 运行态变化事件
+ */
+function emitWidgetRuntimeChange(wrapper: VueWrapper, change: WidgetRuntimeChange): void {
+  wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('change', change);
+}
+
+/**
  * 创建等待用户选择的工具片段。
  * @returns 等待用户选择工具片段
  */
@@ -380,6 +406,26 @@ describe('MessageBubble', (): void => {
       })
     );
 
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(widgetPart, {
+        reason: 'mount',
+        status: 'mounted',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z'
+        },
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            weather: {
+              temperature: 31
+            }
+          }
+        }
+      })
+    );
     await flushPromises();
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
@@ -454,10 +500,37 @@ describe('MessageBubble', (): void => {
       })
     );
 
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(widgetPart, {
+        reason: 'mount',
+        status: 'mounted',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z'
+        },
+        renderContext: {
+          input: {
+            city: '杭州'
+          },
+          data: {
+            weather: {
+              temperature: 32
+            }
+          }
+        }
+      })
+    );
     await flushPromises();
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(
+      createAssistantMessage({
+        id: 'assistant-widget-second',
+        content: '',
+        parts: [{ id: 'part0012', type: 'text', text: '天气卡片' }, widgetPart]
+      })
+    );
     await action.run(submitContext);
 
     expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget-second', expect.any(Function));
@@ -519,7 +592,32 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', output);
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(widgetPart, {
+        reason: 'submit',
+        output,
+        status: 'finished',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z',
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            weather: {
+              temperature: 28
+            },
+            submitted: {
+              city: '上海',
+              temperature: 28
+            }
+          }
+        }
+      })
+    );
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
@@ -610,7 +708,32 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', output);
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(widgetPart, {
+        reason: 'submit',
+        output,
+        status: 'finished',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z',
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            weather: {
+              temperature: 28
+            },
+            submitted: {
+              city: '上海',
+              temperature: 28
+            }
+          }
+        }
+      })
+    );
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
@@ -693,7 +816,42 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', { coffeeId: 'latte' });
+    await wrapper.setProps({
+      message: createAssistantMessage({
+        id: 'assistant-widget-latest-submit',
+        content: '',
+        parts: [latestWidgetPart]
+      })
+    });
+    await flushPromises();
+
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(latestWidgetPart, {
+        reason: 'submit',
+        output: {
+          coffeeId: 'latte'
+        },
+        status: 'finished',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z',
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            weather: {
+              temperature: 35
+            },
+            submitted: {
+              temperature: 35
+            }
+          }
+        }
+      })
+    );
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
@@ -756,7 +914,24 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', { coffeeId: 'latte' });
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(widgetPart, {
+        reason: 'submit',
+        output: {
+          coffeeId: 'latte'
+        },
+        status: 'finished',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z',
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        sendMessage: {
+          content: [{ type: 'text', text: '确认下单' }],
+          isError: false
+        }
+      })
+    );
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
@@ -815,7 +990,24 @@ describe('MessageBubble', (): void => {
     });
     const wrapper = mountMessageBubble(message);
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', { coffeeId: 'latte' });
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(widgetPart, {
+        reason: 'submit',
+        output: {
+          coffeeId: 'latte'
+        },
+        status: 'finished',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z',
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        sendMessage: {
+          content: '库存不足',
+          isError: true
+        }
+      })
+    );
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
@@ -870,7 +1062,33 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('submit', { coffeeId: 'latte' });
+    await wrapper.setProps({
+      message: createAssistantMessage({
+        id: 'assistant-widget-latest-message',
+        content: '',
+        parts: [latestWidgetPart]
+      })
+    });
+    await flushPromises();
+
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(latestWidgetPart, {
+        reason: 'submit',
+        output: {
+          coffeeId: 'latte'
+        },
+        status: 'finished',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z',
+          unmountedAt: '2026-07-01T00:01:00.000Z'
+        },
+        sendMessage: {
+          content: '确认最新订单',
+          isError: false
+        }
+      })
+    );
 
     const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
     const submitContext = createSubmitContextMock();
@@ -1016,8 +1234,28 @@ describe('MessageBubble', (): void => {
     await wrapper.setProps({ message: nextMessage });
     await flushPromises();
 
+    const mountedToolPart = nextMessage.parts[0] as ChatMessageToolPart;
+    const mountedWidgetPart: ChatMessageWidgetPart = {
+      id: toolPart.id,
+      type: 'widget',
+      ...mountedToolPart.widget!
+    };
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(mountedWidgetPart, {
+        reason: 'mount',
+        status: 'mounted',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z'
+        },
+        renderContext: createWeatherRenderContext()
+      })
+    );
+    await flushPromises();
+
     const mountedAction = wrapper.emitted('submit')?.[1]?.[0] as BChatSubmitAction;
     const mountedSubmitContext = createSubmitContextMock();
+    vi.mocked(mountedSubmitContext.getMessage).mockReturnValue(nextMessage);
     await mountedAction.run(mountedSubmitContext);
 
     expect(mountedSubmitContext.updateMessage).toHaveBeenCalledWith('assistant-open-widget', expect.any(Function));

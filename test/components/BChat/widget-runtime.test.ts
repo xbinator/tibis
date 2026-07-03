@@ -10,7 +10,7 @@ import {
   finishWidgetRuntime as finishWidgetRuntimeBase,
   finishWidgetUnmountState as finishWidgetUnmountStateBase,
   initWidgetMountState as initWidgetMountStateBase
-} from '@/components/BChat/utils/widgetRuntime';
+} from '@/components/BWidget/utils/widgetRuntime';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { runSandboxCode } from '@/utils/sandbox';
 
@@ -435,7 +435,7 @@ describe('widgetRuntime', (): void => {
 
     const result = await finishWidgetRuntime(part);
 
-    expect(result.part.status).toBe('finished');
+    expect(result.state.status).toBe('finished');
     expect(result.sendMessage).toEqual({
       content: [expect.objectContaining({ type: 'text', text: '确认下单' })],
       isError: false
@@ -484,9 +484,9 @@ describe('widgetRuntime', (): void => {
       ['this.confirmed = true', "this.$sendMessage('确认下单')"].join('\n')
     );
 
-    expect(result.part.status).toBe('finished');
-    expect(result.part.lifecycle.unmountedAt).toBe('2026-07-01T00:02:00.000Z');
-    expect(result.part.renderContext.data).toEqual({ confirmed: true });
+    expect(result.state.status).toBe('finished');
+    expect(result.state.lifecycle.unmountedAt).toBe('2026-07-01T00:02:00.000Z');
+    expect(result.state.renderContext.data).toEqual({ confirmed: true });
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
@@ -505,8 +505,8 @@ describe('widgetRuntime', (): void => {
       ['this.confirmed = true', "this.$sendMessage('确认下单')"].join('\n')
     );
 
-    expect(result.part.status).toBe('finished');
-    expect(result.part.renderContext.data).toEqual({
+    expect(result.state.status).toBe('finished');
+    expect(result.state.renderContext.data).toEqual({
       confirmed: true,
       cleanedUp: true
     });
@@ -535,8 +535,8 @@ describe('widgetRuntime', (): void => {
 
     const result = await createWidgetRuntimeInstance(part, { now: () => new Date('2026-07-01T00:02:00.000Z') }).runInteraction('submitOrder()');
 
-    expect(result.part.status).toBe('finished');
-    expect(result.part.renderContext.data).toEqual({ confirmed: true });
+    expect(result.state.status).toBe('finished');
+    expect(result.state.renderContext.data).toEqual({ confirmed: true });
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
@@ -553,8 +553,8 @@ describe('widgetRuntime', (): void => {
       ['try {', '  explode()', '} catch (error) {', '  this.methodErrorHandled = true', '}'].join('\n')
     );
 
-    expect(result.part.status).toBe('mounted');
-    expect(result.part.renderContext.data).toEqual({
+    expect(result.state.status).toBe('mounted');
+    expect(result.state.renderContext.data).toEqual({
       methodErrorHandled: true
     });
   });
@@ -572,8 +572,8 @@ describe('widgetRuntime', (): void => {
 
     const result = await createWidgetRuntimeInstance(part).runInteraction("selectCoffee('latte', this.$input.city)");
 
-    expect(result.part.status).toBe('mounted');
-    expect(result.part.renderContext.data).toEqual({
+    expect(result.state.status).toBe('mounted');
+    expect(result.state.renderContext.data).toEqual({
       selection: {
         id: 'latte',
         city: '上海'
@@ -592,7 +592,7 @@ describe('widgetRuntime', (): void => {
 
     const result = await createWidgetRuntimeInstance(part).runInteraction('unknownAction()');
 
-    expect(result.part.status).toBe('failure');
+    expect(result.state.status).toBe('failure');
     expect(part.status).toBe('mounted');
   });
 
@@ -607,8 +607,8 @@ describe('widgetRuntime', (): void => {
 
     const result = await createWidgetRuntimeInstance(part).runInteraction("this.selectedCoffee = 'latte'");
 
-    expect(result.part.status).toBe('mounted');
-    expect(result.part.renderContext.data).toEqual({
+    expect(result.state.status).toBe('mounted');
+    expect(result.state.renderContext.data).toEqual({
       selectedCoffee: 'latte'
     });
     expect(result.sendMessage).toBeUndefined();
