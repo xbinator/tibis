@@ -9,7 +9,6 @@ import { imageElementSchema } from './Image/schema';
 import ImageSetter from './Image/Setter.vue';
 import RectView from './Rect/index.vue';
 import { rectElementSchema } from './Rect/schema';
-import RectSetter from './Rect/Setter.vue';
 import TextView from './Text/index.vue';
 import { textElementSchema } from './Text/schema';
 import TextSetter from './Text/Setter.vue';
@@ -33,7 +32,6 @@ const widgetElementViewByName = new Map<string, Component>([
 
 /** 元素专属属性设置面板索引。 */
 const widgetElementSetterByName = new Map<string, Component>([
-  [rectElementSchema.name, RectSetter],
   [textElementSchema.name, TextSetter],
   [imageElementSchema.name, ImageSetter]
 ]);
