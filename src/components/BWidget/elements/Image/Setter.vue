@@ -3,15 +3,14 @@
   @description BWidget 图片元素专属属性设置面板。
 -->
 <template>
-  <BSectionBlock title="图片">
-    <BSectionItem label="地址" direction="vertical">
+  <BSectionBlock title="图片" label-min-width="60">
+    <BSectionItem label="地址" tooltip="支持 URL 或变量插值，例如 {{ avatar }}">
       <AInput v-model:value="imageSrc" placeholder="URL 或变量插值" allow-clear />
-      <div v-pre class="widget-image-setter__hint">支持 URL 或变量插值，例如 {{ avatar }}</div>
     </BSectionItem>
     <BSectionItem label="填充">
       <ASelect v-model:value="element.metadata.fit" :options="WIDGET_IMAGE_FIT_OPTIONS" />
     </BSectionItem>
-    <BSectionItem label="替代文本" direction="vertical">
+    <BSectionItem label="替代文本" tooltip="无障碍描述（可选）">
       <AInput v-model:value="element.metadata.alt" placeholder="无障碍描述（可选）" allow-clear />
     </BSectionItem>
   </BSectionBlock>
@@ -30,10 +29,4 @@ const element = defineModel<WidgetElement<WidgetImageElementMetadata>>('element'
 const imageSrc = useElementTemplate(element, 'src');
 </script>
 
-<style lang="less" scoped>
-.widget-image-setter__hint {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-tertiary);
-}
-</style>
+<style lang="less" scoped></style>

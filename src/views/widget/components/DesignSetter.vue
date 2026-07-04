@@ -4,13 +4,6 @@
 -->
 <template>
   <div>
-    <!-- 基础 -->
-    <BSectionBlock title="基础">
-      <BSectionItem label="名称">
-        <AInput v-model:value="dataItem.title" />
-      </BSectionItem>
-    </BSectionBlock>
-
     <!-- 文字 -->
     <BSectionBlock title="文字">
       <div :class="$style.fieldGrid">
@@ -65,7 +58,7 @@
     </BSectionBlock>
 
     <!-- 边框 -->
-    <BSectionBlock title="描边">
+    <BSectionBlock title="边框">
       <BSectionItem label="线形">
         <BSelect v-model:value="dataItem.style.borderStyle" placeholder="线形" :options="borderStyleOptions" />
       </BSectionItem>

@@ -6,7 +6,7 @@
   <ATabs class="page-setter">
     <ATabPane key="basic" tab="属性">
       <BSectionBlock title="基础">
-        <BSectionItem label="名称">
+        <BSectionItem label="名称" label-min-width="60">
           <AInput v-model:value="widgetName" placeholder="组件名称" />
         </BSectionItem>
         <BSectionItem label="使用说明" direction="vertical">

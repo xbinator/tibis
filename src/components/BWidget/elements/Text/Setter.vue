@@ -6,11 +6,10 @@
   <BSectionBlock title="内容">
     <BPromptEditor v-model:value="textContent" :options="variableOptions" :max-height="180" />
   </BSectionBlock>
-  <BSectionBlock title="显示">
-    <BSectionItem label="最大行数">
+  <BSectionBlock title="显示" label-min-width="60">
+    <BSectionItem label="最大行数" tooltip="超出指定行数将截断显示，手动换行也计入配额。留空表示不限制。">
       <AInputNumber v-model:value="element.metadata.maxLines" :min="1" :max="99" :precision="0" allow-clear placeholder="不限" />
     </BSectionItem>
-    <div class="widget-text-setter__hint">超出指定行数将截断显示，手动换行也计入配额。留空表示不限制。</div>
   </BSectionBlock>
 </template>
 
@@ -28,11 +27,3 @@ const textContent = useElementTemplate(element, 'content');
 /** 当前可插入变量候选。 */
 const { variableOptions } = useElementVariables((): WidgetElement<WidgetTextElementMetadata> => element.value);
 </script>
-
-<style lang="less" scoped>
-.widget-text-setter__hint {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-tertiary);
-}
-</style>

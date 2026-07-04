@@ -32,4 +32,6 @@ export interface BSectionItemProps {
   labelMinWidth?: BSectionLabelMinWidth;
   /** 布局方向，默认水平。 */
   direction?: 'horizontal' | 'vertical';
+  /** 标签鼠标移入时展示的提示文本，传入即启用 tooltip 与 hover 下划线。 */
+  tooltip?: string;
 }

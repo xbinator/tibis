@@ -31,8 +31,6 @@
           <AInputNumber v-model:value="element.loop.rowGap" placeholder="行距" :controls="false" />
         </BSectionItem>
       </div>
-
-      <p v-if="sourceOptions.length === 0" class="widget-advanced-setter__empty">暂无可循环数组字段</p>
     </BSectionBlock>
   </div>
 </template>
@@ -67,12 +65,5 @@ const sourceOptions = computed<SelectOption[]>((): SelectOption[] =>
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-}
-
-.widget-advanced-setter__empty {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-secondary);
 }
 </style>

@@ -18,8 +18,14 @@
     <template v-else>
       <ATabs>
         <ATabPane key="style" tab="属性">
+          <!-- 基础 -->
+          <BSectionBlock title="基础">
+            <BSectionItem label="名称" label-min-width="60">
+              <AInput v-model:value="select.title" />
+            </BSectionItem>
+          </BSectionBlock>
+
           <component :is="elementSetter" v-if="elementSetter" v-model:element="select" />
-          <div v-else class="setter-panel__empty">暂无专属属性</div>
         </ATabPane>
 
         <ATabPane key="design" tab="设计">
