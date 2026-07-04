@@ -23,6 +23,11 @@ export interface BSectionBlockProps {
 }
 
 /**
+ * BSection Item 标签水平对齐方式。
+ */
+export type BSectionItemLabelAlign = 'left' | 'center' | 'right';
+
+/**
  * BSection Item 组件属性。
  */
 export interface BSectionItemProps {
@@ -36,6 +41,10 @@ export interface BSectionItemProps {
   labelMinWidth?: BSectionLabelMinWidth;
   /** 布局方向，默认水平。 */
   direction?: 'horizontal' | 'vertical';
-  /** 标签鼠标移入时展示的提示文本，传入即启用 tooltip 与 hover 下划线。 */
+  /** 标签鼠标移入时展示的提示文本，传入即启用 ATooltip 与虚线下划线视觉提示。 */
   tooltip?: string;
+  /** 标签鼠标移入时展示的提示文本，仅启用 ATooltip，不加虚线下划线视觉提示。 */
+  tips?: string;
+  /** 标签水平对齐方式，配合 labelMinWidth 在剩余空间内对齐，默认 left。 */
+  labelAlign?: BSectionItemLabelAlign;
 }

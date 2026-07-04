@@ -1,6 +1,6 @@
 <script lang="tsx">
 import type { BSectionLabelMinWidth } from './context';
-import type { BSectionItemProps as Props } from './types';
+import type { BSectionItemLabelAlign, BSectionItemProps as Props } from './types';
 import { defineComponent, computed, type CSSProperties, type PropType, h } from 'vue';
 import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
@@ -38,19 +38,39 @@ export default defineComponent({
     tooltip: {
       type: String,
       default: undefined
+    },
+    tips: {
+      type: String,
+      default: undefined
+    },
+    labelAlign: {
+      type: String as PropType<BSectionItemLabelAlign>,
+      default: 'left'
     }
   },
   setup(props: Props, { slots }) {
     /** 最近 BSectionBlock 提供的共享上下文。 */
     const sectionContext = useSectionContext();
 
+    /** 标签水平对齐到 flex justify-content 的映射。 */
+    const LABEL_ALIGN_JUSTIFY_MAP: Record<BSectionItemLabelAlign, CSSProperties['justifyContent']> = {
+      left: 'flex-start',
+      center: 'center',
+      right: 'flex-end'
+    };
+
     /** 标签区域的内联样式。 */
     const labelStyle = computed<CSSProperties>(() => {
       const minWidth = addCssUnit(props.labelMinWidth ?? sectionContext.labelMinWidth.value);
+      const style: CSSProperties = {
+        justifyContent: LABEL_ALIGN_JUSTIFY_MAP[props.labelAlign ?? 'left']
+      };
 
-      if (minWidth === undefined) return {};
+      if (minWidth !== undefined) {
+        style.minWidth = minWidth;
+      }
 
-      return { minWidth };
+      return style;
     });
 
     /**
@@ -71,18 +91,25 @@ export default defineComponent({
 
     /**
      * 渲染 label 区域，按需用 ATooltip 包裹。
+     *
+     * - `tooltip`：包裹 ATooltip 并启用 `--tooltip` 修饰符（虚线下划线视觉提示）。
+     * - `tips`：仅包裹 ATooltip，不加视觉提示类。
+     * - 二者同时传入时，ATooltip 文本优先使用 `tooltip`，`--tooltip` 类仅由 `tooltip` 控制。
      * @returns label JSX 节点
      */
     function renderLabel() {
       const content = renderLabelContent();
+      /** ATooltip 显示的文本，tooltip 优先于 tips。 */
+      const tooltipText = props.tooltip ?? props.tips;
+      /** 仅 tooltip 启用虚线下划线视觉提示，tips 不加。 */
       const labelClass = bem('label', { tooltip: !!props.tooltip });
 
       if (!content) return null;
 
-      if (props.tooltip) {
+      if (tooltipText) {
         return (
           <div class={labelClass} style={labelStyle.value}>
-            <ATooltip title={props.tooltip}>{content}</ATooltip>
+            <ATooltip title={tooltipText}>{content}</ATooltip>
           </div>
         );
       }
