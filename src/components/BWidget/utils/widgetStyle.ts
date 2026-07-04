@@ -150,31 +150,6 @@ export function createWidgetElementStyleProperties(style?: WidgetElementStyle): 
 }
 
 /**
- * 解析文字横向对齐到 flex 对齐方式。
- * @param textAlign - 文字横向对齐
- * @returns flex 主轴对齐方式
- */
-export function resolveWidgetElementHorizontalAlign(textAlign: WidgetElementStyle['textAlign']): string | undefined {
-  if (textAlign === 'left') {
-    return 'flex-start';
-  }
-
-  if (textAlign === 'right') {
-    return 'flex-end';
-  }
-
-  if (textAlign === 'center') {
-    return 'center';
-  }
-
-  if (textAlign === 'justify') {
-    return 'space-between';
-  }
-
-  return undefined;
-}
-
-/**
  * 解析文字纵向对齐到 flex 对齐方式。
  * @param textVerticalAlign - 文字纵向对齐
  * @returns flex 交叉轴对齐方式
@@ -206,7 +181,7 @@ export function createWidgetElementContentStyleProperties(style?: WidgetElementS
     color: style?.color,
     fontSize: style?.fontSize === undefined ? undefined : `${style.fontSize}px`,
     fontWeight: style?.fontWeight,
-    justifyContent: resolveWidgetElementHorizontalAlign(style?.textAlign),
-    textAlign: style?.textAlign
+    textAlign: style?.textAlign,
+    overflow: 'hidden'
   };
 }
