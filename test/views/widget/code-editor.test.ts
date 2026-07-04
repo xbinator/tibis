@@ -452,6 +452,10 @@ describe('CodeEditor', (): void => {
     await wrapper.find('.widget-code-monaco-stub').setValue('Widget({ methods: { draft() {} } })');
     await wrapper.setProps({ active: false });
     await wrapper.setProps({ value: nextWidgetData });
+    await nextTick();
+
+    expect(readMonacoProps(wrapper).value).toBe('Widget({ methods: { draft() {} } })');
+
     await wrapper.setProps({ active: true });
     await nextTick();
 

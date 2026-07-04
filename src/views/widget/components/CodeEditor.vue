@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco/utils/createMonaco';
@@ -58,6 +58,10 @@ const emit = defineEmits<{
 
 const dataItem = defineModel<WidgetData>('value', { required: true });
 const codeEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
+/** 当前 Widget 运行脚本编辑器本地草稿。 */
+const inputCode = ref(dataItem.value.execute.code);
+/** 是否正在从模型刷新本地草稿，避免刷新过程回写模型。 */
+const syncingModelToInput = ref(false);
 
 /** Widget 组件脚本编辑器只加载 ECMAScript 基础类型，不引入浏览器 DOM 全局变量。 */
 const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
@@ -69,13 +73,6 @@ const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
 const inputSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => dataItem.value.inputSchema);
 /** 当前 Widget 运行脚本配置，创建流程保证该字段已初始化。 */
 const executeMethod = computed<WidgetData['execute']>((): WidgetData['execute'] => dataItem.value.execute);
-/** 当前 Widget 运行脚本编辑器内容。 */
-const inputCode = computed<string>({
-  get: (): string => executeMethod.value.code,
-  set: (code: string): void => {
-    dataItem.value = { ...dataItem.value, execute: { ...executeMethod.value, code } };
-  }
-});
 /** 当前组件脚本草稿推导出的数据 schema。 */
 const methodDraftDataSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => buildWidgetDataSchema(inputCode.value, inputSchema.value));
 /** 当前组件脚本草稿声明的 methods 方法名。 */
@@ -112,6 +109,34 @@ function focusCodeEditor(): void {
 }
 
 /**
+ * 从当前模型刷新运行脚本草稿。
+ * @param shouldFocus - 刷新后是否聚焦编辑器
+ * @returns 刷新完成信号
+ */
+async function syncInputCodeFromModel(shouldFocus: boolean): Promise<void> {
+  syncingModelToInput.value = true;
+  inputCode.value = executeMethod.value.code;
+  await nextTick();
+  syncingModelToInput.value = false;
+
+  if (shouldFocus) {
+    focusCodeEditor();
+  }
+}
+
+/**
+ * 将运行脚本草稿同步回 Widget 数据模型。
+ * @param code - 最新运行脚本源码
+ */
+function syncInputCodeToModel(code: string): void {
+  if (syncingModelToInput.value || executeMethod.value.code === code) {
+    return;
+  }
+
+  dataItem.value = { ...dataItem.value, execute: { ...executeMethod.value, code } };
+}
+
+/**
  * 关闭当前脚本编辑器。
  */
 function handleClose(): void {
@@ -125,12 +150,16 @@ function handleSave(): void {
   emit('save');
 }
 
+watch(inputCode, (code: string): void => {
+  syncInputCodeToModel(code);
+});
+
 watch(
   (): boolean => props.active,
-  (active: boolean) => {
+  async (active: boolean): Promise<void> => {
     if (!active) return;
 
-    focusCodeEditor();
+    await syncInputCodeFromModel(true);
   }
 );
 </script>
