@@ -147,7 +147,7 @@ function createGroupElement(id: string, title: string, children: WidgetElement[]
 function createLoopConfig(): WidgetElementLoopConfig {
   return {
     enabled: true,
-    source: 'input.items',
+    source: '$input.items',
     columns: 3,
     columnGap: 16,
     rowGap: 12,

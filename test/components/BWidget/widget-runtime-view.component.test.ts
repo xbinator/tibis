@@ -91,7 +91,7 @@ function createRuntimeWidgetData(): WidgetData {
         style: {},
         loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
-          content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
+          content: '{{ $input.city }} 当前 {{ weather.temperature }}°C'
         }
       },
       {
@@ -239,7 +239,7 @@ function createRuntimeNestedGroupWidgetData(): WidgetData {
             style: {},
             loop: createDefaultWidgetElementLoopConfig(),
             metadata: {
-              content: '{{ input.city }}'
+              content: '{{ $input.city }}'
             }
           }
         ]
@@ -445,7 +445,7 @@ describe('BWidgetRuntime', (): void => {
 
     expect(wrapper.find('.b-widget-runtime').exists()).toBe(true);
     expect(findNodeById(wrapper, 'text-1').text()).toBe('上海 当前 28°C');
-    expect(findNodeById(wrapper, 'rect-1').find('.widget-rect-element-view').exists()).toBe(true);
+    expect(findNodeById(wrapper, 'rect-1').find('.widget-rect-element').exists()).toBe(true);
     wrapper.unmount();
   });
 

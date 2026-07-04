@@ -168,7 +168,7 @@ function createWeatherWidgetData(): WidgetData {
         style: {},
         loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
-          content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
+          content: '{{ $input.city }} 当前 {{ weather.temperature }}°C'
         }
       }
     ]

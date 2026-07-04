@@ -4,13 +4,13 @@
 -->
 <template>
   <BSectionBlock title="图片" label-min-width="60">
-    <BSectionItem label="地址" tooltip="支持 URL 或变量插值，例如 {{ avatar }}">
-      <AInput v-model:value="imageSrc" placeholder="URL 或变量插值" allow-clear />
+    <BSectionItem label="地址">
+      <AInput v-model:value="imageSrc" placeholder="图片地址" allow-clear />
     </BSectionItem>
     <BSectionItem label="填充">
       <ASelect v-model:value="element.metadata.fit" :options="WIDGET_IMAGE_FIT_OPTIONS" />
     </BSectionItem>
-    <BSectionItem label="替代文本" tooltip="无障碍描述（可选）">
+    <BSectionItem label="替代文本" tooltip="属性 alt 属性，图片加载失败占位文字">
       <AInput v-model:value="element.metadata.alt" placeholder="无障碍描述（可选）" allow-clear />
     </BSectionItem>
   </BSectionBlock>

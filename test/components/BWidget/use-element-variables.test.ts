@@ -174,7 +174,7 @@ function createGroupElement(
 function createLoopConfig(): WidgetElementLoopConfig {
   return {
     enabled: true,
-    source: 'input.products',
+    source: '$input.products',
     columns: 2,
     columnGap: 12,
     rowGap: 12,
@@ -322,7 +322,7 @@ describe('useElementVariables', (): void => {
     const { variableOptions, wrapper } = mountElementVariables(widgetData);
     const values = readVariableValues(variableOptions.value);
 
-    expect(values).toContain('input.city');
+    expect(values).toContain('$input.city');
     expect(values).toContain('weather.temperature');
     wrapper.unmount();
   });
@@ -333,12 +333,12 @@ describe('useElementVariables', (): void => {
     const values = readVariableValues(variableOptions.value);
     const labels = readVariableLabels(variableOptions.value);
 
-    expect(values).toContain('input.city');
-    expect(values).toContain('input.unit');
-    expect(values).toContain('input.user');
-    expect(values).toContain('input.user.name');
-    expect(values).toContain('input["wind-speed"]');
-    expect(values).toContain('input.weather.temperature');
+    expect(values).toContain('$input.city');
+    expect(values).toContain('$input.unit');
+    expect(values).toContain('$input.user');
+    expect(values).toContain('$input.user.name');
+    expect(values).toContain('$input["wind-speed"]');
+    expect(values).toContain('$input.weather.temperature');
     expect(values).toContain('weather');
     expect(values).toContain('weather.temperature');
     expect(values).toContain('["weather-data"]["feels.like"]');
@@ -358,25 +358,26 @@ describe('useElementVariables', (): void => {
     const widgetDataRef = ref<WidgetData | undefined>(createWidgetData());
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const roots = readVariableTrees(variableOptions.value);
-    const inputVariable = findVariable(variableOptions.value, 'input');
-    const userVariable = findVariable(variableOptions.value, 'input.user');
+    const inputVariable = findVariable(variableOptions.value, '$input');
+    const userVariable = findVariable(variableOptions.value, '$input.user');
     const weatherVariable = findVariable(variableOptions.value, 'weather');
 
-    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['input', 'weather', '["weather-data"]']);
+    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['$input', 'weather', '["weather-data"]']);
+    expect(inputVariable?.label).toBe('入参');
     expect(inputVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual([
-      'input.city',
-      'input.unit',
-      'input.user',
-      'input["wind-speed"]',
-      'input.weather'
+      '$input.city',
+      '$input.unit',
+      '$input.user',
+      '$input["wind-speed"]',
+      '$input.weather'
     ]);
     expect(userVariable).toMatchObject({
       label: '用户',
-      value: 'input.user',
+      value: '$input.user',
       children: [
         {
           label: '用户名',
-          value: 'input.user.name'
+          value: '$input.user.name'
         }
       ]
     });
@@ -397,12 +398,12 @@ describe('useElementVariables', (): void => {
     const widgetDataRef = ref<WidgetData | undefined>(createWidgetData());
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const variables = readVariables(variableOptions.value);
-    const cityVariable = variables.find((item: Variable): boolean => item.value === 'input.city');
+    const cityVariable = variables.find((item: Variable): boolean => item.value === '$input.city');
     const temperatureVariable = variables.find((item: Variable): boolean => item.value === 'weather.temperature');
 
     expect(cityVariable).toEqual({
       label: '城市名称',
-      value: 'input.city'
+      value: '$input.city'
     });
     expect(temperatureVariable).toEqual({
       label: '',
@@ -440,7 +441,7 @@ describe('useElementVariables', (): void => {
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const values = readVariableValues(variableOptions.value);
 
-    expect(values).toContain('input');
+    expect(values).toContain('$input');
     expect(values).not.toContain('data');
     wrapper.unmount();
   });
@@ -472,7 +473,7 @@ describe('useElementVariables', (): void => {
   });
 
   it('hides loop variables when loop source points to a non-array field', (): void => {
-    const loopElement = createWidgetElement('text-1', {}, { ...createLoopConfig(), source: 'input.city' });
+    const loopElement = createWidgetElement('text-1', {}, { ...createLoopConfig(), source: '$input.city' });
     const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopElement]));
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => loopElement);
     const values = readVariableValues(variableOptions.value);
@@ -496,7 +497,7 @@ describe('useElementVariables', (): void => {
 
   it('hides inherited loop variables when group loop source is invalid', (): void => {
     const groupChild = createWidgetElement('text-1');
-    const loopContextGroup = createGroupElement('group-1', {}, [groupChild], { ...createLoopConfig(), source: 'input.city' });
+    const loopContextGroup = createGroupElement('group-1', {}, [groupChild], { ...createLoopConfig(), source: '$input.city' });
     const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopContextGroup]));
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => groupChild);
     const values = readVariableValues(variableOptions.value);
@@ -536,7 +537,7 @@ describe('useElementVariables', (): void => {
     expect(loopSourceOptions.value).toEqual([
       {
         label: '商品列表',
-        value: 'input.products'
+        value: '$input.products'
       }
     ]);
     wrapper.unmount();
@@ -546,7 +547,7 @@ describe('useElementVariables', (): void => {
     const widgetDataRef = ref<WidgetData | undefined>();
     const { loopSourceOptions, variableOptions, wrapper } = mountElementVariables(widgetDataRef);
 
-    expect(readVariableValues(variableOptions.value)).toEqual(['input']);
+    expect(readVariableValues(variableOptions.value)).toEqual(['$input']);
     expect(loopSourceOptions.value).toEqual([]);
     wrapper.unmount();
   });

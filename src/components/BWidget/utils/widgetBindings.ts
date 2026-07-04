@@ -52,6 +52,8 @@ type WidgetDisplayJsonReplacer = (this: unknown, key: string, value: unknown) =>
 const WIDGET_BINDING_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g;
 /** 整个字段都是单个绑定插值时的匹配表达式。 */
 const WIDGET_WHOLE_BINDING_PATTERN = /^\s*\{\{\s*([^{}]+?)\s*\}\}\s*$/;
+/** 模板输入上下文根名称。 */
+const WIDGET_INPUT_BINDING_ROOT = '$input';
 /** 点路径标识符匹配表达式。 */
 const WIDGET_BINDING_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 /** 点路径标识符前缀匹配表达式。 */
@@ -249,7 +251,9 @@ function parsePathSegment(expression: string, startIndex: number): { nextIndex: 
  * @returns 是否为 input 根表达式
  */
 function isInputBindingRootExpression(expression: string): boolean {
-  return expression === 'input' || expression.startsWith('input.') || expression.startsWith('input[');
+  const inputRootPrefixes = [`${WIDGET_INPUT_BINDING_ROOT}.`, `${WIDGET_INPUT_BINDING_ROOT}[`];
+
+  return expression === WIDGET_INPUT_BINDING_ROOT || inputRootPrefixes.some((prefix: string): boolean => expression.startsWith(prefix));
 }
 
 /**
@@ -262,7 +266,7 @@ export function parseWidgetBindingPath(expression: string, options: WidgetBindin
   const { locals } = options;
   const root = isInputBindingRootExpression(expression) ? 'input' : 'data';
   const segments: string[] = [];
-  let index = root === 'input' ? 'input'.length : 0;
+  let index = root === 'input' ? WIDGET_INPUT_BINDING_ROOT.length : 0;
 
   if (root === 'data') {
     const firstSegment = parsePathSegment(expression, index);
@@ -478,7 +482,7 @@ export function formatWidgetBindingPath(root: WidgetBindingContextRoot, segments
     );
   }
 
-  return segments.reduce((path: string, segment: string): string => `${path}${formatBindingPathSegment(segment)}`, root);
+  return segments.reduce((path: string, segment: string): string => `${path}${formatBindingPathSegment(segment)}`, WIDGET_INPUT_BINDING_ROOT);
 }
 
 /**

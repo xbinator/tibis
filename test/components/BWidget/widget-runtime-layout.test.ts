@@ -5,12 +5,12 @@
 import type { WidgetRenderContext } from 'types/widget';
 import { describe, expect, it } from 'vitest';
 import type { WidgetElement, WidgetPoint, WidgetSize } from '@/components/BWidget/types';
+import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import {
   createWidgetRuntimeLayout,
   createWidgetRuntimeLayoutFromRenderElements,
   type WidgetRuntimeElementLayout
 } from '@/components/BWidget/utils/widgetRuntime/layout';
-import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
  * 创建矩形测试元素。
@@ -140,8 +140,8 @@ describe('createWidgetRuntimeLayout', (): void => {
       },
       data: {}
     };
-    const compactLayout = createWidgetRuntimeLayout([createTextElement('{{ input.city }}')], compactContext);
-    const expandedLayout = createWidgetRuntimeLayout([createTextElement('{{ input.city }}')], expandedContext);
+    const compactLayout = createWidgetRuntimeLayout([createTextElement('{{ $input.city }}')], compactContext);
+    const expandedLayout = createWidgetRuntimeLayout([createTextElement('{{ $input.city }}')], expandedContext);
 
     expect(expandedLayout.bounds.height).toBeGreaterThan(compactLayout.bounds.height);
   });

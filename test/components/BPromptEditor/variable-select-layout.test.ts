@@ -120,6 +120,43 @@ describe('VariableSelect layout', (): void => {
     wrapper.unmount();
   });
 
+  it('keeps $input as the primary text and shows its readable label on the right', async (): Promise<void> => {
+    const wrapper = mount(VariableSelect, {
+      props: {
+        visible: true,
+        variables: [
+          {
+            label: '入参',
+            value: '$input',
+            depth: 0
+          }
+        ] as VariableSelectTestItem[],
+        position: {
+          top: 0,
+          left: 0,
+          bottom: 0
+        }
+      },
+      global: {
+        components: {
+          BButton: BButtonStub
+        }
+      }
+    });
+
+    expect(document.body.querySelector('.variable-item-label')?.textContent).toBe('$input');
+    expect(document.body.querySelector('.variable-item-value')?.textContent).toBe('入参');
+
+    document.body.querySelector<HTMLElement>('.select-dropdown__item')?.click();
+
+    expect(wrapper.emitted('select')?.[0]).toEqual([
+      expect.objectContaining({
+        value: '$input'
+      })
+    ]);
+    wrapper.unmount();
+  });
+
   it('hides the secondary variable label when no label is provided', (): void => {
     const wrapper = mount(VariableSelect, {
       props: {

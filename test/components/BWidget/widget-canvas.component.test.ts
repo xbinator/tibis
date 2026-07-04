@@ -10,8 +10,8 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetPoint } from '@/components/BWidget/types';
-import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 vi.mock('@/components/BWidget/components/Toolbar.vue', () => ({
@@ -301,8 +301,8 @@ describe('BWidget canvas component', (): void => {
     expect(node.attributes('style')).toContain('width: 180px');
     expect(node.attributes('style')).toContain('height: 72px');
     expect(node.attributes('style')).toContain('translate(24px, 36px)');
-    expect(node.find('.widget-rect-element-view').exists()).toBe(true);
-    expect(node.find('.widget-rect-element-view').attributes('aria-hidden')).toBe('true');
+    expect(node.find('.widget-rect-element').exists()).toBe(true);
+    expect(node.find('.widget-rect-element').attributes('aria-hidden')).toBe('true');
     expect(wrapper.find('svg').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -607,7 +607,7 @@ describe('BWidget canvas component', (): void => {
         style: {},
         loop: createDefaultWidgetElementLoopConfig(),
         metadata: {
-          content: '{{ input.city }} 当前 {{ weather.temperature }}°C'
+          content: '{{ $input.city }} 当前 {{ weather.temperature }}°C'
         }
       }
     ];

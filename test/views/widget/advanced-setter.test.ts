@@ -108,7 +108,7 @@ vi.mock('ant-design-vue', () => ({
 function createLoopConfig(): WidgetElementLoopConfig {
   return {
     enabled: true,
-    source: 'input.items',
+    source: '$input.items',
     columns: 2,
     columnGap: 12,
     rowGap: 12,
@@ -261,7 +261,7 @@ describe('AdvancedSetter', (): void => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
 
-    expect(wrapper.find('select').text()).toContain('input.items');
+    expect(wrapper.find('select').text()).toContain('$input.items');
     wrapper.unmount();
   });
 
@@ -278,11 +278,11 @@ describe('AdvancedSetter', (): void => {
       indexName: 'index'
     });
 
-    wrapper.findComponent({ name: 'BSelectStub' }).vm.$emit('update:value', 'input.items');
+    wrapper.findComponent({ name: 'BSelectStub' }).vm.$emit('update:value', '$input.items');
     await nextTick();
 
     expect(element.loop).toMatchObject({
-      source: 'input.items'
+      source: '$input.items'
     });
     expect(wrapper.emitted('update:element')).toBeUndefined();
     wrapper.unmount();

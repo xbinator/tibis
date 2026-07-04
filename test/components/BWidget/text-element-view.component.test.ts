@@ -75,7 +75,7 @@ describe('TextElementView', (): void => {
 
   it('renders content binding from widget render context', (): void => {
     const element = createTextElement();
-    element.metadata.content = '{{ input.city }} 当前 {{ weather.temperature }}°C';
+    element.metadata.content = '{{ $input.city }} 当前 {{ weather.temperature }}°C';
     const wrapper = mountTextElementView(element, {
       input: { city: '上海' },
       data: {
@@ -91,7 +91,7 @@ describe('TextElementView', (): void => {
 
   it('renders bracket binding paths produced for non-identifier field names', (): void => {
     const element = createTextElement();
-    element.metadata.content = '{{ input["wind-speed"] }} / {{ ["weather-data"]["feels.like"] }}';
+    element.metadata.content = '{{ $input["wind-speed"] }} / {{ ["weather-data"]["feels.like"] }}';
     const wrapper = mountTextElementView(element, {
       input: {
         'wind-speed': 12

@@ -206,7 +206,7 @@ function createWidgetData(elements: WidgetElement | WidgetElement[]): WidgetData
  * @param source - 数据源路径
  * @returns 循环配置
  */
-function createLoopConfig(source = 'input.items'): WidgetElementLoopConfig {
+function createLoopConfig(source = '$input.items'): WidgetElementLoopConfig {
   return {
     enabled: true,
     source,

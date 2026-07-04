@@ -34,7 +34,18 @@ describe('widgetBindings', (): void => {
       resolved: true,
       value: 28
     });
-    expect(resolveWidgetTemplateValue('{{ input.city }} 当前 {{ weather.temperature }}°C', context)).toBe('上海 当前 28°C');
+    expect(resolveWidgetTemplateValue('{{ $input.city }} 当前 {{ weather.temperature }}°C', context)).toBe('上海 当前 28°C');
+  });
+
+  it('does not resolve old input root bindings', (): void => {
+    const context = createRenderContext();
+    const template = '{{ input.city }} 当前 {{ weather.temperature }}°C';
+
+    expect(evaluateWidgetBindingExpression('input.city', context)).toEqual({
+      resolved: false,
+      value: undefined
+    });
+    expect(resolveWidgetTemplateValue(template, context)).toBe(template);
   });
 
   it('resolves direct data fields whose names start with input', (): void => {
@@ -136,10 +147,10 @@ describe('widgetBindings', (): void => {
     ).toBe('美式 #4');
   });
 
-  it('keeps existing input and data binding behavior without locals', (): void => {
+  it('keeps current input and data binding behavior without locals', (): void => {
     const context = createRenderContext();
 
-    expect(resolveWidgetTemplateValue('{{ input.city }} 当前 {{ weather.temperature }}°C', context)).toBe('上海 当前 28°C');
+    expect(resolveWidgetTemplateValue('{{ $input.city }} 当前 {{ weather.temperature }}°C', context)).toBe('上海 当前 28°C');
     expect(resolveWidgetTemplateValue('{{ item.name }}', context)).toBe('{{ item.name }}');
   });
 });

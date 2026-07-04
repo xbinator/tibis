@@ -38,9 +38,9 @@ describe('useElementTemplate', (): void => {
 
     expect(field.value).toBe('静态内容');
 
-    field.value = '城市：{{ input.city }}';
+    field.value = '城市：{{ $input.city }}';
 
-    expect(element.metadata.content).toBe('城市：{{ input.city }}');
+    expect(element.metadata.content).toBe('城市：{{ $input.city }}');
   });
 
   it('does not read unrelated metadata as the field value', (): void => {
@@ -65,8 +65,8 @@ describe('useElementTemplate', (): void => {
 
     expect(field.value).toBe('副标题');
 
-    field.value = '新副标题：{{ input.city }}';
+    field.value = '新副标题：{{ $input.city }}';
 
-    expect(element.metadata.subtitle).toBe('新副标题：{{ input.city }}');
+    expect(element.metadata.subtitle).toBe('新副标题：{{ $input.city }}');
   });
 });

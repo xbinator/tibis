@@ -34,7 +34,7 @@ function createDisplayElement(content?: string): WidgetShapeElement {
     loop: createDefaultWidgetElementLoopConfig(),
     metadata: {
       content,
-      subtitle: '副标题：{{ input.city }}'
+      subtitle: '副标题：{{ $input.city }}'
     }
   };
 }
@@ -70,7 +70,7 @@ function mountDisplayContent(element: WidgetShapeElement, renderContext?: Widget
 
 describe('useElementContent', (): void => {
   it('reads a template field and resolves it from the widget render context', (): void => {
-    const wrapper = mountDisplayContent(createDisplayElement('{{ input.city }} 天气'), {
+    const wrapper = mountDisplayContent(createDisplayElement('{{ $input.city }} 天气'), {
       input: {
         city: '上海'
       },

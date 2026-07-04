@@ -197,8 +197,8 @@ describe('widgetLoop', (): void => {
 
   it('collects array paths from input and data schemas', (): void => {
     expect(collectWidgetLoopDataSourceOptions(createInputSchema(), createDataSchema()).map((item) => item.value)).toEqual([
-      'input.items',
-      'input.order.lines',
+      '$input.items',
+      '$input.order.lines',
       'products'
     ]);
   });
@@ -308,7 +308,7 @@ describe('widgetLoop', (): void => {
       products: [{ name: '蛋糕' }]
     };
     const outerLoopConfig: WidgetElementLoopConfig = {
-      ...createLoopConfig('input.items'),
+      ...createLoopConfig('$input.items'),
       itemName: 'category',
       indexName: 'categoryIndex'
     };

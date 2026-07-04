@@ -15,6 +15,10 @@ import { useWidgetContext } from './useWidgetContext';
 
 /** 变量路径标识符匹配表达式。 */
 const WIDGET_VARIABLE_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
+/** 输入变量在模板编辑器中展示和插入的根名称。 */
+const WIDGET_INPUT_VARIABLE_ROOT_NAME = '$input';
+/** 输入变量在模板编辑器中展示的可读名称。 */
+const WIDGET_INPUT_VARIABLE_LABEL = '入参';
 
 /**
  * Widget 元素读取函数。
@@ -54,37 +58,6 @@ function createVariable(value: string, label: string, description?: string, chil
 }
 
 /**
- * 从 schema 属性中收集子级变量路径。
- * @param root - 上下文根名称
- * @param properties - schema 属性集合
- * @param parentSegments - 父级路径片段
- * @returns 子级变量选项列表
- */
-function collectSchemaVariableChildren(
-  root: WidgetBindingContextRoot,
-  properties: Record<string, WidgetSchemaProperty> | undefined,
-  parentSegments: string[] = []
-): Variable[] {
-  if (!properties) {
-    return [];
-  }
-
-  const variables = Object.entries(properties).flatMap(([key, property]: [string, WidgetSchemaProperty]): Variable[] => {
-    if (!isWidgetBindingPathSegmentAllowed(key)) {
-      return [];
-    }
-
-    const segments = [...parentSegments, key];
-    const path = formatWidgetBindingPath(root, segments);
-    const children = property.type === 'object' ? collectSchemaVariableChildren(root, property.properties, segments) : [];
-
-    return [createVariable(path, property.description ?? '', undefined, children)];
-  });
-
-  return variables;
-}
-
-/**
  * 格式化局部变量路径片段。
  * @param segment - 路径片段
  * @returns 路径片段文本
@@ -118,6 +91,51 @@ function formatLocalVariableRoot(rootName: string): string {
  */
 function formatLocalVariablePath(rootName: string, segments: string[] = []): string {
   return segments.reduce((path: string, segment: string): string => `${path}${formatLocalVariablePathSegment(segment)}`, formatLocalVariableRoot(rootName));
+}
+
+/**
+ * 格式化变量候选中的绑定路径。
+ * @param root - 上下文根名称
+ * @param segments - 子级路径片段
+ * @returns 变量候选绑定路径
+ */
+function formatVariableBindingPath(root: WidgetBindingContextRoot, segments: string[] = []): string {
+  if (root === 'input') {
+    return formatLocalVariablePath(WIDGET_INPUT_VARIABLE_ROOT_NAME, segments);
+  }
+
+  return formatWidgetBindingPath(root, segments);
+}
+
+/**
+ * 从 schema 属性中收集子级变量路径。
+ * @param root - 上下文根名称
+ * @param properties - schema 属性集合
+ * @param parentSegments - 父级路径片段
+ * @returns 子级变量选项列表
+ */
+function collectSchemaVariableChildren(
+  root: WidgetBindingContextRoot,
+  properties: Record<string, WidgetSchemaProperty> | undefined,
+  parentSegments: string[] = []
+): Variable[] {
+  if (!properties) {
+    return [];
+  }
+
+  const variables = Object.entries(properties).flatMap(([key, property]: [string, WidgetSchemaProperty]): Variable[] => {
+    if (!isWidgetBindingPathSegmentAllowed(key)) {
+      return [];
+    }
+
+    const segments = [...parentSegments, key];
+    const path = formatVariableBindingPath(root, segments);
+    const children = property.type === 'object' ? collectSchemaVariableChildren(root, property.properties, segments) : [];
+
+    return [createVariable(path, property.description ?? '', undefined, children)];
+  });
+
+  return variables;
 }
 
 /**
@@ -290,7 +308,12 @@ export function useElementVariables(readElement?: ElementTargetReader): UseEleme
   const variableOptions = computed<VariableOptionGroup[]>((): VariableOptionGroup[] => {
     const widgetData = currentWidgetData.value;
     const loopVariables = createLoopVariables(widgetData, currentDataSchema.value, readElement?.());
-    const inputVariable = createVariable('input', '', undefined, collectSchemaVariableChildren('input', widgetData?.inputSchema.properties));
+    const inputVariable = createVariable(
+      WIDGET_INPUT_VARIABLE_ROOT_NAME,
+      WIDGET_INPUT_VARIABLE_LABEL,
+      undefined,
+      collectSchemaVariableChildren('input', widgetData?.inputSchema.properties)
+    );
     const dataVariables = collectSchemaVariableChildren('data', currentDataSchema.value.properties);
 
     return [createVariableGroup([...loopVariables, inputVariable, ...dataVariables])];
