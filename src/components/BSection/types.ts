@@ -16,6 +16,10 @@ export interface BSectionBlockProps {
   defaultCollapsed?: boolean;
   /** 字段行标签最小宽度，数字按 px 处理。 */
   labelMinWidth?: BSectionLabelMinWidth;
+  /** 标题鼠标移入时展示的提示文本，传入即启用 tooltip 与 hover 下划线。 */
+  tooltip?: string;
+  /** 标题右侧问号图标的提示文本，传入即展示 ? icon 并启用鼠标移入提示。 */
+  tips?: string;
 }
 
 /**

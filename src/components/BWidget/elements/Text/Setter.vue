@@ -3,7 +3,7 @@
   @description BWidget 文本元素专属属性设置面板。
 -->
 <template>
-  <BSectionBlock title="内容">
+  <BSectionBlock title="内容" tips="支持按此格式书写变量：{{USER_NAME}}">
     <BTextEditor v-model:value="textContent" :options="variableOptions" :max-height="180" />
   </BSectionBlock>
   <BSectionBlock title="显示" label-min-width="60">

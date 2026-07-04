@@ -6,7 +6,15 @@
   <section :class="bem({ collapsed: isCollapsed, collapsible })">
     <header :class="bem('header')" @click="handleHeaderClick">
       <div :class="bem('title-group')">
-        <div :class="bem('title')">{{ title }}</div>
+        <div v-if="tooltip" :class="bem('title', { tooltip: true })">
+          <ATooltip :title="tooltip">{{ title }}</ATooltip>
+        </div>
+        <div v-else :class="bem('title')">{{ title }}</div>
+        <div v-if="tips" :class="bem('tips')">
+          <ATooltip :title="tips">
+            <BIcon icon="lucide:help-circle" :size="14" />
+          </ATooltip>
+        </div>
         <div v-if="$slots.help" :class="bem('help')" @click.stop>
           <slot name="help"></slot>
         </div>
@@ -36,7 +44,9 @@ const [, bem] = createNamespace('section-block');
 const props = withDefaults(defineProps<Props>(), {
   collapsible: false,
   defaultCollapsed: false,
-  labelMinWidth: undefined
+  labelMinWidth: undefined,
+  tooltip: undefined,
+  tips: undefined
 });
 
 /** 当前折叠状态。 */
@@ -90,6 +100,17 @@ function handleHeaderClick(): void {
   color: var(--text-primary);
 }
 
+/* 标题启用 tooltip：鼠标移入显示虚线下划线 */
+.b-section-block__title--tooltip {
+  -webkit-text-decoration-line: underline;
+  text-decoration-line: underline;
+  -webkit-text-decoration-style: dashed;
+  text-decoration-style: dashed;
+  -webkit-text-decoration-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  cursor: help;
+}
+
 .b-section-block__title-group {
   display: flex;
   gap: 6px;
@@ -101,6 +122,14 @@ function handleHeaderClick(): void {
   display: inline-flex;
   align-items: center;
   color: var(--text-tertiary);
+}
+
+/* 标题右侧提示图标 */
+.b-section-block__tips {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  cursor: help;
 }
 
 .b-section-block__extra {
