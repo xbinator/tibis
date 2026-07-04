@@ -4,7 +4,7 @@
 -->
 <template>
   <ATabs class="page-setter">
-    <ATabPane key="basic" tab="设计">
+    <ATabPane key="basic" tab="属性">
       <BSectionBlock title="基础">
         <BSectionItem label="名称">
           <AInput v-model:value="widgetName" placeholder="组件名称" />

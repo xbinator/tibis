@@ -17,13 +17,13 @@
     <div v-else-if="select === null" class="setter-panel__empty">已选择多个元素</div>
     <template v-else>
       <ATabs>
-        <ATabPane key="design" tab="设计">
-          <DesignSetter v-model:element="select" />
-        </ATabPane>
-
         <ATabPane key="style" tab="属性">
           <component :is="elementSetter" v-if="elementSetter" v-model:element="select" />
           <div v-else class="setter-panel__empty">暂无专属属性</div>
+        </ATabPane>
+
+        <ATabPane key="design" tab="设计">
+          <DesignSetter v-model:element="select" />
         </ATabPane>
 
         <ATabPane key="advanced" tab="高级">
