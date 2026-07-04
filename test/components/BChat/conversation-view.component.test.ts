@@ -10,6 +10,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import ConversationView from '@/components/BChat/components/ConversationView.vue';
 import type { Message } from '@/components/BChat/utils/types';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
   default: {
@@ -144,6 +145,7 @@ function createWidgetPart(temperature: number): ChatMessageWidgetPart {
       mountedAt: '2026-07-01T00:00:00.000Z'
     },
     value: {
+      ...createDefaultWidgetData(),
       name: 'weather',
       description: '天气小组件',
       inputSchema: { type: 'object', properties: {} },

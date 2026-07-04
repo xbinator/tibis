@@ -14,7 +14,7 @@
     <section class="widget-code-page__editor">
       <BMonaco
         ref="codeEditorRef"
-        v-model:value="scriptCodeDraft"
+        v-model:value="inputCode"
         language="typescript"
         :editable="true"
         :editor-state="codeEditorState"
@@ -27,13 +27,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco/utils/createMonaco';
 import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types';
 import { buildWidgetDataSchema } from '@/components/BWidget/utils/widgetDataSchema';
-import { readWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import { readWidgetMethodNames } from '@/components/BWidget/utils/widgetMethodNames';
 import { createWidgetMethodScriptExtraLibContent } from '../constants/methodScriptExtraLib';
 
@@ -59,8 +58,6 @@ const emit = defineEmits<{
 
 const dataItem = defineModel<WidgetData>('value', { required: true });
 const codeEditorRef = ref<InstanceType<typeof BMonaco> | null>(null);
-const scriptCodeDraft = ref(readWidgetExecuteMethod(dataItem.value.execute).code);
-const syncingModelToDraft = ref(false);
 
 /** Widget 组件脚本编辑器只加载 ECMAScript 基础类型，不引入浏览器 DOM 全局变量。 */
 const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
@@ -70,10 +67,19 @@ const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
 
 /** 当前 Widget 入参 schema。 */
 const inputSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => dataItem.value.inputSchema);
+/** 当前 Widget 运行脚本配置，创建流程保证该字段已初始化。 */
+const executeMethod = computed<WidgetData['execute']>((): WidgetData['execute'] => dataItem.value.execute);
+/** 当前 Widget 运行脚本编辑器内容。 */
+const inputCode = computed<string>({
+  get: (): string => executeMethod.value.code,
+  set: (code: string): void => {
+    dataItem.value = { ...dataItem.value, execute: { ...executeMethod.value, code } };
+  }
+});
 /** 当前组件脚本草稿推导出的数据 schema。 */
-const methodDraftDataSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => buildWidgetDataSchema(scriptCodeDraft.value, inputSchema.value));
+const methodDraftDataSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => buildWidgetDataSchema(inputCode.value, inputSchema.value));
 /** 当前组件脚本草稿声明的 methods 方法名。 */
-const methodDraftMethodNames = computed<string[]>((): string[] => readWidgetMethodNames(scriptCodeDraft.value));
+const methodDraftMethodNames = computed<string[]>((): string[] => readWidgetMethodNames(inputCode.value));
 /** Widget 组件脚本编辑器类型提示内容。 */
 const widgetMethodScriptExtraLibContent = computed<string>((): string =>
   createWidgetMethodScriptExtraLibContent(inputSchema.value, methodDraftDataSchema.value, methodDraftMethodNames.value)
@@ -91,16 +97,8 @@ const codeEditorState = computed<EditorState>(() => ({
   name: 'widget-method.ts',
   path: null,
   ext: 'ts',
-  content: scriptCodeDraft.value
+  content: inputCode.value
 }));
-
-/**
- * 读取当前 Widget 组件脚本源码。
- * @returns 组件脚本源码
- */
-function readCurrentMethodCode(): string {
-  return readWidgetExecuteMethod(dataItem.value.execute).code;
-}
 
 /**
  * 聚焦组件脚本编辑器。
@@ -111,41 +109,6 @@ function focusCodeEditor(): void {
   }
 
   codeEditorRef.value.focusEditor();
-}
-
-/**
- * 从当前模型同步编辑草稿。
- * @param code - 当前组件脚本源码
- * @param shouldFocus - 同步后是否聚焦编辑器
- * @returns 异步完成信号
- */
-async function syncScriptCodeDraftFromModel(code: string, shouldFocus: boolean): Promise<void> {
-  syncingModelToDraft.value = true;
-  scriptCodeDraft.value = code;
-  await nextTick();
-  syncingModelToDraft.value = false;
-
-  if (shouldFocus) {
-    focusCodeEditor();
-  }
-}
-
-/**
- * 将编辑草稿写回 Widget 数据模型。
- * @param code - 最新组件脚本源码
- */
-function syncScriptCodeToModel(code: string): void {
-  if (readCurrentMethodCode() === code) {
-    return;
-  }
-
-  dataItem.value = {
-    ...dataItem.value,
-    execute: {
-      ...readWidgetExecuteMethod(dataItem.value.execute),
-      code
-    }
-  };
 }
 
 /**
@@ -163,38 +126,11 @@ function handleSave(): void {
 }
 
 watch(
-  (): string => readCurrentMethodCode(),
-  async (code: string): Promise<void> => {
-    if (scriptCodeDraft.value === code) {
-      return;
-    }
-
-    if (!props.active) {
-      await syncScriptCodeDraftFromModel(code, false);
-      return;
-    }
-
-    await syncScriptCodeDraftFromModel(code, true);
-  },
-  { immediate: true }
-);
-
-watch(scriptCodeDraft, (code: string): void => {
-  if (syncingModelToDraft.value) {
-    return;
-  }
-
-  syncScriptCodeToModel(code);
-});
-
-watch(
   (): boolean => props.active,
-  async (active: boolean): Promise<void> => {
-    if (!active) {
-      return;
-    }
+  (active: boolean) => {
+    if (!active) return;
 
-    await syncScriptCodeDraftFromModel(readCurrentMethodCode(), true);
+    focusCodeEditor();
   }
 );
 </script>

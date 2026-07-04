@@ -9,6 +9,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import JSZip from 'jszip';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import WidgetSettingsPage from '@/views/settings/tools/widget/index.vue';
 
 /** 原生平台方法 mock。 */
@@ -319,11 +320,13 @@ describe('WidgetSettingsPage', (): void => {
 
     const writeFileCall = nativeMock.writeFile.mock.calls[0];
     const savedContent = JSON.parse(writeFileCall?.[1] ?? '{}') as Record<string, unknown>;
+    const defaultExecute = createDefaultWidgetExecuteMethod();
 
     expect(electronAPIMock.ensureDir).toHaveBeenCalledWith('/Users/test/.tibis/widgets/weather');
     expect(writeFileCall?.[0]).toBe('/Users/test/.tibis/widgets/weather/widget.json');
     expect(savedContent.name).toBe('天气');
     expect(savedContent.description).toBe('查询指定城市天气');
+    expect(savedContent.execute).toEqual(defaultExecute);
     expect(savedContent).not.toHaveProperty('type');
     expect(savedContent).not.toHaveProperty('version');
     expect(createAndOpenMock.mock.calls[0]?.[0]).toMatchObject({
@@ -394,10 +397,12 @@ describe('WidgetSettingsPage', (): void => {
     const writeFileCall = nativeMock.writeFile.mock.calls[0];
     const savedContent = JSON.parse(writeFileCall?.[1] ?? '{}') as Record<string, unknown>;
     const savedElements = savedContent.elements as unknown[];
+    const defaultExecute = createDefaultWidgetExecuteMethod();
 
     expect(electronAPIMock.ensureDir).toHaveBeenCalledWith('/Users/test/.tibis/widgets/coffee');
     expect(savedContent.name).toBe('咖啡推荐');
     expect(savedContent.description).toBe('展示咖啡列表');
+    expect(savedContent.execute).toEqual(defaultExecute);
     expect(savedElements).toHaveLength(1);
   });
 

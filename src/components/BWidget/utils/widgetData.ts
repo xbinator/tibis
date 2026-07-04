@@ -4,6 +4,7 @@
  */
 import type { WidgetData, WidgetExecuteMethod, WidgetMetadata, WidgetSchemaObject, WidgetViewport } from '../types';
 import { cloneDeep } from 'lodash-es';
+import { createDefaultWidgetExecuteMethod } from './widgetExecuteMethod';
 
 /**
  * Widget能力 Schema 类型。
@@ -90,11 +91,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * 归一化 Widget JS 脚本配置。
  * @param value - 原始脚本配置
- * @returns 可保存脚本配置，缺失时返回 undefined
+ * @returns 可保存脚本配置，缺失时返回默认脚本配置
  */
-function normalizeWidgetExecuteMethod(value: unknown): WidgetExecuteMethod | undefined {
+function normalizeWidgetExecuteMethod(value: unknown): WidgetExecuteMethod {
   if (!isRecord(value) || typeof value.code !== 'string') {
-    return undefined;
+    return createDefaultWidgetExecuteMethod();
   }
 
   return {
@@ -112,14 +113,12 @@ function normalizeWidgetExecuteMethod(value: unknown): WidgetExecuteMethod | und
 export function normalizeWidgetDataContract(
   candidate: WidgetDataContractCandidate
 ): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'dataSchema' | 'execute' | 'metadata'> {
-  const execute = normalizeWidgetExecuteMethod(candidate.execute);
-
   return {
     name: typeof candidate.name === 'string' ? candidate.name : '',
     description: typeof candidate.description === 'string' ? candidate.description : '',
     inputSchema: normalizeWidgetSchemaObject(candidate.inputSchema, 'input'),
     dataSchema: normalizeWidgetSchemaObject(candidate.dataSchema, 'data'),
-    ...(execute ? { execute } : {}),
+    execute: normalizeWidgetExecuteMethod(candidate.execute),
     metadata: cloneDeep(candidate.metadata ?? {})
   };
 }

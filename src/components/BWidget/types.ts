@@ -299,7 +299,7 @@ export interface WidgetData {
   /** Widget运行数据 schema */
   dataSchema: WidgetSchemaObject;
   /** WidgetJS 脚本配置 */
-  execute?: WidgetExecuteMethod;
+  execute: WidgetExecuteMethod;
   /** Widget元信息 */
   metadata: WidgetMetadata;
   /** 元素数据 */

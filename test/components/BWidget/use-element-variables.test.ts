@@ -435,9 +435,9 @@ describe('useElementVariables', (): void => {
   });
 
   it('uses default execute code to provide default data variables when execute config is missing', (): void => {
-    const widgetData = createWidgetData();
+    const widgetData: Partial<WidgetData> = createWidgetData();
     delete widgetData.execute;
-    const widgetDataRef = ref<WidgetData | undefined>(widgetData);
+    const widgetDataRef = ref<WidgetData | undefined>(widgetData as WidgetData);
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef);
     const values = readVariableValues(variableOptions.value);
 

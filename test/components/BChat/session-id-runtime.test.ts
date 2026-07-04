@@ -14,6 +14,7 @@ import BChat from '@/components/BChat/index.vue';
 import { createMessageUpdateSubmitAction, createRuntimeUserMessageSubmitAction, createUserChoiceSubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import type { FileMentionOption } from '@/components/BText/types';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import type { StoredFile } from '@/shared/storage';
 import type { TodoItem } from '@/stores/chat/todo';
@@ -428,6 +429,7 @@ function createWidgetPart(status: ChatMessageWidgetPart['status'], temperature?:
     status,
     lifecycle: status === 'mounted' ? { mountedAt: '2026-07-01T00:00:00.000Z' } : {},
     value: {
+      ...createDefaultWidgetData(),
       name: 'weather',
       description: '天气小组件',
       inputSchema: { type: 'object', properties: {} },
@@ -818,7 +820,8 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('marks a pending question as cancelled and appends interrupt when aborting after runtime waits for user input', async (): Promise<void> => {
-    const pendingToolPart: ChatMessageToolPart = { id: 'part0037',
+    const pendingToolPart: ChatMessageToolPart = {
+      id: 'part0037',
       type: 'tool',
       toolCallId: 'tool-call-1',
       toolName: 'ask_user_choice',
@@ -909,7 +912,8 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('continues user choice answers through main process ChatRuntime', async (): Promise<void> => {
-    const pendingToolPart: ChatMessageToolPart = { id: 'part0039',
+    const pendingToolPart: ChatMessageToolPart = {
+      id: 'part0039',
       type: 'tool',
       toolCallId: 'tool-call-1',
       toolName: 'ask_user_choice',
@@ -960,7 +964,8 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('sends runtime user message submit actions through main process ChatRuntime', async (): Promise<void> => {
-    const resultPart: ChatMessageWidgetResultPart = { id: 'part0040',
+    const resultPart: ChatMessageWidgetResultPart = {
+      id: 'part0040',
       type: 'widget_result',
       sessionId: 'widget-session-1',
       widgetId: 'weather',

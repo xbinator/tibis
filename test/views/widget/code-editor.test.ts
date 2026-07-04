@@ -9,6 +9,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import CodeEditor from '@/views/widget/components/CodeEditor.vue';
 
 /** TypeScript 类型推导测试用最小基础类型声明。 */
@@ -263,7 +264,12 @@ function createBMonacoStub(): ReturnType<typeof defineComponent> {
 
       return { handleInput, handleSave };
     },
-    template: '<div><textarea class="widget-code-monaco-stub" :value="value" @input="handleInput"></textarea><button class="widget-code-monaco-save-stub" @click="handleSave"></button></div>'
+    template: [
+      '<div>',
+      '<textarea class="widget-code-monaco-stub" :value="value" @input="handleInput"></textarea>',
+      '<button class="widget-code-monaco-save-stub" @click="handleSave"></button>',
+      '</div>'
+    ].join('')
   });
 }
 
@@ -300,6 +306,7 @@ function createWeatherInputSchema(): WidgetSchemaObject {
 function createWidgetData(): WidgetData {
   return {
     ...createDefaultWidgetData(),
+    execute: createDefaultWidgetExecuteMethod(),
     inputSchema: createWeatherInputSchema()
   };
 }
@@ -557,7 +564,7 @@ describe('CodeEditor', (): void => {
             '  mounted() {',
             '    const city: string = this.$input.city',
             '    const temperature: number = this.weather.temperature',
-            '    this.message = `${city} ${temperature}`',
+            '    this.message = city',
             '    this.sendText()',
             '  },',
             '  methods: {',

@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WidgetSchemaObject } from '@/components/BWidget/types';
 import { createDefaultWidgetData, normalizeWidgetDataContract } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 
 /** 默认空对象 schema。 */
 const emptyObjectSchema: WidgetSchemaObject = {
@@ -19,6 +20,7 @@ describe('dataItem', (): void => {
 
     expect(dataItem.inputSchema).toEqual(emptyObjectSchema);
     expect(dataItem.dataSchema).toEqual(emptyObjectSchema);
+    expect(dataItem.execute).toEqual(createDefaultWidgetExecuteMethod());
     expect(dataItem).not.toHaveProperty('outputSchema');
     expect(dataItem).not.toHaveProperty('viewport');
   });

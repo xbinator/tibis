@@ -40,6 +40,9 @@ const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
       properties: {},
       required: []
     },
+    execute: {
+      code: 'Widget({})'
+    },
     metadata: {},
     elements: []
   }
