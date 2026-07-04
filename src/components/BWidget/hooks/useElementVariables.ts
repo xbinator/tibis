@@ -172,13 +172,13 @@ function readSchemaPropertyAtPath(schema: WidgetSchemaObject, segments: string[]
 }
 
 /**
- * 读取循环数据源数组项 schema。
+ * 读取循环数据源数组 schema。
  * @param widgetData - Widget 数据
  * @param dataSchema - 静态推导 data schema
  * @param config - 循环配置
- * @returns 数组项 schema
+ * @returns 数组数据源 schema
  */
-function readLoopItemSchema(widgetData: WidgetData, dataSchema: WidgetSchemaObject, config: WidgetElementLoopConfig): WidgetSchemaProperty | undefined {
+function readLoopArraySchema(widgetData: WidgetData, dataSchema: WidgetSchemaObject, config: WidgetElementLoopConfig): WidgetSchemaProperty | undefined {
   const path = parseWidgetBindingPath(config.source);
   if (!path || path.root === 'local') {
     return undefined;
@@ -187,7 +187,7 @@ function readLoopItemSchema(widgetData: WidgetData, dataSchema: WidgetSchemaObje
   const sourceSchema = path.root === 'input' ? widgetData.inputSchema : dataSchema;
   const sourceProperty = readSchemaPropertyAtPath(sourceSchema, path.segments);
 
-  return sourceProperty?.type === 'array' ? sourceProperty.items : undefined;
+  return sourceProperty?.type === 'array' ? sourceProperty : undefined;
 }
 
 /**
@@ -234,8 +234,13 @@ function createLoopVariables(widgetData: WidgetData | undefined, dataSchema: Wid
     return [];
   }
 
+  const loopArraySchema = readLoopArraySchema(widgetData, dataSchema, config);
+  if (!loopArraySchema) {
+    return [];
+  }
+
   const variableNames = resolveWidgetElementLoopVariableNames(config);
-  const itemSchema = readLoopItemSchema(widgetData, dataSchema, config);
+  const itemSchema = loopArraySchema.items;
   const itemChildren = itemSchema?.type === 'object' ? collectLoopItemVariableChildren(variableNames.itemName, itemSchema.properties) : [];
   const variables = [createVariable(formatLocalVariableRoot(variableNames.itemName), '循环项', undefined, itemChildren)];
 

@@ -460,6 +460,17 @@ describe('useElementVariables', (): void => {
     wrapper.unmount();
   });
 
+  it('hides loop variables when loop source is not an array data source', (): void => {
+    const loopElement = createWidgetElement('text-1', {}, { ...createLoopConfig(), source: '' });
+    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopElement]));
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => loopElement);
+    const values = readVariableValues(variableOptions.value);
+
+    expect(values).not.toContain('item');
+    expect(values).not.toContain('index');
+    wrapper.unmount();
+  });
+
   it('provides group loop variables to elements covered by the same group context', (): void => {
     const groupChild = createWidgetElement('text-1');
     const loopContextGroup = createGroupElement('group-1', {}, [groupChild], createLoopConfig());

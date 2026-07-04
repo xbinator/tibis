@@ -120,6 +120,23 @@ function createWidgetData(): WidgetData {
 }
 
 /**
+ * 创建测试循环配置。
+ * @param source - 循环数据源路径
+ * @returns 循环配置
+ */
+function createLoopConfig(source = ''): WidgetElement['loop'] {
+  return {
+    enabled: true,
+    source,
+    columns: 1,
+    columnGap: 12,
+    rowGap: 12,
+    itemName: '',
+    indexName: ''
+  };
+}
+
+/**
  * 挂载文本 Setter。
  * @param element - 文本元素
  * @param widgetData - Widget 数据
@@ -322,6 +339,21 @@ describe('Text Setter', (): void => {
     expect(labels).toContain('用户');
     expect(labels).toContain('用户名');
     expect(labels).toContain('温度');
+    wrapper.unmount();
+  });
+
+  it('does not provide loop variables when the selected text element has no array loop source', (): void => {
+    const element = createTextElement();
+    element.loop = createLoopConfig();
+    const widgetData = createWidgetData();
+    widgetData.elements = [element];
+    const wrapper = mountTextSetter(element, widgetData);
+    const editor = wrapper.findComponent({ name: 'BPromptEditorStub' });
+    const options = editor.props('options') as VariableOptionGroup[];
+    const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
+
+    expect(variables).not.toContain('item');
+    expect(variables).not.toContain('index');
     wrapper.unmount();
   });
 
