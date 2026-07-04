@@ -67,7 +67,7 @@ function createModelUpdateSnapshot(board: UseWidgetBoardReturn, dataItem: Widget
 }
 
 /**
- * 创建外部模型回灌到Widget时使用的快照，保留仍然存在的内部选区。
+ * 创建外部模型回灌到Widget时使用的快照，保留内部视口与仍然存在的内部选区。
  * @param dataItem - 外部Widget数据
  * @param board - 内部Widget状态与命令
  * @returns Widget重置快照
@@ -77,6 +77,10 @@ function createModelResetSnapshot(dataItem: WidgetData, board: UseWidgetBoardRet
 
   return {
     ...dataItem,
+    viewport: {
+      center: { ...board.state.value.viewport.center },
+      zoom: board.state.value.viewport.zoom
+    },
     selection: board.state.value.selection.filter((elementId: string): boolean => modelElementIds.has(elementId))
   };
 }

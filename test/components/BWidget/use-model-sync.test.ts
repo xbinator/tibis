@@ -6,7 +6,7 @@ import { effectScope, nextTick, ref, toRaw } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { useModelSync } from '@/components/BWidget/hooks/useModelSync';
 import { useWidgetBoard } from '@/components/BWidget/hooks/useWidgetBoard';
-import type { WidgetData, WidgetElement, WidgetShapeElement } from '@/components/BWidget/types';
+import type { WidgetData, WidgetElement, WidgetShapeElement, WidgetViewport } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
@@ -253,6 +253,56 @@ describe('useModelSync', (): void => {
 
     expect(modelValue.value?.elements).toHaveLength(2);
     expect(modelValue.value).not.toHaveProperty('viewport');
+  });
+
+  it('preserves current board viewport when external model edits existing elements', async (): Promise<void> => {
+    const scope = effectScope();
+    const initialData: WidgetData = {
+      ...createDefaultWidgetData(),
+      elements: [createTextElement('text-1', 'abc')]
+    };
+    const initialElement = initialData.elements[0];
+    if (!initialElement) {
+      throw new Error('测试数据缺少文本元素');
+    }
+    const editedData: WidgetData = {
+      ...initialData,
+      elements: [
+        {
+          ...initialElement,
+          metadata: {
+            ...initialElement.metadata,
+            content: 'abcdef'
+          }
+        }
+      ]
+    };
+    const viewport: WidgetViewport = {
+      center: { x: 300, y: 240 },
+      zoom: 0.8
+    };
+    const modelValue = ref<WidgetData | undefined>(initialData);
+    let readBoardViewport: () => WidgetViewport = (): WidgetViewport => ({ center: { x: 0, y: 0 }, zoom: 1 });
+
+    scope.run((): void => {
+      const board = useWidgetBoard(modelValue.value);
+      board.state.value = {
+        ...board.state.value,
+        viewport
+      };
+      useModelSync({
+        board,
+        dataItem: modelValue
+      });
+
+      modelValue.value = editedData;
+      readBoardViewport = (): WidgetViewport => board.state.value.viewport;
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(readBoardViewport()).toEqual(viewport);
   });
 
   it('continues generated shape titles from current existing titles', (): void => {
