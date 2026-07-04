@@ -53,8 +53,6 @@ const viewStyle = computed<StyleValue>((): StyleValue => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  font-size: 13px;
-  line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   background: transparent;
