@@ -7,6 +7,7 @@
       :placeholder="placeholder"
       :disabled="disabled"
       type="text"
+      allow-clear
       @input="handleInput"
       @focus="handleSelectionEvent"
       @click="handleSelectionEvent"
