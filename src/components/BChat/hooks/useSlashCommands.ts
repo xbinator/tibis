@@ -2,7 +2,7 @@
  * @file useSlashCommands.ts
  * @description 斜杠命令处理 hook，统一管理命令定义和派发逻辑。
  */
-import type { SlashCommandOption } from '@/components/BPromptEditor/types';
+import type { SlashCommandOption } from '@/components/BText/types';
 
 /**
  * 斜杠命令处理所需的回调函数集合。

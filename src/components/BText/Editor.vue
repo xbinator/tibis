@@ -1,5 +1,5 @@
 <template>
-  <div ref="editorRootRef" class="b-prompt-editor-shell" @focusout="handleEditorShellFocusOut">
+  <div ref="editorRootRef" class="b-text-editor-shell" @focusout="handleEditorShellFocusOut">
     <SlashCommandSelect
       :visible="slashCommand.slashVisible.value"
       :commands="slashCommand.filteredSlashCommands.value"
@@ -16,9 +16,9 @@
       @select="fileMention.handleFileMentionSelect"
       @update:active-index="fileMention.handleMentionActiveIndexChange"
     />
-    <div class="b-prompt-editor" @click="handleContainerClick">
-      <div class="b-prompt-editor__container">
-        <div ref="editorHostRef" class="b-prompt-editor__codemirror"></div>
+    <div class="b-text-editor" @click="handleContainerClick">
+      <div class="b-text-editor__container">
+        <div ref="editorHostRef" class="b-text-editor__codemirror"></div>
         <VariableSelect
           :visible="triggerVisible"
           :variables="filteredVariables"
@@ -35,11 +35,11 @@
 
 <script setup lang="ts">
 /**
- * @file BPromptEditor/index.vue
+ * @file BText/Editor.vue
  * @description Prompt 编辑器主组件，基于 CodeMirror 6 实现
  */
 import type { ChipResolver } from './extensions/variableChip';
-import type { SlashCommandOption, Variable, FileMentionOption, BPromptEditorProps as Props } from './types';
+import type { SlashCommandOption, Variable, FileMentionOption, BTextEditorProps as Props } from './types';
 import type { FlatVariable, VisibleVariable } from './utils/variables';
 import type { Extension } from '@codemirror/state';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
@@ -554,12 +554,12 @@ defineExpose({
 @import url('@/assets/styles/scrollbar.less');
 @import url('@/components/BChat/components/FileRefChip/index.less');
 
-.b-prompt-editor-shell {
+.b-text-editor-shell {
   position: relative;
   width: 100%;
 }
 
-.b-prompt-editor {
+.b-text-editor {
   width: 100%;
   min-height: 80px;
   padding: 4px 12px;
@@ -586,13 +586,13 @@ defineExpose({
   .scrollbar-style();
 }
 
-.b-prompt-editor__container {
+.b-text-editor__container {
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-.b-prompt-editor__codemirror {
+.b-text-editor__codemirror {
   width: 100%;
   min-height: 80px;
 

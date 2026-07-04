@@ -1,6 +1,6 @@
 /**
  * @file base.ts
- * @description BPromptEditor 可动态配置的 Compartment 实例
+ * @description BTextEditor 可动态配置的 Compartment 实例
  */
 
 import { Compartment } from '@codemirror/state';

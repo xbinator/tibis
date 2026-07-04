@@ -43,7 +43,7 @@
       <div :class="bem('input-container', { dragover: isContainerDragActive })">
         <ImagePreview :images="inputImages" :supports-vision="supportsVision" :on-remove-image="inputEvents.removeImage" />
 
-        <BPromptEditor
+        <BTextEditor
           ref="promptEditorRef"
           v-model:value="inputContent"
           placeholder="输入消息..."
@@ -94,8 +94,8 @@ import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudge
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { toTransportTools } from '@/ai/tools/stream';
-import BPromptEditor from '@/components/BPromptEditor/index.vue';
-import type { FileMentionOption } from '@/components/BPromptEditor/types';
+import BTextEditor from '@/components/BText/Editor.vue';
+import type { FileMentionOption } from '@/components/BText/types';
 import { useFileDrop } from '@/hooks/useFileDrop';
 import { useNavigate } from '@/hooks/useNavigate';
 import { native } from '@/shared/platform';
@@ -196,7 +196,7 @@ const { api: interactionAPI, toastQueue, removeToast } = useInteractionState();
 provide('interaction', interactionAPI);
 
 /** 输入框编辑器引用 */
-const promptEditorRef = ref<InstanceType<typeof BPromptEditor>>();
+const promptEditorRef = ref<InstanceType<typeof BTextEditor>>();
 /** 聊天容器引用，用于接收整个聊天区域的文件拖拽。 */
 const containerRef = ref<HTMLElement>();
 /** 通用文件打开导航能力 */
@@ -246,7 +246,7 @@ function handleOpenPromptFileReference(target: FileReferenceNavigationTarget): v
   });
 }
 
-/** PromptEditor 使用的文件引用 chip resolver。 */
+/** BTextEditor 使用的文件引用 chip resolver。 */
 const promptChipResolver = createFileRefChipResolver(handleOpenPromptFileReference);
 
 /** 保存输入框光标位置 */
@@ -1040,7 +1040,7 @@ async function handleLoadHistory(): Promise<void> {
  * @param file - 选中的文件
  */
 function handleFileMentionSelect(file: FileMentionOption): void {
-  // 文件提及已经在 BPromptEditor 中插入到输入框
+  // 文件提及已经在 BTextEditor 中插入到输入框
   console.log('File mention selected:', file.name);
 }
 
@@ -1130,7 +1130,7 @@ defineExpose({ focusInput });
   }
 }
 
-.b-chat__input-container .b-prompt-editor {
+.b-chat__input-container .b-text-editor {
   flex: 1;
   min-width: 0;
   padding: 0;
@@ -1139,7 +1139,7 @@ defineExpose({ focusInput });
   border-radius: 0;
 }
 
-.b-chat__input-container .b-prompt-editor:focus-within {
+.b-chat__input-container .b-text-editor:focus-within {
   box-shadow: none;
 }
 </style>

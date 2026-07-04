@@ -54,9 +54,9 @@ vi.mock('@/components/BModal/index.vue', () => ({
   }
 }));
 
-vi.mock('@/components/BPromptEditor/index.vue', () => ({
+vi.mock('@/components/BText/Editor.vue', () => ({
   default: {
-    name: 'BPromptEditor',
+    name: 'BTextEditor',
     template: '<textarea />'
   }
 }));

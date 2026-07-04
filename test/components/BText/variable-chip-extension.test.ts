@@ -1,13 +1,13 @@
 /**
  * @file variable-chip-extension.test.ts
- * @description 验证 BPromptEditor 变量装饰扩展的可编辑性与 atomic 范围。
+ * @description 验证 BTextEditor 变量装饰扩展的可编辑性与 atomic 范围。
  * @vitest-environment jsdom
  */
 import { EditorState } from '@codemirror/state';
 import { WidgetType } from '@codemirror/view';
 import { describe, expect, it } from 'vitest';
-import type { ChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
-import { chipResolverEffect, getChipAtPos, variableChipField } from '@/components/BPromptEditor/extensions/variableChip';
+import type { ChipResolver } from '@/components/BText/extensions/variableChip';
+import { chipResolverEffect, getChipAtPos, variableChipField } from '@/components/BText/extensions/variableChip';
 
 /**
  * 测试用替换型 Chip Widget。
@@ -48,7 +48,7 @@ function createStateWithResolver(resolver: ChipResolver): EditorState {
   return state.update({ effects: chipResolverEffect.of(resolver) }).state;
 }
 
-describe('BPromptEditor variable chip extension', (): void => {
+describe('BTextEditor variable chip extension', (): void => {
   it('keeps className variable marks editable instead of atomic', (): void => {
     const state = createStateWithResolver(() => ({ className: 'b-prompt-variable-token' }));
 

@@ -7,8 +7,8 @@ import { readFileSync } from 'node:fs';
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import VariableSelect from '@/components/BPromptEditor/components/VariableSelect.vue';
-import type { Variable } from '@/components/BPromptEditor/types';
+import VariableSelect from '@/components/BText/components/VariableSelect.vue';
+import type { Variable } from '@/components/BText/types';
 
 /**
  * 测试用变量选择项。
@@ -25,9 +25,9 @@ interface VariableSelectTestItem extends Variable {
 }
 
 /** 变量选择菜单源码。 */
-const variableSelectSource = readFileSync('src/components/BPromptEditor/components/VariableSelect.vue', 'utf8');
+const variableSelectSource = readFileSync('src/components/BText/components/VariableSelect.vue', 'utf8');
 /** 通用下拉菜单源码。 */
-const selectDropdownSource = readFileSync('src/components/BPromptEditor/components/_SelectDropdown.vue', 'utf8');
+const selectDropdownSource = readFileSync('src/components/BText/components/_SelectDropdown.vue', 'utf8');
 
 /**
  * 测试用 BButton 替身，保留按钮根节点和点击事件。

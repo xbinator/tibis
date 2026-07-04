@@ -250,7 +250,7 @@ describe('PanelSettings', (): void => {
       },
       global: {
         stubs: {
-          BPromptEditor: true,
+          BTextEditor: true,
           BSectionBlock: defineComponent({
             name: 'BSectionBlockStub',
             props: {

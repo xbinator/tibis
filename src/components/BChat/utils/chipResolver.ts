@@ -5,8 +5,8 @@
 import { createApp, type App } from 'vue';
 import { WidgetType } from '@codemirror/view';
 import { createFileRefChipElement, createFileRefChipPresentation } from '@/components/BChat/components/FileRefChip';
-import type { ChipResolver } from '@/components/BPromptEditor/extensions/variableChip';
 import BRecentIcon from '@/components/BRecent/Icon.vue';
+import type { ChipResolver } from '@/components/BText/extensions/variableChip';
 import { parseFileReferenceToken, type FileReferenceNavigationTarget, type ParsedFileReference } from '@/utils/file/reference';
 
 /**
@@ -99,7 +99,7 @@ class FileRefWidget extends WidgetType {
 /**
  * 创建文件引用 chip 解析器。
  * @param onOpenFile - 文件打开回调
- * @returns PromptEditor 可用的 chipResolver
+ * @returns BTextEditor 可用的 chipResolver
  */
 export function createFileRefChipResolver(onOpenFile: (target: FileReferenceNavigationTarget) => void): ChipResolver {
   return (content) => {

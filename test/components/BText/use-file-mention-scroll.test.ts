@@ -5,8 +5,8 @@
 import type { EditorView } from '@codemirror/view';
 import { computed, shallowRef, type ComputedRef, type Ref, type ShallowRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
-import { useFileMention, type UseFileMentionReturn } from '@/components/BPromptEditor/hooks/useFileMention';
-import type { FileMentionOption } from '@/components/BPromptEditor/types';
+import { useFileMention, type UseFileMentionReturn } from '@/components/BText/hooks/useFileMention';
+import type { FileMentionOption } from '@/components/BText/types';
 
 /**
  * 带滚动标记的文件提及 Hook 返回值。

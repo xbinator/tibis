@@ -4,7 +4,7 @@
 -->
 <template>
   <BSectionBlock title="内容">
-    <BPromptEditor v-model:value="textContent" :options="variableOptions" :max-height="180" />
+    <BTextEditor v-model:value="textContent" :options="variableOptions" :max-height="180" />
   </BSectionBlock>
   <BSectionBlock title="显示" label-min-width="60">
     <BSectionItem label="最大行数" tooltip="超出指定行数将截断显示，手动换行也计入配额。留空表示不限制。">

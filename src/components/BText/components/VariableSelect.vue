@@ -3,9 +3,10 @@
     :visible="dropdownVisible"
     :items="variables"
     :active-index="activeIndex"
-    teleport
+    :teleport="teleport"
     :position="position"
-    :dropdown-width="300"
+    :dropdown-width="dropdownWidth"
+    :inline-style="inlineStyle"
     @select="handleSelect"
     @update:active-index="handleMouseEnter"
   >
@@ -74,10 +75,19 @@ interface Props {
   position: { top: number; left: number; bottom: number };
   /** 当前高亮项索引 */
   activeIndex?: number;
+  /** 下拉菜单宽度 */
+  dropdownWidth?: number;
+  /** 是否将下拉菜单传送到 body */
+  teleport?: boolean;
+  /** 非 Teleport 模式下的下拉样式 */
+  inlineStyle?: CSSProperties;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  activeIndex: 0
+  activeIndex: 0,
+  dropdownWidth: 300,
+  teleport: true,
+  inlineStyle: undefined
 });
 
 const emit = defineEmits<{

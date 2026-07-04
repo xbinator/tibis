@@ -6,7 +6,7 @@ import type { ToastOptions } from '../components/InteractionContainer/types';
 import type { ChatMessageFile } from 'types/chat';
 import type { Ref } from 'vue';
 import { createChatImageFile, isImageFile } from '@/components/BChat/utils/imageUtils';
-import type { PasteImageContext } from '@/components/BPromptEditor/types';
+import type { PasteImageContext } from '@/components/BText/types';
 
 /** 单张图片大小限制 */
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;

@@ -1,6 +1,6 @@
 /**
  * @file variables.ts
- * @description BPromptEditor 变量树转换工具。
+ * @description BTextEditor 变量树转换工具。
  */
 import type { Variable } from '../types';
 

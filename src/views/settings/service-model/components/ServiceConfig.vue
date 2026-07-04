@@ -26,7 +26,7 @@
     <BModal v-model:open="promptModalVisible" title="提示词" :width="600" :main-style="{ padding: '16px 24px 10px' }">
       <div class="prompt-modal">
         <div class="prompt-modal-desc" v-text="'输入内容，支持按此格式书写变量： {{ USER_NAME }}'"></div>
-        <BPromptEditor v-model:value="draftPrompt" :placeholder="placeholder" :options="options" :max-height="420" :chip-resolver="chipResolver" />
+        <BTextEditor v-model:value="draftPrompt" :placeholder="placeholder" :options="options" :max-height="420" :chip-resolver="chipResolver" />
       </div>
 
       <template #footer>
@@ -45,11 +45,11 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import BButton from '@/components/BButton/index.vue';
 import BModal from '@/components/BModal/index.vue';
 import BModelIcon from '@/components/BModel/Icon.vue';
-import type { ChipResult } from '@/components/BPromptEditor/extensions/variableChip';
-import BPromptEditor from '@/components/BPromptEditor/index.vue';
-import type { Variable, VariableOptionGroup } from '@/components/BPromptEditor/types';
-import { flattenVariables } from '@/components/BPromptEditor/utils/variables';
 import BSelect from '@/components/BSelect/index.vue';
+import BTextEditor from '@/components/BText/Editor.vue';
+import type { ChipResult } from '@/components/BText/extensions/variableChip';
+import type { Variable, VariableOptionGroup } from '@/components/BText/types';
+import { flattenVariables } from '@/components/BText/utils/variables';
 import { serviceModelsStorage } from '@/shared/storage';
 import { dispatchServiceModelUpdated } from '@/shared/storage/service-models/events';
 import { useProviderStore } from '@/stores/ai/provider';

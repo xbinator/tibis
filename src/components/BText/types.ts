@@ -1,6 +1,6 @@
 /**
  * @file types.ts
- * @description BPromptEditor 共享类型定义
+ * @description BTextEditor 共享类型定义
  */
 import type { ChipResolver } from './extensions/variableChip';
 
@@ -83,9 +83,9 @@ export interface FileMentionOption {
 }
 
 /**
- * BPromptEditor 组件属性
+ * BTextEditor 组件属性
  */
-export interface BPromptEditorProps {
+export interface BTextEditorProps {
   /** 占位符 */
   placeholder?: string;
   /** 变量选项 */

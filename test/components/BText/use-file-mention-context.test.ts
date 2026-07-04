@@ -6,8 +6,8 @@ import type { EditorView } from '@codemirror/view';
 import { computed, shallowRef, type ComputedRef, type ShallowRef } from 'vue';
 import { EditorState } from '@codemirror/state';
 import { describe, expect, it, vi } from 'vitest';
-import { useFileMention, type UseFileMentionReturn } from '@/components/BPromptEditor/hooks/useFileMention';
-import type { FileMentionOption } from '@/components/BPromptEditor/types';
+import { useFileMention, type UseFileMentionReturn } from '@/components/BText/hooks/useFileMention';
+import type { FileMentionOption } from '@/components/BText/types';
 
 /**
  * 创建测试文件提及选项。
