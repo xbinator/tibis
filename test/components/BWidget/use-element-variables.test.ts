@@ -460,8 +460,19 @@ describe('useElementVariables', (): void => {
     wrapper.unmount();
   });
 
-  it('hides loop variables when loop source is not an array data source', (): void => {
+  it('hides loop variables when loop source is empty', (): void => {
     const loopElement = createWidgetElement('text-1', {}, { ...createLoopConfig(), source: '' });
+    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopElement]));
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => loopElement);
+    const values = readVariableValues(variableOptions.value);
+
+    expect(values).not.toContain('item');
+    expect(values).not.toContain('index');
+    wrapper.unmount();
+  });
+
+  it('hides loop variables when loop source points to a non-array field', (): void => {
+    const loopElement = createWidgetElement('text-1', {}, { ...createLoopConfig(), source: 'input.city' });
     const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopElement]));
     const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => loopElement);
     const values = readVariableValues(variableOptions.value);
@@ -480,6 +491,18 @@ describe('useElementVariables', (): void => {
 
     expect(values).toContain('item.name');
     expect(values).toContain('index');
+    wrapper.unmount();
+  });
+
+  it('hides inherited loop variables when group loop source is invalid', (): void => {
+    const groupChild = createWidgetElement('text-1');
+    const loopContextGroup = createGroupElement('group-1', {}, [groupChild], { ...createLoopConfig(), source: 'input.city' });
+    const widgetDataRef = ref<WidgetData | undefined>(createLoopWidgetData([loopContextGroup]));
+    const { variableOptions, wrapper } = mountElementVariables(widgetDataRef, (): WidgetElement => groupChild);
+    const values = readVariableValues(variableOptions.value);
+
+    expect(values).not.toContain('item');
+    expect(values).not.toContain('index');
     wrapper.unmount();
   });
 
