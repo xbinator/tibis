@@ -180,8 +180,11 @@ export function createWidgetElementContentStyleProperties(style?: WidgetElementS
     alignItems: resolveWidgetElementVerticalAlign(style?.textVerticalAlign),
     color: style?.color,
     fontSize: style?.fontSize === undefined ? undefined : `${style.fontSize}px`,
+    fontStyle: style?.fontStyle,
     fontWeight: style?.fontWeight,
+    lineHeight: style?.lineHeight,
     textAlign: style?.textAlign,
+    textDecoration: style?.textDecoration,
     overflow: 'hidden'
   };
 }

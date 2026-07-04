@@ -220,7 +220,8 @@ function getWidgetTextPaddingMetrics(style?: WidgetElementStyle): { horizontal: 
 export function measureWidgetTextElementSize(text: string, style?: WidgetElementStyle, options: WidgetTextMeasureOptions = {}): WidgetSize {
   const fontSize = style?.fontSize ?? WIDGET_TEXT_DEFAULT_FONT_SIZE;
   const fontWeight = style?.fontWeight ?? WIDGET_TEXT_DEFAULT_FONT_WEIGHT;
-  const lineHeight = fontSize * WIDGET_TEXT_LINE_HEIGHT_RATIO;
+  // 行高优先使用用户设置，否则回退到默认比例，保证测量与渲染一致
+  const lineHeight = fontSize * (style?.lineHeight ?? WIDGET_TEXT_LINE_HEIGHT_RATIO);
   const padding = getWidgetTextPaddingMetrics(style);
   const maxContentWidth = getTextWrappingContentWidth(options.maxWidth, padding);
   const allLines = text.split('\n').flatMap((line: string): string[] => wrapWidgetTextLine(line, maxContentWidth, fontSize, fontWeight));

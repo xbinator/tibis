@@ -67,6 +67,16 @@ export type WidgetCornerRadiusValue = number | WidgetCornerRadius;
 export type WidgetBorderStyle = 'none' | 'solid' | 'dashed' | 'dotted';
 
 /**
+ * Widget元素文字修饰线。
+ */
+export type WidgetTextDecoration = 'none' | 'underline' | 'line-through';
+
+/**
+ * Widget元素文字斜体。
+ */
+export type WidgetFontStyle = 'normal' | 'italic';
+
+/**
  * Widget元素样式。
  */
 export interface WidgetElementStyle {
@@ -88,6 +98,12 @@ export interface WidgetElementStyle {
   fontSize?: number;
   /** 文字字重 */
   fontWeight?: number;
+  /** 文字斜体 */
+  fontStyle?: WidgetFontStyle;
+  /** 文字行高，单位为字号倍数（如 1.5），未设置时使用默认比例 */
+  lineHeight?: number;
+  /** 文字修饰线 */
+  textDecoration?: WidgetTextDecoration;
   /** 文字对齐方式 */
   textAlign?: 'left' | 'center' | 'right' | 'justify';
   /** 文字垂直对齐方式 */
