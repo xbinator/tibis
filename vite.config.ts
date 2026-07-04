@@ -43,7 +43,8 @@ const COMPONENT_DIRS = [
   'BColorPicker',
   'BSection',
   'BDrawer',
-  'BPagination'
+  'BPagination',
+  'BInputNumber'
 ];
 
 /**
