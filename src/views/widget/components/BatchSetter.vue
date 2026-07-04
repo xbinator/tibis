@@ -18,16 +18,16 @@
     <BSectionBlock title="布局">
       <div class="multi-select-field-grid">
         <BSectionItem label="X">
-          <AInputNumber v-model:value="layoutXValue" placeholder="X" :controls="false" />
+          <BInputNumber v-model:value="layoutXValue" placeholder="X" />
         </BSectionItem>
         <BSectionItem label="Y">
-          <AInputNumber v-model:value="layoutYValue" placeholder="Y" :controls="false" />
+          <BInputNumber v-model:value="layoutYValue" placeholder="Y" />
         </BSectionItem>
         <BSectionItem label="宽">
-          <AInputNumber v-model:value="layoutWidthValue" placeholder="宽" :controls="false" />
+          <BInputNumber v-model:value="layoutWidthValue" placeholder="宽" />
         </BSectionItem>
         <BSectionItem label="高">
-          <AInputNumber v-model:value="layoutHeightValue" placeholder="高" :controls="false" />
+          <BInputNumber v-model:value="layoutHeightValue" placeholder="高" />
         </BSectionItem>
       </div>
     </BSectionBlock>
@@ -59,7 +59,6 @@
 <script setup lang="ts">
 import type { WidgetMultiSelectLayoutChange } from '../types';
 import { computed } from 'vue';
-import { InputNumber as AInputNumber } from 'ant-design-vue';
 import { isEqual } from 'lodash-es';
 import { useWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetBorderStyle, WidgetElement, WidgetElementStyle, WidgetElementStyleChange } from '@/components/BWidget/types';

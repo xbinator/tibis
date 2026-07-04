@@ -22,13 +22,13 @@
 
       <div class="widget-advanced-setter__grid">
         <BSectionItem label="列数" label-min-width="">
-          <AInputNumber v-model:value="element.loop.columns" placeholder="列数" :controls="false" />
+          <BInputNumber v-model:value="element.loop.columns" placeholder="列数" />
         </BSectionItem>
         <BSectionItem label="列距" label-min-width="">
-          <AInputNumber v-model:value="element.loop.columnGap" placeholder="列距" :controls="false" />
+          <BInputNumber v-model:value="element.loop.columnGap" placeholder="列距" />
         </BSectionItem>
         <BSectionItem label="行距" label-min-width="">
-          <AInputNumber v-model:value="element.loop.rowGap" placeholder="行距" :controls="false" />
+          <BInputNumber v-model:value="element.loop.rowGap" placeholder="行距" />
         </BSectionItem>
       </div>
     </BSectionBlock>
@@ -37,7 +37,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Checkbox as ACheckbox, Input as AInput, InputNumber as AInputNumber } from 'ant-design-vue';
+import { Checkbox as ACheckbox, Input as AInput } from 'ant-design-vue';
 import type { SelectOption } from '@/components/BSelect/types';
 import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
 import type { WidgetElement } from '@/components/BWidget/types';

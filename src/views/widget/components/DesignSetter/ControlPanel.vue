@@ -6,13 +6,7 @@
   <div class="control-panel">
     <BSectionItem :label="label">
       <span class="control-panel__main">
-        <AInputNumber
-          v-model:value="allValue"
-          :min="0"
-          :controls="false"
-          :placeholder="isIndividualValue ? '自定义' : '请输入'"
-          @change="handleAllValueChange"
-        />
+        <BInputNumber v-model:value="allValue" :min="0" :placeholder="isIndividualValue ? '自定义' : '请输入'" @change="handleAllValueChange" />
         <button class="control-panel__toggle" :class="{ 'is-active': isPanelExpanded }" @click="toggleExpanded">
           <BIcon icon="lucide:grid-2x2" :size="15" />
         </button>
@@ -21,21 +15,15 @@
 
     <div v-if="isManuallyExpanded" class="control-panel__advanced">
       <BSectionItem v-for="option in targetOptions" :key="option.value" :label="option.label">
-        <AInputNumber
-          :min="0"
-          :value="getTargetValue(option.value)"
-          :controls="false"
-          @change="(value: ValueType) => handleTargetValueUpdate(option.value, value)"
-        />
+        <BInputNumber :min="0" :value="getTargetValue(option.value)" @change="(value: ValueType) => handleTargetValueUpdate(option.value, value)" />
       </BSectionItem>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { ValueType } from 'ant-design-vue/es/input-number/src/utils/MiniDecimal';
 import { computed, ref, watch } from 'vue';
-import { InputNumber as AInputNumber } from 'ant-design-vue';
+import type { ValueType } from '@/components/BInputNumber/types';
 import type { WidgetBoxSides, WidgetBoxSideValue, WidgetCornerRadius, WidgetCornerRadiusValue } from '@/components/BWidget/types';
 
 /**
