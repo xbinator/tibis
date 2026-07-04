@@ -7,39 +7,50 @@
     <!-- 文字 -->
     <BSectionBlock title="文字">
       <div :class="$style.fieldGrid">
-        <BSectionItem icon="lucide:type">
+        <BSectionItem icon="lucide:type" tips="大小">
           <BInputNumber v-model:value="dataItem.style.fontSize" placeholder="字号" />
         </BSectionItem>
-        <BSectionItem icon="lucide:bold">
-          <BSelect v-model:value="dataItem.style.fontWeight" placeholder="字重" :options="fontWeightOptions" />
+        <BSectionItem icon="lucide:bold" tips="字重">
+          <BSelect v-model:value="dataItem.style.fontWeight" default-value="400" placeholder="字重" :options="fontWeightOptions" />
         </BSectionItem>
       </div>
 
-      <BSectionItem icon="lucide:a-large-small">
-        <BColorPicker v-model:value="dataItem.style.color">
-          <AInput v-model:value="dataItem.style.color" placeholder="字体颜色" />
-        </BColorPicker>
+      <div :class="$style.fieldGrid">
+        <BSectionItem icon="mdi:format-line-height" tips="行高">
+          <BInputNumber v-model:value="dataItem.style.lineHeight" :min="0" :step="0.1" :decimal-precision="2" placeholder="行高" />
+        </BSectionItem>
+        <BSectionItem icon="mdi:format-italic" tips="样式">
+          <BSelect v-model:value="dataItem.style.fontStyle" default-value="normal" placeholder="斜体" :options="fontStyleOptions" />
+        </BSectionItem>
+      </div>
+
+      <BSectionItem icon="lucide:a-large-small" tips="字体颜色">
+        <BColorPicker v-model:value="dataItem.style.color" />
       </BSectionItem>
       <!-- 文字对齐 -->
-      <BSectionItem icon="lucide:chart-no-axes-gantt">
+      <BSectionItem icon="lucide:chart-no-axes-gantt" tips="对齐">
         <BSegmented v-model:value="dataItem.style.textAlign" block :options="textAlignOptions">
           <template #label="{ record }">
             <BIcon :icon="textAlignIconMap[record.value as keyof typeof textAlignIconMap]" :size="16" />
           </template>
         </BSegmented>
       </BSectionItem>
+      <!-- 文字修饰 -->
+      <BSectionItem icon="lucide:underline" tips="修饰">
+        <BSegmented v-model:value="dataItem.style.textDecoration" block :options="textDecorationOptions" />
+      </BSectionItem>
     </BSectionBlock>
 
     <!-- 布局 -->
     <BSectionBlock title="布局">
       <div :class="$style.fieldGrid">
-        <BSectionItem label="X">
+        <BSectionItem label="X" label-align="center">
           <BInputNumber v-model:value="dataItem.position.x" :default-value="0" :decimal-precision="2" />
         </BSectionItem>
-        <BSectionItem label="Y">
+        <BSectionItem label="Y" label-align="center">
           <BInputNumber v-model:value="dataItem.position.y" :default-value="0" :decimal-precision="2" />
         </BSectionItem>
-        <BSectionItem label="宽">
+        <BSectionItem label="宽" label-align="center">
           <BInputNumber
             v-model:value="dataItem.size.width"
             :min="WIDGET_MIN_ELEMENT_SIZE.width"
@@ -47,7 +58,7 @@
             :decimal-precision="2"
           />
         </BSectionItem>
-        <BSectionItem label="高">
+        <BSectionItem label="高" label-align="center">
           <BInputNumber
             v-model:value="dataItem.size.height"
             :min="WIDGET_MIN_ELEMENT_SIZE.height"
@@ -88,7 +99,7 @@
 import { useCssModule } from 'vue';
 import { Input as AInput } from 'ant-design-vue';
 import { WIDGET_MIN_ELEMENT_SIZE } from '@/components/BWidget/constants/board';
-import type { WidgetBorderStyle, WidgetElement, WidgetElementStyle } from '@/components/BWidget/types';
+import type { WidgetBorderStyle, WidgetElement, WidgetElementStyle, WidgetFontStyle, WidgetTextDecoration } from '@/components/BWidget/types';
 import ControlPanel from './DesignSetter/ControlPanel.vue';
 
 const $style = useCssModule();
@@ -111,6 +122,12 @@ const fontWeightOptions = [
   { value: 700, label: '700' }
 ];
 
+/** 文字斜体选项。 */
+const fontStyleOptions: Array<{ value: WidgetFontStyle; label: string }> = [
+  { value: 'normal', label: '正常' },
+  { value: 'italic', label: '斜体' }
+];
+
 /** 文本对齐选项。 */
 const textAlignOptions = [
   { value: 'left', label: '左对齐' },
@@ -126,6 +143,13 @@ const textAlignIconMap: Record<string, string> = {
   right: 'lucide:align-right',
   justify: 'lucide:align-justify'
 };
+
+/** 文字修饰选项。 */
+const textDecorationOptions: Array<{ value: WidgetTextDecoration; label: string }> = [
+  { value: 'none', label: '无' },
+  { value: 'underline', label: '下划线' },
+  { value: 'line-through', label: '删除线' }
+];
 
 /** 边框线形选项。 */
 const borderStyleOptions: Array<{ value: WidgetBorderStyle; label: string }> = [
