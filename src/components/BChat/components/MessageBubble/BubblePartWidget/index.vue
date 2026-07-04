@@ -248,9 +248,6 @@ onMounted((): void => {
 
 <style scoped lang="less">
 .message-bubble-widget {
-  min-width: 220px;
   overflow: hidden;
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
 }
 </style>

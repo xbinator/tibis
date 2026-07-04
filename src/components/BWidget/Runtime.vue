@@ -80,7 +80,7 @@ interface WidgetRuntimeRenderableElement {
 
 const props = withDefaults(defineProps<Props>(), {
   lifecycle: () => ({}),
-  padding: 16,
+  padding: 0,
   runtime: undefined,
   runtimeEnabled: false,
   status: 'created'
@@ -430,7 +430,6 @@ watch(propsRuntimeState, (nextState): void => {
   width: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg-primary);
 }
 
 .b-widget-runtime__stage-viewport {
