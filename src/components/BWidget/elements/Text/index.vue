@@ -3,8 +3,8 @@
   @description BWidget 文本元素中间Widget视图。
 -->
 <template>
-  <div class="widget-text-element-view">
-    <div :style="viewStyle">{{ textContent }}</div>
+  <div class="widget-text-element">
+    <div :style="viewStyle" class="widget-text-element-content">{{ textContent }}</div>
   </div>
 </template>
 
@@ -47,7 +47,7 @@ const viewStyle = computed<StyleValue>((): StyleValue => {
 </script>
 
 <style lang="less" scoped>
-.widget-text-element-view {
+.widget-text-element {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -59,5 +59,9 @@ const viewStyle = computed<StyleValue>((): StyleValue => {
   white-space: pre-wrap;
   background: transparent;
   border-color: transparent;
+}
+
+.widget-text-element-content {
+  width: 100%;
 }
 </style>

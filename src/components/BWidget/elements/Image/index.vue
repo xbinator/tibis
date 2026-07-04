@@ -3,11 +3,11 @@
   @description BWidget 图片元素中间Widget视图。
 -->
 <template>
-  <div class="widget-image-view">
-    <img v-if="imageSrc && !hasError" class="widget-image-view__img" :src="imageSrc" :alt="altText" :style="imageStyle" @error="handleError" />
-    <div v-else class="widget-image-view__placeholder">
-      <BIcon class="widget-image-view__placeholder-icon" :icon="placeholderIcon" :size="28" />
-      <span class="widget-image-view__placeholder-text">{{ placeholderText }}</span>
+  <div class="widget-image-element">
+    <img v-if="imageSrc && !hasError" class="widget-image-element__img" :src="imageSrc" :alt="altText" :style="imageStyle" @error="handleError" />
+    <div v-else class="widget-image-element__placeholder">
+      <BIcon class="widget-image-element__placeholder-icon" :icon="placeholderIcon" :size="28" />
+      <span class="widget-image-element__placeholder-text">{{ placeholderText }}</span>
     </div>
   </div>
 </template>
@@ -72,7 +72,7 @@ function handleError(): void {
 </script>
 
 <style lang="less" scoped>
-.widget-image-view {
+.widget-image-element {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -83,13 +83,13 @@ function handleError(): void {
   border-color: transparent;
 }
 
-.widget-image-view__img {
+.widget-image-element__img {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.widget-image-view__placeholder {
+.widget-image-element__placeholder {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -101,11 +101,11 @@ function handleError(): void {
   background: var(--bg-secondary);
 }
 
-.widget-image-view__placeholder-icon {
+.widget-image-element__placeholder-icon {
   opacity: 0.5;
 }
 
-.widget-image-view__placeholder-text {
+.widget-image-element__placeholder-text {
   font-size: 11px;
   line-height: 1.4;
   text-align: center;
