@@ -8,7 +8,7 @@
   </BSectionBlock>
   <BSectionBlock title="显示" label-min-width="60">
     <BSectionItem label="最大行数" tooltip="超出指定行数将截断显示，手动换行也计入配额。留空表示不限制。">
-      <AInputNumber v-model:value="element.metadata.maxLines" :min="1" :max="99" :precision="0" allow-clear placeholder="不限" />
+      <BInputNumber v-model:value="element.metadata.maxLines" :min="1" :max="99" :precision="0" placeholder="不限" />
     </BSectionItem>
   </BSectionBlock>
 </template>

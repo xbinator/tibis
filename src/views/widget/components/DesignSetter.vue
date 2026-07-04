@@ -8,7 +8,7 @@
     <BSectionBlock title="文字">
       <div :class="$style.fieldGrid">
         <BSectionItem icon="lucide:type">
-          <AInputNumber v-model:value="dataItem.style.fontSize" placeholder="字号" :controls="false" />
+          <BInputNumber v-model:value="dataItem.style.fontSize" placeholder="字号" />
         </BSectionItem>
         <BSectionItem icon="lucide:bold">
           <BSelect v-model:value="dataItem.style.fontWeight" placeholder="字重" :options="fontWeightOptions" />
@@ -34,16 +34,26 @@
     <BSectionBlock title="布局">
       <div :class="$style.fieldGrid">
         <BSectionItem label="X">
-          <AInputNumber v-model:value="dataItem.position.x" :controls="false" />
+          <BInputNumber v-model:value="dataItem.position.x" :default-value="0" :decimal-precision="2" />
         </BSectionItem>
         <BSectionItem label="Y">
-          <AInputNumber v-model:value="dataItem.position.y" :controls="false" />
+          <BInputNumber v-model:value="dataItem.position.y" :default-value="0" :decimal-precision="2" />
         </BSectionItem>
         <BSectionItem label="宽">
-          <AInputNumber v-model:value="dataItem.size.width" :controls="false" />
+          <BInputNumber
+            v-model:value="dataItem.size.width"
+            :min="WIDGET_MIN_ELEMENT_SIZE.width"
+            :default-value="WIDGET_MIN_ELEMENT_SIZE.width"
+            :decimal-precision="2"
+          />
         </BSectionItem>
         <BSectionItem label="高">
-          <AInputNumber v-model:value="dataItem.size.height" :controls="false" />
+          <BInputNumber
+            v-model:value="dataItem.size.height"
+            :min="WIDGET_MIN_ELEMENT_SIZE.height"
+            :default-value="WIDGET_MIN_ELEMENT_SIZE.height"
+            :decimal-precision="2"
+          />
         </BSectionItem>
       </div>
 
@@ -76,7 +86,8 @@
 
 <script setup lang="ts">
 import { useCssModule } from 'vue';
-import { Input as AInput, InputNumber as AInputNumber } from 'ant-design-vue';
+import { Input as AInput } from 'ant-design-vue';
+import { WIDGET_MIN_ELEMENT_SIZE } from '@/components/BWidget/constants/board';
 import type { WidgetBorderStyle, WidgetElement, WidgetElementStyle } from '@/components/BWidget/types';
 import ControlPanel from './DesignSetter/ControlPanel.vue';
 
