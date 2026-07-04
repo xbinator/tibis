@@ -6,8 +6,6 @@
       :value="modelValue"
       :placeholder="placeholder"
       :disabled="disabled"
-      type="text"
-      allow-clear
       @input="handleInput"
       @focus="handleSelectionEvent"
       @click="handleSelectionEvent"
@@ -266,22 +264,6 @@ async function setInputCursorPosition(position: number): Promise<void> {
 }
 
 /**
- * 替换输入框指定范围文本。
- * @param range - 替换范围
- * @param insertText - 插入文本
- */
-function replaceInputRange(range: TemplateTriggerRange, insertText: string): void {
-  const nextValue = `${modelValue.value.slice(0, range.from)}${insertText}${modelValue.value.slice(range.to)}`;
-  const nextCursor = range.from + insertText.length;
-
-  updateValue(nextValue);
-  closeDropdown();
-  setInputCursorPosition(nextCursor).catch((error: unknown): void => {
-    console.warn('BTextInput cursor sync failed', error);
-  });
-}
-
-/**
  * 处理输入事件。
  * @param event - 输入事件
  */
@@ -320,15 +302,18 @@ function handleKeyup(): void {
 }
 
 /**
- * 处理变量选择。
+ * 处理变量选择，直接覆盖整个输入值为选中的变量。
  * @param variable - 被选中的变量
  */
 function handleVariableSelect(variable: Variable): void {
-  if (!triggerRange.value) {
-    return;
-  }
+  const nextValue = `{{ ${variable.value} }}`;
+  const nextCursor = nextValue.length;
 
-  replaceInputRange(triggerRange.value, `{{ ${variable.value} }}`);
+  updateValue(nextValue);
+  closeDropdown();
+  setInputCursorPosition(nextCursor).catch((error: unknown): void => {
+    console.warn('BTextInput cursor sync failed', error);
+  });
 }
 
 /**

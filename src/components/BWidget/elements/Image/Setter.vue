@@ -8,10 +8,10 @@
       <BTextInput v-model:value="imageSrc" :options="variableOptions" placeholder="图片地址" />
     </BSectionItem>
     <BSectionItem label="填充">
-      <ASelect v-model:value="element.metadata.fit" :options="WIDGET_IMAGE_FIT_OPTIONS" />
+      <BSelect v-model:value="element.metadata.fit" :options="WIDGET_IMAGE_FIT_OPTIONS" />
     </BSectionItem>
     <BSectionItem label="替代文本" tooltip="属性 alt 属性，图片加载失败占位文字">
-      <AInput v-model:value="element.metadata.alt" placeholder="无障碍描述（可选）" allow-clear />
+      <BTextInput v-model:value="element.metadata.alt" placeholder="" allow-clear />
     </BSectionItem>
   </BSectionBlock>
 </template>
