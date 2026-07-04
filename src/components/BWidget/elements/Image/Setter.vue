@@ -5,7 +5,7 @@
 <template>
   <BSectionBlock title="图片" label-min-width="60">
     <BSectionItem label="地址">
-      <BTextInput v-model:value="imageSrc" :options="variableOptions" placeholder="图片地址" allow-clear />
+      <BTextInput v-model:value="imageSrc" :options="variableOptions" placeholder="图片地址" />
     </BSectionItem>
     <BSectionItem label="填充">
       <ASelect v-model:value="element.metadata.fit" :options="WIDGET_IMAGE_FIT_OPTIONS" />

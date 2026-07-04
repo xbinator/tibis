@@ -53,14 +53,11 @@ function createVariableOptions(): VariableOptionGroup[] {
  * @returns 输入组件包装器
  */
 function mountTextInput(value = 'https://cdn.example.com/'): VueWrapper {
-  let wrapper: VueWrapper;
-
-  wrapper = mount(BTextInput, {
+  const wrapper: VueWrapper = mount(BTextInput, {
     props: {
       value,
       options: createVariableOptions(),
       placeholder: '图片地址',
-      allowClear: true,
       'onUpdate:value': (nextValue: string): void => {
         wrapper.setProps({ value: nextValue }).catch((error: unknown): void => {
           throw error;
@@ -112,7 +109,7 @@ describe('BText Input', (): void => {
 
   it('inserts the selected variable at the current cursor from the variable button', async (): Promise<void> => {
     const wrapper = mountTextInput('https://cdn.example.com/');
-    const input = wrapper.find<HTMLInputElement>('.b-text-input__control');
+    const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
 
     input.element.setSelectionRange(8, 8);
     await input.trigger('focus');
@@ -128,7 +125,7 @@ describe('BText Input', (): void => {
 
   it('opens filtered variables after typing an open template trigger', async (): Promise<void> => {
     const wrapper = mountTextInput('');
-    const input = wrapper.find<HTMLInputElement>('.b-text-input__control');
+    const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
 
     await input.setValue('{{ci');
     await nextTick();
@@ -164,7 +161,7 @@ describe('BText Input', (): void => {
         x: 250,
         y: 40,
         toJSON: (): Record<string, number> => ({})
-      }) as DOMRect;
+      } as DOMRect);
 
     await wrapper.find('.b-text-input__variable').trigger('click');
 

@@ -215,7 +215,6 @@ describe('Image Setter', (): void => {
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
 
     expect(input.props('placeholder')).toBe('图片地址');
-    expect(input.props('allowClear')).toBe(true);
     expect(variables).toContain('$input.imageUrl');
     wrapper.unmount();
   });

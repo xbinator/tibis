@@ -1,6 +1,6 @@
 <template>
   <div ref="rootRef" :class="bem()" @focusout="handleFocusOut">
-    <input
+    <AInput
       ref="inputRef"
       :class="bem('control')"
       :value="modelValue"
@@ -13,32 +13,13 @@
       @keyup="handleKeyup"
       @select="handleSelectionEvent"
       @keydown="handleKeydown"
-    />
-    <div :class="bem('actions')">
-      <BButton
-        v-if="allowClear && modelValue"
-        :class="bem('clear')"
-        type="text"
-        size="small"
-        square
-        icon="lucide:x"
-        tooltip="清空"
-        :disabled="disabled"
-        @mousedown.prevent
-        @click="handleClear"
-      />
-      <BButton
-        :class="bem('variable')"
-        type="text"
-        size="small"
-        square
-        icon="lucide:braces"
-        tooltip="插入变量"
-        :disabled="disabled || !hasVariables"
-        @mousedown.prevent
-        @click="handleVariableButtonClick"
-      />
-    </div>
+    >
+      <template #suffix>
+        <div :class="bem('variable', { active: dropdownVisible })" @mousedown.prevent @click="handleVariableButtonClick">
+          <BIcon icon="lucide:braces" />
+        </div>
+      </template>
+    </AInput>
     <VariableSelect
       :visible="dropdownVisible"
       :variables="filteredVariables"
@@ -63,6 +44,7 @@ import type { Variable, VariableOptionGroup } from './types';
 import type { VisibleVariable } from './utils/variables';
 import type { CSSProperties } from 'vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Input as AInput } from 'ant-design-vue';
 import { createNamespace } from '@/utils/namespace';
 import VariableSelect from './components/VariableSelect.vue';
 import { flattenVariables, getVisibleVariables } from './utils/variables';
@@ -84,8 +66,6 @@ interface Props {
   options?: VariableOptionGroup[];
   /** 是否禁用 */
   disabled?: boolean;
-  /** 是否显示清空按钮 */
-  allowClear?: boolean;
 }
 
 /**
@@ -103,8 +83,7 @@ interface TemplateTriggerRange {
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '',
   options: () => [],
-  disabled: false,
-  allowClear: false
+  disabled: false
 });
 
 const emit = defineEmits<{
@@ -117,8 +96,17 @@ const [, bem] = createNamespace('text-input');
 
 /** 组件根节点。 */
 const rootRef = ref<HTMLDivElement | null>(null);
-/** 原生输入节点。 */
-const inputRef = ref<HTMLInputElement | null>(null);
+/** AInput 组件实例。 */
+const inputRef = ref<InstanceType<typeof AInput> | null>(null);
+
+/**
+ * 获取 AInput 内部的原生输入节点。
+ * @returns 原生 input 元素，未挂载时返回 null
+ */
+function getNativeInput(): HTMLInputElement | null {
+  const el = inputRef.value?.$el;
+  return el instanceof HTMLElement ? el.querySelector('input') : null;
+}
 /** 当前变量下拉是否打开。 */
 const dropdownVisible = ref(false);
 /** 变量下拉锚点位置。 */
@@ -160,7 +148,7 @@ const dropdownInlineStyle = computed<CSSProperties>(
  * @returns 光标位置
  */
 function readInputCursorPosition(): number {
-  return inputRef.value?.selectionStart ?? modelValue.value.length;
+  return getNativeInput()?.selectionStart ?? modelValue.value.length;
 }
 
 /**
@@ -270,8 +258,9 @@ function updateValue(value: string): void {
  */
 async function setInputCursorPosition(position: number): Promise<void> {
   await nextTick();
-  inputRef.value?.focus();
-  inputRef.value?.setSelectionRange(position, position);
+  const input = getNativeInput();
+  input?.focus();
+  input?.setSelectionRange(position, position);
   cursorPosition.value = position;
 }
 
@@ -308,8 +297,15 @@ function handleInput(event: Event): void {
 
 /**
  * 处理选择相关事件，保持光标位置可用于变量按钮插入。
+ * 点击来自变量按钮时不处理，避免与按钮点击行为冲突。
+ * @param event - 选择或点击事件
  */
-function handleSelectionEvent(): void {
+function handleSelectionEvent(event?: Event): void {
+  const target = event?.target;
+  if (target instanceof Element && target.closest('.b-text-input__variable')) {
+    return;
+  }
+
   syncCursorPosition();
   syncTriggerDropdown();
 }
@@ -404,17 +400,6 @@ function handleActiveIndexChange(index: number): void {
 }
 
 /**
- * 清空输入值。
- */
-function handleClear(): void {
-  updateValue('');
-  closeDropdown();
-  setInputCursorPosition(0).catch((error: unknown): void => {
-    console.warn('BTextInput clear cursor sync failed', error);
-  });
-}
-
-/**
  * 判断焦点是否仍在组件内部或变量下拉内部。
  * @param target - 下一个焦点目标
  * @returns 是否应保持下拉打开
@@ -489,65 +474,20 @@ onBeforeUnmount((): void => {
 <style lang="less" scoped>
 .b-text-input {
   position: relative;
-  display: flex;
-  align-items: center;
   width: 100%;
   min-width: 0;
-  height: 32px;
-  padding: 0 4px 0 11px;
-  background: var(--bg-primary);
-  border: 1px solid var(--input-border);
-  border-radius: 6px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-
-  &:hover {
-    border-color: var(--border-hover);
-  }
-
-  &:focus-within {
-    border-color: var(--input-focus-border);
-    box-shadow: 0 0 0 2px var(--input-focus-shadow);
-  }
 }
 
-.b-text-input__control {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 30px;
-  padding: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 14px;
-  line-height: 30px;
-  color: var(--text-primary);
-  outline: none;
-  background: transparent;
-  border: 0;
-}
-
-.b-text-input__control::placeholder {
-  color: var(--text-placeholder);
-}
-
-.b-text-input__control:disabled {
-  cursor: not-allowed;
-}
-
-.b-text-input__actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 2px;
-  align-items: center;
-  margin-left: 4px;
-}
-
-.b-text-input__clear,
 .b-text-input__variable {
   color: var(--text-tertiary);
-}
+  cursor: pointer;
 
-.b-text-input__clear:hover,
-.b-text-input__variable:hover {
-  color: var(--text-primary);
+  &:hover {
+    color: var(--color-primary);
+  }
+
+  &.b-text-input__variable--active {
+    color: var(--color-primary);
+  }
 }
 </style>
