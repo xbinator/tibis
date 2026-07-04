@@ -59,5 +59,9 @@ const wrapStyle = computed(() => {
   overflow: hidden;
   vertical-align: -0.15em;
   fill: currentColor;
+
+  &:focus {
+    outline: none;
+  }
 }
 </style>
