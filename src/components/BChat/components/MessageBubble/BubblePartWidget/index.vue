@@ -11,28 +11,18 @@
       :status="part.status"
       :value="part.value"
       @change="handleRuntimeChange"
-      @submit="handleSubmit"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import type { Message } from '../../../utils/types';
-import type {
-  ChatMessagePart,
-  ChatMessageTextPart,
-  ChatMessageToolPart,
-  ChatMessageWidgetPart,
-  ChatMessageWidgetResultPart,
-  ChatMessageWidgetRuntime
-} from 'types/chat';
+import type { ChatMessagePart, ChatMessageTextPart, ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetRuntime } from 'types/chat';
 import type { WidgetRuntimeChange, WidgetRuntimeSendMessage } from 'types/widget';
 import { onMounted } from 'vue';
 import { isString } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
-import { createWidgetSubmitSuccessResult } from '@/shared/widget/protocol';
-import { stringifyJsonValue } from '@/utils/json';
 import { createNamespace } from '@/utils/namespace';
 import { create, initializeWidgetToolRuntimeParts, resolveWidgetPartFromToolResult } from '../../../utils/messageHelper';
 import {
@@ -167,30 +157,6 @@ function createWidgetSendMessageSubmitInput(sendMessage: WidgetRuntimeSendMessag
 }
 
 /**
- * 创建小组件默认提交结果动作。
- * @param output - 小组件输出
- * @returns 统一提交动作
- */
-function createWidgetResultSubmitAction(output: unknown): BChatSubmitAction {
-  const resultPart: ChatMessageWidgetResultPart = {
-    id: nanoid(),
-    type: 'widget_result',
-    sessionId: props.part.sessionId,
-    widgetId: props.part.widgetId,
-    result: createWidgetSubmitSuccessResult(output),
-    submittedAt: new Date().toISOString()
-  };
-  const userMessage = create.userMessage(stringifyJsonValue(resultPart, { space: 2 }));
-  userMessage.parts = [resultPart];
-
-  return createRuntimeUserMessageSubmitAction({
-    userMessage,
-    parts: [resultPart],
-    errorMessage: '提交小组件结果失败'
-  });
-}
-
-/**
  * 使用运行态变化结果创建下一版小组件片段。
  * @param currentPart - 当前小组件片段
  * @param change - BWidget 运行态变化
@@ -230,7 +196,6 @@ function createWidgetRuntimeChangedMessage(currentMessage: Message, partId: stri
  */
 function createWidgetRuntimeChangeSubmitAction(change: WidgetRuntimeChange): BChatSubmitAction {
   const { messageId } = props;
-  const submitAction = change.reason === 'submit' ? createWidgetResultSubmitAction(change.output) : null;
 
   return {
     async run(context): Promise<void> {
@@ -244,11 +209,6 @@ function createWidgetRuntimeChangeSubmitAction(change: WidgetRuntimeChange): BCh
 
       if (change.sendMessage) {
         await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(change.sendMessage));
-        return;
-      }
-
-      if (submitAction) {
-        await submitAction.run(context);
       }
     }
   };
@@ -264,25 +224,12 @@ function handleRuntimeChange(change: WidgetRuntimeChange): void {
 
     if (change.sendMessage) {
       emit('submit', createRuntimeUserMessageSubmitAction(createWidgetSendMessageSubmitInput(change.sendMessage)));
-      return;
-    }
-
-    if (change.reason === 'submit') {
-      emit('submit', createWidgetResultSubmitAction(change.output));
     }
 
     return;
   }
 
   emit('submit', createWidgetRuntimeChangeSubmitAction(change));
-}
-
-/**
- * 透传小组件提交结果并补充会话信息。
- * @param output - 小组件输出
- */
-function handleSubmit(output: unknown): void {
-  emit('submit', createWidgetResultSubmitAction(output));
 }
 
 /**

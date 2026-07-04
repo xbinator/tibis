@@ -73,7 +73,7 @@ export type WidgetRuntimeDataPatch =
 /**
  * Widget 运行态变化来源。
  */
-export type WidgetRuntimeChangeReason = 'mount' | 'interaction' | 'submit';
+export type WidgetRuntimeChangeReason = 'mount' | 'interaction';
 
 /**
  * Widget 运行态变化事件。
@@ -83,8 +83,6 @@ export interface WidgetRuntimeChange extends WidgetRuntimeState {
   reason: WidgetRuntimeChangeReason;
   /** 脚本声明的上行消息 */
   sendMessage?: WidgetRuntimeSendMessage;
-  /** 节点提交输出，仅 submit 来源存在 */
-  output?: unknown;
 }
 
 /**

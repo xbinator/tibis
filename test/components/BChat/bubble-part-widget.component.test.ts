@@ -288,10 +288,7 @@ describe('BubblePartWidget', (): void => {
     wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
       'change',
       createRuntimeChange(targetWidgetPart, {
-        reason: 'submit',
-        output: {
-          coffeeId: 'latte'
-        },
+        reason: 'interaction',
         status: 'finished',
         lifecycle: {
           ...targetWidgetPart.lifecycle,
@@ -337,7 +334,7 @@ describe('BubblePartWidget', (): void => {
     });
   });
 
-  it('finishes the message widget part before sending submit result', async (): Promise<void> => {
+  it('updates the message widget part without sending widget_result', async (): Promise<void> => {
     const widgetPart = createWidgetPart(
       ['Widget({', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '})'].join('\n')
     );
@@ -348,10 +345,7 @@ describe('BubblePartWidget', (): void => {
     wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
       'change',
       createRuntimeChange(widgetPart, {
-        reason: 'submit',
-        output: {
-          coffeeId: 'latte'
-        },
+        reason: 'interaction',
         status: 'finished',
         lifecycle: {
           ...widgetPart.lifecycle,

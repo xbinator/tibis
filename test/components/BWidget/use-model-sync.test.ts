@@ -198,6 +198,40 @@ describe('useModelSync', (): void => {
     expect(hasInternalStateFields(modelValue.value as WidgetData)).toBe(false);
   });
 
+  it('preserves widget execute config when emitting board content changes', async (): Promise<void> => {
+    const scope = effectScope();
+    const modelValue = ref<WidgetData | undefined>({
+      ...createWidgetData('node-1'),
+      execute: {
+        enabled: false,
+        description: '保存脚本配置',
+        code: 'Widget({ methods: { submit() { this.$sendMessage("ok") } } })'
+      }
+    });
+
+    scope.run((): void => {
+      const board = useWidgetBoard(modelValue.value);
+      useModelSync({
+        board,
+        dataItem: modelValue
+      });
+
+      board.startCreateShapeDraft('rect', { x: 20, y: 30 });
+      board.updateDraftPoint({ x: 140, y: 90 });
+      board.commitCreateShapeDraft();
+    });
+
+    await nextTick();
+    scope.stop();
+
+    expect(modelValue.value?.execute).toEqual({
+      enabled: false,
+      description: '保存脚本配置',
+      code: 'Widget({ methods: { submit() { this.$sendMessage("ok") } } })'
+    });
+    expect(hasInternalStateFields(modelValue.value as WidgetData)).toBe(false);
+  });
+
   it('does not emit model data when only the viewport changes', async (): Promise<void> => {
     const scope = effectScope();
     const modelValue = ref<WidgetData | undefined>(createWidgetData('node-1'));

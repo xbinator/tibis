@@ -762,18 +762,16 @@ async function runWidgetInteraction(
     const sandboxResult = await runPartSandbox(nextState, { ...options, interactionCode });
     const interactedState = applyWidgetSandboxResult(nextState, sandboxResult);
 
-    if (sandboxResult.sendMessage) {
-      const finishResult = await finishWidgetRuntime(interactedState, options);
+    const finishResult = await finishWidgetRuntime(interactedState, options);
 
+    if (sandboxResult.sendMessage) {
       return {
         state: finishResult.state,
         sendMessage: sandboxResult.sendMessage
       };
     }
 
-    if (!sandboxResult.dataChanged) return { state };
-
-    return { state: { ...interactedState, status: 'mounted' } };
+    return finishResult;
   } catch {
     return { state: createFailedWidgetState(state) };
   }

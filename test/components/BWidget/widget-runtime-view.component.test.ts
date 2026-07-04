@@ -555,7 +555,7 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
-  it('emits submit payloads from runtime nodes', async (): Promise<void> => {
+  it('ignores submit payloads from runtime nodes', async (): Promise<void> => {
     const output = {
       coffeeId: 'latte',
       size: 'large'
@@ -564,7 +564,8 @@ describe('BWidgetRuntime', (): void => {
 
     wrapper.findComponent({ name: 'WidgetNode' }).vm.$emit('submit', output);
 
-    expect(wrapper.emitted('submit')?.[0]).toEqual([output]);
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.emitted('change')).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -659,7 +660,7 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
-  it('finishes runtime scripts before reporting node submit changes', async (): Promise<void> => {
+  it('does not finish runtime scripts from node submit events', async (): Promise<void> => {
     const output = {
       coffeeId: 'latte'
     };
@@ -691,22 +692,11 @@ describe('BWidgetRuntime', (): void => {
     await flushWidgetRuntime();
 
     expect(wrapper.emitted('submit')).toBeUndefined();
-    expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
-      reason: 'submit',
-      output,
-      status: 'finished',
-      renderContext: {
-        data: {
-          submitted: {
-            coffeeId: 'latte'
-          }
-        }
-      }
-    });
+    expect(wrapper.emitted('change')).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('serializes runtime interactions against local state before parent props are written back', async (): Promise<void> => {
+  it('finishes runtime interactions that do not send a message', async (): Promise<void> => {
     const wrapper = mount(BWidgetRuntime, {
       props: {
         value: {
@@ -737,14 +727,21 @@ describe('BWidgetRuntime', (): void => {
 
     await nextTick();
     await wrapper.get('.runtime-counter-probe').trigger('click');
-    await wrapper.get('.runtime-counter-probe').trigger('click');
     await flushWidgetRuntime();
 
     const changes = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
 
-    expect(changes).toHaveLength(2);
-    expect(changes[0].renderContext.data.count).toBe(1);
-    expect(changes[1].renderContext.data.count).toBe(2);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      reason: 'interaction',
+      status: 'finished',
+      renderContext: {
+        data: {
+          count: 1
+        }
+      }
+    });
+    expect(changes[0].sendMessage).toBeUndefined();
     wrapper.unmount();
   });
 

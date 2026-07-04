@@ -606,7 +606,7 @@ describe('widgetRuntime', (): void => {
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
-  it('keeps widget mounted when a method throw is handled by interaction code', async (): Promise<void> => {
+  it('finishes widget when a method throw is handled by interaction code', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(['Widget({', '  methods: {', '    explode() {', "      throw new Error('handled by interaction')", '    }', '  }', '})'].join('\n')),
       status: 'mounted',
@@ -619,13 +619,13 @@ describe('widgetRuntime', (): void => {
       ['try {', '  explode()', '} catch (error) {', '  this.methodErrorHandled = true', '}'].join('\n')
     );
 
-    expect(result.state.status).toBe('mounted');
+    expect(result.state.status).toBe('finished');
     expect(result.state.renderContext.data).toEqual({
       methodErrorHandled: true
     });
   });
 
-  it('passes evaluated interaction arguments into user helper parameters', async (): Promise<void> => {
+  it('finishes widget after passing evaluated interaction arguments into user helper parameters', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart(
         ['Widget({', '  methods: {', '    selectCoffee(id, city) {', '      this.selection = { id, city }', '    }', '  }', '})'].join('\n')
@@ -638,7 +638,7 @@ describe('widgetRuntime', (): void => {
 
     const result = await createWidgetRuntimeInstance(part).runInteraction("selectCoffee('latte', this.$input.city)");
 
-    expect(result.state.status).toBe('mounted');
+    expect(result.state.status).toBe('finished');
     expect(result.state.renderContext.data).toEqual({
       selection: {
         id: 'latte',
@@ -662,7 +662,7 @@ describe('widgetRuntime', (): void => {
     expect(part.status).toBe('mounted');
   });
 
-  it('keeps the widget mounted when interaction code updates data without sending a message', async (): Promise<void> => {
+  it('finishes the widget when interaction code updates data without sending a message', async (): Promise<void> => {
     const part: ChatMessageWidgetPart = {
       ...createWidgetPart('Widget({})'),
       status: 'mounted',
@@ -673,7 +673,7 @@ describe('widgetRuntime', (): void => {
 
     const result = await createWidgetRuntimeInstance(part).runInteraction("this.selectedCoffee = 'latte'");
 
-    expect(result.state.status).toBe('mounted');
+    expect(result.state.status).toBe('finished');
     expect(result.state.renderContext.data).toEqual({
       selectedCoffee: 'latte'
     });

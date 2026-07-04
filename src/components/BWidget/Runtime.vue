@@ -15,7 +15,6 @@
           @context-menu="ignoreContextMenu"
           @release="ignoreNodeEvent"
           @select="ignoreNodeEvent"
-          @submit="handleNodeSubmit"
         />
       </div>
     </div>
@@ -41,13 +40,7 @@ import { useViewportSize } from './hooks/useViewportSize';
 import { provideWidgetRuntime, type WidgetRuntimeController } from './hooks/useWidgetRuntime';
 import WidgetNode from './renderers/WidgetNode.vue';
 import { createWidgetLoopRenderElements, type WidgetLoopRenderContext, type WidgetLoopRenderElement } from './utils/widgetLoop';
-import {
-  createWidgetHttpClient,
-  createWidgetRuntimeInstance,
-  finishWidgetRuntime,
-  initWidgetMountState,
-  type WidgetRuntimeFinishResult
-} from './utils/widgetRuntime';
+import { createWidgetHttpClient, createWidgetRuntimeInstance, initWidgetMountState, type WidgetRuntimeFinishResult } from './utils/widgetRuntime';
 import { applyWidgetRuntimeDataPatchesToState } from './utils/widgetRuntime/dataPatch';
 import { createWidgetRuntimeLayoutFromRenderElements, type WidgetRuntimeElementLayout } from './utils/widgetRuntime/layout';
 
@@ -96,8 +89,6 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   /** 运行态脚本执行完成后的状态变化 */
   change: [change: WidgetRuntimeChange];
-  /** 提交运行态输出 */
-  submit: [output: unknown];
 }>();
 
 const [name, bem] = createNamespace('widget-runtime');
@@ -293,10 +284,9 @@ function createStateFromRuntimeResult(result: WidgetRuntimeFinishResult): Widget
  * 根据脚本执行结果创建运行态变化事件。
  * @param reason - 运行态变化来源
  * @param result - 脚本执行结果
- * @param output - 节点提交输出
  * @returns 运行态变化事件
  */
-function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult, output?: unknown): WidgetRuntimeChange {
+function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult): WidgetRuntimeChange {
   const state = createStateFromRuntimeResult(result);
 
   return {
@@ -305,8 +295,7 @@ function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: Widg
     status: state.status,
     lifecycle: state.lifecycle,
     renderContext: state.renderContext,
-    ...(result.sendMessage ? { sendMessage: result.sendMessage } : {}),
-    ...(reason === 'submit' ? { output } : {})
+    ...(result.sendMessage ? { sendMessage: result.sendMessage } : {})
   };
 }
 
@@ -314,10 +303,9 @@ function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: Widg
  * 提交运行态变化并通知宿主。
  * @param reason - 运行态变化来源
  * @param result - 脚本执行结果
- * @param output - 节点提交输出
  */
-function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult, output?: unknown): void {
-  const change = createRuntimeChange(reason, result, output);
+function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult): void {
+  const change = createRuntimeChange(reason, result);
 
   patchPreviewRuntimeState.value = null;
   activePatchExecutionId = null;
@@ -386,28 +374,6 @@ const widgetRuntimeController: WidgetRuntimeController = {
 const providedRuntime = computed<WidgetRuntimeController | undefined>(() => props.runtime ?? (props.runtimeEnabled ? widgetRuntimeController : undefined));
 
 provideWidgetRuntime(providedRuntime);
-
-/**
- * 向使用方透传运行态节点提交结果。
- * @param output - 节点提交输出
- */
-function handleNodeSubmit(output: unknown): void {
-  if (props.runtimeEnabled) {
-    enqueueRuntimeTask(async (): Promise<void> => {
-      const currentState = runtimeState.value;
-      const executionId = beginPatchExecution();
-      const result = await finishWidgetRuntime(currentState, {
-        http: widgetHttpClient,
-        onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches)
-      });
-
-      emitRuntimeChange('submit', result, output);
-    });
-    return;
-  }
-
-  emit('submit', output);
-}
 
 /**
  * 使用宿主 props 回写状态清理本地运行态快照。

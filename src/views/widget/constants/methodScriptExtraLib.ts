@@ -262,7 +262,7 @@ declare interface WidgetBaseThisContext {
    */
   $http: WidgetHttpClient
   /**
-   * 向聊天上行一条消息。调用后表示当前小组件交互结束；未调用时继续等待用户操作。
+   * 向聊天上行一条消息。调用后表示当前小组件交互结束；交互代码未调用时会结束运行态但不发送消息。
    * @param message - 上行消息，支持字符串、文本片段数组或带 isError 的对象。
    * @example this.$sendMessage('确认下单')
    * @example this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })

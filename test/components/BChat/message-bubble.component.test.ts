@@ -564,15 +564,7 @@ describe('MessageBubble', (): void => {
     );
   });
 
-  it('emits unified submit actions from widget runtime items', async (): Promise<void> => {
-    const output: Record<string, unknown> = {
-      coffeeId: 'latte',
-      size: 'large',
-      quantity: 2,
-      options: {
-        temperature: 'hot'
-      }
-    };
+  it('updates widget runtime state without sending widget_result messages', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
       id: 'widget-result-part',
       type: 'widget',
@@ -593,8 +585,7 @@ describe('MessageBubble', (): void => {
     emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
-        reason: 'submit',
-        output,
+        reason: 'interaction',
         status: 'finished',
         lifecycle: {
           mountedAt: '2026-07-01T00:00:00.000Z',
@@ -628,53 +619,33 @@ describe('MessageBubble', (): void => {
     );
     await action.run(submitContext);
 
-    expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
-      userMessage: expect.objectContaining({
-        role: 'user',
-        content: expect.stringContaining('"type": "widget_result"'),
-        parts: [
-          expect.objectContaining({
-            type: 'widget_result',
-            sessionId: 'widget-coffee-session-1',
-            widgetId: 'coffee',
-            submittedAt: expect.any(String),
-            result: {
-              status: 'success',
-              data: {
-                coffeeId: 'latte',
-                size: 'large',
-                quantity: '2',
-                options: '{"temperature":"hot"}'
-              }
-            }
-          })
-        ]
-      }),
-      parts: [
-        expect.objectContaining({
-          type: 'widget_result',
-          sessionId: 'widget-coffee-session-1',
-          widgetId: 'coffee',
-          submittedAt: expect.any(String),
-          result: {
-            status: 'success',
-            data: {
-              coffeeId: 'latte',
-              size: 'large',
-              quantity: '2',
-              options: '{"temperature":"hot"}'
-            }
+    expect(submitContext.sendAdaptedUserMessage).not.toHaveBeenCalled();
+    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
+    const nextMessage = updater(
+      createAssistantMessage({
+        id: 'assistant-widget-submit',
+        content: '',
+        parts: [widgetPart]
+      })
+    );
+
+    expect(nextMessage.parts[0]).toMatchObject({
+      status: 'finished',
+      renderContext: {
+        data: {
+          weather: {
+            temperature: 28
+          },
+          submitted: {
+            city: '上海',
+            temperature: 28
           }
-        })
-      ],
-      errorMessage: '提交小组件结果失败'
+        }
+      }
     });
   });
 
-  it('finishes widget runtime data before sending widget submit result', async (): Promise<void> => {
-    const output: Record<string, unknown> = {
-      coffeeId: 'latte'
-    };
+  it('updates widget runtime data without sending widget_result messages', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
       id: 'widget-submit-part',
       type: 'widget',
@@ -709,8 +680,7 @@ describe('MessageBubble', (): void => {
     emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
-        reason: 'submit',
-        output,
+        reason: 'interaction',
         status: 'finished',
         lifecycle: {
           mountedAt: '2026-07-01T00:00:00.000Z',
@@ -772,7 +742,7 @@ describe('MessageBubble', (): void => {
         }
       }
     });
-    expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledTimes(1);
+    expect(submitContext.sendAdaptedUserMessage).not.toHaveBeenCalled();
   });
 
   it('finishes widget runtime data from the latest message part', async (): Promise<void> => {
@@ -826,10 +796,7 @@ describe('MessageBubble', (): void => {
     emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(latestWidgetPart, {
-        reason: 'submit',
-        output: {
-          coffeeId: 'latte'
-        },
+        reason: 'interaction',
         status: 'finished',
         lifecycle: {
           mountedAt: '2026-07-01T00:00:00.000Z',
@@ -915,10 +882,7 @@ describe('MessageBubble', (): void => {
     emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
-        reason: 'submit',
-        output: {
-          coffeeId: 'latte'
-        },
+        reason: 'interaction',
         status: 'finished',
         lifecycle: {
           mountedAt: '2026-07-01T00:00:00.000Z',
@@ -991,10 +955,7 @@ describe('MessageBubble', (): void => {
     emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
-        reason: 'submit',
-        output: {
-          coffeeId: 'latte'
-        },
+        reason: 'interaction',
         status: 'finished',
         lifecycle: {
           mountedAt: '2026-07-01T00:00:00.000Z',
@@ -1072,10 +1033,7 @@ describe('MessageBubble', (): void => {
     emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(latestWidgetPart, {
-        reason: 'submit',
-        output: {
-          coffeeId: 'latte'
-        },
+        reason: 'interaction',
         status: 'finished',
         lifecycle: {
           mountedAt: '2026-07-01T00:00:00.000Z',
