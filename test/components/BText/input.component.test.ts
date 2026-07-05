@@ -52,12 +52,13 @@ function createVariableOptions(): VariableOptionGroup[] {
  * @param value - 初始输入值
  * @returns 输入组件包装器
  */
-function mountTextInput(value = 'https://cdn.example.com/'): VueWrapper {
+function mountTextInput(value = 'https://cdn.example.com/', extraProps: Record<string, unknown> = {}): VueWrapper {
   const wrapper: VueWrapper = mount(BTextInput, {
     props: {
       value,
       options: createVariableOptions(),
       placeholder: '图片地址',
+      ...extraProps,
       'onUpdate:value': (nextValue: string): void => {
         wrapper.setProps({ value: nextValue }).catch((error: unknown): void => {
           throw error;
@@ -170,6 +171,20 @@ describe('BText Input', (): void => {
     expect(root.querySelector('.select-dropdown')).toBe(dropdown);
     expect(dropdown?.style.width).toBe('100%');
     expect(dropdown?.style.left).toBe('0px');
+    wrapper.unmount();
+  });
+
+  it('inserts the variable as a plain path when useTemplateSyntax is false', async (): Promise<void> => {
+    const wrapper = mountTextInput('', { useTemplateSyntax: false });
+    const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
+
+    await input.trigger('focus');
+    await wrapper.find('.b-text-input__variable').trigger('click');
+    await nextTick();
+    document.body.querySelectorAll<HTMLElement>('.select-dropdown__item')[2]?.click();
+    await nextTick();
+
+    expect(wrapper.emitted('update:value')?.at(-1)).toEqual(['$input.imageUrl']);
     wrapper.unmount();
   });
 });

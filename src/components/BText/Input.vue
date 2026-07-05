@@ -65,6 +65,8 @@ interface Props {
   options?: VariableOptionGroup[];
   /** 是否禁用 */
   disabled?: boolean;
+  /** 变量插入时是否使用 {{ }} 模板语法包裹，默认 true；绑定路径等纯字段场景可设为 false */
+  useTemplateSyntax?: boolean;
 }
 
 /**
@@ -82,7 +84,8 @@ interface TemplateTriggerRange {
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '',
   options: () => [],
-  disabled: false
+  disabled: false,
+  useTemplateSyntax: true
 });
 
 const emit = defineEmits<{
@@ -303,10 +306,11 @@ function handleKeyup(): void {
 
 /**
  * 处理变量选择，直接覆盖整个输入值为选中的变量。
+ * useTemplateSyntax 为 true 时用 {{ }} 包裹（模板字段），为 false 时插入纯路径（绑定路径字段）。
  * @param variable - 被选中的变量
  */
 function handleVariableSelect(variable: Variable): void {
-  const nextValue = `{{ ${variable.value} }}`;
+  const nextValue = props.useTemplateSyntax ? `{{ ${variable.value} }}` : variable.value;
   const nextCursor = nextValue.length;
 
   updateValue(nextValue);

@@ -10,7 +10,7 @@
       </BSectionItem>
 
       <BSectionItem label="数据源">
-        <BSelect v-model:value="element.loop.source" placeholder="选择数组数据" :options="sourceOptions" />
+        <BTextInput v-model:value="element.loop.source" :use-template-syntax="false" :options="variableOptions" placeholder="数组数据路径，如 $input.items" />
       </BSectionItem>
 
       <BSectionItem label="迭代变量名">
@@ -36,9 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import { Checkbox as ACheckbox, Input as AInput } from 'ant-design-vue';
-import type { SelectOption } from '@/components/BSelect/types';
 import { useElementVariables } from '@/components/BWidget/hooks/useElementVariables';
 import type { WidgetElement } from '@/components/BWidget/types';
 
@@ -46,12 +44,8 @@ defineOptions({ name: 'AdvancedSetter' });
 
 const element = defineModel<WidgetElement>('element', { required: true });
 
-const { loopSourceOptions } = useElementVariables();
-
-/** 循环数据源下拉选项，复用元素变量 hook 中的 schema 推导结果。 */
-const sourceOptions = computed<SelectOption[]>((): SelectOption[] =>
-  loopSourceOptions.value.map((option): SelectOption => ({ label: option.label, value: option.value }))
-);
+/** 当前可插入变量候选。 */
+const { variableOptions } = useElementVariables((): WidgetElement => element.value);
 </script>
 
 <style lang="less" scoped>
