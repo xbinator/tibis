@@ -191,4 +191,8 @@ export default defineComponent({
     margin-left: 0;
   }
 }
+
+.b-section-item__content {
+  width: 100%;
+}
 </style>
