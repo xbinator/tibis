@@ -47,4 +47,11 @@ export interface BSectionItemProps {
   tips?: string;
   /** 标签水平对齐方式，配合 labelMinWidth 在剩余空间内对齐，默认 left。 */
   labelAlign?: BSectionItemLabelAlign;
+  /**
+   * 默认插槽内容（控件区）的水平对齐方式：
+   * - `left`（默认）：保持原行为，控件紧跟在 label 之后。
+   * - `right`：控件区贴右排列（horizontal 下用 margin-left:auto，
+   *   vertical 下用 align-self:flex-end）。
+   */
+  contentAlign?: 'left' | 'right';
 }

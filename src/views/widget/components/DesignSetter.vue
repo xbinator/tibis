@@ -43,17 +43,14 @@
 
     <!-- 布局 -->
     <BSectionBlock title="布局">
-      <BSectionItem label="锁" label-align="center">
+      <BSectionItem label="锁" label-align="center" content-align="right">
         <BButton
           :icon="isGeometryLocked ? 'lucide:lock' : 'lucide:unlock'"
-          :tooltip="isGeometryLocked ? '解除位置和尺寸锁定' : '锁定位置和尺寸'"
-          block
+          square
           size="small"
-          :type="isGeometryLocked ? 'outline' : 'secondary'"
+          :type="isGeometryLocked ? 'secondary' : 'outline'"
           @click="toggleGeometryLocked"
-        >
-          {{ isGeometryLocked ? '已锁定' : '未锁定' }}
-        </BButton>
+        />
       </BSectionItem>
 
       <div :class="$style.fieldGrid">

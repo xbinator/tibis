@@ -46,6 +46,10 @@ export default defineComponent({
     labelAlign: {
       type: String as PropType<BSectionItemLabelAlign>,
       default: 'left'
+    },
+    contentAlign: {
+      type: String as PropType<'left' | 'right'>,
+      default: 'left'
     }
   },
   setup(props: Props, { slots }) {
@@ -124,7 +128,7 @@ export default defineComponent({
     return () => (
       <div class={bem({ vertical: props.direction === 'vertical' })}>
         {renderLabel()}
-        {slots.default?.()}
+        <div class={bem('content', { right: props.contentAlign === 'right' })}>{slots.default?.()}</div>
       </div>
     );
   }
@@ -166,6 +170,11 @@ export default defineComponent({
   cursor: help;
 }
 
+/* 控件区内容贴右：horizontal 下用 auto 外边距推到行尾 */
+.b-section-item__content--right {
+  margin-left: auto;
+}
+
 /* 垂直布局：前缀与控件纵向排列 */
 .b-section-item--vertical {
   flex-direction: column;
@@ -174,6 +183,12 @@ export default defineComponent({
   .b-section-item__label {
     justify-content: flex-start;
     min-width: 0;
+  }
+
+  /* 垂直布局下控件区贴右：覆盖默认的 align-items: stretch，让控件收缩到内容宽度并贴右 */
+  .b-section-item__content--right {
+    align-self: flex-end;
+    margin-left: 0;
   }
 }
 </style>
