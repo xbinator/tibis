@@ -17,7 +17,7 @@
       :container="root"
       :root-container="root"
       :use-accurate-position="true"
-      :draggable="true"
+      :draggable="canMoveSelection"
       :resizable="canResizeSelection"
       :snappable="canSnapSelection"
       :snap-center="true"
@@ -326,12 +326,30 @@ function handleContextMenu(event: MouseEvent): void {
 }
 
 /**
+ * 判断元素自身是否锁定位置和尺寸。
+ * @param element - Widget元素
+ * @returns 是否锁定
+ */
+function isElementLocked(element: WidgetElement): boolean {
+  return element.locked === true;
+}
+
+/**
+ * 判断 Moveable 操作目标是否锁定。
+ * @param element - Widget元素
+ * @returns 当前元素是否锁定
+ */
+function isElementMoveableLocked(element: WidgetElement): boolean {
+  return isElementLocked(element);
+}
+
+/**
  * 判断元素是否允许通过 Moveable 修改尺寸。
  * @param element - Widget元素
  * @returns 是否允许缩放
  */
 function isElementResizable(element: WidgetElement): boolean {
-  return getWidgetElementSchema(element.name)?.resize?.enabled ?? true;
+  return !isElementMoveableLocked(element) && (getWidgetElementSchema(element.name)?.resize?.enabled ?? true);
 }
 
 /**
@@ -354,10 +372,12 @@ function normalizeResizeSize(element: WidgetElement, size: WidgetSize): WidgetSi
 const selectedElements = computed<WidgetElement[]>(() =>
   props.selection.map(getElementById).filter((element: WidgetElement | undefined): element is WidgetElement => element !== undefined)
 );
+/** 当前选区是否允许通过 Moveable 修改位置。 */
+const canMoveSelection = computed<boolean>(() => selectedElements.value.every((element: WidgetElement): boolean => !isElementMoveableLocked(element)));
 /** 当前选区是否允许通过 Moveable 修改尺寸。 */
 const canResizeSelection = computed<boolean>(() => selectedElements.value.every((element: WidgetElement): boolean => isElementResizable(element)));
 /** 当前选区是否允许展示 Moveable 吸附辅助线。 */
-const canSnapSelection = computed<boolean>(() => singleTarget.value && selectedElements.value.length === 1);
+const canSnapSelection = computed<boolean>(() => canMoveSelection.value && singleTarget.value && selectedElements.value.length === 1);
 /** 当前选区使用的 Moveable 控制间距。 */
 const moveableSelectionPadding = computed<MoveableSelectionPadding>(() =>
   canResizeSelection.value ? WIDGET_MOVEABLE_SELECTION_PADDING : disabledMoveableSelectionPadding
@@ -564,7 +584,7 @@ function createMoveChange(event: MoveableDragEndEvent): WidgetGeometryChange | n
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
   const distance = getMoveableDragDistance(event.lastEvent);
-  if (!id || !element || !distance) {
+  if (!id || !element || isElementMoveableLocked(element) || !distance) {
     return null;
   }
 
@@ -624,7 +644,7 @@ function previewDragEvent(event: MoveableDragEvent): WidgetGeometryChange | null
   const id = getTargetId(event.target);
   const element = id ? getElementById(id) : undefined;
   const distance = getMoveableDragDistance(event);
-  if (!event.target || !id || !element || !distance) {
+  if (!event.target || !id || !element || isElementMoveableLocked(element) || !distance) {
     return null;
   }
 

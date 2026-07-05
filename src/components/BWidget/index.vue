@@ -636,6 +636,15 @@ function getShapeElementById(id: string): WidgetShapeElement | null {
 }
 
 /**
+ * 判断元素自身是否锁定几何。
+ * @param element - Widget元素
+ * @returns 当前元素是否锁定位置和尺寸
+ */
+function isElementGeometryLocked(element: WidgetElement): boolean {
+  return element.locked === true;
+}
+
+/**
  * 读取Widget渲染尺寸。
  * @returns Widget渲染尺寸，无法读取时返回 null
  */
@@ -1011,7 +1020,7 @@ function handleDirectDragCancel(): void {
  */
 function startDirectDrag(id: string, event: PointerEvent, selectOnEnd: boolean): void {
   const element = getShapeElementById(id);
-  if (!element) {
+  if (!element || isElementGeometryLocked(element)) {
     return;
   }
 

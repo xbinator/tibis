@@ -408,6 +408,55 @@ describe('BWidget canvas component', (): void => {
     wrapper.unmount();
   });
 
+  it('previews locked nested children while directly dragging their parent group', async (): Promise<void> => {
+    const dataItem = createNestedWidgetDataFixture();
+    const group = dataItem.elements[0];
+    if (group?.children?.[0]) {
+      group.children[0].locked = true;
+    }
+    const wrapper = mount(BWidget, {
+      props: {
+        value: dataItem
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    const groupNode = findNodeById(wrapper, 'group-1');
+    const child = findNodeById(wrapper, 'child-node-1');
+
+    await dispatchPointerEvent(groupNode.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 130, clientY: 120 });
+
+    expect(groupNode.attributes('style')).toContain('translate(130px, 140px)');
+    expect(child.attributes('style')).toContain('translate(154px, 176px)');
+    window.dispatchEvent(new MouseEvent('pointercancel', { bubbles: true }));
+    wrapper.unmount();
+  });
+
+  it('selects locked elements without directly dragging their geometry', async (): Promise<void> => {
+    const dataItem = createWidgetDataFixture();
+    if (dataItem.elements[0]) {
+      dataItem.elements[0].locked = true;
+    }
+    const wrapper = mount(BWidget, {
+      props: {
+        value: dataItem
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    const node = findNodeById(wrapper, 'external-node-1');
+
+    await dispatchPointerEvent(node.element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
+    await flushWidgetUpdates();
+
+    expect(node.attributes('style')).toContain('translate(24px, 36px)');
+    expect(wrapper.emitted('selection-change')?.at(-1)).toEqual([['external-node-1']]);
+    wrapper.unmount();
+  });
+
   it('previews nested group children while moving the selected group through Moveable', async (): Promise<void> => {
     const wrapper = mount(BWidget, {
       props: {

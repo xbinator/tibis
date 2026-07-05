@@ -17,7 +17,7 @@ import type {
   WidgetSize,
   WidgetShapeElement
 } from '../types';
-import { cloneDeep, escapeRegExp } from 'lodash-es';
+import { cloneDeep, escapeRegExp, isEqual } from 'lodash-es';
 import { WIDGET_DEFAULT_NODE_SIZE, WIDGET_MIN_CREATE_SIZE, WIDGET_MIN_ELEMENT_SIZE } from '../constants/board';
 import { getWidgetElementSchema } from '../elements';
 import { createDefaultWidgetViewport, normalizeWidgetDataContract, type WidgetDataContractCandidate } from './widgetData';
@@ -53,6 +53,15 @@ const WIDGET_GROUP_ELEMENT_LABEL = '组合';
  */
 function normalizeGeometryValue(value: number): number {
   return Number(value.toFixed(2));
+}
+
+/**
+ * 判断元素自身是否锁定几何。
+ * @param element - Widget元素
+ * @returns 当前元素是否锁定位置和尺寸
+ */
+function isWidgetElementGeometryLocked(element: WidgetShapeElement): boolean {
+  return element.locked === true;
 }
 
 /**
@@ -544,6 +553,10 @@ function createSupportedElementSnapshot(element: WidgetElementSnapshotCandidate,
     loop: cloneDeep(element.loop),
     metadata: normalizeElementMetadata(element.metadata)
   };
+  if (element.locked === true) {
+    supportedElement.locked = true;
+  }
+
   const children = isWidgetGroupElement(supportedElement)
     ? readElementSnapshotChildren(element)
         .map((child: WidgetElementSnapshotCandidate): WidgetShapeElement | null => createSupportedElementSnapshot(child, options))
@@ -699,10 +712,18 @@ function applyGeometryChanges(
       return withError(state, new Error(`找不到元素: ${change.id}`));
     }
 
+    if (isWidgetElementGeometryLocked(node.element)) {
+      continue;
+    }
+
     applyChange(node.element, change);
     if (options.normalizeSize ?? true) {
       node.element.size = normalizeElementModelSize(node.element).size;
     }
+  }
+
+  if (isEqual(nextElements, state.elements)) {
+    return state;
   }
 
   return withHistory(state, {

@@ -225,6 +225,8 @@ export interface WidgetShapeElement<TMetadata extends WidgetMetadata = WidgetMet
   rotation: number;
   /** 元素样式 */
   style: WidgetElementStyle;
+  /** 是否锁定位置和尺寸 */
+  locked?: boolean;
   /** 循环渲染配置 */
   loop: WidgetElementLoopConfig;
   /** 组件自定义元数据 */

@@ -342,6 +342,34 @@ describe('boardTransforms', (): void => {
     expect(moved.history.past).toHaveLength(1);
   });
 
+  it('ignores move changes for locked elements', (): void => {
+    const lockedElement = {
+      ...createShapeElement('node-1'),
+      locked: true
+    };
+    const initial = createWidgetBoardState({
+      elements: [lockedElement]
+    });
+    const moved = moveWidgetElements(initial, [{ id: 'node-1', position: { x: 240, y: 260 } }]);
+
+    expect(moved.elements[0]?.position).toEqual({ x: 100, y: 120 });
+    expect(moved.history.past).toHaveLength(0);
+  });
+
+  it('moves groups that contain locked descendants', (): void => {
+    const lockedChild = {
+      ...createShapeElement('child-1'),
+      locked: true
+    };
+    const initial = createWidgetBoardState({
+      elements: [createGroupElement('group-1', [lockedChild])]
+    });
+    const moved = moveWidgetElements(initial, [{ id: 'group-1', position: { x: 240, y: 260 } }]);
+
+    expect(moved.elements[0]?.position).toEqual({ x: 240, y: 260 });
+    expect(moved.history.past).toHaveLength(1);
+  });
+
   it('resizes an element with the minimum size clamp', (): void => {
     const initial = createWidgetBoardState({
       elements: [createShapeElement('node-1')]
@@ -357,6 +385,27 @@ describe('boardTransforms', (): void => {
     expect(resized.elements[0]?.position).toEqual({ x: 80, y: 90 });
     expect(resized.elements[0]?.size).toEqual({ width: 16, height: 16 });
     expect(resized.history.past).toHaveLength(1);
+  });
+
+  it('ignores resize changes for locked elements', (): void => {
+    const lockedElement = {
+      ...createShapeElement('node-1'),
+      locked: true
+    };
+    const initial = createWidgetBoardState({
+      elements: [lockedElement]
+    });
+    const resized = resizeWidgetElements(initial, [
+      {
+        id: 'node-1',
+        position: { x: 80, y: 90 },
+        size: { width: 240, height: 120 }
+      }
+    ]);
+
+    expect(resized.elements[0]?.position).toEqual({ x: 100, y: 120 });
+    expect(resized.elements[0]?.size).toEqual({ width: 180, height: 72 });
+    expect(resized.history.past).toHaveLength(0);
   });
 
   it('resizes group children proportionally in group-local coordinates', (): void => {
@@ -387,6 +436,37 @@ describe('boardTransforms', (): void => {
     expect(group?.size).toEqual({ width: 200, height: 160 });
     expect(group?.children?.[0]?.position).toEqual({ x: 20, y: 40 });
     expect(group?.children?.[0]?.size).toEqual({ width: 100, height: 80 });
+  });
+
+  it('resizes locked descendants when resizing their parent group', (): void => {
+    const lockedChild = {
+      ...createShapeElement('child-1'),
+      locked: true,
+      position: { x: 10, y: 20 },
+      size: { width: 50, height: 40 }
+    };
+    const initial = createWidgetBoardState({
+      elements: [
+        {
+          ...createGroupElement('group-1', [lockedChild]),
+          position: { x: 100, y: 120 },
+          size: { width: 100, height: 80 }
+        }
+      ]
+    });
+    const resized = resizeWidgetElements(initial, [
+      {
+        id: 'group-1',
+        position: { x: 90, y: 100 },
+        size: { width: 200, height: 160 }
+      }
+    ]);
+    const group = resized.elements[0] as WidgetElementWithChildren | undefined;
+
+    expect(group?.position).toEqual({ x: 90, y: 100 });
+    expect(group?.children?.[0]?.position).toEqual({ x: 20, y: 40 });
+    expect(group?.children?.[0]?.size).toEqual({ width: 100, height: 80 });
+    expect(group?.children?.[0]?.locked).toBe(true);
   });
 
   it('resizes nested group descendants proportionally when resizing a parent group', (): void => {

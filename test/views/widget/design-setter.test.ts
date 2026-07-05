@@ -42,6 +42,10 @@ vi.mock('ant-design-vue', () => ({
       placeholder: {
         type: String,
         default: ''
+      },
+      disabled: {
+        type: Boolean,
+        default: false
       }
     },
     emits: {
@@ -55,6 +59,7 @@ vi.mock('ant-design-vue', () => ({
     template: `
       <input
         type="number"
+        :disabled="disabled"
         :value="value ?? ''"
         @input="$emit('update:value', $event.target.value === '' ? null : Number($event.target.value))"
       />
@@ -99,6 +104,157 @@ function createWidgetElement(): WidgetElement {
 }
 
 /**
+ * 挂载设计设置面板。
+ * @param element - 待编辑的 Widget 元素
+ * @returns 组件包装器
+ */
+function mountDesignSetter(element: WidgetElement): VueWrapper {
+  return mount(DesignSetter, {
+    props: {
+      element
+    },
+    global: {
+      stubs: {
+        BSectionBlock: defineComponent({
+          name: 'BSectionBlockStub',
+          props: {
+            title: {
+              type: String,
+              required: true
+            }
+          },
+          template: '<section :data-title="title"><slot /></section>'
+        }),
+        BSectionItem: defineComponent({
+          name: 'BSectionItemStub',
+          props: {
+            label: {
+              type: String,
+              default: ''
+            },
+            icon: {
+              type: String,
+              default: ''
+            }
+          },
+          template: '<label :data-label="label" :data-icon="icon"><slot /></label>'
+        }),
+        BButton: defineComponent({
+          name: 'BButtonStub',
+          props: {
+            icon: {
+              type: String,
+              default: ''
+            },
+            tooltip: {
+              type: String,
+              default: ''
+            }
+          },
+          emits: ['click'],
+          template: '<button type="button" :data-icon="icon" :data-tooltip="tooltip" @click="$emit(\'click\', $event)"><slot /></button>'
+        }),
+        BInputNumber: defineComponent({
+          name: 'BInputNumberStub',
+          props: {
+            value: {
+              type: Number,
+              default: undefined
+            },
+            disabled: {
+              type: Boolean,
+              default: false
+            },
+            defaultValue: {
+              type: Number,
+              default: undefined
+            },
+            decimalPrecision: {
+              type: Number,
+              default: undefined
+            }
+          },
+          emits: {
+            /**
+             * 更新数字输入值。
+             * @param value - 新输入值
+             * @returns 是否允许触发事件
+             */
+            'update:value': (value: number | null): boolean => value === null || typeof value === 'number'
+          },
+          methods: {
+            /**
+             * 归一化数字输入测试值。
+             * @param value - 原始输入值
+             * @returns 归一化后的输出值
+             */
+            normalizeValue(value: number | null): number | undefined {
+              if (value === null) {
+                return this.defaultValue;
+              }
+
+              if (this.decimalPrecision === undefined) {
+                return value;
+              }
+
+              return Number(value.toFixed(this.decimalPrecision));
+            }
+          },
+          template: `
+            <input
+              type="number"
+              :disabled="disabled"
+              :value="value ?? ''"
+              @input="$emit('update:value', normalizeValue($event.target.value === '' ? null : Number($event.target.value)))"
+            />
+          `
+        }),
+        BSelect: defineComponent({
+          name: 'BSelectStub',
+          props: {
+            value: {
+              type: [Number, String],
+              default: undefined
+            },
+            options: {
+              type: Array as PropType<Array<{ value: number | string; label: string }>>,
+              default: (): Array<{ value: number | string; label: string }> => []
+            }
+          },
+          emits: ['update:value'],
+          template: `
+            <select :value="value">
+              <option v-for="option in options" :key="String(option.value)" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          `
+        }),
+        BColorPicker: defineComponent({
+          name: 'BColorPickerStub',
+          template: '<div><slot /></div>'
+        }),
+        BSegmented: defineComponent({
+          name: 'BSegmentedStub',
+          props: {
+            value: {
+              type: String,
+              default: ''
+            },
+            options: {
+              type: Array as PropType<Array<{ value: string; label: string }>>,
+              default: (): Array<{ value: string; label: string }> => []
+            }
+          },
+          template: '<div><slot v-for="option in options" name="label" :record="option" /></div>'
+        }),
+        BIcon: true
+      }
+    }
+  });
+}
+
+/**
  * 清空指定布局项的数字输入。
  * @param wrapper - 组件包装器
  * @param label - 布局项标签
@@ -110,82 +266,23 @@ async function clearLayoutInput(wrapper: VueWrapper, label: string): Promise<voi
   await input.setValue('');
 }
 
+/**
+ * 读取指定布局项的数字输入。
+ * @param wrapper - 组件包装器
+ * @param label - 布局项标签
+ * @returns 数字输入包装器
+ */
+function findLayoutInput(wrapper: VueWrapper, label: string): ReturnType<VueWrapper['find']> {
+  const input = wrapper.find(`[data-label="${label}"] input`);
+  expect(input.exists()).toBe(true);
+
+  return input;
+}
+
 describe('DesignSetter', (): void => {
   it('keeps layout geometry valid when numeric layout inputs are cleared', async (): Promise<void> => {
     const element = createWidgetElement();
-    const wrapper = mount(DesignSetter, {
-      props: {
-        element
-      },
-      global: {
-        stubs: {
-          BSectionBlock: defineComponent({
-            name: 'BSectionBlockStub',
-            props: {
-              title: {
-                type: String,
-                required: true
-              }
-            },
-            template: '<section :data-title="title"><slot /></section>'
-          }),
-          BSectionItem: defineComponent({
-            name: 'BSectionItemStub',
-            props: {
-              label: {
-                type: String,
-                default: ''
-              },
-              icon: {
-                type: String,
-                default: ''
-              }
-            },
-            template: '<label :data-label="label" :data-icon="icon"><slot /></label>'
-          }),
-          BSelect: defineComponent({
-            name: 'BSelectStub',
-            props: {
-              value: {
-                type: [Number, String],
-                default: undefined
-              },
-              options: {
-                type: Array as PropType<Array<{ value: number | string; label: string }>>,
-                default: (): Array<{ value: number | string; label: string }> => []
-              }
-            },
-            emits: ['update:value'],
-            template: `
-              <select :value="value">
-                <option v-for="option in options" :key="String(option.value)" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            `
-          }),
-          BColorPicker: defineComponent({
-            name: 'BColorPickerStub',
-            template: '<div><slot /></div>'
-          }),
-          BSegmented: defineComponent({
-            name: 'BSegmentedStub',
-            props: {
-              value: {
-                type: String,
-                default: ''
-              },
-              options: {
-                type: Array as PropType<Array<{ value: string; label: string }>>,
-                default: (): Array<{ value: string; label: string }> => []
-              }
-            },
-            template: '<div><slot v-for="option in options" name="label" :record="option" /></div>'
-          }),
-          BIcon: true
-        }
-      }
-    });
+    const wrapper = mountDesignSetter(element);
 
     await clearLayoutInput(wrapper, 'X');
     await clearLayoutInput(wrapper, 'Y');
@@ -197,6 +294,29 @@ describe('DesignSetter', (): void => {
       width: WIDGET_MIN_ELEMENT_SIZE.width,
       height: WIDGET_MIN_ELEMENT_SIZE.height
     });
+    wrapper.unmount();
+  });
+
+  it('locks persisted element geometry inputs without disabling style controls', async (): Promise<void> => {
+    const element = createWidgetElement();
+    const wrapper = mountDesignSetter(element);
+
+    const lockButton = wrapper.find('[data-label="锁"] button');
+    expect(lockButton.exists()).toBe(true);
+
+    await lockButton.trigger('click');
+
+    expect(element.locked).toBe(true);
+    expect(findLayoutInput(wrapper, 'X').attributes('disabled')).toBeDefined();
+    expect(findLayoutInput(wrapper, 'Y').attributes('disabled')).toBeDefined();
+    expect(findLayoutInput(wrapper, '宽').attributes('disabled')).toBeDefined();
+    expect(findLayoutInput(wrapper, '高').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-icon="lucide:paint-bucket"]').exists()).toBe(true);
+
+    await lockButton.trigger('click');
+
+    expect(element.locked).toBe(false);
+    expect(findLayoutInput(wrapper, 'X').attributes('disabled')).toBeUndefined();
     wrapper.unmount();
   });
 });

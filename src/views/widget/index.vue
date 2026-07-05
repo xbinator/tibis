@@ -559,6 +559,15 @@ function transformElementByMultiSelectionBounds(element: WidgetElement, currentB
 }
 
 /**
+ * 判断元素是否锁定自身几何属性。
+ * @param element - Widget 元素
+ * @returns 是否禁止直接修改位置和尺寸
+ */
+function isWidgetElementGeometryLocked(element: WidgetElement): boolean {
+  return element.locked === true;
+}
+
+/**
  * 按 ID 从元素树读取选中元素。
  * @param elements - 当前Widget元素树
  * @param selectedIds - 当前选中元素 ID 集合
@@ -589,7 +598,12 @@ function updateSelectedElementLayouts(elements: WidgetElement[], selectedIds: Se
     return elements;
   }
 
-  return selectedElements.reduce<WidgetElement[]>(
+  const editableElements = selectedElements.filter((element: WidgetElement): boolean => !isWidgetElementGeometryLocked(element));
+  if (editableElements.length === 0) {
+    return elements;
+  }
+
+  return editableElements.reduce<WidgetElement[]>(
     (nextElements: WidgetElement[], element: WidgetElement): WidgetElement[] =>
       updateWidgetElementInTree(
         nextElements,

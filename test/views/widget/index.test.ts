@@ -763,6 +763,55 @@ describe('WidgetPage', (): void => {
     wrapper.unmount();
   });
 
+  it('keeps locked direct multi-selection elements fixed during settings layout changes', async (): Promise<void> => {
+    const lockedElement = {
+      ...createWidgetElement('node-1', '节点 1'),
+      locked: true,
+      position: { x: 10, y: 20 },
+      size: { width: 100, height: 50 }
+    };
+    const editableElement = {
+      ...createWidgetElement('node-2', '节点 2'),
+      position: { x: 130, y: 20 },
+      size: { width: 100, height: 50 }
+    };
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [lockedElement, editableElement]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+
+    panelSidebar.vm.$emit('select-elements', [lockedElement, editableElement]);
+    await nextTick();
+
+    wrapper.findComponent({ name: 'PanelSettings' }).vm.$emit('multi-layout-change', {
+      x: 20,
+      y: 40,
+      width: 440,
+      height: 100
+    });
+    await nextTick();
+
+    expect(widgetDataMock.value.elements[0]).toMatchObject({
+      locked: true,
+      position: { x: 10, y: 20 },
+      size: { width: 100, height: 50 }
+    });
+    expect(widgetDataMock.value.elements[1]).toMatchObject({
+      position: { x: 260, y: 40 },
+      size: { width: 200, height: 100 }
+    });
+    wrapper.unmount();
+  });
+
   it('ignores settings style changes for a multi-selection across different parents', async (): Promise<void> => {
     const childElement = createWidgetElement('child-1', '子节点');
     const groupElement = createGroupElement('group-1', '组合', [childElement]);

@@ -43,16 +43,30 @@
 
     <!-- 布局 -->
     <BSectionBlock title="布局">
+      <BSectionItem label="锁" label-align="center">
+        <BButton
+          :icon="isGeometryLocked ? 'lucide:lock' : 'lucide:unlock'"
+          :tooltip="isGeometryLocked ? '解除位置和尺寸锁定' : '锁定位置和尺寸'"
+          block
+          size="small"
+          :type="isGeometryLocked ? 'outline' : 'secondary'"
+          @click="toggleGeometryLocked"
+        >
+          {{ isGeometryLocked ? '已锁定' : '未锁定' }}
+        </BButton>
+      </BSectionItem>
+
       <div :class="$style.fieldGrid">
         <BSectionItem label="X" label-align="center">
-          <BInputNumber v-model:value="dataItem.position.x" :default-value="0" :decimal-precision="2" />
+          <BInputNumber v-model:value="dataItem.position.x" :disabled="isGeometryLocked" :default-value="0" :decimal-precision="2" />
         </BSectionItem>
         <BSectionItem label="Y" label-align="center">
-          <BInputNumber v-model:value="dataItem.position.y" :default-value="0" :decimal-precision="2" />
+          <BInputNumber v-model:value="dataItem.position.y" :disabled="isGeometryLocked" :default-value="0" :decimal-precision="2" />
         </BSectionItem>
         <BSectionItem label="宽" label-align="center">
           <BInputNumber
             v-model:value="dataItem.size.width"
+            :disabled="isGeometryLocked"
             :min="WIDGET_MIN_ELEMENT_SIZE.width"
             :default-value="WIDGET_MIN_ELEMENT_SIZE.width"
             :decimal-precision="2"
@@ -61,6 +75,7 @@
         <BSectionItem label="高" label-align="center">
           <BInputNumber
             v-model:value="dataItem.size.height"
+            :disabled="isGeometryLocked"
             :min="WIDGET_MIN_ELEMENT_SIZE.height"
             :default-value="WIDGET_MIN_ELEMENT_SIZE.height"
             :decimal-precision="2"
@@ -96,8 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { useCssModule } from 'vue';
-import { Input as AInput } from 'ant-design-vue';
+import { computed, useCssModule } from 'vue';
 import { WIDGET_MIN_ELEMENT_SIZE } from '@/components/BWidget/constants/board';
 import type { WidgetBorderStyle, WidgetElement, WidgetElementStyle, WidgetFontStyle, WidgetTextDecoration } from '@/components/BWidget/types';
 import ControlPanel from './DesignSetter/ControlPanel.vue';
@@ -113,6 +127,8 @@ type EditableWidgetElement = WidgetElement & {
 };
 
 const dataItem = defineModel<EditableWidgetElement>('element', { default: () => ({}) });
+/** 当前元素是否锁定位置和尺寸。 */
+const isGeometryLocked = computed<boolean>(() => dataItem.value.locked === true);
 
 /** 字重选项。 */
 const fontWeightOptions = [
@@ -158,6 +174,13 @@ const borderStyleOptions: Array<{ value: WidgetBorderStyle; label: string }> = [
   { value: 'dashed', label: '虚线' },
   { value: 'dotted', label: '点线' }
 ];
+
+/**
+ * 切换当前元素的位置和尺寸锁定状态。
+ */
+function toggleGeometryLocked(): void {
+  dataItem.value.locked = !isGeometryLocked.value;
+}
 </script>
 
 <style module lang="less">

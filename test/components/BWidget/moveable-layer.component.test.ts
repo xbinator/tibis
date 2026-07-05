@@ -358,6 +358,43 @@ describe('MoveableLayer', (): void => {
     wrapper.unmount();
   });
 
+  it('disables drag, resize and snapping when the selected element is locked', async (): Promise<void> => {
+    const lockedElement = {
+      ...createWidgetElement('rect-1', 'rect'),
+      locked: true
+    };
+    const { wrapper } = mountMoveableLayer(['rect-1'], null, [lockedElement, createWidgetElement('text-1', 'text')]);
+
+    await flushMoveableLayerSync();
+
+    const moveableProps = wrapper.find('.moveable-props');
+
+    expect(moveableProps.attributes('data-draggable')).toBe('false');
+    expect(moveableProps.attributes('data-resizable')).toBe('false');
+    expect(moveableProps.attributes('data-snappable')).toBe('false');
+    expect(moveableProps.attributes('data-snap-gap')).toBe('false');
+    wrapper.unmount();
+  });
+
+  it('keeps parent groups draggable and resizable when a descendant is locked', async (): Promise<void> => {
+    const lockedChild = {
+      ...createWidgetElement('group-child-1', 'rect'),
+      locked: true
+    };
+    const group = createGroupWidgetElement('group-1', [lockedChild]);
+    const outsideElement = createWidgetElement('outside-1', 'rect');
+    const { wrapper } = mountMoveableLayer(['group-1'], null, [group, outsideElement]);
+
+    await flushMoveableLayerSync();
+
+    const moveableProps = wrapper.find('.moveable-props');
+
+    expect(moveableProps.attributes('data-draggable')).toBe('true');
+    expect(moveableProps.attributes('data-resizable')).toBe('true');
+    expect(moveableProps.attributes('data-snappable')).toBe('true');
+    wrapper.unmount();
+  });
+
   it('excludes selected group descendants from snap guidelines while moving the group', async (): Promise<void> => {
     const groupChild = createWidgetElement('group-child-1', 'rect');
     const group = createGroupWidgetElement('group-1', [groupChild]);
