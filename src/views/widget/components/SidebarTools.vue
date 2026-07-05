@@ -3,22 +3,25 @@
   @description Widget页面侧边栏工具网格，展示可拖拽的Widget元素工具项。
 -->
 <template>
-  <div class="sidebar-panel__tool-grid">
-    <div
-      v-for="schema in widgetElementSchemas"
-      :key="schema.name"
-      class="sidebar-panel__tool-item"
-      @pointerdown.left.prevent="elementDrag.startDrag(schema, $event)"
-    >
-      <BIcon :icon="schema.icon" :size="16" />
-      <span>{{ schema.label }}</span>
+  <SidebarPanel title="组件">
+    <div class="sidebar-panel__tool-grid">
+      <div
+        v-for="schema in widgetElementSchemas"
+        :key="schema.name"
+        class="sidebar-panel__tool-item"
+        @pointerdown.left.prevent="elementDrag.startDrag(schema, $event)"
+      >
+        <BIcon :icon="schema.icon" :size="16" />
+        <span>{{ schema.label }}</span>
+      </div>
     </div>
-  </div>
+  </SidebarPanel>
 </template>
 
 <script setup lang="ts">
 import { WIDGET_ELEMENT_SCHEMAS } from '@/components/BWidget/elements';
 import { useDraggerController } from '../hooks/useDragger';
+import SidebarPanel from './_SidebarPanel.vue';
 
 /** 当前可创建元素列表。 */
 const widgetElementSchemas = WIDGET_ELEMENT_SCHEMAS;

@@ -10,31 +10,25 @@
       </template>
     </div>
 
-    <BPanelSplitter v-model:size="size" position="right" :min-width="200" :max-width="300">
+    <BPanelSplitter v-model:size="size" position="right" :closable="false" :min-width="280" :max-width="360">
       <div class="sidebar-panel__content">
-        <header class="sidebar-panel__panel-header">
-          <h2 class="sidebar-panel__panel-title">{{ activePanelTitle }}</h2>
-        </header>
-
-        <div class="sidebar-panel__panel-content">
-          <SidebarTools v-if="activeSidebarTab === 'tools'" />
-          <SidebarLayer
-            v-else-if="activeSidebarTab === 'layers'"
-            :active-element-id="activeElementId"
-            :elements="elements"
-            :selected-element-ids="selectedElementIds"
-            @select-element="handleElementSelect"
-            @select-elements="handleElementsSelect"
-            @copy-element="handleElementCopy"
-            @copy-elements="handleElementsCopy"
-            @delete-element="handleElementDelete"
-            @delete-elements="handleElementsDelete"
-            @move-element="handleElementMove"
-            @move-elements="handleElementsMove"
-          />
-          <SidebarState v-else-if="activeSidebarTab === 'data-source'" />
-          <SidebarAction v-else-if="activeSidebarTab === 'action'" />
-        </div>
+        <SidebarTools v-if="activeSidebarTab === 'tools'" />
+        <SidebarLayer
+          v-else-if="activeSidebarTab === 'layers'"
+          :active-element-id="activeElementId"
+          :elements="elements"
+          :selected-element-ids="selectedElementIds"
+          @select-element="handleElementSelect"
+          @select-elements="handleElementsSelect"
+          @copy-element="handleElementCopy"
+          @copy-elements="handleElementsCopy"
+          @delete-element="handleElementDelete"
+          @delete-elements="handleElementsDelete"
+          @move-element="handleElementMove"
+          @move-elements="handleElementsMove"
+        />
+        <SidebarState v-else-if="activeSidebarTab === 'data-source'" v-model:value="dataItem" />
+        <SidebarAction v-else-if="activeSidebarTab === 'action'" />
       </div>
     </BPanelSplitter>
   </aside>
@@ -42,8 +36,8 @@
 
 <script setup lang="ts">
 import type { WidgetLayerMovePosition } from '../utils/layerOrder';
-import { computed, ref } from 'vue';
-import type { WidgetElement } from '@/components/BWidget/types';
+import { ref } from 'vue';
+import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
 import SidebarAction from './SidebarAction.vue';
 import SidebarLayer from './SidebarLayer.vue';
 import SidebarState from './SidebarState.vue';
@@ -88,8 +82,11 @@ withDefaults(defineProps<Props>(), {
   selectedElementIds: (): string[] => []
 });
 
+/** 当前 Widget 完整数据（透传给侧栏子面板）。 */
+const dataItem = defineModel<WidgetData>('value', { required: true });
+
 /** 内容区默认宽度；侧栏关闭后点击 tab 时恢复到该值。 */
-const SIDEBAR_DEFAULT_SIZE = 240;
+const SIDEBAR_DEFAULT_SIZE = 280;
 
 /** 内容区宽度（内部状态），为 0 时表示侧栏已关闭。 */
 const size = ref(SIDEBAR_DEFAULT_SIZE);
@@ -122,12 +119,6 @@ const sidebarTabs: WidgetSidebarTab[] = [
 ];
 
 const activeSidebarTab = ref<ActiveWidgetSidebarTabKey>('tools');
-
-/** 当前面板标题（从 sidebarTabs 派生，标签单一来源）。 */
-const activePanelTitle = computed<string>((): string => {
-  const tab = sidebarTabs.find((item) => item.key === activeSidebarTab.value);
-  return tab?.label ?? '';
-});
 
 /**
  * 切换左侧侧边栏页签。
@@ -238,28 +229,5 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-}
-
-.sidebar-panel__panel-content {
-  height: 100%;
-  padding: 12px;
-  overflow: auto;
-}
-
-.sidebar-panel__panel-header {
-  display: flex;
-  flex-shrink: 0;
-  gap: 8px;
-  align-items: center;
-  height: 38px;
-  padding: 0 12px;
-  box-shadow: 0 1px 0 0 var(--border-primary);
-}
-
-.sidebar-panel__panel-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 </style>

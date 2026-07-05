@@ -4,7 +4,7 @@
 -->
 <template>
   <div class="schema-editor">
-    <div v-if="schemaRows.length > 0" class="schema-editor__header">
+    <div class="schema-editor__header">
       <span class="schema-editor__header-name">
         <span v-if="hasToggleColumn" class="schema-editor__header-toggle-placeholder" aria-hidden="true"></span>
         <span>变量名</span>
@@ -813,6 +813,7 @@ const hasObjectActionColumn = computed<boolean>(() => schemaRows.value.some((row
 
     .schema-editor__header-actions {
       grid-column: 2 / 4;
+      text-align: right;
     }
 
     &.is-object {
@@ -826,8 +827,7 @@ const hasObjectActionColumn = computed<boolean>(() => schemaRows.value.some((row
     }
   }
 
-  .schema-editor__header-required,
-  .schema-editor__header-actions {
+  .schema-editor__header-required {
     text-align: center;
   }
 

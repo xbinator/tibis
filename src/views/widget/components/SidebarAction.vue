@@ -3,16 +3,20 @@
   @description Widget页面侧边栏动作面板骨架，后续承载运行时动作管理功能。
 -->
 <template>
-  <div class="sidebar-panel__action-empty">
-    <div class="sidebar-panel__action-empty-icon">
-      <BIcon icon="lucide:zap" :size="24" />
+  <SidebarPanel title="动作">
+    <div class="sidebar-panel__action-empty">
+      <div class="sidebar-panel__action-empty-icon">
+        <BIcon icon="lucide:zap" :size="24" />
+      </div>
+      <span class="sidebar-panel__action-empty-text">还没有动作</span>
+      <span class="sidebar-panel__action-empty-hint">动作将在此展示</span>
     </div>
-    <span class="sidebar-panel__action-empty-text">还没有动作</span>
-    <span class="sidebar-panel__action-empty-hint">动作将在此展示</span>
-  </div>
+  </SidebarPanel>
 </template>
 
 <script setup lang="ts">
+import SidebarPanel from './_SidebarPanel.vue';
+
 defineOptions({ name: 'SidebarAction' });
 </script>
 

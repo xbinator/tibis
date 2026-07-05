@@ -5,6 +5,7 @@
 <template>
   <main class="widget-page" tabindex="0" @blur="session.actions.onBlur">
     <PanelSidebar
+      v-model:value="session.data.value"
       :active-element-id="activeSidebarElementId"
       :elements="session.data.value.elements"
       :selected-element-ids="selectedElementIds"
@@ -29,7 +30,7 @@
       />
     </section>
 
-    <BPanelSplitter v-model:size="settingsWidth" position="left" :closable="false" :min-width="360" :max-width="400">
+    <BPanelSplitter v-model:size="settingsWidth" position="left" :closable="false" :min-width="220" :max-width="320">
       <PanelSettings
         v-model:value="session.data.value"
         v-model:select="selectedTarget"
@@ -106,7 +107,7 @@ const session = useFileSession<WidgetData>({
 });
 /** 当前右侧设置栏可编辑目标。 */
 /** 右侧设置面板宽度。 */
-const settingsWidth = ref(360);
+const settingsWidth = ref(300);
 const selectedTarget = ref<WidgetSelectTarget>(session.data.value.metadata);
 /** 当前侧栏需要高亮的元素 ID。 */
 const selectedElementIds = ref<string[]>([]);

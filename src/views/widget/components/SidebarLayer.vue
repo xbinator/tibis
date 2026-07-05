@@ -3,53 +3,55 @@
   @description Widget页面侧边栏图层列表，展示Widget元素图层项及选中态。
 -->
 <template>
-  <!-- 图层列表为空时的缺省提示 -->
-  <div v-if="layerEntries.length === 0" class="sidebar-panel__layer-empty">
-    <div class="sidebar-panel__layer-empty-icon">
-      <BIcon icon="lucide:rectangle-dashed" :size="24" />
-    </div>
-    <span class="sidebar-panel__layer-empty-text">暂无图层</span>
-    <span class="sidebar-panel__layer-empty-hint">添加元素后图层将在此展示</span>
-  </div>
-  <!-- 图层拖拽列表 -->
-  <BDraggable
-    v-else
-    class="sidebar-panel__layer-list"
-    :list="layerEntries"
-    item-key="id"
-    :item-class="getDraggableItemClass"
-    handle-class="sidebar-panel__layer-drag-handle"
-    emit-unchanged-move
-    @item-click="handleDraggableItemClick"
-    @move="handleDraggableMove"
-  >
-    <template #default="{ item: entry, handleClass, draggingKey, dropPosition }">
-      <div
-        class="sidebar-panel__layer-row"
-        :class="getLayerRowClass(entry, dropPosition, draggingKey)"
-        :style="getLayerRowStyle(entry, dropPosition, draggingKey)"
-      >
-        <button type="button" :class="handleClass" @click.stop>
-          <BIcon icon="lucide:grip-vertical" :size="14" />
-        </button>
-        <button v-if="entry.childCount > 0" type="button" class="sidebar-panel__layer-collapse" @click.stop="toggleGroupCollapsed(entry.element.id)">
-          <BIcon :icon="isGroupExpanded(entry) ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="14" />
-        </button>
-        <span v-else-if="shouldShowCollapsePlaceholder(entry)" class="sidebar-panel__layer-collapse-placeholder"></span>
-        <button type="button" class="sidebar-panel__layer-select">
-          <BIcon :icon="getElementIcon(entry.element)" :size="15" />
-          <div class="sidebar-panel__layer-main">
-            <span v-if="entry.isGroup" class="sidebar-panel__layer-group-title">{{ getGroupTitle(entry) }}</span>
-            <span v-else class="sidebar-panel__layer-title">{{ entry.element.title }}</span>
-          </div>
-        </button>
-        <div class="sidebar-panel__layer-actions">
-          <BButton class="sidebar-panel__layer-action" type="text" size="mini" square icon="lucide:copy" @click.stop="handleEntryCopy(entry)" />
-          <BButton class="sidebar-panel__layer-action" type="text" size="mini" danger square icon="lucide:trash-2" @click.stop="handleEntryDelete(entry)" />
-        </div>
+  <SidebarPanel title="图层">
+    <!-- 图层列表为空时的缺省提示 -->
+    <div v-if="layerEntries.length === 0" class="sidebar-panel__layer-empty">
+      <div class="sidebar-panel__layer-empty-icon">
+        <BIcon icon="lucide:rectangle-dashed" :size="24" />
       </div>
-    </template>
-  </BDraggable>
+      <span class="sidebar-panel__layer-empty-text">暂无图层</span>
+      <span class="sidebar-panel__layer-empty-hint">添加元素后图层将在此展示</span>
+    </div>
+    <!-- 图层拖拽列表 -->
+    <BDraggable
+      v-else
+      class="sidebar-panel__layer-list"
+      :list="layerEntries"
+      item-key="id"
+      :item-class="getDraggableItemClass"
+      handle-class="sidebar-panel__layer-drag-handle"
+      emit-unchanged-move
+      @item-click="handleDraggableItemClick"
+      @move="handleDraggableMove"
+    >
+      <template #default="{ item: entry, handleClass, draggingKey, dropPosition }">
+        <div
+          class="sidebar-panel__layer-row"
+          :class="getLayerRowClass(entry, dropPosition, draggingKey)"
+          :style="getLayerRowStyle(entry, dropPosition, draggingKey)"
+        >
+          <button type="button" :class="handleClass" @click.stop>
+            <BIcon icon="lucide:grip-vertical" :size="14" />
+          </button>
+          <button v-if="entry.childCount > 0" type="button" class="sidebar-panel__layer-collapse" @click.stop="toggleGroupCollapsed(entry.element.id)">
+            <BIcon :icon="isGroupExpanded(entry) ? 'lucide:chevron-down' : 'lucide:chevron-right'" :size="14" />
+          </button>
+          <span v-else-if="shouldShowCollapsePlaceholder(entry)" class="sidebar-panel__layer-collapse-placeholder"></span>
+          <button type="button" class="sidebar-panel__layer-select">
+            <BIcon :icon="getElementIcon(entry.element)" :size="15" />
+            <div class="sidebar-panel__layer-main">
+              <span v-if="entry.isGroup" class="sidebar-panel__layer-group-title">{{ getGroupTitle(entry) }}</span>
+              <span v-else class="sidebar-panel__layer-title">{{ entry.element.title }}</span>
+            </div>
+          </button>
+          <div class="sidebar-panel__layer-actions">
+            <BButton class="sidebar-panel__layer-action" type="text" size="mini" square icon="lucide:copy" @click.stop="handleEntryCopy(entry)" />
+            <BButton class="sidebar-panel__layer-action" type="text" size="mini" danger square icon="lucide:trash-2" @click.stop="handleEntryDelete(entry)" />
+          </div>
+        </div>
+      </template>
+    </BDraggable>
+  </SidebarPanel>
 </template>
 
 <script setup lang="ts">
@@ -59,6 +61,7 @@ import { computed, ref } from 'vue';
 import type { BDraggableKey, BDraggableMoveEvent, BDraggableMovePosition } from '@/components/BDraggable/types';
 import type { WidgetElement } from '@/components/BWidget/types';
 import { isWidgetGroupElement, readWidgetElementChildren } from '@/components/BWidget/utils/widgetTree';
+import SidebarPanel from './_SidebarPanel.vue';
 
 /**
  * 侧栏图层投放预览位置。
