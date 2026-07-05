@@ -234,7 +234,7 @@ declare interface WidgetHttpRequestOptions {
   body?: WidgetHttpBody
 }
 
-declare interface RequestResponse {
+declare interface RequestResponse<TData = unknown> {
   /** 最终响应 URL。 */
   url: string
   /** HTTP 状态码。 */
@@ -243,21 +243,21 @@ declare interface RequestResponse {
   ok: boolean
   /** 响应头。 */
   headers: Record<string, string>
-  /** 响应数据。 */
-  data: unknown
+  /** 响应数据，类型由调用方泛型参数指定，缺省为 unknown。 */
+  data: TData
 }
 
 declare interface WidgetHttpClient {
-  /** 发送 GET 请求。 */
-  get(url: string, options?: WidgetHttpGetOptions): Promise<RequestResponse>
-  /** 发送 POST 请求。 */
-  post(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse>
-  /** 发送 PUT 请求。 */
-  put(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse>
-  /** 发送 PATCH 请求。 */
-  patch(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse>
-  /** 发送 DELETE 请求。 */
-  delete(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse>
+  /** 发送 GET 请求，可通过泛型指定响应体类型。 */
+  get<TData = unknown>(url: string, options?: WidgetHttpGetOptions): Promise<RequestResponse<TData>>
+  /** 发送 POST 请求，可通过泛型指定响应体类型。 */
+  post<TData = unknown>(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse<TData>>
+  /** 发送 PUT 请求，可通过泛型指定响应体类型。 */
+  put<TData = unknown>(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse<TData>>
+  /** 发送 PATCH 请求，可通过泛型指定响应体类型。 */
+  patch<TData = unknown>(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse<TData>>
+  /** 发送 DELETE 请求，可通过泛型指定响应体类型。 */
+  delete<TData = unknown>(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse<TData>>
 }
 
 declare interface WidgetBaseThisContext {

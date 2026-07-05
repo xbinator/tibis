@@ -154,10 +154,7 @@ const scaledHeight = computed<number>(() => runtimeLayout.value.contentSize.heig
 const runtimeElements = computed<WidgetRuntimeRenderableElement[]>(() =>
   runtimeLayout.value.elements.map(
     (item: WidgetRuntimeElementLayout): WidgetRuntimeRenderableElement => ({
-      node: {
-        ...item.element,
-        position: item.position
-      },
+      node: { ...item.element, position: item.position },
       renderSize: item.renderSize,
       renderContext: runtimeRenderContextByElementId.value.get(item.element.id) ?? runtimeState.value.renderContext
     })

@@ -50,15 +50,13 @@ withDefaults(defineProps<Props>(), {
 }
 
 .sidebar-panel__header {
-  position: relative;
-  z-index: 1;
   display: flex;
   flex-shrink: 0;
   gap: 8px;
   align-items: center;
   height: 40px;
   padding: 0 12px;
-  box-shadow: 0 1px 0 0 var(--border-primary);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .sidebar-panel__title-group {

@@ -290,8 +290,6 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
 }
 
 .widget-sidebar__tabs {
-  position: relative;
-  z-index: 2;
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
@@ -299,7 +297,7 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   min-height: 0;
   padding: 6px;
   background: var(--bg-primary);
-  box-shadow: 1px 0 0 var(--border-primary);
+  border-right: 1px solid var(--border-primary);
 }
 
 .widget-sidebar__splitter {
