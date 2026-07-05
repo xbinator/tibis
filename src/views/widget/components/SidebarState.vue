@@ -1,23 +1,23 @@
 <!--
-  @file SidebarDataSource.vue
-  @description Widget页面侧边栏数据源面板骨架，后续承载数据源管理功能。
+  @file SidebarState.vue
+  @description Widget页面侧边栏状态面板骨架，后续承载状态管理功能。
 -->
 <template>
-  <div class="sidebar-panel__data-source-empty">
-    <div class="sidebar-panel__data-source-empty-icon">
+  <div class="sidebar-panel__state-empty">
+    <div class="sidebar-panel__state-empty-icon">
       <BIcon icon="lucide:database" :size="24" />
     </div>
-    <span class="sidebar-panel__data-source-empty-text">还没有数据源</span>
-    <span class="sidebar-panel__data-source-empty-hint">数据源将在此展示</span>
+    <span class="sidebar-panel__state-empty-text">还没有数据源</span>
+    <span class="sidebar-panel__state-empty-hint">数据源将在此展示</span>
   </div>
 </template>
 
 <script setup lang="ts">
-defineOptions({ name: 'SidebarDataSource' });
+defineOptions({ name: 'SidebarState' });
 </script>
 
 <style lang="less" scoped>
-.sidebar-panel__data-source-empty {
+.sidebar-panel__state-empty {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -27,7 +27,7 @@ defineOptions({ name: 'SidebarDataSource' });
   padding: 40px 16px;
 }
 
-.sidebar-panel__data-source-empty-icon {
+.sidebar-panel__state-empty-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,12 +39,12 @@ defineOptions({ name: 'SidebarDataSource' });
   border-radius: 12px;
 }
 
-.sidebar-panel__data-source-empty-text {
+.sidebar-panel__state-empty-text {
   font-size: 13px;
   color: var(--text-tertiary);
 }
 
-.sidebar-panel__data-source-empty-hint {
+.sidebar-panel__state-empty-hint {
   font-size: 12px;
   color: var(--text-quaternary);
 }

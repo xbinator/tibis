@@ -32,7 +32,7 @@
             @move-element="handleElementMove"
             @move-elements="handleElementsMove"
           />
-          <SidebarDataSource v-else-if="activeSidebarTab === 'data-source'" />
+          <SidebarState v-else-if="activeSidebarTab === 'data-source'" />
           <SidebarAction v-else-if="activeSidebarTab === 'action'" />
         </div>
       </div>
@@ -45,8 +45,8 @@ import type { WidgetLayerMovePosition } from '../utils/layerOrder';
 import { computed, ref } from 'vue';
 import type { WidgetElement } from '@/components/BWidget/types';
 import SidebarAction from './SidebarAction.vue';
-import SidebarDataSource from './SidebarDataSource.vue';
 import SidebarLayer from './SidebarLayer.vue';
+import SidebarState from './SidebarState.vue';
 import SidebarTools from './SidebarTools.vue';
 
 /**
