@@ -466,17 +466,11 @@ function createElementLoopRenderElements(
     x: parentAbsolutePosition.x + element.position.x,
     y: parentAbsolutePosition.y + element.position.y
   };
-  const config = element.loop;
+  const loopConfig = element.loop;
 
-  if (config.enabled) {
-    return expandLoopTemplateTarget(
-      {
-        config,
-        element,
-        absolutePosition
-      },
-      renderContext
-    );
+  // 循环启用且配置了数据源才走展开逻辑，否则按普通元素渲染一次，避免空 source 导致元素整体消失。
+  if (loopConfig.enabled && loopConfig.source) {
+    return expandLoopTemplateTarget({ config: loopConfig, element, absolutePosition }, renderContext);
   }
 
   return [

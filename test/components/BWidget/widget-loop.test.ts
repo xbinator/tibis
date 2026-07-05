@@ -384,4 +384,18 @@ describe('widgetLoop', (): void => {
 
     expect(createWidgetLoopRenderElements([loopElement], createRenderContext())).toEqual([]);
   });
+
+  it('falls back to normal rendering when loop is enabled but source is empty', (): void => {
+    const loopConfig: WidgetElementLoopConfig = {
+      ...createDefaultWidgetElementLoopConfig(),
+      enabled: true,
+      source: ''
+    };
+    const loopElement = createElement('text-1', { x: 10, y: 20 }, { width: 100, height: 52 }, {}, loopConfig);
+
+    const result = createWidgetLoopRenderElements([loopElement], createRenderContext());
+
+    expect(result.map((item) => item.element.id)).toEqual(['text-1']);
+    expect(result[0].element.position).toEqual({ x: 10, y: 20 });
+  });
 });
