@@ -1,10 +1,10 @@
 /**
  * @file panel-sidebar.test.ts
- * @description 验证Widget 页面左侧侧栏 tab 与 splitter 关闭状态。
+ * @description 验证Widget 页面左侧侧栏 tab 默认展示与 splitter 折叠交互。
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import { defineComponent, nextTick } from 'vue';
+import { defineComponent } from 'vue';
 import { mount, VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { WidgetElement } from '@/components/BWidget/types';
@@ -21,7 +21,7 @@ const BPanelSplitterStub = defineComponent({
       required: true
     }
   },
-  emits: ['close', 'update:size'],
+  emits: ['update:size'],
   template: '<section class="panel-splitter-stub" :data-size="size"><slot /></section>'
 });
 
@@ -87,27 +87,6 @@ describe('PanelSidebar', (): void => {
     expect(wrapper.find('.sidebar-tools-stub').exists()).toBe(true);
     expect(wrapper.find('.panel-splitter-stub').attributes('data-size')).toBe('240');
     expect(wrapper.find('[data-icon="lucide:box"]').attributes('data-type')).toBe('secondary');
-
-    wrapper.unmount();
-  });
-
-  it('clears the active tab when the splitter closes and restores size when a tab is clicked', async (): Promise<void> => {
-    const wrapper = mountPanelSidebar();
-    const splitter = wrapper.findComponent(BPanelSplitterStub);
-
-    splitter.vm.$emit('update:size', 0);
-    splitter.vm.$emit('close');
-    await nextTick();
-
-    expect(wrapper.find('.sidebar-tools-stub').exists()).toBe(false);
-    expect(wrapper.find('[data-icon="lucide:box"]').attributes('data-type')).toBe('ghost');
-    expect(wrapper.find('.panel-splitter-stub').attributes('data-size')).toBe('0');
-
-    await wrapper.find('[data-icon="lucide:layers"]').trigger('click');
-
-    expect(wrapper.find('.sidebar-layer-stub').exists()).toBe(true);
-    expect(wrapper.find('[data-icon="lucide:layers"]').attributes('data-type')).toBe('secondary');
-    expect(wrapper.find('.panel-splitter-stub').attributes('data-size')).toBe('240');
 
     wrapper.unmount();
   });

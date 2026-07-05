@@ -1,6 +1,6 @@
 <!--
   @file PanelSidebar.vue
-  @description Widget页面左侧工具与图层侧边栏，tabs 列常驻显示，splitter 包裹内容区控制折叠；splitter 关闭时通过 @close 清空 tab 选中态，再次点击 tab 自动重新展开。
+  @description Widget页面左侧工具与图层侧边栏，tabs 列常驻显示，splitter 包裹内容区控制折叠；splitter 关闭后保留当前 tab 选中态，再次点击 tab 自动重新展开并定位。
 -->
 <template>
   <aside class="sidebar-panel">
@@ -10,7 +10,7 @@
       </template>
     </div>
 
-    <BPanelSplitter v-model:size="size" position="right" :min-width="200" :max-width="300" @close="handleSplitterClose">
+    <BPanelSplitter v-model:size="size" position="right" :min-width="200" :max-width="300">
       <div class="sidebar-panel__content">
         <header class="sidebar-panel__panel-header">
           <h2 class="sidebar-panel__panel-title">{{ activePanelTitle }}</h2>
@@ -51,7 +51,7 @@ import SidebarTools from './SidebarTools.vue';
 type WidgetSidebarTabKey = 'tools' | 'layers';
 
 /**
- * 当前激活的左侧侧边栏页签；null 表示未选中（splitter 关闭态）。
+ * 当前激活的左侧侧边栏页签。
  */
 type ActiveWidgetSidebarTabKey = WidgetSidebarTabKey | null;
 
@@ -110,7 +110,7 @@ const emit = defineEmits<{
 }>();
 
 const activeSidebarTab = ref<ActiveWidgetSidebarTabKey>('tools');
-/** 当前面板标题；未选中时返回空串。 */
+/** 当前面板标题。 */
 const activePanelTitle = computed<string>((): string => {
   if (activeSidebarTab.value === 'tools') {
     return '组件';
@@ -141,13 +141,6 @@ function handleTabClick(key: WidgetSidebarTabKey): void {
   }
 
   activeSidebarTab.value = key;
-}
-
-/**
- * 清空侧边栏页签选中态，保持 splitter 关闭后内容区为空。
- */
-function handleSplitterClose(): void {
-  activeSidebarTab.value = null;
 }
 
 /**
