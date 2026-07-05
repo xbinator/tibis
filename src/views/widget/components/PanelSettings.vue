@@ -4,7 +4,7 @@
 -->
 <template>
   <aside class="setter-panel">
-    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="widgetData" @edit-code="emit('edit-code')" />
+    <PageSetter v-if="select && !isElementTarget(select)" v-model:value="widgetData" />
     <ATabs v-else-if="select === null && selectedElementIds.length > 1">
       <ATabPane key="design" tab="设计">
         <BatchSetter
@@ -65,8 +65,6 @@ const props = withDefaults(defineProps<Props>(), {
   selectedElementIds: (): string[] => []
 });
 const emit = defineEmits<{
-  /** 打开运行代码编辑器 */
-  'edit-code': [];
   /** 触发多选快捷操作 */
   'multi-command': [command: 'copy' | 'group' | 'ungroup' | 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack' | 'delete'];
   /** 批量更新多选元素布局 */

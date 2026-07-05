@@ -1,55 +1,63 @@
 <!--
   @file SidebarAction.vue
-  @description Widget页面侧边栏动作面板骨架，后续承载运行时动作管理功能。
+  @description Widget页面侧边栏动作面板，直接承载运行脚本代码编辑器；顶部「展开」按钮可请求扩展侧栏宽度以获得更大的编辑区域。
 -->
 <template>
-  <SidebarPanel title="动作">
-    <div class="sidebar-panel__action-empty">
-      <div class="sidebar-panel__action-empty-icon">
-        <BIcon icon="lucide:zap" :size="24" />
-      </div>
-      <span class="sidebar-panel__action-empty-text">还没有动作</span>
-      <span class="sidebar-panel__action-empty-hint">动作将在此展示</span>
-    </div>
+  <SidebarPanel title="动作面板" :padding="0">
+    <template #extra>
+      <BButton
+        :icon="isExpanded ? 'lucide:minimize-2' : 'lucide:maximize-2'"
+        size="mini"
+        square
+        :type="isExpanded ? 'secondary' : 'ghost'"
+        @click="toggleExpand"
+      />
+    </template>
+    <CodeEditor v-model:value="dataItem" :active="props.active" @save="emit('save')" />
   </SidebarPanel>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
+import type { WidgetData } from '@/components/BWidget/types';
 import SidebarPanel from './_SidebarPanel.vue';
+import CodeEditor from './CodeEditor.vue';
 
 defineOptions({ name: 'SidebarAction' });
+
+/**
+ * 动作侧栏入参。
+ */
+interface Props {
+  /** 当前动作侧栏是否处于可见激活态，用于驱动编辑器刷新和聚焦。 */
+  active?: boolean;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  active: false
+});
+const dataItem = defineModel<WidgetData>('value', { required: true });
+const emit = defineEmits<{
+  /** 请求保存当前 Widget 文件（来自 CodeEditor 的 Ctrl+S） */
+  save: [];
+  /** 请求展开侧栏（占据除右侧设置面板与 tabs 列之外的所有空间） */
+  expand: [];
+  /** 请求收起侧栏（恢复默认宽度） */
+  collapse: [];
+}>();
+
+/** 当前是否处于展开态。 */
+const isExpanded = ref(false);
+
+/**
+ * 切换展开 / 收起态，并向上抛出对应事件。
+ */
+function toggleExpand(): void {
+  isExpanded.value = !isExpanded.value;
+  if (isExpanded.value) {
+    emit('expand');
+  } else {
+    emit('collapse');
+  }
+}
 </script>
-
-<style lang="less" scoped>
-.sidebar-panel__action-empty {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 16px;
-}
-
-.sidebar-panel__action-empty-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 4px;
-  color: var(--text-quaternary);
-  background: var(--bg-tertiary);
-  border-radius: 12px;
-}
-
-.sidebar-panel__action-empty-text {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.sidebar-panel__action-empty-hint {
-  font-size: 12px;
-  color: var(--text-quaternary);
-}
-</style>

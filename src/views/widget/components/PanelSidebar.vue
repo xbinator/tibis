@@ -1,17 +1,24 @@
 <!--
   @file PanelSidebar.vue
-  @description Widget页面左侧工具与图层侧边栏，tabs 列常驻显示，splitter 包裹内容区控制折叠；splitter 关闭后保留当前 tab 选中态，再次点击 tab 自动重新展开并定位。
+  @description Widget 页面左侧工具、图层、数据源和动作侧边栏，tabs 列常驻显示；动作面板可像 ChatSider 一样通过展开态样式覆盖画布并避让右侧设置栏。
 -->
 <template>
-  <aside class="sidebar-panel">
-    <div class="sidebar__tabs">
+  <aside :class="bem({ expanded: isExpanded })" :style="sidebarStyle">
+    <div :class="bem('tabs')">
       <template v-for="tab in sidebarTabs" :key="tab.key">
         <BButton :type="activeSidebarTab === tab.key ? 'secondary' : 'ghost'" square :icon="tab.icon" @click="handleTabClick(tab.key)" />
       </template>
     </div>
 
-    <BPanelSplitter v-model:size="size" position="right" :closable="false" :min-width="280" :max-width="360">
-      <div class="sidebar-panel__content">
+    <BPanelSplitter
+      v-model:size="size"
+      :class="bem('splitter', { expanded: isExpanded })"
+      :disabled="isExpanded"
+      :max-width="SIDEBAR_MAX_SIZE"
+      :min-width="SIDEBAR_MIN_SIZE"
+      position="right"
+    >
+      <div :class="bem('content')">
         <SidebarTools v-if="activeSidebarTab === 'tools'" />
         <SidebarLayer
           v-else-if="activeSidebarTab === 'layers'"
@@ -28,7 +35,14 @@
           @move-elements="handleElementsMove"
         />
         <SidebarState v-else-if="activeSidebarTab === 'data-source'" v-model:value="dataItem" />
-        <SidebarAction v-else-if="activeSidebarTab === 'action'" />
+        <SidebarAction
+          v-else-if="activeSidebarTab === 'action'"
+          v-model:value="dataItem"
+          :active="activeSidebarTab === 'action'"
+          @save="emit('save')"
+          @expand="handleExpand"
+          @collapse="handleCollapse"
+        />
       </div>
     </BPanelSplitter>
   </aside>
@@ -36,8 +50,10 @@
 
 <script setup lang="ts">
 import type { WidgetLayerMovePosition } from '../utils/layerOrder';
-import { ref } from 'vue';
+import type { CSSProperties } from 'vue';
+import { computed, ref } from 'vue';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
+import { createNamespace } from '@/utils/namespace';
 import SidebarAction from './SidebarAction.vue';
 import SidebarLayer from './SidebarLayer.vue';
 import SidebarState from './SidebarState.vue';
@@ -66,6 +82,14 @@ interface WidgetSidebarTab {
 }
 
 /**
+ * Widget 侧边栏根元素内联样式。
+ */
+type WidgetSidebarStyle = CSSProperties & {
+  /** 右侧设置面板宽度，用于展开态避让。 */
+  '--widget-sidebar-settings-width': string;
+};
+
+/**
  * Widget侧边栏入参。
  */
 interface Props {
@@ -75,21 +99,20 @@ interface Props {
   elements: WidgetElement[];
   /** 当前选中的Widget元素 ID 列表 */
   selectedElementIds?: string[];
+  /** 右侧设置面板宽度（px），用于计算「动作」tab 展开态的最大宽度 */
+  settingsWidth?: number;
 }
 
-withDefaults(defineProps<Props>(), {
+const [, bem] = createNamespace('widget-sidebar', '');
+
+const props = withDefaults(defineProps<Props>(), {
   activeElementId: null,
-  selectedElementIds: (): string[] => []
+  selectedElementIds: (): string[] => [],
+  settingsWidth: 300
 });
 
 /** 当前 Widget 完整数据（透传给侧栏子面板）。 */
 const dataItem = defineModel<WidgetData>('value', { required: true });
-
-/** 内容区默认宽度；侧栏关闭后点击 tab 时恢复到该值。 */
-const SIDEBAR_DEFAULT_SIZE = 280;
-
-/** 内容区宽度（内部状态），为 0 时表示侧栏已关闭。 */
-const size = ref(SIDEBAR_DEFAULT_SIZE);
 
 const emit = defineEmits<{
   /** 选择侧栏图层元素 */
@@ -108,6 +131,8 @@ const emit = defineEmits<{
   'move-element': [sourceElementId: string, targetElementId: string, position: WidgetLayerMovePosition];
   /** 移动多个侧栏图层元素 */
   'move-elements': [sourceElementIds: string[], targetElementIds: string[], position: WidgetLayerMovePosition];
+  /** 请求保存当前 Widget 文件（来自运行脚本编辑器 Ctrl+S） */
+  save: [];
 }>();
 
 /** 左侧侧边栏页签列表（标签与图标的单一来源）。 */
@@ -118,7 +143,44 @@ const sidebarTabs: WidgetSidebarTab[] = [
   { key: 'action', label: '动作', icon: 'lucide:file-code-corner' }
 ];
 
+/** 内容区最小宽度，保障 schema 树和动作编辑器基础可用空间。 */
+const SIDEBAR_MIN_SIZE = 280;
+
+/** 内容区默认宽度；侧栏关闭后点击 tab 时恢复到该值。 */
+const SIDEBAR_DEFAULT_SIZE = 320;
+
+/** 普通拖拽态最大宽度；展开态通过 CSS 覆盖整段画布空间。 */
+const SIDEBAR_MAX_SIZE = 440;
+
+/** 内容区宽度（内部状态），为 0 时表示侧栏已关闭。 */
+const size = ref(SIDEBAR_DEFAULT_SIZE);
+
+/** 当前激活的侧栏 tab。 */
 const activeSidebarTab = ref<ActiveWidgetSidebarTabKey>('tools');
+
+/** 当前是否处于展开态（由「动作」tab 触发）。 */
+const isExpanded = ref(false);
+
+/** 根元素样式变量，展开态用它给右侧设置栏让位。 */
+const sidebarStyle = computed<WidgetSidebarStyle>(
+  (): WidgetSidebarStyle => ({
+    '--widget-sidebar-settings-width': `${props.settingsWidth}px`
+  })
+);
+
+/**
+ * 处理「动作」tab 展开事件：只切换布局状态，保留普通态拖拽宽度。
+ */
+function handleExpand(): void {
+  isExpanded.value = true;
+}
+
+/**
+ * 处理「动作」tab 收起事件：恢复普通侧栏布局。
+ */
+function handleCollapse(): void {
+  isExpanded.value = false;
+}
 
 /**
  * 切换左侧侧边栏页签。
@@ -128,6 +190,11 @@ const activeSidebarTab = ref<ActiveWidgetSidebarTabKey>('tools');
  * @param key - 目标页签标识
  */
 function handleTabClick(key: WidgetSidebarTabKey): void {
+  // 切换到非「动作」tab 时退出覆盖布局，但保留用户拖拽后的普通态宽度。
+  if (key !== 'action' && isExpanded.value) {
+    isExpanded.value = false;
+  }
+
   if (size.value <= 0) {
     size.value = SIDEBAR_DEFAULT_SIZE;
   }
@@ -205,7 +272,7 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
 </script>
 
 <style lang="less" scoped>
-.sidebar-panel {
+.widget-sidebar {
   position: relative;
   z-index: 1;
   display: flex;
@@ -215,19 +282,47 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   box-shadow: 1px 0 0 0 var(--border-primary);
 }
 
-.sidebar__tabs {
+.widget-sidebar--expanded {
+  position: absolute;
+  inset: 0 var(--widget-sidebar-settings-width) 0 0;
+  z-index: 2;
+  background: var(--bg-primary);
+}
+
+.widget-sidebar__tabs {
+  position: relative;
+  z-index: 2;
   display: flex;
+  flex-shrink: 0;
   flex-direction: column;
   gap: 8px;
   min-height: 0;
   padding: 6px;
+  background: var(--bg-primary);
   box-shadow: 1px 0 0 var(--border-primary);
 }
 
-.sidebar-panel__content {
+.widget-sidebar__splitter {
+  flex-shrink: 0;
+}
+
+.widget-sidebar__splitter--expanded {
+  flex: 1;
+  width: 0;
+}
+
+.widget-sidebar__splitter--expanded :deep(.b-panel-splitter__section) {
+  width: 100% !important;
+}
+
+.widget-sidebar__content {
   display: flex;
   flex: 1;
   flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
+  background: var(--bg-primary);
 }
 </style>

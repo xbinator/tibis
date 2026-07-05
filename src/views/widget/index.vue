@@ -9,6 +9,8 @@
       :active-element-id="activeSidebarElementId"
       :elements="session.data.value.elements"
       :selected-element-ids="selectedElementIds"
+      :settings-width="settingsWidth"
+      @save="handleSave"
       @select-element="handleSidebarElementSelect"
       @select-elements="handleSidebarElementsSelect"
       @copy-element="handleSidebarElementCopy"
@@ -30,21 +32,16 @@
       />
     </section>
 
-    <BPanelSplitter v-model:size="settingsWidth" position="left" :closable="false" :min-width="220" :max-width="320">
+    <BPanelSplitter v-model:size="settingsWidth" position="left" :min-width="220" :max-width="320">
       <PanelSettings
         v-model:value="session.data.value"
         v-model:select="selectedTarget"
         :selected-element-ids="selectedElementIds"
-        @edit-code="handleCodeEdit"
         @multi-command="handleSettingsMultiCommand"
         @multi-layout-change="handleSettingsMultiLayoutChange"
         @multi-style-change="handleSettingsMultiStyleChange"
       />
     </BPanelSplitter>
-
-    <div class="widget-page__code-overlay" :class="{ 'is-open': isCodeEditorOpen }" :style="{ right: `${settingsWidth}px` }">
-      <CodeEditor v-model:value="session.data.value" :active="isCodeEditorOpen" @close="handleCodeClose" @save="handleCodeSave" />
-    </div>
   </main>
 </template>
 
@@ -70,7 +67,6 @@ import {
 } from '@/components/BWidget/utils/widgetTree';
 import { useFileSession } from '@/hooks/useFileSession';
 import { useTabsStore } from '@/stores/workspace/tabs';
-import CodeEditor from './components/CodeEditor.vue';
 import PanelSettings from './components/PanelSettings.vue';
 import PanelSidebar from './components/PanelSidebar.vue';
 import { useBindings } from './hooks/useBindings';
@@ -85,7 +81,6 @@ const route = useRoute();
 const tabsStore = useTabsStore();
 const fileId = ref(String(route.params.id || ''));
 const isActive = ref(true);
-const isCodeEditorOpen = ref(false);
 const widgetRef = ref<InstanceType<typeof BWidgetComponent>>();
 const canvasRef = ref<HTMLElement | null>(null);
 const routePath = computed<string>(() => route.fullPath || `/widget/${fileId.value}`);
@@ -105,9 +100,9 @@ const session = useFileSession<WidgetData>({
   routeName: 'widget',
   fallbackRouteName: 'editor'
 });
-/** 当前右侧设置栏可编辑目标。 */
 /** 右侧设置面板宽度。 */
 const settingsWidth = ref(300);
+/** 当前右侧设置栏可编辑目标。 */
 const selectedTarget = ref<WidgetSelectTarget>(session.data.value.metadata);
 /** 当前侧栏需要高亮的元素 ID。 */
 const selectedElementIds = ref<string[]>([]);
@@ -260,7 +255,7 @@ function insertLayerCopyAboveSource(elements: WidgetElement[], sourceElementId: 
 /**
  * 将复制元素列表插入到原元素组上一层。
  * @param elements - 当前元素列表
- * @param sourceElements - 原始元素列表
+ * @param sourceElements - 原始元素组 ID 列表
  * @param copiedElements - 复制元素列表
  * @returns 插入后的元素列表
  */
@@ -344,26 +339,16 @@ function handleWidgetSelectUpdate(target: WidgetSelectTarget): void {
  */
 function handleWidgetSelectionChange(selection: string[]): void {
   selectedElementIds.value = [...selection];
+
+  if (settingsWidth.value === 0 && selectedElementIds.value.length) {
+    settingsWidth.value = 300;
+  }
 }
 
 /**
- * 打开当前 Widget 的组件脚本当前页编辑器。
+ * 保存当前 Widget 文件（由侧栏运行脚本编辑器 Ctrl+S 触发）。
  */
-function handleCodeEdit(): void {
-  isCodeEditorOpen.value = true;
-}
-
-/**
- * 关闭组件脚本当前页编辑器。
- */
-function handleCodeClose(): void {
-  isCodeEditorOpen.value = false;
-}
-
-/**
- * 保存当前 Widget 文件。
- */
-async function handleCodeSave(): Promise<void> {
+async function handleSave(): Promise<void> {
   await session.actions.onSave();
 }
 
@@ -485,7 +470,7 @@ async function handleSettingsMultiCommand(command: SettingsMultiCommand): Promis
 /**
  * 创建多选元素外接框。
  * @param elements - 目标多选元素列表
- * @returns 多选外接框，空列表返回 null
+ * @returns 多选元素外接框，空列表返回 null
  */
 function createMultiSelectionBounds(elements: WidgetElement[]): MultiSelectionBounds | null {
   if (elements.length === 0) {
@@ -583,7 +568,7 @@ function getSelectedElementsInTree(elements: WidgetElement[], selectedIds: Set<s
 /**
  * 批量更新选中元素布局。
  * @param elements - 当前Widget元素列表
- * @param selectedIds - 当前多选元素 ID 集合
+ * @param selectedIds - 当前多选元素 ID 列表
  * @param layout - 布局变更
  * @returns 更新布局后的元素列表
  */
@@ -822,21 +807,5 @@ onDeactivated((): void => {
   min-width: 0;
   min-height: 0;
   padding: 8px 0;
-}
-
-.widget-page__code-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  visibility: hidden;
-  pointer-events: none;
-  background: var(--bg-primary);
-  opacity: 0;
-}
-
-.widget-page__code-overlay.is-open {
-  visibility: visible;
-  pointer-events: auto;
-  opacity: 1;
 }
 </style>

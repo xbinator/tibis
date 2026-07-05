@@ -1,29 +1,20 @@
 <!--
   @file CodeEditor.vue
-  @description Widget 组件脚本当前页代码编辑器。
+  @description Widget 组件脚本代码编辑器（无外壳，仅承载 Monaco 编辑器）。
 -->
 <template>
-  <main class="widget-code-page">
-    <header class="widget-code-page__toolbar">
-      <h1 class="widget-code-page__title">编辑运行脚本</h1>
-      <div class="widget-code-page__actions">
-        <BButton icon="lucide:x" size="small" square type="ghost" @click="handleClose" />
-      </div>
-    </header>
-
-    <section class="widget-code-page__editor">
-      <BMonaco
-        ref="codeEditorRef"
-        v-model:value="inputCode"
-        language="typescript"
-        :editable="true"
-        :editor-state="codeEditorState"
-        :extra-libs="widgetMethodScriptExtraLibs"
-        :options="{ wordWrap: true, search: true, stickyScroll: true, typescriptCompilerOptions: widgetMethodScriptCompilerOptions }"
-        @save="handleSave"
-      />
-    </section>
-  </main>
+  <div class="code-editor">
+    <BMonaco
+      ref="codeEditorRef"
+      v-model:value="inputCode"
+      language="typescript"
+      :editable="true"
+      :editor-state="codeEditorState"
+      :extra-libs="widgetMethodScriptExtraLibs"
+      :options="{ wordWrap: true, search: true, stickyScroll: true, typescriptCompilerOptions: widgetMethodScriptCompilerOptions }"
+      @save="handleSave"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -50,8 +41,6 @@ const props = withDefaults(defineProps<Props>(), {
   active: false
 });
 const emit = defineEmits<{
-  /** 关闭 组件脚本编辑器 */
-  close: [];
   /** 请求保存当前 Widget 文件 */
   save: [];
 }>();
@@ -137,13 +126,6 @@ function syncInputCodeToModel(code: string): void {
 }
 
 /**
- * 关闭当前脚本编辑器。
- */
-function handleClose(): void {
-  emit('close');
-}
-
-/**
  * 向外抛出保存请求，由 Widget 页面统一执行文件保存。
  */
 function handleSave(): void {
@@ -160,70 +142,38 @@ watch(
     if (!active) return;
 
     await syncInputCodeFromModel(true);
-  }
+  },
+  { immediate: true }
 );
 </script>
 
 <style lang="less" scoped>
-.widget-code-page {
+.code-editor {
   display: flex;
-  flex-direction: column;
+  flex: 1;
   width: 100%;
+  min-width: 0;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   background: var(--bg-primary);
-  border-radius: 8px;
 }
 
-.widget-code-page__toolbar {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  height: 40px;
-  padding: 0 12px;
-  box-shadow: 0 1px 0 0 var(--border-primary);
-}
-
-.widget-code-page__title {
+.code-editor :deep(.b-editor-monaco),
+.code-editor :deep(.b-editor-monaco__host),
+.code-editor :deep(.b-editor-monaco__fallback) {
   flex: 1;
+  width: 100%;
   min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.widget-code-page__actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 8px;
-  align-items: center;
-}
-
-.widget-code-page__editor {
-  flex: 1;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 
-.widget-code-page__editor :deep(.b-editor-monaco),
-.widget-code-page__editor :deep(.b-editor-monaco__host),
-.widget-code-page__editor :deep(.b-editor-monaco__fallback) {
-  min-height: 100%;
-}
-
-.widget-code-page__editor :deep(.monaco-editor),
-.widget-code-page__editor :deep(.monaco-editor-background),
-.widget-code-page__editor :deep(.monaco-editor .margin),
-.widget-code-page__editor :deep(.monaco-editor .monaco-editor-background) {
+.code-editor :deep(.monaco-editor),
+.code-editor :deep(.monaco-editor-background),
+.code-editor :deep(.monaco-editor .margin),
+.code-editor :deep(.monaco-editor .monaco-editor-background) {
   background: var(--bg-primary);
 }
 </style>

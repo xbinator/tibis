@@ -3,10 +3,12 @@
  * @description 验证 Widget JS 脚本当前页代码编辑器。
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { defineComponent, nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
@@ -37,6 +39,8 @@ type Record<K extends string | number | symbol, T> = {
 
 /** 已移除的旧根变量名。 */
 const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
+/** Monaco 聚焦方法测试替身。 */
+const focusEditorMock = vi.fn<() => void>();
 
 /**
  * Monaco 测试替身属性。
@@ -169,43 +173,6 @@ function getTypeScriptCompletionNames(files: Record<string, string>, targetFileN
 }
 
 /**
- * 创建 BButton 测试替身。
- * @returns BButton 测试替身
- */
-function createBButtonStub(): ReturnType<typeof defineComponent> {
-  return defineComponent({
-    name: 'BButtonStub',
-    props: {
-      icon: {
-        type: String,
-        default: ''
-      },
-      size: {
-        type: String,
-        default: 'middle'
-      },
-      type: {
-        type: String,
-        default: 'primary'
-      }
-    },
-    emits: ['click'],
-    setup(_props, { emit }) {
-      /**
-       * 转发按钮点击事件。
-       * @param event - 原生鼠标事件
-       */
-      function handleClick(event: MouseEvent): void {
-        emit('click', event);
-      }
-
-      return { handleClick };
-    },
-    template: '<button class="b-button-stub" :data-icon="icon" :data-size="size" :data-type="type" @click="handleClick"><slot></slot></button>'
-  });
-}
-
-/**
  * 创建 BMonaco 测试替身。
  * @returns BMonaco 测试替身
  */
@@ -250,7 +217,7 @@ function createBMonacoStub(): ReturnType<typeof defineComponent> {
        * 模拟 Monaco 聚焦方法。
        */
       function focusEditor(): void {
-        return undefined;
+        focusEditorMock();
       }
 
       /**
@@ -324,7 +291,6 @@ function mountCodeEditor(value: WidgetData = createWidgetData(), active = true):
     },
     global: {
       stubs: {
-        BButton: createBButtonStub(),
         BMonaco: createBMonacoStub(),
         Icon: true
       }
@@ -342,22 +308,18 @@ function readMonacoProps(wrapper: VueWrapper): BMonacoStubProps {
 }
 
 /**
- * 查找关闭按钮。
- * @param wrapper - 页面包装器
- * @returns 按钮包装器
+ * 读取 CodeEditor 源码。
+ * @returns CodeEditor 源码文本
  */
-function findCloseButton(wrapper: VueWrapper): VueWrapper {
-  const button = wrapper
-    .findAllComponents({ name: 'BButtonStub' })
-    .find((item: VueWrapper): boolean => (item.props() as { icon?: string }).icon === 'lucide:x');
-  if (!button) {
-    throw new Error('未找到关闭按钮');
-  }
-
-  return button;
+function readCodeEditorSource(): string {
+  return readFileSync(resolve(process.cwd(), 'src/views/widget/components/CodeEditor.vue'), 'utf8');
 }
 
 describe('CodeEditor', (): void => {
+  beforeEach((): void => {
+    focusEditorMock.mockClear();
+  });
+
   it('loads current script and updates widget data through value model', async (): Promise<void> => {
     const initialCode = ['Widget({', '  data: {', '    ready: false', '  },', '  async mounted() {', '    this.ready = true', '  }', '})'].join('\n');
     const nextCode = [
@@ -379,10 +341,8 @@ describe('CodeEditor', (): void => {
     };
     const wrapper = mountCodeEditor(widgetData);
 
-    expect(wrapper.find('.widget-code-page__toolbar').exists()).toBe(true);
-    expect(wrapper.find('.widget-code-page__title').text()).toBe('编辑运行脚本');
-    expect(wrapper.findAllComponents({ name: 'BButtonStub' })).toHaveLength(1);
-    expect((findCloseButton(wrapper).props() as { icon?: string }).icon).toBe('lucide:x');
+    expect(wrapper.find('.code-editor').exists()).toBe(true);
+    expect(wrapper.find('.widget-code-page__toolbar').exists()).toBe(false);
     expect(readMonacoProps(wrapper).language).toBe('typescript');
     expect(readMonacoProps(wrapper).options?.wordWrap).toBe(true);
     expect(readMonacoProps(wrapper).options?.search).toBe(true);
@@ -402,7 +362,7 @@ describe('CodeEditor', (): void => {
     wrapper.unmount();
   });
 
-  it('emits close without mutating the current model by itself', async (): Promise<void> => {
+  it('does not expose the removed overlay close action', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
@@ -410,9 +370,8 @@ describe('CodeEditor', (): void => {
       }
     });
 
-    await findCloseButton(wrapper).trigger('click');
-
-    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(wrapper.find('.widget-code-page__actions').exists()).toBe(false);
+    expect(wrapper.emitted('close')).toBeUndefined();
     expect(wrapper.emitted('update:value')).toBeUndefined();
     wrapper.unmount();
   });
@@ -463,6 +422,24 @@ describe('CodeEditor', (): void => {
     wrapper.unmount();
   });
 
+  it('focuses Monaco when mounted as the active sidebar editor', async (): Promise<void> => {
+    const wrapper = mountCodeEditor(
+      {
+        ...createWidgetData(),
+        execute: {
+          code: 'Widget({ mounted() {} })'
+        }
+      },
+      true
+    );
+
+    await nextTick();
+    await nextTick();
+
+    expect(focusEditorMock).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
   it('keeps an empty script when syncing from the latest model', async (): Promise<void> => {
     const wrapper = mountCodeEditor(
       {
@@ -486,6 +463,15 @@ describe('CodeEditor', (): void => {
 
     expect(readMonacoProps(wrapper).value).toBe('');
     wrapper.unmount();
+  });
+
+  it('allows the nested Monaco editor to shrink with sidebar width changes', (): void => {
+    const source = readCodeEditorSource();
+
+    expect(source).toContain('.code-editor {');
+    expect(source).toContain('min-width: 0;');
+    expect(source).toContain('.code-editor :deep(.b-editor-monaco),');
+    expect(source).toContain('.code-editor :deep(.b-editor-monaco__host),');
   });
 
   it('creates editor type hints for nested, array and non-identifier input schema fields', (): void => {

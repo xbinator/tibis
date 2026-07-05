@@ -15,7 +15,7 @@
         <slot name="extra"></slot>
       </div>
     </header>
-    <div class="sidebar-panel__content">
+    <div class="sidebar-panel__content" :style="{ padding }">
       <slot></slot>
     </div>
   </div>
@@ -28,12 +28,15 @@
 interface Props {
   /** 面板标题，未提供时仍可仅渲染 help 装饰 / extra 操作区。 */
   title?: string;
+  /** 内容区内边距，支持任意 CSS 长度 / 简写；数字会被视作 px。 */
+  padding?: string | number;
 }
 
 defineOptions({ name: 'SidebarPanel' });
 
 withDefaults(defineProps<Props>(), {
-  title: ''
+  title: '',
+  padding: '12px'
 });
 </script>
 
@@ -47,11 +50,13 @@ withDefaults(defineProps<Props>(), {
 }
 
 .sidebar-panel__header {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-shrink: 0;
   gap: 8px;
   align-items: center;
-  height: 38px;
+  height: 40px;
   padding: 0 12px;
   box-shadow: 0 1px 0 0 var(--border-primary);
 }

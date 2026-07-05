@@ -13,6 +13,7 @@ import type { WidgetData, WidgetElement, WidgetSchemaObject } from '@/components
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import PageSetter from '@/views/widget/components/PageSetter.vue';
+import SidebarState from '@/views/widget/components/SidebarState.vue';
 
 const globalStubs = {
   ATabs: defineComponent({
@@ -369,6 +370,17 @@ interface PageSetterHostVm extends ComponentPublicInstance {
 }
 
 /**
+ * SidebarState 测试宿主公开状态。
+ */
+interface SidebarStateHostVm extends ComponentPublicInstance {
+  /** 当前Widget 数据 */
+  dataItem: WidgetData;
+}
+
+/** Vue 测试包装器查询目标。 */
+type QueryableWrapper = VueWrapper | DOMWrapper<Element>;
+
+/**
  * 创建测试用天气入参 schema。
  * @returns 天气入参 schema
  */
@@ -479,22 +491,36 @@ function mountPageSetterHost(initialData: WidgetData): VueWrapper<PageSetterHost
 }
 
 /**
- * 查找 PageSetter 内的指定标题区块。
- * @param wrapper - PageSetter 测试包装器
- * @param title - 区块标题
- * @returns 区块包装器
+ * 创建带 v-model 回写的 SidebarState 测试宿主。
+ * @param initialData - 初始Widget 数据
+ * @returns 测试宿主组件
  */
-function findSectionBlock(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
-  const section = wrapper.findAllComponents({ name: 'BSectionBlockStub' }).find((item: VueWrapper): boolean => {
-    const props = item.props() as { title?: string };
-
-    return props.title === title;
+function createSidebarStateHost(initialData: WidgetData): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'SidebarStateHost',
+    components: {
+      SidebarState
+    },
+    setup(): { dataItem: Ref<WidgetData> } {
+      return {
+        dataItem: ref(initialData)
+      };
+    },
+    template: '<SidebarState v-model:value="dataItem" />'
   });
-  if (!section) {
-    throw new Error(`未找到区块：${title}`);
-  }
+}
 
-  return section;
+/**
+ * 挂载带 v-model 回写的 SidebarState 测试宿主。
+ * @param initialData - 初始Widget 数据
+ * @returns 测试包装器
+ */
+function mountSidebarStateHost(initialData: WidgetData): VueWrapper<SidebarStateHostVm> {
+  return mount(createSidebarStateHost(initialData), {
+    global: {
+      stubs: globalStubs
+    }
+  }) as VueWrapper<SidebarStateHostVm>;
 }
 
 /**
@@ -511,67 +537,77 @@ function readSectionBlockTitles(wrapper: VueWrapper<PageSetterHostVm>): string[]
 }
 
 /**
- * 查找指定区块内的编辑按钮。
- * @param wrapper - PageSetter 测试包装器
- * @param title - 区块标题
- * @returns 按钮包装器
+ * 查找 SidebarState 数据源面板。
+ * @param wrapper - SidebarState 测试包装器
+ * @returns 数据源面板包装器
  */
-function findSectionEditButton(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
-  const section = findSectionBlock(wrapper, title);
-  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => item.text() === '编辑');
-  if (!button) {
-    throw new Error(`区块缺少编辑按钮：${title}`);
+function findSidebarStatePanel(wrapper: VueWrapper<SidebarStateHostVm>): DOMWrapper<Element> {
+  const panel = wrapper.find('.sidebar-panel');
+  if (!panel.exists()) {
+    throw new Error('未找到数据源侧栏面板');
   }
 
-  return button;
+  return panel;
 }
 
 /**
- * 查找指定区块内的 Schema 编辑按钮。
- * @param wrapper - PageSetter 测试包装器
- * @param title - 区块标题
- * @returns 按钮包装器
+ * 查找 SidebarState 右侧操作区。
+ * @param wrapper - SidebarState 测试包装器
+ * @returns 操作区包装器
  */
-function findSectionSchemaEditButton(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
-  const section = findSectionBlock(wrapper, title);
-  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => item.text() === '编辑');
-  if (!button) {
-    throw new Error(`区块缺少编辑 Schema 按钮：${title}`);
+function findSidebarStateExtra(wrapper: VueWrapper<SidebarStateHostVm>): DOMWrapper<Element> {
+  const extra = wrapper.find('.sidebar-panel__extra');
+  if (!extra.exists()) {
+    throw new Error('数据源侧栏缺少操作区');
   }
 
-  return button;
+  return extra;
 }
 
 /**
- * 查找指定区块内的添加字段按钮。
- * @param wrapper - PageSetter 测试包装器
- * @param title - 区块标题
+ * 查找 SidebarState 添加字段按钮。
+ * @param wrapper - SidebarState 测试包装器
  * @returns 按钮包装器
  */
-function findSectionAddFieldButton(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
-  const section = findSectionBlock(wrapper, title);
-  const button = section.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => {
-    const props = item.props() as { icon?: string; tooltip?: string };
+function findSidebarStateAddFieldButton(wrapper: VueWrapper<SidebarStateHostVm>): VueWrapper {
+  const extraElement = findSidebarStateExtra(wrapper).element;
+  const button = wrapper.findAllComponents({ name: 'BButtonStub' }).find((item: VueWrapper): boolean => {
+    const props = item.props() as { icon?: string };
 
-    return props.icon === 'lucide:plus' && props.tooltip === '添加字段';
+    return extraElement.contains(item.element) && props.icon === 'lucide:plus';
   });
   if (!button) {
-    throw new Error(`区块缺少添加字段按钮：${title}`);
+    throw new Error('数据源侧栏缺少添加字段按钮');
   }
 
   return button;
 }
 
 /**
- * 查找指定区块标题旁边的说明图标。
- * @param wrapper - PageSetter 测试包装器
- * @param title - 区块标题
+ * 查找 SidebarState Schema 编辑按钮。
+ * @param wrapper - SidebarState 测试包装器
+ * @returns 按钮包装器
+ */
+function findSidebarStateSchemaEditButton(wrapper: VueWrapper<SidebarStateHostVm>): VueWrapper {
+  const extraElement = findSidebarStateExtra(wrapper).element;
+  const button = wrapper
+    .findAllComponents({ name: 'BButtonStub' })
+    .find((item: VueWrapper): boolean => extraElement.contains(item.element) && item.text() === '编辑');
+  if (!button) {
+    throw new Error('数据源侧栏缺少编辑 Schema 按钮');
+  }
+
+  return button;
+}
+
+/**
+ * 查找 SidebarState 标题旁边的说明图标。
+ * @param wrapper - SidebarState 测试包装器
  * @returns 图标包装器
  */
-function findSectionHelpIcon(wrapper: VueWrapper<PageSetterHostVm>, title: string): VueWrapper {
-  const section = findSectionBlock(wrapper, title);
-  const icon = section
-    .find('.section-block-stub__help')
+function findSidebarStateHelpIcon(wrapper: VueWrapper<SidebarStateHostVm>): VueWrapper {
+  const icon = wrapper
+    .find('.sidebar-panel__help')
     .findAllComponents({ name: 'BIconStub' })
     .find((item: VueWrapper): boolean => {
       const props = item.props() as { icon?: string };
@@ -579,7 +615,7 @@ function findSectionHelpIcon(wrapper: VueWrapper<PageSetterHostVm>, title: strin
       return props.icon === 'lucide:circle-alert';
     });
   if (!icon) {
-    throw new Error(`区块缺少说明图标：${title}`);
+    throw new Error('数据源侧栏缺少说明图标');
   }
 
   return icon;
@@ -591,7 +627,7 @@ function findSectionHelpIcon(wrapper: VueWrapper<PageSetterHostVm>, title: strin
  * @param name - schema 字段名
  * @returns 字段行包装器
  */
-function findSchemaRow(section: VueWrapper, name: string): DOMWrapper<Element> {
+function findSchemaRow(section: QueryableWrapper, name: string): DOMWrapper<Element> {
   const row = section.findAll('.schema-editor__row').find((item: DOMWrapper<Element>): boolean => {
     const input = item.find('.schema-editor__name-input input');
 
@@ -610,7 +646,7 @@ function findSchemaRow(section: VueWrapper, name: string): DOMWrapper<Element> {
  * @param name - schema 字段名
  * @returns 字段行是否存在
  */
-function hasSchemaRow(section: VueWrapper, name: string): boolean {
+function hasSchemaRow(section: QueryableWrapper, name: string): boolean {
   return section.findAll('.schema-editor__row').some((item: DOMWrapper<Element>): boolean => {
     const input = item.find('.schema-editor__name-input input');
 
@@ -730,14 +766,12 @@ describe('PageSetter', (): void => {
 
   it('shows schemas as inline tree editors and opens an input schema dialog for advanced editing', async (): Promise<void> => {
     const dataItem = createWidgetData();
-    const wrapper = mountPageSetterHost(dataItem);
-    const inputSection = findSectionBlock(wrapper, '入参');
-    const sectionTitles = readSectionBlockTitles(wrapper);
+    const wrapper = mountSidebarStateHost(dataItem);
+    const inputSection = findSidebarStatePanel(wrapper);
+    const extra = findSidebarStateExtra(wrapper);
 
-    expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(1);
-    expect(sectionTitles).not.toContain('状态');
-    expect(sectionTitles).not.toContain('出参');
-    expect(sectionTitles).not.toContain('动态预览');
+    expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(0);
+    expect(inputSection.find('.sidebar-panel__title').text()).toBe('入参');
     expect(wrapper.find('.schema-preview').exists()).toBe(false);
     expect(inputSection.find('.schema-editor').exists()).toBe(true);
     expect(inputSection.find('.schema-editor').html()).not.toContain('data-schema');
@@ -748,17 +782,17 @@ describe('PageSetter', (): void => {
     expect(wrapper.text()).not.toContain('dataSchema');
     expect(wrapper.text()).not.toContain('outputSchema');
 
-    const addButton = findSectionAddFieldButton(wrapper, '入参');
-    const editButton = findSectionSchemaEditButton(wrapper, '入参');
+    const addButton = findSidebarStateAddFieldButton(wrapper);
+    const editButton = findSidebarStateSchemaEditButton(wrapper);
     expect((addButton.props() as { icon?: string; size?: string }).icon).toBe('lucide:plus');
     expect((addButton.props() as { size?: string }).size).toBe('mini');
     expect((editButton.props() as { size?: string }).size).toBe('mini');
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__help').findComponent({ name: 'BIconStub' }).exists()).toBe(true);
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).not.toContain('添加字段');
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').find('[data-tooltip="添加字段"]').exists()).toBe(true);
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).toContain('编辑');
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').text()).not.toContain('JSON导入');
-    expect(findSectionBlock(wrapper, '入参').find('.section-block-stub__extra').findComponent({ name: 'BIconStub' }).exists()).toBe(false);
+    expect(findSidebarStateHelpIcon(wrapper).exists()).toBe(true);
+    expect(extra.text()).not.toContain('添加字段');
+    expect(extra.find('[data-tooltip="添加字段"]').exists()).toBe(true);
+    expect(extra.text()).toContain('编辑');
+    expect(extra.text()).not.toContain('JSON导入');
+    expect(extra.findComponent({ name: 'BIconStub' }).exists()).toBe(false);
 
     await addButton.trigger('click');
     expect(wrapper.vm.dataItem.inputSchema.properties.field).toEqual({
@@ -805,10 +839,10 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('edits schema fields inline from the page setter tree editor', async (): Promise<void> => {
+  it('edits schema fields inline from the data-source sidebar tree editor', async (): Promise<void> => {
     const dataItem = createWeatherWidgetData();
-    const wrapper = mountPageSetterHost(dataItem);
-    const inputSection = findSectionBlock(wrapper, '入参');
+    const wrapper = mountSidebarStateHost(dataItem);
+    const inputSection = findSidebarStatePanel(wrapper);
 
     await findSchemaRow(inputSection, 'city').find('.schema-editor__name-input input').setValue('location');
 
@@ -862,7 +896,7 @@ describe('PageSetter', (): void => {
 
     expect(wrapper.vm.dataItem.inputSchema.properties.date.properties?.field).toBeUndefined();
 
-    await findSectionAddFieldButton(wrapper, '入参').trigger('click');
+    await findSidebarStateAddFieldButton(wrapper).trigger('click');
 
     expect(wrapper.vm.dataItem.inputSchema.properties.field).toEqual({
       type: 'string'
@@ -872,8 +906,8 @@ describe('PageSetter', (): void => {
 
   it('expands schema rows to edit field descriptions inline', async (): Promise<void> => {
     const dataItem = createWeatherWidgetData();
-    const wrapper = mountPageSetterHost(dataItem);
-    const inputSection = findSectionBlock(wrapper, '入参');
+    const wrapper = mountSidebarStateHost(dataItem);
+    const inputSection = findSidebarStatePanel(wrapper);
     const collapsedDescriptionButton = findSchemaRow(inputSection, 'city').find('[data-icon="lucide:maximize-2"]');
 
     expect(inputSection.find('.schema-editor__description').exists()).toBe(false);
@@ -916,8 +950,8 @@ describe('PageSetter', (): void => {
       },
       required: []
     };
-    const wrapper = mountPageSetterHost(dataItem);
-    const inputSection = findSectionBlock(wrapper, '入参');
+    const wrapper = mountSidebarStateHost(dataItem);
+    const inputSection = findSidebarStatePanel(wrapper);
 
     await findSchemaRow(inputSection, 'temperature.celsius').find('[data-tooltip="添加子字段"]').trigger('click');
 
@@ -928,49 +962,25 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
-  it('emits interaction script edit request below input schema without opening a dialog', async (): Promise<void> => {
+  it('keeps PageSetter focused on basic settings after moving schema and script editing to side tabs', (): void => {
     const dataItem = createWeatherWidgetData();
     dataItem.inputSchema = { ...dataItem.inputSchema, description: '查询天气入参' };
     const wrapper = mountPageSetterHost(dataItem);
     const sectionTitles = readSectionBlockTitles(wrapper);
-    const methodSection = findSectionBlock(wrapper, '运行脚本');
 
-    expect(sectionTitles.indexOf('运行脚本')).toBeGreaterThan(sectionTitles.indexOf('入参'));
+    expect(sectionTitles).toEqual(['基础']);
+    expect(sectionTitles).not.toContain('入参');
+    expect(sectionTitles).not.toContain('运行脚本');
     expect(sectionTitles).not.toContain('执行方法');
     expect(sectionTitles).not.toContain('出参');
     expect(sectionTitles).not.toContain('动态预览');
-    expect(methodSection.find('.method-summary__text').exists()).toBe(false);
-    expect(methodSection.find('.method-summary__code').text()).toContain('Widget({');
-    expect(methodSection.find('.method-summary__code').text()).toContain('data: {');
-    expect(methodSection.findAll('.method-summary__line').length).toBeGreaterThan(4);
-    expect(methodSection.find('.hljs-keyword').exists()).toBe(true);
-    expect(methodSection.find('.hljs-comment').exists()).toBe(true);
-    expect(methodSection.find('.method-summary__token--keyword').exists()).toBe(false);
-    expect(methodSection.find('.method-summary').classes()).not.toContain('is-expanded');
-    expect(methodSection.text()).not.toContain('展开');
-    expect(methodSection.text()).not.toContain('收起');
-    expect(methodSection.find('.method-summary__actions').exists()).toBe(false);
-    expect(methodSection.find('.method-summary__code').text()).not.toContain('stateSnapshot: state');
-    const methodSummaryCodeStyle = readStyleBlock(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8'), '.method-summary__code');
-    expect(methodSummaryCodeStyle).toContain('overflow: auto;');
-    expect(methodSummaryCodeStyle).toContain('white-space: pre-wrap;');
-    expect(methodSummaryCodeStyle).toContain('overflow-wrap: anywhere;');
-    expect(methodSummaryCodeStyle).toContain('--code-keyword:');
-    expect(methodSummaryCodeStyle).toContain('--code-string:');
-    expect(methodSummaryCodeStyle).toContain('--code-comment:');
-    expect(readStyleBlock(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8'), '.method-summary__line')).toContain('display: block;');
-    expect(readFileSync('src/views/widget/components/PageSetter.vue', 'utf-8')).toContain('.code-highlight();');
     expect(
       wrapper.findAllComponents({ name: 'ATabPaneStub' }).map((pane: VueWrapper): string | undefined => (pane.props() as { tab?: string }).tab)
     ).not.toContain('方法');
-
-    const editButton = findSectionEditButton(wrapper, '运行脚本');
-    expect((editButton.props() as { icon?: string }).icon).toBe('lucide:code-xml');
-    expect((editButton.props() as { size?: string }).size).toBe('mini');
-    await editButton.trigger('click');
-
-    expect(wrapper.findComponent(PageSetter).emitted('edit-code')).toEqual([[]]);
-    expect(wrapper.vm.dataItem.execute).toBeUndefined();
+    expect(wrapper.find('.method-summary').exists()).toBe(false);
+    expect(wrapper.find('.schema-editor').exists()).toBe(false);
+    expect(wrapper.findComponent(PageSetter).emitted('edit-code')).toBeUndefined();
+    expect(wrapper.vm.dataItem.execute).toEqual(dataItem.execute);
     expect(wrapper.vm.dataItem.metadata.skill).toBeUndefined();
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
     wrapper.unmount();
@@ -988,9 +998,9 @@ describe('PageSetter', (): void => {
       required: ['query']
     };
     const previousInputSchema = dataItem.inputSchema;
-    const wrapper = mountPageSetterHost(dataItem);
+    const wrapper = mountSidebarStateHost(dataItem);
 
-    await findSectionSchemaEditButton(wrapper, '入参').trigger('click');
+    await findSidebarStateSchemaEditButton(wrapper).trigger('click');
     await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue('{broken');
     await nextTick();
     await wrapper
@@ -1005,13 +1015,14 @@ describe('PageSetter', (): void => {
   });
 
   it('opens schema guidance drawer from the input help icon', async (): Promise<void> => {
-    const wrapper = mountPageSetterHost(createWidgetData());
-    const inputHelpIcon = findSectionHelpIcon(wrapper, '入参');
+    const wrapper = mountSidebarStateHost(createWidgetData());
+    const inputHelpIcon = findSidebarStateHelpIcon(wrapper);
 
     expect((inputHelpIcon.props() as { icon?: string }).icon).toBe('lucide:circle-alert');
     expect((inputHelpIcon.props() as { size?: number }).size).toBe(14);
     expect(
-      findSectionBlock(wrapper, '入参')
+      wrapper
+        .find('.sidebar-panel__help')
         .findAllComponents({ name: 'BButtonStub' })
         .some((button: VueWrapper): boolean => {
           const props = button.props() as { icon?: string };
@@ -1035,9 +1046,9 @@ describe('PageSetter', (): void => {
   });
 
   it('expands the JSON schema example inline from the guidance drawer', async (): Promise<void> => {
-    const wrapper = mountPageSetterHost(createWidgetData());
+    const wrapper = mountSidebarStateHost(createWidgetData());
 
-    await findSectionHelpIcon(wrapper, '入参').trigger('click');
+    await findSidebarStateHelpIcon(wrapper).trigger('click');
     expect(wrapper.find('.schema-help__example').classes()).not.toContain('is-expanded');
 
     await wrapper.find('.schema-help__expand').trigger('click');
@@ -1052,9 +1063,9 @@ describe('PageSetter', (): void => {
   });
 
   it('resets the JSON schema example expanded state after closing the guidance drawer', async (): Promise<void> => {
-    const wrapper = mountPageSetterHost(createWidgetData());
+    const wrapper = mountSidebarStateHost(createWidgetData());
 
-    await findSectionHelpIcon(wrapper, '入参').trigger('click');
+    await findSidebarStateHelpIcon(wrapper).trigger('click');
     await wrapper.find('.schema-help__expand').trigger('click');
     expect(wrapper.find('.schema-help__example').classes()).toContain('is-expanded');
 
@@ -1062,7 +1073,7 @@ describe('PageSetter', (): void => {
     await nextTick();
     expect(wrapper.find('.schema-help-drawer-stub').exists()).toBe(false);
 
-    await findSectionHelpIcon(wrapper, '入参').trigger('click');
+    await findSidebarStateHelpIcon(wrapper).trigger('click');
 
     expect(wrapper.find('.schema-help__example').classes()).not.toContain('is-expanded');
     expect(wrapper.find('.schema-help__expand').attributes('data-icon')).toBe('lucide:maximize-2');

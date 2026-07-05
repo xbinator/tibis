@@ -3,7 +3,7 @@
   @description 侧边栏数据源 schema 配置面板，承载入参字段定义与编辑。
 -->
 <template>
-  <SidebarPanel title="数据源">
+  <SidebarPanel title="入参">
     <template #help>
       <BIcon
         class="schema-help-icon"
@@ -17,7 +17,7 @@
       />
     </template>
     <template #extra>
-      <BButton icon="lucide:plus" size="mini" square type="secondary" @click="addRootSchemaField" />
+      <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField" />
       <BButton size="mini" type="secondary" @click="openSchemaInputEditor('input')">编辑</BButton>
     </template>
     <div class="schema-body">
