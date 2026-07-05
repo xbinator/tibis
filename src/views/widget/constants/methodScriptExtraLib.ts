@@ -208,6 +208,16 @@ declare interface WidgetSendMessagePayload {
 
 declare type WidgetSendMessageInput = string | WidgetSendMessageContentPart[] | WidgetSendMessagePayload
 
+/** 小组件持久化日志通道，写入应用日志文件，可在「设置 → 日志」查看。 */
+declare interface Logger {
+  /** 写入 INFO 级别日志。 */
+  info(...args: unknown[]): Promise<void>
+  /** 写入 WARN 级别日志。 */
+  warn(...args: unknown[]): Promise<void>
+  /** 写入 ERROR 级别日志。 */
+  error(...args: unknown[]): Promise<void>
+}
+
 declare type WidgetHttpQueryValue = string | number | boolean | null | undefined
 declare type WidgetHttpJsonValue = string | number | boolean | null | WidgetHttpJsonValue[] | { [key: string]: WidgetHttpJsonValue }
 declare type WidgetHttpBody = WidgetHttpJsonValue | Blob | FormData | ReadableStream | URLSearchParams | ArrayBuffer
@@ -268,6 +278,13 @@ declare interface WidgetBaseThisContext {
    * @example this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })
    */
   $sendMessage(message: WidgetSendMessageInput): Promise<void>
+  /**
+   * 持久化日志通道，写入应用日志文件，可在「设置 → 日志」查看。
+   * 与 console 不同：console 仅输出到 DevTools，$logger 会落盘并可检索。
+   * @example this.$logger.info('用户点击', this.$input)
+   * @example this.$logger.error('请求失败', error)
+   */
+  $logger: Logger
 }
 
 declare type WidgetMethodMap = Record<string, (...args: unknown[]) => unknown>
@@ -299,5 +316,21 @@ declare interface WidgetConfig<TData extends object = Partial<WidgetData>, TMeth
 declare function Widget<TData extends object = Partial<WidgetData>, TMethods extends WidgetMethodMap = WidgetMethodMap>(
   config: WidgetConfig<TData, TMethods> & ThisType<WidgetThisContext<TData, TMethods>>
 ): WidgetConfig<TData, TMethods>
+
+/** 浏览器/Node 风格控制台，仅输出到 DevTools，不写入日志文件。 */
+declare interface Console {
+  /** 输出日志（DevTools only）。 */
+  log(...args: unknown[]): void
+  /** 输出信息（DevTools only）。 */
+  info(...args: unknown[]): void
+  /** 输出警告（DevTools only）。 */
+  warn(...args: unknown[]): void
+  /** 输出错误（DevTools only）。 */
+  error(...args: unknown[]): void
+  /** 输出调试信息（DevTools only）。 */
+  debug(...args: unknown[]): void
+}
+
+declare const console: Console
 `;
 }

@@ -12,6 +12,18 @@ import { isWidgetRuntimeDataPatchArray } from './dataPatch';
 /** 沙箱中用于上报 Widget data patch 的宿主函数名。 */
 const SANDBOX_WIDGET_DATA_PATCH_HOST_FUNCTION_NAME = '__sandboxWidgetDataPatch';
 
+/** 沙箱中用于上报 Widget 日志的宿主函数名。 */
+const SANDBOX_WIDGET_LOGGER_HOST_FUNCTION_NAME = '__sandboxWidgetLogger';
+
+/** 沙箱中用于转发 Widget console 调用的宿主函数名。 */
+const SANDBOX_WIDGET_CONSOLE_HOST_FUNCTION_NAME = '__sandboxWidgetConsole';
+
+/** 小组件日志级别，与 logger.info/warn/error 对齐。 */
+type WidgetLogLevel = 'info' | 'warn' | 'error';
+
+/** 小组件 console 级别，对齐标准 console 方法。 */
+type WidgetConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
+
 /**
  * 小组件脚本生命周期执行选项。
  */
@@ -26,6 +38,10 @@ interface WidgetLifecycleRunOptions {
   timeoutMs?: number;
   /** 脚本执行中的运行态 data patch 回调。 */
   onDataPatch?: (patches: WidgetRuntimeDataPatch[]) => void | Promise<void>;
+  /** 脚本执行中的日志回调（$logger.info/warn/error 触发）。 */
+  onLogger?: (level: WidgetLogLevel, args: unknown[]) => void | Promise<void>;
+  /** 脚本执行中的 console 回调（console.log/info/warn/error/debug 触发），转发到主线程 DevTools。 */
+  onConsole?: (level: WidgetConsoleLevel, args: unknown[]) => void | Promise<void>;
 }
 
 /** 小组件脚本生命周期名称。 */
@@ -62,7 +78,7 @@ interface WidgetScriptRunResult {
 /**
  * 小组件脚本运行选项。
  */
-type WidgetScriptRunOptions = Pick<WidgetLifecycleRunOptions, 'http' | 'useWorker' | 'timeoutMs' | 'onDataPatch'>;
+type WidgetScriptRunOptions = Pick<WidgetLifecycleRunOptions, 'http' | 'useWorker' | 'timeoutMs' | 'onDataPatch' | 'onLogger' | 'onConsole'>;
 
 /**
  * 小组件 part 沙箱执行选项。
@@ -228,7 +244,8 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "  'delete', 'do', 'else', 'enum', 'eval', 'export', 'extends', 'false', 'finally', 'for', 'function',",
     "  'if', 'implements', 'import', 'in', 'instanceof', 'interface', 'let', 'new', 'null', 'package',",
     "  'private', 'protected', 'public', 'return', 'static', 'super', 'switch', 'this', 'throw', 'true',",
-    "  'try', 'typeof', 'undefined', 'var', 'void', 'while', 'with', 'yield'",
+    "  'try', 'typeof', 'undefined', 'var', 'void', 'while', 'with', 'yield',",
+    "  'console', 'widgetThis'",
     '])',
     '',
     'function __clone(value) {',
@@ -295,6 +312,30 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "    delete: (url, input = {}) => request('DELETE', url, input)",
     '  }',
     '}',
+    '',
+    'function __createWidgetLogger(executionState) {',
+    '  const send = async (level, args) => {',
+    '    await __flushDataPatches(executionState)',
+    '    return __sandboxWidgetLogger(level, args)',
+    '  }',
+    '  return {',
+    "    info: (...args) => send('info', args),",
+    "    warn: (...args) => send('warn', args),",
+    "    error: (...args) => send('error', args)",
+    '  }',
+    '}',
+    '',
+    'function __createWidgetConsole() {',
+    '  const send = (level, args) => __sandboxWidgetConsole(level, args)',
+    '  return {',
+    "    log: (...args) => send('log', args),",
+    "    info: (...args) => send('info', args),",
+    "    warn: (...args) => send('warn', args),",
+    "    error: (...args) => send('error', args),",
+    "    debug: (...args) => send('debug', args)",
+    '  }',
+    '}',
+    'const console = __createWidgetConsole()',
     '',
     'function __createExecutionState() {',
     '  return {',
@@ -446,7 +487,9 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "      return Reflect.has(targetObject, property) || (typeof property === 'string' && Object.prototype.hasOwnProperty.call(__widgetData, property))",
     '    },',
     '    deleteProperty(targetObject, property) {',
-    "      if (property === '$input' || property === '$http' || property === '$sendMessage') return Reflect.deleteProperty(targetObject, property)",
+    "      if (property === '$input' || property === '$http' || property === '$sendMessage' || property === '$logger') {",
+    '        return Reflect.deleteProperty(targetObject, property)',
+    '      }',
     "      if (typeof property === 'string' && Object.prototype.hasOwnProperty.call(__widgetData, property)) {",
     '        const didDeleteData = delete __widgetData[property]',
     '        if (Reflect.has(targetObject, property)) Reflect.deleteProperty(targetObject, property)',
@@ -467,6 +510,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  const context = {',
     '    get $input() { return __clone(__widgetInput) },',
     '    $http: __createWidgetHttpClient(executionState),',
+    '    $logger: __createWidgetLogger(executionState),',
     '    async $sendMessage(message) {',
     '      const sendMessage = __normalizeSendMessage(message)',
     '      if (sendMessage) executionState.sendMessage = sendMessage',
@@ -474,7 +518,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    }',
     '  }',
     '  for (const key of Object.keys(__widgetData)) {',
-    "    if (key === '$input' || key === '$http' || key === '$sendMessage') continue",
+    "    if (key === '$input' || key === '$http' || key === '$sendMessage' || key === '$logger') continue",
     '    __defineWidgetDataAccessor(context, key, executionState, proxyCache)',
     '  }',
     '  return __createWidgetRootProxy(context, executionState, proxyCache)',
@@ -517,8 +561,8 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  const methodBindings = __createMethodBindings(widgetThis, executionState)',
     '  const bindingNames = Object.keys(methodBindings)',
     "  const interactionBody = '\"use strict\";\\nreturn (async function() {\\n' + interactionCode + '\\n}).call(widgetThis);'",
-    "  const fn = __sandbox.createFunction(['widgetThis', ...bindingNames], interactionBody)",
-    '  await fn(widgetThis, ...bindingNames.map((name) => methodBindings[name]))',
+    "  const fn = __sandbox.createFunction(['widgetThis', ...bindingNames, 'console'], interactionBody)",
+    '  await fn(widgetThis, ...bindingNames.map((name) => methodBindings[name]), console)',
     '}',
     '',
     'async function __runWidgetRuntime(lifecycleName, interactionCode) {',
@@ -546,8 +590,8 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return value',
     '}',
     '',
-    "const __runWidgetScript = __sandbox.createFunction(['Widget'], __widgetScriptCode)",
-    '__runWidgetScript(Widget)',
+    "const __runWidgetScript = __sandbox.createFunction(['Widget', 'console'], __widgetScriptCode)",
+    '__runWidgetScript(Widget, console)',
     '',
     `return await __runWidgetRuntime(${lifecycleName}, ${interactionCode})`
   ].join('\n');
@@ -585,6 +629,26 @@ async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: 
           }
 
           await options.onDataPatch?.(patches);
+        },
+        [SANDBOX_WIDGET_LOGGER_HOST_FUNCTION_NAME]: async (level: unknown, args: unknown): Promise<void> => {
+          if (level !== 'info' && level !== 'warn' && level !== 'error') {
+            throw new Error('小组件日志级别无效');
+          }
+          if (!Array.isArray(args)) {
+            throw new Error('小组件日志参数无效');
+          }
+
+          await options.onLogger?.(level, args);
+        },
+        [SANDBOX_WIDGET_CONSOLE_HOST_FUNCTION_NAME]: async (level: unknown, args: unknown): Promise<void> => {
+          if (level !== 'log' && level !== 'info' && level !== 'warn' && level !== 'error' && level !== 'debug') {
+            throw new Error('小组件 console 级别无效');
+          }
+          if (!Array.isArray(args)) {
+            throw new Error('小组件 console 参数无效');
+          }
+
+          await options.onConsole?.(level, args);
         }
       }
     }
@@ -655,7 +719,9 @@ function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOpt
       http: options.http,
       useWorker: options.useWorker,
       timeoutMs: options.timeoutMs,
-      onDataPatch: options.onDataPatch
+      onDataPatch: options.onDataPatch,
+      onLogger: options.onLogger,
+      onConsole: options.onConsole
     }
   );
 }

@@ -34,6 +34,7 @@ import type {
 import type { CSSProperties } from 'vue';
 import { computed, onMounted, shallowRef, watch } from 'vue';
 import { isEqual } from 'lodash-es';
+import { logger } from '@/shared/logger';
 import { createNamespace } from '@/utils/namespace';
 import { provideRenderContext } from './hooks/useRenderContext';
 import { useViewportSize } from './hooks/useViewportSize';
@@ -43,6 +44,7 @@ import { createWidgetLoopRenderElements, type WidgetLoopRenderContext, type Widg
 import { createWidgetHttpClient, createWidgetRuntimeInstance, initWidgetMountState, type WidgetRuntimeFinishResult } from './utils/widgetRuntime';
 import { applyWidgetRuntimeDataPatchesToState } from './utils/widgetRuntime/dataPatch';
 import { createWidgetRuntimeLayoutFromRenderElements, type WidgetRuntimeElementLayout } from './utils/widgetRuntime/layout';
+import { formatWidgetLogArgs } from './utils/widgetRuntime/logger';
 
 defineOptions({ name: 'BWidgetRuntime' });
 
@@ -267,6 +269,26 @@ function commitRuntimeDataPatches(executionId: string, patches: WidgetRuntimeDat
 }
 
 /**
+ * 把小组件脚本日志写入应用日志文件，带 [widget] 前缀以便在「设置 → 日志」区分来源。
+ * @param level - 日志级别，对齐 logger.info/warn/error
+ * @param args - 原始参数数组，会被序列化为单行字符串
+ */
+async function handleWidgetLogger(level: 'info' | 'warn' | 'error', args: unknown[]): Promise<void> {
+  const message = `[widget] ${formatWidgetLogArgs(args)}`;
+  await logger[level](message);
+}
+
+/**
+ * 把小组件脚本 console 调用转发到主线程 DevTools，使对象可在控制台展开。
+ * 沙箱执行栈销毁后 Worker 上下文对象无法回溯，故把 args 克隆到主线程再输出。
+ * @param level - console 级别
+ * @param args - 原始参数数组（已被沙箱 clone）
+ */
+function handleWidgetConsole(level: 'log' | 'info' | 'warn' | 'error' | 'debug', args: unknown[]): void {
+  console[level](...args);
+}
+
+/**
  * 从脚本执行结果中提取运行态快照。
  * @param result - 脚本执行结果
  * @returns 可写回宿主的运行态快照
@@ -333,7 +355,9 @@ async function initWidgetRuntime(): Promise<void> {
   const executionId = beginPatchExecution();
   const nextState = await initWidgetMountState(currentState, {
     http: widgetHttpClient,
-    onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches)
+    onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches),
+    onLogger: handleWidgetLogger,
+    onConsole: handleWidgetConsole
   });
   if (nextState === currentState) {
     clearPatchPreview(executionId);
@@ -354,7 +378,9 @@ async function runRuntimeInteraction(interactionCode: string): Promise<void> {
   const executionId = beginPatchExecution();
   const result = await createWidgetRuntimeInstance(currentState, {
     http: widgetHttpClient,
-    onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches)
+    onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches),
+    onLogger: handleWidgetLogger,
+    onConsole: handleWidgetConsole
   }).runInteraction(interactionCode);
   if (result.state === currentState && !result.sendMessage) {
     clearPatchPreview(executionId);
