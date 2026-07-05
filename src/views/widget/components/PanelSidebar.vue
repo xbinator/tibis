@@ -32,6 +32,8 @@
             @move-element="handleElementMove"
             @move-elements="handleElementsMove"
           />
+          <SidebarDataSource v-else-if="activeSidebarTab === 'data-source'" />
+          <SidebarAction v-else-if="activeSidebarTab === 'action'" />
         </div>
       </div>
     </BPanelSplitter>
@@ -42,13 +44,15 @@
 import type { WidgetLayerMovePosition } from '../utils/layerOrder';
 import { computed, ref } from 'vue';
 import type { WidgetElement } from '@/components/BWidget/types';
+import SidebarAction from './SidebarAction.vue';
+import SidebarDataSource from './SidebarDataSource.vue';
 import SidebarLayer from './SidebarLayer.vue';
 import SidebarTools from './SidebarTools.vue';
 
 /**
  * 左侧侧边栏页签类型。
  */
-type WidgetSidebarTabKey = 'tools' | 'layers';
+type WidgetSidebarTabKey = 'tools' | 'layers' | 'data-source' | 'action';
 
 /**
  * 当前激活的左侧侧边栏页签。
@@ -109,24 +113,21 @@ const emit = defineEmits<{
   'move-elements': [sourceElementIds: string[], targetElementIds: string[], position: WidgetLayerMovePosition];
 }>();
 
-const activeSidebarTab = ref<ActiveWidgetSidebarTabKey>('tools');
-/** 当前面板标题。 */
-const activePanelTitle = computed<string>((): string => {
-  if (activeSidebarTab.value === 'tools') {
-    return '组件';
-  }
-
-  if (activeSidebarTab.value === 'layers') {
-    return '图层';
-  }
-
-  return '';
-});
-/** 左侧侧边栏页签列表。 */
+/** 左侧侧边栏页签列表（标签与图标的单一来源）。 */
 const sidebarTabs: WidgetSidebarTab[] = [
   { key: 'tools', label: '组件', icon: 'lucide:box' },
-  { key: 'layers', label: '图层', icon: 'lucide:layers' }
+  { key: 'layers', label: '图层', icon: 'lucide:layers' },
+  { key: 'data-source', label: '数据源', icon: 'lucide:database-zap' },
+  { key: 'action', label: '动作', icon: 'lucide:file-code-corner' }
 ];
+
+const activeSidebarTab = ref<ActiveWidgetSidebarTabKey>('tools');
+
+/** 当前面板标题（从 sidebarTabs 派生，标签单一来源）。 */
+const activePanelTitle = computed<string>((): string => {
+  const tab = sidebarTabs.find((item) => item.key === activeSidebarTab.value);
+  return tab?.label ?? '';
+});
 
 /**
  * 切换左侧侧边栏页签。
