@@ -5,7 +5,7 @@
 <template>
   <div class="widget-advanced-setter">
     <BSectionBlock title="循环数据" :label-min-width="60">
-      <BSectionItem label="启用">
+      <BSectionItem label="启用" content-align="right">
         <ACheckbox v-model:checked="element.loop.enabled" />
       </BSectionItem>
 

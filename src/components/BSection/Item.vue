@@ -172,7 +172,7 @@ export default defineComponent({
 
 /* 控件区内容贴右：horizontal 下用 auto 外边距推到行尾 */
 .b-section-item__content--right {
-  margin-left: auto;
+  text-align: right;
 }
 
 /* 垂直布局：前缀与控件纵向排列 */
