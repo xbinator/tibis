@@ -17,6 +17,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * 判断值是否包含可用的 Widget execute 脚本。
+ * @param value - 待检查值
+ * @returns 是否包含可用 execute
+ */
+function hasWidgetExecuteMethod(value: Record<string, unknown>): boolean {
+  const { execute } = value;
+
+  return isRecord(execute) && typeof execute.code === 'string';
+}
+
+/**
  * 拼接路径片段，统一使用 / 分隔。
  * @param segments - 路径片段
  * @returns 拼接后的路径
@@ -52,11 +63,12 @@ export function readWidgetIdFromFilePath(filePath: string): string {
  * @returns 小组件数据
  */
 function normalizeWidgetData(id: string, value: Record<string, unknown>): WidgetData {
-  const defaults = createDefaultWidgetData();
+  const defaults = createDefaultWidgetData(id);
   const contract = normalizeWidgetDataContract(value);
   const data: WidgetData = {
     ...defaults,
     ...contract,
+    execute: hasWidgetExecuteMethod(value) ? contract.execute : defaults.execute,
     elements: Array.isArray(value.elements) ? (cloneDeep(value.elements) as WidgetData['elements']) : defaults.elements
   };
 
@@ -74,7 +86,7 @@ function normalizeWidgetData(id: string, value: Record<string, unknown>): Widget
  */
 function createWidgetParseError(filePath: string, message: string): WidgetDefinition {
   const id = readWidgetIdFromFilePath(filePath);
-  const data = createDefaultWidgetData();
+  const data = createDefaultWidgetData(id);
 
   return {
     id,

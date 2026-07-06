@@ -29,6 +29,15 @@ function createLoggerRuntimeState(code: string, data: Record<string, unknown> = 
   };
 }
 
+/**
+ * 创建测试用 Widget class 脚本。
+ * @param members - class 成员源码
+ * @returns Widget class 脚本源码
+ */
+function createLoggerWidgetCode(members: string[]): string {
+  return ['export default class LoggerWidget extends Widget {', ...members, '}'].join('\n');
+}
+
 /** 小组件 console 调用记录。 */
 interface WidgetConsoleCall {
   level: 'log' | 'info' | 'warn' | 'error' | 'debug';
@@ -125,7 +134,7 @@ describe('widgetRuntime/logger formatWidgetLogArgs', (): void => {
 describe('widgetRuntime $logger bridge', (): void => {
   it('invokes onLogger with info level and args', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
-    const state = createLoggerRuntimeState(['Widget({', '  async mounted() {', "    await this.$logger.info('hello', { count: 1 })", '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async mounted() {', "    await this.$logger.info('hello', { count: 1 })", '  }']));
 
     await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
 
@@ -135,7 +144,7 @@ describe('widgetRuntime $logger bridge', (): void => {
   it('forwards warn and error levels', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(
-      ['Widget({', '  async mounted() {', "    await this.$logger.warn('warning')", "    await this.$logger.error('error')", '  }', '})'].join('\n')
+      createLoggerWidgetCode(['  async mounted() {', "    await this.$logger.warn('warning')", "    await this.$logger.error('error')", '  }'])
     );
 
     await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
@@ -150,9 +159,7 @@ describe('widgetRuntime $logger bridge', (): void => {
     const dataPatches: WidgetRuntimeDataPatch[] = [];
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(
-      ['Widget({', '  data: { count: 0 },', '  async mounted() {', '    this.count = 5', "    await this.$logger.info('count', this.count)", '  }', '})'].join(
-        '\n'
-      ),
+      createLoggerWidgetCode(['  count = 0', '', '  async mounted() {', '    this.count = 5', "    await this.$logger.info('count', this.count)", '  }']),
       { count: 0 }
     );
 
@@ -173,7 +180,7 @@ describe('widgetRuntime $logger bridge', (): void => {
 
   it('supports no-arg calls without throwing', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
-    const state = createLoggerRuntimeState(['Widget({', '  async mounted() {', '    await this.$logger.info()', '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async mounted() {', '    await this.$logger.info()', '  }']));
 
     await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
 
@@ -183,15 +190,13 @@ describe('widgetRuntime $logger bridge', (): void => {
   it('deep-clones args before forwarding to host', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(
-      [
-        'Widget({',
+      createLoggerWidgetCode([
         '  async mounted() {',
         '    const payload = { items: [1, 2, 3] }',
         '    await this.$logger.info("payload", payload)',
         '    payload.items.push(4)',
-        '  }',
-        '})'
-      ].join('\n')
+        '  }'
+      ])
     );
 
     await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
@@ -203,7 +208,7 @@ describe('widgetRuntime $logger bridge', (): void => {
   it('preserves Error and undefined args before forwarding to host', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(
-      ['Widget({', '  async mounted() {', '    await this.$logger.error("caught", new Error("boom"), undefined)', '  }', '})'].join('\n')
+      createLoggerWidgetCode(['  async mounted() {', '    await this.$logger.error("caught", new Error("boom"), undefined)', '  }'])
     );
 
     await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
@@ -218,15 +223,13 @@ describe('widgetRuntime $logger bridge', (): void => {
   it('supports circular and BigInt args without failing runtime', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(
-      [
-        'Widget({',
+      createLoggerWidgetCode([
         '  async mounted() {',
         '    const payload = { label: "loop" }',
         '    payload.self = payload',
         '    await this.$logger.info(payload, 42n)',
-        '  }',
-        '})'
-      ].join('\n')
+        '  }'
+      ])
     );
 
     const result = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
@@ -240,7 +243,7 @@ describe('widgetRuntime $logger bridge', (): void => {
 
   it('works in unmounted lifecycle hook', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
-    const state = createLoggerRuntimeState(['Widget({', '  async unmounted() {', "    await this.$logger.info('unmounting')", '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async unmounted() {', "    await this.$logger.info('unmounting')", '  }']));
 
     // 先 init 到 mounted（脚本未声明 mounted，不会触发 $logger），再 finish 触发 unmounted
     const mountedState = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
@@ -253,7 +256,7 @@ describe('widgetRuntime $logger bridge', (): void => {
 
   it('does not invoke onLogger when script execution throws', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
-    const state = createLoggerRuntimeState(['Widget({', '  mounted() {', '    throw new Error("script boom")', '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  mounted() {', '    throw new Error("script boom")', '  }']));
 
     const result = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
 
@@ -264,7 +267,7 @@ describe('widgetRuntime $logger bridge', (): void => {
 
   it('does not invoke onLogger when script is disabled', async (): Promise<void> => {
     const onLogger = vi.fn<(level: 'info' | 'warn' | 'error', args: unknown[]) => void>();
-    const state = createLoggerRuntimeState(['Widget({', '  async mounted() {', "    await this.$logger.info('should not run')", '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async mounted() {', "    await this.$logger.info('should not run')", '  }']));
     state.value.execute = { enabled: false, code: state.value.execute.code };
 
     await initWidgetMountState(state, { useWorker: false, onLogger });
@@ -276,7 +279,7 @@ describe('widgetRuntime $logger bridge', (): void => {
 describe('widgetRuntime console bridge', (): void => {
   it('forwards console.log to onConsole with level and args', async (): Promise<void> => {
     const consoleCalls: WidgetConsoleCall[] = [];
-    const state = createLoggerRuntimeState(['Widget({', '  mounted() {', "    console.log('hello', { count: 1 })", '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  mounted() {', "    console.log('hello', { count: 1 })", '  }']));
 
     await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
 
@@ -286,16 +289,14 @@ describe('widgetRuntime console bridge', (): void => {
   it('forwards info/warn/error/debug levels', async (): Promise<void> => {
     const consoleCalls: WidgetConsoleCall[] = [];
     const state = createLoggerRuntimeState(
-      [
-        'Widget({',
+      createLoggerWidgetCode([
         '  mounted() {',
         "    console.info('info')",
         "    console.warn('warn')",
         "    console.error('error')",
         "    console.debug('debug')",
-        '  }',
-        '})'
-      ].join('\n')
+        '  }'
+      ])
     );
 
     await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
@@ -311,15 +312,13 @@ describe('widgetRuntime console bridge', (): void => {
   it('deep-clones object args before forwarding (breaks reference)', async (): Promise<void> => {
     const consoleCalls: WidgetConsoleCall[] = [];
     const state = createLoggerRuntimeState(
-      [
-        'Widget({',
+      createLoggerWidgetCode([
         '  mounted() {',
         '    const payload = { items: [1, 2, 3] }',
         '    console.log("payload", payload)',
         '    payload.items.push(4)',
-        '  }',
-        '})'
-      ].join('\n')
+        '  }'
+      ])
     );
 
     await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
@@ -330,7 +329,7 @@ describe('widgetRuntime console bridge', (): void => {
 
   it('preserves undefined and BigInt console args without failing runtime', async (): Promise<void> => {
     const consoleCalls: WidgetConsoleCall[] = [];
-    const state = createLoggerRuntimeState(['Widget({', '  mounted() {', '    console.log(undefined, 42n)', '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  mounted() {', '    console.log(undefined, 42n)', '  }']));
 
     const result = await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
 
@@ -342,15 +341,13 @@ describe('widgetRuntime console bridge', (): void => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const consoleCalls: WidgetConsoleCall[] = [];
     const state = createLoggerRuntimeState(
-      [
-        'Widget({',
+      createLoggerWidgetCode([
         '  async mounted() {',
         "    console.log('to-devtools')",
         "    await this.$logger.info('to-file')",
         "    console.error('devtools-error')",
-        '  }',
-        '})'
-      ].join('\n')
+        '  }'
+      ])
     );
 
     await initWidgetMountState(state, createCaptureOptions([], loggerCalls, consoleCalls));
@@ -365,7 +362,7 @@ describe('widgetRuntime console bridge', (): void => {
 
   it('works in unmounted lifecycle hook', async (): Promise<void> => {
     const consoleCalls: WidgetConsoleCall[] = [];
-    const state = createLoggerRuntimeState(['Widget({', '  unmounted() {', "    console.log('unmounting')", '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  unmounted() {', "    console.log('unmounting')", '  }']));
 
     // 先 init 到 mounted（脚本未声明 mounted，不会触发 console），再 finish 触发 unmounted
     const mountedState = await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
@@ -378,7 +375,7 @@ describe('widgetRuntime console bridge', (): void => {
 
   it('does not invoke onConsole when script is disabled', async (): Promise<void> => {
     const onConsole = vi.fn<(level: 'log' | 'info' | 'warn' | 'error' | 'debug', args: unknown[]) => void>();
-    const state = createLoggerRuntimeState(['Widget({', '  mounted() {', "    console.log('should not run')", '  }', '})'].join('\n'));
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  mounted() {', "    console.log('should not run')", '  }']));
     state.value.execute = { enabled: false, code: state.value.execute.code };
 
     await initWidgetMountState(state, { useWorker: false, onConsole });

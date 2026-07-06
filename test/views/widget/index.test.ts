@@ -41,7 +41,7 @@ const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
       required: []
     },
     execute: {
-      code: 'Widget({})'
+      code: 'export default class Weather extends Widget {}'
     },
     metadata: {},
     elements: []
@@ -331,7 +331,7 @@ describe('WidgetPage', (): void => {
       execute: {
         enabled: false,
         description: '已有脚本说明',
-        code: 'Widget({})'
+        code: 'export default class Weather extends Widget {}'
       }
     };
     const wrapper = shallowMount(WidgetPage, {
@@ -350,7 +350,7 @@ describe('WidgetPage', (): void => {
       execute: {
         enabled: false,
         description: '已有脚本说明',
-        code: 'Widget({ methods: { confirm() {} } })'
+        code: 'export default class Weather extends Widget { confirm() {} }'
       }
     };
 
@@ -376,7 +376,7 @@ describe('WidgetPage', (): void => {
     widgetDataMock.value = {
       ...createDefaultWidgetData(),
       execute: {
-        code: 'Widget({})'
+        code: 'export default class Weather extends Widget {}'
       }
     };
     const wrapper = shallowMount(WidgetPage, {

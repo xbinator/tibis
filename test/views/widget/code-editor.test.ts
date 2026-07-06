@@ -321,15 +321,15 @@ describe('CodeEditor', (): void => {
   });
 
   it('loads current script and updates widget data through value model', async (): Promise<void> => {
-    const initialCode = ['Widget({', '  data: {', '    ready: false', '  },', '  async mounted() {', '    this.ready = true', '  }', '})'].join('\n');
+    const initialCode = ['export default class Weather extends Widget {', '  ready = false', '', '  async mounted() {', '    this.ready = true', '  }', '}'].join(
+      '\n'
+    );
     const nextCode = [
-      'Widget({',
-      '  methods: {',
-      '    async confirm() {',
-      "      await this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })",
-      '    }',
+      'export default class Weather extends Widget {',
+      '  async confirm() {',
+      "    await this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })",
       '  }',
-      '})'
+      '}'
     ].join('\n');
     const widgetData = {
       ...createWidgetData(),
@@ -366,7 +366,7 @@ describe('CodeEditor', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
-        code: 'Widget({})'
+        code: 'export default class Weather extends Widget {}'
       }
     });
 
@@ -380,7 +380,7 @@ describe('CodeEditor', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
-        code: 'Widget({})'
+        code: 'export default class Weather extends Widget {}'
       }
     });
 
@@ -391,7 +391,7 @@ describe('CodeEditor', (): void => {
   });
 
   it('syncs draft from the latest model when activated again', async (): Promise<void> => {
-    const initialCode = 'Widget({ mounted() {} })';
+    const initialCode = 'export default class Weather extends Widget { mounted() {} }';
     const wrapper = mountCodeEditor(
       {
         ...createWidgetData(),
@@ -404,16 +404,16 @@ describe('CodeEditor', (): void => {
     const nextWidgetData = {
       ...createWidgetData(),
       execute: {
-        code: 'Widget({ methods: { latest() {} } })'
+        code: 'export default class Weather extends Widget { latest() {} }'
       }
     };
 
-    await wrapper.find('.widget-code-monaco-stub').setValue('Widget({ methods: { draft() {} } })');
+    await wrapper.find('.widget-code-monaco-stub').setValue('export default class Weather extends Widget { draft() {} }');
     await wrapper.setProps({ active: false });
     await wrapper.setProps({ value: nextWidgetData });
     await nextTick();
 
-    expect(readMonacoProps(wrapper).value).toBe('Widget({ methods: { draft() {} } })');
+    expect(readMonacoProps(wrapper).value).toBe('export default class Weather extends Widget { draft() {} }');
 
     await wrapper.setProps({ active: true });
     await nextTick();
@@ -427,7 +427,7 @@ describe('CodeEditor', (): void => {
       {
         ...createWidgetData(),
         execute: {
-          code: 'Widget({ mounted() {} })'
+          code: 'export default class Weather extends Widget { mounted() {} }'
         }
       },
       true
@@ -445,7 +445,7 @@ describe('CodeEditor', (): void => {
       {
         ...createWidgetData(),
         execute: {
-          code: 'Widget({ mounted() {} })'
+          code: 'export default class Weather extends Widget { mounted() {} }'
         }
       },
       false
@@ -510,24 +510,21 @@ describe('CodeEditor', (): void => {
     wrapper.unmount();
   });
 
-  it('creates Vue-like this data and method type hints from the interaction script', (): void => {
+  it('creates class-style this data and method type hints from the interaction script', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
         code: [
-          'Widget({',
-          '  data: {',
-          '    weather: {',
-          '      temperature: 28',
-          '    },',
-          "    message: '等待用户操作'",
-          '  },',
-          '  methods: {',
-          '    sendText() {',
-          '      this.message = this.$input.city',
-          '    }',
+          'export default class Weather extends Widget {',
+          '  weather = {',
+          '    temperature: 28',
           '  }',
-          '})'
+          "  message = '等待用户操作'",
+          '',
+          '  sendText() {',
+          '    this.message = this.$input.city',
+          '  }',
+          '}'
         ].join('\n')
       }
     });
@@ -544,26 +541,24 @@ describe('CodeEditor', (): void => {
           'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
           'widget-env.d.ts': extraLibContent,
           'widget-test.ts': [
-            'Widget({',
-            '  data: {',
-            '    weather: {',
-            '      temperature: 28',
-            '    },',
-            "    message: '等待用户操作'",
-            '  },',
+            'export default class Weather extends Widget {',
+            '  weather = {',
+            '    temperature: 28',
+            '  }',
+            "  message = '等待用户操作'",
+            '',
             '  mounted() {',
             '    const city: string = this.$input.city',
             '    const temperature: number = this.weather.temperature',
             '    this.message = city',
             '    this.sendText()',
-            '  },',
-            '  methods: {',
-            '    sendText() {',
-            '      const text: string = this.message',
-            "      this.$sendMessage({ content: [{ type: 'text', text }] })",
-            '    }',
             '  }',
-            '})'
+            '',
+            '  sendText() {',
+            '    const text: string = this.message',
+            "    this.$sendMessage({ content: [{ type: 'text', text }] })",
+            '  }',
+            '}'
           ].join('\n')
         })
       )
@@ -573,19 +568,17 @@ describe('CodeEditor', (): void => {
         'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
         'widget-env.d.ts': extraLibContent,
         'widget-completion.ts': [
-          'Widget({',
-          '  data: {',
-          "    message: '等待用户操作'",
-          '  },',
+          'export default class Weather extends Widget {',
+          "  message = '等待用户操作'",
+          '',
           '  mounted() {',
           '    this./*cursor*/',
-          '  },',
-          '  methods: {',
-          '    sendText() {',
-          '      this.message = this.$input.city',
-          '    }',
           '  }',
-          '})'
+          '',
+          '  sendText() {',
+          '    this.message = this.$input.city',
+          '  }',
+          '}'
         ].join('\n')
       },
       'widget-completion.ts',
@@ -601,7 +594,7 @@ describe('CodeEditor', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
-        code: ['Widget({', '  async mounted() {', '    // 暂无数据写入。', '  }', '})'].join('\n')
+        code: ['export default class Weather extends Widget {', '  async mounted() {', '    // 暂无数据写入。', '  }', '}'].join('\n')
       }
     });
 
@@ -611,16 +604,15 @@ describe('CodeEditor', (): void => {
       .find('.widget-code-monaco-stub')
       .setValue(
         [
-          'Widget({',
-          '  data: {',
-          '    draft: {',
-          "      city: ''",
-          '    }',
-          '  },',
+          'export default class Weather extends Widget {',
+          '  draft = {',
+          "    city: ''",
+          '  }',
+          '',
           '  async mounted() {',
           '    this.draft.city = this.$input.city',
           '  }',
-          '})'
+          '}'
         ].join('\n')
       );
     await nextTick();
@@ -634,7 +626,7 @@ describe('CodeEditor', (): void => {
         getTypeScriptDiagnostics({
           'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
           'widget-env.d.ts': extraLibContent,
-          'widget-test.ts': "Widget({ data: { draft: { city: '' } }, mounted() { const city: string = this.draft.city } })"
+          'widget-test.ts': "export default class Weather extends Widget { draft = { city: '' }; mounted() { const city: string = this.draft.city } }"
         })
       )
     ).toEqual([]);

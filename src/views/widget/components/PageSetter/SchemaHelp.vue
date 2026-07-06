@@ -156,10 +156,10 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
   },
   data: {
     title: '数据变量说明',
-    lead: '数据变量不需要单独填写 schema。编辑器会从JS 脚本中的 Widget({ data })、根级 this.dataField 赋值和已初始化对象的嵌套赋值推导 data 路径，供小组件元素动态绑定。',
+    lead: '数据变量不需要单独填写 schema。编辑器会从JS 脚本中的 class 字段、根级 this.dataField 赋值和已初始化对象的嵌套赋值推导 data 路径，供小组件元素动态绑定。',
     fields: [
       {
-        name: 'data: { weather: {...} }',
+        name: 'weather = {...}',
         type: 'object',
         required: false,
         description: '对象字面量会递归生成 weather.* 这类可直接绑定的路径。'
@@ -172,20 +172,20 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
       }
     ],
     exampleTitle: '查天气数据写入',
-    example: `Widget({
-  data: {
-    weather: {
-      temperature: 28,
-      condition: '晴'
-    },
-    lastQuery: {
-      city: ''
-    }
-  },
+    example: `export default class Weather extends Widget {
+  weather = {
+    temperature: 28,
+    condition: '晴'
+  }
+
+  lastQuery = {
+    city: ''
+  }
+
   mounted() {
     this.lastQuery.city = this.$input.city
   }
-})`
+}`
   }
 };
 

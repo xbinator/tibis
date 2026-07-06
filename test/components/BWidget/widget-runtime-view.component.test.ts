@@ -573,7 +573,7 @@ describe('BWidgetRuntime', (): void => {
     const dataItem = {
       ...createRuntimeWidgetData(),
       execute: {
-        code: ['Widget({', '  mounted() {', '    this.weather = { temperature: 29 }', '  }', '})'].join('\n')
+        code: ['export default class Weather extends Widget {', '  mounted() {', '    this.weather = { temperature: 29 }', '  }', '}'].join('\n')
       }
     };
     const wrapper = mount(BWidgetRuntime, {
@@ -615,13 +615,13 @@ describe('BWidgetRuntime', (): void => {
 
     const dataItem = createRuntimeMessageWidgetData(
       [
-        'Widget({',
+        'export default class Weather extends Widget {',
         '  async mounted() {',
         "    this.message = '正在加载'",
         "    await this.$http.get('https://api.example.com/weather')",
         "    this.message = '加载完成'",
         '  }',
-        '})'
+        '}'
       ].join('\n')
     );
     const wrapper = mount(BWidgetRuntime, {
@@ -667,7 +667,9 @@ describe('BWidgetRuntime', (): void => {
     const dataItem = {
       ...createRuntimeWidgetData(),
       execute: {
-        code: ['Widget({', '  unmounted() {', '    this.submitted = { coffeeId: this.$input.coffeeId }', '  }', '})'].join('\n')
+        code: ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { coffeeId: this.$input.coffeeId }', '  }', '}'].join(
+          '\n'
+        )
       }
     };
     const wrapper = mount(BWidgetRuntime, {
@@ -702,7 +704,7 @@ describe('BWidgetRuntime', (): void => {
         value: {
           ...createRuntimeWidgetData(),
           execute: {
-            code: 'Widget({})'
+            code: 'export default class Weather extends Widget {}'
           }
         },
         renderContext: {

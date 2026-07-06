@@ -91,16 +91,15 @@ function createWidgetData(): WidgetData {
     },
     execute: {
       code: [
-        'Widget({',
-        '  data: {',
-        '    weather: {',
-        '      temperature: 0',
-        '    }',
-        '  },',
+        'export default class Weather extends Widget {',
+        '  weather = {',
+        '    temperature: 0',
+        '  }',
+        '',
         '  async mounted() {',
         '    this.weather.temperature = this.$input.weather.temperature',
         '  }',
-        '})'
+        '}'
       ].join('\n')
     },
     metadata: {
@@ -186,8 +185,8 @@ function mountTextSetter(element: WidgetElement, widgetData: WidgetData = create
           },
           template: '<div class="widget-text-setter-stub-item" :data-label="label"><slot></slot></div>'
         }),
-        AInputNumber: defineComponent({
-          name: 'AInputNumberStub',
+        BInputNumber: defineComponent({
+          name: 'BInputNumberStub',
           props: {
             value: {
               type: Number,
@@ -216,7 +215,7 @@ function mountTextSetter(element: WidgetElement, widgetData: WidgetData = create
           },
           emits: {
             /**
-             * 更新数字值；清空时传入 null 与 AInputNumber allow-clear 行为一致。
+             * 更新数字值；清空时传入 null 与 BInputNumber allow-clear 行为一致。
              * @param value - 新值
              * @returns 是否允许触发事件
              */

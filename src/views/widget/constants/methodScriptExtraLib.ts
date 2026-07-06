@@ -164,33 +164,15 @@ export function createWidgetSchemaInterfaceDeclaration(interfaceName: string, sc
 }
 
 /**
- * 根据 Widget methods 方法名生成 TypeScript 接口声明。
- * @param methodNames - methods 中静态声明的方法名
- * @returns TypeScript 接口声明
- */
-function createWidgetScriptMethodsInterfaceDeclaration(methodNames: string[]): string {
-  const uniqueMethodNames = Array.from(new Set(methodNames)).filter((methodName: string): boolean => methodName.length > 0);
-  const propertyLines = uniqueMethodNames.map((methodName: string): string => {
-    const propertyName = formatTypeScriptPropertyName(methodName);
-
-    return `  ${propertyName}: (...args: unknown[]) => unknown`;
-  });
-
-  return ['declare interface WidgetScriptMethods {', ...(propertyLines.length > 0 ? propertyLines : []), '}'].join('\n');
-}
-
-/**
  * 创建 Widget JS 脚本编辑器类型提示内容。
  * @param inputSchema - 入参 schema
  * @param dataSchema - 数据 schema
- * @param methodNames - methods 中静态声明的方法名
  * @returns Monaco extra lib 内容
  */
-export function createWidgetMethodScriptExtraLibContent(inputSchema: WidgetSchemaObject, dataSchema: WidgetSchemaObject, methodNames: string[] = []): string {
+export function createWidgetMethodScriptExtraLibContent(inputSchema: WidgetSchemaObject, dataSchema: WidgetSchemaObject): string {
   return `
 ${createWidgetSchemaInterfaceDeclaration('WidgetInput', inputSchema)}
 ${createWidgetSchemaInterfaceDeclaration('WidgetData', dataSchema)}
-${createWidgetScriptMethodsInterfaceDeclaration(methodNames)}
 
 declare interface WidgetSendMessageContentPart {
   /** 消息片段类型。 */
@@ -260,17 +242,17 @@ declare interface WidgetHttpClient {
   delete<TData = unknown>(url: string, options?: WidgetHttpRequestOptions): Promise<RequestResponse<TData>>
 }
 
-declare interface WidgetBaseThisContext {
+declare abstract class Widget {
   /**
    * 调用小组件时 AI 提取到的入参。
    * @example const city = this.$input.city
    */
-  $input: WidgetInput
+  readonly $input: WidgetInput
   /**
    * 托管 HTTP 客户端，request 超时和队列由系统统一控制。
    * @example const response = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })
    */
-  $http: WidgetHttpClient
+  readonly $http: WidgetHttpClient
   /**
    * 向聊天上行一条消息。调用后表示当前小组件交互结束；交互代码未调用时会结束运行态但不发送消息。
    * @param message - 上行消息，支持字符串、文本片段数组或带 isError 的对象。
@@ -284,38 +266,12 @@ declare interface WidgetBaseThisContext {
    * @example this.$logger.info('用户点击', this.$input)
    * @example this.$logger.error('请求失败', error)
    */
-  $logger: Logger
-}
-
-declare type WidgetMethodMap = Record<string, (...args: unknown[]) => unknown>
-
-declare type WidgetBoundMethods<TMethods extends WidgetMethodMap> = {
-  [K in keyof TMethods]: TMethods[K] extends (...args: infer TArgs) => infer TReturn ? (...args: TArgs) => TReturn : never
-}
-
-declare type WidgetThisContext<
-  TData extends object = Partial<WidgetData>,
-  TMethods extends WidgetMethodMap = WidgetMethodMap
-> = WidgetBaseThisContext & WidgetData & WidgetScriptMethods & TData & WidgetBoundMethods<TMethods>
-
-declare type WidgetLifecycleHook<TData extends object, TMethods extends WidgetMethodMap> = (
-  this: WidgetThisContext<TData, TMethods>
-) => void | Promise<void>
-
-declare interface WidgetConfig<TData extends object = Partial<WidgetData>, TMethods extends WidgetMethodMap = WidgetMethodMap> {
-  /** 小组件运行态初始数据。 */
-  data?: TData
+  readonly $logger: Logger
   /** 小组件创建或展示时执行。 */
-  mounted?: WidgetLifecycleHook<TData, TMethods>
+  mounted?(): void | Promise<void>
   /** 小组件运行完成后执行一次。 */
-  unmounted?: WidgetLifecycleHook<TData, TMethods>
-  /** 由元素事件触发的方法集合。 */
-  methods?: TMethods & ThisType<WidgetThisContext<TData, TMethods>>
+  unmounted?(): void | Promise<void>
 }
-
-declare function Widget<TData extends object = Partial<WidgetData>, TMethods extends WidgetMethodMap = WidgetMethodMap>(
-  config: WidgetConfig<TData, TMethods> & ThisType<WidgetThisContext<TData, TMethods>>
-): WidgetConfig<TData, TMethods>
 
 /** 浏览器/Node 风格控制台，仅输出到 DevTools，不写入日志文件。 */
 declare interface Console {

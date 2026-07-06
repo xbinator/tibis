@@ -163,7 +163,7 @@ export interface WidgetExecuteMethod {
   enabled?: boolean;
   /** 方法说明，用于编辑器提示和后续权限确认 */
   description?: string;
-  /** JS 脚本代码，要求调用 Widget({...}) 声明生命周期与 methods */
+  /** JS 脚本代码，要求默认导出继承 Widget 的类 */
   code: string;
 }
 

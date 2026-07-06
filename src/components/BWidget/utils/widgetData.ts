@@ -136,11 +136,12 @@ export function createDefaultWidgetViewport(): WidgetViewport {
 
 /**
  * 创建空Widget数据。
+ * @param widgetId - 小组件标识符
  * @returns 空Widget数据
  */
-export function createDefaultWidgetData(): WidgetData {
+export function createDefaultWidgetData(widgetId?: string): WidgetData {
   return {
-    ...normalizeWidgetDataContract({}),
+    ...normalizeWidgetDataContract({ execute: createDefaultWidgetExecuteMethod(widgetId) }),
     elements: []
   };
 }

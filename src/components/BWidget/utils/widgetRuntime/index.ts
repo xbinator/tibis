@@ -5,6 +5,7 @@
 import type { RequestInput, RequestMethod, RequestResponse } from 'types/request';
 import type { WidgetHttpClient, WidgetRuntimeDataPatch, WidgetRuntimeSendMessage, WidgetRuntimeState, WidgetSendMessageTextPart } from 'types/widget';
 import { cloneDeep, isPlainObject } from 'lodash-es';
+import ts from 'typescript';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { compileSandboxSource, createSandboxHttpHost, runSandboxCode, SANDBOX_HTTP_HOST_FUNCTION_NAME } from '@/utils/sandbox';
 import { isWidgetRuntimeDataPatchArray } from './dataPatch';
@@ -23,6 +24,11 @@ type WidgetLogLevel = 'info' | 'warn' | 'error';
 
 /** 小组件 console 级别，对齐标准 console 方法。 */
 type WidgetConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
+
+/** 缺省 Widget class 脚本。 */
+const EMPTY_WIDGET_CLASS_SCRIPT = 'export default class Component extends Widget {}';
+/** Widget class 非公开成员元数据字段。 */
+const WIDGET_NON_PUBLIC_MEMBER_NAMES_PROPERTY = '__widgetNonPublicMemberNames';
 
 /**
  * 小组件脚本生命周期执行选项。
@@ -51,7 +57,7 @@ type WidgetScriptLifecycleName = 'mounted' | 'unmounted';
  * 小组件脚本运行载荷。
  */
 interface WidgetScriptRunPayload {
-  /** 用户编写的 Widget({ ... }) 脚本。 */
+  /** 用户编写的默认导出 Widget class 脚本。 */
   scriptCode: string;
   /** 元素声明的交互脚本。 */
   interactionCode?: string;
@@ -226,6 +232,186 @@ function isTestEnvironment(): boolean {
 }
 
 /**
+ * 判断类声明是否带有指定修饰符。
+ * @param node - 类声明节点
+ * @param kind - 修饰符类型
+ * @returns 是否带有指定修饰符
+ */
+function hasClassModifier(node: ts.ClassDeclaration, kind: ts.SyntaxKind): boolean {
+  return node.modifiers?.some((modifier: ts.ModifierLike): boolean => modifier.kind === kind) ?? false;
+}
+
+/**
+ * 判断类成员是否带有指定修饰符。
+ * @param member - 类成员节点
+ * @param kind - 修饰符类型
+ * @returns 是否带有指定修饰符
+ */
+function hasClassElementModifier(member: ts.ClassElement, kind: ts.SyntaxKind): boolean {
+  const modifiers = ts.canHaveModifiers(member) ? ts.getModifiers(member) : undefined;
+
+  return modifiers?.some((modifier: ts.ModifierLike): boolean => modifier.kind === kind) ?? false;
+}
+
+/**
+ * 读取可静态表示的类成员名。
+ * @param name - 类成员名节点
+ * @returns 成员名；无法静态读取时返回 null
+ */
+function readClassElementName(name: ts.PropertyName | ts.PrivateIdentifier | undefined): string | null {
+  if (!name || ts.isPrivateIdentifier(name)) {
+    return null;
+  }
+
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+
+  return null;
+}
+
+/**
+ * 读取类成员名。
+ * @param member - 类成员节点
+ * @returns 成员名；无法静态读取时返回 null
+ */
+function readClassMemberName(member: ts.ClassElement): string | null {
+  if (ts.isPropertyDeclaration(member) || ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) {
+    return readClassElementName(member.name);
+  }
+
+  return null;
+}
+
+/**
+ * 判断类成员是否为 TypeScript 非公开成员。
+ * @param member - 类成员节点
+ * @returns 是否带有 private/protected 修饰符
+ */
+function isTypeScriptNonPublicClassMember(member: ts.ClassElement): boolean {
+  return hasClassElementModifier(member, ts.SyntaxKind.PrivateKeyword) || hasClassElementModifier(member, ts.SyntaxKind.ProtectedKeyword);
+}
+
+/**
+ * 判断类声明是否继承 Widget 基类。
+ * @param node - 类声明节点
+ * @returns 是否继承 Widget
+ */
+function isWidgetClassDeclaration(node: ts.ClassDeclaration): boolean {
+  const extendsClause = node.heritageClauses?.find((clause: ts.HeritageClause): boolean => clause.token === ts.SyntaxKind.ExtendsKeyword);
+  const [heritageType] = extendsClause?.types ?? [];
+
+  return Boolean(heritageType && ts.isIdentifier(heritageType.expression) && heritageType.expression.text === 'Widget');
+}
+
+/**
+ * 判断类声明是否为默认导出的 Widget 类。
+ * @param node - 类声明节点
+ * @returns 是否为默认导出的 Widget 类
+ */
+function isDefaultExportWidgetClassDeclaration(node: ts.ClassDeclaration): boolean {
+  return (
+    Boolean(node.name) &&
+    hasClassModifier(node, ts.SyntaxKind.ExportKeyword) &&
+    hasClassModifier(node, ts.SyntaxKind.DefaultKeyword) &&
+    isWidgetClassDeclaration(node)
+  );
+}
+
+/**
+ * 判断类成员是否为构造器。
+ * @param member - 类成员节点
+ * @returns 是否为构造器
+ */
+function isConstructorMember(member: ts.ClassElement): boolean {
+  return ts.isConstructorDeclaration(member);
+}
+
+/**
+ * 收集 TS private/protected 成员名。
+ * @param node - 默认导出的 Widget 类
+ * @returns 非公开成员名列表
+ */
+function collectWidgetNonPublicMemberNames(node: ts.ClassDeclaration): string[] {
+  const memberNames = new Set<string>();
+
+  node.members.forEach((member: ts.ClassElement): void => {
+    if (!isTypeScriptNonPublicClassMember(member)) {
+      return;
+    }
+
+    const memberName = readClassMemberName(member);
+    if (memberName) {
+      memberNames.add(memberName);
+    }
+  });
+
+  return Array.from(memberNames);
+}
+
+/**
+ * 移除默认导出 Widget 类上的 export/default 修饰符。
+ * @param node - 默认导出的 Widget 类
+ * @returns 普通类声明
+ */
+function removeDefaultExportClassModifiers(node: ts.ClassDeclaration): ts.ClassDeclaration {
+  const modifiers = node.modifiers?.filter(
+    (modifier: ts.ModifierLike): boolean => modifier.kind !== ts.SyntaxKind.ExportKeyword && modifier.kind !== ts.SyntaxKind.DefaultKeyword
+  );
+
+  return ts.factory.updateClassDeclaration(node, modifiers, node.name, node.typeParameters, node.heritageClauses, node.members);
+}
+
+/**
+ * 创建可由沙箱函数执行的 Widget 类脚本源码。
+ * @param code - 原始 Widget 脚本源码
+ * @returns 返回默认导出类的函数体源码
+ */
+function createWidgetClassScriptFunctionBody(code: string): string {
+  const sourceFile = ts.createSourceFile('widget-script.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const widgetClassDeclarations = sourceFile.statements.filter(
+    (statement: ts.Statement): statement is ts.ClassDeclaration => ts.isClassDeclaration(statement) && isDefaultExportWidgetClassDeclaration(statement)
+  );
+
+  if (widgetClassDeclarations.length !== 1) {
+    throw new Error('小组件脚本必须使用 export default class Xxx extends Widget');
+  }
+
+  const [widgetClassDeclaration] = widgetClassDeclarations;
+  const className = widgetClassDeclaration.name?.text;
+  const nonPublicMemberNames = collectWidgetNonPublicMemberNames(widgetClassDeclaration);
+
+  if (!className) {
+    throw new Error('小组件脚本默认导出类必须具名');
+  }
+
+  if (widgetClassDeclaration.members.some(isConstructorMember)) {
+    throw new Error('小组件脚本暂不支持 constructor');
+  }
+
+  const statements = sourceFile.statements.map(
+    (statement: ts.Statement): ts.Statement => (statement === widgetClassDeclaration ? removeDefaultExportClassModifiers(widgetClassDeclaration) : statement)
+  );
+  const transformedSourceFile = ts.factory.updateSourceFile(sourceFile, statements);
+  const printer = ts.createPrinter();
+
+  return [
+    printer.printFile(transformedSourceFile),
+    `Object.defineProperty(${className}, ${JSON.stringify(WIDGET_NON_PUBLIC_MEMBER_NAMES_PROPERTY)}, { value: ${JSON.stringify(nonPublicMemberNames)} });`,
+    `return ${className};`
+  ].join('\n');
+}
+
+/**
+ * 编译 Widget 类脚本。
+ * @param code - 原始 Widget 脚本源码
+ * @returns 可在沙箱内执行的 JS 函数体
+ */
+function compileWidgetClassScript(code: string): string {
+  return compileSandboxSource(createWidgetClassScriptFunctionBody(code), 'widget-script.ts');
+}
+
+/**
  * 生成小组件协议适配脚本。
  * @param payload - 小组件运行载荷
  * @returns 可交给通用沙箱执行的脚本
@@ -238,15 +424,21 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
   return [
     'const __widgetInput = __initialWidgetInput',
     'let __widgetData = __clone(__initialWidgetData)',
-    'let __widgetConfig',
+    'let __widgetClass',
     'const __widgetReservedBindingNames = new Set([',
     "  'arguments', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default',",
     "  'delete', 'do', 'else', 'enum', 'eval', 'export', 'extends', 'false', 'finally', 'for', 'function',",
     "  'if', 'implements', 'import', 'in', 'instanceof', 'interface', 'let', 'new', 'null', 'package',",
     "  'private', 'protected', 'public', 'return', 'static', 'super', 'switch', 'this', 'throw', 'true',",
     "  'try', 'typeof', 'undefined', 'var', 'void', 'while', 'with', 'yield',",
+    "  'globalThis', 'window', 'self', 'document', 'localStorage', 'sessionStorage', 'indexedDB', 'fetch',",
+    "  'XMLHttpRequest', 'WebSocket', 'EventSource', 'Worker', 'SharedWorker', 'navigator', 'location',",
+    "  'history', 'crypto', 'process', 'require', 'module', 'exports', 'importScripts', 'Function',",
+    "  'setTimeout', 'setInterval', 'requestAnimationFrame', 'alert', 'confirm', 'prompt', 'open',",
     "  'console', 'widgetThis'",
     '])',
+    "const __widgetLifecycleNames = new Set(['mounted', 'unmounted'])",
+    `const __widgetNonPublicMemberNamesProperty = ${JSON.stringify(WIDGET_NON_PUBLIC_MEMBER_NAMES_PROPERTY)}`,
     '',
     'function __clone(value) {',
     '  if (value === undefined) return value',
@@ -269,13 +461,27 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return result',
     '}',
     '',
+    'function __readWidgetClassDefaultData(widgetInstance) {',
+    '  const data = {}',
+    '  for (const [key, value] of Object.entries(widgetInstance)) {',
+    "    if (key.startsWith('$') || __widgetReservedBindingNames.has(key) || __widgetNonPublicMemberNames.has(key) || typeof value === 'function') continue",
+    '    data[key] = __clone(value)',
+    '  }',
+    '  return data',
+    '}',
+    '',
+    'function __createWidgetComponentInstance() {',
+    "  if (typeof __widgetClass !== 'function') throw new Error('小组件脚本未导出 Widget 类')",
+    '  return new __widgetClass()',
+    '}',
+    '',
     'function __serializeData(value) {',
     '  return JSON.stringify(value)',
     '}',
     '',
-    'function __initializeWidgetData(executionState) {',
+    'function __initializeWidgetData(executionState, widgetInstance) {',
     '  const previousData = __serializeData(__widgetData)',
-    '  const declaredData = __widgetConfig && __widgetConfig.data',
+    '  const declaredData = __readWidgetClassDefaultData(widgetInstance)',
     '  __widgetData = __mergePlainData(declaredData, __initialWidgetData)',
     '  if (__serializeData(__widgetData) !== previousData) executionState.dataChanged = true',
     '}',
@@ -505,18 +711,23 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  })',
     '}',
     '',
-    'function __createWidgetThisContext(executionState) {',
+    'function __createWidgetThisContext(widgetInstance, executionState) {',
     '  const proxyCache = new WeakMap()',
-    '  const context = {',
-    '    get $input() { return __clone(__widgetInput) },',
-    '    $http: __createWidgetHttpClient(executionState),',
-    '    $logger: __createWidgetLogger(executionState),',
-    '    async $sendMessage(message) {',
-    '      const sendMessage = __normalizeSendMessage(message)',
-    '      if (sendMessage) executionState.sendMessage = sendMessage',
-    '      await __flushDataPatches(executionState)',
+    '  const context = widgetInstance',
+    '  Object.defineProperties(context, {',
+    '    $input: { configurable: true, enumerable: false, get() { return __clone(__widgetInput) } },',
+    '    $http: { configurable: true, enumerable: false, value: __createWidgetHttpClient(executionState) },',
+    '    $logger: { configurable: true, enumerable: false, value: __createWidgetLogger(executionState) },',
+    '    $sendMessage: {',
+    '      configurable: true,',
+    '      enumerable: false,',
+    '      async value(message) {',
+    '        const sendMessage = __normalizeSendMessage(message)',
+    '        if (sendMessage) executionState.sendMessage = sendMessage',
+    '        await __flushDataPatches(executionState)',
+    '      }',
     '    }',
-    '  }',
+    '  })',
     '  for (const key of Object.keys(__widgetData)) {',
     "    if (key === '$input' || key === '$http' || key === '$sendMessage' || key === '$logger') continue",
     '    __defineWidgetDataAccessor(context, key, executionState, proxyCache)',
@@ -528,15 +739,53 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(name) && !__widgetReservedBindingNames.has(name)',
     '}',
     '',
-    'function __createMethodBindings(widgetThis, executionState) {',
-    '  const methods = __widgetConfig && __widgetConfig.methods',
-    '  if (!__isPlainRecord(methods)) return {}',
+    'function __collectWidgetPrototypeDescriptors(widgetInstance) {',
+    '  const descriptors = []',
+    '  const visitedNames = new Set()',
+    '  let prototype = Object.getPrototypeOf(widgetInstance)',
+    '  while (prototype && prototype !== Widget.prototype) {',
+    '    for (const [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(prototype))) {',
+    '      if (visitedNames.has(name)) continue',
+    '      visitedNames.add(name)',
+    '      descriptors.push([name, descriptor])',
+    '    }',
+    '    prototype = Object.getPrototypeOf(prototype)',
+    '  }',
+    '  return descriptors',
+    '}',
+    '',
+    'function __defineWidgetComputedAccessors(widgetThis, widgetInstance) {',
+    '  for (const [propertyName, descriptor] of __collectWidgetPrototypeDescriptors(widgetInstance)) {',
+    "    if (propertyName === 'constructor' ||",
+    '      Reflect.has(widgetThis, propertyName) ||',
+    '      __widgetNonPublicMemberNames.has(propertyName) ||',
+    "      typeof descriptor.get !== 'function') continue",
+    '    Object.defineProperty(widgetThis, propertyName, {',
+    '      configurable: true,',
+    '      enumerable: false,',
+    '      get() {',
+    '        return Reflect.apply(descriptor.get, widgetThis, [])',
+    '      }',
+    '    })',
+    '  }',
+    '}',
+    '',
+    'function __readWidgetLifecycle(widgetInstance, lifecycleName) {',
+    '  const matched = __collectWidgetPrototypeDescriptors(widgetInstance).find(([propertyName]) => propertyName === lifecycleName)',
+    '  if (matched && __widgetNonPublicMemberNames.has(matched[0])) return undefined',
+    '  const lifecycle = matched && matched[1].value',
+    "  return typeof lifecycle === 'function' ? lifecycle : undefined",
+    '}',
+    '',
+    'function __createMethodBindings(widgetThis, widgetInstance, executionState) {',
     '  const bindings = {}',
-    '  for (const [methodName, method] of Object.entries(methods)) {',
-    "    if (typeof method !== 'function') continue",
+    '  __defineWidgetComputedAccessors(widgetThis, widgetInstance)',
+    '  for (const [methodName, descriptor] of __collectWidgetPrototypeDescriptors(widgetInstance)) {',
+    "    if (methodName === 'constructor' || __widgetLifecycleNames.has(methodName) || typeof descriptor.value !== 'function') continue",
+    '    const isNonPublicMethod = __widgetNonPublicMemberNames.has(methodName)',
     '    const boundMethod = (...args) => {',
     '      try {',
-    '        const result = Reflect.apply(method, widgetThis, args)',
+    '        const result = Reflect.apply(descriptor.value, widgetThis, args)',
     '        const pendingCall = Promise.resolve(result).catch(() => undefined)',
     '        executionState.pendingMethodCalls.push(pendingCall)',
     '        return result',
@@ -545,7 +794,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '      }',
     '    }',
     '    Object.defineProperty(widgetThis, methodName, { value: boundMethod, configurable: true, enumerable: false })',
-    '    if (__canUseAsBindingName(methodName)) bindings[methodName] = boundMethod',
+    '    if (!isNonPublicMethod && __canUseAsBindingName(methodName)) bindings[methodName] = boundMethod',
     '  }',
     '  return bindings',
     '}',
@@ -557,8 +806,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  }',
     '}',
     '',
-    'async function __runInteractionCode(interactionCode, widgetThis, executionState) {',
-    '  const methodBindings = __createMethodBindings(widgetThis, executionState)',
+    'async function __runInteractionCode(interactionCode, widgetThis, methodBindings) {',
     '  const bindingNames = Object.keys(methodBindings)',
     "  const interactionBody = '\"use strict\";\\nreturn (async function() {\\n' + interactionCode + '\\n}).call(widgetThis);'",
     "  const fn = __sandbox.createFunction(['widgetThis', ...bindingNames, 'console'], interactionBody)",
@@ -567,14 +815,15 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '',
     'async function __runWidgetRuntime(lifecycleName, interactionCode) {',
     '  const executionState = __createExecutionState()',
-    '  __initializeWidgetData(executionState)',
-    '  const widgetThis = __createWidgetThisContext(executionState)',
-    '  __createMethodBindings(widgetThis, executionState)',
+    '  const widgetInstance = __createWidgetComponentInstance()',
+    '  __initializeWidgetData(executionState, widgetInstance)',
+    '  const widgetThis = __createWidgetThisContext(widgetInstance, executionState)',
+    '  const methodBindings = __createMethodBindings(widgetThis, widgetInstance, executionState)',
     '  if (lifecycleName) {',
-    '    const lifecycle = __widgetConfig && __widgetConfig[lifecycleName]',
+    '    const lifecycle = __readWidgetLifecycle(widgetInstance, lifecycleName)',
     "    if (typeof lifecycle === 'function') await Reflect.apply(lifecycle, widgetThis, [])",
     '  } else if (typeof interactionCode === "string" && interactionCode.trim()) {',
-    '    await __runInteractionCode(interactionCode, widgetThis, executionState)',
+    '    await __runInteractionCode(interactionCode, widgetThis, methodBindings)',
     '  }',
     '  await __flushPendingMethodCalls(executionState)',
     '  await __flushScheduledDataPatchFlushes(executionState)',
@@ -585,13 +834,19 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  }',
     '}',
     '',
-    'const Widget = (value) => {',
-    '  if (__isPlainRecord(value)) __widgetConfig = value',
-    '  return value',
+    'class Widget {}',
+    '',
+    'function __readWidgetNonPublicMemberNames() {',
+    '  const names = __widgetClass && __widgetClass[__widgetNonPublicMemberNamesProperty]',
+    "  return new Set(Array.isArray(names) ? names.filter((name) => typeof name === 'string') : [])",
     '}',
     '',
     "const __runWidgetScript = __sandbox.createFunction(['Widget', 'console'], __widgetScriptCode)",
-    '__runWidgetScript(Widget, console)',
+    '__widgetClass = __runWidgetScript(Widget, console)',
+    "if (typeof __widgetClass !== 'function' || !(__widgetClass.prototype instanceof Widget)) {",
+    "  throw new Error('小组件脚本必须默认导出继承 Widget 的类')",
+    '}',
+    'const __widgetNonPublicMemberNames = __readWidgetNonPublicMemberNames()',
     '',
     `return await __runWidgetRuntime(${lifecycleName}, ${interactionCode})`
   ].join('\n');
@@ -610,7 +865,7 @@ async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: 
       arguments: {
         __initialWidgetInput: payload.input,
         __initialWidgetData: payload.data,
-        __widgetScriptCode: compileSandboxSource(payload.scriptCode, 'widget-script.ts')
+        __widgetScriptCode: compileWidgetClassScript(payload.scriptCode)
       }
     },
     {
@@ -709,7 +964,7 @@ function applyWidgetSandboxResult(state: WidgetRuntimeState, result: WidgetScrip
 function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOptions = {}): Promise<WidgetScriptRunResult> {
   return runWidgetScriptSandbox(
     {
-      scriptCode: state.value.execute?.code ?? 'Widget({})',
+      scriptCode: state.value.execute?.code ?? EMPTY_WIDGET_CLASS_SCRIPT,
       ...(options.interactionCode !== undefined ? { interactionCode: options.interactionCode } : {}),
       ...(options.lifecycleName ? { lifecycleName: options.lifecycleName } : {}),
       input: state.renderContext.input,

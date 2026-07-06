@@ -273,13 +273,11 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
 
 <style lang="less" scoped>
 .widget-sidebar {
-  position: relative;
-  z-index: 1;
   display: flex;
   flex-shrink: 0;
   height: 100%;
   min-height: 0;
-  box-shadow: 1px 0 0 0 var(--border-primary);
+  border-right: 1px solid var(--border-primary);
 }
 
 .widget-sidebar--expanded {

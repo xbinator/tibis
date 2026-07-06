@@ -51,6 +51,7 @@ import { Form, message } from 'ant-design-vue';
 import { cloneDeep } from 'lodash-es';
 import { importWidgetZipFile, type WidgetImportResource } from '@/ai/widget';
 import type { WidgetData } from '@/components/BWidget/types';
+import { createDefaultWidgetExecuteMethod, isDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import { asyncTo } from '@/utils/asyncTo';
 
 /**
@@ -103,6 +104,8 @@ const isImportDragOver = ref(false);
 const importedWidgetData = shallowRef<WidgetData | null>(null);
 /** 已导入的小组件资源。 */
 const importedWidgetResources = shallowRef<WidgetImportResource[]>([]);
+/** zip 文件名推导出的小组件标识。 */
+const importedWidgetSuggestedId = ref('');
 /** 已导入来源文件名。 */
 const importedSourceName = ref('');
 
@@ -168,6 +171,7 @@ function handleIdBlur(): void {
 function resetImportedWidgetPackage(): void {
   importedWidgetData.value = null;
   importedWidgetResources.value = [];
+  importedWidgetSuggestedId.value = '';
   importedSourceName.value = '';
 }
 
@@ -181,6 +185,7 @@ async function importWidgetFromZipFile(file: File): Promise<void> {
 
   importedWidgetData.value = result.data;
   importedWidgetResources.value = result.resources;
+  importedWidgetSuggestedId.value = result.suggestedId;
   importedSourceName.value = result.sourceName;
   dataItem.id = result.suggestedId;
   dataItem.name = result.data.name || result.suggestedId;
@@ -210,6 +215,24 @@ async function handleZipSelected(files: FileList): Promise<void> {
 }
 
 /**
+ * 创建确认提交时使用的导入小组件数据。
+ * @returns 导入数据副本；未导入时返回 undefined
+ */
+function createImportedWidgetDataForConfirm(): WidgetData | undefined {
+  if (!importedWidgetData.value) {
+    return undefined;
+  }
+
+  const data = cloneDeep(importedWidgetData.value);
+
+  if (isDefaultWidgetExecuteMethod(data.execute, importedWidgetSuggestedId.value)) {
+    data.execute = createDefaultWidgetExecuteMethod(dataItem.id);
+  }
+
+  return data;
+}
+
+/**
  * 取消创建小组件。
  */
 function handleCancel(): void {
@@ -231,11 +254,13 @@ async function handleConfirm(): Promise<void> {
     return;
   }
 
+  const importedData = createImportedWidgetDataForConfirm();
+
   emit('confirm', {
     id: dataItem.id,
     name: dataItem.name,
     description: dataItem.description,
-    ...(importedWidgetData.value ? { data: cloneDeep(importedWidgetData.value) } : {}),
+    ...(importedData ? { data: importedData } : {}),
     ...(importedWidgetResources.value.length > 0 ? { resources: importedWidgetResources.value } : {})
   });
 }

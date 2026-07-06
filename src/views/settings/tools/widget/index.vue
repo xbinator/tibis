@@ -208,7 +208,7 @@ async function handleCreateConfirm(payload: WidgetCreatePayload): Promise<void> 
   const widgetDescription = payload.description;
   const homeDir = await native.getHomeDir();
   const widgetDir = joinPath(homeDir, '.tibis', 'widgets', widgetId);
-  const payloadWidgetData = payload.data ?? createDefaultWidgetData();
+  const payloadWidgetData = payload.data ?? createDefaultWidgetData(widgetId);
   const widgetData = {
     ...payloadWidgetData,
     name: widgetName,

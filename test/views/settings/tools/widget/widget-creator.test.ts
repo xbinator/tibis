@@ -10,6 +10,7 @@ import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import type { WidgetImportResource } from '@/ai/widget';
 import type { WidgetData } from '@/components/BWidget/types';
+import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import WidgetCreator from '@/views/settings/tools/widget/components/WidgetCreator.vue';
 
 /**
@@ -319,6 +320,25 @@ describe('WidgetCreator', (): void => {
     expect(payload.name).toBe('咖啡菜单');
     expect(payload.description).toBe('展示咖啡列表');
     expect(payload.data?.elements).toHaveLength(1);
+  });
+
+  it('regenerates imported default execute class name when the final widget id changes', async (): Promise<void> => {
+    const wrapper = mountWidgetCreator();
+    const file = await createWidgetZipFile({
+      name: '咖啡菜单',
+      description: '展示咖啡列表'
+    });
+
+    await selectZipFile(wrapper, file);
+    await waitForZipImport(wrapper);
+    await wrapper.find('.widget-creator__id input').setValue('tea-menu');
+    await findButtonByText(wrapper, '确定').trigger('click');
+    await flushPromises();
+
+    const payload = readConfirmPayload(wrapper);
+
+    expect(payload.id).toBe('tea-menu');
+    expect(payload.data?.execute).toEqual(createDefaultWidgetExecuteMethod('tea-menu'));
   });
 
   it('emits imported zip resources with widget data', async (): Promise<void> => {

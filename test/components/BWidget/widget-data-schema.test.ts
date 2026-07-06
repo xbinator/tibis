@@ -31,7 +31,7 @@ const inputSchema: WidgetSchemaObject = {
 describe('buildWidgetDataSchema', (): void => {
   it('builds nested data schema from direct this object assignments', (): void => {
     const code = `
-      Widget({
+      export default class Weather extends Widget {
         async mounted() {
           this.weather = {
             temperature: 28,
@@ -39,7 +39,7 @@ describe('buildWidgetDataSchema', (): void => {
             active: true
           }
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -67,11 +67,11 @@ describe('buildWidgetDataSchema', (): void => {
 
   it('ignores nested this data writes when the root field is not initialized', (): void => {
     const code = `
-      Widget({
+      export default class Weather extends Widget {
         async mounted() {
           this.weather.temperature = 28
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -83,12 +83,12 @@ describe('buildWidgetDataSchema', (): void => {
 
   it('builds nested data schema after a root this assignment initializes the field', (): void => {
     const code = `
-      Widget({
+      export default class Weather extends Widget {
         async mounted() {
           this.weather = {}
           this.weather.temperature = this.$input.weather.temperature
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -108,17 +108,16 @@ describe('buildWidgetDataSchema', (): void => {
     });
   });
 
-  it('builds data schema from Widget data declarations', (): void => {
+  it('builds data schema from Widget class field declarations', (): void => {
     const code = `
-      Widget({
-        data: {
-          weather: {
-            temperature: 18,
-            condition: '晴'
-          },
-          ready: true
+      export default class Weather extends Widget {
+        weather = {
+          temperature: 18,
+          condition: '晴'
         }
-      })
+
+        ready = true
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -144,22 +143,52 @@ describe('buildWidgetDataSchema', (): void => {
     });
   });
 
+  it('ignores TypeScript private and protected class fields when building data schema', (): void => {
+    const code = `
+      export default class Weather extends Widget {
+        private secret = 'token'
+        protected cache = {
+          ready: true
+        }
+        weather = {
+          temperature: 18
+        }
+      }
+    `;
+
+    expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
+      type: 'object',
+      properties: {
+        weather: {
+          type: 'object',
+          properties: {
+            temperature: {
+              type: 'number'
+            }
+          },
+          required: []
+        }
+      },
+      required: []
+    });
+  });
+
   it('supports direct this dot paths and input schema type reuse', (): void => {
     const code = `
-      Widget({
-        data: {
-          lastQuery: {
-            city: ''
-          },
-          weather: {
-            temperature: 0
-          }
-        },
+      export default class Weather extends Widget {
+        lastQuery = {
+          city: ''
+        }
+
+        weather = {
+          temperature: 0
+        }
+
         async mounted() {
           this.lastQuery.city = this.$input.city
           this.weather.temperature = this.$input.weather.temperature
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -190,27 +219,26 @@ describe('buildWidgetDataSchema', (): void => {
 
   it('supports Widget this context assignments and input schema type reuse', (): void => {
     const code = `
-      Widget({
-        data: {
-          lastQuery: {
-            city: ''
-          },
-          weather: {
-            temperature: 0,
-            condition: ''
-          }
-        },
+      export default class Weather extends Widget {
+        lastQuery = {
+          city: ''
+        }
+
+        weather = {
+          temperature: 0,
+          condition: ''
+        }
+
         async mounted() {
           this.lastQuery.city = this.$input.city
           this.weather.temperature = this.$input.weather.temperature
-        },
-        methods: {
-          async refresh() {
-            this.weather.condition = '晴'
-            this.$sendMessage('刷新天气')
-          }
         }
-      })
+
+        async refresh() {
+          this.weather.condition = '晴'
+          this.$sendMessage('刷新天气')
+        }
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -244,7 +272,7 @@ describe('buildWidgetDataSchema', (): void => {
 
   it('ignores assignments that are not owned by the widget context', (): void => {
     const code = `
-      Widget({
+      export default class Weather extends Widget {
         async mounted() {
           const store = {
             save() {
@@ -254,7 +282,7 @@ describe('buildWidgetDataSchema', (): void => {
           store.save()
           this.weather = { temperature: 28 }
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -276,7 +304,7 @@ describe('buildWidgetDataSchema', (): void => {
 
   it('ignores nested object methods that use their own this context', (): void => {
     const code = `
-      Widget({
+      export default class Weather extends Widget {
         async mounted() {
           const store = {
             save() {
@@ -286,7 +314,7 @@ describe('buildWidgetDataSchema', (): void => {
           store.save()
           this.weather = { temperature: 28 }
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -308,7 +336,7 @@ describe('buildWidgetDataSchema', (): void => {
 
   it('keeps input aliases scoped when a block declares the same variable name', (): void => {
     const code = `
-      Widget({
+      export default class Weather extends Widget {
         async mounted() {
           const city = this.$input.city
           {
@@ -317,7 +345,7 @@ describe('buildWidgetDataSchema', (): void => {
           }
           this.lastQuery = { city }
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -348,12 +376,12 @@ describe('buildWidgetDataSchema', (): void => {
 
   it('returns an empty data schema when code has no static this data path', (): void => {
     const code = `
-      Widget({
+      export default class Weather extends Widget {
         async mounted() {
           const path = 'weather.temperature'
           this[path] = 28
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
@@ -365,15 +393,14 @@ describe('buildWidgetDataSchema', (): void => {
 
   it('preserves array type from data initialization when runtime assignment cannot be inferred', (): void => {
     const code = `
-      Widget({
-        data: {
-          movieList: []
-        },
+      export default class Weather extends Widget {
+        movieList = []
+
         async mounted() {
           const res = await this.$http.get('https://example.com/api')
           this.movieList = res.data.movieList
         }
-      })
+      }
     `;
 
     expect(buildWidgetDataSchema(code, inputSchema)).toEqual({

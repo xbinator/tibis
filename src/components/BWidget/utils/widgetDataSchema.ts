@@ -349,12 +349,55 @@ function writeDataSchemaProperty(properties: Record<string, WidgetSchemaProperty
 }
 
 /**
- * 判断调用表达式是否为 Widget 配置调用。
- * @param expression - 调用目标表达式
- * @returns 是否为 Widget 配置调用
+ * 判断类声明是否带有指定修饰符。
+ * @param node - 类声明节点
+ * @param kind - 修饰符类型
+ * @returns 是否带有指定修饰符
  */
-function isWidgetConfigCallExpression(expression: ts.Expression): boolean {
-  return ts.isIdentifier(expression) && expression.text === 'Widget';
+function hasClassModifier(node: ts.ClassDeclaration, kind: ts.SyntaxKind): boolean {
+  return node.modifiers?.some((modifier: ts.ModifierLike): boolean => modifier.kind === kind) ?? false;
+}
+
+/**
+ * 判断类成员是否带有指定修饰符。
+ * @param member - 类成员节点
+ * @param kind - 修饰符类型
+ * @returns 是否带有指定修饰符
+ */
+function hasClassElementModifier(member: ts.ClassElement, kind: ts.SyntaxKind): boolean {
+  const modifiers = ts.canHaveModifiers(member) ? ts.getModifiers(member) : undefined;
+
+  return modifiers?.some((modifier: ts.ModifierLike): boolean => modifier.kind === kind) ?? false;
+}
+
+/**
+ * 判断类成员是否为 TypeScript 非公开成员。
+ * @param member - 类成员节点
+ * @returns 是否带有 private/protected 修饰符
+ */
+function isTypeScriptNonPublicClassMember(member: ts.ClassElement): boolean {
+  return hasClassElementModifier(member, ts.SyntaxKind.PrivateKeyword) || hasClassElementModifier(member, ts.SyntaxKind.ProtectedKeyword);
+}
+
+/**
+ * 判断类声明是否继承 Widget 基类。
+ * @param node - 类声明节点
+ * @returns 是否继承 Widget
+ */
+function isWidgetClassDeclaration(node: ts.ClassDeclaration): boolean {
+  const extendsClause = node.heritageClauses?.find((clause: ts.HeritageClause): boolean => clause.token === ts.SyntaxKind.ExtendsKeyword);
+  const [heritageType] = extendsClause?.types ?? [];
+
+  return Boolean(heritageType && ts.isIdentifier(heritageType.expression) && heritageType.expression.text === 'Widget');
+}
+
+/**
+ * 判断类声明是否为默认导出的 Widget 类。
+ * @param node - 类声明节点
+ * @returns 是否为默认导出的 Widget 类
+ */
+function isDefaultExportWidgetClassDeclaration(node: ts.ClassDeclaration): boolean {
+  return hasClassModifier(node, ts.SyntaxKind.ExportKeyword) && hasClassModifier(node, ts.SyntaxKind.DefaultKeyword) && isWidgetClassDeclaration(node);
 }
 
 /**
@@ -406,50 +449,29 @@ function canWriteWidgetDataPath(properties: Record<string, WidgetSchemaProperty>
 }
 
 /**
- * 将 Widget({ data }) 对象字面量写入根数据 schema。
- * @param properties - 根属性集合
- * @param dataExpression - data 属性表达式
- * @param inputSchema - input schema，用于复用 input 字段类型
- * @param readInputAlias - input 路径别名读取函数
- */
-function writeWidgetConfigDataProperties(
-  properties: Record<string, WidgetSchemaProperty>,
-  dataExpression: ts.Expression,
-  inputSchema: WidgetSchemaObject | undefined,
-  readInputAlias: InputAliasReader
-): void {
-  const dataProperty = inferSchemaPropertyFromExpression(dataExpression, inputSchema, readInputAlias);
-  if (!dataProperty || dataProperty.type !== 'object' || !dataProperty.properties) {
-    return;
-  }
-
-  Object.entries(dataProperty.properties).forEach(([key, property]: [string, WidgetSchemaProperty]): void => {
-    const merged = mergeSchemaProperty(properties[key], property);
-    if (merged) {
-      properties[key] = merged;
-    }
-  });
-}
-
-/**
- * 从 Widget 配置对象中收集 data 字段声明。
- * @param configObject - Widget 配置对象
+ * 从默认导出 Widget 类字段中收集 data 字段声明。
+ * @param classDeclaration - Widget 类声明
  * @param properties - 根属性集合
  * @param inputSchema - input schema，用于复用 input 字段类型
  * @param readInputAlias - input 路径别名读取函数
  */
-function collectWidgetConfigDataProperties(
-  configObject: ts.ObjectLiteralExpression,
+function collectWidgetClassDataProperties(
+  classDeclaration: ts.ClassDeclaration,
   properties: Record<string, WidgetSchemaProperty>,
   inputSchema: WidgetSchemaObject | undefined,
   readInputAlias: InputAliasReader
 ): void {
-  configObject.properties.forEach((property: ts.ObjectLiteralElementLike): void => {
-    const propertyName = ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property) ? readPropertyName(property.name) : null;
-
-    if (propertyName === 'data' && ts.isPropertyAssignment(property)) {
-      writeWidgetConfigDataProperties(properties, property.initializer, inputSchema, readInputAlias);
+  classDeclaration.members.forEach((member: ts.ClassElement): void => {
+    if (!ts.isPropertyDeclaration(member) || !member.initializer || ts.isPrivateIdentifier(member.name) || isTypeScriptNonPublicClassMember(member)) {
+      return;
     }
+
+    const propertyName = readPropertyName(member.name);
+    if (!propertyName || propertyName.startsWith('$')) {
+      return;
+    }
+
+    writeDataSchemaProperty(properties, [propertyName], inferSchemaPropertyFromExpression(member.initializer, inputSchema, readInputAlias));
   });
 }
 
@@ -547,23 +569,6 @@ function withInputAliasScope(scopes: InputAliasScope[], callback: () => void): v
 }
 
 /**
- * 读取属性中承载的函数节点。
- * @param property - 对象字面量属性
- * @returns 函数节点，不存在时返回 undefined
- */
-function readObjectPropertyFunction(property: ts.ObjectLiteralElementLike): FunctionLikeNodeWithBody | undefined {
-  if (ts.isMethodDeclaration(property)) {
-    return property;
-  }
-
-  if (ts.isPropertyAssignment(property) && (ts.isArrowFunction(property.initializer) || ts.isFunctionExpression(property.initializer))) {
-    return property.initializer;
-  }
-
-  return undefined;
-}
-
-/**
  * 使用 Widget this 上下文访问函数体。
  * @param node - 函数类节点
  * @param scopes - input 别名作用域栈
@@ -581,39 +586,15 @@ function visitWidgetFunctionBody(node: FunctionLikeNodeWithBody, scopes: InputAl
 }
 
 /**
- * 访问 Widget methods 对象。
- * @param methodsObject - methods 对象字面量
+ * 访问默认导出 Widget 类中的生命周期、方法和 getter。
+ * @param classDeclaration - Widget 类声明
  * @param scopes - input 别名作用域栈
  * @param visit - AST 访问函数
  */
-function visitWidgetMethodsObject(methodsObject: ts.ObjectLiteralExpression, scopes: InputAliasScope[], visit: WidgetDataSchemaVisitor): void {
-  methodsObject.properties.forEach((property: ts.ObjectLiteralElementLike): void => {
-    const methodNode = readObjectPropertyFunction(property);
-
-    if (methodNode) {
-      visitWidgetFunctionBody(methodNode, scopes, visit);
-    }
-  });
-}
-
-/**
- * 访问 Widget 配置对象中的生命周期和事件方法。
- * @param configObject - Widget 配置对象
- * @param scopes - input 别名作用域栈
- * @param visit - AST 访问函数
- */
-function visitWidgetConfigObject(configObject: ts.ObjectLiteralExpression, scopes: InputAliasScope[], visit: WidgetDataSchemaVisitor): void {
-  configObject.properties.forEach((property: ts.ObjectLiteralElementLike): void => {
-    const propertyName = ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property) ? readPropertyName(property.name) : null;
-    const functionNode = readObjectPropertyFunction(property);
-
-    if ((propertyName === 'mounted' || propertyName === 'unmounted') && functionNode) {
-      visitWidgetFunctionBody(functionNode, scopes, visit);
-      return;
-    }
-
-    if (propertyName === 'methods' && ts.isPropertyAssignment(property) && ts.isObjectLiteralExpression(property.initializer)) {
-      visitWidgetMethodsObject(property.initializer, scopes, visit);
+function visitWidgetClassDeclaration(classDeclaration: ts.ClassDeclaration, scopes: InputAliasScope[], visit: WidgetDataSchemaVisitor): void {
+  classDeclaration.members.forEach((member: ts.ClassElement): void => {
+    if (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member)) {
+      visitWidgetFunctionBody(member, scopes, visit);
     }
   });
 }
@@ -640,7 +621,7 @@ function cloneDeepDataSchema(schema: WidgetSchemaObject): WidgetSchemaObject {
  * 从JS 脚本代码构建 Widget 数据 schema。
  * @param code - JS 脚本源码
  * @param inputSchema - input schema，用于复用 this.$input 字段类型
- * @returns 从 Widget({ data }) 和 this 数据赋值推导出的数据 schema
+ * @returns 从默认导出 Widget class 字段和 this 数据赋值推导出的数据 schema
  */
 export function buildWidgetDataSchema(code: string, inputSchema?: WidgetSchemaObject): WidgetSchemaObject {
   if (code.trim().length === 0) {
@@ -671,14 +652,9 @@ export function buildWidgetDataSchema(code: string, inputSchema?: WidgetSchemaOb
       return;
     }
 
-    if (ts.isCallExpression(node) && isWidgetConfigCallExpression(node.expression)) {
-      const [configExpression] = node.arguments;
-
-      if (configExpression && ts.isObjectLiteralExpression(configExpression)) {
-        collectWidgetConfigDataProperties(configExpression, properties, inputSchema, readCurrentInputAlias);
-        visitWidgetConfigObject(configExpression, inputAliasScopes, visit);
-      }
-
+    if (ts.isClassDeclaration(node) && isDefaultExportWidgetClassDeclaration(node)) {
+      collectWidgetClassDataProperties(node, properties, inputSchema, readCurrentInputAlias);
+      visitWidgetClassDeclaration(node, inputAliasScopes, visit);
       return;
     }
 

@@ -78,19 +78,19 @@ function createWidgetData(): WidgetData {
     },
     execute: {
       code: [
-        'Widget({',
-        '  data: {',
-        '    weather: {',
-        '      temperature: 0',
-        '    },',
-        '    "weather-data": {',
-        '      "feels.like": 31',
-        '    }',
-        '  },',
+        'export default class Weather extends Widget {',
+        '  weather = {',
+        '    temperature: 0',
+        '  }',
+        '',
+        '  "weather-data" = {',
+        '    "feels.like": 31',
+        '  }',
+        '',
         '  async mounted() {',
         '    this.weather.temperature = this.$input.weather.temperature',
         '  }',
-        '})'
+        '}'
       ].join('\n')
     },
     metadata: {

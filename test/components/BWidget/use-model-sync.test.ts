@@ -120,7 +120,7 @@ describe('useModelSync', (): void => {
     scope.stop();
 
     expect(modelValue.value?.elements).toHaveLength(2);
-    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['dataSchema', 'description', 'elements', 'inputSchema', 'metadata', 'name']);
+    expect(Object.keys(modelValue.value ?? {}).sort()).toEqual(['dataSchema', 'description', 'elements', 'execute', 'inputSchema', 'metadata', 'name']);
     expect('kind' in (modelValue.value?.elements[0] ?? {})).toBe(false);
     expect(modelValue.value?.elements[0]?.name).toBe('rect');
     expect('shape' in (modelValue.value?.elements[0] ?? {})).toBe(false);
@@ -205,7 +205,7 @@ describe('useModelSync', (): void => {
       execute: {
         enabled: false,
         description: '保存脚本配置',
-        code: 'Widget({ methods: { submit() { this.$sendMessage("ok") } } })'
+        code: 'export default class ProfileCard extends Widget { submit() { this.$sendMessage("ok") } }'
       }
     });
 
@@ -227,7 +227,7 @@ describe('useModelSync', (): void => {
     expect(modelValue.value?.execute).toEqual({
       enabled: false,
       description: '保存脚本配置',
-      code: 'Widget({ methods: { submit() { this.$sendMessage("ok") } } })'
+      code: 'export default class ProfileCard extends Widget { submit() { this.$sendMessage("ok") } }'
     });
     expect(hasInternalStateFields(modelValue.value as WidgetData)).toBe(false);
   });

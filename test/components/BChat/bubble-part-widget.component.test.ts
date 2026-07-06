@@ -172,7 +172,7 @@ describe('BubblePartWidget', (): void => {
           kind: 'widget_display',
           sessionId: 'widget-coffee-session',
           widgetId: 'coffee',
-          value: createWidgetData('Widget({})'),
+          value: createWidgetData('export default class Weather extends Widget {}'),
           renderContext: createWidgetRenderContext()
         }
       }
@@ -210,7 +210,7 @@ describe('BubblePartWidget', (): void => {
 
   it('emits changed widget parts when the runtime view reports mounted data', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
-      ...createWidgetPart('Widget({})'),
+      ...createWidgetPart('export default class Weather extends Widget {}'),
       status: 'created',
       lifecycle: {},
       renderContext: {
@@ -261,13 +261,17 @@ describe('BubblePartWidget', (): void => {
   it('finishes the message widget part by part id without a separate partIndex prop', async (): Promise<void> => {
     const staleWidgetPart = {
       ...createWidgetPart(
-        ['Widget({', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '})'].join('\n')
+        ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join(
+          '\n'
+        )
       ),
       id: 'widget-part-stale'
     };
     const targetWidgetPart = {
       ...createWidgetPart(
-        ['Widget({', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '})'].join('\n')
+        ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join(
+          '\n'
+        )
       ),
       id: 'widget-part-target',
       renderContext: {
@@ -336,7 +340,7 @@ describe('BubblePartWidget', (): void => {
 
   it('updates the message widget part without sending widget_result', async (): Promise<void> => {
     const widgetPart = createWidgetPart(
-      ['Widget({', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '})'].join('\n')
+      ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join('\n')
     );
     const wrapper = mountBubblePartWidget(widgetPart, {
       messageId: 'assistant-widget-message'
@@ -387,7 +391,7 @@ describe('BubblePartWidget', (): void => {
   });
 
   it('sends widget runtime messages reported by interaction changes', async (): Promise<void> => {
-    const widgetPart = createWidgetPart('Widget({})');
+    const widgetPart = createWidgetPart('export default class Weather extends Widget {}');
     const wrapper = mountBubblePartWidget(widgetPart, {
       messageId: 'assistant-widget-message'
     });

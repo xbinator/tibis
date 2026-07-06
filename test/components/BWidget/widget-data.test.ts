@@ -15,6 +15,22 @@ const emptyObjectSchema: WidgetSchemaObject = {
 };
 
 describe('dataItem', (): void => {
+  it('creates class-style default execute method from widget id', (): void => {
+    const execute = createDefaultWidgetExecuteMethod('weather-card');
+
+    expect(execute.code).toContain('export default class WeatherCard extends Widget');
+    expect(execute.code).not.toContain('Widget({');
+    expect(execute.code).not.toContain('Promise<void>');
+    expect(execute.code).not.toContain('$logger');
+    expect(execute.code).not.toContain('async mounted');
+  });
+
+  it('falls back to Component when widget id conflicts with base class name', (): void => {
+    const execute = createDefaultWidgetExecuteMethod('widget');
+
+    expect(execute.code).toContain('export default class Component extends Widget');
+  });
+
   it('creates input and data schemas for new widget data without output schema', (): void => {
     const dataItem = createDefaultWidgetData();
 
@@ -47,14 +63,14 @@ describe('dataItem', (): void => {
       execute: {
         enabled: true,
         description: '查询天气',
-        code: "Widget({ methods: { confirm() { this.$sendMessage('确认') } } })"
+        code: "export default class Weather extends Widget { confirm() { this.$sendMessage('确认') } }"
       }
     });
 
     expect(contract.execute).toEqual({
       enabled: true,
       description: '查询天气',
-      code: "Widget({ methods: { confirm() { this.$sendMessage('确认') } } })"
+      code: "export default class Weather extends Widget { confirm() { this.$sendMessage('确认') } }"
     });
   });
 });

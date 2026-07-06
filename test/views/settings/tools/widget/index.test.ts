@@ -320,7 +320,7 @@ describe('WidgetSettingsPage', (): void => {
 
     const writeFileCall = nativeMock.writeFile.mock.calls[0];
     const savedContent = JSON.parse(writeFileCall?.[1] ?? '{}') as Record<string, unknown>;
-    const defaultExecute = createDefaultWidgetExecuteMethod();
+    const defaultExecute = createDefaultWidgetExecuteMethod('weather');
 
     expect(electronAPIMock.ensureDir).toHaveBeenCalledWith('/Users/test/.tibis/widgets/weather');
     expect(writeFileCall?.[0]).toBe('/Users/test/.tibis/widgets/weather/widget.json');
@@ -397,7 +397,7 @@ describe('WidgetSettingsPage', (): void => {
     const writeFileCall = nativeMock.writeFile.mock.calls[0];
     const savedContent = JSON.parse(writeFileCall?.[1] ?? '{}') as Record<string, unknown>;
     const savedElements = savedContent.elements as unknown[];
-    const defaultExecute = createDefaultWidgetExecuteMethod();
+    const defaultExecute = createDefaultWidgetExecuteMethod('coffee');
 
     expect(electronAPIMock.ensureDir).toHaveBeenCalledWith('/Users/test/.tibis/widgets/coffee');
     expect(savedContent.name).toBe('咖啡推荐');
