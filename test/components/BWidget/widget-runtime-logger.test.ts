@@ -2,10 +2,10 @@
  * @file widget-runtime-logger.test.ts
  * @description BWidget 运行态 $logger 桥接与日志参数序列化测试。
  */
-import type { WidgetRuntimeDataPatch, WidgetRuntimeState } from 'types/widget';
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { finishWidgetRuntime, initWidgetMountState } from '@/components/BWidget/utils/widgetRuntime';
+import { finishWidgetRuntime, initWidgetMountState, type WidgetRuntimeState } from '@/components/BWidget/utils/widgetRuntime';
+import type { WidgetRuntimeDataPatch } from '@/components/BWidget/utils/widgetRuntime/dataPatch';
 import { formatWidgetLogArgs } from '@/components/BWidget/utils/widgetRuntime/logger';
 
 /**
@@ -20,8 +20,6 @@ function createLoggerRuntimeState(code: string, data: Record<string, unknown> = 
       ...createDefaultWidgetData(),
       execute: { enabled: true, code }
     },
-    status: 'created',
-    lifecycle: {},
     renderContext: {
       input: {},
       data
@@ -232,10 +230,9 @@ describe('widgetRuntime $logger bridge', (): void => {
       ])
     );
 
-    const result = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
+    await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
     const payloadArg = loggerCalls[0]?.args[0] as Record<string, unknown> | undefined;
 
-    expect(result.status).toBe('mounted');
     expect(payloadArg?.label).toBe('loop');
     expect(payloadArg?.self).toBe(payloadArg);
     expect(loggerCalls[0]?.args[1]).toBe(42n);
@@ -254,9 +251,8 @@ describe('widgetRuntime $logger bridge', (): void => {
       ])
     );
 
-    const result = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
+    await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
 
-    expect(result.status).toBe('mounted');
     expect(loggerCalls).toEqual([{ level: 'info', args: ['movies', [{ title: '流浪地球' }]] }]);
   });
 
@@ -273,9 +269,8 @@ describe('widgetRuntime $logger bridge', (): void => {
       ])
     );
 
-    const result = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
+    await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
 
-    expect(result.status).toBe('mounted');
     expect(loggerCalls).toEqual([{ level: 'info', args: [new Map([['movies', [{ title: '流浪地球' }]]]), new Set([[{ title: '流浪地球' }]])] }]);
   });
 
@@ -296,11 +291,10 @@ describe('widgetRuntime $logger bridge', (): void => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(createLoggerWidgetCode(['  mounted() {', '    throw new Error("script boom")', '  }']));
 
-    const result = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
+    await expect(initWidgetMountState(state, createCaptureOptions([], loggerCalls))).rejects.toThrow('script boom');
 
-    // 脚本抛错 → 状态变 failure，$logger 未触发
+    // 脚本抛错时不触发 $logger。
     expect(loggerCalls).toHaveLength(0);
-    expect(result.status).toBe('failure');
   });
 
   it('does not invoke onLogger when script is disabled', async (): Promise<void> => {
@@ -369,9 +363,8 @@ describe('widgetRuntime console bridge', (): void => {
     const consoleCalls: WidgetConsoleCall[] = [];
     const state = createLoggerRuntimeState(createLoggerWidgetCode(['  mounted() {', '    console.log(undefined, 42n)', '  }']));
 
-    const result = await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
+    await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
 
-    expect(result.status).toBe('mounted');
     expect(consoleCalls).toEqual([{ level: 'log', args: [undefined, 42n] }]);
   });
 
@@ -392,9 +385,8 @@ describe('widgetRuntime console bridge', (): void => {
       ])
     );
 
-    const result = await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
+    await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
 
-    expect(result.status).toBe('mounted');
     expect(consoleCalls).toEqual([{ level: 'log', args: ['movies', [{ title: '流浪地球' }]] }]);
   });
 
@@ -411,9 +403,8 @@ describe('widgetRuntime console bridge', (): void => {
       ])
     );
 
-    const result = await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
+    await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
 
-    expect(result.status).toBe('mounted');
     expect(consoleCalls).toEqual([{ level: 'log', args: [new Map([['movies', [{ title: '流浪地球' }]]]), new Set([[{ title: '流浪地球' }]])] }]);
   });
 

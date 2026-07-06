@@ -4,14 +4,20 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart, ChatSession } from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatMessageWidgetResultPart, ChatSession } from 'types/chat';
 import type { ChatRuntimeContinueInput } from 'types/chat-runtime';
+import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent, h, type PropType } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BChat from '@/components/BChat/index.vue';
-import { createMessageUpdateSubmitAction, createRuntimeUserMessageSubmitAction, createUserChoiceSubmitAction } from '@/components/BChat/utils/submitAction';
+import {
+  type BChatAdaptedUserMessageSubmitInput,
+  type BChatSubmitAction,
+  createToolPartStateUpdateSubmitAction,
+  createUserChoiceSubmitAction
+} from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import type { FileMentionOption } from '@/components/BText/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
@@ -29,6 +35,22 @@ const chatStoreMock = vi.hoisted(() => ({
   getSessionMessages: vi.fn<(sessionId: string) => Promise<Message[]>>(),
   getSessions: vi.fn()
 }));
+
+/**
+ * open_widget 工具片段测试用展示数据来源。
+ */
+interface TestWidgetDisplayFixture {
+  /** 片段唯一标识 */
+  id: string;
+  /** 小组件会话 ID */
+  sessionId: string;
+  /** 小组件稳定 ID */
+  widgetId: string;
+  /** 小组件快照值 */
+  value: WidgetData;
+  /** 小组件渲染上下文 */
+  renderContext: WidgetRenderContext;
+}
 
 const promptEditorMockState = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -415,19 +437,28 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
 }
 
 /**
+ * 创建测试用运行态用户消息提交动作。
+ * @param input - 已适配的用户消息提交输入
+ * @returns 统一提交动作
+ */
+function createRuntimeUserMessageTestSubmitAction(input: BChatAdaptedUserMessageSubmitInput): BChatSubmitAction {
+  return {
+    async run(context): Promise<void> {
+      await context.sendAdaptedUserMessage(input);
+    }
+  };
+}
+
+/**
  * 创建测试用 Widget 消息片段。
- * @param status - 小组件状态
  * @param temperature - 状态温度值
  * @returns 小组件消息片段
  */
-function createWidgetPart(status: ChatMessageWidgetPart['status'], temperature?: number): ChatMessageWidgetPart {
+function createWidgetPart(temperature?: number): TestWidgetDisplayFixture {
   return {
     id: 'widget-part-weather',
-    type: 'widget',
     sessionId: 'widget-session-1',
     widgetId: 'weather',
-    status,
-    lifecycle: status === 'mounted' ? { mountedAt: '2026-07-01T00:00:00.000Z' } : {},
     value: {
       ...createDefaultWidgetData(),
       name: 'weather',
@@ -454,16 +485,15 @@ function createWidgetPart(status: ChatMessageWidgetPart['status'], temperature?:
 /**
  * 从小组件视图片段创建 open_widget 工具片段。
  * @param widget - 小组件视图片段
- * @returns 带内嵌小组件运行态的工具片段
+ * @returns 带工具运行数据的工具片段
  */
-function createOpenWidgetToolPartFromWidgetPart(widget: ChatMessageWidgetPart): ChatMessageToolPart {
+function createOpenWidgetToolPartFromWidgetPart(widget: TestWidgetDisplayFixture): ChatMessageToolPart {
   return {
     id: widget.id,
     type: 'tool',
     toolCallId: `tool-call-${widget.id}`,
     toolName: 'open_widget',
     status: 'done',
-    presentation: 'widget',
     input: {
       id: widget.widgetId
     },
@@ -478,13 +508,8 @@ function createOpenWidgetToolPartFromWidgetPart(widget: ChatMessageWidgetPart): 
         renderContext: widget.renderContext
       }
     },
-    widget: {
-      sessionId: widget.sessionId,
-      widgetId: widget.widgetId,
-      status: widget.status,
-      lifecycle: widget.lifecycle,
-      value: widget.value,
-      renderContext: widget.renderContext
+    state: {
+      renderData: widget.renderContext.data
     }
   };
 }
@@ -752,10 +777,6 @@ describe('BChat sessionId runtime', (): void => {
 
     expect(chatStoreMock.createSession).toHaveBeenCalledWith('assistant', { title: '查天气 上海' });
     expect(visibleMessages).toEqual([]);
-    expect(chatStoreMock.setSessionMessages).not.toHaveBeenCalledWith(
-      'session-created',
-      expect.arrayContaining([expect.objectContaining({ role: 'assistant', parts: [expect.objectContaining({ type: 'widget' })] })])
-    );
     expect(getAvailableServiceConfigMock).toHaveBeenCalled();
     expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-created', content: '查天气 上海' }));
   });
@@ -1029,7 +1050,7 @@ describe('BChat sessionId runtime', (): void => {
 
     wrapper.findComponent(ConversationViewStub).vm.$emit(
       'submit',
-      createRuntimeUserMessageSubmitAction({
+      createRuntimeUserMessageTestSubmitAction({
         userMessage,
         parts: [resultPart],
         errorMessage: '提交小组件结果失败'
@@ -1049,9 +1070,9 @@ describe('BChat sessionId runtime', (): void => {
   });
 
   it('persists message update submit actions against the latest visible message', async (): Promise<void> => {
-    const firstWidgetPart = createWidgetPart('created');
-    const secondWidgetPart: ChatMessageWidgetPart = {
-      ...createWidgetPart('created'),
+    const firstWidgetPart = createWidgetPart();
+    const secondWidgetPart: TestWidgetDisplayFixture = {
+      ...createWidgetPart(),
       id: 'widget-part-forecast',
       sessionId: 'widget-session-2',
       widgetId: 'forecast'
@@ -1063,38 +1084,51 @@ describe('BChat sessionId runtime', (): void => {
       content: '',
       parts: [firstToolPart, secondToolPart]
     });
-    const firstMountedWidgetPart = createWidgetPart('mounted', 31);
-    const secondMountedWidgetPart: ChatMessageWidgetPart = {
-      ...createWidgetPart('mounted', 32),
+    const firstMountedWidgetPart = createWidgetPart(31);
+    const secondMountedWidgetPart: TestWidgetDisplayFixture = {
+      ...createWidgetPart(32),
       id: 'widget-part-forecast',
       sessionId: 'widget-session-2',
       widgetId: 'forecast'
     };
-    const firstMountedToolPart = createOpenWidgetToolPartFromWidgetPart(firstMountedWidgetPart);
-    const secondMountedToolPart = createOpenWidgetToolPartFromWidgetPart(secondMountedWidgetPart);
     chatStoreMock.getSessionMessages.mockResolvedValueOnce([assistantMessage]).mockResolvedValueOnce([]);
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
     wrapper.findComponent(ConversationViewStub).vm.$emit(
       'submit',
-      createMessageUpdateSubmitAction('assistant-widget', (currentMessage) => ({
-        ...currentMessage,
-        parts: currentMessage.parts.map((part, index) => (index === 0 ? firstMountedToolPart : part))
+      createToolPartStateUpdateSubmitAction('assistant-widget', firstToolPart.id, (state) => ({
+        ...state,
+        renderData: firstMountedWidgetPart.renderContext.data
       }))
     );
     wrapper.findComponent(ConversationViewStub).vm.$emit(
       'submit',
-      createMessageUpdateSubmitAction('assistant-widget', (currentMessage) => ({
-        ...currentMessage,
-        parts: currentMessage.parts.map((part, index) => (index === 1 ? secondMountedToolPart : part))
+      createToolPartStateUpdateSubmitAction('assistant-widget', secondToolPart.id, (state) => ({
+        ...state,
+        renderData: secondMountedWidgetPart.renderContext.data
       }))
     );
     await flushPromises();
 
     const nextAssistantMessage: Message = {
       ...assistantMessage,
-      parts: [firstMountedToolPart, secondMountedToolPart]
+      parts: [
+        {
+          ...firstToolPart,
+          state: {
+            ...firstToolPart.state,
+            renderData: firstMountedWidgetPart.renderContext.data
+          }
+        },
+        {
+          ...secondToolPart,
+          state: {
+            ...secondToolPart.state,
+            renderData: secondMountedWidgetPart.renderContext.data
+          }
+        }
+      ]
     };
     const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
     expect(visibleMessages[0]).toEqual(nextAssistantMessage);

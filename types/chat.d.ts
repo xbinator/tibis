@@ -4,7 +4,7 @@
  */
 import type { AIToolExecutionResult, AIUsage } from './ai';
 import type { ChatMessageCompactionPart, ChatMessageRuntimeMeta } from './chat-runtime';
-import type { WidgetData, WidgetRenderContext, WidgetSubmitPayload } from './widget';
+import type { WidgetRenderContext, WidgetSubmitPayload } from './widget';
 
 /**
  * 聊天会话类型
@@ -194,42 +194,12 @@ export interface ChatMessageShellOutputChunk {
 }
 
 /**
- * 聊天消息小组件片段状态。
+ * 聊天工具片段运行数据。
  */
-export type ChatMessageWidgetStatus = 'created' | 'mounted' | 'finished' | 'failure' | 'cancelled';
-
-/**
- * 聊天消息小组件运行态生命周期记录。
- */
-export interface ChatMessageWidgetLifecycle {
-  /** mounted 执行完成时间 */
-  mountedAt?: string;
-  /** unmounted 执行完成时间 */
-  unmountedAt?: string;
+export interface ChatMessageToolPartState {
+  /** open_widget 运行后写回的渲染数据；静态输入和值仍来自 tool result */
+  renderData?: WidgetRenderContext['data'];
 }
-
-/**
- * 聊天消息小组件运行态。
- */
-export interface ChatMessageWidgetRuntime {
-  /** 小组件会话 ID，用于后续执行闭环关联；独立运行态使用所在消息 ID 表示 */
-  sessionId: string;
-  /** 小组件稳定 ID */
-  widgetId: string;
-  /** 小组件执行或展示状态 */
-  status: ChatMessageWidgetStatus;
-  /** 小组件运行态生命周期记录 */
-  lifecycle: ChatMessageWidgetLifecycle;
-  /** 小组件快照值 */
-  value: WidgetData;
-  /** 运行态渲染上下文 */
-  renderContext: WidgetRenderContext;
-}
-
-/**
- * 聊天工具片段展示类型。
- */
-export type ChatMessageToolPresentation = 'widget';
 
 /**
  * 聊天消息统一工具片段。
@@ -250,21 +220,10 @@ export interface ChatMessageToolPart extends ChatMessagePartBase {
   inputText?: string;
   /** 工具执行结果，仅 status === 'done' 时存在 */
   result?: AIToolExecutionResult;
-  /** 工具结果在聊天 UI 中的专用展示类型，由 ChatRuntime 在生成 part 时判定 */
-  presentation?: ChatMessageToolPresentation;
   /** Shell 命令实时输出缓冲，仅 run_shell_command 使用 */
   shellOutput?: ChatMessageShellOutputChunk[];
-  /** open_widget 工具对应的小组件运行态，仅 UI 运行态使用，不进入模型 tool result */
-  widget?: ChatMessageWidgetRuntime;
-}
-
-/**
- * 聊天消息小组件渲染片段。
- * 仅作为 open_widget 工具片段派生出的 UI 运行态视图模型，不作为 Message.parts 中的独立消息结构。
- */
-export interface ChatMessageWidgetPart extends ChatMessagePartBase, ChatMessageWidgetRuntime {
-  /** 片段类型 */
-  type: 'widget';
+  /** 工具运行后产生的 UI 数据，不进入模型 tool result */
+  state?: ChatMessageToolPartState;
 }
 
 /**

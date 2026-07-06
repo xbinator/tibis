@@ -2,8 +2,40 @@
  * @file widgetRuntime/dataPatch.ts
  * @description BWidget 运行态 data patch 应用工具。
  */
-import type { WidgetRuntimeDataPatch, WidgetRuntimeDataPathSegment, WidgetRuntimeState } from 'types/widget';
 import { isPlainObject } from 'lodash-es';
+
+/** Widget 运行态 data patch 路径片段。 */
+export type WidgetRuntimeDataPathSegment = string | number;
+
+/**
+ * Widget 运行态 data patch。
+ */
+export type WidgetRuntimeDataPatch =
+  | {
+      /** 设置字段值 */
+      op: 'set';
+      /** 从 renderContext.data 根开始的路径 */
+      path: WidgetRuntimeDataPathSegment[];
+      /** 写入值 */
+      value: unknown;
+    }
+  | {
+      /** 删除字段 */
+      op: 'delete';
+      /** 从 renderContext.data 根开始的路径 */
+      path: WidgetRuntimeDataPathSegment[];
+    };
+
+/**
+ * 可应用运行态 data patch 的状态。
+ */
+interface WidgetRuntimeDataPatchableState {
+  /** 运行态渲染上下文 */
+  renderContext: {
+    /** 运行态数据 */
+    data: Record<string, unknown>;
+  };
+}
 
 /**
  * 判断值是否为普通对象记录。
@@ -195,7 +227,7 @@ export function applyWidgetRuntimeDataPatches(data: Record<string, unknown>, pat
  * @param patches - data patch 列表
  * @returns 应用后的运行态状态
  */
-export function applyWidgetRuntimeDataPatchesToState(state: WidgetRuntimeState, patches: WidgetRuntimeDataPatch[]): WidgetRuntimeState {
+export function applyWidgetRuntimeDataPatchesToState<TState extends WidgetRuntimeDataPatchableState>(state: TState, patches: WidgetRuntimeDataPatch[]): TState {
   const nextData = applyWidgetRuntimeDataPatches(state.renderContext.data, patches);
   if (nextData === state.renderContext.data) return state;
 
@@ -205,7 +237,7 @@ export function applyWidgetRuntimeDataPatchesToState(state: WidgetRuntimeState, 
       ...state.renderContext,
       data: nextData
     }
-  };
+  } as TState;
 }
 
 /**

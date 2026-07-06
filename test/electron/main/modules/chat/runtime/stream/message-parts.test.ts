@@ -60,21 +60,16 @@ describe('runtime stream message parts', (): void => {
       toolCallId: 'tool-call-widget',
       toolName: 'open_widget',
       status: 'done',
-      presentation: 'widget',
-      widget: {
-        sessionId: 'widget-weather-tool-call-widget',
-        widgetId: 'weather',
-        status: 'created',
-        lifecycle: {},
-        value: widgetValue,
-        renderContext: {
-          input: {
-            city: '上海'
-          },
-          data: {}
-        }
-      }
+      result: expect.objectContaining({
+        data: expect.objectContaining({
+          kind: 'widget_display',
+          value: widgetValue
+        })
+      })
     });
+    expect(message.parts[0]).not.toHaveProperty('presentation');
+    expect(message.parts[0]).not.toHaveProperty('widget');
+    expect(message.parts[0]).not.toHaveProperty('state');
     expect(message.parts).toHaveLength(1);
   });
 });

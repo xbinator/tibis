@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import type { RequestInput, RequestResponse } from 'types/request';
-import type { WidgetData, WidgetRenderContext, WidgetRuntimeChange } from 'types/widget';
+import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent, nextTick } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { cloneDeep } from 'lodash-es';
@@ -14,6 +14,7 @@ import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
+import type { WidgetRuntimeChange } from '@/components/BWidget/utils/widgetRuntime';
 
 /** ResizeObserver 回调。 */
 type ResizeObserverCallbackLike = (entries: ResizeObserverEntry[]) => void;
@@ -582,7 +583,7 @@ describe('BWidgetRuntime', (): void => {
     await wrapper.setProps({
       renderContext: createRenderContext('杭州', 31)
     });
-    await nextTick();
+    await flushWidgetRuntime();
 
     expect(dataItem).toEqual(originalWidgetData);
     wrapper.unmount();
@@ -630,9 +631,7 @@ describe('BWidgetRuntime', (): void => {
           },
           data: {}
         },
-        runtimeEnabled: true,
-        status: 'created',
-        lifecycle: {}
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
@@ -641,7 +640,6 @@ describe('BWidgetRuntime', (): void => {
 
     expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
       reason: 'mount',
-      status: 'mounted',
       renderContext: {
         data: {
           weather: {
@@ -662,9 +660,7 @@ describe('BWidgetRuntime', (): void => {
           input: {},
           data: {}
         },
-        runtimeEnabled: true,
-        status: 'created',
-        lifecycle: {}
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
@@ -674,7 +670,6 @@ describe('BWidgetRuntime', (): void => {
     expect(findNodeById(wrapper, 'text-1').text()).toBe('晴天');
     expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
       reason: 'mount',
-      status: 'mounted',
       renderContext: {
         data: {
           message: '晴天'
@@ -695,19 +690,14 @@ describe('BWidgetRuntime', (): void => {
             message: '旧数据'
           }
         },
-        runtimeEnabled: true,
-        status: 'created',
-        lifecycle: {}
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
 
     await flushWidgetRuntime();
 
-    expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
-      reason: 'mount',
-      status: 'failure'
-    });
+    expect(wrapper.emitted('change')).toBeUndefined();
     expect(findNodeById(wrapper, 'text-1').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -722,11 +712,7 @@ describe('BWidgetRuntime', (): void => {
             message: '已经展示的数据'
           }
         },
-        runtimeEnabled: true,
-        status: 'cancelled',
-        lifecycle: {
-          mountedAt: '2026-07-06T00:00:00.000Z'
-        }
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
@@ -750,9 +736,7 @@ describe('BWidgetRuntime', (): void => {
           },
           data: {}
         },
-        runtimeEnabled: true,
-        status: 'created',
-        lifecycle: {}
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
@@ -760,7 +744,6 @@ describe('BWidgetRuntime', (): void => {
     await flushWidgetRuntime();
     expect(firstWrapper.emitted('change')?.[0]?.[0]).toMatchObject({
       reason: 'mount',
-      status: 'mounted',
       renderContext: {
         data: {
           message: '第一版'
@@ -778,9 +761,7 @@ describe('BWidgetRuntime', (): void => {
           },
           data: {}
         },
-        runtimeEnabled: true,
-        status: 'created',
-        lifecycle: {}
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
@@ -789,7 +770,6 @@ describe('BWidgetRuntime', (): void => {
 
     expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({
       reason: 'mount',
-      status: 'mounted',
       renderContext: {
         data: {
           message: '第二版'
@@ -826,9 +806,7 @@ describe('BWidgetRuntime', (): void => {
         input: {},
         data: {}
       },
-      runtimeEnabled: true,
-      status: 'created' as const,
-      lifecycle: {}
+      runtimeEnabled: true
     };
     stubElectronRequest(request);
 
@@ -838,7 +816,7 @@ describe('BWidgetRuntime', (): void => {
     });
     await flushWidgetRuntime();
 
-    expect(firstWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount', status: 'mounted' });
+    expect(firstWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount' });
     firstWrapper.unmount();
 
     const secondWrapper = mount(BWidgetRuntime, {
@@ -848,8 +826,61 @@ describe('BWidgetRuntime', (): void => {
     await flushWidgetRuntime();
 
     expect(request).toHaveBeenCalledTimes(2);
-    expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount', status: 'mounted' });
+    expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount' });
     secondWrapper.unmount();
+  });
+
+  it('does not rerun mounted when props fall back to created on the same runtime instance', async (): Promise<void> => {
+    const request = vi.fn<() => Promise<RequestResponse>>(
+      async (): Promise<RequestResponse> => ({
+        status: 200,
+        ok: true,
+        url: 'https://api.example.com/weather',
+        headers: {},
+        data: {}
+      })
+    );
+    const dataItem = createRuntimeMessageWidgetData(
+      [
+        'export default class Weather extends Widget {',
+        '  async mounted() {',
+        "    await this.$http.get('https://api.example.com/weather')",
+        "    this.message = '加载完成'",
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const initialRenderContext: WidgetRenderContext = {
+      input: {},
+      data: {}
+    };
+    stubElectronRequest(request);
+
+    const wrapper: VueWrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: initialRenderContext,
+        runtimeEnabled: true
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+
+    const firstChange = wrapper.emitted('change')?.[0]?.[0] as WidgetRuntimeChange;
+    await wrapper.setProps({
+      renderContext: firstChange.renderContext
+    });
+    await flushWidgetRuntime();
+
+    await wrapper.setProps({
+      renderContext: initialRenderContext
+    });
+    await flushWidgetRuntime();
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('change')).toHaveLength(1);
+    wrapper.unmount();
   });
 
   it('remeasures viewport width after async mounted data renders loop content', async (): Promise<void> => {
@@ -884,9 +915,7 @@ describe('BWidgetRuntime', (): void => {
           input: {},
           data: {}
         },
-        runtimeEnabled: true,
-        status: 'created',
-        lifecycle: {}
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
@@ -899,7 +928,7 @@ describe('BWidgetRuntime', (): void => {
       });
 
     await flushWidgetRuntime();
-    await nextTick();
+    await flushWidgetRuntime();
 
     const stageViewport = wrapper.find('.b-widget-runtime__stage-viewport');
     const heightStyle = stageViewport.element.getAttribute('style')?.match(/height:\s*([^;]+)/)?.[1] ?? '0';
@@ -933,9 +962,7 @@ describe('BWidgetRuntime', (): void => {
           input: {},
           data: {}
         },
-        runtimeEnabled: true,
-        status: 'created',
-        lifecycle: {}
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
@@ -952,7 +979,6 @@ describe('BWidgetRuntime', (): void => {
 
     expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
       reason: 'mount',
-      status: 'mounted',
       renderContext: {
         data: {
           message: '加载完成'
@@ -986,9 +1012,7 @@ describe('BWidgetRuntime', (): void => {
         input: {},
         data: {}
       },
-      runtimeEnabled: true,
-      status: 'created' as const,
-      lifecycle: {}
+      runtimeEnabled: true
     };
     stubElectronRequest(request);
 
@@ -1014,8 +1038,8 @@ describe('BWidgetRuntime', (): void => {
     requestDeferreds[1].resolve({ status: 200, ok: true, url: 'https://api.example.com/movies', headers: {}, data: {} });
     await flushWidgetRuntime();
 
-    expect(firstWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount', status: 'mounted' });
-    expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount', status: 'mounted' });
+    expect(firstWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount' });
+    expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount' });
     firstWrapper.unmount();
     secondWrapper.unmount();
   });
@@ -1041,11 +1065,7 @@ describe('BWidgetRuntime', (): void => {
           },
           data: {}
         },
-        runtimeEnabled: true,
-        status: 'mounted',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z'
-        }
+        runtimeEnabled: true
       },
       attachTo: document.body
     });
@@ -1073,11 +1093,7 @@ describe('BWidgetRuntime', (): void => {
             count: 0
           }
         },
-        runtimeEnabled: true,
-        status: 'mounted',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z'
-        }
+        runtimeEnabled: true
       },
       global: {
         stubs: {
@@ -1096,7 +1112,6 @@ describe('BWidgetRuntime', (): void => {
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({
       reason: 'interaction',
-      status: 'finished',
       renderContext: {
         data: {
           count: 1

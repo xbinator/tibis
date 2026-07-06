@@ -838,15 +838,6 @@ async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promi
 }
 
 /**
- * 读取一条可见消息。
- * @param messageId - 待读取消息 ID
- * @returns 当前消息；不存在时返回 null
- */
-function getVisibleMessage(messageId: string): Message | null {
-  return messages.value.find((message) => message.id === messageId) ?? null;
-}
-
-/**
  * 更新一条可见消息并持久化。
  * @param messageId - 待更新消息 ID
  * @param updater - 基于当前消息生成下一版消息的函数
@@ -867,7 +858,6 @@ const chatSubmitter = useChatSubmitter({
   resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig,
   submitUserChoice: chatRuntime.submitUserChoice,
   sendRuntimeUserMessage,
-  getMessage: getVisibleMessage,
   updateMessage: updateVisibleMessage
 });
 

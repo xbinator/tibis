@@ -4,7 +4,7 @@
  */
 import type { ChatMessageToolPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { convert } from '@/components/BChat/utils/messageHelper';
+import { convert, isWidgetToolPart } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -42,6 +42,24 @@ function createOpenWidgetToolPart(): ChatMessageToolPart {
 }
 
 describe('messageHelper widget result', (): void => {
+  it('detects open_widget tool parts with widget display results', (): void => {
+    const widgetToolPart = createOpenWidgetToolPart();
+    const plainToolPart: ChatMessageToolPart = {
+      ...createOpenWidgetToolPart(),
+      toolName: 'read_file',
+      result: {
+        toolName: 'read_file',
+        status: 'success',
+        data: {
+          content: 'ok'
+        }
+      }
+    };
+
+    expect(isWidgetToolPart(widgetToolPart)).toBe(true);
+    expect(isWidgetToolPart(plainToolPart)).toBe(false);
+  });
+
   it('keeps widget snapshots out of model-visible tool results', (): void => {
     const assistantMessage: Message = {
       id: 'assistant-widget',

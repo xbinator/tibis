@@ -3,13 +3,18 @@
  * @description BChat 消息级交互统一提交动作类型。
  */
 import type { Message } from './types';
-import type { AIUserChoiceAnswerData } from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessageToolPartState } from 'types/chat';
 import type { ChatRuntimeUserInputPart } from 'types/chat-runtime';
 
 /**
  * BChat 可见消息更新函数。
  */
 export type BChatMessageUpdater = (message: Message) => Message;
+
+/**
+ * BChat 工具片段 state 更新函数。
+ */
+export type BChatToolPartStateUpdater = (state: ChatMessageToolPartState | undefined) => ChatMessageToolPartState | undefined;
 
 /**
  * 已由底层组件适配好的用户消息提交输入。
@@ -30,12 +35,6 @@ export interface BChatAdaptedUserMessageSubmitInput {
  */
 export interface BChatSubmitContext {
   /**
-   * 读取一条当前可见消息。
-   * @param messageId - 待读取消息 ID
-   * @returns 当前消息；不存在时返回 null
-   */
-  getMessage: (messageId: string) => Message | null;
-  /**
    * 续跑等待中的助手任务。
    * @param answer - 用户选择答案
    */
@@ -46,11 +45,12 @@ export interface BChatSubmitContext {
    */
   sendAdaptedUserMessage: (input: BChatAdaptedUserMessageSubmitInput) => Promise<void>;
   /**
-   * 更新一条已经存在的可见消息。
+   * 更新消息内指定工具片段的 UI state。
    * @param messageId - 待更新消息 ID
-   * @param updater - 基于当前消息生成下一版消息的函数
+   * @param partId - 待更新工具片段 ID
+   * @param updater - 基于当前工具 state 生成下一版 state 的函数
    */
-  updateMessage: (messageId: string, updater: BChatMessageUpdater) => Promise<void>;
+  updateToolPartState: (messageId: string, partId: string, updater: BChatToolPartStateUpdater) => Promise<void>;
 }
 
 /**
@@ -78,28 +78,16 @@ export function createUserChoiceSubmitAction(answer: AIUserChoiceAnswerData): BC
 }
 
 /**
- * 创建运行态用户消息提交动作。
- * @param input - 用户消息提交输入
- * @returns 统一提交动作
- */
-export function createRuntimeUserMessageSubmitAction(input: BChatAdaptedUserMessageSubmitInput): BChatSubmitAction {
-  return {
-    async run(context: BChatSubmitContext): Promise<void> {
-      await context.sendAdaptedUserMessage(input);
-    }
-  };
-}
-
-/**
- * 创建消息更新提交动作。
+ * 创建工具片段 state 更新提交动作。
  * @param messageId - 待更新消息 ID
- * @param updater - 基于当前消息生成下一版消息的函数
+ * @param partId - 待更新工具片段 ID
+ * @param updater - 基于当前工具 state 生成下一版 state 的函数
  * @returns 统一提交动作
  */
-export function createMessageUpdateSubmitAction(messageId: string, updater: BChatMessageUpdater): BChatSubmitAction {
+export function createToolPartStateUpdateSubmitAction(messageId: string, partId: string, updater: BChatToolPartStateUpdater): BChatSubmitAction {
   return {
     async run(context: BChatSubmitContext): Promise<void> {
-      await context.updateMessage(messageId, updater);
+      await context.updateToolPartState(messageId, partId, updater);
     }
   };
 }

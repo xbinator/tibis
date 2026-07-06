@@ -4,13 +4,12 @@
  * @vitest-environment jsdom
  */
 import type { AIMCPRequestConfig, AIToolContext, AIToolExecutor } from 'types/ai';
-import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart, ChatMessageWidgetRuntime } from 'types/chat';
+import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart, ChatMessageToolPartState } from 'types/chat';
 import { effectScope, reactive, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatRuntime } from '@/components/BChat/hooks/useChatRuntime';
 import type { Message } from '@/components/BChat/utils/types';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
 
@@ -96,18 +95,17 @@ function createMessage(overrides: Partial<ChatMessageRecord>): ChatMessageRecord
 
 /**
  * 创建 open_widget 工具片段。
- * @param widget - renderer 本地小组件运行态
+ * @param state - renderer 本地工具运行数据
  * @param id - 工具片段 ID
  * @returns open_widget 工具片段
  */
-function createOpenWidgetToolPart(widget?: ChatMessageWidgetRuntime, id = 'tool-part-open-widget'): ChatMessageToolPart {
+function createOpenWidgetToolPart(state?: ChatMessageToolPartState, id = 'tool-part-open-widget'): ChatMessageToolPart {
   return {
     id,
     type: 'tool',
     toolCallId: 'tool-call-widget',
     toolName: 'open_widget',
     status: 'done',
-    presentation: 'widget',
     input: {
       id: 'weather'
     },
@@ -127,7 +125,7 @@ function createOpenWidgetToolPart(widget?: ChatMessageWidgetRuntime, id = 'tool-
         }
       }
     },
-    ...(widget ? { widget } : {})
+    ...(state ? { state } : {})
   };
 }
 
@@ -256,23 +254,11 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
-  it('preserves local open_widget runtime state when streaming runtime messages replace parts', (): void => {
-    const widgetRuntime: ChatMessageWidgetRuntime = {
-      sessionId: 'widget-weather-tool-call-widget',
-      widgetId: 'weather',
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-06T00:00:00.000Z'
-      },
-      value: createDefaultWidgetData(),
-      renderContext: {
-        input: {
-          city: '上海'
-        },
-        data: {
-          weather: {
-            temperature: 32
-          }
+  it('preserves local open_widget tool state when streaming runtime messages replace parts', (): void => {
+    const toolState: ChatMessageToolPartState = {
+      renderData: {
+        weather: {
+          temperature: 32
         }
       }
     };
@@ -281,7 +267,7 @@ describe('useChatRuntime', (): void => {
         id: 'assistant-1',
         runtimeId: 'runtime-1',
         content: '',
-        parts: [createOpenWidgetToolPart(widgetRuntime)],
+        parts: [createOpenWidgetToolPart(toolState)],
         loading: true,
         finished: false
       }) as Message
@@ -317,30 +303,18 @@ describe('useChatRuntime', (): void => {
         id: 'tool-part-open-widget',
         type: 'tool',
         toolCallId: 'tool-call-widget',
-        widget: widgetRuntime
+        state: toolState
       });
     });
 
     scope.stop();
   });
 
-  it('does not preserve local open_widget runtime state when the incoming payload changes', (): void => {
-    const widgetRuntime: ChatMessageWidgetRuntime = {
-      sessionId: 'widget-weather-tool-call-widget',
-      widgetId: 'weather',
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-06T00:00:00.000Z'
-      },
-      value: createDefaultWidgetData(),
-      renderContext: {
-        input: {
-          city: '上海'
-        },
-        data: {
-          weather: {
-            temperature: 32
-          }
+  it('preserves local open_widget tool state for the same tool call without comparing payload snapshots', (): void => {
+    const toolState: ChatMessageToolPartState = {
+      renderData: {
+        weather: {
+          temperature: 32
         }
       }
     };
@@ -349,7 +323,7 @@ describe('useChatRuntime', (): void => {
         id: 'assistant-1',
         runtimeId: 'runtime-1',
         content: '',
-        parts: [createOpenWidgetToolPart(widgetRuntime)],
+        parts: [createOpenWidgetToolPart(toolState)],
         loading: true,
         finished: false
       }) as Message
@@ -397,11 +371,11 @@ describe('useChatRuntime', (): void => {
       });
 
       expect(messages.value[0].parts[0]).toMatchObject({
-        id: 'tool-part-open-widget-stream',
+        id: 'tool-part-open-widget',
         type: 'tool',
-        toolCallId: 'tool-call-widget'
+        toolCallId: 'tool-call-widget',
+        state: toolState
       });
-      expect((messages.value[0].parts[0] as ChatMessageToolPart).widget).toBeUndefined();
     });
 
     scope.stop();

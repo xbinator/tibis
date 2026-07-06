@@ -13,10 +13,10 @@ import type {
   ChatMessageRole,
   ChatMessageShellOutputChunk,
   ChatMessageToolPart,
-  ChatMessageWidgetRuntime,
   ChatMessageWidgetResultPart
 } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
+import type { WidgetDisplayPayload } from 'types/widget';
 import dayjs from 'dayjs';
 import { nanoid } from 'nanoid';
 import { OPEN_WIDGET_TOOL_NAME } from '@/ai/tools/builtin/WidgetTool';
@@ -70,6 +70,9 @@ type InterruptSourceMessage = Pick<Message, 'agentId' | 'runtimeId' | 'parentRun
 /** 工具结果类型 */
 export type ToolResult = NonNullable<ChatMessageToolPart['result']>;
 
+/** 可渲染的 open_widget 工具片段。 */
+export type WidgetToolPart = ChatMessageToolPart & { result: ToolResult & { status: 'success'; data: WidgetDisplayPayload } };
+
 /** 最近压缩边界。 */
 type LatestCompressionBoundary =
   | {
@@ -119,12 +122,12 @@ function toJsonValue(value: unknown): JSONValue {
 }
 
 /**
- * 判断小组件运行态是否仍未完成。
- * @param widget - 小组件运行态
- * @returns 是否需要在中断恢复时标记为取消
+ * 判断工具片段是否为可渲染的小组件运行态。
+ * @param part - 消息片段
+ * @returns 是否为 open_widget 小组件片段
  */
-function isUnfinishedWidgetRuntime(widget: ChatMessageWidgetRuntime): boolean {
-  return widget.status !== 'finished' && widget.status !== 'failure' && widget.status !== 'cancelled';
+export function isWidgetToolPart(part: ChatMessagePart): part is WidgetToolPart {
+  return part.type === 'tool' && part.toolName === OPEN_WIDGET_TOOL_NAME && part.result?.status === 'success' && isWidgetDisplayPayload(part.result.data);
 }
 
 /**
@@ -183,10 +186,6 @@ export function finalizeInterruptedPartsAsCancelled(message: Message): void {
         error: { code: 'USER_CANCELLED', message: '用户中止了操作' }
       } satisfies AIToolExecutionCancelledResult;
       delete part.inputText;
-    }
-
-    if (part.type === 'tool' && part.widget && isUnfinishedWidgetRuntime(part.widget)) {
-      part.widget.status = 'cancelled';
     }
   }
 }

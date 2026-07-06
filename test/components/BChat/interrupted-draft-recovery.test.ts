@@ -6,7 +6,6 @@ import type { ChatMessageToolPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
 import { recoverInterruptedAssistantDrafts, HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChat/utils/interruptedDraftRecovery';
 import type { Message } from '@/components/BChat/utils/types';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
 /**
  * 创建一条未完成的助手草稿消息。
@@ -28,8 +27,8 @@ function createInterruptedAssistantDraft(): Message {
 }
 
 /**
- * 创建一条带 tool.widget 运行态的未完成助手草稿消息。
- * @returns 带 open_widget 工具运行态的未完成助手消息。
+ * 创建一条带 tool.state 运行数据的未完成助手草稿消息。
+ * @returns 带 open_widget 工具运行数据的未完成助手消息。
  */
 function createInterruptedToolWidgetAssistantDraft(): Message {
   const toolPart: ChatMessageToolPart = {
@@ -38,7 +37,6 @@ function createInterruptedToolWidgetAssistantDraft(): Message {
     toolCallId: 'open-widget-tool-1',
     toolName: 'open_widget',
     status: 'done',
-    presentation: 'widget',
     input: { id: 'weather' },
     result: {
       toolName: 'open_widget',
@@ -46,20 +44,19 @@ function createInterruptedToolWidgetAssistantDraft(): Message {
       data: {
         kind: 'widget_display',
         sessionId: 'widget-session-2',
-        widgetId: 'weather'
+        widgetId: 'weather',
+        value: {},
+        renderContext: {
+          input: {},
+          data: {}
+        }
       }
     },
-    widget: {
-      sessionId: 'widget-session-2',
-      widgetId: 'weather',
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-01T00:00:00.000Z'
-      },
-      value: createDefaultWidgetData(),
-      renderContext: {
-        input: {},
-        data: {}
+    state: {
+      renderData: {
+        weather: {
+          temperature: 32
+        }
       }
     }
   };
@@ -152,14 +149,18 @@ describe('interrupted assistant draft recovery', () => {
     expect(result.messages[0]).toEqual(awaitingMessage);
   });
 
-  it('marks unfinished tool widget runtime as cancelled when recovering interrupted drafts', (): void => {
+  it('keeps open_widget tool state when recovering interrupted drafts', (): void => {
     const result = recoverInterruptedAssistantDrafts([createInterruptedToolWidgetAssistantDraft()]);
     const recoveredMessage = result.messages[0];
     const toolPart = recoveredMessage.parts.find((part): part is ChatMessageToolPart => part.type === 'tool');
 
     expect(result.recovered).toBe(true);
-    expect(toolPart?.widget).toMatchObject({
-      status: 'cancelled'
+    expect(toolPart?.state).toMatchObject({
+      renderData: {
+        weather: {
+          temperature: 32
+        }
+      }
     });
   });
 

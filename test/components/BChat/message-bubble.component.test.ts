@@ -4,8 +4,8 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import type { ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetResultPart } from 'types/chat';
-import type { WidgetData, WidgetRenderContext, WidgetRuntimeChange } from 'types/widget';
+import type { ChatMessageToolPart, ChatMessageWidgetResultPart } from 'types/chat';
+import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,9 +15,26 @@ import type { BChatSubmitContext, BChatSubmitAction } from '@/components/BChat/u
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
+import type { WidgetRuntimeChange } from '@/components/BWidget/utils/widgetRuntime';
 
 /** 剪贴板写入测试替身。 */
 const clipboardMock = vi.fn();
+
+/**
+ * open_widget 工具片段测试用展示数据来源。
+ */
+interface TestWidgetDisplayFixture {
+  /** 片段唯一标识 */
+  id: string;
+  /** 小组件会话 ID */
+  sessionId: string;
+  /** 小组件稳定 ID */
+  widgetId: string;
+  /** 小组件快照值 */
+  value: WidgetData;
+  /** 小组件渲染上下文 */
+  renderContext: WidgetRenderContext;
+}
 
 /**
  * 创建统一提交上下文测试替身。
@@ -26,9 +43,8 @@ const clipboardMock = vi.fn();
 function createSubmitContextMock(): BChatSubmitContext {
   return {
     continueAssistantTurn: vi.fn(),
-    getMessage: vi.fn(),
     sendAdaptedUserMessage: vi.fn(),
-    updateMessage: vi.fn()
+    updateToolPartState: vi.fn()
   };
 }
 
@@ -134,10 +150,6 @@ const BMessageStub = defineComponent({
 const BWidgetRuntimeSilentStub = defineComponent({
   name: 'BWidgetRuntime',
   props: {
-    lifecycle: {
-      type: Object,
-      default: () => ({})
-    },
     renderContext: {
       type: Object,
       required: true
@@ -145,10 +157,6 @@ const BWidgetRuntimeSilentStub = defineComponent({
     runtimeEnabled: {
       type: Boolean,
       default: false
-    },
-    status: {
-      type: String,
-      default: 'created'
     },
     value: {
       type: Object,
@@ -226,12 +234,10 @@ function createWeatherRenderContext(): WidgetRenderContext {
  * @param change - 运行态变化覆盖字段
  * @returns 运行态变化事件
  */
-function createRuntimeChange(part: ChatMessageWidgetPart, change: Partial<WidgetRuntimeChange> = {}): WidgetRuntimeChange {
+function createRuntimeChange(part: TestWidgetDisplayFixture, change: Partial<WidgetRuntimeChange> = {}): WidgetRuntimeChange {
   return {
     reason: 'mount',
     value: part.value,
-    status: part.status,
-    lifecycle: part.lifecycle,
     renderContext: part.renderContext,
     ...change
   };
@@ -240,16 +246,15 @@ function createRuntimeChange(part: ChatMessageWidgetPart, change: Partial<Widget
 /**
  * 将测试用小组件运行态包装成 open_widget 工具片段。
  * @param part - 小组件运行态片段
- * @returns 携带 widget 运行态的 open_widget 工具片段
+ * @returns 携带工具运行数据的 open_widget 工具片段
  */
-function createOpenWidgetToolPartFromWidgetPart(part: ChatMessageWidgetPart): ChatMessageToolPart {
+function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture): ChatMessageToolPart {
   return {
     id: part.id,
     type: 'tool',
     toolCallId: `tool-call-${part.id}`,
     toolName: 'open_widget',
     status: 'done',
-    presentation: 'widget',
     input: {
       id: part.widgetId
     },
@@ -264,13 +269,8 @@ function createOpenWidgetToolPartFromWidgetPart(part: ChatMessageWidgetPart): Ch
         renderContext: part.renderContext
       }
     },
-    widget: {
-      sessionId: part.sessionId,
-      widgetId: part.widgetId,
-      status: part.status,
-      lifecycle: part.lifecycle,
-      value: part.value,
-      renderContext: part.renderContext
+    state: {
+      renderData: part.renderContext.data
     }
   };
 }
@@ -282,6 +282,19 @@ function createOpenWidgetToolPartFromWidgetPart(part: ChatMessageWidgetPart): Ch
  */
 function emitWidgetRuntimeChange(wrapper: VueWrapper, change: WidgetRuntimeChange): void {
   wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('change', change);
+}
+
+/**
+ * 读取最近一次小组件提交动作。
+ * @param wrapper - 消息气泡包装器
+ * @returns 最近一次提交动作
+ */
+function readLatestSubmitAction(wrapper: VueWrapper): BChatSubmitAction {
+  const submitEvents = wrapper.emitted('submit') ?? [];
+  const action = submitEvents[submitEvents.length - 1]?.[0];
+  if (!action) throw new Error('Expected submit action');
+
+  return action as BChatSubmitAction;
 }
 
 /**
@@ -441,13 +454,10 @@ describe('MessageBubble', (): void => {
   });
 
   it('emits unified submit actions after the created widget runs mounted', async (): Promise<void> => {
-    const widgetPart: ChatMessageWidgetPart = {
+    const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-created-part',
-      type: 'widget',
       sessionId: 'widget-session-1',
       widgetId: 'weather',
-      status: 'created',
-      lifecycle: {},
       value: {
         ...createWeatherWidgetData(),
         execute: {
@@ -474,10 +484,6 @@ describe('MessageBubble', (): void => {
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'mount',
-        status: 'mounted',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z'
-        },
         renderContext: {
           input: {
             city: '上海'
@@ -492,59 +498,27 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(
-      createAssistantMessage({
-        id: 'assistant-widget',
-        content: '',
-        parts: [toolPart]
-      })
-    );
     await action.run(submitContext);
 
-    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget', expect.any(Function));
-    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
-    const nextMessage = updater(
-      createAssistantMessage({
-        id: 'assistant-widget',
-        content: '',
-        parts: [toolPart]
-      })
-    );
+    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget', toolPart.id, expect.any(Function));
+    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
 
-    expect(nextMessage).toEqual(
-      expect.objectContaining({
-        id: 'assistant-widget',
-        parts: [
-          expect.objectContaining({
-            widget: expect.objectContaining({
-              status: 'mounted',
-              renderContext: {
-                input: {
-                  city: '上海'
-                },
-                data: {
-                  weather: {
-                    temperature: 31
-                  }
-                }
-              }
-            })
-          })
-        ]
-      })
-    );
+    expect(updater(undefined)).toEqual({
+      renderData: {
+        weather: {
+          temperature: 31
+        }
+      }
+    });
   });
 
-  it('emits complete message update actions for widget parts outside the first index', async (): Promise<void> => {
-    const widgetPart: ChatMessageWidgetPart = {
+  it('emits tool state update actions for widget parts outside the first index', async (): Promise<void> => {
+    const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-second-part',
-      type: 'widget',
       sessionId: 'widget-session-2',
       widgetId: 'weather',
-      status: 'created',
-      lifecycle: {},
       value: {
         ...createWeatherWidgetData(),
         execute: {
@@ -571,10 +545,6 @@ describe('MessageBubble', (): void => {
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'mount',
-        status: 'mounted',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z'
-        },
         renderContext: {
           input: {
             city: '杭州'
@@ -589,63 +559,30 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(
-      createAssistantMessage({
-        id: 'assistant-widget-second',
-        content: '',
-        parts: [{ id: 'part0012', type: 'text', text: '天气卡片' }, toolPart]
-      })
-    );
     await action.run(submitContext);
 
-    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget-second', expect.any(Function));
-    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
-    const nextMessage = updater(
-      createAssistantMessage({
-        id: 'assistant-widget-second',
-        content: '',
-        parts: [{ id: 'part0013', type: 'text', text: '天气卡片' }, toolPart]
-      })
-    );
+    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-second', toolPart.id, expect.any(Function));
+    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
 
-    expect(nextMessage).toEqual(
-      expect.objectContaining({
-        id: 'assistant-widget-second',
-        parts: [
-          expect.objectContaining({ type: 'text', text: '天气卡片' }),
-          expect.objectContaining({
-            widget: expect.objectContaining({
-              status: 'mounted',
-              renderContext: {
-                input: {
-                  city: '杭州'
-                },
-                data: {
-                  weather: {
-                    temperature: 32
-                  }
-                }
-              }
-            })
-          })
-        ]
-      })
-    );
+    expect(updater(undefined)).toEqual({
+      renderData: {
+        weather: {
+          temperature: 32
+        }
+      }
+    });
   });
 
   it('updates widget runtime state without sending widget_result messages', async (): Promise<void> => {
-    const widgetPart: ChatMessageWidgetPart = {
+    const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-result-part',
-      type: 'widget',
       sessionId: 'widget-coffee-session-1',
       widgetId: 'coffee',
-      status: 'mounted',
-      lifecycle: {},
       value: createWeatherWidgetData(),
       renderContext: createWeatherRenderContext()
-    } as ChatMessageWidgetPart;
+    };
     const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
     const wrapper = mountMessageBubble(
       createAssistantMessage({
@@ -658,11 +595,6 @@ describe('MessageBubble', (): void => {
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
-        status: 'finished',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z',
-          unmountedAt: '2026-07-01T00:01:00.000Z'
-        },
         renderContext: {
           input: {
             city: '上海'
@@ -680,55 +612,32 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(
-      createAssistantMessage({
-        id: 'assistant-widget-submit',
-        content: '',
-        parts: [toolPart]
-      })
-    );
     await action.run(submitContext);
 
     expect(submitContext.sendAdaptedUserMessage).not.toHaveBeenCalled();
-    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
-    const nextMessage = updater(
-      createAssistantMessage({
-        id: 'assistant-widget-submit',
-        content: '',
-        parts: [toolPart]
-      })
-    );
+    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-1', toolPart.id, expect.any(Function));
+    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
 
-    expect(nextMessage.parts[0]).toMatchObject({
-      widget: {
-        status: 'finished',
-        renderContext: {
-          data: {
-            weather: {
-              temperature: 28
-            },
-            submitted: {
-              city: '上海',
-              temperature: 28
-            }
-          }
+    expect(updater(undefined)).toEqual({
+      renderData: {
+        weather: {
+          temperature: 28
+        },
+        submitted: {
+          city: '上海',
+          temperature: 28
         }
       }
     });
   });
 
   it('updates widget runtime data without sending widget_result messages', async (): Promise<void> => {
-    const widgetPart: ChatMessageWidgetPart = {
+    const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-submit-part',
-      type: 'widget',
       sessionId: 'widget-coffee-session-2',
       widgetId: 'coffee',
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-01T00:00:00.000Z'
-      },
       value: {
         ...createWeatherWidgetData(),
         execute: {
@@ -756,11 +665,6 @@ describe('MessageBubble', (): void => {
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
-        status: 'finished',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z',
-          unmountedAt: '2026-07-01T00:01:00.000Z'
-        },
         renderContext: {
           input: {
             city: '上海'
@@ -778,44 +682,21 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(
-      createAssistantMessage({
-        id: 'assistant-widget-submit',
-        content: '',
-        parts: [toolPart]
-      })
-    );
     await action.run(submitContext);
 
-    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-widget-submit', expect.any(Function));
-    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
-    const nextMessage = updater(
-      createAssistantMessage({
-        id: 'assistant-widget-submit',
-        content: '',
-        parts: [toolPart]
-      })
-    );
+    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-submit', toolPart.id, expect.any(Function));
+    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
 
-    expect(nextMessage.parts[0]).toMatchObject({
-      widget: {
-        status: 'finished',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z',
-          unmountedAt: expect.any(String)
+    expect(updater(undefined)).toEqual({
+      renderData: {
+        weather: {
+          temperature: 28
         },
-        renderContext: {
-          data: {
-            weather: {
-              temperature: 28
-            },
-            submitted: {
-              city: '上海',
-              temperature: 28
-            }
-          }
+        submitted: {
+          city: '上海',
+          temperature: 28
         }
       }
     });
@@ -823,15 +704,10 @@ describe('MessageBubble', (): void => {
   });
 
   it('finishes widget runtime data from the latest message part', async (): Promise<void> => {
-    const staleWidgetPart: ChatMessageWidgetPart = {
+    const staleWidgetPart: TestWidgetDisplayFixture = {
       id: 'widget-latest-submit-part',
-      type: 'widget',
       sessionId: 'widget-coffee-session-3',
       widgetId: 'coffee',
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-01T00:00:00.000Z'
-      },
       value: {
         ...createWeatherWidgetData(),
         execute: {
@@ -846,7 +722,7 @@ describe('MessageBubble', (): void => {
       },
       renderContext: createWeatherRenderContext()
     };
-    const latestWidgetPart: ChatMessageWidgetPart = {
+    const latestWidgetPart: TestWidgetDisplayFixture = {
       ...staleWidgetPart,
       renderContext: {
         input: {
@@ -882,11 +758,6 @@ describe('MessageBubble', (): void => {
       wrapper,
       createRuntimeChange(latestWidgetPart, {
         reason: 'interaction',
-        status: 'finished',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z',
-          unmountedAt: '2026-07-01T00:01:00.000Z'
-        },
         renderContext: {
           input: {
             city: '上海'
@@ -903,53 +774,30 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(
-      createAssistantMessage({
-        id: 'assistant-widget-latest-submit',
-        content: '',
-        parts: [latestToolPart]
-      })
-    );
     await action.run(submitContext);
 
-    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
-    const nextMessage = updater(
-      createAssistantMessage({
-        id: 'assistant-widget-latest-submit',
-        content: '',
-        parts: [latestToolPart]
-      })
-    );
+    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-latest-submit', latestToolPart.id, expect.any(Function));
+    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
 
-    expect(nextMessage.parts[0]).toMatchObject({
-      widget: {
-        status: 'finished',
-        renderContext: {
-          data: {
-            weather: {
-              temperature: 35
-            },
-            submitted: {
-              temperature: 35
-            }
-          }
+    expect(updater(undefined)).toEqual({
+      renderData: {
+        weather: {
+          temperature: 35
+        },
+        submitted: {
+          temperature: 35
         }
       }
     });
   });
 
   it('adds ids to widget script message parts and sends them instead of widget_result', async (): Promise<void> => {
-    const widgetPart: ChatMessageWidgetPart = {
+    const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-send-message-part',
-      type: 'widget',
       sessionId: 'widget-coffee-session-4',
       widgetId: 'coffee',
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-01T00:00:00.000Z'
-      },
       value: {
         ...createWeatherWidgetData(),
         execute: {
@@ -977,11 +825,6 @@ describe('MessageBubble', (): void => {
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
-        status: 'finished',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z',
-          unmountedAt: '2026-07-01T00:01:00.000Z'
-        },
         sendMessage: {
           content: [{ type: 'text', text: '确认下单' }],
           isError: false
@@ -989,24 +832,8 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(
-      createAssistantMessage({
-        id: 'assistant-widget-send-message',
-        content: '',
-        parts: [toolPart]
-      })
-    );
-    vi.mocked(submitContext.updateMessage).mockImplementation(async (_messageId, updater): Promise<void> => {
-      updater(
-        createAssistantMessage({
-          id: 'assistant-widget-send-message',
-          content: '',
-          parts: [toolPart]
-        })
-      );
-    });
     await action.run(submitContext);
 
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
@@ -1018,19 +845,15 @@ describe('MessageBubble', (): void => {
       parts: [expect.objectContaining({ id: expect.any(String), type: 'text', text: '确认下单' })],
       errorMessage: '发送小组件消息失败'
     });
+    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-send-message', toolPart.id, expect.any(Function));
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledTimes(1);
   });
 
   it('marks widget script error messages in the text sent to chat runtime', async (): Promise<void> => {
-    const widgetPart: ChatMessageWidgetPart = {
+    const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-error-message-part',
-      type: 'widget',
       sessionId: 'widget-coffee-session-error',
       widgetId: 'coffee',
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-01T00:00:00.000Z'
-      },
       value: {
         ...createWeatherWidgetData(),
         execute: {
@@ -1057,11 +880,6 @@ describe('MessageBubble', (): void => {
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
-        status: 'finished',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z',
-          unmountedAt: '2026-07-01T00:01:00.000Z'
-        },
         sendMessage: {
           content: '库存不足',
           isError: true
@@ -1069,9 +887,8 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(message);
     await action.run(submitContext);
 
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
@@ -1086,15 +903,10 @@ describe('MessageBubble', (): void => {
   });
 
   it('sends widget script message from latest message without relying on update updater side effects', async (): Promise<void> => {
-    const staleWidgetPart: ChatMessageWidgetPart = {
+    const staleWidgetPart: TestWidgetDisplayFixture = {
       id: 'widget-latest-message-part',
-      type: 'widget',
       sessionId: 'widget-coffee-session-latest-message',
       widgetId: 'coffee',
-      status: 'mounted',
-      lifecycle: {
-        mountedAt: '2026-07-01T00:00:00.000Z'
-      },
       value: {
         ...createWeatherWidgetData(),
         execute: {
@@ -1105,7 +917,7 @@ describe('MessageBubble', (): void => {
       },
       renderContext: createWeatherRenderContext()
     };
-    const latestWidgetPart: ChatMessageWidgetPart = {
+    const latestWidgetPart: TestWidgetDisplayFixture = {
       ...staleWidgetPart,
       renderContext: {
         input: {},
@@ -1139,11 +951,6 @@ describe('MessageBubble', (): void => {
       wrapper,
       createRuntimeChange(latestWidgetPart, {
         reason: 'interaction',
-        status: 'finished',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z',
-          unmountedAt: '2026-07-01T00:01:00.000Z'
-        },
         sendMessage: {
           content: '确认最新订单',
           isError: false
@@ -1151,15 +958,8 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(
-      createAssistantMessage({
-        id: 'assistant-widget-latest-message',
-        content: '',
-        parts: [latestToolPart]
-      })
-    );
     await action.run(submitContext);
 
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
@@ -1185,7 +985,7 @@ describe('MessageBubble', (): void => {
     await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
     await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
     await action.run(submitContext);
 
@@ -1203,14 +1003,13 @@ describe('MessageBubble', (): void => {
     });
   });
 
-  it('renders presentation widget tool parts as widget runtime items', (): void => {
+  it('renders open_widget tool parts with widget runtime items', (): void => {
     const toolPart: ChatMessageToolPart = {
       id: 'part0014',
       type: 'tool',
       toolCallId: 'tool-call-widget',
       toolName: 'open_widget',
       status: 'done',
-      presentation: 'widget',
       input: {
         id: 'weather',
         input: {
@@ -1227,16 +1026,6 @@ describe('MessageBubble', (): void => {
           value: createWeatherWidgetData(),
           renderContext: createWeatherRenderContext()
         }
-      },
-      widget: {
-        sessionId: 'widget-weather-tool-call-widget',
-        widgetId: 'weather',
-        status: 'mounted',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z'
-        },
-        value: createWeatherWidgetData(),
-        renderContext: createWeatherRenderContext()
       }
     };
     const wrapper = mountMessageBubble(
@@ -1250,7 +1039,7 @@ describe('MessageBubble', (): void => {
     expect(wrapper.text()).toContain('28°C');
   });
 
-  it('renders open_widget without presentation as a plain tool result', (): void => {
+  it('renders open_widget widget_display results as widget runtime without tool state', (): void => {
     const toolPart: ChatMessageToolPart = {
       id: 'part0014',
       type: 'tool',
@@ -1282,8 +1071,8 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).exists()).toBe(false);
-    expect(wrapper.text()).toContain('widget_display');
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).exists()).toBe(true);
+    expect(wrapper.text()).toContain('上海');
   });
 
   it('renders main-initialized open_widget tool runtime when scripts are disabled', (): void => {
@@ -1300,7 +1089,6 @@ describe('MessageBubble', (): void => {
       toolCallId: 'tool-call-widget',
       toolName: 'open_widget',
       status: 'done',
-      presentation: 'widget',
       input: {
         id: 'weather'
       },
@@ -1314,14 +1102,6 @@ describe('MessageBubble', (): void => {
           value: widgetValue,
           renderContext: createWeatherRenderContext()
         }
-      },
-      widget: {
-        sessionId: 'widget-weather-tool-call-widget',
-        widgetId: 'weather',
-        status: 'created',
-        lifecycle: {},
-        value: widgetValue,
-        renderContext: createWeatherRenderContext()
       }
     };
     const message = createAssistantMessage({
@@ -1336,14 +1116,13 @@ describe('MessageBubble', (): void => {
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('runtimeEnabled')).toBe(true);
   });
 
-  it('emits message update actions to keep open_widget runtime on the tool part', async (): Promise<void> => {
+  it('emits tool state update actions to keep open_widget render data on the tool part state', async (): Promise<void> => {
     const toolPart: ChatMessageToolPart = {
       id: 'part0014',
       type: 'tool',
       toolCallId: 'tool-call-widget',
       toolName: 'open_widget',
       status: 'done',
-      presentation: 'widget',
       input: {
         id: 'weather',
         input: {
@@ -1360,14 +1139,6 @@ describe('MessageBubble', (): void => {
           value: createWeatherWidgetData(),
           renderContext: createWeatherRenderContext()
         }
-      },
-      widget: {
-        sessionId: 'widget-weather-tool-call-widget',
-        widgetId: 'weather',
-        status: 'created',
-        lifecycle: {},
-        value: createWeatherWidgetData(),
-        renderContext: createWeatherRenderContext()
       }
     };
     const message = createAssistantMessage({
@@ -1384,43 +1155,41 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(
         {
           id: 'part0014',
-          type: 'widget',
           sessionId: 'widget-weather-tool-call-widget',
           widgetId: 'weather',
-          status: 'created',
-          lifecycle: {},
           value: createWeatherWidgetData(),
           renderContext: createWeatherRenderContext()
         },
         {
           reason: 'mount',
-          status: 'mounted',
-          lifecycle: {
-            mountedAt: '2026-07-01T00:00:00.000Z'
+          renderContext: {
+            input: {
+              city: '上海'
+            },
+            data: {
+              weather: {
+                temperature: 29
+              }
+            }
           }
         }
       )
     );
 
-    const mountedAction = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const mountedAction = readLatestSubmitAction(wrapper);
     const submitContext = createSubmitContextMock();
-    vi.mocked(submitContext.getMessage).mockReturnValue(message);
     await mountedAction.run(submitContext);
 
-    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-open-widget', expect.any(Function));
-    const [, mountedUpdater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
+    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-open-widget', message.parts[0]?.id, expect.any(Function));
+    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
 
-    expect(mountedUpdater(message).parts[0]).toEqual(
-      expect.objectContaining({
-        type: 'tool',
-        widget: expect.objectContaining({
-          status: 'mounted',
-          lifecycle: expect.objectContaining({
-            mountedAt: expect.any(String)
-          })
-        })
-      })
-    );
+    expect(updater(undefined)).toEqual({
+      renderData: {
+        weather: {
+          temperature: 29
+        }
+      }
+    });
   });
 
   it('copies user widget result messages from message content when no text part exists', async (): Promise<void> => {

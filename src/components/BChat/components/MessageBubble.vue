@@ -39,7 +39,7 @@
 
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
 
-            <BubblePartWidget v-else-if="item.kind === 'widget'" :message="message" :part="item.part" @submit="$emit('submit', $event)" />
+            <BubblePartWidget v-else-if="item.kind === 'widget'" :message-id="message.id" :part="item.part" @submit="$emit('submit', $event)" />
           </template>
         </template>
       </div>
@@ -76,7 +76,7 @@ import { useClipboard } from '@/hooks/useClipboard';
 import type { ImagePreviewItem } from '@/hooks/useImagePreview';
 import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
-import { extractLastTextPart, isAwaitingUserChoiceResult } from '../utils/messageHelper';
+import { extractLastTextPart, isAwaitingUserChoiceResult, isWidgetToolPart, type WidgetToolPart } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
 import BubblePartStatus from './MessageBubble/BubblePartStatus/index.vue';
 import BubblePartText from './MessageBubble/BubblePartText/index.vue';
@@ -115,7 +115,7 @@ type MessageBubbleRenderItem =
   | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart }
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
   | { key: string; kind: 'tool'; part: ChatMessageToolPart }
-  | { key: string; kind: 'widget'; part: ChatMessageToolPart };
+  | { key: string; kind: 'widget'; part: WidgetToolPart };
 
 /**
  * 判断消息片段是否为文本或错误片段。
@@ -176,7 +176,7 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
     if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
-    if (part.type === 'tool' && part.presentation === 'widget') return [{ key, kind: 'widget', part }];
+    if (isWidgetToolPart(part)) return [{ key, kind: 'widget', part }];
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
     return [];
   })

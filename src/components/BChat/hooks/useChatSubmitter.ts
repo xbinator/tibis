@@ -4,9 +4,9 @@
  */
 import type { BChatRuntimeSubmitUserChoiceInput } from './useChatRuntime';
 import type { ChatTaskKind, ChatTaskStartResult, ChatTaskState } from './useChatTaskRuntime';
-import type { BChatAdaptedUserMessageSubmitInput, BChatMessageUpdater, BChatSubmitAction } from '../utils/submitAction';
+import type { BChatAdaptedUserMessageSubmitInput, BChatMessageUpdater, BChatSubmitAction, BChatToolPartStateUpdater } from '../utils/submitAction';
 import type { Message } from '../utils/types';
-import type { AIUserChoiceAnswerData } from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageToolPart } from 'types/chat';
 import type { ChatRuntimeSendInput, ChatRuntimeStartResult } from 'types/chat-runtime';
 import type { Ref } from 'vue';
 
@@ -46,8 +46,6 @@ interface UseChatSubmitterOptions {
   submitUserChoice: (input: BChatRuntimeSubmitUserChoiceInput) => Promise<ChatRuntimeStartResult>;
   /** 发送已创建的用户消息。 */
   sendRuntimeUserMessage: (input: BChatAdaptedUserMessageSubmitInput) => Promise<void>;
-  /** 读取当前可见消息。 */
-  getMessage: (messageId: string) => Message | null;
   /** 更新一条已存在的可见消息。 */
   updateMessage: (messageId: string, updater: BChatMessageUpdater) => Promise<void>;
 }
@@ -121,15 +119,44 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
   }
 
   /**
+   * 更新消息内指定工具片段的 UI state。
+   * @param messageId - 待更新消息 ID
+   * @param partId - 待更新工具片段 ID
+   * @param updater - 工具 state 更新函数
+   */
+  async function updateToolPartState(messageId: string, partId: string, updater: BChatToolPartStateUpdater): Promise<void> {
+    await options.updateMessage(messageId, (message: Message): Message => {
+      let updated = false;
+      const parts = message.parts.map((part): ChatMessagePart => {
+        if (part.id !== partId || part.type !== 'tool') return part;
+
+        updated = true;
+        const nextState = updater(part.state);
+        const nextPart: ChatMessageToolPart = {
+          ...part,
+          state: nextState
+        };
+
+        if (nextState === undefined) {
+          delete nextPart.state;
+        }
+
+        return nextPart;
+      });
+
+      return updated ? { ...message, parts } : message;
+    });
+  }
+
+  /**
    * 提交消息级交互动作。
    * @param action - 已由底层组件适配好的提交动作
    */
   async function submit(action: BChatSubmitAction): Promise<void> {
     await action.run({
-      getMessage: options.getMessage,
       continueAssistantTurn,
       sendAdaptedUserMessage,
-      updateMessage: options.updateMessage
+      updateToolPartState
     });
   }
 

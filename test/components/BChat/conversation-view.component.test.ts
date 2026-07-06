@@ -3,7 +3,8 @@
  * @description BChat ConversationView 渲染记忆更新测试。
  * @vitest-environment jsdom
  */
-import type { ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetRuntime } from 'types/chat';
+import type { ChatMessageToolPart } from 'types/chat';
+import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import type { DefineComponent } from 'vue';
 import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
@@ -36,8 +37,8 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
       '{{ disabled ? "disabled" : "enabled" }}:',
       '{{ canRollback && canRollback(message) ? "rollback" : "no-rollback" }}',
       '{{ message.parts[0]?.result?.data?.renderContext?.input?.city ?? "" }}',
-      '{{ message.parts[0]?.widget?.renderContext?.data?.weather?.temperature ?? "" }}',
-      '{{ message.parts[0]?.widget?.renderContext?.data?.message ?? "" }}',
+      '{{ message.parts[0]?.state?.renderData?.weather?.temperature ?? "" }}',
+      '{{ message.parts[0]?.state?.renderData?.message ?? "" }}',
       '</div>'
     ].join('')
   }
@@ -57,6 +58,22 @@ interface ConversationViewTestProps {
 
 /** 带测试 props 类型的 ConversationView。 */
 const ConversationViewForTest = ConversationView as DefineComponent<ConversationViewTestProps>;
+
+/**
+ * open_widget 工具片段测试用展示数据来源。
+ */
+interface TestWidgetDisplayFixture {
+  /** 片段唯一标识 */
+  id: string;
+  /** 小组件会话 ID */
+  sessionId: string;
+  /** 小组件稳定 ID */
+  widgetId: string;
+  /** 小组件快照值 */
+  value: WidgetData;
+  /** 小组件渲染上下文 */
+  renderContext: WidgetRenderContext;
+}
 
 /**
  * 创建提问工具片段。
@@ -109,7 +126,6 @@ function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
     toolCallId: 'tool-call-widget',
     toolName: 'open_widget',
     status: 'done',
-    presentation: 'widget',
     input: {
       id: 'weather'
     },
@@ -128,19 +144,6 @@ function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
           data: {}
         }
       }
-    },
-    widget: {
-      sessionId: 'widget-weather-tool-call-widget',
-      widgetId: 'weather',
-      status: 'created',
-      lifecycle: {},
-      value: widgetValue,
-      renderContext: {
-        input: {
-          city
-        },
-        data: {}
-      }
     }
   };
 }
@@ -150,16 +153,11 @@ function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
  * @param temperature - 状态中的温度值
  * @returns 小组件消息片段
  */
-function createWidgetPart(temperature: number): ChatMessageWidgetPart {
+function createWidgetPart(temperature: number): TestWidgetDisplayFixture {
   return {
     id: 'widget-part-weather',
-    type: 'widget',
     sessionId: 'widget-session-1',
     widgetId: 'weather',
-    status: 'mounted',
-    lifecycle: {
-      mountedAt: '2026-07-01T00:00:00.000Z'
-    },
     value: {
       ...createDefaultWidgetData(),
       name: 'weather',
@@ -187,27 +185,13 @@ function createWidgetPart(temperature: number): ChatMessageWidgetPart {
  */
 function createOpenWidgetToolPartWithRuntimeMessage(message: string): ChatMessageToolPart {
   const part = createOpenWidgetToolPart('上海');
-  const widget: ChatMessageWidgetRuntime = {
-    sessionId: 'widget-weather-tool-call-widget',
-    widgetId: 'weather',
-    status: 'mounted',
-    lifecycle: {
-      mountedAt: '2026-07-03T00:00:00.000Z'
-    },
-    value: createWidgetPart(0).value,
-    renderContext: {
-      input: {
-        city: '上海'
-      },
-      data: {
+  return {
+    ...part,
+    state: {
+      renderData: {
         message
       }
     }
-  };
-
-  return {
-    ...part,
-    widget
   };
 }
 
@@ -216,7 +200,7 @@ function createOpenWidgetToolPartWithRuntimeMessage(message: string): ChatMessag
  * @param widget - 小组件视图片段
  * @returns 带内嵌小组件运行态的工具片段
  */
-function createOpenWidgetToolPartFromWidgetPart(widget: ChatMessageWidgetPart): ChatMessageToolPart {
+function createOpenWidgetToolPartFromWidgetPart(widget: TestWidgetDisplayFixture): ChatMessageToolPart {
   const part = createOpenWidgetToolPart('上海');
 
   return {
@@ -241,13 +225,8 @@ function createOpenWidgetToolPartFromWidgetPart(widget: ChatMessageWidgetPart): 
         }
       }
     },
-    widget: {
-      sessionId: widget.sessionId,
-      widgetId: widget.widgetId,
-      status: widget.status,
-      lifecycle: widget.lifecycle,
-      value: widget.value,
-      renderContext: widget.renderContext
+    state: {
+      renderData: widget.renderContext.data
     }
   };
 }

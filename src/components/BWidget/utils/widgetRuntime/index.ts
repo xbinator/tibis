@@ -2,8 +2,10 @@
  * @file widgetRuntime/index.ts
  * @description BWidget 运行态脚本沙箱执行工具。
  */
+import type { WidgetRuntimeDataPatch } from './dataPatch';
+import type { WidgetData } from '../../types';
 import type { RequestInput, RequestMethod, RequestResponse } from 'types/request';
-import type { WidgetHttpClient, WidgetRuntimeDataPatch, WidgetRuntimeSendMessage, WidgetRuntimeState, WidgetSendMessageTextPart } from 'types/widget';
+import type { WidgetHttpClient, WidgetRenderContext, WidgetRuntimeSendMessage, WidgetSendMessageTextPart } from 'types/widget';
 import { cloneDeep, isPlainObject } from 'lodash-es';
 import ts from 'typescript';
 import { getElectronAPI } from '@/shared/platform/electron-api';
@@ -31,11 +33,36 @@ const EMPTY_WIDGET_CLASS_SCRIPT = 'export default class Component extends Widget
 const WIDGET_NON_PUBLIC_MEMBER_NAMES_PROPERTY = '__widgetNonPublicMemberNames';
 
 /**
+ * Widget 内部运行态数据快照。
+ */
+export interface WidgetRuntimeState {
+  /** Widget快照值 */
+  value: WidgetData;
+  /** Widget运行态渲染上下文 */
+  renderContext: WidgetRenderContext;
+}
+
+/** Widget 运行态变化来源。 */
+export type WidgetRuntimeChangeReason = 'mount' | 'interaction';
+
+/**
+ * Widget 运行态对外变化事件。
+ */
+export interface WidgetRuntimeChange {
+  /** 运行态变化来源 */
+  reason: WidgetRuntimeChangeReason;
+  /** Widget快照值 */
+  value: WidgetData;
+  /** Widget运行态渲染上下文 */
+  renderContext: WidgetRenderContext;
+  /** 脚本声明的上行消息 */
+  sendMessage?: WidgetRuntimeSendMessage;
+}
+
+/**
  * 小组件脚本生命周期执行选项。
  */
 interface WidgetLifecycleRunOptions {
-  /** 当前时间来源，测试中可注入固定时间。 */
-  now?: () => Date;
   /** 小组件托管 HTTP 客户端。 */
   http?: WidgetHttpClient;
   /** 是否使用 Worker 执行脚本。 */
@@ -962,18 +989,6 @@ async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: 
 }
 
 /**
- * 将脚本运行错误写回为失败状态。
- * @param state - 原始运行态状态
- * @returns 失败状态的运行态状态
- */
-function createFailedWidgetState(state: WidgetRuntimeState): WidgetRuntimeState {
-  return {
-    ...cloneDeep(state),
-    status: 'failure'
-  };
-}
-
-/**
  * 判断小组件脚本是否启用。
  * @param state - 运行态状态
  * @returns 是否启用脚本
@@ -1027,85 +1042,40 @@ function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOpt
 }
 
 /**
- * 小组件完成态创建选项。
- */
-interface WidgetFinishedResultOptions {
-  /** 脚本通过 this.$sendMessage 声明的上行消息。 */
-  sendMessage?: WidgetRuntimeSendMessage;
-  /** 当前时间来源，测试中可注入固定时间。 */
-  now?: () => Date;
-}
-
-/**
- * 创建小组件完成态结果。
- * @param state - 运行态状态
- * @param options - 完成态创建选项
- * @returns 小组件运行态收尾结果
- */
-function createWidgetFinishedResult(state: WidgetRuntimeState, options: WidgetFinishedResultOptions = {}): WidgetRuntimeFinishResult {
-  const unmountedAt = (options.now ?? (() => new Date()))().toISOString();
-
-  return {
-    state: {
-      ...state,
-      status: 'finished',
-      lifecycle: {
-        ...state.lifecycle,
-        unmountedAt
-      }
-    },
-    ...(options.sendMessage ? { sendMessage: options.sendMessage } : {})
-  };
-}
-
-/**
- * 初始化 created 小组件的 mounted 状态，并返回可写回宿主的下一版状态。
+ * 执行小组件 mounted 生命周期，并返回下一版运行数据。
  * @param state - 运行态状态
  * @param options - 生命周期执行选项。
- * @returns 运行后的状态；非 created 状态原样返回。
+ * @returns 运行后的状态。
  */
 export async function initWidgetMountState(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeState> {
-  if (state.status !== 'created' || state.lifecycle.mountedAt) return state;
   if (!isWidgetScriptEnabled(state)) return state;
 
   const nextState = cloneDeep(state);
-  const mountedAt = (options.now ?? (() => new Date()))().toISOString();
+  const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'mounted' });
+  if (!sandboxResult.dataChanged) return state;
 
-  try {
-    const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'mounted' });
-    const mountedState = applyWidgetSandboxResult(nextState, sandboxResult);
-
-    return { ...mountedState, status: 'mounted', lifecycle: { ...mountedState.lifecycle, mountedAt } };
-  } catch {
-    return createFailedWidgetState(state);
-  }
+  return applyWidgetSandboxResult(nextState, sandboxResult);
 }
 
 /**
- * 完成 mounted 小组件运行态，并收集 unmounted 中的上行消息。
+ * 执行小组件 unmounted 生命周期，并收集上行消息。
  * @param state - 运行态状态
  * @param options - 生命周期执行选项。
- * @returns 小组件运行态收尾结果。
+ * @returns 小组件运行态结果。
  */
 export async function finishWidgetRuntime(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeFinishResult> {
-  if (state.status !== 'mounted' || state.lifecycle.unmountedAt) {
-    return { state };
-  }
   if (!isWidgetScriptEnabled(state)) return { state };
 
   const nextState = cloneDeep(state);
+  const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'unmounted' });
+  if (!sandboxResult.dataChanged && !sandboxResult.sendMessage) return { state };
 
-  try {
-    const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'unmounted' });
-    const finishedState = applyWidgetSandboxResult(nextState, sandboxResult);
+  const finishedState = applyWidgetSandboxResult(nextState, sandboxResult);
 
-    return createWidgetFinishedResult(finishedState, {
-      sendMessage: sandboxResult.sendMessage,
-      now: options.now
-    });
-  } catch {
-    return { state: createFailedWidgetState(state) };
-  }
+  return {
+    state: finishedState,
+    ...(sandboxResult.sendMessage ? { sendMessage: sandboxResult.sendMessage } : {})
+  };
 }
 
 /**
@@ -1120,27 +1090,23 @@ async function runWidgetInteraction(
   interactionCode: string,
   options: WidgetLifecycleRunOptions = {}
 ): Promise<WidgetRuntimeFinishResult> {
-  if (state.status !== 'mounted' || !isWidgetScriptEnabled(state)) return { state };
+  if (!isWidgetScriptEnabled(state)) return { state };
   if (!interactionCode.trim()) return { state };
 
-  try {
-    const nextState = cloneDeep(state);
-    const sandboxResult = await runPartSandbox(nextState, { ...options, interactionCode });
-    const interactedState = applyWidgetSandboxResult(nextState, sandboxResult);
+  const nextState = cloneDeep(state);
+  const sandboxResult = await runPartSandbox(nextState, { ...options, interactionCode });
+  const interactedState = applyWidgetSandboxResult(nextState, sandboxResult);
 
-    const finishResult = await finishWidgetRuntime(interactedState, options);
+  const finishResult = await finishWidgetRuntime(interactedState, options);
 
-    if (sandboxResult.sendMessage) {
-      return {
-        state: finishResult.state,
-        sendMessage: sandboxResult.sendMessage
-      };
-    }
-
-    return finishResult;
-  } catch {
-    return { state: createFailedWidgetState(state) };
+  if (sandboxResult.sendMessage) {
+    return {
+      state: finishResult.state,
+      sendMessage: sandboxResult.sendMessage
+    };
   }
+
+  return finishResult;
 }
 
 /**
@@ -1153,14 +1119,4 @@ export function createWidgetRuntimeInstance(state: WidgetRuntimeState, options: 
   return {
     runInteraction: (interactionCode: string): Promise<WidgetRuntimeFinishResult> => runWidgetInteraction(state, interactionCode, options)
   };
-}
-
-/**
- * 初始化 mounted 小组件的 unmounted 收尾状态，并返回可写回消息的下一版 part。
- * @param state - 运行态状态
- * @param options - 生命周期执行选项。
- * @returns 收尾后的状态；已收尾或不可收尾状态原样返回。
- */
-export async function finishWidgetUnmountState(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeState> {
-  return (await finishWidgetRuntime(state, options)).state;
 }

@@ -2,9 +2,9 @@
  * @file widget-runtime-data-patch.test.ts
  * @description BWidget 运行态 data patch 应用工具测试。
  */
-import type { WidgetRuntimeState } from 'types/widget';
 import { describe, expect, it } from 'vitest';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import type { WidgetRuntimeState } from '@/components/BWidget/utils/widgetRuntime';
 import { applyWidgetRuntimeDataPatchesToState } from '@/components/BWidget/utils/widgetRuntime/dataPatch';
 
 /**
@@ -14,10 +14,6 @@ import { applyWidgetRuntimeDataPatchesToState } from '@/components/BWidget/utils
 function createRuntimeState(): WidgetRuntimeState {
   return {
     value: createDefaultWidgetData(),
-    status: 'mounted',
-    lifecycle: {
-      mountedAt: '2026-07-03T00:00:00.000Z'
-    },
     renderContext: {
       input: {},
       data: {

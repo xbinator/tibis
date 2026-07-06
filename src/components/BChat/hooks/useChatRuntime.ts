@@ -23,15 +23,12 @@ import type {
   ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
-import type { WidgetDisplayPayload } from 'types/widget';
 import type { Ref } from 'vue';
 import { onScopeDispose, ref, toRaw } from 'vue';
-import { isEqual } from 'lodash-es';
-import { OPEN_WIDGET_TOOL_NAME } from '@/ai/tools/builtin/WidgetTool';
 import { executeToolCall } from '@/ai/tools/stream';
 import { getElectronAPI } from '@/shared/platform/electron-api';
-import { isWidgetDisplayPayload } from '@/shared/widget/protocol';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
+import { isWidgetToolPart } from '../utils/messageHelper';
 import { createRuntimeRequestError, localizeRuntimeServiceError } from '../utils/runtimeError';
 
 /** ChatRuntime hook 选项。 */
@@ -240,54 +237,24 @@ function findPreviousToolPart(parts: ChatMessagePart[], nextPart: ChatMessageToo
 }
 
 /**
- * 判断工具片段是否为可展示的 open_widget 结果。
- * @param part - 工具消息片段
- * @returns 是否为可展示的 open_widget 结果
- */
-function isOpenWidgetDisplayToolPart(part: ChatMessageToolPart): part is ChatMessageToolPart & { result: { status: 'success'; data: WidgetDisplayPayload } } {
-  return part.toolName === OPEN_WIDGET_TOOL_NAME && part.result?.status === 'success' && isWidgetDisplayPayload(part.result.data);
-}
-
-/**
- * 判断两个 open_widget 工具片段是否来自同一份展示载荷。
- * @param previousPart - 本地旧工具片段
- * @param nextPart - runtime 新工具片段
- * @returns 两者展示载荷一致时返回 true
- */
-function isSameOpenWidgetDisplayPayload(previousPart: ChatMessageToolPart, nextPart: ChatMessageToolPart): boolean {
-  if (!isOpenWidgetDisplayToolPart(previousPart) || !isOpenWidgetDisplayToolPart(nextPart)) return false;
-
-  const previousData = previousPart.result.data;
-  const nextData = nextPart.result.data;
-
-  return (
-    previousData.sessionId === nextData.sessionId &&
-    previousData.widgetId === nextData.widgetId &&
-    isEqual(previousData.value, nextData.value) &&
-    isEqual(previousData.renderContext, nextData.renderContext)
-  );
-}
-
-/**
- * 合并工具片段上的 renderer 本地运行态字段。
- * runtime 流式事件会带主进程创建的初始 widget，renderer 已运行过的状态需要继续保留。
+ * 合并工具片段上的 renderer 本地运行数据。
+ * runtime 流式事件只带工具结果，renderer 已运行过的 state 需要继续保留。
  * @param previousParts - 本地旧消息片段列表
  * @param nextParts - runtime 新消息片段列表
- * @returns 保留本地运行态后的片段列表
+ * @returns 保留本地运行数据后的片段列表
  */
 function mergeRuntimeMessageParts(previousParts: ChatMessagePart[], nextParts: ChatMessagePart[]): ChatMessagePart[] {
   return nextParts.map((nextPart): ChatMessagePart => {
     if (!isToolMessagePart(nextPart)) return nextPart;
 
     const previousPart = findPreviousToolPart(previousParts, nextPart);
-    if (!previousPart?.widget) return nextPart;
-    if (!isSameOpenWidgetDisplayPayload(previousPart, nextPart)) return nextPart;
+    if (!previousPart?.state || nextPart.state) return nextPart;
+    if (!isWidgetToolPart(previousPart) || !isWidgetToolPart(nextPart)) return nextPart;
 
     return {
       ...nextPart,
       id: previousPart.id,
-      presentation: previousPart.presentation ?? nextPart.presentation,
-      widget: previousPart.widget
+      state: previousPart.state
     };
   });
 }
