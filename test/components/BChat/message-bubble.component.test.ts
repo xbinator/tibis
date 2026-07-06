@@ -11,7 +11,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MessageBubble from '@/components/BChat/components/MessageBubble.vue';
 import { create } from '@/components/BChat/utils/messageHelper';
-import type { BChatSubmitContext, BChatSubmitAction } from '@/components/BChat/utils/submitAction';
+import type { SubmitContext, SubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
@@ -40,7 +40,7 @@ interface TestWidgetDisplayFixture {
  * 创建统一提交上下文测试替身。
  * @returns 提交上下文测试替身
  */
-function createSubmitContextMock(): BChatSubmitContext {
+function createSubmitContextMock(): SubmitContext {
   return {
     continueAssistantTurn: vi.fn(),
     sendAdaptedUserMessage: vi.fn(),
@@ -289,12 +289,12 @@ function emitWidgetRuntimeChange(wrapper: VueWrapper, change: WidgetRuntimeChang
  * @param wrapper - 消息气泡包装器
  * @returns 最近一次提交动作
  */
-function readLatestSubmitAction(wrapper: VueWrapper): BChatSubmitAction {
+function readLatestSubmitAction(wrapper: VueWrapper): SubmitAction {
   const submitEvents = wrapper.emitted('submit') ?? [];
   const action = submitEvents[submitEvents.length - 1]?.[0];
   if (!action) throw new Error('Expected submit action');
 
-  return action as BChatSubmitAction;
+  return action as SubmitAction;
 }
 
 /**
@@ -842,8 +842,7 @@ describe('MessageBubble', (): void => {
         content: '确认下单',
         parts: [expect.objectContaining({ id: expect.any(String), type: 'text', text: '确认下单' })]
       }),
-      parts: [expect.objectContaining({ id: expect.any(String), type: 'text', text: '确认下单' })],
-      errorMessage: '发送小组件消息失败'
+      parts: [expect.objectContaining({ id: expect.any(String), type: 'text', text: '确认下单' })]
     });
     expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-send-message', toolPart.id, expect.any(Function));
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledTimes(1);
@@ -897,8 +896,7 @@ describe('MessageBubble', (): void => {
         content: '小组件错误：库存不足',
         parts: [expect.objectContaining({ type: 'text', text: '小组件错误：库存不足' })]
       }),
-      parts: [expect.objectContaining({ type: 'text', text: '小组件错误：库存不足' })],
-      errorMessage: '发送小组件消息失败'
+      parts: [expect.objectContaining({ type: 'text', text: '小组件错误：库存不足' })]
     });
   });
 
@@ -968,8 +966,7 @@ describe('MessageBubble', (): void => {
         content: '确认最新订单',
         parts: [expect.objectContaining({ type: 'text', text: '确认最新订单' })]
       }),
-      parts: [expect.objectContaining({ type: 'text', text: '确认最新订单' })],
-      errorMessage: '发送小组件消息失败'
+      parts: [expect.objectContaining({ type: 'text', text: '确认最新订单' })]
     });
   });
 

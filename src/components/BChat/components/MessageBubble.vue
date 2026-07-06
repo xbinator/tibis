@@ -65,7 +65,7 @@
  * @file MessageBubble.vue
  * @description 聊天气泡组件，按结构化消息片段渲染文本、思考、工具调用和工具结果。
  */
-import type { BChatSubmitAction } from '../utils/submitAction';
+import type { SubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
 import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type { ChatMessageErrorPart, ChatMessagePart, ChatMessageTextPart, ChatMessageThinkingPart, ChatMessageToolPart } from 'types/chat';
@@ -104,7 +104,7 @@ const props = defineProps<{
 defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
-  (e: 'submit', action: BChatSubmitAction): void;
+  (e: 'submit', action: SubmitAction): void;
   (e: 'rollback', message: Message): void;
 }>();
 

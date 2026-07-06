@@ -12,12 +12,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BChat from '@/components/BChat/index.vue';
-import {
-  type BChatAdaptedUserMessageSubmitInput,
-  type BChatSubmitAction,
-  createToolPartStateUpdateSubmitAction,
-  createUserChoiceSubmitAction
-} from '@/components/BChat/utils/submitAction';
+import { type AdaptedUserMessageInput, type SubmitAction, createToolPartStateUpdate, createUserChoice } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import type { FileMentionOption } from '@/components/BText/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
@@ -441,7 +436,7 @@ function createAssistantMessage(overrides: Partial<Message> = {}): Message {
  * @param input - 已适配的用户消息提交输入
  * @returns 统一提交动作
  */
-function createRuntimeUserMessageTestSubmitAction(input: BChatAdaptedUserMessageSubmitInput): BChatSubmitAction {
+function createRuntimeUserMessageTestSubmitAction(input: AdaptedUserMessageInput): SubmitAction {
   return {
     async run(context): Promise<void> {
       await context.sendAdaptedUserMessage(input);
@@ -1006,7 +1001,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit('submit', createUserChoiceSubmitAction(answer));
+    wrapper.findComponent(ConversationViewStub).vm.$emit('submit', createUserChoice(answer));
     await flushPromises();
 
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(
@@ -1052,8 +1047,7 @@ describe('BChat sessionId runtime', (): void => {
       'submit',
       createRuntimeUserMessageTestSubmitAction({
         userMessage,
-        parts: [resultPart],
-        errorMessage: '提交小组件结果失败'
+        parts: [resultPart]
       })
     );
     await flushPromises();
@@ -1097,14 +1091,14 @@ describe('BChat sessionId runtime', (): void => {
 
     wrapper.findComponent(ConversationViewStub).vm.$emit(
       'submit',
-      createToolPartStateUpdateSubmitAction('assistant-widget', firstToolPart.id, (state) => ({
+      createToolPartStateUpdate('assistant-widget', firstToolPart.id, (state) => ({
         ...state,
         renderData: firstMountedWidgetPart.renderContext.data
       }))
     );
     wrapper.findComponent(ConversationViewStub).vm.$emit(
       'submit',
-      createToolPartStateUpdateSubmitAction('assistant-widget', secondToolPart.id, (state) => ({
+      createToolPartStateUpdate('assistant-widget', secondToolPart.id, (state) => ({
         ...state,
         renderData: secondMountedWidgetPart.renderContext.data
       }))
@@ -1150,7 +1144,7 @@ describe('BChat sessionId runtime', (): void => {
       otherText: ''
     };
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit('submit', createUserChoiceSubmitAction(answer));
+    wrapper.findComponent(ConversationViewStub).vm.$emit('submit', createUserChoice(answer));
     await flushPromises();
 
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(

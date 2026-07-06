@@ -27,7 +27,7 @@
 
 ## Task 1: Define Unified Submit Action
 
-- [x] Add `src/components/BChat/utils/submitAction.ts` with `BChatSubmitAction`, `BChatSubmitContext`, helper factories, and `BChatAdaptedUserMessageSubmitInput`.
+- [x] Add `src/components/BChat/utils/submitAction.ts` with `SubmitAction`, `SubmitContext`, helper factories, and `AdaptedUserMessageInput`.
 - [x] Include file header comments and JSDoc for all exported types.
 - [x] Use `ChatRuntimeUserInputPart` for runtime parts and `Message` for renderer-created user messages.
 
@@ -48,7 +48,7 @@
 
 ## Task 4: Implement Leaf Component Adaptation
 
-- [x] Update `QuestionCard.vue` to emit `submit` with `createUserChoiceSubmitAction(answer)`.
+- [x] Update `QuestionCard.vue` to emit `submit` with `createUserChoice(answer)`.
 - [x] Update `BubblePartWidget.vue` to create `ChatMessageWidgetResultPart`, create a user message with `create.userMessage`, and emit `createRuntimeUserMessageSubmitAction(...)`.
 - [x] Keep existing widget mounted lifecycle and `widget-part-change` behavior unchanged.
 - [x] Re-run the message bubble test and make it pass.

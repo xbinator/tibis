@@ -9,7 +9,7 @@ import { defineComponent, nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import BubblePartWidget from '@/components/BChat/components/MessageBubble/BubblePartWidget/index.vue';
-import type { BChatSubmitAction, BChatSubmitContext } from '@/components/BChat/utils/submitAction';
+import type { SubmitAction, SubmitContext } from '@/components/BChat/utils/submitAction';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import type { WidgetRuntimeChange } from '@/components/BWidget/utils/widgetRuntime';
 
@@ -35,7 +35,7 @@ interface TestWidgetDisplayFixture {
 /**
  * 带工具片段 state 更新能力的提交上下文测试替身。
  */
-interface TestSubmitContext extends Pick<BChatSubmitContext, 'continueAssistantTurn' | 'sendAdaptedUserMessage'> {
+interface TestSubmitContext extends Pick<SubmitContext, 'continueAssistantTurn' | 'sendAdaptedUserMessage'> {
   /** 更新指定工具片段 state */
   updateToolPartState: ReturnType<typeof vi.fn<(messageId: string, partId: string, updater: TestToolPartStateUpdater) => Promise<void>>>;
 }
@@ -411,7 +411,7 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
     const context = createSubmitContextMock();
     await action.run(context);
 
@@ -478,7 +478,7 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
     const context = createSubmitContextMock();
     await action.run(context);
 
@@ -525,7 +525,7 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
     const context = createSubmitContextMock();
     await action.run(context);
 

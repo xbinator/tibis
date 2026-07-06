@@ -161,8 +161,6 @@ interface RuntimeUserMessageSendInput {
   userMessage: Message;
   /** 发送给运行态的结构化输入片段 */
   parts: ChatRuntimeUserInputPart[];
-  /** 发送失败时的默认错误提示 */
-  errorMessage: string;
   /** 是否清空当前输入草稿 */
   clearDraft?: boolean;
 }
@@ -815,7 +813,7 @@ async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promi
     });
   } catch (error) {
     taskRuntime.finishTask('chat');
-    const message = error instanceof Error ? error.message : input.errorMessage;
+    const message = error instanceof Error ? error.message : '发送消息失败';
     if (pendingSessionId && pendingUserMessage) {
       await appendRuntimeErrorMessage({
         sessionId: pendingSessionId,
@@ -901,8 +899,7 @@ async function submitUserTextMessage(content: string, images: typeof inputImages
   await sendRuntimeUserMessage({
     userMessage,
     parts: userParts,
-    clearDraft,
-    errorMessage: '发送消息失败'
+    clearDraft
   });
 }
 

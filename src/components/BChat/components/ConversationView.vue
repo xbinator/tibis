@@ -50,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import type { BChatSubmitAction } from '../utils/submitAction';
+import type { SubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
 import { toRef } from 'vue';
 import { useChatScroll } from '../hooks/useChatScroll';
@@ -83,7 +83,7 @@ defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'load-history'): void;
-  (e: 'submit', action: BChatSubmitAction): void;
+  (e: 'submit', action: SubmitAction): void;
   (e: 'rollback', message: Message): void;
 }>();
 

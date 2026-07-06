@@ -53,7 +53,7 @@
  */
 import type { AIAwaitingUserChoiceItem, AIAwaitingUserChoiceQuestion } from 'types/ai';
 import { computed, ref, watch } from 'vue';
-import { createUserChoiceSubmitAction, type BChatSubmitAction } from '../utils/submitAction';
+import { createUserChoice, type SubmitAction } from '../utils/submitAction';
 
 const props = withDefaults(
   defineProps<{
@@ -67,7 +67,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   /** 用户交互提交到统一聊天提交器 */
-  (e: 'submit', action: BChatSubmitAction): void;
+  (e: 'submit', action: SubmitAction): void;
 }>();
 
 /** 每个问题的选中值列表，索引与 questionItems 一一对应 */
@@ -186,7 +186,7 @@ function handlePrev(): void {
 function handleCancel(): void {
   emit(
     'submit',
-    createUserChoiceSubmitAction({
+    createUserChoice({
       questionId: props.question.questionId,
       toolCallId: props.question.toolCallId,
       answers: [],
@@ -207,7 +207,7 @@ function handleSubmit(): void {
 
   emit(
     'submit',
-    createUserChoiceSubmitAction({
+    createUserChoice({
       questionId: props.question.questionId,
       toolCallId: props.question.toolCallId,
       answers: questionAnswers[0]?.answers ?? [],

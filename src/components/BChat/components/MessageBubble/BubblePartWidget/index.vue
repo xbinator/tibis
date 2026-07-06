@@ -18,7 +18,7 @@ import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import type { WidgetRuntimeChange } from '@/components/BWidget/utils/widgetRuntime';
 import { createNamespace } from '@/utils/namespace';
 import { create, type WidgetToolPart } from '../../../utils/messageHelper';
-import { createToolPartStateUpdateSubmitAction, type BChatAdaptedUserMessageSubmitInput, type BChatSubmitAction } from '../../../utils/submitAction';
+import { createToolPartStateUpdate, type SubmitAction } from '../../../utils/submitAction';
 
 defineOptions({ name: 'BubblePartWidget' });
 
@@ -33,7 +33,7 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   /** 小组件交互提交到统一聊天提交器 */
-  submit: [action: BChatSubmitAction];
+  submit: [action: SubmitAction];
 }>();
 
 const [name] = createNamespace('', 'message-bubble-widget');
@@ -66,34 +66,14 @@ function normalizeWidgetSendMessageTextParts(content: WidgetRuntimeSendMessage['
 }
 
 /**
- * 将小组件脚本上行消息转成 BChat 统一用户消息提交输入。
- * @param sendMessage - 小组件脚本上行消息
- * @returns 统一用户消息提交输入
- */
-function createWidgetSendMessageSubmitInput(sendMessage: WidgetRuntimeSendMessage): BChatAdaptedUserMessageSubmitInput {
-  const rawParts = normalizeWidgetSendMessageTextParts(sendMessage.content);
-  const rawContent = rawParts.map((part): string => part.text).join('\n');
-  const content = sendMessage.isError ? `小组件错误：${rawContent}` : rawContent;
-  const parts: ChatMessageTextPart[] = sendMessage.isError ? [{ id: nanoid(), type: 'text', text: content }] : rawParts;
-  const userMessage = create.userMessage(content);
-  userMessage.parts = parts;
-
-  return {
-    userMessage,
-    parts,
-    errorMessage: '发送小组件消息失败'
-  };
-}
-
-/**
  * 创建运行态变化提交动作。
  * @param messageId - 所属聊天消息 ID
  * @param partId - 小组件运行态所在的消息片段 ID
  * @param change - BWidget 运行态变化
  * @returns 统一提交动作
  */
-function createWidgetRuntimeChangeSubmitAction(messageId: string, partId: string, change: WidgetRuntimeChange): BChatSubmitAction {
-  const updateStateAction = createToolPartStateUpdateSubmitAction(messageId, partId, (state) => ({
+function createWidgetRuntimeChangeSubmitAction(messageId: string, partId: string, change: WidgetRuntimeChange): SubmitAction {
+  const updateStateAction = createToolPartStateUpdate(messageId, partId, (state) => ({
     ...state,
     renderData: change.renderContext.data
   }));
@@ -102,9 +82,18 @@ function createWidgetRuntimeChangeSubmitAction(messageId: string, partId: string
     async run(context): Promise<void> {
       await updateStateAction.run(context);
 
-      if (change.sendMessage) {
-        await context.sendAdaptedUserMessage(createWidgetSendMessageSubmitInput(change.sendMessage));
-      }
+      if (!change.sendMessage) return;
+
+      // 将小组件脚本上行消息归一化为聊天提交输入，避免额外抽象层
+      const { sendMessage } = change;
+      const rawParts = normalizeWidgetSendMessageTextParts(sendMessage.content);
+      const rawContent = rawParts.map((part): string => part.text).join('\n');
+      const content = sendMessage.isError ? `小组件错误：${rawContent}` : rawContent;
+      const parts: ChatMessageTextPart[] = sendMessage.isError ? [{ id: nanoid(), type: 'text', text: content }] : rawParts;
+      const userMessage = create.userMessage(content);
+      userMessage.parts = parts;
+
+      await context.sendAdaptedUserMessage({ userMessage, parts });
     }
   };
 }
