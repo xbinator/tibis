@@ -362,4 +362,28 @@ describe('buildWidgetDataSchema', (): void => {
       required: []
     });
   });
+
+  it('preserves array type from data initialization when runtime assignment cannot be inferred', (): void => {
+    const code = `
+      Widget({
+        data: {
+          movieList: []
+        },
+        async mounted() {
+          const res = await this.$http.get('https://example.com/api')
+          this.movieList = res.data.movieList
+        }
+      })
+    `;
+
+    expect(buildWidgetDataSchema(code, inputSchema)).toEqual({
+      type: 'object',
+      properties: {
+        movieList: {
+          type: 'array'
+        }
+      },
+      required: []
+    });
+  });
 });

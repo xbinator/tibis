@@ -201,16 +201,17 @@ function readInputSchemaPathSegments(expression: ts.Expression, readInputAlias: 
 
 /**
  * 从表达式推断 schema 字段定义。
+ * 无法静态推导的表达式（如来自异步请求结果的属性访问）返回 undefined，避免污染已有类型。
  * @param expression - 表达式节点
  * @param inputSchema - input schema
  * @param readInputAlias - input 路径别名读取函数
- * @returns schema 字段定义
+ * @returns schema 字段定义；无法推导时返回 undefined
  */
 function inferSchemaPropertyFromExpression(
   expression: ts.Expression,
   inputSchema: WidgetSchemaObject | undefined,
   readInputAlias: InputAliasReader
-): WidgetSchemaProperty {
+): WidgetSchemaProperty | undefined {
   const inputPath = readInputSchemaPathSegments(expression, readInputAlias);
   const inputProperty = inputPath ? readSchemaPropertyAtPath(inputSchema, inputPath) : undefined;
 
@@ -231,12 +232,20 @@ function inferSchemaPropertyFromExpression(
         const propertyName = readPropertyName(item.name);
 
         if (propertyName) {
-          childProperties[propertyName] = inferSchemaPropertyFromExpression(item.initializer, inputSchema, readInputAlias);
+          const childProperty = inferSchemaPropertyFromExpression(item.initializer, inputSchema, readInputAlias);
+
+          if (childProperty) {
+            childProperties[propertyName] = childProperty;
+          }
         }
       }
 
       if (ts.isShorthandPropertyAssignment(item)) {
-        childProperties[item.name.text] = inferSchemaPropertyFromExpression(item.name, inputSchema, readInputAlias);
+        const childProperty = inferSchemaPropertyFromExpression(item.name, inputSchema, readInputAlias);
+
+        if (childProperty) {
+          childProperties[item.name.text] = childProperty;
+        }
       }
     }
 
@@ -245,10 +254,11 @@ function inferSchemaPropertyFromExpression(
 
   if (ts.isArrayLiteralExpression(expression)) {
     const firstElement = expression.elements[0];
+    const items = firstElement ? inferSchemaPropertyFromExpression(firstElement, inputSchema, readInputAlias) : undefined;
 
     return {
       type: 'array',
-      ...(firstElement ? { items: inferSchemaPropertyFromExpression(firstElement, inputSchema, readInputAlias) } : {})
+      ...(items ? { items } : {})
     };
   }
 
@@ -268,18 +278,23 @@ function inferSchemaPropertyFromExpression(
     return { type: 'number' };
   }
 
-  return { type: 'string' };
+  return undefined;
 }
 
 /**
  * 合并两个 schema 字段定义。
+ * next 为 undefined 时保留 current，避免无法推导的赋值污染已有类型。
  * @param current - 当前字段
  * @param next - 新字段
- * @returns 合并后的字段
+ * @returns 合并后的字段；current 和 next 均为 undefined 时返回 undefined
  */
-function mergeSchemaProperty(current: WidgetSchemaProperty | undefined, next: WidgetSchemaProperty): WidgetSchemaProperty {
+function mergeSchemaProperty(current: WidgetSchemaProperty | undefined, next: WidgetSchemaProperty | undefined): WidgetSchemaProperty | undefined {
   if (!current) {
-    return cloneWidgetSchemaProperty(next);
+    return next ? cloneWidgetSchemaProperty(next) : undefined;
+  }
+
+  if (!next) {
+    return cloneWidgetSchemaProperty(current);
   }
 
   if (current.type === 'object' && next.type === 'object') {
@@ -288,10 +303,12 @@ function mergeSchemaProperty(current: WidgetSchemaProperty | undefined, next: Wi
       properties: {
         ...(current.properties ?? {}),
         ...Object.fromEntries(
-          Object.entries(next.properties ?? {}).map(([key, childProperty]: [string, WidgetSchemaProperty]): [string, WidgetSchemaProperty] => [
-            key,
-            mergeSchemaProperty(current.properties?.[key], childProperty)
-          ])
+          Object.entries(next.properties ?? {})
+            .map(([key, childProperty]: [string, WidgetSchemaProperty]): [string, WidgetSchemaProperty | undefined] => [
+              key,
+              mergeSchemaProperty(current.properties?.[key], childProperty)
+            ])
+            .filter((entry: [string, WidgetSchemaProperty | undefined]): entry is [string, WidgetSchemaProperty] => entry[1] !== undefined)
         )
       },
       required: []
@@ -303,19 +320,23 @@ function mergeSchemaProperty(current: WidgetSchemaProperty | undefined, next: Wi
 
 /**
  * 将字段定义写入对象 schema 的指定路径。
+ * property 为 undefined 时跳过写入，避免无法推导的赋值覆盖已有类型。
  * @param properties - 根属性集合
  * @param segments - 数据路径片段
  * @param property - 字段定义
  */
-function writeDataSchemaProperty(properties: Record<string, WidgetSchemaProperty>, segments: string[], property: WidgetSchemaProperty): void {
-  if (segments.length === 0) {
+function writeDataSchemaProperty(properties: Record<string, WidgetSchemaProperty>, segments: string[], property: WidgetSchemaProperty | undefined): void {
+  if (segments.length === 0 || !property) {
     return;
   }
 
   const [segment, ...restSegments] = segments;
 
   if (restSegments.length === 0) {
-    properties[segment] = mergeSchemaProperty(properties[segment], property);
+    const merged = mergeSchemaProperty(properties[segment], property);
+    if (merged) {
+      properties[segment] = merged;
+    }
     return;
   }
 
@@ -398,12 +419,15 @@ function writeWidgetConfigDataProperties(
   readInputAlias: InputAliasReader
 ): void {
   const dataProperty = inferSchemaPropertyFromExpression(dataExpression, inputSchema, readInputAlias);
-  if (dataProperty.type !== 'object' || !dataProperty.properties) {
+  if (!dataProperty || dataProperty.type !== 'object' || !dataProperty.properties) {
     return;
   }
 
   Object.entries(dataProperty.properties).forEach(([key, property]: [string, WidgetSchemaProperty]): void => {
-    properties[key] = mergeSchemaProperty(properties[key], property);
+    const merged = mergeSchemaProperty(properties[key], property);
+    if (merged) {
+      properties[key] = merged;
+    }
   });
 }
 
