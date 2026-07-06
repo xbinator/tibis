@@ -758,9 +758,10 @@ function handleDraggableMove(event: BDraggableMoveEvent<SidebarLayerEntry>): voi
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 20px;
+  width: 24px;
   height: 100%;
   padding: 0;
+  padding-right: 4px;
   color: var(--text-secondary);
   appearance: none;
   cursor: pointer;
