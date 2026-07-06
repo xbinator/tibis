@@ -26,6 +26,7 @@ import type { WidgetData, WidgetShapeElement, WidgetSize } from './types';
 import type { WidgetRenderContext } from 'types/widget';
 import type { CSSProperties } from 'vue';
 import { computed, onMounted, shallowRef, watch } from 'vue';
+import { nanoid } from 'nanoid';
 import { logger } from '@/shared/logger';
 import { createNamespace } from '@/utils/namespace';
 import { provideRenderContext } from './hooks/useRenderContext';
@@ -55,12 +56,6 @@ interface Props {
   value: WidgetData;
   /** 运行态渲染上下文 */
   renderContext: WidgetRenderContext;
-  /** 是否启用运行态脚本执行 */
-  runtimeEnabled?: boolean;
-  /** 运行态控制器，供元素自行调用JS 脚本 methods */
-  runtime?: WidgetRuntimeController;
-  /** 内容留白 */
-  padding?: number;
 }
 
 /**
@@ -75,11 +70,7 @@ interface WidgetRuntimeRenderableElement {
   renderContext: WidgetLoopRenderContext;
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  padding: 0,
-  runtime: undefined,
-  runtimeEnabled: false
-});
+const props = defineProps<Props>();
 
 const emit = defineEmits<{
   /** 运行态脚本执行完成后的状态变化 */
@@ -102,8 +93,6 @@ const runtimeFinished = shallowRef<boolean>(false);
 const runtimeFailed = shallowRef<boolean>(false);
 /** 串行运行态脚本任务，避免并发交互读取同一个旧快照。 */
 let runtimeTaskQueue: Promise<void> = Promise.resolve();
-/** 实时 patch 执行序号。 */
-let runtimePatchExecutionSeq = 0;
 /** 当前允许接收 patch 的执行 ID。 */
 let activePatchExecutionId: string | null = null;
 
@@ -130,7 +119,7 @@ const runtimeRenderContextByElementId = computed<Map<string, WidgetLoopRenderCon
   () => new Map(runtimeRenderElements.value.map((item: WidgetLoopRenderElement): [string, WidgetLoopRenderContext] => [item.element.id, item.renderContext]))
 );
 /** 当前运行态内容布局。 */
-const runtimeLayout = computed(() => createWidgetRuntimeLayoutFromRenderElements(runtimeRenderElements.value, props.padding));
+const runtimeLayout = computed(() => createWidgetRuntimeLayoutFromRenderElements(runtimeRenderElements.value, 0));
 /** 当前运行态内容缩放比例。 */
 const runtimeScale = computed<number>(() => {
   if (!runtimeLayout.value.elements.length) {
@@ -193,12 +182,11 @@ function commitLocalRuntimeState(state: WidgetRuntimeState): void {
 }
 
 /**
- * 创建一次脚本执行的实时 patch ID。
- * @returns patch 执行 ID
+ * 判断当前 Widget mounted 是否已经触发过。
+ * @returns mounted 是否已触发
  */
-function createPatchExecutionId(): string {
-  runtimePatchExecutionSeq += 1;
-  return `widget-runtime-patch-${runtimePatchExecutionSeq}`;
+function hasTriggeredMounted(): boolean {
+  return runtimeState.value.renderContext.isMounted === true;
 }
 
 /**
@@ -206,7 +194,7 @@ function createPatchExecutionId(): string {
  * @returns patch 执行 ID
  */
 function beginPatchExecution(): string {
-  const executionId = createPatchExecutionId();
+  const executionId = nanoid();
 
   activePatchExecutionId = executionId;
   patchPreviewRuntimeState.value = null;
@@ -329,8 +317,11 @@ function enqueueRuntimeTask(task: () => Promise<void>): void {
  * 初始化运行态 mounted 生命周期。
  */
 async function initWidgetRuntime(): Promise<void> {
-  if (!props.runtimeEnabled) return;
   if (mountedInitialized.value || runtimeFailed.value) return;
+  if (hasTriggeredMounted()) {
+    mountedInitialized.value = true;
+    return;
+  }
 
   const currentState = runtimeState.value;
   mountedInitialized.value = true;
@@ -359,7 +350,6 @@ async function initWidgetRuntime(): Promise<void> {
  * @param interactionCode - 元素交互表达式
  */
 async function runRuntimeInteraction(interactionCode: string): Promise<void> {
-  if (!props.runtimeEnabled) return;
   if (!mountedInitialized.value || runtimeFinished.value || runtimeFailed.value) return;
   if (!interactionCode.trim()) return;
 
@@ -391,7 +381,7 @@ const widgetRuntimeController: WidgetRuntimeController = {
   }
 };
 /** 运行态控制器响应式包装。 */
-const providedRuntime = computed<WidgetRuntimeController | undefined>(() => props.runtime ?? (props.runtimeEnabled ? widgetRuntimeController : undefined));
+const providedRuntime = computed<WidgetRuntimeController>(() => widgetRuntimeController);
 
 provideWidgetRuntime(providedRuntime);
 

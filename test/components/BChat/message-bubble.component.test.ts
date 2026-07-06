@@ -43,7 +43,8 @@ interface TestWidgetDisplayFixture {
 function createSubmitContextMock(): SubmitContext {
   return {
     continueAssistantTurn: vi.fn(),
-    sendAdaptedUserMessage: vi.fn()
+    sendAdaptedUserMessage: vi.fn(),
+    updateMessagePart: vi.fn()
   };
 }
 
@@ -152,10 +153,6 @@ const BWidgetRuntimeSilentStub = defineComponent({
     renderContext: {
       type: Object,
       required: true
-    },
-    runtimeEnabled: {
-      type: Boolean,
-      default: false
     },
     value: {
       type: Object,
@@ -291,6 +288,19 @@ function readLatestSubmitAction(wrapper: VueWrapper): SubmitAction {
   if (!action) throw new Error('Expected submit action');
 
   return action as SubmitAction;
+}
+
+/**
+ * 断言最近一次提交动作只更新消息片段。
+ * @param wrapper - 消息气泡包装器
+ */
+async function expectLatestSubmitActionUpdatesPartOnly(wrapper: VueWrapper): Promise<void> {
+  const action = readLatestSubmitAction(wrapper);
+  const submitContext = createSubmitContextMock();
+  await action.run(submitContext);
+
+  expect(submitContext.updateMessagePart).toHaveBeenCalledTimes(1);
+  expect(submitContext.sendAdaptedUserMessage).not.toHaveBeenCalled();
 }
 
 /**
@@ -484,6 +494,7 @@ describe('MessageBubble', (): void => {
           input: {
             city: '上海'
           },
+          isMounted: true,
           data: {
             weather: {
               temperature: 31
@@ -494,8 +505,31 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    const action = readLatestSubmitAction(wrapper);
+    const submitContext = createSubmitContextMock();
+    await action.run(submitContext);
+
+    expect(submitContext.updateMessagePart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: 'assistant-widget',
+        part: expect.objectContaining({
+          result: expect.objectContaining({
+            data: expect.objectContaining({
+              renderContext: expect.objectContaining({
+                isMounted: true,
+                data: {
+                  weather: {
+                    temperature: 31
+                  }
+                }
+              })
+            })
+          })
+        })
+      })
+    );
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      isMounted: true,
       data: {
         weather: {
           temperature: 31
@@ -549,7 +583,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -597,7 +631,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -661,7 +695,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -747,7 +781,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -1144,7 +1178,7 @@ describe('MessageBubble', (): void => {
     });
     const wrapper = mountMessageBubbleWithSilentWidgetRuntime(message);
 
-    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('runtimeEnabled')).toBe(true);
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).exists()).toBe(true);
   });
 
   it('keeps open_widget render data local without tool part state actions', async (): Promise<void> => {
@@ -1208,7 +1242,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {

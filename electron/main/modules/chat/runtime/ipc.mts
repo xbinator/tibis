@@ -11,6 +11,7 @@ import type {
   ChatRuntimeHandlerResult,
   ChatRuntimeSendInput,
   ChatRuntimeSubmitConfirmationInput,
+  ChatRuntimeSubmitMessagePartInput,
   ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeSubmitToolResultInput
 } from 'types/chat-runtime';
@@ -95,5 +96,10 @@ export function registerChatRuntimeHandlers(): void {
   ipcMain.handle(
     'chat:runtime:tool-result',
     wrapRuntimeHandler((_event, input) => chatRuntimeService.submitToolResult(input as ChatRuntimeSubmitToolResultInput))
+  );
+
+  ipcMain.handle(
+    'chat:runtime:message-part',
+    wrapRuntimeHandler((_event, input) => chatRuntimeService.submitMessagePart(input as ChatRuntimeSubmitMessagePartInput))
   );
 }

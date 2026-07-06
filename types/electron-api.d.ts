@@ -34,6 +34,7 @@ import type {
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
   ChatRuntimeSubmitConfirmationInput,
+  ChatRuntimeSubmitMessagePartInput,
   ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeSubmitToolResultInput,
   ChatRuntimeToolRequestEvent
@@ -594,6 +595,7 @@ export interface ElectronAPI {
   chatRuntimeAbort: (input: ChatRuntimeAbortInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeCompact: (input: ChatRuntimeCompactInput) => Promise<ChatRuntimeHandlerResult<ChatRuntimeCompactResult>>;
   chatRuntimeSubmitToolResult: (input: ChatRuntimeSubmitToolResultInput) => Promise<ChatRuntimeHandlerResult<void>>;
+  chatRuntimeSubmitMessagePart: (input: ChatRuntimeSubmitMessagePartInput) => Promise<ChatRuntimeHandlerResult<void>>;
   chatRuntimeOnMessageCreated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;
   chatRuntimeOnMessageUpdated: (callback: (event: ChatRuntimeMessageEvent) => void) => () => void;
   chatRuntimeOnMessageDeleted: (callback: (event: ChatRuntimeMessageDeletedEvent) => void) => () => void;

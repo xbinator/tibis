@@ -5,6 +5,7 @@
  */
 import type { AIMCPRequestConfig, AIToolContext, AIToolExecutor } from 'types/ai';
 import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
+import type { WidgetRenderContext } from 'types/widget';
 import { effectScope, reactive, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +31,7 @@ const electronAPIMock = vi.hoisted(() => ({
   chatRuntimeSubmitBridgeResponse: vi.fn(),
   chatRuntimeAbort: vi.fn(),
   chatRuntimeSubmitToolResult: vi.fn(),
+  chatRuntimeSubmitMessagePart: vi.fn(),
   chatRuntimeOnMessageCreated: vi.fn((callback: NonNullable<typeof listeners.messageCreated>) => {
     listeners.messageCreated = callback;
     return vi.fn();
@@ -96,9 +98,18 @@ function createMessage(overrides: Partial<ChatMessageRecord>): ChatMessageRecord
 /**
  * 创建 open_widget 工具片段。
  * @param id - 工具片段 ID
+ * @param renderContext - Widget 渲染上下文
  * @returns open_widget 工具片段
  */
-function createOpenWidgetToolPart(id = 'tool-part-open-widget'): ChatMessageToolPart {
+function createOpenWidgetToolPart(
+  id = 'tool-part-open-widget',
+  renderContext: WidgetRenderContext = {
+    input: {
+      city: '上海'
+    },
+    data: {}
+  }
+): ChatMessageToolPart {
   return {
     id,
     type: 'tool',
@@ -116,12 +127,7 @@ function createOpenWidgetToolPart(id = 'tool-part-open-widget'): ChatMessageTool
         sessionId: 'widget-weather-tool-call-widget',
         widgetId: 'weather',
         value: {},
-        renderContext: {
-          input: {
-            city: '上海'
-          },
-          data: {}
-        }
+        renderContext
       }
     }
   };
@@ -140,6 +146,7 @@ describe('useChatRuntime', (): void => {
     electronAPIMock.chatRuntimeSubmitBridgeResponse.mockReset();
     electronAPIMock.chatRuntimeAbort.mockReset();
     electronAPIMock.chatRuntimeSubmitToolResult.mockReset();
+    electronAPIMock.chatRuntimeSubmitMessagePart.mockReset();
     electronAPIMock.chatRuntimeOnMessageCreated.mockClear();
     electronAPIMock.chatRuntimeOnMessageUpdated.mockClear();
     electronAPIMock.chatRuntimeOnMessageDeleted.mockClear();
@@ -165,6 +172,7 @@ describe('useChatRuntime', (): void => {
     electronAPIMock.chatRuntimeSubmitBridgeResponse.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeAbort.mockResolvedValue({ ok: true });
     electronAPIMock.chatRuntimeSubmitToolResult.mockResolvedValue({ ok: true });
+    electronAPIMock.chatRuntimeSubmitMessagePart.mockResolvedValue({ ok: true });
   });
 
   afterEach((): void => {
@@ -296,6 +304,32 @@ describe('useChatRuntime', (): void => {
         toolCallId: 'tool-call-widget'
       });
       expect(messages.value[0].parts[0]).not.toHaveProperty('state');
+    });
+
+    scope.stop();
+  });
+
+  it('submits renderer message parts to the active runtime', async (): Promise<void> => {
+    const messages = ref<Message[]>([]);
+    const scope = effectScope();
+
+    await scope.run(async (): Promise<void> => {
+      const runtime = useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      await runtime.submitMessagePart({
+        runtimeId: 'runtime-1',
+        messageId: 'assistant-1',
+        part: createOpenWidgetToolPart()
+      });
+
+      expect(electronAPIMock.chatRuntimeSubmitMessagePart).toHaveBeenCalledWith({
+        runtimeId: 'runtime-1',
+        messageId: 'assistant-1',
+        part: createOpenWidgetToolPart()
+      });
     });
 
     scope.stop();

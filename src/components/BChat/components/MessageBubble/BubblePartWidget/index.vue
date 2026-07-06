@@ -4,7 +4,7 @@
 -->
 <template>
   <div :class="name">
-    <BWidgetRuntime :render-context="runtimeRenderContext" runtime-enabled :value="widgetDisplay.value" @change="handleRuntimeChange" />
+    <BWidgetRuntime :render-context="runtimeRenderContext" :value="widgetDisplay.value" @change="handleRuntimeChange" />
   </div>
 </template>
 
@@ -23,6 +23,8 @@ import { create, type WidgetToolPart } from '../../../utils/messageHelper';
 defineOptions({ name: 'BubblePartWidget' });
 
 interface Props {
+  /** 持有当前工具片段的消息 ID。 */
+  messageId: string;
   /** 已通过父组件判定的 open_widget 工具片段。 */
   part: WidgetToolPart;
 }
@@ -36,27 +38,24 @@ const emit = defineEmits<{
 
 const [name] = createNamespace('', 'message-bubble-widget');
 
-/** renderer 本地刚运行出的渲染数据，用于抵御流式旧快照回退。 */
-const localRenderData = shallowRef<WidgetRenderContext['data'] | null>(null);
-/** 产生本地渲染数据时对应的 open_widget 展示源。 */
+/** renderer 本地刚运行出的渲染上下文，用于抵御流式旧快照回退。 */
+const localRenderContext = shallowRef<WidgetRenderContext | null>(null);
+/** 产生本地渲染上下文时对应的 open_widget 展示源。 */
 const localRenderSource = shallowRef<WidgetDisplayPayload | null>(null);
 
 /** 当前 open_widget 展示载荷。 */
 const widgetDisplay = computed(() => props.part.result.data);
 
-/** 当前展示源仍匹配时可继续使用的本地渲染数据。 */
-const currentLocalRenderData = computed<WidgetRenderContext['data'] | null>(() => {
-  if (!localRenderData.value || !localRenderSource.value) return null;
+/** 当前展示源仍匹配时可继续使用的本地渲染上下文。 */
+const currentLocalRenderContext = computed<WidgetRenderContext | null>(() => {
+  if (!localRenderContext.value || !localRenderSource.value) return null;
 
-  return isEqual(localRenderSource.value, widgetDisplay.value) ? localRenderData.value : null;
+  return isEqual(localRenderSource.value, widgetDisplay.value) ? localRenderContext.value : null;
 });
 
 /** 当前可渲染上下文，优先使用本地刚执行出的运行态数据。 */
 const runtimeRenderContext = computed<WidgetRenderContext>(() => {
-  return {
-    ...widgetDisplay.value.renderContext,
-    data: currentLocalRenderData.value ?? widgetDisplay.value.renderContext.data
-  };
+  return currentLocalRenderContext.value ?? widgetDisplay.value.renderContext;
 });
 
 /**
@@ -77,7 +76,7 @@ function normalizeWidgetSendMessageTextParts(content: WidgetRuntimeSendMessage['
  * @param sendMessage - 小组件脚本上行消息
  * @returns 统一提交动作
  */
-function createWidgetSendMessageAction(sendMessage: WidgetRuntimeSendMessage): SubmitAction {
+function createSendMessageAction(sendMessage: WidgetRuntimeSendMessage): SubmitAction {
   return {
     async run(context): Promise<void> {
       // 将小组件脚本上行消息归一化为聊天提交输入，避免额外抽象层
@@ -94,16 +93,34 @@ function createWidgetSendMessageAction(sendMessage: WidgetRuntimeSendMessage): S
 }
 
 /**
+ * 创建小组件运行态变化提交动作。
+ * @param messageId - 持有当前工具片段的消息 ID
+ * @param part - 当前 open_widget 工具片段
+ * @param change - 运行态变化
+ * @returns 统一提交动作
+ */
+function createRuntimeChangeAction(messageId: string, part: WidgetToolPart, change: WidgetRuntimeChange): SubmitAction {
+  return {
+    async run(context): Promise<void> {
+      const nextPart = cloneDeep(part);
+      nextPart.result.data.renderContext = cloneDeep(change.renderContext);
+      await context.updateMessagePart({ messageId, part: nextPart });
+
+      if (!change.sendMessage) return;
+
+      await createSendMessageAction(change.sendMessage).run(context);
+    }
+  };
+}
+
+/**
  * 处理 BWidget 内部脚本执行完成后的运行态变化。
  * @param change - BWidget 运行态变化
  */
 function handleRuntimeChange(change: WidgetRuntimeChange): void {
-  localRenderData.value = change.renderContext.data;
+  localRenderContext.value = change.renderContext;
   localRenderSource.value = cloneDeep(widgetDisplay.value);
-
-  if (!change.sendMessage) return;
-
-  emit('submit', createWidgetSendMessageAction(change.sendMessage));
+  emit('submit', createRuntimeChangeAction(props.messageId, props.part, change));
 }
 </script>
 

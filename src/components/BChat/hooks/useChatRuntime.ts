@@ -20,6 +20,7 @@ import type {
   ChatRuntimeMessageEvent,
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
+  ChatRuntimeSubmitMessagePartInput,
   ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
@@ -113,6 +114,9 @@ export type BChatRuntimeSubmitUserChoiceInput = Pick<
   ChatRuntimeSubmitUserChoiceInput,
   'sessionId' | 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp' | 'answer'
 >;
+
+/** ChatRuntime renderer 消息片段提交输入。 */
+export type BChatRuntimeSubmitMessagePartInput = ChatRuntimeSubmitMessagePartInput;
 
 /**
  * 可能包含主进程 runtime 扩展字段的 renderer 消息。
@@ -684,6 +688,14 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
   }
 
   /**
+   * 提交 renderer 侧产生的消息片段更新。
+   * @param input - 消息片段更新输入
+   */
+  async function submitMessagePart(input: BChatRuntimeSubmitMessagePartInput): Promise<void> {
+    assertRuntimeResult(await electronAPI.chatRuntimeSubmitMessagePart(toCloneableData(input)));
+  }
+
+  /**
    * 中止当前活跃 runtime。
    */
   async function abort(): Promise<void> {
@@ -707,6 +719,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     abort,
     continueTurn,
     send,
+    submitMessagePart,
     submitUserChoice
   };
 }

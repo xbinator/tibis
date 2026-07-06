@@ -630,8 +630,7 @@ describe('BWidgetRuntime', (): void => {
             city: '上海'
           },
           data: {}
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -641,6 +640,7 @@ describe('BWidgetRuntime', (): void => {
     expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
       reason: 'mount',
       renderContext: {
+        isMounted: true,
         data: {
           weather: {
             temperature: 29
@@ -659,8 +659,7 @@ describe('BWidgetRuntime', (): void => {
         renderContext: {
           input: {},
           data: {}
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -689,8 +688,7 @@ describe('BWidgetRuntime', (): void => {
           data: {
             message: '旧数据'
           }
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -711,8 +709,7 @@ describe('BWidgetRuntime', (): void => {
           data: {
             message: '已经展示的数据'
           }
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -735,8 +732,7 @@ describe('BWidgetRuntime', (): void => {
             message: '第一版'
           },
           data: {}
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -760,8 +756,7 @@ describe('BWidgetRuntime', (): void => {
             message: '第二版'
           },
           data: {}
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -805,8 +800,7 @@ describe('BWidgetRuntime', (): void => {
       renderContext: {
         input: {},
         data: {}
-      },
-      runtimeEnabled: true
+      }
     };
     stubElectronRequest(request);
 
@@ -828,6 +822,93 @@ describe('BWidgetRuntime', (): void => {
     expect(request).toHaveBeenCalledTimes(2);
     expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount' });
     secondWrapper.unmount();
+  });
+
+  it('does not rerun mounted when the render context is already marked as mounted', async (): Promise<void> => {
+    const request = vi.fn<() => Promise<RequestResponse>>(
+      async (): Promise<RequestResponse> => ({
+        status: 200,
+        ok: true,
+        url: 'https://api.example.com/weather',
+        headers: {},
+        data: {}
+      })
+    );
+    const dataItem = createRuntimeMessageWidgetData(
+      [
+        'export default class Weather extends Widget {',
+        '  async mounted() {',
+        "    await this.$http.get('https://api.example.com/weather')",
+        "    this.message = '加载完成'",
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const runtimeProps = {
+      value: dataItem,
+      renderContext: {
+        input: {},
+        data: {
+          message: '加载完成'
+        },
+        isMounted: true
+      }
+    };
+    stubElectronRequest(request);
+
+    const wrapper = mount(BWidgetRuntime, {
+      props: runtimeProps,
+      attachTo: document.body
+    });
+    await flushWidgetRuntime();
+
+    expect(request).not.toHaveBeenCalled();
+    expect(wrapper.emitted('change')).toBeUndefined();
+    expect(findNodeById(wrapper, 'text-1').text()).toBe('加载完成');
+    wrapper.unmount();
+  });
+
+  it('keeps runtime interactions available after skipping mounted by render context state', async (): Promise<void> => {
+    const runtimeProps = {
+      value: {
+        ...createRuntimeWidgetData(),
+        execute: {
+          code: 'export default class Weather extends Widget {}'
+        }
+      },
+      renderContext: {
+        input: {},
+        data: {
+          count: 0
+        },
+        isMounted: true
+      }
+    };
+    const wrapper = mount(BWidgetRuntime, {
+      props: runtimeProps,
+      global: {
+        stubs: {
+          WidgetNode: WidgetNodeRuntimeCounterStub
+        }
+      },
+      attachTo: document.body
+    });
+    await wrapper.get('.runtime-counter-probe').trigger('click');
+    await flushWidgetRuntime();
+
+    const changes = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
+
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      reason: 'interaction',
+      renderContext: {
+        isMounted: true,
+        data: {
+          count: 1
+        }
+      }
+    });
+    wrapper.unmount();
   });
 
   it('does not rerun mounted when props fall back to created on the same runtime instance', async (): Promise<void> => {
@@ -859,8 +940,7 @@ describe('BWidgetRuntime', (): void => {
     const wrapper: VueWrapper = mount(BWidgetRuntime, {
       props: {
         value: dataItem,
-        renderContext: initialRenderContext,
-        runtimeEnabled: true
+        renderContext: initialRenderContext
       },
       attachTo: document.body
     });
@@ -914,8 +994,7 @@ describe('BWidgetRuntime', (): void => {
         renderContext: {
           input: {},
           data: {}
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -961,8 +1040,7 @@ describe('BWidgetRuntime', (): void => {
         renderContext: {
           input: {},
           data: {}
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -1011,8 +1089,7 @@ describe('BWidgetRuntime', (): void => {
       renderContext: {
         input: {},
         data: {}
-      },
-      runtimeEnabled: true
+      }
     };
     stubElectronRequest(request);
 
@@ -1064,8 +1141,7 @@ describe('BWidgetRuntime', (): void => {
             coffeeId: 'latte'
           },
           data: {}
-        },
-        runtimeEnabled: true
+        }
       },
       attachTo: document.body
     });
@@ -1092,8 +1168,7 @@ describe('BWidgetRuntime', (): void => {
           data: {
             count: 0
           }
-        },
-        runtimeEnabled: true
+        }
       },
       global: {
         stubs: {
@@ -1123,14 +1198,10 @@ describe('BWidgetRuntime', (): void => {
   });
 
   it('provides the runtime controller to rendered elements', async (): Promise<void> => {
-    const runInteraction = vi.fn<(code: string) => void>();
     const wrapper = mount(BWidgetRuntime, {
       props: {
         value: createRuntimeWidgetData(),
-        renderContext: createRenderContext('上海', 28),
-        runtime: {
-          runInteraction
-        }
+        renderContext: createRenderContext('上海', 28)
       },
       global: {
         stubs: {
@@ -1142,8 +1213,19 @@ describe('BWidgetRuntime', (): void => {
 
     await nextTick();
     await wrapper.get('.runtime-interaction-probe').trigger('click');
+    await flushWidgetRuntime();
 
-    expect(runInteraction).toHaveBeenCalledWith("this.$sendMessage('确认下单')");
+    const interactionChange = (wrapper.emitted('change') ?? [])
+      .map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange)
+      .find((change) => change.reason === 'interaction');
+
+    expect(interactionChange).toMatchObject({
+      reason: 'interaction',
+      sendMessage: {
+        content: '确认下单',
+        isError: false
+      }
+    });
     wrapper.unmount();
   });
 });

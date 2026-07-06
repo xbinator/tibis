@@ -15,6 +15,8 @@ export interface WidgetRenderContext {
   input: Record<string, unknown>;
   /** Widget会话数据 */
   data: Record<string, unknown>;
+  /** mounted 生命周期是否已经执行过 */
+  isMounted?: boolean;
 }
 
 /**

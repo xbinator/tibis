@@ -3,7 +3,7 @@
  * @description BChat 消息级交互统一提交动作类型。
  */
 import type { Message } from './types';
-import type { AIUserChoiceAnswerData } from 'types/chat';
+import type { AIUserChoiceAnswerData, ChatMessagePart } from 'types/chat';
 import type { ChatRuntimeUserInputPart } from 'types/chat-runtime';
 
 /**
@@ -16,6 +16,16 @@ export interface AdaptedUserMessageInput {
   parts: ChatRuntimeUserInputPart[];
   /** 是否清空主输入框草稿 */
   clearDraft?: boolean;
+}
+
+/**
+ * 已由底层组件适配好的消息片段更新输入。
+ */
+export interface MessagePartUpdateInput {
+  /** 持有该 part 的消息 ID */
+  messageId: string;
+  /** 更新后的完整消息片段 */
+  part: ChatMessagePart;
 }
 
 /**
@@ -32,6 +42,11 @@ export interface SubmitContext {
    * @param input - 用户消息提交输入
    */
   sendAdaptedUserMessage: (input: AdaptedUserMessageInput) => Promise<void>;
+  /**
+   * 提交底层组件产生的消息片段更新。
+   * @param input - 消息片段更新输入
+   */
+  updateMessagePart: (input: MessagePartUpdateInput) => Promise<void>;
 }
 
 /**

@@ -39,7 +39,7 @@
 
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
 
-            <BubblePartWidget v-else-if="item.kind === 'widget'" :part="item.part" @submit="$emit('submit', $event)" />
+            <BubblePartWidget v-else-if="item.kind === 'widget'" :message-id="message.id" :part="item.part" @submit="$emit('submit', $event)" />
           </template>
         </template>
       </div>
@@ -181,6 +181,7 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     return [];
   })
 );
+
 /**
  * 打开图片预览。
  * @param index - 图片索引

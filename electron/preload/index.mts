@@ -513,6 +513,13 @@ const electronAPI: ElectronAPI = {
   chatRuntimeSubmitToolResult: (input) => ipcRenderer.invoke('chat:runtime:tool-result', input),
 
   /**
+   * 提交 renderer 侧产生的消息片段更新。
+   * @param input - 消息片段更新输入
+   * @returns 提交结果
+   */
+  chatRuntimeSubmitMessagePart: (input) => ipcRenderer.invoke('chat:runtime:message-part', input),
+
+  /**
    * 监听 ChatRuntime 创建消息事件。
    * @param callback - 事件回调
    * @returns 取消监听函数

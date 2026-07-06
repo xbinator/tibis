@@ -838,10 +838,14 @@ async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promi
 /** 消息级交互统一提交器。 */
 const chatSubmitter = useChatSubmitter({
   taskRuntime,
+  messages,
   getSessionId: () => activeSessionId.value ?? undefined,
+  getActiveRuntimeId: () => chatRuntime.activeRuntimeId.value ?? undefined,
   resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig,
   submitUserChoice: chatRuntime.submitUserChoice,
-  sendRuntimeUserMessage
+  sendRuntimeUserMessage,
+  submitRuntimeMessagePart: chatRuntime.submitMessagePart,
+  updateSessionMessage: (sessionId, nextMessage) => chatStore.updateSessionMessage(sessionId, nextMessage)
 });
 
 /** 用户消息回退 hook。 */

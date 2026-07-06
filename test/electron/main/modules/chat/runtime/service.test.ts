@@ -510,6 +510,124 @@ describe('chat runtime service shell', (): void => {
     });
   });
 
+  it('submits renderer message parts into the active assistant message', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const streamDeferred = createDeferred();
+    const updatedMessages: Array<ChatRuntimeEventMap['chat:runtime:message-updated']['message']> = [];
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message) => {
+          updatedMessages.push({ ...message, parts: [...message.parts] });
+        }
+      },
+      streamExecutor: async ({ assistantMessage }) => {
+        assistantMessage.parts.push({
+          id: 'part-open-widget',
+          type: 'tool',
+          toolCallId: 'tool-call-widget',
+          toolName: 'open_widget',
+          status: 'done',
+          input: { id: 'weather' },
+          result: {
+            toolName: 'open_widget',
+            status: 'success',
+            data: { kind: 'widget_display', sessionId: 'widget-weather-tool-call-widget', widgetId: 'weather', value: {} }
+          }
+        });
+        await streamDeferred.promise;
+        assistantMessage.content = '继续输出';
+        assistantMessage.parts.push({ id: 'part-stream-text', type: 'text', text: '继续输出' });
+        return {};
+      }
+    });
+
+    const result = await service.send(createInput({ content: 'hello runtime' }));
+    await flushRuntimeTasks();
+
+    await service.submitMessagePart({
+      runtimeId: result.runtimeId,
+      messageId: 'assistant-message-1',
+      part: {
+        id: 'part-open-widget',
+        type: 'tool',
+        toolCallId: 'tool-call-widget',
+        toolName: 'open_widget',
+        status: 'done',
+        input: { id: 'weather' },
+        result: {
+          toolName: 'open_widget',
+          status: 'success',
+          data: {
+            kind: 'widget_display',
+            sessionId: 'widget-weather-tool-call-widget',
+            widgetId: 'weather',
+            value: {},
+            renderContext: {
+              input: { city: '上海' },
+              data: { weather: { temperature: 29 } },
+              isMounted: true
+            }
+          }
+        }
+      }
+    });
+    streamDeferred.resolve();
+    await flushRuntimeTasks();
+
+    expect(updatedMessages[0]).toMatchObject({
+      id: 'assistant-message-1',
+      parts: [
+        {
+          type: 'tool',
+          toolCallId: 'tool-call-widget',
+          result: {
+            data: {
+              renderContext: {
+                data: { weather: { temperature: 29 } },
+                isMounted: true
+              }
+            }
+          }
+        }
+      ]
+    });
+    expect(updatedMessages.at(-1)?.parts).toEqual([
+      expect.objectContaining({
+        type: 'tool',
+        toolCallId: 'tool-call-widget',
+        result: expect.objectContaining({
+          data: expect.objectContaining({
+            renderContext: expect.objectContaining({
+              isMounted: true
+            })
+          })
+        })
+      }),
+      expect.objectContaining({ type: 'text', text: '继续输出' })
+    ]);
+    expect(collector.events).toContainEqual(
+      expect.objectContaining({
+        name: 'chat:runtime:message-updated',
+        payload: expect.objectContaining({
+          runtimeId: result.runtimeId,
+          message: expect.objectContaining({
+            parts: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'tool',
+                toolCallId: 'tool-call-widget'
+              })
+            ])
+          })
+        })
+      })
+    );
+  });
+
   it('auto-compacts after completion when provider usage exceeds usable input budget', async (): Promise<void> => {
     const collector = createEventCollector();
     const compact = vi.fn().mockResolvedValue({ status: 'success' as const, messageId: 'compression-1', recordId: 'record-1' });
@@ -734,7 +852,8 @@ describe('chat runtime service shell', (): void => {
     const collector = createEventCollector();
     const priorMessage = createMessageRecord('prior-user', 'user', '大量历史上下文'.repeat(40_000), '2026-06-19T00:00:00.000Z');
     const compact = vi.fn(async (input: ChatRuntimeCompactInput) => {
-      input.targetMessage?.parts.push({ id: 'part0085',
+      input.targetMessage?.parts.push({
+        id: 'part0085',
         type: 'compaction',
         auto: true,
         reason: 'auto',
@@ -770,7 +889,8 @@ describe('chat runtime service shell', (): void => {
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       if (streamExecutor.mock.calls.length === 1) {
         assistantMessage.parts = [
-          { id: 'part0086',
+          {
+            id: 'part0086',
             type: 'tool',
             toolCallId: 'tool-call-1',
             toolName: 'read_file',
@@ -820,7 +940,8 @@ describe('chat runtime service shell', (): void => {
       operations.push('compact');
       compactTargetFinishedStates.push(input.targetMessage?.finished);
       if (input.targetMessage) {
-        input.targetMessage.parts.push({ id: 'part0088',
+        input.targetMessage.parts.push({
+          id: 'part0088',
           type: 'compaction',
           auto: true,
           reason: 'auto',
@@ -837,7 +958,8 @@ describe('chat runtime service shell', (): void => {
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       if (streamExecutor.mock.calls.length === 1) {
         operations.push('stream-1');
-        assistantMessage.parts.push({ id: 'part0089',
+        assistantMessage.parts.push({
+          id: 'part0089',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'operate_webpage',
@@ -885,7 +1007,8 @@ describe('chat runtime service shell', (): void => {
     const updatedMessages: ChatMessageRecord[] = [];
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       assistantMessage.parts = [
-        { id: 'part0091',
+        {
+          id: 'part0091',
           type: 'tool',
           toolCallId: 'tool-call-question',
           toolName: 'question',
@@ -965,7 +1088,8 @@ describe('chat runtime service shell', (): void => {
     const updatedMessages: ChatMessageRecord[] = [];
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       assistantMessage.parts = [
-        { id: 'part0092',
+        {
+          id: 'part0092',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'read_file',
@@ -1197,7 +1321,8 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        { id: 'part0093',
+        {
+          id: 'part0093',
           type: 'tool',
           toolCallId: 'tool-call-old',
           toolName: 'read_file',
@@ -1219,7 +1344,8 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        { id: 'part0094',
+        {
+          id: 'part0094',
           type: 'tool',
           toolCallId: 'tool-call-recent',
           toolName: 'read_file',
@@ -1306,7 +1432,8 @@ describe('chat runtime service shell', (): void => {
     const streamExecutor = vi.fn<ChatRuntimeStreamExecutor>(async ({ assistantMessage }, updateAssistant) => {
       if (streamExecutor.mock.calls.length === 1) {
         assistantMessage.parts = [
-          { id: 'part0096',
+          {
+            id: 'part0096',
             type: 'tool',
             toolCallId: 'tool-call-1',
             toolName: 'read_file',
@@ -1373,7 +1500,8 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        { id: 'part0099',
+        {
+          id: 'part0099',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'ask_user_choice',
@@ -1620,7 +1748,8 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        { id: 'part0108',
+        {
+          id: 'part0108',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'ask_user_choice',
@@ -1738,7 +1867,8 @@ describe('chat runtime service shell', (): void => {
       role: 'assistant',
       content: '',
       parts: [
-        { id: 'part0111',
+        {
+          id: 'part0111',
           type: 'tool',
           toolCallId: 'tool-call-1',
           toolName: 'ask_user_choice',

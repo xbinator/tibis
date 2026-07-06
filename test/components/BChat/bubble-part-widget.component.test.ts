@@ -30,7 +30,7 @@ interface TestWidgetDisplayFixture {
 }
 
 /** 小组件提交上下文测试替身。 */
-type TestSubmitContext = Pick<SubmitContext, 'continueAssistantTurn' | 'sendAdaptedUserMessage'>;
+type TestSubmitContext = Pick<SubmitContext, 'continueAssistantTurn' | 'sendAdaptedUserMessage' | 'updateMessagePart'>;
 
 /**
  * 创建统一提交上下文测试替身。
@@ -39,7 +39,8 @@ type TestSubmitContext = Pick<SubmitContext, 'continueAssistantTurn' | 'sendAdap
 function createSubmitContextMock(): TestSubmitContext {
   return {
     continueAssistantTurn: vi.fn(),
-    sendAdaptedUserMessage: vi.fn()
+    sendAdaptedUserMessage: vi.fn(),
+    updateMessagePart: vi.fn()
   };
 }
 
@@ -141,10 +142,6 @@ const BWidgetRuntimeStub = defineComponent({
       type: Object,
       required: true
     },
-    runtimeEnabled: {
-      type: Boolean,
-      default: false
-    },
     value: {
       type: Object,
       required: true
@@ -206,7 +203,6 @@ describe('BubblePartWidget', (): void => {
 
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props()).toMatchObject({
       renderContext,
-      runtimeEnabled: true,
       value: widgetValue
     });
   });
@@ -241,7 +237,29 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
+    const context = createSubmitContextMock();
+    await action.run(context);
+
+    expect(context.updateMessagePart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: 'assistant-widget-message',
+        part: expect.objectContaining({
+          result: expect.objectContaining({
+            data: expect.objectContaining({
+              renderContext: expect.objectContaining({
+                data: {
+                  weather: {
+                    temperature: 28
+                  }
+                }
+              })
+            })
+          })
+        })
+      })
+    );
+    expect(context.sendAdaptedUserMessage).not.toHaveBeenCalled();
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -410,7 +428,17 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
+    const context = createSubmitContextMock();
+    await action.run(context);
+
+    expect(context.updateMessagePart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: 'assistant-widget-message',
+        part: expect.objectContaining({ id: targetToolPart.id })
+      })
+    );
+    expect(context.sendAdaptedUserMessage).not.toHaveBeenCalled();
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         submitted: {
@@ -424,7 +452,7 @@ describe('BubblePartWidget', (): void => {
     expect(targetToolPart).not.toHaveProperty('state');
   });
 
-  it('keeps widget runtime data local without sending widget_result', async (): Promise<void> => {
+  it('submits widget runtime data as a message part update without sending user messages', async (): Promise<void> => {
     const widgetScript = [
       'export default class Weather extends Widget {',
       '  unmounted() {',
@@ -456,7 +484,30 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
+    const context = createSubmitContextMock();
+    await action.run(context);
+
+    expect(context.updateMessagePart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: 'assistant-widget-message',
+        part: expect.objectContaining({
+          id: toolPart.id,
+          result: expect.objectContaining({
+            data: expect.objectContaining({
+              renderContext: expect.objectContaining({
+                data: {
+                  submitted: {
+                    temperature: 28
+                  }
+                }
+              })
+            })
+          })
+        })
+      })
+    );
+    expect(context.sendAdaptedUserMessage).not.toHaveBeenCalled();
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         submitted: {
@@ -488,6 +539,12 @@ describe('BubblePartWidget', (): void => {
     const context = createSubmitContextMock();
     await action.run(context);
 
+    expect(context.updateMessagePart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: 'assistant-widget-message',
+        part: expect.objectContaining({ id: toolPart.id })
+      })
+    );
     expect(context.sendAdaptedUserMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         userMessage: expect.objectContaining({

@@ -2,12 +2,14 @@
  * @file useChatSubmitter.ts
  * @description BChat 消息级交互统一提交 hook。
  */
-import type { BChatRuntimeSubmitUserChoiceInput } from './useChatRuntime';
+import type { BChatRuntimeSubmitMessagePartInput, BChatRuntimeSubmitUserChoiceInput } from './useChatRuntime';
 import type { ChatTaskKind, ChatTaskStartResult, ChatTaskState } from './useChatTaskRuntime';
-import type { AdaptedUserMessageInput, SubmitAction } from '../utils/submitAction';
+import type { AdaptedUserMessageInput, MessagePartUpdateInput, SubmitAction } from '../utils/submitAction';
+import type { Message } from '../utils/types';
 import type { AIUserChoiceAnswerData } from 'types/chat';
 import type { ChatRuntimeSendInput, ChatRuntimeStartResult } from 'types/chat-runtime';
 import type { Ref } from 'vue';
+import { cloneDeep } from 'lodash-es';
 
 /** ChatRuntime 通用请求配置。 */
 type ChatRuntimeRequestConfig = Pick<ChatRuntimeSendInput, 'contextWindow' | 'system' | 'workspaceRoot' | 'tools' | 'tavily' | 'mcp'>;
@@ -35,16 +37,24 @@ interface ChatSubmitterTaskRuntime {
  * BChat 统一提交 hook 选项。
  */
 interface UseChatSubmitterOptions {
+  /** 当前消息列表。 */
+  messages: Ref<Message[]>;
   /** 任务运行时。 */
   taskRuntime: ChatSubmitterTaskRuntime;
   /** 获取当前会话 ID。 */
   getSessionId: () => string | undefined;
+  /** 获取当前活跃 runtime ID。 */
+  getActiveRuntimeId: () => string | undefined;
   /** 解析 Runtime 请求配置。 */
   resolveRuntimeRequestConfig: () => Promise<ChatRuntimeRequestConfig | null>;
   /** 提交用户选择并续跑。 */
   submitUserChoice: (input: BChatRuntimeSubmitUserChoiceInput) => Promise<ChatRuntimeStartResult>;
   /** 发送已创建的用户消息。 */
   sendRuntimeUserMessage: (input: AdaptedUserMessageInput) => Promise<void>;
+  /** 提交 renderer 侧产生的消息片段更新。 */
+  submitRuntimeMessagePart: (input: BChatRuntimeSubmitMessagePartInput) => Promise<void>;
+  /** 持久化单条消息。 */
+  updateSessionMessage: (sessionId: string | undefined, message: Message) => Promise<void>;
 }
 
 /**
@@ -119,13 +129,42 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
   }
 
   /**
+   * 提交 renderer 已构造好的消息片段更新。
+   * @param input - 消息片段更新输入
+   */
+  async function updateMessagePart(input: MessagePartUpdateInput): Promise<void> {
+    const messageIndex = options.messages.value.findIndex((message: Message): boolean => message.id === input.messageId);
+    if (messageIndex < 0) return;
+
+    const nextMessage = cloneDeep(options.messages.value[messageIndex]);
+    const partIndex = nextMessage.parts.findIndex((part): boolean => part.id === input.part.id);
+    if (partIndex < 0) return;
+
+    nextMessage.parts.splice(partIndex, 1, cloneDeep(input.part));
+
+    const runtimeId = options.getActiveRuntimeId();
+    if (runtimeId) {
+      await options.submitRuntimeMessagePart({
+        runtimeId,
+        messageId: input.messageId,
+        part: cloneDeep(input.part)
+      });
+      return;
+    }
+
+    options.messages.value.splice(messageIndex, 1, nextMessage);
+    await options.updateSessionMessage(options.getSessionId(), nextMessage);
+  }
+
+  /**
    * 提交消息级交互动作。
    * @param action - 已由底层组件适配好的提交动作
    */
   async function submit(action: SubmitAction): Promise<void> {
     await action.run({
       continueAssistantTurn,
-      sendAdaptedUserMessage
+      sendAdaptedUserMessage,
+      updateMessagePart
     });
   }
 

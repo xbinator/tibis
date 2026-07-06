@@ -30,6 +30,7 @@ import type {
   ChatRuntimeSendInput,
   ChatRuntimeStartResult,
   ChatRuntimeSubmitConfirmationInput,
+  ChatRuntimeSubmitMessagePartInput,
   ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeSubmitToolResultInput
 } from 'types/chat-runtime';
@@ -1120,6 +1121,30 @@ export function createChatRuntimeService(dependencies: Partial<ChatRuntimeServic
      */
     submitToolResult(input: ChatRuntimeSubmitToolResultInput): void {
       rendererToolRequests.submit(input);
+    },
+
+    /**
+     * 提交 renderer 侧产生的消息片段更新。
+     * @param input - 消息片段更新输入
+     */
+    async submitMessagePart(input: ChatRuntimeSubmitMessagePartInput): Promise<void> {
+      const runtime = activeRuntimes.get(input.runtimeId);
+      if (!runtime) {
+        throw new ChatRuntimeError('RUNTIME_NOT_ACTIVE', `Runtime ${input.runtimeId} is not active`);
+      }
+
+      const assistantMessage = activeAssistantMessages.get(runtime.runtimeId);
+      if (!assistantMessage || assistantMessage.id !== input.messageId) {
+        throw new ChatRuntimeError('MESSAGE_NOT_ACTIVE', `Message ${input.messageId} is not active in runtime ${input.runtimeId}`);
+      }
+
+      const partIndex = assistantMessage.parts.findIndex((part): boolean => part.id === input.part.id);
+      if (partIndex < 0) {
+        throw new ChatRuntimeError('MESSAGE_PART_NOT_ACTIVE', `Message part ${input.part.id} is not active in message ${input.messageId}`);
+      }
+
+      assistantMessage.parts.splice(partIndex, 1, { ...input.part });
+      await updateAssistantMessage(runtime, assistantMessage);
     },
 
     /**

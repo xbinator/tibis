@@ -278,6 +278,16 @@ export interface ChatRuntimeSubmitToolResultInput {
   result: AIToolExecutionResult;
 }
 
+/** Renderer message part submission input. */
+export interface ChatRuntimeSubmitMessagePartInput {
+  /** Runtime id owning the active assistant message. */
+  runtimeId: string;
+  /** Active assistant message id. */
+  messageId: string;
+  /** Next message part snapshot. */
+  part: ChatMessagePart;
+}
+
 /** Auto-name command input. */
 export interface ChatRuntimeAutoNameInput {
   /** Session id to rename. */

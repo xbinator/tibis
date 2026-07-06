@@ -104,6 +104,8 @@ interface WidgetScriptRunResult {
   data: Record<string, unknown>;
   /** 是否写入过数据。 */
   dataChanged: boolean;
+  /** 指定生命周期是否真实存在并执行过。 */
+  lifecycleExecuted?: boolean;
   /** 脚本声明的上行消息。 */
   sendMessage?: WidgetRuntimeSendMessage;
 }
@@ -206,6 +208,7 @@ function isWidgetRuntimeSendMessage(value: unknown): value is WidgetRuntimeSendM
  */
 function isWidgetScriptRunResult(value: unknown): value is WidgetScriptRunResult {
   if (!isPlainRecord(value) || !isPlainRecord(value.data) || typeof value.dataChanged !== 'boolean') return false;
+  if (value.lifecycleExecuted !== undefined && typeof value.lifecycleExecuted !== 'boolean') return false;
   return value.sendMessage === undefined || isWidgetRuntimeSendMessage(value.sendMessage);
 }
 
@@ -891,9 +894,13 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  __initializeWidgetData(executionState, widgetInstance)',
     '  const widgetThis = __createWidgetThisContext(widgetInstance, executionState)',
     '  const methodBindings = __createMethodBindings(widgetThis, widgetInstance, executionState)',
+    '  let lifecycleExecuted = false',
     '  if (lifecycleName) {',
     '    const lifecycle = __readWidgetLifecycle(widgetInstance, lifecycleName)',
-    "    if (typeof lifecycle === 'function') await Reflect.apply(lifecycle, widgetThis, [])",
+    "    if (typeof lifecycle === 'function') {",
+    '      lifecycleExecuted = true',
+    '      await Reflect.apply(lifecycle, widgetThis, [])',
+    '    }',
     '  } else if (typeof interactionCode === "string" && interactionCode.trim()) {',
     '    await __runInteractionCode(interactionCode, widgetThis, methodBindings)',
     '  }',
@@ -902,6 +909,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return {',
     '    data: __clone(__widgetData),',
     '    dataChanged: executionState.dataChanged,',
+    '    ...(lifecycleExecuted ? { lifecycleExecuted } : {}),',
     '    ...(executionState.sendMessage ? { sendMessage: __clone(executionState.sendMessage) } : {})',
     '  }',
     '}',
@@ -1016,6 +1024,23 @@ function applyWidgetSandboxResult(state: WidgetRuntimeState, result: WidgetScrip
 }
 
 /**
+ * 标记运行态上下文已经执行过 mounted 生命周期。
+ * @param state - 原始运行态状态
+ * @returns 带 mounted 标记的运行态状态
+ */
+function markWidgetRuntimeMounted(state: WidgetRuntimeState): WidgetRuntimeState {
+  if (state.renderContext.isMounted === true) return state;
+
+  return {
+    ...state,
+    renderContext: {
+      ...state.renderContext,
+      isMounted: true
+    }
+  };
+}
+
+/**
  * 运行 Widget 沙箱脚本。
  * @param state - 运行态状态
  * @param options - 沙箱执行选项
@@ -1052,9 +1077,11 @@ export async function initWidgetMountState(state: WidgetRuntimeState, options: W
 
   const nextState = cloneDeep(state);
   const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'mounted' });
-  if (!sandboxResult.dataChanged) return state;
+  if (!sandboxResult.dataChanged && sandboxResult.lifecycleExecuted !== true) return state;
 
-  return applyWidgetSandboxResult(nextState, sandboxResult);
+  const changedState = applyWidgetSandboxResult(nextState, sandboxResult);
+
+  return sandboxResult.lifecycleExecuted === true ? markWidgetRuntimeMounted(changedState) : changedState;
 }
 
 /**
