@@ -33,7 +33,8 @@ export const TOOL_ACTION_LABELS: Record<string, { alias: string }> = {
   tavily_search: { alias: '搜索网页' },
   tavily_extract: { alias: '提取网页内容' },
   open_draft: { alias: '打开草稿' },
-  open_resource: { alias: '打开资源' }
+  open_resource: { alias: '打开资源' },
+  widget: { alias: '小组件' }
 };
 
 /**
