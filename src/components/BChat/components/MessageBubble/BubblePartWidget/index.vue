@@ -72,7 +72,7 @@ function normalizeWidgetSendMessageTextParts(content: WidgetRuntimeSendMessage['
  * @param change - BWidget 运行态变化
  * @returns 统一提交动作
  */
-function createWidgetRuntimeChangeSubmitAction(messageId: string, partId: string, change: WidgetRuntimeChange): SubmitAction {
+function createWidgetRuntimeChange(messageId: string, partId: string, change: WidgetRuntimeChange): SubmitAction {
   const updateStateAction = createToolPartStateUpdate(messageId, partId, (state) => ({
     ...state,
     renderData: change.renderContext.data
@@ -105,7 +105,7 @@ function createWidgetRuntimeChangeSubmitAction(messageId: string, partId: string
 function handleRuntimeChange(change: WidgetRuntimeChange): void {
   localRenderData.value = change.renderContext.data;
 
-  emit('submit', createWidgetRuntimeChangeSubmitAction(props.messageId, props.part.id, change));
+  emit('submit', createWidgetRuntimeChange(props.messageId, props.part.id, change));
 }
 </script>
 
