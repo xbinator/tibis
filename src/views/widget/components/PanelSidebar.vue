@@ -14,6 +14,7 @@
       v-model:size="size"
       :class="bem('splitter', { expanded: isExpanded })"
       :disabled="isExpanded"
+      :closable="false"
       :max-width="SIDEBAR_MAX_SIZE"
       :min-width="SIDEBAR_MIN_SIZE"
       position="right"
@@ -277,7 +278,6 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   flex-shrink: 0;
   height: 100%;
   min-height: 0;
-  border-right: 1px solid var(--border-primary);
 }
 
 .widget-sidebar--expanded {
@@ -320,5 +320,6 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   min-height: 0;
   overflow: hidden;
   background: var(--bg-primary);
+  border-right: 1px solid var(--border-primary);
 }
 </style>

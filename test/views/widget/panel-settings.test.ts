@@ -6,8 +6,8 @@
 /* eslint-disable vue/one-component-per-file */
 import { defineComponent } from 'vue';
 import type { PropType } from 'vue';
-import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { config, mount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
@@ -144,6 +144,172 @@ vi.mock('@/views/widget/components/PageSetter.vue', () => ({
   })
 }));
 
+/** 测试前原始全局 stub 配置。 */
+const originalGlobalStubs = config.global.stubs;
+
+/** 面板测试中自动注册组件的最小可交互替身。 */
+const panelGlobalStubs = {
+  AInput: defineComponent({
+    name: 'AInputStub',
+    props: {
+      value: {
+        type: String,
+        default: ''
+      }
+    },
+    emits: ['update:value'],
+    setup(_props, { emit }) {
+      /**
+       * 将原生 input 事件转换为 AInput 的 value 更新事件。
+       * @param event - 原生输入事件
+       */
+      function handleInput(event: Event): void {
+        if (event.target instanceof HTMLInputElement) {
+          emit('update:value', event.target.value);
+        }
+      }
+
+      return { handleInput };
+    },
+    template: '<input :value="value" @input="handleInput" />'
+  }),
+  BButton: defineComponent({
+    name: 'BButtonStub',
+    props: {
+      icon: {
+        type: String,
+        default: ''
+      }
+    },
+    template: '<button type="button" :data-icon="icon"><slot></slot></button>'
+  }),
+  BColorPicker: defineComponent({
+    name: 'BColorPickerStub',
+    props: {
+      value: {
+        type: String,
+        default: ''
+      }
+    },
+    emits: ['update:value'],
+    setup(_props, { emit }) {
+      /**
+       * 将原生 input 事件转换为 BColorPicker 的 value 更新事件。
+       * @param event - 原生输入事件
+       */
+      function handleInput(event: Event): void {
+        if (event.target instanceof HTMLInputElement) {
+          emit('update:value', event.target.value);
+        }
+      }
+
+      return { handleInput };
+    },
+    template: '<input type="color" :value="value || \'#000000\'" @input="handleInput" />'
+  }),
+  BIcon: defineComponent({
+    name: 'BIconStub',
+    props: {
+      icon: {
+        type: String,
+        default: ''
+      }
+    },
+    template: '<span :data-icon="icon"></span>'
+  }),
+  BInputNumber: defineComponent({
+    name: 'BInputNumberStub',
+    props: {
+      value: {
+        type: [Number, String],
+        default: undefined
+      },
+      placeholder: {
+        type: String,
+        default: ''
+      }
+    },
+    emits: ['update:value', 'change'],
+    setup(_props, { emit }) {
+      /**
+       * 将原生数字输入事件转换为 BInputNumber 的更新事件。
+       * @param event - 原生输入事件
+       */
+      function handleInput(event: Event): void {
+        if (!(event.target instanceof HTMLInputElement)) {
+          return;
+        }
+
+        const value = Number(event.target.value);
+        emit('update:value', value);
+        emit('change', value);
+      }
+
+      return { handleInput };
+    },
+    template: '<input type="number" :value="value" :placeholder="placeholder" @input="handleInput" />'
+  }),
+  BSectionBlock: defineComponent({
+    name: 'BSectionBlockStub',
+    props: {
+      title: {
+        type: String,
+        required: true
+      }
+    },
+    template: '<section class="b-section-block-stub" :data-title="title"><slot></slot></section>'
+  }),
+  BSectionItem: defineComponent({
+    name: 'BSectionItemStub',
+    props: {
+      label: {
+        type: String,
+        default: ''
+      },
+      icon: {
+        type: String,
+        default: ''
+      }
+    },
+    template: '<label class="b-section-item-stub" :data-label="label" :data-icon="icon"><slot></slot></label>'
+  }),
+  BSelect: defineComponent({
+    name: 'BSelectStub',
+    props: {
+      value: {
+        type: [String, Number],
+        default: undefined
+      },
+      options: {
+        type: Array as PropType<Array<{ value: string | number; label: string }>>,
+        default: (): Array<{ value: string | number; label: string }> => []
+      }
+    },
+    emits: ['update:value', 'change'],
+    setup(_props, { emit }) {
+      /**
+       * 将原生 select 事件转换为 BSelect 的更新事件。
+       * @param event - 原生选择事件
+       */
+      function handleChange(event: Event): void {
+        if (!(event.target instanceof HTMLSelectElement)) {
+          return;
+        }
+
+        emit('update:value', event.target.value);
+        emit('change', event.target.value);
+      }
+
+      return { handleChange };
+    },
+    template: `
+      <select :value="value" @change="handleChange">
+        <option v-for="option in options" :key="String(option.value)" :value="option.value">{{ option.label }}</option>
+      </select>
+    `
+  })
+};
+
 /**
  * 创建测试Widget 元素。
  * @param id - 元素 ID
@@ -219,6 +385,17 @@ function createLoopConfig(source = '$input.items'): WidgetElementLoopConfig {
 }
 
 describe('PanelSettings', (): void => {
+  beforeEach((): void => {
+    config.global.stubs = {
+      ...originalGlobalStubs,
+      ...panelGlobalStubs
+    };
+  });
+
+  afterEach((): void => {
+    config.global.stubs = originalGlobalStubs;
+  });
+
   it('forwards page setting widget data changes', async (): Promise<void> => {
     const dataItem = createWidgetData([]);
     const wrapper = mount(PanelSettings, {

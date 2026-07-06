@@ -82,7 +82,7 @@ interface WidgetRuntimeRenderableElement {
 
 const props = withDefaults(defineProps<Props>(), {
   lifecycle: () => ({}),
-  padding: 0,
+  padding: 16,
   runtime: undefined,
   runtimeEnabled: false,
   status: 'created'

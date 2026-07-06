@@ -305,13 +305,16 @@ function handleKeyup(): void {
 }
 
 /**
- * 处理变量选择，直接覆盖整个输入值为选中的变量。
+ * 处理变量选择，按当前触发范围插入或替换变量。
  * useTemplateSyntax 为 true 时用 {{ }} 包裹（模板字段），为 false 时插入纯路径（绑定路径字段）。
  * @param variable - 被选中的变量
  */
 function handleVariableSelect(variable: Variable): void {
-  const nextValue = props.useTemplateSyntax ? `{{ ${variable.value} }}` : variable.value;
-  const nextCursor = nextValue.length;
+  const currentValue = modelValue.value;
+  const range = triggerRange.value ?? { from: cursorPosition.value, to: cursorPosition.value, query: '' };
+  const insertedValue = props.useTemplateSyntax ? `{{ ${variable.value} }}` : variable.value;
+  const nextValue = `${currentValue.slice(0, range.from)}${insertedValue}${currentValue.slice(range.to)}`;
+  const nextCursor = range.from + insertedValue.length;
 
   updateValue(nextValue);
   closeDropdown();

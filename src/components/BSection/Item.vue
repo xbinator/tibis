@@ -1,7 +1,7 @@
-<script lang="tsx">
+<script lang="ts">
 import type { BSectionLabelMinWidth } from './context';
 import type { BSectionItemLabelAlign, BSectionItemProps as Props } from './types';
-import { defineComponent, computed, type CSSProperties, type PropType, h } from 'vue';
+import { defineComponent, computed, type CSSProperties, type PropType, h, resolveComponent } from 'vue';
 import { addCssUnit } from '@/utils/css';
 import { createNamespace } from '@/utils/namespace';
 import { useSectionContext } from './context';
@@ -87,7 +87,11 @@ export default defineComponent({
       }
 
       if (props.icon) {
-        return <BIcon icon={props.icon} size={props.iconSize} class={bem('icon')} />;
+        return h(resolveComponent('BIcon'), {
+          class: bem('icon'),
+          icon: props.icon,
+          size: props.iconSize
+        });
       }
 
       return null;
@@ -111,26 +115,41 @@ export default defineComponent({
       if (!content) return null;
 
       if (tooltipText) {
-        return (
-          <div class={labelClass} style={labelStyle.value}>
-            <ATooltip title={tooltipText}>{content}</ATooltip>
-          </div>
+        return h(
+          'div',
+          {
+            class: labelClass,
+            style: labelStyle.value
+          },
+          [
+            h(
+              resolveComponent('ATooltip'),
+              {
+                title: tooltipText
+              },
+              {
+                default: () => content
+              }
+            )
+          ]
         );
       }
 
-      return (
-        <div class={labelClass} style={labelStyle.value}>
-          {content}
-        </div>
+      return h(
+        'div',
+        {
+          class: labelClass,
+          style: labelStyle.value
+        },
+        [content]
       );
     }
 
-    return () => (
-      <div class={bem({ vertical: props.direction === 'vertical' })}>
-        {renderLabel()}
-        <div class={bem('content', { right: props.contentAlign === 'right' })}>{slots.default?.()}</div>
-      </div>
-    );
+    return () =>
+      h('div', { class: bem({ vertical: props.direction === 'vertical' }) }, [
+        renderLabel(),
+        h('div', { class: bem('content', { right: props.contentAlign === 'right' }) }, slots.default?.())
+      ]);
   }
 });
 </script>

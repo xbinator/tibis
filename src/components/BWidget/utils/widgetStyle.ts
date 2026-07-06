@@ -171,6 +171,15 @@ export function resolveWidgetElementVerticalAlign(textVerticalAlign: WidgetEleme
 }
 
 /**
+ * 文字横向对齐到 flex 主轴对齐方式的映射。
+ */
+const WIDGET_TEXT_ALIGN_JUSTIFY_CONTENT_MAP: Partial<Record<NonNullable<WidgetElementStyle['textAlign']>, CSSProperties['justifyContent']>> = {
+  center: 'center',
+  left: 'flex-start',
+  right: 'flex-end'
+};
+
+/**
  * 创建Widget元素内容排版 CSS 属性。
  * @param style - 元素样式
  * @returns Vue CSS 属性对象
@@ -182,6 +191,7 @@ export function createWidgetElementContentStyleProperties(style?: WidgetElementS
     fontSize: style?.fontSize === undefined ? undefined : `${style.fontSize}px`,
     fontStyle: style?.fontStyle,
     fontWeight: style?.fontWeight,
+    justifyContent: style?.textAlign ? WIDGET_TEXT_ALIGN_JUSTIFY_CONTENT_MAP[style.textAlign] : undefined,
     lineHeight: style?.lineHeight,
     textAlign: style?.textAlign,
     textDecoration: style?.textDecoration,

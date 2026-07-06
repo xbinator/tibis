@@ -8,7 +8,7 @@ import { defineComponent, nextTick, ref } from 'vue';
 import type { PropType, Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import type { SelectOption } from '@/components/BSelect/types';
+import type { Variable, VariableOptionGroup } from '@/components/BText/types';
 import { provideWidgetContext } from '@/components/BWidget/hooks/useWidgetContext';
 import type { WidgetData, WidgetElement, WidgetElementLoopConfig } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
@@ -158,6 +158,32 @@ function createWidgetData(element: WidgetElement): WidgetData {
   return dataItem;
 }
 
+/**
+ * 测试用变量树节点。
+ */
+interface VariableTreeNode extends Variable {
+  /** 子级变量节点 */
+  children?: VariableTreeNode[];
+}
+
+/**
+ * 扁平化变量树。
+ * @param variables - 变量树节点列表
+ * @returns 扁平变量列表
+ */
+function flattenVariableTree(variables: VariableTreeNode[]): VariableTreeNode[] {
+  return variables.flatMap((item: VariableTreeNode): VariableTreeNode[] => [item, ...flattenVariableTree(item.children ?? [])]);
+}
+
+/**
+ * 读取变量分组中的全部变量。
+ * @param options - 变量分组选项
+ * @returns 扁平变量列表
+ */
+function readVariables(options: VariableOptionGroup[]): VariableTreeNode[] {
+  return options.flatMap((group: VariableOptionGroup): VariableTreeNode[] => flattenVariableTree(group.options as VariableTreeNode[]));
+}
+
 describe('AdvancedSetter', (): void => {
   /**
    * 创建高级设置面板测试包装器。
@@ -220,37 +246,69 @@ describe('AdvancedSetter', (): void => {
             },
             template: '<label><span>{{ label }}</span><slot></slot></label>'
           },
-          BSelect: defineComponent({
-            name: 'BSelectStub',
+          BTextInput: defineComponent({
+            name: 'BTextInputStub',
             props: {
               value: {
                 type: String,
                 default: ''
               },
+              useTemplateSyntax: {
+                type: Boolean,
+                default: true
+              },
               options: {
-                type: Array as PropType<SelectOption[]>,
-                default: (): SelectOption[] => []
+                type: Array as PropType<VariableOptionGroup[]>,
+                default: (): VariableOptionGroup[] => []
+              },
+              placeholder: {
+                type: String,
+                default: ''
               }
             },
             emits: ['update:value'],
             setup(_props, { emit }) {
               /**
-               * 将原生 select 事件转换为 BSelect 的 value 更新事件。
-               * @param event - 原生选择事件
+               * 将原生 input 事件转换为 BTextInput 的 value 更新事件。
+               * @param event - 原生输入事件
                */
-              function handleChange(event: Event): void {
-                if (event.target instanceof HTMLSelectElement) {
+              function handleInput(event: Event): void {
+                if (event.target instanceof HTMLInputElement) {
                   emit('update:value', event.target.value);
                 }
               }
 
-              return { handleChange };
+              return { handleInput };
             },
-            template: `
-              <select :value="value" @change="handleChange">
-                <option v-for="option in options" :key="String(option.value)" :value="option.value">{{ option.label }}</option>
-              </select>
-            `
+            template: '<input class="advanced-setter-source-input" :value="value" :placeholder="placeholder" @input="handleInput" />'
+          }),
+          BInputNumber: defineComponent({
+            name: 'BInputNumberStub',
+            props: {
+              value: {
+                type: Number,
+                default: null
+              },
+              placeholder: {
+                type: String,
+                default: ''
+              }
+            },
+            emits: ['update:value'],
+            setup(_props, { emit }) {
+              /**
+               * 将原生数字输入事件转换为 BInputNumber 的 value 更新事件。
+               * @param event - 原生输入事件
+               */
+              function handleInput(event: Event): void {
+                if (event.target instanceof HTMLInputElement) {
+                  emit('update:value', Number(event.target.value));
+                }
+              }
+
+              return { handleInput };
+            },
+            template: '<input type="number" :value="value" :placeholder="placeholder" @input="handleInput" />'
           })
         }
       }
@@ -260,8 +318,13 @@ describe('AdvancedSetter', (): void => {
   it('renders loop source options from element variables', (): void => {
     const element = createWidgetElement();
     const wrapper = mountAdvancedSetter(element);
+    const input = wrapper.findComponent({ name: 'BTextInputStub' });
+    const options = input.props('options') as VariableOptionGroup[];
+    const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
 
-    expect(wrapper.find('select').text()).toContain('$input.items');
+    expect(input.props('useTemplateSyntax')).toBe(false);
+    expect(input.props('placeholder')).toBe('数组数据路径，如 $input.items');
+    expect(variables).toContain('$input.items');
     wrapper.unmount();
   });
 
@@ -278,7 +341,7 @@ describe('AdvancedSetter', (): void => {
       indexName: 'index'
     });
 
-    wrapper.findComponent({ name: 'BSelectStub' }).vm.$emit('update:value', '$input.items');
+    wrapper.findComponent({ name: 'BTextInputStub' }).vm.$emit('update:value', '$input.items');
     await nextTick();
 
     expect(element.loop).toMatchObject({

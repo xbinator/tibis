@@ -7,7 +7,7 @@
     <!-- 图层列表为空时的缺省提示 -->
     <div v-if="layerEntries.length === 0" class="sidebar-panel__layer-empty">
       <div class="sidebar-panel__layer-empty-icon">
-        <BIcon icon="lucide:rectangle-dashed" :size="24" />
+        <BIcon icon="lucide:layers" :size="24" />
       </div>
       <span class="sidebar-panel__layer-empty-text">暂无图层</span>
       <span class="sidebar-panel__layer-empty-hint">添加元素后图层将在此展示</span>

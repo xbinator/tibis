@@ -125,18 +125,6 @@ function mountImageSetter(element: WidgetElement): VueWrapper {
           },
           template: '<div class="widget-image-setter-stub-item" :data-label="label"><slot></slot></div>'
         }),
-        AInput: defineComponent({
-          name: 'AInputStub',
-          props: {
-            value: { type: String, default: undefined },
-            placeholder: { type: String, default: undefined },
-            allowClear: { type: Boolean, default: false }
-          },
-          emits: {
-            'update:value': (value: string): boolean => typeof value === 'string'
-          },
-          template: '<input class="widget-image-setter-stub-input" :value="value" @input="$emit(\'update:value\', $event.target.value)" />'
-        }),
         BTextInput: defineComponent({
           name: 'BTextInputStub',
           props: {
@@ -158,8 +146,8 @@ function mountImageSetter(element: WidgetElement): VueWrapper {
           },
           template: '<input class="widget-image-setter-stub-text-input" :value="value" @input="$emit(\'update:value\', $event.target.value)" />'
         }),
-        ASelect: defineComponent({
-          name: 'ASelectStub',
+        BSelect: defineComponent({
+          name: 'BSelectStub',
           props: {
             value: { type: [String, Number], default: undefined },
             options: { type: Array, default: (): unknown[] => [] }
@@ -222,7 +210,7 @@ describe('Image Setter', (): void => {
   it('writes alt to metadata when the alt input changes', async (): Promise<void> => {
     const element = createImageElement();
     const wrapper = mountImageSetter(element);
-    const input = wrapper.find('.widget-image-setter-stub-item[data-label="替代文本"] .widget-image-setter-stub-input');
+    const input = wrapper.find('.widget-image-setter-stub-item[data-label="替代文本"] .widget-image-setter-stub-text-input');
 
     await input.setValue('一张示意图');
 
@@ -248,7 +236,7 @@ describe('Image Setter', (): void => {
     element.metadata.alt = '初始替代文本';
     const wrapper = mountImageSetter(element);
     const srcInput = wrapper.find('.widget-image-setter-stub-text-input');
-    const altInput = wrapper.find('.widget-image-setter-stub-input');
+    const altInput = wrapper.find('.widget-image-setter-stub-item[data-label="替代文本"] .widget-image-setter-stub-text-input');
     const select = wrapper.find('.widget-image-setter-stub-select');
 
     expect((srcInput.element as HTMLInputElement).value).toBe('https://example.com/init.png');
