@@ -79,6 +79,19 @@ function createViewportSizeHost(): ReturnType<typeof defineComponent> {
 }
 
 /**
+ * 创建允许零高度同步的视口尺寸 hook 测试宿主。
+ * @returns Vue 测试宿主组件
+ */
+function createZeroHeightViewportSizeHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    setup(): ReturnType<typeof useViewportSize> {
+      return useViewportSize(undefined, { allowZeroHeight: true });
+    },
+    template: '<div ref="rootRef"></div>'
+  });
+}
+
+/**
  * 创建命名模板引用模式的视口尺寸 hook 测试宿主。
  * @returns Vue 测试宿主组件
  */
@@ -124,6 +137,26 @@ describe('useViewportSize', (): void => {
     await nextTick();
 
     expect(vm.isViewportReady).toBe(true);
+  });
+
+  it('ignores root size by default when root height is temporarily zero', (): void => {
+    const wrapper = mount(createViewportSizeHost());
+    const vm = wrapper.vm as unknown as ViewportSizeHostVm;
+
+    setElementRect(wrapper.element, { width: 640, height: 0 });
+    vm.syncViewportSizeFromRoot();
+
+    expect(vm.viewportSize).toEqual({ width: 0, height: 0 });
+  });
+
+  it('syncs viewport width when zero height is explicitly allowed', (): void => {
+    const wrapper = mount(createZeroHeightViewportSizeHost());
+    const vm = wrapper.vm as unknown as ViewportSizeHostVm;
+
+    setElementRect(wrapper.element, { width: 640, height: 0 });
+    vm.syncViewportSizeFromRoot();
+
+    expect(vm.viewportSize).toEqual({ width: 640, height: 0 });
   });
 
   it('resets readiness before scheduling a KeepAlive size sync', async (): Promise<void> => {

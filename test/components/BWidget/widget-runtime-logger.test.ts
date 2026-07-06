@@ -241,6 +241,44 @@ describe('widgetRuntime $logger bridge', (): void => {
     expect(loggerCalls[0]?.args[1]).toBe(42n);
   });
 
+  it('unwraps proxied data args before forwarding to host logger', async (): Promise<void> => {
+    const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
+    const state = createLoggerRuntimeState(
+      createLoggerWidgetCode([
+        '  movieList = []',
+        '',
+        '  async mounted() {',
+        '    this.movieList = [{ title: "流浪地球" }]',
+        '    await this.$logger.info("movies", this.movieList)',
+        '  }'
+      ])
+    );
+
+    const result = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
+
+    expect(result.status).toBe('mounted');
+    expect(loggerCalls).toEqual([{ level: 'info', args: ['movies', [{ title: '流浪地球' }]] }]);
+  });
+
+  it('unwraps proxied data inside Map and Set logger args', async (): Promise<void> => {
+    const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
+    const state = createLoggerRuntimeState(
+      createLoggerWidgetCode([
+        '  movieList = []',
+        '',
+        '  async mounted() {',
+        '    this.movieList = [{ title: "流浪地球" }]',
+        '    await this.$logger.info(new Map([["movies", this.movieList]]), new Set([this.movieList]))',
+        '  }'
+      ])
+    );
+
+    const result = await initWidgetMountState(state, createCaptureOptions([], loggerCalls));
+
+    expect(result.status).toBe('mounted');
+    expect(loggerCalls).toEqual([{ level: 'info', args: [new Map([['movies', [{ title: '流浪地球' }]]]), new Set([[{ title: '流浪地球' }]])] }]);
+  });
+
   it('works in unmounted lifecycle hook', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async unmounted() {', "    await this.$logger.info('unmounting')", '  }']));
@@ -335,6 +373,48 @@ describe('widgetRuntime console bridge', (): void => {
 
     expect(result.status).toBe('mounted');
     expect(consoleCalls).toEqual([{ level: 'log', args: [undefined, 42n] }]);
+  });
+
+  it('unwraps proxied data args before forwarding to host console', async (): Promise<void> => {
+    const consoleCalls: WidgetConsoleCall[] = [];
+    const state = createLoggerRuntimeState(
+      createLoggerWidgetCode([
+        '  movieList = []',
+        '',
+        '  mounted() {',
+        '    this.fetchMovies()',
+        '  }',
+        '',
+        '  async fetchMovies() {',
+        '    this.movieList = [{ title: "流浪地球" }]',
+        '    console.log("movies", this.movieList)',
+        '  }'
+      ])
+    );
+
+    const result = await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
+
+    expect(result.status).toBe('mounted');
+    expect(consoleCalls).toEqual([{ level: 'log', args: ['movies', [{ title: '流浪地球' }]] }]);
+  });
+
+  it('unwraps proxied data inside Map and Set console args', async (): Promise<void> => {
+    const consoleCalls: WidgetConsoleCall[] = [];
+    const state = createLoggerRuntimeState(
+      createLoggerWidgetCode([
+        '  movieList = []',
+        '',
+        '  mounted() {',
+        '    this.movieList = [{ title: "流浪地球" }]',
+        '    console.log(new Map([["movies", this.movieList]]), new Set([this.movieList]))',
+        '  }'
+      ])
+    );
+
+    const result = await initWidgetMountState(state, createCaptureOptions([], [], consoleCalls));
+
+    expect(result.status).toBe('mounted');
+    expect(consoleCalls).toEqual([{ level: 'log', args: [new Map([['movies', [{ title: '流浪地球' }]]]), new Set([[{ title: '流浪地球' }]])] }]);
   });
 
   it('keeps $logger and console independent', async (): Promise<void> => {

@@ -4,7 +4,7 @@
  */
 import type { Message } from '../utils/types';
 import type { AIServiceError, AIToolContext, AIToolExecutionError, AIToolExecutionResult, AIToolExecutor, AIToolGrantScope } from 'types/ai';
-import type { ChatMessageRecord } from 'types/chat';
+import type { ChatMessagePart, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import type {
   ChatRuntimeContinueInput,
   ChatRuntimeConfirmationDecision,
@@ -23,10 +23,14 @@ import type {
   ChatRuntimeSubmitUserChoiceInput,
   ChatRuntimeToolRequestEvent
 } from 'types/chat-runtime';
+import type { WidgetDisplayPayload } from 'types/widget';
 import type { Ref } from 'vue';
 import { onScopeDispose, ref, toRaw } from 'vue';
+import { isEqual } from 'lodash-es';
+import { OPEN_WIDGET_TOOL_NAME } from '@/ai/tools/builtin/WidgetTool';
 import { executeToolCall } from '@/ai/tools/stream';
 import { getElectronAPI } from '@/shared/platform/electron-api';
+import { isWidgetDisplayPayload } from '@/shared/widget/protocol';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { createRuntimeRequestError, localizeRuntimeServiceError } from '../utils/runtimeError';
 
@@ -214,6 +218,95 @@ function compareRuntimeMessages(left: Message, right: Message): number {
 }
 
 /**
+ * 判断消息片段是否为工具片段。
+ * @param part - 消息片段
+ * @returns 是否为工具片段
+ */
+function isToolMessagePart(part: ChatMessagePart): part is ChatMessageToolPart {
+  return part.type === 'tool';
+}
+
+/**
+ * 查找同一个工具调用在本地消息中的片段。
+ * @param parts - 本地消息片段列表
+ * @param nextPart - runtime 新消息中的工具片段
+ * @returns 匹配的本地工具片段
+ */
+function findPreviousToolPart(parts: ChatMessagePart[], nextPart: ChatMessageToolPart): ChatMessageToolPart | undefined {
+  return parts.find(
+    (part): part is ChatMessageToolPart =>
+      isToolMessagePart(part) && part.toolName === nextPart.toolName && (part.toolCallId === nextPart.toolCallId || part.id === nextPart.id)
+  );
+}
+
+/**
+ * 判断工具片段是否为可展示的 open_widget 结果。
+ * @param part - 工具消息片段
+ * @returns 是否为可展示的 open_widget 结果
+ */
+function isOpenWidgetDisplayToolPart(part: ChatMessageToolPart): part is ChatMessageToolPart & { result: { status: 'success'; data: WidgetDisplayPayload } } {
+  return part.toolName === OPEN_WIDGET_TOOL_NAME && part.result?.status === 'success' && isWidgetDisplayPayload(part.result.data);
+}
+
+/**
+ * 判断两个 open_widget 工具片段是否来自同一份展示载荷。
+ * @param previousPart - 本地旧工具片段
+ * @param nextPart - runtime 新工具片段
+ * @returns 两者展示载荷一致时返回 true
+ */
+function isSameOpenWidgetDisplayPayload(previousPart: ChatMessageToolPart, nextPart: ChatMessageToolPart): boolean {
+  if (!isOpenWidgetDisplayToolPart(previousPart) || !isOpenWidgetDisplayToolPart(nextPart)) return false;
+
+  const previousData = previousPart.result.data;
+  const nextData = nextPart.result.data;
+
+  return (
+    previousData.sessionId === nextData.sessionId &&
+    previousData.widgetId === nextData.widgetId &&
+    isEqual(previousData.value, nextData.value) &&
+    isEqual(previousData.renderContext, nextData.renderContext)
+  );
+}
+
+/**
+ * 合并工具片段上的 renderer 本地运行态字段。
+ * runtime 流式事件会带主进程创建的初始 widget，renderer 已运行过的状态需要继续保留。
+ * @param previousParts - 本地旧消息片段列表
+ * @param nextParts - runtime 新消息片段列表
+ * @returns 保留本地运行态后的片段列表
+ */
+function mergeRuntimeMessageParts(previousParts: ChatMessagePart[], nextParts: ChatMessagePart[]): ChatMessagePart[] {
+  return nextParts.map((nextPart): ChatMessagePart => {
+    if (!isToolMessagePart(nextPart)) return nextPart;
+
+    const previousPart = findPreviousToolPart(previousParts, nextPart);
+    if (!previousPart?.widget) return nextPart;
+    if (!isSameOpenWidgetDisplayPayload(previousPart, nextPart)) return nextPart;
+
+    return {
+      ...nextPart,
+      id: previousPart.id,
+      presentation: previousPart.presentation ?? nextPart.presentation,
+      widget: previousPart.widget
+    };
+  });
+}
+
+/**
+ * 合并 runtime 新消息与 renderer 本地消息。
+ * @param previousMessage - 本地旧消息
+ * @param nextMessage - runtime 新消息
+ * @returns 合并后的本地消息
+ */
+function mergeRuntimeMessage(previousMessage: Message, nextMessage: Message): Message {
+  return {
+    ...previousMessage,
+    ...nextMessage,
+    parts: mergeRuntimeMessageParts(previousMessage.parts, nextMessage.parts)
+  };
+}
+
+/**
  * 将 runtime 消息写入本地列表。
  * @param messages - 本地消息列表
  * @param nextMessage - runtime 消息
@@ -226,7 +319,7 @@ function upsertRuntimeMessage(messages: Message[], nextMessage: Message): void {
     return;
   }
 
-  messages.splice(index, 1, { ...messages[index], ...nextMessage });
+  messages.splice(index, 1, mergeRuntimeMessage(messages[index], nextMessage));
   messages.sort(compareRuntimeMessages);
 }
 

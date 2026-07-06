@@ -224,4 +224,30 @@ describe('toolResultSummary open file metadata', (): void => {
       ]
     });
   });
+
+  it('summarizes widget contract results without falling back to raw JSON', (): void => {
+    const summary = getToolResultSummary(
+      'widget',
+      successResult('widget', {
+        id: 'movie-on-list',
+        name: '正在热映电影列表',
+        description: '展示当前正在影院热映的电影列表',
+        inputSchema: {
+          type: 'object',
+          properties: {}
+        },
+        dataSchema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            rating: { type: 'number' }
+          }
+        }
+      })
+    );
+
+    expect(summary).toEqual({
+      text: '已读取小组件: 正在热映电影列表\n展示当前正在影院热映的电影列表'
+    });
+  });
 });

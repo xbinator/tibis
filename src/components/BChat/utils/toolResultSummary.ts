@@ -449,6 +449,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * 格式化 widget 工具的结果。
+ * @param data - Widget 契约数据
+ * @returns 小组件契约摘要
+ */
+function summarizeWidget(data: Record<string, unknown>): ToolResultSummary {
+  const widgetName = typeof data.name === 'string' ? data.name : '';
+  const description = typeof data.description === 'string' ? data.description : '';
+  const title = widgetName || '未命名小组件';
+  const descriptionText = description ? `\n${description}` : '';
+
+  return {
+    text: `已读取小组件: ${title}${descriptionText}`
+  };
+}
+
+/**
  * 读取 WebView 操作目标摘要。
  * @param value - 工具结果中的目标对象
  * @returns 目标摘要
@@ -607,6 +623,7 @@ const TOOL_SUMMARIZERS: Record<string, (data: unknown) => ToolResultSummary> = {
   run_shell_command: (data) => summarizeShellCommand(data as Record<string, unknown>),
   skill: summarizeSkill,
   create_document: (data) => summarizeCreateDocument(data as Record<string, unknown>),
+  widget: (data) => summarizeWidget(data as Record<string, unknown>),
   write_file: (data) => summarizeWriteFile(data as Record<string, unknown>),
   read_file: (data) => summarizeReadFile(data as Record<string, unknown>),
   read_current_document: (data) => summarizeReadFile(data as Record<string, unknown>),

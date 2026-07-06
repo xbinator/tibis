@@ -24,6 +24,10 @@ const RUNTIME_CONTAINER_WIDTH = 504;
 const RUNTIME_CONTAINER_HEIGHT = 300;
 /** ResizeObserver 已监听的目标元素。 */
 let observedResizeTargets: Element[] = [];
+/** ResizeObserver 当前上报的测试宽度。 */
+let resizeObserverWidth = RUNTIME_CONTAINER_WIDTH;
+/** ResizeObserver 当前上报的测试高度。 */
+let resizeObserverHeight = RUNTIME_CONTAINER_HEIGHT;
 
 /**
  * ResizeObserver 测试替身。
@@ -50,13 +54,13 @@ class ResizeObserverMock {
     const entry = {
       target,
       contentRect: DOMRect.fromRect({
-        width: RUNTIME_CONTAINER_WIDTH,
-        height: RUNTIME_CONTAINER_HEIGHT
+        width: resizeObserverWidth,
+        height: resizeObserverHeight
       }),
       contentBoxSize: [
         {
-          inlineSize: RUNTIME_CONTAINER_WIDTH,
-          blockSize: RUNTIME_CONTAINER_HEIGHT
+          inlineSize: resizeObserverWidth,
+          blockSize: resizeObserverHeight
         }
       ]
     } as unknown as ResizeObserverEntry;
@@ -276,6 +280,45 @@ function createRuntimeMessageWidgetData(code: string): WidgetData {
 }
 
 /**
+ * 创建异步脚本驱动循环内容的运行态测试Widget 数据。
+ * @param code - 运行脚本
+ * @returns 测试Widget 数据
+ */
+function createRuntimeAsyncLoopWidgetData(code: string): WidgetData {
+  return {
+    ...createDefaultWidgetData(),
+    execute: {
+      code
+    },
+    elements: [
+      {
+        id: 'product-name',
+        name: 'text',
+        label: '文本',
+        icon: 'lucide:type',
+        title: '商品名称',
+        position: { x: 0, y: 0 },
+        size: { width: 100, height: 24 },
+        rotation: 0,
+        style: {},
+        loop: {
+          enabled: true,
+          source: 'products',
+          columns: 1,
+          columnGap: 0,
+          rowGap: 0,
+          itemName: 'item',
+          indexName: 'index'
+        },
+        metadata: {
+          content: '{{ item.name }}'
+        }
+      }
+    ]
+  };
+}
+
+/**
  * 创建运行态渲染上下文。
  * @param city - 城市名称
  * @param temperature - 温度
@@ -427,6 +470,8 @@ const WidgetNodeRuntimeCounterStub = defineComponent({
 describe('BWidgetRuntime', (): void => {
   beforeEach((): void => {
     observedResizeTargets = [];
+    resizeObserverWidth = RUNTIME_CONTAINER_WIDTH;
+    resizeObserverHeight = RUNTIME_CONTAINER_HEIGHT;
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
       callback(0);
@@ -500,12 +545,12 @@ describe('BWidgetRuntime', (): void => {
 
     expect(wrapper.find('.b-widget-infinite-viewport').exists()).toBe(false);
     expect(wrapper.find('.b-widget-canvas').exists()).toBe(false);
-    expect(stageViewport.attributes('style')).toContain('height: 256px');
-    expect(stage.attributes('style')).toContain('width: 252px');
-    expect(stage.attributes('style')).toContain('height: 128px');
-    expect(stage.attributes('style')).toContain('scale(2)');
-    expect(textNode.attributes('style')).toContain('translate(28px, 34px)');
-    expect(rectNode.attributes('style')).toContain('translate(16px, 16px)');
+    expect(stageViewport.attributes('style')).toContain('height: 219.92727272727274px');
+    expect(stage.attributes('style')).toContain('width: 220px');
+    expect(stage.attributes('style')).toContain('height: 96px');
+    expect(stage.attributes('style')).toContain('scale(2.290909090909091)');
+    expect(textNode.attributes('style')).toContain('translate(12px, 18px)');
+    expect(rectNode.attributes('style')).toContain('translate(0px, 0px)');
     wrapper.unmount();
   });
 
@@ -608,6 +653,263 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
+  it('renders Widget class field data before the host writes runtime changes back', async (): Promise<void> => {
+    const dataItem = createRuntimeMessageWidgetData(['export default class Weather extends Widget {', "  message = '晴天'", '}'].join('\n'));
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {},
+          data: {}
+        },
+        runtimeEnabled: true,
+        status: 'created',
+        lifecycle: {}
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+
+    expect(findNodeById(wrapper, 'text-1').text()).toBe('晴天');
+    expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
+      reason: 'mount',
+      status: 'mounted',
+      renderContext: {
+        data: {
+          message: '晴天'
+        }
+      }
+    });
+    wrapper.unmount();
+  });
+
+  it('does not render stale data after unsupported legacy scripts fail', async (): Promise<void> => {
+    const dataItem = createRuntimeMessageWidgetData(['Widget({', '  data() {', "    return { message: '旧数据' }", '  }', '})'].join('\n'));
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {},
+          data: {
+            message: '旧数据'
+          }
+        },
+        runtimeEnabled: true,
+        status: 'created',
+        lifecycle: {}
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+
+    expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
+      reason: 'mount',
+      status: 'failure'
+    });
+    expect(findNodeById(wrapper, 'text-1').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('keeps cancelled runtime widgets visible after an interrupted turn', async (): Promise<void> => {
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: createRuntimeMessageWidgetData('export default class Weather extends Widget {}'),
+        renderContext: {
+          input: {},
+          data: {
+            message: '已经展示的数据'
+          }
+        },
+        runtimeEnabled: true,
+        status: 'cancelled',
+        lifecycle: {
+          mountedAt: '2026-07-06T00:00:00.000Z'
+        }
+      },
+      attachTo: document.body
+    });
+
+    await nextTick();
+
+    expect(findNodeById(wrapper, 'text-1').text()).toBe('已经展示的数据');
+    wrapper.unmount();
+  });
+
+  it('reruns mounted when a remounted runtime receives a different source payload', async (): Promise<void> => {
+    const dataItem = createRuntimeMessageWidgetData(
+      ['export default class Weather extends Widget {', '  mounted() {', '    this.message = this.$input.message', '  }', '}'].join('\n')
+    );
+    const firstWrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {
+            message: '第一版'
+          },
+          data: {}
+        },
+        runtimeEnabled: true,
+        status: 'created',
+        lifecycle: {}
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+    expect(firstWrapper.emitted('change')?.[0]?.[0]).toMatchObject({
+      reason: 'mount',
+      status: 'mounted',
+      renderContext: {
+        data: {
+          message: '第一版'
+        }
+      }
+    });
+    firstWrapper.unmount();
+
+    const secondWrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {
+            message: '第二版'
+          },
+          data: {}
+        },
+        runtimeEnabled: true,
+        status: 'created',
+        lifecycle: {}
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+
+    expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({
+      reason: 'mount',
+      status: 'mounted',
+      renderContext: {
+        data: {
+          message: '第二版'
+        }
+      }
+    });
+    expect(findNodeById(secondWrapper, 'text-1').text()).toBe('第二版');
+    secondWrapper.unmount();
+  });
+
+  it('reruns mounted when a runtime is remounted with the same source payload', async (): Promise<void> => {
+    const request = vi.fn<() => Promise<RequestResponse>>(
+      async (): Promise<RequestResponse> => ({
+        status: 200,
+        ok: true,
+        url: 'https://api.example.com/weather',
+        headers: {},
+        data: {}
+      })
+    );
+    const dataItem = createRuntimeMessageWidgetData(
+      [
+        'export default class Weather extends Widget {',
+        '  async mounted() {',
+        "    await this.$http.get('https://api.example.com/weather')",
+        "    this.message = '加载完成'",
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const runtimeProps = {
+      value: dataItem,
+      renderContext: {
+        input: {},
+        data: {}
+      },
+      runtimeEnabled: true,
+      status: 'created' as const,
+      lifecycle: {}
+    };
+    stubElectronRequest(request);
+
+    const firstWrapper = mount(BWidgetRuntime, {
+      props: runtimeProps,
+      attachTo: document.body
+    });
+    await flushWidgetRuntime();
+
+    expect(firstWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount', status: 'mounted' });
+    firstWrapper.unmount();
+
+    const secondWrapper = mount(BWidgetRuntime, {
+      props: runtimeProps,
+      attachTo: document.body
+    });
+    await flushWidgetRuntime();
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount', status: 'mounted' });
+    secondWrapper.unmount();
+  });
+
+  it('remeasures viewport width after async mounted data renders loop content', async (): Promise<void> => {
+    resizeObserverWidth = 0.1;
+    stubElectronRequest(
+      async (): Promise<RequestResponse> => ({
+        status: 200,
+        ok: true,
+        url: 'https://api.example.com/products',
+        headers: {},
+        data: {
+          products: [{ name: '拿铁' }, { name: '美式' }]
+        }
+      })
+    );
+
+    const dataItem = createRuntimeAsyncLoopWidgetData(
+      [
+        'export default class Weather extends Widget {',
+        '  products = []',
+        '  async mounted() {',
+        "    const response = await this.$http.get('https://api.example.com/products')",
+        '    this.products = response.data.products',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {},
+          data: {}
+        },
+        runtimeEnabled: true,
+        status: 'created',
+        lifecycle: {}
+      },
+      attachTo: document.body
+    });
+    const root = wrapper.find<HTMLElement>('.b-widget-runtime').element;
+
+    root.getBoundingClientRect = (): DOMRect =>
+      DOMRect.fromRect({
+        width: RUNTIME_CONTAINER_WIDTH,
+        height: 0
+      });
+
+    await flushWidgetRuntime();
+    await nextTick();
+
+    const stageViewport = wrapper.find('.b-widget-runtime__stage-viewport');
+    const heightStyle = stageViewport.element.getAttribute('style')?.match(/height:\s*([^;]+)/)?.[1] ?? '0';
+
+    expect(findNodeById(wrapper, 'product-name__loop_0').text()).toBe('拿铁');
+    expect(findNodeById(wrapper, 'product-name__loop_1').text()).toBe('美式');
+    expect(Number.parseFloat(heightStyle)).toBeGreaterThan(100);
+    wrapper.unmount();
+  });
+
   it('renders patch preview before mounted scripts finish', async (): Promise<void> => {
     const requestDeferred = createDeferred<RequestResponse>();
     const request = vi.fn<(input: RequestInput) => Promise<RequestResponse>>(() => requestDeferred.promise);
@@ -658,6 +960,64 @@ describe('BWidgetRuntime', (): void => {
       }
     });
     wrapper.unmount();
+  });
+
+  it('runs concurrent mounted scripts independently for separate runtime instances', async (): Promise<void> => {
+    const requestDeferreds = [createDeferred<RequestResponse>(), createDeferred<RequestResponse>()];
+    let requestIndex = 0;
+    const request = vi.fn<(input: RequestInput) => Promise<RequestResponse>>((): Promise<RequestResponse> => {
+      const deferred = requestDeferreds[requestIndex] ?? requestDeferreds[requestDeferreds.length - 1];
+      requestIndex += 1;
+      return deferred.promise;
+    });
+    const dataItem = createRuntimeMessageWidgetData(
+      [
+        'export default class Weather extends Widget {',
+        '  async mounted() {',
+        "    await this.$http.get('https://api.example.com/movies')",
+        "    this.message = '加载完成'",
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const runtimeProps = {
+      value: dataItem,
+      renderContext: {
+        input: {},
+        data: {}
+      },
+      runtimeEnabled: true,
+      status: 'created' as const,
+      lifecycle: {}
+    };
+    stubElectronRequest(request);
+
+    const firstWrapper = mount(BWidgetRuntime, {
+      props: runtimeProps,
+      attachTo: document.body
+    });
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    const secondWrapper = mount(BWidgetRuntime, {
+      props: runtimeProps,
+      attachTo: document.body
+    });
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(request).toHaveBeenCalledTimes(2);
+
+    requestDeferreds[0].resolve({ status: 200, ok: true, url: 'https://api.example.com/movies', headers: {}, data: {} });
+    requestDeferreds[1].resolve({ status: 200, ok: true, url: 'https://api.example.com/movies', headers: {}, data: {} });
+    await flushWidgetRuntime();
+
+    expect(firstWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount', status: 'mounted' });
+    expect(secondWrapper.emitted('change')?.[0]?.[0]).toMatchObject({ reason: 'mount', status: 'mounted' });
+    firstWrapper.unmount();
+    secondWrapper.unmount();
   });
 
   it('does not finish runtime scripts from node submit events', async (): Promise<void> => {

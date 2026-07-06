@@ -2,7 +2,7 @@
  * @file interrupted-draft-recovery.test.ts
  * @description BChat 硬中断 assistant 草稿恢复测试。
  */
-import type { ChatMessageToolPart, ChatMessageWidgetPart } from 'types/chat';
+import type { ChatMessageToolPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
 import { recoverInterruptedAssistantDrafts, HARD_INTERRUPTED_ASSISTANT_MESSAGE } from '@/components/BChat/utils/interruptedDraftRecovery';
 import type { Message } from '@/components/BChat/utils/types';
@@ -28,36 +28,6 @@ function createInterruptedAssistantDraft(): Message {
 }
 
 /**
- * 创建一条带小组件的未完成助手草稿消息。
- * @returns 带小组件的未完成助手消息。
- */
-function createInterruptedWidgetAssistantDraft(): Message {
-  const widgetPart: ChatMessageWidgetPart = {
-    id: 'part0006',
-    type: 'widget',
-    sessionId: 'widget-session-1',
-    widgetId: 'weather',
-    status: 'created',
-    lifecycle: {},
-    value: createDefaultWidgetData(),
-    renderContext: {
-      input: {},
-      data: {}
-    }
-  };
-
-  return {
-    id: 'assistant-widget-draft-1',
-    role: 'assistant',
-    content: '',
-    parts: [widgetPart],
-    createdAt: '2026-06-13T00:00:00.000Z',
-    loading: true,
-    finished: false
-  };
-}
-
-/**
  * 创建一条带 tool.widget 运行态的未完成助手草稿消息。
  * @returns 带 open_widget 工具运行态的未完成助手消息。
  */
@@ -68,6 +38,7 @@ function createInterruptedToolWidgetAssistantDraft(): Message {
     toolCallId: 'open-widget-tool-1',
     toolName: 'open_widget',
     status: 'done',
+    presentation: 'widget',
     input: { id: 'weather' },
     result: {
       toolName: 'open_widget',
@@ -179,18 +150,6 @@ describe('interrupted assistant draft recovery', () => {
 
     expect(result.recovered).toBe(false);
     expect(result.messages[0]).toEqual(awaitingMessage);
-  });
-
-  it('marks unfinished widget parts as cancelled when recovering interrupted drafts', (): void => {
-    const result = recoverInterruptedAssistantDrafts([createInterruptedWidgetAssistantDraft()]);
-    const recoveredMessage = result.messages[0];
-    const widgetPart = recoveredMessage.parts.find((part) => part.type === 'widget');
-
-    expect(result.recovered).toBe(true);
-    expect(widgetPart).toMatchObject({
-      type: 'widget',
-      status: 'cancelled'
-    });
   });
 
   it('marks unfinished tool widget runtime as cancelled when recovering interrupted drafts', (): void => {

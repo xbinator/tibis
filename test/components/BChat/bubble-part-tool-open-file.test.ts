@@ -3,6 +3,7 @@
  * @description 验证聊天工具结果中的文件摘要 chip 可点击打开。
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs';
 import type { VueWrapper } from '@vue/test-utils';
 import type { ChatMessageToolPart } from 'types/chat';
 import { mount } from '@vue/test-utils';
@@ -10,6 +11,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import BubblePartTool from '@/components/BChat/components/MessageBubble/BubblePartTool/index.vue';
 
 const openFileMock = vi.hoisted(() => vi.fn<(_options: { filePath?: string | null }) => Promise<void>>().mockResolvedValue(undefined));
+/** 工具气泡组件源码。 */
+const bubblePartToolSource = readFileSync('src/components/BChat/components/MessageBubble/BubblePartTool/index.vue', 'utf8');
 
 vi.mock('@/hooks/useNavigate', () => ({
   useNavigate: () => ({
@@ -79,5 +82,9 @@ describe('BubblePartTool open file summary tag', (): void => {
     expect(wrapper.find('button.bubble-part-tool__summary-tag--clickable').exists()).toBe(false);
     expect(wrapper.text()).toContain('https://example.com');
     wrapper.unmount();
+  });
+
+  it('preserves summary text line breaks for readable descriptions', (): void => {
+    expect(bubblePartToolSource).toMatch(/\.bubble-part-tool__summary-text\s*\{[\s\S]*white-space:\s*pre-wrap;/);
   });
 });

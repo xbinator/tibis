@@ -49,7 +49,7 @@ describe('runtime stream message parts', (): void => {
             input: {
               city: '上海'
             },
-            state: {}
+            data: {}
           }
         }
       }
@@ -59,7 +59,21 @@ describe('runtime stream message parts', (): void => {
       type: 'tool',
       toolCallId: 'tool-call-widget',
       toolName: 'open_widget',
-      status: 'done'
+      status: 'done',
+      presentation: 'widget',
+      widget: {
+        sessionId: 'widget-weather-tool-call-widget',
+        widgetId: 'weather',
+        status: 'created',
+        lifecycle: {},
+        value: widgetValue,
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {}
+        }
+      }
     });
     expect(message.parts).toHaveLength(1);
   });

@@ -4,7 +4,7 @@
  */
 import type { ChatMessageToolPart } from 'types/chat';
 import { describe, expect, it } from 'vitest';
-import { convert, initializeWidgetToolRuntimeParts, resolveWidgetPartFromToolResult } from '@/components/BChat/utils/messageHelper';
+import { convert } from '@/components/BChat/utils/messageHelper';
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -42,61 +42,6 @@ function createOpenWidgetToolPart(): ChatMessageToolPart {
 }
 
 describe('messageHelper widget result', (): void => {
-  it('resolves open_widget result as a widget message part', (): void => {
-    const widgetPart = resolveWidgetPartFromToolResult(createOpenWidgetToolPart());
-
-    expect(widgetPart).toMatchObject({
-      type: 'widget',
-      sessionId: 'widget-weather-tool-call-widget',
-      status: 'created',
-      lifecycle: {},
-      value: {
-        name: ''
-      },
-      renderContext: {
-        input: {
-          city: '上海'
-        },
-        data: {}
-      }
-    });
-    expect(widgetPart).not.toHaveProperty('runtimeId');
-  });
-
-  it('ignores non widget tool results', (): void => {
-    const toolPart = createOpenWidgetToolPart();
-    toolPart.toolName = 'read_file';
-
-    expect(resolveWidgetPartFromToolResult(toolPart)).toBeNull();
-  });
-
-  it('initializes open_widget tool parts with durable widget runtime data', (): void => {
-    const toolPart = createOpenWidgetToolPart();
-    const message: Message = {
-      id: 'assistant-widget',
-      role: 'assistant',
-      content: '',
-      parts: [toolPart],
-      createdAt: '2026-06-30T00:00:00.000Z',
-      finished: true
-    };
-
-    const nextMessage = initializeWidgetToolRuntimeParts(message);
-
-    expect(nextMessage).not.toBe(message);
-    expect(nextMessage.parts).toEqual([
-      expect.objectContaining({
-        ...toolPart,
-        widget: expect.objectContaining({
-          sessionId: 'widget-weather-tool-call-widget',
-          widgetId: 'weather',
-          status: 'created'
-        })
-      })
-    ]);
-    expect(initializeWidgetToolRuntimeParts(nextMessage)).toBe(nextMessage);
-  });
-
   it('keeps widget snapshots out of model-visible tool results', (): void => {
     const assistantMessage: Message = {
       id: 'assistant-widget',

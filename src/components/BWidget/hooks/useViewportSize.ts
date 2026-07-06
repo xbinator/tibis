@@ -24,27 +24,53 @@ interface UseViewportSizeReturn {
 }
 
 /**
+ * 视口尺寸 hook 选项。
+ */
+interface UseViewportSizeOptions {
+  /** 是否允许根高度为 0 时同步尺寸，适用于高度由内容反算的运行态视图 */
+  allowZeroHeight?: boolean;
+}
+
+/**
+ * 判断视口尺寸是否可用于同步。
+ * @param size - 待判断的视口尺寸
+ * @param options - 视口尺寸 hook 选项
+ * @returns 尺寸可用时返回 true
+ */
+function isUsableViewportSize(size: WidgetSize, options: UseViewportSizeOptions): boolean {
+  if (!size.width) {
+    return false;
+  }
+
+  return options.allowZeroHeight ? size.height >= 0 : Boolean(size.height);
+}
+
+/**
  * 从 ResizeObserver 条目读取Widget尺寸。
  * @param entry - ResizeObserver 条目
+ * @param options - 视口尺寸 hook 选项
  * @returns Widget尺寸，无法读取时返回 null
  */
-function readResizeEntrySize(entry: ResizeObserverEntry): WidgetSize | null {
+function readResizeEntrySize(entry: ResizeObserverEntry, options: UseViewportSizeOptions): WidgetSize | null {
   const boxSize = Array.isArray(entry.contentBoxSize) ? entry.contentBoxSize[0] : entry.contentBoxSize;
-  const width = boxSize?.inlineSize ?? entry.contentRect.width;
-  const height = boxSize?.blockSize ?? entry.contentRect.height;
-  if (!width || !height) {
+  const size = {
+    width: boxSize?.inlineSize ?? entry.contentRect.width,
+    height: boxSize?.blockSize ?? entry.contentRect.height
+  };
+  if (!isUsableViewportSize(size, options)) {
     return null;
   }
 
-  return { width, height };
+  return size;
 }
 
 /**
  * 创建视口尺寸同步 hook。
  * @param key - 模板中静态 ref 名称，不传时返回可手动绑定的 rootRef
+ * @param options - 视口尺寸 hook 选项
  * @returns 视口尺寸状态和同步命令
  */
-export function useViewportSize(key?: string): UseViewportSizeReturn {
+export function useViewportSize(key?: string, options: UseViewportSizeOptions = {}): UseViewportSizeReturn {
   const rootRef = key ? useTemplateRef<HTMLElement>(key) : ref<HTMLElement | null>(null);
   const viewportSize = ref<WidgetSize>({ width: 0, height: 0 });
   const isViewportReady = ref<boolean>(false);
@@ -57,14 +83,12 @@ export function useViewportSize(key?: string): UseViewportSizeReturn {
    */
   function readRootViewportSize(): WidgetSize | null {
     const rect = rootRef.value?.getBoundingClientRect();
-    if (!rect?.width || !rect.height) {
+    const size = rect ? { width: rect.width, height: rect.height } : null;
+    if (!size || !isUsableViewportSize(size, options)) {
       return null;
     }
 
-    return {
-      width: rect.width,
-      height: rect.height
-    };
+    return size;
   }
 
   /**
@@ -161,7 +185,7 @@ export function useViewportSize(key?: string): UseViewportSizeReturn {
   });
 
   useResizeObserver(rootRef, (entries: ResizeObserverEntry[]): void => {
-    const size = entries[0] ? readResizeEntrySize(entries[0]) : null;
+    const size = entries[0] ? readResizeEntrySize(entries[0], options) : null;
     if (!size) {
       return;
     }

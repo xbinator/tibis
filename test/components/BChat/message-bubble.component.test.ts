@@ -130,6 +130,34 @@ const BMessageStub = defineComponent({
   template: '<div class="b-message-stub">{{ content }}</div>'
 });
 
+/** 静默 BWidgetRuntime 测试替身，用于只验证宿主初始化动作。 */
+const BWidgetRuntimeSilentStub = defineComponent({
+  name: 'BWidgetRuntime',
+  props: {
+    lifecycle: {
+      type: Object,
+      default: () => ({})
+    },
+    renderContext: {
+      type: Object,
+      required: true
+    },
+    runtimeEnabled: {
+      type: Boolean,
+      default: false
+    },
+    status: {
+      type: String,
+      default: 'created'
+    },
+    value: {
+      type: Object,
+      required: true
+    }
+  },
+  template: '<div class="b-widget-runtime-silent-stub" />'
+});
+
 /**
  * 创建助手消息。
  * @param overrides - 消息覆盖字段
@@ -210,6 +238,44 @@ function createRuntimeChange(part: ChatMessageWidgetPart, change: Partial<Widget
 }
 
 /**
+ * 将测试用小组件运行态包装成 open_widget 工具片段。
+ * @param part - 小组件运行态片段
+ * @returns 携带 widget 运行态的 open_widget 工具片段
+ */
+function createOpenWidgetToolPartFromWidgetPart(part: ChatMessageWidgetPart): ChatMessageToolPart {
+  return {
+    id: part.id,
+    type: 'tool',
+    toolCallId: `tool-call-${part.id}`,
+    toolName: 'open_widget',
+    status: 'done',
+    presentation: 'widget',
+    input: {
+      id: part.widgetId
+    },
+    result: {
+      toolName: 'open_widget',
+      status: 'success',
+      data: {
+        kind: 'widget_display',
+        sessionId: part.sessionId,
+        widgetId: part.widgetId,
+        value: part.value,
+        renderContext: part.renderContext
+      }
+    },
+    widget: {
+      sessionId: part.sessionId,
+      widgetId: part.widgetId,
+      status: part.status,
+      lifecycle: part.lifecycle,
+      value: part.value,
+      renderContext: part.renderContext
+    }
+  };
+}
+
+/**
  * 从消息气泡中的 BWidgetRuntime 发出运行态变化。
  * @param wrapper - 消息气泡包装器
  * @param change - 运行态变化事件
@@ -259,6 +325,27 @@ function mountMessageBubble(message: Message): VueWrapper {
         BIcon: true,
         BRecentIcon: true,
         BMessage: BMessageStub
+      }
+    }
+  });
+}
+
+/**
+ * 挂载静默 Widget 运行态的消息气泡。
+ * @param message - 待渲染消息
+ * @returns 组件包装器
+ */
+function mountMessageBubbleWithSilentWidgetRuntime(message: Message): VueWrapper {
+  return mount(MessageBubble, {
+    props: { message },
+    global: {
+      stubs: {
+        BBubble: BBubbleStub,
+        BButton: BButtonStub,
+        BIcon: true,
+        BRecentIcon: true,
+        BMessage: BMessageStub,
+        BWidgetRuntime: BWidgetRuntimeSilentStub
       }
     }
   });
@@ -353,28 +440,6 @@ describe('MessageBubble', (): void => {
     expect(wrapper.text()).not.toContain('压缩失败');
   });
 
-  it('renders widget parts with runtime template variables inside assistant bubbles', (): void => {
-    const widgetPart: ChatMessageWidgetPart = {
-      id: 'widget-render-part',
-      type: 'widget',
-      sessionId: 'widget-session-1',
-      widgetId: 'weather',
-      status: 'mounted',
-      lifecycle: {},
-      value: createWeatherWidgetData(),
-      renderContext: createWeatherRenderContext()
-    } as ChatMessageWidgetPart;
-    const wrapper = mountMessageBubble(
-      createAssistantMessage({
-        content: '',
-        parts: [widgetPart]
-      })
-    );
-
-    expect(wrapper.text()).toContain('上海');
-    expect(wrapper.text()).toContain('28°C');
-  });
-
   it('emits unified submit actions after the created widget runs mounted', async (): Promise<void> => {
     const widgetPart: ChatMessageWidgetPart = {
       id: 'widget-created-part',
@@ -396,11 +461,12 @@ describe('MessageBubble', (): void => {
         data: {}
       }
     };
+    const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
 
@@ -432,7 +498,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
     await action.run(submitContext);
@@ -443,7 +509,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
 
@@ -452,17 +518,19 @@ describe('MessageBubble', (): void => {
         id: 'assistant-widget',
         parts: [
           expect.objectContaining({
-            status: 'mounted',
-            renderContext: {
-              input: {
-                city: '上海'
-              },
-              data: {
-                weather: {
-                  temperature: 31
+            widget: expect.objectContaining({
+              status: 'mounted',
+              renderContext: {
+                input: {
+                  city: '上海'
+                },
+                data: {
+                  weather: {
+                    temperature: 31
+                  }
                 }
               }
-            }
+            })
           })
         ]
       })
@@ -490,11 +558,12 @@ describe('MessageBubble', (): void => {
         data: {}
       }
     };
+    const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-second',
         content: '',
-        parts: [{ id: 'part0012', type: 'text', text: '天气卡片' }, widgetPart]
+        parts: [{ id: 'part0012', type: 'text', text: '天气卡片' }, toolPart]
       })
     );
 
@@ -526,7 +595,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-second',
         content: '',
-        parts: [{ id: 'part0012', type: 'text', text: '天气卡片' }, widgetPart]
+        parts: [{ id: 'part0012', type: 'text', text: '天气卡片' }, toolPart]
       })
     );
     await action.run(submitContext);
@@ -537,7 +606,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-second',
         content: '',
-        parts: [{ id: 'part0013', type: 'text', text: '天气卡片' }, widgetPart]
+        parts: [{ id: 'part0013', type: 'text', text: '天气卡片' }, toolPart]
       })
     );
 
@@ -547,17 +616,19 @@ describe('MessageBubble', (): void => {
         parts: [
           expect.objectContaining({ type: 'text', text: '天气卡片' }),
           expect.objectContaining({
-            status: 'mounted',
-            renderContext: {
-              input: {
-                city: '杭州'
-              },
-              data: {
-                weather: {
-                  temperature: 32
+            widget: expect.objectContaining({
+              status: 'mounted',
+              renderContext: {
+                input: {
+                  city: '杭州'
+                },
+                data: {
+                  weather: {
+                    temperature: 32
+                  }
                 }
               }
-            }
+            })
           })
         ]
       })
@@ -575,10 +646,11 @@ describe('MessageBubble', (): void => {
       value: createWeatherWidgetData(),
       renderContext: createWeatherRenderContext()
     } as ChatMessageWidgetPart;
+    const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
 
@@ -614,7 +686,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-submit',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
     await action.run(submitContext);
@@ -625,20 +697,22 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-submit',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
 
     expect(nextMessage.parts[0]).toMatchObject({
-      status: 'finished',
-      renderContext: {
-        data: {
-          weather: {
-            temperature: 28
-          },
-          submitted: {
-            city: '上海',
-            temperature: 28
+      widget: {
+        status: 'finished',
+        renderContext: {
+          data: {
+            weather: {
+              temperature: 28
+            },
+            submitted: {
+              city: '上海',
+              temperature: 28
+            }
           }
         }
       }
@@ -669,11 +743,12 @@ describe('MessageBubble', (): void => {
       },
       renderContext: createWeatherRenderContext()
     };
+    const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-submit',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
 
@@ -709,7 +784,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-submit',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
     await action.run(submitContext);
@@ -720,24 +795,26 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-submit',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
 
     expect(nextMessage.parts[0]).toMatchObject({
-      status: 'finished',
-      lifecycle: {
-        mountedAt: '2026-07-01T00:00:00.000Z',
-        unmountedAt: expect.any(String)
-      },
-      renderContext: {
-        data: {
-          weather: {
-            temperature: 28
-          },
-          submitted: {
-            city: '上海',
-            temperature: 28
+      widget: {
+        status: 'finished',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z',
+          unmountedAt: expect.any(String)
+        },
+        renderContext: {
+          data: {
+            weather: {
+              temperature: 28
+            },
+            submitted: {
+              city: '上海',
+              temperature: 28
+            }
           }
         }
       }
@@ -758,9 +835,13 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join(
-            '\n'
-          )
+          code: [
+            'export default class Weather extends Widget {',
+            '  unmounted() {',
+            '    this.submitted = { temperature: this.weather.temperature }',
+            '  }',
+            '}'
+          ].join('\n')
         }
       },
       renderContext: createWeatherRenderContext()
@@ -778,11 +859,13 @@ describe('MessageBubble', (): void => {
         }
       }
     };
+    const staleToolPart = createOpenWidgetToolPartFromWidgetPart(staleWidgetPart);
+    const latestToolPart = createOpenWidgetToolPartFromWidgetPart(latestWidgetPart);
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-latest-submit',
         content: '',
-        parts: [staleWidgetPart]
+        parts: [staleToolPart]
       })
     );
 
@@ -790,7 +873,7 @@ describe('MessageBubble', (): void => {
       message: createAssistantMessage({
         id: 'assistant-widget-latest-submit',
         content: '',
-        parts: [latestWidgetPart]
+        parts: [latestToolPart]
       })
     });
     await flushPromises();
@@ -826,7 +909,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-latest-submit',
         content: '',
-        parts: [latestWidgetPart]
+        parts: [latestToolPart]
       })
     );
     await action.run(submitContext);
@@ -836,19 +919,21 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-latest-submit',
         content: '',
-        parts: [latestWidgetPart]
+        parts: [latestToolPart]
       })
     );
 
     expect(nextMessage.parts[0]).toMatchObject({
-      status: 'finished',
-      renderContext: {
-        data: {
-          weather: {
-            temperature: 35
-          },
-          submitted: {
-            temperature: 35
+      widget: {
+        status: 'finished',
+        renderContext: {
+          data: {
+            weather: {
+              temperature: 35
+            },
+            submitted: {
+              temperature: 35
+            }
           }
         }
       }
@@ -879,11 +964,12 @@ describe('MessageBubble', (): void => {
       },
       renderContext: createWeatherRenderContext()
     };
+    const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-send-message',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
 
@@ -909,7 +995,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-send-message',
         content: '',
-        parts: [widgetPart]
+        parts: [toolPart]
       })
     );
     vi.mocked(submitContext.updateMessage).mockImplementation(async (_messageId, updater): Promise<void> => {
@@ -917,7 +1003,7 @@ describe('MessageBubble', (): void => {
         createAssistantMessage({
           id: 'assistant-widget-send-message',
           content: '',
-          parts: [widgetPart]
+          parts: [toolPart]
         })
       );
     });
@@ -959,10 +1045,11 @@ describe('MessageBubble', (): void => {
       },
       renderContext: createWeatherRenderContext()
     };
+    const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
     const message = createAssistantMessage({
       id: 'assistant-widget-error-message',
       content: '',
-      parts: [widgetPart]
+      parts: [toolPart]
     });
     const wrapper = mountMessageBubble(message);
 
@@ -1011,13 +1098,9 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: [
-            'export default class Weather extends Widget {',
-            '  unmounted() {',
-            '    this.$sendMessage({ content: this.order.message })',
-            '  }',
-            '}'
-          ].join('\n')
+          code: ['export default class Weather extends Widget {', '  unmounted() {', '    this.$sendMessage({ content: this.order.message })', '  }', '}'].join(
+            '\n'
+          )
         }
       },
       renderContext: createWeatherRenderContext()
@@ -1033,11 +1116,13 @@ describe('MessageBubble', (): void => {
         }
       }
     };
+    const staleToolPart = createOpenWidgetToolPartFromWidgetPart(staleWidgetPart);
+    const latestToolPart = createOpenWidgetToolPartFromWidgetPart(latestWidgetPart);
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-latest-message',
         content: '',
-        parts: [staleWidgetPart]
+        parts: [staleToolPart]
       })
     );
 
@@ -1045,7 +1130,7 @@ describe('MessageBubble', (): void => {
       message: createAssistantMessage({
         id: 'assistant-widget-latest-message',
         content: '',
-        parts: [latestWidgetPart]
+        parts: [latestToolPart]
       })
     });
     await flushPromises();
@@ -1072,7 +1157,7 @@ describe('MessageBubble', (): void => {
       createAssistantMessage({
         id: 'assistant-widget-latest-message',
         content: '',
-        parts: [latestWidgetPart]
+        parts: [latestToolPart]
       })
     );
     await action.run(submitContext);
@@ -1118,7 +1203,54 @@ describe('MessageBubble', (): void => {
     });
   });
 
-  it('renders open_widget tool results as widget runtime items', (): void => {
+  it('renders presentation widget tool parts as widget runtime items', (): void => {
+    const toolPart: ChatMessageToolPart = {
+      id: 'part0014',
+      type: 'tool',
+      toolCallId: 'tool-call-widget',
+      toolName: 'open_widget',
+      status: 'done',
+      presentation: 'widget',
+      input: {
+        id: 'weather',
+        input: {
+          city: '上海'
+        }
+      },
+      result: {
+        toolName: 'open_widget',
+        status: 'success',
+        data: {
+          kind: 'widget_display',
+          sessionId: 'widget-weather-tool-call-widget',
+          widgetId: 'weather',
+          value: createWeatherWidgetData(),
+          renderContext: createWeatherRenderContext()
+        }
+      },
+      widget: {
+        sessionId: 'widget-weather-tool-call-widget',
+        widgetId: 'weather',
+        status: 'mounted',
+        lifecycle: {
+          mountedAt: '2026-07-01T00:00:00.000Z'
+        },
+        value: createWeatherWidgetData(),
+        renderContext: createWeatherRenderContext()
+      }
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        content: '',
+        parts: [toolPart]
+      })
+    );
+
+    expect(wrapper.text()).toContain('上海');
+    expect(wrapper.text()).toContain('28°C');
+  });
+
+  it('renders open_widget without presentation as a plain tool result', (): void => {
     const toolPart: ChatMessageToolPart = {
       id: 'part0014',
       type: 'tool',
@@ -1150,8 +1282,58 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    expect(wrapper.text()).toContain('上海');
-    expect(wrapper.text()).toContain('28°C');
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).exists()).toBe(false);
+    expect(wrapper.text()).toContain('widget_display');
+  });
+
+  it('renders main-initialized open_widget tool runtime when scripts are disabled', (): void => {
+    const widgetValue: WidgetData = {
+      ...createWeatherWidgetData(),
+      execute: {
+        enabled: false,
+        code: 'export default class Weather extends Widget {}'
+      }
+    };
+    const toolPart: ChatMessageToolPart = {
+      id: 'part0014',
+      type: 'tool',
+      toolCallId: 'tool-call-widget',
+      toolName: 'open_widget',
+      status: 'done',
+      presentation: 'widget',
+      input: {
+        id: 'weather'
+      },
+      result: {
+        toolName: 'open_widget',
+        status: 'success',
+        data: {
+          kind: 'widget_display',
+          sessionId: 'widget-weather-tool-call-widget',
+          widgetId: 'weather',
+          value: widgetValue,
+          renderContext: createWeatherRenderContext()
+        }
+      },
+      widget: {
+        sessionId: 'widget-weather-tool-call-widget',
+        widgetId: 'weather',
+        status: 'created',
+        lifecycle: {},
+        value: widgetValue,
+        renderContext: createWeatherRenderContext()
+      }
+    };
+    const message = createAssistantMessage({
+      id: 'assistant-open-widget',
+      content: '',
+      parts: [toolPart],
+      loading: true,
+      finished: false
+    });
+    const wrapper = mountMessageBubbleWithSilentWidgetRuntime(message);
+
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('runtimeEnabled')).toBe(true);
   });
 
   it('emits message update actions to keep open_widget runtime on the tool part', async (): Promise<void> => {
@@ -1161,6 +1343,7 @@ describe('MessageBubble', (): void => {
       toolCallId: 'tool-call-widget',
       toolName: 'open_widget',
       status: 'done',
+      presentation: 'widget',
       input: {
         id: 'weather',
         input: {
@@ -1177,6 +1360,14 @@ describe('MessageBubble', (): void => {
           value: createWeatherWidgetData(),
           renderContext: createWeatherRenderContext()
         }
+      },
+      widget: {
+        sessionId: 'widget-weather-tool-call-widget',
+        widgetId: 'weather',
+        status: 'created',
+        lifecycle: {},
+        value: createWeatherWidgetData(),
+        renderContext: createWeatherRenderContext()
       }
     };
     const message = createAssistantMessage({
@@ -1188,56 +1379,38 @@ describe('MessageBubble', (): void => {
 
     await flushPromises();
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
-
-    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-open-widget', expect.any(Function));
-    const [, updater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
-    const nextMessage = updater(message);
-
-    expect(nextMessage.parts).toEqual([
-      expect.objectContaining({
-        ...toolPart,
-        widget: expect.objectContaining({
-          sessionId: 'widget-weather-tool-call-widget',
-          widgetId: 'weather',
-          status: 'created'
-        })
-      })
-    ]);
-
-    await wrapper.setProps({ message: nextMessage });
-    await flushPromises();
-
-    const mountedToolPart = nextMessage.parts[0] as ChatMessageToolPart;
-    const mountedWidgetPart: ChatMessageWidgetPart = {
-      id: toolPart.id,
-      type: 'widget',
-      ...mountedToolPart.widget!
-    };
     emitWidgetRuntimeChange(
       wrapper,
-      createRuntimeChange(mountedWidgetPart, {
-        reason: 'mount',
-        status: 'mounted',
-        lifecycle: {
-          mountedAt: '2026-07-01T00:00:00.000Z'
+      createRuntimeChange(
+        {
+          id: 'part0014',
+          type: 'widget',
+          sessionId: 'widget-weather-tool-call-widget',
+          widgetId: 'weather',
+          status: 'created',
+          lifecycle: {},
+          value: createWeatherWidgetData(),
+          renderContext: createWeatherRenderContext()
         },
-        renderContext: createWeatherRenderContext()
-      })
+        {
+          reason: 'mount',
+          status: 'mounted',
+          lifecycle: {
+            mountedAt: '2026-07-01T00:00:00.000Z'
+          }
+        }
+      )
     );
-    await flushPromises();
 
-    const mountedAction = wrapper.emitted('submit')?.[1]?.[0] as BChatSubmitAction;
-    const mountedSubmitContext = createSubmitContextMock();
-    vi.mocked(mountedSubmitContext.getMessage).mockReturnValue(nextMessage);
-    await mountedAction.run(mountedSubmitContext);
+    const mountedAction = wrapper.emitted('submit')?.[0]?.[0] as BChatSubmitAction;
+    const submitContext = createSubmitContextMock();
+    vi.mocked(submitContext.getMessage).mockReturnValue(message);
+    await mountedAction.run(submitContext);
 
-    expect(mountedSubmitContext.updateMessage).toHaveBeenCalledWith('assistant-open-widget', expect.any(Function));
-    const [, mountedUpdater] = vi.mocked(mountedSubmitContext.updateMessage).mock.calls[0];
+    expect(submitContext.updateMessage).toHaveBeenCalledWith('assistant-open-widget', expect.any(Function));
+    const [, mountedUpdater] = vi.mocked(submitContext.updateMessage).mock.calls[0];
 
-    expect(mountedUpdater(nextMessage).parts[0]).toEqual(
+    expect(mountedUpdater(message).parts[0]).toEqual(
       expect.objectContaining({
         type: 'tool',
         widget: expect.objectContaining({

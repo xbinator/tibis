@@ -82,7 +82,7 @@ interface WidgetRuntimeRenderableElement {
 
 const props = withDefaults(defineProps<Props>(), {
   lifecycle: () => ({}),
-  padding: 16,
+  padding: 0,
   runtime: undefined,
   runtimeEnabled: false,
   status: 'created'
@@ -94,7 +94,7 @@ const emit = defineEmits<{
 }>();
 
 const [name, bem] = createNamespace('widget-runtime');
-const { viewportSize } = useViewportSize('rootRef');
+const { viewportSize, scheduleViewportSizeSyncFromRoot } = useViewportSize('rootRef', { allowZeroHeight: true });
 /** 最多保留的待宿主回写运行态数量。 */
 const MAX_PENDING_RUNTIME_STATE_COUNT = 20;
 /** 小组件脚本托管 HTTP 客户端。 */
@@ -126,9 +126,11 @@ const providedRenderContext = computed<WidgetRenderContext | undefined>(() => ru
 
 provideRenderContext(providedRenderContext);
 
+/** 当前运行态是否允许继续渲染节点。 */
+const shouldRenderRuntimeElements = computed<boolean>(() => runtimeState.value.status !== 'failure');
 /** 循环展开后的运行态渲染元素。 */
 const runtimeRenderElements = computed<WidgetLoopRenderElement[]>(() =>
-  createWidgetLoopRenderElements(runtimeState.value.value.elements, runtimeState.value.renderContext)
+  shouldRenderRuntimeElements.value ? createWidgetLoopRenderElements(runtimeState.value.value.elements, runtimeState.value.renderContext) : []
 );
 /** 运行态渲染元素上下文索引。 */
 const runtimeRenderContextByElementId = computed<Map<string, WidgetLoopRenderContext>>(
@@ -349,6 +351,8 @@ async function initWidgetRuntime(): Promise<void> {
   if (!props.runtimeEnabled) return;
 
   const currentState = runtimeState.value;
+  if (currentState.status !== 'created' || currentState.lifecycle.mountedAt) return;
+
   const executionId = beginPatchExecution();
   const nextState = await initWidgetMountState(currentState, {
     http: widgetHttpClient,
@@ -433,13 +437,19 @@ onMounted((): void => {
   enqueueRuntimeTask(initWidgetRuntime);
 });
 
-watch(
-  () => [props.runtimeEnabled, props.status, props.lifecycle.mountedAt] as const,
-  ([runtimeEnabled]): void => {
-    if (!runtimeEnabled) return;
+watch([() => props.runtimeEnabled, () => props.status, () => props.lifecycle.mountedAt], ([runtimeEnabled]): void => {
+  if (!runtimeEnabled) return;
 
-    enqueueRuntimeTask(initWidgetRuntime);
-  }
+  enqueueRuntimeTask(initWidgetRuntime);
+});
+
+/** 内容布局变化后重新同步宿主宽度，避免异步内容用首帧异常宽度计算高度。 */
+watch(
+  () => [runtimeLayout.value.contentSize.width, runtimeLayout.value.contentSize.height, runtimeLayout.value.elements.length] as const,
+  (): void => {
+    scheduleViewportSizeSyncFromRoot();
+  },
+  { flush: 'post', immediate: true }
 );
 
 watch(propsRuntimeState, (nextState): void => {

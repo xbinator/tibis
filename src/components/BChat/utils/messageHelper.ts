@@ -13,7 +13,6 @@ import type {
   ChatMessageRole,
   ChatMessageShellOutputChunk,
   ChatMessageToolPart,
-  ChatMessageWidgetPart,
   ChatMessageWidgetRuntime,
   ChatMessageWidgetResultPart
 } from 'types/chat';
@@ -184,10 +183,6 @@ export function finalizeInterruptedPartsAsCancelled(message: Message): void {
         error: { code: 'USER_CANCELLED', message: '用户中止了操作' }
       } satisfies AIToolExecutionCancelledResult;
       delete part.inputText;
-    }
-
-    if (part.type === 'widget' && part.status !== 'finished' && part.status !== 'failure' && part.status !== 'cancelled') {
-      part.status = 'cancelled';
     }
 
     if (part.type === 'tool' && part.widget && isUnfinishedWidgetRuntime(part.widget)) {
@@ -398,81 +393,6 @@ export const create = {
 
 export function isAwaitingUserChoiceResult(part: ChatMessagePart): part is ChatMessageToolPart & { result: AIToolExecutionAwaitingUserInputResult } {
   return part.type === 'tool' && ASK_USER_QUESTION_TOOL_NAMES.has(part.toolName) && part.result?.status === 'awaiting_user_input';
-}
-
-/**
- * 从 open_widget 工具结果派生小组件渲染片段。
- * @param part - 消息片段
- * @returns 可渲染的小组件片段，不匹配时返回 null
- */
-export function resolveWidgetPartFromToolResult(part: ChatMessagePart): ChatMessageWidgetPart | null {
-  if (part.type !== 'tool' || part.toolName !== OPEN_WIDGET_TOOL_NAME || part.result?.status !== 'success' || !isWidgetDisplayPayload(part.result.data)) {
-    return null;
-  }
-
-  if (part.widget) {
-    return {
-      id: part.id,
-      type: 'widget',
-      ...part.widget
-    };
-  }
-
-  return {
-    id: part.id,
-    type: 'widget',
-    sessionId: part.result.data.sessionId,
-    widgetId: part.result.data.widgetId,
-    status: 'created',
-    lifecycle: {},
-    value: part.result.data.value,
-    renderContext: part.result.data.renderContext
-  };
-}
-
-/**
- * 从 open_widget 工具结果创建初始小组件运行态。
- * @param part - open_widget 工具片段
- * @returns 初始小组件运行态；不匹配时返回 null
- */
-function createWidgetRuntimeFromToolResult(part: ChatMessageToolPart): ChatMessageWidgetRuntime | null {
-  const widgetPart = resolveWidgetPartFromToolResult(part);
-  if (!widgetPart) return null;
-
-  return {
-    sessionId: widgetPart.sessionId,
-    widgetId: widgetPart.widgetId,
-    status: widgetPart.status,
-    lifecycle: widgetPart.lifecycle,
-    value: widgetPart.value,
-    renderContext: widgetPart.renderContext
-  };
-}
-
-/**
- * 初始化 open_widget 工具片段内的小组件运行态。
- * tool part 保留工具调用历史，widget 字段承载 UI 运行态与状态持久化。
- * @param message - 当前消息
- * @returns 补齐 widget 运行态后的消息；无需修改时返回原消息
- */
-export function initializeWidgetToolRuntimeParts(message: Message): Message {
-  let changed = false;
-  const nextParts = message.parts.map((part): ChatMessagePart => {
-    if (part.type !== 'tool' || part.widget) return part;
-
-    const widget = createWidgetRuntimeFromToolResult(part);
-    if (!widget) return part;
-
-    changed = true;
-    return { ...part, widget };
-  });
-
-  if (!changed) return message;
-
-  return {
-    ...message,
-    parts: nextParts
-  };
 }
 
 export const userChoice = {
@@ -937,11 +857,6 @@ function toAssistantModelMessages(parts: ChatMessagePart[]): ModelMessage[] {
           input: part.input
         });
       }
-    }
-
-    if (part.type === 'widget') {
-      // 小组件片段仅用于当前 UI 展示；执行协议确定前不写入模型上下文。
-      continue;
     }
   }
 

@@ -452,6 +452,44 @@ function createWidgetPart(status: ChatMessageWidgetPart['status'], temperature?:
 }
 
 /**
+ * 从小组件视图片段创建 open_widget 工具片段。
+ * @param widget - 小组件视图片段
+ * @returns 带内嵌小组件运行态的工具片段
+ */
+function createOpenWidgetToolPartFromWidgetPart(widget: ChatMessageWidgetPart): ChatMessageToolPart {
+  return {
+    id: widget.id,
+    type: 'tool',
+    toolCallId: `tool-call-${widget.id}`,
+    toolName: 'open_widget',
+    status: 'done',
+    presentation: 'widget',
+    input: {
+      id: widget.widgetId
+    },
+    result: {
+      toolName: 'open_widget',
+      status: 'success',
+      data: {
+        kind: 'widget_display',
+        sessionId: widget.sessionId,
+        widgetId: widget.widgetId,
+        value: widget.value,
+        renderContext: widget.renderContext
+      }
+    },
+    widget: {
+      sessionId: widget.sessionId,
+      widgetId: widget.widgetId,
+      status: widget.status,
+      lifecycle: widget.lifecycle,
+      value: widget.value,
+      renderContext: widget.renderContext
+    }
+  };
+}
+
+/**
  * 创建带文件拖拽数据的 DOM 事件。
  * @param type - 事件类型
  * @param files - 拖拽文件列表
@@ -1014,20 +1052,26 @@ describe('BChat sessionId runtime', (): void => {
     const firstWidgetPart = createWidgetPart('created');
     const secondWidgetPart: ChatMessageWidgetPart = {
       ...createWidgetPart('created'),
+      id: 'widget-part-forecast',
       sessionId: 'widget-session-2',
       widgetId: 'forecast'
     };
+    const firstToolPart = createOpenWidgetToolPartFromWidgetPart(firstWidgetPart);
+    const secondToolPart = createOpenWidgetToolPartFromWidgetPart(secondWidgetPart);
     const assistantMessage = createAssistantMessage({
       id: 'assistant-widget',
       content: '',
-      parts: [firstWidgetPart, secondWidgetPart]
+      parts: [firstToolPart, secondToolPart]
     });
     const firstMountedWidgetPart = createWidgetPart('mounted', 31);
     const secondMountedWidgetPart: ChatMessageWidgetPart = {
       ...createWidgetPart('mounted', 32),
+      id: 'widget-part-forecast',
       sessionId: 'widget-session-2',
       widgetId: 'forecast'
     };
+    const firstMountedToolPart = createOpenWidgetToolPartFromWidgetPart(firstMountedWidgetPart);
+    const secondMountedToolPart = createOpenWidgetToolPartFromWidgetPart(secondMountedWidgetPart);
     chatStoreMock.getSessionMessages.mockResolvedValueOnce([assistantMessage]).mockResolvedValueOnce([]);
     const wrapper = mountBChat('session-active');
     await flushPromises();
@@ -1036,21 +1080,21 @@ describe('BChat sessionId runtime', (): void => {
       'submit',
       createMessageUpdateSubmitAction('assistant-widget', (currentMessage) => ({
         ...currentMessage,
-        parts: currentMessage.parts.map((part, index) => (index === 0 ? firstMountedWidgetPart : part))
+        parts: currentMessage.parts.map((part, index) => (index === 0 ? firstMountedToolPart : part))
       }))
     );
     wrapper.findComponent(ConversationViewStub).vm.$emit(
       'submit',
       createMessageUpdateSubmitAction('assistant-widget', (currentMessage) => ({
         ...currentMessage,
-        parts: currentMessage.parts.map((part, index) => (index === 1 ? secondMountedWidgetPart : part))
+        parts: currentMessage.parts.map((part, index) => (index === 1 ? secondMountedToolPart : part))
       }))
     );
     await flushPromises();
 
     const nextAssistantMessage: Message = {
       ...assistantMessage,
-      parts: [firstMountedWidgetPart, secondMountedWidgetPart]
+      parts: [firstMountedToolPart, secondMountedToolPart]
     };
     const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
     expect(visibleMessages[0]).toEqual(nextAssistantMessage);

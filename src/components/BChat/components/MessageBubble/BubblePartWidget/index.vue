@@ -3,13 +3,13 @@
   @description 聊天消息中小组件快照片段的运行态展示组件。
 -->
 <template>
-  <div :class="name">
+  <div v-if="widgetPart" :class="name">
     <BWidgetRuntime
-      :lifecycle="part.lifecycle"
-      :render-context="part.renderContext"
+      :lifecycle="widgetPart.lifecycle"
+      :render-context="widgetPart.renderContext"
       :runtime-enabled="runtimeEnabled"
-      :status="part.status"
-      :value="part.value"
+      :status="widgetPart.status"
+      :value="widgetPart.value"
       @change="handleRuntimeChange"
     />
   </div>
@@ -19,33 +19,25 @@
 import type { Message } from '../../../utils/types';
 import type { ChatMessagePart, ChatMessageTextPart, ChatMessageToolPart, ChatMessageWidgetPart, ChatMessageWidgetRuntime } from 'types/chat';
 import type { WidgetRuntimeChange, WidgetRuntimeSendMessage } from 'types/widget';
-import { onMounted } from 'vue';
+import { computed } from 'vue';
 import { isString } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import { createNamespace } from '@/utils/namespace';
-import { create, initializeWidgetToolRuntimeParts, resolveWidgetPartFromToolResult } from '../../../utils/messageHelper';
-import {
-  createMessageUpdateSubmitAction,
-  createRuntimeUserMessageSubmitAction,
-  type BChatAdaptedUserMessageSubmitInput,
-  type BChatSubmitAction
-} from '../../../utils/submitAction';
+import { create } from '../../../utils/messageHelper';
+import { createRuntimeUserMessageSubmitAction, type BChatAdaptedUserMessageSubmitInput, type BChatSubmitAction } from '../../../utils/submitAction';
 
 defineOptions({ name: 'BubblePartWidget' });
 
 interface Props {
-  /** 所属聊天消息 ID，消息内运行态需要用它写回状态。 */
-  messageId?: string;
-  /** 小组件消息片段 */
-  part: ChatMessageWidgetPart;
-  /** 是否启用消息内独立运行态 */
-  runtimeEnabled?: boolean;
+  /** 所属聊天消息，消息内运行态需要用它写回状态。 */
+  message?: Message;
+  /** open_widget 工具片段，小组件运行态通过 part.widget 持久化。 */
+  part: ChatMessageToolPart;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  messageId: undefined,
-  runtimeEnabled: false
+  message: undefined
 });
 
 const emit = defineEmits<{
@@ -56,6 +48,10 @@ const emit = defineEmits<{
 }>();
 
 const [name] = createNamespace('', 'message-bubble-widget');
+/** 从 open_widget 工具片段读取当前可渲染的小组件运行态。 */
+const widgetPart = computed<ChatMessageWidgetPart | null>(() => (props.part.widget ? { id: props.part.id, type: 'widget', ...props.part.widget } : null));
+/** 是否启用 BWidget 独立运行态；消息内运行态以 tool.widget 是否已写回为准。 */
+const runtimeEnabled = computed<boolean>(() => Boolean(props.part.widget));
 
 /**
  * 将可渲染的小组件片段转换成工具片段内的运行态。
@@ -79,15 +75,13 @@ function toWidgetRuntime(part: ChatMessageWidgetPart): ChatMessageWidgetRuntime 
  * @returns 可执行的小组件片段；不存在时返回 null
  */
 function resolveWidgetPartFromMessagePart(part: ChatMessagePart): ChatMessageWidgetPart | null {
-  if (part.type === 'widget') return part;
-
   if (part.type !== 'tool') return null;
 
   if (part.widget) {
     return { id: part.id, type: 'widget', ...part.widget };
   }
 
-  return resolveWidgetPartFromToolResult(part);
+  return null;
 }
 
 /**
@@ -97,7 +91,6 @@ function resolveWidgetPartFromMessagePart(part: ChatMessagePart): ChatMessageWid
  * @returns 更新后的宿主消息片段
  */
 function updateHostMessagePart(sourcePart: ChatMessagePart, nextPart: ChatMessageWidgetPart): ChatMessagePart {
-  if (sourcePart.type === 'widget') return nextPart;
   if (sourcePart.type !== 'tool') return sourcePart;
 
   return {
@@ -195,15 +188,15 @@ function createWidgetRuntimeChangedMessage(currentMessage: Message, partId: stri
  * @returns 统一提交动作
  */
 function createWidgetRuntimeChangeSubmitAction(change: WidgetRuntimeChange): BChatSubmitAction {
-  const { messageId } = props;
+  const hostMessage = props.message;
 
   return {
     async run(context): Promise<void> {
-      if (messageId) {
-        const currentMessage = context.getMessage(messageId);
+      if (hostMessage) {
+        const currentMessage = context.getMessage(hostMessage.id);
         if (currentMessage) {
           const nextMessage = createWidgetRuntimeChangedMessage(currentMessage, props.part.id, change);
-          await context.updateMessage(messageId, (): Message => nextMessage);
+          await context.updateMessage(hostMessage.id, (): Message => nextMessage);
         }
       }
 
@@ -219,8 +212,11 @@ function createWidgetRuntimeChangeSubmitAction(change: WidgetRuntimeChange): BCh
  * @param change - BWidget 运行态变化
  */
 function handleRuntimeChange(change: WidgetRuntimeChange): void {
-  if (!props.messageId) {
-    emit('change', createWidgetPartFromRuntimeChange(props.part, change));
+  const currentPart = widgetPart.value;
+  if (!currentPart) return;
+
+  if (!props.message) {
+    emit('change', createWidgetPartFromRuntimeChange(currentPart, change));
 
     if (change.sendMessage) {
       emit('submit', createRuntimeUserMessageSubmitAction(createWidgetSendMessageSubmitInput(change.sendMessage)));
@@ -231,19 +227,6 @@ function handleRuntimeChange(change: WidgetRuntimeChange): void {
 
   emit('submit', createWidgetRuntimeChangeSubmitAction(change));
 }
-
-/**
- * 请求宿主消息初始化 open_widget 工具片段内的小组件运行态。
- */
-function requestWidgetRuntimeInitialization(): void {
-  if (props.runtimeEnabled || !props.messageId) return;
-
-  emit('submit', createMessageUpdateSubmitAction(props.messageId, initializeWidgetToolRuntimeParts));
-}
-
-onMounted((): void => {
-  requestWidgetRuntimeInitialization();
-});
 </script>
 
 <style scoped lang="less">

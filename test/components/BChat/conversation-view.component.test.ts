@@ -36,7 +36,7 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
       '{{ disabled ? "disabled" : "enabled" }}:',
       '{{ canRollback && canRollback(message) ? "rollback" : "no-rollback" }}',
       '{{ message.parts[0]?.result?.data?.renderContext?.input?.city ?? "" }}',
-      '{{ message.parts[0]?.renderContext?.data?.weather?.temperature ?? "" }}',
+      '{{ message.parts[0]?.widget?.renderContext?.data?.weather?.temperature ?? "" }}',
       '{{ message.parts[0]?.widget?.renderContext?.data?.message ?? "" }}',
       '</div>'
     ].join('')
@@ -101,12 +101,15 @@ function createQuestionToolPart(status: ChatMessageToolPart['status'], resultSta
  * @returns 工具片段
  */
 function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
+  const widgetValue = createDefaultWidgetData();
+
   return {
     id: 'tool-part-open-widget',
     type: 'tool',
     toolCallId: 'tool-call-widget',
     toolName: 'open_widget',
     status: 'done',
+    presentation: 'widget',
     input: {
       id: 'weather'
     },
@@ -117,13 +120,26 @@ function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
         kind: 'widget_display',
         sessionId: 'widget-weather-tool-call-widget',
         widgetId: 'weather',
-        value: {},
+        value: widgetValue,
         renderContext: {
           input: {
             city
           },
           data: {}
         }
+      }
+    },
+    widget: {
+      sessionId: 'widget-weather-tool-call-widget',
+      widgetId: 'weather',
+      status: 'created',
+      lifecycle: {},
+      value: widgetValue,
+      renderContext: {
+        input: {
+          city
+        },
+        data: {}
       }
     }
   };
@@ -196,6 +212,47 @@ function createOpenWidgetToolPartWithRuntimeMessage(message: string): ChatMessag
 }
 
 /**
+ * 从小组件视图片段创建 open_widget 工具片段。
+ * @param widget - 小组件视图片段
+ * @returns 带内嵌小组件运行态的工具片段
+ */
+function createOpenWidgetToolPartFromWidgetPart(widget: ChatMessageWidgetPart): ChatMessageToolPart {
+  const part = createOpenWidgetToolPart('上海');
+
+  return {
+    ...part,
+    id: widget.id,
+    input: {
+      id: widget.widgetId
+    },
+    result: {
+      toolName: 'open_widget',
+      status: 'success',
+      data: {
+        kind: 'widget_display',
+        sessionId: widget.sessionId,
+        widgetId: widget.widgetId,
+        value: widget.value,
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {}
+        }
+      }
+    },
+    widget: {
+      sessionId: widget.sessionId,
+      widgetId: widget.widgetId,
+      status: widget.status,
+      lifecycle: widget.lifecycle,
+      value: widget.value,
+      renderContext: widget.renderContext
+    }
+  };
+}
+
+/**
  * 创建 assistant 消息。
  * @param part - 工具片段
  * @returns assistant 消息
@@ -209,23 +266,6 @@ function createAssistantMessage(part: ChatMessageToolPart): Message {
     createdAt: '2026-06-22T00:00:00.000Z',
     loading: false,
     finished: false
-  };
-}
-
-/**
- * 创建带小组件片段的 assistant 消息。
- * @param part - 小组件片段
- * @returns assistant 消息
- */
-function createWidgetMessage(part: ChatMessageWidgetPart): Message {
-  return {
-    id: 'assistant-widget',
-    role: 'assistant',
-    content: '',
-    parts: [part],
-    createdAt: '2026-07-01T00:00:00.000Z',
-    loading: false,
-    finished: true
   };
 }
 
@@ -372,7 +412,7 @@ describe('ConversationView', (): void => {
   it('updates widget display when render context data changes without status changes', async (): Promise<void> => {
     const wrapper = mount(ConversationViewForTest, {
       props: {
-        messages: [createWidgetMessage(createWidgetPart(28))],
+        messages: [createAssistantMessage(createOpenWidgetToolPartFromWidgetPart(createWidgetPart(28)))],
         loading: false,
         disabled: false
       },
@@ -383,16 +423,16 @@ describe('ConversationView', (): void => {
       }
     });
 
-    expect(wrapper.get('.message-bubble').text()).toBe('mounted::enabled:no-rollback28');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海28');
 
     await wrapper.setProps({
-      messages: [createWidgetMessage(createWidgetPart(31))],
+      messages: [createAssistantMessage(createOpenWidgetToolPartFromWidgetPart(createWidgetPart(31)))],
       loading: false,
       disabled: false
     });
     await nextTick();
 
-    expect(wrapper.get('.message-bubble').text()).toBe('mounted::enabled:no-rollback31');
+    expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海31');
   });
 
   it('forwards message bubble submit actions without inspecting them', async (): Promise<void> => {

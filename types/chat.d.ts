@@ -227,6 +227,11 @@ export interface ChatMessageWidgetRuntime {
 }
 
 /**
+ * 聊天工具片段展示类型。
+ */
+export type ChatMessageToolPresentation = 'widget';
+
+/**
  * 聊天消息统一工具片段。
  * 合并原 tool-input / tool-call / tool-result 为同一片段，通过 status 追踪工具执行生命周期。
  */
@@ -245,6 +250,8 @@ export interface ChatMessageToolPart extends ChatMessagePartBase {
   inputText?: string;
   /** 工具执行结果，仅 status === 'done' 时存在 */
   result?: AIToolExecutionResult;
+  /** 工具结果在聊天 UI 中的专用展示类型，由 ChatRuntime 在生成 part 时判定 */
+  presentation?: ChatMessageToolPresentation;
   /** Shell 命令实时输出缓冲，仅 run_shell_command 使用 */
   shellOutput?: ChatMessageShellOutputChunk[];
   /** open_widget 工具对应的小组件运行态，仅 UI 运行态使用，不进入模型 tool result */
@@ -252,7 +259,8 @@ export interface ChatMessageToolPart extends ChatMessagePartBase {
 }
 
 /**
- * 聊天消息小组件快照片段。
+ * 聊天消息小组件渲染片段。
+ * 仅作为 open_widget 工具片段派生出的 UI 运行态视图模型，不作为 Message.parts 中的独立消息结构。
  */
 export interface ChatMessageWidgetPart extends ChatMessagePartBase, ChatMessageWidgetRuntime {
   /** 片段类型 */
@@ -394,7 +402,6 @@ export type ChatMessagePart =
   | ChatMessageErrorPart
   | ChatMessageThinkingPart
   | ChatMessageToolPart
-  | ChatMessageWidgetPart
   | ChatMessageWidgetResultPart
   | ChatMessageConfirmationPart
   | ChatMessageCompactionPart;

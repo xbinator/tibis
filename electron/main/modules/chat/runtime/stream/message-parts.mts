@@ -9,9 +9,74 @@ import type {
   RuntimeToolInputStartChunk,
   RuntimeToolResultChunk
 } from './types.mjs';
-import type { AIUsage } from 'types/ai';
-import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
+import type { AIToolExecutionResult, AIUsage } from 'types/ai';
+import type { ChatMessageRecord, ChatMessageToolPart, ChatMessageWidgetRuntime } from 'types/chat';
+import type { WidgetDisplayPayload } from 'types/widget';
 import { nanoid } from 'nanoid';
+
+/** open_widget 工具名称。 */
+const OPEN_WIDGET_TOOL_NAME = 'open_widget';
+
+/**
+ * 判断未知值是否为对象记录。
+ * @param value - 待判断的值
+ * @returns 是否为对象记录
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * 判断工具结果数据是否为小组件展示载荷。
+ * @param value - 工具结果数据
+ * @returns 是否为小组件展示载荷
+ */
+function isWidgetDisplayPayload(value: unknown): value is WidgetDisplayPayload {
+  return (
+    isRecord(value) &&
+    value.kind === 'widget_display' &&
+    typeof value.sessionId === 'string' &&
+    typeof value.widgetId === 'string' &&
+    isRecord(value.value) &&
+    isRecord(value.renderContext)
+  );
+}
+
+/**
+ * 从工具结果创建小组件初始运行态。
+ * @param toolName - 工具名称
+ * @param result - 工具执行结果
+ * @returns 小组件运行态；不匹配时返回 undefined
+ */
+function createInitialWidgetRuntime(toolName: string, result: AIToolExecutionResult): ChatMessageWidgetRuntime | undefined {
+  if (toolName !== OPEN_WIDGET_TOOL_NAME || result.status !== 'success' || !isWidgetDisplayPayload(result.data)) return undefined;
+
+  return {
+    sessionId: result.data.sessionId,
+    widgetId: result.data.widgetId,
+    status: 'created',
+    lifecycle: {},
+    value: result.data.value,
+    renderContext: result.data.renderContext
+  };
+}
+
+/**
+ * 写入工具结果的 UI 展示元信息。
+ * @param toolPart - 待更新的工具片段
+ * @param result - 工具执行结果
+ */
+function applyToolPresentation(toolPart: ChatMessageToolPart, result: AIToolExecutionResult): void {
+  const widget = createInitialWidgetRuntime(toolPart.toolName, result);
+  if (!widget) {
+    delete toolPart.presentation;
+    delete toolPart.widget;
+    return;
+  }
+
+  toolPart.presentation = 'widget';
+  toolPart.widget = widget;
+}
 
 /**
  * 将文本增量写入 assistant 消息。
@@ -144,6 +209,7 @@ export function appendToolResult(message: ChatMessageRecord, chunk: RuntimeToolR
   const toolPart = ensureToolPart(message, chunk.toolCallId, chunk.toolName);
   toolPart.status = 'done';
   toolPart.result = chunk.result;
+  applyToolPresentation(toolPart, chunk.result);
   message.loading = false;
   message.finished = false;
 }

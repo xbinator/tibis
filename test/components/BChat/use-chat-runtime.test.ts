@@ -4,12 +4,13 @@
  * @vitest-environment jsdom
  */
 import type { AIMCPRequestConfig, AIToolContext, AIToolExecutor } from 'types/ai';
-import type { ChatMessageFile, ChatMessageRecord } from 'types/chat';
+import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart, ChatMessageWidgetRuntime } from 'types/chat';
 import { effectScope, reactive, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatRuntime } from '@/components/BChat/hooks/useChatRuntime';
 import type { Message } from '@/components/BChat/utils/types';
+import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
 import { emitRuntimeEvent, resetRuntimeEventListeners, type RuntimeEventListeners } from './runtime-event-test-utils';
 
@@ -93,6 +94,43 @@ function createMessage(overrides: Partial<ChatMessageRecord>): ChatMessageRecord
   };
 }
 
+/**
+ * 创建 open_widget 工具片段。
+ * @param widget - renderer 本地小组件运行态
+ * @param id - 工具片段 ID
+ * @returns open_widget 工具片段
+ */
+function createOpenWidgetToolPart(widget?: ChatMessageWidgetRuntime, id = 'tool-part-open-widget'): ChatMessageToolPart {
+  return {
+    id,
+    type: 'tool',
+    toolCallId: 'tool-call-widget',
+    toolName: 'open_widget',
+    status: 'done',
+    presentation: 'widget',
+    input: {
+      id: 'weather'
+    },
+    result: {
+      toolName: 'open_widget',
+      status: 'success',
+      data: {
+        kind: 'widget_display',
+        sessionId: 'widget-weather-tool-call-widget',
+        widgetId: 'weather',
+        value: {},
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {}
+        }
+      }
+    },
+    ...(widget ? { widget } : {})
+  };
+}
+
 describe('useChatRuntime', (): void => {
   beforeEach((): void => {
     setActivePinia(createPinia());
@@ -172,7 +210,13 @@ describe('useChatRuntime', (): void => {
         sessionId: 'session-1',
         clientId: 'bchat',
         agentId: 'default',
-        message: createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ id: 'part0042', type: 'text', text: 'hello' }], runtimeId: 'runtime-1' })
+        message: createMessage({
+          id: 'user-1',
+          role: 'user',
+          content: 'hello',
+          parts: [{ id: 'part0042', type: 'text', text: 'hello' }],
+          runtimeId: 'runtime-1'
+        })
       });
       emitRuntimeEvent(listeners, 'messageCreated', {
         runtimeId: 'runtime-1',
@@ -207,6 +251,157 @@ describe('useChatRuntime', (): void => {
         expect.objectContaining({ id: 'assistant-1', content: 'answer', finished: true })
       ]);
       expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant-1', content: 'answer' }));
+    });
+
+    scope.stop();
+  });
+
+  it('preserves local open_widget runtime state when streaming runtime messages replace parts', (): void => {
+    const widgetRuntime: ChatMessageWidgetRuntime = {
+      sessionId: 'widget-weather-tool-call-widget',
+      widgetId: 'weather',
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-06T00:00:00.000Z'
+      },
+      value: createDefaultWidgetData(),
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        data: {
+          weather: {
+            temperature: 32
+          }
+        }
+      }
+    };
+    const messages = ref<Message[]>([
+      createMessage({
+        id: 'assistant-1',
+        runtimeId: 'runtime-1',
+        content: '',
+        parts: [createOpenWidgetToolPart(widgetRuntime)],
+        loading: true,
+        finished: false
+      }) as Message
+    ]);
+    const scope = effectScope();
+
+    scope.run((): void => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      emitRuntimeEvent(listeners, 'messageUpdated', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        message: createMessage({
+          id: 'assistant-1',
+          runtimeId: 'runtime-1',
+          content: '继续输出',
+          parts: [createOpenWidgetToolPart(undefined, 'tool-part-open-widget-stream')],
+          loading: true,
+          finished: false
+        })
+      });
+
+      expect(messages.value[0]).toMatchObject({
+        id: 'assistant-1',
+        content: '继续输出'
+      });
+      expect(messages.value[0].parts[0]).toMatchObject({
+        id: 'tool-part-open-widget',
+        type: 'tool',
+        toolCallId: 'tool-call-widget',
+        widget: widgetRuntime
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('does not preserve local open_widget runtime state when the incoming payload changes', (): void => {
+    const widgetRuntime: ChatMessageWidgetRuntime = {
+      sessionId: 'widget-weather-tool-call-widget',
+      widgetId: 'weather',
+      status: 'mounted',
+      lifecycle: {
+        mountedAt: '2026-07-06T00:00:00.000Z'
+      },
+      value: createDefaultWidgetData(),
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        data: {
+          weather: {
+            temperature: 32
+          }
+        }
+      }
+    };
+    const messages = ref<Message[]>([
+      createMessage({
+        id: 'assistant-1',
+        runtimeId: 'runtime-1',
+        content: '',
+        parts: [createOpenWidgetToolPart(widgetRuntime)],
+        loading: true,
+        finished: false
+      }) as Message
+    ]);
+    const changedToolPart: ChatMessageToolPart = {
+      ...createOpenWidgetToolPart(undefined, 'tool-part-open-widget-stream'),
+      result: {
+        toolName: 'open_widget',
+        status: 'success',
+        data: {
+          kind: 'widget_display',
+          sessionId: 'widget-weather-tool-call-widget',
+          widgetId: 'weather',
+          value: {},
+          renderContext: {
+            input: {
+              city: '杭州'
+            },
+            data: {}
+          }
+        }
+      }
+    };
+    const scope = effectScope();
+
+    scope.run((): void => {
+      useChatRuntime({
+        messages,
+        getSessionId: () => 'session-1'
+      });
+
+      emitRuntimeEvent(listeners, 'messageUpdated', {
+        runtimeId: 'runtime-1',
+        sessionId: 'session-1',
+        clientId: 'bchat',
+        agentId: 'default',
+        message: createMessage({
+          id: 'assistant-1',
+          runtimeId: 'runtime-1',
+          content: '继续输出',
+          parts: [changedToolPart],
+          loading: true,
+          finished: false
+        })
+      });
+
+      expect(messages.value[0].parts[0]).toMatchObject({
+        id: 'tool-part-open-widget-stream',
+        type: 'tool',
+        toolCallId: 'tool-call-widget'
+      });
+      expect((messages.value[0].parts[0] as ChatMessageToolPart).widget).toBeUndefined();
     });
 
     scope.stop();
@@ -385,7 +580,13 @@ describe('useChatRuntime', (): void => {
         sessionId: 'session-1',
         clientId: 'bchat',
         agentId: 'default',
-        message: createMessage({ id: 'user-1', role: 'user', content: 'hello', parts: [{ id: 'part0045', type: 'text', text: 'hello' }], runtimeId: 'runtime-1' })
+        message: createMessage({
+          id: 'user-1',
+          role: 'user',
+          content: 'hello',
+          parts: [{ id: 'part0045', type: 'text', text: 'hello' }],
+          runtimeId: 'runtime-1'
+        })
       });
 
       expect(messages.value.map((message) => message.id)).toEqual(['user-1', 'assistant-1']);
@@ -506,7 +707,9 @@ describe('useChatRuntime', (): void => {
   });
 
   it('converts continue input into cloneable data before crossing IPC', async (): Promise<void> => {
-    const messages = ref<Message[]>([createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ id: 'part0049', type: 'text', text: 'choose' }] }) as Message]);
+    const messages = ref<Message[]>([
+      createMessage({ id: 'user-1', role: 'user', content: 'choose', parts: [{ id: 'part0049', type: 'text', text: 'choose' }] }) as Message
+    ]);
     const scope = effectScope();
 
     electronAPIMock.chatRuntimeContinue.mockImplementation(async (input: unknown) => {

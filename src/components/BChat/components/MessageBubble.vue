@@ -39,13 +39,7 @@
 
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
 
-            <BubblePartWidget
-              v-else-if="item.kind === 'widget'"
-              :message-id="message.id"
-              :part="item.part"
-              :runtime-enabled="item.runtimeEnabled"
-              @submit="$emit('submit', $event)"
-            />
+            <BubblePartWidget v-else-if="item.kind === 'widget'" :message="message" :part="item.part" @submit="$emit('submit', $event)" />
           </template>
         </template>
       </div>
@@ -74,14 +68,7 @@
 import type { BChatSubmitAction } from '../utils/submitAction';
 import type { Message } from '../utils/types';
 import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
-import type {
-  ChatMessageErrorPart,
-  ChatMessagePart,
-  ChatMessageTextPart,
-  ChatMessageThinkingPart,
-  ChatMessageToolPart,
-  ChatMessageWidgetPart
-} from 'types/chat';
+import type { ChatMessageErrorPart, ChatMessagePart, ChatMessageTextPart, ChatMessageThinkingPart, ChatMessageToolPart } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
 import { computed } from 'vue';
 import BBubble from '@/components/BBubble/index.vue';
@@ -89,7 +76,7 @@ import { useClipboard } from '@/hooks/useClipboard';
 import type { ImagePreviewItem } from '@/hooks/useImagePreview';
 import { useImagePreview } from '@/hooks/useImagePreview';
 import { createNamespace } from '@/utils/namespace';
-import { extractLastTextPart, isAwaitingUserChoiceResult, resolveWidgetPartFromToolResult } from '../utils/messageHelper';
+import { extractLastTextPart, isAwaitingUserChoiceResult } from '../utils/messageHelper';
 import { formatMessageTime } from '../utils/timeFormat';
 import BubblePartStatus from './MessageBubble/BubblePartStatus/index.vue';
 import BubblePartText from './MessageBubble/BubblePartText/index.vue';
@@ -128,7 +115,7 @@ type MessageBubbleRenderItem =
   | { key: string; kind: 'compaction'; part: ChatMessageCompactionPart }
   | { key: string; kind: 'question'; question: AIAwaitingUserChoiceQuestion }
   | { key: string; kind: 'tool'; part: ChatMessageToolPart }
-  | { key: string; kind: 'widget'; part: ChatMessageWidgetPart; runtimeEnabled: boolean };
+  | { key: string; kind: 'widget'; part: ChatMessageToolPart };
 
 /**
  * 判断消息片段是否为文本或错误片段。
@@ -189,21 +176,8 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
     if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
-    if (part.type === 'tool') {
-      const widgetPart = resolveWidgetPartFromToolResult(part);
-      if (widgetPart) {
-        return [
-          {
-            key,
-            kind: 'widget',
-            part: widgetPart,
-            runtimeEnabled: Boolean(part.widget)
-          }
-        ];
-      }
-    }
+    if (part.type === 'tool' && part.presentation === 'widget') return [{ key, kind: 'widget', part }];
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
-    if (part.type === 'widget') return [{ key, kind: 'widget', part, runtimeEnabled: true }];
     return [];
   })
 );

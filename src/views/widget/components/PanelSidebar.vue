@@ -14,7 +14,6 @@
       v-model:size="size"
       :class="bem('splitter', { expanded: isExpanded })"
       :disabled="isExpanded"
-      :closable="false"
       :max-width="SIDEBAR_MAX_SIZE"
       :min-width="SIDEBAR_MIN_SIZE"
       position="right"

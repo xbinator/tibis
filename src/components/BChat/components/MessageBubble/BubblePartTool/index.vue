@@ -363,6 +363,7 @@ const questionOtherText = computed(() => {
 
 .bubble-part-tool__summary-text {
   color: var(--text-primary);
+  white-space: pre-wrap;
 
   &--shell {
     padding: 4px 8px;
