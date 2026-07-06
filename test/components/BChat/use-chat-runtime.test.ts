@@ -4,7 +4,7 @@
  * @vitest-environment jsdom
  */
 import type { AIMCPRequestConfig, AIToolContext, AIToolExecutor } from 'types/ai';
-import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart, ChatMessageToolPartState } from 'types/chat';
+import type { ChatMessageFile, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import { effectScope, reactive, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -95,11 +95,10 @@ function createMessage(overrides: Partial<ChatMessageRecord>): ChatMessageRecord
 
 /**
  * 创建 open_widget 工具片段。
- * @param state - renderer 本地工具运行数据
  * @param id - 工具片段 ID
  * @returns open_widget 工具片段
  */
-function createOpenWidgetToolPart(state?: ChatMessageToolPartState, id = 'tool-part-open-widget'): ChatMessageToolPart {
+function createOpenWidgetToolPart(id = 'tool-part-open-widget'): ChatMessageToolPart {
   return {
     id,
     type: 'tool',
@@ -124,8 +123,7 @@ function createOpenWidgetToolPart(state?: ChatMessageToolPartState, id = 'tool-p
           data: {}
         }
       }
-    },
-    ...(state ? { state } : {})
+    }
   };
 }
 
@@ -254,20 +252,13 @@ describe('useChatRuntime', (): void => {
     scope.stop();
   });
 
-  it('preserves local open_widget tool state when streaming runtime messages replace parts', (): void => {
-    const toolState: ChatMessageToolPartState = {
-      renderData: {
-        weather: {
-          temperature: 32
-        }
-      }
-    };
+  it('replaces open_widget parts from streaming runtime messages', (): void => {
     const messages = ref<Message[]>([
       createMessage({
         id: 'assistant-1',
         runtimeId: 'runtime-1',
         content: '',
-        parts: [createOpenWidgetToolPart(toolState)],
+        parts: [createOpenWidgetToolPart()],
         loading: true,
         finished: false
       }) as Message
@@ -289,7 +280,7 @@ describe('useChatRuntime', (): void => {
           id: 'assistant-1',
           runtimeId: 'runtime-1',
           content: '继续输出',
-          parts: [createOpenWidgetToolPart(undefined, 'tool-part-open-widget-stream')],
+          parts: [createOpenWidgetToolPart('tool-part-open-widget-stream')],
           loading: true,
           finished: false
         })
@@ -300,36 +291,29 @@ describe('useChatRuntime', (): void => {
         content: '继续输出'
       });
       expect(messages.value[0].parts[0]).toMatchObject({
-        id: 'tool-part-open-widget',
+        id: 'tool-part-open-widget-stream',
         type: 'tool',
-        toolCallId: 'tool-call-widget',
-        state: toolState
+        toolCallId: 'tool-call-widget'
       });
+      expect(messages.value[0].parts[0]).not.toHaveProperty('state');
     });
 
     scope.stop();
   });
 
-  it('preserves local open_widget tool state for the same tool call without comparing payload snapshots', (): void => {
-    const toolState: ChatMessageToolPartState = {
-      renderData: {
-        weather: {
-          temperature: 32
-        }
-      }
-    };
+  it('accepts changed open_widget payloads from runtime messages', (): void => {
     const messages = ref<Message[]>([
       createMessage({
         id: 'assistant-1',
         runtimeId: 'runtime-1',
         content: '',
-        parts: [createOpenWidgetToolPart(toolState)],
+        parts: [createOpenWidgetToolPart()],
         loading: true,
         finished: false
       }) as Message
     ]);
     const changedToolPart: ChatMessageToolPart = {
-      ...createOpenWidgetToolPart(undefined, 'tool-part-open-widget-stream'),
+      ...createOpenWidgetToolPart('tool-part-open-widget-stream'),
       result: {
         toolName: 'open_widget',
         status: 'success',
@@ -371,11 +355,20 @@ describe('useChatRuntime', (): void => {
       });
 
       expect(messages.value[0].parts[0]).toMatchObject({
-        id: 'tool-part-open-widget',
+        id: 'tool-part-open-widget-stream',
         type: 'tool',
         toolCallId: 'tool-call-widget',
-        state: toolState
+        result: {
+          data: {
+            renderContext: {
+              input: {
+                city: '杭州'
+              }
+            }
+          }
+        }
       });
+      expect(messages.value[0].parts[0]).not.toHaveProperty('state');
     });
 
     scope.stop();

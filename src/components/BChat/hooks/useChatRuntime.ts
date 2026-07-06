@@ -4,7 +4,7 @@
  */
 import type { Message } from '../utils/types';
 import type { AIServiceError, AIToolContext, AIToolExecutionError, AIToolExecutionResult, AIToolExecutor, AIToolGrantScope } from 'types/ai';
-import type { ChatMessagePart, ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
+import type { ChatMessageRecord } from 'types/chat';
 import type {
   ChatRuntimeContinueInput,
   ChatRuntimeConfirmationDecision,
@@ -28,7 +28,6 @@ import { onScopeDispose, ref, toRaw } from 'vue';
 import { executeToolCall } from '@/ai/tools/stream';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { useToolPermissionStore } from '@/stores/chat/toolPermission';
-import { isWidgetToolPart } from '../utils/messageHelper';
 import { createRuntimeRequestError, localizeRuntimeServiceError } from '../utils/runtimeError';
 
 /** ChatRuntime hook 选项。 */
@@ -215,51 +214,6 @@ function compareRuntimeMessages(left: Message, right: Message): number {
 }
 
 /**
- * 判断消息片段是否为工具片段。
- * @param part - 消息片段
- * @returns 是否为工具片段
- */
-function isToolMessagePart(part: ChatMessagePart): part is ChatMessageToolPart {
-  return part.type === 'tool';
-}
-
-/**
- * 查找同一个工具调用在本地消息中的片段。
- * @param parts - 本地消息片段列表
- * @param nextPart - runtime 新消息中的工具片段
- * @returns 匹配的本地工具片段
- */
-function findPreviousToolPart(parts: ChatMessagePart[], nextPart: ChatMessageToolPart): ChatMessageToolPart | undefined {
-  return parts.find(
-    (part): part is ChatMessageToolPart =>
-      isToolMessagePart(part) && part.toolName === nextPart.toolName && (part.toolCallId === nextPart.toolCallId || part.id === nextPart.id)
-  );
-}
-
-/**
- * 合并工具片段上的 renderer 本地运行数据。
- * runtime 流式事件只带工具结果，renderer 已运行过的 state 需要继续保留。
- * @param previousParts - 本地旧消息片段列表
- * @param nextParts - runtime 新消息片段列表
- * @returns 保留本地运行数据后的片段列表
- */
-function mergeRuntimeMessageParts(previousParts: ChatMessagePart[], nextParts: ChatMessagePart[]): ChatMessagePart[] {
-  return nextParts.map((nextPart): ChatMessagePart => {
-    if (!isToolMessagePart(nextPart)) return nextPart;
-
-    const previousPart = findPreviousToolPart(previousParts, nextPart);
-    if (!previousPart?.state || nextPart.state) return nextPart;
-    if (!isWidgetToolPart(previousPart) || !isWidgetToolPart(nextPart)) return nextPart;
-
-    return {
-      ...nextPart,
-      id: previousPart.id,
-      state: previousPart.state
-    };
-  });
-}
-
-/**
  * 合并 runtime 新消息与 renderer 本地消息。
  * @param previousMessage - 本地旧消息
  * @param nextMessage - runtime 新消息
@@ -268,8 +222,7 @@ function mergeRuntimeMessageParts(previousParts: ChatMessagePart[], nextParts: C
 function mergeRuntimeMessage(previousMessage: Message, nextMessage: Message): Message {
   return {
     ...previousMessage,
-    ...nextMessage,
-    parts: mergeRuntimeMessageParts(previousMessage.parts, nextMessage.parts)
+    ...nextMessage
   };
 }
 
@@ -315,12 +268,21 @@ function findCompletedAssistantMessage(messages: Message[], runtimeId: string): 
 /**
  * 将值转换为可通过 Electron IPC structured clone 的纯数据。
  * @param value - 待转换值
- * @returns 去除 Vue Proxy 后的 JSON 兼容数据
+ * @returns 去除 Vue Proxy 后的可克隆数据
  */
 function toCloneableData<T>(value: T): T {
   if (value === undefined) return value;
 
-  return JSON.parse(JSON.stringify(toRaw(value))) as T;
+  const rawValue = toRaw(value);
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(rawValue) as T;
+    } catch {
+      // 嵌套 Vue Proxy 无法 structuredClone 时，回退到 JSON 纯数据。
+    }
+  }
+
+  return JSON.parse(JSON.stringify(rawValue)) as T;
 }
 
 /**

@@ -43,8 +43,7 @@ interface TestWidgetDisplayFixture {
 function createSubmitContextMock(): SubmitContext {
   return {
     continueAssistantTurn: vi.fn(),
-    sendAdaptedUserMessage: vi.fn(),
-    updateToolPartState: vi.fn()
+    sendAdaptedUserMessage: vi.fn()
   };
 }
 
@@ -246,7 +245,7 @@ function createRuntimeChange(part: TestWidgetDisplayFixture, change: Partial<Wid
 /**
  * 将测试用小组件运行态包装成 open_widget 工具片段。
  * @param part - 小组件运行态片段
- * @returns 携带工具运行数据的 open_widget 工具片段
+ * @returns open_widget 工具片段
  */
 function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture): ChatMessageToolPart {
   return {
@@ -268,9 +267,6 @@ function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture):
         value: part.value,
         renderContext: part.renderContext
       }
-    },
-    state: {
-      renderData: part.renderContext.data
     }
   };
 }
@@ -453,7 +449,7 @@ describe('MessageBubble', (): void => {
     expect(wrapper.text()).not.toContain('压缩失败');
   });
 
-  it('emits unified submit actions after the created widget runs mounted', async (): Promise<void> => {
+  it('keeps mounted widget render data local without submit actions', async (): Promise<void> => {
     const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-created-part',
       sessionId: 'widget-session-1',
@@ -498,15 +494,9 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
-
-    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget', toolPart.id, expect.any(Function));
-    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
-
-    expect(updater(undefined)).toEqual({
-      renderData: {
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
         weather: {
           temperature: 31
         }
@@ -514,7 +504,7 @@ describe('MessageBubble', (): void => {
     });
   });
 
-  it('emits tool state update actions for widget parts outside the first index', async (): Promise<void> => {
+  it('keeps widget render data local for widget parts outside the first index', async (): Promise<void> => {
     const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-second-part',
       sessionId: 'widget-session-2',
@@ -559,15 +549,9 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
-
-    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-second', toolPart.id, expect.any(Function));
-    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
-
-    expect(updater(undefined)).toEqual({
-      renderData: {
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
         weather: {
           temperature: 32
         }
@@ -575,7 +559,7 @@ describe('MessageBubble', (): void => {
     });
   });
 
-  it('updates widget runtime state without sending widget_result messages', async (): Promise<void> => {
+  it('keeps widget runtime state local without sending widget_result messages', async (): Promise<void> => {
     const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-result-part',
       sessionId: 'widget-coffee-session-1',
@@ -611,17 +595,11 @@ describe('MessageBubble', (): void => {
         }
       })
     );
+    await flushPromises();
 
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
-
-    expect(submitContext.sendAdaptedUserMessage).not.toHaveBeenCalled();
-    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-1', toolPart.id, expect.any(Function));
-    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
-
-    expect(updater(undefined)).toEqual({
-      renderData: {
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
         weather: {
           temperature: 28
         },
@@ -633,7 +611,7 @@ describe('MessageBubble', (): void => {
     });
   });
 
-  it('updates widget runtime data without sending widget_result messages', async (): Promise<void> => {
+  it('keeps widget runtime data local without sending widget_result messages', async (): Promise<void> => {
     const widgetPart: TestWidgetDisplayFixture = {
       id: 'widget-submit-part',
       sessionId: 'widget-coffee-session-2',
@@ -681,16 +659,11 @@ describe('MessageBubble', (): void => {
         }
       })
     );
+    await flushPromises();
 
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
-
-    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-submit', toolPart.id, expect.any(Function));
-    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
-
-    expect(updater(undefined)).toEqual({
-      renderData: {
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
         weather: {
           temperature: 28
         },
@@ -700,10 +673,9 @@ describe('MessageBubble', (): void => {
         }
       }
     });
-    expect(submitContext.sendAdaptedUserMessage).not.toHaveBeenCalled();
   });
 
-  it('finishes widget runtime data from the latest message part', async (): Promise<void> => {
+  it('keeps latest widget runtime data local after message part updates', async (): Promise<void> => {
     const staleWidgetPart: TestWidgetDisplayFixture = {
       id: 'widget-latest-submit-part',
       sessionId: 'widget-coffee-session-3',
@@ -773,21 +745,84 @@ describe('MessageBubble', (): void => {
         }
       })
     );
+    await flushPromises();
 
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
-
-    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-latest-submit', latestToolPart.id, expect.any(Function));
-    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
-
-    expect(updater(undefined)).toEqual({
-      renderData: {
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
         weather: {
           temperature: 35
         },
         submitted: {
           temperature: 35
+        }
+      }
+    });
+  });
+
+  it('keeps widget runtime data when streaming snapshots replace the part id for the same tool call', async (): Promise<void> => {
+    const widgetPart: TestWidgetDisplayFixture = {
+      id: 'widget-stream-created-part',
+      sessionId: 'widget-coffee-session-5',
+      widgetId: 'coffee',
+      value: createWeatherWidgetData(),
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        data: {}
+      }
+    };
+    const initialToolPart: ChatMessageToolPart = {
+      ...createOpenWidgetToolPartFromWidgetPart(widgetPart),
+      toolCallId: 'tool-call-stable-widget'
+    };
+    const streamToolPart: ChatMessageToolPart = {
+      ...createOpenWidgetToolPartFromWidgetPart({
+        ...widgetPart,
+        id: 'widget-stream-replaced-part'
+      }),
+      toolCallId: 'tool-call-stable-widget'
+    };
+    const wrapper = mountMessageBubble(
+      createAssistantMessage({
+        id: 'assistant-widget-stream',
+        content: '',
+        parts: [initialToolPart]
+      })
+    );
+
+    emitWidgetRuntimeChange(
+      wrapper,
+      createRuntimeChange(widgetPart, {
+        reason: 'mount',
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            weather: {
+              temperature: 33
+            }
+          }
+        }
+      })
+    );
+    await flushPromises();
+
+    await wrapper.setProps({
+      message: createAssistantMessage({
+        id: 'assistant-widget-stream',
+        content: '',
+        parts: [streamToolPart]
+      })
+    });
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
+        weather: {
+          temperature: 33
         }
       }
     });
@@ -844,7 +879,6 @@ describe('MessageBubble', (): void => {
       }),
       parts: [expect.objectContaining({ id: expect.any(String), type: 'text', text: '确认下单' })]
     });
-    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-widget-send-message', toolPart.id, expect.any(Function));
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -1113,7 +1147,7 @@ describe('MessageBubble', (): void => {
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('runtimeEnabled')).toBe(true);
   });
 
-  it('emits tool state update actions to keep open_widget render data on the tool part state', async (): Promise<void> => {
+  it('keeps open_widget render data local without tool part state actions', async (): Promise<void> => {
     const toolPart: ChatMessageToolPart = {
       id: 'part0014',
       type: 'tool',
@@ -1172,16 +1206,11 @@ describe('MessageBubble', (): void => {
         }
       )
     );
+    await flushPromises();
 
-    const mountedAction = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await mountedAction.run(submitContext);
-
-    expect(submitContext.updateToolPartState).toHaveBeenCalledWith('assistant-open-widget', message.parts[0]?.id, expect.any(Function));
-    const [, , updater] = vi.mocked(submitContext.updateToolPartState).mock.calls[0];
-
-    expect(updater(undefined)).toEqual({
-      renderData: {
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
         weather: {
           temperature: 29
         }

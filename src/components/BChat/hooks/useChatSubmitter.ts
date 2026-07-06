@@ -4,9 +4,8 @@
  */
 import type { BChatRuntimeSubmitUserChoiceInput } from './useChatRuntime';
 import type { ChatTaskKind, ChatTaskStartResult, ChatTaskState } from './useChatTaskRuntime';
-import type { AdaptedUserMessageInput, MessageUpdater, SubmitAction, ToolPartStateUpdater } from '../utils/submitAction';
-import type { Message } from '../utils/types';
-import type { AIUserChoiceAnswerData, ChatMessagePart, ChatMessageToolPart } from 'types/chat';
+import type { AdaptedUserMessageInput, SubmitAction } from '../utils/submitAction';
+import type { AIUserChoiceAnswerData } from 'types/chat';
 import type { ChatRuntimeSendInput, ChatRuntimeStartResult } from 'types/chat-runtime';
 import type { Ref } from 'vue';
 
@@ -46,8 +45,6 @@ interface UseChatSubmitterOptions {
   submitUserChoice: (input: BChatRuntimeSubmitUserChoiceInput) => Promise<ChatRuntimeStartResult>;
   /** 发送已创建的用户消息。 */
   sendRuntimeUserMessage: (input: AdaptedUserMessageInput) => Promise<void>;
-  /** 更新一条已存在的可见消息。 */
-  updateMessage: (messageId: string, updater: MessageUpdater) => Promise<void>;
 }
 
 /**
@@ -112,40 +109,13 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
    * @param input - 运行态用户消息提交输入
    */
   async function sendAdaptedUserMessage(input: AdaptedUserMessageInput): Promise<void> {
-    const startResult = options.taskRuntime.beginTask('chat');
-    if (!startResult.ok) return;
+    const isActiveChatTask = options.taskRuntime.activeTask.value === 'chat';
+    if (!isActiveChatTask) {
+      const startResult = options.taskRuntime.beginTask('chat');
+      if (!startResult.ok) return;
+    }
 
     await options.sendRuntimeUserMessage(input);
-  }
-
-  /**
-   * 更新消息内指定工具片段的 UI state。
-   * @param messageId - 待更新消息 ID
-   * @param partId - 待更新工具片段 ID
-   * @param updater - 工具 state 更新函数
-   */
-  async function updateToolPartState(messageId: string, partId: string, updater: ToolPartStateUpdater): Promise<void> {
-    await options.updateMessage(messageId, (message: Message): Message => {
-      let updated = false;
-      const parts = message.parts.map((part): ChatMessagePart => {
-        if (part.id !== partId || part.type !== 'tool') return part;
-
-        updated = true;
-        const nextState = updater(part.state);
-        const nextPart: ChatMessageToolPart = {
-          ...part,
-          state: nextState
-        };
-
-        if (nextState === undefined) {
-          delete nextPart.state;
-        }
-
-        return nextPart;
-      });
-
-      return updated ? { ...message, parts } : message;
-    });
   }
 
   /**
@@ -155,8 +125,7 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
   async function submit(action: SubmitAction): Promise<void> {
     await action.run({
       continueAssistantTurn,
-      sendAdaptedUserMessage,
-      updateToolPartState
+      sendAdaptedUserMessage
     });
   }
 

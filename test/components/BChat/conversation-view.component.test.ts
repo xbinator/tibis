@@ -4,7 +4,6 @@
  * @vitest-environment jsdom
  */
 import type { ChatMessageToolPart } from 'types/chat';
-import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import type { DefineComponent } from 'vue';
 import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
@@ -37,8 +36,7 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
       '{{ disabled ? "disabled" : "enabled" }}:',
       '{{ canRollback && canRollback(message) ? "rollback" : "no-rollback" }}',
       '{{ message.parts[0]?.result?.data?.renderContext?.input?.city ?? "" }}',
-      '{{ message.parts[0]?.state?.renderData?.weather?.temperature ?? "" }}',
-      '{{ message.parts[0]?.state?.renderData?.message ?? "" }}',
+      '{{ message.parts[0]?.result?.data?.renderContext?.data?.weather?.temperature ?? "" }}',
       '</div>'
     ].join('')
   }
@@ -58,22 +56,6 @@ interface ConversationViewTestProps {
 
 /** 带测试 props 类型的 ConversationView。 */
 const ConversationViewForTest = ConversationView as DefineComponent<ConversationViewTestProps>;
-
-/**
- * open_widget 工具片段测试用展示数据来源。
- */
-interface TestWidgetDisplayFixture {
-  /** 片段唯一标识 */
-  id: string;
-  /** 小组件会话 ID */
-  sessionId: string;
-  /** 小组件稳定 ID */
-  widgetId: string;
-  /** 小组件快照值 */
-  value: WidgetData;
-  /** 小组件渲染上下文 */
-  renderContext: WidgetRenderContext;
-}
 
 /**
  * 创建提问工具片段。
@@ -115,10 +97,12 @@ function createQuestionToolPart(status: ChatMessageToolPart['status'], resultSta
 /**
  * 创建打开小组件工具片段。
  * @param city - 渲染上下文城市
+ * @param temperature - 渲染上下文温度
  * @returns 工具片段
  */
-function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
+function createOpenWidgetToolPart(city: string, temperature?: number): ChatMessageToolPart {
   const widgetValue = createDefaultWidgetData();
+  const data = temperature === undefined ? {} : { weather: { temperature } };
 
   return {
     id: 'tool-part-open-widget',
@@ -141,92 +125,9 @@ function createOpenWidgetToolPart(city: string): ChatMessageToolPart {
           input: {
             city
           },
-          data: {}
+          data
         }
       }
-    }
-  };
-}
-
-/**
- * 创建小组件消息片段。
- * @param temperature - 状态中的温度值
- * @returns 小组件消息片段
- */
-function createWidgetPart(temperature: number): TestWidgetDisplayFixture {
-  return {
-    id: 'widget-part-weather',
-    sessionId: 'widget-session-1',
-    widgetId: 'weather',
-    value: {
-      ...createDefaultWidgetData(),
-      name: 'weather',
-      description: '天气小组件',
-      inputSchema: { type: 'object', properties: {} },
-      dataSchema: { type: 'object', properties: {} },
-      metadata: {},
-      elements: []
-    },
-    renderContext: {
-      input: {},
-      data: {
-        weather: {
-          temperature
-        }
-      }
-    }
-  };
-}
-
-/**
- * 创建带内嵌运行态的小组件工具片段。
- * @param message - 运行态数据中的消息文本
- * @returns 工具片段
- */
-function createOpenWidgetToolPartWithRuntimeMessage(message: string): ChatMessageToolPart {
-  const part = createOpenWidgetToolPart('上海');
-  return {
-    ...part,
-    state: {
-      renderData: {
-        message
-      }
-    }
-  };
-}
-
-/**
- * 从小组件视图片段创建 open_widget 工具片段。
- * @param widget - 小组件视图片段
- * @returns 带内嵌小组件运行态的工具片段
- */
-function createOpenWidgetToolPartFromWidgetPart(widget: TestWidgetDisplayFixture): ChatMessageToolPart {
-  const part = createOpenWidgetToolPart('上海');
-
-  return {
-    ...part,
-    id: widget.id,
-    input: {
-      id: widget.widgetId
-    },
-    result: {
-      toolName: 'open_widget',
-      status: 'success',
-      data: {
-        kind: 'widget_display',
-        sessionId: widget.sessionId,
-        widgetId: widget.widgetId,
-        value: widget.value,
-        renderContext: {
-          input: {
-            city: '上海'
-          },
-          data: {}
-        }
-      }
-    },
-    state: {
-      renderData: widget.renderContext.data
     }
   };
 }
@@ -362,36 +263,10 @@ describe('ConversationView', (): void => {
     expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback杭州');
   });
 
-  it('updates embedded open_widget runtime data when widget render context changes without tool status changes', async (): Promise<void> => {
-    const wrapper = mount(ConversationViewForTest, {
-      props: {
-        messages: [createAssistantMessage(createOpenWidgetToolPartWithRuntimeMessage('等待用户操作'))],
-        loading: true,
-        disabled: false
-      },
-      global: {
-        stubs: {
-          BIcon: true
-        }
-      }
-    });
-
-    expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海等待用户操作');
-
-    await wrapper.setProps({
-      messages: [createAssistantMessage(createOpenWidgetToolPartWithRuntimeMessage('已经完成'))],
-      loading: true,
-      disabled: false
-    });
-    await nextTick();
-
-    expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海已经完成');
-  });
-
   it('updates widget display when render context data changes without status changes', async (): Promise<void> => {
     const wrapper = mount(ConversationViewForTest, {
       props: {
-        messages: [createAssistantMessage(createOpenWidgetToolPartFromWidgetPart(createWidgetPart(28)))],
+        messages: [createAssistantMessage(createOpenWidgetToolPart('上海', 28))],
         loading: false,
         disabled: false
       },
@@ -405,7 +280,7 @@ describe('ConversationView', (): void => {
     expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海28');
 
     await wrapper.setProps({
-      messages: [createAssistantMessage(createOpenWidgetToolPartFromWidgetPart(createWidgetPart(31)))],
+      messages: [createAssistantMessage(createOpenWidgetToolPart('上海', 31))],
       loading: false,
       disabled: false
     });

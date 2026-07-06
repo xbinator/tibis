@@ -116,6 +116,8 @@ type CompactionProgressMode = 'continue' | 'context';
 
 /**
  * 将任意值转换为 JSON 可序列化值。
+ * @param value - 任意值
+ * @returns JSON 值
  */
 function toJsonValue(value: unknown): JSONValue {
   return JSON.parse(JSON.stringify(value)) as JSONValue;

@@ -39,7 +39,7 @@
 
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
 
-            <BubblePartWidget v-else-if="item.kind === 'widget'" :message-id="message.id" :part="item.part" @submit="$emit('submit', $event)" />
+            <BubblePartWidget v-else-if="item.kind === 'widget'" :part="item.part" @submit="$emit('submit', $event)" />
           </template>
         </template>
       </div>
@@ -176,7 +176,7 @@ const renderItems = computed<MessageBubbleRenderItem[]>(() =>
     if (part.type === 'thinking') return [{ key, kind: 'thinking', part }];
     if (part.type === 'compaction') return [{ key, kind: 'compaction', part }];
     if (!props.disabled && isAwaitingUserChoiceResult(part)) return [{ key, kind: 'question', question: part.result.data }];
-    if (isWidgetToolPart(part)) return [{ key, kind: 'widget', part }];
+    if (isWidgetToolPart(part)) return [{ key: `widget:${part.toolCallId}`, kind: 'widget', part }];
     if (part.type === 'tool') return [{ key, kind: 'tool', part }];
     return [];
   })

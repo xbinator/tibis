@@ -70,7 +70,9 @@ describe('messageHelper widget result', (): void => {
       finished: true
     };
 
-    expect(convert.toModelMessages([assistantMessage])).toEqual([
+    const modelMessages = convert.toModelMessages([assistantMessage]);
+
+    expect(modelMessages).toStrictEqual([
       {
         role: 'assistant',
         content: [{ type: 'tool-call', toolCallId: 'tool-call-widget', toolName: 'open_widget', input: { id: 'weather' } }]
@@ -91,6 +93,76 @@ describe('messageHelper widget result', (): void => {
                   kind: 'widget_display',
                   sessionId: 'widget-weather-tool-call-widget',
                   widgetId: 'weather'
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]);
+    const toolMessage = modelMessages[1];
+    if (
+      !toolMessage ||
+      !Array.isArray(toolMessage.content) ||
+      toolMessage.content[0]?.type !== 'tool-result' ||
+      toolMessage.content[0].output.type !== 'json'
+    ) {
+      throw new Error('Expected tool result model message');
+    }
+    const outputValue = toolMessage.content[0].output.value as { data: Record<string, unknown> };
+    expect(Object.prototype.hasOwnProperty.call(outputValue.data, 'dropped')).toBe(false);
+  });
+
+  it('serializes model-visible tool results as JSON values', (): void => {
+    const assistantMessage: Message = {
+      id: 'assistant-json-tool',
+      role: 'assistant',
+      content: '',
+      parts: [
+        {
+          id: 'tool-part-json',
+          type: 'tool',
+          toolCallId: 'tool-call-json',
+          toolName: 'json_tool',
+          status: 'done',
+          input: {},
+          result: {
+            toolName: 'json_tool',
+            status: 'success',
+            data: {
+              kept: 'ok',
+              dropped: undefined,
+              nested: {
+                dropped: undefined
+              }
+            }
+          }
+        }
+      ],
+      createdAt: '2026-06-30T00:00:00.000Z',
+      finished: true
+    };
+
+    expect(convert.toModelMessages([assistantMessage])).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'tool-call-json', toolName: 'json_tool', input: {} }]
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'tool-call-json',
+            toolName: 'json_tool',
+            output: {
+              type: 'json',
+              value: {
+                toolName: 'json_tool',
+                status: 'success',
+                data: {
+                  kept: 'ok',
+                  nested: {}
                 }
               }
             }

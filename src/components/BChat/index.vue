@@ -835,28 +835,13 @@ async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promi
   }
 }
 
-/**
- * 更新一条可见消息并持久化。
- * @param messageId - 待更新消息 ID
- * @param updater - 基于当前消息生成下一版消息的函数
- */
-async function updateVisibleMessage(messageId: string, updater: (message: Message) => Message): Promise<void> {
-  const messageIndex = messages.value.findIndex((message) => message.id === messageId);
-  if (messageIndex < 0) return;
-
-  const nextMessage = updater(messages.value[messageIndex]);
-  messages.value.splice(messageIndex, 1, nextMessage);
-  await chatStore.updateSessionMessage(activeSessionId.value, nextMessage);
-}
-
 /** 消息级交互统一提交器。 */
 const chatSubmitter = useChatSubmitter({
   taskRuntime,
   getSessionId: () => activeSessionId.value ?? undefined,
   resolveRuntimeRequestConfig: resolveChatRuntimeRequestConfig,
   submitUserChoice: chatRuntime.submitUserChoice,
-  sendRuntimeUserMessage,
-  updateMessage: updateVisibleMessage
+  sendRuntimeUserMessage
 });
 
 /** 用户消息回退 hook。 */

@@ -101,7 +101,11 @@ const RESERVED_BINDING_NAMES = new Set([
  */
 function cloneSandboxValue<T>(value: T): T {
   if (typeof structuredClone === 'function') {
-    return structuredClone(value);
+    try {
+      return structuredClone(value) as T;
+    } catch {
+      // 不可 structuredClone 的值回退到 JSON 纯数据，避免透传宿主引用。
+    }
   }
 
   if (value === undefined) return value;

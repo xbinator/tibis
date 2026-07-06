@@ -4,9 +4,9 @@
  */
 import type { AIUsage } from 'types/ai';
 import type { ChatMessageHistoryCursor, ChatMessageRecord, ChatSession, ChatSessionType, PaginatedSessionsResult, SessionPaginationParams } from 'types/chat';
+import { toRaw } from 'vue';
 import { defineStore } from 'pinia';
 import dayjs from 'dayjs';
-import { cloneDeep } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import { recoverInterruptedAssistantDrafts } from '@/components/BChat/utils/interruptedDraftRecovery';
 import { is, type PersistableMessage } from '@/components/BChat/utils/messageHelper';
@@ -14,6 +14,26 @@ import type { Message } from '@/components/BChat/utils/types';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { isDatabaseInitializationRaceError, retryDuringDatabaseInitialization } from '@/shared/storage/utils/database';
 import { useTodoStore } from './todo';
+
+/**
+ * 将值转换为 Electron IPC 可克隆的纯数据。
+ * @param value - 待转换值
+ * @returns 去除 Vue Proxy 后的可克隆数据
+ */
+function toCloneableData<T>(value: T): T {
+  if (value === undefined) return value;
+
+  const rawValue = toRaw(value);
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(rawValue) as T;
+    } catch {
+      // 嵌套 Vue Proxy 无法 structuredClone 时，回退到 JSON 纯数据。
+    }
+  }
+
+  return JSON.parse(JSON.stringify(rawValue)) as T;
+}
 
 /**
  * 将可持久化的侧边栏消息转换为存储记录。
@@ -25,7 +45,7 @@ function toRecordMessage(sessionId: string, message: PersistableMessage): ChatMe
   const { id, role, content, parts, thinking, files, usage, compression, createdAt = dayjs().toISOString(), loading, finished } = message;
 
   // Deep-clone to strip Vue reactive Proxy objects before passing through Electron IPC.
-  return cloneDeep({ sessionId, id, role, content, parts, thinking, files, usage, compression, createdAt, loading, finished });
+  return toCloneableData({ sessionId, id, role, content, parts, thinking, files, usage, compression, createdAt, loading, finished });
 }
 
 /**
@@ -54,7 +74,7 @@ export const useChatSessionStore = defineStore('chat', {
       try {
         const messages = await retryDuringDatabaseInitialization(async () => {
           // 深拷贝以剥离 Vue 响应式 Proxy，否则 Electron IPC 结构化克隆会失败
-          const plainCursor = cursor ? (cloneDeep(cursor) as ChatMessageHistoryCursor) : undefined;
+          const plainCursor = cursor ? toCloneableData(cursor) : undefined;
           const result = await getElectronAPI().chatMessageList(sessionId, plainCursor);
           return unwrap(result);
         });
@@ -89,7 +109,7 @@ export const useChatSessionStore = defineStore('chat', {
       try {
         return await retryDuringDatabaseInitialization(async () => {
           // 深拷贝以剥离 Vue 响应式 Proxy，否则 Electron IPC 结构化克隆会失败
-          const plainPagination = pagination ? (JSON.parse(JSON.stringify(pagination)) as SessionPaginationParams) : undefined;
+          const plainPagination = pagination ? toCloneableData(pagination) : undefined;
           const result = await getElectronAPI().chatSessionList(type, plainPagination);
           return unwrap(result);
         });

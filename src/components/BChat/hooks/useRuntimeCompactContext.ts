@@ -80,12 +80,21 @@ function applyRuntimeMessage(messages: Message[], nextMessage: Message): void {
 /**
  * 将值转换为 Electron IPC 可克隆的纯数据。
  * @param value - 待转换值
- * @returns 去除 Vue Proxy 后的 JSON 兼容数据
+ * @returns 去除 Vue Proxy 后的可克隆数据
  */
 function toCloneableData<T>(value: T): T {
   if (value === undefined) return value;
 
-  return JSON.parse(JSON.stringify(toRaw(value))) as T;
+  const rawValue = toRaw(value);
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(rawValue) as T;
+    } catch {
+      // 嵌套 Vue Proxy 无法 structuredClone 时，回退到 JSON 纯数据。
+    }
+  }
+
+  return JSON.parse(JSON.stringify(rawValue)) as T;
 }
 
 /**

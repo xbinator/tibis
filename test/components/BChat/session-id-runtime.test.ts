@@ -6,16 +6,14 @@
 /* eslint-disable vue/one-component-per-file */
 import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatMessageWidgetResultPart, ChatSession } from 'types/chat';
 import type { ChatRuntimeContinueInput } from 'types/chat-runtime';
-import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent, h, type PropType } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BChat from '@/components/BChat/index.vue';
-import { type AdaptedUserMessageInput, type SubmitAction, createToolPartStateUpdate, createUserChoice } from '@/components/BChat/utils/submitAction';
+import { type AdaptedUserMessageInput, type SubmitAction, createUserChoice } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import type { FileMentionOption } from '@/components/BText/types';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { emitChatFileReferenceInsert } from '@/shared/chat/fileReference';
 import type { StoredFile } from '@/shared/storage';
 import type { TodoItem } from '@/stores/chat/todo';
@@ -30,22 +28,6 @@ const chatStoreMock = vi.hoisted(() => ({
   getSessionMessages: vi.fn<(sessionId: string) => Promise<Message[]>>(),
   getSessions: vi.fn()
 }));
-
-/**
- * open_widget 工具片段测试用展示数据来源。
- */
-interface TestWidgetDisplayFixture {
-  /** 片段唯一标识 */
-  id: string;
-  /** 小组件会话 ID */
-  sessionId: string;
-  /** 小组件稳定 ID */
-  widgetId: string;
-  /** 小组件快照值 */
-  value: WidgetData;
-  /** 小组件渲染上下文 */
-  renderContext: WidgetRenderContext;
-}
 
 const promptEditorMockState = vi.hoisted(() => ({
   focus: vi.fn(),
@@ -440,71 +422,6 @@ function createRuntimeUserMessageTestSubmitAction(input: AdaptedUserMessageInput
   return {
     async run(context): Promise<void> {
       await context.sendAdaptedUserMessage(input);
-    }
-  };
-}
-
-/**
- * 创建测试用 Widget 消息片段。
- * @param temperature - 状态温度值
- * @returns 小组件消息片段
- */
-function createWidgetPart(temperature?: number): TestWidgetDisplayFixture {
-  return {
-    id: 'widget-part-weather',
-    sessionId: 'widget-session-1',
-    widgetId: 'weather',
-    value: {
-      ...createDefaultWidgetData(),
-      name: 'weather',
-      description: '天气小组件',
-      inputSchema: { type: 'object', properties: {} },
-      dataSchema: { type: 'object', properties: {} },
-      metadata: {},
-      elements: []
-    },
-    renderContext: {
-      input: {},
-      data:
-        temperature === undefined
-          ? {}
-          : {
-              weather: {
-                temperature
-              }
-            }
-    }
-  };
-}
-
-/**
- * 从小组件视图片段创建 open_widget 工具片段。
- * @param widget - 小组件视图片段
- * @returns 带工具运行数据的工具片段
- */
-function createOpenWidgetToolPartFromWidgetPart(widget: TestWidgetDisplayFixture): ChatMessageToolPart {
-  return {
-    id: widget.id,
-    type: 'tool',
-    toolCallId: `tool-call-${widget.id}`,
-    toolName: 'open_widget',
-    status: 'done',
-    input: {
-      id: widget.widgetId
-    },
-    result: {
-      toolName: 'open_widget',
-      status: 'success',
-      data: {
-        kind: 'widget_display',
-        sessionId: widget.sessionId,
-        widgetId: widget.widgetId,
-        value: widget.value,
-        renderContext: widget.renderContext
-      }
-    },
-    state: {
-      renderData: widget.renderContext.data
     }
   };
 }
@@ -1061,72 +978,6 @@ describe('BChat sessionId runtime', (): void => {
         parts: [resultPart]
       })
     );
-  });
-
-  it('persists message update submit actions against the latest visible message', async (): Promise<void> => {
-    const firstWidgetPart = createWidgetPart();
-    const secondWidgetPart: TestWidgetDisplayFixture = {
-      ...createWidgetPart(),
-      id: 'widget-part-forecast',
-      sessionId: 'widget-session-2',
-      widgetId: 'forecast'
-    };
-    const firstToolPart = createOpenWidgetToolPartFromWidgetPart(firstWidgetPart);
-    const secondToolPart = createOpenWidgetToolPartFromWidgetPart(secondWidgetPart);
-    const assistantMessage = createAssistantMessage({
-      id: 'assistant-widget',
-      content: '',
-      parts: [firstToolPart, secondToolPart]
-    });
-    const firstMountedWidgetPart = createWidgetPart(31);
-    const secondMountedWidgetPart: TestWidgetDisplayFixture = {
-      ...createWidgetPart(32),
-      id: 'widget-part-forecast',
-      sessionId: 'widget-session-2',
-      widgetId: 'forecast'
-    };
-    chatStoreMock.getSessionMessages.mockResolvedValueOnce([assistantMessage]).mockResolvedValueOnce([]);
-    const wrapper = mountBChat('session-active');
-    await flushPromises();
-
-    wrapper.findComponent(ConversationViewStub).vm.$emit(
-      'submit',
-      createToolPartStateUpdate('assistant-widget', firstToolPart.id, (state) => ({
-        ...state,
-        renderData: firstMountedWidgetPart.renderContext.data
-      }))
-    );
-    wrapper.findComponent(ConversationViewStub).vm.$emit(
-      'submit',
-      createToolPartStateUpdate('assistant-widget', secondToolPart.id, (state) => ({
-        ...state,
-        renderData: secondMountedWidgetPart.renderContext.data
-      }))
-    );
-    await flushPromises();
-
-    const nextAssistantMessage: Message = {
-      ...assistantMessage,
-      parts: [
-        {
-          ...firstToolPart,
-          state: {
-            ...firstToolPart.state,
-            renderData: firstMountedWidgetPart.renderContext.data
-          }
-        },
-        {
-          ...secondToolPart,
-          state: {
-            ...secondToolPart.state,
-            renderData: secondMountedWidgetPart.renderContext.data
-          }
-        }
-      ]
-    };
-    const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
-    expect(visibleMessages[0]).toEqual(nextAssistantMessage);
-    expect(chatStoreMock.updateSessionMessage).toHaveBeenCalledWith('session-active', nextAssistantMessage);
   });
 
   it('submits cancelled user choices while the chat task is waiting for the answer', async (): Promise<void> => {

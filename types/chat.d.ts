@@ -4,7 +4,7 @@
  */
 import type { AIToolExecutionResult, AIUsage } from './ai';
 import type { ChatMessageCompactionPart, ChatMessageRuntimeMeta } from './chat-runtime';
-import type { WidgetRenderContext, WidgetSubmitPayload } from './widget';
+import type { WidgetSubmitPayload } from './widget';
 
 /**
  * 聊天会话类型
@@ -194,14 +194,6 @@ export interface ChatMessageShellOutputChunk {
 }
 
 /**
- * 聊天工具片段运行数据。
- */
-export interface ChatMessageToolPartState {
-  /** open_widget 运行后写回的渲染数据；静态输入和值仍来自 tool result */
-  renderData?: WidgetRenderContext['data'];
-}
-
-/**
  * 聊天消息统一工具片段。
  * 合并原 tool-input / tool-call / tool-result 为同一片段，通过 status 追踪工具执行生命周期。
  */
@@ -222,8 +214,6 @@ export interface ChatMessageToolPart extends ChatMessagePartBase {
   result?: AIToolExecutionResult;
   /** Shell 命令实时输出缓冲，仅 run_shell_command 使用 */
   shellOutput?: ChatMessageShellOutputChunk[];
-  /** 工具运行后产生的 UI 数据，不进入模型 tool result */
-  state?: ChatMessageToolPartState;
 }
 
 /**

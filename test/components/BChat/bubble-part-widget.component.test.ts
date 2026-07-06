@@ -3,7 +3,7 @@
  * @description BChat BubblePartWidget 小组件运行态提交测试。
  * @vitest-environment jsdom
  */
-import type { ChatMessageToolPart, ChatMessageToolPartState } from 'types/chat';
+import type { ChatMessageToolPart } from 'types/chat';
 import type { WidgetData, WidgetRenderContext } from 'types/widget';
 import { defineComponent, nextTick } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
@@ -12,9 +12,6 @@ import BubblePartWidget from '@/components/BChat/components/MessageBubble/Bubble
 import type { SubmitAction, SubmitContext } from '@/components/BChat/utils/submitAction';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import type { WidgetRuntimeChange } from '@/components/BWidget/utils/widgetRuntime';
-
-/** 测试用工具片段 state 更新函数。 */
-type TestToolPartStateUpdater = (state: ChatMessageToolPartState | undefined) => ChatMessageToolPartState | undefined;
 
 /**
  * open_widget 工具片段测试用展示数据来源。
@@ -32,13 +29,8 @@ interface TestWidgetDisplayFixture {
   renderContext: WidgetRenderContext;
 }
 
-/**
- * 带工具片段 state 更新能力的提交上下文测试替身。
- */
-interface TestSubmitContext extends Pick<SubmitContext, 'continueAssistantTurn' | 'sendAdaptedUserMessage'> {
-  /** 更新指定工具片段 state */
-  updateToolPartState: ReturnType<typeof vi.fn<(messageId: string, partId: string, updater: TestToolPartStateUpdater) => Promise<void>>>;
-}
+/** 小组件提交上下文测试替身。 */
+type TestSubmitContext = Pick<SubmitContext, 'continueAssistantTurn' | 'sendAdaptedUserMessage'>;
 
 /**
  * 创建统一提交上下文测试替身。
@@ -47,8 +39,7 @@ interface TestSubmitContext extends Pick<SubmitContext, 'continueAssistantTurn' 
 function createSubmitContextMock(): TestSubmitContext {
   return {
     continueAssistantTurn: vi.fn(),
-    sendAdaptedUserMessage: vi.fn(),
-    updateToolPartState: vi.fn<(messageId: string, partId: string, updater: TestToolPartStateUpdater) => Promise<void>>()
+    sendAdaptedUserMessage: vi.fn()
   };
 }
 
@@ -101,10 +92,9 @@ function createWidgetPart(code: string): TestWidgetDisplayFixture {
 /**
  * 从小组件视图片段创建 open_widget 工具片段。
  * @param part - 小组件视图片段
- * @param state - 工具运行数据
  * @returns 承载小组件运行态的工具消息片段
  */
-function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture, state?: ChatMessageToolPartState): ChatMessageToolPart {
+function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture): ChatMessageToolPart {
   return {
     id: part.id,
     type: 'tool',
@@ -124,8 +114,7 @@ function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture, 
         value: part.value,
         renderContext: part.renderContext
       }
-    },
-    ...(state ? { state } : {})
+    }
   };
 }
 
@@ -222,54 +211,7 @@ describe('BubblePartWidget', (): void => {
     });
   });
 
-  it('overrides widget render data from tool state', (): void => {
-    const widgetValue = createWidgetData('export default class Weather extends Widget {}');
-    const renderContext = createWidgetRenderContext();
-    const toolPart: ChatMessageToolPart = {
-      id: 'tool-open-widget',
-      type: 'tool',
-      toolCallId: 'tool-call-widget',
-      toolName: 'open_widget',
-      status: 'done',
-      input: {
-        id: 'coffee'
-      },
-      result: {
-        toolName: 'open_widget',
-        status: 'success',
-        data: {
-          kind: 'widget_display',
-          sessionId: 'widget-coffee-session',
-          widgetId: 'coffee',
-          value: widgetValue,
-          renderContext
-        }
-      },
-      state: {
-        renderData: {
-          weather: {
-            temperature: 31
-          }
-        }
-      }
-    };
-    const wrapper = mountBubblePartWidget(toolPart, {
-      messageId: 'assistant-widget-message'
-    });
-
-    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
-      input: {
-        city: '上海'
-      },
-      data: {
-        weather: {
-          temperature: 31
-        }
-      }
-    });
-  });
-
-  it('updates local runtime data without emitting widget part changes', async (): Promise<void> => {
+  it('updates local runtime data without emitting submit actions', async (): Promise<void> => {
     const widgetPart: TestWidgetDisplayFixture = {
       ...createWidgetPart('export default class Weather extends Widget {}'),
       renderContext: {
@@ -299,7 +241,7 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    expect(wrapper.emitted('change')).toBeUndefined();
+    expect(wrapper.emitted('submit')).toBeUndefined();
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -360,7 +302,64 @@ describe('BubblePartWidget', (): void => {
     });
   });
 
-  it('finishes the message widget part by part id without a separate partIndex prop', async (): Promise<void> => {
+  it('uses latest tool result data when the widget display payload changes', async (): Promise<void> => {
+    const widgetPart: TestWidgetDisplayFixture = {
+      ...createWidgetPart('export default class Weather extends Widget {}'),
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        data: {}
+      }
+    };
+    const wrapper = mountBubblePartWidget(createOpenWidgetToolPartFromWidgetPart(widgetPart));
+
+    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
+      'change',
+      createRuntimeChange(widgetPart, {
+        reason: 'mount',
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            weather: {
+              temperature: 28
+            }
+          }
+        }
+      })
+    );
+    await nextTick();
+
+    const latestWidgetPart: TestWidgetDisplayFixture = {
+      ...widgetPart,
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        data: {
+          weather: {
+            temperature: 31
+          }
+        }
+      }
+    };
+    await wrapper.setProps({
+      part: createOpenWidgetToolPartFromWidgetPart(latestWidgetPart)
+    });
+    await nextTick();
+
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
+        weather: {
+          temperature: 31
+        }
+      }
+    });
+  });
+
+  it('keeps interaction render data local without touching message parts', async (): Promise<void> => {
     const staleWidgetPart = {
       ...createWidgetPart(
         ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join(
@@ -411,30 +410,9 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
-    const context = createSubmitContextMock();
-    await action.run(context);
-
-    expect(context.updateToolPartState).toHaveBeenCalledWith('assistant-widget-message', 'widget-part-target', expect.any(Function));
-    const [, , updater] = context.updateToolPartState.mock.calls[0];
-
-    expect(updater(undefined)).toEqual({
-      renderData: {
-        submitted: {
-          temperature: 35
-        }
-      }
-    });
-    expect(
-      updater({
-        renderData: {
-          weather: {
-            temperature: 35
-          }
-        }
-      })
-    ).toEqual({
-      renderData: {
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
         submitted: {
           temperature: 35
         }
@@ -443,10 +421,10 @@ describe('BubblePartWidget', (): void => {
     expect(staleToolPart).toMatchObject({
       id: 'widget-part-stale'
     });
-    expect(targetToolPart).not.toHaveProperty('state.renderData.submitted');
+    expect(targetToolPart).not.toHaveProperty('state');
   });
 
-  it('updates the message widget part without sending widget_result', async (): Promise<void> => {
+  it('keeps widget runtime data local without sending widget_result', async (): Promise<void> => {
     const widgetScript = [
       'export default class Weather extends Widget {',
       '  unmounted() {',
@@ -478,28 +456,9 @@ describe('BubblePartWidget', (): void => {
     );
     await nextTick();
 
-    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
-    const context = createSubmitContextMock();
-    await action.run(context);
-
-    expect(context.updateToolPartState).toHaveBeenCalledWith('assistant-widget-message', toolPart.id, expect.any(Function));
-    const [, , updater] = context.updateToolPartState.mock.calls[0];
-
-    expect(updater(undefined)).toEqual({
-      renderData: {
-        submitted: {
-          temperature: 28
-        }
-      }
-    });
-    expect(
-      updater({
-        renderData: {
-          old: true
-        }
-      })
-    ).toEqual({
-      renderData: {
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
+      data: {
         submitted: {
           temperature: 28
         }
@@ -529,7 +488,6 @@ describe('BubblePartWidget', (): void => {
     const context = createSubmitContextMock();
     await action.run(context);
 
-    expect(context.updateToolPartState).toHaveBeenCalledWith('assistant-widget-message', toolPart.id, expect.any(Function));
     expect(context.sendAdaptedUserMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         userMessage: expect.objectContaining({

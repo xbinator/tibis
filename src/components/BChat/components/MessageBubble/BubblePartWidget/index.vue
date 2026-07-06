@@ -9,23 +9,21 @@
 </template>
 
 <script setup lang="ts">
+import type { SubmitAction } from '../../../utils/submitAction';
 import type { ChatMessageTextPart } from 'types/chat';
-import type { WidgetRenderContext, WidgetRuntimeSendMessage } from 'types/widget';
+import type { WidgetDisplayPayload, WidgetRenderContext, WidgetRuntimeSendMessage } from 'types/widget';
 import { computed, shallowRef } from 'vue';
-import { isString } from 'lodash-es';
+import { cloneDeep, isEqual, isString } from 'lodash-es';
 import { nanoid } from 'nanoid';
 import BWidgetRuntime from '@/components/BWidget/Runtime.vue';
 import type { WidgetRuntimeChange } from '@/components/BWidget/utils/widgetRuntime';
 import { createNamespace } from '@/utils/namespace';
 import { create, type WidgetToolPart } from '../../../utils/messageHelper';
-import { createToolPartStateUpdate, type SubmitAction } from '../../../utils/submitAction';
 
 defineOptions({ name: 'BubblePartWidget' });
 
 interface Props {
-  /** 所属聊天消息 ID，消息内运行态需要用它写回状态。 */
-  messageId: string;
-  /** 已通过父组件判定的 open_widget 工具片段，小组件运行数据通过 part.state 持久化。 */
+  /** 已通过父组件判定的 open_widget 工具片段。 */
   part: WidgetToolPart;
 }
 
@@ -40,15 +38,24 @@ const [name] = createNamespace('', 'message-bubble-widget');
 
 /** renderer 本地刚运行出的渲染数据，用于抵御流式旧快照回退。 */
 const localRenderData = shallowRef<WidgetRenderContext['data'] | null>(null);
+/** 产生本地渲染数据时对应的 open_widget 展示源。 */
+const localRenderSource = shallowRef<WidgetDisplayPayload | null>(null);
 
 /** 当前 open_widget 展示载荷。 */
 const widgetDisplay = computed(() => props.part.result.data);
 
-/** 当前可渲染上下文，优先使用宿主已确认状态，其次使用本地刚执行出的状态。 */
+/** 当前展示源仍匹配时可继续使用的本地渲染数据。 */
+const currentLocalRenderData = computed<WidgetRenderContext['data'] | null>(() => {
+  if (!localRenderData.value || !localRenderSource.value) return null;
+
+  return isEqual(localRenderSource.value, widgetDisplay.value) ? localRenderData.value : null;
+});
+
+/** 当前可渲染上下文，优先使用本地刚执行出的运行态数据。 */
 const runtimeRenderContext = computed<WidgetRenderContext>(() => {
   return {
     ...widgetDisplay.value.renderContext,
-    data: props.part.state?.renderData ?? localRenderData.value ?? widgetDisplay.value.renderContext.data
+    data: currentLocalRenderData.value ?? widgetDisplay.value.renderContext.data
   };
 });
 
@@ -66,26 +73,14 @@ function normalizeWidgetSendMessageTextParts(content: WidgetRuntimeSendMessage['
 }
 
 /**
- * 创建运行态变化提交动作。
- * @param messageId - 所属聊天消息 ID
- * @param partId - 小组件运行态所在的消息片段 ID
- * @param change - BWidget 运行态变化
+ * 创建小组件上行消息提交动作。
+ * @param sendMessage - 小组件脚本上行消息
  * @returns 统一提交动作
  */
-function createWidgetRuntimeChange(messageId: string, partId: string, change: WidgetRuntimeChange): SubmitAction {
-  const updateStateAction = createToolPartStateUpdate(messageId, partId, (state) => ({
-    ...state,
-    renderData: change.renderContext.data
-  }));
-
+function createWidgetSendMessageAction(sendMessage: WidgetRuntimeSendMessage): SubmitAction {
   return {
     async run(context): Promise<void> {
-      await updateStateAction.run(context);
-
-      if (!change.sendMessage) return;
-
       // 将小组件脚本上行消息归一化为聊天提交输入，避免额外抽象层
-      const { sendMessage } = change;
       const rawParts = normalizeWidgetSendMessageTextParts(sendMessage.content);
       const rawContent = rawParts.map((part): string => part.text).join('\n');
       const content = sendMessage.isError ? `小组件错误：${rawContent}` : rawContent;
@@ -104,8 +99,11 @@ function createWidgetRuntimeChange(messageId: string, partId: string, change: Wi
  */
 function handleRuntimeChange(change: WidgetRuntimeChange): void {
   localRenderData.value = change.renderContext.data;
+  localRenderSource.value = cloneDeep(widgetDisplay.value);
 
-  emit('submit', createWidgetRuntimeChange(props.messageId, props.part.id, change));
+  if (!change.sendMessage) return;
+
+  emit('submit', createWidgetSendMessageAction(change.sendMessage));
 }
 </script>
 
