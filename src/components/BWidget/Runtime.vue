@@ -37,7 +37,7 @@ import { createWidgetLoopRenderElements, type WidgetLoopRenderContext, type Widg
 import {
   createWidgetHttpClient,
   createWidgetRuntimeInstance,
-  initWidgetMountState,
+  mountWidgetRuntime,
   type WidgetRuntimeChange,
   type WidgetRuntimeFinishResult,
   type WidgetRuntimeState
@@ -56,6 +56,8 @@ interface Props {
   value: WidgetData;
   /** 运行态渲染上下文 */
   renderContext: WidgetRenderContext;
+  /** 宿主提交运行态变化的异步回调。 */
+  commitRuntimeChange?: (change: WidgetRuntimeChange) => Promise<void> | void;
 }
 
 /**
@@ -283,13 +285,14 @@ function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: Widg
  * @param reason - 运行态变化来源
  * @param result - 脚本执行结果
  */
-function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult): void {
+async function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult): Promise<void> {
   const change = createRuntimeChange(reason, result);
 
   patchPreviewRuntimeState.value = null;
   activePatchExecutionId = null;
   commitLocalRuntimeState(createStateFromRuntimeResult(result));
   emit('change', change);
+  await props.commitRuntimeChange?.(change);
 }
 
 /**
@@ -328,18 +331,18 @@ async function initWidgetRuntime(): Promise<void> {
 
   const executionId = beginPatchExecution();
   try {
-    const nextState = await initWidgetMountState(currentState, {
+    const result = await mountWidgetRuntime(currentState, {
       http: widgetHttpClient,
       onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches),
       onLogger: handleWidgetLogger,
       onConsole: handleWidgetConsole
     });
-    if (nextState === currentState) {
+    if (result.state === currentState && !result.sendMessage) {
       clearPatchPreview(executionId);
       return;
     }
 
-    emitRuntimeChange('mount', { state: nextState });
+    await emitRuntimeChange('mount', result);
   } catch (error: unknown) {
     handleRuntimeFailure(executionId, error);
   }
@@ -368,7 +371,7 @@ async function runRuntimeInteraction(interactionCode: string): Promise<void> {
       return;
     }
 
-    emitRuntimeChange('interaction', result);
+    await emitRuntimeChange('interaction', result);
   } catch (error: unknown) {
     handleRuntimeFailure(executionId, error);
   }

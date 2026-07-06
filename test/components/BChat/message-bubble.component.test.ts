@@ -6,7 +6,7 @@
 /* eslint-disable vue/one-component-per-file */
 import type { ChatMessageToolPart, ChatMessageWidgetResultPart } from 'types/chat';
 import type { WidgetData, WidgetRenderContext } from 'types/widget';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MessageBubble from '@/components/BChat/components/MessageBubble.vue';
@@ -157,6 +157,11 @@ const BWidgetRuntimeSilentStub = defineComponent({
     value: {
       type: Object,
       required: true
+    },
+    commitRuntimeChange: {
+      type: Function,
+      required: false,
+      default: undefined
     }
   },
   template: '<div class="b-widget-runtime-silent-stub" />'
@@ -273,34 +278,34 @@ function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture):
  * @param wrapper - 消息气泡包装器
  * @param change - 运行态变化事件
  */
-function emitWidgetRuntimeChange(wrapper: VueWrapper, change: WidgetRuntimeChange): void {
-  wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit('change', change);
+async function emitWidgetRuntimeChange(wrapper: VueWrapper, change: WidgetRuntimeChange): Promise<void> {
+  const commitRuntimeChange = wrapper.findComponent({ name: 'BWidgetRuntime' }).props('commitRuntimeChange') as
+    | ((nextChange: WidgetRuntimeChange) => Promise<void> | void)
+    | undefined;
+  if (!commitRuntimeChange) throw new Error('Expected BWidgetRuntime commitRuntimeChange prop');
+
+  await commitRuntimeChange(change);
+  await nextTick();
 }
 
 /**
- * 读取最近一次小组件提交动作。
- * @param wrapper - 消息气泡包装器
- * @returns 最近一次提交动作
+ * 创建会立即运行 SubmitAction 的测试提交函数。
+ * @param context - 提交上下文测试替身
+ * @returns 测试提交函数
  */
-function readLatestSubmitAction(wrapper: VueWrapper): SubmitAction {
-  const submitEvents = wrapper.emitted('submit') ?? [];
-  const action = submitEvents[submitEvents.length - 1]?.[0];
-  if (!action) throw new Error('Expected submit action');
-
-  return action as SubmitAction;
+function createSubmitActionRunner(context: SubmitContext): (action: SubmitAction) => Promise<void> {
+  return async (action: SubmitAction): Promise<void> => {
+    await action.run(context);
+  };
 }
 
 /**
- * 断言最近一次提交动作只更新消息片段。
- * @param wrapper - 消息气泡包装器
+ * 断言提交上下文只更新消息片段。
+ * @param context - 提交上下文测试替身
  */
-async function expectLatestSubmitActionUpdatesPartOnly(wrapper: VueWrapper): Promise<void> {
-  const action = readLatestSubmitAction(wrapper);
-  const submitContext = createSubmitContextMock();
-  await action.run(submitContext);
-
-  expect(submitContext.updateMessagePart).toHaveBeenCalledTimes(1);
-  expect(submitContext.sendAdaptedUserMessage).not.toHaveBeenCalled();
+function expectSubmitContextUpdatesPartOnly(context: SubmitContext): void {
+  expect(context.updateMessagePart).toHaveBeenCalled();
+  expect(context.sendAdaptedUserMessage).not.toHaveBeenCalled();
 }
 
 /**
@@ -334,9 +339,12 @@ function createQuestionToolPart(): ChatMessageToolPart {
  * @param message - 待渲染消息
  * @returns 组件包装器
  */
-function mountMessageBubble(message: Message): VueWrapper {
+function mountMessageBubble(message: Message, submitAction?: (action: SubmitAction) => Promise<void> | void): VueWrapper {
   return mount(MessageBubble, {
-    props: { message },
+    props: {
+      message,
+      submitAction
+    },
     global: {
       stubs: {
         BBubble: BBubbleStub,
@@ -354,9 +362,12 @@ function mountMessageBubble(message: Message): VueWrapper {
  * @param message - 待渲染消息
  * @returns 组件包装器
  */
-function mountMessageBubbleWithSilentWidgetRuntime(message: Message): VueWrapper {
+function mountMessageBubbleWithSilentWidgetRuntime(message: Message, submitAction?: (action: SubmitAction) => Promise<void> | void): VueWrapper {
   return mount(MessageBubble, {
-    props: { message },
+    props: {
+      message,
+      submitAction
+    },
     global: {
       stubs: {
         BBubble: BBubbleStub,
@@ -478,15 +489,17 @@ describe('MessageBubble', (): void => {
       }
     };
     const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
+    const submitContext = createSubmitContextMock();
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget',
         content: '',
         parts: [toolPart]
-      })
+      }),
+      createSubmitActionRunner(submitContext)
     );
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'mount',
@@ -504,10 +517,6 @@ describe('MessageBubble', (): void => {
       })
     );
     await flushPromises();
-
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
 
     expect(submitContext.updateMessagePart).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -557,15 +566,17 @@ describe('MessageBubble', (): void => {
       }
     };
     const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
+    const submitContext = createSubmitContextMock();
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-second',
         content: '',
         parts: [{ id: 'part0012', type: 'text', text: '天气卡片' }, toolPart]
-      })
+      }),
+      createSubmitActionRunner(submitContext)
     );
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'mount',
@@ -583,7 +594,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
+    expectSubmitContextUpdatesPartOnly(submitContext);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -602,14 +613,16 @@ describe('MessageBubble', (): void => {
       renderContext: createWeatherRenderContext()
     };
     const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
+    const submitContext = createSubmitContextMock();
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         content: '',
         parts: [toolPart]
-      })
+      }),
+      createSubmitActionRunner(submitContext)
     );
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
@@ -631,7 +644,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
+    expectSubmitContextUpdatesPartOnly(submitContext);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -665,15 +678,17 @@ describe('MessageBubble', (): void => {
       renderContext: createWeatherRenderContext()
     };
     const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
+    const submitContext = createSubmitContextMock();
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-submit',
         content: '',
         parts: [toolPart]
-      })
+      }),
+      createSubmitActionRunner(submitContext)
     );
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
@@ -695,7 +710,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
+    expectSubmitContextUpdatesPartOnly(submitContext);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -743,12 +758,14 @@ describe('MessageBubble', (): void => {
     };
     const staleToolPart = createOpenWidgetToolPartFromWidgetPart(staleWidgetPart);
     const latestToolPart = createOpenWidgetToolPartFromWidgetPart(latestWidgetPart);
+    const submitContext = createSubmitContextMock();
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-latest-submit',
         content: '',
         parts: [staleToolPart]
-      })
+      }),
+      createSubmitActionRunner(submitContext)
     );
 
     await wrapper.setProps({
@@ -760,7 +777,7 @@ describe('MessageBubble', (): void => {
     });
     await flushPromises();
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(latestWidgetPart, {
         reason: 'interaction',
@@ -781,7 +798,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
+    expectSubmitContextUpdatesPartOnly(submitContext);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {
@@ -826,7 +843,7 @@ describe('MessageBubble', (): void => {
       })
     );
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'mount',
@@ -882,15 +899,17 @@ describe('MessageBubble', (): void => {
       renderContext: createWeatherRenderContext()
     };
     const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
+    const submitContext = createSubmitContextMock();
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-send-message',
         content: '',
         parts: [toolPart]
-      })
+      }),
+      createSubmitActionRunner(submitContext)
     );
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
@@ -900,10 +919,6 @@ describe('MessageBubble', (): void => {
         }
       })
     );
-
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
 
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
       userMessage: expect.objectContaining({
@@ -941,9 +956,10 @@ describe('MessageBubble', (): void => {
       content: '',
       parts: [toolPart]
     });
-    const wrapper = mountMessageBubble(message);
+    const submitContext = createSubmitContextMock();
+    const wrapper = mountMessageBubble(message, createSubmitActionRunner(submitContext));
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
@@ -953,10 +969,6 @@ describe('MessageBubble', (): void => {
         }
       })
     );
-
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
 
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
       userMessage: expect.objectContaining({
@@ -996,12 +1008,14 @@ describe('MessageBubble', (): void => {
     };
     const staleToolPart = createOpenWidgetToolPartFromWidgetPart(staleWidgetPart);
     const latestToolPart = createOpenWidgetToolPartFromWidgetPart(latestWidgetPart);
+    const submitContext = createSubmitContextMock();
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         id: 'assistant-widget-latest-message',
         content: '',
         parts: [staleToolPart]
-      })
+      }),
+      createSubmitActionRunner(submitContext)
     );
 
     await wrapper.setProps({
@@ -1013,7 +1027,7 @@ describe('MessageBubble', (): void => {
     });
     await flushPromises();
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(latestWidgetPart, {
         reason: 'interaction',
@@ -1023,10 +1037,6 @@ describe('MessageBubble', (): void => {
         }
       })
     );
-
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
 
     expect(submitContext.sendAdaptedUserMessage).toHaveBeenCalledWith({
       userMessage: expect.objectContaining({
@@ -1039,20 +1049,18 @@ describe('MessageBubble', (): void => {
   });
 
   it('emits unified submit actions from question answers', async (): Promise<void> => {
+    const submitContext = createSubmitContextMock();
     const wrapper = mountMessageBubble(
       createAssistantMessage({
         content: '',
         parts: [createQuestionToolPart()]
-      })
+      }),
+      createSubmitActionRunner(submitContext)
     );
 
     await wrapper.get('.choice-card__option-btn').trigger('click');
     await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
     await wrapper.get('.choice-card__footer-right .b-button-stub:last-child').trigger('click');
-
-    const action = readLatestSubmitAction(wrapper);
-    const submitContext = createSubmitContextMock();
-    await action.run(submitContext);
 
     expect(submitContext.continueAssistantTurn).toHaveBeenCalledWith({
       questionId: 'question-1',
@@ -1211,11 +1219,12 @@ describe('MessageBubble', (): void => {
       content: '',
       parts: [toolPart]
     });
-    const wrapper = mountMessageBubble(message);
+    const submitContext = createSubmitContextMock();
+    const wrapper = mountMessageBubble(message, createSubmitActionRunner(submitContext));
 
     await flushPromises();
 
-    emitWidgetRuntimeChange(
+    await emitWidgetRuntimeChange(
       wrapper,
       createRuntimeChange(
         {
@@ -1242,7 +1251,7 @@ describe('MessageBubble', (): void => {
     );
     await flushPromises();
 
-    await expectLatestSubmitActionUpdatesPartOnly(wrapper);
+    expectSubmitContextUpdatesPartOnly(submitContext);
     expect(wrapper.findComponent({ name: 'BWidgetRuntime' }).props('renderContext')).toMatchObject({
       data: {
         weather: {

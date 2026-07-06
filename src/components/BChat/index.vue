@@ -12,9 +12,9 @@
         :disabled="!loading"
         :on-load-history="handleLoadHistory"
         :can-rollback="rollbackController.canRollback"
+        :submit-action="chatSubmitter.submit"
         @edit="handleChatEdit"
         @regenerate="handleChatRegenerate"
-        @submit="chatSubmitter.submit"
         @rollback="handleRollback"
       >
         <template #footer>

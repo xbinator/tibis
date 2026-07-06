@@ -570,6 +570,26 @@ describe('widgetRuntime', (): void => {
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
+  it('waits for unawaited sendMessage calls before finishing mounted scripts', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class Weather extends Widget {',
+        '  mounted() {',
+        "    this.$sendMessage('加载完成').then(() => {",
+        "      this.message = '发送后更新'",
+        '    })',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+
+    const nextPart = await initWidgetMountState(part);
+
+    expect(nextPart.renderContext.data).toEqual({
+      message: '发送后更新'
+    });
+  });
+
   it('runs unmounted cleanup when an interaction finishes with a message', async (): Promise<void> => {
     const part: WidgetRuntimeState = {
       ...createWidgetPart(

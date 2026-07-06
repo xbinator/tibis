@@ -651,6 +651,37 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
+  it('emits mounted send messages even when mounted does not change data', async (): Promise<void> => {
+    const dataItem = createRuntimeMessageWidgetData(
+      ['export default class Weather extends Widget {', '  mounted() {', "    this.$sendMessage('加载完成')", '  }', '}'].join('\n')
+    );
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: dataItem,
+        renderContext: {
+          input: {},
+          data: {}
+        }
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+
+    expect(wrapper.emitted('change')?.[0]?.[0]).toMatchObject({
+      reason: 'mount',
+      renderContext: {
+        isMounted: true,
+        data: {}
+      },
+      sendMessage: {
+        content: '加载完成',
+        isError: false
+      }
+    });
+    wrapper.unmount();
+  });
+
   it('renders Widget class field data before the host writes runtime changes back', async (): Promise<void> => {
     const dataItem = createRuntimeMessageWidgetData(['export default class Weather extends Widget {', "  message = '晴天'", '}'].join('\n'));
     const wrapper = mount(BWidgetRuntime, {
@@ -865,6 +896,52 @@ describe('BWidgetRuntime', (): void => {
     expect(request).not.toHaveBeenCalled();
     expect(wrapper.emitted('change')).toBeUndefined();
     expect(findNodeById(wrapper, 'text-1').text()).toBe('加载完成');
+    wrapper.unmount();
+  });
+
+  it('waits for host runtime change commits before running queued interactions', async (): Promise<void> => {
+    const commitDeferred = createDeferred<void>();
+    const commitRuntimeChange = vi.fn(async (change: WidgetRuntimeChange): Promise<void> => {
+      if (change.reason === 'mount') {
+        await commitDeferred.promise;
+      }
+    });
+    const runtimeProps = {
+      value: {
+        ...createRuntimeWidgetData(),
+        execute: {
+          code: ['export default class Counter extends Widget {', '  mounted() {', '    this.count = 0', '  }', '}'].join('\n')
+        }
+      },
+      renderContext: {
+        input: {},
+        data: {}
+      },
+      commitRuntimeChange
+    };
+    const wrapper = mount(BWidgetRuntime, {
+      props: runtimeProps,
+      global: {
+        stubs: {
+          WidgetNode: WidgetNodeRuntimeCounterStub
+        }
+      },
+      attachTo: document.body
+    });
+    await flushWidgetRuntime();
+
+    await wrapper.get('.runtime-counter-probe').trigger('click');
+    await flushWidgetRuntime();
+
+    const beforeCommitChanges = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
+    expect(beforeCommitChanges.map((change): WidgetRuntimeChange['reason'] => change.reason)).toEqual(['mount']);
+
+    commitDeferred.resolve();
+    await flushWidgetRuntime();
+
+    const afterCommitChanges = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
+    expect(afterCommitChanges.map((change): WidgetRuntimeChange['reason'] => change.reason)).toEqual(['mount', 'interaction']);
+    expect(commitRuntimeChange).toHaveBeenCalledTimes(2);
     wrapper.unmount();
   });
 

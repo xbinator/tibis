@@ -14,9 +14,9 @@
             :message="item"
             :disabled="disabled"
             :can-rollback="canRollback"
+            :submit-action="submitAction"
             @edit="$emit('edit', item)"
             @regenerate="$emit('regenerate', item)"
-            @submit="$emit('submit', $event)"
             @rollback="$emit('rollback', item)"
           />
 
@@ -70,20 +70,22 @@ interface Props {
   disabled?: boolean;
   /** 判断消息是否可回退 */
   canRollback?: (message: Message) => boolean;
+  /** 可 await 的统一提交函数，用于让运行态组件等待宿主提交完成。 */
+  submitAction?: (action: SubmitAction) => Promise<void> | void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
   onLoadHistory: undefined,
   disabled: false,
-  canRollback: undefined
+  canRollback: undefined,
+  submitAction: undefined
 });
 
 defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'load-history'): void;
-  (e: 'submit', action: SubmitAction): void;
   (e: 'rollback', message: Message): void;
 }>();
 

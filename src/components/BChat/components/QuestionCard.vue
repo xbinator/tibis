@@ -61,14 +61,14 @@ const props = withDefaults(
     question: AIAwaitingUserChoiceQuestion;
     /** 会话已结束时禁用交互 */
     disabled?: boolean;
+    /** 统一提交函数。 */
+    submitAction?: (action: SubmitAction) => Promise<void> | void;
   }>(),
-  { disabled: false }
+  {
+    disabled: false,
+    submitAction: undefined
+  }
 );
-
-const emit = defineEmits<{
-  /** 用户交互提交到统一聊天提交器 */
-  (e: 'submit', action: SubmitAction): void;
-}>();
 
 /** 每个问题的选中值列表，索引与 questionItems 一一对应 */
 const selectedValuesByQuestion = ref<string[][]>([]);
@@ -184,8 +184,7 @@ function handlePrev(): void {
  * 取消操作：提交空答案。
  */
 function handleCancel(): void {
-  emit(
-    'submit',
+  props.submitAction?.(
     createUserChoice({
       questionId: props.question.questionId,
       toolCallId: props.question.toolCallId,
@@ -205,8 +204,7 @@ function handleSubmit(): void {
     answers: [...getSelectedValues(index)]
   }));
 
-  emit(
-    'submit',
+  props.submitAction?.(
     createUserChoice({
       questionId: props.question.questionId,
       toolCallId: props.question.toolCallId,

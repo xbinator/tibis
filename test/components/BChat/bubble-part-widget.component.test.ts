@@ -32,6 +32,27 @@ interface TestWidgetDisplayFixture {
 /** 小组件提交上下文测试替身。 */
 type TestSubmitContext = Pick<SubmitContext, 'continueAssistantTurn' | 'sendAdaptedUserMessage' | 'updateMessagePart'>;
 
+/** 可手动 resolve 的测试 Promise。 */
+interface Deferred<T> {
+  /** Promise 实例。 */
+  promise: Promise<T>;
+  /** 解决 Promise。 */
+  resolve: (value: T) => void;
+}
+
+/**
+ * 创建测试用 Deferred。
+ * @returns 测试 Deferred
+ */
+function createDeferred<T = void>(): Deferred<T> {
+  let resolve: (value: T) => void = (): void => undefined;
+  const promise = new Promise<T>((promiseResolve): void => {
+    resolve = promiseResolve;
+  });
+
+  return { promise, resolve };
+}
+
 /**
  * 创建统一提交上下文测试替身。
  * @returns 提交上下文测试替身
@@ -41,6 +62,17 @@ function createSubmitContextMock(): TestSubmitContext {
     continueAssistantTurn: vi.fn(),
     sendAdaptedUserMessage: vi.fn(),
     updateMessagePart: vi.fn()
+  };
+}
+
+/**
+ * 创建会立即运行 SubmitAction 的测试提交函数。
+ * @param context - 提交上下文测试替身
+ * @returns 测试提交函数
+ */
+function createSubmitActionRunner(context: TestSubmitContext): (action: SubmitAction) => Promise<void> {
+  return async (action: SubmitAction): Promise<void> => {
+    await action.run(context);
   };
 }
 
@@ -145,6 +177,11 @@ const BWidgetRuntimeStub = defineComponent({
     value: {
       type: Object,
       required: true
+    },
+    commitRuntimeChange: {
+      type: Function,
+      required: false,
+      default: undefined
     }
   },
   emits: ['change', 'submit'],
@@ -170,6 +207,21 @@ function mountBubblePartWidget(part: ChatMessageToolPart, props: Record<string, 
       }
     }
   });
+}
+
+/**
+ * 通过 BWidgetRuntime 的可 await commit 回调提交运行态变化。
+ * @param wrapper - 小组件工具片段包装器
+ * @param change - 运行态变化
+ */
+async function commitWidgetRuntimeChange(wrapper: VueWrapper, change: WidgetRuntimeChange): Promise<void> {
+  const commitRuntimeChange = wrapper.findComponent({ name: 'BWidgetRuntime' }).props('commitRuntimeChange') as
+    | ((nextChange: WidgetRuntimeChange) => Promise<void> | void)
+    | undefined;
+  if (!commitRuntimeChange) throw new Error('Expected BWidgetRuntime commitRuntimeChange prop');
+
+  await commitRuntimeChange(change);
+  await nextTick();
 }
 
 describe('BubblePartWidget', (): void => {
@@ -218,9 +270,12 @@ describe('BubblePartWidget', (): void => {
       }
     };
 
-    const wrapper = mountBubblePartWidget(createOpenWidgetToolPartFromWidgetPart(widgetPart));
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
-      'change',
+    const context = createSubmitContextMock();
+    const wrapper = mountBubblePartWidget(createOpenWidgetToolPartFromWidgetPart(widgetPart), {
+      submitAction: createSubmitActionRunner(context)
+    });
+    await commitWidgetRuntimeChange(
+      wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
@@ -235,11 +290,6 @@ describe('BubblePartWidget', (): void => {
         }
       })
     );
-    await nextTick();
-
-    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
-    const context = createSubmitContextMock();
-    await action.run(context);
 
     expect(context.updateMessagePart).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -269,6 +319,63 @@ describe('BubblePartWidget', (): void => {
     });
   });
 
+  it('passes an awaitable runtime change committer to widget runtime', async (): Promise<void> => {
+    const widgetPart: TestWidgetDisplayFixture = {
+      ...createWidgetPart('export default class Weather extends Widget {}'),
+      renderContext: {
+        input: {
+          city: '上海'
+        },
+        data: {}
+      }
+    };
+    const context = createSubmitContextMock();
+    const submitDeferred = createDeferred();
+    const submitAction = vi.fn(async (action: SubmitAction): Promise<void> => {
+      await submitDeferred.promise;
+      await action.run(context);
+    });
+    const wrapper = mountBubblePartWidget(createOpenWidgetToolPartFromWidgetPart(widgetPart), { submitAction });
+    const commitRuntimeChange = wrapper.findComponent({ name: 'BWidgetRuntime' }).props('commitRuntimeChange') as
+      | ((change: WidgetRuntimeChange) => Promise<void>)
+      | undefined;
+
+    expect(commitRuntimeChange).toEqual(expect.any(Function));
+
+    let committed = false;
+    const commitPromise = commitRuntimeChange?.(
+      createRuntimeChange(widgetPart, {
+        reason: 'mount',
+        renderContext: {
+          input: {
+            city: '上海'
+          },
+          data: {
+            weather: {
+              temperature: 28
+            }
+          }
+        },
+        sendMessage: {
+          content: '加载完成',
+          isError: false
+        }
+      })
+    ).then((): void => {
+      committed = true;
+    });
+    await nextTick();
+
+    expect(committed).toBe(false);
+
+    submitDeferred.resolve();
+    await commitPromise;
+
+    expect(submitAction).toHaveBeenCalledTimes(1);
+    expect(context.updateMessagePart).toHaveBeenCalled();
+    expect(context.sendAdaptedUserMessage).toHaveBeenCalled();
+  });
+
   it('keeps the visible runtime state when streaming props fall back to created', async (): Promise<void> => {
     const widgetPart: TestWidgetDisplayFixture = {
       ...createWidgetPart('export default class Weather extends Widget {}'),
@@ -284,8 +391,8 @@ describe('BubblePartWidget', (): void => {
       messageId: 'assistant-widget-message'
     });
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
-      'change',
+    await commitWidgetRuntimeChange(
+      wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
@@ -300,7 +407,6 @@ describe('BubblePartWidget', (): void => {
         }
       })
     );
-    await nextTick();
 
     const staleToolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
     await wrapper.setProps({
@@ -332,8 +438,8 @@ describe('BubblePartWidget', (): void => {
     };
     const wrapper = mountBubblePartWidget(createOpenWidgetToolPartFromWidgetPart(widgetPart));
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
-      'change',
+    await commitWidgetRuntimeChange(
+      wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
@@ -348,7 +454,6 @@ describe('BubblePartWidget', (): void => {
         }
       })
     );
-    await nextTick();
 
     const latestWidgetPart: TestWidgetDisplayFixture = {
       ...widgetPart,
@@ -406,12 +511,14 @@ describe('BubblePartWidget', (): void => {
     };
     const staleToolPart = createOpenWidgetToolPartFromWidgetPart(staleWidgetPart);
     const targetToolPart = createOpenWidgetToolPartFromWidgetPart(targetWidgetPart);
+    const context = createSubmitContextMock();
     const wrapper = mountBubblePartWidget(targetToolPart, {
-      messageId: 'assistant-widget-message'
+      messageId: 'assistant-widget-message',
+      submitAction: createSubmitActionRunner(context)
     });
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
-      'change',
+    await commitWidgetRuntimeChange(
+      wrapper,
       createRuntimeChange(targetWidgetPart, {
         reason: 'interaction',
         renderContext: {
@@ -426,11 +533,6 @@ describe('BubblePartWidget', (): void => {
         }
       })
     );
-    await nextTick();
-
-    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
-    const context = createSubmitContextMock();
-    await action.run(context);
 
     expect(context.updateMessagePart).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -462,12 +564,14 @@ describe('BubblePartWidget', (): void => {
     ].join('\n');
     const widgetPart = createWidgetPart(widgetScript);
     const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
+    const context = createSubmitContextMock();
     const wrapper = mountBubblePartWidget(toolPart, {
-      messageId: 'assistant-widget-message'
+      messageId: 'assistant-widget-message',
+      submitAction: createSubmitActionRunner(context)
     });
 
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
-      'change',
+    await commitWidgetRuntimeChange(
+      wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
         renderContext: {
@@ -482,11 +586,6 @@ describe('BubblePartWidget', (): void => {
         }
       })
     );
-    await nextTick();
-
-    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
-    const context = createSubmitContextMock();
-    await action.run(context);
 
     expect(context.updateMessagePart).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -520,11 +619,13 @@ describe('BubblePartWidget', (): void => {
   it('sends widget runtime messages reported by interaction changes', async (): Promise<void> => {
     const widgetPart = createWidgetPart('export default class Weather extends Widget {}');
     const toolPart = createOpenWidgetToolPartFromWidgetPart(widgetPart);
+    const context = createSubmitContextMock();
     const wrapper = mountBubblePartWidget(toolPart, {
-      messageId: 'assistant-widget-message'
+      messageId: 'assistant-widget-message',
+      submitAction: createSubmitActionRunner(context)
     });
-    wrapper.findComponent({ name: 'BWidgetRuntime' }).vm.$emit(
-      'change',
+    await commitWidgetRuntimeChange(
+      wrapper,
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
         sendMessage: {
@@ -533,11 +634,6 @@ describe('BubblePartWidget', (): void => {
         }
       })
     );
-    await nextTick();
-
-    const action = wrapper.emitted('submit')?.[0]?.[0] as SubmitAction;
-    const context = createSubmitContextMock();
-    await action.run(context);
 
     expect(context.updateMessagePart).toHaveBeenCalledWith(
       expect.objectContaining({

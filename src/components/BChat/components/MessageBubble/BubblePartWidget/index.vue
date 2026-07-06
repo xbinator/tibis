@@ -4,7 +4,7 @@
 -->
 <template>
   <div :class="name">
-    <BWidgetRuntime :render-context="runtimeRenderContext" :value="widgetDisplay.value" @change="handleRuntimeChange" />
+    <BWidgetRuntime :commit-runtime-change="handleRuntimeChange" :render-context="runtimeRenderContext" :value="widgetDisplay.value" />
   </div>
 </template>
 
@@ -27,14 +27,11 @@ interface Props {
   messageId: string;
   /** 已通过父组件判定的 open_widget 工具片段。 */
   part: WidgetToolPart;
+  /** 可 await 的统一提交函数，用于让 Widget runtime 等待宿主提交完成。 */
+  submitAction?: (action: SubmitAction) => Promise<void> | void;
 }
 
 const props = defineProps<Props>();
-
-const emit = defineEmits<{
-  /** 小组件交互提交到统一聊天提交器 */
-  submit: [action: SubmitAction];
-}>();
 
 const [name] = createNamespace('', 'message-bubble-widget');
 
@@ -114,13 +111,21 @@ function createRuntimeChangeAction(messageId: string, part: WidgetToolPart, chan
 }
 
 /**
+ * 提交运行态变化动作；有可 await 宿主提交函数时优先等待它完成。
+ * @param action - 统一提交动作
+ */
+async function submitRuntimeAction(action: SubmitAction): Promise<void> {
+  await props.submitAction?.(action);
+}
+
+/**
  * 处理 BWidget 内部脚本执行完成后的运行态变化。
  * @param change - BWidget 运行态变化
  */
-function handleRuntimeChange(change: WidgetRuntimeChange): void {
+async function handleRuntimeChange(change: WidgetRuntimeChange): Promise<void> {
   localRenderContext.value = change.renderContext;
   localRenderSource.value = cloneDeep(widgetDisplay.value);
-  emit('submit', createRuntimeChangeAction(props.messageId, props.part, change));
+  await submitRuntimeAction(createRuntimeChangeAction(props.messageId, props.part, change));
 }
 </script>
 

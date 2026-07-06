@@ -339,9 +339,13 @@ const ConversationViewStub = defineComponent({
     messages: {
       type: Array,
       default: () => []
+    },
+    submitAction: {
+      type: Function,
+      default: undefined
     }
   },
-  emits: ['regenerate', 'rollback', 'submit'],
+  emits: ['regenerate', 'rollback'],
   setup(_props, { expose, slots }) {
     expose({
       scrollToBottom: conversationViewMockState.scrollToBottom
@@ -350,6 +354,18 @@ const ConversationViewStub = defineComponent({
     return () => h('div', { class: 'conversation-view-stub' }, slots.footer?.());
   }
 });
+
+/**
+ * 通过 ConversationView 的 submitAction prop 提交消息级动作。
+ * @param wrapper - BChat 组件包装器
+ * @param action - 提交动作
+ */
+async function submitConversationAction(wrapper: ReturnType<typeof shallowMount>, action: SubmitAction): Promise<void> {
+  const submitAction = wrapper.findComponent(ConversationViewStub).props('submitAction') as ((nextAction: SubmitAction) => Promise<void> | void) | undefined;
+  if (!submitAction) throw new Error('Expected ConversationView submitAction prop');
+
+  await submitAction(action);
+}
 
 const CommandPanelStub = defineComponent({
   name: 'BCommandPanel',
@@ -918,7 +934,7 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit('submit', createUserChoice(answer));
+    await submitConversationAction(wrapper, createUserChoice(answer));
     await flushPromises();
 
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(
@@ -960,8 +976,8 @@ describe('BChat sessionId runtime', (): void => {
     const wrapper = mountBChat('session-active');
     await flushPromises();
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit(
-      'submit',
+    await submitConversationAction(
+      wrapper,
       createRuntimeUserMessageTestSubmitAction({
         userMessage,
         parts: [resultPart]
@@ -995,7 +1011,7 @@ describe('BChat sessionId runtime', (): void => {
       otherText: ''
     };
 
-    wrapper.findComponent(ConversationViewStub).vm.$emit('submit', createUserChoice(answer));
+    await submitConversationAction(wrapper, createUserChoice(answer));
     await flushPromises();
 
     expect(electronAPIMock.chatRuntimeSubmitUserChoice).toHaveBeenCalledWith(

@@ -35,11 +35,11 @@
 
             <BubblePartStatus v-else-if="item.kind === 'compaction'" :message="message" :compaction-part="item.part" />
 
-            <QuestionCard v-else-if="item.kind === 'question'" :question="item.question" :disabled="disabled" @submit="$emit('submit', $event)" />
+            <QuestionCard v-else-if="item.kind === 'question'" :question="item.question" :disabled="disabled" :submit-action="submitAction" />
 
             <BubblePartTool v-else-if="item.kind === 'tool'" :part="item.part" />
 
-            <BubblePartWidget v-else-if="item.kind === 'widget'" :message-id="message.id" :part="item.part" @submit="$emit('submit', $event)" />
+            <BubblePartWidget v-else-if="item.kind === 'widget'" :message-id="message.id" :part="item.part" :submit-action="submitAction" />
           </template>
         </template>
       </div>
@@ -99,12 +99,13 @@ const props = defineProps<{
   disabled?: boolean;
   /** 判断消息是否可回退 */
   canRollback?: (message: Message) => boolean;
+  /** 可 await 的统一提交函数，用于让运行态组件等待宿主提交完成。 */
+  submitAction?: (action: SubmitAction) => Promise<void> | void;
 }>();
 
 defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
-  (e: 'submit', action: SubmitAction): void;
   (e: 'rollback', message: Message): void;
 }>();
 

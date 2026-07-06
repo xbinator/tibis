@@ -9,6 +9,7 @@ import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import ConversationView from '@/components/BChat/components/ConversationView.vue';
+import type { SubmitAction } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 
@@ -25,6 +26,10 @@ vi.mock('@/components/BChat/components/MessageBubble.vue', () => ({
         default: false
       },
       canRollback: {
+        type: Function,
+        default: undefined
+      },
+      submitAction: {
         type: Function,
         default: undefined
       }
@@ -52,6 +57,8 @@ interface ConversationViewTestProps {
   disabled: boolean;
   /** 判断消息是否可回退 */
   canRollback?: (message: Message) => boolean;
+  /** 统一提交函数 */
+  submitAction?: (action: SubmitAction) => Promise<void> | void;
 }
 
 /** 带测试 props 类型的 ConversationView。 */
@@ -289,15 +296,17 @@ describe('ConversationView', (): void => {
     expect(wrapper.get('.message-bubble').text()).toBe('done:success:enabled:no-rollback上海31');
   });
 
-  it('forwards message bubble submit actions without inspecting them', async (): Promise<void> => {
-    const submitAction = {
+  it('passes submit actions to message bubbles through props', async (): Promise<void> => {
+    const submitAction: SubmitAction = {
       run: vi.fn()
     };
+    const submitActionHandler = vi.fn<(_action: SubmitAction) => Promise<void>>(async (): Promise<void> => undefined);
     const wrapper = mount(ConversationViewForTest, {
       props: {
         messages: [createAssistantMessage(createQuestionToolPart('done', 'awaiting_user_input'))],
         loading: false,
-        disabled: false
+        disabled: false,
+        submitAction: submitActionHandler
       },
       global: {
         stubs: {
@@ -306,9 +315,10 @@ describe('ConversationView', (): void => {
       }
     });
 
-    wrapper.findComponent({ name: 'MessageBubble' }).vm.$emit('submit', submitAction);
+    const messageBubbleSubmitAction = wrapper.findComponent({ name: 'MessageBubble' }).props('submitAction') as (action: SubmitAction) => Promise<void>;
+    await messageBubbleSubmitAction(submitAction);
 
-    expect(wrapper.emitted('submit')?.[0]).toEqual([submitAction]);
+    expect(submitActionHandler).toHaveBeenCalledWith(submitAction);
   });
 
   it('updates rollback visibility when following messages change', async (): Promise<void> => {

@@ -1067,21 +1067,35 @@ function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOpt
 }
 
 /**
+ * 执行小组件 mounted 生命周期，并收集上行消息。
+ * @param state - 运行态状态
+ * @param options - 生命周期执行选项。
+ * @returns 小组件运行态结果。
+ */
+export async function mountWidgetRuntime(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeFinishResult> {
+  if (!isWidgetScriptEnabled(state)) return { state };
+
+  const nextState = cloneDeep(state);
+  const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'mounted' });
+  if (!sandboxResult.dataChanged && sandboxResult.lifecycleExecuted !== true && !sandboxResult.sendMessage) return { state };
+
+  const changedState = applyWidgetSandboxResult(nextState, sandboxResult);
+  const mountedState = sandboxResult.lifecycleExecuted === true ? markWidgetRuntimeMounted(changedState) : changedState;
+
+  return {
+    state: mountedState,
+    ...(sandboxResult.sendMessage ? { sendMessage: sandboxResult.sendMessage } : {})
+  };
+}
+
+/**
  * 执行小组件 mounted 生命周期，并返回下一版运行数据。
  * @param state - 运行态状态
  * @param options - 生命周期执行选项。
  * @returns 运行后的状态。
  */
 export async function initWidgetMountState(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeState> {
-  if (!isWidgetScriptEnabled(state)) return state;
-
-  const nextState = cloneDeep(state);
-  const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'mounted' });
-  if (!sandboxResult.dataChanged && sandboxResult.lifecycleExecuted !== true) return state;
-
-  const changedState = applyWidgetSandboxResult(nextState, sandboxResult);
-
-  return sandboxResult.lifecycleExecuted === true ? markWidgetRuntimeMounted(changedState) : changedState;
+  return (await mountWidgetRuntime(state, options)).state;
 }
 
 /**
