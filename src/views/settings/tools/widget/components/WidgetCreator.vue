@@ -14,8 +14,13 @@
           :class="{ 'widget-creator__dropzone--active': isImportDragOver }"
           @change="handleZipSelected"
         >
-          <BIcon class="widget-creator__dropzone-icon" icon="lucide:package-plus" :size="26" />
-          <div class="widget-creator__dropzone-title">拖拽 .zip 到此处或点击添加</div>
+          <div class="widget-creator__dropzone-icon">
+            <BIcon icon="lucide:package-plus" :size="26" />
+          </div>
+          <div class="widget-creator__dropzone-title">拖拽文件到此处或点击添加</div>
+          <div class="widget-creator__dropzone-badges">
+            <span class="widget-creator__badge">.zip</span>
+          </div>
           <div v-if="importedSourceName" class="widget-creator__dropzone-file">{{ importedSourceName }}</div>
         </BUpload>
 
@@ -330,6 +335,21 @@ watch(
   color: var(--color-primary);
   white-space: nowrap;
   background: var(--color-primary-bg);
+  border-radius: 4px;
+}
+
+.widget-creator__dropzone-badges {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.widget-creator__badge {
+  padding: 2px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--color-primary);
+  background: var(--color-primary-bg, rgb(var(--color-primary-rgb) / 8%));
   border-radius: 4px;
 }
 </style>
