@@ -20,14 +20,14 @@
         <AInput v-model:value="element.loop.indexName" placeholder="默认为：index" />
       </BSectionItem>
 
-      <div class="widget-advanced-setter__grid">
-        <BSectionItem label="列数" label-min-width="">
+      <div class="widget-advanced-setter__loop-grid">
+        <BSectionItem class="widget-advanced-setter__loop-field widget-advanced-setter__loop-field--columns" label="列数" direction="vertical">
           <BInputNumber v-model:value="element.loop.columns" placeholder="列数" />
         </BSectionItem>
-        <BSectionItem label="列距" label-min-width="">
+        <BSectionItem class="widget-advanced-setter__loop-field widget-advanced-setter__loop-field--gap" label="列距" direction="vertical">
           <BInputNumber v-model:value="element.loop.columnGap" placeholder="列距" />
         </BSectionItem>
-        <BSectionItem label="行距" label-min-width="">
+        <BSectionItem class="widget-advanced-setter__loop-field widget-advanced-setter__loop-field--gap" label="行距" direction="vertical">
           <BInputNumber v-model:value="element.loop.rowGap" placeholder="行距" />
         </BSectionItem>
       </div>
@@ -55,9 +55,17 @@ const { variableOptions } = useElementVariables((): WidgetElement => element.val
   gap: 12px;
 }
 
-.widget-advanced-setter__grid {
+.widget-advanced-setter__loop-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.widget-advanced-setter__loop-field {
+  min-width: 0;
+}
+
+.widget-advanced-setter__loop-field--columns {
+  grid-column: 1 / -1;
 }
 </style>

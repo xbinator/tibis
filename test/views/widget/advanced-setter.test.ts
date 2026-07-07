@@ -360,4 +360,14 @@ describe('AdvancedSetter', (): void => {
     expect(element.loop.indexName).toBe('item');
     wrapper.unmount();
   });
+
+  it('renders loop number controls in a compact two-row grid', (): void => {
+    const element = createWidgetElement();
+    const wrapper = mountAdvancedSetter(element);
+
+    expect(wrapper.find('.widget-advanced-setter__loop-grid').exists()).toBe(true);
+    expect(wrapper.find('.widget-advanced-setter__loop-field--columns').exists()).toBe(true);
+    expect(wrapper.findAll('.widget-advanced-setter__loop-field--gap')).toHaveLength(2);
+    wrapper.unmount();
+  });
 });
