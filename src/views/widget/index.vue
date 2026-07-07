@@ -92,12 +92,11 @@ const WIDGET_LAYER_COPY_ID_SIZE = 8;
 
 const session = useFileSession<WidgetData>({
   fileId,
-  kind: 'tibis',
+  kind: 'widget',
+  recordType: 'widget',
   defaultName: 'Untitled',
-  defaultExt: 'tibis',
+  defaultExt: 'json',
   defaultData: createDefaultWidgetData(),
-  type: 'widget',
-  version: 1,
   routeName: 'widget',
   fallbackRouteName: 'editor'
 });

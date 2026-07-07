@@ -135,20 +135,3 @@ export function parseWidgetJson(content: string, filePath: string): WidgetDefini
     return createWidgetParseError(normalizedFilePath, error instanceof Error ? error.message : String(error));
   }
 }
-
-/**
- * 将 WidgetData 序列化为可打开的 .tibis 文件内容。
- * @param data - 小组件数据
- * @returns .tibis 文件 JSON 文本
- */
-export function createWidgetTibisDocumentContent(data: WidgetData): string {
-  return JSON.stringify(
-    {
-      type: 'widget',
-      version: 1,
-      ...data
-    },
-    null,
-    2
-  );
-}

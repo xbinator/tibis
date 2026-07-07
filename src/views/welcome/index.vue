@@ -24,14 +24,14 @@
             v-for="record in topRecentRecords"
             :key="record.id"
             class="recent-file-item"
-            @click="record.type === 'file' ? handleOpenRecentFile(record.id) : handleOpenWebview(record.url)"
+            @click="isDocumentRecord(record) ? handleOpenRecentFile(record.id) : handleOpenWebview(record.url)"
           >
             <div class="recent-file-icon">
               <BRecentIcon :record="record" :size="14" />
             </div>
             <div class="recent-file-info">
-              <div class="recent-file-name">{{ record.type === 'file' ? resolveFileTitle(record) : record.title }}</div>
-              <div class="recent-file-path">{{ record.type === 'file' ? record.path || '未保存文件' : record.url }}</div>
+              <div class="recent-file-name">{{ isDocumentRecord(record) ? resolveFileTitle(record) : record.title }}</div>
+              <div class="recent-file-path">{{ isDocumentRecord(record) ? record.path || '未保存文件' : record.url }}</div>
             </div>
           </div>
         </div>
@@ -53,6 +53,7 @@ import { computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useNavigate } from '@/hooks/useNavigate';
 import { useOpenFile } from '@/hooks/useOpenFile';
+import { isDocumentRecord } from '@/shared/storage';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useRecentStore } from '@/stores/workspace/recent';
 import { resolveFileTitle } from '@/utils/file/title';

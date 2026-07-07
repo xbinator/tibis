@@ -40,9 +40,6 @@ const EXT_ICON_MAP: Record<string, string> = {
   pptx: 'vscode-icons:file-type-powerpoint',
   txt: 'vscode-icons:file-type-text',
 
-  // Tibis 内置格式本质为 JSON 结构，按 JSON 图标展示。
-  tibis: 'vscode-icons:file-type-json',
-
   // 后端 / 脚本
   py: 'vscode-icons:file-type-python',
   rb: 'vscode-icons:file-type-ruby',

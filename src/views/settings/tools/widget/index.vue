@@ -32,7 +32,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { WidgetDefinition, WidgetImportResource } from '@/ai/widget';
-import { createWidgetTibisDocumentContent, joinPath, parseWidgetJson } from '@/ai/widget';
+import { joinPath, parseWidgetJson } from '@/ai/widget';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { native } from '@/shared/platform';
 import { getElectronAPI } from '@/shared/platform/electron-api';
@@ -131,18 +131,18 @@ async function readLatestWidgetDefinition(widget: WidgetDefinition): Promise<Wid
 }
 
 /**
- * 将小组件数据作为 .tibis 文件会话打开。
+ * 将小组件数据作为 Widget JSON 文件会话打开。
  * @param widget - 小组件定义
  * @returns 打开完成信号
  */
 async function openWidgetEditor(widget: WidgetDefinition): Promise<void> {
-  const content = createWidgetTibisDocumentContent(widget.data);
+  const content = JSON.stringify(widget.data, null, 2);
   const openedFile = await filesStore.createAndOpen({
-    type: 'file',
+    type: 'widget',
     id: `widget-${widget.id}`,
     path: widget.filePath,
     name: widget.id,
-    ext: 'tibis',
+    ext: 'json',
     content,
     savedContent: content
   });

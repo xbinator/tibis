@@ -6,8 +6,8 @@
 import { defineStore } from 'pinia';
 import { customAlphabet } from 'nanoid';
 import { native } from '@/shared/platform';
-import type { StoredFile, WebviewRecord, RecentRecord, WebviewRecordOptions } from '@/shared/storage';
-import { recentFilesStorage, sortRecentFiles } from '@/shared/storage';
+import type { StoredDocumentRecord, WebviewRecord, RecentRecord, WebviewRecordOptions } from '@/shared/storage';
+import { isDocumentRecord, recentFilesStorage, sortRecentFiles } from '@/shared/storage';
 
 /**
  * recent store 的状态定义。
@@ -47,10 +47,10 @@ export const useRecentStore = defineStore('recent', {
 
   getters: {
     /**
-     * 仅 file 类型的记录（兼容旧调用方）。
+     * 文件型记录（普通文件 + Widget，兼容旧调用方）。
      */
-    recentFiles(state: RecentState): StoredFile[] | null {
-      return state.recentRecords ? state.recentRecords.filter((r): r is StoredFile => r.type === 'file') : null;
+    recentFiles(state: RecentState): StoredDocumentRecord[] | null {
+      return state.recentRecords ? state.recentRecords.filter(isDocumentRecord) : null;
     },
 
     /**
@@ -104,22 +104,22 @@ export const useRecentStore = defineStore('recent', {
     },
 
     /**
-     * 按 ID 获取最近文件记录（仅 file 类型）。
+     * 按 ID 获取最近文件型记录。
      * @param id - 文件 ID
      * @returns 命中的文件记录
      */
-    async getFileById(id: string): Promise<StoredFile | undefined> {
+    async getFileById(id: string): Promise<StoredDocumentRecord | undefined> {
       await this.ensureLoaded();
 
       return this.recentFiles?.find((file) => file.id === id);
     },
 
     /**
-     * 按路径获取最近文件记录（仅 file 类型）。
+     * 按路径获取最近文件型记录。
      * @param path - 磁盘路径
      * @returns 命中的文件记录
      */
-    async getFileByPath(path: string): Promise<StoredFile | undefined> {
+    async getFileByPath(path: string): Promise<StoredDocumentRecord | undefined> {
       await this.ensureLoaded();
 
       return this.recentFiles?.find((file) => file.path === path);
@@ -130,7 +130,7 @@ export const useRecentStore = defineStore('recent', {
      * @param file - 需要写入的文件记录
      * @returns 写入后的文件记录
      */
-    async addFile(file: StoredFile): Promise<StoredFile> {
+    async addFile<TFile extends StoredDocumentRecord>(file: TFile): Promise<TFile> {
       await recentFilesStorage.addRecentFile(file);
       this.patchCache(file);
       this.syncRecentFiles();
@@ -143,7 +143,7 @@ export const useRecentStore = defineStore('recent', {
      * @param updates - 需要更新的字段
      * @returns 更新后的文件记录
      */
-    async updateFile(id: string, updates: Partial<StoredFile>): Promise<StoredFile> {
+    async updateFile(id: string, updates: Partial<StoredDocumentRecord>): Promise<StoredDocumentRecord> {
       const nextFile = await recentFilesStorage.updateRecentFile(id, updates);
       this.patchCache(nextFile);
       this.syncRecentFiles();
@@ -155,7 +155,7 @@ export const useRecentStore = defineStore('recent', {
      * @param id - 文件 ID
      * @returns 被打开的文件记录
      */
-    async openExistingFile(id: string): Promise<StoredFile> {
+    async openExistingFile(id: string): Promise<StoredDocumentRecord> {
       await this.ensureLoaded();
       const touchedFile = await enqueueWrite(() => recentFilesStorage.touchRecentFile(id));
       this.patchCache(touchedFile);
@@ -168,7 +168,7 @@ export const useRecentStore = defineStore('recent', {
      * @param path - 磁盘路径
      * @returns 被打开或创建的文件记录
      */
-    async openOrCreateByPath(path: string): Promise<StoredFile | null> {
+    async openOrCreateByPath(path: string): Promise<StoredDocumentRecord | null> {
       if (inflightPaths.has(path)) return null;
 
       inflightPaths.add(path);
@@ -183,7 +183,7 @@ export const useRecentStore = defineStore('recent', {
 
         const file = await native.readFile(path);
         const now = Date.now();
-        const createdFile: StoredFile = {
+        const createdFile: StoredDocumentRecord = {
           type: 'file',
           id: createFileId(),
           path,
@@ -213,7 +213,7 @@ export const useRecentStore = defineStore('recent', {
      * @param path - 磁盘绝对路径
      * @returns 刷新后的文件记录；并发命中时返回 null
      */
-    async openOrRefreshByPathFromDisk(path: string): Promise<StoredFile | null> {
+    async openOrRefreshByPathFromDisk(path: string): Promise<StoredDocumentRecord | null> {
       if (inflightPaths.has(path)) return null;
 
       inflightPaths.add(path);
@@ -241,7 +241,7 @@ export const useRecentStore = defineStore('recent', {
           return refreshedFile;
         }
 
-        const createdFile: StoredFile = {
+        const createdFile: StoredDocumentRecord = {
           type: 'file',
           id: createFileId(),
           path,
@@ -271,9 +271,9 @@ export const useRecentStore = defineStore('recent', {
      * @param file - 新文件记录
      * @returns 创建后的文件记录
      */
-    async createAndOpen(file: StoredFile): Promise<StoredFile> {
+    async createAndOpen<TFile extends StoredDocumentRecord>(file: TFile): Promise<TFile> {
       const now = Date.now();
-      const createdFile: StoredFile = {
+      const createdFile: TFile = {
         ...file,
         createdAt: file.createdAt ?? now,
         openedAt: file.openedAt ?? now
@@ -309,12 +309,12 @@ export const useRecentStore = defineStore('recent', {
 
     /**
      * 将最近文件摘要同步给主进程系统快捷入口，避免正文内容进入系统菜单模型。
-     * 仅同步 file 类型记录。
+     * 仅同步文件型记录。
      */
     async syncRecentFiles(): Promise<void> {
       if (!native.syncRecentFiles || this.recentRecords === null) return;
 
-      const fileRecords = this.recentRecords.filter((r): r is StoredFile => r.type === 'file');
+      const fileRecords = this.recentRecords.filter(isDocumentRecord);
 
       await native.syncRecentFiles(
         fileRecords.map((file) => ({

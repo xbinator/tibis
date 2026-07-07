@@ -12,6 +12,7 @@ import { useFileAutoSave } from '@/hooks/useFileAutoSave';
 import { resolveRouteTabInfo } from '@/router/cache';
 import { native } from '@/shared/platform';
 import type { ReadFileResult } from '@/shared/platform/native/types';
+import type { StoredDocumentRecord, StoredFile } from '@/shared/storage';
 import { useEditorFileWatchStore } from '@/stores/editor/fileWatch';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { useFilesStore } from '@/stores/workspace/files';
@@ -27,6 +28,15 @@ import { type SaveToDiskResult, useSavePolicy } from './useSavePolicy';
 type ViewMode = 'rich' | 'source';
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
+
+/**
+ * 判断文件型记录是否为普通编辑器文件。
+ * @param record - 文件型记录
+ * @returns 是否为普通文件记录
+ */
+function isStoredFileRecord(record: StoredDocumentRecord | undefined): record is StoredFile {
+  return record?.type === 'file';
+}
 
 export function useSession(fileId: Ref<string>) {
   const route = useRoute();
@@ -428,10 +438,16 @@ export function useSession(fileId: Ref<string>) {
       // 记录当前文件ID，避免在异步操作过程中文件ID发生变化
       const currentFileId = fileId.value;
 
-      const stored = await filesStore.getFileById(currentFileId);
+      const storedRecord = await filesStore.getFileById(currentFileId);
       // 检查版本号，如果版本不匹配则终止（说明有更新的加载请求）
       if (currentVersion !== loadVersion) return;
 
+      if (storedRecord?.type === 'widget') {
+        await router.push({ name: 'widget', params: { id: currentFileId } });
+        return;
+      }
+
+      const stored = isStoredFileRecord(storedRecord) ? storedRecord : undefined;
       // 初始化文件状态
       await fileStateActions.initializeFileState(stored, currentFileId);
 

@@ -18,6 +18,7 @@
  */
 import { computed, ref, type CSSProperties } from 'vue';
 import type { RecentRecord } from '@/shared/storage';
+import { isDocumentRecord } from '@/shared/storage';
 import { DEFAULT_FALLBACK_ICON, getFileIconByName, WEB_RECORD_ICON } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 
@@ -78,7 +79,7 @@ const resolvedIcon = computed<string>(() => {
     return WEB_RECORD_ICON;
   }
 
-  if (props.record?.type === 'file') {
+  if (props.record && isDocumentRecord(props.record)) {
     return getFileIconByName(resolveFileTitle(props.record));
   }
 

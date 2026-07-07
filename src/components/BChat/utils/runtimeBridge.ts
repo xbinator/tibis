@@ -6,7 +6,8 @@ import type { AIToolContext, AIToolExecutionError } from 'types/ai';
 import type { ChatRuntimeBridgeRequestEvent } from 'types/chat-runtime';
 import type { WebviewOperateInput, WebviewPressKey, WebviewToolContext } from '@/ai/tools/context/webview';
 import type { OpenDraftInput, OpenDraftResult } from '@/ai/tools/shared/types';
-import type { StoredFile } from '@/shared/storage/files/types';
+import { isDocumentRecord } from '@/shared/storage';
+import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { isAbsoluteFilePath } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath, parseUnsavedPath } from '@/utils/file/unsaved';
 
@@ -50,9 +51,9 @@ export interface BChatRuntimeBridgeDependencies {
   /** 通过文件路径查找文件记录。 */
   findFileByPath?: (filePath: string) => Promise<{ id: string } | null>;
   /** 通过最近文件 ID 获取文件记录。 */
-  getRecentFileById?: (fileId: string) => StoredFile | undefined | Promise<StoredFile | undefined>;
+  getRecentFileById?: (fileId: string) => StoredDocumentRecord | undefined | Promise<StoredDocumentRecord | undefined>;
   /** 更新最近文件记录。 */
-  updateRecentFileById?: (fileId: string, updates: Partial<StoredFile>) => Promise<StoredFile>;
+  updateRecentFileById?: (fileId: string, updates: Partial<StoredDocumentRecord>) => Promise<StoredDocumentRecord>;
   /** 获取当前 WebView 工具上下文。 */
   getWebviewContext: () => WebviewToolContext | undefined;
   /** 获取应用设置快照。 */
@@ -289,7 +290,7 @@ async function readFileContentSnapshot(
   if (isUnsavedPath(filePath)) {
     const unsavedReference = parseUnsavedPath(filePath);
     const file = unsavedReference ? await dependencies.getRecentFileById?.(unsavedReference.fileId) : undefined;
-    if (!file || file.type !== 'file') {
+    if (!isDocumentRecord(file)) {
       throw createBridgeError('EDITOR_UNAVAILABLE', '当前没有可用的未保存文件内容');
     }
 

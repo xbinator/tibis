@@ -7,11 +7,10 @@ import { useRouter } from 'vue-router';
 import { customAlphabet } from 'nanoid';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { native } from '@/shared/platform';
-import type { StoredFile } from '@/shared/storage/files/types';
+import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/workspace/files';
 import { useTabsStore } from '@/stores/workspace/tabs';
 import { Modal } from '@/utils/modal';
-import { createTibisDocumentContent, resolveTibisDocumentRoute } from './useFileSession';
 
 const createFileId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz_', 8);
 
@@ -33,32 +32,30 @@ interface FileRouteLocation {
  */
 interface OpenFileActions {
   /** 打开最近文件记录 */
-  openFile: (file: StoredFile) => Promise<StoredFile | null>;
+  openFile: (file: StoredDocumentRecord) => Promise<StoredDocumentRecord | null>;
   /** 通过文件 ID 打开最近文件 */
-  openFileById: (id: string) => Promise<StoredFile | null>;
+  openFileById: (id: string) => Promise<StoredDocumentRecord | null>;
   /** 通过磁盘路径打开文件 */
-  openFileByPath: (path: string) => Promise<StoredFile | null>;
+  openFileByPath: (path: string) => Promise<StoredDocumentRecord | null>;
   /** 通过原生文件选择器打开文件 */
-  openNativeFile: () => Promise<StoredFile | null>;
+  openNativeFile: () => Promise<StoredDocumentRecord | null>;
   /** 创建新的 Markdown 文件 */
-  createNewFile: () => Promise<StoredFile>;
-  /** 创建新的 Tibis Widget 文件 */
-  createNewWidgetFile: () => Promise<StoredFile>;
+  createNewFile: () => Promise<StoredDocumentRecord>;
+  /** 创建新的 Widget 文件 */
+  createNewWidgetFile: () => Promise<StoredDocumentRecord>;
 }
 
 /**
- * 根据文件内容解析目标路由。
+ * 根据文件记录类型解析目标路由。
  * @param file - 最近文件记录
  * @returns 路由位置
  */
-function resolveFileRoute(file: StoredFile): FileRouteLocation {
-  if (file.ext !== 'tibis') {
-    return { name: 'editor', params: { id: file.id } };
+function resolveFileRoute(file: StoredDocumentRecord): FileRouteLocation {
+  if (file.type === 'widget') {
+    return { name: 'widget', params: { id: file.id } };
   }
 
-  const route = resolveTibisDocumentRoute(file.content);
-
-  return { name: route.routeName, params: { id: file.id } };
+  return { name: 'editor', params: { id: file.id } };
 }
 
 /**
@@ -90,7 +87,7 @@ export function useOpenFile(): OpenFileActions {
    * @param path - 文件绝对路径
    * @returns 打开的文件记录；未命中时返回 null
    */
-  async function openFileByPath(path: string): Promise<StoredFile | null> {
+  async function openFileByPath(path: string): Promise<StoredDocumentRecord | null> {
     const openedTabPath = await findOpenTabPathByFilePath(path);
     if (openedTabPath) {
       await router.push(openedTabPath);
@@ -120,7 +117,7 @@ export function useOpenFile(): OpenFileActions {
    * @param file - 文件记录
    * @returns 打开的文件记录；文件不存在时为 null
    */
-  async function openFile(file: StoredFile): Promise<StoredFile | null> {
+  async function openFile(file: StoredDocumentRecord): Promise<StoredDocumentRecord | null> {
     // 有磁盘路径则走路径统一入口，确保文件存在性校验。
     if (file.path) {
       return openFileByPath(file.path);
@@ -138,7 +135,7 @@ export function useOpenFile(): OpenFileActions {
    * @param id - 文件 ID
    * @returns 更新后的文件记录；未命中时返回 null
    */
-  async function openFileById(id: string): Promise<StoredFile | null> {
+  async function openFileById(id: string): Promise<StoredDocumentRecord | null> {
     const file = await filesStore.getFileById(id);
     if (!file) return null;
 
@@ -153,7 +150,7 @@ export function useOpenFile(): OpenFileActions {
    * 通过原生文件选择器打开文件。
    * @returns 打开的文件记录；用户取消时返回 null
    */
-  async function openNativeFile(): Promise<StoredFile | null> {
+  async function openNativeFile(): Promise<StoredDocumentRecord | null> {
     const file = await native.openFile();
     if (!file.path) return null;
 
@@ -164,7 +161,7 @@ export function useOpenFile(): OpenFileActions {
    * 创建一个新的未保存文件并打开。
    * @returns 创建后的文件记录
    */
-  async function createNewFile(): Promise<StoredFile> {
+  async function createNewFile(): Promise<StoredDocumentRecord> {
     const createdFile = await filesStore.createAndOpen({
       type: 'file',
       id: createFileId(),
@@ -183,19 +180,15 @@ export function useOpenFile(): OpenFileActions {
    * 创建一个新的未保存 Widget 文件并打开。
    * @returns 创建后的文件记录
    */
-  async function createNewWidgetFile(): Promise<StoredFile> {
+  async function createNewWidgetFile(): Promise<StoredDocumentRecord> {
     const dataItem = createDefaultWidgetData();
-    const content = createTibisDocumentContent({
-      type: 'widget',
-      version: 1,
-      data: dataItem
-    });
+    const content = JSON.stringify(dataItem, null, 2);
     const createdFile = await filesStore.createAndOpen({
-      type: 'file',
+      type: 'widget',
       id: createFileId(),
       path: null,
       name: 'Untitled',
-      ext: 'tibis',
+      ext: 'json',
       content,
       savedContent: content
     });

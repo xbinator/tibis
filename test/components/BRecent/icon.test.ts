@@ -109,7 +109,7 @@ describe('BRecentIcon', (): void => {
 
   it('resolves standalone file names through the shared file icon map', (): void => {
     const wrapper = mountRecentRecordIcon({
-      fileName: 'board.tibis',
+      fileName: 'board.json',
       size: 14
     });
 

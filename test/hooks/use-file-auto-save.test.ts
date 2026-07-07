@@ -28,7 +28,7 @@ function createState(content: string): FileSessionState {
   return {
     id: 'file-1',
     name: 'Untitled',
-    ext: 'tibis',
+    ext: 'json',
     path: null,
     content
   };

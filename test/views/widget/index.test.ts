@@ -70,14 +70,14 @@ vi.mock('@/stores/workspace/tabs', () => ({
 vi.mock('@/hooks/useFileSession', () => ({
   useFileSession: () => ({
     currentTitle: {
-      value: 'board.tibis',
+      value: 'board.json',
       __v_isRef: true
     },
     fileState: {
       value: {
         id: 'widget-1',
         name: 'board',
-        ext: 'tibis',
+        ext: 'json',
         path: null,
         content: ''
       },
@@ -271,7 +271,7 @@ describe('WidgetPage', (): void => {
     expect(addTabMock).toHaveBeenCalledWith({
       id: 'widget-1',
       path: '/widget/widget-1',
-      title: 'board.tibis',
+      title: 'board.json',
       cacheKey: 'widget:widget-1'
     });
 

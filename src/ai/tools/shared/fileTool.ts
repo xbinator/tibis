@@ -4,8 +4,8 @@
  */
 import type { AIToolConfirmationAdapter, AIToolConfirmationRequest } from '../confirmation';
 import type { AIToolContext, AIToolExecutionError, AIToolExecutionResult } from 'types/ai';
-import { recentFilesStorage } from '@/shared/storage';
-import type { StoredFile } from '@/shared/storage/files/types';
+import { isDocumentRecord, recentFilesStorage } from '@/shared/storage';
+import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { isAbsoluteFilePath, isPathInsideWorkspace, resolvePathAgainstWorkspace } from '@/shared/workspace/pathUtils';
 import { isUnsavedPath as isUnsavedPathUtil } from '@/utils/file/unsaved';
 import { createToolCancelledResult, createToolFailureResult, createToolSuccessResult } from '../results';
@@ -29,9 +29,9 @@ export type ResolveResult =
  */
 export interface UnsavedDraftOptions {
   /** 按草稿 ID 读取未保存文件。 */
-  getUnsavedDraft?: (fileId: string) => Promise<StoredFile | null>;
+  getUnsavedDraft?: (fileId: string) => Promise<StoredDocumentRecord | null>;
   /** 更新未保存文件内容。 */
-  updateUnsavedDraft?: (fileId: string, updates: Partial<StoredFile>) => Promise<StoredFile>;
+  updateUnsavedDraft?: (fileId: string, updates: Partial<StoredDocumentRecord>) => Promise<StoredDocumentRecord>;
 }
 
 // ─── 错误映射 ─────────────────────────────────────────────────────────────────
@@ -117,13 +117,13 @@ export function isActiveDocumentTarget(context: AIToolContext | undefined, targe
  * @param fileId - 草稿 ID
  * @returns 草稿记录，不存在时返回 null
  */
-export async function readUnsavedDraft(options: UnsavedDraftOptions, fileId: string): Promise<StoredFile | null> {
+export async function readUnsavedDraft(options: UnsavedDraftOptions, fileId: string): Promise<StoredDocumentRecord | null> {
   if (!fileId.trim()) return null;
   const getter =
     options.getUnsavedDraft ??
     (async (id: string) => {
       const record = await recentFilesStorage.getRecentFile(id);
-      return record?.type === 'file' ? record : null;
+      return isDocumentRecord(record) ? record : null;
     });
   return getter(fileId);
 }
@@ -135,9 +135,9 @@ export async function readUnsavedDraft(options: UnsavedDraftOptions, fileId: str
  * @param updates - 需更新的字段
  * @returns 更新后的草稿记录
  */
-export async function writeUnsavedDraft(options: UnsavedDraftOptions, fileId: string, updates: Partial<StoredFile>): Promise<StoredFile> {
+export async function writeUnsavedDraft(options: UnsavedDraftOptions, fileId: string, updates: Partial<StoredDocumentRecord>): Promise<StoredDocumentRecord> {
   if (!fileId.trim()) throw new Error('未保存文档 ID 不能为空');
-  const updater = options.updateUnsavedDraft ?? ((id: string, u: Partial<StoredFile>) => recentFilesStorage.updateRecentFile(id, u));
+  const updater = options.updateUnsavedDraft ?? ((id: string, u: Partial<StoredDocumentRecord>) => recentFilesStorage.updateRecentFile(id, u));
   return updater(fileId, updates);
 }
 

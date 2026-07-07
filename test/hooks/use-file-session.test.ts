@@ -1,12 +1,12 @@
 /**
  * @file use-file-session.test.ts
- * @description 验证通用文件会话和 .tibis 容器工具。
+ * @description 验证通用文件会话与 Widget JSON 会话。
  */
 import { effectScope, nextTick, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WidgetData } from '@/components/BWidget/types';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { createTibisDocumentContent, parseTibisDocumentContent, resolveTibisDocumentRoute, useFileSession } from '@/hooks/useFileSession';
+import { useFileSession } from '@/hooks/useFileSession';
 import type { FileChangeEvent } from '@/shared/platform/native/types';
 
 const getFileByIdMock = vi.hoisted(() => vi.fn());
@@ -106,67 +106,6 @@ function flushPromises(): Promise<void> {
   });
 }
 
-describe('tibis document helpers', (): void => {
-  it('serializes widget data as flat top-level tibis JSON', (): void => {
-    const content = createTibisDocumentContent({
-      type: 'widget',
-      version: 1,
-      data: createWidgetData()
-    });
-
-    expect(JSON.parse(content)).toEqual({
-      type: 'widget',
-      version: 1,
-      ...createWidgetData()
-    });
-  });
-
-  it('parses flat tibis JSON and strips type and version from data', (): void => {
-    const parsed = parseTibisDocumentContent<WidgetData>(
-      JSON.stringify({
-        type: 'widget',
-        version: 1,
-        metadata: {},
-        elements: []
-      })
-    );
-
-    expect(parsed.supported).toBe(true);
-    expect(parsed.type).toBe('widget');
-    expect(parsed.version).toBe(1);
-    expect(parsed.data).toEqual({
-      metadata: {},
-      elements: []
-    });
-  });
-
-  it('checks tibis support against the requested type and version', (): void => {
-    const parsed = parseTibisDocumentContent<Record<string, unknown>>(
-      JSON.stringify({
-        type: 'workflow',
-        version: 1,
-        nodes: []
-      }),
-      { type: 'workflow', version: 1 }
-    );
-
-    expect(parsed.supported).toBe(true);
-    expect(parsed.data).toEqual({
-      nodes: []
-    });
-  });
-
-  it('routes supported widget documents to widget and invalid content to editor', (): void => {
-    expect(resolveTibisDocumentRoute('{"type":"widget","version":1,"elements":[]}')).toEqual({
-      routeName: 'widget'
-    });
-
-    expect(resolveTibisDocumentRoute('{broken')).toEqual({
-      routeName: 'editor'
-    });
-  });
-});
-
 describe('useFileSession', (): void => {
   beforeEach((): void => {
     getFileByIdMock.mockReset();
@@ -187,7 +126,7 @@ describe('useFileSession', (): void => {
     onFileChangedMock.mockReturnValue(vi.fn());
   });
 
-  it('creates default widget tibis content when no stored file exists', async (): Promise<void> => {
+  it('creates default widget JSON content when no stored file exists', async (): Promise<void> => {
     getFileByIdMock.mockResolvedValue(undefined);
     addFileMock.mockResolvedValue(undefined);
     const scope = effectScope();
@@ -197,12 +136,11 @@ describe('useFileSession', (): void => {
     await scope.run(async (): Promise<void> => {
       const session = useFileSession<WidgetData>({
         fileId,
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });
@@ -212,21 +150,25 @@ describe('useFileSession', (): void => {
     });
     scope.stop();
 
-    expect(JSON.parse(content)).toEqual({
-      type: 'widget',
-      version: 1,
-      ...createWidgetData()
-    });
+    expect(JSON.parse(content)).toEqual(createWidgetData());
+    expect(JSON.parse(content)).not.toHaveProperty('type');
+    expect(JSON.parse(content)).not.toHaveProperty('version');
+    expect(addFileMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'widget',
+        ext: 'json'
+      })
+    );
   });
 
   it('writes to existing disk path on save', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
+    const content = JSON.stringify(createWidgetData(), null, 2);
     getFileByIdMock.mockResolvedValue({
-      type: 'file',
+      type: 'widget',
       id: 'widget-1',
-      path: '/tmp/board.tibis',
+      path: '/tmp/widget.json',
       name: 'board',
-      ext: 'tibis',
+      ext: 'json',
       content,
       savedContent: content
     });
@@ -236,12 +178,11 @@ describe('useFileSession', (): void => {
     await scope.run(async (): Promise<void> => {
       const session = useFileSession<WidgetData>({
         fileId: ref('widget-1'),
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });
@@ -251,17 +192,24 @@ describe('useFileSession', (): void => {
     });
     scope.stop();
 
-    expect(writeFileMock).toHaveBeenCalledWith('/tmp/board.tibis', content);
+    expect(writeFileMock).toHaveBeenCalledWith('/tmp/widget.json', content);
+    expect(updateFileMock).toHaveBeenCalledWith(
+      'widget-1',
+      expect.objectContaining({
+        type: 'widget',
+        content
+      })
+    );
   });
 
-  it('does not mark stored tibis content dirty while loading', async (): Promise<void> => {
-    const content = '{"type":"widget","version":1,"elements":[]}';
+  it('does not mark stored widget JSON content dirty while loading', async (): Promise<void> => {
+    const content = JSON.stringify(createWidgetData(), null, 2);
     getFileByIdMock.mockResolvedValue({
-      type: 'file',
+      type: 'widget',
       id: 'widget-1',
-      path: '/tmp/board.tibis',
+      path: '/tmp/widget.json',
       name: 'board',
-      ext: 'tibis',
+      ext: 'json',
       content,
       savedContent: content
     });
@@ -270,12 +218,11 @@ describe('useFileSession', (): void => {
     await scope.run(async (): Promise<void> => {
       useFileSession<WidgetData>({
         fileId: ref('widget-1'),
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });
@@ -289,14 +236,14 @@ describe('useFileSession', (): void => {
     expect(writeFileMock).not.toHaveBeenCalled();
   });
 
-  it('marks unsaved tibis drafts dirty when stored content differs from the saved baseline', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
+  it('marks unsaved widget drafts dirty when stored content differs from the saved baseline', async (): Promise<void> => {
+    const content = JSON.stringify(createWidgetData(), null, 2);
     getFileByIdMock.mockResolvedValue({
-      type: 'file',
+      type: 'widget',
       id: 'widget-1',
       path: null,
       name: 'board',
-      ext: 'tibis',
+      ext: 'json',
       content,
       savedContent: ''
     });
@@ -305,12 +252,11 @@ describe('useFileSession', (): void => {
     await scope.run(async (): Promise<void> => {
       useFileSession<WidgetData>({
         fileId: ref('widget-1'),
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });
@@ -324,15 +270,15 @@ describe('useFileSession', (): void => {
     expect(clearDirtyMock).not.toHaveBeenCalledWith('widget-1');
   });
 
-  it('marks disk-backed tibis drafts dirty when stored content differs from the saved baseline', async (): Promise<void> => {
-    const savedContent = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
+  it('marks disk-backed widget drafts dirty when stored content differs from the saved baseline', async (): Promise<void> => {
+    const savedContent = JSON.stringify(createWidgetData(), null, 2);
     const draftContent = savedContent.replace('"elements": []', '"elements": [{"id":"node-1"}]');
     getFileByIdMock.mockResolvedValue({
-      type: 'file',
+      type: 'widget',
       id: 'widget-1',
-      path: '/tmp/board.tibis',
+      path: '/tmp/widget.json',
       name: 'board',
-      ext: 'tibis',
+      ext: 'json',
       content: draftContent,
       savedContent
     });
@@ -341,12 +287,11 @@ describe('useFileSession', (): void => {
     await scope.run(async (): Promise<void> => {
       useFileSession<WidgetData>({
         fileId: ref('widget-1'),
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });
@@ -360,21 +305,20 @@ describe('useFileSession', (): void => {
     expect(clearDirtyMock).not.toHaveBeenCalledWith('widget-1');
   });
 
-  it('uses tibis save filter when saving with dialog', async (): Promise<void> => {
+  it('uses JSON default path when saving a widget with dialog', async (): Promise<void> => {
     getFileByIdMock.mockResolvedValue(undefined);
     addFileMock.mockResolvedValue(undefined);
-    saveFileMock.mockResolvedValue('/tmp/board.tibis');
+    saveFileMock.mockResolvedValue('/tmp/widget.json');
     const scope = effectScope();
 
     await scope.run(async (): Promise<void> => {
       const session = useFileSession<WidgetData>({
         fileId: ref('widget-1'),
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });
@@ -388,10 +332,10 @@ describe('useFileSession', (): void => {
       expect.any(String),
       undefined,
       expect.objectContaining({
-        defaultPath: 'Untitled.tibis',
-        filters: [{ name: 'Tibis', extensions: ['tibis'] }]
+        defaultPath: 'Untitled.json'
       })
     );
+    expect(saveFileMock.mock.calls[0]?.[2]).not.toHaveProperty('filters');
   });
 
   it('syncs text mode data changes into file content', async (): Promise<void> => {
@@ -422,13 +366,13 @@ describe('useFileSession', (): void => {
   });
 
   it('registers disk paths for missing file tracking', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
+    const content = JSON.stringify(createWidgetData(), null, 2);
     getFileByIdMock.mockResolvedValue({
-      type: 'file',
+      type: 'widget',
       id: 'widget-1',
-      path: '/tmp/board.tibis',
+      path: '/tmp/widget.json',
       name: 'board',
-      ext: 'tibis',
+      ext: 'json',
       content,
       savedContent: content
     });
@@ -437,12 +381,11 @@ describe('useFileSession', (): void => {
     await scope.run(async (): Promise<void> => {
       useFileSession<WidgetData>({
         fileId: ref('widget-1'),
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });
@@ -451,22 +394,26 @@ describe('useFileSession', (): void => {
     });
     scope.stop();
 
-    expect(registerWatchMock).toHaveBeenCalledWith('widget-1', '/tmp/board.tibis');
+    expect(registerWatchMock).toHaveBeenCalledWith('widget-1', '/tmp/widget.json');
   });
 
-  it('routes to fallback when an external change makes tibis content unsupported', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
+  it('updates widget data when an external change writes valid widget JSON', async (): Promise<void> => {
+    const content = JSON.stringify(createWidgetData(), null, 2);
+    const nextData = {
+      ...createWidgetData(),
+      name: '天气新版'
+    };
     let fileChangedHandler: ((event: FileChangeEvent) => void) | null = null;
     onFileChangedMock.mockImplementation((handler: (event: FileChangeEvent) => void): (() => void) => {
       fileChangedHandler = handler;
       return vi.fn();
     });
     getFileByIdMock.mockResolvedValue({
-      type: 'file',
+      type: 'widget',
       id: 'widget-1',
-      path: '/tmp/board.tibis',
+      path: '/tmp/widget.json',
       name: 'board',
-      ext: 'tibis',
+      ext: 'json',
       content,
       savedContent: content
     });
@@ -475,12 +422,11 @@ describe('useFileSession', (): void => {
     await scope.run(async (): Promise<void> => {
       useFileSession<WidgetData>({
         fileId: ref('widget-1'),
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });
@@ -488,8 +434,8 @@ describe('useFileSession', (): void => {
       await flushPromises();
       fileChangedHandler?.({
         type: 'change',
-        filePath: '/tmp/board.tibis',
-        content: '{"type":"workflow","version":1}'
+        filePath: '/tmp/widget.json',
+        content: JSON.stringify(nextData, null, 2)
       });
       await flushPromises();
     });
@@ -498,20 +444,21 @@ describe('useFileSession', (): void => {
     expect(updateFileMock).toHaveBeenCalledWith(
       'widget-1',
       expect.objectContaining({
-        content: '{"type":"workflow","version":1}'
+        type: 'widget',
+        content: JSON.stringify(nextData, null, 2)
       })
     );
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'editor', params: { id: 'widget-1' } });
+    expect(routerPushMock).not.toHaveBeenCalled();
   });
 
-  it('does not write disk when tibis serialization fails', async (): Promise<void> => {
-    const content = createTibisDocumentContent({ type: 'widget', version: 1, data: createWidgetData() });
+  it('does not write disk when widget serialization fails', async (): Promise<void> => {
+    const content = JSON.stringify(createWidgetData(), null, 2);
     getFileByIdMock.mockResolvedValue({
-      type: 'file',
+      type: 'widget',
       id: 'widget-1',
-      path: '/tmp/board.tibis',
+      path: '/tmp/widget.json',
       name: 'board',
-      ext: 'tibis',
+      ext: 'json',
       content,
       savedContent: content
     });
@@ -522,12 +469,11 @@ describe('useFileSession', (): void => {
     await scope.run(async (): Promise<void> => {
       const session = useFileSession<WidgetData>({
         fileId: ref('widget-1'),
-        kind: 'tibis',
+        kind: 'widget',
+        recordType: 'widget',
         defaultName: 'Untitled',
-        defaultExt: 'tibis',
+        defaultExt: 'json',
         defaultData: createWidgetData(),
-        type: 'widget',
-        version: 1,
         routeName: 'widget',
         fallbackRouteName: 'editor'
       });

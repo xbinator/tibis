@@ -3,10 +3,18 @@
  * @description 最近记录存储的读写、排序派生与时间字段归一化（支持文件 + WebView 网页）。
  */
 
-import type { StoredFile, WebviewRecord, RecentRecord, WebviewRecordOptions } from './types';
 import { isEqual, isNumber, noop } from 'lodash-es';
 import { getElectronAPI } from '../../platform/electron-api';
 import { hashString } from '../../utils/hash';
+import {
+  isDocumentRecord,
+  type StoredDocumentRecord,
+  type StoredFile,
+  type StoredWidget,
+  type WebviewRecord,
+  type RecentRecord,
+  type WebviewRecordOptions
+} from './types';
 
 const RECENT_FILES_KEY = 'recent_files';
 const MAX_RECENT_FILES = 100;
@@ -68,22 +76,25 @@ function deriveFileTitleParts(filePath: string | null): { name: string; ext: str
 }
 
 /**
- * 将单个文件记录归一化到当前存储模型。
+ * 将单个文件型记录归一化到当前存储模型。
  * 对于未保存的内存文件（path === null），将当前内容作为 savedContent 基线，
  * 防止首次入库后丢失 baseline。
+ * @param file - 文件型记录
+ * @param type - 目标记录类型
+ * @returns 归一化后的文件型记录
  */
-function normalizeStoredFile(file: StoredFile): StoredFile {
+function normalizeStoredDocumentRecord<T extends StoredDocumentRecord>(file: T, type: T['type']): T {
   const rawFile = file as unknown as Record<string, unknown>;
   const normalizedPath = normalizePathField(rawFile.path);
   const derivedTitleParts = deriveFileTitleParts(normalizedPath);
-  const normalizedFile: StoredFile = {
+  const normalizedFile = {
     ...file,
-    type: 'file',
+    type,
     path: normalizedPath,
     content: normalizeContentField(rawFile.content),
     name: normalizeTextField(rawFile.name) || derivedTitleParts.name,
     ext: normalizeTextField(rawFile.ext).replace(/^\.+/, '') || derivedTitleParts.ext
-  };
+  } as T;
 
   if (normalizedFile.savedContent === undefined && normalizedFile.path === null) {
     return { ...normalizedFile, savedContent: normalizedFile.content };
@@ -100,14 +111,23 @@ function normalizeStoredFiles(files: RecentRecord[]): { files: RecentRecord[]; c
   const normalizedFiles = files.map((file) => {
     const rawRecord = file as unknown as Record<string, unknown>;
 
-    if (rawRecord.type !== 'webview') {
-      const normalized = normalizeStoredFile({ ...rawRecord, type: 'file' } as StoredFile);
+    if (rawRecord.type === 'webview') {
+      return file;
+    }
+
+    if (rawRecord.type === 'widget') {
+      const normalized = normalizeStoredDocumentRecord({ ...rawRecord, type: 'widget' } as StoredWidget, 'widget');
       if (!changed && !isEqual(normalized, file)) {
         changed = true;
       }
       return normalized;
     }
-    return file;
+
+    const normalized = normalizeStoredDocumentRecord({ ...rawRecord, type: 'file' } as StoredFile, 'file');
+    if (!changed && !isEqual(normalized, file)) {
+      changed = true;
+    }
+    return normalized;
   });
 
   return { files: normalizedFiles, changed };
@@ -122,7 +142,7 @@ function normalizeTime(value: number | undefined): number {
 
 /**
  * 依据 openedAt 降序排列记录。
- * file 记录回退到 modifiedAt → createdAt；webview 记录仅按 openedAt 排序。
+ * 文件型记录回退到 modifiedAt → createdAt；webview 记录仅按 openedAt 排序。
  */
 export function sortRecentFiles(records: RecentRecord[]): RecentRecord[] {
   return [...records].sort((a, b) => {
@@ -132,11 +152,9 @@ export function sortRecentFiles(records: RecentRecord[]): RecentRecord[] {
 
     if (diff !== 0) return diff;
 
-    // file 记录有 modifiedAt / createdAt 回退，webview 记录没有
-    if (a.type === 'file' && b.type === 'file') {
-      return (
-        normalizeTime((a as StoredFile).modifiedAt) - normalizeTime((b as StoredFile).modifiedAt) || normalizeTime(a.createdAt) - normalizeTime(b.createdAt)
-      );
+    // 文件型记录有 modifiedAt / createdAt 回退，webview 记录没有
+    if (isDocumentRecord(a) && isDocumentRecord(b)) {
+      return normalizeTime(a.modifiedAt) - normalizeTime(b.modifiedAt) || normalizeTime(a.createdAt) - normalizeTime(b.createdAt);
     }
 
     return 0;
@@ -160,7 +178,7 @@ async function setElectronStoreValue(key: string, value: unknown): Promise<void>
  * 对缺失 type 字段的旧记录自动补 'file'（迁移逻辑）。
  */
 async function readRecentFiles(): Promise<RecentRecord[]> {
-  const stored = (await getElectronStoreValue<(StoredFile | WebviewRecord)[]>(RECENT_FILES_KEY)) ?? [];
+  const stored = (await getElectronStoreValue<RecentRecord[]>(RECENT_FILES_KEY)) ?? [];
   const { files, changed: normalized } = normalizeStoredFiles(stored);
 
   if (normalized) {
@@ -188,20 +206,22 @@ function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
 
 export const recentFilesStorage = {
   /**
-   * 添加或覆盖最近文件记录。
+   * 添加或覆盖最近文件型记录。
    * createdAt / openedAt 缺失时自动补充为当前时间。
-   * 确保 type: 'file' 字段存在。
+   * 保留普通文件与 Widget 的记录类型。
    */
-  async addRecentFile(file: StoredFile): Promise<void> {
+  async addRecentFile(file: StoredDocumentRecord): Promise<void> {
     await enqueueWrite(async () => {
       const files = await readRecentFiles();
       const now = Date.now();
-      const normalized = normalizeStoredFile({
-        ...file,
-        type: 'file' as const,
-        createdAt: file.createdAt ?? now,
-        openedAt: file.openedAt ?? now
-      });
+      const normalized = normalizeStoredDocumentRecord(
+        {
+          ...file,
+          createdAt: file.createdAt ?? now,
+          openedAt: file.openedAt ?? now
+        },
+        file.type
+      );
 
       // 去重后前置，降低下次读取时重排的成本
       const deduped = files.filter((item) => item.id !== normalized.id);
@@ -230,18 +250,21 @@ export const recentFilesStorage = {
    * 更新指定文件的部分字段。
    * openedAt 只接受正有限数，其余情况保留原值。
    */
-  async updateRecentFile(id: string, updates: Partial<StoredFile>): Promise<StoredFile> {
+  async updateRecentFile(id: string, updates: Partial<StoredDocumentRecord>): Promise<StoredDocumentRecord> {
     return enqueueWrite(async () => {
       const files = await readRecentFiles();
       const index = files.findIndex((item) => item.id === id);
 
       if (index === -1) throw new Error(`File not found: ${id}`);
 
-      const file = files[index] as StoredFile;
+      const file = files[index];
+      if (!isDocumentRecord(file)) throw new Error(`File not found: ${id}`);
+
       const prevOpenedAt = file.openedAt;
       const nextOpenedAt = isNumber(updates.openedAt) && Number.isFinite(updates.openedAt) && updates.openedAt ? updates.openedAt : prevOpenedAt;
 
-      const nextFile = normalizeStoredFile({ ...file, ...updates, openedAt: nextOpenedAt });
+      const nextType = updates.type ?? file.type;
+      const nextFile = normalizeStoredDocumentRecord({ ...file, ...updates, type: nextType, openedAt: nextOpenedAt }, nextType);
       files[index] = nextFile;
       await writeRecentFiles(files);
 
@@ -252,15 +275,17 @@ export const recentFilesStorage = {
   /**
    * 更新指定记录的 openedAt 为当前时间，并将其前置到原始存储数组头部。
    */
-  async touchRecentFile(id: string): Promise<StoredFile> {
+  async touchRecentFile(id: string): Promise<StoredDocumentRecord> {
     return enqueueWrite(async () => {
       const files = await readRecentFiles();
-      const index = files.findIndex((item) => item.type === 'file' && item.id === id);
+      const index = files.findIndex((item) => isDocumentRecord(item) && item.id === id);
 
       if (index === -1) throw new Error(`File not found: ${id}`);
 
-      const file = files[index] as StoredFile;
-      const touched: StoredFile = { ...file, openedAt: Date.now() };
+      const file = files[index];
+      if (!isDocumentRecord(file)) throw new Error(`File not found: ${id}`);
+
+      const touched: StoredDocumentRecord = { ...file, openedAt: Date.now() };
 
       // 移除原位置，前置到头部；读侧的 sortRecentFiles 会统一做派生排序
       files.splice(index, 1);
@@ -350,4 +375,4 @@ export const recentFilesStorage = {
   }
 };
 
-export type { StoredFile };
+export type { StoredDocumentRecord, StoredFile, StoredWidget };

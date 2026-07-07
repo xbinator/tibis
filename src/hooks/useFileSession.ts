@@ -1,17 +1,14 @@
 /**
  * @file useFileSession.ts
- * @description 通用文件会话 hook 与 .tibis 文件容器工具。
+ * @description 通用文件会话 hook，支持文本与 Widget JSON 会话。
  */
 import type { SaveToDiskResult } from './useSavePolicy';
 import type { Ref } from 'vue';
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
-import { isPlainObject } from 'lodash-es';
-import { TIBIS_FILE_FILTER } from '@/constants/extensions';
 import { useClipboard } from '@/hooks/useClipboard';
 import { native } from '@/shared/platform';
 import type { File, FileChangeEvent } from '@/shared/platform/native/types';
-import type { StoredFile } from '@/shared/storage/files/types';
+import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { useEditorFileWatchStore } from '@/stores/editor/fileWatch';
 import { useEditorPreferencesStore } from '@/stores/editor/preferences';
 import { useFilesStore } from '@/stores/workspace/files';
@@ -33,7 +30,7 @@ export interface FileSessionState extends File {
 /**
  * 文件会话业务模式。
  */
-export type FileSessionKind = 'text' | 'tibis';
+export type FileSessionKind = 'text' | 'widget';
 
 /**
  * 通用文件会话配置。
@@ -43,16 +40,14 @@ export interface UseFileSessionOptions<TData> {
   fileId: Ref<string>;
   /** 文件会话类型 */
   kind: FileSessionKind;
+  /** 文件会话对应的存储记录类型。 */
+  recordType?: StoredDocumentRecord['type'];
   /** 默认文件名主体 */
   defaultName: string;
   /** 默认扩展名 */
   defaultExt: string;
   /** 默认业务数据 */
   defaultData: TData;
-  /** .tibis 业务类型 */
-  type?: string;
-  /** .tibis 业务版本 */
-  version?: number;
   /** 当前业务路由名称 */
   routeName: string;
   /** 不支持当前内容时的兜底路由名称 */
@@ -91,135 +86,11 @@ export interface UseFileSessionReturn<TData> {
 }
 
 /**
- * .tibis 文档解析结果。
- */
-export interface TibisDocumentParseResult<TData> {
-  /** 是否是当前支持的 Tibis 文档 */
-  supported: boolean;
-  /** 文档类型 */
-  type: string;
-  /** 文档版本 */
-  version: number;
-  /** 业务数据 */
-  data: TData;
-  /** 原始解析错误 */
-  error?: Error;
-}
-
-/**
- * .tibis 文档序列化参数。
- */
-export interface CreateTibisDocumentContentOptions<TData extends object> {
-  /** 业务文档类型 */
-  type: string;
-  /** 业务数据版本 */
-  version: number;
-  /** 业务数据 */
-  data: TData;
-}
-
-/**
- * .tibis 文档支持性判断参数。
- */
-export interface TibisDocumentSupportOptions {
-  /** 期望的业务文档类型 */
-  type: string;
-  /** 期望的业务数据版本 */
-  version: number;
-}
-
-/**
- * Tibis 路由解析结果。
- */
-export interface TibisDocumentRouteTarget {
-  /** 目标路由名称 */
-  routeName: 'widget' | 'editor';
-}
-
-/**
- * 判断值是否为可索引对象。
- * @param value - 待判断值
- * @returns 是否为普通对象记录
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value);
-}
-
-/**
- * 将业务数据序列化为扁平 .tibis 文档内容。
- * @param options - 序列化参数
- * @returns JSON 字符串
- */
-export function createTibisDocumentContent<TData extends object>(options: CreateTibisDocumentContentOptions<TData>): string {
-  return JSON.stringify(
-    {
-      type: options.type,
-      version: options.version,
-      ...options.data
-    },
-    null,
-    2
-  );
-}
-
-/**
- * 解析 .tibis 文档内容。
- * @param content - 原始文件内容
- * @returns 解析结果
- */
-export function parseTibisDocumentContent<TData extends object>(
-  content: string,
-  options: TibisDocumentSupportOptions = { type: 'widget', version: 1 }
-): TibisDocumentParseResult<TData> {
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    if (!isRecord(parsed)) {
-      return {
-        supported: false,
-        type: '',
-        version: 0,
-        data: {} as TData,
-        error: new Error('Tibis document must be an object')
-      };
-    }
-
-    const { type, version, ...data } = parsed;
-    return {
-      supported: type === options.type && version === options.version,
-      type: typeof type === 'string' ? type : '',
-      version: typeof version === 'number' ? version : 0,
-      data: data as TData
-    };
-  } catch (error: unknown) {
-    return {
-      supported: false,
-      type: '',
-      version: 0,
-      data: {} as TData,
-      error: error instanceof Error ? error : new Error('Failed to parse Tibis document')
-    };
-  }
-}
-
-/**
- * 解析 .tibis 文档对应的目标路由。
- * @param content - 原始文件内容
- * @returns 路由目标
- */
-export function resolveTibisDocumentRoute(content: string): TibisDocumentRouteTarget {
-  const parsed = parseTibisDocumentContent<Record<string, unknown>>(content);
-
-  return {
-    routeName: parsed.supported ? 'widget' : 'editor'
-  };
-}
-
-/**
  * 将最近文件记录转换为文件会话状态。
  * @param stored - 最近文件记录
  * @returns 文件会话状态
  */
-function createFileStateFromStored(stored: StoredFile): FileSessionState {
+function createFileStateFromStored(stored: StoredDocumentRecord): FileSessionState {
   return {
     id: stored.id,
     name: stored.name,
@@ -235,14 +106,7 @@ function createFileStateFromStored(stored: StoredFile): FileSessionState {
  * @returns 文件状态
  */
 function createDefaultFileState<TData>(options: UseFileSessionOptions<TData>): FileSessionState {
-  const content =
-    options.kind === 'tibis'
-      ? createTibisDocumentContent({
-          type: options.type ?? '',
-          version: options.version ?? 1,
-          data: options.defaultData as object
-        })
-      : String(options.defaultData ?? '');
+  const content = options.kind === 'widget' ? JSON.stringify(options.defaultData ?? {}, null, 2) : String(options.defaultData ?? '');
 
   return {
     id: options.fileId.value,
@@ -264,15 +128,11 @@ function createDataFromContent<TData>(options: UseFileSessionOptions<TData>, con
     return content as TData;
   }
 
-  const parsed = parseTibisDocumentContent<object>(content, {
-    type: options.type ?? '',
-    version: options.version ?? 1
-  });
-  if (!parsed.supported) {
+  try {
+    return JSON.parse(content) as TData;
+  } catch {
     return options.defaultData;
   }
-
-  return parsed.data as TData;
 }
 
 /**
@@ -281,7 +141,6 @@ function createDataFromContent<TData>(options: UseFileSessionOptions<TData>, con
  * @returns 文件会话
  */
 export function useFileSession<TData>(options: UseFileSessionOptions<TData>): UseFileSessionReturn<TData> {
-  const router = useRouter();
   const filesStore = useFilesStore();
   const tabsStore = useTabsStore();
   const fileWatchStore = useEditorFileWatchStore();
@@ -292,9 +151,18 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
   const savedContent = ref<string>(fileState.value.content);
   const syncingContentToData = ref<boolean>(false);
   const serializationError = ref<Error | null>(null);
-  const autoSave = useFileAutoSave(fileState);
+  const autoSave = useFileAutoSave(fileState, { recordType: options.recordType });
   const currentTitle = computed<string>(() => resolveFileTitle(fileState.value));
   let registeredWatchPath: string | null = null;
+
+  /**
+   * 读取当前会话应写入的最近记录类型。
+   * @param fallbackType - 已有记录类型
+   * @returns 最近记录类型
+   */
+  function readRecordType(fallbackType: StoredDocumentRecord['type'] = 'file'): StoredDocumentRecord['type'] {
+    return options.recordType ?? fallbackType;
+  }
 
   /**
    * 将业务数据安全序列化为文件内容。
@@ -308,15 +176,11 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     }
 
     try {
-      const content = createTibisDocumentContent({
-        type: options.type ?? '',
-        version: options.version ?? 1,
-        data: nextData as object
-      });
+      const content = JSON.stringify(nextData ?? {}, null, 2);
       serializationError.value = null;
       return content;
     } catch (error: unknown) {
-      serializationError.value = error instanceof Error ? error : new Error('serialize tibis document failed');
+      serializationError.value = error instanceof Error ? error : new Error('serialize widget document failed');
       return null;
     }
   }
@@ -375,9 +239,9 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     syncingContentToData.value = false;
 
     if (stored) {
-      await filesStore.updateFile(options.fileId.value, { ...fileState.value, savedContent: savedContent.value });
+      await filesStore.updateFile(options.fileId.value, { ...fileState.value, type: readRecordType(stored.type), savedContent: savedContent.value });
     } else {
-      await filesStore.addFile({ ...fileState.value, type: 'file', savedContent: savedContent.value });
+      await filesStore.addFile({ ...fileState.value, type: readRecordType(), savedContent: savedContent.value });
     }
 
     syncLoadedDirtyState();
@@ -394,6 +258,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     tabsStore.clearMissing(options.fileId.value);
     await filesStore.updateFile(options.fileId.value, {
       ...fileState.value,
+      type: readRecordType(),
       savedContent: fileState.value.content,
       savedAt
     });
@@ -432,7 +297,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     }
 
     const defaultPath = fileState.value.path || getDefaultSavePath(fileState.value);
-    const saveOptions = options.kind === 'tibis' ? { defaultPath, filters: [TIBIS_FILE_FILTER] } : { defaultPath };
+    const saveOptions = { defaultPath };
     const savedPath = await native.saveFile(fileState.value.content, undefined, saveOptions);
     if (!savedPath) {
       return false;
@@ -463,6 +328,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
     tabsStore.clearMissing(options.fileId.value);
     await filesStore.updateFile(options.fileId.value, {
       ...fileState.value,
+      type: readRecordType(),
       savedContent: content
     });
   }
@@ -480,24 +346,19 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
   }
 
   /**
-   * 应用外部 .tibis 内容变化。
+   * 应用外部 Widget JSON 内容变化。
    * @param content - 外部文件内容
    */
-  async function applyExternalTibisContent(content: string): Promise<void> {
-    const parsed = parseTibisDocumentContent<object>(content, {
-      type: options.type ?? '',
-      version: options.version ?? 1
-    });
-    if (!parsed.supported) {
-      await updateSessionContentFromDisk(content);
-      await router.push({ name: options.fallbackRouteName, params: { id: options.fileId.value } });
-      return;
+  async function applyExternalWidgetContent(content: string): Promise<void> {
+    try {
+      syncingContentToData.value = true;
+      data.value = JSON.parse(content) as TData;
+      await nextTick();
+    } catch {
+      // 外部 JSON 暂时不可解析时保留当前业务数据，只同步文件内容基线。
+    } finally {
+      syncingContentToData.value = false;
     }
-
-    syncingContentToData.value = true;
-    data.value = parsed.data as TData;
-    await nextTick();
-    syncingContentToData.value = false;
     await updateSessionContentFromDisk(content);
   }
 
@@ -539,7 +400,7 @@ export function useFileSession<TData>(options: UseFileSessionOptions<TData>): Us
       return;
     }
 
-    await applyExternalTibisContent(content);
+    await applyExternalWidgetContent(content);
   }
 
   const savePolicy = useSavePolicy({

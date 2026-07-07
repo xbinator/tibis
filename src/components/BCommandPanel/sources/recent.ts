@@ -5,7 +5,8 @@
 import type { CommandPanelActionItem, CommandPanelGroup, CommandPanelIconContext, CommandPanelSource } from '../types';
 import type { VNodeChild } from 'vue';
 import { debounce } from 'lodash-es';
-import type { RecentRecord, StoredFile } from '@/shared/storage';
+import type { RecentRecord, StoredDocumentRecord } from '@/shared/storage';
+import { isDocumentRecord } from '@/shared/storage';
 import { WEB_RECORD_ICON } from '@/utils/file/icons';
 import { resolveFileTitle } from '@/utils/file/title';
 
@@ -45,7 +46,7 @@ export interface RecentSourceDeps {
   /** 确保最近记录已加载。 */
   ensureLoaded: () => Promise<void> | void;
   /** 打开文件记录。 */
-  openFile: (record: StoredFile) => RecentSourceActionResult;
+  openFile: (record: StoredDocumentRecord) => RecentSourceActionResult;
   /** 按绝对路径打开文件。 */
   openFileByPath: (path: string) => RecentSourceActionResult;
   /** 打开 WebView URL。 */
@@ -218,7 +219,7 @@ async function createAbsolutePathItem(
  * @returns 是否匹配
  */
 function isRecordMatched(record: RecentRecord, re: RegExp): boolean {
-  if (record.type === 'file') {
+  if (isDocumentRecord(record)) {
     const searchable = [resolveFileTitle(record), record.name, record.ext, record.path].filter(Boolean).join('\0');
     return re.test(searchable);
   }
@@ -245,6 +246,10 @@ function createRecentRecordItem(record: RecentRecord, deps: RecentSourceDeps): C
       onRemove: async (): Promise<void> => deps.removeRecent(record.id),
       renderIcon: (context) => deps.renderRecentIcon({ record }, context)
     };
+  }
+
+  if (!isDocumentRecord(record)) {
+    throw new Error('Unsupported recent record type');
   }
 
   const isUnsaved = !record.path;
@@ -294,7 +299,7 @@ export function createRecentSource(deps: RecentSourceDeps): CommandPanelSource {
       const filteredRecords = query ? records.filter((record) => isRecordMatched(record, new RegExp(escapeRegExp(query), 'i'))) : records;
 
       for (const record of filteredRecords) {
-        if (pathItem && record.type === 'file' && record.path === pathItem.description) {
+        if (pathItem && isDocumentRecord(record) && record.path === pathItem.description) {
           continue;
         }
         items.push(createRecentRecordItem(record, deps));

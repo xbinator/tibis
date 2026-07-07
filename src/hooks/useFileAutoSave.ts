@@ -7,7 +7,7 @@ import type { DebouncedFunc } from 'lodash-es';
 import type { Ref } from 'vue';
 import { getCurrentScope, onScopeDispose, ref, watch } from 'vue';
 import { debounce } from 'lodash-es';
-import type { StoredFile } from '@/shared/storage/files/types';
+import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { useFilesStore } from '@/stores/workspace/files';
 
 /**
@@ -16,6 +16,8 @@ import { useFilesStore } from '@/stores/workspace/files';
 export interface FileAutoSaveOptions {
   /** debounce 延迟 */
   delay?: number;
+  /** 自动保存写入的最近记录类型。 */
+  recordType?: StoredDocumentRecord['type'];
 }
 
 /**
@@ -38,12 +40,13 @@ export interface FileAutoSaveController {
  * 创建可写入最近文件存储的记录。
  * @param fileState - 当前文件会话状态
  * @param timestamp - 时间戳
- * @returns 最近文件记录
+ * @param type - 最近记录类型
+ * @returns 最近文件型记录
  */
-function createStoredFile(fileState: FileSessionState, timestamp: number): StoredFile {
+function createStoredFile(fileState: FileSessionState, timestamp: number, type: StoredDocumentRecord['type']): StoredDocumentRecord {
   return {
     ...fileState,
-    type: 'file',
+    type,
     createdAt: timestamp,
     modifiedAt: timestamp
   };
@@ -61,6 +64,15 @@ export function useFileAutoSave(fileState: Ref<FileSessionState>, options: FileA
   const isPaused = ref<boolean>(false);
 
   /**
+   * 读取自动保存应使用的最近记录类型。
+   * @param stored - 已存在的最近记录
+   * @returns 最近记录类型
+   */
+  function readRecordType(stored?: StoredDocumentRecord): StoredDocumentRecord['type'] {
+    return options.recordType ?? stored?.type ?? 'file';
+  }
+
+  /**
    * 将当前文件状态保存到最近文件存储。
    */
   async function saveToStorage(): Promise<void> {
@@ -73,11 +85,11 @@ export function useFileAutoSave(fileState: Ref<FileSessionState>, options: FileA
     const stored = await filesStore.getFileById(current.id);
 
     if (stored) {
-      await filesStore.updateFile(current.id, { ...current, modifiedAt });
+      await filesStore.updateFile(current.id, { ...current, type: readRecordType(stored), modifiedAt });
       return;
     }
 
-    await filesStore.addFile(createStoredFile(current, modifiedAt));
+    await filesStore.addFile(createStoredFile(current, modifiedAt, readRecordType()));
   }
 
   const debouncedSave = debounce(saveToStorage, delay);

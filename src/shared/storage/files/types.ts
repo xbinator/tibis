@@ -4,11 +4,11 @@
  */
 
 /**
- * 文件主记录。
+ * 文件型最近记录公共字段。
  */
-export interface StoredFile {
-  /** 记录类型 */
-  type: 'file';
+export interface StoredDocumentRecord {
+  /** 记录类型。 */
+  type: 'file' | 'widget';
   /** 文件唯一标识。 */
   id: string;
   /** 文件唯一路径，未保存文件为 null。 */
@@ -33,6 +33,22 @@ export interface StoredFile {
   pinnedAt?: number;
   /** 文件所属工作区 ID（预留字段）。 */
   workspaceId?: string | null;
+}
+
+/**
+ * 普通文件主记录。
+ */
+export interface StoredFile extends StoredDocumentRecord {
+  /** 记录类型。 */
+  type: 'file';
+}
+
+/**
+ * Widget 文件主记录。
+ */
+export interface StoredWidget extends StoredDocumentRecord {
+  /** 记录类型。 */
+  type: 'widget';
 }
 
 /**
@@ -66,4 +82,13 @@ export interface WebviewRecordOptions {
 /**
  * 最近记录联合类型（文件 + WebView 网页）。
  */
-export type RecentRecord = StoredFile | WebviewRecord;
+export type RecentRecord = StoredFile | StoredWidget | WebviewRecord;
+
+/**
+ * 判断最近记录是否为文件型记录。
+ * @param record - 最近记录
+ * @returns 是否为普通文件或 Widget 记录
+ */
+export function isDocumentRecord(record: RecentRecord | null | undefined): record is StoredFile | StoredWidget {
+  return record?.type === 'file' || record?.type === 'widget';
+}

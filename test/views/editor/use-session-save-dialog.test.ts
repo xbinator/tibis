@@ -6,7 +6,7 @@
 import { defineComponent, ref } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { StoredFile } from '@/shared/storage/files/types';
+import type { StoredFile, StoredWidget } from '@/shared/storage/files/types';
 import { useSession } from '@/views/editor/hooks/useSession';
 
 const getFileByIdMock = vi.hoisted(() => vi.fn());
@@ -29,6 +29,7 @@ const setIsDirtyMock = vi.hoisted(() => vi.fn());
 const finishReloadMock = vi.hoisted(() => vi.fn());
 const suppressNextChangeMock = vi.hoisted(() => vi.fn());
 const clearSuppressedChangeMock = vi.hoisted(() => vi.fn());
+const routerPushMock = vi.hoisted(() => vi.fn());
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -39,7 +40,7 @@ vi.mock('vue-router', () => ({
     meta: {}
   }),
   useRouter: () => ({
-    push: vi.fn()
+    push: routerPushMock
   })
 }));
 
@@ -155,6 +156,22 @@ function createStoredFile(): StoredFile {
 }
 
 /**
+ * 创建 Widget 最近文件存储记录。
+ * @returns Widget 最近文件存储记录
+ */
+function createStoredWidget(): StoredWidget {
+  return {
+    type: 'widget',
+    id: 'file-1',
+    path: '/workspace/widget.json',
+    name: 'widget',
+    ext: 'json',
+    content: '{}',
+    savedContent: '{}'
+  };
+}
+
+/**
  * 挂载编辑器会话宿主组件。
  * @returns 暴露编辑器会话的测试包装器
  */
@@ -194,6 +211,7 @@ describe('useSession save dialog', (): void => {
     finishReloadMock.mockReset();
     suppressNextChangeMock.mockReset();
     clearSuppressedChangeMock.mockReset();
+    routerPushMock.mockReset();
 
     const storedFile = createStoredFile();
     getFileByIdMock.mockResolvedValue(storedFile);
@@ -228,5 +246,16 @@ describe('useSession save dialog', (): void => {
 
     expect(suppressNextChangeMock).toHaveBeenCalledWith(FILE_PATH, FILE_CONTENT);
     expect(clearSuppressedChangeMock).toHaveBeenCalledWith(FILE_PATH);
+  });
+
+  it('redirects widget records away from the editor without replacing the stored record', async (): Promise<void> => {
+    getFileByIdMock.mockResolvedValue(createStoredWidget());
+
+    mountSessionHost();
+    await flushPromises();
+
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'file-1' } });
+    expect(addFileMock).not.toHaveBeenCalled();
+    expect(switchWatchedFileMock).not.toHaveBeenCalled();
   });
 });

@@ -3,8 +3,8 @@
  * @description 聊天与输入框共用的文件引用 token 解析及类型定义。
  */
 
-import { recentFilesStorage } from '@/shared/storage';
-import type { StoredFile } from '@/shared/storage/files/types';
+import { isDocumentRecord, recentFilesStorage } from '@/shared/storage';
+import type { StoredDocumentRecord } from '@/shared/storage/files/types';
 import { isUnsavedPath, parseUnsavedPath } from './unsaved';
 
 /**
@@ -197,16 +197,16 @@ export function findFileReferenceTokens(content: string): FileReferenceTokenMatc
  * @param path - 文件路径或 unsaved:// 引用
  * @returns 命中的文件记录，不存在时返回 null
  */
-async function findStoredFileByReferencePath(path: string): Promise<StoredFile | null> {
+async function findStoredFileByReferencePath(path: string): Promise<StoredDocumentRecord | null> {
   if (isUnsavedPath(path)) {
     const unsavedReference = parseUnsavedPath(path);
     const record = unsavedReference ? await recentFilesStorage.getRecentFile(unsavedReference.fileId) : null;
 
-    return record?.type === 'file' ? record : null;
+    return isDocumentRecord(record) ? record : null;
   }
 
   const files = await recentFilesStorage.getAllRecentFiles();
-  return (files.find((item) => item.type === 'file' && item.path === path) as StoredFile | undefined) || null;
+  return files.find((item): item is StoredDocumentRecord => isDocumentRecord(item) && item.path === path) ?? null;
 }
 
 /**

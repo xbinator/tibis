@@ -9,9 +9,9 @@ import { createJumpSource } from '@/components/BCommandPanel/sources/jump';
 import { createModelSource } from '@/components/BCommandPanel/sources/model';
 import { createRecentSource } from '@/components/BCommandPanel/sources/recent';
 import type { CommandPanelActionItem } from '@/components/BCommandPanel/types';
-import type { RecentRecord, StoredFile } from '@/shared/storage';
+import type { RecentRecord, StoredDocumentRecord, StoredFile } from '@/shared/storage';
 
-const openFileMock = vi.fn<(_record: StoredFile) => Promise<StoredFile | null>>();
+const openFileMock = vi.fn<(_record: StoredDocumentRecord) => Promise<StoredDocumentRecord | null>>();
 const openFileByPathMock = vi.fn<(_path: string) => Promise<StoredFile | null>>();
 const openWebviewMock = vi.fn<(_url: URL) => void>();
 const removeFileMock = vi.fn<(_id: string) => Promise<void>>();

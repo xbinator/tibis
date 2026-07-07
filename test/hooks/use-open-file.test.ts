@@ -1,6 +1,6 @@
 /**
  * @file use-open-file.test.ts
- * @description 验证统一文件打开入口对 .tibis 文件的路由分流。
+ * @description 验证统一文件打开入口按最近记录类型路由。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOpenFile } from '@/hooks/useOpenFile';
@@ -57,37 +57,37 @@ describe('useOpenFile', (): void => {
     createAndOpenMock.mockReset();
   });
 
-  it('routes supported widget tibis files to widget', async (): Promise<void> => {
+  it('routes widget records to widget', async (): Promise<void> => {
+    openOrRefreshByPathFromDiskMock.mockResolvedValue({
+      type: 'widget',
+      id: 'widget-1',
+      path: '/tmp/widget.json',
+      name: 'board',
+      ext: 'json',
+      content: '{"elements":[]}',
+      savedContent: ''
+    });
+
+    const { openFileByPath } = useOpenFile();
+    await openFileByPath('/tmp/widget.json');
+
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-1' } });
+  });
+
+  it('routes file records to editor without parsing widget-shaped content', async (): Promise<void> => {
     openOrRefreshByPathFromDiskMock.mockResolvedValue({
       type: 'file',
-      id: 'widget-1',
-      path: '/tmp/board.tibis',
+      id: 'json-1',
+      path: '/tmp/board.json',
       name: 'board',
-      ext: 'tibis',
+      ext: 'json',
       content: '{"type":"widget","version":1,"elements":[]}',
       savedContent: ''
     });
 
     const { openFileByPath } = useOpenFile();
-    await openFileByPath('/tmp/board.tibis');
+    await openFileByPath('/tmp/board.json');
 
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-1' } });
-  });
-
-  it('routes invalid tibis files to editor', async (): Promise<void> => {
-    openOrRefreshByPathFromDiskMock.mockResolvedValue({
-      type: 'file',
-      id: 'bad-1',
-      path: '/tmp/bad.tibis',
-      name: 'bad',
-      ext: 'tibis',
-      content: '{broken',
-      savedContent: ''
-    });
-
-    const { openFileByPath } = useOpenFile();
-    await openFileByPath('/tmp/bad.tibis');
-
-    expect(routerPushMock).toHaveBeenCalledWith({ name: 'editor', params: { id: 'bad-1' } });
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'editor', params: { id: 'json-1' } });
   });
 });

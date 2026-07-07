@@ -604,7 +604,7 @@ describe('BChat sessionId runtime', (): void => {
     filesStoreMock.recentFiles = [
       createStoredFile({ id: 'md-1', name: 'note.md', path: '/workspace/note.md', ext: 'md' }),
       createStoredFile({ id: 'json-1', name: 'config.json', path: '/workspace/config.json', ext: 'json' }),
-      createStoredFile({ id: 'tibis-1', name: 'sketch.tibis', path: '/workspace/sketch.tibis', ext: 'tibis' })
+      createStoredFile({ id: 'txt-1', name: 'notes.txt', path: '/workspace/notes.txt', ext: 'txt' })
     ];
 
     const wrapper = mountBChat(null);

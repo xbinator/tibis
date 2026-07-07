@@ -30,7 +30,7 @@ const routerReplaceMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise
 const routerPushMock = vi.hoisted(() => vi.fn<(_location: unknown) => Promise<void>>().mockResolvedValue(undefined));
 /** 最近文件创建 mock。 */
 const createAndOpenMock = vi.hoisted(() =>
-  vi.fn<(file: { id: string; content: string; name: string; ext: string; path: string | null }) => Promise<{ id: string }>>()
+  vi.fn<(file: { type: 'file' | 'widget'; id: string; content: string; name: string; ext: string; path: string | null }) => Promise<{ id: string }>>()
 );
 
 vi.mock('@/shared/platform', () => ({
@@ -329,11 +329,14 @@ describe('WidgetSettingsPage', (): void => {
     expect(savedContent.execute).toEqual(defaultExecute);
     expect(savedContent).not.toHaveProperty('type');
     expect(savedContent).not.toHaveProperty('version');
+    expect(JSON.parse(createAndOpenMock.mock.calls[0]?.[0].content ?? '{}')).not.toHaveProperty('type');
+    expect(JSON.parse(createAndOpenMock.mock.calls[0]?.[0].content ?? '{}')).not.toHaveProperty('version');
     expect(createAndOpenMock.mock.calls[0]?.[0]).toMatchObject({
+      type: 'widget',
       id: 'widget-weather',
       path: '/Users/test/.tibis/widgets/weather/widget.json',
       name: 'weather',
-      ext: 'tibis'
+      ext: 'json'
     });
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
   });
@@ -466,17 +469,18 @@ describe('WidgetSettingsPage', (): void => {
     const createdContent = JSON.parse(createdFile?.content ?? '{}') as Record<string, unknown>;
 
     expect(createdFile).toMatchObject({
+      type: 'widget',
       id: 'widget-weather',
       path: '/Users/test/.tibis/widgets/weather/widget.json',
       name: 'weather',
-      ext: 'tibis'
+      ext: 'json'
     });
     expect(createdContent).toMatchObject({
-      type: 'widget',
-      version: 1,
       name: '天气',
       description: '查询指定城市天气'
     });
+    expect(createdContent).not.toHaveProperty('type');
+    expect(createdContent).not.toHaveProperty('version');
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'widget', params: { id: 'widget-weather' } });
   });
 
@@ -528,6 +532,8 @@ describe('WidgetSettingsPage', (): void => {
     expect(nativeMock.readFile).toHaveBeenLastCalledWith('/Users/test/.tibis/widgets/weather/widget.json');
     expect(createdContent.name).toBe('天气新版');
     expect(createdContent.description).toBe('新描述');
+    expect(createdContent).not.toHaveProperty('type');
+    expect(createdContent).not.toHaveProperty('version');
     expect(createdElements).toHaveLength(1);
     wrapper.unmount();
   });

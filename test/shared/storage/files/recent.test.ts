@@ -47,6 +47,57 @@ describe('recentFilesStorage.getAllRecentFiles', () => {
     ]);
     expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
   });
+
+  it('preserves widget records during normalization', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([
+      {
+        type: 'widget',
+        id: 'widget-weather',
+        path: '/Users/demo/.tibis/widgets/weather/widget.json',
+        content: '{"name":"天气"}',
+        name: 'weather',
+        ext: 'json',
+        openedAt: 200
+      }
+    ]);
+
+    const records = await recentFilesStorage.getAllRecentFiles();
+
+    expect(records[0]).toMatchObject({
+      type: 'widget',
+      id: 'widget-weather',
+      path: '/Users/demo/.tibis/widgets/weather/widget.json',
+      content: '{"name":"天气"}',
+      name: 'weather',
+      ext: 'json',
+      openedAt: 200
+    });
+    expect(mockElectronAPI.storeSet).not.toHaveBeenCalled();
+  });
+
+  it('migrates unknown record types to files', async (): Promise<void> => {
+    mockElectronAPI.storeGet.mockResolvedValue([
+      {
+        type: 'unknown',
+        id: 'legacy-record',
+        path: '/Users/demo/Legacy.md',
+        content: '# Legacy',
+        openedAt: 100
+      }
+    ]);
+
+    const records = await recentFilesStorage.getAllRecentFiles();
+
+    expect(records[0]).toMatchObject({
+      type: 'file',
+      id: 'legacy-record',
+      path: '/Users/demo/Legacy.md',
+      content: '# Legacy',
+      name: 'Legacy',
+      ext: 'md'
+    });
+    expect(mockElectronAPI.storeSet).toHaveBeenCalledWith('recent_files', records);
+  });
 });
 
 describe('recentFilesStorage.addWebviewRecord', () => {

@@ -16,6 +16,8 @@ const recentRecordsMock = vi.hoisted<{ value: unknown[] }>(() => ({
 }));
 
 vi.mock('@/shared/storage', () => ({
+  isDocumentRecord: (record: unknown): boolean =>
+    typeof record === 'object' && record !== null && 'type' in record && (record.type === 'file' || record.type === 'widget'),
   recentFilesStorage: {
     getAllRecentFiles: vi.fn(async () => recentRecordsMock.value),
     getRecentFile: vi.fn(async (id: string) =>

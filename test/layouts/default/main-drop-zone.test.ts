@@ -157,17 +157,8 @@ describe('MainDropZone', () => {
     expect(openFileByPathMock).toHaveBeenCalledWith('/tmp/dropped.md');
   });
 
-  it('creates and opens a dropped tibis draft when no native path is available', async (): Promise<void> => {
+  it('ignores dropped tibis files because widget sessions use json records', async (): Promise<void> => {
     getPathForFileMock.mockReturnValue(null);
-    createAndOpenMock.mockResolvedValue({
-      type: 'file',
-      id: 'draft-1',
-      path: null,
-      name: 'board',
-      ext: 'tibis',
-      content: '{"type":"widget","version":1}',
-      savedContent: '{"type":"widget","version":1}'
-    });
 
     const wrapper = shallowMount(MainDropZone, {
       slots: {
@@ -178,8 +169,8 @@ describe('MainDropZone', () => {
     await wrapper.element.dispatchEvent(createDropEvent(new File(['{"type":"widget","version":1}'], 'board.tibis', { type: 'application/json' })));
     await flushPromises();
 
-    expect(createAndOpenMock).toHaveBeenCalledWith(expect.objectContaining({ ext: 'tibis', name: 'board' }));
-    expect(openFileMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'draft-1', ext: 'tibis' }));
+    expect(createAndOpenMock).not.toHaveBeenCalled();
+    expect(openFileMock).not.toHaveBeenCalled();
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 });
