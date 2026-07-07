@@ -146,7 +146,6 @@ describe('WidgetTool', (): void => {
       toolName: OPEN_WIDGET_TOOL_NAME,
       status: 'success',
       data: {
-        kind: 'widget_display',
         sessionId: 'widget-weather-tool-call-widget',
         widgetId: 'weather',
         value: {
@@ -155,8 +154,14 @@ describe('WidgetTool', (): void => {
         },
         renderContext: {
           input: {
-            city: '上海'
-          }
+              city: '上海'
+            },
+            output: undefined,
+          data: {}
+        },
+        execution: {
+          status: 'success',
+          output: undefined
         }
       }
     });
@@ -170,10 +175,14 @@ describe('WidgetTool', (): void => {
       toolName: OPEN_WIDGET_TOOL_NAME,
       status: 'success',
       data: {
-        kind: 'widget_display',
         renderContext: {
           input: {},
+            output: undefined,
           data: {}
+        },
+        execution: {
+          status: 'success',
+          output: undefined
         }
       }
     });

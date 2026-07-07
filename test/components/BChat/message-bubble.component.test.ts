@@ -219,8 +219,9 @@ function createWeatherWidgetData(): WidgetData {
 function createWeatherRenderContext(): WidgetRenderContext {
   return {
     input: {
-      city: '上海'
-    },
+        city: '上海'
+      },
+      output: undefined,
     data: {
       weather: {
         temperature: 28
@@ -263,11 +264,11 @@ function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture):
       toolName: 'open_widget',
       status: 'success',
       data: {
-        kind: 'widget_display',
         sessionId: part.sessionId,
         widgetId: part.widgetId,
         value: part.value,
-        renderContext: part.renderContext
+        renderContext: part.renderContext,
+        execution: { status: 'success', output: undefined }
       }
     }
   };
@@ -478,13 +479,14 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['export default class Weather extends Widget {', '  mounted() {', '    this.weather = { temperature: 31 }', '  }', '}'].join('\n')
+          code: ['export default class Weather extends Widget {', '  onMounted() {', '    this.weather = { temperature: 31 }', '  }', '}'].join('\n')
         }
       },
       renderContext: {
-        input: {
+                input: {
           city: '上海'
         },
+          output: undefined,
         data: {}
       }
     };
@@ -504,9 +506,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           isMounted: true,
           data: {
             weather: {
@@ -555,13 +558,14 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['export default class Weather extends Widget {', '  mounted() {', '    this.weather = { temperature: 32 }', '  }', '}'].join('\n')
+          code: ['export default class Weather extends Widget {', '  onMounted() {', '    this.weather = { temperature: 32 }', '  }', '}'].join('\n')
         }
       },
       renderContext: {
-        input: {
+                input: {
           city: '杭州'
         },
+          output: undefined,
         data: {}
       }
     };
@@ -581,9 +585,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-          input: {
+                    input: {
             city: '杭州'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 32
@@ -627,9 +632,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -668,7 +674,7 @@ describe('MessageBubble', (): void => {
         execute: {
           code: [
             'export default class Weather extends Widget {',
-            '  unmounted() {',
+            '  confirmOrder() {',
             '    this.submitted = { city: this.$input.city, temperature: this.weather.temperature }',
             '  }',
             '}'
@@ -693,9 +699,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -734,7 +741,7 @@ describe('MessageBubble', (): void => {
         execute: {
           code: [
             'export default class Weather extends Widget {',
-            '  unmounted() {',
+            '  confirmOrder() {',
             '    this.submitted = { temperature: this.weather.temperature }',
             '  }',
             '}'
@@ -747,8 +754,9 @@ describe('MessageBubble', (): void => {
       ...staleWidgetPart,
       renderContext: {
         input: {
-          city: '上海'
-        },
+            city: '上海'
+          },
+          output: undefined,
         data: {
           weather: {
             temperature: 35
@@ -782,9 +790,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(latestWidgetPart, {
         reason: 'interaction',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 35
@@ -818,9 +827,10 @@ describe('MessageBubble', (): void => {
       widgetId: 'coffee',
       value: createWeatherWidgetData(),
       renderContext: {
-        input: {
+                input: {
           city: '上海'
         },
+          output: undefined,
         data: {}
       }
     };
@@ -848,9 +858,10 @@ describe('MessageBubble', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 33
@@ -889,7 +900,7 @@ describe('MessageBubble', (): void => {
         execute: {
           code: [
             'export default class Weather extends Widget {',
-            '  unmounted() {',
+            '  confirmOrder() {',
             "    this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })",
             '  }',
             '}'
@@ -941,7 +952,7 @@ describe('MessageBubble', (): void => {
         execute: {
           code: [
             'export default class Weather extends Widget {',
-            '  unmounted() {',
+            '  confirmOrder() {',
             "    this.$sendMessage({ content: '库存不足', isError: true })",
             '  }',
             '}'
@@ -988,7 +999,7 @@ describe('MessageBubble', (): void => {
       value: {
         ...createWeatherWidgetData(),
         execute: {
-          code: ['export default class Weather extends Widget {', '  unmounted() {', '    this.$sendMessage({ content: this.order.message })', '  }', '}'].join(
+          code: ['export default class Weather extends Widget {', '  confirmOrder() {', '    this.$sendMessage({ content: this.order.message })', '  }', '}'].join(
             '\n'
           )
         }
@@ -999,6 +1010,7 @@ describe('MessageBubble', (): void => {
       ...staleWidgetPart,
       renderContext: {
         input: {},
+          output: undefined,
         data: {
           order: {
             message: '确认最新订单'
@@ -1093,11 +1105,11 @@ describe('MessageBubble', (): void => {
         toolName: 'open_widget',
         status: 'success',
         data: {
-          kind: 'widget_display',
           sessionId: 'widget-weather-tool-call-widget',
           widgetId: 'weather',
           value: createWeatherWidgetData(),
-          renderContext: createWeatherRenderContext()
+          renderContext: createWeatherRenderContext(),
+          execution: { status: 'success', output: undefined }
         }
       }
     };
@@ -1112,7 +1124,7 @@ describe('MessageBubble', (): void => {
     expect(wrapper.text()).toContain('28°C');
   });
 
-  it('renders open_widget widget_display results as widget runtime without tool state', (): void => {
+  it('renders open_widget display results as widget runtime without tool state', (): void => {
     const toolPart: ChatMessageToolPart = {
       id: 'part0014',
       type: 'tool',
@@ -1129,11 +1141,11 @@ describe('MessageBubble', (): void => {
         toolName: 'open_widget',
         status: 'success',
         data: {
-          kind: 'widget_display',
           sessionId: 'widget-weather-tool-call-widget',
           widgetId: 'weather',
           value: createWeatherWidgetData(),
-          renderContext: createWeatherRenderContext()
+          renderContext: createWeatherRenderContext(),
+          execution: { status: 'success', output: undefined }
         }
       }
     };
@@ -1169,11 +1181,11 @@ describe('MessageBubble', (): void => {
         toolName: 'open_widget',
         status: 'success',
         data: {
-          kind: 'widget_display',
           sessionId: 'widget-weather-tool-call-widget',
           widgetId: 'weather',
           value: widgetValue,
-          renderContext: createWeatherRenderContext()
+          renderContext: createWeatherRenderContext(),
+          execution: { status: 'success', output: undefined }
         }
       }
     };
@@ -1206,11 +1218,11 @@ describe('MessageBubble', (): void => {
         toolName: 'open_widget',
         status: 'success',
         data: {
-          kind: 'widget_display',
           sessionId: 'widget-weather-tool-call-widget',
           widgetId: 'weather',
           value: createWeatherWidgetData(),
-          renderContext: createWeatherRenderContext()
+          renderContext: createWeatherRenderContext(),
+          execution: { status: 'success', output: undefined }
         }
       }
     };
@@ -1237,9 +1249,10 @@ describe('MessageBubble', (): void => {
         {
           reason: 'mount',
           renderContext: {
-            input: {
+                        input: {
               city: '上海'
             },
+              output: undefined,
             data: {
               weather: {
                 temperature: 29

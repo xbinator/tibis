@@ -4,6 +4,7 @@
  */
 import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createOpenWidgetTool, type OpenWidgetRuntimeState, type OpenWidgetToolOptions } from '@/ai/tools/builtin/WidgetTool';
 import type { WebviewToolContext } from '@/ai/tools/context/webview';
 import { useRuntimeTools } from '@/components/BChat/hooks/useRuntimeTools';
 import type { Message } from '@/components/BChat/utils/types';
@@ -37,6 +38,7 @@ const builtinMockState = vi.hoisted(() => {
   }
 
   return {
+    createExecutor,
     createBuiltinTools: vi.fn(() => [
       createExecutor('read_current_webpage'),
       createExecutor('operate_webpage'),
@@ -79,6 +81,25 @@ const workspaceMockState = vi.hoisted(() => ({
   getWorkspaceRoot: vi.fn(() => '/workspace')
 }));
 
+const widgetRuntimeMockState = vi.hoisted(() => {
+  const httpClient = {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn()
+  };
+
+  return {
+    httpClient,
+    createWidgetHttpClient: vi.fn(() => httpClient),
+    executeWidgetRuntime: vi.fn(async (state: unknown): Promise<{ state: unknown; execution: { status: 'success'; output: undefined } }> => ({
+      state,
+      execution: { status: 'success', output: undefined }
+    }))
+  };
+});
+
 vi.mock('@/ai/tools/builtin', () => ({
   createBuiltinTools: builtinMockState.createBuiltinTools,
   isBuiltinToolName: vi.fn((toolName: string): boolean =>
@@ -118,6 +139,11 @@ vi.mock('@/ai/tools/builtin/WidgetTool', () => ({
     },
     execute: async (): Promise<{ toolName: string; status: 'success'; data: null }> => ({ toolName: 'widget', status: 'success', data: null })
   }))
+}));
+
+vi.mock('@/components/BWidget/utils/widgetRuntime', () => ({
+  createWidgetHttpClient: widgetRuntimeMockState.createWidgetHttpClient,
+  executeWidgetRuntime: widgetRuntimeMockState.executeWidgetRuntime
 }));
 
 vi.mock('@/ai/tools/context/editor', () => ({
@@ -188,6 +214,20 @@ function readActiveToolNames(getActiveTools: ReturnType<typeof useRuntimeTools>[
   return getActiveTools().map((tool) => tool.definition.name);
 }
 
+/**
+ * 读取最近创建的 open_widget 工具选项。
+ * @returns open_widget 工具创建选项
+ */
+function readLatestOpenWidgetOptions(): OpenWidgetToolOptions {
+  const options = vi.mocked(createOpenWidgetTool).mock.calls.at(-1)?.[1];
+
+  if (!options) {
+    throw new Error('open_widget 工具未创建');
+  }
+
+  return options;
+}
+
 describe('useRuntimeTools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -229,5 +269,61 @@ describe('useRuntimeTools', () => {
 
     expect(readActiveToolNames(runtimeTools.getActiveTools)).toContain('widget');
     expect(readActiveToolNames(runtimeTools.getActiveTools)).toContain('open_widget');
+  });
+
+  it('replaces prebuilt open_widget with the renderer executable widget tool', (): void => {
+    const staleOpenWidgetTool = builtinMockState.createExecutor('open_widget');
+    builtinMockState.createBuiltinTools.mockReturnValueOnce([
+      builtinMockState.createExecutor('read_current_webpage'),
+      staleOpenWidgetTool
+    ]);
+    storeMockState.widgetStore.initialized = true;
+    storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([
+      {
+        id: 'weather',
+        enabled: true,
+        parseError: undefined
+      }
+    ]);
+
+    const runtimeTools = createRuntimeTools();
+    const openWidgetTools = runtimeTools.getActiveTools().filter((tool): boolean => tool.definition.name === 'open_widget');
+
+    expect(openWidgetTools).toHaveLength(1);
+    expect(openWidgetTools[0]).not.toBe(staleOpenWidgetTool);
+    expect(createOpenWidgetTool).toHaveBeenCalledWith(
+      storeMockState.widgetStore,
+      expect.objectContaining({
+        executeWidget: expect.any(Function)
+      })
+    );
+  });
+
+  it('passes the managed widget http client to the open_widget execute lifecycle', async (): Promise<void> => {
+    storeMockState.widgetStore.initialized = true;
+    storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([
+      {
+        id: 'weather',
+        enabled: true,
+        parseError: undefined
+      }
+    ]);
+
+    const runtimeTools = createRuntimeTools();
+    runtimeTools.getActiveTools();
+    const options = readLatestOpenWidgetOptions();
+    const state: OpenWidgetRuntimeState = {
+      value: {} as OpenWidgetRuntimeState['value'],
+      renderContext: {
+        input: {},
+        output: undefined,
+        data: {}
+      }
+    };
+
+    await options.executeWidget?.({ state });
+
+    expect(widgetRuntimeMockState.createWidgetHttpClient).toHaveBeenCalledTimes(1);
+    expect(widgetRuntimeMockState.executeWidgetRuntime).toHaveBeenCalledWith(state, { http: widgetRuntimeMockState.httpClient });
   });
 });

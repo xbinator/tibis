@@ -32,7 +32,7 @@ describe('buildWidgetDataSchema', (): void => {
   it('builds nested data schema from direct this object assignments', (): void => {
     const code = `
       export default class Weather extends Widget {
-        async mounted() {
+        async onMounted() {
           this.weather = {
             temperature: 28,
             condition: '晴',
@@ -68,7 +68,7 @@ describe('buildWidgetDataSchema', (): void => {
   it('ignores nested this data writes when the root field is not initialized', (): void => {
     const code = `
       export default class Weather extends Widget {
-        async mounted() {
+        async onMounted() {
           this.weather.temperature = 28
         }
       }
@@ -84,7 +84,7 @@ describe('buildWidgetDataSchema', (): void => {
   it('builds nested data schema after a root this assignment initializes the field', (): void => {
     const code = `
       export default class Weather extends Widget {
-        async mounted() {
+        async onMounted() {
           this.weather = {}
           this.weather.temperature = this.$input.weather.temperature
         }
@@ -184,7 +184,7 @@ describe('buildWidgetDataSchema', (): void => {
           temperature: 0
         }
 
-        async mounted() {
+        async onMounted() {
           this.lastQuery.city = this.$input.city
           this.weather.temperature = this.$input.weather.temperature
         }
@@ -229,7 +229,7 @@ describe('buildWidgetDataSchema', (): void => {
           condition: ''
         }
 
-        async mounted() {
+        async onMounted() {
           this.lastQuery.city = this.$input.city
           this.weather.temperature = this.$input.weather.temperature
         }
@@ -273,7 +273,7 @@ describe('buildWidgetDataSchema', (): void => {
   it('ignores assignments that are not owned by the widget context', (): void => {
     const code = `
       export default class Weather extends Widget {
-        async mounted() {
+        async onMounted() {
           const store = {
             save() {
               this.debug = { enabled: true }
@@ -305,7 +305,7 @@ describe('buildWidgetDataSchema', (): void => {
   it('ignores nested object methods that use their own this context', (): void => {
     const code = `
       export default class Weather extends Widget {
-        async mounted() {
+        async onMounted() {
           const store = {
             save() {
               this.debug = { enabled: true }
@@ -337,7 +337,7 @@ describe('buildWidgetDataSchema', (): void => {
   it('keeps input aliases scoped when a block declares the same variable name', (): void => {
     const code = `
       export default class Weather extends Widget {
-        async mounted() {
+        async onMounted() {
           const city = this.$input.city
           {
             const city = this.$input.weather.temperature
@@ -377,7 +377,7 @@ describe('buildWidgetDataSchema', (): void => {
   it('returns an empty data schema when code has no static this data path', (): void => {
     const code = `
       export default class Weather extends Widget {
-        async mounted() {
+        async onMounted() {
           const path = 'weather.temperature'
           this[path] = 28
         }
@@ -396,7 +396,7 @@ describe('buildWidgetDataSchema', (): void => {
       export default class Weather extends Widget {
         movieList = []
 
-        async mounted() {
+        async onMounted() {
           const res = await this.$http.get('https://example.com/api')
           this.movieList = res.data.movieList
         }

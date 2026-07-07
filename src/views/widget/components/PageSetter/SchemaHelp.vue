@@ -182,7 +182,7 @@ const schemaHelpContentMap: Record<WidgetSchemaKind, SchemaHelpContent> = {
     city: ''
   }
 
-  mounted() {
+  onMounted() {
     this.lastQuery.city = this.$input.city
   }
 }`

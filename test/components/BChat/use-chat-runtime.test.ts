@@ -105,8 +105,9 @@ function createOpenWidgetToolPart(
   id = 'tool-part-open-widget',
   renderContext: WidgetRenderContext = {
     input: {
-      city: '上海'
-    },
+        city: '上海'
+      },
+      output: undefined,
     data: {}
   }
 ): ChatMessageToolPart {
@@ -123,11 +124,11 @@ function createOpenWidgetToolPart(
       toolName: 'open_widget',
       status: 'success',
       data: {
-        kind: 'widget_display',
         sessionId: 'widget-weather-tool-call-widget',
         widgetId: 'weather',
         value: {},
-        renderContext
+        renderContext,
+        execution: { status: 'success', output: undefined }
       }
     }
   };
@@ -352,16 +353,17 @@ describe('useChatRuntime', (): void => {
         toolName: 'open_widget',
         status: 'success',
         data: {
-          kind: 'widget_display',
           sessionId: 'widget-weather-tool-call-widget',
           widgetId: 'weather',
           value: {},
           renderContext: {
             input: {
-              city: '杭州'
-            },
+                city: '杭州'
+              },
+              output: undefined,
             data: {}
-          }
+          },
+          execution: { status: 'success', output: undefined }
         }
       }
     };
@@ -395,10 +397,11 @@ describe('useChatRuntime', (): void => {
         result: {
           data: {
             renderContext: {
-              input: {
+                            input: {
                 city: '杭州'
+              },
+                output: undefined
               }
-            }
           }
         }
       });

@@ -249,7 +249,7 @@ function readBindingPathContextValue(renderContext: WidgetRenderContext, path: W
   if (path.root === 'local') {
     currentValue = readLoopRenderContextLocals(renderContext)?.[path.localRoot ?? ''];
   } else {
-    currentValue = path.root === 'input' ? renderContext.input : renderContext.data;
+    currentValue = renderContext[path.root];
   }
 
   for (const segment of path.segments) {

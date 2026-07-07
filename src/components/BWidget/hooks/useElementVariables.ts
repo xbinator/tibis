@@ -15,10 +15,14 @@ import { useWidgetContext } from './useWidgetContext';
 
 /** 变量路径标识符匹配表达式。 */
 const WIDGET_VARIABLE_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
-/** 输入变量在模板编辑器中展示和插入的根名称。 */
+/** 入参变量在模板编辑器中展示和插入的根名称。 */
 const WIDGET_INPUT_VARIABLE_ROOT_NAME = '$input';
+/** 输出变量在模板编辑器中展示和插入的根名称。 */
+const WIDGET_OUTPUT_VARIABLE_ROOT_NAME = '$output';
 /** 输入变量在模板编辑器中展示的可读名称。 */
 const WIDGET_INPUT_VARIABLE_LABEL = '入参';
+/** 执行输出变量在模板编辑器中展示的可读名称。 */
+const WIDGET_OUTPUT_VARIABLE_LABEL = '执行结果';
 
 /**
  * Widget 元素读取函数。
@@ -100,10 +104,6 @@ function formatLocalVariablePath(rootName: string, segments: string[] = []): str
  * @returns 变量候选绑定路径
  */
 function formatVariableBindingPath(root: WidgetBindingContextRoot, segments: string[] = []): string {
-  if (root === 'input') {
-    return formatLocalVariablePath(WIDGET_INPUT_VARIABLE_ROOT_NAME, segments);
-  }
-
   return formatWidgetBindingPath(root, segments);
 }
 
@@ -203,7 +203,8 @@ function readLoopArraySchema(widgetData: WidgetData, dataSchema: WidgetSchemaObj
   }
 
   const sourceSchema = path.root === 'input' ? widgetData.inputSchema : dataSchema;
-  const sourceProperty = readSchemaPropertyAtPath(sourceSchema, path.segments);
+  const sourceSegments = path.segments;
+  const sourceProperty = readSchemaPropertyAtPath(sourceSchema, sourceSegments);
 
   return sourceProperty?.type === 'array' ? sourceProperty : undefined;
 }
@@ -314,9 +315,10 @@ export function useElementVariables(readElement?: ElementTargetReader): UseEleme
       undefined,
       collectSchemaVariableChildren('input', widgetData?.inputSchema.properties)
     );
+    const outputVariable = createVariable(WIDGET_OUTPUT_VARIABLE_ROOT_NAME, WIDGET_OUTPUT_VARIABLE_LABEL);
     const dataVariables = collectSchemaVariableChildren('data', currentDataSchema.value.properties);
 
-    return [createVariableGroup([...loopVariables, inputVariable, ...dataVariables])];
+    return [createVariableGroup([...loopVariables, inputVariable, outputVariable, ...dataVariables])];
   });
   const loopSourceOptions = computed<WidgetLoopDataSourceOption[]>((): WidgetLoopDataSourceOption[] => {
     if (!currentWidgetData.value) {

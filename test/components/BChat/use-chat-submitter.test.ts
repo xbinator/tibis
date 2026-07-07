@@ -54,7 +54,33 @@ function createMessagePartUpdateAction(input: MessagePartUpdateInput): SubmitAct
 }
 
 describe('useChatSubmitter', (): void => {
-  it('sends adapted user messages while the chat task is already active', async (): Promise<void> => {
+  it('sends adapted user messages after starting an inactive chat task', async (): Promise<void> => {
+    const beginTask = vi.fn<(_kind: 'chat' | 'compact') => ChatTaskStartResult>(() => ({ ok: true }));
+    const sendRuntimeUserMessage = vi.fn<(_input: AdaptedUserMessageInput) => Promise<void>>(() => Promise.resolve());
+    const input = createAdaptedUserMessageInput();
+    const submitter = useChatSubmitter({
+      taskRuntime: {
+        activeTask: ref<ChatTaskState>('idle'),
+        beginTask,
+        finishTask: vi.fn()
+      },
+      messages: ref<Message[]>([]),
+      getSessionId: () => 'session-1',
+      getActiveRuntimeId: () => undefined,
+      resolveRuntimeRequestConfig: vi.fn(),
+      submitUserChoice: vi.fn(),
+      sendRuntimeUserMessage,
+      submitRuntimeMessagePart: vi.fn(),
+      updateSessionMessage: vi.fn()
+    });
+
+    await submitter.submit(createSendAdaptedUserMessageAction(input));
+
+    expect(beginTask).toHaveBeenCalledWith('chat');
+    expect(sendRuntimeUserMessage).toHaveBeenCalledWith(input);
+  });
+
+  it('does not send adapted user messages while the chat task is already active', async (): Promise<void> => {
     const activeTask = ref<ChatTaskState>('chat');
     const beginTask = vi.fn<(_kind: 'chat' | 'compact') => ChatTaskStartResult>(() => ({ ok: false, reason: 'busy' }));
     const sendRuntimeUserMessage = vi.fn<(_input: AdaptedUserMessageInput) => Promise<void>>(() => Promise.resolve());
@@ -78,7 +104,7 @@ describe('useChatSubmitter', (): void => {
     await submitter.submit(createSendAdaptedUserMessageAction(input));
 
     expect(beginTask).not.toHaveBeenCalled();
-    expect(sendRuntimeUserMessage).toHaveBeenCalledWith(input);
+    expect(sendRuntimeUserMessage).not.toHaveBeenCalled();
   });
 
   it('submits message part updates to the active runtime when a chat turn is running', async (): Promise<void> => {

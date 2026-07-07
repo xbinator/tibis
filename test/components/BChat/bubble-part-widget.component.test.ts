@@ -97,8 +97,9 @@ function createWidgetData(code: string): WidgetData {
 function createWidgetRenderContext(): WidgetRenderContext {
   return {
     input: {
-      city: '上海'
-    },
+        city: '上海'
+      },
+      output: undefined,
     data: {
       weather: {
         temperature: 28
@@ -141,11 +142,11 @@ function createOpenWidgetToolPartFromWidgetPart(part: TestWidgetDisplayFixture):
       toolName: 'open_widget',
       status: 'success',
       data: {
-        kind: 'widget_display',
         sessionId: part.sessionId,
         widgetId: part.widgetId,
         value: part.value,
-        renderContext: part.renderContext
+        renderContext: part.renderContext,
+        execution: { status: 'success', output: undefined }
       }
     }
   };
@@ -241,11 +242,11 @@ describe('BubblePartWidget', (): void => {
         toolName: 'open_widget',
         status: 'success',
         data: {
-          kind: 'widget_display',
           sessionId: 'widget-coffee-session',
           widgetId: 'coffee',
           value: widgetValue,
-          renderContext
+          renderContext,
+          execution: { status: 'success', output: undefined }
         }
       }
     };
@@ -263,9 +264,10 @@ describe('BubblePartWidget', (): void => {
     const widgetPart: TestWidgetDisplayFixture = {
       ...createWidgetPart('export default class Weather extends Widget {}'),
       renderContext: {
-        input: {
+                input: {
           city: '上海'
         },
+          output: undefined,
         data: {}
       }
     };
@@ -279,9 +281,10 @@ describe('BubblePartWidget', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -323,9 +326,10 @@ describe('BubblePartWidget', (): void => {
     const widgetPart: TestWidgetDisplayFixture = {
       ...createWidgetPart('export default class Weather extends Widget {}'),
       renderContext: {
-        input: {
+                input: {
           city: '上海'
         },
+          output: undefined,
         data: {}
       }
     };
@@ -347,9 +351,10 @@ describe('BubblePartWidget', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -380,9 +385,10 @@ describe('BubblePartWidget', (): void => {
     const widgetPart: TestWidgetDisplayFixture = {
       ...createWidgetPart('export default class Weather extends Widget {}'),
       renderContext: {
-        input: {
+                input: {
           city: '上海'
         },
+          output: undefined,
         data: {}
       }
     };
@@ -396,9 +402,10 @@ describe('BubblePartWidget', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -430,9 +437,10 @@ describe('BubblePartWidget', (): void => {
     const widgetPart: TestWidgetDisplayFixture = {
       ...createWidgetPart('export default class Weather extends Widget {}'),
       renderContext: {
-        input: {
+                input: {
           city: '上海'
         },
+          output: undefined,
         data: {}
       }
     };
@@ -443,9 +451,10 @@ describe('BubblePartWidget', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'mount',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -458,9 +467,10 @@ describe('BubblePartWidget', (): void => {
     const latestWidgetPart: TestWidgetDisplayFixture = {
       ...widgetPart,
       renderContext: {
-        input: {
+                input: {
           city: '上海'
         },
+          output: undefined,
         data: {
           weather: {
             temperature: 31
@@ -485,7 +495,7 @@ describe('BubblePartWidget', (): void => {
   it('keeps interaction render data local without touching message parts', async (): Promise<void> => {
     const staleWidgetPart = {
       ...createWidgetPart(
-        ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join(
+        ['export default class Weather extends Widget {', '  confirmOrder() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join(
           '\n'
         )
       ),
@@ -493,15 +503,16 @@ describe('BubblePartWidget', (): void => {
     };
     const targetWidgetPart = {
       ...createWidgetPart(
-        ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join(
+        ['export default class Weather extends Widget {', '  confirmOrder() {', '    this.submitted = { temperature: this.weather.temperature }', '  }', '}'].join(
           '\n'
         )
       ),
       id: 'widget-part-target',
       renderContext: {
         input: {
-          city: '上海'
-        },
+            city: '上海'
+          },
+          output: undefined,
         data: {
           weather: {
             temperature: 35
@@ -523,8 +534,9 @@ describe('BubblePartWidget', (): void => {
         reason: 'interaction',
         renderContext: {
           input: {
-            city: '上海'
-          },
+              city: '上海'
+            },
+            output: undefined,
           data: {
             submitted: {
               temperature: 35
@@ -557,7 +569,7 @@ describe('BubblePartWidget', (): void => {
   it('submits widget runtime data as a message part update without sending user messages', async (): Promise<void> => {
     const widgetScript = [
       'export default class Weather extends Widget {',
-      '  unmounted() {',
+      '  confirmOrder() {',
       '    this.submitted = { temperature: this.weather.temperature }',
       '  }',
       '}'
@@ -575,9 +587,10 @@ describe('BubblePartWidget', (): void => {
       createRuntimeChange(widgetPart, {
         reason: 'interaction',
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {
             submitted: {
               temperature: 28

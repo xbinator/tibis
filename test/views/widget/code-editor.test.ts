@@ -321,7 +321,7 @@ describe('CodeEditor', (): void => {
   });
 
   it('loads current script and updates widget data through value model', async (): Promise<void> => {
-    const initialCode = ['export default class Weather extends Widget {', '  ready = false', '', '  async mounted() {', '    this.ready = true', '  }', '}'].join(
+    const initialCode = ['export default class Weather extends Widget {', '  ready = false', '', '  async onMounted() {', '    this.ready = true', '  }', '}'].join(
       '\n'
     );
     const nextCode = [
@@ -391,7 +391,7 @@ describe('CodeEditor', (): void => {
   });
 
   it('syncs draft from the latest model when activated again', async (): Promise<void> => {
-    const initialCode = 'export default class Weather extends Widget { mounted() {} }';
+    const initialCode = 'export default class Weather extends Widget { onMounted() {} }';
     const wrapper = mountCodeEditor(
       {
         ...createWidgetData(),
@@ -427,7 +427,7 @@ describe('CodeEditor', (): void => {
       {
         ...createWidgetData(),
         execute: {
-          code: 'export default class Weather extends Widget { mounted() {} }'
+          code: 'export default class Weather extends Widget { onMounted() {} }'
         }
       },
       true
@@ -445,7 +445,7 @@ describe('CodeEditor', (): void => {
       {
         ...createWidgetData(),
         execute: {
-          code: 'export default class Weather extends Widget { mounted() {} }'
+          code: 'export default class Weather extends Widget { onMounted() {} }'
         }
       },
       false
@@ -547,7 +547,7 @@ describe('CodeEditor', (): void => {
             '  }',
             "  message = '等待用户操作'",
             '',
-            '  mounted() {',
+            '  onMounted() {',
             '    const city: string = this.$input.city',
             '    const temperature: number = this.weather.temperature',
             '    this.message = city',
@@ -571,7 +571,7 @@ describe('CodeEditor', (): void => {
           'export default class Weather extends Widget {',
           "  message = '等待用户操作'",
           '',
-          '  mounted() {',
+          '  onMounted() {',
           '    this./*cursor*/',
           '  }',
           '',
@@ -594,7 +594,7 @@ describe('CodeEditor', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),
       execute: {
-        code: ['export default class Weather extends Widget {', '  async mounted() {', '    // 暂无数据写入。', '  }', '}'].join('\n')
+        code: ['export default class Weather extends Widget {', '  async onMounted() {', '    // 暂无数据写入。', '  }', '}'].join('\n')
       }
     });
 
@@ -609,7 +609,7 @@ describe('CodeEditor', (): void => {
           "    city: ''",
           '  }',
           '',
-          '  async mounted() {',
+          '  async onMounted() {',
           '    this.draft.city = this.$input.city',
           '  }',
           '}'
@@ -626,7 +626,7 @@ describe('CodeEditor', (): void => {
         getTypeScriptDiagnostics({
           'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
           'widget-env.d.ts': extraLibContent,
-          'widget-test.ts': "export default class Weather extends Widget { draft = { city: '' }; mounted() { const city: string = this.draft.city } }"
+          'widget-test.ts': "export default class Weather extends Widget { draft = { city: '' }; onMounted() { const city: string = this.draft.city } }"
         })
       )
     ).toEqual([]);

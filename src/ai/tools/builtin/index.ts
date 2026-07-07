@@ -32,7 +32,7 @@ import { QUESTION_TOOL_NAME, createQuestionTool, type PendingQuestionSnapshot } 
 import { createBuiltinShellCommandTool, RUN_SHELL_COMMAND_TOOL_NAME } from './ShellTool';
 import { createSkillTool, SKILL_TOOL_NAME, type SkillStoreLike } from './SkillTool';
 import { TODO_WRITE_TOOL_NAME, createBuiltinTodoWriteTool } from './TodoWriteTool';
-import { createOpenWidgetTool, createWidgetTool, OPEN_WIDGET_TOOL_NAME, WIDGET_TOOL_NAME, type WidgetStoreLike } from './WidgetTool';
+import { createWidgetTool, OPEN_WIDGET_TOOL_NAME, WIDGET_TOOL_NAME, type WidgetStoreLike } from './WidgetTool';
 
 // 重新导出工具名称
 export {
@@ -273,7 +273,6 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   // Widget 工具：仅当有可用小组件时注册
   const enabledWidgets = options.widgetStore?.getEnabledWidgets() ?? [];
   const widgetTool = options.widgetStore?.initialized && enabledWidgets.length > 0 ? createWidgetTool(options.widgetStore) : null;
-  const openWidgetTool = options.widgetStore?.initialized && enabledWidgets.length > 0 ? createOpenWidgetTool(options.widgetStore) : null;
 
   // todowrite 工具：无条件注册
   const todoWriteTool = createBuiltinTodoWriteTool({
@@ -290,7 +289,6 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     operateWebpageTool,
     ...(skillTool ? [skillTool] : []),
     ...(widgetTool ? [widgetTool] : []),
-    ...(openWidgetTool ? [openWidgetTool] : []),
     todoWriteTool
   ];
 }

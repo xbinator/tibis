@@ -2,25 +2,9 @@
  * @file protocol.ts
  * @description 小组件与聊天、工具层共享的协议归一化工具。
  */
-import type { WidgetDisplayPayload, WidgetRuntimeSendMessage, WidgetSendMessageTextPart, WidgetSubmitSuccessResult } from 'types/widget';
+import type { WidgetDisplayPayload, WidgetExecutionResult, WidgetRuntimeSendMessage, WidgetSendMessageTextPart, WidgetSubmitSuccessResult } from 'types/widget';
 import { isArray, mapValues } from 'lodash-es';
 import { isPlainRecord, stringifyRuntimeTextValue } from '@/utils/json';
-
-/**
- * 判断值是否为 open_widget 工具返回的小组件展示载荷。
- * @param value - 待判断的值
- * @returns 是否为小组件展示载荷
- */
-export function isWidgetDisplayPayload(value: unknown): value is WidgetDisplayPayload {
-  return (
-    isPlainRecord(value) &&
-    value.kind === 'widget_display' &&
-    typeof value.sessionId === 'string' &&
-    typeof value.widgetId === 'string' &&
-    isPlainRecord(value.value) &&
-    isPlainRecord(value.renderContext)
-  );
-}
 
 /**
  * 将小组件原始提交值转为成功结果。
@@ -77,4 +61,34 @@ export function normalizeWidgetSendMessage(value: unknown): WidgetRuntimeSendMes
     content,
     isError: typeof value.isError === 'boolean' ? value.isError : false
   };
+}
+
+/**
+ * 判断值是否为 Widget onExecute 执行结果。
+ * @param value - 待判断的值
+ * @returns 是否为 Widget onExecute 执行结果
+ */
+function isWidgetExecutionResult(value: unknown): value is WidgetExecutionResult {
+  if (!isPlainRecord(value) || typeof value.status !== 'string') return false;
+  if (value.status === 'success') return true;
+
+  return value.status === 'failure' && isPlainRecord(value.error) && value.error.code === 'EXECUTION_FAILED' && typeof value.error.message === 'string';
+}
+
+/**
+ * 判断值是否为 open_widget 工具返回的小组件展示载荷。
+ * @param value - 待判断的值
+ * @returns 是否为小组件展示载荷
+ */
+export function isWidgetDisplayPayload(value: unknown): value is WidgetDisplayPayload {
+  return (
+    isPlainRecord(value) &&
+    typeof value.sessionId === 'string' &&
+    typeof value.widgetId === 'string' &&
+    isPlainRecord(value.value) &&
+    isPlainRecord(value.renderContext) &&
+    isPlainRecord(value.renderContext.input) &&
+    isPlainRecord(value.renderContext.data) &&
+    isWidgetExecutionResult(value.execution)
+  );
 }

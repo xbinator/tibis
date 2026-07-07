@@ -39,7 +39,7 @@ import {
   createWidgetRuntimeInstance,
   mountWidgetRuntime,
   type WidgetRuntimeChange,
-  type WidgetRuntimeFinishResult,
+  type WidgetRuntimeRunResult,
   type WidgetRuntimeState
 } from './utils/widgetRuntime';
 import { createWidgetRuntimeLayoutFromRenderElements, type WidgetRuntimeElementLayout } from './utils/widgetRuntime/layout';
@@ -89,8 +89,6 @@ const patchPreviewRuntimeState = shallowRef<WidgetRuntimeState | null>(null);
 const localRuntimeState = shallowRef<WidgetRuntimeState | null>(null);
 /** mounted 生命周期是否已在当前组件实例中执行过。 */
 const mountedInitialized = shallowRef<boolean>(false);
-/** 当前运行态是否已由交互收尾。 */
-const runtimeFinished = shallowRef<boolean>(false);
 /** 当前运行态是否执行失败。 */
 const runtimeFailed = shallowRef<boolean>(false);
 /** 串行运行态脚本任务，避免并发交互读取同一个旧快照。 */
@@ -256,7 +254,7 @@ function handleWidgetConsole(level: 'log' | 'info' | 'warn' | 'error' | 'debug',
  * @param result - 脚本执行结果
  * @returns 可写回宿主的运行态快照
  */
-function createStateFromRuntimeResult(result: WidgetRuntimeFinishResult): WidgetRuntimeState {
+function createStateFromRuntimeResult(result: WidgetRuntimeRunResult): WidgetRuntimeState {
   return {
     value: result.state.value,
     renderContext: result.state.renderContext
@@ -269,7 +267,7 @@ function createStateFromRuntimeResult(result: WidgetRuntimeFinishResult): Widget
  * @param result - 脚本执行结果
  * @returns 运行态变化事件
  */
-function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult): WidgetRuntimeChange {
+function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeRunResult): WidgetRuntimeChange {
   const state = createStateFromRuntimeResult(result);
 
   return {
@@ -285,7 +283,7 @@ function createRuntimeChange(reason: WidgetRuntimeChange['reason'], result: Widg
  * @param reason - 运行态变化来源
  * @param result - 脚本执行结果
  */
-async function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeFinishResult): Promise<void> {
+async function emitRuntimeChange(reason: WidgetRuntimeChange['reason'], result: WidgetRuntimeRunResult): Promise<void> {
   const change = createRuntimeChange(reason, result);
 
   patchPreviewRuntimeState.value = null;
@@ -353,7 +351,7 @@ async function initWidgetRuntime(): Promise<void> {
  * @param interactionCode - 元素交互表达式
  */
 async function runRuntimeInteraction(interactionCode: string): Promise<void> {
-  if (!mountedInitialized.value || runtimeFinished.value || runtimeFailed.value) return;
+  if (!mountedInitialized.value || runtimeFailed.value) return;
   if (!interactionCode.trim()) return;
 
   const currentState = runtimeState.value;
@@ -365,7 +363,6 @@ async function runRuntimeInteraction(interactionCode: string): Promise<void> {
       onLogger: handleWidgetLogger,
       onConsole: handleWidgetConsole
     }).runInteraction(interactionCode);
-    runtimeFinished.value = true;
     if (result.state === currentState && !result.sendMessage) {
       clearPatchPreview(executionId);
       return;

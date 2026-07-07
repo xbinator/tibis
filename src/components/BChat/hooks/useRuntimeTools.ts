@@ -21,6 +21,7 @@ import { createOpenWidgetTool, createWidgetTool } from '@/ai/tools/builtin/Widge
 import type { AIToolConfirmationAdapter } from '@/ai/tools/confirmation';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
+import { createWidgetHttpClient, executeWidgetRuntime } from '@/components/BWidget/utils/widgetRuntime';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { useWorkspaceRoot } from '@/hooks/useWorkspaceRoot';
@@ -74,6 +75,8 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
   const { openDraft } = useOpenDraft();
   const { openFileByPath } = useOpenFile();
   const { workspaceRoot, getWorkspaceRoot } = useWorkspaceRoot();
+  /** open_widget 前置执行阶段复用的托管 HTTP 客户端。 */
+  const widgetHttpClient = createWidgetHttpClient();
 
   const allBuiltinTools = createBuiltinTools({
     confirm: options.confirm,
@@ -141,6 +144,11 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
     const hasActiveEditor = Boolean(editorToolContextRegistry.getCurrentContext());
     const hasActiveWebview = Boolean(webviewToolContextRegistry.getCurrentContext());
     const hasWorkspace = Boolean(workspaceRoot.value);
+    const enabledWidgets = widgetStore.initialized ? widgetStore.getEnabledWidgets() : [];
+    const hasActiveWidgets = widgetStore.initialized && enabledWidgets.length > 0;
+    const baseBuiltinTools = hasActiveWidgets
+      ? allBuiltinTools.filter((tool: AIToolExecutor): boolean => tool.definition.name !== OPEN_WIDGET_TOOL_NAME)
+      : allBuiltinTools;
 
     // skillStore 在 onMounted 中异步初始化，allBuiltinTools 创建时 skillStore.initialized 为 false，
     // 因此需要在每次获取工具时动态判断是否需要追加 Skill 工具。
@@ -151,18 +159,19 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
         dynamicTools.push(createSkillTool(skillStore));
       }
     }
-    if (widgetStore.initialized && widgetStore.getEnabledWidgets().length > 0) {
-      const hasWidgetTool = allBuiltinTools.some((tool) => tool.definition.name === WIDGET_TOOL_NAME);
+    if (hasActiveWidgets) {
+      const hasWidgetTool = baseBuiltinTools.some((tool) => tool.definition.name === WIDGET_TOOL_NAME);
       if (!hasWidgetTool) {
         dynamicTools.push(createWidgetTool(widgetStore));
       }
-      const hasOpenWidgetTool = allBuiltinTools.some((tool) => tool.definition.name === OPEN_WIDGET_TOOL_NAME);
-      if (!hasOpenWidgetTool) {
-        dynamicTools.push(createOpenWidgetTool(widgetStore));
-      }
+      dynamicTools.push(
+        createOpenWidgetTool(widgetStore, {
+          executeWidget: ({ state }) => executeWidgetRuntime(state, { http: widgetHttpClient })
+        })
+      );
     }
 
-    return [...allBuiltinTools, ...dynamicTools].filter((tool) => {
+    return [...baseBuiltinTools, ...dynamicTools].filter((tool) => {
       if (!isBuiltinToolName(tool.definition.name)) return false;
       if (tool.definition.name === 'read_current_document' && !hasActiveEditor) return false;
       if (tool.definition.name === READ_CURRENT_WEBPAGE_TOOL_NAME && !hasActiveWebview) return false;

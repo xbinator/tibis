@@ -404,8 +404,9 @@ describe('WidgetPage', (): void => {
       metadata: {
         previewContext: {
           input: {
-            city: '上海'
-          },
+              city: '上海'
+            },
+            output: undefined,
           data: {
             weather: {
               temperature: 28

@@ -5,7 +5,7 @@
 import type { WidgetRuntimePatch } from './patch';
 import type { WidgetData } from '../../types';
 import type { RequestInput, RequestMethod, RequestResponse } from 'types/request';
-import type { WidgetHttpClient, WidgetRenderContext, WidgetRuntimeSendMessage, WidgetSendMessageTextPart } from 'types/widget';
+import type { WidgetExecutionResult, WidgetHttpClient, WidgetRenderContext, WidgetRuntimeSendMessage, WidgetSendMessageTextPart } from 'types/widget';
 import { cloneDeep, isPlainObject } from 'lodash-es';
 import ts from 'typescript';
 import { getElectronAPI } from '@/shared/platform/electron-api';
@@ -78,7 +78,7 @@ interface WidgetLifecycleRunOptions {
 }
 
 /** 小组件脚本生命周期名称。 */
-type WidgetScriptLifecycleName = 'mounted' | 'unmounted';
+type WidgetScriptLifecycleName = 'onExecute' | 'onMounted';
 
 /**
  * 小组件脚本运行载荷。
@@ -91,7 +91,9 @@ interface WidgetScriptRunPayload {
   /** 需要执行的生命周期。 */
   lifecycleName?: WidgetScriptLifecycleName;
   /** 小组件启动入参。 */
-  input: Record<string, unknown>;
+  input: WidgetRenderContext['input'];
+  /** onExecute 返回值。 */
+  output: WidgetRenderContext['output'];
   /** 小组件当前运行态数据。 */
   data: Record<string, unknown>;
 }
@@ -106,6 +108,8 @@ interface WidgetScriptRunResult {
   dataChanged: boolean;
   /** 指定生命周期是否真实存在并执行过。 */
   lifecycleExecuted?: boolean;
+  /** 生命周期或交互返回值。 */
+  returnValue?: unknown;
   /** 脚本声明的上行消息。 */
   sendMessage?: WidgetRuntimeSendMessage;
 }
@@ -134,13 +138,23 @@ export interface WidgetHttpClientDependencies {
 }
 
 /**
- * 小组件运行态收尾结果。
+ * 小组件运行态执行结果。
  */
-export interface WidgetRuntimeFinishResult {
-  /** 收尾后的运行态状态。 */
+export interface WidgetRuntimeRunResult {
+  /** 执行后的运行态状态。 */
   state: WidgetRuntimeState;
   /** 脚本通过 this.$sendMessage 声明的上行消息。 */
   sendMessage?: WidgetRuntimeSendMessage;
+}
+
+/**
+ * 小组件 onExecute 执行结果。
+ */
+export interface WidgetRuntimeExecuteResult {
+  /** 执行后的运行态状态。 */
+  state: WidgetRuntimeState;
+  /** 模型可见执行状态。 */
+  execution: WidgetExecutionResult;
 }
 
 /**
@@ -152,7 +166,7 @@ export interface WidgetRuntimeInstance {
    * @param interactionCode - 元素交互表达式
    * @returns 交互执行后的运行态结果
    */
-  runInteraction: (interactionCode: string) => Promise<WidgetRuntimeFinishResult>;
+  runInteraction: (interactionCode: string) => Promise<WidgetRuntimeRunResult>;
 }
 
 /**
@@ -452,7 +466,8 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     payload.interactionCode !== undefined ? JSON.stringify(compileSandboxSource(payload.interactionCode, 'widget-interaction.ts')) : 'undefined';
 
   return [
-    'const __widgetInput = __initialWidgetInput',
+    'const __widgetInput = __clone(__initialWidgetInput)',
+    'const __widgetOutput = __clone(__initialWidgetOutput)',
     'let __widgetData = __clone(__initialWidgetData)',
     'let __widgetClass',
     'const __widgetReservedBindingNames = new Set([',
@@ -467,7 +482,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "  'setTimeout', 'setInterval', 'requestAnimationFrame', 'alert', 'confirm', 'prompt', 'open',",
     "  'console', 'widgetThis'",
     '])',
-    "const __widgetLifecycleNames = new Set(['mounted', 'unmounted'])",
+    "const __widgetLifecycleNames = new Set(['onExecute', 'onMounted'])",
     `const __widgetNonPublicMemberNamesProperty = ${JSON.stringify(WIDGET_NON_PUBLIC_MEMBER_NAMES_PROPERTY)}`,
     '',
     'function __clone(value) {',
@@ -686,6 +701,23 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "  return value !== null && typeof value === 'object'",
     '}',
     '',
+    'function __createReadonlyProxy(value, proxyCache = new WeakMap()) {',
+    '  if (!__isObjectLike(value)) return value',
+    '  const cachedProxy = proxyCache.get(value)',
+    '  if (cachedProxy) return cachedProxy',
+    '  const proxy = new Proxy(value, {',
+    '    get(target, property, receiver) {',
+    '      return __createReadonlyProxy(Reflect.get(target, property, receiver), proxyCache)',
+    '    },',
+    '    set() { return true },',
+    '    deleteProperty() { return true },',
+    '    defineProperty() { return true },',
+    '    setPrototypeOf() { return true }',
+    '  })',
+    '  proxyCache.set(value, proxy)',
+    '  return proxy',
+    '}',
+    '',
     'function __createWidgetDataProxy(value, executionState, proxyCache, path) {',
     '  if (!__isObjectLike(value)) return value',
     '  const cachedProxy = proxyCache.get(value)',
@@ -768,7 +800,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "      return Reflect.has(targetObject, property) || (typeof property === 'string' && Object.prototype.hasOwnProperty.call(__widgetData, property))",
     '    },',
     '    deleteProperty(targetObject, property) {',
-    "      if (property === '$input' || property === '$http' || property === '$sendMessage' || property === '$logger') {",
+    "      if (property === '$input' || property === '$output' || property === '$http' || property === '$sendMessage' || property === '$logger') {",
     '        return Reflect.deleteProperty(targetObject, property)',
     '      }',
     "      if (typeof property === 'string' && Object.prototype.hasOwnProperty.call(__widgetData, property)) {",
@@ -790,7 +822,8 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  const proxyCache = new WeakMap()',
     '  const context = widgetInstance',
     '  Object.defineProperties(context, {',
-    '    $input: { configurable: true, enumerable: false, get() { return __clone(__widgetInput) } },',
+    '    $input: { configurable: false, enumerable: false, get() { return __createReadonlyProxy(__widgetInput) } },',
+    '    $output: { configurable: false, enumerable: false, get() { return __createReadonlyProxy(__widgetOutput) } },',
     '    $http: { configurable: true, enumerable: false, value: __createWidgetHttpClient(executionState) },',
     '    $logger: { configurable: true, enumerable: false, value: __createWidgetLogger(executionState) },',
     '    $sendMessage: {',
@@ -804,7 +837,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    }',
     '  })',
     '  for (const key of Object.keys(__widgetData)) {',
-    "    if (key === '$input' || key === '$http' || key === '$sendMessage' || key === '$logger') continue",
+    "    if (key === '$input' || key === '$output' || key === '$http' || key === '$sendMessage' || key === '$logger') continue",
     '    __defineWidgetDataAccessor(context, key, executionState, proxyCache)',
     '  }',
     '  return __createWidgetRootProxy(context, executionState, proxyCache)',
@@ -885,7 +918,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  const bindingNames = Object.keys(methodBindings)',
     "  const interactionBody = '\"use strict\";\\nreturn (async function() {\\n' + interactionCode + '\\n}).call(widgetThis);'",
     "  const fn = __sandbox.createFunction(['widgetThis', ...bindingNames, 'console'], interactionBody)",
-    '  await fn(widgetThis, ...bindingNames.map((name) => methodBindings[name]), console)',
+    '  return await fn(widgetThis, ...bindingNames.map((name) => methodBindings[name]), console)',
     '}',
     '',
     'async function __runWidgetRuntime(lifecycleName, interactionCode) {',
@@ -895,14 +928,15 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  const widgetThis = __createWidgetThisContext(widgetInstance, executionState)',
     '  const methodBindings = __createMethodBindings(widgetThis, widgetInstance, executionState)',
     '  let lifecycleExecuted = false',
+    '  let returnValue',
     '  if (lifecycleName) {',
     '    const lifecycle = __readWidgetLifecycle(widgetInstance, lifecycleName)',
     "    if (typeof lifecycle === 'function') {",
     '      lifecycleExecuted = true',
-    '      await Reflect.apply(lifecycle, widgetThis, [])',
+    '      returnValue = await Reflect.apply(lifecycle, widgetThis, [])',
     '    }',
     '  } else if (typeof interactionCode === "string" && interactionCode.trim()) {',
-    '    await __runInteractionCode(interactionCode, widgetThis, methodBindings)',
+    '    returnValue = await __runInteractionCode(interactionCode, widgetThis, methodBindings)',
     '  }',
     '  await __flushPendingMethodCalls(executionState)',
     '  await __flushScheduledPatchFlushes(executionState)',
@@ -910,6 +944,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    data: __clone(__widgetData),',
     '    dataChanged: executionState.dataChanged,',
     '    ...(lifecycleExecuted ? { lifecycleExecuted } : {}),',
+    '    ...(returnValue !== undefined ? { returnValue: __clone(returnValue) } : {}),',
     '    ...(executionState.sendMessage ? { sendMessage: __clone(executionState.sendMessage) } : {})',
     '  }',
     '}',
@@ -944,6 +979,7 @@ async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: 
       code: createWidgetAdapterCode(payload),
       arguments: {
         __initialWidgetInput: payload.input,
+        __initialWidgetOutput: payload.output,
         __initialWidgetData: payload.data,
         __widgetScriptCode: compileWidgetClassScript(payload.scriptCode)
       }
@@ -1024,9 +1060,9 @@ function applyWidgetSandboxResult(state: WidgetRuntimeState, result: WidgetScrip
 }
 
 /**
- * 标记运行态上下文已经执行过 mounted 生命周期。
+ * 标记运行态上下文已经执行过 onMounted 生命周期。
  * @param state - 原始运行态状态
- * @returns 带 mounted 标记的运行态状态
+ * @returns 带 onMounted 标记的运行态状态
  */
 function markWidgetRuntimeMounted(state: WidgetRuntimeState): WidgetRuntimeState {
   if (state.renderContext.isMounted === true) return state;
@@ -1053,6 +1089,7 @@ function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOpt
       ...(options.interactionCode !== undefined ? { interactionCode: options.interactionCode } : {}),
       ...(options.lifecycleName ? { lifecycleName: options.lifecycleName } : {}),
       input: state.renderContext.input,
+      output: state.renderContext.output,
       data: state.renderContext.data
     },
     {
@@ -1067,16 +1104,74 @@ function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOpt
 }
 
 /**
- * 执行小组件 mounted 生命周期，并收集上行消息。
+ * 执行小组件 onExecute 生命周期。
+ * @param state - 运行态状态
+ * @param options - 生命周期执行选项
+ * @returns 小组件 onExecute 执行结果
+ */
+export async function executeWidgetRuntime(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeExecuteResult> {
+  const stateWithEmptyOutput: WidgetRuntimeState = {
+    ...state,
+    renderContext: {
+      ...state.renderContext,
+      output: undefined
+    }
+  };
+
+  if (!isWidgetScriptEnabled(state)) {
+    return {
+      state: stateWithEmptyOutput,
+      execution: { status: 'success', output: undefined }
+    };
+  }
+
+  const nextState = cloneDeep(stateWithEmptyOutput);
+
+  try {
+    const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'onExecute' });
+    const output = sandboxResult.returnValue;
+    const executedState = applyWidgetSandboxResult(
+      {
+        ...nextState,
+        renderContext: {
+          ...nextState.renderContext,
+          output
+        }
+      },
+      sandboxResult
+    );
+
+    return {
+      state: executedState,
+      execution: { status: 'success', output }
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return {
+      state: stateWithEmptyOutput,
+      execution: {
+        status: 'failure',
+        error: {
+          code: 'EXECUTION_FAILED',
+          message
+        }
+      }
+    };
+  }
+}
+
+/**
+ * 执行小组件 onMounted 生命周期，并收集上行消息。
  * @param state - 运行态状态
  * @param options - 生命周期执行选项。
  * @returns 小组件运行态结果。
  */
-export async function mountWidgetRuntime(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeFinishResult> {
+export async function mountWidgetRuntime(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeRunResult> {
   if (!isWidgetScriptEnabled(state)) return { state };
 
   const nextState = cloneDeep(state);
-  const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'mounted' });
+  const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'onMounted' });
   if (!sandboxResult.dataChanged && sandboxResult.lifecycleExecuted !== true && !sandboxResult.sendMessage) return { state };
 
   const changedState = applyWidgetSandboxResult(nextState, sandboxResult);
@@ -1089,34 +1184,13 @@ export async function mountWidgetRuntime(state: WidgetRuntimeState, options: Wid
 }
 
 /**
- * 执行小组件 mounted 生命周期，并返回下一版运行数据。
+ * 执行小组件 onMounted 生命周期，并返回下一版运行数据。
  * @param state - 运行态状态
  * @param options - 生命周期执行选项。
  * @returns 运行后的状态。
  */
 export async function initWidgetMountState(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeState> {
   return (await mountWidgetRuntime(state, options)).state;
-}
-
-/**
- * 执行小组件 unmounted 生命周期，并收集上行消息。
- * @param state - 运行态状态
- * @param options - 生命周期执行选项。
- * @returns 小组件运行态结果。
- */
-export async function finishWidgetRuntime(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeFinishResult> {
-  if (!isWidgetScriptEnabled(state)) return { state };
-
-  const nextState = cloneDeep(state);
-  const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'unmounted' });
-  if (!sandboxResult.dataChanged && !sandboxResult.sendMessage) return { state };
-
-  const finishedState = applyWidgetSandboxResult(nextState, sandboxResult);
-
-  return {
-    state: finishedState,
-    ...(sandboxResult.sendMessage ? { sendMessage: sandboxResult.sendMessage } : {})
-  };
 }
 
 /**
@@ -1130,7 +1204,7 @@ async function runWidgetInteraction(
   state: WidgetRuntimeState,
   interactionCode: string,
   options: WidgetLifecycleRunOptions = {}
-): Promise<WidgetRuntimeFinishResult> {
+): Promise<WidgetRuntimeRunResult> {
   if (!isWidgetScriptEnabled(state)) return { state };
   if (!interactionCode.trim()) return { state };
 
@@ -1138,16 +1212,10 @@ async function runWidgetInteraction(
   const sandboxResult = await runPartSandbox(nextState, { ...options, interactionCode });
   const interactedState = applyWidgetSandboxResult(nextState, sandboxResult);
 
-  const finishResult = await finishWidgetRuntime(interactedState, options);
-
-  if (sandboxResult.sendMessage) {
-    return {
-      state: finishResult.state,
-      sendMessage: sandboxResult.sendMessage
-    };
-  }
-
-  return finishResult;
+  return {
+    state: interactedState,
+    ...(sandboxResult.sendMessage ? { sendMessage: sandboxResult.sendMessage } : {})
+  };
 }
 
 /**
@@ -1158,6 +1226,6 @@ async function runWidgetInteraction(
  */
 export function createWidgetRuntimeInstance(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): WidgetRuntimeInstance {
   return {
-    runInteraction: (interactionCode: string): Promise<WidgetRuntimeFinishResult> => runWidgetInteraction(state, interactionCode, options)
+    runInteraction: (interactionCode: string): Promise<WidgetRuntimeRunResult> => runWidgetInteraction(state, interactionCode, options)
   };
 }

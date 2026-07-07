@@ -32,21 +32,59 @@ function createWidgetScriptClassName(widgetId: string | undefined): string {
 }
 
 /**
- * 创建 Widget JS 脚本默认代码。
+ * 创建 Widget 默认脚本代码。
  * @param widgetId - 小组件标识符
  * @returns 默认脚本代码
  */
-function createWidgetInteractionScriptDefaultCode(widgetId?: string): string {
+function createWidgetScriptDefaultCode(widgetId?: string): string {
   const className = createWidgetScriptClassName(widgetId);
 
   return [
     `export default class ${className} extends Widget {`,
+    '  /**',
+    '   * 可直接绑定到元素里的数据字段。',
+    '   * 在模板中使用：{{ message }}、{{ weather.temperature }}。',
+    '   */',
     "  message = '';",
+    '  weather = {',
+    '    temperature: 0,',
+    "    condition: ''",
+    '  };',
     '',
-    '  mounted() {',
-    "    this.message = '';",
+    '  /**',
+    '   * 大模型调用 open_widget 时先执行。',
+    '   * - this.$input：只读入参，例如 this.$input.city。',
+    '   * - return 的值会成为 this.$output。',
+    '   * - 这里的 this.$sendMessage 不会发送到 Chat，发送消息请放到 onMounted 或交互方法中。',
+    '   */',
+    '  async onExecute() {',
+    '    // const response = await this.$http.get<{ temperature: number; condition: string }>(',
+    "    //   'https://api.example.com/weather',",
+    '    //   { query: { city: this.$input.city } }',
+    '    // );',
+    "    // this.$logger.info('onExecute 完成', response.data);",
+    '    // return response.data;',
+    '    return undefined;',
     '  }',
     '',
+    '  /**',
+    '   * 小组件展示后执行。',
+    '   * - this.$output 是 onExecute 的返回值；失败或未返回时为 undefined。',
+    '   * - 可以在这里把 this.$output 写入可绑定的数据字段。',
+    '   */',
+    '  onMounted() {',
+    '    const output = this.$output as { temperature?: number; condition?: string } | undefined;',
+    '    if (output?.temperature !== undefined) this.weather.temperature = output.temperature;',
+    '    if (output?.condition !== undefined) this.weather.condition = output.condition;',
+    "    this.message = String(this.$input.message ?? '');",
+    '  }',
+    '',
+    '  /**',
+    '   * 元素交互方法示例，可在按钮点击等事件中调用。',
+    '   * - this.$sendMessage 支持字符串、文本 part 数组或 { content, isError }。',
+    '   * - this.$http 支持 get/post/put/patch/delete。',
+    '   * - this.$logger.info/warn/error 会写入应用日志；console.* 只进 DevTools。',
+    '   */',
     '  confirm() {',
     '    this.$sendMessage(this.message);',
     '  }',
@@ -73,7 +111,7 @@ export function createDefaultWidgetExecuteMethod(widgetId?: string): WidgetExecu
   return {
     enabled: true,
     description: '',
-    code: createWidgetInteractionScriptDefaultCode(widgetId)
+    code: createWidgetScriptDefaultCode(widgetId)
   };
 }
 

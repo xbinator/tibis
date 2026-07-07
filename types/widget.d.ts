@@ -8,14 +8,46 @@ import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types'
 export type { WidgetData, WidgetSchemaObject };
 
 /**
+ * Widget onExecute 成功状态。
+ */
+export interface WidgetExecutionSuccess {
+  /** 执行状态 */
+  status: 'success';
+  /** onExecute 返回值；缺省或不存在时为 undefined */
+  output?: unknown;
+}
+
+/**
+ * Widget onExecute 失败状态。
+ */
+export interface WidgetExecutionFailure {
+  /** 执行状态 */
+  status: 'failure';
+  /** 失败详情 */
+  error: {
+    /** 机器可读错误码 */
+    code: 'EXECUTION_FAILED';
+    /** 给模型展示的错误说明 */
+    message: string;
+  };
+}
+
+/**
+ * Widget onExecute 执行结果。
+ */
+export type WidgetExecutionResult = WidgetExecutionSuccess | WidgetExecutionFailure;
+
+/**
  * Widget Skill 渲染上下文。
  */
 export interface WidgetRenderContext {
   /** Widget启动入参 */
-  input: Record<string, unknown>;
+  readonly input: Record<string, unknown>;
+  /** onExecute 成功返回值；未返回或失败时为 undefined */
+  readonly output?: unknown;
   /** Widget会话数据 */
   data: Record<string, unknown>;
-  /** mounted 生命周期是否已经执行过 */
+  /** onMounted 生命周期是否已经执行过 */
   isMounted?: boolean;
 }
 
@@ -39,8 +71,6 @@ export interface WidgetContract {
  * open_widget 工具返回给聊天渲染层的小组件展示载荷。
  */
 export interface WidgetDisplayPayload {
-  /** 载荷类型 */
-  kind: 'widget_display';
   /** 小组件会话 ID */
   sessionId: string;
   /** 小组件稳定 ID */
@@ -49,6 +79,8 @@ export interface WidgetDisplayPayload {
   value: WidgetData;
   /** 运行态渲染上下文 */
   renderContext: WidgetRenderContext;
+  /** onExecute 执行结果 */
+  execution: WidgetExecutionResult;
 }
 
 /**

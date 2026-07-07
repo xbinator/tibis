@@ -3,7 +3,7 @@
  * @description Widget 工具实现，LLM 通过 widget 读取说明，通过 open_widget 打开聊天小组件。
  */
 import type { AIToolContext, AIToolExecutionResult, AIToolExecutor } from 'types/ai';
-import type { WidgetContract, WidgetDisplayPayload, WidgetRenderContext } from 'types/widget';
+import type { WidgetContract, WidgetDisplayPayload, WidgetExecutionResult, WidgetRenderContext } from 'types/widget';
 import { cloneDeep, isPlainObject } from 'lodash-es';
 import type { WidgetDefinition } from '@/ai/widget/types';
 import { createToolFailureResult, createToolSuccessResult } from '../../results';
@@ -23,11 +23,11 @@ const WIDGET_DESCRIPTION_HEADER = 'Inspect a widget by id. Available widgets:';
 const WIDGET_DESCRIPTION_FOOTER = 'Call this tool with id to read widget schemas and decide which optional input fields can be passed to open_widget.';
 
 /** 打开 Widget 工具 description 固定头部。 */
-const OPEN_WIDGET_DESCRIPTION_HEADER = 'Open a widget in chat. This does not fetch data or execute widget code. Available widgets:';
+const OPEN_WIDGET_DESCRIPTION_HEADER = 'Open a widget in chat and run its optional onExecute before display. Available widgets:';
 
 /** 打开 Widget 工具 description 固定尾部。 */
 const OPEN_WIDGET_DESCRIPTION_FOOTER =
-  'Call with id and optional input extracted from the user message. Do not provide state or output; the widget runtime owns them.';
+  'Call with id and optional input extracted from the user message. Do not provide state or output; the widget runtime owns them and returns execution status.';
 
 /**
  * Widget Store 接口，仅声明 WidgetTool 所需的方法。
@@ -55,6 +55,47 @@ export interface OpenWidgetToolInput {
   id: string;
   /** 绑定到 Widget input 的数据 */
   input?: Record<string, unknown>;
+}
+
+/**
+ * open_widget 前置运行态状态。
+ */
+export interface OpenWidgetRuntimeState {
+  /** Widget快照值 */
+  value: WidgetDisplayPayload['value'];
+  /** Widget运行态渲染上下文 */
+  renderContext: WidgetRenderContext;
+}
+
+/**
+ * open_widget 前置执行结果。
+ */
+export interface OpenWidgetRuntimeExecuteResult {
+  /** 执行后的运行态状态 */
+  state: OpenWidgetRuntimeState;
+  /** 模型可见执行状态 */
+  execution: WidgetExecutionResult;
+}
+
+/**
+ * open_widget 前置执行器输入。
+ */
+export interface OpenWidgetRuntimeExecutorInput {
+  /** 初始运行态状态 */
+  state: OpenWidgetRuntimeState;
+}
+
+/**
+ * open_widget 前置执行器。
+ */
+export type OpenWidgetRuntimeExecutor = (input: OpenWidgetRuntimeExecutorInput) => Promise<OpenWidgetRuntimeExecuteResult>;
+
+/**
+ * open_widget 工具创建选项。
+ */
+export interface OpenWidgetToolOptions {
+  /** renderer 侧 Widget 沙箱执行器 */
+  executeWidget?: OpenWidgetRuntimeExecutor;
 }
 
 /**
@@ -145,14 +186,28 @@ function isWidgetInputRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 创建打开小组件时的初始渲染上下文。
+ * 创建打开小组件时的入参。
  * @param input - 打开 Widget 工具输入
- * @returns 小组件渲染上下文
+ * @returns 小组件入参
  */
-function createOpenWidgetRenderContext(input: OpenWidgetToolInput): WidgetRenderContext {
+function createOpenWidgetInput(input: OpenWidgetToolInput): Record<string, unknown> {
+  return isWidgetInputRecord(input.input) ? cloneDeep(input.input) : {};
+}
+
+/**
+ * 创建打开小组件时的初始运行态状态。
+ * @param widget - 小组件定义
+ * @param input - 打开 Widget 工具输入
+ * @returns 小组件运行态状态
+ */
+function createOpenWidgetInitialState(widget: WidgetDefinition, input: OpenWidgetToolInput): OpenWidgetRuntimeState {
   return {
-    input: isWidgetInputRecord(input.input) ? cloneDeep(input.input) : {},
-    data: {}
+    value: cloneDeep(widget.data),
+    renderContext: {
+      input: createOpenWidgetInput(input),
+      output: undefined,
+      data: {}
+    }
   };
 }
 
@@ -171,15 +226,29 @@ function findEnabledWidgetById(store: WidgetStoreLike, id: string): WidgetDefini
  * @param widget - 小组件定义
  * @param input - 打开 Widget 工具输入
  * @param context - 工具执行上下文
+ * @param options - open_widget 工具创建选项
  * @returns 小组件展示快照
  */
-function createWidgetDisplayPayload(widget: WidgetDefinition, input: OpenWidgetToolInput, context?: AIToolContext): WidgetDisplayPayload {
+async function createWidgetDisplayPayload(
+  widget: WidgetDefinition,
+  input: OpenWidgetToolInput,
+  context: AIToolContext | undefined,
+  options: OpenWidgetToolOptions
+): Promise<WidgetDisplayPayload> {
+  const initialState = createOpenWidgetInitialState(widget, input);
+  const executed = options.executeWidget
+    ? await options.executeWidget({ state: initialState })
+    : {
+        state: initialState,
+        execution: { status: 'success', output: undefined } satisfies WidgetExecutionResult
+      };
+
   return {
-    kind: 'widget_display',
     sessionId: `widget-${createSafeWidgetId(widget.id)}-${createSafeWidgetId(context?.toolCallId ?? 'manual')}`,
     widgetId: widget.id,
-    value: cloneDeep(widget.data),
-    renderContext: createOpenWidgetRenderContext(input)
+    value: cloneDeep(executed.state.value),
+    renderContext: cloneDeep(executed.state.renderContext),
+    execution: cloneDeep(executed.execution)
   };
 }
 
@@ -243,7 +312,7 @@ export function createWidgetTool(store: WidgetStoreLike): AIToolExecutor<WidgetT
  * @param store - Widget store 实例
  * @returns 工具执行器
  */
-export function createOpenWidgetTool(store: WidgetStoreLike): AIToolExecutor<OpenWidgetToolInput, WidgetDisplayPayload> {
+export function createOpenWidgetTool(store: WidgetStoreLike, options: OpenWidgetToolOptions = {}): AIToolExecutor<OpenWidgetToolInput, WidgetDisplayPayload> {
   return {
     definition: {
       name: OPEN_WIDGET_TOOL_NAME,
@@ -275,7 +344,7 @@ export function createOpenWidgetTool(store: WidgetStoreLike): AIToolExecutor<Ope
         return createWidgetNotFoundResult(store, input.id, OPEN_WIDGET_TOOL_NAME);
       }
 
-      return createToolSuccessResult(OPEN_WIDGET_TOOL_NAME, createWidgetDisplayPayload(widget, input, context));
+      return createToolSuccessResult(OPEN_WIDGET_TOOL_NAME, await createWidgetDisplayPayload(widget, input, context, options));
     }
   };
 }

@@ -14,12 +14,12 @@ describe('widgetPreviewContext', (): void => {
     const metadata: WidgetMetadata = {
       previewContext: {
         input: {
-          city: '上海'
-        },
+            city: '上海'
+          },
+          output: {
+            condition: '晴'
+          },
         data: {},
-        output: {
-          condition: '晴'
-        },
         [REMOVED_LEGACY_ROOT]: {
           status: 'success'
         }
@@ -28,8 +28,11 @@ describe('widgetPreviewContext', (): void => {
 
     expect(readWidgetPreviewRenderContext(metadata)).toEqual({
       input: {
-        city: '上海'
-      },
+          city: '上海'
+        },
+        output: {
+          condition: '晴'
+        },
       data: {}
     });
   });

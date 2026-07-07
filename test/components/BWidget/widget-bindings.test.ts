@@ -16,8 +16,11 @@ const REMOVED_LEGACY_ROOT = ['last', 'Result'].join('');
 function createRenderContext(): WidgetRenderContext {
   return {
     input: {
-      city: '上海'
-    },
+        city: '上海'
+      },
+      output: {
+        condition: '晴'
+      },
     data: {
       weather: {
         temperature: 28
@@ -35,17 +38,7 @@ describe('widgetBindings', (): void => {
       value: 28
     });
     expect(resolveWidgetTemplateValue('{{ $input.city }} 当前 {{ weather.temperature }}°C', context)).toBe('上海 当前 28°C');
-  });
-
-  it('does not resolve old input root bindings', (): void => {
-    const context = createRenderContext();
-    const template = '{{ input.city }} 当前 {{ weather.temperature }}°C';
-
-    expect(evaluateWidgetBindingExpression('input.city', context)).toEqual({
-      resolved: false,
-      value: undefined
-    });
-    expect(resolveWidgetTemplateValue(template, context)).toBe(template);
+    expect(resolveWidgetTemplateValue('{{ $output.condition }}', context)).toBe('晴');
   });
 
   it('resolves direct data fields whose names start with input', (): void => {
@@ -114,8 +107,9 @@ describe('widgetBindings', (): void => {
   it('resolves loop local variables before data fields', (): void => {
     const context: WidgetRenderContext = {
       input: {
-        city: '上海'
-      },
+          city: '上海'
+        },
+        output: undefined,
       data: {
         item: {
           name: 'data item'

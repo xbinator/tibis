@@ -145,9 +145,9 @@ function createModelVisibleToolResult(part: ChatMessageToolPart & { result: Tool
   return {
     ...part.result,
     data: {
-      kind: part.result.data.kind,
       sessionId: part.result.data.sessionId,
-      widgetId: part.result.data.widgetId
+      widgetId: part.result.data.widgetId,
+      execution: part.result.data.execution
     }
   };
 }

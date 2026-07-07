@@ -123,9 +123,10 @@ function createTextElement(
  */
 function createRenderContext(): WidgetRenderContext {
   return {
-    input: {
+        input: {
       items: [{ name: '入参 A' }, { name: '入参 B' }]
     },
+      output: undefined,
     data: {
       products: [{ name: 'A' }, { name: 'B' }, { name: 'C' }]
     }
@@ -249,6 +250,7 @@ describe('widgetLoop', (): void => {
     loopElement.loop = loopConfig;
     const renderContext: WidgetRenderContext = {
       input: {},
+        output: undefined,
       data: {
         products: [{ name: '短' }, { name: longName }, { name: '尾' }]
       }
@@ -333,8 +335,9 @@ describe('widgetLoop', (): void => {
     );
     const result = createWidgetLoopRenderElements([groupOwner], {
       input: {
-        items: [firstCategory, secondCategory]
-      },
+          items: [firstCategory, secondCategory]
+        },
+        output: undefined,
       data: {}
     });
     const productRenderElements = result.filter((item): boolean => item.element.id.startsWith('product-title__loop_'));

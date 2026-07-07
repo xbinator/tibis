@@ -289,13 +289,17 @@ describe('runtime model message context', (): void => {
           toolName: 'open_widget',
           status: 'success',
           data: {
-            kind: 'widget_display',
             sessionId: 'widget-weather-tool-call-widget',
             widgetId: 'weather',
             value: createDefaultWidgetData(),
             renderContext: {
               input: { city: '上海' },
-              state: {}
+                output: undefined,
+              data: {}
+            },
+            execution: {
+              status: 'success',
+              output: undefined
             }
           }
         }
@@ -320,9 +324,12 @@ describe('runtime model message context', (): void => {
                 toolName: 'open_widget',
                 status: 'success',
                 data: {
-                  kind: 'widget_display',
                   sessionId: 'widget-weather-tool-call-widget',
-                  widgetId: 'weather'
+                  widgetId: 'weather',
+                  execution: {
+                    status: 'success',
+                    output: undefined
+                  }
                 }
               }
             }

@@ -81,8 +81,8 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
  * @param value - 工具结果数据
  * @returns 是否为小组件展示载荷
  */
-function isOpenWidgetDisplayPayload(value: unknown): value is { kind: 'widget_display'; sessionId: string; widgetId: string } {
-  return isPlainRecord(value) && value.kind === 'widget_display' && typeof value.sessionId === 'string' && typeof value.widgetId === 'string';
+function isOpenWidgetDisplayPayload(value: unknown): value is { sessionId: string; widgetId: string; execution: unknown } {
+  return isPlainRecord(value) && typeof value.sessionId === 'string' && typeof value.widgetId === 'string' && isPlainRecord(value.execution);
 }
 
 /**
@@ -98,9 +98,9 @@ function createModelVisibleToolResult(part: ChatMessageToolPart & { result: Runt
   return {
     ...part.result,
     data: {
-      kind: part.result.data.kind,
       sessionId: part.result.data.sessionId,
-      widgetId: part.result.data.widgetId
+      widgetId: part.result.data.widgetId,
+      execution: part.result.data.execution
     }
   };
 }

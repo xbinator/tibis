@@ -78,6 +78,7 @@ describe('TextElementView', (): void => {
     element.metadata.content = '{{ $input.city }} 当前 {{ weather.temperature }}°C';
     const wrapper = mountTextElementView(element, {
       input: { city: '上海' },
+        output: undefined,
       data: {
         weather: {
           temperature: 28
@@ -94,8 +95,9 @@ describe('TextElementView', (): void => {
     element.metadata.content = '{{ $input["wind-speed"] }} / {{ ["weather-data"]["feels.like"] }}';
     const wrapper = mountTextElementView(element, {
       input: {
-        'wind-speed': 12
-      },
+          'wind-speed': 12
+        },
+        output: undefined,
       data: {
         'weather-data': {
           'feels.like': 31
@@ -112,6 +114,7 @@ describe('TextElementView', (): void => {
     element.metadata.content = '{{ weather.temperature }}°C';
     const wrapper = mountTextElementView(element, {
       input: {},
+        output: undefined,
       data: {}
     });
 
@@ -124,6 +127,7 @@ describe('TextElementView', (): void => {
     element.metadata.content = '{{ weather.temperature | default("未知") }}';
     const wrapper = mountTextElementView(element, {
       input: {},
+        output: undefined,
       data: {
         weather: {
           temperature: 28

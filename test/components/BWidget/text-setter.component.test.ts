@@ -96,7 +96,7 @@ function createWidgetData(): WidgetData {
         '    temperature: 0',
         '  }',
         '',
-        '  async mounted() {',
+        '  async onMounted() {',
         '    this.weather.temperature = this.$input.weather.temperature',
         '  }',
         '}'
@@ -105,8 +105,9 @@ function createWidgetData(): WidgetData {
     metadata: {
       previewContext: {
         input: {
-          city: '上海'
-        },
+            city: '上海'
+          },
+          output: undefined,
         data: {
           weather: {
             temperature: 28
@@ -325,7 +326,7 @@ describe('Text Setter', (): void => {
     const variables = readVariables(options).map((item: VariableTreeNode): string => item.value);
     const labels = readVariables(options).map((item: VariableTreeNode): string => item.label);
 
-    expect(rootVariables).toEqual(['$input', 'weather']);
+    expect(rootVariables).toEqual(['$input', '$output', 'weather']);
     expect(variables).toContain('$input.city');
     expect(variables).toContain('$input.user');
     expect(variables).toContain('$input.user.name');

@@ -71,6 +71,7 @@ describe('ImageElementView', (): void => {
     const element = createImageElement({ src: '{{ avatar }}' });
     const wrapper = mountImageElementView(element, {
       input: {},
+        output: undefined,
       data: {
         avatar: 'https://cdn.example.com/avatar.png'
       }
@@ -84,6 +85,7 @@ describe('ImageElementView', (): void => {
     const element = createImageElement({ alt: '{{ label }}' });
     const wrapper = mountImageElementView(element, {
       input: {},
+        output: undefined,
       data: {
         label: '示意图'
       }

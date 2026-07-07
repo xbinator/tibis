@@ -6,7 +6,7 @@ import type { WidgetMetadata } from '../types';
 import type { WidgetRenderContext } from 'types/widget';
 
 /** 支持的绑定上下文根名称。 */
-export type WidgetBindingContextRoot = 'input' | 'data';
+export type WidgetBindingContextRoot = 'input' | 'output' | 'data';
 
 /**
  * 绑定表达式路径。
@@ -52,8 +52,10 @@ type WidgetDisplayJsonReplacer = (this: unknown, key: string, value: unknown) =>
 const WIDGET_BINDING_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g;
 /** 整个字段都是单个绑定插值时的匹配表达式。 */
 const WIDGET_WHOLE_BINDING_PATTERN = /^\s*\{\{\s*([^{}]+?)\s*\}\}\s*$/;
-/** 模板输入上下文根名称。 */
+/** 模板入参根名称。 */
 const WIDGET_INPUT_BINDING_ROOT = '$input';
+/** 模板执行结果根名称。 */
+const WIDGET_OUTPUT_BINDING_ROOT = '$output';
 /** 点路径标识符匹配表达式。 */
 const WIDGET_BINDING_IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 /** 点路径标识符前缀匹配表达式。 */
@@ -95,6 +97,7 @@ function createBindingScope(
 ): Record<WidgetBindingContextRoot, unknown> & WidgetBindingLocalContext {
   return {
     input: context.input,
+    output: context.output,
     data: context.data,
     locals: options.locals ?? readContextLocalRoots(context)
   };
@@ -246,14 +249,23 @@ function parsePathSegment(expression: string, startIndex: number): { nextIndex: 
 }
 
 /**
- * 判断表达式是否显式访问 input 根。
+ * 读取表达式显式访问的运行态根。
  * @param expression - 绑定表达式
- * @returns 是否为 input 根表达式
+ * @returns 运行态根名称，未显式访问时返回 undefined
  */
-function isInputBindingRootExpression(expression: string): boolean {
+function readExplicitBindingRoot(expression: string): 'input' | 'output' | undefined {
   const inputRootPrefixes = [`${WIDGET_INPUT_BINDING_ROOT}.`, `${WIDGET_INPUT_BINDING_ROOT}[`];
+  const outputRootPrefixes = [`${WIDGET_OUTPUT_BINDING_ROOT}.`, `${WIDGET_OUTPUT_BINDING_ROOT}[`];
 
-  return expression === WIDGET_INPUT_BINDING_ROOT || inputRootPrefixes.some((prefix: string): boolean => expression.startsWith(prefix));
+  if (expression === WIDGET_INPUT_BINDING_ROOT || inputRootPrefixes.some((prefix: string): boolean => expression.startsWith(prefix))) {
+    return 'input';
+  }
+
+  if (expression === WIDGET_OUTPUT_BINDING_ROOT || outputRootPrefixes.some((prefix: string): boolean => expression.startsWith(prefix))) {
+    return 'output';
+  }
+
+  return undefined;
 }
 
 /**
@@ -264,9 +276,16 @@ function isInputBindingRootExpression(expression: string): boolean {
  */
 export function parseWidgetBindingPath(expression: string, options: WidgetBindingEvaluationOptions = {}): WidgetBindingPath | null {
   const { locals } = options;
-  const root = isInputBindingRootExpression(expression) ? 'input' : 'data';
+  const explicitRoot = readExplicitBindingRoot(expression);
+  const root = explicitRoot ?? 'data';
   const segments: string[] = [];
-  let index = root === 'input' ? WIDGET_INPUT_BINDING_ROOT.length : 0;
+  let index = 0;
+
+  if (root === 'input') {
+    index = WIDGET_INPUT_BINDING_ROOT.length;
+  } else if (root === 'output') {
+    index = WIDGET_OUTPUT_BINDING_ROOT.length;
+  }
 
   if (root === 'data') {
     const firstSegment = parsePathSegment(expression, index);
@@ -482,7 +501,9 @@ export function formatWidgetBindingPath(root: WidgetBindingContextRoot, segments
     );
   }
 
-  return segments.reduce((path: string, segment: string): string => `${path}${formatBindingPathSegment(segment)}`, WIDGET_INPUT_BINDING_ROOT);
+  const rootName = root === 'input' ? WIDGET_INPUT_BINDING_ROOT : WIDGET_OUTPUT_BINDING_ROOT;
+
+  return segments.reduce((path: string, segment: string): string => `${path}${formatBindingPathSegment(segment)}`, rootName);
 }
 
 /**

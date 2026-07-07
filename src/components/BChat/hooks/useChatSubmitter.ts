@@ -120,10 +120,12 @@ export function useChatSubmitter(options: UseChatSubmitterOptions): UseChatSubmi
    */
   async function sendAdaptedUserMessage(input: AdaptedUserMessageInput): Promise<void> {
     const isActiveChatTask = options.taskRuntime.activeTask.value === 'chat';
-    if (!isActiveChatTask) {
-      const startResult = options.taskRuntime.beginTask('chat');
-      if (!startResult.ok) return;
+    if (isActiveChatTask) {
+      return;
     }
+
+    const startResult = options.taskRuntime.beginTask('chat');
+    if (!startResult.ok) return;
 
     await options.sendRuntimeUserMessage(input);
   }

@@ -327,9 +327,10 @@ function createRuntimeAsyncLoopWidgetData(code: string): WidgetData {
  */
 function createRenderContext(city: string, temperature: number): WidgetRenderContext {
   return {
-    input: {
+        input: {
       city
     },
+      output: undefined,
     data: {
       weather: {
         temperature
@@ -497,7 +498,8 @@ describe('BWidgetRuntime', (): void => {
 
   it('renders loop-expanded text nodes with item and index locals', async (): Promise<void> => {
     const wrapper = await mountRuntime(createRuntimeLoopTextWidgetData(), {
-      input: {},
+            input: {},
+        output: undefined,
       data: {
         products: [{ name: '拿铁' }, { name: '美式' }]
       }
@@ -520,6 +522,7 @@ describe('BWidgetRuntime', (): void => {
   it('renders grouped loop nodes with the same item local per iteration', async (): Promise<void> => {
     const wrapper = await mountRuntime(createRuntimeLoopGroupWidgetData(), {
       input: {},
+        output: undefined,
       data: {
         products: [{ name: '拿铁' }, { name: '美式' }]
       }
@@ -619,16 +622,17 @@ describe('BWidgetRuntime', (): void => {
     const dataItem = {
       ...createRuntimeWidgetData(),
       execute: {
-        code: ['export default class Weather extends Widget {', '  mounted() {', '    this.weather = { temperature: 29 }', '  }', '}'].join('\n')
+        code: ['export default class Weather extends Widget {', '  onMounted() {', '    this.weather = { temperature: 29 }', '  }', '}'].join('\n')
       }
     };
     const wrapper = mount(BWidgetRuntime, {
       props: {
         value: dataItem,
         renderContext: {
-          input: {
+                    input: {
             city: '上海'
           },
+            output: undefined,
           data: {}
         }
       },
@@ -653,13 +657,14 @@ describe('BWidgetRuntime', (): void => {
 
   it('emits mounted send messages even when mounted does not change data', async (): Promise<void> => {
     const dataItem = createRuntimeMessageWidgetData(
-      ['export default class Weather extends Widget {', '  mounted() {', "    this.$sendMessage('加载完成')", '  }', '}'].join('\n')
+      ['export default class Weather extends Widget {', '  onMounted() {', "    this.$sendMessage('加载完成')", '  }', '}'].join('\n')
     );
     const wrapper = mount(BWidgetRuntime, {
       props: {
         value: dataItem,
         renderContext: {
-          input: {},
+                    input: {},
+            output: undefined,
           data: {}
         }
       },
@@ -688,7 +693,8 @@ describe('BWidgetRuntime', (): void => {
       props: {
         value: dataItem,
         renderContext: {
-          input: {},
+                    input: {},
+            output: undefined,
           data: {}
         }
       },
@@ -715,7 +721,8 @@ describe('BWidgetRuntime', (): void => {
       props: {
         value: dataItem,
         renderContext: {
-          input: {},
+                    input: {},
+            output: undefined,
           data: {
             message: '旧数据'
           }
@@ -736,7 +743,8 @@ describe('BWidgetRuntime', (): void => {
       props: {
         value: createRuntimeMessageWidgetData('export default class Weather extends Widget {}'),
         renderContext: {
-          input: {},
+                    input: {},
+            output: undefined,
           data: {
             message: '已经展示的数据'
           }
@@ -753,15 +761,16 @@ describe('BWidgetRuntime', (): void => {
 
   it('reruns mounted when a remounted runtime receives a different source payload', async (): Promise<void> => {
     const dataItem = createRuntimeMessageWidgetData(
-      ['export default class Weather extends Widget {', '  mounted() {', '    this.message = this.$input.message', '  }', '}'].join('\n')
+      ['export default class Weather extends Widget {', '  onMounted() {', '    this.message = this.$input.message', '  }', '}'].join('\n')
     );
     const firstWrapper = mount(BWidgetRuntime, {
       props: {
         value: dataItem,
         renderContext: {
-          input: {
+                    input: {
             message: '第一版'
           },
+            output: undefined,
           data: {}
         }
       },
@@ -783,9 +792,10 @@ describe('BWidgetRuntime', (): void => {
       props: {
         value: dataItem,
         renderContext: {
-          input: {
+                    input: {
             message: '第二版'
           },
+            output: undefined,
           data: {}
         }
       },
@@ -819,7 +829,7 @@ describe('BWidgetRuntime', (): void => {
     const dataItem = createRuntimeMessageWidgetData(
       [
         'export default class Weather extends Widget {',
-        '  async mounted() {',
+        '  async onMounted() {',
         "    await this.$http.get('https://api.example.com/weather')",
         "    this.message = '加载完成'",
         '  }',
@@ -829,7 +839,8 @@ describe('BWidgetRuntime', (): void => {
     const runtimeProps = {
       value: dataItem,
       renderContext: {
-        input: {},
+                input: {},
+          output: undefined,
         data: {}
       }
     };
@@ -868,7 +879,7 @@ describe('BWidgetRuntime', (): void => {
     const dataItem = createRuntimeMessageWidgetData(
       [
         'export default class Weather extends Widget {',
-        '  async mounted() {',
+        '  async onMounted() {',
         "    await this.$http.get('https://api.example.com/weather')",
         "    this.message = '加载完成'",
         '  }',
@@ -878,7 +889,8 @@ describe('BWidgetRuntime', (): void => {
     const runtimeProps = {
       value: dataItem,
       renderContext: {
-        input: {},
+                input: {},
+          output: undefined,
         data: {
           message: '加载完成'
         },
@@ -910,11 +922,12 @@ describe('BWidgetRuntime', (): void => {
       value: {
         ...createRuntimeWidgetData(),
         execute: {
-          code: ['export default class Counter extends Widget {', '  mounted() {', '    this.count = 0', '  }', '}'].join('\n')
+          code: ['export default class Counter extends Widget {', '  onMounted() {', '    this.count = 0', '  }', '}'].join('\n')
         }
       },
       renderContext: {
-        input: {},
+                input: {},
+          output: undefined,
         data: {}
       },
       commitRuntimeChange
@@ -954,7 +967,8 @@ describe('BWidgetRuntime', (): void => {
         }
       },
       renderContext: {
-        input: {},
+                input: {},
+          output: undefined,
         data: {
           count: 0
         },
@@ -1001,7 +1015,7 @@ describe('BWidgetRuntime', (): void => {
     const dataItem = createRuntimeMessageWidgetData(
       [
         'export default class Weather extends Widget {',
-        '  async mounted() {',
+        '  async onMounted() {',
         "    await this.$http.get('https://api.example.com/weather')",
         "    this.message = '加载完成'",
         '  }',
@@ -1010,6 +1024,7 @@ describe('BWidgetRuntime', (): void => {
     );
     const initialRenderContext: WidgetRenderContext = {
       input: {},
+        output: undefined,
       data: {}
     };
     stubElectronRequest(request);
@@ -1058,7 +1073,7 @@ describe('BWidgetRuntime', (): void => {
       [
         'export default class Weather extends Widget {',
         '  products = []',
-        '  async mounted() {',
+        '  async onMounted() {',
         "    const response = await this.$http.get('https://api.example.com/products')",
         '    this.products = response.data.products',
         '  }',
@@ -1069,7 +1084,8 @@ describe('BWidgetRuntime', (): void => {
       props: {
         value: dataItem,
         renderContext: {
-          input: {},
+                    input: {},
+            output: undefined,
           data: {}
         }
       },
@@ -1103,7 +1119,7 @@ describe('BWidgetRuntime', (): void => {
     const dataItem = createRuntimeMessageWidgetData(
       [
         'export default class Weather extends Widget {',
-        '  async mounted() {',
+        '  async onMounted() {',
         "    this.message = '正在加载'",
         "    await this.$http.get('https://api.example.com/weather')",
         "    this.message = '加载完成'",
@@ -1115,7 +1131,8 @@ describe('BWidgetRuntime', (): void => {
       props: {
         value: dataItem,
         renderContext: {
-          input: {},
+                    input: {},
+            output: undefined,
           data: {}
         }
       },
@@ -1154,7 +1171,7 @@ describe('BWidgetRuntime', (): void => {
     const dataItem = createRuntimeMessageWidgetData(
       [
         'export default class Weather extends Widget {',
-        '  async mounted() {',
+        '  async onMounted() {',
         "    await this.$http.get('https://api.example.com/movies')",
         "    this.message = '加载完成'",
         '  }',
@@ -1164,7 +1181,8 @@ describe('BWidgetRuntime', (): void => {
     const runtimeProps = {
       value: dataItem,
       renderContext: {
-        input: {},
+                input: {},
+          output: undefined,
         data: {}
       }
     };
@@ -1198,14 +1216,14 @@ describe('BWidgetRuntime', (): void => {
     secondWrapper.unmount();
   });
 
-  it('does not finish runtime scripts from node submit events', async (): Promise<void> => {
+  it('does not run cleanup methods from node submit events', async (): Promise<void> => {
     const output = {
       coffeeId: 'latte'
     };
     const dataItem = {
       ...createRuntimeWidgetData(),
       execute: {
-        code: ['export default class Weather extends Widget {', '  unmounted() {', '    this.submitted = { coffeeId: this.$input.coffeeId }', '  }', '}'].join(
+        code: ['export default class Weather extends Widget {', '  cleanup() {', '    this.submitted = { coffeeId: this.$input.coffeeId }', '  }', '}'].join(
           '\n'
         )
       }
@@ -1215,8 +1233,9 @@ describe('BWidgetRuntime', (): void => {
         value: dataItem,
         renderContext: {
           input: {
-            coffeeId: 'latte'
-          },
+              coffeeId: 'latte'
+            },
+            output: undefined,
           data: {}
         }
       },
@@ -1241,7 +1260,8 @@ describe('BWidgetRuntime', (): void => {
           }
         },
         renderContext: {
-          input: {},
+                    input: {},
+            output: undefined,
           data: {
             count: 0
           }

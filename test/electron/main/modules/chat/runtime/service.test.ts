@@ -536,7 +536,12 @@ describe('chat runtime service shell', (): void => {
           result: {
             toolName: 'open_widget',
             status: 'success',
-            data: { kind: 'widget_display', sessionId: 'widget-weather-tool-call-widget', widgetId: 'weather', value: {} }
+            data: {
+              sessionId: 'widget-weather-tool-call-widget',
+              widgetId: 'weather',
+              value: {},
+              execution: { status: 'success', output: undefined }
+            }
           }
         });
         await streamDeferred.promise;
@@ -560,21 +565,22 @@ describe('chat runtime service shell', (): void => {
         status: 'done',
         input: { id: 'weather' },
         result: {
-          toolName: 'open_widget',
-          status: 'success',
-          data: {
-            kind: 'widget_display',
-            sessionId: 'widget-weather-tool-call-widget',
-            widgetId: 'weather',
-            value: {},
-            renderContext: {
-              input: { city: '上海' },
-              data: { weather: { temperature: 29 } },
-              isMounted: true
+            toolName: 'open_widget',
+            status: 'success',
+            data: {
+              sessionId: 'widget-weather-tool-call-widget',
+              widgetId: 'weather',
+              value: {},
+              renderContext: {
+                input: { city: '上海' },
+                  output: undefined,
+                data: { weather: { temperature: 29 } },
+                isMounted: true
+              },
+              execution: { status: 'success', output: undefined }
             }
           }
         }
-      }
     });
     streamDeferred.resolve();
     await flushRuntimeTasks();

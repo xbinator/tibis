@@ -580,6 +580,7 @@ describe('MoveableLayer', (): void => {
     };
     const renderContext: WidgetRenderContext = {
       input: {},
+        output: undefined,
       data: { shortText: 'abcdef' }
     };
     const setStartSize = vi.fn<(size: [number, number]) => void>();
@@ -609,6 +610,7 @@ describe('MoveableLayer', (): void => {
     };
     const renderContext: WidgetRenderContext = {
       input: {},
+        output: undefined,
       data: { shortText: 'abcdef' }
     };
     const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext);

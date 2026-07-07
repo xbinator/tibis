@@ -72,8 +72,9 @@ describe('useElementContent', (): void => {
   it('reads a template field and resolves it from the widget render context', (): void => {
     const wrapper = mountDisplayContent(createDisplayElement('{{ $input.city }} 天气'), {
       input: {
-        city: '上海'
-      },
+          city: '上海'
+        },
+        output: undefined,
       data: {}
     });
 
@@ -84,6 +85,7 @@ describe('useElementContent', (): void => {
   it('formats complex binding values as readable JSON text', (): void => {
     const wrapper = mountDisplayContent(createDisplayElement('{{ weather }}'), {
       input: {},
+        output: undefined,
       data: {
         weather: {
           condition: '晴',
@@ -108,8 +110,9 @@ describe('useElementContent', (): void => {
     const elementRef = ref<WidgetShapeElement | undefined>(createDisplayElement('正文'));
     const contextRef = ref<WidgetRenderContext | undefined>({
       input: {
-        city: '上海'
-      },
+          city: '上海'
+        },
+        output: undefined,
       data: {}
     });
     const Consumer: Component = {

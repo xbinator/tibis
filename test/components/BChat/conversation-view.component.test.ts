@@ -124,7 +124,6 @@ function createOpenWidgetToolPart(city: string, temperature?: number): ChatMessa
       toolName: 'open_widget',
       status: 'success',
       data: {
-        kind: 'widget_display',
         sessionId: 'widget-weather-tool-call-widget',
         widgetId: 'weather',
         value: widgetValue,
@@ -132,8 +131,10 @@ function createOpenWidgetToolPart(city: string, temperature?: number): ChatMessa
           input: {
             city
           },
+          output: undefined,
           data
-        }
+        },
+        execution: { status: 'success', output: undefined }
       }
     }
   };

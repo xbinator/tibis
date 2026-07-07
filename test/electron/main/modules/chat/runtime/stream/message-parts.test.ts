@@ -41,16 +41,17 @@ describe('runtime stream message parts', (): void => {
         toolName: 'open_widget',
         status: 'success',
         data: {
-          kind: 'widget_display',
           sessionId: 'widget-weather-tool-call-widget',
           widgetId: 'weather',
           value: widgetValue,
           renderContext: {
             input: {
-              city: '上海'
-            },
+                city: '上海'
+              },
+              output: undefined,
             data: {}
-          }
+          },
+          execution: { status: 'success', output: undefined }
         }
       }
     });
@@ -62,7 +63,6 @@ describe('runtime stream message parts', (): void => {
       status: 'done',
       result: expect.objectContaining({
         data: expect.objectContaining({
-          kind: 'widget_display',
           value: widgetValue
         })
       })

@@ -26,15 +26,23 @@ function createOpenWidgetToolPart(): ChatMessageToolPart {
       toolName: 'open_widget',
       status: 'success',
       data: {
-        kind: 'widget_display',
         sessionId: 'widget-weather-tool-call-widget',
         widgetId: 'weather',
         value: createDefaultWidgetData(),
         renderContext: {
           input: {
-            city: '上海'
-          },
+              city: '上海'
+            },
+            output: {
+              temperature: 28
+            },
           data: {}
+        },
+        execution: {
+          status: 'success',
+          output: {
+            temperature: 28
+          }
         }
       }
     }
@@ -90,9 +98,14 @@ describe('messageHelper widget result', (): void => {
                 toolName: 'open_widget',
                 status: 'success',
                 data: {
-                  kind: 'widget_display',
                   sessionId: 'widget-weather-tool-call-widget',
-                  widgetId: 'weather'
+                  widgetId: 'weather',
+                  execution: {
+                    status: 'success',
+                    output: {
+                      temperature: 28
+                    }
+                  }
                 }
               }
             }

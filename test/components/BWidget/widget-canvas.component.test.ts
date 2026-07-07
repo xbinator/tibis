@@ -634,8 +634,9 @@ describe('BWidget canvas component', (): void => {
     data.metadata = {
       previewContext: {
         input: {
-          city: '上海'
-        },
+            city: '上海'
+          },
+          output: undefined,
         data: {
           weather: {
             temperature: 28
@@ -676,6 +677,7 @@ describe('BWidget canvas component', (): void => {
     data.metadata = {
       previewContext: {
         input: {},
+          output: undefined,
         data: {
           longText: ['第一行', '第二行', '第三行', '第四行', '第五行', '第六行'].join('\n')
         }
@@ -715,6 +717,7 @@ describe('BWidget canvas component', (): void => {
     data.metadata = {
       previewContext: {
         input: {},
+          output: undefined,
         data: {
           shortText: 'abcdef'
         }

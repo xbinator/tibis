@@ -87,7 +87,7 @@ function createWidgetData(): WidgetData {
         '    "feels.like": 31',
         '  }',
         '',
-        '  async mounted() {',
+        '  async onMounted() {',
         '    this.weather.temperature = this.$input.weather.temperature',
         '  }',
         '}'
@@ -96,8 +96,9 @@ function createWidgetData(): WidgetData {
     metadata: {
       previewContext: {
         input: {
-          city: '上海'
-        },
+            city: '上海'
+          },
+          output: undefined,
         data: {
           weather: {
             temperature: 28
@@ -362,7 +363,7 @@ describe('useElementVariables', (): void => {
     const userVariable = findVariable(variableOptions.value, '$input.user');
     const weatherVariable = findVariable(variableOptions.value, 'weather');
 
-    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['$input', 'weather', '["weather-data"]']);
+    expect(roots.map((item: VariableTreeNode): string => item.value)).toEqual(['$input', '$output', 'weather', '["weather-data"]']);
     expect(inputVariable?.label).toBe('入参');
     expect(inputVariable?.children?.map((item: VariableTreeNode): string => item.value)).toEqual([
       '$input.city',
@@ -547,7 +548,7 @@ describe('useElementVariables', (): void => {
     const widgetDataRef = ref<WidgetData | undefined>();
     const { loopSourceOptions, variableOptions, wrapper } = mountElementVariables(widgetDataRef);
 
-    expect(readVariableValues(variableOptions.value)).toEqual(['$input']);
+    expect(readVariableValues(variableOptions.value)).toEqual(['$input', '$output']);
     expect(loopSourceOptions.value).toEqual([]);
     wrapper.unmount();
   });

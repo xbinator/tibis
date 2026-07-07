@@ -18,6 +18,7 @@ import { provideRenderContext, useRenderContext } from '@/components/BWidget/hoo
 function createRenderContext(city: string): WidgetRenderContext {
   return {
     input: { city },
+      output: undefined,
     data: {}
   };
 }

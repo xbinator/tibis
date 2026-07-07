@@ -19,13 +19,13 @@ The runtime should follow one linear story:
 3. The tool result records whether execution succeeded or failed.
 4. The widget is displayed.
 5. The widget script runs `onMounted`.
-6. User interactions may call `$sendMessage`, but sending is allowed only after the current assistant stream has ended.
+6. Display lifecycle and user interactions may call `$sendMessage`, but sending is allowed only after the current assistant stream has ended.
 
 `$sendMessage` must not finish the widget, unmount the widget, mark execution done, or carry hidden lifecycle meaning. It only requests a chat message send.
 
 ## Public Script API
 
-`createWidgetInteractionScriptDefaultCode` should emit a widget script with:
+`createWidgetScriptDefaultCode` should emit a widget script with:
 
 - optional `async onExecute()`
 - optional `onMounted()`
@@ -35,20 +35,18 @@ The runtime should follow one linear story:
 
 `unmounted` is removed.
 
-`this.$input` is removed.
-
-`this.$execute` is added:
+The public script context exposes two read-only roots:
 
 ```ts
-this.$execute.input
-this.$execute.output
+this.$input
+this.$output
 ```
 
-`this.$execute` is read-only, and its nested `input` and `output` values are also read-only from user script. User code should not be able to mutate it by assigning `this.$execute.output`, mutating nested fields, or replacing `this.$execute`.
+`this.$input` and `this.$output` are read-only from user script. User code should not be able to mutate nested input/output fields or replace either root.
 
-`this.$execute.input` comes from the `open_widget` tool input.
+`this.$input` comes from the `open_widget` tool input.
 
-`this.$execute.output` is automatically set to the fulfilled return value of `onExecute`. If `onExecute` does not exist, returns `undefined`, or throws, `this.$execute.output` remains `undefined`.
+`this.$output` is automatically set to the fulfilled return value of `onExecute`. If `onExecute` does not exist, returns `undefined`, or throws, `this.$output` remains `undefined`.
 
 ## Tool Result Contract
 
@@ -62,10 +60,8 @@ Payload on execution success:
   widgetId,
   value,
   renderContext: {
-    execute: {
-      input,
-      output
-    },
+    input,
+    output,
     data
   },
   execution: {
@@ -83,10 +79,8 @@ Payload when `onExecute` is missing:
   widgetId,
   value,
   renderContext: {
-    execute: {
-      input,
-      output: undefined
-    },
+    input,
+    output: undefined,
     data
   },
   execution: {
@@ -104,10 +98,8 @@ Payload when `onExecute` throws:
   widgetId,
   value,
   renderContext: {
-    execute: {
-      input,
-      output: undefined
-    },
+    input,
+    output: undefined,
     data
   },
   execution: {
@@ -141,20 +133,18 @@ The full `value` and `renderContext` stay renderer-side.
 
 ## Runtime Context
 
-`WidgetRenderContext` should use `execute` instead of `input`:
+`WidgetRenderContext` should keep the same public mental model:
 
 ```ts
 {
-  execute: {
-    input,
-    output
-  },
+  input,
+  output,
   data,
   isMounted?
 }
 ```
 
-Template bindings and variable panels should use `$execute.input` and `$execute.output` instead of `$input`.
+Template bindings and variable panels should use `$input` and `$output`.
 
 Direct data bindings keep the existing low-friction behavior for widget data fields.
 
@@ -162,18 +152,18 @@ Direct data bindings keep the existing low-friction behavior for widget data fie
 
 `$sendMessage` should only normalize and request a message send. It should not decide whether the runtime is finished.
 
-The actual send gate belongs in the BChat layer. For this refactor, the simple rule is:
+`$sendMessage` calls made during `onExecute` must not leak into Chat. They must not appear in `WidgetDisplayPayload`, must not be forwarded through `BubblePartWidget`, and must not create a pending Chat send effect. The execute phase may ignore or locally reject those calls, but the only externally visible execute result is `execution`.
+
+For display lifecycle and user interaction phases, the actual send gate belongs in the BChat layer. For this refactor, the simple rule is:
 
 - if the assistant stream is still active, reject the send request in the BChat submit path;
 - if the assistant stream has ended, send normally.
 
 This keeps widget runtime code free from chat-stream policy and leaves room for a future send queue.
 
-User code may call `$sendMessage` inside `onExecute`, but BChat still decides whether it can be sent. `onExecute` completion state should be tracked internally so runtime behavior is explicit rather than inferred from `$sendMessage`.
-
 ## Error Handling
 
-`onExecute` errors must not be written into `$execute.output`.
+`onExecute` errors must not be written into `$output`.
 
 `onExecute` errors must be visible to the model through `execution.status === 'failure'`.
 
@@ -209,11 +199,12 @@ Update existing tests rather than preserve old behavior:
 - widget runtime lifecycle: `onExecute` before `onMounted`, no `unmounted`
 - optional `onExecute` returns success with `output: undefined`
 - failed `onExecute` returns payload execution failure and still mounts
-- `$execute` is deeply read-only
-- `$input` is removed from runtime, bindings, variable panel, and extra lib
+- `$input` and `$output` are deeply read-only
+- `$execute` is removed from runtime, bindings, variable panel, and extra lib
 - `kind: 'widget_display'` is removed from renderer and main-process protocol checks
 - model-visible `open_widget` result includes `execution` and excludes full display payload
-- `$sendMessage` is gated by BChat stream state
+- display lifecycle and interaction `$sendMessage` calls are gated by BChat stream state
+- `onExecute` `$sendMessage` calls do not enter `WidgetDisplayPayload` or Chat
 
 Final verification should run:
 

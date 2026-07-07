@@ -244,17 +244,22 @@ declare interface WidgetHttpClient {
 
 declare abstract class Widget {
   /**
-   * 调用小组件时 AI 提取到的入参。
+   * 调用小组件时 AI 提取到的入参，只读。
    * @example const city = this.$input.city
    */
   readonly $input: WidgetInput
+  /**
+   * onExecute 返回值，只读；未返回或执行失败时为 undefined。
+   * @example const weather = this.$output as { temperature?: number } | undefined
+   */
+  readonly $output: unknown
   /**
    * 托管 HTTP 客户端，request 超时和队列由系统统一控制。
    * @example const response = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })
    */
   readonly $http: WidgetHttpClient
   /**
-   * 向聊天上行一条消息。调用后表示当前小组件交互结束；交互代码未调用时会结束运行态但不发送消息。
+   * 向聊天请求发送一条消息。
    * @param message - 上行消息，支持字符串、文本片段数组或带 isError 的对象。
    * @example this.$sendMessage('确认下单')
    * @example this.$sendMessage({ content: [{ type: 'text', text: '确认下单' }] })
@@ -267,10 +272,10 @@ declare abstract class Widget {
    * @example this.$logger.error('请求失败', error)
    */
   readonly $logger: Logger
-  /** 小组件创建或展示时执行。 */
-  mounted?(): void | Promise<void>
-  /** 小组件运行完成后执行一次。 */
-  unmounted?(): void | Promise<void>
+  /** 大模型打开小组件时执行，返回值会写入 $output。 */
+  onExecute?(): unknown | Promise<unknown>
+  /** 小组件展示后执行。 */
+  onMounted?(): void | Promise<void>
 }
 
 /** 浏览器/Node 风格控制台，仅输出到 DevTools，不写入日志文件。 */
