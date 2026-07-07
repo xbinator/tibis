@@ -450,6 +450,23 @@ describe('PanelSettings', (): void => {
     wrapper.unmount();
   });
 
+  it('renders the group Setter.vue and forwards element commands', async (): Promise<void> => {
+    const group = createGroupElement('group-1', [createWidgetElement('child-1', 'rect'), createWidgetElement('child-2', 'text')]);
+    const wrapper = mount(PanelSettings, {
+      props: {
+        value: createWidgetData(group),
+        select: group
+      }
+    });
+
+    await wrapper.find('.widget-group-setter__ungroup').trigger('click');
+
+    expect(wrapper.find('.b-section-block-stub[data-title="组合"]').exists()).toBe(true);
+    expect(wrapper.find('.b-section-block-stub[data-title="布局"]').exists()).toBe(false);
+    expect(wrapper.emitted('element-command')).toEqual([['ungroup']]);
+    wrapper.unmount();
+  });
+
   it('renders advanced tab for a selected element and edits the selected element directly', async (): Promise<void> => {
     const element = createWidgetElement('text-1', 'text');
     const dataItem = createWidgetData(element);

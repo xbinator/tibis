@@ -25,7 +25,7 @@
             </BSectionItem>
           </BSectionBlock>
 
-          <component :is="elementSetter" v-if="elementSetter" v-model:element="select" />
+          <component :is="elementSetter" v-if="elementSetter" v-model:element="select" @command="emit('element-command', $event)" />
         </ATabPane>
 
         <ATabPane key="design" tab="设计">
@@ -65,6 +65,8 @@ const props = withDefaults(defineProps<Props>(), {
   selectedElementIds: (): string[] => []
 });
 const emit = defineEmits<{
+  /** 触发单元素专属快捷操作 */
+  'element-command': [command: 'ungroup'];
   /** 触发多选快捷操作 */
   'multi-command': [command: 'copy' | 'group' | 'ungroup' | 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack' | 'delete'];
   /** 批量更新多选元素布局 */

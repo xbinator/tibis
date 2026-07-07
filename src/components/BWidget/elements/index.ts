@@ -4,6 +4,7 @@
  */
 import type { WidgetElementSchema } from './types';
 import type { Component } from 'vue';
+import GroupSetter from './group/Setter.vue';
 import ImageView from './Image/index.vue';
 import { imageElementSchema } from './Image/schema';
 import ImageSetter from './Image/Setter.vue';
@@ -32,6 +33,7 @@ const widgetElementViewByName = new Map<string, Component>([
 
 /** 元素专属属性设置面板索引。 */
 const widgetElementSetterByName = new Map<string, Component>([
+  ['group', GroupSetter],
   [textElementSchema.name, TextSetter],
   [imageElementSchema.name, ImageSetter]
 ]);
