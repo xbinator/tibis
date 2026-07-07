@@ -37,6 +37,7 @@
         v-model:value="session.data.value"
         v-model:select="selectedTarget"
         :selected-element-ids="selectedElementIds"
+        @element-command="handleSettingsElementCommand"
         @multi-command="handleSettingsMultiCommand"
         @multi-layout-change="handleSettingsMultiLayoutChange"
         @multi-style-change="handleSettingsMultiStyleChange"
@@ -128,6 +129,11 @@ const activeSidebarElementId = computed<string | null>(() => {
  * 右侧多选面板快捷操作命令。
  */
 type SettingsMultiCommand = 'copy' | 'group' | 'ungroup' | WidgetLayerAction | 'delete';
+
+/**
+ * 右侧单元素专属快捷操作命令。
+ */
+type SettingsElementCommand = 'ungroup';
 
 /**
  * 多选外接框布局信息。
@@ -317,12 +323,43 @@ function syncSelectedTargetFromElementTree(): void {
 }
 
 /**
+ * 根据Widget内部选区同步当前设置目标，避免模型回写时序让非空选区退回页面配置。
+ * @param selection - Widget内部选区 ID 列表
+ */
+function syncSelectedTargetFromSelection(selection: string[]): void {
+  if (selection.length === 0) {
+    selectedTarget.value = session.data.value.metadata;
+    return;
+  }
+
+  if (selection.length !== 1) {
+    return;
+  }
+
+  const selectedId = selection[0];
+  const selectedElement = selectedId ? findWidgetElementTreeNode(session.data.value.elements, selectedId)?.element : null;
+  if (selectedElement) {
+    selectedTarget.value = selectedElement;
+  }
+}
+
+/**
+ * 判断Widget回传的设置目标是否为可能过期的页面配置目标。
+ * @param target - Widget回传的设置目标
+ * @returns 是否应忽略本次目标更新
+ */
+function shouldIgnoreWidgetSelectUpdate(target: WidgetSelectTarget): boolean {
+  return selectedElementIds.value.length > 0 && target !== null && !isWidgetElementTarget(target);
+}
+
+/**
  * 处理Widget内部数据更新。
  * @param data - 最新Widget数据
  */
 function handleWidgetDataUpdate(data: WidgetData): void {
   session.data.value = data;
   syncSelectedTargetFromElementTree();
+  syncSelectedTargetFromSelection(selectedElementIds.value);
 }
 
 /**
@@ -330,6 +367,10 @@ function handleWidgetDataUpdate(data: WidgetData): void {
  * @param target - 最新设置目标
  */
 function handleWidgetSelectUpdate(target: WidgetSelectTarget): void {
+  if (shouldIgnoreWidgetSelectUpdate(target)) {
+    return;
+  }
+
   selectedTarget.value = target;
 }
 
@@ -339,6 +380,7 @@ function handleWidgetSelectUpdate(target: WidgetSelectTarget): void {
  */
 function handleWidgetSelectionChange(selection: string[]): void {
   selectedElementIds.value = [...selection];
+  syncSelectedTargetFromSelection(selection);
 
   if (settingsWidth.value === 0 && selectedElementIds.value.length) {
     settingsWidth.value = 300;
@@ -464,6 +506,16 @@ async function handleSettingsMultiCommand(command: SettingsMultiCommand): Promis
       widgetRef.value?.reorderSelection(command);
       break;
     }
+  }
+}
+
+/**
+ * 处理右侧元素专属快捷操作。
+ * @param command - 快捷操作命令
+ */
+function handleSettingsElementCommand(command: SettingsElementCommand): void {
+  if (command === 'ungroup') {
+    widgetRef.value?.ungroupSelection();
   }
 }
 

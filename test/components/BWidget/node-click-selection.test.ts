@@ -6,12 +6,12 @@
 /* eslint-disable vue/one-component-per-file */
 import { computed, defineComponent, nextTick, ref, toRaw } from 'vue';
 import type { ComponentPublicInstance, ComputedRef, Ref } from 'vue';
-import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetPoint, WidgetSelectTarget } from '@/components/BWidget/types';
-import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
@@ -63,11 +63,23 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
     name: 'VueMoveableStub',
     props: {
       target: {
-        type: Array,
-        default: (): Element[] => []
+        type: [Array, Object],
+        default: null
       }
     },
     methods: {
+      /**
+       * 读取 Moveable 目标列表。
+       * @param target - Moveable 目标
+       * @returns 目标列表
+       */
+      getTargets(target: Element[] | Element | null): Element[] {
+        if (Array.isArray(target)) {
+          return target;
+        }
+
+        return target ? [target] : [];
+      },
       /**
        * 模拟 Moveable 对外暴露的位置刷新方法。
        */
@@ -128,14 +140,14 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
       }
     },
     template: `
-      <div v-if="target.length" class="moveable-stub">
+      <div v-if="getTargets(target).length" class="moveable-stub">
         <button
           class="moveable-absolute-drag-group"
-          @click="$emit('drag-group', createAbsoluteDragGroupEvent(target))"
+          @click="$emit('drag-group', createAbsoluteDragGroupEvent(getTargets(target)))"
         ></button>
         <button
           class="moveable-absolute-drag-group-end"
-          @click="$emit('drag-group-end', createAbsoluteDragGroupEndEvent(target))"
+          @click="$emit('drag-group-end', createAbsoluteDragGroupEndEvent(getTargets(target)))"
         ></button>
       </div>
     `
@@ -284,15 +296,32 @@ interface BWidgetExpose {
   createElementFromClientPoint: (name: string, point: WidgetPoint) => Promise<void>;
   /** 根据元素 ID 选择元素 */
   selectElementById: (id: string, options?: { activateElement?: boolean }) => void;
+  /** 根据元素 ID 列表选中Widget元素 */
+  selectElementsByIds: (ids: string[]) => void;
+  /** 合并当前Widget选区 */
+  groupSelection: () => void;
 }
 
 /**
- * 查找测试节点。
- * @param wrapper - BWidget 测试包装器
- * @returns 节点包装器
+ * BWidget v-model 回写测试宿主公开方法。
  */
-function findNode(wrapper: VueWrapper): DOMWrapper<Element> {
-  return findNodeById(wrapper, 'node-1');
+interface WidgetRoundTripHostExpose {
+  /** 根据元素 ID 列表选中Widget元素 */
+  selectElementsByIds: (ids: string[]) => void;
+  /** 合并当前Widget选区 */
+  groupSelection: () => void;
+  /** 读取父级接收到的Widget数据 */
+  readDataItem: () => WidgetData;
+  /** 读取父级接收到的设置目标 */
+  readSelectedTarget: () => WidgetSelectTarget;
+}
+
+/**
+ * 外部选择目标同步测试宿主公开方法。
+ */
+interface WidgetExternalSelectHostExpose {
+  /** 更新外部Widget数据和设置目标 */
+  updateValueAndSelect: (value: WidgetData, select: WidgetSelectTarget) => void;
 }
 
 /**
@@ -304,7 +333,19 @@ function findNode(wrapper: VueWrapper): DOMWrapper<Element> {
 function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
   const target = queryWidgetElementTarget(wrapper.element, id);
 
-  return wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ?? wrapper.find<Element>('.missing-widget-node');
+  return (
+    wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ??
+    wrapper.find<Element>('.missing-widget-node')
+  );
+}
+
+/**
+ * 查找测试节点。
+ * @param wrapper - BWidget 测试包装器
+ * @returns 节点包装器
+ */
+function findNode(wrapper: VueWrapper): DOMWrapper<Element> {
+  return findNodeById(wrapper, 'node-1');
 }
 
 /**
@@ -344,33 +385,86 @@ function createWidgetRoundTripHost(): ReturnType<typeof defineComponent> {
     components: {
       BWidget
     },
-    setup(): {
+    setup(
+      _,
+      { expose }
+    ): {
       dataItem: Ref<WidgetData>;
       selectedTarget: Ref<WidgetSelectTarget>;
       selectedId: ComputedRef<string>;
       isSelectedCurrentElement: ComputedRef<boolean>;
+      widgetRef: Ref<(ComponentPublicInstance & BWidgetExpose) | undefined>;
     } {
       const dataItem = ref<WidgetData>(createTwoNodeWidgetData());
       const selectedTarget = ref<WidgetSelectTarget>(dataItem.value.metadata);
+      const widgetRef = ref<ComponentPublicInstance & BWidgetExpose>();
       const selectedId = computed<string>(() => (isElementSelectTarget(selectedTarget.value) ? selectedTarget.value.id : ''));
       const isSelectedCurrentElement = computed<boolean>(() =>
         isElementSelectTarget(selectedTarget.value) ? dataItem.value.elements.includes(selectedTarget.value) : false
       );
 
+      expose({
+        selectElementsByIds: (ids: string[]): void => {
+          widgetRef.value?.selectElementsByIds(ids);
+        },
+        groupSelection: (): void => {
+          widgetRef.value?.groupSelection();
+        },
+        readDataItem: (): WidgetData => dataItem.value,
+        readSelectedTarget: (): WidgetSelectTarget => selectedTarget.value
+      });
+
       return {
         dataItem,
         selectedTarget,
         selectedId,
-        isSelectedCurrentElement
+        isSelectedCurrentElement,
+        widgetRef
       };
     },
     template: `
       <div>
-        <BWidget v-model:value="dataItem" v-model:select="selectedTarget" />
+        <BWidget ref="widgetRef" v-model:value="dataItem" v-model:select="selectedTarget" />
         <span class="selected-id">{{ selectedId }}</span>
         <span class="selected-current">{{ isSelectedCurrentElement ? 'yes' : 'no' }}</span>
       </div>
     `
+  });
+}
+
+/**
+ * 创建外部选择目标同步测试宿主。
+ * @returns 父组件定义
+ */
+function createWidgetExternalSelectHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'WidgetExternalSelectHost',
+    components: {
+      BWidget
+    },
+    setup(
+      _,
+      { expose }
+    ): {
+      dataItem: Ref<WidgetData>;
+      selectedTarget: Ref<WidgetSelectTarget>;
+    } {
+      const dataItem = ref<WidgetData>(createTwoNodeWidgetData());
+      const selectedTarget = ref<WidgetSelectTarget>({});
+
+      expose({
+        updateValueAndSelect: (value: WidgetData, select: WidgetSelectTarget): void => {
+          dataItem.value = value;
+          selectedTarget.value = select;
+        }
+      });
+
+      return {
+        dataItem,
+        selectedTarget
+      };
+    },
+    template: '<BWidget v-model:value="dataItem" v-model:select="selectedTarget" />'
   });
 }
 
@@ -636,6 +730,52 @@ describe('BWidget node click selection', () => {
     expect(wrapper.find('.moveable-stub').exists()).toBe(true);
     expect(wrapper.find('.selected-id').text()).toBe('node-1');
     expect(wrapper.find('.selected-current').text()).toBe('yes');
+    wrapper.unmount();
+  });
+
+  it('keeps the grouped canvas node and moveable handles after grouping through v-model', async (): Promise<void> => {
+    const wrapper = mount(createWidgetRoundTripHost(), {
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+
+    const host = wrapper.vm as ComponentPublicInstance & WidgetRoundTripHostExpose;
+
+    host.selectElementsByIds(['node-1', 'node-2']);
+    await nextTick();
+    await nextTick();
+    host.groupSelection();
+    await nextTick();
+    await nextTick();
+
+    const dataItem = host.readDataItem();
+    const groupedElement = dataItem.elements[0];
+
+    expect(groupedElement?.name).toBe('group');
+    expect(findNodeById(wrapper, groupedElement?.id ?? '').classes()).toContain('is-selected');
+    expect(wrapper.find('.moveable-stub').exists()).toBe(true);
+    expect((host.readSelectedTarget() as WidgetElement | null)?.id).toBe(groupedElement?.id);
+    wrapper.unmount();
+  });
+
+  it('syncs an externally selected group target into the canvas selection', async (): Promise<void> => {
+    const groupedData = createGroupedWidgetData();
+    const groupedElement = groupedData.elements[0];
+    const wrapper = mount(createWidgetExternalSelectHost(), {
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+
+    (wrapper.vm as ComponentPublicInstance & WidgetExternalSelectHostExpose).updateValueAndSelect(groupedData, groupedElement ?? null);
+    await nextTick();
+    await flushPromises();
+    await nextTick();
+
+    expect(groupedElement?.name).toBe('group');
+    expect(findNodeById(wrapper, groupedElement?.id ?? '').classes()).toContain('is-selected');
+    expect(wrapper.find('.moveable-stub').exists()).toBe(true);
     wrapper.unmount();
   });
 

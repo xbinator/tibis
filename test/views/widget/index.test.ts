@@ -404,9 +404,9 @@ describe('WidgetPage', (): void => {
       metadata: {
         previewContext: {
           input: {
-              city: '上海'
-            },
-            output: undefined,
+            city: '上海'
+          },
+          output: undefined,
           data: {
             weather: {
               temperature: 28
@@ -534,6 +534,41 @@ describe('WidgetPage', (): void => {
     wrapper.unmount();
   });
 
+  it('keeps a non-empty canvas selection when a stale metadata target is emitted after grouping', async (): Promise<void> => {
+    const firstElement = createWidgetElement('node-1', '节点 1');
+    const secondElement = createWidgetElement('node-2', '节点 2');
+    const thirdElement = createWidgetElement('node-3', '节点 3');
+    const groupedElement = createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), createWidgetElement('node-2', '节点 2')]);
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [firstElement, secondElement, thirdElement]
+    };
+    const staleMetadataTarget = widgetDataMock.value.metadata;
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSidebar = wrapper.findComponent({ name: 'PanelSidebar' });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+    const widget = wrapper.findComponent({ name: 'BWidget' });
+
+    widget.vm.$emit('selection-change', ['group-1']);
+    widget.vm.$emit('update:value', {
+      ...widgetDataMock.value,
+      elements: [groupedElement, thirdElement]
+    });
+    widget.vm.$emit('update:select', staleMetadataTarget);
+    await nextTick();
+
+    expect(panelSidebar.props('selectedElementIds')).toEqual(['group-1']);
+    expect(panelSettings.props('select')).toEqual(groupedElement);
+    wrapper.unmount();
+  });
+
   it('keeps the selected nested child highlighted from canvas selection changes', async (): Promise<void> => {
     const secondElement = createWidgetElement('node-2', '节点 2');
     const groupElement = createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), secondElement]);
@@ -649,6 +684,28 @@ describe('WidgetPage', (): void => {
     expect(copySelectionMock).toHaveBeenCalledTimes(1);
     expect(deleteSelectionMock).toHaveBeenCalledTimes(1);
     expect(reorderSelectionMock).toHaveBeenCalledWith('bringToFront');
+    wrapper.unmount();
+  });
+
+  it('forwards settings element commands to the widget canvas', async (): Promise<void> => {
+    widgetDataMock.value = {
+      ...createDefaultWidgetData(),
+      elements: [createGroupElement('group-1', '组合', [createWidgetElement('node-1', '节点 1'), createWidgetElement('node-2', '节点 2')])]
+    };
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: createBWidgetStub(),
+          Icon: true
+        }
+      }
+    });
+    const panelSettings = wrapper.findComponent({ name: 'PanelSettings' });
+
+    panelSettings.vm.$emit('element-command', 'ungroup');
+    await nextTick();
+
+    expect(ungroupSelectionMock).toHaveBeenCalledTimes(1);
     wrapper.unmount();
   });
 
