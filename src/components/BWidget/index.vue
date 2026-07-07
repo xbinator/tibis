@@ -247,9 +247,13 @@ const contextMenuItems = computed<WidgetContextMenuEntry[]>(() => {
   let lockEntry: WidgetContextMenuItem | null = null;
 
   if (selectedElements.length > 0) {
-    lockEntry = selectedElements.every((element: WidgetElement): boolean => element.locked === true)
-      ? { key: 'unlock', label: '解锁', icon: 'lucide:unlock' }
-      : { key: 'lock', label: '锁定', icon: 'lucide:lock' };
+    const isSelectionLocked = selectedElements.every((element: WidgetElement): boolean => element.locked === true);
+
+    if (isSelectionLocked) {
+      lockEntry = { key: 'unlock', label: '解锁', icon: 'lucide:unlock' };
+    } else {
+      lockEntry = { key: 'lock', label: '锁定', icon: 'lucide:lock' };
+    }
   }
   const canGroup = board.state.value.selection.length > 1 && isSameWidgetElementParent(board.state.value.elements, board.state.value.selection);
   const canUngroup = board.state.value.selection.some((elementId: string): boolean => {
