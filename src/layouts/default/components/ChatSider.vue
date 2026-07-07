@@ -181,7 +181,7 @@ onUnmounted(() => {
 .chat-sider--expanded {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 10;
   width: 100%;
   height: 100%;
 }
