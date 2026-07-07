@@ -19,13 +19,14 @@ describe('dataItem', (): void => {
     const execute = createDefaultWidgetExecuteMethod('weather-card');
 
     expect(execute.code).toContain('export default class WeatherCard extends Widget');
-    expect(execute.code).toContain('async onExecute()');
-    expect(execute.code).toContain('onMounted()');
-    expect(execute.code).toContain('$input');
-    expect(execute.code).toContain('$output');
-    expect(execute.code).toContain('$sendMessage');
-    expect(execute.code).toContain('$http.get');
-    expect(execute.code).toContain('$logger.info');
+    expect(execute.code).toContain('async onExecute() {}');
+    expect(execute.code).toContain('onMounted() {}');
+    expect(execute.code).toContain('confirm() {}');
+    expect(execute.code).not.toContain('weather');
+    expect(execute.code).not.toContain('$output');
+    expect(execute.code).not.toContain('$sendMessage');
+    expect(execute.code).not.toContain('$http.get');
+    expect(execute.code).not.toContain('$logger.info');
     expect(execute.code).not.toContain('Widget({');
     expect(execute.code).not.toContain('Promise<void>');
     expect(execute.code).not.toContain('async mounted');

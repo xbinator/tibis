@@ -613,13 +613,13 @@ describe('widgetRuntime', (): void => {
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
-  it('runs default confirm method through widget this without injecting the shadowed binding name', async (): Promise<void> => {
+  it('runs empty default confirm method through widget this without injecting the shadowed binding name', async (): Promise<void> => {
     const { code } = createDefaultWidgetExecuteMethod('weather');
     const part: WidgetRuntimeState = {
       ...createWidgetPart(code),
       renderContext: {
-                input: {},
-          output: undefined,
+        input: {},
+        output: undefined,
         data: {
           message: '确认下单'
         }
@@ -628,7 +628,7 @@ describe('widgetRuntime', (): void => {
 
     const result = await createWidgetRuntimeInstance(part).runInteraction('this.confirm()');
 
-    expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
+    expect(result.sendMessage).toBeUndefined();
   });
 
   it('keeps TypeScript private and protected helpers out of direct interaction bindings', async (): Promise<void> => {
