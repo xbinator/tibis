@@ -36,6 +36,11 @@ type MoveableStubTarget = Element[] | Element | null;
 
 /** Moveable updateRect 调用记录。 */
 const moveableUpdateRectMock = vi.hoisted(() => vi.fn<(className: string) => void>());
+/** Moveable 生命周期调用记录，用于验证目标类型切换时重建控制器。 */
+const moveableLifecycleMock = vi.hoisted(() => ({
+  mounted: vi.fn<(className: string) => void>(),
+  unmounted: vi.fn<(className: string) => void>()
+}));
 
 vi.mock('vue3-moveable/dist/moveable.js', () => ({
   default: defineComponent({
@@ -90,6 +95,12 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         default: null
       }
     },
+    mounted(this: { className: string }): void {
+      moveableLifecycleMock.mounted(this.className);
+    },
+    unmounted(this: { className: string }): void {
+      moveableLifecycleMock.unmounted(this.className);
+    },
     methods: {
       /**
        * 读取 Moveable 测试目标数量。
@@ -102,6 +113,30 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         }
 
         return target ? 1 : 0;
+      },
+      /**
+       * 读取 Moveable 测试目标类型。
+       * @param target - Moveable 目标
+       * @returns 目标类型
+       */
+      getTargetKind(target: MoveableStubTarget): string {
+        return Array.isArray(target) ? 'group' : 'single';
+      },
+      /**
+       * 读取 Moveable 测试目标 ID。
+       * @param target - Moveable 目标
+       * @returns 目标 ID 列表
+       */
+      getTargetIds(target: MoveableStubTarget): string {
+        let targets: Element[] = [];
+
+        if (Array.isArray(target)) {
+          targets = target;
+        } else if (target) {
+          targets = [target];
+        }
+
+        return targets.map((item: Element): string => (item instanceof HTMLElement ? item.dataset.widgetElementId ?? '' : '')).join(',');
       },
       /**
        * 模拟 Moveable 对外暴露的位置刷新方法。
@@ -129,6 +164,8 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
         :data-snap-gap="String(snapGap)"
         :data-snappable="String(snappable)"
         :data-target-count="String(getTargetLength(target))"
+        :data-target-ids="getTargetIds(target)"
+        :data-target-kind="getTargetKind(target)"
       ></div>
     `
   })
@@ -259,6 +296,22 @@ function collectWidgetElementIds(elements: WidgetElement[]): string[] {
 }
 
 /**
+ * 向测试根元素追加一个Widget节点 DOM。
+ * @param root - 测试根元素
+ * @param id - 节点 ID
+ * @returns 新追加的 DOM target
+ */
+function appendRootElementTarget(root: HTMLElement, id: string): HTMLElement {
+  const target = document.createElement('div');
+  target.className = 'b-widget-node';
+  target.dataset.widgetElementId = id;
+  registerWidgetElementTarget(target, id);
+  root.appendChild(target);
+
+  return target;
+}
+
+/**
  * 创建包含Widget 节点的测试根元素。
  * @param ids - 节点 ID 列表
  * @returns 测试根元素
@@ -267,10 +320,7 @@ function createRootElement(ids: string[]): HTMLElement {
   const root = document.createElement('div');
 
   ids.forEach((id: string): void => {
-    const target = document.createElement('div');
-    target.className = 'b-widget-node';
-    registerWidgetElementTarget(target, id);
-    root.appendChild(target);
+    appendRootElementTarget(root, id);
   });
 
   document.body.appendChild(root);
@@ -323,6 +373,8 @@ describe('MoveableLayer', (): void => {
   afterEach((): void => {
     document.body.innerHTML = '';
     moveableUpdateRectMock.mockClear();
+    moveableLifecycleMock.mounted.mockClear();
+    moveableLifecycleMock.unmounted.mockClear();
   });
 
   it('uses the shared resize handles for text while keeping schema resize enabled', async (): Promise<void> => {
@@ -337,6 +389,7 @@ describe('MoveableLayer', (): void => {
     expect(moveableProps.attributes('data-snappable')).toBe('true');
     expect(moveableProps.attributes('data-snap-gap')).toBe('true');
     expect(moveableProps.attributes('data-guideline-count')).toBe('1');
+    expect(moveableProps.attributes('data-target-kind')).toBe('single');
     expect(moveableProps.attributes('data-padding-top')).toBe('0');
     expect(moveableProps.attributes('data-padding-right')).toBe('0');
     expect(moveableProps.attributes('data-padding-bottom')).toBe('0');
@@ -406,6 +459,57 @@ describe('MoveableLayer', (): void => {
     const moveableProps = wrapper.find('.moveable-props');
 
     expect(moveableProps.attributes('data-guideline-count')).toBe('1');
+    wrapper.unmount();
+  });
+
+  it('keeps cleared selection empty when an older async target sync finishes later', async (): Promise<void> => {
+    const staleElement = createWidgetElement('stale-1', 'rect');
+    const root = createRootElement([]);
+    const viewport: WidgetViewport = { center: { x: 0, y: 0 }, zoom: 1 };
+    const viewportSize: WidgetSize = { width: 800, height: 600 };
+    const wrapper = mount(MoveableLayerHost, {
+      props: {
+        root,
+        elements: [staleElement],
+        selection: ['stale-1'],
+        viewport,
+        viewportSize,
+        enabled: true
+      },
+      attachTo: document.body
+    });
+
+    const clearSelection = wrapper.setProps({
+      selection: []
+    });
+    appendRootElementTarget(root, 'stale-1');
+    await clearSelection;
+    await flushMoveableLayerSync();
+
+    expect(wrapper.find('.moveable-props').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('remounts the controller when a multi selection becomes one grouped target', async (): Promise<void> => {
+    const firstElement = createWidgetElement('text-1', 'text');
+    const secondElement = createWidgetElement('rect-1', 'rect');
+    const group = createGroupWidgetElement('group-1', [firstElement, secondElement]);
+    const { root, wrapper } = mountMoveableLayer(['text-1', 'rect-1'], null, [firstElement, secondElement]);
+
+    await flushMoveableLayerSync();
+    moveableLifecycleMock.mounted.mockClear();
+    moveableLifecycleMock.unmounted.mockClear();
+    appendRootElementTarget(root, 'group-1');
+
+    await wrapper.setProps({
+      elements: [group],
+      selection: ['group-1']
+    });
+    await flushMoveableLayerSync();
+
+    expect(moveableLifecycleMock.unmounted).toHaveBeenCalledWith('');
+    expect(moveableLifecycleMock.mounted).toHaveBeenCalledWith('');
+    expect(wrapper.find('.moveable-props').attributes('data-target-kind')).toBe('single');
     wrapper.unmount();
   });
 
@@ -580,7 +684,7 @@ describe('MoveableLayer', (): void => {
     };
     const renderContext: WidgetRenderContext = {
       input: {},
-        output: undefined,
+      output: undefined,
       data: { shortText: 'abcdef' }
     };
     const setStartSize = vi.fn<(size: [number, number]) => void>();
@@ -610,7 +714,7 @@ describe('MoveableLayer', (): void => {
     };
     const renderContext: WidgetRenderContext = {
       input: {},
-        output: undefined,
+      output: undefined,
       data: { shortText: 'abcdef' }
     };
     const { root, wrapper } = mountMoveableLayer(['text-1'], null, [textElement, createWidgetElement('rect-1', 'rect')], renderContext);

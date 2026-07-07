@@ -12,8 +12,9 @@
     @pointerup.stop
   >
     <VueMoveable
+      :key="moveableTargetKey"
       ref="moveableRef"
-      :target="targets"
+      :target="moveableTarget"
       :container="root"
       :root-container="root"
       :use-accurate-position="true"
@@ -27,7 +28,8 @@
       :snap-directions="WIDGET_MOVEABLE_SNAP_DIRECTIONS"
       :element-snap-directions="WIDGET_MOVEABLE_SNAP_DIRECTIONS"
       :element-guidelines="activeGuidelineTargets"
-      :hide-child-moveable-default-lines="shouldHideChildMoveableDefaultLines"
+      :hide-default-lines="false"
+      :hide-child-moveable-default-lines="moveableHideChildDefaultLines"
       :padding="moveableSelectionPadding"
       :render-directions="WIDGET_MOVEABLE_RENDER_DIRECTIONS"
       :zoom="viewport.zoom"
@@ -237,6 +239,7 @@ const targets = ref<Element[]>([]);
 const moveableRef = ref<MoveableInstance | null>(null);
 const activeChildMoveableRef = ref<MoveableInstance | null>(null);
 let moveableRectRefreshFrame: ReturnType<typeof requestAnimationFrame> | null = null;
+let targetSyncRevision = 0;
 /** 单选拖拽时用于元素间吸附的其它Widget节点。 */
 const guidelineTargets = ref<Element[]>([]);
 /** 不展示 Moveable 控制间距时使用的零留白配置。 */
@@ -384,6 +387,25 @@ const moveableSelectionPadding = computed<MoveableSelectionPadding>(() =>
 );
 /** 当前实际传给 Moveable 的吸附参考节点。 */
 const activeGuidelineTargets = computed<Element[]>(() => (canSnapSelection.value ? guidelineTargets.value : []));
+/** 实际传给 Moveable 的目标，单选必须传 DOM 元素，避免 Moveable 误进入组合模式并隐藏默认线。 */
+const moveableTarget = computed<Element | Element[] | null>(() => {
+  if (targets.value.length === 0) {
+    return null;
+  }
+
+  return targets.value.length === 1 ? targets.value[0] ?? null : targets.value;
+});
+/** Moveable 目标签名，目标类型变化时重建控制器以清理旧的多选内部状态。 */
+const moveableTargetKey = computed<string>(() => {
+  const targetKind = Array.isArray(moveableTarget.value) ? 'group' : 'single';
+  const targetIds = targets.value.map((target: Element): string => getTargetId(target) ?? '').join('|');
+
+  return `${targetKind}:${targetIds}`;
+});
+/** 单选时不传 Groupable 专属配置，避免 Moveable 误启用 groupable able。 */
+const moveableHideChildDefaultLines = computed<boolean | undefined>(() =>
+  Array.isArray(moveableTarget.value) ? shouldHideChildMoveableDefaultLines.value : undefined
+);
 /** 当前组合内正在编辑的子元素 Moveable target。 */
 const activeChildTarget = computed<Element | null>(() => {
   if (!props.activeElementId || targets.value.length <= 1) {
@@ -400,6 +422,48 @@ const activeChildTarget = computed<Element | null>(() => {
  */
 function getTargetById(id: string): Element | null {
   return queryWidgetElementTarget(props.root, id);
+}
+
+/**
+ * 读取当前元素树中仍然有效的选区 ID。
+ * @param treeNodes - 当前渲染树节点
+ * @returns 有效选区 ID 列表
+ */
+function getSelectableSelectionIds(treeNodes: WidgetRenderTreeNode[]): string[] {
+  const shapeIds = new Set<string>(treeNodes.map((item: WidgetRenderTreeNode): string => item.element.id));
+
+  return props.selection.filter((id: string): boolean => shapeIds.has(id));
+}
+
+/**
+ * 读取选区 ID 对应的 DOM target。
+ * @param selectionIds - 有效选区 ID 列表
+ * @returns DOM target 列表
+ */
+function resolveSelectedTargets(selectionIds: string[]): Element[] {
+  return selectionIds.map(getTargetById).filter((target): target is Element => target !== null);
+}
+
+/**
+ * 等待新渲染节点完成 DOM 注册后读取 Moveable 目标。
+ * @param selectionIds - 有效选区 ID 列表
+ * @returns Moveable 目标列表
+ */
+async function resolveSelectedTargetsAfterDomReady(selectionIds: string[]): Promise<Element[]> {
+  let selectedTargets = resolveSelectedTargets(selectionIds);
+
+  if (selectedTargets.length >= selectionIds.length) {
+    return selectedTargets;
+  }
+
+  await nextTick();
+  selectedTargets = resolveSelectedTargets(selectionIds);
+  if (selectedTargets.length >= selectionIds.length) {
+    return selectedTargets;
+  }
+
+  await nextTick();
+  return resolveSelectedTargets(selectionIds);
 }
 
 /**
@@ -702,7 +766,9 @@ function previewResizeEvent(event: MoveableResizeEvent, shouldConvertGroupSize =
  * 读取选区对应 DOM target。
  */
 async function syncTargets(): Promise<void> {
-  await nextTick();
+  targetSyncRevision += 1;
+  const currentRevision = targetSyncRevision;
+
   if (!props.root || !props.enabled) {
     targets.value = [];
     guidelineTargets.value = [];
@@ -710,12 +776,13 @@ async function syncTargets(): Promise<void> {
   }
 
   const treeNodes = flattenWidgetElementTree(props.elements);
-  const shapeIds = new Set<string>(treeNodes.map((item: WidgetRenderTreeNode): string => item.element.id));
-  const selectedTargets = props.selection
-    .filter((id: string): boolean => shapeIds.has(id))
-    .map(getTargetById)
-    .filter((target): target is Element => target !== null);
-  const selectedPaths = props.selection
+  const selectionIds = getSelectableSelectionIds(treeNodes);
+  const selectedTargets = await resolveSelectedTargetsAfterDomReady(selectionIds);
+  if (currentRevision !== targetSyncRevision) {
+    return;
+  }
+
+  const selectedPaths = selectionIds
     .map((id: string): WidgetRenderTreeNode | undefined => treeNodes.find((item: WidgetRenderTreeNode): boolean => item.element.id === id))
     .filter((item: WidgetRenderTreeNode | undefined): item is WidgetRenderTreeNode => item !== undefined)
     .map((item: WidgetRenderTreeNode): string[] => item.path);
@@ -896,6 +963,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  targetSyncRevision += 1;
   cancelMoveableRectRefresh();
 });
 
@@ -906,7 +974,7 @@ watch(
       console.warn('BWidget Moveable target sync failed', error);
     });
   },
-  { deep: true }
+  { deep: true, flush: 'post' }
 );
 
 watch(
