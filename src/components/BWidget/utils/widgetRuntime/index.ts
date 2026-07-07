@@ -2,7 +2,7 @@
  * @file widgetRuntime/index.ts
  * @description BWidget 运行态脚本沙箱执行工具。
  */
-import type { WidgetRuntimeDataPatch } from './dataPatch';
+import type { WidgetRuntimePatch } from './patch';
 import type { WidgetData } from '../../types';
 import type { RequestInput, RequestMethod, RequestResponse } from 'types/request';
 import type { WidgetHttpClient, WidgetRenderContext, WidgetRuntimeSendMessage, WidgetSendMessageTextPart } from 'types/widget';
@@ -10,10 +10,10 @@ import { cloneDeep, isPlainObject } from 'lodash-es';
 import ts from 'typescript';
 import { getElectronAPI } from '@/shared/platform/electron-api';
 import { compileSandboxSource, createSandboxHttpHost, runSandboxCode, SANDBOX_HTTP_HOST_FUNCTION_NAME } from '@/utils/sandbox';
-import { isWidgetRuntimeDataPatchArray } from './dataPatch';
+import { isWidgetRuntimePatchArray } from './patch';
 
-/** 沙箱中用于上报 Widget data patch 的宿主函数名。 */
-const SANDBOX_WIDGET_DATA_PATCH_HOST_FUNCTION_NAME = '__sandboxWidgetDataPatch';
+/** 沙箱中用于上报 Widget patch 的宿主函数名。 */
+const SANDBOX_WIDGET_PATCH_HOST_FUNCTION_NAME = '__sandboxWidgetPatch';
 
 /** 沙箱中用于上报 Widget 日志的宿主函数名。 */
 const SANDBOX_WIDGET_LOGGER_HOST_FUNCTION_NAME = '__sandboxWidgetLogger';
@@ -69,8 +69,8 @@ interface WidgetLifecycleRunOptions {
   useWorker?: boolean;
   /** Worker 执行超时。 */
   timeoutMs?: number;
-  /** 脚本执行中的运行态 data patch 回调。 */
-  onDataPatch?: (patches: WidgetRuntimeDataPatch[]) => void | Promise<void>;
+  /** 脚本执行中的运行态 patch 回调。 */
+  onPatch?: (patches: WidgetRuntimePatch[]) => void | Promise<void>;
   /** 脚本执行中的日志回调（$logger.info/warn/error 触发）。 */
   onLogger?: (level: WidgetLogLevel, args: unknown[]) => void | Promise<void>;
   /** 脚本执行中的 console 回调（console.log/info/warn/error/debug 触发），转发到主线程 DevTools。 */
@@ -113,7 +113,7 @@ interface WidgetScriptRunResult {
 /**
  * 小组件脚本运行选项。
  */
-type WidgetScriptRunOptions = Pick<WidgetLifecycleRunOptions, 'http' | 'useWorker' | 'timeoutMs' | 'onDataPatch' | 'onLogger' | 'onConsole'>;
+type WidgetScriptRunOptions = Pick<WidgetLifecycleRunOptions, 'http' | 'useWorker' | 'timeoutMs' | 'onPatch' | 'onLogger' | 'onConsole'>;
 
 /**
  * 小组件 part 沙箱执行选项。
@@ -582,7 +582,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '',
     'function __createWidgetHttpClient(executionState) {',
     `  const request = async (method, url, input = {}) => {`,
-    '    await __flushDataPatches(executionState)',
+    '    await __flushPatches(executionState)',
     `    return ${SANDBOX_HTTP_HOST_FUNCTION_NAME}({ ...__clone(input), method, url })`,
     '  }',
     '  return {',
@@ -596,7 +596,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '',
     'function __createWidgetLogger(executionState) {',
     '  const send = async (level, args) => {',
-    '    await __flushDataPatches(executionState)',
+    '    await __flushPatches(executionState)',
     '    return __sandboxWidgetLogger(level, __createHostSafeArgs(args))',
     '  }',
     '  return {',
@@ -623,9 +623,9 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    dataChanged: false,',
     '    sendMessage: undefined,',
     '    pendingMethodCalls: [],',
-    '    pendingDataPatches: [],',
-    '    pendingDataPatchFlushes: [],',
-    '    pendingDataPatchFlushScheduled: false',
+    '    pendingPatches: [],',
+    '    pendingPatchFlushes: [],',
+    '    pendingPatchFlushScheduled: false',
     '  }',
     '}',
     '',
@@ -648,38 +648,38 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return segment === undefined ? undefined : [...path, segment]',
     '}',
     '',
-    'function __createSetDataPatch(target, path, value) {',
+    'function __createSetPatch(target, path, value) {',
     '  if (!path) return undefined',
     '  if (value !== undefined) return { op: "set", path, value }',
     '  return Array.isArray(target) && typeof path[path.length - 1] === "number" ? { op: "set", path, value: null } : { op: "delete", path }',
     '}',
     '',
-    'async function __flushDataPatches(executionState) {',
-    '  executionState.pendingDataPatchFlushScheduled = false',
-    '  const patches = executionState.pendingDataPatches.splice(0)',
+    'async function __flushPatches(executionState) {',
+    '  executionState.pendingPatchFlushScheduled = false',
+    '  const patches = executionState.pendingPatches.splice(0)',
     '  if (!patches.length) return',
-    `  await ${SANDBOX_WIDGET_DATA_PATCH_HOST_FUNCTION_NAME}(patches)`,
+    `  await ${SANDBOX_WIDGET_PATCH_HOST_FUNCTION_NAME}(patches)`,
     '}',
     '',
-    'function __scheduleDataPatchFlush(executionState) {',
-    '  if (executionState.pendingDataPatchFlushScheduled) return',
-    '  executionState.pendingDataPatchFlushScheduled = true',
-    '  const flushPromise = Promise.resolve().then(() => __flushDataPatches(executionState))',
-    '  executionState.pendingDataPatchFlushes.push(flushPromise)',
+    'function __schedulePatchFlush(executionState) {',
+    '  if (executionState.pendingPatchFlushScheduled) return',
+    '  executionState.pendingPatchFlushScheduled = true',
+    '  const flushPromise = Promise.resolve().then(() => __flushPatches(executionState))',
+    '  executionState.pendingPatchFlushes.push(flushPromise)',
     '}',
     '',
-    'function __recordDataPatch(executionState, patch) {',
+    'function __recordPatch(executionState, patch) {',
     '  if (!__isPatchablePath(patch.path)) return',
-    '  executionState.pendingDataPatches.push(__clone(patch))',
-    '  __scheduleDataPatchFlush(executionState)',
+    '  executionState.pendingPatches.push(__clone(patch))',
+    '  __schedulePatchFlush(executionState)',
     '}',
     '',
-    'async function __flushScheduledDataPatchFlushes(executionState) {',
-    '  while (executionState.pendingDataPatchFlushes.length > 0) {',
-    '    const pendingFlushes = executionState.pendingDataPatchFlushes.splice(0)',
+    'async function __flushScheduledPatchFlushes(executionState) {',
+    '  while (executionState.pendingPatchFlushes.length > 0) {',
+    '    const pendingFlushes = executionState.pendingPatchFlushes.splice(0)',
     '    await Promise.all(pendingFlushes)',
     '  }',
-    '  await __flushDataPatches(executionState)',
+    '  await __flushPatches(executionState)',
     '}',
     '',
     'function __isObjectLike(value) {',
@@ -703,8 +703,8 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '      if (didSet && !Object.is(previousValue, nextValue)) {',
     '        executionState.dataChanged = true',
     '        const patchPath = __appendPatchPath(path, target, property)',
-    '        const patch = __createSetDataPatch(target, patchPath, clonedValue)',
-    '        if (patch) __recordDataPatch(executionState, patch)',
+    '        const patch = __createSetPatch(target, patchPath, clonedValue)',
+    '        if (patch) __recordPatch(executionState, patch)',
     '      }',
     '      return didSet',
     '    },',
@@ -714,7 +714,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '      if (didDelete && hadProperty) {',
     '        executionState.dataChanged = true',
     '        const patchPath = __appendPatchPath(path, target, property)',
-    '        if (patchPath) __recordDataPatch(executionState, { op: "delete", path: patchPath })',
+    '        if (patchPath) __recordPatch(executionState, { op: "delete", path: patchPath })',
     '      }',
     '      return didDelete',
     '    }',
@@ -736,7 +736,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '      __widgetData[key] = clonedValue',
     '      if (!Object.is(previousValue, value)) {',
     '        executionState.dataChanged = true',
-    '        __recordDataPatch(executionState, __createSetDataPatch(__widgetData, [key], clonedValue))',
+    '        __recordPatch(executionState, __createSetPatch(__widgetData, [key], clonedValue))',
     '      }',
     '    }',
     '  })',
@@ -760,7 +760,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '      __defineWidgetDataAccessor(targetObject, property, executionState, proxyCache)',
     '      if (!Object.is(previousValue, value)) {',
     '        executionState.dataChanged = true',
-    '        __recordDataPatch(executionState, __createSetDataPatch(__widgetData, [property], clonedValue))',
+    '        __recordPatch(executionState, __createSetPatch(__widgetData, [property], clonedValue))',
     '      }',
     '      return true',
     '    },',
@@ -776,7 +776,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '        if (Reflect.has(targetObject, property)) Reflect.deleteProperty(targetObject, property)',
     '        if (didDeleteData) {',
     '          executionState.dataChanged = true',
-    '          __recordDataPatch(executionState, { op: "delete", path: [property] })',
+    '          __recordPatch(executionState, { op: "delete", path: [property] })',
     '        }',
     '        return didDeleteData',
     '      }',
@@ -799,7 +799,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '      async value(message) {',
     '        const sendMessage = __normalizeSendMessage(message)',
     '        if (sendMessage) executionState.sendMessage = sendMessage',
-    '        await __flushDataPatches(executionState)',
+    '        await __flushPatches(executionState)',
     '      }',
     '    }',
     '  })',
@@ -905,7 +905,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    await __runInteractionCode(interactionCode, widgetThis, methodBindings)',
     '  }',
     '  await __flushPendingMethodCalls(executionState)',
-    '  await __flushScheduledDataPatchFlushes(executionState)',
+    '  await __flushScheduledPatchFlushes(executionState)',
     '  return {',
     '    data: __clone(__widgetData),',
     '    dataChanged: executionState.dataChanged,',
@@ -958,12 +958,12 @@ async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: 
           disabledMessage: '当前环境未启用小组件 HTTP 客户端',
           invalidRequestMessage: '小组件 HTTP 请求参数无效'
         }),
-        [SANDBOX_WIDGET_DATA_PATCH_HOST_FUNCTION_NAME]: async (patches: unknown): Promise<void> => {
-          if (!isWidgetRuntimeDataPatchArray(patches)) {
+        [SANDBOX_WIDGET_PATCH_HOST_FUNCTION_NAME]: async (patches: unknown): Promise<void> => {
+          if (!isWidgetRuntimePatchArray(patches)) {
             throw new Error('小组件运行态 patch 参数无效');
           }
 
-          await options.onDataPatch?.(patches);
+          await options.onPatch?.(patches);
         },
         [SANDBOX_WIDGET_LOGGER_HOST_FUNCTION_NAME]: async (level: unknown, args: unknown): Promise<void> => {
           if (level !== 'info' && level !== 'warn' && level !== 'error') {
@@ -1059,7 +1059,7 @@ function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOpt
       http: options.http,
       useWorker: options.useWorker,
       timeoutMs: options.timeoutMs,
-      onDataPatch: options.onDataPatch,
+      onPatch: options.onPatch,
       onLogger: options.onLogger,
       onConsole: options.onConsole
     }

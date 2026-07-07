@@ -5,8 +5,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { finishWidgetRuntime, initWidgetMountState, type WidgetRuntimeState } from '@/components/BWidget/utils/widgetRuntime';
-import type { WidgetRuntimeDataPatch } from '@/components/BWidget/utils/widgetRuntime/dataPatch';
 import { formatWidgetLogArgs } from '@/components/BWidget/utils/widgetRuntime/logger';
+import type { WidgetRuntimePatch } from '@/components/BWidget/utils/widgetRuntime/patch';
 
 /**
  * 创建用于 $logger 测试的运行态状态。
@@ -43,26 +43,26 @@ interface WidgetConsoleCall {
 }
 
 /**
- * 创建捕获 data patch、$logger 与 console 回调的 options。
- * @param dataPatches - patch 收集数组
+ * 创建捕获 patch、$logger 与 console 回调的 options。
+ * @param patches - patch 收集数组
  * @param loggerCalls - $logger 调用收集数组
  * @param consoleCalls - console 调用收集数组
  * @returns lifecycle options
  */
 function createCaptureOptions(
-  dataPatches: WidgetRuntimeDataPatch[],
+  patches: WidgetRuntimePatch[],
   loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }>,
   consoleCalls: WidgetConsoleCall[] = []
 ): {
   useWorker: false;
-  onDataPatch: (patches: WidgetRuntimeDataPatch[]) => void;
+  onPatch: (incomingPatches: WidgetRuntimePatch[]) => void;
   onLogger: (level: 'info' | 'warn' | 'error', args: unknown[]) => void;
   onConsole: (level: 'log' | 'info' | 'warn' | 'error' | 'debug', args: unknown[]) => void;
 } {
   return {
     useWorker: false,
-    onDataPatch: (patches: WidgetRuntimeDataPatch[]): void => {
-      dataPatches.push(...patches);
+    onPatch: (incomingPatches: WidgetRuntimePatch[]): void => {
+      patches.push(...incomingPatches);
     },
     onLogger: (level: 'info' | 'warn' | 'error', args: unknown[]): void => {
       loggerCalls.push({ level, args });
@@ -153,8 +153,8 @@ describe('widgetRuntime $logger bridge', (): void => {
     ]);
   });
 
-  it('flushes data patches before invoking onLogger', async (): Promise<void> => {
-    const dataPatches: WidgetRuntimeDataPatch[] = [];
+  it('flushes patches before invoking onLogger', async (): Promise<void> => {
+    const patches: WidgetRuntimePatch[] = [];
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(
       createLoggerWidgetCode(['  count = 0', '', '  async mounted() {', '    this.count = 5', "    await this.$logger.info('count', this.count)", '  }']),
@@ -162,11 +162,11 @@ describe('widgetRuntime $logger bridge', (): void => {
     );
 
     // onLogger 触发时，前置的 set patch 应已上报
-    let patchesAtLogTime: WidgetRuntimeDataPatch[] = [];
-    const options = createCaptureOptions(dataPatches, loggerCalls);
+    let patchesAtLogTime: WidgetRuntimePatch[] = [];
+    const options = createCaptureOptions(patches, loggerCalls);
     const originalOnLogger = options.onLogger;
     options.onLogger = (level, args): void => {
-      patchesAtLogTime = [...dataPatches];
+      patchesAtLogTime = [...patches];
       originalOnLogger(level, args);
     };
 

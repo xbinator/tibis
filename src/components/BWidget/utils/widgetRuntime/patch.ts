@@ -1,21 +1,21 @@
 /**
- * @file widgetRuntime/dataPatch.ts
- * @description BWidget 运行态 data patch 应用工具。
+ * @file widgetRuntime/patch.ts
+ * @description BWidget 运行态 patch 应用工具。
  */
 import { isPlainObject } from 'lodash-es';
 
-/** Widget 运行态 data patch 路径片段。 */
-export type WidgetRuntimeDataPathSegment = string | number;
+/** Widget 运行态 patch 路径片段。 */
+export type WidgetRuntimePathSegment = string | number;
 
 /**
- * Widget 运行态 data patch。
+ * Widget 运行态 patch。
  */
-export type WidgetRuntimeDataPatch =
+export type WidgetRuntimePatch =
   | {
       /** 设置字段值 */
       op: 'set';
       /** 从 renderContext.data 根开始的路径 */
-      path: WidgetRuntimeDataPathSegment[];
+      path: WidgetRuntimePathSegment[];
       /** 写入值 */
       value: unknown;
     }
@@ -23,13 +23,13 @@ export type WidgetRuntimeDataPatch =
       /** 删除字段 */
       op: 'delete';
       /** 从 renderContext.data 根开始的路径 */
-      path: WidgetRuntimeDataPathSegment[];
+      path: WidgetRuntimePathSegment[];
     };
 
 /**
- * 可应用运行态 data patch 的状态。
+ * 可应用运行态 patch 的状态。
  */
-interface WidgetRuntimeDataPatchableState {
+interface WidgetRuntimePatchableState {
   /** 运行态渲染上下文 */
   renderContext: {
     /** 运行态数据 */
@@ -51,7 +51,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
  * @param value - 待判断值
  * @returns 是否为路径片段
  */
-function isPatchPathSegment(value: unknown): value is WidgetRuntimeDataPathSegment {
+function isPatchPathSegment(value: unknown): value is WidgetRuntimePathSegment {
   return typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0);
 }
 
@@ -60,7 +60,7 @@ function isPatchPathSegment(value: unknown): value is WidgetRuntimeDataPathSegme
  * @param value - 待判断值
  * @returns 是否为 patch 路径
  */
-function isPatchPath(value: unknown): value is WidgetRuntimeDataPathSegment[] {
+function isPatchPath(value: unknown): value is WidgetRuntimePathSegment[] {
   return Array.isArray(value) && value.length > 0 && typeof value[0] === 'string' && value.every(isPatchPathSegment);
 }
 
@@ -79,7 +79,7 @@ function isPatchContainer(value: unknown): value is Record<string, unknown> | un
  * @param segment - 路径片段
  * @returns 是否存在
  */
-function hasContainerSegment(container: Record<string, unknown> | unknown[], segment: WidgetRuntimeDataPathSegment): boolean {
+function hasContainerSegment(container: Record<string, unknown> | unknown[], segment: WidgetRuntimePathSegment): boolean {
   return Object.prototype.hasOwnProperty.call(container, segment);
 }
 
@@ -89,7 +89,7 @@ function hasContainerSegment(container: Record<string, unknown> | unknown[], seg
  * @param segment - 路径片段
  * @returns 路径值
  */
-function readContainerSegment(container: Record<string, unknown> | unknown[], segment: WidgetRuntimeDataPathSegment): unknown {
+function readContainerSegment(container: Record<string, unknown> | unknown[], segment: WidgetRuntimePathSegment): unknown {
   return Array.isArray(container) && typeof segment === 'number' ? container[segment] : (container as Record<string, unknown>)[String(segment)];
 }
 
@@ -99,7 +99,7 @@ function readContainerSegment(container: Record<string, unknown> | unknown[], se
  * @param segment - 路径片段
  * @param value - 写入值
  */
-function writeContainerSegment(container: Record<string, unknown> | unknown[], segment: WidgetRuntimeDataPathSegment, value: unknown): void {
+function writeContainerSegment(container: Record<string, unknown> | unknown[], segment: WidgetRuntimePathSegment, value: unknown): void {
   if (Array.isArray(container) && typeof segment === 'number') {
     container[segment] = value;
     return;
@@ -113,7 +113,7 @@ function writeContainerSegment(container: Record<string, unknown> | unknown[], s
  * @param container - 容器
  * @param segment - 路径片段
  */
-function deleteContainerSegment(container: Record<string, unknown> | unknown[], segment: WidgetRuntimeDataPathSegment): void {
+function deleteContainerSegment(container: Record<string, unknown> | unknown[], segment: WidgetRuntimePathSegment): void {
   if (Array.isArray(container) && typeof segment === 'number') {
     container[segment] = null;
     return;
@@ -128,7 +128,7 @@ function deleteContainerSegment(container: Record<string, unknown> | unknown[], 
  * @param nextSegment - 下一段路径
  * @returns 新容器
  */
-function clonePatchContainer(value: unknown, nextSegment: WidgetRuntimeDataPathSegment): Record<string, unknown> | unknown[] {
+function clonePatchContainer(value: unknown, nextSegment: WidgetRuntimePathSegment): Record<string, unknown> | unknown[] {
   if (Array.isArray(value)) return [...value];
   if (isPlainRecord(value)) return { ...value };
   return typeof nextSegment === 'number' ? [] : {};
@@ -140,7 +140,7 @@ function clonePatchContainer(value: unknown, nextSegment: WidgetRuntimeDataPathS
  * @param patch - set patch
  * @returns 应用后的 data
  */
-function applySetPatch(data: Record<string, unknown>, patch: Extract<WidgetRuntimeDataPatch, { op: 'set' }>): Record<string, unknown> {
+function applySetPatch(data: Record<string, unknown>, patch: Extract<WidgetRuntimePatch, { op: 'set' }>): Record<string, unknown> {
   if (!isPatchPath(patch.path)) return data;
 
   const nextData = { ...data };
@@ -167,7 +167,7 @@ function applySetPatch(data: Record<string, unknown>, patch: Extract<WidgetRunti
  * @param patch - delete patch
  * @returns 应用后的 data
  */
-function applyDeletePatch(data: Record<string, unknown>, patch: Extract<WidgetRuntimeDataPatch, { op: 'delete' }>): Record<string, unknown> {
+function applyDeletePatch(data: Record<string, unknown>, patch: Extract<WidgetRuntimePatch, { op: 'delete' }>): Record<string, unknown> {
   if (!isPatchPath(patch.path)) return data;
 
   const nextData = { ...data };
@@ -196,39 +196,39 @@ function applyDeletePatch(data: Record<string, unknown>, patch: Extract<WidgetRu
 }
 
 /**
- * 应用单个运行态 data patch。
+ * 应用单个运行态 patch。
  * @param data - 原 data
- * @param patch - data patch
+ * @param patch - patch
  * @returns 应用后的 data
  */
-export function applyWidgetRuntimeDataPatch(data: Record<string, unknown>, patch: WidgetRuntimeDataPatch): Record<string, unknown> {
+export function applyWidgetRuntimePatch(data: Record<string, unknown>, patch: WidgetRuntimePatch): Record<string, unknown> {
   return patch.op === 'set' ? applySetPatch(data, patch) : applyDeletePatch(data, patch);
 }
 
 /**
- * 应用运行态 data patch 列表。
+ * 应用运行态 patch 列表。
  * @param data - 原 data
- * @param patches - data patch 列表
+ * @param patches - patch 列表
  * @returns 应用后的 data
  */
-export function applyWidgetRuntimeDataPatches(data: Record<string, unknown>, patches: WidgetRuntimeDataPatch[]): Record<string, unknown> {
+export function applyWidgetRuntimePatches(data: Record<string, unknown>, patches: WidgetRuntimePatch[]): Record<string, unknown> {
   let nextData = data;
 
   for (const patch of patches) {
-    nextData = applyWidgetRuntimeDataPatch(nextData, patch);
+    nextData = applyWidgetRuntimePatch(nextData, patch);
   }
 
   return nextData;
 }
 
 /**
- * 把 data patch 列表应用到运行态状态。
+ * 把 patch 列表应用到运行态状态。
  * @param state - 原运行态状态
- * @param patches - data patch 列表
+ * @param patches - patch 列表
  * @returns 应用后的运行态状态
  */
-export function applyWidgetRuntimeDataPatchesToState<TState extends WidgetRuntimeDataPatchableState>(state: TState, patches: WidgetRuntimeDataPatch[]): TState {
-  const nextData = applyWidgetRuntimeDataPatches(state.renderContext.data, patches);
+export function applyWidgetRuntimePatchesToState<TState extends WidgetRuntimePatchableState>(state: TState, patches: WidgetRuntimePatch[]): TState {
+  const nextData = applyWidgetRuntimePatches(state.renderContext.data, patches);
   if (nextData === state.renderContext.data) return state;
 
   return {
@@ -241,21 +241,21 @@ export function applyWidgetRuntimeDataPatchesToState<TState extends WidgetRuntim
 }
 
 /**
- * 判断值是否为运行态 data patch。
+ * 判断值是否为运行态 patch。
  * @param value - 待判断值
- * @returns 是否为运行态 data patch
+ * @returns 是否为运行态 patch
  */
-export function isWidgetRuntimeDataPatch(value: unknown): value is WidgetRuntimeDataPatch {
+export function isWidgetRuntimePatch(value: unknown): value is WidgetRuntimePatch {
   if (!isPlainRecord(value) || !isPatchPath(value.path)) return false;
   if (value.op === 'delete') return true;
   return value.op === 'set' && Object.prototype.hasOwnProperty.call(value, 'value');
 }
 
 /**
- * 判断值是否为运行态 data patch 数组。
+ * 判断值是否为运行态 patch 数组。
  * @param value - 待判断值
- * @returns 是否为运行态 data patch 数组
+ * @returns 是否为运行态 patch 数组
  */
-export function isWidgetRuntimeDataPatchArray(value: unknown): value is WidgetRuntimeDataPatch[] {
-  return Array.isArray(value) && value.every(isWidgetRuntimeDataPatch);
+export function isWidgetRuntimePatchArray(value: unknown): value is WidgetRuntimePatch[] {
+  return Array.isArray(value) && value.every(isWidgetRuntimePatch);
 }

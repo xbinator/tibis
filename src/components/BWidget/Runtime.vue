@@ -42,9 +42,9 @@ import {
   type WidgetRuntimeFinishResult,
   type WidgetRuntimeState
 } from './utils/widgetRuntime';
-import { applyWidgetRuntimeDataPatchesToState, type WidgetRuntimeDataPatch } from './utils/widgetRuntime/dataPatch';
 import { createWidgetRuntimeLayoutFromRenderElements, type WidgetRuntimeElementLayout } from './utils/widgetRuntime/layout';
 import { formatWidgetLogArgs } from './utils/widgetRuntime/logger';
+import { applyWidgetRuntimePatchesToState, type WidgetRuntimePatch } from './utils/widgetRuntime/patch';
 
 defineOptions({ name: 'BWidgetRuntime' });
 
@@ -216,11 +216,11 @@ function clearPatchPreview(executionId: string): void {
 }
 
 /**
- * 提交脚本执行中的实时 data patch。
+ * 提交脚本执行中的实时 patch。
  * @param executionId - patch 执行 ID
- * @param patches - data patch 列表
+ * @param patches - patch 列表
  */
-function commitRuntimeDataPatches(executionId: string, patches: WidgetRuntimeDataPatch[]): void {
+function commitRuntimePatches(executionId: string, patches: WidgetRuntimePatch[]): void {
   if (executionId !== activePatchExecutionId) return;
   if (!patches.length) return;
 
@@ -228,7 +228,7 @@ function commitRuntimeDataPatches(executionId: string, patches: WidgetRuntimeDat
   // runtimeState.value 在没有 preview 时只会回落到 localRuntimeState 或 propsRuntimeState。
   const baseState = patchPreviewRuntimeState.value ?? runtimeState.value;
 
-  patchPreviewRuntimeState.value = applyWidgetRuntimeDataPatchesToState(baseState, patches);
+  patchPreviewRuntimeState.value = applyWidgetRuntimePatchesToState(baseState, patches);
 }
 
 /**
@@ -333,7 +333,7 @@ async function initWidgetRuntime(): Promise<void> {
   try {
     const result = await mountWidgetRuntime(currentState, {
       http: widgetHttpClient,
-      onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches),
+      onPatch: (patches): void => commitRuntimePatches(executionId, patches),
       onLogger: handleWidgetLogger,
       onConsole: handleWidgetConsole
     });
@@ -361,7 +361,7 @@ async function runRuntimeInteraction(interactionCode: string): Promise<void> {
   try {
     const result = await createWidgetRuntimeInstance(currentState, {
       http: widgetHttpClient,
-      onDataPatch: (patches): void => commitRuntimeDataPatches(executionId, patches),
+      onPatch: (patches): void => commitRuntimePatches(executionId, patches),
       onLogger: handleWidgetLogger,
       onConsole: handleWidgetConsole
     }).runInteraction(interactionCode);

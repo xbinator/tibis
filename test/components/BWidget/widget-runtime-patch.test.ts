@@ -1,11 +1,11 @@
 /**
- * @file widget-runtime-data-patch.test.ts
- * @description BWidget 运行态 data patch 应用工具测试。
+ * @file widget-runtime-patch.test.ts
+ * @description BWidget 运行态 patch 应用工具测试。
  */
 import { describe, expect, it } from 'vitest';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import type { WidgetRuntimeState } from '@/components/BWidget/utils/widgetRuntime';
-import { applyWidgetRuntimeDataPatchesToState } from '@/components/BWidget/utils/widgetRuntime/dataPatch';
+import { applyWidgetRuntimePatchesToState } from '@/components/BWidget/utils/widgetRuntime/patch';
 
 /**
  * 创建用于 patch 应用测试的运行态状态。
@@ -35,10 +35,10 @@ function createRuntimeState(): WidgetRuntimeState {
   };
 }
 
-describe('widgetRuntime/dataPatch', (): void => {
+describe('widgetRuntime/patch', (): void => {
   it('applies nested set patches with structural sharing', (): void => {
     const state = createRuntimeState();
-    const nextState = applyWidgetRuntimeDataPatchesToState(state, [{ op: 'set', path: ['weather', 'temperature'], value: 28 }]);
+    const nextState = applyWidgetRuntimePatchesToState(state, [{ op: 'set', path: ['weather', 'temperature'], value: 28 }]);
 
     expect(nextState).not.toBe(state);
     expect(nextState.renderContext).not.toBe(state.renderContext);
@@ -54,7 +54,7 @@ describe('widgetRuntime/dataPatch', (): void => {
 
   it('creates missing parent objects for set patches', (): void => {
     const state = createRuntimeState();
-    const nextState = applyWidgetRuntimeDataPatchesToState(state, [{ op: 'set', path: ['forecast', 'today', 'temperature'], value: 30 }]);
+    const nextState = applyWidgetRuntimePatchesToState(state, [{ op: 'set', path: ['forecast', 'today', 'temperature'], value: 30 }]);
 
     expect(nextState.renderContext.data.forecast).toEqual({
       today: {
@@ -66,7 +66,7 @@ describe('widgetRuntime/dataPatch', (): void => {
 
   it('applies array path patches without mutating unchanged siblings', (): void => {
     const state = createRuntimeState();
-    const nextState = applyWidgetRuntimeDataPatchesToState(state, [{ op: 'set', path: ['items', 0, 'name'], value: '燕麦拿铁' }]);
+    const nextState = applyWidgetRuntimePatchesToState(state, [{ op: 'set', path: ['items', 0, 'name'], value: '燕麦拿铁' }]);
     const nextItems = nextState.renderContext.data.items;
 
     expect(Array.isArray(nextItems)).toBe(true);
@@ -77,7 +77,7 @@ describe('widgetRuntime/dataPatch', (): void => {
 
   it('applies delete patches with structural sharing', (): void => {
     const state = createRuntimeState();
-    const nextState = applyWidgetRuntimeDataPatchesToState(state, [{ op: 'delete', path: ['weather', 'temperature'] }]);
+    const nextState = applyWidgetRuntimePatchesToState(state, [{ op: 'delete', path: ['weather', 'temperature'] }]);
 
     expect(nextState.renderContext.data.weather).toEqual({
       city: '上海'
@@ -101,7 +101,7 @@ describe('widgetRuntime/dataPatch', (): void => {
         }
       }
     };
-    const nextState = applyWidgetRuntimeDataPatchesToState(stateWithTwoItems, [{ op: 'delete', path: ['items', 0] }]);
+    const nextState = applyWidgetRuntimePatchesToState(stateWithTwoItems, [{ op: 'delete', path: ['items', 0] }]);
     const nextItems = nextState.renderContext.data.items;
 
     expect(Array.isArray(nextItems)).toBe(true);

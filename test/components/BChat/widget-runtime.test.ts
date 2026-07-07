@@ -12,7 +12,7 @@ import {
   initWidgetMountState as initWidgetMountStateBase,
   type WidgetRuntimeState
 } from '@/components/BWidget/utils/widgetRuntime';
-import type { WidgetRuntimeDataPatch } from '@/components/BWidget/utils/widgetRuntime/dataPatch';
+import type { WidgetRuntimePatch } from '@/components/BWidget/utils/widgetRuntime/patch';
 import { runSandboxCode } from '@/utils/sandbox';
 
 /** 测试环境没有浏览器 Worker，显式允许走本地 fallback。 */
@@ -392,7 +392,7 @@ describe('widgetRuntime', (): void => {
     });
   });
 
-  it('reports data patches while mounted scripts write direct data fields', async (): Promise<void> => {
+  it('reports patches while mounted scripts write direct data fields', async (): Promise<void> => {
     const part = createWidgetPart(
       [
         'export default class Weather extends Widget {',
@@ -409,10 +409,10 @@ describe('widgetRuntime', (): void => {
         '}'
       ].join('\n')
     );
-    const patchBatches: WidgetRuntimeDataPatch[][] = [];
+    const patchBatches: WidgetRuntimePatch[][] = [];
 
     const nextPart = await initWidgetMountState(part, {
-      onDataPatch: (patches): void => {
+      onPatch: (patches): void => {
         patchBatches.push(patches);
       }
     });
@@ -437,10 +437,10 @@ describe('widgetRuntime', (): void => {
         '\n'
       )
     );
-    const patchBatches: WidgetRuntimeDataPatch[][] = [];
+    const patchBatches: WidgetRuntimePatch[][] = [];
 
     const nextPart = await initWidgetMountState(part, {
-      onDataPatch: (patches): void => {
+      onPatch: (patches): void => {
         patchBatches.push(patches);
       }
     });
@@ -778,7 +778,7 @@ describe('widgetRuntime', (): void => {
     });
   });
 
-  it('flushes pending data patches before hosted http requests', async (): Promise<void> => {
+  it('flushes pending patches before hosted http requests', async (): Promise<void> => {
     const part = createWidgetPart(
       [
         'export default class Weather extends Widget {',
@@ -804,7 +804,7 @@ describe('widgetRuntime', (): void => {
 
     const nextPart = await initWidgetMountState(part, {
       http,
-      onDataPatch: (patches): void => {
+      onPatch: (patches): void => {
         for (const patch of patches) {
           if (patch.op === 'set' && patch.path[0] === 'message') {
             events.push(`patch:${String(patch.value)}`);
