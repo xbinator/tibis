@@ -219,4 +219,32 @@ describe('useWidgetBoard selection commands', (): void => {
     board.ungroupSelection();
     expect(board.state.value.elements.map((element: WidgetShapeElement): string => element.id)).toEqual(['node-1', 'node-4', 'node-2', 'node-3']);
   });
+
+  it('locks and unlocks the current selection through board history', (): void => {
+    const groupElement: WidgetElementWithChildren = {
+      ...createShapeElement('group-1', 100, 80),
+      name: 'group',
+      label: '组合',
+      icon: 'lucide:group',
+      title: '组合',
+      children: [createShapeElement('child-1', 10, 20)]
+    };
+    const board = useWidgetBoard({
+      elements: [groupElement],
+      selection: ['child-1']
+    });
+
+    board.setSelectionLocked(true);
+
+    const lockedChild = (board.state.value.elements[0] as WidgetElementWithChildren | undefined)?.children?.[0];
+    expect(lockedChild?.locked).toBe(true);
+    expect(board.state.value.selection).toEqual(['child-1']);
+    expect(board.state.value.history.past).toHaveLength(1);
+
+    board.setSelectionLocked(false);
+
+    const unlockedChild = (board.state.value.elements[0] as WidgetElementWithChildren | undefined)?.children?.[0];
+    expect(unlockedChild?.locked).toBeUndefined();
+    expect(board.state.value.history.past).toHaveLength(2);
+  });
 });

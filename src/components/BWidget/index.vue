@@ -120,7 +120,18 @@ import {
 /**
  * 右键菜单命令。
  */
-type WidgetContextMenuCommand = 'copy' | 'paste' | 'group' | 'ungroup' | 'bringToFront' | 'bringForward' | 'sendBackward' | 'sendToBack' | 'delete';
+type WidgetContextMenuCommand =
+  | 'copy'
+  | 'paste'
+  | 'lock'
+  | 'unlock'
+  | 'group'
+  | 'ungroup'
+  | 'bringToFront'
+  | 'bringForward'
+  | 'sendBackward'
+  | 'sendToBack'
+  | 'delete';
 
 /**
  * 右键菜单项。
@@ -221,20 +232,6 @@ const contextMenuState = ref<WidgetContextMenuState>({
   boardPoint: { x: 0, y: 0 }
 });
 
-/**
- * 处理外部模型重置，允许异步加载出的已有内容重新执行初始视口适配。
- * @param nextDataItem - 最新外部Widget数据
- */
-function handleExternalModelReset(nextDataItem: WidgetData): void {
-  if (nextDataItem.elements.length > 0) {
-    initialContentViewportFitted.value = false;
-  }
-}
-useModelSync({
-  board,
-  dataItem,
-  onExternalModelReset: handleExternalModelReset
-});
 /** 当前激活工具对应的可创建元素配置。 */
 const activeCreateSchema = computed<WidgetElementSchema | null>(() => getWidgetElementSchema(activeTool.value));
 /** 当前是否激活可创建元素工具。 */
@@ -244,24 +241,37 @@ const activeCreateCursor = computed<string | undefined>(() => (activeCreateSchem
 /** 当前右键菜单项。 */
 const contextMenuItems = computed<WidgetContextMenuEntry[]>(() => {
   const hasSelection = board.state.value.selection.length > 0;
+  const selectedElements = board.state.value.selection
+    .map((elementId: string): WidgetElement | null => findWidgetElementTreeNode(board.state.value.elements, elementId)?.element ?? null)
+    .filter((element: WidgetElement | null): element is WidgetElement => element !== null);
+  let lockEntry: WidgetContextMenuItem | null = null;
+
+  if (selectedElements.length > 0) {
+    lockEntry = selectedElements.every((element: WidgetElement): boolean => element.locked === true)
+      ? { key: 'unlock', label: '解锁', icon: 'lucide:unlock' }
+      : { key: 'lock', label: '锁定', icon: 'lucide:lock' };
+  }
   const canGroup = board.state.value.selection.length > 1 && isSameWidgetElementParent(board.state.value.elements, board.state.value.selection);
   const canUngroup = board.state.value.selection.some((elementId: string): boolean => {
     const element = findWidgetElementTreeNode(board.state.value.elements, elementId)?.element;
 
     return element ? isWidgetGroupElement(element) : false;
   });
-  const groupEntries: WidgetContextMenuEntry[] = [];
+  const editEntries: WidgetContextMenuEntry[] = [];
 
+  if (lockEntry) {
+    editEntries.push(lockEntry);
+  }
   if (canUngroup) {
-    groupEntries.push({ type: 'divider', key: 'divider-edit-group' }, { key: 'ungroup', label: '取消合并', icon: 'lucide:ungroup' });
+    editEntries.push({ key: 'ungroup', label: '取消合并', icon: 'lucide:ungroup' });
   } else if (canGroup) {
-    groupEntries.push({ type: 'divider', key: 'divider-edit-group' }, { key: 'group', label: '合并', icon: 'lucide:group' });
+    editEntries.push({ key: 'group', label: '合并', icon: 'lucide:group' });
   }
 
   return [
     { key: 'copy', label: '复制', icon: 'lucide:copy', disabled: !hasSelection },
     { key: 'paste', label: '粘贴', icon: 'lucide:clipboard-paste', disabled: !board.hasClipboard.value },
-    ...groupEntries,
+    ...(editEntries.length ? [{ type: 'divider', key: 'divider-edit' } satisfies WidgetContextMenuDivider, ...editEntries] : []),
     { type: 'divider', key: 'divider-group-layer' },
     { key: 'bringForward', label: '上一层', icon: 'lucide:bring-to-front', disabled: !hasSelection },
     { key: 'sendBackward', label: '下一层', icon: 'lucide:send-to-back', disabled: !hasSelection },
@@ -293,6 +303,15 @@ function createSelectedTargetFromSelection(selection: string[]): WidgetSelectTar
   const element = selectedId ? findWidgetElementTreeNode(dataItem.value.elements, selectedId)?.element : null;
 
   return element ?? dataItem.value.metadata;
+}
+
+/**
+ * 判断设置目标是否为Widget元素。
+ * @param target - 设置目标
+ * @returns 是否为Widget元素
+ */
+function isWidgetElementSelectTarget(target: WidgetSelectTarget): target is WidgetElement {
+  return target !== null && typeof target === 'object' && 'id' in target && typeof target.id === 'string';
 }
 
 /**
@@ -353,12 +372,58 @@ function getSelectionForElement(id: string): string[] {
 }
 
 /**
+ * 将外部传入的元素设置目标同步到内部画布选区。
+ * @param target - 外部设置目标
+ */
+function syncBoardSelectionFromSelectedTarget(target: WidgetSelectTarget): void {
+  if (!isWidgetElementSelectTarget(target)) {
+    return;
+  }
+
+  if (board.state.value.selection.includes(target.id)) {
+    return;
+  }
+
+  const hasElement = findWidgetElementTreeNode(board.state.value.elements, target.id) !== null;
+  if (!hasElement) {
+    return;
+  }
+
+  activeElementId.value = null;
+  board.setSelection(getSelectionForElement(target.id));
+}
+
+/**
+ * 处理外部模型重置，允许异步加载出的已有内容重新执行初始视口适配。
+ * @param nextDataItem - 最新外部Widget数据
+ */
+function handleExternalModelReset(nextDataItem: WidgetData): void {
+  if (nextDataItem.elements.length > 0) {
+    initialContentViewportFitted.value = false;
+  }
+
+  syncBoardSelectionFromSelectedTarget(selectedTarget.value);
+}
+
+useModelSync({
+  board,
+  dataItem,
+  onExternalModelReset: handleExternalModelReset
+});
+
+/**
  * 读取元素右键菜单应使用的选区。
  * @param id - 元素 ID
  * @returns 右键菜单选区
  */
 function getContextMenuSelectionForElement(id: string): string[] {
   if (board.state.value.selection.includes(id)) {
+    return [...board.state.value.selection];
+  }
+
+  const node = findWidgetElementTreeNode(board.state.value.elements, id);
+  const selectedIds = new Set(board.state.value.selection);
+  if (node?.path.some((pathId: string): boolean => selectedIds.has(pathId))) {
     return [...board.state.value.selection];
   }
 
@@ -406,6 +471,13 @@ watch(
 );
 
 watch(() => board.state.value.selection, handleSelectionChange, { immediate: true });
+watch(
+  () => [selectedTarget.value, board.state.value.elements],
+  (): void => {
+    syncBoardSelectionFromSelectedTarget(selectedTarget.value);
+  },
+  { deep: true }
+);
 
 /**
  * 直接拖拽预览节点。
@@ -843,6 +915,14 @@ function handleContextMenuCommand(command: string): void {
     }
     case 'paste': {
       board.pasteClipboard(contextMenuState.value.boardPoint);
+      break;
+    }
+    case 'lock': {
+      board.setSelectionLocked(true);
+      break;
+    }
+    case 'unlock': {
+      board.setSelectionLocked(false);
       break;
     }
     case 'group': {

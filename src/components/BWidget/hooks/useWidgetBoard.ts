@@ -30,6 +30,7 @@ import {
   reorderWidgetElement,
   reorderWidgetSelection,
   resizeWidgetElements,
+  setWidgetSelectionLocked,
   ungroupWidgetSelection,
   undoWidgetBoard,
   updateWidgetElementStyle,
@@ -141,6 +142,8 @@ export interface UseWidgetBoardReturn {
   reorderElement: (elementId: string, action: WidgetLayerAction) => void;
   /** 调整选区层级 */
   reorderSelection: (action: WidgetLayerAction) => void;
+  /** 设置选区位置尺寸锁定状态 */
+  setSelectionLocked: (locked: boolean) => void;
   /** 设置选区 */
   setSelection: (selection: string[]) => void;
   /** 重置Widget状态 */
@@ -350,6 +353,7 @@ export function useWidgetBoard(snapshot?: Partial<WidgetBoardSnapshot>): UseWidg
     updateElementTitle: (elementId: string, title: string): void => setState(updateWidgetElementTitle(state.value, elementId, title)),
     reorderElement: (elementId: string, action: WidgetLayerAction): void => setState(reorderWidgetElement(state.value, elementId, action)),
     reorderSelection: (action: WidgetLayerAction): void => setState(reorderWidgetSelection(state.value, action)),
+    setSelectionLocked: (locked: boolean): void => setState(setWidgetSelectionLocked(state.value, locked)),
     setSelection: (selection: string[]): void => {
       state.value = { ...state.value, selection: normalizeWidgetElementSelection(state.value.elements, selection) };
     },

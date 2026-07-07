@@ -935,6 +935,42 @@ export function updateWidgetElementStyle(state: WidgetBoardState, elementId: str
 }
 
 /**
+ * 设置当前选区元素的位置尺寸锁定状态。
+ * @param state - 当前Widget状态
+ * @param locked - 是否锁定位置和尺寸
+ * @returns 新Widget状态
+ */
+export function setWidgetSelectionLocked(state: WidgetBoardState, locked: boolean): WidgetBoardState {
+  const selection = normalizeWidgetElementSelection(state.elements, state.selection);
+  if (!selection.length) {
+    return state;
+  }
+
+  const nextElements = selection.reduce<WidgetShapeElement[]>((elements: WidgetShapeElement[], elementId: string): WidgetShapeElement[] => {
+    return updateWidgetElementInTree(elements, elementId, (element: WidgetShapeElement): WidgetShapeElement => {
+      const nextElement = cloneDeep(element);
+      if (locked) {
+        nextElement.locked = true;
+        return nextElement;
+      }
+
+      delete nextElement.locked;
+      return nextElement;
+    });
+  }, state.elements);
+
+  if (isEqual(nextElements, state.elements)) {
+    return state;
+  }
+
+  return withHistory(state, {
+    elements: nextElements,
+    selection,
+    viewport: cloneDeep(state.viewport)
+  });
+}
+
+/**
  * 删除当前选中元素。
  * @param state - 当前Widget状态
  * @returns 新Widget状态

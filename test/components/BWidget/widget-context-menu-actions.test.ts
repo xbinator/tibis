@@ -10,8 +10,8 @@ import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BWidget from '@/components/BWidget/index.vue';
 import type { WidgetData, WidgetElement, WidgetSelectTarget } from '@/components/BWidget/types';
-import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { queryWidgetElementTarget } from '@/components/BWidget/utils/widgetGeometry';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 
 /**
@@ -121,6 +121,19 @@ function createWidgetData(): WidgetData {
 }
 
 /**
+ * 创建锁定节点测试Widget 数据。
+ * @returns 测试Widget 数据
+ */
+function createLockedWidgetData(): WidgetData {
+  const data = createWidgetData();
+  if (data.elements[0]) {
+    data.elements[0].locked = true;
+  }
+
+  return data;
+}
+
+/**
  * 创建组合测试Widget 数据。
  * @returns 测试Widget 数据
  */
@@ -178,7 +191,10 @@ async function flushWidgetUpdates(): Promise<void> {
 function findNodeById(wrapper: VueWrapper, id: string): DOMWrapper<Element> {
   const target = queryWidgetElementTarget(wrapper.element, id);
 
-  return wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ?? wrapper.find<Element>('.missing-widget-node');
+  return (
+    wrapper.findAll<Element>('.b-widget-node').find((node: DOMWrapper<Element>): boolean => node.element === target) ??
+    wrapper.find<Element>('.missing-widget-node')
+  );
 }
 
 /**
@@ -222,6 +238,21 @@ function getLatestWidgetData(wrapper: VueWrapper): WidgetData | undefined {
  */
 function readContextMenuLabels(wrapper: VueWrapper): string[] {
   return wrapper.findAll<HTMLButtonElement>('.b-widget-context-menu__item').map((item: DOMWrapper<HTMLButtonElement>): string => item.text());
+}
+
+/**
+ * 读取右键菜单条目顺序，分割线以 divider 表示。
+ * @param wrapper - BWidget 测试包装器
+ * @returns 菜单条目顺序
+ */
+function readContextMenuEntries(wrapper: VueWrapper): string[] {
+  return Array.from(wrapper.find('.b-widget-context-menu').element.children).map((child: Element): string => {
+    if (child.classList.contains('b-widget-context-menu__divider')) {
+      return 'divider';
+    }
+
+    return child.textContent ?? '';
+  });
 }
 
 describe('BWidget context menu actions', (): void => {
@@ -285,6 +316,7 @@ describe('BWidget context menu actions', (): void => {
     await findNodeById(wrapper, 'group-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
     expect(readContextMenuLabels(wrapper)).toContain('取消合并');
     expect(readContextMenuLabels(wrapper)).not.toContain('合并');
+    expect(readContextMenuEntries(wrapper).slice(0, 6)).toEqual(['复制', '粘贴', 'divider', '锁定', '取消合并', 'divider']);
     expect(wrapper.findAll('.b-widget-context-menu__divider')).toHaveLength(3);
 
     await clickContextMenuItem(wrapper, '取消合并');
@@ -293,6 +325,93 @@ describe('BWidget context menu actions', (): void => {
     expect(latestData?.elements.map((element: WidgetElement): string => element.id)).toEqual(['node-1', 'node-2']);
     expect(latestData?.elements[0]?.position).toEqual({ x: 80, y: 60 });
     expect(latestData?.elements[1]?.position).toEqual({ x: 220, y: 100 });
+    wrapper.unmount();
+  });
+
+  it('locks and unlocks a single element from the dynamic context menu item', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createWidgetData()
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
+
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+    expect(readContextMenuLabels(wrapper)).toContain('锁定');
+    expect(readContextMenuLabels(wrapper)).not.toContain('解锁');
+    expect(readContextMenuEntries(wrapper).slice(0, 4)).toEqual(['复制', '粘贴', 'divider', '锁定']);
+
+    await clickContextMenuItem(wrapper, '锁定');
+    expect(getLatestWidgetData(wrapper)?.elements[0]?.locked).toBe(true);
+
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+    expect(readContextMenuLabels(wrapper)).toContain('解锁');
+    expect(readContextMenuLabels(wrapper)).not.toContain('锁定');
+    expect(readContextMenuEntries(wrapper).slice(0, 4)).toEqual(['复制', '粘贴', 'divider', '解锁']);
+
+    await clickContextMenuItem(wrapper, '解锁');
+    expect(getLatestWidgetData(wrapper)?.elements[0]?.locked).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('uses lock when any selected element is unlocked and unlock when all selected elements are locked', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createMultiSelectedWidgetData(),
+        select: {}
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
+
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+
+    expect(readContextMenuLabels(wrapper)).toContain('锁定');
+    expect(readContextMenuLabels(wrapper)).not.toContain('解锁');
+
+    await clickContextMenuItem(wrapper, '锁定');
+    const lockedData = getLatestWidgetData(wrapper);
+    expect(lockedData?.elements.every((element: WidgetElement): boolean => element.locked === true)).toBe(true);
+
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+
+    expect(readContextMenuLabels(wrapper)).toContain('解锁');
+    expect(readContextMenuLabels(wrapper)).not.toContain('锁定');
+    wrapper.unmount();
+  });
+
+  it('shows an unlock action for a locked single element context menu', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createLockedWidgetData()
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
+
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+
+    expect(readContextMenuLabels(wrapper)).toContain('解锁');
+    expect(readContextMenuLabels(wrapper)).not.toContain('锁定');
     wrapper.unmount();
   });
 
@@ -322,6 +441,32 @@ describe('BWidget context menu actions', (): void => {
     await clickContextMenuItem(wrapper, '取消合并');
 
     expect(wrapper.emitted('update:select')?.at(-1)?.[0]).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('keeps the selected group when opening the context menu from one of its children', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createGroupedWidgetData(),
+        select: {}
+      },
+      global: {
+        stubs: {
+          BIcon: true
+        }
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
+
+    getWidgetExpose(wrapper).selectElementById('group-1');
+    await flushWidgetUpdates();
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
+
+    const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as WidgetSelectTarget;
+    expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('group-1');
+    expect(readContextMenuLabels(wrapper)).toContain('取消合并');
     wrapper.unmount();
   });
 
