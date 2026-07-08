@@ -64,6 +64,8 @@ Widget 状态分两层：
 
 传给 Worker 的脚本载荷只承诺 JSON 快照语义。`input`、`output`、`data` 和方法参数会在 Widget runtime 边界转成 JSON-safe 数据，避免 Vue proxy、DOM Event、函数或其他不可结构化克隆对象触发 `DataCloneError`。事件方法需要业务参数时，应传业务数据本身，而不是浏览器原始事件对象。
 
+通用 sandbox 也遵循同一类跨线程约束：`SandboxRunPayload.arguments` 和 host function 返回值在进入 Worker 或回传 Worker 前会转换为可传输快照。业务代码不要依赖跨 Worker 保留 Proxy、函数、DOM 对象或其他宿主引用。
+
 ## Mounted And Restore
 
 `renderContext.isMounted` 表示宿主已经保存过 mounted 结果。恢复历史消息时可以跳过 `onMounted`，避免重复请求和重复副作用。

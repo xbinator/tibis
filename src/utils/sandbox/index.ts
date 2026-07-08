@@ -85,14 +85,38 @@ function compileSandboxPayload(payload: SandboxRunPayload): SandboxRunPayload {
 }
 
 /**
+ * 克隆为可通过 Worker postMessage 传输的沙箱值。
+ * @param value - 原始值
+ * @returns 可传输值
+ */
+function cloneSandboxTransferValue<T>(value: T): T {
+  if (value === undefined) return value;
+
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(value) as T;
+    } catch {
+      // 不可 structuredClone 的值继续尝试降级为 JSON 纯数据。
+    }
+  }
+
+  const serializedValue = JSON.stringify(value);
+
+  return serializedValue === undefined ? (undefined as T) : (JSON.parse(serializedValue) as T);
+}
+
+/**
  * 创建带宿主函数名的已编译沙箱载荷。
  * @param payload - 原始载荷
  * @param hostFunctions - 宿主函数表
  * @returns 已编译载荷
  */
 function createCompiledSandboxPayload(payload: SandboxRunPayload, hostFunctions: Record<string, SandboxHostFunction> | undefined): SandboxRunPayload {
+  const compiledPayload = compileSandboxPayload(payload);
+
   return {
-    ...compileSandboxPayload(payload),
+    ...compiledPayload,
+    ...(compiledPayload.arguments !== undefined ? { arguments: cloneSandboxTransferValue(compiledPayload.arguments) } : {}),
     hostFunctionNames: Object.keys(hostFunctions ?? {})
   };
 }
@@ -136,6 +160,20 @@ function runHostFunction(hostFunctions: Record<string, SandboxHostFunction> | un
   }
 
   return Promise.resolve(hostFunction(...args));
+}
+
+/**
+ * 创建可传输的宿主函数成功响应。
+ * @param requestId - 宿主函数请求 ID
+ * @param value - 宿主函数返回值
+ * @returns Worker 输入消息
+ */
+function createHostResponseMessage(requestId: string, value: unknown): SandboxWorkerInputMessage {
+  return {
+    type: 'host-response',
+    requestId,
+    value: cloneSandboxTransferValue(value)
+  };
 }
 
 /**
@@ -239,11 +277,7 @@ function runSandboxInWorker(payload: SandboxRunPayload, options: SandboxRunOptio
 
       runHostFunction(options.hostFunctions, data.name, data.args)
         .then((value): void => {
-          const message: SandboxWorkerInputMessage = {
-            type: 'host-response',
-            requestId: data.requestId,
-            value
-          };
+          const message = createHostResponseMessage(data.requestId, value);
           worker.postMessage(message);
         })
         .catch((error): void => {
@@ -328,11 +362,7 @@ function createWorkerSandboxSession(options: SandboxRunOptions = {}): SandboxSes
 
         runHostFunction(options.hostFunctions, data.name, data.args)
           .then((value): void => {
-            const message: SandboxWorkerInputMessage = {
-              type: 'host-response',
-              requestId: data.requestId,
-              value
-            };
+            const message = createHostResponseMessage(data.requestId, value);
             worker.postMessage(message);
           })
           .catch((error): void => {
