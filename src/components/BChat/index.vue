@@ -85,12 +85,15 @@
 
 <script setup lang="ts">
 import type { BChatProps, Message } from './utils/types';
+import type { AIToolExecutor } from 'types/ai';
 import type { ChatMessageConfirmationAction, ChatSession } from 'types/chat';
 import type { ChatRuntimeContextUsageSnapshot, ChatRuntimeSendInput, ChatRuntimeUserInputPart } from 'types/chat-runtime';
 import { computed, h, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { cloneDeep } from 'lodash-es';
+import { cloneDeep, uniq } from 'lodash-es';
 import type { ContextUsageBudgetSnapshot } from '@@/shared/ai/context/usageBudget.ts';
+import type { MemorySelectionContext, MemorySelectionDebugInfo } from '@/ai/memory/types';
+import { EDIT_MEMORY_TOOL_NAME } from '@/ai/tools/builtin';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
 import { toTransportTools } from '@/ai/tools/stream';
@@ -98,6 +101,7 @@ import BTextEditor from '@/components/BText/Editor.vue';
 import type { FileMentionOption } from '@/components/BText/types';
 import { useFileDrop } from '@/hooks/useFileDrop';
 import { useNavigate } from '@/hooks/useNavigate';
+import { logger } from '@/shared/logger';
 import { native } from '@/shared/platform';
 import { getElectronAPI, unwrap } from '@/shared/platform/electron-api';
 import { useProviderStore } from '@/stores/ai/provider';
@@ -165,6 +169,14 @@ interface RuntimeUserMessageSendInput {
   clearDraft?: boolean;
 }
 
+/**
+ * 记忆选择日志信息。
+ */
+interface MemorySelectionLogInfo extends MemorySelectionDebugInfo {
+  /** 本轮是否向模型暴露 edit_memory 工具。 */
+  editMemoryExposed: boolean;
+}
+
 const emit = defineEmits<{
   (e: 'session-created', session: ChatSession): void;
   (e: 'session-title-persisted', sessionId: string, title: string): void;
@@ -222,6 +234,17 @@ const { workspaceRoot, getActiveTools, openDraft, openFileByPath } = useRuntimeT
   getSessionId: () => activeSessionId.value ?? undefined,
   openWebview
 });
+
+/** 显式记忆编辑意图匹配规则，避免普通讨论“记忆系统”时暴露写记忆工具。 */
+const MEMORY_EDIT_INTENT_PATTERNS: RegExp[] = [
+  /(?:记住|记一下|记下来|帮我记|请记|记录一下|保存一下|存一下)/u,
+  /(?:整理|更新|修改|编辑|删除|移除|清理|清空).{0,12}(?:记忆|memory)/iu,
+  /(?:记忆|memory).{0,12}(?:整理|更新|修改|编辑|删除|移除|清理|清空|保存|写入)/iu,
+  /(?:忘记|忘掉)/u,
+  /\b(?:remember|forget)\b/iu,
+  /\b(?:update|edit|delete|remove|save|clean up|cleanup).{0,20}memory\b/iu,
+  /\bmemory.{0,20}(?:update|edit|delete|remove|save|clean up|cleanup)\b/iu
+];
 
 /** 聚焦输入框 */
 function focusInput(options?: { moveToEnd?: boolean }): void {
@@ -575,21 +598,102 @@ function showNoModelConfigToast(): void {
 }
 
 /**
+ * 判断用户是否明确要求编辑长期记忆。
+ * @param content - 用户消息内容
+ * @returns 是否应切换到完整记忆并暴露 edit_memory
+ */
+function hasMemoryEditIntent(content: string): boolean {
+  return MEMORY_EDIT_INTENT_PATTERNS.some((pattern) => pattern.test(content));
+}
+
+/**
+ * 从用户消息和 runtime 输入片段构建记忆筛选上下文。
+ * @param userMessage - 用户消息
+ * @param parts - 发送给 runtime 的结构化输入片段
+ * @returns 记忆筛选上下文
+ */
+function createMemorySelectionContext(userMessage: Message, parts: ChatRuntimeUserInputPart[] = []): MemorySelectionContext {
+  const messageReferences = userMessage.references?.map((reference) => reference.path) ?? [];
+  const filePartReferences = parts.filter((part) => part.type === 'file').map((part) => part.path);
+  const references = uniq([...messageReferences, ...filePartReferences]).filter((path) => path.trim().length > 0);
+
+  return {
+    userMessage: userMessage.content,
+    references,
+    workspaceRoot: workspaceRoot.value || undefined,
+    mode: hasMemoryEditIntent(userMessage.content) ? 'full' : 'relevant'
+  };
+}
+
+/**
+ * 查找消息列表中的最后一条用户消息。
+ * @param sourceMessages - 消息列表
+ * @returns 最后一条用户消息，不存在时返回 null
+ */
+function findLastUserMessage(sourceMessages: Message[]): Message | null {
+  for (let index = sourceMessages.length - 1; index >= 0; index -= 1) {
+    const message = sourceMessages[index];
+    if (message.role === 'user') return message;
+  }
+
+  return null;
+}
+
+/**
+ * 过滤普通相关记忆轮次不能暴露的工具。
+ * @param tools - 候选工具列表
+ * @returns 最终发送给 runtime 的工具列表
+ */
+function filterRelevantMemoryTools(tools: AIToolExecutor[]): AIToolExecutor[] {
+  return tools.filter((tool) => tool.definition.name !== EDIT_MEMORY_TOOL_NAME);
+}
+
+/**
+ * 写入本轮记忆选择调试日志。
+ * @param debugInfo - 记忆选择调试信息
+ * @param tools - 本轮最终暴露给模型的工具
+ */
+function logMemorySelectionDebug(debugInfo: MemorySelectionDebugInfo, tools: AIToolExecutor[]): void {
+  const logInfo: MemorySelectionLogInfo = {
+    ...debugInfo,
+    editMemoryExposed: tools.some((tool) => tool.definition.name === EDIT_MEMORY_TOOL_NAME)
+  };
+  logger.info(`[memory-selection] ${JSON.stringify(logInfo)}`);
+}
+
+/**
  * 解析 ChatRuntime 通用请求配置。
+ * @param selectionSource - 用于构建记忆筛选上下文的用户消息
+ * @param selectionParts - 发送给 runtime 的结构化输入片段
  * @returns Runtime 请求配置，未配置模型时返回 null
  */
-async function resolveChatRuntimeRequestConfig(): Promise<ChatRuntimeRequestConfig | null> {
+async function resolveChatRuntimeRequestConfig(
+  selectionSource?: Message | null,
+  selectionParts: ChatRuntimeUserInputPart[] = []
+): Promise<ChatRuntimeRequestConfig | null> {
   const serviceConfig = await chatServiceConfig.resolveServiceConfig();
   if (!serviceConfig) {
     showNoModelConfigToast();
     return null;
   }
 
+  const candidateTools = serviceConfig.toolSupport.supported ? getActiveTools() : [];
+  const selection = selectionSource ? createMemorySelectionContext(selectionSource, selectionParts) : undefined;
+  const finalTools = selection?.mode === 'relevant' ? filterRelevantMemoryTools(candidateTools) : candidateTools;
+  let memorySelectionDebugInfo: MemorySelectionDebugInfo | undefined;
+  const system = await resolveRuntimeSystemPrompt(selection, (debugInfo) => {
+    memorySelectionDebugInfo = debugInfo;
+  });
+
+  if (memorySelectionDebugInfo) {
+    logMemorySelectionDebug(memorySelectionDebugInfo, finalTools);
+  }
+
   return {
     contextWindow: contextWindow.value,
-    system: await resolveRuntimeSystemPrompt(),
+    system,
     workspaceRoot: workspaceRoot.value || undefined,
-    tools: serviceConfig.toolSupport.supported ? toTransportTools(getActiveTools()) : undefined,
+    tools: serviceConfig.toolSupport.supported ? toTransportTools(finalTools) : undefined,
     tavily: resolveRuntimeTavilyConfig(),
     mcp: resolveRuntimeMcpRequestConfig()
   };
@@ -739,7 +843,7 @@ async function startRuntimeRegenerate(targetMessage: Message): Promise<boolean> 
   const removedMessages = messages.value.slice(startIndex + 1);
   messages.value.splice(0, messages.value.length, ...sourceMessages);
 
-  const runtimeConfig = await resolveChatRuntimeRequestConfig();
+  const runtimeConfig = await resolveChatRuntimeRequestConfig(findLastUserMessage(sourceMessages));
   if (!runtimeConfig) {
     messages.value.splice(0, messages.value.length, ...sourceMessages, ...removedMessages);
     return false;
@@ -785,7 +889,7 @@ async function sendRuntimeUserMessage(input: RuntimeUserMessageSendInput): Promi
   let pendingUserMessage: Message | null = null;
 
   try {
-    const runtimeConfig = await resolveChatRuntimeRequestConfig();
+    const runtimeConfig = await resolveChatRuntimeRequestConfig(input.userMessage, input.parts);
     if (!runtimeConfig) {
       taskRuntime.finishTask('chat');
       return;

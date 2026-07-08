@@ -4,12 +4,13 @@
  */
 import type { MCPServerConfig } from 'types/ai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BuildMemoryContextOptions, MemorySelectionContext } from '@/ai/memory/types';
 import { useRuntimeConfig } from '@/components/BChat/hooks/useRuntimeConfig';
 
 const memoryStoreMock = vi.hoisted(() => ({
   loaded: true,
-  loadMemory: vi.fn(),
-  buildSystemPromptContext: vi.fn(() => '')
+  loadMemory: vi.fn<() => Promise<void>>(),
+  buildSystemPromptContext: vi.fn<(_options?: BuildMemoryContextOptions) => string>(() => '')
 }));
 
 const toolSettingsStoreMock = vi.hoisted(() => ({
@@ -84,5 +85,20 @@ describe('useRuntimeConfig', (): void => {
       enabledServerIds: ['enabled-server'],
       servers: [{ id: 'enabled-server', toolAllowlist: ['search'] }]
     });
+  });
+
+  it('passes memory selection context to the memory store', async (): Promise<void> => {
+    const selection: MemorySelectionContext = {
+      userMessage: '帮我优化 tibis memory',
+      references: ['src/ai/memory/injector.ts'],
+      workspaceRoot: '/workspace/tibis'
+    };
+    memoryStoreMock.buildSystemPromptContext.mockReturnValue('<user_memory>memory</user_memory>');
+
+    const { resolveRuntimeSystemPrompt } = useRuntimeConfig();
+    const system = await resolveRuntimeSystemPrompt(selection);
+
+    expect(system).toBe('<user_memory>memory</user_memory>');
+    expect(memoryStoreMock.buildSystemPromptContext).toHaveBeenCalledWith({ selection });
   });
 });

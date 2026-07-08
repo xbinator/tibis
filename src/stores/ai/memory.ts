@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia';
 import { buildSystemPromptContext } from '@/ai/memory/injector';
 import { parseMemoryDoc, serializeMemoryDoc, createEmptyMemoryDoc } from '@/ai/memory/parser';
-import type { MemoryCategory, MemoryDoc } from '@/ai/memory/types';
+import type { BuildMemoryContextOptions, MemoryCategory, MemoryDoc } from '@/ai/memory/types';
 import { MEMORY_FILE_NAME } from '@/ai/memory/types';
 import { native } from '@/shared/platform';
 import { getElectronAPI } from '@/shared/platform/electron-api';
@@ -124,11 +124,12 @@ export const useMemoryStore = defineStore('memory', {
 
     /**
      * 构建要注入到 System Prompt 的记忆上下文
+     * @param options - 记忆注入选项
      * @returns 注入字符串，无记忆或未启用时返回空字符串
      */
-    buildSystemPromptContext(): string {
+    buildSystemPromptContext(options?: BuildMemoryContextOptions): string {
       if (!useSettingStore().memoryEnabled) return '';
-      return buildSystemPromptContext(this.doc);
+      return buildSystemPromptContext(this.doc, options);
     },
 
     /**

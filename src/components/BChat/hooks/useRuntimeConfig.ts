@@ -3,6 +3,7 @@
  * @description ChatRuntime 请求配置解析 hook。
  */
 import type { AIMCPRequestConfig, AITavilyRuntimeConfig } from 'types/ai';
+import type { BuildMemoryContextOptions, MemorySelectionContext, MemorySelectionDebugInfo } from '@/ai/memory/types';
 import { useMemoryStore } from '@/stores/ai/memory';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
 
@@ -11,7 +12,10 @@ import { useToolSettingsStore } from '@/stores/ai/toolSettings';
  */
 interface UseRuntimeConfigReturn {
   /** 解析 runtime system prompt 上下文。 */
-  resolveRuntimeSystemPrompt: () => Promise<string | undefined>;
+  resolveRuntimeSystemPrompt: (
+    selection?: MemorySelectionContext,
+    onSelectionDebug?: (debugInfo: MemorySelectionDebugInfo) => void
+  ) => Promise<string | undefined>;
   /** 解析可交给主进程执行的 Tavily 配置。 */
   resolveRuntimeTavilyConfig: () => AITavilyRuntimeConfig | undefined;
   /** 解析可交给主进程执行的 MCP 配置。 */
@@ -40,14 +44,24 @@ export function useRuntimeConfig(): UseRuntimeConfigReturn {
 
   /**
    * 解析 runtime system prompt 上下文。
+   * @param selection - 当前请求的记忆筛选上下文
+   * @param onSelectionDebug - 记忆选择调试回调
    * @returns system prompt
    */
-  async function resolveRuntimeSystemPrompt(): Promise<string | undefined> {
+  async function resolveRuntimeSystemPrompt(
+    selection?: MemorySelectionContext,
+    onSelectionDebug?: (debugInfo: MemorySelectionDebugInfo) => void
+  ): Promise<string | undefined> {
     if (!memoryStore.loaded) {
       await memoryStore.loadMemory();
     }
 
-    const memoryContext = memoryStore.buildSystemPromptContext();
+    const memoryOptions: BuildMemoryContextOptions | undefined = selection ? { selection } : undefined;
+    if (memoryOptions && onSelectionDebug) {
+      memoryOptions.onSelectionDebug = onSelectionDebug;
+    }
+
+    const memoryContext = memoryStore.buildSystemPromptContext(memoryOptions);
     return memoryContext.trim() ? memoryContext : undefined;
   }
 

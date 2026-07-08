@@ -4,12 +4,14 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
-import type { AIUserChoiceAnswerData, ChatMessageToolPart, ChatMessageWidgetResultPart, ChatSession } from 'types/chat';
+import type { AIToolExecutor } from 'types/ai';
+import type { AIUserChoiceAnswerData, ChatMessageFilePartInput, ChatMessageToolPart, ChatMessageWidgetResultPart, ChatSession } from 'types/chat';
 import type { ChatRuntimeContinueInput } from 'types/chat-runtime';
 import { defineComponent, h, type PropType } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BuildMemoryContextOptions } from '@/ai/memory/types';
 import BChat from '@/components/BChat/index.vue';
 import { type AdaptedUserMessageInput, type SubmitAction, createUserChoice } from '@/components/BChat/utils/submitAction';
 import type { Message } from '@/components/BChat/utils/types';
@@ -102,10 +104,20 @@ const toolSettingsMockState = vi.hoisted(() => ({
   }
 }));
 
+const builtinToolsMockState = vi.hoisted(() => ({
+  tools: [] as AIToolExecutor[]
+}));
+
+const loggerMockState = vi.hoisted(() => ({
+  info: vi.fn<(_message: string) => Promise<void>>(() => Promise.resolve()),
+  warn: vi.fn<(_message: string) => Promise<void>>(() => Promise.resolve()),
+  error: vi.fn<(_message: string) => Promise<void>>(() => Promise.resolve())
+}));
+
 const memoryStoreMock = vi.hoisted(() => ({
   loaded: true,
   loadMemory: vi.fn<() => Promise<void>>(),
-  buildSystemPromptContext: vi.fn<() => string>(() => '')
+  buildSystemPromptContext: vi.fn<(_options?: BuildMemoryContextOptions) => string>(() => '')
 }));
 
 const filesStoreMock = vi.hoisted(() => ({
@@ -158,12 +170,20 @@ vi.mock('@/components/BButton/index.vue', () => ({
 }));
 
 vi.mock('@/ai/tools/builtin', () => ({
-  createBuiltinTools: vi.fn(() => []),
+  createBuiltinTools: vi.fn(() => builtinToolsMockState.tools),
   isBuiltinToolName: vi.fn(() => true),
+  EDIT_MEMORY_TOOL_NAME: 'edit_memory',
+  OPEN_RESOURCE_TOOL_NAME: 'open_resource',
+  OPEN_WIDGET_TOOL_NAME: 'open_widget',
   OPERATE_WEBPAGE_TOOL_NAME: 'operate_webpage',
   READ_CURRENT_WEBPAGE_TOOL_NAME: 'read_current_webpage',
   READ_DIRECTORY_TOOL_NAME: 'read_directory',
-  SKILL_TOOL_NAME: 'skill'
+  SKILL_TOOL_NAME: 'skill',
+  WIDGET_TOOL_NAME: 'widget'
+}));
+
+vi.mock('@/shared/logger', () => ({
+  logger: loggerMockState
 }));
 
 vi.mock('@/ai/tools/builtin/SkillTool', () => ({
@@ -412,6 +432,29 @@ function createMessage(id: string, content: string): Message {
 }
 
 /**
+ * 创建测试用 AI 工具。
+ * @param name - 工具名称
+ * @returns 工具执行器
+ */
+function createRuntimeTool(name: string): AIToolExecutor {
+  return {
+    definition: {
+      name,
+      description: `${name} description`,
+      source: 'builtin',
+      riskLevel: name === 'edit_memory' ? 'write' : 'read',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false
+      },
+      requiresActiveDocument: false
+    },
+    execute: async (): Promise<{ toolName: string; status: 'success'; data: null }> => ({ toolName: name, status: 'success', data: null })
+  };
+}
+
+/**
  * 创建测试用助手消息。
  * @param overrides - 需要覆盖的消息字段。
  * @returns 测试助手消息。
@@ -556,6 +599,13 @@ describe('BChat sessionId runtime', (): void => {
     autoNameMockState.options = undefined;
     toolSettingsMockState.tavily = undefined;
     toolSettingsMockState.mcp.servers = [];
+    builtinToolsMockState.tools = [];
+    loggerMockState.info.mockReset();
+    loggerMockState.info.mockResolvedValue();
+    loggerMockState.warn.mockReset();
+    loggerMockState.warn.mockResolvedValue();
+    loggerMockState.error.mockReset();
+    loggerMockState.error.mockResolvedValue();
     memoryStoreMock.loaded = true;
     memoryStoreMock.loadMemory.mockReset();
     memoryStoreMock.loadMemory.mockResolvedValue();
@@ -725,6 +775,147 @@ describe('BChat sessionId runtime', (): void => {
         sessionId: 'session-created',
         content: 'fix {{@src/foo.ts}}',
         parts: [expect.objectContaining({ type: 'text', text: 'fix ' }), expect.objectContaining({ type: 'file', path: 'src/foo.ts' })]
+      })
+    );
+  });
+
+  it('uses relevant memory selection and filters edit_memory for normal sends', async (): Promise<void> => {
+    builtinToolsMockState.tools = [createRuntimeTool('edit_memory'), createRuntimeTool('read_file')];
+    memoryStoreMock.buildSystemPromptContext.mockImplementation((options?: BuildMemoryContextOptions): string => {
+      options?.onSelectionDebug?.({
+        mode: 'relevant',
+        maxChars: 4000,
+        finalChars: 36,
+        keywords: ['fix', 'src', 'foo'],
+        selectedItems: [{ category: 'Projects', preview: 'foo project', score: 3 }],
+        droppedItems: [{ category: 'Habits', preview: 'unrelated habit', score: 0 }]
+      });
+      return '<user_memory>relevant</user_memory>';
+    });
+    const createdSession = createSession('session-created', 'fix {{@src/foo.ts}}');
+    chatStoreMock.createSession.mockResolvedValue(createdSession);
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', 'fix {{@src/foo.ts}}');
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    expect(memoryStoreMock.buildSystemPromptContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selection: {
+          userMessage: 'fix {{@src/foo.ts}}',
+          references: ['src/foo.ts'],
+          workspaceRoot: '/workspace',
+          mode: 'relevant'
+        }
+      })
+    );
+    expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: '<user_memory>relevant</user_memory>',
+        tools: [expect.objectContaining({ name: 'read_file' })]
+      })
+    );
+    expect(electronAPIMock.chatRuntimeSend).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: expect.arrayContaining([expect.objectContaining({ name: 'edit_memory' })])
+      })
+    );
+    expect(loggerMockState.info).toHaveBeenCalledWith(expect.stringContaining('"editMemoryExposed":false'));
+    expect(loggerMockState.info).toHaveBeenCalledWith(expect.stringContaining('"selectedItems":[{"category":"Projects","preview":"foo project","score":3}]'));
+  });
+
+  it('uses full memory and keeps edit_memory for explicit memory edit requests', async (): Promise<void> => {
+    builtinToolsMockState.tools = [createRuntimeTool('edit_memory'), createRuntimeTool('read_file')];
+    memoryStoreMock.buildSystemPromptContext.mockImplementation((options?: BuildMemoryContextOptions): string => {
+      options?.onSelectionDebug?.({
+        mode: 'full',
+        maxChars: 4000,
+        finalChars: 32,
+        keywords: ['整理', '记忆'],
+        selectedItems: [{ category: 'Preferences', preview: '用户叫张三', score: 1 }],
+        droppedItems: []
+      });
+      return '<user_memory>full</user_memory>';
+    });
+    const createdSession = createSession('session-created', '请整理记忆：以后叫我张三');
+    chatStoreMock.createSession.mockResolvedValue(createdSession);
+    const wrapper = mountBChat(null);
+    await flushPromises();
+
+    wrapper.findComponent(BTextEditorStub).vm.$emit('update:value', '请整理记忆：以后叫我张三');
+    await flushPromises();
+    wrapper.findComponent(InputToolbarStub).vm.$emit('submit');
+    await flushPromises();
+
+    expect(memoryStoreMock.buildSystemPromptContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selection: {
+          userMessage: '请整理记忆：以后叫我张三',
+          references: [],
+          workspaceRoot: '/workspace',
+          mode: 'full'
+        }
+      })
+    );
+    expect(electronAPIMock.chatRuntimeSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: '<user_memory>full</user_memory>',
+        tools: expect.arrayContaining([expect.objectContaining({ name: 'edit_memory' }), expect.objectContaining({ name: 'read_file' })])
+      })
+    );
+    expect(loggerMockState.info).toHaveBeenCalledWith(expect.stringContaining('"editMemoryExposed":true'));
+  });
+
+  it('combines message references with file input parts for memory selection', async (): Promise<void> => {
+    const filePart: ChatMessageFilePartInput = {
+      id: 'file-part-union',
+      type: 'file',
+      filename: 'part.ts',
+      mime: 'text/plain',
+      url: 'file:///workspace/src/part.ts',
+      path: 'src/part.ts',
+      sourceText: {
+        start: 0,
+        end: 0,
+        value: '@src/part.ts'
+      }
+    };
+    const userMessage: Message = {
+      ...createMessage('user-union', 'fix related files'),
+      references: [
+        {
+          token: '@src/message.ts',
+          path: 'src/message.ts',
+          startLine: 0,
+          endLine: 0,
+          selectedContent: '',
+          fullContent: ''
+        }
+      ]
+    };
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    await submitConversationAction(
+      wrapper,
+      createRuntimeUserMessageTestSubmitAction({
+        userMessage,
+        parts: [filePart]
+      })
+    );
+    await flushPromises();
+
+    expect(memoryStoreMock.buildSystemPromptContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selection: {
+          userMessage: 'fix related files',
+          references: ['src/message.ts', 'src/part.ts'],
+          workspaceRoot: '/workspace',
+          mode: 'relevant'
+        }
       })
     );
   });
@@ -1051,6 +1242,50 @@ describe('BChat sessionId runtime', (): void => {
     );
     const [continueInput] = electronAPIMock.chatRuntimeContinue.mock.calls[0] as [ChatRuntimeContinueInput];
     expect(continueInput.messages).toEqual([expect.objectContaining({ id: 'user-regenerate', role: 'user' })]);
+  });
+
+  it('uses the last source user message as memory selection when regenerating', async (): Promise<void> => {
+    memoryStoreMock.buildSystemPromptContext.mockReturnValue('<user_memory>regen</user_memory>');
+    const userMessage = {
+      ...createMessage('user-regenerate', '重新回答 {{@src/ai/memory/injector.ts}}'),
+      references: [
+        {
+          token: '@src/ai/memory/injector.ts',
+          path: 'src/ai/memory/injector.ts',
+          startLine: 0,
+          endLine: 0,
+          selectedContent: '',
+          fullContent: ''
+        }
+      ]
+    };
+    const assistantMessage = createAssistantMessage({
+      id: 'assistant-regenerate',
+      content: '旧回答',
+      parts: [{ id: 'part0042', type: 'text', text: '旧回答' }]
+    });
+    chatStoreMock.getSessionMessages.mockResolvedValueOnce([userMessage, assistantMessage]).mockResolvedValueOnce([]);
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+
+    wrapper.findComponent(ConversationViewStub).vm.$emit('regenerate', assistantMessage);
+    await flushPromises();
+
+    expect(memoryStoreMock.buildSystemPromptContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selection: {
+          userMessage: '重新回答 {{@src/ai/memory/injector.ts}}',
+          references: ['src/ai/memory/injector.ts'],
+          workspaceRoot: '/workspace',
+          mode: 'relevant'
+        }
+      })
+    );
+    expect(electronAPIMock.chatRuntimeContinue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: '<user_memory>regen</user_memory>'
+      })
+    );
   });
 
   it('restores todo snapshots for runtime ids removed by rollback', async (): Promise<void> => {
