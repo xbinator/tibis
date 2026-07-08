@@ -3,7 +3,7 @@
   @description 独立Widget工具页面。
 -->
 <template>
-  <main class="widget-page" tabindex="0" @blur="session.actions.onBlur">
+  <main class="widget-page" tabindex="0" :style="widgetPageStyle" @blur="session.actions.onBlur">
     <PanelSidebar
       v-model:value="session.data.value"
       :active-element-id="activeSidebarElementId"
@@ -32,7 +32,7 @@
       />
     </section>
 
-    <BPanelSplitter v-model:size="settingsWidth" position="left" :min-width="220" :max-width="320">
+    <BPanelSplitter v-model:size="settingsWidth" class="widget-page__settings" position="left" :min-width="220" :max-width="320">
       <PanelSettings
         v-model:value="session.data.value"
         v-model:select="selectedTarget"
@@ -48,6 +48,7 @@
 
 <script setup lang="ts">
 import type { WidgetMultiSelectLayoutChange } from './types';
+import type { CSSProperties } from 'vue';
 import { computed, nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { cloneDeep } from 'lodash-es';
@@ -106,6 +107,21 @@ const settingsWidth = ref(300);
 const selectedTarget = ref<WidgetSelectTarget>(session.data.value.metadata);
 /** 当前侧栏需要高亮的元素 ID。 */
 const selectedElementIds = ref<string[]>([]);
+
+/**
+ * Widget 页面根节点样式变量。
+ */
+type WidgetPageStyle = CSSProperties & {
+  /** 右侧设置覆盖面板宽度，用于画布内浮动控件避让。 */
+  '--widget-page-settings-width': string;
+};
+
+/** 页面级样式变量，供画布内浮动控件避让覆盖面板。 */
+const widgetPageStyle = computed<WidgetPageStyle>(
+  (): WidgetPageStyle => ({
+    '--widget-page-settings-width': `${settingsWidth.value}px`
+  })
+);
 /**
  * 判断当前设置目标是否为Widget元素。
  * @param target - 当前设置目标
@@ -852,10 +868,32 @@ onDeactivated((): void => {
 }
 
 .widget-page__canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: flex;
   flex: 1;
-  width: 0;
+  width: 100%;
   min-width: 0;
+  height: 100%;
   min-height: 0;
+}
+
+.widget-page__settings {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.widget-page__settings :deep(.b-panel-splitter__section),
+.widget-page__settings :deep(.b-panel-splitter__line) {
+  pointer-events: auto;
+}
+
+.widget-page :deep(.b-widget-toolbar__group--bottom-left) {
+  right: calc(var(--widget-page-settings-width) + 12px);
 }
 </style>

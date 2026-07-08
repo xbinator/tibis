@@ -4,6 +4,7 @@
  * @vitest-environment jsdom
  */
 /* eslint-disable vue/one-component-per-file */
+import { readFileSync } from 'node:fs';
 import { defineComponent, nextTick } from 'vue';
 import type { ComponentPublicInstance, PropType } from 'vue';
 import { shallowMount, type VueWrapper } from '@vue/test-utils';
@@ -395,6 +396,42 @@ describe('WidgetPage', (): void => {
     expect(panelSidebar.props('settingsWidth')).toBe(300);
     expect(wrapper.findComponent({ name: 'CodeEditor' }).exists()).toBe(false);
     expect(wrapper.find('.widget-page__code-overlay').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('renders the settings splitter as an overlay so the canvas keeps the full page width', (): void => {
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: true,
+          BPanelSplitter: createBPanelSplitterStub(),
+          Icon: true
+        }
+      }
+    });
+
+    expect(wrapper.find('.widget-page__canvas').exists()).toBe(true);
+    expect(wrapper.find('.widget-page__settings').exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('offsets the widget toolbar from the overlaid settings panel', (): void => {
+    const wrapper = shallowMount(WidgetPage, {
+      global: {
+        stubs: {
+          BWidget: true,
+          BPanelSplitter: createBPanelSplitterStub(),
+          Icon: true
+        }
+      }
+    });
+    const source = readFileSync('src/views/widget/index.vue', 'utf-8');
+
+    expect(wrapper.find('.widget-page').attributes('style') ?? '').toContain('--widget-page-settings-width: 300px;');
+    expect(source).toContain('.widget-page :deep(.b-widget-toolbar__group--bottom-left)');
+    expect(source).toContain('right: calc(var(--widget-page-settings-width) + 12px);');
+
     wrapper.unmount();
   });
 

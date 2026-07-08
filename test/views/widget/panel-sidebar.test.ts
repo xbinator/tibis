@@ -157,6 +157,14 @@ function mountPanelSidebar(value: WidgetData = createDefaultWidgetData()): VueWr
 }
 
 describe('PanelSidebar', (): void => {
+  it('marks the sidebar as an overlay so it does not reserve canvas width', (): void => {
+    const wrapper = mountPanelSidebar();
+
+    expect(wrapper.find('.widget-sidebar').classes()).toContain('widget-sidebar--overlay');
+
+    wrapper.unmount();
+  });
+
   it('shows the tools tab by default instead of an empty expanded panel', (): void => {
     const wrapper = mountPanelSidebar();
     const splitter = wrapper.find('.panel-splitter-stub');

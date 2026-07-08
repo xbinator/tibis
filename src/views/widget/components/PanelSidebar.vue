@@ -3,7 +3,7 @@
   @description Widget 页面左侧工具、图层、数据源和动作侧边栏，tabs 列常驻显示；动作面板可像 ChatSider 一样通过展开态样式覆盖画布并避让右侧设置栏。
 -->
 <template>
-  <aside :class="bem({ expanded: isExpanded })" :style="sidebarStyle">
+  <aside :class="bem({ expanded: isExpanded, overlay: true })" :style="sidebarStyle">
     <div :class="bem('tabs')">
       <template v-for="tab in sidebarTabs" :key="tab.key">
         <BButton :type="activeSidebarTab === tab.key ? 'secondary' : 'ghost'" square :icon="tab.icon" @click="handleTabClick(tab.key)" />
@@ -279,10 +279,22 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
   min-height: 0;
 }
 
-.widget-sidebar--expanded {
+.widget-sidebar--overlay {
   position: absolute;
-  inset: 0 var(--widget-sidebar-settings-width) 0 0;
-  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.widget-sidebar--overlay .widget-sidebar__tabs,
+.widget-sidebar--overlay .widget-sidebar__splitter {
+  pointer-events: auto;
+}
+
+.widget-sidebar--expanded {
+  right: var(--widget-sidebar-settings-width);
   background: var(--bg-primary);
 }
 
