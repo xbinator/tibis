@@ -49,7 +49,7 @@ withDefaults(defineProps<Props>(), {
   flex-shrink: 0;
   gap: 6px;
   align-items: center;
-  height: 52px;
+  height: 40px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border-primary);
 }
@@ -58,7 +58,7 @@ withDefaults(defineProps<Props>(), {
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }

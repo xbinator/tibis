@@ -80,7 +80,8 @@ async function handleToggleProvider(id: string, enabled: boolean): Promise<void>
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  height: 32px;
+  margin-bottom: 12px;
 }
 
 .header-left {
@@ -92,7 +93,7 @@ async function handleToggleProvider(id: string, enabled: boolean): Promise<void>
 
 .content-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
 }

@@ -279,9 +279,9 @@ const providerDropdownOptionsMap = computed<Map<string, DropdownOptionItem[]>>((
 <style scoped lang="less">
 .provider-layout {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   height: 100%;
-  padding: 20px;
+  padding: 16px 12px;
   background: var(--bg-primary);
   border-radius: 8px;
 }
