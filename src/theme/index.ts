@@ -12,6 +12,7 @@ import './presets/kanagawa';
 import './presets/nord';
 import './presets/matrix';
 import './presets/one-dark';
+import './presets/shonen';
 
 export type { ThemeTokens } from './types/tokens';
 export { defaultLight as light, defaultDark as dark } from './presets/default';

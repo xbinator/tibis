@@ -46,7 +46,7 @@ function createWidgetScriptDefaultCode(widgetId?: string): string {
     '   * - this.$input：只读入参，例如 this.$input.city。',
     '   * - return 的值会成为 this.$output。',
     '   */',
-    '  async onExecute() {',
+    '   onExecute() {',
     '',
     '   }',
     '',
