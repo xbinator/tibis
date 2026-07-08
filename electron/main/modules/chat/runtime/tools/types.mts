@@ -133,6 +133,24 @@ export interface RuntimeReadDirectoryInput {
   directoryPath: string;
 }
 
+/** Runtime glob 搜索参数。 */
+export interface RuntimeGlobInput {
+  /** Glob 模式。 */
+  pattern: string;
+  /** 搜索目录路径。 */
+  searchPath: string;
+}
+
+/** Runtime grep 搜索参数。 */
+export interface RuntimeGrepInput {
+  /** grep -E 正则。 */
+  pattern: string;
+  /** 搜索文件或目录路径。 */
+  searchPath: string;
+  /** 候选文件 glob。 */
+  include?: string;
+}
+
 /** Runtime 可读取的设置键。 */
 export type RuntimeSettingKey = (typeof SUPPORTED_SETTING_KEYS)[number];
 

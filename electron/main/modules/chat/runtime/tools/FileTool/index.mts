@@ -8,6 +8,9 @@ import type {
   MainToolsDependencies,
   RuntimeCreateDocumentInput,
   RuntimeEditFileInput,
+  RuntimeGlobInput,
+  RuntimeGrepInput,
+  RuntimeReadTarget,
   RuntimeReadDirectoryInput,
   RuntimeReadFileInput,
   RuntimeWriteFileInput
@@ -19,12 +22,26 @@ import {
   DEFAULT_READ_FILE_OFFSET,
   EDIT_FILE_TOOL_NAME,
   FILE_TOOL_NAMES,
+  GLOB_TOOL_NAME,
+  GREP_TOOL_NAME,
   READ_DIRECTORY_TOOL_NAME,
   READ_FILE_TOOL_NAME,
   WRITE_FILE_TOOL_NAME
 } from '../constants.mjs';
+import {
+  DEFAULT_FILE_SEARCH_EXCLUDED_DIRS,
+  DEFAULT_FILE_SEARCH_LIMIT,
+  DEFAULT_GREP_BATCH_SIZE,
+  DEFAULT_GREP_LINE_TEXT_LIMIT,
+  DEFAULT_GREP_STDERR_LIMIT_BYTES,
+  DEFAULT_GREP_STDOUT_LIMIT_BYTES,
+  DEFAULT_GREP_TIMEOUT_MS,
+  RuntimeSubprocessError,
+  runGlobSearch,
+  runGrepSearch
+} from '../file-search.mjs';
 import { isRecord, isRuntimeFileContentSnapshot, isRuntimeOpenDraftResult } from '../guards.mjs';
-import { resolveRuntimeReadTarget, resolveRuntimeWriteTarget } from '../paths.mjs';
+import { isRuntimePathInsideWorkspace, resolveRuntimeReadTarget, resolveRuntimeWriteTarget } from '../paths.mjs';
 import { createBridgeFailureResult, createMainToolCancelledResult, createMainToolFailureResult, createMainToolSuccessResult } from '../results.mjs';
 
 /**
@@ -88,6 +105,51 @@ function normalizeRuntimeReadDirectoryInput(input: unknown): RuntimeReadDirector
   }
 
   return { directoryPath };
+}
+
+/**
+ * 读取可选搜索路径。
+ * @param source - 输入对象
+ * @returns 搜索路径
+ */
+function readRuntimeSearchPath(source: Record<string, unknown>): string {
+  return typeof source.path === 'string' && source.path.trim() ? source.path.trim() : '.';
+}
+
+/**
+ * 归一化 glob 输入。
+ * @param input - 原始工具输入
+ * @returns 归一化 glob 输入或失败结果
+ */
+function normalizeRuntimeGlobInput(input: unknown): RuntimeGlobInput | AIToolExecutionResult {
+  const source = isRecord(input) ? input : {};
+  const pattern = typeof source.pattern === 'string' ? source.pattern : '';
+  if (pattern.length === 0) {
+    return createMainToolFailureResult(GLOB_TOOL_NAME, 'INVALID_INPUT', 'glob pattern 不能为空');
+  }
+
+  return { pattern, searchPath: readRuntimeSearchPath(source) };
+}
+
+/**
+ * 归一化 grep 输入。
+ * @param input - 原始工具输入
+ * @returns 归一化 grep 输入或失败结果
+ */
+function normalizeRuntimeGrepInput(input: unknown): RuntimeGrepInput | AIToolExecutionResult {
+  const source = isRecord(input) ? input : {};
+  const pattern = typeof source.pattern === 'string' ? source.pattern : '';
+  if (pattern.length === 0) {
+    return createMainToolFailureResult(GREP_TOOL_NAME, 'INVALID_INPUT', 'grep pattern 不能为空');
+  }
+
+  const include = typeof source.include === 'string' && source.include.length > 0 ? source.include : undefined;
+
+  return {
+    pattern,
+    searchPath: readRuntimeSearchPath(source),
+    ...(include ? { include } : {})
+  };
 }
 
 /**
@@ -347,6 +409,148 @@ async function executeReadDirectoryTool(input: ChatRuntimeMainToolExecutionInput
   }
 }
 
+/** 文件搜索真实目标。 */
+interface RuntimeRealSearchTarget {
+  /** realpath 后的搜索目标路径。 */
+  filePath: string;
+  /** 真实路径是否位于工作区外。 */
+  outsideWorkspace: boolean;
+}
+
+/**
+ * 解析文件搜索目标的真实路径，并基于 realpath 复核工作区边界。
+ * @param target - 词法解析后的读取目标
+ * @param workspaceRoot - 工作区根目录
+ * @returns 真实搜索目标
+ */
+async function resolveRuntimeRealSearchTarget(target: RuntimeReadTarget, workspaceRoot: string | undefined): Promise<RuntimeRealSearchTarget> {
+  const realFilePath = await fs.realpath(target.filePath);
+  const realWorkspaceRoot = workspaceRoot ? await fs.realpath(workspaceRoot) : undefined;
+  const realPathOutsideWorkspace = realWorkspaceRoot ? !isRuntimePathInsideWorkspace(realFilePath, realWorkspaceRoot) : false;
+  const outsideWorkspace = realWorkspaceRoot ? realPathOutsideWorkspace : target.outsideWorkspace;
+
+  return {
+    filePath: !target.outsideWorkspace && realPathOutsideWorkspace ? realFilePath : target.filePath,
+    outsideWorkspace
+  };
+}
+
+/**
+ * 请求确认读取工作区外搜索目标。
+ * @param input - 工具执行输入
+ * @param deps - 主进程工具依赖
+ * @param targetPath - 搜索目标路径
+ * @returns 是否允许继续
+ */
+async function confirmRuntimeExternalSearchTarget(input: ChatRuntimeMainToolExecutionInput, deps: MainToolsDependencies, targetPath: string): Promise<boolean> {
+  const decision = await deps.requestConfirmation({
+    runtimeId: input.runtime.runtimeId,
+    toolCallId: input.toolCallId,
+    request: {
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      title: 'AI 想要搜索本地文件',
+      description: `AI 请求搜索本地路径：${targetPath}`,
+      riskLevel: 'read',
+      beforeText: targetPath
+    }
+  });
+
+  return decision.approved;
+}
+
+/**
+ * 将搜索错误转为工具失败结果。
+ * @param toolName - 工具名称
+ * @param error - 搜索错误
+ * @returns 工具失败结果
+ */
+function createRuntimeSearchFailureResult(toolName: string, error: unknown): AIToolExecutionResult {
+  if (error instanceof RuntimeSubprocessError) {
+    if (error.code === 'USER_CANCELLED') return createMainToolCancelledResult(toolName);
+    return createMainToolFailureResult(toolName, error.code, error.message);
+  }
+
+  const message = error instanceof Error ? error.message : '搜索文件失败';
+  return createMainToolFailureResult(toolName, 'EXECUTION_FAILED', message);
+}
+
+/**
+ * 执行 glob 工具。
+ * @param input - 工具执行输入
+ * @param deps - 主进程工具依赖
+ * @returns 工具执行结果
+ */
+async function executeGlobTool(input: ChatRuntimeMainToolExecutionInput, deps: MainToolsDependencies): Promise<AIToolExecutionResult> {
+  const normalizedInput = normalizeRuntimeGlobInput(input.input);
+  if ('status' in normalizedInput) return normalizedInput;
+
+  const target = resolveRuntimeReadTarget(normalizedInput.searchPath, input.runtime.workspaceRoot, input.toolName);
+  if ('status' in target) return target;
+
+  try {
+    const searchTarget = await resolveRuntimeRealSearchTarget(target, input.runtime.workspaceRoot);
+    if (searchTarget.outsideWorkspace && !(await confirmRuntimeExternalSearchTarget(input, deps, searchTarget.filePath))) {
+      return createMainToolCancelledResult(input.toolName);
+    }
+
+    const stats = await fs.stat(searchTarget.filePath);
+    if (!stats.isDirectory()) return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', 'glob 搜索目标必须是目录');
+
+    const data = await runGlobSearch({
+      rootPath: searchTarget.filePath,
+      pattern: normalizedInput.pattern,
+      limit: DEFAULT_FILE_SEARCH_LIMIT,
+      excludedDirs: DEFAULT_FILE_SEARCH_EXCLUDED_DIRS,
+      signal: input.runtime.abortController.signal
+    });
+    return createMainToolSuccessResult(GLOB_TOOL_NAME, { path: searchTarget.filePath, ...data });
+  } catch (error) {
+    return createRuntimeSearchFailureResult(input.toolName, error);
+  }
+}
+
+/**
+ * 执行 grep 工具。
+ * @param input - 工具执行输入
+ * @param deps - 主进程工具依赖
+ * @returns 工具执行结果
+ */
+async function executeGrepTool(input: ChatRuntimeMainToolExecutionInput, deps: MainToolsDependencies): Promise<AIToolExecutionResult> {
+  const normalizedInput = normalizeRuntimeGrepInput(input.input);
+  if ('status' in normalizedInput) return normalizedInput;
+
+  const target = resolveRuntimeReadTarget(normalizedInput.searchPath, input.runtime.workspaceRoot, input.toolName);
+  if ('status' in target) return target;
+
+  try {
+    const searchTarget = await resolveRuntimeRealSearchTarget(target, input.runtime.workspaceRoot);
+    if (searchTarget.outsideWorkspace && !(await confirmRuntimeExternalSearchTarget(input, deps, searchTarget.filePath))) {
+      return createMainToolCancelledResult(input.toolName);
+    }
+
+    const stats = await fs.stat(searchTarget.filePath);
+    if (!stats.isFile() && !stats.isDirectory()) return createMainToolFailureResult(input.toolName, 'EXECUTION_FAILED', 'grep 搜索目标必须是文件或目录');
+
+    const data = await runGrepSearch({
+      rootPath: searchTarget.filePath,
+      pattern: normalizedInput.pattern,
+      ...(normalizedInput.include ? { include: normalizedInput.include } : {}),
+      limit: DEFAULT_FILE_SEARCH_LIMIT,
+      batchSize: DEFAULT_GREP_BATCH_SIZE,
+      excludedDirs: DEFAULT_FILE_SEARCH_EXCLUDED_DIRS,
+      timeoutMs: DEFAULT_GREP_TIMEOUT_MS,
+      stdoutLimitBytes: DEFAULT_GREP_STDOUT_LIMIT_BYTES,
+      stderrLimitBytes: DEFAULT_GREP_STDERR_LIMIT_BYTES,
+      lineTextLimit: DEFAULT_GREP_LINE_TEXT_LIMIT,
+      signal: input.runtime.abortController.signal
+    });
+    return createMainToolSuccessResult(GREP_TOOL_NAME, { path: searchTarget.filePath, ...data });
+  } catch (error) {
+    return createRuntimeSearchFailureResult(input.toolName, error);
+  }
+}
+
 /**
  * 执行 create_document 工具。
  * @param input - 工具执行输入
@@ -591,6 +795,8 @@ async function executeEditFileTool(input: ChatRuntimeMainToolExecutionInput, dep
 export async function executeFileTool(input: ChatRuntimeMainToolExecutionInput, deps: MainToolsDependencies): Promise<AIToolExecutionResult> {
   if (input.toolName === READ_FILE_TOOL_NAME) return executeReadFileTool(input, deps);
   if (input.toolName === READ_DIRECTORY_TOOL_NAME) return executeReadDirectoryTool(input, deps);
+  if (input.toolName === GLOB_TOOL_NAME) return executeGlobTool(input, deps);
+  if (input.toolName === GREP_TOOL_NAME) return executeGrepTool(input, deps);
   if (input.toolName === CREATE_DOCUMENT_TOOL_NAME) return executeCreateDocumentTool(input, deps);
   if (input.toolName === WRITE_FILE_TOOL_NAME) return executeWriteFileTool(input, deps);
   if (input.toolName === EDIT_FILE_TOOL_NAME) return executeEditFileTool(input, deps);

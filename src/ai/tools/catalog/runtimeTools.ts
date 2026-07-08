@@ -7,6 +7,8 @@ import {
   ADD_MCP_SERVER_TOOL_NAME,
   CREATE_DOCUMENT_TOOL_NAME,
   EDIT_FILE_TOOL_NAME,
+  GLOB_TOOL_NAME,
+  GREP_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
@@ -31,6 +33,8 @@ export {
   ADD_MCP_SERVER_TOOL_NAME,
   CREATE_DOCUMENT_TOOL_NAME,
   EDIT_FILE_TOOL_NAME,
+  GLOB_TOOL_NAME,
+  GREP_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
@@ -139,6 +143,16 @@ export const createReadFileTool = getRuntimeToolFactory(READ_FILE_TOOL_NAME);
  * 创建 read_directory schema-only 工具。
  */
 export const createReadDirectoryTool = getRuntimeToolFactory(READ_DIRECTORY_TOOL_NAME);
+
+/**
+ * 创建 glob schema-only 工具。
+ */
+export const createGlobTool = getRuntimeToolFactory(GLOB_TOOL_NAME);
+
+/**
+ * 创建 grep schema-only 工具。
+ */
+export const createGrepTool = getRuntimeToolFactory(GREP_TOOL_NAME);
 
 /**
  * 创建 write_file schema-only 工具。

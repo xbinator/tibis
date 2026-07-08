@@ -11,6 +11,8 @@ import {
   createAddMcpServerTool,
   createCreateDocumentTool,
   createEditFileTool,
+  createGlobTool,
+  createGrepTool,
   createGetCurrentTimeTool,
   createGetMcpSettingsTool,
   createGetSettingsTool,
@@ -39,6 +41,8 @@ export {
   ADD_MCP_SERVER_TOOL_NAME,
   CREATE_DOCUMENT_TOOL_NAME,
   EDIT_FILE_TOOL_NAME,
+  GLOB_TOOL_NAME,
+  GREP_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
   GET_MCP_SETTINGS_TOOL_NAME,
   GET_SETTINGS_TOOL_NAME,
@@ -217,6 +221,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   // read_directory 工具：仅当存在工作区根目录时注册
   const hasWorkspace = Boolean(options.getWorkspaceRoot?.());
   const readDirectoryTool = hasWorkspace ? createReadDirectoryTool() : null;
+  const fileSearchTools = hasWorkspace ? [createGlobTool(), createGrepTool()] : [];
 
   // MCP 只读工具：仅当存在已配置的 MCP server 时注册
   const mcpHasContent = options.mcpStore?.hasEnabledMcpServers === true;
@@ -232,6 +237,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
     return [
       ...readonlyTools,
       ...(readDirectoryTool ? [readDirectoryTool] : []),
+      ...fileSearchTools,
       ...(mcpReadTool ? [mcpReadTool] : []),
       readCurrentWebpageTool,
       createBuiltinTodoWriteTool({ getSessionId: options.getSessionId ?? (() => undefined) }),
@@ -282,6 +288,7 @@ export function createBuiltinTools(options: CreateBuiltinToolsOptions = {}): AIT
   return [
     ...readonlyTools,
     ...(readDirectoryTool ? [readDirectoryTool] : []),
+    ...fileSearchTools,
     ...(mcpReadTool ? [mcpReadTool] : []),
     readCurrentWebpageTool,
     ...writableTools,

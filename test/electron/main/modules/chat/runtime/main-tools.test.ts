@@ -422,6 +422,221 @@ describe('createMainToolExecutor', (): void => {
     }
   });
 
+  it('executes glob as a main-process file search tool', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      await fs.mkdir(path.join(workspaceRoot, 'src'), { recursive: true });
+      await fs.writeFile(path.join(workspaceRoot, 'src', 'alpha.ts'), 'alpha', 'utf8');
+      await fs.writeFile(path.join(workspaceRoot, 'src', 'beta.tsx'), 'beta', 'utf8');
+      await fs.writeFile(path.join(workspaceRoot, 'src', 'gamma.js'), 'gamma', 'utf8');
+      await fs.mkdir(path.join(workspaceRoot, '.git'), { recursive: true });
+      await fs.writeFile(path.join(workspaceRoot, '.git', 'hidden.ts'), 'hidden', 'utf8');
+      const executeMainTool = createMainToolExecutor(createMainToolDependencies([]));
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-glob-1',
+        toolName: 'glob',
+        input: { pattern: '**/*.{ts,tsx}' }
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.toolName).toBe('glob');
+      expect(result.data).toMatchObject({
+        path: workspaceRoot,
+        count: 2,
+        truncated: false
+      });
+      expect((result.data as { files: string[] }).files.map((filePath) => path.relative(workspaceRoot, filePath)).sort()).toEqual([
+        'src/alpha.ts',
+        'src/beta.tsx'
+      ]);
+      expect(result.data).toEqual(expect.objectContaining({ elapsedMs: expect.any(Number) }));
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('executes grep as a main-process file search tool with include filtering', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      await fs.mkdir(path.join(workspaceRoot, 'src'), { recursive: true });
+      await fs.writeFile(path.join(workspaceRoot, 'src', 'alpha.ts'), 'const target = 1;\n', 'utf8');
+      await fs.writeFile(path.join(workspaceRoot, 'src', 'beta.md'), 'target in markdown\n', 'utf8');
+      await fs.mkdir(path.join(workspaceRoot, '.git'), { recursive: true });
+      await fs.writeFile(path.join(workspaceRoot, '.git', 'ignored.ts'), 'const target = 2;\n', 'utf8');
+      const executeMainTool = createMainToolExecutor(createMainToolDependencies([]));
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-grep-1',
+        toolName: 'grep',
+        input: { pattern: 'target', include: '**/*.ts' }
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.toolName).toBe('grep');
+      expect(result.data).toMatchObject({
+        path: workspaceRoot,
+        count: 1,
+        truncated: false,
+        matches: [
+          {
+            path: path.join(workspaceRoot, 'src', 'alpha.ts'),
+            line: 1,
+            text: 'const target = 1;'
+          }
+        ]
+      });
+      expect(result.data).toEqual(expect.objectContaining({ elapsedMs: expect.any(Number) }));
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('blocks glob relative paths that escape the workspace without confirmation', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(path.join(tempRoot, 'outside'));
+      const requestConfirmation = vi.fn(async () => ({ approved: true }));
+      const executeMainTool = createMainToolExecutor({
+        ...createMainToolDependencies([]),
+        requestConfirmation
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-glob-escape-1',
+        toolName: 'glob',
+        input: { pattern: '**/*.ts', path: '../outside' }
+      });
+
+      expect(result).toMatchObject({
+        toolName: 'glob',
+        status: 'failure',
+        error: { code: 'PERMISSION_DENIED' }
+      });
+      expect(requestConfirmation).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('confirms glob absolute paths outside the workspace', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      await fs.writeFile(path.join(outsideRoot, 'outside.ts'), 'outside', 'utf8');
+      const requestConfirmation = vi.fn(async () => ({ approved: true }));
+      const executeMainTool = createMainToolExecutor({
+        ...createMainToolDependencies([]),
+        requestConfirmation
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-glob-outside-1',
+        toolName: 'glob',
+        input: { pattern: '**/*.ts', path: outsideRoot }
+      });
+
+      expect(result).toMatchObject({
+        toolName: 'glob',
+        status: 'success',
+        data: { path: outsideRoot, count: 1 }
+      });
+      expect(requestConfirmation).toHaveBeenCalledTimes(1);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('confirms glob workspace symlinks that resolve outside the workspace', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      await fs.writeFile(path.join(outsideRoot, 'outside.ts'), 'outside', 'utf8');
+      await fs.symlink(outsideRoot, path.join(workspaceRoot, 'link-outside'), 'dir');
+      const realOutsideRoot = await fs.realpath(outsideRoot);
+      const requestConfirmation = vi.fn(async () => ({ approved: true }));
+      const executeMainTool = createMainToolExecutor({
+        ...createMainToolDependencies([]),
+        requestConfirmation
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-glob-symlink-1',
+        toolName: 'glob',
+        input: { pattern: '**/*.ts', path: 'link-outside' }
+      });
+
+      expect(result).toMatchObject({
+        toolName: 'glob',
+        status: 'success',
+        data: { path: realOutsideRoot, count: 1 }
+      });
+      expect(requestConfirmation).toHaveBeenCalledTimes(1);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('confirms grep workspace symlinks that resolve outside and preserves pattern whitespace', async (): Promise<void> => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'tibis-runtime-tools-'));
+    try {
+      const workspaceRoot = path.join(tempRoot, 'workspace');
+      const outsideRoot = path.join(tempRoot, 'outside');
+      const outsideFile = path.join(outsideRoot, 'secret.txt');
+      await fs.mkdir(workspaceRoot);
+      await fs.mkdir(outsideRoot);
+      await fs.writeFile(outsideFile, ' secret\nsecret\n', 'utf8');
+      await fs.symlink(outsideFile, path.join(workspaceRoot, 'secret-link.txt'));
+      const realOutsideFile = await fs.realpath(outsideFile);
+      const requestConfirmation = vi.fn(async () => ({ approved: true }));
+      const executeMainTool = createMainToolExecutor({
+        ...createMainToolDependencies([]),
+        requestConfirmation
+      });
+
+      const result = await executeMainTool({
+        runtime: { ...runtime, workspaceRoot },
+        toolCallId: 'tool-call-grep-symlink-1',
+        toolName: 'grep',
+        input: { pattern: ' secret', path: 'secret-link.txt' }
+      });
+
+      expect(result).toMatchObject({
+        toolName: 'grep',
+        status: 'success',
+        data: {
+          path: realOutsideFile,
+          count: 1,
+          matches: [
+            {
+              path: realOutsideFile,
+              line: 1,
+              text: ' secret'
+            }
+          ]
+        }
+      });
+      expect(requestConfirmation).toHaveBeenCalledTimes(1);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('blocks open_resource relative file paths that escape the workspace before bridge dispatch', async (): Promise<void> => {
     const bridgeRequests: MainToolBridgeRequest[] = [];
     const requestConfirmation = vi.fn(async () => ({ approved: true }));

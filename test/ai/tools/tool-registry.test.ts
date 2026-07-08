@@ -5,12 +5,25 @@
 import type { AIToolExecutor } from 'types/ai';
 import { describe, expect, it } from 'vitest';
 import * as runtimeTools from '@/ai/tools/catalog/runtimeTools';
-import { createReadFileTool, READ_FILE_TOOL_NAME } from '@/ai/tools/catalog/runtimeTools';
+import { GLOB_TOOL_NAME, GREP_TOOL_NAME, READ_FILE_TOOL_NAME, createGlobTool, createGrepTool, createReadFileTool } from '@/ai/tools/catalog/runtimeTools';
 import { createDocumentToolRegistryEntry, readCurrentDocumentToolRegistryEntry } from '../../../shared/ai/tools/DocumentTool/index.js';
 import { getCurrentTimeToolRegistryEntry } from '../../../shared/ai/tools/EnvironmentTool/index.js';
 import { editFileToolRegistryEntry } from '../../../shared/ai/tools/FileEditTool/index.js';
-import { readDirectoryToolRegistryEntry, readFileToolRegistryEntry } from '../../../shared/ai/tools/FileReadTool/index.js';
+import {
+  globToolRegistryEntry,
+  grepToolRegistryEntry,
+  readDirectoryToolRegistryEntry,
+  readFileToolRegistryEntry
+} from '../../../shared/ai/tools/FileReadTool/index.js';
 import { writeFileToolRegistryEntry } from '../../../shared/ai/tools/FileWriteTool/index.js';
+import {
+  OPERATE_WEBPAGE_TOOL_NAME,
+  OPEN_RESOURCE_TOOL_NAME,
+  TOOL_REGISTRY,
+  getToolDefinitionByName,
+  getToolNamesByExposure,
+  getToolNamesByRuntimeGroup
+} from '../../../shared/ai/tools/index.js';
 import { queryLogsToolRegistryEntry } from '../../../shared/ai/tools/LogsTool/index.js';
 import {
   addMcpServerToolRegistryEntry,
@@ -22,14 +35,6 @@ import {
 import { openResourceToolRegistryEntry } from '../../../shared/ai/tools/OpenResourceTool/index.js';
 import { getSettingsToolRegistryEntry, updateSettingsToolRegistryEntry } from '../../../shared/ai/tools/SettingsTool/index.js';
 import { operateWebpageToolRegistryEntry, readCurrentWebpageToolRegistryEntry } from '../../../shared/ai/tools/WebviewTool/index.js';
-import {
-  OPERATE_WEBPAGE_TOOL_NAME,
-  OPEN_RESOURCE_TOOL_NAME,
-  TOOL_REGISTRY,
-  getToolDefinitionByName,
-  getToolNamesByExposure,
-  getToolNamesByRuntimeGroup
-} from '../../../shared/ai/tools/index.js';
 
 /** runtimeTools 模块带工厂映射的测试视图。 */
 type RuntimeToolsWithFactoryMap = typeof runtimeTools & {
@@ -49,6 +54,8 @@ describe('toolRegistry', (): void => {
       getCurrentTimeToolRegistryEntry,
       readFileToolRegistryEntry,
       readDirectoryToolRegistryEntry,
+      globToolRegistryEntry,
+      grepToolRegistryEntry,
       writeFileToolRegistryEntry,
       editFileToolRegistryEntry,
       queryLogsToolRegistryEntry,
@@ -73,6 +80,11 @@ describe('toolRegistry', (): void => {
     expect(runtimeTool.definition).toEqual(registryDefinition);
   });
 
+  it('exposes glob and grep schema-only factories from the shared registry', (): void => {
+    expect(createGlobTool().definition).toEqual(getToolDefinitionByName(GLOB_TOOL_NAME));
+    expect(createGrepTool().definition).toEqual(getToolDefinitionByName(GREP_TOOL_NAME));
+  });
+
   it('derives runtimeTools factory map from every shared registry definition', (): void => {
     const factoryMap = (runtimeTools as RuntimeToolsWithFactoryMap).RUNTIME_TOOL_FACTORIES;
     const registryToolNames = TOOL_REGISTRY.map((entry) => entry.definition.name).sort();
@@ -87,7 +99,7 @@ describe('toolRegistry', (): void => {
   it('can derive main-process tool names by runtime group', (): void => {
     const fileToolNames = getToolNamesByRuntimeGroup('main', 'file');
 
-    expect(fileToolNames).toEqual(expect.arrayContaining(['read_file', 'read_directory', 'create_document', 'write_file', 'edit_file']));
+    expect(fileToolNames).toEqual(expect.arrayContaining(['read_file', 'read_directory', 'glob', 'grep', 'create_document', 'write_file', 'edit_file']));
   });
 
   it('can derive WebView tool names by runtime group', (): void => {
@@ -142,10 +154,10 @@ describe('toolRegistry', (): void => {
     expect(getToolNamesByExposure('default-readonly')).toEqual(
       expect.arrayContaining(['read_current_document', 'get_current_time', 'read_file', 'get_settings', 'query_logs', 'open_resource'])
     );
-    expect(getToolNamesByExposure('default-writable')).toEqual(
-      expect.arrayContaining(['create_document', 'edit_file', 'write_file', 'update_settings'])
+    expect(getToolNamesByExposure('default-writable')).toEqual(expect.arrayContaining(['create_document', 'edit_file', 'write_file', 'update_settings']));
+    expect(getToolNamesByExposure('conditional-readonly')).toEqual(
+      expect.arrayContaining(['read_directory', 'glob', 'grep', 'get_mcp_settings', 'read_current_webpage'])
     );
-    expect(getToolNamesByExposure('conditional-readonly')).toEqual(expect.arrayContaining(['read_directory', 'get_mcp_settings', 'read_current_webpage']));
     expect(getToolNamesByExposure('conditional-writable')).toEqual(
       expect.arrayContaining(['add_mcp_server', 'update_mcp_server', 'remove_mcp_server', 'refresh_mcp_discovery', 'operate_webpage'])
     );

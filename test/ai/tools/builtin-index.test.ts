@@ -12,6 +12,7 @@ import {
   OPERATE_WEBPAGE_TOOL_NAME,
   READ_CURRENT_WEBPAGE_TOOL_NAME
 } from '@/ai/tools/builtin';
+import { GLOB_TOOL_NAME, GREP_TOOL_NAME } from '@/ai/tools/catalog/runtimeTools';
 import { getToolNamesByExposure } from '../../../shared/ai/tools/index.js';
 
 describe('builtin tools index', (): void => {
@@ -26,5 +27,11 @@ describe('builtin tools index', (): void => {
     const toolNames = createBuiltinTools().map((tool) => tool.definition.name);
 
     expect(toolNames).toEqual(expect.arrayContaining([READ_CURRENT_WEBPAGE_TOOL_NAME, OPERATE_WEBPAGE_TOOL_NAME]));
+  });
+
+  it('keeps workspace file search tools available when a workspace exists', (): void => {
+    const toolNames = createBuiltinTools({ getWorkspaceRoot: () => '/workspace' }).map((tool) => tool.definition.name);
+
+    expect(toolNames).toEqual(expect.arrayContaining([GLOB_TOOL_NAME, GREP_TOOL_NAME]));
   });
 });

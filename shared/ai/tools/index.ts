@@ -6,7 +6,7 @@ import type { SharedToolDefinition, ToolExposure, ToolRegistryEntry, ToolRuntime
 import { createDocumentToolRegistryEntry, readCurrentDocumentToolRegistryEntry } from './DocumentTool/index.js';
 import { getCurrentTimeToolRegistryEntry } from './EnvironmentTool/index.js';
 import { editFileToolRegistryEntry } from './FileEditTool/index.js';
-import { readDirectoryToolRegistryEntry, readFileToolRegistryEntry } from './FileReadTool/index.js';
+import { globToolRegistryEntry, grepToolRegistryEntry, readDirectoryToolRegistryEntry, readFileToolRegistryEntry } from './FileReadTool/index.js';
 import { writeFileToolRegistryEntry } from './FileWriteTool/index.js';
 import { queryLogsToolRegistryEntry } from './LogsTool/index.js';
 import {
@@ -34,7 +34,7 @@ export type {
 export { CREATE_DOCUMENT_TOOL_NAME, READ_CURRENT_DOCUMENT_TOOL_NAME } from './DocumentTool/index.js';
 export { GET_CURRENT_TIME_TOOL_NAME } from './EnvironmentTool/index.js';
 export { EDIT_FILE_TOOL_NAME } from './FileEditTool/index.js';
-export { READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool/index.js';
+export { GLOB_TOOL_NAME, GREP_TOOL_NAME, READ_DIRECTORY_TOOL_NAME, READ_FILE_TOOL_NAME } from './FileReadTool/index.js';
 export { WRITE_FILE_TOOL_NAME } from './FileWriteTool/index.js';
 export { QUERY_LOGS_TOOL_NAME } from './LogsTool/index.js';
 export {
@@ -55,6 +55,8 @@ export const TOOL_REGISTRY = [
   getCurrentTimeToolRegistryEntry,
   readFileToolRegistryEntry,
   readDirectoryToolRegistryEntry,
+  globToolRegistryEntry,
+  grepToolRegistryEntry,
   writeFileToolRegistryEntry,
   editFileToolRegistryEntry,
   queryLogsToolRegistryEntry,

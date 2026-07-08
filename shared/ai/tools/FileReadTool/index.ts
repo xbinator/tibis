@@ -10,6 +10,12 @@ export const READ_FILE_TOOL_NAME = 'read_file';
 /** 读取目录工具名称。 */
 export const READ_DIRECTORY_TOOL_NAME = 'read_directory';
 
+/** Glob 文件搜索工具名称。 */
+export const GLOB_TOOL_NAME = 'glob';
+
+/** Grep 内容搜索工具名称。 */
+export const GREP_TOOL_NAME = 'grep';
+
 /** 读取文件工具 registry 条目。 */
 export const readFileToolRegistryEntry = {
   runtime: 'main',
@@ -53,6 +59,58 @@ export const readDirectoryToolRegistryEntry = {
         path: { type: 'string', description: '目录路径，支持相对工作区路径或绝对路径。' }
       },
       required: ['path'],
+      additionalProperties: false
+    }
+  }
+} satisfies ToolRegistryEntry;
+
+/** Glob 文件搜索工具 registry 条目。 */
+export const globToolRegistryEntry = {
+  runtime: 'main',
+  group: 'file',
+  exposure: 'conditional-readonly',
+  definition: {
+    name: GLOB_TOOL_NAME,
+    description:
+      '按 glob 路径模式递归查找本地文件，仅返回文件路径，不读取文件内容。pattern 使用 glob 语义，支持 *、?、**，常见扩展写法由 picomatch 兼容处理。相对路径需要工作区根目录，工作区外绝对路径需要用户确认；部分路径不可读时会返回 incomplete 和 warnings。',
+    source: 'builtin',
+    riskLevel: 'read',
+    requiresActiveDocument: false,
+    permissionCategory: 'system',
+    parameters: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: '文件路径 glob 模式，例如 **/*.ts 或 **/*.{ts,tsx}。' },
+        path: { type: 'string', description: '搜索目录路径，支持相对工作区路径或绝对路径；不传时使用当前工作区根目录。' }
+      },
+      required: ['pattern'],
+      additionalProperties: false
+    }
+  }
+} satisfies ToolRegistryEntry;
+
+/** Grep 内容搜索工具 registry 条目。 */
+export const grepToolRegistryEntry = {
+  runtime: 'main',
+  group: 'file',
+  exposure: 'conditional-readonly',
+  definition: {
+    name: GREP_TOOL_NAME,
+    description:
+      '使用系统 grep -E 在本地文件中搜索内容，返回匹配文件、行号和文本。pattern 使用系统 grep -E 扩展正则语义，不兼容 ripgrep 专有语义；' +
+      'include 是文件 glob，由 Tibis 在执行前筛选候选文件。部分文件不可读时会返回 incomplete 和 warnings。',
+    source: 'builtin',
+    riskLevel: 'read',
+    requiresActiveDocument: false,
+    permissionCategory: 'system',
+    parameters: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: '传给 grep -E 的扩展正则表达式。' },
+        path: { type: 'string', description: '搜索文件或目录路径，支持相对工作区路径或绝对路径；不传时使用当前工作区根目录。' },
+        include: { type: 'string', description: '候选文件 glob，例如 **/*.ts 或 **/*.{ts,tsx}。' }
+      },
+      required: ['pattern'],
       additionalProperties: false
     }
   }
