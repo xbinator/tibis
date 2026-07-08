@@ -13,6 +13,7 @@ import './presets/nord';
 import './presets/matrix';
 import './presets/one-dark';
 import './presets/shonen';
+import './presets/manga-ink';
 
 export type { ThemeTokens } from './types/tokens';
 export { defaultLight as light, defaultDark as dark } from './presets/default';
