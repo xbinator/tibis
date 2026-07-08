@@ -62,6 +62,8 @@ Widget 状态分两层：
 
 因此，事件方法若需要跨刷新或历史恢复仍然可用，必须把必要数据写入 `renderContext.data`。`private` 字段适合缓存、临时计算和同一显示会话内的短期状态，不适合承载持久业务事实。
 
+传给 Worker 的脚本载荷只承诺 JSON 快照语义。`input`、`output`、`data` 和方法参数会在 Widget runtime 边界转成 JSON-safe 数据，避免 Vue proxy、DOM Event、函数或其他不可结构化克隆对象触发 `DataCloneError`。事件方法需要业务参数时，应传业务数据本身，而不是浏览器原始事件对象。
+
 ## Mounted And Restore
 
 `renderContext.isMounted` 表示宿主已经保存过 mounted 结果。恢复历史消息时可以跳过 `onMounted`，避免重复请求和重复副作用。
@@ -131,5 +133,6 @@ export default class MovieOnList extends Widget {
 | 按钮点击仍执行旧脚本 | `Runtime.vue` 是否在脚本 identity 变化时销毁旧 session。 |
 | 旧 HTTP 请求回来覆盖新脚本数据 | 是否用脚本版本守卫丢弃 stale async result。 |
 | Worker 超时后后续交互卡死 | `createSandboxSession` 超时分支是否 terminate 并标记 disposed。 |
+| Worker 报 `DataCloneError` | 是否把 Vue proxy、DOM Event、函数等不可克隆对象传入脚本；Widget payload 边界应先转 JSON 快照。 |
 | 恢复历史消息后事件依赖丢失 | 事件是否依赖不可持久化的实例内存状态。 |
 | 默认按钮事件无效果 | 默认模板不注入业务方法，需要脚本显式定义。 |

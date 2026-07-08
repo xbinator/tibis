@@ -3,7 +3,8 @@
  * @description BChat 小组件消息运行态脚本测试。
  */
 import type { WidgetData, WidgetHttpClient } from 'types/widget';
-import { describe, expect, it } from 'vitest';
+import { reactive } from 'vue';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import {
@@ -21,6 +22,69 @@ import { runSandboxCode } from '@/utils/sandbox';
 const TEST_WIDGET_RUN_OPTIONS = {
   useWorker: false
 } satisfies NonNullable<Parameters<typeof initWidgetMountStateBase>[1]>;
+
+/**
+ * Worker run 消息。
+ */
+interface CloneCheckingRunMessage {
+  /** 消息类型。 */
+  type: 'run';
+  /** 沙箱运行 ID。 */
+  runId: string;
+}
+
+/**
+ * 判断值是否是 Worker run 消息。
+ * @param value - 待判断值
+ * @returns 是否是 Worker run 消息
+ */
+function isCloneCheckingRunMessage(value: unknown): value is CloneCheckingRunMessage {
+  if (typeof value !== 'object' || value === null) return false;
+
+  const record = value as { type?: unknown; runId?: unknown };
+
+  return record.type === 'run' && typeof record.runId === 'string';
+}
+
+/** 校验 postMessage 载荷可结构化克隆的 Worker 测试替身。 */
+class CloneCheckingWorkerMock {
+  /** Worker 消息处理器。 */
+  public onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
+
+  /** Worker 错误处理器。 */
+  public onerror: ((event: ErrorEvent) => void) | null = null;
+
+  /**
+   * 校验主线程消息可结构化克隆，并返回一个空运行结果。
+   * @param message - 主线程消息
+   */
+  public postMessage(message: unknown): void {
+    const clonedMessage = structuredClone(message);
+
+    if (!isCloneCheckingRunMessage(clonedMessage)) return;
+
+    queueMicrotask((): void => {
+      this.onmessage?.({
+        data: {
+          type: 'done',
+          runId: clonedMessage.runId,
+          result: {
+            value: {
+              data: {},
+              dataChanged: false,
+              lifecycleExecuted: true
+            }
+          }
+        }
+      } as MessageEvent<unknown>);
+    });
+  }
+
+  /**
+   * 终止 Worker。
+   */
+  public terminate(): void {}
+}
 
 /**
  * 初始化测试小组件。
@@ -98,6 +162,10 @@ function createExecuteWidgetPart(code: string, input: Record<string, unknown> = 
 }
 
 describe('widgetRuntime', (): void => {
+  afterEach((): void => {
+    vi.unstubAllGlobals();
+  });
+
   it('does not use local sandbox fallback unless explicitly requested', async (): Promise<void> => {
     await expect(runSandboxCode({ code: 'return 1' })).rejects.toThrow('当前环境不支持 Worker');
   });
@@ -596,6 +664,42 @@ describe('widgetRuntime', (): void => {
         message: '已挂载'
       });
       expect(clickedResult.sendMessage).toEqual({ content: '已挂载', isError: false });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('sends cloneable widget payloads to worker sessions from reactive render context', async (): Promise<void> => {
+    vi.stubGlobal('Worker', CloneCheckingWorkerMock);
+
+    const part: WidgetRuntimeState = {
+      ...createWidgetPart('export default class MovieList extends Widget { onMounted() {} }'),
+      renderContext: reactive({
+        input: {
+          city: '上海'
+        },
+        output: undefined,
+        data: {
+          movie: {
+            title: '流浪地球'
+          }
+        }
+      }) as WidgetRuntimeState['renderContext']
+    };
+    const session = createWidgetRuntimeSession(part, { useWorker: true });
+
+    try {
+      await expect(session.mounted()).resolves.toMatchObject({
+        state: {
+          renderContext: {
+            data: {
+              movie: {
+                title: '流浪地球'
+              }
+            }
+          }
+        }
+      });
     } finally {
       session.dispose();
     }

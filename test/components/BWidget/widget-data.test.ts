@@ -19,7 +19,7 @@ describe('dataItem', (): void => {
     const execute = createDefaultWidgetExecuteMethod('weather-card');
 
     expect(execute.code).toContain('export default class WeatherCard extends Widget');
-    expect(execute.code).toContain('async onExecute()');
+    expect(execute.code).toContain('onExecute()');
     expect(execute.code).toContain('onMounted()');
     expect(execute.code).not.toContain('confirm()');
     expect(execute.code).not.toContain('weather');

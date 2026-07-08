@@ -1246,21 +1246,36 @@ function markWidgetRuntimeMounted(state: WidgetRuntimeState): WidgetRuntimeState
 }
 
 /**
+ * 克隆为 Widget 脚本可见的 JSON 快照。
+ * @param value - 原始运行态值
+ * @returns 可传入 Worker 的 JSON 快照
+ */
+function cloneWidgetScriptValue<T>(value: T): T {
+  if (value === undefined) return value;
+
+  const serializedValue = JSON.stringify(value);
+
+  return serializedValue === undefined ? (undefined as T) : (JSON.parse(serializedValue) as T);
+}
+
+/**
  * 创建 Widget 脚本运行载荷。
  * @param state - 运行态状态
  * @param options - 沙箱执行选项
  * @returns Widget 脚本运行载荷
  */
 function createWidgetScriptRunPayload(state: WidgetRuntimeState, options: WidgetPartSandboxOptions = {}): WidgetScriptRunPayload {
+  const methodArgs = options.methodArgs !== undefined ? cloneWidgetScriptValue(options.methodArgs) : undefined;
+
   return {
     scriptCode: state.value.execute?.code ?? EMPTY_WIDGET_CLASS_SCRIPT,
     ...(options.interactionCode !== undefined ? { interactionCode: options.interactionCode } : {}),
     ...(options.methodName !== undefined ? { methodName: options.methodName } : {}),
-    ...(options.methodArgs !== undefined ? { methodArgs: options.methodArgs } : {}),
+    ...(methodArgs !== undefined ? { methodArgs } : {}),
     ...(options.lifecycleName ? { lifecycleName: options.lifecycleName } : {}),
-    input: state.renderContext.input,
-    output: state.renderContext.output,
-    data: state.renderContext.data
+    input: cloneWidgetScriptValue(state.renderContext.input) ?? {},
+    output: cloneWidgetScriptValue(state.renderContext.output),
+    data: cloneWidgetScriptValue(state.renderContext.data) ?? {}
   };
 }
 
