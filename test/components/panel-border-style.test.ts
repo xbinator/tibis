@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const PANEL_BORDER_SHADOW = 'box-shadow: inset 0 0 0 1px var(--border-primary);';
+const PANEL_BORDER_RULE = 'border: 1px solid var(--border-primary);';
 
 /**
  * 需要统一内描边的容器目标。
@@ -71,11 +71,13 @@ function readRuleBody(source: string, selector: string): string {
 }
 
 describe('panel border styles', (): void => {
-  it('uses a theme-aware inset border on primary content containers', (): void => {
+  it('uses a direct theme-aware border on primary content containers', (): void => {
     for (const target of PANEL_BORDER_TARGETS) {
-      const ruleBody = readRuleBody(readSource(target.filePath), target.selector);
+      const source = readSource(target.filePath);
+      const ruleBody = readRuleBody(source, target.selector);
 
-      expect(ruleBody, `${target.filePath} ${target.selector}`).toContain(PANEL_BORDER_SHADOW);
+      expect(ruleBody, `${target.filePath} ${target.selector}`).toContain(PANEL_BORDER_RULE);
+      expect(source, `${target.filePath} ${target.selector}`).not.toContain(`${target.selector}::after`);
     }
   });
 });

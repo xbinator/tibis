@@ -283,8 +283,8 @@ const providerDropdownOptionsMap = computed<Map<string, DropdownOptionItem[]>>((
   height: 100%;
   padding: 16px 12px;
   background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
-  box-shadow: inset 0 0 0 1px var(--border-primary);
 }
 
 .provider-sidebar {
