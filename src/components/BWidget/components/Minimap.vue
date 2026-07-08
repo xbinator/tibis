@@ -40,7 +40,12 @@ import { computed, ref } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { throttle } from 'lodash-es';
 import BDropdown from '@/components/BDropdown/index.vue';
-import { WIDGET_MINIMAP_DROPDOWN_ALIGN, WIDGET_MINIMAP_EMPTY_SIZE, WIDGET_MINIMAP_VIEWBOX_PADDING } from '../constants/minimap';
+import {
+  WIDGET_MINIMAP_DROPDOWN_ALIGN,
+  WIDGET_MINIMAP_EMPTY_SIZE,
+  WIDGET_MINIMAP_VIEWBOX_PADDING,
+  WIDGET_MINIMAP_VIEWPORT_DRAG_DAMPING
+} from '../constants/minimap';
 import { WIDGET_MAX_ZOOM, WIDGET_MIN_ZOOM, WIDGET_ZOOM_STEP } from '../constants/viewport';
 import { getWidgetResponsiveViewBoxSize, getWidgetShapeRenderSize } from '../utils/widgetGeometry';
 
@@ -220,8 +225,8 @@ function handleViewportDragMove(event: PointerEvent): void {
   }
 
   const currentSvgPoint = clientToSvgPoint(event.clientX, event.clientY);
-  const dx = currentSvgPoint.x - dragStartSvgPoint.value.x;
-  const dy = currentSvgPoint.y - dragStartSvgPoint.value.y;
+  const dx = (currentSvgPoint.x - dragStartSvgPoint.value.x) * WIDGET_MINIMAP_VIEWPORT_DRAG_DAMPING;
+  const dy = (currentSvgPoint.y - dragStartSvgPoint.value.y) * WIDGET_MINIMAP_VIEWPORT_DRAG_DAMPING;
 
   emit('set-center', {
     x: dragStartCenter.value.x + dx,

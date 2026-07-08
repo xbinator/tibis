@@ -14,6 +14,11 @@ export const WIDGET_MINIMAP_EMPTY_SIZE = 320;
 export const WIDGET_MINIMAP_VIEWBOX_PADDING = 80;
 
 /**
+ * 小地图视口矩形拖拽阻尼系数，降低拖拽时的视口移动灵敏度。
+ */
+export const WIDGET_MINIMAP_VIEWPORT_DRAG_DAMPING = 0.6;
+
+/**
  * 小地图弹框相对触发按钮的偏移。
  */
 export const WIDGET_MINIMAP_DROPDOWN_ALIGN = {
