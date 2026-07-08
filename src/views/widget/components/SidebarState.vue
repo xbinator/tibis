@@ -5,16 +5,7 @@
 <template>
   <SidebarPanel title="入参">
     <template #help>
-      <BIcon
-        class="schema-help-icon"
-        icon="lucide:circle-alert"
-        role="button"
-        :size="14"
-        tabindex="0"
-        @click="openSchemaHelp('input')"
-        @keydown.enter="openSchemaHelp('input')"
-        @keydown.space.prevent="openSchemaHelp('input')"
-      />
+      <BIcon class="schema-help-icon" icon="lucide:circle-alert" role="button" :size="14" tabindex="0" @click="openSchemaHelp" />
     </template>
     <template #extra>
       <BButton icon="lucide:plus" size="mini" square tooltip="添加字段" type="secondary" @click="addRootSchemaField" />
@@ -139,10 +130,8 @@ function openSchemaInputEditor(kind: WidgetSchemaKind): void {
 
 /**
  * 打开 Schema 填写说明抽屉。
- * @param kind - schema 类型
  */
-function openSchemaHelp(kind: WidgetSchemaKind): void {
-  activeSchemaHelpKind.value = kind;
+function openSchemaHelp(): void {
   schemaHelpDrawerOpen.value = true;
 }
 

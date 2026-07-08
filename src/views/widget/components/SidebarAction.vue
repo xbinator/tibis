@@ -4,6 +4,18 @@
 -->
 <template>
   <SidebarPanel title="动作面板" :padding="0">
+    <template #help>
+      <BIcon
+        class="action-help-icon"
+        icon="lucide:circle-alert"
+        role="button"
+        :size="14"
+        tabindex="0"
+        @click="openActionHelp"
+        @keydown.enter="openActionHelp"
+        @keydown.space.prevent="openActionHelp"
+      />
+    </template>
     <template #extra>
       <BButton
         :icon="isExpanded ? 'lucide:minimize-2' : 'lucide:maximize-2'"
@@ -15,6 +27,9 @@
     </template>
     <CodeEditor v-model:value="dataItem" :active="props.active" @save="emit('save')" />
   </SidebarPanel>
+
+  <!-- 动作脚本编写说明抽屉 -->
+  <ActionHelp v-model:open="actionHelpOpen" />
 </template>
 
 <script setup lang="ts">
@@ -22,6 +37,7 @@ import { ref } from 'vue';
 import type { WidgetData } from '@/components/BWidget/types';
 import SidebarPanel from './_SidebarPanel.vue';
 import CodeEditor from './CodeEditor.vue';
+import ActionHelp from './PageSetter/ActionHelp.vue';
 
 defineOptions({ name: 'SidebarAction' });
 
@@ -60,4 +76,27 @@ function toggleExpand(): void {
     emit('collapse');
   }
 }
+
+/** 动作脚本编写说明抽屉开关状态。 */
+const actionHelpOpen = ref(false);
+
+/**
+ * 打开动作脚本编写说明抽屉。
+ */
+function openActionHelp(): void {
+  actionHelpOpen.value = true;
+}
 </script>
+
+<style lang="less" scoped>
+.action-help-icon {
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.action-help-icon:hover,
+.action-help-icon:focus {
+  color: var(--color-primary);
+}
+</style>

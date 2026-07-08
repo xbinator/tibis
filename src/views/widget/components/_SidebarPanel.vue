@@ -62,7 +62,7 @@ withDefaults(defineProps<Props>(), {
 .sidebar-panel__title-group {
   display: flex;
   flex: 1;
-  gap: 4px;
+  gap: 8px;
   align-items: center;
   min-width: 0;
 }

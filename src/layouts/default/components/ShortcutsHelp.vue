@@ -6,7 +6,6 @@
   <BDrawer v-model:open="visible" :width="500" :get-container="false">
     <template #title>
       <div class="shortcuts-help__title">
-        <BIcon icon="lucide:keyboard" :size="17" />
         <span>快捷键</span>
       </div>
     </template>
@@ -23,7 +22,6 @@
               <div class="shortcuts-help__group-description">{{ group.description }}</div>
             </div>
           </div>
-          <span class="shortcuts-help__group-count">{{ group.items.length }}</span>
         </div>
 
         <div class="shortcuts-help__list" role="list">
@@ -174,21 +172,6 @@ function formatShortcutAriaLabel(shortcut: string): string {
   font-size: 12px;
   line-height: 1.35;
   color: var(--text-tertiary);
-}
-
-.shortcuts-help__group-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 7px;
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--text-tertiary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-secondary);
-  border-radius: 999px;
 }
 
 .shortcuts-help__list {

@@ -172,8 +172,10 @@ function handleClose(): void {
 .b-drawer__header {
   position: relative;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  padding: 16px 24px;
+  height: 40px;
+  padding-left: 12px;
   font-size: 16px;
   font-weight: 500;
   color: var(--text-primary);
@@ -202,7 +204,7 @@ function handleClose(): void {
 }
 
 .b-drawer__body {
-  padding: 16px 24px;
+  padding: 12px;
   overflow: auto;
 }
 

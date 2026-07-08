@@ -97,6 +97,7 @@ export function toCssVars(tokens: ThemeTokens): Record<string, string> {
  * 以保持输入区域更亮的背景与卡片容器的视觉层次。
  * 带下拉弹出层的组件额外覆盖 colorBgElevated 为 dropdown.bg，
  * 使弹出面板背景与主题 dropdown 语义保持一致。
+ * Drawer 单独覆盖 colorBgElevated 为 bg.primary，使其与页面主背景保持一致。
  * @param tokens - 主题 Token 对象
  * @returns Ant Design 完整主题配置（全局 token + 组件级 token）
  */
@@ -116,6 +117,11 @@ export function toAntdToken(tokens: ThemeTokens): AntdThemeConfig {
       colorBgElevated: tokens.dropdown.bg
     };
   }
+
+  // Drawer 背景使用 bg.primary，使其与页面主背景保持一致。
+  inputComponentTokens.Drawer = {
+    colorBgElevated: tokens.bg.primary
+  };
 
   return {
     token: {
