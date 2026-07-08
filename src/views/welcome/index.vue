@@ -114,6 +114,7 @@ function handleShowShortcuts(): void {
   width: 100%;
   height: 100%;
   background-color: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
 }
 
