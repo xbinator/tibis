@@ -375,11 +375,24 @@ export const DEFAULT_PROVIDERS: AIProvider[] = [
     id: 'tencentcloud',
     name: '腾讯云',
     description: '提供混元系列大模型，擅长对话、创作、代码与企业级智能服务。',
-    baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
+    baseUrl: 'https://tokenhub.tencentmaas.com/v1',
     type: 'openai',
     isEnabled: false,
     readonly: true,
     models: [
+      {
+        id: 'hy3',
+        name: 'Hy3',
+        type: 'reasoning',
+        isEnabled: true,
+        contextWindow: 256000,
+        supportsTools: true,
+        supportsVision: true,
+        supportsDeepThought: true,
+        supportsWebSearch: true,
+        supportsImageGeneration: false,
+        supportsVideoRecognition: true
+      },
       {
         id: 'hy3-preview',
         name: 'Hy3 Preview',
