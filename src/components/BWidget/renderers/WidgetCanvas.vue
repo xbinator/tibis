@@ -266,8 +266,6 @@ function handleWheel(event: WheelEvent): void {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
 }
 
 .b-widget-canvas.is-tool-select {

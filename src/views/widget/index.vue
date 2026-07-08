@@ -864,6 +864,7 @@ onDeactivated((): void => {
   min-height: 0;
   overflow: hidden;
   background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
 }
 

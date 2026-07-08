@@ -340,7 +340,6 @@ onBeforeUnmount((): void => {
   gap: 8px;
   min-height: 0;
   padding: 6px;
-  background: var(--bg-primary);
   border-right: 1px solid var(--border-primary);
 }
 
@@ -376,7 +375,6 @@ onBeforeUnmount((): void => {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg-primary);
   border-right: 1px solid var(--border-primary);
 }
 </style>
