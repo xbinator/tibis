@@ -198,6 +198,7 @@ onUnmounted(() => {
   overflow: hidden;
   background: var(--bg-primary);
   border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--border-primary);
 }
 
 .chat-sider__header {

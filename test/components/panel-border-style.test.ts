@@ -1,0 +1,81 @@
+/**
+ * @file panel-border-style.test.ts
+ * @description 验证主要内容容器使用统一的主题内描边。
+ */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const PANEL_BORDER_SHADOW = 'box-shadow: inset 0 0 0 1px var(--border-primary);';
+
+/**
+ * 需要统一内描边的容器目标。
+ */
+interface PanelBorderTarget {
+  /** Vue 单文件组件路径 */
+  filePath: string;
+  /** 容器 CSS 选择器 */
+  selector: string;
+}
+
+const PANEL_BORDER_TARGETS: PanelBorderTarget[] = [
+  { filePath: 'src/views/settings/_components/SettingsPage.vue', selector: '.settings-page' },
+  { filePath: 'src/layouts/default/components/ChatSider.vue', selector: '.chat-sider__content' },
+  { filePath: 'src/views/settings/provider/layout.vue', selector: '.provider-layout' },
+  { filePath: 'src/components/BWidget/renderers/WidgetCanvas.vue', selector: '.b-widget-canvas' },
+  { filePath: 'src/components/BEditor/Markdown.vue', selector: '.b-markdown-main' },
+  { filePath: 'src/components/BEditor/components/Sidebar.vue', selector: '.b-markdown-sidebar' }
+];
+
+/**
+ * 读取源码文件。
+ * @param filePath - 仓库相对路径
+ * @returns 文件文本
+ */
+function readSource(filePath: string): string {
+  return readFileSync(resolve(process.cwd(), filePath), 'utf8');
+}
+
+/**
+ * 读取指定选择器的首个规则体。
+ * @param source - 样式源码
+ * @param selector - CSS 选择器
+ * @returns 规则体文本
+ */
+function readRuleBody(source: string, selector: string): string {
+  const selectorIndex = source.indexOf(selector);
+  if (selectorIndex < 0) {
+    throw new Error(`未找到选择器：${selector}`);
+  }
+
+  const openBraceIndex = source.indexOf('{', selectorIndex);
+  if (openBraceIndex < 0) {
+    throw new Error(`选择器缺少规则体：${selector}`);
+  }
+
+  let depth = 0;
+  for (let index = openBraceIndex; index < source.length; index++) {
+    const char = source[index];
+    if (char === '{') {
+      depth++;
+    }
+    if (char === '}') {
+      depth--;
+    }
+    if (depth === 0) {
+      return source.slice(openBraceIndex + 1, index);
+    }
+  }
+
+  throw new Error(`选择器规则体未闭合：${selector}`);
+}
+
+describe('panel border styles', (): void => {
+  it('uses a theme-aware inset border on primary content containers', (): void => {
+    for (const target of PANEL_BORDER_TARGETS) {
+      const ruleBody = readRuleBody(readSource(target.filePath), target.selector);
+
+      expect(ruleBody, `${target.filePath} ${target.selector}`).toContain(PANEL_BORDER_SHADOW);
+    }
+  });
+});
