@@ -56,9 +56,13 @@ const state = reactive({
 const isLeft = computed(() => props.position === 'left');
 const containerRef = computed(() => rootRef.value?.parentElement);
 
-const sectionStyle = computed(() => ({
-  width: `${size.value}px`
-}));
+const sectionStyle = computed(() => {
+  if (size.value === 0) {
+    return { display: 'none' };
+  }
+
+  return { width: `${size.value}px` };
+});
 
 const splitterStyle = computed(() => {
   if (isLeft.value) {

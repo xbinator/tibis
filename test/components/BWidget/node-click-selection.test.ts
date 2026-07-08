@@ -289,6 +289,33 @@ function createGroupedWidgetData(): WidgetData {
 }
 
 /**
+ * 创建锁定循环组合测试数据，模拟 movie-on-list Widget 结构。
+ * @returns 带锁定循环组合节点的Widget 数据
+ */
+function createLockedLoopGroupedWidgetData(): WidgetData {
+  const data = createGroupedWidgetData();
+  const groupElement = data.elements[0];
+
+  if (groupElement) {
+    groupElement.loop = {
+      ...groupElement.loop,
+      enabled: true,
+      source: 'movies',
+      columns: 1
+    };
+    groupElement.locked = true;
+    groupElement.children = groupElement.children?.map(
+      (childElement: WidgetElement): WidgetElement => ({
+        ...childElement,
+        locked: true
+      })
+    );
+  }
+
+  return data;
+}
+
+/**
  * BWidget 暴露给页面层的创建命令。
  */
 interface BWidgetExpose {
@@ -322,6 +349,14 @@ interface WidgetRoundTripHostExpose {
 interface WidgetExternalSelectHostExpose {
   /** 更新外部Widget数据和设置目标 */
   updateValueAndSelect: (value: WidgetData, select: WidgetSelectTarget) => void;
+}
+
+/**
+ * 初始外部选择组合测试宿主公开方法。
+ */
+interface WidgetInitialGroupSelectHostExpose {
+  /** 读取父级接收到的设置目标 */
+  readSelectedTarget: () => WidgetSelectTarget;
 }
 
 /**
@@ -457,6 +492,39 @@ function createWidgetExternalSelectHost(): ReturnType<typeof defineComponent> {
           dataItem.value = value;
           selectedTarget.value = select;
         }
+      });
+
+      return {
+        dataItem,
+        selectedTarget
+      };
+    },
+    template: '<BWidget v-model:value="dataItem" v-model:select="selectedTarget" />'
+  });
+}
+
+/**
+ * 创建初始外部选择组合的测试宿主。
+ * @returns 父组件定义
+ */
+function createWidgetInitialGroupSelectHost(): ReturnType<typeof defineComponent> {
+  return defineComponent({
+    name: 'WidgetInitialGroupSelectHost',
+    components: {
+      BWidget
+    },
+    setup(
+      _,
+      { expose }
+    ): {
+      dataItem: Ref<WidgetData>;
+      selectedTarget: Ref<WidgetSelectTarget>;
+    } {
+      const dataItem = ref<WidgetData>(createGroupedWidgetData());
+      const selectedTarget = ref<WidgetSelectTarget>(dataItem.value.elements[0] ?? null);
+
+      expose({
+        readSelectedTarget: (): WidgetSelectTarget => selectedTarget.value
       });
 
       return {
@@ -756,6 +824,113 @@ describe('BWidget node click selection', () => {
     expect(findNodeById(wrapper, groupedElement?.id ?? '').classes()).toContain('is-selected');
     expect(wrapper.find('.moveable-stub').exists()).toBe(true);
     expect((host.readSelectedTarget() as WidgetElement | null)?.id).toBe(groupedElement?.id);
+    wrapper.unmount();
+  });
+
+  it('drags the selected group when pointer starts from one of its children', async (): Promise<void> => {
+    const data = createGroupedWidgetData();
+    const wrapper = mount(BWidget, {
+      props: {
+        value: data,
+        select: {}
+      },
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+
+    getWidgetExpose(wrapper).selectElementById('group-1');
+    await nextTick();
+    await nextTick();
+
+    await dispatchPointerEvent(findNodeById(wrapper, 'node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
+    await nextTick();
+
+    const selectedPayload = wrapper.emitted('update:select')?.at(-1)?.[0] as WidgetSelectTarget;
+    const latestData = (wrapper.emitted('update:value') as Array<[WidgetData]> | undefined)?.at(-1)?.[0] ?? data;
+    const movedGroup = latestData.elements[0];
+    const firstChild = movedGroup?.children?.[0];
+
+    expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('group-1');
+    expect(movedGroup?.position).toEqual({ x: 40, y: 20 });
+    expect(firstChild?.position).toEqual({ x: 80, y: 60 });
+    wrapper.unmount();
+  });
+
+  it('keeps an externally selected group target when pressing one of its children before internal selection sync', async (): Promise<void> => {
+    const wrapper = mount(createWidgetInitialGroupSelectHost(), {
+      attachTo: document.body
+    });
+
+    await dispatchPointerEvent(findNodeById(wrapper, 'node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+
+    const selectedTarget = (wrapper.vm as ComponentPublicInstance & WidgetInitialGroupSelectHostExpose).readSelectedTarget();
+
+    expect(selectedTarget && 'id' in selectedTarget ? selectedTarget.id : '').toBe('group-1');
+    wrapper.unmount();
+  });
+
+  it('keeps an externally selected locked loop group when pressing one of its children', async (): Promise<void> => {
+    const data = createLockedLoopGroupedWidgetData();
+    const wrapper = mount(BWidget, {
+      props: {
+        value: data,
+        select: data.elements[0]
+      },
+      attachTo: document.body
+    });
+
+    await dispatchPointerEvent(findNodeById(wrapper, 'node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
+    await nextTick();
+
+    const selectEmissions = ((wrapper.emitted('update:select') as Array<[WidgetSelectTarget]> | undefined) ?? []).map(
+      ([target]: [WidgetSelectTarget]): string => (isElementSelectTarget(target) ? target.id : '')
+    );
+    const selectionEmissions = ((wrapper.emitted('selection-change') as Array<[string[]]> | undefined) ?? []).map(
+      ([selection]: [string[]]): string[] => selection
+    );
+
+    expect(selectEmissions).not.toContain('node-1');
+    expect(selectionEmissions).not.toContainEqual(['node-1']);
+    if (selectEmissions.length > 0) {
+      expect(selectEmissions.at(-1)).toBe('group-1');
+    }
+    if (selectionEmissions.length > 0) {
+      expect(selectionEmissions.at(-1)).toEqual(['group-1']);
+    }
+    expect(findNodeById(wrapper, 'group-1').classes()).toContain('is-selected');
+    expect(findNodeById(wrapper, 'node-1').classes()).not.toContain('is-selected');
+    wrapper.unmount();
+  });
+
+  it('keeps group and child previews aligned while directly dragging a selected group child', async (): Promise<void> => {
+    const data = createGroupedWidgetData();
+    const wrapper = mount(BWidget, {
+      props: {
+        value: data,
+        select: {}
+      },
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+
+    getWidgetExpose(wrapper).selectElementById('group-1');
+    await nextTick();
+    await nextTick();
+
+    await dispatchPointerEvent(findNodeById(wrapper, 'node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+
+    expect(wrapper.find('.moveable-stub').exists()).toBe(false);
+    expect(findNodeById(wrapper, 'group-1').attributes('style')).toContain('translate(40px, 20px)');
+    expect(findNodeById(wrapper, 'node-1').attributes('style')).toContain('translate(120px, 80px)');
+
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
     wrapper.unmount();
   });
 

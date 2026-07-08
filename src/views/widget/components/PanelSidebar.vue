@@ -312,6 +312,7 @@ onBeforeUnmount((): void => {
   flex-shrink: 0;
   height: 100%;
   min-height: 0;
+  background: var(--bg-primary);
 }
 
 .widget-sidebar--overlay {

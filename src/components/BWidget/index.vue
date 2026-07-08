@@ -367,12 +367,51 @@ function setBoardSelection(selection: string[]): void {
 }
 
 /**
+ * 读取命中元素路径上当前已选中的节点 ID。
+ * @param id - 命中的元素 ID
+ * @returns 当前已选路径节点 ID，不存在时返回 null
+ */
+function getSelectedPathElementId(id: string): string | null {
+  const node = findWidgetElementTreeNode(board.state.value.elements, id);
+  if (!node) {
+    return null;
+  }
+
+  const reversedPath = node.path.slice().reverse();
+  if (isWidgetElementSelectTarget(selectedTarget.value) && reversedPath.includes(selectedTarget.value.id)) {
+    return selectedTarget.value.id;
+  }
+
+  const selectedIds = new Set(board.state.value.selection);
+
+  return reversedPath.find((pathId: string): boolean => selectedIds.has(pathId)) ?? null;
+}
+
+/**
  * 读取元素点击后应使用的选区。
  * @param id - 元素 ID
  * @returns 目标选区
  */
 function getSelectionForElement(id: string): string[] {
-  return [id];
+  const selectedPathElementId = getSelectedPathElementId(id);
+  if (!selectedPathElementId) {
+    return [id];
+  }
+
+  if (board.state.value.selection.includes(selectedPathElementId)) {
+    return [...board.state.value.selection];
+  }
+
+  return [selectedPathElementId];
+}
+
+/**
+ * 读取元素指针拖拽应操作的节点 ID。
+ * @param id - 命中的元素 ID
+ * @returns 拖拽目标元素 ID
+ */
+function getDragTargetForElement(id: string): string {
+  return getSelectedPathElementId(id) ?? id;
 }
 
 /**
@@ -474,6 +513,7 @@ watch(
   { immediate: true }
 );
 
+syncBoardSelectionFromSelectedTarget(selectedTarget.value);
 watch(() => board.state.value.selection, handleSelectionChange, { immediate: true });
 watch(
   () => [selectedTarget.value, board.state.value.elements],
@@ -1110,7 +1150,7 @@ function startDirectDrag(id: string, event: PointerEvent, selectOnEnd: boolean):
 
   const abortController = new AbortController();
   cancelDirectDrag();
-  hideMoveableDuringDirectDrag.value = selectOnEnd;
+  hideMoveableDuringDirectDrag.value = true;
   directDragSession = {
     id,
     startClient: {
@@ -1158,14 +1198,15 @@ function handleElementSelect(id: string, event: PointerEvent): void {
   }
 
   const selection = getSelectionForElement(id);
-  if (isSameSelection(board.state.value.selection, selection)) {
-    return;
-  }
+  const dragTargetId = getDragTargetForElement(id);
+  const selectionChanged = !isSameSelection(board.state.value.selection, selection);
 
-  activeElementId.value = null;
-  board.setSelection(selection);
+  if (selectionChanged) {
+    activeElementId.value = null;
+    board.setSelection(selection);
+  }
   if (selection.length === 1) {
-    startDirectDrag(id, event, true);
+    startDirectDrag(dragTargetId, event, selectionChanged);
   }
 }
 
