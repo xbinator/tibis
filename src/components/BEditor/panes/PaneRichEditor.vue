@@ -609,6 +609,8 @@ defineExpose({
     }
 
     .ai-selection-highlight {
+      font-style: inherit;
+      text-decoration: inherit;
       background: var(--selection-bg);
       box-shadow: 0 0.2em 0 0 var(--selection-bg), 0 -0.2em 0 0 var(--selection-bg);
       -webkit-box-decoration-break: clone;
@@ -623,7 +625,7 @@ defineExpose({
 
       .ai-selection-highlight {
         vertical-align: baseline;
-        box-shadow: 0 0.34em 0 0 var(--selection-bg), 0 -0.38em 0 0 var(--selection-bg);
+        box-shadow: 0 0.38em 0 0 var(--selection-bg), 0 -0.52em 0 0 var(--selection-bg);
       }
     }
 

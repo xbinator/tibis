@@ -54,8 +54,18 @@
     <!-- 用户消息底部：时间戳 + 回退按钮 + 复制按钮（hover 可见） -->
     <div v-if="isUserMessage && message.finished" :class="bem('toolbar', { right: isUserMessage })">
       <span :class="bem('time')">{{ formatMessageTime(message.createdAt) }}</span>
-      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" @click="$emit('rollback', message)" />
+      <BButton v-if="showRollback" type="text" size="small" square icon="lucide:undo-2" @click="handleRollbackClick" />
       <BButton v-if="showContainer" type="text" size="small" square icon="lucide:copy" @click="handleCopy(message)" />
+    </div>
+
+    <!-- 回退二次确认条（inline） -->
+    <div v-if="confirmRollback" :class="bem('rollback-confirm')">
+      <div :class="bem('rollback-confirm-title')">确定要回退至此回答重新发起？</div>
+      <span :class="bem('rollback-confirm-text')">回退将删除该消息之后的所有内容，不可撤销。</span>
+      <div :class="bem('rollback-confirm-actions')">
+        <BButton type="text" size="mini" @click="handleRollbackCancel">取消</BButton>
+        <BButton type="primary" size="mini" @click="handleRollbackConfirm">确认</BButton>
+      </div>
     </div>
   </div>
 </template>
@@ -70,7 +80,7 @@ import type { Message } from '../utils/types';
 import type { AIAwaitingUserChoiceQuestion } from 'types/ai';
 import type { ChatMessageErrorPart, ChatMessagePart, ChatMessageTextPart, ChatMessageThinkingPart, ChatMessageToolPart } from 'types/chat';
 import type { ChatMessageCompactionPart } from 'types/chat-runtime';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import BBubble from '@/components/BBubble/index.vue';
 import { useClipboard } from '@/hooks/useClipboard';
 import type { ImagePreviewItem } from '@/hooks/useImagePreview';
@@ -103,7 +113,7 @@ const props = defineProps<{
   submitAction?: (action: SubmitAction) => Promise<void> | void;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'edit', message: Message): void;
   (e: 'regenerate', message: Message): void;
   (e: 'rollback', message: Message): void;
@@ -201,6 +211,31 @@ async function handleImageClick(index: number): Promise<void> {
 function handleCopy(message: Message): void {
   const content = extractLastTextPart(message);
   clipboard(content, { successMessage: '已复制到剪贴板' });
+}
+
+/** 是否处于回退二次确认态（inline 确认条） */
+const confirmRollback = ref(false);
+
+/**
+ * 点击回退按钮：不直接 emit，而是切到确认态，展示 inline 确认条。
+ */
+function handleRollbackClick(): void {
+  confirmRollback.value = true;
+}
+
+/**
+ * 确认回退：向上 emit rollback 并收起确认条。
+ */
+function handleRollbackConfirm(): void {
+  confirmRollback.value = false;
+  emit('rollback', props.message);
+}
+
+/**
+ * 取消回退：仅收起确认条。
+ */
+function handleRollbackCancel(): void {
+  confirmRollback.value = false;
 }
 </script>
 
@@ -301,5 +336,36 @@ function handleCopy(message: Message): void {
   font-size: 11px;
   color: var(--text-primary);
   user-select: none;
+}
+
+.message-bubble__rollback-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--border-primary);
+}
+
+.message-bubble__rollback-confirm-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.message-bubble__rollback-confirm-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-bubble__rollback-confirm-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
 }
 </style>

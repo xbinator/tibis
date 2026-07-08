@@ -109,7 +109,6 @@ import { useChatSessionStore } from '@/stores/chat/session';
 import { useCommandPanelStore } from '@/stores/ui/commandPanel';
 import { useFilesStore } from '@/stores/workspace/files';
 import type { FileReferenceNavigationTarget } from '@/utils/file/reference';
-import { Modal } from '@/utils/modal';
 import { createNamespace } from '@/utils/namespace';
 import ConfirmationSheet from './components/ConfirmationSheet.vue';
 import ConversationView from './components/ConversationView.vue';
@@ -1059,7 +1058,7 @@ async function handleCancel(): Promise<void> {
 
 /**
  * 处理回退请求。
- * 弹出二次确认后执行截断、恢复输入框。
+ * 二次确认已前置到 MessageBubble 的 inline 确认条，此处直接执行截断与恢复。
  * @param message - 目标用户消息
  */
 async function handleRollback(message: Message): Promise<void> {
@@ -1070,13 +1069,6 @@ async function handleRollback(message: Message): Promise<void> {
   if (loading.value) {
     await handleAbort();
   }
-
-  const afterCount = messages.value.length - index - 1;
-  const [cancelled] = await Modal.confirm('确认回退', `将删除该用户消息及其后的 ${afterCount} 条消息。此操作不可撤销，是否继续？`, {
-    confirmText: '确认回退',
-    cancelText: '取消'
-  });
-  if (cancelled) return;
 
   const rolledBackMessages = messages.value.slice(index);
   rememberRolledBackRuntimeIds(rolledBackMessages);
