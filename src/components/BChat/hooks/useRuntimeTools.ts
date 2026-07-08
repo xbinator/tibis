@@ -21,10 +21,12 @@ import { createOpenWidgetTool, createWidgetTool } from '@/ai/tools/builtin/Widge
 import type { AIToolConfirmationAdapter } from '@/ai/tools/confirmation';
 import { editorToolContextRegistry } from '@/ai/tools/context/editor';
 import { webviewToolContextRegistry } from '@/ai/tools/context/webview';
-import { createWidgetHttpClient, executeWidgetRuntime } from '@/components/BWidget/utils/widgetRuntime';
+import { createWidgetHttpClient, executeWidgetRuntime, type WidgetConsoleLevel, type WidgetLogLevel } from '@/components/BWidget/utils/widgetRuntime';
+import { formatWidgetLogArgs } from '@/components/BWidget/utils/widgetRuntime/logger';
 import { useOpenDraft } from '@/hooks/useOpenDraft';
 import { useOpenFile } from '@/hooks/useOpenFile';
 import { useWorkspaceRoot } from '@/hooks/useWorkspaceRoot';
+import { logger } from '@/shared/logger';
 import { native } from '@/shared/platform';
 import { useSkillStore } from '@/stores/ai/skill';
 import { useToolSettingsStore } from '@/stores/ai/toolSettings';
@@ -77,6 +79,30 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
   const { workspaceRoot, getWorkspaceRoot } = useWorkspaceRoot();
   /** open_widget 前置执行阶段复用的托管 HTTP 客户端。 */
   const widgetHttpClient = createWidgetHttpClient();
+  /**
+   * 把 open_widget 预执行阶段的小组件日志写入应用日志。
+   * @param level - 日志级别
+   * @param args - 原始日志参数
+   */
+  async function handleWidgetLogger(level: WidgetLogLevel, args: unknown[]): Promise<void> {
+    await logger[level](`[widget] ${formatWidgetLogArgs(args)}`);
+  }
+
+  /**
+   * 把 open_widget 预执行阶段的小组件 console 转发到 DevTools。
+   * @param level - console 级别
+   * @param args - 原始 console 参数
+   */
+  function handleWidgetConsole(level: WidgetConsoleLevel, args: unknown[]): void {
+    console[level](...args);
+  }
+
+  /** open_widget 前置执行阶段复用的运行态宿主能力。 */
+  const openWidgetRuntimeHost = {
+    http: widgetHttpClient,
+    onLogger: handleWidgetLogger,
+    onConsole: handleWidgetConsole
+  };
 
   const allBuiltinTools = createBuiltinTools({
     confirm: options.confirm,
@@ -166,7 +192,7 @@ export function useRuntimeTools(options: UseRuntimeToolsOptions): UseRuntimeTool
       }
       dynamicTools.push(
         createOpenWidgetTool(widgetStore, {
-          executeWidget: ({ state }) => executeWidgetRuntime(state, { http: widgetHttpClient })
+          executeWidget: ({ state }) => executeWidgetRuntime(state, openWidgetRuntimeHost)
         })
       );
     }

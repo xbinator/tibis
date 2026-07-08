@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetExecuteMethod } from '@/components/BWidget/utils/widgetExecuteMethod';
 import {
+  createWidgetRuntimeSession,
   createWidgetRuntimeInstance as createWidgetRuntimeInstanceBase,
   executeWidgetRuntime,
   initWidgetMountState as initWidgetMountStateBase,
@@ -556,6 +557,119 @@ describe('widgetRuntime', (): void => {
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
+  it('keeps compatibility runtime instance interaction calls one-shot', async (): Promise<void> => {
+    const part = createWidgetPart('export default class Counter extends Widget {}');
+    const instance = createWidgetRuntimeInstance(part);
+
+    const firstResult = await instance.runInteraction('this.count = (this.count ?? 0) + 1');
+    const secondResult = await instance.runInteraction('this.count = (this.count ?? 0) + 1');
+
+    expect(firstResult.state.renderContext.data).toEqual({ count: 1 });
+    expect(secondResult.state.renderContext.data).toEqual({ count: 1 });
+  });
+
+  it('keeps private instance state from mounted to method runs in one widget session', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class MovieList extends Widget {',
+        '  private cache = new Map()',
+        '',
+        '  onMounted() {',
+        "    this.cache.set('message', '已挂载')",
+        '  }',
+        '',
+        '  buttonByClick() {',
+        "    this.message = this.cache.get('message')",
+        "    this.$sendMessage(this.message)",
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      const mountedResult = await session.mounted();
+      const clickedResult = await session.run('buttonByClick');
+
+      expect(mountedResult.state.renderContext.data).toEqual({});
+      expect(clickedResult.state.renderContext.data).toEqual({
+        message: '已挂载'
+      });
+      expect(clickedResult.sendMessage).toEqual({ content: '已挂载', isError: false });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('hydrates execute snapshot data before display session mounted and method runs', async (): Promise<void> => {
+    const part = createExecuteWidgetPart(
+      [
+        'export default class MovieList extends Widget {',
+        '  async onExecute() {',
+        "    this.message = '来自执行阶段'",
+        '  }',
+        '',
+        '  onMounted() {',
+        '    this.mountedMessage = this.message',
+        '  }',
+        '',
+        '  buttonByClick() {',
+        '    this.clickedMessage = this.message',
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const executeResult = await executeWidgetRuntime(part, TEST_WIDGET_RUN_OPTIONS);
+    const session = createWidgetRuntimeSession(executeResult.state, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      const mountedResult = await session.mounted();
+      const clickedResult = await session.run('buttonByClick');
+
+      expect(mountedResult.state.renderContext.data).toMatchObject({
+        message: '来自执行阶段',
+        mountedMessage: '来自执行阶段'
+      });
+      expect(clickedResult.state.renderContext.data).toMatchObject({
+        clickedMessage: '来自执行阶段',
+        message: '来自执行阶段',
+        mountedMessage: '来自执行阶段'
+      });
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('runs existing interaction code against the same widget session instance', async (): Promise<void> => {
+    const part = createWidgetPart(
+      [
+        'export default class MovieList extends Widget {',
+        '  private cache = new Map()',
+        '',
+        '  onMounted() {',
+        "    this.cache.set('message', '兼容交互')",
+        '  }',
+        '',
+        '  buttonByClick() {',
+        "    this.message = this.cache.get('message')",
+        '  }',
+        '}'
+      ].join('\n')
+    );
+    const session = createWidgetRuntimeSession(part, TEST_WIDGET_RUN_OPTIONS);
+
+    try {
+      await session.mounted();
+      const result = await session.runInteraction('buttonByClick()');
+
+      expect(result.state.renderContext.data).toEqual({
+        message: '兼容交互'
+      });
+    } finally {
+      session.dispose();
+    }
+  });
+
   it('waits for unawaited sendMessage calls before finishing mounted scripts', async (): Promise<void> => {
     const part = createWidgetPart(
       [
@@ -613,7 +727,7 @@ describe('widgetRuntime', (): void => {
     expect(result.sendMessage).toEqual({ content: '确认下单', isError: false });
   });
 
-  it('runs empty default confirm method through widget this without injecting the shadowed binding name', async (): Promise<void> => {
+  it('does not expose a default confirm method from generated scripts', async (): Promise<void> => {
     const { code } = createDefaultWidgetExecuteMethod('weather');
     const part: WidgetRuntimeState = {
       ...createWidgetPart(code),
@@ -626,9 +740,7 @@ describe('widgetRuntime', (): void => {
       }
     };
 
-    const result = await createWidgetRuntimeInstance(part).runInteraction('this.confirm()');
-
-    expect(result.sendMessage).toBeUndefined();
+    await expect(createWidgetRuntimeInstance(part).runInteraction('this.confirm()')).rejects.toThrow();
   });
 
   it('keeps TypeScript private and protected helpers out of direct interaction bindings', async (): Promise<void> => {

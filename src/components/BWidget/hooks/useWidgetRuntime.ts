@@ -10,6 +10,12 @@ import type { InjectionKey, Ref } from 'vue';
  */
 export interface WidgetRuntimeController {
   /**
+   * 运行 Widget 实例上的公开方法。
+   * @param methodName - 方法名
+   * @param args - 方法参数
+   */
+  run: (methodName: string, ...args: unknown[]) => void;
+  /**
    * 运行元素自己声明的交互表达式。
    * @param interactionCode - 元素交互表达式
    */

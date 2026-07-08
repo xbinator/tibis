@@ -44,6 +44,30 @@ export interface SandboxRunOptions {
 }
 
 /**
+ * 沙箱执行上下文。
+ */
+export interface SandboxExecutionContext {
+  /** 同一个沙箱上下文内复用的遮蔽全局变量值。 */
+  shadowValues: unknown[];
+}
+
+/**
+ * 可连续运行多段脚本的沙箱 session。
+ */
+export interface SandboxSession {
+  /**
+   * 在当前 session 中运行脚本。
+   * @param payload - 运行载荷
+   * @returns 沙箱运行结果
+   */
+  run(payload: SandboxRunPayload): Promise<SandboxRunResult>;
+  /**
+   * 销毁当前 session。
+   */
+  dispose(): void;
+}
+
+/**
  * 沙箱执行桥接接口。
  */
 export interface SandboxExecutionBridge {

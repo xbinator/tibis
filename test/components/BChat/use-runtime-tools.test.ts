@@ -89,14 +89,17 @@ const widgetRuntimeMockState = vi.hoisted(() => {
     patch: vi.fn(),
     delete: vi.fn()
   };
+  const executeWidgetRuntime = vi.fn(
+    async (state: unknown): Promise<{ state: unknown; execution: { status: 'success'; output: undefined } }> => ({
+      state,
+      execution: { status: 'success', output: undefined }
+    })
+  );
 
   return {
     httpClient,
     createWidgetHttpClient: vi.fn(() => httpClient),
-    executeWidgetRuntime: vi.fn(async (state: unknown): Promise<{ state: unknown; execution: { status: 'success'; output: undefined } }> => ({
-      state,
-      execution: { status: 'success', output: undefined }
-    }))
+    executeWidgetRuntime
   };
 });
 
@@ -299,7 +302,7 @@ describe('useRuntimeTools', () => {
     );
   });
 
-  it('passes the managed widget http client to the open_widget execute lifecycle', async (): Promise<void> => {
+  it('passes a managed widget runtime host to the open_widget execute lifecycle', async (): Promise<void> => {
     storeMockState.widgetStore.initialized = true;
     storeMockState.widgetStore.getEnabledWidgets.mockReturnValue([
       {
@@ -324,6 +327,10 @@ describe('useRuntimeTools', () => {
     await options.executeWidget?.({ state });
 
     expect(widgetRuntimeMockState.createWidgetHttpClient).toHaveBeenCalledTimes(1);
-    expect(widgetRuntimeMockState.executeWidgetRuntime).toHaveBeenCalledWith(state, { http: widgetRuntimeMockState.httpClient });
+    expect(widgetRuntimeMockState.executeWidgetRuntime).toHaveBeenCalledWith(state, {
+      http: widgetRuntimeMockState.httpClient,
+      onLogger: expect.any(Function),
+      onConsole: expect.any(Function)
+    });
   });
 });

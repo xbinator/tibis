@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
-import { initWidgetMountState, type WidgetRuntimeState } from '@/components/BWidget/utils/widgetRuntime';
+import { createWidgetRuntimeSession, executeWidgetRuntime, initWidgetMountState, type WidgetRuntimeState } from '@/components/BWidget/utils/widgetRuntime';
 import { formatWidgetLogArgs } from '@/components/BWidget/utils/widgetRuntime/logger';
 import type { WidgetRuntimePatch } from '@/components/BWidget/utils/widgetRuntime/patch';
 
@@ -219,6 +219,43 @@ describe('widgetRuntime $logger bridge', (): void => {
     expect(loggerCalls[0]?.args[2]).toBeUndefined();
   });
 
+  it('executeWidgetRuntime forwards $logger calls from onExecute', async (): Promise<void> => {
+    const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async onExecute() {', "    await this.$logger.info('execute-log')", '  }']));
+
+    await executeWidgetRuntime(state, createCaptureOptions([], loggerCalls));
+
+    expect(loggerCalls).toEqual([{ level: 'info', args: ['execute-log'] }]);
+  });
+
+  it('runtime session mounted forwards $logger calls from onMounted', async (): Promise<void> => {
+    const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async onMounted() {', "    await this.$logger.warn('mount-log')", '  }']));
+    const session = createWidgetRuntimeSession(state, createCaptureOptions([], loggerCalls));
+
+    try {
+      await session.mounted();
+    } finally {
+      session.dispose();
+    }
+
+    expect(loggerCalls).toEqual([{ level: 'warn', args: ['mount-log'] }]);
+  });
+
+  it('runtime session run forwards $logger calls from custom methods', async (): Promise<void> => {
+    const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  async submitOrder() {', "    await this.$logger.error('interaction-log')", '  }']));
+    const session = createWidgetRuntimeSession(state, createCaptureOptions([], loggerCalls));
+
+    try {
+      await session.run('submitOrder');
+    } finally {
+      session.dispose();
+    }
+
+    expect(loggerCalls).toEqual([{ level: 'error', args: ['interaction-log'] }]);
+  });
+
   it('supports circular and BigInt args without failing runtime', async (): Promise<void> => {
     const loggerCalls: Array<{ level: 'info' | 'warn' | 'error'; args: unknown[] }> = [];
     const state = createLoggerRuntimeState(
@@ -297,6 +334,29 @@ describe('widgetRuntime $logger bridge', (): void => {
 });
 
 describe('widgetRuntime console bridge', (): void => {
+  it('executeWidgetRuntime forwards console calls from onExecute', async (): Promise<void> => {
+    const consoleCalls: WidgetConsoleCall[] = [];
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  onExecute() {', "    console.log('execute-console')", '  }']));
+
+    await executeWidgetRuntime(state, createCaptureOptions([], [], consoleCalls));
+
+    expect(consoleCalls).toEqual([{ level: 'log', args: ['execute-console'] }]);
+  });
+
+  it('runtime session run forwards console calls from custom methods', async (): Promise<void> => {
+    const consoleCalls: WidgetConsoleCall[] = [];
+    const state = createLoggerRuntimeState(createLoggerWidgetCode(['  submitOrder() {', "    console.info('interaction-console')", '  }']));
+    const session = createWidgetRuntimeSession(state, createCaptureOptions([], [], consoleCalls));
+
+    try {
+      await session.run('submitOrder');
+    } finally {
+      session.dispose();
+    }
+
+    expect(consoleCalls).toEqual([{ level: 'info', args: ['interaction-console'] }]);
+  });
+
   it('forwards console.log to onConsole with level and args', async (): Promise<void> => {
     const consoleCalls: WidgetConsoleCall[] = [];
     const state = createLoggerRuntimeState(createLoggerWidgetCode(['  onMounted() {', "    console.log('hello', { count: 1 })", '  }']));

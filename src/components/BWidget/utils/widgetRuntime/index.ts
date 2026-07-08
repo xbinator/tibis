@@ -9,7 +9,16 @@ import type { WidgetExecutionResult, WidgetHttpClient, WidgetRenderContext, Widg
 import { cloneDeep, isPlainObject } from 'lodash-es';
 import ts from 'typescript';
 import { getElectronAPI } from '@/shared/platform/electron-api';
-import { compileSandboxSource, createSandboxHttpHost, runSandboxCode, SANDBOX_HTTP_HOST_FUNCTION_NAME } from '@/utils/sandbox';
+import {
+  compileSandboxSource,
+  createSandboxHttpHost,
+  createSandboxSession,
+  runSandboxCode,
+  SANDBOX_HTTP_HOST_FUNCTION_NAME,
+  type SandboxRunOptions,
+  type SandboxRunPayload,
+  type SandboxSession
+} from '@/utils/sandbox';
 import { isWidgetRuntimePatchArray } from './patch';
 
 /** 沙箱中用于上报 Widget patch 的宿主函数名。 */
@@ -22,10 +31,10 @@ const SANDBOX_WIDGET_LOGGER_HOST_FUNCTION_NAME = '__sandboxWidgetLogger';
 const SANDBOX_WIDGET_CONSOLE_HOST_FUNCTION_NAME = '__sandboxWidgetConsole';
 
 /** 小组件日志级别，与 logger.info/warn/error 对齐。 */
-type WidgetLogLevel = 'info' | 'warn' | 'error';
+export type WidgetLogLevel = 'info' | 'warn' | 'error';
 
 /** 小组件 console 级别，对齐标准 console 方法。 */
-type WidgetConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
+export type WidgetConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
 
 /** 缺省 Widget class 脚本。 */
 const EMPTY_WIDGET_CLASS_SCRIPT = 'export default class Component extends Widget {}';
@@ -60,9 +69,9 @@ export interface WidgetRuntimeChange {
 }
 
 /**
- * 小组件脚本生命周期执行选项。
+ * 小组件运行态宿主能力。
  */
-interface WidgetLifecycleRunOptions {
+export interface WidgetRuntimeHost {
   /** 小组件托管 HTTP 客户端。 */
   http?: WidgetHttpClient;
   /** 是否使用 Worker 执行脚本。 */
@@ -88,6 +97,10 @@ interface WidgetScriptRunPayload {
   scriptCode: string;
   /** 元素声明的交互脚本。 */
   interactionCode?: string;
+  /** 需要直接调用的 Widget 实例方法名。 */
+  methodName?: string;
+  /** 直接调用 Widget 实例方法时传入的参数。 */
+  methodArgs?: unknown[];
   /** 需要执行的生命周期。 */
   lifecycleName?: WidgetScriptLifecycleName;
   /** 小组件启动入参。 */
@@ -117,16 +130,20 @@ interface WidgetScriptRunResult {
 /**
  * 小组件脚本运行选项。
  */
-type WidgetScriptRunOptions = Pick<WidgetLifecycleRunOptions, 'http' | 'useWorker' | 'timeoutMs' | 'onPatch' | 'onLogger' | 'onConsole'>;
+type WidgetScriptRunOptions = Pick<WidgetRuntimeHost, 'http' | 'useWorker' | 'timeoutMs' | 'onPatch' | 'onLogger' | 'onConsole'>;
 
 /**
  * 小组件 part 沙箱执行选项。
  */
-interface WidgetPartSandboxOptions extends WidgetLifecycleRunOptions {
+interface WidgetPartSandboxOptions extends WidgetRuntimeHost {
   /** 需要运行的生命周期。 */
   lifecycleName?: WidgetScriptLifecycleName;
   /** 元素交互脚本。 */
   interactionCode?: string;
+  /** 需要直接调用的 Widget 实例方法名。 */
+  methodName?: string;
+  /** 直接调用 Widget 实例方法时传入的参数。 */
+  methodArgs?: unknown[];
 }
 
 /**
@@ -167,6 +184,26 @@ export interface WidgetRuntimeInstance {
    * @returns 交互执行后的运行态结果
    */
   runInteraction: (interactionCode: string) => Promise<WidgetRuntimeRunResult>;
+}
+
+/**
+ * 小组件显示期运行态 session。
+ */
+export interface WidgetRuntimeSession extends WidgetRuntimeInstance {
+  /**
+   * 执行小组件 onMounted 生命周期。
+   * @returns onMounted 执行结果
+   */
+  mounted: () => Promise<WidgetRuntimeRunResult>;
+  /**
+   * 运行 Widget 实例上的公开方法。
+   * @param methodName - 方法名
+   * @param args - 方法参数
+   * @returns 方法执行后的运行态结果
+   */
+  run: (methodName: string, ...args: unknown[]) => Promise<WidgetRuntimeRunResult>;
+  /** 销毁运行态 session。 */
+  dispose: () => void;
 }
 
 /**
@@ -456,20 +493,39 @@ function compileWidgetClassScript(code: string): string {
 }
 
 /**
+ * 创建 Widget 脚本 session 属性名。
+ * @param scriptCode - Widget 脚本源码
+ * @returns 沙箱全局 session 属性名
+ */
+function createWidgetScriptSessionProperty(scriptCode: string): string {
+  let hash = 2166136261;
+
+  for (let index = 0; index < scriptCode.length; index += 1) {
+    hash ^= scriptCode.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+
+  return `__widgetRuntimeSession:${scriptCode.length}:${hash.toString(36)}`;
+}
+
+/**
  * 生成小组件协议适配脚本。
  * @param payload - 小组件运行载荷
  * @returns 可交给通用沙箱执行的脚本
  */
 function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
   const lifecycleName = payload.lifecycleName ? JSON.stringify(payload.lifecycleName) : 'undefined';
+  const methodName = payload.methodName !== undefined ? JSON.stringify(payload.methodName) : 'undefined';
+  const sessionProperty = JSON.stringify(createWidgetScriptSessionProperty(payload.scriptCode));
   const interactionCode =
     payload.interactionCode !== undefined ? JSON.stringify(compileSandboxSource(payload.interactionCode, 'widget-interaction.ts')) : 'undefined';
 
   return [
-    'const __widgetInput = __clone(__initialWidgetInput)',
-    'const __widgetOutput = __clone(__initialWidgetOutput)',
-    'let __widgetData = __clone(__initialWidgetData)',
+    `const __widgetRuntimeSessionProperty = ${sessionProperty}`,
+    'let __widgetRuntimeSession',
+    'let __widgetData',
     'let __widgetClass',
+    'let __widgetNonPublicMemberNames = new Set()',
     'const __widgetReservedBindingNames = new Set([',
     "  'arguments', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default',",
     "  'delete', 'do', 'else', 'enum', 'eval', 'export', 'extends', 'false', 'finally', 'for', 'function',",
@@ -644,6 +700,15 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  }',
     '}',
     '',
+    'function __getCurrentExecutionState() {',
+    "  if (!__widgetRuntimeSession || !__widgetRuntimeSession.currentExecutionState) throw new Error('小组件运行态 session 未初始化')",
+    '  return __widgetRuntimeSession.currentExecutionState',
+    '}',
+    '',
+    'function __setCurrentExecutionState(executionState) {',
+    '  __widgetRuntimeSession.currentExecutionState = executionState',
+    '}',
+    '',
     'function __isPatchPathSegment(value) {',
     "  return typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)",
     '}',
@@ -718,7 +783,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return proxy',
     '}',
     '',
-    'function __createWidgetDataProxy(value, executionState, proxyCache, path) {',
+    'function __createWidgetDataProxy(value, proxyCache, path) {',
     '  if (!__isObjectLike(value)) return value',
     '  const cachedProxy = proxyCache.get(value)',
     '  if (cachedProxy) return cachedProxy',
@@ -726,9 +791,10 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    get(target, property, receiver) {',
     '      const childValue = Reflect.get(target, property, receiver)',
     '      const childPath = __appendPatchPath(path, target, property)',
-    '      return childPath ? __createWidgetDataProxy(childValue, executionState, proxyCache, childPath) : childValue',
+    '      return childPath ? __createWidgetDataProxy(childValue, proxyCache, childPath) : childValue',
     '    },',
     '    set(target, property, nextValue, receiver) {',
+    '      const executionState = __getCurrentExecutionState()',
     '      const previousValue = Reflect.get(target, property, receiver)',
     '      const clonedValue = __clone(nextValue)',
     '      const didSet = Reflect.set(target, property, clonedValue, receiver)',
@@ -741,6 +807,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '      return didSet',
     '    },',
     '    deleteProperty(target, property) {',
+    '      const executionState = __getCurrentExecutionState()',
     '      const hadProperty = Object.prototype.hasOwnProperty.call(target, property)',
     '      const didDelete = Reflect.deleteProperty(target, property)',
     '      if (didDelete && hadProperty) {',
@@ -755,14 +822,15 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return proxy',
     '}',
     '',
-    'function __defineWidgetDataAccessor(target, key, executionState, proxyCache) {',
+    'function __defineWidgetDataAccessor(target, key, proxyCache) {',
     '  Object.defineProperty(target, key, {',
     '    configurable: true,',
     '    enumerable: true,',
     '    get() {',
-    '      return __createWidgetDataProxy(__widgetData[key], executionState, proxyCache, [key])',
+    '      return __createWidgetDataProxy(__widgetData[key], proxyCache, [key])',
     '    },',
     '    set(value) {',
+    '      const executionState = __getCurrentExecutionState()',
     '      const previousValue = __widgetData[key]',
     '      const clonedValue = __clone(value)',
     '      __widgetData[key] = clonedValue',
@@ -774,22 +842,23 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  })',
     '}',
     '',
-    'function __createWidgetRootProxy(target, executionState, proxyCache) {',
+    'function __createWidgetRootProxy(target, proxyCache) {',
     '  return new Proxy(target, {',
     '    get(targetObject, property, receiver) {',
     '      if (Reflect.has(targetObject, property)) return Reflect.get(targetObject, property, receiver)',
     "      if (typeof property === 'string' && Object.prototype.hasOwnProperty.call(__widgetData, property)) {",
-    '        return __createWidgetDataProxy(__widgetData[property], executionState, proxyCache, [property])',
+    '        return __createWidgetDataProxy(__widgetData[property], proxyCache, [property])',
     '      }',
     '      return undefined',
     '    },',
     '    set(targetObject, property, value, receiver) {',
+    '      const executionState = __getCurrentExecutionState()',
     '      if (Reflect.has(targetObject, property)) return Reflect.set(targetObject, property, value, receiver)',
     "      if (typeof property !== 'string') return Reflect.set(targetObject, property, value, receiver)",
     '      const previousValue = __widgetData[property]',
     '      const clonedValue = __clone(value)',
     '      __widgetData[property] = clonedValue',
-    '      __defineWidgetDataAccessor(targetObject, property, executionState, proxyCache)',
+    '      __defineWidgetDataAccessor(targetObject, property, proxyCache)',
     '      if (!Object.is(previousValue, value)) {',
     '        executionState.dataChanged = true',
     '        __recordPatch(executionState, __createSetPatch(__widgetData, [property], clonedValue))',
@@ -800,6 +869,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "      return Reflect.has(targetObject, property) || (typeof property === 'string' && Object.prototype.hasOwnProperty.call(__widgetData, property))",
     '    },',
     '    deleteProperty(targetObject, property) {',
+    '      const executionState = __getCurrentExecutionState()',
     "      if (property === '$input' || property === '$output' || property === '$http' || property === '$sendMessage' || property === '$logger') {",
     '        return Reflect.deleteProperty(targetObject, property)',
     '      }',
@@ -818,18 +888,19 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  })',
     '}',
     '',
-    'function __createWidgetThisContext(widgetInstance, executionState) {',
+    'function __createWidgetThisContext(widgetInstance) {',
     '  const proxyCache = new WeakMap()',
     '  const context = widgetInstance',
     '  Object.defineProperties(context, {',
-    '    $input: { configurable: false, enumerable: false, get() { return __createReadonlyProxy(__widgetInput) } },',
-    '    $output: { configurable: false, enumerable: false, get() { return __createReadonlyProxy(__widgetOutput) } },',
-    '    $http: { configurable: true, enumerable: false, value: __createWidgetHttpClient(executionState) },',
-    '    $logger: { configurable: true, enumerable: false, value: __createWidgetLogger(executionState) },',
+    '    $input: { configurable: true, enumerable: false, get() { return __createReadonlyProxy(__widgetRuntimeSession.input) } },',
+    '    $output: { configurable: true, enumerable: false, get() { return __createReadonlyProxy(__widgetRuntimeSession.output) } },',
+    '    $http: { configurable: true, enumerable: false, get() { return __createWidgetHttpClient(__getCurrentExecutionState()) } },',
+    '    $logger: { configurable: true, enumerable: false, get() { return __createWidgetLogger(__getCurrentExecutionState()) } },',
     '    $sendMessage: {',
     '      configurable: true,',
     '      enumerable: false,',
     '      async value(message) {',
+    '        const executionState = __getCurrentExecutionState()',
     '        const sendMessage = __normalizeSendMessage(message)',
     '        if (sendMessage) executionState.sendMessage = sendMessage',
     '        await __flushPatches(executionState)',
@@ -838,9 +909,9 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  })',
     '  for (const key of Object.keys(__widgetData)) {',
     "    if (key === '$input' || key === '$output' || key === '$http' || key === '$sendMessage' || key === '$logger') continue",
-    '    __defineWidgetDataAccessor(context, key, executionState, proxyCache)',
+    '    __defineWidgetDataAccessor(context, key, proxyCache)',
     '  }',
-    '  return __createWidgetRootProxy(context, executionState, proxyCache)',
+    '  return __createWidgetRootProxy(context, proxyCache)',
     '}',
     '',
     'function __canUseAsBindingName(name) {',
@@ -885,7 +956,16 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "  return typeof lifecycle === 'function' ? lifecycle : undefined",
     '}',
     '',
-    'function __createMethodBindings(widgetThis, widgetInstance, executionState) {',
+    'function __readWidgetPublicMethod(widgetInstance, methodName) {',
+    "  if (typeof methodName !== 'string' || !methodName.trim()) return undefined",
+    '  if (__widgetLifecycleNames.has(methodName)) return undefined',
+    '  const matched = __collectWidgetPrototypeDescriptors(widgetInstance).find(([propertyName]) => propertyName === methodName)',
+    '  if (matched && __widgetNonPublicMemberNames.has(matched[0])) return undefined',
+    '  const method = matched && matched[1].value',
+    "  return typeof method === 'function' ? method : undefined",
+    '}',
+    '',
+    'function __createMethodBindings(widgetThis, widgetInstance) {',
     '  const bindings = {}',
     '  __defineWidgetComputedAccessors(widgetThis, widgetInstance)',
     '  for (const [methodName, descriptor] of __collectWidgetPrototypeDescriptors(widgetInstance)) {',
@@ -893,6 +973,7 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '    const isNonPublicMethod = __widgetNonPublicMemberNames.has(methodName)',
     '    const boundMethod = (...args) => {',
     '      try {',
+    '        const executionState = __getCurrentExecutionState()',
     '        const result = Reflect.apply(descriptor.value, widgetThis, args)',
     '        const pendingCall = Promise.resolve(result).catch(() => undefined)',
     '        executionState.pendingMethodCalls.push(pendingCall)',
@@ -921,12 +1002,68 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '  return await fn(widgetThis, ...bindingNames.map((name) => methodBindings[name]), console)',
     '}',
     '',
-    'async function __runWidgetRuntime(lifecycleName, interactionCode) {',
-    '  const executionState = __createExecutionState()',
+    'async function __runWidgetMethod(methodName, methodArgs, widgetThis, widgetInstance) {',
+    '  const method = __readWidgetPublicMethod(widgetInstance, methodName)',
+    "  if (typeof method !== 'function') throw new Error('小组件方法不存在：' + methodName)",
+    '  return await Reflect.apply(method, widgetThis, Array.isArray(methodArgs) ? methodArgs : [])',
+    '}',
+    '',
+    'function __createWidgetRuntimeSessionState() {',
+    '  return {',
+    '    scriptCode: __widgetScriptCode,',
+    '    input: __clone(__initialWidgetInput),',
+    '    output: typeof __initialWidgetOutput === "undefined" ? undefined : __clone(__initialWidgetOutput),',
+    '    data: __clone(__initialWidgetData),',
+    '    widgetClass: undefined,',
+    '    widgetInstance: undefined,',
+    '    widgetThis: undefined,',
+    '    methodBindings: undefined,',
+    '    nonPublicMemberNames: new Set(),',
+    '    currentExecutionState: undefined,',
+    '    initialized: false',
+    '  }',
+    '}',
+    '',
+    'function __getWidgetRuntimeSessionState() {',
+    '  const existing = globalThis[__widgetRuntimeSessionProperty]',
+    '  if (existing && existing.scriptCode === __widgetScriptCode) return existing',
+    '  const sessionState = __createWidgetRuntimeSessionState()',
+    '  globalThis[__widgetRuntimeSessionProperty] = sessionState',
+    '  return sessionState',
+    '}',
+    '',
+    'function __initializeWidgetRuntimeSession(executionState) {',
+    '  __widgetRuntimeSession = __getWidgetRuntimeSessionState()',
+    '  __widgetData = __widgetRuntimeSession.data',
+    '  __widgetClass = __widgetRuntimeSession.widgetClass',
+    '  __widgetNonPublicMemberNames = __widgetRuntimeSession.nonPublicMemberNames',
+    '  __setCurrentExecutionState(executionState)',
+    '  if (__widgetRuntimeSession.initialized) return',
+    "  const __runWidgetScript = __sandbox.createFunction(['Widget', 'console'], __widgetScriptCode)",
+    '  __widgetClass = __runWidgetScript(Widget, console)',
+    "  if (typeof __widgetClass !== 'function' || !(__widgetClass.prototype instanceof Widget)) {",
+    "    throw new Error('小组件脚本必须默认导出继承 Widget 的类')",
+    '  }',
+    '  __widgetRuntimeSession.widgetClass = __widgetClass',
+    '  __widgetNonPublicMemberNames = __readWidgetNonPublicMemberNames()',
+    '  __widgetRuntimeSession.nonPublicMemberNames = __widgetNonPublicMemberNames',
     '  const widgetInstance = __createWidgetComponentInstance()',
     '  __initializeWidgetData(executionState, widgetInstance)',
-    '  const widgetThis = __createWidgetThisContext(widgetInstance, executionState)',
-    '  const methodBindings = __createMethodBindings(widgetThis, widgetInstance, executionState)',
+    '  __widgetRuntimeSession.data = __widgetData',
+    '  const widgetThis = __createWidgetThisContext(widgetInstance)',
+    '  const methodBindings = __createMethodBindings(widgetThis, widgetInstance)',
+    '  __widgetRuntimeSession.widgetInstance = widgetInstance',
+    '  __widgetRuntimeSession.widgetThis = widgetThis',
+    '  __widgetRuntimeSession.methodBindings = methodBindings',
+    '  __widgetRuntimeSession.initialized = true',
+    '}',
+    '',
+    'async function __runWidgetRuntime(lifecycleName, interactionCode, methodName, methodArgs) {',
+    '  const executionState = __createExecutionState()',
+    '  __initializeWidgetRuntimeSession(executionState)',
+    '  const widgetInstance = __widgetRuntimeSession.widgetInstance',
+    '  const widgetThis = __widgetRuntimeSession.widgetThis',
+    '  const methodBindings = __widgetRuntimeSession.methodBindings',
     '  let lifecycleExecuted = false',
     '  let returnValue',
     '  if (lifecycleName) {',
@@ -935,6 +1072,8 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     '      lifecycleExecuted = true',
     '      returnValue = await Reflect.apply(lifecycle, widgetThis, [])',
     '    }',
+    '  } else if (typeof methodName === "string" && methodName.trim()) {',
+    '    returnValue = await __runWidgetMethod(methodName, methodArgs, widgetThis, widgetInstance)',
     '  } else if (typeof interactionCode === "string" && interactionCode.trim()) {',
     '    returnValue = await __runInteractionCode(interactionCode, widgetThis, methodBindings)',
     '  }',
@@ -956,15 +1095,86 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
     "  return new Set(Array.isArray(names) ? names.filter((name) => typeof name === 'string') : [])",
     '}',
     '',
-    "const __runWidgetScript = __sandbox.createFunction(['Widget', 'console'], __widgetScriptCode)",
-    '__widgetClass = __runWidgetScript(Widget, console)',
-    "if (typeof __widgetClass !== 'function' || !(__widgetClass.prototype instanceof Widget)) {",
-    "  throw new Error('小组件脚本必须默认导出继承 Widget 的类')",
-    '}',
-    'const __widgetNonPublicMemberNames = __readWidgetNonPublicMemberNames()',
-    '',
-    `return await __runWidgetRuntime(${lifecycleName}, ${interactionCode})`
+    `return await __runWidgetRuntime(${lifecycleName}, ${interactionCode}, ${methodName}, __widgetMethodArgs)`
   ].join('\n');
+}
+
+/**
+ * 创建 Widget 沙箱运行载荷。
+ * @param payload - Widget 运行载荷
+ * @returns 通用沙箱运行载荷
+ */
+function createWidgetSandboxRunPayload(payload: WidgetScriptRunPayload): SandboxRunPayload {
+  return {
+    code: createWidgetAdapterCode(payload),
+    arguments: {
+      __initialWidgetInput: payload.input,
+      __initialWidgetOutput: payload.output,
+      __initialWidgetData: payload.data,
+      __widgetMethodArgs: payload.methodArgs ?? [],
+      __widgetScriptCode: compileWidgetClassScript(payload.scriptCode)
+    }
+  };
+}
+
+/**
+ * 创建 Widget 沙箱运行选项。
+ * @param options - Widget 运行选项
+ * @returns 通用沙箱运行选项
+ */
+function createWidgetSandboxRunOptions(options: WidgetScriptRunOptions = {}): SandboxRunOptions {
+  return {
+    useWorker: options.useWorker ?? !isTestEnvironment(),
+    timeoutMs: options.timeoutMs,
+    hostFunctions: {
+      ...createSandboxHttpHost({
+        request: (request: RequestInput): Promise<RequestResponse> => runWidgetHttpRequest(options.http, request),
+        functionName: SANDBOX_HTTP_HOST_FUNCTION_NAME,
+        disabledMessage: '当前环境未启用小组件 HTTP 客户端',
+        invalidRequestMessage: '小组件 HTTP 请求参数无效'
+      }),
+      [SANDBOX_WIDGET_PATCH_HOST_FUNCTION_NAME]: async (patches: unknown): Promise<void> => {
+        if (!isWidgetRuntimePatchArray(patches)) {
+          throw new Error('小组件运行态 patch 参数无效');
+        }
+
+        await options.onPatch?.(patches);
+      },
+      [SANDBOX_WIDGET_LOGGER_HOST_FUNCTION_NAME]: async (level: unknown, args: unknown): Promise<void> => {
+        if (level !== 'info' && level !== 'warn' && level !== 'error') {
+          throw new Error('小组件日志级别无效');
+        }
+        if (!Array.isArray(args)) {
+          throw new Error('小组件日志参数无效');
+        }
+
+        await options.onLogger?.(level, args);
+      },
+      [SANDBOX_WIDGET_CONSOLE_HOST_FUNCTION_NAME]: async (level: unknown, args: unknown): Promise<void> => {
+        if (level !== 'log' && level !== 'info' && level !== 'warn' && level !== 'error' && level !== 'debug') {
+          throw new Error('小组件 console 级别无效');
+        }
+        if (!Array.isArray(args)) {
+          throw new Error('小组件 console 参数无效');
+        }
+
+        await options.onConsole?.(level, args);
+      }
+    }
+  };
+}
+
+/**
+ * 校验并读取 Widget 沙箱运行结果。
+ * @param value - 原始沙箱返回值
+ * @returns Widget 脚本运行结果
+ */
+function readWidgetSandboxRunResult(value: unknown): WidgetScriptRunResult {
+  if (!isWidgetScriptRunResult(value)) {
+    throw new Error('小组件脚本返回结果无效');
+  }
+
+  return value;
 }
 
 /**
@@ -974,62 +1184,21 @@ function createWidgetAdapterCode(payload: WidgetScriptRunPayload): string {
  * @returns 小组件脚本运行结果
  */
 async function runWidgetScriptSandbox(payload: WidgetScriptRunPayload, options: WidgetScriptRunOptions = {}): Promise<WidgetScriptRunResult> {
-  const result = await runSandboxCode(
-    {
-      code: createWidgetAdapterCode(payload),
-      arguments: {
-        __initialWidgetInput: payload.input,
-        __initialWidgetOutput: payload.output,
-        __initialWidgetData: payload.data,
-        __widgetScriptCode: compileWidgetClassScript(payload.scriptCode)
-      }
-    },
-    {
-      useWorker: options.useWorker ?? !isTestEnvironment(),
-      timeoutMs: options.timeoutMs,
-      hostFunctions: {
-        ...createSandboxHttpHost({
-          request: (request: RequestInput): Promise<RequestResponse> => runWidgetHttpRequest(options.http, request),
-          functionName: SANDBOX_HTTP_HOST_FUNCTION_NAME,
-          disabledMessage: '当前环境未启用小组件 HTTP 客户端',
-          invalidRequestMessage: '小组件 HTTP 请求参数无效'
-        }),
-        [SANDBOX_WIDGET_PATCH_HOST_FUNCTION_NAME]: async (patches: unknown): Promise<void> => {
-          if (!isWidgetRuntimePatchArray(patches)) {
-            throw new Error('小组件运行态 patch 参数无效');
-          }
+  const result = await runSandboxCode(createWidgetSandboxRunPayload(payload), createWidgetSandboxRunOptions(options));
 
-          await options.onPatch?.(patches);
-        },
-        [SANDBOX_WIDGET_LOGGER_HOST_FUNCTION_NAME]: async (level: unknown, args: unknown): Promise<void> => {
-          if (level !== 'info' && level !== 'warn' && level !== 'error') {
-            throw new Error('小组件日志级别无效');
-          }
-          if (!Array.isArray(args)) {
-            throw new Error('小组件日志参数无效');
-          }
+  return readWidgetSandboxRunResult(result.value);
+}
 
-          await options.onLogger?.(level, args);
-        },
-        [SANDBOX_WIDGET_CONSOLE_HOST_FUNCTION_NAME]: async (level: unknown, args: unknown): Promise<void> => {
-          if (level !== 'log' && level !== 'info' && level !== 'warn' && level !== 'error' && level !== 'debug') {
-            throw new Error('小组件 console 级别无效');
-          }
-          if (!Array.isArray(args)) {
-            throw new Error('小组件 console 参数无效');
-          }
+/**
+ * 在指定沙箱 session 中运行小组件脚本。
+ * @param session - 沙箱 session
+ * @param payload - 小组件运行载荷
+ * @returns 小组件脚本运行结果
+ */
+async function runWidgetScriptSandboxSession(session: SandboxSession, payload: WidgetScriptRunPayload): Promise<WidgetScriptRunResult> {
+  const result = await session.run(createWidgetSandboxRunPayload(payload));
 
-          await options.onConsole?.(level, args);
-        }
-      }
-    }
-  );
-
-  if (!isWidgetScriptRunResult(result.value)) {
-    throw new Error('小组件脚本返回结果无效');
-  }
-
-  return result.value;
+  return readWidgetSandboxRunResult(result.value);
 }
 
 /**
@@ -1077,39 +1246,48 @@ function markWidgetRuntimeMounted(state: WidgetRuntimeState): WidgetRuntimeState
 }
 
 /**
+ * 创建 Widget 脚本运行载荷。
+ * @param state - 运行态状态
+ * @param options - 沙箱执行选项
+ * @returns Widget 脚本运行载荷
+ */
+function createWidgetScriptRunPayload(state: WidgetRuntimeState, options: WidgetPartSandboxOptions = {}): WidgetScriptRunPayload {
+  return {
+    scriptCode: state.value.execute?.code ?? EMPTY_WIDGET_CLASS_SCRIPT,
+    ...(options.interactionCode !== undefined ? { interactionCode: options.interactionCode } : {}),
+    ...(options.methodName !== undefined ? { methodName: options.methodName } : {}),
+    ...(options.methodArgs !== undefined ? { methodArgs: options.methodArgs } : {}),
+    ...(options.lifecycleName ? { lifecycleName: options.lifecycleName } : {}),
+    input: state.renderContext.input,
+    output: state.renderContext.output,
+    data: state.renderContext.data
+  };
+}
+
+/**
  * 运行 Widget 沙箱脚本。
  * @param state - 运行态状态
  * @param options - 沙箱执行选项
  * @returns 沙箱运行结果
  */
 function runPartSandbox(state: WidgetRuntimeState, options: WidgetPartSandboxOptions = {}): Promise<WidgetScriptRunResult> {
-  return runWidgetScriptSandbox(
-    {
-      scriptCode: state.value.execute?.code ?? EMPTY_WIDGET_CLASS_SCRIPT,
-      ...(options.interactionCode !== undefined ? { interactionCode: options.interactionCode } : {}),
-      ...(options.lifecycleName ? { lifecycleName: options.lifecycleName } : {}),
-      input: state.renderContext.input,
-      output: state.renderContext.output,
-      data: state.renderContext.data
-    },
-    {
-      http: options.http,
-      useWorker: options.useWorker,
-      timeoutMs: options.timeoutMs,
-      onPatch: options.onPatch,
-      onLogger: options.onLogger,
-      onConsole: options.onConsole
-    }
-  );
+  return runWidgetScriptSandbox(createWidgetScriptRunPayload(state, options), {
+    http: options.http,
+    useWorker: options.useWorker,
+    timeoutMs: options.timeoutMs,
+    onPatch: options.onPatch,
+    onLogger: options.onLogger,
+    onConsole: options.onConsole
+  });
 }
 
 /**
  * 执行小组件 onExecute 生命周期。
  * @param state - 运行态状态
- * @param options - 生命周期执行选项
+ * @param host - 小组件运行态宿主能力
  * @returns 小组件 onExecute 执行结果
  */
-export async function executeWidgetRuntime(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeExecuteResult> {
+async function executeWidgetRuntimeWithHost(state: WidgetRuntimeState, host: WidgetRuntimeHost = {}): Promise<WidgetRuntimeExecuteResult> {
   const stateWithEmptyOutput: WidgetRuntimeState = {
     ...state,
     renderContext: {
@@ -1128,7 +1306,7 @@ export async function executeWidgetRuntime(state: WidgetRuntimeState, options: W
   const nextState = cloneDeep(stateWithEmptyOutput);
 
   try {
-    const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'onExecute' });
+    const sandboxResult = await runPartSandbox(nextState, { ...host, lifecycleName: 'onExecute' });
     const output = sandboxResult.returnValue;
     const executedState = applyWidgetSandboxResult(
       {
@@ -1162,70 +1340,134 @@ export async function executeWidgetRuntime(state: WidgetRuntimeState, options: W
 }
 
 /**
- * 执行小组件 onMounted 生命周期，并收集上行消息。
- * @param state - 运行态状态
- * @param options - 生命周期执行选项。
- * @returns 小组件运行态结果。
+ * 创建 Widget 运行态结果。
+ * @param state - 运行后的状态
+ * @param sandboxResult - 沙箱运行结果
+ * @returns Widget 运行态结果
  */
-export async function mountWidgetRuntime(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeRunResult> {
-  if (!isWidgetScriptEnabled(state)) return { state };
-
-  const nextState = cloneDeep(state);
-  const sandboxResult = await runPartSandbox(nextState, { ...options, lifecycleName: 'onMounted' });
-  if (!sandboxResult.dataChanged && sandboxResult.lifecycleExecuted !== true && !sandboxResult.sendMessage) return { state };
-
-  const changedState = applyWidgetSandboxResult(nextState, sandboxResult);
-  const mountedState = sandboxResult.lifecycleExecuted === true ? markWidgetRuntimeMounted(changedState) : changedState;
-
+function createWidgetRuntimeRunResult(state: WidgetRuntimeState, sandboxResult: WidgetScriptRunResult): WidgetRuntimeRunResult {
   return {
-    state: mountedState,
+    state,
     ...(sandboxResult.sendMessage ? { sendMessage: sandboxResult.sendMessage } : {})
   };
+}
+
+/**
+ * 创建小组件显示期运行态 session。
+ * @param state - 初始运行态状态
+ * @param host - 小组件运行态宿主能力
+ * @returns 小组件运行态 session
+ */
+export function createWidgetRuntimeSession(state: WidgetRuntimeState, host: WidgetRuntimeHost = {}): WidgetRuntimeSession {
+  const sandboxSession = createSandboxSession(createWidgetSandboxRunOptions(host));
+  let currentState = state;
+  let disposed = false;
+  let runQueue: Promise<void> | null = null;
+
+  /**
+   * 在 session 队列中运行 Widget 命令。
+   * @param options - Widget 命令选项
+   * @returns Widget 运行态结果
+   */
+  function enqueueSessionRun(options: WidgetPartSandboxOptions): Promise<WidgetRuntimeRunResult> {
+    const runTask = async (): Promise<WidgetRuntimeRunResult> => {
+      if (disposed) throw new Error('小组件运行态 session 已销毁');
+      if (!isWidgetScriptEnabled(currentState)) return { state: currentState };
+
+      const sandboxResult = await runWidgetScriptSandboxSession(sandboxSession, createWidgetScriptRunPayload(currentState, options));
+      const changedState = applyWidgetSandboxResult(currentState, sandboxResult);
+      currentState = options.lifecycleName === 'onMounted' && sandboxResult.lifecycleExecuted === true ? markWidgetRuntimeMounted(changedState) : changedState;
+
+      return createWidgetRuntimeRunResult(currentState, sandboxResult);
+    };
+    const task = runQueue ? runQueue.then(runTask) : runTask();
+
+    runQueue = task.then(
+      (): void => undefined,
+      (): void => undefined
+    );
+
+    return task;
+  }
+
+  return {
+    mounted: (): Promise<WidgetRuntimeRunResult> => enqueueSessionRun({ lifecycleName: 'onMounted' }),
+    run: (methodName: string, ...args: unknown[]): Promise<WidgetRuntimeRunResult> => enqueueSessionRun({ methodName, methodArgs: args }),
+    runInteraction: (interactionCode: string): Promise<WidgetRuntimeRunResult> => {
+      if (!interactionCode.trim()) return Promise.resolve({ state: currentState });
+      return enqueueSessionRun({ interactionCode });
+    },
+    dispose(): void {
+      disposed = true;
+      sandboxSession.dispose();
+    }
+  };
+}
+
+/**
+ * 执行小组件 onMounted 生命周期，并收集上行消息。
+ * @param state - 运行态状态
+ * @param host - 小组件运行态宿主能力。
+ * @returns 小组件运行态结果。
+ */
+async function mountWidgetRuntimeWithHost(state: WidgetRuntimeState, host: WidgetRuntimeHost = {}): Promise<WidgetRuntimeRunResult> {
+  if (!isWidgetScriptEnabled(state)) return { state };
+
+  const session = createWidgetRuntimeSession(state, host);
+
+  try {
+    return await session.mounted();
+  } finally {
+    session.dispose();
+  }
+}
+
+/**
+ * 执行小组件 onExecute 生命周期。
+ * @param state - 运行态状态
+ * @param options - 小组件运行态宿主能力
+ * @returns 小组件 onExecute 执行结果
+ */
+export async function executeWidgetRuntime(state: WidgetRuntimeState, options: WidgetRuntimeHost = {}): Promise<WidgetRuntimeExecuteResult> {
+  return executeWidgetRuntimeWithHost(state, options);
+}
+
+/**
+ * 执行小组件 onMounted 生命周期，并收集上行消息。
+ * @param state - 运行态状态
+ * @param options - 小组件运行态宿主能力。
+ * @returns 小组件运行态结果。
+ */
+export async function mountWidgetRuntime(state: WidgetRuntimeState, options: WidgetRuntimeHost = {}): Promise<WidgetRuntimeRunResult> {
+  return mountWidgetRuntimeWithHost(state, options);
 }
 
 /**
  * 执行小组件 onMounted 生命周期，并返回下一版运行数据。
  * @param state - 运行态状态
- * @param options - 生命周期执行选项。
+ * @param options - 小组件运行态宿主能力。
  * @returns 运行后的状态。
  */
-export async function initWidgetMountState(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): Promise<WidgetRuntimeState> {
-  return (await mountWidgetRuntime(state, options)).state;
-}
-
-/**
- * 运行元素声明的交互表达式。
- * @param state - 运行态状态
- * @param interactionCode - 元素交互表达式
- * @param options - 生命周期执行选项
- * @returns 交互执行结果
- */
-async function runWidgetInteraction(
-  state: WidgetRuntimeState,
-  interactionCode: string,
-  options: WidgetLifecycleRunOptions = {}
-): Promise<WidgetRuntimeRunResult> {
-  if (!isWidgetScriptEnabled(state)) return { state };
-  if (!interactionCode.trim()) return { state };
-
-  const nextState = cloneDeep(state);
-  const sandboxResult = await runPartSandbox(nextState, { ...options, interactionCode });
-  const interactedState = applyWidgetSandboxResult(nextState, sandboxResult);
-
-  return {
-    state: interactedState,
-    ...(sandboxResult.sendMessage ? { sendMessage: sandboxResult.sendMessage } : {})
-  };
+export async function initWidgetMountState(state: WidgetRuntimeState, options: WidgetRuntimeHost = {}): Promise<WidgetRuntimeState> {
+  return (await mountWidgetRuntimeWithHost(state, options)).state;
 }
 
 /**
  * 创建小组件运行态实例。
  * @param state - 运行态状态
- * @param options - 生命周期执行选项
+ * @param options - 小组件运行态宿主能力
  * @returns 小组件运行态实例
  */
-export function createWidgetRuntimeInstance(state: WidgetRuntimeState, options: WidgetLifecycleRunOptions = {}): WidgetRuntimeInstance {
+export function createWidgetRuntimeInstance(state: WidgetRuntimeState, options: WidgetRuntimeHost = {}): WidgetRuntimeInstance {
   return {
-    runInteraction: (interactionCode: string): Promise<WidgetRuntimeRunResult> => runWidgetInteraction(state, interactionCode, options)
+    async runInteraction(interactionCode: string): Promise<WidgetRuntimeRunResult> {
+      const session = createWidgetRuntimeSession(state, options);
+
+      try {
+        return await session.runInteraction(interactionCode);
+      } finally {
+        session.dispose();
+      }
+    }
   };
 }

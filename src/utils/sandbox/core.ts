@@ -2,7 +2,7 @@
  * @file core.ts
  * @description 通用 JS 沙箱核心执行器，可在 Worker 或本地 fallback 中运行。
  */
-import type { SandboxExecutionBridge, SandboxRunPayload, SandboxRunResult, SandboxRuntimeHelpers } from './types';
+import type { SandboxExecutionBridge, SandboxExecutionContext, SandboxRunPayload, SandboxRunResult, SandboxRuntimeHelpers } from './types';
 
 /** 沙箱内遮蔽的全局标识符。 */
 const SANDBOX_SHADOW_NAMES = [
@@ -156,6 +156,16 @@ function createSandboxShadowValues(): unknown[] {
 }
 
 /**
+ * 创建沙箱执行上下文。
+ * @returns 可复用于多次执行的沙箱上下文
+ */
+export function createSandboxExecutionContext(): SandboxExecutionContext {
+  return {
+    shadowValues: createSandboxShadowValues()
+  };
+}
+
+/**
  * 创建沙箱函数。
  * @param parameters - 参数名
  * @param body - 函数体
@@ -171,11 +181,11 @@ function createSandboxFunction(parameters: string[], body: string): (...args: un
  * @param body - 函数体
  * @returns 可执行函数
  */
-function createInnerSandboxFunction(parameters: string[], body: string): (...args: unknown[]) => unknown {
+function createInnerSandboxFunction(parameters: string[], body: string, context: SandboxExecutionContext): (...args: unknown[]) => unknown {
   assertUsableBindingNames(parameters);
   const fn = createSandboxFunction([...parameters, ...SANDBOX_SHADOW_NAMES], `"use strict";\n${body}`);
 
-  return (...args: unknown[]): unknown => fn(...args, ...createSandboxShadowValues());
+  return (...args: unknown[]): unknown => fn(...args, ...context.shadowValues);
 }
 
 /**
@@ -196,9 +206,9 @@ function createHostFunctionProxy(name: string, bridge: SandboxExecutionBridge): 
  * 创建沙箱运行辅助对象。
  * @returns 沙箱辅助对象
  */
-function createSandboxHelpers(): SandboxRuntimeHelpers {
+function createSandboxHelpers(context: SandboxExecutionContext): SandboxRuntimeHelpers {
   return {
-    createFunction: createInnerSandboxFunction
+    createFunction: (parameters: string[], body: string): ((...args: unknown[]) => unknown) => createInnerSandboxFunction(parameters, body, context)
   };
 }
 
@@ -208,7 +218,11 @@ function createSandboxHelpers(): SandboxRuntimeHelpers {
  * @param bridge - 执行桥接
  * @returns 运行结果
  */
-export async function executeSandboxCode(payload: SandboxRunPayload, bridge: SandboxExecutionBridge): Promise<SandboxRunResult> {
+export async function executeSandboxCode(
+  payload: SandboxRunPayload,
+  bridge: SandboxExecutionBridge,
+  context: SandboxExecutionContext = createSandboxExecutionContext()
+): Promise<SandboxRunResult> {
   const sandboxArguments = cloneSandboxValue(payload.arguments ?? {});
   const argumentNames = Object.keys(sandboxArguments);
   const hostFunctionNames = payload.hostFunctionNames ?? [];
@@ -217,7 +231,7 @@ export async function executeSandboxCode(payload: SandboxRunPayload, bridge: San
   const argumentValues = argumentNames.map((name): unknown => sandboxArguments[name]);
   const hostFunctionValues = hostFunctionNames.map((name): ((...args: unknown[]) => Promise<unknown>) => createHostFunctionProxy(name, bridge));
   const parameters = [...argumentNames, ...hostFunctionNames, '__sandbox', ...SANDBOX_SHADOW_NAMES];
-  const values = [...argumentValues, ...hostFunctionValues, createSandboxHelpers(), ...createSandboxShadowValues()];
+  const values = [...argumentValues, ...hostFunctionValues, createSandboxHelpers(context), ...context.shadowValues];
   const fn = createSandboxFunction(parameters, `"use strict";\nreturn (async function() {\n${payload.code}\n}).call(undefined);`);
   const value = await fn(...values);
 

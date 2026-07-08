@@ -3,7 +3,7 @@
  * @description 通用 JS 沙箱 Worker 入口。
  */
 import type { SandboxWorkerInputMessage, SandboxWorkerOutputMessage } from './types';
-import { executeSandboxCode } from './core';
+import { createSandboxExecutionContext, executeSandboxCode } from './core';
 
 /** Worker 内需要禁用的全局能力。 */
 const WORKER_BLOCKED_GLOBAL_NAMES = [
@@ -42,6 +42,8 @@ interface PendingHostCall {
 const pendingHostCalls = new Map<string, PendingHostCall>();
 /** 宿主函数调用序号。 */
 let hostCallSeq = 0;
+/** 当前 Worker 复用的沙箱执行上下文。 */
+const sandboxExecutionContext = createSandboxExecutionContext();
 /** Worker 原始 postMessage 引用，禁用全局 postMessage 后仍用于协议通信。 */
 const workerPostMessage = postMessage.bind(globalThis);
 
@@ -108,9 +110,13 @@ function createWorkerHostBridge(runId: string): (name: string, args: unknown[]) 
  */
 async function handleRunMessage(message: Extract<SandboxWorkerInputMessage, { type: 'run' }>): Promise<void> {
   try {
-    const result = await executeSandboxCode(message.payload, {
-      callHostFunction: createWorkerHostBridge(message.runId)
-    });
+    const result = await executeSandboxCode(
+      message.payload,
+      {
+        callHostFunction: createWorkerHostBridge(message.runId)
+      },
+      sandboxExecutionContext
+    );
     postWorkerMessage({
       type: 'done',
       runId: message.runId,

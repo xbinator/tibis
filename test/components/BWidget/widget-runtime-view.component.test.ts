@@ -460,6 +460,23 @@ const RuntimeCounterProbe = defineComponent({
   template: '<button class="runtime-counter-probe" type="button" @click="increment">递增</button>'
 });
 
+/** 运行态方法调用探针。 */
+const RuntimeMethodProbe = defineComponent({
+  name: 'RuntimeMethodProbe',
+  setup() {
+    const runtime = useWidgetRuntime();
+    /**
+     * 模拟元素用方法名触发业务事件。
+     */
+    function clickButton(): void {
+      runtime.value?.run('buttonByClick');
+    }
+
+    return { clickButton };
+  },
+  template: '<button class="runtime-method-probe" type="button" @click="clickButton">调用方法</button>'
+});
+
 /** WidgetNode 测试替身，用于验证运行态交互使用本地最新状态串行执行。 */
 const WidgetNodeRuntimeCounterStub = defineComponent({
   name: 'WidgetNode',
@@ -467,6 +484,15 @@ const WidgetNodeRuntimeCounterStub = defineComponent({
     RuntimeCounterProbe
   },
   template: '<RuntimeCounterProbe />'
+});
+
+/** WidgetNode 测试替身，用于验证元素可按方法名触发运行态方法。 */
+const WidgetNodeRuntimeMethodStub = defineComponent({
+  name: 'WidgetNode',
+  components: {
+    RuntimeMethodProbe
+  },
+  template: '<RuntimeMethodProbe />'
 });
 
 describe('BWidgetRuntime', (): void => {
@@ -1002,6 +1028,125 @@ describe('BWidgetRuntime', (): void => {
     wrapper.unmount();
   });
 
+  it('recreates the display session when execute code changes on the same runtime instance', async (): Promise<void> => {
+    /**
+     * 创建按钮点击脚本。
+     * @param message - 点击后写入的消息
+     * @returns Widget 脚本
+     */
+    function createButtonCode(message: string): string {
+      return [
+        'export default class MovieList extends Widget {',
+        '  buttonByClick() {',
+        `    this.message = '${message}'`,
+        '  }',
+        '}'
+      ].join('\n');
+    }
+
+    const wrapper: VueWrapper = mount(BWidgetRuntime, {
+      props: {
+        value: createRuntimeMessageWidgetData(createButtonCode('第一版')),
+        renderContext: {
+          input: {},
+          output: undefined,
+          data: {}
+        }
+      },
+      global: {
+        stubs: {
+          WidgetNode: WidgetNodeRuntimeMethodStub
+        }
+      },
+      attachTo: document.body
+    });
+    await flushWidgetRuntime();
+
+    await wrapper.setProps({
+      value: createRuntimeMessageWidgetData(createButtonCode('第二版')),
+      renderContext: {
+        input: {},
+        output: undefined,
+        data: {}
+      }
+    });
+    await flushWidgetRuntime();
+    await wrapper.get('.runtime-method-probe').trigger('click');
+    await flushWidgetRuntime();
+
+    const changes = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
+    const lastChange = changes[changes.length - 1];
+
+    expect(lastChange).toMatchObject({
+      reason: 'interaction',
+      renderContext: {
+        data: {
+          message: '第二版'
+        }
+      }
+    });
+    wrapper.unmount();
+  });
+
+  it('ignores stale mounted results when execute code changes before the previous mounted finishes', async (): Promise<void> => {
+    const requestDeferred = createDeferred<RequestResponse>();
+    const request = vi.fn<(input: RequestInput) => Promise<RequestResponse>>((): Promise<RequestResponse> => requestDeferred.promise);
+    stubElectronRequest(request);
+
+    const wrapper: VueWrapper = mount(BWidgetRuntime, {
+      props: {
+        value: createRuntimeMessageWidgetData(
+          [
+            'export default class MovieList extends Widget {',
+            '  async onMounted() {',
+            "    await this.$http.get('https://api.example.com/slow')",
+            "    this.message = '第一版完成'",
+            '  }',
+            '}'
+          ].join('\n')
+        ),
+        renderContext: {
+          input: {},
+          output: undefined,
+          data: {}
+        }
+      },
+      attachTo: document.body
+    });
+    await nextTick();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(request).toHaveBeenCalledTimes(1);
+
+    await wrapper.setProps({
+      value: createRuntimeMessageWidgetData(
+        ['export default class MovieList extends Widget {', '  onMounted() {', "    this.message = '第二版'", '  }', '}'].join('\n')
+      ),
+      renderContext: {
+        input: {},
+        output: undefined,
+        data: {}
+      }
+    });
+    requestDeferred.resolve({ status: 200, ok: true, url: 'https://api.example.com/slow', headers: {}, data: {} });
+    await flushWidgetRuntime();
+    await flushWidgetRuntime();
+
+    const changes = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
+
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      reason: 'mount',
+      renderContext: {
+        data: {
+          message: '第二版'
+        }
+      }
+    });
+    wrapper.unmount();
+  });
+
   it('does not rerun mounted when props fall back to created on the same runtime instance', async (): Promise<void> => {
     const request = vi.fn<() => Promise<RequestResponse>>(
       async (): Promise<RequestResponse> => ({
@@ -1321,6 +1466,59 @@ describe('BWidgetRuntime', (): void => {
       sendMessage: {
         content: '确认下单',
         isError: false
+      }
+    });
+    wrapper.unmount();
+  });
+
+  it('lets rendered elements run widget methods on the mounted session instance', async (): Promise<void> => {
+    const wrapper = mount(BWidgetRuntime, {
+      props: {
+        value: {
+          ...createRuntimeWidgetData(),
+          execute: {
+            code: [
+              'export default class MovieList extends Widget {',
+              '  private cache = new Map()',
+              '',
+              '  onMounted() {',
+              "    this.cache.set('message', '方法点击')",
+              '  }',
+              '',
+              '  buttonByClick() {',
+              "    this.message = this.cache.get('message')",
+              '  }',
+              '}'
+            ].join('\n')
+          }
+        },
+        renderContext: {
+          input: {},
+          output: undefined,
+          data: {}
+        }
+      },
+      global: {
+        stubs: {
+          WidgetNode: WidgetNodeRuntimeMethodStub
+        }
+      },
+      attachTo: document.body
+    });
+
+    await flushWidgetRuntime();
+    await wrapper.get('.runtime-method-probe').trigger('click');
+    await flushWidgetRuntime();
+
+    const changes = (wrapper.emitted('change') ?? []).map(([change]): WidgetRuntimeChange => change as WidgetRuntimeChange);
+
+    expect(changes.map((change): WidgetRuntimeChange['reason'] => change.reason)).toEqual(['mount', 'interaction']);
+    expect(changes[1]).toMatchObject({
+      reason: 'interaction',
+      renderContext: {
+        data: {
+          message: '方法点击'
+        }
       }
     });
     wrapper.unmount();
