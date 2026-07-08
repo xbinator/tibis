@@ -1,9 +1,13 @@
+<!--
+ * @file index.vue
+ * @description BToolbar 顶部菜单工具栏组件。
+ -->
 <template>
   <BDropdownButton :show-icon="false" :options="options" :overlay-width="240">
     <div>{{ title }}</div>
 
     <template #menu="{ record }">
-      <span v-if="props.showSelectedCheck" class="toolbar-menu-item-check">
+      <span v-if="shouldShowSelectedCheckColumn" class="toolbar-menu-item-check">
         <BIcon v-if="(record as ToolbarOption).selected" icon="lucide:check" />
       </span>
       <BTruncateText :text="(record as ToolbarOption).label" class="toolbar-menu-item-label" :class="{ 'is-active': (record as ToolbarOption).active }" />
@@ -22,11 +26,18 @@
 
 <script setup lang="ts">
 import type { ToolbarOption, ToolbarOptions } from './types';
+import { computed } from 'vue';
 import { getShortcutParts } from '@/utils/shortcut';
 
+/**
+ * BToolbar 组件属性。
+ */
 export interface Props {
+  /** 工具栏按钮标题。 */
   title?: string;
+  /** 是否在存在选中项时展示勾选列。 */
   showSelectedCheck?: boolean;
+  /** 工具栏下拉菜单配置。 */
   options?: ToolbarOptions;
 }
 
@@ -35,6 +46,11 @@ const props = withDefaults(defineProps<Props>(), {
   showSelectedCheck: false,
   options: () => []
 });
+
+/** 是否需要为选中勾选图标预留列。 */
+const shouldShowSelectedCheckColumn = computed<boolean>(
+  (): boolean => props.showSelectedCheck && props.options.some((option): boolean => option.type !== 'divider' && option.selected === true)
+);
 </script>
 
 <style lang="less" scoped>
