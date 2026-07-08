@@ -22,7 +22,7 @@
     <textarea
       v-if="isEditing"
       ref="textarea"
-      v-model="draftLatex"
+      v-model="input"
       class="b-markdown-mathblock__editor"
       spellcheck="false"
       contenteditable="false"
@@ -52,7 +52,8 @@ const isPreviewVisible = computed<boolean>(() => !isEditing.value);
 
 const latex = computed<string>(() => (typeof props.node.attrs.latex === 'string' ? props.node.attrs.latex : ''));
 const draftLatex = ref(latex.value);
-const { triggerResize } = useTextareaAutosize({
+// @ts-ignore
+const { textarea, input, triggerResize } = useTextareaAutosize({
   input: draftLatex
 });
 
