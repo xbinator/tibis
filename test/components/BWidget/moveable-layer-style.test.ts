@@ -48,4 +48,17 @@ describe('MoveableLayer styles', () => {
     expect(moveableLayerSource).toContain(':root-container="root"');
     expect(moveableLayerSource).toContain(':use-accurate-position="true"');
   });
+
+  it('sets stable cursors for Moveable controls and active drag state', (): void => {
+    expect(moveableLayerSource).toContain(":deep(.moveable-control[data-direction='n'])");
+    expect(moveableLayerSource).toContain(":deep(.moveable-control[data-direction='ne'])");
+    expect(moveableLayerSource).toContain(":deep(.moveable-around-control[data-direction='n'])");
+    expect(moveableLayerSource).toContain(":deep(.moveable-around-control[data-direction='ne'])");
+    expect(moveableLayerSource).toContain(':deep(.moveable-control-box.dragging)');
+    expect(moveableLayerSource).toContain('cursor: ns-resize !important;');
+    expect(moveableLayerSource).toContain('cursor: ew-resize !important;');
+    expect(moveableLayerSource).toContain('cursor: nesw-resize !important;');
+    expect(moveableLayerSource).toContain('cursor: nwse-resize !important;');
+    expect(moveableLayerSource).toContain('cursor: move !important;');
+  });
 });

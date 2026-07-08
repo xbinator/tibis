@@ -999,14 +999,51 @@ watch(
     height: 8px !important;
     margin-top: -4px !important;
     margin-left: -4px !important;
+    cursor: move !important;
     background: #fff !important;
     border: 1px solid var(--color-primary) !important;
     border-radius: 0 !important;
   }
 
+  :deep(.moveable-around-control) {
+    cursor: move !important;
+  }
+
+  :deep(.moveable-control[data-direction='n']),
+  :deep(.moveable-around-control[data-direction='n']),
+  :deep(.moveable-around-control[data-direction='s']),
+  :deep(.moveable-control[data-direction='s']) {
+    cursor: ns-resize !important;
+  }
+
+  :deep(.moveable-control[data-direction='e']),
+  :deep(.moveable-around-control[data-direction='e']),
+  :deep(.moveable-around-control[data-direction='w']),
+  :deep(.moveable-control[data-direction='w']) {
+    cursor: ew-resize !important;
+  }
+
+  :deep(.moveable-control[data-direction='ne']),
+  :deep(.moveable-around-control[data-direction='ne']),
+  :deep(.moveable-around-control[data-direction='sw']),
+  :deep(.moveable-control[data-direction='sw']) {
+    cursor: nesw-resize !important;
+  }
+
+  :deep(.moveable-control[data-direction='nw']),
+  :deep(.moveable-around-control[data-direction='nw']),
+  :deep(.moveable-around-control[data-direction='se']),
+  :deep(.moveable-control[data-direction='se']) {
+    cursor: nwse-resize !important;
+  }
+
   :deep(.moveable-control-box) {
     z-index: 1;
     pointer-events: auto;
+  }
+
+  :deep(.moveable-control-box.dragging) {
+    cursor: move !important;
   }
 
   :deep(.moveable-control:hover) {
