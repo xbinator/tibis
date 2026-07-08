@@ -12,14 +12,14 @@
 
     <BPanelSplitter
       v-model:size="size"
-      :class="bem('splitter', { expanded: isExpanded })"
+      :class="bem('splitter', { expanded: isExpanded, dragging: isDragging })"
       :disabled="isExpanded"
       :max-width="SIDEBAR_MAX_SIZE"
       :min-width="SIDEBAR_MIN_SIZE"
       position="right"
     >
       <div :class="bem('content')">
-        <SidebarTools v-if="activeSidebarTab === 'tools'" />
+        <SidebarTools v-if="activeSidebarTab === 'tools'" @drag-start="handleDragStart" />
         <SidebarLayer
           v-else-if="activeSidebarTab === 'layers'"
           :active-element-id="activeElementId"
@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import type { WidgetLayerMovePosition } from '../utils/layerOrder';
 import type { CSSProperties } from 'vue';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import type { WidgetData, WidgetElement } from '@/components/BWidget/types';
 import { createNamespace } from '@/utils/namespace';
 import SidebarAction from './SidebarAction.vue';
@@ -160,6 +160,10 @@ const activeSidebarTab = ref<ActiveWidgetSidebarTabKey>('tools');
 
 /** 当前是否处于展开态（由「动作」tab 触发）。 */
 const isExpanded = ref(false);
+/** 当前是否处于拖拽创建元素状态。 */
+const isDragging = ref(false);
+/** 拖拽期间的全局指针监听控制器。 */
+let dragAbortController: AbortController | null = null;
 
 /** 根元素样式变量，展开态用它给右侧设置栏让位。 */
 const sidebarStyle = computed<WidgetSidebarStyle>(
@@ -180,6 +184,33 @@ function handleExpand(): void {
  */
 function handleCollapse(): void {
   isExpanded.value = false;
+}
+
+/**
+ * 清理拖拽期间的全局指针监听。
+ */
+function cleanupDragListeners(): void {
+  dragAbortController?.abort();
+  dragAbortController = null;
+}
+
+/**
+ * 恢复左侧面板内容区展示。
+ */
+function restoreDraggingSidebar(): void {
+  isDragging.value = false;
+  cleanupDragListeners();
+}
+
+/**
+ * 处理拖拽开始，临时隐藏内容区 splitter 以释放画布操作区域。
+ */
+function handleDragStart(): void {
+  isDragging.value = true;
+  cleanupDragListeners();
+  dragAbortController = new AbortController();
+  window.addEventListener('pointerup', restoreDraggingSidebar, { signal: dragAbortController.signal });
+  window.addEventListener('pointercancel', restoreDraggingSidebar, { signal: dragAbortController.signal });
 }
 
 /**
@@ -269,6 +300,10 @@ function handleElementMove(sourceElementId: string, targetElementId: string, pos
 function handleElementsMove(sourceElementIds: string[], targetElementIds: string[], position: WidgetLayerMovePosition): void {
   emit('move-elements', sourceElementIds, targetElementIds, position);
 }
+
+onBeforeUnmount((): void => {
+  cleanupDragListeners();
+});
 </script>
 
 <style lang="less" scoped>
@@ -311,6 +346,17 @@ function handleElementsMove(sourceElementIds: string[], targetElementIds: string
 
 .widget-sidebar__splitter {
   flex-shrink: 0;
+}
+
+.widget-sidebar__splitter--dragging {
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.widget-sidebar__splitter--dragging :deep(.b-panel-splitter__section) {
+  width: 0 !important;
 }
 
 .widget-sidebar__splitter--expanded {

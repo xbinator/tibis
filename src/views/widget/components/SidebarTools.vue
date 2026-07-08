@@ -9,7 +9,7 @@
         v-for="schema in widgetElementSchemas"
         :key="schema.name"
         class="sidebar-panel__tool-item"
-        @pointerdown.left.prevent="elementDrag.startDrag(schema, $event)"
+        @pointerdown.left.prevent="handleToolPointerdown(schema, $event)"
       >
         <BIcon :icon="schema.icon" :size="16" />
         <span>{{ schema.label }}</span>
@@ -19,14 +19,29 @@
 </template>
 
 <script setup lang="ts">
-import { WIDGET_ELEMENT_SCHEMAS } from '@/components/BWidget/elements';
+import { WIDGET_ELEMENT_SCHEMAS, type WidgetElementSchema } from '@/components/BWidget/elements';
 import { useDraggerController } from '../hooks/useDragger';
 import SidebarPanel from './_SidebarPanel.vue';
+
+const emit = defineEmits<{
+  /** 开始拖拽创建 Widget 元素 */
+  'drag-start': [];
+}>();
 
 /** 当前可创建元素列表。 */
 const widgetElementSchemas = WIDGET_ELEMENT_SCHEMAS;
 /** 元素拖拽控制器。 */
 const elementDrag = useDraggerController();
+
+/**
+ * 处理工具项指针按下，启动自定义拖拽并通知父级临时收起侧栏内容区。
+ * @param schema - 被拖拽的 Widget 元素工具
+ * @param event - 指针事件
+ */
+function handleToolPointerdown(schema: WidgetElementSchema, event: PointerEvent): void {
+  elementDrag.startDrag(schema, event);
+  emit('drag-start');
+}
 </script>
 
 <style lang="less" scoped>

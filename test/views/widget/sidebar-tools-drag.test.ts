@@ -66,6 +66,7 @@ describe('SidebarTools drag', (): void => {
     });
     expect(startDrag.mock.calls[0]?.[1]).toBeInstanceOf(MouseEvent);
     expect(startDrag.mock.calls[0]).toHaveLength(2);
+    expect(wrapper.findComponent(SidebarTools).emitted('drag-start')).toHaveLength(1);
     wrapper.unmount();
   });
 });

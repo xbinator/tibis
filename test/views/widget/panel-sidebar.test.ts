@@ -82,7 +82,8 @@ const BButtonStub = defineComponent({
  */
 const SidebarToolsStub = defineComponent({
   name: 'SidebarTools',
-  template: '<div class="sidebar-tools-stub">组件</div>'
+  emits: ['drag-start'],
+  template: '<button class="sidebar-tools-stub" type="button" @click="$emit(\'drag-start\')">组件</button>'
 });
 
 /**
@@ -175,6 +176,29 @@ describe('PanelSidebar', (): void => {
     expect(splitter.attributes('data-max-width')).toBe('440');
     expect(splitter.attributes('data-disabled')).toBe('false');
     expect(wrapper.find('[data-icon="lucide:box"]').attributes('data-type')).toBe('secondary');
+
+    wrapper.unmount();
+  });
+
+  it('keeps the splitter mounted while visually hiding it during dragging', async (): Promise<void> => {
+    const wrapper = mountPanelSidebar();
+
+    expect(wrapper.find('.panel-splitter-stub').exists()).toBe(true);
+
+    await wrapper.find('.sidebar-tools-stub').trigger('click');
+    await nextTick();
+
+    const draggingSplitter = wrapper.find('.panel-splitter-stub');
+    expect(draggingSplitter.exists()).toBe(true);
+    expect(draggingSplitter.classes()).toContain('widget-sidebar__splitter--dragging');
+
+    window.dispatchEvent(new PointerEvent('pointerup'));
+    await nextTick();
+
+    const splitter = wrapper.find('.panel-splitter-stub');
+    expect(splitter.exists()).toBe(true);
+    expect(splitter.classes()).not.toContain('widget-sidebar__splitter--dragging');
+    expect(splitter.attributes('data-size')).toBe('320');
 
     wrapper.unmount();
   });
