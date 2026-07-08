@@ -30,6 +30,14 @@ export function useViewActive(): { toolbarViewOptions: ComputedRef<ToolbarOption
         editorPreferencesStore.setViewMode(editorPreferencesStore.viewMode === 'source' ? 'rich' : 'source');
       }
     },
+    {
+      value: 'outline',
+      label: '大纲',
+      selected: editorPreferencesStore.showOutline,
+      onClick: () => {
+        editorPreferencesStore.setShowOutline(!editorPreferencesStore.showOutline);
+      }
+    },
     { type: 'divider' },
     {
       value: 'page-width',

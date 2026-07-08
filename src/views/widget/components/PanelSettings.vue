@@ -111,7 +111,7 @@ const elementSetter = computed<Component | null>(() => (isElementTarget(select.v
   overflow: hidden;
   font-size: 12px;
   background: var(--bg-primary);
-  box-shadow: inset 1px 0 0 var(--border-primary);
+  border-left: 1px solid var(--border-primary);
 }
 
 :deep(.ant-tabs) {

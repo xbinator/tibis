@@ -4,7 +4,7 @@
   首次加载在 onMounted 中触发初始日志拉取。
 -->
 <template>
-  <SettingsPage :title="MENU_ITEMS.logger.label">
+  <SettingsPage :title="MENU_ITEMS.logger.label" class="log-settings">
     <template #extra>
       <LogFilterBar v-model:value="dataItem" :available-dates="availableDates" @change="handleFilterChange" />
     </template>
@@ -194,10 +194,17 @@ onMounted(() => {
 </script>
 
 <style scoped lang="less">
+.log-settings {
+  :deep(.settings-page__body) {
+    padding: 0;
+  }
+}
+
 .log-timeline {
   display: flex;
   flex-direction: column;
   gap: 0;
+  padding: 20px 14px 20px 20px;
 }
 
 .log-empty {
