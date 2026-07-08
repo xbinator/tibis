@@ -81,7 +81,8 @@ const modelIcons: Record<string, string> = {
   deepseek: 'deepseek-color',
   gemini: 'gemini-color',
   gemma: 'gemma-color',
-  grok: 'grok'
+  grok: 'grok',
+  hy: 'hunyuan-color'
 };
 
 const iconId = computed(() => {
