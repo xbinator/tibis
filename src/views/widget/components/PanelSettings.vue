@@ -118,13 +118,13 @@ const elementSetter = computed<Component | null>(() => (isElementTarget(select.v
   height: 100%;
 
   .ant-tabs-nav {
+    height: 40px;
     padding: 0 12px;
     margin-bottom: 0;
-    box-shadow: 0 1px 0 0 var(--border-primary);
+    border-bottom: 1px solid var(--border-primary);
   }
 
   .ant-tabs-tab {
-    height: 40px;
     padding: 0;
   }
 
