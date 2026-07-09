@@ -17,7 +17,7 @@ import type { WidgetImageElementMetadata, WidgetImageFit } from './schema';
 import type { WidgetShapeElement } from '../../types';
 import type { CSSProperties } from 'vue';
 import { computed, ref, toRef, watch } from 'vue';
-import { useElementContent } from '../../hooks/useElementContent';
+import { useElementValue } from '../../hooks/useElementValue';
 import { WIDGET_IMAGE_DEFAULT_FIT } from './schema';
 
 /**
@@ -30,9 +30,9 @@ interface Props {
 
 const props = defineProps<Props>();
 /** 图片地址（渲染态，已解析变量）。 */
-const imageSrc = useElementContent(toRef(props, 'element'), 'src');
+const imageSrc = useElementValue(toRef(props, 'element'), 'src');
 /** 替代文本（渲染态，已解析变量）。 */
-const altText = useElementContent(toRef(props, 'element'), 'alt');
+const altText = useElementValue(toRef(props, 'element'), 'alt');
 /** 图片加载失败标记，src 变化时重置以重新尝试加载。 */
 const hasError = ref(false);
 

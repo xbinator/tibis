@@ -3,8 +3,8 @@
  * @description 验证 BTextMethod 选择函数并配置参数。
  * @vitest-environment jsdom
  */
-import type { PropType, Ref } from 'vue';
 import { readFileSync } from 'node:fs';
+import type { PropType, Ref } from 'vue';
 import { defineComponent, nextTick, ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
@@ -295,6 +295,12 @@ describe('BTextMethod', (): void => {
     expect(methodSource).not.toContain('draftActions');
     expect(methodSource).not.toContain('activeAction');
     expect(methodSource).not.toContain('activeActionIndex');
+  });
+
+  it('uses shared method action normalization helpers', (): void => {
+    expect(methodSource).toContain("import { normalizeMethodAction, normalizeMethodActions } from '@/components/BWidget/utils/widgetMethods';");
+    expect(methodSource).not.toContain('function normalizeMethodAction');
+    expect(methodSource).not.toContain('function normalizeMethodActions');
   });
 
   it('renders configured actions and removes one from the inline list', async (): Promise<void> => {

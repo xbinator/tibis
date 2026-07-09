@@ -3,6 +3,7 @@
  * @description 验证 BWidget 按钮元素视图渲染文本和变量插值。
  * @vitest-environment jsdom
  */
+import { readFileSync } from 'node:fs';
 import type { VueWrapper } from '@vue/test-utils';
 import type { WidgetRenderContext } from 'types/widget';
 import type { VNode } from 'vue';
@@ -14,6 +15,9 @@ import { provideRenderContext } from '@/components/BWidget/hooks/useRenderContex
 import { provideWidgetRuntime, type WidgetRuntimeController } from '@/components/BWidget/hooks/useWidgetRuntime';
 import type { WidgetShapeElement } from '@/components/BWidget/types';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
+
+/** 按钮元素视图源码。 */
+const BUTTON_ELEMENT_VIEW_SOURCE = readFileSync('src/components/BWidget/elements/Button/index.vue', 'utf-8');
 
 /**
  * 创建按钮视图测试元素。
@@ -65,6 +69,13 @@ function mountButtonElementView(element: WidgetShapeElement, renderContext?: Wid
 }
 
 describe('ButtonElementView', (): void => {
+  it('keeps boolean and action argument parsing free of fallback plumbing', (): void => {
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('fallback');
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('normalizeButtonBoolean');
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('normalizeButtonActions');
+    expect(BUTTON_ELEMENT_VIEW_SOURCE).not.toContain('buttonActionsValue');
+  });
+
   it('renders a native button with text from element metadata', (): void => {
     const wrapper = mountButtonElementView(createButtonElement('立即提交'));
     const button = wrapper.find('button');

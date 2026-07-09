@@ -448,7 +448,7 @@ function createWidgetDisplayJsonReplacer(): WidgetDisplayJsonReplacer {
  * @param value - 绑定解析值
  * @returns 展示文本
  */
-function formatWidgetDisplayTextValue(value: unknown): string {
+export function formatWidgetDisplayTextValue(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
   }

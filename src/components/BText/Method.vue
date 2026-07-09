@@ -84,6 +84,7 @@
 import type { BTextMethodAction, BTextMethodOption, VariableOptionGroup } from './types';
 import { computed, ref } from 'vue';
 import type { BDraggableMoveEvent } from '@/components/BDraggable/types';
+import { normalizeMethodAction, normalizeMethodActions } from '@/components/BWidget/utils/widgetMethods';
 import { createNamespace } from '@/utils/namespace';
 
 /**
@@ -152,54 +153,6 @@ const editingActionIndex = ref<number | null>(null);
 const selectedMethod = computed<BTextMethodOption | undefined>((): BTextMethodOption | undefined =>
   props.methods.find((method: BTextMethodOption): boolean => method.value === editingAction.value.method)
 );
-
-/**
- * 判断值是否为普通对象。
- * @param value - 待判断值
- * @returns 是否为普通对象
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-/**
- * 规整方法动作。
- * @param value - 原始方法动作
- * @returns 可编辑的方法动作
- */
-function normalizeMethodAction(value: unknown): BTextMethodAction | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const method = typeof value.method === 'string' ? value.method.trim() : '';
-
-  if (!method) {
-    return null;
-  }
-
-  return {
-    args: Array.isArray(value.args) ? value.args.filter((item: unknown): item is string => typeof item === 'string') : [],
-    method
-  };
-}
-
-/**
- * 规整方法动作列表。
- * @param value - 原始方法动作列表
- * @returns 可编辑的方法动作列表
- */
-function normalizeMethodActions(value: unknown): BTextMethodAction[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((action: unknown): BTextMethodAction[] => {
-    const normalizedAction = normalizeMethodAction(action);
-
-    return normalizedAction ? [normalizedAction] : [];
-  });
-}
 
 /** 已配置动作列表。 */
 const actions = computed<BTextMethodAction[]>((): BTextMethodAction[] => normalizeMethodActions(modelValue.value));

@@ -157,7 +157,7 @@ data 数组路径依赖脚本推导出的 data schema，因此只会列出能被
 - `WidgetNode.vue` 为单个节点 provide 对应上下文；没有传入节点级上下文时继续使用上层全局上下文。
 - 普通非循环元素继续使用全局上下文。
 
-这能保持元素视图和 `useElementContent` 的使用方式不变，让文本元素仍通过 `useRenderContext()` 解析模板。
+这能保持元素视图和 `useElementValue` 的使用方式不变，让文本元素仍通过 `useRenderContext()` 解析模板。
 
 ## 错误和边界
 

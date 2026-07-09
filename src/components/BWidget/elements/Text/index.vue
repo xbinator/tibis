@@ -13,7 +13,7 @@ import type { WidgetTextElementMetadata } from './schema';
 import type { WidgetShapeElement } from '../../types';
 import type { StyleValue } from 'vue';
 import { computed, toRef } from 'vue';
-import { useElementContent } from '../../hooks/useElementContent';
+import { useElementValue } from '../../hooks/useElementValue';
 
 /**
  * 文本元素中间Widget视图入参。
@@ -24,8 +24,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-/** 当前文本正文内容。 */
-const textContent = useElementContent(toRef(props, 'element'), 'content');
+/** 当前文本正文展示内容。 */
+const textContent = useElementValue(toRef(props, 'element'), 'content', { transform: 'text' });
 
 /**
  * 计算 line-clamp 内联样式。

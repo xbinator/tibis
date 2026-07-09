@@ -3,6 +3,7 @@
  * @description BTextEditor 共享类型定义
  */
 import type { ChipResolver } from './extensions/variableChip';
+import type { MethodAction } from '@/components/BWidget/utils/widgetMethods';
 
 /**
  * 图片粘贴/拖拽接管上下文。
@@ -90,15 +91,8 @@ export interface BTextSelectOption {
   description?: string;
 }
 
-/**
- * 方法动作配置。
- */
-export interface BTextMethodAction {
-  /** 需要调用的方法名 */
-  method: string;
-  /** 方法参数，支持 {{ }} 变量模板 */
-  args: string[];
-}
+/** 方法动作配置。 */
+export type BTextMethodAction = MethodAction;
 
 /**
  * 可选方法。

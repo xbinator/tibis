@@ -3,6 +3,7 @@
  * @description BWidget 按钮元素注册配置。
  */
 import type { WidgetElementStyle, WidgetMetadata } from '../../types';
+import type { MethodAction } from '../../utils/widgetMethods';
 import type { WidgetElementSchema } from '../types';
 import type { BTextSelectOption } from '@/components/BText/types';
 
@@ -40,15 +41,8 @@ export const WIDGET_BUTTON_DEFAULT_STYLE: WidgetElementStyle = {
   textVerticalAlign: 'middle'
 };
 
-/**
- * 按钮点击动作配置。
- */
-export interface WidgetButtonAction {
-  /** 点击时调用的 Widget 实例方法名 */
-  method: string;
-  /** 调用方法时传入的参数模板 */
-  args: string[];
-}
+/** 按钮点击动作配置。 */
+export type WidgetButtonAction = MethodAction;
 
 /**
  * 按钮元素自定义元数据。
