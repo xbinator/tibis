@@ -174,6 +174,9 @@ defineExpose({
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
   background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
 }
 </style>

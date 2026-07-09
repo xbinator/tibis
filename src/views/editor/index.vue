@@ -93,6 +93,5 @@ onDeactivated(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  border-radius: 8px;
 }
 </style>
