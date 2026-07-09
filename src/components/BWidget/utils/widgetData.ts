@@ -2,14 +2,10 @@
  * @file widgetData.ts
  * @description BWidget 外部 WidgetData 默认值与契约字段归一化工具。
  */
-import type { WidgetData, WidgetExecuteMethod, WidgetMetadata, WidgetSchemaObject, WidgetViewport } from '../types';
+import type { WidgetData, WidgetExecuteMethod, WidgetMetadata, WidgetSchemaObject, WidgetSchemaProperty, WidgetViewport } from '../types';
 import { cloneDeep } from 'lodash-es';
 import { createDefaultWidgetExecuteMethod } from './widgetExecuteMethod';
-
-/**
- * Widget能力 Schema 类型。
- */
-export type WidgetSchemaKind = 'input' | 'data';
+import { isWidgetSchemaObjectCandidate } from './widgetSchema';
 
 /**
  * 可归一化为 WidgetData 契约字段的数据。
@@ -21,6 +17,8 @@ export interface WidgetDataContractCandidate {
   description?: unknown;
   /** 入参 schema */
   inputSchema?: unknown;
+  /** 出参 schema */
+  outputSchema?: unknown;
   /** 运行数据 schema */
   dataSchema?: unknown;
   /** JS 脚本配置 */
@@ -30,51 +28,34 @@ export interface WidgetDataContractCandidate {
 }
 
 /** 默认空对象 schema，具体字段由小组件配置按需声明。 */
-const DEFAULT_WIDGET_EMPTY_SCHEMA: WidgetSchemaObject = {
+export const DEFAULT_WIDGET_EMPTY_SCHEMA: WidgetSchemaObject = {
   type: 'object',
   properties: {},
   required: []
 };
 
-/** 各类 schema 的默认模板。 */
-const DEFAULT_WIDGET_SCHEMA_TEMPLATES: Record<WidgetSchemaKind, WidgetSchemaObject> = {
-  input: DEFAULT_WIDGET_EMPTY_SCHEMA,
-  data: DEFAULT_WIDGET_EMPTY_SCHEMA
-};
-
 /**
  * 创建默认对象 schema。
- * @param kind - schema 类型
  * @returns 默认对象 schema
  */
-export function createDefaultWidgetSchemaObject(kind: WidgetSchemaKind = 'input'): WidgetSchemaObject {
-  return cloneDeep(DEFAULT_WIDGET_SCHEMA_TEMPLATES[kind]);
-}
-
-/**
- * 判断值是否为可保存的 WidgetData 对象 schema。
- * @param value - 待检查值
- * @returns 是否为对象 schema
- */
-function isWidgetSchemaObject(value: unknown): value is WidgetSchemaObject {
-  return typeof value === 'object' && value !== null && (value as { type?: unknown }).type === 'object';
+export function createDefaultWidgetSchemaObject(): WidgetSchemaObject {
+  return cloneDeep(DEFAULT_WIDGET_EMPTY_SCHEMA);
 }
 
 /**
  * 归一化 WidgetData 对象 schema。
  * @param value - 原始 schema
- * @param kind - schema 类型
  * @returns 可保存对象 schema
  */
-export function normalizeWidgetSchemaObject(value: unknown, kind: WidgetSchemaKind = 'input'): WidgetSchemaObject {
-  if (!isWidgetSchemaObject(value)) {
-    return createDefaultWidgetSchemaObject(kind);
+export function normalizeWidgetSchemaObject(value: unknown): WidgetSchemaObject {
+  if (!isWidgetSchemaObjectCandidate(value)) {
+    return createDefaultWidgetSchemaObject();
   }
 
   return {
     type: 'object',
     ...(typeof value.description === 'string' ? { description: value.description } : {}),
-    properties: typeof value.properties === 'object' && value.properties !== null ? cloneDeep(value.properties) : {},
+    properties: typeof value.properties === 'object' && value.properties !== null ? (cloneDeep(value.properties) as Record<string, WidgetSchemaProperty>) : {},
     required: Array.isArray(value.required) ? [...value.required].filter((item: unknown): item is string => typeof item === 'string') : []
   };
 }
@@ -112,12 +93,13 @@ function normalizeWidgetExecuteMethod(value: unknown): WidgetExecuteMethod {
  */
 export function normalizeWidgetDataContract(
   candidate: WidgetDataContractCandidate
-): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'dataSchema' | 'execute' | 'metadata'> {
+): Pick<WidgetData, 'name' | 'description' | 'inputSchema' | 'outputSchema' | 'dataSchema' | 'execute' | 'metadata'> {
   return {
     name: typeof candidate.name === 'string' ? candidate.name : '',
     description: typeof candidate.description === 'string' ? candidate.description : '',
-    inputSchema: normalizeWidgetSchemaObject(candidate.inputSchema, 'input'),
-    dataSchema: normalizeWidgetSchemaObject(candidate.dataSchema, 'data'),
+    inputSchema: normalizeWidgetSchemaObject(candidate.inputSchema),
+    outputSchema: normalizeWidgetSchemaObject(candidate.outputSchema),
+    dataSchema: normalizeWidgetSchemaObject(candidate.dataSchema),
     execute: normalizeWidgetExecuteMethod(candidate.execute),
     metadata: cloneDeep(candidate.metadata ?? {})
   };

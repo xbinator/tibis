@@ -181,7 +181,11 @@ describe('boardTransforms', (): void => {
       properties: {},
       required: []
     });
-    expect(snapshot).not.toHaveProperty('outputSchema');
+    expect(snapshot.outputSchema).toEqual({
+      type: 'object',
+      properties: {},
+      required: []
+    });
     expect(snapshot.dataSchema).toEqual({
       type: 'object',
       properties: {},

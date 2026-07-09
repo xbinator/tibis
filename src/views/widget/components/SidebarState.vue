@@ -1,61 +1,76 @@
 <!--
   @file SidebarState.vue
-  @description 侧边栏数据源 schema 配置面板，承载入参字段定义与编辑。
+  @description 侧边栏数据源 schema 配置面板，承载入参与出参字段定义与编辑。
 -->
 <template>
-  <SidebarPanel title="入参">
+  <SidebarPanel title="数据源">
     <template #help>
       <BIcon class="schema-help-icon" icon="lucide:circle-alert" role="button" :size="14" tabindex="0" @click="openSchemaHelp" />
     </template>
     <template #extra>
-      <BButton type="secondary" icon="lucide:plus" size="mini" square @click="addRootSchemaField" />
+      <BButton type="secondary" icon="lucide:plus" size="mini" square tooltip="添加字段" @click="addRootSchemaField" />
       <BButton type="secondary" size="mini" @click="openSchemaInputEditor"> JSON 编辑 </BButton>
     </template>
+    <div class="schema-mode">
+      <BSegmented :value="activeMode" block :options="schemaModeOptions" @change="handleSchemaModeChange" />
+    </div>
     <div class="schema-body">
-      <SchemaTreeEditor v-model:schema="dataItem.inputSchema" />
+      <SchemaTreeEditor v-model:schema="activeSchema" />
     </div>
   </SidebarPanel>
 
   <!-- Schema JSON 编辑弹窗 -->
-  <SchemaInputEditor v-model:open="schemaInputEditorOpen" :schema="dataItem.inputSchema" @confirm="handleSchemaInputEditorConfirm" />
+  <BMonacoModal
+    v-model:open="schemaInputEditorOpen"
+    v-model:value="activeSchema"
+    :default-value="WIDGET_SCHEMA_DEFAULT_FIELD_NAME"
+    :editor-state="schemaEditorState"
+    :validate="validateSchemaEditorValue"
+    language="json"
+    :options="{ wordWrap: true, search: false }"
+  />
   <!-- Schema 填写说明抽屉 -->
-  <SchemaHelp v-model:open="schemaHelpDrawerOpen" />
+  <SchemaHelp v-model:open="schemaHelpDrawerOpen" :kind="activeMode" />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { cloneDeep, has } from 'lodash-es';
-import type { WidgetData, WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
+import type { EditorState } from '@/components/BEditor/types';
+import BMonacoModal from '@/components/BMonaco/Modal.vue';
+import type { BSegmentedOption } from '@/components/BSegmented/types';
+import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types';
+import { DEFAULT_WIDGET_EMPTY_SCHEMA, normalizeWidgetSchemaObject } from '@/components/BWidget/utils/widgetData';
+import { isWidgetSchemaObject } from '@/components/BWidget/utils/widgetSchema';
 import { WIDGET_SCHEMA_DEFAULT_FIELD_NAME } from '../constants/pageSetter';
 import SidebarPanel from './_SidebarPanel.vue';
 import SchemaHelp from './PageSetter/SchemaHelp.vue';
-import SchemaInputEditor from './PageSetter/SchemaInputEditor.vue';
 import SchemaTreeEditor from './PageSetter/SchemaTreeEditor.vue';
 
 defineOptions({ name: 'SidebarState' });
 
+/**
+ * 数据源 schema 分段选项。
+ */
+type SidebarSchemaModeOption = Omit<BSegmentedOption, 'value'> & {
+  /** 选项对应的 WidgetData schema 字段名。 */
+  value: 'inputSchema' | 'outputSchema';
+};
+
 const dataItem = defineModel<WidgetData>('value', { required: true });
 
+/** 当前正在编辑的 schema 类型。 */
+const activeMode = ref<'inputSchema' | 'outputSchema'>('inputSchema');
 /** Schema JSON 编辑弹窗开关状态。 */
 const schemaInputEditorOpen = ref(false);
 /** Schema 填写说明抽屉开关。 */
 const schemaHelpDrawerOpen = ref(false);
 
-/**
- * 向当前 Widget 数据写入配置变更。
- * @param patch - Widget 配置增量
- */
-function updateWidgetDataConfig(patch: Partial<Pick<WidgetData, 'description' | 'inputSchema' | 'name'>>): void {
-  dataItem.value = { ...dataItem.value, ...patch };
-}
-
-/**
- * 创建默认 schema 字段。
- * @returns 默认 schema 字段
- */
-function createDefaultSchemaField(): WidgetSchemaProperty {
-  return { type: 'string' };
-}
+/** 数据源 schema 模式切换选项。 */
+const schemaModeOptions: SidebarSchemaModeOption[] = [
+  { label: '入参', value: 'inputSchema' },
+  { label: '出参', value: 'outputSchema' }
+];
 
 /**
  * 创建根级唯一 schema 字段名。
@@ -76,23 +91,45 @@ function createUniqueRootSchemaFieldName(schema: WidgetSchemaObject): string {
 }
 
 /**
- * 写入当前 Widget 的入参 schema。
- * @param schema - 新入参 schema
+ * 校验 Schema JSON 编辑器保存值。
+ * @param value - 待校验模型值
+ * @returns 错误文案；undefined 表示校验通过
  */
-function updateWidgetSchema(schema: WidgetSchemaObject): void {
-  updateWidgetDataConfig({ inputSchema: schema });
+function validateSchemaEditorValue(value: unknown): string | undefined {
+  if (!isWidgetSchemaObject(value)) {
+    return 'Schema 必须是合法 JSON 对象';
+  }
+
+  return undefined;
 }
 
+/** 当前正在编辑的 schema。 */
+const activeSchema = computed<WidgetSchemaObject>({
+  get: (): WidgetSchemaObject => normalizeWidgetSchemaObject(dataItem.value[activeMode.value]),
+  set: (schema: WidgetSchemaObject): void => {
+    dataItem.value = { ...dataItem.value, [activeMode.value]: schema };
+  }
+});
+
+/** Schema JSON 编辑器状态。 */
+const schemaEditorState = computed<EditorState>(() => ({
+  id: `widget-${activeMode.value}-schema`,
+  name: `${activeMode.value}.json`,
+  path: null,
+  ext: 'json',
+  content: JSON.stringify(activeSchema.value, null, 2)
+}));
+
 /**
- * 添加根级入参 schema 字段。
+ * 添加根级 schema 字段。
  */
 function addRootSchemaField(): void {
-  const nextSchema = cloneDeep(dataItem.value.inputSchema);
+  const nextSchema = cloneDeep(activeSchema.value || DEFAULT_WIDGET_EMPTY_SCHEMA);
   const fieldName = createUniqueRootSchemaFieldName(nextSchema);
 
-  nextSchema.properties[fieldName] = createDefaultSchemaField();
+  nextSchema.properties[fieldName] = { type: 'string' };
 
-  updateWidgetSchema(nextSchema);
+  activeSchema.value = nextSchema;
 }
 
 /**
@@ -110,11 +147,11 @@ function openSchemaHelp(): void {
 }
 
 /**
- * 保存入参 Schema。
- * @param schema - 标准化后的 schema
+ * 切换当前 schema 编辑模式。
+ * @param value - 分段选项值
  */
-function handleSchemaInputEditorConfirm(schema: WidgetSchemaObject): void {
-  updateWidgetSchema(schema);
+function handleSchemaModeChange(value: string | number): void {
+  activeMode.value = value as 'inputSchema' | 'outputSchema';
 }
 </script>
 
@@ -134,5 +171,9 @@ function handleSchemaInputEditorConfirm(schema: WidgetSchemaObject): void {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.schema-mode {
+  margin-bottom: 10px;
 }
 </style>

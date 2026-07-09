@@ -10,7 +10,7 @@ import type { ComponentPublicInstance, Ref } from 'vue';
 import { mount, type DOMWrapper, type VueWrapper } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import type { WidgetData, WidgetElement, WidgetSchemaObject } from '@/components/BWidget/types';
-import { createDefaultWidgetData } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetData, DEFAULT_WIDGET_EMPTY_SCHEMA } from '@/components/BWidget/utils/widgetData';
 import { createDefaultWidgetElementLoopConfig } from '@/components/BWidget/utils/widgetLoop';
 import PageSetter from '@/views/widget/components/PageSetter.vue';
 import SidebarState from '@/views/widget/components/SidebarState.vue';
@@ -203,6 +203,51 @@ const globalStubs = {
       </button>
     `
   }),
+  BSegmented: defineComponent({
+    name: 'BSegmentedStub',
+    props: {
+      block: {
+        type: Boolean,
+        default: false
+      },
+      options: {
+        type: Array,
+        default: (): unknown[] => []
+      },
+      value: {
+        type: [String, Number],
+        default: ''
+      }
+    },
+    emits: ['change', 'update:value'],
+    setup(_props, { emit }) {
+      /**
+       * 转发分段选项点击事件。
+       * @param value - 被选中的选项值
+       * @param option - 被选中的选项配置
+       */
+      function handleClick(value: string | number, option: unknown): void {
+        emit('update:value', value);
+        emit('change', value, option);
+      }
+
+      return { handleClick };
+    },
+    template: `
+      <div class="b-segmented-stub" :data-block="block">
+        <button
+          v-for="option in options"
+          :key="option.value"
+          class="b-segmented-stub__button"
+          :class="{ 'is-active': option.value === value }"
+          type="button"
+          @click="handleClick(option.value, option)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    `
+  }),
   BIcon: defineComponent({
     name: 'BIconStub',
     props: {
@@ -269,6 +314,10 @@ const globalStubs = {
   BMonaco: defineComponent({
     name: 'BMonacoStub',
     props: {
+      editorState: {
+        type: Object,
+        default: (): Record<string, unknown> => ({})
+      },
       extraLibs: {
         type: Array,
         default: (): unknown[] => []
@@ -286,7 +335,7 @@ const globalStubs = {
         default: ''
       }
     },
-    emits: ['update:value'],
+    emits: ['save', 'update:value'],
     setup(_props, { emit, expose }) {
       /**
        * 将输入事件转换为 Monaco 的 value 更新事件。
@@ -305,11 +354,23 @@ const globalStubs = {
         return undefined;
       }
 
+      /**
+       * 模拟 Monaco 保存快捷键。
+       */
+      function handleSave(): void {
+        emit('save');
+      }
+
       expose({ focusEditor });
 
-      return { handleInput };
+      return { handleInput, handleSave };
     },
-    template: '<textarea class="schema-editor-monaco-stub" :value="value" @input="handleInput"></textarea>'
+    template: `
+      <div>
+        <textarea class="schema-editor-monaco-stub" :value="value" @input="handleInput"></textarea>
+        <button class="schema-editor-monaco-save-stub" @click="handleSave"></button>
+      </div>
+    `
   }),
   BMessage: defineComponent({
     name: 'BMessageStub',
@@ -676,9 +737,24 @@ function findSidebarStateSchemaEditButton(wrapper: VueWrapper<SidebarStateHostVm
   const extraElement = findSidebarStateExtra(wrapper).element;
   const button = wrapper
     .findAllComponents({ name: 'BButtonStub' })
-    .find((item: VueWrapper): boolean => extraElement.contains(item.element) && item.text() === '编辑');
+    .find((item: VueWrapper): boolean => extraElement.contains(item.element) && item.text().includes('编辑'));
   if (!button) {
     throw new Error('数据源侧栏缺少编辑 Schema 按钮');
+  }
+
+  return button;
+}
+
+/**
+ * 查找 SidebarState schema 类型切换按钮。
+ * @param wrapper - SidebarState 测试包装器
+ * @param label - 切换按钮文案
+ * @returns 按钮包装器
+ */
+function findSidebarStateSchemaModeButton(wrapper: VueWrapper<SidebarStateHostVm>, label: '入参' | '出参'): DOMWrapper<Element> {
+  const button = wrapper.findAll('.b-segmented-stub__button').find((item: DOMWrapper<Element>): boolean => item.text() === label);
+  if (!button) {
+    throw new Error(`数据源侧栏缺少 ${label} 切换按钮`);
   }
 
   return button;
@@ -831,6 +907,41 @@ describe('PageSetter', (): void => {
     expect(source).toMatch(typeSelectorFontSizePattern);
   });
 
+  it('keeps SidebarState schema modal usage bound directly to active schema', (): void => {
+    const source = readFileSync('src/views/widget/components/SidebarState.vue', 'utf-8');
+    const legacySchemaKindHelperName = ['getSidebar', 'WidgetSchema', 'Kind'].join('');
+    const legacySchemaKeyGuardName = ['isSidebar', 'SchemaKey'].join('');
+
+    expect(source).toContain('v-model:value="activeSchema"');
+    expect(source).toContain(':default-value="WIDGET_SCHEMA_DEFAULT_FIELD_NAME"');
+    expect(source).toContain(':kind="activeMode"');
+    expect(source).toContain("{ label: '入参', value: 'inputSchema' }");
+    expect(source).toContain("{ label: '出参', value: 'outputSchema' }");
+    expect(source).not.toContain('activeSchemaKey');
+    expect(source).not.toContain(legacySchemaKeyGuardName);
+    expect(source).not.toContain(':kind="activeSchemaKind"');
+    expect(source).not.toContain(legacySchemaKindHelperName);
+    expect(source).toContain('normalizeWidgetSchemaObject(dataItem.value[activeMode.value])');
+    expect(source).not.toContain('editorTitle');
+    expect(source).not.toContain('schemaDraftText');
+    expect(source).not.toContain('activeSchemaDraftDefaultText');
+    expect(source).not.toContain('handleSchemaInputEditorConfirm');
+    expect(source).not.toContain('handleSchemaInputEditorCancel');
+  });
+
+  it('keeps SchemaHelp keyed by WidgetData schema fields', (): void => {
+    const source = readFileSync('src/views/widget/components/PageSetter/SchemaHelp.vue', 'utf-8');
+
+    expect(source).toContain("type SchemaHelpKey = 'inputSchema' | 'outputSchema'");
+    expect(source).toContain('Record<SchemaHelpKey, SchemaHelpContent>');
+    expect(source).toContain('inputSchema: {');
+    expect(source).toContain('outputSchema: {');
+    expect(source).not.toContain("type SchemaHelpKind = 'input' | 'output'");
+    expect(source).not.toContain("kind: 'input'");
+    expect(source).not.toContain('input: {');
+    expect(source).not.toContain('output: {');
+  });
+
   it('edits widget name and description on the selected page', async (): Promise<void> => {
     const dataItem = createWidgetData();
     const wrapper = mountPageSetterHost(dataItem);
@@ -865,9 +976,7 @@ describe('PageSetter', (): void => {
     await sizeInputs[0]?.setValue('320');
     await sizeInputs[1]?.setValue('180');
 
-    expect((sizeSection.props() as SectionBlockTitleSnapshot).tips).toBe(
-      '设置运行态展示尺寸。留空按内容自适应；容器不足时等比缩小，容器更大时保持配置尺寸。'
-    );
+    expect((sizeSection.props() as SectionBlockTitleSnapshot).tips).toBe('设置运行态展示尺寸。留空按内容自适应；容器不足时等比缩小，容器更大时保持配置尺寸');
     expect(wrapper.vm.dataItem.metadata).toMatchObject({
       preserved: true,
       width: 320,
@@ -890,8 +999,10 @@ describe('PageSetter', (): void => {
     const extra = findSidebarStateExtra(wrapper);
 
     expect(wrapper.findAllComponents({ name: 'ATextareaStub' })).toHaveLength(0);
-    expect(inputSection.find('.sidebar-panel__title').text()).toBe('入参');
+    expect(inputSection.find('.sidebar-panel__title').text()).toBe('数据源');
     expect(wrapper.find('.schema-preview').exists()).toBe(false);
+    expect(findSidebarStateSchemaModeButton(wrapper, '入参').classes()).toContain('is-active');
+    expect(findSidebarStateSchemaModeButton(wrapper, '出参').exists()).toBe(true);
     expect(inputSection.find('.schema-editor').exists()).toBe(true);
     expect(inputSection.find('.schema-editor').html()).not.toContain('data-schema');
     expect(inputSection.findAll('.schema-editor__row')).toHaveLength(0);
@@ -955,6 +1066,78 @@ describe('PageSetter', (): void => {
     });
     expect(wrapper.vm.dataItem.inputSchema.required).toEqual(['userName']);
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('switches SidebarState between input and output schema editing', async (): Promise<void> => {
+    const dataItem = createWidgetData();
+    dataItem.inputSchema = {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string'
+        }
+      },
+      required: ['query']
+    };
+    dataItem.outputSchema = {
+      type: 'object',
+      properties: {
+        summary: {
+          type: 'string',
+          description: '天气摘要'
+        }
+      },
+      required: ['summary']
+    };
+    const wrapper = mountSidebarStateHost(dataItem);
+    const inputSection = findSidebarStatePanel(wrapper);
+
+    expect(findSchemaRow(inputSection, 'query').exists()).toBe(true);
+    expect(hasSchemaRow(inputSection, 'summary')).toBe(false);
+
+    await findSidebarStateSchemaModeButton(wrapper, '出参').trigger('click');
+
+    expect(findSidebarStateSchemaModeButton(wrapper, '出参').classes()).toContain('is-active');
+    expect(findSchemaRow(inputSection, 'summary').find('.schema-editor__name-input input').element).toHaveProperty('value', 'summary');
+    expect(hasSchemaRow(inputSection, 'query')).toBe(false);
+
+    await findSidebarStateAddFieldButton(wrapper).trigger('click');
+
+    expect(wrapper.vm.dataItem.outputSchema.properties.field).toEqual({
+      type: 'string'
+    });
+    expect(wrapper.vm.dataItem.inputSchema.properties.field).toBeUndefined();
+
+    await findSidebarStateSchemaEditButton(wrapper).trigger('click');
+    expect(wrapper.find('.schema-editor-modal-stub').attributes('data-title')).toBe('编辑');
+
+    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          resultCode: {
+            type: 'number',
+            description: '结果码'
+          }
+        },
+        required: ['resultCode']
+      })
+    );
+    await nextTick();
+    await wrapper
+      .findAllComponents({ name: 'BButtonStub' })
+      .find((button: VueWrapper): boolean => button.text() === '保存')
+      ?.trigger('click');
+
+    expect(wrapper.vm.dataItem.outputSchema.properties.resultCode).toEqual({
+      type: 'number',
+      description: '结果码'
+    });
+    expect(wrapper.vm.dataItem.outputSchema.required).toEqual(['resultCode']);
+    expect(wrapper.vm.dataItem.inputSchema.properties.query).toEqual({
+      type: 'string'
+    });
     wrapper.unmount();
   });
 
@@ -1128,8 +1311,88 @@ describe('PageSetter', (): void => {
       ?.trigger('click');
 
     expect(wrapper.vm.dataItem.inputSchema).toEqual(previousInputSchema);
-    expect(wrapper.find('.schema-editor__error').text()).toContain('Schema 必须是合法 JSON 对象');
+    expect(wrapper.find('.b-monaco-modal__error').text()).toContain('JSON 必须是合法格式');
     expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('keeps previous schema and shows validation feedback for non-object schema JSON', async (): Promise<void> => {
+    const dataItem = createWidgetData();
+    dataItem.inputSchema = {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string'
+        }
+      },
+      required: ['query']
+    };
+    const previousInputSchema = dataItem.inputSchema;
+    const wrapper = mountSidebarStateHost(dataItem);
+
+    await findSidebarStateSchemaEditButton(wrapper).trigger('click');
+    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(
+      JSON.stringify({
+        type: 'array',
+        items: {
+          type: 'string'
+        }
+      })
+    );
+    await nextTick();
+    await wrapper
+      .findAllComponents({ name: 'BButtonStub' })
+      .find((button: VueWrapper): boolean => button.text() === '保存')
+      ?.trigger('click');
+
+    expect(wrapper.vm.dataItem.inputSchema).toEqual(previousInputSchema);
+    expect(wrapper.find('.b-monaco-modal__error').text()).toContain('Schema 必须是合法 JSON 对象');
+    expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('keeps previous schema and shows validation feedback for object schema without properties', async (): Promise<void> => {
+    const dataItem = createWidgetData();
+    dataItem.inputSchema = {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string'
+        }
+      },
+      required: ['query']
+    };
+    const previousInputSchema = dataItem.inputSchema;
+    const wrapper = mountSidebarStateHost(dataItem);
+
+    await findSidebarStateSchemaEditButton(wrapper).trigger('click');
+    await wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').setValue(JSON.stringify({ type: 'object' }));
+    await nextTick();
+    await wrapper
+      .findAllComponents({ name: 'BButtonStub' })
+      .find((button: VueWrapper): boolean => button.text() === '保存')
+      ?.trigger('click');
+
+    expect(wrapper.vm.dataItem.inputSchema).toEqual(previousInputSchema);
+    expect(wrapper.find('.b-monaco-modal__error').text()).toContain('Schema 必须是合法 JSON 对象');
+    expect(wrapper.find('.schema-editor-modal-stub').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('uses default schema as the JSON draft when the active schema is undefined on open', async (): Promise<void> => {
+    const dataItem = createWidgetData();
+
+    delete (dataItem as unknown as { outputSchema?: WidgetSchemaObject }).outputSchema;
+    const wrapper = mountSidebarStateHost(dataItem);
+
+    await findSidebarStateSchemaModeButton(wrapper, '出参').trigger('click');
+    await findSidebarStateSchemaEditButton(wrapper).trigger('click');
+
+    await nextTick();
+
+    expect(JSON.parse((wrapper.find('.schema-editor-modal-stub .schema-editor-monaco-stub').element as HTMLTextAreaElement).value)).toEqual(
+      DEFAULT_WIDGET_EMPTY_SCHEMA
+    );
     wrapper.unmount();
   });
 

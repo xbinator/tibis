@@ -1,6 +1,6 @@
 /**
- * @file methodScriptExtraLib.ts
- * @description 小组件JS 脚本 Monaco extra lib 内容生成工具。
+ * @file methodScriptTypes.ts
+ * @description 小组件JS 脚本 Monaco extra lib 类型提示内容生成工具。
  */
 
 import type { WidgetSchemaObject, WidgetSchemaProperty } from '@/components/BWidget/types';
@@ -166,12 +166,14 @@ export function createWidgetSchemaInterfaceDeclaration(interfaceName: string, sc
 /**
  * 创建 Widget JS 脚本编辑器类型提示内容。
  * @param inputSchema - 入参 schema
+ * @param outputSchema - 出参 schema
  * @param dataSchema - 数据 schema
  * @returns Monaco extra lib 内容
  */
-export function createWidgetMethodScriptExtraLibContent(inputSchema: WidgetSchemaObject, dataSchema: WidgetSchemaObject): string {
+export function createWidgetMethodScriptTypes(inputSchema: WidgetSchemaObject, outputSchema: WidgetSchemaObject, dataSchema: WidgetSchemaObject): string {
   return `
 ${createWidgetSchemaInterfaceDeclaration('WidgetInput', inputSchema)}
+${createWidgetSchemaInterfaceDeclaration('WidgetOutput', outputSchema)}
 ${createWidgetSchemaInterfaceDeclaration('WidgetData', dataSchema)}
 
 declare interface WidgetSendMessageContentPart {
@@ -249,10 +251,10 @@ declare abstract class Widget {
    */
   readonly $input: WidgetInput
   /**
-   * onExecute 返回值，只读；未返回或执行失败时为 undefined。
-   * @example const weather = this.$output as { temperature?: number } | undefined
+   * onExecute 返回值，只读；类型由出参 schema 推导，未返回或执行失败时为 undefined。
+   * @example const weather = this.$output
    */
-  readonly $output: unknown
+  readonly $output: WidgetOutput | undefined
   /**
    * 托管 HTTP 客户端，request 超时和队列由系统统一控制。
    * @example const response = await this.$http.get('https://api.example.com/weather', { query: { city: this.$input.city } })

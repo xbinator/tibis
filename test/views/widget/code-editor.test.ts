@@ -510,6 +510,56 @@ describe('CodeEditor', (): void => {
     wrapper.unmount();
   });
 
+  it('creates editor type hints for configured output schema fields', (): void => {
+    const wrapper = mountCodeEditor({
+      ...createWidgetData(),
+      outputSchema: {
+        type: 'object',
+        description: '天气查询出参',
+        properties: {
+          summary: {
+            type: 'string',
+            description: '天气摘要'
+          },
+          alerts: {
+            type: 'array',
+            description: '预警列表',
+            items: {
+              type: 'string'
+            }
+          }
+        },
+        required: ['summary']
+      }
+    });
+    const extraLibContent = readMonacoProps(wrapper).extraLibs?.[0]?.content ?? '';
+
+    expect(extraLibContent).toContain('/** 天气查询出参 */\ndeclare interface WidgetOutput');
+    expect(extraLibContent).toContain('/** 天气摘要 */\n  summary: string');
+    expect(extraLibContent).toContain('/** 预警列表 */\n  alerts?: Array<string>');
+    expect(extraLibContent).toContain('readonly $output: WidgetOutput | undefined');
+    expect(
+      formatTypeScriptDiagnostics(
+        getTypeScriptDiagnostics({
+          'lib.d.ts': TYPESCRIPT_TEST_BASE_LIB,
+          'widget-env.d.ts': extraLibContent,
+          'widget-test.ts': [
+            'export default class Weather extends Widget {',
+            '  onMounted() {',
+            '    if (!this.$output) {',
+            '      return',
+            '    }',
+            '    const summary: string = this.$output.summary',
+            '    const firstAlert: string | undefined = this.$output.alerts?.[0]',
+            '  }',
+            '}'
+          ].join('\n')
+        })
+      )
+    ).toEqual([]);
+    wrapper.unmount();
+  });
+
   it('creates class-style this data and method type hints from the interaction script', (): void => {
     const wrapper = mountCodeEditor({
       ...createWidgetData(),

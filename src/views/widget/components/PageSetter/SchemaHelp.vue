@@ -15,6 +15,21 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+
+/**
+ * Schema 说明对应的 WidgetData 字段名。
+ */
+type SchemaHelpKey = 'inputSchema' | 'outputSchema';
+
+/**
+ * Schema 填写说明入参。
+ */
+interface Props {
+  /** 当前说明面向的 WidgetData schema 字段 */
+  kind?: SchemaHelpKey;
+}
+
 /**
  * Schema 填写说明内容。
  */
@@ -27,13 +42,17 @@ interface SchemaHelpContent {
   example: string;
 }
 
+const props = withDefaults(defineProps<Props>(), {
+  kind: 'inputSchema'
+});
 const open = defineModel<boolean>('open', { required: true });
 
-/** 当前 Schema 说明内容。 */
-const schemaHelpContent: SchemaHelpContent = {
-  title: '入参填写说明',
-  lead: '入参描述调用组件前需要提供的数据。以查天气为例，大模型需要知道要查询哪个城市、哪一天以及温度单位。',
-  example: `## 查天气入参
+/** 各类 Schema 说明内容。 */
+const schemaHelpContentMap: Record<SchemaHelpKey, SchemaHelpContent> = {
+  inputSchema: {
+    title: '入参填写说明',
+    lead: '入参描述调用组件前需要提供的数据。以查天气为例，大模型需要知道要查询哪个城市、哪一天以及温度单位。',
+    example: `## 查天气入参
 
 \`\`\`json
 {
@@ -55,7 +74,40 @@ const schemaHelpContent: SchemaHelpContent = {
   "required": ["city"]
 }
 \`\`\``
+  },
+  outputSchema: {
+    title: '出参填写说明',
+    lead: '出参描述 onExecute 返回给调用方的数据。以查天气为例，可以声明天气摘要、温度、预警列表等返回字段。',
+    example: `## 查天气出参
+
+\`\`\`json
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "天气摘要，例如上海今天晴，28℃"
+    },
+    "temperature": {
+      "type": "number",
+      "description": "温度数值"
+    },
+    "alerts": {
+      "type": "array",
+      "description": "天气预警列表",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["summary"]
+}
+\`\`\``
+  }
 };
+
+/** 当前 Schema 说明内容。 */
+const schemaHelpContent = computed<SchemaHelpContent>(() => schemaHelpContentMap[props.kind]);
 </script>
 
 <style lang="less" scoped>

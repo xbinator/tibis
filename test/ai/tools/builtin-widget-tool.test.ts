@@ -28,6 +28,16 @@ function createWeatherWidget(): WidgetDefinition {
       },
       required: ['city']
     },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        summary: {
+          type: 'string',
+          description: '天气摘要'
+        }
+      },
+      required: ['summary']
+    },
     metadata: {
       skill: {
         triggers: ['天气']
@@ -94,10 +104,16 @@ describe('WidgetTool', (): void => {
               description: '城市名称'
             }
           }
+        },
+        outputSchema: {
+          properties: {
+            summary: {
+              description: '天气摘要'
+            }
+          }
         }
       }
     });
-    expect(result.data).not.toHaveProperty('outputSchema');
   });
 
   it('fails when widget id is not found', async (): Promise<void> => {

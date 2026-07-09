@@ -172,6 +172,7 @@ function createWidgetContract(widget: WidgetDefinition): WidgetContract {
     name: widget.name,
     description: widget.description,
     inputSchema: cloneDeep(widget.data.inputSchema),
+    outputSchema: cloneDeep(widget.data.outputSchema),
     dataSchema: cloneDeep(widget.data.dataSchema)
   };
 }

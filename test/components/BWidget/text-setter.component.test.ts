@@ -85,6 +85,11 @@ function createWidgetData(): WidgetData {
         }
       }
     },
+    outputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    },
     dataSchema: {
       type: 'object',
       properties: {}

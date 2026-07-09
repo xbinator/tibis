@@ -62,6 +62,11 @@ function createWidgetData(element: WidgetElement): WidgetData {
         }
       }
     },
+    outputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    },
     dataSchema: {
       type: 'object',
       properties: {}

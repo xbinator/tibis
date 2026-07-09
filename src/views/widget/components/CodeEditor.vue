@@ -24,7 +24,7 @@ import BMonaco from '@/components/BMonaco/index.vue';
 import type { MonacoCompilerOptions, MonacoExtraLib } from '@/components/BMonaco/utils/createMonaco';
 import type { WidgetData, WidgetSchemaObject } from '@/components/BWidget/types';
 import { buildWidgetDataSchema } from '@/components/BWidget/utils/widgetDataSchema';
-import { createWidgetMethodScriptExtraLibContent } from '../constants/methodScriptExtraLib';
+import { createWidgetMethodScriptTypes } from '../constants/methodScriptTypes';
 
 defineOptions({ name: 'CodeEditor' });
 
@@ -59,13 +59,15 @@ const widgetMethodScriptCompilerOptions: MonacoCompilerOptions = {
 
 /** 当前 Widget 入参 schema。 */
 const inputSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => dataItem.value.inputSchema);
+/** 当前 Widget 出参 schema。 */
+const outputSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => dataItem.value.outputSchema);
 /** 当前 Widget 运行脚本配置，创建流程保证该字段已初始化。 */
 const executeMethod = computed<WidgetData['execute']>((): WidgetData['execute'] => dataItem.value.execute);
 /** 当前组件脚本草稿推导出的数据 schema。 */
 const methodDraftDataSchema = computed<WidgetSchemaObject>((): WidgetSchemaObject => buildWidgetDataSchema(inputCode.value, inputSchema.value));
 /** Widget 组件脚本编辑器类型提示内容。 */
 const widgetMethodScriptExtraLibContent = computed<string>((): string =>
-  createWidgetMethodScriptExtraLibContent(inputSchema.value, methodDraftDataSchema.value)
+  createWidgetMethodScriptTypes(inputSchema.value, outputSchema.value, methodDraftDataSchema.value)
 );
 /** Widget 组件脚本编辑器类型提示声明。 */
 const widgetMethodScriptExtraLibs = computed<MonacoExtraLib[]>((): MonacoExtraLib[] => [

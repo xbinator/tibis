@@ -63,6 +63,8 @@ export interface WidgetContract {
   description: string;
   /** 小组件入参 schema */
   inputSchema: WidgetSchemaObject;
+  /** 小组件出参 schema */
+  outputSchema: WidgetSchemaObject;
   /** 小组件数据 schema */
   dataSchema: WidgetSchemaObject;
 }

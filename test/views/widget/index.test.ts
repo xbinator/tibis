@@ -36,6 +36,11 @@ const widgetDataMock = vi.hoisted((): { value: WidgetData } => ({
       properties: {},
       required: []
     },
+    outputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    },
     dataSchema: {
       type: 'object',
       properties: {},

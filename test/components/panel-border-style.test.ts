@@ -22,10 +22,15 @@ const PANEL_BORDER_TARGETS: PanelBorderTarget[] = [
   { filePath: 'src/views/settings/_components/SettingsPage.vue', selector: '.settings-page' },
   { filePath: 'src/layouts/default/components/ChatSider.vue', selector: '.chat-sider__content' },
   { filePath: 'src/views/settings/provider/layout.vue', selector: '.provider-layout' },
-  { filePath: 'src/components/BWidget/renderers/WidgetCanvas.vue', selector: '.b-widget-canvas' },
   { filePath: 'src/components/BEditor/Markdown.vue', selector: '.b-markdown-main' },
   { filePath: 'src/components/BEditor/components/Sidebar.vue', selector: '.b-markdown-sidebar' }
 ];
+
+/** Widget 画布容器由外层页面承载边界，不直接绘制主容器边框。 */
+const WIDGET_CANVAS_BORDER_TARGET: PanelBorderTarget = {
+  filePath: 'src/components/BWidget/renderers/WidgetCanvas.vue',
+  selector: '.b-widget-canvas'
+};
 
 /**
  * 读取源码文件。
@@ -79,5 +84,12 @@ describe('panel border styles', (): void => {
       expect(ruleBody, `${target.filePath} ${target.selector}`).toContain(PANEL_BORDER_RULE);
       expect(source, `${target.filePath} ${target.selector}`).not.toContain(`${target.selector}::after`);
     }
+  });
+
+  it('does not draw a direct border on the widget canvas container', (): void => {
+    const source = readSource(WIDGET_CANVAS_BORDER_TARGET.filePath);
+    const ruleBody = readRuleBody(source, WIDGET_CANVAS_BORDER_TARGET.selector);
+
+    expect(ruleBody, `${WIDGET_CANVAS_BORDER_TARGET.filePath} ${WIDGET_CANVAS_BORDER_TARGET.selector}`).not.toContain(PANEL_BORDER_RULE);
   });
 });

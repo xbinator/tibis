@@ -56,6 +56,7 @@ function createModelUpdateSnapshot(board: UseWidgetBoardReturn, dataItem: Widget
       name: dataItem?.name,
       description: dataItem?.description,
       inputSchema: dataItem?.inputSchema,
+      outputSchema: dataItem?.outputSchema,
       dataSchema: dataItem?.dataSchema,
       execute: dataItem?.execute,
       metadata: dataItem?.metadata

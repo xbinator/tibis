@@ -315,6 +315,8 @@ export interface WidgetData<TMetadata extends WidgetMetadata = WidgetMetadata> {
   description: string;
   /** Widget能力入参 schema */
   inputSchema: WidgetSchemaObject;
+  /** Widget能力出参 schema */
+  outputSchema: WidgetSchemaObject;
   /** Widget运行数据 schema */
   dataSchema: WidgetSchemaObject;
   /** WidgetJS 脚本配置 */
