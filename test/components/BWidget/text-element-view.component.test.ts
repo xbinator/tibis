@@ -138,4 +138,20 @@ describe('TextElementView', (): void => {
     expect(wrapper.text()).toBe('{{ weather.temperature | default("未知") }}');
     wrapper.unmount();
   });
+
+  it('ignores cleared and non-positive maxLines values for line clamp', (): void => {
+    const ignoredValues: Array<number | null> = [null, 0, -1];
+
+    ignoredValues.forEach((maxLines: number | null): void => {
+      const element = createTextElement();
+      element.metadata.content = '第一行\n第二行\n第三行';
+      element.metadata.maxLines = maxLines;
+      const wrapper = mountTextElementView(element);
+      const style = wrapper.find('.widget-text-element-content').attributes('style') ?? '';
+
+      expect(style).not.toContain('-webkit-line-clamp');
+      expect(style).not.toContain('display: -webkit-box');
+      wrapper.unmount();
+    });
+  });
 });

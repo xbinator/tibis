@@ -35,7 +35,7 @@ const textContent = useElementContent(toRef(props, 'element'), 'content');
  */
 const viewStyle = computed<StyleValue>((): StyleValue => {
   const maxLines = props.element?.metadata.maxLines;
-  if (maxLines === undefined) return {};
+  if (typeof maxLines !== 'number' || maxLines <= 0) return {};
 
   return {
     display: '-webkit-box',
