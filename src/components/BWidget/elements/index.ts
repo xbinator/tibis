@@ -4,6 +4,9 @@
  */
 import type { WidgetElementSchema } from './types';
 import type { Component } from 'vue';
+import ButtonView from './Button/index.vue';
+import { buttonElementSchema } from './Button/schema';
+import ButtonSetter from './Button/Setter.vue';
 import GroupSetter from './group/Setter.vue';
 import ImageView from './Image/index.vue';
 import { imageElementSchema } from './Image/schema';
@@ -17,7 +20,7 @@ import TextSetter from './Text/Setter.vue';
 /**
  * BWidget 侧边栏可创建元素注册表。
  */
-export const WIDGET_ELEMENT_SCHEMAS: WidgetElementSchema[] = [rectElementSchema, textElementSchema, imageElementSchema];
+export const WIDGET_ELEMENT_SCHEMAS: WidgetElementSchema[] = [rectElementSchema, textElementSchema, imageElementSchema, buttonElementSchema];
 
 /** 元素配置索引。 */
 const widgetElementSchemaByName = new Map<string, WidgetElementSchema>(
@@ -28,14 +31,16 @@ const widgetElementSchemaByName = new Map<string, WidgetElementSchema>(
 const widgetElementViewByName = new Map<string, Component>([
   [rectElementSchema.name, RectView],
   [textElementSchema.name, TextView],
-  [imageElementSchema.name, ImageView]
+  [imageElementSchema.name, ImageView],
+  [buttonElementSchema.name, ButtonView]
 ]);
 
 /** 元素专属属性设置面板索引。 */
 const widgetElementSetterByName = new Map<string, Component>([
   ['group', GroupSetter],
   [textElementSchema.name, TextSetter],
-  [imageElementSchema.name, ImageSetter]
+  [imageElementSchema.name, ImageSetter],
+  [buttonElementSchema.name, ButtonSetter]
 ]);
 
 /**
