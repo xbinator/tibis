@@ -50,9 +50,11 @@ function createVariableOptions(): VariableOptionGroup[] {
 /**
  * 挂载单行变量输入。
  * @param value - 初始输入值
+ * @param extraProps - 额外组件属性
+ * @param attachTo - 挂载目标
  * @returns 输入组件包装器
  */
-function mountTextInput(value = 'https://cdn.example.com/', extraProps: Record<string, unknown> = {}): VueWrapper {
+function mountTextInput(value = 'https://cdn.example.com/', extraProps: Record<string, unknown> = {}, attachTo: Element = document.body): VueWrapper {
   const wrapper: VueWrapper = mount(BTextInput, {
     props: {
       value,
@@ -97,7 +99,7 @@ function mountTextInput(value = 'https://cdn.example.com/', extraProps: Record<s
         })
       }
     },
-    attachTo: document.body
+    attachTo
   });
 
   return wrapper;
@@ -174,6 +176,49 @@ describe('BText Input', (): void => {
     wrapper.unmount();
   });
 
+  it('opens the variable dropdown above when the scroll container lacks space below', async (): Promise<void> => {
+    const scrollContainer = document.createElement('div');
+    scrollContainer.style.overflowY = 'auto';
+    document.body.appendChild(scrollContainer);
+
+    const wrapper = mountTextInput('', {}, scrollContainer);
+    const root = wrapper.find('.b-text-input').element as HTMLElement;
+
+    scrollContainer.getBoundingClientRect = (): DOMRect =>
+      ({
+        bottom: 220,
+        height: 120,
+        left: 0,
+        right: 320,
+        top: 100,
+        width: 320,
+        x: 0,
+        y: 100,
+        toJSON: (): Record<string, number> => ({})
+      } as DOMRect);
+    root.getBoundingClientRect = (): DOMRect =>
+      ({
+        bottom: 216,
+        height: 32,
+        left: 12,
+        right: 292,
+        top: 184,
+        width: 280,
+        x: 12,
+        y: 184,
+        toJSON: (): Record<string, number> => ({})
+      } as DOMRect);
+
+    await wrapper.find('.b-text-input__variable').trigger('click');
+
+    const dropdown = root.querySelector<HTMLElement>('.select-dropdown');
+
+    expect(dropdown?.style.bottom).toBe('calc(100% + 4px)');
+    expect(dropdown?.style.top).toBe('');
+    expect(dropdown?.style.maxHeight).toBe('80px');
+    wrapper.unmount();
+  });
+
   it('inserts the variable as a plain path when useTemplateSyntax is false', async (): Promise<void> => {
     const wrapper = mountTextInput('', { useTemplateSyntax: false });
     const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
@@ -185,6 +230,23 @@ describe('BText Input', (): void => {
     await nextTick();
 
     expect(wrapper.emitted('update:value')?.at(-1)).toEqual(['$input.imageUrl']);
+    wrapper.unmount();
+  });
+
+  it('replaces the whole value when replaceEntireValue is true', async (): Promise<void> => {
+    const wrapper = mountTextInput('prefix ');
+    const input = wrapper.find<HTMLInputElement>('.b-text-input__control input');
+
+    await wrapper.setProps({ replaceEntireValue: true });
+    input.element.setSelectionRange(3, 3);
+    await input.trigger('focus');
+    await input.trigger('select');
+    await wrapper.find('.b-text-input__variable').trigger('click');
+    await nextTick();
+    document.body.querySelectorAll<HTMLElement>('.select-dropdown__item')[2]?.click();
+    await nextTick();
+
+    expect(wrapper.emitted('update:value')?.at(-1)).toEqual(['{{ $input.imageUrl }}']);
     wrapper.unmount();
   });
 });

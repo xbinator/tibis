@@ -45,6 +45,7 @@ import type { CSSProperties } from 'vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Input as AInput } from 'ant-design-vue';
 import { createNamespace } from '@/utils/namespace';
+import { scroll } from '@/utils/scroll';
 import VariableSelect from './components/VariableSelect.vue';
 import { flattenVariables, getVisibleVariables } from './utils/variables';
 
@@ -54,6 +55,15 @@ const TEXT_INPUT_TRIGGER_LOOKBEHIND = 100;
 const DEFAULT_DROPDOWN_POSITION = { top: 0, left: 0, bottom: 0 };
 /** 默认下拉宽度，等待首次打开时同步为真实输入框宽度。 */
 const DEFAULT_DROPDOWN_WIDTH = 300;
+/** 变量下拉与输入框的间距。 */
+const TEXT_INPUT_DROPDOWN_GAP = 4;
+/** 变量下拉最大高度，包含外层面板 padding。 */
+const TEXT_INPUT_DROPDOWN_MAX_HEIGHT = 316;
+
+/**
+ * 变量下拉展开方向。
+ */
+type TextInputDropdownPlacement = 'top' | 'bottom';
 
 /**
  * 单行变量输入组件属性。
@@ -67,6 +77,8 @@ interface Props {
   disabled?: boolean;
   /** 变量插入时是否使用 {{ }} 模板语法包裹，默认 true；绑定路径等纯字段场景可设为 false */
   useTemplateSyntax?: boolean;
+  /** 变量选择后是否覆盖整个输入值，默认 false 表示按光标插入/拼接 */
+  replaceEntireValue?: boolean;
 }
 
 /**
@@ -85,7 +97,8 @@ const props = withDefaults(defineProps<Props>(), {
   placeholder: '',
   options: () => [],
   disabled: false,
-  useTemplateSyntax: true
+  useTemplateSyntax: true,
+  replaceEntireValue: false
 });
 
 const emit = defineEmits<{
@@ -115,6 +128,10 @@ const dropdownVisible = ref(false);
 const dropdownPosition = ref(DEFAULT_DROPDOWN_POSITION);
 /** 变量下拉宽度。 */
 const dropdownWidth = ref(DEFAULT_DROPDOWN_WIDTH);
+/** 变量下拉展开方向。 */
+const dropdownPlacement = ref<TextInputDropdownPlacement>('bottom');
+/** 变量下拉在当前滚动容器中的可用最大高度。 */
+const dropdownMaxHeight = ref(TEXT_INPUT_DROPDOWN_MAX_HEIGHT);
 /** 当前高亮变量索引。 */
 const activeIndex = ref(0);
 /** 当前触发替换范围。 */
@@ -135,15 +152,23 @@ const filteredVariables = computed<VisibleVariable[]>((): VisibleVariable[] =>
   getVisibleVariables(variableTrees.value, collapsedVariableValues.value, triggerRange.value?.query ?? '')
 );
 /** 单行输入内联下拉样式，避免全局 Teleport 定位在鼠标打开时跑到页面左侧。 */
-const dropdownInlineStyle = computed<CSSProperties>(
-  (): CSSProperties => ({
+const dropdownInlineStyle = computed<CSSProperties>(() => {
+  const style: CSSProperties = {
     position: 'absolute',
-    top: 'calc(100% + 4px)',
     left: '0px',
     width: '100%',
+    maxHeight: `${dropdownMaxHeight.value}px`,
     zIndex: 20
-  })
-);
+  };
+
+  if (dropdownPlacement.value === 'top') {
+    style.bottom = `calc(100% + ${TEXT_INPUT_DROPDOWN_GAP}px)`;
+  } else {
+    style.top = `calc(100% + ${TEXT_INPUT_DROPDOWN_GAP}px)`;
+  }
+
+  return style;
+});
 
 /**
  * 读取输入框当前光标位置。
@@ -189,16 +214,63 @@ function readTemplateTriggerRange(value: string, cursor: number): TemplateTrigge
 }
 
 /**
- * 同步变量下拉锚点位置。
+ * 读取变量下拉应遵守的可视边界。
+ * @returns 可视边界
+ */
+function readDropdownBoundary(): { top: number; bottom: number } {
+  const scrollContainer = scroll.container(rootRef.value);
+
+  if (scrollContainer instanceof HTMLElement) {
+    const rect = scrollContainer.getBoundingClientRect();
+
+    return {
+      top: rect.top,
+      bottom: rect.bottom
+    };
+  }
+
+  if (scrollContainer === window) {
+    return {
+      top: 0,
+      bottom: window.innerHeight || document.documentElement.clientHeight || 0
+    };
+  }
+
+  return {
+    top: 0,
+    bottom: window.innerHeight || document.documentElement.clientHeight || 0
+  };
+}
+
+/**
+ * 同步变量下拉在滚动容器内的展开方向与高度。
+ * @param rect - 输入根节点矩形
+ */
+function syncDropdownInlinePlacement(rect: DOMRect): void {
+  const boundary = readDropdownBoundary();
+  const spaceBelow = boundary.bottom - rect.bottom - TEXT_INPUT_DROPDOWN_GAP;
+  const spaceAbove = rect.top - boundary.top - TEXT_INPUT_DROPDOWN_GAP;
+  const shouldOpenAbove = spaceBelow < TEXT_INPUT_DROPDOWN_MAX_HEIGHT && spaceAbove > spaceBelow;
+  const availableHeight = shouldOpenAbove ? spaceAbove : spaceBelow;
+
+  dropdownPlacement.value = shouldOpenAbove ? 'top' : 'bottom';
+  dropdownMaxHeight.value = Math.max(0, Math.min(TEXT_INPUT_DROPDOWN_MAX_HEIGHT, availableHeight));
+}
+
+/**
+ * 同步变量下拉锚点位置与滚动容器内的展开方式。
  */
 function syncDropdownPosition(): void {
   const rect = rootRef.value?.getBoundingClientRect();
   if (!rect) {
     dropdownPosition.value = DEFAULT_DROPDOWN_POSITION;
     dropdownWidth.value = DEFAULT_DROPDOWN_WIDTH;
+    dropdownPlacement.value = 'bottom';
+    dropdownMaxHeight.value = TEXT_INPUT_DROPDOWN_MAX_HEIGHT;
     return;
   }
 
+  syncDropdownInlinePlacement(rect);
   dropdownPosition.value = {
     top: rect.top,
     left: rect.left,
@@ -313,14 +385,19 @@ function handleVariableSelect(variable: Variable): void {
   const currentValue = modelValue.value;
   const range = triggerRange.value ?? { from: cursorPosition.value, to: cursorPosition.value, query: '' };
   const insertedValue = props.useTemplateSyntax ? `{{ ${variable.value} }}` : variable.value;
+  if (props.replaceEntireValue) {
+    updateValue(insertedValue);
+    closeDropdown();
+    setInputCursorPosition(insertedValue.length);
+    return;
+  }
+
   const nextValue = `${currentValue.slice(0, range.from)}${insertedValue}${currentValue.slice(range.to)}`;
   const nextCursor = range.from + insertedValue.length;
 
   updateValue(nextValue);
   closeDropdown();
-  setInputCursorPosition(nextCursor).catch((error: unknown): void => {
-    console.warn('BTextInput cursor sync failed', error);
-  });
+  setInputCursorPosition(nextCursor);
 }
 
 /**

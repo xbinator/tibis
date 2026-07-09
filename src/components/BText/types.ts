@@ -69,6 +69,52 @@ export interface VariableOptionGroup {
 }
 
 /**
+ * BTextSelect 支持的静态选项值。
+ */
+export type BTextSelectStaticValue = string | number | boolean | null;
+
+/**
+ * BTextSelect 模型值，字符串也可表示完整变量模板。
+ */
+export type BTextSelectValue = BTextSelectStaticValue | undefined;
+
+/**
+ * BTextSelect 静态选项。
+ */
+export interface BTextSelectOption {
+  /** 展示文本 */
+  label: string;
+  /** 实际写入值 */
+  value: BTextSelectStaticValue;
+  /** 选项说明 */
+  description?: string;
+}
+
+/**
+ * 方法动作配置。
+ */
+export interface BTextMethodAction {
+  /** 需要调用的方法名 */
+  method: string;
+  /** 方法参数，支持 {{ }} 变量模板 */
+  args: string[];
+}
+
+/**
+ * 可选方法。
+ */
+export interface BTextMethodOption {
+  /** 展示文本 */
+  label: string;
+  /** 实际方法名 */
+  value: string;
+  /** 方法参数名 */
+  parameters?: string[];
+  /** 方法说明 */
+  description?: string;
+}
+
+/**
  * 文件提及选项，用于 @ 文件查找功能
  */
 export interface FileMentionOption {
