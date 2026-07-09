@@ -35,7 +35,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends BSegmentedOption">
 import type { BSegmentedOption, BSegmentedProps as Props, BSegmentedValue } from './types';
 import type { Ref } from 'vue';
 import { computed, nextTick, onMounted, ref, useSlots, watch } from 'vue';
@@ -46,7 +46,7 @@ defineOptions({ name: 'BSegmented' });
 
 const [, bem] = createNamespace('segmented');
 
-const props = withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props<T>>(), {
   value: undefined,
   block: false
 });
@@ -55,7 +55,7 @@ const emit = defineEmits<{
   /** 选中值更新时触发。 */
   'update:value': [value: BSegmentedValue];
   /** 用户点击切换选项时触发。 */
-  change: [value: BSegmentedValue, option: BSegmentedOption];
+  change: [value: BSegmentedValue, option: T];
 }>();
 
 const slots = useSlots();
@@ -185,7 +185,7 @@ function syncActiveValue(): void {
  * 处理选项点击。
  * @param option - 被点击选项
  */
-function handleOptionClick(option: BSegmentedOption): void {
+function handleOptionClick(option: T): void {
   if (option.disabled || option.value === active.value) {
     return;
   }

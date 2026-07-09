@@ -27,11 +27,11 @@ export interface BSegmentedOption {
 /**
  * BSegmented 组件属性。
  */
-export interface BSegmentedProps {
+export interface BSegmentedProps<T extends BSegmentedOption> {
   /** 当前选中值。 */
   value?: BSegmentedValue;
   /** 分段选项列表。 */
-  options: BSegmentedOption[];
+  options: T[];
   /** 是否撑满父容器宽度。 */
   block?: boolean;
 }
