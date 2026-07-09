@@ -119,6 +119,7 @@ describe('ButtonElementView', (): void => {
     expect(button.attributes('disabled')).toBeDefined();
     expect(button.attributes('aria-busy')).toBe('true');
     expect(wrapper.find('.widget-button-element__loading').exists()).toBe(true);
+    expect(wrapper.find('.widget-button-element__loading-spinner').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -141,6 +142,7 @@ describe('ButtonElementView', (): void => {
     expect(button.attributes('disabled')).toBeDefined();
     expect(button.attributes('aria-busy')).toBe('true');
     expect(wrapper.find('.widget-button-element__loading').exists()).toBe(true);
+    expect(wrapper.find('.widget-button-element__loading-spinner').exists()).toBe(true);
     wrapper.unmount();
   });
 

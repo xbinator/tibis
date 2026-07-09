@@ -4,8 +4,17 @@
 -->
 <template>
   <div class="widget-button-element">
-    <button :aria-busy="buttonLoading ? 'true' : 'false'" :class="buttonClasses" :disabled="buttonBlocked" type="button" @click.stop="handleButtonClick">
-      <span v-if="buttonLoading" class="widget-button-element__loading" aria-hidden="true"></span>
+    <button
+      :aria-busy="buttonLoading ? 'true' : 'false'"
+      class="widget-button-element__button"
+      :class="{ 'is-loading': buttonLoading }"
+      :disabled="buttonBlocked"
+      type="button"
+      @click.stop="handleButtonClick"
+    >
+      <span v-if="buttonLoading" class="widget-button-element__loading" aria-hidden="true">
+        <span class="widget-button-element__loading-spinner"></span>
+      </span>
       <span class="widget-button-element__text">{{ buttonText }}</span>
     </button>
   </div>
@@ -70,15 +79,6 @@ function runButtonAction(action: WidgetButtonAction): void {
 const buttonBlocked = computed<boolean>((): boolean => buttonDisabled.value || buttonLoading.value);
 /** 点击动作列表。 */
 const buttonActions = useElementValue(toRef(props, 'element'), 'actions', { transform: 'method' });
-/** 按钮样式类名。 */
-const buttonClasses = computed<Array<string | Record<string, boolean>>>(
-  (): Array<string | Record<string, boolean>> => [
-    'widget-button-element__button',
-    {
-      'is-loading': buttonLoading.value
-    }
-  ]
-);
 
 /**
  * 处理按钮点击，调用运行态中的同名业务方法。
@@ -97,6 +97,7 @@ function handleButtonClick(): void {
 }
 
 .widget-button-element__button {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -119,11 +120,20 @@ function handleButtonClick(): void {
 }
 
 .widget-button-element__button.is-loading {
-  cursor: wait;
+  cursor: not-allowed;
+  opacity: 0.8;
 }
 
 .widget-button-element__loading {
-  flex: none;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.widget-button-element__loading-spinner {
   width: 1em;
   height: 1em;
   border: 2px solid currentColor;
