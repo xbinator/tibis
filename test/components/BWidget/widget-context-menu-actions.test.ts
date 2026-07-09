@@ -269,7 +269,7 @@ describe('BWidget context menu actions', (): void => {
     vi.unstubAllGlobals();
   });
 
-  it('copies a node and pastes it at the canvas context point', async (): Promise<void> => {
+  it('copies a node and pastes it from an element context menu point', async (): Promise<void> => {
     const wrapper = mount(BWidget, {
       props: {
         value: createWidgetData()
@@ -286,7 +286,7 @@ describe('BWidget context menu actions', (): void => {
 
     await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 440, clientY: 330 });
     await clickContextMenuItem(wrapper, '复制');
-    await wrapper.find('.b-widget-canvas').trigger('contextmenu', { clientX: 500, clientY: 360 });
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 500, clientY: 360 });
     await clickContextMenuItem(wrapper, '粘贴');
 
     const latestData = getLatestWidgetData(wrapper);
@@ -295,6 +295,26 @@ describe('BWidget context menu actions', (): void => {
       position: { x: 100, y: 60 }
     });
     expect(latestData?.elements[1]?.id).toMatch(/^[A-Za-z0-9_-]{8}$/);
+    wrapper.unmount();
+  });
+
+  it('does not open the context menu when right-clicking the blank canvas area', async (): Promise<void> => {
+    const wrapper = mount(BWidget, {
+      props: {
+        value: createWidgetData(),
+        select: {}
+      },
+      attachTo: document.body
+    });
+    setElementRect(wrapper.element, { height: 600, left: 0, top: 0, width: 800 });
+    setElementRect(wrapper.find('.b-widget-canvas').element, { height: 600, left: 0, top: 0, width: 800 });
+
+    getWidgetExpose(wrapper).selectElementById('node-1');
+    await flushWidgetUpdates();
+    await wrapper.find('.b-widget-canvas').trigger('contextmenu', { clientX: 500, clientY: 360 });
+
+    expect(wrapper.find('.b-widget-context-menu').exists()).toBe(false);
+    expect(wrapper.emitted('selection-change')?.at(-1)).toEqual([['node-1']]);
     wrapper.unmount();
   });
 
@@ -490,7 +510,7 @@ describe('BWidget context menu actions', (): void => {
     expect(readContextMenuLabels(wrapper)).not.toContain('取消合并');
 
     await clickContextMenuItem(wrapper, '复制');
-    await wrapper.find('.b-widget-canvas').trigger('contextmenu', { clientX: 500, clientY: 360 });
+    await findNodeById(wrapper, 'node-1').trigger('contextmenu', { clientX: 500, clientY: 360 });
     const pasteItem = wrapper
       .findAll<HTMLButtonElement>('.b-widget-context-menu__item')
       .find((item: DOMWrapper<HTMLButtonElement>): boolean => item.text().includes('粘贴'));

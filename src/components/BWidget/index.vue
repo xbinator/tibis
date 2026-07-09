@@ -961,16 +961,18 @@ function setActiveTool(tool: string): void {
  * @param payload - 右键菜单事件载荷
  */
 function handleWidgetContextMenu(payload: WidgetContextMenuPayload): void {
+  if (payload.elementId === null) {
+    // 空白画布区域不提供自定义菜单，避免右键误清空选区或打开禁用项列表。
+    closeContextMenu();
+    return;
+  }
+
   cancelDirectDrag();
   setActiveTool('select');
 
-  if (payload.elementId) {
-    const selection = getContextMenuSelectionForElement(payload.elementId);
-    if (!isSameSelection(board.state.value.selection, selection)) {
-      board.setSelection(selection);
-    }
-  } else {
-    board.setSelection([]);
+  const selection = getContextMenuSelectionForElement(payload.elementId);
+  if (!isSameSelection(board.state.value.selection, selection)) {
+    board.setSelection(selection);
   }
 
   contextMenuState.value = {
