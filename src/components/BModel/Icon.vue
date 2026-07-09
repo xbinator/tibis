@@ -63,7 +63,8 @@ const providerIcons: Record<string, string> = {
   ollama: 'ollama',
   volcengine: 'volcengine-color',
   glm: 'zhipu-color',
-  mimo: 'xiaomimimo'
+  mimo: 'xiaomimimo',
+  sensenova: 'sensenova-color'
 };
 
 const modelIcons: Record<string, string> = {
@@ -82,7 +83,8 @@ const modelIcons: Record<string, string> = {
   gemini: 'gemini-color',
   gemma: 'gemma-color',
   grok: 'grok',
-  hy: 'hunyuan-color'
+  hy: 'hunyuan-color',
+  sensenova: 'sensenova-color'
 };
 
 const iconId = computed(() => {
