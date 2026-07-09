@@ -142,7 +142,6 @@ export default defineComponent({
   justify-content: center;
   padding: 0 16px;
   font-size: 14px;
-  line-height: 1;
   color: #fff;
   white-space: nowrap;
   cursor: pointer;

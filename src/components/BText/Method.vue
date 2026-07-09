@@ -50,23 +50,27 @@
             >
               <span :class="bem('method-name')">{{ method.label }}</span>
             </button>
-            <div v-if="methods.length === 0" :class="bem('empty')">暂无可用函数</div>
+            <div v-if="methods.length === 0" :class="bem('empty')">
+              <BIcon icon="lucide:inbox" :class="bem('empty-icon')" />
+              <span :class="bem('empty-text')">暂无可用函数</span>
+            </div>
           </div>
         </div>
 
         <div :class="bem('section')">
           <div :class="bem('section-title')">
             <span>参数</span>
-            <button :class="bem('argument-add')" type="button" @click="addArgument">
-              <BIcon icon="lucide:plus" />
-              <span>添加参数</span>
-            </button>
+            <BButton v-if="editingAction.method" type="secondary" size="mini" icon="lucide:plus" @click="addArgument">添加参数</BButton>
           </div>
           <div :class="bem('args')">
             <div v-for="(_argument, index) in editingAction.args" :key="index" :class="bem('arg')">
               <label :class="bem('arg-label')">{{ readArgumentLabel(index) }}</label>
               <BTextInput v-model:value="editingAction.args[index]" :options="variables" :placeholder="readArgumentPlaceholder(index)" />
               <BButton :class="bem('arg-remove')" type="text" danger square icon="lucide:trash-2" @click="removeArgument(index)" />
+            </div>
+            <div v-if="editingAction.args.length === 0" :class="bem('empty')">
+              <BIcon icon="lucide:brackets" :class="bem('empty-icon')" />
+              <span :class="bem('empty-text')">{{ editingAction.method ? '暂无参数' : '请先选择函数' }}</span>
             </div>
           </div>
         </div>
@@ -435,7 +439,6 @@ function confirmAction(): void {
   min-height: 36px;
   padding: 0 10px;
   font-size: 13px;
-  font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
@@ -482,14 +485,25 @@ function confirmAction(): void {
   color: var(--text-tertiary);
 }
 
-.b-text-method__empty,
-.b-text-method__args-empty {
-  padding: 12px 10px;
-  font-size: 13px;
+.b-text-method__empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px;
   color: var(--text-tertiary);
-  text-align: center;
-  border: 1px dashed var(--border-primary);
-  border-radius: 6px;
+}
+
+.b-text-method__empty-icon {
+  width: 28px;
+  height: 28px;
+  opacity: 0.4;
+}
+
+.b-text-method__empty-text {
+  font-size: 13px;
 }
 
 .b-text-method__args {
@@ -517,26 +531,5 @@ function confirmAction(): void {
   font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
-}
-
-.b-text-method__argument-add {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  height: 26px;
-  padding: 0 8px;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-secondary);
-  cursor: pointer;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
-
-  &:hover {
-    color: var(--color-primary);
-    background: var(--color-primary-bg);
-    border-color: var(--color-primary-border);
-  }
 }
 </style>

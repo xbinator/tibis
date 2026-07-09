@@ -206,6 +206,7 @@ defineExpose({
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
+  line-height: 16px;
   color: var(--text-primary);
   white-space: nowrap;
 }
