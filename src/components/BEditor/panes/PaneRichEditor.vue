@@ -581,18 +581,6 @@ defineExpose({
     caret-color: var(--editor-caret);
     outline: none;
 
-    // &::selection {
-    //   color: var(--native-selection-color) !important;
-    //   background: var(--native-selection-bg) !important;
-    //   -webkit-text-fill-color: var(--native-selection-color) !important;
-    // }
-
-    // *::selection {
-    //   color: var(--native-selection-color) !important;
-    //   background: var(--native-selection-bg) !important;
-    //   -webkit-text-fill-color: var(--native-selection-color) !important;
-    // }
-
     > *:first-child {
       margin-top: 0;
     }
@@ -625,7 +613,7 @@ defineExpose({
 
       .ai-selection-highlight {
         vertical-align: baseline;
-        box-shadow: 0 0.38em 0 0 var(--selection-bg), 0 -0.52em 0 0 var(--selection-bg);
+        box-shadow: 0 0.34em 0 0 var(--selection-bg), 0 -0.38em 0 0 var(--selection-bg);
       }
     }
 
