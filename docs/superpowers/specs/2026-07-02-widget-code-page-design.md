@@ -43,7 +43,7 @@
 - 使用 `v-model:value` 接收并更新当前 `WidgetData`。
 - 接收 `active` 标识，在覆盖层打开时重置本地草稿。
 - 从 `value.execute` 读取初始脚本，维护 `scriptCodeDraft` 本地草稿。
-- 用草稿内容驱动 `buildWidgetStateSchema` 和 `createWidgetMethodScriptExtraLibContent`。
+- 用草稿内容驱动 `buildWidgetStateSchema` 和 `createWidgetMethodScriptTypes`。
 - 顶部渲染“运行代码”标题和关闭按钮。
 - 不直接使用 `useFileSession`，不直接写最近文件，不直接保存磁盘。
 

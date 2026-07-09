@@ -1009,7 +1009,7 @@ Expected: FAIL because `$http` is missing from the extra lib.
 
 - [x] **Step 3: Add Monaco type declarations**
 
-Modify `createWidgetMethodScriptExtraLibContent` in `src/views/widget/components/PageSetter/MethodEditor.vue`:
+Modify `createWidgetMethodScriptTypes` in `src/views/widget/components/PageSetter/MethodEditor.vue`:
 
 ```ts
 declare type WidgetHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'

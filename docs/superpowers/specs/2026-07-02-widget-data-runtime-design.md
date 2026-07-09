@@ -29,7 +29,7 @@ The runtime only accepts plain object data declarations. Invalid or missing `dat
 
 - `types/widget.d.ts` and `types/chat.d.ts`: rename runtime context and contract fields to `data` / `dataSchema`.
 - `src/components/BChat/utils/widgetRuntime.ts`: rename payload/result fields, adapter internals, runtime context getters, and mutation function to data terminology.
-- `src/views/widget/constants/methodScriptExtraLib.ts`: expose `WidgetData`, direct `this` data fields, bound `methods`, and `WidgetConfig.data`.
+- `src/views/widget/constants/methodScriptTypes.ts`: expose `WidgetData`, direct `this` data fields, bound `methods`, and `WidgetConfig.data`.
 - `src/components/BWidget/utils/widgetStateSchema.ts`: convert the schema inference utility to infer Widget data schema from `Widget({ data })` and direct `this.xxx = ...` assignments.
 - `src/components/BWidget/utils/widgetBindings.ts` and `src/components/BWidget/hooks/useElementVariables.ts`: keep `input` as an explicit binding root and expose data schema fields directly.
 - Widget editor/view files and tests: update examples, assertions, helper names, and fixture payloads.

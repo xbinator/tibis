@@ -174,7 +174,7 @@ Display still proceeds after `onExecute` failure, and `onMounted` still runs. Th
 Expected implementation areas:
 
 - `src/components/BWidget/utils/widgetExecuteMethod.ts`
-- `src/views/widget/constants/methodScriptExtraLib.ts`
+- `src/views/widget/constants/methodScriptTypes.ts`
 - `types/widget.d.ts`
 - `src/shared/widget/protocol.ts`
 - `src/ai/tools/builtin/WidgetTool/index.ts`

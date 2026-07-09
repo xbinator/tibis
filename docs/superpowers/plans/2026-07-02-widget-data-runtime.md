@@ -66,7 +66,7 @@ Expected: PASS.
 - Modify: `test/components/BWidget/widget-data-schema.test.ts`
 - Modify: `test/views/widget/code-editor.test.ts`
 - Modify: `src/components/BWidget/utils/widgetStateSchema.ts`
-- Modify: `src/views/widget/constants/methodScriptExtraLib.ts`
+- Modify: `src/views/widget/constants/methodScriptTypes.ts`
 - Modify: `src/views/widget/components/CodeEditor.vue`
 
 - [ ] **Step 1: Write failing schema/editor tests**
