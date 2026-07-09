@@ -742,6 +742,10 @@ defineExpose({
 
   p {
     min-height: 1em;
+
+    .b-markdown-image {
+      margin: 0.2em 0;
+    }
   }
 
   ul,
