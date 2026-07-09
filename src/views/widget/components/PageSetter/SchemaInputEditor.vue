@@ -32,14 +32,12 @@ import { computed, nextTick, ref, watch } from 'vue';
 import type { EditorState } from '@/components/BEditor/types';
 import BMonaco from '@/components/BMonaco/index.vue';
 import type { WidgetSchemaObject } from '@/components/BWidget/types';
-import { createDefaultWidgetSchemaObject, normalizeWidgetSchemaObject, type WidgetSchemaKind } from '@/components/BWidget/utils/widgetData';
+import { createDefaultWidgetSchemaObject, normalizeWidgetSchemaObject } from '@/components/BWidget/utils/widgetData';
 
 /**
  * Schema 编辑弹窗入参。
  */
 interface Props {
-  /** 当前编辑的 schema 类型 */
-  kind: WidgetSchemaKind;
   /** 当前 schema 值 */
   schema: WidgetSchemaObject;
 }
@@ -87,14 +85,13 @@ function formatSchemaText(schema: WidgetSchemaObject): string {
 /**
  * 解析 schema 编辑器文本。
  * @param value - JSON 文本
- * @param kind - schema 类型
  * @returns 标准化后的对象 schema
  */
-function parseSchemaText(value: string, kind: WidgetSchemaKind): WidgetSchemaObject {
+function parseSchemaText(value: string): WidgetSchemaObject {
   const trimmedValue = value.trim();
 
   if (!trimmedValue) {
-    return createDefaultWidgetSchemaObject(kind);
+    return createDefaultWidgetSchemaObject();
   }
 
   const parsed = JSON.parse(trimmedValue) as unknown;
@@ -102,7 +99,7 @@ function parseSchemaText(value: string, kind: WidgetSchemaKind): WidgetSchemaObj
     throw new Error('Schema must be an object JSON schema.');
   }
 
-  return normalizeWidgetSchemaObject(parsed, kind);
+  return normalizeWidgetSchemaObject(parsed);
 }
 
 /**
@@ -141,7 +138,7 @@ function handleEditorCancel(): void {
  */
 function handleEditorConfirm(): void {
   try {
-    const schema = parseSchemaText(schemaDraftText.value, props.kind);
+    const schema = parseSchemaText(schemaDraftText.value);
     emit('confirm', schema);
     open.value = false;
     schemaInputEditorError.value = '';
@@ -159,7 +156,7 @@ watch(open, async (isOpen: boolean): Promise<void> => {
 });
 
 watch(
-  (): [WidgetSchemaKind, WidgetSchemaObject] => [props.kind, props.schema],
+  (): WidgetSchemaObject => props.schema,
   async (): Promise<void> => {
     if (!open.value) {
       return;
@@ -171,8 +168,8 @@ watch(
 
 /** Schema 编辑器状态。 */
 const schemaEditorState = computed<EditorState>(() => ({
-  id: `widget-data-${props.kind}-schema`,
-  name: `${props.kind}-schema.json`,
+  id: 'widget-schema',
+  name: 'schema.json',
   path: null,
   ext: 'json',
   content: schemaDraftText.value
