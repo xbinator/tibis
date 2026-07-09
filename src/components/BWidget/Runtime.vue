@@ -30,6 +30,7 @@ import { nanoid } from 'nanoid';
 import { logger } from '@/shared/logger';
 import { createNamespace } from '@/utils/namespace';
 import { provideRenderContext } from './hooks/useRenderContext';
+import { useRuntimeLayout } from './hooks/useRuntimeLayout';
 import { useViewportSize } from './hooks/useViewportSize';
 import { provideWidgetRuntime, type WidgetRuntimeController } from './hooks/useWidgetRuntime';
 import WidgetNode from './renderers/WidgetNode.vue';
@@ -139,20 +140,13 @@ const runtimeRenderContextByElementId = computed<Map<string, WidgetLoopRenderCon
 );
 /** 当前运行态内容布局。 */
 const runtimeLayout = computed(() => createWidgetRuntimeLayoutFromRenderElements(runtimeRenderElements.value, 0));
-/** 当前运行态内容缩放比例。 */
-const runtimeScale = computed<number>(() => {
-  if (!runtimeLayout.value.elements.length) {
-    return 1;
-  }
-
-  if (!viewportSize.value.width || !runtimeLayout.value.contentSize.width) {
-    return 1;
-  }
-
-  return viewportSize.value.width / runtimeLayout.value.contentSize.width;
+/** 当前运行态展示布局。 */
+const { runtimeDisplayLayout } = useRuntimeLayout({
+  widgetData: computed<WidgetData>(() => runtimeState.value.value),
+  contentSize: computed<WidgetSize>(() => runtimeLayout.value.contentSize),
+  hasRenderableElements: computed<boolean>(() => Boolean(runtimeLayout.value.elements.length)),
+  viewportSize
 });
-/** 缩放后的运行态视图高度。 */
-const scaledHeight = computed<number>(() => runtimeLayout.value.contentSize.height * runtimeScale.value);
 /** 运行态渲染元素，使用平移后的内容边界坐标，不修改来源Widget数据。 */
 const runtimeElements = computed<WidgetRuntimeRenderableElement[]>(() =>
   runtimeLayout.value.elements.map(
@@ -164,18 +158,37 @@ const runtimeElements = computed<WidgetRuntimeRenderableElement[]>(() =>
   )
 );
 /** 运行态根节点样式。 */
-const rootStyle = computed<CSSProperties>(() => ({
-  height: `${scaledHeight.value}px`
-}));
+const rootStyle = computed<CSSProperties>(() => {
+  const style: CSSProperties = {
+    height: `${runtimeDisplayLayout.value.height}px`
+  };
+
+  if (runtimeDisplayLayout.value.width !== undefined) {
+    style.width = `${runtimeDisplayLayout.value.width}px`;
+    style.maxWidth = '100%';
+  }
+
+  return style;
+});
 /** 运行态舞台裁剪容器样式。 */
-const stageViewportStyle = computed<CSSProperties>(() => ({
-  height: `${scaledHeight.value}px`
-}));
+const stageViewportStyle = computed<CSSProperties>(() => {
+  const style: CSSProperties = {
+    height: `${runtimeDisplayLayout.value.height}px`
+  };
+
+  if (runtimeDisplayLayout.value.width !== undefined) {
+    style.width = `${runtimeDisplayLayout.value.width}px`;
+  }
+
+  return style;
+});
 /** 运行态内容舞台样式。 */
 const stageStyle = computed<CSSProperties>(() => ({
+  top: `${runtimeDisplayLayout.value.stageOffset.y}px`,
+  left: `${runtimeDisplayLayout.value.stageOffset.x}px`,
   width: `${runtimeLayout.value.contentSize.width}px`,
   height: `${runtimeLayout.value.contentSize.height}px`,
-  transform: `scale(${runtimeScale.value})`
+  transform: `scale(${runtimeDisplayLayout.value.scale})`
 }));
 
 /**

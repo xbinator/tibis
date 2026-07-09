@@ -89,6 +89,30 @@ const globalStubs = {
     },
     template: '<textarea :value="value" @blur="handleBlur" @input="handleInput"></textarea>'
   }),
+  BInputNumber: defineComponent({
+    name: 'BInputNumberStub',
+    props: {
+      value: {
+        type: Number,
+        default: undefined
+      }
+    },
+    emits: ['update:value'],
+    setup(_props, { emit }) {
+      /**
+       * 将原生数字输入事件转换为 BInputNumber 的 value 更新事件。
+       * @param event - 原生输入事件
+       */
+      function handleInput(event: Event): void {
+        if (event.target instanceof HTMLInputElement) {
+          emit('update:value', event.target.value === '' ? undefined : Number(event.target.value));
+        }
+      }
+
+      return { handleInput };
+    },
+    template: '<input class="b-input-number-stub" type="number" :value="value ?? \'\'" @input="handleInput" />'
+  }),
   ACheckbox: defineComponent({
     name: 'ACheckboxStub',
     props: {
@@ -287,16 +311,74 @@ const globalStubs = {
     },
     template: '<textarea class="schema-editor-monaco-stub" :value="value" @input="handleInput"></textarea>'
   }),
+  BMessage: defineComponent({
+    name: 'BMessageStub',
+    props: {
+      content: {
+        type: String,
+        default: ''
+      }
+    },
+    setup() {
+      const isExpanded = ref<boolean>(false);
+
+      /**
+       * 切换测试用 JSON 示例展开状态。
+       */
+      function toggleExpanded(): void {
+        isExpanded.value = !isExpanded.value;
+      }
+
+      return { isExpanded, toggleExpanded };
+    },
+    template: `
+      <article class="b-message-stub">
+        <template v-if="content.includes('properties')">
+          <ul class="schema-help__field-list">
+            <li class="schema-help__field-item">
+              <span class="schema-help__type">string</span>
+              <span>必填</span>
+              <span>city</span>
+              <span>城市名称</span>
+            </li>
+            <li class="schema-help__field-item">
+              <span class="schema-help__type">string</span>
+              <span>date</span>
+            </li>
+            <li class="schema-help__field-item">
+              <span class="schema-help__type">string</span>
+              <span>unit</span>
+            </li>
+          </ul>
+          <section class="schema-help__example" :class="{ 'is-expanded': isExpanded }">
+            <button
+              class="schema-help__expand"
+              type="button"
+              :data-icon="isExpanded ? 'lucide:minimize-2' : 'lucide:maximize-2'"
+              :data-tooltip="isExpanded ? '收起查看' : '展开查看'"
+              @click="toggleExpanded"
+            ></button>
+            <pre v-if="isExpanded">{{ content }}</pre>
+          </section>
+        </template>
+        <template v-else>{{ content }}</template>
+      </article>
+    `
+  }),
   BSectionBlock: defineComponent({
     name: 'BSectionBlockStub',
     props: {
       title: {
         type: String,
         required: true
+      },
+      tips: {
+        type: String,
+        default: ''
       }
     },
     template: `
-      <section class="section-block-stub">
+      <section class="section-block-stub" :data-tips="tips">
         <header>
           <div class="section-block-stub__title">
             <h3>{{ title }}</h3>
@@ -411,6 +493,8 @@ function createWeatherInputSchema(): WidgetSchemaObject {
 interface SectionBlockTitleSnapshot {
   /** 区块标题 */
   title: string;
+  /** 区块提示 */
+  tips?: string;
 }
 
 /**
@@ -764,6 +848,41 @@ describe('PageSetter', (): void => {
     wrapper.unmount();
   });
 
+  it('edits runtime display width and height metadata on the selected page', async (): Promise<void> => {
+    const dataItem = createWidgetData();
+    dataItem.metadata = { preserved: true };
+    const wrapper = mountPageSetterHost(dataItem);
+    const sizeInputs = wrapper.findAll('.b-input-number-stub');
+    const sizeSection = wrapper.findAllComponents({ name: 'BSectionBlockStub' }).find((item: VueWrapper): boolean => {
+      const props = item.props() as SectionBlockTitleSnapshot;
+
+      return props.title === '尺寸';
+    });
+    if (!sizeSection) {
+      throw new Error('未找到尺寸设置区块');
+    }
+
+    await sizeInputs[0]?.setValue('320');
+    await sizeInputs[1]?.setValue('180');
+
+    expect((sizeSection.props() as SectionBlockTitleSnapshot).tips).toBe(
+      '设置运行态展示尺寸。留空按内容自适应；容器不足时等比缩小，容器更大时保持配置尺寸。'
+    );
+    expect(wrapper.vm.dataItem.metadata).toMatchObject({
+      preserved: true,
+      width: 320,
+      height: 180
+    });
+
+    await sizeInputs[0]?.setValue('');
+
+    expect(wrapper.vm.dataItem.metadata).toEqual({
+      preserved: true,
+      height: 180
+    });
+    wrapper.unmount();
+  });
+
   it('shows schemas as inline tree editors and opens an input schema dialog for advanced editing', async (): Promise<void> => {
     const dataItem = createWidgetData();
     const wrapper = mountSidebarStateHost(dataItem);
@@ -968,7 +1087,7 @@ describe('PageSetter', (): void => {
     const wrapper = mountPageSetterHost(dataItem);
     const sectionTitles = readSectionBlockTitles(wrapper);
 
-    expect(sectionTitles).toEqual(['基础']);
+    expect(sectionTitles).toEqual(['基础', '尺寸']);
     expect(sectionTitles).not.toContain('入参');
     expect(sectionTitles).not.toContain('运行脚本');
     expect(sectionTitles).not.toContain('执行方法');

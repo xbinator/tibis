@@ -306,8 +306,9 @@ export interface WidgetViewport {
 
 /**
  * Widget外部双向绑定数据。
+ * @template TMetadata - Widget 顶层自定义元数据类型
  */
-export interface WidgetData {
+export interface WidgetData<TMetadata extends WidgetMetadata = WidgetMetadata> {
   /** Widget能力标识符 */
   name: string;
   /** Widget能力描述 */
@@ -319,7 +320,7 @@ export interface WidgetData {
   /** WidgetJS 脚本配置 */
   execute: WidgetExecuteMethod;
   /** Widget元信息 */
-  metadata: WidgetMetadata;
+  metadata: TMetadata;
   /** 元素数据 */
   elements: WidgetElement[];
 }
