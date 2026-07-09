@@ -1,40 +1,63 @@
+/**
+ * @file types.ts
+ * @description BButton 组件公开类型定义。
+ */
+
+/**
+ * 按钮视觉类型。
+ */
+export type BButtonType = 'primary' | 'secondary' | 'outline' | 'text' | 'ghost' | 'soft';
+
+/**
+ * 按钮尺寸。
+ */
+export type BButtonSize = 'mini' | 'small' | 'middle' | 'large';
+
+/**
+ * Tooltip 弹出位置。
+ */
+export type BButtonTooltipPlacement =
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
+  | 'topLeft'
+  | 'topRight'
+  | 'bottomLeft'
+  | 'bottomRight'
+  | 'leftTop'
+  | 'leftBottom'
+  | 'rightTop'
+  | 'rightBottom';
+
+/**
+ * BButton 组件 Props。
+ */
 export interface BButtonProps {
-  // 按钮类型
-  type?: 'primary' | 'secondary' | 'outline' | 'text' | 'ghost';
-  // 按钮大小
-  size?: 'mini' | 'small' | 'middle' | 'large';
-  // 是否禁用
+  /** 按钮类型 */
+  type?: BButtonType;
+  /** 按钮大小 */
+  size?: BButtonSize;
+  /** 是否禁用 */
   disabled?: boolean;
-  // 是否加载中
+  /** 是否加载中 */
   loading?: boolean;
-  // 是否全宽
+  /** 是否全宽 */
   block?: boolean;
-  // 是否圆角
+  /** 是否圆角 */
   rounded?: boolean;
-  // 是否方角
+  /** 是否方形按钮 */
   square?: boolean;
-  // 图标
+  /** 图标名称 */
   icon?: string;
-  // 文本
+  /** 文本文案 */
   text?: string;
-  // 是否危险
+  /** 是否使用危险状态样式 */
   danger?: boolean;
-  // 提示信息
+  /** 提示信息 */
   tooltip?: string;
-  // 是否显示箭头
+  /** 是否显示 Tooltip 箭头 */
   arrow?: boolean;
-  // 提示位置
-  placement?:
-    | 'top'
-    | 'bottom'
-    | 'left'
-    | 'right'
-    | 'topLeft'
-    | 'topRight'
-    | 'bottomLeft'
-    | 'bottomRight'
-    | 'leftTop'
-    | 'leftBottom'
-    | 'rightTop'
-    | 'rightBottom';
+  /** Tooltip 弹出位置 */
+  placement?: BButtonTooltipPlacement;
 }

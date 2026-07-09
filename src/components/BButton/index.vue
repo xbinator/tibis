@@ -1,6 +1,11 @@
+<!--
+ * @file index.vue
+ * @description 通用按钮组件，支持类型、尺寸、图标、加载态和 Tooltip。
+-->
 <script lang="tsx">
-import type { BButtonProps } from './types';
-import { defineComponent, type PropType } from 'vue';
+import type { BButtonProps, BButtonSize, BButtonTooltipPlacement, BButtonType } from './types';
+import type { PropType, VNodeChild } from 'vue';
+import { defineComponent } from 'vue';
 import { Tooltip } from 'ant-design-vue';
 import { createNamespace } from '@/utils/namespace';
 
@@ -14,11 +19,11 @@ export default defineComponent({
   name: 'BButton',
   props: {
     type: {
-      type: String as PropType<'primary' | 'secondary' | 'outline' | 'text' | 'ghost'>,
+      type: String as PropType<BButtonType>,
       default: 'primary'
     },
     size: {
-      type: String as PropType<'mini' | 'small' | 'middle' | 'large'>,
+      type: String as PropType<BButtonSize>,
       default: 'middle'
     },
     disabled: {
@@ -62,17 +67,17 @@ export default defineComponent({
       default: true
     },
     placement: {
-      type: String,
+      type: String as PropType<BButtonTooltipPlacement>,
       default: 'top'
     }
   },
   emits: ['click'],
-  setup(props: BButtonProps, { emit, slots }) {
+  setup(props: BButtonProps, { emit, slots }): () => VNodeChild {
     /**
      * 处理按钮点击事件
      * @param event - 鼠标事件对象
      */
-    function handleClick(event: MouseEvent) {
+    function handleClick(event: MouseEvent): void {
       if (!props.disabled && !props.loading) {
         emit('click', event);
       }
@@ -82,7 +87,7 @@ export default defineComponent({
      * 渲染按钮内容
      * @returns 按钮 JSX 元素
      */
-    function renderButton() {
+    function renderButton(): VNodeChild {
       const hasIcon = slots.icon || props.icon;
 
       return (
@@ -113,7 +118,7 @@ export default defineComponent({
       );
     }
 
-    return () => {
+    return (): VNodeChild => {
       if (props.tooltip) {
         return (
           <Tooltip title={props.tooltip} arrow={props.arrow} placement={props.placement}>
@@ -439,6 +444,44 @@ export default defineComponent({
       margin: 0;
     }
   }
+}
+
+.b-button--soft {
+  color: var(--color-primary);
+  background-color: var(--color-primary-bg);
+
+  &:hover:not(.b-button--disabled, .b-button--loading) {
+    background-color: var(--color-primary-bg-hover);
+  }
+
+  &:active:not(.b-button--disabled, .b-button--loading) {
+    background-color: var(--color-primary-bg-hover);
+  }
+}
+
+.b-button--soft .b-button__loading-spinner {
+  border-color: rgb(0 0 0 / 10%);
+  border-top-color: var(--color-primary);
+}
+
+.b-button--danger.b-button--soft {
+  color: var(--color-danger);
+  background-color: var(--color-danger-bg);
+
+  &:hover:not(.b-button--disabled, .b-button--loading) {
+    color: var(--color-danger-hover);
+    background-color: var(--color-danger-bg-hover);
+  }
+
+  &:active:not(.b-button--disabled, .b-button--loading) {
+    color: var(--color-danger-active);
+    background-color: var(--color-danger-bg-hover);
+  }
+}
+
+.b-button--danger.b-button--soft .b-button__loading-spinner {
+  border-color: rgb(0 0 0 / 10%);
+  border-top-color: var(--color-danger);
 }
 
 @keyframes spin {
