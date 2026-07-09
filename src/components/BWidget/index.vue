@@ -891,6 +891,40 @@ function createDirectDragPreviewChanges(position: WidgetPoint, session: DirectEl
 }
 
 /**
+ * 判断两个Widget坐标是否不同。
+ * @param first - 第一个坐标
+ * @param second - 第二个坐标
+ * @returns 两个坐标是否不同
+ */
+function isDifferentWidgetPoint(first: WidgetPoint, second: WidgetPoint): boolean {
+  return first.x !== second.x || first.y !== second.y;
+}
+
+/**
+ * 根据指针事件刷新直接拖拽会话的最后位置。
+ * @param event - 指针事件
+ * @param session - 直接拖拽会话
+ */
+function updateDirectDragSessionPosition(event: PointerEvent, session: DirectElementDragSession): void {
+  const position = getDirectDragPosition(event, session);
+
+  moveablePreviewChanges.value = createDirectDragPreviewChanges(position, session);
+  session.currentPosition = position;
+  session.moved = session.moved || isDifferentWidgetPoint(position, session.startPosition);
+}
+
+/**
+ * 判断当前按下是否需要启动 BWidget 直接拖拽。
+ * @param hitElementId - 指针命中的元素 ID
+ * @param dragTargetId - 实际拖拽目标 ID
+ * @param selectionChanged - 本次按下是否改变选区
+ * @returns 是否启动直接拖拽
+ */
+function shouldStartDirectDrag(hitElementId: string, dragTargetId: string, selectionChanged: boolean): boolean {
+  return selectionChanged || hitElementId !== dragTargetId;
+}
+
+/**
  * 取消直接拖拽。
  */
 function cancelDirectDrag(): void {
@@ -1089,21 +1123,22 @@ function handleDirectDragMove(event: PointerEvent): void {
     return;
   }
 
-  const position = getDirectDragPosition(event, directDragSession);
-  moveablePreviewChanges.value = createDirectDragPreviewChanges(position, directDragSession);
-  directDragSession.currentPosition = position;
-  directDragSession.moved = true;
+  updateDirectDragSessionPosition(event, directDragSession);
 }
 
 /**
  * 处理直接拖拽结束。
+ * @param event - 指针事件
  */
-function handleDirectDragEnd(): void {
+function handleDirectDragEnd(event?: PointerEvent): void {
   if (!directDragSession) {
     return;
   }
 
   const session = directDragSession;
+  if (event) {
+    updateDirectDragSessionPosition(event, session);
+  }
   session.abortController.abort();
   directDragSession = null;
 
@@ -1150,7 +1185,8 @@ function startDirectDrag(id: string, event: PointerEvent, selectOnEnd: boolean):
 
   const abortController = new AbortController();
   cancelDirectDrag();
-  hideMoveableDuringDirectDrag.value = true;
+  // 新选中直接拖拽需要隐藏旧控制层；组合直接拖拽需要避免父子预览与控制层错位。
+  hideMoveableDuringDirectDrag.value = selectOnEnd || isWidgetGroupElement(element);
   directDragSession = {
     id,
     startClient: {
@@ -1173,9 +1209,11 @@ function startDirectDrag(id: string, event: PointerEvent, selectOnEnd: boolean):
 
 /**
  * 处理元素上释放指针。
+ * @param _id - 元素 ID
+ * @param event - 指针事件
  */
-function handleElementPointerup(): void {
-  handleDirectDragEnd();
+function handleElementPointerup(_id: string, event: PointerEvent): void {
+  handleDirectDragEnd(event);
 }
 
 /**
@@ -1205,7 +1243,7 @@ function handleElementSelect(id: string, event: PointerEvent): void {
     activeElementId.value = null;
     board.setSelection(selection);
   }
-  if (selection.length === 1) {
+  if (selection.length === 1 && shouldStartDirectDrag(id, dragTargetId, selectionChanged)) {
     startDirectDrag(dragTargetId, event, selectionChanged);
   }
 }

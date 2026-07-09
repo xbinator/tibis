@@ -137,10 +137,22 @@ vi.mock('vue3-moveable/dist/moveable.js', () => ({
             })
           )
         };
+      },
+      /**
+       * 创建模拟 Moveable 单目标真实 absolute translate 的拖拽结束事件。
+       * @param targets - Moveable 目标元素列表
+       * @returns 单目标拖拽结束事件
+       */
+      createAbsoluteDragEndEvent(targets: Element[]): MoveableDragEndTestEvent | null {
+        return this.createAbsoluteDragGroupEndEvent(targets).events[0] ?? null;
       }
     },
     template: `
       <div v-if="getTargets(target).length" class="moveable-stub">
+        <button
+          class="moveable-absolute-drag-end"
+          @click="$emit('drag-end', createAbsoluteDragEndEvent(getTargets(target)))"
+        ></button>
         <button
           class="moveable-absolute-drag-group"
           @click="$emit('drag-group', createAbsoluteDragGroupEvent(getTargets(target)))"
@@ -702,6 +714,73 @@ describe('BWidget node click selection', () => {
 
     expect(selectedPayload && 'id' in selectedPayload ? selectedPayload.id : '').toBe('node-1');
     expect(wrapper.find('.moveable-stub').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('keeps moveable handles while pressing and moving an already selected single node', async (): Promise<void> => {
+    const data = createSingleSelectedTwoNodeWidgetData();
+    const wrapper = mount(BWidget, {
+      props: {
+        value: data,
+        select: data.elements[0]
+      },
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+
+    await dispatchPointerEvent(findNodeById(wrapper, 'node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+
+    expect(findNodeById(wrapper, 'node-1').classes()).toContain('is-selected');
+    expect(wrapper.find('.moveable-stub').exists()).toBe(true);
+
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
+    wrapper.unmount();
+  });
+
+  it('does not move an already selected single node twice when Moveable finishes after pointerup', async (): Promise<void> => {
+    const data = createSingleSelectedTwoNodeWidgetData();
+    const wrapper = mount(BWidget, {
+      props: {
+        value: data,
+        select: data.elements[0]
+      },
+      attachTo: document.body
+    });
+    await nextTick();
+    await nextTick();
+
+    await dispatchPointerEvent(findNodeById(wrapper, 'node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 140, clientY: 120 });
+    await nextTick();
+    await wrapper.find('.moveable-absolute-drag-end').trigger('click');
+    await nextTick();
+
+    const latestData = (wrapper.emitted('update:value') as Array<[WidgetData]> | undefined)?.at(-1)?.[0] ?? data;
+
+    expect(latestData.elements[0]?.position).toEqual({ x: 120, y: 80 });
+    wrapper.unmount();
+  });
+
+  it('commits direct drag to the final pointerup position', async (): Promise<void> => {
+    const data = createNodeClickWidgetData();
+    const wrapper = mount(BWidget, {
+      props: {
+        value: data
+      },
+      attachTo: document.body
+    });
+
+    await dispatchPointerEvent(findNodeById(wrapper, 'node-1').element, 'pointerdown', { clientX: 100, clientY: 100 });
+    await dispatchPointerEvent(window, 'pointermove', { clientX: 140, clientY: 120 });
+    await dispatchPointerEvent(window, 'pointerup', { clientX: 170, clientY: 140 });
+    await nextTick();
+
+    const latestData = (wrapper.emitted('update:value') as Array<[WidgetData]> | undefined)?.at(-1)?.[0] ?? data;
+
+    expect(latestData.elements[0]?.position).toEqual({ x: 150, y: 100 });
     wrapper.unmount();
   });
 
