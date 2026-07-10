@@ -2006,6 +2006,65 @@ describe('chat runtime service shell', (): void => {
     expect(completeEvent).toBeDefined();
   });
 
+  it('marks pending tool part as failed without appending duplicate error part when stream executor fails', async (): Promise<void> => {
+    const collector = createEventCollector();
+    const updatedMessages: ChatMessageRecord[] = [];
+    const runtimeError = { code: 'REQUEST_FAILED', message: 'model failed' } as AIServiceError;
+    const service = createChatRuntimeService({
+      emit: collector.emit,
+      createMessageId: (role) => `${role}-message-1`,
+      now: () => '2026-06-19T00:00:00.000Z',
+      messageReader: createNoopMessageReader(),
+      messageWriter: {
+        addMessage: (): void => undefined,
+        updateMessage: (message): void => {
+          updatedMessages.push(structuredClone(message));
+        }
+      },
+      streamExecutor: async ({ assistantMessage }, updateAssistant): Promise<{}> => {
+        const pendingSkillPart: ChatMessagePart = {
+          id: 'tool-part-1',
+          type: 'tool',
+          toolCallId: 'tool-call-skill',
+          toolName: 'skill',
+          status: 'inputting',
+          input: { name: 'debugging' },
+          inputText: '{"name":"debugging"'
+        };
+
+        assistantMessage.parts.push(pendingSkillPart);
+        await updateAssistant(assistantMessage);
+        throw runtimeError;
+      }
+    });
+
+    const result = await service.send(createInput({ content: 'hello runtime' }));
+    await flushRuntimeTasks();
+
+    const finalMessage = updatedMessages[updatedMessages.length - 1];
+    expect(result.runtimeId).toMatch(/^runtime-/);
+    expect(finalMessage).toMatchObject({
+      id: 'assistant-message-1',
+      content: 'model failed',
+      parts: [
+        {
+          type: 'tool',
+          toolName: 'skill',
+          status: 'done',
+          result: {
+            toolName: 'skill',
+            status: 'failure',
+            error: { code: 'EXECUTION_FAILED', message: 'model failed' }
+          }
+        }
+      ],
+      loading: false,
+      finished: true
+    });
+    expect(finalMessage.parts).toHaveLength(1);
+    expect(finalMessage.parts.some((part) => part.type === 'error')).toBe(false);
+  });
+
   it('compacts and replays the user turn when the provider reports context overflow', async (): Promise<void> => {
     const collector = createEventCollector();
     const updatedMessages: ChatMessageRecord[] = [];

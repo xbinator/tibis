@@ -2,7 +2,7 @@
  * @file finalizer.mts
  * @description ChatRuntime assistant 消息终态处理。
  */
-import type { AIToolExecutionCancelledResult, AIServiceError } from 'types/ai';
+import type { AIToolExecutionCancelledResult, AIToolExecutionFailureResult, AIServiceError } from 'types/ai';
 import type { ChatMessageRecord, ChatMessageToolPart } from 'types/chat';
 import { nanoid } from 'nanoid';
 
@@ -18,13 +18,43 @@ export function ensureRuntimeMessageCreatedAt(message: ChatMessageRecord, fallba
 }
 
 /**
+ * 将未完成工具片段标记为失败。
+ * @param message - assistant 草稿消息
+ * @param error - runtime 错误
+ * @returns 是否存在被标记失败的工具片段
+ */
+function failPendingToolParts(message: ChatMessageRecord, error: AIServiceError): boolean {
+  let hasFailedToolPart = false;
+
+  for (const part of message.parts) {
+    if (part.type !== 'tool' || part.status === 'done') continue;
+
+    const toolPart = part as ChatMessageToolPart;
+    toolPart.status = 'done';
+    toolPart.result = {
+      toolName: toolPart.toolName,
+      status: 'failure',
+      error: { code: 'EXECUTION_FAILED', message: error.message }
+    } satisfies AIToolExecutionFailureResult;
+    delete toolPart.inputText;
+    hasFailedToolPart = true;
+  }
+
+  return hasFailedToolPart;
+}
+
+/**
  * 将 assistant 草稿标记为失败终态。
  * @param message - assistant 草稿消息
  * @param error - runtime 错误
  */
 export function markAssistantMessageFailed(message: ChatMessageRecord, error: AIServiceError): void {
+  const hasFailedToolPart = failPendingToolParts(message, error);
+
   message.content = message.content ? `${message.content}\n${error.message}` : error.message;
-  message.parts.push({ id: nanoid(), type: 'error', text: error.message });
+  if (!hasFailedToolPart) {
+    message.parts.push({ id: nanoid(), type: 'error', text: error.message });
+  }
   message.loading = false;
   message.finished = true;
 }

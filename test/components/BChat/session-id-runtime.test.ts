@@ -982,6 +982,61 @@ describe('BChat sessionId runtime', (): void => {
     expect(chatStoreMock.setSessionMessages).toHaveBeenCalledWith('session-active', [expect.objectContaining({ role: 'error', content: '模型调用失败' })]);
   });
 
+  it('does not append runtime error message when latest assistant tool part already shows the same failure', async (): Promise<void> => {
+    const failedToolPart: ChatMessageToolPart = {
+      id: 'tool-part-1',
+      type: 'tool',
+      toolCallId: 'tool-call-1',
+      toolName: 'run_shell_command',
+      status: 'done',
+      input: { command: 'python query.py' },
+      result: {
+        toolName: 'run_shell_command',
+        status: 'failure',
+        error: { code: 'EXECUTION_FAILED', message: '模型调用失败' }
+      }
+    };
+    const assistantMessage: Message = {
+      id: 'assistant-message-1',
+      role: 'assistant',
+      content: '模型调用失败',
+      parts: [failedToolPart],
+      createdAt: '2026-06-15T00:00:00.000Z',
+      loading: false,
+      finished: true
+    };
+    chatStoreMock.getSessionMessages.mockResolvedValue([assistantMessage]);
+
+    const wrapper = mountBChat('session-active');
+    await flushPromises();
+    chatStoreMock.setSessionMessages.mockClear();
+
+    emitRuntimeEvent(runtimeListeners, 'error', {
+      runtimeId: 'runtime-1',
+      sessionId: 'session-active',
+      clientId: 'bchat',
+      agentId: 'default',
+      error: { code: 'REQUEST_FAILED', message: '模型调用失败' }
+    });
+    await flushPromises();
+
+    const visibleMessages = wrapper.findComponent(ConversationViewStub).props('messages') as Message[];
+    expect(visibleMessages).toHaveLength(1);
+    expect(visibleMessages[0]).toMatchObject({
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool',
+          result: {
+            status: 'failure',
+            error: { message: '模型调用失败' }
+          }
+        }
+      ]
+    });
+    expect(chatStoreMock.setSessionMessages).not.toHaveBeenCalled();
+  });
+
   it('does not append a renderer-side interrupt message when aborting a chat runtime', async (): Promise<void> => {
     const wrapper = mountBChat('session-active');
     await flushPromises();

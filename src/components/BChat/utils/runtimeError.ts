@@ -98,6 +98,24 @@ export function createRuntimeRequestError(result: ChatRuntimeHandlerResult<unkno
 }
 
 /**
+ * 判断消息片段是否已经展示同一条错误内容。
+ * @param part - 待检查消息片段
+ * @param content - 错误内容
+ * @returns 是否已经展示同一条错误内容
+ */
+function isSameVisibleErrorPart(part: Message['parts'][number], content: string): boolean {
+  if (part.type === 'error') {
+    return part.text === content;
+  }
+
+  if (part.type === 'tool' && part.result?.status === 'failure') {
+    return part.result.error.message === content;
+  }
+
+  return false;
+}
+
+/**
  * 判断最后一条可见消息是否已经展示同一条错误内容。
  * @param message - 待检查消息
  * @param content - 错误内容
@@ -108,7 +126,7 @@ function isSameVisibleErrorMessage(message: Message | undefined, content: string
     return false;
   }
 
-  return message.parts.some((part) => part.type === 'error' && part.text === content);
+  return message.parts.some((part) => isSameVisibleErrorPart(part, content));
 }
 
 /**
